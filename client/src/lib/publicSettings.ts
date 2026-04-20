@@ -75,13 +75,13 @@ export async function getCachedPublicSettings(): Promise<Partial<SystemSettings>
     listeners.forEach(fn => fn());
     return cache;
   } catch {
-    return cache || { show_watermark: false, watermark_image: "", site_title: "3DPartHub", site_logo: "" };
+    return cache || { show_watermark: false, watermark_image: "", site_title: "", site_logo: "" };
   }
 }
 
 // Synchronous getter for already-fetched settings
 export function getPublicSettingsSnapshot(): Partial<SystemSettings> {
-  return cache || { show_watermark: false, watermark_image: "", site_title: "3DPartHub", site_logo: "" };
+  return cache || { show_watermark: false, watermark_image: "", site_title: "", site_logo: "" };
 }
 
 // Get site title (sync, with fallback) — used in nav bar, login page

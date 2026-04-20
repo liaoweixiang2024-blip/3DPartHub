@@ -15,7 +15,7 @@ import { useModel } from "../hooks/useModels";
 import { modelApi } from "../api/models";
 import { categoriesApi, type CategoryItem } from "../api/categories";
 import { useToast } from "../components/shared/Toast";
-import { getCachedPublicSettings } from "../lib/publicSettings";
+import { getCachedPublicSettings, getSiteTitle } from "../lib/publicSettings";
 import type { ModelSpec, ModelDownload } from "../types";
 import useSWR from "swr";
 
@@ -433,7 +433,7 @@ function DesktopDetail({
             本平台所有 3D 模型仅供参考与模拟验证，不作为生产加工依据。产品持续迭代更新，请以实物为准。
           </p>
           <p className="text-xs text-on-surface-variant/30">
-            © {new Date().getFullYear()} 3DPartHub
+            © {new Date().getFullYear()} {getSiteTitle()}
           </p>
         </div>
       </div>
@@ -545,7 +545,7 @@ function MobileDetail({
               本平台所有 3D 模型仅供参考与模拟验证，不作为生产加工依据。产品持续迭代更新，请以实物为准。
             </p>
             <p className="text-[11px] text-on-surface-variant/30">
-              © {new Date().getFullYear()} 3DPartHub
+              © {new Date().getFullYear()} {getSiteTitle()}
             </p>
           </div>
         </div>
