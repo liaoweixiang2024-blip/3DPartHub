@@ -213,25 +213,25 @@ export default function TopNav({ compact = false, onMenuToggle }: TopNavProps) {
               >
                 <Icon name="menu" size={22} />
               </button>
-              <Link to="/" className="flex items-center gap-1.5 min-w-0">
+              <Link to="/" className="flex items-center gap-2 min-w-0">
                 {getLogoDisplayMode() === 'title_only' ? (
-                  <span className="font-headline font-bold text-on-surface text-xs tracking-tighter truncate">{getSiteTitle()}</span>
+                  <span className="font-headline font-bold text-on-surface text-sm tracking-tighter truncate">{getSiteTitle()}</span>
                 ) : getLogoDisplayMode() === 'logo_only' && getSiteLogo() ? (
-                  <img src={getSiteLogo()} alt="" className="h-5 max-w-[100px] shrink-0 object-contain" />
+                  <img src={getSiteLogo()} alt="" className="h-6 max-w-[120px] shrink-0 object-contain" />
                 ) : getLogoDisplayMode() === 'logo_and_title' && getSiteIcon() ? (
                   <>
-                    <img src={getSiteIcon()} alt="" className="h-5 w-5 shrink-0 object-contain" />
-                    <span className="font-headline font-bold text-on-surface text-xs tracking-tighter truncate">{getSiteTitle()}</span>
+                    <img src={getSiteIcon()} alt="" className="h-6 w-6 shrink-0 object-contain" />
+                    <span className="font-headline font-bold text-on-surface text-sm tracking-tighter truncate">{getSiteTitle()}</span>
                   </>
                 ) : getLogoDisplayMode() === 'logo_and_title' && getSiteLogo() ? (
                   <>
-                    <img src={getSiteLogo()} alt="" className="h-4 max-w-[48px] shrink-0 object-contain" />
-                    <span className="font-headline font-bold text-on-surface text-xs tracking-tighter truncate">{getSiteTitle()}</span>
+                    <img src={getSiteLogo()} alt="" className="h-5 max-w-[60px] shrink-0 object-contain" />
+                    <span className="font-headline font-bold text-on-surface text-sm tracking-tighter truncate">{getSiteTitle()}</span>
                   </>
                 ) : (
                   <>
                     <Icon name="precision_manufacturing" size={20} className="text-orange-500 shrink-0" />
-                    <span className="font-headline font-bold text-on-surface text-xs tracking-tighter truncate">{getSiteTitle()}</span>
+                    <span className="font-headline font-bold text-on-surface text-sm tracking-tighter truncate">{getSiteTitle()}</span>
                   </>
                 )}
               </Link>
@@ -274,11 +274,11 @@ export default function TopNav({ compact = false, onMenuToggle }: TopNavProps) {
   return (
     <>
       <header className="h-14 flex items-center bg-surface-container-low border-b border-outline-variant/10 shrink-0 z-50">
-        <Link to="/" className="flex items-center hover:opacity-80 transition-opacity shrink-0 w-56 px-5 gap-1.5">
+        <Link to="/" className={`flex items-center hover:opacity-80 transition-opacity shrink-0 w-56 px-5 ${displayMode === 'logo_only' ? 'justify-center' : 'gap-1.5'}`}>
           {displayMode === 'title_only' ? (
             <span className="text-sm font-headline font-bold tracking-tighter text-on-surface truncate">{siteTitle}</span>
           ) : displayMode === 'logo_only' && siteLogo ? (
-            <img src={siteLogo} alt={siteTitle} className="h-8 w-full object-contain" />
+            <img src={siteLogo} alt={siteTitle} className="h-8 max-w-[200px] object-contain" />
           ) : displayMode === 'logo_and_title' && siteIcon ? (
             <>
               <img src={siteIcon} alt={siteTitle} className="h-7 w-7 shrink-0 object-contain" />
