@@ -266,20 +266,22 @@ export default function TopNav({ compact = false, onMenuToggle }: TopNavProps) {
   const siteIcon = getSiteIcon();
   const siteTitle = getSiteTitle();
 
-  // logo_only: wide logo; logo_and_title: square icon + title
-  const iconForNav = displayMode === 'logo_and_title' ? (siteIcon || siteLogo) : siteLogo;
-
   return (
     <>
       <header className="h-14 flex items-center bg-surface-container-low border-b border-outline-variant/10 shrink-0 z-50">
-        <Link to="/" className={`flex items-center hover:opacity-80 transition-opacity shrink-0 ${displayMode === 'logo_only' ? 'w-56 px-4' : 'w-56 px-4 gap-1.5'}`}>
+        <Link to="/" className="flex items-center hover:opacity-80 transition-opacity shrink-0 w-56 px-4 gap-1.5">
           {displayMode === 'title_only' ? (
             <span className="text-sm font-headline font-bold tracking-tighter text-on-surface truncate">{siteTitle}</span>
-          ) : iconForNav && displayMode === 'logo_only' ? (
-            <img src={iconForNav} alt={siteTitle} className="h-8 w-full object-contain" />
-          ) : iconForNav && displayMode === 'logo_and_title' ? (
+          ) : displayMode === 'logo_only' && siteLogo ? (
+            <img src={siteLogo} alt={siteTitle} className="h-8 w-full object-contain" />
+          ) : displayMode === 'logo_and_title' && siteIcon ? (
             <>
-              <img src={siteIcon || siteLogo} alt={siteTitle} className="h-7 w-7 shrink-0 object-contain" />
+              <img src={siteIcon} alt={siteTitle} className="h-7 w-7 shrink-0 object-contain" />
+              <span className="text-sm font-headline font-bold tracking-tighter text-on-surface truncate">{siteTitle}</span>
+            </>
+          ) : displayMode === 'logo_and_title' && siteLogo ? (
+            <>
+              <img src={siteLogo} alt={siteTitle} className="h-7 max-w-[72px] shrink-0 object-contain" />
               <span className="text-sm font-headline font-bold tracking-tighter text-on-surface truncate">{siteTitle}</span>
             </>
           ) : (
