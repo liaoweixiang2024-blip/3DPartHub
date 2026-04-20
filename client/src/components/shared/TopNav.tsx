@@ -216,8 +216,13 @@ export default function TopNav({ compact = false, onMenuToggle }: TopNavProps) {
               <Link to="/" className="flex items-center gap-1.5 min-w-0">
                 {getLogoDisplayMode() === 'title_only' ? (
                   <span className="font-headline font-bold text-on-surface text-xs tracking-tighter truncate">{getSiteTitle()}</span>
-                ) : getSiteLogo() ? (
+                ) : getSiteLogo() && getLogoDisplayMode() === 'logo_only' ? (
                   <img src={getSiteLogo()} alt="" className="h-5 max-w-[100px] shrink-0 object-contain" />
+                ) : getSiteLogo() ? (
+                  <>
+                    <img src={getSiteLogo()} alt="" className="h-4 max-w-[48px] shrink-0 object-contain" />
+                    <span className="font-headline font-bold text-on-surface text-xs tracking-tighter truncate">{getSiteTitle()}</span>
+                  </>
                 ) : (
                   <>
                     <Icon name="precision_manufacturing" size={20} className="text-orange-500 shrink-0" />
@@ -263,15 +268,20 @@ export default function TopNav({ compact = false, onMenuToggle }: TopNavProps) {
   return (
     <>
       <header className="h-14 flex items-center bg-surface-container-low border-b border-outline-variant/10 shrink-0 z-50">
-        <Link to="/" className="flex items-center hover:opacity-80 transition-opacity shrink-0 w-56 px-4">
+        <Link to="/" className="flex items-center hover:opacity-80 transition-opacity shrink-0 w-56 px-4 gap-2">
           {displayMode === 'title_only' ? (
-            <span className="text-sm font-headline font-bold tracking-tighter text-on-surface">{siteTitle}</span>
-          ) : siteLogo ? (
+            <span className="text-sm font-headline font-bold tracking-tighter text-on-surface truncate">{siteTitle}</span>
+          ) : siteLogo && displayMode === 'logo_only' ? (
             <img src={siteLogo} alt={siteTitle} className="h-8 w-full object-contain" />
+          ) : siteLogo && displayMode === 'logo_and_title' ? (
+            <>
+              <img src={siteLogo} alt={siteTitle} className="h-7 max-w-[100px] object-contain shrink-0" />
+              <span className="text-sm font-headline font-bold tracking-tighter text-on-surface truncate hidden sm:inline">{siteTitle}</span>
+            </>
           ) : (
             <>
-              <Icon name="view_in_ar" size={26} className="text-orange-500" />
-              <span className="text-sm font-headline font-bold tracking-tighter text-on-surface ml-2">{siteTitle}</span>
+              <Icon name="view_in_ar" size={26} className="text-orange-500 shrink-0" />
+              <span className="text-sm font-headline font-bold tracking-tighter text-on-surface truncate">{siteTitle}</span>
             </>
           )}
         </Link>

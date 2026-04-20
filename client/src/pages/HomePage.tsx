@@ -669,34 +669,35 @@ export default function HomePage() {
         </div>
         {/* Full-width Footer */}
         <footer className="shrink-0 border-t border-outline-variant/10 bg-surface-container-low">
-          <div className="px-8 py-5 flex items-center justify-between gap-8">
-            <div className="flex items-center gap-3">
-              <div className="flex items-center gap-2">
+          <div className="px-8 py-4">
+            <div className="flex items-center justify-between gap-8">
+              {/* Left: Logo / Brand */}
+              <div className="flex items-center gap-3">
                 {getSiteLogo() ? (
-                  <img src={getSiteLogo()} alt="" className="h-5 max-w-[100px] object-contain opacity-70" />
+                  <img src={getSiteLogo()} alt="" className="h-6 max-w-[120px] object-contain opacity-80" />
                 ) : (
-                  <Icon name="precision_manufacturing" size={18} className="text-orange-500/70" />
+                  <span className="font-headline font-semibold text-sm text-on-surface-variant/70 tracking-tight">{getSiteTitle()}</span>
                 )}
-                <span className="font-headline font-semibold text-xs text-on-surface-variant/60 tracking-tight">{getSiteTitle()}</span>
               </div>
-              <div className="w-px h-4 bg-outline-variant/15" />
-              <span className="text-[11px] text-on-surface-variant/30">
-                {getFooterCopyright() || `© ${new Date().getFullYear()} ${getSiteTitle()}`}
-              </span>
+              {/* Right: Links + Email */}
+              <div className="flex items-center gap-5">
+                {getFooterLinks().map((link, i) => (
+                  <a key={i} href={link.url} target="_blank" rel="noopener noreferrer" className="text-[11px] text-on-surface-variant/40 hover:text-on-surface-variant/70 transition-colors">
+                    {link.label}
+                  </a>
+                ))}
+                {getContactEmail() && (
+                  <a href={`mailto:${getContactEmail()}`} className="flex items-center gap-1.5 text-[11px] text-on-surface-variant/40 hover:text-orange-400 transition-colors">
+                    <Icon name="mail" size={13} />
+                    <span>{getContactEmail()}</span>
+                  </a>
+                )}
+              </div>
             </div>
-            <div className="flex items-center gap-6">
-              {getFooterLinks().map((link, i) => (
-                <a key={i} href={link.url} target="_blank" rel="noopener noreferrer" className="text-[11px] text-on-surface-variant/40 hover:text-on-surface-variant/70 transition-colors">
-                  {link.label}
-                </a>
-              ))}
-              {getContactEmail() && (
-                <a href={`mailto:${getContactEmail()}`} className="flex items-center gap-1.5 text-[11px] text-on-surface-variant/40 hover:text-orange-400 transition-colors">
-                  <Icon name="mail" size={13} />
-                  <span>{getContactEmail()}</span>
-                </a>
-              )}
-            </div>
+            {/* Copyright line */}
+            <p className="text-[10px] text-on-surface-variant/25 mt-2.5">
+              {getFooterCopyright() || `© ${new Date().getFullYear()} ${getSiteTitle()}. All rights reserved.`}
+            </p>
           </div>
         </footer>
         {loginPromptOpen && (
