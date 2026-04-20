@@ -14,7 +14,7 @@ services:
       - "8000:8000"
     environment:
       PORT: 8000
-      DATABASE_URL: postgresql://modeluser:${DB_PASSWORD:-modelpass}@postgres:5432/model_management
+      DATABASE_URL: postgresql://modeluser:${DB_PASSWORD:-modelpass}@postgres:5432/3dparthub
       JWT_SECRET: ${JWT_SECRET:-change-me-in-production}
       JWT_EXPIRES_IN: 7d
       UPLOAD_DIR: uploads
@@ -52,13 +52,13 @@ services:
     image: postgres:16-alpine
     # 不暴露端口到宿主机，仅内部访问（安全）
     environment:
-      POSTGRES_DB: model_management
+      POSTGRES_DB: 3dparthub
       POSTGRES_USER: modeluser
       POSTGRES_PASSWORD: ${DB_PASSWORD:-modelpass}
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U modeluser -d model_management"]
+      test: ["CMD-SHELL", "pg_isready -U modeluser -d 3dparthub"]
       interval: 5s
       timeout: 5s
       retries: 5

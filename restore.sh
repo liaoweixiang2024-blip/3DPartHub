@@ -1,5 +1,5 @@
 #!/bin/bash
-# ===== 零件模型中心 - 恢复脚本 =====
+# ===== 3DPartHub - 恢复脚本 =====
 # 使用: ./restore.sh <备份目录路径>
 # 示例: ./restore.sh ./backups/20260419_120000
 
@@ -14,7 +14,7 @@ if [ -z "$RESTORE_PATH" ] || [ ! -d "$RESTORE_PATH" ]; then
   exit 1
 fi
 
-echo "=== 零件模型中心恢复 ==="
+echo "=== 3DPartHub 恢复 ==="
 echo "备份目录: $RESTORE_PATH"
 echo ""
 read -p "确认恢复？这将覆盖当前数据库和模型文件 (y/N): " confirm
@@ -32,7 +32,7 @@ sleep 5
 echo "[2/3] 恢复数据库..."
 if [ -f "$RESTORE_PATH/database.sql" ]; then
   docker compose -f "$COMPOSE_FILE" exec -T postgres \
-    psql -U modeluser -d model_management \
+    psql -U modeluser -d 3dparthub \
     < "$RESTORE_PATH/database.sql"
   echo "  ✓ 数据库已恢复"
 else
