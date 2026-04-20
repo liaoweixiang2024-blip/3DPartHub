@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { useMediaQuery } from '../layouts/hooks/useMediaQuery';
 import { useDocumentTitle } from '../hooks/useDocumentTitle';
 import TopNav from '../components/shared/TopNav';
@@ -8,6 +8,8 @@ import MobileNavDrawer from '../components/shared/MobileNavDrawer';
 import Icon from '../components/shared/Icon';
 import { useToast } from '../components/shared/Toast';
 import { getSettings, updateSettings, uploadImage, getBackupStats, startBackupJob, pollBackupProgress, downloadBackup, renameBackup, deleteBackup, startRestore, pollRestoreProgress, listBackups, importBackup, importBackupAsRecord, type SystemSettings, type BackupStats, type BackupRecord } from '../api/settings';
+import { COLOR_PRESETS, COLOR_KEYS, type ColorKey } from '../lib/colorSchemes';
+import { applyColorScheme, generatePaletteFromPrimary } from '../lib/colorScheme';
 // Note: pollBackupProgress is used by handleExport
 
 const DEFAULT_SETTINGS: SystemSettings = {
@@ -40,6 +42,13 @@ const DEFAULT_SETTINGS: SystemSettings = {
   smtp_pass: "",
   smtp_from: "",
   smtp_secure: true,
+  color_scheme: "orange",
+  color_custom_dark: "{}",
+  color_custom_light: "{}",
+  default_theme: "dark",
+  auto_theme_enabled: false,
+  auto_theme_dark_hour: 20,
+  auto_theme_light_hour: 8,
 };
 
 interface SettingGroup {
@@ -133,6 +142,21 @@ const GROUPS: SettingGroup[] = [
       { key: 'daily_download_limit', label: '每日下载上限', desc: '每个用户每天最多下载次数，0 表示不限制', type: 'number' },
     ],
   },
+  {
+    title: '外观设置',
+    icon: 'palette',
+    items: [
+      { key: 'color_scheme', label: '配色方案', desc: '预设:orange/blue/green/purple/red/teal 或 custom', type: 'color-scheme' as any },
+      { key: 'default_theme', label: '默认主题', desc: '新用户首次访问时看到的默认外观', type: 'select', options: [
+        { value: 'dark', label: '暗色模式' },
+        { value: 'light', label: '亮色模式' },
+        { value: 'system', label: '跟随系统' },
+      ] },
+      { key: 'auto_theme_enabled', label: '定时切换', desc: '按时间段自动在亮色和暗色之间切换', type: 'switch' },
+      { key: 'auto_theme_dark_hour', label: '暗色开始', desc: '几点切换为暗色模式（24小时制）', type: 'number' },
+      { key: 'auto_theme_light_hour', label: '亮色开始', desc: '几点切换为亮色模式（24小时制）', type: 'number' },
+    ],
+  },
 ];
 
 function Switch({ checked, onChange }: { checked: boolean; onChange: (v: boolean) => void }) {
@@ -145,6 +169,183 @@ function Switch({ checked, onChange }: { checked: boolean; onChange: (v: boolean
         className={`absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white shadow-sm transition-transform duration-200 ${checked ? 'translate-x-5' : 'translate-x-0'}`}
       />
     </button>
+  );
+}
+
+function ColorSchemeEditor({ settings, updateSetting }: { settings: SystemSettings; updateSetting: (key: keyof SystemSettings, value: boolean | number | string) => void }) {
+  const [customMode, setCustomMode] = useState<'generate' | 'advanced'>('generate');
+  const [customPrimary, setCustomPrimary] = useState('#3b82f6');
+  const [showAdvanced, setShowAdvanced] = useState(false);
+
+  const currentScheme = (settings.color_scheme as string) || 'orange';
+  const isCustom = currentScheme === 'custom';
+
+  // Parse custom colors from JSON strings
+  let customDark: Record<string, string> = {};
+  let customLight: Record<string, string> = {};
+  try { customDark = JSON.parse((settings.color_custom_dark as string) || '{}'); } catch {}
+  try { customLight = JSON.parse((settings.color_custom_light as string) || '{}'); } catch {}
+
+  // Live preview
+  const preview = useCallback(() => {
+    applyColorScheme(currentScheme, settings.color_custom_dark as string, settings.color_custom_light as string);
+  }, [currentScheme, settings.color_custom_dark, settings.color_custom_light]);
+
+  useEffect(() => { preview(); }, [preview]);
+
+  function selectPreset(key: string) {
+    updateSetting('color_scheme', key);
+  }
+
+  function handleGenerate() {
+    const palette = generatePaletteFromPrimary(customPrimary);
+    const darkJson = JSON.stringify(palette.dark);
+    const lightJson = JSON.stringify(palette.light);
+    updateSetting('color_scheme', 'custom');
+    updateSetting('color_custom_dark', darkJson);
+    updateSetting('color_custom_light', lightJson);
+  }
+
+  function updateCustomColor(mode: 'dark' | 'light', key: string, value: string) {
+    const current = mode === 'dark' ? { ...customDark } : { ...customLight };
+    current[key] = value;
+    updateSetting(mode === 'dark' ? 'color_custom_dark' : 'color_custom_light', JSON.stringify(current));
+    if (currentScheme !== 'custom') {
+      updateSetting('color_scheme', 'custom');
+    }
+  }
+
+  return (
+    <>
+      <div>
+        <p className="text-sm font-medium text-on-surface mb-1">配色方案</p>
+        <p className="text-xs text-on-surface-variant mb-3">选择预设配色或自定义主题色，实时预览效果</p>
+
+        {/* Preset swatches */}
+        <div className="flex flex-wrap gap-3">
+          {Object.entries(COLOR_PRESETS).map(([key, preset]) => (
+            <button
+              key={key}
+              onClick={() => selectPreset(key)}
+              className={`flex flex-col items-center gap-1.5 p-2.5 rounded-lg border-2 transition-all ${
+                currentScheme === key
+                  ? 'border-primary-container bg-primary-container/10 shadow-sm'
+                  : 'border-outline-variant/20 hover:border-outline-variant/40 hover:bg-surface-container-high/30'
+              }`}
+            >
+              <span
+                className="w-8 h-8 rounded-full shadow-inner border border-white/10"
+                style={{ backgroundColor: preset.primary }}
+              />
+              <span className="text-[10px] text-on-surface-variant font-medium">{preset.label}</span>
+            </button>
+          ))}
+          {/* Custom option */}
+          <button
+            onClick={() => selectPreset('custom')}
+            className={`flex flex-col items-center gap-1.5 p-2.5 rounded-lg border-2 transition-all ${
+              isCustom
+                ? 'border-primary-container bg-primary-container/10 shadow-sm'
+                : 'border-outline-variant/20 hover:border-outline-variant/40 hover:bg-surface-container-high/30'
+            }`}
+          >
+            <span className="w-8 h-8 rounded-full border-2 border-dashed border-on-surface-variant/40 flex items-center justify-center">
+              <Icon name="colorize" size={14} className="text-on-surface-variant/60" />
+            </span>
+            <span className="text-[10px] text-on-surface-variant font-medium">自定义</span>
+          </button>
+        </div>
+      </div>
+
+      {/* Custom color section */}
+      {isCustom && (
+        <div className="bg-surface-container-high/30 rounded-lg border border-outline-variant/10 p-4 space-y-4">
+          {/* Tabs */}
+          <div className="flex gap-2">
+            <button
+              onClick={() => setCustomMode('generate')}
+              className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
+                customMode === 'generate' ? 'bg-primary-container text-on-primary' : 'bg-surface-container-highest/50 text-on-surface-variant'
+              }`}
+            >
+              从主色生成
+            </button>
+            <button
+              onClick={() => setCustomMode('advanced')}
+              className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
+                customMode === 'advanced' ? 'bg-primary-container text-on-primary' : 'bg-surface-container-highest/50 text-on-surface-variant'
+              }`}
+            >
+              高级自定义
+            </button>
+          </div>
+
+          {customMode === 'generate' ? (
+            <div className="flex items-center gap-4">
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-on-surface-variant">主色调：</span>
+                <input
+                  type="color"
+                  value={customPrimary}
+                  onChange={(e) => setCustomPrimary(e.target.value)}
+                  className="w-10 h-8 rounded cursor-pointer border border-outline-variant/30 p-0"
+                />
+                <span className="text-xs text-on-surface-variant font-mono">{customPrimary}</span>
+              </div>
+              <button
+                onClick={handleGenerate}
+                className="px-4 py-1.5 text-xs font-medium bg-primary-container/20 text-primary-container rounded-md hover:bg-primary-container/30 transition-colors"
+              >
+                生成色板
+              </button>
+            </div>
+          ) : (
+            <>
+              <button
+                onClick={() => setShowAdvanced(!showAdvanced)}
+                className="flex items-center gap-1.5 text-xs text-primary-container hover:underline"
+              >
+                <Icon name={showAdvanced ? 'expand_less' : 'expand_more'} size={14} />
+                {showAdvanced ? '收起颜色编辑器' : '展开颜色编辑器'}
+              </button>
+              {showAdvanced && (
+                <div className="space-y-3">
+                  <p className="text-xs text-on-surface-variant">分别设置暗色和亮色模式下的各颜色变量。留空则使用全局默认值。</p>
+                  {(['dark', 'light'] as const).map(mode => (
+                    <div key={mode}>
+                      <p className="text-xs font-medium text-on-surface mb-2">{mode === 'dark' ? '暗色模式' : '亮色模式'}</p>
+                      <div className="grid grid-cols-2 gap-x-4 gap-y-1.5">
+                        {COLOR_KEYS.map(ck => {
+                          const val = (mode === 'dark' ? customDark : customLight)[ck] || '';
+                          return (
+                            <div key={ck} className="flex items-center gap-1.5">
+                              <input
+                                type="color"
+                                value={val || '#888888'}
+                                onChange={(e) => updateCustomColor(mode, ck, e.target.value)}
+                                className="w-5 h-5 rounded cursor-pointer border-0 p-0 shrink-0"
+                              />
+                              <span className="text-[10px] text-on-surface-variant w-24 truncate shrink-0">{ck}</span>
+                              <input
+                                type="text"
+                                value={val}
+                                onChange={(e) => updateCustomColor(mode, ck, e.target.value)}
+                                placeholder="默认"
+                                className="flex-1 min-w-0 bg-surface-container-lowest text-on-surface text-[10px] rounded px-1.5 py-0.5 border border-outline-variant/15 outline-none focus:border-primary font-mono"
+                              />
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </>
+          )}
+        </div>
+      )}
+    </>
   );
 }
 
@@ -408,7 +609,10 @@ function Content() {
             </div>
             <div className="divide-y divide-outline-variant/5">
               {group.items.map(item => (
-                <div key={item.key} className={`px-6 py-4 flex ${item.type === 'textarea' ? 'flex-col gap-3' : 'items-center justify-between gap-4'} hover:bg-surface-container-high/30 transition-colors`}>
+                <div key={item.key} className={`px-6 py-4 flex ${item.type === 'textarea' ? 'flex-col gap-3' : item.type === 'color-scheme' ? 'flex-col gap-4' : 'items-center justify-between gap-4'} hover:bg-surface-container-high/30 transition-colors`}>
+                  {item.type === 'color-scheme' ? (
+                    <ColorSchemeEditor settings={settings} updateSetting={updateSetting} />
+                  ) : (<>
                   <div className="min-w-0">
                     <p className="text-sm font-medium text-on-surface">{item.label}</p>
                     <p className="text-xs text-on-surface-variant mt-0.5">{item.desc}</p>
@@ -512,6 +716,7 @@ function Content() {
                       className="w-56 bg-surface-container-lowest text-on-surface text-sm rounded-md px-3 py-2 border border-outline-variant/20 outline-none focus:border-primary placeholder:text-on-surface-variant/30"
                     />
                   )}
+                  </>)}
                 </div>
               ))}
             </div>

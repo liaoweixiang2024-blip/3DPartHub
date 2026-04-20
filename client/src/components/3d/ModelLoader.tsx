@@ -44,7 +44,7 @@ function DimensionMarker({ start, end, label, axis }: { start: THREE.Vector3; en
         <lineBasicMaterial color="#f97316" linewidth={1} />
       </line>
       <Html position={[pos.x, pos.y, pos.z]} center distanceFactor={8}>
-        <div className="bg-black/80 text-orange-400 text-[10px] px-2 py-0.5 rounded font-mono whitespace-nowrap border border-orange-500/30 pointer-events-none">
+        <div className="bg-black/80 text-primary text-[10px] px-2 py-0.5 rounded font-mono whitespace-nowrap border border-primary-container/30 pointer-events-none">
           {label}
         </div>
       </Html>

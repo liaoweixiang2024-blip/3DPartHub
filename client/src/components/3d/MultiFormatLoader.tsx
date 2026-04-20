@@ -276,7 +276,7 @@ function DimensionLine({ start, end, label }: { start: THREE.Vector3; end: THREE
         <lineBasicMaterial color="#f97316" linewidth={1} />
       </line>
       <Html position={[mid.x, mid.y - 0.3, mid.z]} center distanceFactor={8}>
-        <div className="bg-black/80 text-orange-400 text-[10px] px-2 py-0.5 rounded font-mono whitespace-nowrap border border-orange-500/30 pointer-events-none">
+        <div className="bg-black/80 text-primary text-[10px] px-2 py-0.5 rounded font-mono whitespace-nowrap border border-primary-container/30 pointer-events-none">
           {label}
         </div>
       </Html>
@@ -323,7 +323,7 @@ function XtServerConverter({ url, ...props }: MultiFormatLoaderProps) {
     return (
       <Html center>
         <div className="flex flex-col items-center gap-3">
-          <Icon name="autorenew" size={48} className="text-orange-500/60 animate-spin" />
+          <Icon name="autorenew" size={48} className="text-primary-container/60 animate-spin" />
           <span className="text-xs text-on-surface-variant">正在转换 Parasolid (.x_t) 格式...</span>
         </div>
       </Html>

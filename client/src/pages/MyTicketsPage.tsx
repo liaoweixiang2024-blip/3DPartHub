@@ -22,7 +22,7 @@ interface MyTicket {
 }
 
 const STATUS_MAP: Record<string, { label: string; color: string; bg: string }> = {
-  open: { label: '待处理', color: 'text-orange-500', bg: 'bg-orange-500/10' },
+  open: { label: '待处理', color: 'text-primary-container', bg: 'bg-primary-container/10' },
   waiting_user: { label: '待回复', color: 'text-amber-600', bg: 'bg-amber-500/10' },
   in_progress: { label: '处理中', color: 'text-blue-500', bg: 'bg-blue-500/10' },
   resolved: { label: '已解决', color: 'text-green-500', bg: 'bg-green-500/10' },

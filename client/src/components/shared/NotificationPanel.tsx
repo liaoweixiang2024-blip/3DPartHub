@@ -15,7 +15,7 @@ import {
 } from "../../api/notifications";
 
 const TYPE_META: Record<string, { icon: string; color: string }> = {
-  ticket: { icon: "assignment_add", color: "text-orange-500 bg-orange-500/10" },
+  ticket: { icon: "assignment_add", color: "text-primary-container bg-primary-container/10" },
   comment: { icon: "chat", color: "text-blue-500 bg-blue-500/10" },
   favorite: { icon: "star", color: "text-pink-500 bg-pink-500/10" },
   download: { icon: "download", color: "text-purple-500 bg-purple-500/10" },

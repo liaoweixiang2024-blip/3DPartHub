@@ -1,9 +1,11 @@
 import { getPublicSettings, type SystemSettings } from "../api/settings";
+import { applyColorScheme } from "./colorScheme";
+import { applyServerThemeDefaults } from "../stores/useThemeStore";
 
 let cache: Partial<SystemSettings> | null = null;
 let fetchedAt = 0;
 const STORAGE_KEY = "site_config_cache";
-const TTL = 5 * 60 * 1000; // 5 minutes
+const TTL = 2 * 60 * 1000; // 2 minutes — config changes propagate faster
 
 function loadFromStorage(): { data: Partial<SystemSettings>; ts: number } | null {
   try {
@@ -35,16 +37,18 @@ export function clearCache() {
   listeners.forEach(fn => fn());
 }
 
-// Refresh config: clear, re-fetch, apply meta/favicon, then notify listeners
+// Refresh config: clear all caches, re-fetch, apply, then notify listeners
 export async function refreshSiteConfig() {
   cache = null;
   fetchedAt = 0;
+  localStorage.removeItem(STORAGE_KEY);
   try {
     cache = await getPublicSettings();
     fetchedAt = Date.now();
     saveToStorage(cache);
     applyMetaTags();
     applyFavicon();
+    applyAppearanceSettings(cache);
   } catch {}
   // Notify all listeners with fresh cache populated
   listeners.forEach(fn => fn());
@@ -71,6 +75,7 @@ export async function getCachedPublicSettings(): Promise<Partial<SystemSettings>
     saveToStorage(cache);
     applyMetaTags();
     applyFavicon();
+    applyAppearanceSettings(cache);
     // Notify listeners with fresh API data
     listeners.forEach(fn => fn());
     return cache;
@@ -191,4 +196,19 @@ function applyFavicon() {
   else if (favicon.endsWith(".png")) link.type = "image/png";
   else if (favicon.endsWith(".jpg") || favicon.endsWith(".jpeg")) link.type = "image/jpeg";
   link.href = favicon + (favicon.includes('?') ? '&' : '?') + '_t=' + Date.now();
+}
+
+// Apply appearance-related settings (color scheme + theme defaults)
+export function applyAppearanceSettings(settings: Partial<SystemSettings>) {
+  applyColorScheme(
+    (settings.color_scheme as string) || 'orange',
+    (settings.color_custom_dark as string) || '{}',
+    (settings.color_custom_light as string) || '{}',
+  );
+  applyServerThemeDefaults(
+    (settings.default_theme as string) || 'dark',
+    (settings.auto_theme_enabled as boolean) || false,
+    (settings.auto_theme_dark_hour as number) ?? 20,
+    (settings.auto_theme_light_hour as number) ?? 8,
+  );
 }

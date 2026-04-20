@@ -276,6 +276,9 @@ router.post("/api/settings/upload-image", authMiddleware, async (req: AuthReques
 
 // Public: get non-sensitive settings
 router.get("/api/settings/public", async (_req, res: Response) => {
+  // Prevent browser/CDN caching of config — always revalidate
+  res.set("Cache-Control", "no-store, no-cache, must-revalidate");
+  res.set("Pragma", "no-cache");
   try {
     const cached = await cacheGet<Record<string, unknown>>("cache:settings:public");
     if (cached) { res.json(cached); return; }
@@ -303,6 +306,13 @@ router.get("/api/settings/public", async (_req, res: Response) => {
       announcement_text: all.announcement_text ?? "",
       announcement_type: all.announcement_type ?? "info",
       announcement_color: all.announcement_color ?? "",
+      color_scheme: all.color_scheme ?? "orange",
+      color_custom_dark: all.color_custom_dark ?? "{}",
+      color_custom_light: all.color_custom_light ?? "{}",
+      default_theme: all.default_theme ?? "dark",
+      auto_theme_enabled: all.auto_theme_enabled ?? false,
+      auto_theme_dark_hour: all.auto_theme_dark_hour ?? 20,
+      auto_theme_light_hour: all.auto_theme_light_hour ?? 8,
     };
     await cacheSet("cache:settings:public", result, TTL.SETTINGS_PUBLIC);
     res.json(result);

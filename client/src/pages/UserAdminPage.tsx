@@ -27,7 +27,7 @@ const ROLE_LABELS: Record<string, string> = {
 };
 
 const ROLE_COLORS: Record<string, string> = {
-  ADMIN: "bg-orange-500/15 text-orange-400",
+  ADMIN: "bg-primary-container/15 text-primary",
   EDITOR: "bg-blue-500/15 text-blue-400",
   VIEWER: "bg-surface-container-highest text-on-surface-variant",
 };

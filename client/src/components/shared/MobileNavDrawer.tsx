@@ -51,7 +51,7 @@ export default function MobileNavDrawer({ open, onClose }: MobileNavDrawerProps)
                     onClick={onClose}
                     className={`flex items-center gap-3 px-6 py-3 text-sm transition-colors ${
                       isActive
-                        ? 'border-l-4 border-orange-500 bg-surface-container-high text-orange-500 font-bold'
+                        ? 'border-l-4 border-primary-container bg-surface-container-high text-primary-container font-bold'
                         : 'text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high/50'
                     }`}
                   >

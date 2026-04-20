@@ -13,7 +13,7 @@ import { useModels } from "../hooks/useModels";
 import type { ServerModelListItem } from "../api/models";
 import { categoriesApi, type CategoryItem } from "../api/categories";
 import { useAuthStore, getAccessToken } from "../stores";
-import { getCachedPublicSettings, getAnnouncement, getContactEmail, getSiteTitle, getSiteLogo, getFooterLinks, getFooterCopyright } from "../lib/publicSettings";
+import { getCachedPublicSettings, getAnnouncement, getContactEmail, getSiteTitle, getFooterLinks, getFooterCopyright } from "../lib/publicSettings";
 import { useToast } from "../components/shared/Toast";
 
 interface Category {
@@ -108,7 +108,7 @@ function CategorySidebar({
   onSelect: (id: string) => void;
 }) {
   return (
-    <aside className="hidden md:flex w-56 bg-surface-container-low flex-col border-r border-orange-500/10 shrink-0 py-4 gap-2">
+    <aside className="hidden md:flex w-56 bg-surface-container-low flex-col border-r border-primary-container/10 shrink-0 py-4 gap-2">
       <div className="px-5 py-3 border-b border-surface">
         <h2 className="text-sm font-bold text-on-surface tracking-wider uppercase font-headline">产品目录</h2>
       </div>
@@ -116,7 +116,7 @@ function CategorySidebar({
         <button
           onClick={() => onSelect("all")}
           className={`w-full flex items-center justify-between px-4 py-2 text-sm transition-colors rounded-sm ${
-            activeCategory === "all" ? "border-l-2 border-orange-500 text-orange-500 bg-gradient-to-r from-orange-500/15 to-transparent" : "text-on-surface-variant hover:text-on-surface hover:bg-surface-container/50"
+            activeCategory === "all" ? "border-l-2 border-primary-container text-primary-container bg-gradient-to-r from-primary-container/15 to-transparent" : "text-on-surface-variant hover:text-on-surface hover:bg-surface-container/50"
           }`}
         >
           <span className="flex items-center gap-2">
@@ -140,7 +140,7 @@ function CategorySidebar({
                   }
                 }}
                 className={`w-full flex items-center justify-between px-4 py-2 text-sm transition-colors rounded-sm ${
-                  isActive ? "border-l-2 border-orange-500 text-orange-500 bg-gradient-to-r from-orange-500/15 to-transparent" : "text-on-surface-variant hover:text-on-surface hover:bg-surface-container/50"
+                  isActive ? "border-l-2 border-primary-container text-primary-container bg-gradient-to-r from-primary-container/15 to-transparent" : "text-on-surface-variant hover:text-on-surface hover:bg-surface-container/50"
                 }`}
               >
                 <span className="flex items-center gap-2">
@@ -164,10 +164,10 @@ function CategorySidebar({
                         key={child.id}
                         onClick={() => onSelect(child.id)}
                         className={`w-full text-left ml-8 pr-4 py-1.5 text-[12px] transition-colors flex items-center gap-2 ${
-                          activeCategory === child.id ? "text-orange-500" : "text-slate-500 hover:text-on-surface"
+                          activeCategory === child.id ? "text-primary-container" : "text-slate-500 hover:text-on-surface"
                         }`}
                       >
-                        <span className={`w-1 h-1 rounded-full shrink-0 ${activeCategory === child.id ? "bg-orange-500" : "bg-slate-600"}`} />
+                        <span className={`w-1 h-1 rounded-full shrink-0 ${activeCategory === child.id ? "bg-primary-container" : "bg-slate-600"}`} />
                         {child.name}
                         <span className="text-[10px] text-on-surface-variant/60 ml-auto">{child.count}</span>
                       </button>
@@ -268,7 +268,7 @@ function MobileDrawer({
               <button
                 onClick={() => { onSelect("all"); onClose(); }}
                 className={`w-full flex items-center justify-between px-4 py-2.5 text-sm transition-colors ${
-                  activeCategory === "all" ? "border-l-2 border-orange-500 text-orange-500 bg-gradient-to-r from-orange-500/15 to-transparent" : "text-on-surface-variant hover:text-on-surface"
+                  activeCategory === "all" ? "border-l-2 border-primary-container text-primary-container bg-gradient-to-r from-primary-container/15 to-transparent" : "text-on-surface-variant hover:text-on-surface"
                 }`}
               >
                 <span className="flex items-center gap-2">
@@ -293,7 +293,7 @@ function MobileDrawer({
                         }
                       }}
                       className={`w-full flex items-center justify-between px-4 py-2.5 text-sm transition-colors ${
-                        isActive ? "border-l-2 border-orange-500 text-orange-500 bg-gradient-to-r from-orange-500/15 to-transparent" : "text-on-surface-variant hover:text-on-surface"
+                        isActive ? "border-l-2 border-primary-container text-primary-container bg-gradient-to-r from-primary-container/15 to-transparent" : "text-on-surface-variant hover:text-on-surface"
                       }`}
                     >
                       <span className="flex items-center gap-2">
@@ -317,10 +317,10 @@ function MobileDrawer({
                               key={child.id}
                               onClick={() => { onSelect(child.id); onClose(); }}
                               className={`w-full text-left ml-8 pr-4 py-2 text-[12px] flex items-center gap-2 ${
-                                activeCategory === child.id ? "text-orange-500" : "text-slate-500"
+                                activeCategory === child.id ? "text-primary-container" : "text-slate-500"
                               }`}
                             >
-                              <span className={`w-1 h-1 rounded-full shrink-0 ${activeCategory === child.id ? "bg-orange-500" : "bg-slate-600"}`} />
+                              <span className={`w-1 h-1 rounded-full shrink-0 ${activeCategory === child.id ? "bg-primary-container" : "bg-slate-600"}`} />
                               {child.name}
                               <span className="text-[10px] text-on-surface-variant/60 ml-auto">{child.count}</span>
                             </button>
@@ -433,7 +433,7 @@ function Pagination({ page, totalPages, onPageChange, compact = false }: { page:
             onClick={() => onPageChange(p)}
             className={`${btnBase} flex items-center justify-center transition-colors ${
               p === page
-                ? "bg-orange-500 text-white font-medium"
+                ? "bg-primary-container text-on-primary font-medium"
                 : "border border-outline-variant/30 text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high"
             }`}
           >
@@ -643,7 +643,7 @@ export default function HomePage() {
 
             {isLoading && products.length === 0 ? (
               <div className="flex items-center justify-center py-20">
-                <div className="w-8 h-8 border-2 border-orange-500 border-t-transparent rounded-full animate-spin" />
+                <div className="w-8 h-8 border-2 border-primary-container border-t-transparent rounded-full animate-spin" />
               </div>
             ) : (
               <>
@@ -671,14 +671,8 @@ export default function HomePage() {
         <footer className="shrink-0 border-t border-outline-variant/10 bg-surface-container-low">
           <div className="px-8 py-4">
             <div className="flex items-center justify-between gap-8">
-              {/* Left: Logo / Brand */}
-              <div className="flex items-center gap-3">
-                {getSiteLogo() ? (
-                  <img src={getSiteLogo()} alt="" className="h-6 max-w-[120px] object-contain opacity-80" />
-                ) : (
-                  <span className="font-headline font-semibold text-sm text-on-surface-variant/70 tracking-tight">{getSiteTitle()}</span>
-                )}
-              </div>
+              {/* Left: Brand */}
+              <span className="font-headline font-semibold text-sm text-on-surface-variant/60 tracking-tight">{getSiteTitle()}</span>
               {/* Right: Links + Email */}
               <div className="flex items-center gap-5">
                 {getFooterLinks().map((link, i) => (
@@ -687,7 +681,7 @@ export default function HomePage() {
                   </a>
                 ))}
                 {getContactEmail() && (
-                  <a href={`mailto:${getContactEmail()}`} className="flex items-center gap-1.5 text-[11px] text-on-surface-variant/40 hover:text-orange-400 transition-colors">
+                  <a href={`mailto:${getContactEmail()}`} className="flex items-center gap-1.5 text-[11px] text-on-surface-variant/40 hover:text-primary transition-colors">
                     <Icon name="mail" size={13} />
                     <span>{getContactEmail()}</span>
                   </a>
@@ -769,7 +763,7 @@ export default function HomePage() {
             <button
               onClick={() => handleSelectCategory("all")}
               className={`shrink-0 px-3 py-1 rounded-full text-xs font-medium transition-colors ${
-                activeCategory === "all" ? "bg-orange-500 text-white" : "bg-surface-container-high text-on-surface-variant"
+                activeCategory === "all" ? "bg-primary-container text-on-primary" : "bg-surface-container-high text-on-surface-variant"
               }`}
             >
               全部
@@ -779,7 +773,7 @@ export default function HomePage() {
                 key={cat.id}
                 onClick={() => handleSelectCategory(cat.id)}
                 className={`shrink-0 px-3 py-1 rounded-full text-xs font-medium transition-colors ${
-                  activeCategory === cat.id ? "bg-orange-500 text-white" : "bg-surface-container-high text-on-surface-variant"
+                  activeCategory === cat.id ? "bg-primary-container text-on-primary" : "bg-surface-container-high text-on-surface-variant"
                 }`}
               >
                 {cat.name}
@@ -790,7 +784,7 @@ export default function HomePage() {
           {/* Model grid */}
           {isLoading && products.length === 0 ? (
             <div className="flex items-center justify-center py-16">
-              <div className="w-6 h-6 border-2 border-orange-500 border-t-transparent rounded-full animate-spin" />
+              <div className="w-6 h-6 border-2 border-primary-container border-t-transparent rounded-full animate-spin" />
             </div>
           ) : (
             <div className="grid grid-cols-2 gap-2">
@@ -814,7 +808,7 @@ export default function HomePage() {
           <footer className="mt-6 pt-4 border-t border-outline-variant/10 text-center pb-2">
             <div className="flex flex-col items-center gap-2">
               {getContactEmail() && (
-                <a href={`mailto:${getContactEmail()}`} className="flex items-center gap-1 text-[11px] text-on-surface-variant/40 hover:text-orange-400 transition-colors">
+                <a href={`mailto:${getContactEmail()}`} className="flex items-center gap-1 text-[11px] text-on-surface-variant/40 hover:text-primary transition-colors">
                   <Icon name="mail" size={12} />
                   <span>{getContactEmail()}</span>
                 </a>

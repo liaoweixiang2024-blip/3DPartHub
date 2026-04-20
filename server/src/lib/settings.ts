@@ -33,6 +33,13 @@ const SETTINGS_SCHEMA: SettingDef[] = [
   { key: "smtp_pass", defaultValue: "" },
   { key: "smtp_from", defaultValue: "" },
   { key: "smtp_secure", defaultValue: true },
+  { key: "color_scheme", defaultValue: "orange" },
+  { key: "color_custom_dark", defaultValue: "{}" },
+  { key: "color_custom_light", defaultValue: "{}" },
+  { key: "default_theme", defaultValue: "dark" },
+  { key: "auto_theme_enabled", defaultValue: false },
+  { key: "auto_theme_dark_hour", defaultValue: 20 },
+  { key: "auto_theme_light_hour", defaultValue: 8 },
 ];
 
 const DEFAULTS: Record<string, unknown> = {};

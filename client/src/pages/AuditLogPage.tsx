@@ -31,7 +31,7 @@ const ACTION_MAP: Record<string, { label: string; color: string }> = {
   favorite: { label: "收藏", color: "text-pink-500 bg-pink-500/10" },
   unfavorite: { label: "取消收藏", color: "text-on-surface-variant bg-surface-container-highest" },
   comment: { label: "评论", color: "text-indigo-500 bg-indigo-500/10" },
-  ticket_create: { label: "创建工单", color: "text-orange-500 bg-orange-500/10" },
+  ticket_create: { label: "创建工单", color: "text-primary-container bg-primary-container/10" },
   ticket_reply: { label: "回复工单", color: "text-blue-500 bg-blue-500/10" },
   ticket_status: { label: "工单状态", color: "text-amber-500 bg-amber-500/10" },
 };

@@ -31,6 +31,13 @@ export interface SystemSettings {
   smtp_pass: string;
   smtp_from: string;
   smtp_secure: boolean;
+  color_scheme: string;
+  color_custom_dark: string;
+  color_custom_light: string;
+  default_theme: string;
+  auto_theme_enabled: boolean;
+  auto_theme_dark_hour: number;
+  auto_theme_light_hour: number;
 }
 
 export interface BackupStats {

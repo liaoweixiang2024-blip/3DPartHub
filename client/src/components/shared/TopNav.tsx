@@ -229,13 +229,11 @@ export default function TopNav({ compact = false, onMenuToggle }: TopNavProps) {
                   </>
                 ) : (
                   <>
-                    <Icon name="precision_manufacturing" size={20} className="text-orange-500 shrink-0" />
+                    <Icon name="precision_manufacturing" size={20} className="text-primary-container shrink-0" />
                     <span className="font-headline font-bold text-on-surface text-sm tracking-tighter truncate">{getSiteTitle()}</span>
                   </>
                 )}
               </Link>
-            </div>
-
             <div className="flex items-center gap-0.5 shrink-0 ml-auto">
               <NotificationPanel compact />
               <ThemeToggle />
@@ -273,11 +271,11 @@ export default function TopNav({ compact = false, onMenuToggle }: TopNavProps) {
   return (
     <>
       <header className="h-14 flex items-center bg-surface-container-low border-b border-outline-variant/10 shrink-0 z-50">
-        <Link to="/" className={`flex items-center hover:opacity-80 transition-opacity shrink-0 w-56 px-5 ${displayMode === 'logo_only' ? 'justify-center' : 'gap-1.5'}`}>
+        <Link to="/" className={`flex items-center hover:opacity-80 transition-opacity shrink-0 w-56 ${displayMode === 'logo_only' ? 'justify-center' : 'px-5 gap-1.5'}`}>
           {displayMode === 'title_only' ? (
             <span className="text-sm font-headline font-bold tracking-tighter text-on-surface truncate">{siteTitle}</span>
           ) : displayMode === 'logo_only' && siteLogo ? (
-            <img src={siteLogo} alt={siteTitle} className="h-8 max-w-[200px] object-contain" />
+            <img src={siteLogo} alt={siteTitle} className="h-8 w-full px-4 object-contain" />
           ) : displayMode === 'logo_and_title' && siteIcon ? (
             <>
               <img src={siteIcon} alt={siteTitle} className="h-7 w-7 shrink-0 object-contain" />
@@ -290,7 +288,7 @@ export default function TopNav({ compact = false, onMenuToggle }: TopNavProps) {
             </>
           ) : (
             <>
-              <Icon name="view_in_ar" size={26} className="text-orange-500 shrink-0" />
+              <Icon name="view_in_ar" size={26} className="text-primary-container shrink-0" />
               <span className="text-sm font-headline font-bold tracking-tighter text-on-surface truncate">{siteTitle}</span>
             </>
           )}
@@ -315,7 +313,7 @@ export default function TopNav({ compact = false, onMenuToggle }: TopNavProps) {
         <div className="flex items-center gap-0.5 shrink-0 ml-auto pr-6">
           {isAdmin && (
             <Tooltip text="后台设置" side="bottom">
-              <Link to="/settings" className="p-2 text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high rounded-lg transition-colors">
+              <Link to="/admin/settings" className="p-2 text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high rounded-lg transition-colors">
                 <Icon name="settings" size={20} />
               </Link>
             </Tooltip>

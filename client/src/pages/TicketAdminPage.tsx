@@ -11,7 +11,7 @@ import { useAuthStore } from '../stores/useAuthStore';
 import { getTickets, updateTicketStatus, type Ticket } from '../api/tickets';
 
 const STATUS_MAP: Record<string, { label: string; color: string; bg: string }> = {
-  open: { label: "待处理", color: "text-orange-500", bg: "bg-orange-500/10" },
+  open: { label: "待处理", color: "text-primary-container", bg: "bg-primary-container/10" },
   waiting_user: { label: "待回复", color: "text-amber-600", bg: "bg-amber-500/10" },
   in_progress: { label: "处理中", color: "text-blue-500", bg: "bg-blue-500/10" },
   resolved: { label: "已解决", color: "text-green-500", bg: "bg-green-500/10" },
@@ -129,7 +129,7 @@ function Content() {
                       <button onClick={() => handleStatusChange(ticket.id, "closed")} className="px-2.5 py-1 text-xs text-on-surface-variant border border-outline-variant/20 rounded-sm hover:bg-surface-container-highest transition-colors">关闭</button>
                     )}
                     {ticket.status === "closed" && (
-                      <button onClick={() => handleStatusChange(ticket.id, "open")} className="px-2.5 py-1 text-xs text-orange-500 border border-orange-500/30 rounded-sm hover:bg-orange-500/10 transition-colors">重新打开</button>
+                      <button onClick={() => handleStatusChange(ticket.id, "open")} className="px-2.5 py-1 text-xs text-primary-container border border-primary-container/30 rounded-sm hover:bg-primary-container/10 transition-colors">重新打开</button>
                     )}
                   </div>
                 </div>

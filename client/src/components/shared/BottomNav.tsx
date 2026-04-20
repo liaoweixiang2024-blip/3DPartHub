@@ -26,7 +26,7 @@ export default function BottomNav() {
             to={tab.path}
             className={`flex flex-col items-center gap-0.5 py-1 min-w-[44px] min-h-[44px] justify-center cursor-pointer active:scale-95 transition-transform ${
               active
-                ? "text-orange-500 border-t-2 border-orange-500 -mt-px"
+                ? "text-primary-container border-t-2 border-primary-container -mt-px"
                 : "text-on-surface-variant"
             }`}
           >
