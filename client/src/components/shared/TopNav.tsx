@@ -262,7 +262,7 @@ export default function TopNav({ compact = false, onMenuToggle }: TopNavProps) {
         <Link to="/" className="flex items-center gap-2 hover:opacity-80 transition-opacity shrink-0 w-56 px-5">
           {getLogoDisplayMode() !== 'title_only' && (
             getSiteLogo() ? (
-              <img src={getSiteLogo()} alt="" className="w-6 h-6 object-contain" />
+              <img src={getSiteLogo()} alt="" className={`${getLogoDisplayMode() === 'logo_only' ? 'w-8 h-8' : 'w-6 h-6'} object-contain`} />
             ) : (
               <Icon name="view_in_ar" size={22} className="text-orange-500" />
             )

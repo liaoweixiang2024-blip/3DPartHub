@@ -10,8 +10,6 @@ server/static/originals/
 server/static/thumbnails/
 server/static/batch/
 server/static/backups/
-server/static/logo/
-server/static/favicon/
 server/static/watermark/
 backups/
 stitch-assets/
