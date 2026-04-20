@@ -106,6 +106,12 @@ export async function initDefaultSettings(): Promise<void> {
       await prisma.setting.create({
         data: { key: def.key, value: JSON.stringify(def.defaultValue) },
       });
+    } else if (def.defaultValue && existing.value === '""') {
+      // Auto-fill empty values that have a non-trivial default (e.g. logo/favicon)
+      await prisma.setting.update({
+        where: { key: def.key },
+        data: { value: JSON.stringify(def.defaultValue) },
+      });
     }
   }
   cache = null;
