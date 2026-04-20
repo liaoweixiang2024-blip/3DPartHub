@@ -5,7 +5,7 @@
 # 1. 将整个项目上传到服务器（如 /www/wwwroot/model）
 # 2. 复制 .env.production 为 .env 并填入真实值
 # 3. 运行: docker compose -f docker-compose.prod.yml up -d --build
-# 4. 在宝塔面板创建网站，设置反向代理到 http://127.0.0.1:5173
+# 4. 在宝塔面板创建网站，设置反向代理到 http://127.0.0.1:3780
 
 services:
   api:
@@ -41,7 +41,7 @@ services:
   web:
     build: ./client
     ports:
-      - "5173:80"
+      - "3780:80"
     depends_on:
       - api
     restart: unless-stopped

@@ -122,18 +122,22 @@ app.listen(PORT, async () => {
       const adminUser = process.env.ADMIN_USER || "admin";
       const adminPass = process.env.ADMIN_PASS || randomUUID().slice(0, 12);
       const hash = await hashPassword(adminPass);
-      await prisma.user.create({
-        data: {
-          username: adminUser,
-          email: `${adminUser}@3dparthub.local`,
-          passwordHash: hash,
-          role: "ADMIN",
-        },
-      });
-      console.log(`\n  👑 Admin account created (first run only):`);
-      console.log(`     Username: ${adminUser}`);
-      console.log(`     Password: ${adminPass}`);
-      console.log(`     ⚠️  Please change the password after first login!\n`);
+      try {
+        await prisma.user.create({
+          data: {
+            username: adminUser,
+            email: `${adminUser}@3dparthub.local`,
+            passwordHash: hash,
+            role: "ADMIN",
+          },
+        });
+        console.log(`\n  👑 Admin account created (first run only):`);
+        console.log(`     Username: ${adminUser}`);
+        console.log(`     Password: ${adminPass}`);
+        console.log(`     ⚠️  Please change the password after first login!\n`);
+      } catch {
+        // Another worker created admin first — safe to ignore
+      }
     }
   } catch {}
   console.log(`\n  ⚙️  3DPartHub API running: http://localhost:${PORT}`);

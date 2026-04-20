@@ -109,11 +109,14 @@ export async function setSettings(settings: Record<string, unknown>): Promise<vo
 export async function initDefaultSettings(): Promise<void> {
   if (!prisma) return;
   for (const def of SETTINGS_SCHEMA) {
-    const existing = await prisma.setting.findUnique({ where: { key: def.key } });
-    if (!existing) {
-      await prisma.setting.create({
-        data: { key: def.key, value: JSON.stringify(def.defaultValue) },
+    try {
+      await prisma.setting.upsert({
+        where: { key: def.key },
+        update: {},
+        create: { key: def.key, value: JSON.stringify(def.defaultValue) },
       });
+    } catch {
+      // Ignore duplicate key errors from concurrent workers
     }
   }
   cache = null;

@@ -10,7 +10,7 @@ services:
       STATIC_DIR: static
       MAX_FILE_SIZE: 104857600
       REDIS_URL: redis://redis:6379
-      ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-http://localhost:5173}
+      ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-http://localhost:3780}
       SMTP_HOST: ${SMTP_HOST:-smtp.qq.com}
       SMTP_PORT: ${SMTP_PORT:-465}
       SMTP_USER: ${SMTP_USER:-}
@@ -29,7 +29,7 @@ services:
   web:
     build: ./client
     ports:
-      - "${WEB_PORT:-5173}:80"
+      - "${WEB_PORT:-3780}:80"
     depends_on:
       - api
     restart: unless-stopped
