@@ -677,6 +677,7 @@ export default function HomePage() {
                 ) : (
                   <Icon name="precision_manufacturing" size={18} className="text-orange-500/70" />
                 )}
+                <span className="font-headline font-semibold text-xs text-on-surface-variant/60 tracking-tight">{getSiteTitle()}</span>
               </div>
               <div className="w-px h-4 bg-outline-variant/15" />
               <span className="text-[11px] text-on-surface-variant/30">

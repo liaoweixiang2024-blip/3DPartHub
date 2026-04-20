@@ -214,13 +214,15 @@ export default function TopNav({ compact = false, onMenuToggle }: TopNavProps) {
                 <Icon name="menu" size={22} />
               </button>
               <Link to="/" className="flex items-center gap-1.5 min-w-0">
-                {getLogoDisplayMode() !== 'title_only' && getSiteLogo() ? (
-                  <img src={getSiteLogo()} alt="" className={`${getLogoDisplayMode() === 'logo_only' ? 'h-5 max-w-[100px]' : 'h-4 max-w-[64px]'} shrink-0 object-contain`} />
-                ) : getLogoDisplayMode() !== 'title_only' ? (
-                  <Icon name="precision_manufacturing" size={20} className="text-orange-500 shrink-0" />
-                ) : null}
-                {getLogoDisplayMode() !== 'logo_only' && (
+                {getLogoDisplayMode() === 'title_only' ? (
                   <span className="font-headline font-bold text-on-surface text-xs tracking-tighter truncate">{getSiteTitle()}</span>
+                ) : getSiteLogo() ? (
+                  <img src={getSiteLogo()} alt="" className="h-5 max-w-[100px] shrink-0 object-contain" />
+                ) : (
+                  <>
+                    <Icon name="precision_manufacturing" size={20} className="text-orange-500 shrink-0" />
+                    <span className="font-headline font-bold text-on-surface text-xs tracking-tighter truncate">{getSiteTitle()}</span>
+                  </>
                 )}
               </Link>
             </div>
@@ -261,18 +263,16 @@ export default function TopNav({ compact = false, onMenuToggle }: TopNavProps) {
   return (
     <>
       <header className="h-14 flex items-center bg-surface-container-low border-b border-outline-variant/10 shrink-0 z-50">
-        <Link to="/" className={`flex items-center hover:opacity-80 transition-opacity shrink-0 ${displayMode === 'logo_only' ? 'w-56 px-4' : 'w-56 pl-6 pr-2 gap-2.5'}`}>
-          {displayMode !== 'title_only' && siteLogo ? (
-            <img
-              src={siteLogo}
-              alt={siteTitle}
-              className={`${displayMode === 'logo_only' ? 'h-9 w-full' : 'h-7 max-w-[120px]'} object-contain`}
-            />
-          ) : displayMode !== 'title_only' && !siteLogo ? (
-            <Icon name="view_in_ar" size={26} className="text-orange-500" />
-          ) : null}
-          {displayMode !== 'logo_only' && (
-            <span className="text-sm font-headline font-bold tracking-tighter text-on-surface hidden sm:inline">{siteTitle}</span>
+        <Link to="/" className="flex items-center hover:opacity-80 transition-opacity shrink-0 w-56 px-4">
+          {displayMode === 'title_only' ? (
+            <span className="text-sm font-headline font-bold tracking-tighter text-on-surface">{siteTitle}</span>
+          ) : siteLogo ? (
+            <img src={siteLogo} alt={siteTitle} className="h-8 w-full object-contain" />
+          ) : (
+            <>
+              <Icon name="view_in_ar" size={26} className="text-orange-500" />
+              <span className="text-sm font-headline font-bold tracking-tighter text-on-surface ml-2">{siteTitle}</span>
+            </>
           )}
         </Link>
 
