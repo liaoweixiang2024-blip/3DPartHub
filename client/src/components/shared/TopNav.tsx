@@ -268,14 +268,14 @@ export default function TopNav({ compact = false, onMenuToggle }: TopNavProps) {
   return (
     <>
       <header className="h-14 flex items-center bg-surface-container-low border-b border-outline-variant/10 shrink-0 z-50">
-        <Link to="/" className="flex items-center hover:opacity-80 transition-opacity shrink-0 w-56 px-4 gap-2">
+        <Link to="/" className={`flex items-center hover:opacity-80 transition-opacity shrink-0 ${displayMode === 'logo_only' ? 'w-56 px-4' : 'px-4 gap-1.5'}`}>
           {displayMode === 'title_only' ? (
             <span className="text-sm font-headline font-bold tracking-tighter text-on-surface truncate">{siteTitle}</span>
           ) : siteLogo && displayMode === 'logo_only' ? (
             <img src={siteLogo} alt={siteTitle} className="h-8 w-full object-contain" />
           ) : siteLogo && displayMode === 'logo_and_title' ? (
             <>
-              <img src={siteLogo} alt={siteTitle} className="h-7 max-w-[100px] object-contain shrink-0" />
+              <img src={siteLogo} alt={siteTitle} className="h-6 max-w-[72px] object-contain shrink-0" />
               <span className="text-sm font-headline font-bold tracking-tighter text-on-surface truncate hidden sm:inline">{siteTitle}</span>
             </>
           ) : (
