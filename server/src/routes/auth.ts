@@ -241,7 +241,8 @@ router.put("/api/auth/password", authMiddleware, async (req: AuthRequest, res: R
     const hash = await hashPassword(newPassword);
     await prisma.user.update({ where: { id: req.user!.userId }, data: { passwordHash: hash } });
     res.json({ message: "密码修改成功" });
-  } catch {
+  } catch (err) {
+    console.error("[password] change failed:", err);
     res.status(500).json({ detail: "密码修改失败" });
   }
 });

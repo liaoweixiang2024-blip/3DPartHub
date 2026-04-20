@@ -158,11 +158,14 @@ function PasswordChangeDialog({ open, onClose }: { open: boolean; onClose: () =>
     setLoading(true);
     try {
       await authApi.changePassword(form.oldPassword, form.newPassword);
-      toast('密码修改成功', 'success');
-      setForm({ oldPassword: '', newPassword: '', confirmPassword: '' });
+      toast('密码修改成功，请重新登录', 'success');
       onClose();
+      setTimeout(() => {
+        useAuthStore.getState().logout();
+        window.location.replace("/login");
+      }, 1000);
     } catch (err: any) {
-      const msg = err?.response?.data?.detail || '密码修改失败，请重试';
+      const msg = err?.response?.data?.message || err?.response?.data?.detail || '密码修改失败，请重试';
       setError(msg);
     } finally {
       setLoading(false);

@@ -8,6 +8,7 @@ import { verifyToken } from "../lib/jwt.js";
 import { getAllSettings, setSettings, setSetting } from "../lib/settings.js";
 import { cacheGet, cacheSet, cacheDel, TTL } from "../lib/cache.js";
 import { startBackupJob, getJob, getRestoreJob, startRestoreJob, startRestoreJobFromFile, saveAsBackupRecord, getBackupStats, listBackups, renameBackup, deleteBackup, getBackupArchivePath } from "../lib/backup.js";
+import { checkUpdateAvailable, startUpdateJob, getUpdateJob } from "../lib/update.js";
 
 const router = Router();
 
@@ -50,6 +51,35 @@ const backupUpload = multer({
       cb(new Error("只支持 .tar.gz 格式的备份文件"));
     }
   },
+});
+// Admin: check for updates
+router.get("/api/settings/update/check", authMiddleware, async (req: AuthRequest, res: Response) => {
+  if (req.user?.role !== "ADMIN") { res.status(403).json({ detail: "需要管理员权限" }); return; }
+  try {
+    const result = checkUpdateAvailable();
+    res.json(result);
+  } catch {
+    res.json({ current: "unknown", remote: "unknown", updateAvailable: false });
+  }
+});
+
+// Admin: start update
+router.post("/api/settings/update/run", authMiddleware, async (req: AuthRequest, res: Response) => {
+  if (req.user?.role !== "ADMIN") { res.status(403).json({ detail: "需要管理员权限" }); return; }
+  try {
+    const jobId = startUpdateJob();
+    res.json({ jobId });
+  } catch (err: any) {
+    res.status(500).json({ detail: `启动更新失败: ${err.message}` });
+  }
+});
+
+// Admin: poll update progress
+router.get("/api/settings/update/progress/:id", authMiddleware, async (req: AuthRequest, res: Response) => {
+  if (req.user?.role !== "ADMIN") { res.status(403).json({ detail: "需要管理员权限" }); return; }
+  const job = getUpdateJob(req.params.id);
+  if (!job) { res.status(404).json({ detail: "更新任务不存在" }); return; }
+  res.json({ stage: job.stage, percent: job.percent, message: job.message, error: job.error });
 });
 
 function adminOnly(req: AuthRequest, res: Response): boolean {

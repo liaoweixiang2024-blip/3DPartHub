@@ -34,6 +34,8 @@ services:
     volumes:
       - uploads-data:/app/uploads
       - ./server/static:/app/static
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ./:/project:rw
     restart: unless-stopped
     networks:
       - internal

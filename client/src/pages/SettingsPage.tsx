@@ -7,7 +7,7 @@ import AppSidebar from '../components/shared/Sidebar';
 import MobileNavDrawer from '../components/shared/MobileNavDrawer';
 import Icon from '../components/shared/Icon';
 import { useToast } from '../components/shared/Toast';
-import { getSettings, updateSettings, uploadImage, getBackupStats, startBackupJob, pollBackupProgress, downloadBackup, renameBackup, deleteBackup, startRestore, pollRestoreProgress, listBackups, importBackup, importBackupAsRecord, type SystemSettings, type BackupStats, type BackupRecord } from '../api/settings';
+import { getSettings, updateSettings, uploadImage, getBackupStats, startBackupJob, pollBackupProgress, downloadBackup, renameBackup, deleteBackup, startRestore, pollRestoreProgress, listBackups, importBackup, importBackupAsRecord, checkUpdate, startUpdate, pollUpdateProgress, type SystemSettings, type BackupStats, type BackupRecord } from '../api/settings';
 import { COLOR_PRESETS, COLOR_KEYS, type ColorKey } from '../lib/colorSchemes';
 import { applyColorScheme, generatePaletteFromPrimary } from '../lib/colorScheme';
 // Note: pollBackupProgress is used by handleExport
@@ -366,6 +366,12 @@ function Content() {
   const [importing, setImporting] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [restoreConfirmFile, setRestoreConfirmFile] = useState<File | null>(null);
+
+  // Update state
+  const [updateInfo, setUpdateInfo] = useState<{ current: string; remote: string; updateAvailable: boolean } | null>(null);
+  const [updating, setUpdating] = useState(false);
+  const [updateProgress, setUpdateProgress] = useState({ stage: "", percent: 0, message: "" });
+  const [checkingUpdate, setCheckingUpdate] = useState(false);
   const [restoreConfirmId, setRestoreConfirmId] = useState<string | null>(null);
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState("");
@@ -458,6 +464,44 @@ function Content() {
     } finally {
       setExporting(false);
       setExportProgress({ stage: "", percent: 0, message: "" });
+    }
+  }
+
+  async function handleCheckUpdate() {
+    setCheckingUpdate(true);
+    try {
+      const info = await checkUpdate();
+      setUpdateInfo(info);
+      if (!info.updateAvailable) {
+        toast('当前已是最新版本', 'success');
+      }
+    } catch {
+      toast('检查更新失败', 'error');
+    } finally {
+      setCheckingUpdate(false);
+    }
+  }
+
+  async function handleUpdate() {
+    setUpdating(true);
+    setUpdateProgress({ stage: "pulling", percent: 0, message: "正在准备更新..." });
+    try {
+      const jobId = await startUpdate();
+      await pollUpdateProgress(jobId, (stage, percent, message) => {
+        setUpdateProgress({ stage, percent, message });
+      });
+      toast('更新成功，页面即将刷新...', 'success');
+      setTimeout(() => window.location.reload(), 3000);
+    } catch (err: any) {
+      // Network error during restart is expected — just refresh
+      if (updateProgress.stage === "restarting" || !navigator.onLine) {
+        toast('服务正在重启，页面即将刷新...', 'success');
+        setTimeout(() => window.location.reload(), 5000);
+      } else {
+        toast(err.message || '更新失败', 'error');
+      }
+    } finally {
+      setUpdating(false);
     }
   }
 
@@ -954,6 +998,55 @@ function Content() {
                         取消
                       </button>
                     </div>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* System Update */}
+            <div className="px-6 py-4 border-t border-outline-variant/10">
+              <div className="flex items-center justify-between gap-4 mb-3">
+                <div>
+                  <p className="text-sm font-medium text-on-surface">系统更新</p>
+                  <p className="text-xs text-on-surface-variant mt-0.5">
+                    当前版本: <span className="font-mono text-primary-container">{updateInfo?.current || '—'}</span>
+                    {updateInfo?.updateAvailable && (
+                      <> · 最新版本: <span className="font-mono text-emerald-400">{updateInfo.remote}</span></>
+                    )}
+                  </p>
+                </div>
+                <div className="flex gap-2">
+                  <button
+                    onClick={handleCheckUpdate}
+                    disabled={checkingUpdate}
+                    className="px-4 py-2 text-xs font-medium border border-outline-variant/40 text-on-surface-variant rounded-md hover:text-on-surface hover:bg-surface-container-high/50 disabled:opacity-50 transition-colors flex items-center gap-1.5"
+                  >
+                    <Icon name="search" size={14} className={checkingUpdate ? 'animate-spin' : ''} />
+                    {checkingUpdate ? '检查中...' : '检查更新'}
+                  </button>
+                  {updateInfo?.updateAvailable && !updating && (
+                    <button
+                      onClick={handleUpdate}
+                      className="px-4 py-2 text-xs font-medium bg-primary-container/20 text-primary-container rounded-md hover:bg-primary-container/30 transition-colors flex items-center gap-1.5"
+                    >
+                      <Icon name="sync" size={14} />
+                      立即更新
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {updating && (
+                <div className="mt-3">
+                  <div className="flex items-center justify-between text-xs text-on-surface-variant mb-1">
+                    <span>{updateProgress.message}</span>
+                    <span>{updateProgress.percent}%</span>
+                  </div>
+                  <div className="w-full h-2 bg-surface-container-highest rounded-full overflow-hidden">
+                    <div
+                      className="h-full bg-emerald-500 rounded-full transition-all duration-500"
+                      style={{ width: `${updateProgress.percent}%` }}
+                    />
                   </div>
                 </div>
               )}

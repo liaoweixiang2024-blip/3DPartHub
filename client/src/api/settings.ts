@@ -408,3 +408,71 @@ function directUpload(file: File, onProgress?: (percent: number) => void): Promi
     xhr.send(formData);
   });
 }
+
+// ===== System Update =====
+
+export interface UpdateCheckResult {
+  current: string;
+  remote: string;
+  updateAvailable: boolean;
+}
+
+export async function checkUpdate(): Promise<UpdateCheckResult> {
+  const res = await client.get("/settings/update/check", { timeout: 30000 });
+  return unwrap<UpdateCheckResult>(res);
+}
+
+export async function startUpdate(): Promise<string> {
+  const res = await client.post("/settings/update/run", {}, { timeout: 30000 });
+  const data = res.data as any;
+  const jobId = data?.data?.jobId ?? data?.jobId;
+  if (!jobId) throw new Error("启动更新失败");
+  return jobId;
+}
+
+export function pollUpdateProgress(
+  jobId: string,
+  onProgress?: (stage: string, percent: number, message: string) => void,
+): Promise<string> {
+  return new Promise((resolve, reject) => {
+    let consecutiveErrors = 0;
+    const MAX_ERRORS = 10; // More retries since container may restart
+    const poll = setInterval(async () => {
+      try {
+        const res = await client.get(`/settings/update/progress/${jobId}`, { timeout: 15000 });
+        consecutiveErrors = 0;
+        const d = (res.data as any)?.data ?? res.data;
+        onProgress?.(d.stage, d.percent, d.message);
+        if (d.stage === "done") {
+          clearInterval(poll);
+          resolve(jobId);
+        } else if (d.stage === "error") {
+          clearInterval(poll);
+          reject(new Error(d.error || "更新失败"));
+        } else if (d.stage === "restarting") {
+          // Container will restart soon — treat disconnect as success
+          clearInterval(poll);
+          resolve(jobId);
+        }
+      } catch (err: any) {
+        consecutiveErrors++;
+        // Network error during restart is expected — resolve as success
+        if (consecutiveErrors >= 2 && !err.response) {
+          clearInterval(poll);
+          resolve(jobId);
+          return;
+        }
+        const status = err.response?.status;
+        if (status === 404) {
+          clearInterval(poll);
+          resolve(jobId); // Job lost = server restarted = update applied
+          return;
+        }
+        if (consecutiveErrors >= MAX_ERRORS) {
+          clearInterval(poll);
+          reject(new Error("更新超时，请手动检查"));
+        }
+      }
+    }, 2000);
+  });
+}
