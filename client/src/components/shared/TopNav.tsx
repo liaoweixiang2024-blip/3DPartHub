@@ -218,9 +218,14 @@ export default function TopNav({ compact = false, onMenuToggle }: TopNavProps) {
                   <span className="font-headline font-bold text-on-surface text-xs tracking-tighter truncate">{getSiteTitle()}</span>
                 ) : getLogoDisplayMode() === 'logo_only' && getSiteLogo() ? (
                   <img src={getSiteLogo()} alt="" className="h-5 max-w-[100px] shrink-0 object-contain" />
-                ) : (getSiteIcon() || getSiteLogo()) ? (
+                ) : getLogoDisplayMode() === 'logo_and_title' && getSiteIcon() ? (
                   <>
-                    <img src={getSiteIcon() || getSiteLogo()} alt="" className="h-4 w-4 shrink-0 object-contain" />
+                    <img src={getSiteIcon()} alt="" className="h-5 w-5 shrink-0 object-contain" />
+                    <span className="font-headline font-bold text-on-surface text-xs tracking-tighter truncate">{getSiteTitle()}</span>
+                  </>
+                ) : getLogoDisplayMode() === 'logo_and_title' && getSiteLogo() ? (
+                  <>
+                    <img src={getSiteLogo()} alt="" className="h-4 max-w-[48px] shrink-0 object-contain" />
                     <span className="font-headline font-bold text-on-surface text-xs tracking-tighter truncate">{getSiteTitle()}</span>
                   </>
                 ) : (
