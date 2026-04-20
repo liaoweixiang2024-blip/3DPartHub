@@ -204,28 +204,27 @@ export default function TopNav({ compact = false, onMenuToggle }: TopNavProps) {
     return (
       <>
         <header className="bg-surface-container-low border-b border-surface-container-highest shrink-0 z-50">
-          <div className="h-11 flex items-center justify-between px-3">
-            <div className="flex items-center gap-1.5 min-w-0">
-              <button
-                onClick={() => onMenuToggle?.()}
-                className="p-1 text-[#f97316] hover:text-on-surface transition-colors"
-                aria-label="打开菜单"
-              >
-                <Icon name="menu" size={22} />
-              </button>
-              <Link to="/" className="flex items-center gap-2 min-w-0">
+          <div className="h-11 flex items-center px-3">
+            <button
+              onClick={() => onMenuToggle?.()}
+              className="p-1 text-[#f97316] hover:text-on-surface transition-colors"
+              aria-label="打开菜单"
+            >
+              <Icon name="menu" size={22} />
+            </button>
+            <Link to="/" className="flex items-center gap-2 min-w-0 ml-1">
                 {getLogoDisplayMode() === 'title_only' ? (
                   <span className="font-headline font-bold text-on-surface text-sm tracking-tighter truncate">{getSiteTitle()}</span>
                 ) : getLogoDisplayMode() === 'logo_only' && getSiteLogo() ? (
-                  <img src={getSiteLogo()} alt="" className="h-6 max-w-[120px] shrink-0 object-contain" />
+                  <img src={getSiteLogo()} alt="" className="h-6 max-w-[120px] shrink-0" />
                 ) : getLogoDisplayMode() === 'logo_and_title' && getSiteIcon() ? (
                   <>
-                    <img src={getSiteIcon()} alt="" className="h-6 w-6 shrink-0 object-contain" />
+                    <img src={getSiteIcon()} alt="" className="h-6 w-6 shrink-0 block" />
                     <span className="font-headline font-bold text-on-surface text-sm tracking-tighter truncate">{getSiteTitle()}</span>
                   </>
                 ) : getLogoDisplayMode() === 'logo_and_title' && getSiteLogo() ? (
                   <>
-                    <img src={getSiteLogo()} alt="" className="h-5 max-w-[60px] shrink-0 object-contain" />
+                    <img src={getSiteLogo()} alt="" className="h-5 max-w-[60px] shrink-0" />
                     <span className="font-headline font-bold text-on-surface text-sm tracking-tighter truncate">{getSiteTitle()}</span>
                   </>
                 ) : (
@@ -237,7 +236,7 @@ export default function TopNav({ compact = false, onMenuToggle }: TopNavProps) {
               </Link>
             </div>
 
-            <div className="flex items-center gap-0.5 shrink-0">
+            <div className="flex items-center gap-0.5 shrink-0 ml-auto">
               <NotificationPanel compact />
               <ThemeToggle />
               <UserMenu size="compact" />
