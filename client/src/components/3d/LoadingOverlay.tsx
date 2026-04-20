@@ -1,0 +1,56 @@
+import { useEffect, useState } from "react";
+import * as THREE from "three";
+import Icon from "../shared/Icon";
+
+export default function LoadingOverlay() {
+  const [progress, setProgress] = useState(0);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    const manager = THREE.DefaultLoadingManager;
+
+    const onStart = () => {
+      setLoading(true);
+      setProgress(0);
+    };
+    const onProgress = (_url: string, loaded: number, total: number) => {
+      setProgress(Math.round((loaded / total) * 100));
+    };
+    const onLoad = () => {
+      setProgress(100);
+      setTimeout(() => setLoading(false), 300);
+    };
+    const onError = () => {
+      setLoading(false);
+    };
+
+    manager.onStart = onStart;
+    manager.onProgress = onProgress;
+    manager.onLoad = onLoad;
+    manager.onError = onError;
+
+    return () => {
+      manager.onStart = () => {};
+      manager.onProgress = () => {};
+      manager.onLoad = () => {};
+      manager.onError = () => {};
+    };
+  }, []);
+
+  if (!loading) return null;
+
+  return (
+    <div className="absolute inset-0 flex flex-col items-center justify-center z-10 pointer-events-none bg-surface-dim/80 backdrop-blur-sm">
+      <Icon name="view_in_ar" size={40} className="text-primary/40 animate-pulse mb-4" />
+      <div className="w-40 h-1 bg-surface-container-highest rounded-full overflow-hidden">
+        <div
+          className="h-full bg-primary rounded-full transition-all duration-300 ease-out"
+          style={{ width: `${progress}%` }}
+        />
+      </div>
+      <span className="text-xs text-on-surface-variant font-mono mt-2">
+        {progress < 100 ? `加载中 ${progress}%` : "渲染中..."}
+      </span>
+    </div>
+  );
+}

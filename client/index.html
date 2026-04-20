@@ -1,0 +1,41 @@
+<!doctype html>
+<html class="dark" lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="description" content="3DPartHub - Enterprise 3D Part Model Management Platform" />
+    <meta name="theme-color" content="#1a1a1a" />
+    <meta property="og:title" content="3DPartHub" />
+    <meta property="og:description" content="3DPartHub - Enterprise 3D Part Model Management Platform" />
+    <meta property="og:type" content="website" />
+    <script>
+      var Module = { locateFile: function(name) { return '/' + name; } };
+    </script>
+    <script>
+      // Apply site config from localStorage before React hydrates to prevent flash
+      (function() {
+        try {
+          var raw = localStorage.getItem('site_config_cache');
+          if (!raw) return;
+          var stored = JSON.parse(raw);
+          var cfg = stored && stored.data;
+          if (!cfg) return;
+          if (cfg.site_title) {
+            document.title = cfg.site_title;
+          }
+          if (cfg.site_favicon) {
+            var link = document.querySelector('link[rel="icon"]');
+            if (link) link.href = cfg.site_favicon;
+          }
+        } catch(e) {}
+      })();
+    </script>
+    <script src="/occt-import-js.js"></script>
+    <title>3DPartHub</title>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

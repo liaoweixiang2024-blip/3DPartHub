@@ -1,0 +1,228 @@
+import {
+  Menu, Search, Download, Bell, User, CloudUpload, Settings,
+  Eye, Star, X, ArrowLeft, ArrowRight, ChevronRight, ChevronDown, ChevronLeft,
+  AlertCircle, CheckCircle, Plus, Upload, Folder, Lock,
+  LogOut, Mail, MoreHorizontal, MoreVertical, Link, Send,
+  Filter, Calendar, FileArchive, Expand, Grid, List, Package,
+  RefreshCw, Clock, FlaskConical, Box, Camera, Ruler,
+  Scissors, SlidersHorizontal, Zap, Wrench, ArrowLeftRight,
+  Copy, Check, Badge as BadgeIcon, Building2, Database,
+  Code as CodeIcon, FolderOpen, FolderClosed, ExternalLink, FileUp,
+  RotateCcw, Bookmark, Activity, HelpCircle, Weight,
+  Sun, Moon, Cog,
+  Cable, Pipette, Nut, Wind, Puzzle, Droplets,
+  CircleDot, Fuel, Cone, Layers, Grip,
+  Square, PanelRight, Grid3x3, Maximize2, Scan,
+  Image as ImageIcon,
+  Paperclip,
+  ImageIcon as PhotoIcon,
+  // Additional icons for categories
+  Plug, Bolt, Hexagon, Gauge, Fan, Merge, Split,
+  Flame, Cylinder, Funnel, Shield, Target, Hammer,
+  Factory, HardHat, CircuitBoard, Waypoints,
+  Spline, Timer, SprayCan, Disc, Ampersand,
+  Triangle, BoxSelect, Trash2,
+  Heart,
+  AlertTriangle,
+  Pencil, Undo2, Save,
+  Users, Receipt, Megaphone,
+  MessageCircle, BellOff,
+  Phone,
+  Inbox,
+  ListChecks,
+} from "lucide-react";
+import type { LucideIcon } from "lucide-react";
+
+const iconMap: Record<string, LucideIcon> = {
+  // Navigation & Actions
+  menu: Menu,
+  search: Search,
+  download: Download,
+  "cloud_upload": CloudUpload,
+  notifications: Bell,
+  settings: Settings,
+  person: User,
+  close: X,
+  add: Plus,
+  upload: Upload,
+  send: Send,
+
+  // Visibility & Feedback
+  visibility: Eye,
+  star: Star,
+  favorite: Heart,
+  "star_off": Heart,
+  error: AlertCircle,
+  warning: AlertTriangle,
+  "check_circle": CheckCircle,
+  check: Check,
+  "content_copy": Copy,
+
+  // Arrows & Navigation
+  "arrow_back": ArrowLeft,
+  "arrow_forward": ArrowRight,
+  "chevron_right": ChevronRight,
+  "chevron_left": ChevronLeft,
+  "expand_more": ChevronDown,
+  "compare_arrows": ArrowLeftRight,
+
+  // Content
+  link: Link,
+  mail: Mail,
+  lock: Lock,
+  logout: LogOut,
+  "more_horiz": MoreHorizontal,
+  "more_vert": MoreVertical,
+  filter_list: Filter,
+  calendar_today: Calendar,
+  folder: Folder,
+  "folder_off": FolderOpen,
+  "folder_special": FolderClosed,
+  "folder_zip": FileArchive,
+  fullscreen: Expand,
+  "grid_view": Grid,
+  "view_list": List,
+  "inventory_2": Package,
+  "progress_activity": RefreshCw,
+  schedule: Clock,
+  science: FlaskConical,
+  "view_in_ar": Box,
+  photo_camera: Camera,
+  straighten: Ruler,
+  "content_cut": Scissors,
+  tune: SlidersHorizontal,
+  update: RefreshCw,
+  weight: Weight,
+  "3d_rotation": RotateCcw,
+  "360": RotateCcw,
+  badge: BadgeIcon,
+  domain: Building2,
+  "data_usage": Database,
+  api: CodeIcon,
+  "open_in_new": ExternalLink,
+  "upload_file": FileUp,
+  autorenew: RefreshCw,
+  bookmark: Bookmark,
+  "bookmark_border": Bookmark,
+  "precision_manufacturing": Cog,
+  "search_off": HelpCircle,
+  "support_agent": HelpCircle,
+  "assignment_add": FileUp,
+  "create_new_folder": FolderOpen,
+  "library_books": Package,
+  light_mode: Sun,
+  dark_mode: Moon,
+  build: Wrench,
+  dashboard: Package,
+  "hourglass_top": RefreshCw,
+  delete: Trash2,
+  restore: Undo2,
+  edit: Pencil,
+  save: Save,
+  group: Users,
+  receipt_long: Receipt,
+  campaign: Megaphone,
+
+  // 3D Viewer controls
+  square: Square,
+  "view_sidebar": PanelRight,
+  "deployed_code": Box,
+  "grid_4x4": Grid3x3,
+  layers: Layers,
+  "zoom_out_map": Maximize2,
+  "crop_free": Scan,
+  "wallpaper": ImageIcon,
+  image: PhotoIcon,
+  attachment: Paperclip,
+  chat: MessageCircle,
+  notifications_off: BellOff,
+  phone: Phone,
+  refresh: RefreshCw,
+  inbox: Inbox,
+  checklist: ListChecks,
+
+  // Category icons — parent
+  "category_all": Layers,
+  "stainless_steel": Hexagon,
+  "iron_hydraulic": Bolt,
+  "copper": CircleDot,
+  "pneumatic": Fan,
+  "assembly": Puzzle,
+  "valve": Disc,
+  "accessories": Wrench,
+  "universal_pipe": Spline,
+  "air_tank": Cylinder,
+  "pneumatic_fitting": Plug,
+  "lubrication": Droplets,
+  "pipeline": Merge,
+  "other_materials": Package,
+
+  // Category icons — child: 配件
+  "cat_meter": Gauge,
+  "cat_water_gun": SprayCan,
+  "cat_crimp_fitting": Cable,
+  "cat_sheet_metal": Shield,
+  "cat_hydraulic_hose": Spline,
+
+  // Category icons — child: 气动元件
+  "cat_smc": CircuitBoard,
+  "cat_air_gun": Wind,
+  "cat_pneumatic_brand": Cog,
+
+  // Category icons — child: 铜接头
+  "cat_copper_sleeve": CircleDot,
+  "cat_copper_pagoda": Triangle,
+  "cat_copper_quick_screw": Nut,
+  "cat_copper_quick_insert": Plug,
+
+  // Category icons — child: 组装成品类
+  "cat_pneumatic_module": CircuitBoard,
+  "cat_air_combo": Wind,
+  "cat_air_control": SlidersHorizontal,
+  "cat_air_board": CircuitBoard,
+  "cat_gun_set": Package,
+  "cat_water_module": Droplets,
+  "cat_oil_set": Fuel,
+  "cat_parts_assembly": Puzzle,
+  "cat_hose_assembly": Spline,
+
+  // Category icons — child: 铁&液压接头
+  "cat_flow_block": Split,
+  "cat_center_water": Droplets,
+  "cat_pagoda": Triangle,
+  "cat_zinc_hydraulic": Bolt,
+  "cat_quick_connect": Zap,
+  "cat_carbon_steel": Hexagon,
+  "cat_iron_pipe": Merge,
+
+  // Category icons — child: 阀门
+  "cat_ss_valve": Disc,
+  "cat_copper_valve": CircleDot,
+
+  // Category icons — child: 不锈钢接头
+  "cat_weld_straight": Hexagon,
+  "cat_nozzle": Funnel,
+  "cat_ring_spray": Target,
+  "cat_quick_insert": Plug,
+  "cat_quick_screw": Nut,
+  "cat_sleeve": CircleDot,
+  "cat_ss_pipe": Merge,
+};
+
+interface IconProps {
+  name: string;
+  size?: number;
+  className?: string;
+  fill?: boolean;
+}
+
+export default function Icon({ name, size = 20, className = "", fill }: IconProps) {
+  const LucideComp = iconMap[name];
+  if (!LucideComp) return <span style={{ width: size, height: size, display: "inline-block" }} />;
+  return (
+    <LucideComp
+      size={size}
+      className={`inline-block ${fill ? "fill-current" : ""} ${className}`}
+    />
+  );
+}

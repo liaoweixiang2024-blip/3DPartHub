@@ -1,0 +1,12 @@
+node_modules/
+dist/
+.env
+*.log
+uploads/
+static/models/
+static/originals/
+static/thumbnails/
+static/batch/
+static/backups/
+.occt-import-js.cache/
+scripts/

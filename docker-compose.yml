@@ -1,0 +1,60 @@
+services:
+  api:
+    build: ./server
+    environment:
+      PORT: 8000
+      DATABASE_URL: postgresql://modeluser:${DB_PASSWORD:-modelpass}@postgres:5432/3dparthub?connection_limit=20&pool_timeout=10
+      JWT_SECRET: ${JWT_SECRET:-change-me-in-production}
+      JWT_EXPIRES_IN: 7d
+      UPLOAD_DIR: uploads
+      STATIC_DIR: static
+      MAX_FILE_SIZE: 104857600
+      REDIS_URL: redis://redis:6379
+      ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-http://localhost:5173}
+      SMTP_HOST: ${SMTP_HOST:-smtp.qq.com}
+      SMTP_PORT: ${SMTP_PORT:-465}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASS: ${SMTP_PASS:-}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    volumes:
+      - uploads-data:/app/uploads
+      - ./server/static:/app/static
+    restart: unless-stopped
+    # No external ports — only accessible via web (nginx)
+
+  web:
+    build: ./client
+    ports:
+      - "${WEB_PORT:-5173}:80"
+    depends_on:
+      - api
+    restart: unless-stopped
+
+  postgres:
+    image: postgres:16-alpine
+    # No external ports — only accessible from api container
+    environment:
+      POSTGRES_DB: 3dparthub
+      POSTGRES_USER: modeluser
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-modelpass}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U modeluser -d 3dparthub"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    # No external ports — only accessible from api container
+    restart: unless-stopped
+
+volumes:
+  pgdata:
+  uploads-data:

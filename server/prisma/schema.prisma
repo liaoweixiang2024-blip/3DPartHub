@@ -1,0 +1,277 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           String   @id @default(uuid())
+  username     String   @unique
+  email        String   @unique
+  passwordHash String   @map("password_hash")
+  avatar       String?
+  role         Role     @default(VIEWER)
+  company      String?
+  phone        String?
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  models          Model[]
+  modelVersions   ModelVersion[]
+  favorites       Favorite[]
+  downloads       Download[]
+  comments        Comment[]
+  ownedProjects   Project[]              @relation("ProjectOwner")
+  projectMembers  ProjectMember[]
+  shareLinks      ShareLink[]
+  supportTickets  SupportTicket[]
+  ticketMessages  TicketMessage[]
+  notifications   Notification[]
+
+  @@map("users")
+}
+
+enum Role {
+  ADMIN
+  EDITOR
+  VIEWER
+}
+
+model Project {
+  id          String   @id @default(uuid())
+  name        String
+  description String?
+  coverImage  String?  @map("cover_image")
+  ownerId     String   @map("owner_id")
+  owner       User     @relation("ProjectOwner", fields: [ownerId], references: [id])
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  members ProjectMember[]
+  models  Model[]
+
+  @@map("projects")
+}
+
+model ProjectMember {
+  id        String   @id @default(uuid())
+  projectId String   @map("project_id")
+  project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  userId    String   @map("user_id")
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role      Role     @default(VIEWER)
+  joinedAt  DateTime @default(now()) @map("joined_at")
+
+  @@unique([projectId, userId])
+  @@map("project_members")
+}
+
+model Model {
+  id              String   @id @default(uuid())
+  name            String
+  description     String?
+  partNumber      String?   @map("part_number")
+  category        String?
+  categoryId      String?  @map("category_id")
+  categoryRef     Category? @relation(fields: [categoryId], references: [id])
+  originalName    String   @map("original_name")
+  originalFormat  String   @map("original_format")
+  originalSize    Int      @map("original_size")
+  gltfUrl         String   @map("gltf_url")
+  gltfSize        Int      @map("gltf_size")
+  thumbnailUrl    String?  @map("thumbnail_url")
+  dimensions      String?
+  format          String
+  status          String   @default("processing")
+  currentVersion  Int      @default(1) @map("current_version")
+  downloadCount   Int      @default(0) @map("download_count")
+  uploadPath      String?  @map("upload_path")
+  metadata        Json?
+  projectId       String?  @map("project_id")
+  project         Project? @relation(fields: [projectId], references: [id])
+
+  createdById String   @map("created_by_id")
+  createdBy   User     @relation(fields: [createdById], references: [id])
+
+  versions  ModelVersion[]
+  favorites Favorite[]
+  downloads Download[]
+  comments  Comment[]
+  shareLinks ShareLink[]
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([status])
+  @@index([categoryId])
+  @@index([createdById])
+  @@index([createdAt])
+  @@index([projectId])
+  @@map("models")
+}
+
+model ModelVersion {
+  id             String   @id @default(uuid())
+  modelId        String   @map("model_id")
+  model          Model    @relation(fields: [modelId], references: [id], onDelete: Cascade)
+  versionNumber  Int      @map("version_number")
+  fileKey        String   @map("file_key")
+  format         String
+  fileSize       Int      @map("file_size")
+  vertexCount    Int?     @map("vertex_count")
+  faceCount      Int?     @map("face_count")
+  changeLog      String?  @map("change_log")
+  createdById    String   @map("created_by_id")
+  createdBy      User     @relation(fields: [createdById], references: [id])
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  @@map("model_versions")
+}
+
+model Favorite {
+  id        String   @id @default(uuid())
+  userId    String   @map("user_id")
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  modelId   String   @map("model_id")
+  model     Model    @relation(fields: [modelId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@unique([userId, modelId])
+  @@index([userId])
+  @@map("favorites")
+}
+
+model Download {
+  id        String   @id @default(uuid())
+  userId    String   @map("user_id")
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  modelId   String   @map("model_id")
+  model     Model    @relation(fields: [modelId], references: [id], onDelete: Cascade)
+  format    String
+  fileSize  Int      @map("file_size")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([userId])
+  @@index([userId, createdAt])
+  @@map("downloads")
+}
+
+model Comment {
+  id        String   @id @default(uuid())
+  modelId   String   @map("model_id")
+  model     Model    @relation(fields: [modelId], references: [id], onDelete: Cascade)
+  userId    String   @map("user_id")
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  content   String
+  position3d Json?   @map("position_3d")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([modelId])
+  @@map("comments")
+}
+
+model ShareLink {
+  id        String    @id @default(uuid())
+  modelId   String    @map("model_id")
+  model     Model     @relation(fields: [modelId], references: [id], onDelete: Cascade)
+  token     String    @unique
+  password  String?
+  expiresAt DateTime? @map("expires_at")
+  createdById String  @map("created_by_id")
+  createdBy   User    @relation(fields: [createdById], references: [id])
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  @@map("share_links")
+}
+
+model AuditLog {
+  id         String   @id @default(uuid())
+  userId     String?  @map("user_id")
+  action     String
+  resource   String
+  resourceId String?  @map("resource_id")
+  details    Json?
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  @@index([userId])
+  @@index([createdAt])
+  @@map("audit_logs")
+}
+
+model Category {
+  id        String    @id @default(uuid())
+  name      String
+  icon      String    @default("folder")
+  parentId  String?   @map("parent_id")
+  parent    Category? @relation("CategoryTree", fields: [parentId], references: [id], onDelete: Cascade)
+  children  Category[] @relation("CategoryTree")
+  sortOrder Int       @default(0) @map("sort_order")
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+
+  models Model[]
+
+  @@index([parentId])
+  @@map("categories")
+}
+
+model SupportTicket {
+  id             String   @id @default(uuid())
+  userId         String   @map("user_id")
+  user           User     @relation(fields: [userId], references: [id])
+  basePart       String?  @map("base_part")
+  classification String
+  description    String
+  status         String   @default("open")
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  messages TicketMessage[]
+
+  @@index([userId])
+  @@index([status])
+  @@map("support_tickets")
+}
+
+model TicketMessage {
+  id        String         @id @default(uuid())
+  ticketId  String         @map("ticket_id")
+  ticket    SupportTicket  @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  userId    String         @map("user_id")
+  user      User           @relation(fields: [userId], references: [id])
+  content   String
+  attachment String? @map("attachment")
+  isAdmin   Boolean        @default(false) @map("is_admin")
+  createdAt DateTime       @default(now()) @map("created_at")
+
+  @@index([ticketId])
+  @@map("ticket_messages")
+}
+
+model Notification {
+  id        String   @id @default(uuid())
+  userId    String   @map("user_id")
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title     String
+  message   String
+  type      String   @default("info")
+  read      Boolean  @default(false)
+  relatedId String?  @map("related_id")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([userId])
+  @@index([userId, read])
+  @@map("notifications")
+}
+
+model Setting {
+  id        String   @id @default(uuid())
+  key       String   @unique
+  value     String   @default("{}")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("settings")
+}

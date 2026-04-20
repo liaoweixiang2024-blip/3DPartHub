@@ -1,0 +1,81 @@
+# ===== 宝塔面板 Docker Compose 生产配置 =====
+# 使用方式: docker compose -f docker-compose.prod.yml up -d
+#
+# 部署步骤:
+# 1. 将整个项目上传到服务器（如 /www/wwwroot/model）
+# 2. 复制 .env.production 为 .env 并填入真实值
+# 3. 运行: docker compose -f docker-compose.prod.yml up -d --build
+# 4. 在宝塔面板创建网站，设置反向代理到 http://127.0.0.1:5173
+
+services:
+  api:
+    build: ./server
+    ports:
+      - "8000:8000"
+    environment:
+      PORT: 8000
+      DATABASE_URL: postgresql://modeluser:${DB_PASSWORD:-modelpass}@postgres:5432/model_management
+      JWT_SECRET: ${JWT_SECRET:-change-me-in-production}
+      JWT_EXPIRES_IN: 7d
+      UPLOAD_DIR: uploads
+      STATIC_DIR: static
+      MAX_FILE_SIZE: 104857600
+      REDIS_URL: redis://redis:6379
+      ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-http://localhost}
+      SMTP_HOST: ${SMTP_HOST:-smtp.qq.com}
+      SMTP_PORT: ${SMTP_PORT:-465}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASS: ${SMTP_PASS:-}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    volumes:
+      - uploads-data:/app/uploads
+      - ./server/static:/app/static
+    restart: unless-stopped
+    networks:
+      - internal
+
+  web:
+    build: ./client
+    ports:
+      - "5173:80"
+    depends_on:
+      - api
+    restart: unless-stopped
+    networks:
+      - internal
+
+  postgres:
+    image: postgres:16-alpine
+    # 不暴露端口到宿主机，仅内部访问（安全）
+    environment:
+      POSTGRES_DB: model_management
+      POSTGRES_USER: modeluser
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-modelpass}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U modeluser -d model_management"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    networks:
+      - internal
+
+  redis:
+    image: redis:7-alpine
+    # 不暴露端口到宿主机，仅内部访问（安全）
+    restart: unless-stopped
+    networks:
+      - internal
+
+volumes:
+  pgdata:
+  uploads-data:
+
+networks:
+  internal:

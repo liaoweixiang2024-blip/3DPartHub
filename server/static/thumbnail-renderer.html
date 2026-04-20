@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+  * { margin: 0; padding: 0; }
+  body { overflow: hidden; }
+  canvas { display: block; }
+</style>
+<script type="importmap">
+{
+  "imports": {
+    "three": "/static/js/three.module.js",
+    "three/addons/": "/static/js/addons/"
+  }
+}
+</script>
+</head>
+<body>
+<script type="module">
+import * as THREE from 'three';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { RGBELoader } from 'three/addons/loaders/RGBELoader.js';
+
+const params = new URLSearchParams(window.location.search);
+const modelUrl = params.get('model');
+
+const SIZE = 1024;
+
+// Renderer — EXACT match with online viewer (ModelViewer.tsx)
+const renderer = new THREE.WebGLRenderer({
+  antialias: true,
+  preserveDrawingBuffer: true,
+  alpha: false,
+});
+renderer.setSize(SIZE, SIZE);
+renderer.setPixelRatio(1);
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.2;
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+document.body.appendChild(renderer.domElement);
+
+// Scene — white background
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0xffffff);
+
+// Lighting — EXACT match with online viewer Scene.tsx
+scene.add(new THREE.AmbientLight(0xffffff, 0.6));
+
+const dir1 = new THREE.DirectionalLight(0xffffff, 1.4);
+dir1.position.set(10, 10, 5);
+dir1.castShadow = true;
+dir1.shadow.mapSize.width = 1024;
+dir1.shadow.mapSize.height = 1024;
+scene.add(dir1);
+
+const dir2 = new THREE.DirectionalLight(0xb0c4de, 0.6);
+dir2.position.set(-8, 6, -8);
+scene.add(dir2);
+
+const dir3 = new THREE.DirectionalLight(0xe0e8f0, 0.3);
+dir3.position.set(0, -5, 10);
+scene.add(dir3);
+
+const pointLight = new THREE.PointLight(0xffffff, 0.4);
+pointLight.position.set(0, 15, 0);
+scene.add(pointLight);
+
+// Camera
+const camera = new THREE.PerspectiveCamera(45, 1, 0.01, 100000);
+
+function render() {
+  renderer.render(scene, camera);
+}
+
+// Load city HDR environment (same as online viewer's "city" preset)
+const rgbeLoader = new RGBELoader();
+rgbeLoader.load('/static/js/potsdamer_platz_1k.hdr', (envMap) => {
+  const pmremGenerator = new THREE.PMREMGenerator(renderer);
+  const envTexture = pmremGenerator.fromEquirectangular(envMap).texture;
+  scene.environment = envTexture;
+  envMap.dispose();
+  pmremGenerator.dispose();
+
+  if (!modelUrl) {
+    render();
+    window.__done = true;
+    return;
+  }
+
+  const loader = new GLTFLoader();
+  loader.load(
+    modelUrl,
+    (gltf) => {
+      const model = gltf.scene;
+
+      // Enable shadow receiving on all meshes
+      model.traverse((child) => {
+        if (child.isMesh) {
+          child.castShadow = true;
+          child.receiveShadow = true;
+        }
+      });
+
+      scene.add(model);
+
+      const box = new THREE.Box3().setFromObject(model);
+      const center = box.getCenter(new THREE.Vector3());
+      const size = box.getSize(new THREE.Vector3());
+      const maxDim = Math.max(size.x, size.y, size.z) || 1;
+
+      const fovRad = (45 / 2) * Math.PI / 180;
+      const fitDistance = (maxDim / 2) / Math.tan(fovRad);
+      const padding = 1.5;
+      const distance = fitDistance * padding;
+
+      const dir = new THREE.Vector3(5, 3, 5).normalize();
+      camera.position.copy(center).add(dir.multiplyScalar(distance));
+      camera.lookAt(center);
+      camera.updateProjectionMatrix();
+
+      // Update shadow camera to cover the model
+      dir1.shadow.camera.near = 0.1;
+      dir1.shadow.camera.far = distance * 3;
+      dir1.shadow.camera.left = -maxDim * 2;
+      dir1.shadow.camera.right = maxDim * 2;
+      dir1.shadow.camera.top = maxDim * 2;
+      dir1.shadow.camera.bottom = -maxDim * 2;
+      dir1.shadow.camera.updateProjectionMatrix();
+      dir1.target.position.copy(center);
+      dir1.target.updateMatrixWorld();
+
+      render();
+      window.__done = true;
+    },
+    undefined,
+    () => {
+      render();
+      window.__done = true;
+    }
+  );
+}, undefined, () => {
+  if (!modelUrl) {
+    render();
+    window.__done = true;
+    return;
+  }
+  const loader = new GLTFLoader();
+  loader.load(modelUrl, (gltf) => {
+    scene.add(gltf.scene);
+    render();
+    window.__done = true;
+  }, undefined, () => {
+    render();
+    window.__done = true;
+  });
+});
+</script>
+</body>
+</html>
