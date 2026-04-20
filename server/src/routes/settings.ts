@@ -15,6 +15,7 @@ const router = Router();
 const imageDirs: Record<string, string> = {
   watermark_image: join(process.cwd(), config.staticDir, "watermark"),
   site_logo: join(process.cwd(), config.staticDir, "logo"),
+  site_icon: join(process.cwd(), config.staticDir, "logo"),
   site_favicon: join(process.cwd(), config.staticDir, "favicon"),
 };
 for (const dir of Object.values(imageDirs)) {
@@ -25,6 +26,7 @@ for (const dir of Object.values(imageDirs)) {
 const imageNames: Record<string, string> = {
   watermark_image: "watermark",
   site_logo: "logo",
+  site_icon: "icon",
   site_favicon: "favicon",
 };
 
@@ -266,7 +268,7 @@ router.post("/api/settings/upload-image", authMiddleware, async (req: AuthReques
 
   // Build URL path: /static/<subdir>/<filename>
   const dirKey = Object.keys(imageDirs).find(k => imageDirs[k] === targetDir)!;
-  const urlSegment = dirKey === "watermark_image" ? "watermark" : dirKey === "site_logo" ? "logo" : "favicon";
+  const urlSegment = dirKey === "watermark_image" ? "watermark" : (dirKey === "site_logo" || dirKey === "site_icon") ? "logo" : "favicon";
   const imageUrl = `/static/${urlSegment}/${finalName}`;
   await setSetting(key, imageUrl);
   res.json({ url: imageUrl });
@@ -289,6 +291,7 @@ router.get("/api/settings/public", async (_req, res: Response) => {
       site_title: all.site_title ?? "3DPartHub",
       site_browser_title: all.site_browser_title ?? "",
       site_logo: all.site_logo ?? "/static/logo/logo.svg",
+      site_icon: all.site_icon ?? "/static/logo/icon.svg",
       site_favicon: all.site_favicon ?? "/favicon.svg",
       site_logo_display: all.site_logo_display ?? "logo_and_title",
       site_description: all.site_description ?? "",

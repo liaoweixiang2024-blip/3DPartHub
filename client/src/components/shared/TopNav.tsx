@@ -8,7 +8,7 @@ import UploadModal from "./UploadModal";
 import NotificationPanel from "./NotificationPanel";
 import Icon from "./Icon";
 import Tooltip from "./Tooltip";
-import { getSiteTitle, getSiteLogo, getLogoDisplayMode, onSiteConfigChange } from "../../lib/publicSettings";
+import { getSiteTitle, getSiteLogo, getSiteIcon, getLogoDisplayMode, onSiteConfigChange } from "../../lib/publicSettings";
 
 interface TopNavProps {
   compact?: boolean;
@@ -216,11 +216,11 @@ export default function TopNav({ compact = false, onMenuToggle }: TopNavProps) {
               <Link to="/" className="flex items-center gap-1.5 min-w-0">
                 {getLogoDisplayMode() === 'title_only' ? (
                   <span className="font-headline font-bold text-on-surface text-xs tracking-tighter truncate">{getSiteTitle()}</span>
-                ) : getSiteLogo() && getLogoDisplayMode() === 'logo_only' ? (
+                ) : getLogoDisplayMode() === 'logo_only' && getSiteLogo() ? (
                   <img src={getSiteLogo()} alt="" className="h-5 max-w-[100px] shrink-0 object-contain" />
-                ) : getSiteLogo() ? (
+                ) : (getSiteIcon() || getSiteLogo()) ? (
                   <>
-                    <img src={getSiteLogo()} alt="" className="h-4 max-w-[48px] shrink-0 object-contain" />
+                    <img src={getSiteIcon() || getSiteLogo()} alt="" className="h-4 w-4 shrink-0 object-contain" />
                     <span className="font-headline font-bold text-on-surface text-xs tracking-tighter truncate">{getSiteTitle()}</span>
                   </>
                 ) : (
@@ -263,20 +263,24 @@ export default function TopNav({ compact = false, onMenuToggle }: TopNavProps) {
 
   const displayMode = getLogoDisplayMode();
   const siteLogo = getSiteLogo();
+  const siteIcon = getSiteIcon();
   const siteTitle = getSiteTitle();
+
+  // logo_only: wide logo; logo_and_title: square icon + title
+  const iconForNav = displayMode === 'logo_and_title' ? (siteIcon || siteLogo) : siteLogo;
 
   return (
     <>
       <header className="h-14 flex items-center bg-surface-container-low border-b border-outline-variant/10 shrink-0 z-50">
-        <Link to="/" className={`flex items-center hover:opacity-80 transition-opacity shrink-0 ${displayMode === 'logo_only' ? 'w-56 px-4' : 'px-4 gap-1.5'}`}>
+        <Link to="/" className={`flex items-center hover:opacity-80 transition-opacity shrink-0 ${displayMode === 'logo_only' ? 'w-56 px-4' : 'w-56 px-4 gap-1.5'}`}>
           {displayMode === 'title_only' ? (
             <span className="text-sm font-headline font-bold tracking-tighter text-on-surface truncate">{siteTitle}</span>
-          ) : siteLogo && displayMode === 'logo_only' ? (
-            <img src={siteLogo} alt={siteTitle} className="h-8 w-full object-contain" />
-          ) : siteLogo && displayMode === 'logo_and_title' ? (
+          ) : iconForNav && displayMode === 'logo_only' ? (
+            <img src={iconForNav} alt={siteTitle} className="h-8 w-full object-contain" />
+          ) : iconForNav && displayMode === 'logo_and_title' ? (
             <>
-              <img src={siteLogo} alt={siteTitle} className="h-6 max-w-[72px] object-contain shrink-0" />
-              <span className="text-sm font-headline font-bold tracking-tighter text-on-surface truncate hidden sm:inline">{siteTitle}</span>
+              <img src={siteIcon || siteLogo} alt={siteTitle} className="h-7 w-7 shrink-0 object-contain" />
+              <span className="text-sm font-headline font-bold tracking-tighter text-on-surface truncate">{siteTitle}</span>
             </>
           ) : (
             <>

@@ -101,6 +101,11 @@ export function getSiteLogo(): string {
   return (cache?.site_logo as string) || "";
 }
 
+// Get site icon URL (sync, square icon for logo+title mode)
+export function getSiteIcon(): string {
+  return (cache?.site_icon as string) || "";
+}
+
 // Get logo display mode: 'logo_and_title' | 'logo_only' | 'title_only'
 export function getLogoDisplayMode(): string {
   return (cache?.site_logo_display as string) || "logo_and_title";

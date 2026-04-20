@@ -22,6 +22,7 @@ const DEFAULT_SETTINGS: SystemSettings = {
   site_title: "3DPartHub",
   site_browser_title: "",
   site_logo: "/static/logo/logo.svg",
+  site_icon: "/static/logo/icon.svg",
   site_favicon: "/favicon.svg",
   site_logo_display: "logo_and_title",
   site_description: "",
@@ -78,10 +79,11 @@ const GROUPS: SettingGroup[] = [
     items: [
       { key: 'site_title', label: '网站名称', desc: '显示在导航栏、登录页和浏览器标签的站点名称', type: 'text' },
       { key: 'site_browser_title', label: '浏览器标题', desc: '浏览器标签页显示的标题，留空则使用网站名称', type: 'text' },
-      { key: 'site_logo', label: '站点 Logo', desc: '建议横版长条形，宽高比 5:1 左右，SVG/PNG 格式透明背景', type: 'image' },
-      { key: 'site_logo_display', label: 'Logo 显示方式', desc: '选择导航栏中 Logo 和标题的组合方式', type: 'select', options: [
-        { value: 'logo_and_title', label: 'Logo + 标题' },
-        { value: 'logo_only', label: '仅 Logo' },
+      { key: 'site_logo', label: '站点 Logo', desc: '仅 Logo 模式使用，建议横版长条形，宽高比 5:1，SVG/PNG 透明背景', type: 'image' },
+      { key: 'site_icon', label: '站点图标', desc: 'Logo + 标题模式使用，建议正方形 64×64，SVG/PNG 透明背景', type: 'image' },
+      { key: 'site_logo_display', label: 'Logo 显示方式', desc: '仅 Logo = 横版长条；Logo + 标题 = 方形图标 + 文字', type: 'select', options: [
+        { value: 'logo_and_title', label: '图标 + 标题' },
+        { value: 'logo_only', label: '仅 Logo（长条）' },
         { value: 'title_only', label: '仅标题' },
       ] },
       { key: 'site_favicon', label: 'Favicon 图标', desc: '浏览器标签页图标，建议正方形 32×32 或 64×64，支持 ICO/PNG/SVG', type: 'image' },

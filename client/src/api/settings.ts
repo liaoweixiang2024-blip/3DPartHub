@@ -13,6 +13,7 @@ export interface SystemSettings {
   site_title: string;
   site_browser_title: string;
   site_logo: string;
+  site_icon: string;
   site_favicon: string;
   site_logo_display: string;
   site_description: string;

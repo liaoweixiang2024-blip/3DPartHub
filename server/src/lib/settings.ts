@@ -18,6 +18,7 @@ const SETTINGS_SCHEMA: SettingDef[] = [
   { key: "site_title", defaultValue: "3DPartHub" },
   { key: "site_browser_title", defaultValue: "" },
   { key: "site_logo", defaultValue: "/static/logo/logo.svg" },
+  { key: "site_icon", defaultValue: "/static/logo/icon.svg" },
   { key: "site_favicon", defaultValue: "/favicon.svg" },
   { key: "site_logo_display", defaultValue: "logo_and_title" },
   { key: "site_description", defaultValue: "" },
