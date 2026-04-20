@@ -673,11 +673,10 @@ export default function HomePage() {
             <div className="flex items-center gap-3">
               <div className="flex items-center gap-2">
                 {getSiteLogo() ? (
-                  <img src={getSiteLogo()} alt="" className="w-5 h-5 object-contain opacity-70" />
+                  <img src={getSiteLogo()} alt="" className="h-5 max-w-[100px] object-contain opacity-70" />
                 ) : (
                   <Icon name="precision_manufacturing" size={18} className="text-orange-500/70" />
                 )}
-                <span className="font-headline font-semibold text-xs text-on-surface-variant/60 tracking-tight">{getSiteTitle()}</span>
               </div>
               <div className="w-px h-4 bg-outline-variant/15" />
               <span className="text-[11px] text-on-surface-variant/30">
