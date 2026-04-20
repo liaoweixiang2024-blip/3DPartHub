@@ -216,7 +216,7 @@ export default function TopNav({ compact = false, onMenuToggle }: TopNavProps) {
               <Link to="/" className="flex items-center gap-1.5 min-w-0">
                 {getLogoDisplayMode() !== 'title_only' && (
                   getSiteLogo() ? (
-                    <img src={getSiteLogo()} alt="" className="w-5 h-5 shrink-0 object-contain" />
+                    <img src={getSiteLogo()} alt="" className={`${getLogoDisplayMode() === 'logo_only' ? 'h-5 max-w-[100px]' : 'w-5 h-5'} shrink-0 object-contain`} />
                   ) : (
                     <Icon name="precision_manufacturing" size={20} className="text-orange-500 shrink-0" />
                   )
@@ -259,10 +259,10 @@ export default function TopNav({ compact = false, onMenuToggle }: TopNavProps) {
   return (
     <>
       <header className="h-14 flex items-center bg-surface-container-low border-b border-outline-variant/10 shrink-0 z-50">
-        <Link to="/" className="flex items-center gap-2 hover:opacity-80 transition-opacity shrink-0 w-56 px-5">
+        <Link to="/" className="flex items-center gap-2 hover:opacity-80 transition-opacity shrink-0 px-5">
           {getLogoDisplayMode() !== 'title_only' && (
             getSiteLogo() ? (
-              <img src={getSiteLogo()} alt="" className={`${getLogoDisplayMode() === 'logo_only' ? 'w-8 h-8' : 'w-6 h-6'} object-contain`} />
+              <img src={getSiteLogo()} alt="" className={`${getLogoDisplayMode() === 'logo_only' ? 'h-7 max-w-[140px]' : 'w-6 h-6'} object-contain`} />
             ) : (
               <Icon name="view_in_ar" size={22} className="text-orange-500" />
             )
