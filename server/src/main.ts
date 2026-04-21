@@ -120,7 +120,7 @@ app.listen(PORT, async () => {
     const existing = await prisma.user.findFirst({ where: { role: "ADMIN" } });
     if (!existing) {
       const adminUser = process.env.ADMIN_USER || "admin";
-      const adminPass = process.env.ADMIN_PASS || randomUUID().slice(0, 12);
+      const adminPass = process.env.ADMIN_PASS || "admin123";
       const hash = await hashPassword(adminPass);
       try {
         await prisma.user.create({
@@ -129,12 +129,13 @@ app.listen(PORT, async () => {
             email: `${adminUser}@3dparthub.local`,
             passwordHash: hash,
             role: "ADMIN",
+            mustChangePassword: true,
           },
         });
         console.log(`\n  👑 Admin account created (first run only):`);
         console.log(`     Username: ${adminUser}`);
         console.log(`     Password: ${adminPass}`);
-        console.log(`     ⚠️  Please change the password after first login!\n`);
+        console.log(`     ⚠️  首次登录后将强制修改密码！\n`);
       } catch {
         // Another worker created admin first — safe to ignore
       }

@@ -415,6 +415,7 @@ export interface UpdateCheckResult {
   current: string;
   remote: string;
   updateAvailable: boolean;
+  warning?: string;
 }
 
 export async function checkUpdate(): Promise<UpdateCheckResult> {

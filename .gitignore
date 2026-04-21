@@ -18,3 +18,4 @@ stitch-assets/
 *.tsbuildinfo
 .colima/
 .claude/
+docker-compose.override.yml

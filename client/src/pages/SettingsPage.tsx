@@ -368,7 +368,7 @@ function Content() {
   const [restoreConfirmFile, setRestoreConfirmFile] = useState<File | null>(null);
 
   // Update state
-  const [updateInfo, setUpdateInfo] = useState<{ current: string; remote: string; updateAvailable: boolean } | null>(null);
+  const [updateInfo, setUpdateInfo] = useState<{ current: string; remote: string; updateAvailable: boolean; warning?: string } | null>(null);
   const [updating, setUpdating] = useState(false);
   const [updateProgress, setUpdateProgress] = useState({ stage: "", percent: 0, message: "" });
   const [checkingUpdate, setCheckingUpdate] = useState(false);
@@ -484,17 +484,18 @@ function Content() {
 
   async function handleUpdate() {
     setUpdating(true);
+    let lastStage = "pulling";
     setUpdateProgress({ stage: "pulling", percent: 0, message: "正在准备更新..." });
     try {
       const jobId = await startUpdate();
       await pollUpdateProgress(jobId, (stage, percent, message) => {
+        lastStage = stage;
         setUpdateProgress({ stage, percent, message });
       });
       toast('更新成功，页面即将刷新...', 'success');
       setTimeout(() => window.location.reload(), 3000);
     } catch (err: any) {
-      // Network error during restart is expected — just refresh
-      if (updateProgress.stage === "restarting" || !navigator.onLine) {
+      if (lastStage === "restarting" || !navigator.onLine) {
         toast('服务正在重启，页面即将刷新...', 'success');
         setTimeout(() => window.location.reload(), 5000);
       } else {
@@ -1035,6 +1036,12 @@ function Content() {
                   )}
                 </div>
               </div>
+
+              {updateInfo?.warning && (
+                <div className="mt-2 p-3 rounded-md bg-amber-500/10 border border-amber-500/20">
+                  <p className="text-xs text-amber-400">{updateInfo.warning}</p>
+                </div>
+              )}
 
               {updating && (
                 <div className="mt-3">
