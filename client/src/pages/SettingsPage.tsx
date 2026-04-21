@@ -1016,6 +1016,9 @@ function Content() {
                   <p className="text-sm font-medium text-on-surface">系统更新</p>
                   <p className="text-xs text-on-surface-variant mt-0.5">
                     当前版本: <span className="font-mono text-primary-container">{updateInfo?.current || '—'}</span>
+                    {updateInfo && !updateInfo.updateAvailable && updateInfo.current !== 'unknown' && (
+                      <span className="ml-1.5 text-emerald-400">· 已是最新</span>
+                    )}
                     {updateInfo?.updateAvailable && (
                       <> · 最新版本: <span className="font-mono text-emerald-400">{updateInfo.remote}</span></>
                     )}
@@ -1095,7 +1098,7 @@ export default function SettingsPage() {
   }
 
   return (
-    <div className="flex flex-col h-screen bg-surface">
+    <div className="flex flex-col h-dvh bg-surface">
       <TopNav compact onMenuToggle={() => setNavOpen(prev => !prev)} />
       <MobileNavDrawer open={navOpen} onClose={() => setNavOpen(false)} />
       <main className="flex-1 overflow-y-auto scrollbar-hidden bg-surface-dim">

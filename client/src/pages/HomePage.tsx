@@ -587,7 +587,7 @@ export default function HomePage() {
 
   if (isDesktop) {
     return (
-      <div className="flex flex-col h-screen overflow-hidden bg-surface">
+      <div className="flex flex-col h-dvh overflow-hidden bg-surface">
         <TopNav />
         <div className="flex flex-1 overflow-hidden">
           <CategorySidebar
@@ -729,7 +729,7 @@ export default function HomePage() {
 
   // Mobile layout
   return (
-    <div className="flex flex-col h-screen bg-surface">
+    <div className="flex flex-col h-dvh bg-surface">
       <TopNav compact onMenuToggle={() => setDrawerOpen((prev) => !prev)} />
       <MobileDrawer
         open={drawerOpen}
@@ -742,7 +742,7 @@ export default function HomePage() {
         onSelect={handleSelectCategory}
       />
       <main className="flex-1 overflow-y-auto overflow-x-hidden scrollbar-hidden bg-surface-dim">
-        <div className="p-3 space-y-3 pb-20">
+        <div className="p-3 space-y-3 pb-20 min-h-full flex flex-col">
           <AnnouncementBanner />
           {/* Header with category filter button */}
           <div className="flex items-center justify-between">
@@ -805,7 +805,7 @@ export default function HomePage() {
           <Pagination page={page} totalPages={totalPages} onPageChange={setPage} compact />
 
           {/* Footer */}
-          <footer className="mt-6 pt-4 border-t border-outline-variant/10 text-center pb-2">
+          <footer className="mt-auto pt-4 border-t border-outline-variant/10 text-center pb-2">
             <div className="flex flex-col items-center gap-2">
               {getContactEmail() && (
                 <a href={`mailto:${getContactEmail()}`} className="flex items-center gap-1 text-[11px] text-on-surface-variant/40 hover:text-primary transition-colors">

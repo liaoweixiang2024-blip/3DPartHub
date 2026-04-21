@@ -1,6 +1,7 @@
 import { execSync } from "child_process";
 import { readFileSync, writeFileSync, unlinkSync } from "node:fs";
 import { join } from "node:path";
+import { syncJob, loadJob } from "./jobStore.js";
 
 interface UpdateJob {
   id: string;
@@ -54,13 +55,14 @@ services:
 }
 
 export function getUpdateJob(id: string): UpdateJob | undefined {
-  return jobs.get(id);
+  return jobs.get(id) || loadJob<UpdateJob>(id);
 }
 
 function addLog(job: UpdateJob, text: string) {
   const time = new Date().toLocaleTimeString("zh-CN", { hour12: false });
   job.logs.push(`[${time}] ${text}`);
   console.log(`[Update #${job.id}] ${text}`);
+  syncJob(job);
 }
 
 export function checkUpdateAvailable(): { current: string; remote: string; updateAvailable: boolean; warning?: string } {
@@ -80,11 +82,24 @@ export function checkUpdateAvailable(): { current: string; remote: string; updat
   }
 
   try {
-    const current = execSync("git rev-parse --short HEAD", { cwd: projectDir, encoding: "utf-8" }).trim();
+    // Read current version from git tag (e.g., "v1.1.1")
+    let current: string;
+    try {
+      current = execSync("git describe --tags --abbrev=0", { cwd: projectDir, encoding: "utf-8" }).trim();
+    } catch {
+      // No tags — fall back to short commit hash
+      current = execSync("git rev-parse --short HEAD", { cwd: projectDir, encoding: "utf-8" }).trim();
+    }
+
     let remote = "unknown";
     try {
-      execSync("git fetch origin main", { cwd: projectDir, encoding: "utf-8", timeout: 30000, stdio: "pipe" });
-      remote = execSync("git rev-parse --short origin/main", { cwd: projectDir, encoding: "utf-8" }).trim();
+      execSync("git fetch origin main --tags", { cwd: projectDir, encoding: "utf-8", timeout: 30000, stdio: "pipe" });
+      try {
+        remote = execSync("git describe --tags --abbrev=0 origin/main", { cwd: projectDir, encoding: "utf-8" }).trim();
+      } catch {
+        // No tags on remote — fall back to short hash
+        remote = execSync("git rev-parse --short origin/main", { cwd: projectDir, encoding: "utf-8" }).trim();
+      }
     } catch {
       // fetch failed
     }
@@ -101,11 +116,13 @@ export function startUpdateJob(): string {
   const id = `update_${Date.now()}`;
   const job: UpdateJob = { id, stage: "pulling", percent: 0, message: "正在拉取最新代码...", logs: [] };
   jobs.set(id, job);
+  syncJob(job);
   isRunning = true;
 
   runUpdate(job).catch((err) => {
     job.stage = "error";
     job.error = err instanceof Error ? err.message : String(err);
+    syncJob(job);
     console.error(`[Update #${job.id}] Error:`, job.error);
   }).finally(() => {
     isRunning = false;
@@ -133,14 +150,16 @@ async function runUpdate(job: UpdateJob) {
 
   try {
     addLog(job, "执行 git fetch origin main...");
-    execSync("git fetch origin main", { cwd: projectDir, encoding: "utf-8", timeout: 120000, stdio: "pipe" });
+    execSync("git fetch origin main --tags", { cwd: projectDir, encoding: "utf-8", timeout: 120000, stdio: "pipe" });
     job.percent = 15;
     job.message = "正在合并代码...";
+    syncJob(job);
     addLog(job, "拉取成功，开始合并代码...");
     execSync("git reset --hard origin/main", { cwd: projectDir, encoding: "utf-8", timeout: 60000, stdio: "pipe" });
     const newHash = execSync("git rev-parse --short HEAD", { cwd: projectDir, encoding: "utf-8" }).trim();
     job.percent = 30;
     job.message = "代码已更新";
+    syncJob(job);
     addLog(job, `代码合并成功，当前版本: ${newHash}`);
   } catch (err: any) {
     addLog(job, `拉取代码失败: ${err.message}`);
@@ -164,6 +183,7 @@ async function runUpdate(job: UpdateJob) {
     job.stage = "building";
     job.percent = 35;
     job.message = "正在构建 API 服务...";
+    syncJob(job);
     addLog(job, "开始构建 API 服务镜像（可能需要几分钟）...");
 
     execSync(`${composeCmd} build api`, {
@@ -171,6 +191,7 @@ async function runUpdate(job: UpdateJob) {
     });
     job.percent = 60;
     job.message = "正在构建前端服务...";
+    syncJob(job);
     addLog(job, "API 服务构建完成，开始构建前端...");
 
     execSync(`${composeCmd} build web`, {
@@ -178,12 +199,14 @@ async function runUpdate(job: UpdateJob) {
     });
     job.percent = 80;
     job.message = "构建完成";
+    syncJob(job);
     addLog(job, "前端服务构建完成");
 
     // Step 3: Restart services (80-100%)
     job.stage = "restarting";
     job.percent = 85;
     job.message = "正在重启服务（连接即将断开）...";
+    syncJob(job);
     addLog(job, "开始重启服务，连接即将断开...");
 
     execSync(`${composeCmd} up -d`, {
@@ -192,6 +215,7 @@ async function runUpdate(job: UpdateJob) {
     job.percent = 100;
     job.message = "更新完成";
     job.stage = "done";
+    syncJob(job);
     addLog(job, "更新完成！服务已重启");
   } catch (err: any) {
     addLog(job, `构建/重启失败: ${err.message}`);

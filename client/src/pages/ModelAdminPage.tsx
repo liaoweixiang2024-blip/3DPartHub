@@ -352,7 +352,7 @@ export default function ModelAdminPage() {
   }
 
   return (
-    <div className="flex flex-col h-screen bg-surface">
+    <div className="flex flex-col h-dvh bg-surface">
       <TopNav compact onMenuToggle={() => setNavOpen((prev) => !prev)} />
       <MobileNavDrawer open={navOpen} onClose={() => setNavOpen(false)} />
       <main className="flex-1 overflow-y-auto scrollbar-hidden bg-surface-dim">

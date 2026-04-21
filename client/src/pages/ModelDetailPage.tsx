@@ -830,7 +830,7 @@ export default function ModelDetailPage() {
   }
 
   return (
-    <div className="flex flex-col h-screen bg-surface">
+    <div className="flex flex-col h-dvh bg-surface">
       <TopNav compact onMenuToggle={() => setNavOpen((prev) => !prev)} />
       <MobileNavDrawer open={navOpen} onClose={() => setNavOpen(false)} />
       <div ref={mobileViewerRef} className="relative h-[50vh] min-h-[280px] max-h-[500px] bg-[#1a1a2e] overflow-hidden">

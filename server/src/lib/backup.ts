@@ -2,6 +2,7 @@ import { execSync, spawn, execFile } from "child_process";
 import { existsSync, mkdirSync, rmSync, writeFileSync, statSync, readdirSync, readFileSync, renameSync, createWriteStream } from "fs";
 import { join } from "path";
 import { config } from "./config.js";
+import { syncJob, loadJob, removeJobFile } from "./jobStore.js";
 
 const DB_URL = config.databaseUrl;
 const BACKUP_DIR = join(process.cwd(), config.staticDir, "backups");
@@ -57,14 +58,15 @@ function ts(): string {
 function addLog(job: BackupJob | RestoreJob, text: string) {
   job.logs.push(`[${ts()}] ${text}`);
   console.log(`[Backup] ${text}`);
+  syncJob(job);
 }
 
 export function getJob(id: string): BackupJob | undefined {
-  return jobs.get(id);
+  return jobs.get(id) || loadJob<BackupJob>(id);
 }
 
 export function getRestoreJob(id: string): RestoreJob | undefined {
-  return restoreJobs.get(id);
+  return restoreJobs.get(id) || loadJob<RestoreJob>(id);
 }
 
 // ---- Import as backup record (save to backup list) ----
@@ -124,6 +126,7 @@ export function startBackupJob(): string {
   const id = `backup_${Date.now()}`;
   const job: BackupJob = { id, stage: "dumping", percent: 0, message: "正在导出数据库...", logs: [] };
   jobs.set(id, job);
+  syncJob(job);
 
   runBackup(job).catch((err) => {
     job.stage = "error";
@@ -131,6 +134,7 @@ export function startBackupJob(): string {
     // Clean up partial archive
     if (existsSync(archivePath(id))) rmSync(archivePath(id), { force: true });
     if (existsSync(metaPath(id))) rmSync(metaPath(id), { force: true });
+    syncJob(job);
     console.error(`[Backup #${job.id}] Error:`, err.message);
   });
 
@@ -162,6 +166,7 @@ async function runBackup(job: BackupJob) {
     const dbSize = statSync(join(tmpDir, "database.sql")).size;
     addLog(job, `数据库导出完成，大小: ${formatSize(dbSize)}`);
     job.percent = 30;
+    syncJob(job);
 
     // Write metadata into tmp
     writeFileSync(join(tmpDir, "meta.json"), JSON.stringify({
@@ -224,6 +229,7 @@ async function runBackup(job: BackupJob) {
           if (p < 55) job.message = "正在打包模型文件...";
           else if (p < 75) job.message = "正在压缩归档...";
           else job.message = "即将完成...";
+          syncJob(job);
         }
       }, 3000);
     });
@@ -232,6 +238,7 @@ async function runBackup(job: BackupJob) {
     job.stage = "saving";
     job.percent = 96;
     job.message = "正在保存备份记录...";
+    syncJob(job);
     addLog(job, `打包完成，文件大小: ${formatSize(statSync(finalArchive).size)}`);
     addLog(job, "正在保存备份记录...");
 
@@ -259,6 +266,7 @@ async function runBackup(job: BackupJob) {
   } catch (err: any) {
     job.stage = "error";
     job.error = err.message;
+    syncJob(job);
     if (existsSync(finalArchive)) rmSync(finalArchive, { force: true });
     if (existsSync(metaPath(job.id))) rmSync(metaPath(job.id), { force: true });
     console.error(`[Backup #${job.id}] Error:`, err.message);
@@ -317,6 +325,7 @@ export function startRestoreJob(backupId: string): string {
   const jobId = `restore_${Date.now()}`;
   const job: RestoreJob = { id: jobId, stage: "extracting", percent: 0, message: "正在解压备份文件...", logs: [] };
   restoreJobs.set(jobId, job);
+  syncJob(job);
 
   runRestore(job, backupId).catch((err) => {
     job.stage = "error";
@@ -342,9 +351,11 @@ async function runRestore(job: RestoreJob, backupId: string) {
     job.stage = "extracting";
     job.percent = 5;
     job.message = "正在解压备份文件...";
+    syncJob(job);
 
     execSync(`tar xzf "${arch}" -C "${tmpDir}"`, { stdio: "pipe", timeout: 600_000 });
     job.percent = 30;
+    syncJob(job);
 
     // Find database.sql (may be inside _backup_db/)
     let sqlPath = join(tmpDir, "database.sql");
@@ -355,21 +366,26 @@ async function runRestore(job: RestoreJob, backupId: string) {
       job.stage = "restoring_db";
       job.percent = 35;
       job.message = "正在恢复数据库...";
+      syncJob(job);
 
       const { PrismaClient } = await import("@prisma/client");
       const prisma = new PrismaClient();
       try { await prisma.$executeRawUnsafe(`DROP SCHEMA public CASCADE; CREATE SCHEMA public; GRANT ALL ON SCHEMA public TO public;`); } catch {}
       await prisma.$disconnect();
       job.percent = 45;
+      syncJob(job);
 
       execSync("npx prisma migrate deploy", { stdio: "pipe", timeout: 60_000, env: { ...process.env } });
       job.percent = 55;
+      syncJob(job);
 
       execSync(`psql "${DB_URL}" < "${sqlPath}"`, { stdio: "pipe", timeout: 300_000 });
       result.dbRestored = true;
       job.percent = 70;
+      syncJob(job);
     } else {
       job.percent = 70;
+      syncJob(job);
     }
 
     // Step 3: Restore files (70-95%)
@@ -380,6 +396,7 @@ async function runRestore(job: RestoreJob, backupId: string) {
       job.stage = "restoring_files";
       job.percent = 75;
       job.message = "正在恢复模型文件...";
+      syncJob(job);
 
       const dest = join(staticDir, "models");
       mkdirSync(dest, { recursive: true });
@@ -387,40 +404,47 @@ async function runRestore(job: RestoreJob, backupId: string) {
       execSync(`cp -r "${modelsTmp}/." "${dest}/"`, { stdio: "pipe" });
       try { result.modelCount = parseInt(execSync(`find "${dest}" -name '*.gltf' -type f | wc -l`).toString().trim()) || 0; } catch {}
       job.percent = 85;
+      syncJob(job);
     }
 
     const thumbsTmp = join(tmpDir, "thumbnails");
     if (existsSync(thumbsTmp)) {
       job.percent = 90;
       job.message = "正在恢复缩略图...";
+      syncJob(job);
 
       const dest = join(staticDir, "thumbnails");
       mkdirSync(dest, { recursive: true });
       execSync(`rm -rf "${dest}"/*`, { stdio: "pipe" });
       execSync(`cp -r "${thumbsTmp}/." "${dest}/"`, { stdio: "pipe" });
       try { result.thumbnailCount = parseInt(execSync(`find "${dest}" -name '*.png' -type f | wc -l`).toString().trim()) || 0; } catch {}
+      syncJob(job);
     }
 
     const originalsTmp = join(tmpDir, "originals");
     if (existsSync(originalsTmp)) {
       job.percent = 94;
       job.message = "正在恢复原始文件...";
+      syncJob(job);
 
       const dest = join(staticDir, "originals");
       mkdirSync(dest, { recursive: true });
       execSync(`rm -rf "${dest}"/*`, { stdio: "pipe" });
       execSync(`cp -r "${originalsTmp}/." "${dest}/"`, { stdio: "pipe" });
+      syncJob(job);
     }
 
     job.stage = "done";
     job.percent = 100;
     job.message = "恢复完成";
     job.result = result;
+    syncJob(job);
 
     console.log(`[Restore #${job.id}] Done: ${result.modelCount} models, ${result.thumbnailCount} thumbnails`);
   } catch (err: any) {
     job.stage = "error";
     job.error = err.message;
+    syncJob(job);
     console.error(`[Restore #${job.id}] Error:`, err.message);
   } finally {
     if (existsSync(tmpDir)) rmSync(tmpDir, { recursive: true, force: true });
@@ -429,12 +453,13 @@ async function runRestore(job: RestoreJob, backupId: string) {
 
 // ---- Restore from uploaded file (import) ----
 
-export function startRestoreJobFromFile(archivePath: string): string {
+export function startRestoreJobFromFile(archPath: string): string {
   const jobId = `restore_${Date.now()}`;
   const job: RestoreJob = { id: jobId, stage: "extracting", percent: 0, message: "正在上传完成，开始解压...", logs: [] };
   restoreJobs.set(jobId, job);
+  syncJob(job);
 
-  runRestoreFromFile(job, archivePath).catch((err) => {
+  runRestoreFromFile(job, archPath).catch((err) => {
     job.stage = "error";
     job.error = err.message;
     addLog(job, `恢复失败: ${err.message}`);
@@ -455,11 +480,13 @@ async function runRestoreFromFile(job: RestoreJob, archPath: string) {
     job.stage = "extracting";
     job.percent = 5;
     job.message = "正在解压备份文件...";
+    syncJob(job);
 
     execSync(`tar xzf "${archPath}" -C "${tmpDir}"`, { stdio: "pipe", timeout: 600_000 });
     // Clean up uploaded archive
     if (existsSync(archPath)) rmSync(archPath, { force: true });
     job.percent = 30;
+    syncJob(job);
 
     // Find database.sql
     let sqlPath = join(tmpDir, "database.sql");
@@ -470,21 +497,26 @@ async function runRestoreFromFile(job: RestoreJob, archPath: string) {
       job.stage = "restoring_db";
       job.percent = 35;
       job.message = "正在恢复数据库...";
+      syncJob(job);
 
       const { PrismaClient } = await import("@prisma/client");
       const prisma = new PrismaClient();
       try { await prisma.$executeRawUnsafe(`DROP SCHEMA public CASCADE; CREATE SCHEMA public; GRANT ALL ON SCHEMA public TO public;`); } catch {}
       await prisma.$disconnect();
       job.percent = 45;
+      syncJob(job);
 
       execSync("npx prisma migrate deploy", { stdio: "pipe", timeout: 60_000, env: { ...process.env } });
       job.percent = 55;
+      syncJob(job);
 
       execSync(`psql "${DB_URL}" < "${sqlPath}"`, { stdio: "pipe", timeout: 300_000 });
       result.dbRestored = true;
       job.percent = 70;
+      syncJob(job);
     } else {
       job.percent = 70;
+      syncJob(job);
     }
 
     // Step 3: Restore files (70-95%)
@@ -495,6 +527,7 @@ async function runRestoreFromFile(job: RestoreJob, archPath: string) {
       job.stage = "restoring_files";
       job.percent = 75;
       job.message = "正在恢复模型文件...";
+      syncJob(job);
 
       const dest = join(staticDir, "models");
       mkdirSync(dest, { recursive: true });
@@ -502,41 +535,48 @@ async function runRestoreFromFile(job: RestoreJob, archPath: string) {
       execSync(`cp -r "${modelsTmp}/." "${dest}/"`, { stdio: "pipe" });
       try { result.modelCount = parseInt(execSync(`find "${dest}" -name '*.gltf' -type f | wc -l`).toString().trim()) || 0; } catch {}
       job.percent = 85;
+      syncJob(job);
     }
 
     const thumbsTmp = join(tmpDir, "thumbnails");
     if (existsSync(thumbsTmp)) {
       job.percent = 90;
       job.message = "正在恢复缩略图...";
+      syncJob(job);
 
       const dest = join(staticDir, "thumbnails");
       mkdirSync(dest, { recursive: true });
       execSync(`rm -rf "${dest}"/*`, { stdio: "pipe" });
       execSync(`cp -r "${thumbsTmp}/." "${dest}/"`, { stdio: "pipe" });
       try { result.thumbnailCount = parseInt(execSync(`find "${dest}" -name '*.png' -type f | wc -l`).toString().trim()) || 0; } catch {}
+      syncJob(job);
     }
 
     const originalsTmp = join(tmpDir, "originals");
     if (existsSync(originalsTmp)) {
       job.percent = 94;
       job.message = "正在恢复原始文件...";
+      syncJob(job);
 
       const dest = join(staticDir, "originals");
       mkdirSync(dest, { recursive: true });
       execSync(`rm -rf "${dest}"/*`, { stdio: "pipe" });
       execSync(`cp -r "${originalsTmp}/." "${dest}/"`, { stdio: "pipe" });
+      syncJob(job);
     }
 
     job.stage = "done";
     job.percent = 100;
     job.message = "恢复完成";
     job.result = result;
+    syncJob(job);
 
     console.log(`[Restore #${job.id}] Done: ${result.modelCount} models, ${result.thumbnailCount} thumbnails`);
   } catch (err: any) {
     job.stage = "error";
     job.error = err.message;
     if (existsSync(archPath)) rmSync(archPath, { force: true });
+    syncJob(job);
     console.error(`[Restore #${job.id}] Error:`, err.message);
   } finally {
     if (existsSync(tmpDir)) rmSync(tmpDir, { recursive: true, force: true });

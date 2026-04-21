@@ -176,7 +176,7 @@ export default function UserAdminPage() {
   }
 
   return (
-    <div className="flex flex-col h-screen bg-surface">
+    <div className="flex flex-col h-dvh bg-surface">
       <TopNav compact onMenuToggle={() => setNavOpen((v) => !v)} />
       <main className="flex-1 overflow-y-auto p-3 pb-20 scrollbar-hidden bg-surface-dim">
         {content}

@@ -118,7 +118,7 @@ export default function ProjectsPage() {
   }
 
   return (
-    <div className="flex flex-col h-screen bg-surface">
+    <div className="flex flex-col h-dvh bg-surface">
       <TopNav />
       <main className="flex-1 overflow-y-auto scrollbar-hidden bg-surface-dim p-4 md:p-8">
         <div className="max-w-6xl mx-auto">
