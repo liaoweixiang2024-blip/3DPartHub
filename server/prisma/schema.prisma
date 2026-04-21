@@ -8,16 +8,17 @@ datasource db {
 }
 
 model User {
-  id           String   @id @default(uuid())
-  username     String   @unique
-  email        String   @unique
-  passwordHash String   @map("password_hash")
-  avatar       String?
-  role         Role     @default(VIEWER)
-  company      String?
-  phone        String?
-  createdAt    DateTime @default(now()) @map("created_at")
-  updatedAt    DateTime @updatedAt @map("updated_at")
+  id                String   @id @default(uuid())
+  username          String   @unique
+  email             String   @unique
+  passwordHash      String   @map("password_hash")
+  avatar            String?
+  role              Role     @default(VIEWER)
+  company           String?
+  phone             String?
+  mustChangePassword Boolean @default(false) @map("must_change_password")
+  createdAt         DateTime @default(now()) @map("created_at")
+  updatedAt         DateTime @updatedAt @map("updated_at")
 
   models          Model[]
   modelVersions   ModelVersion[]

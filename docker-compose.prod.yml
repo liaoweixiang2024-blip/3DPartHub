@@ -10,8 +10,8 @@
 services:
   api:
     build: ./server
-    ports:
-      - "8000:8000"
+    # ports not needed locally — access via web reverse proxy on :3780
+    # For direct API access, uncomment: ports: ["8000:8000"]
     environment:
       PORT: 8000
       DATABASE_URL: postgresql://modeluser:${DB_PASSWORD:-modelpass}@postgres:5432/3dparthub

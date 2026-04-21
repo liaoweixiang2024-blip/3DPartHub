@@ -5,6 +5,8 @@ import { config } from "./config.js";
 import { syncJob, loadJob, removeJobFile } from "./jobStore.js";
 
 const DB_URL = config.databaseUrl;
+// Strip Prisma-specific query params that pg_dump/psql don't understand
+const DB_URL_CLEAN = DB_URL.replace(/\?.*/, "");
 const BACKUP_DIR = join(process.cwd(), config.staticDir, "backups");
 
 // Ensure backup directory exists
@@ -155,7 +157,7 @@ async function runBackup(job: BackupJob) {
     job.message = "正在导出数据库...";
     addLog(job, "正在导出数据库 (pg_dump)...");
 
-    execSync(`pg_dump "${DB_URL}" --no-owner --no-privileges > "${tmpDir}/database.sql"`, {
+    execSync(`pg_dump "${DB_URL_CLEAN}" --no-owner --no-privileges > "${tmpDir}/database.sql"`, {
       stdio: "pipe",
       timeout: 120_000,
     });
@@ -379,7 +381,7 @@ async function runRestore(job: RestoreJob, backupId: string) {
       job.percent = 55;
       syncJob(job);
 
-      execSync(`psql "${DB_URL}" < "${sqlPath}"`, { stdio: "pipe", timeout: 300_000 });
+      execSync(`psql "${DB_URL_CLEAN}" < "${sqlPath}"`, { stdio: "pipe", timeout: 300_000 });
       result.dbRestored = true;
       job.percent = 70;
       syncJob(job);
@@ -510,7 +512,7 @@ async function runRestoreFromFile(job: RestoreJob, archPath: string) {
       job.percent = 55;
       syncJob(job);
 
-      execSync(`psql "${DB_URL}" < "${sqlPath}"`, { stdio: "pipe", timeout: 300_000 });
+      execSync(`psql "${DB_URL_CLEAN}" < "${sqlPath}"`, { stdio: "pipe", timeout: 300_000 });
       result.dbRestored = true;
       job.percent = 70;
       syncJob(job);

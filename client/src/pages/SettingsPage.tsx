@@ -837,7 +837,7 @@ function Content() {
                       style={{ width: `${exportProgress.percent}%` }}
                     />
                   </div>
-                  {exportProgress.logs.length > 0 && (
+                  {exportProgress.logs && exportProgress.logs.length > 0 && (
                     <div className="mt-2 max-h-32 overflow-y-auto bg-surface-container-highest/50 rounded p-2 text-[11px] font-mono text-on-surface-variant/70 space-y-0.5">
                       {exportProgress.logs.map((log, i) => <div key={i}>{log}</div>)}
                     </div>
