@@ -130,14 +130,17 @@ export function startBackupJob(): string {
   jobs.set(id, job);
   syncJob(job);
 
-  runBackup(job).catch((err) => {
-    job.stage = "error";
-    job.error = err.message;
-    // Clean up partial archive
-    if (existsSync(archivePath(id))) rmSync(archivePath(id), { force: true });
-    if (existsSync(metaPath(id))) rmSync(metaPath(id), { force: true });
-    syncJob(job);
-    console.error(`[Backup #${job.id}] Error:`, err.message);
+  // Use setImmediate to ensure HTTP response is sent before blocking work
+  setImmediate(() => {
+    runBackup(job).catch((err) => {
+      job.stage = "error";
+      job.error = err.message;
+      // Clean up partial archive
+      if (existsSync(archivePath(id))) rmSync(archivePath(id), { force: true });
+      if (existsSync(metaPath(id))) rmSync(metaPath(id), { force: true });
+      syncJob(job);
+      console.error(`[Backup #${job.id}] Error:`, err.message);
+    });
   });
 
   return id;
@@ -329,11 +332,14 @@ export function startRestoreJob(backupId: string): string {
   restoreJobs.set(jobId, job);
   syncJob(job);
 
-  runRestore(job, backupId).catch((err) => {
-    job.stage = "error";
-    job.error = err.message;
-    addLog(job, `恢复失败: ${err.message}`);
-    console.error(`[Restore #${jobId}] Error:`, err.message);
+  // Use setImmediate to ensure HTTP response is sent before blocking work
+  setImmediate(() => {
+    runRestore(job, backupId).catch((err) => {
+      job.stage = "error";
+      job.error = err.message;
+      addLog(job, `恢复失败: ${err.message}`);
+      console.error(`[Restore #${jobId}] Error:`, err.message);
+    });
   });
 
   return jobId;
@@ -461,11 +467,14 @@ export function startRestoreJobFromFile(archPath: string): string {
   restoreJobs.set(jobId, job);
   syncJob(job);
 
-  runRestoreFromFile(job, archPath).catch((err) => {
-    job.stage = "error";
-    job.error = err.message;
-    addLog(job, `恢复失败: ${err.message}`);
-    console.error(`[Restore #${jobId}] Error:`, err.message);
+  // Use setImmediate to ensure HTTP response is sent before blocking work
+  setImmediate(() => {
+    runRestoreFromFile(job, archPath).catch((err) => {
+      job.stage = "error";
+      job.error = err.message;
+      addLog(job, `恢复失败: ${err.message}`);
+      console.error(`[Restore #${jobId}] Error:`, err.message);
+    });
   });
 
   return jobId;
