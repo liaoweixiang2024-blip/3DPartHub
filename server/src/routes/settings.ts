@@ -79,7 +79,7 @@ router.get("/api/settings/update/progress/:id", authMiddleware, async (req: Auth
   if (req.user?.role !== "ADMIN") { res.status(403).json({ detail: "需要管理员权限" }); return; }
   const job = getUpdateJob(req.params.id);
   if (!job) { res.status(404).json({ detail: "更新任务不存在" }); return; }
-  res.json({ stage: job.stage, percent: job.percent, message: job.message, error: job.error });
+  res.json({ stage: job.stage, percent: job.percent, message: job.message, error: job.error, logs: job.logs });
 });
 
 function adminOnly(req: AuthRequest, res: Response): boolean {
@@ -122,7 +122,18 @@ router.get("/api/settings/backup/progress/:id", authMiddleware, async (req: Auth
     res.status(404).json({ detail: "备份任务不存在" });
     return;
   }
-  res.json({ stage: job.stage, percent: job.percent, message: job.message, error: job.error });
+  res.json({ stage: job.stage, percent: job.percent, message: job.message, error: job.error, logs: job.logs });
+});
+
+// Admin: poll restore progress
+router.get("/api/settings/restore/progress/:id", authMiddleware, async (req: AuthRequest, res: Response) => {
+  if (!adminOnly(req, res)) return;
+  const job = getRestoreJob(req.params.id);
+  if (!job) {
+    res.status(404).json({ detail: "恢复任务不存在" });
+    return;
+  }
+  res.json({ stage: job.stage, percent: job.percent, message: job.message, error: job.error, logs: job.logs, result: job.result });
 });
 
 // Admin: download a backup file (supports ?token= for browser direct download)

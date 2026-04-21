@@ -114,7 +114,7 @@ export async function startBackupJob(): Promise<string> {
 
 export async function pollBackupProgress(
   jobId: string,
-  onProgress?: (stage: string, percent: number, message: string) => void,
+  onProgress?: (stage: string, percent: number, message: string, logs?: string[]) => void,
 ): Promise<string> {
   return new Promise((resolve, reject) => {
     let consecutiveErrors = 0;
@@ -124,7 +124,7 @@ export async function pollBackupProgress(
         const res = await client.get(`/settings/backup/progress/${jobId}`, { timeout: 15000 });
         consecutiveErrors = 0;
         const d = (res.data as any)?.data ?? res.data;
-        onProgress?.(d.stage, d.percent, d.message);
+        onProgress?.(d.stage, d.percent, d.message, d.logs);
         if (d.stage === "done") {
           clearInterval(poll);
           resolve(jobId);
@@ -177,7 +177,7 @@ export async function startRestore(id: string): Promise<string> {
 
 export async function pollRestoreProgress(
   jobId: string,
-  onProgress?: (stage: string, percent: number, message: string) => void,
+  onProgress?: (stage: string, percent: number, message: string, logs?: string[]) => void,
 ): Promise<RestoreResult> {
   return new Promise((resolve, reject) => {
     let consecutiveErrors = 0;
@@ -187,7 +187,7 @@ export async function pollRestoreProgress(
         const res = await client.get(`/settings/backup/restore-progress/${jobId}`, { timeout: 15000 });
         consecutiveErrors = 0;
         const d = (res.data as any)?.data ?? res.data;
-        onProgress?.(d.stage, d.percent, d.message);
+        onProgress?.(d.stage, d.percent, d.message, d.logs);
         if (d.stage === "done") {
           clearInterval(poll);
           resolve(d.result ?? { dbRestored: true, modelCount: 0, thumbnailCount: 0 });
@@ -433,17 +433,17 @@ export async function startUpdate(): Promise<string> {
 
 export function pollUpdateProgress(
   jobId: string,
-  onProgress?: (stage: string, percent: number, message: string) => void,
+  onProgress?: (stage: string, percent: number, message: string, logs?: string[]) => void,
 ): Promise<string> {
   return new Promise((resolve, reject) => {
     let consecutiveErrors = 0;
-    const MAX_ERRORS = 10; // More retries since container may restart
+    const MAX_ERRORS = 10;
     const poll = setInterval(async () => {
       try {
         const res = await client.get(`/settings/update/progress/${jobId}`, { timeout: 15000 });
         consecutiveErrors = 0;
         const d = (res.data as any)?.data ?? res.data;
-        onProgress?.(d.stage, d.percent, d.message);
+        onProgress?.(d.stage, d.percent, d.message, d.logs);
         if (d.stage === "done") {
           clearInterval(poll);
           resolve(jobId);
@@ -451,13 +451,11 @@ export function pollUpdateProgress(
           clearInterval(poll);
           reject(new Error(d.error || "更新失败"));
         } else if (d.stage === "restarting") {
-          // Container will restart soon — treat disconnect as success
           clearInterval(poll);
           resolve(jobId);
         }
       } catch (err: any) {
         consecutiveErrors++;
-        // Network error during restart is expected — resolve as success
         if (consecutiveErrors >= 2 && !err.response) {
           clearInterval(poll);
           resolve(jobId);
@@ -466,7 +464,7 @@ export function pollUpdateProgress(
         const status = err.response?.status;
         if (status === 404) {
           clearInterval(poll);
-          resolve(jobId); // Job lost = server restarted = update applied
+          resolve(jobId);
           return;
         }
         if (consecutiveErrors >= MAX_ERRORS) {

@@ -8,6 +8,7 @@ interface UpdateJob {
   percent: number;
   message: string;
   error?: string;
+  logs: string[];
 }
 
 const jobs = new Map<string, UpdateJob>();
@@ -56,6 +57,12 @@ export function getUpdateJob(id: string): UpdateJob | undefined {
   return jobs.get(id);
 }
 
+function addLog(job: UpdateJob, text: string) {
+  const time = new Date().toLocaleTimeString("zh-CN", { hour12: false });
+  job.logs.push(`[${time}] ${text}`);
+  console.log(`[Update #${job.id}] ${text}`);
+}
+
 export function checkUpdateAvailable(): { current: string; remote: string; updateAvailable: boolean; warning?: string } {
   const projectDir = "/project";
   const defaultResult = { current: "unknown", remote: "unknown", updateAvailable: false, warning: undefined as string | undefined };
@@ -92,7 +99,7 @@ export function startUpdateJob(): string {
     throw new Error("已有更新任务正在执行");
   }
   const id = `update_${Date.now()}`;
-  const job: UpdateJob = { id, stage: "pulling", percent: 0, message: "正在拉取最新代码..." };
+  const job: UpdateJob = { id, stage: "pulling", percent: 0, message: "正在拉取最新代码...", logs: [] };
   jobs.set(id, job);
   isRunning = true;
 
@@ -116,20 +123,27 @@ async function runUpdate(job: UpdateJob) {
     throw new Error("无法检测宿主机项目路径，请确保容器正确挂载了 Docker Socket 和项目目录");
   }
   console.log(`[Update] Host project dir detected: ${hostProjectDir}`);
+  addLog(job, `检测到宿主机路径: ${hostProjectDir}`);
 
   // Step 1: Pull latest code (0-30%)
   job.stage = "pulling";
   job.percent = 5;
   job.message = "正在拉取最新代码...";
+  addLog(job, "开始从 GitHub 拉取最新代码...");
 
   try {
+    addLog(job, "执行 git fetch origin main...");
     execSync("git fetch origin main", { cwd: projectDir, encoding: "utf-8", timeout: 120000, stdio: "pipe" });
     job.percent = 15;
     job.message = "正在合并代码...";
+    addLog(job, "拉取成功，开始合并代码...");
     execSync("git reset --hard origin/main", { cwd: projectDir, encoding: "utf-8", timeout: 60000, stdio: "pipe" });
+    const newHash = execSync("git rev-parse --short HEAD", { cwd: projectDir, encoding: "utf-8" }).trim();
     job.percent = 30;
     job.message = "代码已更新";
+    addLog(job, `代码合并成功，当前版本: ${newHash}`);
   } catch (err: any) {
+    addLog(job, `拉取代码失败: ${err.message}`);
     throw new Error(`拉取代码失败: ${err.message}`);
   }
 
@@ -137,7 +151,9 @@ async function runUpdate(job: UpdateJob) {
   let overridePath: string | undefined;
   try {
     overridePath = writeOverrideCompose(projectDir, hostProjectDir);
+    addLog(job, "生成更新配置文件成功");
   } catch (err: any) {
+    addLog(job, `生成配置失败: ${err.message}`);
     throw new Error(`生成更新配置失败: ${err.message}`);
   }
 
@@ -148,23 +164,27 @@ async function runUpdate(job: UpdateJob) {
     job.stage = "building";
     job.percent = 35;
     job.message = "正在构建 API 服务...";
+    addLog(job, "开始构建 API 服务镜像（可能需要几分钟）...");
 
     execSync(`${composeCmd} build api`, {
       cwd: projectDir, encoding: "utf-8", timeout: 600000, stdio: "pipe",
     });
     job.percent = 60;
     job.message = "正在构建前端服务...";
+    addLog(job, "API 服务构建完成，开始构建前端...");
 
     execSync(`${composeCmd} build web`, {
       cwd: projectDir, encoding: "utf-8", timeout: 600000, stdio: "pipe",
     });
     job.percent = 80;
     job.message = "构建完成";
+    addLog(job, "前端服务构建完成");
 
     // Step 3: Restart services (80-100%)
     job.stage = "restarting";
     job.percent = 85;
     job.message = "正在重启服务（连接即将断开）...";
+    addLog(job, "开始重启服务，连接即将断开...");
 
     execSync(`${composeCmd} up -d`, {
       cwd: projectDir, encoding: "utf-8", timeout: 120000, stdio: "pipe",
@@ -172,7 +192,9 @@ async function runUpdate(job: UpdateJob) {
     job.percent = 100;
     job.message = "更新完成";
     job.stage = "done";
+    addLog(job, "更新完成！服务已重启");
   } catch (err: any) {
+    addLog(job, `构建/重启失败: ${err.message}`);
     try { if (overridePath) unlinkSync(overridePath); } catch {}
     throw new Error(`构建/重启失败: ${err.message}`);
   }

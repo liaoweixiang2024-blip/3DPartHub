@@ -34,6 +34,7 @@ interface BackupJob {
   percent: number;
   message: string;
   error?: string;
+  logs: string[];
 }
 
 interface RestoreJob {
@@ -43,10 +44,20 @@ interface RestoreJob {
   message: string;
   error?: string;
   result?: { dbRestored: boolean; modelCount: number; thumbnailCount: number };
+  logs: string[];
 }
 
 const jobs = new Map<string, BackupJob>();
 const restoreJobs = new Map<string, RestoreJob>();
+
+function ts(): string {
+  return new Date().toLocaleTimeString("zh-CN", { hour12: false });
+}
+
+function addLog(job: BackupJob | RestoreJob, text: string) {
+  job.logs.push(`[${ts()}] ${text}`);
+  console.log(`[Backup] ${text}`);
+}
 
 export function getJob(id: string): BackupJob | undefined {
   return jobs.get(id);
@@ -111,7 +122,7 @@ export function saveAsBackupRecord(archPath: string, originalName: string): Back
 
 export function startBackupJob(): string {
   const id = `backup_${Date.now()}`;
-  const job: BackupJob = { id, stage: "dumping", percent: 0, message: "正在导出数据库..." };
+  const job: BackupJob = { id, stage: "dumping", percent: 0, message: "正在导出数据库...", logs: [] };
   jobs.set(id, job);
 
   runBackup(job).catch((err) => {
@@ -132,11 +143,13 @@ async function runBackup(job: BackupJob) {
 
   try {
     mkdirSync(tmpDir, { recursive: true });
+    addLog(job, "开始备份任务...");
 
     // Step 1: pg_dump (0-30%)
     job.stage = "dumping";
     job.percent = 5;
     job.message = "正在导出数据库...";
+    addLog(job, "正在导出数据库 (pg_dump)...");
 
     execSync(`pg_dump "${DB_URL}" --no-owner --no-privileges > "${tmpDir}/database.sql"`, {
       stdio: "pipe",
@@ -146,6 +159,8 @@ async function runBackup(job: BackupJob) {
     if (!existsSync(join(tmpDir, "database.sql"))) {
       throw new Error("数据库导出失败：文件未生成");
     }
+    const dbSize = statSync(join(tmpDir, "database.sql")).size;
+    addLog(job, `数据库导出完成，大小: ${formatSize(dbSize)}`);
     job.percent = 30;
 
     // Write metadata into tmp
@@ -158,6 +173,7 @@ async function runBackup(job: BackupJob) {
     job.stage = "packing";
     job.percent = 35;
     job.message = "正在打包模型文件...";
+    addLog(job, "正在打包模型、预览图和原始文件...");
 
     const staticDir = join(process.cwd(), config.staticDir);
     const hasModels = existsSync(join(staticDir, "models"));
@@ -216,6 +232,8 @@ async function runBackup(job: BackupJob) {
     job.stage = "saving";
     job.percent = 96;
     job.message = "正在保存备份记录...";
+    addLog(job, `打包完成，文件大小: ${formatSize(statSync(finalArchive).size)}`);
+    addLog(job, "正在保存备份记录...");
 
     const stats = await getBackupStats();
     const fileSize = statSync(finalArchive).size;
@@ -235,6 +253,7 @@ async function runBackup(job: BackupJob) {
     job.stage = "done";
     job.percent = 100;
     job.message = "备份完成";
+    addLog(job, `备份完成！共 ${record.modelCount} 个模型，${record.thumbnailCount} 张预览图`);
 
     console.log(`[Backup #${job.id}] Done: ${formatSize(fileSize)}`);
   } catch (err: any) {
@@ -296,12 +315,13 @@ export function deleteBackup(id: string): boolean {
 
 export function startRestoreJob(backupId: string): string {
   const jobId = `restore_${Date.now()}`;
-  const job: RestoreJob = { id: jobId, stage: "extracting", percent: 0, message: "正在解压备份文件..." };
+  const job: RestoreJob = { id: jobId, stage: "extracting", percent: 0, message: "正在解压备份文件...", logs: [] };
   restoreJobs.set(jobId, job);
 
   runRestore(job, backupId).catch((err) => {
     job.stage = "error";
     job.error = err.message;
+    addLog(job, `恢复失败: ${err.message}`);
     console.error(`[Restore #${jobId}] Error:`, err.message);
   });
 
@@ -411,12 +431,13 @@ async function runRestore(job: RestoreJob, backupId: string) {
 
 export function startRestoreJobFromFile(archivePath: string): string {
   const jobId = `restore_${Date.now()}`;
-  const job: RestoreJob = { id: jobId, stage: "extracting", percent: 0, message: "正在上传完成，开始解压..." };
+  const job: RestoreJob = { id: jobId, stage: "extracting", percent: 0, message: "正在上传完成，开始解压...", logs: [] };
   restoreJobs.set(jobId, job);
 
   runRestoreFromFile(job, archivePath).catch((err) => {
     job.stage = "error";
     job.error = err.message;
+    addLog(job, `恢复失败: ${err.message}`);
     console.error(`[Restore #${jobId}] Error:`, err.message);
   });
 

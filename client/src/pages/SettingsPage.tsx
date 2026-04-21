@@ -362,7 +362,7 @@ function Content() {
   const [backupStats, setBackupStats] = useState<BackupStats | null>(null);
   const [backupList, setBackupList] = useState<BackupRecord[]>([]);
   const [exporting, setExporting] = useState(false);
-  const [exportProgress, setExportProgress] = useState({ stage: "", percent: 0, message: "" });
+  const [exportProgress, setExportProgress] = useState({ stage: "", percent: 0, message: "", logs: [] as string[] });
   const [importing, setImporting] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [restoreConfirmFile, setRestoreConfirmFile] = useState<File | null>(null);
@@ -370,13 +370,13 @@ function Content() {
   // Update state
   const [updateInfo, setUpdateInfo] = useState<{ current: string; remote: string; updateAvailable: boolean; warning?: string } | null>(null);
   const [updating, setUpdating] = useState(false);
-  const [updateProgress, setUpdateProgress] = useState({ stage: "", percent: 0, message: "" });
+  const [updateProgress, setUpdateProgress] = useState({ stage: "", percent: 0, message: "", logs: [] as string[] });
   const [checkingUpdate, setCheckingUpdate] = useState(false);
   const [restoreConfirmId, setRestoreConfirmId] = useState<string | null>(null);
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState("");
   const [restoring, setRestoring] = useState(false);
-  const [restoreProgress, setRestoreProgress] = useState({ stage: '', percent: 0, message: '' });
+  const [restoreProgress, setRestoreProgress] = useState({ stage: '', percent: 0, message: '', logs: [] as string[] });
   const backupInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -451,8 +451,8 @@ function Content() {
     try {
       const jobId = await startBackupJob();
       localStorage.setItem('backupJobId', jobId);
-      await pollBackupProgress(jobId, (stage, percent, message) => {
-        setExportProgress({ stage, percent, message });
+      await pollBackupProgress(jobId, (stage, percent, message, logs) => {
+        setExportProgress({ stage, percent, message, logs: logs || [] });
       });
       toast('备份导出成功', 'success');
       localStorage.removeItem('backupJobId');
@@ -463,7 +463,7 @@ function Content() {
       toast(err.message || '导出失败', 'error');
     } finally {
       setExporting(false);
-      setExportProgress({ stage: "", percent: 0, message: "" });
+      setExportProgress({ stage: "", percent: 0, message: "", logs: [] });
     }
   }
 
@@ -488,9 +488,9 @@ function Content() {
     setUpdateProgress({ stage: "pulling", percent: 0, message: "正在准备更新..." });
     try {
       const jobId = await startUpdate();
-      await pollUpdateProgress(jobId, (stage, percent, message) => {
+      await pollUpdateProgress(jobId, (stage, percent, message, logs) => {
         lastStage = stage;
-        setUpdateProgress({ stage, percent, message });
+        setUpdateProgress({ stage, percent, message, logs: logs || [] });
       });
       toast('更新成功，页面即将刷新...', 'success');
       setTimeout(() => window.location.reload(), 3000);
@@ -543,9 +543,9 @@ function Content() {
         const jobId = await importBackup(restoreConfirmFile, (p) => {
           setUploadProgress(p);
         });
-        setRestoreProgress({ stage: 'uploading', percent: 100, message: '上传完成，正在恢复...' });
-        const result = await pollRestoreProgress(jobId, (stage, percent, message) => {
-          setRestoreProgress({ stage, percent, message });
+        setRestoreProgress({ stage: 'uploading', percent: 100, message: '上传完成，正在恢复...', logs: [] });
+        const result = await pollRestoreProgress(jobId, (stage, percent, message, logs) => {
+          setRestoreProgress({ stage, percent, message, logs: logs || [] });
         });
         toast(`恢复成功：${result.modelCount} 个模型，${result.thumbnailCount} 张缩略图`, 'success');
         setRestoreConfirmFile(null);
@@ -602,11 +602,11 @@ function Content() {
   async function handleRestoreConfirm() {
     if (!restoreConfirmId) return;
     setRestoring(true);
-    setRestoreProgress({ stage: 'starting', percent: 0, message: '正在启动恢复...' });
+    setRestoreProgress({ stage: 'starting', percent: 0, message: '正在启动恢复...', logs: [] });
     try {
       const jobId = await startRestore(restoreConfirmId);
-      const result = await pollRestoreProgress(jobId, (stage, percent, message) => {
-        setRestoreProgress({ stage, percent, message });
+      const result = await pollRestoreProgress(jobId, (stage, percent, message, logs) => {
+        setRestoreProgress({ stage, percent, message, logs: logs || [] });
       });
       toast(`恢复成功：${result.modelCount} 个模型，${result.thumbnailCount} 张缩略图`, 'success');
       setRestoreConfirmId(null);
@@ -828,6 +828,11 @@ function Content() {
                       style={{ width: `${exportProgress.percent}%` }}
                     />
                   </div>
+                  {exportProgress.logs.length > 0 && (
+                    <div className="mt-2 max-h-32 overflow-y-auto bg-surface-container-highest/50 rounded p-2 text-[11px] font-mono text-on-surface-variant/70 space-y-0.5">
+                      {exportProgress.logs.map((log, i) => <div key={i}>{log}</div>)}
+                    </div>
+                  )}
                 </div>
               )}
             </div>
@@ -1055,6 +1060,11 @@ function Content() {
                       style={{ width: `${updateProgress.percent}%` }}
                     />
                   </div>
+                  {updateProgress.logs.length > 0 && (
+                    <div className="mt-2 max-h-32 overflow-y-auto bg-surface-container-highest/50 rounded p-2 text-[11px] font-mono text-on-surface-variant/70 space-y-0.5">
+                      {updateProgress.logs.map((log, i) => <div key={i}>{log}</div>)}
+                    </div>
+                  )}
                 </div>
               )}
             </div>
