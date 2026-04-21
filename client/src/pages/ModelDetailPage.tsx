@@ -729,7 +729,7 @@ export default function ModelDetailPage() {
   if (error) {
     console.error("Model load error:", error);
     return (
-      <div className="flex flex-col items-center justify-center h-screen bg-surface gap-4">
+      <div className="flex flex-col items-center justify-center h-dvh bg-surface gap-4">
         <Icon name="error" size={64} className="text-error" />
         <h1 className="text-2xl font-headline font-bold text-on-surface">加载失败</h1>
         <p className="text-sm text-on-surface-variant">{error?.message || "请稍后重试"}</p>
@@ -740,7 +740,7 @@ export default function ModelDetailPage() {
 
   if (isLoading) {
     return (
-      <div className="flex flex-col items-center justify-center h-screen bg-surface gap-4">
+      <div className="flex flex-col items-center justify-center h-dvh bg-surface gap-4">
         <Icon name="view_in_ar" size={48} className="text-on-surface-variant animate-pulse" />
         <span className="text-sm text-on-surface-variant">加载中...</span>
       </div>
@@ -749,7 +749,7 @@ export default function ModelDetailPage() {
 
   if (!modelData) {
     return (
-      <div className="flex flex-col items-center justify-center h-screen bg-surface gap-4">
+      <div className="flex flex-col items-center justify-center h-dvh bg-surface gap-4">
         <Icon name="search_off" size={64} className="text-on-surface-variant" />
         <h1 className="text-2xl font-headline font-bold text-on-surface">模型不存在</h1>
         <button onClick={() => navigate("/")} className="text-primary hover:underline">返回首页</button>

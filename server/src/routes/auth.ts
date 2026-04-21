@@ -150,6 +150,7 @@ router.post("/api/auth/login", async (req: Request, res: Response) => {
         username: user.username,
         email: user.email,
         role: user.role,
+        mustChangePassword: user.mustChangePassword,
         createdAt: user.createdAt,
       },
       tokens: { accessToken, refreshToken },
@@ -179,7 +180,7 @@ router.get("/api/auth/profile", authMiddleware, async (req: AuthRequest, res: Re
   try {
     const user = await prisma.user.findUnique({
       where: { id: req.user!.userId },
-      select: { id: true, username: true, email: true, role: true, company: true, phone: true, avatar: true, createdAt: true },
+      select: { id: true, username: true, email: true, role: true, mustChangePassword: true, company: true, phone: true, avatar: true, createdAt: true },
     });
     if (!user) {
       res.status(404).json({ detail: "用户不存在" });
@@ -214,7 +215,7 @@ router.put("/api/auth/profile", authMiddleware, async (req: AuthRequest, res: Re
         ...(phone !== undefined && { phone }),
         ...(avatar !== undefined && { avatar }),
       },
-      select: { id: true, username: true, email: true, role: true, company: true, phone: true, avatar: true, createdAt: true },
+      select: { id: true, username: true, email: true, role: true, mustChangePassword: true, company: true, phone: true, avatar: true, createdAt: true },
     });
 
     res.json(user);
@@ -239,7 +240,7 @@ router.put("/api/auth/password", authMiddleware, async (req: AuthRequest, res: R
     const valid = await verifyPassword(oldPassword, user.passwordHash);
     if (!valid) { res.status(401).json({ detail: "旧密码错误" }); return; }
     const hash = await hashPassword(newPassword);
-    await prisma.user.update({ where: { id: req.user!.userId }, data: { passwordHash: hash } });
+    await prisma.user.update({ where: { id: req.user!.userId }, data: { passwordHash: hash, mustChangePassword: false } });
     res.json({ message: "密码修改成功" });
   } catch (err) {
     console.error("[password] change failed:", err);

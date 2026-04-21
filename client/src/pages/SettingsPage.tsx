@@ -7,7 +7,7 @@ import AppSidebar from '../components/shared/Sidebar';
 import MobileNavDrawer from '../components/shared/MobileNavDrawer';
 import Icon from '../components/shared/Icon';
 import { useToast } from '../components/shared/Toast';
-import { getSettings, updateSettings, uploadImage, getBackupStats, startBackupJob, pollBackupProgress, downloadBackup, renameBackup, deleteBackup, startRestore, pollRestoreProgress, listBackups, importBackup, importBackupAsRecord, checkUpdate, startUpdate, pollUpdateProgress, type SystemSettings, type BackupStats, type BackupRecord } from '../api/settings';
+import { getSettings, updateSettings, uploadImage, getBackupStats, startBackupJob, pollBackupProgress, downloadBackup, renameBackup, deleteBackup, startRestore, pollRestoreProgress, listBackups, importBackup, importBackupAsRecord, checkUpdate, startUpdate, pollUpdateProgress, getVersion, type SystemSettings, type BackupStats, type BackupRecord } from '../api/settings';
 import { COLOR_PRESETS, COLOR_KEYS, type ColorKey } from '../lib/colorSchemes';
 import { applyColorScheme, generatePaletteFromPrimary } from '../lib/colorScheme';
 // Note: pollBackupProgress is used by handleExport
@@ -368,6 +368,7 @@ function Content() {
   const [restoreConfirmFile, setRestoreConfirmFile] = useState<File | null>(null);
 
   // Update state
+  const [currentVersion, setCurrentVersion] = useState<string>("");
   const [updateInfo, setUpdateInfo] = useState<{ current: string; remote: string; updateAvailable: boolean; warning?: string } | null>(null);
   const [updating, setUpdating] = useState(false);
   const [updateProgress, setUpdateProgress] = useState({ stage: "", percent: 0, message: "", logs: [] as string[] });
@@ -386,6 +387,7 @@ function Content() {
     loadSettings();
     loadBackupStats();
     loadBackupList();
+    loadVersion();
   }, []);
 
   async function loadSettings() {
@@ -447,7 +449,7 @@ function Content() {
 
   async function handleExport() {
     setExporting(true);
-    setExportProgress({ stage: "dumping", percent: 0, message: "正在准备..." });
+    setExportProgress({ stage: "dumping", percent: 0, message: "正在准备...", logs: [] });
     try {
       const jobId = await startBackupJob();
       localStorage.setItem('backupJobId', jobId);
@@ -513,6 +515,13 @@ function Content() {
     } catch {}
   }
 
+  async function loadVersion() {
+    try {
+      const v = await getVersion();
+      setCurrentVersion(v);
+    } catch {}
+  }
+
   function handleBackupFileSelect(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -557,7 +566,7 @@ function Content() {
     } finally {
       setImporting(false);
       setUploadProgress(0);
-      setRestoreProgress({ stage: '', percent: 0, message: '' });
+      setRestoreProgress({ stage: '', percent: 0, message: '', logs: [] });
       if (backupInputRef.current) backupInputRef.current.value = '';
     }
   }
@@ -616,7 +625,7 @@ function Content() {
       toast(err.message || '恢复失败', 'error');
     } finally {
       setRestoring(false);
-      setRestoreProgress({ stage: '', percent: 0, message: '' });
+      setRestoreProgress({ stage: '', percent: 0, message: '', logs: [] });
     }
   }
 
@@ -1015,8 +1024,8 @@ function Content() {
                 <div>
                   <p className="text-sm font-medium text-on-surface">系统更新</p>
                   <p className="text-xs text-on-surface-variant mt-0.5">
-                    当前版本: <span className="font-mono text-primary-container">{updateInfo?.current || '—'}</span>
-                    {updateInfo && !updateInfo.updateAvailable && updateInfo.current !== 'unknown' && (
+                    当前版本: <span className="font-mono text-primary-container">{currentVersion || updateInfo?.current || '—'}</span>
+                    {updateInfo && !updateInfo.updateAvailable && (updateInfo.current || currentVersion) !== 'unknown' && (
                       <span className="ml-1.5 text-emerald-400">· 已是最新</span>
                     )}
                     {updateInfo?.updateAvailable && (

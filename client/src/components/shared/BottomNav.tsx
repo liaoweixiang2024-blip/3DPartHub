@@ -17,7 +17,7 @@ export default function BottomNav() {
   };
 
   return (
-    <nav className="h-14 bg-[#1b1b1f] border-t border-[#343538] flex items-center justify-around px-4">
+    <nav className="h-14 shrink-0 bg-[#1b1b1f] border-t border-[#343538] flex items-center justify-around px-4 safe-bottom">
       {tabs.map((tab) => {
         const active = isActive(tab.path);
         return (

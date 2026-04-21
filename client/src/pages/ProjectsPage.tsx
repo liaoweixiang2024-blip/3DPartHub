@@ -109,7 +109,7 @@ export default function ProjectsPage() {
 
   if (!isAuthenticated) {
     return (
-      <div className="flex flex-col items-center justify-center h-screen bg-surface gap-4">
+      <div className="flex flex-col items-center justify-center h-dvh bg-surface gap-4">
         <Icon name="lock" size={64} className="text-on-surface-variant/30" />
         <p className="text-on-surface-variant">请先登录查看项目</p>
         <button onClick={() => navigate("/login")} className="text-primary hover:underline">前往登录</button>

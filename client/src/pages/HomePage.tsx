@@ -574,7 +574,7 @@ export default function HomePage() {
 
   if (browseBlocked) {
     return (
-      <div className="flex flex-col items-center justify-center h-screen bg-surface gap-6">
+      <div className="flex flex-col items-center justify-center h-dvh bg-surface gap-6">
         <Icon name="lock" size={64} className="text-on-surface-variant/30" />
         <h2 className="text-xl font-bold text-on-surface">需要登录</h2>
         <p className="text-sm text-on-surface-variant">浏览模型库需要先登录账号</p>

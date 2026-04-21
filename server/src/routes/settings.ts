@@ -315,6 +315,16 @@ router.post("/api/settings/upload-image", authMiddleware, async (req: AuthReques
   res.json({ url: imageUrl });
 });
 
+// Public: get current version (no auth required)
+router.get("/api/settings/version", async (_req, res: Response) => {
+  try {
+    const result = checkUpdateAvailable();
+    res.json({ current: result.current });
+  } catch {
+    res.json({ current: "unknown" });
+  }
+});
+
 // Public: get non-sensitive settings
 router.get("/api/settings/public", async (_req, res: Response) => {
   // Prevent browser/CDN caching of config — always revalidate

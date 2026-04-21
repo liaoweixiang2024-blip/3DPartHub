@@ -82,28 +82,33 @@ export function checkUpdateAvailable(): { current: string; remote: string; updat
   }
 
   try {
-    // Read current version from git tag (e.g., "v1.1.1")
-    let current: string;
+    // Version display from git tag (e.g., "v1.2.0"), fallback to hash
+    let currentTag: string;
     try {
-      current = execSync("git describe --tags --abbrev=0", { cwd: projectDir, encoding: "utf-8" }).trim();
+      currentTag = execSync("git describe --tags --abbrev=0", { cwd: projectDir, encoding: "utf-8" }).trim();
     } catch {
-      // No tags — fall back to short commit hash
-      current = execSync("git rev-parse --short HEAD", { cwd: projectDir, encoding: "utf-8" }).trim();
+      currentTag = execSync("git rev-parse --short HEAD", { cwd: projectDir, encoding: "utf-8" }).trim();
     }
 
-    let remote = "unknown";
+    const currentHash = execSync("git rev-parse HEAD", { cwd: projectDir, encoding: "utf-8" }).trim();
+
+    let remoteTag = "unknown";
+    let remoteHash = "unknown";
     try {
       execSync("git fetch origin main --tags", { cwd: projectDir, encoding: "utf-8", timeout: 30000, stdio: "pipe" });
+      remoteHash = execSync("git rev-parse origin/main", { cwd: projectDir, encoding: "utf-8" }).trim();
       try {
-        remote = execSync("git describe --tags --abbrev=0 origin/main", { cwd: projectDir, encoding: "utf-8" }).trim();
+        remoteTag = execSync("git describe --tags --abbrev=0 origin/main", { cwd: projectDir, encoding: "utf-8" }).trim();
       } catch {
-        // No tags on remote — fall back to short hash
-        remote = execSync("git rev-parse --short origin/main", { cwd: projectDir, encoding: "utf-8" }).trim();
+        remoteTag = execSync("git rev-parse --short origin/main", { cwd: projectDir, encoding: "utf-8" }).trim();
       }
     } catch {
       // fetch failed
     }
-    return { current, remote, updateAvailable: current !== remote && remote !== "unknown", warning: defaultResult.warning };
+
+    // Update available if commit hashes differ (works even without new tags)
+    const updateAvailable = currentHash !== remoteHash && remoteHash !== "unknown";
+    return { current: currentTag, remote: remoteTag, updateAvailable, warning: defaultResult.warning };
   } catch {
     return defaultResult;
   }

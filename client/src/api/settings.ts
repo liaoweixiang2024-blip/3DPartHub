@@ -411,6 +411,11 @@ function directUpload(file: File, onProgress?: (percent: number) => void): Promi
 
 // ===== System Update =====
 
+export async function getVersion(): Promise<string> {
+  const res = await client.get("/settings/version", { timeout: 10000 });
+  return unwrap<{ current: string }>(res).current || "unknown";
+}
+
 export interface UpdateCheckResult {
   current: string;
   remote: string;

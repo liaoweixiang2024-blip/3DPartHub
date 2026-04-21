@@ -156,7 +156,7 @@ export default function ProjectDetailPage() {
 
   if (error || !project) {
     return (
-      <div className="flex flex-col items-center justify-center h-screen bg-surface gap-4">
+      <div className="flex flex-col items-center justify-center h-dvh bg-surface gap-4">
         <Icon name="search_off" size={64} className="text-on-surface-variant" />
         <h1 className="text-2xl font-headline font-bold text-on-surface">
           {error ? "加载失败" : "加载中..."}
