@@ -874,8 +874,8 @@ function Content() {
                           <div className="flex flex-wrap gap-x-4 gap-y-1 mt-1.5 text-xs text-on-surface-variant">
                             <span>{new Date(b.createdAt).toLocaleString('zh-CN')}</span>
                             <span>{b.fileSizeText}</span>
-                            <span>{b.modelCount} 个模型</span>
-                            <span>{b.thumbnailCount} 张预览图</span>
+                            <span>{b.modelCount ?? 0} 个模型</span>
+                            <span>{b.thumbnailCount ?? 0} 张预览图</span>
                             <span>数据库 {b.dbSize}</span>
                           </div>
                         </div>

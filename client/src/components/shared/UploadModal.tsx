@@ -54,7 +54,7 @@ export default function UploadModal({ open, onClose, onConverted }: UploadModalP
       fileSize: file.size,
       totalChunks,
     });
-    const { uploadId } = initResp.data || initResp;
+    const { uploadId } = initResp?.data || initResp;
 
     // Upload chunks
     for (let i = 0; i < totalChunks; i++) {
@@ -71,7 +71,7 @@ export default function UploadModal({ open, onClose, onConverted }: UploadModalP
 
     // Complete
     const { data: completeResp } = await client.post("/upload/complete", { uploadId });
-    return completeResp.data || completeResp;
+    return completeResp?.data || completeResp;
   }, []);
 
   const handleFile = useCallback(async (file: File) => {
@@ -136,7 +136,7 @@ export default function UploadModal({ open, onClose, onConverted }: UploadModalP
   const handleDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault();
     setDragActive(false);
-    const file = e.dataTransfer.files[0];
+    const file = e.dataTransfer.files?.[0];
     if (file) handleFile(file);
   }, [handleFile]);
 
