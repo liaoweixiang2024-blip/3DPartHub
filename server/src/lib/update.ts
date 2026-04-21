@@ -82,6 +82,11 @@ export function checkUpdateAvailable(): { current: string; remote: string; updat
   }
 
   try {
+    // Fetch tags to ensure version display is accurate
+    try {
+      execSync("git fetch origin --tags", { cwd: projectDir, encoding: "utf-8", timeout: 30000, stdio: "pipe" });
+    } catch { /* non-critical */ }
+
     // Version display from git tag (e.g., "v1.2.0"), fallback to hash
     let currentTag: string;
     try {
