@@ -2,6 +2,7 @@
   <img src="https://img.shields.io/badge/License-MIT-blue.svg" alt="License: MIT" />
   <img src="https://img.shields.io/badge/Docker-Ready-2496ED?logo=docker&logoColor=white" alt="Docker" />
   <img src="https://img.shields.io/badge/TypeScript-5.8-3178C6?logo=typescript&logoColor=white" alt="TypeScript" />
+  <img src="https://img.shields.io/badge/version-v1.2.0-brightgreen" alt="Version" />
 </p>
 
 <h1 align="center">3DPartHub</h1>
@@ -40,22 +41,28 @@
 ### 团队与安全
 - **RBAC 权限** — 管理员 (ADMIN)、编辑 (EDITOR)、查看者 (VIEWER) 三级角色
 - **JWT 认证** — 无状态 Token 认证，支持刷新
+- **默认密码** — 首次部署默认管理员密码 `admin123`，首次登录强制修改
 - **操作审计** — 管理员操作完整日志，可追溯
 - **请求限流** — 内置 Rate Limit 防护
+- **强制改密** — 首次登录必须修改初始密码
 
 ### 后台管理
 - **用户管理** — 查看用户列表、修改角色、禁用账号
 - **分类管理** — 树形分类增删改、拖拽排序
 - **模型管理** — 批量操作、重新转换、缩略图管理
 - **站点设置** — 自定义站点名称、Logo、Favicon、SEO、联系邮箱、页脚
-- **系统公告** — 首页公告横幅，支持 HTML 内容
-- **数据备份** — 全量备份与恢复（数据库 + 模型 + 预览图）
+- **外观设置** — 预设配色方案 + 自定义主题色，支持亮/暗模式自动切换
+- **系统公告** — 首页公告横幅，支持多种样式
+- **数据备份** — 全量备份与恢复（数据库 + 模型 + 预览图），支持大文件分片上传，详细操作日志
 - **邮件配置** — SMTP 配置，用于注册验证码
+- **操作日志** — 管理员操作完整审计，可追溯
+- **一键更新** — 后台检查版本、一键拉取代码并自动构建重启，语义化版本号（v1.x.x）
+- **维护页面** — 更新重启期间自动显示"系统维护中"页面，恢复后自动刷新
 
 ### 性能优化
 - **Redis 缓存** — 热点 API 缓存（QPS 700 → 2400+），Redis 故障自动降级
-- **Cluster 多进程** — Node.js 集群模式，充分利用多核 CPU
-- **Nginx 优化** — HTTP/2、gzip 预压缩、静态资源长缓存
+- **Cluster 多进程** — Node.js 集群模式，充分利用多核 CPU，任务状态跨 Worker 文件级共享
+- **Nginx 优化** — HTTP/2、gzip 预压缩、静态资源长缓存、维护页面自动切换
 - **PostgreSQL** — 连接池 + 索引优化
 
 ## 快速开始
@@ -78,8 +85,10 @@ cp .env.production .env
 # 3. 启动服务
 docker-compose up -d
 
-# 4. 查看自动生成的管理员密码
-docker-compose logs api | grep "Admin account"
+# 4. 查看默认管理员账号
+# 默认账号: admin / admin123
+# 首次登录后系统会强制要求修改密码
+docker-compose logs api | grep "admin"
 ```
 
 ### 环境变量
@@ -91,12 +100,12 @@ docker-compose logs api | grep "Admin account"
 | `JWT_SECRET` | **是** | — | JWT 密钥（至少 32 位） |
 | `ALLOWED_ORIGINS` | 否 | `http://localhost:5173` | CORS 允许的域名 |
 | `ADMIN_USER` | 否 | `admin` | 初始管理员用户名（仅首次启动） |
-| `ADMIN_PASS` | 否 | *随机生成* | 初始管理员密码（仅首次启动） |
+| `ADMIN_PASS` | 否 | `admin123` | 初始管理员密码（仅首次启动，首次登录强制修改） |
 | `SMTP_HOST` | 否 | — | SMTP 服务器 |
 | `SMTP_USER` | 否 | — | SMTP 用户名 |
 | `SMTP_PASS` | 否 | — | SMTP 密码/授权码 |
 
-> 管理员账号仅在首次启动时创建，密码会打印在 API 容器日志中。首次登录后请立即修改密码。
+> 管理员账号仅在首次启动时创建。默认密码 `admin123`，首次登录后系统强制要求修改。
 
 ### 本地开发
 
