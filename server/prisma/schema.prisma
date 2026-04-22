@@ -16,6 +16,7 @@ model User {
   role              Role     @default(VIEWER)
   company           String?
   phone             String?
+  metadata          Json?
   mustChangePassword Boolean @default(false) @map("must_change_password")
   createdAt         DateTime @default(now()) @map("created_at")
   updatedAt         DateTime @updatedAt @map("updated_at")
@@ -103,6 +104,12 @@ model Model {
   comments  Comment[]
   shareLinks ShareLink[]
 
+  groupId    String?     @map("group_id")
+  group      ModelGroup? @relation(fields: [groupId], references: [id], onDelete: SetNull)
+  groupPrimary ModelGroup? @relation("GroupPrimary")
+
+  drawingUrl String? @map("drawing_url")
+
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
@@ -111,6 +118,7 @@ model Model {
   @@index([createdById])
   @@index([createdAt])
   @@index([projectId])
+  @@index([groupId])
   @@map("models")
 }
 
@@ -275,4 +283,17 @@ model Setting {
   updatedAt DateTime @updatedAt @map("updated_at")
 
   @@map("settings")
+}
+
+model ModelGroup {
+  id          String   @id @default(uuid())
+  name        String
+  description String?
+  primaryId   String?   @unique @map("primary_id")
+  primary     Model?    @relation("GroupPrimary", fields: [primaryId], references: [id], onDelete: SetNull)
+  models      Model[]
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+
+  @@map("model_groups")
 }

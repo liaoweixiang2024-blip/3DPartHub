@@ -20,6 +20,7 @@ import AuditLogPage from "./pages/AuditLogPage";
 import ProtectedRoute from "./components/shared/ProtectedRoute";
 import ErrorBoundary from "./components/shared/ErrorBoundary";
 import Icon from "./components/shared/Icon";
+import { getSiteTitle, getSiteIcon } from "./lib/publicSettings";
 
 const pageVariants = {
   initial: { opacity: 0 },
@@ -44,11 +45,22 @@ function PageWrap({ children }: { children: React.ReactNode }) {
 }
 
 function NotFoundPage() {
+  const siteIcon = getSiteIcon();
+  const siteTitle = getSiteTitle();
   return (
     <div className="flex flex-col items-center justify-center h-screen bg-surface gap-4">
-      <Icon name="search_off" size={64} className="text-on-surface-variant" />
+      <div className="flex items-center gap-2 mb-2">
+        {siteIcon ? (
+          <img src={siteIcon} alt={siteTitle} className="h-8 w-8 shrink-0 object-contain" />
+        ) : (
+          <Icon name="view_in_ar" size={32} className="text-primary-container shrink-0" />
+        )}
+        <span className="text-lg font-headline font-bold tracking-tight text-on-surface">{siteTitle}</span>
+      </div>
+      <Icon name="search_off" size={56} className="text-on-surface-variant/50" />
       <h1 className="text-2xl font-headline font-bold text-on-surface">页面不存在</h1>
-      <Link to="/" className="text-primary hover:underline">返回首页</Link>
+      <p className="text-sm text-on-surface-variant">您访问的页面可能已被移除或暂时不可用</p>
+      <Link to="/" className="text-primary-container hover:underline mt-2">返回首页</Link>
     </div>
   );
 }

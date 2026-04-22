@@ -25,6 +25,7 @@ services:
       - ./server/static:/app/static
       - /var/run/docker.sock:/var/run/docker.sock
       - ./:/project:rw
+      - ./step_import_temp:/import:ro
     restart: unless-stopped
     # No external ports — only accessible via web (nginx)
 
@@ -38,7 +39,8 @@ services:
 
   postgres:
     image: postgres:16-alpine
-    # No external ports — only accessible from api container
+    ports:
+      - "5433:5432"
     environment:
       POSTGRES_DB: 3dparthub
       POSTGRES_USER: modeluser
@@ -54,7 +56,8 @@ services:
 
   redis:
     image: redis:7-alpine
-    # No external ports — only accessible from api container
+    ports:
+      - "6380:6379"
     restart: unless-stopped
 
 volumes:

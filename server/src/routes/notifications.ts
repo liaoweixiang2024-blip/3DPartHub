@@ -46,11 +46,15 @@ router.get("/api/notifications", authMiddleware, async (req: AuthRequest, res: R
 router.put("/api/notifications/:id/read", authMiddleware, async (req: AuthRequest, res: Response) => {
   try {
     if (!prisma) { res.status(503).json({ detail: "DB unavailable" }); return; }
-    const notification = await prisma.notification.update({
-      where: { id: req.params.id as string },
+    const result = await prisma.notification.updateMany({
+      where: { id: req.params.id as string, userId: req.user!.userId },
       data: { read: true },
     });
-    res.json(notification);
+    if (result.count === 0) {
+      res.status(404).json({ detail: "通知不存在" });
+      return;
+    }
+    res.json({ success: true });
   } catch {
     res.status(404).json({ detail: "通知不存在" });
   }

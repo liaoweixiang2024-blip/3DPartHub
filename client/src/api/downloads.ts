@@ -51,8 +51,16 @@ export const downloadsApi = {
     }
     const blob = await res.blob();
     const cd = res.headers.get("content-disposition");
-    const match = cd?.match(/filename"?(.+?)"?$/);
-    const filename = match?.[1] || `${modelId}.step`;
+    let filename = `${modelId}.step`;
+    if (cd) {
+      const utf8Match = cd.match(/filename\*=UTF-8''(.+)/i);
+      if (utf8Match) {
+        filename = decodeURIComponent(utf8Match[1]);
+      } else {
+        const asciiMatch = cd.match(/filename="([^"]+)"/);
+        if (asciiMatch) filename = asciiMatch[1];
+      }
+    }
     const a = document.createElement("a");
     a.href = URL.createObjectURL(blob);
     a.download = filename;

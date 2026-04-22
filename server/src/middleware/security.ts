@@ -13,8 +13,8 @@ export const apiLimiter = rateLimit({
 
 export const uploadLimiter = rateLimit({
   windowMs: 60 * 60 * 1000, // 1 hour
-  limit: 1000,
-  max: 1000,
+  limit: 5000, // Allow up to 5000 upload requests/hour (~50GB at 10MB/chunk)
+  max: 5000,
   standardHeaders: true,
   legacyHeaders: false,
   message: { success: false, message: "上传次数超出限制" },

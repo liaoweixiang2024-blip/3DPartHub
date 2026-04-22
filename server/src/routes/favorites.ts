@@ -52,7 +52,7 @@ router.post("/api/models/:id/favorite", authMiddleware, async (req: AuthRequest,
           await createNotification({
             userId: model.createdById,
             title: "新收藏",
-            message: `${req.user!.username || "用户"} 收藏了模型「${model.name}」`,
+            message: `有用户收藏了模型「${model.name}」`,
             type: "favorite",
             relatedId: modelId,
           });
@@ -127,22 +127,15 @@ router.post("/api/favorites/batch-download", authMiddleware, async (req: AuthReq
 
     const downloadOriginal = format === "original";
 
-    // Set up ZIP streaming
-    res.setHeader("Content-Type", "application/zip");
-    res.setHeader("Content-Disposition", `attachment; filename="favorites_${Date.now()}.zip"`);
-
-    const archive = archiver("zip", { zlib: { level: 5 } });
-    archive.pipe(res);
-
     const staticDir = join(process.cwd(), config.staticDir);
-    let added = 0;
 
+    // Pre-scan files before committing response headers
+    const fileEntries: Array<{ filePath: string; fileName: string; binPath?: string }> = [];
     for (const m of models) {
       let filePath: string | null = null;
-      let fileName: string;
+      let fileName = m.originalName || `${m.name || m.id}.${m.format}`;
 
       if (downloadOriginal && m.uploadPath) {
-        // Try uploadPath first, then convention
         const origPath = m.uploadPath.startsWith("/")
           ? join(process.cwd(), m.uploadPath.slice(1))
           : m.uploadPath;
@@ -162,27 +155,37 @@ router.post("/api/favorites/batch-download", authMiddleware, async (req: AuthReq
         if (existsSync(gltfPath)) {
           filePath = gltfPath;
           fileName = `${m.name || m.id}.gltf`;
-          // Also add the .bin file if exists
           const binPath = gltfPath.replace(/\.gltf$/, ".bin");
-          if (existsSync(binPath)) {
-            archive.file(binPath, { name: `${m.name || m.id}.bin` });
-          }
+          const hasBin = existsSync(binPath) ? binPath : undefined;
+          fileEntries.push({ filePath, fileName, binPath: hasBin });
+          continue;
         }
       }
 
       if (filePath && existsSync(filePath)) {
-        // Sanitize name to avoid path traversal
-        const safeName = (m.name || m.id).replace(/[<>:"/\\|?*]/g, "_");
-        const ext = filePath.split(".").pop();
-        archive.file(filePath, { name: `${safeName}.${ext}` });
-        added++;
+        fileEntries.push({ filePath, fileName });
       }
     }
 
-    if (added === 0) {
-      archive.destroy();
+    if (fileEntries.length === 0) {
       res.status(404).json({ detail: "没有找到可下载的文件" });
       return;
+    }
+
+    // Now safe to commit headers and stream
+    res.setHeader("Content-Type", "application/zip");
+    res.setHeader("Content-Disposition", `attachment; filename="favorites_${Date.now()}.zip"`);
+
+    const archive = archiver("zip", { zlib: { level: 5 } });
+    archive.pipe(res);
+
+    for (const entry of fileEntries) {
+      const safeName = (entry.fileName.replace(/\.[^.]+$/, "") || "file").replace(/[<>:"/\\|?*]/g, "_");
+      const ext = entry.filePath.split(".").pop();
+      archive.file(entry.filePath, { name: `${safeName}.${ext}` });
+      if (entry.binPath) {
+        archive.file(entry.binPath, { name: `${safeName}.bin` });
+      }
     }
 
     await archive.finalize();

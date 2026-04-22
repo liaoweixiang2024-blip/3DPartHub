@@ -64,7 +64,7 @@ router.post("/api/models/:id/comments", authMiddleware, async (req: AuthRequest,
           await createNotification({
             userId: model.createdById,
             title: "新评论",
-            message: `${req.user!.username || "用户"} 评论了模型「${model.name}」`,
+            message: `有用户评论了模型「${model.name}」`,
             type: "comment",
             relatedId: modelId,
           });

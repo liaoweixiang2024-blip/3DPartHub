@@ -6,6 +6,7 @@ export interface User {
   role: string;
   company?: string;
   phone?: string;
+  mustChangePassword?: boolean;
   createdAt?: string;
 }
 

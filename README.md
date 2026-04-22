@@ -85,8 +85,9 @@ cp .env.production .env
 # 3. 启动服务
 docker-compose up -d
 
-# 4. 查看默认管理员账号
-# 默认账号: admin / admin123
+# 4. 查看初始管理员账号
+# 默认登录邮箱: admin@model.com
+# 默认初始密码: admin123
 # 首次登录后系统会强制要求修改密码
 docker-compose logs api | grep "admin"
 ```
@@ -95,17 +96,18 @@ docker-compose logs api | grep "admin"
 
 | 变量 | 必填 | 默认值 | 说明 |
 |------|------|--------|------|
-| `WEB_PORT` | 否 | `5173` | 对外访问端口 |
+| `WEB_PORT` | 否 | `3780` | 对外访问端口 |
 | `DB_PASSWORD` | **是** | `modelpass` | 数据库密码 |
 | `JWT_SECRET` | **是** | — | JWT 密钥（至少 32 位） |
-| `ALLOWED_ORIGINS` | 否 | `http://localhost:5173` | CORS 允许的域名 |
+| `ALLOWED_ORIGINS` | 否 | `http://localhost:3780` | CORS 允许的域名 |
 | `ADMIN_USER` | 否 | `admin` | 初始管理员用户名（仅首次启动） |
+| `ADMIN_EMAIL` | 否 | `admin@model.com` | 初始管理员登录邮箱（仅首次启动） |
 | `ADMIN_PASS` | 否 | `admin123` | 初始管理员密码（仅首次启动，首次登录强制修改） |
 | `SMTP_HOST` | 否 | — | SMTP 服务器 |
 | `SMTP_USER` | 否 | — | SMTP 用户名 |
 | `SMTP_PASS` | 否 | — | SMTP 密码/授权码 |
 
-> 管理员账号仅在首次启动时创建。默认密码 `admin123`，首次登录后系统强制要求修改。
+> 管理员账号仅在首次启动时创建。默认登录邮箱为 `admin@model.com`，默认密码 `admin123`，首次登录后系统强制要求修改。
 
 ### 本地开发
 

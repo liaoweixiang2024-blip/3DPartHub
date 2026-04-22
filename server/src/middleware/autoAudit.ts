@@ -1,4 +1,5 @@
 import { Response, NextFunction, Request } from "express";
+import type { Prisma } from "@prisma/client";
 import { prisma } from "../lib/prisma.js";
 import type { AuthRequest } from "./auth.js";
 
@@ -12,9 +13,16 @@ const SKIP_PREFIXES = [
   "/api/tasks?", // GET task status, not mutations
   "/api/settings/backup/progress", // polling
   "/api/settings/backup/restore-progress", // polling
+  "/api/settings/backup/restore-progress", // polling
+  "/api/settings/backup/import-save-progress", // polling
+  "/api/settings/backup/download/", // one-time token download, logged separately
+  "/api/settings/backup/download-token/", // token generation, logged as backup_download
+  "/api/settings/update/progress", // polling
   "/api/notifications", // GET polling
   "/api/audit", // don't audit the audit log itself
   "/api/auth/refresh", // token refresh noise
+  "/api/settings/version", // public version check
+  "/api/settings/public", // public settings read
 ];
 
 const ACTION_MAP: Record<string, string> = {
@@ -35,6 +43,8 @@ function extractResource(path: string): string {
   if (path.includes("/favorites")) return "favorite";
   if (path.includes("/tickets")) return "ticket";
   if (path.includes("/tasks") && !path.includes("/tickets")) return "ticket";
+  if (path.includes("/settings/backup")) return "backup";
+  if (path.includes("/settings/update")) return "backup";
   if (path.includes("/settings")) return "settings";
   if (path.includes("/shares")) return "share";
   if (path.includes("/projects")) return "project";
@@ -55,6 +65,17 @@ function refineAction(method: string, path: string): string {
   if (path.includes("/tickets") && path.includes("/messages")) return "ticket_reply";
   if (path.includes("/tickets") && method === "PUT") return "ticket_status";
   if (path.includes("/tasks") && method === "POST" && !path.includes("/tickets")) return "ticket_create";
+  // Backup-related actions
+  if (path.includes("/settings/backup/create") && method === "POST") return "backup_create";
+  if (path.includes("/settings/backup/restore/") && method === "POST") return "backup_restore";
+  if (path.includes("/settings/backup/import-chunked") && method === "POST") return "backup_import_restore";
+  if (path.includes("/settings/backup/import") && method === "POST") return "backup_import_restore";
+  if (path.includes("/settings/backup/import-save-chunked") && method === "POST") return "backup_import_save";
+  if (path.includes("/settings/backup/import-save") && method === "POST") return "backup_import_save";
+  if (path.includes("/settings/backup/delete/") && method === "DELETE") return "backup_delete";
+  if (path.includes("/settings/backup/download-token/") && method === "POST") return "backup_download";
+  if (path.includes("/settings/backup/rename/") && method === "PUT") return "backup_rename";
+  if (path.includes("/settings/update/run") && method === "POST") return "system_update";
   return ACTION_MAP[method] || method.toLowerCase();
 }
 
@@ -86,7 +107,7 @@ export function autoAudit(req: Request, _res: Response, next: NextFunction) {
         const userId = authReq.user?.userId || null;
         const resourceId = req.params?.id || req.params?.projectId || (req.body as any)?.id || null;
 
-        const details: Record<string, unknown> = {
+        const details: Record<string, Prisma.InputJsonValue> = {
           method: req.method,
           path,
           statusCode: _res.statusCode,
@@ -95,11 +116,16 @@ export function autoAudit(req: Request, _res: Response, next: NextFunction) {
         // Include relevant body fields (sanitized)
         const body = req.body as Record<string, unknown>;
         if (body && typeof body === "object") {
-          const safeFields: Record<string, unknown> = {};
+          const safeFields: Record<string, Prisma.InputJsonValue> = {};
           for (const key of ["name", "status", "classification", "description", "role", "email", "username", "format"]) {
-            if (key in body) safeFields[key] = body[key];
+            const value = body[key];
+            if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") {
+              safeFields[key] = value;
+            }
           }
-          if (Object.keys(safeFields).length > 0) details.body = safeFields;
+          if (Object.keys(safeFields).length > 0) {
+            details.body = safeFields as Prisma.InputJsonObject;
+          }
         }
 
         await prisma.auditLog.create({
@@ -108,7 +134,7 @@ export function autoAudit(req: Request, _res: Response, next: NextFunction) {
             action,
             resource,
             resourceId: resourceId as string | null,
-            details,
+            details: details as Prisma.InputJsonObject,
           },
         });
       } catch {

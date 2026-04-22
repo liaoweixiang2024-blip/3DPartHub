@@ -32,6 +32,11 @@ export const authApi = {
     return data.data?.data ?? data.data;
   },
 
+  setInitialPassword: async (newPassword: string) => {
+    const { data } = await client.put<ApiResponse<{ message: string }>>("/auth/password", { newPassword });
+    return data.data?.data ?? data.data;
+  },
+
   getNotificationPrefs: async (): Promise<Record<string, boolean>> => {
     try {
       const { data } = await client.get("/auth/notification-prefs");

@@ -159,6 +159,34 @@ const GROUPS: SettingGroup[] = [
   },
 ];
 
+/** Shared progress card — used by backup create, restore, import-restore, import-save, update */
+function TaskProgressCard({ progress, color = 'primary-container' }: {
+  progress: { message: string; percent: number; logs?: string[] };
+  color?: string;
+}) {
+  const MAX_DISPLAY_LOGS = 200;
+  const displayLogs = (progress.logs || []).slice(-MAX_DISPLAY_LOGS);
+  return (
+    <div className="mt-3">
+      <div className="flex items-center justify-between text-xs text-on-surface-variant mb-1">
+        <span>{progress.message || '处理中...'}</span>
+        <span>{progress.percent}%</span>
+      </div>
+      <div className="w-full h-2 bg-surface-container-highest rounded-full overflow-hidden">
+        <div
+          className={`h-full bg-${color} rounded-full transition-all duration-300`}
+          style={{ width: `${progress.percent}%` }}
+        />
+      </div>
+      {displayLogs.length > 0 && (
+        <div className="mt-2 max-h-40 overflow-y-auto bg-surface-container-highest/50 rounded p-2 text-[11px] font-mono text-on-surface-variant/70 space-y-0.5">
+          {displayLogs.map((log, i) => <div key={i}>{log}</div>)}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function Switch({ checked, onChange }: { checked: boolean; onChange: (v: boolean) => void }) {
   return (
     <button
@@ -380,15 +408,81 @@ function Content() {
   const [restoreProgress, setRestoreProgress] = useState({ stage: '', percent: 0, message: '', logs: [] as string[] });
   const backupInputRef = useRef<HTMLInputElement>(null);
 
-  useEffect(() => {
-    // Clear stale backup job ID from previous sessions
-    localStorage.removeItem('backupJobId');
+  // Global busy state — prevent concurrent admin operations
+  const adminBusy = exporting || importing || restoring || updating;
 
+  useEffect(() => {
     loadSettings();
     loadBackupStats();
     loadBackupList();
     loadVersion();
+
+    // Resume in-progress tasks from previous session (page refresh)
+    resumePendingJobs();
   }, []);
+
+  async function resumePendingJobs() {
+    // Resume backup job
+    const backupJobId = localStorage.getItem('backupJobId');
+    if (backupJobId) {
+      setExporting(true);
+      setExportProgress({ stage: 'resuming', percent: 0, message: '正在恢复备份任务...', logs: [] });
+      try {
+        await pollBackupProgress(backupJobId, (stage, percent, message, logs) => {
+          setExportProgress({ stage, percent, message, logs: logs || [] });
+        });
+        toast('备份导出成功', 'success');
+        loadBackupList();
+        loadBackupStats();
+      } catch (err: any) {
+        toast(err.message || '备份任务失败', 'error');
+      } finally {
+        localStorage.removeItem('backupJobId');
+        setExporting(false);
+        setExportProgress({ stage: '', percent: 0, message: '', logs: [] });
+      }
+    }
+
+    // Resume restore job
+    const restoreJobId = localStorage.getItem('restoreJobId');
+    if (restoreJobId) {
+      setRestoring(true);
+      setRestoreProgress({ stage: 'resuming', percent: 0, message: '正在恢复恢复任务...', logs: [] });
+      try {
+        const result = await pollRestoreProgress(restoreJobId, (stage, percent, message, logs) => {
+          setRestoreProgress({ stage, percent, message, logs: logs || [] });
+        });
+        toast(`恢复成功：${result.modelCount} 个 STEP 模型，${result.thumbnailCount} 张缩略图`, 'success');
+        loadBackupList();
+        loadBackupStats();
+      } catch (err: any) {
+        toast(err.message || '恢复失败', 'error');
+      } finally {
+        localStorage.removeItem('restoreJobId');
+        setRestoring(false);
+        setRestoreProgress({ stage: '', percent: 0, message: '', logs: [] });
+      }
+    }
+
+    // Resume update job
+    const updateJobId = localStorage.getItem('updateJobId');
+    if (updateJobId) {
+      setUpdating(true);
+      setUpdateProgress({ stage: 'resuming', percent: 0, message: '正在恢复更新任务...', logs: [] });
+      try {
+        await pollUpdateProgress(updateJobId, (stage, percent, message, logs) => {
+          setUpdateProgress({ stage, percent, message, logs: logs || [] });
+        });
+        toast('更新成功，页面即将刷新...', 'success');
+        setTimeout(() => window.location.reload(), 3000);
+      } catch (err: any) {
+        toast(err.message || '更新失败', 'error');
+        setUpdating(false);
+      } finally {
+        localStorage.removeItem('updateJobId');
+      }
+    }
+  }
 
   async function loadSettings() {
     try {
@@ -405,7 +499,9 @@ function Content() {
     try {
       const stats = await getBackupStats();
       setBackupStats(stats);
-    } catch {}
+    } catch {
+      // Stats are informational — failure doesn't block the page
+    }
   }
 
   async function handleSave() {
@@ -490,6 +586,7 @@ function Content() {
     setUpdateProgress({ stage: "pulling", percent: 0, message: "正在准备更新...", logs: [] });
     try {
       const jobId = await startUpdate();
+      localStorage.setItem('updateJobId', jobId);
       await pollUpdateProgress(jobId, (stage, percent, message, logs) => {
         lastStage = stage;
         setUpdateProgress({ stage, percent, message, logs: logs || [] });
@@ -502,9 +599,9 @@ function Content() {
         setTimeout(() => window.location.reload(), 5000);
       } else {
         toast(err.message || '更新失败', 'error');
+        localStorage.removeItem('updateJobId');
+        setUpdating(false);
       }
-    } finally {
-      setUpdating(false);
     }
   }
 
@@ -512,14 +609,18 @@ function Content() {
     try {
       const list = await listBackups();
       setBackupList(list);
-    } catch {}
+    } catch {
+      // Backup list load failure — user can still use the page
+    }
   }
 
   async function loadVersion() {
     try {
       const v = await getVersion();
-      setCurrentVersion(v);
-    } catch {}
+      setCurrentVersion(v || 'unknown');
+    } catch {
+      setCurrentVersion('unknown');
+    }
   }
 
   function handleBackupFileSelect(e: React.ChangeEvent<HTMLInputElement>) {
@@ -540,9 +641,14 @@ function Content() {
       if (mode === 'save') {
         // Save as backup record (no restore)
         const isLarge = restoreConfirmFile.size >= 100 * 1024 * 1024;
-        await importBackupAsRecord(restoreConfirmFile, isLarge ? 'chunked' : 'direct', (p) => {
-          setUploadProgress(p);
-        });
+        await importBackupAsRecord(
+          restoreConfirmFile,
+          isLarge ? 'chunked' : 'direct',
+          (p) => setUploadProgress(p),
+          (stage, percent, message, logs) => {
+            setRestoreProgress({ stage, percent, message, logs: logs || [] });
+          },
+        );
         toast('备份文件已保存到备份记录列表', 'success');
         setRestoreConfirmFile(null);
         loadBackupList();
@@ -552,11 +658,12 @@ function Content() {
         const jobId = await importBackup(restoreConfirmFile, (p) => {
           setUploadProgress(p);
         });
+        localStorage.setItem('restoreJobId', jobId);
         setRestoreProgress({ stage: 'uploading', percent: 100, message: '上传完成，正在恢复...', logs: [] });
         const result = await pollRestoreProgress(jobId, (stage, percent, message, logs) => {
           setRestoreProgress({ stage, percent, message, logs: logs || [] });
         });
-        toast(`恢复成功：${result.modelCount} 个模型，${result.thumbnailCount} 张缩略图`, 'success');
+        toast(`恢复成功：${result.modelCount} 个 STEP 模型，${result.thumbnailCount} 张缩略图`, 'success');
         setRestoreConfirmFile(null);
         loadBackupList();
         loadBackupStats();
@@ -564,6 +671,7 @@ function Content() {
     } catch (err: any) {
       toast(err.message || '操作失败', 'error');
     } finally {
+      localStorage.removeItem('restoreJobId');
       setImporting(false);
       setUploadProgress(0);
       setRestoreProgress({ stage: '', percent: 0, message: '', logs: [] });
@@ -614,16 +722,18 @@ function Content() {
     setRestoreProgress({ stage: 'starting', percent: 0, message: '正在启动恢复...', logs: [] });
     try {
       const jobId = await startRestore(restoreConfirmId);
+      localStorage.setItem('restoreJobId', jobId);
       const result = await pollRestoreProgress(jobId, (stage, percent, message, logs) => {
         setRestoreProgress({ stage, percent, message, logs: logs || [] });
       });
-      toast(`恢复成功：${result.modelCount} 个模型，${result.thumbnailCount} 张缩略图`, 'success');
+      toast(`恢复成功：${result.modelCount} 个 STEP 模型，${result.thumbnailCount} 张缩略图`, 'success');
       setRestoreConfirmId(null);
       loadBackupList();
       loadBackupStats();
     } catch (err: any) {
       toast(err.message || '恢复失败', 'error');
     } finally {
+      localStorage.removeItem('restoreJobId');
       setRestoring(false);
       setRestoreProgress({ stage: '', percent: 0, message: '', logs: [] });
     }
@@ -791,7 +901,7 @@ function Content() {
                   <>
                     <div className="flex items-center gap-2 bg-surface-container-high/50 px-3 py-1.5 rounded-md">
                       <Icon name="view_in_ar" size={14} className="text-primary-container" />
-                      <span className="text-on-surface-variant">模型</span>
+                      <span className="text-on-surface-variant">STEP 模型</span>
                       <span className="font-medium text-on-surface">{backupStats.modelCount} 个</span>
                     </div>
                     <div className="flex items-center gap-2 bg-surface-container-high/50 px-3 py-1.5 rounded-md">
@@ -818,7 +928,7 @@ function Content() {
                 </div>
                 <button
                   onClick={handleExport}
-                  disabled={exporting}
+                  disabled={adminBusy}
                   className="px-4 py-2 text-xs font-medium bg-primary-container/20 text-primary-container rounded-md hover:bg-primary-container/30 disabled:opacity-50 transition-colors flex items-center gap-1.5 shrink-0"
                 >
                   <Icon name="add" size={14} />
@@ -826,23 +936,7 @@ function Content() {
                 </button>
               </div>
               {exporting && (
-                <div className="mt-2">
-                  <div className="flex items-center justify-between text-xs text-on-surface-variant mb-1">
-                    <span>{exportProgress.message}</span>
-                    <span>{exportProgress.percent}%</span>
-                  </div>
-                  <div className="w-full h-2 bg-surface-container-highest rounded-full overflow-hidden">
-                    <div
-                      className="h-full bg-primary-container rounded-full transition-all duration-500"
-                      style={{ width: `${exportProgress.percent}%` }}
-                    />
-                  </div>
-                  {exportProgress.logs && exportProgress.logs.length > 0 && (
-                    <div className="mt-2 max-h-32 overflow-y-auto bg-surface-container-highest/50 rounded p-2 text-[11px] font-mono text-on-surface-variant/70 space-y-0.5">
-                      {exportProgress.logs.map((log, i) => <div key={i}>{log}</div>)}
-                    </div>
-                  )}
-                </div>
+                <TaskProgressCard progress={exportProgress} />
               )}
             </div>
 
@@ -874,22 +968,22 @@ function Content() {
                           <div className="flex flex-wrap gap-x-4 gap-y-1 mt-1.5 text-xs text-on-surface-variant">
                             <span>{new Date(b.createdAt).toLocaleString('zh-CN')}</span>
                             <span>{b.fileSizeText}</span>
-                            <span>{b.modelCount ?? 0} 个模型</span>
+                            <span>{b.modelCount ?? 0} 个 STEP 模型</span>
                             <span>{b.thumbnailCount ?? 0} 张预览图</span>
                             <span>数据库 {b.dbSize}</span>
                           </div>
                         </div>
                         <div className="flex flex-wrap items-center gap-1.5 shrink-0">
-                          <button onClick={() => handleRestoreRequest(b.id)} className="px-2.5 py-1.5 text-xs font-medium bg-primary-container/15 text-primary-container rounded-md hover:bg-primary-container/25 transition-colors flex items-center gap-1">
+                          <button onClick={() => handleRestoreRequest(b.id)} disabled={adminBusy} className="px-2.5 py-1.5 text-xs font-medium bg-primary-container/15 text-primary-container rounded-md hover:bg-primary-container/25 disabled:opacity-50 transition-colors flex items-center gap-1">
                             <Icon name="restore" size={13} />恢复
                           </button>
-                          <button onClick={() => handleDownloadBackup(b.id)} className="px-2.5 py-1.5 text-xs font-medium bg-surface-container-high/60 text-on-surface-variant rounded-md hover:bg-surface-container-highest/50 transition-colors flex items-center gap-1">
+                          <button onClick={() => handleDownloadBackup(b.id)} disabled={adminBusy} className="px-2.5 py-1.5 text-xs font-medium bg-surface-container-high/60 text-on-surface-variant rounded-md hover:bg-surface-container-highest/50 disabled:opacity-50 transition-colors flex items-center gap-1">
                             <Icon name="download" size={13} />下载
                           </button>
-                          <button onClick={() => { setRenamingId(b.id); setRenameValue(b.name); }} className="px-2.5 py-1.5 text-xs font-medium bg-surface-container-high/60 text-on-surface-variant rounded-md hover:bg-surface-container-highest/50 transition-colors flex items-center gap-1">
+                          <button onClick={() => { setRenamingId(b.id); setRenameValue(b.name); }} disabled={adminBusy} className="px-2.5 py-1.5 text-xs font-medium bg-surface-container-high/60 text-on-surface-variant rounded-md hover:bg-surface-container-highest/50 disabled:opacity-50 transition-colors flex items-center gap-1">
                             <Icon name="edit" size={13} />重命名
                           </button>
-                          <button onClick={() => handleDelete(b.id)} className="px-2.5 py-1.5 text-xs font-medium bg-error-container/10 text-error rounded-md hover:bg-error-container/20 transition-colors flex items-center gap-1">
+                          <button onClick={() => handleDelete(b.id)} disabled={adminBusy} className="px-2.5 py-1.5 text-xs font-medium bg-error-container/10 text-error rounded-md hover:bg-error-container/20 disabled:opacity-50 transition-colors flex items-center gap-1">
                             <Icon name="delete" size={13} />删除
                           </button>
                         </div>
@@ -920,16 +1014,7 @@ function Content() {
                                   </div>
                                 </>
                               ) : (
-                                <>
-                                  <p className="text-xs font-medium text-on-surface">{restoreProgress.message || '恢复中...'}</p>
-                                  <div className="mt-2 w-full bg-surface-container-high rounded-full h-2 overflow-hidden">
-                                    <div
-                                      className="h-full bg-primary rounded-full transition-all duration-500"
-                                      style={{ width: `${restoreProgress.percent}%` }}
-                                    />
-                                  </div>
-                                  <p className="text-xs text-on-surface-variant mt-1">{restoreProgress.percent}%</p>
-                                </>
+                                <TaskProgressCard progress={restoreProgress} color="primary" />
                               )}
                             </div>
                           </div>
@@ -957,7 +1042,7 @@ function Content() {
                   />
                   <button
                     onClick={() => backupInputRef.current?.click()}
-                    disabled={importing}
+                    disabled={adminBusy}
                     className="px-4 py-2 text-xs font-medium border border-outline-variant/40 text-on-surface-variant rounded-md hover:text-on-surface hover:bg-surface-container-high/50 disabled:opacity-50 transition-colors flex items-center gap-1.5"
                   >
                     <Icon name="upload" size={14} />
@@ -968,16 +1053,20 @@ function Content() {
 
               {importing && (
                 <div className="mt-3">
-                  <div className="flex items-center justify-between text-xs text-on-surface-variant mb-1">
-                    <span>{restoreProgress.message || (uploadProgress < 100 ? '上传中...' : '上传完成，正在处理...')}</span>
-                    <span>{restoreProgress.message ? `${restoreProgress.percent}%` : `${uploadProgress}%`}</span>
-                  </div>
-                  <div className="w-full h-2 bg-surface-container-highest rounded-full overflow-hidden">
-                    <div
-                      className="h-full bg-primary-container rounded-full transition-all duration-300"
-                      style={{ width: `${restoreProgress.message ? restoreProgress.percent : uploadProgress}%` }}
+                  {/* Phase 1: Upload */}
+                  {!restoreProgress.message && uploadProgress < 100 && (
+                    <TaskProgressCard progress={{ message: '上传中...', percent: uploadProgress }} />
+                  )}
+                  {/* Phase 2: Server processing */}
+                  {(restoreProgress.message || uploadProgress >= 100) && (
+                    <TaskProgressCard
+                      progress={{
+                        message: restoreProgress.message || '上传完成，正在处理...',
+                        percent: restoreProgress.message ? restoreProgress.percent : 100,
+                        logs: restoreProgress.logs,
+                      }}
                     />
-                  </div>
+                  )}
                 </div>
               )}
 
@@ -1036,7 +1125,7 @@ function Content() {
                 <div className="flex gap-2">
                   <button
                     onClick={handleCheckUpdate}
-                    disabled={checkingUpdate}
+                    disabled={checkingUpdate || adminBusy}
                     className="px-4 py-2 text-xs font-medium border border-outline-variant/40 text-on-surface-variant rounded-md hover:text-on-surface hover:bg-surface-container-high/50 disabled:opacity-50 transition-colors flex items-center gap-1.5"
                   >
                     <Icon name="search" size={14} className={checkingUpdate ? 'animate-spin' : ''} />
@@ -1061,23 +1150,7 @@ function Content() {
               )}
 
               {updating && (
-                <div className="mt-3">
-                  <div className="flex items-center justify-between text-xs text-on-surface-variant mb-1">
-                    <span>{updateProgress.message}</span>
-                    <span>{updateProgress.percent}%</span>
-                  </div>
-                  <div className="w-full h-2 bg-surface-container-highest rounded-full overflow-hidden">
-                    <div
-                      className="h-full bg-emerald-500 rounded-full transition-all duration-500"
-                      style={{ width: `${updateProgress.percent}%` }}
-                    />
-                  </div>
-                  {updateProgress.logs && updateProgress.logs.length > 0 && (
-                    <div className="mt-2 max-h-32 overflow-y-auto bg-surface-container-highest/50 rounded p-2 text-[11px] font-mono text-on-surface-variant/70 space-y-0.5">
-                      {updateProgress.logs.map((log, i) => <div key={i}>{log}</div>)}
-                    </div>
-                  )}
-                </div>
+                <TaskProgressCard progress={updateProgress} color="emerald-500" />
               )}
             </div>
           </div>

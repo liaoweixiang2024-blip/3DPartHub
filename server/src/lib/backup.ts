@@ -1,14 +1,18 @@
 import { execSync, spawn } from "child_process";
-import { existsSync, mkdirSync, rmSync, writeFileSync, statSync, readdirSync, readFileSync, renameSync } from "fs";
+import { existsSync, mkdirSync, rmSync, writeFileSync, statSync, readdirSync, readFileSync, renameSync, openSync, closeSync, writeSync, readSync, createReadStream, createWriteStream } from "fs";
 import { join } from "path";
+import { createInterface } from "readline";
+import { pipeline } from "stream/promises";
+import { Transform } from "stream";
 import { config } from "./config.js";
 import { syncJob, loadJob } from "./jobStore.js";
 
 const DB_URL = config.databaseUrl;
 // Strip Prisma-specific query params that pg_dump/psql don't understand
 const DB_URL_CLEAN = DB_URL.replace(/\?.*/, "");
-const ACTIVE_BACKUP_DIR = join(process.cwd(), config.uploadDir, "backups");
-const LEGACY_BACKUP_DIR = join(process.cwd(), config.staticDir, "backups");
+// Prefer static/backups (bind-mount in Docker → host disk space) over uploads/backups (named volume → limited space)
+const ACTIVE_BACKUP_DIR = join(process.cwd(), config.staticDir, "backups");
+const LEGACY_BACKUP_DIR = join(process.cwd(), config.uploadDir, "backups");
 const BACKUP_DIRS = Array.from(new Set([ACTIVE_BACKUP_DIR, LEGACY_BACKUP_DIR]));
 const BACKUP_WORK_DIR = join(ACTIVE_BACKUP_DIR, ".work");
 
@@ -201,14 +205,44 @@ const jobs = new Map<string, BackupJob>();
 const restoreJobs = new Map<string, RestoreJob>();
 const pendingRecordNormalizations = new Set<string>();
 
+// File-based lock to prevent concurrent backup/restore across cluster workers
+const LOCK_FILE = join(process.cwd(), config.uploadDir, ".backup_restore.lock");
+function acquireLock(): boolean {
+  try {
+    const fd = openSync(LOCK_FILE, "wx");
+    writeSync(fd, `${process.pid}\n${new Date().toISOString()}\n`);
+    closeSync(fd);
+    return true;
+  } catch {
+    // Lock file exists — check if it's stale (older than 2 hours)
+    try {
+      const { mtime } = statSync(LOCK_FILE);
+      if (Date.now() - mtime.getTime() > 2 * 60 * 60 * 1000) {
+        rmSync(LOCK_FILE, { force: true });
+        return acquireLock();
+      }
+    } catch {}
+    return false;
+  }
+}
+function releaseLock(): void {
+  try { rmSync(LOCK_FILE, { force: true }); } catch {}
+}
+
 function ts(): string {
   return new Date().toLocaleTimeString("zh-CN", { hour12: false });
 }
 
-function addLog(job: BackupJob | RestoreJob, text: string) {
+const MAX_LOG_LINES = 200;
+
+function addLog(job: { logs?: string[] }, text: string) {
+  if (!job.logs) return;
   job.logs.push(`[${ts()}] ${text}`);
+  if (job.logs.length > MAX_LOG_LINES) {
+    job.logs = job.logs.slice(-MAX_LOG_LINES);
+  }
   console.log(`[Backup] ${text}`);
-  syncJob(job);
+  syncJob(job as any);
 }
 
 export function getJob(id: string): BackupJob | undefined {
@@ -221,7 +255,7 @@ export function getRestoreJob(id: string): RestoreJob | undefined {
 
 // ---- Import as backup record (save to backup list) ----
 
-export function saveAsBackupRecord(archPath: string, originalName: string): BackupRecord {
+export async function saveAsBackupRecord(archPath: string, originalName: string): Promise<BackupRecord> {
   const id = `backup_${Date.now()}`;
   const dest = activeArchivePath(id);
 
@@ -229,7 +263,7 @@ export function saveAsBackupRecord(archPath: string, originalName: string): Back
     execSync(`cp "${archPath}" "${dest}"`, { stdio: "pipe" });
     if (existsSync(archPath)) rmSync(archPath, { force: true });
 
-    const record = inspectBackupArchive(id, dest, originalName);
+    const record = await inspectBackupArchive(id, dest, originalName);
     writeFileSync(activeMetaPath(id), JSON.stringify(record, null, 2));
     return record;
   } catch (err) {
@@ -239,9 +273,111 @@ export function saveAsBackupRecord(archPath: string, originalName: string): Back
   }
 }
 
+// ---- Import save as async job ----
+
+interface ImportSaveJob {
+  id: string;
+  stage: "verifying_archive" | "reading_meta" | "counting_models" | "copying_archive" | "writing_record" | "done" | "error";
+  percent: number;
+  message: string;
+  error?: string;
+  result?: BackupRecord;
+  logs: string[];
+}
+
+const importSaveJobs = new Map<string, ImportSaveJob>();
+
+export function startImportSaveJob(archPath: string, originalName: string): string {
+  const jobId = `importsave_${Date.now()}`;
+  const job: ImportSaveJob = { id: jobId, stage: "verifying_archive", percent: 5, message: "正在校验备份文件...", logs: [] };
+  importSaveJobs.set(jobId, job);
+  syncJob(job);
+
+  setImmediate(async () => {
+    try {
+      addLog(job, `开始导入保存: ${originalName}`);
+
+      // Stage 1: Verify archive
+      job.stage = "verifying_archive";
+      job.percent = 10;
+      job.message = "正在校验备份归档...";
+      syncJob(job);
+      if (!existsSync(archPath)) throw new Error("上传的备份文件不存在");
+      const fileSize = statSync(archPath).size;
+      addLog(job, `备份文件大小: ${formatSize(fileSize)}`);
+
+      const entries = listArchiveEntries(archPath);
+      if (entries.length === 0) throw new Error("备份归档内容为空");
+      addLog(job, `归档包含 ${entries.length} 个条目`);
+
+      // Stage 2: Read meta
+      job.stage = "reading_meta";
+      job.percent = 20;
+      job.message = "正在读取备份元数据...";
+      syncJob(job);
+
+      // Stage 3: Count models (async — uses streaming)
+      job.stage = "counting_models";
+      job.percent = 30;
+      job.message = "正在统计模型数量...";
+      syncJob(job);
+      const tmpDir = prepareWorkDir(`peek_${jobId}`);
+      try {
+        const sqlPath = extractRestoreSqlPath(archPath, tmpDir);
+        if (sqlPath) {
+          const modelCount = await countStepModelsInSqlDump(sqlPath);
+          if (modelCount > 0) addLog(job, `发现 ${modelCount} 个 STEP 模型`);
+        }
+      } catch {
+        // Model counting is best-effort
+      } finally {
+        if (existsSync(tmpDir)) rmSync(tmpDir, { recursive: true, force: true });
+      }
+
+      // Stage 4: Copy archive to backup storage
+      job.stage = "copying_archive";
+      job.percent = 50;
+      job.message = "正在保存备份文件...";
+      addLog(job, "正在复制归档到备份存储...");
+      syncJob(job);
+
+      const record = await saveAsBackupRecord(archPath, originalName);
+
+      // Stage 5: Write record
+      job.stage = "writing_record";
+      job.percent = 90;
+      job.message = "正在写入备份记录...";
+      syncJob(job);
+
+      addLog(job, `备份记录已保存: ${record.name}`);
+      addLog(job, `${record.modelCount} 个模型, ${record.thumbnailCount} 张预览图, 数据库 ${record.dbSize}`);
+
+      job.stage = "done";
+      job.percent = 100;
+      job.message = "保存完成";
+      job.result = record;
+      syncJob(job);
+    } catch (err: any) {
+      job.stage = "error";
+      job.error = err.message;
+      job.message = `保存失败: ${err.message}`;
+      addLog(job, `保存失败: ${err.message}`);
+      syncJob(job);
+      if (existsSync(archPath)) rmSync(archPath, { force: true });
+    }
+  });
+
+  return jobId;
+}
+
+export function getImportSaveJob(id: string): ImportSaveJob | undefined {
+  return importSaveJobs.get(id) || loadJob<ImportSaveJob>(id);
+}
+
 // ---- Create backup ----
 
 export function startBackupJob(): string {
+  if (!acquireLock()) throw new Error("有备份或恢复任务正在进行中，请等待完成后再试");
   const id = `backup_${Date.now()}`;
   const job: BackupJob = { id, stage: "dumping", percent: 0, message: "正在导出数据库...", logs: [] };
   jobs.set(id, job);
@@ -257,6 +393,8 @@ export function startBackupJob(): string {
       if (existsSync(activeMetaPath(id))) rmSync(activeMetaPath(id), { force: true });
       syncJob(job);
       console.error(`[Backup #${job.id}] Error:`, err.message);
+    }).finally(() => {
+      releaseLock();
     });
   });
 
@@ -276,7 +414,7 @@ async function runBackup(job: BackupJob) {
     job.message = "正在导出数据库...";
     addLog(job, "正在导出数据库 (pg_dump)...");
 
-    pgDumpToFile(DB_URL_CLEAN, join(tmpDir, "database.sql"), "--data-only --no-owner --no-privileges", DB_DUMP_TIMEOUT_MS);
+    pgDumpToFile(DB_URL_CLEAN, join(tmpDir, "database.sql"), "--no-owner --no-privileges", DB_DUMP_TIMEOUT_MS);
 
     if (!existsSync(join(tmpDir, "database.sql"))) {
       throw new Error("数据库导出失败：文件未生成");
@@ -460,6 +598,7 @@ export function deleteBackup(id: string): boolean {
 // ---- Restore ----
 
 export function startRestoreJob(backupId: string): string {
+  if (!acquireLock()) throw new Error("有备份或恢复任务正在进行中，请等待完成后再试");
   const jobId = `restore_${Date.now()}`;
   const job: RestoreJob = { id: jobId, stage: "extracting", percent: 0, message: "正在解压备份文件...", logs: [] };
   restoreJobs.set(jobId, job);
@@ -472,6 +611,8 @@ export function startRestoreJob(backupId: string): string {
       job.error = err.message;
       addLog(job, `恢复失败: ${err.message}`);
       console.error(`[Restore #${jobId}] Error:`, err.message);
+    }).finally(() => {
+      releaseLock();
     });
   });
 
@@ -488,6 +629,7 @@ async function runRestore(job: RestoreJob, backupId: string) {
 // ---- Restore from uploaded file (import) ----
 
 export function startRestoreJobFromFile(archPath: string): string {
+  if (!acquireLock()) throw new Error("有备份或恢复任务正在进行中，请等待完成后再试");
   const jobId = `restore_${Date.now()}`;
   const job: RestoreJob = { id: jobId, stage: "extracting", percent: 0, message: "正在上传完成，开始解压...", logs: [] };
   restoreJobs.set(jobId, job);
@@ -500,6 +642,8 @@ export function startRestoreJobFromFile(archPath: string): string {
       job.error = err.message;
       addLog(job, `恢复失败: ${err.message}`);
       console.error(`[Restore #${jobId}] Error:`, err.message);
+    }).finally(() => {
+      releaseLock();
     });
   });
 
@@ -515,9 +659,12 @@ async function runRestoreFromArchive(job: RestoreJob, archPath: string, removeAr
   const result = { dbRestored: false, modelCount: 0, thumbnailCount: 0 };
 
   try {
+    addLog(job, "开始恢复任务...");
+
     job.stage = "extracting";
     job.percent = 5;
     job.message = "正在读取备份数据库...";
+    addLog(job, "正在提取备份数据库文件...");
     syncJob(job);
 
     const sqlPath = extractRestoreSqlPath(archPath, tmpDir);
@@ -527,63 +674,182 @@ async function runRestoreFromArchive(job: RestoreJob, archPath: string, removeAr
     if (sqlPath) {
       job.stage = "restoring_db";
       job.percent = 35;
-      job.message = "正在校验备份数据库兼容性...";
+      job.message = "正在校验备份数据库...";
       syncJob(job);
 
       const sanitizedSqlPath = join(tmpDir, "database.restore.sql");
-      await sanitizeSqlDump(sqlPath, sanitizedSqlPath);
-      await preflightRestoreSql(sanitizedSqlPath);
 
-      job.percent = 45;
-      job.message = "正在重置数据库结构...";
+      // Check if full dump by reading only first 100KB — avoid loading entire file into memory
+      job.percent = 35;
+      job.message = "正在校验备份数据库...";
       syncJob(job);
-      await resetDatabaseSchema(DB_URL_CLEAN);
+      const fd = openSync(sqlPath, "r");
+      const headBuffer = Buffer.alloc(100 * 1024);
+      const bytesRead = readSync(fd, headBuffer, 0, headBuffer.length, 0);
+      closeSync(fd);
+      const headBytes = headBuffer.toString("utf-8", 0, bytesRead);
+      const isFullDump = headBytes.includes("CREATE TABLE");
+      addLog(job, `数据库类型: ${isFullDump ? "完整备份 (full dump)" : "数据备份 (data-only)"}`);
 
-      job.percent = 55;
-      job.message = "正在应用数据库迁移...";
+      // Stream-sanitize SQL dump — avoid loading entire file into memory
+      job.percent = 37;
+      job.message = "正在预处理数据库...";
+      addLog(job, "正在预处理 SQL 数据...");
       syncJob(job);
-      runPrismaMigrations(DB_URL_CLEAN);
+      await sanitizeSqlDumpStreaming(sqlPath, sanitizedSqlPath);
 
-      job.percent = 65;
-      job.message = "正在导入数据库数据...";
-      syncJob(job);
-      try {
-        restoreSqlIntoDatabase(DB_URL_CLEAN, sanitizedSqlPath);
-      } catch (err) {
-        await recoverDatabaseToCleanSchema();
-        throw err;
+      if (isFullDump) {
+        // Full dump: reset schema then restore directly (includes schema + data)
+        job.percent = 45;
+        job.message = "正在重置数据库...";
+        addLog(job, "正在重置数据库 schema...");
+        syncJob(job);
+        await resetDatabaseSchema(DB_URL_CLEAN);
+        addLog(job, "数据库 schema 已重置");
+
+        job.percent = 55;
+        job.message = "正在恢复数据库...";
+        addLog(job, "正在导入数据库...");
+        syncJob(job);
+        try {
+          restoreSqlIntoDatabase(DB_URL_CLEAN, sanitizedSqlPath);
+        } catch (err) {
+          addLog(job, `数据库导入失败，尝试恢复...`);
+          await recoverDatabaseToCleanSchema();
+          throw err;
+        }
+        addLog(job, "数据库导入完成");
+
+        // Run prisma migrate after restore to apply any new migrations
+        job.percent = 65;
+        job.message = "正在检查数据库迁移...";
+        addLog(job, "正在检查并应用数据库迁移...");
+        syncJob(job);
+        try {
+          runPrismaMigrations(DB_URL_CLEAN);
+          addLog(job, "数据库迁移完成");
+        } catch (migrateErr) {
+          addLog(job, `迁移提示: ${extractCommandError(migrateErr)}`);
+          console.warn(`[Restore] Post-restore migration warning: ${extractCommandError(migrateErr)}`);
+        }
+      } else {
+        // Data-only dump: need prisma migrate first, then handle circular FKs
+        await preflightRestoreSql(sanitizedSqlPath);
+
+        job.percent = 45;
+        job.message = "正在重置数据库结构...";
+        addLog(job, "正在重置数据库 schema (增量模式)...");
+        syncJob(job);
+        await resetDatabaseSchema(DB_URL_CLEAN);
+
+        job.percent = 55;
+        job.message = "正在应用数据库迁移...";
+        addLog(job, "正在应用数据库迁移...");
+        syncJob(job);
+        runPrismaMigrations(DB_URL_CLEAN);
+        addLog(job, "数据库迁移完成");
+
+        // Drop circular FK constraints before data import
+        job.percent = 60;
+        job.message = "正在准备数据导入...";
+        addLog(job, "正在处理循环外键约束...");
+        syncJob(job);
+        const { dropCircularFKs, restoreCircularFKs } = await import("./restore-helpers.js").catch(() => ({
+          dropCircularFKs: async (_dbUrl: string) => {},
+          restoreCircularFKs: async (_dbUrl: string) => {},
+        }));
+        await dropCircularFKs(DB_URL_CLEAN);
+
+        job.percent = 65;
+        job.message = "正在导入数据库数据...";
+        addLog(job, "正在导入数据...");
+        syncJob(job);
+        try {
+          restoreSqlIntoDatabase(DB_URL_CLEAN, sanitizedSqlPath);
+        } catch (err) {
+          addLog(job, `数据导入失败，尝试恢复外键...`);
+          await restoreCircularFKs(DB_URL_CLEAN).catch(() => {});
+          await recoverDatabaseToCleanSchema();
+          throw err;
+        }
+
+        // Re-add circular FK constraints
+        await restoreCircularFKs(DB_URL_CLEAN);
+        addLog(job, "数据库导入完成，外键已恢复");
       }
 
       result.dbRestored = true;
       job.percent = 70;
       syncJob(job);
     } else {
+      addLog(job, "备份中未包含数据库文件，跳过数据库恢复");
       job.percent = 70;
       syncJob(job);
     }
 
     const staticDir = join(process.cwd(), config.staticDir);
+    let restoredSourceFiles = 0;
+    const fileErrors: string[] = [];
 
     job.stage = "restoring_files";
     job.percent = 75;
     job.message = "正在恢复转换模型文件...";
+    addLog(job, "正在恢复模型文件 (models/)...");
     syncJob(job);
-    restoreArchiveDirectory(archPath, staticDir, "models");
+    try {
+      restoreArchiveDirectory(archPath, staticDir, "models");
+      addLog(job, "模型文件恢复完成");
+    } catch (err: any) {
+      fileErrors.push(`models: ${err.message}`);
+      addLog(job, `模型文件恢复失败: ${err.message}`);
+    }
 
     job.percent = 88;
     job.message = "正在恢复缩略图...";
+    addLog(job, "正在恢复缩略图 (thumbnails/)...");
     syncJob(job);
-    result.thumbnailCount = restoreArchiveDirectory(archPath, staticDir, "thumbnails", (name) => name.endsWith(".png"));
+    try {
+      result.thumbnailCount = restoreArchiveDirectory(archPath, staticDir, "thumbnails", (name) => name.endsWith(".png"));
+      addLog(job, `缩略图恢复完成: ${result.thumbnailCount} 张`);
+    } catch (err: any) {
+      fileErrors.push(`thumbnails: ${err.message}`);
+      addLog(job, `缩略图恢复失败: ${err.message}`);
+    }
 
     job.percent = 92;
     job.message = "正在恢复 STEP 原始文件...";
+    addLog(job, "正在恢复 STEP 原始文件 (originals/)...");
     syncJob(job);
-    const restoredSourceFiles = restoreArchiveDirectory(archPath, staticDir, "originals", isStepFileName);
+    try {
+      restoredSourceFiles = restoreArchiveDirectory(archPath, staticDir, "originals", isStepFileName);
+      addLog(job, `原始文件恢复完成: ${restoredSourceFiles} 个`);
+    } catch (err: any) {
+      fileErrors.push(`originals: ${err.message}`);
+      addLog(job, `原始文件恢复失败: ${err.message}`);
+    }
 
     job.percent = 94;
     job.message = "正在恢复产品图纸...";
+    addLog(job, "正在恢复产品图纸 (drawings/)...");
     syncJob(job);
-    restoreArchiveDirectory(archPath, staticDir, "drawings");
+    try {
+      restoreArchiveDirectory(archPath, staticDir, "drawings");
+      addLog(job, "产品图纸恢复完成");
+    } catch (err: any) {
+      fileErrors.push(`drawings: ${err.message}`);
+      addLog(job, `产品图纸恢复失败: ${err.message}`);
+    }
+
+    if (fileErrors.length > 0) {
+      const msg = `部分文件恢复失败: ${fileErrors.join("; ")}`;
+      console.error(`[Restore] ${msg}`);
+      addLog(job, msg);
+      job.stage = "error";
+      job.error = msg;
+      job.result = result;
+      syncJob(job);
+      return;
+    }
 
     if (result.dbRestored) {
       try {
@@ -595,6 +861,8 @@ async function runRestoreFromArchive(job: RestoreJob, archPath: string, removeAr
       result.modelCount = restoredSourceFiles;
     }
 
+    addLog(job, `恢复完成: ${result.modelCount} 个 STEP 模型, ${result.thumbnailCount} 张缩略图`);
+
     job.stage = "done";
     job.percent = 100;
     job.message = "恢复完成";
@@ -605,6 +873,7 @@ async function runRestoreFromArchive(job: RestoreJob, archPath: string, removeAr
   } catch (err: any) {
     job.stage = "error";
     job.error = err.message;
+    addLog(job, `恢复失败: ${err.message}`);
     syncJob(job);
     console.error(`[Restore #${job.id}] Error:`, err.message);
   } finally {
@@ -646,7 +915,7 @@ export async function getBackupStats(): Promise<{
 
 // ---- Helpers ----
 
-function inspectBackupArchive(id: string, archive: string, originalName: string): BackupRecord {
+async function inspectBackupArchive(id: string, archive: string, originalName: string): Promise<BackupRecord> {
   const fileSize = statSync(archive).size;
   if (fileSize <= 0) {
     throw new Error("备份文件为空");
@@ -656,7 +925,8 @@ function inspectBackupArchive(id: string, archive: string, originalName: string)
   if (entries.length === 0) {
     throw new Error("备份归档内容为空");
   }
-  if (!entries.includes("_backup_db/database.sql")) {
+  const hasDbFile = entries.includes("_backup_db/database.sql") || entries.includes("database.sql");
+  if (!hasDbFile) {
     throw new Error("备份包缺少数据库文件");
   }
 
@@ -675,11 +945,18 @@ function inspectBackupArchive(id: string, archive: string, originalName: string)
 
   const tmpDir = prepareWorkDir(`peek_${id}`);
   try {
-    execSync(`tar xzf "${archive}" -C "${tmpDir}" _backup_db/meta.json`, { stdio: "pipe", timeout: ARCHIVE_META_TIMEOUT_MS });
-    const metaFile = join(tmpDir, "_backup_db", "meta.json");
-    if (existsSync(metaFile)) {
-      const meta = JSON.parse(readFileSync(metaFile, "utf-8"));
-      if (meta.timestamp) record.createdAt = meta.timestamp;
+    // Try both possible locations for meta.json
+    const metaLocations = ["_backup_db/meta.json", "meta.json"];
+    for (const loc of metaLocations) {
+      try {
+        execSync(`tar xzf "${archive}" -C "${tmpDir}" "${loc}"`, { stdio: "pipe", timeout: ARCHIVE_META_TIMEOUT_MS });
+        const metaFile = join(tmpDir, loc);
+        if (existsSync(metaFile)) {
+          const meta = JSON.parse(readFileSync(metaFile, "utf-8"));
+          if (meta.timestamp) record.createdAt = meta.timestamp;
+          break;
+        }
+      } catch { /* try next location */ }
     }
   } catch {
     // Metadata is optional for imports from older versions.
@@ -688,7 +965,7 @@ function inspectBackupArchive(id: string, archive: string, originalName: string)
   try {
     const sqlPath = extractRestoreSqlPath(archive, tmpDir);
     if (sqlPath) {
-      record.modelCount = countStepModelsInSqlDump(sqlPath);
+      record.modelCount = await countStepModelsInSqlDump(sqlPath);
     }
   } finally {
     if (existsSync(tmpDir)) rmSync(tmpDir, { recursive: true, force: true });
@@ -746,17 +1023,20 @@ function extractRestoreSqlPath(archive: string, tmpDir: string): string | null {
   return null;
 }
 
-async function sanitizeSqlDump(source: string, destination: string) {
-  const sanitized = readFileSync(source, "utf-8")
-    .split(/\r?\n/)
-    .filter((line) => (
-      !line.startsWith("\\restrict") &&
-      !line.startsWith("\\unrestrict") &&
-      line !== "SET transaction_timeout = 0;"
-    ))
-    .join("\n");
-
-  writeFileSync(destination, `${sanitized}\n`);
+async function sanitizeSqlDumpStreaming(source: string, destination: string) {
+  // Stream through the SQL dump, filtering out problematic lines
+  const rl = createInterface({ input: createReadStream(source, { encoding: "utf-8" }), crlfDelay: Infinity });
+  const ws = createWriteStream(destination, { encoding: "utf-8" });
+  for await (const line of rl) {
+    if (line !== "SET transaction_timeout = 0;") {
+      ws.write(line + "\n");
+    }
+  }
+  ws.end();
+  await new Promise<void>((resolve, reject) => {
+    ws.on("finish", resolve);
+    ws.on("error", reject);
+  });
 }
 
 function databaseNameFromUrl(): string {
@@ -788,7 +1068,7 @@ async function preflightRestoreSql(sqlPath: string) {
     psqlCommand(maintenanceUrl, `CREATE DATABASE "${preflightDbName}"`, "-v ON_ERROR_STOP=1", PSQL_COMMAND_TIMEOUT_MS);
     runPrismaMigrations(preflightDbUrl);
     restoreSqlIntoDatabase(preflightDbUrl, sqlPath);
-    addLog({ logs: [] } as any, "备份数据库校验通过");
+    console.log("[Backup] 备份数据库校验通过");
   } catch (err: any) {
     // Preflight failed — could be missing CREATEDB privilege or incompatible data.
     // Skip preflight and let the actual restore handle errors with recovery.
@@ -825,7 +1105,7 @@ function runPrismaMigrations(dbUrl: string) {
 }
 
 function restoreSqlIntoDatabase(dbUrl: string, sqlPath: string) {
-  psqlFromFile(dbUrl, sqlPath, "-v ON_ERROR_STOP=0", DB_RESTORE_TIMEOUT_MS);
+  psqlFromFile(dbUrl, sqlPath, "-v ON_ERROR_STOP=1", DB_RESTORE_TIMEOUT_MS);
 }
 
 async function recoverDatabaseToCleanSchema() {
@@ -845,21 +1125,35 @@ function restoreArchiveDirectory(
   const stagingRoot = join(staticDir, `.restore_${folder}_${Date.now()}`);
   const stagedFolder = join(stagingRoot, folder);
 
-  if (!archiveContainsEntry(archive, folder)) return 0;
+  if (!archiveContainsEntry(archive, folder)) {
+    // Backup doesn't contain this directory — remove current to avoid mixed state
+    rmSync(destination, { recursive: true, force: true });
+    return 0;
+  }
 
-  rmSync(destination, { recursive: true, force: true });
   rmSync(stagingRoot, { recursive: true, force: true });
   mkdirSync(stagingRoot, { recursive: true });
 
   try {
+    // Extract to staging first — if extraction fails, original data is preserved
     extractArchiveEntry(archive, stagingRoot, folder);
-    if (!existsSync(stagedFolder)) return 0;
+    if (!existsSync(stagedFolder)) {
+      rmSync(stagingRoot, { recursive: true, force: true });
+      return 0;
+    }
 
     pruneIgnoredFiles(stagedFolder);
+
+    // Only delete original after successful extraction
+    rmSync(destination, { recursive: true, force: true });
     renameSync(stagedFolder, destination);
     return predicate ? countFilesRecursive(destination, predicate) : 0;
-  } finally {
+  } catch (err) {
+    // Extraction failed — clean up staging, keep original data intact
     rmSync(stagingRoot, { recursive: true, force: true });
+    throw err;
+  } finally {
+    if (existsSync(stagingRoot)) rmSync(stagingRoot, { recursive: true, force: true });
   }
 }
 
@@ -913,7 +1207,8 @@ function extractArchiveEntry(archive: string, destination: string, entry: string
 }
 
 function isArchiveEntryMissing(err: unknown): boolean {
-  return extractCommandError(err).includes("Not found in archive");
+  const msg = extractCommandError(err).toLowerCase();
+  return msg.includes("not found in archive") || msg.includes("could not find");
 }
 
 function archiveContainsEntry(archive: string, entry: string): boolean {
@@ -974,9 +1269,9 @@ function scheduleBackupRecordNormalization(record: BackupRecord, archive: string
   if (pendingRecordNormalizations.has(record.id)) return;
 
   pendingRecordNormalizations.add(record.id);
-  setImmediate(() => {
+  setImmediate(async () => {
     try {
-      const refreshed = inspectBackupArchive(record.id, archive, record.filename);
+      const refreshed = await inspectBackupArchive(record.id, archive, record.filename);
       refreshed.name = record.name;
       refreshed.dbSize = record.dbSize || refreshed.dbSize;
       writeFileSync(metaFile, JSON.stringify(refreshed, null, 2));
@@ -1023,40 +1318,45 @@ async function countStepModelsInDatabase(): Promise<number> {
   }
 }
 
-function countStepModelsInSqlDump(sqlPath: string): number {
-  const lines = readFileSync(sqlPath, "utf-8").split(/\r?\n/);
-  let inModelsCopy = false;
-  let formatIndex = -1;
-  let statusIndex = -1;
-  let count = 0;
+async function countStepModelsInSqlDump(sqlPath: string): Promise<number> {
+  return new Promise((resolve) => {
+    let count = 0;
+    const input = createReadStream(sqlPath, { encoding: "utf-8" });
+    const rl = createInterface({ input, crlfDelay: Infinity });
 
-  for (const line of lines) {
-    if (!inModelsCopy) {
-      const match = line.match(/^COPY\s+(?:public\.)?"?models"?\s+\((.+)\)\s+FROM\s+stdin;$/i);
-      if (!match) continue;
+    let inModelsCopy = false;
+    let formatIndex = -1;
+    let statusIndex = -1;
 
-      const columns = match[1]
-        .split(",")
-        .map((value) => value.trim().replace(/^"|"$/g, ""));
-      formatIndex = columns.findIndex((column) => column === "format");
-      statusIndex = columns.findIndex((column) => column === "status");
-      if (formatIndex === -1 || statusIndex === -1) return 0;
-      inModelsCopy = true;
-      continue;
-    }
+    rl.on("line", (line: string) => {
+      if (!inModelsCopy) {
+        const match = line.match(/^COPY\s+(?:public\.)?"?models"?\s+\((.+)\)\s+FROM\s+stdin;$/i);
+        if (!match) return;
 
-    if (line === "\\.") break;
-    if (!line) continue;
+        const columns = match[1]
+          .split(",")
+          .map((value) => value.trim().replace(/^"|"$/g, ""));
+        formatIndex = columns.findIndex((column) => column === "format");
+        statusIndex = columns.findIndex((column) => column === "status");
+        if (formatIndex === -1 || statusIndex === -1) { rl.close(); return; }
+        inModelsCopy = true;
+        return;
+      }
 
-    const fields = line.split("\t");
-    const format = (fields[formatIndex] || "").toLowerCase();
-    const status = (fields[statusIndex] || "").toLowerCase();
-    if ((format === "step" || format === "stp") && status === "completed") {
-      count += 1;
-    }
-  }
+      if (line === "\\.") { rl.close(); return; }
+      if (!line) return;
 
-  return count;
+      const fields = line.split("\t");
+      const format = (fields[formatIndex] || "").toLowerCase();
+      const status = (fields[statusIndex] || "").toLowerCase();
+      if (status === "completed" && STEP_EXTENSIONS.has(`.${format}`)) {
+        count += 1;
+      }
+    });
+
+    rl.on("close", () => resolve(count));
+    input.on("error", () => resolve(0));
+  });
 }
 
 function formatSize(bytes: number): string {

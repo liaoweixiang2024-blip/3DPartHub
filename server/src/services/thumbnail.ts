@@ -129,7 +129,7 @@ export function generateThumbnail(
     // Apply strong Gaussian blur to fully blend facets into smooth surfaces
     const blurCanvas = createCanvas(hiW, hiH);
     const blurCtx = blurCanvas.getContext("2d");
-    blurCtx.filter = `blur(${ss * 2}px)`;
+    (blurCtx as unknown as { filter: string }).filter = `blur(${ss * 2}px)`;
     blurCtx.drawImage(hiCanvas, 0, 0);
     // Use fully blurred version for smooth surface appearance
     hiCtx.drawImage(blurCanvas, 0, 0);

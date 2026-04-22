@@ -26,10 +26,6 @@ export default function ForceChangePassword() {
       setError('新密码长度至少8位');
       return;
     }
-    if (newPassword === 'admin123') {
-      setError('新密码不能与默认密码相同');
-      return;
-    }
     if (newPassword !== confirmPassword) {
       setError('两次输入的密码不一致');
       return;
@@ -37,7 +33,7 @@ export default function ForceChangePassword() {
 
     setLoading(true);
     try {
-      await authApi.changePassword('admin123', newPassword);
+      await authApi.setInitialPassword(newPassword);
       toast('密码修改成功，请重新登录', 'success');
       setTimeout(() => {
         useAuthStore.getState().logout();
@@ -71,17 +67,11 @@ export default function ForceChangePassword() {
             </div>
             <h2 className="text-xl font-bold text-on-surface">首次登录，请修改密码</h2>
             <p className="text-sm text-on-surface-variant mt-2 text-center">
-              为保障账户安全，请修改默认密码后继续使用
+              为保障账户安全，请先设置一个新的登录密码
             </p>
           </div>
 
           <form onSubmit={handleSubmit} className="space-y-4">
-            <div className="flex flex-col gap-1.5">
-              <label className="text-xs uppercase tracking-wider text-on-surface-variant">默认密码</label>
-              <div className="w-full bg-surface-container-lowest text-on-surface-variant border border-outline-variant/20 px-3 py-2 text-sm rounded-sm">
-                admin123
-              </div>
-            </div>
             <div className="flex flex-col gap-1.5">
               <label className="text-xs uppercase tracking-wider text-on-surface-variant">新密码</label>
               <input

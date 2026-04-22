@@ -581,7 +581,8 @@ router.get("/api/models/:id/download", async (req: Request, res: Response) => {
         const displayName = m.name || m.originalName || id;
         const origExt = m.originalFormat || m.format || "step";
         if (requestedFormat === "original" && m.uploadPath) {
-          // uploadPath may be absolute or relative
+          // uploadPath may be absolute or relative — try direct resolution first,
+          // then fall back to {cwd}/static/originals/{id}.{ext}
           const origPath = m.uploadPath.startsWith("/")
             ? m.uploadPath
             : join(process.cwd(), m.uploadPath);
@@ -589,15 +590,31 @@ router.get("/api/models/:id/download", async (req: Request, res: Response) => {
             filePath = origPath;
             fileName = `${displayName}.${origExt}`;
             fileSize = m.originalSize;
+          } else {
+            const fallbackPath = join(process.cwd(), "static", "originals", `${id}.${origExt}`);
+            if (existsSync(fallbackPath)) {
+              filePath = fallbackPath;
+              fileName = `${displayName}.${origExt}`;
+              fileSize = m.originalSize;
+            }
           }
         }
         if (!filePath) {
           const gltfPath = m.gltfUrl.startsWith("/")
             ? m.gltfUrl
             : join(process.cwd(), m.gltfUrl);
-          filePath = gltfPath;
-          fileName = `${displayName}.gltf`;
-          fileSize = m.gltfSize;
+          if (existsSync(gltfPath)) {
+            filePath = gltfPath;
+          } else {
+            const fallbackGltf = join(process.cwd(), "static", "models", `${id}.gltf`);
+            if (existsSync(fallbackGltf)) {
+              filePath = fallbackGltf;
+            }
+          }
+          if (filePath) {
+            fileName = `${displayName}.gltf`;
+            fileSize = m.gltfSize;
+          }
         }
 
         // Record download (best effort, skip if no_record=1)

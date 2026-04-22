@@ -1,13 +1,13 @@
 import { Router, Response } from "express";
 import multer from "multer";
-import { mkdirSync, existsSync, rmSync, copyFileSync } from "fs";
-import { join } from "path";
+import { mkdirSync, existsSync, rmSync, copyFileSync, readFileSync, readdirSync, writeFileSync } from "fs";
+import { join, resolve, sep } from "path";
 import { config } from "../lib/config.js";
 import { authMiddleware, type AuthRequest } from "../middleware/auth.js";
 import { verifyToken } from "../lib/jwt.js";
 import { getAllSettings, setSettings, setSetting } from "../lib/settings.js";
 import { cacheGet, cacheSet, cacheDel, TTL } from "../lib/cache.js";
-import { startBackupJob, getJob, getRestoreJob, startRestoreJob, startRestoreJobFromFile, saveAsBackupRecord, getBackupStats, listBackups, renameBackup, deleteBackup, getBackupArchivePath } from "../lib/backup.js";
+import { startBackupJob, getJob, getRestoreJob, startRestoreJob, startRestoreJobFromFile, saveAsBackupRecord, startImportSaveJob, getImportSaveJob, getBackupStats, listBackups, renameBackup, deleteBackup, getBackupArchivePath } from "../lib/backup.js";
 import { checkUpdateAvailable, startUpdateJob, getUpdateJob } from "../lib/update.js";
 
 const router = Router();
@@ -21,6 +21,23 @@ const imageDirs: Record<string, string> = {
 };
 for (const dir of Object.values(imageDirs)) {
   mkdirSync(dir, { recursive: true });
+}
+
+const managedUploadRoot = resolve(process.cwd(), config.uploadDir);
+
+function resolveManagedUploadPath(filePath: unknown): string | null {
+  if (typeof filePath !== "string" || !filePath.trim()) return null;
+  const resolved = resolve(filePath);
+  if (resolved !== managedUploadRoot && !resolved.startsWith(`${managedUploadRoot}${sep}`)) {
+    return null;
+  }
+  return existsSync(resolved) ? resolved : null;
+}
+
+function asSingleString(value: unknown): string | undefined {
+  if (typeof value === "string") return value;
+  if (Array.isArray(value)) return typeof value[0] === "string" ? value[0] : undefined;
+  return undefined;
 }
 
 // Map setting key → stable filename (without extension, ext comes from upload)
@@ -43,7 +60,7 @@ const imageUpload = multer({
 
 const backupUpload = multer({
   dest: "/tmp",
-  limits: { fileSize: 50 * 1024 * 1024 * 1024 }, // 50GB max for backup
+  limits: { fileSize: 500 * 1024 * 1024 }, // 500MB max for direct upload — larger files must use chunked upload
   fileFilter: (_req, file, cb) => {
     if (file.originalname.endsWith(".tar.gz") || file.originalname.endsWith(".tgz") || file.mimetype === "application/gzip" || file.mimetype === "application/x-gzip") {
       cb(null, true);
@@ -77,7 +94,9 @@ router.post("/api/settings/update/run", authMiddleware, async (req: AuthRequest,
 // Admin: poll update progress
 router.get("/api/settings/update/progress/:id", authMiddleware, async (req: AuthRequest, res: Response) => {
   if (req.user?.role !== "ADMIN") { res.status(403).json({ detail: "需要管理员权限" }); return; }
-  const job = getUpdateJob(req.params.id);
+  const jobId = asSingleString(req.params.id);
+  if (!jobId) { res.status(400).json({ detail: "更新任务参数无效" }); return; }
+  const job = getUpdateJob(jobId);
   if (!job) { res.status(404).json({ detail: "更新任务不存在" }); return; }
   res.json({ stage: job.stage, percent: job.percent, message: job.message, error: job.error, logs: job.logs });
 });
@@ -110,14 +129,21 @@ router.get("/api/settings/backup/list", authMiddleware, async (req: AuthRequest,
 // Admin: start backup creation
 router.post("/api/settings/backup/create", authMiddleware, async (req: AuthRequest, res: Response) => {
   if (!adminOnly(req, res)) return;
-  const jobId = startBackupJob();
-  res.json({ jobId });
+  try {
+    const jobId = startBackupJob();
+    res.json({ jobId });
+  } catch (err: any) {
+    const status = err.message?.includes("正在进行中") ? 409 : 500;
+    res.status(status).json({ detail: err.message || "启动备份失败" });
+  }
 });
 
 // Admin: poll backup progress
 router.get("/api/settings/backup/progress/:id", authMiddleware, async (req: AuthRequest, res: Response) => {
   if (!adminOnly(req, res)) return;
-  const job = getJob(req.params.id);
+  const jobId = asSingleString(req.params.id);
+  if (!jobId) { res.status(400).json({ detail: "备份任务参数无效" }); return; }
+  const job = getJob(jobId);
   if (!job) {
     res.status(404).json({ detail: "备份任务不存在" });
     return;
@@ -125,33 +151,58 @@ router.get("/api/settings/backup/progress/:id", authMiddleware, async (req: Auth
   res.json({ stage: job.stage, percent: job.percent, message: job.message, error: job.error, logs: job.logs });
 });
 
-// Admin: poll restore progress
-router.get("/api/settings/restore/progress/:id", authMiddleware, async (req: AuthRequest, res: Response) => {
+// Short-lived one-time download tokens — file-based for cross-worker sharing in cluster mode
+const DL_TOKEN_DIR = join(resolve(process.cwd(), config.uploadDir), ".download_tokens");
+mkdirSync(DL_TOKEN_DIR, { recursive: true });
+
+function writeDownloadToken(token: string, backupId: string) {
+  writeFileSync(join(DL_TOKEN_DIR, token), JSON.stringify({ backupId, expires: Date.now() + 5 * 60 * 1000 }));
+}
+function consumeDownloadToken(token: string): string | null {
+  const p = join(DL_TOKEN_DIR, token);
+  try {
+    const data = JSON.parse(readFileSync(p, "utf-8"));
+    rmSync(p, { force: true }); // One-time use
+    if (data.expires < Date.now()) return null;
+    return data.backupId;
+  } catch { return null; }
+}
+// Clean expired tokens every 5 minutes
+setInterval(() => {
+  const now = Date.now();
+  try {
+    for (const f of readdirSync(DL_TOKEN_DIR)) {
+      try {
+        const data = JSON.parse(readFileSync(join(DL_TOKEN_DIR, f), "utf-8"));
+        if (data.expires < now) rmSync(join(DL_TOKEN_DIR, f), { force: true });
+      } catch { rmSync(join(DL_TOKEN_DIR, f), { force: true }); }
+    }
+  } catch {}
+}, 5 * 60 * 1000);
+
+// Admin: generate a short-lived download token
+router.post("/api/settings/backup/download-token/:id", authMiddleware, async (req: AuthRequest, res: Response) => {
   if (!adminOnly(req, res)) return;
-  const job = getRestoreJob(req.params.id);
-  if (!job) {
-    res.status(404).json({ detail: "恢复任务不存在" });
-    return;
-  }
-  res.json({ stage: job.stage, percent: job.percent, message: job.message, error: job.error, logs: job.logs, result: job.result });
+  const backupId = asSingleString(req.params.id);
+  if (!backupId) { res.status(400).json({ detail: "备份参数无效" }); return; }
+  const filePath = getBackupArchivePath(backupId);
+  if (!filePath) { res.status(404).json({ detail: "备份文件不存在" }); return; }
+  const token = `${Date.now()}_${Math.random().toString(36).slice(2)}`;
+  writeDownloadToken(token, backupId);
+  res.json({ token });
 });
 
-// Admin: download a backup file (supports ?token= for browser direct download)
-router.get("/api/settings/backup/download/:id", async (req: AuthRequest, res: Response) => {
-  const token = req.headers.authorization?.slice(7) || req.query.token;
-  if (!token) { res.status(401).json({ detail: "未提供认证令牌" }); return; }
-  try {
-    req.user = verifyToken(token) as AuthRequest["user"];
-  } catch {
-    res.status(401).json({ detail: "令牌无效或已过期" });
+// Download backup file using one-time token (no JWT in URL)
+router.get("/api/settings/backup/download/:token", async (req: AuthRequest, res: Response) => {
+  const token = asSingleString(req.params.token);
+  if (!token) { res.status(400).json({ detail: "下载令牌无效" }); return; }
+  const backupId = consumeDownloadToken(token);
+  if (!backupId) {
+    res.status(401).json({ detail: "下载令牌已过期或无效" });
     return;
   }
-  if (req.user?.role !== "ADMIN") { res.status(403).json({ detail: "需要管理员权限" }); return; }
-  const filePath = getBackupArchivePath(req.params.id);
-  if (!filePath) {
-    res.status(404).json({ detail: "备份文件不存在" });
-    return;
-  }
+  const filePath = getBackupArchivePath(backupId);
+  if (!filePath) { res.status(404).json({ detail: "备份文件不存在" }); return; }
   res.download(filePath);
 });
 
@@ -160,7 +211,9 @@ router.put("/api/settings/backup/rename/:id", authMiddleware, async (req: AuthRe
   if (!adminOnly(req, res)) return;
   const { name } = req.body;
   if (!name) { res.status(400).json({ detail: "名称不能为空" }); return; }
-  const record = renameBackup(req.params.id, name);
+  const backupId = asSingleString(req.params.id);
+  if (!backupId) { res.status(400).json({ detail: "备份参数无效" }); return; }
+  const record = renameBackup(backupId, name);
   if (!record) { res.status(404).json({ detail: "备份不存在" }); return; }
   res.json(record);
 });
@@ -168,7 +221,9 @@ router.put("/api/settings/backup/rename/:id", authMiddleware, async (req: AuthRe
 // Admin: delete a backup
 router.delete("/api/settings/backup/delete/:id", authMiddleware, async (req: AuthRequest, res: Response) => {
   if (!adminOnly(req, res)) return;
-  const ok = deleteBackup(req.params.id);
+  const backupId = asSingleString(req.params.id);
+  if (!backupId) { res.status(400).json({ detail: "备份参数无效" }); return; }
+  const ok = deleteBackup(backupId);
   res.json({ success: ok });
 });
 
@@ -176,7 +231,9 @@ router.delete("/api/settings/backup/delete/:id", authMiddleware, async (req: Aut
 router.post("/api/settings/backup/restore/:id", authMiddleware, async (req: AuthRequest, res: Response) => {
   if (!adminOnly(req, res)) return;
   try {
-    const jobId = startRestoreJob(req.params.id);
+    const backupId = asSingleString(req.params.id);
+    if (!backupId) { res.status(400).json({ detail: "备份参数无效" }); return; }
+    const jobId = startRestoreJob(backupId);
     res.json({ jobId });
   } catch (err: any) {
     res.status(500).json({ detail: `启动恢复失败: ${err.message}` });
@@ -186,12 +243,14 @@ router.post("/api/settings/backup/restore/:id", authMiddleware, async (req: Auth
 // Admin: poll restore progress
 router.get("/api/settings/backup/restore-progress/:jobId", authMiddleware, async (req: AuthRequest, res: Response) => {
   if (!adminOnly(req, res)) return;
-  const job = getRestoreJob(req.params.jobId);
+  const jobId = asSingleString(req.params.jobId);
+  if (!jobId) { res.status(400).json({ detail: "恢复任务参数无效" }); return; }
+  const job = getRestoreJob(jobId);
   if (!job) {
     res.status(404).json({ detail: "恢复任务不存在，服务器可能已重启" });
     return;
   }
-  res.json({ stage: job.stage, percent: job.percent, message: job.message, error: job.error, result: job.result });
+  res.json({ stage: job.stage, percent: job.percent, message: job.message, error: job.error, result: job.result, logs: job.logs });
 });
 
 // Admin: import backup from uploaded file (async)
@@ -201,53 +260,68 @@ router.post("/api/settings/backup/import", authMiddleware, (req: AuthRequest, re
 }, backupUpload.single("file"), async (req: AuthRequest, res: Response) => {
   const file = req.file;
   if (!file) { res.status(400).json({ detail: "请选择备份文件" }); return; }
-  // Start async restore job from the uploaded file
-  const jobId = startRestoreJobFromFile(file.path);
-  res.json({ jobId });
+  try {
+    const jobId = startRestoreJobFromFile(file.path);
+    res.json({ jobId });
+  } catch (err: any) {
+    const status = err.message?.includes("正在进行中") ? 409 : 500;
+    res.status(status).json({ detail: err.message || "启动恢复失败" });
+  }
+});
+
+// Admin: poll import-save progress
+router.get("/api/settings/backup/import-save-progress/:jobId", authMiddleware, async (req: AuthRequest, res: Response) => {
+  if (!adminOnly(req, res)) return;
+  const jobId = asSingleString(req.params.jobId);
+  if (!jobId) { res.status(400).json({ detail: "任务参数无效" }); return; }
+  const job = getImportSaveJob(jobId);
+  if (!job) {
+    res.status(404).json({ detail: "任务不存在" });
+    return;
+  }
+  res.json({ stage: job.stage, percent: job.percent, message: job.message, error: job.error, result: job.result, logs: job.logs });
 });
 
 // Admin: import backup from chunked upload (called after chunks are merged)
 router.post("/api/settings/backup/import-chunked", authMiddleware, async (req: AuthRequest, res: Response) => {
   if (!adminOnly(req, res)) return;
-  const { filePath } = req.body;
-  if (!filePath || !existsSync(filePath)) {
+  const managedPath = resolveManagedUploadPath(req.body?.filePath);
+  if (!managedPath) {
     res.status(400).json({ detail: "文件路径无效" });
     return;
   }
-  const jobId = startRestoreJobFromFile(filePath);
-  res.json({ jobId });
+  try {
+    const jobId = startRestoreJobFromFile(managedPath);
+    res.json({ jobId });
+  } catch (err: any) {
+    const status = err.message?.includes("正在进行中") ? 409 : 500;
+    res.status(status).json({ detail: err.message || "启动恢复失败" });
+  }
 });
 
-// Admin: save uploaded file as backup record (no restore)
+// Admin: save uploaded file as backup record (no restore) — async job for large files
 router.post("/api/settings/backup/import-save", authMiddleware, (req: AuthRequest, res: Response, next) => {
   if (!adminOnly(req, res)) return;
   next();
 }, backupUpload.single("file"), async (req: AuthRequest, res: Response) => {
   const file = req.file;
   if (!file) { res.status(400).json({ detail: "请选择备份文件" }); return; }
-  try {
-    const record = saveAsBackupRecord(file.path, file.originalname);
-    res.json(record);
-  } catch (err: any) {
-    if (existsSync(file.path)) rmSync(file.path, { force: true });
-    res.status(500).json({ detail: `保存备份失败: ${err.message}` });
-  }
+  // Return async job — inspection of large archives can be slow
+  const jobId = startImportSaveJob(file.path, file.originalname);
+  res.json({ jobId });
 });
 
-// Admin: save chunked upload as backup record (no restore)
+// Admin: save chunked upload as backup record (no restore) — async job
 router.post("/api/settings/backup/import-save-chunked", authMiddleware, async (req: AuthRequest, res: Response) => {
   if (!adminOnly(req, res)) return;
-  const { filePath, fileName } = req.body;
-  if (!filePath || !existsSync(filePath)) {
+  const managedPath = resolveManagedUploadPath(req.body?.filePath);
+  const fileName = req.body?.fileName;
+  if (!managedPath) {
     res.status(400).json({ detail: "文件路径无效" });
     return;
   }
-  try {
-    const record = saveAsBackupRecord(filePath, fileName || "备份文件");
-    res.json(record);
-  } catch (err: any) {
-    res.status(500).json({ detail: `保存备份失败: ${err.message}` });
-  }
+  const jobId = startImportSaveJob(managedPath, fileName || "备份文件");
+  res.json({ jobId });
 });
 
 // Admin: get all settings

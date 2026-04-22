@@ -226,8 +226,8 @@ router.put("/api/auth/profile", authMiddleware, async (req: AuthRequest, res: Re
 
 router.put("/api/auth/password", authMiddleware, async (req: AuthRequest, res: Response) => {
   const { oldPassword, newPassword } = req.body;
-  if (!oldPassword || !newPassword) {
-    res.status(400).json({ detail: "请输入旧密码和新密码" });
+  if (!newPassword) {
+    res.status(400).json({ detail: "请输入新密码" });
     return;
   }
   if (newPassword.length < 8) {
@@ -237,8 +237,21 @@ router.put("/api/auth/password", authMiddleware, async (req: AuthRequest, res: R
   try {
     const user = await prisma.user.findUnique({ where: { id: req.user!.userId } });
     if (!user) { res.status(404).json({ detail: "用户不存在" }); return; }
-    const valid = await verifyPassword(oldPassword, user.passwordHash);
-    if (!valid) { res.status(401).json({ detail: "旧密码错误" }); return; }
+
+    if (await verifyPassword(newPassword, user.passwordHash)) {
+      res.status(400).json({ detail: "新密码不能与当前密码相同" });
+      return;
+    }
+
+    if (!user.mustChangePassword) {
+      if (!oldPassword) {
+        res.status(400).json({ detail: "请输入旧密码" });
+        return;
+      }
+      const valid = await verifyPassword(oldPassword, user.passwordHash);
+      if (!valid) { res.status(401).json({ detail: "旧密码错误" }); return; }
+    }
+
     const hash = await hashPassword(newPassword);
     await prisma.user.update({ where: { id: req.user!.userId }, data: { passwordHash: hash, mustChangePassword: false } });
     res.json({ message: "密码修改成功" });
@@ -316,6 +329,10 @@ function adminGuard(req: AuthRequest, res: Response): boolean {
   return true;
 }
 
+function routeParam(value: string | string[] | undefined): string | undefined {
+  return Array.isArray(value) ? value[0] : value;
+}
+
 // List users (admin)
 router.get("/api/admin/users", authMiddleware, async (req: AuthRequest, res: Response) => {
   if (!adminGuard(req, res)) return;
@@ -358,18 +375,20 @@ router.get("/api/admin/users", authMiddleware, async (req: AuthRequest, res: Res
 router.put("/api/admin/users/:id/role", authMiddleware, async (req: AuthRequest, res: Response) => {
   if (!adminGuard(req, res)) return;
   const { role } = req.body;
+  const userId = routeParam(req.params.id);
+  if (!userId) { res.status(400).json({ detail: "用户参数无效" }); return; }
   if (!["ADMIN", "EDITOR", "VIEWER"].includes(role)) {
     res.status(400).json({ detail: "无效的角色" });
     return;
   }
   // Prevent self-demotion
-  if (req.params.id === req.user!.userId && role !== "ADMIN") {
+  if (userId === req.user!.userId && role !== "ADMIN") {
     res.status(400).json({ detail: "不能修改自己的角色" });
     return;
   }
   try {
     const user = await prisma.user.update({
-      where: { id: req.params.id },
+      where: { id: userId },
       data: { role },
       select: { id: true, username: true, email: true, role: true },
     });
@@ -383,12 +402,14 @@ router.put("/api/admin/users/:id/role", authMiddleware, async (req: AuthRequest,
 // Delete user (admin)
 router.delete("/api/admin/users/:id", authMiddleware, async (req: AuthRequest, res: Response) => {
   if (!adminGuard(req, res)) return;
-  if (req.params.id === req.user!.userId) {
+  const userId = routeParam(req.params.id);
+  if (!userId) { res.status(400).json({ detail: "用户参数无效" }); return; }
+  if (userId === req.user!.userId) {
     res.status(400).json({ detail: "不能删除自己" });
     return;
   }
   try {
-    await prisma.user.delete({ where: { id: req.params.id } });
+    await prisma.user.delete({ where: { id: userId } });
     res.json({ message: "用户已删除" });
   } catch (err: any) {
     if (err.code === "P2025") { res.status(404).json({ detail: "用户不存在" }); return; }

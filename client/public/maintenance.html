@@ -21,13 +21,31 @@
       padding: 2rem;
       max-width: 480px;
     }
-    .icon {
-      width: 80px;
-      height: 80px;
+    .brand {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      margin-bottom: 2rem;
+    }
+    .brand-icon {
+      width: 36px;
+      height: 36px;
+      object-fit: contain;
+    }
+    .brand-title {
+      font-size: 1.2rem;
+      font-weight: 700;
+      color: #fff;
+      letter-spacing: -0.02em;
+    }
+    .gear-icon {
+      width: 64px;
+      height: 64px;
       margin: 0 auto 1.5rem;
       animation: pulse 2s ease-in-out infinite;
     }
-    .icon svg {
+    .gear-icon svg {
       width: 100%;
       height: 100%;
     }
@@ -68,10 +86,13 @@
 </head>
 <body>
   <div class="container">
-    <div class="icon">
+    <div class="brand">
+      <img id="brandIcon" src="/static/logo/icon.svg" alt="" class="brand-icon" />
+      <span id="brandTitle" class="brand-title">3DPartHub</span>
+    </div>
+    <div class="gear-icon">
       <svg viewBox="0 0 24 24" fill="none" stroke="#f97316" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
         <circle cx="12" cy="12" r="3"></circle>
-        <path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"></path>
         <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z" opacity="0.3"></path>
       </svg>
     </div>
@@ -82,6 +103,17 @@
     <div class="footer-text">页面将自动刷新，请勿关闭浏览器</div>
   </div>
   <script>
+    // Apply branding from site config (may not be available during maintenance)
+    fetch('/api/settings/public', { method: 'GET', cache: 'no-store' })
+      .then(function(res) { return res.ok ? res.json() : null; })
+      .then(function(data) {
+        if (!data) return;
+        var s = data.data || data;
+        if (s.site_title) document.getElementById('brandTitle').textContent = s.site_title;
+        if (s.site_icon) document.getElementById('brandIcon').src = s.site_icon;
+      })
+      .catch(function() {});
+
     // Auto-retry every 10 seconds
     setTimeout(function check() {
       fetch('/api/settings/public', { method: 'GET', cache: 'no-store' })

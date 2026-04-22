@@ -153,9 +153,11 @@ export async function pollBackupProgress(
 }
 
 export async function downloadBackup(id: string): Promise<void> {
-  const token = getAccessToken();
-  if (!token) throw new Error("未登录");
-  window.open(`/api/settings/backup/download/${id}?token=${encodeURIComponent(token)}`, "_blank");
+  // Get a short-lived one-time download token, then open download
+  const { data: resp } = await client.post(`/settings/backup/download-token/${id}`);
+  const token = (resp as any)?.data?.token ?? (resp as any)?.token;
+  if (!token) throw new Error("获取下载令牌失败");
+  window.open(`/api/settings/backup/download/${token}`, "_blank");
 }
 
 export async function renameBackup(id: string, name: string): Promise<BackupRecord> {
@@ -216,10 +218,19 @@ export async function importBackupAsRecord(
   file: File,
   mode: "direct" | "chunked",
   onUploadProgress?: (percent: number) => void,
+  onServerProgress?: (stage: string, percent: number, message: string, logs?: string[]) => void,
 ): Promise<BackupRecord> {
+  let jobId: string;
   if (mode === "chunked" && file.size >= 100 * 1024 * 1024) {
-    return chunkedSaveAsRecord(file, onUploadProgress);
+    jobId = await chunkedSaveAsRecordJob(file, onUploadProgress);
+  } else {
+    jobId = await directSaveAsRecordJob(file, onUploadProgress);
   }
+  // Poll until import-save job completes
+  return pollImportSaveProgress(jobId, onServerProgress);
+}
+
+async function directSaveAsRecordJob(file: File, onUploadProgress?: (percent: number) => void): Promise<string> {
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
     xhr.open("POST", "/api/settings/backup/import-save");
@@ -232,8 +243,9 @@ export async function importBackupAsRecord(
       if (xhr.status >= 200 && xhr.status < 300) {
         try {
           const data = JSON.parse(xhr.responseText);
-          const record = data?.data ?? data;
-          resolve(record);
+          const id = data?.data?.jobId ?? data?.jobId;
+          if (id) resolve(id);
+          else reject(new Error("导入响应异常"));
         } catch { reject(new Error("解析响应失败")); }
       } else {
         try {
@@ -253,103 +265,119 @@ export async function importBackupAsRecord(
   });
 }
 
-async function chunkedSaveAsRecord(file: File, onProgress?: (percent: number) => void): Promise<BackupRecord> {
-  const CHUNK_SIZE = 10 * 1024 * 1024;
-  const totalChunks = Math.ceil(file.size / CHUNK_SIZE);
+async function pollImportSaveProgress(
+  jobId: string,
+  onProgress?: (stage: string, percent: number, message: string, logs?: string[]) => void,
+): Promise<BackupRecord> {
+  return new Promise((resolve, reject) => {
+    let consecutiveErrors = 0;
+    const poll = setInterval(async () => {
+      try {
+        const res = await client.get(`/settings/backup/import-save-progress/${jobId}`, { timeout: 15000 });
+        consecutiveErrors = 0;
+        const d = (res.data as any)?.data ?? res.data;
+        onProgress?.(d.stage, d.percent, d.message, d.logs);
+        if (d.stage === "done") {
+          clearInterval(poll);
+          resolve(d.result);
+        } else if (d.stage === "error") {
+          clearInterval(poll);
+          reject(new Error(d.error || "保存备份失败"));
+        }
+      } catch (err: any) {
+        consecutiveErrors++;
+        if (consecutiveErrors >= 5) {
+          clearInterval(poll);
+          reject(new Error(err.response?.data?.detail || err.message || "查询进度失败"));
+        }
+      }
+    }, 2000);
+  });
+}
 
+const BACKUP_CHUNK_SIZE = 10 * 1024 * 1024;
+
+async function initChunkedUpload(file: File): Promise<string> {
+  const totalChunks = Math.ceil(file.size / BACKUP_CHUNK_SIZE);
   const { data: initResp } = await client.post("/upload/init", {
-    fileName: file.name, fileSize: file.size, totalChunks,
+    fileName: file.name,
+    fileSize: file.size,
+    totalChunks,
   });
   const initData = (initResp as any)?.data ?? initResp;
   const uploadId = initData.uploadId;
   if (!uploadId) throw new Error("初始化上传失败");
+  return uploadId;
+}
+
+async function uploadFileInChunks(
+  file: File,
+  uploadId: string,
+  onProgress?: (percent: number) => void,
+) {
+  const totalChunks = Math.ceil(file.size / BACKUP_CHUNK_SIZE);
 
   for (let i = 0; i < totalChunks; i++) {
-    const start = i * CHUNK_SIZE;
-    const end = Math.min(start + CHUNK_SIZE, file.size);
+    const start = i * BACKUP_CHUNK_SIZE;
+    const end = Math.min(start + BACKUP_CHUNK_SIZE, file.size);
     const chunk = file.slice(start, end);
+
     let retries = 3;
     while (retries > 0) {
       try {
-        await fetch(`/api/upload/chunk?uploadId=${uploadId}&chunkIndex=${i}`, {
-          method: "PUT",
-          headers: { Authorization: `Bearer ${getAccessToken()}` },
-          body: chunk,
+        await client.put(`/upload/chunk?uploadId=${uploadId}&chunkIndex=${i}`, chunk, {
+          headers: { "Content-Type": "application/octet-stream" },
+          timeout: 300000,
         });
         break;
-      } catch {
+      } catch (err: any) {
         retries--;
-        if (retries === 0) throw new Error(`分块 ${i + 1}/${totalChunks} 上传失败`);
-        await new Promise((r) => setTimeout(r, 2000));
+        if (retries === 0) {
+          throw new Error(err.response?.data?.detail || `分块 ${i + 1}/${totalChunks} 上传失败`);
+        }
+        await new Promise((resolve) => setTimeout(resolve, 2000));
       }
     }
+
     onProgress?.(Math.round(((i + 1) / totalChunks) * 100));
   }
+}
 
+async function completeChunkedUpload(uploadId: string): Promise<{ filePath: string }> {
   const { data: completeResp } = await client.post("/upload/complete", { uploadId });
   const completeData = (completeResp as any)?.data ?? completeResp;
-  const filePath = completeData.filePath;
+  if (!completeData.filePath) throw new Error("合并文件失败");
+  return completeData;
+}
+
+async function chunkedSaveAsRecordJob(file: File, onProgress?: (percent: number) => void): Promise<string> {
+  const uploadId = await initChunkedUpload(file);
+  await uploadFileInChunks(file, uploadId, onProgress);
+  const { filePath } = await completeChunkedUpload(uploadId);
 
   const { data: saveResp } = await client.post("/settings/backup/import-save-chunked", { filePath, fileName: file.name });
   const saveData = (saveResp as any)?.data ?? saveResp;
-  return saveData;
+  const jobId = saveData?.jobId;
+  if (!jobId) throw new Error("启动保存任务失败");
+  return jobId;
 }
 
 export async function importBackup(
   file: File,
   onUploadProgress?: (percent: number) => void,
 ): Promise<string> {
-  const CHUNK_SIZE = 10 * 1024 * 1024; // 10MB per chunk
   const fileSize = file.size;
-  const totalChunks = Math.ceil(fileSize / CHUNK_SIZE);
 
   // Small files (< 100MB): direct upload
   if (fileSize < 100 * 1024 * 1024) {
     return directUpload(file, onUploadProgress);
   }
 
-  // Large files: chunked upload with resume support
+  // Large files: chunked upload
   try {
-    // Step 1: Init chunked upload
-    const { data: initResp } = await client.post("/upload/init", {
-      fileName: file.name,
-      fileSize,
-      totalChunks,
-    });
-    const initData = (initResp as any)?.data ?? initResp;
-    const uploadId = initData.uploadId;
-    if (!uploadId) throw new Error("初始化上传失败");
-
-    // Step 2: Upload chunks with retry
-    for (let i = 0; i < totalChunks; i++) {
-      const start = i * CHUNK_SIZE;
-      const end = Math.min(start + CHUNK_SIZE, fileSize);
-      const chunk = file.slice(start, end);
-
-      let retries = 3;
-      while (retries > 0) {
-        try {
-          await fetch(`/api/upload/chunk?uploadId=${uploadId}&chunkIndex=${i}`, {
-            method: "PUT",
-            headers: { Authorization: `Bearer ${getAccessToken()}` },
-            body: chunk,
-          });
-          break;
-        } catch {
-          retries--;
-          if (retries === 0) throw new Error(`分块 ${i + 1}/${totalChunks} 上传失败`);
-          await new Promise((r) => setTimeout(r, 2000));
-        }
-      }
-
-      onUploadProgress?.(Math.round(((i + 1) / totalChunks) * 100));
-    }
-
-    // Step 3: Complete upload — merges chunks into final file
-    const { data: completeResp } = await client.post("/upload/complete", { uploadId });
-    const completeData = (completeResp as any)?.data ?? completeResp;
-    const filePath = completeData.filePath;
-    if (!filePath) throw new Error("合并文件失败");
+    const uploadId = await initChunkedUpload(file);
+    await uploadFileInChunks(file, uploadId, onUploadProgress);
+    const { filePath } = await completeChunkedUpload(uploadId);
 
     // Step 4: Start restore from merged file
     const { data: restoreResp } = await client.post("/settings/backup/import-chunked", { filePath });

@@ -3,7 +3,7 @@ import { useNavigate, Link } from "react-router-dom";
 import { motion } from "framer-motion";
 import { useAuthStore } from "../stores/useAuthStore";
 import { useDocumentTitle } from "../hooks/useDocumentTitle";
-import { getSiteTitle, getSiteLogo } from "../lib/publicSettings";
+import { getSiteTitle, getSiteIcon, getSiteLogo, getLogoDisplayMode } from "../lib/publicSettings";
 import Icon from "../components/shared/Icon";
 import { getPublicSettings } from "../api/settings";
 import client from "../api/client";
@@ -159,11 +159,24 @@ export default function LoginPage() {
       >
         <div className="bg-surface-container-low rounded-lg border border-outline-variant/20 overflow-hidden">
           <div className="p-8 border-b border-outline-variant/10 text-center">
-            {getSiteLogo() ? (
-              <img src={getSiteLogo()} alt="" className="w-12 h-12 mx-auto mb-3 object-contain" />
-            ) : (
-              <Icon name="precision_manufacturing" size={48} className="text-primary mb-3 block" />
-            )}
+            {(() => {
+              const displayMode = getLogoDisplayMode();
+              const siteIcon = getSiteIcon();
+              const siteLogo = getSiteLogo();
+              const siteTitle = getSiteTitle();
+              if (displayMode === 'logo_only' && siteLogo) {
+                return <img src={siteLogo} alt={siteTitle} className="h-12 max-w-[200px] mx-auto mb-3 object-contain" />;
+              }
+              if (siteIcon) {
+                return (
+                  <div className="flex items-center justify-center gap-2 mb-3">
+                    <img src={siteIcon} alt={siteTitle} className="h-10 w-10 shrink-0 object-contain" />
+                    <span className="text-xl font-headline font-bold tracking-tight text-on-surface">{siteTitle}</span>
+                  </div>
+                );
+              }
+              return <Icon name="precision_manufacturing" size={48} className="text-primary-container mb-3 block mx-auto" />;
+            })()}
             <h1 className="text-2xl font-headline font-bold text-on-surface tracking-tight">
               {mode === "login" ? `登录${getSiteTitle()}` : "创建账户"}
             </h1>

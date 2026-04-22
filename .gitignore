@@ -19,3 +19,4 @@ stitch-assets/
 .colima/
 .claude/
 docker-compose.override.yml
+step_import_temp/

@@ -36,4 +36,4 @@ RUN ARCH=$(uname -m) && \
 
 EXPOSE 8000
 
-CMD ["sh", "-c", "npx prisma migrate deploy && node --import tsx src/cluster.ts"]
+CMD ["sh", "-c", "npx prisma migrate deploy || true && node --import tsx src/cluster.ts"]

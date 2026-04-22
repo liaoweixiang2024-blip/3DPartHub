@@ -1,22 +1,22 @@
 /**
- * 批量导入模型脚本
+ * 批量导入模型脚本（使用图片库分类结构）
  *
  * 用法:
- *   # 导入单个目录下所有 STEP 文件，分类为"储气罐"
- *   npx tsx scripts/batch_import.mts --dir /path/to/models --category "储气罐"
+ *   # 使用图片库目录结构创建分类
+ *   npx tsx scripts/batch_import.mts \
+ *     --dir /path/to/step_files \
+ *     --categories-dir /path/to/图片库 \
+ *     --admin admin@model.com
  *
- *   # 递归扫描，每个子文件夹名作为分类名
- *   npx tsx scripts/batch_import.mts --dir /path/to/models --category-by-folder
- *
- *   # 指定管理员邮箱（默认 admin@model.com）
- *   npx tsx scripts/batch_import.mts --dir /path/to/models --category "储气罐" --admin user@example.com
- *
- *   # 只注册已存在的 glTF 文件（跳过转换，用于恢复数据）
- *   npx tsx scripts/batch_import.mts --dir /path/to/models --skip-convert --category "储气罐"
+ *   # 跳过转换（用于恢复已有 glTF 文件）
+ *   npx tsx scripts/batch_import.mts \
+ *     --dir /path/to/step_files \
+ *     --categories-dir /path/to/图片库 \
+ *     --skip-convert
  */
 
-import { readdirSync, statSync, copyFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { join, basename, extname } from "node:path";
+import { readdirSync, statSync, copyFileSync, existsSync, mkdirSync, writeFileSync } from "node:fs";
+import { join, basename, extname, resolve } from "node:path";
 import { randomUUID } from "node:crypto";
 import { PrismaClient } from "@prisma/client";
 import { convertStepToGltf } from "../src/services/converter.js";
@@ -35,13 +35,12 @@ function hasFlag(name: string): boolean {
 }
 
 const SOURCE_DIR = getArg("dir");
-const CATEGORY_NAME = getArg("category");
-const CATEGORY_BY_FOLDER = hasFlag("category-by-folder");
+const CATEGORIES_DIR = getArg("categories-dir");
 const SKIP_CONVERT = hasFlag("skip-convert");
 const ADMIN_EMAIL = getArg("admin") || "admin@model.com";
 
 if (!SOURCE_DIR || !existsSync(SOURCE_DIR)) {
-  console.error("Usage: npx tsx scripts/batch_import.mts --dir /path/to/models [--category NAME] [--category-by-folder] [--skip-convert]");
+  console.error("Usage: npx tsx scripts/batch_import.mts --dir /path/to/models --categories-dir /path/to/图片库 [--skip-convert] [--admin email]");
   process.exit(1);
 }
 
@@ -55,20 +54,75 @@ if (!admin) {
 }
 console.log(`Admin: ${admin.username} (${admin.id})`);
 
-// ─── Resolve or create category ───
-async function getOrCreateCategory(name: string): Promise<string> {
+// ─── Build category hierarchy from image archive ───
+// Maps parent category name → Set of sub-category names
+const categoryHierarchy = new Map<string, Set<string>>();
+
+if (CATEGORIES_DIR && existsSync(CATEGORIES_DIR)) {
+  const topDirs = readdirSync(CATEGORIES_DIR, { withFileTypes: true });
+  for (const d of topDirs) {
+    if (!d.isDirectory()) continue;
+    const subDirs = readdirSync(join(CATEGORIES_DIR, d.name), { withFileTypes: true })
+      .filter(e => e.isDirectory())
+      .map(e => e.name);
+    categoryHierarchy.set(d.name, new Set(subDirs));
+  }
+  console.log(`\nCategory hierarchy loaded from: ${CATEGORIES_DIR}`);
+  for (const [parent, subs] of categoryHierarchy) {
+    if (subs.size > 0) {
+      console.log(`  ${parent}: ${[...subs].join(", ")}`);
+    } else {
+      console.log(`  ${parent}: (no sub-categories)`);
+    }
+  }
+} else {
+  console.log(`\nNo categories directory specified, files will have no category.`);
+}
+
+// ─── Category creation with caching ───
+const categoryCache = new Map<string, string>();
+
+async function getOrCreateCategory(name: string, parentName?: string): Promise<string> {
+  const cacheKey = parentName ? `${parentName}/${name}` : name;
+  if (categoryCache.has(cacheKey)) return categoryCache.get(cacheKey)!;
+
   const existing = await prisma.category.findFirst({ where: { name } });
-  if (existing) return existing.id;
+  if (existing) {
+    categoryCache.set(cacheKey, existing.id);
+    return existing.id;
+  }
+
+  let parentId: string | undefined;
+  if (parentName) {
+    parentId = await getOrCreateCategory(parentName);
+  }
+
   const created = await prisma.category.create({
-    data: { id: name, name, icon: "folder", createdAt: new Date(), updatedAt: new Date() },
+    data: { id: name, name, icon: "folder", parentId, createdAt: new Date(), updatedAt: new Date() },
   });
-  console.log(`  Created category: ${name}`);
+  console.log(`  Created ${parentId ? "sub-" : ""}category: ${name}${parentId ? ` (under ${parentName})` : ""}`);
+  categoryCache.set(cacheKey, created.id);
   return created.id;
 }
 
-let defaultCategoryId: string | null = null;
-if (CATEGORY_NAME) {
-  defaultCategoryId = await getOrCreateCategory(CATEGORY_NAME);
+// ─── Resolve category for a STEP file based on its path ───
+function resolveCategory(
+  level1Dir: string,
+  level2Dir: string | null,
+): { parent: string; sub: string | null } {
+  // Special case: 高压喷嘴 in STEP archive → 不锈钢接头/高压喷嘴 in image archive
+  if (level1Dir === "高压喷嘴") {
+    return { parent: "不锈钢接头", sub: "高压喷嘴" };
+  }
+
+  // Check if this parent has sub-categories in the image archive
+  const subs = categoryHierarchy.get(level1Dir);
+  if (subs && subs.size > 0 && level2Dir && subs.has(level2Dir)) {
+    return { parent: level1Dir, sub: level2Dir };
+  }
+
+  // No matching sub-category → just parent category
+  return { parent: level1Dir, sub: null };
 }
 
 // ─── Scan STEP files ───
@@ -76,31 +130,36 @@ interface ModelEntry {
   filePath: string;
   fileName: string;
   fileSize: number;
-  categoryName: string | null;
-  folderName: string;
+  level1Dir: string;         // top-level directory name (e.g., 不锈钢接头)
+  level2Dir: string | null;  // second-level directory name (e.g., 不锈钢管件)
+  parentDirName: string;     // immediate parent directory name (for display name)
 }
 
-function scanDir(dir: string, folderName: string | null = null): ModelEntry[] {
+function scanDir(dir: string, relativePath: string = ""): ModelEntry[] {
   const results: ModelEntry[] = [];
   const entries = readdirSync(dir, { withFileTypes: true });
 
   for (const entry of entries) {
+    if (entry.name.startsWith(".")) continue;
     const fullPath = join(dir, entry.name);
 
     if (entry.isDirectory()) {
-      // Recurse into subdirectories
-      results.push(...scanDir(fullPath, CATEGORY_BY_FOLDER ? entry.name : folderName));
+      const subPath = relativePath ? `${relativePath}/${entry.name}` : entry.name;
+      results.push(...scanDir(fullPath, subPath));
     } else if (entry.isFile()) {
       const ext = extname(entry.name).toLowerCase();
       if (!ACCEPTED.has(ext)) continue;
 
       const stat = statSync(fullPath);
+      const parts = relativePath.split("/");
+
       results.push({
         filePath: fullPath,
         fileName: entry.name,
         fileSize: stat.size,
-        categoryName: CATEGORY_BY_FOLDER ? folderName : null,
-        folderName: folderName || basename(dir),
+        level1Dir: parts[0] || "",
+        level2Dir: parts.length > 1 ? parts[1] : null,
+        parentDirName: basename(dir),
       });
     }
   }
@@ -133,17 +192,30 @@ let failed = 0;
 
 for (let i = 0; i < models.length; i++) {
   const model = models[i];
-  const { filePath, fileName, fileSize, categoryName, folderName } = model;
+  const { filePath, fileName, fileSize, level1Dir, level2Dir, parentDirName } = model;
   const ext = extname(fileName).slice(1).toLowerCase();
   const modelId = randomUUID().slice(0, 12);
-  const displayName = folderName || fileName.replace(/\.[^.]+$/, "");
+
+  // Display name: use immediate parent directory name, replace + → _ and fractions
+  const displayName = parentDirName
+    .replace(/\+/g, "_")
+    .replace(/1分/g, "1_8")
+    .replace(/2分/g, "1_4")
+    .replace(/3分/g, "3_8")
+    .replace(/4分/g, "1_2")
+    .replace(/6分/g, "3_4");
 
   console.log(`[${i + 1}/${models.length}] ${displayName} (${(fileSize / 1024 / 1024).toFixed(1)}MB)`);
 
-  // Resolve category
-  let categoryId = defaultCategoryId;
-  if (categoryName && !defaultCategoryId) {
-    categoryId = await getOrCreateCategory(categoryName);
+  // Resolve category from path + image archive hierarchy
+  const { parent: parentCat, sub: subCat } = resolveCategory(level1Dir, level2Dir);
+  let categoryId: string | null = null;
+  if (CATEGORIES_DIR) {
+    if (subCat) {
+      categoryId = await getOrCreateCategory(subCat, parentCat);
+    } else {
+      categoryId = await getOrCreateCategory(parentCat);
+    }
   }
 
   try {
@@ -170,7 +242,6 @@ for (let i = 0; i < models.length; i++) {
     let thumbnailUrl: string | null = null;
 
     if (SKIP_CONVERT) {
-      // Check if glTF already exists (for recovery)
       const existingGltf = join(STATIC_MODELS, `${modelId}.gltf`);
       if (existsSync(existingGltf)) {
         gltfUrl = `/static/models/${modelId}.gltf`;
@@ -233,7 +304,7 @@ for (let i = 0; i < models.length; i++) {
     meta.thumbnail_url = thumbnailUrl;
     writeFileSync(join(META_DIR, `${modelId}.json`), JSON.stringify(meta, null, 2));
 
-    console.log(`  ✓ ${gltfUrl} (${(gltfSize / 1024).toFixed(0)}KB)${thumbnailUrl ? " +thumb" : ""}`);
+    console.log(`  ✓ ${gltfUrl} (${(gltfSize / 1024).toFixed(0)}KB)${thumbnailUrl ? " +thumb" : ""} [${parentCat}${subCat ? `/${subCat}` : ""}]`);
     success++;
   } catch (err: any) {
     console.log(`  ✗ ${err.message?.slice(0, 120) || "failed"}`);
