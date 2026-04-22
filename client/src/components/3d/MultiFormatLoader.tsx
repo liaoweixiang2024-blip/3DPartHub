@@ -49,6 +49,9 @@ function CadModel({
   const [cadGroup, setCadGroup] = useState<THREE.Group | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+  // Cache base material — only recreate when preset changes
+  const baseMaterial = useMemo(() => createMaterial(materialPreset), [materialPreset]);
+
   useEffect(() => {
     let cancelled = false;
     loadCadFromUrl(url)
@@ -82,7 +85,13 @@ function CadModel({
           child.userData.originalMaterial = child.material;
         }
 
-        child.material = materialPreset !== "default" ? createMaterial(materialPreset) : child.userData.originalMaterial;
+        // Only create new material when preset changes
+        if (child.userData._matPreset !== materialPreset) {
+          child.material = materialPreset !== "default"
+            ? baseMaterial.clone()
+            : child.userData.originalMaterial;
+          child.userData._matPreset = materialPreset;
+        }
 
         if (clipEnabled) {
           child.material.clippingPlanes = [clipPlane];
@@ -106,7 +115,7 @@ function CadModel({
         child.material.needsUpdate = true;
       }
     });
-  }, [cadGroup, viewMode, clipEnabled, clipDirection, clipPosition, materialPreset]);
+  }, [cadGroup, viewMode, clipEnabled, clipDirection, clipPosition, materialPreset, baseMaterial]);
 
   if (error) {
     return (
@@ -161,6 +170,9 @@ function GltfModel({
   const clonedScene = useMemo(() => scene.clone(true), [scene]);
   const box = useMemo(() => new THREE.Box3().setFromObject(clonedScene), [clonedScene]);
 
+  // Cache base material — only recreate when preset changes
+  const baseMaterial = useMemo(() => createMaterial(materialPreset), [materialPreset]);
+
   // Auto-adjust camera to fit the model
   useEffect(() => {
     if (!box || box.isEmpty()) return;
@@ -195,9 +207,11 @@ function GltfModel({
 
     clonedScene.traverse((child) => {
       if (child instanceof THREE.Mesh) {
-        // Always use a properly visible material
-        const mat = createMaterial(materialPreset);
-        child.material = mat;
+        // Only create new material when preset changes
+        if (child.userData._matPreset !== materialPreset) {
+          child.material = baseMaterial.clone();
+          child.userData._matPreset = materialPreset;
+        }
         if (clipEnabled) {
           child.material.clippingPlanes = [clipPlane];
           child.material.side = THREE.DoubleSide;
@@ -218,7 +232,7 @@ function GltfModel({
         child.material.needsUpdate = true;
       }
     });
-  }, [viewMode, clipEnabled, clipDirection, clipPosition, clipPlane, materialPreset, clonedScene]);
+  }, [viewMode, clipEnabled, clipDirection, clipPosition, clipPlane, materialPreset, baseMaterial, clonedScene]);
 
   useEffect(() => {
     if (viewMode !== "explode" || !box) return;

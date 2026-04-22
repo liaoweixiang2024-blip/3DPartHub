@@ -168,7 +168,7 @@ function writeGltfSet(gltf: object, binData: Buffer, outputDir: string, modelId:
   gltfAny.buffers[0].uri = `${modelId}.bin`;
 
   writeFileSync(binPath, binData);
-  writeFileSync(gltfPath, JSON.stringify(gltf, null, 2));
+  writeFileSync(gltfPath, JSON.stringify(gltf));
   return gltfPath;
 }
 

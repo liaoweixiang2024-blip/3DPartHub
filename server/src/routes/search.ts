@@ -11,7 +11,7 @@ router.get("/api/search", async (req, res: Response) => {
   const project = req.query.project as string | undefined;
   const sort = (req.query.sort as string) || "relevance";
   const page = Math.max(1, Number(req.query.page) || 1);
-  const size = Math.min(50, Math.max(1, Number(req.query.size) || 20));
+  const size = Math.min(50, Math.max(1, Number(req.query.page_size) || 20));
 
   if (!prisma) {
     res.status(503).json({ detail: "数据库未连接" });

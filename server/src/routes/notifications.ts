@@ -74,6 +74,37 @@ router.put("/api/notifications/read-all", authMiddleware, async (req: AuthReques
   }
 });
 
+// Batch mark specific notifications as read
+router.put("/api/notifications/batch-read", authMiddleware, async (req: AuthRequest, res: Response) => {
+  try {
+    if (!prisma) { res.json({ count: 0 }); return; }
+    const { ids } = req.body as { ids: string[] };
+    if (!ids?.length) { res.json({ count: 0 }); return; }
+    const result = await prisma.notification.updateMany({
+      where: { id: { in: ids }, userId: req.user!.userId },
+      data: { read: true },
+    });
+    res.json({ count: result.count });
+  } catch {
+    res.status(500).json({ detail: "操作失败" });
+  }
+});
+
+// Batch delete specific notifications
+router.delete("/api/notifications/batch", authMiddleware, async (req: AuthRequest, res: Response) => {
+  try {
+    if (!prisma) { res.json({ count: 0 }); return; }
+    const { ids } = req.body as { ids: string[] };
+    if (!ids?.length) { res.json({ count: 0 }); return; }
+    const result = await prisma.notification.deleteMany({
+      where: { id: { in: ids }, userId: req.user!.userId },
+    });
+    res.json({ count: result.count });
+  } catch {
+    res.status(500).json({ detail: "删除失败" });
+  }
+});
+
 // Delete single notification
 router.delete("/api/notifications/:id", authMiddleware, async (req: AuthRequest, res: Response) => {
   try {

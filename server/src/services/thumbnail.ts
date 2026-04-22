@@ -6,6 +6,9 @@ import { mkdirSync, writeFileSync } from "node:fs";
 interface Vec3 { x: number; y: number; z: number }
 interface Tri { v0: Vec3; v1: Vec3; v2: Vec3; nx: number; ny: number; nz: number }
 
+// Max triangles to render — larger models get uniformly sampled for performance
+const MAX_RENDER_TRIANGLES = 80000;
+
 export function generateThumbnail(
   gltfPath: string,
   outputDir: string,
@@ -22,9 +25,19 @@ export function generateThumbnail(
     const binPath = gltfPath.replace(".gltf", ".bin");
     const binData = readFileSync(binPath);
 
-    const triangles = extractTriangles(gltf, binData);
+    let triangles = extractTriangles(gltf, binData);
     if (triangles.length === 0) {
       return generatePlaceholder(outputDir, modelId, width, height);
+    }
+
+    // Subsample if model is too complex (keeps uniform coverage)
+    if (triangles.length > MAX_RENDER_TRIANGLES) {
+      const step = triangles.length / MAX_RENDER_TRIANGLES;
+      const sampled: Tri[] = [];
+      for (let i = 0; i < MAX_RENDER_TRIANGLES; i++) {
+        sampled.push(triangles[Math.floor(i * step)]);
+      }
+      triangles = sampled;
     }
 
     // Compute bounding box

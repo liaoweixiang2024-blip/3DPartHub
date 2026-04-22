@@ -270,31 +270,11 @@ function DesktopContent() {
 
   const handleSingleDownload = useCallback(async (modelId: string) => {
     const token = getAccessToken();
-    try {
-      const res = await fetch(`/api/models/${modelId}/download?format=original`, {
-        headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) },
-      });
-      if (!res.ok) {
-        toast('下载失败', 'error');
-        return;
-      }
-      const blob = await res.blob();
-      const cd = res.headers.get("content-disposition");
-      let filename = `${modelId}.step`;
-      if (cd) {
-        const utf8Match = cd.match(/filename\*=UTF-8''(.+)/i);
-        if (utf8Match) {
-          filename = decodeURIComponent(utf8Match[1]);
-        } else {
-          const asciiMatch = cd.match(/filename="([^"]+)"/);
-          if (asciiMatch) filename = asciiMatch[1];
-        }
-      }
-      const a = document.createElement("a");
-      a.href = URL.createObjectURL(blob);
-      a.download = filename;
-      a.click();
-      URL.revokeObjectURL(a.href);
+    if (!token) { toast('请先登录', 'error'); return; }
+    const a = document.createElement("a");
+    a.href = `/api/models/${modelId}/download?format=original&token=${encodeURIComponent(token)}`;
+    a.download = "";
+    a.click();
     } catch {
       toast('下载失败，请检查网络', 'error');
     }
@@ -468,31 +448,11 @@ function MobileContent() {
 
   const handleSingleDownload = useCallback(async (modelId: string) => {
     const token = getAccessToken();
-    try {
-      const res = await fetch(`/api/models/${modelId}/download?format=original`, {
-        headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) },
-      });
-      if (!res.ok) {
-        toast('下载失败', 'error');
-        return;
-      }
-      const blob = await res.blob();
-      const cd = res.headers.get("content-disposition");
-      let filename = `${modelId}.step`;
-      if (cd) {
-        const utf8Match = cd.match(/filename\*=UTF-8''(.+)/i);
-        if (utf8Match) {
-          filename = decodeURIComponent(utf8Match[1]);
-        } else {
-          const asciiMatch = cd.match(/filename="([^"]+)"/);
-          if (asciiMatch) filename = asciiMatch[1];
-        }
-      }
-      const a = document.createElement("a");
-      a.href = URL.createObjectURL(blob);
-      a.download = filename;
-      a.click();
-      URL.revokeObjectURL(a.href);
+    if (!token) { toast('请先登录', 'error'); return; }
+    const a = document.createElement("a");
+    a.href = `/api/models/${modelId}/download?format=original&token=${encodeURIComponent(token)}`;
+    a.download = "";
+    a.click();
     } catch {
       toast('下载失败，请检查网络', 'error');
     }

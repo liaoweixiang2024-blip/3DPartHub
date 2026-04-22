@@ -34,6 +34,15 @@ export const converterApi = {
     return resp.data?.data ?? resp.data ?? resp;
   },
 
+  /** Create model from a file already on the server (after chunked upload) */
+  uploadLocal: async (filePath: string, fileName: string, categoryId?: string): Promise<ConversionResponse> => {
+    const { data: resp } = await client.post<ApiResponse<ConversionResponse>>(
+      "/models/upload-local",
+      { filePath, fileName, categoryId: categoryId || undefined },
+    );
+    return resp.data?.data ?? resp.data ?? resp;
+  },
+
   deleteModel: async (modelId: string): Promise<void> => {
     await client.delete(`/models/${modelId}`);
   },

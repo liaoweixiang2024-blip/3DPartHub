@@ -203,7 +203,13 @@ function DesktopContent() {
     if (accepted.length === 0) { toast('请选择 STEP/IGES/XT 格式的文件', 'error'); return; }
     setUploading(true);
     let ok = 0, fail = 0;
-    for (const file of accepted) { try { await modelApi.upload(file); ok++; } catch { fail++; } }
+    // Upload with limited concurrency (3 at a time)
+    const CONCURRENCY = 3;
+    for (let i = 0; i < accepted.length; i += CONCURRENCY) {
+      const batch = accepted.slice(i, i + CONCURRENCY);
+      const results = await Promise.allSettled(batch.map(f => modelApi.upload(f)));
+      for (const r of results) { if (r.status === "fulfilled") ok++; else fail++; }
+    }
     setUploading(false);
     toast(`上传完成: ${ok} 成功${fail > 0 ? `, ${fail} 失败` : ''}`, fail > 0 ? 'error' : 'success');
     mutate();
@@ -397,7 +403,13 @@ function MobileContent() {
     if (accepted.length === 0) { toast('请选择 STEP/IGES/XT 格式的文件', 'error'); return; }
     setUploading(true);
     let ok = 0, fail = 0;
-    for (const file of accepted) { try { await modelApi.upload(file); ok++; } catch { fail++; } }
+    // Upload with limited concurrency (3 at a time)
+    const CONCURRENCY = 3;
+    for (let i = 0; i < accepted.length; i += CONCURRENCY) {
+      const batch = accepted.slice(i, i + CONCURRENCY);
+      const results = await Promise.allSettled(batch.map(f => modelApi.upload(f)));
+      for (const r of results) { if (r.status === "fulfilled") ok++; else fail++; }
+    }
     setUploading(false);
     toast(`上传完成: ${ok} 成功${fail > 0 ? `, ${fail} 失败` : ''}`, fail > 0 ? 'error' : 'success');
     mutate();

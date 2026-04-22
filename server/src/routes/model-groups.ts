@@ -79,13 +79,27 @@ router.get("/api/model-groups/suggestions", authMiddleware, requireRole("ADMIN")
     const paged = dupes.slice((page - 1) * pageSize, page * pageSize);
 
     const items = [];
-    for (const d of paged) {
-      const models = await prisma.model.findMany({
-        where: { name: d.name, groupId: null, status: "completed" },
+    if (paged.length > 0) {
+      // Batch query: fetch all models for paged names in one go
+      const allModels = await prisma.model.findMany({
+        where: {
+          name: { in: paged.map(d => d.name) },
+          groupId: null,
+          status: "completed",
+        },
         select: { id: true, name: true, thumbnailUrl: true, originalName: true, originalSize: true, createdAt: true },
         orderBy: { createdAt: "desc" },
       });
-      items.push({ name: d.name, count: d.cnt, models });
+      // Group by name
+      const byName = new Map<string, typeof allModels>();
+      for (const m of allModels) {
+        let arr = byName.get(m.name);
+        if (!arr) { arr = []; byName.set(m.name, arr); }
+        arr.push(m);
+      }
+      for (const d of paged) {
+        items.push({ name: d.name, count: d.cnt, models: byName.get(d.name) || [] });
+      }
     }
 
     res.json({ success: true, data: items, total, page, page_size: pageSize });

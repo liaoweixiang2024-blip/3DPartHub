@@ -1,15 +1,38 @@
-FROM node:20-alpine
+# === Stage 1: Build dependencies ===
+FROM node:20-alpine AS builder
 
-RUN apk add --no-cache python3 make g++ pkgconfig openssl \
-    pixman-dev cairo-dev pango-dev giflib-dev libjpeg-turbo-dev \
-    pixman cairo pango giflib libjpeg-turbo \
-    chromium mesa-gl mesa-egl mesa-dri-gallium \
-    postgresql-client git curl
+RUN apk add --no-cache python3 make g++ pkgconfig openssl pixman-dev cairo-dev pango-dev
 
 WORKDIR /app
 
 COPY package.json package-lock.json ./
 RUN npm ci
+
+COPY . .
+
+# Generate Prisma client
+RUN npx prisma generate
+
+# === Stage 2: Runtime ===
+FROM node:20-alpine
+
+# Only runtime libs (no -dev packages)
+RUN apk add --no-cache openssl pixman cairo pango giflib libjpeg-turbo \
+    postgresql-client git curl \
+    chromium mesa-gl mesa-egl mesa-dri-gallium
+
+WORKDIR /app
+
+COPY package.json package-lock.json ./
+RUN npm ci
+
+# Copy built artifacts from builder
+COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma
+COPY --from=builder /app/node_modules/@prisma ./node_modules/@prisma
+COPY --from=builder /app/src ./src
+COPY --from=builder /app/prisma ./prisma
+COPY --from=builder /app/occt-import-js.node.cjs ./occt-import-js.node.cjs
+COPY --from=builder /app/static ./static
 
 # Copy Three.js to static/js/ for thumbnail renderer
 RUN mkdir -p /app/static/js/addons && \
@@ -18,11 +41,6 @@ RUN mkdir -p /app/static/js/addons && \
     cp -r node_modules/three/examples/jsm/loaders /app/static/js/addons/ && \
     cp -r node_modules/three/examples/jsm/environments /app/static/js/addons/ && \
     cp -r node_modules/three/examples/jsm/utils /app/static/js/addons/
-
-COPY . .
-
-# Generate Prisma client
-RUN npx prisma generate
 
 RUN mkdir -p uploads/.metadata uploads/chunks uploads/batch static/models static/thumbnails static/batch
 

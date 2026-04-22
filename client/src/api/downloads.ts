@@ -38,33 +38,14 @@ export const downloadsApi = {
     await client.delete("/downloads/clear");
   },
 
-  /** Download file with auth token */
+  /** Download file via direct link (no blob in memory) */
   downloadFile: async (modelId: string, format?: string) => {
     const token = getAccessToken();
-    const url = `/api/models/${modelId}/download?format=${format || "original"}&no_record=1`;
-    const res = await fetch(url, {
-      headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) },
-    });
-    if (!res.ok) {
-      const body = await res.json().catch(() => null);
-      throw new Error(body?.message || body?.detail || "下载失败");
-    }
-    const blob = await res.blob();
-    const cd = res.headers.get("content-disposition");
-    let filename = `${modelId}.step`;
-    if (cd) {
-      const utf8Match = cd.match(/filename\*=UTF-8''(.+)/i);
-      if (utf8Match) {
-        filename = decodeURIComponent(utf8Match[1]);
-      } else {
-        const asciiMatch = cd.match(/filename="([^"]+)"/);
-        if (asciiMatch) filename = asciiMatch[1];
-      }
-    }
+    const params = new URLSearchParams({ format: format || "original", no_record: "1" });
+    if (token) params.set("token", token);
     const a = document.createElement("a");
-    a.href = URL.createObjectURL(blob);
-    a.download = filename;
+    a.href = `/api/models/${modelId}/download?${params.toString()}`;
+    a.download = "";
     a.click();
-    URL.revokeObjectURL(a.href);
   },
 };

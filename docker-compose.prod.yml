@@ -10,8 +10,13 @@
 services:
   api:
     build: ./server
-    # ports not needed locally — access via web reverse proxy on :3780
-    # For direct API access, uncomment: ports: ["8000:8000"]
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+          cpus: "2"
+        reservations:
+          memory: 512M
     environment:
       PORT: 8000
       DATABASE_URL: postgresql://modeluser:${DB_PASSWORD:-modelpass}@postgres:5432/3dparthub
@@ -44,6 +49,11 @@ services:
     build: ./client
     ports:
       - "3780:80"
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+          cpus: "0.5"
     depends_on:
       - api
     restart: unless-stopped
@@ -52,6 +62,11 @@ services:
 
   postgres:
     image: postgres:16-alpine
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: "1"
     # 不暴露端口到宿主机，仅内部访问（安全）
     environment:
       POSTGRES_DB: 3dparthub
@@ -70,6 +85,11 @@ services:
 
   redis:
     image: redis:7-alpine
+    deploy:
+      resources:
+        limits:
+          memory: 128M
+          cpus: "0.5"
     # 不暴露端口到宿主机，仅内部访问（安全）
     restart: unless-stopped
     networks:

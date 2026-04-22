@@ -95,20 +95,15 @@ export default function UploadModal({ open, onClose, onConverted }: UploadModalP
       let res: ConversionResponse;
 
       if (file.size > LARGE_FILE_THRESHOLD) {
-        // Chunked upload path
+        // Chunked upload path: upload chunks → merge on server → create from local file
         const uploadResult = await uploadChunked(file);
         setProgress(75);
-        // Then convert via standard upload endpoint with the merged file info
-        // For now, we use the direct upload for all sizes since chunked just merges
-        // The actual conversion happens in the standard flow
-        res = await converterApi.uploadAndConvert(file, {
-          categoryId: categoryId || undefined,
-          onUploadProgress: (e) => {
-            if (e.total) {
-              setProgress(5 + Math.round((e.loaded / e.total) * 80));
-            }
-          },
-        });
+        // Create model from the already-merged file on server — no re-upload
+        res = await converterApi.uploadLocal(
+          uploadResult.filePath,
+          uploadResult.fileName || file.name,
+          categoryId || undefined,
+        );
       } else {
         // Standard upload
         res = await converterApi.uploadAndConvert(file, {

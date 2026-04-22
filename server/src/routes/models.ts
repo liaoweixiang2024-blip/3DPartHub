@@ -3,6 +3,7 @@ import multer from "multer";
 import { randomUUID } from "node:crypto";
 import { join } from "node:path";
 import { mkdirSync, readdirSync, readFileSync, rmSync, existsSync, writeFileSync, copyFileSync } from "node:fs";
+import { stat as statAsync } from "node:fs/promises";
 import { convertStepToGltf } from "../services/converter.js";
 import { conversionQueue } from "../lib/queue.js";
 import { convertXtToGltf } from "../services/xt-converter.js";
@@ -196,9 +197,99 @@ router.post("/api/models/upload", authMiddleware, requireRole("ADMIN"), upload.s
       created_at: createdAt,
     },
   });
+});
 
+// Upload from server-local file (used after chunked upload merges the file)
+router.post("/api/models/upload-local", authMiddleware, requireRole("ADMIN"), async (req: AuthRequest, res: Response) => {
+  const { filePath, fileName, categoryId } = req.body;
+  if (!filePath || !fileName) {
+    res.status(400).json({ detail: "缺少 filePath 或 fileName" });
+    return;
+  }
 
+  // Validate file exists and is within allowed directories
+  const absPath = filePath.startsWith("/") ? filePath : join(process.cwd(), filePath);
+  const allowedDirs = [join(process.cwd(), config.uploadDir), join(process.cwd(), "uploads"), "/tmp"];
+  const isAllowed = allowedDirs.some((d) => absPath.startsWith(d));
+  if (!isAllowed) {
+    res.status(400).json({ detail: "文件路径不在允许的目录内" });
+    return;
+  }
+  if (!existsSync(absPath)) {
+    res.status(400).json({ detail: "文件不存在" });
+    return;
+  }
 
+  const ext = fileName.split(".").pop()?.toLowerCase();
+  if (!ext || !ACCEPTED_EXTS.has(ext)) {
+    res.status(400).json({ detail: `不支持的格式: .${ext}` });
+    return;
+  }
+
+  const fileSize = (await statAsync(absPath)).size;
+  const modelId = randomUUID().slice(0, 12);
+  const createdAt = new Date().toISOString();
+  const userId = req.user!.userId;
+
+  const meta: Record<string, unknown> = {
+    model_id: modelId,
+    original_name: fileName,
+    original_size: fileSize,
+    format: ext,
+    status: "queued",
+    created_at: createdAt,
+    upload_path: absPath,
+    created_by_id: userId,
+  };
+  saveMeta(modelId, meta);
+
+  if (prisma) {
+    try {
+      await prisma.model.upsert({
+        where: { id: modelId },
+        create: {
+          id: modelId,
+          name: fileName.replace(/\.[^.]+$/, ""),
+          originalName: fileName,
+          originalFormat: ext,
+          originalSize: fileSize,
+          gltfUrl: "",
+          gltfSize: 0,
+          format: ext,
+          status: "queued",
+          uploadPath: absPath,
+          createdById: userId,
+          ...(categoryId && { categoryId }),
+        },
+        update: {},
+      });
+    } catch (dbErr) {
+      console.error("Database save failed:", dbErr);
+    }
+  }
+
+  try {
+    await conversionQueue.add("convert", {
+      modelId,
+      filePath: absPath,
+      originalName: fileName,
+      format: ext,
+      userId,
+    });
+  } catch (err) {
+    console.error("Failed to queue conversion:", err);
+  }
+
+  res.json({
+    success: true,
+    data: {
+      model_id: modelId,
+      original_name: fileName,
+      format: ext,
+      status: "queued",
+      created_at: createdAt,
+    },
+  });
 });
 
 // List models (public, with optional pagination/search/category)
@@ -393,7 +484,6 @@ router.get("/api/models/:id", async (req: Request, res: Response) => {
         },
       });
       if (m) {
-        const { statSync } = await import("node:fs");
         // Get file modified date for the main model
         let mainFileModifiedAt: string | null = null;
         try {
@@ -401,24 +491,27 @@ router.get("/api/models/:id", async (req: Request, res: Response) => {
             ? m.uploadPath
             : join(config.staticDir, "originals", `${m.id}.${m.format}`);
           if (existsSync(mainPath)) {
-            const stat = statSync(mainPath);
+            const stat = await statAsync(mainPath);
             mainFileModifiedAt = (stat.birthtime < stat.mtime ? stat.birthtime : stat.mtime).toISOString();
           }
         } catch { /* ignore */ }
 
+        // Pre-fetch variant file stats in parallel
+        const variantStats = await Promise.all(
+          (m.group?.models ?? []).map(async (v: any) => {
+            if (!v.uploadPath) return null;
+            try {
+              const p = v.uploadPath.startsWith("/") ? v.uploadPath : join(process.cwd(), v.uploadPath);
+              const stat = await statAsync(p);
+              return (stat.birthtime < stat.mtime ? stat.birthtime : stat.mtime).toISOString();
+            } catch { return null; }
+          })
+        );
+
         const groupData = m.group ? {
           id: m.group.id,
           name: m.group.name,
-          variants: m.group.models.map((v: any) => {
-            let fileModifiedAt: string | null = null;
-            try {
-              if (v.uploadPath) {
-                const p = v.uploadPath.startsWith("/") ? v.uploadPath : join(process.cwd(), v.uploadPath);
-                // Use birthtime (original file creation time) — more accurate than mtime (import time)
-                const stat = statSync(p);
-                fileModifiedAt = (stat.birthtime < stat.mtime ? stat.birthtime : stat.mtime).toISOString();
-              }
-            } catch { /* file not found */ }
+          variants: m.group.models.map((v: any, i: number) => {
             return {
               model_id: v.id,
               name: v.name,
@@ -427,7 +520,7 @@ router.get("/api/models/:id", async (req: Request, res: Response) => {
               original_size: v.originalSize,
               is_primary: v.id === m.group.primaryId,
               created_at: v.createdAt,
-              file_modified_at: fileModifiedAt,
+              file_modified_at: variantStats[i],
             };
           }),
         } : null;
@@ -534,40 +627,39 @@ router.get("/api/models/:id/download", async (req: Request, res: Response) => {
   const id = req.params.id as string;
   const requestedFormat = req.query.format as string | undefined;
 
+  // Auth: support both Authorization header and ?token= query param
+  const authHeader = req.headers.authorization;
+  const queryToken = req.query.token as string | undefined;
+  const authToken = authHeader?.startsWith("Bearer ") ? authHeader.slice(7) : queryToken;
+
   // Check if login is required to download
   const requireLogin = await getSetting<boolean>("require_login_download");
-  if (requireLogin) {
-    const authHeader = req.headers.authorization;
-    if (!authHeader?.startsWith("Bearer ")) {
-      res.status(401).json({ detail: "需要登录后才能下载" });
-      return;
-    }
+  if (requireLogin && !authToken) {
+    res.status(401).json({ detail: "需要登录后才能下载" });
+    return;
   }
 
   // Check daily download limit
   const dailyLimit = await getSetting<number>("daily_download_limit");
-  if (dailyLimit > 0) {
-    const authHeader = req.headers.authorization;
-    if (authHeader?.startsWith("Bearer ")) {
-      try {
-        const { verifyToken } = await import("../lib/jwt.js");
-        const payload = verifyToken(authHeader.slice(7));
-        const today = new Date();
-        today.setHours(0, 0, 0, 0);
-        if (prisma) {
-          const count = await prisma.download.count({
-            where: {
-              userId: payload.userId,
-              createdAt: { gte: today },
-            },
-          });
-          if (count >= dailyLimit) {
-            res.status(429).json({ detail: `每日下载次数已达上限 (${dailyLimit} 次)` });
-            return;
-          }
+  if (dailyLimit > 0 && authToken) {
+    try {
+      const { verifyToken } = await import("../lib/jwt.js");
+      const payload = verifyToken(authToken);
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      if (prisma) {
+        const count = await prisma.download.count({
+          where: {
+            userId: payload.userId,
+            createdAt: { gte: today },
+          },
+        });
+        if (count >= dailyLimit) {
+          res.status(429).json({ detail: `每日下载次数已达上限 (${dailyLimit} 次)` });
+          return;
         }
-      } catch { /* token invalid, allow download if login not required */ }
-    }
+      }
+    } catch { /* token invalid, allow download if login not required */ }
   }
 
   let filePath: string | null = null;
@@ -620,16 +712,13 @@ router.get("/api/models/:id/download", async (req: Request, res: Response) => {
         // Record download (best effort, skip if no_record=1)
         try {
           const noRecord = req.query.no_record === "1";
-          if (!noRecord) {
+          if (!noRecord && authToken) {
             let userId: string | undefined;
-            const authHeader = req.headers.authorization;
-            if (authHeader?.startsWith("Bearer ")) {
-              try {
-                const { verifyToken } = await import("../lib/jwt.js");
-                const payload = verifyToken(authHeader.slice(7));
-                userId = payload.userId;
-              } catch { /* token invalid */ }
-            }
+            try {
+              const { verifyToken } = await import("../lib/jwt.js");
+              const payload = verifyToken(authToken);
+              userId = payload.userId;
+            } catch { /* token invalid */ }
             if (userId) {
               await prisma.download.create({
                 data: {
