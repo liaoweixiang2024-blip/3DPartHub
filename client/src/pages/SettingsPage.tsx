@@ -7,7 +7,7 @@ import AppSidebar from '../components/shared/Sidebar';
 import MobileNavDrawer from '../components/shared/MobileNavDrawer';
 import Icon from '../components/shared/Icon';
 import { useToast } from '../components/shared/Toast';
-import { getSettings, updateSettings, uploadImage, getBackupStats, startBackupJob, pollBackupProgress, downloadBackup, renameBackup, deleteBackup, startRestore, pollRestoreProgress, listBackups, importBackup, importBackupAsRecord, checkUpdate, startUpdate, pollUpdateProgress, getVersion, type SystemSettings, type BackupStats, type BackupRecord } from '../api/settings';
+import { getSettings, updateSettings, uploadImage, getBackupStats, startBackupJob, pollBackupProgress, downloadBackup, renameBackup, deleteBackup, startRestore, pollRestoreProgress, listBackups, importBackup, importBackupAsRecord, pollImportSaveProgress, checkUpdate, startUpdate, pollUpdateProgress, getVersion, type SystemSettings, type BackupStats, type BackupRecord } from '../api/settings';
 import { COLOR_PRESETS, COLOR_KEYS, type ColorKey } from '../lib/colorSchemes';
 import { applyColorScheme, generatePaletteFromPrimary } from '../lib/colorScheme';
 // Note: pollBackupProgress is used by handleExport
@@ -160,12 +160,20 @@ const GROUPS: SettingGroup[] = [
 ];
 
 /** Shared progress card — used by backup create, restore, import-restore, import-save, update */
+const PROGRESS_COLORS: Record<string, string> = {
+  'primary-container': 'var(--color-primary-container)',
+  'primary': 'var(--color-primary)',
+  'emerald-500': '#10b981',
+  'error': 'var(--color-error)',
+};
+
 function TaskProgressCard({ progress, color = 'primary-container' }: {
   progress: { message: string; percent: number; logs?: string[] };
   color?: string;
 }) {
   const MAX_DISPLAY_LOGS = 200;
   const displayLogs = (progress.logs || []).slice(-MAX_DISPLAY_LOGS);
+  const barColor = PROGRESS_COLORS[color] || color;
   return (
     <div className="mt-3">
       <div className="flex items-center justify-between text-xs text-on-surface-variant mb-1">
@@ -174,8 +182,8 @@ function TaskProgressCard({ progress, color = 'primary-container' }: {
       </div>
       <div className="w-full h-2 bg-surface-container-highest rounded-full overflow-hidden">
         <div
-          className={`h-full bg-${color} rounded-full transition-all duration-300`}
-          style={{ width: `${progress.percent}%` }}
+          className="h-full rounded-full transition-all duration-300"
+          style={{ width: `${progress.percent}%`, backgroundColor: barColor }}
         />
       </div>
       {displayLogs.length > 0 && (
@@ -446,6 +454,8 @@ function Content() {
     // Resume restore job
     const restoreJobId = localStorage.getItem('restoreJobId');
     if (restoreJobId) {
+      const savedBackupId = localStorage.getItem('restoreConfirmBackupId');
+      if (savedBackupId) setRestoreConfirmId(savedBackupId);
       setRestoring(true);
       setRestoreProgress({ stage: 'resuming', percent: 0, message: '正在恢复恢复任务...', logs: [] });
       try {
@@ -453,12 +463,14 @@ function Content() {
           setRestoreProgress({ stage, percent, message, logs: logs || [] });
         });
         toast(`恢复成功：${result.modelCount} 个 STEP 模型，${result.thumbnailCount} 张缩略图`, 'success');
+        setRestoreConfirmId(null);
         loadBackupList();
         loadBackupStats();
       } catch (err: any) {
         toast(err.message || '恢复失败', 'error');
       } finally {
         localStorage.removeItem('restoreJobId');
+        localStorage.removeItem('restoreConfirmBackupId');
         setRestoring(false);
         setRestoreProgress({ stage: '', percent: 0, message: '', logs: [] });
       }
@@ -480,6 +492,27 @@ function Content() {
         setUpdating(false);
       } finally {
         localStorage.removeItem('updateJobId');
+      }
+    }
+
+    // Resume import-save job
+    const importSaveJobId = localStorage.getItem('importSaveJobId');
+    if (importSaveJobId) {
+      setImporting(true);
+      setRestoreProgress({ stage: 'resuming', percent: 0, message: '正在恢复导入保存任务...', logs: [] });
+      try {
+        await pollImportSaveProgress(importSaveJobId, (stage, percent, message, logs) => {
+          setRestoreProgress({ stage, percent, message, logs: logs || [] });
+        });
+        toast('备份文件已保存到备份记录列表', 'success');
+        loadBackupList();
+        loadBackupStats();
+      } catch (err: any) {
+        toast(err.message || '导入保存失败', 'error');
+      } finally {
+        localStorage.removeItem('importSaveJobId');
+        setImporting(false);
+        setRestoreProgress({ stage: '', percent: 0, message: '', logs: [] });
       }
     }
   }
@@ -641,12 +674,16 @@ function Content() {
       if (mode === 'save') {
         // Save as backup record (no restore)
         const isLarge = restoreConfirmFile.size >= 100 * 1024 * 1024;
-        await importBackupAsRecord(
+        const record = await importBackupAsRecord(
           restoreConfirmFile,
           isLarge ? 'chunked' : 'direct',
           (p) => setUploadProgress(p),
           (stage, percent, message, logs) => {
             setRestoreProgress({ stage, percent, message, logs: logs || [] });
+          },
+          (jobId) => {
+            // Persist jobId for page refresh resume
+            localStorage.setItem('importSaveJobId', jobId);
           },
         );
         toast('备份文件已保存到备份记录列表', 'success');
@@ -672,6 +709,7 @@ function Content() {
       toast(err.message || '操作失败', 'error');
     } finally {
       localStorage.removeItem('restoreJobId');
+      localStorage.removeItem('importSaveJobId');
       setImporting(false);
       setUploadProgress(0);
       setRestoreProgress({ stage: '', percent: 0, message: '', logs: [] });
@@ -723,6 +761,7 @@ function Content() {
     try {
       const jobId = await startRestore(restoreConfirmId);
       localStorage.setItem('restoreJobId', jobId);
+      localStorage.setItem('restoreConfirmBackupId', restoreConfirmId);
       const result = await pollRestoreProgress(jobId, (stage, percent, message, logs) => {
         setRestoreProgress({ stage, percent, message, logs: logs || [] });
       });
@@ -734,6 +773,7 @@ function Content() {
       toast(err.message || '恢复失败', 'error');
     } finally {
       localStorage.removeItem('restoreJobId');
+      localStorage.removeItem('restoreConfirmBackupId');
       setRestoring(false);
       setRestoreProgress({ stage: '', percent: 0, message: '', logs: [] });
     }

@@ -219,6 +219,7 @@ export async function importBackupAsRecord(
   mode: "direct" | "chunked",
   onUploadProgress?: (percent: number) => void,
   onServerProgress?: (stage: string, percent: number, message: string, logs?: string[]) => void,
+  onJobId?: (jobId: string) => void,
 ): Promise<BackupRecord> {
   let jobId: string;
   if (mode === "chunked" && file.size >= 100 * 1024 * 1024) {
@@ -226,6 +227,8 @@ export async function importBackupAsRecord(
   } else {
     jobId = await directSaveAsRecordJob(file, onUploadProgress);
   }
+  // Expose jobId for persistence (page refresh resume)
+  onJobId?.(jobId);
   // Poll until import-save job completes
   return pollImportSaveProgress(jobId, onServerProgress);
 }
@@ -265,7 +268,7 @@ async function directSaveAsRecordJob(file: File, onUploadProgress?: (percent: nu
   });
 }
 
-async function pollImportSaveProgress(
+export async function pollImportSaveProgress(
   jobId: string,
   onProgress?: (stage: string, percent: number, message: string, logs?: string[]) => void,
 ): Promise<BackupRecord> {

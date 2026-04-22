@@ -236,7 +236,8 @@ router.post("/api/settings/backup/restore/:id", authMiddleware, async (req: Auth
     const jobId = startRestoreJob(backupId);
     res.json({ jobId });
   } catch (err: any) {
-    res.status(500).json({ detail: `启动恢复失败: ${err.message}` });
+    const status = err.message?.includes("正在进行中") ? 409 : 500;
+    res.status(status).json({ detail: err.message || "启动恢复失败" });
   }
 });
 
