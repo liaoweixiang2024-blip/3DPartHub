@@ -2,7 +2,7 @@
   <img src="https://img.shields.io/badge/License-MIT-blue.svg" alt="License: MIT" />
   <img src="https://img.shields.io/badge/Docker-Ready-2496ED?logo=docker&logoColor=white" alt="Docker" />
   <img src="https://img.shields.io/badge/TypeScript-5.8-3178C6?logo=typescript&logoColor=white" alt="TypeScript" />
-  <img src="https://img.shields.io/badge/version-v1.2.0-brightgreen" alt="Version" />
+  <img src="https://img.shields.io/badge/version-v1.3.0-brightgreen" alt="Version" />
 </p>
 
 <h1 align="center">3DPartHub</h1>
@@ -53,10 +53,10 @@
 - **站点设置** — 自定义站点名称、Logo、Favicon、SEO、联系邮箱、页脚
 - **外观设置** — 预设配色方案 + 自定义主题色，支持亮/暗模式自动切换
 - **系统公告** — 首页公告横幅，支持多种样式
-- **数据备份** — 全量备份与恢复（数据库 + 模型 + 预览图），支持大文件分片上传，详细操作日志
+- **数据备份** — 全量备份与恢复（数据库 + 模型 + 预览图），支持大文件分片上传，15+ 阶段详细操作日志，导入存档细粒度进度追踪
 - **邮件配置** — SMTP 配置，用于注册验证码
 - **操作日志** — 管理员操作完整审计，可追溯
-- **一键更新** — 后台检查版本、一键拉取代码并自动构建重启，语义化版本号（v1.x.x）
+- **一键更新** — 后台检查版本、一键拉取代码并自动构建重启，语义化版本号（v1.x.x），阶段级进度日志
 - **维护页面** — 更新重启期间自动显示"系统维护中"页面，恢复后自动刷新
 
 ### 性能优化
