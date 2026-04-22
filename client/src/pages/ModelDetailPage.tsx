@@ -834,7 +834,6 @@ export default function ModelDetailPage() {
     a.download = "";
     a.click();
   }, []);
-  }, [toast, navigate]);
 
   useEffect(() => {
     getCachedPublicSettings().then(s => {
