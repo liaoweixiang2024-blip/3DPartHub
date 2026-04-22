@@ -105,6 +105,13 @@ function addLog(job: UpdateJob, text: string) {
  * Safe for public endpoints.
  */
 export function getLocalVersion(): string {
+  // Priority 1: VERSION file (injected by Docker build)
+  try {
+    const version = readFileSync("/app/VERSION", "utf-8").trim();
+    if (version && version !== "dev") return version;
+  } catch { /* no VERSION file */ }
+
+  // Priority 2: git tag (when deployed with source code)
   const projectDir = "/project";
   try {
     return execSync("git describe --tags --abbrev=0", { cwd: projectDir, encoding: "utf-8", timeout: 3000, stdio: "pipe" }).trim();

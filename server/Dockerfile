@@ -21,11 +21,15 @@ RUN mkdir -p /app/static/js/addons && \
     cp -r node_modules/three/examples/jsm/environments /app/static/js/addons/ && \
     cp -r node_modules/three/examples/jsm/utils /app/static/js/addons/
 
+# Inject version from git tag (fall back to "dev")
+ARG APP_VERSION=dev
+RUN echo $APP_VERSION > /app/VERSION
+
 # === Stage 2: Runtime (no compilers, no -dev headers) ===
 FROM node:20-alpine
 
 RUN apk add --no-cache openssl pixman cairo pango giflib libjpeg-turbo \
-    postgresql-client git curl \
+    postgresql-client curl \
     chromium mesa-gl mesa-egl mesa-dri-gallium
 
 WORKDIR /app
@@ -37,16 +41,11 @@ COPY --from=builder /app/src ./src
 COPY --from=builder /app/prisma ./prisma
 COPY --from=builder /app/occt-import-js.node.cjs ./occt-import-js.node.cjs
 COPY --from=builder /app/static ./static
+COPY --from=builder /app/VERSION ./VERSION
 
 RUN mkdir -p uploads/.metadata uploads/chunks uploads/batch static/models static/thumbnails static/batch
 
 ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium-browser
-
-# Install docker-compose for in-container update feature
-RUN ARCH=$(uname -m) && \
-    curl -L "https://github.com/docker/compose/releases/download/v2.24.5/docker-compose-linux-${ARCH}" \
-    -o /usr/local/bin/docker-compose && \
-    chmod +x /usr/local/bin/docker-compose
 
 EXPOSE 8000
 

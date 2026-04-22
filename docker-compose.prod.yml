@@ -1,14 +1,10 @@
 # ===== 宝塔面板 Docker Compose 生产配置 =====
-# 使用方式: docker compose -f docker-compose.prod.yml up -d
-#
-# 部署步骤:
-# 1. 将整个项目上传到服务器（如 /www/wwwroot/model）
-# 2. 复制 .env.production 为 .env 并填入真实值
-# 3. 运行: docker compose -f docker-compose.prod.yml up -d --build
-# 4. 在宝塔面板创建网站，设置反向代理到 http://127.0.0.1:3780
+# 方式一 (本地构建): docker compose -f docker-compose.prod.yml up -d --build
+# 方式二 (拉镜像):   docker compose -f docker-compose.prod.yml up -d
 
 services:
   api:
+    image: ghcr.io/liaoweixiang2024-blip/3dparthub-api:latest
     build: ./server
     deploy:
       resources:
@@ -38,14 +34,15 @@ services:
         condition: service_started
     volumes:
       - uploads-data:/app/uploads
-      - ./server/static:/app/static
+      - static-data:/app/static
       - /var/run/docker.sock:/var/run/docker.sock
-      - ./:/project:rw
+      - project-data:/project
     restart: unless-stopped
     networks:
       - internal
 
   web:
+    image: ghcr.io/liaoweixiang2024-blip/3dparthub-web:latest
     build: ./client
     ports:
       - "3780:80"
@@ -98,6 +95,8 @@ services:
 volumes:
   pgdata:
   uploads-data:
+  static-data:
+  project-data:
 
 networks:
   internal:
