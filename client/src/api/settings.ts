@@ -473,7 +473,7 @@ export function pollUpdateProgress(
 ): Promise<string> {
   return new Promise((resolve, reject) => {
     let consecutiveErrors = 0;
-    const MAX_ERRORS = 10;
+    const MAX_ERRORS = 30;
     const poll = setInterval(async () => {
       try {
         const res = await client.get(`/settings/update/progress/${jobId}`, { timeout: 15000 });
@@ -486,28 +486,17 @@ export function pollUpdateProgress(
         } else if (d.stage === "error") {
           clearInterval(poll);
           reject(new Error(d.error || "更新失败"));
-        } else if (d.stage === "restarting") {
-          clearInterval(poll);
-          resolve(jobId);
         }
+        // Keep polling for all other stages (pulling/building/restarting/prechecking)
       } catch (err: any) {
+        // During restart, the server will be temporarily unavailable.
+        // Don't resolve early — keep polling until it comes back.
         consecutiveErrors++;
-        if (consecutiveErrors >= 2 && !err.response) {
-          clearInterval(poll);
-          resolve(jobId);
-          return;
-        }
-        const status = err.response?.status;
-        if (status === 404) {
-          clearInterval(poll);
-          resolve(jobId);
-          return;
-        }
         if (consecutiveErrors >= MAX_ERRORS) {
           clearInterval(poll);
-          reject(new Error("更新超时，请手动检查"));
+          reject(new Error("更新超时，请手动检查服务状态"));
         }
       }
-    }, 2000);
+    }, 3000);
   });
 }

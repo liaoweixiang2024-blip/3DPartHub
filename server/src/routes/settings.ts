@@ -8,7 +8,7 @@ import { verifyToken } from "../lib/jwt.js";
 import { getAllSettings, setSettings, setSetting } from "../lib/settings.js";
 import { cacheGet, cacheSet, cacheDel, TTL } from "../lib/cache.js";
 import { startBackupJob, getJob, getRestoreJob, startRestoreJob, startRestoreJobFromFile, saveAsBackupRecord, startImportSaveJob, getImportSaveJob, getBackupStats, listBackups, renameBackup, deleteBackup, getBackupArchivePath } from "../lib/backup.js";
-import { checkUpdateAvailable, startUpdateJob, getUpdateJob } from "../lib/update.js";
+import { checkUpdateAvailable, getLocalVersion, startUpdateJob, getUpdateJob } from "../lib/update.js";
 
 const router = Router();
 
@@ -87,7 +87,8 @@ router.post("/api/settings/update/run", authMiddleware, async (req: AuthRequest,
     const jobId = startUpdateJob();
     res.json({ jobId });
   } catch (err: any) {
-    res.status(500).json({ detail: `启动更新失败: ${err.message}` });
+    const status = err.message?.includes("正在进行中") ? 409 : 500;
+    res.status(status).json({ detail: err.message || "启动更新失败" });
   }
 });
 
@@ -390,11 +391,11 @@ router.post("/api/settings/upload-image", authMiddleware, async (req: AuthReques
   res.json({ url: imageUrl });
 });
 
-// Public: get current version (no auth required)
+// Public: get current version (no auth required, no network requests)
 router.get("/api/settings/version", async (_req, res: Response) => {
   try {
-    const result = checkUpdateAvailable();
-    res.json({ current: result.current });
+    const current = getLocalVersion();
+    res.json({ current });
   } catch {
     res.json({ current: "unknown" });
   }
