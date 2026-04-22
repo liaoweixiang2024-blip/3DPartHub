@@ -12,12 +12,24 @@ import { ModelViewer, type ViewMode, type CameraPreset } from "../components/3d"
 import LoadingOverlay from "../components/3d/LoadingOverlay";
 import { useFavoriteStore, useAuthStore, getAccessToken } from "../stores";
 import { useModel } from "../hooks/useModels";
-import { modelApi } from "../api/models";
+import { modelApi, type ServerModelListItem } from "../api/models";
 import { categoriesApi, type CategoryItem } from "../api/categories";
 import { useToast } from "../components/shared/Toast";
+import CategorySelect from "../components/shared/CategorySelect";
 import { getCachedPublicSettings, getSiteTitle } from "../lib/publicSettings";
 import type { ModelSpec, ModelDownload } from "../types";
-import useSWR from "swr";
+import useSWR, { mutate as globalMutate } from "swr";
+
+interface ModelVariant {
+  model_id: string;
+  name: string;
+  thumbnail_url: string | null;
+  original_name: string;
+  original_size: number;
+  is_primary: boolean;
+  created_at: string;
+  file_modified_at: string | null;
+}
 
 interface ModelInfo {
   id: string;
@@ -29,6 +41,11 @@ interface ModelInfo {
   downloads: ModelDownload[];
   dimensions: string;
   modelUrl?: string;
+  thumbnailUrl?: string;
+  drawingUrl?: string;
+  groupId?: string;
+  groupName?: string;
+  variants?: ModelVariant[];
 }
 
 const VIEW_MODES: { key: ViewMode; label: string; icon: string }[] = [
@@ -79,6 +96,7 @@ function ViewerPanel({
   onClipDirectionChange,
   showAxis,
   onToggleAxis,
+  onThumbnailUpdated,
 }: {
   modelId?: string;
   isAdmin?: boolean;
@@ -100,6 +118,7 @@ function ViewerPanel({
   onClipDirectionChange: (d: "x" | "y" | "z") => void;
   showAxis: boolean;
   onToggleAxis: () => void;
+  onThumbnailUpdated?: () => void;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [loaded, setLoaded] = useState(false);
@@ -127,6 +146,7 @@ function ViewerPanel({
     const canvas = containerRef.current?.querySelector("canvas") as HTMLCanvasElement | null;
     if (!canvas) return;
     setSettingThumb(true);
+    let ok = false;
     try {
       const blob = await new Promise<Blob>((resolve, reject) => {
         canvas.toBlob((b) => b ? resolve(b) : reject(new Error("toBlob failed")), "image/png");
@@ -134,12 +154,14 @@ function ViewerPanel({
       const file = new File([blob], "thumbnail.png", { type: "image/png" });
       await modelApi.uploadThumbnail(modelId, file);
       toast("预览图已更新", "success");
+      ok = true;
     } catch {
       toast("设置预览图失败", "error");
     } finally {
       setSettingThumb(false);
     }
-  }, [modelId, toast]);
+    if (ok) onThumbnailUpdated?.();
+  }, [modelId, toast, onThumbnailUpdated]);
 
   const handleFullscreen = useCallback(() => {
     if (containerRef.current) {
@@ -307,6 +329,121 @@ function ViewerPanel({
     </div>
   );
 }
+function DetailEditDialog({ open, modelId, modelName, thumbnailUrl: initialThumb, drawingUrl: initialDrawing, categoryId: initialCat, categories, onClose, onSaved, onDelete }: {
+  open: boolean; modelId: string; modelName: string; thumbnailUrl: string | null; drawingUrl: string | null; categoryId?: string | null; categories: CategoryItem[]; onClose: () => void; onSaved: () => void; onDelete?: () => void;
+}) {
+  const { toast } = useToast();
+  const [name, setName] = useState(modelName);
+  const [catId, setCatId] = useState(initialCat || '');
+  const [saving, setSaving] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [thumbUploading, setThumbUploading] = useState(false);
+  const [regenerating, setRegenerating] = useState(false);
+  const [thumbUrl, setThumbUrl] = useState(initialThumb);
+  const [drawingUploading, setDrawingUploading] = useState(false);
+  const [drawingUrl, setDrawingUrl] = useState(initialDrawing);
+  const [fileReplacing, setFileReplacing] = useState(false);
+
+  useEffect(() => {
+    if (open) { setName(modelName); setCatId(initialCat || ''); setThumbUrl(initialThumb); setDrawingUrl(initialDrawing); }
+  }, [open, modelName, initialCat, initialThumb, initialDrawing]);
+
+  if (!open) return null;
+
+  const handleSave = async () => {
+    if (!name.trim()) { toast('名称不能为空', 'error'); return; }
+    setSaving(true);
+    let ok = false;
+    try {
+      await modelApi.update(modelId, { name: name.trim(), categoryId: catId || null });
+      toast('保存成功', 'success');
+      ok = true;
+    } catch { toast('保存失败', 'error'); } finally { setSaving(false); }
+    if (ok) { onSaved(); onClose(); }
+  };
+
+  return (
+    <AnimatePresence>
+      {open && (
+        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-50 flex items-center justify-center bg-surface-dim/70 backdrop-blur-sm" onClick={onClose}>
+          <motion.div initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.95, opacity: 0 }} onClick={(e) => e.stopPropagation()} className="bg-surface-container-low rounded-lg shadow-xl border border-outline-variant/20 w-full max-w-md mx-4 p-6 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between mb-6">
+              <h3 className="font-headline text-lg font-semibold text-on-surface">编辑模型</h3>
+              <button onClick={onClose} className="p-1 text-on-surface-variant hover:text-on-surface transition-colors"><Icon name="close" size={20} /></button>
+            </div>
+            <div className="space-y-4">
+              <div className="flex flex-col gap-1.5">
+                <label className="text-xs uppercase tracking-wider text-on-surface-variant">预览图</label>
+                <div className="flex items-center gap-3">
+                  {thumbUrl ? <img src={thumbUrl} alt="" className="w-16 h-16 rounded-sm object-cover bg-surface-container-highest shrink-0" /> : <div className="w-16 h-16 rounded-sm bg-surface-container-highest flex items-center justify-center shrink-0"><Icon name="view_in_ar" size={24} className="text-on-surface-variant/40" /></div>}
+                  <div className="flex flex-col gap-1.5">
+                    <input type="file" accept="image/png,image/jpeg,image/webp" className="hidden" id="detail-thumb-upload" onChange={async (e) => { const f = e.target.files?.[0]; if (f) { setThumbUploading(true); let ok = false; try { const r = await modelApi.uploadThumbnail(modelId, f); setThumbUrl(r.thumbnail_url); toast('预览图已更新', 'success'); ok = true; } catch { toast('上传失败', 'error'); } finally { setThumbUploading(false); } if (ok) onSaved(); e.target.value = ''; } }} />
+                    <button onClick={() => document.getElementById('detail-thumb-upload')?.click()} disabled={thumbUploading} className="flex items-center gap-1.5 px-3 py-1.5 text-xs text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high rounded-sm transition-colors border border-outline-variant/20 disabled:opacity-50"><Icon name="upload" size={14} />{thumbUploading ? '上传中...' : '上传图片'}</button>
+                    <button onClick={async () => { setRegenerating(true); let ok = false; try { const r = await modelApi.reconvert(modelId); setThumbUrl(r.thumbnail_url); toast('已重新生成', 'success'); ok = true; } catch { toast('重新生成失败', 'error'); } finally { setRegenerating(false); } if (ok) onSaved(); }} disabled={regenerating} className="flex items-center gap-1.5 px-3 py-1.5 text-xs text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high rounded-sm transition-colors border border-outline-variant/20 disabled:opacity-50"><Icon name="refresh" size={14} />{regenerating ? '生成中...' : '从模型重新生成'}</button>
+                  </div>
+                </div>
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <label className="text-xs uppercase tracking-wider text-on-surface-variant">名称</label>
+                <input value={name} onChange={(e) => setName(e.target.value)} className="w-full bg-surface-container-lowest text-on-surface border border-outline-variant/30 focus:border-primary px-3 py-2 text-sm rounded-sm outline-none" />
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <label className="text-xs uppercase tracking-wider text-on-surface-variant">分类</label>
+                <CategorySelect categories={categories} value={catId} onChange={setCatId} placeholder="选择分类" />
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <label className="text-xs uppercase tracking-wider text-on-surface-variant">产品图纸 (PDF)</label>
+                <div className="flex items-center gap-3">
+                  {drawingUrl ? (
+                    <div className="flex items-center gap-2 flex-1">
+                      <Icon name="description" size={20} className="text-primary shrink-0" />
+                      <span className="text-sm text-on-surface truncate flex-1">已上传</span>
+                      <a href={drawingUrl} target="_blank" rel="noreferrer" className="text-xs text-primary hover:underline">查看</a>
+                      <button onClick={async () => { let ok = false; try { await modelApi.deleteDrawing(modelId); setDrawingUrl(null); toast('图纸已删除', 'success'); ok = true; } catch { toast('删除失败', 'error'); } if (ok) onSaved(); }} className="text-xs text-error hover:underline">删除</button>
+                    </div>
+                  ) : (
+                    <>
+                      <input type="file" accept="application/pdf" className="hidden" id="detail-drawing-upload" onChange={async (e) => { const f = e.target.files?.[0]; if (!f) return; if (f.type !== 'application/pdf') { toast('仅支持 PDF 格式', 'error'); return; } setDrawingUploading(true); let ok = false; try { const r = await modelApi.uploadDrawing(modelId, f); setDrawingUrl(r.drawing_url); toast('图纸上传成功', 'success'); ok = true; } catch { toast('上传失败', 'error'); } finally { setDrawingUploading(false); } if (ok) onSaved(); e.target.value = ''; }} />
+                      <button onClick={() => document.getElementById('detail-drawing-upload')?.click()} disabled={drawingUploading} className="flex items-center gap-1.5 px-3 py-1.5 text-xs text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high rounded-sm transition-colors border border-outline-variant/20 disabled:opacity-50 w-full justify-center">
+                        <Icon name="upload_file" size={14} />{drawingUploading ? '上传中...' : '上传 PDF 图纸'}
+                      </button>
+                    </>
+                  )}
+                </div>
+              </div>
+              <div className="border-t border-outline-variant/20 pt-4 mt-1">
+                <label className="text-xs uppercase tracking-wider text-on-surface-variant">替换模型文件</label>
+                <p className="text-[10px] text-on-surface-variant/60 mt-1 mb-2">替换后将重新转换，预计耗时 30 秒</p>
+                <input type="file" accept=".step,.stp,.iges,.igs,.xt,.x_t" className="hidden" id="detail-replace-file" onChange={async (e) => { const f = e.target.files?.[0]; if (!f) return; const ext = f.name.split('.').pop()?.toLowerCase() || ''; if (!['step','stp','iges','igs','xt','x_t'].includes(ext)) { toast('仅支持 STEP/IGES/XT 格式', 'error'); return; } setFileReplacing(true); let ok = false; try { await modelApi.replaceFile(modelId, f); toast('文件已上传，正在转换中...', 'success'); ok = true; } catch { toast('替换文件失败', 'error'); } finally { setFileReplacing(false); } if (ok) { onSaved(); onClose(); } e.target.value = ''; }} />
+                <button onClick={() => document.getElementById('detail-replace-file')?.click()} disabled={fileReplacing} className="flex items-center gap-1.5 px-3 py-1.5 text-xs text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high rounded-sm transition-colors border border-outline-variant/20 disabled:opacity-50 w-full justify-center">
+                  <Icon name="swap_horiz" size={14} />{fileReplacing ? '上传中...' : '选择新模型文件'}
+                </button>
+              </div>
+              <div className="flex items-center justify-between pt-2">
+                {onDelete && (
+                  confirmDelete ? (
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs text-error">确认删除？</span>
+                      <button onClick={async () => { setDeleting(true); let ok = false; try { await onDelete(); toast('已删除', 'success'); ok = true; } catch { toast('删除失败', 'error'); } finally { setDeleting(false); setConfirmDelete(false); } if (ok) onClose(); }} disabled={deleting} className="px-3 py-1.5 text-xs bg-error text-white rounded-sm hover:bg-error/90 disabled:opacity-50">{deleting ? '删除中...' : '确认'}</button>
+                      <button onClick={() => setConfirmDelete(false)} className="px-3 py-1.5 text-xs text-on-surface-variant hover:text-on-surface">取消</button>
+                    </div>
+                  ) : (
+                    <button onClick={() => setConfirmDelete(true)} className="flex items-center gap-1 px-3 py-1.5 text-xs text-on-surface-variant hover:text-error hover:bg-error/10 rounded-sm transition-colors"><Icon name="delete" size={14} />删除模型</button>
+                  )
+                )}
+                <div className="flex gap-3 ml-auto">
+                  <button onClick={onClose} className="px-4 py-2 text-sm text-on-surface-variant hover:text-on-surface transition-colors">取消</button>
+                  <button onClick={handleSave} disabled={saving} className="px-6 py-2 bg-primary-container text-on-primary rounded-sm text-sm hover:bg-primary transition-colors disabled:opacity-50">{saving ? '保存中...' : '保存'}</button>
+                </div>
+              </div>
+            </div>
+          </motion.div>
+        </motion.div>
+      )}
+    </AnimatePresence>
+  );
+}
 
 function SpecTable({ specs }: { specs: ModelSpec[] }) {
   return (
@@ -329,18 +466,22 @@ function SpecTable({ specs }: { specs: ModelSpec[] }) {
 function DesktopDetail({
   modelData,
   isFav,
+  isAdmin,
   onToggleFav,
+  onEdit,
   categoryBreadcrumb,
   onDownload,
 }: {
   modelData: ModelInfo;
   isFav: boolean;
+  isAdmin?: boolean;
   onToggleFav: () => void;
+  onEdit?: () => void;
   categoryBreadcrumb: { id: string; name: string }[];
   onDownload: (id: string, format?: string) => void;
 }) {
   return (
-    <section className="w-full md:w-[40%] md:min-w-[400px] md:max-w-[500px] bg-surface-container-low overflow-hidden flex flex-col shrink-0 min-h-0">
+    <section className="w-full md:w-[40%] md:min-w-[400px] md:max-w-[500px] bg-surface-container-low overflow-y-auto flex flex-col shrink-0 min-h-0">
       <div className="p-8 border-b border-outline-variant/10">
         <div className="flex justify-between items-start mb-4">
           <div>
@@ -360,6 +501,11 @@ function DesktopDetail({
             </div>
             <h1 className="font-headline text-3xl font-bold text-on-surface tracking-tight mb-2">{modelData.name}</h1>
           </div>
+          {isAdmin && onEdit && (
+            <button onClick={onEdit} className="p-2 text-on-surface-variant hover:text-primary hover:bg-surface-container-high rounded-sm transition-colors border border-outline-variant/20 shrink-0" title="编辑模型">
+              <Icon name="settings" size={20} />
+            </button>
+          )}
         </div>
         <div className="flex gap-3 mt-6">
           <button
@@ -393,6 +539,40 @@ function DesktopDetail({
         </div>
       </div>
 
+      {/* Variant selector */}
+      {modelData.variants && modelData.variants.length > 0 && (
+        <div className="px-8 pt-4">
+          <h3 className="text-[11px] tracking-[0.05em] uppercase text-on-surface-variant mb-4 border-b border-outline-variant/20 pb-2">
+            历史版本 ({modelData.variants.length})
+          </h3>
+          <div className="flex gap-2 overflow-x-auto pb-2">
+            {modelData.variants.map((v) => {
+              const isCurrent = v.model_id === modelData.id;
+              return isCurrent ? (
+                <div key={v.model_id} className="shrink-0">
+                  <div className="w-20 h-20 rounded-md border-2 border-primary bg-surface-container-lowest overflow-hidden relative">
+                    {v.thumbnail_url && <img src={v.thumbnail_url} alt="" className="w-full h-full object-cover" />}
+                    <div className="absolute bottom-0 inset-x-0 bg-primary/90 text-on-primary text-[9px] text-center py-0.5 font-medium">当前</div>
+                    {v.is_primary && <div className="absolute top-1 left-1 bg-primary/80 text-on-primary text-[7px] px-1 rounded-sm">主版本</div>}
+                  </div>
+                  <p className="text-[10px] text-primary mt-1 text-center w-20 truncate" title={v.original_name}>{v.original_name.replace(/\.[^.]+$/, "")}</p>
+                  {v.file_modified_at && <p className="text-[9px] text-on-surface-variant/40 text-center">{new Date(v.file_modified_at).toLocaleDateString("zh-CN")}</p>}
+                </div>
+              ) : (
+                <Link key={v.model_id} to={`/model/${v.model_id}`} className="shrink-0 group">
+                  <div className="w-20 h-20 rounded-md border border-outline-variant/30 bg-surface-container-lowest overflow-hidden hover:border-primary/50 transition-colors relative">
+                    {v.thumbnail_url && <img src={v.thumbnail_url} alt="" className="w-full h-full object-cover" />}
+                    {v.is_primary && <div className="absolute top-1 left-1 bg-primary/80 text-on-primary text-[7px] px-1 rounded-sm">主版本</div>}
+                  </div>
+                  <p className="text-[10px] text-on-surface-variant group-hover:text-primary mt-1 text-center w-20 truncate" title={v.original_name}>{v.original_name.replace(/\.[^.]+$/, "")}</p>
+                  {v.file_modified_at && <p className="text-[9px] text-on-surface-variant/40 text-center">{new Date(v.file_modified_at).toLocaleDateString("zh-CN")}</p>}
+                </Link>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
       <div className="p-8 pt-4 flex-grow bg-surface-container-low">
         <h3 className="text-[11px] tracking-[0.05em] uppercase text-on-surface-variant mb-4 border-b border-outline-variant/20 pb-2">模型下载</h3>
         <div className="flex flex-col gap-2">
@@ -413,6 +593,18 @@ function DesktopDetail({
               </button>
             </div>
           ))}
+          {modelData.drawingUrl && (
+            <a href={modelData.drawingUrl} target="_blank" rel="noreferrer" className="milled-inset bg-surface-container-lowest p-3 rounded-sm flex items-center justify-between border border-outline-variant/10 hover:border-primary/50 transition-colors group cursor-pointer">
+              <div className="flex items-center gap-3">
+                <Icon name="description" className="text-primary group-hover:text-primary-container transition-colors" />
+                <div>
+                  <div className="text-sm font-medium text-on-surface">产品图纸</div>
+                  <div className="text-[11px] text-on-secondary-container mt-0.5">PDF</div>
+                </div>
+              </div>
+              <Icon name="open_in_new" size={18} className="text-primary" />
+            </a>
+          )}
         </div>
       </div>
 
@@ -446,7 +638,9 @@ function MobileDetail({
   expandedSpecs,
   onToggleSpecs,
   isFav,
+  isAdmin,
   onToggleFav,
+  onEdit,
   onBack,
   categoryBreadcrumb,
   onDownload,
@@ -455,7 +649,9 @@ function MobileDetail({
   expandedSpecs: boolean;
   onToggleSpecs: () => void;
   isFav: boolean;
+  isAdmin?: boolean;
   onToggleFav: () => void;
+  onEdit?: () => void;
   onBack: () => void;
   categoryBreadcrumb: { id: string; name: string }[];
   onDownload: (id: string, format?: string) => void;
@@ -470,6 +666,11 @@ function MobileDetail({
             </button>
             <span className="text-sm font-medium text-on-surface font-headline truncate mx-2">{modelData.name}</span>
             <div className="flex items-center gap-1">
+              {isAdmin && onEdit && (
+                <button onClick={onEdit} className="w-9 h-9 flex items-center justify-center rounded-sm text-on-surface-variant hover:text-primary hover:bg-surface-container transition-colors">
+                  <Icon name="settings" size={20} />
+                </button>
+              )}
               <motion.button whileTap={{ scale: 0.9 }} onClick={onToggleFav} className="w-9 h-9 flex items-center justify-center rounded-sm text-on-surface-variant hover:bg-surface-container transition-colors">
                 <Icon name="star" size={20} className={`${isFav ? "text-primary" : ""}`} fill={isFav} />
               </motion.button>
@@ -511,6 +712,40 @@ function MobileDetail({
           </AnimatePresence>
         </div>
 
+        {/* Variant selector - mobile */}
+        {modelData.variants && modelData.variants.length > 0 && (
+          <div>
+            <div className="text-[11px] uppercase tracking-widest text-on-surface-variant font-medium mb-3">
+              历史版本 ({modelData.variants.length})
+            </div>
+            <div className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1">
+              {modelData.variants.map((v) => {
+                const isCurrent = v.model_id === modelData.id;
+                return isCurrent ? (
+                  <div key={v.model_id} className="shrink-0">
+                    <div className="w-16 h-16 rounded-md border-2 border-primary bg-surface-container-lowest overflow-hidden relative">
+                      {v.thumbnail_url && <img src={v.thumbnail_url} alt="" className="w-full h-full object-cover" />}
+                      <div className="absolute bottom-0 inset-x-0 bg-primary/90 text-on-primary text-[8px] text-center py-0.5">当前</div>
+                      {v.is_primary && <div className="absolute top-0.5 left-0.5 bg-primary/80 text-on-primary text-[6px] px-0.5 rounded-sm">主</div>}
+                    </div>
+                    <p className="text-[9px] text-primary mt-0.5 text-center w-16 truncate" title={v.original_name}>{v.original_name.replace(/\.[^.]+$/, "")}</p>
+                    {v.file_modified_at && <p className="text-[8px] text-on-surface-variant/40 text-center">{new Date(v.file_modified_at).toLocaleDateString("zh-CN")}</p>}
+                  </div>
+                ) : (
+                  <Link key={v.model_id} to={`/model/${v.model_id}`} className="shrink-0">
+                    <div className="w-16 h-16 rounded-md border border-outline-variant/30 bg-surface-container-lowest overflow-hidden relative">
+                      {v.thumbnail_url && <img src={v.thumbnail_url} alt="" className="w-full h-full object-cover" />}
+                      {v.is_primary && <div className="absolute top-0.5 left-0.5 bg-primary/80 text-on-primary text-[6px] px-0.5 rounded-sm">主</div>}
+                    </div>
+                    <p className="text-[9px] text-on-surface-variant mt-0.5 text-center w-16 truncate" title={v.original_name}>{v.original_name.replace(/\.[^.]+$/, "")}</p>
+                    {v.file_modified_at && <p className="text-[8px] text-on-surface-variant/40 text-center">{new Date(v.file_modified_at).toLocaleDateString("zh-CN")}</p>}
+                  </Link>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
         <div>
           <div className="text-[11px] uppercase tracking-widest text-on-surface-variant font-medium mb-3">下载文件</div>
           <div className="grid grid-cols-2 gap-2">
@@ -526,6 +761,12 @@ function MobileDetail({
             <Icon name="download" size={20} fill />
             下载模型
           </button>
+          {modelData.drawingUrl && (
+            <a href={modelData.drawingUrl} target="_blank" rel="noreferrer" className="w-full mt-2 py-2.5 rounded-sm border border-outline-variant/30 text-on-surface-variant font-medium text-sm hover:text-primary hover:border-primary/50 transition-colors flex items-center justify-center gap-2">
+              <Icon name="description" size={20} />
+              查看产品图纸
+            </a>
+          )}
         </div>
 
         <div className="mt-4 pt-4 border-t border-outline-variant/20 space-y-3">
@@ -574,6 +815,8 @@ export default function ModelDetailPage() {
   const [settingThumb, setSettingThumb] = useState(false);
   const [watermarkState, setWatermarkState] = useState<{ show: boolean; image: string }>({ show: false, image: "" });
   const [loginPromptOpen, setLoginPromptOpen] = useState(false);
+  const [editOpen, setEditOpen] = useState(false);
+  const isAdmin = useAuthStore.getState().user?.role === "ADMIN";
   const { toast } = useToast();
 
   const handleDownload = useCallback(async (modelId: string, format?: string) => {
@@ -600,8 +843,16 @@ export default function ModelDetailPage() {
       }
       const blob = await res.blob();
       const cd = res.headers.get('content-disposition');
-      const match = cd?.match(/filename="?(.+?)"?$/);
-      const filename = match?.[1] || `${modelId}.${format || 'step'}`;
+      let filename = `${modelId}.${format || 'step'}`;
+      if (cd) {
+        const utf8Match = cd.match(/filename\*=UTF-8''(.+)/i);
+        if (utf8Match) {
+          filename = decodeURIComponent(utf8Match[1]);
+        } else {
+          const asciiMatch = cd.match(/filename="([^"]+)"/);
+          if (asciiMatch) filename = asciiMatch[1];
+        }
+      }
 
       const a = document.createElement('a');
       a.href = URL.createObjectURL(blob);
@@ -629,26 +880,6 @@ export default function ModelDetailPage() {
     link.click();
   }, []);
 
-  const handleSetThumbnail = useCallback(async () => {
-    if (!id) return;
-    const container = mobileViewerRef.current || document.querySelector(".relative.bg-surface-dim");
-    const canvas = container?.querySelector("canvas") as HTMLCanvasElement | null;
-    if (!canvas) return;
-    setSettingThumb(true);
-    try {
-      const blob = await new Promise<Blob>((resolve, reject) => {
-        canvas.toBlob((b) => b ? resolve(b) : reject(new Error("toBlob failed")), "image/png");
-      });
-      const file = new File([blob], "thumbnail.png", { type: "image/png" });
-      await modelApi.uploadThumbnail(id, file);
-      toast("预览图已更新", "success");
-    } catch {
-      toast("设置预览图失败", "error");
-    } finally {
-      setSettingThumb(false);
-    }
-  }, [id, toast]);
-
   const handleFullscreen = useCallback(() => {
     const container = mobileViewerRef.current || document.querySelector(".relative.bg-surface-dim");
     if (container) {
@@ -662,8 +893,31 @@ export default function ModelDetailPage() {
 
   const { isFavorite, toggleFavorite } = useFavoriteStore();
 
-  const { data: serverModel, isLoading, error } = useModel(id);
+  const { data: serverModel, isLoading, error, mutate } = useModel(id);
   const { data: catTreeData } = useSWR("/categories", () => categoriesApi.tree());
+
+  const handleSetThumbnail = useCallback(async () => {
+    if (!id) return;
+    const container = mobileViewerRef.current || document.querySelector(".relative.bg-surface-dim");
+    const canvas = container?.querySelector("canvas") as HTMLCanvasElement | null;
+    if (!canvas) return;
+    setSettingThumb(true);
+    let ok = false;
+    try {
+      const blob = await new Promise<Blob>((resolve, reject) => {
+        canvas.toBlob((b) => b ? resolve(b) : reject(new Error("toBlob failed")), "image/png");
+      });
+      const file = new File([blob], "thumbnail.png", { type: "image/png" });
+      await modelApi.uploadThumbnail(id, file);
+      toast("预览图已更新", "success");
+      ok = true;
+    } catch {
+      toast("设置预览图失败", "error");
+    } finally {
+      setSettingThumb(false);
+    }
+    if (ok) { mutate(); globalMutate((k: string) => typeof k === 'string' && k.startsWith('/models')); }
+  }, [id, toast, mutate]);
   const categoryTree = catTreeData?.items;
 
   let modelData: ModelInfo | undefined;
@@ -680,7 +934,7 @@ export default function ModelDetailPage() {
       specs: [
         { label: "格式", value: format },
         { label: "文件大小", value: formatFileSize(serverModel.original_size || 0) },
-        { label: "状态", value: serverModel.status === "completed" ? "已完成" : serverModel.status },
+        ...(serverModel.file_modified_at ? [{ label: "文件日期", value: new Date(serverModel.file_modified_at).toLocaleDateString("zh-CN") }] : []),
         { label: "上传时间", value: serverModel.created_at ? new Date(serverModel.created_at).toLocaleString("zh-CN") : "N/A" },
         ...(serverModel.description ? [{ label: "描述", value: serverModel.description }] : []),
       ],
@@ -689,6 +943,11 @@ export default function ModelDetailPage() {
       ],
       dimensions: "-",
       modelUrl: serverModel.gltf_url || undefined,
+      thumbnailUrl: serverModel.thumbnail_url || undefined,
+      drawingUrl: serverModel.drawing_url || undefined,
+      groupId: serverModel.group?.id,
+      groupName: serverModel.group?.name,
+      variants: serverModel.group?.variants,
     };
   }
 
@@ -785,15 +1044,29 @@ export default function ModelDetailPage() {
       <div className="fixed inset-0 flex flex-col overflow-hidden">
         <TopNav />
         <main className="flex-1 min-h-0 overflow-hidden flex flex-col md:flex-row">
-          <ViewerPanel {...viewerProps} />
+          <ViewerPanel {...viewerProps} onThumbnailUpdated={() => { mutate(); globalMutate((k: string) => typeof k === 'string' && k.startsWith('/models')); }} />
           <DesktopDetail
             modelData={modelData}
             isFav={fav}
+            isAdmin={isAdmin}
             onToggleFav={handleToggleFav}
+            onEdit={() => setEditOpen(true)}
             categoryBreadcrumb={categoryBreadcrumb}
             onDownload={handleDownload}
           />
         </main>
+        <DetailEditDialog
+          open={editOpen}
+          modelId={modelData.id}
+          modelName={modelData.name}
+          thumbnailUrl={modelData.thumbnailUrl}
+          drawingUrl={modelData.drawingUrl}
+          categoryId={modelData.categoryId}
+          categories={categoryTree || []}
+          onClose={() => setEditOpen(false)}
+          onSaved={() => { mutate(); globalMutate((k: string) => typeof k === 'string' && k.startsWith('/models')); }}
+          onDelete={async () => { await modelApi.delete(modelData.id); navigate('/'); }}
+        />
         <AnimatePresence>
           {loginPromptOpen && (
             <motion.div
@@ -952,12 +1225,26 @@ export default function ModelDetailPage() {
         expandedSpecs={expandedSpecs}
         onToggleSpecs={() => setExpandedSpecs(!expandedSpecs)}
         isFav={fav}
+        isAdmin={isAdmin}
         onToggleFav={() => toggleFavorite({ id: modelData.id, name: modelData.name, subtitle: modelData.subtitle, category: modelData.category, dimensions: modelData.dimensions })}
+        onEdit={() => setEditOpen(true)}
         onBack={() => navigate(-1)}
         categoryBreadcrumb={categoryBreadcrumb}
         onDownload={handleDownload}
       />
       <BottomNav />
+      <DetailEditDialog
+        open={editOpen}
+        modelId={modelData.id}
+        modelName={modelData.name}
+        thumbnailUrl={modelData.thumbnailUrl}
+        drawingUrl={modelData.drawingUrl}
+        categoryId={modelData.categoryId}
+        categories={categoryTree || []}
+        onClose={() => setEditOpen(false)}
+        onSaved={() => { mutate(); globalMutate((k: string) => typeof k === 'string' && k.startsWith('/models')); }}
+        onDelete={async () => { await modelApi.delete(modelData.id); navigate('/'); }}
+      />
       <AnimatePresence>
         {loginPromptOpen && (
           <motion.div

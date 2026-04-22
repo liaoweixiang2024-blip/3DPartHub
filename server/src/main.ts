@@ -18,7 +18,9 @@ import batchRouter from "./routes/batch.js";
 import categoriesRouter from "./routes/categories.js";
 import notificationsRouter from "./routes/notifications.js";
 import settingsRouter from "./routes/settings.js";
+import modelGroupsRouter from "./routes/model-groups.js";
 import { initDefaultSettings } from "./lib/settings.js";
+import { prisma } from "./lib/prisma.js";
 import { responseHandler } from "./middleware/responseHandler.js";
 import { errorHandler, notFoundHandler } from "./middleware/errorHandler.js";
 import { apiLimiter, uploadLimiter, authLimiter, securityHeaders } from "./middleware/security.js";
@@ -70,6 +72,10 @@ mkdirSync(`${config.staticDir}/originals`, { recursive: true });
 mkdirSync(`${config.staticDir}/batch`, { recursive: true });
 mkdirSync(`${config.staticDir}/ticket-attachments`, { recursive: true });
 
+app.use("/static/thumbnails", express.static(join(process.cwd(), config.staticDir, "thumbnails"), {
+  maxAge: "1h",
+}));
+
 app.use("/static", express.static(join(process.cwd(), config.staticDir), {
   maxAge: "30d",
   immutable: true,
@@ -104,6 +110,7 @@ app.use(batchRouter);
 app.use(categoriesRouter);
 app.use(notificationsRouter);
 app.use(settingsRouter);
+app.use(modelGroupsRouter);
 
 // 404 handler
 app.use(notFoundHandler);
@@ -121,12 +128,13 @@ app.listen(PORT, async () => {
     if (!existing) {
       const adminUser = process.env.ADMIN_USER || "admin";
       const adminPass = process.env.ADMIN_PASS || "admin123";
+      const adminEmail = process.env.ADMIN_EMAIL || `${adminUser}@model.com`;
       const hash = await hashPassword(adminPass);
       try {
         await prisma.user.create({
           data: {
             username: adminUser,
-            email: `${adminUser}@3dparthub.local`,
+            email: adminEmail,
             passwordHash: hash,
             role: "ADMIN",
             mustChangePassword: true,
@@ -134,6 +142,7 @@ app.listen(PORT, async () => {
         });
         console.log(`\n  👑 Admin account created (first run only):`);
         console.log(`     Username: ${adminUser}`);
+        console.log(`     Email: ${adminEmail}`);
         console.log(`     Password: ${adminPass}`);
         console.log(`     ⚠️  首次登录后将强制修改密码！\n`);
       } catch {

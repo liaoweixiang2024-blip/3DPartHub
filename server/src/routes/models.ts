@@ -106,6 +106,40 @@ router.post("/api/models/upload", authMiddleware, requireRole("ADMIN"), upload.s
     }
   }
 
+  // Auto-merge: check if models with same name exist, auto-group them
+  if (prisma) {
+    try {
+      const modelName = originalName.replace(/\.[^.]+$/, "");
+      // Find other completed models with same name
+      const sameNameModels = await prisma.model.findMany({
+        where: { name: modelName, status: "completed", id: { not: modelId } },
+        select: { id: true, groupId: true },
+      });
+      if (sameNameModels.length > 0) {
+        // Check if any of them already belong to a group
+        const existingGroup = sameNameModels.find((m: any) => m.groupId);
+        if (existingGroup?.groupId) {
+          // Join existing group
+          await prisma.model.update({ where: { id: modelId }, data: { groupId: existingGroup.groupId } });
+          // Update primary to the newest (this new upload is the newest)
+          await prisma.modelGroup.update({ where: { id: existingGroup.groupId }, data: { primaryId: modelId } });
+        } else {
+          // Create new group with all same-name models, newest (this one) as primary
+          const allIds = [modelId, ...sameNameModels.map((m: any) => m.id)];
+          await prisma.modelGroup.create({
+            data: {
+              name: modelName,
+              primaryId: modelId,
+              models: { connect: allIds.map(id => ({ id })) },
+            },
+          });
+        }
+      }
+    } catch (mergeErr) {
+      console.error("Auto-merge failed (non-critical):", mergeErr);
+    }
+  }
+
   // Enqueue conversion job
   try {
     await conversionQueue.add("convert", {
@@ -136,14 +170,16 @@ router.post("/api/models/upload", authMiddleware, requireRole("ADMIN"), upload.s
     }
 
     const persistedPath = existsSync(originalDest) ? originalDest : file.path;
+    const thumbTs = Date.now();
+    const versionedThumbUrl = `${thumb.thumbnailUrl}?t=${thumbTs}`;
     meta.status = "completed";
     meta.gltf_url = result.gltfUrl;
     meta.gltf_size = result.gltfSize;
-    meta.thumbnail_url = thumb.thumbnailUrl;
+    meta.thumbnail_url = versionedThumbUrl;
     saveMeta(modelId, meta);
     if (prisma) {
       await prisma.model.update({ where: { id: modelId }, data: {
-        status: "completed", gltfUrl: result.gltfUrl, gltfSize: result.gltfSize, thumbnailUrl: thumb.thumbnailUrl,
+        status: "completed", gltfUrl: result.gltfUrl, gltfSize: result.gltfSize, thumbnailUrl: versionedThumbUrl,
         uploadPath: persistedPath,
       } }).catch(() => {});
       await cacheDelByPrefix("cache:models:");
@@ -185,9 +221,10 @@ router.get("/api/models", async (req: Request, res: Response) => {
   const categoryId = req.query.category_id as string | undefined;
   const sort = (req.query.sort as string) || "created_at";
   const order = (req.query.order as string) || "desc";
+  const grouped = req.query.grouped === "true";
 
   // Try Redis cache
-  const cacheKey = `cache:models:${page}:${pageSize}:${search || ""}:${format || ""}:${category || ""}:${categoryId || ""}:${sort}:${order}`;
+  const cacheKey = `cache:models:${page}:${pageSize}:${search || ""}:${format || ""}:${category || ""}:${categoryId || ""}:${sort}:${order}:${grouped}`;
   const cached = await cacheGet(cacheKey);
   if (cached) { res.json(cached); return; }
 
@@ -226,6 +263,35 @@ router.get("/api/models", async (req: Request, res: Response) => {
         }
       }
 
+      // When grouped mode, only show: ungrouped models + primary models of each group
+      if (grouped) {
+        const groupPrimaries = await prisma.modelGroup.findMany({
+          select: { primaryId: true },
+        });
+        const primaryIds = groupPrimaries.map((g: any) => g.primaryId).filter(Boolean);
+        where.OR = [
+          { groupId: null },
+          { id: { in: primaryIds } },
+        ];
+        // If there's a search filter, combine with AND
+        if (search) {
+          const searchCond = {
+            OR: [
+              { name: { contains: search, mode: "insensitive" } },
+              { originalName: { contains: search, mode: "insensitive" } },
+              { description: { contains: search, mode: "insensitive" } },
+            ],
+          };
+          // Wrap: (grouped filter) AND (search filter)
+          const groupedCond = where.OR;
+          delete where.OR;
+          where.AND = [
+            { OR: groupedCond },
+            searchCond,
+          ];
+        }
+      }
+
       const total = await prisma.model.count({ where });
 
       const orderBy: any = {};
@@ -238,9 +304,13 @@ router.get("/api/models", async (req: Request, res: Response) => {
         orderBy,
         skip: (page - 1) * pageSize,
         take: pageSize,
-        include: { categoryRef: { select: { name: true } } },
+        include: {
+          categoryRef: { select: { name: true } },
+          group: { select: { id: true, name: true, primaryId: true, _count: { select: { models: true } } } },
+        },
       });
 
+      // If grouped mode, also fetch the group variant counts for items that have groups
       const items = models.map((m: any) => ({
         model_id: m.id,
         name: m.name || m.originalName,
@@ -253,6 +323,13 @@ router.get("/api/models", async (req: Request, res: Response) => {
         category_id: m.categoryId || null,
         download_count: m.downloadCount || 0,
         created_at: m.createdAt,
+        drawing_url: m.drawingUrl || null,
+        group: m.group ? {
+          id: m.group.id,
+          name: m.group.name,
+          is_primary: m.id === m.group.primaryId,
+          variant_count: m.group._count.models,
+        } : null,
       }));
 
       const responseData = { total, items, page, page_size: pageSize };
@@ -301,8 +378,60 @@ router.get("/api/models/:id", async (req: Request, res: Response) => {
   const id = req.params.id as string;
   if (prisma) {
     try {
-      const m = await prisma.model.findUnique({ where: { id }, include: { categoryRef: { select: { name: true } } } });
+      const m = await prisma.model.findUnique({
+        where: { id },
+        include: {
+          categoryRef: { select: { name: true } },
+          group: {
+            include: {
+              models: {
+                select: { id: true, name: true, thumbnailUrl: true, originalName: true, originalSize: true, uploadPath: true, createdAt: true },
+                orderBy: { createdAt: "asc" },
+              },
+            },
+          },
+        },
+      });
       if (m) {
+        const { statSync } = await import("node:fs");
+        // Get file modified date for the main model
+        let mainFileModifiedAt: string | null = null;
+        try {
+          const mainPath = m.uploadPath && existsSync(m.uploadPath)
+            ? m.uploadPath
+            : join(config.staticDir, "originals", `${m.id}.${m.format}`);
+          if (existsSync(mainPath)) {
+            const stat = statSync(mainPath);
+            mainFileModifiedAt = (stat.birthtime < stat.mtime ? stat.birthtime : stat.mtime).toISOString();
+          }
+        } catch { /* ignore */ }
+
+        const groupData = m.group ? {
+          id: m.group.id,
+          name: m.group.name,
+          variants: m.group.models.map((v: any) => {
+            let fileModifiedAt: string | null = null;
+            try {
+              if (v.uploadPath) {
+                const p = v.uploadPath.startsWith("/") ? v.uploadPath : join(process.cwd(), v.uploadPath);
+                // Use birthtime (original file creation time) — more accurate than mtime (import time)
+                const stat = statSync(p);
+                fileModifiedAt = (stat.birthtime < stat.mtime ? stat.birthtime : stat.mtime).toISOString();
+              }
+            } catch { /* file not found */ }
+            return {
+              model_id: v.id,
+              name: v.name,
+              thumbnail_url: v.thumbnailUrl,
+              original_name: v.originalName,
+              original_size: v.originalSize,
+              is_primary: v.id === m.group.primaryId,
+              created_at: v.createdAt,
+              file_modified_at: fileModifiedAt,
+            };
+          }),
+        } : null;
+
         res.json({
           model_id: m.id,
           name: m.name,
@@ -317,6 +446,9 @@ router.get("/api/models/:id", async (req: Request, res: Response) => {
           category: (m as any).categoryRef?.name || null,
           category_id: m.categoryId || null,
           created_at: m.createdAt,
+          file_modified_at: mainFileModifiedAt,
+          drawing_url: m.drawingUrl || null,
+          group: groupData,
         });
         return;
       }
@@ -446,19 +578,25 @@ router.get("/api/models/:id/download", async (req: Request, res: Response) => {
     try {
       const m = await prisma.model.findUnique({ where: { id } });
       if (m) {
+        const displayName = m.name || m.originalName || id;
+        const origExt = m.originalFormat || m.format || "step";
         if (requestedFormat === "original" && m.uploadPath) {
-          const origPath = join(process.cwd(), m.uploadPath.replace(/^\//, ""));
+          // uploadPath may be absolute or relative
+          const origPath = m.uploadPath.startsWith("/")
+            ? m.uploadPath
+            : join(process.cwd(), m.uploadPath);
           if (existsSync(origPath)) {
             filePath = origPath;
-            fileName = m.originalName || `${id}.${m.format}`;
+            fileName = `${displayName}.${origExt}`;
             fileSize = m.originalSize;
           }
         }
         if (!filePath) {
-          filePath = join(process.cwd(), m.gltfUrl.replace(/^\//, ""));
-          fileName = m.originalName
-            ? m.originalName.replace(/\.[^.]+$/, ".gltf")
-            : `${id}.gltf`;
+          const gltfPath = m.gltfUrl.startsWith("/")
+            ? m.gltfUrl
+            : join(process.cwd(), m.gltfUrl);
+          filePath = gltfPath;
+          fileName = `${displayName}.gltf`;
           fileSize = m.gltfSize;
         }
 
@@ -527,19 +665,48 @@ router.get("/api/models/:id/download", async (req: Request, res: Response) => {
     return;
   }
 
-  res.download(filePath, fileName!);
+  // RFC 5987: filename* for UTF-8, ASCII fallback for filename
+  const asciiName = fileName!.replace(/[^\x20-\x7E]/g, "_");
+  const utf8Name = encodeURIComponent(fileName!);
+  res.setHeader("Content-Disposition", `attachment; filename="${asciiName}"; filename*=UTF-8''${utf8Name}`);
+  res.setHeader("Content-Type", "application/octet-stream");
+  const { createReadStream } = await import("node:fs");
+  const stream = createReadStream(filePath);
+  stream.pipe(res);
 });
 
 // Delete model requires auth
 router.delete("/api/models/:id", authMiddleware, requireRole("ADMIN"), async (req: AuthRequest, res: Response) => {
   const id = req.params.id as string;
 
-  // Collect format info before deleting from DB
+  // Collect format info + group info before deleting from DB
   let origExt = "";
   if (prisma) {
     try {
-      const dbModel = await prisma.model.findUnique({ where: { id }, select: { format: true } });
+      const dbModel = await prisma.model.findUnique({
+        where: { id },
+        select: { format: true, groupId: true, group: { select: { id: true, primaryId: true } } },
+      });
       origExt = dbModel?.format || "";
+
+      // If this model is the primary of its group, transfer primary to the newest remaining variant
+      if (dbModel?.group && dbModel.group.primaryId === id) {
+        const remaining = await prisma.model.findMany({
+          where: { groupId: dbModel.groupId, id: { not: id } },
+          orderBy: { createdAt: "desc" },
+          take: 1,
+          select: { id: true },
+        });
+        if (remaining.length > 0) {
+          await prisma.modelGroup.update({
+            where: { id: dbModel.groupId },
+            data: { primaryId: remaining[0].id },
+          });
+        } else {
+          // No remaining variants — delete the group too
+          await prisma.modelGroup.delete({ where: { id: dbModel.groupId } }).catch(() => {});
+        }
+      }
     } catch {}
   }
 
@@ -580,6 +747,82 @@ router.delete("/api/models/:id", authMiddleware, requireRole("ADMIN"), async (re
   if (existsSync(metaPath)) rmSync(metaPath, { force: true });
 
   res.json({ message: "删除成功" });
+});
+
+// Upload drawing (PDF) for a model
+router.post("/api/models/:id/drawing", authMiddleware, requireRole("ADMIN"), upload.single("file"), async (req: AuthRequest, res: Response) => {
+  const id = req.params.id as string;
+  const file = req.file;
+
+  if (!file) {
+    res.status(400).json({ detail: "没有文件" });
+    return;
+  }
+
+  if (file.mimetype !== "application/pdf") {
+    rmSync(file.path, { force: true });
+    res.status(400).json({ detail: "仅支持 PDF 格式" });
+    return;
+  }
+
+  if (!prisma) {
+    rmSync(file.path, { force: true });
+    res.status(503).json({ detail: "数据库未连接" });
+    return;
+  }
+
+  try {
+    const m = await prisma.model.findUnique({ where: { id } });
+    if (!m) {
+      rmSync(file.path, { force: true });
+      res.status(404).json({ detail: "模型不存在" });
+      return;
+    }
+
+    const drawingDir = join(config.staticDir, "drawings");
+    mkdirSync(drawingDir, { recursive: true });
+    const drawingPath = join(drawingDir, `${id}.pdf`);
+    copyFileSync(file.path, drawingPath);
+    rmSync(file.path, { force: true });
+
+    const drawingUrl = `/static/drawings/${id}.pdf`;
+
+    await prisma.model.update({ where: { id }, data: { drawingUrl } });
+    await cacheDelByPrefix("cache:models:");
+
+    res.json({ success: true, data: { model_id: id, drawing_url: drawingUrl } });
+  } catch (err: any) {
+    rmSync(file.path, { force: true });
+    res.status(500).json({ detail: err.message || "上传图纸失败" });
+  }
+});
+
+// Delete drawing (PDF) for a model
+router.delete("/api/models/:id/drawing", authMiddleware, requireRole("ADMIN"), async (req: AuthRequest, res: Response) => {
+  const id = req.params.id as string;
+
+  if (!prisma) {
+    res.status(503).json({ detail: "数据库未连接" });
+    return;
+  }
+
+  try {
+    const m = await prisma.model.findUnique({ where: { id } });
+    if (!m) {
+      res.status(404).json({ detail: "模型不存在" });
+      return;
+    }
+
+    const drawingPath = join(config.staticDir, "drawings", `${id}.pdf`);
+    if (existsSync(drawingPath)) rmSync(drawingPath, { force: true });
+
+    await prisma.model.update({ where: { id }, data: { drawingUrl: null } });
+    await cacheDelByPrefix("cache:models:");
+
+    res.json({ success: true, data: { model_id: id, drawing_url: null } });
+  } catch (err: any) {
+    res.status(500).json({ detail: err.message || "删除图纸失败" });
+  }
 });
 
 // Upload custom thumbnail for a model
@@ -623,7 +866,8 @@ router.post("/api/models/:id/thumbnail", authMiddleware, requireRole("ADMIN"), u
     copyFileSync(file.path, thumbPath);
     rmSync(file.path, { force: true });
 
-    const thumbnailUrl = `/static/thumbnails/${id}.png`;
+    const ts = Date.now();
+    const thumbnailUrl = `/static/thumbnails/${id}.png?t=${ts}`;
 
     await prisma.model.update({
       where: { id },
@@ -636,6 +880,122 @@ router.post("/api/models/:id/thumbnail", authMiddleware, requireRole("ADMIN"), u
   } catch (err: any) {
     rmSync(file.path, { force: true });
     res.status(500).json({ detail: err.message || "上传预览图失败" });
+  }
+});
+
+// Replace model source file and re-convert
+router.post("/api/models/:id/replace-file", authMiddleware, requireRole("ADMIN"), upload.single("file"), async (req: AuthRequest, res: Response) => {
+  const id = req.params.id as string;
+  const file = req.file;
+  if (!file) {
+    res.status(400).json({ detail: "没有文件" });
+    return;
+  }
+
+  const originalName = file.originalname || "unknown.step";
+  const ext = originalName.split(".").pop()?.toLowerCase();
+  if (!ext || !ACCEPTED_EXTS.has(ext)) {
+    rmSync(file.path, { force: true });
+    res.status(400).json({ detail: `不支持的格式: .${ext}` });
+    return;
+  }
+
+  if (!prisma) {
+    rmSync(file.path, { force: true });
+    res.status(503).json({ detail: "数据库未连接" });
+    return;
+  }
+
+  try {
+    const m = await prisma.model.findUnique({ where: { id } });
+    if (!m) {
+      rmSync(file.path, { force: true });
+      res.status(404).json({ detail: "模型不存在" });
+      return;
+    }
+
+    // Delete old files
+    const origExt = m.originalFormat || m.format;
+    for (const p of [
+      m.uploadPath,
+      join(config.staticDir, "models", `${id}.gltf`),
+      join(config.staticDir, "models", `${id}.bin`),
+      join(config.staticDir, "thumbnails", `${id}.png`),
+      ...(origExt ? [join(config.staticDir, "originals", `${id}.${origExt}`)] : []),
+    ]) {
+      if (p && existsSync(p)) rmSync(p, { force: true });
+    }
+
+    // Save new file as original
+    const originalsDir = join(config.staticDir, "originals");
+    mkdirSync(originalsDir, { recursive: true });
+    const destPath = join(originalsDir, `${id}.${ext}`);
+    copyFileSync(file.path, destPath);
+    rmSync(file.path, { force: true });
+
+    // Update database
+    await prisma.model.update({
+      where: { id },
+      data: {
+        originalName,
+        originalFormat: ext,
+        originalSize: file.size,
+        format: ext,
+        uploadPath: destPath,
+        status: "processing",
+        gltfUrl: "",
+        gltfSize: 0,
+        thumbnailUrl: null,
+      },
+    });
+
+    // Update filesystem metadata
+    const meta = getMeta(id);
+    if (meta) {
+      Object.assign(meta, {
+        original_name: originalName,
+        original_size: file.size,
+        format: ext,
+        status: "processing",
+        upload_path: destPath,
+      });
+      saveMeta(id, meta);
+    }
+
+    // Enqueue conversion
+    try {
+      await conversionQueue.add("convert", {
+        modelId: id,
+        filePath: destPath,
+        originalName,
+        ext,
+        userId: req.user!.userId,
+      });
+    } catch (queueErr) {
+      console.error("Queue add failed, falling back to sync:", queueErr);
+      let result;
+      if (ext === "xt" || ext === "x_t") {
+        result = await convertXtToGltf(destPath, join(config.staticDir, "models"), id, originalName);
+      } else {
+        result = await convertStepToGltf(destPath, join(config.staticDir, "models"), id, originalName);
+      }
+      const thumb = await generateThumbnail(result.gltfPath, join(config.staticDir, "thumbnails"), id);
+      await prisma.model.update({
+        where: { id },
+        data: {
+          status: "completed",
+          gltfUrl: result.gltfUrl,
+          gltfSize: result.gltfSize,
+          thumbnailUrl: thumb.thumbnailUrl,
+        },
+      });
+    }
+
+    await cacheDelByPrefix("cache:models:");
+    res.json({ success: true, data: { model_id: id, status: "processing" } });
+  } catch (err: any) {
+    console.error("Replace file failed:", err);
+    res.status(500).json({ detail: err.message || "替换文件失败" });
   }
 });
 
@@ -679,10 +1039,14 @@ router.post("/api/models/:id/reconvert", authMiddleware, requireRole("ADMIN"), a
       } catch { /* non-critical */ }
     }
 
-    // Update DB
+    // Append timestamp for cache busting
+    const ts = Date.now();
+    const versionedUrl = thumbnailUrl ? `${thumbnailUrl.split('?')[0]}?t=${ts}` : null;
+
+    // Update DB with versioned URL
     await prisma.model.update({
       where: { id },
-      data: { ...(gltfSize !== m.gltfSize ? { gltfSize } : {}), ...(thumbnailUrl !== m.thumbnailUrl ? { thumbnailUrl } : {}) },
+      data: { ...(gltfSize !== m.gltfSize ? { gltfSize } : {}), ...(versionedUrl !== m.thumbnailUrl ? { thumbnailUrl: versionedUrl } : {}) },
     });
 
     await cacheDelByPrefix("cache:models:");
@@ -693,7 +1057,7 @@ router.post("/api/models/:id/reconvert", authMiddleware, requireRole("ADMIN"), a
         model_id: m.id,
         name: m.name,
         gltf_size: gltfSize,
-        thumbnail_url: thumbnailUrl,
+        thumbnail_url: versionedUrl,
       },
     });
   } catch (err: any) {
@@ -734,7 +1098,7 @@ router.post("/api/models/reconvert-all", authMiddleware, requireRole("ADMIN"), a
         if (existsSync(gltfPath)) {
           try {
             const thumb = await generateThumbnail(gltfPath, thumbDir, m.id);
-            thumbnailUrl = thumb.thumbnailUrl;
+            thumbnailUrl = `${thumb.thumbnailUrl}?t=${Date.now()}`;
           } catch { /* non-critical */ }
         }
 

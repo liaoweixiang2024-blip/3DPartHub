@@ -48,6 +48,7 @@ interface Product {
   thumbnailUrl?: string;
   createdAt?: string;
   fileSizeBytes?: number;
+  variantCount?: number;
 }
 
 const dotGridBg = {
@@ -200,7 +201,10 @@ function ProductCard({ product, onDownload }: { product: Product; onDownload: (i
         <span className="absolute top-2 right-2 bg-surface-container-highest/80 backdrop-blur-md px-1.5 py-0.5 text-[9px] text-on-surface-variant font-mono rounded-sm border border-outline-variant/30">
           {product.fileSize}
         </span>
-        <div className="absolute bottom-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity">
+        <div className="absolute bottom-2 right-2 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+          {product.variantCount && product.variantCount > 1 && (
+            <span className="bg-primary/90 text-on-primary text-[9px] font-bold px-1.5 py-0.5 rounded-sm">×{product.variantCount}</span>
+          )}
           <Icon name="360" size={18} className="text-primary" />
         </div>
       </div>
@@ -381,6 +385,7 @@ function serverItemToProduct(item: ServerModelListItem): Product {
     thumbnailUrl: item.thumbnail_url || undefined,
     createdAt: item.created_at || undefined,
     fileSizeBytes: item.file_size || item.original_size || 0,
+    variantCount: item.group?.variant_count,
   };
 }
 
@@ -472,7 +477,7 @@ export default function HomePage() {
   // Fetch category tree (with counts from server)
   const { data: categoryData } = useSWR("/categories", () => categoriesApi.tree());
   const categories = useMemo(() => buildCategories(categoryData?.items || []), [categoryData]);
-  const totalModelCount = categoryData?.total ?? 0;
+  const [totalModelCount, setTotalModelCount] = useState(0);
 
   const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set());
   const [activeCategory, setActiveCategory] = useState(() => searchParams.get("category") || "all");
@@ -511,8 +516,16 @@ export default function HomePage() {
       }
       const blob = await res.blob();
       const cd = res.headers.get("content-disposition");
-      const match = cd?.match(/filename="?(.+?)"?$/);
-      const filename = match?.[1] || `${modelId}.step`;
+      let filename = `${modelId}.step`;
+      if (cd) {
+        const utf8Match = cd.match(/filename\*=UTF-8''(.+)/i);
+        if (utf8Match) {
+          filename = decodeURIComponent(utf8Match[1]);
+        } else {
+          const asciiMatch = cd.match(/filename="([^"]+)"/);
+          if (asciiMatch) filename = asciiMatch[1];
+        }
+      }
       const a = document.createElement("a");
       a.href = URL.createObjectURL(blob);
       a.download = filename;
@@ -531,6 +544,11 @@ export default function HomePage() {
     categoryId: activeCategory !== "all" ? activeCategory : undefined,
     // sort handled client-side for simplicity
   });
+
+  useEffect(() => {
+    if (serverData?.total != null) setTotalModelCount(serverData.total);
+    else if (categoryData?.total != null) setTotalModelCount(categoryData.total);
+  }, [serverData?.total, categoryData?.total]);
 
   const products = useMemo(() => {
     if (!serverData?.items) return [];

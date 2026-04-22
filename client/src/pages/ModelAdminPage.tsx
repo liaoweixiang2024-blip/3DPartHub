@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { Link } from 'react-router-dom';
 import { AnimatePresence, motion } from 'framer-motion';
 import { useMediaQuery } from '../layouts/hooks/useMediaQuery';
 import { useDocumentTitle } from '../hooks/useDocumentTitle';
@@ -30,6 +31,9 @@ function EditDialog({ open, model, categories, onClose, onSaved }: {
   const [thumbnailUploading, setThumbnailUploading] = useState(false);
   const [regenerating, setRegenerating] = useState(false);
   const [thumbnailUrl, setThumbnailUrl] = useState<string | null>(null);
+  const [drawingUploading, setDrawingUploading] = useState(false);
+  const [drawingUrl, setDrawingUrl] = useState<string | null>(null);
+  const [fileReplacing, setFileReplacing] = useState(false);
 
   useEffect(() => {
     if (model) {
@@ -37,6 +41,7 @@ function EditDialog({ open, model, categories, onClose, onSaved }: {
       setDescription('');
       setCategoryId(model.category_id || '');
       setThumbnailUrl(model.thumbnail_url);
+      setDrawingUrl(model.drawing_url || null);
     }
   }, [model]);
 
@@ -45,31 +50,37 @@ function EditDialog({ open, model, categories, onClose, onSaved }: {
   const handleSave = async () => {
     if (!name.trim()) { toast('名称不能为空', 'error'); return; }
     setSaving(true);
+    let ok = false;
     try {
       await modelApi.update(model.model_id, { name: name.trim(), description: description.trim() || undefined, categoryId: categoryId || null });
       toast('保存成功', 'success');
-      onSaved(); onClose();
+      ok = true;
     } catch { toast('保存失败', 'error'); } finally { setSaving(false); }
+    if (ok) { onSaved(); onClose(); }
   };
 
   const handleThumbnailUpload = async (file: File) => {
     setThumbnailUploading(true);
+    let ok = false;
     try {
       const result = await modelApi.uploadThumbnail(model.model_id, file);
       setThumbnailUrl(result.thumbnail_url);
       toast('预览图已更新', 'success');
-      onSaved();
+      ok = true;
     } catch { toast('上传预览图失败', 'error'); } finally { setThumbnailUploading(false); }
+    if (ok) onSaved();
   };
 
   const handleRegenerate = async () => {
     setRegenerating(true);
+    let ok = false;
     try {
       const result = await modelApi.reconvert(model.model_id);
       setThumbnailUrl(result.thumbnail_url);
       toast('预览图已重新生成', 'success');
-      onSaved();
+      ok = true;
     } catch { toast('重新生成失败', 'error'); } finally { setRegenerating(false); }
+    if (ok) onSaved();
   };
 
   return (
@@ -105,6 +116,47 @@ function EditDialog({ open, model, categories, onClose, onSaved }: {
                 <label className="text-xs uppercase tracking-wider text-on-surface-variant">分类</label>
                 <CategorySelect categories={categories} value={categoryId} onChange={setCategoryId} placeholder="选择分类" />
               </div>
+              <div className="flex flex-col gap-1.5">
+                <label className="text-xs uppercase tracking-wider text-on-surface-variant">产品图纸 (PDF)</label>
+                <div className="flex items-center gap-3">
+                  {drawingUrl ? (
+                    <div className="flex items-center gap-2 flex-1">
+                      <Icon name="description" size={20} className="text-primary shrink-0" />
+                      <span className="text-sm text-on-surface truncate flex-1">已上传</span>
+                      <a href={drawingUrl} target="_blank" rel="noreferrer" className="text-xs text-primary hover:underline">查看</a>
+                      <button onClick={async () => { let ok = false; try { await modelApi.deleteDrawing(model.model_id); setDrawingUrl(null); toast('图纸已删除', 'success'); ok = true; } catch { toast('删除失败', 'error'); } if (ok) onSaved(); }} className="text-xs text-error hover:underline">删除</button>
+                    </div>
+                  ) : (
+                    <>
+                      <input type="file" accept="application/pdf" className="hidden" id="drawing-upload" onChange={async (e) => { const f = e.target.files?.[0]; if (!f) return; if (f.type !== 'application/pdf') { toast('仅支持 PDF 格式', 'error'); return; } setDrawingUploading(true); let ok = false; try { const r = await modelApi.uploadDrawing(model.model_id, f); setDrawingUrl(r.drawing_url); toast('图纸上传成功', 'success'); ok = true; } catch { toast('上传失败', 'error'); } finally { setDrawingUploading(false); } if (ok) onSaved(); e.target.value = ''; }} />
+                      <button onClick={() => document.getElementById('drawing-upload')?.click()} disabled={drawingUploading} className="flex items-center gap-1.5 px-3 py-1.5 text-xs text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high rounded-sm transition-colors border border-outline-variant/20 disabled:opacity-50 w-full justify-center">
+                        <Icon name="upload_file" size={14} />{drawingUploading ? '上传中...' : '上传 PDF 图纸'}
+                      </button>
+                    </>
+                  )}
+                </div>
+              </div>
+              <div className="border-t border-outline-variant/20 pt-4 mt-1">
+                <label className="text-xs uppercase tracking-wider text-on-surface-variant">替换模型文件</label>
+                <p className="text-[10px] text-on-surface-variant/60 mt-1 mb-2">替换后将重新转换，预计耗时 30 秒</p>
+                <input type="file" accept=".step,.stp,.iges,.igs,.xt,.x_t" className="hidden" id="replace-file-upload" onChange={async (e) => {
+                  const f = e.target.files?.[0];
+                  if (!f) return;
+                  const ext = f.name.split('.').pop()?.toLowerCase() || '';
+                  if (!['step','stp','iges','igs','xt','x_t'].includes(ext)) { toast('仅支持 STEP/IGES/XT 格式', 'error'); return; }
+                  setFileReplacing(true);
+                  try {
+                    await modelApi.replaceFile(model.model_id, f);
+                    toast('文件已上传，正在转换中...', 'success');
+                  } catch { toast('替换文件失败', 'error'); }
+                  finally { setFileReplacing(false); }
+                  onSaved(); onClose();
+                  e.target.value = '';
+                }} />
+                <button onClick={() => document.getElementById('replace-file-upload')?.click()} disabled={fileReplacing} className="flex items-center gap-1.5 px-3 py-1.5 text-xs text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high rounded-sm transition-colors border border-outline-variant/20 disabled:opacity-50 w-full justify-center">
+                  <Icon name="swap_horiz" size={14} />{fileReplacing ? '上传中...' : '选择新模型文件'}
+                </button>
+              </div>
               <div className="flex justify-end gap-3 pt-2">
                 <button onClick={onClose} className="px-4 py-2 text-sm text-on-surface-variant hover:text-on-surface transition-colors">取消</button>
                 <button onClick={handleSave} disabled={saving} className="px-6 py-2 bg-primary-container text-on-primary rounded-sm text-sm hover:bg-primary transition-colors disabled:opacity-50">{saving ? '保存中...' : '保存'}</button>
@@ -125,10 +177,20 @@ function DesktopContent() {
   const [deleteTarget, setDeleteTarget] = useState<ServerModelListItem | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [activeTab, setActiveTab] = useState<'models' | 'suggestions'>('models');
 
-  const { data, isLoading, mutate } = useSWR(['/admin/models', search, page], () => modelApi.list({ search: search || undefined, page, pageSize: 20 }));
+  const { data, isLoading, mutate } = useSWR(['/admin/models', search, page], () => modelApi.list({ search: search || undefined, page, pageSize: 20, grouped: false }));
   const { data: catData } = useSWR('/categories', () => categoriesApi.tree());
   const categories = catData?.items || [];
+
+  // Merge suggestions
+  const [sugPage, setSugPage] = useState(1);
+  const [selectedNames, setSelectedNames] = useState<Set<string>>(new Set());
+  const [merging, setMerging] = useState(false);
+  const { data: sugData, isLoading: sugLoading, mutate: sugMutate } = useSWR(
+    activeTab === 'suggestions' ? ['/model-groups/suggestions', sugPage] : null,
+    () => modelApi.getMergeSuggestions({ page: sugPage, pageSize: 15 })
+  );
 
   const handleDelete = async () => {
     if (!deleteTarget) return;
@@ -147,13 +209,42 @@ function DesktopContent() {
     mutate();
   };
 
+  const toggleSelect = (name: string) => {
+    setSelectedNames(prev => {
+      const next = new Set(prev);
+      if (next.has(name)) next.delete(name); else next.add(name);
+      return next;
+    });
+  };
+
+  const handleMerge = async () => {
+    if (selectedNames.size === 0) return;
+    setMerging(true);
+    try {
+      const items = (sugData?.data || []).filter(s => selectedNames.has(s.name)).map(s => ({
+        name: s.name,
+        modelIds: s.models.map(m => m.id),
+      }));
+      const result = await modelApi.batchMerge(items);
+      toast(`已合并 ${result.merged} 组`, 'success');
+      setSelectedNames(new Set());
+      sugMutate();
+    } catch { toast('合并失败', 'error'); }
+    finally { setMerging(false); }
+  };
+
   return (
     <>
       <input type="file" multiple accept=".step,.stp,.iges,.igs,.xt,.x_t" className="hidden" id="admin-file-upload" onChange={(e) => { if (e.target.files?.length) handleUpload(e.target.files); e.target.value = ''; }} />
-      <div className="flex items-center justify-between mb-6">
-        <div>
+      <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center gap-4">
           <h2 className="font-headline text-2xl font-bold tracking-tight text-on-surface uppercase">模型管理</h2>
-          <p className="text-sm text-on-surface-variant mt-1">共 {data?.total || 0} 个模型</p>
+          <div className="flex rounded-sm border border-outline-variant/30 overflow-hidden">
+            <button onClick={() => setActiveTab('models')} className={`px-4 py-1.5 text-sm font-medium transition-colors ${activeTab === 'models' ? 'bg-primary-container text-on-primary' : 'bg-surface-container-low text-on-surface-variant hover:text-on-surface'}`}>全部模型</button>
+            <button onClick={() => { setActiveTab('suggestions'); sugMutate(); }} className={`px-4 py-1.5 text-sm font-medium transition-colors ${activeTab === 'suggestions' ? 'bg-primary-container text-on-primary' : 'bg-surface-container-low text-on-surface-variant hover:text-on-surface'}`}>
+              合并建议 {sugData?.total != null && <span className="ml-1 text-[10px] opacity-70">({sugData.total})</span>}
+            </button>
+          </div>
         </div>
         <div className="flex items-center gap-3">
           <button onClick={() => document.getElementById('admin-file-upload')?.click()} disabled={uploading} className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-on-primary bg-primary-container rounded-sm hover:opacity-90 transition-opacity active:scale-95 disabled:opacity-50">
@@ -166,7 +257,48 @@ function DesktopContent() {
         </div>
       </div>
 
-      {isLoading ? (
+      {activeTab === 'suggestions' ? (
+        sugLoading ? <div className="flex justify-center py-20"><Icon name="progress_activity" size={32} className="text-on-surface-variant animate-spin" /></div> : (
+          <div className="space-y-3">
+            {selectedNames.size > 0 && (
+              <div className="flex items-center justify-between px-4 py-3 bg-primary-container/10 rounded-sm border border-primary/20">
+                <span className="text-sm text-on-surface">已选择 <strong className="text-primary">{selectedNames.size}</strong> 组</span>
+                <button onClick={handleMerge} disabled={merging} className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-on-primary bg-primary-container rounded-sm hover:opacity-90 disabled:opacity-50">
+                  <Icon name="merge" size={16} />{merging ? '合并中...' : `合并选中 (${selectedNames.size} 组)`}
+                </button>
+              </div>
+            )}
+            {sugData?.data.map((group) => (
+              <div key={group.name} className="bg-surface-container-low rounded-sm border border-outline-variant/10 overflow-hidden">
+                <div className="flex items-center gap-3 px-4 py-3">
+                  <input type="checkbox" checked={selectedNames.has(group.name)} onChange={() => toggleSelect(group.name)} className="w-4 h-4 accent-primary-container rounded" />
+                  <span className="text-sm font-medium text-on-surface flex-1">{group.name}</span>
+                  <span className="text-[10px] bg-surface-container-highest px-2 py-0.5 rounded-sm text-on-surface-variant font-mono">{group.count} 个同名</span>
+                </div>
+                <div className="px-4 pb-3 flex gap-2 overflow-x-auto">
+                  {group.models.map(m => (
+                    <div key={m.id} className="shrink-0 w-16">
+                      <div className="w-16 h-16 rounded-sm bg-surface-container-highest overflow-hidden border border-outline-variant/10">
+                        {m.thumbnailUrl ? <img src={m.thumbnailUrl} alt="" className="w-full h-full object-cover" /> : <div className="w-full h-full flex items-center justify-center"><Icon name="view_in_ar" size={16} className="text-on-surface-variant/30" /></div>}
+                      </div>
+                      <p className="text-[9px] text-on-surface-variant mt-1 truncate" title={m.originalName}>{m.originalName.replace(/\.[^.]+$/, '')}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ))}
+            {sugData && sugData.total > 15 && (
+              <div className="flex items-center justify-center gap-2 mt-4">
+                <button onClick={() => setSugPage(p => Math.max(1, p - 1))} disabled={sugPage <= 1} className="px-3 py-1.5 text-sm text-on-surface-variant hover:text-on-surface disabled:opacity-30">上一页</button>
+                <span className="text-sm text-on-surface-variant">{sugPage} / {Math.ceil(sugData.total / 15)}</span>
+                <button onClick={() => setSugPage(p => p + 1)} disabled={sugPage >= Math.ceil(sugData.total / 15)} className="px-3 py-1.5 text-sm text-on-surface-variant hover:text-on-surface disabled:opacity-30">下一页</button>
+              </div>
+            )}
+            {sugData?.data.length === 0 && <p className="text-center text-on-surface-variant py-12">没有需要合并的同名模型</p>}
+          </div>
+        )
+      ) : (
+      isLoading ? (
         <div className="flex justify-center py-20"><Icon name="progress_activity" size={32} className="text-on-surface-variant animate-spin" /></div>
       ) : (
         <>
@@ -178,6 +310,7 @@ function DesktopContent() {
                   <th className="text-left px-4 py-3 text-xs uppercase tracking-wider text-on-surface-variant font-medium">分类</th>
                   <th className="text-left px-4 py-3 text-xs uppercase tracking-wider text-on-surface-variant font-medium">格式</th>
                   <th className="text-left px-4 py-3 text-xs uppercase tracking-wider text-on-surface-variant font-medium">大小</th>
+                  <th className="text-left px-4 py-3 text-xs uppercase tracking-wider text-on-surface-variant font-medium">图纸</th>
                   <th className="text-right px-4 py-3 text-xs uppercase tracking-wider text-on-surface-variant font-medium">操作</th>
                 </tr>
               </thead>
@@ -185,23 +318,28 @@ function DesktopContent() {
                 {data?.items.map((m) => (
                   <tr key={m.model_id} className="border-b border-outline-variant/10 hover:bg-surface-container-high/50 transition-colors">
                     <td className="px-4 py-3">
-                      <div className="flex items-center gap-3">
+                      <Link to={`/model/${m.model_id}`} target="_blank" className="flex items-center gap-3 hover:opacity-80 transition-opacity">
                         {m.thumbnail_url ? <img src={m.thumbnail_url} alt="" className="w-10 h-10 rounded-sm object-cover bg-surface-container-highest" /> : <div className="w-10 h-10 rounded-sm bg-surface-container-highest flex items-center justify-center shrink-0"><Icon name="view_in_ar" size={18} className="text-on-surface-variant/40" /></div>}
-                        <span className="text-on-surface font-medium truncate max-w-[300px]">{m.name}</span>
-                      </div>
+                        <div className="min-w-0">
+                          <span className="text-on-surface font-medium truncate max-w-[300px] block">{m.name}</span>
+                          {m.group && <span className="text-[10px] text-primary font-medium">{m.group.name} {m.group.is_primary ? '· 主版本' : ''} (共{m.group.variant_count}个)</span>}
+                        </div>
+                      </Link>
                     </td>
                     <td className="px-4 py-3 text-on-surface-variant">{m.category || '—'}</td>
                     <td className="px-4 py-3"><span className="text-xs font-mono bg-surface-container-highest px-1.5 py-0.5 rounded-sm">{m.format?.toUpperCase()}</span></td>
                     <td className="px-4 py-3 text-on-surface-variant font-mono">{formatSize(m.original_size)}</td>
+                    <td className="px-4 py-3">{m.drawing_url ? <span className="text-[10px] bg-primary/15 text-primary px-1.5 py-0.5 rounded-sm font-medium">PDF</span> : <span className="text-[10px] text-on-surface-variant/30">—</span>}</td>
                     <td className="px-4 py-3 text-right">
                       <div className="flex items-center justify-end gap-2">
+                        <Link to={`/model/${m.model_id}`} target="_blank" className="flex items-center gap-1 px-2.5 py-1 text-xs text-on-surface-variant hover:text-primary hover:bg-primary/10 rounded-sm transition-colors border border-outline-variant/20"><Icon name="open_in_new" size={14} />查看</Link>
                         <button onClick={() => setEditModel(m)} className="flex items-center gap-1 px-2.5 py-1 text-xs text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high rounded-sm transition-colors border border-outline-variant/20"><Icon name="settings" size={14} />编辑</button>
                         <button onClick={() => setDeleteTarget(m)} className="flex items-center gap-1 px-2.5 py-1 text-xs text-on-surface-variant hover:text-error hover:bg-error/10 rounded-sm transition-colors border border-outline-variant/20"><Icon name="close" size={14} />删除</button>
                       </div>
                     </td>
                   </tr>
                 ))}
-                {data?.items.length === 0 && (<tr><td colSpan={5} className="px-4 py-12 text-center text-on-surface-variant">没有找到模型</td></tr>)}
+                {data?.items.length === 0 && (<tr><td colSpan={6} className="px-4 py-12 text-center text-on-surface-variant">没有找到模型</td></tr>)}
               </tbody>
             </table>
           </div>
@@ -213,6 +351,7 @@ function DesktopContent() {
             </div>
           )}
         </>
+      )
       )}
 
       <EditDialog open={!!editModel} model={editModel} categories={categories || []} onClose={() => setEditModel(null)} onSaved={() => mutate()} />
@@ -243,7 +382,7 @@ function MobileContent() {
   const [deleting, setDeleting] = useState(false);
   const [uploading, setUploading] = useState(false);
 
-  const { data, isLoading, mutate } = useSWR(['/admin/models/m', search, page], () => modelApi.list({ search: search || undefined, page, pageSize: 20 }));
+  const { data, isLoading, mutate } = useSWR(['/admin/models/m', search, page], () => modelApi.list({ search: search || undefined, page, pageSize: 20, grouped: false }));
   const { data: catDataM } = useSWR('/categories-m', () => categoriesApi.tree());
   const categories = catDataM?.items || [];
 
@@ -286,7 +425,7 @@ function MobileContent() {
         ) : (
           <div className="space-y-2">
             {data?.items.map((m) => (
-              <div key={m.model_id} className="bg-surface-container-high rounded-sm p-3 flex items-center gap-3">
+              <Link key={m.model_id} to={`/model/${m.model_id}`} target="_blank" className="bg-surface-container-high rounded-sm p-3 flex items-center gap-3 hover:bg-surface-container-highest transition-colors">
                 {m.thumbnail_url ? <img src={m.thumbnail_url} alt="" className="w-12 h-12 rounded-sm object-cover bg-surface-container-highest shrink-0" /> : <div className="w-12 h-12 rounded-sm bg-surface-container-highest flex items-center justify-center shrink-0"><Icon name="view_in_ar" size={20} className="text-on-surface-variant/40" /></div>}
                 <div className="flex-1 min-w-0">
                   <p className="text-sm text-on-surface font-medium truncate">{m.name}</p>
@@ -296,11 +435,11 @@ function MobileContent() {
                     <span className="text-[10px] text-on-surface-variant font-mono">{formatSize(m.original_size)}</span>
                   </div>
                 </div>
-                <div className="flex items-center gap-1.5 shrink-0">
+                <div className="flex items-center gap-1.5 shrink-0" onClick={(e) => e.preventDefault()}>
                   <button onClick={() => setEditModel(m)} className="px-2 py-1.5 text-xs text-on-surface-variant hover:text-on-surface rounded-sm border border-outline-variant/20"><Icon name="settings" size={14} /></button>
                   <button onClick={() => setDeleteTarget(m)} className="px-2 py-1.5 text-xs text-on-surface-variant hover:text-error rounded-sm border border-outline-variant/20"><Icon name="close" size={14} /></button>
                 </div>
-              </div>
+              </Link>
             ))}
             {data?.items.length === 0 && <p className="text-center text-on-surface-variant py-12 text-sm">没有找到模型</p>}
             {data && data.totalPages > 1 && (
