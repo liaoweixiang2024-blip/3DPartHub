@@ -62,8 +62,21 @@ export async function cacheDel(key: string): Promise<void> {
 export async function cacheDelByPrefix(prefix: string): Promise<void> {
   if (!available) return;
   try {
-    const keys = await redis.keys(prefix + "*");
-    if (keys.length > 0) await redis.del(...keys);
+    // Use SCAN instead of KEYS to avoid blocking Redis on large key sets
+    const stream = redis.scanStream({ match: prefix + "*", count: 100 });
+    const batches: string[][] = [];
+    stream.on("data", (keys: string[]) => {
+      if (keys.length > 0) batches.push(keys);
+    });
+    await new Promise<void>((resolve, reject) => {
+      stream.on("end", async () => {
+        for (const batch of batches) {
+          await redis.del(...batch);
+        }
+        resolve();
+      });
+      stream.on("error", reject);
+    });
   } catch {
     markUnavailable();
   }

@@ -542,7 +542,7 @@ export default function HomePage() {
     pageSize: PAGE_SIZE,
     search: searchQuery,
     categoryId: activeCategory !== "all" ? activeCategory : undefined,
-    // sort handled client-side for simplicity
+    sort: sortBy,
   });
 
   useEffect(() => {
@@ -642,7 +642,7 @@ export default function HomePage() {
               </div>
               <div className="flex items-center gap-2">
                 <div className="relative">
-                  <select value={sortBy} onChange={(e) => setSortBy(e.target.value)} className="bg-surface-container-lowest text-sm text-on-surface rounded-sm pl-3 pr-8 py-1 border border-outline-variant/30 outline-none appearance-none cursor-pointer">
+                  <select value={sortBy} onChange={(e) => { setSortBy(e.target.value); setPage(1); }} className="bg-surface-container-lowest text-sm text-on-surface rounded-sm pl-3 pr-8 py-1 border border-outline-variant/30 outline-none appearance-none cursor-pointer">
                     <option value="created_at">最新上传</option>
                     <option value="name">名称排序</option>
                   </select>

@@ -74,7 +74,7 @@ function mapListResponse(data: ServerModelListResponse): PaginatedResponse<Serve
 }
 
 export const modelApi = {
-  list: async (params?: PaginationParams & { category?: string; categoryId?: string; search?: string; format?: string; grouped?: boolean }): Promise<PaginatedResponse<ServerModelListItem>> => {
+  list: async (params?: PaginationParams & { category?: string; categoryId?: string; search?: string; format?: string; grouped?: boolean; sort?: string }): Promise<PaginatedResponse<ServerModelListItem>> => {
     const { data: resp } = await client.get("/models", {
       params: {
         page: params?.page || 1,
@@ -84,6 +84,7 @@ export const modelApi = {
         category: params?.category || undefined,
         category_id: params?.categoryId || undefined,
         grouped: params?.grouped ?? true,
+        sort: params?.sort || undefined,
       },
     });
     const inner = resp.data?.data ?? resp.data ?? resp;

@@ -1,26 +1,28 @@
+import { lazy, Suspense } from "react";
 import { Routes, Route, Link, useLocation } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
-import HomePage from "./pages/HomePage";
-import ModelDetailPage from "./pages/ModelDetailPage";
-import DownloadsPage from "./pages/DownloadsPage";
-import FavoritesPage from "./pages/FavoritesPage";
-import ProfilePage from "./pages/ProfilePage";
-import SupportPage from "./pages/SupportPage";
-import MyTicketsPage from "./pages/MyTicketsPage";
-import LoginPage from "./pages/LoginPage";
-import ProjectsPage from "./pages/ProjectsPage";
-import ProjectDetailPage from "./pages/ProjectDetailPage";
-import CategoryAdminPage from "./pages/CategoryAdminPage";
-import ModelAdminPage from "./pages/ModelAdminPage";
-import TicketAdminPage from "./pages/TicketAdminPage";
-import TicketDetailPage from "./pages/TicketDetailPage";
-import SettingsPage from "./pages/SettingsPage";
-import UserAdminPage from "./pages/UserAdminPage";
-import AuditLogPage from "./pages/AuditLogPage";
 import ProtectedRoute from "./components/shared/ProtectedRoute";
-import ErrorBoundary from "./components/shared/ErrorBoundary";
 import Icon from "./components/shared/Icon";
 import { getSiteTitle, getSiteIcon } from "./lib/publicSettings";
+
+// Lazy-loaded pages — Vite generates separate chunks automatically
+const HomePage = lazy(() => import("./pages/HomePage"));
+const ModelDetailPage = lazy(() => import("./pages/ModelDetailPage"));
+const DownloadsPage = lazy(() => import("./pages/DownloadsPage"));
+const FavoritesPage = lazy(() => import("./pages/FavoritesPage"));
+const ProfilePage = lazy(() => import("./pages/ProfilePage"));
+const SupportPage = lazy(() => import("./pages/SupportPage"));
+const MyTicketsPage = lazy(() => import("./pages/MyTicketsPage"));
+const LoginPage = lazy(() => import("./pages/LoginPage"));
+const ProjectsPage = lazy(() => import("./pages/ProjectsPage"));
+const ProjectDetailPage = lazy(() => import("./pages/ProjectDetailPage"));
+const CategoryAdminPage = lazy(() => import("./pages/CategoryAdminPage"));
+const ModelAdminPage = lazy(() => import("./pages/ModelAdminPage"));
+const TicketAdminPage = lazy(() => import("./pages/TicketAdminPage"));
+const TicketDetailPage = lazy(() => import("./pages/TicketDetailPage"));
+const SettingsPage = lazy(() => import("./pages/SettingsPage"));
+const UserAdminPage = lazy(() => import("./pages/UserAdminPage"));
+const AuditLogPage = lazy(() => import("./pages/AuditLogPage"));
 
 const pageVariants = {
   initial: { opacity: 0 },
@@ -30,7 +32,11 @@ const pageVariants = {
 
 function PageWrap({ children }: { children: React.ReactNode }) {
   return (
-    <ErrorBoundary>
+    <Suspense fallback={
+      <div className="flex items-center justify-center py-20">
+        <Icon name="autorenew" size={32} className="text-on-surface-variant/30 animate-spin" />
+      </div>
+    }>
       <motion.div
         variants={pageVariants}
         initial="initial"
@@ -40,7 +46,7 @@ function PageWrap({ children }: { children: React.ReactNode }) {
       >
         {children}
       </motion.div>
-    </ErrorBoundary>
+    </Suspense>
   );
 }
 
