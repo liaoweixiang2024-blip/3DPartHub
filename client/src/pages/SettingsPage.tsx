@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useMediaQuery } from '../layouts/hooks/useMediaQuery';
 import { useDocumentTitle } from '../hooks/useDocumentTitle';
+import { SkeletonList } from '../components/shared/Skeleton';
 import TopNav from '../components/shared/TopNav';
 import BottomNav from '../components/shared/BottomNav';
 import AppSidebar from '../components/shared/Sidebar';
@@ -780,11 +781,7 @@ function Content() {
   }
 
   if (loading) {
-    return (
-      <div className="flex items-center justify-center py-20">
-        <Icon name="autorenew" size={32} className="text-on-surface-variant/30 animate-spin" />
-      </div>
-    );
+    return <SkeletonList rows={6} />;
   }
 
   return (

@@ -4,6 +4,7 @@ import { AnimatePresence, motion } from 'framer-motion';
 import useSWR from 'swr';
 import { useMediaQuery } from '../layouts/hooks/useMediaQuery';
 import { useDocumentTitle } from '../hooks/useDocumentTitle';
+import { SkeletonList } from '../components/shared/Skeleton';
 import TopNav from '../components/shared/TopNav';
 import BottomNav from '../components/shared/BottomNav';
 import AppSidebar from '../components/shared/Sidebar';
@@ -73,9 +74,7 @@ function Content() {
       </div>
 
       {isLoading ? (
-        <div className="flex items-center justify-center py-20">
-          <Icon name="autorenew" size={32} className="text-on-surface-variant/30 animate-spin" />
-        </div>
+        <SkeletonList rows={4} />
       ) : list.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-20 gap-4">
           <Icon name="inbox" size={48} className="text-on-surface-variant/20" />
@@ -140,9 +139,7 @@ function MobileContent() {
       </div>
 
       {isLoading ? (
-        <div className="flex items-center justify-center py-16">
-          <Icon name="autorenew" size={28} className="text-on-surface-variant/30 animate-spin" />
-        </div>
+        <SkeletonList rows={4} />
       ) : list.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-16 gap-3">
           <Icon name="inbox" size={40} className="text-on-surface-variant/20" />

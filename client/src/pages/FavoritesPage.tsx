@@ -4,6 +4,7 @@ import useSWR from 'swr';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useMediaQuery } from '../layouts/hooks/useMediaQuery';
 import { useDocumentTitle } from '../hooks/useDocumentTitle';
+import { SkeletonGrid } from '../components/shared/Skeleton';
 import TopNav from '../components/shared/TopNav';
 import BottomNav from '../components/shared/BottomNav';
 import AppSidebar from '../components/shared/Sidebar';
@@ -280,11 +281,7 @@ function DesktopContent() {
   const models = data ? mapFavorites(data) : [];
 
   if (isLoading) {
-    return (
-      <div className="flex items-center justify-center py-24">
-        <Icon name="progress_activity" size={32} className="text-on-surface-variant animate-spin" />
-      </div>
-    );
+    return <SkeletonGrid count={8} />;
   }
 
   if (error) {
@@ -503,9 +500,7 @@ function MobileContent() {
       )}
 
       {isLoading ? (
-        <div className="flex items-center justify-center py-16">
-          <Icon name="progress_activity" size={32} className="text-on-surface-variant animate-spin" />
-        </div>
+        <SkeletonGrid compact count={6} />
       ) : error ? (
         <div className="flex flex-col items-center gap-3 py-16">
           <Icon name="error" size={40} className="text-error" />

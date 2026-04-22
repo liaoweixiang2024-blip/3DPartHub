@@ -184,6 +184,29 @@ function CategorySidebar({
   );
 }
 
+function SkeletonCard() {
+  return (
+    <div className="bg-surface-container-high rounded-sm overflow-hidden animate-pulse">
+      <div className="aspect-square bg-surface-container-lowest" />
+      <div className="p-2.5 space-y-2">
+        <div className="h-3 bg-surface-container-lowest rounded w-3/4" />
+        <div className="h-3 bg-surface-container-lowest rounded w-1/2" />
+      </div>
+    </div>
+  );
+}
+
+function SkeletonCardMobile() {
+  return (
+    <div className="bg-surface-container-high rounded-sm overflow-hidden animate-pulse">
+      <div className="aspect-square bg-surface-container-lowest" />
+      <div className="p-2 space-y-1.5">
+        <div className="h-2.5 bg-surface-container-lowest rounded w-3/4" />
+      </div>
+    </div>
+  );
+}
+
 function ProductCard({ product, onDownload }: { product: Product; onDownload: (id: string) => void }) {
   return (
     <Link to={`/model/${product.id}`} className="block group bg-surface-container-high rounded-sm overflow-hidden hover:shadow-[0_12px_24px_rgba(0,0,0,0.4)] transition-all duration-300 flex flex-col relative">
@@ -634,8 +657,8 @@ export default function HomePage() {
             </div>
 
             {isLoading && products.length === 0 ? (
-              <div className="flex items-center justify-center py-20">
-                <div className="w-8 h-8 border-2 border-primary-container border-t-transparent rounded-full animate-spin" />
+              <div className="grid gap-3 grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6">
+                {Array.from({ length: 12 }).map((_, i) => <SkeletonCard key={i} />)}
               </div>
             ) : (
               <>
@@ -775,8 +798,8 @@ export default function HomePage() {
 
           {/* Model grid */}
           {isLoading && products.length === 0 ? (
-            <div className="flex items-center justify-center py-16">
-              <div className="w-6 h-6 border-2 border-primary-container border-t-transparent rounded-full animate-spin" />
+            <div className="grid grid-cols-2 gap-2">
+              {Array.from({ length: 6 }).map((_, i) => <SkeletonCardMobile key={i} />)}
             </div>
           ) : (
             <div className="grid grid-cols-2 gap-2">

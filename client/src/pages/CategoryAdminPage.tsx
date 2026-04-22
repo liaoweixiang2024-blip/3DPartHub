@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import useSWR from "swr";
 import { useMediaQuery } from "../layouts/hooks/useMediaQuery";
 import { useDocumentTitle } from "../hooks/useDocumentTitle";
+import { SkeletonList } from "../components/shared/Skeleton";
 import TopNav from "../components/shared/TopNav";
 import BottomNav from "../components/shared/BottomNav";
 import AppSidebar from "../components/shared/Sidebar";
@@ -218,9 +219,7 @@ function Content() {
       </div>
 
       {!tree ? (
-        <div className="flex items-center justify-center py-20">
-          <Icon name="progress_activity" size={32} className="text-on-surface-variant animate-spin" />
-        </div>
+        <SkeletonList rows={5} />
       ) : (
         <div className="bg-surface-container-low rounded-lg border border-outline-variant/10 overflow-hidden">
           {tree.map((cat) => (

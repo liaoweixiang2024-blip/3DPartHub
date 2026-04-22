@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { AnimatePresence, motion } from 'framer-motion';
 import { useMediaQuery } from '../layouts/hooks/useMediaQuery';
 import { useDocumentTitle } from '../hooks/useDocumentTitle';
+import { SkeletonList } from '../components/shared/Skeleton';
 import TopNav from '../components/shared/TopNav';
 import BottomNav from '../components/shared/BottomNav';
 import AppSidebar from '../components/shared/Sidebar';
@@ -264,7 +265,7 @@ function DesktopContent() {
       </div>
 
       {activeTab === 'suggestions' ? (
-        sugLoading ? <div className="flex justify-center py-20"><Icon name="progress_activity" size={32} className="text-on-surface-variant animate-spin" /></div> : (
+        sugLoading ? <SkeletonList rows={5} /> : (
           <div className="space-y-3">
             {selectedNames.size > 0 && (
               <div className="flex items-center justify-between px-4 py-3 bg-primary-container/10 rounded-sm border border-primary/20">
@@ -305,7 +306,7 @@ function DesktopContent() {
         )
       ) : (
       isLoading ? (
-        <div className="flex justify-center py-20"><Icon name="progress_activity" size={32} className="text-on-surface-variant animate-spin" /></div>
+        <SkeletonList rows={5} />
       ) : (
         <>
           <div className="bg-surface-container-low rounded-lg border border-outline-variant/10 overflow-hidden">
@@ -433,7 +434,7 @@ function MobileContent() {
           <input value={search} onChange={(e) => { setSearch(e.target.value); setPage(1); }} placeholder="搜索模型..." className="bg-transparent border-none outline-none text-sm text-on-surface placeholder:text-on-surface-variant/50 w-full" />
         </div>
         {isLoading ? (
-          <div className="flex justify-center py-12"><Icon name="progress_activity" size={24} className="text-on-surface-variant animate-spin" /></div>
+          <SkeletonList rows={5} />
         ) : (
           <div className="space-y-2">
             {data?.items.map((m) => (

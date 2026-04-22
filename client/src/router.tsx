@@ -5,8 +5,10 @@ import ProtectedRoute from "./components/shared/ProtectedRoute";
 import Icon from "./components/shared/Icon";
 import { getSiteTitle, getSiteIcon } from "./lib/publicSettings";
 
+// Static import for the landing page — eliminates flash on first visit
+import HomePage from "./pages/HomePage";
+
 // Lazy-loaded pages — Vite generates separate chunks automatically
-const HomePage = lazy(() => import("./pages/HomePage"));
 const ModelDetailPage = lazy(() => import("./pages/ModelDetailPage"));
 const DownloadsPage = lazy(() => import("./pages/DownloadsPage"));
 const FavoritesPage = lazy(() => import("./pages/FavoritesPage"));
@@ -32,11 +34,7 @@ const pageVariants = {
 
 function PageWrap({ children }: { children: React.ReactNode }) {
   return (
-    <Suspense fallback={
-      <div className="flex items-center justify-center py-20">
-        <Icon name="autorenew" size={32} className="text-on-surface-variant/30 animate-spin" />
-      </div>
-    }>
+    <Suspense fallback={null}>
       <motion.div
         variants={pageVariants}
         initial="initial"

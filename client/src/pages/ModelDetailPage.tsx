@@ -970,9 +970,23 @@ export default function ModelDetailPage() {
 
   if (isLoading) {
     return (
-      <div className="flex flex-col items-center justify-center h-dvh bg-surface gap-4">
-        <Icon name="view_in_ar" size={48} className="text-on-surface-variant animate-pulse" />
-        <span className="text-sm text-on-surface-variant">加载中...</span>
+      <div className="h-dvh bg-surface flex items-stretch">
+        {/* Sidebar skeleton */}
+        <div className="hidden md:block w-64 bg-surface-container-low border-r border-outline-variant/10 p-5 space-y-4 animate-pulse">
+          <div className="h-5 bg-surface-container rounded w-3/4" />
+          <div className="aspect-square bg-surface-container rounded" />
+          <div className="space-y-2">
+            <div className="h-3 bg-surface-container rounded w-full" />
+            <div className="h-3 bg-surface-container rounded w-5/6" />
+            <div className="h-3 bg-surface-container rounded w-2/3" />
+          </div>
+          <div className="space-y-2">
+            <div className="h-8 bg-surface-container rounded" />
+            <div className="h-8 bg-surface-container rounded" />
+          </div>
+        </div>
+        {/* Viewer skeleton */}
+        <div className="flex-1 bg-surface-dim animate-pulse" />
       </div>
     );
   }

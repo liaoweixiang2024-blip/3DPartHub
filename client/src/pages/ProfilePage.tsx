@@ -3,6 +3,7 @@ import useSWR from 'swr';
 import { AnimatePresence, motion } from 'framer-motion';
 import { useMediaQuery } from '../layouts/hooks/useMediaQuery';
 import { useDocumentTitle } from '../hooks/useDocumentTitle';
+import { SkeletonList } from '../components/shared/Skeleton';
 import TopNav from '../components/shared/TopNav';
 import BottomNav from '../components/shared/BottomNav';
 import AppSidebar from '../components/shared/Sidebar';
@@ -332,11 +333,7 @@ function DesktopContent() {
   }, [toast, updateUser]);
 
   if (isLoading) {
-    return (
-      <div className="flex items-center justify-center py-24">
-        <Icon name="progress_activity" size={32} className="text-on-surface-variant animate-spin" />
-      </div>
-    );
+    return <SkeletonList rows={4} />;
   }
 
   return (
