@@ -275,9 +275,6 @@ function DesktopContent() {
     a.href = `/api/models/${modelId}/download?format=original&token=${encodeURIComponent(token)}`;
     a.download = "";
     a.click();
-    } catch {
-      toast('下载失败，请检查网络', 'error');
-    }
   }, [toast]);
 
   const models = data ? mapFavorites(data) : [];
@@ -453,9 +450,6 @@ function MobileContent() {
     a.href = `/api/models/${modelId}/download?format=original&token=${encodeURIComponent(token)}`;
     a.download = "";
     a.click();
-    } catch {
-      toast('下载失败，请检查网络', 'error');
-    }
   }, [toast]);
 
   return (
