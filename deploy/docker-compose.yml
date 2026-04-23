@@ -67,8 +67,6 @@ services:
     volumes:
       - uploads-data:/app/uploads
       - static-data:/app/static
-      # 备份目录挂载 — 把备份文件放到这个目录，网页端即可看到
-      - ./backups:/app/static/backups
     restart: unless-stopped
     networks:
       - internal

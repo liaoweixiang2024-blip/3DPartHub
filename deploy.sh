@@ -1,12 +1,14 @@
 #!/bin/bash
 # ============================================================
-# 3DPartHub 一键部署脚本（纯镜像，无需源码）
+# 3DPartHub 一键部署脚本
 # ============================================================
 #
-# 用法:
-#   全新部署:           bash deploy.sh
-#   带备份恢复部署:     bash deploy.sh /path/to/backup_xxx.tar.gz
-#   指定备份所在目录:   bash deploy.sh "/www/wwwroot/model备份"
+# 全新部署:
+#   bash deploy.sh
+#
+# 带备份恢复（自动复制到容器内并恢复）:
+#   bash deploy.sh /path/to/backup_1776890498343.tar.gz
+#   bash deploy.sh "/www/wwwroot/model备份"
 #
 # ============================================================
 
@@ -39,13 +41,13 @@ if ! docker compose version &> /dev/null; then
 fi
 
 # ---------- 1. 创建目录 ----------
-echo -e "${YELLOW}[1/5] 创建项目目录...${NC}"
-mkdir -p "$INSTALL_DIR/backups"
+echo -e "${YELLOW}[1/4] 创建项目目录...${NC}"
+mkdir -p "$INSTALL_DIR"
 cd "$INSTALL_DIR"
 echo -e "${GREEN}  ✓ $INSTALL_DIR${NC}"
 
 # ---------- 2. 下载配置 ----------
-echo -e "${YELLOW}[2/5] 下载配置文件...${NC}"
+echo -e "${YELLOW}[2/4] 下载配置文件...${NC}"
 if [ ! -f docker-compose.yml ]; then
   curl -sO https://raw.githubusercontent.com/liaoweixiang2024-blip/3DPartHub/main/docker-compose.yml
   echo -e "${GREEN}  ✓ docker-compose.yml 已下载${NC}"
@@ -54,7 +56,7 @@ else
 fi
 
 # ---------- 3. 生成密钥 ----------
-echo -e "${YELLOW}[3/5] 配置密钥...${NC}"
+echo -e "${YELLOW}[3/4] 配置密钥...${NC}"
 if [ ! -f .env ]; then
   cat > .env << EOF
 DB_PASSWORD=$(openssl rand -hex 16)
@@ -65,48 +67,14 @@ else
   echo -e "${GREEN}  ✓ .env 已存在，保持不变${NC}"
 fi
 
-# ---------- 4. 复制备份文件（如果指定了路径）----------
-if [ -n "$BACKUP_SOURCE" ]; then
-  echo -e "${YELLOW}[4/5] 复制备份文件...${NC}"
-
-  if [ -d "$BACKUP_SOURCE" ]; then
-    # 目录 — 复制里面所有 backup_* 文件
-    FOUND=$(find "$BACKUP_SOURCE" -maxdepth 1 -name "backup_*.tar.gz" 2>/dev/null | head -1)
-    if [ -z "$FOUND" ]; then
-      echo -e "${RED}  ✗ 目录中未找到 backup_*.tar.gz${NC}"
-      exit 1
-    fi
-    cp "$BACKUP_SOURCE"/backup_*.json "$INSTALL_DIR/backups/" 2>/dev/null || true
-    cp "$BACKUP_SOURCE"/backup_*.tar.gz "$INSTALL_DIR/backups/"
-    echo -e "${GREEN}  ✓ 备份文件已复制到 backups/${NC}"
-
-  elif [ -f "$BACKUP_SOURCE" ]; then
-    # 单个文件
-    cp "$BACKUP_SOURCE" "$INSTALL_DIR/backups/"
-    # 尝试复制配套 .json
-    JSON_FILE="${BACKUP_SOURCE%.tar.gz}.json"
-    [ -f "$JSON_FILE" ] && cp "$JSON_FILE" "$INSTALL_DIR/backups/"
-    echo -e "${GREEN}  ✓ 备份文件已复制到 backups/${NC}"
-
-  else
-    echo -e "${RED}  ✗ 路径不存在: $BACKUP_SOURCE${NC}"
-    exit 1
-  fi
-else
-  echo -e "${YELLOW}[4/5] 跳过备份（未指定备份路径）${NC}"
-  echo "  如需恢复，可稍后手动复制:"
-  echo "  cp /path/to/backup_*.tar.gz $INSTALL_DIR/backups/"
-  echo "  cp /path/to/backup_*.json $INSTALL_DIR/backups/"
-fi
-
-# ---------- 5. 启动服务 ----------
-echo -e "${YELLOW}[5/5] 拉取镜像并启动（首次可能需要几分钟）...${NC}"
+# ---------- 4. 启动服务 ----------
+echo -e "${YELLOW}[4/4] 拉取镜像并启动（首次可能需要几分钟）...${NC}"
 docker compose pull 2>/dev/null || true
 docker compose up -d
 
 echo ""
 echo -e "${YELLOW}等待服务就绪...${NC}"
-sleep 10
+sleep 15
 
 HEALTH_OK=false
 for i in $(seq 1 15); do
@@ -119,6 +87,37 @@ for i in $(seq 1 15); do
   echo "  等待中... ($i/15)"
   sleep 3
 done
+
+# ---------- 导入备份 ----------
+if [ -n "$BACKUP_SOURCE" ] && [ "$HEALTH_OK" = true ]; then
+  echo ""
+  echo -e "${YELLOW}正在导入备份文件...${NC}"
+
+  # 找到备份文件
+  TARGZ=""
+  JSON=""
+  if [ -d "$BACKUP_SOURCE" ]; then
+    TARGZ=$(find "$BACKUP_SOURCE" -maxdepth 1 -name "backup_*.tar.gz" 2>/dev/null | head -1)
+    JSON=$(find "$BACKUP_SOURCE" -maxdepth 1 -name "backup_*.json" 2>/dev/null | head -1)
+  elif [ -f "$BACKUP_SOURCE" ]; then
+    TARGZ="$BACKUP_SOURCE"
+    JSON="${BACKUP_SOURCE%.tar.gz}.json"
+    [ ! -f "$JSON" ] && JSON=""
+  fi
+
+  if [ -z "$TARGZ" ]; then
+    echo -e "${RED}  ✗ 未找到 backup_*.tar.gz${NC}"
+  else
+    # docker cp 到容器
+    docker cp "$TARGZ" 3dparthub-api-1:/app/static/backups/ 2>/dev/null && echo -e "${GREEN}  ✓ $(basename "$TARGZ") 已复制${NC}" || echo -e "${RED}  ✗ 复制失败${NC}"
+    if [ -n "$JSON" ] && [ -f "$JSON" ]; then
+      docker cp "$JSON" 3dparthub-api-1:/app/static/backups/ 2>/dev/null && echo -e "${GREEN}  ✓ $(basename "$JSON") 已复制${NC}" || true
+    fi
+    echo ""
+    echo -e "${YELLOW}  备份文件已导入容器，请登录网页恢复：${NC}"
+    echo "  设置 → 数据备份 → 点「恢复」"
+  fi
+fi
 
 # ---------- 结果 ----------
 echo ""
@@ -136,11 +135,6 @@ echo "    密码: admin123"
 echo "    (首次登录强制修改密码)"
 echo ""
 
-if [ -n "$BACKUP_SOURCE" ]; then
-  echo -e "${YELLOW}  下一步: 登录后台 →「设置 → 数据备份」→ 点「恢复」${NC}"
-  echo ""
-fi
-
 if [ "$HEALTH_OK" = false ]; then
   echo -e "${RED}  ⚠ 健康检查未通过，查看日志:${NC}"
   echo "  docker compose logs api"
@@ -148,8 +142,8 @@ if [ "$HEALTH_OK" = false ]; then
 fi
 
 echo "  常用命令:"
-echo "    日志:   docker compose logs -f api"
-echo "    状态:   docker compose ps"
-echo "    停止:   docker compose down"
-echo "    升级:   改 IMAGE_TAG 版本号 → docker compose pull && docker compose up -d"
+echo "    日志:  docker compose logs -f api"
+echo "    状态:  docker compose ps"
+echo "    停止:  docker compose down"
+echo "    升级:  改 IMAGE_TAG 版本号 → docker compose pull && docker compose up -d"
 echo ""

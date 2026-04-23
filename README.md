@@ -111,20 +111,11 @@ curl http://localhost:3780/api/health
 
 所有数据存储在 Docker 命名卷中，升级/重建容器不会丢失：
 
-| 卷名 | 内容 | 备注 |
-|------|------|------|
-| `pgdata` | PostgreSQL 数据库 | 数据库所有数据 |
-| `uploads-data` | 上传的原始模型文件 | STEP/IGES 原文件 |
-| `static-data` | 转换文件、缩略图 | glTF 模型、缩略图 |
-| `./backups/` | 备份文件 | **宿主机目录挂载**，直接放文件就能恢复 |
-
-```bash
-# 查看卷占用空间
-docker system df -v
-
-# 备份整个数据目录
-docker run --rm -v 3dparthub_pgdata:/data -v $(pwd):/backup alpine tar czf /backup/pgdata.tar.gz -C /data .
-```
+| 卷名 | 容器内路径 | 内容 |
+|------|-----------|------|
+| `pgdata` | `/var/lib/postgresql/data` | 数据库 |
+| `uploads-data` | `/app/uploads` | 原始模型文件 |
+| `static-data` | `/app/static` | 转换模型、缩略图、备份文件 |
 
 ---
 
@@ -132,186 +123,94 @@ docker run --rm -v 3dparthub_pgdata:/data -v $(pwd):/backup alpine tar czf /back
 
 ### 1. 备份文件在服务器上，怎么恢复？
 
-备份文件需要两个：`.json`（元数据）和 `.tar.gz`（数据），缺一不可。
+**方式一：网页上传（最简单）**
 
-**方式一：放到 backups 目录（推荐）**
+打开 **设置 → 数据备份 → 导入恢复 → 选择文件**，从电脑选择 `.tar.gz` 备份文件上传即可。大文件支持断点续传。
 
-`docker-compose.yml` 已经把 `./backups/` 挂载到容器内，直接放文件就行：
-
-```bash
-cd /opt/3dparthub
-
-# 把备份文件复制到 backups 目录
-cp /root/backup_1776890498343.json backups/
-cp /root/backup_1776890498343.tar.gz backups/
-
-# 打开网页 → 设置 → 数据备份
-# 备份列表会自动显示，点击「恢复」即可
-```
-
-**方式二：docker cp（不推荐，重启后文件会丢）**
+**方式二：从服务器本地文件恢复**
 
 ```bash
-docker cp /root/backup_1776890498343.json 3dparthub-api-1:/app/static/backups/
-docker cp /root/backup_1776890498343.tar.gz 3dparthub-api-1:/app/static/backups/
+# 把服务器上的备份文件复制到容器内
+docker cp /path/to/backup_1776890498343.json 3dparthub-api-1:/app/static/backups/
+docker cp /path/to/backup_1776890498343.tar.gz 3dparthub-api-1:/app/static/backups/
 ```
 
-**方式二：命令行**
+然后打开 **设置 → 数据备份**，列表里自动出现，点「恢复」。
 
-```bash
-# 1. 登录获取管理员 token
-TOKEN=$(curl -s -X POST http://localhost:3780/api/auth/login \
-  -H "Content-Type: application/json" \
-  -d '{"email":"admin@model.com","password":"你的密码"}' \
-  | grep -o '"accessToken":"[^"]*"' | cut -d'"' -f4)
-
-# 2. 触发恢复
-curl -X POST http://localhost:3780/api/settings/backup/import-path \
-  -H "Authorization: Bearer $TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{"path":"/app/static/backups/backup_20260423.tar.gz"}'
-
-# 返回 {"jobId":"restore_xxx"}
-
-# 3. 查看恢复进度
-curl -s http://localhost:3780/api/settings/backup/restore-progress/restore_xxx \
-  -H "Authorization: Bearer $TOKEN" | python3 -m json.tool
-```
+> 恢复完成后数据已写入数据库和命名卷，安全不会丢。`docker cp` 进去的备份归档文件在容器重建后会消失，但数据已经恢复了，无所谓。
 
 ### 2. 忘记管理员密码怎么办？
 
-通过 `docker exec` 直接重置数据库中的密码：
-
 ```bash
-# 1. 进入 API 容器
 docker exec -it 3dparthub-api-1 sh
 
-# 2. 生成新密码的 bcrypt 哈希（新密码设为 newpass123）
+# 生成新密码的哈希（新密码设为 newpass123）
 HASH=$(node -e "require('bcryptjs').hash('newpass123', 12).then(h => console.log(h))")
-echo $HASH
 
-# 3. 更新数据库
+# 写入数据库
 npx prisma db execute --stdin << SQL
 UPDATE users SET password_hash = '$HASH', must_change_password = true WHERE email = 'admin@model.com';
 SQL
-
-# 4. 退出容器
 exit
 ```
 
-现在可以用新密码 `newpass123` 登录，登录后系统会要求你再设一个新密码。
+用新密码 `newpass123` 登录后，系统会要求再设一个新密码。
 
 ### 3. 忘记管理员用户名/邮箱怎么办？
 
 ```bash
-# 查看所有管理员账号
 docker exec -it 3dparthub-api-1 sh -c \
   "npx prisma db execute --stdin" << SQL
 SELECT username, email, role FROM users WHERE role = 'ADMIN';
 SQL
 ```
 
-找到邮箱后，用上面的方法重置密码即可。
-
 ### 4. 忘记数据库密码怎么办？
 
-数据库密码只在 `.env` 文件中，如果忘了：
-
 ```bash
-cd /opt/3dparthub
+# 查看 .env
+cat /opt/3dparthub/.env
 
-# 方法一：查看 .env 文件
-cat .env
-
-# 方法二：如果 .env 也丢了，直接重置
-# 1. 停止服务
+# 如果 .env 也丢了，只能重置（数据会丢，需重新恢复备份）
 docker compose down
-
-# 2. 重新生成密码并写入 .env
 cat > .env << EOF
 DB_PASSWORD=$(openssl rand -hex 16)
 JWT_SECRET=$(openssl rand -hex 32)
 EOF
-
-# 3. 删除旧数据库卷（会丢失数据！）
 docker volume rm 3dparthub_pgdata
-
-# 4. 重新启动（会创建新的空数据库）
 docker compose up -d
 ```
 
-> **如果有备份**：启动后通过网页端或命令行恢复备份即可找回数据。
-
-### 5. 容器启动后访问报错怎么办？
+### 5. 容器启动报错？
 
 ```bash
-# 1. 看容器状态
-docker compose ps
-
-# 2. 看 API 日志（最常见的错误在这里）
 docker compose logs api --tail 50
 
-# 3. 常见原因：
-#    - "P1001: Can't reach database server" → postgres 还没就绪，等 30 秒
-#    - "jwt secret is required" → 检查 .env 中的 JWT_SECRET
-#    - "ECONNREFUSED redis" → 重启 redis: docker compose restart redis
+# 常见原因：
+# "P1001: Can't reach database" → postgres 还没就绪，等 30 秒
+# "jwt secret is required"     → 检查 .env 中的 JWT_SECRET
+# "ECONNREFUSED redis"         → docker compose restart redis
 ```
 
-### 6. 端口被占用怎么办？
-
-```bash
-# 修改 .env 中的端口
-echo "PORT=8080" >> .env
-
-# 重启
-docker compose up -d
-```
-
-### 7. 如何迁移到新服务器？
-
-**最简单的方法：备份文件直接放到宿主机目录**
+### 6. 如何迁移到新服务器？
 
 ```bash
 # ===== 旧服务器 =====
-
-# 1. 在网页端「设置 → 数据备份」创建完整备份
-#    备份完成后会生成两个文件：
-#      backup_xxxxxxxxxx.json  （备份元数据）
-#      backup_xxxxxxxxxx.tar.gz（备份数据：数据库 + 模型 + 缩略图）
-
-# 2. 找到备份文件
-cd /opt/3dparthub
-ls -lh backups/
-
-# 3. 把备份文件传到新服务器
-scp backups/backup_*.json backups/backup_*.tar.gz root@新服务器IP:/opt/3dparthub/backups/
-
+# 1. 网页端「设置 → 数据备份」→ 创建备份
+# 2. 把备份文件从容器导出到宿主机
+docker cp 3dparthub-api-1:/app/static/backups/backup_XXXX.json /tmp/
+docker cp 3dparthub-api-1:/app/static/backups/backup_XXXX.tar.gz /tmp/
+# 3. 传到新服务器
+scp /tmp/backup_XXXX.* root@新服务器IP:/tmp/
 
 # ===== 新服务器 =====
-
-# 1. 部署新实例（按上面的"一键部署"操作）
-mkdir -p /opt/3dparthub/backups && cd /opt/3dparthub
-curl -O https://raw.githubusercontent.com/liaoweixiang2024-blip/3DPartHub/main/docker-compose.yml
-cat > .env << EOF
-DB_PASSWORD=$(openssl rand -hex 16)
-JWT_SECRET=$(openssl rand -hex 32)
-EOF
-
-# 2. 把备份文件放进 backups 目录（scp 已经传过来了）
-ls backups/
-# backup_1776890498343.json  backup_1776890498343.tar.gz
-
-# 3. 启动服务
-docker compose up -d
-
-# 4. 打开网页 → 设置 → 数据备份
-#    备份列表会自动显示刚才放的备份文件
-#    点击「恢复」即可还原全部数据
-#
-#    或者点「导入恢复 → 服务器文件」也能看到
+# 1. 部署（按上面的"快速部署"操作）
+cd /opt/3dparthub && docker compose up -d
+# 2. 等服务启动后，把备份文件复制到容器
+docker cp /tmp/backup_XXXX.json 3dparthub-api-1:/app/static/backups/
+docker cp /tmp/backup_XXXX.tar.gz 3dparthub-api-1:/app/static/backups/
+# 3. 网页端「设置 → 数据备份」→ 点「恢复」
 ```
-
-> **原理**：`docker-compose.yml` 中 `./backups` 目录直接挂载到容器内 `/app/static/backups/`，放到宿主机目录的备份文件，容器内立即可见。
 
 ---
 

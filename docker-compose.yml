@@ -22,16 +22,20 @@
 #     static-data  — 转换后的模型、缩略图、备份文件
 #
 # 【备份恢复】
-#   把备份文件（.json + .tar.gz）放到 ./backups/ 目录：
-#     cp /path/to/backup_*.json ./backups/
-#     cp /path/to/backup_*.tar.gz ./backups/
-#   然后网页端「设置 → 数据备份 → 服务器文件」或直接在备份列表里恢复
+#   网页创建的备份存储在 Docker 命名卷中，重启不丢失
+#   从外部导入备份: docker cp backup_xxx.json 3dparthub-api-1:/app/static/backups/
+#                   docker cp backup_xxx.tar.gz 3dparthub-api-1:/app/static/backups/
+#   然后网页端「设置 → 数据备份」恢复
 #
 # 【迁移到新服务器】
 #   1. 旧服务器：设置 → 数据备份 → 创建备份
-#      把 ./backups/ 下的 .json 和 .tar.gz 文件复制到新服务器
-#   2. 新服务器：按「快速开始」部署后，把备份文件放到 ./backups/
-#      网页端恢复即可
+#   2. 备份文件在 static-data 卷内，可通过 docker cp 导出：
+#      docker cp 3dparthub-api-1:/app/static/backups/. /tmp/backups/
+#      scp /tmp/backups/* 新服务器:/tmp/backups/
+#   3. 新服务器部署后导入：
+#      docker cp /tmp/backups/backup_xxx.json 3dparthub-api-1:/app/static/backups/
+#      docker cp /tmp/backups/backup_xxx.tar.gz 3dparthub-api-1:/app/static/backups/
+#   4. 网页端恢复
 #
 # ============================================================
 
@@ -75,8 +79,6 @@ services:
     volumes:
       - uploads-data:/app/uploads
       - static-data:/app/static
-      # 备份目录挂载 — 把备份文件放到这个目录，网页端即可看到
-      - ./backups:/app/static/backups
     restart: unless-stopped
     networks:
       - internal
