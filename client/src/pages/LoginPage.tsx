@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
-import { useNavigate, Link } from "react-router-dom";
+import { useNavigate, useLocation, Link } from "react-router-dom";
 import { motion } from "framer-motion";
 import { useAuthStore } from "../stores/useAuthStore";
 import { useDocumentTitle } from "../hooks/useDocumentTitle";
@@ -34,6 +34,8 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
   const [apiError, setApiError] = useState("");
   const navigate = useNavigate();
+  const location = useLocation();
+  const from = (location.state as any)?.from || "/";
   const { login } = useAuthStore();
   const [allowRegister, setAllowRegister] = useState(true);
 
@@ -126,11 +128,11 @@ export default function LoginPage() {
       if (mode === "login") {
         const result = await authApi.login({ email, password });
         login(result.user, result.tokens);
-        navigate("/");
+        navigate(from, { replace: true });
       } else {
         const result = await authApi.register({ username, email, password, emailCode });
         login(result.user, result.tokens);
-        navigate("/");
+        navigate(from, { replace: true });
       }
     } catch (err: any) {
       const msg = err.response?.data?.message || err.response?.data?.detail || (mode === "login" ? "邮箱或密码错误" : "注册失败，请重试");
@@ -150,7 +152,8 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="flex items-center justify-center min-h-screen bg-surface p-4">
+    <div className="flex items-center justify-center min-h-screen bg-surface p-4 overflow-y-auto">
+      <div className="my-4 w-full max-w-md">
       <motion.div
         initial={{ opacity: 0, scale: 0.95 }}
         animate={{ opacity: 1, scale: 1 }}
@@ -178,10 +181,10 @@ export default function LoginPage() {
               return <Icon name="precision_manufacturing" size={48} className="text-primary-container mb-3 block mx-auto" />;
             })()}
             <h1 className="text-2xl font-headline font-bold text-on-surface tracking-tight">
-              {mode === "login" ? `登录${getSiteTitle()}` : "创建账户"}
+              {mode === "login" ? "欢迎回来" : "创建账户"}
             </h1>
             <p className="text-sm text-on-surface-variant mt-2">
-              {mode === "login" ? "访问您的3D模型库与工程数据" : "注册以开始使用平台"}
+              {mode === "login" ? "登录您的账户继续" : "注册以开始使用平台"}
             </p>
           </div>
 
@@ -204,7 +207,7 @@ export default function LoginPage() {
                   type="text"
                   value={username}
                   onChange={(e) => setUsername(e.target.value)}
-                  className={`w-full bg-surface-container-lowest text-on-surface rounded-sm px-4 py-2.5 border outline-none transition-colors ${
+                  className={`w-full bg-surface-container-lowest text-on-surface text-base rounded-sm px-4 py-2.5 border outline-none transition-colors ${
                     errors.username ? "border-error" : "border-outline-variant/30 focus:border-primary-container"
                   }`}
                   placeholder="请输入用户名"
@@ -219,7 +222,7 @@ export default function LoginPage() {
                 type="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                className={`w-full bg-surface-container-lowest text-on-surface rounded-sm px-4 py-2.5 border outline-none transition-colors ${
+                className={`w-full bg-surface-container-lowest text-on-surface text-base rounded-sm px-4 py-2.5 border outline-none transition-colors ${
                   errors.email ? "border-error" : "border-outline-variant/30 focus:border-primary-container"
                 }`}
                 placeholder="例如 name@company.com"
@@ -235,7 +238,7 @@ export default function LoginPage() {
                     type="text"
                     value={captchaText}
                     onChange={(e) => setCaptchaText(e.target.value)}
-                    className={`flex-1 bg-surface-container-lowest text-on-surface rounded-sm px-4 py-2.5 border outline-none transition-colors ${
+                    className={`flex-1 bg-surface-container-lowest text-on-surface text-base rounded-sm px-4 py-2.5 border outline-none transition-colors ${
                       errors.captchaText ? "border-error" : "border-outline-variant/30 focus:border-primary-container"
                     }`}
                     placeholder="输入右侧验证码"
@@ -264,7 +267,7 @@ export default function LoginPage() {
                     type="text"
                     value={emailCode}
                     onChange={(e) => setEmailCode(e.target.value)}
-                    className={`flex-1 bg-surface-container-lowest text-on-surface rounded-sm px-4 py-2.5 border outline-none transition-colors ${
+                    className={`flex-1 bg-surface-container-lowest text-on-surface text-base rounded-sm px-4 py-2.5 border outline-none transition-colors ${
                       errors.emailCode ? "border-error" : "border-outline-variant/30 focus:border-primary-container"
                     }`}
                     placeholder="6位验证码"
@@ -289,7 +292,7 @@ export default function LoginPage() {
                 type="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                className={`w-full bg-surface-container-lowest text-on-surface rounded-sm px-4 py-2.5 border outline-none transition-colors ${
+                className={`w-full bg-surface-container-lowest text-on-surface text-base rounded-sm px-4 py-2.5 border outline-none transition-colors ${
                   errors.password ? "border-error" : "border-outline-variant/30 focus:border-primary-container"
                 }`}
                 placeholder="至少8位"
@@ -304,7 +307,7 @@ export default function LoginPage() {
                   type="password"
                   value={confirmPassword}
                   onChange={(e) => setConfirmPassword(e.target.value)}
-                  className={`w-full bg-surface-container-lowest text-on-surface rounded-sm px-4 py-2.5 border outline-none transition-colors ${
+                  className={`w-full bg-surface-container-lowest text-on-surface text-base rounded-sm px-4 py-2.5 border outline-none transition-colors ${
                     errors.confirmPassword ? "border-error" : "border-outline-variant/30 focus:border-primary-container"
                   }`}
                   placeholder="再次输入密码"
@@ -342,6 +345,7 @@ export default function LoginPage() {
         <p className="text-center text-xs text-on-surface-variant mt-6">
           <Link to="/" className="hover:text-primary transition-colors">← 返回首页</Link>
         </p>
+      </div>
       </motion.div>
     </div>
   );
