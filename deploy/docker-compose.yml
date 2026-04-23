@@ -1,0 +1,107 @@
+# 3DPartHub 一键部署配置
+#
+# 使用方法：
+#   1. 安装 Docker 和 Docker Compose
+#   2. 修改下方环境变量（带 <<< 标记的）
+#   3. 运行: docker compose up -d
+#   4. 访问: http://你的服务器IP:3780
+#
+# 数据持久化: 所有数据存储在 Docker 命名卷中，升级镜像不会丢失
+# 备份文件导入: docker cp 备份文件.tar.gz 3dparthub-api-1:/app/static/backups/
+# 查看日志: docker compose logs -f api
+# 停止服务: docker compose down
+# 升级版本: docker compose pull && docker compose up -d
+
+services:
+  api:
+    image: ghcr.io/liaoweixiang2024-blip/3dparthub-api:latest
+    container_name: 3dparthub-api
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+          cpus: "2"
+        reservations:
+          memory: 512M
+    environment:
+      TZ: Asia/Shanghai
+      PORT: 8000
+      DATABASE_URL: postgresql://modeluser:${DB_PASSWORD:-modelpass}@postgres:5432/3dparthub
+      # <<< 请修改为随机密钥 (至少32位)
+      JWT_SECRET: ${JWT_SECRET:-change-me-to-a-random-secret-string}
+      JWT_EXPIRES_IN: 7d
+      UPLOAD_DIR: uploads
+      STATIC_DIR: static
+      MAX_FILE_SIZE: 104857600
+      REDIS_URL: redis://redis:6379
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    volumes:
+      - uploads-data:/app/uploads
+      - static-data:/app/static
+    restart: unless-stopped
+    networks:
+      - internal
+
+  web:
+    image: ghcr.io/liaoweixiang2024-blip/3dparthub-web:latest
+    container_name: 3dparthub-web
+    ports:
+      - "${PORT:-3780}:80"
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+          cpus: "0.5"
+    depends_on:
+      - api
+    restart: unless-stopped
+    networks:
+      - internal
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: 3dparthub-postgres
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: "1"
+    environment:
+      POSTGRES_DB: 3dparthub
+      POSTGRES_USER: modeluser
+      # <<< 请修改数据库密码 (与上方 DB_PASSWORD 保持一致)
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-modelpass}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U modeluser -d 3dparthub"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    networks:
+      - internal
+
+  redis:
+    image: redis:7-alpine
+    container_name: 3dparthub-redis
+    deploy:
+      resources:
+        limits:
+          memory: 128M
+          cpus: "0.5"
+    restart: unless-stopped
+    networks:
+      - internal
+
+volumes:
+  pgdata:
+  uploads-data:
+  static-data:
+
+networks:
+  internal:
