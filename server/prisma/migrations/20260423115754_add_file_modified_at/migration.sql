@@ -31,5 +31,8 @@ CREATE INDEX "models_created_by_id_idx" ON "models"("created_by_id");
 -- CreateIndex
 CREATE INDEX "models_created_at_idx" ON "models"("created_at");
 
+-- CreateTable
+ALTER TABLE "models" ADD COLUMN "file_modified_at" TIMESTAMP(3);
+
 -- CreateIndex
 CREATE INDEX "models_project_id_idx" ON "models"("project_id");
