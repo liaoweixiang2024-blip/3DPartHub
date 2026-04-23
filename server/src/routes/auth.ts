@@ -235,8 +235,14 @@ router.put("/api/auth/password", authMiddleware, async (req: AuthRequest, res: R
     return;
   }
   try {
-    const user = await prisma.user.findUnique({ where: { id: req.user!.userId } });
-    if (!user) { res.status(404).json({ detail: "用户不存在" }); return; }
+    const userId = req.user!.userId;
+    console.log(`[password] change request for user: ${userId}`);
+    const user = await prisma.user.findUnique({ where: { id: userId } });
+    if (!user) {
+      console.error(`[password] user not found: ${userId}`);
+      res.status(404).json({ detail: "用户不存在" });
+      return;
+    }
 
     if (await verifyPassword(newPassword, user.passwordHash)) {
       res.status(400).json({ detail: "新密码不能与当前密码相同" });

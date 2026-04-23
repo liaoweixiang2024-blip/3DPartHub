@@ -1,4 +1,4 @@
-import { Grid, GizmoHelper, GizmoViewport, Environment } from "@react-three/drei";
+import { Grid, GizmoHelper, GizmoViewport } from "@react-three/drei";
 
 interface SceneProps {
   showGrid: boolean;
@@ -13,7 +13,7 @@ export default function Scene({ showGrid, showAxis = true }: SceneProps) {
       <directionalLight position={[-8, 6, -8]} intensity={0.6} color="#b0c4de" />
       <directionalLight position={[0, -5, 10]} intensity={0.3} color="#e0e8f0" />
       <pointLight position={[0, 15, 0]} intensity={0.4} />
-      <Environment preset="city" background={false} />
+      <hemisphereLight args={["#b1e1ff", "#b97a20", 0.3]} />
 
       {showGrid && (
         <Grid

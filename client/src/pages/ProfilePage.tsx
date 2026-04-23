@@ -196,7 +196,7 @@ function PasswordChangeDialog({ open, onClose }: { open: boolean; onClose: () =>
                 <Icon name="close" size={20} />
               </button>
             </div>
-            <form onSubmit={handleSubmit} className="space-y-4">
+            <form onSubmit={handleSubmit} className="space-y-4" autoComplete="off">
               <div className="flex flex-col gap-1.5">
                 <label className="text-xs uppercase tracking-wider text-on-surface-variant">旧密码</label>
                 <input
@@ -205,6 +205,7 @@ function PasswordChangeDialog({ open, onClose }: { open: boolean; onClose: () =>
                   value={form.oldPassword}
                   onChange={handleChange}
                   required
+                  autoComplete="current-password"
                   className="w-full bg-surface-container-lowest text-on-surface border border-outline-variant/30 focus:border-primary px-3 py-2 text-sm rounded-sm outline-none"
                 />
               </div>
@@ -217,6 +218,7 @@ function PasswordChangeDialog({ open, onClose }: { open: boolean; onClose: () =>
                   onChange={handleChange}
                   required
                   minLength={8}
+                  autoComplete="new-password"
                   className="w-full bg-surface-container-lowest text-on-surface border border-outline-variant/30 focus:border-primary px-3 py-2 text-sm rounded-sm outline-none"
                 />
               </div>
@@ -228,6 +230,7 @@ function PasswordChangeDialog({ open, onClose }: { open: boolean; onClose: () =>
                   value={form.confirmPassword}
                   onChange={handleChange}
                   required
+                  autoComplete="new-password"
                   className="w-full bg-surface-container-lowest text-on-surface border border-outline-variant/30 focus:border-primary px-3 py-2 text-sm rounded-sm outline-none"
                 />
               </div>
