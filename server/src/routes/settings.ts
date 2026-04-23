@@ -471,6 +471,44 @@ router.get("/api/settings/public", async (_req, res: Response) => {
       auto_theme_enabled: all.auto_theme_enabled ?? false,
       auto_theme_dark_hour: all.auto_theme_dark_hour ?? 20,
       auto_theme_light_hour: all.auto_theme_light_hour ?? 8,
+      // 3D Material — default
+      mat_default_color: all.mat_default_color ?? "#c8cad0",
+      mat_default_metalness: all.mat_default_metalness ?? 0.5,
+      mat_default_roughness: all.mat_default_roughness ?? 0.25,
+      mat_default_envMapIntensity: all.mat_default_envMapIntensity ?? 1.5,
+      // 3D Material — metal
+      mat_metal_color: all.mat_metal_color ?? "#f0f0f4",
+      mat_metal_metalness: all.mat_metal_metalness ?? 1.0,
+      mat_metal_roughness: all.mat_metal_roughness ?? 0.05,
+      mat_metal_envMapIntensity: all.mat_metal_envMapIntensity ?? 2.0,
+      // 3D Material — plastic
+      mat_plastic_color: all.mat_plastic_color ?? "#4499ff",
+      mat_plastic_metalness: all.mat_plastic_metalness ?? 0.0,
+      mat_plastic_roughness: all.mat_plastic_roughness ?? 0.35,
+      mat_plastic_envMapIntensity: all.mat_plastic_envMapIntensity ?? 0.6,
+      // 3D Material — glass
+      mat_glass_color: all.mat_glass_color ?? "#ffffff",
+      mat_glass_metalness: all.mat_glass_metalness ?? 0.0,
+      mat_glass_roughness: all.mat_glass_roughness ?? 0.0,
+      mat_glass_envMapIntensity: all.mat_glass_envMapIntensity ?? 1.0,
+      mat_glass_transmission: all.mat_glass_transmission ?? 0.95,
+      mat_glass_ior: all.mat_glass_ior ?? 1.5,
+      mat_glass_thickness: all.mat_glass_thickness ?? 0.5,
+      // 3D Viewer lighting
+      viewer_exposure: all.viewer_exposure ?? 1.2,
+      viewer_ambient_intensity: all.viewer_ambient_intensity ?? 0.6,
+      viewer_main_light_intensity: all.viewer_main_light_intensity ?? 1.4,
+      viewer_fill_light_intensity: all.viewer_fill_light_intensity ?? 0.6,
+      viewer_hemisphere_intensity: all.viewer_hemisphere_intensity ?? 0.3,
+      viewer_bg_color: all.viewer_bg_color ?? "linear-gradient(180deg, #2a2a3e 0%, #1e2a42 50%, #162040 100%)",
+      // Share policy
+      share_default_expire_days: all.share_default_expire_days ?? 0,
+      share_max_expire_days: all.share_max_expire_days ?? 0,
+      share_default_download_limit: all.share_default_download_limit ?? 0,
+      share_max_download_limit: all.share_max_download_limit ?? 0,
+      share_allow_password: all.share_allow_password ?? true,
+      share_allow_custom_expiry: all.share_allow_custom_expiry ?? true,
+      share_allow_preview: all.share_allow_preview ?? true,
     };
     await cacheSet("cache:settings:public", result, TTL.SETTINGS_PUBLIC);
     res.json(result);

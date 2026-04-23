@@ -9,7 +9,6 @@ const ModelViewer = lazy(() => import("../components/3d/ModelViewer"));
 
 export default function SharePage() {
   const { token } = useParams<{ token: string }>();
-  useDocumentTitle(info ? `${info.modelName} - 分享预览` : "分享预览");
 
   const [info, setInfo] = useState<ShareInfo | null>(null);
   const [loading, setLoading] = useState(true);
@@ -19,6 +18,8 @@ export default function SharePage() {
   const [password, setPassword] = useState("");
   const [passwordError, setPasswordError] = useState("");
   const [downloading, setDownloading] = useState(false);
+
+  useDocumentTitle(info ? `${info.modelName} - 分享预览` : "分享预览");
 
   async function loadInfo() {
     if (!token) return;
@@ -170,11 +171,11 @@ export default function SharePage() {
         <span className="text-xs text-on-surface-variant/50">分享预览</span>
       </header>
 
-      {/* Content */}
-      <div className="flex-1 flex flex-col md:flex-row">
-        {/* 3D Preview */}
+      {/* Content — desktop: side-by-side, mobile: stacked scrollable */}
+      <div className="flex-1 flex flex-col md:flex-row md:overflow-hidden">
+        {/* 3D Preview — fixed height on mobile, flex-fill on desktop */}
         {info.allowPreview && info.gltfUrl && (
-          <div className="flex-1 min-h-[40vh] md:min-h-0 bg-surface-container relative">
+          <div className="h-[55vh] md:h-auto md:flex-1 bg-surface-container relative shrink-0">
             <Suspense fallback={
               <div className="w-full h-full flex items-center justify-center">
                 <Icon name="view_in_ar" size={48} className="text-on-surface-variant/20 animate-pulse" />
@@ -197,7 +198,7 @@ export default function SharePage() {
         )}
 
         {/* Info panel */}
-        <div className="w-full md:w-80 bg-surface-container-low border-t md:border-t-0 md:border-l border-outline-variant/10 p-5 space-y-4">
+        <div className="w-full md:w-80 bg-surface-container-low border-t md:border-t-0 md:border-l border-outline-variant/10 p-5 space-y-4 shrink-0">
           <div>
             <h1 className="text-lg font-bold text-on-surface">{info.modelName}</h1>
             <div className="flex flex-wrap gap-3 mt-2 text-xs text-on-surface-variant">

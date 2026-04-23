@@ -38,6 +38,44 @@ export interface SystemSettings {
   auto_theme_enabled: boolean;
   auto_theme_dark_hour: number;
   auto_theme_light_hour: number;
+  // 3D Material — default
+  mat_default_color: string;
+  mat_default_metalness: number;
+  mat_default_roughness: number;
+  mat_default_envMapIntensity: number;
+  // 3D Material — metal
+  mat_metal_color: string;
+  mat_metal_metalness: number;
+  mat_metal_roughness: number;
+  mat_metal_envMapIntensity: number;
+  // 3D Material — plastic
+  mat_plastic_color: string;
+  mat_plastic_metalness: number;
+  mat_plastic_roughness: number;
+  mat_plastic_envMapIntensity: number;
+  // 3D Material — glass
+  mat_glass_color: string;
+  mat_glass_metalness: number;
+  mat_glass_roughness: number;
+  mat_glass_envMapIntensity: number;
+  mat_glass_transmission: number;
+  mat_glass_ior: number;
+  mat_glass_thickness: number;
+  // 3D Viewer lighting
+  viewer_exposure: number;
+  viewer_ambient_intensity: number;
+  viewer_main_light_intensity: number;
+  viewer_fill_light_intensity: number;
+  viewer_hemisphere_intensity: number;
+  viewer_bg_color: string;
+  // Share policy
+  share_default_expire_days: number;
+  share_max_expire_days: number;
+  share_default_download_limit: number;
+  share_max_download_limit: number;
+  share_allow_password: boolean;
+  share_allow_custom_expiry: boolean;
+  share_allow_preview: boolean;
 }
 
 export interface BackupStats {

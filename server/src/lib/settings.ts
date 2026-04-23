@@ -40,6 +40,45 @@ const SETTINGS_SCHEMA: SettingDef[] = [
   { key: "auto_theme_enabled", defaultValue: false },
   { key: "auto_theme_dark_hour", defaultValue: 20 },
   { key: "auto_theme_light_hour", defaultValue: 8 },
+
+  // 3D Material presets — default
+  { key: "mat_default_color", defaultValue: "#c8cad0" },
+  { key: "mat_default_metalness", defaultValue: 0.5 },
+  { key: "mat_default_roughness", defaultValue: 0.25 },
+  { key: "mat_default_envMapIntensity", defaultValue: 1.5 },
+  // 3D Material presets — metal
+  { key: "mat_metal_color", defaultValue: "#f0f0f4" },
+  { key: "mat_metal_metalness", defaultValue: 1.0 },
+  { key: "mat_metal_roughness", defaultValue: 0.05 },
+  { key: "mat_metal_envMapIntensity", defaultValue: 2.0 },
+  // 3D Material presets — plastic
+  { key: "mat_plastic_color", defaultValue: "#4499ff" },
+  { key: "mat_plastic_metalness", defaultValue: 0.0 },
+  { key: "mat_plastic_roughness", defaultValue: 0.35 },
+  { key: "mat_plastic_envMapIntensity", defaultValue: 0.6 },
+  // 3D Material presets — glass
+  { key: "mat_glass_color", defaultValue: "#ffffff" },
+  { key: "mat_glass_metalness", defaultValue: 0.0 },
+  { key: "mat_glass_roughness", defaultValue: 0.0 },
+  { key: "mat_glass_envMapIntensity", defaultValue: 1.0 },
+  { key: "mat_glass_transmission", defaultValue: 0.95 },
+  { key: "mat_glass_ior", defaultValue: 1.5 },
+  { key: "mat_glass_thickness", defaultValue: 0.5 },
+  // 3D Viewer lighting
+  { key: "viewer_exposure", defaultValue: 1.2 },
+  { key: "viewer_ambient_intensity", defaultValue: 0.6 },
+  { key: "viewer_main_light_intensity", defaultValue: 1.4 },
+  { key: "viewer_fill_light_intensity", defaultValue: 0.6 },
+  { key: "viewer_hemisphere_intensity", defaultValue: 0.3 },
+  { key: "viewer_bg_color", defaultValue: "linear-gradient(180deg, #2a2a3e 0%, #1e2a42 50%, #162040 100%)" },
+  // Share policy
+  { key: "share_default_expire_days", defaultValue: 0 },
+  { key: "share_max_expire_days", defaultValue: 0 },
+  { key: "share_default_download_limit", defaultValue: 0 },
+  { key: "share_max_download_limit", defaultValue: 0 },
+  { key: "share_allow_password", defaultValue: true },
+  { key: "share_allow_custom_expiry", defaultValue: true },
+  { key: "share_allow_preview", defaultValue: true },
 ];
 
 const DEFAULTS: Record<string, unknown> = {};

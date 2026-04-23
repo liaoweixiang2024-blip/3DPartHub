@@ -1,5 +1,6 @@
 import { lazy, Suspense, useEffect } from "react";
 import * as THREE from "three";
+import { get3DMaterialConfig } from "../../lib/publicSettings";
 
 const Canvas = lazy(() =>
   import("@react-three/fiber").then((m) => ({ default: m.Canvas }))
@@ -26,6 +27,7 @@ interface ModelViewerProps {
   clipPosition: number;
   materialPreset: "metal" | "plastic" | "glass" | "default";
   showAxis?: boolean;
+  viewportBottom?: number;
   onLoaded?: () => void;
   onProgress?: (progress: number) => void;
 }
@@ -53,18 +55,21 @@ export default function ModelViewer({
   clipPosition,
   materialPreset,
   showAxis = true,
+  viewportBottom,
   onLoaded,
 }: ModelViewerProps) {
+  const config = get3DMaterialConfig().viewer;
+
   return (
     <Canvas
-      gl={{ preserveDrawingBuffer: true, antialias: true, toneMapping: THREE.ACESFilmicToneMapping, toneMappingExposure: 1.5 }}
+      gl={{ preserveDrawingBuffer: true, antialias: true, toneMapping: THREE.ACESFilmicToneMapping, toneMappingExposure: config.exposure, localClippingEnabled: true }}
       camera={{ position: [5, 3, 5], fov: 45, near: 0.01, far: 100000 }}
       dpr={[1, 2]}
-      style={{ background: "linear-gradient(180deg, #2a2a3e 0%, #1e2a42 50%, #162040 100%)" }}
+      style={{ background: config.bgColor }}
     >
       <Suspense fallback={null}>
         <Scene showGrid={showGrid} showAxis={showAxis} />
-        <CameraController preset={cameraPreset} />
+        <CameraController preset={cameraPreset} viewportBottom={viewportBottom} />
         <OrbitControls
           enableDamping
           dampingFactor={0.15}

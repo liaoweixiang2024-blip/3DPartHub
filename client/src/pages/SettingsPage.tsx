@@ -50,6 +50,38 @@ const DEFAULT_SETTINGS: SystemSettings = {
   auto_theme_enabled: false,
   auto_theme_dark_hour: 20,
   auto_theme_light_hour: 8,
+  mat_default_color: "#c8cad0",
+  mat_default_metalness: 0.5,
+  mat_default_roughness: 0.25,
+  mat_default_envMapIntensity: 1.5,
+  mat_metal_color: "#f0f0f4",
+  mat_metal_metalness: 1.0,
+  mat_metal_roughness: 0.05,
+  mat_metal_envMapIntensity: 2.0,
+  mat_plastic_color: "#4499ff",
+  mat_plastic_metalness: 0.0,
+  mat_plastic_roughness: 0.35,
+  mat_plastic_envMapIntensity: 0.6,
+  mat_glass_color: "#ffffff",
+  mat_glass_metalness: 0.0,
+  mat_glass_roughness: 0.0,
+  mat_glass_envMapIntensity: 1.0,
+  mat_glass_transmission: 0.95,
+  mat_glass_ior: 1.5,
+  mat_glass_thickness: 0.5,
+  viewer_exposure: 1.2,
+  viewer_ambient_intensity: 0.6,
+  viewer_main_light_intensity: 1.4,
+  viewer_fill_light_intensity: 0.6,
+  viewer_hemisphere_intensity: 0.3,
+  viewer_bg_color: "linear-gradient(180deg, #2a2a3e 0%, #1e2a42 50%, #162040 100%)",
+  share_default_expire_days: 0,
+  share_max_expire_days: 0,
+  share_default_download_limit: 0,
+  share_max_download_limit: 0,
+  share_allow_password: true,
+  share_allow_custom_expiry: true,
+  share_allow_preview: true,
 };
 
 interface SettingGroup {
@@ -59,8 +91,11 @@ interface SettingGroup {
     key: keyof SystemSettings;
     label: string;
     desc: string;
-    type: 'switch' | 'number' | 'text' | 'image' | 'textarea' | 'select' | 'color';
+    type: 'switch' | 'number' | 'text' | 'image' | 'textarea' | 'select' | 'color' | 'range';
     options?: { value: string; label: string }[];
+    step?: number;
+    min?: number;
+    max?: number;
   }[];
 }
 
@@ -79,8 +114,6 @@ const GROUPS: SettingGroup[] = [
     icon: 'tune',
     items: [
       { key: 'allow_comments', label: '允许评论', desc: '用户可以在模型详情页发表评论', type: 'switch' },
-      { key: 'show_watermark', label: '3D 水印', desc: '在 3D 模型预览中显示水印标识', type: 'switch' },
-      { key: 'watermark_image', label: '水印图片', desc: '上传水印图片（PNG/SVG），建议使用透明背景', type: 'image' },
     ],
   },
   {
@@ -141,6 +174,50 @@ const GROUPS: SettingGroup[] = [
     icon: 'download',
     items: [
       { key: 'daily_download_limit', label: '每日下载上限', desc: '每个用户每天最多下载次数，0 表示不限制', type: 'number' },
+    ],
+  },
+  {
+    title: '分享设置',
+    icon: 'share',
+    items: [
+      { key: 'share_default_expire_days', label: '默认有效期', desc: '用户创建分享时的默认有效期天数，0 表示永久有效', type: 'number' },
+      { key: 'share_max_expire_days', label: '最大有效期', desc: '分享链接最大有效期天数，0 表示不限制', type: 'number' },
+      { key: 'share_default_download_limit', label: '默认下载上限', desc: '用户创建分享时的默认下载次数限制，0 表示不限制', type: 'number' },
+      { key: 'share_max_download_limit', label: '最大下载上限', desc: '分享链接最大下载次数，0 表示不限制', type: 'number' },
+      { key: 'share_allow_password', label: '允许设置密码', desc: '用户创建分享时是否可以设置访问密码', type: 'switch' },
+      { key: 'share_allow_custom_expiry', label: '允许自定义有效期', desc: '用户创建分享时是否可以自行设置有效期', type: 'switch' },
+      { key: 'share_allow_preview', label: '默认允许预览', desc: '新创建的分享链接默认是否允许 3D 预览', type: 'switch' },
+    ],
+  },
+  {
+    title: '3D 预览设置',
+    icon: 'view_in_ar',
+    items: [
+      { key: 'viewer_bg_color', label: '预览背景色', desc: '支持 CSS 渐变，如 linear-gradient(180deg, #1a1a2e, #16213e)', type: 'text' },
+      { key: 'show_watermark', label: '3D 水印', desc: '在 3D 模型预览中显示水印标识', type: 'switch' },
+      { key: 'watermark_image', label: '水印图片', desc: '上传水印图片（PNG/SVG），建议使用透明背景', type: 'image' },
+      { key: 'viewer_exposure', label: '曝光度', desc: '色调映射曝光值，越高越亮', type: 'range', min: 0.2, max: 3.0, step: 0.1 },
+      { key: 'viewer_ambient_intensity', label: '环境光', desc: '环境光强度', type: 'range', min: 0, max: 2.0, step: 0.1 },
+      { key: 'viewer_main_light_intensity', label: '主光源', desc: '主方向光强度', type: 'range', min: 0, max: 3.0, step: 0.1 },
+      { key: 'viewer_fill_light_intensity', label: '补光', desc: '补光方向光强度', type: 'range', min: 0, max: 2.0, step: 0.1 },
+      { key: 'viewer_hemisphere_intensity', label: '半球光', desc: '天空/地面双色光强度', type: 'range', min: 0, max: 2.0, step: 0.1 },
+      { key: 'mat_default_color', label: '默认材质 · 颜色', desc: '默认材质的基础颜色', type: 'color' },
+      { key: 'mat_default_metalness', label: '默认材质 · 金属度', desc: '0 = 非金属，1 = 全金属', type: 'range', min: 0, max: 1.0, step: 0.05 },
+      { key: 'mat_default_roughness', label: '默认材质 · 粗糙度', desc: '0 = 镜面，1 = 完全粗糙', type: 'range', min: 0, max: 1.0, step: 0.05 },
+      { key: 'mat_default_envMapIntensity', label: '默认材质 · 环境反射', desc: '环境贴图反射强度', type: 'range', min: 0, max: 3.0, step: 0.1 },
+      { key: 'mat_metal_color', label: '金属材质 · 颜色', desc: '金属材质的基础颜色', type: 'color' },
+      { key: 'mat_metal_metalness', label: '金属材质 · 金属度', desc: '1.0 = 全金属', type: 'range', min: 0, max: 1.0, step: 0.05 },
+      { key: 'mat_metal_roughness', label: '金属材质 · 粗糙度', desc: '0 = 亮面，1 = 哑光', type: 'range', min: 0, max: 1.0, step: 0.05 },
+      { key: 'mat_metal_envMapIntensity', label: '金属材质 · 环境反射', desc: '环境贴图反射强度', type: 'range', min: 0, max: 3.0, step: 0.1 },
+      { key: 'mat_plastic_color', label: '塑料材质 · 颜色', desc: '塑料材质的基础颜色', type: 'color' },
+      { key: 'mat_plastic_metalness', label: '塑料材质 · 金属度', desc: '0 = 非金属', type: 'range', min: 0, max: 1.0, step: 0.05 },
+      { key: 'mat_plastic_roughness', label: '塑料材质 · 粗糙度', desc: '表面粗糙程度', type: 'range', min: 0, max: 1.0, step: 0.05 },
+      { key: 'mat_plastic_envMapIntensity', label: '塑料材质 · 环境反射', desc: '环境贴图反射强度', type: 'range', min: 0, max: 3.0, step: 0.1 },
+      { key: 'mat_glass_color', label: '玻璃材质 · 颜色', desc: '玻璃材质的基础颜色', type: 'color' },
+      { key: 'mat_glass_roughness', label: '玻璃材质 · 粗糙度', desc: '0 = 完全透明', type: 'range', min: 0, max: 1.0, step: 0.05 },
+      { key: 'mat_glass_transmission', label: '玻璃材质 · 透射率', desc: '光线透过率，1 = 全透', type: 'range', min: 0, max: 1.0, step: 0.05 },
+      { key: 'mat_glass_ior', label: '玻璃材质 · 折射率', desc: '折射率 (IOR)，玻璃约 1.5', type: 'range', min: 1.0, max: 2.5, step: 0.1 },
+      { key: 'mat_glass_thickness', label: '玻璃材质 · 厚度', desc: '影响折射效果', type: 'range', min: 0, max: 2.0, step: 0.1 },
     ],
   },
   {
@@ -848,10 +925,23 @@ function Content() {
                         type="number"
                         min={0}
                         value={settings[item.key] as number}
-                        onChange={(e) => updateSetting(item.key, Math.max(0, parseInt(e.target.value) || 0))}
+                        onChange={(e) => updateSetting(item.key, Math.max(0, parseFloat(e.target.value) || 0))}
                         className="w-20 bg-surface-container-lowest text-on-surface text-sm text-center rounded-md px-3 py-2 border border-outline-variant/20 outline-none focus:border-primary"
                       />
                       {item.key === 'daily_download_limit' && <span className="text-xs text-on-surface-variant">次/天</span>}
+                    </div>
+                  ) : item.type === 'range' ? (
+                    <div className="flex items-center gap-3 shrink-0">
+                      <input
+                        type="range"
+                        min={item.min ?? 0}
+                        max={item.max ?? 1}
+                        step={item.step ?? 0.01}
+                        value={settings[item.key] as number}
+                        onChange={(e) => updateSetting(item.key, parseFloat(e.target.value))}
+                        className="w-28 accent-[var(--color-primary-container)]"
+                      />
+                      <span className="text-xs font-mono text-on-surface w-10 text-right">{(settings[item.key] as number).toFixed(item.step && item.step < 0.1 ? 2 : item.step && item.step < 1 ? 1 : 0)}</span>
                     </div>
                   ) : item.type === 'textarea' ? (
                     <textarea

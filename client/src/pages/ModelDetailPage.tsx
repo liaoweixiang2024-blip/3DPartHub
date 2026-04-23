@@ -60,7 +60,7 @@ const VIEW_MODES: { key: ViewMode; label: string; icon: string }[] = [
 const CAMERA_ANGLES: { key: CameraPreset; label: string; icon: string }[] = [
   { key: "front", label: "正视", icon: "square" },
   { key: "side", label: "侧视", icon: "view_sidebar" },
-  { key: "iso", label: "等轴测", icon: "view_in_ar" },
+  { key: "iso", label: "等轴测", icon: "box_icon" },
   { key: "top", label: "俯视", icon: "crop_free" },
 ];
 
@@ -648,173 +648,6 @@ function DesktopDetail({
   );
 }
 
-function MobileDetail({
-  modelData,
-  expandedSpecs,
-  onToggleSpecs,
-  isFav,
-  isAdmin,
-  onToggleFav,
-  onEdit,
-  onShare,
-  onBack,
-  categoryBreadcrumb,
-  onDownload,
-}: {
-  modelData: ModelInfo;
-  expandedSpecs: boolean;
-  onToggleSpecs: () => void;
-  isFav: boolean;
-  isAdmin?: boolean;
-  onToggleFav: () => void;
-  onEdit?: () => void;
-  onShare: () => void;
-  onBack: () => void;
-  categoryBreadcrumb: { id: string; name: string }[];
-  onDownload: (id: string, format?: string) => void;
-}) {
-  return (
-    <div className="flex-1 overflow-y-auto bg-surface scrollbar-hidden">
-      <div className="p-4 space-y-5 pb-20">
-        <div>
-          <div className="flex items-center justify-between mb-3">
-            <button onClick={onBack} className="w-9 h-9 flex items-center justify-center rounded-sm text-on-surface-variant hover:bg-surface-container transition-colors">
-              <Icon name="arrow_back" size={24} />
-            </button>
-            <span className="text-sm font-medium text-on-surface font-headline truncate mx-2">{modelData.name}</span>
-            <div className="flex items-center gap-1">
-              {isAdmin && onEdit && (
-                <button onClick={onEdit} className="w-9 h-9 flex items-center justify-center rounded-sm text-on-surface-variant hover:text-primary hover:bg-surface-container transition-colors">
-                  <Icon name="settings" size={20} />
-                </button>
-              )}
-              <button onClick={onShare} className="w-9 h-9 flex items-center justify-center rounded-sm text-on-surface-variant hover:text-primary hover:bg-surface-container transition-colors">
-                <Icon name="share" size={20} />
-              </button>
-              <motion.button whileTap={{ scale: 0.9 }} onClick={onToggleFav} className="w-9 h-9 flex items-center justify-center rounded-sm text-on-surface-variant hover:bg-surface-container transition-colors">
-                <Icon name="star" size={20} className={`${isFav ? "text-primary" : ""}`} fill={isFav} />
-              </motion.button>
-            </div>
-          </div>
-          <div className="flex items-center gap-1.5 text-[11px] text-on-surface-variant mb-2">
-            <Link to="/" className="hover:text-primary transition-colors">模型库</Link>
-            {categoryBreadcrumb.map((cat, i) => (
-              <span key={cat.id} className="flex items-center gap-1.5">
-                <Icon name="chevron_right" size={12} className="text-on-surface-variant/40" />
-                <Link
-                  to={`/?category=${cat.id}`}
-                  className={`hover:text-primary transition-colors ${i === categoryBreadcrumb.length - 1 ? "text-primary" : ""}`}
-                >
-                  {cat.name}
-                </Link>
-              </span>
-            ))}
-          </div>
-          <p className="text-sm text-on-surface-variant font-light">{modelData.subtitle}</p>
-        </div>
-
-        <div className="rounded-sm border border-outline-variant/10 overflow-hidden">
-          <button onClick={onToggleSpecs} className="w-full flex items-center justify-between px-4 py-3 bg-surface-container-low">
-            <span className="text-[11px] uppercase tracking-widest text-on-surface-variant font-medium">技术参数</span>
-            <motion.span
-              animate={{ rotate: expandedSpecs ? 180 : 0 }}
-              transition={{ duration: 0.2 }}
-            >
-              <Icon name="expand_more" size={20} className="text-on-surface-variant" />
-            </motion.span>
-          </button>
-          <AnimatePresence>
-            {expandedSpecs && (
-              <motion.div initial={{ height: 0 }} animate={{ height: "auto" }} exit={{ height: 0 }} className="overflow-hidden">
-                <SpecTable specs={modelData.specs} />
-              </motion.div>
-            )}
-          </AnimatePresence>
-        </div>
-
-        {/* Variant selector - mobile */}
-        {modelData.variants && modelData.variants.length > 0 && (
-          <div>
-            <div className="text-[11px] uppercase tracking-widest text-on-surface-variant font-medium mb-3">
-              历史版本 ({modelData.variants.length})
-            </div>
-            <div className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1">
-              {modelData.variants.map((v) => {
-                const isCurrent = v.model_id === modelData.id;
-                return isCurrent ? (
-                  <div key={v.model_id} className="shrink-0">
-                    <div className="w-16 h-16 rounded-md border-2 border-primary bg-surface-container-lowest overflow-hidden relative">
-                      <ModelThumbnail src={v.thumbnail_url} alt="" className="w-full h-full object-cover" />
-                      <div className="absolute bottom-0 inset-x-0 bg-primary/90 text-on-primary text-[8px] text-center py-0.5">当前</div>
-                      {v.is_primary && <div className="absolute top-0.5 left-0.5 bg-primary/80 text-on-primary text-[6px] px-0.5 rounded-sm">主</div>}
-                    </div>
-                    <p className="text-[9px] text-primary mt-0.5 text-center w-16 truncate" title={v.original_name}>{v.original_name.replace(/\.[^.]+$/, "")}</p>
-                    {v.file_modified_at && <p className="text-[8px] text-on-surface-variant/40 text-center">{new Date(v.file_modified_at).toLocaleDateString("zh-CN")}</p>}
-                  </div>
-                ) : (
-                  <Link key={v.model_id} to={`/model/${v.model_id}`} className="shrink-0">
-                    <div className="w-16 h-16 rounded-md border border-outline-variant/30 bg-surface-container-lowest overflow-hidden relative">
-                      <ModelThumbnail src={v.thumbnail_url} alt="" className="w-full h-full object-cover" />
-                      {v.is_primary && <div className="absolute top-0.5 left-0.5 bg-primary/80 text-on-primary text-[6px] px-0.5 rounded-sm">主</div>}
-                    </div>
-                    <p className="text-[9px] text-on-surface-variant mt-0.5 text-center w-16 truncate" title={v.original_name}>{v.original_name.replace(/\.[^.]+$/, "")}</p>
-                    {v.file_modified_at && <p className="text-[8px] text-on-surface-variant/40 text-center">{new Date(v.file_modified_at).toLocaleDateString("zh-CN")}</p>}
-                  </Link>
-                );
-              })}
-            </div>
-          </div>
-        )}
-
-        <div>
-          <div className="text-[11px] uppercase tracking-widest text-on-surface-variant font-medium mb-3">下载文件</div>
-          <div className="grid grid-cols-2 gap-2">
-            {modelData.downloads.map((file) => (
-              <button key={file.format} onClick={() => onDownload(modelData.id, file.downloadFormat === "original" ? "original" : undefined)} className="flex flex-col items-center gap-1.5 p-3 rounded-sm bg-surface-container-low border border-outline-variant/10 hover:bg-surface-container transition-colors active:scale-95">
-                <Icon name="download" size={24} className="text-primary-container" fill />
-                <span className="text-xs font-medium text-on-surface font-mono">{file.format}</span>
-                <span className="text-[11px] text-on-surface-variant">{file.size}</span>
-              </button>
-            ))}
-          </div>
-          <button onClick={() => onDownload(modelData.id, 'original')} className="w-full mt-3 py-2.5 rounded-sm bg-primary-container text-on-primary font-medium text-sm hover:bg-primary-container/90 transition-colors flex items-center justify-center gap-2">
-            <Icon name="download" size={20} fill />
-            下载模型
-          </button>
-          {modelData.drawingUrl && (
-            <a href={modelData.drawingUrl} target="_blank" rel="noreferrer" className="w-full mt-2 py-2.5 rounded-sm border border-outline-variant/30 text-on-surface-variant font-medium text-sm hover:text-primary hover:border-primary/50 transition-colors flex items-center justify-center gap-2">
-              <Icon name="description" size={20} />
-              查看产品图纸
-            </a>
-          )}
-        </div>
-
-        <div className="mt-4 pt-4 border-t border-outline-variant/20 space-y-3">
-          <Link to="/support" className="flex items-center gap-3 p-3 rounded-sm bg-surface-container-high hover:bg-surface-container-highest transition-colors group">
-            <div className="w-8 h-8 rounded-full bg-primary-container/15 flex items-center justify-center shrink-0">
-              <Icon name="support_agent" size={16} className="text-primary" />
-            </div>
-            <div className="flex-1 min-w-0">
-              <p className="text-xs font-medium text-on-surface">需要非标定制？</p>
-              <p className="text-[11px] text-on-surface-variant">联系工程师获取专业支持</p>
-            </div>
-            <Icon name="chevron_right" size={16} className="text-on-surface-variant/40" />
-          </Link>
-
-          <div className="pt-1 space-y-1">
-            <p className="text-[11px] text-on-surface-variant/50 leading-relaxed">
-              本平台所有 3D 模型仅供参考与模拟验证，不作为生产加工依据。产品持续迭代更新，请以实物为准。
-            </p>
-            <p className="text-[11px] text-on-surface-variant/30">
-              © {new Date().getFullYear()} {getSiteTitle()}
-            </p>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
 export default function ModelDetailPage() {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -831,7 +664,10 @@ export default function ModelDetailPage() {
   const [clipPosition, setClipPosition] = useState(0);
   const [clipDirection, setClipDirection] = useState<"x" | "y" | "z">("x");
   const [showAxis, setShowAxis] = useState(true);
+  const [sheetExpanded, setSheetExpanded] = useState(false);
+  const [showMoreTools, setShowMoreTools] = useState(false);
   const mobileViewerRef = useRef<HTMLDivElement>(null);
+  const dragStartY = useRef(0);
   const [settingThumb, setSettingThumb] = useState(false);
   const [watermarkState, setWatermarkState] = useState<{ show: boolean; image: string }>({ show: false, image: "" });
   const [loginPromptOpen, setLoginPromptOpen] = useState(false);
@@ -1119,133 +955,347 @@ export default function ModelDetailPage() {
     <div className="flex flex-col h-dvh bg-surface">
       <TopNav compact onMenuToggle={() => setNavOpen((prev) => !prev)} />
       <MobileNavDrawer open={navOpen} onClose={() => setNavOpen(false)} />
-      <div ref={mobileViewerRef} className="relative h-[50vh] min-h-[280px] max-h-[500px] bg-surface-container overflow-hidden">
-        <LoadingOverlay />
-        <Suspense fallback={<div className="w-full h-full flex items-center justify-center"><Icon name="view_in_ar" size={64} className="text-on-surface-variant/15 animate-pulse" /></div>}>
-          <ModelViewer
-            modelUrl={modelData.modelUrl}
-            viewMode={activeView}
-            cameraPreset={activeCamera}
-            showDimensions={showDimensions}
-            showGrid={false}
-            clipEnabled={clipEnabled}
-            clipDirection={clipDirection}
-            clipPosition={clipPosition}
-            materialPreset={materialPreset}
-            showAxis={showAxis}
-          />
-        </Suspense>
-        <div className="absolute top-2 left-1/2 -translate-x-1/2 micro-glass rounded-sm p-0.5 flex items-center gap-px">
-          {VIEW_MODES.map((mode) => (
+
+      {/* Main area: 3D viewer + bottom sheet */}
+      <div className="flex-1 min-h-0 relative">
+        {/* 3D Viewer — fills entire area */}
+        <div ref={mobileViewerRef} className="absolute inset-0 bg-surface-container overflow-hidden rounded-b-2xl" style={{ bottom: '19dvh' }} onClick={() => { if (sheetExpanded) setSheetExpanded(false); }}>
+          <LoadingOverlay />
+          <Suspense fallback={<div className="w-full h-full flex items-center justify-center"><Icon name="view_in_ar" size={64} className="text-on-surface-variant/15 animate-pulse" /></div>}>
+            <ModelViewer
+              modelUrl={modelData.modelUrl}
+              viewMode={activeView}
+              cameraPreset={activeCamera}
+              showDimensions={showDimensions}
+              showGrid={false}
+              clipEnabled={clipEnabled}
+              clipDirection={clipDirection}
+              clipPosition={clipPosition}
+              materialPreset={materialPreset}
+              showAxis={showAxis}
+            />
+          </Suspense>
+
+          {/* Back button — hidden when sheet is expanded */}
+          {!sheetExpanded && (
             <button
-              key={mode.key}
-              onClick={() => setActiveView(mode.key)}
-              title={mode.label}
-              className={`p-1.5 text-on-surface-variant hover:text-primary transition-colors rounded-sm ${
-                activeView === mode.key ? "text-primary bg-primary-container/10" : ""
-              }`}
+              onClick={() => navigate(-1)}
+              className="absolute top-2 left-2 z-40 w-8 h-8 flex items-center justify-center rounded-full micro-glass text-on-surface-variant hover:text-on-surface active:scale-90 transition-all"
             >
-              <Icon name={mode.icon} size={14} />
+              <Icon name="arrow_back" size={18} />
             </button>
-          ))}
-          <div className="w-px h-3 bg-white/10 mx-px" />
-          <Tooltip text="尺寸标注" delay={600}>
-            <button onClick={() => setShowDimensions(!showDimensions)} className={`p-1.5 transition-colors rounded-sm ${showDimensions ? "text-primary bg-primary-container/10" : "text-on-surface-variant hover:text-primary"}`}>
-              <Icon name="straighten" size={14} />
-            </button>
-          </Tooltip>
-          <Tooltip text="剖面查看" delay={600}>
-            <button onClick={() => setClipEnabled(!clipEnabled)} className={`p-1.5 transition-colors rounded-sm ${clipEnabled ? "text-primary bg-primary-container/10" : "text-on-surface-variant hover:text-primary"}`}>
-              <Icon name="content_cut" size={14} />
-            </button>
-          </Tooltip>
-          <Tooltip text="坐标轴" delay={600}>
-            <button onClick={() => setShowAxis(!showAxis)} className={`p-1.5 transition-colors rounded-sm ${showAxis ? "text-primary bg-primary-container/10" : "text-on-surface-variant hover:text-primary"}`}>
-              <Icon name="3d_rotation" size={14} />
-            </button>
-          </Tooltip>
-          <Tooltip text="截图" delay={600}>
-            <button onClick={handleScreenshot} className="p-1.5 text-on-surface-variant hover:text-primary transition-colors">
-              <Icon name="photo_camera" size={14} />
-            </button>
-          </Tooltip>
-          {useAuthStore.getState().user?.role === "ADMIN" && (
-          <Tooltip text="设为预览图" delay={600}>
-            <button onClick={handleSetThumbnail} disabled={settingThumb} className={`p-1.5 transition-colors ${settingThumb ? "text-primary animate-pulse" : "text-on-surface-variant hover:text-primary"}`}>
-              <Icon name="wallpaper" size={14} />
-            </button>
-          </Tooltip>
           )}
-          <Tooltip text="全屏" delay={600}>
-            <button onClick={handleFullscreen} className="p-1.5 text-on-surface-variant hover:text-primary transition-colors">
-              <Icon name="fullscreen" size={14} />
-            </button>
-          </Tooltip>
-        </div>
-        <div className="absolute bottom-2 left-1/2 -translate-x-1/2 micro-glass rounded-sm p-0.5 flex items-center gap-px">
-          {CAMERA_ANGLES.map((angle) => (
-            <button
-              key={angle.key}
-              onClick={() => setActiveCamera(angle.key)}
-              title={angle.label}
-              className={`p-1.5 text-on-surface-variant hover:text-primary transition-colors rounded-sm ${
-                activeCamera === angle.key ? "text-primary bg-primary-container/10" : ""
-              }`}
-            >
-              <Icon name={angle.icon} size={14} />
-            </button>
-          ))}
-        </div>
-        {clipEnabled && (
-          <div className="absolute bottom-12 left-1/2 -translate-x-1/2 micro-glass rounded-sm p-2 flex flex-col gap-1.5 min-w-[140px]">
-            <div className="flex gap-1">
-              {(["x", "y", "z"] as const).map((d) => (
+
+          {/* Unified toolbar — right side */}
+          <div className="absolute right-2 top-1/2 -translate-y-1/2 z-10">
+            <div className="micro-glass rounded-sm p-0.5 flex flex-col gap-px">
+              {VIEW_MODES.filter(m => m.key !== "explode").map((mode) => (
                 <button
-                  key={d}
-                  onClick={() => setClipDirection(d)}
-                  className={`flex-1 text-[10px] py-0.5 rounded-sm transition-colors ${
-                    clipDirection === d ? "bg-primary-container/30 text-primary font-bold" : "text-on-surface-variant hover:text-on-surface"
+                  key={mode.key}
+                  onClick={() => setActiveView(mode.key)}
+                  title={mode.label}
+                  className={`p-1.5 text-on-surface-variant hover:text-primary transition-colors rounded-sm ${
+                    activeView === mode.key ? "text-primary bg-primary-container/10" : ""
                   }`}
                 >
-                  {d.toUpperCase()}
+                  <Icon name={mode.icon} size={14} />
                 </button>
               ))}
+              <div className="w-4 h-px bg-white/10 mx-auto" />
+              {CAMERA_ANGLES.filter(a => a.key === "front" || a.key === "iso").map((angle) => (
+                <button
+                  key={angle.key}
+                  onClick={() => setActiveCamera(angle.key)}
+                  title={angle.label}
+                  className={`p-1.5 text-on-surface-variant hover:text-primary transition-colors rounded-sm ${
+                    activeCamera === angle.key ? "text-primary bg-primary-container/10" : ""
+                  }`}
+                >
+                  <Icon name={angle.icon} size={14} />
+                </button>
+              ))}
+              <div className="w-4 h-px bg-white/10 mx-auto" />
+              <button
+                onClick={() => setShowMoreTools(!showMoreTools)}
+                title="更多"
+                className={`p-1.5 text-on-surface-variant hover:text-primary transition-colors rounded-sm ${showMoreTools ? "text-primary bg-primary-container/10" : ""}`}
+              >
+                <Icon name="more_horiz" size={14} />
+              </button>
             </div>
-            <input
-              type="range"
-              min={-2}
-              max={2}
-              step={0.01}
-              value={clipPosition}
-              onChange={(e) => setClipPosition(parseFloat(e.target.value))}
-              className="w-full accent-primary-container"
-            />
+            {showMoreTools && (
+              <>
+                <div className="fixed inset-0 z-10" onClick={() => setShowMoreTools(false)} />
+                <div className="absolute top-0 right-full mr-1 micro-glass rounded-sm p-0.5 flex flex-col gap-px z-20">
+                  <button onClick={() => { setActiveView("explode"); }} className={`p-1.5 transition-colors rounded-sm ${activeView === "explode" ? "text-primary bg-primary-container/10" : "text-on-surface-variant hover:text-primary"}`}>
+                    <Icon name={VIEW_MODES[3].icon} size={14} />
+                  </button>
+                  {CAMERA_ANGLES.filter(a => a.key === "side" || a.key === "top").map((angle) => (
+                    <button key={angle.key} onClick={() => { setActiveCamera(angle.key); }} className={`p-1.5 transition-colors rounded-sm ${activeCamera === angle.key ? "text-primary bg-primary-container/10" : "text-on-surface-variant hover:text-primary"}`}>
+                      <Icon name={angle.icon} size={14} />
+                    </button>
+                  ))}
+                  <div className="w-4 h-px bg-white/10 mx-auto" />
+                  <button onClick={() => { setShowDimensions(!showDimensions); }} className={`p-1.5 transition-colors rounded-sm ${showDimensions ? "text-primary bg-primary-container/10" : "text-on-surface-variant hover:text-primary"}`}>
+                    <Icon name="straighten" size={14} />
+                  </button>
+                  <button onClick={() => { setClipEnabled(!clipEnabled); }} className={`p-1.5 transition-colors rounded-sm ${clipEnabled ? "text-primary bg-primary-container/10" : "text-on-surface-variant hover:text-primary"}`}>
+                    <Icon name="content_cut" size={14} />
+                  </button>
+                  <button onClick={() => { setShowAxis(!showAxis); }} className={`p-1.5 transition-colors rounded-sm ${showAxis ? "text-primary bg-primary-container/10" : "text-on-surface-variant hover:text-primary"}`}>
+                    <Icon name="3d_rotation" size={14} />
+                  </button>
+                  <div className="w-4 h-px bg-white/10 mx-auto" />
+                  <button onClick={() => { handleScreenshot(); setShowMoreTools(false); }} className="p-1.5 text-on-surface-variant hover:text-primary transition-colors">
+                    <Icon name="photo_camera" size={14} />
+                  </button>
+                  <button onClick={() => { handleFullscreen(); setShowMoreTools(false); }} className="p-1.5 text-on-surface-variant hover:text-primary transition-colors">
+                    <Icon name="fullscreen" size={14} />
+                  </button>
+                  {useAuthStore.getState().user?.role === "ADMIN" && (
+                    <button onClick={() => { handleSetThumbnail(); setShowMoreTools(false); }} disabled={settingThumb} className={`p-1.5 transition-colors ${settingThumb ? "text-primary animate-pulse" : "text-on-surface-variant hover:text-primary"}`}>
+                      <Icon name="wallpaper" size={14} />
+                    </button>
+                  )}
+                </div>
+              </>
+            )}
           </div>
-        )}
-        {watermarkState.show && watermarkState.image && (
-          <div className="absolute inset-0 pointer-events-none flex items-center justify-center select-none">
-            <img
-              src={watermarkState.image}
-              alt=""
-              className="opacity-[0.04] select-none"
-              style={{ maxWidth: "40%", maxHeight: "40%", objectFit: "contain" }}
-            />
+
+          {/* Clip controls */}
+          {clipEnabled && (
+            <div className="absolute bottom-2 left-2 micro-glass rounded-sm p-2 flex flex-col gap-1.5 min-w-[130px]">
+              <div className="flex gap-1">
+                {(["x", "y", "z"] as const).map((d) => (
+                  <button
+                    key={d}
+                    onClick={() => setClipDirection(d)}
+                    className={`flex-1 text-[10px] py-0.5 rounded-sm transition-colors ${
+                      clipDirection === d ? "bg-primary-container/30 text-primary font-bold" : "text-on-surface-variant hover:text-on-surface"
+                    }`}
+                  >
+                    {d.toUpperCase()}
+                  </button>
+                ))}
+              </div>
+              <input
+                type="range"
+                min={-2}
+                max={2}
+                step={0.01}
+                value={clipPosition}
+                onChange={(e) => setClipPosition(parseFloat(e.target.value))}
+                className="w-full accent-primary-container"
+              />
+            </div>
+          )}
+
+          {/* Watermark */}
+          {watermarkState.show && watermarkState.image && (
+            <div className="absolute inset-0 pointer-events-none flex items-center justify-center select-none">
+              <img
+                src={watermarkState.image}
+                alt=""
+                className="opacity-[0.04] select-none"
+                style={{ maxWidth: "40%", maxHeight: "40%", objectFit: "contain" }}
+              />
+            </div>
+          )}
+        </div>
+
+        {/* Bottom sheet */}
+        <div
+          className="absolute bottom-0 left-0 right-0 z-30 bg-surface-container-low rounded-t-2xl shadow-[0_-2px_20px_rgba(0,0,0,0.25)] border-t border-outline-variant/10 flex flex-col overflow-hidden"
+          style={{
+            height: sheetExpanded ? '94%' : '19dvh',
+            transition: 'height 0.35s cubic-bezier(0.32, 0.72, 0, 1)',
+          }}
+        >
+          {/* Drag handle + back button (when expanded) */}
+          <div className="flex items-center gap-2 pt-2.5 pb-1.5 px-3 shrink-0">
+            {sheetExpanded && (
+              <button
+                onClick={() => navigate(-1)}
+                className="w-7 h-7 flex items-center justify-center rounded-full text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high active:scale-90 transition-all shrink-0"
+              >
+                <Icon name="arrow_back" size={18} />
+              </button>
+            )}
+            <div
+              onTouchStart={(e) => { dragStartY.current = e.touches[0].clientY; }}
+              onTouchEnd={(e) => {
+                const dy = e.changedTouches[0].clientY - dragStartY.current;
+                if (dy < -50 && !sheetExpanded) setSheetExpanded(true);
+                else if (dy > 50 && sheetExpanded) setSheetExpanded(false);
+              }}
+              onClick={() => setSheetExpanded(!sheetExpanded)}
+              className="flex-1 flex justify-center cursor-pointer"
+            >
+              <div className="w-9 h-1 rounded-full bg-on-surface-variant/25" />
+            </div>
+            {sheetExpanded && <div className="w-7 shrink-0" />}
           </div>
-        )}
+
+          {/* Peek bar — always visible */}
+          <div className="px-4 pb-3 shrink-0">
+            <div className="flex items-center gap-2">
+              <div className="min-w-0 flex-1">
+                <h2 className="text-sm font-bold text-on-surface truncate">{modelData.name}</h2>
+                <p className="text-[11px] text-on-surface-variant truncate">{modelData.subtitle}</p>
+              </div>
+              <div className="flex items-center gap-0.5 shrink-0">
+                {isAdmin && (
+                  <button onClick={() => setEditOpen(true)} className="w-8 h-8 flex items-center justify-center rounded-full text-on-surface-variant hover:text-primary transition-colors">
+                    <Icon name="settings" size={18} />
+                  </button>
+                )}
+                <button onClick={() => setShareOpen(true)} className="w-8 h-8 flex items-center justify-center rounded-full text-on-surface-variant hover:text-primary transition-colors">
+                  <Icon name="share" size={18} />
+                </button>
+                <motion.button whileTap={{ scale: 0.9 }} onClick={handleToggleFav} className="w-8 h-8 flex items-center justify-center rounded-full text-on-surface-variant transition-colors">
+                  <Icon name={fav ? "star" : "star_border"} size={18} className={fav ? "text-primary" : ""} />
+                </motion.button>
+              </div>
+            </div>
+            <button
+              onClick={() => handleDownload(modelData.id, 'original')}
+              className="w-full mt-2.5 py-2 rounded-lg bg-primary-container text-on-primary text-sm font-medium flex items-center justify-center gap-2 active:scale-[0.98] transition-transform"
+            >
+              <Icon name="download" size={18} />
+              下载模型
+            </button>
+          </div>
+
+          {/* Expanded content — scrollable */}
+          <div className="flex-1 min-h-0 overflow-y-auto scrollbar-hidden">
+            <div className="px-4 pb-8 space-y-5">
+              {/* Category breadcrumb */}
+              <div className="flex items-center gap-1.5 text-[11px] text-on-surface-variant">
+                <Link to="/" className="hover:text-primary transition-colors">模型库</Link>
+                {categoryBreadcrumb.map((cat, i) => (
+                  <span key={cat.id} className="flex items-center gap-1.5">
+                    <Icon name="chevron_right" size={12} className="text-on-surface-variant/40" />
+                    <Link
+                      to={`/?category=${cat.id}`}
+                      className={`hover:text-primary transition-colors ${i === categoryBreadcrumb.length - 1 ? "text-primary" : ""}`}
+                    >
+                      {cat.name}
+                    </Link>
+                  </span>
+                ))}
+              </div>
+
+              {/* Specs — collapsible */}
+              <div className="rounded-sm border border-outline-variant/10 overflow-hidden">
+                <button
+                  onClick={() => setExpandedSpecs(!expandedSpecs)}
+                  className="w-full flex items-center justify-between px-4 py-3 bg-surface-container-low"
+                >
+                  <span className="text-[11px] uppercase tracking-widest text-on-surface-variant font-medium">技术参数</span>
+                  <motion.span animate={{ rotate: expandedSpecs ? 180 : 0 }} transition={{ duration: 0.2 }}>
+                    <Icon name="expand_more" size={20} className="text-on-surface-variant" />
+                  </motion.span>
+                </button>
+                <AnimatePresence>
+                  {expandedSpecs && (
+                    <motion.div initial={{ height: 0 }} animate={{ height: "auto" }} exit={{ height: 0 }} className="overflow-hidden">
+                      <SpecTable specs={modelData.specs} />
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </div>
+
+              {/* Variants */}
+              {modelData.variants && modelData.variants.length > 0 && (
+                <div>
+                  <div className="text-[11px] uppercase tracking-widest text-on-surface-variant font-medium mb-3">
+                    历史版本 ({modelData.variants.length})
+                  </div>
+                  <div className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1">
+                    {modelData.variants.map((v) => {
+                      const isCurrent = v.model_id === modelData.id;
+                      return isCurrent ? (
+                        <div key={v.model_id} className="shrink-0">
+                          <div className="w-16 h-16 rounded-md border-2 border-primary bg-surface-container-lowest overflow-hidden relative">
+                            <ModelThumbnail src={v.thumbnail_url} alt="" className="w-full h-full object-cover" />
+                            <div className="absolute bottom-0 inset-x-0 bg-primary/90 text-on-primary text-[8px] text-center py-0.5">当前</div>
+                            {v.is_primary && <div className="absolute top-0.5 left-0.5 bg-primary/80 text-on-primary text-[6px] px-0.5 rounded-sm">主</div>}
+                          </div>
+                          <p className="text-[9px] text-primary mt-0.5 text-center w-16 truncate" title={v.original_name}>{v.original_name.replace(/\.[^.]+$/, "")}</p>
+                          {v.file_modified_at && <p className="text-[8px] text-on-surface-variant/40 text-center">{new Date(v.file_modified_at).toLocaleDateString("zh-CN")}</p>}
+                        </div>
+                      ) : (
+                        <Link key={v.model_id} to={`/model/${v.model_id}`} className="shrink-0">
+                          <div className="w-16 h-16 rounded-md border border-outline-variant/30 bg-surface-container-lowest overflow-hidden relative">
+                            <ModelThumbnail src={v.thumbnail_url} alt="" className="w-full h-full object-cover" />
+                            {v.is_primary && <div className="absolute top-0.5 left-0.5 bg-primary/80 text-on-primary text-[6px] px-0.5 rounded-sm">主</div>}
+                          </div>
+                          <p className="text-[9px] text-on-surface-variant mt-0.5 text-center w-16 truncate" title={v.original_name}>{v.original_name.replace(/\.[^.]+$/, "")}</p>
+                          {v.file_modified_at && <p className="text-[8px] text-on-surface-variant/40 text-center">{new Date(v.file_modified_at).toLocaleDateString("zh-CN")}</p>}
+                        </Link>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* Downloads */}
+              <div>
+                <div className="text-[11px] uppercase tracking-widest text-on-surface-variant font-medium mb-2">下载文件</div>
+                <div className="space-y-1.5">
+                  {modelData.downloads.map((file) => (
+                    <div key={file.format} className="flex items-center gap-2.5 px-3 py-2 rounded-sm bg-surface-container-low border border-outline-variant/10">
+                      <Icon name="insert_drive_file" size={18} className="text-primary shrink-0" />
+                      <div className="flex-1 min-w-0">
+                        <span className="text-xs font-medium text-on-surface font-mono">{file.format}</span>
+                        <span className="text-[11px] text-on-surface-variant ml-1.5">{file.size}</span>
+                      </div>
+                      <button onClick={() => handleDownload(modelData.id, file.downloadFormat === "original" ? "original" : undefined)} className="shrink-0 w-7 h-7 flex items-center justify-center rounded-full bg-primary/10 hover:bg-primary/20 text-primary active:scale-90 transition-all">
+                        <Icon name="download" size={16} />
+                      </button>
+                    </div>
+                  ))}
+                  {modelData.drawingUrl && (
+                    <a href={modelData.drawingUrl} target="_blank" rel="noreferrer" className="flex items-center gap-2.5 px-3 py-2 rounded-sm bg-surface-container-low border border-outline-variant/10 hover:bg-surface-container transition-colors">
+                      <Icon name="description" size={18} className="text-primary shrink-0" />
+                      <div className="flex-1 min-w-0">
+                        <span className="text-xs font-medium text-on-surface">产品图纸</span>
+                        <span className="text-[11px] text-on-surface-variant ml-1.5">PDF</span>
+                      </div>
+                      <div className="shrink-0 w-7 h-7 flex items-center justify-center rounded-full bg-primary/10 text-primary">
+                        <Icon name="open_in_new" size={14} />
+                      </div>
+                    </a>
+                  )}
+                </div>
+              </div>
+
+              {/* Support */}
+              <div className="pt-2 border-t border-outline-variant/20">
+                <Link to="/support" className="flex items-center gap-3 p-3 rounded-sm bg-surface-container-high hover:bg-surface-container-highest transition-colors group">
+                  <div className="w-8 h-8 rounded-full bg-primary-container/15 flex items-center justify-center shrink-0">
+                    <Icon name="support_agent" size={16} className="text-primary" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs font-medium text-on-surface">需要非标定制？</p>
+                    <p className="text-[11px] text-on-surface-variant">联系工程师获取专业支持</p>
+                  </div>
+                  <Icon name="chevron_right" size={16} className="text-on-surface-variant/40" />
+                </Link>
+                <div className="pt-3 space-y-1">
+                  <p className="text-[11px] text-on-surface-variant/50 leading-relaxed">
+                    本平台所有 3D 模型仅供参考与模拟验证，不作为生产加工依据。产品持续迭代更新，请以实物为准。
+                  </p>
+                  <p className="text-[11px] text-on-surface-variant/30">
+                    © {new Date().getFullYear()} {getSiteTitle()}
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
-      <MobileDetail
-        modelData={modelData}
-        expandedSpecs={expandedSpecs}
-        onToggleSpecs={() => setExpandedSpecs(!expandedSpecs)}
-        isFav={fav}
-        isAdmin={isAdmin}
-        onToggleFav={() => toggleFavorite({ id: modelData.id, name: modelData.name, subtitle: modelData.subtitle, category: modelData.category, dimensions: modelData.dimensions })}
-        onEdit={() => setEditOpen(true)}
-        onShare={() => setShareOpen(true)}
-        onBack={() => navigate(-1)}
-        categoryBreadcrumb={categoryBreadcrumb}
-        onDownload={handleDownload}
-      />
+
       <BottomNav />
       <DetailEditDialog
         open={editOpen}

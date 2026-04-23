@@ -1,4 +1,5 @@
 import { Grid, GizmoHelper, GizmoViewport } from "@react-three/drei";
+import { get3DMaterialConfig } from "../../lib/publicSettings";
 
 interface SceneProps {
   showGrid: boolean;
@@ -6,14 +7,16 @@ interface SceneProps {
 }
 
 export default function Scene({ showGrid, showAxis = true }: SceneProps) {
+  const config = get3DMaterialConfig().viewer;
+
   return (
     <>
-      <ambientLight intensity={1.0} />
-      <directionalLight position={[10, 15, 10]} intensity={1.8} />
-      <directionalLight position={[-10, 10, -5]} intensity={0.8} color="#d0d8e8" />
-      <directionalLight position={[0, -5, 10]} intensity={0.5} color="#e8eef5" />
-      <pointLight position={[0, 20, 0]} intensity={0.6} />
-      <hemisphereLight args={["#c8e0ff", "#d4a050", 0.5]} />
+      <ambientLight intensity={config.ambientIntensity} />
+      <directionalLight position={[10, 10, 5]} intensity={config.mainLightIntensity} />
+      <directionalLight position={[-8, 6, -8]} intensity={config.fillLightIntensity} color="#b0c4de" />
+      <directionalLight position={[0, -5, 10]} intensity={0.3} color="#e0e8f0" />
+      <pointLight position={[0, 15, 0]} intensity={0.4} />
+      <hemisphereLight args={["#b1e1ff", "#b97a20", config.hemisphereIntensity]} />
 
       {showGrid && (
         <Grid
@@ -32,8 +35,10 @@ export default function Scene({ showGrid, showAxis = true }: SceneProps) {
       )}
 
       {showAxis && (
-        <GizmoHelper alignment="bottom-right" margin={[60, 60]}>
-          <GizmoViewport labelColor="white" axisHeadScale={0.8} />
+        <GizmoHelper alignment="bottom-right" margin={[30, 30]}>
+          <group scale={0.6}>
+            <GizmoViewport labelColor="white" axisHeadScale={0.4} />
+          </group>
         </GizmoHelper>
       )}
     </>

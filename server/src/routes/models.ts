@@ -13,6 +13,20 @@ import { authMiddleware, type AuthRequest } from "../middleware/auth.js";
 import { requireRole } from "../middleware/rbac.js";
 import { getSetting } from "../lib/settings.js";
 import { config } from "../lib/config.js";
+
+// Parse STEP/IGES file header for the original creation timestamp
+function parseStepFileDate(filePath: string): Date | null {
+  try {
+    const head = readFileSync(filePath, { encoding: "utf-8", end: 2000 });
+    // STEP: FILE_NAME('name', '2026-03-19T09:10:22', ...)
+    const match = head.match(/FILE_NAME\s*\([^;]*?'(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2})'/);
+    if (match) return new Date(match[1]);
+    // IGES: may have date in S06 or similar fields
+    const igMatch = head.match(/(\d{4})(\d{2})(\d{2})\.(\d{2})(\d{2})(\d{2})/);
+    if (igMatch) return new Date(`${igMatch[1]}-${igMatch[2]}-${igMatch[3]}T${igMatch[4]}:${igMatch[5]}:${igMatch[6]}`);
+  } catch { /* ignore */ }
+  return null;
+}
 import { cacheGet, cacheSet, cacheDelByPrefix, TTL } from "../lib/cache.js";
 
 // Try to import Prisma, fallback to null if DB is not configured
@@ -68,9 +82,11 @@ router.post("/api/models/upload", authMiddleware, requireRole("ADMIN"), upload.s
   const userId = req.user!.userId;
   const categoryId = req.body.categoryId || null;
 
-  // Preserve original file modification time from client filesystem
+  // Preserve original file modification time: STEP header > client filesystem > null
+  const stepFileDate = parseStepFileDate(file.path);
   const clientLastModified = req.body.lastModified ? Number(req.body.lastModified) : null;
-  const originalModifiedAt = clientLastModified && !isNaN(clientLastModified) ? new Date(clientLastModified).toISOString() : null;
+  const fileDate = stepFileDate || (clientLastModified && !isNaN(clientLastModified) ? new Date(clientLastModified) : null);
+  const originalModifiedAt = fileDate ? fileDate.toISOString() : null;
 
   // Save filesystem metadata (always, as backup)
   const meta: Record<string, unknown> = {
@@ -105,6 +121,7 @@ router.post("/api/models/upload", authMiddleware, requireRole("ADMIN"), upload.s
           createdById: userId,
           ...(categoryId && { categoryId }),
           ...(originalModifiedAt && { metadata: { originalModifiedAt } }),
+          ...(originalModifiedAt && { fileModifiedAt: new Date(originalModifiedAt) }),
         },
         update: {},
       });
@@ -482,7 +499,7 @@ router.get("/api/models/:id", async (req: Request, res: Response) => {
           group: {
             include: {
               models: {
-                select: { id: true, name: true, thumbnailUrl: true, originalName: true, originalSize: true, uploadPath: true, createdAt: true, metadata: true },
+                select: { id: true, name: true, thumbnailUrl: true, originalName: true, originalSize: true, uploadPath: true, createdAt: true, metadata: true, fileModifiedAt: true },
                 orderBy: { createdAt: "asc" },
               },
             },
@@ -490,18 +507,32 @@ router.get("/api/models/:id", async (req: Request, res: Response) => {
         },
       });
       if (m) {
-        // Get original file date — priority: DB metadata > filesystem mtime > DB createdAt
+        // Get original file date — always try STEP header first for true CAD creation date
         const dbMeta = (m.metadata as Record<string, unknown>) || {};
         let mainFileModifiedAt: string = m.createdAt.toISOString();
-        if (dbMeta.originalModifiedAt) {
-          mainFileModifiedAt = dbMeta.originalModifiedAt as string;
-        } else try {
+        try {
           const mainPath = m.uploadPath && existsSync(m.uploadPath)
             ? m.uploadPath
             : join(config.staticDir, "originals", `${m.id}.${m.format}`);
           if (existsSync(mainPath)) {
-            const stat = await statAsync(mainPath);
-            mainFileModifiedAt = stat.mtime.toISOString();
+            const stepDate = parseStepFileDate(mainPath);
+            if (stepDate) {
+              mainFileModifiedAt = stepDate.toISOString();
+              // Backfill/upsert to dedicated column
+              if (!(m as any).fileModifiedAt || (m as any).fileModifiedAt.toISOString() !== stepDate.toISOString()) {
+                prisma.model.update({ where: { id: m.id }, data: { fileModifiedAt: stepDate } }).catch(() => {});
+              }
+            } else if ((m as any).fileModifiedAt) {
+              mainFileModifiedAt = (m as any).fileModifiedAt.toISOString();
+            } else {
+              const stat = await statAsync(mainPath);
+              mainFileModifiedAt = stat.mtime.toISOString();
+              prisma.model.update({ where: { id: m.id }, data: { fileModifiedAt: stat.mtime } }).catch(() => {});
+            }
+          } else if ((m as any).fileModifiedAt) {
+            mainFileModifiedAt = (m as any).fileModifiedAt.toISOString();
+          } else if (dbMeta.originalModifiedAt) {
+            mainFileModifiedAt = dbMeta.originalModifiedAt as string;
           }
         } catch { /* keep DB fallback */ }
 
@@ -509,6 +540,7 @@ router.get("/api/models/:id", async (req: Request, res: Response) => {
         const variantStats = await Promise.all(
           (m.group?.models ?? []).map(async (v: any) => {
             try {
+              if (v.fileModifiedAt) return v.fileModifiedAt.toISOString();
               const vMeta = (v.metadata as Record<string, unknown>) || {};
               if (vMeta.originalModifiedAt) return vMeta.originalModifiedAt as string;
               if (v.uploadPath) {
@@ -1054,9 +1086,11 @@ router.post("/api/models/:id/replace-file", authMiddleware, requireRole("ADMIN")
     copyFileSync(file.path, destPath);
     rmSync(file.path, { force: true });
 
-    // Update database — preserve original file modification time
+    // Update database — preserve original file modification time: STEP header > client filesystem
+    const stepFileDate = parseStepFileDate(destPath);
     const clientLastModified = req.body.lastModified ? Number(req.body.lastModified) : null;
-    const originalModifiedAt = clientLastModified && !isNaN(clientLastModified) ? new Date(clientLastModified).toISOString() : null;
+    const fileDate = stepFileDate || (clientLastModified && !isNaN(clientLastModified) ? new Date(clientLastModified) : null);
+    const originalModifiedAt = fileDate ? fileDate.toISOString() : null;
     const existingModel = await prisma.model.findUnique({ where: { id }, select: { metadata: true } });
     const existingMeta = (existingModel?.metadata as Record<string, unknown>) || {};
 
@@ -1073,6 +1107,7 @@ router.post("/api/models/:id/replace-file", authMiddleware, requireRole("ADMIN")
         gltfSize: 0,
         thumbnailUrl: null,
         ...(originalModifiedAt && { metadata: { ...existingMeta, originalModifiedAt } }),
+        ...(originalModifiedAt && { fileModifiedAt: new Date(originalModifiedAt) }),
       },
     });
 

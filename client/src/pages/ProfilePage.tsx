@@ -10,6 +10,7 @@ import AppSidebar from '../components/shared/Sidebar';
 import MobileNavDrawer from '../components/shared/MobileNavDrawer';
 import Icon from '../components/shared/Icon';
 import { authApi } from '../api/auth';
+import { listShares, deleteShare, type ShareLink } from '../api/shares';
 import { useAuthStore } from '../stores/useAuthStore';
 import { useToast } from '../components/shared/Toast';
 import type { User } from '../types';
@@ -255,6 +256,161 @@ function PasswordChangeDialog({ open, onClose }: { open: boolean; onClose: () =>
   );
 }
 
+function MySharesSection({ compact = false }: { compact?: boolean }) {
+  const { toast } = useToast();
+  const [deleteId, setDeleteId] = useState<string | null>(null);
+  const { data: shares, mutate } = useSWR<ShareLink[]>('/shares/mine', listShares);
+
+  const items = shares || [];
+
+  async function handleDelete(id: string) {
+    try {
+      await deleteShare(id);
+      toast('已删除', 'success');
+      setDeleteId(null);
+      mutate();
+    } catch (err: any) {
+      toast(err.response?.data?.message || err.response?.data?.detail || '删除失败', 'error');
+    }
+  }
+
+  function isExpired(expiresAt: string | null) {
+    if (!expiresAt) return false;
+    return new Date(expiresAt) < new Date();
+  }
+
+  if (compact) {
+    return (
+      <div className="space-y-3">
+        <div className="flex items-center gap-2 mb-4">
+          <Icon name="share" size={20} className="text-primary-container" />
+          <h3 className="font-headline text-sm font-semibold text-on-surface uppercase tracking-wide">我的分享</h3>
+        </div>
+        {items.length === 0 && (
+          <div className="text-center py-6 text-on-surface-variant/50">
+            <Icon name="share" size={28} className="mx-auto mb-1 opacity-30" />
+            <p className="text-xs">暂无分享记录</p>
+          </div>
+        )}
+        {items.map(s => {
+          const expired = isExpired(s.expiresAt);
+          return (
+            <div key={s.id} className="bg-surface-container-lowest rounded-md border border-outline-variant/10 p-3">
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-sm text-on-surface truncate">{s.modelName || s.modelId}</span>
+                {expired ? (
+                  <span className="text-[10px] px-1.5 py-0.5 rounded-sm bg-on-surface-variant/10 text-on-surface-variant shrink-0">已过期</span>
+                ) : s.expiresAt ? (
+                  <span className="text-[10px] px-1.5 py-0.5 rounded-sm bg-emerald-500/15 text-emerald-400 shrink-0">有效</span>
+                ) : (
+                  <span className="text-[10px] px-1.5 py-0.5 rounded-sm bg-primary-container/15 text-primary-container shrink-0">永久</span>
+                )}
+              </div>
+              <div className="flex items-center gap-2 mt-1.5 text-[10px] text-on-surface-variant/60">
+                <span><Icon name="visibility" size={10} /> {s.viewCount}</span>
+                <span><Icon name="download" size={10} /> {s.downloadCount}{s.downloadLimit > 0 ? `/${s.downloadLimit}` : ''}</span>
+                {s.hasPassword && <span>有密码</span>}
+              </div>
+              <div className="flex items-center gap-1.5 mt-2">
+                <button
+                  onClick={() => { navigator.clipboard.writeText(`${window.location.origin}/share/${s.token}`); toast('链接已复制', 'success'); }}
+                  className="px-2 py-1 text-[10px] text-primary-container hover:bg-primary-container/10 rounded transition-colors"
+                >
+                  <Icon name="link" size={12} className="inline mr-0.5" />复制链接
+                </button>
+                {deleteId === s.id ? (
+                  <>
+                    <button onClick={() => handleDelete(s.id)} className="px-2 py-1 text-[10px] font-medium bg-error text-on-error-container rounded">确认</button>
+                    <button onClick={() => setDeleteId(null)} className="px-2 py-1 text-[10px] text-on-surface-variant hover:bg-surface-container-high/50 rounded">取消</button>
+                  </>
+                ) : (
+                  <button
+                    onClick={() => setDeleteId(s.id)}
+                    className="px-2 py-1 text-[10px] text-error hover:bg-error-container/10 rounded transition-colors"
+                  >
+                    删除
+                  </button>
+                )}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    );
+  }
+
+  return (
+    <div className="bg-surface-container-low rounded-lg p-6 border border-outline-variant/10">
+      <div className="flex items-center gap-2 mb-5">
+        <Icon name="share" size={24} className="text-primary-container" />
+        <h3 className="font-headline text-sm font-semibold uppercase tracking-wide text-on-surface">我的分享</h3>
+        <span className="text-xs text-on-surface-variant ml-auto">{items.length} 条</span>
+      </div>
+      {items.length === 0 && (
+        <div className="text-center py-8 text-on-surface-variant/50">
+          <Icon name="share" size={36} className="mx-auto mb-2 opacity-30" />
+          <p className="text-sm">暂无分享记录</p>
+        </div>
+      )}
+      <div className="space-y-2">
+        {items.map(s => {
+          const expired = isExpired(s.expiresAt);
+          return (
+            <div key={s.id} className="bg-surface-container-lowest rounded-md border border-outline-variant/10 p-3">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="font-medium text-sm text-on-surface truncate max-w-[240px]">{s.modelName || s.modelId}</span>
+                    {expired ? (
+                      <span className="text-[10px] px-1.5 py-0.5 rounded-sm font-medium bg-on-surface-variant/10 text-on-surface-variant">已过期</span>
+                    ) : s.expiresAt ? (
+                      <span className="text-[10px] px-1.5 py-0.5 rounded-sm font-medium bg-emerald-500/15 text-emerald-400">有效</span>
+                    ) : (
+                      <span className="text-[10px] px-1.5 py-0.5 rounded-sm font-medium bg-primary-container/15 text-primary-container">永久</span>
+                    )}
+                    {s.hasPassword && (
+                      <span className="text-[10px] px-1.5 py-0.5 rounded-sm font-medium bg-amber-500/15 text-amber-400">有密码</span>
+                    )}
+                  </div>
+                  <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1.5 text-[10px] text-on-surface-variant/70">
+                    <span className="flex items-center gap-0.5"><Icon name="visibility" size={10} />{s.viewCount} 次浏览</span>
+                    <span className="flex items-center gap-0.5"><Icon name="download" size={10} />{s.downloadCount}{s.downloadLimit > 0 ? `/${s.downloadLimit}` : ''} 次下载</span>
+                    {s.expiresAt && <span className="flex items-center gap-0.5"><Icon name="schedule" size={10} />{new Date(s.expiresAt).toLocaleDateString('zh-CN')}</span>}
+                    <span>{new Date(s.createdAt).toLocaleDateString('zh-CN')}</span>
+                  </div>
+                </div>
+                <div className="flex items-center gap-1 shrink-0">
+                  <button
+                    onClick={() => { navigator.clipboard.writeText(`${window.location.origin}/share/${s.token}`); toast('链接已复制', 'success'); }}
+                    className="px-2 py-1 text-[10px] text-primary-container hover:bg-primary-container/10 rounded transition-colors"
+                    title="复制链接"
+                  >
+                    <Icon name="link" size={14} />
+                  </button>
+                  {deleteId === s.id ? (
+                    <>
+                      <button onClick={() => handleDelete(s.id)} className="px-2 py-1 text-[10px] font-medium bg-error text-on-error-container rounded">确认</button>
+                      <button onClick={() => setDeleteId(null)} className="px-2 py-1 text-[10px] text-on-surface-variant hover:bg-surface-container-high/50 rounded">取消</button>
+                    </>
+                  ) : (
+                    <button
+                      onClick={() => setDeleteId(s.id)}
+                      className="px-2 py-1 text-[10px] text-error hover:bg-error-container/10 rounded transition-colors"
+                      title="删除"
+                    >
+                      <Icon name="delete" size={14} />
+                    </button>
+                  )}
+                </div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 function DesktopContent() {
   const { user, updateUser } = useAuthStore();
   const { toast } = useToast();
@@ -458,6 +614,10 @@ function DesktopContent() {
         <section className="lg:col-span-12">
           <NotificationPrefs />
         </section>
+
+        <section className="lg:col-span-12">
+          <MySharesSection />
+        </section>
       </div>
       <PasswordChangeDialog open={pwdOpen} onClose={() => setPwdOpen(false)} />
     </div>
@@ -541,7 +701,7 @@ function MobileContent() {
   }, [toast, updateUser]);
 
   return (
-    <div className="space-y-4 px-4 py-4 pb-6">
+    <div className="space-y-4 px-4 py-5 pb-6">
       <h1 className="text-lg font-bold text-on-surface">个人设置</h1>
 
       {/* Avatar + basic info */}
@@ -668,6 +828,11 @@ function MobileContent() {
       {/* Notification prefs */}
       <div className="rounded-lg bg-surface-container-high p-4">
         <NotificationPrefs compact />
+      </div>
+
+      {/* My shares */}
+      <div className="rounded-lg bg-surface-container-high p-4">
+        <MySharesSection compact />
       </div>
 
       <PasswordChangeDialog open={pwdOpen} onClose={() => setPwdOpen(false)} />

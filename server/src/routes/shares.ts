@@ -5,7 +5,7 @@ import { existsSync, createReadStream } from "node:fs";
 import { join } from "node:path";
 import { prisma } from "../lib/prisma.js";
 import { authMiddleware, AuthRequest } from "../middleware/auth.js";
-import { getSetting } from "../lib/settings.js";
+import { getAllSettings, getSetting } from "../lib/settings.js";
 
 const router = Router();
 
@@ -13,46 +13,95 @@ const router = Router();
 
 // Create share link
 router.post("/api/shares", authMiddleware, async (req: AuthRequest, res: Response) => {
-  const userId = req.user!.userId;
-  const { modelId, password, allowPreview = true, allowDownload = true, downloadLimit = 0, expiresAt } = req.body;
+  try {
+    const userId = req.user!.userId;
+    let { modelId, password, allowPreview, allowDownload = true, downloadLimit = 0, expiresAt } = req.body;
 
-  if (!modelId) {
-    res.status(400).json({ detail: "缺少 modelId" });
-    return;
+    if (!modelId) {
+      res.status(400).json({ detail: "缺少 modelId" });
+      return;
+    }
+
+    const model = await prisma.model.findUnique({ where: { id: modelId } });
+    if (!model) {
+      res.status(404).json({ detail: "模型不存在" });
+      return;
+    }
+
+    // --- Apply share policy ---
+    const settings = await getAllSettings();
+    const sAllowPassword = settings.share_allow_password ?? true;
+    const sAllowCustomExpiry = settings.share_allow_custom_expiry ?? true;
+    const sDefaultExpireDays = Number(settings.share_default_expire_days) || 0;
+    const sMaxExpireDays = Number(settings.share_max_expire_days) || 0;
+    const sDefaultDownloadLimit = Number(settings.share_default_download_limit) || 0;
+    const sMaxDownloadLimit = Number(settings.share_max_download_limit) || 0;
+    const sAllowPreview = settings.share_allow_preview ?? true;
+
+    // Password policy
+    if (!sAllowPassword) password = undefined;
+
+    // Preview default
+    if (allowPreview === undefined) allowPreview = sAllowPreview as boolean;
+
+    // Expiry policy
+    let finalExpiresAt: Date | null = null;
+    if (!sAllowCustomExpiry) {
+      // User cannot customize — use default only
+      if (sDefaultExpireDays > 0) {
+        finalExpiresAt = new Date(Date.now() + sDefaultExpireDays * 86400000);
+      }
+    } else {
+      if (expiresAt) {
+        finalExpiresAt = new Date(expiresAt);
+        // Clamp to max
+        if (sMaxExpireDays > 0) {
+          const maxDate = new Date(Date.now() + sMaxExpireDays * 86400000);
+          if (finalExpiresAt > maxDate) finalExpiresAt = maxDate;
+        }
+      } else if (sDefaultExpireDays > 0) {
+        finalExpiresAt = new Date(Date.now() + sDefaultExpireDays * 86400000);
+      }
+    }
+
+    // Download limit policy
+    if (downloadLimit === 0 && sDefaultDownloadLimit > 0) {
+      downloadLimit = sDefaultDownloadLimit;
+    }
+    if (sMaxDownloadLimit > 0 && downloadLimit > sMaxDownloadLimit) {
+      downloadLimit = sMaxDownloadLimit;
+    }
+
+    const token = randomBytes(12).toString("hex");
+    const hashedPassword = password ? await bcrypt.hash(password, 10) : null;
+
+    const share = await prisma.shareLink.create({
+      data: {
+        modelId,
+        token,
+        password: hashedPassword,
+        allowPreview,
+        allowDownload,
+        downloadLimit,
+        expiresAt: finalExpiresAt,
+        createdById: userId,
+      },
+    });
+
+    res.status(201).json({
+      id: share.id,
+      token: share.token,
+      allowPreview: share.allowPreview,
+      allowDownload: share.allowDownload,
+      downloadLimit: share.downloadLimit,
+      expiresAt: share.expiresAt,
+      createdAt: share.createdAt,
+      url: `${req.protocol}://${req.get("host")}/share/${share.token}`,
+    });
+  } catch (err) {
+    console.error("[Shares] Create error:", err);
+    res.status(500).json({ detail: "创建分享失败", error: err instanceof Error ? err.message : String(err) });
   }
-
-  const model = await prisma.model.findUnique({ where: { id: modelId } });
-  if (!model) {
-    res.status(404).json({ detail: "模型不存在" });
-    return;
-  }
-
-  const token = randomBytes(12).toString("hex");
-  const hashedPassword = password ? await bcrypt.hash(password, 10) : null;
-
-  const share = await prisma.shareLink.create({
-    data: {
-      modelId,
-      token,
-      password: hashedPassword,
-      allowPreview,
-      allowDownload,
-      downloadLimit,
-      expiresAt: expiresAt ? new Date(expiresAt) : null,
-      createdById: userId,
-    },
-  });
-
-  res.status(201).json({
-    id: share.id,
-    token: share.token,
-    allowPreview: share.allowPreview,
-    allowDownload: share.allowDownload,
-    downloadLimit: share.downloadLimit,
-    expiresAt: share.expiresAt,
-    createdAt: share.createdAt,
-    url: `${req.protocol}://${req.get("host")}/share/${share.token}`,
-  });
 });
 
 // List my shares
@@ -118,6 +167,115 @@ router.delete("/api/shares/:id", authMiddleware, async (req: AuthRequest, res: R
 
   await prisma.shareLink.delete({ where: { id } });
   res.json({ ok: true });
+});
+
+// ========== Admin endpoints ==========
+
+function adminOnly(req: AuthRequest, res: Response): boolean {
+  if (req.user?.role !== "ADMIN") {
+    res.status(403).json({ detail: "需要管理员权限" });
+    return false;
+  }
+  return true;
+}
+
+// Admin: list all shares
+router.get("/api/admin/shares", authMiddleware, async (req: AuthRequest, res: Response) => {
+  if (!adminOnly(req, res)) return;
+  try {
+    const page = Math.max(1, Number(req.query.page) || 1);
+    const pageSize = Math.min(100, Math.max(1, Number(req.query.page_size) || 20));
+    const search = (req.query.search as string) || "";
+
+    const where = search
+      ? {
+          OR: [
+            { model: { name: { contains: search, mode: "insensitive" as const } } },
+            { model: { originalName: { contains: search, mode: "insensitive" as const } } },
+            { createdBy: { username: { contains: search, mode: "insensitive" as const } } },
+          ],
+        }
+      : {};
+
+    const [total, rows] = await Promise.all([
+      prisma.shareLink.count({ where }),
+      prisma.shareLink.findMany({
+        where,
+        include: {
+          model: { select: { id: true, name: true, originalName: true } },
+          createdBy: { select: { id: true, username: true } },
+        },
+        orderBy: { createdAt: "desc" },
+        skip: (page - 1) * pageSize,
+        take: pageSize,
+      }),
+    ]);
+
+    res.json({
+      total,
+      page,
+      pageSize,
+      items: rows.map((s) => ({
+        id: s.id,
+        token: s.token,
+        modelId: s.modelId,
+        modelName: s.model.name || s.model.originalName,
+        createdById: s.createdById,
+        createdByUsername: s.createdBy.username,
+        allowPreview: s.allowPreview,
+        allowDownload: s.allowDownload,
+        downloadLimit: s.downloadLimit,
+        downloadCount: s.downloadCount,
+        viewCount: s.viewCount,
+        hasPassword: !!s.password,
+        expiresAt: s.expiresAt,
+        createdAt: s.createdAt,
+      })),
+    });
+  } catch (err) {
+    console.error("[Shares] Admin list error:", err);
+    res.status(500).json({ detail: "获取分享列表失败" });
+  }
+});
+
+// Admin: share statistics
+router.get("/api/admin/shares/stats", authMiddleware, async (req: AuthRequest, res: Response) => {
+  if (!adminOnly(req, res)) return;
+  try {
+    const [total, expired, agg] = await Promise.all([
+      prisma.shareLink.count(),
+      prisma.shareLink.count({ where: { expiresAt: { not: null, lt: new Date() } } }),
+      prisma.shareLink.aggregate({ _sum: { downloadCount: true, viewCount: true } }),
+    ]);
+    res.json({
+      total,
+      active: total - expired,
+      expired,
+      totalDownloads: agg._sum.downloadCount || 0,
+      totalViews: agg._sum.viewCount || 0,
+    });
+  } catch (err) {
+    console.error("[Shares] Admin stats error:", err);
+    res.status(500).json({ detail: "获取分享统计失败" });
+  }
+});
+
+// Admin: delete any share
+router.delete("/api/admin/shares/:id", authMiddleware, async (req: AuthRequest, res: Response) => {
+  if (!adminOnly(req, res)) return;
+  try {
+    const { id } = req.params;
+    const share = await prisma.shareLink.findUnique({ where: { id } });
+    if (!share) {
+      res.status(404).json({ detail: "分享链接不存在" });
+      return;
+    }
+    await prisma.shareLink.delete({ where: { id } });
+    res.json({ ok: true });
+  } catch (err) {
+    console.error("[Shares] Admin delete error:", err);
+    res.status(500).json({ detail: "删除分享失败" });
+  }
 });
 
 // ========== Public endpoints ==========

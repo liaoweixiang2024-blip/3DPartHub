@@ -1,6 +1,7 @@
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAuthStore } from '../../stores/useAuthStore';
+import { userNav, adminNav } from './Sidebar';
 import Icon from "../shared/Icon";
 
 interface MobileNavDrawerProps {
@@ -8,17 +9,12 @@ interface MobileNavDrawerProps {
   onClose: () => void;
 }
 
-const navItems = [
-  { label: '首页', icon: 'dashboard', href: '/' },
-  { label: '收藏', icon: 'star', href: '/favorites' },
-  { label: '我的工单', icon: 'assignment_add', href: '/my-tickets' },
-  { label: '技术支持', icon: 'support_agent', href: '/support' },
-];
-
 export default function MobileNavDrawer({ open, onClose }: MobileNavDrawerProps) {
   const location = useLocation();
   const navigate = useNavigate();
-  const { logout } = useAuthStore();
+  const { logout, user } = useAuthStore();
+  const isAdmin = user?.role === 'ADMIN';
+  const navItems = isAdmin ? adminNav : userNav;
 
   return (
     <AnimatePresence>
@@ -43,11 +39,11 @@ export default function MobileNavDrawer({ open, onClose }: MobileNavDrawerProps)
             </div>
             <nav className="flex-1 py-2">
               {navItems.map((item) => {
-                const isActive = location.pathname === item.href;
+                const isActive = location.pathname === item.path || (item.path !== '/' && location.pathname.startsWith(item.path));
                 return (
                   <Link
-                    key={item.href}
-                    to={item.href}
+                    key={item.path}
+                    to={item.path}
                     onClick={onClose}
                     className={`flex items-center gap-3 px-6 py-3 text-sm transition-colors ${
                       isActive
@@ -55,7 +51,7 @@ export default function MobileNavDrawer({ open, onClose }: MobileNavDrawerProps)
                         : 'text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high/50'
                     }`}
                   >
-                    <Icon name={item.icon} size={28} fill={isActive} />
+                    <Icon name={item.icon} size={24} />
                     {item.label}
                   </Link>
                 );
@@ -67,14 +63,14 @@ export default function MobileNavDrawer({ open, onClose }: MobileNavDrawerProps)
                 onClick={onClose}
                 className="flex items-center gap-3 px-0 py-2 text-sm text-on-surface-variant hover:text-on-surface transition-colors"
               >
-                <Icon name="settings" size={28} />
-                设置
+                <Icon name="settings" size={24} />
+                个人设置
               </Link>
               <button
                 onClick={() => { logout(); onClose(); navigate('/login'); }}
                 className="flex items-center gap-3 px-0 py-2 text-sm text-on-surface-variant hover:text-on-surface transition-colors"
               >
-                <Icon name="logout" size={28} />
+                <Icon name="logout" size={24} />
                 退出
               </button>
             </div>

@@ -212,3 +212,57 @@ export function applyAppearanceSettings(settings: Partial<SystemSettings>) {
     (settings.auto_theme_light_hour as number) ?? 8,
   );
 }
+
+// 3D Material & Viewer config helpers
+export interface MaterialPresetConfig {
+  color: string;
+  metalness: number;
+  roughness: number;
+  envMapIntensity: number;
+  transmission?: number;
+  ior?: number;
+  thickness?: number;
+}
+
+export function get3DMaterialConfig() {
+  const s = cache || {};
+  return {
+    presets: {
+      default: {
+        color: (s.mat_default_color as string) || "#c8cad0",
+        metalness: (s.mat_default_metalness as number) ?? 0.5,
+        roughness: (s.mat_default_roughness as number) ?? 0.25,
+        envMapIntensity: (s.mat_default_envMapIntensity as number) ?? 1.5,
+      } satisfies MaterialPresetConfig,
+      metal: {
+        color: (s.mat_metal_color as string) || "#f0f0f4",
+        metalness: (s.mat_metal_metalness as number) ?? 1.0,
+        roughness: (s.mat_metal_roughness as number) ?? 0.05,
+        envMapIntensity: (s.mat_metal_envMapIntensity as number) ?? 2.0,
+      } satisfies MaterialPresetConfig,
+      plastic: {
+        color: (s.mat_plastic_color as string) || "#4499ff",
+        metalness: (s.mat_plastic_metalness as number) ?? 0.0,
+        roughness: (s.mat_plastic_roughness as number) ?? 0.35,
+        envMapIntensity: (s.mat_plastic_envMapIntensity as number) ?? 0.6,
+      } satisfies MaterialPresetConfig,
+      glass: {
+        color: (s.mat_glass_color as string) || "#ffffff",
+        metalness: (s.mat_glass_metalness as number) ?? 0.0,
+        roughness: (s.mat_glass_roughness as number) ?? 0.0,
+        envMapIntensity: (s.mat_glass_envMapIntensity as number) ?? 1.0,
+        transmission: (s.mat_glass_transmission as number) ?? 0.95,
+        ior: (s.mat_glass_ior as number) ?? 1.5,
+        thickness: (s.mat_glass_thickness as number) ?? 0.5,
+      } satisfies MaterialPresetConfig,
+    },
+    viewer: {
+      exposure: (s.viewer_exposure as number) ?? 1.2,
+      ambientIntensity: (s.viewer_ambient_intensity as number) ?? 0.6,
+      mainLightIntensity: (s.viewer_main_light_intensity as number) ?? 1.4,
+      fillLightIntensity: (s.viewer_fill_light_intensity as number) ?? 0.6,
+      hemisphereIntensity: (s.viewer_hemisphere_intensity as number) ?? 0.3,
+      bgColor: (s.viewer_bg_color as string) || "linear-gradient(180deg, #2a2a3e 0%, #1e2a42 50%, #162040 100%)",
+    },
+  };
+}

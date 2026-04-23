@@ -1,9 +1,11 @@
 import { useMemo, useEffect, useState, useRef } from "react";
 import { useGLTF, Center, Html } from "@react-three/drei";
+import { useThree } from "@react-three/fiber";
 import * as THREE from "three";
 import { loadCadFromUrl } from "./StepLoader";
 import type { ViewMode } from "./ModelViewer";
 import Icon from "../../components/shared/Icon";
+import { get3DMaterialConfig } from "../../lib/publicSettings";
 
 interface MultiFormatLoaderProps {
   url: string;
@@ -16,39 +18,49 @@ interface MultiFormatLoaderProps {
   onLoaded?: () => void;
 }
 
-// Generate a simple environment map for metallic reflections
+// Generate a professional environment map for metallic reflections
+import { RoomEnvironment } from "three/examples/jsm/environments/RoomEnvironment.js";
 let _envMap: THREE.Texture | null = null;
-function getEnvMap(): THREE.Texture {
+function getEnvMap(renderer: THREE.WebGLRenderer): THREE.Texture {
   if (_envMap) return _envMap;
-  const pmrem = new THREE.PMREMGenerator();
-  const scene = new THREE.Scene();
-  scene.background = new THREE.Color(0xd0d8e8);
-  // Add gradient lights for reflection
-  const l1 = new THREE.DirectionalLight(0xffffff, 3);
-  l1.position.set(5, 8, 5);
-  scene.add(l1);
-  const l2 = new THREE.DirectionalLight(0x8899bb, 2);
-  l2.position.set(-5, 3, -5);
-  scene.add(l2);
-  const l3 = new THREE.HemisphereLight(0xc8e0ff, 0x886633, 2);
-  scene.add(l3);
-  _envMap = pmrem.fromScene(scene, 0.04).texture;
+  const pmrem = new THREE.PMREMGenerator(renderer);
+  pmrem.compileEquirectangularShader();
+  const roomEnv = new RoomEnvironment();
+  const envScene = new THREE.Scene();
+  envScene.background = new THREE.Color(0x888888);
+  envScene.add(roomEnv);
+  _envMap = pmrem.fromScene(envScene, 0.04).texture;
   pmrem.dispose();
   return _envMap;
 }
 
-function createMaterial(preset: string): THREE.MeshStandardMaterial | THREE.MeshPhysicalMaterial {
-  const envMap = getEnvMap();
-  switch (preset) {
-    case "metal":
-      return new THREE.MeshStandardMaterial({ color: 0xe8e8ec, metalness: 0.95, roughness: 0.15, envMap, envMapIntensity: 1.5 });
-    case "plastic":
-      return new THREE.MeshStandardMaterial({ color: 0x4499ff, metalness: 0.0, roughness: 0.35, envMap, envMapIntensity: 0.4 });
-    case "glass":
-      return new THREE.MeshPhysicalMaterial({ color: 0xffffff, metalness: 0.0, roughness: 0.0, transmission: 0.95, thickness: 0.5, ior: 1.5, envMap, envMapIntensity: 0.8 });
-    default:
-      return new THREE.MeshStandardMaterial({ color: 0xc8cad0, metalness: 0.5, roughness: 0.3, envMap, envMapIntensity: 1.0 });
+function createMaterial(preset: string, renderer?: THREE.WebGLRenderer): THREE.MeshStandardMaterial | THREE.MeshPhysicalMaterial {
+  const config = get3DMaterialConfig();
+  const p = config.presets[preset] || config.presets.default;
+  const envMap = renderer ? getEnvMap(renderer) : undefined;
+  if (preset === "glass") {
+    const glassProps: Record<string, any> = {
+      color: p.color,
+      metalness: p.metalness,
+      roughness: p.roughness,
+      transmission: p.transmission ?? 0.95,
+      thickness: p.thickness ?? 0.5,
+      ior: p.ior ?? 1.5,
+      envMapIntensity: p.envMapIntensity,
+    };
+    if (envMap) glassProps.envMap = envMap;
+    return new THREE.MeshPhysicalMaterial(glassProps);
   }
+  const baseProps: Record<string, any> = {
+    color: p.color,
+    metalness: p.metalness,
+    roughness: p.roughness,
+    envMapIntensity: p.envMapIntensity,
+  };
+  if (preset === "metal" && envMap) {
+    baseProps.envMap = envMap;
+  }
+  return new THREE.MeshStandardMaterial(baseProps);
 }
 
 function getModelFormat(url: string): string {
@@ -70,9 +82,10 @@ function CadModel({
 }: MultiFormatLoaderProps) {
   const [cadGroup, setCadGroup] = useState<THREE.Group | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const gl = useThree((state) => state.gl);
 
   // Cache base material — only recreate when preset changes
-  const baseMaterial = useMemo(() => createMaterial(materialPreset), [materialPreset]);
+  const baseMaterial = useMemo(() => createMaterial(materialPreset, gl), [materialPreset, gl]);
 
   useEffect(() => {
     let cancelled = false;
@@ -168,9 +181,9 @@ function CadModel({
       <primitive object={cadGroup} />
       {showDimensions && box && (
         <group>
-          <DimensionLine start={new THREE.Vector3(box.min.x, box.min.y, box.min.z)} end={new THREE.Vector3(box.max.x, box.min.y, box.min.z)} label={`${((box.max.x - box.min.x) * 1000).toFixed(1)} mm`} />
-          <DimensionLine start={new THREE.Vector3(box.min.x, box.min.y, box.min.z)} end={new THREE.Vector3(box.min.x, box.max.y, box.min.z)} label={`${((box.max.y - box.min.y) * 1000).toFixed(1)} mm`} />
-          <DimensionLine start={new THREE.Vector3(box.min.x, box.min.y, box.min.z)} end={new THREE.Vector3(box.min.x, box.min.y, box.max.z)} label={`${((box.max.z - box.min.z) * 1000).toFixed(1)} mm`} />
+          <DimensionLine start={new THREE.Vector3(box.min.x, box.min.y, box.min.z)} end={new THREE.Vector3(box.max.x, box.min.y, box.min.z)} label={`${(box.max.x - box.min.x).toFixed(1)} mm`} />
+          <DimensionLine start={new THREE.Vector3(box.min.x, box.min.y, box.min.z)} end={new THREE.Vector3(box.min.x, box.max.y, box.min.z)} label={`${(box.max.y - box.min.y).toFixed(1)} mm`} />
+          <DimensionLine start={new THREE.Vector3(box.min.x, box.min.y, box.min.z)} end={new THREE.Vector3(box.min.x, box.min.y, box.max.z)} label={`${(box.max.z - box.min.z).toFixed(1)} mm`} />
         </group>
       )}
     </group>
@@ -188,12 +201,13 @@ function GltfModel({
   onLoaded,
 }: MultiFormatLoaderProps) {
   const { scene } = useGLTF(url);
+  const gl = useThree((state) => state.gl);
 
   const clonedScene = useMemo(() => scene.clone(true), [scene]);
   const box = useMemo(() => new THREE.Box3().setFromObject(clonedScene), [clonedScene]);
 
   // Cache base material — only recreate when preset changes
-  const baseMaterial = useMemo(() => createMaterial(materialPreset), [materialPreset]);
+  const baseMaterial = useMemo(() => createMaterial(materialPreset, gl), [materialPreset, gl]);
 
   // Auto-adjust camera to fit the model
   useEffect(() => {
@@ -271,13 +285,13 @@ function GltfModel({
     });
   }, [viewMode, box, clonedScene]);
 
-  const positions = useMemo(() => {
-    if (!box) return null;
-    return {
-      x: new Float32Array([box.min.x, box.min.y, box.min.z, box.max.x, box.min.y, box.min.z]),
-      y: new Float32Array([box.min.x, box.min.y, box.min.z, box.min.x, box.max.y, box.min.z]),
-      z: new Float32Array([box.min.x, box.min.y, box.min.z, box.min.x, box.min.y, box.max.z]),
-    };
+  const centeredBox = useMemo(() => {
+    if (!box || box.isEmpty()) return null;
+    const center = box.getCenter(new THREE.Vector3());
+    return new THREE.Box3(
+      new THREE.Vector3(box.min.x - center.x, box.min.y - center.y, box.min.z - center.z),
+      new THREE.Vector3(box.max.x - center.x, box.max.y - center.y, box.max.z - center.z)
+    );
   }, [box]);
 
   return (
@@ -285,11 +299,11 @@ function GltfModel({
       <Center>
         <primitive object={clonedScene} />
       </Center>
-      {showDimensions && box && positions && (
+      {showDimensions && centeredBox && (
         <group>
-          <DimensionLine start={new THREE.Vector3(box.min.x, box.min.y, box.min.z)} end={new THREE.Vector3(box.max.x, box.min.y, box.min.z)} label={`${((box.max.x - box.min.x) * 1000).toFixed(1)} mm`} />
-          <DimensionLine start={new THREE.Vector3(box.min.x, box.min.y, box.min.z)} end={new THREE.Vector3(box.min.x, box.max.y, box.min.z)} label={`${((box.max.y - box.min.y) * 1000).toFixed(1)} mm`} />
-          <DimensionLine start={new THREE.Vector3(box.min.x, box.min.y, box.min.z)} end={new THREE.Vector3(box.min.x, box.min.y, box.max.z)} label={`${((box.max.z - box.min.z) * 1000).toFixed(1)} mm`} />
+          <DimensionLine start={new THREE.Vector3(centeredBox.min.x, centeredBox.min.y, centeredBox.min.z)} end={new THREE.Vector3(centeredBox.max.x, centeredBox.min.y, centeredBox.min.z)} label={`${(centeredBox.max.x - centeredBox.min.x).toFixed(1)} mm`} />
+          <DimensionLine start={new THREE.Vector3(centeredBox.min.x, centeredBox.min.y, centeredBox.min.z)} end={new THREE.Vector3(centeredBox.min.x, centeredBox.max.y, centeredBox.min.z)} label={`${(centeredBox.max.y - centeredBox.min.y).toFixed(1)} mm`} />
+          <DimensionLine start={new THREE.Vector3(centeredBox.min.x, centeredBox.min.y, centeredBox.min.z)} end={new THREE.Vector3(centeredBox.min.x, centeredBox.min.y, centeredBox.max.z)} label={`${(centeredBox.max.z - centeredBox.min.z).toFixed(1)} mm`} />
         </group>
       )}
     </group>
@@ -300,36 +314,61 @@ function DimensionLine({ start, end, label }: { start: THREE.Vector3; end: THREE
   const mid = new THREE.Vector3().addVectors(start, end).multiplyScalar(0.5);
   const length = start.distanceTo(end);
   const dir = new THREE.Vector3().subVectors(end, start).normalize();
-  // Offset labels slightly outward to avoid overlapping with model
-  const offset = 0.02 * length;
-  const up = Math.abs(dir.y) > 0.9 ? new THREE.Vector3(1, 0, 0) : new THREE.Vector3(0, 1, 0);
-  const labelOffset = new THREE.Vector3().crossVectors(dir, up).normalize().multiplyScalar(offset);
-  const labelPos = mid.clone().add(labelOffset);
 
-  const positions = useMemo(
-    () => new Float32Array([start.x, start.y, start.z, end.x, end.y, end.z]),
-    [start, end]
-  );
+  // Offset the whole dimension line outward from the model
+  const up = Math.abs(dir.y) > 0.9 ? new THREE.Vector3(0, 0, 1) : new THREE.Vector3(0, 1, 0);
+  const outward = new THREE.Vector3().crossVectors(dir, up).normalize().multiplyScalar(length * 0.08);
+  const oStart = start.clone().add(outward);
+  const oEnd = end.clone().add(outward);
+  const oMid = mid.clone().add(outward);
+
+  // Connector lines from model edge to dimension line
+  const connA = useMemo(() => new Float32Array([
+    start.x, start.y, start.z, oStart.x, oStart.y, oStart.z
+  ]), [start, oStart]);
+  const connB = useMemo(() => new Float32Array([
+    end.x, end.y, end.z, oEnd.x, oEnd.y, oEnd.z
+  ]), [end, oEnd]);
+  const mainLine = useMemo(() => new Float32Array([
+    oStart.x, oStart.y, oStart.z, oEnd.x, oEnd.y, oEnd.z
+  ]), [oStart, oEnd]);
+
+  const dotR = Math.max(length * 0.006, 0.001);
 
   return (
     <group>
+      {/* Main dimension line */}
       <line>
         <bufferGeometry>
-          <bufferAttribute attach="attributes-position" args={[positions, 3]} count={2} />
+          <bufferAttribute attach="attributes-position" args={[mainLine, 3]} count={2} />
         </bufferGeometry>
         <lineBasicMaterial color="#00e5ff" linewidth={2} />
       </line>
+      {/* Connector lines */}
+      <line>
+        <bufferGeometry>
+          <bufferAttribute attach="attributes-position" args={[connA, 3]} count={2} />
+        </bufferGeometry>
+        <lineBasicMaterial color="#00e5ff" linewidth={1} transparent opacity={0.4} />
+      </line>
+      <line>
+        <bufferGeometry>
+          <bufferAttribute attach="attributes-position" args={[connB, 3]} count={2} />
+        </bufferGeometry>
+        <lineBasicMaterial color="#00e5ff" linewidth={1} transparent opacity={0.4} />
+      </line>
       {/* End markers */}
-      <mesh position={start}>
-        <sphereGeometry args={[length * 0.008, 8, 8]} />
+      <mesh position={oStart}>
+        <sphereGeometry args={[dotR, 6, 6]} />
         <meshBasicMaterial color="#00e5ff" />
       </mesh>
-      <mesh position={end}>
-        <sphereGeometry args={[length * 0.008, 8, 8]} />
+      <mesh position={oEnd}>
+        <sphereGeometry args={[dotR, 6, 6]} />
         <meshBasicMaterial color="#00e5ff" />
       </mesh>
-      <Html position={[labelPos.x, labelPos.y, labelPos.z]} center distanceFactor={8}>
-        <div className="bg-[#00e5ff]/20 text-[#00e5ff] text-[11px] px-2 py-0.5 rounded font-mono whitespace-nowrap border border-[#00e5ff]/50 pointer-events-none backdrop-blur-sm">
+      {/* Label — fixed screen size */}
+      <Html position={[oMid.x, oMid.y, oMid.z]} center>
+        <div className="bg-black/70 text-[#00e5ff] text-[11px] px-2 py-0.5 rounded font-mono whitespace-nowrap border border-[#00e5ff]/40 pointer-events-none select-none" style={{ transform: 'translateY(-8px)' }}>
           {label}
         </div>
       </Html>

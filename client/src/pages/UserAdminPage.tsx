@@ -4,6 +4,7 @@ import { useDocumentTitle } from "../hooks/useDocumentTitle";
 import { useMediaQuery } from "../layouts/hooks/useMediaQuery";
 import TopNav from "../components/shared/TopNav";
 import BottomNav from "../components/shared/BottomNav";
+import MobileNavDrawer from "../components/shared/MobileNavDrawer";
 import AppSidebar from "../components/shared/Sidebar";
 import Icon from "../components/shared/Icon";
 import client from "../api/client";
@@ -78,7 +79,7 @@ export default function UserAdminPage() {
 
   const content = (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center gap-3">
         <h1 className="text-lg md:text-2xl md:font-headline md:font-bold md:tracking-tight md:uppercase font-bold text-on-surface">用户管理</h1>
         <span className="text-xs text-on-surface-variant">{total} 个用户</span>
       </div>
@@ -178,6 +179,7 @@ export default function UserAdminPage() {
   return (
     <div className="flex flex-col h-dvh bg-surface">
       <TopNav compact onMenuToggle={() => setNavOpen((v) => !v)} />
+      <MobileNavDrawer open={navOpen} onClose={() => setNavOpen(false)} />
       <main className="flex-1 overflow-y-auto p-3 pb-20 scrollbar-hidden bg-surface-dim">
         {content}
       </main>

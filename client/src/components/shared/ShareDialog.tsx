@@ -1,6 +1,7 @@
 import { useState } from "react";
 import Icon from "./Icon";
 import { createShare, type CreateShareParams } from "../../api/shares";
+import { getPublicSettingsSnapshot } from "../../lib/publicSettings";
 
 interface ShareDialogProps {
   open: boolean;
@@ -10,7 +11,14 @@ interface ShareDialogProps {
 }
 
 export default function ShareDialog({ open, onClose, modelId, modelName }: ShareDialogProps) {
-  const [allowPreview, setAllowPreview] = useState(true);
+  const policy = getPublicSettingsSnapshot();
+  const canPassword = policy.share_allow_password !== false;
+  const canCustomExpiry = policy.share_allow_custom_expiry !== false;
+  const defaultAllowPreview = policy.share_allow_preview !== false;
+  const maxExpireDays = Number(policy.share_max_expire_days) || 0;
+  const maxDownloadLimit = Number(policy.share_max_download_limit) || 0;
+
+  const [allowPreview, setAllowPreview] = useState(defaultAllowPreview);
   const [allowDownload, setAllowDownload] = useState(true);
   const [downloadLimit, setDownloadLimit] = useState(0);
   const [usePassword, setUsePassword] = useState(false);
@@ -22,6 +30,15 @@ export default function ShareDialog({ open, onClose, modelId, modelName }: Share
   const [error, setError] = useState("");
 
   if (!open) return null;
+
+  // Build expiry options based on policy
+  const expiryOptions = (() => {
+    const opts = [{ value: "never", label: "永久" }];
+    if (maxExpireDays === 0 || maxExpireDays >= 1) opts.push({ value: "1d", label: "1 天" });
+    if (maxExpireDays === 0 || maxExpireDays >= 7) opts.push({ value: "7d", label: "7 天" });
+    if (maxExpireDays === 0 || maxExpireDays >= 30) opts.push({ value: "30d", label: "30 天" });
+    return opts;
+  })();
 
   async function handleCreate() {
     if (usePassword && !password.trim()) {
@@ -37,13 +54,13 @@ export default function ShareDialog({ open, onClose, modelId, modelName }: Share
         allowPreview,
         allowDownload,
         downloadLimit,
-        ...(usePassword && { password }),
+        ...(usePassword && canPassword && { password }),
         ...(expiresAt && { expiresAt }),
       };
       const result = await createShare(params);
-      setShareUrl(result.url || `${window.location.origin}/share/${result.token}`);
+      setShareUrl(`${window.location.origin}/share/${result.token}`);
     } catch (err: any) {
-      setError(err.response?.data?.detail || "创建失败");
+      setError(err.response?.data?.detail || err.response?.data?.message || "创建失败");
     } finally {
       setCreating(false);
     }
@@ -58,7 +75,7 @@ export default function ShareDialog({ open, onClose, modelId, modelName }: Share
   function handleReset() {
     setShareUrl("");
     setCopied(false);
-    setAllowPreview(true);
+    setAllowPreview(defaultAllowPreview);
     setAllowDownload(true);
     setDownloadLimit(0);
     setUsePassword(false);
@@ -91,7 +108,6 @@ export default function ShareDialog({ open, onClose, modelId, modelName }: Share
           <p className="text-sm text-on-surface-variant">分享「{modelName}」给其他人查看或下载</p>
 
           {shareUrl ? (
-            /* Share link created */
             <div className="space-y-3">
               <div className="bg-primary/10 border border-primary/20 rounded-lg p-3">
                 <p className="text-xs text-primary font-medium mb-2">分享链接已创建</p>
@@ -120,7 +136,6 @@ export default function ShareDialog({ open, onClose, modelId, modelName }: Share
               </div>
             </div>
           ) : (
-            /* Share settings */
             <>
               {/* Preview permission */}
               <div className="flex items-center justify-between">
@@ -158,61 +173,65 @@ export default function ShareDialog({ open, onClose, modelId, modelName }: Share
                     <input
                       type="number"
                       min={0}
+                      max={maxDownloadLimit || undefined}
                       value={downloadLimit}
-                      onChange={(e) => setDownloadLimit(Math.max(0, parseInt(e.target.value) || 0))}
+                      onChange={(e) => {
+                        let v = Math.max(0, parseInt(e.target.value) || 0);
+                        if (maxDownloadLimit > 0) v = Math.min(v, maxDownloadLimit);
+                        setDownloadLimit(v);
+                      }}
                       className="w-24 bg-surface-container-lowest text-on-surface text-base rounded-md px-3 py-2 border border-outline-variant/20 outline-none focus:border-primary"
                     />
-                    <span className="text-xs text-on-surface-variant">0 = 不限制</span>
+                    <span className="text-xs text-on-surface-variant">0 = 不限制{maxDownloadLimit > 0 ? `，上限 ${maxDownloadLimit}` : ""}</span>
                   </div>
                 </div>
               )}
 
               {/* Password */}
-              <div>
-                <div className="flex items-center justify-between mb-1">
-                  <p className="text-sm text-on-surface">密码保护</p>
-                  <button
-                    onClick={() => setUsePassword(!usePassword)}
-                    className={`relative w-11 h-6 rounded-full transition-colors duration-200 shrink-0 ${usePassword ? 'bg-primary-container' : 'bg-outline-variant/30'}`}
-                  >
-                    <span className={`absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white shadow-sm transition-transform duration-200 ${usePassword ? 'translate-x-5' : 'translate-x-0'}`} />
-                  </button>
+              {canPassword && (
+                <div>
+                  <div className="flex items-center justify-between mb-1">
+                    <p className="text-sm text-on-surface">密码保护</p>
+                    <button
+                      onClick={() => setUsePassword(!usePassword)}
+                      className={`relative w-11 h-6 rounded-full transition-colors duration-200 shrink-0 ${usePassword ? 'bg-primary-container' : 'bg-outline-variant/30'}`}
+                    >
+                      <span className={`absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white shadow-sm transition-transform duration-200 ${usePassword ? 'translate-x-5' : 'translate-x-0'}`} />
+                    </button>
+                  </div>
+                  {usePassword && (
+                    <input
+                      type="text"
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      placeholder="输入访问密码"
+                      className="w-full bg-surface-container-lowest text-on-surface text-base rounded-md px-3 py-2 border border-outline-variant/20 outline-none focus:border-primary"
+                    />
+                  )}
                 </div>
-                {usePassword && (
-                  <input
-                    type="text"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    placeholder="输入访问密码"
-                    className="w-full bg-surface-container-lowest text-on-surface text-base rounded-md px-3 py-2 border border-outline-variant/20 outline-none focus:border-primary"
-                  />
-                )}
-              </div>
+              )}
 
               {/* Expiry */}
-              <div>
-                <label className="block text-sm text-on-surface mb-1">有效期</label>
-                <div className="flex gap-2">
-                  {[
-                    { value: "never", label: "永久" },
-                    { value: "1d", label: "1 天" },
-                    { value: "7d", label: "7 天" },
-                    { value: "30d", label: "30 天" },
-                  ].map(opt => (
-                    <button
-                      key={opt.value}
-                      onClick={() => setExpiry(opt.value)}
-                      className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
-                        expiry === opt.value
-                          ? 'bg-primary-container text-on-primary'
-                          : 'bg-surface-container-highest/50 text-on-surface-variant hover:bg-surface-container-highest'
-                      }`}
-                    >
-                      {opt.label}
-                    </button>
-                  ))}
+              {canCustomExpiry && (
+                <div>
+                  <label className="block text-sm text-on-surface mb-1">有效期{maxExpireDays > 0 ? `（最长 ${maxExpireDays} 天）` : ""}</label>
+                  <div className="flex gap-2">
+                    {expiryOptions.map(opt => (
+                      <button
+                        key={opt.value}
+                        onClick={() => setExpiry(opt.value)}
+                        className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
+                          expiry === opt.value
+                            ? 'bg-primary-container text-on-primary'
+                            : 'bg-surface-container-highest/50 text-on-surface-variant hover:bg-surface-container-highest'
+                        }`}
+                      >
+                        {opt.label}
+                      </button>
+                    ))}
+                  </div>
                 </div>
-              </div>
+              )}
 
               {error && <p className="text-xs text-error">{error}</p>}
 

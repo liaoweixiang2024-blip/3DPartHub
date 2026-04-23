@@ -2,7 +2,7 @@ import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useAuthStore } from "../../stores/useAuthStore";
 import Icon from "./Icon";
 
-const userNav = [
+export const userNav = [
   { label: "模型库", icon: "dashboard", path: "/" },
   { label: "我的收藏", icon: "star", path: "/favorites" },
   { label: "下载历史", icon: "download", path: "/downloads" },
@@ -10,13 +10,14 @@ const userNav = [
   { label: "技术支持", icon: "support_agent", path: "/support" },
 ];
 
-const adminNav = [
+export const adminNav = [
   { label: "模型库", icon: "dashboard", path: "/" },
   { label: "模型管理", icon: "view_in_ar", path: "/admin/models" },
   { label: "分类管理", icon: "folder", path: "/admin/categories" },
   { label: "用户管理", icon: "group", path: "/admin/users" },
   { label: "工单处理", icon: "build", path: "/admin/tickets" },
   { label: "操作日志", icon: "receipt_long", path: "/admin/audit" },
+  { label: "分享管理", icon: "share", path: "/admin/shares" },
   { label: "系统设置", icon: "settings", path: "/admin/settings" },
   { label: "我的收藏", icon: "star", path: "/favorites" },
   { label: "下载历史", icon: "download", path: "/downloads" },

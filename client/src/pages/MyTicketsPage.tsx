@@ -127,7 +127,7 @@ function MobileContent() {
   const list = tickets || [];
 
   return (
-    <>
+    <div className="px-4 py-5 pb-6">
       <div className="flex items-center justify-between mb-4">
         <div>
           <h1 className="text-lg font-bold text-on-surface">我的工单</h1>
@@ -141,10 +141,10 @@ function MobileContent() {
       {isLoading ? (
         <SkeletonList rows={4} />
       ) : list.length === 0 ? (
-        <div className="flex flex-col items-center justify-center py-16 gap-3">
-          <Icon name="inbox" size={40} className="text-on-surface-variant/20" />
-          <p className="text-xs text-on-surface-variant">暂无工单记录</p>
-          <Link to="/support" className="bg-primary-container text-on-primary px-5 py-2 rounded-lg text-xs font-medium">提交工单</Link>
+        <div className="flex flex-col items-center justify-center py-24 gap-4">
+          <Icon name="inbox" size={64} className="text-on-surface-variant/20" />
+          <p className="text-on-surface-variant text-sm">暂无工单记录</p>
+          <Link to="/support" className="bg-primary-container text-on-primary px-6 py-2.5 rounded-sm text-sm font-bold uppercase tracking-wider hover:opacity-90 transition-opacity">提交工单</Link>
         </div>
       ) : (
         <div className="flex flex-col gap-2.5">
@@ -173,7 +173,7 @@ function MobileContent() {
           })}
         </div>
       )}
-    </>
+    </div>
   );
 }
 
@@ -201,9 +201,7 @@ export default function MyTicketsPage() {
       <TopNav compact onMenuToggle={() => setNavOpen((prev) => !prev)} />
       <MobileNavDrawer open={navOpen} onClose={() => setNavOpen(false)} />
       <main className="flex-1 overflow-y-auto scrollbar-hidden bg-surface-dim">
-        <div className="px-4 py-4 pb-20">
-          <MobileContent />
-        </div>
+        <MobileContent />
       </main>
       <BottomNav />
     </div>

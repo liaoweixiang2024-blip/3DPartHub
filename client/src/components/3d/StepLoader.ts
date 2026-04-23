@@ -139,16 +139,5 @@ function cadResultToThreeGroup(result: OcctResult): THREE.Group {
 
   group.rotation.x = -Math.PI / 2;
 
-  const box = new THREE.Box3().setFromObject(group);
-  const center = box.getCenter(new THREE.Vector3());
-  const size = box.getSize(new THREE.Vector3());
-  const maxDim = Math.max(size.x, size.y, size.z);
-  if (maxDim > 0) {
-    const scale = 4 / maxDim;
-    group.scale.setScalar(scale);
-    group.position.sub(center.multiplyScalar(scale));
-    group.position.y += 1;
-  }
-
   return group;
 }

@@ -27,6 +27,7 @@ const TicketDetailPage = lazy(() => import("./pages/TicketDetailPage"));
 const SettingsPage = lazy(() => import("./pages/SettingsPage"));
 const UserAdminPage = lazy(() => import("./pages/UserAdminPage"));
 const AuditLogPage = lazy(() => import("./pages/AuditLogPage"));
+const ShareAdminPage = lazy(() => import("./pages/ShareAdminPage"));
 
 const pageVariants = {
   initial: { opacity: 0 },
@@ -97,6 +98,7 @@ export default function Router() {
         <Route path="/admin/settings" element={<PageWrap><ProtectedRoute requiredRole="ADMIN"><SettingsPage /></ProtectedRoute></PageWrap>} />
         <Route path="/admin/users" element={<PageWrap><ProtectedRoute requiredRole="ADMIN"><UserAdminPage /></ProtectedRoute></PageWrap>} />
         <Route path="/admin/audit" element={<PageWrap><ProtectedRoute requiredRole="ADMIN"><AuditLogPage /></ProtectedRoute></PageWrap>} />
+        <Route path="/admin/shares" element={<PageWrap><ProtectedRoute requiredRole="ADMIN"><ShareAdminPage /></ProtectedRoute></PageWrap>} />
         <Route path="*" element={<NotFoundPage />} />
       </Routes>
     </AnimatePresence>
