@@ -39,22 +39,14 @@
 ### 一键部署
 
 ```bash
-# 1. 创建项目目录
 mkdir -p /opt/3dparthub && cd /opt/3dparthub
-
-# 2. 下载配置文件
 curl -O https://raw.githubusercontent.com/liaoweixiang2024-blip/3DPartHub/main/docker-compose.yml
-
-# 3. 生成随机密钥
-cat > .env << EOF
-DB_PASSWORD=$(openssl rand -hex 16)
-JWT_SECRET=$(openssl rand -hex 32)
-EOF
-
-# 4. 启动
 docker compose up -d
+```
 
-# 5. 检查服务状态
+检查服务状态：
+
+```bash
 docker compose ps
 docker compose logs api | tail -20
 curl http://localhost:3780/api/health

@@ -3,17 +3,14 @@
 # ============================================================
 #
 # 【快速开始】
-#   1. 安装 Docker + Docker Compose
-#   2. 复制本文件到服务器，创建 .env 文件填写密钥（见下方）
-#   3. docker compose up -d
-#   4. 访问 http://服务器IP:3780
+#   mkdir -p /opt/3dparthub && cd /opt/3dparthub
+#   curl -O https://raw.githubusercontent.com/liaoweixiang2024-blip/3DPartHub/main/docker-compose.yml
+#   docker compose up -d
+#   访问 http://服务器IP:3780
 #
 # 【升级版本】
-#   1. 修改下方 IMAGE_TAG 为新版本号
-#   2. docker compose pull && docker compose up -d
-#   3. 检查日志: docker compose logs -f api
-#      确认 prisma migrate deploy 成功，无报错
-#   4. 检查健康: curl http://localhost:3780/api/health
+#   docker compose pull && docker compose up -d
+#   检查日志: docker compose logs -f api
 #
 # 【数据安全】
 #   所有数据存储在 Docker 命名卷中，升级/重建容器不会丢失：
