@@ -484,27 +484,31 @@ router.get("/api/models/:id", async (req: Request, res: Response) => {
         },
       });
       if (m) {
-        // Get file modified date for the main model
-        let mainFileModifiedAt: string | null = null;
+        // Get file modified date — fallback to DB createdAt if file not on disk
+        let mainFileModifiedAt: string = m.createdAt.toISOString();
         try {
           const mainPath = m.uploadPath && existsSync(m.uploadPath)
             ? m.uploadPath
             : join(config.staticDir, "originals", `${m.id}.${m.format}`);
           if (existsSync(mainPath)) {
             const stat = await statAsync(mainPath);
-            mainFileModifiedAt = (stat.birthtime < stat.mtime ? stat.birthtime : stat.mtime).toISOString();
+            mainFileModifiedAt = stat.mtime.toISOString();
           }
-        } catch { /* ignore */ }
+        } catch { /* keep DB fallback */ }
 
-        // Pre-fetch variant file stats in parallel
+        // Pre-fetch variant file stats in parallel — fallback to DB createdAt
         const variantStats = await Promise.all(
           (m.group?.models ?? []).map(async (v: any) => {
-            if (!v.uploadPath) return null;
             try {
-              const p = v.uploadPath.startsWith("/") ? v.uploadPath : join(process.cwd(), v.uploadPath);
-              const stat = await statAsync(p);
-              return (stat.birthtime < stat.mtime ? stat.birthtime : stat.mtime).toISOString();
-            } catch { return null; }
+              if (v.uploadPath) {
+                const p = v.uploadPath.startsWith("/") ? v.uploadPath : join(process.cwd(), v.uploadPath);
+                if (existsSync(p)) {
+                  const stat = await statAsync(p);
+                  return stat.mtime.toISOString();
+                }
+              }
+            } catch { /* fallback */ }
+            return v.createdAt ? v.createdAt.toISOString() : null;
           })
         );
 

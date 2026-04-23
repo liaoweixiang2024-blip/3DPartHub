@@ -908,7 +908,7 @@ export default function ModelDetailPage() {
       specs: [
         { label: "格式", value: format },
         { label: "文件大小", value: formatFileSize(serverModel.original_size || 0) },
-        ...(serverModel.file_modified_at ? [{ label: "文件日期", value: new Date(serverModel.file_modified_at).toLocaleDateString("zh-CN") }] : []),
+        { label: "文件日期", value: new Date(serverModel.file_modified_at || serverModel.created_at).toLocaleDateString("zh-CN") },
         { label: "上传时间", value: serverModel.created_at ? new Date(serverModel.created_at).toLocaleString("zh-CN") : "N/A" },
         ...(serverModel.description ? [{ label: "描述", value: serverModel.description }] : []),
       ],
