@@ -1,7 +1,7 @@
 # === Stage 1: Build (install deps + compile native modules) ===
 FROM node:20-alpine AS builder
 
-RUN apk add --no-cache python3 make g++ pkgconfig openssl pixman-dev cairo-dev pango-dev
+RUN apk update && apk add --no-cache python3 make g++ pkgconfig openssl pixman-dev cairo-dev pango-dev
 
 WORKDIR /app
 
@@ -28,7 +28,7 @@ RUN echo $APP_VERSION > /app/VERSION
 # === Stage 2: Runtime (no compilers, no -dev headers) ===
 FROM node:20-alpine
 
-RUN apk add --no-cache openssl pixman cairo pango giflib libjpeg-turbo \
+RUN apk update && apk add --no-cache openssl pixman cairo pango giflib libjpeg-turbo \
     postgresql-client curl \
     chromium mesa-gl mesa-egl mesa-dri-gallium
 

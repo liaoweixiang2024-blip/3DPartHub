@@ -187,15 +187,20 @@ model Comment {
 }
 
 model ShareLink {
-  id        String    @id @default(uuid())
-  modelId   String    @map("model_id")
-  model     Model     @relation(fields: [modelId], references: [id], onDelete: Cascade)
-  token     String    @unique
-  password  String?
-  expiresAt DateTime? @map("expires_at")
-  createdById String  @map("created_by_id")
-  createdBy   User    @relation(fields: [createdById], references: [id])
-  createdAt   DateTime @default(now()) @map("created_at")
+  id              String    @id @default(uuid())
+  modelId         String    @map("model_id")
+  model           Model     @relation(fields: [modelId], references: [id], onDelete: Cascade)
+  token           String    @unique
+  password        String?
+  allowPreview    Boolean   @default(true) @map("allow_preview")
+  allowDownload   Boolean   @default(true) @map("allow_download")
+  downloadLimit   Int       @default(0) @map("download_limit")
+  downloadCount   Int       @default(0) @map("download_count")
+  viewCount       Int       @default(0) @map("view_count")
+  expiresAt       DateTime? @map("expires_at")
+  createdById     String    @map("created_by_id")
+  createdBy       User      @relation(fields: [createdById], references: [id])
+  createdAt       DateTime  @default(now()) @map("created_at")
 
   @@map("share_links")
 }

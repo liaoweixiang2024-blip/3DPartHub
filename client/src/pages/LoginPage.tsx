@@ -156,12 +156,11 @@ export default function LoginPage() {
   return (
     <div className="flex items-center justify-center min-h-screen bg-surface p-4 overflow-y-auto">
       <div className="my-4 w-full max-w-md">
-      <motion.div
-        initial={{ opacity: 0, scale: 0.95 }}
-        animate={{ opacity: 1, scale: 1 }}
-        transition={{ duration: 0.4, ease: "easeOut" }}
-        className="w-full max-w-md"
-      >
+        <motion.div
+          initial={{ opacity: 0, scale: 0.95 }}
+          animate={{ opacity: 1, scale: 1 }}
+          transition={{ duration: 0.4, ease: "easeOut" }}
+        >
         <div className="bg-surface-container-low rounded-lg border border-outline-variant/20 overflow-hidden">
           <div className="p-8 border-b border-outline-variant/10 text-center">
             {(() => {
@@ -385,8 +384,8 @@ export default function LoginPage() {
         <p className="text-center text-xs text-on-surface-variant mt-6">
           <Link to="/" className="hover:text-primary transition-colors">← 返回首页</Link>
         </p>
-      </div>
       </motion.div>
+      </div>
     </div>
   );
 }

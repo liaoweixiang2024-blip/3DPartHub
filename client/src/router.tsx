@@ -17,6 +17,7 @@ const SupportPage = lazy(() => import("./pages/SupportPage"));
 const MyTicketsPage = lazy(() => import("./pages/MyTicketsPage"));
 const LoginPage = lazy(() => import("./pages/LoginPage"));
 const LegalPage = lazy(() => import("./pages/LegalPage"));
+const SharePage = lazy(() => import("./pages/SharePage"));
 const ProjectsPage = lazy(() => import("./pages/ProjectsPage"));
 const ProjectDetailPage = lazy(() => import("./pages/ProjectDetailPage"));
 const CategoryAdminPage = lazy(() => import("./pages/CategoryAdminPage"));
@@ -78,6 +79,7 @@ export default function Router() {
       <Routes location={location} key={location.pathname}>
         <Route path="/login" element={<PageWrap><LoginPage /></PageWrap>} />
         <Route path="/legal/:type" element={<PageWrap><LegalPage /></PageWrap>} />
+        <Route path="/share/:token" element={<PageWrap><SharePage /></PageWrap>} />
         <Route path="/" element={<PageWrap><HomePage /></PageWrap>} />
         <Route path="/model/:id" element={<PageWrap><ModelDetailPage /></PageWrap>} />
         <Route path="/projects" element={<PageWrap><ProtectedRoute><ProjectsPage /></ProtectedRoute></PageWrap>} />

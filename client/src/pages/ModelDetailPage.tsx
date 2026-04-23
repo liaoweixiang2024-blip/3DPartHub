@@ -17,6 +17,7 @@ import { modelApi, type ServerModelListItem } from "../api/models";
 import { categoriesApi, type CategoryItem } from "../api/categories";
 import { useToast } from "../components/shared/Toast";
 import CategorySelect from "../components/shared/CategorySelect";
+import ShareDialog from "../components/shared/ShareDialog";
 import { getCachedPublicSettings, getSiteTitle } from "../lib/publicSettings";
 import type { ModelSpec, ModelDownload } from "../types";
 import useSWR, { mutate as globalMutate } from "swr";
@@ -472,6 +473,7 @@ function DesktopDetail({
   isAdmin,
   onToggleFav,
   onEdit,
+  onShare,
   categoryBreadcrumb,
   onDownload,
 }: {
@@ -480,6 +482,7 @@ function DesktopDetail({
   isAdmin?: boolean;
   onToggleFav: () => void;
   onEdit?: () => void;
+  onShare: () => void;
   categoryBreadcrumb: { id: string; name: string }[];
   onDownload: (id: string, format?: string) => void;
 }) {
@@ -518,6 +521,15 @@ function DesktopDetail({
             <Icon name="download" size={18} />
             下载模型
           </button>
+          <Tooltip text="分享">
+            <motion.button
+              whileTap={{ scale: 0.9 }}
+              onClick={onShare}
+              className="bg-surface-container-high border border-outline/40 hover:border-outline text-on-surface rounded-sm p-2 transition-all flex items-center justify-center"
+            >
+              <Icon name="share" size={20} />
+            </motion.button>
+          </Tooltip>
           <Tooltip text="收藏">
             <motion.button
               whileTap={{ scale: 0.9 }}
@@ -644,6 +656,7 @@ function MobileDetail({
   isAdmin,
   onToggleFav,
   onEdit,
+  onShare,
   onBack,
   categoryBreadcrumb,
   onDownload,
@@ -655,6 +668,7 @@ function MobileDetail({
   isAdmin?: boolean;
   onToggleFav: () => void;
   onEdit?: () => void;
+  onShare: () => void;
   onBack: () => void;
   categoryBreadcrumb: { id: string; name: string }[];
   onDownload: (id: string, format?: string) => void;
@@ -674,6 +688,9 @@ function MobileDetail({
                   <Icon name="settings" size={20} />
                 </button>
               )}
+              <button onClick={onShare} className="w-9 h-9 flex items-center justify-center rounded-sm text-on-surface-variant hover:text-primary hover:bg-surface-container transition-colors">
+                <Icon name="share" size={20} />
+              </button>
               <motion.button whileTap={{ scale: 0.9 }} onClick={onToggleFav} className="w-9 h-9 flex items-center justify-center rounded-sm text-on-surface-variant hover:bg-surface-container transition-colors">
                 <Icon name="star" size={20} className={`${isFav ? "text-primary" : ""}`} fill={isFav} />
               </motion.button>
@@ -819,6 +836,7 @@ export default function ModelDetailPage() {
   const [watermarkState, setWatermarkState] = useState<{ show: boolean; image: string }>({ show: false, image: "" });
   const [loginPromptOpen, setLoginPromptOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
+  const [shareOpen, setShareOpen] = useState(false);
   const isAdmin = useAuthStore.getState().user?.role === "ADMIN";
   const { toast } = useToast();
 
@@ -1039,6 +1057,7 @@ export default function ModelDetailPage() {
             isAdmin={isAdmin}
             onToggleFav={handleToggleFav}
             onEdit={() => setEditOpen(true)}
+            onShare={() => setShareOpen(true)}
             categoryBreadcrumb={categoryBreadcrumb}
             onDownload={handleDownload}
           />
@@ -1054,6 +1073,12 @@ export default function ModelDetailPage() {
           onClose={() => setEditOpen(false)}
           onSaved={() => { mutate(); globalMutate((k: string) => typeof k === 'string' && k.startsWith('/models')); }}
           onDelete={async () => { await modelApi.delete(modelData.id); navigate('/'); }}
+        />
+        <ShareDialog
+          open={shareOpen}
+          onClose={() => setShareOpen(false)}
+          modelId={modelData.id}
+          modelName={modelData.name}
         />
         <AnimatePresence>
           {loginPromptOpen && (
@@ -1216,6 +1241,7 @@ export default function ModelDetailPage() {
         isAdmin={isAdmin}
         onToggleFav={() => toggleFavorite({ id: modelData.id, name: modelData.name, subtitle: modelData.subtitle, category: modelData.category, dimensions: modelData.dimensions })}
         onEdit={() => setEditOpen(true)}
+        onShare={() => setShareOpen(true)}
         onBack={() => navigate(-1)}
         categoryBreadcrumb={categoryBreadcrumb}
         onDownload={handleDownload}
@@ -1232,6 +1258,12 @@ export default function ModelDetailPage() {
         onClose={() => setEditOpen(false)}
         onSaved={() => { mutate(); globalMutate((k: string) => typeof k === 'string' && k.startsWith('/models')); }}
         onDelete={async () => { await modelApi.delete(modelData.id); navigate('/'); }}
+      />
+      <ShareDialog
+        open={shareOpen}
+        onClose={() => setShareOpen(false)}
+        modelId={modelData.id}
+        modelName={modelData.name}
       />
       <AnimatePresence>
         {loginPromptOpen && (
