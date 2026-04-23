@@ -16,16 +16,38 @@ interface MultiFormatLoaderProps {
   onLoaded?: () => void;
 }
 
+// Generate a simple environment map for metallic reflections
+let _envMap: THREE.Texture | null = null;
+function getEnvMap(): THREE.Texture {
+  if (_envMap) return _envMap;
+  const pmrem = new THREE.PMREMGenerator();
+  const scene = new THREE.Scene();
+  scene.background = new THREE.Color(0xd0d8e8);
+  // Add gradient lights for reflection
+  const l1 = new THREE.DirectionalLight(0xffffff, 3);
+  l1.position.set(5, 8, 5);
+  scene.add(l1);
+  const l2 = new THREE.DirectionalLight(0x8899bb, 2);
+  l2.position.set(-5, 3, -5);
+  scene.add(l2);
+  const l3 = new THREE.HemisphereLight(0xc8e0ff, 0x886633, 2);
+  scene.add(l3);
+  _envMap = pmrem.fromScene(scene, 0.04).texture;
+  pmrem.dispose();
+  return _envMap;
+}
+
 function createMaterial(preset: string): THREE.MeshStandardMaterial | THREE.MeshPhysicalMaterial {
+  const envMap = getEnvMap();
   switch (preset) {
     case "metal":
-      return new THREE.MeshStandardMaterial({ color: 0xe8e8ec, metalness: 0.95, roughness: 0.08, envMapIntensity: 1.8 });
+      return new THREE.MeshStandardMaterial({ color: 0xe8e8ec, metalness: 0.95, roughness: 0.15, envMap, envMapIntensity: 1.5 });
     case "plastic":
-      return new THREE.MeshStandardMaterial({ color: 0x4499ff, metalness: 0.0, roughness: 0.35, envMapIntensity: 0.6 });
+      return new THREE.MeshStandardMaterial({ color: 0x4499ff, metalness: 0.0, roughness: 0.35, envMap, envMapIntensity: 0.4 });
     case "glass":
-      return new THREE.MeshPhysicalMaterial({ color: 0xffffff, metalness: 0.0, roughness: 0.0, transmission: 0.95, thickness: 0.5, ior: 1.5, envMapIntensity: 1.0 });
+      return new THREE.MeshPhysicalMaterial({ color: 0xffffff, metalness: 0.0, roughness: 0.0, transmission: 0.95, thickness: 0.5, ior: 1.5, envMap, envMapIntensity: 0.8 });
     default:
-      return new THREE.MeshStandardMaterial({ color: 0xc8cad0, metalness: 0.5, roughness: 0.25, envMapIntensity: 1.5 });
+      return new THREE.MeshStandardMaterial({ color: 0xc8cad0, metalness: 0.5, roughness: 0.3, envMap, envMapIntensity: 1.0 });
   }
 }
 
@@ -276,6 +298,14 @@ function GltfModel({
 
 function DimensionLine({ start, end, label }: { start: THREE.Vector3; end: THREE.Vector3; label: string }) {
   const mid = new THREE.Vector3().addVectors(start, end).multiplyScalar(0.5);
+  const length = start.distanceTo(end);
+  const dir = new THREE.Vector3().subVectors(end, start).normalize();
+  // Offset labels slightly outward to avoid overlapping with model
+  const offset = 0.02 * length;
+  const up = Math.abs(dir.y) > 0.9 ? new THREE.Vector3(1, 0, 0) : new THREE.Vector3(0, 1, 0);
+  const labelOffset = new THREE.Vector3().crossVectors(dir, up).normalize().multiplyScalar(offset);
+  const labelPos = mid.clone().add(labelOffset);
+
   const positions = useMemo(
     () => new Float32Array([start.x, start.y, start.z, end.x, end.y, end.z]),
     [start, end]
@@ -287,10 +317,19 @@ function DimensionLine({ start, end, label }: { start: THREE.Vector3; end: THREE
         <bufferGeometry>
           <bufferAttribute attach="attributes-position" args={[positions, 3]} count={2} />
         </bufferGeometry>
-        <lineBasicMaterial color="#f97316" linewidth={1} />
+        <lineBasicMaterial color="#00e5ff" linewidth={2} />
       </line>
-      <Html position={[mid.x, mid.y - 0.3, mid.z]} center distanceFactor={8}>
-        <div className="bg-black/80 text-primary text-[10px] px-2 py-0.5 rounded font-mono whitespace-nowrap border border-primary-container/30 pointer-events-none">
+      {/* End markers */}
+      <mesh position={start}>
+        <sphereGeometry args={[length * 0.008, 8, 8]} />
+        <meshBasicMaterial color="#00e5ff" />
+      </mesh>
+      <mesh position={end}>
+        <sphereGeometry args={[length * 0.008, 8, 8]} />
+        <meshBasicMaterial color="#00e5ff" />
+      </mesh>
+      <Html position={[labelPos.x, labelPos.y, labelPos.z]} center distanceFactor={8}>
+        <div className="bg-[#00e5ff]/20 text-[#00e5ff] text-[11px] px-2 py-0.5 rounded font-mono whitespace-nowrap border border-[#00e5ff]/50 pointer-events-none backdrop-blur-sm">
           {label}
         </div>
       </Html>

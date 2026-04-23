@@ -57,10 +57,10 @@ export default function ModelViewer({
 }: ModelViewerProps) {
   return (
     <Canvas
-      gl={{ preserveDrawingBuffer: true, antialias: true, toneMapping: THREE.ACESFilmicToneMapping, toneMappingExposure: 1.2 }}
+      gl={{ preserveDrawingBuffer: true, antialias: true, toneMapping: THREE.ACESFilmicToneMapping, toneMappingExposure: 1.5 }}
       camera={{ position: [5, 3, 5], fov: 45, near: 0.01, far: 100000 }}
       dpr={[1, 2]}
-      style={{ background: "linear-gradient(180deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%)" }}
+      style={{ background: "linear-gradient(180deg, #2a2a3e 0%, #1e2a42 50%, #162040 100%)" }}
     >
       <Suspense fallback={null}>
         <Scene showGrid={showGrid} showAxis={showAxis} />
