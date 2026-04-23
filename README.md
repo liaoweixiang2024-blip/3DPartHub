@@ -115,7 +115,8 @@ curl http://localhost:3780/api/health
 |------|------|------|
 | `pgdata` | PostgreSQL 数据库 | 数据库所有数据 |
 | `uploads-data` | 上传的原始模型文件 | STEP/IGES 原文件 |
-| `static-data` | 转换文件、缩略图、备份 | 备份文件在 `static/backups/`，注意磁盘容量 |
+| `static-data` | 转换文件、缩略图 | glTF 模型、缩略图 |
+| `./backups/` | 备份文件 | **宿主机目录挂载**，直接放文件就能恢复 |
 
 ```bash
 # 查看卷占用空间
@@ -131,14 +132,29 @@ docker run --rm -v 3dparthub_pgdata:/data -v $(pwd):/backup alpine tar czf /back
 
 ### 1. 备份文件在服务器上，怎么恢复？
 
-**方式一：网页端（推荐）**
+备份文件需要两个：`.json`（元数据）和 `.tar.gz`（数据），缺一不可。
+
+**方式一：放到 backups 目录（推荐）**
+
+`docker-compose.yml` 已经把 `./backups/` 挂载到容器内，直接放文件就行：
 
 ```bash
-# 把备份文件复制到容器内
-docker cp /root/backup_20260423.tar.gz 3dparthub-api-1:/app/static/backups/
+cd /opt/3dparthub
+
+# 把备份文件复制到 backups 目录
+cp /root/backup_1776890498343.json backups/
+cp /root/backup_1776890498343.tar.gz backups/
+
+# 打开网页 → 设置 → 数据备份
+# 备份列表会自动显示，点击「恢复」即可
 ```
 
-然后打开 **设置 → 数据备份 → 导入恢复 → 服务器文件**，会自动列出备份文件，点击恢复即可。
+**方式二：docker cp（不推荐，重启后文件会丢）**
+
+```bash
+docker cp /root/backup_1776890498343.json 3dparthub-api-1:/app/static/backups/
+docker cp /root/backup_1776890498343.tar.gz 3dparthub-api-1:/app/static/backups/
+```
 
 **方式二：命令行**
 
@@ -253,17 +269,49 @@ docker compose up -d
 
 ### 7. 如何迁移到新服务器？
 
-```bash
-# 旧服务器：
-# 1. 在网页端创建完整备份，下载到本地
-# 或用命令行导出卷数据：
-docker run --rm -v 3dparthub_pgdata:/data -v $(pwd):/backup alpine tar czf /backup/pgdata.tar.gz -C /data .
+**最简单的方法：备份文件直接放到宿主机目录**
 
-# 新服务器：
-# 1. 部署新实例（按上面的"一键部署"）
-# 2. 通过网页端恢复备份
-#    或命令行导入：docker cp backup.tar.gz 3dparthub-api-1:/app/static/backups/
+```bash
+# ===== 旧服务器 =====
+
+# 1. 在网页端「设置 → 数据备份」创建完整备份
+#    备份完成后会生成两个文件：
+#      backup_xxxxxxxxxx.json  （备份元数据）
+#      backup_xxxxxxxxxx.tar.gz（备份数据：数据库 + 模型 + 缩略图）
+
+# 2. 找到备份文件
+cd /opt/3dparthub
+ls -lh backups/
+
+# 3. 把备份文件传到新服务器
+scp backups/backup_*.json backups/backup_*.tar.gz root@新服务器IP:/opt/3dparthub/backups/
+
+
+# ===== 新服务器 =====
+
+# 1. 部署新实例（按上面的"一键部署"操作）
+mkdir -p /opt/3dparthub/backups && cd /opt/3dparthub
+curl -O https://raw.githubusercontent.com/liaoweixiang2024-blip/3DPartHub/main/docker-compose.yml
+cat > .env << EOF
+DB_PASSWORD=$(openssl rand -hex 16)
+JWT_SECRET=$(openssl rand -hex 32)
+EOF
+
+# 2. 把备份文件放进 backups 目录（scp 已经传过来了）
+ls backups/
+# backup_1776890498343.json  backup_1776890498343.tar.gz
+
+# 3. 启动服务
+docker compose up -d
+
+# 4. 打开网页 → 设置 → 数据备份
+#    备份列表会自动显示刚才放的备份文件
+#    点击「恢复」即可还原全部数据
+#
+#    或者点「导入恢复 → 服务器文件」也能看到
 ```
+
+> **原理**：`docker-compose.yml` 中 `./backups` 目录直接挂载到容器内 `/app/static/backups/`，放到宿主机目录的备份文件，容器内立即可见。
 
 ---
 
