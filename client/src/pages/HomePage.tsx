@@ -204,7 +204,44 @@ function SkeletonCardMobile() {
   );
 }
 
-function ProductCard({ product, onDownload }: { product: Product; onDownload: (id: string) => void }) {
+function ProductCard({ product, onDownload, variant = "grid" }: { product: Product; onDownload: (id: string) => void; variant?: "grid" | "list" }) {
+  if (variant === "list") {
+    return (
+      <Link to={`/model/${product.id}`} className="flex group bg-surface-container-high rounded-sm overflow-hidden hover:shadow-[0_8px_20px_rgba(0,0,0,0.35)] transition-all duration-300">
+        <div className="w-32 shrink-0 bg-surface-container-lowest relative overflow-hidden flex items-center justify-center">
+          <ModelThumbnail src={product.thumbnailUrl} alt={product.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
+          <div className="absolute top-1.5 left-1.5 flex gap-1">
+            {product.formats.map((f) => <FormatTag key={f} format={f} />)}
+          </div>
+        </div>
+        <div className="flex-1 flex flex-col justify-center p-3 min-w-0">
+          <h3 className="text-sm font-headline text-on-surface leading-tight line-clamp-1 mb-1">{product.name}</h3>
+          <div className="flex items-center gap-3 text-xs text-on-surface-variant mb-2">
+            <span>{product.fileSize}</span>
+            {product.variantCount && product.variantCount > 1 && (
+              <span className="bg-primary/20 text-primary px-1.5 py-0.5 rounded-sm text-[10px] font-medium">×{product.variantCount} 变体</span>
+            )}
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={(e) => { e.preventDefault(); e.stopPropagation(); onDownload(product.id); }}
+              className="bg-primary-container text-on-primary rounded-sm py-1 px-3 text-xs font-medium hover:opacity-90 flex items-center gap-1"
+            >
+              <Icon name="download" size={14} fill />
+              下载
+            </button>
+            <button
+              onClick={(e) => { e.preventDefault(); e.stopPropagation(); }}
+              className="border border-outline-variant/40 text-on-surface-variant hover:text-on-surface rounded-sm py-1 px-3 text-xs flex items-center gap-1"
+            >
+              <Icon name="visibility" size={14} />
+              预览
+            </button>
+          </div>
+        </div>
+      </Link>
+    );
+  }
   return (
     <Link to={`/model/${product.id}`} className="block group bg-surface-container-high rounded-sm overflow-hidden hover:shadow-[0_12px_24px_rgba(0,0,0,0.4)] transition-all duration-300 flex flex-col relative">
       <div className="aspect-square bg-surface-container-lowest relative overflow-hidden flex items-center justify-center">
@@ -632,34 +669,34 @@ export default function HomePage() {
                   <span className="bg-surface-container-high px-2 py-0.5 text-xs text-on-surface-variant rounded-sm border border-outline-variant/20">{totalItems} 个模型</span>
                 </div>
               </div>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-3">
                 <div className="relative">
                   <select value={sortBy} onChange={(e) => { setSortBy(e.target.value); setPage(1); }} className="bg-surface-container-lowest text-sm text-on-surface rounded-sm pl-3 pr-8 py-1 border border-outline-variant/30 outline-none appearance-none cursor-pointer">
                     <option value="created_at">最新上传</option>
                     <option value="name">名称排序</option>
                   </select>
-                  <Icon name="expand_more" size={14} className="absolute right-2 top-1/2 -translate-y-1/2 text-on-surface-variant pointer-events-none" />
+                  <Icon name="expand_more" size={12} className="absolute right-2 top-1/2 -translate-y-1/2 text-on-surface-variant pointer-events-none" />
                 </div>
-                <div className="flex bg-surface-container rounded-sm border border-outline-variant/30 overflow-hidden">
-                  <button onClick={() => setViewMode("grid")} className={`p-1.5 transition-colors ${viewMode === "grid" ? "bg-surface-container-high text-on-surface" : "text-on-surface-variant"}`}>
-                    <Icon name="grid_view" size={20} />
+                <div className="flex rounded-sm border border-outline-variant/30 overflow-hidden">
+                  <button onClick={() => setViewMode("grid")} className={`px-2.5 py-1.5 transition-colors ${viewMode === "grid" ? "bg-surface-container-high text-on-surface" : "text-on-surface-variant hover:text-on-surface"}`}>
+                    <Icon name="grid_view" size={18} />
                   </button>
-                  <button onClick={() => setViewMode("list")} className={`p-1.5 transition-colors ${viewMode === "list" ? "bg-surface-container-high text-on-surface" : "text-on-surface-variant"}`}>
-                    <Icon name="view_list" size={20} />
+                  <button onClick={() => setViewMode("list")} className={`px-2.5 py-1.5 transition-colors ${viewMode === "list" ? "bg-surface-container-high text-on-surface" : "text-on-surface-variant hover:text-on-surface"}`}>
+                    <Icon name="view_list" size={18} />
                   </button>
                 </div>
               </div>
             </div>
 
             {isLoading && products.length === 0 ? (
-              <div className="grid gap-3 grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6">
+              <div className="grid gap-3 grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
                 {Array.from({ length: 12 }).map((_, i) => <SkeletonCard key={i} />)}
               </div>
             ) : (
               <>
-                <div className={`grid gap-3 ${viewMode === "grid" ? "grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6" : "grid-cols-1"}`}>
+                <div className={`grid gap-3 ${viewMode === "grid" ? "grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5" : "grid-cols-1 gap-2"}`}>
                   {products.map((product) => (
-                    <ProductCard key={product.id} product={product} onDownload={handleDownload} />
+                    <ProductCard key={product.id} product={product} onDownload={handleDownload} variant={viewMode} />
                   ))}
                 </div>
 

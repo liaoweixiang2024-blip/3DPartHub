@@ -62,7 +62,7 @@ router.post("/api/auth/register", async (req: Request, res: Response) => {
     return;
   }
 
-  const { username, email, password, emailCode } = req.body;
+  const { username, email, password, emailCode, phone, company } = req.body;
 
   if (!username || !email || !password || !emailCode) {
     res.status(400).json({ detail: "所有字段不能为空" });
@@ -102,7 +102,7 @@ router.post("/api/auth/register", async (req: Request, res: Response) => {
 
     const passwordHash = await hashPassword(password);
     const user = await prisma.user.create({
-      data: { username, email, passwordHash },
+      data: { username, email, passwordHash, phone: phone || null, company: company || null },
       select: { id: true, username: true, email: true, role: true, createdAt: true },
     });
 

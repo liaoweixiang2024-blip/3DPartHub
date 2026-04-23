@@ -51,6 +51,15 @@ function PageWrap({ children }: { children: React.ReactNode }) {
   );
 }
 
+// No wrapper — let the page handle its own height/scrolling
+function ScrollPage({ children }: { children: React.ReactNode }) {
+  return (
+    <Suspense fallback={null}>
+      {children}
+    </Suspense>
+  );
+}
+
 function NotFoundPage() {
   const siteIcon = getSiteIcon();
   const siteTitle = getSiteTitle();
@@ -78,9 +87,9 @@ export default function Router() {
   return (
     <AnimatePresence mode="wait">
       <Routes location={location} key={location.pathname}>
-        <Route path="/login" element={<PageWrap><LoginPage /></PageWrap>} />
-        <Route path="/legal/:type" element={<PageWrap><LegalPage /></PageWrap>} />
-        <Route path="/share/:token" element={<PageWrap><SharePage /></PageWrap>} />
+        <Route path="/login" element={<ScrollPage><LoginPage /></ScrollPage>} />
+        <Route path="/legal/:type" element={<ScrollPage><LegalPage /></ScrollPage>} />
+        <Route path="/share/:token" element={<ScrollPage><SharePage /></ScrollPage>} />
         <Route path="/" element={<PageWrap><HomePage /></PageWrap>} />
         <Route path="/model/:id" element={<PageWrap><ModelDetailPage /></PageWrap>} />
         <Route path="/projects" element={<PageWrap><ProtectedRoute><ProjectsPage /></ProtectedRoute></PageWrap>} />

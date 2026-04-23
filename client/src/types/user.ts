@@ -25,4 +25,6 @@ export interface RegisterRequest {
   email: string;
   password: string;
   emailCode: string;
+  phone?: string;
+  company?: string;
 }

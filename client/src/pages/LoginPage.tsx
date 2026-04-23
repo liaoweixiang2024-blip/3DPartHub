@@ -50,6 +50,8 @@ export default function LoginPage() {
   const [emailCode, setEmailCode] = useState("");
   const [emailCountdown, setEmailCountdown] = useState(0);
   const [sendingCode, setSendingCode] = useState(false);
+  const [phone, setPhone] = useState("");
+  const [company, setCompany] = useState("");
 
   useEffect(() => {
     getPublicSettings().then(s => setAllowRegister(s.allow_register ?? true)).catch(() => {});
@@ -132,7 +134,7 @@ export default function LoginPage() {
         login(result.user, result.tokens);
         navigate(from, { replace: true });
       } else {
-        const result = await authApi.register({ username, email, password, emailCode });
+        const result = await authApi.register({ username, email, password, emailCode, phone: phone || undefined, company: company || undefined });
         login(result.user, result.tokens);
         navigate(from, { replace: true });
       }
@@ -151,18 +153,20 @@ export default function LoginPage() {
     setApiError("");
     setEmailCode("");
     setCaptchaText("");
+    setPhone("");
+    setCompany("");
   };
 
   return (
-    <div className="flex items-center justify-center min-h-screen bg-surface p-4 overflow-y-auto">
-      <div className="my-4 w-full max-w-md">
+    <div className="min-h-screen bg-surface p-4 overflow-x-hidden">
+      <div className="my-4 w-full max-w-md mx-auto">
         <motion.div
           initial={{ opacity: 0, scale: 0.95 }}
           animate={{ opacity: 1, scale: 1 }}
           transition={{ duration: 0.4, ease: "easeOut" }}
         >
         <div className="bg-surface-container-low rounded-lg border border-outline-variant/20 overflow-hidden">
-          <div className="p-8 border-b border-outline-variant/10 text-center">
+          <div className="p-6 sm:p-8 border-b border-outline-variant/10 text-center">
             {(() => {
               const displayMode = getLogoDisplayMode();
               const siteIcon = getSiteIcon();
@@ -189,7 +193,7 @@ export default function LoginPage() {
             </p>
           </div>
 
-          <form onSubmit={handleSubmit} className="p-8 space-y-5">
+          <form onSubmit={handleSubmit} className="p-6 sm:p-8 space-y-5">
             {apiError && (
               <motion.div
                 initial={{ opacity: 0, height: 0 }}
@@ -217,6 +221,32 @@ export default function LoginPage() {
               </div>
             )}
 
+            {mode === "register" && (
+              <div>
+                <label className="block text-xs text-on-surface-variant uppercase tracking-wider mb-1.5">手机号</label>
+                <input
+                  type="tel"
+                  value={phone}
+                  onChange={(e) => setPhone(e.target.value)}
+                  className="w-full bg-surface-container-lowest text-on-surface text-base rounded-sm px-4 py-2.5 border border-outline-variant/30 outline-none transition-colors focus:border-primary-container"
+                  placeholder="方便工单和技术沟通（选填）"
+                />
+              </div>
+            )}
+
+            {mode === "register" && (
+              <div>
+                <label className="block text-xs text-on-surface-variant uppercase tracking-wider mb-1.5">公司名称</label>
+                <input
+                  type="text"
+                  value={company}
+                  onChange={(e) => setCompany(e.target.value)}
+                  className="w-full bg-surface-container-lowest text-on-surface text-base rounded-sm px-4 py-2.5 border border-outline-variant/30 outline-none transition-colors focus:border-primary-container"
+                  placeholder="方便工单和技术沟通（选填）"
+                />
+              </div>
+            )}
+
             <div>
               <label className="block text-xs text-on-surface-variant uppercase tracking-wider mb-1.5">邮箱</label>
               <input
@@ -234,15 +264,15 @@ export default function LoginPage() {
             {mode === "register" && (
               <div>
                 <label className="block text-xs text-on-surface-variant uppercase tracking-wider mb-1.5">图形验证码</label>
-                <div className="flex gap-3 items-center">
+                <div className="flex gap-2 items-center">
                   <input
                     type="text"
                     value={captchaText}
                     onChange={(e) => setCaptchaText(e.target.value)}
-                    className={`flex-1 bg-surface-container-lowest text-on-surface text-base rounded-sm px-4 py-2.5 border outline-none transition-colors ${
+                    className={`flex-1 min-w-0 bg-surface-container-lowest text-on-surface text-base rounded-sm px-3 py-2.5 border outline-none transition-colors ${
                       errors.captchaText ? "border-error" : "border-outline-variant/30 focus:border-primary-container"
                     }`}
-                    placeholder="输入右侧验证码"
+                    placeholder="验证码"
                     maxLength={4}
                   />
                   {captchaSvg && (
@@ -252,7 +282,7 @@ export default function LoginPage() {
                       className="shrink-0 cursor-pointer rounded-sm overflow-hidden border border-outline-variant/30 hover:opacity-80 transition-opacity"
                       title="点击刷新验证码"
                       dangerouslySetInnerHTML={{ __html: captchaSvg }}
-                      style={{ width: 120, height: 40 }}
+                      style={{ width: 100, height: 40 }}
                     />
                   )}
                 </div>
@@ -263,12 +293,12 @@ export default function LoginPage() {
             {mode === "register" && (
               <div>
                 <label className="block text-xs text-on-surface-variant uppercase tracking-wider mb-1.5">邮箱验证码</label>
-                <div className="flex gap-3">
+                <div className="flex gap-2">
                   <input
                     type="text"
                     value={emailCode}
                     onChange={(e) => setEmailCode(e.target.value)}
-                    className={`flex-1 bg-surface-container-lowest text-on-surface text-base rounded-sm px-4 py-2.5 border outline-none transition-colors ${
+                    className={`flex-1 min-w-0 bg-surface-container-lowest text-on-surface text-base rounded-sm px-3 py-2.5 border outline-none transition-colors ${
                       errors.emailCode ? "border-error" : "border-outline-variant/30 focus:border-primary-container"
                     }`}
                     placeholder="6位验证码"
@@ -278,7 +308,7 @@ export default function LoginPage() {
                     type="button"
                     onClick={handleSendEmailCode}
                     disabled={emailCountdown > 0 || sendingCode}
-                    className="shrink-0 px-4 py-2.5 text-sm rounded-sm border border-primary-container/50 text-primary-container hover:bg-primary-container/10 transition-colors disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
+                    className="shrink-0 px-3 py-2.5 text-sm rounded-sm border border-primary-container/50 text-primary-container hover:bg-primary-container/10 transition-colors disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
                   >
                     {sendingCode ? "发送中..." : emailCountdown > 0 ? `${emailCountdown}s` : "发送验证码"}
                   </button>
@@ -362,7 +392,7 @@ export default function LoginPage() {
           </form>
 
           {allowRegister && (
-          <div className="px-8 pb-6 text-center">
+          <div className="px-6 sm:px-8 pb-6 text-center">
             <button
               onClick={() => switchMode(mode === "login" ? "register" : "login")}
               className="text-sm text-primary hover:underline underline-offset-4"
@@ -372,11 +402,11 @@ export default function LoginPage() {
           </div>
           )}
 
-          <div className="px-8 pb-8 text-center space-y-2">
+          <div className="px-6 sm:px-8 pb-6 sm:pb-8 text-center space-y-2">
             <div className="flex items-center justify-center gap-3 text-xs text-on-surface-variant/60">
-              <Link to="/legal/terms" className="hover:text-on-surface-variant transition-colors">用户协议</Link>
+              <a href="/legal/terms" target="_blank" rel="noopener noreferrer" className="hover:text-on-surface-variant transition-colors">用户协议</a>
               <span>·</span>
-              <Link to="/legal/privacy" className="hover:text-on-surface-variant transition-colors">隐私声明</Link>
+              <a href="/legal/privacy" target="_blank" rel="noopener noreferrer" className="hover:text-on-surface-variant transition-colors">隐私声明</a>
             </div>
           </div>
         </div>
