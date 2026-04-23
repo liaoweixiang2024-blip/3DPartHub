@@ -1,20 +1,38 @@
-# 3DPartHub 一键部署配置
+# ============================================================
+# 3DPartHub — 纯镜像一键部署配置
+# ============================================================
 #
-# 使用方法：
-#   1. 安装 Docker 和 Docker Compose
-#   2. 修改下方环境变量（带 <<< 标记的）
-#   3. 运行: docker compose up -d
-#   4. 访问: http://你的服务器IP:3780
+# 【快速开始】
+#   1. 安装 Docker + Docker Compose
+#   2. 复制本文件到服务器，创建 .env 文件填写密钥（见下方）
+#   3. docker compose up -d
+#   4. 访问 http://服务器IP:3780
 #
-# 数据持久化: 所有数据存储在 Docker 命名卷中，升级镜像不会丢失
-# 备份文件导入: docker cp 备份文件.tar.gz 3dparthub-api-1:/app/static/backups/
-# 查看日志: docker compose logs -f api
-# 停止服务: docker compose down
-# 升级版本: docker compose pull && docker compose up -d
+# 【升级版本】
+#   1. 修改下方 IMAGE_TAG 为新版本号
+#   2. docker compose pull && docker compose up -d
+#   3. 检查日志: docker compose logs -f api
+#      确认 prisma migrate deploy 成功，无报错
+#   4. 检查健康: curl http://localhost:3780/api/health
+#
+# 【数据安全】
+#   所有数据存储在 Docker 命名卷中，升级/重建容器不会丢失：
+#     pgdata       — PostgreSQL 数据库
+#     uploads-data — 上传的原始模型文件
+#     static-data  — 转换后的模型、缩略图、备份文件
+#
+# 【备份恢复】
+#   网页端: 设置 → 数据备份 → 服务器文件
+#   命令行: docker cp backup.tar.gz 3dparthub-api-1:/app/static/backups/
+#
+# ============================================================
+
+# <<< 修改版本号后执行 docker compose pull && docker compose up -d
+x-image-tag: &IMAGE_TAG v1.5.0
 
 services:
   api:
-    image: ghcr.io/liaoweixiang2024-blip/3dparthub-api:latest
+    image: ghcr.io/liaoweixiang2024-blip/3dparthub-api:${IMAGE_TAG}
     container_name: 3dparthub-api
     deploy:
       resources:
@@ -27,13 +45,20 @@ services:
       TZ: Asia/Shanghai
       PORT: 8000
       DATABASE_URL: postgresql://modeluser:${DB_PASSWORD:-modelpass}@postgres:5432/3dparthub
-      # <<< 请修改为随机密钥 (至少32位)
+      # <<< 必改: 使用随机字符串 (openssl rand -hex 32)
       JWT_SECRET: ${JWT_SECRET:-change-me-to-a-random-secret-string}
       JWT_EXPIRES_IN: 7d
       UPLOAD_DIR: uploads
       STATIC_DIR: static
       MAX_FILE_SIZE: 104857600
       REDIS_URL: redis://redis:6379
+      # <<< 可选: 允许的来源域名 (多个用逗号分隔)
+      ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-}
+      # <<< 可选: 邮件通知 (注册验证码)
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-465}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASS: ${SMTP_PASS:-}
     depends_on:
       postgres:
         condition: service_healthy
@@ -47,7 +72,7 @@ services:
       - internal
 
   web:
-    image: ghcr.io/liaoweixiang2024-blip/3dparthub-web:latest
+    image: ghcr.io/liaoweixiang2024-blip/3dparthub-web:${IMAGE_TAG}
     container_name: 3dparthub-web
     ports:
       - "${PORT:-3780}:80"
@@ -73,7 +98,7 @@ services:
     environment:
       POSTGRES_DB: 3dparthub
       POSTGRES_USER: modeluser
-      # <<< 请修改数据库密码 (与上方 DB_PASSWORD 保持一致)
+      # <<< 必改: 数据库密码 (与 DB_PASSWORD 一致)
       POSTGRES_PASSWORD: ${DB_PASSWORD:-modelpass}
     volumes:
       - pgdata:/var/lib/postgresql/data
