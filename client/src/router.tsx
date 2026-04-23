@@ -16,6 +16,7 @@ const ProfilePage = lazy(() => import("./pages/ProfilePage"));
 const SupportPage = lazy(() => import("./pages/SupportPage"));
 const MyTicketsPage = lazy(() => import("./pages/MyTicketsPage"));
 const LoginPage = lazy(() => import("./pages/LoginPage"));
+const LegalPage = lazy(() => import("./pages/LegalPage"));
 const ProjectsPage = lazy(() => import("./pages/ProjectsPage"));
 const ProjectDetailPage = lazy(() => import("./pages/ProjectDetailPage"));
 const CategoryAdminPage = lazy(() => import("./pages/CategoryAdminPage"));
@@ -76,6 +77,7 @@ export default function Router() {
     <AnimatePresence mode="wait">
       <Routes location={location} key={location.pathname}>
         <Route path="/login" element={<PageWrap><LoginPage /></PageWrap>} />
+        <Route path="/legal/:type" element={<PageWrap><LegalPage /></PageWrap>} />
         <Route path="/" element={<PageWrap><HomePage /></PageWrap>} />
         <Route path="/model/:id" element={<PageWrap><ModelDetailPage /></PageWrap>} />
         <Route path="/projects" element={<PageWrap><ProtectedRoute><ProjectsPage /></ProtectedRoute></PageWrap>} />

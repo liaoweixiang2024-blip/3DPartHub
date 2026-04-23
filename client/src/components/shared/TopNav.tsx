@@ -271,7 +271,7 @@ export default function TopNav({ compact = false, onMenuToggle }: TopNavProps) {
   return (
     <>
       <header className="h-14 flex items-center bg-surface-container-low border-b border-outline-variant/10 shrink-0 z-50">
-        <Link to="/" className={`flex items-center hover:opacity-80 transition-opacity shrink-0 w-56 ${displayMode === 'logo_only' ? 'justify-center' : 'px-5 gap-1.5'}`}>
+        <Link to="/" className={`flex items-center hover:opacity-80 active:scale-95 transition-all shrink-0 w-56 cursor-pointer ${displayMode === 'logo_only' ? 'justify-center' : 'px-5 gap-1.5'}`}>
           {displayMode === 'title_only' ? (
             <span className="text-sm font-headline font-bold tracking-tighter text-on-surface truncate">{siteTitle}</span>
           ) : displayMode === 'logo_only' && siteLogo ? (

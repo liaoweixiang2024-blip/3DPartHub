@@ -33,6 +33,8 @@ export default function LoginPage() {
   const [errors, setErrors] = useState<FormErrors>({});
   const [loading, setLoading] = useState(false);
   const [apiError, setApiError] = useState("");
+  const [rememberMe, setRememberMe] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
   const navigate = useNavigate();
   const location = useLocation();
   const from = (location.state as any)?.from || "/";
@@ -288,32 +290,62 @@ export default function LoginPage() {
 
             <div>
               <label className="block text-xs text-on-surface-variant uppercase tracking-wider mb-1.5">密码</label>
-              <input
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                className={`w-full bg-surface-container-lowest text-on-surface text-base rounded-sm px-4 py-2.5 border outline-none transition-colors ${
-                  errors.password ? "border-error" : "border-outline-variant/30 focus:border-primary-container"
-                }`}
-                placeholder="至少8位"
-              />
+              <div className="relative">
+                <input
+                  type={showPassword ? "text" : "password"}
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  className={`w-full bg-surface-container-lowest text-on-surface text-base rounded-sm px-4 py-2.5 pr-10 border outline-none transition-colors ${
+                    errors.password ? "border-error" : "border-outline-variant/30 focus:border-primary-container"
+                  }`}
+                  placeholder="至少8位"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-on-surface-variant hover:text-on-surface transition-colors"
+                >
+                  <Icon name={showPassword ? "visibility_off" : "visibility"} size={18} />
+                </button>
+              </div>
               {errors.password && <span className="text-xs text-error mt-1 block">{errors.password}</span>}
             </div>
 
             {mode === "register" && (
               <div>
                 <label className="block text-xs text-on-surface-variant uppercase tracking-wider mb-1.5">确认密码</label>
-                <input
-                  type="password"
-                  value={confirmPassword}
-                  onChange={(e) => setConfirmPassword(e.target.value)}
-                  className={`w-full bg-surface-container-lowest text-on-surface text-base rounded-sm px-4 py-2.5 border outline-none transition-colors ${
-                    errors.confirmPassword ? "border-error" : "border-outline-variant/30 focus:border-primary-container"
-                  }`}
+                <div className="relative">
+                  <input
+                    type={showPassword ? "text" : "password"}
+                    value={confirmPassword}
+                    onChange={(e) => setConfirmPassword(e.target.value)}
+                    className={`w-full bg-surface-container-lowest text-on-surface text-base rounded-sm px-4 py-2.5 pr-10 border outline-none transition-colors ${
+                      errors.confirmPassword ? "border-error" : "border-outline-variant/30 focus:border-primary-container"
+                    }`}
                   placeholder="再次输入密码"
-                />
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-on-surface-variant hover:text-on-surface transition-colors"
+                  >
+                    <Icon name={showPassword ? "visibility_off" : "visibility"} size={18} />
+                  </button>
+                </div>
                 {errors.confirmPassword && <span className="text-xs text-error mt-1 block">{errors.confirmPassword}</span>}
               </div>
+            )}
+
+            {mode === "login" && (
+              <label className="flex items-center gap-2 cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={rememberMe}
+                  onChange={(e) => setRememberMe(e.target.checked)}
+                  className="w-4 h-4 rounded border-outline-variant/30 text-primary-container accent-primary-container"
+                />
+                <span className="text-sm text-on-surface-variant">记住登录</span>
+              </label>
             )}
 
             <button
@@ -331,7 +363,7 @@ export default function LoginPage() {
           </form>
 
           {allowRegister && (
-          <div className="px-8 pb-8 text-center">
+          <div className="px-8 pb-6 text-center">
             <button
               onClick={() => switchMode(mode === "login" ? "register" : "login")}
               className="text-sm text-primary hover:underline underline-offset-4"
@@ -340,6 +372,14 @@ export default function LoginPage() {
             </button>
           </div>
           )}
+
+          <div className="px-8 pb-8 text-center space-y-2">
+            <div className="flex items-center justify-center gap-3 text-xs text-on-surface-variant/60">
+              <Link to="/legal/terms" className="hover:text-on-surface-variant transition-colors">用户协议</Link>
+              <span>·</span>
+              <Link to="/legal/privacy" className="hover:text-on-surface-variant transition-colors">隐私声明</Link>
+            </div>
+          </div>
         </div>
 
         <p className="text-center text-xs text-on-surface-variant mt-6">

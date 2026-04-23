@@ -784,17 +784,9 @@ function Content() {
           <h2 className="font-headline text-2xl font-bold tracking-tight text-on-surface uppercase">系统设置</h2>
           <p className="text-sm text-on-surface-variant mt-1">配置平台的全局行为和访问策略</p>
         </div>
-        <button
-          onClick={handleSave}
-          disabled={saving || !changed}
-          className="flex items-center gap-2 px-6 py-2.5 bg-primary-container text-on-primary rounded-lg text-sm font-medium hover:opacity-90 disabled:opacity-50 active:scale-95 transition-all"
-        >
-          <Icon name="save" size={16} />
-          {saving ? '保存中...' : '保存设置'}
-        </button>
       </div>
 
-      <div className="flex flex-col gap-6">
+      <div className="flex flex-col gap-6 pb-20">
         {GROUPS.map(group => (
           <div key={group.title} className="bg-surface-container-low rounded-lg border border-outline-variant/10 overflow-hidden">
             <div className="px-6 py-4 border-b border-outline-variant/10 bg-surface-container-high/50 flex items-center gap-2.5">
@@ -1274,6 +1266,20 @@ function Content() {
           </div>
         </div>
       </div>
+
+      {/* Floating save button */}
+      {changed && (
+        <div className="fixed bottom-4 right-4 z-50 animate-[fadeInUp_0.2s_ease-out]">
+          <button
+            onClick={handleSave}
+            disabled={saving}
+            className="flex items-center gap-2 px-6 py-3 bg-primary-container text-on-primary rounded-xl text-sm font-bold shadow-lg hover:opacity-90 disabled:opacity-50 active:scale-95 transition-all"
+          >
+            <Icon name="save" size={16} />
+            {saving ? '保存中...' : '保存设置'}
+          </button>
+        </div>
+      )}
     </>
   );
 }
