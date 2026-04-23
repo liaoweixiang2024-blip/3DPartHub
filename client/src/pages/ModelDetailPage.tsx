@@ -667,6 +667,8 @@ export default function ModelDetailPage() {
   const [sheetExpanded, setSheetExpanded] = useState(false);
   const [showMoreTools, setShowMoreTools] = useState(false);
   const mobileViewerRef = useRef<HTMLDivElement>(null);
+  const peekContentRef = useRef<HTMLDivElement>(null);
+  const [peekHeight, setPeekHeight] = useState(120);
   const dragStartY = useRef(0);
   const [settingThumb, setSettingThumb] = useState(false);
   const [watermarkState, setWatermarkState] = useState<{ show: boolean; image: string }>({ show: false, image: "" });
@@ -697,6 +699,19 @@ export default function ModelDetailPage() {
       setWatermarkState({ show: !!s.show_watermark, image: (s as any).watermark_image || "" });
     }).catch(() => {});
   }, []);
+
+  // Measure peek content height for adaptive bottom sheet
+  useEffect(() => {
+    const measure = () => {
+      if (peekContentRef.current) {
+        const h = peekContentRef.current.getBoundingClientRect().height;
+        if (h > 0) setPeekHeight(Math.ceil(h) + 16); // 8px extra for drag handle padding
+      }
+    };
+    measure();
+    window.addEventListener('resize', measure);
+    return () => window.removeEventListener('resize', measure);
+  }, [id]);
 
   const handleScreenshot = useCallback(() => {
     const container = mobileViewerRef.current || document.querySelector(".relative.bg-surface-dim");
@@ -767,7 +782,7 @@ export default function ModelDetailPage() {
         ...(serverModel.description ? [{ label: "描述", value: serverModel.description }] : []),
       ],
       downloads: [
-        { format, size: formatFileSize(serverModel.original_size || 0), downloadFormat: "original" },
+        { format, size: formatFileSize(serverModel.original_size || 0), fileName: serverModel.original_name || `${serverModel.name}.${format.toLowerCase()}`, downloadFormat: "original" },
       ],
       dimensions: "-",
       modelUrl: serverModel.gltf_url || undefined,
@@ -959,7 +974,7 @@ export default function ModelDetailPage() {
       {/* Main area: 3D viewer + bottom sheet */}
       <div className="flex-1 min-h-0 relative">
         {/* 3D Viewer — fills entire area */}
-        <div ref={mobileViewerRef} className="absolute inset-0 bg-surface-container overflow-hidden rounded-b-2xl" style={{ bottom: '19dvh' }} onClick={() => { if (sheetExpanded) setSheetExpanded(false); }}>
+        <div ref={mobileViewerRef} className="absolute inset-0 bg-surface-container overflow-hidden rounded-b-2xl" style={{ bottom: peekHeight }} onClick={() => { if (sheetExpanded) setSheetExpanded(false); }}>
           <LoadingOverlay />
           <Suspense fallback={<div className="w-full h-full flex items-center justify-center"><Icon name="view_in_ar" size={64} className="text-on-surface-variant/15 animate-pulse" /></div>}>
             <ModelViewer
@@ -1107,7 +1122,7 @@ export default function ModelDetailPage() {
         <div
           className="absolute bottom-0 left-0 right-0 z-30 bg-surface-container-low rounded-t-2xl shadow-[0_-2px_20px_rgba(0,0,0,0.25)] border-t border-outline-variant/10 flex flex-col overflow-hidden"
           style={{
-            height: sheetExpanded ? '94%' : '19dvh',
+            height: sheetExpanded ? '94%' : peekHeight,
             transition: 'height 0.35s cubic-bezier(0.32, 0.72, 0, 1)',
           }}
         >
@@ -1137,7 +1152,7 @@ export default function ModelDetailPage() {
           </div>
 
           {/* Peek bar — always visible */}
-          <div className="px-4 pb-3 shrink-0">
+          <div ref={peekContentRef} className="px-4 pb-5 shrink-0">
             <div className="flex items-center gap-2">
               <div className="min-w-0 flex-1">
                 <h2 className="text-sm font-bold text-on-surface truncate">{modelData.name}</h2>
@@ -1167,7 +1182,7 @@ export default function ModelDetailPage() {
           </div>
 
           {/* Expanded content — scrollable */}
-          <div className="flex-1 min-h-0 overflow-y-auto scrollbar-hidden">
+          <div className={`flex-1 min-h-0 overflow-y-auto scrollbar-hidden ${!sheetExpanded ? "hidden" : ""}`}>
             <div className="px-4 pb-8 space-y-5">
               {/* Category breadcrumb */}
               <div className="flex items-center gap-1.5 text-[11px] text-on-surface-variant">
@@ -1244,14 +1259,11 @@ export default function ModelDetailPage() {
                 <div className="text-[11px] uppercase tracking-widest text-on-surface-variant font-medium mb-2">下载文件</div>
                 <div className="space-y-1.5">
                   {modelData.downloads.map((file) => (
-                    <div key={file.format} className="flex items-center gap-2.5 px-3 py-2 rounded-sm bg-surface-container-low border border-outline-variant/10">
-                      <Icon name="insert_drive_file" size={18} className="text-primary shrink-0" />
-                      <div className="flex-1 min-w-0">
-                        <span className="text-xs font-medium text-on-surface font-mono">{file.format}</span>
-                        <span className="text-[11px] text-on-surface-variant ml-1.5">{file.size}</span>
-                      </div>
+                    <div key={file.format} className="flex items-center gap-2 px-3 py-2.5 rounded-sm bg-surface-container-low border border-outline-variant/10">
+                      <span className="flex-1 min-w-0 text-xs font-medium text-on-surface truncate" title={file.fileName}>{file.fileName || file.format}</span>
+                      <span className="text-[11px] text-on-surface-variant shrink-0">{file.size}</span>
                       <button onClick={() => handleDownload(modelData.id, file.downloadFormat === "original" ? "original" : undefined)} className="shrink-0 w-7 h-7 flex items-center justify-center rounded-full bg-primary/10 hover:bg-primary/20 text-primary active:scale-90 transition-all">
-                        <Icon name="download" size={16} />
+                        <Icon name="download" size={15} />
                       </button>
                     </div>
                   ))}

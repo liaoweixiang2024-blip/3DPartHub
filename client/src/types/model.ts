@@ -6,6 +6,7 @@ export interface ModelSpec {
 export interface ModelDownload {
   format: string;
   size: string;
+  fileName?: string;
   downloadFormat?: string;
 }
 

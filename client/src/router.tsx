@@ -1,7 +1,8 @@
 import { lazy, Suspense } from "react";
-import { Routes, Route, Link, useLocation } from "react-router-dom";
+import { Routes, Route, Link, useLocation, Navigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
-import ProtectedRoute from "./components/shared/ProtectedRoute";
+import { useAuthStore } from "./stores/useAuthStore";
+
 import Icon from "./components/shared/Icon";
 import { getSiteTitle, getSiteIcon } from "./lib/publicSettings";
 
@@ -36,6 +37,34 @@ const pageVariants = {
 };
 
 function PageWrap({ children }: { children: React.ReactNode }) {
+  return (
+    <Suspense fallback={null}>
+      <motion.div
+        variants={pageVariants}
+        initial="initial"
+        animate="animate"
+        exit="exit"
+        className="h-full"
+      >
+        {children}
+      </motion.div>
+    </Suspense>
+  );
+}
+
+// Protected pages — check auth BEFORE entering motion animation
+// so redirect to login is instant (no exit animation delay)
+function ProtectedPage({ children, requiredRole }: { children: React.ReactNode; requiredRole?: string }) {
+  const { isAuthenticated, user } = useAuthStore();
+  const location = useLocation();
+
+  if (!isAuthenticated) {
+    return <Navigate to="/login" state={{ from: location.pathname }} replace />;
+  }
+  if (requiredRole && user?.role !== requiredRole) {
+    return <Navigate to="/" replace />;
+  }
+
   return (
     <Suspense fallback={null}>
       <motion.div
@@ -92,22 +121,22 @@ export default function Router() {
         <Route path="/share/:token" element={<ScrollPage><SharePage /></ScrollPage>} />
         <Route path="/" element={<PageWrap><HomePage /></PageWrap>} />
         <Route path="/model/:id" element={<PageWrap><ModelDetailPage /></PageWrap>} />
-        <Route path="/projects" element={<PageWrap><ProtectedRoute><ProjectsPage /></ProtectedRoute></PageWrap>} />
-        <Route path="/projects/:id" element={<PageWrap><ProtectedRoute><ProjectDetailPage /></ProtectedRoute></PageWrap>} />
-        <Route path="/downloads" element={<PageWrap><ProtectedRoute><DownloadsPage /></ProtectedRoute></PageWrap>} />
-        <Route path="/favorites" element={<PageWrap><ProtectedRoute><FavoritesPage /></ProtectedRoute></PageWrap>} />
-        <Route path="/profile" element={<PageWrap><ProtectedRoute><ProfilePage /></ProtectedRoute></PageWrap>} />
-        <Route path="/support" element={<PageWrap><ProtectedRoute><SupportPage /></ProtectedRoute></PageWrap>} />
-        <Route path="/my-tickets" element={<PageWrap><ProtectedRoute><MyTicketsPage /></ProtectedRoute></PageWrap>} />
-        <Route path="/my-tickets/:id" element={<PageWrap><ProtectedRoute><TicketDetailPage /></ProtectedRoute></PageWrap>} />
-        <Route path="/admin/categories" element={<PageWrap><ProtectedRoute requiredRole="ADMIN"><CategoryAdminPage /></ProtectedRoute></PageWrap>} />
-        <Route path="/admin/models" element={<PageWrap><ProtectedRoute requiredRole="ADMIN"><ModelAdminPage /></ProtectedRoute></PageWrap>} />
-        <Route path="/admin/tickets" element={<PageWrap><ProtectedRoute requiredRole="ADMIN"><TicketAdminPage /></ProtectedRoute></PageWrap>} />
-        <Route path="/admin/tickets/:id" element={<PageWrap><ProtectedRoute requiredRole="ADMIN"><TicketDetailPage /></ProtectedRoute></PageWrap>} />
-        <Route path="/admin/settings" element={<PageWrap><ProtectedRoute requiredRole="ADMIN"><SettingsPage /></ProtectedRoute></PageWrap>} />
-        <Route path="/admin/users" element={<PageWrap><ProtectedRoute requiredRole="ADMIN"><UserAdminPage /></ProtectedRoute></PageWrap>} />
-        <Route path="/admin/audit" element={<PageWrap><ProtectedRoute requiredRole="ADMIN"><AuditLogPage /></ProtectedRoute></PageWrap>} />
-        <Route path="/admin/shares" element={<PageWrap><ProtectedRoute requiredRole="ADMIN"><ShareAdminPage /></ProtectedRoute></PageWrap>} />
+        <Route path="/projects" element={<ProtectedPage><ProjectsPage /></ProtectedPage>} />
+        <Route path="/projects/:id" element={<ProtectedPage><ProjectDetailPage /></ProtectedPage>} />
+        <Route path="/downloads" element={<ProtectedPage><DownloadsPage /></ProtectedPage>} />
+        <Route path="/favorites" element={<ProtectedPage><FavoritesPage /></ProtectedPage>} />
+        <Route path="/profile" element={<ProtectedPage><ProfilePage /></ProtectedPage>} />
+        <Route path="/support" element={<ProtectedPage><SupportPage /></ProtectedPage>} />
+        <Route path="/my-tickets" element={<ProtectedPage><MyTicketsPage /></ProtectedPage>} />
+        <Route path="/my-tickets/:id" element={<ProtectedPage><TicketDetailPage /></ProtectedPage>} />
+        <Route path="/admin/categories" element={<ProtectedPage requiredRole="ADMIN"><CategoryAdminPage /></ProtectedPage>} />
+        <Route path="/admin/models" element={<ProtectedPage requiredRole="ADMIN"><ModelAdminPage /></ProtectedPage>} />
+        <Route path="/admin/tickets" element={<ProtectedPage requiredRole="ADMIN"><TicketAdminPage /></ProtectedPage>} />
+        <Route path="/admin/tickets/:id" element={<ProtectedPage requiredRole="ADMIN"><TicketDetailPage /></ProtectedPage>} />
+        <Route path="/admin/settings" element={<ProtectedPage requiredRole="ADMIN"><SettingsPage /></ProtectedPage>} />
+        <Route path="/admin/users" element={<ProtectedPage requiredRole="ADMIN"><UserAdminPage /></ProtectedPage>} />
+        <Route path="/admin/audit" element={<ProtectedPage requiredRole="ADMIN"><AuditLogPage /></ProtectedPage>} />
+        <Route path="/admin/shares" element={<ProtectedPage requiredRole="ADMIN"><ShareAdminPage /></ProtectedPage>} />
         <Route path="*" element={<NotFoundPage />} />
       </Routes>
     </AnimatePresence>

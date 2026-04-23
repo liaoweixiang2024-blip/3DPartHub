@@ -17,7 +17,7 @@ export default function BottomNav() {
   };
 
   return (
-    <nav className="h-14 shrink-0 bg-surface-container-low border-t border-outline-variant/10 flex items-center justify-around px-4 safe-bottom">
+    <nav className="h-14 shrink-0 bg-surface-container-low border-t border-outline-variant/10 flex items-center justify-around px-4 safe-bottom" style={{ position: 'sticky', bottom: 0, paddingBottom: "env(safe-area-inset-bottom, 0px)" }}>
       {tabs.map((tab) => {
         const active = isActive(tab.path);
         return (
