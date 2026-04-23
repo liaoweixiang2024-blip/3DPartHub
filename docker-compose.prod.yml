@@ -14,6 +14,7 @@ services:
         reservations:
           memory: 512M
     environment:
+      TZ: Asia/Shanghai
       PORT: 8000
       DATABASE_URL: postgresql://modeluser:${DB_PASSWORD:-modelpass}@postgres:5432/3dparthub
       JWT_SECRET: ${JWT_SECRET:-change-me-in-production}

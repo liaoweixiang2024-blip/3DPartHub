@@ -10,6 +10,7 @@ import BottomNav from '../components/shared/BottomNav';
 import AppSidebar from '../components/shared/Sidebar';
 import MobileNavDrawer from '../components/shared/MobileNavDrawer';
 import Icon from '../components/shared/Icon';
+import ModelThumbnail from '../components/shared/ModelThumbnail';
 import { useToast } from '../components/shared/Toast';
 import { downloadsApi, type DownloadHistoryItem } from '../api/downloads';
 
@@ -227,11 +228,7 @@ function DesktopContent() {
                 </button>
               )}
               <div className="w-16 h-16 bg-surface-container-lowest shrink-0 flex items-center justify-center p-1 rounded-md overflow-hidden m-3">
-                {item.model?.thumbnail_url ? (
-                  <img src={item.model.thumbnail_url} alt="" className="w-full h-full object-contain" loading="lazy" />
-                ) : (
-                  <Icon name="view_in_ar" size={28} className="text-on-surface-variant/30" />
-                )}
+                <ModelThumbnail src={item.model?.thumbnail_url} alt="" className="w-full h-full object-contain" />
               </div>
               <div className="flex-1 min-w-0">
                 <h3 className="text-sm font-medium text-on-surface truncate">{item.model?.name || '未知模型'}</h3>
@@ -333,11 +330,7 @@ function MobileContent() {
           {downloads.map((item) => (
             <div key={item.id} className="rounded-lg bg-surface-container-high p-3 flex items-center gap-3">
               <div className="w-12 h-12 bg-surface-container-lowest shrink-0 rounded-md flex items-center justify-center overflow-hidden">
-                {item.model?.thumbnail_url ? (
-                  <img src={item.model.thumbnail_url} alt="" className="w-full h-full object-cover" loading="lazy" />
-                ) : (
-                  <Icon name="view_in_ar" size={22} className="text-on-surface-variant/30" />
-                )}
+                <ModelThumbnail src={item.model?.thumbnail_url} alt="" className="w-full h-full object-cover" />
               </div>
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-medium text-on-surface truncate">{item.model?.name || '未知模型'}</p>

@@ -9,6 +9,7 @@ import BottomNav from '../components/shared/BottomNav';
 import AppSidebar from '../components/shared/Sidebar';
 import MobileNavDrawer from '../components/shared/MobileNavDrawer';
 import Icon from '../components/shared/Icon';
+import ModelThumbnail from '../components/shared/ModelThumbnail';
 import { useToast } from '../components/shared/Toast';
 import { modelApi, type ServerModelListItem } from '../api/models';
 import { categoriesApi, type CategoryItem } from '../api/categories';
@@ -97,7 +98,9 @@ function EditDialog({ open, model, categories, onClose, onSaved }: {
               <div className="flex flex-col gap-1.5">
                 <label className="text-xs uppercase tracking-wider text-on-surface-variant">预览图</label>
                 <div className="flex items-center gap-3">
-                  {thumbnailUrl ? <img src={thumbnailUrl} alt="" className="w-16 h-16 rounded-sm object-cover bg-surface-container-highest shrink-0" /> : <div className="w-16 h-16 rounded-sm bg-surface-container-highest flex items-center justify-center shrink-0"><Icon name="view_in_ar" size={24} className="text-on-surface-variant/40" /></div>}
+                  <div className="w-16 h-16 rounded-sm bg-surface-container-highest shrink-0 overflow-hidden">
+                    <ModelThumbnail src={thumbnailUrl} alt="" className="w-full h-full object-cover" />
+                  </div>
                   <div className="flex flex-col gap-1.5">
                     <input type="file" accept="image/png,image/jpeg,image/webp" className="hidden" id="thumb-upload" onChange={(e) => { const f = e.target.files?.[0]; if (f) handleThumbnailUpload(f); e.target.value = ''; }} />
                     <button onClick={() => document.getElementById('thumb-upload')?.click()} disabled={thumbnailUploading} className="flex items-center gap-1.5 px-3 py-1.5 text-xs text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high rounded-sm transition-colors border border-outline-variant/20 disabled:opacity-50"><Icon name="upload" size={14} />{thumbnailUploading ? '上传中...' : '上传图片'}</button>
@@ -286,7 +289,7 @@ function DesktopContent() {
                   {group.models.map(m => (
                     <div key={m.id} className="shrink-0 w-16">
                       <div className="w-16 h-16 rounded-sm bg-surface-container-highest overflow-hidden border border-outline-variant/10">
-                        {m.thumbnailUrl ? <img src={m.thumbnailUrl} alt="" className="w-full h-full object-cover" /> : <div className="w-full h-full flex items-center justify-center"><Icon name="view_in_ar" size={16} className="text-on-surface-variant/30" /></div>}
+                        <ModelThumbnail src={m.thumbnailUrl} alt="" className="w-full h-full object-cover" />
                       </div>
                       <p className="text-[9px] text-on-surface-variant mt-1 truncate" title={m.originalName}>{m.originalName.replace(/\.[^.]+$/, '')}</p>
                     </div>
@@ -326,7 +329,9 @@ function DesktopContent() {
                   <tr key={m.model_id} className="border-b border-outline-variant/10 hover:bg-surface-container-high/50 transition-colors">
                     <td className="px-4 py-3">
                       <Link to={`/model/${m.model_id}`} target="_blank" className="flex items-center gap-3 hover:opacity-80 transition-opacity">
-                        {m.thumbnail_url ? <img src={m.thumbnail_url} alt="" className="w-10 h-10 rounded-sm object-cover bg-surface-container-highest" /> : <div className="w-10 h-10 rounded-sm bg-surface-container-highest flex items-center justify-center shrink-0"><Icon name="view_in_ar" size={18} className="text-on-surface-variant/40" /></div>}
+                        <div className="w-10 h-10 rounded-sm bg-surface-container-highest shrink-0 overflow-hidden">
+                          <ModelThumbnail src={m.thumbnail_url} alt="" className="w-full h-full object-cover" />
+                        </div>
                         <div className="min-w-0">
                           <span className="text-on-surface font-medium truncate max-w-[300px] block">{m.name}</span>
                           {m.group && <span className="text-[10px] text-primary font-medium">{m.group.name} {m.group.is_primary ? '· 主版本' : ''} (共{m.group.variant_count}个)</span>}
@@ -439,7 +444,9 @@ function MobileContent() {
           <div className="space-y-2">
             {data?.items.map((m) => (
               <Link key={m.model_id} to={`/model/${m.model_id}`} target="_blank" className="bg-surface-container-high rounded-sm p-3 flex items-center gap-3 hover:bg-surface-container-highest transition-colors">
-                {m.thumbnail_url ? <img src={m.thumbnail_url} alt="" className="w-12 h-12 rounded-sm object-cover bg-surface-container-highest shrink-0" /> : <div className="w-12 h-12 rounded-sm bg-surface-container-highest flex items-center justify-center shrink-0"><Icon name="view_in_ar" size={20} className="text-on-surface-variant/40" /></div>}
+                <div className="w-12 h-12 rounded-sm bg-surface-container-highest shrink-0 overflow-hidden">
+                  <ModelThumbnail src={m.thumbnail_url} alt="" className="w-full h-full object-cover" />
+                </div>
                 <div className="flex-1 min-w-0">
                   <p className="text-sm text-on-surface font-medium truncate">{m.name}</p>
                   <div className="flex items-center gap-2 mt-0.5">

@@ -9,6 +9,7 @@ import BottomNav from "../components/shared/BottomNav";
 import FormatTag from "../components/shared/FormatTag";
 
 import Icon from "../components/shared/Icon";
+import ModelThumbnail from "../components/shared/ModelThumbnail";
 import { useModels } from "../hooks/useModels";
 import type { ServerModelListItem } from "../api/models";
 import { categoriesApi, type CategoryItem } from "../api/categories";
@@ -51,10 +52,6 @@ interface Product {
   variantCount?: number;
 }
 
-const dotGridBg = {
-  backgroundImage: "radial-gradient(circle, #584237 1px, transparent 1px)",
-  backgroundSize: "16px 16px",
-};
 
 function AnnouncementBanner() {
   const [ann, setAnn] = useState({ enabled: false, text: "", type: "info", color: "" });
@@ -211,13 +208,11 @@ function ProductCard({ product, onDownload }: { product: Product; onDownload: (i
   return (
     <Link to={`/model/${product.id}`} className="block group bg-surface-container-high rounded-sm overflow-hidden hover:shadow-[0_12px_24px_rgba(0,0,0,0.4)] transition-all duration-300 flex flex-col relative">
       <div className="aspect-square bg-surface-container-lowest relative overflow-hidden flex items-center justify-center">
-        {product.thumbnailUrl ? (
-          <img src={product.thumbnailUrl} alt={product.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" loading="lazy" />
-        ) : (
-          <div className="flex flex-col items-center gap-2 opacity-20" style={dotGridBg}>
-            <Icon name="view_in_ar" size={48} className="text-on-surface-variant/15" />
-          </div>
-        )}
+        <ModelThumbnail
+          src={product.thumbnailUrl}
+          alt={product.name}
+          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+        />
         <div className="absolute top-2 left-2 flex gap-1">
           {product.formats.map((f) => <FormatTag key={f} format={f} />)}
         </div>
@@ -371,11 +366,11 @@ function ProductCardMobile({ product, onDownload }: { product: Product; onDownlo
     <div className="bg-surface-container-high rounded-sm overflow-hidden flex flex-col">
       <Link to={`/model/${product.id}`} className="block">
         <div className="h-[140px] bg-surface-container-lowest relative overflow-hidden flex items-center justify-center">
-          {product.thumbnailUrl ? (
-            <img src={product.thumbnailUrl} alt={product.name} className="w-full h-full object-cover" loading="lazy" />
-          ) : (
-            <Icon name="view_in_ar" size={40} className="text-on-surface-variant/15" />
-          )}
+          <ModelThumbnail
+            src={product.thumbnailUrl}
+            alt={product.name}
+            className="w-full h-full object-cover"
+          />
           <div className="absolute top-2 left-2 flex flex-col gap-0.5">
             {product.formats.map((f) => <FormatTag key={f} format={f} />)}
           </div>

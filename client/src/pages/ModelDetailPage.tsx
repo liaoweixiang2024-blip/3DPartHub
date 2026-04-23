@@ -11,6 +11,7 @@ import Tooltip from "../components/shared/Tooltip";
 import { ModelViewer, type ViewMode, type CameraPreset } from "../components/3d";
 import LoadingOverlay from "../components/3d/LoadingOverlay";
 import { useFavoriteStore, useAuthStore, getAccessToken } from "../stores";
+import ModelThumbnail from "../components/shared/ModelThumbnail";
 import { useModel } from "../hooks/useModels";
 import { modelApi, type ServerModelListItem } from "../api/models";
 import { categoriesApi, type CategoryItem } from "../api/categories";
@@ -376,7 +377,9 @@ function DetailEditDialog({ open, modelId, modelName, thumbnailUrl: initialThumb
               <div className="flex flex-col gap-1.5">
                 <label className="text-xs uppercase tracking-wider text-on-surface-variant">预览图</label>
                 <div className="flex items-center gap-3">
-                  {thumbUrl ? <img src={thumbUrl} alt="" className="w-16 h-16 rounded-sm object-cover bg-surface-container-highest shrink-0" /> : <div className="w-16 h-16 rounded-sm bg-surface-container-highest flex items-center justify-center shrink-0"><Icon name="view_in_ar" size={24} className="text-on-surface-variant/40" /></div>}
+                  <div className="w-16 h-16 rounded-sm bg-surface-container-highest shrink-0 overflow-hidden">
+                    <ModelThumbnail src={thumbUrl} alt="" className="w-full h-full object-cover" />
+                  </div>
                   <div className="flex flex-col gap-1.5">
                     <input type="file" accept="image/png,image/jpeg,image/webp" className="hidden" id="detail-thumb-upload" onChange={async (e) => { const f = e.target.files?.[0]; if (f) { setThumbUploading(true); let ok = false; try { const r = await modelApi.uploadThumbnail(modelId, f); setThumbUrl(r.thumbnail_url); toast('预览图已更新', 'success'); ok = true; } catch { toast('上传失败', 'error'); } finally { setThumbUploading(false); } if (ok) onSaved(); e.target.value = ''; } }} />
                     <button onClick={() => document.getElementById('detail-thumb-upload')?.click()} disabled={thumbUploading} className="flex items-center gap-1.5 px-3 py-1.5 text-xs text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high rounded-sm transition-colors border border-outline-variant/20 disabled:opacity-50"><Icon name="upload" size={14} />{thumbUploading ? '上传中...' : '上传图片'}</button>
@@ -551,7 +554,7 @@ function DesktopDetail({
               return isCurrent ? (
                 <div key={v.model_id} className="shrink-0">
                   <div className="w-20 h-20 rounded-md border-2 border-primary bg-surface-container-lowest overflow-hidden relative">
-                    {v.thumbnail_url && <img src={v.thumbnail_url} alt="" className="w-full h-full object-cover" />}
+                    <ModelThumbnail src={v.thumbnail_url} alt="" className="w-full h-full object-cover" />
                     <div className="absolute bottom-0 inset-x-0 bg-primary/90 text-on-primary text-[9px] text-center py-0.5 font-medium">当前</div>
                     {v.is_primary && <div className="absolute top-1 left-1 bg-primary/80 text-on-primary text-[7px] px-1 rounded-sm">主版本</div>}
                   </div>
@@ -561,7 +564,7 @@ function DesktopDetail({
               ) : (
                 <Link key={v.model_id} to={`/model/${v.model_id}`} className="shrink-0 group">
                   <div className="w-20 h-20 rounded-md border border-outline-variant/30 bg-surface-container-lowest overflow-hidden hover:border-primary/50 transition-colors relative">
-                    {v.thumbnail_url && <img src={v.thumbnail_url} alt="" className="w-full h-full object-cover" />}
+                    <ModelThumbnail src={v.thumbnail_url} alt="" className="w-full h-full object-cover" />
                     {v.is_primary && <div className="absolute top-1 left-1 bg-primary/80 text-on-primary text-[7px] px-1 rounded-sm">主版本</div>}
                   </div>
                   <p className="text-[10px] text-on-surface-variant group-hover:text-primary mt-1 text-center w-20 truncate" title={v.original_name}>{v.original_name.replace(/\.[^.]+$/, "")}</p>
@@ -724,7 +727,7 @@ function MobileDetail({
                 return isCurrent ? (
                   <div key={v.model_id} className="shrink-0">
                     <div className="w-16 h-16 rounded-md border-2 border-primary bg-surface-container-lowest overflow-hidden relative">
-                      {v.thumbnail_url && <img src={v.thumbnail_url} alt="" className="w-full h-full object-cover" />}
+                      <ModelThumbnail src={v.thumbnail_url} alt="" className="w-full h-full object-cover" />
                       <div className="absolute bottom-0 inset-x-0 bg-primary/90 text-on-primary text-[8px] text-center py-0.5">当前</div>
                       {v.is_primary && <div className="absolute top-0.5 left-0.5 bg-primary/80 text-on-primary text-[6px] px-0.5 rounded-sm">主</div>}
                     </div>
@@ -734,7 +737,7 @@ function MobileDetail({
                 ) : (
                   <Link key={v.model_id} to={`/model/${v.model_id}`} className="shrink-0">
                     <div className="w-16 h-16 rounded-md border border-outline-variant/30 bg-surface-container-lowest overflow-hidden relative">
-                      {v.thumbnail_url && <img src={v.thumbnail_url} alt="" className="w-full h-full object-cover" />}
+                      <ModelThumbnail src={v.thumbnail_url} alt="" className="w-full h-full object-cover" />
                       {v.is_primary && <div className="absolute top-0.5 left-0.5 bg-primary/80 text-on-primary text-[6px] px-0.5 rounded-sm">主</div>}
                     </div>
                     <p className="text-[9px] text-on-surface-variant mt-0.5 text-center w-16 truncate" title={v.original_name}>{v.original_name.replace(/\.[^.]+$/, "")}</p>

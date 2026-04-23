@@ -10,6 +10,7 @@ import BottomNav from '../components/shared/BottomNav';
 import AppSidebar from '../components/shared/Sidebar';
 import MobileNavDrawer from '../components/shared/MobileNavDrawer';
 import Icon from '../components/shared/Icon';
+import ModelThumbnail from '../components/shared/ModelThumbnail';
 import Tooltip from '../components/shared/Tooltip';
 import { useToast } from '../components/shared/Toast';
 import client from '../api/client';
@@ -96,13 +97,11 @@ const ModelCard = memo(function ModelCard({ model, selected, onSelect, onRemove,
     <div className={`bg-surface-container-high rounded-sm group relative transition-all flex flex-col ${selected ? 'ring-2 ring-primary shadow-[0_0_0_1px_var(--color-primary)]' : 'hover:shadow-[0_12px_24px_rgba(0,0,0,0.4)]'}`}>
       <div className="aspect-[4/3] bg-surface-container-lowest w-full relative overflow-hidden flex items-center justify-center">
         <Link to={`/model/${model.id}`} className="absolute inset-0 z-0">
-          {model.thumbnailUrl ? (
-            <img src={model.thumbnailUrl} alt={model.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" loading="lazy" />
-          ) : (
-            <div className="w-full h-full flex items-center justify-center">
-              <Icon name="view_in_ar" size={48} className="text-on-surface-variant/30" />
-            </div>
-          )}
+          <ModelThumbnail
+            src={model.thumbnailUrl}
+            alt={model.name}
+            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+          />
         </Link>
         {showCheckbox && (
           <button
@@ -163,11 +162,7 @@ const MobileModelCard = memo(function MobileModelCard({ model, selected, onSelec
       )}
       <Link to={`/model/${model.id}`} className="flex items-center">
         <div className="w-20 h-20 bg-surface-container-lowest flex-shrink-0 flex items-center justify-center overflow-hidden rounded-l-lg">
-          {model.thumbnailUrl ? (
-            <img src={model.thumbnailUrl} alt={model.name} className="w-full h-full object-cover" />
-          ) : (
-            <Icon name="view_in_ar" size={36} className="text-on-surface-variant/20" />
-          )}
+          <ModelThumbnail src={model.thumbnailUrl} alt={model.name} className="w-full h-full object-cover" />
         </div>
         <div className="flex-1 min-w-0 p-2.5 flex flex-col gap-1.5">
           <div>

@@ -11,6 +11,7 @@ import { useAuthStore } from "../stores";
 import { useToast } from "../components/shared/Toast";
 import FormatTag from "../components/shared/FormatTag";
 import Icon from "../components/shared/Icon";
+import ModelThumbnail from "../components/shared/ModelThumbnail";
 
 function formatFileSize(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
@@ -24,12 +25,8 @@ const ModelRow = memo(function ModelRow({ model }: { model: any }) {
       to={`/model/${model.id}`}
       className="flex items-center gap-4 p-4 bg-surface-container-high rounded-sm hover:bg-surface-container-highest transition-colors border border-outline-variant/10"
     >
-      <div className="w-16 h-16 bg-surface-container-lowest rounded-sm flex items-center justify-center shrink-0">
-        {model.thumbnailUrl ? (
-          <img src={model.thumbnailUrl} alt="" className="w-full h-full object-cover rounded-sm" loading="lazy" />
-        ) : (
-          <Icon name="view_in_ar" size={32} className="text-on-surface-variant/20" />
-        )}
+      <div className="w-16 h-16 bg-surface-container-lowest rounded-sm shrink-0 overflow-hidden">
+        <ModelThumbnail src={model.thumbnailUrl} alt="" className="w-full h-full object-cover rounded-sm" />
       </div>
       <div className="flex-1 min-w-0">
         <h3 className="text-sm font-headline text-on-surface truncate">{model.name || model.originalName}</h3>
