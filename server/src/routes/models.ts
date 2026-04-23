@@ -68,6 +68,10 @@ router.post("/api/models/upload", authMiddleware, requireRole("ADMIN"), upload.s
   const userId = req.user!.userId;
   const categoryId = req.body.categoryId || null;
 
+  // Preserve original file modification time from client filesystem
+  const clientLastModified = req.body.lastModified ? Number(req.body.lastModified) : null;
+  const originalModifiedAt = clientLastModified && !isNaN(clientLastModified) ? new Date(clientLastModified).toISOString() : null;
+
   // Save filesystem metadata (always, as backup)
   const meta: Record<string, unknown> = {
     model_id: modelId,
@@ -78,6 +82,7 @@ router.post("/api/models/upload", authMiddleware, requireRole("ADMIN"), upload.s
     created_at: createdAt,
     upload_path: file.path,
     created_by_id: userId,
+    ...(originalModifiedAt && { original_modified_at: originalModifiedAt }),
   };
   saveMeta(modelId, meta);
 
@@ -99,6 +104,7 @@ router.post("/api/models/upload", authMiddleware, requireRole("ADMIN"), upload.s
           uploadPath: file.path,
           createdById: userId,
           ...(categoryId && { categoryId }),
+          ...(originalModifiedAt && { metadata: { originalModifiedAt } }),
         },
         update: {},
       });
@@ -476,7 +482,7 @@ router.get("/api/models/:id", async (req: Request, res: Response) => {
           group: {
             include: {
               models: {
-                select: { id: true, name: true, thumbnailUrl: true, originalName: true, originalSize: true, uploadPath: true, createdAt: true },
+                select: { id: true, name: true, thumbnailUrl: true, originalName: true, originalSize: true, uploadPath: true, createdAt: true, metadata: true },
                 orderBy: { createdAt: "asc" },
               },
             },
@@ -484,9 +490,12 @@ router.get("/api/models/:id", async (req: Request, res: Response) => {
         },
       });
       if (m) {
-        // Get file modified date — fallback to DB createdAt if file not on disk
+        // Get original file date — priority: DB metadata > filesystem mtime > DB createdAt
+        const dbMeta = (m.metadata as Record<string, unknown>) || {};
         let mainFileModifiedAt: string = m.createdAt.toISOString();
-        try {
+        if (dbMeta.originalModifiedAt) {
+          mainFileModifiedAt = dbMeta.originalModifiedAt as string;
+        } else try {
           const mainPath = m.uploadPath && existsSync(m.uploadPath)
             ? m.uploadPath
             : join(config.staticDir, "originals", `${m.id}.${m.format}`);
@@ -496,10 +505,12 @@ router.get("/api/models/:id", async (req: Request, res: Response) => {
           }
         } catch { /* keep DB fallback */ }
 
-        // Pre-fetch variant file stats in parallel — fallback to DB createdAt
+        // Pre-fetch variant file dates in parallel — priority: DB metadata > fs mtime > DB createdAt
         const variantStats = await Promise.all(
           (m.group?.models ?? []).map(async (v: any) => {
             try {
+              const vMeta = (v.metadata as Record<string, unknown>) || {};
+              if (vMeta.originalModifiedAt) return vMeta.originalModifiedAt as string;
               if (v.uploadPath) {
                 const p = v.uploadPath.startsWith("/") ? v.uploadPath : join(process.cwd(), v.uploadPath);
                 if (existsSync(p)) {
@@ -1043,7 +1054,12 @@ router.post("/api/models/:id/replace-file", authMiddleware, requireRole("ADMIN")
     copyFileSync(file.path, destPath);
     rmSync(file.path, { force: true });
 
-    // Update database
+    // Update database — preserve original file modification time
+    const clientLastModified = req.body.lastModified ? Number(req.body.lastModified) : null;
+    const originalModifiedAt = clientLastModified && !isNaN(clientLastModified) ? new Date(clientLastModified).toISOString() : null;
+    const existingModel = await prisma.model.findUnique({ where: { id }, select: { metadata: true } });
+    const existingMeta = (existingModel?.metadata as Record<string, unknown>) || {};
+
     await prisma.model.update({
       where: { id },
       data: {
@@ -1056,6 +1072,7 @@ router.post("/api/models/:id/replace-file", authMiddleware, requireRole("ADMIN")
         gltfUrl: "",
         gltfSize: 0,
         thumbnailUrl: null,
+        ...(originalModifiedAt && { metadata: { ...existingMeta, originalModifiedAt } }),
       },
     });
 

@@ -109,6 +109,7 @@ export const modelApi = {
     const form = new FormData();
     form.append("file", file);
     if (options?.categoryId) form.append("categoryId", options.categoryId);
+    if (file.lastModified) form.append("lastModified", String(file.lastModified));
     const { data: resp } = await client.post("/models/upload", form, {
       headers: { "Content-Type": "multipart/form-data" },
     });
@@ -123,6 +124,7 @@ export const modelApi = {
   replaceFile: async (id: string, file: File): Promise<{ model_id: string; status: string }> => {
     const form = new FormData();
     form.append("file", file);
+    if (file.lastModified) form.append("lastModified", String(file.lastModified));
     const { data: resp } = await client.post(`/models/${id}/replace-file`, form, {
       headers: { "Content-Type": "multipart/form-data" },
     });
