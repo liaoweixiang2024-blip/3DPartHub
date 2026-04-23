@@ -175,7 +175,7 @@ function ViewerPanel({
   }, []);
 
   return (
-    <div ref={containerRef} className="relative bg-[#1a1a2e] flex-1 md:w-[60%] overflow-hidden border-r border-outline-variant/20 shrink-0" style={{ contain: 'strict' }}>
+    <div ref={containerRef} className="relative bg-surface-container flex-1 md:w-[60%] overflow-hidden border-r border-outline-variant/20 shrink-0" style={{ contain: 'strict' }}>
       <LoadingOverlay />
       <div className="absolute inset-0">
         <Suspense
@@ -1094,7 +1094,7 @@ export default function ModelDetailPage() {
     <div className="flex flex-col h-dvh bg-surface">
       <TopNav compact onMenuToggle={() => setNavOpen((prev) => !prev)} />
       <MobileNavDrawer open={navOpen} onClose={() => setNavOpen(false)} />
-      <div ref={mobileViewerRef} className="relative h-[50vh] min-h-[280px] max-h-[500px] bg-[#1a1a2e] overflow-hidden">
+      <div ref={mobileViewerRef} className="relative h-[50vh] min-h-[280px] max-h-[500px] bg-surface-container overflow-hidden">
         <LoadingOverlay />
         <Suspense fallback={<div className="w-full h-full flex items-center justify-center"><Icon name="view_in_ar" size={64} className="text-on-surface-variant/15 animate-pulse" /></div>}>
           <ModelViewer

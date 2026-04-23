@@ -46,7 +46,7 @@ const DEFAULT_SETTINGS: SystemSettings = {
   color_scheme: "orange",
   color_custom_dark: "{}",
   color_custom_light: "{}",
-  default_theme: "dark",
+  default_theme: "light",
   auto_theme_enabled: false,
   auto_theme_dark_hour: 20,
   auto_theme_light_hour: 8,
@@ -1228,24 +1228,46 @@ function Content() {
               </div>
 
               {updateInfo?.updateAvailable && (
-                <div className="mt-2 p-3 rounded-md bg-primary/10 border border-primary/20">
-                  <p className="text-xs font-medium text-primary">发现新版本 {updateInfo.remote}</p>
-                  <p className="text-xs text-on-surface-variant mt-1">
-                    请在服务器上执行以下命令升级：
-                  </p>
-                  <code className="block mt-1.5 px-3 py-2 bg-surface-container rounded text-xs font-mono text-on-surface select-all">
-                    docker compose pull && docker compose up -d
-                  </code>
-                  {updateInfo.releaseUrl && (
-                    <a
-                      href={updateInfo.releaseUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="inline-block mt-2 text-xs text-primary hover:underline"
-                    >
-                      查看更新详情 →
-                    </a>
+                <div className="mt-2 rounded-md bg-primary/10 border border-primary/20 overflow-hidden">
+                  {/* Version comparison header */}
+                  <div className="px-4 py-3 bg-primary/5 border-b border-primary/10">
+                    <div className="flex items-center gap-3">
+                      <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-surface-container-lowest text-on-surface-variant border border-outline-variant/20 font-mono">{updateInfo.current}</span>
+                      <Icon name="arrow_forward" size={16} className="text-primary" />
+                      <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 font-mono">{updateInfo.remote}</span>
+                      <span className="text-xs font-medium text-primary">发现新版本</span>
+                    </div>
+                  </div>
+
+                  {/* Release notes */}
+                  {updateInfo.releaseNotes && (
+                    <div className="px-4 py-3">
+                      <p className="text-xs font-medium text-on-surface mb-2">更新内容</p>
+                      <div className="max-h-48 overflow-y-auto text-xs text-on-surface-variant/80 space-y-0.5 whitespace-pre-line bg-surface-container/50 rounded p-3">
+                        {updateInfo.releaseNotes}
+                      </div>
+                    </div>
                   )}
+
+                  {/* Upgrade command */}
+                  <div className="px-4 py-3 border-t border-primary/10">
+                    <p className="text-xs text-on-surface-variant mb-2">在服务器上执行以下命令升级：</p>
+                    <div className="bg-surface-container rounded p-3 font-mono text-xs text-on-surface select-all space-y-1">
+                      <div><span className="text-on-surface-variant/50">$</span> docker compose pull</div>
+                      <div><span className="text-on-surface-variant/50">$</span> docker compose up -d</div>
+                    </div>
+                    <p className="text-[10px] text-on-surface-variant/50 mt-2">升级后数据库会自动迁移，请查看日志确认: docker compose logs -f api</p>
+                    {updateInfo.releaseUrl && (
+                      <a
+                        href={updateInfo.releaseUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-block mt-2 text-xs text-primary hover:underline"
+                      >
+                        查看 GitHub Release 详情 →
+                      </a>
+                    )}
+                  </div>
                 </div>
               )}
             </div>

@@ -467,7 +467,7 @@ router.get("/api/settings/public", async (_req, res: Response) => {
       color_scheme: all.color_scheme ?? "orange",
       color_custom_dark: all.color_custom_dark ?? "{}",
       color_custom_light: all.color_custom_light ?? "{}",
-      default_theme: all.default_theme ?? "dark",
+      default_theme: all.default_theme ?? "light",
       auto_theme_enabled: all.auto_theme_enabled ?? false,
       auto_theme_dark_hour: all.auto_theme_dark_hour ?? 20,
       auto_theme_light_hour: all.auto_theme_light_hour ?? 8,

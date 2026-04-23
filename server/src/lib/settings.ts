@@ -36,7 +36,7 @@ const SETTINGS_SCHEMA: SettingDef[] = [
   { key: "color_scheme", defaultValue: "orange" },
   { key: "color_custom_dark", defaultValue: "{}" },
   { key: "color_custom_light", defaultValue: "{}" },
-  { key: "default_theme", defaultValue: "dark" },
+  { key: "default_theme", defaultValue: "light" },
   { key: "auto_theme_enabled", defaultValue: false },
   { key: "auto_theme_dark_hour", defaultValue: 20 },
   { key: "auto_theme_light_hour", defaultValue: 8 },

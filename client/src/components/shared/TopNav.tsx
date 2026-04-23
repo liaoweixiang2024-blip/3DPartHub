@@ -207,7 +207,7 @@ export default function TopNav({ compact = false, onMenuToggle }: TopNavProps) {
           <div className="h-11 flex items-center px-3">
             <button
               onClick={() => onMenuToggle?.()}
-              className="p-1 text-[#f97316] hover:text-on-surface transition-colors"
+              className="p-1 text-primary-container hover:text-on-surface transition-colors"
               aria-label="打开菜单"
             >
               <Icon name="menu" size={22} />
@@ -248,7 +248,7 @@ export default function TopNav({ compact = false, onMenuToggle }: TopNavProps) {
                 value={localQuery}
                 onChange={(e) => handleSearchChange(e.target.value)}
                 placeholder="搜索模型..."
-                className="bg-transparent border-none outline-none text-sm text-on-surface placeholder:text-on-surface-variant/50 w-full"
+                className="bg-transparent border-none outline-none text-base text-on-surface placeholder:text-on-surface-variant/50 w-full"
               />
               {localQuery && (
                 <button type="button" onClick={() => { setLocalQuery(""); doSearch(""); }} className="p-0.5 text-on-surface-variant hover:text-on-surface shrink-0">
