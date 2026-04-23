@@ -40,11 +40,10 @@
 # ============================================================
 
 # <<< 修改版本号后执行 docker compose pull && docker compose up -d
-x-image-tag: &IMAGE_TAG v1.5.0
 
 services:
   api:
-    image: ghcr.io/liaoweixiang2024-blip/3dparthub-api:${IMAGE_TAG}
+    image: ghcr.io/liaoweixiang2024-blip/3dparthub-api:v1.5.0
     container_name: 3dparthub-api
     deploy:
       resources:
@@ -84,7 +83,7 @@ services:
       - internal
 
   web:
-    image: ghcr.io/liaoweixiang2024-blip/3dparthub-web:${IMAGE_TAG}
+    image: ghcr.io/liaoweixiang2024-blip/3dparthub-web:v1.5.0
     container_name: 3dparthub-web
     ports:
       - "${PORT:-3780}:80"
