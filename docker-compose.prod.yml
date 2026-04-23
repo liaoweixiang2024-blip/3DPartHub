@@ -1,6 +1,5 @@
-# ===== 宝塔面板 Docker Compose 生产配置 =====
-# 方式一 (本地构建): docker compose -f docker-compose.prod.yml up -d --build
-# 方式二 (拉镜像):   docker compose -f docker-compose.prod.yml up -d
+# ===== 3DPartHub Docker Compose 生产配置 =====
+# 使用方法: docker compose -f docker-compose.prod.yml up -d
 
 services:
   api:
@@ -36,8 +35,6 @@ services:
     volumes:
       - uploads-data:/app/uploads
       - static-data:/app/static
-      - /var/run/docker.sock:/var/run/docker.sock
-      - project-data:/project
     restart: unless-stopped
     networks:
       - internal
@@ -97,7 +94,6 @@ volumes:
   pgdata:
   uploads-data:
   static-data:
-  project-data:
 
 networks:
   internal:

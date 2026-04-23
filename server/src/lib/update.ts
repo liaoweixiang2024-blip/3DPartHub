@@ -1,29 +1,16 @@
-import { execSync } from "child_process";
 import { readFileSync } from "node:fs";
 import https from "node:https";
 
 /**
- * Get local version without any network requests.
- * Safe for public endpoints.
+ * Get local version from the VERSION file injected at Docker build time.
+ * Safe for public endpoints — no network or git operations.
  */
 export function getLocalVersion(): string {
-  // Priority 1: VERSION file (injected by Docker build)
   try {
     const version = readFileSync("/app/VERSION", "utf-8").trim();
-    if (version && version !== "dev") return version;
+    if (version) return version;
   } catch { /* no VERSION file */ }
-
-  // Priority 2: git tag (when deployed with source code)
-  const projectDir = "/project";
-  try {
-    return execSync("git describe --tags --abbrev=0", { cwd: projectDir, encoding: "utf-8", timeout: 3000, stdio: "pipe" }).trim();
-  } catch {
-    try {
-      return execSync("git rev-parse --short HEAD", { cwd: projectDir, encoding: "utf-8", timeout: 3000, stdio: "pipe" }).trim();
-    } catch {
-      return "unknown";
-    }
-  }
+  return "unknown";
 }
 
 interface GithubRelease {
@@ -80,12 +67,7 @@ export async function checkUpdateAvailable(): Promise<UpdateCheckResult> {
   }
 
   const remote = release.tag_name;
-  // Compare: if current is a git short hash (7 chars hex), always show as having update available
-  // if current is a version tag, compare semver-style
-  let updateAvailable = false;
-  if (current !== remote && current !== "unknown") {
-    updateAvailable = true;
-  }
+  const updateAvailable = current !== remote && current !== "unknown";
 
   return {
     current,
