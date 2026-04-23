@@ -8,7 +8,7 @@ import AppSidebar from '../components/shared/Sidebar';
 import MobileNavDrawer from '../components/shared/MobileNavDrawer';
 import Icon from '../components/shared/Icon';
 import { useToast } from '../components/shared/Toast';
-import { getSettings, updateSettings, uploadImage, getBackupStats, startBackupJob, pollBackupProgress, downloadBackup, renameBackup, deleteBackup, startRestore, pollRestoreProgress, listBackups, importBackup, importBackupAsRecord, pollImportSaveProgress, listServerBackupFiles, importBackupFromPath, type ServerBackupFile, checkUpdate, startUpdate, pollUpdateProgress, getVersion, type SystemSettings, type BackupStats, type BackupRecord } from '../api/settings';
+import { getSettings, updateSettings, uploadImage, getBackupStats, startBackupJob, pollBackupProgress, downloadBackup, renameBackup, deleteBackup, startRestore, pollRestoreProgress, listBackups, importBackup, importBackupAsRecord, pollImportSaveProgress, listServerBackupFiles, importBackupFromPath, type ServerBackupFile, checkUpdate, getVersion, type SystemSettings, type BackupStats, type BackupRecord } from '../api/settings';
 import { COLOR_PRESETS, COLOR_KEYS, type ColorKey } from '../lib/colorSchemes';
 import { applyColorScheme, generatePaletteFromPrimary } from '../lib/colorScheme';
 // Note: pollBackupProgress is used by handleExport
@@ -410,9 +410,7 @@ function Content() {
 
   // Update state
   const [currentVersion, setCurrentVersion] = useState<string>("");
-  const [updateInfo, setUpdateInfo] = useState<{ current: string; remote: string; updateAvailable: boolean; warning?: string } | null>(null);
-  const [updating, setUpdating] = useState(false);
-  const [updateProgress, setUpdateProgress] = useState({ stage: "", percent: 0, message: "", logs: [] as string[] });
+  const [updateInfo, setUpdateInfo] = useState<{ current: string; remote: string; updateAvailable: boolean; releaseUrl?: string; releaseNotes?: string } | null>(null);
   const [checkingUpdate, setCheckingUpdate] = useState(false);
   const [restoreConfirmId, setRestoreConfirmId] = useState<string | null>(null);
   const [renamingId, setRenamingId] = useState<string | null>(null);
@@ -422,7 +420,7 @@ function Content() {
   const backupInputRef = useRef<HTMLInputElement>(null);
 
   // Global busy state — prevent concurrent admin operations
-  const adminBusy = exporting || importing || restoring || updating;
+  const adminBusy = exporting || importing || restoring;
 
   useEffect(() => {
     loadSettings();
@@ -478,25 +476,6 @@ function Content() {
         localStorage.removeItem('restoreConfirmBackupId');
         setRestoring(false);
         setRestoreProgress({ stage: '', percent: 0, message: '', logs: [] });
-      }
-    }
-
-    // Resume update job
-    const updateJobId = localStorage.getItem('updateJobId');
-    if (updateJobId) {
-      setUpdating(true);
-      setUpdateProgress({ stage: 'resuming', percent: 0, message: '正在恢复更新任务...', logs: [] });
-      try {
-        await pollUpdateProgress(updateJobId, (stage, percent, message, logs) => {
-          setUpdateProgress({ stage, percent, message, logs: logs || [] });
-        });
-        toast('更新成功，页面即将刷新...', 'success');
-        setTimeout(() => window.location.reload(), 3000);
-      } catch (err: any) {
-        toast(err.message || '更新失败', 'error');
-        setUpdating(false);
-      } finally {
-        localStorage.removeItem('updateJobId');
       }
     }
 
@@ -615,31 +594,6 @@ function Content() {
       toast('检查更新失败', 'error');
     } finally {
       setCheckingUpdate(false);
-    }
-  }
-
-  async function handleUpdate() {
-    setUpdating(true);
-    let lastStage = "pulling";
-    setUpdateProgress({ stage: "pulling", percent: 0, message: "正在准备更新...", logs: [] });
-    try {
-      const jobId = await startUpdate();
-      localStorage.setItem('updateJobId', jobId);
-      await pollUpdateProgress(jobId, (stage, percent, message, logs) => {
-        lastStage = stage;
-        setUpdateProgress({ stage, percent, message, logs: logs || [] });
-      });
-      toast('更新成功，页面即将刷新...', 'success');
-      setTimeout(() => window.location.reload(), 3000);
-    } catch (err: any) {
-      if (lastStage === "restarting" || !navigator.onLine) {
-        toast('服务正在重启，页面即将刷新...', 'success');
-        setTimeout(() => window.location.reload(), 5000);
-      } else {
-        toast(err.message || '更新失败', 'error');
-        localStorage.removeItem('updateJobId');
-        setUpdating(false);
-      }
     }
   }
 
@@ -1248,11 +1202,11 @@ function Content() {
               )}
             </div>
 
-            {/* System Update */}
+            {/* System Update — version detection only */}
             <div className="px-6 py-4 border-t border-outline-variant/10">
               <div className="flex items-center justify-between gap-4 mb-3">
                 <div>
-                  <p className="text-sm font-medium text-on-surface">系统更新</p>
+                  <p className="text-sm font-medium text-on-surface">版本检测</p>
                   <p className="text-xs text-on-surface-variant mt-0.5">
                     当前版本: <span className="font-mono text-primary-container">{currentVersion || updateInfo?.current || '—'}</span>
                     {updateInfo && !updateInfo.updateAvailable && (updateInfo.current || currentVersion) !== 'unknown' && (
@@ -1263,35 +1217,36 @@ function Content() {
                     )}
                   </p>
                 </div>
-                <div className="flex gap-2">
-                  <button
-                    onClick={handleCheckUpdate}
-                    disabled={checkingUpdate || adminBusy}
-                    className="px-4 py-2 text-xs font-medium border border-outline-variant/40 text-on-surface-variant rounded-md hover:text-on-surface hover:bg-surface-container-high/50 disabled:opacity-50 transition-colors flex items-center gap-1.5"
-                  >
-                    <Icon name="search" size={14} className={checkingUpdate ? 'animate-spin' : ''} />
-                    {checkingUpdate ? '检查中...' : '检查更新'}
-                  </button>
-                  {updateInfo?.updateAvailable && !updating && (
-                    <button
-                      onClick={handleUpdate}
-                      className="px-4 py-2 text-xs font-medium bg-primary-container/20 text-primary-container rounded-md hover:bg-primary-container/30 transition-colors flex items-center gap-1.5"
-                    >
-                      <Icon name="sync" size={14} />
-                      立即更新
-                    </button>
-                  )}
-                </div>
+                <button
+                  onClick={handleCheckUpdate}
+                  disabled={checkingUpdate || adminBusy}
+                  className="px-4 py-2 text-xs font-medium border border-outline-variant/40 text-on-surface-variant rounded-md hover:text-on-surface hover:bg-surface-container-high/50 disabled:opacity-50 transition-colors flex items-center gap-1.5"
+                >
+                  <Icon name="search" size={14} className={checkingUpdate ? 'animate-spin' : ''} />
+                  {checkingUpdate ? '检查中...' : '检查更新'}
+                </button>
               </div>
 
-              {updateInfo?.warning && (
-                <div className="mt-2 p-3 rounded-md bg-amber-500/10 border border-amber-500/20">
-                  <p className="text-xs text-amber-400">{updateInfo.warning}</p>
+              {updateInfo?.updateAvailable && (
+                <div className="mt-2 p-3 rounded-md bg-primary/10 border border-primary/20">
+                  <p className="text-xs font-medium text-primary">发现新版本 {updateInfo.remote}</p>
+                  <p className="text-xs text-on-surface-variant mt-1">
+                    请在服务器上执行以下命令升级：
+                  </p>
+                  <code className="block mt-1.5 px-3 py-2 bg-surface-container rounded text-xs font-mono text-on-surface select-all">
+                    docker compose pull && docker compose up -d
+                  </code>
+                  {updateInfo.releaseUrl && (
+                    <a
+                      href={updateInfo.releaseUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-block mt-2 text-xs text-primary hover:underline"
+                    >
+                      查看更新详情 →
+                    </a>
+                  )}
                 </div>
-              )}
-
-              {updating && (
-                <TaskProgressCard progress={updateProgress} color="emerald-500" />
               )}
             </div>
           </div>

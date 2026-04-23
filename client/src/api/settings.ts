@@ -474,52 +474,11 @@ export interface UpdateCheckResult {
   current: string;
   remote: string;
   updateAvailable: boolean;
-  warning?: string;
+  releaseUrl?: string;
+  releaseNotes?: string;
 }
 
 export async function checkUpdate(): Promise<UpdateCheckResult> {
   const res = await client.get("/settings/update/check", { timeout: 30000 });
   return unwrap<UpdateCheckResult>(res);
-}
-
-export async function startUpdate(): Promise<string> {
-  const res = await client.post("/settings/update/run", {}, { timeout: 30000 });
-  const data = res.data as any;
-  const jobId = data?.data?.jobId ?? data?.jobId;
-  if (!jobId) throw new Error("启动更新失败");
-  return jobId;
-}
-
-export function pollUpdateProgress(
-  jobId: string,
-  onProgress?: (stage: string, percent: number, message: string, logs?: string[]) => void,
-): Promise<string> {
-  return new Promise((resolve, reject) => {
-    let consecutiveErrors = 0;
-    const MAX_ERRORS = 30;
-    const poll = setInterval(async () => {
-      try {
-        const res = await client.get(`/settings/update/progress/${jobId}`, { timeout: 15000 });
-        consecutiveErrors = 0;
-        const d = (res.data as any)?.data ?? res.data;
-        onProgress?.(d.stage, d.percent, d.message, d.logs);
-        if (d.stage === "done") {
-          clearInterval(poll);
-          resolve(jobId);
-        } else if (d.stage === "error") {
-          clearInterval(poll);
-          reject(new Error(d.error || "更新失败"));
-        }
-        // Keep polling for all other stages (pulling/building/restarting/prechecking)
-      } catch (err: any) {
-        // During restart, the server will be temporarily unavailable.
-        // Don't resolve early — keep polling until it comes back.
-        consecutiveErrors++;
-        if (consecutiveErrors >= MAX_ERRORS) {
-          clearInterval(poll);
-          reject(new Error("更新超时，请手动检查服务状态"));
-        }
-      }
-    }, 3000);
-  });
 }

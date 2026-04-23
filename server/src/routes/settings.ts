@@ -8,7 +8,7 @@ import { verifyToken } from "../lib/jwt.js";
 import { getAllSettings, setSettings, setSetting } from "../lib/settings.js";
 import { cacheGet, cacheSet, cacheDel, TTL } from "../lib/cache.js";
 import { startBackupJob, getJob, getRestoreJob, startRestoreJob, startRestoreJobFromFile, saveAsBackupRecord, startImportSaveJob, getImportSaveJob, getBackupStats, listBackups, renameBackup, deleteBackup, getBackupArchivePath } from "../lib/backup.js";
-import { checkUpdateAvailable, getLocalVersion, startUpdateJob, getUpdateJob } from "../lib/update.js";
+import { checkUpdateAvailable, getLocalVersion } from "../lib/update.js";
 
 const router = Router();
 
@@ -82,37 +82,15 @@ const backupUpload = multer({
     }
   },
 });
-// Admin: check for updates
+// Admin: check for updates (version detection only, no auto-update)
 router.get("/api/settings/update/check", authMiddleware, async (req: AuthRequest, res: Response) => {
   if (req.user?.role !== "ADMIN") { res.status(403).json({ detail: "需要管理员权限" }); return; }
   try {
-    const result = checkUpdateAvailable();
+    const result = await checkUpdateAvailable();
     res.json(result);
   } catch {
     res.json({ current: "unknown", remote: "unknown", updateAvailable: false });
   }
-});
-
-// Admin: start update
-router.post("/api/settings/update/run", authMiddleware, async (req: AuthRequest, res: Response) => {
-  if (req.user?.role !== "ADMIN") { res.status(403).json({ detail: "需要管理员权限" }); return; }
-  try {
-    const jobId = startUpdateJob();
-    res.json({ jobId });
-  } catch (err: any) {
-    const status = err.message?.includes("正在进行中") ? 409 : 500;
-    res.status(status).json({ detail: err.message || "启动更新失败" });
-  }
-});
-
-// Admin: poll update progress
-router.get("/api/settings/update/progress/:id", authMiddleware, async (req: AuthRequest, res: Response) => {
-  if (req.user?.role !== "ADMIN") { res.status(403).json({ detail: "需要管理员权限" }); return; }
-  const jobId = asSingleString(req.params.id);
-  if (!jobId) { res.status(400).json({ detail: "更新任务参数无效" }); return; }
-  const job = getUpdateJob(jobId);
-  if (!job) { res.status(404).json({ detail: "更新任务不存在" }); return; }
-  res.json({ stage: job.stage, percent: job.percent, message: job.message, error: job.error, logs: job.logs });
 });
 
 function adminOnly(req: AuthRequest, res: Response): boolean {
