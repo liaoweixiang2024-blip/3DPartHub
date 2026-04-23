@@ -8,7 +8,7 @@ import AppSidebar from '../components/shared/Sidebar';
 import MobileNavDrawer from '../components/shared/MobileNavDrawer';
 import Icon from '../components/shared/Icon';
 import { useToast } from '../components/shared/Toast';
-import { getSettings, updateSettings, uploadImage, getBackupStats, startBackupJob, pollBackupProgress, downloadBackup, renameBackup, deleteBackup, startRestore, pollRestoreProgress, listBackups, importBackup, importBackupAsRecord, pollImportSaveProgress, checkUpdate, startUpdate, pollUpdateProgress, getVersion, type SystemSettings, type BackupStats, type BackupRecord } from '../api/settings';
+import { getSettings, updateSettings, uploadImage, getBackupStats, startBackupJob, pollBackupProgress, downloadBackup, renameBackup, deleteBackup, startRestore, pollRestoreProgress, listBackups, importBackup, importBackupAsRecord, pollImportSaveProgress, listServerBackupFiles, importBackupFromPath, type ServerBackupFile, checkUpdate, startUpdate, pollUpdateProgress, getVersion, type SystemSettings, type BackupStats, type BackupRecord } from '../api/settings';
 import { COLOR_PRESETS, COLOR_KEYS, type ColorKey } from '../lib/colorSchemes';
 import { applyColorScheme, generatePaletteFromPrimary } from '../lib/colorScheme';
 // Note: pollBackupProgress is used by handleExport
@@ -403,6 +403,10 @@ function Content() {
   const [importing, setImporting] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [restoreConfirmFile, setRestoreConfirmFile] = useState<File | null>(null);
+  const [serverFiles, setServerFiles] = useState<ServerBackupFile[]>([]);
+  const [loadingServerFiles, setLoadingServerFiles] = useState(false);
+  const [serverFileConfirm, setServerFileConfirm] = useState<ServerBackupFile | null>(null);
+  const [serverFilesScanned, setServerFilesScanned] = useState(false);
 
   // Update state
   const [currentVersion, setCurrentVersion] = useState<string>("");
@@ -715,6 +719,41 @@ function Content() {
       setUploadProgress(0);
       setRestoreProgress({ stage: '', percent: 0, message: '', logs: [] });
       if (backupInputRef.current) backupInputRef.current.value = '';
+    }
+  }
+
+  async function handleLoadServerFiles() {
+    setLoadingServerFiles(true);
+    try {
+      const files = await listServerBackupFiles();
+      setServerFiles(files);
+      setServerFilesScanned(true);
+    } catch {
+      toast('获取服务器文件列表失败', 'error');
+    } finally {
+      setLoadingServerFiles(false);
+    }
+  }
+
+  async function handleServerFileImport(file: ServerBackupFile) {
+    setServerFileConfirm(null);
+    setImporting(true);
+    setRestoreProgress({ stage: 'starting', percent: 0, message: '正在从服务器路径恢复...', logs: [] });
+    try {
+      const jobId = await importBackupFromPath(file.path);
+      localStorage.setItem('restoreJobId', jobId);
+      const result = await pollRestoreProgress(jobId, (stage, percent, message, logs) => {
+        setRestoreProgress({ stage, percent, message, logs: logs || [] });
+      });
+      toast(`恢复成功：${result.modelCount} 个 STEP 模型，${result.thumbnailCount} 张缩略图`, 'success');
+      loadBackupList();
+      loadBackupStats();
+    } catch (err: any) {
+      toast(err.message || '恢复失败', 'error');
+    } finally {
+      localStorage.removeItem('restoreJobId');
+      setImporting(false);
+      setRestoreProgress({ stage: '', percent: 0, message: '', logs: [] });
     }
   }
 
@@ -1070,7 +1109,7 @@ function Content() {
                   <p className="text-sm font-medium text-on-surface">导入恢复</p>
                   <p className="text-xs text-on-surface-variant mt-0.5">上传备份文件恢复数据（将覆盖当前数据）</p>
                 </div>
-                <div>
+                <div className="flex gap-2">
                   <input
                     ref={backupInputRef}
                     type="file"
@@ -1083,7 +1122,15 @@ function Content() {
                     className="px-4 py-2 text-xs font-medium border border-outline-variant/40 text-on-surface-variant rounded-md hover:text-on-surface hover:bg-surface-container-high/50 disabled:opacity-50 transition-colors flex items-center gap-1.5"
                   >
                     <Icon name="upload" size={14} />
-                    选择文件
+                    本地上传
+                  </button>
+                  <button
+                    onClick={() => { setServerFileConfirm(null); handleLoadServerFiles(); }}
+                    disabled={adminBusy}
+                    className="px-4 py-2 text-xs font-medium border border-outline-variant/40 text-on-surface-variant rounded-md hover:text-on-surface hover:bg-surface-container-high/50 disabled:opacity-50 transition-colors flex items-center gap-1.5"
+                  >
+                    <Icon name="folder" size={14} />
+                    服务器文件
                   </button>
                 </div>
               </div>
@@ -1104,6 +1151,63 @@ function Content() {
                       }}
                     />
                   )}
+                </div>
+              )}
+
+              {/* Server file list */}
+              {loadingServerFiles && (
+                <div className="mt-3 text-xs text-on-surface-variant animate-pulse">正在扫描服务器文件...</div>
+              )}
+              {!loadingServerFiles && serverFiles.length > 0 && !importing && (
+                <div className="mt-3 border border-outline-variant/20 rounded-md divide-y divide-outline-variant/10">
+                  {serverFiles.map(f => (
+                    <div key={f.path} className="flex items-center justify-between px-3 py-2 hover:bg-surface-container-high/30">
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs font-medium text-on-surface truncate">{f.name}</p>
+                        <p className="text-xs text-on-surface-variant">{(f.size / 1024 / 1024).toFixed(1)} MB · {new Date(f.modifiedAt).toLocaleString('zh-CN')}</p>
+                      </div>
+                      <button
+                        onClick={() => setServerFileConfirm(f)}
+                        disabled={adminBusy}
+                        className="ml-2 px-3 py-1 text-xs font-medium text-primary border border-primary/30 rounded hover:bg-primary/10 disabled:opacity-50 transition-colors shrink-0"
+                      >
+                        恢复
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+              {!loadingServerFiles && serverFilesScanned && serverFiles.length === 0 && (
+                <div className="mt-3 text-xs text-on-surface-variant">未找到服务器上的备份文件</div>
+              )}
+
+              {/* Server file confirm dialog */}
+              {serverFileConfirm && !importing && (
+                <div className="mt-3 bg-error-container/10 border border-error/20 rounded-md p-4">
+                  <div className="flex items-start gap-3">
+                    <Icon name="warning" size={20} className="text-error shrink-0 mt-0.5" />
+                    <div className="flex-1">
+                      <p className="text-sm font-medium text-on-surface">确认从服务器文件恢复</p>
+                      <p className="text-xs text-on-surface-variant mt-1">
+                        文件：{serverFileConfirm.name}（{(serverFileConfirm.size / 1024 / 1024).toFixed(1)} MB）
+                      </p>
+                      <p className="text-xs text-on-surface-variant mt-0.5">路径：{serverFileConfirm.path}</p>
+                      <div className="mt-3 flex gap-2">
+                        <button
+                          onClick={() => handleServerFileImport(serverFileConfirm)}
+                          className="px-4 py-1.5 text-xs font-medium text-on-error bg-error rounded-md hover:bg-error/90 transition-colors"
+                        >
+                          确认恢复（将覆盖当前数据）
+                        </button>
+                        <button
+                          onClick={() => setServerFileConfirm(null)}
+                          className="px-4 py-1.5 text-xs text-on-surface-variant border border-outline-variant/30 rounded-md hover:bg-surface-container-high/50 transition-colors"
+                        >
+                          取消
+                        </button>
+                      </div>
+                    </div>
+                  </div>
                 </div>
               )}
 

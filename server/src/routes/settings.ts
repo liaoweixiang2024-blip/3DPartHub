@@ -1,6 +1,6 @@
 import { Router, Response } from "express";
 import multer from "multer";
-import { mkdirSync, existsSync, rmSync, copyFileSync, readFileSync, readdirSync, writeFileSync } from "fs";
+import { mkdirSync, existsSync, rmSync, copyFileSync, readFileSync, readdirSync, writeFileSync, statSync } from "fs";
 import { join, resolve, sep } from "path";
 import { config } from "../lib/config.js";
 import { authMiddleware, type AuthRequest } from "../middleware/auth.js";
@@ -24,6 +24,7 @@ for (const dir of Object.values(imageDirs)) {
 }
 
 const managedUploadRoot = resolve(process.cwd(), config.uploadDir);
+const managedBackupRoot = resolve(process.cwd(), config.staticDir, "backups");
 
 function resolveManagedUploadPath(filePath: unknown): string | null {
   if (typeof filePath !== "string" || !filePath.trim()) return null;
@@ -32,6 +33,18 @@ function resolveManagedUploadPath(filePath: unknown): string | null {
     return null;
   }
   return existsSync(resolved) ? resolved : null;
+}
+
+function resolveBackupPath(filePath: unknown): string | null {
+  if (typeof filePath !== "string" || !filePath.trim()) return null;
+  const resolved = resolve(filePath);
+  // Only allow files inside backup dir or uploads dir
+  const allowed = [managedBackupRoot, managedUploadRoot];
+  const ok = allowed.some(root => resolved === root || resolved.startsWith(`${root}${sep}`));
+  if (!ok) return null;
+  if (!existsSync(resolved)) return null;
+  if (!resolved.endsWith(".tar.gz") && !resolved.endsWith(".tgz")) return null;
+  return resolved;
 }
 
 function asSingleString(value: unknown): string | undefined {
@@ -298,6 +311,46 @@ router.post("/api/settings/backup/import-chunked", authMiddleware, async (req: A
   } catch (err: any) {
     const status = err.message?.includes("正在进行中") ? 409 : 500;
     res.status(status).json({ detail: err.message || "启动恢复失败" });
+  }
+});
+
+// Admin: import backup from server-local path (no upload needed)
+router.post("/api/settings/backup/import-path", authMiddleware, async (req: AuthRequest, res: Response) => {
+  if (!adminOnly(req, res)) return;
+  const filePath = req.body?.path;
+  const resolved = resolveBackupPath(filePath);
+  if (!resolved) {
+    res.status(400).json({ detail: "路径无效，仅支持备份目录下的 .tar.gz 文件" });
+    return;
+  }
+  try {
+    const jobId = startRestoreJobFromFile(resolved);
+    res.json({ jobId });
+  } catch (err: any) {
+    const status = err.message?.includes("正在进行中") ? 409 : 500;
+    res.status(status).json({ detail: err.message || "启动恢复失败" });
+  }
+});
+
+// Admin: list server-local backup files for import
+router.get("/api/settings/backup/server-files", authMiddleware, async (req: AuthRequest, res: Response) => {
+  if (!adminOnly(req, res)) return;
+  try {
+    const files: { name: string; path: string; size: number; modifiedAt: string }[] = [];
+    for (const dir of [managedBackupRoot, managedUploadRoot]) {
+      if (!existsSync(dir)) continue;
+      for (const entry of readdirSync(dir, { withFileTypes: true })) {
+        if (!entry.isFile()) continue;
+        if (!entry.name.endsWith(".tar.gz") && !entry.name.endsWith(".tgz")) continue;
+        const fullPath = join(dir, entry.name);
+        const st = statSync(fullPath);
+        files.push({ name: entry.name, path: fullPath, size: st.size, modifiedAt: st.mtime.toISOString() });
+      }
+    }
+    files.sort((a, b) => new Date(b.modifiedAt).getTime() - new Date(a.modifiedAt).getTime());
+    res.json(files);
+  } catch {
+    res.json([]);
   }
 });
 

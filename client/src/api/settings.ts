@@ -440,6 +440,29 @@ function directUpload(file: File, onProgress?: (percent: number) => void): Promi
   });
 }
 
+// ===== Server-local backup import =====
+
+export interface ServerBackupFile {
+  name: string;
+  path: string;
+  size: number;
+  modifiedAt: string;
+}
+
+export async function listServerBackupFiles(): Promise<ServerBackupFile[]> {
+  const res = await client.get("/settings/backup/server-files");
+  const data = (res.data as any)?.data ?? res.data;
+  return Array.isArray(data) ? data : [];
+}
+
+export async function importBackupFromPath(serverPath: string): Promise<string> {
+  const { data: resp } = await client.post("/settings/backup/import-path", { path: serverPath });
+  const inner = (resp as any)?.data ?? resp;
+  const jobId = inner?.jobId;
+  if (!jobId) throw new Error("启动恢复失败");
+  return jobId;
+}
+
 // ===== System Update =====
 
 export async function getVersion(): Promise<string> {
