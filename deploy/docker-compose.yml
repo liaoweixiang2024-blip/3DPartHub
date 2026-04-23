@@ -31,7 +31,7 @@
 
 services:
   api:
-    image: ghcr.io/liaoweixiang2024-blip/3dparthub-api:v1.5.0
+    image: ghcr.io/liaoweixiang2024-blip/3dparthub-api:latest
     container_name: 3dparthub-api
     deploy:
       resources:
@@ -71,7 +71,7 @@ services:
       - internal
 
   web:
-    image: ghcr.io/liaoweixiang2024-blip/3dparthub-web:v1.5.0
+    image: ghcr.io/liaoweixiang2024-blip/3dparthub-web:latest
     container_name: 3dparthub-web
     ports:
       - "${PORT:-3780}:80"
