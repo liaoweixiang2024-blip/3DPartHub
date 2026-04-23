@@ -123,8 +123,8 @@ curl http://localhost:3780/api/health
 
 ```bash
 # 把服务器上的备份文件复制到容器内
-docker cp /path/to/backup_1776890498343.json 3dparthub-api-1:/app/static/backups/
-docker cp /path/to/backup_1776890498343.tar.gz 3dparthub-api-1:/app/static/backups/
+docker cp /path/to/backup_1776890498343.json 3dparthub-api:/app/static/backups/
+docker cp /path/to/backup_1776890498343.tar.gz 3dparthub-api:/app/static/backups/
 ```
 
 然后打开 **设置 → 数据备份**，列表里自动出现，点「恢复」。
@@ -134,7 +134,7 @@ docker cp /path/to/backup_1776890498343.tar.gz 3dparthub-api-1:/app/static/backu
 ### 2. 忘记管理员密码怎么办？
 
 ```bash
-docker exec -it 3dparthub-api-1 sh
+docker exec -it 3dparthub-api sh
 
 # 生成新密码的哈希（新密码设为 newpass123）
 HASH=$(node -e "require('bcryptjs').hash('newpass123', 12).then(h => console.log(h))")
@@ -151,7 +151,7 @@ exit
 ### 3. 忘记管理员用户名/邮箱怎么办？
 
 ```bash
-docker exec -it 3dparthub-api-1 sh -c \
+docker exec -it 3dparthub-api sh -c \
   "npx prisma db execute --stdin" << SQL
 SELECT username, email, role FROM users WHERE role = 'ADMIN';
 SQL
@@ -190,8 +190,8 @@ docker compose logs api --tail 50
 # ===== 旧服务器 =====
 # 1. 网页端「设置 → 数据备份」→ 创建备份
 # 2. 把备份文件从容器导出到宿主机
-docker cp 3dparthub-api-1:/app/static/backups/backup_XXXX.json /tmp/
-docker cp 3dparthub-api-1:/app/static/backups/backup_XXXX.tar.gz /tmp/
+docker cp 3dparthub-api:/app/static/backups/backup_XXXX.json /tmp/
+docker cp 3dparthub-api:/app/static/backups/backup_XXXX.tar.gz /tmp/
 # 3. 传到新服务器
 scp /tmp/backup_XXXX.* root@新服务器IP:/tmp/
 
@@ -199,8 +199,8 @@ scp /tmp/backup_XXXX.* root@新服务器IP:/tmp/
 # 1. 部署（按上面的"快速部署"操作）
 cd /opt/3dparthub && docker compose up -d
 # 2. 等服务启动后，把备份文件复制到容器
-docker cp /tmp/backup_XXXX.json 3dparthub-api-1:/app/static/backups/
-docker cp /tmp/backup_XXXX.tar.gz 3dparthub-api-1:/app/static/backups/
+docker cp /tmp/backup_XXXX.json 3dparthub-api:/app/static/backups/
+docker cp /tmp/backup_XXXX.tar.gz 3dparthub-api:/app/static/backups/
 # 3. 网页端「设置 → 数据备份」→ 点「恢复」
 ```
 

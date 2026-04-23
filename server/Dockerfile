@@ -43,7 +43,7 @@ COPY --from=builder /app/occt-import-js.node.cjs ./occt-import-js.node.cjs
 COPY --from=builder /app/static ./static
 COPY --from=builder /app/VERSION ./VERSION
 
-RUN mkdir -p uploads/.metadata uploads/chunks uploads/batch static/models static/thumbnails static/batch
+RUN mkdir -p uploads/.metadata uploads/chunks uploads/batch static/models static/thumbnails static/batch static/backups
 
 ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium-browser
 

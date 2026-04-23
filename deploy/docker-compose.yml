@@ -23,7 +23,7 @@
 #
 # 【备份恢复】
 #   网页端: 设置 → 数据备份 → 服务器文件
-#   命令行: docker cp backup.tar.gz 3dparthub-api-1:/app/static/backups/
+#   命令行: docker cp backup.tar.gz 3dparthub-api:/app/static/backups/
 #
 # ============================================================
 

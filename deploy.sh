@@ -109,9 +109,9 @@ if [ -n "$BACKUP_SOURCE" ] && [ "$HEALTH_OK" = true ]; then
     echo -e "${RED}  ✗ 未找到 backup_*.tar.gz${NC}"
   else
     # docker cp 到容器
-    docker cp "$TARGZ" 3dparthub-api-1:/app/static/backups/ 2>/dev/null && echo -e "${GREEN}  ✓ $(basename "$TARGZ") 已复制${NC}" || echo -e "${RED}  ✗ 复制失败${NC}"
+    docker cp "$TARGZ" 3dparthub-api:/app/static/backups/ 2>/dev/null && echo -e "${GREEN}  ✓ $(basename "$TARGZ") 已复制${NC}" || echo -e "${RED}  ✗ 复制失败${NC}"
     if [ -n "$JSON" ] && [ -f "$JSON" ]; then
-      docker cp "$JSON" 3dparthub-api-1:/app/static/backups/ 2>/dev/null && echo -e "${GREEN}  ✓ $(basename "$JSON") 已复制${NC}" || true
+      docker cp "$JSON" 3dparthub-api:/app/static/backups/ 2>/dev/null && echo -e "${GREEN}  ✓ $(basename "$JSON") 已复制${NC}" || true
     fi
     echo ""
     echo -e "${YELLOW}  备份文件已导入容器，请登录网页恢复：${NC}"

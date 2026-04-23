@@ -20,18 +20,18 @@
 #
 # 【备份恢复】
 #   网页创建的备份存储在 Docker 命名卷中，重启不丢失
-#   从外部导入备份: docker cp backup_xxx.json 3dparthub-api-1:/app/static/backups/
-#                   docker cp backup_xxx.tar.gz 3dparthub-api-1:/app/static/backups/
+#   从外部导入备份: docker cp backup_xxx.json 3dparthub-api:/app/static/backups/
+#                   docker cp backup_xxx.tar.gz 3dparthub-api:/app/static/backups/
 #   然后网页端「设置 → 数据备份」恢复
 #
 # 【迁移到新服务器】
 #   1. 旧服务器：设置 → 数据备份 → 创建备份
 #   2. 备份文件在 static-data 卷内，可通过 docker cp 导出：
-#      docker cp 3dparthub-api-1:/app/static/backups/. /tmp/backups/
+#      docker cp 3dparthub-api:/app/static/backups/. /tmp/backups/
 #      scp /tmp/backups/* 新服务器:/tmp/backups/
 #   3. 新服务器部署后导入：
-#      docker cp /tmp/backups/backup_xxx.json 3dparthub-api-1:/app/static/backups/
-#      docker cp /tmp/backups/backup_xxx.tar.gz 3dparthub-api-1:/app/static/backups/
+#      docker cp /tmp/backups/backup_xxx.json 3dparthub-api:/app/static/backups/
+#      docker cp /tmp/backups/backup_xxx.tar.gz 3dparthub-api:/app/static/backups/
 #   4. 网页端恢复
 #
 # ============================================================
