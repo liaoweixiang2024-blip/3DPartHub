@@ -123,8 +123,8 @@ curl http://localhost:3780/api/health
 
 ```bash
 # 把服务器上的备份文件复制到容器内
-docker cp /path/to/backup_1776890498343.json 3dparthub-api:/app/static/backups/
-docker cp /path/to/backup_1776890498343.tar.gz 3dparthub-api:/app/static/backups/
+docker cp /path/to/backup_xxx.json 3dparthub-api:/app/static/backups/
+docker cp /path/to/backup_xxx.tar.gz 3dparthub-api:/app/static/backups/
 ```
 
 然后打开 **设置 → 数据备份**，列表里自动出现，点「恢复」。

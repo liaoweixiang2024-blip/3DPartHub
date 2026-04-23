@@ -7,7 +7,7 @@
 #   bash deploy.sh
 #
 # 带备份恢复（自动复制到容器内并恢复）:
-#   bash deploy.sh /path/to/backup_1776890498343.tar.gz
+#   bash deploy.sh /path/to/backup_xxx.tar.gz
 #   bash deploy.sh "/www/wwwroot/model备份"
 #
 # ============================================================
