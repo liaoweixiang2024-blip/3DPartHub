@@ -105,7 +105,8 @@ export function autoAudit(req: Request, _res: Response, next: NextFunction) {
       try {
         const authReq = req as AuthRequest;
         const userId = authReq.user?.userId || null;
-        const resourceId = req.params?.id || req.params?.projectId || (req.body as any)?.id || null;
+        const params = req.params || {};
+        const resourceId = params.id || params.modelId || params.catId || params.productId || params.projectId || params.ticketId || params.commentId || params.userId || params.slug || (req.body as any)?.id || null;
 
         const details: Record<string, Prisma.InputJsonValue> = {
           method: req.method,
@@ -117,7 +118,7 @@ export function autoAudit(req: Request, _res: Response, next: NextFunction) {
         const body = req.body as Record<string, unknown>;
         if (body && typeof body === "object") {
           const safeFields: Record<string, Prisma.InputJsonValue> = {};
-          for (const key of ["name", "status", "classification", "description", "role", "email", "username", "format"]) {
+          for (const key of ["name", "status", "classification", "description", "role", "email", "username", "format", "title"]) {
             const value = body[key];
             if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") {
               safeFields[key] = value;

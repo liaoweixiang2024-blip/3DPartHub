@@ -34,7 +34,25 @@ router.get("/api/audit", authMiddleware, requireRole("ADMIN"), async (req: AuthR
       take: size,
     });
 
-    res.json({ total, items: logs, page, page_size: size });
+    // Resolve userId → username
+    const userIds = [...new Set(logs.map((l) => l.userId).filter(Boolean))] as string[];
+    const users = userIds.length > 0
+      ? await prisma.user.findMany({ where: { id: { in: userIds } }, select: { id: true, username: true } })
+      : [];
+    const userMap = new Map(users.map((u) => [u.id, u.username]));
+
+    const items = logs.map((l) => ({
+      id: l.id,
+      userId: l.userId,
+      username: l.userId ? (userMap.get(l.userId) || l.userId) : null,
+      action: l.action,
+      resource: l.resource,
+      resourceId: l.resourceId,
+      details: l.details,
+      createdAt: l.createdAt,
+    }));
+
+    res.json({ total, items, page, page_size: size });
   } catch {
     res.status(500).json({ detail: "查询审计日志失败" });
   }

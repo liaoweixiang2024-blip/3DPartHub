@@ -12,6 +12,7 @@ import client from "../api/client";
 interface AuditEntry {
   id: string;
   userId: string | null;
+  username: string | null;
   action: string;
   resource: string;
   resourceId: string | null;
@@ -85,11 +86,11 @@ function LogRow({ log, isDesktop }: { log: AuditEntry; isDesktop: boolean }) {
           </span>
         </td>
         <td className="py-2.5 px-4 text-xs text-on-surface-variant">{resLabel}</td>
-        <td className="py-2.5 px-4 text-xs text-on-surface-variant/60 font-mono max-w-[120px] truncate">
-          {log.resourceId ? log.resourceId.slice(0, 8) + "..." : "—"}
+        <td className="py-2.5 px-4 text-xs text-on-surface-variant/60 font-mono max-w-[120px] truncate" title={log.resourceId || ""}>
+          {log.resourceId || "—"}
         </td>
         <td className="py-2.5 px-4 text-xs text-on-surface-variant/60">
-          {log.userId ? log.userId.slice(0, 8) + "..." : "系统"}
+          {log.username || (log.userId ? log.userId.slice(0, 8) + "..." : "系统")}
         </td>
         <td className="py-2.5 px-4 text-xs text-on-surface-variant/40 whitespace-nowrap">
           {new Date(log.createdAt).toLocaleString("zh-CN")}
