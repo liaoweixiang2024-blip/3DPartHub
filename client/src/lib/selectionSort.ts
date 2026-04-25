@@ -1,10 +1,11 @@
 /**
  * Shared option sorting logic for selection wizard.
- * Used by both SelectionPage and SelectionAdminPage.
+ * Sort type is determined by column definition's sortType field:
+ *   "thread" → thread/spec sorting (R, G, NPT, PT, ZG, M)
+ *   "numeric" → extract leading number
+ *   "default" / undefined → Chinese locale with numeric support
  */
 
-const NUMERIC_SORT_FIELDS = new Set(["管径", "适用管外径", "适用管径"]);
-const THREAD_SORT_FIELDS = new Set(["螺纹规格", "螺纹"]);
 const THREAD_PREFIX_PRIORITY: Record<string, number> = {
   R: 0,
   RC: 0,
@@ -62,8 +63,9 @@ function extractThreadSortKey(value: string): { prefixRank: number; size: number
   };
 }
 
-export function compareOptionValues(field: string, left: string, right: string): number {
-  if (THREAD_SORT_FIELDS.has(field)) {
+/** Compare two option values given a sortType */
+export function compareOptionValues(sortType: string | undefined, left: string, right: string): number {
+  if (sortType === "thread") {
     const leftThread = extractThreadSortKey(left);
     const rightThread = extractThreadSortKey(right);
 
@@ -81,7 +83,7 @@ export function compareOptionValues(field: string, left: string, right: string):
     }
   }
 
-  if (NUMERIC_SORT_FIELDS.has(field)) {
+  if (sortType === "numeric") {
     const leftNum = extractLeadingNumber(left);
     const rightNum = extractLeadingNumber(right);
     if (leftNum !== null && rightNum !== null && leftNum !== rightNum) {
@@ -94,7 +96,7 @@ export function compareOptionValues(field: string, left: string, right: string):
   return left.localeCompare(right, "zh-CN", { numeric: true });
 }
 
-/** Sort an array of option values using smart comparison for the given field */
-export function smartSortOptions(values: string[], field: string): string[] {
-  return [...values].sort((a, b) => compareOptionValues(field, a, b));
+/** Sort an array of option values using the given sortType */
+export function smartSortOptions(values: string[], sortType?: string): string[] {
+  return [...values].sort((a, b) => compareOptionValues(sortType, a, b));
 }

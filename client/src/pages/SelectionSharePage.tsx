@@ -106,10 +106,10 @@ export default function SelectionSharePage() {
     if (!isSelectionMode) return;
 
     redirected.current = true;
-    const isGroupShare = data.categorySlug.startsWith("beize-group-");
+    const isGroupShare = !!data.groupId;
 
     if (isGroupShare) {
-      navigate(`/selection?g=${data.categorySlug}`, { replace: true });
+      navigate(`/selection?g=${data.groupId}`, { replace: true });
     } else {
       navigate("/selection", { replace: true, state: { shareSlug: data.categorySlug, shareSpecs: specs } });
     }

@@ -2,7 +2,7 @@ import { Router, Request, Response } from "express";
 import multer from "multer";
 import { randomUUID } from "node:crypto";
 import { join } from "node:path";
-import { mkdirSync, readdirSync, readFileSync, rmSync, existsSync, writeFileSync, copyFileSync } from "node:fs";
+import { mkdirSync, readdirSync, readFileSync, rmSync, existsSync, writeFileSync, copyFileSync, statSync } from "node:fs";
 import { stat as statAsync } from "node:fs/promises";
 import { convertStepToGltf } from "../services/converter.js";
 import { conversionQueue } from "../lib/queue.js";
@@ -438,6 +438,8 @@ router.get("/api/models", async (req: Request, res: Response) => {
         download_count: m.downloadCount || 0,
         created_at: m.createdAt,
         drawing_url: m.drawingUrl || null,
+        drawing_name: m.drawingName || null,
+        drawing_size: m.drawingSize || null,
         group: m.group ? {
           id: m.group.id,
           name: m.group.name,
@@ -588,6 +590,8 @@ router.get("/api/models/:id", async (req: Request, res: Response) => {
           created_at: m.createdAt,
           file_modified_at: mainFileModifiedAt,
           drawing_url: m.drawingUrl || null,
+          drawing_name: m.drawingName || null,
+        drawing_size: m.drawingSize || null,
           group: groupData,
         });
         return;
@@ -939,8 +943,9 @@ router.post("/api/models/:id/drawing", authMiddleware, requireRole("ADMIN"), upl
     rmSync(file.path, { force: true });
 
     const drawingUrl = `/static/drawings/${id}.pdf`;
+    const { size: drawingSize } = statSync(drawingPath);
 
-    await prisma.model.update({ where: { id }, data: { drawingUrl } });
+    await prisma.model.update({ where: { id }, data: { drawingUrl, drawingName: file.originalname, drawingSize } });
     await cacheDelByPrefix("cache:models:");
 
     res.json({ success: true, data: { model_id: id, drawing_url: drawingUrl } });

@@ -20,6 +20,7 @@ import {
   batchImportProducts,
   uploadOptionImage,
   renameOptionValue,
+  sortCategories,
   type SelectionCategory,
   type SelectionProduct,
   type SelectionComponent,
@@ -100,12 +101,22 @@ function ColumnEditor({ columns, onChange }: { columns: ColumnDef[]; onChange: (
 function Content() {
   const { toast } = useToast();
   const [tab, setTab] = useState<Tab>("categories");
+  const [catFilter, setCatFilter] = useState<"all" | "empty">("all");
 
   // Category state
   const [showCatModal, setShowCatModal] = useState(false);
   const [editCat, setEditCat] = useState<SelectionCategory | null>(null);
   const [catForm, setCatForm] = useState({ name: "", slug: "", description: "", icon: "", image: "", columns: [] as ColumnDef[] });
   const [deleteCatId, setDeleteCatId] = useState<string | null>(null);
+  const [showCatSortModal, setShowCatSortModal] = useState(false);
+  const [catSortItems, setCatSortItems] = useState<{ id: string; name: string }[]>([]);
+  const [catSortDragIdx, setCatSortDragIdx] = useState<number | null>(null);
+  const [showGroupModal, setShowGroupModal] = useState(false);
+  const [groupItems, setGroupItems] = useState<{ id: string; name: string; icon: string; catCount: number }[]>([]);
+  const [editGroupId, setEditGroupId] = useState<string | null>(null);
+  const [groupForm, setGroupForm] = useState({ name: "", icon: "category" });
+  const [groupDragIdx, setGroupDragIdx] = useState<number | null>(null);
+  const [manageGroupCatsId, setManageGroupCatsId] = useState<string | null>(null);
 
   // Product state
   const [selectedCatId, setSelectedCatId] = useState<string>("");
@@ -342,12 +353,37 @@ function Content() {
         <h1 className="text-lg md:text-2xl md:font-headline md:font-bold md:tracking-tight md:uppercase font-bold text-on-surface">选型管理</h1>
       </div>
 
+      {/* Stats Overview */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+        {(() => {
+          const totalCats = categories.length;
+          const totalProducts = categories.reduce((s, c) => s + (c.productCount || 0), 0);
+          const catsWithProducts = categories.filter((c) => (c.productCount || 0) > 0).length;
+          const emptyCats = totalCats - catsWithProducts;
+          const stats = [
+            { label: "总分类", value: totalCats, icon: "category", color: "text-primary-container", action: () => { setCatFilter("all"); setTab("categories"); } },
+            { label: "总产品", value: totalProducts, icon: "inventory_2", color: "text-primary-container", action: () => { setCatFilter("all"); setTab("products"); } },
+            { label: "有产品分类", value: catsWithProducts, icon: "check_circle", color: "text-green-600", action: () => { setCatFilter("all"); setTab("categories"); } },
+            { label: "空分类", value: emptyCats, icon: emptyCats > 0 ? "warning" : "check_circle", color: emptyCats > 0 ? "text-amber-500" : "text-green-600", action: () => { setCatFilter("empty"); setTab("categories"); } },
+          ];
+          return stats.map((s) => (
+            <button key={s.label} onClick={s.action} className="flex items-center gap-2 bg-surface-container-low rounded-lg px-3 py-2 border border-outline-variant/10 hover:bg-surface-container-high hover:border-outline-variant/30 transition-colors text-left">
+              <Icon name={s.icon} size={18} className={s.color} />
+              <div>
+                <div className="text-lg font-bold text-on-surface leading-tight">{s.value}</div>
+                <div className="text-[10px] text-on-surface-variant">{s.label}</div>
+              </div>
+            </button>
+          ));
+        })()}
+      </div>
+
       {/* Tabs */}
       <div className="flex border-b border-outline-variant/20">
         {(["categories", "products"] as Tab[]).map((t) => (
           <button
             key={t}
-            onClick={() => setTab(t)}
+            onClick={() => { setTab(t); setCatFilter("all"); }}
             className={`px-4 py-2 text-sm font-bold transition-colors ${
               tab === t
                 ? "text-primary-container border-b-2 border-primary-container"
@@ -362,50 +398,80 @@ function Content() {
       {/* ===== Categories Tab ===== */}
       {tab === "categories" && (
         <div className="space-y-3">
-          <div className="flex justify-end">
+          <div className="flex justify-end gap-2">
+            <button onClick={() => {
+              const map = new Map<string, { id: string; name: string; icon: string; catCount: number }>();
+              for (const c of categories) {
+                if (c.groupId && c.groupName) {
+                  if (!map.has(c.groupId)) {
+                    map.set(c.groupId, { id: c.groupId, name: c.groupName, icon: c.groupIcon || "category", catCount: 0 });
+                  }
+                  map.get(c.groupId)!.catCount++;
+                }
+              }
+              setGroupItems(Array.from(map.values()));
+              setEditGroupId(null);
+              setGroupForm({ name: "", icon: "category" });
+              setShowGroupModal(true);
+            }} className="px-3 py-1.5 text-xs font-bold bg-surface-container-high text-on-surface rounded-md hover:opacity-90 flex items-center gap-1">
+              <Icon name="folder" size={14} /> 分组管理
+            </button>
+            <button onClick={() => { setCatSortItems(categories.map((c) => ({ id: c.id, name: c.name }))); setShowCatSortModal(true); }} className="px-3 py-1.5 text-xs font-bold bg-surface-container-high text-on-surface rounded-md hover:opacity-90 flex items-center gap-1">
+              <Icon name="reorder" size={14} /> 排序
+            </button>
             <button onClick={openNewCat} className="px-3 py-1.5 text-xs font-bold bg-primary-container text-on-primary rounded-md hover:opacity-90 transition-opacity flex items-center gap-1">
               <Icon name="add" size={14} /> 新建分类
             </button>
           </div>
-          {categories.length === 0 && (
-            <div className="text-center py-12 text-on-surface-variant">
-              <Icon name="category" size={40} className="mx-auto mb-2 opacity-30" />
-              <p className="text-sm">暂无分类</p>
+          {catFilter === "empty" && (
+            <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-amber-500/10 border border-amber-500/20">
+              <Icon name="warning" size={14} className="text-amber-500 shrink-0" />
+              <span className="text-xs text-on-surface">仅显示空分类（无产品的分类）</span>
+              <button onClick={() => setCatFilter("all")} className="text-xs text-primary-container hover:underline ml-auto shrink-0">显示全部</button>
             </div>
           )}
-          {categories.map((cat) => (
-            <div key={cat.id} className="bg-surface-container-low rounded-md border border-outline-variant/10 p-3">
-              <div className="flex items-center justify-between gap-3">
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-2">
-                    <Icon name={cat.icon || "category"} size={16} className="text-primary-container shrink-0" />
-                    <span className="font-bold text-sm text-on-surface truncate">{cat.name}</span>
-                    <span className="text-[10px] text-on-surface-variant">/{cat.slug}</span>
+          {(() => {
+            const filtered = catFilter === "empty" ? categories.filter((c) => !(c.productCount || 0)) : categories;
+            if (filtered.length === 0) return (
+              <div className="text-center py-12 text-on-surface-variant">
+                <Icon name="category" size={40} className="mx-auto mb-2 opacity-30" />
+                <p className="text-sm">{catFilter === "empty" ? "没有空分类" : "暂无分类"}</p>
+              </div>
+            );
+            return filtered.map((cat) => (
+              <div key={cat.id} className="bg-surface-container-low rounded-md border border-outline-variant/10 p-3">
+                <div className="flex items-center justify-between gap-3">
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2">
+                      <Icon name={cat.icon || "category"} size={16} className="text-primary-container shrink-0" />
+                      <span className="font-bold text-sm text-on-surface truncate">{cat.name}</span>
+                      <span className="text-[10px] text-on-surface-variant">/{cat.slug}</span>
+                    </div>
+                    <div className="flex items-center gap-3 mt-1 text-[10px] text-on-surface-variant/70">
+                      <span>{(cat.columns as ColumnDef[]).length} 个参数列</span>
+                      <span>{cat.productCount ?? 0} 个产品</span>
+                      <span>排序: {cat.sortOrder}</span>
+                    </div>
                   </div>
-                  <div className="flex items-center gap-3 mt-1 text-[10px] text-on-surface-variant/70">
-                    <span>{(cat.columns as ColumnDef[]).length} 个参数列</span>
-                    <span>{cat.productCount ?? 0} 个产品</span>
-                    <span>排序: {cat.sortOrder}</span>
-                  </div>
-                </div>
-                <div className="flex items-center gap-1 shrink-0">
-                  <button onClick={() => openEditCat(cat)} className="px-2 py-1 text-xs text-primary-container hover:bg-primary-container/10 rounded" title="编辑">
-                    <Icon name="edit" size={14} />
-                  </button>
-                  {deleteCatId === cat.id ? (
-                    <>
-                      <button onClick={() => handleDeleteCat(cat.id)} className="px-2 py-1 text-[10px] font-medium bg-error text-on-error-container rounded">确认</button>
-                      <button onClick={() => setDeleteCatId(null)} className="px-2 py-1 text-[10px] text-on-surface-variant hover:bg-surface-container-high/50 rounded">取消</button>
-                    </>
-                  ) : (
-                    <button onClick={() => setDeleteCatId(cat.id)} className="px-2 py-1 text-xs text-error hover:bg-error-container/10 rounded" title="删除">
-                      <Icon name="delete" size={14} />
+                  <div className="flex items-center gap-1 shrink-0">
+                    <button onClick={() => openEditCat(cat)} className="px-2 py-1 text-xs text-primary-container hover:bg-primary-container/10 rounded" title="编辑">
+                      <Icon name="edit" size={14} />
                     </button>
-                  )}
+                    {deleteCatId === cat.id ? (
+                      <>
+                        <button onClick={() => handleDeleteCat(cat.id)} className="px-2 py-1 text-[10px] font-medium bg-error text-on-error-container rounded">确认</button>
+                        <button onClick={() => setDeleteCatId(null)} className="px-2 py-1 text-[10px] text-on-surface-variant hover:bg-surface-container-high/50 rounded">取消</button>
+                      </>
+                    ) : (
+                      <button onClick={() => setDeleteCatId(cat.id)} className="px-2 py-1 text-xs text-error hover:bg-error-container/10 rounded" title="删除">
+                        <Icon name="delete" size={14} />
+                      </button>
+                    )}
+                  </div>
                 </div>
               </div>
-            </div>
-          ))}
+            ));
+          })()}
         </div>
       )}
 
@@ -431,6 +497,31 @@ function Content() {
                 </button>
                 <button onClick={() => setShowBatchModal(true)} className="px-3 py-2 text-xs font-bold bg-surface-container-high text-on-surface rounded-md hover:opacity-90 flex items-center gap-1">
                   <Icon name="upload" size={14} /> 批量导入
+                </button>
+                <button
+                  onClick={() => {
+                    if (!products.length) { toast("没有可导出的产品", "error"); return; }
+                    const exportData = products.map((p) => ({
+                      name: p.name,
+                      modelNo: p.modelNo ?? "",
+                      specs: p.specs,
+                      image: p.image ?? "",
+                      pdfUrl: p.pdfUrl ?? "",
+                      isKit: p.isKit,
+                      components: p.components ?? [],
+                    }));
+                    const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: "application/json" });
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement("a");
+                    a.href = url;
+                    a.download = `${activeCat?.slug || "products"}_export.json`;
+                    a.click();
+                    URL.revokeObjectURL(url);
+                    toast(`已导出 ${products.length} 个产品`, "success");
+                  }}
+                  className="px-3 py-2 text-xs font-bold bg-surface-container-high text-on-surface rounded-md hover:opacity-90 flex items-center gap-1"
+                >
+                  <Icon name="download" size={14} /> 导出
                 </button>
                 <button onClick={() => { setOptImgField(""); setOrderItems([]); setShowOptImgModal(true); }} className="px-3 py-2 text-xs font-bold bg-surface-container-high text-on-surface rounded-md hover:opacity-90 flex items-center gap-1">
                   <Icon name="settings" size={14} /> 选项设置
@@ -537,6 +628,40 @@ function Content() {
               <div>
                 <label className="text-xs text-on-surface-variant mb-1 block">描述</label>
                 <input value={catForm.description} onChange={(e) => setCatForm({ ...catForm, description: e.target.value })} className="w-full bg-surface-container-lowest text-on-surface text-sm rounded px-3 py-2 border border-outline-variant/20 outline-none focus:border-primary-container" />
+              </div>
+              <div>
+                <label className="text-xs text-on-surface-variant mb-1 block">所属分组（可选）</label>
+                <select
+                  value={(() => {
+                    const editCatObj = editCat ? categories.find(c => c.id === editCat.id) : null;
+                    return editCatObj?.groupId || "";
+                  })()}
+                  onChange={async (e) => {
+                    const gid = e.target.value;
+                    if (!gid) {
+                      if (editCat) await updateCategory(editCat.id, { groupId: null, groupName: null, groupIcon: null });
+                      toast("已移除分组", "success");
+                      mutateCats();
+                    } else {
+                      const src = categories.find(c => c.groupId === gid);
+                      if (editCat) await updateCategory(editCat.id, { groupId: gid, groupName: src?.groupName || "", groupIcon: src?.groupIcon || "" });
+                      toast("已设置分组", "success");
+                      mutateCats();
+                    }
+                  }}
+                  className="w-full bg-surface-container-lowest text-on-surface text-sm rounded px-3 py-2 border border-outline-variant/20 outline-none focus:border-primary-container"
+                >
+                  <option value="">不分组</option>
+                  {(() => {
+                    const groupMap = new Map<string, string>();
+                    for (const c of categories) {
+                      if (c.groupId && c.groupName && !groupMap.has(c.groupId)) groupMap.set(c.groupId, c.groupName);
+                    }
+                    return Array.from(groupMap.entries()).map(([id, name]) => (
+                      <option key={id} value={id}>{name}</option>
+                    ));
+                  })()}
+                </select>
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
@@ -756,7 +881,10 @@ function Content() {
               )}
               {optImgField && orderItems.length > 0 && (
                 <button
-                  onClick={() => setOrderItems(smartSortOptions(orderItems, optImgField))}
+                  onClick={() => {
+                    const colDef = activeCat?.columns?.find((c: any) => c.key === optImgField);
+                    setOrderItems(smartSortOptions(orderItems, colDef?.sortType));
+                  }}
                   className="px-2 py-1.5 text-xs font-medium bg-surface-container-lowest text-on-surface-variant border border-outline-variant/20 rounded-md hover:bg-surface-container-high hover:text-on-surface transition-colors shrink-0"
                   title="按智能规则排序（螺纹/数字优先）"
                 >
@@ -1039,6 +1167,282 @@ function Content() {
             <div className="flex justify-end gap-2">
               <button onClick={() => setShowBatchModal(false)} className="px-4 py-2 text-sm text-on-surface-variant hover:bg-surface-container-high/50 rounded">取消</button>
               <button onClick={handleBatchImport} disabled={!batchText.trim()} className="px-4 py-2 text-sm font-bold bg-primary-container text-on-primary rounded hover:opacity-90 disabled:opacity-50">导入</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ===== Group Management Modal ===== */}
+      {showGroupModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={() => { setShowGroupModal(false); setManageGroupCatsId(null); }}>
+          <div className="w-full max-w-md bg-surface-container-low rounded-xl border border-outline-variant/20 p-5 space-y-4 max-h-[85vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
+
+            {/* --- Sub-view: manage categories in a group --- */}
+            {manageGroupCatsId ? (() => {
+              const g = groupItems.find((gi) => gi.id === manageGroupCatsId);
+              const catsInGroup = categories.filter((c) => c.groupId === manageGroupCatsId);
+              const otherCats = categories.filter((c) => c.groupId !== manageGroupCatsId);
+              return (
+                <>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <button onClick={() => setManageGroupCatsId(null)} className="text-on-surface-variant hover:text-on-surface"><Icon name="arrow_back" size={18} /></button>
+                    <h2 className="text-base font-bold text-on-surface">{g?.name} — 分类管理</h2>
+                  </div>
+
+                  <div className="flex-1 overflow-y-auto min-h-0 space-y-1">
+                    <p className="text-[10px] text-on-surface-variant font-bold uppercase tracking-wide">当前分组内（{catsInGroup.length}）</p>
+                    {catsInGroup.length === 0 && <p className="text-xs text-on-surface-variant py-2 text-center">暂无分类</p>}
+                    {catsInGroup.map((c) => (
+                      <div key={c.id} className="flex items-center gap-2 px-3 py-2 rounded-lg border border-outline-variant/20 bg-surface-container-lowest">
+                        <Icon name={c.icon || "category"} size={14} className="text-primary-container shrink-0" />
+                        <span className="text-sm text-on-surface flex-1 truncate">{c.name}</span>
+                        <button
+                          onClick={async () => {
+                            await updateCategory(c.id, { groupId: null, groupName: null, groupIcon: null });
+                            toast(`"${c.name}" 已移出分组`, "success");
+                            mutateCats();
+                          }}
+                          className="text-error/60 hover:text-error shrink-0"
+                          title="移出分组"
+                        >
+                          <Icon name="close" size={14} />
+                        </button>
+                      </div>
+                    ))}
+
+                    {otherCats.length > 0 && (
+                      <>
+                        <p className="text-[10px] text-on-surface-variant font-bold uppercase tracking-wide pt-2">其他分类（点击添加到本组）</p>
+                        {otherCats.map((c) => {
+                          const srcGroup = c.groupId ? groupItems.find((gi) => gi.id === c.groupId) : null;
+                          return (
+                            <button
+                              key={c.id}
+                              onClick={async () => {
+                                await updateCategory(c.id, { groupId: manageGroupCatsId, groupName: g?.name || "", groupIcon: g?.icon || "category" });
+                                toast(`"${c.name}" 已移入本组`, "success");
+                                mutateCats();
+                              }}
+                              className="flex items-center gap-2 px-3 py-2 rounded-lg border border-dashed border-outline-variant/30 bg-surface-container-lowest hover:border-primary-container/40 hover:bg-primary-container/5 w-full text-left transition-colors"
+                            >
+                              <Icon name="add" size={14} className="text-primary-container shrink-0" />
+                              <span className="text-sm text-on-surface-variant flex-1 truncate">{c.name}</span>
+                              {srcGroup ? (
+                                <span className="text-[10px] text-on-surface-variant/60 shrink-0">来自: {srcGroup.name}</span>
+                              ) : (
+                                <span className="text-[10px] text-on-surface-variant/60 shrink-0">未分组</span>
+                              )}
+                            </button>
+                          );
+                        })}
+                      </>
+                    )}
+                  </div>
+
+                  <div className="flex justify-end shrink-0 pt-2 border-t border-outline-variant/10">
+                    <button onClick={() => setManageGroupCatsId(null)} className="px-3 py-1.5 text-xs text-on-surface-variant hover:bg-surface-container-high/50 rounded">返回</button>
+                  </div>
+                </>
+              );
+            })() : (
+              <>
+                {/* --- Main view: group list --- */}
+                <div className="flex items-center justify-between shrink-0">
+                  <h2 className="text-base font-bold text-on-surface">分组管理</h2>
+                  <button onClick={() => setShowGroupModal(false)} className="text-on-surface-variant hover:text-on-surface"><Icon name="close" size={18} /></button>
+                </div>
+
+                {/* Add / edit group form */}
+                <div className="shrink-0 space-y-2 border-b border-outline-variant/10 pb-3">
+                  <div className="flex items-center gap-2">
+                    <input
+                      value={groupForm.icon}
+                      onChange={(e) => setGroupForm({ ...groupForm, icon: e.target.value })}
+                      placeholder="图标"
+                      className="w-20 bg-surface-container-lowest text-on-surface text-xs rounded px-2 py-1.5 border border-outline-variant/20 outline-none focus:border-primary-container"
+                    />
+                    <input
+                      value={groupForm.name}
+                      onChange={(e) => setGroupForm({ ...groupForm, name: e.target.value })}
+                      placeholder="分组名称"
+                      className="flex-1 bg-surface-container-lowest text-on-surface text-xs rounded px-2 py-1.5 border border-outline-variant/20 outline-none focus:border-primary-container"
+                    />
+                    <button
+                      onClick={async () => {
+                        if (!groupForm.name.trim()) return;
+                        if (editGroupId) {
+                          const catsInGroup = categories.filter((c) => c.groupId === editGroupId);
+                          for (const c of catsInGroup) {
+                            await updateCategory(c.id, { groupName: groupForm.name.trim(), groupIcon: groupForm.icon.trim() || "category" });
+                          }
+                          toast("分组已更新", "success");
+                        } else {
+                          const newId = `group_${Date.now()}`;
+                          setGroupItems([...groupItems, { id: newId, name: groupForm.name.trim(), icon: groupForm.icon.trim() || "category", catCount: 0 }]);
+                          toast("分组已创建", "success");
+                        }
+                        setGroupForm({ name: "", icon: "category" });
+                        setEditGroupId(null);
+                        mutateCats();
+                      }}
+                      disabled={!groupForm.name.trim()}
+                      className="px-3 py-1.5 text-xs font-bold bg-primary-container text-on-primary rounded hover:opacity-90 disabled:opacity-50 shrink-0"
+                    >
+                      {editGroupId ? "更新" : "创建"}
+                    </button>
+                    {editGroupId && (
+                      <button onClick={() => { setEditGroupId(null); setGroupForm({ name: "", icon: "category" }); }} className="px-2 py-1.5 text-xs text-on-surface-variant hover:bg-surface-container-high/50 rounded shrink-0">取消</button>
+                    )}
+                  </div>
+                </div>
+
+                {/* Group list */}
+                <div className="flex-1 overflow-y-auto min-h-0 space-y-1">
+                  {groupItems.length === 0 && (
+                    <p className="text-center py-8 text-on-surface-variant text-sm">暂无分组</p>
+                  )}
+                  {groupItems.map((g, i) => (
+                    <div
+                      key={g.id}
+                      draggable
+                      onDragStart={() => setGroupDragIdx(i)}
+                      onDragOver={(e) => {
+                        e.preventDefault();
+                        if (groupDragIdx === null || groupDragIdx === i) return;
+                        const next = [...groupItems];
+                        const [moved] = next.splice(groupDragIdx, 1);
+                        next.splice(i, 0, moved);
+                        setGroupItems(next);
+                        setGroupDragIdx(i);
+                      }}
+                      onDragEnd={() => setGroupDragIdx(null)}
+                      className={`flex items-center gap-2 px-3 py-2.5 rounded-lg border transition-all ${
+                        groupDragIdx === i
+                          ? "opacity-40 border-primary-container/30 bg-primary-container/5"
+                          : "border-outline-variant/20 bg-surface-container-lowest hover:border-outline-variant/40"
+                      }`}
+                    >
+                      <span className="cursor-grab active:cursor-grabbing text-on-surface-variant/40 select-none text-sm">⠿</span>
+                      <Icon name={g.icon} size={16} className="text-primary-container shrink-0" />
+                      <span className="text-sm font-medium text-on-surface flex-1">{g.name}</span>
+                      <span className="text-[10px] text-on-surface-variant">{g.catCount} 个分类</span>
+                      <button
+                        onClick={() => setManageGroupCatsId(g.id)}
+                        className="text-primary-container hover:bg-primary-container/10 rounded p-1"
+                        title="管理分类"
+                      >
+                        <Icon name="settings" size={13} />
+                      </button>
+                      <button
+                        onClick={() => { setEditGroupId(g.id); setGroupForm({ name: g.name, icon: g.icon }); }}
+                        className="text-on-surface-variant hover:bg-surface-container-high/50 rounded p-1"
+                        title="改名称/图标"
+                      >
+                        <Icon name="edit" size={13} />
+                      </button>
+                      <button
+                        onClick={async () => {
+                          const catsInGroup = categories.filter((c) => c.groupId === g.id);
+                          for (const c of catsInGroup) {
+                            await updateCategory(c.id, { groupId: null, groupName: null, groupIcon: null });
+                          }
+                          setGroupItems(groupItems.filter((gi) => gi.id !== g.id));
+                          toast("分组已删除", "success");
+                          mutateCats();
+                        }}
+                        className="text-error/70 hover:text-error rounded p-1"
+                        title="删除分组"
+                      >
+                        <Icon name="delete" size={13} />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Save group order */}
+                <div className="flex justify-end gap-2 shrink-0 pt-2 border-t border-outline-variant/10">
+                  <button onClick={() => setShowGroupModal(false)} className="px-3 py-1.5 text-xs text-on-surface-variant hover:bg-surface-container-high/50 rounded">关闭</button>
+                  <button
+                    onClick={async () => {
+                      try {
+                        for (const g of groupItems) {
+                          const catsInGroup = categories.filter((c) => c.groupId === g.id);
+                          for (const c of catsInGroup) {
+                            await updateCategory(c.id, { groupName: g.name, groupIcon: g.icon });
+                          }
+                        }
+                        toast("分组已保存", "success");
+                        setShowGroupModal(false);
+                        mutateCats();
+                      } catch (err: any) {
+                        toast("保存失败", "error");
+                      }
+                    }}
+                    className="px-3 py-1.5 text-xs font-bold bg-primary-container text-on-primary rounded hover:opacity-90"
+                  >
+                    保存设置
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ===== Category Sort Modal ===== */}
+      {showCatSortModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={() => setShowCatSortModal(false)}>
+          <div className="w-full max-w-md bg-surface-container-low rounded-xl border border-outline-variant/20 p-5 space-y-4 max-h-[85vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between shrink-0">
+              <h2 className="text-base font-bold text-on-surface">分类排序</h2>
+              <button onClick={() => setShowCatSortModal(false)} className="text-on-surface-variant hover:text-on-surface"><Icon name="close" size={18} /></button>
+            </div>
+            <p className="text-xs text-on-surface-variant shrink-0">拖拽调整分类显示顺序</p>
+            <div className="flex-1 overflow-y-auto min-h-0 space-y-1">
+              {catSortItems.map((item, i) => (
+                <div
+                  key={item.id}
+                  draggable
+                  onDragStart={() => setCatSortDragIdx(i)}
+                  onDragOver={(e) => {
+                    e.preventDefault();
+                    if (catSortDragIdx === null || catSortDragIdx === i) return;
+                    const next = [...catSortItems];
+                    const [moved] = next.splice(catSortDragIdx, 1);
+                    next.splice(i, 0, moved);
+                    setCatSortItems(next);
+                    setCatSortDragIdx(i);
+                  }}
+                  onDragEnd={() => setCatSortDragIdx(null)}
+                  className={`flex items-center gap-2 px-3 py-2.5 rounded-lg border transition-all ${
+                    catSortDragIdx === i
+                      ? "opacity-40 border-primary-container/30 bg-primary-container/5"
+                      : "border-outline-variant/20 bg-surface-container-lowest hover:border-outline-variant/40"
+                  }`}
+                >
+                  <span className="cursor-grab active:cursor-grabbing text-on-surface-variant/40 select-none text-sm">⠿</span>
+                  <span className="text-sm font-medium text-on-surface flex-1">{item.name}</span>
+                  <span className="text-[10px] text-on-surface-variant">{i + 1}</span>
+                </div>
+              ))}
+            </div>
+            <div className="flex justify-end gap-2 shrink-0 pt-2 border-t border-outline-variant/10">
+              <button onClick={() => setShowCatSortModal(false)} className="px-3 py-1.5 text-xs text-on-surface-variant hover:bg-surface-container-high/50 rounded">取消</button>
+              <button
+                onClick={async () => {
+                  try {
+                    await sortCategories(catSortItems.map((item, i) => ({ id: item.id, sortOrder: i })));
+                    toast("排序已保存", "success");
+                    setShowCatSortModal(false);
+                    mutateCats();
+                  } catch (err: any) {
+                    toast(err.response?.data?.detail || "排序保存失败", "error");
+                  }
+                }}
+                className="px-3 py-1.5 text-xs font-bold bg-primary-container text-on-primary rounded hover:opacity-90"
+              >
+                保存排序
+              </button>
             </div>
           </div>
         </div>

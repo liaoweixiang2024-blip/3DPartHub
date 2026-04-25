@@ -79,6 +79,12 @@ const SETTINGS_SCHEMA: SettingDef[] = [
   { key: "share_allow_password", defaultValue: true },
   { key: "share_allow_custom_expiry", defaultValue: true },
   { key: "share_allow_preview", defaultValue: true },
+
+  // Selection wizard
+  { key: "selection_page_title", defaultValue: "产品选型" },
+  { key: "selection_page_desc", defaultValue: "选择产品大类，逐步筛选出精确型号" },
+  { key: "selection_enable_match", defaultValue: true },
+  { key: "field_aliases", defaultValue: "{}" },
 ];
 
 const DEFAULTS: Record<string, unknown> = {};

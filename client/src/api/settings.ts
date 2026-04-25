@@ -76,6 +76,11 @@ export interface SystemSettings {
   share_allow_password: boolean;
   share_allow_custom_expiry: boolean;
   share_allow_preview: boolean;
+  // Selection wizard
+  selection_page_title: string;
+  selection_page_desc: string;
+  selection_enable_match: boolean;
+  field_aliases: string;
 }
 
 export interface BackupStats {

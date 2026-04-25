@@ -435,11 +435,11 @@ function serverItemToProduct(item: ServerModelListItem): Product {
     name: item.name || "未命名模型",
     description: `${format} 格式 3D 模型`,
     formats: [format],
-    fileSize: formatFileSize(item.file_size || item.original_size || 0),
+    fileSize: formatFileSize(item.original_size || item.file_size || 0),
     category: item.category || "其他辅料",
     thumbnailUrl: item.thumbnail_url || undefined,
     createdAt: item.created_at || undefined,
-    fileSizeBytes: item.file_size || item.original_size || 0,
+    fileSizeBytes: item.original_size || item.file_size || 0,
     variantCount: item.group?.variant_count,
   };
 }

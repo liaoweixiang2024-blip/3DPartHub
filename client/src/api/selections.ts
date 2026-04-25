@@ -4,6 +4,7 @@ export interface ColumnDef {
   key: string;
   label: string;
   unit: string;
+  sortType?: "thread" | "numeric" | "default";
 }
 
 export interface SelectionCategory {
@@ -17,6 +18,10 @@ export interface SelectionCategory {
   image?: string | null;
   optionImages?: Record<string, Record<string, string>> | null;
   optionOrder?: Record<string, string[]> | null;
+  groupId?: string | null;
+  groupName?: string | null;
+  groupIcon?: string | null;
+  kind?: string | null;
   productCount?: number;
 }
 
@@ -92,6 +97,10 @@ export async function deleteCategory(id: string): Promise<void> {
   await client.delete(`/admin/selections/categories/${id}`);
 }
 
+export async function sortCategories(items: { id: string; sortOrder: number }[]): Promise<void> {
+  await client.put("/admin/selections/categories-sort", { items });
+}
+
 export async function createProduct(data: {
   categoryId: string; name: string; modelNo?: string;
   specs?: Record<string, string>; image?: string; pdfUrl?: string; sortOrder?: number;
@@ -138,6 +147,7 @@ export interface SelectionShareInfo {
   specs: Record<string, string>;
   columns: ColumnDef[];
   products: SelectionProduct[];
+  groupId?: string | null;
 }
 
 export async function createSelectionShare(data: {

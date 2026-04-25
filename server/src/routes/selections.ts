@@ -49,6 +49,10 @@ router.get("/api/selections/categories", async (_req, res) => {
       image: c.image,
       optionImages: c.optionImages,
       optionOrder: c.optionOrder,
+      groupId: c.groupId,
+      groupName: c.groupName,
+      groupIcon: c.groupIcon,
+      kind: c.kind,
       productCount: c._count.products,
     })));
   } catch (err) {
@@ -79,6 +83,10 @@ router.get("/api/selections/categories/:slug", async (req, res) => {
       image: category.image,
       optionImages: category.optionImages,
       optionOrder: category.optionOrder,
+      groupId: category.groupId,
+      groupName: category.groupName,
+      groupIcon: category.groupIcon,
+      kind: category.kind,
     });
   } catch (err) {
     console.error("[Selections] Get category error:", err);
@@ -160,7 +168,7 @@ router.get("/api/selections/categories/:slug/products", async (req, res) => {
 router.post("/api/admin/selections/categories", authMiddleware, async (req: AuthRequest, res) => {
   if (!adminOnly(req, res)) return;
   try {
-    const { name, slug, description, icon, sortOrder, columns, image, optionImages, optionOrder } = req.body;
+    const { name, slug, description, icon, sortOrder, columns, image, optionImages, optionOrder, groupId, groupName, groupIcon, kind } = req.body;
     if (!name || !slug) {
       res.status(400).json({ detail: "分类名称和标识不能为空" });
       return;
@@ -171,7 +179,7 @@ router.post("/api/admin/selections/categories", authMiddleware, async (req: Auth
     }
 
     const category = await prisma.selectionCategory.create({
-      data: { name, slug, description, icon, sortOrder: sortOrder ?? 0, columns, image, optionImages, optionOrder },
+      data: { name, slug, description, icon, sortOrder: sortOrder ?? 0, columns, image, optionImages, optionOrder, groupId, groupName, groupIcon, kind },
     });
     res.status(201).json(category);
   } catch (err: any) {
@@ -189,7 +197,7 @@ router.put("/api/admin/selections/categories/:id", authMiddleware, async (req: A
   if (!adminOnly(req, res)) return;
   try {
     const id = req.params.id as string;
-    const { name, slug, description, icon, sortOrder, columns, image, optionImages, optionOrder } = req.body;
+    const { name, slug, description, icon, sortOrder, columns, image, optionImages, optionOrder, groupId, groupName, groupIcon, kind } = req.body;
     const data: any = {};
     if (name !== undefined) data.name = name;
     if (slug !== undefined) data.slug = slug;
@@ -206,6 +214,10 @@ router.put("/api/admin/selections/categories/:id", authMiddleware, async (req: A
     if (image !== undefined) data.image = image;
     if (optionImages !== undefined) data.optionImages = optionImages;
     if (optionOrder !== undefined) data.optionOrder = optionOrder;
+    if (groupId !== undefined) data.groupId = groupId;
+    if (groupName !== undefined) data.groupName = groupName;
+    if (groupIcon !== undefined) data.groupIcon = groupIcon;
+    if (kind !== undefined) data.kind = kind;
 
     const category = await prisma.selectionCategory.update({
       where: { id },

@@ -101,6 +101,7 @@ router.get("/api/selection-shares/:token", async (req: Request, res: Response) =
       data: {
         categorySlug: share.categorySlug,
         categoryName: category?.name || "",
+        groupId: (category?.groupId as string) || null,
         specs: share.specs,
         columns: category?.columns || [],
         products: productsWithMatch,

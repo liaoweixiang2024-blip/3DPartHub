@@ -15,6 +15,8 @@ export interface ServerModelListItem {
   download_count?: number;
   created_at: string;
   drawing_url?: string | null;
+  drawing_name?: string | null;
+  drawing_size?: number | null;
   group?: {
     id: string;
     name: string;
@@ -49,6 +51,8 @@ export interface ServerModelDetail {
   created_at: string;
   file_modified_at?: string | null;
   drawing_url?: string | null;
+  drawing_name?: string | null;
+  drawing_size?: number | null;
   group?: {
     id: string;
     name: string;

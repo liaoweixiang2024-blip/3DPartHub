@@ -19,24 +19,38 @@ import {
 } from "../api/selections";
 import { createInquiry } from "../api/inquiries";
 import { useToast } from "../components/shared/Toast";
-import {
-  beizeSelectionBySlug,
-  beizeSelectionGroups,
-} from "../data/beizeSelection";
 import { getIllustration, illustratedParams } from "../data/paramIllustrations";
 import { compareOptionValues } from "../lib/selectionSort";
+import { getCachedPublicSettings } from "../lib/publicSettings";
 
 /* ── helpers ── */
 
-const ALIASES: Record<string, string[]> = {
-  "管径": ["适用管外径", "适用管径"],
-  "适用管外径": ["管径", "适用管径"],
-  "适用管径": ["适用管外径", "管径"],
-};
+function loadAliases(): Record<string, string[]> {
+  const defaults: Record<string, string[]> = {
+    "管径": ["适用管外径", "适用管径"],
+    "适用管外径": ["管径", "适用管径"],
+    "适用管径": ["适用管外径", "管径"],
+  };
+  try {
+    const settings = getCachedPublicSettings();
+    const raw = settings.field_aliases as string;
+    if (raw) {
+      const custom = JSON.parse(raw);
+      if (typeof custom === "object" && custom !== null) return { ...defaults, ...custom };
+    }
+  } catch {}
+  return defaults;
+}
+
+let _aliases: Record<string, string[]> | null = null;
+function getAliases(): Record<string, string[]> {
+  if (!_aliases) _aliases = loadAliases();
+  return _aliases;
+}
 
 function sv(specs: Record<string, string>, key: string): string {
   if (specs[key]) return specs[key];
-  for (const a of ALIASES[key] ?? []) if (specs[a]) return specs[a];
+  for (const a of getAliases()[key] ?? []) if (specs[a]) return specs[a];
   return "—";
 }
 
@@ -243,7 +257,10 @@ function ResultCard({ product, columns, selected, onToggleSelect, expandedKits, 
 /* ══════════════ Main Page ══════════════ */
 
 export default function SelectionPage() {
-  useDocumentTitle("产品选型");
+  const { data: settingsData } = useSWR("publicSettings", () => getCachedPublicSettings());
+  const pageTitle = (settingsData?.selection_page_title as string) || "产品选型";
+  const pageDesc = (settingsData?.selection_page_desc as string) || "选择产品大类，逐步筛选出精确型号";
+  useDocumentTitle(pageTitle);
   const isDesktop = useMediaQuery("(min-width: 768px)");
   const navigate = useNavigate();
   const location = useLocation();
@@ -268,9 +285,9 @@ export default function SelectionPage() {
     if (state?.shareSlug && !slug) {
       setSlug(state.shareSlug);
       if (state.shareSpecs) setSpecs(state.shareSpecs);
-      // Derive groupId from slug so phase goes directly to "wizard"
-      const parent = beizeSelectionGroups.find((g) => g.children.some((ch) => ch.slug === state.shareSlug));
-      if (parent) setGroupId(parent.id);
+      // Derive groupId from shareSlug via API cats
+      const match = cats.find((c) => c.slug === state.shareSlug);
+      if (match?.groupId) setGroupId(match.groupId);
       window.history.replaceState({}, "");
       return;
     }
@@ -282,12 +299,30 @@ export default function SelectionPage() {
     }
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  /* derived */
-  const group = useMemo(() => beizeSelectionGroups.find((g) => g.id === groupId) ?? null, [groupId]);
-  const blueprint = useMemo(() => (slug ? beizeSelectionBySlug[slug] ?? null : null), [slug]);
-
   /* data */
   const { data: cats = [] } = useSWR("selections/categories", getSelectionCategories);
+
+  /* derive groups from API categories (replaces beizeSelectionGroups) */
+  interface DerivedGroup {
+    id: string;
+    name: string;
+    icon: string;
+    children: { slug: string; name: string; icon: string }[];
+  }
+  const groups = useMemo<DerivedGroup[]>(() => {
+    const map = new Map<string, DerivedGroup>();
+    for (const c of cats) {
+      if (!c.groupId || !c.groupName) continue;
+      if (!map.has(c.groupId)) {
+        map.set(c.groupId, { id: c.groupId, name: c.groupName, icon: c.groupIcon || "category", children: [] });
+      }
+      map.get(c.groupId)!.children.push({ slug: c.slug, name: c.name, icon: c.icon || "category" });
+    }
+    return Array.from(map.values());
+  }, [cats]);
+
+  const group = useMemo(() => groups.find((g) => g.id === groupId) ?? null, [groups, groupId]);
+
   const liveCat = slug ? cats.find((c) => c.slug === slug) ?? null : null;
   const { data: pData, isLoading } = useSWR(
     liveCat ? ["sel-prod", liveCat.slug] : null,
@@ -299,14 +334,13 @@ export default function SelectionPage() {
     if (liveCat?.columns?.length) {
       return liveCat.columns.map((col) => col.key).filter((key) => key !== "型号");
     }
-    return blueprint?.selectionFields ?? [];
-  }, [liveCat, blueprint]);
+    return [];
+  }, [liveCat]);
 
   const columns = useMemo(() => {
     if (liveCat?.columns?.length) return liveCat.columns;
-    if (blueprint) return buildCols(blueprint.selectionFields);
     return [];
-  }, [liveCat, blueprint]);
+  }, [liveCat]);
 
   /* filtered */
   const filtered = useMemo(() => {
@@ -336,6 +370,9 @@ export default function SelectionPage() {
       if (v !== "—") m.set(v, (m.get(v) || 0) + 1);
     });
     const entries = Array.from(m.entries());
+    // Get sortType from column definition
+    const colDef = columns.find((c) => c.key === curField);
+    const sortType = colDef?.sortType;
     // Use custom optionOrder if defined
     const savedOrder = (liveCat?.optionOrder as Record<string, string[]>)?.[curField];
     if (savedOrder && savedOrder.length > 0) {
@@ -344,13 +381,13 @@ export default function SelectionPage() {
         const ia = orderMap.get(a[0]) ?? Infinity;
         const ib = orderMap.get(b[0]) ?? Infinity;
         if (ia !== ib) return ia - ib;
-        return compareOptionValues(curField, a[0], b[0]);
+        return compareOptionValues(sortType, a[0], b[0]);
       });
     } else {
-      entries.sort((a, b) => compareOptionValues(curField, a[0], b[0]));
+      entries.sort((a, b) => compareOptionValues(sortType, a[0], b[0]));
     }
     return entries.map(([val, count]) => ({ val, count }));
-  }, [filtered, curField, liveCat?.optionOrder]);
+  }, [filtered, curField, liveCat?.optionOrder, columns]);
 
   const phase: "group" | "sub" | "wizard" = !groupId ? "group" : !slug ? "sub" : "wizard";
   const selectedProds = filtered.filter((p) => selectedIds.has(p.id));
@@ -465,7 +502,7 @@ export default function SelectionPage() {
     <div className="mb-6">
       <div className="flex items-center justify-between gap-4">
         <div className="flex items-center gap-1.5 font-headline text-xl md:text-2xl font-bold tracking-tight text-on-surface uppercase min-w-0 overflow-x-auto scrollbar-none">
-          <button onClick={goHome} className="hover:text-primary-container transition-colors shrink-0">产品选型</button>
+          <button onClick={goHome} className="hover:text-primary-container transition-colors shrink-0">{pageTitle}</button>
           {group && (
             <>
               <Icon name="chevron_right" size={18} className="text-on-surface-variant/30 shrink-0" />
@@ -477,10 +514,10 @@ export default function SelectionPage() {
               )}
             </>
           )}
-          {blueprint && (
+          {liveCat && (
             <>
               <Icon name="chevron_right" size={18} className="text-on-surface-variant/30 shrink-0" />
-              <span className="text-primary-container shrink-0">{blueprint.name}</span>
+              <span className="text-primary-container shrink-0">{liveCat.name}</span>
             </>
           )}
         </div>
@@ -509,11 +546,11 @@ export default function SelectionPage() {
     <div className="px-4 md:px-6 py-6 md:py-10">
       <div className="text-center mb-8">
         <Icon name="tune" size={36} className="text-primary-container mx-auto mb-3" />
-        <h1 className="text-xl md:text-2xl font-headline font-bold text-on-surface mb-2">产品选型</h1>
-        <p className="text-sm text-on-surface-variant">选择产品大类，逐步筛选出精确型号</p>
+        <h1 className="text-xl md:text-2xl font-headline font-bold text-on-surface mb-2">{pageTitle}</h1>
+        <p className="text-sm text-on-surface-variant">{pageDesc}</p>
       </div>
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-2.5 md:gap-3">
-        {beizeSelectionGroups.map((g) => (
+        {groups.map((g) => (
           <button key={g.id} onClick={() => pickGroup(g.id)}
             className="rounded-xl md:rounded-2xl border border-outline-variant/15 bg-surface-container-low p-3.5 md:p-5 text-left hover:border-primary-container/40 hover:bg-primary-container/5 transition-all active:scale-[0.97]">
             <Icon name={g.icon} size={24} className="text-primary-container mb-2" />

@@ -112,7 +112,9 @@ model Model {
   group      ModelGroup? @relation(fields: [groupId], references: [id], onDelete: SetNull)
   groupPrimary ModelGroup? @relation("GroupPrimary")
 
-  drawingUrl String? @map("drawing_url")
+  drawingUrl   String?  @map("drawing_url")
+  drawingName  String?  @map("drawing_name")
+  drawingSize  Int?     @map("drawing_size")
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
@@ -339,6 +341,10 @@ model SelectionCategory {
   image        String?
   optionImages Json?    @map("option_images")
   optionOrder  Json?    @map("option_order")
+  groupId      String?  @map("group_id")
+  groupName    String?  @map("group_name")
+  groupIcon    String?  @map("group_icon")
+  kind         String?  @default("product")
   createdAt    DateTime @default(now()) @map("created_at")
   updatedAt    DateTime @updatedAt @map("updated_at")
   products     SelectionProduct[]

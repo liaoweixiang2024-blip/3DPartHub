@@ -82,6 +82,10 @@ const DEFAULT_SETTINGS: SystemSettings = {
   share_allow_password: true,
   share_allow_custom_expiry: true,
   share_allow_preview: true,
+  selection_page_title: "产品选型",
+  selection_page_desc: "选择产品大类，逐步筛选出精确型号",
+  selection_enable_match: true,
+  field_aliases: "{}",
 };
 
 interface SettingGroup {
@@ -233,6 +237,16 @@ const GROUPS: SettingGroup[] = [
       { key: 'auto_theme_enabled', label: '定时切换', desc: '按时间段自动在亮色和暗色之间切换', type: 'switch' },
       { key: 'auto_theme_dark_hour', label: '暗色开始', desc: '几点切换为暗色模式（24小时制）', type: 'number' },
       { key: 'auto_theme_light_hour', label: '亮色开始', desc: '几点切换为亮色模式（24小时制）', type: 'number' },
+    ],
+  },
+  {
+    title: '选型设置',
+    icon: 'tune',
+    items: [
+      { key: 'selection_page_title', label: '选型页标题', desc: '选型页顶部显示的标题文字', type: 'text' },
+      { key: 'selection_page_desc', label: '选型页描述', desc: '选型页标题下方的描述文字', type: 'text' },
+      { key: 'selection_enable_match', label: '模型匹配', desc: '在选型结果中自动匹配3D模型', type: 'switch' },
+      { key: 'field_aliases', label: '字段别名', desc: 'JSON格式，如：{"管径":["适用管外径","适用管径"]}', type: 'textarea' },
     ],
   },
 ];

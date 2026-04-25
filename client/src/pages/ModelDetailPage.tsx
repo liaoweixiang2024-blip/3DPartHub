@@ -589,37 +589,44 @@ function DesktopDetail({
       )}
 
       <div className="p-8 pt-4 flex-grow bg-surface-container-low">
-        <h3 className="text-[11px] tracking-[0.05em] uppercase text-on-surface-variant mb-4 border-b border-outline-variant/20 pb-2">模型下载</h3>
+        <h3 className="text-[11px] tracking-[0.05em] uppercase text-on-surface-variant mb-4 border-b border-outline-variant/20 pb-2">文件下载</h3>
         <div className="flex flex-col gap-2">
           {modelData.downloads.map((file) => (
-            <div key={file.format} className="milled-inset bg-surface-container-lowest p-3 rounded-sm flex items-center justify-between border border-outline-variant/10 hover:border-primary/50 transition-colors group">
-              <div className="flex items-center gap-3">
-                <Icon name={file.format === "STEP" || file.format === "x_t" ? "deployed_code" : "description"} className="text-on-surface-variant group-hover:text-primary transition-colors" />
-                <div>
-                  <div className="text-sm font-medium text-on-surface font-mono">{modelData.name}.{file.format.toLowerCase()}</div>
-                  <div className="text-[11px] text-on-secondary-container mt-0.5">{file.format} / {file.size}</div>
+            file.downloadFormat === "drawing" ? (
+              <a key={file.format} href={modelData.drawingUrl} target="_blank" rel="noreferrer" className="milled-inset bg-surface-container-lowest p-3 rounded-sm flex items-center justify-between border border-outline-variant/10 hover:border-primary/50 transition-colors group cursor-pointer">
+                <div className="flex items-center gap-3">
+                  <div className="w-9 h-9 rounded-lg bg-error/10 flex items-center justify-center shrink-0">
+                    <span className="text-[10px] font-bold text-error">PDF</span>
+                  </div>
+                  <div className="min-w-0">
+                    <div className="text-sm font-medium text-on-surface truncate">{file.fileName}</div>
+                    <div className="text-[11px] text-on-surface-variant mt-0.5">{file.format} · {file.size}</div>
+                  </div>
                 </div>
+                <div className="text-primary hover:text-primary-container p-2">
+                  <Icon name="open_in_new" size={20} />
+                </div>
+              </a>
+            ) : (
+              <div key={file.format} className="milled-inset bg-surface-container-lowest p-3 rounded-sm flex items-center justify-between border border-outline-variant/10 hover:border-primary/50 transition-colors group">
+                <div className="flex items-center gap-3">
+                  <div className="w-9 h-9 rounded-lg bg-primary-container/10 flex items-center justify-center shrink-0">
+                    <span className="text-[10px] font-bold text-primary-container">{file.format.slice(0, 4)}</span>
+                  </div>
+                  <div className="min-w-0">
+                    <div className="text-sm font-medium text-on-surface font-mono truncate">{modelData.name}.{file.format.toLowerCase()}</div>
+                    <div className="text-[11px] text-on-surface-variant mt-0.5">{file.format} · {file.size}</div>
+                  </div>
+                </div>
+                <button
+                  onClick={() => onDownload(modelData.id, file.downloadFormat === "original" ? "original" : undefined)}
+                  className="text-primary hover:text-primary-container p-2"
+                >
+                  <Icon name="download" size={20} />
+                </button>
               </div>
-              <button
-                onClick={() => onDownload(modelData.id, file.downloadFormat === "original" ? "original" : undefined)}
-                className="text-primary hover:text-primary-container p-2"
-              >
-                <Icon name="download" size={20} />
-              </button>
-            </div>
+            )
           ))}
-          {modelData.drawingUrl && (
-            <a href={modelData.drawingUrl} target="_blank" rel="noreferrer" className="milled-inset bg-surface-container-lowest p-3 rounded-sm flex items-center justify-between border border-outline-variant/10 hover:border-primary/50 transition-colors group cursor-pointer">
-              <div className="flex items-center gap-3">
-                <Icon name="description" className="text-primary group-hover:text-primary-container transition-colors" />
-                <div>
-                  <div className="text-sm font-medium text-on-surface">产品图纸</div>
-                  <div className="text-[11px] text-on-secondary-container mt-0.5">PDF</div>
-                </div>
-              </div>
-              <Icon name="open_in_new" size={18} className="text-primary" />
-            </a>
-          )}
         </div>
       </div>
 
@@ -783,6 +790,7 @@ export default function ModelDetailPage() {
       ],
       downloads: [
         { format, size: formatFileSize(serverModel.original_size || 0), fileName: serverModel.original_name || `${serverModel.name}.${format.toLowerCase()}`, downloadFormat: "original" },
+        ...(serverModel.drawing_url ? [{ format: "PDF", size: serverModel.drawing_size ? formatFileSize(serverModel.drawing_size) : "PDF", fileName: serverModel.drawing_name || `${serverModel.name}.pdf`, downloadFormat: "drawing" as const }] : []),
       ],
       dimensions: "-",
       modelUrl: serverModel.gltf_url || undefined,
@@ -1256,29 +1264,37 @@ export default function ModelDetailPage() {
 
               {/* Downloads */}
               <div>
-                <div className="text-[11px] uppercase tracking-widest text-on-surface-variant font-medium mb-2">下载文件</div>
+                <div className="text-[11px] uppercase tracking-widest text-on-surface-variant font-medium mb-2">文件下载</div>
                 <div className="space-y-1.5">
                   {modelData.downloads.map((file) => (
-                    <div key={file.format} className="flex items-center gap-2 px-3 py-2.5 rounded-sm bg-surface-container-low border border-outline-variant/10">
-                      <span className="flex-1 min-w-0 text-xs font-medium text-on-surface truncate" title={file.fileName}>{file.fileName || file.format}</span>
-                      <span className="text-[11px] text-on-surface-variant shrink-0">{file.size}</span>
-                      <button onClick={() => handleDownload(modelData.id, file.downloadFormat === "original" ? "original" : undefined)} className="shrink-0 w-7 h-7 flex items-center justify-center rounded-full bg-primary/10 hover:bg-primary/20 text-primary active:scale-90 transition-all">
-                        <Icon name="download" size={15} />
-                      </button>
-                    </div>
+                    file.downloadFormat === "drawing" ? (
+                      <a key={file.format} href={modelData.drawingUrl} target="_blank" rel="noreferrer" className="flex items-center gap-2.5 px-3 py-2 rounded-sm bg-surface-container-low border border-outline-variant/10 hover:bg-surface-container transition-colors">
+                        <div className="w-7 h-7 rounded bg-error/10 flex items-center justify-center shrink-0">
+                          <span className="text-[8px] font-bold text-error">PDF</span>
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <span className="text-xs font-medium text-on-surface truncate block">{file.fileName}</span>
+                          <span className="text-[10px] text-on-surface-variant">{file.format} · {file.size}</span>
+                        </div>
+                        <div className="shrink-0 w-7 h-7 flex items-center justify-center rounded-full bg-primary/10 text-primary">
+                          <Icon name="open_in_new" size={14} />
+                        </div>
+                      </a>
+                    ) : (
+                      <div key={file.format} className="flex items-center gap-2 px-3 py-2.5 rounded-sm bg-surface-container-low border border-outline-variant/10">
+                        <div className="w-7 h-7 rounded bg-primary-container/15 flex items-center justify-center shrink-0">
+                          <span className="text-[8px] font-bold text-primary-container">{file.format.slice(0, 3)}</span>
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <span className="text-xs font-medium text-on-surface truncate block" title={file.fileName}>{file.fileName || file.format}</span>
+                          <span className="text-[10px] text-on-surface-variant">{file.format} · {file.size}</span>
+                        </div>
+                        <button onClick={() => handleDownload(modelData.id, file.downloadFormat === "original" ? "original" : undefined)} className="shrink-0 w-7 h-7 flex items-center justify-center rounded-full bg-primary/10 hover:bg-primary/20 text-primary active:scale-90 transition-all">
+                          <Icon name="download" size={15} />
+                        </button>
+                      </div>
+                    )
                   ))}
-                  {modelData.drawingUrl && (
-                    <a href={modelData.drawingUrl} target="_blank" rel="noreferrer" className="flex items-center gap-2.5 px-3 py-2 rounded-sm bg-surface-container-low border border-outline-variant/10 hover:bg-surface-container transition-colors">
-                      <Icon name="description" size={18} className="text-primary shrink-0" />
-                      <div className="flex-1 min-w-0">
-                        <span className="text-xs font-medium text-on-surface">产品图纸</span>
-                        <span className="text-[11px] text-on-surface-variant ml-1.5">PDF</span>
-                      </div>
-                      <div className="shrink-0 w-7 h-7 flex items-center justify-center rounded-full bg-primary/10 text-primary">
-                        <Icon name="open_in_new" size={14} />
-                      </div>
-                    </a>
-                  )}
                 </div>
               </div>
 
