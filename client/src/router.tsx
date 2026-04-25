@@ -29,6 +29,13 @@ const SettingsPage = lazy(() => import("./pages/SettingsPage"));
 const UserAdminPage = lazy(() => import("./pages/UserAdminPage"));
 const AuditLogPage = lazy(() => import("./pages/AuditLogPage"));
 const ShareAdminPage = lazy(() => import("./pages/ShareAdminPage"));
+const SelectionPage = lazy(() => import("./pages/SelectionPage"));
+const SelectionAdminPage = lazy(() => import("./pages/SelectionAdminPage"));
+const MyInquiriesPage = lazy(() => import("./pages/MyInquiriesPage"));
+const InquiryDetailPage = lazy(() => import("./pages/InquiryDetailPage"));
+const InquiryAdminPage = lazy(() => import("./pages/InquiryAdminPage"));
+const QuotePrintPage = lazy(() => import("./pages/QuotePrintPage"));
+const SelectionSharePage = lazy(() => import("./pages/SelectionSharePage"));
 
 const pageVariants = {
   initial: { opacity: 0 },
@@ -119,6 +126,7 @@ export default function Router() {
         <Route path="/login" element={<ScrollPage><LoginPage /></ScrollPage>} />
         <Route path="/legal/:type" element={<ScrollPage><LegalPage /></ScrollPage>} />
         <Route path="/share/:token" element={<ScrollPage><SharePage /></ScrollPage>} />
+        <Route path="/selection/s/:token" element={<ScrollPage><SelectionSharePage /></ScrollPage>} />
         <Route path="/" element={<PageWrap><HomePage /></PageWrap>} />
         <Route path="/model/:id" element={<PageWrap><ModelDetailPage /></PageWrap>} />
         <Route path="/projects" element={<ProtectedPage><ProjectsPage /></ProtectedPage>} />
@@ -137,6 +145,13 @@ export default function Router() {
         <Route path="/admin/users" element={<ProtectedPage requiredRole="ADMIN"><UserAdminPage /></ProtectedPage>} />
         <Route path="/admin/audit" element={<ProtectedPage requiredRole="ADMIN"><AuditLogPage /></ProtectedPage>} />
         <Route path="/admin/shares" element={<ProtectedPage requiredRole="ADMIN"><ShareAdminPage /></ProtectedPage>} />
+        <Route path="/selection" element={<PageWrap><SelectionPage /></PageWrap>} />
+        <Route path="/admin/selections" element={<ProtectedPage requiredRole="ADMIN"><SelectionAdminPage /></ProtectedPage>} />
+        <Route path="/my-inquiries" element={<ProtectedPage><MyInquiriesPage /></ProtectedPage>} />
+        <Route path="/my-inquiries/:id" element={<ProtectedPage><InquiryDetailPage /></ProtectedPage>} />
+        <Route path="/admin/inquiries" element={<ProtectedPage requiredRole="ADMIN"><InquiryAdminPage /></ProtectedPage>} />
+        <Route path="/admin/inquiries/:id" element={<ProtectedPage requiredRole="ADMIN"><InquiryDetailPage /></ProtectedPage>} />
+        <Route path="/quote/:id" element={<ScrollPage><QuotePrintPage /></ScrollPage>} />
         <Route path="*" element={<NotFoundPage />} />
       </Routes>
     </AnimatePresence>

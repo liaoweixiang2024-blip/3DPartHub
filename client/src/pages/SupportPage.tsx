@@ -1,5 +1,5 @@
-import { useState, useRef } from 'react';
-import { Link } from 'react-router-dom';
+import { useState, useRef, useEffect } from 'react';
+import { Link, useLocation } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useMediaQuery } from '../layouts/hooks/useMediaQuery';
 import { useDocumentTitle } from '../hooks/useDocumentTitle';
@@ -10,6 +10,61 @@ import MobileNavDrawer from '../components/shared/MobileNavDrawer';
 import Icon from "../components/shared/Icon";
 import { useToast } from "../components/shared/Toast";
 import client from "../api/client";
+
+/* ── Context passed via navigate(state) ── */
+interface SupportContext {
+  modelNo?: string;
+  modelName?: string;
+  specs?: Record<string, string>;
+  source?: 'selection' | 'model';
+}
+
+function useContextState(): { basePart: string; ctx: SupportContext | null } {
+  const location = useLocation();
+  const ctx = (location.state as SupportContext) || {};
+  const hasCtx = ctx.modelNo || ctx.modelName;
+  return {
+    basePart: ctx.modelNo || ctx.modelName || '',
+    ctx: hasCtx ? ctx : null,
+  };
+}
+
+/** Build append-only context string for ticket submission */
+function buildContextSuffix(ctx: SupportContext): string {
+  let suffix = '';
+  if (ctx.source === 'model' && ctx.modelName) suffix += `来源模型：${ctx.modelName}\n`;
+  if (ctx.source === 'selection' && ctx.modelNo) suffix += `选型型号：${ctx.modelNo}\n`;
+  if (ctx.specs && Object.keys(ctx.specs).length > 0) {
+    const lines = Object.entries(ctx.specs)
+      .filter(([, v]) => v && v !== '—')
+      .map(([k, v]) => `${k}: ${v}`);
+    if (lines.length) suffix += `【产品规格】\n${lines.join('\n')}\n`;
+  }
+  return suffix;
+}
+
+/** Read-only context card shown above the form */
+function ContextCard({ ctx }: { ctx: SupportContext }) {
+  const label = ctx.source === 'model' ? '来自模型' : ctx.source === 'selection' ? '来自选型' : '关联产品';
+  const name = ctx.modelName || ctx.modelNo || '';
+  const specEntries = Object.entries(ctx.specs || {}).filter(([, v]) => v && v !== '—');
+  return (
+    <div className="flex items-start gap-2.5 px-3.5 py-2.5 rounded-lg bg-primary-container/8 border border-primary-container/15">
+      <Icon name="link" size={14} className="text-primary-container shrink-0 mt-0.5" />
+      <div className="min-w-0">
+        <p className="text-xs font-medium text-primary-container">{label}：{name}</p>
+        {specEntries.length > 0 && (
+          <div className="flex flex-wrap gap-x-3 gap-y-0.5 mt-1">
+            {specEntries.slice(0, 6).map(([k, v]) => (
+              <span key={k} className="text-[11px] text-on-surface-variant">{k}: {v}</span>
+            ))}
+            {specEntries.length > 6 && <span className="text-[11px] text-on-surface-variant">+{specEntries.length - 6} 项</span>}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
 
 const CLASSIFICATIONS = [
   { value: 'dimension', label: '尺寸修改', icon: 'straighten', desc: '调整模型尺寸参数' },
@@ -26,7 +81,8 @@ const STEPS = [
 ];
 
 function DesktopContent() {
-  const [formData, setFormData] = useState({ basePart: '', classification: '', description: '' });
+  const { basePart: initBasePart, ctx } = useContextState();
+  const [formData, setFormData] = useState({ basePart: initBasePart, classification: '', description: '' });
   const [submitted, setSubmitted] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -40,11 +96,12 @@ function DesktopContent() {
     if (!formData.classification) { toast('请选择请求分类', 'error'); return; }
     if (!formData.description.trim()) { toast('请填写问题描述', 'error'); return; }
     setSubmitting(true);
+    const suffix = ctx ? buildContextSuffix(ctx) : '';
     try {
       await client.post('/tasks', {
         basePart: formData.basePart || undefined,
         classification: formData.classification,
-        description: formData.description,
+        description: formData.description + (suffix ? `\n\n${suffix}` : ''),
       });
       setSubmitted(true);
       toast('工单已提交，我们将尽快处理', 'success');
@@ -110,6 +167,7 @@ function DesktopContent() {
                   <Icon name="assignment_add" size={20} className="text-primary-container" />
                   提交需求
                 </h3>
+                {ctx && <div className="mb-5"><ContextCard ctx={ctx} /></div>}
 
                 <div className="space-y-6">
                   {/* Classification cards */}
@@ -258,7 +316,8 @@ function DesktopContent() {
 }
 
 function MobileContent() {
-  const [formData, setFormData] = useState({ basePart: '', classification: '', description: '' });
+  const { basePart: initBasePart, ctx } = useContextState();
+  const [formData, setFormData] = useState({ basePart: initBasePart, classification: '', description: '' });
   const [submitted, setSubmitted] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -272,11 +331,12 @@ function MobileContent() {
     if (!formData.classification) { toast('请选择请求分类', 'error'); return; }
     if (!formData.description.trim()) { toast('请填写问题描述', 'error'); return; }
     setSubmitting(true);
+    const suffix = ctx ? buildContextSuffix(ctx) : '';
     try {
       await client.post('/tasks', {
         basePart: formData.basePart || undefined,
         classification: formData.classification,
-        description: formData.description,
+        description: formData.description + (suffix ? `\n\n${suffix}` : ''),
       });
       setSubmitted(true);
       toast('工单已提交，我们将尽快处理', 'success');
@@ -295,6 +355,8 @@ function MobileContent() {
         <h1 className="text-lg font-bold text-on-surface">技术支持</h1>
         <p className="text-xs text-on-surface-variant mt-1">提交定制需求，工程师团队为您处理</p>
       </div>
+
+      {ctx && <ContextCard ctx={ctx} />}
 
       {submitted ? (
         <div className="bg-emerald-500/10 border border-emerald-500/30 rounded-lg p-8 flex flex-col items-center text-center">

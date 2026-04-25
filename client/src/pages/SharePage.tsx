@@ -5,6 +5,8 @@ import { getSiteTitle, getSiteIcon } from "../lib/publicSettings";
 import Icon from "../components/shared/Icon";
 import { getShareInfo, verifySharePassword, getShareDownloadUrl, type ShareInfo } from "../api/shares";
 
+const isWechat = /MicroMessenger/i.test(navigator.userAgent);
+
 const ModelViewer = lazy(() => import("../components/3d/ModelViewer"));
 
 export default function SharePage() {
@@ -158,7 +160,12 @@ export default function SharePage() {
   // Main share page
   return (
     <div className="min-h-screen bg-surface flex flex-col">
-      {/* Header */}
+      {/* WeChat open-in-browser guide */}
+      {isWechat && (
+        <div className="bg-primary-container/90 text-on-primary px-4 py-3 text-center text-sm font-bold relative shrink-0">
+          <span>请点击右上角 <Icon name="more_horiz" size={14} className="inline" /> 选择「在浏览器中打开」</span>
+        </div>
+      )}
       <header className="h-12 flex items-center justify-between px-4 bg-surface-container-low border-b border-outline-variant/10 shrink-0">
         <Link to="/" className="flex items-center gap-2 hover:opacity-80 transition-opacity">
           {siteIcon ? (

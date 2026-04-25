@@ -140,6 +140,7 @@ body {
 .scrollbar-hidden {
   -ms-overflow-style: none;
   scrollbar-width: none;
+  overscroll-behavior-y: contain;
 }
 
 .micro-glass {

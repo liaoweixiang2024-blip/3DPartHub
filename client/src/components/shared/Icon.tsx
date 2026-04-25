@@ -151,6 +151,7 @@ const iconMap: Record<string, LucideIcon> = {
   inbox: Inbox,
   checklist: ListChecks,
   share: Share2,
+  "request_quote": Receipt,
   "link_off": Link,
   diamond: Diamond,
   "iso_view": Orbit,

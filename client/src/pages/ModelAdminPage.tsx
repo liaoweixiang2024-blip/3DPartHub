@@ -249,6 +249,7 @@ function DesktopContent() {
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-4">
           <h2 className="font-headline text-2xl font-bold tracking-tight text-on-surface uppercase">模型管理</h2>
+          <span className="text-xs text-on-surface-variant">{data?.total || 0} 个模型</span>
           <div className="flex rounded-sm border border-outline-variant/30 overflow-hidden">
             <button onClick={() => setActiveTab('models')} className={`px-4 py-1.5 text-sm font-medium transition-colors ${activeTab === 'models' ? 'bg-primary-container text-on-primary' : 'bg-surface-container-low text-on-surface-variant hover:text-on-surface'}`}>全部模型</button>
             <button onClick={() => { setActiveTab('suggestions'); sugMutate(); }} className={`px-4 py-1.5 text-sm font-medium transition-colors ${activeTab === 'suggestions' ? 'bg-primary-container text-on-primary' : 'bg-surface-container-low text-on-surface-variant hover:text-on-surface'}`}>

@@ -624,7 +624,7 @@ function DesktopDetail({
       </div>
 
       <div className="mt-auto border-t border-outline-variant/20 bg-surface-container p-6 space-y-4">
-        <Link to="/support" className="flex items-center gap-3 p-3 rounded-sm bg-surface-container-high hover:bg-surface-container-highest transition-colors group">
+        <Link to="/support" state={{ modelName: modelData.name, modelNo: modelData.name, specs: Object.fromEntries(modelData.specs.map(s => [s.label, s.value])), source: 'model' }} className="flex items-center gap-3 p-3 rounded-sm bg-surface-container-high hover:bg-surface-container-highest transition-colors group">
           <div className="w-10 h-10 rounded-full bg-primary-container/15 flex items-center justify-center shrink-0">
             <Icon name="support_agent" size={20} className="text-primary group-hover:text-on-primary transition-colors" />
           </div>
@@ -1284,7 +1284,7 @@ export default function ModelDetailPage() {
 
               {/* Support */}
               <div className="pt-2 border-t border-outline-variant/20">
-                <Link to="/support" className="flex items-center gap-3 p-3 rounded-sm bg-surface-container-high hover:bg-surface-container-highest transition-colors group">
+                <Link to="/support" state={{ modelName: modelData.name, modelNo: modelData.name, specs: Object.fromEntries(modelData.specs.map(s => [s.label, s.value])), source: 'model' }} className="flex items-center gap-3 p-3 rounded-sm bg-surface-container-high hover:bg-surface-container-highest transition-colors group">
                   <div className="w-8 h-8 rounded-full bg-primary-container/15 flex items-center justify-center shrink-0">
                     <Icon name="support_agent" size={16} className="text-primary" />
                   </div>

@@ -325,6 +325,11 @@ export default function TopNav({ compact = false, onMenuToggle }: TopNavProps) {
               </button>
             </Tooltip>
           )}
+          <Tooltip text="产品选型" side="bottom">
+            <Link to="/selection" className="p-2 text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high rounded-lg transition-colors">
+              <Icon name="tune" size={20} />
+            </Link>
+          </Tooltip>
           <Tooltip text="我的收藏" side="bottom">
             <Link to="/favorites" className="p-2 text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high rounded-lg transition-colors">
               <Icon name="star" size={20} />
@@ -333,6 +338,11 @@ export default function TopNav({ compact = false, onMenuToggle }: TopNavProps) {
           <Tooltip text="下载历史" side="bottom">
             <Link to="/downloads" className="p-2 text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high rounded-lg transition-colors">
               <Icon name="download" size={20} />
+            </Link>
+          </Tooltip>
+          <Tooltip text="我的询价" side="bottom">
+            <Link to="/my-inquiries" className="p-2 text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high rounded-lg transition-colors">
+              <Icon name="request_quote" size={20} />
             </Link>
           </Tooltip>
           <Tooltip text="我的工单" side="bottom">

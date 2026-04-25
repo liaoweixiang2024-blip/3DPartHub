@@ -29,9 +29,12 @@ model User {
   ownedProjects   Project[]              @relation("ProjectOwner")
   projectMembers  ProjectMember[]
   shareLinks      ShareLink[]
+  selectionShares SelectionShare[]
   supportTickets  SupportTicket[]
   ticketMessages  TicketMessage[]
   notifications   Notification[]
+  inquiries       Inquiry[]
+  inquiryMessages InquiryMessage[]
 
   @@map("users")
 }
@@ -206,6 +209,20 @@ model ShareLink {
   @@map("share_links")
 }
 
+model SelectionShare {
+  id           String   @id @default(uuid())
+  token        String   @unique
+  categorySlug String   @map("category_slug")
+  specs        Json
+  productIds   Json     @map("product_ids")
+  viewCount    Int      @default(0) @map("view_count")
+  createdById  String   @map("created_by_id")
+  createdBy    User     @relation(fields: [createdById], references: [id])
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  @@map("selection_shares")
+}
+
 model AuditLog {
   id         String   @id @default(uuid())
   userId     String?  @map("user_id")
@@ -309,4 +326,97 @@ model ModelGroup {
   updatedAt   DateTime  @updatedAt @map("updated_at")
 
   @@map("model_groups")
+}
+
+model SelectionCategory {
+  id           String   @id @default(uuid())
+  name         String
+  slug         String   @unique
+  description  String?
+  icon         String?
+  sortOrder    Int      @default(0) @map("sort_order")
+  columns      Json
+  image        String?
+  optionImages Json?    @map("option_images")
+  optionOrder  Json?    @map("option_order")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+  products     SelectionProduct[]
+
+  @@map("selection_categories")
+}
+
+model SelectionProduct {
+  id         String   @id @default(uuid())
+  categoryId String   @map("category_id")
+  name       String
+  modelNo    String?  @map("model_no")
+  specs      Json
+  image      String?
+  pdfUrl     String?  @map("pdf_url")
+  sortOrder  Int      @default(0) @map("sort_order")
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+  category   SelectionCategory @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+
+  isKit      Boolean  @default(false) @map("is_kit")
+  components Json?
+
+  @@index([categoryId])
+  @@index([modelNo])
+  @@map("selection_products")
+}
+
+model Inquiry {
+  id           String    @id @default(uuid())
+  userId       String    @map("user_id")
+  user         User      @relation(fields: [userId], references: [id])
+  status       String    @default("submitted")
+  remark       String?
+  company      String?
+  contactName  String?   @map("contact_name")
+  contactPhone String?   @map("contact_phone")
+  totalAmount  Decimal?  @map("total_amount") @db.Decimal(12, 2)
+  adminRemark  String?   @map("admin_remark")
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @updatedAt @map("updated_at")
+
+  items    InquiryItem[]
+  messages InquiryMessage[]
+
+  @@index([userId])
+  @@index([status])
+  @@map("inquiries")
+}
+
+model InquiryItem {
+  id          String   @id @default(uuid())
+  inquiryId   String   @map("inquiry_id")
+  inquiry     Inquiry  @relation(fields: [inquiryId], references: [id], onDelete: Cascade)
+  productId   String?  @map("product_id")
+  productName String   @map("product_name")
+  modelNo     String?  @map("model_no")
+  specs       Json?
+  qty         Int      @default(1)
+  unitPrice   Decimal? @map("unit_price") @db.Decimal(12, 2)
+  remark      String?
+
+  @@index([inquiryId])
+  @@map("inquiry_items")
+}
+
+model InquiryMessage {
+  id         String   @id @default(uuid())
+  inquiryId  String   @map("inquiry_id")
+  inquiry    Inquiry  @relation(fields: [inquiryId], references: [id], onDelete: Cascade)
+  userId     String   @map("user_id")
+  user       User     @relation(fields: [userId], references: [id])
+  content    String
+  attachment String?
+  isAdmin    Boolean  @default(false) @map("is_admin")
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  @@index([inquiryId])
+  @@index([inquiryId, createdAt])
+  @@map("inquiry_messages")
 }

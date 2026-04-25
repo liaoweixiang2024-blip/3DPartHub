@@ -19,6 +19,9 @@ import categoriesRouter from "./routes/categories.js";
 import notificationsRouter from "./routes/notifications.js";
 import settingsRouter from "./routes/settings.js";
 import modelGroupsRouter from "./routes/model-groups.js";
+import selectionsRouter from "./routes/selections.js";
+import inquiriesRouter from "./routes/inquiries.js";
+import selectionSharesRouter from "./routes/selection-shares.js";
 import { initDefaultSettings } from "./lib/settings.js";
 import { prisma } from "./lib/prisma.js";
 import { responseHandler } from "./middleware/responseHandler.js";
@@ -111,6 +114,9 @@ app.use(categoriesRouter);
 app.use(notificationsRouter);
 app.use(settingsRouter);
 app.use(modelGroupsRouter);
+app.use(selectionsRouter);
+app.use(inquiriesRouter);
+app.use(selectionSharesRouter);
 
 // 404 handler
 app.use(notFoundHandler);

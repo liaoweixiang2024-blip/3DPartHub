@@ -67,7 +67,18 @@ export default function ShareDialog({ open, onClose, modelId, modelName }: Share
   }
 
   function handleCopy() {
-    navigator.clipboard.writeText(shareUrl);
+    if (navigator.clipboard?.writeText) {
+      navigator.clipboard.writeText(shareUrl);
+    } else {
+      const ta = document.createElement("textarea");
+      ta.value = shareUrl;
+      ta.style.position = "fixed";
+      ta.style.left = "-9999px";
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand("copy");
+      document.body.removeChild(ta);
+    }
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   }
