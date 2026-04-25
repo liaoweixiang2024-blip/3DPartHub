@@ -314,17 +314,7 @@ export const paramIllustrations: Illus = {
  * Which parameter names should display illustrations.
  * Add a field here to opt-in; values not in paramIllustrations fall back to text-only.
  */
-export const illustratedParams = new Set([
-  "接头形态",
-  "管件形态",
-  "接头类型",
-  "阀门类型",
-  "公头/母头",
-  "公母头",
-  "枪体类型",
-  "手柄形式",
-  "连接形态",
-]);
+export const illustratedParams = new Set<string>([]);
 
 /**
  * Get illustration component for a parameter value.

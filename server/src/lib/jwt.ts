@@ -2,8 +2,8 @@ import jwt from "jsonwebtoken";
 import { config } from "./config.js";
 
 const JWT_SECRET = config.jwtSecret;
-const ACCESS_EXPIRES = "15m";
-const REFRESH_EXPIRES = "7d";
+const ACCESS_EXPIRES = "2h";
+const REFRESH_EXPIRES = "30d";
 
 export interface TokenPayload {
   userId: string;

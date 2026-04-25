@@ -23,6 +23,7 @@ const TYPE_META: Record<string, { icon: string; color: string }> = {
   error: { icon: "error", color: "text-red-500 bg-red-500/10" },
   info: { icon: "notifications", color: "text-primary-container bg-primary-container/10" },
   model_conversion: { icon: "view_in_ar", color: "text-cyan-500 bg-cyan-500/10" },
+  inquiry: { icon: "request_quote", color: "text-amber-500 bg-amber-500/10" },
 };
 
 function getTypeMeta(type: string) {
@@ -36,6 +37,7 @@ function getNotificationRoute(n: Notification, isAdmin: boolean): string | null 
   if (n.type === "comment") return `/model/${n.relatedId}`;
   if (n.type === "favorite") return `/model/${n.relatedId}`;
   if (n.type === "model_conversion") return `/model/${n.relatedId}`;
+  if (n.type === "inquiry") return isAdmin ? `/admin/inquiries/${n.relatedId}` : `/my-inquiries/${n.relatedId}`;
   return null;
 }
 

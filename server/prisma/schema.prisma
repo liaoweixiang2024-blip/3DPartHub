@@ -360,6 +360,7 @@ model SelectionProduct {
   specs      Json
   image      String?
   pdfUrl     String?  @map("pdf_url")
+  unit       String?  @default("个")
   sortOrder  Int      @default(0) @map("sort_order")
   createdAt  DateTime @default(now()) @map("created_at")
   updatedAt  DateTime @updatedAt @map("updated_at")
@@ -403,6 +404,7 @@ model InquiryItem {
   productName String   @map("product_name")
   modelNo     String?  @map("model_no")
   specs       Json?
+  unit        String?  @default("个")
   qty         Int      @default(1)
   unitPrice   Decimal? @map("unit_price") @db.Decimal(12, 2)
   remark      String?

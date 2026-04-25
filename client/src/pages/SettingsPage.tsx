@@ -86,6 +86,7 @@ const DEFAULT_SETTINGS: SystemSettings = {
   selection_page_desc: "选择产品大类，逐步筛选出精确型号",
   selection_enable_match: true,
   field_aliases: "{}",
+  quote_template: "",
 };
 
 interface SettingGroup {
@@ -962,7 +963,7 @@ function Content() {
                       value={settings[item.key] as string}
                       onChange={(e) => updateSetting(item.key, e.target.value)}
                       placeholder={item.desc}
-                      rows={3}
+                      rows={item.key === 'quote_template' ? 20 : 3}
                       className="w-full bg-surface-container-lowest text-on-surface text-sm rounded-md px-3 py-2 border border-outline-variant/20 outline-none focus:border-primary placeholder:text-on-surface-variant/30 resize-y font-mono"
                     />
                   ) : item.type === 'select' ? (

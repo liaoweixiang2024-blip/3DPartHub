@@ -81,6 +81,8 @@ export interface SystemSettings {
   selection_page_desc: string;
   selection_enable_match: boolean;
   field_aliases: string;
+  // Quotation template
+  quote_template: string;
 }
 
 export interface BackupStats {

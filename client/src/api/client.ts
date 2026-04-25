@@ -34,6 +34,10 @@ client.interceptors.request.use((config) => {
   if (accessToken) {
     config.headers.Authorization = `Bearer ${accessToken}`;
   }
+  // Let browser set Content-Type with boundary for FormData
+  if (config.data instanceof FormData) {
+    delete config.headers["Content-Type"];
+  }
   return config;
 });
 

@@ -1,7 +1,8 @@
 import { Router, Response } from "express";
 import { randomUUID } from "node:crypto";
-import { join } from "node:path";
-import { existsSync, mkdirSync } from "node:fs";
+import { join, extname } from "node:path";
+import { existsSync, mkdirSync, createWriteStream } from "node:fs";
+import { pipeline } from "node:stream/promises";
 import multer from "multer";
 import { prisma } from "../lib/prisma.js";
 import { authMiddleware, AuthRequest } from "../middleware/auth.js";
@@ -148,6 +149,7 @@ router.get("/api/selections/categories/:slug/products", async (req, res) => {
           specs: p.specs,
           image: p.image,
           pdfUrl: p.pdfUrl,
+          unit: p.unit,
           sortOrder: p.sortOrder,
           isKit: p.isKit,
           components: p.components,
@@ -344,20 +346,50 @@ router.post("/api/admin/selections/products/batch", authMiddleware, async (req: 
       return;
     }
 
-    const data = products.map((p: any, i: number) => ({
-      categoryId,
-      name: p.name || `产品 ${i + 1}`,
-      modelNo: p.modelNo || null,
-      specs: p.specs ?? {},
-      image: p.image || null,
-      pdfUrl: p.pdfUrl || null,
-      sortOrder: p.sortOrder ?? i,
-      isKit: p.isKit ?? false,
-      components: p.components ?? undefined,
-    }));
+    // Load existing products by modelNo for dedup
+    const incomingModelNos = products.map((p: any) => p.modelNo).filter(Boolean) as string[];
+    const existing = incomingModelNos.length > 0
+      ? await prisma.selectionProduct.findMany({
+          where: { categoryId, modelNo: { in: incomingModelNos } },
+          select: { id: true, modelNo: true },
+        })
+      : [];
+    const existingMap = new Map(existing.map((e) => [e.modelNo, e.id]));
 
-    const result = await prisma.selectionProduct.createMany({ data });
-    res.status(201).json({ created: result.count });
+    let created = 0;
+    let updated = 0;
+
+    for (let i = 0; i < products.length; i++) {
+      const p = products[i] as any;
+      const modelNo = p.modelNo || null;
+      const data = {
+        name: p.name || `产品 ${i + 1}`,
+        modelNo,
+        specs: p.specs ?? {},
+        image: p.image || null,
+        pdfUrl: p.pdfUrl || null,
+        sortOrder: p.sortOrder ?? i,
+        isKit: p.isKit ?? false,
+        components: p.components ?? undefined,
+      };
+
+      if (modelNo && existingMap.has(modelNo)) {
+        // Update existing product
+        await prisma.selectionProduct.update({
+          where: { id: existingMap.get(modelNo)! },
+          data,
+        });
+        updated++;
+      } else {
+        // Create new product
+        await prisma.selectionProduct.create({
+          data: { categoryId, ...data },
+        });
+        created++;
+      }
+    }
+
+    res.status(201).json({ created, updated });
   } catch (err) {
     console.error("[Selections] Batch import error:", err);
     res.status(500).json({ detail: "批量导入失败" });
@@ -406,6 +438,70 @@ router.post("/api/admin/selections/option-image", authMiddleware, optImgUpload.s
   } catch (err) {
     console.error("[Selections] Upload option image error:", err);
     res.status(500).json({ detail: "上传失败" });
+  }
+});
+
+// Download remote image as option image
+router.post("/api/admin/selections/option-image-from-url", authMiddleware, async (req: AuthRequest, res: Response) => {
+  if (!adminOnly(req, res)) return;
+  try {
+    const { url } = req.body;
+    if (!url || typeof url !== "string") {
+      res.status(400).json({ detail: "请提供图片地址" });
+      return;
+    }
+
+    // Basic URL validation
+    let parsedUrl: URL;
+    try {
+      parsedUrl = new URL(url);
+    } catch {
+      res.status(400).json({ detail: "图片地址格式无效" });
+      return;
+    }
+    if (!["http:", "https:"].includes(parsedUrl.protocol)) {
+      res.status(400).json({ detail: "仅支持 http/https 协议" });
+      return;
+    }
+
+    // Fetch remote image
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 15000);
+    const resp = await fetch(url, { signal: controller.signal });
+    clearTimeout(timeout);
+
+    if (!resp.ok) {
+      res.status(400).json({ detail: `下载图片失败: HTTP ${resp.status}` });
+      return;
+    }
+
+    const contentType = resp.headers.get("content-type") || "";
+    if (!/image\/(png|jpe?g|gif|webp|svg\+xml)/.test(contentType)) {
+      res.status(400).json({ detail: "远程文件不是支持的图片格式" });
+      return;
+    }
+
+    // Determine extension
+    const extMap: Record<string, string> = {
+      "image/png": "png", "image/jpeg": "jpg", "image/gif": "gif",
+      "image/webp": "webp", "image/svg+xml": "svg",
+    };
+    const ext = extMap[contentType] || extname(parsedUrl.pathname).slice(1) || "png";
+    const filename = `${randomUUID()}.${ext}`;
+    const filePath = join(optImgDir, filename);
+
+    const ws = createWriteStream(filePath);
+    await pipeline(resp.body!, ws);
+
+    const resultUrl = `/static/option-images/${filename}`;
+    res.json({ url: resultUrl });
+  } catch (err: any) {
+    if (err.name === "AbortError") {
+      res.status(400).json({ detail: "下载图片超时" });
+      return;
+    }
+    console.error("[Selections] Download option image from URL error:", err);
+    res.status(500).json({ detail: "下载图片失败" });
   }
 });
 

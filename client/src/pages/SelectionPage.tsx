@@ -177,9 +177,9 @@ function InquiryDialog({ open, onClose, products }: { open: boolean; onClose: ()
 
 /* ── Result Card ── */
 
-function ResultCard({ product, columns, selected, onToggleSelect, expandedKits, onToggleKit, navigate, isMobile }: {
+function ResultCard({ product, columns, selected, onToggleSelect, onInquiry, expandedKits, onToggleKit, navigate, isMobile }: {
   product: SelectionProduct; columns: ColumnDef[];
-  selected: boolean; onToggleSelect: () => void;
+  selected: boolean; onToggleSelect: () => void; onInquiry: () => void;
   expandedKits: Set<string>; onToggleKit: (id: string) => void;
   navigate: ReturnType<typeof useNavigate>; isMobile: boolean;
 }) {
@@ -199,7 +199,13 @@ function ResultCard({ product, columns, selected, onToggleSelect, expandedKits, 
             <span className="text-sm md:text-base font-bold text-on-surface">{product.modelNo || product.name}</span>
             {product.isKit && <span className="text-[10px] md:text-xs font-medium text-primary-container bg-primary-container/10 px-1.5 md:px-2 py-0.5 rounded-full">套件</span>}
           </div>
-          {product.modelNo && product.name !== product.modelNo && <p className="text-xs md:text-sm text-on-surface-variant mt-0.5 truncate">{product.name}</p>}
+          {(() => {
+            // Show name only if it's different from modelNo (remove modelNo part from name to avoid duplication)
+            if (!product.modelNo || product.name === product.modelNo) return null;
+            const cleanName = product.name.replace(product.modelNo, "").replace(/[\s\-—_]+$/g, "").replace(/^[\s\-—_]+/g, "");
+            if (!cleanName) return null;
+            return <p className="text-xs md:text-sm text-on-surface-variant mt-0.5 truncate">{cleanName}</p>;
+          })()}
         </div>
       </div>
 
@@ -235,7 +241,7 @@ function ResultCard({ product, columns, selected, onToggleSelect, expandedKits, 
       )}
 
       <div className="border-t border-outline-variant/10 px-3 md:px-4 py-2 md:py-2.5 flex items-center gap-1.5 md:gap-2 flex-wrap">
-        <button onClick={onToggleSelect} className="px-2.5 md:px-3 py-1 md:py-1.5 text-xs md:text-sm font-bold bg-primary-container text-on-primary rounded-lg hover:opacity-90 transition-opacity">询价</button>
+        <button onClick={onInquiry} className="px-2.5 md:px-3 py-1 md:py-1.5 text-xs md:text-sm font-bold bg-primary-container text-on-primary rounded-lg hover:opacity-90 transition-opacity">询价</button>
         {product.pdfUrl && (
           <a href={product.pdfUrl} target="_blank" rel="noopener" className="px-2.5 md:px-3 py-1 md:py-1.5 text-xs md:text-sm font-medium border border-outline-variant/30 text-on-surface-variant rounded-lg hover:bg-surface-container-high/50 transition-colors inline-flex items-center gap-1">
             <Icon name="library_books" size={14} /><span>规格书</span>
@@ -302,7 +308,7 @@ export default function SelectionPage() {
   /* data */
   const { data: cats = [] } = useSWR("selections/categories", getSelectionCategories);
 
-  /* derive groups from API categories (replaces beizeSelectionGroups) */
+  /* derive groups and standalone categories from API categories */
   interface DerivedGroup {
     id: string;
     name: string;
@@ -320,6 +326,9 @@ export default function SelectionPage() {
     }
     return Array.from(map.values());
   }, [cats]);
+
+  // Standalone categories without a group
+  const standaloneCats = useMemo(() => cats.filter((c) => !c.groupId || !c.groupName), [cats]);
 
   const group = useMemo(() => groups.find((g) => g.id === groupId) ?? null, [groups, groupId]);
 
@@ -549,16 +558,44 @@ export default function SelectionPage() {
         <h1 className="text-xl md:text-2xl font-headline font-bold text-on-surface mb-2">{pageTitle}</h1>
         <p className="text-sm text-on-surface-variant">{pageDesc}</p>
       </div>
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-2.5 md:gap-3">
-        {groups.map((g) => (
-          <button key={g.id} onClick={() => pickGroup(g.id)}
-            className="rounded-xl md:rounded-2xl border border-outline-variant/15 bg-surface-container-low p-3.5 md:p-5 text-left hover:border-primary-container/40 hover:bg-primary-container/5 transition-all active:scale-[0.97]">
-            <Icon name={g.icon} size={24} className="text-primary-container mb-2" />
-            <div className="font-bold text-sm text-on-surface mb-0.5">{g.name}</div>
-            <div className="text-xs text-on-surface-variant">{g.children.length} 个子类</div>
-          </button>
-        ))}
-      </div>
+      {/* Standalone categories (no group) */}
+      {standaloneCats.length > 0 && (
+        <div className="mb-6">
+          {groups.length > 0 && <h2 className="text-sm font-bold text-on-surface-variant/70 uppercase tracking-wide mb-3">产品分类</h2>}
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-2.5 md:gap-3">
+            {standaloneCats.map((c) => (
+              <button key={c.id} onClick={() => pickSub(c.slug)}
+                className="rounded-xl md:rounded-2xl border border-outline-variant/15 bg-surface-container-low p-3.5 md:p-5 text-left hover:border-primary-container/40 hover:bg-primary-container/5 transition-all active:scale-[0.97]">
+                <Icon name={c.icon || "category"} size={24} className="text-primary-container mb-2" />
+                <div className="font-bold text-sm text-on-surface mb-0.5">{c.name}</div>
+                <div className="text-xs text-on-surface-variant">{c.productCount ?? 0} 个产品</div>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+      {/* Grouped categories */}
+      {groups.length > 0 && (
+        <div>
+          {standaloneCats.length > 0 && <h2 className="text-sm font-bold text-on-surface-variant/70 uppercase tracking-wide mb-3">产品分组</h2>}
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-2.5 md:gap-3">
+            {groups.map((g) => (
+              <button key={g.id} onClick={() => pickGroup(g.id)}
+                className="rounded-xl md:rounded-2xl border border-outline-variant/15 bg-surface-container-low p-3.5 md:p-5 text-left hover:border-primary-container/40 hover:bg-primary-container/5 transition-all active:scale-[0.97]">
+                <Icon name={g.icon} size={24} className="text-primary-container mb-2" />
+                <div className="font-bold text-sm text-on-surface mb-0.5">{g.name}</div>
+                <div className="text-xs text-on-surface-variant">{g.children.length} 个子类</div>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+      {groups.length === 0 && standaloneCats.length === 0 && (
+        <div className="text-center py-10">
+          <Icon name="inventory_2" size={40} className="mx-auto mb-3 text-on-surface-variant/20" />
+          <p className="text-sm text-on-surface-variant">暂无产品分类</p>
+        </div>
+      )}
     </div>
   );
 
@@ -619,7 +656,6 @@ export default function SelectionPage() {
     const hasIllus = illustratedParams.has(field);
 
     if (isCompleted) {
-      const Illus = getIllustration(specs[field]);
       return (
         <div key={field}>
           <button onClick={() => dropVal(field)}
@@ -627,7 +663,6 @@ export default function SelectionPage() {
             <div className="w-5 h-5 md:w-6 md:h-6 rounded-full bg-primary-container/25 flex items-center justify-center shrink-0">
               <Icon name="check" size={12} className="text-primary-container" />
             </div>
-            {Illus && <Illus className="w-7 h-5 text-primary-container/60 shrink-0" />}
             <span className="text-xs sm:text-sm text-on-surface-variant shrink-0">{field}:</span>
             <span className="text-xs sm:text-sm font-bold text-on-surface truncate">{specs[field]}</span>
             <Icon name="close" size={12} className="text-on-surface-variant/30 ml-auto shrink-0" />
@@ -665,25 +700,41 @@ export default function SelectionPage() {
                 <span className="text-xs text-on-surface-variant bg-surface-container-high px-2.5 py-1 rounded-full shrink-0">{filtered.length} 件</span>
               </div>
               {options.length > 0 ? (
-                hasIllus || liveCat?.optionImages ? (
-                  <div className="grid gap-2" style={{ gridTemplateColumns: `repeat(auto-fill, minmax(${isDesktop ? 110 : 90}px, 1fr))` }}>
+                (() => {
+                  // Per-field check: only use image cards if THIS field has uploaded images
+                  const fieldImages = liveCat?.optionImages?.[field];
+                  const hasFieldImages = fieldImages && Object.keys(fieldImages).length > 0;
+                  return hasFieldImages;
+                })() ? (
+                  <div className="grid gap-3" style={{ gridTemplateColumns: `repeat(auto-fill, minmax(${isDesktop ? 130 : 100}px, 1fr))` }}>
                     {options.map(({ val, count }) => {
-                      const Illus = getIllustration(val);
                       const uploadedImg = liveCat?.optionImages?.[field]?.[val];
+                      const selected = specs[field] === val;
                       return (
                         <button key={val} onClick={() => pickVal(field, val)}
-                          className="flex flex-col items-center gap-1.5 rounded-xl border border-outline-variant/20 bg-surface-container px-3 py-3 text-on-surface hover:border-primary-container/50 hover:bg-primary-container/5 active:scale-95 transition-all">
-                          {uploadedImg ? (
-                            <img src={uploadedImg} alt={val} className="w-10 h-7 object-contain" />
-                          ) : Illus ? (
-                            <Illus className="w-10 h-7 text-on-surface-variant" />
-                          ) : (
-                            <div className="w-10 h-7 flex items-center justify-center text-on-surface-variant">
-                              <Icon name="category" size={18} className="opacity-30" />
-                            </div>
-                          )}
-                          <span className="text-sm font-medium text-center leading-tight">{val}</span>
-                          <span className="text-[10px] text-on-surface-variant/50">{count}件</span>
+                          className={`group relative flex flex-col items-stretch rounded-xl border transition-all duration-150 active:scale-[0.97] ${
+                            selected
+                              ? "border-primary-container shadow-sm scale-[1.02]"
+                              : "border-outline-variant/20 bg-surface-container-low hover:border-primary-container/40"
+                          }`}>
+                          {/* Image area */}
+                          <div className={`relative w-full aspect-square flex items-center justify-center rounded-t-lg overflow-hidden bg-white`}>
+                            {uploadedImg ? (
+                              <img src={uploadedImg} alt={val} className="w-[85%] h-[85%] object-contain" />
+                            ) : (
+                              <Icon name="category" size={28} className="text-on-surface-variant/20" />
+                            )}
+                            {/* Selected check */}
+                            {selected && (
+                              <div className="absolute top-1.5 right-1.5 w-5 h-5 rounded-full bg-primary-container flex items-center justify-center">
+                                <Icon name="check" size={14} className="text-on-primary" />
+                              </div>
+                            )}
+                          </div>
+                          {/* Label */}
+                          <div className="px-2 py-2 text-center">
+                            <span className="text-xs sm:text-sm font-medium text-on-surface leading-tight line-clamp-2">{val}</span>
+                          </div>
                         </button>
                       );
                     })}
@@ -753,7 +804,7 @@ export default function SelectionPage() {
         <div className="space-y-3 mt-3 pb-6">
           {filtered.map((p) => (
             <ResultCard key={p.id} product={p} columns={columns} selected={selectedIds.has(p.id)}
-              onToggleSelect={() => toggleSel(p.id)} expandedKits={expandedKits} onToggleKit={toggleKit} navigate={navigate} isMobile={!isDesktop} />
+              onToggleSelect={() => toggleSel(p.id)} onInquiry={() => { toggleSel(p.id); setInquiryOpen(true); }} expandedKits={expandedKits} onToggleKit={toggleKit} navigate={navigate} isMobile={!isDesktop} />
           ))}
         </div>
       ) : (
@@ -789,7 +840,7 @@ export default function SelectionPage() {
         <div className="space-y-3 pb-4">
           {filtered.map((p) => (
             <ResultCard key={p.id} product={p} columns={columns} selected={selectedIds.has(p.id)}
-              onToggleSelect={() => toggleSel(p.id)} expandedKits={expandedKits} onToggleKit={toggleKit} navigate={navigate} isMobile={!isDesktop} />
+              onToggleSelect={() => toggleSel(p.id)} onInquiry={() => { toggleSel(p.id); setInquiryOpen(true); }} expandedKits={expandedKits} onToggleKit={toggleKit} navigate={navigate} isMobile={!isDesktop} />
           ))}
         </div>
       ) : (

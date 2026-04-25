@@ -40,6 +40,7 @@ export interface SelectionProduct {
   specs: Record<string, string>;
   image?: string | null;
   pdfUrl?: string | null;
+  unit?: string | null;
   sortOrder: number;
   isKit: boolean;
   components?: SelectionComponent[] | null;
@@ -129,7 +130,7 @@ export async function batchImportProducts(
     name: string; modelNo?: string; specs?: Record<string, string>;
     image?: string; pdfUrl?: string; isKit?: boolean; components?: SelectionComponent[];
   }>
-): Promise<{ created: number }> {
+): Promise<{ created: number; updated: number }> {
   const res = await client.post("/admin/selections/products/batch", { categoryId, products });
   return unwrap(res);
 }
@@ -168,6 +169,11 @@ export async function uploadOptionImage(file: File): Promise<{ url: string }> {
   const form = new FormData();
   form.append("file", file);
   const res = await client.post("/admin/selections/option-image", form);
+  return unwrap(res);
+}
+
+export async function uploadOptionImageFromUrl(url: string): Promise<{ url: string }> {
+  const res = await client.post("/admin/selections/option-image-from-url", { url });
   return unwrap(res);
 }
 

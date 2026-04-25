@@ -135,6 +135,12 @@ export function getAnnouncement(): { enabled: boolean; text: string; type: strin
 export function getContactEmail(): string {
   return (cache?.contact_email as string) || "";
 }
+export function getContactPhone(): string {
+  return (cache?.contact_phone as string) || "";
+}
+export function getContactAddress(): string {
+  return (cache?.contact_address as string) || "";
+}
 
 // Get footer links (sync) — JSON string or empty
 export function getFooterLinks(): { label: string; url: string }[] {

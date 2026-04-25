@@ -1,8 +1,9 @@
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, useCallback } from "react";
 import useSWR from "swr";
 import { useDocumentTitle } from "../hooks/useDocumentTitle";
 import { smartSortOptions } from "../lib/selectionSort";
 import { useMediaQuery } from "../layouts/hooks/useMediaQuery";
+import * as XLSX from "xlsx";
 import TopNav from "../components/shared/TopNav";
 import BottomNav from "../components/shared/BottomNav";
 import AppSidebar from "../components/shared/Sidebar";
@@ -19,6 +20,7 @@ import {
   deleteProduct,
   batchImportProducts,
   uploadOptionImage,
+  uploadOptionImageFromUrl,
   renameOptionValue,
   sortCategories,
   type SelectionCategory,
@@ -133,7 +135,9 @@ function Content() {
   });
   const [deleteProdId, setDeleteProdId] = useState<string | null>(null);
   const [showBatchModal, setShowBatchModal] = useState(false);
-  const [batchText, setBatchText] = useState("");
+  const [batchParsed, setBatchParsed] = useState<any[] | null>(null);
+  const [batchErrors, setBatchErrors] = useState<string[]>([]);
+  const [batchImporting, setBatchImporting] = useState(false);
   const [showOptImgModal, setShowOptImgModal] = useState(false);
   const [optImgField, setOptImgField] = useState<string>("");
   const [uploadingVal, setUploadingVal] = useState<string | null>(null);
@@ -173,13 +177,23 @@ function Content() {
       const cat = categories.find((c) => c.id === selectedCatId);
       if (!cat) return null;
       const { default: client } = await import("../api/client");
-      const { data: resp } = await client.get(`/selections/categories/${cat.slug}/products`, { params: { page_size: 200 } });
+      const { data: resp } = await client.get(`/selections/categories/${cat.slug}/products`, { params: { page_size: 5000 } });
       const d = (resp as any)?.data ?? resp;
       return d as { items: SelectionProduct[] };
     }
   );
 
   const products = productsData?.items ?? [];
+  const [prodSearch, setProdSearch] = useState("");
+  const filteredProducts = useMemo(() => {
+    if (!prodSearch) return products;
+    const q = prodSearch.toLowerCase();
+    return products.filter((p) =>
+      (p.name || "").toLowerCase().includes(q) ||
+      (p.modelNo || "").toLowerCase().includes(q) ||
+      Object.values(p.specs as Record<string, string>).some((v) => v.toLowerCase().includes(q))
+    );
+  }, [products, prodSearch]);
 
   // ---- Category handlers ----
   function openNewCat() {
@@ -276,18 +290,108 @@ function Content() {
     }
   }
   async function handleBatchImport() {
+    if (!batchParsed || batchParsed.length === 0) return;
+    setBatchImporting(true);
     try {
-      const prods = JSON.parse(batchText);
-      if (!Array.isArray(prods)) throw new Error("必须是 JSON 数组");
-      const { created } = await batchImportProducts(selectedCatId, prods);
-      toast(`成功导入 ${created} 个产品`, "success");
+      const { created, updated } = await batchImportProducts(selectedCatId, batchParsed);
+      const msg = updated > 0
+        ? `导入完成：新增 ${created} 个，更新 ${updated} 个`
+        : `成功导入 ${created} 个产品`;
+      toast(msg, "success");
       setShowBatchModal(false);
-      setBatchText("");
+      setBatchParsed(null);
+      setBatchErrors([]);
       mutateProds();
       mutateCats();
     } catch (err: any) {
       toast(err.message || "导入失败", "error");
+    } finally {
+      setBatchImporting(false);
     }
+  }
+
+  function handleExcelFile(file: File) {
+    setBatchErrors([]);
+    setBatchParsed(null);
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      try {
+        const wb = XLSX.read(e.target!.result, { type: "array" });
+        const ws = wb.Sheets[wb.SheetNames[0]];
+        const rows = XLSX.utils.sheet_to_json<Record<string, string>>(ws);
+        if (rows.length === 0) {
+          setBatchErrors(["文件中没有数据"]);
+          return;
+        }
+
+        const cols = (activeCat?.columns as ColumnDef[]) || [];
+        const colMap = new Map<string, string>(); // label → key
+        cols.forEach((c) => { colMap.set(c.label || c.key, c.key); });
+
+        const errors: string[] = [];
+        const parsed: any[] = [];
+
+        rows.forEach((row, i) => {
+          const specs: Record<string, string> = {};
+          let name = "";
+          let modelNo = "";
+
+          for (const [header, val] of Object.entries(row)) {
+            const key = colMap.get(header);
+            if (key) {
+              specs[key] = String(val ?? "");
+              // Use the first column as name fallback
+              if (!name) name = String(val ?? "");
+            } else if (header === "图片") {
+              // skip, handled below
+            } else if (header === "PDF链接") {
+              // skip
+            } else if (header === "是否套件") {
+              // skip
+            } else if (header === "组件(JSON)") {
+              // skip
+            }
+          }
+
+          // Build product object
+          const product: any = {
+            name: row["名称"] || row["型号"] || name || `产品 ${i + 1}`,
+            modelNo: row["型号"] || row["modelNo"] || "",
+            specs,
+            image: row["图片"] || "",
+            pdfUrl: row["PDF链接"] || "",
+          };
+
+          const isKitVal = row["是否套件"];
+          if (isKitVal === "是" || isKitVal === "true" || isKitVal === "1") {
+            product.isKit = true;
+          }
+
+          const compStr = row["组件(JSON)"];
+          if (compStr && typeof compStr === "string" && compStr.trim()) {
+            try {
+              product.components = JSON.parse(compStr);
+            } catch {
+              errors.push(`第 ${i + 2} 行：组件 JSON 解析失败`);
+            }
+          }
+
+          if (!product.modelNo && cols.length > 0) {
+            // Use first spec value as modelNo fallback
+            const firstKey = cols[0].key;
+            product.modelNo = specs[firstKey] || "";
+          }
+
+          parsed.push(product);
+        });
+
+        if (errors.length > 0) setBatchErrors(errors);
+        setBatchParsed(parsed);
+      } catch {
+        setBatchErrors(["文件解析失败，请确认是有效的 Excel 文件"]);
+      }
+    };
+    reader.readAsArrayBuffer(file);
   }
 
   // ---- Option Image handlers ----
@@ -343,6 +447,21 @@ function Content() {
         const file = item.getAsFile();
         if (file) await uploadOptImg(optImgField, "__pasting__", file);
         return;
+      }
+    }
+    // No image — check for URL text
+    const text = e.clipboardData.getData("text/plain")?.trim();
+    if (text && /^https?:\/\/.+/i.test(text)) {
+      e.preventDefault();
+      toast("正在下载图片...", "info");
+      try {
+        const { url } = await uploadOptionImageFromUrl(text);
+        const updated = { ...optImages, [optImgField]: { ...(optImages[optImgField] || {}), ["__pasting__"]: url } };
+        await updateCategory(activeCat!.id, { optionImages: updated });
+        mutateCats();
+        toast("图片已下载并保存", "success");
+      } catch {
+        toast("下载图片失败，请检查链接", "error");
       }
     }
   }
@@ -482,7 +601,7 @@ function Content() {
           <div className="flex items-center gap-3">
             <select
               value={selectedCatId}
-              onChange={(e) => setSelectedCatId(e.target.value)}
+              onChange={(e) => { setSelectedCatId(e.target.value); setProdSearch(""); }}
               className="flex-1 bg-surface-container-lowest text-on-surface text-sm rounded-md px-3 py-2 border border-outline-variant/20 outline-none focus:border-primary-container"
             >
               <option value="">选择分类...</option>
@@ -501,22 +620,23 @@ function Content() {
                 <button
                   onClick={() => {
                     if (!products.length) { toast("没有可导出的产品", "error"); return; }
-                    const exportData = products.map((p) => ({
-                      name: p.name,
-                      modelNo: p.modelNo ?? "",
-                      specs: p.specs,
-                      image: p.image ?? "",
-                      pdfUrl: p.pdfUrl ?? "",
-                      isKit: p.isKit,
-                      components: p.components ?? [],
-                    }));
-                    const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: "application/json" });
-                    const url = URL.createObjectURL(blob);
-                    const a = document.createElement("a");
-                    a.href = url;
-                    a.download = `${activeCat?.slug || "products"}_export.json`;
-                    a.click();
-                    URL.revokeObjectURL(url);
+                    const cols = (activeCat.columns as ColumnDef[]);
+                    const headers = cols.map((c) => c.label || c.key);
+                    const extraHeaders = ["图片", "PDF链接", "是否套件", "组件(JSON)"];
+                    const rows = products.map((p) => {
+                      const specs = p.specs as Record<string, string>;
+                      const baseRow: Record<string, string> = {};
+                      cols.forEach((c) => { baseRow[c.label || c.key] = specs[c.key] ?? ""; });
+                      baseRow["图片"] = p.image ?? "";
+                      baseRow["PDF链接"] = p.pdfUrl ?? "";
+                      baseRow["是否套件"] = p.isKit ? "是" : "否";
+                      baseRow["组件(JSON)"] = p.components ? JSON.stringify(p.components) : "";
+                      return baseRow;
+                    });
+                    const ws = XLSX.utils.json_to_sheet(rows, { header: [...headers, ...extraHeaders] });
+                    const wb = XLSX.utils.book_new();
+                    XLSX.utils.book_append_sheet(wb, ws, "产品");
+                    XLSX.writeFile(wb, `${activeCat?.slug || "products"}_products.xlsx`);
                     toast(`已导出 ${products.length} 个产品`, "success");
                   }}
                   className="px-3 py-2 text-xs font-bold bg-surface-container-high text-on-surface rounded-md hover:opacity-90 flex items-center gap-1"
@@ -532,6 +652,23 @@ function Content() {
 
           {selectedCatId && activeCat && (
             <>
+              {/* Search bar */}
+              {products.length > 0 && (
+                <div className="relative">
+                  <Icon name="search" size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant" />
+                  <input
+                    value={prodSearch}
+                    onChange={(e) => setProdSearch(e.target.value)}
+                    placeholder="搜索产品名称、型号、参数值..."
+                    className="w-full bg-surface-container-lowest text-on-surface text-sm rounded-md pl-9 pr-3 py-2 border border-outline-variant/20 outline-none focus:border-primary-container placeholder:text-on-surface-variant/40"
+                  />
+                  {prodSearch && (
+                    <button onClick={() => setProdSearch("")} className="absolute right-2 top-1/2 -translate-y-1/2 text-on-surface-variant/50 hover:text-on-surface">
+                      <Icon name="close" size={14} />
+                    </button>
+                  )}
+                </div>
+              )}
               {/* Products table */}
               {products.length === 0 ? (
                 <div className="text-center py-12 text-on-surface-variant">
@@ -539,6 +676,18 @@ function Content() {
                   <p className="text-sm">暂无产品</p>
                 </div>
               ) : (
+                <>
+                  {prodSearch && (
+                    <p className="text-xs text-on-surface-variant">
+                      搜索 "<span className="text-on-surface font-medium">{prodSearch}</span>" 匹配 {filteredProducts.length} / {products.length} 个产品
+                    </p>
+                  )}
+                  {filteredProducts.length === 0 ? (
+                    <div className="text-center py-12 text-on-surface-variant">
+                      <Icon name="search_off" size={40} className="mx-auto mb-2 opacity-30" />
+                      <p className="text-sm">未找到匹配的产品</p>
+                    </div>
+                  ) : (
                 <div className="overflow-x-auto custom-scrollbar rounded-lg border border-outline-variant/10">
                   <table className="w-full text-sm">
                     <thead>
@@ -552,7 +701,7 @@ function Content() {
                       </tr>
                     </thead>
                     <tbody>
-                      {products.map((p) => (
+                      {filteredProducts.map((p) => (
                         <tr key={p.id} className="border-t border-outline-variant/5 hover:bg-surface-container/50">
                           {(activeCat.columns as ColumnDef[]).map((col) => (
                             <td key={col.key} className="px-3 py-2 text-on-surface whitespace-nowrap">
@@ -581,6 +730,8 @@ function Content() {
                     </tbody>
                   </table>
                 </div>
+                  )}
+                </>
               )}
             </>
           )}
@@ -610,6 +761,17 @@ function Content() {
               }
               return;
             }
+          }
+          // Check for URL text
+          const text = e.clipboardData.getData("text/plain")?.trim();
+          if (text && /^https?:\/\/.+/i.test(text)) {
+            e.preventDefault();
+            toast("正在下载图片...", "info");
+            try {
+              const { url } = await uploadOptionImageFromUrl(text);
+              setCatForm(prev => ({ ...prev, image: url }));
+              toast("图片已下载并保存", "success");
+            } catch { toast("下载图片失败", "error"); }
           }
         }}>
           <div className="w-full max-w-lg bg-surface-container-low rounded-xl border border-outline-variant/20 p-5 space-y-4 max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
@@ -839,7 +1001,7 @@ function Content() {
               <h2 className="text-base font-bold text-on-surface">选项设置 — {activeCat.name}</h2>
               <button onClick={() => setShowOptImgModal(false)} className="text-on-surface-variant hover:text-on-surface"><Icon name="close" size={18} /></button>
             </div>
-            <p className="text-xs text-on-surface-variant shrink-0">拖拽调整顺序 · 点击图片区域上传/更换图片 · 点击改名图标修改文字</p>
+            <p className="text-xs text-on-surface-variant shrink-0">拖拽调整顺序 · 点击图片上传/更换 · 点击编辑图标修改名称</p>
 
             {/* Field selector + view toggle */}
             <div className="flex items-center gap-2 shrink-0">
@@ -1025,12 +1187,28 @@ function Content() {
       {/* ===== Single Option Upload Dialog ===== */}
       {editOptVal && optImgField && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-4" onClick={() => setEditOptVal(null)} onPaste={async (e) => {
+          // Check for image first
           for (const item of Array.from(e.clipboardData.items)) {
             if (item.type.startsWith("image/")) {
               e.preventDefault();
               const file = item.getAsFile();
               if (file) await uploadOptImg(optImgField, editOptVal, file);
               return;
+            }
+          }
+          // Check for URL text
+          const text = e.clipboardData.getData("text/plain")?.trim();
+          if (text && /^https?:\/\/.+/i.test(text)) {
+            e.preventDefault();
+            toast("正在下载图片...", "info");
+            try {
+              const { url } = await uploadOptionImageFromUrl(text);
+              const updated = { ...optImages, [optImgField]: { ...(optImages[optImgField] || {}), [editOptVal]: url } };
+              await updateCategory(activeCat!.id, { optionImages: updated });
+              mutateCats();
+              toast("图片已下载并保存", "success");
+            } catch {
+              toast("下载图片失败，请检查链接是否有效", "error");
             }
           }
         }}>
@@ -1081,9 +1259,24 @@ function Content() {
                                 await uploadOptImg(optImgField, editOptVal, file);
                                 return;
                               }
+                              // Check for URL in text clipboard
+                              if (type === "text/plain") {
+                                const blob = await item.getType(type);
+                                const text = await blob.text();
+                                const url = text.trim();
+                                if (/^https?:\/\/.+/i.test(url)) {
+                                  toast("正在下载图片...", "info");
+                                  const { url: localUrl } = await uploadOptionImageFromUrl(url);
+                                  const updated = { ...optImages, [optImgField]: { ...(optImages[optImgField] || {}), [editOptVal]: localUrl } };
+                                  await updateCategory(activeCat!.id, { optionImages: updated });
+                                  mutateCats();
+                                  toast("图片已下载并保存", "success");
+                                  return;
+                                }
+                              }
                             }
                           }
-                          toast("剪贴板中没有图片，请先截图", "error");
+                          toast("剪贴板中没有图片，请先截图或复制图片链接", "error");
                         } catch {
                           toast("无法读取剪贴板，请使用 Ctrl+V 粘贴或选择文件上传", "error");
                         }
@@ -1098,7 +1291,7 @@ function Content() {
                       移除图片
                     </button>
                   )}
-                  <p className="text-[10px] text-on-surface-variant text-center">提示：截图后可直接按 Ctrl+V 粘贴到此弹窗</p>
+                  <p className="text-[10px] text-on-surface-variant text-center">提示：截图或复制图片链接后按 Ctrl+V 粘贴</p>
                 </>
               );
             })()}
@@ -1129,8 +1322,11 @@ function Content() {
                   if (!renameNewVal.trim() || renameNewVal === renameOldVal) return;
                   setRenaming(true);
                   try {
-                    const { updated } = await renameOptionValue(activeCat.id, renameField, renameOldVal, renameNewVal.trim());
-                    toast(`"${renameOldVal}" → "${renameNewVal.trim()}"，已替换 ${updated} 个产品`, "success");
+                    const newVal = renameNewVal.trim();
+                    const { updated } = await renameOptionValue(activeCat.id, renameField, renameOldVal, newVal);
+                    toast(`"${renameOldVal}" → "${newVal}"，已替换 ${updated} 个产品`, "success");
+                    // Update local orderItems to reflect the rename immediately
+                    setOrderItems((prev) => prev.map((v) => (v === renameOldVal ? newVal : v)));
                     mutateCats();
                     mutateProds();
                     setRenameOldVal("");
@@ -1153,20 +1349,85 @@ function Content() {
 
       {/* ===== Batch Import Modal ===== */}
       {showBatchModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={() => setShowBatchModal(false)}>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={() => { setShowBatchModal(false); setBatchParsed(null); setBatchErrors([]); }}>
           <div className="w-full max-w-lg bg-surface-container-low rounded-xl border border-outline-variant/20 p-5 space-y-4" onClick={(e) => e.stopPropagation()}>
             <h2 className="text-base font-bold text-on-surface">批量导入产品</h2>
-            <p className="text-xs text-on-surface-variant">粘贴 JSON 数组，格式：[&#123;"name":"...","modelNo":"...","specs":&#123;"key":"value"...&#125;&#125;]</p>
-            <textarea
-              value={batchText}
-              onChange={(e) => setBatchText(e.target.value)}
-              rows={10}
-              className="w-full bg-surface-container-lowest text-on-surface text-xs rounded px-3 py-2 border border-outline-variant/20 outline-none focus:border-primary-container font-mono"
-              placeholder='[{"name":"KQ2H06-01A","specs":{"model_no":"KQ2H06-01A","pipe_size":"6","L":"24.4"}}]'
-            />
-            <div className="flex justify-end gap-2">
-              <button onClick={() => setShowBatchModal(false)} className="px-4 py-2 text-sm text-on-surface-variant hover:bg-surface-container-high/50 rounded">取消</button>
-              <button onClick={handleBatchImport} disabled={!batchText.trim()} className="px-4 py-2 text-sm font-bold bg-primary-container text-on-primary rounded hover:opacity-90 disabled:opacity-50">导入</button>
+            <p className="text-xs text-on-surface-variant">支持 .xlsx / .xls / .csv 格式。建议先导出模板，填写数据后导入。相同型号的产品会自动更新。</p>
+
+            {/* File upload area */}
+            {!batchParsed && (
+              <div className="space-y-3">
+                <label className="flex flex-col items-center justify-center w-full h-32 border-2 border-dashed border-outline-variant/30 rounded-lg cursor-pointer hover:border-primary-container/50 hover:bg-primary-container/5 transition-colors">
+                  <Icon name="upload_file" size={28} className="text-on-surface-variant/40 mb-2" />
+                  <span className="text-sm text-on-surface-variant">点击选择 Excel 文件</span>
+                  <span className="text-[10px] text-on-surface-variant/50 mt-1">.xlsx / .xls / .csv</span>
+                  <input type="file" accept=".xlsx,.xls,.csv" className="hidden" onChange={(e) => {
+                    const f = e.target.files?.[0];
+                    if (f) handleExcelFile(f);
+                    e.target.value = "";
+                  }} />
+                </label>
+                {batchErrors.length > 0 && (
+                  <div className="space-y-1">
+                    {batchErrors.map((err, i) => (
+                      <p key={i} className="text-xs text-error">{err}</p>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Preview parsed data */}
+            {batchParsed && (
+              <div className="space-y-3">
+                <div className="flex items-center gap-2 text-sm">
+                  <Icon name="check_circle" size={16} className="text-green-500" />
+                  <span className="text-on-surface font-medium">解析成功：{batchParsed.length} 条产品</span>
+                </div>
+                <div className="max-h-48 overflow-y-auto scrollbar-hidden rounded-lg border border-outline-variant/10">
+                  <table className="w-full text-xs">
+                    <thead>
+                      <tr className="bg-surface-container-high text-on-surface-variant">
+                        <th className="px-2 py-1.5 text-left">#</th>
+                        <th className="px-2 py-1.5 text-left">名称</th>
+                        <th className="px-2 py-1.5 text-left">型号</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {batchParsed.slice(0, 20).map((p, i) => (
+                        <tr key={i} className="border-t border-outline-variant/5">
+                          <td className="px-2 py-1 text-on-surface-variant/50">{i + 1}</td>
+                          <td className="px-2 py-1 text-on-surface truncate max-w-[150px]">{p.name}</td>
+                          <td className="px-2 py-1 text-on-surface font-mono">{p.modelNo}</td>
+                        </tr>
+                      ))}
+                      {batchParsed.length > 20 && (
+                        <tr className="border-t border-outline-variant/5">
+                          <td colSpan={3} className="px-2 py-1 text-on-surface-variant text-center">... 还有 {batchParsed.length - 20} 条</td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+                {batchErrors.length > 0 && (
+                  <div className="space-y-1">
+                    {batchErrors.map((err, i) => (
+                      <p key={i} className="text-xs text-amber-500">{err}</p>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
+            <div className="flex justify-end gap-2 pt-1">
+              <button onClick={() => { setShowBatchModal(false); setBatchParsed(null); setBatchErrors([]); }} className="px-4 py-2 text-sm text-on-surface-variant hover:bg-surface-container-high/50 rounded">
+                {batchParsed ? "取消" : "关闭"}
+              </button>
+              {batchParsed && (
+                <button onClick={handleBatchImport} disabled={batchImporting} className="px-4 py-2 text-sm font-bold bg-primary-container text-on-primary rounded hover:opacity-90 disabled:opacity-50">
+                  {batchImporting ? "导入中..." : `确认导入 ${batchParsed.length} 条`}
+                </button>
+              )}
             </div>
           </div>
         </div>

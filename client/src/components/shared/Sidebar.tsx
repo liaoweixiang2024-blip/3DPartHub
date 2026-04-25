@@ -29,6 +29,7 @@ export const adminNav = [
   { label: "选型管理", icon: "tune", path: "/admin/selections" },
   // 客户服务
   { label: "询价管理", icon: "receipt_long", path: "/admin/inquiries" },
+  { label: "报价模板", icon: "description", path: "/admin/quote-template" },
   { label: "工单处理", icon: "build", path: "/admin/tickets" },
   // 系统
   { label: "用户管理", icon: "group", path: "/admin/users" },

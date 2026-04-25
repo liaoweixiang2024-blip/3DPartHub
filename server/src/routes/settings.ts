@@ -458,6 +458,8 @@ router.get("/api/settings/public", async (_req, res: Response) => {
       site_description: all.site_description ?? "",
       site_keywords: all.site_keywords ?? "",
       contact_email: all.contact_email ?? "",
+      contact_phone: all.contact_phone ?? "",
+      contact_address: all.contact_address ?? "",
       footer_links: all.footer_links ?? "",
       footer_copyright: all.footer_copyright ?? "",
       announcement_enabled: all.announcement_enabled ?? false,
@@ -514,6 +516,7 @@ router.get("/api/settings/public", async (_req, res: Response) => {
       selection_page_desc: all.selection_page_desc ?? "选择产品大类，逐步筛选出精确型号",
       selection_enable_match: all.selection_enable_match ?? true,
       field_aliases: all.field_aliases ?? "{}",
+      quote_template: all.quote_template ?? "",
     };
     await cacheSet("cache:settings:public", result, TTL.SETTINGS_PUBLIC);
     res.json(result);

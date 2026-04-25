@@ -33,6 +33,9 @@ const SETTINGS_SCHEMA: SettingDef[] = [
   { key: "smtp_pass", defaultValue: "" },
   { key: "smtp_from", defaultValue: "" },
   { key: "smtp_secure", defaultValue: true },
+  { key: "contact_email", defaultValue: "" },
+  { key: "contact_phone", defaultValue: "" },
+  { key: "contact_address", defaultValue: "" },
   { key: "color_scheme", defaultValue: "orange" },
   { key: "color_custom_dark", defaultValue: "{}" },
   { key: "color_custom_light", defaultValue: "{}" },
@@ -85,6 +88,9 @@ const SETTINGS_SCHEMA: SettingDef[] = [
   { key: "selection_page_desc", defaultValue: "选择产品大类，逐步筛选出精确型号" },
   { key: "selection_enable_match", defaultValue: true },
   { key: "field_aliases", defaultValue: "{}" },
+
+  // Quotation template
+  { key: "quote_template", defaultValue: "" },
 ];
 
 const DEFAULTS: Record<string, unknown> = {};

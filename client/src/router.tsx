@@ -35,6 +35,7 @@ const MyInquiriesPage = lazy(() => import("./pages/MyInquiriesPage"));
 const InquiryDetailPage = lazy(() => import("./pages/InquiryDetailPage"));
 const InquiryAdminPage = lazy(() => import("./pages/InquiryAdminPage"));
 const QuotePrintPage = lazy(() => import("./pages/QuotePrintPage"));
+const QuoteTemplateEditor = lazy(() => import("./pages/QuoteTemplateEditor"));
 const SelectionSharePage = lazy(() => import("./pages/SelectionSharePage"));
 
 const pageVariants = {
@@ -151,6 +152,7 @@ export default function Router() {
         <Route path="/my-inquiries/:id" element={<ProtectedPage><InquiryDetailPage /></ProtectedPage>} />
         <Route path="/admin/inquiries" element={<ProtectedPage requiredRole="ADMIN"><InquiryAdminPage /></ProtectedPage>} />
         <Route path="/admin/inquiries/:id" element={<ProtectedPage requiredRole="ADMIN"><InquiryDetailPage /></ProtectedPage>} />
+        <Route path="/admin/quote-template" element={<ProtectedPage requiredRole="ADMIN"><QuoteTemplateEditor /></ProtectedPage>} />
         <Route path="/quote/:id" element={<ScrollPage><QuotePrintPage /></ScrollPage>} />
         <Route path="*" element={<NotFoundPage />} />
       </Routes>

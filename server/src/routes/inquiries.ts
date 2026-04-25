@@ -47,6 +47,7 @@ router.post("/api/inquiries", authMiddleware, async (req: AuthRequest, res: Resp
               productName: product?.name || item.productName || "未知产品",
               modelNo: product?.modelNo || item.modelNo || null,
               specs: product?.specs || item.specs || null,
+              unit: product?.unit || item.unit || "个",
               qty: item.qty || 1,
               remark: item.remark || null,
             };
@@ -84,7 +85,7 @@ router.get("/api/inquiries", authMiddleware, async (req: AuthRequest, res: Respo
       where: { userId: req.user!.userId },
       orderBy: { createdAt: "desc" },
       include: {
-        items: { select: { id: true, productName: true, modelNo: true, qty: true, unitPrice: true } },
+        items: { select: { id: true, productName: true, modelNo: true, qty: true, unit: true, unitPrice: true } },
       },
     });
     res.json(inquiries);
@@ -239,7 +240,7 @@ router.get("/api/admin/inquiries", authMiddleware, async (req: AuthRequest, res:
         take: pageSize,
         include: {
           user: { select: { id: true, username: true, email: true, company: true } },
-          items: { select: { id: true, productName: true, modelNo: true, qty: true, unitPrice: true } },
+          items: { select: { id: true, productName: true, modelNo: true, qty: true, unit: true, unitPrice: true } },
         },
       }),
     ]);

@@ -10,6 +10,7 @@ import AppSidebar from '../components/shared/Sidebar';
 import MobileNavDrawer from '../components/shared/MobileNavDrawer';
 import Icon from '../components/shared/Icon';
 import { authApi } from '../api/auth';
+import { useNavigate } from 'react-router-dom';
 import { listShares, deleteShare, type ShareLink } from '../api/shares';
 import { useAuthStore } from '../stores/useAuthStore';
 import { useToast } from '../components/shared/Toast';
@@ -17,6 +18,7 @@ import type { User } from '../types';
 
 const NOTIFICATION_ITEMS = [
   { key: 'ticket', label: '工单通知', desc: '工单回复、状态变更' },
+  { key: 'inquiry', label: '询价通知', desc: '询价回复、报价状态变更' },
   { key: 'comment', label: '评论通知', desc: '有人评论你的模型' },
   { key: 'favorite', label: '收藏通知', desc: '有人收藏你的模型' },
   { key: 'model_conversion', label: '转换通知', desc: '模型转换完成或失败' },
@@ -40,6 +42,7 @@ function NotificationPrefs({ compact = false }: { compact?: boolean }) {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [changed, setChanged] = useState(false);
+  const [expanded, setExpanded] = useState(false);
 
   useEffect(() => {
     authApi.getNotificationPrefs().then(p => {
@@ -77,28 +80,42 @@ function NotificationPrefs({ compact = false }: { compact?: boolean }) {
 
   if (compact) {
     return (
-      <div className="space-y-3">
-        <div className="flex items-center gap-2 mb-4">
-          <Icon name="notifications" size={20} className="text-primary-container" />
-          <h3 className="font-headline text-sm font-semibold text-on-surface uppercase tracking-wide">通知设置</h3>
-        </div>
-        {NOTIFICATION_ITEMS.map(item => (
-          <label key={item.key} className="flex items-center justify-between py-1">
-            <div>
-              <span className="text-sm text-on-surface">{item.label}</span>
-              <p className="text-[10px] text-on-surface-variant/60">{item.desc}</p>
-            </div>
-            <Toggle checked={prefs[item.key] !== false} onChange={(v) => handleChange(item.key, v)} />
-          </label>
-        ))}
-        {changed && (
-          <button
-            onClick={handleSave}
-            disabled={saving}
-            className="w-full mt-3 py-2 text-xs font-medium bg-primary-container text-on-primary rounded-lg hover:opacity-90 disabled:opacity-50 transition-opacity"
-          >
-            {saving ? '保存中...' : '保存通知设置'}
-          </button>
+      <div>
+        <button
+          onClick={() => setExpanded(!expanded)}
+          className="w-full flex items-center justify-between"
+        >
+          <div className="flex items-center gap-2">
+            <Icon name="notifications" size={20} className="text-on-surface-variant" />
+            <h3 className="font-headline text-sm font-semibold text-on-surface uppercase tracking-wide">通知设置</h3>
+          </div>
+          <Icon
+            name="expand_more"
+            size={20}
+            className={`text-on-surface-variant/50 transition-transform ${expanded ? 'rotate-180' : ''}`}
+          />
+        </button>
+        {expanded && (
+          <div className="mt-3 space-y-3">
+            {NOTIFICATION_ITEMS.map(item => (
+              <label key={item.key} className="flex items-center justify-between py-1">
+                <div>
+                  <span className="text-sm text-on-surface">{item.label}</span>
+                  <p className="text-[10px] text-on-surface-variant/60">{item.desc}</p>
+                </div>
+                <Toggle checked={prefs[item.key] !== false} onChange={(v) => handleChange(item.key, v)} />
+              </label>
+            ))}
+            {changed && (
+              <button
+                onClick={handleSave}
+                disabled={saving}
+                className="w-full mt-3 py-2 text-xs font-medium bg-primary-container text-on-primary rounded-lg hover:opacity-90 disabled:opacity-50 transition-opacity"
+              >
+                {saving ? '保存中...' : '保存通知设置'}
+              </button>
+            )}
+          </div>
         )}
       </div>
     );
@@ -106,32 +123,42 @@ function NotificationPrefs({ compact = false }: { compact?: boolean }) {
 
   return (
     <div className="bg-surface-container-low rounded-lg p-6 border border-outline-variant/10">
-      <div className="flex items-center justify-between mb-5">
+      <button
+        onClick={() => setExpanded(!expanded)}
+        className="w-full flex items-center justify-between"
+      >
         <div className="flex items-center gap-2">
-          <Icon name="notifications" size={24} className="text-primary-container" />
+          <Icon name="notifications" size={24} className="text-on-surface-variant" />
           <h3 className="font-headline text-sm font-semibold uppercase tracking-wide text-on-surface">通知偏好</h3>
         </div>
-        {changed && (
-          <button
-            onClick={handleSave}
-            disabled={saving}
-            className="px-4 py-1.5 text-xs font-medium bg-primary-container text-on-primary rounded-md hover:opacity-90 disabled:opacity-50 transition-opacity"
-          >
-            {saving ? '保存中...' : '保存'}
-          </button>
-        )}
-      </div>
-      <div className="space-y-4">
-        {NOTIFICATION_ITEMS.map(item => (
-          <div key={item.key} className="flex items-center justify-between">
-            <div>
-              <span className="text-sm text-on-surface">{item.label}</span>
-              <p className="text-xs text-on-surface-variant mt-0.5">{item.desc}</p>
+        <Icon
+          name="expand_more"
+          size={20}
+          className={`text-on-surface-variant/50 transition-transform ${expanded ? 'rotate-180' : ''}`}
+        />
+      </button>
+      {expanded && (
+        <div className="mt-5 space-y-4">
+          {NOTIFICATION_ITEMS.map(item => (
+            <div key={item.key} className="flex items-center justify-between">
+              <div>
+                <span className="text-sm text-on-surface">{item.label}</span>
+                <p className="text-xs text-on-surface-variant mt-0.5">{item.desc}</p>
+              </div>
+              <Toggle checked={prefs[item.key] !== false} onChange={(v) => handleChange(item.key, v)} />
             </div>
-            <Toggle checked={prefs[item.key] !== false} onChange={(v) => handleChange(item.key, v)} />
-          </div>
-        ))}
-      </div>
+          ))}
+          {changed && (
+            <button
+              onClick={handleSave}
+              disabled={saving}
+              className="px-4 py-1.5 text-xs font-medium bg-primary-container text-on-primary rounded-md hover:opacity-90 disabled:opacity-50 transition-opacity"
+            >
+              {saving ? '保存中...' : '保存'}
+            </button>
+          )}
+        </div>
+      )}
     </div>
   );
 }
@@ -283,7 +310,7 @@ function MySharesSection({ compact = false }: { compact?: boolean }) {
     return (
       <div className="space-y-3">
         <div className="flex items-center gap-2 mb-4">
-          <Icon name="share" size={20} className="text-primary-container" />
+          <Icon name="share" size={20} className="text-on-surface-variant" />
           <h3 className="font-headline text-sm font-semibold text-on-surface uppercase tracking-wide">我的分享</h3>
         </div>
         {items.length === 0 && (
@@ -342,7 +369,7 @@ function MySharesSection({ compact = false }: { compact?: boolean }) {
   return (
     <div className="bg-surface-container-low rounded-lg p-6 border border-outline-variant/10">
       <div className="flex items-center gap-2 mb-5">
-        <Icon name="share" size={24} className="text-primary-container" />
+        <Icon name="share" size={24} className="text-on-surface-variant" />
         <h3 className="font-headline text-sm font-semibold uppercase tracking-wide text-on-surface">我的分享</h3>
         <span className="text-xs text-on-surface-variant ml-auto">{items.length} 条</span>
       </div>
@@ -627,6 +654,7 @@ function DesktopContent() {
 function MobileContent() {
   const { user, updateUser } = useAuthStore();
   const { toast } = useToast();
+  const navigate = useNavigate();
   const [pwdOpen, setPwdOpen] = useState(false);
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -821,6 +849,18 @@ function MobileContent() {
         <div className="flex items-center gap-3">
           <Icon name="lock" size={20} className="text-on-surface/50" />
           <span className="text-sm text-on-surface">修改密码</span>
+        </div>
+        <Icon name="chevron_right" size={20} className="text-on-surface/30" />
+      </button>
+
+      {/* My Inquiries */}
+      <button
+        onClick={() => navigate('/my-inquiries')}
+        className="w-full flex items-center justify-between rounded-lg bg-surface-container-high px-4 py-3 text-left"
+      >
+        <div className="flex items-center gap-3">
+          <Icon name="request_quote" size={20} className="text-on-surface/50" />
+          <span className="text-sm text-on-surface">我的询价</span>
         </div>
         <Icon name="chevron_right" size={20} className="text-on-surface/30" />
       </button>

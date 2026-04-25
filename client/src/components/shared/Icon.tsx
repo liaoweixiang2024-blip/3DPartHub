@@ -40,6 +40,7 @@ import {
   Inbox,
   ListChecks,
   Share2,
+  FileText,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
@@ -151,6 +152,7 @@ const iconMap: Record<string, LucideIcon> = {
   inbox: Inbox,
   checklist: ListChecks,
   share: Share2,
+  description: FileText,
   "request_quote": Receipt,
   "link_off": Link,
   diamond: Diamond,
