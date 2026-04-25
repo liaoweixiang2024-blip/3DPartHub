@@ -101,6 +101,12 @@ let cache: Record<string, unknown> | null = null;
 let cacheAt = 0;
 const CACHE_TTL = 300_000; // 5 minutes — public config rarely changes
 
+/** Clear the in-memory settings cache (used after restore) */
+export function clearSettingsCache(): void {
+  cache = null;
+  cacheAt = 0;
+}
+
 export async function getAllSettings(): Promise<Record<string, unknown>> {
   const now = Date.now();
   if (cache && now - cacheAt < CACHE_TTL) return cache;

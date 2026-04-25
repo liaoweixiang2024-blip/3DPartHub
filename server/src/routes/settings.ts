@@ -302,7 +302,7 @@ router.post("/api/settings/backup/import-path", authMiddleware, async (req: Auth
     return;
   }
   try {
-    const jobId = startRestoreJobFromFile(resolved);
+    const jobId = startRestoreJobFromFile(resolved, false); // Don't delete server-local files
     res.json({ jobId });
   } catch (err: any) {
     const status = err.message?.includes("正在进行中") ? 409 : 500;

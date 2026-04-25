@@ -7,6 +7,17 @@ import { Transform } from "stream";
 import { config } from "./config.js";
 import { syncJob, loadJob } from "./jobStore.js";
 
+// Read app version from package.json
+let _appVersion: string | null = null;
+function getAppVersion(): string {
+  if (_appVersion) return _appVersion;
+  try {
+    const pkg = JSON.parse(readFileSync(join(process.cwd(), "package.json"), "utf-8"));
+    _appVersion = pkg.version || "unknown";
+  } catch { _appVersion = "unknown"; }
+  return _appVersion!;
+}
+
 const DB_URL = config.databaseUrl;
 // Strip Prisma-specific query params that pg_dump/psql don't understand
 const DB_URL_CLEAN = DB_URL.replace(/\?.*/, "");
@@ -424,10 +435,20 @@ async function runBackup(job: BackupJob) {
     job.percent = 30;
     syncJob(job);
 
+    // Determine which static directories exist for backup
+    const staticDir = join(process.cwd(), config.staticDir);
+    const backupDirList = [
+      "models", "thumbnails", "originals", "drawings",
+      "option-images", "ticket-attachments", "logo", "favicon", "watermark",
+    ];
+    const existingBackupDirs = backupDirList.filter(d => existsSync(join(staticDir, d)));
+
     // Write metadata into tmp
     writeFileSync(join(tmpDir, "meta.json"), JSON.stringify({
       timestamp: new Date().toISOString(),
-      version: "1.0",
+      version: "2.0",
+      appVersion: getAppVersion(),
+      staticDirs: existingBackupDirs,
     }, null, 2));
 
     // Step 2: tar.gz packing (30-95%)
@@ -436,12 +457,6 @@ async function runBackup(job: BackupJob) {
     job.message = "正在打包模型文件...";
     addLog(job, "正在打包模型、预览图和原始文件...");
 
-    const staticDir = join(process.cwd(), config.staticDir);
-    const hasModels = existsSync(join(staticDir, "models"));
-    const hasThumbs = existsSync(join(staticDir, "thumbnails"));
-    const hasOriginals = existsSync(join(staticDir, "originals"));
-    const hasDrawings = existsSync(join(staticDir, "drawings"));
-
     // Copy db files into static/_backup_db so tar uses a single -C
     const dbMarker = join(staticDir, "_backup_db");
     // Clean up any residual _backup_db from previous crashed backup
@@ -449,6 +464,13 @@ async function runBackup(job: BackupJob) {
     mkdirSync(dbMarker, { recursive: true });
     execSync(`cp "${join(tmpDir, "database.sql")}" "${join(dbMarker, "database.sql")}"`, { stdio: "pipe" });
     execSync(`cp "${join(tmpDir, "meta.json")}" "${join(dbMarker, "meta.json")}"`, { stdio: "pipe" });
+
+    // Copy uploads/.metadata into staging for inclusion in backup
+    const uploadMetadataDir = join(process.cwd(), config.uploadDir, ".metadata");
+    if (existsSync(uploadMetadataDir)) {
+      mkdirSync(join(dbMarker, "metadata"), { recursive: true });
+      execSync(`cp -r "${uploadMetadataDir}/." "${join(dbMarker, "metadata")}"`, { stdio: "pipe" });
+    }
 
     await new Promise<void>((resolve, reject) => {
       const tmpArchive = `${finalArchive}.tmp`;
@@ -460,12 +482,12 @@ async function runBackup(job: BackupJob) {
         "--exclude=*/.DS_Store",
         "--exclude=._*",
         "--exclude=*/._*",
+        "--exclude=backups",
+        "--exclude=.restore_*",
       );
       args.push("_backup_db/database.sql", "_backup_db/meta.json");
-      if (hasModels) args.push("models");
-      if (hasThumbs) args.push("thumbnails");
-      if (hasOriginals) args.push("originals");
-      if (hasDrawings) args.push("drawings");
+      if (existsSync(join(dbMarker, "metadata"))) args.push("_backup_db/metadata");
+      for (const d of existingBackupDirs) args.push(d);
 
       const proc = spawn("tar", args, { timeout: ARCHIVE_EXTRACT_TIMEOUT_MS });
       let stderr = "";
@@ -628,7 +650,7 @@ async function runRestore(job: RestoreJob, backupId: string) {
 
 // ---- Restore from uploaded file (import) ----
 
-export function startRestoreJobFromFile(archPath: string): string {
+export function startRestoreJobFromFile(archPath: string, removeAfter = true): string {
   if (!acquireLock()) throw new Error("有备份或恢复任务正在进行中，请等待完成后再试");
   const jobId = `restore_${Date.now()}`;
   const job: RestoreJob = { id: jobId, stage: "extracting", percent: 0, message: "正在上传完成，开始解压...", logs: [] };
@@ -637,7 +659,7 @@ export function startRestoreJobFromFile(archPath: string): string {
 
   // Use setImmediate to ensure HTTP response is sent before blocking work
   setImmediate(() => {
-    runRestoreFromFile(job, archPath).catch((err) => {
+    runRestoreFromFile(job, archPath, removeAfter).catch((err) => {
       job.stage = "error";
       job.error = err.message;
       addLog(job, `恢复失败: ${err.message}`);
@@ -650,13 +672,14 @@ export function startRestoreJobFromFile(archPath: string): string {
   return jobId;
 }
 
-async function runRestoreFromFile(job: RestoreJob, archPath: string) {
-  await runRestoreFromArchive(job, archPath, true);
+async function runRestoreFromFile(job: RestoreJob, archPath: string, removeAfter: boolean) {
+  await runRestoreFromArchive(job, archPath, removeAfter);
 }
 
 async function runRestoreFromArchive(job: RestoreJob, archPath: string, removeArchiveAfterExtract: boolean) {
   const tmpDir = prepareWorkDir(job.id);
   const result = { dbRestored: false, modelCount: 0, thumbnailCount: 0 };
+  let safetySnapshot: string | null = null; // Pre-restore safety backup
 
   try {
     addLog(job, "开始恢复任务...");
@@ -698,6 +721,23 @@ async function runRestoreFromArchive(job: RestoreJob, archPath: string, removeAr
       syncJob(job);
       await sanitizeSqlDumpStreaming(sqlPath, sanitizedSqlPath);
 
+      // --- Safety snapshot: export current DB before any destructive operation ---
+      job.percent = 39;
+      job.message = "正在创建恢复前安全快照...";
+      addLog(job, "正在导出当前数据库安全快照（恢复失败时自动回滚）...");
+      syncJob(job);
+      try {
+        safetySnapshot = join(tmpDir, "safety_snapshot.sql");
+        pgDumpToFile(DB_URL_CLEAN, safetySnapshot, "--no-owner --no-privileges", DB_DUMP_TIMEOUT_MS);
+        // Verify the snapshot is not empty
+        const snapSize = statSync(safetySnapshot).size;
+        if (snapSize === 0) throw new Error("安全快照为空");
+        addLog(job, `安全快照已创建 (${formatSize(snapSize)})，恢复失败将自动回滚`);
+      } catch (snapErr: any) {
+        // Safety snapshot is mandatory — abort restore to prevent data loss
+        throw new Error(`无法创建恢复前安全快照，已中止恢复以保护数据安全: ${snapErr.message}`);
+      }
+
       if (isFullDump) {
         // Full dump: reset schema then restore directly (includes schema + data)
         job.percent = 45;
@@ -714,8 +754,8 @@ async function runRestoreFromArchive(job: RestoreJob, archPath: string, removeAr
         try {
           restoreSqlIntoDatabase(DB_URL_CLEAN, sanitizedSqlPath);
         } catch (err) {
-          addLog(job, `数据库导入失败，尝试恢复...`);
-          await recoverDatabaseToCleanSchema();
+          addLog(job, `数据库导入失败，尝试回滚到安全快照...`);
+          await rollbackToSafetySnapshot(safetySnapshot, job);
           throw err;
         }
         addLog(job, "数据库导入完成");
@@ -729,8 +769,16 @@ async function runRestoreFromArchive(job: RestoreJob, archPath: string, removeAr
           runPrismaMigrations(DB_URL_CLEAN);
           addLog(job, "数据库迁移完成");
         } catch (migrateErr) {
-          addLog(job, `迁移提示: ${extractCommandError(migrateErr)}`);
-          console.warn(`[Restore] Post-restore migration warning: ${extractCommandError(migrateErr)}`);
+          const detail = extractCommandError(migrateErr);
+          addLog(job, `迁移提示: ${detail}`);
+          addLog(job, "迁移存在冲突，改用 schema 同步兜底...");
+          try {
+            runPrismaDbPush(DB_URL_CLEAN);
+            addLog(job, "schema 同步完成");
+          } catch (pushErr) {
+            addLog(job, `schema 同步提示: ${extractCommandError(pushErr)}`);
+            console.warn(`[Restore] Post-restore schema sync warning: ${extractCommandError(pushErr)}`);
+          }
         }
       } else {
         // Data-only dump: need prisma migrate first, then handle circular FKs
@@ -767,9 +815,9 @@ async function runRestoreFromArchive(job: RestoreJob, archPath: string, removeAr
         try {
           restoreSqlIntoDatabase(DB_URL_CLEAN, sanitizedSqlPath);
         } catch (err) {
-          addLog(job, `数据导入失败，尝试恢复外键...`);
+          addLog(job, `数据导入失败，尝试回滚到安全快照...`);
           await restoreCircularFKs(DB_URL_CLEAN).catch(() => {});
-          await recoverDatabaseToCleanSchema();
+          await rollbackToSafetySnapshot(safetySnapshot, job);
           throw err;
         }
 
@@ -797,7 +845,7 @@ async function runRestoreFromArchive(job: RestoreJob, archPath: string, removeAr
     addLog(job, "正在恢复模型文件 (models/)...");
     syncJob(job);
     try {
-      restoreArchiveDirectory(archPath, staticDir, "models");
+      await restoreArchiveDirectory(archPath, staticDir, "models");
       addLog(job, "模型文件恢复完成");
     } catch (err: any) {
       fileErrors.push(`models: ${err.message}`);
@@ -809,7 +857,7 @@ async function runRestoreFromArchive(job: RestoreJob, archPath: string, removeAr
     addLog(job, "正在恢复缩略图 (thumbnails/)...");
     syncJob(job);
     try {
-      result.thumbnailCount = restoreArchiveDirectory(archPath, staticDir, "thumbnails", (name) => name.endsWith(".png"));
+      result.thumbnailCount = await restoreArchiveDirectory(archPath, staticDir, "thumbnails", (name) => name.endsWith(".png"));
       addLog(job, `缩略图恢复完成: ${result.thumbnailCount} 张`);
     } catch (err: any) {
       fileErrors.push(`thumbnails: ${err.message}`);
@@ -821,7 +869,7 @@ async function runRestoreFromArchive(job: RestoreJob, archPath: string, removeAr
     addLog(job, "正在恢复 STEP 原始文件 (originals/)...");
     syncJob(job);
     try {
-      restoredSourceFiles = restoreArchiveDirectory(archPath, staticDir, "originals", isStepFileName);
+      restoredSourceFiles = await restoreArchiveDirectory(archPath, staticDir, "originals", isStepFileName);
       addLog(job, `原始文件恢复完成: ${restoredSourceFiles} 个`);
     } catch (err: any) {
       fileErrors.push(`originals: ${err.message}`);
@@ -833,11 +881,59 @@ async function runRestoreFromArchive(job: RestoreJob, archPath: string, removeAr
     addLog(job, "正在恢复产品图纸 (drawings/)...");
     syncJob(job);
     try {
-      restoreArchiveDirectory(archPath, staticDir, "drawings");
+      await restoreArchiveDirectory(archPath, staticDir, "drawings");
       addLog(job, "产品图纸恢复完成");
     } catch (err: any) {
       fileErrors.push(`drawings: ${err.message}`);
       addLog(job, `产品图纸恢复失败: ${err.message}`);
+    }
+
+    // Restore additional static directories (option-images, ticket-attachments, logo, favicon, watermark)
+    const extraDirs = ["option-images", "ticket-attachments", "logo", "favicon", "watermark"];
+    for (const dir of extraDirs) {
+      try {
+        const count = await restoreArchiveDirectory(archPath, staticDir, dir);
+        if (count > 0) addLog(job, `${dir}/ 恢复完成`);
+      } catch (err: any) {
+        // These directories may not exist in older backups — non-fatal
+        addLog(job, `${dir}/ 跳过: ${err.message}`);
+      }
+    }
+
+    // Restore uploads/.metadata from _backup_db/metadata in the archive
+    try {
+      const uploadDir = join(process.cwd(), config.uploadDir);
+      const metadataDest = join(uploadDir, ".metadata");
+      const stagingMeta = join(staticDir, `.restore_metadata_${Date.now()}`);
+      const extractedMeta = join(stagingMeta, "_backup_db", "metadata");
+      const metadataBackup = join(uploadDir, `.metadata_backup_${Date.now()}`);
+      try {
+        mkdirSync(stagingMeta, { recursive: true });
+        execSync(`tar xzf "${archPath}" -C "${stagingMeta}" "_backup_db/metadata"`, { stdio: "pipe", timeout: ARCHIVE_EXTRACT_TIMEOUT_MS });
+        if (existsSync(extractedMeta)) {
+          rmSync(metadataBackup, { recursive: true, force: true });
+          if (existsSync(metadataDest)) {
+            renameSync(metadataDest, metadataBackup);
+          }
+          try {
+            renameSync(extractedMeta, metadataDest);
+          } catch (replaceErr) {
+            if (existsSync(metadataBackup) && !existsSync(metadataDest)) {
+              try { renameSync(metadataBackup, metadataDest); } catch {}
+            }
+            throw replaceErr;
+          }
+          rmSync(metadataBackup, { recursive: true, force: true });
+          const metaCount = readdirSync(metadataDest).length;
+          addLog(job, `上传元数据恢复完成 (${metaCount} 个文件)`);
+        }
+      } finally {
+        rmSync(metadataBackup, { recursive: true, force: true });
+        if (existsSync(stagingMeta)) rmSync(stagingMeta, { recursive: true, force: true });
+      }
+    } catch (err: any) {
+      // Older backups won't have this — non-fatal
+      addLog(job, `上传元数据跳过: ${err.message}`);
     }
 
     if (fileErrors.length > 0) {
@@ -862,6 +958,17 @@ async function runRestoreFromArchive(job: RestoreJob, archPath: string, removeAr
     }
 
     addLog(job, `恢复完成: ${result.modelCount} 个 STEP 模型, ${result.thumbnailCount} 张缩略图`);
+
+    // Clear all caches so the app uses restored data immediately
+    try {
+      const { cacheDelByPrefix } = await import("./cache.js");
+      await cacheDelByPrefix("cache:");
+      addLog(job, "缓存已清理");
+    } catch {}
+    try {
+      const { clearSettingsCache } = await import("./settings.js");
+      clearSettingsCache();
+    } catch {}
 
     job.stage = "done";
     job.percent = 100;
@@ -1104,6 +1211,14 @@ function runPrismaMigrations(dbUrl: string) {
   });
 }
 
+function runPrismaDbPush(dbUrl: string) {
+  execSync("npx prisma db push --skip-generate", {
+    stdio: "pipe",
+    timeout: PRISMA_MIGRATE_TIMEOUT_MS,
+    env: { ...process.env, DATABASE_URL: dbUrl },
+  });
+}
+
 function restoreSqlIntoDatabase(dbUrl: string, sqlPath: string) {
   psqlFromFile(dbUrl, sqlPath, "-v ON_ERROR_STOP=1", DB_RESTORE_TIMEOUT_MS);
 }
@@ -1115,19 +1230,39 @@ async function recoverDatabaseToCleanSchema() {
   } catch {}
 }
 
-function restoreArchiveDirectory(
+/** Rollback to the pre-restore safety snapshot. Falls back to clean schema if snapshot is unavailable. */
+async function rollbackToSafetySnapshot(snapshotPath: string | null, job: { logs?: string[] }) {
+  if (snapshotPath && existsSync(snapshotPath)) {
+    try {
+      addLog(job, "正在回滚到恢复前的安全快照...");
+      await resetDatabaseSchema(DB_URL_CLEAN);
+      restoreSqlIntoDatabase(DB_URL_CLEAN, snapshotPath);
+      // Apply migrations in case the snapshot was from an older schema version
+      try { runPrismaMigrations(DB_URL_CLEAN); } catch {}
+      addLog(job, "已成功回滚到恢复前的数据库状态");
+      return;
+    } catch (rollbackErr: any) {
+      addLog(job, `安全快照回滚失败: ${rollbackErr.message}，尝试恢复空 schema...`);
+      console.error(`[Restore] Safety snapshot rollback failed: ${rollbackErr.message}`);
+    }
+  }
+  // No snapshot or rollback failed — fall back to clean empty schema
+  await recoverDatabaseToCleanSchema();
+}
+
+async function restoreArchiveDirectory(
   archive: string,
   staticDir: string,
   folder: string,
   predicate?: (name: string) => boolean,
-): number {
+): Promise<number> {
   const destination = join(staticDir, folder);
   const stagingRoot = join(staticDir, `.restore_${folder}_${Date.now()}`);
   const stagedFolder = join(stagingRoot, folder);
 
   if (!archiveContainsEntry(archive, folder)) {
-    // Backup doesn't contain this directory — remove current to avoid mixed state
-    rmSync(destination, { recursive: true, force: true });
+    // Backup doesn't contain this directory — keep current data (don't delete)
+    // Old backups may not include newly added directories
     return 0;
   }
 
@@ -1136,7 +1271,7 @@ function restoreArchiveDirectory(
 
   try {
     // Extract to staging first — if extraction fails, original data is preserved
-    extractArchiveEntry(archive, stagingRoot, folder);
+    await extractArchiveEntryAsync(archive, stagingRoot, folder);
     if (!existsSync(stagedFolder)) {
       rmSync(stagingRoot, { recursive: true, force: true });
       return 0;
@@ -1155,6 +1290,27 @@ function restoreArchiveDirectory(
   } finally {
     if (existsSync(stagingRoot)) rmSync(stagingRoot, { recursive: true, force: true });
   }
+}
+
+function extractArchiveEntryAsync(archive: string, destination: string, entry: string): Promise<boolean> {
+  return new Promise((resolve, reject) => {
+    const proc = spawn("tar", ["xzf", archive, "-C", destination, entry], { timeout: ARCHIVE_EXTRACT_TIMEOUT_MS });
+    let stderr = "";
+    proc.stderr?.on("data", (d: Buffer) => { stderr += d.toString(); });
+    proc.on("error", reject);
+    proc.on("close", (code) => {
+      if (code === 0) {
+        resolve(true);
+        return;
+      }
+      const err = new Error(stderr || `tar failed with code ${code}`);
+      if (isArchiveEntryMissing(err)) {
+        resolve(false);
+        return;
+      }
+      reject(new Error(`提取备份内容失败: ${stderr || `tar failed with code ${code}`}`));
+    });
+  });
 }
 
 function pruneIgnoredFiles(dir: string) {

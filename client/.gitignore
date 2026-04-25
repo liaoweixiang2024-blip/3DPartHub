@@ -22,3 +22,7 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Sample/test model files
+public/models/*.stp
+public/models/*.step

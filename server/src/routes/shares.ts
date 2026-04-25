@@ -9,6 +9,12 @@ import { getAllSettings, getSetting } from "../lib/settings.js";
 
 const router = Router();
 
+function asSingleString(value: unknown): string | undefined {
+  if (typeof value === "string") return value;
+  if (Array.isArray(value)) return typeof value[0] === "string" ? value[0] : undefined;
+  return undefined;
+}
+
 // ========== Authenticated endpoints ==========
 
 // Create share link
@@ -113,7 +119,7 @@ router.get("/api/shares", authMiddleware, async (req: AuthRequest, res: Response
       model: { select: { id: true, name: true, originalName: true, format: true } },
     },
     orderBy: { createdAt: "desc" },
-  });
+  }) as any[];
 
   res.json(shares.map(s => ({
     id: s.id,
@@ -133,8 +139,12 @@ router.get("/api/shares", authMiddleware, async (req: AuthRequest, res: Response
 
 // List shares for a specific model
 router.get("/api/models/:id/shares", authMiddleware, async (req: AuthRequest, res: Response) => {
-  const modelId = req.params.id;
+  const modelId = asSingleString(req.params.id);
   const userId = req.user!.userId;
+  if (!modelId) {
+    res.status(400).json({ detail: "模型参数无效" });
+    return;
+  }
   const shares = await prisma.shareLink.findMany({
     where: { modelId, createdById: userId },
     orderBy: { createdAt: "desc" },
@@ -157,7 +167,11 @@ router.get("/api/models/:id/shares", authMiddleware, async (req: AuthRequest, re
 // Delete share
 router.delete("/api/shares/:id", authMiddleware, async (req: AuthRequest, res: Response) => {
   const userId = req.user!.userId;
-  const { id } = req.params;
+  const id = asSingleString(req.params.id);
+  if (!id) {
+    res.status(400).json({ detail: "分享参数无效" });
+    return;
+  }
 
   const share = await prisma.shareLink.findUnique({ where: { id } });
   if (!share || share.createdById !== userId) {
@@ -264,7 +278,11 @@ router.get("/api/admin/shares/stats", authMiddleware, async (req: AuthRequest, r
 router.delete("/api/admin/shares/:id", authMiddleware, async (req: AuthRequest, res: Response) => {
   if (!adminOnly(req, res)) return;
   try {
-    const { id } = req.params;
+    const id = asSingleString(req.params.id);
+    if (!id) {
+      res.status(400).json({ detail: "分享参数无效" });
+      return;
+    }
     const share = await prisma.shareLink.findUnique({ where: { id } });
     if (!share) {
       res.status(404).json({ detail: "分享链接不存在" });
@@ -282,7 +300,11 @@ router.delete("/api/admin/shares/:id", authMiddleware, async (req: AuthRequest, 
 
 // Get share info
 router.get("/api/shares/:token/info", async (req: Request, res: Response) => {
-  const { token } = req.params;
+  const token = asSingleString(req.params.token);
+  if (!token) {
+    res.status(400).json({ detail: "分享参数无效" });
+    return;
+  }
 
   const share = await prisma.shareLink.findUnique({
     where: { token },
@@ -296,7 +318,7 @@ router.get("/api/shares/:token/info", async (req: Request, res: Response) => {
         },
       },
     },
-  });
+  }) as any;
 
   if (!share) {
     res.status(404).json({ detail: "分享链接不存在" });
@@ -335,8 +357,12 @@ router.get("/api/shares/:token/info", async (req: Request, res: Response) => {
 
 // Verify password
 router.post("/api/shares/:token/verify", async (req: Request, res: Response) => {
-  const { token } = req.params;
+  const token = asSingleString(req.params.token);
   const { password } = req.body;
+  if (!token) {
+    res.status(400).json({ detail: "分享参数无效" });
+    return;
+  }
 
   if (!password) {
     res.status(400).json({ detail: "请输入密码" });
@@ -370,12 +396,16 @@ router.post("/api/shares/:token/verify", async (req: Request, res: Response) => 
 
 // Download via share link
 router.get("/api/shares/:token/download", async (req: Request, res: Response) => {
-  const { token } = req.params;
+  const token = asSingleString(req.params.token);
+  if (!token) {
+    res.status(400).json({ detail: "分享参数无效" });
+    return;
+  }
 
   const share = await prisma.shareLink.findUnique({
     where: { token },
     include: { model: true },
-  });
+  }) as any;
 
   if (!share) {
     res.status(404).json({ detail: "分享链接不存在" });
@@ -428,7 +458,7 @@ router.get("/api/shares/:token/download", async (req: Request, res: Response) =>
     }
   }
 
-  if (!filePath) {
+  if (!filePath || !fileName) {
     res.status(404).json({ detail: "文件不存在" });
     return;
   }

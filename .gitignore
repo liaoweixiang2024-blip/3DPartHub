@@ -1,22 +1,62 @@
+# Dependencies
 node_modules/
+
+# Build output
 dist/
+*.tsbuildinfo
+
+# Environment & secrets
 .env
+.env.production
 *.local
+
+# OS files
 .DS_Store
+
+# Uploads & runtime data
 uploads/
 !uploads/.gitkeep
+
+# Static generated files
 server/static/models/
 server/static/originals/
 server/static/thumbnails/
 server/static/batch/
 server/static/backups/
 server/static/watermark/
+server/static/drawings/
+server/static/option-images/
+server/static/ticket-attachments/
+server/static/logo/
+server/static/favicon/
+server/static/js/
+
+# Temp directories
+tmp_*/
+step_import_temp/
 backups/
 stitch-assets/
+
+# Data scripts (not part of application source)
+data/
+
+# OCR reference images
+docs/ocr-references/
+
+# Business documents (catalogs, PDFs)
+*.pdf
+
+# Archives
 *.rar
 *.zip
-*.tsbuildinfo
+
+# Docker / local overrides
 .colima/
-.claude/
 docker-compose.override.yml
-step_import_temp/
+docker-compose.local.yml
+
+# Auto-generated
+client/README.md
+
+# Claude Code
+.claude/

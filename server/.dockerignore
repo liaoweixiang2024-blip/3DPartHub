@@ -1,11 +1,29 @@
 node_modules/
 dist/
 .env
+.env.production
 *.log
+.DS_Store
+
+# Runtime data (mounted as volumes)
 uploads/
 static/models/
 static/originals/
 static/thumbnails/
 static/batch/
 static/backups/
+static/drawings/
+static/option-images/
+static/ticket-attachments/
+static/logo/
+static/favicon/
+static/watermark/
 .occt-import-js.cache/
+
+# Data scripts (moved to project root data/)
+scripts/
+
+# Prisma seeds (non-runtime)
+prisma/seeds/
+prisma/seed-beize.ts
+prisma/seed-categories.ts

@@ -26,7 +26,7 @@ router.post("/api/inquiries", authMiddleware, async (req: AuthRequest, res: Resp
     const products = productIds.length > 0
       ? await prisma.selectionProduct.findMany({
           where: { id: { in: productIds } },
-          select: { id: true, name: true, modelNo: true, specs: true },
+          select: { id: true, name: true, modelNo: true, specs: true, unit: true },
         })
       : [];
     const productMap = new Map(products.map((p) => [p.id, p]));

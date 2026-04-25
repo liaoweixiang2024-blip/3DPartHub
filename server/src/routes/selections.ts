@@ -18,6 +18,12 @@ function adminOnly(req: AuthRequest, res: Response): boolean {
   return true;
 }
 
+function asSingleString(value: unknown): string | undefined {
+  if (typeof value === "string") return value;
+  if (Array.isArray(value)) return typeof value[0] === "string" ? value[0] : undefined;
+  return undefined;
+}
+
 // Option image upload config
 const optImgDir = join(process.cwd(), "static", "option-images");
 if (!existsSync(optImgDir)) mkdirSync(optImgDir, { recursive: true });
@@ -509,8 +515,12 @@ router.post("/api/admin/selections/option-image-from-url", authMiddleware, async
 router.put("/api/admin/selections/categories/:id/rename-option", authMiddleware, async (req: AuthRequest, res: Response) => {
   if (!adminOnly(req, res)) return;
   try {
-    const { id } = req.params;
+    const id = asSingleString(req.params.id);
     const { field, oldValue, newValue } = req.body;
+    if (!id) {
+      res.status(400).json({ detail: "分类参数无效" });
+      return;
+    }
     if (!field || !oldValue || !newValue) {
       res.status(400).json({ detail: "缺少参数" });
       return;

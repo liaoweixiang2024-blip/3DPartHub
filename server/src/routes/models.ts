@@ -2,7 +2,7 @@ import { Router, Request, Response } from "express";
 import multer from "multer";
 import { randomUUID } from "node:crypto";
 import { join } from "node:path";
-import { mkdirSync, readdirSync, readFileSync, rmSync, existsSync, writeFileSync, copyFileSync, statSync } from "node:fs";
+import { mkdirSync, readdirSync, readFileSync, rmSync, existsSync, writeFileSync, copyFileSync, statSync, openSync, readSync, closeSync } from "node:fs";
 import { stat as statAsync } from "node:fs/promises";
 import { convertStepToGltf } from "../services/converter.js";
 import { conversionQueue } from "../lib/queue.js";
@@ -17,7 +17,11 @@ import { config } from "../lib/config.js";
 // Parse STEP/IGES file header for the original creation timestamp
 function parseStepFileDate(filePath: string): Date | null {
   try {
-    const head = readFileSync(filePath, { encoding: "utf-8", end: 2000 });
+    const fd = openSync(filePath, "r");
+    const buffer = Buffer.alloc(2000);
+    const bytesRead = readSync(fd, buffer, 0, buffer.length, 0);
+    closeSync(fd);
+    const head = buffer.toString("utf-8", 0, bytesRead);
     // STEP: FILE_NAME('name', '2026-03-19T09:10:22', ...)
     const match = head.match(/FILE_NAME\s*\([^;]*?'(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2})'/);
     if (match) return new Date(match[1]);
