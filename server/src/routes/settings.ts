@@ -509,6 +509,11 @@ router.get("/api/settings/public", async (_req, res: Response) => {
       share_allow_password: all.share_allow_password ?? true,
       share_allow_custom_expiry: all.share_allow_custom_expiry ?? true,
       share_allow_preview: all.share_allow_preview ?? true,
+      // Selection wizard
+      selection_page_title: all.selection_page_title ?? "产品选型",
+      selection_page_desc: all.selection_page_desc ?? "选择产品大类，逐步筛选出精确型号",
+      selection_enable_match: all.selection_enable_match ?? true,
+      field_aliases: all.field_aliases ?? "{}",
     };
     await cacheSet("cache:settings:public", result, TTL.SETTINGS_PUBLIC);
     res.json(result);
