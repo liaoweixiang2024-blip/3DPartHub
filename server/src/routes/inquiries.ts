@@ -2,6 +2,7 @@ import { Router, Response } from "express";
 import { prisma } from "../lib/prisma.js";
 import { authMiddleware, type AuthRequest } from "../middleware/auth.js";
 import { createNotification } from "./notifications.js";
+import { getBusinessConfig, labelFor } from "../lib/businessConfig.js";
 
 const router = Router();
 
@@ -227,7 +228,8 @@ router.get("/api/admin/inquiries", authMiddleware, async (req: AuthRequest, res:
   }
   try {
     const page = Math.max(1, Number(req.query.page) || 1);
-    const pageSize = Math.min(100, Math.max(1, Number(req.query.page_size) || 20));
+    const { pageSizePolicy } = await getBusinessConfig();
+    const pageSize = Math.min(pageSizePolicy.inquiryAdminMax, Math.max(1, Number(req.query.page_size) || pageSizePolicy.inquiryAdminDefault));
     const status = req.query.status as string | undefined;
 
     const where = status && status !== "all" ? { status } : {};
@@ -322,7 +324,9 @@ router.put("/api/admin/inquiries/:id/status", authMiddleware, async (req: AuthRe
   try {
     const id = param(req, "id");
     const { status } = req.body;
-    if (!["accepted", "rejected"].includes(status)) {
+    const { inquiryStatuses } = await getBusinessConfig();
+    const allowed = inquiryStatuses.filter((item) => item.value !== "draft").map((item) => item.value);
+    if (!allowed.includes(status)) {
       res.status(400).json({ detail: "无效状态" });
       return;
     }
@@ -331,11 +335,10 @@ router.put("/api/admin/inquiries/:id/status", authMiddleware, async (req: AuthRe
       data: { status },
     });
 
-    const STATUS_LABELS: Record<string, string> = { accepted: "已接受", rejected: "已拒绝" };
     await createNotification({
       userId: updated.userId,
       title: "询价单状态更新",
-      message: `您的询价单状态已更新为「${STATUS_LABELS[status] || status}」`,
+      message: `您的询价单状态已更新为「${labelFor(inquiryStatuses, status)}」`,
       type: "inquiry",
       relatedId: id,
     }).catch(() => {});

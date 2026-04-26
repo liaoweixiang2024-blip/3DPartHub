@@ -1,7 +1,8 @@
 import { useState, useEffect, lazy, Suspense } from "react";
 import { useParams, Link } from "react-router-dom";
 import { useDocumentTitle } from "../hooks/useDocumentTitle";
-import { getSiteTitle, getSiteIcon } from "../lib/publicSettings";
+import { getSiteTitle } from "../lib/publicSettings";
+import BrandMark from "../components/shared/BrandMark";
 import Icon from "../components/shared/Icon";
 import { getShareInfo, verifySharePassword, getShareDownloadUrl, type ShareInfo } from "../api/shares";
 
@@ -48,6 +49,8 @@ export default function SharePage() {
     setPasswordError("");
     try {
       await verifySharePassword(token, password);
+      const data = await getShareInfo(token, password);
+      setInfo(data);
       setNeedPassword(false);
     } catch (err: any) {
       setPasswordError(err.response?.data?.detail || "密码错误");
@@ -58,7 +61,7 @@ export default function SharePage() {
     if (!token) return;
     setDownloading(true);
     const a = document.createElement("a");
-    a.href = getShareDownloadUrl(token);
+    a.href = getShareDownloadUrl(token, info?.hasPassword ? password : undefined);
     a.download = "";
     a.click();
     setTimeout(() => setDownloading(false), 2000);
@@ -71,7 +74,6 @@ export default function SharePage() {
   }
 
   const siteTitle = getSiteTitle();
-  const siteIcon = getSiteIcon();
 
   // Loading
   if (loading) {
@@ -120,11 +122,7 @@ export default function SharePage() {
         <div className="w-full max-w-sm">
           <div className="bg-surface-container-low rounded-xl border border-outline-variant/20 overflow-hidden">
             <div className="px-6 py-5 border-b border-outline-variant/10 text-center">
-              {siteIcon ? (
-                <img src={siteIcon} alt={siteTitle} className="h-8 w-8 mx-auto mb-2 object-contain" />
-              ) : (
-                <Icon name="lock" size={32} className="text-primary-container mx-auto mb-2" />
-              )}
+              <BrandMark size="compact" centered className="mx-auto mb-2 max-w-full" />
               <h2 className="text-lg font-bold text-on-surface">{info.modelName}</h2>
               <p className="text-xs text-on-surface-variant mt-1">此分享链接需要密码访问</p>
             </div>
@@ -166,16 +164,11 @@ export default function SharePage() {
           <span>请点击右上角 <Icon name="more_horiz" size={14} className="inline" /> 选择「在浏览器中打开」</span>
         </div>
       )}
-      <header className="h-12 flex items-center justify-between px-4 bg-surface-container-low border-b border-outline-variant/10 shrink-0">
-        <Link to="/" className="flex items-center gap-2 hover:opacity-80 transition-opacity">
-          {siteIcon ? (
-            <img src={siteIcon} alt={siteTitle} className="h-6 w-6 object-contain" />
-          ) : (
-            <Icon name="view_in_ar" size={20} className="text-primary-container" />
-          )}
-          <span className="text-sm font-bold text-on-surface">{siteTitle}</span>
+      <header className="min-h-12 flex items-center justify-between gap-3 px-4 py-2 bg-surface-container-low border-b border-outline-variant/10 shrink-0">
+        <Link to="/" className="flex items-center gap-2 min-w-0 hover:opacity-80 transition-opacity">
+          <BrandMark size="compact" />
         </Link>
-        <span className="text-xs text-on-surface-variant/50">分享预览</span>
+        <span className="text-xs text-on-surface-variant/50 shrink-0">分享预览</span>
       </header>
 
       {/* Content — desktop: side-by-side, mobile: stacked scrollable */}
@@ -207,7 +200,7 @@ export default function SharePage() {
         {/* Info panel */}
         <div className="w-full md:w-80 bg-surface-container-low border-t md:border-t-0 md:border-l border-outline-variant/10 p-5 space-y-4 shrink-0">
           <div>
-            <h1 className="text-lg font-bold text-on-surface">{info.modelName}</h1>
+            <h1 className="text-lg font-bold text-on-surface break-words">{info.modelName}</h1>
             <div className="flex flex-wrap gap-3 mt-2 text-xs text-on-surface-variant">
               <span className="flex items-center gap-1">
                 <Icon name="description" size={12} />
@@ -225,7 +218,7 @@ export default function SharePage() {
           </div>
 
           {info.description && (
-            <p className="text-sm text-on-surface-variant">{info.description}</p>
+            <p className="text-sm text-on-surface-variant break-words">{info.description}</p>
           )}
 
           {/* Download button */}

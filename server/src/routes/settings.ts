@@ -7,8 +7,9 @@ import { authMiddleware, type AuthRequest } from "../middleware/auth.js";
 import { verifyToken } from "../lib/jwt.js";
 import { getAllSettings, setSettings, setSetting } from "../lib/settings.js";
 import { cacheGet, cacheSet, cacheDel, TTL } from "../lib/cache.js";
-import { startBackupJob, getJob, getRestoreJob, startRestoreJob, startRestoreJobFromFile, saveAsBackupRecord, startImportSaveJob, getImportSaveJob, getBackupStats, listBackups, renameBackup, deleteBackup, getBackupArchivePath } from "../lib/backup.js";
+import { startBackupJob, getJob, getRestoreJob, startRestoreJob, startRestoreJobFromFile, saveAsBackupRecord, startImportSaveJob, getImportSaveJob, getBackupStats, getBackupHealth, getBackupPolicyCheck, verifyBackupArchive, listBackups, renameBackup, deleteBackup, getBackupArchivePath, getActiveBackupJob } from "../lib/backup.js";
 import { checkUpdateAvailable, getLocalVersion } from "../lib/update.js";
+import { sendTestEmail } from "../lib/email.js";
 
 const router = Router();
 
@@ -112,6 +113,41 @@ router.get("/api/settings/backup/stats", authMiddleware, async (req: AuthRequest
   }
 });
 
+// Admin: backup policy health and scheduler status
+router.get("/api/settings/backup/health", authMiddleware, async (req: AuthRequest, res: Response) => {
+  if (!adminOnly(req, res)) return;
+  try {
+    const health = await getBackupHealth();
+    res.json(health);
+  } catch {
+    res.status(500).json({ detail: "获取备份健康状态失败" });
+  }
+});
+
+// Admin: run backup policy preflight checks
+router.post("/api/settings/backup/check", authMiddleware, async (req: AuthRequest, res: Response) => {
+  if (!adminOnly(req, res)) return;
+  try {
+    const result = await getBackupPolicyCheck();
+    res.json(result);
+  } catch (err: any) {
+    res.status(500).json({ detail: err.message || "备份策略体检失败" });
+  }
+});
+
+// Admin: verify one backup archive without restoring it
+router.post("/api/settings/backup/verify/:id", authMiddleware, async (req: AuthRequest, res: Response) => {
+  if (!adminOnly(req, res)) return;
+  const backupId = asSingleString(req.params.id);
+  if (!backupId) { res.status(400).json({ detail: "备份参数无效" }); return; }
+  try {
+    const result = await verifyBackupArchive(backupId);
+    res.json(result);
+  } catch (err: any) {
+    res.status(400).json({ detail: err.message || "备份校验失败" });
+  }
+});
+
 // Admin: list all saved backups
 router.get("/api/settings/backup/list", authMiddleware, async (req: AuthRequest, res: Response) => {
   if (!adminOnly(req, res)) return;
@@ -126,7 +162,10 @@ router.post("/api/settings/backup/create", authMiddleware, async (req: AuthReque
     res.json({ jobId });
   } catch (err: any) {
     const status = err.message?.includes("正在进行中") ? 409 : 500;
-    res.status(status).json({ detail: err.message || "启动备份失败" });
+    res.status(status).json({
+      detail: err.message || "启动备份失败",
+      jobId: err.jobId || getActiveBackupJob()?.id,
+    });
   }
 });
 
@@ -386,6 +425,22 @@ router.put("/api/settings", authMiddleware, async (req: AuthRequest, res: Respon
   }
 });
 
+// Admin: send a test email using the saved SMTP settings and email template.
+router.post("/api/settings/email/test", authMiddleware, async (req: AuthRequest, res: Response) => {
+  if (!adminOnly(req, res)) return;
+  const to = typeof req.body?.to === "string" ? req.body.to.trim() : "";
+  if (!to || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(to)) {
+    res.status(400).json({ detail: "请输入正确的测试收件邮箱" });
+    return;
+  }
+  try {
+    await sendTestEmail(to);
+    res.json({ message: "测试邮件已发送" });
+  } catch (err: any) {
+    res.status(500).json({ detail: err.message || "测试邮件发送失败" });
+  }
+});
+
 // Admin: upload image (generic — watermark, logo, favicon)
 router.post("/api/settings/upload-image", authMiddleware, async (req: AuthRequest, res: Response, next) => {
   if (req.user?.role !== "ADMIN") {
@@ -432,6 +487,16 @@ router.get("/api/settings/version", async (_req, res: Response) => {
   }
 });
 
+// Admin: get current client IP (for IP whitelist configuration)
+router.get("/api/settings/my-ip", authMiddleware, async (req: AuthRequest, res: Response) => {
+  if (req.user?.role !== "ADMIN") { res.status(403).json({ detail: "需要管理员权限" }); return; }
+  const forwarded = req.headers["x-forwarded-for"];
+  const ip = typeof forwarded === "string" ? forwarded.split(",")[0].trim()
+    : typeof req.headers["x-real-ip"] === "string" ? req.headers["x-real-ip"]
+    : req.ip || req.socket.remoteAddress || "unknown";
+  res.json({ ip });
+});
+
 // Public: get non-sensitive settings
 router.get("/api/settings/public", async (_req, res: Response) => {
   // Prevent browser/CDN caching of config — always revalidate
@@ -451,8 +516,8 @@ router.get("/api/settings/public", async (_req, res: Response) => {
       watermark_image: all.watermark_image ?? "",
       site_title: all.site_title ?? "3DPartHub",
       site_browser_title: all.site_browser_title ?? "",
-      site_logo: all.site_logo ?? "/static/logo/logo.svg",
-      site_icon: all.site_icon ?? "/static/logo/icon.svg",
+      site_logo: all.site_logo ?? "",
+      site_icon: all.site_icon ?? "",
       site_favicon: all.site_favicon ?? "/favicon.svg",
       site_logo_display: all.site_logo_display ?? "logo_and_title",
       site_description: all.site_description ?? "",
@@ -517,6 +582,17 @@ router.get("/api/settings/public", async (_req, res: Response) => {
       selection_enable_match: all.selection_enable_match ?? true,
       field_aliases: all.field_aliases ?? "{}",
       quote_template: all.quote_template ?? "",
+      document_templates: all.document_templates ?? "",
+      inquiry_statuses: all.inquiry_statuses ?? "",
+      ticket_statuses: all.ticket_statuses ?? "",
+      ticket_classifications: all.ticket_classifications ?? "",
+      support_process_steps: all.support_process_steps ?? "",
+      nav_user_items: all.nav_user_items ?? "",
+      nav_admin_items: all.nav_admin_items ?? "",
+      nav_mobile_items: all.nav_mobile_items ?? "",
+      upload_policy: all.upload_policy ?? "",
+      selection_thread_priority: all.selection_thread_priority ?? "",
+      page_size_policy: all.page_size_policy ?? "",
     };
     await cacheSet("cache:settings:public", result, TTL.SETTINGS_PUBLIC);
     res.json(result);

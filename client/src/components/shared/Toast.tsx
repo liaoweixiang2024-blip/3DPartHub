@@ -1,7 +1,8 @@
-import { createContext, useContext, useState, useCallback, useRef, type ReactNode } from "react";
+import { createContext, useContext, useState, useCallback, useEffect, useRef, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import Icon from "./Icon";
+import { notifyGlobalError, setGlobalErrorNotifier } from "../../lib/errorNotifications";
 
 type ToastType = "success" | "error" | "info";
 
@@ -34,6 +35,29 @@ export function ToastProvider({ children }: { children: ReactNode }) {
     setTimeout(() => {
       setToasts((prev) => prev.filter((t) => t.id !== id));
     }, 3000);
+  }, []);
+
+  useEffect(() => {
+    setGlobalErrorNotifier((message, type = "error") => toast(message, type));
+    return () => setGlobalErrorNotifier(null);
+  }, [toast]);
+
+  useEffect(() => {
+    const handleError = (event: ErrorEvent) => {
+      notifyGlobalError(event.error || event.message, "页面运行出错，请刷新后重试");
+    };
+
+    const handleUnhandledRejection = (event: PromiseRejectionEvent) => {
+      notifyGlobalError(event.reason, "操作失败，请稍后重试");
+    };
+
+    window.addEventListener("error", handleError);
+    window.addEventListener("unhandledrejection", handleUnhandledRejection);
+
+    return () => {
+      window.removeEventListener("error", handleError);
+      window.removeEventListener("unhandledrejection", handleUnhandledRejection);
+    };
   }, []);
 
   return (

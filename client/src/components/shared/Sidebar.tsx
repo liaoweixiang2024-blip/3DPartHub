@@ -1,43 +1,13 @@
-import { useRef, useEffect, useState, useCallback } from "react";
+import { useRef, useEffect, useState, useCallback, useMemo } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
+import useSWR from "swr";
 import { useAuthStore } from "../../stores/useAuthStore";
+import { getCachedPublicSettings } from "../../lib/publicSettings";
+import { DEFAULT_ADMIN_NAV, DEFAULT_USER_NAV, getBusinessConfig, type NavItemConfig } from "../../lib/businessConfig";
 import Icon from "./Icon";
 
-export const userNav = [
-  // 浏览
-  { label: "模型库", icon: "dashboard", path: "/" },
-  { label: "产品选型", icon: "tune", path: "/selection" },
-  // 我的
-  { label: "我的收藏", icon: "star", path: "/favorites" },
-  { label: "我的询价", icon: "request_quote", path: "/my-inquiries" },
-  { label: "下载历史", icon: "download", path: "/downloads" },
-  // 服务
-  { label: "我的工单", icon: "assignment_add", path: "/my-tickets" },
-  { label: "技术支持", icon: "support_agent", path: "/support" },
-];
-
-export const adminNav = [
-  // 常用功能
-  { label: "模型库", icon: "dashboard", path: "/" },
-  { label: "产品选型", icon: "tune", path: "/selection" },
-  { label: "我的收藏", icon: "star", path: "/favorites" },
-  { label: "我的询价", icon: "request_quote", path: "/my-inquiries" },
-  { label: "下载历史", icon: "download", path: "/downloads" },
-  // 内容管理
-  { label: "模型管理", icon: "view_in_ar", path: "/admin/models" },
-  { label: "分类管理", icon: "folder", path: "/admin/categories" },
-  { label: "选型管理", icon: "tune", path: "/admin/selections" },
-  // 客户服务
-  { label: "询价管理", icon: "receipt_long", path: "/admin/inquiries" },
-  { label: "报价模板", icon: "description", path: "/admin/quote-template" },
-  { label: "工单处理", icon: "build", path: "/admin/tickets" },
-  // 系统
-  { label: "用户管理", icon: "group", path: "/admin/users" },
-  { label: "分享管理", icon: "share", path: "/admin/shares" },
-  { label: "操作日志", icon: "schedule", path: "/admin/audit" },
-  { label: "系统设置", icon: "settings", path: "/admin/settings" },
-  { label: "技术支持", icon: "support_agent", path: "/support" },
-];
+export const userNav: NavItemConfig[] = DEFAULT_USER_NAV;
+export const adminNav: NavItemConfig[] = DEFAULT_ADMIN_NAV;
 
 const footerNav = [
   { label: "个人设置", icon: "settings", path: "/profile" },
@@ -55,8 +25,12 @@ export default function AppSidebar() {
   const location = useLocation();
   const navigate = useNavigate();
   const { logout, user } = useAuthStore();
+  const { data: settings } = useSWR("publicSettings", () => getCachedPublicSettings());
   const isAdmin = user?.role === "ADMIN";
-  const navItems = isAdmin ? adminNav : userNav;
+  const navItems = useMemo(() => {
+    const business = getBusinessConfig(settings);
+    return isAdmin ? business.adminNav : business.userNav;
+  }, [settings, isAdmin]);
   const activeRef = useRef<HTMLAnchorElement>(null);
   const navRef = useRef<HTMLElement>(null);
   const [overflow, setOverflow] = useState({ top: false, bottom: false });

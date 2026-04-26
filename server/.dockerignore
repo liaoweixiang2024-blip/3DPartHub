@@ -12,18 +12,17 @@ static/originals/
 static/thumbnails/
 static/batch/
 static/backups/
+static/_backup_db/
+static/_safety_snapshots/
 static/drawings/
 static/option-images/
 static/ticket-attachments/
 static/logo/
 static/favicon/
+static/selection-categories-ai/
 static/watermark/
 .occt-import-js.cache/
 
-# Data scripts (moved to project root data/)
-scripts/
-
 # Prisma seeds (non-runtime)
 prisma/seeds/
-prisma/seed-beize.ts
 prisma/seed-categories.ts

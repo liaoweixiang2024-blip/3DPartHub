@@ -7,6 +7,7 @@ import multer from "multer";
 import { prisma } from "../lib/prisma.js";
 import { authMiddleware, AuthRequest } from "../middleware/auth.js";
 import { buildModelMatchMap } from "../lib/modelMatch.js";
+import { getBusinessConfig } from "../lib/businessConfig.js";
 
 const router = Router();
 
@@ -22,6 +23,10 @@ function asSingleString(value: unknown): string | undefined {
   if (typeof value === "string") return value;
   if (Array.isArray(value)) return typeof value[0] === "string" ? value[0] : undefined;
   return undefined;
+}
+
+function isValidGroupImageFit(value: unknown): value is "cover" | "contain" | null {
+  return value === "cover" || value === "contain" || value === null;
 }
 
 // Option image upload config
@@ -59,6 +64,8 @@ router.get("/api/selections/categories", async (_req, res) => {
       groupId: c.groupId,
       groupName: c.groupName,
       groupIcon: c.groupIcon,
+      groupImage: c.groupImage,
+      groupImageFit: c.groupImageFit,
       kind: c.kind,
       productCount: c._count.products,
     })));
@@ -93,6 +100,8 @@ router.get("/api/selections/categories/:slug", async (req, res) => {
       groupId: category.groupId,
       groupName: category.groupName,
       groupIcon: category.groupIcon,
+      groupImage: category.groupImage,
+      groupImageFit: category.groupImageFit,
       kind: category.kind,
     });
   } catch (err) {
@@ -106,7 +115,8 @@ router.get("/api/selections/categories/:slug/products", async (req, res) => {
   try {
     const slug = req.params.slug as string;
     const page = Math.max(1, Number(req.query.page) || 1);
-    const pageSize = Math.min(5000, Math.max(1, Number(req.query.page_size) || 50));
+    const { pageSizePolicy } = await getBusinessConfig();
+    const pageSize = Math.min(pageSizePolicy.selectionMax, Math.max(1, Number(req.query.page_size) || pageSizePolicy.selectionDefault));
     const search = (req.query.search as string) || "";
 
     const category = await prisma.selectionCategory.findUnique({
@@ -176,7 +186,7 @@ router.get("/api/selections/categories/:slug/products", async (req, res) => {
 router.post("/api/admin/selections/categories", authMiddleware, async (req: AuthRequest, res) => {
   if (!adminOnly(req, res)) return;
   try {
-    const { name, slug, description, icon, sortOrder, columns, image, optionImages, optionOrder, groupId, groupName, groupIcon, kind } = req.body;
+    const { name, slug, description, icon, sortOrder, columns, image, optionImages, optionOrder, groupId, groupName, groupIcon, groupImage, groupImageFit, kind } = req.body;
     if (!name || !slug) {
       res.status(400).json({ detail: "分类名称和标识不能为空" });
       return;
@@ -185,9 +195,13 @@ router.post("/api/admin/selections/categories", authMiddleware, async (req: Auth
       res.status(400).json({ detail: "columns 必须是数组" });
       return;
     }
+    if (groupImageFit !== undefined && !isValidGroupImageFit(groupImageFit)) {
+      res.status(400).json({ detail: "分组封面展示方式无效" });
+      return;
+    }
 
     const category = await prisma.selectionCategory.create({
-      data: { name, slug, description, icon, sortOrder: sortOrder ?? 0, columns, image, optionImages, optionOrder, groupId, groupName, groupIcon, kind },
+      data: { name, slug, description, icon, sortOrder: sortOrder ?? 0, columns, image, optionImages, optionOrder, groupId, groupName, groupIcon, groupImage, groupImageFit, kind },
     });
     res.status(201).json(category);
   } catch (err: any) {
@@ -205,7 +219,7 @@ router.put("/api/admin/selections/categories/:id", authMiddleware, async (req: A
   if (!adminOnly(req, res)) return;
   try {
     const id = req.params.id as string;
-    const { name, slug, description, icon, sortOrder, columns, image, optionImages, optionOrder, groupId, groupName, groupIcon, kind } = req.body;
+    const { name, slug, description, icon, sortOrder, columns, image, optionImages, optionOrder, groupId, groupName, groupIcon, groupImage, groupImageFit, kind } = req.body;
     const data: any = {};
     if (name !== undefined) data.name = name;
     if (slug !== undefined) data.slug = slug;
@@ -225,6 +239,14 @@ router.put("/api/admin/selections/categories/:id", authMiddleware, async (req: A
     if (groupId !== undefined) data.groupId = groupId;
     if (groupName !== undefined) data.groupName = groupName;
     if (groupIcon !== undefined) data.groupIcon = groupIcon;
+    if (groupImage !== undefined) data.groupImage = groupImage;
+    if (groupImageFit !== undefined) {
+      if (!isValidGroupImageFit(groupImageFit)) {
+        res.status(400).json({ detail: "分组封面展示方式无效" });
+        return;
+      }
+      data.groupImageFit = groupImageFit;
+    }
     if (kind !== undefined) data.kind = kind;
 
     const category = await prisma.selectionCategory.update({
@@ -238,6 +260,10 @@ router.put("/api/admin/selections/categories/:id", authMiddleware, async (req: A
       return;
     }
     console.error("[Selections] Update category error:", err);
+    if (err.code === "P2022") {
+      res.status(500).json({ detail: "数据库字段缺失，请执行迁移并重启服务后再试" });
+      return;
+    }
     res.status(500).json({ detail: "更新分类失败" });
   }
 });

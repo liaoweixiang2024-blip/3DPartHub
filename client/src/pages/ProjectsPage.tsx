@@ -6,6 +6,7 @@ import { useMediaQuery } from "../layouts/hooks/useMediaQuery";
 import { useDocumentTitle } from "../hooks/useDocumentTitle";
 import TopNav from "../components/shared/TopNav";
 import BottomNav from "../components/shared/BottomNav";
+import MobileNavDrawer from "../components/shared/MobileNavDrawer";
 import { projectApi, type Project } from "../api/projects";
 import { useAuthStore } from "../stores";
 import { useToast } from "../components/shared/Toast";
@@ -38,9 +39,9 @@ function ProjectCard({ project, onDelete }: { project: Project; onDelete: (id: s
           </span>
         </div>
         <div className="p-4">
-          <h3 className="text-base font-headline text-on-surface mb-1">{project.name}</h3>
+          <h3 className="text-base font-headline text-on-surface mb-1 line-clamp-2 break-words">{project.name}</h3>
           {project.description && (
-            <p className="text-xs text-on-surface-variant line-clamp-2">{project.description}</p>
+            <p className="text-xs text-on-surface-variant line-clamp-2 break-words">{project.description}</p>
           )}
           <div className="flex items-center gap-2 mt-3">
             <span className="text-[10px] text-on-surface-variant">
@@ -74,6 +75,7 @@ export default function ProjectsPage() {
   const navigate = useNavigate();
   const { isAuthenticated } = useAuthStore();
   const [showCreate, setShowCreate] = useState(false);
+  const [navOpen, setNavOpen] = useState(false);
   const [newName, setNewName] = useState("");
   const [newDesc, setNewDesc] = useState("");
 
@@ -119,12 +121,16 @@ export default function ProjectsPage() {
 
   return (
     <div className="flex flex-col h-dvh bg-surface">
-      <TopNav />
-      <main className="flex-1 overflow-y-auto scrollbar-hidden bg-surface-dim p-4 md:p-8">
+      <TopNav compact={!isDesktop} onMenuToggle={() => setNavOpen(true)} />
+      {!isDesktop && <MobileNavDrawer open={navOpen} onClose={() => setNavOpen(false)} />}
+      <main
+        className="flex-1 overflow-y-auto scrollbar-hidden bg-surface-dim p-4 md:p-8"
+        style={!isDesktop ? { paddingBottom: "calc(5rem + env(safe-area-inset-bottom, 0px))" } : undefined}
+      >
         <div className="max-w-6xl mx-auto">
-          <div className="flex items-center justify-between mb-6 border-b border-surface-container-low pb-4">
-            <div>
-              <div className="flex items-center gap-2 text-sm mb-2">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between mb-6 border-b border-surface-container-low pb-4">
+            <div className="min-w-0">
+              <div className="flex items-center gap-2 text-sm mb-2 overflow-x-auto scrollbar-hidden">
                 <Link to="/" className="text-on-surface-variant hover:text-on-surface">首页</Link>
                 <Icon name="chevron_right" size={12} className="text-on-surface-variant/40" />
                 <span className="text-primary font-medium">项目空间</span>
@@ -181,7 +187,7 @@ export default function ProjectsPage() {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm"
+            className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/60 backdrop-blur-sm p-3 sm:p-4"
             role="dialog"
             aria-modal="true"
             onClick={() => setShowCreate(false)}
@@ -190,7 +196,7 @@ export default function ProjectsPage() {
               initial={{ opacity: 0, scale: 0.95, y: 20 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.95, y: 20 }}
-              className="bg-surface-container-low rounded-lg w-full max-w-md mx-4 p-6 shadow-2xl border border-outline-variant/20"
+              className="bg-surface-container-low rounded-t-lg sm:rounded-lg w-full max-w-md p-4 sm:p-6 shadow-2xl border border-outline-variant/20 max-h-[calc(100dvh-1.5rem)] overflow-y-auto"
               onClick={(e) => e.stopPropagation()}
             >
               <h2 className="text-lg font-headline font-bold text-on-surface mb-4">新建项目</h2>
@@ -213,7 +219,7 @@ export default function ProjectsPage() {
                     placeholder="项目描述（可选）"
                   />
                 </div>
-                <div className="flex gap-3 justify-end">
+                <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-3">
                   <button
                     onClick={() => setShowCreate(false)}
                     className="px-4 py-2 text-sm text-on-surface-variant hover:text-on-surface"

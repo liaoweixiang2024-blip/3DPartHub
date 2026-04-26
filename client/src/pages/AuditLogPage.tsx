@@ -51,9 +51,9 @@ const RESOURCE_MAP: Record<string, string> = {
 
 function DetailRow({ label, value }: { label: string; value: string }) {
   return (
-    <div className="flex items-center gap-2 text-xs">
+    <div className="flex items-start gap-2 text-xs">
       <span className="text-on-surface-variant/60 shrink-0 w-14">{label}</span>
-      <span className="text-on-surface-variant truncate">{value}</span>
+      <span className="text-on-surface-variant min-w-0 break-all">{value}</span>
     </div>
   );
 }
@@ -104,7 +104,7 @@ function LogRow({ log, isDesktop }: { log: AuditEntry; isDesktop: boolean }) {
       className="bg-surface-container-low rounded-lg p-3 cursor-pointer active:bg-surface-container-high transition-colors"
       onClick={() => setExpanded(!expanded)}
     >
-      <div className="flex items-center gap-2 mb-1.5">
+      <div className="flex flex-wrap items-center gap-2 mb-1.5">
         <span className={`text-[10px] px-2 py-0.5 rounded-sm font-bold ${act.color}`}>
           {act.label}
         </span>
@@ -116,7 +116,7 @@ function LogRow({ log, isDesktop }: { log: AuditEntry; isDesktop: boolean }) {
         </span>
       </div>
       {log.resourceId && (
-        <p className="text-[11px] text-on-surface-variant/50 font-mono truncate">ID: {log.resourceId.slice(0, 12)}</p>
+        <p className="text-[11px] text-on-surface-variant/50 font-mono break-all">ID: {log.resourceId}</p>
       )}
       {expanded && detailLines.length > 0 && (
         <div className="mt-2 pt-2 border-t border-outline-variant/10 space-y-1">
@@ -159,7 +159,7 @@ export default function AuditLogPage() {
       <select
         value={filterAction}
         onChange={e => { setFilterAction(e.target.value); setPage(1); }}
-        className="bg-surface-container-high text-on-surface text-xs rounded-md px-2.5 py-1.5 border border-outline-variant/20 outline-none focus:border-primary"
+        className="bg-surface-container-high text-on-surface text-xs rounded-md px-2.5 py-1.5 border border-outline-variant/20 outline-none focus:border-primary min-w-0 flex-1 sm:flex-none"
       >
         <option value="">全部操作</option>
         {Object.entries(ACTION_MAP).map(([k, v]) => (
@@ -169,7 +169,7 @@ export default function AuditLogPage() {
       <select
         value={filterResource}
         onChange={e => { setFilterResource(e.target.value); setPage(1); }}
-        className="bg-surface-container-high text-on-surface text-xs rounded-md px-2.5 py-1.5 border border-outline-variant/20 outline-none focus:border-primary"
+        className="bg-surface-container-high text-on-surface text-xs rounded-md px-2.5 py-1.5 border border-outline-variant/20 outline-none focus:border-primary min-w-0 flex-1 sm:flex-none"
       >
         <option value="">全部资源</option>
         {Object.entries(RESOURCE_MAP).map(([k, v]) => (
@@ -220,10 +220,10 @@ export default function AuditLogPage() {
                 <p className="text-sm text-on-surface-variant mt-1">{total} 条记录</p>
               </div>
               {filterBar}
-              <div className="bg-surface-container-low rounded-lg border border-outline-variant/10 overflow-hidden">
+              <div className="bg-surface-container-low rounded-lg border border-outline-variant/10 overflow-auto max-h-[calc(100vh-280px)]">
                 <table className="w-full">
-                  <thead>
-                    <tr className="bg-surface-container-high/50 text-xs uppercase tracking-wider text-on-surface-variant font-bold">
+                  <thead className="sticky top-0 z-10">
+                    <tr className="bg-surface-container-low text-xs uppercase tracking-wider text-on-surface-variant font-bold">
                       <th className="py-3 px-4 text-left">操作</th>
                       <th className="py-3 px-4 text-left">资源</th>
                       <th className="py-3 px-4 text-left">资源ID</th>

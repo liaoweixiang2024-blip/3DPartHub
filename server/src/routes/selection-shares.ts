@@ -37,8 +37,8 @@ router.post("/api/selection-shares", authMiddleware, async (req: AuthRequest, re
       data: { id: share.id, token: share.token },
     });
   } catch (err: any) {
-    console.error("Create selection share error:", err);
-    res.status(500).json({ detail: "创建分享失败" });
+    console.error("Create selection share error:", err?.message ?? err, err?.code ?? "", err?.meta ?? "");
+    res.status(500).json({ detail: `创建分享失败: ${err?.message ?? "未知错误"}` });
   }
 });
 

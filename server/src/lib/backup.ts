@@ -1,6 +1,7 @@
-import { execSync, spawn } from "child_process";
-import { existsSync, mkdirSync, rmSync, writeFileSync, statSync, readdirSync, readFileSync, renameSync, openSync, closeSync, writeSync, readSync, createReadStream, createWriteStream } from "fs";
-import { join } from "path";
+import { execFileSync, execSync, spawn } from "child_process";
+import { existsSync, mkdirSync, rmSync, writeFileSync, statSync, statfsSync, readdirSync, readFileSync, renameSync, openSync, closeSync, writeSync, readSync, createReadStream, createWriteStream, copyFileSync } from "fs";
+import { basename, dirname, isAbsolute, join, resolve, sep } from "path";
+import { createHash } from "crypto";
 import { createInterface } from "readline";
 import { pipeline } from "stream/promises";
 import { Transform } from "stream";
@@ -26,6 +27,15 @@ const ACTIVE_BACKUP_DIR = join(process.cwd(), config.staticDir, "backups");
 const LEGACY_BACKUP_DIR = join(process.cwd(), config.uploadDir, "backups");
 const BACKUP_DIRS = Array.from(new Set([ACTIVE_BACKUP_DIR, LEGACY_BACKUP_DIR]));
 const BACKUP_WORK_DIR = join(ACTIVE_BACKUP_DIR, ".work");
+const BACKUP_DB_ENTRY_DIR = "_backup_db";
+const BACKUP_DATABASE_ENTRY = `${BACKUP_DB_ENTRY_DIR}/database.sql`;
+const BACKUP_META_ENTRY = `${BACKUP_DB_ENTRY_DIR}/meta.json`;
+const BACKUP_MANIFEST_ENTRY = `${BACKUP_DB_ENTRY_DIR}/manifest.json`;
+const BACKUP_UPLOAD_METADATA_ENTRY = `${BACKUP_DB_ENTRY_DIR}/metadata`;
+const BACKUP_UPLOADS_ENTRY = `${BACKUP_DB_ENTRY_DIR}/uploads`;
+const STATIC_BACKUP_EXCLUDE_DIRS = new Set(["backups", BACKUP_DB_ENTRY_DIR, "_safety_snapshots"]);
+const UPLOAD_BACKUP_EXCLUDE_DIRS = new Set(["backups", "chunks", "batch", ".download_tokens"]);
+const RESTORE_PRIORITY_DIRS = ["models", "thumbnails", "originals", "drawings"];
 
 // Detect whether pg_dump/psql are available locally, otherwise use docker exec
 let _dockerContainer: string | null = undefined as any;
@@ -163,6 +173,34 @@ export interface BackupRecord {
   thumbnailCount: number;
   dbSize: string;
   countMode?: "step_models";
+  archiveSha256?: string;
+  manifestVersion?: string;
+  verifiedAt?: string;
+}
+
+interface BackupManifestDirectory {
+  path: string;
+  fileCount: number;
+  totalBytes: number;
+}
+
+interface ArchiveDirectorySpec {
+  path: string;
+  source: string;
+}
+
+interface BackupManifest {
+  schemaVersion: "3.0";
+  backupId: string;
+  generatedAt: string;
+  appVersion: string;
+  database: {
+    path: typeof BACKUP_DATABASE_ENTRY;
+    size: number;
+    sha256: string;
+  };
+  directories: BackupManifestDirectory[];
+  requiredEntries: string[];
 }
 
 function buildMetaPath(baseDir: string, id: string) { return join(baseDir, `${id}.json`); }
@@ -200,6 +238,55 @@ interface BackupJob {
   message: string;
   error?: string;
   logs: string[];
+  source?: "manual" | "scheduled";
+}
+
+export interface BackupHealth {
+  enabled: boolean;
+  scheduleTime: string;
+  retentionCount: number;
+  mirrorEnabled: boolean;
+  mirrorDir?: string;
+  status: "ok" | "warning" | "disabled" | "empty";
+  message: string;
+  backupCount: number;
+  totalSize: number;
+  totalSizeText: string;
+  latestBackup?: BackupRecord;
+  nextRunAt?: string;
+  lastAutoStatus?: string;
+  lastAutoMessage?: string;
+  lastAutoAt?: string;
+  lastAutoJobId?: string;
+  lastMirrorStatus?: string;
+  lastMirrorMessage?: string;
+  lastMirrorAt?: string;
+}
+
+export interface BackupPolicyCheckItem {
+  key: string;
+  label: string;
+  status: "ok" | "warning" | "error";
+  message: string;
+}
+
+export interface BackupPolicyCheck {
+  status: "ok" | "warning" | "error";
+  checkedAt: string;
+  estimatedBackupSize: number;
+  estimatedBackupSizeText: string;
+  checks: BackupPolicyCheckItem[];
+}
+
+export interface BackupVerificationResult {
+  id: string;
+  ok: boolean;
+  checkedAt: string;
+  fileSize: number;
+  fileSizeText: string;
+  manifestVersion?: string;
+  archiveSha256?: string;
+  message: string;
 }
 
 interface RestoreJob {
@@ -218,6 +305,20 @@ const pendingRecordNormalizations = new Set<string>();
 
 // File-based lock to prevent concurrent backup/restore across cluster workers
 const LOCK_FILE = join(process.cwd(), config.uploadDir, ".backup_restore.lock");
+function lockOwnerIsAlive(): boolean {
+  try {
+    const raw = readFileSync(LOCK_FILE, "utf-8").trim();
+    const pid = Number(raw.split(/\r?\n/)[0]);
+    if (!pid) return false;
+    process.kill(pid, 0);
+    return true;
+  } catch (err: any) {
+    if (err?.code === "ESRCH" || err?.code === "ENOENT") return false;
+    // EPERM means a process exists but is not signalable by this user.
+    return err?.code === "EPERM";
+  }
+}
+
 function acquireLock(): boolean {
   try {
     const fd = openSync(LOCK_FILE, "wx");
@@ -228,7 +329,7 @@ function acquireLock(): boolean {
     // Lock file exists — check if it's stale (older than 2 hours)
     try {
       const { mtime } = statSync(LOCK_FILE);
-      if (Date.now() - mtime.getTime() > 2 * 60 * 60 * 1000) {
+      if (!lockOwnerIsAlive() || Date.now() - mtime.getTime() > 2 * 60 * 60 * 1000) {
         rmSync(LOCK_FILE, { force: true });
         return acquireLock();
       }
@@ -258,6 +359,13 @@ function addLog(job: { logs?: string[] }, text: string) {
 
 export function getJob(id: string): BackupJob | undefined {
   return jobs.get(id) || loadJob<BackupJob>(id);
+}
+
+export function getActiveBackupJob(): BackupJob | undefined {
+  for (const job of jobs.values()) {
+    if (job.stage !== "done" && job.stage !== "error") return job;
+  }
+  return undefined;
 }
 
 export function getRestoreJob(id: string): RestoreJob | undefined {
@@ -388,9 +496,13 @@ export function getImportSaveJob(id: string): ImportSaveJob | undefined {
 // ---- Create backup ----
 
 export function startBackupJob(): string {
-  if (!acquireLock()) throw new Error("有备份或恢复任务正在进行中，请等待完成后再试");
+  if (!acquireLock()) {
+    const err = new Error("有备份或恢复任务正在进行中，请等待完成后再试");
+    (err as Error & { jobId?: string }).jobId = getActiveBackupJob()?.id;
+    throw err;
+  }
   const id = `backup_${Date.now()}`;
-  const job: BackupJob = { id, stage: "dumping", percent: 0, message: "正在导出数据库...", logs: [] };
+  const job: BackupJob = { id, stage: "dumping", percent: 0, message: "正在导出数据库...", logs: [], source: "manual" };
   jobs.set(id, job);
   syncJob(job);
 
@@ -404,6 +516,33 @@ export function startBackupJob(): string {
       if (existsSync(activeMetaPath(id))) rmSync(activeMetaPath(id), { force: true });
       syncJob(job);
       console.error(`[Backup #${job.id}] Error:`, err.message);
+    }).finally(() => {
+      releaseLock();
+    });
+  });
+
+  return id;
+}
+
+function startScheduledBackupJob(): string {
+  if (!acquireLock()) {
+    const err = new Error("有备份或恢复任务正在进行中，请等待完成后再试");
+    (err as Error & { jobId?: string }).jobId = getActiveBackupJob()?.id;
+    throw err;
+  }
+  const id = `backup_${Date.now()}`;
+  const job: BackupJob = { id, stage: "dumping", percent: 0, message: "正在执行自动备份...", logs: [], source: "scheduled" };
+  jobs.set(id, job);
+  syncJob(job);
+
+  setImmediate(() => {
+    runBackup(job).catch((err) => {
+      job.stage = "error";
+      job.error = err.message;
+      if (existsSync(activeArchivePath(id))) rmSync(activeArchivePath(id), { force: true });
+      if (existsSync(activeMetaPath(id))) rmSync(activeMetaPath(id), { force: true });
+      syncJob(job);
+      console.error(`[Backup #${job.id}] Scheduled error:`, err.message);
     }).finally(() => {
       releaseLock();
     });
@@ -435,13 +574,11 @@ async function runBackup(job: BackupJob) {
     job.percent = 30;
     syncJob(job);
 
-    // Determine which static directories exist for backup
+    // Discover business directories automatically so newly added attachment folders are protected by default.
     const staticDir = join(process.cwd(), config.staticDir);
-    const backupDirList = [
-      "models", "thumbnails", "originals", "drawings",
-      "option-images", "ticket-attachments", "logo", "favicon", "watermark",
-    ];
-    const existingBackupDirs = backupDirList.filter(d => existsSync(join(staticDir, d)));
+    const uploadDir = join(process.cwd(), config.uploadDir);
+    const existingBackupDirs = discoverStaticBackupDirs(staticDir);
+    const uploadBackupDirs = discoverUploadBackupDirs(uploadDir);
 
     // Write metadata into tmp
     writeFileSync(join(tmpDir, "meta.json"), JSON.stringify({
@@ -449,6 +586,7 @@ async function runBackup(job: BackupJob) {
       version: "2.0",
       appVersion: getAppVersion(),
       staticDirs: existingBackupDirs,
+      uploadDirs: uploadBackupDirs,
     }, null, 2));
 
     // Step 2: tar.gz packing (30-95%)
@@ -465,12 +603,36 @@ async function runBackup(job: BackupJob) {
     execSync(`cp "${join(tmpDir, "database.sql")}" "${join(dbMarker, "database.sql")}"`, { stdio: "pipe" });
     execSync(`cp "${join(tmpDir, "meta.json")}" "${join(dbMarker, "meta.json")}"`, { stdio: "pipe" });
 
-    // Copy uploads/.metadata into staging for inclusion in backup
+    // Copy uploads data into staging for inclusion in backup. Keep the legacy metadata path too.
     const uploadMetadataDir = join(process.cwd(), config.uploadDir, ".metadata");
+    const stagedUploadsDir = join(dbMarker, "uploads");
+    for (const dir of uploadBackupDirs) {
+      const source = join(uploadDir, dir);
+      const destination = join(stagedUploadsDir, dir);
+      mkdirSync(destination, { recursive: true });
+      execSync(`cp -R "${source}/." "${destination}"`, { stdio: "pipe" });
+    }
     if (existsSync(uploadMetadataDir)) {
       mkdirSync(join(dbMarker, "metadata"), { recursive: true });
       execSync(`cp -r "${uploadMetadataDir}/." "${join(dbMarker, "metadata")}"`, { stdio: "pipe" });
     }
+
+    const manifestDirs: ArchiveDirectorySpec[] = [
+      ...existingBackupDirs.map((dir) => ({ path: dir, source: join(staticDir, dir) })),
+      ...uploadBackupDirs.map((dir) => ({ path: `${BACKUP_UPLOADS_ENTRY}/${dir}`, source: join(stagedUploadsDir, dir) })),
+    ];
+    if (existsSync(join(dbMarker, "metadata"))) {
+      manifestDirs.push({ path: BACKUP_UPLOAD_METADATA_ENTRY, source: join(dbMarker, "metadata") });
+    }
+
+    const manifest = await createBackupManifest(
+      job.id,
+      join(tmpDir, "database.sql"),
+      manifestDirs,
+    );
+    writeJsonAtomic(join(tmpDir, "manifest.json"), manifest);
+    writeJsonAtomic(join(dbMarker, "manifest.json"), manifest);
+    addLog(job, `备份清单已生成: ${manifest.directories.length} 个目录，数据库校验 ${manifest.database.sha256.slice(0, 12)}...`);
 
     await new Promise<void>((resolve, reject) => {
       const tmpArchive = `${finalArchive}.tmp`;
@@ -485,8 +647,9 @@ async function runBackup(job: BackupJob) {
         "--exclude=backups",
         "--exclude=.restore_*",
       );
-      args.push("_backup_db/database.sql", "_backup_db/meta.json");
-      if (existsSync(join(dbMarker, "metadata"))) args.push("_backup_db/metadata");
+      args.push(BACKUP_DATABASE_ENTRY, BACKUP_META_ENTRY, BACKUP_MANIFEST_ENTRY);
+      if (existsSync(stagedUploadsDir)) args.push(BACKUP_UPLOADS_ENTRY);
+      if (existsSync(join(dbMarker, "metadata"))) args.push(BACKUP_UPLOAD_METADATA_ENTRY);
       for (const d of existingBackupDirs) args.push(d);
 
       const proc = spawn("tar", args, { timeout: ARCHIVE_EXTRACT_TIMEOUT_MS });
@@ -530,6 +693,11 @@ async function runBackup(job: BackupJob) {
     job.message = "正在保存备份记录...";
     syncJob(job);
     addLog(job, `打包完成，文件大小: ${formatSize(statSync(finalArchive).size)}`);
+    addLog(job, "正在校验备份包完整性...");
+    await validateBackupArchive(finalArchive, { expectedManifest: manifest });
+    addLog(job, "备份包完整性校验通过");
+    addLog(job, "正在计算备份包 SHA256...");
+    const archiveSha256 = await sha256File(finalArchive);
     addLog(job, "正在保存备份记录...");
 
     const stats = await getBackupStats();
@@ -544,19 +712,42 @@ async function runBackup(job: BackupJob) {
       modelCount: stats.modelCount,
       thumbnailCount: stats.thumbnailCount,
       dbSize: stats.dbSize,
+      countMode: "step_models",
+      archiveSha256,
+      manifestVersion: manifest.schemaVersion,
+      verifiedAt: new Date().toISOString(),
     };
-    writeFileSync(activeMetaPath(job.id), JSON.stringify(record, null, 2));
+    writeJsonAtomic(activeMetaPath(job.id), record);
+    await mirrorBackupIfEnabled(record, job);
 
     job.stage = "done";
     job.percent = 100;
     job.message = "备份完成";
     addLog(job, `备份完成！共 ${record.modelCount} 个 STEP 模型，${record.thumbnailCount} 张预览图`);
+    await applyBackupRetentionPolicy(job);
+    if (job.source === "scheduled") {
+      await updateBackupPolicySettings({
+        backup_last_auto_date: localDateKey(),
+        backup_last_auto_status: "success",
+        backup_last_auto_message: `自动备份完成: ${record.fileSizeText}`,
+        backup_last_auto_job_id: job.id,
+        backup_last_auto_at: new Date().toISOString(),
+      });
+    }
 
     console.log(`[Backup #${job.id}] Done: ${formatSize(fileSize)}`);
   } catch (err: any) {
     job.stage = "error";
     job.error = err.message;
     syncJob(job);
+    if (job.source === "scheduled") {
+      await updateBackupPolicySettings({
+        backup_last_auto_status: "error",
+        backup_last_auto_message: err.message || "自动备份失败",
+        backup_last_auto_job_id: job.id,
+        backup_last_auto_at: new Date().toISOString(),
+      });
+    }
     if (existsSync(finalArchive)) rmSync(finalArchive, { force: true });
     if (existsSync(activeMetaPath(job.id))) rmSync(activeMetaPath(job.id), { force: true });
     console.error(`[Backup #${job.id}] Error:`, err.message);
@@ -590,6 +781,223 @@ export function listBackups(): BackupRecord[] {
   // Sort by date descending
   records.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
   return records;
+}
+
+export async function getBackupHealth(): Promise<BackupHealth> {
+  const settings = await getBackupPolicySettings();
+  const backups = listBackups();
+  const latestBackup = backups[0];
+  const totalSize = backups.reduce((sum, backup) => sum + (backup.fileSize || 0), 0);
+  const nextRunAt = settings.backup_auto_enabled
+    ? nextScheduledRunIso(settings.backup_schedule_time)
+    : undefined;
+
+  if (!settings.backup_auto_enabled) {
+    return {
+      enabled: false,
+      scheduleTime: settings.backup_schedule_time,
+      retentionCount: settings.backup_retention_count,
+      mirrorEnabled: settings.backup_mirror_enabled,
+      mirrorDir: settings.backup_mirror_dir || undefined,
+      status: backups.length > 0 ? "disabled" : "empty",
+      message: buildBackupHealthMessage(
+        backups.length > 0 ? "自动备份未开启，已有手动备份可用" : "尚无备份，建议先创建一次手动备份",
+        settings,
+      ),
+      backupCount: backups.length,
+      totalSize,
+      totalSizeText: formatSize(totalSize),
+      latestBackup,
+      lastAutoStatus: settings.backup_last_auto_status,
+      lastAutoMessage: settings.backup_last_auto_message,
+      lastAutoAt: settings.backup_last_auto_at,
+      lastAutoJobId: settings.backup_last_auto_job_id,
+      lastMirrorStatus: settings.backup_last_mirror_status,
+      lastMirrorMessage: settings.backup_last_mirror_message,
+      lastMirrorAt: settings.backup_last_mirror_at,
+    };
+  }
+
+  if (!latestBackup) {
+    return {
+      enabled: true,
+      scheduleTime: settings.backup_schedule_time,
+      retentionCount: settings.backup_retention_count,
+      mirrorEnabled: settings.backup_mirror_enabled,
+      mirrorDir: settings.backup_mirror_dir || undefined,
+      status: "empty",
+      message: buildBackupHealthMessage("自动备份已开启，但当前还没有任何备份", settings),
+      backupCount: 0,
+      totalSize: 0,
+      totalSizeText: formatSize(0),
+      nextRunAt,
+      lastAutoStatus: settings.backup_last_auto_status,
+      lastAutoMessage: settings.backup_last_auto_message,
+      lastAutoAt: settings.backup_last_auto_at,
+      lastAutoJobId: settings.backup_last_auto_job_id,
+      lastMirrorStatus: settings.backup_last_mirror_status,
+      lastMirrorMessage: settings.backup_last_mirror_message,
+      lastMirrorAt: settings.backup_last_mirror_at,
+    };
+  }
+
+  const latestAgeMs = Date.now() - new Date(latestBackup.createdAt).getTime();
+  const stale = latestAgeMs > 36 * 60 * 60 * 1000;
+  const mirrorWarning = settings.backup_mirror_enabled && settings.backup_last_mirror_status === "error";
+  return {
+    enabled: true,
+    scheduleTime: settings.backup_schedule_time,
+    retentionCount: settings.backup_retention_count,
+    mirrorEnabled: settings.backup_mirror_enabled,
+    mirrorDir: settings.backup_mirror_dir || undefined,
+    status: stale || mirrorWarning ? "warning" : "ok",
+    message: buildBackupHealthMessage(
+      stale ? "最近一次备份超过 36 小时，请检查自动备份任务" : "备份策略正常，最近备份可用",
+      settings,
+    ),
+    backupCount: backups.length,
+    totalSize,
+    totalSizeText: formatSize(totalSize),
+    latestBackup,
+    nextRunAt,
+    lastAutoStatus: settings.backup_last_auto_status,
+    lastAutoMessage: settings.backup_last_auto_message,
+    lastAutoAt: settings.backup_last_auto_at,
+    lastAutoJobId: settings.backup_last_auto_job_id,
+    lastMirrorStatus: settings.backup_last_mirror_status,
+    lastMirrorMessage: settings.backup_last_mirror_message,
+    lastMirrorAt: settings.backup_last_mirror_at,
+  };
+}
+
+export async function getBackupPolicyCheck(): Promise<BackupPolicyCheck> {
+  const settings = await getBackupPolicySettings();
+  const checks: BackupPolicyCheckItem[] = [];
+  const estimatedBackupSize = estimateCurrentBackupBytes();
+  const requiredBytes = Math.ceil(estimatedBackupSize * 1.25);
+
+  checks.push(checkWritableDirectory(ACTIVE_BACKUP_DIR, "本地备份目录可写"));
+  checks.push(checkDiskSpace(ACTIVE_BACKUP_DIR, requiredBytes, "本地备份磁盘空间"));
+
+  if (settings.backup_auto_enabled) {
+    checks.push({
+      key: "schedule",
+      label: "自动备份计划",
+      status: "ok",
+      message: `已开启，每日 ${settings.backup_schedule_time} 自动备份`,
+    });
+  } else {
+    checks.push({
+      key: "schedule",
+      label: "自动备份计划",
+      status: "warning",
+      message: "自动备份未开启，建议确认手动备份稳定后开启",
+    });
+  }
+
+  checks.push({
+    key: "retention",
+    label: "保留份数",
+    status: settings.backup_retention_count >= 3 ? "ok" : "warning",
+    message: `当前保留 ${settings.backup_retention_count} 份${settings.backup_retention_count < 3 ? "，建议至少 3 份" : ""}`,
+  });
+
+  if (settings.backup_mirror_enabled) {
+    const mirrorDir = resolveMirrorBackupDir(settings.backup_mirror_dir);
+    if (!mirrorDir) {
+      checks.push({
+        key: "mirror_dir",
+        label: "外部镜像目录",
+        status: "error",
+        message: "镜像目录无效，请填写独立磁盘/NAS 的绝对路径，不能指向当前备份目录",
+      });
+    } else {
+      checks.push(checkWritableDirectory(mirrorDir, "外部镜像目录可写"));
+      checks.push(checkDiskSpace(mirrorDir, requiredBytes, "外部镜像磁盘空间"));
+    }
+  } else {
+    checks.push({
+      key: "mirror",
+      label: "外部镜像备份",
+      status: "warning",
+      message: "外部镜像未开启，服务器硬盘故障时本地备份可能一起丢失",
+    });
+  }
+
+  const latest = listBackups()[0];
+  if (!latest) {
+    checks.push({
+      key: "latest_backup",
+      label: "最近备份可用性",
+      status: "warning",
+      message: "当前没有备份记录，请先创建一次备份",
+    });
+  } else {
+    try {
+      await verifyBackupArchive(latest.id);
+      checks.push({
+        key: "latest_backup",
+        label: "最近备份可用性",
+        status: "ok",
+        message: `最近备份 ${latest.name} 校验通过`,
+      });
+    } catch (err: any) {
+      const isLegacyBackup = isMissingManifestError(err);
+      checks.push({
+        key: "latest_backup",
+        label: "最近备份可用性",
+        status: isLegacyBackup ? "warning" : "error",
+        message: isLegacyBackup
+          ? `最近备份 ${latest.name} 是旧版备份，缺少企业级清单；建议重新创建一次备份`
+          : `最近备份校验失败: ${err?.message || err}`,
+      });
+    }
+  }
+
+  return {
+    status: checks.some((check) => check.status === "error") ? "error" : checks.some((check) => check.status === "warning") ? "warning" : "ok",
+    checkedAt: new Date().toISOString(),
+    estimatedBackupSize,
+    estimatedBackupSizeText: formatSize(estimatedBackupSize),
+    checks,
+  };
+}
+
+export async function verifyBackupArchive(id: string): Promise<BackupVerificationResult> {
+  const archive = archivePath(id);
+  if (!existsSync(archive)) throw new Error("备份文件不存在");
+  const meta = metaPath(id);
+  const record = existsSync(meta) ? JSON.parse(readFileSync(meta, "utf-8")) as BackupRecord : null;
+  const manifest = await validateBackupArchive(archive, { requireManifest: true });
+  const archiveSha256 = await sha256File(archive);
+  if (record?.archiveSha256 && record.archiveSha256 !== archiveSha256) {
+    throw new Error("备份归档 SHA256 与记录不一致");
+  }
+  const checkedAt = new Date().toISOString();
+  if (record) {
+    writeJsonAtomic(meta, {
+      ...record,
+      archiveSha256,
+      manifestVersion: manifest?.schemaVersion,
+      verifiedAt: checkedAt,
+    });
+  }
+  const fileSize = statSync(archive).size;
+  return {
+    id,
+    ok: true,
+    checkedAt,
+    fileSize,
+    fileSizeText: formatSize(fileSize),
+    manifestVersion: manifest?.schemaVersion,
+    archiveSha256,
+    message: "备份包 manifest、数据库 SHA256、目录文件数校验通过",
+  };
+}
+
+function isMissingManifestError(err: unknown): boolean {
+  const message = err instanceof Error ? err.message : String(err || "");
+  return message.includes("缺少企业级清单文件");
 }
 
 // ---- Rename backup ----
@@ -690,9 +1098,21 @@ async function runRestoreFromArchive(job: RestoreJob, archPath: string, removeAr
     addLog(job, "正在提取备份数据库文件...");
     syncJob(job);
 
+    addLog(job, "正在执行备份包完整性预检...");
+    await validateBackupArchive(archPath);
+    addLog(job, "备份包完整性预检通过");
+
     const sqlPath = extractRestoreSqlPath(archPath, tmpDir);
     job.percent = 30;
     syncJob(job);
+
+    job.message = "正在预检备份文件目录...";
+    addLog(job, "正在预检模型、上传、静态文件目录...");
+    syncJob(job);
+    const staticDirsToRestore = getRestorableStaticDirs(archPath);
+    const filePlan = await prepareRestoreFilePlan(archPath, tmpDir, staticDirsToRestore);
+    assertRestoreHasDiskSpace(filePlan);
+    addLog(job, `文件目录预检通过: ${filePlan.staticDirs.length} 个 static 目录，${filePlan.uploadDirs.length} 个 uploads 目录`);
 
     if (sqlPath) {
       job.stage = "restoring_db";
@@ -752,11 +1172,26 @@ async function runRestoreFromArchive(job: RestoreJob, archPath: string, removeAr
         addLog(job, "正在导入数据库...");
         syncJob(job);
         try {
-          restoreSqlIntoDatabase(DB_URL_CLEAN, sanitizedSqlPath);
+          await restoreSqlIntoDatabase(DB_URL_CLEAN, sanitizedSqlPath, { disableTriggers: true });
         } catch (err) {
-          addLog(job, `数据库导入失败，尝试回滚到安全快照...`);
-          await rollbackToSafetySnapshot(safetySnapshot, job);
-          throw err;
+          if (!isForeignKeyRestoreError(err)) {
+            addLog(job, `数据库导入失败，尝试回滚到安全快照...`);
+            await rollbackToSafetySnapshot(safetySnapshot, job);
+            throw err;
+          }
+
+          addLog(job, "检测到历史数据存在孤儿外键，改用跳过外键约束模式恢复以优先保留数据...");
+          const noFkSqlPath = join(tmpDir, "database.restore.no-fk.sql");
+          await sanitizeSqlDumpStreaming(sqlPath, noFkSqlPath, { skipForeignKeys: true });
+          await resetDatabaseSchema(DB_URL_CLEAN);
+          try {
+            await restoreSqlIntoDatabase(DB_URL_CLEAN, noFkSqlPath, { disableTriggers: true });
+            addLog(job, "数据库已恢复；部分历史外键约束因源数据不一致已跳过");
+          } catch (fallbackErr) {
+            addLog(job, `数据库兜底导入失败，尝试回滚到安全快照...`);
+            await rollbackToSafetySnapshot(safetySnapshot, job);
+            throw fallbackErr;
+          }
         }
         addLog(job, "数据库导入完成");
 
@@ -813,7 +1248,7 @@ async function runRestoreFromArchive(job: RestoreJob, archPath: string, removeAr
         addLog(job, "正在导入数据...");
         syncJob(job);
         try {
-          restoreSqlIntoDatabase(DB_URL_CLEAN, sanitizedSqlPath);
+          await restoreSqlIntoDatabase(DB_URL_CLEAN, sanitizedSqlPath, { disableTriggers: true });
         } catch (err) {
           addLog(job, `数据导入失败，尝试回滚到安全快照...`);
           await restoreCircularFKs(DB_URL_CLEAN).catch(() => {});
@@ -835,116 +1270,21 @@ async function runRestoreFromArchive(job: RestoreJob, archPath: string, removeAr
       syncJob(job);
     }
 
-    const staticDir = join(process.cwd(), config.staticDir);
-    let restoredSourceFiles = 0;
-    const fileErrors: string[] = [];
-
     job.stage = "restoring_files";
     job.percent = 75;
-    job.message = "正在恢复转换模型文件...";
-    addLog(job, "正在恢复模型文件 (models/)...");
+    job.message = "正在恢复备份文件目录...";
     syncJob(job);
+    let restoredSourceFiles = 0;
     try {
-      await restoreArchiveDirectory(archPath, staticDir, "models");
-      addLog(job, "模型文件恢复完成");
+      const fileResult = await commitRestoreFilePlan(filePlan, job);
+      restoredSourceFiles = fileResult.restoredSourceFiles;
+      result.thumbnailCount = fileResult.thumbnailCount;
     } catch (err: any) {
-      fileErrors.push(`models: ${err.message}`);
-      addLog(job, `模型文件恢复失败: ${err.message}`);
-    }
-
-    job.percent = 88;
-    job.message = "正在恢复缩略图...";
-    addLog(job, "正在恢复缩略图 (thumbnails/)...");
-    syncJob(job);
-    try {
-      result.thumbnailCount = await restoreArchiveDirectory(archPath, staticDir, "thumbnails", (name) => name.endsWith(".png"));
-      addLog(job, `缩略图恢复完成: ${result.thumbnailCount} 张`);
-    } catch (err: any) {
-      fileErrors.push(`thumbnails: ${err.message}`);
-      addLog(job, `缩略图恢复失败: ${err.message}`);
-    }
-
-    job.percent = 92;
-    job.message = "正在恢复 STEP 原始文件...";
-    addLog(job, "正在恢复 STEP 原始文件 (originals/)...");
-    syncJob(job);
-    try {
-      restoredSourceFiles = await restoreArchiveDirectory(archPath, staticDir, "originals", isStepFileName);
-      addLog(job, `原始文件恢复完成: ${restoredSourceFiles} 个`);
-    } catch (err: any) {
-      fileErrors.push(`originals: ${err.message}`);
-      addLog(job, `原始文件恢复失败: ${err.message}`);
-    }
-
-    job.percent = 94;
-    job.message = "正在恢复产品图纸...";
-    addLog(job, "正在恢复产品图纸 (drawings/)...");
-    syncJob(job);
-    try {
-      await restoreArchiveDirectory(archPath, staticDir, "drawings");
-      addLog(job, "产品图纸恢复完成");
-    } catch (err: any) {
-      fileErrors.push(`drawings: ${err.message}`);
-      addLog(job, `产品图纸恢复失败: ${err.message}`);
-    }
-
-    // Restore additional static directories (option-images, ticket-attachments, logo, favicon, watermark)
-    const extraDirs = ["option-images", "ticket-attachments", "logo", "favicon", "watermark"];
-    for (const dir of extraDirs) {
-      try {
-        const count = await restoreArchiveDirectory(archPath, staticDir, dir);
-        if (count > 0) addLog(job, `${dir}/ 恢复完成`);
-      } catch (err: any) {
-        // These directories may not exist in older backups — non-fatal
-        addLog(job, `${dir}/ 跳过: ${err.message}`);
+      if (result.dbRestored) {
+        addLog(job, "文件恢复失败，正在回滚数据库到恢复前安全快照...");
+        await rollbackToSafetySnapshot(safetySnapshot, job);
       }
-    }
-
-    // Restore uploads/.metadata from _backup_db/metadata in the archive
-    try {
-      const uploadDir = join(process.cwd(), config.uploadDir);
-      const metadataDest = join(uploadDir, ".metadata");
-      const stagingMeta = join(staticDir, `.restore_metadata_${Date.now()}`);
-      const extractedMeta = join(stagingMeta, "_backup_db", "metadata");
-      const metadataBackup = join(uploadDir, `.metadata_backup_${Date.now()}`);
-      try {
-        mkdirSync(stagingMeta, { recursive: true });
-        execSync(`tar xzf "${archPath}" -C "${stagingMeta}" "_backup_db/metadata"`, { stdio: "pipe", timeout: ARCHIVE_EXTRACT_TIMEOUT_MS });
-        if (existsSync(extractedMeta)) {
-          rmSync(metadataBackup, { recursive: true, force: true });
-          if (existsSync(metadataDest)) {
-            renameSync(metadataDest, metadataBackup);
-          }
-          try {
-            renameSync(extractedMeta, metadataDest);
-          } catch (replaceErr) {
-            if (existsSync(metadataBackup) && !existsSync(metadataDest)) {
-              try { renameSync(metadataBackup, metadataDest); } catch {}
-            }
-            throw replaceErr;
-          }
-          rmSync(metadataBackup, { recursive: true, force: true });
-          const metaCount = readdirSync(metadataDest).length;
-          addLog(job, `上传元数据恢复完成 (${metaCount} 个文件)`);
-        }
-      } finally {
-        rmSync(metadataBackup, { recursive: true, force: true });
-        if (existsSync(stagingMeta)) rmSync(stagingMeta, { recursive: true, force: true });
-      }
-    } catch (err: any) {
-      // Older backups won't have this — non-fatal
-      addLog(job, `上传元数据跳过: ${err.message}`);
-    }
-
-    if (fileErrors.length > 0) {
-      const msg = `部分文件恢复失败: ${fileErrors.join("; ")}`;
-      console.error(`[Restore] ${msg}`);
-      addLog(job, msg);
-      job.stage = "error";
-      job.error = msg;
-      job.result = result;
-      syncJob(job);
-      return;
+      throw err;
     }
 
     if (result.dbRestored) {
@@ -1028,6 +1368,7 @@ async function inspectBackupArchive(id: string, archive: string, originalName: s
     throw new Error("备份文件为空");
   }
 
+  const manifest = await validateBackupArchive(archive);
   const entries = listArchiveEntries(archive);
   if (entries.length === 0) {
     throw new Error("备份归档内容为空");
@@ -1048,6 +1389,8 @@ async function inspectBackupArchive(id: string, archive: string, originalName: s
     thumbnailCount: entries.filter((entry) => entry.startsWith("thumbnails/") && entry.endsWith(".png")).length,
     dbSize: "unknown",
     countMode: "step_models",
+    manifestVersion: manifest?.schemaVersion,
+    verifiedAt: manifest ? new Date().toISOString() : undefined,
   };
 
   const tmpDir = prepareWorkDir(`peek_${id}`);
@@ -1099,6 +1442,168 @@ function listArchiveEntries(archive: string): string[] {
     .filter((line) => !isIgnoredArchiveEntry(line));
 }
 
+async function createBackupManifest(
+  backupId: string,
+  databaseSqlPath: string,
+  directoriesToCheck: readonly ArchiveDirectorySpec[],
+): Promise<BackupManifest> {
+  const directories: BackupManifestDirectory[] = directoriesToCheck.map((dir) => {
+    const stats = countFilesAndBytesRecursive(dir.source);
+    return { path: dir.path, fileCount: stats.fileCount, totalBytes: stats.totalBytes };
+  });
+
+  const requiredEntries = [BACKUP_DATABASE_ENTRY, BACKUP_META_ENTRY, BACKUP_MANIFEST_ENTRY, ...directoriesToCheck.map((dir) => dir.path)];
+
+  return {
+    schemaVersion: "3.0",
+    backupId,
+    generatedAt: new Date().toISOString(),
+    appVersion: getAppVersion(),
+    database: {
+      path: BACKUP_DATABASE_ENTRY,
+      size: statSync(databaseSqlPath).size,
+      sha256: await sha256File(databaseSqlPath),
+    },
+    directories,
+    requiredEntries,
+  };
+}
+
+async function validateBackupArchive(
+  archive: string,
+  options: { expectedManifest?: BackupManifest; requireManifest?: boolean } = {},
+): Promise<BackupManifest | null> {
+  if (!existsSync(archive)) throw new Error("备份文件不存在");
+  const archiveSize = statSync(archive).size;
+  if (archiveSize <= 0) throw new Error("备份文件为空");
+
+  const entries = listArchiveEntries(archive);
+  if (entries.length === 0) throw new Error("备份归档内容为空");
+  if (!archiveHasEntry(entries, BACKUP_DATABASE_ENTRY) && !archiveHasEntry(entries, "database.sql")) {
+    throw new Error("备份包缺少数据库文件");
+  }
+
+  const archiveManifest = readArchiveManifest(archive);
+  const manifest = options.expectedManifest || archiveManifest;
+  if (!manifest) {
+    if (options.requireManifest) throw new Error(`备份包缺少企业级清单文件: ${BACKUP_MANIFEST_ENTRY}`);
+    return null;
+  }
+  if (options.expectedManifest && !archiveManifest) {
+    throw new Error(`备份包缺少企业级清单文件: ${BACKUP_MANIFEST_ENTRY}`);
+  }
+  if (options.expectedManifest && archiveManifest && JSON.stringify(options.expectedManifest) !== JSON.stringify(archiveManifest)) {
+    throw new Error("备份包清单内容与打包前清单不一致");
+  }
+
+  if (manifest.schemaVersion !== "3.0") {
+    throw new Error(`不支持的备份清单版本: ${manifest.schemaVersion}`);
+  }
+
+  for (const entry of manifest.requiredEntries) {
+    if (!archiveHasEntry(entries, entry)) {
+      throw new Error(`备份包缺少必要条目: ${entry}`);
+    }
+  }
+
+  const archiveDbStats = await inspectArchiveDatabase(archive, manifest.database.path);
+  if (archiveDbStats.size !== manifest.database.size) {
+    throw new Error(`数据库备份大小不一致: manifest=${manifest.database.size}, archive=${archiveDbStats.size}`);
+  }
+  if (archiveDbStats.sha256 !== manifest.database.sha256) {
+    throw new Error("数据库备份 SHA256 校验失败");
+  }
+
+  for (const dir of manifest.directories) {
+    if (!archiveHasEntry(entries, dir.path)) {
+      throw new Error(`备份包缺少业务目录: ${dir.path}`);
+    }
+    const archivedCount = countArchiveFiles(entries, dir.path);
+    if (archivedCount !== dir.fileCount) {
+      throw new Error(`备份目录文件数不一致: ${dir.path} manifest=${dir.fileCount}, archive=${archivedCount}`);
+    }
+  }
+
+  return manifest;
+}
+
+function readArchiveManifest(archive: string): BackupManifest | null {
+  try {
+    const raw = execSync(`tar xOzf "${archive}" "${BACKUP_MANIFEST_ENTRY}"`, {
+      stdio: "pipe",
+      timeout: ARCHIVE_META_TIMEOUT_MS,
+    }).toString("utf-8");
+    return JSON.parse(raw) as BackupManifest;
+  } catch (err) {
+    if (isArchiveEntryMissing(err)) return null;
+    throw new Error(`读取备份清单失败: ${extractCommandError(err)}`);
+  }
+}
+
+async function inspectArchiveDatabase(archive: string, databaseEntry: string): Promise<{ size: number; sha256: string }> {
+  const tmpDir = prepareWorkDir(`verify_${Date.now()}_${Math.random().toString(36).slice(2)}`);
+  try {
+    if (!extractArchiveEntry(archive, tmpDir, databaseEntry)) {
+      throw new Error(`备份包缺少数据库文件: ${databaseEntry}`);
+    }
+    const dbPath = join(tmpDir, databaseEntry);
+    return {
+      size: statSync(dbPath).size,
+      sha256: await sha256File(dbPath),
+    };
+  } finally {
+    if (existsSync(tmpDir)) rmSync(tmpDir, { recursive: true, force: true });
+  }
+}
+
+function archiveHasEntry(entries: string[], entry: string): boolean {
+  const normalized = entry.replace(/\/$/, "");
+  return entries.some((item) => item === normalized || item === `${normalized}/` || item.startsWith(`${normalized}/`));
+}
+
+function countArchiveFiles(entries: string[], dir: string): number {
+  const prefix = `${dir.replace(/\/$/, "")}/`;
+  return entries.filter((entry) => entry.startsWith(prefix) && !entry.endsWith("/")).length;
+}
+
+function writeJsonAtomic(path: string, value: unknown) {
+  const tmp = `${path}.tmp`;
+  writeFileSync(tmp, JSON.stringify(value, null, 2));
+  renameSync(tmp, path);
+}
+
+async function sha256File(path: string): Promise<string> {
+  const hash = createHash("sha256");
+  await new Promise<void>((resolve, reject) => {
+    const stream = createReadStream(path);
+    stream.on("data", (chunk) => hash.update(chunk));
+    stream.on("error", reject);
+    stream.on("end", resolve);
+  });
+  return hash.digest("hex");
+}
+
+function countFilesAndBytesRecursive(dir: string): { fileCount: number; totalBytes: number } {
+  if (!existsSync(dir)) return { fileCount: 0, totalBytes: 0 };
+
+  let fileCount = 0;
+  let totalBytes = 0;
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    if (isIgnoredFileName(entry.name)) continue;
+    const fullPath = join(dir, entry.name);
+    if (entry.isDirectory()) {
+      const child = countFilesAndBytesRecursive(fullPath);
+      fileCount += child.fileCount;
+      totalBytes += child.totalBytes;
+      continue;
+    }
+    fileCount += 1;
+    totalBytes += statSync(fullPath).size;
+  }
+
+  return { fileCount, totalBytes };
+}
+
 function isIgnoredArchiveEntry(entry: string): boolean {
   return entry
     .split("/")
@@ -1130,20 +1635,52 @@ function extractRestoreSqlPath(archive: string, tmpDir: string): string | null {
   return null;
 }
 
-async function sanitizeSqlDumpStreaming(source: string, destination: string) {
+async function sanitizeSqlDumpStreaming(
+  source: string,
+  destination: string,
+  options: { skipForeignKeys?: boolean } = {},
+) {
   // Stream through the SQL dump, filtering out problematic lines
   const rl = createInterface({ input: createReadStream(source, { encoding: "utf-8" }), crlfDelay: Infinity });
   const ws = createWriteStream(destination, { encoding: "utf-8" });
-  for await (const line of rl) {
+  let pendingAlterTableLine: string | null = null;
+
+  const writeIfAllowed = (line: string) => {
     if (line !== "SET transaction_timeout = 0;") {
       ws.write(line + "\n");
     }
+  };
+
+  for await (const line of rl) {
+    if (options.skipForeignKeys && pendingAlterTableLine !== null) {
+      if (/\bFOREIGN KEY\b/.test(line)) {
+        pendingAlterTableLine = null;
+        continue;
+      }
+      writeIfAllowed(pendingAlterTableLine);
+      pendingAlterTableLine = null;
+    }
+
+    if (options.skipForeignKeys && /^ALTER TABLE ONLY public\./.test(line)) {
+      pendingAlterTableLine = line;
+      continue;
+    }
+
+    writeIfAllowed(line);
+  }
+  if (pendingAlterTableLine !== null) {
+    writeIfAllowed(pendingAlterTableLine);
   }
   ws.end();
   await new Promise<void>((resolve, reject) => {
     ws.on("finish", resolve);
     ws.on("error", reject);
   });
+}
+
+function isForeignKeyRestoreError(err: unknown): boolean {
+  const message = err instanceof Error ? err.message : String(err || "");
+  return message.includes("violates foreign key constraint") || message.includes("FOREIGN KEY");
 }
 
 function databaseNameFromUrl(): string {
@@ -1174,7 +1711,7 @@ async function preflightRestoreSql(sqlPath: string) {
   try {
     psqlCommand(maintenanceUrl, `CREATE DATABASE "${preflightDbName}"`, "-v ON_ERROR_STOP=1", PSQL_COMMAND_TIMEOUT_MS);
     runPrismaMigrations(preflightDbUrl);
-    restoreSqlIntoDatabase(preflightDbUrl, sqlPath);
+    await restoreSqlIntoDatabase(preflightDbUrl, sqlPath, { disableTriggers: true });
     console.log("[Backup] 备份数据库校验通过");
   } catch (err: any) {
     // Preflight failed — could be missing CREATEDB privilege or incompatible data.
@@ -1219,8 +1756,35 @@ function runPrismaDbPush(dbUrl: string) {
   });
 }
 
-function restoreSqlIntoDatabase(dbUrl: string, sqlPath: string) {
-  psqlFromFile(dbUrl, sqlPath, "-v ON_ERROR_STOP=1", DB_RESTORE_TIMEOUT_MS);
+async function restoreSqlIntoDatabase(dbUrl: string, sqlPath: string, options: { disableTriggers?: boolean } = {}) {
+  let restorePath = sqlPath;
+  let guardedPath: string | null = null;
+  try {
+    if (options.disableTriggers) {
+      guardedPath = await writeTriggerGuardedSql(sqlPath);
+      restorePath = guardedPath;
+    }
+    psqlFromFile(dbUrl, restorePath, "-v ON_ERROR_STOP=1", DB_RESTORE_TIMEOUT_MS);
+  } finally {
+    if (guardedPath) rmSync(guardedPath, { force: true });
+  }
+}
+
+async function writeTriggerGuardedSql(source: string): Promise<string> {
+  const destination = join(dirname(source), `${basename(source)}.trigger_guarded.sql`);
+  const rl = createInterface({ input: createReadStream(source, { encoding: "utf-8" }), crlfDelay: Infinity });
+  const ws = createWriteStream(destination, { encoding: "utf-8" });
+  ws.write("SET session_replication_role = replica;\n");
+  for await (const line of rl) {
+    ws.write(line + "\n");
+  }
+  ws.write("\nSET session_replication_role = origin;\n");
+  ws.end();
+  await new Promise<void>((resolve, reject) => {
+    ws.on("finish", resolve);
+    ws.on("error", reject);
+  });
+  return destination;
 }
 
 async function recoverDatabaseToCleanSchema() {
@@ -1236,7 +1800,7 @@ async function rollbackToSafetySnapshot(snapshotPath: string | null, job: { logs
     try {
       addLog(job, "正在回滚到恢复前的安全快照...");
       await resetDatabaseSchema(DB_URL_CLEAN);
-      restoreSqlIntoDatabase(DB_URL_CLEAN, snapshotPath);
+      await restoreSqlIntoDatabase(DB_URL_CLEAN, snapshotPath, { disableTriggers: true });
       // Apply migrations in case the snapshot was from an older schema version
       try { runPrismaMigrations(DB_URL_CLEAN); } catch {}
       addLog(job, "已成功回滚到恢复前的数据库状态");
@@ -1248,6 +1812,261 @@ async function rollbackToSafetySnapshot(snapshotPath: string | null, job: { logs
   }
   // No snapshot or rollback failed — fall back to clean empty schema
   await recoverDatabaseToCleanSchema();
+}
+
+interface RestoreStaticDirPlan {
+  dir: string;
+  destination: string;
+  archiveEntry: string;
+}
+
+interface RestoreUploadDirPlan {
+  name: string;
+  destination: string;
+  archiveEntry: string;
+}
+
+interface RestoreFilePlan {
+  archive: string;
+  stagingRoot: string;
+  staticDirs: RestoreStaticDirPlan[];
+  uploadDirs: RestoreUploadDirPlan[];
+  legacyMetadata?: RestoreUploadDirPlan;
+}
+
+interface RestoreFileCommitResult {
+  restoredSourceFiles: number;
+  thumbnailCount: number;
+}
+
+interface DirectoryReplacement {
+  destination: string;
+  backup: string | null;
+}
+
+async function prepareRestoreFilePlan(
+  archive: string,
+  tmpDir: string,
+  staticDirsToRestore: string[],
+): Promise<RestoreFilePlan> {
+  const staticDir = join(process.cwd(), config.staticDir);
+  const uploadDir = join(process.cwd(), config.uploadDir);
+  const entries = listArchiveEntries(archive);
+  const plan: RestoreFilePlan = { archive, stagingRoot: join(tmpDir, "restore_files"), staticDirs: [], uploadDirs: [] };
+
+  for (const dir of staticDirsToRestore) {
+    if (!archiveHasEntry(entries, dir)) continue;
+    plan.staticDirs.push({
+      dir,
+      destination: join(staticDir, dir),
+      archiveEntry: dir,
+    });
+  }
+
+  const uploadPrefix = `${BACKUP_UPLOADS_ENTRY}/`;
+  const uploadNames = Array.from(new Set(entries
+    .filter((entry) => entry.startsWith(uploadPrefix))
+    .map((entry) => entry.slice(uploadPrefix.length).split("/")[0])
+    .filter(Boolean)))
+    .filter((name) => !UPLOAD_BACKUP_EXCLUDE_DIRS.has(name))
+    .sort((a, b) => a.localeCompare(b));
+  for (const name of uploadNames) {
+    plan.uploadDirs.push({
+      name,
+      destination: join(uploadDir, name),
+      archiveEntry: `${BACKUP_UPLOADS_ENTRY}/${name}`,
+    });
+  }
+
+  if (plan.uploadDirs.length === 0 && archiveHasEntry(entries, BACKUP_UPLOAD_METADATA_ENTRY)) {
+    plan.legacyMetadata = {
+      name: ".metadata",
+      destination: join(uploadDir, ".metadata"),
+      archiveEntry: BACKUP_UPLOAD_METADATA_ENTRY,
+    };
+  }
+
+  return plan;
+}
+
+function assertRestoreHasDiskSpace(plan: RestoreFilePlan) {
+  const requiredDataBytes = estimateRestoreWorkingBytes(plan);
+  if (requiredDataBytes <= 0) return;
+
+  const statfsTarget = existsSync(plan.stagingRoot) ? plan.stagingRoot : dirname(plan.stagingRoot);
+  const fsStats = statfsSync(statfsTarget);
+  const availableBytes = Number(fsStats.bavail) * Number(fsStats.bsize);
+  const safetyMargin = Math.max(512 * 1024 * 1024, Math.ceil(requiredDataBytes * 0.05));
+  const requiredBytes = requiredDataBytes + safetyMargin;
+
+  if (availableBytes < requiredBytes) {
+    throw new Error(
+      `恢复前磁盘空间不足，已中止以保护现有数据：需要约 ${formatSize(requiredBytes)} 可用空间，当前仅 ${formatSize(availableBytes)}。请释放空间或挂载更大的备份/静态文件磁盘后重试。`,
+    );
+  }
+}
+
+function estimateRestoreWorkingBytes(plan: RestoreFilePlan): number {
+  const manifest = readArchiveManifest(plan.archive);
+  if (!manifest) return 0;
+
+  const bytesByPath = new Map(manifest.directories.map((dir) => [dir.path, dir.totalBytes]));
+  const entries = [
+    ...plan.staticDirs.map((item) => item.archiveEntry),
+    ...plan.uploadDirs.map((item) => item.archiveEntry),
+    ...(plan.legacyMetadata ? [plan.legacyMetadata.archiveEntry] : []),
+  ];
+
+  return entries.reduce((sum, entry) => sum + (bytesByPath.get(entry) || 0), 0);
+}
+
+async function stageArchiveDirectory(plan: RestoreFilePlan, archiveEntry: string, index: number): Promise<{ root: string; stagedPath: string }> {
+  const root = join(plan.stagingRoot, `step_${index}`);
+  rmSync(root, { recursive: true, force: true });
+  mkdirSync(root, { recursive: true });
+  const ok = await extractArchiveEntryAsync(plan.archive, root, archiveEntry);
+  const stagedPath = join(root, archiveEntry);
+  if (!ok || !existsSync(stagedPath)) {
+    throw new Error(`备份包缺少目录: ${archiveEntry}`);
+  }
+  pruneIgnoredFiles(stagedPath);
+  return { root, stagedPath };
+}
+
+async function replaceArchiveDirectory(
+  plan: RestoreFilePlan,
+  archiveEntry: string,
+  destination: string,
+  stepIndex: number,
+): Promise<DirectoryReplacement> {
+  const staged = await stageArchiveDirectory(plan, archiveEntry, stepIndex);
+  try {
+    return replaceStagedDirectory(staged.stagedPath, destination);
+  } finally {
+    rmSync(staged.root, { recursive: true, force: true });
+  }
+}
+
+async function commitRestoreFilePlan(plan: RestoreFilePlan, job: RestoreJob): Promise<RestoreFileCommitResult> {
+  const replacements: DirectoryReplacement[] = [];
+  let restoredSourceFiles = 0;
+  let thumbnailCount = 0;
+
+  try {
+    const totalSteps = plan.staticDirs.length + plan.uploadDirs.length + (plan.legacyMetadata ? 1 : 0);
+    let step = 0;
+    const updateFileProgress = (message: string) => {
+      job.percent = Math.min(94, 75 + Math.round((step / Math.max(totalSteps, 1)) * 19));
+      job.message = message;
+      syncJob(job);
+    };
+
+    for (const item of plan.staticDirs) {
+      updateFileProgress(restoreMessageForStaticDir(item.dir));
+      addLog(job, `正在恢复 ${item.dir}/...`);
+      replacements.push(await replaceArchiveDirectory(plan, item.archiveEntry, item.destination, step));
+
+      if (item.dir === "thumbnails") {
+        thumbnailCount = countFilesRecursive(item.destination, (name) => name.endsWith(".png"));
+        addLog(job, `缩略图恢复完成: ${thumbnailCount} 张`);
+      } else if (item.dir === "originals") {
+        restoredSourceFiles = countFilesRecursive(item.destination, isStepFileName);
+        addLog(job, `原始文件恢复完成: ${restoredSourceFiles} 个`);
+      } else {
+        const count = countFilesRecursive(item.destination);
+        addLog(job, `${item.dir}/ 恢复完成${count > 0 ? ` (${count} 个文件)` : ""}`);
+      }
+      step += 1;
+    }
+
+    for (const item of plan.uploadDirs) {
+      updateFileProgress(`正在恢复 uploads/${item.name}/...`);
+      addLog(job, `正在恢复 uploads/${item.name}/...`);
+      replacements.push(await replaceArchiveDirectory(plan, item.archiveEntry, item.destination, step));
+      step += 1;
+    }
+    if (plan.uploadDirs.length > 0) {
+      addLog(job, `uploads/ 恢复完成 (${plan.uploadDirs.length} 个目录)`);
+    }
+
+    if (plan.legacyMetadata) {
+      updateFileProgress("正在恢复上传元数据...");
+      replacements.push(await replaceArchiveDirectory(plan, plan.legacyMetadata.archiveEntry, plan.legacyMetadata.destination, step));
+      const metadataCount = countFilesRecursive(plan.legacyMetadata.destination);
+      addLog(job, `上传元数据恢复完成 (${metadataCount} 个文件)`);
+    }
+
+    cleanupDirectoryBackups(replacements);
+    job.percent = 94;
+    syncJob(job);
+    return { restoredSourceFiles, thumbnailCount };
+  } catch (err: any) {
+    rollbackDirectoryReplacements(replacements, job);
+    throw new Error(`文件目录恢复失败，已回滚已替换目录: ${err?.message || err}`);
+  }
+}
+
+function replaceStagedDirectory(stagedPath: string, destination: string): DirectoryReplacement {
+  if (!existsSync(stagedPath)) {
+    throw new Error(`恢复源目录不存在: ${stagedPath}`);
+  }
+
+  mkdirSync(dirname(destination), { recursive: true });
+  const backup = existsSync(destination)
+    ? `${destination}.restore_backup_${Date.now()}_${Math.random().toString(36).slice(2)}`
+    : null;
+  if (backup) renameSync(destination, backup);
+
+  try {
+    moveDirectory(stagedPath, destination);
+    return { destination, backup };
+  } catch (err) {
+    rmSync(destination, { recursive: true, force: true });
+    if (backup && existsSync(backup)) renameSync(backup, destination);
+    throw err;
+  }
+}
+
+function moveDirectory(source: string, destination: string) {
+  try {
+    renameSync(source, destination);
+  } catch (err: any) {
+    if (err?.code !== "EXDEV") throw err;
+    copyDirectoryRecursive(source, destination);
+    rmSync(source, { recursive: true, force: true });
+  }
+}
+
+function copyDirectoryRecursive(source: string, destination: string) {
+  mkdirSync(destination, { recursive: true });
+  for (const entry of readdirSync(source, { withFileTypes: true })) {
+    const src = join(source, entry.name);
+    const dest = join(destination, entry.name);
+    if (entry.isDirectory()) {
+      copyDirectoryRecursive(src, dest);
+    } else if (entry.isFile()) {
+      copyFileSync(src, dest);
+    }
+  }
+}
+
+function rollbackDirectoryReplacements(replacements: DirectoryReplacement[], job: { logs?: string[] }) {
+  for (const replacement of [...replacements].reverse()) {
+    try {
+      rmSync(replacement.destination, { recursive: true, force: true });
+      if (replacement.backup && existsSync(replacement.backup)) {
+        renameSync(replacement.backup, replacement.destination);
+      }
+    } catch (err: any) {
+      addLog(job, `目录回滚失败 ${replacement.destination}: ${err?.message || err}`);
+    }
+  }
+}
+
+function cleanupDirectoryBackups(replacements: DirectoryReplacement[]) {
+  for (const replacement of replacements) {
+    if (replacement.backup) rmSync(replacement.backup, { recursive: true, force: true });
+  }
 }
 
 async function restoreArchiveDirectory(
@@ -1282,7 +2101,7 @@ async function restoreArchiveDirectory(
     // Only delete original after successful extraction
     rmSync(destination, { recursive: true, force: true });
     renameSync(stagedFolder, destination);
-    return predicate ? countFilesRecursive(destination, predicate) : 0;
+    return countFilesRecursive(destination, predicate);
   } catch (err) {
     // Extraction failed — clean up staging, keep original data intact
     rmSync(stagingRoot, { recursive: true, force: true });
@@ -1293,24 +2112,16 @@ async function restoreArchiveDirectory(
 }
 
 function extractArchiveEntryAsync(archive: string, destination: string, entry: string): Promise<boolean> {
-  return new Promise((resolve, reject) => {
-    const proc = spawn("tar", ["xzf", archive, "-C", destination, entry], { timeout: ARCHIVE_EXTRACT_TIMEOUT_MS });
-    let stderr = "";
-    proc.stderr?.on("data", (d: Buffer) => { stderr += d.toString(); });
-    proc.on("error", reject);
-    proc.on("close", (code) => {
-      if (code === 0) {
-        resolve(true);
-        return;
-      }
-      const err = new Error(stderr || `tar failed with code ${code}`);
-      if (isArchiveEntryMissing(err)) {
-        resolve(false);
-        return;
-      }
-      reject(new Error(`提取备份内容失败: ${stderr || `tar failed with code ${code}`}`));
+  try {
+    execFileSync("tar", ["xzf", archive, "-C", destination, entry], {
+      stdio: "pipe",
+      timeout: ARCHIVE_EXTRACT_TIMEOUT_MS,
     });
-  });
+    return Promise.resolve(true);
+  } catch (err) {
+    if (isArchiveEntryMissing(err)) return Promise.resolve(false);
+    return Promise.reject(new Error(`提取备份内容失败: ${extractCommandError(err)}`));
+  }
 }
 
 function pruneIgnoredFiles(dir: string) {
@@ -1325,7 +2136,7 @@ function pruneIgnoredFiles(dir: string) {
   }
 }
 
-function countFilesRecursive(dir: string, predicate: (name: string) => boolean): number {
+function countFilesRecursive(dir: string, predicate?: (name: string) => boolean): number {
   if (!existsSync(dir)) return 0;
 
   let total = 0;
@@ -1336,9 +2147,131 @@ function countFilesRecursive(dir: string, predicate: (name: string) => boolean):
       total += countFilesRecursive(fullPath, predicate);
       continue;
     }
-    if (predicate(entry.name)) total++;
+    if (!predicate || predicate(entry.name)) total++;
   }
   return total;
+}
+
+function discoverStaticBackupDirs(staticDir: string): string[] {
+  return discoverTopLevelDirs(staticDir, (name) => {
+    if (STATIC_BACKUP_EXCLUDE_DIRS.has(name)) return false;
+    if (name.startsWith(".")) return false;
+    if (name.startsWith("_")) return false;
+    return true;
+  });
+}
+
+function discoverUploadBackupDirs(uploadDir: string): string[] {
+  return discoverTopLevelDirs(uploadDir, (name) => {
+    if (UPLOAD_BACKUP_EXCLUDE_DIRS.has(name)) return false;
+    if (name.startsWith(".") && name !== ".metadata") return false;
+    if (name.startsWith("_")) return false;
+    return true;
+  });
+}
+
+function discoverTopLevelDirs(root: string, include: (name: string) => boolean): string[] {
+  if (!existsSync(root)) return [];
+  return readdirSync(root, { withFileTypes: true })
+    .filter((entry) => entry.isDirectory() && include(entry.name))
+    .map((entry) => entry.name)
+    .sort((a, b) => a.localeCompare(b));
+}
+
+function getRestorableStaticDirs(archive: string): string[] {
+  const manifest = readArchiveManifest(archive);
+  const dirs = manifest
+    ? manifest.directories.map((dir) => dir.path)
+    : Array.from(new Set(listArchiveEntries(archive).map((entry) => entry.split("/")[0]).filter(Boolean)));
+
+  const staticDirs = dirs
+    .filter((dir) => !dir.startsWith(`${BACKUP_DB_ENTRY_DIR}/`) && dir !== BACKUP_DB_ENTRY_DIR)
+    .filter((dir) => !STATIC_BACKUP_EXCLUDE_DIRS.has(dir))
+    .filter((dir) => !dir.startsWith(".") && !dir.startsWith("_"));
+
+  const priority = RESTORE_PRIORITY_DIRS.filter((dir) => staticDirs.includes(dir));
+  const rest = staticDirs.filter((dir) => !priority.includes(dir)).sort((a, b) => a.localeCompare(b));
+  return [...priority, ...rest];
+}
+
+function restoreMessageForStaticDir(dir: string): string {
+  if (dir === "models") return "正在恢复转换模型文件...";
+  if (dir === "thumbnails") return "正在恢复缩略图...";
+  if (dir === "originals") return "正在恢复 STEP 原始文件...";
+  if (dir === "drawings") return "正在恢复产品图纸...";
+  return `正在恢复 ${dir}/...`;
+}
+
+async function restoreUploadDirectoriesFromArchive(archive: string, staticDir: string): Promise<number> {
+  if (!archiveContainsEntry(archive, BACKUP_UPLOADS_ENTRY)) return 0;
+
+  const uploadDir = join(process.cwd(), config.uploadDir);
+  const stagingRoot = join(staticDir, `.restore_uploads_${Date.now()}`);
+  const extractedUploads = join(stagingRoot, BACKUP_UPLOADS_ENTRY);
+  const replacedBackups: string[] = [];
+  let restored = 0;
+
+  rmSync(stagingRoot, { recursive: true, force: true });
+  mkdirSync(stagingRoot, { recursive: true });
+  try {
+    await extractArchiveEntryAsync(archive, stagingRoot, BACKUP_UPLOADS_ENTRY);
+    if (!existsSync(extractedUploads)) return 0;
+    for (const entry of readdirSync(extractedUploads, { withFileTypes: true })) {
+      if (!entry.isDirectory()) continue;
+      if (UPLOAD_BACKUP_EXCLUDE_DIRS.has(entry.name)) continue;
+      const source = join(extractedUploads, entry.name);
+      const destination = join(uploadDir, entry.name);
+      const backup = join(uploadDir, `.restore_backup_${entry.name}_${Date.now()}`);
+      rmSync(backup, { recursive: true, force: true });
+      if (existsSync(destination)) renameSync(destination, backup);
+      try {
+        renameSync(source, destination);
+        rmSync(backup, { recursive: true, force: true });
+        restored += 1;
+      } catch (err) {
+        if (existsSync(backup) && !existsSync(destination)) {
+          try { renameSync(backup, destination); } catch {}
+        }
+        throw err;
+      } finally {
+        replacedBackups.push(backup);
+      }
+    }
+    return restored;
+  } finally {
+    for (const backup of replacedBackups) rmSync(backup, { recursive: true, force: true });
+    rmSync(stagingRoot, { recursive: true, force: true });
+  }
+}
+
+async function restoreLegacyUploadMetadataFromArchive(archive: string, staticDir: string): Promise<number> {
+  if (!archiveContainsEntry(archive, BACKUP_UPLOAD_METADATA_ENTRY)) return 0;
+
+  const uploadDir = join(process.cwd(), config.uploadDir);
+  const metadataDest = join(uploadDir, ".metadata");
+  const stagingMeta = join(staticDir, `.restore_metadata_${Date.now()}`);
+  const extractedMeta = join(stagingMeta, "_backup_db", "metadata");
+  const metadataBackup = join(uploadDir, `.metadata_backup_${Date.now()}`);
+  try {
+    mkdirSync(stagingMeta, { recursive: true });
+    await extractArchiveEntryAsync(archive, stagingMeta, BACKUP_UPLOAD_METADATA_ENTRY);
+    if (!existsSync(extractedMeta)) return 0;
+    rmSync(metadataBackup, { recursive: true, force: true });
+    if (existsSync(metadataDest)) renameSync(metadataDest, metadataBackup);
+    try {
+      renameSync(extractedMeta, metadataDest);
+    } catch (replaceErr) {
+      if (existsSync(metadataBackup) && !existsSync(metadataDest)) {
+        try { renameSync(metadataBackup, metadataDest); } catch {}
+      }
+      throw replaceErr;
+    }
+    rmSync(metadataBackup, { recursive: true, force: true });
+    return countFilesRecursive(metadataDest);
+  } finally {
+    rmSync(metadataBackup, { recursive: true, force: true });
+    rmSync(stagingMeta, { recursive: true, force: true });
+  }
 }
 
 function extractCommandError(err: unknown): string {
@@ -1438,6 +2371,299 @@ function scheduleBackupRecordNormalization(record: BackupRecord, archive: string
       pendingRecordNormalizations.delete(record.id);
     }
   });
+}
+
+interface BackupPolicySettings {
+  backup_auto_enabled: boolean;
+  backup_schedule_time: string;
+  backup_retention_count: number;
+  backup_mirror_enabled: boolean;
+  backup_mirror_dir: string;
+  backup_last_mirror_status: string;
+  backup_last_mirror_message: string;
+  backup_last_mirror_at: string;
+  backup_last_auto_date: string;
+  backup_last_auto_status: string;
+  backup_last_auto_message: string;
+  backup_last_auto_job_id: string;
+  backup_last_auto_at: string;
+}
+
+let backupSchedulerStarted = false;
+
+export function startBackupScheduler() {
+  if (backupSchedulerStarted) return;
+  backupSchedulerStarted = true;
+  const interval = setInterval(() => {
+    runBackupSchedulerTick().catch((err) => {
+      console.warn(`[BackupScheduler] ${err?.message || err}`);
+    });
+  }, 60_000);
+  interval.unref?.();
+  runBackupSchedulerTick().catch(() => {});
+}
+
+async function runBackupSchedulerTick() {
+  const settings = await getBackupPolicySettings();
+  if (!settings.backup_auto_enabled) return;
+  if (!isScheduleDue(settings.backup_schedule_time)) return;
+  if (settings.backup_last_auto_date === localDateKey()) return;
+
+  try {
+    const jobId = startScheduledBackupJob();
+    await updateBackupPolicySettings({
+      backup_last_auto_status: "running",
+      backup_last_auto_message: "自动备份正在执行",
+      backup_last_auto_job_id: jobId,
+      backup_last_auto_at: new Date().toISOString(),
+    });
+    console.log(`[BackupScheduler] Started scheduled backup: ${jobId}`);
+  } catch (err: any) {
+    await updateBackupPolicySettings({
+      backup_last_auto_status: "skipped",
+      backup_last_auto_message: err?.message || "自动备份跳过",
+      backup_last_auto_at: new Date().toISOString(),
+    });
+    console.warn(`[BackupScheduler] Skipped: ${err?.message || err}`);
+  }
+}
+
+async function applyBackupRetentionPolicy(job: { logs?: string[] }) {
+  const settings = await getBackupPolicySettings();
+  const keep = settings.backup_retention_count;
+  if (!Number.isFinite(keep) || keep <= 0) return;
+
+  const backups = listBackups();
+  const removable = backups.slice(keep);
+  for (const backup of removable) {
+    if (deleteBackup(backup.id)) {
+      addLog(job, `已按保留策略清理旧备份: ${backup.name || backup.id}`);
+    }
+  }
+
+  const mirrorDir = resolveMirrorBackupDir(settings.backup_mirror_dir);
+  if (settings.backup_mirror_enabled && mirrorDir) {
+    cleanupMirrorBackups(mirrorDir, keep, job);
+  }
+}
+
+async function mirrorBackupIfEnabled(record: BackupRecord, job: { logs?: string[] }) {
+  const settings = await getBackupPolicySettings();
+  if (!settings.backup_mirror_enabled) return;
+
+  const mirrorDir = resolveMirrorBackupDir(settings.backup_mirror_dir);
+  if (!mirrorDir) {
+    const message = "镜像备份目录无效，请配置一个绝对路径，且不能指向当前备份目录";
+    addLog(job, message);
+    await updateBackupPolicySettings({
+      backup_last_mirror_status: "error",
+      backup_last_mirror_message: message,
+      backup_last_mirror_at: new Date().toISOString(),
+    });
+    return;
+  }
+
+  try {
+    mkdirSync(mirrorDir, { recursive: true });
+    const sourceArchive = activeArchivePath(record.id);
+    const sourceMeta = activeMetaPath(record.id);
+    const targetArchive = join(mirrorDir, `${record.id}.tar.gz`);
+    const targetMeta = join(mirrorDir, `${record.id}.json`);
+    const tmpArchive = `${targetArchive}.tmp`;
+    const tmpMeta = `${targetMeta}.tmp`;
+
+    addLog(job, `正在复制备份到外部镜像目录: ${mirrorDir}`);
+    copyFileSync(sourceArchive, tmpArchive);
+    if (record.archiveSha256) {
+      const copiedSha = await sha256File(tmpArchive);
+      if (copiedSha !== record.archiveSha256) {
+        throw new Error("镜像备份 SHA256 校验失败");
+      }
+    }
+    await validateBackupArchive(tmpArchive, { requireManifest: true });
+    renameSync(tmpArchive, targetArchive);
+
+    copyFileSync(sourceMeta, tmpMeta);
+    renameSync(tmpMeta, targetMeta);
+
+    const message = `镜像备份完成: ${mirrorDir}`;
+    addLog(job, message);
+    await updateBackupPolicySettings({
+      backup_last_mirror_status: "success",
+      backup_last_mirror_message: message,
+      backup_last_mirror_at: new Date().toISOString(),
+    });
+  } catch (err: any) {
+    const message = `镜像备份失败: ${err?.message || err}`;
+    addLog(job, message);
+    await updateBackupPolicySettings({
+      backup_last_mirror_status: "error",
+      backup_last_mirror_message: message,
+      backup_last_mirror_at: new Date().toISOString(),
+    });
+  }
+}
+
+function resolveMirrorBackupDir(value: string): string | null {
+  const raw = value.trim();
+  if (!raw || !isAbsolute(raw)) return null;
+  const target = resolve(raw);
+  const forbidden = [resolve(ACTIVE_BACKUP_DIR), resolve(LEGACY_BACKUP_DIR), resolve(BACKUP_WORK_DIR)];
+  if (forbidden.some((dir) => target === dir || target.startsWith(`${dir}${sep}`))) return null;
+  return target;
+}
+
+function cleanupMirrorBackups(mirrorDir: string, keep: number, job: { logs?: string[] }) {
+  try {
+    if (!existsSync(mirrorDir)) return;
+    const records = readdirSync(mirrorDir)
+      .filter((file) => file.endsWith(".json"))
+      .map((file) => {
+        try {
+          const record = JSON.parse(readFileSync(join(mirrorDir, file), "utf-8")) as BackupRecord;
+          return record.id ? record : null;
+        } catch {
+          return null;
+        }
+      })
+      .filter((record): record is BackupRecord => Boolean(record))
+      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+
+    for (const record of records.slice(keep)) {
+      rmSync(join(mirrorDir, `${record.id}.json`), { force: true });
+      rmSync(join(mirrorDir, `${record.id}.tar.gz`), { force: true });
+      addLog(job, `已清理外部镜像旧备份: ${record.name || record.id}`);
+    }
+  } catch (err: any) {
+    addLog(job, `外部镜像保留策略清理失败: ${err?.message || err}`);
+  }
+}
+
+function buildBackupHealthMessage(base: string, settings: BackupPolicySettings): string {
+  if (!settings.backup_mirror_enabled) return base;
+  if (!settings.backup_mirror_dir) return `${base}；外部镜像已开启但未配置目录`;
+  if (settings.backup_last_mirror_status === "error") return `${base}；${settings.backup_last_mirror_message || "外部镜像最近失败"}`;
+  if (settings.backup_last_mirror_status === "success") return `${base}；外部镜像正常`;
+  return `${base}；外部镜像等待首次执行`;
+}
+
+function estimateCurrentBackupBytes(): number {
+  const staticDir = join(process.cwd(), config.staticDir);
+  const uploadDir = join(process.cwd(), config.uploadDir);
+  let total = 0;
+  for (const dir of discoverStaticBackupDirs(staticDir)) {
+    total += countFilesAndBytesRecursive(join(staticDir, dir)).totalBytes;
+  }
+  for (const dir of discoverUploadBackupDirs(uploadDir)) {
+    total += countFilesAndBytesRecursive(join(uploadDir, dir)).totalBytes;
+  }
+  // Keep a floor so an empty development instance still performs a useful space check.
+  return Math.max(total, 1024 * 1024 * 1024);
+}
+
+function checkWritableDirectory(dir: string, label: string): BackupPolicyCheckItem {
+  try {
+    mkdirSync(dir, { recursive: true });
+    const probe = join(dir, `.backup_write_test_${process.pid}_${Date.now()}`);
+    writeFileSync(probe, "ok");
+    rmSync(probe, { force: true });
+    return { key: `write:${dir}`, label, status: "ok", message: `${dir} 可写` };
+  } catch (err: any) {
+    return { key: `write:${dir}`, label, status: "error", message: `${dir} 不可写: ${err?.message || err}` };
+  }
+}
+
+function checkDiskSpace(dir: string, requiredBytes: number, label: string): BackupPolicyCheckItem {
+  try {
+    mkdirSync(dir, { recursive: true });
+    const availableBytes = getAvailableBytes(dir);
+    if (availableBytes === null) {
+      return { key: `space:${dir}`, label, status: "warning", message: `无法读取 ${dir} 的剩余空间` };
+    }
+    const status = availableBytes >= requiredBytes ? "ok" : "error";
+    return {
+      key: `space:${dir}`,
+      label,
+      status,
+      message: `${dir} 可用 ${formatSize(availableBytes)}，预计至少需要 ${formatSize(requiredBytes)}`,
+    };
+  } catch (err: any) {
+    return { key: `space:${dir}`, label, status: "error", message: `检查磁盘空间失败: ${err?.message || err}` };
+  }
+}
+
+function getAvailableBytes(dir: string): number | null {
+  try {
+    const raw = execFileSync("df", ["-Pk", dir], { encoding: "utf-8", timeout: 10_000 });
+    const lines = raw.trim().split(/\r?\n/);
+    const parts = lines[1]?.trim().split(/\s+/);
+    const availableKb = Number(parts?.[3]);
+    if (!Number.isFinite(availableKb)) return null;
+    return availableKb * 1024;
+  } catch {
+    return null;
+  }
+}
+
+async function getBackupPolicySettings(): Promise<BackupPolicySettings> {
+  const { getAllSettings } = await import("./settings.js");
+  const settings = await getAllSettings();
+  return {
+    backup_auto_enabled: Boolean(settings.backup_auto_enabled),
+    backup_schedule_time: normalizeScheduleTime(settings.backup_schedule_time),
+    backup_retention_count: clampRetentionCount(settings.backup_retention_count),
+    backup_mirror_enabled: Boolean(settings.backup_mirror_enabled),
+    backup_mirror_dir: typeof settings.backup_mirror_dir === "string" ? settings.backup_mirror_dir.trim() : "",
+    backup_last_mirror_status: typeof settings.backup_last_mirror_status === "string" ? settings.backup_last_mirror_status : "",
+    backup_last_mirror_message: typeof settings.backup_last_mirror_message === "string" ? settings.backup_last_mirror_message : "",
+    backup_last_mirror_at: typeof settings.backup_last_mirror_at === "string" ? settings.backup_last_mirror_at : "",
+    backup_last_auto_date: typeof settings.backup_last_auto_date === "string" ? settings.backup_last_auto_date : "",
+    backup_last_auto_status: typeof settings.backup_last_auto_status === "string" ? settings.backup_last_auto_status : "",
+    backup_last_auto_message: typeof settings.backup_last_auto_message === "string" ? settings.backup_last_auto_message : "",
+    backup_last_auto_job_id: typeof settings.backup_last_auto_job_id === "string" ? settings.backup_last_auto_job_id : "",
+    backup_last_auto_at: typeof settings.backup_last_auto_at === "string" ? settings.backup_last_auto_at : "",
+  };
+}
+
+async function updateBackupPolicySettings(settings: Partial<BackupPolicySettings>) {
+  const { setSettings } = await import("./settings.js");
+  await setSettings(settings as Record<string, unknown>);
+}
+
+function normalizeScheduleTime(value: unknown): string {
+  const raw = typeof value === "string" ? value.trim() : "";
+  const match = raw.match(/^([01]?\d|2[0-3]):([0-5]\d)$/);
+  if (!match) return "03:00";
+  return `${match[1].padStart(2, "0")}:${match[2]}`;
+}
+
+function clampRetentionCount(value: unknown): number {
+  const parsed = typeof value === "number" ? value : Number(value);
+  if (!Number.isFinite(parsed)) return 7;
+  return Math.min(60, Math.max(1, Math.floor(parsed)));
+}
+
+function isScheduleDue(scheduleTime: string): boolean {
+  const now = new Date();
+  const current = `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
+  return current === scheduleTime;
+}
+
+function localDateKey(date = new Date()): string {
+  const yyyy = date.getFullYear();
+  const mm = String(date.getMonth() + 1).padStart(2, "0");
+  const dd = String(date.getDate()).padStart(2, "0");
+  return `${yyyy}-${mm}-${dd}`;
+}
+
+function nextScheduledRunIso(scheduleTime: string): string {
+  const [hourRaw, minuteRaw] = normalizeScheduleTime(scheduleTime).split(":");
+  const next = new Date();
+  next.setHours(Number(hourRaw), Number(minuteRaw), 0, 0);
+  if (next.getTime() <= Date.now()) {
+    next.setDate(next.getDate() + 1);
+  }
+  return next.toISOString();
 }
 
 function cleanupPartialArchives(dir: string) {

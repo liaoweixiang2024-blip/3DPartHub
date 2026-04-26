@@ -5,6 +5,11 @@ import tailwindcss from '@tailwindcss/vite'
 export default defineConfig({
   plugins: [react(), tailwindcss()],
   assetsInclude: ['**/*.wasm'],
+  build: {
+    // The 3D viewer intentionally keeps three.js in a lazy route chunk.
+    // It is large by nature, but no longer affects the initial app bundle.
+    chunkSizeWarningLimit: 900,
+  },
   optimizeDeps: {
     exclude: ['occt-import-js'],
   },

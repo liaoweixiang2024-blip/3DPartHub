@@ -2,6 +2,7 @@ import { useState } from "react";
 import Icon from "./Icon";
 import { createShare, type CreateShareParams } from "../../api/shares";
 import { getPublicSettingsSnapshot } from "../../lib/publicSettings";
+import { copyText } from "../../lib/clipboard";
 
 interface ShareDialogProps {
   open: boolean;
@@ -66,19 +67,8 @@ export default function ShareDialog({ open, onClose, modelId, modelName }: Share
     }
   }
 
-  function handleCopy() {
-    if (navigator.clipboard?.writeText) {
-      navigator.clipboard.writeText(shareUrl);
-    } else {
-      const ta = document.createElement("textarea");
-      ta.value = shareUrl;
-      ta.style.position = "fixed";
-      ta.style.left = "-9999px";
-      document.body.appendChild(ta);
-      ta.select();
-      document.execCommand("copy");
-      document.body.removeChild(ta);
-    }
+  async function handleCopy() {
+    await copyText(shareUrl);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   }
@@ -106,28 +96,34 @@ export default function ShareDialog({ open, onClose, modelId, modelName }: Share
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4" onClick={onClose}>
-      <div className="bg-surface-container-low rounded-xl border border-outline-variant/20 w-full max-w-md shadow-2xl" onClick={e => e.stopPropagation()}>
-        <div className="flex items-center justify-between px-5 py-4 border-b border-outline-variant/10">
+    <div
+      className="fixed inset-0 z-[120] flex items-end sm:items-center justify-center bg-black/50 backdrop-blur-sm p-3 pb-[calc(0.75rem+env(safe-area-inset-bottom,0px))] sm:p-4"
+      onClick={onClose}
+    >
+      <div
+        className="bg-surface-container-low rounded-t-xl sm:rounded-xl border border-outline-variant/20 w-full max-w-md shadow-2xl max-h-[calc(100dvh-1.5rem-env(safe-area-inset-bottom,0px))] flex flex-col overflow-hidden"
+        onClick={e => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between px-5 py-4 border-b border-outline-variant/10 shrink-0">
           <h3 className="text-base font-bold text-on-surface">分享模型</h3>
           <button onClick={onClose} className="text-on-surface-variant hover:text-on-surface transition-colors">
             <Icon name="close" size={20} />
           </button>
         </div>
 
-        <div className="px-5 py-4 space-y-4">
-          <p className="text-sm text-on-surface-variant">分享「{modelName}」给其他人查看或下载</p>
+        <div className="px-5 py-4 space-y-4 overflow-y-auto scrollbar-hidden">
+          <p className="text-sm text-on-surface-variant break-words">分享「{modelName}」给其他人查看或下载</p>
 
           {shareUrl ? (
             <div className="space-y-3">
               <div className="bg-primary/10 border border-primary/20 rounded-lg p-3">
                 <p className="text-xs text-primary font-medium mb-2">分享链接已创建</p>
-                <div className="flex items-center gap-2">
+                <div className="flex flex-col sm:flex-row sm:items-center gap-2">
                   <input
                     type="text"
                     readOnly
                     value={shareUrl}
-                    className="flex-1 bg-surface-container-lowest text-on-surface text-sm rounded px-3 py-2 border border-outline-variant/20 font-mono truncate"
+                    className="w-full sm:flex-1 bg-surface-container-lowest text-on-surface text-sm rounded px-3 py-2 border border-outline-variant/20 font-mono truncate"
                   />
                   <button
                     onClick={handleCopy}
@@ -180,7 +176,7 @@ export default function ShareDialog({ open, onClose, modelId, modelName }: Share
               {allowDownload && (
                 <div>
                   <label className="block text-sm text-on-surface mb-1">下载次数限制</label>
-                  <div className="flex items-center gap-2">
+                  <div className="flex flex-wrap items-center gap-2">
                     <input
                       type="number"
                       min={0}
@@ -226,7 +222,7 @@ export default function ShareDialog({ open, onClose, modelId, modelName }: Share
               {canCustomExpiry && (
                 <div>
                   <label className="block text-sm text-on-surface mb-1">有效期{maxExpireDays > 0 ? `（最长 ${maxExpireDays} 天）` : ""}</label>
-                  <div className="flex gap-2">
+                  <div className="flex flex-wrap gap-2">
                     {expiryOptions.map(opt => (
                       <button
                         key={opt.value}

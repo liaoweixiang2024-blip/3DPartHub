@@ -10,6 +10,7 @@ import Icon from "../components/shared/Icon";
 import client from "../api/client";
 import { useToast } from "../components/shared/Toast";
 import { SkeletonList } from "../components/shared/Skeleton";
+import { copyText } from "../lib/clipboard";
 
 interface ShareItem {
   id: string;
@@ -82,6 +83,15 @@ function Content() {
     }
   }
 
+  async function handleCopy(token: string) {
+    try {
+      await copyText(`${window.location.origin}/share/${token}`);
+      toast("链接已复制", "success");
+    } catch {
+      toast("复制失败，请手动复制链接", "error");
+    }
+  }
+
   function isExpired(expiresAt: string | null) {
     if (!expiresAt) return false;
     return new Date(expiresAt) < new Date();
@@ -144,10 +154,10 @@ function Content() {
           const expired = isExpired(s.expiresAt);
           return (
             <div key={s.id} className="bg-surface-container-low rounded-md border border-outline-variant/10 p-3">
-              <div className="flex items-start justify-between gap-3">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2 flex-wrap">
-                    <span className="font-medium text-sm text-on-surface truncate max-w-[200px]">{s.modelName}</span>
+                    <span className="font-medium text-sm text-on-surface break-words sm:truncate sm:max-w-[200px]">{s.modelName}</span>
                     {expired ? (
                       <span className="text-[10px] px-1.5 py-0.5 rounded-sm font-medium bg-on-surface-variant/10 text-on-surface-variant">已过期</span>
                     ) : s.expiresAt ? (
@@ -167,9 +177,9 @@ function Content() {
                     <span>{new Date(s.createdAt).toLocaleDateString("zh-CN")}</span>
                   </div>
                 </div>
-                <div className="flex items-center gap-1 shrink-0">
+                <div className="flex items-center justify-end gap-1 shrink-0">
                   <button
-                    onClick={() => { navigator.clipboard.writeText(`${window.location.origin}/share/${s.token}`); toast("链接已复制", "success"); }}
+                    onClick={() => handleCopy(s.token)}
                     className="px-2 py-1 text-[10px] text-primary-container hover:bg-primary-container/10 rounded transition-colors"
                     title="复制链接"
                   >

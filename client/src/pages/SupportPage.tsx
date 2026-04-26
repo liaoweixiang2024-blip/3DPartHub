@@ -10,6 +10,9 @@ import MobileNavDrawer from '../components/shared/MobileNavDrawer';
 import Icon from "../components/shared/Icon";
 import { useToast } from "../components/shared/Toast";
 import client from "../api/client";
+import useSWR from "swr";
+import { getCachedPublicSettings } from "../lib/publicSettings";
+import { getBusinessConfig } from "../lib/businessConfig";
 
 /* ── Context passed via navigate(state) ── */
 interface SupportContext {
@@ -52,11 +55,11 @@ function ContextCard({ ctx }: { ctx: SupportContext }) {
     <div className="flex items-start gap-2.5 px-3.5 py-2.5 rounded-lg bg-primary-container/8 border border-primary-container/15">
       <Icon name="link" size={14} className="text-primary-container shrink-0 mt-0.5" />
       <div className="min-w-0">
-        <p className="text-xs font-medium text-primary-container">{label}：{name}</p>
+        <p className="text-xs font-medium text-primary-container break-all">{label}：{name}</p>
         {specEntries.length > 0 && (
           <div className="flex flex-wrap gap-x-3 gap-y-0.5 mt-1">
             {specEntries.slice(0, 6).map(([k, v]) => (
-              <span key={k} className="text-[11px] text-on-surface-variant">{k}: {v}</span>
+              <span key={k} className="text-[11px] text-on-surface-variant break-words">{k}: {v}</span>
             ))}
             {specEntries.length > 6 && <span className="text-[11px] text-on-surface-variant">+{specEntries.length - 6} 项</span>}
           </div>
@@ -66,20 +69,6 @@ function ContextCard({ ctx }: { ctx: SupportContext }) {
   );
 }
 
-const CLASSIFICATIONS = [
-  { value: 'dimension', label: '尺寸修改', icon: 'straighten', desc: '调整模型尺寸参数' },
-  { value: 'material', label: '材料变更', icon: 'layers', desc: '更换材料属性' },
-  { value: 'novel', label: '新零件设计', icon: 'add', desc: '全新零件定制' },
-  { value: 'topology', label: '错误报告', icon: 'error', desc: '报告拓扑问题' },
-];
-
-const STEPS = [
-  { icon: 'assignment_add', title: '提交需求', desc: '描述您的定制要求' },
-  { icon: 'build', title: '工程师评估', desc: '技术团队评估方案' },
-  { icon: 'precision_manufacturing', title: '模型修改', desc: '执行定制化修改' },
-  { icon: 'check_circle', title: '交付验收', desc: '确认最终模型' },
-];
-
 function DesktopContent() {
   const { basePart: initBasePart, ctx } = useContextState();
   const [formData, setFormData] = useState({ basePart: initBasePart, classification: '', description: '' });
@@ -87,6 +76,8 @@ function DesktopContent() {
   const [submitting, setSubmitting] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
+  const { data: settings } = useSWR("publicSettings", () => getCachedPublicSettings());
+  const business = getBusinessConfig(settings);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     setFormData((prev) => ({ ...prev, [e.target.name]: e.target.value }));
@@ -124,7 +115,7 @@ function DesktopContent() {
 
       {/* Process Steps */}
       <div className="grid grid-cols-4 gap-4 mb-10">
-        {STEPS.map((step, i) => (
+        {business.supportProcessSteps.map((step, i) => (
           <div key={step.title} className="flex items-center gap-4 bg-surface-container-low rounded-lg p-4 border border-outline-variant/10">
             <div className="w-10 h-10 rounded-full bg-primary-container/15 flex items-center justify-center shrink-0">
               <span className="text-xs font-bold text-primary-container">{i + 1}</span>
@@ -173,8 +164,8 @@ function DesktopContent() {
                   {/* Classification cards */}
                   <div>
                     <label className="block text-xs uppercase tracking-wider text-on-surface-variant mb-3">请求分类</label>
-                    <div className="grid grid-cols-2 gap-3">
-                      {CLASSIFICATIONS.map((c) => (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      {business.ticketClassifications.map((c) => (
                         <button
                           key={c.value}
                           onClick={() => setFormData(prev => ({ ...prev, classification: c.value }))}
@@ -188,7 +179,7 @@ function DesktopContent() {
                             <Icon name={c.icon} size={16} className={formData.classification === c.value ? 'text-primary-container' : 'text-on-surface-variant'} />
                             <span className={`text-sm font-medium ${formData.classification === c.value ? 'text-primary-container' : 'text-on-surface'}`}>{c.label}</span>
                           </div>
-                          <p className="text-[11px] text-on-surface-variant ml-7">{c.desc}</p>
+                          <p className="text-[11px] text-on-surface-variant sm:ml-7">{c.desc}</p>
                         </button>
                       ))}
                     </div>
@@ -237,7 +228,7 @@ function DesktopContent() {
                     />
                   </div>
 
-                  <div className="flex items-center justify-between pt-2">
+                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 pt-2">
                     <Link to="/my-tickets" className="text-sm text-on-surface-variant hover:text-on-surface flex items-center gap-1.5">
                       <Icon name="schedule" size={14} />
                       查看历史工单
@@ -245,7 +236,7 @@ function DesktopContent() {
                     <button
                       onClick={handleSubmit}
                       disabled={submitting || !formData.classification || !formData.description.trim()}
-                      className="flex items-center gap-2 px-8 py-3 bg-primary-container text-on-primary rounded-sm text-sm font-medium hover:opacity-90 transition-all active:scale-95 disabled:opacity-50"
+                      className="flex items-center justify-center gap-2 px-8 py-3 bg-primary-container text-on-primary rounded-sm text-sm font-medium hover:opacity-90 transition-all active:scale-95 disabled:opacity-50"
                     >
                       <Icon name="send" size={16} />
                       {submitting ? '提交中...' : '提交工单'}
@@ -322,6 +313,8 @@ function MobileContent() {
   const [submitting, setSubmitting] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
+  const { data: settings } = useSWR("publicSettings", () => getCachedPublicSettings());
+  const business = getBusinessConfig(settings);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     setFormData((prev) => ({ ...prev, [e.target.name]: e.target.value }));
@@ -368,8 +361,8 @@ function MobileContent() {
       ) : (
         <>
           {/* Classification */}
-          <div className="grid grid-cols-2 gap-2">
-            {CLASSIFICATIONS.map((c) => (
+          <div className="grid grid-cols-1 min-[380px]:grid-cols-2 gap-2">
+            {business.ticketClassifications.map((c) => (
               <button
                 key={c.value}
                 onClick={() => setFormData(prev => ({ ...prev, classification: c.value }))}
@@ -379,11 +372,11 @@ function MobileContent() {
                     : 'border-outline-variant/15 bg-surface-container-high'
                 }`}
               >
-                <div className="flex items-center gap-2 mb-0.5">
+                <div className="flex items-center gap-2 mb-0.5 min-w-0">
                   <Icon name={c.icon} size={14} className={formData.classification === c.value ? 'text-primary-container' : 'text-on-surface-variant'} />
-                  <span className={`text-xs font-medium ${formData.classification === c.value ? 'text-primary-container' : 'text-on-surface'}`}>{c.label}</span>
+                  <span className={`text-xs font-medium break-words ${formData.classification === c.value ? 'text-primary-container' : 'text-on-surface'}`}>{c.label}</span>
                 </div>
-                <p className="text-[10px] text-on-surface-variant ml-6">{c.desc}</p>
+                <p className="text-[10px] text-on-surface-variant min-[380px]:ml-6 break-words">{c.desc}</p>
               </button>
             ))}
           </div>

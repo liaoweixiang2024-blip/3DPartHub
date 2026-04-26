@@ -52,12 +52,12 @@ export default function ForceChangePassword() {
       <motion.div
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
-        className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm"
+        className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center bg-black/60 backdrop-blur-sm sm:p-4"
       >
         <motion.div
           initial={{ scale: 0.95, opacity: 0 }}
           animate={{ scale: 1, opacity: 1 }}
-          className="bg-surface-container-low rounded-lg shadow-2xl border border-outline-variant/20 w-full max-w-md mx-4 p-8"
+          className="bg-surface-container-low rounded-t-2xl sm:rounded-lg shadow-2xl border border-outline-variant/20 w-full max-w-md p-5 sm:p-8 max-h-[calc(100dvh-1rem)] overflow-y-auto"
         >
           <div className="flex flex-col items-center mb-6">
             <div className="w-14 h-14 rounded-full bg-primary-container/20 flex items-center justify-center mb-4">
@@ -97,7 +97,7 @@ export default function ForceChangePassword() {
                 placeholder="再次输入新密码"
               />
             </div>
-            {error && <p className="text-red-400 text-xs">{error}</p>}
+            {error && <p className="text-red-400 text-xs break-words">{error}</p>}
             <button
               type="submit"
               disabled={loading}

@@ -12,6 +12,7 @@ import { ModelViewer, type ViewMode, type CameraPreset } from "../components/3d"
 import LoadingOverlay from "../components/3d/LoadingOverlay";
 import { useFavoriteStore, useAuthStore, getAccessToken } from "../stores";
 import ModelThumbnail from "../components/shared/ModelThumbnail";
+import SafeImage from "../components/shared/SafeImage";
 import { useModel } from "../hooks/useModels";
 import { modelApi, type ServerModelListItem } from "../api/models";
 import { categoriesApi, type CategoryItem } from "../api/categories";
@@ -319,11 +320,12 @@ function ViewerPanel({
 
       {watermark.show && watermark.image && (
         <div className="absolute inset-0 pointer-events-none flex items-center justify-center select-none">
-          <img
+          <SafeImage
             src={watermark.image}
             alt=""
             className="opacity-[0.04] select-none"
             style={{ maxWidth: "40%", maxHeight: "40%", objectFit: "contain" }}
+            fallbackClassName="hidden"
           />
         </div>
       )}
@@ -368,20 +370,32 @@ function DetailEditDialog({ open, modelId, modelName, thumbnailUrl: initialThumb
   return (
     <AnimatePresence>
       {open && (
-        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-50 flex items-center justify-center bg-surface-dim/70 backdrop-blur-sm" onClick={onClose}>
-          <motion.div initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.95, opacity: 0 }} onClick={(e) => e.stopPropagation()} className="bg-surface-container-low rounded-lg shadow-xl border border-outline-variant/20 w-full max-w-md mx-4 p-6 max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between mb-6">
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          className="fixed inset-0 z-[120] flex items-end sm:items-center justify-center bg-surface-dim/70 backdrop-blur-sm p-3 pb-[calc(0.75rem+env(safe-area-inset-bottom,0px))] sm:p-4"
+          onClick={onClose}
+        >
+          <motion.div
+            initial={{ scale: 0.95, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            exit={{ scale: 0.95, opacity: 0 }}
+            onClick={(e) => e.stopPropagation()}
+            className="bg-surface-container-low rounded-t-lg sm:rounded-lg shadow-xl border border-outline-variant/20 w-full max-w-md max-h-[calc(100dvh-1.5rem-env(safe-area-inset-bottom,0px))] sm:max-h-[90vh] flex flex-col overflow-hidden"
+          >
+            <div className="flex items-center justify-between px-4 py-4 sm:px-6 border-b border-outline-variant/10 shrink-0">
               <h3 className="font-headline text-lg font-semibold text-on-surface">编辑模型</h3>
               <button onClick={onClose} className="p-1 text-on-surface-variant hover:text-on-surface transition-colors"><Icon name="close" size={20} /></button>
             </div>
-            <div className="space-y-4">
+            <div className="px-4 py-4 sm:px-6 space-y-4 overflow-y-auto scrollbar-hidden">
               <div className="flex flex-col gap-1.5">
                 <label className="text-xs uppercase tracking-wider text-on-surface-variant">预览图</label>
-                <div className="flex items-center gap-3">
+                <div className="flex flex-wrap items-center gap-3">
                   <div className="w-16 h-16 rounded-sm bg-surface-container-highest shrink-0 overflow-hidden">
                     <ModelThumbnail src={thumbUrl} alt="" className="w-full h-full object-cover" />
                   </div>
-                  <div className="flex flex-col gap-1.5">
+                  <div className="flex min-w-0 flex-col gap-1.5">
                     <input type="file" accept="image/png,image/jpeg,image/webp" className="hidden" id="detail-thumb-upload" onChange={async (e) => { const f = e.target.files?.[0]; if (f) { setThumbUploading(true); let ok = false; try { const r = await modelApi.uploadThumbnail(modelId, f); setThumbUrl(r.thumbnail_url); toast('预览图已更新', 'success'); ok = true; } catch { toast('上传失败', 'error'); } finally { setThumbUploading(false); } if (ok) onSaved(); e.target.value = ''; } }} />
                     <button onClick={() => document.getElementById('detail-thumb-upload')?.click()} disabled={thumbUploading} className="flex items-center gap-1.5 px-3 py-1.5 text-xs text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high rounded-sm transition-colors border border-outline-variant/20 disabled:opacity-50"><Icon name="upload" size={14} />{thumbUploading ? '上传中...' : '上传图片'}</button>
                     <button onClick={async () => { setRegenerating(true); let ok = false; try { const r = await modelApi.reconvert(modelId); setThumbUrl(r.thumbnail_url); toast('已重新生成', 'success'); ok = true; } catch { toast('重新生成失败', 'error'); } finally { setRegenerating(false); } if (ok) onSaved(); }} disabled={regenerating} className="flex items-center gap-1.5 px-3 py-1.5 text-xs text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high rounded-sm transition-colors border border-outline-variant/20 disabled:opacity-50"><Icon name="refresh" size={14} />{regenerating ? '生成中...' : '从模型重新生成'}</button>
@@ -424,10 +438,11 @@ function DetailEditDialog({ open, modelId, modelName, thumbnailUrl: initialThumb
                   <Icon name="swap_horiz" size={14} />{fileReplacing ? '上传中...' : '选择新模型文件'}
                 </button>
               </div>
-              <div className="flex items-center justify-between pt-2">
+            </div>
+            <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3 sm:px-6 border-t border-outline-variant/10 shrink-0">
                 {onDelete && (
                   confirmDelete ? (
-                    <div className="flex items-center gap-2">
+                    <div className="flex flex-wrap items-center gap-2">
                       <span className="text-xs text-error">确认删除？</span>
                       <button onClick={async () => { setDeleting(true); let ok = false; try { await onDelete(); toast('已删除', 'success'); ok = true; } catch { toast('删除失败', 'error'); } finally { setDeleting(false); setConfirmDelete(false); } if (ok) onClose(); }} disabled={deleting} className="px-3 py-1.5 text-xs bg-error text-white rounded-sm hover:bg-error/90 disabled:opacity-50">{deleting ? '删除中...' : '确认'}</button>
                       <button onClick={() => setConfirmDelete(false)} className="px-3 py-1.5 text-xs text-on-surface-variant hover:text-on-surface">取消</button>
@@ -441,7 +456,6 @@ function DetailEditDialog({ open, modelId, modelName, thumbnailUrl: initialThumb
                   <button onClick={handleSave} disabled={saving} className="px-6 py-2 bg-primary-container text-on-primary rounded-sm text-sm hover:bg-primary transition-colors disabled:opacity-50">{saving ? '保存中...' : '保存'}</button>
                 </div>
               </div>
-            </div>
           </motion.div>
         </motion.div>
       )}
@@ -675,8 +689,14 @@ export default function ModelDetailPage() {
   const [showMoreTools, setShowMoreTools] = useState(false);
   const mobileViewerRef = useRef<HTMLDivElement>(null);
   const peekContentRef = useRef<HTMLDivElement>(null);
+  const sheetRef = useRef<HTMLDivElement>(null);
+  const sheetContentRef = useRef<HTMLDivElement>(null);
   const [peekHeight, setPeekHeight] = useState(120);
   const dragStartY = useRef(0);
+  const dragStartScrollTop = useRef(0);
+  const dragStartExpanded = useRef(false);
+  const isMouseDraggingSheet = useRef(false);
+  const [sheetDragOffset, setSheetDragOffset] = useState(0);
   const [settingThumb, setSettingThumb] = useState(false);
   const [watermarkState, setWatermarkState] = useState<{ show: boolean; image: string }>({ show: false, image: "" });
   const [loginPromptOpen, setLoginPromptOpen] = useState(false);
@@ -803,6 +823,102 @@ export default function ModelDetailPage() {
   }
 
   const fav = modelData ? isFavorite(modelData.id) : false;
+
+  const beginSheetDrag = useCallback((clientY: number) => {
+    dragStartY.current = clientY;
+    dragStartScrollTop.current = sheetContentRef.current?.scrollTop || 0;
+    dragStartExpanded.current = sheetExpanded;
+    setSheetDragOffset(0);
+  }, [sheetExpanded]);
+
+  const moveSheetDrag = useCallback((clientY: number) => {
+    const dy = clientY - dragStartY.current;
+
+    if (dragStartExpanded.current) {
+      const canCloseFromTop = dragStartScrollTop.current <= 4 && (sheetContentRef.current?.scrollTop || 0) <= 4;
+      if (dy > 0 && canCloseFromTop) {
+        setSheetDragOffset(Math.min(dy, 180));
+        return true;
+      }
+      return false;
+    }
+
+    if (dy < 0) {
+      setSheetDragOffset(Math.max(dy, -90));
+      return true;
+    }
+
+    return false;
+  }, []);
+
+  const endSheetDrag = useCallback((clientY: number) => {
+    const dy = clientY - dragStartY.current;
+    const closeFromTop = dragStartScrollTop.current <= 4;
+
+    if (dragStartExpanded.current && dy > 80 && closeFromTop) {
+      setSheetExpanded(false);
+    } else if (!dragStartExpanded.current && dy < -50) {
+      setSheetExpanded(true);
+    }
+
+    setSheetDragOffset(0);
+  }, []);
+
+  const handleSheetTouchStart = useCallback((e: React.TouchEvent<HTMLDivElement>) => {
+    beginSheetDrag(e.touches[0].clientY);
+  }, [beginSheetDrag]);
+
+  const handleSheetTouchEnd = useCallback((e: React.TouchEvent<HTMLDivElement>) => {
+    endSheetDrag(e.changedTouches[0].clientY);
+  }, [endSheetDrag]);
+
+  useEffect(() => {
+    const sheet = sheetRef.current;
+    if (!sheet) return;
+
+    const handleTouchMove = (event: TouchEvent) => {
+      const touch = event.touches[0];
+      if (!touch) return;
+
+      if (moveSheetDrag(touch.clientY)) {
+        event.preventDefault();
+      }
+    };
+
+    sheet.addEventListener("touchmove", handleTouchMove, { passive: false });
+    return () => {
+      sheet.removeEventListener("touchmove", handleTouchMove);
+    };
+  }, [moveSheetDrag]);
+
+  const handleSheetMouseDown = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
+    if (e.button !== 0) return;
+    isMouseDraggingSheet.current = true;
+    beginSheetDrag(e.clientY);
+
+    const handleWindowMouseMove = (event: MouseEvent) => {
+      if (!isMouseDraggingSheet.current) return;
+      if (moveSheetDrag(event.clientY)) {
+        event.preventDefault();
+      }
+    };
+
+    const handleWindowMouseUp = (event: MouseEvent) => {
+      if (!isMouseDraggingSheet.current) return;
+      isMouseDraggingSheet.current = false;
+      endSheetDrag(event.clientY);
+      window.removeEventListener("mousemove", handleWindowMouseMove);
+      window.removeEventListener("mouseup", handleWindowMouseUp);
+    };
+
+    window.addEventListener("mousemove", handleWindowMouseMove);
+    window.addEventListener("mouseup", handleWindowMouseUp);
+  }, [beginSheetDrag, endSheetDrag, moveSheetDrag]);
+
+  const cancelSheetDrag = useCallback(() => {
+    isMouseDraggingSheet.current = false;
+    setSheetDragOffset(0);
+  }, []);
 
   const handleToggleFav = useCallback(async () => {
     if (!modelData) return;
@@ -980,7 +1096,10 @@ export default function ModelDetailPage() {
       <MobileNavDrawer open={navOpen} onClose={() => setNavOpen(false)} />
 
       {/* Main area: 3D viewer + bottom sheet */}
-      <div className="flex-1 min-h-0 relative">
+      <div
+        className="flex-1 min-h-0 relative"
+        style={{ marginBottom: "calc(3.5rem + env(safe-area-inset-bottom, 0px))" }}
+      >
         {/* 3D Viewer — fills entire area */}
         <div ref={mobileViewerRef} className="absolute inset-0 bg-surface-container overflow-hidden rounded-b-2xl" style={{ bottom: peekHeight }} onClick={() => { if (sheetExpanded) setSheetExpanded(false); }}>
           <LoadingOverlay />
@@ -1116,11 +1235,12 @@ export default function ModelDetailPage() {
           {/* Watermark */}
           {watermarkState.show && watermarkState.image && (
             <div className="absolute inset-0 pointer-events-none flex items-center justify-center select-none">
-              <img
+              <SafeImage
                 src={watermarkState.image}
                 alt=""
                 className="opacity-[0.04] select-none"
                 style={{ maxWidth: "40%", maxHeight: "40%", objectFit: "contain" }}
+                fallbackClassName="hidden"
               />
             </div>
           )}
@@ -1128,10 +1248,18 @@ export default function ModelDetailPage() {
 
         {/* Bottom sheet */}
         <div
+          ref={sheetRef}
           className="absolute bottom-0 left-0 right-0 z-30 bg-surface-container-low rounded-t-2xl shadow-[0_-2px_20px_rgba(0,0,0,0.25)] border-t border-outline-variant/10 flex flex-col overflow-hidden"
+          onTouchStart={handleSheetTouchStart}
+          onTouchEnd={handleSheetTouchEnd}
+          onTouchCancel={cancelSheetDrag}
+          onMouseDown={handleSheetMouseDown}
           style={{
             height: sheetExpanded ? '94%' : peekHeight,
-            transition: 'height 0.35s cubic-bezier(0.32, 0.72, 0, 1)',
+            transform: `translateY(${sheetDragOffset}px)`,
+            transition: sheetDragOffset === 0
+              ? 'height 0.35s cubic-bezier(0.32, 0.72, 0, 1), transform 0.2s ease-out'
+              : 'none',
           }}
         >
           {/* Drag handle + back button (when expanded) */}
@@ -1145,12 +1273,6 @@ export default function ModelDetailPage() {
               </button>
             )}
             <div
-              onTouchStart={(e) => { dragStartY.current = e.touches[0].clientY; }}
-              onTouchEnd={(e) => {
-                const dy = e.changedTouches[0].clientY - dragStartY.current;
-                if (dy < -50 && !sheetExpanded) setSheetExpanded(true);
-                else if (dy > 50 && sheetExpanded) setSheetExpanded(false);
-              }}
               onClick={() => setSheetExpanded(!sheetExpanded)}
               className="flex-1 flex justify-center cursor-pointer"
             >
@@ -1160,10 +1282,10 @@ export default function ModelDetailPage() {
           </div>
 
           {/* Peek bar — always visible */}
-          <div ref={peekContentRef} className="px-4 pb-5 shrink-0">
+          <div ref={peekContentRef} className="px-4 pb-4 shrink-0">
             <div className="flex items-center gap-2">
               <div className="min-w-0 flex-1">
-                <h2 className="text-sm font-bold text-on-surface truncate">{modelData.name}</h2>
+                <h2 className="text-sm font-bold text-on-surface line-clamp-2 break-words">{modelData.name}</h2>
                 <p className="text-[11px] text-on-surface-variant truncate">{modelData.subtitle}</p>
               </div>
               <div className="flex items-center gap-0.5 shrink-0">
@@ -1190,13 +1312,13 @@ export default function ModelDetailPage() {
           </div>
 
           {/* Expanded content — scrollable */}
-          <div className={`flex-1 min-h-0 overflow-y-auto scrollbar-hidden ${!sheetExpanded ? "hidden" : ""}`}>
+          <div ref={sheetContentRef} className={`flex-1 min-h-0 overflow-y-auto scrollbar-hidden ${!sheetExpanded ? "hidden" : ""}`}>
             <div className="px-4 pb-8 space-y-5">
               {/* Category breadcrumb */}
-              <div className="flex items-center gap-1.5 text-[11px] text-on-surface-variant">
+              <div className="flex items-center gap-1.5 text-[11px] text-on-surface-variant overflow-x-auto scrollbar-hidden">
                 <Link to="/" className="hover:text-primary transition-colors">模型库</Link>
                 {categoryBreadcrumb.map((cat, i) => (
-                  <span key={cat.id} className="flex items-center gap-1.5">
+                  <span key={cat.id} className="flex items-center gap-1.5 shrink-0">
                     <Icon name="chevron_right" size={12} className="text-on-surface-variant/40" />
                     <Link
                       to={`/?category=${cat.id}`}
@@ -1273,7 +1395,7 @@ export default function ModelDetailPage() {
                           <span className="text-[8px] font-bold text-error">PDF</span>
                         </div>
                         <div className="flex-1 min-w-0">
-                          <span className="text-xs font-medium text-on-surface truncate block">{file.fileName}</span>
+                          <span className="text-xs font-medium text-on-surface line-clamp-2 break-words" title={file.fileName}>{file.fileName}</span>
                           <span className="text-[10px] text-on-surface-variant">{file.format} · {file.size}</span>
                         </div>
                         <div className="shrink-0 w-7 h-7 flex items-center justify-center rounded-full bg-primary/10 text-primary">
@@ -1286,7 +1408,7 @@ export default function ModelDetailPage() {
                           <span className="text-[8px] font-bold text-primary-container">{file.format.slice(0, 3)}</span>
                         </div>
                         <div className="flex-1 min-w-0">
-                          <span className="text-xs font-medium text-on-surface truncate block" title={file.fileName}>{file.fileName || file.format}</span>
+                          <span className="text-xs font-medium text-on-surface line-clamp-2 break-words" title={file.fileName}>{file.fileName || file.format}</span>
                           <span className="text-[10px] text-on-surface-variant">{file.format} · {file.size}</span>
                         </div>
                         <button onClick={() => handleDownload(modelData.id, file.downloadFormat === "original" ? "original" : undefined)} className="shrink-0 w-7 h-7 flex items-center justify-center rounded-full bg-primary/10 hover:bg-primary/20 text-primary active:scale-90 transition-all">

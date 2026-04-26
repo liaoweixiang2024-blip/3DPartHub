@@ -1,10 +1,10 @@
-import { lazy, Suspense } from "react";
+import { lazy, Suspense, useEffect, useRef } from "react";
 import { Routes, Route, Link, useLocation, Navigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { useAuthStore } from "./stores/useAuthStore";
 
 import Icon from "./components/shared/Icon";
-import { getSiteTitle, getSiteIcon } from "./lib/publicSettings";
+import BrandMark from "./components/shared/BrandMark";
 
 // Static import for the landing page — eliminates flash on first visit
 import HomePage from "./pages/HomePage";
@@ -98,18 +98,9 @@ function ScrollPage({ children }: { children: React.ReactNode }) {
 }
 
 function NotFoundPage() {
-  const siteIcon = getSiteIcon();
-  const siteTitle = getSiteTitle();
   return (
     <div className="flex flex-col items-center justify-center h-screen bg-surface gap-4">
-      <div className="flex items-center gap-2 mb-2">
-        {siteIcon ? (
-          <img src={siteIcon} alt={siteTitle} className="h-8 w-8 shrink-0 object-contain" />
-        ) : (
-          <Icon name="view_in_ar" size={32} className="text-primary-container shrink-0" />
-        )}
-        <span className="text-lg font-headline font-bold tracking-tight text-on-surface">{siteTitle}</span>
-      </div>
+      <BrandMark size="nav" centered className="mb-2" />
       <Icon name="search_off" size={56} className="text-on-surface-variant/50" />
       <h1 className="text-2xl font-headline font-bold text-on-surface">页面不存在</h1>
       <p className="text-sm text-on-surface-variant">您访问的页面可能已被移除或暂时不可用</p>
@@ -118,8 +109,30 @@ function NotFoundPage() {
   );
 }
 
+/** Periodically check token validity and logout if expired */
+function useTokenWatcher() {
+  const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
+  const checkAndRefreshToken = useAuthStore((s) => s.checkAndRefreshToken);
+  const timerRef = useRef<ReturnType<typeof setInterval>>();
+
+  useEffect(() => {
+    if (!isAuthenticated) return;
+
+    // Check immediately on mount / auth change
+    checkAndRefreshToken();
+
+    // Then check every 60 seconds
+    timerRef.current = setInterval(() => {
+      checkAndRefreshToken();
+    }, 60_000);
+
+    return () => clearInterval(timerRef.current);
+  }, [isAuthenticated, checkAndRefreshToken]);
+}
+
 export default function Router() {
   const location = useLocation();
+  useTokenWatcher();
 
   return (
     <AnimatePresence mode="wait">
@@ -154,6 +167,7 @@ export default function Router() {
         <Route path="/admin/inquiries/:id" element={<ProtectedPage requiredRole="ADMIN"><InquiryDetailPage /></ProtectedPage>} />
         <Route path="/admin/quote-template" element={<ProtectedPage requiredRole="ADMIN"><QuoteTemplateEditor /></ProtectedPage>} />
         <Route path="/quote/:id" element={<ScrollPage><QuotePrintPage /></ScrollPage>} />
+        <Route path="/document/:type/:id" element={<ScrollPage><QuotePrintPage /></ScrollPage>} />
         <Route path="*" element={<NotFoundPage />} />
       </Routes>
     </AnimatePresence>

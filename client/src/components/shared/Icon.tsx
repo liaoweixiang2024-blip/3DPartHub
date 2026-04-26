@@ -1,6 +1,6 @@
 import {
   Menu, Search, Download, Bell, User, CloudUpload, Settings,
-  Eye, Star, X, ArrowLeft, ArrowRight, ChevronRight, ChevronDown, ChevronLeft,
+  Eye, Star, X, ArrowLeft, ArrowRight, ChevronRight, ChevronDown, ChevronLeft, ChevronUp,
   AlertCircle, CheckCircle, Plus, Upload, Folder, Lock,
   LogOut, Mail, MoreHorizontal, MoreVertical, Link, Send,
   Filter, Calendar, FileArchive, Expand, Grid, List, Package,
@@ -75,6 +75,7 @@ const iconMap: Record<string, LucideIcon> = {
   "chevron_right": ChevronRight,
   "chevron_left": ChevronLeft,
   "expand_more": ChevronDown,
+  "expand_less": ChevronUp,
   "compare_arrows": ArrowLeftRight,
 
   // Content
@@ -154,6 +155,8 @@ const iconMap: Record<string, LucideIcon> = {
   share: Share2,
   description: FileText,
   "request_quote": Receipt,
+  rule: ListChecks,
+  shield: Shield,
   "link_off": Link,
   diamond: Diamond,
   "iso_view": Orbit,

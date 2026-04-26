@@ -333,8 +333,8 @@ function MobileContent() {
                 <ModelThumbnail src={item.model?.thumbnail_url} alt="" className="w-full h-full object-cover" />
               </div>
               <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium text-on-surface truncate">{item.model?.name || '未知模型'}</p>
-                <p className="text-[11px] text-on-surface-variant mt-0.5">
+                <p className="text-sm font-medium text-on-surface line-clamp-2 break-words">{item.model?.name || '未知模型'}</p>
+                <p className="text-[11px] text-on-surface-variant mt-0.5 truncate">
                   {formatDate(item.createdAt)} · {formatFileSize(item.fileSize)}
                 </p>
               </div>

@@ -6,6 +6,7 @@ import { useMediaQuery } from "../layouts/hooks/useMediaQuery";
 import { useDocumentTitle } from "../hooks/useDocumentTitle";
 import TopNav from "../components/shared/TopNav";
 import BottomNav from "../components/shared/BottomNav";
+import MobileNavDrawer from "../components/shared/MobileNavDrawer";
 import { projectApi, type Project } from "../api/projects";
 import { useAuthStore } from "../stores";
 import { useToast } from "../components/shared/Toast";
@@ -23,14 +24,14 @@ const ModelRow = memo(function ModelRow({ model }: { model: any }) {
   return (
     <Link
       to={`/model/${model.id}`}
-      className="flex items-center gap-4 p-4 bg-surface-container-high rounded-sm hover:bg-surface-container-highest transition-colors border border-outline-variant/10"
+      className="flex items-center gap-3 sm:gap-4 p-3 sm:p-4 bg-surface-container-high rounded-sm hover:bg-surface-container-highest transition-colors border border-outline-variant/10"
     >
       <div className="w-16 h-16 bg-surface-container-lowest rounded-sm shrink-0 overflow-hidden">
         <ModelThumbnail src={model.thumbnailUrl} alt="" className="w-full h-full object-cover rounded-sm" />
       </div>
       <div className="flex-1 min-w-0">
-        <h3 className="text-sm font-headline text-on-surface truncate">{model.name || model.originalName}</h3>
-        <div className="flex items-center gap-2 mt-1">
+        <h3 className="text-sm font-headline text-on-surface line-clamp-2 break-words">{model.name || model.originalName}</h3>
+        <div className="flex flex-wrap items-center gap-2 mt-1">
           <FormatTag format={model.format?.toUpperCase() || "?"} />
           <span className="text-[10px] text-on-surface-variant">{formatFileSize(model.gltfSize || 0)}</span>
         </div>
@@ -66,7 +67,7 @@ function EditModal({ project, onClose, onSaved }: { project: Project; onClose: (
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm"
+      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/60 backdrop-blur-sm p-3 sm:p-4"
       role="dialog"
       aria-modal="true"
       onClick={onClose}
@@ -75,7 +76,7 @@ function EditModal({ project, onClose, onSaved }: { project: Project; onClose: (
         initial={{ opacity: 0, scale: 0.95, y: 20 }}
         animate={{ opacity: 1, scale: 1, y: 0 }}
         exit={{ opacity: 0, scale: 0.95, y: 20 }}
-        className="bg-surface-container-low rounded-lg w-full max-w-md mx-4 p-6 shadow-2xl border border-outline-variant/20"
+        className="bg-surface-container-low rounded-t-lg sm:rounded-lg w-full max-w-md p-4 sm:p-6 shadow-2xl border border-outline-variant/20 max-h-[calc(100dvh-1.5rem)] overflow-y-auto"
         onClick={(e) => e.stopPropagation()}
       >
         <h2 className="text-lg font-headline font-bold text-on-surface mb-4">编辑项目</h2>
@@ -96,7 +97,7 @@ function EditModal({ project, onClose, onSaved }: { project: Project; onClose: (
               className="w-full bg-surface-container-lowest text-on-surface rounded-sm px-3 py-2 border border-outline-variant/30 outline-none focus:border-primary resize-none h-20"
             />
           </div>
-          <div className="flex gap-3 justify-end">
+          <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-3">
             <button onClick={onClose} className="px-4 py-2 text-sm text-on-surface-variant hover:text-on-surface">取消</button>
             <button
               onClick={handleSave}
@@ -120,6 +121,7 @@ export default function ProjectDetailPage() {
   const { user } = useAuthStore();
   const [showEdit, setShowEdit] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState(false);
+  const [navOpen, setNavOpen] = useState(false);
   const { toast } = useToast();
 
   const { data: project, error, mutate } = useSWR(
@@ -165,25 +167,29 @@ export default function ProjectDetailPage() {
 
   return (
     <div className="flex flex-col h-dvh bg-surface">
-      <TopNav />
-      <main className="flex-1 overflow-y-auto scrollbar-hidden bg-surface-dim p-4 md:p-8">
+      <TopNav compact={!isDesktop} onMenuToggle={() => setNavOpen(true)} />
+      {!isDesktop && <MobileNavDrawer open={navOpen} onClose={() => setNavOpen(false)} />}
+      <main
+        className="flex-1 overflow-y-auto scrollbar-hidden bg-surface-dim p-4 md:p-8"
+        style={!isDesktop ? { paddingBottom: "calc(5rem + env(safe-area-inset-bottom, 0px))" } : undefined}
+      >
         <div className="max-w-6xl mx-auto">
-          <div className="flex items-center gap-2 text-sm mb-4">
-            <Link to="/" className="text-on-surface-variant hover:text-on-surface">首页</Link>
-            <Icon name="chevron_right" size={12} className="text-on-surface-variant/40" />
-            <Link to="/projects" className="text-on-surface-variant hover:text-on-surface">项目</Link>
-            <Icon name="chevron_right" size={12} className="text-on-surface-variant/40" />
-            <span className="text-primary font-medium">{project.name}</span>
+          <div className="flex items-center gap-2 text-sm mb-4 overflow-x-auto scrollbar-hidden">
+            <Link to="/" className="text-on-surface-variant hover:text-on-surface shrink-0">首页</Link>
+            <Icon name="chevron_right" size={12} className="text-on-surface-variant/40 shrink-0" />
+            <Link to="/projects" className="text-on-surface-variant hover:text-on-surface shrink-0">项目</Link>
+            <Icon name="chevron_right" size={12} className="text-on-surface-variant/40 shrink-0" />
+            <span className="text-primary font-medium truncate">{project.name}</span>
           </div>
 
-          <div className="flex items-start justify-between mb-6 border-b border-surface-container-low pb-4">
-            <div>
-              <h1 className="text-2xl font-headline font-bold text-on-surface mb-1">{project.name}</h1>
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between mb-6 border-b border-surface-container-low pb-4">
+            <div className="min-w-0">
+              <h1 className="text-2xl font-headline font-bold text-on-surface mb-1 break-words">{project.name}</h1>
               {project.description && (
-                <p className="text-sm text-on-surface-variant">{project.description}</p>
+                <p className="text-sm text-on-surface-variant break-words">{project.description}</p>
               )}
             </div>
-            <div className="flex items-center gap-3">
+            <div className="flex items-center justify-between sm:justify-end gap-3">
               <div className="text-xs text-on-surface-variant text-right">
                 <div>{project._count.models} 个模型</div>
                 <div>{project.members.length} 个成员</div>
@@ -216,7 +222,7 @@ export default function ProjectDetailPage() {
                 initial={{ opacity: 0, height: 0 }}
                 animate={{ opacity: 1, height: "auto" }}
                 exit={{ opacity: 0, height: 0 }}
-                className="mb-4 bg-error/10 border border-error/30 rounded-sm p-4 flex items-center justify-between overflow-hidden"
+                className="mb-4 bg-error/10 border border-error/30 rounded-sm p-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between overflow-hidden"
               >
                 <p className="text-sm text-on-surface">确认删除此项目？此操作不可撤销。</p>
                 <div className="flex gap-2">
@@ -236,7 +242,7 @@ export default function ProjectDetailPage() {
                   <div className="w-6 h-6 rounded-full bg-primary/20 flex items-center justify-center text-[10px] text-primary font-bold">
                     {(m.user.username || "?")[0].toUpperCase()}
                   </div>
-                  <span className="text-xs text-on-surface">{m.user.username}</span>
+                  <span className="text-xs text-on-surface break-words">{m.user.username}</span>
                   <span className="text-[9px] text-on-surface-variant bg-surface-container-lowest px-1.5 py-0.5 rounded-sm">
                     {m.role}
                   </span>

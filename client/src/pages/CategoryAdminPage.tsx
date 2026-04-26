@@ -25,21 +25,21 @@ function CategoryRow({
 }) {
   return (
     <>
-      <div className="flex items-center gap-3 px-4 py-3 hover:bg-surface-container-high transition-colors border-b border-outline-variant/10">
-        <span style={{ paddingLeft: depth * 24 }} />
+      <div className="flex items-center gap-2 sm:gap-3 px-3 sm:px-4 py-3 hover:bg-surface-container-high transition-colors border-b border-outline-variant/10">
+        <span className="shrink-0" style={{ paddingLeft: depth * 16 }} />
         {cat.children?.length ? (
           <Icon name="folder" size={18} className="text-primary shrink-0" />
         ) : (
           <Icon name="view_in_ar" size={18} className="text-on-surface-variant shrink-0" />
         )}
         <Icon name={cat.icon || "folder"} size={18} className="text-on-surface-variant shrink-0" />
-        <span className="flex-1 text-sm text-on-surface truncate">{cat.name}</span>
+        <span className="flex-1 min-w-0 text-sm text-on-surface truncate">{cat.name}</span>
         {cat.children?.length ? (
           <span className="text-[10px] text-on-surface-variant bg-surface-container-highest px-2 py-0.5 rounded-sm">
             {cat.children.length} 子类
           </span>
         ) : null}
-        <span className="text-[10px] text-on-surface-variant font-mono">排序: {cat.sortOrder}</span>
+        <span className="hidden sm:inline text-[10px] text-on-surface-variant font-mono">排序: {cat.sortOrder}</span>
         <button onClick={() => onEdit(cat)} className="p-1.5 text-on-surface-variant hover:text-primary transition-colors" aria-label="编辑">
           <Icon name="settings" size={16} />
         </button>

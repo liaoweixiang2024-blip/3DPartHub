@@ -12,6 +12,7 @@ dist/
 
 # OS files
 .DS_Store
+CLAUDE.md
 
 # Uploads & runtime data
 uploads/
@@ -23,13 +24,20 @@ server/static/originals/
 server/static/thumbnails/
 server/static/batch/
 server/static/backups/
+server/static/_backup_db/
+server/static/_safety_snapshots/
 server/static/watermark/
 server/static/drawings/
 server/static/option-images/
 server/static/ticket-attachments/
 server/static/logo/
 server/static/favicon/
+server/static/selection-categories-ai/
 server/static/js/
+client/public/static/selection-categories/
+client/public/static/selection-categories-ai/
+client/public/static/selection-categories-real/
+client/scripts/generate-selection-category-*
 
 # Temp directories
 tmp_*/
@@ -45,6 +53,17 @@ docs/ocr-references/
 
 # Business documents (catalogs, PDFs)
 *.pdf
+*.xlsx
+docs/北泽*
+docs/*画册*
+docs/*产品批次*
+docs/选型询价实现说明.md
+
+# Product seed data / customer-specific catalogs
+server/prisma/seed-beize.ts
+server/prisma/seeds/run-batch.ts
+server/prisma/seeds/products/
+server/prisma/seeds/cleanup-beize-bad-products.ts
 
 # Archives
 *.rar

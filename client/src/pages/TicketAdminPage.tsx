@@ -10,21 +10,9 @@ import MobileNavDrawer from '../components/shared/MobileNavDrawer';
 import Icon from '../components/shared/Icon';
 import { useAuthStore } from '../stores/useAuthStore';
 import { getTickets, updateTicketStatus, type Ticket } from '../api/tickets';
-
-const STATUS_MAP: Record<string, { label: string; color: string; bg: string }> = {
-  open: { label: "待处理", color: "text-primary-container", bg: "bg-primary-container/10" },
-  waiting_user: { label: "待回复", color: "text-amber-600", bg: "bg-amber-500/10" },
-  in_progress: { label: "处理中", color: "text-blue-500", bg: "bg-blue-500/10" },
-  resolved: { label: "已解决", color: "text-green-500", bg: "bg-green-500/10" },
-  closed: { label: "已关闭", color: "text-on-surface-variant", bg: "bg-surface-container-highest" },
-};
-
-const CLASSIFICATION_MAP: Record<string, string> = {
-  dimension: "尺寸问题",
-  material: "材料问题",
-  process: "工艺问题",
-  other: "其他",
-};
+import useSWR from 'swr';
+import { getCachedPublicSettings } from '../lib/publicSettings';
+import { getBusinessConfig, statusInfo } from '../lib/businessConfig';
 
 function Content() {
   const { user } = useAuthStore();
@@ -32,6 +20,11 @@ function Content() {
   const [tickets, setTickets] = useState<Ticket[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<string>("all");
+  const { data: settings } = useSWR("publicSettings", () => getCachedPublicSettings());
+  const business = getBusinessConfig(settings);
+  const statuses = business.ticketStatuses;
+  const statusTabs = statuses.filter((s) => s.tab);
+  const classificationMap = new Map(business.ticketClassifications.map((item) => [item.value, item.label]));
 
   useEffect(() => { loadTickets(); }, []);
 
@@ -45,14 +38,8 @@ function Content() {
   }
 
   const filtered = filter === "all" ? tickets : tickets.filter((t) => t.status === filter);
-  const counts = {
-    all: tickets.length,
-    open: tickets.filter((t) => t.status === "open").length,
-    waiting_user: tickets.filter((t) => t.status === "waiting_user").length,
-    in_progress: tickets.filter((t) => t.status === "in_progress").length,
-    resolved: tickets.filter((t) => t.status === "resolved").length,
-    closed: tickets.filter((t) => t.status === "closed").length,
-  };
+  const counts: Record<string, number> = { all: tickets.length };
+  for (const status of statusTabs) counts[status.value] = tickets.filter((t) => t.status === status.value).length;
 
   if (user?.role !== "ADMIN") {
     return (
@@ -64,24 +51,24 @@ function Content() {
 
   return (
     <>
-      <div className="flex items-center justify-between mb-6">
-        <div>
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-6">
+        <div className="min-w-0">
           <h2 className="font-headline text-lg md:text-2xl font-bold tracking-tight text-on-surface uppercase">工单管理</h2>
           <p className="text-sm text-on-surface-variant mt-1">管理用户提交的模型需求工单</p>
         </div>
-        <button onClick={loadTickets} className="flex items-center gap-2 px-3 py-1.5 text-sm text-on-surface-variant hover:text-on-surface border border-outline-variant/20 rounded-sm transition-colors">
+        <button onClick={loadTickets} className="flex items-center justify-center gap-2 px-3 py-1.5 text-sm text-on-surface-variant hover:text-on-surface border border-outline-variant/20 rounded-sm transition-colors w-full sm:w-auto">
           <Icon name="refresh" size={16} />刷新
         </button>
       </div>
 
       <div className="flex gap-2 mb-6 flex-wrap">
-        {(["all", "open", "waiting_user", "in_progress", "resolved", "closed"] as const).map((s) => (
+        {[{ value: "all", label: "全部" }, ...statusTabs].map((s) => (
           <button
-            key={s}
-            onClick={() => setFilter(s)}
-            className={`px-3 py-1.5 text-xs rounded-sm transition-colors ${filter === s ? "bg-primary-container text-on-primary font-bold" : "bg-surface-container-high text-on-surface-variant hover:text-on-surface"}`}
+            key={s.value}
+            onClick={() => setFilter(s.value)}
+            className={`px-3 py-1.5 text-xs rounded-sm transition-colors ${filter === s.value ? "bg-primary-container text-on-primary font-bold" : "bg-surface-container-high text-on-surface-variant hover:text-on-surface"}`}
           >
-            {s === "all" ? "全部" : STATUS_MAP[s]?.label || s} ({counts[s]})
+            {s.label} ({counts[s.value] ?? 0})
           </button>
         ))}
       </div>
@@ -100,23 +87,23 @@ function Content() {
       {!loading && filtered.length > 0 && (
         <div className="flex flex-col gap-3">
           {filtered.map((ticket) => {
-            const statusInfo = STATUS_MAP[ticket.status] || STATUS_MAP.open;
+            const info = statusInfo(statuses, ticket.status);
             return (
               <div key={ticket.id} className="bg-surface-container-low border border-outline-variant/15 rounded-sm p-4">
-                <div className="flex items-start justify-between gap-4">
+                <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 mb-2">
-                      <span className={`text-[10px] px-2 py-0.5 rounded-sm font-bold ${statusInfo.color} ${statusInfo.bg}`}>{statusInfo.label}</span>
-                      <span className="text-[10px] text-on-surface-variant bg-surface-container-highest px-2 py-0.5 rounded-sm">{CLASSIFICATION_MAP[ticket.classification] || ticket.classification}</span>
+                      <span className={`text-[10px] px-2 py-0.5 rounded-sm font-bold ${info.color || ""} ${info.bg || ""}`}>{info.label}</span>
+                      <span className="text-[10px] text-on-surface-variant bg-surface-container-highest px-2 py-0.5 rounded-sm">{classificationMap.get(ticket.classification) || ticket.classification}</span>
                     </div>
-                    <p className="text-sm text-on-surface whitespace-pre-wrap mb-2">{ticket.description}</p>
-                    {ticket.basePart && <p className="text-xs text-on-surface-variant">基准零件: {ticket.basePart}</p>}
-                    <div className="flex items-center gap-3 mt-2 text-xs text-on-surface-variant">
-                      <span className="flex items-center gap-1"><Icon name="person" size={12} />{ticket.user?.username || "未知用户"}</span>
-                      <span className="flex items-center gap-1"><Icon name="schedule" size={12} />{new Date(ticket.createdAt).toLocaleString("zh-CN")}</span>
+                    <p className="text-sm text-on-surface whitespace-pre-wrap break-words mb-2">{ticket.description}</p>
+                    {ticket.basePart && <p className="text-xs text-on-surface-variant break-all">基准零件: {ticket.basePart}</p>}
+                    <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-2 text-xs text-on-surface-variant">
+                      <span className="flex items-center gap-1 min-w-0"><Icon name="person" size={12} className="shrink-0" /><span className="truncate">{ticket.user?.username || "未知用户"}</span></span>
+                      <span className="flex items-center gap-1 shrink-0"><Icon name="schedule" size={12} />{new Date(ticket.createdAt).toLocaleString("zh-CN")}</span>
                     </div>
                   </div>
-                  <div className="flex items-center gap-1 shrink-0">
+                  <div className="flex flex-wrap items-center gap-1 shrink-0">
                     <button onClick={() => navigate(`/admin/tickets/${ticket.id}`)} className="px-2.5 py-1 text-xs text-primary border border-primary/30 rounded-sm hover:bg-primary/10 transition-colors">查看详情</button>
                     {ticket.status !== "in_progress" && ticket.status !== "resolved" && (
                       <button onClick={() => handleStatusChange(ticket.id, "in_progress")} className="px-2.5 py-1 text-xs text-blue-500 border border-blue-500/30 rounded-sm hover:bg-blue-500/10 transition-colors">开始处理</button>

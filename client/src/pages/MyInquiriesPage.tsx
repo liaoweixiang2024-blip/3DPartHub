@@ -9,20 +9,13 @@ import AppSidebar from "../components/shared/Sidebar";
 import MobileNavDrawer from "../components/shared/MobileNavDrawer";
 import Icon from "../components/shared/Icon";
 import { getMyInquiries, type Inquiry } from "../api/inquiries";
+import { getCachedPublicSettings } from "../lib/publicSettings";
+import { getBusinessConfig, statusInfo, type StatusConfig } from "../lib/businessConfig";
 
-const STATUS_MAP: Record<string, { label: string; color: string; bg: string }> = {
-  draft: { label: "草稿", color: "text-on-surface-variant", bg: "bg-surface-container-highest" },
-  submitted: { label: "已提交", color: "text-blue-500", bg: "bg-blue-500/10" },
-  quoted: { label: "已报价", color: "text-green-600", bg: "bg-green-500/10" },
-  accepted: { label: "已接受", color: "text-emerald-600", bg: "bg-emerald-500/10" },
-  rejected: { label: "已拒绝", color: "text-red-500", bg: "bg-red-500/10" },
-  cancelled: { label: "已取消", color: "text-on-surface-variant", bg: "bg-surface-container-highest" },
-};
-
-function StatusBadge({ status }: { status: string }) {
-  const info = STATUS_MAP[status] || STATUS_MAP.submitted;
+function StatusBadge({ status, statuses }: { status: string; statuses: StatusConfig[] }) {
+  const info = statusInfo(statuses, status);
   return (
-    <span className={`inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-md font-bold ${info.color} ${info.bg}`}>
+    <span className={`inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-md font-bold ${info.color || ""} ${info.bg || ""}`}>
       {info.label}
     </span>
   );
@@ -30,6 +23,8 @@ function StatusBadge({ status }: { status: string }) {
 
 function DesktopContent() {
   const { data: inquiries = [], isLoading } = useSWR("my-inquiries", getMyInquiries);
+  const { data: settings } = useSWR("publicSettings", () => getCachedPublicSettings());
+  const statuses = getBusinessConfig(settings).inquiryStatuses;
   const navigate = useNavigate();
 
   return (
@@ -59,8 +54,8 @@ function DesktopContent() {
           </Link>
         </div>
       ) : (
-        <div className="bg-surface-container-low rounded-lg border border-outline-variant/10 overflow-hidden">
-          <div className="grid grid-cols-[80px_1fr_100px_120px_140px] gap-4 px-6 py-3 bg-surface-container-high text-xs uppercase tracking-wider text-on-surface-variant font-bold border-b border-outline-variant/10">
+        <div className="bg-surface-container-low rounded-lg border border-outline-variant/10 overflow-auto">
+          <div className="grid grid-cols-[80px_1fr_100px_120px_140px] gap-4 px-6 py-3 bg-surface-container-low text-xs uppercase tracking-wider text-on-surface-variant font-bold border-b border-outline-variant/10 sticky top-0 z-10">
             <span>状态</span>
             <span>产品</span>
             <span>金额</span>
@@ -69,7 +64,7 @@ function DesktopContent() {
           </div>
           {inquiries.map((inq) => (
             <div key={inq.id} className="grid grid-cols-[80px_1fr_100px_120px_140px] gap-4 px-6 py-4 border-b border-outline-variant/5 hover:bg-surface-container-high/50 transition-colors items-center">
-              <StatusBadge status={inq.status} />
+              <StatusBadge status={inq.status} statuses={statuses} />
               <div className="min-w-0">
                 <p className="text-sm text-on-surface truncate">
                   {inq.items.map((it) => it.modelNo || it.productName).join("、")}
@@ -98,10 +93,12 @@ function DesktopContent() {
 
 function MobileContent() {
   const { data: inquiries = [], isLoading } = useSWR("my-inquiries", getMyInquiries);
+  const { data: settings } = useSWR("publicSettings", () => getCachedPublicSettings());
+  const statuses = getBusinessConfig(settings).inquiryStatuses;
   const navigate = useNavigate();
 
   return (
-    <div className="px-4 py-5 pb-6">
+    <div className="px-4 py-5 pb-20">
       <div className="flex items-center justify-between mb-4">
         <div>
           <h1 className="text-lg font-bold text-on-surface">我的询价</h1>
@@ -134,16 +131,16 @@ function MobileContent() {
               onClick={() => navigate(`/my-inquiries/${inq.id}`)}
               className="bg-surface-container-high rounded-lg p-3.5 cursor-pointer active:bg-surface-container-highest transition-colors"
             >
-              <div className="flex items-center gap-2 mb-2">
-                <StatusBadge status={inq.status} />
+              <div className="flex flex-wrap items-center gap-2 mb-2">
+                <StatusBadge status={inq.status} statuses={statuses} />
                 <span className="text-[11px] text-on-surface-variant">
                   {new Date(inq.createdAt).toLocaleDateString("zh-CN")}
                 </span>
               </div>
-              <p className="text-sm text-on-surface mb-1 truncate">
+              <p className="text-sm text-on-surface mb-1 line-clamp-2 break-words">
                 {inq.items.map((it) => it.modelNo || it.productName).join("、")}
               </p>
-              <div className="flex items-center justify-between text-xs text-on-surface-variant">
+              <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-on-surface-variant">
                 <span>{inq.items.length} 个产品</span>
                 <span>{inq.totalAmount ? `¥${Number(inq.totalAmount).toFixed(2)}` : "待报价"}</span>
               </div>

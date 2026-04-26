@@ -19,6 +19,8 @@ export interface SystemSettings {
   site_description: string;
   site_keywords: string;
   contact_email: string;
+  contact_phone: string;
+  contact_address: string;
   footer_links: string;
   footer_copyright: string;
   announcement_enabled: boolean;
@@ -31,6 +33,7 @@ export interface SystemSettings {
   smtp_pass: string;
   smtp_from: string;
   smtp_secure: boolean;
+  email_templates: string;
   color_scheme: string;
   color_custom_dark: string;
   color_custom_light: string;
@@ -81,8 +84,39 @@ export interface SystemSettings {
   selection_page_desc: string;
   selection_enable_match: boolean;
   field_aliases: string;
+  selection_thread_priority: string;
   // Quotation template
   quote_template: string;
+  document_templates: string;
+  // Business dictionaries and policies
+  inquiry_statuses: string;
+  ticket_statuses: string;
+  ticket_classifications: string;
+  support_process_steps: string;
+  nav_user_items: string;
+  nav_admin_items: string;
+  nav_mobile_items: string;
+  upload_policy: string;
+  page_size_policy: string;
+  // Anti-reverse-proxy & hotlink protection
+  anti_proxy_enabled: boolean;
+  allowed_hosts: string;
+  hotlink_protection_enabled: boolean;
+  allowed_referers: string;
+  // Enterprise backup policy
+  backup_auto_enabled: boolean;
+  backup_schedule_time: string;
+  backup_retention_count: number;
+  backup_mirror_enabled: boolean;
+  backup_mirror_dir: string;
+  backup_last_mirror_status: string;
+  backup_last_mirror_message: string;
+  backup_last_mirror_at: string;
+  backup_last_auto_date: string;
+  backup_last_auto_status: string;
+  backup_last_auto_message: string;
+  backup_last_auto_job_id: string;
+  backup_last_auto_at: string;
 }
 
 export interface BackupStats {
@@ -101,6 +135,57 @@ export interface BackupRecord {
   modelCount: number;
   thumbnailCount: number;
   dbSize: string;
+  archiveSha256?: string;
+  manifestVersion?: string;
+  verifiedAt?: string;
+}
+
+export interface BackupHealth {
+  enabled: boolean;
+  scheduleTime: string;
+  retentionCount: number;
+  mirrorEnabled: boolean;
+  mirrorDir?: string;
+  status: "ok" | "warning" | "disabled" | "empty";
+  message: string;
+  backupCount: number;
+  totalSize: number;
+  totalSizeText: string;
+  latestBackup?: BackupRecord;
+  nextRunAt?: string;
+  lastAutoStatus?: string;
+  lastAutoMessage?: string;
+  lastAutoAt?: string;
+  lastAutoJobId?: string;
+  lastMirrorStatus?: string;
+  lastMirrorMessage?: string;
+  lastMirrorAt?: string;
+}
+
+export interface BackupPolicyCheckItem {
+  key: string;
+  label: string;
+  status: "ok" | "warning" | "error";
+  message: string;
+}
+
+export interface BackupPolicyCheck {
+  status: "ok" | "warning" | "error";
+  checkedAt: string;
+  estimatedBackupSize: number;
+  estimatedBackupSizeText: string;
+  checks: BackupPolicyCheckItem[];
+}
+
+export interface BackupVerificationResult {
+  id: string;
+  ok: boolean;
+  checkedAt: string;
+  fileSize: number;
+  fileSizeText: string;
+  manifestVersion?: string;
+  archiveSha256?: string;
+  message: string;
 }
 
 export interface RestoreResult {
@@ -125,6 +210,11 @@ export async function updateSettings(data: Partial<SystemSettings>): Promise<Sys
   return unwrap<SystemSettings>(res);
 }
 
+export async function sendTestEmail(to: string): Promise<{ message: string }> {
+  const res = await client.post("/settings/email/test", { to }, { timeout: 30000 });
+  return unwrap<{ message: string }>(res);
+}
+
 export async function getPublicSettings(): Promise<Partial<SystemSettings>> {
   const res = await client.get("/settings/public");
   return unwrap<Partial<SystemSettings>>(res);
@@ -144,17 +234,47 @@ export async function getBackupStats(): Promise<BackupStats> {
   return unwrap<BackupStats>(res);
 }
 
+export async function getBackupHealth(): Promise<BackupHealth> {
+  const res = await client.get("/settings/backup/health");
+  return unwrap<BackupHealth>(res);
+}
+
+export async function checkBackupPolicy(): Promise<BackupPolicyCheck> {
+  const res = await client.post("/settings/backup/check", {}, { timeout: 120000 });
+  return unwrap<BackupPolicyCheck>(res);
+}
+
+export async function verifyBackup(id: string): Promise<BackupVerificationResult> {
+  const res = await client.post(`/settings/backup/verify/${id}`, {}, { timeout: 120000 });
+  return unwrap<BackupVerificationResult>(res);
+}
+
 export async function listBackups(): Promise<BackupRecord[]> {
   const res = await client.get("/settings/backup/list");
   return unwrap<BackupRecord[]>(res);
 }
 
 export async function startBackupJob(): Promise<string> {
-  const res = await client.post("/settings/backup/create", {}, { timeout: 30000 });
-  const data = res.data as any;
-  const jobId = data?.data?.jobId ?? data?.jobId;
-  if (!jobId) throw new Error("启动备份失败");
-  return jobId;
+  try {
+    const res = await client.post("/settings/backup/create", {}, { timeout: 30000 });
+    const data = res.data as any;
+    const jobId = data?.data?.jobId ?? data?.jobId;
+    if (!jobId) throw new Error("启动备份失败");
+    return jobId;
+  } catch (err: any) {
+    const responseData = err.response?.data;
+    const message =
+      responseData?.detail ||
+      responseData?.message ||
+      responseData?.data?.detail ||
+      responseData?.data?.message;
+    if (err.response?.status === 409) {
+      const conflictError = new Error(message || "已有备份或恢复任务正在进行中，请等待完成后再试");
+      (conflictError as Error & { jobId?: string }).jobId = responseData?.jobId || responseData?.data?.jobId;
+      throw conflictError;
+    }
+    throw new Error(message || err.message || "启动备份失败");
+  }
 }
 
 export async function pollBackupProgress(

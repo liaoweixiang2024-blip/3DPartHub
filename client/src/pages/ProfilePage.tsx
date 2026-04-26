@@ -9,11 +9,13 @@ import BottomNav from '../components/shared/BottomNav';
 import AppSidebar from '../components/shared/Sidebar';
 import MobileNavDrawer from '../components/shared/MobileNavDrawer';
 import Icon from '../components/shared/Icon';
+import SafeImage from '../components/shared/SafeImage';
 import { authApi } from '../api/auth';
 import { useNavigate } from 'react-router-dom';
 import { listShares, deleteShare, type ShareLink } from '../api/shares';
 import { useAuthStore } from '../stores/useAuthStore';
 import { useToast } from '../components/shared/Toast';
+import { copyText } from '../lib/clipboard';
 import type { User } from '../types';
 
 const NOTIFICATION_ITEMS = [
@@ -34,6 +36,15 @@ function Toggle({ checked, onChange }: { checked: boolean; onChange: (v: boolean
       <span className={`absolute top-0.5 h-4 w-4 rounded-full bg-on-surface transition-transform ${checked ? 'left-[18px]' : 'left-0.5'}`} />
     </button>
   );
+}
+
+async function copyShareLink(token: string, toast: (message: string, type?: "success" | "error" | "info") => void) {
+  try {
+    await copyText(`${window.location.origin}/share/${token}`);
+    toast('链接已复制', 'success');
+  } catch {
+    toast('复制失败，请手动复制链接', 'error');
+  }
 }
 
 function NotificationPrefs({ compact = false }: { compact?: boolean }) {
@@ -208,7 +219,7 @@ function PasswordChangeDialog({ open, onClose }: { open: boolean; onClose: () =>
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
-          className="fixed inset-0 z-50 flex items-center justify-center bg-surface-dim/70 backdrop-blur-sm"
+          className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-surface-dim/70 backdrop-blur-sm p-3 sm:p-4"
           onClick={onClose}
         >
           <motion.div
@@ -216,7 +227,7 @@ function PasswordChangeDialog({ open, onClose }: { open: boolean; onClose: () =>
             animate={{ scale: 1, opacity: 1 }}
             exit={{ scale: 0.95, opacity: 0 }}
             onClick={(e) => e.stopPropagation()}
-            className="bg-surface-container-low rounded-lg shadow-xl border border-outline-variant/20 w-full max-w-md mx-4 p-6"
+            className="bg-surface-container-low rounded-t-lg sm:rounded-lg shadow-xl border border-outline-variant/20 w-full max-w-md p-4 sm:p-6 max-h-[calc(100dvh-1.5rem)] overflow-y-auto"
           >
             <div className="flex items-center justify-between mb-6">
               <h3 className="font-headline text-lg font-semibold text-on-surface">修改密码</h3>
@@ -263,7 +274,7 @@ function PasswordChangeDialog({ open, onClose }: { open: boolean; onClose: () =>
                 />
               </div>
               {error && <p className="text-red-400 text-xs">{error}</p>}
-              <div className="flex justify-end gap-3 pt-2">
+              <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-3 pt-2">
                 <button type="button" onClick={onClose} className="px-4 py-2 text-sm text-on-surface-variant hover:text-on-surface transition-colors">
                   取消
                 </button>
@@ -323,8 +334,8 @@ function MySharesSection({ compact = false }: { compact?: boolean }) {
           const expired = isExpired(s.expiresAt);
           return (
             <div key={s.id} className="bg-surface-container-lowest rounded-md border border-outline-variant/10 p-3">
-              <div className="flex items-center justify-between gap-2">
-                <span className="text-sm text-on-surface truncate">{s.modelName || s.modelId}</span>
+              <div className="flex items-start justify-between gap-2">
+                <span className="text-sm text-on-surface line-clamp-2 break-words min-w-0">{s.modelName || s.modelId}</span>
                 {expired ? (
                   <span className="text-[10px] px-1.5 py-0.5 rounded-sm bg-on-surface-variant/10 text-on-surface-variant shrink-0">已过期</span>
                 ) : s.expiresAt ? (
@@ -333,14 +344,14 @@ function MySharesSection({ compact = false }: { compact?: boolean }) {
                   <span className="text-[10px] px-1.5 py-0.5 rounded-sm bg-primary-container/15 text-primary-container shrink-0">永久</span>
                 )}
               </div>
-              <div className="flex items-center gap-2 mt-1.5 text-[10px] text-on-surface-variant/60">
+              <div className="flex flex-wrap items-center gap-x-2 gap-y-1 mt-1.5 text-[10px] text-on-surface-variant/60">
                 <span><Icon name="visibility" size={10} /> {s.viewCount}</span>
                 <span><Icon name="download" size={10} /> {s.downloadCount}{s.downloadLimit > 0 ? `/${s.downloadLimit}` : ''}</span>
                 {s.hasPassword && <span>有密码</span>}
               </div>
-              <div className="flex items-center gap-1.5 mt-2">
+              <div className="flex flex-wrap items-center gap-1.5 mt-2">
                 <button
-                  onClick={() => { navigator.clipboard.writeText(`${window.location.origin}/share/${s.token}`); toast('链接已复制', 'success'); }}
+                  onClick={() => copyShareLink(s.token, toast)}
                   className="px-2 py-1 text-[10px] text-primary-container hover:bg-primary-container/10 rounded transition-colors"
                 >
                   <Icon name="link" size={12} className="inline mr-0.5" />复制链接
@@ -387,7 +398,7 @@ function MySharesSection({ compact = false }: { compact?: boolean }) {
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2 flex-wrap">
-                    <span className="font-medium text-sm text-on-surface truncate max-w-[240px]">{s.modelName || s.modelId}</span>
+                    <span className="font-medium text-sm text-on-surface break-words sm:truncate sm:max-w-[240px]">{s.modelName || s.modelId}</span>
                     {expired ? (
                       <span className="text-[10px] px-1.5 py-0.5 rounded-sm font-medium bg-on-surface-variant/10 text-on-surface-variant">已过期</span>
                     ) : s.expiresAt ? (
@@ -408,7 +419,7 @@ function MySharesSection({ compact = false }: { compact?: boolean }) {
                 </div>
                 <div className="flex items-center gap-1 shrink-0">
                   <button
-                    onClick={() => { navigator.clipboard.writeText(`${window.location.origin}/share/${s.token}`); toast('链接已复制', 'success'); }}
+                    onClick={() => copyShareLink(s.token, toast)}
                     className="px-2 py-1 text-[10px] text-primary-container hover:bg-primary-container/10 rounded transition-colors"
                     title="复制链接"
                   >
@@ -559,7 +570,7 @@ function DesktopContent() {
             <div onClick={() => avatarInputRef.current?.click()} className="relative group cursor-pointer mb-4">
               <div className="w-24 h-24 rounded-full bg-surface-container-highest flex items-center justify-center">
                 {user?.avatar ? (
-                  <img src={user.avatar} alt="" className="w-full h-full rounded-full object-cover" />
+                  <SafeImage src={user.avatar} alt="" className="w-full h-full rounded-full object-cover" fallbackIcon="person" />
                 ) : (
                   <Icon name="person" size={48} className="text-on-surface-variant" />
                 )}
@@ -729,7 +740,7 @@ function MobileContent() {
   }, [toast, updateUser]);
 
   return (
-    <div className="space-y-4 px-4 py-5 pb-6">
+    <div className="space-y-4 px-4 py-5 pb-20">
       <h1 className="text-lg font-bold text-on-surface">个人设置</h1>
 
       {/* Avatar + basic info */}
@@ -738,7 +749,7 @@ function MobileContent() {
         <div onClick={() => avatarInputRef.current?.click()} className="relative group cursor-pointer shrink-0">
           <div className="h-14 w-14 rounded-full bg-surface-container-lowest flex items-center justify-center">
             {user?.avatar ? (
-              <img src={user.avatar} alt="" className="w-full h-full rounded-full object-cover" />
+              <SafeImage src={user.avatar} alt="" className="w-full h-full rounded-full object-cover" fallbackIcon="person" />
             ) : (
               <Icon name="person" size={32} className="text-on-surface-variant/40" />
             )}
@@ -749,7 +760,7 @@ function MobileContent() {
         </div>
         <div className="min-w-0 flex-1">
           <h2 className="text-sm font-bold text-on-surface truncate">{user?.username || '用户'}</h2>
-          <p className="text-xs text-on-surface-variant truncate">{user?.email}</p>
+          <p className="text-xs text-on-surface-variant break-all line-clamp-2">{user?.email}</p>
         </div>
         {!editing && (
           <button
@@ -824,19 +835,19 @@ function MobileContent() {
         </div>
       ) : (
         <div className="space-y-2">
-          <div className="flex items-center justify-between rounded-lg bg-surface-container-high px-4 py-3">
+          <div className="flex items-center justify-between gap-3 rounded-lg bg-surface-container-high px-4 py-3">
             <div className="flex items-center gap-3">
               <Icon name="domain" size={20} className="text-on-surface/50" />
               <span className="text-sm text-on-surface">公司</span>
             </div>
-            <span className="text-sm text-on-surface-variant">{user?.company || '-'}</span>
+            <span className="text-sm text-on-surface-variant text-right break-words min-w-0">{user?.company || '-'}</span>
           </div>
-          <div className="flex items-center justify-between rounded-lg bg-surface-container-high px-4 py-3">
+          <div className="flex items-center justify-between gap-3 rounded-lg bg-surface-container-high px-4 py-3">
             <div className="flex items-center gap-3">
               <Icon name="phone" size={20} className="text-on-surface/50" />
               <span className="text-sm text-on-surface">电话</span>
             </div>
-            <span className="text-sm text-on-surface-variant">{user?.phone || '-'}</span>
+            <span className="text-sm text-on-surface-variant text-right break-words min-w-0">{user?.phone || '-'}</span>
           </div>
         </div>
       )}

@@ -8,31 +8,66 @@ import {
   type SelectionComponent,
   type ColumnDef,
 } from "../api/selections";
-import { getSiteTitle, getSiteIcon } from "../lib/publicSettings";
+import { getSiteTitle } from "../lib/publicSettings";
+import BrandMark from "../components/shared/BrandMark";
 import Icon from "../components/shared/Icon";
 import { useToast } from "../components/shared/Toast";
+import SafeImage from "../components/shared/SafeImage";
 
 function sv(specs: Record<string, string>, key: string): string {
   return specs[key] || "—";
 }
 
-function ShareResultCard({ product, columns }: { product: SelectionProduct; columns: ColumnDef[] }) {
+function isManualColumn(col?: ColumnDef) {
+  return col?.inputType === "manual";
+}
+
+function normalizeManualValue(col: ColumnDef | undefined, value: string) {
+  const trimmed = value.trim();
+  if (!trimmed) return "";
+  if (!col?.suffix) return trimmed;
+  return trimmed.toUpperCase().endsWith(col.suffix.toUpperCase()) ? trimmed : `${trimmed}${col.suffix}`;
+}
+
+function applyManualSpecs(product: SelectionProduct, columns: ColumnDef[], specs: Record<string, string>): SelectionProduct {
+  const manualEntries = columns
+    .filter((col) => isManualColumn(col) && specs[col.key])
+    .map((col) => [col.key, normalizeManualValue(col, specs[col.key])] as const);
+
+  if (!manualEntries.length) return product;
+
+  const nextSpecs = { ...(product.specs as Record<string, string>) };
+  for (const [key, value] of manualEntries) nextSpecs[key] = value;
+
+  let modelNo = product.modelNo;
+  if (modelNo) {
+    for (const [key, value] of manualEntries) {
+      modelNo = modelNo.replaceAll(`[${key}]`, value);
+      if (key === "长度") modelNo = modelNo.replaceAll("[M]", value);
+    }
+  }
+
+  return { ...product, modelNo, specs: nextSpecs };
+}
+
+function ShareResultCard({ product, columns, specs }: { product: SelectionProduct; columns: ColumnDef[]; specs: Record<string, string> }) {
+  const displayProduct = applyManualSpecs(product, columns, specs);
   const specCols = columns.filter((c) => c.key !== "型号");
-  const comps = (product.isKit && product.components ? product.components : []) as SelectionComponent[];
+  const comps = (displayProduct.isKit && displayProduct.components ? displayProduct.components : []) as SelectionComponent[];
 
   return (
     <div className="rounded-xl border border-outline-variant/15 bg-surface-container-low overflow-hidden">
       <div className="flex items-start gap-3 px-4 py-3">
-        {product.image && (
-          <img src={product.image} alt="" className="w-16 h-16 rounded-lg object-cover shrink-0 border border-outline-variant/10" />
+        {displayProduct.image && (
+          <SafeImage src={displayProduct.image} alt="" className="w-16 h-16 rounded-lg object-cover shrink-0 border border-outline-variant/10" />
         )}
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
-            <span className="text-sm font-bold text-on-surface">{product.modelNo || product.name}</span>
-            {product.isKit && <span className="text-[10px] font-medium text-primary-container bg-primary-container/10 px-2 py-0.5 rounded-full">套件</span>}
+            <span className="text-sm font-bold text-on-surface break-all">{displayProduct.modelNo || displayProduct.name}</span>
+            {displayProduct.isKit && <span className="text-[10px] font-medium text-primary-container bg-primary-container/10 px-2 py-0.5 rounded-full">套件</span>}
           </div>
-          {product.modelNo && product.name !== product.modelNo && (
-            <p className="text-xs text-on-surface-variant mt-0.5 truncate">{product.name}</p>
+          {displayProduct.modelNo && displayProduct.name !== displayProduct.modelNo && (
+            <p className="text-xs text-on-surface-variant mt-0.5 line-clamp-2 break-words">{displayProduct.name}</p>
           )}
         </div>
       </div>
@@ -40,12 +75,12 @@ function ShareResultCard({ product, columns }: { product: SelectionProduct; colu
       <div className="px-4 pb-2.5">
         <div className="grid grid-cols-2 md:grid-cols-3 gap-x-4 gap-y-1">
           {specCols.map((col) => {
-            const v = sv(product.specs as Record<string, string>, col.key);
+            const v = sv(displayProduct.specs as Record<string, string>, col.key);
             if (v === "—") return null;
             return (
-              <div key={col.key} className="text-xs">
+              <div key={col.key} className="text-xs min-w-0">
                 <span className="text-on-surface-variant">{col.label}: </span>
-                <span className="text-on-surface font-medium">{v}</span>
+                <span className="text-on-surface font-medium break-words">{v}</span>
               </div>
             );
           })}
@@ -57,10 +92,10 @@ function ShareResultCard({ product, columns }: { product: SelectionProduct; colu
           <p className="text-xs text-on-surface-variant mb-1">子零件（{comps.length}）</p>
           <div className="space-y-0.5">
             {comps.map((c, i) => (
-              <div key={i} className="flex items-center gap-2 text-xs pl-2">
+              <div key={i} className="flex items-center gap-2 text-xs pl-2 min-w-0">
                 <span className="w-px h-3 bg-on-surface-variant/20 shrink-0" />
-                <span className="text-on-surface">{c.name}</span>
-                {c.modelNo && <span className="text-[10px] text-on-surface-variant">{c.modelNo}</span>}
+                <span className="text-on-surface break-words">{c.name}</span>
+                {c.modelNo && <span className="text-[10px] text-on-surface-variant break-all">{c.modelNo}</span>}
                 {c.qty > 1 && <span className="text-[10px] text-on-surface-variant">&times;{c.qty}</span>}
               </div>
             ))}
@@ -69,13 +104,13 @@ function ShareResultCard({ product, columns }: { product: SelectionProduct; colu
       )}
 
       <div className="border-t border-outline-variant/10 px-4 py-2.5 flex items-center gap-2 flex-wrap">
-        {product.pdfUrl && (
-          <a href={product.pdfUrl} target="_blank" rel="noopener" className="px-3 py-1 text-xs font-medium border border-outline-variant/30 text-on-surface-variant rounded-lg hover:bg-surface-container-high/50 transition-colors inline-flex items-center gap-1">
+        {displayProduct.pdfUrl && (
+          <a href={displayProduct.pdfUrl} target="_blank" rel="noopener" className="px-3 py-1 text-xs font-medium border border-outline-variant/30 text-on-surface-variant rounded-lg hover:bg-surface-container-high/50 transition-colors inline-flex items-center gap-1">
             <Icon name="library_books" size={14} />规格书
           </a>
         )}
-        {product.matchedModelId && (
-          <Link to={`/model/${product.matchedModelId}`} className="px-3 py-1 text-xs font-medium border border-outline-variant/30 text-on-surface-variant rounded-lg hover:bg-surface-container-high/50 transition-colors inline-flex items-center gap-1">
+        {displayProduct.matchedModelId && (
+          <Link to={`/model/${displayProduct.matchedModelId}`} className="px-3 py-1 text-xs font-medium border border-outline-variant/30 text-on-surface-variant rounded-lg hover:bg-surface-container-high/50 transition-colors inline-flex items-center gap-1">
             <Icon name="view_in_ar" size={14} />查看模型
           </Link>
         )}
@@ -89,7 +124,6 @@ export default function SelectionSharePage() {
   const navigate = useNavigate();
   const { toast } = useToast();
   const siteTitle = getSiteTitle();
-  const siteIcon = getSiteIcon();
 
   const { data, error } = useSWR<SelectionShareInfo>(
     token ? `selection-share-${token}` : null,
@@ -98,33 +132,29 @@ export default function SelectionSharePage() {
 
   const redirected = useRef(false);
 
-  // Redirect selection-mode shares to the selection page
+  // Redirect selection-mode shares (no products) to the selection page
   useEffect(() => {
     if (!data || redirected.current) return;
-    const specs = data.specs as Record<string, string>;
     const isSelectionMode = data.products.length === 0;
     if (!isSelectionMode) return;
 
     redirected.current = true;
-    const isGroupShare = !!data.groupId;
-
-    if (isGroupShare) {
-      navigate(`/selection?g=${data.groupId}`, { replace: true });
-    } else {
-      navigate("/selection", { replace: true, state: { shareSlug: data.categorySlug, shareSpecs: specs } });
-    }
+    const specs = data.specs as Record<string, string>;
+    const hasSpecs = specs && Object.keys(specs).length > 0;
+    navigate("/selection", {
+      replace: true,
+      state: {
+        shareSlug: data.categorySlug,
+        ...(hasSpecs ? { shareSpecs: specs } : {}),
+      },
+    });
   }, [data, navigate]);
 
   if (error) {
     return (
       <div className="flex flex-col items-center justify-center min-h-screen bg-surface gap-4">
         <div className="flex items-center gap-2 mb-2">
-          {siteIcon ? (
-            <img src={siteIcon} alt={siteTitle} className="h-8 w-8 shrink-0 object-contain" />
-          ) : (
-            <Icon name="view_in_ar" size={32} className="text-primary-container shrink-0" />
-          )}
-          <span className="text-lg font-bold text-on-surface">{siteTitle}</span>
+          <BrandMark size="nav" />
         </div>
         <Icon name="link_off" size={48} className="text-on-surface-variant/30" />
         <p className="text-sm text-on-surface-variant">分享链接无效或已过期</p>
@@ -155,18 +185,13 @@ export default function SelectionSharePage() {
   return (
     <div className="min-h-screen bg-surface">
       {/* Top bar */}
-      <div className="border-b border-outline-variant/10 bg-surface-container-low px-4 md:px-8 py-3 flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          {siteIcon ? (
-            <img src={siteIcon} alt={siteTitle} className="h-6 w-6 shrink-0 object-contain" />
-          ) : (
-            <Icon name="view_in_ar" size={20} className="text-primary-container shrink-0" />
-          )}
-          <span className="text-sm font-bold text-on-surface">{siteTitle}</span>
-          <span className="text-on-surface-variant/30">·</span>
-          <span className="text-sm text-on-surface-variant">选型分享</span>
+      <div className="border-b border-outline-variant/10 bg-surface-container-low px-4 md:px-8 py-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex items-center gap-2 min-w-0">
+          <BrandMark size="compact" />
+          <span className="text-on-surface-variant/30 shrink-0">·</span>
+          <span className="text-sm text-on-surface-variant shrink-0">选型分享</span>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3 self-end sm:self-auto">
           <Link to="/selection" className="text-xs text-primary-container hover:underline">开始新的选型</Link>
           <Link to="/login" className="text-xs text-on-surface-variant hover:text-on-surface">登录</Link>
         </div>
@@ -176,11 +201,11 @@ export default function SelectionSharePage() {
       <div className="max-w-3xl mx-auto px-4 md:px-8 py-6 space-y-6">
         {/* Category & specs */}
         <div>
-          <h1 className="text-xl font-bold text-on-surface mb-2">{data.categoryName}</h1>
+          <h1 className="text-xl font-bold text-on-surface mb-2 break-words">{data.categoryName}</h1>
           {Object.keys(specs).length > 0 && (
             <div className="flex flex-wrap gap-2">
               {Object.entries(specs).map(([k, v]) => (
-                <span key={k} className="text-xs bg-surface-container-high text-on-surface px-2.5 py-1 rounded-full">
+                <span key={k} className="text-xs bg-surface-container-high text-on-surface px-2.5 py-1 rounded-full break-words">
                   {k}: <strong className="text-on-surface">{v}</strong>
                 </span>
               ))}
@@ -197,7 +222,7 @@ export default function SelectionSharePage() {
         {data.products.length > 0 ? (
           <div className="space-y-3">
             {data.products.map((p) => (
-              <ShareResultCard key={p.id} product={p} columns={data.columns} />
+              <ShareResultCard key={p.id} product={p} columns={data.columns} specs={specs} />
             ))}
           </div>
         ) : (

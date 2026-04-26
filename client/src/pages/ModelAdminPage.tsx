@@ -15,6 +15,8 @@ import { modelApi, type ServerModelListItem } from '../api/models';
 import { categoriesApi, type CategoryItem } from '../api/categories';
 import CategorySelect from '../components/shared/CategorySelect';
 import useSWR from 'swr';
+import { getCachedPublicSettings } from '../lib/publicSettings';
+import { getBusinessConfig } from '../lib/businessConfig';
 
 function formatSize(bytes: number) {
   if (bytes < 1024) return `${bytes} B`;
@@ -88,8 +90,8 @@ function EditDialog({ open, model, categories, onClose, onSaved }: {
   return (
     <AnimatePresence>
       {open && (
-        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-50 flex items-center justify-center bg-surface-dim/70 backdrop-blur-sm" onClick={onClose}>
-          <motion.div initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.95, opacity: 0 }} onClick={(e) => e.stopPropagation()} className="bg-surface-container-low rounded-lg shadow-xl border border-outline-variant/20 w-full max-w-md mx-4 p-6">
+        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-surface-dim/70 backdrop-blur-sm sm:p-4" onClick={onClose}>
+          <motion.div initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.95, opacity: 0 }} onClick={(e) => e.stopPropagation()} className="bg-surface-container-low rounded-t-2xl sm:rounded-lg shadow-xl border border-outline-variant/20 w-full max-w-md p-4 sm:p-6 max-h-[calc(100dvh-1rem)] sm:max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between mb-6">
               <h3 className="font-headline text-lg font-semibold text-on-surface">编辑模型</h3>
               <button onClick={onClose} className="p-1 text-on-surface-variant hover:text-on-surface transition-colors"><Icon name="close" size={20} /></button>
@@ -97,14 +99,14 @@ function EditDialog({ open, model, categories, onClose, onSaved }: {
             <div className="space-y-4">
               <div className="flex flex-col gap-1.5">
                 <label className="text-xs uppercase tracking-wider text-on-surface-variant">预览图</label>
-                <div className="flex items-center gap-3">
+                <div className="flex flex-col sm:flex-row sm:items-center gap-3">
                   <div className="w-16 h-16 rounded-sm bg-surface-container-highest shrink-0 overflow-hidden">
                     <ModelThumbnail src={thumbnailUrl} alt="" className="w-full h-full object-cover" />
                   </div>
-                  <div className="flex flex-col gap-1.5">
+                  <div className="flex flex-col gap-1.5 w-full sm:w-auto">
                     <input type="file" accept="image/png,image/jpeg,image/webp" className="hidden" id="thumb-upload" onChange={(e) => { const f = e.target.files?.[0]; if (f) handleThumbnailUpload(f); e.target.value = ''; }} />
-                    <button onClick={() => document.getElementById('thumb-upload')?.click()} disabled={thumbnailUploading} className="flex items-center gap-1.5 px-3 py-1.5 text-xs text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high rounded-sm transition-colors border border-outline-variant/20 disabled:opacity-50"><Icon name="upload" size={14} />{thumbnailUploading ? '上传中...' : '上传图片'}</button>
-                    <button onClick={handleRegenerate} disabled={regenerating} className="flex items-center gap-1.5 px-3 py-1.5 text-xs text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high rounded-sm transition-colors border border-outline-variant/20 disabled:opacity-50"><Icon name="refresh" size={14} />{regenerating ? '生成中...' : '从模型重新生成'}</button>
+                    <button onClick={() => document.getElementById('thumb-upload')?.click()} disabled={thumbnailUploading} className="flex items-center justify-center gap-1.5 px-3 py-1.5 text-xs text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high rounded-sm transition-colors border border-outline-variant/20 disabled:opacity-50"><Icon name="upload" size={14} />{thumbnailUploading ? '上传中...' : '上传图片'}</button>
+                    <button onClick={handleRegenerate} disabled={regenerating} className="flex items-center justify-center gap-1.5 px-3 py-1.5 text-xs text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high rounded-sm transition-colors border border-outline-variant/20 disabled:opacity-50"><Icon name="refresh" size={14} />{regenerating ? '生成中...' : '从模型重新生成'}</button>
                   </div>
                 </div>
               </div>
@@ -122,9 +124,9 @@ function EditDialog({ open, model, categories, onClose, onSaved }: {
               </div>
               <div className="flex flex-col gap-1.5">
                 <label className="text-xs uppercase tracking-wider text-on-surface-variant">产品图纸 (PDF)</label>
-                <div className="flex items-center gap-3">
+                <div className="flex items-center gap-3 min-w-0">
                   {drawingUrl ? (
-                    <div className="flex items-center gap-2 flex-1">
+                    <div className="flex flex-wrap items-center gap-2 flex-1 min-w-0">
                       <Icon name="description" size={20} className="text-primary shrink-0" />
                       <span className="text-sm text-on-surface truncate flex-1">已上传</span>
                       <a href={drawingUrl} target="_blank" rel="noreferrer" className="text-xs text-primary hover:underline">查看</a>
@@ -161,7 +163,7 @@ function EditDialog({ open, model, categories, onClose, onSaved }: {
                   <Icon name="swap_horiz" size={14} />{fileReplacing ? '上传中...' : '选择新模型文件'}
                 </button>
               </div>
-              <div className="flex justify-end gap-3 pt-2">
+              <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-2 sm:gap-3 pt-2">
                 <button onClick={onClose} className="px-4 py-2 text-sm text-on-surface-variant hover:text-on-surface transition-colors">取消</button>
                 <button onClick={handleSave} disabled={saving} className="px-6 py-2 bg-primary-container text-on-primary rounded-sm text-sm hover:bg-primary transition-colors disabled:opacity-50">{saving ? '保存中...' : '保存'}</button>
               </div>
@@ -175,6 +177,8 @@ function EditDialog({ open, model, categories, onClose, onSaved }: {
 
 function DesktopContent() {
   const { toast } = useToast();
+  const { data: settings } = useSWR("publicSettings", () => getCachedPublicSettings());
+  const { uploadPolicy } = getBusinessConfig(settings);
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
   const [editModel, setEditModel] = useState<ServerModelListItem | null>(null);
@@ -203,8 +207,9 @@ function DesktopContent() {
   };
 
   const handleUpload = async (files: FileList) => {
-    const accepted = Array.from(files).filter(f => { const ext = f.name.split('.').pop()?.toLowerCase() || ''; return ['step', 'stp', 'iges', 'igs', 'xt', 'x_t'].includes(ext); });
-    if (accepted.length === 0) { toast('请选择 STEP/IGES/XT 格式的文件', 'error'); return; }
+    const formats = uploadPolicy.modelFormats.map((f) => f.toLowerCase());
+    const accepted = Array.from(files).filter(f => { const ext = f.name.split('.').pop()?.toLowerCase() || ''; return formats.includes(ext) && f.size <= uploadPolicy.modelMaxSizeMb * 1024 * 1024; });
+    if (accepted.length === 0) { toast(`请选择 ${uploadPolicy.modelFormats.map((f) => f.toUpperCase()).join('/')} 格式且小于 ${uploadPolicy.modelMaxSizeMb}MB 的文件`, 'error'); return; }
     setUploading(true);
     let ok = 0, fail = 0;
     // Upload with limited concurrency (3 at a time)
@@ -245,7 +250,7 @@ function DesktopContent() {
 
   return (
     <>
-      <input type="file" multiple accept=".step,.stp,.iges,.igs,.xt,.x_t" className="hidden" id="admin-file-upload" onChange={(e) => { if (e.target.files?.length) handleUpload(e.target.files); e.target.value = ''; }} />
+      <input type="file" multiple accept={uploadPolicy.modelFormats.map((f) => `.${f}`).join(",")} className="hidden" id="admin-file-upload" onChange={(e) => { if (e.target.files?.length) handleUpload(e.target.files); e.target.value = ''; }} />
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-4">
           <h2 className="font-headline text-2xl font-bold tracking-tight text-on-surface uppercase">模型管理</h2>
@@ -313,10 +318,10 @@ function DesktopContent() {
         <SkeletonList rows={5} />
       ) : (
         <>
-          <div className="bg-surface-container-low rounded-lg border border-outline-variant/10 overflow-hidden">
+          <div className="bg-surface-container-low rounded-lg border border-outline-variant/10 overflow-auto max-h-[calc(100vh-220px)]">
             <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-outline-variant/20">
+              <thead className="sticky top-0 z-10">
+                <tr className="border-b border-outline-variant/20 bg-surface-container-low">
                   <th className="text-left px-4 py-3 text-xs uppercase tracking-wider text-on-surface-variant font-medium">模型</th>
                   <th className="text-left px-4 py-3 text-xs uppercase tracking-wider text-on-surface-variant font-medium">分类</th>
                   <th className="text-left px-4 py-3 text-xs uppercase tracking-wider text-on-surface-variant font-medium">格式</th>
@@ -388,6 +393,8 @@ function DesktopContent() {
 
 function MobileContent() {
   const { toast } = useToast();
+  const { data: settings } = useSWR("publicSettings", () => getCachedPublicSettings());
+  const { uploadPolicy } = getBusinessConfig(settings);
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
   const [editModel, setEditModel] = useState<ServerModelListItem | null>(null);
@@ -406,8 +413,9 @@ function MobileContent() {
   };
 
   const handleUpload = async (files: FileList) => {
-    const accepted = Array.from(files).filter(f => { const ext = f.name.split('.').pop()?.toLowerCase() || ''; return ['step', 'stp', 'iges', 'igs', 'xt', 'x_t'].includes(ext); });
-    if (accepted.length === 0) { toast('请选择 STEP/IGES/XT 格式的文件', 'error'); return; }
+    const formats = uploadPolicy.modelFormats.map((f) => f.toLowerCase());
+    const accepted = Array.from(files).filter(f => { const ext = f.name.split('.').pop()?.toLowerCase() || ''; return formats.includes(ext) && f.size <= uploadPolicy.modelMaxSizeMb * 1024 * 1024; });
+    if (accepted.length === 0) { toast(`请选择 ${uploadPolicy.modelFormats.map((f) => f.toUpperCase()).join('/')} 格式且小于 ${uploadPolicy.modelMaxSizeMb}MB 的文件`, 'error'); return; }
     setUploading(true);
     let ok = 0, fail = 0;
     // Upload with limited concurrency (3 at a time)
@@ -424,12 +432,12 @@ function MobileContent() {
 
   return (
     <>
-      <input type="file" multiple accept=".step,.stp,.iges,.igs,.xt,.x_t" className="hidden" id="mobile-admin-upload" onChange={(e) => { if (e.target.files?.length) handleUpload(e.target.files); e.target.value = ''; }} />
+      <input type="file" multiple accept={uploadPolicy.modelFormats.map((f) => `.${f}`).join(",")} className="hidden" id="mobile-admin-upload" onChange={(e) => { if (e.target.files?.length) handleUpload(e.target.files); e.target.value = ''; }} />
       <div className="px-4 py-4 space-y-4 pb-20">
-        <div className="flex items-center justify-between">
+        <div className="flex items-start justify-between gap-3">
           <h1 className="text-lg font-bold text-on-surface">模型管理</h1>
           <div className="flex items-center gap-2">
-            <span className="text-xs text-on-surface-variant">{data?.total || 0} 个</span>
+            <span className="hidden min-[360px]:inline text-xs text-on-surface-variant">{data?.total || 0} 个</span>
             <button onClick={() => document.getElementById('mobile-admin-upload')?.click()} disabled={uploading} className="flex items-center gap-1 px-3 py-1.5 text-xs font-medium text-on-primary bg-primary-container rounded-sm active:scale-95 disabled:opacity-50">
               <Icon name="cloud_upload" size={14} />{uploading ? '上传中...' : '上传'}
             </button>
@@ -444,15 +452,15 @@ function MobileContent() {
         ) : (
           <div className="space-y-2">
             {data?.items.map((m) => (
-              <Link key={m.model_id} to={`/model/${m.model_id}`} target="_blank" className="bg-surface-container-high rounded-sm p-3 flex items-center gap-3 hover:bg-surface-container-highest transition-colors">
+              <Link key={m.model_id} to={`/model/${m.model_id}`} target="_blank" className="bg-surface-container-high rounded-sm p-3 flex items-start gap-3 hover:bg-surface-container-highest transition-colors">
                 <div className="w-12 h-12 rounded-sm bg-surface-container-highest shrink-0 overflow-hidden">
                   <ModelThumbnail src={m.thumbnail_url} alt="" className="w-full h-full object-cover" />
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm text-on-surface font-medium truncate">{m.name}</p>
-                  <div className="flex items-center gap-2 mt-0.5">
+                  <p className="text-sm text-on-surface font-medium line-clamp-2 break-words">{m.name}</p>
+                  <div className="flex flex-wrap items-center gap-x-2 gap-y-1 mt-0.5">
                     <span className="text-[10px] font-mono bg-surface-container-highest px-1 py-0.5 rounded-sm">{m.format?.toUpperCase()}</span>
-                    <span className="text-[10px] text-on-surface-variant">{m.category || '未分类'}</span>
+                    <span className="text-[10px] text-on-surface-variant break-words">{m.category || '未分类'}</span>
                     <span className="text-[10px] text-on-surface-variant font-mono">{formatSize(m.original_size)}</span>
                   </div>
                 </div>
@@ -477,10 +485,10 @@ function MobileContent() {
       <AnimatePresence>
         {deleteTarget && (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-50 flex items-center justify-center bg-surface-dim/70 backdrop-blur-sm" onClick={() => setDeleteTarget(null)}>
-            <motion.div initial={{ scale: 0.95 }} animate={{ scale: 1 }} exit={{ scale: 0.95 }} onClick={(e) => e.stopPropagation()} className="bg-surface-container-low rounded-lg shadow-xl border border-outline-variant/20 w-full max-w-sm mx-4 p-6">
+            <motion.div initial={{ scale: 0.95 }} animate={{ scale: 1 }} exit={{ scale: 0.95 }} onClick={(e) => e.stopPropagation()} className="bg-surface-container-low rounded-lg shadow-xl border border-outline-variant/20 w-full max-w-sm mx-4 p-5 sm:p-6">
               <h3 className="font-headline text-base font-semibold text-on-surface mb-2">确认删除</h3>
-              <p className="text-sm text-on-surface-variant mb-5">确定要删除「{deleteTarget.name}」吗？</p>
-              <div className="flex justify-end gap-3">
+              <p className="text-sm text-on-surface-variant mb-5 break-words">确定要删除「{deleteTarget.name}」吗？</p>
+              <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-2 sm:gap-3">
                 <button onClick={() => setDeleteTarget(null)} className="px-4 py-2 text-sm text-on-surface-variant">取消</button>
                 <button onClick={handleDelete} disabled={deleting} className="px-4 py-2 bg-error text-white rounded-sm text-sm disabled:opacity-50">{deleting ? '删除中...' : '删除'}</button>
               </div>

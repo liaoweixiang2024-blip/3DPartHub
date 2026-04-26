@@ -13,6 +13,7 @@ import { authMiddleware, type AuthRequest } from "../middleware/auth.js";
 import { requireRole } from "../middleware/rbac.js";
 import { getSetting } from "../lib/settings.js";
 import { config } from "../lib/config.js";
+import { getBusinessConfig } from "../lib/businessConfig.js";
 
 // Parse STEP/IGES file header for the original creation timestamp
 function parseStepFileDate(filePath: string): Date | null {
@@ -64,6 +65,24 @@ function saveMeta(id: string, data: Record<string, unknown>) {
 }
 
 const ACCEPTED_EXTS = new Set(["step", "stp", "iges", "igs", "xt", "x_t"]);
+async function validateModelUpload(file: Express.Multer.File, res: Response): Promise<string | null> {
+  const originalName = file.originalname || "unknown.step";
+  const ext = originalName.split(".").pop()?.toLowerCase() || "";
+  const { uploadPolicy } = await getBusinessConfig();
+  const formats = uploadPolicy.modelFormats.map((item) => item.toLowerCase());
+  const maxBytes = Math.max(1, uploadPolicy.modelMaxSizeMb) * 1024 * 1024;
+  if (!ext || !formats.includes(ext)) {
+    rmSync(file.path, { force: true });
+    res.status(400).json({ detail: `不支持的格式，请上传 ${formats.map((item) => `.${item}`).join(" / ")} 文件` });
+    return null;
+  }
+  if (file.size > maxBytes) {
+    rmSync(file.path, { force: true });
+    res.status(400).json({ detail: `文件过大，最大支持 ${uploadPolicy.modelMaxSizeMb}MB` });
+    return null;
+  }
+  return ext;
+}
 
 // Upload requires auth
 router.post("/api/models/upload", authMiddleware, requireRole("ADMIN"), upload.single("file"), async (req: AuthRequest, res: Response) => {
@@ -74,12 +93,8 @@ router.post("/api/models/upload", authMiddleware, requireRole("ADMIN"), upload.s
   }
 
   const originalName = file.originalname || "unknown.step";
-  const ext = originalName.split(".").pop()?.toLowerCase();
-  if (!ext || !ACCEPTED_EXTS.has(ext)) {
-    rmSync(file.path, { force: true });
-    res.status(400).json({ detail: `不支持的格式: .${ext}` });
-    return;
-  }
+  const ext = await validateModelUpload(file, res);
+  if (!ext) return;
 
   const modelId = randomUUID().slice(0, 12);
   const createdAt = new Date().toISOString();
@@ -247,13 +262,19 @@ router.post("/api/models/upload-local", authMiddleware, requireRole("ADMIN"), as
     return;
   }
 
-  const ext = fileName.split(".").pop()?.toLowerCase();
-  if (!ext || !ACCEPTED_EXTS.has(ext)) {
-    res.status(400).json({ detail: `不支持的格式: .${ext}` });
+  const ext = fileName.split(".").pop()?.toLowerCase() || "";
+  const { uploadPolicy } = await getBusinessConfig();
+  const formats = uploadPolicy.modelFormats.map((item) => item.toLowerCase());
+  const fileSize = (await statAsync(absPath)).size;
+  const maxBytes = Math.max(1, uploadPolicy.modelMaxSizeMb) * 1024 * 1024;
+  if (!formats.includes(ext)) {
+    res.status(400).json({ detail: `不支持的格式，请上传 ${formats.map((item) => `.${item}`).join(" / ")} 文件` });
     return;
   }
-
-  const fileSize = (await statAsync(absPath)).size;
+  if (fileSize > maxBytes) {
+    res.status(400).json({ detail: `文件过大，最大支持 ${uploadPolicy.modelMaxSizeMb}MB` });
+    return;
+  }
   const modelId = randomUUID().slice(0, 12);
   const createdAt = new Date().toISOString();
   const userId = req.user!.userId;
@@ -1055,12 +1076,8 @@ router.post("/api/models/:id/replace-file", authMiddleware, requireRole("ADMIN")
   }
 
   const originalName = file.originalname || "unknown.step";
-  const ext = originalName.split(".").pop()?.toLowerCase();
-  if (!ext || !ACCEPTED_EXTS.has(ext)) {
-    rmSync(file.path, { force: true });
-    res.status(400).json({ detail: `不支持的格式: .${ext}` });
-    return;
-  }
+  const ext = await validateModelUpload(file, res);
+  if (!ext) return;
 
   if (!prisma) {
     rmSync(file.path, { force: true });
@@ -1334,7 +1351,8 @@ router.post("/api/models/:id/versions", authMiddleware, requireRole("ADMIN"), up
       return;
     }
 
-    const ext = file.originalname?.split(".").pop()?.toLowerCase() || "step";
+    const ext = await validateModelUpload(file, res);
+    if (!ext) return;
     const versionNumber = model.currentVersion + 1;
 
     // Convert file

@@ -8,7 +8,8 @@ import UploadModal from "./UploadModal";
 import NotificationPanel from "./NotificationPanel";
 import Icon from "./Icon";
 import Tooltip from "./Tooltip";
-import { getSiteTitle, getSiteLogo, getSiteIcon, getLogoDisplayMode, onSiteConfigChange } from "../../lib/publicSettings";
+import BrandMark from "./BrandMark";
+import { onSiteConfigChange } from "../../lib/publicSettings";
 
 interface TopNavProps {
   compact?: boolean;
@@ -39,6 +40,7 @@ function UserMenu({ size = 'default' }: { size?: 'compact' | 'default' }) {
   const isCompact = size === 'compact';
   const avatarSize = isCompact ? 'w-7 h-7' : 'w-8 h-8';
   const iconSize = isCompact ? 16 : 18;
+  const compactButtonClass = isCompact ? 'h-9 w-9 justify-center' : '';
 
   const menuItems = [
     { label: '个人中心', icon: 'person', onClick: () => { setOpen(false); navigate('/profile'); } },
@@ -51,7 +53,7 @@ function UserMenu({ size = 'default' }: { size?: 'compact' | 'default' }) {
     return (
       <button
         onClick={() => navigate('/login')}
-        className={`flex items-center gap-2 cursor-pointer ${isCompact ? '' : 'ml-2'}`}
+        className={`flex items-center gap-2 cursor-pointer ${compactButtonClass} ${isCompact ? '' : 'ml-2'}`}
       >
         <div className={`${avatarSize} rounded-full bg-surface-container-highest flex items-center justify-center`}>
           <Icon name="person" size={iconSize} className="text-on-surface-variant" />
@@ -72,7 +74,7 @@ function UserMenu({ size = 'default' }: { size?: 'compact' | 'default' }) {
     >
       <button
         onClick={() => setOpen(!open)}
-        className={`flex items-center gap-2 cursor-pointer ${isCompact ? '' : 'ml-2'}`}
+        className={`flex items-center gap-2 cursor-pointer ${compactButtonClass} ${isCompact ? '' : 'ml-2'}`}
         aria-label="用户菜单"
       >
         <div className={`${avatarSize} rounded-full bg-surface-container-highest flex items-center justify-center`}>
@@ -126,7 +128,7 @@ function ThemeToggle() {
   return (
     <button
       onClick={toggleTheme}
-      className="p-2 text-on-surface-variant hover:text-on-surface transition-colors rounded-sm hover:bg-surface-container-high"
+      className="flex h-9 w-9 items-center justify-center text-on-surface-variant hover:text-on-surface transition-colors rounded-sm hover:bg-surface-container-high"
       title={theme === "dark" ? "切换亮色模式" : "切换暗色模式"}
       aria-label={theme === "dark" ? "切换亮色模式" : "切换暗色模式"}
     >
@@ -204,37 +206,18 @@ export default function TopNav({ compact = false, onMenuToggle }: TopNavProps) {
     return (
       <>
         <header className="bg-surface-container-low border-b border-surface-container-highest shrink-0 z-50" style={{ paddingTop: "env(safe-area-inset-top, 0px)" }}>
-          <div className="h-11 flex items-center px-3">
+          <div className="flex h-12 items-center gap-1 px-3">
             <button
               onClick={() => onMenuToggle?.()}
-              className="p-1 text-primary-container hover:text-on-surface transition-colors"
+              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-sm text-primary-container transition-colors hover:bg-surface-container-high hover:text-on-surface"
               aria-label="打开菜单"
             >
               <Icon name="menu" size={22} />
             </button>
-            <Link to="/" className="flex items-center gap-2 min-w-0 ml-1">
-                {getLogoDisplayMode() === 'title_only' ? (
-                  <span className="font-headline font-bold text-on-surface text-sm tracking-tighter truncate">{getSiteTitle()}</span>
-                ) : getLogoDisplayMode() === 'logo_only' && getSiteLogo() ? (
-                  <img src={getSiteLogo()} alt="" className="h-6 max-w-[120px] shrink-0" />
-                ) : getLogoDisplayMode() === 'logo_and_title' && getSiteIcon() ? (
-                  <>
-                    <img src={getSiteIcon()} alt="" className="h-6 w-6 shrink-0 block" />
-                    <span className="font-headline font-bold text-on-surface text-sm tracking-tighter truncate">{getSiteTitle()}</span>
-                  </>
-                ) : getLogoDisplayMode() === 'logo_and_title' && getSiteLogo() ? (
-                  <>
-                    <img src={getSiteLogo()} alt="" className="h-5 max-w-[60px] shrink-0" />
-                    <span className="font-headline font-bold text-on-surface text-sm tracking-tighter truncate">{getSiteTitle()}</span>
-                  </>
-                ) : (
-                  <>
-                    <Icon name="precision_manufacturing" size={20} className="text-primary-container shrink-0" />
-                    <span className="font-headline font-bold text-on-surface text-sm tracking-tighter truncate">{getSiteTitle()}</span>
-                  </>
-                )}
-              </Link>
-            <div className="flex items-center gap-0.5 shrink-0 ml-auto">
+            <Link to="/" className="flex h-9 min-w-0 flex-1 items-center">
+              <BrandMark size="compact" />
+            </Link>
+            <div className="ml-auto flex h-9 shrink-0 items-center gap-0.5">
               <NotificationPanel compact />
               <ThemeToggle />
               <UserMenu size="compact" />
@@ -263,35 +246,11 @@ export default function TopNav({ compact = false, onMenuToggle }: TopNavProps) {
     );
   }
 
-  const displayMode = getLogoDisplayMode();
-  const siteLogo = getSiteLogo();
-  const siteIcon = getSiteIcon();
-  const siteTitle = getSiteTitle();
-
   return (
     <>
       <header className="h-14 flex items-center bg-surface-container-low border-b border-outline-variant/10 shrink-0 z-50">
-        <Link to="/" className={`flex items-center hover:opacity-80 active:scale-95 transition-all shrink-0 w-56 cursor-pointer ${displayMode === 'logo_only' ? 'justify-center' : 'px-5 gap-1.5'}`}>
-          {displayMode === 'title_only' ? (
-            <span className="text-sm font-headline font-bold tracking-tighter text-on-surface truncate">{siteTitle}</span>
-          ) : displayMode === 'logo_only' && siteLogo ? (
-            <img src={siteLogo} alt={siteTitle} className="h-8 w-full px-4 object-contain" />
-          ) : displayMode === 'logo_and_title' && siteIcon ? (
-            <>
-              <img src={siteIcon} alt={siteTitle} className="h-7 w-7 shrink-0 object-contain" />
-              <span className="text-sm font-headline font-bold tracking-tighter text-on-surface truncate">{siteTitle}</span>
-            </>
-          ) : displayMode === 'logo_and_title' && siteLogo ? (
-            <>
-              <img src={siteLogo} alt={siteTitle} className="h-7 max-w-[72px] shrink-0 object-contain" />
-              <span className="text-sm font-headline font-bold tracking-tighter text-on-surface truncate">{siteTitle}</span>
-            </>
-          ) : (
-            <>
-              <Icon name="view_in_ar" size={26} className="text-primary-container shrink-0" />
-              <span className="text-sm font-headline font-bold tracking-tighter text-on-surface truncate">{siteTitle}</span>
-            </>
-          )}
+        <Link to="/" className="flex w-56 shrink-0 cursor-pointer items-center px-5 transition-all hover:opacity-80 active:scale-95">
+          <BrandMark size="nav" className="w-full" />
         </Link>
 
         <form onSubmit={handleSearchSubmit} className="hidden md:flex items-center flex-1 max-w-lg bg-surface-container-lowest rounded-lg px-3 py-1.5 border border-outline-variant/20 focus-within:ring-1 focus-within:ring-primary-container transition-all">

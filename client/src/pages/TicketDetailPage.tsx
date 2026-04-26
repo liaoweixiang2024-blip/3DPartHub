@@ -9,22 +9,12 @@ import BottomNav from '../components/shared/BottomNav';
 import AppSidebar from '../components/shared/Sidebar';
 import MobileNavDrawer from '../components/shared/MobileNavDrawer';
 import Icon from '../components/shared/Icon';
+import SafeImage from '../components/shared/SafeImage';
 import { useToast } from '../components/shared/Toast';
 import client from '../api/client';
 import { getTicketMessages, sendTicketMessage, updateTicketStatus, uploadTicketAttachment, type TicketMessage } from '../api/tickets';
-
-const STATUS_MAP: Record<string, { label: string; color: string; bg: string }> = {
-  open: { label: '待处理', color: 'text-primary-container', bg: 'bg-primary-container/10' },
-  waiting_user: { label: '待回复', color: 'text-amber-600', bg: 'bg-amber-500/10' },
-  in_progress: { label: '处理中', color: 'text-blue-500', bg: 'bg-blue-500/10' },
-  resolved: { label: '已解决', color: 'text-green-500', bg: 'bg-green-500/10' },
-  closed: { label: '已关闭', color: 'text-on-surface-variant', bg: 'bg-surface-container-highest' },
-};
-
-const CLASSIFICATION_MAP: Record<string, string> = {
-  dimension: '尺寸修改', material: '材料变更', novel: '新零件设计',
-  topology: '拓扑错误报告', process: '工艺问题', other: '其他',
-};
+import { getCachedPublicSettings } from '../lib/publicSettings';
+import { getBusinessConfig, statusInfo } from '../lib/businessConfig';
 
 interface TicketInfo {
   id: string; userId: string; basePart: string | null;
@@ -55,8 +45,8 @@ function MessageBubble({ msg }: { msg: TicketMessage }) {
   const [previewImg, setPreviewImg] = useState<string | null>(null);
   return (
     <div className={`flex ${isRight ? 'justify-end' : 'justify-start'} mb-3`}>
-      <div className={`max-w-[80%] ${isRight ? 'order-2' : 'order-1'}`}>
-        <div className="flex items-center gap-2 mb-1">
+      <div className={`max-w-[88%] sm:max-w-[80%] min-w-0 ${isRight ? 'order-2' : 'order-1'}`}>
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 mb-1">
           {!isRight && (
             <span className="text-[11px] font-medium text-on-surface-variant">{msg.user?.username || '用户'}</span>
           )}
@@ -67,18 +57,18 @@ function MessageBubble({ msg }: { msg: TicketMessage }) {
             <span className="text-[11px] font-medium text-primary">管理员</span>
           )}
         </div>
-        <div className={`rounded-lg px-3.5 py-2.5 text-sm leading-relaxed whitespace-pre-wrap ${
+        <div className={`rounded-lg px-3.5 py-2.5 text-sm leading-relaxed whitespace-pre-wrap break-words ${
           isRight
             ? 'bg-primary-container/20 text-on-surface border border-primary/10'
             : 'bg-surface-container-high text-on-surface border border-outline-variant/10'
         }`}>
           {msg.content}
           {msg.attachment && (
-            <img
+            <SafeImage
               src={msg.attachment}
               alt="附件"
-              className="mt-2 max-w-full rounded cursor-pointer hover:opacity-90 transition-opacity"
-              style={{ maxHeight: 240 }}
+              className="mt-2 max-w-full max-h-[240px] rounded cursor-pointer hover:opacity-90 transition-opacity object-contain"
+              fallbackClassName="min-h-24"
               onClick={() => setPreviewImg(msg.attachment)}
             />
           )}
@@ -87,7 +77,7 @@ function MessageBubble({ msg }: { msg: TicketMessage }) {
       {/* Image preview overlay */}
       {previewImg && (
         <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center" onClick={() => setPreviewImg(null)}>
-          <img src={previewImg} alt="预览" className="max-w-[90vw] max-h-[90vh] object-contain" />
+          <SafeImage src={previewImg} alt="预览" className="max-w-[90vw] max-h-[90vh] object-contain" />
         </div>
       )}
     </div>
@@ -98,18 +88,18 @@ function MessageBubble({ msg }: { msg: TicketMessage }) {
 function OriginalMessage({ ticket }: { ticket: TicketInfo }) {
   return (
     <div className="flex justify-start mb-3">
-      <div className="max-w-[80%]">
-        <div className="flex items-center gap-2 mb-1">
+      <div className="max-w-[88%] sm:max-w-[80%] min-w-0">
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 mb-1">
           <span className="text-[11px] font-medium text-on-surface-variant">{ticket.user?.username || '用户'}</span>
           <span className="text-[10px] text-on-surface-variant/60">
             {new Date(ticket.createdAt).toLocaleString('zh-CN')}
           </span>
         </div>
-        <div className="rounded-lg px-3.5 py-2.5 text-sm leading-relaxed whitespace-pre-wrap bg-surface-container-high text-on-surface border border-outline-variant/10">
+        <div className="rounded-lg px-3.5 py-2.5 text-sm leading-relaxed whitespace-pre-wrap break-words bg-surface-container-high text-on-surface border border-outline-variant/10">
           {ticket.description}
         </div>
         {ticket.basePart && (
-          <p className="text-[11px] text-on-surface-variant mt-1 ml-1">基准零件: {ticket.basePart}</p>
+          <p className="text-[11px] text-on-surface-variant mt-1 ml-1 break-words">基准零件: {ticket.basePart}</p>
         )}
       </div>
     </div>
@@ -149,6 +139,9 @@ function ChatContent({ ticketId }: { ticketId: string }) {
   const { toast } = useToast();
   const isDesktop = useMediaQuery('(min-width: 768px)');
   const { data: ticket } = useTicket(ticketId);
+  const { data: settings } = useSWR("publicSettings", () => getCachedPublicSettings());
+  const business = getBusinessConfig(settings);
+  const classificationMap = new Map(business.ticketClassifications.map((item) => [item.value, item.label]));
   const { data: messages, mutate: mutateMessages } = useMessages(ticketId);
   const [input, setInput] = useState('');
   const [sending, setSending] = useState(false);
@@ -184,7 +177,7 @@ function ChatContent({ ticketId }: { ticketId: string }) {
     const file = e.target.files?.[0];
     if (!file) return;
     if (!file.type.startsWith('image/')) { toast('请选择图片文件', 'error'); return; }
-    if (file.size > 5 * 1024 * 1024) { toast('图片不能超过 5MB', 'error'); return; }
+    if (file.size > business.uploadPolicy.ticketAttachmentMaxSizeMb * 1024 * 1024) { toast(`附件不能超过 ${business.uploadPolicy.ticketAttachmentMaxSizeMb}MB`, 'error'); return; }
     try {
       setPendingImageUrl(URL.createObjectURL(file));
       const { url } = await uploadTicketAttachment(ticketId, file);
@@ -194,7 +187,7 @@ function ChatContent({ ticketId }: { ticketId: string }) {
       setPendingImageUrl(null);
     }
     e.target.value = '';
-  }, [ticketId, toast]);
+  }, [ticketId, toast, business.uploadPolicy.ticketAttachmentMaxSizeMb]);
 
   const handleStatusUpdate = useCallback(async (status: string) => {
     try {
@@ -209,27 +202,27 @@ function ChatContent({ ticketId }: { ticketId: string }) {
     return <SkeletonList rows={4} />;
   }
 
-  const statusInfo = STATUS_MAP[ticket.status] || STATUS_MAP.open;
+  const info = statusInfo(business.ticketStatuses, ticket.status);
   const msgList = messages || [];
 
   return (
     <div className="flex flex-col h-full">
       {/* Header */}
       <div className="shrink-0 border-b border-outline-variant/10 bg-surface-container px-4 py-3">
-        <div className="flex items-center gap-3 mb-2">
+        <div className="flex items-center gap-3 mb-2 min-w-0">
           <button onClick={() => navigate(-1)} className="text-on-surface-variant hover:text-on-surface transition-colors">
             <Icon name="arrow_back" size={20} />
           </button>
           <h2 className="font-headline text-lg font-bold text-on-surface flex-1 truncate">
-            {CLASSIFICATION_MAP[ticket.classification] || ticket.classification}
+            {classificationMap.get(ticket.classification) || ticket.classification}
           </h2>
-          <span className={`text-[10px] px-2 py-0.5 rounded-sm font-bold shrink-0 ${statusInfo.color} ${statusInfo.bg}`}>
-            {statusInfo.label}
+          <span className={`text-[10px] px-2 py-0.5 rounded-sm font-bold shrink-0 ${info.color || ""} ${info.bg || ""}`}>
+            {info.label}
           </span>
         </div>
-        <div className="flex items-center gap-4 text-xs text-on-surface-variant">
-          <span className="flex items-center gap-1"><Icon name="person" size={12} />{ticket.user?.username || '未知'}</span>
-          <span className="flex items-center gap-1"><Icon name="schedule" size={12} />{new Date(ticket.createdAt).toLocaleString('zh-CN')}</span>
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-on-surface-variant">
+          <span className="flex items-center gap-1 min-w-0"><Icon name="person" size={12} className="shrink-0" /><span className="truncate">{ticket.user?.username || '未知'}</span></span>
+          <span className="flex items-center gap-1"><Icon name="schedule" size={12} className="shrink-0" />{new Date(ticket.createdAt).toLocaleString('zh-CN')}</span>
           {isAdmin && <StatusActions ticketId={ticketId} status={ticket.status} onUpdate={handleStatusUpdate} />}
         </div>
       </div>
@@ -244,10 +237,10 @@ function ChatContent({ ticketId }: { ticketId: string }) {
       </div>
 
       {/* Input area */}
-      <div className={`shrink-0 border-t border-outline-variant/10 bg-surface-container ${isDesktop ? 'p-3' : 'p-2 pb-3'}`}>
+      <div className={`shrink-0 border-t border-outline-variant/10 bg-surface-container ${isDesktop ? 'p-3' : 'p-2 pb-3 mb-20'}`}>
         {pendingImageUrl && (
           <div className="mb-2 relative inline-block">
-            <img src={pendingImageUrl} alt="待发送" className={`${isDesktop ? 'h-20' : 'h-16'} rounded border border-outline-variant/20`} />
+            <SafeImage src={pendingImageUrl} alt="待发送" className={`${isDesktop ? 'h-20' : 'h-16'} rounded border border-outline-variant/20`} />
             <button
               onClick={() => { setPendingImage(null); setPendingImageUrl(null); }}
               className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-error text-on-primary rounded-full flex items-center justify-center text-xs"

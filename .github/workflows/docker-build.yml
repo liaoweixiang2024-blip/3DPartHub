@@ -78,6 +78,16 @@ jobs:
           body: |
             ## Docker Images
 
+            API image:
+            `ghcr.io/${{ github.repository_owner }}/3dparthub-api:${{ steps.version.outputs.version }}`
+
+            Includes the Express/Prisma API service, migrations, model conversion workers, backup/restore, audit logs, admin settings, and background jobs.
+
+            Web image:
+            `ghcr.io/${{ github.repository_owner }}/3dparthub-web:${{ steps.version.outputs.version }}`
+
+            Includes the React/Vite frontend for 3D preview, product selection, inquiry/quote workflows, sharing, and admin pages.
+
             ```bash
             # Update deploy/docker-compose.yml IMAGE_TAG to ${{ steps.version.outputs.version }}
             docker compose pull && docker compose up -d

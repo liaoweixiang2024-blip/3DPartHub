@@ -73,9 +73,9 @@ export default function CategorySelect({ categories, value, onChange, placeholde
       <button
         type="button"
         onClick={() => setOpen(!open)}
-        className="w-full flex items-center justify-between bg-surface-container-lowest text-on-surface border border-outline-variant/30 focus:border-primary px-3 py-2 text-sm rounded-sm outline-none cursor-pointer text-left"
+        className="w-full flex items-center justify-between bg-surface-container-lowest text-on-surface border border-outline-variant/30 focus:border-primary px-3 py-2 text-sm rounded-sm outline-none cursor-pointer text-left min-w-0"
       >
-        <span className={selectedName ? "text-on-surface" : "text-on-surface-variant/50"}>
+        <span className={`min-w-0 truncate ${selectedName ? "text-on-surface" : "text-on-surface-variant/50"}`}>
           {selectedName || placeholder}
         </span>
         <Icon name={open ? "expand_less" : "expand_more"} size={18} className="text-on-surface-variant shrink-0" />
@@ -131,7 +131,7 @@ export default function CategorySelect({ categories, value, onChange, placeholde
                     }`}
                   >
                     <Icon name={cat.icon || "folder"} size={14} className="shrink-0 text-on-surface-variant" />
-                    <span className="font-medium">{cat.name}</span>
+                    <span className="font-medium min-w-0 break-words">{cat.name}</span>
                     {(cat as any).count !== undefined && (
                       <span className="text-[10px] text-on-surface-variant/60 ml-auto">{(cat as any).count}</span>
                     )}
@@ -148,7 +148,7 @@ export default function CategorySelect({ categories, value, onChange, placeholde
                       }`}
                     >
                       <span className="text-on-surface-variant/30">└</span>
-                      <span>{child.name}</span>
+                      <span className="min-w-0 break-words">{child.name}</span>
                       {(child as any).count !== undefined && (
                         <span className="text-[10px] text-on-surface-variant/60 ml-auto">{(child as any).count}</span>
                       )}

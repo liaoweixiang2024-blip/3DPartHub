@@ -8,6 +8,7 @@ import { authMiddleware, type AuthRequest } from "../middleware/auth.js";
 import { requireRole } from "../middleware/rbac.js";
 import { config } from "../lib/config.js";
 import { deleteUploadSession, loadUploadSession, saveUploadSession, cleanupExpiredSessions } from "../lib/uploadSessionStore.js";
+import { getBusinessConfig } from "../lib/businessConfig.js";
 
 const router = Router();
 
@@ -31,6 +32,17 @@ router.post("/api/upload/init", authMiddleware, requireRole("ADMIN"), async (req
   }
   if (normalizedFileSize <= 0 || normalizedTotalChunks <= 0) {
     res.status(400).json({ detail: "文件参数无效" });
+    return;
+  }
+  const { uploadPolicy } = await getBusinessConfig();
+  const maxBytes = Math.max(1, uploadPolicy.modelMaxSizeMb) * 1024 * 1024;
+  const ext = String(fileName).split(".").pop()?.toLowerCase() || "";
+  if (normalizedFileSize > maxBytes) {
+    res.status(400).json({ detail: `文件过大，最大支持 ${uploadPolicy.modelMaxSizeMb}MB` });
+    return;
+  }
+  if (!uploadPolicy.modelFormats.map((item) => item.toLowerCase()).includes(ext)) {
+    res.status(400).json({ detail: `不支持的格式，请上传 ${uploadPolicy.modelFormats.map((item) => `.${item}`).join(" / ")} 文件` });
     return;
   }
 

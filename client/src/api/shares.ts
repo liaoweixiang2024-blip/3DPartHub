@@ -64,8 +64,10 @@ export async function deleteShare(id: string): Promise<void> {
   await client.delete(`/shares/${id}`);
 }
 
-export async function getShareInfo(token: string): Promise<ShareInfo> {
-  const res = await client.get(`/shares/${token}/info`);
+export async function getShareInfo(token: string, password?: string): Promise<ShareInfo> {
+  const res = await client.get(`/shares/${token}/info`, {
+    params: password ? { password } : undefined,
+  });
   return unwrap(res);
 }
 
@@ -73,6 +75,7 @@ export async function verifySharePassword(token: string, password: string): Prom
   await client.post(`/shares/${token}/verify`, { password });
 }
 
-export function getShareDownloadUrl(token: string): string {
-  return `/api/shares/${token}/download`;
+export function getShareDownloadUrl(token: string, password?: string): string {
+  const query = password ? `?password=${encodeURIComponent(password)}` : "";
+  return `/api/shares/${token}/download${query}`;
 }

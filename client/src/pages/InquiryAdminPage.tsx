@@ -9,28 +9,16 @@ import AppSidebar from "../components/shared/Sidebar";
 import MobileNavDrawer from "../components/shared/MobileNavDrawer";
 import Icon from "../components/shared/Icon";
 import { getAllInquiries } from "../api/inquiries";
-
-const STATUS_TABS = [
-  { value: "all", label: "全部" },
-  { value: "submitted", label: "待报价" },
-  { value: "quoted", label: "已报价" },
-  { value: "accepted", label: "已接受" },
-  { value: "rejected", label: "已拒绝" },
-];
-
-const STATUS_MAP: Record<string, { label: string; color: string; bg: string }> = {
-  draft: { label: "草稿", color: "text-on-surface-variant", bg: "bg-surface-container-highest" },
-  submitted: { label: "待报价", color: "text-blue-500", bg: "bg-blue-500/10" },
-  quoted: { label: "已报价", color: "text-green-600", bg: "bg-green-500/10" },
-  accepted: { label: "已接受", color: "text-emerald-600", bg: "bg-emerald-500/10" },
-  rejected: { label: "已拒绝", color: "text-red-500", bg: "bg-red-500/10" },
-  cancelled: { label: "已取消", color: "text-on-surface-variant", bg: "bg-surface-container-highest" },
-};
+import { getCachedPublicSettings } from "../lib/publicSettings";
+import { getBusinessConfig, statusInfo } from "../lib/businessConfig";
 
 function DesktopContent() {
   const navigate = useNavigate();
   const [statusFilter, setStatusFilter] = useState("all");
   const [page, setPage] = useState(1);
+  const { data: settings } = useSWR("publicSettings", () => getCachedPublicSettings());
+  const statuses = getBusinessConfig(settings).inquiryStatuses;
+  const statusTabs = [{ value: "all", label: "全部" }, ...statuses.filter((s) => s.tab).map((s) => ({ value: s.value, label: s.label }))];
 
   const { data, isLoading } = useSWR(
     ["admin-inquiries", statusFilter, page],
@@ -50,7 +38,7 @@ function DesktopContent() {
 
       {/* Status tabs */}
       <div className="flex gap-1 mb-6 border-b border-outline-variant/10">
-        {STATUS_TABS.map((tab) => (
+        {statusTabs.map((tab) => (
           <button
             key={tab.value}
             onClick={() => { setStatusFilter(tab.value); setPage(1); }}
@@ -77,8 +65,8 @@ function DesktopContent() {
           <p className="text-sm text-on-surface-variant">暂无询价单</p>
         </div>
       ) : (
-        <div className="bg-surface-container-low rounded-lg border border-outline-variant/10 overflow-hidden">
-          <div className="grid grid-cols-[80px_1fr_140px_100px_120px_80px] gap-4 px-6 py-3 bg-surface-container-high text-xs uppercase tracking-wider text-on-surface-variant font-bold border-b border-outline-variant/10">
+        <div className="bg-surface-container-low rounded-lg border border-outline-variant/10 overflow-auto max-h-[calc(100vh-260px)]">
+          <div className="grid grid-cols-[80px_1fr_140px_100px_120px_80px] gap-4 px-6 py-3 bg-surface-container-low text-xs uppercase tracking-wider text-on-surface-variant font-bold border-b border-outline-variant/10 sticky top-0 z-10">
             <span>状态</span>
             <span>用户 / 产品</span>
             <span>公司</span>
@@ -87,13 +75,13 @@ function DesktopContent() {
             <span>操作</span>
           </div>
           {inquiries.map((inq) => {
-            const info = STATUS_MAP[inq.status] || STATUS_MAP.submitted;
+            const info = statusInfo(statuses, inq.status);
             return (
               <div
                 key={inq.id}
                 className="grid grid-cols-[80px_1fr_140px_100px_120px_80px] gap-4 px-6 py-4 border-b border-outline-variant/5 hover:bg-surface-container-high/50 transition-colors items-center"
               >
-                <span className={`inline-flex items-center text-xs px-2 py-0.5 rounded-md font-bold ${info.color} ${info.bg}`}>
+                <span className={`inline-flex items-center text-xs px-2 py-0.5 rounded-md font-bold ${info.color || ""} ${info.bg || ""}`}>
                   {info.label}
                 </span>
                 <div className="min-w-0">
@@ -141,6 +129,9 @@ function DesktopContent() {
 function MobileContent() {
   const navigate = useNavigate();
   const [statusFilter, setStatusFilter] = useState("all");
+  const { data: settings } = useSWR("publicSettings", () => getCachedPublicSettings());
+  const statuses = getBusinessConfig(settings).inquiryStatuses;
+  const statusTabs = [{ value: "all", label: "全部" }, ...statuses.filter((s) => s.tab).map((s) => ({ value: s.value, label: s.label }))];
 
   const { data, isLoading } = useSWR(
     ["admin-inquiries", statusFilter],
@@ -149,11 +140,11 @@ function MobileContent() {
   const inquiries = data?.items ?? [];
 
   return (
-    <div className="px-4 py-5 pb-6">
+    <div className="px-4 py-5 pb-20">
       <h1 className="text-lg font-bold text-on-surface mb-4">询价管理</h1>
 
       <div className="flex gap-1 mb-4 overflow-x-auto scrollbar-none">
-        {STATUS_TABS.map((tab) => (
+        {statusTabs.map((tab) => (
           <button
             key={tab.value}
             onClick={() => setStatusFilter(tab.value)}
@@ -182,22 +173,22 @@ function MobileContent() {
       ) : (
         <div className="flex flex-col gap-2.5">
           {inquiries.map((inq) => {
-            const info = STATUS_MAP[inq.status] || STATUS_MAP.submitted;
+            const info = statusInfo(statuses, inq.status);
             return (
               <div
                 key={inq.id}
                 onClick={() => navigate(`/admin/inquiries/${inq.id}`)}
                 className="bg-surface-container-high rounded-lg p-3.5 cursor-pointer active:bg-surface-container-highest transition-colors"
               >
-                <div className="flex items-center gap-2 mb-2">
-                  <span className={`text-[10px] px-2 py-0.5 rounded-sm font-bold ${info.color} ${info.bg}`}>{info.label}</span>
-                  <span className="text-[10px] text-on-surface-variant">{new Date(inq.createdAt).toLocaleDateString("zh-CN")}</span>
-                </div>
-                <p className="text-sm text-on-surface mb-1 truncate">
+              <div className="flex flex-wrap items-center gap-2 mb-2">
+                <span className={`text-[10px] px-2 py-0.5 rounded-sm font-bold ${info.color || ""} ${info.bg || ""}`}>{info.label}</span>
+                <span className="text-[10px] text-on-surface-variant">{new Date(inq.createdAt).toLocaleDateString("zh-CN")}</span>
+              </div>
+                <p className="text-sm text-on-surface mb-1 line-clamp-2 break-words">
                   {inq.items.map((it) => it.modelNo || it.productName).join("、")}
                 </p>
-                <div className="flex items-center justify-between text-xs text-on-surface-variant">
-                  <span>{inq.user?.username || "—"} · {inq.items.length} 项</span>
+                <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-on-surface-variant">
+                  <span className="min-w-0 break-words">{inq.user?.username || "—"} · {inq.items.length} 项</span>
                   <span>{inq.totalAmount ? `¥${Number(inq.totalAmount).toFixed(2)}` : "待报价"}</span>
                 </div>
               </div>

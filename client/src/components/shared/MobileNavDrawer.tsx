@@ -1,7 +1,10 @@
 import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import useSWR from 'swr';
 import { useAuthStore } from '../../stores/useAuthStore';
-import { userNav, adminNav } from './Sidebar';
+import { getCachedPublicSettings } from '../../lib/publicSettings';
+import { getBusinessConfig } from '../../lib/businessConfig';
 import Icon from "../shared/Icon";
 
 interface MobileNavDrawerProps {
@@ -13,8 +16,15 @@ export default function MobileNavDrawer({ open, onClose }: MobileNavDrawerProps)
   const location = useLocation();
   const navigate = useNavigate();
   const { logout, user } = useAuthStore();
+  const { data: settings } = useSWR("publicSettings", () => getCachedPublicSettings());
   const isAdmin = user?.role === 'ADMIN';
-  const navItems = isAdmin ? adminNav : userNav;
+  const business = getBusinessConfig(settings);
+  const navItems = isAdmin ? business.adminNav : business.userNav;
+
+  useEffect(() => {
+    document.documentElement.classList.toggle('mobile-nav-drawer-open', open);
+    return () => document.documentElement.classList.remove('mobile-nav-drawer-open');
+  }, [open]);
 
   return (
     <AnimatePresence>
@@ -32,7 +42,11 @@ export default function MobileNavDrawer({ open, onClose }: MobileNavDrawerProps)
             animate={{ x: 0 }}
             exit={{ x: "-100%" }}
             transition={{ type: "spring", damping: 25, stiffness: 300 }}
-            className="fixed left-0 top-[56px] w-[240px] h-[calc(100vh-56px)] bg-surface-container-low z-[70] flex flex-col overflow-y-auto"
+            className="fixed left-0 top-0 w-[min(82vw,280px)] h-dvh bg-surface-container-low z-[70] flex flex-col overflow-y-auto shadow-2xl"
+            style={{
+              paddingTop: "env(safe-area-inset-top, 0px)",
+              paddingBottom: "env(safe-area-inset-bottom, 0px)",
+            }}
           >
             <div className="px-6 py-4 border-b border-surface">
               <span className="text-xs font-bold text-on-surface-variant uppercase tracking-widest font-headline">导航</span>

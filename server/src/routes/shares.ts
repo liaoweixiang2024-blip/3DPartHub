@@ -15,6 +15,13 @@ function asSingleString(value: unknown): string | undefined {
   return undefined;
 }
 
+async function isValidSharePassword(hashedPassword: string | null, candidate: unknown): Promise<boolean> {
+  if (!hashedPassword) return true;
+  const password = asSingleString(candidate);
+  if (!password) return false;
+  return bcrypt.compare(password, hashedPassword);
+}
+
 // ========== Authenticated endpoints ==========
 
 // Create share link
@@ -335,6 +342,7 @@ router.get("/api/shares/:token/info", async (req: Request, res: Response) => {
 
   const model = share.model;
   const siteTitle = await getSetting<string>("site_title").catch(() => "3DPartHub");
+  const passwordVerified = await isValidSharePassword(share.password, req.query.password);
 
   res.json({
     id: share.id,
@@ -351,7 +359,7 @@ router.get("/api/shares/:token/info", async (req: Request, res: Response) => {
     hasPassword: !!share.password,
     expiresAt: share.expiresAt,
     siteTitle,
-    gltfUrl: share.allowPreview ? model.gltfUrl : undefined,
+    gltfUrl: share.allowPreview && passwordVerified ? model.gltfUrl : undefined,
   });
 });
 
@@ -419,6 +427,11 @@ router.get("/api/shares/:token/download", async (req: Request, res: Response) =>
 
   if (!share.allowDownload) {
     res.status(403).json({ detail: "此链接不允许下载" });
+    return;
+  }
+
+  if (!(await isValidSharePassword(share.password, req.query.password))) {
+    res.status(403).json({ detail: "请输入正确的分享密码" });
     return;
   }
 

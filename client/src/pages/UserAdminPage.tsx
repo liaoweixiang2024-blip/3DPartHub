@@ -105,23 +105,23 @@ export default function UserAdminPage() {
       <div className="space-y-2">
         {users.map((u) => (
           <div key={u.id} className="bg-surface-container-low rounded-md border border-outline-variant/10 p-3">
-            <div className="flex items-start justify-between gap-3">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
               <div className="min-w-0 flex-1">
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 min-w-0">
                   <span className="font-medium text-sm text-on-surface truncate">{u.username}</span>
                   <span className={`text-[10px] px-1.5 py-0.5 rounded-sm font-medium ${ROLE_COLORS[u.role] || ROLE_COLORS.VIEWER}`}>
                     {ROLE_LABELS[u.role] || u.role}
                   </span>
                 </div>
-                <p className="text-xs text-on-surface-variant mt-0.5">{u.email}</p>
-                <div className="flex items-center gap-3 mt-1 text-[10px] text-on-surface-variant/60">
-                  {u.company && <span>{u.company}</span>}
+                <p className="text-xs text-on-surface-variant mt-0.5 break-all">{u.email}</p>
+                <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1 text-[10px] text-on-surface-variant/60">
+                  {u.company && <span className="break-words">{u.company}</span>}
                   <span>下载 {u._count.downloads}</span>
                   <span>收藏 {u._count.favorites}</span>
                   <span>{new Date(u.createdAt).toLocaleDateString()}</span>
                 </div>
               </div>
-              <div className="flex items-center gap-2 shrink-0">
+              <div className="flex items-center justify-end gap-2 shrink-0">
                 <select
                   value={u.role}
                   onChange={(e) => handleRoleChange(u.id, e.target.value)}

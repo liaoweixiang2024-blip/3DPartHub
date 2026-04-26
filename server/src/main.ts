@@ -2,7 +2,7 @@ import express from "express";
 import cors from "cors";
 import compression from "compression";
 import { join } from "node:path";
-import { mkdirSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync } from "node:fs";
 import { config } from "./lib/config.js";
 import modelsRouter from "./routes/models.js";
 import authRouter from "./routes/auth.js";
@@ -23,11 +23,13 @@ import selectionsRouter from "./routes/selections.js";
 import inquiriesRouter from "./routes/inquiries.js";
 import selectionSharesRouter from "./routes/selection-shares.js";
 import { initDefaultSettings } from "./lib/settings.js";
+import { startBackupScheduler } from "./lib/backup.js";
 import { prisma } from "./lib/prisma.js";
 import { responseHandler } from "./middleware/responseHandler.js";
 import { errorHandler, notFoundHandler } from "./middleware/errorHandler.js";
 import { apiLimiter, uploadLimiter, authLimiter, securityHeaders } from "./middleware/security.js";
 import { autoAudit } from "./middleware/autoAudit.js";
+import { ipGuard } from "./middleware/ipGuard.js";
 
 const app = express();
 const PORT = config.port;
@@ -75,6 +77,48 @@ mkdirSync(`${config.staticDir}/originals`, { recursive: true });
 mkdirSync(`${config.staticDir}/batch`, { recursive: true });
 mkdirSync(`${config.staticDir}/ticket-attachments`, { recursive: true });
 
+function backupRestoreLockIsActive(): boolean {
+  const lockFile = join(process.cwd(), config.uploadDir, ".backup_restore.lock");
+  if (!existsSync(lockFile)) return false;
+  try {
+    const pid = Number(readFileSync(lockFile, "utf-8").trim().split(/\r?\n/)[0]);
+    if (!pid) return false;
+    process.kill(pid, 0);
+    return true;
+  } catch (err: any) {
+    return err?.code === "EPERM";
+  }
+}
+
+// Clean stale internal work directories that must never be served as public assets.
+try {
+  const staticDir = join(process.cwd(), config.staticDir);
+  if (backupRestoreLockIsActive()) {
+    console.log("  ⏳ Backup/restore lock is active; skipped internal workdir cleanup");
+  } else {
+    rmSync(join(staticDir, "_backup_db"), { recursive: true, force: true });
+    for (const entry of readdirSync(staticDir, { withFileTypes: true })) {
+      if (entry.isDirectory() && entry.name.startsWith(".restore_")) {
+        rmSync(join(staticDir, entry.name), { recursive: true, force: true });
+      }
+    }
+  }
+} catch {}
+
+app.use("/static", (req, res, next) => {
+  const path = req.path;
+  if (
+    path === "/backups" || path.startsWith("/backups/") ||
+    path === "/_backup_db" || path.startsWith("/_backup_db/") ||
+    path === "/_safety_snapshots" || path.startsWith("/_safety_snapshots/") ||
+    path.startsWith("/.restore_")
+  ) {
+    res.status(404).end();
+    return;
+  }
+  next();
+});
+
 app.use("/static/thumbnails", express.static(join(process.cwd(), config.staticDir, "thumbnails"), {
   maxAge: "1h",
 }));
@@ -91,6 +135,9 @@ app.use("/api/models/upload", uploadLimiter);
 app.use("/api/upload", uploadLimiter);
 app.use("/api/batch", uploadLimiter);
 app.use("/api", apiLimiter);
+
+// IP access control & hotlink protection
+app.use(ipGuard);
 
 // Global response wrapper
 app.use(responseHandler);
@@ -126,6 +173,7 @@ app.use(errorHandler);
 
 app.listen(PORT, async () => {
   await initDefaultSettings();
+  startBackupScheduler();
   // Seed admin account on first run
   try {
     const { hashPassword } = await import("./lib/password.js");
@@ -162,5 +210,23 @@ app.listen(PORT, async () => {
   console.log(`  📁 Static dir: ${join(process.cwd(), config.staticDir)}`);
   console.log(`  🗄️  Storage: ${config.storageType}`);
   console.log(`  🗃️  Database: ${config.databaseUrl.replace(/:[^:@]+@/, ":****@")}`);
-  console.log(`  🔒 Security: Helmet + Rate Limit enabled\n`);
+  console.log(`  🔒 Security: Helmet + Rate Limit enabled`);
+
+  // Startup safety check — warn if DB was recently reset or no recent backup
+  try {
+    const migrations = await prisma.$queryRaw<Array<{ started_at: Date }>>`
+      SELECT started_at FROM _prisma_migrations ORDER BY started_at
+    `;
+    if (migrations.length > 0) {
+      const firstTs = migrations[0].started_at.getTime();
+      const lastTs = migrations[migrations.length - 1].started_at.getTime();
+      // If all migrations applied within 2 seconds, DB was likely reset
+      if (migrations.length >= 3 && lastTs - firstTs < 2000) {
+        console.log(`\n  ⚠️  数据库疑似最近被重置（${migrations.length} 个迁移在 ${lastTs - firstTs}ms 内完成）`);
+        console.log(`  ⚠️  如有数据丢失，请通过后台「数据备份」或服务器备份目录恢复\n`);
+      }
+    }
+  } catch {
+    // _prisma_migrations might not exist yet — ignore
+  }
 });

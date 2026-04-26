@@ -8,44 +8,74 @@
 
 <p align="center">
   <strong>企业级 3D 零件模型管理平台</strong><br/>
-  开源的 3D CAD 模型管理、格式转换、在线预览与团队协作平台
+  开源的 3D CAD 模型管理、格式转换、在线预览、产品选型、询价报价与后台运维平台
 </p>
 
 ---
 
-3DPartHub 是一个功能完整的开源平台，专为制造企业团队管理 3D 零件模型而设计。自动将 STEP/IGES/XT 文件转换为 glTF，实现浏览器内实时 3D 预览，支持批量导入、分类管理、团队协作和完整的后台管理。
+3DPartHub 专为制造企业团队管理 3D 零件模型与产品选型数据而设计。系统支持 STEP / IGES / Parasolid 文件自动转换为 glTF，在浏览器内实时 3D 预览，并提供分类管理、选型筛选、询价报价、分享、审计、备份恢复和完整后台设置。
+
+> V2.3 公开发行版只包含通用源码、数据库结构、迁移、Docker/CI 配置和文档。数据库、模型文件、缩略图、Logo、Favicon、产品图片、企业资料、业务批次脚本、Excel/PDF 私有资料等运行时或定制内容不会随 Git 仓库和镜像发布。
+
+## V2.3 更新
+
+- **企业级备份恢复**：备份包含 PostgreSQL 全量 dump、自动发现的 `static` 业务目录、`uploads` 上传目录与上传元数据；备份包带 manifest 3.0、数据库 SHA256、目录文件数校验。
+- **恢复安全增强**：恢复前先做归档完整性校验、目录预检、磁盘空间预检和当前数据库安全快照；数据库或文件恢复失败时自动回滚，避免半恢复导致数据丢失。
+- **备份运维增强**：支持备份健康检查、手动校验、自动备份保留策略、外部镜像备份目录、服务器本地备份导入、网页上传恢复。
+- **后台配置增强**：站点品牌、导航、页脚、邮件模板、上传策略、分页策略、选型排序、字段别名、工单状态、询价状态等配置集中到后台管理。
+- **产品选型与报价**：选型分组支持图片与展示适配，询价/报价打印模板继续增强；公开发行不内置任何企业产品图片或产品数据库。
+- **部署与发布**：V2.3 使用 GitHub Release 作为后台更新日志来源，Tag 推送后自动构建 GHCR API/Web 镜像。
+
+## Release 与镜像
+
+| 项目 | 值 |
+|------|----|
+| Tag | `v2.3` |
+| Release 标题 | `V2.3 - 企业级备份恢复与后台配置增强` |
+| API 镜像 | `ghcr.io/liaoweixiang2024-blip/3dparthub-api:v2.3` |
+| Web 镜像 | `ghcr.io/liaoweixiang2024-blip/3dparthub-web:v2.3` |
+| Latest 镜像 | `ghcr.io/liaoweixiang2024-blip/3dparthub-api:latest` / `ghcr.io/liaoweixiang2024-blip/3dparthub-web:latest` |
+
+镜像说明：
+
+- `3dparthub-api`：Express 5 + Prisma 后端，包含数据库迁移、模型转换、任务队列、后台设置、备份/恢复、审计与 API 服务。
+- `3dparthub-web`：React 19 + Vite 前端，包含 3D 预览、产品选型、询价报价、分享页和后台管理界面。
+
+后台 **设置 -> 系统更新 -> 检查更新** 会读取 GitHub 最新 Release 的描述内容，并显示为后台更新日志。发布 V2.3 时，请以 Release 描述作为用户可见更新简介。
+
+---
 
 ## 功能特性
 
 ### 3D 模型管理
 
-- **多格式支持** — STEP (.step/.stp)、IGES (.iges/.igs)、Parasolid (.xt/.x_t) 自动转换为 glTF
-- **浏览器 3D 预览** — 基于 Three.js 的实时渲染，支持线框/实体/透明/爆炸视图
-- **批量导入** — 扫描服务器目录批量导入，按文件夹结构自动归类
-- **无限级分类** — 树形分类体系，拖拽排序
-- **全文搜索** — 按名称、格式、分类多维度检索
+- **多格式支持**：STEP (`.step` / `.stp`)、IGES (`.iges` / `.igs`)、Parasolid (`.xt` / `.x_t`) 自动转换为 glTF。
+- **浏览器 3D 预览**：基于 Three.js 的实时渲染，支持线框、实体、透明、爆炸视图和缩略图。
+- **批量导入**：扫描服务器目录批量导入，按文件夹结构自动归类。
+- **无限级分类**：树形分类体系，支持拖拽排序。
+- **全文搜索**：按名称、格式、分类和元数据多维检索。
 
 ### 产品选型
 
-- **分级筛选** — 按产品大类 → 二级类目 → 规格参数逐步筛选，精准定位型号
-- **智能匹配** — 选型产品自动关联 3D 模型，支持在线预览和下载
-- **选型后台** — 分类管理、产品增删改、JSON 批量导入、分组维护
-- **参数排序** — 支持数值排序、螺纹规则排序，筛选结果稳定有序
+- **分级筛选**：按产品大类、二级类目、规格参数逐步筛选。
+- **智能匹配**：选型产品可关联 3D 模型，支持预览、收藏、下载和询价。
+- **选型后台**：分类管理、分组维护、产品增删改、JSON 批量导入。
+- **参数排序**：支持数值排序、螺纹规则排序、字段别名和业务优先级配置。
 
 ### 询价与报价
 
-- **在线询价** — 从选型结果一键发起询价，支持多产品、多规格明细
-- **报价管理** — 管理员录入报价、更新状态，买卖双方实时留言沟通
-- **报价单模板** — 可视化编辑器，拖拽排序区块、开关字段、添加自定义内容，实时预览 A4 效果
-- **报价单打印** — 按模板配置生成格式化的打印报价单
+- **在线询价**：从选型结果一键发起询价，支持多产品、多规格明细。
+- **报价管理**：管理员录入报价、更新状态，买卖双方留言沟通。
+- **报价模板**：可视化编辑器，支持区块排序、字段开关、自定义内容和 A4 实时预览。
+- **报价打印**：按模板配置生成格式化打印报价单。
 
 ### 系统管理
 
-- **RBAC 权限** — 管理员 / 编辑 / 查看者三级角色
-- **数据备份** — 全量备份与恢复（数据库 + 11 类文件目录 + 上传元数据），恢复前自动创建安全快照，失败自动回滚
-- **版本检测** — 自动检测新版本，提示升级命令
-- **站点自定义** — 站名、Logo、Favicon、配色方案、SEO、公告
-- **系统设置** — 站点配置、注册控制、下载策略、3D 材质预设、分享策略、选型页面文案，统一管理
+- **RBAC 权限**：管理员、编辑、查看者三级角色。
+- **数据备份**：数据库、模型文件、转换文件、缩略图、上传文件、站点品牌和配置类运行时资料完整备份与恢复。
+- **版本检测**：检查 GitHub Release，后台展示最新版本、Release 链接和更新内容。
+- **站点自定义**：站名、Logo、Favicon、配色方案、SEO、公告和邮件模板。
+- **安全与审计**：登录保护、下载策略、分享策略、IP/Host 保护、审计日志。
 
 ---
 
@@ -80,95 +110,149 @@ curl http://localhost:3780/api/health
 | 密码 | `admin123` |
 | 说明 | 首次登录强制修改密码 |
 
-> 自定义管理员账号：在 `.env` 中添加 `ADMIN_USER`、`ADMIN_EMAIL`、`ADMIN_PASS`，仅在首次启动时生效。
+自定义管理员账号可在 `.env` 中设置 `ADMIN_USER`、`ADMIN_EMAIL`、`ADMIN_PASS`，仅首次启动时生效。
 
 ### 环境变量
 
 | 变量 | 必填 | 默认值 | 说明 |
 |------|------|--------|------|
-| `DB_PASSWORD` | 是 | — | 数据库密码 |
-| `JWT_SECRET` | 是 | — | JWT 签名密钥（至少 32 位） |
+| `DB_PASSWORD` | 是 | - | 数据库密码 |
+| `JWT_SECRET` | 是 | - | JWT 签名密钥，建议至少 32 位 |
 | `PORT` | 否 | `3780` | 对外访问端口 |
-| `ALLOWED_ORIGINS` | 否 | — | CORS 域名（多个逗号分隔） |
-| `ADMIN_USER` | 否 | `admin` | 初始管理员用户名（仅首次启动） |
-| `ADMIN_EMAIL` | 否 | `admin@model.com` | 初始管理员邮箱（仅首次启动） |
-| `ADMIN_PASS` | 否 | `admin123` | 初始管理员密码（仅首次启动） |
-| `SMTP_HOST` | 否 | — | SMTP 服务器（注册验证码） |
-| `SMTP_USER` | 否 | — | SMTP 用户名 |
-| `SMTP_PASS` | 否 | — | SMTP 密码/授权码 |
+| `ALLOWED_ORIGINS` | 否 | - | CORS 域名，多个用逗号分隔 |
+| `ADMIN_USER` | 否 | `admin` | 初始管理员用户名，仅首次启动 |
+| `ADMIN_EMAIL` | 否 | `admin@model.com` | 初始管理员邮箱，仅首次启动 |
+| `ADMIN_PASS` | 否 | `admin123` | 初始管理员密码，仅首次启动 |
+| `SMTP_HOST` | 否 | - | SMTP 服务器 |
+| `SMTP_USER` | 否 | - | SMTP 用户名 |
+| `SMTP_PASS` | 否 | - | SMTP 密码或授权码 |
+
+### 使用指定版本镜像
+
+```bash
+cd /opt/3dparthub
+IMAGE_TAG=v2.3 docker compose pull
+IMAGE_TAG=v2.3 docker compose up -d
+curl http://localhost:3780/api/health
+```
+
+也可以在 `.env` 中写入：
+
+```bash
+IMAGE_TAG=v2.3
+```
 
 ### 升级版本
 
 ```bash
 cd /opt/3dparthub
 
-# 1. 下载最新配置文件（或手动修改 IMAGE_TAG 版本号）
+# 1. 更新部署配置
 curl -O https://raw.githubusercontent.com/liaoweixiang2024-blip/3DPartHub/main/docker-compose.yml
 
-# 2. 拉取新镜像 + 重启
-docker compose pull && docker compose up -d
+# 2. 拉取新镜像并重启
+docker compose pull
+docker compose up -d
 
-# 3. 检查日志（确认数据库迁移成功）
+# 3. 检查迁移和服务日志
 docker compose logs -f api
 
 # 4. 验证服务正常
 curl http://localhost:3780/api/health
 ```
 
-> **重要**：启动命令中 `prisma migrate deploy || true` 会在升级时自动迁移数据库。请务必检查日志确认迁移成功，`|| true` 会让容器忽略迁移失败继续启动。
+升级前建议在后台 **设置 -> 数据备份** 创建并校验一次备份。
 
 ---
 
+## 数据与隐私
+
+公开仓库和发行镜像不会包含以下内容：
+
+- `.env`、数据库密码、JWT 密钥、SMTP 密码等环境配置。
+- PostgreSQL 数据库、SQL dump、后台备份包、安全快照。
+- STEP/IGES/XT 原始模型、glTF 转换模型、缩略图、图纸、上传附件。
+- Logo、Favicon、水印、产品选型图片、企业定制图片。
+- 企业产品批次脚本、业务 Excel/PDF、私有资料和本地导入数据。
+
+需要迁移企业数据时，请使用后台备份功能导出 `.tar.gz` 和 `.json` 备份记录，再在新服务器恢复。不要把运行时数据提交到 Git。
+
 ## 数据持久化
 
-所有数据存储在 Docker 命名卷中，升级/重建容器不会丢失：
+默认 Docker Compose 使用命名卷持久化数据：
 
 | 卷名 | 容器内路径 | 内容 |
 |------|-----------|------|
-| `pgdata` | `/var/lib/postgresql/data` | 数据库 |
-| `uploads-data` | `/app/uploads` | 原始模型文件 |
-| `static-data` | `/app/static` | 转换模型、缩略图、备份文件 |
+| `pgdata` | `/var/lib/postgresql/data` | PostgreSQL 数据库 |
+| `uploads-data` | `/app/uploads` | 上传附件、上传元数据 |
+| `static-data` | `/app/static` | 转换模型、缩略图、原始文件、站点运行时静态资料、备份包 |
+
+## 备份与恢复
+
+V2.3 备份包包含：
+
+- PostgreSQL 全量 dump。
+- `static` 下自动发现的业务目录，例如 `models`、`thumbnails`、`originals`、`drawings`、`option-images`、`logo`、`favicon`、`watermark` 等。
+- `uploads` 下的业务上传目录与 `.metadata` 上传元数据。
+- manifest 3.0 清单、数据库 SHA256、目录文件数量和体积信息。
+
+恢复保护机制：
+
+- 恢复前校验备份包结构、manifest、数据库 SHA256、目录文件数。
+- 恢复前检查磁盘可用空间，不满足安全回滚空间时会中止。
+- 恢复前创建当前数据库安全快照。
+- 数据库恢复失败会自动回滚到安全快照。
+- 文件目录按目录逐个恢复，保留旧目录回滚副本；文件恢复失败会回滚已替换目录。
+- 恢复完成后清理缓存，使后台立即读取恢复后的数据。
+
+本仓库已用本地真实数据做过 V2.3 端到端校验：创建备份、导入备份、从导入备份恢复，再比对数据库和业务文件指纹。校验结果为 `22` 张表、`15522` 行、`19872` 个业务文件、约 `24.68GB` 恢复前后一致。
+
+### 迁移到新服务器
+
+旧服务器：
+
+```bash
+# 1. 后台「设置 -> 数据备份」创建并校验备份
+# 2. 导出备份记录和归档
+docker cp 3dparthub-api:/app/static/backups/backup_XXXX.json /tmp/
+docker cp 3dparthub-api:/app/static/backups/backup_XXXX.tar.gz /tmp/
+
+# 3. 传到新服务器
+scp /tmp/backup_XXXX.* root@新服务器IP:/tmp/
+```
+
+新服务器：
+
+```bash
+cd /opt/3dparthub
+docker compose up -d
+
+docker cp /tmp/backup_XXXX.json 3dparthub-api:/app/static/backups/
+docker cp /tmp/backup_XXXX.tar.gz 3dparthub-api:/app/static/backups/
+```
+
+然后打开后台 **设置 -> 数据备份**，选择该备份执行恢复。也可以直接在网页上传 `.tar.gz` 备份包，系统会保存为备份记录或直接恢复。
 
 ---
 
 ## 常见问题
 
-### 1. 备份文件在服务器上，怎么恢复？
-
-**方式一：网页上传（最简单）**
-
-打开 **设置 → 数据备份 → 导入恢复 → 选择文件**，从电脑选择 `.tar.gz` 备份文件上传即可。大文件支持断点续传。
-
-**方式二：从服务器本地文件恢复**
-
-```bash
-# 把服务器上的备份文件复制到容器内
-docker cp /path/to/backup_xxx.json 3dparthub-api:/app/static/backups/
-docker cp /path/to/backup_xxx.tar.gz 3dparthub-api:/app/static/backups/
-```
-
-然后打开 **设置 → 数据备份**，列表里自动出现，点「恢复」。
-
-> 恢复完成后数据已写入数据库和命名卷，安全不会丢。`docker cp` 进去的备份归档文件在容器重建后会消失，但数据已经恢复了，无所谓。
-
-### 2. 忘记管理员密码怎么办？
+### 忘记管理员密码怎么办？
 
 ```bash
 docker exec -it 3dparthub-api sh
 
-# 生成新密码的哈希（新密码设为 newpass123）
 HASH=$(node -e "require('bcryptjs').hash('newpass123', 12).then(h => console.log(h))")
 
-# 写入数据库
 npx prisma db execute --stdin << SQL
 UPDATE users SET password_hash = '$HASH', must_change_password = true WHERE email = 'admin@model.com';
 SQL
 exit
 ```
 
-用新密码 `newpass123` 登录后，系统会要求再设一个新密码。
+用新密码 `newpass123` 登录后，系统会要求重新设置密码。
 
-### 3. 忘记管理员用户名/邮箱怎么办？
+### 忘记管理员用户名或邮箱怎么办？
 
 ```bash
 docker exec -it 3dparthub-api sh -c \
@@ -177,52 +261,20 @@ SELECT username, email, role FROM users WHERE role = 'ADMIN';
 SQL
 ```
 
-### 4. 忘记数据库密码怎么办？
+### 容器启动报错怎么办？
 
 ```bash
-# 查看 .env
-cat /opt/3dparthub/.env
-
-# 如果 .env 也丢了，只能重置（数据会丢，需重新恢复备份）
-docker compose down
-cat > .env << EOF
-DB_PASSWORD=$(openssl rand -hex 16)
-JWT_SECRET=$(openssl rand -hex 32)
-EOF
-docker volume rm 3dparthub_pgdata
-docker compose up -d
+docker compose logs api --tail 80
+docker compose logs postgres --tail 80
+docker compose logs redis --tail 80
 ```
 
-### 5. 容器启动报错？
+常见原因：
 
-```bash
-docker compose logs api --tail 50
-
-# 常见原因：
-# "P1001: Can't reach database" → postgres 还没就绪，等 30 秒
-# "jwt secret is required"     → 检查 .env 中的 JWT_SECRET
-# "ECONNREFUSED redis"         → docker compose restart redis
-```
-
-### 6. 如何迁移到新服务器？
-
-```bash
-# ===== 旧服务器 =====
-# 1. 网页端「设置 → 数据备份」→ 创建备份
-# 2. 把备份文件从容器导出到宿主机
-docker cp 3dparthub-api:/app/static/backups/backup_XXXX.json /tmp/
-docker cp 3dparthub-api:/app/static/backups/backup_XXXX.tar.gz /tmp/
-# 3. 传到新服务器
-scp /tmp/backup_XXXX.* root@新服务器IP:/tmp/
-
-# ===== 新服务器 =====
-# 1. 部署（按上面的"快速部署"操作）
-cd /opt/3dparthub && docker compose up -d
-# 2. 等服务启动后，把备份文件复制到容器
-docker cp /tmp/backup_XXXX.json 3dparthub-api:/app/static/backups/
-docker cp /tmp/backup_XXXX.tar.gz 3dparthub-api:/app/static/backups/
-# 3. 网页端「设置 → 数据备份」→ 点「恢复」
-```
+- `P1001: Can't reach database`：PostgreSQL 尚未就绪，等待后重启 API。
+- `JWT_SECRET is required`：检查 `.env` 中的 `JWT_SECRET`。
+- `ECONNREFUSED redis`：检查 Redis 容器并执行 `docker compose restart redis`。
+- 数据库迁移失败：先保留卷和备份，不要删除数据卷；检查 `api` 日志里的 Prisma 错误。
 
 ---
 
@@ -234,57 +286,44 @@ docker cp /tmp/backup_XXXX.tar.gz 3dparthub-api:/app/static/backups/
 | 后端 | Express 5, TypeScript, Prisma ORM, JWT, Node.js Cluster |
 | 数据库 | PostgreSQL 16 |
 | 缓存/队列 | Redis 7, BullMQ |
-| 3D 转换 | OpenCASCADE (occt-import-js) — STEP/IGES/XT → glTF |
+| 3D 转换 | OpenCASCADE (`occt-import-js`) |
 | 预览图 | Node.js Canvas + Three.js, Puppeteer + Chromium |
-| 反向代理 | Nginx (HTTP/2, gzip_static, 安全头) |
+| 反向代理 | Nginx |
 
 ## 项目结构
 
-```
+```text
 3DPartHub/
-├── client/                 # React 前端 (Vite + Nginx)
+├── client/                 # React 前端
 │   ├── src/
-│   │   ├── api/           # API 客户端
-│   │   ├── components/3d/ # Three.js 3D 查看器
-│   │   ├── components/shared/ # 通用 UI 组件
-│   │   ├── data/          # 选型蓝图、参数图示等静态数据
-│   │   ├── pages/         # 页面（选型、询价、设置、报价模板…）
-│   │   ├── stores/        # Zustand 状态管理
-│   │   └── lib/           # 工具库
+│   │   ├── api/            # API 客户端
+│   │   ├── components/3d/  # Three.js 3D 查看器
+│   │   ├── components/shared/
+│   │   ├── pages/          # 选型、询价、分享、后台设置等页面
+│   │   ├── stores/         # Zustand 状态
+│   │   └── lib/            # 工具库与业务配置默认值
 │   ├── Dockerfile
 │   └── nginx.conf
-├── data/                    # 数据脚本（不随应用发布）
-│   ├── seeds/products/     # 产品批次脚本 (batch1~79)
-│   └── scripts/            # 运维工具脚本
 ├── server/                 # Express 后端
 │   ├── src/
-│   │   ├── cluster.ts     # 多进程入口
-│   │   ├── main.ts        # Express 应用
-│   │   ├── lib/           # 缓存、JWT、队列、设置、备份恢复
-│   │   ├── middleware/    # 认证、RBAC、审计
-│   │   ├── routes/        # API 路由（模型、选型、询价、设置…）
-│   │   ├── services/      # 转换、预览图服务
-│   │   └── workers/       # BullMQ 消费者
+│   │   ├── main.ts
+│   │   ├── lib/            # 缓存、JWT、队列、设置、备份恢复
+│   │   ├── middleware/     # 认证、RBAC、审计、安全中间件
+│   │   ├── routes/         # API 路由
+│   │   ├── services/       # 转换、预览图服务
+│   │   └── workers/        # BullMQ 消费者
 │   ├── prisma/
-│   │   ├── schema.prisma  # 数据库模型定义
-│   │   ├── seed-beize.ts  # 北泽分类初始化
-│   │   └── seeds/         # 数据脚本
-│   │       ├── run-batch.ts       # 批次通用入口（指向 data/）
-│   │       └── backfill-*.ts      # 回填脚本
+│   │   ├── schema.prisma
+│   │   └── migrations/
+│   ├── scripts/            # 迁移和备份校验脚本
 │   └── Dockerfile
-├── docs/                   # 项目文档
-│   ├── 选型询价实现说明.md  # 完整实现文档
-│   ├── 北泽选型清单.md      # 画册整理稿
-│   ├── 北泽选型结构.json    # 结构化数据源
-│   └── 北泽数据导入进度.md  # 批次录入进度
 ├── deploy/                 # 纯镜像部署配置
-│   └── docker-compose.yml
-├── docker-compose.yml      # 默认部署配置
-└── .github/workflows/      # CI 自动构建镜像
+├── docker-compose.yml
+└── .github/workflows/      # CI 自动构建镜像与 Release
 ```
 
 ## 许可证
 
 本项目基于 [MIT 许可证](LICENSE) 开源。
 
-Copyright (c) 2024-2026 [liaoweixiang](https://liaoweixiang.com)
+Copyright (c) 2024-2026 3DPartHub contributors

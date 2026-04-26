@@ -5,6 +5,10 @@ export interface ColumnDef {
   label: string;
   unit: string;
   sortType?: "thread" | "numeric" | "default";
+  inputType?: "select" | "manual";
+  placeholder?: string;
+  suffix?: string;
+  displayOnly?: boolean;
 }
 
 export interface SelectionCategory {
@@ -21,6 +25,8 @@ export interface SelectionCategory {
   groupId?: string | null;
   groupName?: string | null;
   groupIcon?: string | null;
+  groupImage?: string | null;
+  groupImageFit?: "cover" | "contain" | null;
   kind?: string | null;
   productCount?: number;
 }
@@ -79,6 +85,7 @@ export async function getSelectionProducts(
 export async function createCategory(data: {
   name: string; slug: string; description?: string; icon?: string;
   sortOrder?: number; columns: ColumnDef[]; image?: string;
+  groupId?: string | null; groupName?: string | null; groupIcon?: string | null; groupImage?: string | null; groupImageFit?: "cover" | "contain" | null;
 }): Promise<SelectionCategory> {
   const res = await client.post("/admin/selections/categories", data);
   return unwrap(res);
@@ -89,6 +96,11 @@ export async function updateCategory(id: string, data: Partial<{
   sortOrder: number; columns: ColumnDef[]; image: string;
   optionImages: Record<string, Record<string, string>>;
   optionOrder: Record<string, string[]>;
+  groupId: string | null;
+  groupName: string | null;
+  groupIcon: string | null;
+  groupImage: string | null;
+  groupImageFit: "cover" | "contain" | null;
 }>): Promise<SelectionCategory> {
   const res = await client.put(`/admin/selections/categories/${id}`, data);
   return unwrap(res);

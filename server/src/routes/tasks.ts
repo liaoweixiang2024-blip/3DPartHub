@@ -2,13 +2,14 @@ import { Router, Response } from "express";
 import multer from "multer";
 import { join, extname } from "path";
 import { randomUUID } from "crypto";
-import { existsSync, mkdirSync } from "fs";
+import { existsSync, mkdirSync, rmSync } from "fs";
 import { prisma } from "../lib/prisma.js";
 import { conversionQueue } from "../lib/queue.js";
 import { config } from "../lib/config.js";
 import { authMiddleware, type AuthRequest } from "../middleware/auth.js";
 import { requireRole } from "../middleware/rbac.js";
 import { createNotification } from "./notifications.js";
+import { getBusinessConfig, labelFor, DEFAULT_UPLOAD_POLICY } from "../lib/businessConfig.js";
 
 const attachmentUpload = multer({
   storage: multer.diskStorage({
@@ -22,9 +23,9 @@ const attachmentUpload = multer({
       cb(null, `${randomUUID().slice(0, 12)}${ext}`);
     },
   }),
-  limits: { fileSize: 5 * 1024 * 1024 },
+  limits: { fileSize: 100 * 1024 * 1024 },
   fileFilter: (_req, file, cb) => {
-    const allowed = [".jpg", ".jpeg", ".png", ".gif", ".webp"];
+    const allowed = [".jpg", ".jpeg", ".png", ".gif", ".webp", ".pdf", ".step", ".stp", ".iges", ".igs", ".stl"];
     const ext = extname(file.originalname).toLowerCase();
     if (allowed.includes(ext)) cb(null, true);
     else cb(new Error("仅支持 jpg/png/gif/webp 格式"));
@@ -77,11 +78,14 @@ router.post("/api/tasks", authMiddleware, async (req: AuthRequest, res: Response
   }
 
   try {
+    const { ticketClassifications } = await getBusinessConfig();
+    const enabledClassifications = ticketClassifications.filter((item) => item.enabled !== false).map((item) => item.value);
+    const normalizedClassification = enabledClassifications.includes(classification) ? classification : enabledClassifications[0] || "dimension";
     const ticket = await prisma.supportTicket.create({
       data: {
         userId: req.user!.userId,
         basePart: basePart || null,
-        classification: classification || "dimension",
+        classification: normalizedClassification,
         description: description.trim(),
       },
     });
@@ -163,19 +167,21 @@ router.put("/api/tickets/:id", authMiddleware, requireRole("ADMIN"), async (req:
   try {
     if (!prisma) { res.status(500).json({ error: "DB unavailable" }); return; }
     const { status } = req.body;
+    const { ticketStatuses, ticketClassifications } = await getBusinessConfig();
+    if (!ticketStatuses.some((item) => item.value === status)) {
+      res.status(400).json({ detail: "无效状态" });
+      return;
+    }
     const ticket = await prisma.supportTicket.update({
       where: { id: req.params.id as string },
       data: { status },
       include: { user: { select: { username: true } } },
     });
     // Notify user about status change
-    const STATUS_LABELS: Record<string, string> = {
-      open: "待处理", waiting_user: "待回复", in_progress: "处理中", resolved: "已解决", closed: "已关闭",
-    };
     await createNotification({
       userId: ticket.userId,
       title: "工单状态更新",
-      message: `您的工单「${ticket.classification}」状态已更新为「${STATUS_LABELS[status] || status}」`,
+      message: `您的工单「${labelFor(ticketClassifications, ticket.classification)}」状态已更新为「${labelFor(ticketStatuses, status)}」`,
       type: "ticket",
       relatedId: ticket.id,
     }).catch(() => {});
@@ -221,6 +227,7 @@ router.post("/api/tickets/:id/messages", authMiddleware, async (req: AuthRequest
       res.status(403).json({ detail: "无权操作" }); return;
     }
     const isAdmin = req.user!.role === "ADMIN";
+    const { ticketStatuses, ticketClassifications } = await getBusinessConfig();
     // Status flow: admin reply → waiting_user, user reply → in_progress
     let newStatus: string | null = null;
     if (isAdmin) {
@@ -228,6 +235,7 @@ router.post("/api/tickets/:id/messages", authMiddleware, async (req: AuthRequest
     } else {
       newStatus = "in_progress"; // User replied, needs admin attention
     }
+    if (newStatus && !ticketStatuses.some((item) => item.value === newStatus)) newStatus = null;
     if (newStatus && ticket.status !== newStatus) {
       await prisma.supportTicket.update({ where: { id: ticketId }, data: { status: newStatus } });
     }
@@ -246,7 +254,7 @@ router.post("/api/tickets/:id/messages", authMiddleware, async (req: AuthRequest
       await createNotification({
         userId: ticket.userId,
         title: "工单回复",
-        message: `管理员回复了您的工单「${ticket.classification}」`,
+        message: `管理员回复了您的工单「${labelFor(ticketClassifications, ticket.classification)}」`,
         type: "ticket",
         relatedId: ticketId,
       }).catch(() => {});
@@ -259,7 +267,7 @@ router.post("/api/tickets/:id/messages", authMiddleware, async (req: AuthRequest
           await createNotification({
             userId: admin.id,
             title: "工单新回复",
-            message: `用户回复了工单「${ticket.classification}」`,
+            message: `用户回复了工单「${labelFor(ticketClassifications, ticket.classification)}」`,
             type: "ticket",
             relatedId: ticketId,
           });
@@ -277,6 +285,15 @@ router.post("/api/tickets/:id/messages/upload", authMiddleware, attachmentUpload
   const ticketId = param(req, "id");
   try {
     if (!req.file) { res.status(400).json({ detail: "请选择文件" }); return; }
+    const { uploadPolicy } = await getBusinessConfig();
+    const maxBytes = Math.max(1, uploadPolicy.ticketAttachmentMaxSizeMb || DEFAULT_UPLOAD_POLICY.ticketAttachmentMaxSizeMb) * 1024 * 1024;
+    const ext = extname(req.file.originalname).toLowerCase();
+    const allowed = (uploadPolicy.ticketAttachmentExts || DEFAULT_UPLOAD_POLICY.ticketAttachmentExts).map((item) => item.toLowerCase());
+    if (req.file.size > maxBytes || !allowed.includes(ext)) {
+      rmSync(req.file.path, { force: true });
+      res.status(400).json({ detail: `附件仅支持 ${allowed.join("/")}，最大 ${Math.round(maxBytes / 1024 / 1024)}MB` });
+      return;
+    }
     const ticket = await prisma.supportTicket.findUnique({ where: { id: ticketId } });
     if (!ticket) { res.status(404).json({ detail: "工单不存在" }); return; }
     if (ticket.userId !== req.user!.userId && req.user!.role !== "ADMIN") {

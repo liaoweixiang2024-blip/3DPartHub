@@ -6,6 +6,8 @@
  *   "default" / undefined → Chinese locale with numeric support
  */
 
+import { DEFAULT_THREAD_PRIORITY } from "./businessConfig";
+
 const THREAD_PREFIX_PRIORITY: Record<string, number> = {
   R: 0,
   RC: 0,
@@ -48,7 +50,7 @@ function parseThreadSize(raw: string): number | null {
   return Number.isFinite(parsed) ? parsed : null;
 }
 
-function extractThreadSortKey(value: string): { prefixRank: number; size: number | null; token: string } | null {
+function extractThreadSortKey(value: string, priority: Record<string, number>): { prefixRank: number; size: number | null; token: string } | null {
   const match = value.toUpperCase().match(/(RC|R|G|NPT|PT|ZG|M)?\s*(\d+(?:-\d+\/\d+|\/\d+|(?:\.\d+)?)?)/);
   if (!match) return null;
 
@@ -57,17 +59,18 @@ function extractThreadSortKey(value: string): { prefixRank: number; size: number
   const size = parseThreadSize(token);
 
   return {
-    prefixRank: THREAD_PREFIX_PRIORITY[prefix] ?? 99,
+    prefixRank: priority[prefix] ?? 99,
     size,
     token,
   };
 }
 
 /** Compare two option values given a sortType */
-export function compareOptionValues(sortType: string | undefined, left: string, right: string): number {
+export function compareOptionValues(sortType: string | undefined, left: string, right: string, threadPriority: Record<string, number> = THREAD_PREFIX_PRIORITY): number {
   if (sortType === "thread") {
-    const leftThread = extractThreadSortKey(left);
-    const rightThread = extractThreadSortKey(right);
+    const priority = { ...DEFAULT_THREAD_PRIORITY, ...threadPriority };
+    const leftThread = extractThreadSortKey(left, priority);
+    const rightThread = extractThreadSortKey(right, priority);
 
     if (leftThread && rightThread) {
       if (leftThread.prefixRank !== rightThread.prefixRank) {

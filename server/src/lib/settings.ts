@@ -1,5 +1,18 @@
 import { prisma } from "./prisma.js";
 import { cacheDel } from "./cache.js";
+import {
+  DEFAULT_ADMIN_NAV_FOR_SETTINGS,
+  DEFAULT_INQUIRY_STATUSES_FOR_SETTINGS,
+  DEFAULT_MOBILE_NAV_FOR_SETTINGS,
+  DEFAULT_PAGE_SIZE_POLICY_FOR_SETTINGS,
+  DEFAULT_SELECTION_THREAD_PRIORITY_FOR_SETTINGS,
+  DEFAULT_SUPPORT_STEPS_FOR_SETTINGS,
+  DEFAULT_TICKET_CLASSIFICATIONS_FOR_SETTINGS,
+  DEFAULT_TICKET_STATUSES_FOR_SETTINGS,
+  DEFAULT_UPLOAD_POLICY_FOR_SETTINGS,
+  DEFAULT_USER_NAV_FOR_SETTINGS,
+} from "./businessDefaults.js";
+import { DEFAULT_EMAIL_TEMPLATES } from "./emailTemplates.js";
 
 interface SettingDef {
   key: string;
@@ -17,8 +30,8 @@ const SETTINGS_SCHEMA: SettingDef[] = [
   { key: "watermark_image", defaultValue: "" },
   { key: "site_title", defaultValue: "3DPartHub" },
   { key: "site_browser_title", defaultValue: "" },
-  { key: "site_logo", defaultValue: "/static/logo/logo.svg" },
-  { key: "site_icon", defaultValue: "/static/logo/icon.svg" },
+  { key: "site_logo", defaultValue: "" },
+  { key: "site_icon", defaultValue: "" },
   { key: "site_favicon", defaultValue: "/favicon.svg" },
   { key: "site_logo_display", defaultValue: "logo_and_title" },
   { key: "site_description", defaultValue: "" },
@@ -33,9 +46,12 @@ const SETTINGS_SCHEMA: SettingDef[] = [
   { key: "smtp_pass", defaultValue: "" },
   { key: "smtp_from", defaultValue: "" },
   { key: "smtp_secure", defaultValue: true },
+  { key: "email_templates", defaultValue: JSON.stringify(DEFAULT_EMAIL_TEMPLATES, null, 2) },
   { key: "contact_email", defaultValue: "" },
   { key: "contact_phone", defaultValue: "" },
   { key: "contact_address", defaultValue: "" },
+  { key: "footer_links", defaultValue: "" },
+  { key: "footer_copyright", defaultValue: "" },
   { key: "color_scheme", defaultValue: "orange" },
   { key: "color_custom_dark", defaultValue: "{}" },
   { key: "color_custom_light", defaultValue: "{}" },
@@ -88,9 +104,43 @@ const SETTINGS_SCHEMA: SettingDef[] = [
   { key: "selection_page_desc", defaultValue: "选择产品大类，逐步筛选出精确型号" },
   { key: "selection_enable_match", defaultValue: true },
   { key: "field_aliases", defaultValue: "{}" },
+  { key: "selection_thread_priority", defaultValue: JSON.stringify(DEFAULT_SELECTION_THREAD_PRIORITY_FOR_SETTINGS, null, 2) },
 
-  // Quotation template
+  // Document templates
   { key: "quote_template", defaultValue: "" },
+  { key: "document_templates", defaultValue: "" },
+
+  // Business dictionaries and policies
+  { key: "inquiry_statuses", defaultValue: JSON.stringify(DEFAULT_INQUIRY_STATUSES_FOR_SETTINGS, null, 2) },
+  { key: "ticket_statuses", defaultValue: JSON.stringify(DEFAULT_TICKET_STATUSES_FOR_SETTINGS, null, 2) },
+  { key: "ticket_classifications", defaultValue: JSON.stringify(DEFAULT_TICKET_CLASSIFICATIONS_FOR_SETTINGS, null, 2) },
+  { key: "support_process_steps", defaultValue: JSON.stringify(DEFAULT_SUPPORT_STEPS_FOR_SETTINGS, null, 2) },
+  { key: "nav_user_items", defaultValue: JSON.stringify(DEFAULT_USER_NAV_FOR_SETTINGS, null, 2) },
+  { key: "nav_admin_items", defaultValue: JSON.stringify(DEFAULT_ADMIN_NAV_FOR_SETTINGS, null, 2) },
+  { key: "nav_mobile_items", defaultValue: JSON.stringify(DEFAULT_MOBILE_NAV_FOR_SETTINGS, null, 2) },
+  { key: "upload_policy", defaultValue: JSON.stringify(DEFAULT_UPLOAD_POLICY_FOR_SETTINGS, null, 2) },
+  { key: "page_size_policy", defaultValue: JSON.stringify(DEFAULT_PAGE_SIZE_POLICY_FOR_SETTINGS, null, 2) },
+
+  // Anti-reverse-proxy & hotlink protection
+  { key: "anti_proxy_enabled", defaultValue: false },
+  { key: "allowed_hosts", defaultValue: "" },
+  { key: "hotlink_protection_enabled", defaultValue: false },
+  { key: "allowed_referers", defaultValue: "" },
+
+  // Enterprise backup policy
+  { key: "backup_auto_enabled", defaultValue: false },
+  { key: "backup_schedule_time", defaultValue: "03:00" },
+  { key: "backup_retention_count", defaultValue: 7 },
+  { key: "backup_mirror_enabled", defaultValue: false },
+  { key: "backup_mirror_dir", defaultValue: "" },
+  { key: "backup_last_mirror_status", defaultValue: "" },
+  { key: "backup_last_mirror_message", defaultValue: "" },
+  { key: "backup_last_mirror_at", defaultValue: "" },
+  { key: "backup_last_auto_date", defaultValue: "" },
+  { key: "backup_last_auto_status", defaultValue: "" },
+  { key: "backup_last_auto_message", defaultValue: "" },
+  { key: "backup_last_auto_job_id", defaultValue: "" },
+  { key: "backup_last_auto_at", defaultValue: "" },
 ];
 
 const DEFAULTS: Record<string, unknown> = {};

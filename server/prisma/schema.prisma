@@ -344,6 +344,8 @@ model SelectionCategory {
   groupId      String?  @map("group_id")
   groupName    String?  @map("group_name")
   groupIcon    String?  @map("group_icon")
+  groupImage   String?  @map("group_image")
+  groupImageFit String? @map("group_image_fit")
   kind         String?  @default("product")
   createdAt    DateTime @default(now()) @map("created_at")
   updatedAt    DateTime @updatedAt @map("updated_at")

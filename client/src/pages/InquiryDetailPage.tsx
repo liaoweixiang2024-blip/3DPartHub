@@ -10,6 +10,8 @@ import MobileNavDrawer from "../components/shared/MobileNavDrawer";
 import Icon from "../components/shared/Icon";
 import { useToast } from "../components/shared/Toast";
 import { useAuthStore } from "../stores/useAuthStore";
+import { getCachedPublicSettings } from "../lib/publicSettings";
+import { getBusinessConfig, statusInfo, type StatusConfig } from "../lib/businessConfig";
 import {
   getInquiry,
   sendInquiryMessage,
@@ -20,19 +22,10 @@ import {
   type InquiryMessage,
 } from "../api/inquiries";
 
-const STATUS_MAP: Record<string, { label: string; color: string; bg: string }> = {
-  draft: { label: "草稿", color: "text-on-surface-variant", bg: "bg-surface-container-highest" },
-  submitted: { label: "已提交", color: "text-blue-500", bg: "bg-blue-500/10" },
-  quoted: { label: "已报价", color: "text-green-600", bg: "bg-green-500/10" },
-  accepted: { label: "已接受", color: "text-emerald-600", bg: "bg-emerald-500/10" },
-  rejected: { label: "已拒绝", color: "text-red-500", bg: "bg-red-500/10" },
-  cancelled: { label: "已取消", color: "text-on-surface-variant", bg: "bg-surface-container-highest" },
-};
-
-function StatusBadge({ status }: { status: string }) {
-  const info = STATUS_MAP[status] || STATUS_MAP.submitted;
+function StatusBadge({ status, statuses }: { status: string; statuses: StatusConfig[] }) {
+  const info = statusInfo(statuses, status);
   return (
-    <span className={`inline-flex items-center gap-1 text-xs px-2.5 py-1 rounded-md font-bold ${info.color} ${info.bg}`}>
+    <span className={`inline-flex items-center gap-1 text-xs px-2.5 py-1 rounded-md font-bold ${info.color || ""} ${info.bg || ""}`}>
       {info.label}
     </span>
   );
@@ -70,10 +63,10 @@ function ItemsTable({ items, adminMode, quotePrices, onPriceChange }: {
   onPriceChange: (id: string, val: string) => void;
 }) {
   return (
-    <div className="overflow-x-auto rounded-lg border border-outline-variant/15">
-      <table className="w-full text-sm">
-        <thead>
-          <tr className="bg-surface-container-high">
+    <div className="overflow-auto rounded-lg border border-outline-variant/15 max-h-[50vh]">
+      <table className="min-w-[640px] w-full text-sm">
+        <thead className="sticky top-0 z-10">
+          <tr className="bg-surface-container-low">
             <th className="px-4 py-2 text-left text-xs font-bold text-on-surface-variant">型号/产品</th>
             <th className="px-4 py-2 text-left text-xs font-bold text-on-surface-variant">数量</th>
             <th className="px-4 py-2 text-left text-xs font-bold text-on-surface-variant">备注</th>
@@ -89,9 +82,9 @@ function ItemsTable({ items, adminMode, quotePrices, onPriceChange }: {
             return (
               <tr key={item.id} className="border-t border-outline-variant/5">
                 <td className="px-4 py-2.5">
-                  <p className="text-on-surface font-medium">{item.modelNo || item.productName}</p>
+                  <p className="text-on-surface font-medium break-words">{item.modelNo || item.productName}</p>
                   {item.modelNo && item.productName !== item.modelNo && (
-                    <p className="text-xs text-on-surface-variant">{item.productName}</p>
+                    <p className="text-xs text-on-surface-variant break-words">{item.productName}</p>
                   )}
                 </td>
                 <td className="px-4 py-2.5 text-on-surface">{item.qty}</td>
@@ -127,6 +120,8 @@ function DetailContent({ id }: { id: string }) {
   const { toast } = useToast();
   const { user } = useAuthStore();
   const isAdmin = user?.role === "ADMIN";
+  const { data: settings } = useSWR("publicSettings", () => getCachedPublicSettings());
+  const statuses = getBusinessConfig(settings).inquiryStatuses;
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const { data: inquiry, mutate } = useSWR<Inquiry>(
@@ -141,6 +136,20 @@ function DetailContent({ id }: { id: string }) {
   const [adminRemark, setAdminRemark] = useState("");
   const [sending, setSending] = useState(false);
   const [quoting, setQuoting] = useState(false);
+
+  const quotedTotal = inquiry?.items.reduce((sum, it) => {
+    const current = quotePrices[it.id] ?? (it.unitPrice ? String(it.unitPrice) : "");
+    return sum + (Number(current) || 0) * it.qty;
+  }, 0) || 0;
+
+  useEffect(() => {
+    if (!inquiry) return;
+    setQuotePrices((prev) => {
+      if (Object.keys(prev).length > 0) return prev;
+      return Object.fromEntries(inquiry.items.map((item) => [item.id, item.unitPrice ? String(item.unitPrice) : ""]));
+    });
+    if (!adminRemark && inquiry.adminRemark) setAdminRemark(inquiry.adminRemark);
+  }, [inquiry, adminRemark]);
 
   const prevMsgCount = useRef<number | undefined>(undefined);
   useEffect(() => {
@@ -190,10 +199,9 @@ function DetailContent({ id }: { id: string }) {
         id: it.id,
         unitPrice: Number(quotePrices[it.id] || 0),
       }));
-      const total = items.reduce((sum, it) => sum + it.unitPrice, 0);
       await quoteInquiry(id, {
         items,
-        totalAmount: totalAmount ? Number(totalAmount) : total,
+        totalAmount: totalAmount ? Number(totalAmount) : quotedTotal,
         adminRemark: adminRemark || undefined,
       });
       mutate();
@@ -225,7 +233,7 @@ function DetailContent({ id }: { id: string }) {
               <Icon name="arrow_back" size={20} />
             </button>
             <h2 className="font-headline text-xl font-bold text-on-surface">询价单详情</h2>
-            <StatusBadge status={inquiry.status} />
+            <StatusBadge status={inquiry.status} statuses={statuses} />
           </div>
           <p className="text-xs text-on-surface-variant ml-8">
             {new Date(inquiry.createdAt).toLocaleString("zh-CN")}
@@ -237,6 +245,11 @@ function DetailContent({ id }: { id: string }) {
           {(inquiry.status === "quoted" || inquiry.status === "accepted") && (
             <button onClick={() => navigate(`/quote/${inquiry.id}`)} className="px-4 py-2 text-sm font-medium bg-primary-container text-on-primary rounded-lg hover:opacity-90 inline-flex items-center gap-1.5">
               <Icon name="receipt_long" size={16} />生成报价单
+            </button>
+          )}
+          {inquiry.status === "accepted" && (
+            <button onClick={() => navigate(`/document/contract/${inquiry.id}`)} className="px-4 py-2 text-sm font-medium bg-surface-container-high text-on-surface rounded-lg hover:bg-surface-container-highest inline-flex items-center gap-1.5">
+              <Icon name="description" size={16} />生成合同
             </button>
           )}
           {inquiry.status === "submitted" && !isAdmin && (
@@ -261,10 +274,10 @@ function DetailContent({ id }: { id: string }) {
       {(inquiry.company || inquiry.contactName || inquiry.contactPhone) && (
         <div className="rounded-lg border border-outline-variant/15 bg-surface-container-low p-4">
           <h3 className="text-sm font-bold text-on-surface mb-2">联系信息</h3>
-          <div className="grid grid-cols-3 gap-4 text-sm">
-            {inquiry.company && <div><span className="text-on-surface-variant">公司：</span><span className="text-on-surface">{inquiry.company}</span></div>}
-            {inquiry.contactName && <div><span className="text-on-surface-variant">联系人：</span><span className="text-on-surface">{inquiry.contactName}</span></div>}
-            {inquiry.contactPhone && <div><span className="text-on-surface-variant">电话：</span><span className="text-on-surface">{inquiry.contactPhone}</span></div>}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4 text-sm">
+            {inquiry.company && <div className="min-w-0"><span className="text-on-surface-variant">公司：</span><span className="text-on-surface break-words">{inquiry.company}</span></div>}
+            {inquiry.contactName && <div className="min-w-0"><span className="text-on-surface-variant">联系人：</span><span className="text-on-surface break-words">{inquiry.contactName}</span></div>}
+            {inquiry.contactPhone && <div className="min-w-0"><span className="text-on-surface-variant">电话：</span><span className="text-on-surface break-words">{inquiry.contactPhone}</span></div>}
           </div>
         </div>
       )}
@@ -284,7 +297,7 @@ function DetailContent({ id }: { id: string }) {
       {isAdmin && inquiry.status === "submitted" && (
         <div className="rounded-lg border border-primary-container/20 bg-primary-container/5 p-4 space-y-3">
           <h3 className="text-sm font-bold text-on-surface">提交报价</h3>
-          <div className="grid gap-3 grid-cols-2">
+          <div className="grid gap-3 grid-cols-1 sm:grid-cols-2">
             <div>
               <label className="block text-xs text-on-surface-variant mb-1">总金额</label>
               <input
@@ -292,7 +305,7 @@ function DetailContent({ id }: { id: string }) {
                 step="0.01"
                 value={totalAmount}
                 onChange={(e) => setTotalAmount(e.target.value)}
-                placeholder="自动计算"
+                placeholder={`自动计算 ¥${quotedTotal.toFixed(2)}`}
                 className="w-full bg-surface-container-lowest text-on-surface text-sm rounded-md px-3 py-2 border border-outline-variant/20 outline-none focus:border-primary"
               />
             </div>
@@ -305,6 +318,10 @@ function DetailContent({ id }: { id: string }) {
                 className="w-full bg-surface-container-lowest text-on-surface text-sm rounded-md px-3 py-2 border border-outline-variant/20 outline-none focus:border-primary"
               />
             </div>
+          </div>
+          <div className="flex items-center justify-between rounded-md bg-surface-container-lowest px-3 py-2 text-sm">
+            <span className="text-on-surface-variant">系统按单价 × 数量计算</span>
+            <span className="font-headline font-bold text-on-surface">¥{quotedTotal.toFixed(2)}</span>
           </div>
           <button
             onClick={handleQuote}
@@ -402,7 +419,7 @@ export default function InquiryDetailPage() {
     <div className="flex flex-col h-dvh bg-surface">
       <TopNav compact onMenuToggle={() => setNavOpen((p) => !p)} />
       <MobileNavDrawer open={navOpen} onClose={() => setNavOpen(false)} />
-      <main className="flex-1 overflow-y-auto px-4 py-5 pb-6 scrollbar-hidden bg-surface-dim">
+      <main className="flex-1 overflow-y-auto px-4 py-5 pb-20 scrollbar-hidden bg-surface-dim">
         {content}
       </main>
       <BottomNav />

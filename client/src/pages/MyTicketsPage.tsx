@@ -11,6 +11,8 @@ import AppSidebar from '../components/shared/Sidebar';
 import MobileNavDrawer from '../components/shared/MobileNavDrawer';
 import Icon from '../components/shared/Icon';
 import client from '../api/client';
+import { getCachedPublicSettings } from '../lib/publicSettings';
+import { getBusinessConfig, statusInfo } from '../lib/businessConfig';
 
 interface MyTicket {
   id: string;
@@ -21,23 +23,6 @@ interface MyTicket {
   createdAt: string;
   updatedAt: string;
 }
-
-const STATUS_MAP: Record<string, { label: string; color: string; bg: string }> = {
-  open: { label: '待处理', color: 'text-primary-container', bg: 'bg-primary-container/10' },
-  waiting_user: { label: '待回复', color: 'text-amber-600', bg: 'bg-amber-500/10' },
-  in_progress: { label: '处理中', color: 'text-blue-500', bg: 'bg-blue-500/10' },
-  resolved: { label: '已解决', color: 'text-green-500', bg: 'bg-green-500/10' },
-  closed: { label: '已关闭', color: 'text-on-surface-variant', bg: 'bg-surface-container-highest' },
-};
-
-const CLASSIFICATION_MAP: Record<string, string> = {
-  dimension: '尺寸修改',
-  material: '材料变更',
-  novel: '新零件设计',
-  topology: '拓扑错误报告',
-  process: '工艺问题',
-  other: '其他',
-};
 
 function useMyTickets() {
   return useSWR<MyTicket[]>('/my-tickets', () =>
@@ -52,6 +37,9 @@ function useMyTickets() {
 
 function Content() {
   const { data: tickets, isLoading, mutate } = useMyTickets();
+  const { data: settings } = useSWR("publicSettings", () => getCachedPublicSettings());
+  const business = getBusinessConfig(settings);
+  const classificationMap = new Map(business.ticketClassifications.map((item) => [item.value, item.label]));
   const navigate = useNavigate();
 
   const list = tickets || [];
@@ -84,9 +72,9 @@ function Content() {
           </Link>
         </div>
       ) : (
-        <div className="bg-surface-container-low rounded-lg border border-outline-variant/10 overflow-hidden">
+        <div className="bg-surface-container-low rounded-lg border border-outline-variant/10 overflow-auto">
           {/* Table header */}
-          <div className="grid grid-cols-[120px_120px_1fr_140px_160px] gap-4 px-6 py-3 bg-surface-container-high text-xs uppercase tracking-wider text-on-surface-variant font-bold border-b border-outline-variant/10">
+          <div className="grid grid-cols-[120px_120px_1fr_140px_160px] gap-4 px-6 py-3 bg-surface-container-low text-xs uppercase tracking-wider text-on-surface-variant font-bold border-b border-outline-variant/10 sticky top-0 z-10">
             <span>状态</span>
             <span>分类</span>
             <span>描述</span>
@@ -95,15 +83,15 @@ function Content() {
           </div>
           {/* Table rows */}
           {list.map((ticket) => {
-            const statusInfo = STATUS_MAP[ticket.status] || STATUS_MAP.open;
+            const info = statusInfo(business.ticketStatuses, ticket.status);
             return (
               <div key={ticket.id} onClick={() => navigate(`/my-tickets/${ticket.id}`)} className="grid grid-cols-[120px_120px_1fr_140px_160px] gap-4 px-6 py-4 border-b border-outline-variant/5 hover:bg-surface-container-high/50 transition-colors items-center cursor-pointer">
-                <span className={`inline-flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-md font-bold w-fit ${statusInfo.color} ${statusInfo.bg}`}>
+                <span className={`inline-flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-md font-bold w-fit ${info.color || ""} ${info.bg || ""}`}>
                   <Icon name={ticket.status === 'resolved' ? 'check_circle' : ticket.status === 'in_progress' ? 'build' : ticket.status === 'waiting_user' ? 'chat' : 'schedule'} size={12} />
-                  {statusInfo.label}
+                  {info.label}
                 </span>
                 <span className="text-xs text-on-surface-variant">
-                  {CLASSIFICATION_MAP[ticket.classification] || ticket.classification}
+                  {classificationMap.get(ticket.classification) || ticket.classification}
                 </span>
                 <p className="text-sm text-on-surface truncate">{ticket.description}</p>
                 <span className="text-xs text-on-surface-variant truncate">{ticket.basePart || '—'}</span>
@@ -122,12 +110,15 @@ function Content() {
 
 function MobileContent() {
   const { data: tickets, isLoading, mutate } = useMyTickets();
+  const { data: settings } = useSWR("publicSettings", () => getCachedPublicSettings());
+  const business = getBusinessConfig(settings);
+  const classificationMap = new Map(business.ticketClassifications.map((item) => [item.value, item.label]));
   const navigate = useNavigate();
 
   const list = tickets || [];
 
   return (
-    <div className="px-4 py-5 pb-6">
+    <div className="px-4 py-5 pb-20">
       <div className="flex items-center justify-between mb-4">
         <div>
           <h1 className="text-lg font-bold text-on-surface">我的工单</h1>
@@ -149,21 +140,21 @@ function MobileContent() {
       ) : (
         <div className="flex flex-col gap-2.5">
           {list.map((ticket) => {
-            const statusInfo = STATUS_MAP[ticket.status] || STATUS_MAP.open;
+            const info = statusInfo(business.ticketStatuses, ticket.status);
             return (
               <div key={ticket.id} onClick={() => navigate(`/my-tickets/${ticket.id}`)} className="bg-surface-container-high rounded-lg p-3.5 cursor-pointer active:bg-surface-container-highest transition-colors">
                 <div className="flex items-center gap-2 mb-2">
-                  <span className={`text-[10px] px-2 py-0.5 rounded-sm font-bold ${statusInfo.color} ${statusInfo.bg}`}>
-                    {statusInfo.label}
+                  <span className={`text-[10px] px-2 py-0.5 rounded-sm font-bold ${info.color || ""} ${info.bg || ""}`}>
+                    {info.label}
                   </span>
                   <span className="text-[10px] text-on-surface-variant bg-surface-container-highest px-2 py-0.5 rounded-sm">
-                    {CLASSIFICATION_MAP[ticket.classification] || ticket.classification}
+                    {classificationMap.get(ticket.classification) || ticket.classification}
                   </span>
                 </div>
-                <p className="text-sm text-on-surface whitespace-pre-wrap mb-2 line-clamp-3">{ticket.description}</p>
-                <div className="flex items-center gap-3 text-[11px] text-on-surface-variant">
-                  {ticket.basePart && <span>零件: {ticket.basePart}</span>}
-                  <span className="flex items-center gap-1">
+                <p className="text-sm text-on-surface whitespace-pre-wrap break-words mb-2 line-clamp-3">{ticket.description}</p>
+                <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-on-surface-variant">
+                  {ticket.basePart && <span className="break-all">零件: {ticket.basePart}</span>}
+                  <span className="flex items-center gap-1 shrink-0">
                     <Icon name="schedule" size={11} />
                     {new Date(ticket.createdAt).toLocaleDateString('zh-CN')}
                   </span>

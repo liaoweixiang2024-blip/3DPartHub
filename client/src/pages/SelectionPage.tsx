@@ -8,6 +8,7 @@ import BottomNav from "../components/shared/BottomNav";
 import AppSidebar from "../components/shared/Sidebar";
 import MobileNavDrawer from "../components/shared/MobileNavDrawer";
 import Icon from "../components/shared/Icon";
+import SafeImage from "../components/shared/SafeImage";
 import { useAuthStore } from "../stores/useAuthStore";
 import {
   type ColumnDef,
@@ -22,6 +23,8 @@ import { useToast } from "../components/shared/Toast";
 import { getIllustration, illustratedParams } from "../data/paramIllustrations";
 import { compareOptionValues } from "../lib/selectionSort";
 import { getCachedPublicSettings } from "../lib/publicSettings";
+import { getBusinessConfig } from "../lib/businessConfig";
+import { copyText } from "../lib/clipboard";
 
 /* ── helpers ── */
 
@@ -56,6 +59,49 @@ function sv(specs: Record<string, string>, key: string): string {
 
 function buildCols(fields: string[]): ColumnDef[] {
   return [{ key: "型号", label: "型号", unit: "" }, ...fields.map((f) => ({ key: f, label: f, unit: "" }))];
+}
+
+function isManualColumn(col?: ColumnDef) {
+  return col?.inputType === "manual";
+}
+
+function normalizeManualValue(col: ColumnDef | undefined, value: string) {
+  const trimmed = value.trim();
+  if (!trimmed) return "";
+  if (!col?.suffix) return trimmed;
+  return trimmed.toUpperCase().endsWith(col.suffix.toUpperCase()) ? trimmed : `${trimmed}${col.suffix}`;
+}
+
+function applyManualSpecs(product: SelectionProduct, columns: ColumnDef[], specs: Record<string, string>): SelectionProduct {
+  const manualEntries = columns
+    .filter((col) => isManualColumn(col) && specs[col.key])
+    .map((col) => [col.key, normalizeManualValue(col, specs[col.key])] as const);
+
+  if (!manualEntries.length) return product;
+
+  const nextSpecs = { ...(product.specs as Record<string, string>) };
+  for (const [key, value] of manualEntries) nextSpecs[key] = value;
+
+  let modelNo = product.modelNo;
+  if (modelNo) {
+    for (const [key, value] of manualEntries) {
+      modelNo = modelNo.replaceAll(`[${key}]`, value);
+      if (key === "长度") modelNo = modelNo.replaceAll("[M]", value);
+    }
+  }
+
+  return { ...product, modelNo, specs: nextSpecs };
+}
+
+const DEFAULT_CATEGORY_IMAGES: Record<string, string> = {};
+
+function defaultCategoryImage(name: string) {
+  const compact = name.replace(/\s+/g, "");
+  if (DEFAULT_CATEGORY_IMAGES[name]) return DEFAULT_CATEGORY_IMAGES[name];
+  for (const [key, value] of Object.entries(DEFAULT_CATEGORY_IMAGES)) {
+    if (key.replace(/\s+/g, "") === compact) return value;
+  }
+  return "";
 }
 
 /* ── Inquiry Dialog ── */
@@ -109,8 +155,8 @@ function InquiryDialog({ open, onClose, products }: { open: boolean; onClose: ()
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4" onClick={onClose}>
-      <div className="bg-surface-container-low rounded-2xl border border-outline-variant/20 w-full max-w-xl shadow-2xl max-h-[85vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
+    <div className="fixed inset-0 z-[120] bg-black/40 backdrop-blur-sm p-0 md:flex md:items-center md:justify-center md:p-4" onClick={onClose}>
+      <div className="fixed left-3 right-3 top-[max(1rem,env(safe-area-inset-top))] bottom-[max(1rem,env(safe-area-inset-bottom))] bg-surface-container-low rounded-2xl border border-outline-variant/20 shadow-2xl flex min-h-0 flex-col md:relative md:inset-auto md:w-full md:max-w-xl md:max-h-[85vh]" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center justify-between px-5 py-4 border-b border-outline-variant/10 shrink-0">
           <h3 className="text-base font-bold text-on-surface">提交询价单</h3>
           <button onClick={onClose} className="text-on-surface-variant hover:text-on-surface"><Icon name="close" size={20} /></button>
@@ -124,7 +170,7 @@ function InquiryDialog({ open, onClose, products }: { open: boolean; onClose: ()
                 const st = getItem(p.id);
                 return (
                   <div key={p.id} className="rounded-lg border border-outline-variant/15 bg-surface-container-lowest px-3 py-2.5 space-y-2">
-                    <div className="flex items-center gap-2">
+                    <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:gap-2">
                       <p className="text-sm text-on-surface font-medium truncate flex-1">{p.modelNo || p.name}</p>
                       {p.modelNo && p.name !== p.modelNo && <p className="text-xs text-on-surface-variant truncate max-w-[50%]">{p.name}</p>}
                     </div>
@@ -145,7 +191,7 @@ function InquiryDialog({ open, onClose, products }: { open: boolean; onClose: ()
           </div>
 
           {/* Contact info */}
-          <div className="grid gap-3 grid-cols-2">
+          <div className="grid gap-3 grid-cols-1 sm:grid-cols-2">
             <div>
               <label className="block text-xs text-on-surface-variant mb-1">公司名称</label>
               <input value={company} onChange={(e) => setCompany(e.target.value)} className="w-full bg-surface-container-lowest text-on-surface text-sm rounded-lg px-3 py-2 border border-outline-variant/20 outline-none focus:border-primary-container transition-colors" />
@@ -154,7 +200,7 @@ function InquiryDialog({ open, onClose, products }: { open: boolean; onClose: ()
               <label className="block text-xs text-on-surface-variant mb-1">联系人</label>
               <input value={contactName} onChange={(e) => setContactName(e.target.value)} className="w-full bg-surface-container-lowest text-on-surface text-sm rounded-lg px-3 py-2 border border-outline-variant/20 outline-none focus:border-primary-container transition-colors" />
             </div>
-            <div className="col-span-2">
+            <div className="sm:col-span-2">
               <label className="block text-xs text-on-surface-variant mb-1">联系电话</label>
               <input value={contactPhone} onChange={(e) => setContactPhone(e.target.value)} className="w-full bg-surface-container-lowest text-on-surface text-sm rounded-lg px-3 py-2 border border-outline-variant/20 outline-none focus:border-primary-container transition-colors" />
             </div>
@@ -186,17 +232,30 @@ function ResultCard({ product, columns, selected, onToggleSelect, onInquiry, exp
   const expanded = expandedKits.has(product.id);
   const comps = (product.isKit && product.components ? product.components : []) as SelectionComponent[];
   const specCols = columns.filter((c) => c.key !== "型号");
+  const { toast } = useToast();
+
+  const handleCopy = async () => {
+    const modelNo = product.modelNo || product.name;
+    const parts = [modelNo];
+    if (product.modelNo && product.name && product.name !== product.modelNo) {
+      const cleanName = product.name.replace(product.modelNo, "").replace(/[\s\-—_]+$/g, "").replace(/^[\s\-—_]+/g, "");
+      if (cleanName) parts.push(cleanName);
+    }
+    await copyText(parts.join(" "));
+    toast("已复制型号和名称", "success");
+  };
 
   return (
     <div className={`rounded-xl md:rounded-2xl border transition-colors overflow-hidden ${selected ? "border-primary-container/40 bg-primary-container/5" : "border-outline-variant/15 bg-surface-container-low"}`}>
       <div className="flex items-start gap-3 px-3 md:px-4 py-3 md:py-3.5">
         {product.image && (
-          <img src={product.image} alt="" className="w-16 h-16 md:w-20 md:h-20 rounded-lg object-cover shrink-0 border border-outline-variant/10" />
+          <SafeImage src={product.image} alt="" className="w-16 h-16 md:w-20 md:h-20 rounded-lg object-cover shrink-0 border border-outline-variant/10" fallbackIcon="image" />
         )}
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
             <input type="checkbox" checked={selected} onChange={onToggleSelect} className="h-4 w-4 rounded accent-primary-container shrink-0" />
-            <span className="text-sm md:text-base font-bold text-on-surface">{product.modelNo || product.name}</span>
+            <span className="text-sm md:text-base font-bold text-on-surface break-all">{product.modelNo || product.name}</span>
+            <button onClick={handleCopy} title="复制型号和名称" className="text-on-surface-variant/50 hover:text-on-surface-variant transition-colors"><Icon name="content_copy" size={14} /></button>
             {product.isKit && <span className="text-[10px] md:text-xs font-medium text-primary-container bg-primary-container/10 px-1.5 md:px-2 py-0.5 rounded-full">套件</span>}
           </div>
           {(() => {
@@ -214,7 +273,7 @@ function ResultCard({ product, columns, selected, onToggleSelect, onInquiry, exp
           {specCols.map((col) => {
             const v = sv(product.specs as Record<string, string>, col.key);
             if (v === "—") return null;
-            return <div key={col.key} className="text-xs md:text-sm"><span className="text-on-surface-variant">{col.label}: </span><span className="text-on-surface font-medium">{v}</span></div>;
+            return <div key={col.key} className="text-xs md:text-sm min-w-0"><span className="text-on-surface-variant">{col.label}: </span><span className="text-on-surface font-medium break-words">{v}</span></div>;
           })}
         </div>
       </div>
@@ -264,12 +323,17 @@ function ResultCard({ product, columns, selected, onToggleSelect, onInquiry, exp
 
 export default function SelectionPage() {
   const { data: settingsData } = useSWR("publicSettings", () => getCachedPublicSettings());
+  const business = getBusinessConfig(settingsData);
   const pageTitle = (settingsData?.selection_page_title as string) || "产品选型";
   const pageDesc = (settingsData?.selection_page_desc as string) || "选择产品大类，逐步筛选出精确型号";
   useDocumentTitle(pageTitle);
   const isDesktop = useMediaQuery("(min-width: 768px)");
   const navigate = useNavigate();
   const location = useLocation();
+  const previewCategoryImages = useMemo(
+    () => new URLSearchParams(location.search).get("previewImages") === "1",
+    [location.search]
+  );
   const { user } = useAuthStore();
   const { toast } = useToast();
   const [navOpen, setNavOpen] = useState(false);
@@ -281,23 +345,21 @@ export default function SelectionPage() {
   const [groupId, setGroupId] = useState<string | null>(null);
   const [slug, setSlug] = useState<string | null>(null);
   const [specs, setSpecs] = useState<Record<string, string>>({});
+  const [manualDrafts, setManualDrafts] = useState<Record<string, string>>({});
   const [skipped, setSkipped] = useState<Set<string>>(new Set());
   const [search, setSearch] = useState("");
 
+  /* data */
+  const { data: cats = [] } = useSWR("selections/categories", getSelectionCategories);
+
   /* pre-fill from share link state or URL params */
-  useEffect(() => {
-    // From location.state (share token redirect)
+  const shareStateRef = useRef<{ shareSlug?: string; shareSpecs?: Record<string, string> } | null>(null);
+  if (!shareStateRef.current) {
     const state = location.state as { shareSlug?: string; shareSpecs?: Record<string, string> } | null;
-    if (state?.shareSlug && !slug) {
-      setSlug(state.shareSlug);
-      if (state.shareSpecs) setSpecs(state.shareSpecs);
-      // Derive groupId from shareSlug via API cats
-      const match = cats.find((c) => c.slug === state.shareSlug);
-      if (match?.groupId) setGroupId(match.groupId);
-      window.history.replaceState({}, "");
-      return;
-    }
-    // From URL query ?g=groupId (group share)
+    if (state?.shareSlug) shareStateRef.current = state;
+  }
+
+  useEffect(() => {
     const params = new URLSearchParams(location.search);
     const g = params.get("g");
     if (g && !groupId) {
@@ -305,14 +367,25 @@ export default function SelectionPage() {
     }
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  /* data */
-  const { data: cats = [] } = useSWR("selections/categories", getSelectionCategories);
+  // Apply share slug/specs once cats are loaded
+  useEffect(() => {
+    const share = shareStateRef.current;
+    if (!share?.shareSlug || !cats.length || slug) return;
+    setSlug(share.shareSlug);
+    if (share.shareSpecs) setSpecs(share.shareSpecs);
+    const match = cats.find((c) => c.slug === share.shareSlug);
+    if (match?.groupId) setGroupId(match.groupId);
+    shareStateRef.current = null;
+    window.history.replaceState({}, "");
+  }, [cats, slug]); // eslint-disable-line react-hooks/exhaustive-deps
 
   /* derive groups and standalone categories from API categories */
   interface DerivedGroup {
     id: string;
     name: string;
     icon: string;
+    image: string | null;
+    imageFit: "cover" | "contain";
     children: { slug: string; name: string; icon: string }[];
   }
   const groups = useMemo<DerivedGroup[]>(() => {
@@ -320,7 +393,10 @@ export default function SelectionPage() {
     for (const c of cats) {
       if (!c.groupId || !c.groupName) continue;
       if (!map.has(c.groupId)) {
-        map.set(c.groupId, { id: c.groupId, name: c.groupName, icon: c.groupIcon || "category", children: [] });
+        map.set(c.groupId, { id: c.groupId, name: c.groupName, icon: c.groupIcon || "category", image: c.groupImage || null, imageFit: c.groupImageFit === "contain" ? "contain" : "cover", children: [] });
+      } else if (!map.get(c.groupId)!.image && c.groupImage) {
+        map.get(c.groupId)!.image = c.groupImage;
+        map.get(c.groupId)!.imageFit = c.groupImageFit === "contain" ? "contain" : "cover";
       }
       map.get(c.groupId)!.children.push({ slug: c.slug, name: c.name, icon: c.icon || "category" });
     }
@@ -329,19 +405,20 @@ export default function SelectionPage() {
 
   // Standalone categories without a group
   const standaloneCats = useMemo(() => cats.filter((c) => !c.groupId || !c.groupName), [cats]);
+  const catBySlug = useMemo(() => new Map(cats.map((c) => [c.slug, c])), [cats]);
 
   const group = useMemo(() => groups.find((g) => g.id === groupId) ?? null, [groups, groupId]);
 
   const liveCat = slug ? cats.find((c) => c.slug === slug) ?? null : null;
   const { data: pData, isLoading } = useSWR(
     liveCat ? ["sel-prod", liveCat.slug] : null,
-    () => getSelectionProducts(liveCat!.slug, 1, 2000)
+    () => getSelectionProducts(liveCat!.slug, 1, Math.max(liveCat!.productCount ?? 2000, 2000))
   );
   const all = pData?.items ?? [];
 
   const fields = useMemo(() => {
     if (liveCat?.columns?.length) {
-      return liveCat.columns.map((col) => col.key).filter((key) => key !== "型号");
+      return liveCat.columns.filter((col) => col.key !== "型号" && !col.displayOnly).map((col) => col.key);
     }
     return [];
   }, [liveCat]);
@@ -351,14 +428,18 @@ export default function SelectionPage() {
     return [];
   }, [liveCat]);
 
+  const manualFields = useMemo(() => new Set(columns.filter(isManualColumn).map((col) => col.key)), [columns]);
+
   /* filtered */
   const filtered = useMemo(() => {
     if (search) {
       const q = search.toLowerCase();
       return all.filter((p) => (p.modelNo || "").toLowerCase().includes(q) || p.name.toLowerCase().includes(q));
     }
-    return all.filter((p) => Object.entries(specs).every(([k, v]) => sv(p.specs as Record<string, string>, k) === v));
-  }, [all, specs, search]);
+    return all.filter((p) =>
+      Object.entries(specs).every(([k, v]) => manualFields.has(k) || sv(p.specs as Record<string, string>, k) === v)
+    );
+  }, [all, specs, search, manualFields]);
 
   const specKeys = Object.keys(specs);
   const stepIdx = specKeys.length;
@@ -373,6 +454,7 @@ export default function SelectionPage() {
 
   const options = useMemo(() => {
     if (!curField) return [];
+    if (manualFields.has(curField)) return [];
     const m = new Map<string, number>();
     filtered.forEach((p) => {
       const v = sv(p.specs as Record<string, string>, curField);
@@ -390,16 +472,16 @@ export default function SelectionPage() {
         const ia = orderMap.get(a[0]) ?? Infinity;
         const ib = orderMap.get(b[0]) ?? Infinity;
         if (ia !== ib) return ia - ib;
-        return compareOptionValues(sortType, a[0], b[0]);
+        return compareOptionValues(sortType, a[0], b[0], business.threadPriority);
       });
     } else {
-      entries.sort((a, b) => compareOptionValues(sortType, a[0], b[0]));
+      entries.sort((a, b) => compareOptionValues(sortType, a[0], b[0], business.threadPriority));
     }
     return entries.map(([val, count]) => ({ val, count }));
-  }, [filtered, curField, liveCat?.optionOrder, columns]);
+  }, [filtered, curField, liveCat?.optionOrder, columns, manualFields, business.threadPriority]);
 
   const phase: "group" | "sub" | "wizard" = !groupId ? "group" : !slug ? "sub" : "wizard";
-  const selectedProds = filtered.filter((p) => selectedIds.has(p.id));
+  const selectedProds = filtered.filter((p) => selectedIds.has(p.id)).map((p) => applyManualSpecs(p, columns, specs));
 
   /* auto-scroll ref */
   const curStepRef = useRef<HTMLDivElement>(null);
@@ -412,6 +494,7 @@ export default function SelectionPage() {
   /* auto-skip: single-value params get auto-selected; zero-option params get skipped */
   useEffect(() => {
     if (isLoading || search || !curField) return;
+    if (manualFields.has(curField)) return;
     if (options.length === 0 && all.length > 0) {
       // Always skip empty fields — never suppress this
       setSkipped((p) => new Set(p).add(curField));
@@ -425,7 +508,7 @@ export default function SelectionPage() {
     if (options.length === 1) {
       setSpecs((p) => ({ ...p, [curField]: options[0].val }));
     }
-  }, [curField, options, search, isLoading, all.length]);
+  }, [curField, options, search, isLoading, all.length, manualFields]);
 
   /* auto-scroll to current step — desktop uses container.scrollTo to avoid sidebar shift */
   const scrollTimerRef = useRef<ReturnType<typeof setTimeout>>();
@@ -451,10 +534,10 @@ export default function SelectionPage() {
 
   /* handlers */
   const pickGroup = useCallback((id: string) => {
-    setGroupId(id); setSlug(null); setSpecs({}); setSkipped(new Set()); setSearch(""); setSelectedIds(new Set()); setExpandedKits(new Set());
+    setGroupId(id); setSlug(null); setSpecs({}); setManualDrafts({}); setSkipped(new Set()); setSearch(""); setSelectedIds(new Set()); setExpandedKits(new Set());
   }, []);
   const pickSub = useCallback((s: string) => {
-    setSlug(s); setSpecs({}); setSkipped(new Set()); setSearch(""); setSelectedIds(new Set()); setExpandedKits(new Set());
+    setSlug(s); setSpecs({}); setManualDrafts({}); setSkipped(new Set()); setSearch(""); setSelectedIds(new Set()); setExpandedKits(new Set());
   }, []);
   const pickVal = useCallback((key: string, val: string) => setSpecs((p) => ({ ...p, [key]: val })), []);
   const dropVal = useCallback((key: string) => {
@@ -470,10 +553,10 @@ export default function SelectionPage() {
     setSearch("");
   }, []);
   const goHome = useCallback(() => {
-    setGroupId(null); setSlug(null); setSpecs({}); setSkipped(new Set()); setSearch(""); setSelectedIds(new Set()); setExpandedKits(new Set());
+    setGroupId(null); setSlug(null); setSpecs({}); setManualDrafts({}); setSkipped(new Set()); setSearch(""); setSelectedIds(new Set()); setExpandedKits(new Set());
   }, []);
   const restart = useCallback(() => {
-    setSpecs({}); setSkipped(new Set()); setSearch(""); setSelectedIds(new Set()); setExpandedKits(new Set());
+    setSpecs({}); setManualDrafts({}); setSkipped(new Set()); setSearch(""); setSelectedIds(new Set()); setExpandedKits(new Set());
   }, []);
   const toggleSel = useCallback((id: string) => setSelectedIds((p) => { const n = new Set(p); n.has(id) ? n.delete(id) : n.add(id); return n; }), []);
   const toggleKit = useCallback((id: string) => setExpandedKits((p) => { const n = new Set(p); n.has(id) ? n.delete(id) : n.add(id); return n; }), []);
@@ -491,20 +574,65 @@ export default function SelectionPage() {
     if (!user) { requireLogin(); return; }
     setSharing(true);
     try {
-      const result = await createSelectionShare({
+      const payload = {
         categorySlug: slug,
-        specs,
+        specs: withResults ? specs : {},
         productIds: withResults ? filtered.map((p) => p.id) : [],
-      });
+      };
+      console.log("[Share] Request payload:", JSON.stringify(payload).slice(0, 500));
+      const result = await createSelectionShare(payload);
       const url = `${window.location.origin}/selection/s/${result.token}`;
-      await navigator.clipboard.writeText(url);
+      await copyText(url);
       toast("分享链接已复制到剪贴板", "success");
-    } catch {
-      toast("分享失败", "error");
+    } catch (err: any) {
+      console.error("[Share] Error:", err?.response?.status, err?.response?.data, err?.message);
+      toast(`分享失败: ${err?.response?.data?.message || err?.message || "未知错误"}`, "error");
     } finally {
       setSharing(false);
     }
   }
+
+  const totalProductCount = useMemo(
+    () => cats.reduce((sum, c) => sum + (c.productCount ?? 0), 0),
+    [cats]
+  );
+  const previewImages = [
+    "data:image/svg+xml;utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 160 120'%3E%3Crect width='160' height='120' rx='18' fill='%23F4F2EF'/%3E%3Cg transform='translate(34 26)' fill='none' stroke='%23D97706' stroke-width='8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M28 20h52'/%3E%3Cpath d='M80 20v44'/%3E%3Cpath d='M28 20v44'/%3E%3Cpath d='M16 64h24'/%3E%3Cpath d='M68 64h24'/%3E%3Cpath d='M44 12h20'/%3E%3C/g%3E%3C/svg%3E",
+    "data:image/svg+xml;utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 160 120'%3E%3Crect width='160' height='120' rx='18' fill='%23F4F2EF'/%3E%3Cg transform='translate(28 28)' fill='none' stroke='%23D97706' stroke-width='8' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='52' cy='34' r='24'/%3E%3Cpath d='M10 34h18'/%3E%3Cpath d='M76 34h18'/%3E%3Cpath d='M52 10V0'/%3E%3Cpath d='M36 0h32'/%3E%3Cpath d='M40 34h24'/%3E%3C/g%3E%3C/svg%3E",
+    "data:image/svg+xml;utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 160 120'%3E%3Crect width='160' height='120' rx='18' fill='%23F4F2EF'/%3E%3Cg transform='translate(30 22)' fill='none' stroke='%23D97706' stroke-width='8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M16 70C42 18 70 18 96 70'/%3E%3Cpath d='M16 70h24'/%3E%3Cpath d='M72 70h24'/%3E%3Cpath d='M51 20v28'/%3E%3Cpath d='M39 34h24'/%3E%3C/g%3E%3C/svg%3E",
+  ];
+
+  const categoryPreviewImage = (seed: string) => {
+    let hash = 0;
+    for (const ch of seed) hash = (hash + ch.charCodeAt(0)) % previewImages.length;
+    return previewImages[hash];
+  };
+
+  const categoryMedia = (image: string | null | undefined, icon: string | null | undefined, name: string, previewSeed: string, imageFit: "cover" | "contain" = "cover") => {
+    const defaultImage = defaultCategoryImage(name);
+    const mediaImage = image || defaultImage || (previewCategoryImages ? categoryPreviewImage(previewSeed) : "");
+    const fallbackIcon = icon || "category";
+
+    if (!mediaImage) {
+      return (
+        <div className="h-12 w-12 shrink-0 rounded-xl bg-surface-container-high border border-outline-variant/10 flex items-center justify-center">
+          <Icon name={fallbackIcon} size={22} className="text-primary-container" />
+        </div>
+      );
+    }
+
+    return (
+      <div className="w-full aspect-[3.25/1] md:aspect-[2.35/1] rounded-xl bg-surface-container-high border border-outline-variant/10 overflow-hidden shrink-0">
+        <SafeImage
+          src={mediaImage}
+          alt={name}
+          className={imageFit === "contain" ? "w-full h-full object-contain p-2" : "w-full h-full object-cover md:scale-[1.12] md:group-hover:scale-[1.18] transition-transform duration-500"}
+          fallbackClassName="bg-surface-container-high"
+          fallbackIcon={fallbackIcon}
+        />
+      </div>
+    );
+  };
 
   /* ── page header — matches other pages' style (h2 title row inside content area) ── */
   const pageHeader = (
@@ -518,7 +646,7 @@ export default function SelectionPage() {
               {!slug ? (
                 <span className="shrink-0">{group.name}</span>
               ) : (
-                <button onClick={() => { setSlug(null); setSpecs({}); setSkipped(new Set()); setSearch(""); }}
+                <button onClick={() => { setSlug(null); setSpecs({}); setManualDrafts({}); setSkipped(new Set()); setSearch(""); }}
                   className="hover:text-primary-container transition-colors shrink-0">{group.name}</button>
               )}
             </>
@@ -543,8 +671,8 @@ export default function SelectionPage() {
             )}
           </div>
           <button onClick={() => handleShare(false)} disabled={sharing} className="text-sm text-primary-container hover:underline shrink-0 inline-flex items-center gap-1 disabled:opacity-50 ml-auto">
-            <Icon name="share" size={14} />{sharing ? "..." : "分享选型"}
-            </button>
+            <Icon name="share" size={14} />{sharing ? "..." : "分享此分类"}
+          </button>
         </div>
       )}
     </div>
@@ -552,23 +680,83 @@ export default function SelectionPage() {
 
   /* ── group selection ── */
   const groupContent = (
-    <div className="px-4 md:px-6 py-6 md:py-10">
-      <div className="text-center mb-8">
-        <Icon name="tune" size={36} className="text-primary-container mx-auto mb-3" />
-        <h1 className="text-xl md:text-2xl font-headline font-bold text-on-surface mb-2">{pageTitle}</h1>
-        <p className="text-sm text-on-surface-variant">{pageDesc}</p>
+    <div className="px-4 md:px-8 lg:px-10 xl:px-12 pt-4 pb-6 md:py-8">
+      <div className="mb-5 md:mb-7">
+        <div className="md:hidden">
+          <div className="flex items-center gap-2.5">
+            <span className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary-container/8 text-primary-container">
+              <Icon name="tune" size={18} />
+            </span>
+            <h1 className="text-xl font-headline font-bold text-on-surface leading-none">{pageTitle}</h1>
+          </div>
+          <p className="text-sm text-on-surface-variant mt-2 leading-relaxed">{pageDesc}</p>
+        </div>
+        <div className="mt-4 grid grid-cols-3 gap-2 md:hidden">
+          <div className="rounded-xl border border-outline-variant/10 bg-surface-container-low px-3 py-2">
+            <p className="text-[11px] text-on-surface-variant">大类</p>
+            <p className="text-base font-bold text-on-surface">{groups.length + standaloneCats.length}</p>
+          </div>
+          <div className="rounded-xl border border-outline-variant/10 bg-surface-container-low px-3 py-2">
+            <p className="text-[11px] text-on-surface-variant">子类</p>
+            <p className="text-base font-bold text-on-surface">{cats.length}</p>
+          </div>
+          <div className="rounded-xl border border-outline-variant/10 bg-surface-container-low px-3 py-2">
+            <p className="text-[11px] text-on-surface-variant">产品</p>
+            <p className="text-base font-bold text-on-surface">{totalProductCount}</p>
+          </div>
+        </div>
+        <div className="hidden md:flex flex-col xl:flex-row xl:items-stretch xl:justify-between gap-5 xl:gap-6 rounded-2xl border border-outline-variant/12 bg-surface-container-low px-6 py-5 shadow-sm">
+          <div className="min-w-0 flex items-start gap-4">
+            <div className="mt-1 h-12 w-1.5 rounded-full bg-primary-container" />
+            <div className="min-w-0">
+              <div className="inline-flex items-center gap-2 rounded-full bg-primary-container/8 px-3 py-1 text-[11px] font-semibold text-primary-container">
+                <Icon name="tune" size={14} />
+                PRODUCT SELECTOR
+              </div>
+              <h1 className="mt-3 font-headline text-3xl font-bold tracking-tight text-on-surface whitespace-nowrap">{pageTitle}</h1>
+              <p className="mt-2 max-w-2xl text-sm leading-6 text-on-surface-variant">{pageDesc}</p>
+            </div>
+          </div>
+          <div className="grid w-full grid-cols-3 gap-3 xl:w-auto xl:min-w-[360px]">
+            <div className="rounded-xl border border-outline-variant/10 bg-surface px-4 py-3">
+              <p className="text-xs text-on-surface-variant">大类</p>
+              <p className="mt-1 text-2xl font-bold text-on-surface">{groups.length + standaloneCats.length}</p>
+            </div>
+            <div className="rounded-xl border border-outline-variant/10 bg-surface px-4 py-3">
+              <p className="text-xs text-on-surface-variant">子类</p>
+              <p className="mt-1 text-2xl font-bold text-on-surface">{cats.length}</p>
+            </div>
+            <div className="rounded-xl border border-outline-variant/10 bg-surface px-4 py-3">
+              <p className="text-xs text-on-surface-variant">产品</p>
+              <p className="mt-1 text-2xl font-bold text-on-surface">{totalProductCount}</p>
+            </div>
+          </div>
+        </div>
       </div>
       {/* Standalone categories (no group) */}
       {standaloneCats.length > 0 && (
         <div className="mb-6">
-          {groups.length > 0 && <h2 className="text-sm font-bold text-on-surface-variant/70 uppercase tracking-wide mb-3">产品分类</h2>}
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-2.5 md:gap-3">
+          <div className="flex items-center justify-between mb-3 md:mb-4">
+            <h2 className="text-sm md:text-base font-bold text-on-surface">{groups.length > 0 ? "产品分类" : "选择大类"}</h2>
+            <span className="text-xs text-on-surface-variant">{standaloneCats.length} 项</span>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-2.5 md:gap-4">
             {standaloneCats.map((c) => (
               <button key={c.id} onClick={() => pickSub(c.slug)}
-                className="rounded-xl md:rounded-2xl border border-outline-variant/15 bg-surface-container-low p-3.5 md:p-5 text-left hover:border-primary-container/40 hover:bg-primary-container/5 transition-all active:scale-[0.97]">
-                <Icon name={c.icon || "category"} size={24} className="text-primary-container mb-2" />
-                <div className="font-bold text-sm text-on-surface mb-0.5">{c.name}</div>
-                <div className="text-xs text-on-surface-variant">{c.productCount ?? 0} 个产品</div>
+                className="group rounded-xl md:rounded-2xl border border-outline-variant/12 bg-surface-container-low p-2.5 md:p-3 text-left shadow-sm transition-all active:scale-[0.98] hover:-translate-y-0.5 hover:border-primary-container/35 hover:bg-surface hover:shadow-md">
+                <div className={`${c.image || defaultCategoryImage(c.name) || previewCategoryImages ? "space-y-3" : "flex items-center gap-3"}`}>
+                  {categoryMedia(c.image, c.icon, c.name, c.slug)}
+                  <div className="min-w-0 flex-1 flex items-center gap-2">
+                    <div className="min-w-0 flex-1">
+                      <div className="font-bold text-sm md:text-base text-on-surface leading-snug line-clamp-2">{c.name}</div>
+                      <div className="text-xs text-on-surface-variant mt-0.5">{c.productCount ?? 0} 个产品</div>
+                    </div>
+                    <span className="hidden md:flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-surface-container-high text-on-surface-variant transition-colors group-hover:bg-primary-container group-hover:text-on-primary">
+                      <Icon name="chevron_right" size={18} />
+                    </span>
+                    <Icon name="chevron_right" size={18} className="text-on-surface-variant/35 shrink-0 md:hidden" />
+                  </div>
+                </div>
               </button>
             ))}
           </div>
@@ -577,16 +765,37 @@ export default function SelectionPage() {
       {/* Grouped categories */}
       {groups.length > 0 && (
         <div>
-          {standaloneCats.length > 0 && <h2 className="text-sm font-bold text-on-surface-variant/70 uppercase tracking-wide mb-3">产品分组</h2>}
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-2.5 md:gap-3">
-            {groups.map((g) => (
-              <button key={g.id} onClick={() => pickGroup(g.id)}
-                className="rounded-xl md:rounded-2xl border border-outline-variant/15 bg-surface-container-low p-3.5 md:p-5 text-left hover:border-primary-container/40 hover:bg-primary-container/5 transition-all active:scale-[0.97]">
-                <Icon name={g.icon} size={24} className="text-primary-container mb-2" />
-                <div className="font-bold text-sm text-on-surface mb-0.5">{g.name}</div>
-                <div className="text-xs text-on-surface-variant">{g.children.length} 个子类</div>
-              </button>
-            ))}
+          <div className="flex items-center justify-between mb-3 md:mb-4">
+            <h2 className="text-sm md:text-base font-bold text-on-surface">{standaloneCats.length > 0 ? "产品分组" : "选择大类"}</h2>
+            <span className="text-xs text-on-surface-variant">{groups.length} 项</span>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-2.5 md:gap-4">
+            {groups.map((g) => {
+              const childProductCount = g.children.reduce((sum, child) => {
+                const cat = catBySlug.get(child.slug);
+                return sum + (cat?.productCount ?? 0);
+              }, 0);
+              const groupImage = g.image || g.children.map((child) => catBySlug.get(child.slug)?.image).find(Boolean);
+              const hasGroupImage = Boolean(groupImage || defaultCategoryImage(g.name) || previewCategoryImages);
+              return (
+                <button key={g.id} onClick={() => pickGroup(g.id)}
+                  className="group rounded-xl md:rounded-2xl border border-outline-variant/12 bg-surface-container-low p-2.5 md:p-3 text-left shadow-sm transition-all active:scale-[0.98] hover:-translate-y-0.5 hover:border-primary-container/35 hover:bg-surface hover:shadow-md">
+                  <div className={`${hasGroupImage ? "space-y-3" : "flex items-center gap-3"}`}>
+                    {categoryMedia(groupImage, g.icon, g.name, g.id, g.imageFit)}
+                    <div className="min-w-0 flex-1 flex items-center gap-2">
+                      <div className="min-w-0 flex-1">
+                        <div className="font-bold text-sm md:text-base text-on-surface leading-snug line-clamp-2">{g.name}</div>
+                        <div className="text-xs text-on-surface-variant mt-0.5">{g.children.length} 个子类{childProductCount > 0 ? ` · ${childProductCount} 个产品` : ""}</div>
+                      </div>
+                      <span className="hidden md:flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-surface-container-high text-on-surface-variant transition-colors group-hover:bg-primary-container group-hover:text-on-primary">
+                        <Icon name="chevron_right" size={18} />
+                      </span>
+                      <Icon name="chevron_right" size={18} className="text-on-surface-variant/35 shrink-0 md:hidden" />
+                    </div>
+                  </div>
+                </button>
+              );
+            })}
           </div>
         </div>
       )}
@@ -601,16 +810,10 @@ export default function SelectionPage() {
 
   /* ── subcategory selection ── */
   async function handleShareSub(chSlug: string) {
-    if (!user) { requireLogin(); return; }
     setSharing(true);
     try {
-      const result = await createSelectionShare({
-        categorySlug: chSlug,
-        specs: {},
-        productIds: [],
-      });
-      const url = `${window.location.origin}/selection/s/${result.token}`;
-      await navigator.clipboard.writeText(url);
+      const url = `${window.location.origin}/selection?g=${encodeURIComponent(chSlug)}`;
+      await copyText(url);
       toast("分享链接已复制到剪贴板", "success");
     } catch {
       toast("分享失败", "error");
@@ -654,6 +857,8 @@ export default function SelectionPage() {
     const isCurrent = curField === field;
     const hasMore = i < fields.length - 1;
     const hasIllus = illustratedParams.has(field);
+    const colDef = columns.find((c) => c.key === field);
+    const isManual = isManualColumn(colDef);
 
     if (isCompleted) {
       return (
@@ -699,7 +904,40 @@ export default function SelectionPage() {
                 </div>
                 <span className="text-xs text-on-surface-variant bg-surface-container-high px-2.5 py-1 rounded-full shrink-0">{filtered.length} 件</span>
               </div>
-              {options.length > 0 ? (
+              {isManual ? (
+                <form
+                  className="space-y-3"
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    const value = normalizeManualValue(colDef, manualDrafts[field] ?? specs[field] ?? "");
+                    if (value) pickVal(field, value);
+                  }}
+                >
+                  <div className="flex flex-col sm:flex-row gap-2">
+                    <div className="relative flex-1">
+                      <input
+                        value={manualDrafts[field] ?? specs[field] ?? ""}
+                        onChange={(e) => setManualDrafts((prev) => ({ ...prev, [field]: e.target.value }))}
+                        placeholder={colDef?.placeholder || `请输入${field}`}
+                        className="w-full rounded-xl border border-outline-variant/20 bg-surface-container px-3 sm:px-4 py-2.5 pr-12 text-sm text-on-surface outline-none focus:border-primary-container transition-colors"
+                      />
+                      {colDef?.suffix && (
+                        <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-on-surface-variant">{colDef.suffix}</span>
+                      )}
+                    </div>
+                    <button
+                      type="submit"
+                      disabled={!String(manualDrafts[field] ?? specs[field] ?? "").trim()}
+                      className="rounded-xl bg-primary-container px-4 py-2.5 text-sm font-bold text-on-primary disabled:opacity-40"
+                    >
+                      确认
+                    </button>
+                  </div>
+                  <p className="text-xs text-on-surface-variant">
+                    该字段为定制输入，不会按固定库存长度筛选；提交询价时会写入规格并替换型号里的占位符。
+                  </p>
+                </form>
+              ) : options.length > 0 ? (
                 (() => {
                   // Per-field check: only use image cards if THIS field has uploaded images
                   const fieldImages = liveCat?.optionImages?.[field];
@@ -720,7 +958,7 @@ export default function SelectionPage() {
                           {/* Image area */}
                           <div className={`relative w-full aspect-square flex items-center justify-center rounded-t-lg overflow-hidden bg-white`}>
                             {uploadedImg ? (
-                              <img src={uploadedImg} alt={val} className="w-[85%] h-[85%] object-contain" />
+                              <SafeImage src={uploadedImg} alt={val} className="w-[85%] h-[85%] object-contain" fallbackIcon="category" />
                             ) : (
                               <Icon name="category" size={28} className="text-on-surface-variant/20" />
                             )}
@@ -756,7 +994,7 @@ export default function SelectionPage() {
                   {specKeys.length > 0 ? (
                     <button onClick={() => dropVal(specKeys[specKeys.length - 1])} className="mt-2 text-sm text-primary-container hover:underline">回退上一步</button>
                   ) : (
-                    <button onClick={() => { setSlug(null); setSpecs({}); setSkipped(new Set()); }} className="mt-2 text-sm text-primary-container hover:underline">返回选择其他子类</button>
+                    <button onClick={() => { setSlug(null); setSpecs({}); setManualDrafts({}); setSkipped(new Set()); }} className="mt-2 text-sm text-primary-container hover:underline">返回选择其他子类</button>
                   )}
                 </div>
               )}
@@ -794,7 +1032,7 @@ export default function SelectionPage() {
         <div className="flex items-center gap-3">
           {filtered.length > 0 && (
             <button onClick={() => handleShare(true)} disabled={sharing} className="text-sm text-primary-container hover:underline shrink-0 inline-flex items-center gap-1 disabled:opacity-50">
-              <Icon name="share" size={14} />{sharing ? "生成中..." : "分享"}
+              <Icon name="share" size={14} />{sharing ? "生成中..." : "分享结果"}
             </button>
           )}
           {specKeys.length > 0 && <button onClick={restart} className="text-sm text-primary-container hover:underline shrink-0">重新选型</button>}
@@ -803,7 +1041,7 @@ export default function SelectionPage() {
       {filtered.length > 0 ? (
         <div className="space-y-3 mt-3 pb-6">
           {filtered.map((p) => (
-            <ResultCard key={p.id} product={p} columns={columns} selected={selectedIds.has(p.id)}
+            <ResultCard key={p.id} product={applyManualSpecs(p, columns, specs)} columns={columns} selected={selectedIds.has(p.id)}
               onToggleSelect={() => toggleSel(p.id)} onInquiry={() => { toggleSel(p.id); setInquiryOpen(true); }} expandedKits={expandedKits} onToggleKit={toggleKit} navigate={navigate} isMobile={!isDesktop} />
           ))}
         </div>
@@ -827,7 +1065,7 @@ export default function SelectionPage() {
     <div className="text-center py-16">
       <Icon name="inventory_2" size={40} className="mx-auto mb-3 text-on-surface-variant/20" />
       <p className="text-sm text-on-surface">当前分类暂无产品数据</p>
-      <button onClick={() => { setSlug(null); setSpecs({}); setSkipped(new Set()); }}
+      <button onClick={() => { setSlug(null); setSpecs({}); setManualDrafts({}); setSkipped(new Set()); }}
         className="mt-3 text-sm text-primary-container hover:underline">返回选择其他子类</button>
       {user?.role === "ADMIN" && (
         <Link to="/admin/selections" className="mt-3 ml-4 inline-flex items-center gap-1 text-xs text-primary-container hover:underline"><Icon name="tune" size={14} />前往管理</Link>
@@ -839,7 +1077,7 @@ export default function SelectionPage() {
       {filtered.length > 0 ? (
         <div className="space-y-3 pb-4">
           {filtered.map((p) => (
-            <ResultCard key={p.id} product={p} columns={columns} selected={selectedIds.has(p.id)}
+            <ResultCard key={p.id} product={applyManualSpecs(p, columns, specs)} columns={columns} selected={selectedIds.has(p.id)}
               onToggleSelect={() => toggleSel(p.id)} onInquiry={() => { toggleSel(p.id); setInquiryOpen(true); }} expandedKits={expandedKits} onToggleKit={toggleKit} navigate={navigate} isMobile={!isDesktop} />
           ))}
         </div>
@@ -854,7 +1092,10 @@ export default function SelectionPage() {
 
   /* ── batch action bar ── */
   const actionBar = selectedIds.size > 0 && (
-    <div className="shrink-0 border-t border-outline-variant/15 bg-surface/95 backdrop-blur-sm px-3 md:px-4 py-2.5 flex items-center justify-between z-10">
+    <div
+      className="shrink-0 border-t border-outline-variant/15 bg-surface/95 backdrop-blur-sm px-3 md:px-4 py-2.5 flex items-center justify-between z-10"
+      style={!isDesktop ? { marginBottom: "calc(3.5rem + env(safe-area-inset-bottom, 0px))" } : undefined}
+    >
       <span className="text-sm text-on-surface-variant">已选 <strong className="text-on-surface">{selectedIds.size}</strong> 项</span>
       <div className="flex gap-2">
         <button onClick={() => setSelectedIds(new Set())} className="px-3 py-1.5 text-xs text-on-surface-variant hover:bg-surface-container-high rounded-lg transition-colors">取消</button>
@@ -911,7 +1152,7 @@ export default function SelectionPage() {
                 <Icon name="close" size={10} className="ml-0.5 opacity-60" />
               </button>
             ))}
-            <button onClick={() => { setSpecs({}); setSkipped(new Set()); }} className="text-xs text-on-surface-variant hover:text-primary-container transition-colors shrink-0 ml-1">重置</button>
+            <button onClick={() => { setSpecs({}); setManualDrafts({}); setSkipped(new Set()); }} className="text-xs text-on-surface-variant hover:text-primary-container transition-colors shrink-0 ml-1">重置</button>
           </div>
         )}
 

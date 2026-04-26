@@ -3,7 +3,7 @@ import { useNavigate, useLocation, Link } from "react-router-dom";
 import { motion } from "framer-motion";
 import { useAuthStore } from "../stores/useAuthStore";
 import { useDocumentTitle } from "../hooks/useDocumentTitle";
-import { getSiteTitle, getSiteIcon, getSiteLogo, getLogoDisplayMode } from "../lib/publicSettings";
+import BrandMark from "../components/shared/BrandMark";
 import Icon from "../components/shared/Icon";
 import { getPublicSettings } from "../api/settings";
 import client from "../api/client";
@@ -167,24 +167,7 @@ export default function LoginPage() {
         >
         <div className="bg-surface-container-low rounded-lg border border-outline-variant/20 overflow-hidden">
           <div className="p-6 sm:p-8 border-b border-outline-variant/10 text-center">
-            {(() => {
-              const displayMode = getLogoDisplayMode();
-              const siteIcon = getSiteIcon();
-              const siteLogo = getSiteLogo();
-              const siteTitle = getSiteTitle();
-              if (displayMode === 'logo_only' && siteLogo) {
-                return <img src={siteLogo} alt={siteTitle} className="h-12 max-w-[200px] mx-auto mb-3 object-contain" />;
-              }
-              if (siteIcon) {
-                return (
-                  <div className="flex items-center justify-center gap-2 mb-3">
-                    <img src={siteIcon} alt={siteTitle} className="h-10 w-10 shrink-0 object-contain" />
-                    <span className="text-xl font-headline font-bold tracking-tight text-on-surface">{siteTitle}</span>
-                  </div>
-                );
-              }
-              return <Icon name="precision_manufacturing" size={48} className="text-primary-container mb-3 block mx-auto" />;
-            })()}
+            <BrandMark size="hero" centered className="mx-auto mb-3 max-w-full" />
             <h1 className="text-2xl font-headline font-bold text-on-surface tracking-tight">
               {mode === "login" ? "欢迎回来" : "创建账户"}
             </h1>
@@ -198,10 +181,10 @@ export default function LoginPage() {
               <motion.div
                 initial={{ opacity: 0, height: 0 }}
                 animate={{ opacity: 1, height: "auto" }}
-                className="bg-error-container/20 border border-error/30 rounded-sm px-4 py-3 text-sm text-error flex items-center gap-2"
+                className="bg-error-container/20 border border-error/30 rounded-sm px-4 py-3 text-sm text-error flex items-start gap-2"
               >
-                <Icon name="error" size={20} />
-                {apiError}
+                <Icon name="error" size={20} className="shrink-0 mt-0.5" />
+                <span className="min-w-0 break-words">{apiError}</span>
               </motion.div>
             )}
 
@@ -351,7 +334,7 @@ export default function LoginPage() {
                     className={`w-full bg-surface-container-lowest text-on-surface text-base rounded-sm px-4 py-2.5 pr-10 border outline-none transition-colors ${
                       errors.confirmPassword ? "border-error" : "border-outline-variant/30 focus:border-primary-container"
                     }`}
-                  placeholder="再次输入密码"
+                    placeholder="再次输入密码"
                   />
                   <button
                     type="button"

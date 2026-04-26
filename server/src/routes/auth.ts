@@ -160,7 +160,7 @@ router.post("/api/auth/login", async (req: Request, res: Response) => {
   }
 });
 
-router.post("/api/auth/refresh", (req: Request, res: Response) => {
+router.post("/api/auth/refresh", async (req: Request, res: Response) => {
   const { refreshToken } = req.body;
   if (!refreshToken) {
     res.status(400).json({ detail: "缺少 refresh token" });
@@ -169,7 +169,16 @@ router.post("/api/auth/refresh", (req: Request, res: Response) => {
 
   try {
     const payload = verifyToken(refreshToken);
-    const accessToken = signAccessToken({ userId: payload.userId, role: payload.role });
+    // Verify user still exists in database
+    const user = await prisma.user.findUnique({
+      where: { id: payload.userId },
+      select: { id: true, role: true },
+    });
+    if (!user) {
+      res.status(401).json({ detail: "用户不存在，请重新登录" });
+      return;
+    }
+    const accessToken = signAccessToken({ userId: user.id, role: user.role });
     res.json({ accessToken });
   } catch {
     res.status(401).json({ detail: "refresh token 无效或已过期" });
@@ -183,7 +192,7 @@ router.get("/api/auth/profile", authMiddleware, async (req: AuthRequest, res: Re
       select: { id: true, username: true, email: true, role: true, mustChangePassword: true, company: true, phone: true, avatar: true, createdAt: true },
     });
     if (!user) {
-      res.status(404).json({ detail: "用户不存在" });
+      res.status(401).json({ detail: "用户不存在，请重新登录" });
       return;
     }
     res.json(user);
@@ -240,7 +249,7 @@ router.put("/api/auth/password", authMiddleware, async (req: AuthRequest, res: R
     const user = await prisma.user.findUnique({ where: { id: userId } });
     if (!user) {
       console.error(`[password] user not found: ${userId}`);
-      res.status(404).json({ detail: "用户不存在" });
+      res.status(401).json({ detail: "用户不存在，请重新登录" });
       return;
     }
 

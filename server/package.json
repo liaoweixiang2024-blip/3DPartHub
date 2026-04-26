@@ -1,18 +1,18 @@
 {
   "name": "3dparthub-server",
-  "version": "1.0.0",
+  "version": "2.3.0",
   "type": "module",
   "scripts": {
     "dev": "tsx watch src/main.ts",
     "start": "node --import tsx src/cluster.ts",
     "build": "tsc",
-    "prisma:generate": "prisma generate",
-    "prisma:migrate": "prisma migrate dev",
+    "prisma:generate": "bash scripts/safe-migrate.sh generate",
+    "prisma:migrate": "bash scripts/safe-migrate.sh dev",
+    "prisma:deploy": "bash scripts/safe-migrate.sh deploy",
+    "prisma:backup": "bash scripts/safe-migrate.sh backup",
+    "prisma:force-reset": "bash scripts/safe-migrate.sh force-reset",
     "prisma:studio": "prisma studio",
-    "prisma:seed:beize": "tsx prisma/seed-beize.ts",
-    "prisma:seed:batch": "tsx prisma/seeds/run-batch.ts",
-    "prisma:seed:backfill:groups": "tsx ../data/seeds/backfill-groups.ts",
-    "prisma:seed:backfill:sort": "tsx ../data/seeds/backfill-sort-types.ts"
+    "backup:e2e": "tsx scripts/backup-e2e-check.ts"
   },
   "dependencies": {
     "@prisma/client": "^5.22.0",

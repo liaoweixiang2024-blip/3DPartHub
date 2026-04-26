@@ -76,7 +76,7 @@ function NotificationItem({
   return (
     <div
       onClick={handleClick}
-      className={`group relative flex items-start gap-3 px-4 py-3 border-b border-outline-variant/5 transition-colors cursor-pointer ${
+      className={`group relative flex items-start gap-3 px-3 sm:px-4 py-3 border-b border-outline-variant/5 transition-colors cursor-pointer ${
         n.read ? "opacity-60" : "hover:bg-surface-container-highest/50"
       }`}
     >
@@ -84,8 +84,8 @@ function NotificationItem({
         <Icon name={meta.icon} size={14} />
       </span>
       <div className="min-w-0 flex-1">
-        <p className={`text-xs text-on-surface truncate ${!n.read ? "font-medium" : ""}`}>{n.title}</p>
-        <p className="text-[11px] text-on-surface-variant line-clamp-2 mt-0.5">{n.message}</p>
+        <p className={`text-xs text-on-surface line-clamp-1 break-words ${!n.read ? "font-medium" : ""}`}>{n.title}</p>
+        <p className="text-[11px] text-on-surface-variant line-clamp-2 break-words mt-0.5">{n.message}</p>
         <p className="text-[10px] text-on-surface-variant/40 mt-1">{formatTime(n.createdAt)}</p>
       </div>
       <div className="shrink-0 flex items-center gap-1.5 mt-0.5">
@@ -210,11 +210,11 @@ export default function NotificationPanel({ compact = false }: { compact?: boole
   const panelContent = (
     <>
       {/* Header */}
-      <div className="flex items-center justify-between px-4 py-3 border-b border-outline-variant/15">
+      <div className="flex items-center justify-between gap-3 px-4 py-3 border-b border-outline-variant/15">
         <span className="text-sm font-headline font-bold text-on-surface">
           {isAdmin ? "管理通知" : "通知"}
         </span>
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center justify-end gap-x-3 gap-y-1">
           {unreadCount > 0 && (
             <button onClick={handleMarkAllRead} className="text-[11px] text-primary-container hover:underline">
               全部已读
@@ -229,7 +229,7 @@ export default function NotificationPanel({ compact = false }: { compact?: boole
       </div>
 
       {/* List */}
-      <div className={`overflow-y-auto scrollbar-hidden ${isMobile ? 'max-h-[60vh]' : 'max-h-96'}`}>
+      <div className={`overflow-y-auto scrollbar-hidden ${isMobile ? 'max-h-[calc(100dvh-9rem)] pb-[env(safe-area-inset-bottom)]' : 'max-h-96'}`}>
         {loading && (
           <div className="flex items-center justify-center py-8">
             <Icon name="autorenew" size={24} className="text-on-surface-variant/30 animate-spin" />
@@ -290,7 +290,7 @@ export default function NotificationPanel({ compact = false }: { compact?: boole
             animate={{ y: 0 }}
             exit={{ y: "100%" }}
             transition={{ type: "spring", damping: 25, stiffness: 300 }}
-            className="fixed bottom-0 left-0 right-0 z-[201] bg-surface-container-high border-t border-outline-variant/20 rounded-t-2xl shadow-2xl"
+            className="fixed bottom-0 left-0 right-0 z-[201] bg-surface-container-high border-t border-outline-variant/20 rounded-t-2xl shadow-2xl max-h-[calc(100dvh-1rem)] overflow-hidden"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="w-10 h-1 rounded-full bg-outline-variant/30 mx-auto mt-2" />

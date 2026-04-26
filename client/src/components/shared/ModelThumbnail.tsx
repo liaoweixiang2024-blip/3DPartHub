@@ -1,6 +1,8 @@
+import { useEffect, useState } from "react";
+
 /**
  * Unified model thumbnail component with a geometric SVG placeholder
- * when no actual thumbnail is available.
+ * when no actual thumbnail is available or the image fails to load.
  */
 
 interface ModelThumbnailProps {
@@ -47,8 +49,14 @@ function PlaceholderSVG() {
 }
 
 export default function ModelThumbnail({ src, alt, className, placeholderClassName }: ModelThumbnailProps) {
-  if (src) {
-    return <img src={src} alt={alt || ""} className={className} loading="lazy" />;
+  const [failed, setFailed] = useState(false);
+
+  useEffect(() => {
+    setFailed(false);
+  }, [src]);
+
+  if (src && !failed) {
+    return <img src={src} alt={alt || ""} className={className} loading="lazy" onError={() => setFailed(true)} />;
   }
 
   return (

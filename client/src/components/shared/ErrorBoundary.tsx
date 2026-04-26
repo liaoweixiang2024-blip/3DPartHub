@@ -1,5 +1,6 @@
 import { Component, type ReactNode } from "react";
 import Icon from "./Icon";
+import { notifyGlobalError } from "../../lib/errorNotifications";
 
 interface Props {
   children: ReactNode;
@@ -15,6 +16,10 @@ export default class ErrorBoundary extends Component<Props, State> {
 
   static getDerivedStateFromError(error: Error): State {
     return { hasError: true, error };
+  }
+
+  componentDidCatch(error: Error) {
+    notifyGlobalError(error, "页面出现错误，请刷新后重试");
   }
 
   render() {

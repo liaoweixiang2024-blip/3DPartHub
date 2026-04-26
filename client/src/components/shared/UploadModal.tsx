@@ -6,6 +6,7 @@ import { converterApi, type ConversionResponse } from "../../api";
 import client from "../../api/client";
 import { categoriesApi } from "../../api/categories";
 import { useAuthStore } from "../../stores";
+import { getBusinessConfig } from "../../lib/businessConfig";
 import Icon from "../shared/Icon";
 import CategorySelect from "./CategorySelect";
 
@@ -14,10 +15,6 @@ interface UploadModalProps {
   onClose: () => void;
   onConverted?: (result: ConversionResponse) => void;
 }
-
-const ACCEPTED_FORMATS = ".step,.stp,.x_t,.xt";
-const CHUNK_SIZE = 5 * 1024 * 1024; // 5MB chunks
-const LARGE_FILE_THRESHOLD = 20 * 1024 * 1024; // Use chunks for files > 20MB
 
 export default function UploadModal({ open, onClose, onConverted }: UploadModalProps) {
   const navigate = useNavigate();
@@ -29,6 +26,11 @@ export default function UploadModal({ open, onClose, onConverted }: UploadModalP
   const [result, setResult] = useState<ConversionResponse | null>(null);
   const [categoryId, setCategoryId] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
+  const { uploadPolicy } = getBusinessConfig();
+  const acceptedFormats = uploadPolicy.modelFormats.map((f) => `.${f}`).join(",");
+  const chunkSize = Math.max(1, uploadPolicy.chunkSizeMb) * 1024 * 1024;
+  const chunkThreshold = Math.max(1, uploadPolicy.chunkThresholdMb) * 1024 * 1024;
+  const maxSize = Math.max(1, uploadPolicy.modelMaxSizeMb) * 1024 * 1024;
 
   const { data: categoryData } = useSWR(open ? "/categories" : null, () => categoriesApi.tree());
 
@@ -46,7 +48,7 @@ export default function UploadModal({ open, onClose, onConverted }: UploadModalP
   }, [reset, onClose]);
 
   const uploadChunked = useCallback(async (file: File) => {
-    const totalChunks = Math.ceil(file.size / CHUNK_SIZE);
+    const totalChunks = Math.ceil(file.size / chunkSize);
 
     // Init
     const { data: initResp } = await client.post("/upload/init", {
@@ -58,8 +60,8 @@ export default function UploadModal({ open, onClose, onConverted }: UploadModalP
 
     // Upload chunks
     for (let i = 0; i < totalChunks; i++) {
-      const start = i * CHUNK_SIZE;
-      const end = Math.min(start + CHUNK_SIZE, file.size);
+      const start = i * chunkSize;
+      const end = Math.min(start + chunkSize, file.size);
       const chunk = file.slice(start, end);
 
       await client.put(`/upload/chunk?uploadId=${uploadId}&chunkIndex=${i}`, chunk, {
@@ -72,7 +74,7 @@ export default function UploadModal({ open, onClose, onConverted }: UploadModalP
     // Complete
     const { data: completeResp } = await client.post("/upload/complete", { uploadId });
     return completeResp?.data || completeResp;
-  }, []);
+  }, [chunkSize]);
 
   const handleFile = useCallback(async (file: File) => {
     if (!isAuthenticated) {
@@ -82,8 +84,13 @@ export default function UploadModal({ open, onClose, onConverted }: UploadModalP
     }
 
     const ext = file.name.split(".").pop()?.toLowerCase();
-    if (!ext || !["step", "stp", "x_t", "xt"].includes(ext)) {
-      setError("不支持的格式，请上传 .step / .stp / .x_t 文件");
+    if (!ext || !uploadPolicy.modelFormats.map((f) => f.toLowerCase()).includes(ext)) {
+      setError(`不支持的格式，请上传 ${uploadPolicy.modelFormats.map((f) => `.${f}`).join(" / ")} 文件`);
+      return;
+    }
+
+    if (file.size > maxSize) {
+      setError(`文件过大，最大支持 ${uploadPolicy.modelMaxSizeMb}MB`);
       return;
     }
 
@@ -94,7 +101,7 @@ export default function UploadModal({ open, onClose, onConverted }: UploadModalP
     try {
       let res: ConversionResponse;
 
-      if (file.size > LARGE_FILE_THRESHOLD) {
+      if (file.size > chunkThreshold) {
         // Chunked upload path: upload chunks → merge on server → create from local file
         const uploadResult = await uploadChunked(file);
         setProgress(75);
@@ -126,7 +133,7 @@ export default function UploadModal({ open, onClose, onConverted }: UploadModalP
     } finally {
       setUploading(false);
     }
-  }, [isAuthenticated, onConverted, handleClose, navigate, uploadChunked]);
+  }, [isAuthenticated, onConverted, handleClose, navigate, uploadChunked, uploadPolicy, maxSize, chunkThreshold]);
 
   const handleDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault();
@@ -147,7 +154,7 @@ export default function UploadModal({ open, onClose, onConverted }: UploadModalP
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm"
+          className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/60 backdrop-blur-sm sm:p-4"
           onClick={handleClose}
           role="dialog"
           aria-modal="true"
@@ -157,24 +164,24 @@ export default function UploadModal({ open, onClose, onConverted }: UploadModalP
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.95, y: 20 }}
             transition={{ type: "spring", damping: 25, stiffness: 300 }}
-            className="bg-surface-container-low rounded-lg w-full max-w-lg mx-4 shadow-2xl border border-outline-variant/20 overflow-hidden"
+            className="bg-surface-container-low rounded-t-2xl sm:rounded-lg w-full max-w-lg shadow-2xl border border-outline-variant/20 overflow-hidden max-h-[calc(100dvh-1rem)] sm:max-h-[90vh] flex flex-col"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="flex items-center justify-between px-6 py-4 border-b border-outline-variant/10">
+            <div className="flex items-center justify-between px-4 sm:px-6 py-4 border-b border-outline-variant/10 shrink-0">
               <h2 className="font-headline text-lg font-bold text-on-surface">上传模型文件</h2>
               <button onClick={handleClose} className="p-1 text-on-surface-variant hover:text-on-surface transition-colors rounded-sm">
                 <Icon name="close" size={28} />
               </button>
             </div>
 
-            <div className="p-6">
+            <div className="p-4 sm:p-6 overflow-y-auto">
               {result ? (
                 <div className="flex flex-col items-center gap-4 py-4">
                   <div className="w-16 h-16 rounded-full bg-green-500/10 flex items-center justify-center">
                     <Icon name="check_circle" size={36} className="text-green-500" />
                   </div>
-                  <div className="text-center">
-                    <p className="text-on-surface font-medium">{result.original_name}</p>
+                  <div className="text-center min-w-0 max-w-full">
+                    <p className="text-on-surface font-medium break-all">{result.original_name}</p>
                     <p className="text-sm text-on-surface-variant mt-1">
                       已转换为 glTF ({(result.gltf_size / 1024).toFixed(1)} KB)
                     </p>
@@ -202,11 +209,11 @@ export default function UploadModal({ open, onClose, onConverted }: UploadModalP
                     onDragLeave={() => setDragActive(false)}
                     onDrop={handleDrop}
                     onClick={() => inputRef.current?.click()}
-                    className={`border-2 border-dashed rounded-lg p-8 text-center cursor-pointer transition-all ${
+                    className={`border-2 border-dashed rounded-lg p-5 sm:p-8 text-center cursor-pointer transition-all ${
                       dragActive ? "border-primary bg-primary-container/5" : "border-outline-variant/30 hover:border-primary/50 hover:bg-surface-container/50"
                     } ${uploading ? "pointer-events-none opacity-60" : ""}`}
                   >
-                    <input ref={inputRef} type="file" accept={ACCEPTED_FORMATS} onChange={handleChange} className="hidden" />
+                    <input ref={inputRef} type="file" accept={acceptedFormats} onChange={handleChange} className="hidden" />
                     <Icon name={uploading ? "hourglass_top" : "cloud_upload"} size={48} className="text-on-surface-variant/40 mb-3 block" />
                     {uploading ? (
                       <div className="flex flex-col items-center gap-2">
@@ -220,7 +227,7 @@ export default function UploadModal({ open, onClose, onConverted }: UploadModalP
                     ) : (
                       <>
                         <p className="text-sm text-on-surface mb-1">拖放文件到此处，或点击选择</p>
-                        <p className="text-xs text-on-surface-variant">支持 STEP / STP / x_t 格式，最大 100MB</p>
+                        <p className="text-xs text-on-surface-variant">支持 {uploadPolicy.modelFormats.map((f) => f.toUpperCase()).join(" / ")} 格式，最大 {uploadPolicy.modelMaxSizeMb}MB</p>
                       </>
                     )}
                   </div>
@@ -229,7 +236,7 @@ export default function UploadModal({ open, onClose, onConverted }: UploadModalP
                     <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }}
                       className="mt-4 p-3 rounded-sm bg-error/10 border border-error/20 text-sm text-error flex items-start gap-2">
                       <Icon name="error" size={20} className="mt-0.5" />
-                      <span>{error}</span>
+                      <span className="min-w-0 break-words">{error}</span>
                     </motion.div>
                   )}
                 </>

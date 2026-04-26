@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
+import axios from "axios";
 import type { User, AuthTokens } from "../types";
 import { useFavoriteStore } from "./useFavoriteStore";
 
@@ -11,6 +12,7 @@ interface AuthState {
   logout: () => void;
   updateUser: (user: Partial<User>) => void;
   setTokens: (tokens: AuthTokens) => void;
+  checkAndRefreshToken: () => Promise<boolean>;
 }
 
 // In-memory accessToken — also persisted to localStorage for page refresh
@@ -20,9 +22,29 @@ export function getAccessToken(): string | null {
   return _accessToken;
 }
 
+/** Decode JWT payload without a library */
+function decodeJwtPayload(token: string): { exp?: number; [k: string]: unknown } | null {
+  try {
+    const part = token.split(".")[1];
+    if (!part) return null;
+    const json = atob(part.replace(/-/g, "+").replace(/_/g, "/"));
+    return JSON.parse(json);
+  } catch {
+    return null;
+  }
+}
+
+/** Check if the current access token is expired (with 30s grace) */
+function isTokenExpired(token: string | null): boolean {
+  if (!token) return true;
+  const payload = decodeJwtPayload(token);
+  if (!payload?.exp) return true;
+  return Date.now() >= payload.exp * 1000 - 30_000; // 30s grace
+}
+
 export const useAuthStore = create<AuthState>()(
   persist(
-    (set) => ({
+    (set, get) => ({
       user: null,
       tokens: null,
       isAuthenticated: false,
@@ -42,6 +64,36 @@ export const useAuthStore = create<AuthState>()(
       setTokens: (tokens) => {
         _accessToken = tokens.accessToken;
         set({ tokens });
+      },
+      checkAndRefreshToken: async () => {
+        const { tokens, isAuthenticated, logout } = get();
+        if (!tokens || !isAuthenticated) return false;
+
+        // If access token is still valid, nothing to do
+        if (!isTokenExpired(_accessToken)) return true;
+
+        // Access token expired — try to refresh
+        const refreshToken = tokens.refreshToken;
+        if (!refreshToken || isTokenExpired(refreshToken)) {
+          logout();
+          return false;
+        }
+
+        try {
+          const { data: resp } = await axios.post(
+            `${import.meta.env.VITE_API_BASE_URL || "/api"}/auth/refresh`,
+            { refreshToken }
+          );
+          const newAccessToken = resp.data?.data?.accessToken || resp.data?.accessToken || resp.accessToken;
+          if (!newAccessToken) throw new Error("No token in response");
+
+          _accessToken = newAccessToken;
+          set({ tokens: { accessToken: newAccessToken, refreshToken } });
+          return true;
+        } catch {
+          logout();
+          return false;
+        }
       },
     }),
     {

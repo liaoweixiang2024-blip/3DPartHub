@@ -23,9 +23,15 @@ export function responseHandler(req: AuthRequest, res: Response, next: NextFunct
       return originalJson({ success: true, data: body });
     }
 
-    // Error responses: wrap as { success: false, message: ... }
-    if (typeof body === "object" && body !== null && "detail" in (body as Record<string, unknown>)) {
-      return originalJson({ success: false, message: (body as Record<string, unknown>).detail });
+    // Error responses: wrap as { success: false, message: ... } and keep extra payload fields.
+    if (typeof body === "object" && body !== null) {
+      const payload = body as Record<string, unknown>;
+      const { detail, message, ...rest } = payload;
+      return originalJson({
+        success: false,
+        message: detail || message || "请求失败",
+        ...rest,
+      });
     }
 
     return originalJson({ success: false, message: body });

@@ -6,7 +6,7 @@ const categories = [
   { name: "不锈钢接头", icon: "stainless_steel", sortOrder: 0, children: ["304焊直通", "不锈钢管件", "卡套接头", "快拧接头", "快插接头", "快速接头", "环喷", "高压喷嘴"] },
   { name: "铁&液压接头", icon: "iron_hydraulic", sortOrder: 1, children: ["中心出水", "分流块", "宝塔", "彩锌液压件", "快速接头", "白锌液压件", "碳钢接头", "铁管件"] },
   { name: "铜接头", icon: "copper", sortOrder: 2, children: ["铜卡套", "铜宝塔", "铜快拧", "铜快插"] },
-  { name: "气动元件", icon: "pneumatic", sortOrder: 3, children: ["SMC组件", "亚德客组件", "北泽组件", "气枪", "费斯托组件", "金器组件"] },
+  { name: "气动元件", icon: "pneumatic", sortOrder: 3, children: ["SMC组件", "亚德客组件", "通用组件", "气枪", "费斯托组件", "金器组件"] },
   { name: "组装成品类", icon: "assembly", sortOrder: 4, children: ["SMC气动模块", "储气罐套装", "气动组合", "气控模块", "气控集成板", "气枪套装", "水枪套装", "水路模组", "油路套装", "费斯托气动模块", "零配件组装", "高压油管总成"] },
   { name: "阀门", icon: "valve", sortOrder: 5, children: ["不锈钢阀门", "铜阀门"] },
   { name: "配件", icon: "accessories", sortOrder: 6, children: ["仪表", "拖链类", "水枪", "油管扣压接头", "钣金", "高压油管"] },

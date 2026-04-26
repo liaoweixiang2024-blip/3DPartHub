@@ -160,26 +160,26 @@ const MobileModelCard = memo(function MobileModelCard({ model, selected, onSelec
           {selected && <Icon name="check" size={14} className="text-on-primary" />}
         </button>
       )}
-      <Link to={`/model/${model.id}`} className="flex items-center">
+      <Link to={`/model/${model.id}`} className="flex items-stretch">
         <div className="w-20 h-20 bg-surface-container-lowest flex-shrink-0 flex items-center justify-center overflow-hidden rounded-l-lg">
           <ModelThumbnail src={model.thumbnailUrl} alt={model.name} className="w-full h-full object-cover" />
         </div>
         <div className="flex-1 min-w-0 p-2.5 flex flex-col gap-1.5">
           <div>
-            <div className="flex items-center gap-2 mb-1">
+            <div className="flex items-center gap-2 mb-1 min-w-0">
               <span className="text-[10px] font-bold tracking-widest uppercase text-primary bg-primary/10 px-1.5 py-0.5 rounded-sm">
                 {model.format.toUpperCase()}
               </span>
-              <span className="text-[11px] text-on-surface-variant">
+              <span className="text-[11px] text-on-surface-variant truncate">
                 {new Date(model.createdAt).toLocaleDateString('zh-CN')}
               </span>
             </div>
-            <h3 className="text-sm font-semibold text-on-surface leading-snug line-clamp-2">{model.name}</h3>
+            <h3 className="text-sm font-semibold text-on-surface leading-snug line-clamp-2 break-words">{model.name}</h3>
           </div>
-          <div className="flex items-center gap-2 mt-auto">
+          <div className="flex flex-wrap items-center gap-2 mt-auto">
             <button
               onClick={(e) => { e.preventDefault(); e.stopPropagation(); onDownload(model.id); }}
-              className="flex items-center gap-1 bg-primary-container text-on-primary rounded-sm py-1.5 px-3 text-xs font-medium hover:opacity-90 transition-opacity"
+              className="flex items-center justify-center gap-1 bg-primary-container text-on-primary rounded-sm py-1.5 px-3 text-xs font-medium hover:opacity-90 transition-opacity"
             >
               <Icon name="download" size={13} />
               下载
@@ -445,7 +445,7 @@ function MobileContent() {
   }, [toast]);
 
   return (
-    <div className="px-4 py-5 pb-6">
+    <div className="px-4 py-5 pb-20">
       <div className="mb-4">
         <div className="flex items-center justify-between">
           <div>

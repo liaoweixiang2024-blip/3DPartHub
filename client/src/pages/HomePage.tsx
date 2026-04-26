@@ -305,17 +305,22 @@ function MobileDrawer({
   onToggle: (id: string) => void;
   onSelect: (id: string) => void;
 }) {
+  useEffect(() => {
+    document.documentElement.classList.toggle('mobile-nav-drawer-open', open);
+    return () => document.documentElement.classList.remove('mobile-nav-drawer-open');
+  }, [open]);
+
   return (
     <AnimatePresence>
       {open && (
         <>
-          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 bg-black/50 z-40" onClick={onClose} />
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 bg-black/50 z-[80]" onClick={onClose} />
           <motion.aside
             initial={{ x: "-100%" }}
             animate={{ x: 0 }}
             exit={{ x: "-100%" }}
             transition={{ type: "spring", damping: 25, stiffness: 300 }}
-            className="fixed left-0 top-0 bottom-0 w-72 bg-surface-container-low flex flex-col overflow-y-auto scrollbar-hidden z-50"
+            className="fixed left-0 top-0 bottom-0 w-72 bg-surface-container-low flex flex-col overflow-y-auto scrollbar-hidden z-[90]"
           >
             <div className="flex items-center justify-between p-4 border-b border-outline-variant/20">
               <h2 className="text-sm font-bold text-on-surface tracking-wider uppercase font-headline">产品目录</h2>
