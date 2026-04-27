@@ -107,7 +107,7 @@ function OriginalMessage({ ticket }: { ticket: TicketInfo }) {
 }
 
 // Status action buttons for admin
-function StatusActions({ ticketId, status, onUpdate }: { ticketId: string; status: string; onUpdate: (s: string) => void }) {
+function StatusActions({ status, onUpdate }: { ticketId: string; status: string; onUpdate: (s: string) => void }) {
   return (
     <div className="flex items-center gap-1.5 flex-wrap">
       {status === 'open' && (

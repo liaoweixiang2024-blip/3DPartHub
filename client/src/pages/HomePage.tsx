@@ -15,7 +15,6 @@ import type { ServerModelListItem } from "../api/models";
 import { categoriesApi, type CategoryItem } from "../api/categories";
 import { useAuthStore, getAccessToken } from "../stores";
 import { getCachedPublicSettings, getAnnouncement, getContactEmail, getSiteTitle, getFooterLinks, getFooterCopyright } from "../lib/publicSettings";
-import { useToast } from "../components/shared/Toast";
 
 interface Category {
   id: string;
@@ -550,12 +549,11 @@ export default function HomePage() {
       setActiveCategory(cat);
       setPage(1);
     }
-  }, [searchParams]);
+  }, [searchParams, activeCategory]);
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
   const [sortBy, setSortBy] = useState("created_at");
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [loginPromptOpen, setLoginPromptOpen] = useState(false);
-  const { toast } = useToast();
 
   const handleDownload = useCallback(async (modelId: string) => {
     const token = getAccessToken();

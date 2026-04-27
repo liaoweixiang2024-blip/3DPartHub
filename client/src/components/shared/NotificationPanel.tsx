@@ -126,7 +126,9 @@ export default function NotificationPanel({ compact = false }: { compact?: boole
       try {
         const count = await getUnreadCount();
         if (!stopped) setUnreadCount(count);
-      } catch {}
+      } catch {
+        // Polling failures are ignored; the next interval retries automatically.
+      }
     }
 
     const timeout = setTimeout(() => {
@@ -150,7 +152,9 @@ export default function NotificationPanel({ compact = false }: { compact?: boole
       try {
         const res = await getNotifications(1, 30);
         if (!cancelled) setNotifications(res.data);
-      } catch {}
+      } catch {
+        // Keep the panel usable when notification loading fails.
+      }
       finally { if (!cancelled) setLoading(false); }
     }
     fetchList();
@@ -172,7 +176,9 @@ export default function NotificationPanel({ compact = false }: { compact?: boole
       await markAsRead(id);
       setNotifications((prev) => prev.map((n) => (n.id === id ? { ...n, read: true } : n)));
       setUnreadCount((c) => Math.max(0, c - 1));
-    } catch {}
+    } catch {
+      // Global error handling already reports request failures.
+    }
   }, []);
 
   const handleMarkAllRead = useCallback(async () => {
@@ -180,7 +186,9 @@ export default function NotificationPanel({ compact = false }: { compact?: boole
       await markAllAsRead();
       setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
       setUnreadCount(0);
-    } catch {}
+    } catch {
+      // Global error handling already reports request failures.
+    }
   }, []);
 
   const handleDelete = useCallback(async (id: string) => {
@@ -189,14 +197,18 @@ export default function NotificationPanel({ compact = false }: { compact?: boole
       setNotifications((prev) => prev.filter((n) => n.id !== id));
       const deleted = notifications.find((n) => n.id === id);
       if (deleted && !deleted.read) setUnreadCount((c) => Math.max(0, c - 1));
-    } catch {}
+    } catch {
+      // Global error handling already reports request failures.
+    }
   }, [notifications]);
 
   const handleClearRead = useCallback(async () => {
     try {
       await clearReadNotifications();
       setNotifications((prev) => prev.filter((n) => !n.read));
-    } catch {}
+    } catch {
+      // Global error handling already reports request failures.
+    }
   }, []);
 
   const handleNavigate = useCallback((route: string) => {

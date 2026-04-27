@@ -1,4 +1,4 @@
-import { useState, useCallback, memo } from 'react';
+import { useState, useCallback, memo, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import useSWR from 'swr';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -11,7 +11,6 @@ import AppSidebar from '../components/shared/Sidebar';
 import MobileNavDrawer from '../components/shared/MobileNavDrawer';
 import Icon from '../components/shared/Icon';
 import ModelThumbnail from '../components/shared/ModelThumbnail';
-import Tooltip from '../components/shared/Tooltip';
 import { useToast } from '../components/shared/Toast';
 import client from '../api/client';
 import { favoriteApi } from '../api/favorites';
@@ -273,7 +272,7 @@ function DesktopContent() {
     a.click();
   }, [toast]);
 
-  const models = data ? mapFavorites(data) : [];
+  const models = useMemo(() => (data ? mapFavorites(data) : []), [data]);
 
   if (isLoading) {
     return <SkeletonGrid count={8} />;
@@ -399,7 +398,7 @@ function MobileContent() {
     });
   }, []);
 
-  const models = data ? mapFavorites(data) : [];
+  const models = useMemo(() => (data ? mapFavorites(data) : []), [data]);
 
   const selectAll = useCallback(() => {
     setSelected(new Set(models.map(m => m.id)));

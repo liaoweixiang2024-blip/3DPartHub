@@ -9,7 +9,6 @@ import MobileNavDrawer from "../components/shared/MobileNavDrawer";
 import Icon from "../components/shared/Icon";
 import client from "../api/client";
 import { useToast } from "../components/shared/Toast";
-import { SkeletonList } from "../components/shared/Skeleton";
 import { copyText } from "../lib/clipboard";
 
 interface ShareItem {

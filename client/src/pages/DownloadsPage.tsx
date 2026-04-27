@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { AnimatePresence, motion } from 'framer-motion';
 import useSWR from 'swr';
@@ -12,7 +12,7 @@ import MobileNavDrawer from '../components/shared/MobileNavDrawer';
 import Icon from '../components/shared/Icon';
 import ModelThumbnail from '../components/shared/ModelThumbnail';
 import { useToast } from '../components/shared/Toast';
-import { downloadsApi, type DownloadHistoryItem } from '../api/downloads';
+import { downloadsApi } from '../api/downloads';
 
 function formatFileSize(bytes: number): string {
   if (!bytes) return '-';
@@ -84,7 +84,7 @@ function DesktopContent() {
   const [selectMode, setSelectMode] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
 
-  const downloads = data || [];
+  const downloads = useMemo(() => data || [], [data]);
 
   const toggleSelect = useCallback((id: string) => {
     setSelected(prev => {

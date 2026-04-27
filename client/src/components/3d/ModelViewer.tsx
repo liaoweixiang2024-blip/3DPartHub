@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect } from "react";
+import { lazy, Suspense } from "react";
 import * as THREE from "three";
 import { get3DMaterialConfig } from "../../lib/publicSettings";
 

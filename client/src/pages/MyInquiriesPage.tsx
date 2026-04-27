@@ -8,7 +8,7 @@ import BottomNav from "../components/shared/BottomNav";
 import AppSidebar from "../components/shared/Sidebar";
 import MobileNavDrawer from "../components/shared/MobileNavDrawer";
 import Icon from "../components/shared/Icon";
-import { getMyInquiries, type Inquiry } from "../api/inquiries";
+import { getMyInquiries } from "../api/inquiries";
 import { getCachedPublicSettings } from "../lib/publicSettings";
 import { getBusinessConfig, statusInfo, type StatusConfig } from "../lib/businessConfig";
 

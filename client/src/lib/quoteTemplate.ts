@@ -174,7 +174,9 @@ export function parseTemplate(raw: string): QuoteTemplate | null {
   try {
     const obj = JSON.parse(raw);
     if (obj && Array.isArray(obj.sections)) return obj as QuoteTemplate;
-  } catch {}
+  } catch {
+    // Invalid custom templates fall back to defaults.
+  }
   return null;
 }
 
@@ -193,7 +195,9 @@ export function parseDocumentTemplates(raw: string, quoteTemplateRaw = ""): Docu
           contract: { page: { ...DEFAULT_CONTRACT_PAGE, ...obj.contract.page }, sections: obj.contract.sections },
         };
       }
-    } catch {}
+    } catch {
+      // Invalid document template JSON falls back to defaults.
+    }
   }
   return {
     quote: { page: { ...DEFAULT_QUOTE_PAGE, ...quoteFallback.page }, sections: quoteFallback.sections },

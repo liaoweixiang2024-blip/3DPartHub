@@ -1,7 +1,6 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
-import { favoriteApi, type FavoriteItem } from "../api/favorites";
-import type { ServerModelListItem } from "../api/models";
+import { favoriteApi } from "../api/favorites";
 
 interface FavoriteState {
   favoriteIds: Set<string>;

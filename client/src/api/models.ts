@@ -1,6 +1,5 @@
 import client from "./client";
 import type { PaginatedResponse, PaginationParams } from "../types";
-import type { ApiResponse } from "../types/api";
 
 export interface ServerModelListItem {
   model_id: string;

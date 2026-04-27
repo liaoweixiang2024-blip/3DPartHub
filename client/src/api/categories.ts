@@ -1,5 +1,4 @@
 import client from "./client";
-import type { ApiResponse } from "../types/api";
 
 export interface CategoryItem {
   id: string;

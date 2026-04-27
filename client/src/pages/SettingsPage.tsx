@@ -10,7 +10,7 @@ import Icon from '../components/shared/Icon';
 import SafeImage from '../components/shared/SafeImage';
 import { useToast } from '../components/shared/Toast';
 import { getSettings, updateSettings, uploadImage, sendTestEmail, getBackupStats, getBackupHealth, checkBackupPolicy, verifyBackup, startBackupJob, pollBackupProgress, downloadBackup, renameBackup, deleteBackup, startRestore, pollRestoreProgress, listBackups, importBackup, importBackupAsRecord, pollImportSaveProgress, listServerBackupFiles, importBackupFromPath, type ServerBackupFile, checkUpdate, getVersion, type SystemSettings, type BackupStats, type BackupRecord, type BackupHealth, type BackupPolicyCheck } from '../api/settings';
-import { COLOR_PRESETS, COLOR_KEYS, type ColorKey } from '../lib/colorSchemes';
+import { COLOR_PRESETS, COLOR_KEYS } from '../lib/colorSchemes';
 import { applyColorScheme, generatePaletteFromPrimary } from '../lib/colorScheme';
 import {
   DEFAULT_ADMIN_NAV,
@@ -418,8 +418,12 @@ function ColorSchemeEditor({ settings, updateSetting }: { settings: SystemSettin
   // Parse custom colors from JSON strings
   let customDark: Record<string, string> = {};
   let customLight: Record<string, string> = {};
-  try { customDark = JSON.parse((settings.color_custom_dark as string) || '{}'); } catch {}
-  try { customLight = JSON.parse((settings.color_custom_light as string) || '{}'); } catch {}
+  try { customDark = JSON.parse((settings.color_custom_dark as string) || '{}'); } catch {
+    // Invalid custom color JSON falls back to an empty dark palette.
+  }
+  try { customLight = JSON.parse((settings.color_custom_light as string) || '{}'); } catch {
+    // Invalid custom color JSON falls back to an empty light palette.
+  }
 
   // Live preview
   const preview = useCallback(() => {
@@ -1424,6 +1428,8 @@ function Content() {
 
     // Resume in-progress tasks from previous session (page refresh)
     resumePendingJobs();
+    // Only runs once to hydrate settings and resume persisted backup jobs.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   async function resumePendingJobs() {
@@ -1710,7 +1716,7 @@ function Content() {
       if (mode === 'save') {
         // Save as backup record (no restore)
         const isLarge = restoreConfirmFile.size >= 100 * 1024 * 1024;
-        const record = await importBackupAsRecord(
+        await importBackupAsRecord(
           restoreConfirmFile,
           isLarge ? 'chunked' : 'direct',
           (p) => setUploadProgress(p),
@@ -1894,7 +1900,12 @@ function Content() {
           <div key={group.title} className="bg-surface-container-low rounded-lg border border-outline-variant/10 overflow-hidden">
             <div
               className="px-4 sm:px-6 py-4 border-b border-outline-variant/10 bg-surface-container-high/50 flex items-center gap-2.5 cursor-pointer select-none hover:bg-surface-container-high/80 transition-colors"
-              onClick={() => setCollapsedGroups(prev => { const next = new Set(prev); next.has(group.title) ? next.delete(group.title) : next.add(group.title); return next; })}
+              onClick={() => setCollapsedGroups(prev => {
+                const next = new Set(prev);
+                if (next.has(group.title)) next.delete(group.title);
+                else next.add(group.title);
+                return next;
+              })}
             >
               <Icon name={group.icon} size={18} className="text-primary-container" />
               <h3 className="text-sm font-bold text-on-surface uppercase tracking-wider flex-1">{group.title}</h3>
@@ -2075,7 +2086,8 @@ function Content() {
                     type="button"
                     onClick={() => setExpandedAdvancedGroups(prev => {
                       const next = new Set(prev);
-                      next.has(group.title) ? next.delete(group.title) : next.add(group.title);
+                      if (next.has(group.title)) next.delete(group.title);
+                      else next.add(group.title);
                       return next;
                     })}
                     className="w-full flex items-center justify-center gap-2 rounded-md border border-dashed border-outline-variant/25 bg-surface-container-lowest/30 px-3 py-2 text-xs font-medium text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high/40 transition-colors"
@@ -2095,7 +2107,12 @@ function Content() {
         <div className="bg-surface-container-low rounded-lg border border-outline-variant/10 overflow-hidden">
           <div
             className="px-6 py-4 border-b border-outline-variant/10 bg-surface-container-high/50 flex items-center gap-2.5 cursor-pointer select-none hover:bg-surface-container-high/80 transition-colors"
-            onClick={() => setCollapsedGroups(prev => { const next = new Set(prev); next.has('数据备份') ? next.delete('数据备份') : next.add('数据备份'); return next; })}
+            onClick={() => setCollapsedGroups(prev => {
+              const next = new Set(prev);
+              if (next.has('数据备份')) next.delete('数据备份');
+              else next.add('数据备份');
+              return next;
+            })}
           >
             <Icon name="cloud_upload" size={18} className="text-primary-container" />
             <h3 className="text-sm font-bold text-on-surface uppercase tracking-wider flex-1">数据备份</h3>

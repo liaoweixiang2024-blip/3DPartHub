@@ -27,11 +27,9 @@ function detectFormat(filename: string): CadFormat | null {
   return null;
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 type OcctInstance = any;
 
 declare global {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   var occtimportjs: any;
 }
 

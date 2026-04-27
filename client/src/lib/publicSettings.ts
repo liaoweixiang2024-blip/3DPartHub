@@ -18,7 +18,9 @@ function loadFromStorage(): { data: Partial<SystemSettings>; ts: number } | null
 function saveToStorage(data: Partial<SystemSettings>) {
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify({ data, ts: Date.now() }));
-  } catch {}
+  } catch {
+    // Ignore storage quota or private-mode write failures.
+  }
 }
 
 // Sync listeners for site title/logo changes
@@ -49,7 +51,9 @@ export async function refreshSiteConfig() {
     applyMetaTags();
     applyFavicon();
     applyAppearanceSettings(cache);
-  } catch {}
+  } catch {
+    // Keep stale/default config if the public settings endpoint is unavailable.
+  }
   // Notify all listeners with fresh cache populated
   listeners.forEach(fn => fn());
 }
@@ -164,7 +168,7 @@ function applyMetaTags() {
   const title = getSiteTitle();
 
   // Update <meta name="description">
-  let metaDesc = document.querySelector('meta[name="description"]');
+  const metaDesc = document.querySelector('meta[name="description"]');
   if (metaDesc) metaDesc.setAttribute("content", desc);
   // Update <meta name="keywords">
   if (keywords) {
@@ -177,10 +181,10 @@ function applyMetaTags() {
     metaKeywords.setAttribute("content", keywords);
   }
   // Update og:title
-  let ogTitle = document.querySelector('meta[property="og:title"]');
+  const ogTitle = document.querySelector('meta[property="og:title"]');
   if (ogTitle) ogTitle.setAttribute("content", title);
   // Update og:description
-  let ogDesc = document.querySelector('meta[property="og:description"]');
+  const ogDesc = document.querySelector('meta[property="og:description"]');
   if (ogDesc) ogDesc.setAttribute("content", desc);
 }
 

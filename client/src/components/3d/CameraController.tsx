@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useCallback, useEffect, useRef } from "react";
 import { useThree } from "@react-three/fiber";
 import * as THREE from "three";
 import type { CameraPreset } from "./ModelViewer";
@@ -20,16 +20,16 @@ export default function CameraController({ preset, viewportBottom = 0 }: { prese
   const controlsRef = useRef<any>(null);
   const modelDataRef = useRef<{ center: THREE.Vector3; size: number } | null>(null);
 
-  function applyPreset(p: CamPreset) {
+  const applyPreset = useCallback((p: CamPreset) => {
     camera.position.copy(p.position);
     camera.lookAt(p.target);
     if (controlsRef.current) {
       controlsRef.current.target.copy(p.target);
       controlsRef.current.update();
     }
-  }
+  }, [camera]);
 
-  function buildPresets(center: THREE.Vector3, dist: number) {
+  const buildPresets = useCallback((center: THREE.Vector3, dist: number) => {
     presets.front = {
       position: new THREE.Vector3(center.x, center.y, center.z + dist),
       target: center.clone(),
@@ -50,9 +50,9 @@ export default function CameraController({ preset, viewportBottom = 0 }: { prese
       position: new THREE.Vector3(center.x, center.y + dist, center.z + 0.01),
       target: center.clone(),
     };
-  }
+  }, []);
 
-  function applyCamera(rawCenter: THREE.Vector3, size: number) {
+  const applyCamera = useCallback((rawCenter: THREE.Vector3, size: number) => {
     const center = rawCenter.clone();
     const fov = ((camera as THREE.PerspectiveCamera).fov || 45) * (Math.PI / 180);
     let fitDistance = size / (2 * Math.tan(fov / 2)) * 1.4;
@@ -71,12 +71,12 @@ export default function CameraController({ preset, viewportBottom = 0 }: { prese
 
     buildPresets(center, fitDistance);
     applyPreset(presets[preset]);
-  }
+  }, [applyPreset, buildPresets, camera, gl, preset, viewportBottom]);
 
   // Find OrbitControls instance from DOM
   useEffect(() => {
     const findControls = () => {
-      // @ts-ignore — internal fiber
+      // @ts-expect-error — internal fiber
       const fiber = gl.domElement.__reactFiber$;
       if (!fiber) return;
       let node = fiber;
@@ -102,19 +102,19 @@ export default function CameraController({ preset, viewportBottom = 0 }: { prese
     };
     window.addEventListener("model-loaded", handler);
     return () => window.removeEventListener("model-loaded", handler);
-  }, [camera, preset, viewportBottom, gl]);
+  }, [applyCamera]);
 
   // Re-apply when viewportBottom changes (e.g. sheet height)
   useEffect(() => {
     if (modelDataRef.current) {
       applyCamera(modelDataRef.current.center, modelDataRef.current.size);
     }
-  }, [viewportBottom, camera, preset, gl]);
+  }, [applyCamera]);
 
   // User switches preset
   useEffect(() => {
     applyPreset(presets[preset]);
-  }, [preset, camera]);
+  }, [applyPreset, preset]);
 
   return null;
 }

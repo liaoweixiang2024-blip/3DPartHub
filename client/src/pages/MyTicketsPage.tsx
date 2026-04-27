@@ -1,6 +1,5 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { AnimatePresence, motion } from 'framer-motion';
 import useSWR from 'swr';
 import { useMediaQuery } from '../layouts/hooks/useMediaQuery';
 import { useDocumentTitle } from '../hooks/useDocumentTitle';
@@ -36,7 +35,7 @@ function useMyTickets() {
 }
 
 function Content() {
-  const { data: tickets, isLoading, mutate } = useMyTickets();
+  const { data: tickets, isLoading } = useMyTickets();
   const { data: settings } = useSWR("publicSettings", () => getCachedPublicSettings());
   const business = getBusinessConfig(settings);
   const classificationMap = new Map(business.ticketClassifications.map((item) => [item.value, item.label]));
@@ -109,7 +108,7 @@ function Content() {
 }
 
 function MobileContent() {
-  const { data: tickets, isLoading, mutate } = useMyTickets();
+  const { data: tickets, isLoading } = useMyTickets();
   const { data: settings } = useSWR("publicSettings", () => getCachedPublicSettings());
   const business = getBusinessConfig(settings);
   const classificationMap = new Map(business.ticketClassifications.map((item) => [item.value, item.label]));

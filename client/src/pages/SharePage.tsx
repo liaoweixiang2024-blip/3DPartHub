@@ -1,4 +1,4 @@
-import { useState, useEffect, lazy, Suspense } from "react";
+import { useState, useEffect, lazy, Suspense, useCallback } from "react";
 import { useParams, Link } from "react-router-dom";
 import { useDocumentTitle } from "../hooks/useDocumentTitle";
 import { getSiteTitle } from "../lib/publicSettings";
@@ -24,7 +24,7 @@ export default function SharePage() {
 
   useDocumentTitle(info ? `${info.modelName} - 分享预览` : "分享预览");
 
-  async function loadInfo() {
+  const loadInfo = useCallback(async () => {
     if (!token) return;
     try {
       const data = await getShareInfo(token);
@@ -40,9 +40,9 @@ export default function SharePage() {
     } finally {
       setLoading(false);
     }
-  }
+  }, [token]);
 
-  useEffect(() => { loadInfo(); }, [token]);
+  useEffect(() => { loadInfo(); }, [loadInfo]);
 
   async function handleVerifyPassword() {
     if (!token || !password.trim()) return;

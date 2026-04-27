@@ -11,7 +11,6 @@ import {
 import { getSiteTitle } from "../lib/publicSettings";
 import BrandMark from "../components/shared/BrandMark";
 import Icon from "../components/shared/Icon";
-import { useToast } from "../components/shared/Toast";
 import SafeImage from "../components/shared/SafeImage";
 
 function sv(specs: Record<string, string>, key: string): string {
@@ -122,7 +121,6 @@ function ShareResultCard({ product, columns, specs }: { product: SelectionProduc
 export default function SelectionSharePage() {
   const { token } = useParams<{ token: string }>();
   const navigate = useNavigate();
-  const { toast } = useToast();
   const siteTitle = getSiteTitle();
 
   const { data, error } = useSWR<SelectionShareInfo>(

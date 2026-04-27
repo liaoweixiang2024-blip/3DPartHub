@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { useDocumentTitle } from "../hooks/useDocumentTitle";
 import { useMediaQuery } from "../layouts/hooks/useMediaQuery";
 import { getSettings, updateSettings } from "../api/settings";
-import { getSiteTitle, getSiteLogo, getContactEmail } from "../lib/publicSettings";
+import { getSiteTitle, getContactEmail } from "../lib/publicSettings";
 import TopNav from "../components/shared/TopNav";
 import AppSidebar from "../components/shared/Sidebar";
 import BottomNav from "../components/shared/BottomNav";
@@ -78,13 +78,6 @@ function sectionStyle(sec: TemplateSection): React.CSSProperties {
   if (borderMode === "bottom") style.borderBottom = "1px solid #111";
   if (style.border || style.borderBottom) style.borderRadius = 3;
   return style;
-}
-
-function styleToInline(style: React.CSSProperties): string {
-  return Object.entries(style)
-    .filter(([, value]) => value !== undefined && value !== "")
-    .map(([key, value]) => `${key.replace(/[A-Z]/g, (m) => `-${m.toLowerCase()}`)}:${typeof value === "number" ? `${value}px` : value}`)
-    .join(";");
 }
 
 function pageDefaults(kind: DocumentTemplateKind): TemplatePageConfig {
@@ -642,7 +635,7 @@ export default function QuoteTemplateEditor() {
       setTemplates(parsed);
       setLoading(false);
     }).catch(() => setLoading(false));
-  }, []);
+  }, [setSections]);
 
   const sections = templates[activeKind].sections;
   const selectedSection = sections.find((s) => s.id === expandedId) || null;
@@ -794,14 +787,14 @@ export default function QuoteTemplateEditor() {
       if (idx <= 0) return prev;
       return moveSection(prev, idx, idx - 1);
     });
-  }, []);
+  }, [setSections]);
   const moveDown = useCallback((id: string) => {
     setSections((prev) => {
       const idx = prev.findIndex((s) => s.id === id);
       if (idx < 0 || idx >= prev.length - 1) return prev;
       return moveSection(prev, idx, idx + 1);
     });
-  }, []);
+  }, [setSections]);
 
   // Select section from preview
   const handlePreviewSelect = useCallback((id: string) => {

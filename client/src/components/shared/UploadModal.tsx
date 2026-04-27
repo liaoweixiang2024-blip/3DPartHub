@@ -133,7 +133,7 @@ export default function UploadModal({ open, onClose, onConverted }: UploadModalP
     } finally {
       setUploading(false);
     }
-  }, [isAuthenticated, onConverted, handleClose, navigate, uploadChunked, uploadPolicy, maxSize, chunkThreshold]);
+  }, [categoryId, isAuthenticated, onConverted, handleClose, navigate, uploadChunked, uploadPolicy, maxSize, chunkThreshold]);
 
   const handleDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault();

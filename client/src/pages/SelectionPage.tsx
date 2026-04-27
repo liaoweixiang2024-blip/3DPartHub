@@ -20,7 +20,6 @@ import {
 } from "../api/selections";
 import { createInquiry } from "../api/inquiries";
 import { useToast } from "../components/shared/Toast";
-import { getIllustration, illustratedParams } from "../data/paramIllustrations";
 import { compareOptionValues } from "../lib/selectionSort";
 import { getCachedPublicSettings } from "../lib/publicSettings";
 import { getBusinessConfig } from "../lib/businessConfig";
@@ -41,7 +40,9 @@ function loadAliases(): Record<string, string[]> {
       const custom = JSON.parse(raw);
       if (typeof custom === "object" && custom !== null) return { ...defaults, ...custom };
     }
-  } catch {}
+  } catch {
+    // Invalid custom aliases fall back to built-in defaults.
+  }
   return defaults;
 }
 
@@ -55,10 +56,6 @@ function sv(specs: Record<string, string>, key: string): string {
   if (specs[key]) return specs[key];
   for (const a of getAliases()[key] ?? []) if (specs[a]) return specs[a];
   return "—";
-}
-
-function buildCols(fields: string[]): ColumnDef[] {
-  return [{ key: "型号", label: "型号", unit: "" }, ...fields.map((f) => ({ key: f, label: f, unit: "" }))];
 }
 
 function isManualColumn(col?: ColumnDef) {
@@ -377,7 +374,7 @@ export default function SelectionPage() {
     if (match?.groupId) setGroupId(match.groupId);
     shareStateRef.current = null;
     window.history.replaceState({}, "");
-  }, [cats, slug]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [cats, slug]);
 
   /* derive groups and standalone categories from API categories */
   interface DerivedGroup {
@@ -414,7 +411,7 @@ export default function SelectionPage() {
     liveCat ? ["sel-prod", liveCat.slug] : null,
     () => getSelectionProducts(liveCat!.slug, 1, Math.max(liveCat!.productCount ?? 2000, 2000))
   );
-  const all = pData?.items ?? [];
+  const all = useMemo(() => pData?.items ?? [], [pData]);
 
   const fields = useMemo(() => {
     if (liveCat?.columns?.length) {
@@ -441,8 +438,6 @@ export default function SelectionPage() {
     );
   }, [all, specs, search, manualFields]);
 
-  const specKeys = Object.keys(specs);
-  const stepIdx = specKeys.length;
   const curField = useMemo(() => {
     for (const f of fields) {
       if (specs[f]) continue;
@@ -558,8 +553,18 @@ export default function SelectionPage() {
   const restart = useCallback(() => {
     setSpecs({}); setManualDrafts({}); setSkipped(new Set()); setSearch(""); setSelectedIds(new Set()); setExpandedKits(new Set());
   }, []);
-  const toggleSel = useCallback((id: string) => setSelectedIds((p) => { const n = new Set(p); n.has(id) ? n.delete(id) : n.add(id); return n; }), []);
-  const toggleKit = useCallback((id: string) => setExpandedKits((p) => { const n = new Set(p); n.has(id) ? n.delete(id) : n.add(id); return n; }), []);
+  const toggleSel = useCallback((id: string) => setSelectedIds((p) => {
+    const n = new Set(p);
+    if (n.has(id)) n.delete(id);
+    else n.add(id);
+    return n;
+  }), []);
+  const toggleKit = useCallback((id: string) => setExpandedKits((p) => {
+    const n = new Set(p);
+    if (n.has(id)) n.delete(id);
+    else n.add(id);
+    return n;
+  }), []);
 
   /* ── share handler ── */
   const [sharing, setSharing] = useState(false);
@@ -856,7 +861,6 @@ export default function SelectionPage() {
     const isSkipped = skipped.has(field);
     const isCurrent = curField === field;
     const hasMore = i < fields.length - 1;
-    const hasIllus = illustratedParams.has(field);
     const colDef = columns.find((c) => c.key === field);
     const isManual = isManualColumn(colDef);
 
@@ -945,7 +949,7 @@ export default function SelectionPage() {
                   return hasFieldImages;
                 })() ? (
                   <div className="grid gap-3" style={{ gridTemplateColumns: `repeat(auto-fill, minmax(${isDesktop ? 130 : 100}px, 1fr))` }}>
-                    {options.map(({ val, count }) => {
+                    {options.map(({ val }) => {
                       const uploadedImg = liveCat?.optionImages?.[field]?.[val];
                       const selected = specs[field] === val;
                       return (

@@ -14,7 +14,7 @@ import { useFavoriteStore, useAuthStore, getAccessToken } from "../stores";
 import ModelThumbnail from "../components/shared/ModelThumbnail";
 import SafeImage from "../components/shared/SafeImage";
 import { useModel } from "../hooks/useModels";
-import { modelApi, type ServerModelListItem } from "../api/models";
+import { modelApi } from "../api/models";
 import { categoriesApi, type CategoryItem } from "../api/categories";
 import { useToast } from "../components/shared/Toast";
 import CategorySelect from "../components/shared/CategorySelect";
@@ -86,7 +86,6 @@ function ViewerPanel({
   onViewChange,
   activeCamera,
   onCameraChange,
-  dimensions,
   showDimensions,
   onToggleDimensions,
   materialPreset,
@@ -108,7 +107,6 @@ function ViewerPanel({
   onViewChange: (v: ViewMode) => void;
   activeCamera: CameraPreset;
   onCameraChange: (c: CameraPreset) => void;
-  dimensions: string;
   showDimensions: boolean;
   onToggleDimensions: () => void;
   materialPreset: "metal" | "plastic" | "glass" | "default";
@@ -124,7 +122,7 @@ function ViewerPanel({
   onThumbnailUpdated?: () => void;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
-  const [loaded, setLoaded] = useState(false);
+  const [, setLoaded] = useState(false);
   const [settingThumb, setSettingThumb] = useState(false);
   const [watermark, setWatermark] = useState<{ show: boolean; image: string }>({ show: false, image: "" });
   const { toast } = useToast();

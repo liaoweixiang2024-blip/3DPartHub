@@ -16,7 +16,6 @@ import { listShares, deleteShare, type ShareLink } from '../api/shares';
 import { useAuthStore } from '../stores/useAuthStore';
 import { useToast } from '../components/shared/Toast';
 import { copyText } from '../lib/clipboard';
-import type { User } from '../types';
 
 const NOTIFICATION_ITEMS = [
   { key: 'ticket', label: '工单通知', desc: '工单回复、状态变更' },
@@ -461,7 +460,6 @@ function DesktopContent() {
   });
   const [saved, setSaved] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [copied, setCopied] = useState(false);
   const avatarInputRef = useRef<HTMLInputElement>(null);
   const { data: profile, isLoading } = useSWR(user ? '/auth/profile' : null, () => authApi.getProfile());
 

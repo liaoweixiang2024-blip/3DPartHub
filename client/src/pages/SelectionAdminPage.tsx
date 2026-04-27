@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect, useCallback, useRef } from "react";
+import { useState, useMemo, useEffect, useRef } from "react";
 import useSWR from "swr";
 import { useDocumentTitle } from "../hooks/useDocumentTitle";
 import { smartSortOptions } from "../lib/selectionSort";
@@ -168,7 +168,6 @@ function Content() {
       };
     }
   }, [showOptImgModal, editOptVal, renameOldVal]);
-  const [orderField, setOrderField] = useState<string>("");
   const [orderItems, setOrderItems] = useState<string[]>([]);
   const [orderDragIdx, setOrderDragIdx] = useState<number | null>(null);
   const [optViewMode, setOptViewMode] = useState<"grid" | "list">("grid");
@@ -188,7 +187,7 @@ function Content() {
     }
   );
 
-  const products = productsData?.items ?? [];
+  const products = useMemo(() => productsData?.items ?? [], [productsData]);
   const [prodSearch, setProdSearch] = useState("");
   const filteredProducts = useMemo(() => {
     if (!prodSearch) return products;
@@ -341,8 +340,6 @@ function Content() {
         rows.forEach((row, i) => {
           const specs: Record<string, string> = {};
           let name = "";
-          let modelNo = "";
-
           for (const [header, val] of Object.entries(row)) {
             const key = colMap.get(header);
             if (key) {
@@ -1887,7 +1884,7 @@ function Content() {
                         toast("分组已保存", "success");
                         setShowGroupModal(false);
                         mutateCats();
-                      } catch (err: any) {
+                      } catch {
                         toast("保存失败", "error");
                       }
                     }}
