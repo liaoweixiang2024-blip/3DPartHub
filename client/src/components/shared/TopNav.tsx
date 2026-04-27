@@ -224,7 +224,7 @@ export default function TopNav({ compact = false, onMenuToggle }: TopNavProps) {
   if (compact) {
     return (
       <>
-        <header className="bg-surface-container-low border-b border-surface-container-highest shrink-0 z-50" style={{ paddingTop: "env(safe-area-inset-top, 0px)" }}>
+        <header className="bg-surface-container-low border-b border-surface-container-highest shrink-0 z-[250]" style={{ paddingTop: "env(safe-area-inset-top, 0px)" }}>
           <div className="flex h-12 items-center gap-1 px-3">
             <button
               onClick={() => onMenuToggle?.()}

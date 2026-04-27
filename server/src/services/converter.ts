@@ -75,9 +75,27 @@ interface PreviewMeta {
     validMeshCount: number;
     skippedMeshCount: number;
     conversionMs: number;
+    asset?: {
+      gltfSize: number;
+      originalSize: number;
+      compressionRatio: number | null;
+    };
+    optimization: {
+      indexComponentTypes: {
+        uint16: number;
+        uint32: number;
+      };
+      indexBytesSaved: number;
+    };
+    performance?: {
+      level: "normal" | "large" | "huge";
+      hints: string[];
+    };
     warnings: string[];
   };
 }
+
+type GltfIndexArray = Uint16Array | Uint32Array;
 
 function colorToHex(color?: [number, number, number]): string | null {
   if (!color) return null;
@@ -120,6 +138,34 @@ function expandBounds(bounds: { min: [number, number, number]; max: [number, num
   }
 }
 
+function compactIndexArray(values: Uint32Array | number[], usableCount: number, vertexCount: number): GltfIndexArray {
+  const canUseUint16 = vertexCount <= 65535;
+  const source = values instanceof Uint32Array
+    ? (usableCount === values.length ? values : values.slice(0, usableCount))
+    : values;
+  return canUseUint16 ? Uint16Array.from(source) : Uint32Array.from(source);
+}
+
+function getPerformanceDiagnostics(totals: { partCount: number; vertexCount: number; faceCount: number }, gltfSize: number): PreviewMeta["diagnostics"]["performance"] {
+  const hints: string[] = [];
+  let level: "normal" | "large" | "huge" = "normal";
+
+  if (totals.faceCount >= 1_500_000 || totals.vertexCount >= 3_000_000 || gltfSize >= 120 * 1024 * 1024) {
+    level = "huge";
+    hints.push("模型规模很大，建议后续生成轻量预览版本或开启 mesh 压缩。");
+  } else if (totals.faceCount >= 500_000 || totals.vertexCount >= 1_000_000 || gltfSize >= 50 * 1024 * 1024) {
+    level = "large";
+    hints.push("模型规模偏大，移动端首次加载可能较慢。");
+  }
+
+  if (totals.partCount >= 1500) {
+    hints.push("零件数量较多，后续可考虑合并静态小零件或启用懒加载。");
+    if (level === "normal") level = "large";
+  }
+
+  return { level, hints };
+}
+
 function meshesToGltf(
   meshes: OcctMesh[],
   sourceName: string,
@@ -138,6 +184,10 @@ function meshesToGltf(
   const nodes: object[] = [{ name: "converted_model", children: [], extras: { sourceName } }];
   const parts: PreviewPartMeta[] = [];
   const warnings: string[] = [];
+  const optimization = {
+    indexComponentTypes: { uint16: 0, uint32: 0 },
+    indexBytesSaved: 0,
+  };
   const modelBounds = {
     min: [Infinity, Infinity, Infinity] as [number, number, number],
     max: [-Infinity, -Infinity, -Infinity] as [number, number, number],
@@ -178,7 +228,7 @@ function meshesToGltf(
       ? rawNormArray.slice(0, vertexCount * 3)
       : null;
 
-    let idxArray: Uint32Array | null = null;
+    let idxArray: GltfIndexArray | null = null;
     if (mesh.index?.array && mesh.index.array.length >= 3) {
       const rawIndexArray = new Uint32Array(mesh.index.array);
       const usableIndexCount = Math.floor(rawIndexArray.length / 3) * 3;
@@ -205,13 +255,20 @@ function meshesToGltf(
           }
         }
         if (sanitized.length >= 3) {
-          idxArray = new Uint32Array(sanitized);
+          idxArray = compactIndexArray(sanitized, sanitized.length, vertexCount);
           warnings.push(`${safePartName(mesh.name, mi)}: invalid or degenerate triangle indices were removed`);
         }
       } else {
-        idxArray = usableIndexCount === rawIndexArray.length
-          ? rawIndexArray
-          : rawIndexArray.slice(0, usableIndexCount);
+        idxArray = compactIndexArray(rawIndexArray, usableIndexCount, vertexCount);
+      }
+
+      if (idxArray) {
+        if (idxArray instanceof Uint16Array) {
+          optimization.indexComponentTypes.uint16++;
+          optimization.indexBytesSaved += idxArray.length * 2;
+        } else {
+          optimization.indexComponentTypes.uint32++;
+        }
       }
     }
 
@@ -265,7 +322,7 @@ function meshesToGltf(
       }
       accessors.push({
         bufferView: indexAccessorIdx,
-        componentType: 5125,
+        componentType: idxArray instanceof Uint16Array ? 5123 : 5125,
         count: idxArray.length,
         type: "SCALAR",
         min: [minIndex],
@@ -399,6 +456,7 @@ function meshesToGltf(
       validMeshCount: meshes.length,
       skippedMeshCount: options.skippedMeshCount,
       conversionMs: options.conversionMs,
+      optimization,
       warnings,
     },
   };
@@ -505,10 +563,15 @@ export async function convertStepToGltf(
     throw new Error("模型文件中无可显示零件数据");
   }
   const gltfPath = writeGlb(json, bin, outputDir, modelId);
-  const metaPath = writePreviewMeta(meta, outputDir, modelId);
-
   const originalSize = fileBuffer.length;
   const gltfSize = readFileSync(gltfPath).length;
+  meta.diagnostics.asset = {
+    gltfSize,
+    originalSize,
+    compressionRatio: originalSize > 0 ? Number((gltfSize / originalSize).toFixed(4)) : null,
+  };
+  meta.diagnostics.performance = getPerformanceDiagnostics(meta.totals, gltfSize);
+  const metaPath = writePreviewMeta(meta, outputDir, modelId);
 
   return {
     modelId,

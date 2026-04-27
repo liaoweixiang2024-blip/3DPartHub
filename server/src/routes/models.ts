@@ -1,7 +1,7 @@
 import { Router, Request, Response } from "express";
 import multer from "multer";
 import { randomUUID } from "node:crypto";
-import { join } from "node:path";
+import { join, resolve, sep } from "node:path";
 import { mkdirSync, readdirSync, readFileSync, rmSync, existsSync, writeFileSync, copyFileSync, statSync, openSync, readSync, closeSync } from "node:fs";
 import { stat as statAsync } from "node:fs/promises";
 import { convertStepToGltf } from "../services/converter.js";
@@ -300,6 +300,26 @@ async function validateModelUpload(file: Express.Multer.File, res: Response): Pr
   return ext;
 }
 
+function pathInside(candidate: string, root: string): boolean {
+  const resolved = resolve(candidate);
+  const resolvedRoot = resolve(root);
+  return resolved === resolvedRoot || resolved.startsWith(`${resolvedRoot}${sep}`);
+}
+
+async function markQueueUnavailable(modelId: string, meta: Record<string, unknown>, res: Response) {
+  meta.status = "failed";
+  meta.error = "conversion_queue_unavailable";
+  saveMeta(modelId, meta);
+  if (prisma) {
+    await prisma.model.update({
+      where: { id: modelId },
+      data: { status: "failed" },
+    }).catch(() => {});
+    await cacheDelByPrefix("cache:models:");
+  }
+  res.status(503).json({ detail: "转换队列暂不可用，请稍后重试" });
+}
+
 // Upload requires auth
 router.post("/api/models/upload", authMiddleware, requireRole("ADMIN"), upload.single("file"), async (req: AuthRequest, res: Response) => {
   const file = req.file;
@@ -409,40 +429,9 @@ router.post("/api/models/upload", authMiddleware, requireRole("ADMIN"), upload.s
       userId,
     });
   } catch (queueErr) {
-    console.error("Queue add failed, falling back to sync:", queueErr);
-    // Fallback: synchronous conversion if Redis is down
-    let result;
-    if (ext === "xt" || ext === "x_t") {
-      result = await convertXtToGltf(file.path, join(config.staticDir, "models"), modelId, originalName);
-    } else {
-      result = await convertStepToGltf(file.path, join(config.staticDir, "models"), modelId, originalName);
-    }
-    const thumb = await generateThumbnail(result.gltfPath, join(config.staticDir, "thumbnails"), modelId);
-
-    // Save original file to persistent storage
-    const originalsDir = join(config.staticDir, "originals");
-    mkdirSync(originalsDir, { recursive: true });
-    const originalDest = join(originalsDir, `${modelId}.${ext}`);
-    if (existsSync(file.path)) {
-      copyFileSync(file.path, originalDest);
-      rmSync(file.path, { force: true });
-    }
-
-    const persistedPath = existsSync(originalDest) ? originalDest : file.path;
-    const thumbTs = Date.now();
-    const versionedThumbUrl = `${thumb.thumbnailUrl}?t=${thumbTs}`;
-    meta.status = "completed";
-    meta.gltf_url = result.gltfUrl;
-    meta.gltf_size = result.gltfSize;
-    meta.thumbnail_url = versionedThumbUrl;
-    saveMeta(modelId, meta);
-    if (prisma) {
-      await prisma.model.update({ where: { id: modelId }, data: {
-        status: "completed", gltfUrl: result.gltfUrl, gltfSize: result.gltfSize, thumbnailUrl: versionedThumbUrl,
-        uploadPath: persistedPath,
-      } }).catch(() => {});
-      await cacheDelByPrefix("cache:models:");
-    }
+    console.error("Queue add failed:", queueErr);
+    await markQueueUnavailable(modelId, meta, res);
+    return;
   }
 
   res.json({
@@ -470,9 +459,9 @@ router.post("/api/models/upload-local", authMiddleware, requireRole("ADMIN"), as
   }
 
   // Validate file exists and is within allowed directories
-  const absPath = filePath.startsWith("/") ? filePath : join(process.cwd(), filePath);
+  const absPath = resolve(filePath.startsWith("/") ? filePath : join(process.cwd(), filePath));
   const allowedDirs = [join(process.cwd(), config.uploadDir), join(process.cwd(), "uploads"), "/tmp"];
-  const isAllowed = allowedDirs.some((d) => absPath.startsWith(d));
+  const isAllowed = allowedDirs.some((d) => pathInside(absPath, d));
   if (!isAllowed) {
     res.status(400).json({ detail: "文件路径不在允许的目录内" });
     return;
@@ -1622,23 +1611,17 @@ router.post("/api/models/:id/replace-file", authMiddleware, requireRole("ADMIN")
         preserveSource: true,
       });
     } catch (queueErr) {
-      console.error("Queue add failed, falling back to sync:", queueErr);
-      let result;
-      if (ext === "xt" || ext === "x_t") {
-        result = await convertXtToGltf(destPath, join(config.staticDir, "models"), id, originalName);
-      } else {
-        result = await convertStepToGltf(destPath, join(config.staticDir, "models"), id, originalName);
-      }
-      const thumb = await generateThumbnail(result.gltfPath, join(config.staticDir, "thumbnails"), id);
+      console.error("Queue add failed:", queueErr);
+      meta.status = "failed";
+      meta.error = "conversion_queue_unavailable";
+      saveMeta(id, meta);
       await prisma.model.update({
         where: { id },
-        data: {
-          status: "completed",
-          gltfUrl: result.gltfUrl,
-          gltfSize: result.gltfSize,
-          thumbnailUrl: thumb.thumbnailUrl,
-        },
-      });
+        data: { status: "failed" },
+      }).catch(() => {});
+      await cacheDelByPrefix("cache:models:");
+      res.status(503).json({ detail: "转换队列暂不可用，请稍后重试" });
+      return;
     }
 
     await cacheDelByPrefix("cache:models:");

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import * as THREE from "three";
 import Icon from "../shared/Icon";
 
@@ -18,7 +18,11 @@ export default function LoadingOverlay({ progress: externalProgress }: LoadingOv
       setProgress(0);
     };
     const onProgress = (_url: string, loaded: number, total: number) => {
-      setProgress(Math.round((loaded / total) * 100));
+      if (total > 0) {
+        setProgress(Math.round((loaded / total) * 100));
+      } else {
+        setProgress((value) => Math.max(value, 35));
+      }
     };
     const onLoad = () => {
       setProgress(100);
@@ -46,6 +50,13 @@ export default function LoadingOverlay({ progress: externalProgress }: LoadingOv
   const displayProgress = hasExternalProgress
     ? Math.max(0, Math.min(99, Math.round(externalProgress)))
     : progress;
+  const phase = useMemo(() => {
+    if (displayProgress < 8) return "准备模型";
+    if (displayProgress < 55) return "下载模型";
+    if (displayProgress < 88) return "解析几何";
+    if (displayProgress < 100) return "上传 GPU";
+    return "渲染中";
+  }, [displayProgress]);
 
   if (!visible) return null;
 
@@ -59,7 +70,7 @@ export default function LoadingOverlay({ progress: externalProgress }: LoadingOv
         />
       </div>
       <span className="text-xs text-on-surface-variant font-mono mt-2">
-        {displayProgress < 100 ? `加载中 ${displayProgress}%` : "渲染中..."}
+        {displayProgress < 100 ? `${phase} ${displayProgress}%` : "渲染中..."}
       </span>
     </div>
   );

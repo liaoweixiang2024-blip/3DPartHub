@@ -15,6 +15,14 @@ function formatCompactNumber(value?: number): string {
   return new Intl.NumberFormat("zh-CN").format(value);
 }
 
+function formatBytes(value?: number): string {
+  if (typeof value !== "number" || !Number.isFinite(value) || value <= 0) return "-";
+  if (value >= 1024 * 1024 * 1024) return `${(value / 1024 / 1024 / 1024).toFixed(2)} GB`;
+  if (value >= 1024 * 1024) return `${(value / 1024 / 1024).toFixed(2)} MB`;
+  if (value >= 1024) return `${(value / 1024).toFixed(1)} KB`;
+  return `${value} B`;
+}
+
 function formatPreviewSize(meta?: ModelPreviewMeta | null): string {
   const size = meta?.bounds?.size;
   if (!size) return "-";
@@ -62,7 +70,13 @@ export default function PreviewDiagnosticsDialog({
 }: PreviewDiagnosticsDialogProps) {
   const health = getPreviewHealth(meta);
   const warnings = meta?.diagnostics?.warnings || [];
+  const performanceHints = meta?.diagnostics?.performance?.hints || [];
   const conversionMs = meta?.diagnostics?.conversionMs;
+  const asset = meta?.diagnostics?.asset;
+  const optimization = meta?.diagnostics?.optimization;
+  const ratio = typeof asset?.compressionRatio === "number" && Number.isFinite(asset.compressionRatio)
+    ? `${(asset.compressionRatio * 100).toFixed(1)}%`
+    : "-";
 
   return (
     <AnimatePresence>
@@ -137,12 +151,38 @@ export default function PreviewDiagnosticsDialog({
                   <span>转换器</span>
                   <span className="font-mono text-on-surface">{meta?.diagnostics?.converter || "-"}</span>
                 </div>
+                <div className="flex items-center justify-between gap-3 py-1">
+                  <span>GLB 大小</span>
+                  <span className="font-mono text-on-surface">{formatBytes(asset?.gltfSize)}</span>
+                </div>
+                <div className="flex items-center justify-between gap-3 py-1">
+                  <span>原文件大小</span>
+                  <span className="font-mono text-on-surface">{formatBytes(asset?.originalSize)}</span>
+                </div>
+                <div className="flex items-center justify-between gap-3 py-1">
+                  <span>体积比例</span>
+                  <span className="font-mono text-on-surface">{ratio}</span>
+                </div>
+                <div className="flex items-center justify-between gap-3 py-1">
+                  <span>索引优化</span>
+                  <span className="text-right font-mono text-on-surface">
+                    {formatBytes(optimization?.indexBytesSaved)} / U16 {formatCompactNumber(optimization?.indexComponentTypes?.uint16)}
+                  </span>
+                </div>
               </div>
 
               {warnings.length > 0 && (
                 <div className="mt-4 rounded-sm bg-amber-500/10 px-3 py-2 text-xs text-amber-500">
                   {warnings.map((warning, index) => (
                     <div key={`${warning || "warning"}-${index}`} className="py-0.5">{warning}</div>
+                  ))}
+                </div>
+              )}
+
+              {performanceHints.length > 0 && (
+                <div className="mt-4 rounded-sm bg-primary-container/10 px-3 py-2 text-xs text-primary">
+                  {performanceHints.map((hint, index) => (
+                    <div key={`${hint || "hint"}-${index}`} className="py-0.5">{hint}</div>
                   ))}
                 </div>
               )}

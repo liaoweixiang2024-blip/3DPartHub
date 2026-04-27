@@ -1,7 +1,7 @@
 import { Router, Response } from "express";
 import { randomUUID } from "node:crypto";
 import { once } from "node:events";
-import { join } from "node:path";
+import { join, resolve, sep } from "node:path";
 import { mkdirSync, readdirSync, createReadStream, createWriteStream, rmSync, statSync, existsSync } from "node:fs";
 import { pipeline } from "node:stream/promises";
 import { authMiddleware, type AuthRequest } from "../middleware/auth.js";
@@ -13,7 +13,23 @@ import { getBusinessConfig } from "../lib/businessConfig.js";
 const router = Router();
 
 const CHUNKS_DIR = join(config.uploadDir, "chunks");
+const UPLOAD_ROOT = resolve(process.cwd(), config.uploadDir);
+const MAX_UPLOAD_CHUNKS = 10_000;
 mkdirSync(CHUNKS_DIR, { recursive: true });
+
+function normalizeUploadFileName(fileName: unknown): string | null {
+  if (typeof fileName !== "string") return null;
+  const trimmed = fileName.trim();
+  if (!trimmed || trimmed.length > 255) return null;
+  if (/[/\\\0]/.test(trimmed) || trimmed === "." || trimmed === "..") return null;
+  return trimmed;
+}
+
+function resolveUploadPath(fileName: string): string | null {
+  const resolved = resolve(UPLOAD_ROOT, fileName);
+  if (resolved !== UPLOAD_ROOT && resolved.startsWith(`${UPLOAD_ROOT}${sep}`)) return resolved;
+  return null;
+}
 
 // Clean up expired sessions on startup and every 30 minutes
 cleanupExpiredSessions(CHUNKS_DIR);
@@ -26,17 +42,18 @@ router.post("/api/upload/init", authMiddleware, requireRole("ADMIN"), async (req
   const normalizedFileSize = Number(fileSize);
   const normalizedTotalChunks = Number(totalChunks);
 
-  if (!fileName || !Number.isFinite(normalizedFileSize) || !Number.isInteger(normalizedTotalChunks)) {
+  const safeFileName = normalizeUploadFileName(fileName);
+  if (!safeFileName || !Number.isFinite(normalizedFileSize) || !Number.isInteger(normalizedTotalChunks)) {
     res.status(400).json({ detail: "缺少参数" });
     return;
   }
-  if (normalizedFileSize <= 0 || normalizedTotalChunks <= 0) {
+  if (normalizedFileSize <= 0 || normalizedTotalChunks <= 0 || normalizedTotalChunks > MAX_UPLOAD_CHUNKS) {
     res.status(400).json({ detail: "文件参数无效" });
     return;
   }
   const { uploadPolicy } = await getBusinessConfig();
   const maxBytes = Math.max(1, uploadPolicy.modelMaxSizeMb) * 1024 * 1024;
-  const ext = String(fileName).split(".").pop()?.toLowerCase() || "";
+  const ext = safeFileName.split(".").pop()?.toLowerCase() || "";
   if (normalizedFileSize > maxBytes) {
     res.status(400).json({ detail: `文件过大，最大支持 ${uploadPolicy.modelMaxSizeMb}MB` });
     return;
@@ -50,7 +67,7 @@ router.post("/api/upload/init", authMiddleware, requireRole("ADMIN"), async (req
   const chunkSize = Math.ceil(normalizedFileSize / normalizedTotalChunks);
 
   saveUploadSession(uploadId, {
-    fileName,
+    fileName: safeFileName,
     fileSize: normalizedFileSize,
     totalChunks: normalizedTotalChunks,
     chunkSize,
@@ -152,7 +169,11 @@ router.post("/api/upload/complete", authMiddleware, requireRole("ADMIN"), async 
   }
 
   const chunksDir = join(CHUNKS_DIR, uploadId);
-  const mergedPath = join(config.uploadDir, `${uploadId}_${session.fileName}`);
+  const mergedPath = resolveUploadPath(`${uploadId}_${session.fileName}`);
+  if (!mergedPath) {
+    res.status(400).json({ detail: "文件名无效" });
+    return;
+  }
 
   if (!existsSync(chunksDir)) {
     res.status(404).json({ detail: "分片目录不存在" });

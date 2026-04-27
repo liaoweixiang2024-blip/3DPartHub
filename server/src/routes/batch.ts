@@ -1,13 +1,17 @@
 import { Router, Response } from "express";
 import multer from "multer";
-import { copyFileSync, createReadStream, existsSync, mkdirSync, rmSync, statSync } from "node:fs";
-import { join } from "node:path";
+import { createReadStream, createWriteStream, existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { join, posix } from "node:path";
 import archiver from "archiver";
 import { randomUUID } from "node:crypto";
+import { once } from "node:events";
 import { authMiddleware, type AuthRequest } from "../middleware/auth.js";
 import { requireRole } from "../middleware/rbac.js";
 import { config } from "../lib/config.js";
 import { getPreviewAssetExtension, resolveFileUrlPath } from "../services/gltfAsset.js";
+import { conversionQueue } from "../lib/queue.js";
+import { cacheDelByPrefix } from "../lib/cache.js";
+import { getBusinessConfig } from "../lib/businessConfig.js";
 
 const router = Router();
 
@@ -15,6 +19,16 @@ const upload = multer({
   dest: join(config.uploadDir, "batch"),
   limits: { fileSize: 500 * 1024 * 1024 }, // 500MB for batch ZIP
 });
+
+const MAX_BATCH_MODEL_FILES = 200;
+
+function normalizeZipEntryName(entryName: string): string | null {
+  const normalized = entryName.replace(/\\/g, "/");
+  if (!normalized || normalized.startsWith("/") || normalized.includes("\0")) return null;
+  const clean = posix.normalize(normalized);
+  if (clean === "." || clean === ".." || clean.startsWith("../")) return null;
+  return clean;
+}
 
 // Batch download — create ZIP of multiple models' preview assets
 router.post("/api/batch/download", authMiddleware, requireRole("ADMIN"), async (req: AuthRequest, res: Response) => {
@@ -52,9 +66,10 @@ router.post("/api/batch/download", authMiddleware, requireRole("ADMIN"), async (
     mkdirSync(join(config.staticDir, "batch"), { recursive: true });
 
     const archive = archiver("zip", { zlib: { level: 5 } });
-    const output = require("fs").createWriteStream(zipPath);
+    const output = createWriteStream(zipPath);
 
     archive.pipe(output);
+    const outputClosed = once(output, "close");
 
     for (const model of models) {
       const gltfPath = resolveFileUrlPath(model.gltfUrl);
@@ -72,6 +87,7 @@ router.post("/api/batch/download", authMiddleware, requireRole("ADMIN"), async (
     }
 
     await archive.finalize();
+    await outputClosed;
 
     // Record downloads
     for (const model of models) {
@@ -105,57 +121,53 @@ router.post("/api/batch/upload", authMiddleware, requireRole("ADMIN"), upload.si
     return;
   }
 
-  if (!file.originalname?.endsWith(".zip")) {
+  if (!file.originalname?.toLowerCase().endsWith(".zip")) {
     rmSync(file.path, { force: true });
     res.status(400).json({ detail: "请上传 ZIP 文件" });
     return;
   }
 
   try {
-    const { convertStepToGltf } = await import("../services/converter.js");
-    const { generateThumbnail } = await import("../services/thumbnail.js");
     const { prisma } = await import("../lib/prisma.js");
-
-    // Extract ZIP
-    const extractDir = join(config.uploadDir, "batch", file.filename);
-    mkdirSync(extractDir, { recursive: true });
+    const { uploadPolicy } = await getBusinessConfig();
+    const acceptedExts = uploadPolicy.modelFormats.map((item) => item.toLowerCase());
+    const maxModelBytes = Math.max(1, uploadPolicy.modelMaxSizeMb) * 1024 * 1024;
 
     const AdmZip = (await import("adm-zip")).default;
     const zip = new AdmZip(file.path);
-    zip.extractAllTo(extractDir, true);
-
-    // Find supported files
-    const ACCEPTED_EXTS = ["step", "stp", "iges", "igs", "xt", "x_t"];
     const results: any[] = [];
-    const entries = zip.getEntries();
+    const entries = zip.getEntries()
+      .filter((entry) => !entry.isDirectory)
+      .map((entry) => ({ entry, safeName: normalizeZipEntryName(entry.entryName) }))
+      .filter((item) => Boolean(item.safeName))
+      .slice(0, MAX_BATCH_MODEL_FILES);
 
-    for (const entry of entries) {
-      const ext = entry.entryName.split(".").pop()?.toLowerCase();
-      if (!ext || !ACCEPTED_EXTS.includes(ext)) continue;
-      if (entry.isDirectory) continue;
-
-      const filePath = join(extractDir, entry.entryName);
-      if (!existsSync(filePath)) continue;
+    for (const { entry, safeName } of entries) {
+      const cleanName = safeName!;
+      const ext = cleanName.split(".").pop()?.toLowerCase();
+      if (!ext || !acceptedExts.includes(ext)) continue;
 
       const modelId = randomUUID().slice(0, 12);
-      const originalName = entry.entryName.split("/").pop() || entry.entryName;
+      const originalName = posix.basename(cleanName);
       let originalDest: string | null = null;
 
       try {
+        const declaredSize = Number((entry as any).header?.size || 0);
+        if (declaredSize > maxModelBytes) {
+          results.push({ name: originalName, status: "failed", error: `文件过大，最大支持 ${uploadPolicy.modelMaxSizeMb}MB` });
+          continue;
+        }
+
+        const data = entry.getData();
+        if (data.length <= 0 || data.length > maxModelBytes) {
+          results.push({ name: originalName, status: "failed", error: `文件大小异常，最大支持 ${uploadPolicy.modelMaxSizeMb}MB` });
+          continue;
+        }
+
         const originalsDir = join(config.staticDir, "originals");
         mkdirSync(originalsDir, { recursive: true });
         originalDest = join(originalsDir, `${modelId}.${ext}`);
-        copyFileSync(filePath, originalDest);
-        const originalSize = statSync(originalDest).size;
-
-        let result;
-        if (ext === "xt" || ext === "x_t") {
-          result = await convertXtToGltfLocal(originalDest, join(config.staticDir, "models"), modelId, originalName);
-        } else {
-          result = await convertStepToGltf(originalDest, join(config.staticDir, "models"), modelId, originalName);
-        }
-
-        const thumb = await generateThumbnail(result.gltfPath, join(config.staticDir, "thumbnails"), modelId);
+        writeFileSync(originalDest, data);
 
         if (prisma) {
           await prisma.model.create({
@@ -164,28 +176,43 @@ router.post("/api/batch/upload", authMiddleware, requireRole("ADMIN"), upload.si
               name: originalName.replace(/\.[^.]+$/, ""),
               originalName,
               originalFormat: ext,
-              originalSize,
-              gltfUrl: result.gltfUrl,
-              gltfSize: result.gltfSize,
-              thumbnailUrl: thumb.thumbnailUrl,
+              originalSize: data.length,
+              gltfUrl: "",
+              gltfSize: 0,
               format: ext,
-              status: "completed",
+              status: "queued",
               uploadPath: originalDest,
               createdById: req.user!.userId,
             },
           });
         }
 
-        results.push({ model_id: modelId, name: originalName, status: "completed" });
+        try {
+          await conversionQueue.add("convert", {
+            modelId,
+            filePath: originalDest,
+            originalName,
+            ext,
+            userId: req.user!.userId,
+            preserveSource: true,
+          });
+          results.push({ model_id: modelId, name: originalName, status: "queued" });
+        } catch (err) {
+          if (prisma) {
+            await prisma.model.update({ where: { id: modelId }, data: { status: "failed" } }).catch(() => {});
+          }
+          results.push({ model_id: modelId, name: originalName, status: "failed", error: "转换队列暂不可用" });
+        }
       } catch (err) {
         if (originalDest && existsSync(originalDest)) rmSync(originalDest, { force: true });
         results.push({ name: originalName, status: "failed", error: (err as Error).message });
       }
     }
 
-    // Clean up
-    rmSync(extractDir, { recursive: true, force: true });
     rmSync(file.path, { force: true });
+    if (results.some((item) => item.status === "queued")) {
+      await cacheDelByPrefix("cache:models:");
+    }
 
     res.json({ total: results.length, results });
   } catch (err) {
@@ -193,11 +220,5 @@ router.post("/api/batch/upload", authMiddleware, requireRole("ADMIN"), upload.si
     res.status(500).json({ detail: "批量上传处理失败" });
   }
 });
-
-// Stub for XT conversion in batch (reuse existing)
-async function convertXtToGltfLocal(sourcePath: string, outputDir: string, modelId: string, name: string) {
-  const { convertXtToGltf } = await import("../services/xt-converter.js");
-  return convertXtToGltf(sourcePath, outputDir, modelId, name);
-}
 
 export default router;

@@ -226,16 +226,23 @@ export default function NotificationPanel({ compact = false }: { compact?: boole
 
   if (!isAuthenticated) return null;
 
+  const mobilePanelStyle = isMobile
+    ? {
+        top: "calc(env(safe-area-inset-top, 0px) + 0.75rem)",
+        bottom: "calc(env(safe-area-inset-bottom, 0px) + 0.75rem)",
+      }
+    : undefined;
+
   // Panel content shared between mobile drawer and desktop popup
   const panelContent = (
-    <>
+    <div className={isMobile ? "flex h-full min-h-0 flex-col" : ""}>
       {/* Header */}
       <div className="shrink-0 border-b border-outline-variant/15 px-4 py-3">
-        <div className="flex items-center justify-between gap-3">
+        <div className="flex items-start justify-between gap-3">
           <span className="text-sm font-headline font-bold text-on-surface">
             {isAdmin ? "管理通知" : "通知"}
           </span>
-          <div className="flex flex-wrap items-center justify-end gap-x-3 gap-y-1">
+          <div className="flex min-w-0 flex-wrap items-center justify-end gap-x-3 gap-y-1">
             {unreadCount > 0 && (
               <button onClick={handleMarkAllRead} className="text-[11px] text-primary-container hover:underline">
                 全部已读
@@ -244,6 +251,15 @@ export default function NotificationPanel({ compact = false }: { compact?: boole
             {notifications.some((n) => n.read) && (
               <button onClick={handleClearRead} className="text-[11px] text-on-surface-variant hover:text-on-surface transition-colors">
                 清除已读
+              </button>
+            )}
+            {isMobile && (
+              <button
+                onClick={() => setOpen(false)}
+                className="ml-0.5 flex h-7 w-7 items-center justify-center rounded-full text-on-surface-variant hover:bg-surface-container-highest hover:text-on-surface"
+                aria-label="关闭通知"
+              >
+                <Icon name="close" size={14} />
               </button>
             )}
           </div>
@@ -256,7 +272,7 @@ export default function NotificationPanel({ compact = false }: { compact?: boole
       </div>
 
       {/* List */}
-      <div className={`scrollbar-hidden overflow-y-auto ${isMobile ? 'min-h-0 flex-1 pb-[max(0.75rem,env(safe-area-inset-bottom))]' : 'max-h-96'}`}>
+      <div className={`scrollbar-hidden overflow-y-auto ${isMobile ? 'min-h-0 flex-1 overscroll-contain pb-3' : 'max-h-96'}`}>
         {loading && (
           <div className="flex items-center justify-center py-10">
             <Icon name="autorenew" size={24} className="text-on-surface-variant/30 animate-spin" />
@@ -281,7 +297,7 @@ export default function NotificationPanel({ compact = false }: { compact?: boole
           />
         ))}
       </div>
-    </>
+    </div>
   );
 
   // Mobile: bounded notification drawer
@@ -314,7 +330,8 @@ export default function NotificationPanel({ compact = false }: { compact?: boole
             animate={{ y: 0, opacity: 1 }}
             exit={{ y: 24, opacity: 0 }}
             transition={{ type: "spring", damping: 26, stiffness: 320 }}
-            className="fixed bottom-[max(1rem,env(safe-area-inset-bottom))] left-3 right-3 top-[max(1rem,env(safe-area-inset-top))] z-[201] flex min-h-0 flex-col overflow-hidden rounded-2xl border border-outline-variant/20 bg-surface-container-high shadow-2xl"
+            style={mobilePanelStyle}
+            className="fixed left-3 right-3 z-[201] flex min-h-0 flex-col overflow-hidden rounded-2xl border border-outline-variant/20 bg-surface-container-high shadow-2xl"
             onClick={(e) => e.stopPropagation()}
           >
             {panelContent}

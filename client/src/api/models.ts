@@ -97,6 +97,22 @@ export interface ModelPreviewMeta {
     validMeshCount?: number;
     skippedMeshCount?: number;
     conversionMs?: number;
+    asset?: {
+      gltfSize?: number;
+      originalSize?: number;
+      compressionRatio?: number | null;
+    };
+    optimization?: {
+      indexComponentTypes?: {
+        uint16?: number;
+        uint32?: number;
+      };
+      indexBytesSaved?: number;
+    };
+    performance?: {
+      level?: "normal" | "large" | "huge";
+      hints?: string[];
+    };
     warnings?: string[];
   };
 }
