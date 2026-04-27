@@ -7,6 +7,7 @@ import BottomNav from "../components/shared/BottomNav";
 import MobileNavDrawer from "../components/shared/MobileNavDrawer";
 import AppSidebar from "../components/shared/Sidebar";
 import Icon from "../components/shared/Icon";
+import Pagination from "../components/shared/Pagination";
 import client from "../api/client";
 import { useToast } from "../components/shared/Toast";
 
@@ -147,18 +148,7 @@ export default function UserAdminPage() {
         )}
       </div>
 
-      {/* Pagination */}
-      {totalPages > 1 && (
-        <div className="flex items-center justify-center gap-2">
-          <button onClick={() => setPage(Math.max(1, page - 1))} disabled={page <= 1} className="p-1.5 rounded hover:bg-surface-container-high disabled:opacity-30">
-            <Icon name="chevron_left" size={18} />
-          </button>
-          <span className="text-xs text-on-surface-variant">{page} / {totalPages}</span>
-          <button onClick={() => setPage(Math.min(totalPages, page + 1))} disabled={page >= totalPages} className="p-1.5 rounded hover:bg-surface-container-high disabled:opacity-30">
-            <Icon name="chevron_right" size={18} />
-          </button>
-        </div>
-      )}
+      <Pagination page={page} totalPages={totalPages} totalItems={total} onPageChange={setPage} className="mt-4 pb-1" />
     </div>
   );
 

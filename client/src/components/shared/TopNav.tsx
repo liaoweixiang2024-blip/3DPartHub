@@ -1,4 +1,4 @@
-import { Link, useNavigate, useSearchParams } from "react-router-dom";
+import { Link, useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { useState, useCallback, useEffect, useRef } from "react";
 import { useThemeStore } from "../../stores/useThemeStore";
@@ -10,6 +10,15 @@ import Icon from "./Icon";
 import Tooltip from "./Tooltip";
 import BrandMark from "./BrandMark";
 import { onSiteConfigChange } from "../../lib/publicSettings";
+import {
+  HOME_SEARCH_EVENT,
+  HOME_SEARCH_MAX_LENGTH,
+  dispatchHomeSearchQuery,
+  normalizeHomeSearchQuery,
+  readHomeSearchQuery,
+  saveHomeSearchQuery,
+  type HomeSearchEventDetail,
+} from "../../lib/homeSearchState";
 
 interface TopNavProps {
   compact?: boolean;
@@ -152,9 +161,10 @@ export default function TopNav({ compact = false, onMenuToggle }: TopNavProps) {
   const [uploadOpen, setUploadOpen] = useState(false);
   const { user } = useAuthStore();
   const isAdmin = user?.role === "ADMIN";
-  const [searchParams, setSearchParams] = useSearchParams();
-  const [localQuery, setLocalQuery] = useState(searchParams.get("q") || "");
+  const [searchParams] = useSearchParams();
+  const [localQuery, setLocalQuery] = useState(() => readHomeSearchQuery() ?? searchParams.get("q") ?? "");
   const navigate = useNavigate();
+  const location = useLocation();
   const debounceRef = useRef<ReturnType<typeof setTimeout>>();
   // Force re-render when site config changes
   const [, forceUpdate] = useState(0);
@@ -163,32 +173,41 @@ export default function TopNav({ compact = false, onMenuToggle }: TopNavProps) {
   }, []);
 
   useEffect(() => {
-    const q = searchParams.get("q") || "";
-    setLocalQuery(q);
+    const stored = readHomeSearchQuery();
+    setLocalQuery(stored ?? searchParams.get("q") ?? "");
   }, [searchParams]);
 
+  useEffect(() => {
+    const handleSearchEvent = (event: Event) => {
+      const detail = (event as CustomEvent<HomeSearchEventDetail>).detail;
+      if (!detail || typeof detail.query !== "string") return;
+      setLocalQuery(detail.query);
+    };
+    window.addEventListener(HOME_SEARCH_EVENT, handleSearchEvent);
+    return () => window.removeEventListener(HOME_SEARCH_EVENT, handleSearchEvent);
+  }, []);
+
   const doSearch = useCallback((value: string) => {
-    if (window.location.pathname === "/") {
-      setSearchParams((prev) => {
-        const next = new URLSearchParams(prev);
-        if (value) {
-          next.set("q", value);
-        } else {
-          next.delete("q");
-        }
-        return next;
-      }, { replace: true });
+    const query = normalizeHomeSearchQuery(value);
+    saveHomeSearchQuery(query);
+    dispatchHomeSearchQuery(query);
+    if (location.pathname === "/") {
+      return;
     } else {
-      navigate(`/?q=${encodeURIComponent(value)}`);
+      navigate("/", { state: { homeBrowseState: { query, page: 1 } } });
     }
-  }, [setSearchParams, navigate]);
+  }, [location.pathname, navigate]);
 
   const handleSearchChange = useCallback((value: string) => {
-    setLocalQuery(value);
+    const nextValue = Array.from(value).slice(0, HOME_SEARCH_MAX_LENGTH).join("");
+    setLocalQuery(nextValue);
     if (debounceRef.current) clearTimeout(debounceRef.current);
-    if (!value.trim()) return;
+    if (!nextValue.trim()) {
+      doSearch("");
+      return;
+    }
     debounceRef.current = setTimeout(() => {
-      doSearch(value);
+      doSearch(nextValue);
     }, 500);
   }, [doSearch]);
 
@@ -230,6 +249,7 @@ export default function TopNav({ compact = false, onMenuToggle }: TopNavProps) {
                 type="text"
                 value={localQuery}
                 onChange={(e) => handleSearchChange(e.target.value)}
+                maxLength={HOME_SEARCH_MAX_LENGTH}
                 placeholder="搜索模型..."
                 className="bg-transparent border-none outline-none text-base text-on-surface placeholder:text-on-surface-variant/50 w-full"
               />
@@ -259,6 +279,7 @@ export default function TopNav({ compact = false, onMenuToggle }: TopNavProps) {
             type="text"
             value={localQuery}
             onChange={(e) => handleSearchChange(e.target.value)}
+            maxLength={HOME_SEARCH_MAX_LENGTH}
             placeholder="搜索模型、规格..."
             className="bg-transparent border-none outline-none text-sm text-on-surface placeholder:text-on-surface-variant/50 w-full"
           />

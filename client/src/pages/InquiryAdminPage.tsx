@@ -8,6 +8,7 @@ import BottomNav from "../components/shared/BottomNav";
 import AppSidebar from "../components/shared/Sidebar";
 import MobileNavDrawer from "../components/shared/MobileNavDrawer";
 import Icon from "../components/shared/Icon";
+import Pagination from "../components/shared/Pagination";
 import { getAllInquiries } from "../api/inquiries";
 import { getCachedPublicSettings } from "../lib/publicSettings";
 import { getBusinessConfig, statusInfo } from "../lib/businessConfig";
@@ -26,6 +27,7 @@ function DesktopContent() {
   );
   const inquiries = data?.items ?? [];
   const total = data?.total ?? 0;
+  const totalPages = Math.ceil(total / 20);
 
   return (
     <>
@@ -102,26 +104,7 @@ function DesktopContent() {
         </div>
       )}
 
-      {/* Pagination */}
-      {total > 20 && (
-        <div className="flex items-center justify-center gap-2 mt-4">
-          <button
-            onClick={() => setPage((p) => Math.max(1, p - 1))}
-            disabled={page <= 1}
-            className="px-3 py-1.5 text-xs border border-outline-variant/20 rounded text-on-surface-variant disabled:opacity-50"
-          >
-            上一页
-          </button>
-          <span className="text-xs text-on-surface-variant">{page} / {Math.ceil(total / 20)}</span>
-          <button
-            onClick={() => setPage((p) => p + 1)}
-            disabled={page >= Math.ceil(total / 20)}
-            className="px-3 py-1.5 text-xs border border-outline-variant/20 rounded text-on-surface-variant disabled:opacity-50"
-          >
-            下一页
-          </button>
-        </div>
-      )}
+      <Pagination page={page} totalPages={totalPages} totalItems={total} onPageChange={setPage} className="mt-4 pb-0" />
     </>
   );
 }

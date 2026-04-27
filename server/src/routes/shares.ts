@@ -6,6 +6,7 @@ import { join } from "node:path";
 import { prisma } from "../lib/prisma.js";
 import { authMiddleware, AuthRequest } from "../middleware/auth.js";
 import { getAllSettings, getSetting } from "../lib/settings.js";
+import { previewAssetFileName, resolveFileUrlPath } from "../services/gltfAsset.js";
 
 const router = Router();
 
@@ -464,10 +465,10 @@ router.get("/api/shares/:token/download", async (req: Request, res: Response) =>
 
   // Fallback to gltf
   if (!filePath && model.gltfUrl) {
-    const gltfPath = model.gltfUrl.startsWith("/") ? model.gltfUrl : join(process.cwd(), model.gltfUrl);
+    const gltfPath = resolveFileUrlPath(model.gltfUrl);
     if (existsSync(gltfPath)) {
       filePath = gltfPath;
-      fileName = `${displayName}.gltf`;
+      fileName = previewAssetFileName(displayName, gltfPath);
     }
   }
 

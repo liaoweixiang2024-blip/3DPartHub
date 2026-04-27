@@ -629,14 +629,6 @@ export default function QuoteTemplateEditor() {
   const historyRef = useRef<DocumentTemplates[]>([]);
   const [historyCount, setHistoryCount] = useState(0);
 
-  useEffect(() => {
-    getSettings().then((s) => {
-      const parsed = parseDocumentTemplates((s as any).document_templates || "", (s as any).quote_template || "");
-      setTemplates(parsed);
-      setLoading(false);
-    }).catch(() => setLoading(false));
-  }, [setSections]);
-
   const sections = templates[activeKind].sections;
   const selectedSection = sections.find((s) => s.id === expandedId) || null;
   const page = { ...pageDefaults(activeKind), ...templates[activeKind].page };
@@ -679,6 +671,27 @@ export default function QuoteTemplateEditor() {
   const setPage = useCallback((nextPage: TemplatePageConfig) => {
     commitTemplates((prev) => ({ ...prev, [activeKind]: { ...prev[activeKind], page: nextPage } }));
   }, [activeKind, commitTemplates]);
+
+  useEffect(() => {
+    let mounted = true;
+
+    getSettings()
+      .then((s) => {
+        if (!mounted) return;
+        const parsed = parseDocumentTemplates((s as any).document_templates || "", (s as any).quote_template || "");
+        setTemplates(parsed);
+      })
+      .catch(() => {
+        // Keep the default template available if settings cannot be loaded.
+      })
+      .finally(() => {
+        if (mounted) setLoading(false);
+      });
+
+    return () => {
+      mounted = false;
+    };
+  }, []);
 
   const handleSave = useCallback(async () => {
     setSaving(true);

@@ -2,7 +2,11 @@ import { useEffect, useState } from "react";
 import * as THREE from "three";
 import Icon from "../shared/Icon";
 
-export default function LoadingOverlay() {
+interface LoadingOverlayProps {
+  progress?: number | null;
+}
+
+export default function LoadingOverlay({ progress: externalProgress }: LoadingOverlayProps) {
   const [progress, setProgress] = useState(0);
   const [loading, setLoading] = useState(false);
 
@@ -37,7 +41,13 @@ export default function LoadingOverlay() {
     };
   }, []);
 
-  if (!loading) return null;
+  const hasExternalProgress = typeof externalProgress === "number" && Number.isFinite(externalProgress) && externalProgress < 100;
+  const visible = loading || hasExternalProgress;
+  const displayProgress = hasExternalProgress
+    ? Math.max(0, Math.min(99, Math.round(externalProgress)))
+    : progress;
+
+  if (!visible) return null;
 
   return (
     <div className="absolute inset-0 flex flex-col items-center justify-center z-10 pointer-events-none bg-surface-dim/80 backdrop-blur-sm">
@@ -45,11 +55,11 @@ export default function LoadingOverlay() {
       <div className="w-40 h-1 bg-surface-container-highest rounded-full overflow-hidden">
         <div
           className="h-full bg-primary rounded-full transition-all duration-300 ease-out"
-          style={{ width: `${progress}%` }}
+          style={{ width: `${displayProgress}%` }}
         />
       </div>
       <span className="text-xs text-on-surface-variant font-mono mt-2">
-        {progress < 100 ? `加载中 ${progress}%` : "渲染中..."}
+        {displayProgress < 100 ? `加载中 ${displayProgress}%` : "渲染中..."}
       </span>
     </div>
   );

@@ -11,8 +11,9 @@ import MobileNavDrawer from '../components/shared/MobileNavDrawer';
 import Icon from '../components/shared/Icon';
 import ModelThumbnail from '../components/shared/ModelThumbnail';
 import { useToast } from '../components/shared/Toast';
-import { modelApi, type ServerModelListItem } from '../api/models';
+import { modelApi, type ConversionQueueJob, type ConversionQueueState, type ModelGroupItem, type ModelPreviewDiagnosticItem, type PreviewDiagnosticFilter, type ServerModelListItem } from '../api/models';
 import { categoriesApi, type CategoryItem } from '../api/categories';
+import { getSettings, updateSettings } from '../api/settings';
 import CategorySelect from '../components/shared/CategorySelect';
 import useSWR from 'swr';
 import { getCachedPublicSettings } from '../lib/publicSettings';
@@ -22,6 +23,989 @@ function formatSize(bytes: number) {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function formatModelDateTime(value?: string | null) {
+  if (!value) return '未记录';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '未记录';
+  return date.toLocaleString('zh-CN', {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+}
+
+const MODEL_SOURCE_FORMATS = ['step', 'stp', 'iges', 'igs', 'xt', 'x_t'];
+const MODEL_SOURCE_ACCEPT = MODEL_SOURCE_FORMATS.map((item) => `.${item}`).join(',');
+const MODEL_SOURCE_LABEL = 'STEP/IGES/XT';
+const MODEL_ADMIN_LIST_LIMIT = 10000;
+const MERGE_SUGGESTION_LIST_LIMIT = 10000;
+
+const DIAGNOSTIC_FILTERS: Array<{ key: PreviewDiagnosticFilter; label: string; icon: string }> = [
+  { key: 'all', label: '全部', icon: 'inventory_2' },
+  { key: 'problem', label: '待处理', icon: 'warning' },
+  { key: 'missing', label: '缺少诊断', icon: 'data_usage' },
+  { key: 'invalid', label: '转换异常', icon: 'error' },
+  { key: 'warning', label: '需复核', icon: 'checklist' },
+  { key: 'ok', label: '正常', icon: 'check_circle' },
+];
+
+const QUEUE_STATUS_CARDS: Array<{ key: 'waiting' | 'active' | 'delayed' | 'completed' | 'failed'; label: string; icon: string }> = [
+  { key: 'waiting', label: '等待', icon: 'hourglass_top' },
+  { key: 'active', label: '处理中', icon: 'play_circle' },
+  { key: 'delayed', label: '延迟', icon: 'schedule' },
+  { key: 'completed', label: '完成', icon: 'check_circle' },
+  { key: 'failed', label: '失败', icon: 'error' },
+];
+
+function formatCount(value?: number | null) {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return '-';
+  return new Intl.NumberFormat('zh-CN').format(value);
+}
+
+function formatBoundsSize(size?: [number, number, number] | null) {
+  if (!size) return '-';
+  return `${size.map((value) => value.toFixed(value >= 100 ? 0 : 1)).join(' x ')} mm`;
+}
+
+function getDiagnosticTone(status: PreviewDiagnosticFilter, active = false) {
+  if (active) return 'border-primary bg-primary-container text-on-primary';
+  if (status === 'ok') return 'border-primary/20 bg-primary/5 text-primary';
+  if (status === 'invalid') return 'border-error/20 bg-error/10 text-error';
+  if (status === 'warning' || status === 'missing' || status === 'problem') return 'border-amber-500/20 bg-amber-500/10 text-amber-600';
+  return 'border-outline-variant/20 bg-surface-container-low text-on-surface-variant';
+}
+
+function getQueueStateLabel(state: ConversionQueueState) {
+  switch (state) {
+    case 'active': return '处理中';
+    case 'waiting': return '等待';
+    case 'delayed': return '延迟';
+    case 'prioritized': return '优先';
+    case 'waiting-children': return '等待子任务';
+    case 'completed': return '完成';
+    case 'failed': return '失败';
+    case 'paused': return '暂停';
+    default: return '未知';
+  }
+}
+
+function getQueueStateTone(state: ConversionQueueState) {
+  if (state === 'active') return 'border-primary/25 bg-primary/10 text-primary';
+  if (state === 'completed') return 'border-emerald-500/20 bg-emerald-500/10 text-emerald-600';
+  if (state === 'failed') return 'border-error/20 bg-error/10 text-error';
+  if (state === 'waiting' || state === 'delayed' || state === 'prioritized' || state === 'waiting-children') return 'border-amber-500/20 bg-amber-500/10 text-amber-600';
+  return 'border-outline-variant/20 bg-surface-container-high text-on-surface-variant';
+}
+
+function formatQueueTime(value?: number | null) {
+  if (!value) return '-';
+  return new Date(value).toLocaleString('zh-CN', {
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+}
+
+function formatQueueDuration(ms?: number | null) {
+  if (!ms || ms <= 0) return '-';
+  const minutes = Math.floor(ms / 60000);
+  if (minutes < 1) return '不到 1 分钟';
+  if (minutes < 60) return `${minutes} 分钟`;
+  const hours = Math.floor(minutes / 60);
+  const rest = minutes % 60;
+  return rest > 0 ? `${hours} 小时 ${rest} 分钟` : `${hours} 小时`;
+}
+
+function formatQueueFailureReason(reason?: string | null) {
+  if (!reason) return null;
+  if (reason.includes('job started more than allowable limit')) {
+    return '任务启动次数超限：通常是转换服务重启、热更新或队列锁过早失效导致的队列保护失败，不代表 STEP 文件一定损坏。可重试该任务。';
+  }
+  if (reason.includes('job stalled more than allowable limit')) {
+    return '任务多次被判定卡住：通常是转换进程退出、服务重启或长时间无响应导致。可查看日志后重试。';
+  }
+  return reason;
+}
+
+function DiagnosticStatusBadge({ item }: { item: ModelPreviewDiagnosticItem }) {
+  return (
+    <span className={`inline-flex shrink-0 items-center whitespace-nowrap rounded-sm border px-2 py-0.5 text-[10px] font-medium ${getDiagnosticTone(item.preview_status)}`}>
+      {item.preview_label}
+    </span>
+  );
+}
+
+function QueueStateBadge({ state }: { state: ConversionQueueState }) {
+  return (
+    <span className={`inline-flex shrink-0 items-center whitespace-nowrap rounded-sm border px-2 py-0.5 text-[10px] font-medium ${getQueueStateTone(state)}`}>
+      {getQueueStateLabel(state)}
+    </span>
+  );
+}
+
+const PREVIEW_OPS_BUTTON_BASE = 'inline-flex h-8 w-[92px] shrink-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-sm px-2 text-[11px] font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50';
+const PREVIEW_OPS_ACTION_ROW = 'flex w-full max-w-full min-w-0 items-center gap-1.5 overflow-x-auto pb-1 sm:w-auto sm:shrink-0 sm:justify-end scrollbar-hidden';
+
+function previewOpsButtonClass(compact: boolean) {
+  return compact
+    ? 'inline-flex h-7 min-w-0 items-center justify-center gap-1 rounded-sm px-1 text-[10px] font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50'
+    : PREVIEW_OPS_BUTTON_BASE;
+}
+
+function previewOpsActionRowClass(compact: boolean) {
+  return compact
+    ? 'grid w-full grid-cols-3 gap-1'
+    : PREVIEW_OPS_ACTION_ROW;
+}
+
+function previewOpsFilterRowClass(compact: boolean) {
+  return compact
+    ? 'mt-3 grid grid-cols-3 gap-1'
+    : 'mt-3 flex gap-1.5 overflow-x-auto pb-1';
+}
+
+function previewOpsFilterButtonClass(compact: boolean, active: boolean) {
+  return `inline-flex h-8 items-center justify-center gap-1.5 whitespace-nowrap rounded-sm border transition-colors ${
+    compact ? 'px-1 text-[10px]' : 'shrink-0 px-2.5 text-[11px]'
+  } ${
+    active
+      ? 'border-primary bg-primary-container/20 text-primary'
+      : 'border-outline-variant/15 bg-surface-container-lowest text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface'
+  }`;
+}
+
+function PreviewDiagnosticsPanel({ compact = false, embedded = false }: { compact?: boolean; embedded?: boolean }) {
+  const { toast } = useToast();
+  const [status, setStatus] = useState<PreviewDiagnosticFilter>('problem');
+  const [rebuilding, setRebuilding] = useState(false);
+  const [rebuildingAll, setRebuildingAll] = useState(false);
+  const { data, isLoading, mutate } = useSWR(
+    ['/models/preview-diagnostics', status, compact],
+    () => modelApi.previewDiagnostics({ status, page: 1, pageSize: compact ? 4 : 6 })
+  );
+  const summary = data?.summary;
+  const visibleItems = data?.items || [];
+
+  const getValue = (key: PreviewDiagnosticFilter) => {
+    if (!summary) return undefined;
+    if (key === 'all') return summary.total;
+    return summary[key];
+  };
+
+  const handleRebuild = async () => {
+    if (!data || data.total === 0 || status === 'ok') return;
+    const limit = compact ? 20 : 50;
+    const ok = window.confirm(`将把当前筛选的前 ${Math.min(limit, data.total)} 个模型加入预览重建队列，生成新的 GLB 与缩略图。是否继续？`);
+    if (!ok) return;
+    setRebuilding(true);
+    try {
+      const result = await modelApi.rebuildPreviewDiagnostics({ status, limit });
+      toast(`已加入队列 ${result.queued} 个${result.skipped ? `，跳过 ${result.skipped} 个` : ''}`, result.failed ? 'error' : 'success');
+      mutate();
+    } catch {
+      toast('加入重建队列失败', 'error');
+    } finally {
+      setRebuilding(false);
+    }
+  };
+
+  const handleRebuildAll = async () => {
+    const total = summary?.total || 0;
+    if (total <= 0) return;
+    const ok = window.confirm(`将把全部 ${total} 个模型加入预览重建队列，重新生成 GLB 与缩略图。任务会按后台队列慢慢执行，耗时可能较长。是否继续？`);
+    if (!ok) return;
+    setRebuildingAll(true);
+    try {
+      const result = await modelApi.rebuildPreviewDiagnostics({ all: true, status: 'all', limit: total });
+      toast(`已加入队列 ${result.queued} 个${result.skipped ? `，跳过 ${result.skipped} 个` : ''}`, result.failed ? 'error' : 'success');
+      mutate();
+    } catch {
+      toast('一键重建全部失败', 'error');
+    } finally {
+      setRebuildingAll(false);
+    }
+  };
+
+  return (
+    <section className={embedded ? 'flex h-full min-w-0 flex-col' : 'flex h-full min-w-0 flex-col rounded-lg border border-outline-variant/10 bg-surface-container-low p-4'}>
+      <div className={embedded ? 'flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between' : 'flex min-h-[72px] flex-col gap-3 lg:flex-row lg:items-start lg:justify-between'}>
+        <div className="min-w-0">
+          <div className="flex items-center gap-2">
+            <Icon name="data_usage" size={17} className="text-primary" />
+            <h3 className="text-sm font-semibold text-on-surface">预览诊断</h3>
+            {summary && <span className="text-[10px] text-on-surface-variant">{summary.total} 个模型</span>}
+          </div>
+          {!embedded && <p className="mt-1 text-xs text-on-surface-variant">扫描现有 GLB/glTF 诊断，快速定位缩略图异常、面片为空或包围盒异常的模型。</p>}
+        </div>
+        <div className={previewOpsActionRowClass(compact)}>
+          <button
+            onClick={() => mutate()}
+            disabled={isLoading}
+            className={`${previewOpsButtonClass(compact)} border border-outline-variant/20 text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface`}
+          >
+            <Icon name="refresh" size={14} className={isLoading ? 'animate-spin' : ''} />
+            {embedded ? '扫描' : '重新扫描'}
+          </button>
+          <button
+            onClick={handleRebuild}
+            disabled={isLoading || rebuilding || rebuildingAll || status === 'ok' || !data || data.total === 0}
+            className={`${previewOpsButtonClass(compact)} bg-primary-container text-on-primary hover:bg-primary`}
+          >
+            <Icon name="autorenew" size={14} className={rebuilding ? 'animate-spin' : ''} />
+            {rebuilding ? '加入中...' : embedded ? '重建当前' : compact ? '重建异常' : '加入重建队列'}
+          </button>
+          <button
+            onClick={handleRebuildAll}
+            disabled={isLoading || rebuilding || rebuildingAll || !summary?.total}
+            className={`${previewOpsButtonClass(compact)} border border-primary/25 bg-primary/10 text-primary hover:bg-primary-container hover:text-on-primary`}
+          >
+            <Icon name="sync" size={14} className={rebuildingAll ? 'animate-spin' : ''} />
+            {rebuildingAll ? '加入中...' : embedded ? '全部重建' : compact ? '一键全部' : '一键重建全部'}
+          </button>
+        </div>
+      </div>
+
+      {embedded ? (
+        <div className={previewOpsFilterRowClass(compact)}>
+          {DIAGNOSTIC_FILTERS.map((item) => {
+            const active = status === item.key;
+            return (
+              <button
+                key={item.key}
+                onClick={() => setStatus(item.key)}
+                className={previewOpsFilterButtonClass(compact, active)}
+              >
+                <span>{item.label}</span>
+                <span className="font-mono font-semibold">{formatCount(getValue(item.key))}</span>
+              </button>
+            );
+          })}
+        </div>
+      ) : (
+        <div className={`mt-4 grid gap-2 ${compact ? 'grid-cols-2' : 'grid-cols-2 lg:grid-cols-5'}`}>
+          {DIAGNOSTIC_FILTERS.map((item) => (
+            <button
+              key={item.key}
+              onClick={() => setStatus(item.key)}
+              className={`flex min-h-[68px] items-center justify-between rounded-sm border px-3 py-2 text-left transition-colors ${getDiagnosticTone(item.key, status === item.key)}`}
+            >
+              <span className="min-w-0">
+                <span className="block text-[11px] font-medium">{item.label}</span>
+                <span className="mt-1 block font-mono text-lg font-semibold">{formatCount(getValue(item.key))}</span>
+              </span>
+              <Icon name={item.icon} size={18} className="shrink-0 opacity-80" />
+            </button>
+          ))}
+        </div>
+      )}
+
+      <div className="mt-3 flex min-h-0 flex-1 flex-col border-t border-outline-variant/10 pt-3">
+        <div className="mb-2 flex items-center justify-between gap-3">
+          <span className="text-[11px] uppercase tracking-wider text-on-surface-variant font-medium">
+            {status === 'ok' ? '正常模型' : '异常模型'}
+          </span>
+          {data && <span className="text-[10px] text-on-surface-variant">显示 {visibleItems.length} / {data.total}</span>}
+        </div>
+        {isLoading ? (
+          <div className={`grid flex-1 gap-2 overflow-y-auto pr-1 ${compact ? 'min-h-[224px] max-h-[224px]' : 'min-h-[280px] max-h-[280px]'}`}>
+            {[0, 1, 2].slice(0, compact ? 2 : 3).map((item) => (
+              <div key={item} className="h-14 animate-pulse rounded-sm bg-surface-container-high" />
+            ))}
+          </div>
+        ) : visibleItems.length > 0 ? (
+          <div className={`grid flex-1 content-start gap-2 overflow-y-auto pr-1 ${compact ? 'min-h-[224px] max-h-[224px]' : 'min-h-[280px] max-h-[280px]'}`}>
+            {visibleItems.map((item) => (
+              <Link
+                key={item.model_id}
+                to={`/model/${item.model_id}`}
+                target="_blank"
+                className="flex items-center gap-3 rounded-sm border border-outline-variant/10 bg-surface-container-lowest px-3 py-2 hover:bg-surface-container-high"
+              >
+                <div className="h-10 w-10 shrink-0 overflow-hidden rounded-sm bg-surface-container-highest">
+                  <ModelThumbnail src={item.thumbnail_url} alt="" className="h-full w-full object-cover" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <p className="truncate text-xs font-medium text-on-surface">{item.name}</p>
+                    <DiagnosticStatusBadge item={item} />
+                  </div>
+                  <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-[10px] text-on-surface-variant">
+                    <span className="font-mono">{item.format?.toUpperCase() || '-'}</span>
+                    <span>面片 {formatCount(item.face_count)}</span>
+                    <span>顶点 {formatCount(item.vertex_count)}</span>
+                    <span>跳过 {formatCount(item.skipped_mesh_count)}</span>
+                    {!compact && <span>包围盒 {formatBoundsSize(item.bounds_size)}</span>}
+                  </div>
+                </div>
+                {!compact && (
+                  <span className="hidden max-w-[180px] shrink-0 text-right text-[10px] text-on-surface-variant xl:block">
+                    {item.preview_reason}
+                  </span>
+                )}
+                <Icon name="open_in_new" size={14} className="shrink-0 text-on-surface-variant" />
+              </Link>
+            ))}
+          </div>
+        ) : (
+          <div className={`flex flex-1 items-center justify-center rounded-sm border border-outline-variant/10 bg-surface-container-lowest px-3 py-4 text-center text-xs text-on-surface-variant ${compact ? 'min-h-[224px]' : 'min-h-[280px]'}`}>
+            {status === 'ok' ? '暂时没有正常诊断记录' : '当前没有需要处理的预览异常'}
+          </div>
+        )}
+      </div>
+    </section>
+  );
+}
+
+function ConversionQueuePanel({ compact = false, embedded = false }: { compact?: boolean; embedded?: boolean }) {
+  const { toast } = useToast();
+  const [queueAction, setQueueAction] = useState<string | null>(null);
+  const [detailJobId, setDetailJobId] = useState<string | null>(null);
+  const [selectedQueueState, setSelectedQueueState] = useState<ConversionQueueState | 'all'>('all');
+  const queueListLimit = selectedQueueState === 'all' ? (compact ? 4 : 6) : (compact ? 8 : 12);
+  const { data, isLoading, mutate } = useSWR(
+    ['/tasks/conversion-queue', compact, selectedQueueState, queueListLimit],
+    () => modelApi.conversionQueue({ limit: queueListLimit, state: selectedQueueState }),
+    { refreshInterval: 2000 }
+  );
+  const { data: detail, isLoading: detailLoading } = useSWR(
+    detailJobId ? ['/tasks/conversion-queue/detail', detailJobId] : null,
+    () => modelApi.conversionQueueJob(detailJobId!)
+  );
+  const items = data?.items || [];
+  const visibleQueueItems = items.slice(0, queueListLimit);
+  const queueCounts = data?.queue_counts || data?.counts;
+  const queueDisplayTotal = selectedQueueState === 'all' ? items.length : data?.total ?? items.length;
+  const activeCount = data?.counts.active || 0;
+  const running = (data?.counts.active || 0) + (data?.counts.waiting || 0) + (data?.counts.delayed || 0);
+  const failedCount = data?.counts.failed || 0;
+  const completedQueueCount = queueCounts?.completed || 0;
+  const selectedQueueLabel = selectedQueueState === 'all'
+    ? '最近任务'
+    : `${QUEUE_STATUS_CARDS.find((item) => item.key === selectedQueueState)?.label || getQueueStateLabel(selectedQueueState)}任务`;
+  const [queueNow, setQueueNow] = useState(() => Date.now());
+  const queueGeneratedAt = data?.generated_at ? Date.parse(data.generated_at) : queueNow;
+
+  useEffect(() => {
+    if (activeCount <= 0) return;
+    const timer = window.setInterval(() => setQueueNow(Date.now()), 1000);
+    return () => window.clearInterval(timer);
+  }, [activeCount]);
+
+  const getLiveActiveMs = (job: ConversionQueueJob) => {
+    if (job.state !== 'active') return job.active_ms || 0;
+    const fetchedMs = job.active_ms || 0;
+    const localElapsed = Number.isFinite(queueGeneratedAt) ? Math.max(0, queueNow - queueGeneratedAt) : 0;
+    return fetchedMs + localElapsed;
+  };
+
+  const getVisualProgress = (job: ConversionQueueJob) => {
+    if (job.state === 'active') {
+      const activeMs = getLiveActiveMs(job);
+      const estimated = 20 + 74 * (1 - Math.exp(-activeMs / 180000));
+      return Math.min(job.is_stale ? 98 : 94, Math.max(job.progress, estimated, 8));
+    }
+    if (job.state === 'waiting' || job.state === 'delayed') return 4;
+    return Math.max(job.progress, 0);
+  };
+
+  const handleRetryFailed = async () => {
+    if (failedCount <= 0) return;
+    const ok = window.confirm(`将重试最多 ${Math.min(failedCount, 25)} 个失败的转换任务，并把关联模型重新标记为排队中。是否继续？`);
+    if (!ok) return;
+    setQueueAction('retry');
+    try {
+      const result = await modelApi.retryFailedConversionJobs({ limit: 25 });
+      toast(`已重试 ${result.retried || 0} 个失败任务${result.skipped ? `，跳过 ${result.skipped} 个` : ''}`, result.failed ? 'error' : 'success');
+      mutate();
+    } catch {
+      toast('重试失败任务失败', 'error');
+    } finally {
+      setQueueAction(null);
+    }
+  };
+
+  const handleCancelPreviewRebuilds = async () => {
+    if (running <= 0) return;
+    const ok = window.confirm('将停止预览重建：取消等待中/延迟中的重建任务。正在处理的当前模型不会强制中断，会完成后停止继续执行后续重建。是否继续？');
+    if (!ok) return;
+    setQueueAction('cancel-rebuilds');
+    try {
+      const result = await modelApi.cancelPreviewRebuildJobs({ limit: 10000 });
+      const activeText = result.active ? `，${result.active} 个正在处理会自然完成` : '';
+      toast(`已取消 ${result.cancelled || 0} 个重建任务${activeText}`, result.failed ? 'error' : 'success');
+      mutate();
+    } catch {
+      toast('取消预览重建任务失败', 'error');
+    } finally {
+      setQueueAction(null);
+    }
+  };
+
+  const handleCleanQueue = async (type: 'completed' | 'failed') => {
+    const count = type === 'completed' ? completedQueueCount : failedCount;
+    if (count <= 0) return;
+    const label = type === 'completed' ? '已完成' : '失败';
+    const ok = window.confirm(`将清理最多 100 条${label}转换任务记录。只删除队列记录，不会删除模型文件。是否继续？`);
+    if (!ok) return;
+    setQueueAction(`clean-${type}`);
+    try {
+      const result = await modelApi.cleanConversionQueue({ type, limit: 100, graceMs: 0 });
+      toast(`已清理 ${result.cleaned || 0} 条${label}任务记录`, 'success');
+      mutate();
+    } catch {
+      toast('清理转换队列失败', 'error');
+    } finally {
+      setQueueAction(null);
+    }
+  };
+
+  const renderJob = (job: ConversionQueueJob) => {
+    const content = (
+      <>
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-2">
+            <p className="min-w-0 flex-1 truncate text-xs font-medium text-on-surface">{job.model_name || job.original_name || job.id}</p>
+            <QueueStateBadge state={job.state} />
+            {job.is_stale && (
+              <span className="inline-flex shrink-0 items-center whitespace-nowrap rounded-sm border border-error/20 bg-error/10 px-1.5 py-0.5 text-[10px] font-medium text-error">
+                可能卡住
+              </span>
+            )}
+          </div>
+          <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-[10px] text-on-surface-variant">
+            <span className="font-mono">#{job.id}</span>
+            {job.ext && <span>{job.ext.toUpperCase()}</span>}
+            {job.rebuild_reason && <span>重建 {job.rebuild_reason}</span>}
+            <span>{formatQueueTime(job.processed_on || job.timestamp)}</span>
+            {job.state === 'active' && <span>已处理 {formatQueueDuration(getLiveActiveMs(job))}</span>}
+            {job.state === 'active' && <span>估算 {Math.round(getVisualProgress(job))}%</span>}
+          </div>
+          {(job.state === 'active' || job.state === 'waiting' || job.state === 'delayed') && (
+            <div className="mt-2 h-1.5 overflow-hidden rounded-sm bg-surface-container-highest">
+              <div
+                className={`h-full rounded-sm transition-all duration-700 ${job.state === 'active' ? 'animate-pulse bg-primary' : 'bg-primary-container'}`}
+                style={{ width: `${getVisualProgress(job)}%` }}
+              />
+            </div>
+          )}
+          {job.failed_reason && (
+            <p className="mt-1 line-clamp-1 text-[10px] text-error">{formatQueueFailureReason(job.failed_reason)}</p>
+          )}
+        </div>
+        <div className="flex shrink-0 items-center gap-1.5">
+          <button
+            onClick={() => setDetailJobId(job.id)}
+            className="inline-flex items-center justify-center rounded-sm border border-outline-variant/20 px-2 py-1 text-[10px] text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface"
+          >
+            详情
+          </button>
+          {job.model_id && (
+            <Link
+              to={`/model/${job.model_id}`}
+              target="_blank"
+              className="inline-flex items-center justify-center rounded-sm border border-outline-variant/20 p-1 text-on-surface-variant hover:bg-surface-container-high hover:text-primary"
+              title="打开模型"
+            >
+              <Icon name="open_in_new" size={14} />
+            </Link>
+          )}
+        </div>
+      </>
+    );
+
+    return (
+      <div key={job.id} className="flex items-start gap-3 rounded-sm border border-outline-variant/10 bg-surface-container-lowest px-3 py-2 hover:bg-surface-container-high">
+        {content}
+      </div>
+    );
+  };
+
+  return (
+    <>
+    <section className={embedded ? 'flex h-full min-w-0 flex-col' : 'flex h-full min-w-0 flex-col rounded-lg border border-outline-variant/10 bg-surface-container-low p-4'}>
+      <div className={embedded ? 'flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between' : 'flex min-h-[72px] flex-col gap-3 lg:flex-row lg:items-start lg:justify-between'}>
+        <div className="min-w-0 shrink-0">
+          <div className="flex min-w-0 flex-wrap items-center gap-2">
+            <Icon name="hourglass_top" size={17} className="text-primary" />
+            <h3 className="shrink-0 text-sm font-semibold text-on-surface">转换队列</h3>
+            <span className={`inline-flex max-w-full shrink-0 whitespace-nowrap rounded-sm px-1.5 py-0.5 text-[10px] leading-none ${running > 0 ? 'bg-primary/10 text-primary' : 'bg-surface-container-high text-on-surface-variant'}`}>
+              {running > 0 ? `${formatCount(running)} 个待完成` : '空闲'}
+            </span>
+          </div>
+          {!embedded && <p className="mt-1 text-xs text-on-surface-variant">实时查看上传、重建和缩略图生成任务状态。</p>}
+        </div>
+        <div className={previewOpsActionRowClass(compact)}>
+          <button
+            onClick={() => mutate()}
+            disabled={isLoading}
+            className={`${previewOpsButtonClass(compact)} border border-outline-variant/20 text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface`}
+            title="刷新队列"
+          >
+            <Icon name="refresh" size={15} className={isLoading ? 'animate-spin' : ''} />
+            <span>刷新</span>
+          </button>
+          <button
+            onClick={handleRetryFailed}
+            disabled={isLoading || !!queueAction || failedCount <= 0}
+            className={`${previewOpsButtonClass(compact)} border border-outline-variant/20 text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface`}
+            title="重试失败任务"
+          >
+            <Icon name="replay" size={14} className={queueAction === 'retry' ? 'animate-spin' : ''} />
+            <span>重试</span>
+          </button>
+          <button
+            onClick={handleCancelPreviewRebuilds}
+            disabled={isLoading || !!queueAction || running <= 0}
+            className={`${previewOpsButtonClass(compact)} border border-error/20 text-error hover:bg-error/10`}
+            title="取消等待中的预览重建任务"
+          >
+            <Icon name="close" size={14} className={queueAction === 'cancel-rebuilds' ? 'animate-spin' : ''} />
+            <span>停止重建</span>
+          </button>
+          <button
+            onClick={() => handleCleanQueue('completed')}
+            disabled={isLoading || !!queueAction || completedQueueCount <= 0}
+            className={`${previewOpsButtonClass(compact)} border border-outline-variant/20 text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface`}
+            title={`清理 BullMQ 保留的完成记录：${formatCount(completedQueueCount)} 条`}
+          >
+            <Icon name="cleaning_services" size={14} className={queueAction === 'clean-completed' ? 'animate-spin' : ''} />
+            清理完成
+          </button>
+          <button
+            onClick={() => handleCleanQueue('failed')}
+            disabled={isLoading || !!queueAction || failedCount <= 0}
+            className={`${previewOpsButtonClass(compact)} border border-outline-variant/20 text-on-surface-variant hover:bg-error/10 hover:text-error`}
+          >
+            <Icon name="delete_sweep" size={14} className={queueAction === 'clean-failed' ? 'animate-spin' : ''} />
+            清理失败
+          </button>
+        </div>
+      </div>
+
+      {embedded ? (
+        <div className={previewOpsFilterRowClass(compact)}>
+          {QUEUE_STATUS_CARDS.map((item) => {
+            const active = selectedQueueState === item.key;
+            return (
+              <button
+                key={item.key}
+                type="button"
+                onClick={() => setSelectedQueueState((current) => current === item.key ? 'all' : item.key)}
+                className={previewOpsFilterButtonClass(compact, active)}
+                title={item.key === 'completed' ? '完成数按模型库实际完成数量统计，点击查看队列保留的完成记录' : `点击筛选${item.label}任务`}
+              >
+                <span>{item.label}</span>
+                <span className="font-mono font-semibold">{formatCount(data?.counts[item.key])}</span>
+              </button>
+            );
+          })}
+        </div>
+      ) : (
+        <div className={`mt-4 grid gap-2 ${compact ? 'grid-cols-2' : 'grid-cols-3 xl:grid-cols-5'}`}>
+          {QUEUE_STATUS_CARDS.map((item) => {
+            const active = selectedQueueState === item.key;
+            return (
+            <button
+              key={item.key}
+              type="button"
+              onClick={() => setSelectedQueueState((current) => current === item.key ? 'all' : item.key)}
+              className={`min-h-[68px] rounded-sm border px-3 py-2 text-left transition ${active ? 'border-primary bg-primary-container/20 text-primary ring-1 ring-primary/30' : getQueueStateTone(item.key)} hover:-translate-y-0.5 hover:shadow-sm`}
+              title={item.key === 'completed' ? '完成数按模型库实际完成数量统计，点击查看队列保留的完成记录' : `点击筛选${item.label}任务`}
+            >
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-[11px] font-medium">{item.label}</span>
+                <Icon name={item.icon} size={16} className="shrink-0 opacity-80" />
+              </div>
+              <span className="mt-1 block font-mono text-lg font-semibold">{formatCount(data?.counts[item.key])}</span>
+              <span className="mt-0.5 block text-[10px] opacity-75">
+                {item.key === 'completed' ? `保留 ${formatCount(queueCounts?.completed)}` : active ? '正在筛选' : '点击筛选'}
+              </span>
+            </button>
+            );
+          })}
+        </div>
+      )}
+
+      <div className="mt-3 flex min-h-0 flex-1 flex-col border-t border-outline-variant/10 pt-3">
+        <div className="mb-2 flex items-center justify-between gap-3">
+          <span className="text-[11px] font-medium text-on-surface-variant">{selectedQueueLabel}</span>
+          <div className="flex items-center gap-2 text-[10px] text-on-surface-variant">
+            <span>显示 {visibleQueueItems.length} / {queueDisplayTotal} 条</span>
+            {data?.generated_at && <span>{new Date(data.generated_at).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })}</span>}
+          </div>
+        </div>
+        {isLoading ? (
+          <div className={`grid flex-1 gap-2 overflow-y-auto pr-1 ${compact ? 'min-h-[224px] max-h-[224px]' : 'min-h-[280px] max-h-[280px]'}`}>
+            {[0, 1, 2].slice(0, compact ? 2 : 3).map((item) => (
+              <div key={item} className="h-14 animate-pulse rounded-sm bg-surface-container-high" />
+            ))}
+          </div>
+        ) : visibleQueueItems.length > 0 ? (
+          <div className={`grid flex-1 content-start gap-2 overflow-y-auto pr-1 ${compact ? 'min-h-[224px] max-h-[224px]' : 'min-h-[280px] max-h-[280px]'}`}>
+            {visibleQueueItems.map(renderJob)}
+          </div>
+        ) : (
+          <div className={`flex flex-1 items-center justify-center rounded-sm border border-outline-variant/10 bg-surface-container-lowest px-3 py-4 text-center text-xs text-on-surface-variant ${compact ? 'min-h-[224px]' : 'min-h-[280px]'}`}>
+            暂无转换任务
+          </div>
+        )}
+      </div>
+    </section>
+    {detailJobId && (
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-surface-dim/70 px-4 py-6 backdrop-blur-sm" onClick={() => setDetailJobId(null)}>
+        <div className="max-h-[88vh] w-full max-w-3xl overflow-hidden rounded-lg border border-outline-variant/20 bg-surface-container-low shadow-xl" onClick={(event) => event.stopPropagation()}>
+          <div className="flex items-center justify-between gap-3 border-b border-outline-variant/10 px-5 py-4">
+            <div className="min-w-0">
+              <h3 className="text-base font-semibold text-on-surface">转换任务详情</h3>
+              <p className="mt-1 truncate text-xs text-on-surface-variant">{detailJobId}</p>
+            </div>
+            <button onClick={() => setDetailJobId(null)} className="rounded-sm border border-outline-variant/20 p-1.5 text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface">
+              <Icon name="close" size={16} />
+            </button>
+          </div>
+          <div className="max-h-[calc(88vh-72px)] overflow-y-auto p-5">
+            {detailLoading ? (
+              <div className="space-y-3">
+                <div className="h-16 animate-pulse rounded-sm bg-surface-container-high" />
+                <div className="h-36 animate-pulse rounded-sm bg-surface-container-high" />
+              </div>
+            ) : detail ? (
+              <div className="space-y-4">
+                <div className="grid gap-2 text-xs sm:grid-cols-2">
+                  <div className="rounded-sm bg-surface-container-lowest p-3">
+                    <span className="block text-[10px] text-on-surface-variant">状态</span>
+                    <span className="mt-1 inline-flex"><QueueStateBadge state={detail.state} /></span>
+                  </div>
+                  <div className="rounded-sm bg-surface-container-lowest p-3">
+                    <span className="block text-[10px] text-on-surface-variant">进度 / 尝试次数</span>
+                    <span className="mt-1 block font-mono text-on-surface">{detail.progress}% / {detail.attempts_made}</span>
+                    {detail.state === 'active' && (
+                      <span className={detail.is_stale ? 'mt-1 block text-[10px] text-error' : 'mt-1 block text-[10px] text-on-surface-variant'}>
+                        已处理 {formatQueueDuration(detail.active_ms)}{detail.is_stale ? '，可能卡住' : ''}
+                      </span>
+                    )}
+                  </div>
+                  <div className="rounded-sm bg-surface-container-lowest p-3">
+                    <span className="block text-[10px] text-on-surface-variant">模型</span>
+                    <span className="mt-1 block truncate text-on-surface">{detail.model?.name || detail.data?.original_name || detail.model_id || '-'}</span>
+                  </div>
+                  <div className="rounded-sm bg-surface-container-lowest p-3">
+                    <span className="block text-[10px] text-on-surface-variant">格式 / 重建原因</span>
+                    <span className="mt-1 block font-mono text-on-surface">{detail.data?.ext?.toUpperCase() || '-'} / {detail.data?.rebuild_reason || '-'}</span>
+                  </div>
+                  <div className="rounded-sm bg-surface-container-lowest p-3 sm:col-span-2">
+                    <span className="block text-[10px] text-on-surface-variant">源文件</span>
+                    <span className="mt-1 block break-all font-mono text-on-surface">{detail.data?.source_path || detail.data?.source_name || '-'}</span>
+                    <span className={`mt-1 inline-block rounded-sm px-1.5 py-0.5 text-[10px] ${detail.data?.source_exists === false ? 'bg-error/10 text-error' : 'bg-primary/10 text-primary'}`}>
+                      {detail.data?.source_exists === null || detail.data?.source_exists === undefined ? '未知' : detail.data.source_exists ? '文件存在' : '文件不存在'}
+                    </span>
+                  </div>
+                </div>
+
+                {detail.failed_reason && (
+                  <div className="rounded-sm border border-error/20 bg-error/10 p-3">
+                    <div className="mb-1 text-[11px] font-medium text-error">失败原因</div>
+                    <p className="break-words text-xs text-error">{formatQueueFailureReason(detail.failed_reason)}</p>
+                  </div>
+                )}
+
+                <div className="rounded-sm border border-outline-variant/10 bg-surface-container-lowest p-3">
+                  <div className="mb-2 flex items-center justify-between">
+                    <span className="text-[11px] font-medium text-on-surface-variant">任务日志</span>
+                    <span className="font-mono text-[10px] text-on-surface-variant">{(detail.logs || []).length} / {detail.log_count || 0}</span>
+                  </div>
+                  {(detail.logs || []).length > 0 ? (
+                    <pre className="max-h-56 overflow-auto whitespace-pre-wrap break-words rounded-sm bg-surface-container-high p-3 text-[11px] leading-relaxed text-on-surface">{(detail.logs || []).join('\n')}</pre>
+                  ) : (
+                    <div className="rounded-sm bg-surface-container-high px-3 py-4 text-center text-xs text-on-surface-variant">暂无日志</div>
+                  )}
+                </div>
+
+                {(detail.stacktrace || []).length > 0 && (
+                  <div className="rounded-sm border border-outline-variant/10 bg-surface-container-lowest p-3">
+                    <div className="mb-2 text-[11px] font-medium text-on-surface-variant">错误栈</div>
+                    <pre className="max-h-56 overflow-auto whitespace-pre-wrap break-words rounded-sm bg-surface-container-high p-3 text-[11px] leading-relaxed text-error">{(detail.stacktrace || []).join('\n')}</pre>
+                  </div>
+                )}
+
+                <div className="flex justify-end gap-2">
+                  {detail.model_id && (
+                    <Link to={`/model/${detail.model_id}`} target="_blank" className="inline-flex items-center gap-1.5 rounded-sm border border-outline-variant/20 px-3 py-1.5 text-xs text-on-surface-variant hover:bg-surface-container-high hover:text-primary">
+                      <Icon name="open_in_new" size={14} />
+                      打开模型
+                    </Link>
+                  )}
+                  <button onClick={() => setDetailJobId(null)} className="rounded-sm bg-primary-container px-3 py-1.5 text-xs font-medium text-on-primary hover:bg-primary">关闭</button>
+                </div>
+              </div>
+            ) : (
+              <div className="rounded-sm bg-surface-container-high px-3 py-8 text-center text-xs text-on-surface-variant">任务详情加载失败</div>
+            )}
+          </div>
+        </div>
+      </div>
+    )}
+    </>
+  );
+}
+
+function PreviewOpsMetricCard({
+  label,
+  value,
+  tone = 'neutral',
+  loading = false,
+}: {
+  label: string;
+  value?: number | null;
+  tone?: 'neutral' | 'primary' | 'warning' | 'error';
+  loading?: boolean;
+}) {
+  const toneClass = {
+    neutral: 'text-on-surface',
+    primary: 'text-primary',
+    warning: 'text-amber-600',
+    error: 'text-error',
+  }[tone];
+
+  return (
+    <div className="flex min-h-[42px] items-center justify-between gap-3 rounded-sm border border-outline-variant/10 bg-surface-container-lowest px-2.5 py-1.5">
+      <span className="truncate text-[10px] text-on-surface-variant">{label}</span>
+      <span className={`shrink-0 font-mono text-base font-semibold ${toneClass}`}>
+        {loading ? '-' : formatCount(value)}
+      </span>
+    </div>
+  );
+}
+
+function ConversionConcurrencyControl({ compact = false }: { compact?: boolean }) {
+  const { toast } = useToast();
+  const [saving, setSaving] = useState(false);
+  const [localValue, setLocalValue] = useState(1);
+  const { data: settings, mutate: mutateSettings } = useSWR(
+    '/settings/conversion-worker-concurrency',
+    getSettings,
+    { revalidateOnFocus: false }
+  );
+  const savedValue = Math.min(8, Math.max(1, Number(settings?.conversion_worker_concurrency) || 1));
+  const changed = localValue !== savedValue;
+
+  useEffect(() => {
+    setLocalValue(savedValue);
+  }, [savedValue]);
+
+  const saveConcurrency = async () => {
+    const nextValue = Math.min(8, Math.max(1, Math.floor(localValue || 1)));
+    setSaving(true);
+    try {
+      const nextSettings = await updateSettings({ conversion_worker_concurrency: nextValue });
+      await mutateSettings(nextSettings, false);
+      setLocalValue(nextValue);
+      toast(`转换并发数已设为 ${nextValue}，Worker 会在约 15 秒内生效`, 'success');
+    } catch {
+      toast('保存转换并发数失败', 'error');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className={`mt-3 rounded-sm border border-outline-variant/10 bg-surface-container-lowest ${compact ? 'p-2' : 'px-3 py-2.5'}`}>
+      <div className={`flex gap-2 ${compact ? 'flex-col' : 'flex-col md:flex-row md:items-center md:justify-between'}`}>
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-2">
+            <Icon name="tune" size={15} className="text-primary" />
+            <span className="text-xs font-medium text-on-surface">转换并发数</span>
+            <span className="rounded-sm bg-surface-container-high px-1.5 py-0.5 text-[10px] text-on-surface-variant">当前 {savedValue}</span>
+            {!compact && <span className="text-[10px] text-on-surface-variant">建议先设为 2，大模型较多时不要过高。</span>}
+          </div>
+        </div>
+        <div className={`flex items-center gap-2 ${compact ? 'w-full' : 'shrink-0'}`}>
+          <input
+            type="range"
+            min={1}
+            max={8}
+            step={1}
+            value={localValue}
+            onChange={(event) => setLocalValue(Number(event.target.value))}
+            className={`${compact ? 'min-w-0 flex-1' : 'w-36'} accent-[var(--color-primary)]`}
+            aria-label="转换并发数"
+          />
+          <input
+            type="number"
+            min={1}
+            max={8}
+            value={localValue}
+            onChange={(event) => setLocalValue(Math.min(8, Math.max(1, Number(event.target.value) || 1)))}
+            className="h-8 w-14 rounded-sm border border-outline-variant/20 bg-surface-container-low px-2 text-center text-xs text-on-surface outline-none focus:border-primary"
+          />
+          <button
+            type="button"
+            onClick={saveConcurrency}
+            disabled={saving || !changed}
+            className="inline-flex h-8 shrink-0 items-center justify-center gap-1 rounded-sm bg-primary-container px-2.5 text-[11px] font-medium text-on-primary transition-colors hover:bg-primary disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            <Icon name="save" size={13} className={saving ? 'animate-pulse' : ''} />
+            保存
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function PreviewOperationsPanel({ compact = false }: { compact?: boolean }) {
+  const [compactPanel, setCompactPanel] = useState<'diagnostics' | 'queue'>('diagnostics');
+  const { data: opsData, isLoading: opsLoading } = useSWR(
+    ['/models/preview-operations-dashboard', compact],
+    async () => {
+      const [diagnostics, queue] = await Promise.all([
+        modelApi.previewDiagnostics({ status: 'problem', page: 1, pageSize: 1 }),
+        modelApi.conversionQueue({ limit: 1, state: 'all' }),
+      ]);
+      return { diagnostics, queue };
+    },
+    { refreshInterval: 5000 }
+  );
+  const diagnosticsSummary = opsData?.diagnostics.summary;
+  const queueCounts = opsData?.queue.queue_counts || opsData?.queue.counts;
+  const pendingQueueCount = (queueCounts?.waiting || 0) + (queueCounts?.active || 0) + (queueCounts?.delayed || 0);
+  const failedQueueCount = queueCounts?.failed || 0;
+
+  return (
+    <section className={`rounded-lg border border-outline-variant/10 bg-surface-container-low ${compact ? 'p-3' : 'p-4'}`}>
+      <div className="flex items-center justify-between gap-3 border-b border-outline-variant/10 pb-3 pr-10">
+        <div className="min-w-0">
+          <div className="flex items-center gap-2">
+            <span className="inline-flex h-7 w-7 items-center justify-center rounded-sm bg-primary-container/10 text-primary">
+              <Icon name="view_in_ar" size={16} />
+            </span>
+            <div className="min-w-0">
+              <h3 className="text-sm font-semibold text-on-surface">预览运维工作台</h3>
+              <p className="mt-0.5 text-[11px] text-on-surface-variant">诊断、重建、队列状态</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div className={`grid gap-2 pt-3 ${compact ? 'grid-cols-2' : 'grid-cols-2 lg:grid-cols-4'}`}>
+        <PreviewOpsMetricCard
+          label="全部模型"
+          value={diagnosticsSummary?.total}
+          loading={opsLoading}
+        />
+        <PreviewOpsMetricCard
+          label="待处理"
+          value={diagnosticsSummary?.problem}
+          tone={(diagnosticsSummary?.problem || 0) > 0 ? 'warning' : 'primary'}
+          loading={opsLoading}
+        />
+        <PreviewOpsMetricCard
+          label="队列"
+          value={pendingQueueCount}
+          tone={pendingQueueCount > 0 ? 'primary' : 'neutral'}
+          loading={opsLoading}
+        />
+        <PreviewOpsMetricCard
+          label="失败"
+          value={failedQueueCount}
+          tone={failedQueueCount > 0 ? 'error' : 'neutral'}
+          loading={opsLoading}
+        />
+      </div>
+
+      <ConversionConcurrencyControl compact={compact} />
+
+      {compact ? (
+        <>
+          <div className="mt-3 grid grid-cols-2 gap-1 rounded-sm bg-surface-container-high p-1">
+            <button
+              type="button"
+              onClick={() => setCompactPanel('diagnostics')}
+              className={`flex h-9 items-center justify-center gap-1.5 rounded-sm text-xs font-medium transition-colors ${
+                compactPanel === 'diagnostics'
+                  ? 'bg-surface-container-lowest text-on-surface shadow-sm'
+                  : 'text-on-surface-variant hover:text-on-surface'
+              }`}
+            >
+              <Icon name="data_usage" size={14} />
+              预览诊断
+            </button>
+            <button
+              type="button"
+              onClick={() => setCompactPanel('queue')}
+              className={`flex h-9 items-center justify-center gap-1.5 rounded-sm text-xs font-medium transition-colors ${
+                compactPanel === 'queue'
+                  ? 'bg-surface-container-lowest text-on-surface shadow-sm'
+                  : 'text-on-surface-variant hover:text-on-surface'
+              }`}
+            >
+              <Icon name="hourglass_top" size={14} />
+              转换队列
+            </button>
+          </div>
+          <div className="mt-3 min-w-0">
+            {compactPanel === 'diagnostics' ? (
+              <PreviewDiagnosticsPanel compact embedded />
+            ) : (
+              <ConversionQueuePanel compact embedded />
+            )}
+          </div>
+        </>
+      ) : (
+        <div className="mt-4 grid items-stretch gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
+          <div className="h-full min-w-0">
+            <PreviewDiagnosticsPanel embedded />
+          </div>
+          <div className="h-full min-w-0 lg:border-l lg:border-outline-variant/10 lg:pl-5">
+            <ConversionQueuePanel embedded />
+          </div>
+        </div>
+      )}
+    </section>
+  );
+}
+
+function PreviewOperationsModal({ open, onClose, compact = false }: { open: boolean; onClose: () => void; compact?: boolean }) {
+  return (
+    <AnimatePresence>
+      {open && (
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          className="fixed inset-0 z-[90] flex items-end justify-center bg-surface-dim/70 px-3 py-4 backdrop-blur-sm sm:items-center sm:px-5"
+          onClick={onClose}
+        >
+          <motion.div
+            initial={{ opacity: 0, y: 24, scale: 0.98 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 16, scale: 0.98 }}
+            transition={{ duration: 0.18 }}
+            className={`relative w-full max-w-[100rem] overflow-y-auto rounded-lg border border-outline-variant/20 bg-surface-container-low shadow-xl ${
+              compact ? 'h-[calc(100dvh-24px)] max-h-[calc(100dvh-24px)]' : 'max-h-[92dvh]'
+            }`}
+            onClick={(event) => event.stopPropagation()}
+          >
+            <button
+              onClick={onClose}
+              className="absolute right-3 top-3 z-10 inline-flex h-8 w-8 items-center justify-center rounded-sm border border-outline-variant/20 bg-surface-container-lowest text-on-surface-variant shadow-sm hover:bg-surface-container-high hover:text-on-surface"
+              aria-label="关闭预览运维工作台"
+            >
+              <Icon name="close" size={16} />
+            </button>
+            <div className={compact ? 'p-2' : 'p-3'}>
+              <PreviewOperationsPanel compact={compact} />
+            </div>
+          </motion.div>
+        </motion.div>
+      )}
+    </AnimatePresence>
+  );
 }
 
 function EditDialog({ open, model, categories, onClose, onSaved }: {
@@ -145,18 +1129,20 @@ function EditDialog({ open, model, categories, onClose, onSaved }: {
               <div className="border-t border-outline-variant/20 pt-4 mt-1">
                 <label className="text-xs uppercase tracking-wider text-on-surface-variant">替换模型文件</label>
                 <p className="text-[10px] text-on-surface-variant/60 mt-1 mb-2">替换后将重新转换，预计耗时 30 秒</p>
-                <input type="file" accept=".step,.stp,.iges,.igs,.xt,.x_t" className="hidden" id="replace-file-upload" onChange={async (e) => {
+                <input type="file" accept={MODEL_SOURCE_ACCEPT} className="hidden" id="replace-file-upload" onChange={async (e) => {
                   const f = e.target.files?.[0];
                   if (!f) return;
                   const ext = f.name.split('.').pop()?.toLowerCase() || '';
-                  if (!['step','stp','iges','igs','xt','x_t'].includes(ext)) { toast('仅支持 STEP/IGES/XT 格式', 'error'); return; }
+                  if (!MODEL_SOURCE_FORMATS.includes(ext)) { toast(`仅支持 ${MODEL_SOURCE_LABEL} 格式`, 'error'); return; }
                   setFileReplacing(true);
+                  let ok = false;
                   try {
-                    await modelApi.replaceFile(model.model_id, f);
-                    toast('文件已上传，正在转换中...', 'success');
+                    const result = await modelApi.replaceFile(model.model_id, f);
+                    toast(result.status === 'completed' ? '文件已更新' : '文件已上传，正在转换中...', 'success');
+                    ok = true;
                   } catch { toast('替换文件失败', 'error'); }
                   finally { setFileReplacing(false); }
-                  onSaved(); onClose();
+                  if (ok) { onSaved(); onClose(); }
                   e.target.value = '';
                 }} />
                 <button onClick={() => document.getElementById('replace-file-upload')?.click()} disabled={fileReplacing} className="flex items-center gap-1.5 px-3 py-1.5 text-xs text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high rounded-sm transition-colors border border-outline-variant/20 disabled:opacity-50 w-full justify-center">
@@ -180,30 +1166,65 @@ function DesktopContent() {
   const { data: settings } = useSWR("publicSettings", () => getCachedPublicSettings());
   const { uploadPolicy } = getBusinessConfig(settings);
   const [search, setSearch] = useState('');
-  const [page, setPage] = useState(1);
   const [editModel, setEditModel] = useState<ServerModelListItem | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<ServerModelListItem | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [uploading, setUploading] = useState(false);
-  const [activeTab, setActiveTab] = useState<'models' | 'suggestions'>('models');
+  const [queueingModelId, setQueueingModelId] = useState<string | null>(null);
+  const [previewOpsOpen, setPreviewOpsOpen] = useState(false);
+  const [activeTab, setActiveTab] = useState<'models' | 'suggestions' | 'groups'>('models');
 
-  const { data, isLoading, mutate } = useSWR(['/admin/models', search, page], () => modelApi.list({ search: search || undefined, page, pageSize: 20, grouped: false }));
+  const { data, isLoading, mutate } = useSWR(['/admin/models', search], () => modelApi.list({ search: search || undefined, page: 1, pageSize: MODEL_ADMIN_LIST_LIMIT, grouped: false }));
   const { data: catData } = useSWR('/categories', () => categoriesApi.tree());
   const categories = catData?.items || [];
 
   // Merge suggestions
-  const [sugPage, setSugPage] = useState(1);
   const [selectedNames, setSelectedNames] = useState<Set<string>>(new Set());
   const [merging, setMerging] = useState(false);
+  const [editingGroupId, setEditingGroupId] = useState<string | null>(null);
+  const [groupNameDraft, setGroupNameDraft] = useState('');
+  const [groupAction, setGroupAction] = useState<string | null>(null);
   const { data: sugData, isLoading: sugLoading, mutate: sugMutate } = useSWR(
-    activeTab === 'suggestions' ? ['/model-groups/suggestions', sugPage] : null,
-    () => modelApi.getMergeSuggestions({ page: sugPage, pageSize: 15 })
+    activeTab === 'suggestions' ? ['/model-groups/suggestions'] : null,
+    () => modelApi.getMergeSuggestions({ page: 1, pageSize: MERGE_SUGGESTION_LIST_LIMIT })
   );
+  const { data: groupData, isLoading: groupsLoading, mutate: groupMutate } = useSWR(
+    activeTab === 'groups' ? ['/model-groups'] : null,
+    () => modelApi.listModelGroups()
+  );
+  const suggestionGroups = sugData?.data || [];
+  const suggestionNames = suggestionGroups.map((group) => group.name);
+  const selectedSuggestionCount = suggestionNames.filter((name) => selectedNames.has(name)).length;
+  const allSuggestionsSelected = suggestionNames.length > 0 && selectedSuggestionCount === suggestionNames.length;
+
+  useEffect(() => {
+    setSelectedNames(new Set());
+  }, [activeTab]);
 
   const handleDelete = async () => {
     if (!deleteTarget) return;
     setDeleting(true);
     try { await modelApi.delete(deleteTarget.model_id); toast('已删除', 'success'); mutate(); setDeleteTarget(null); } catch { toast('删除失败', 'error'); } finally { setDeleting(false); }
+  };
+
+  const handleQueueModelRebuild = async (model: ServerModelListItem) => {
+    const ok = window.confirm(`将把「${model.name}」加入预览重建队列，重新生成 GLB 和缩略图。是否继续？`);
+    if (!ok) return;
+    setQueueingModelId(model.model_id);
+    try {
+      const result = await modelApi.rebuildPreviewDiagnostics({ status: 'all', modelIds: [model.model_id], limit: 1 });
+      const first = result.items?.[0];
+      if (result.queued > 0) {
+        toast('已加入预览重建队列', 'success');
+        mutate();
+      } else {
+        toast(first?.reason || '未能加入预览重建队列', 'error');
+      }
+    } catch {
+      toast('加入预览重建队列失败', 'error');
+    } finally {
+      setQueueingModelId(null);
+    }
   };
 
   const handleUpload = async (files: FileList) => {
@@ -232,11 +1253,23 @@ function DesktopContent() {
     });
   };
 
+  const toggleSelectPage = () => {
+    setSelectedNames(prev => {
+      const next = new Set(prev);
+      if (allSuggestionsSelected) {
+        suggestionNames.forEach((name) => next.delete(name));
+      } else {
+        suggestionNames.forEach((name) => next.add(name));
+      }
+      return next;
+    });
+  };
+
   const handleMerge = async () => {
-    if (selectedNames.size === 0) return;
+    if (selectedSuggestionCount === 0) return;
     setMerging(true);
     try {
-      const items = (sugData?.data || []).filter(s => selectedNames.has(s.name)).map(s => ({
+      const items = suggestionGroups.filter(s => selectedNames.has(s.name)).map(s => ({
         name: s.name,
         modelIds: s.models.map(m => m.id),
       }));
@@ -244,8 +1277,82 @@ function DesktopContent() {
       toast(`已合并 ${result.merged} 组`, 'success');
       setSelectedNames(new Set());
       sugMutate();
+      groupMutate();
     } catch { toast('合并失败', 'error'); }
     finally { setMerging(false); }
+  };
+
+  const beginEditGroup = (group: ModelGroupItem) => {
+    setEditingGroupId(group.id);
+    setGroupNameDraft(group.name);
+  };
+
+  const handleSaveGroup = async (group: ModelGroupItem) => {
+    const name = groupNameDraft.trim();
+    if (!name) {
+      toast('分组名称不能为空', 'error');
+      return;
+    }
+    setGroupAction(`rename:${group.id}`);
+    try {
+      await modelApi.updateModelGroup(group.id, { name });
+      toast('分组已更新', 'success');
+      setEditingGroupId(null);
+      groupMutate();
+      mutate();
+    } catch {
+      toast('更新分组失败', 'error');
+    } finally {
+      setGroupAction(null);
+    }
+  };
+
+  const handleSetPrimary = async (group: ModelGroupItem, modelId: string) => {
+    setGroupAction(`primary:${group.id}:${modelId}`);
+    try {
+      await modelApi.updateModelGroup(group.id, { primaryId: modelId });
+      toast('已设置主版本', 'success');
+      groupMutate();
+      mutate();
+    } catch {
+      toast('设置主版本失败', 'error');
+    } finally {
+      setGroupAction(null);
+    }
+  };
+
+  const handleRemoveFromGroup = async (group: ModelGroupItem, modelId: string) => {
+    const ok = window.confirm('确定将该模型移出当前合并分组吗？模型不会被删除。');
+    if (!ok) return;
+    setGroupAction(`remove:${group.id}:${modelId}`);
+    try {
+      await modelApi.removeModelFromGroup(group.id, modelId);
+      toast('已移出分组', 'success');
+      groupMutate();
+      sugMutate();
+      mutate();
+    } catch {
+      toast('移出分组失败', 'error');
+    } finally {
+      setGroupAction(null);
+    }
+  };
+
+  const handleDeleteGroup = async (group: ModelGroupItem) => {
+    const ok = window.confirm(`确定解散「${group.name}」吗？模型文件不会删除，只会取消合并关系。`);
+    if (!ok) return;
+    setGroupAction(`delete:${group.id}`);
+    try {
+      await modelApi.deleteModelGroup(group.id);
+      toast('分组已解散', 'success');
+      groupMutate();
+      sugMutate();
+      mutate();
+    } catch {
+      toast('解散分组失败', 'error');
+    } finally {
+      setGroupAction(null);
+    }
   };
 
   return (
@@ -260,15 +1367,27 @@ function DesktopContent() {
             <button onClick={() => { setActiveTab('suggestions'); sugMutate(); }} className={`px-4 py-1.5 text-sm font-medium transition-colors ${activeTab === 'suggestions' ? 'bg-primary-container text-on-primary' : 'bg-surface-container-low text-on-surface-variant hover:text-on-surface'}`}>
               合并建议 {sugData?.total != null && <span className="ml-1 text-[10px] opacity-70">({sugData.total})</span>}
             </button>
+            <button onClick={() => { setActiveTab('groups'); groupMutate(); }} className={`px-4 py-1.5 text-sm font-medium transition-colors ${activeTab === 'groups' ? 'bg-primary-container text-on-primary' : 'bg-surface-container-low text-on-surface-variant hover:text-on-surface'}`}>
+              已合并 {groupData && <span className="ml-1 text-[10px] opacity-70">({groupData.length})</span>}
+            </button>
           </div>
         </div>
         <div className="flex items-center gap-3">
+          {activeTab === 'models' && (
+            <button
+              onClick={() => setPreviewOpsOpen(true)}
+              className="flex items-center gap-2 rounded-sm border border-outline-variant/25 bg-surface-container-low px-4 py-2 text-sm font-medium text-on-surface-variant transition-colors hover:bg-surface-container-high hover:text-on-surface"
+            >
+              <Icon name="view_in_ar" size={18} />
+              预览运维
+            </button>
+          )}
           <button onClick={() => document.getElementById('admin-file-upload')?.click()} disabled={uploading} className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-on-primary bg-primary-container rounded-sm hover:opacity-90 transition-opacity active:scale-95 disabled:opacity-50">
             <Icon name="cloud_upload" size={18} />{uploading ? '上传中...' : '上传模型'}
           </button>
           <div className="flex items-center bg-surface-container-lowest rounded-sm px-3 py-2 border border-outline-variant/30">
             <Icon name="search" size={16} className="text-on-surface-variant mr-2" />
-            <input value={search} onChange={(e) => { setSearch(e.target.value); setPage(1); }} placeholder="搜索模型..." className="bg-transparent border-none outline-none text-sm text-on-surface placeholder:text-on-surface-variant/50 w-48" />
+            <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="搜索模型..." className="bg-transparent border-none outline-none text-sm text-on-surface placeholder:text-on-surface-variant/50 w-48" />
           </div>
         </div>
       </div>
@@ -276,15 +1395,36 @@ function DesktopContent() {
       {activeTab === 'suggestions' ? (
         sugLoading ? <SkeletonList rows={5} /> : (
           <div className="space-y-3">
-            {selectedNames.size > 0 && (
-              <div className="flex items-center justify-between px-4 py-3 bg-primary-container/10 rounded-sm border border-primary/20">
-                <span className="text-sm text-on-surface">已选择 <strong className="text-primary">{selectedNames.size}</strong> 组</span>
-                <button onClick={handleMerge} disabled={merging} className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-on-primary bg-primary-container rounded-sm hover:opacity-90 disabled:opacity-50">
-                  <Icon name="merge" size={16} />{merging ? '合并中...' : `合并选中 (${selectedNames.size} 组)`}
-                </button>
+            {suggestionGroups.length > 0 && (
+              <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3 bg-surface-container-low rounded-sm border border-outline-variant/10">
+                <span className="text-sm text-on-surface">
+                  共 <strong className="text-primary">{suggestionGroups.length}</strong> 组建议
+                  {selectedSuggestionCount > 0 && <>，已选择 <strong className="text-primary">{selectedSuggestionCount}</strong> 组</>}
+                </span>
+                <div className="flex flex-wrap items-center gap-2">
+                  <button
+                    onClick={toggleSelectPage}
+                    className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-on-surface-variant bg-surface-container-high rounded-sm hover:text-on-surface hover:bg-surface-container-highest transition-colors"
+                  >
+                    <Icon name="checklist" size={16} />
+                    {allSuggestionsSelected ? '取消全选' : '全选建议'}
+                  </button>
+                  {selectedSuggestionCount > 0 && (
+                    <button
+                      onClick={() => setSelectedNames(new Set())}
+                      className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-on-surface-variant bg-surface-container-high rounded-sm hover:text-on-surface hover:bg-surface-container-highest transition-colors"
+                    >
+                      <Icon name="close" size={16} />
+                      清空
+                    </button>
+                  )}
+                  <button onClick={handleMerge} disabled={merging || selectedSuggestionCount === 0} className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-on-primary bg-primary-container rounded-sm hover:opacity-90 disabled:opacity-50">
+                    <Icon name="merge" size={16} />{merging ? '合并中...' : `合并选中 (${selectedSuggestionCount} 组)`}
+                  </button>
+                </div>
               </div>
             )}
-            {sugData?.data.map((group) => (
+            {suggestionGroups.map((group) => (
               <div key={group.name} className="bg-surface-container-low rounded-sm border border-outline-variant/10 overflow-hidden">
                 <div className="flex items-center gap-3 px-4 py-3">
                   <input type="checkbox" checked={selectedNames.has(group.name)} onChange={() => toggleSelect(group.name)} className="w-4 h-4 accent-primary-container rounded" />
@@ -303,14 +1443,99 @@ function DesktopContent() {
                 </div>
               </div>
             ))}
-            {sugData && sugData.total > 15 && (
-              <div className="flex items-center justify-center gap-2 mt-4">
-                <button onClick={() => setSugPage(p => Math.max(1, p - 1))} disabled={sugPage <= 1} className="px-3 py-1.5 text-sm text-on-surface-variant hover:text-on-surface disabled:opacity-30">上一页</button>
-                <span className="text-sm text-on-surface-variant">{sugPage} / {Math.ceil(sugData.total / 15)}</span>
-                <button onClick={() => setSugPage(p => p + 1)} disabled={sugPage >= Math.ceil(sugData.total / 15)} className="px-3 py-1.5 text-sm text-on-surface-variant hover:text-on-surface disabled:opacity-30">下一页</button>
-              </div>
-            )}
             {sugData?.data.length === 0 && <p className="text-center text-on-surface-variant py-12">没有需要合并的同名模型</p>}
+          </div>
+        )
+      ) : activeTab === 'groups' ? (
+        groupsLoading ? <SkeletonList rows={5} /> : (
+          <div className="space-y-3">
+            {groupData?.map((group) => {
+              const editing = editingGroupId === group.id;
+              const primaryId = group.primary?.id;
+              return (
+                <div key={group.id} className="bg-surface-container-low rounded-sm border border-outline-variant/10 overflow-hidden">
+                  <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3 border-b border-outline-variant/10">
+                    <div className="flex min-w-0 flex-1 items-center gap-3">
+                      <Icon name="folder_special" size={18} className="shrink-0 text-primary-container" />
+                      {editing ? (
+                        <input
+                          value={groupNameDraft}
+                          onChange={(e) => setGroupNameDraft(e.target.value)}
+                          className="min-w-0 flex-1 rounded-sm border border-outline-variant/25 bg-surface-container-lowest px-3 py-2 text-sm text-on-surface outline-none focus:border-primary"
+                          autoFocus
+                        />
+                      ) : (
+                        <div className="min-w-0">
+                          <p className="truncate text-sm font-semibold text-on-surface">{group.name}</p>
+                          <p className="text-[11px] text-on-surface-variant">{group.model_count} 个版本 · 主版本：{group.primary?.name || '未设置'}</p>
+                        </div>
+                      )}
+                    </div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      {editing ? (
+                        <>
+                          <button onClick={() => handleSaveGroup(group)} disabled={groupAction === `rename:${group.id}`} className="flex items-center gap-1.5 rounded-sm bg-primary-container px-3 py-2 text-xs font-medium text-on-primary disabled:opacity-50">
+                            <Icon name="save" size={14} />保存
+                          </button>
+                          <button onClick={() => setEditingGroupId(null)} className="rounded-sm border border-outline-variant/20 px-3 py-2 text-xs text-on-surface-variant hover:text-on-surface">
+                            取消
+                          </button>
+                        </>
+                      ) : (
+                        <button onClick={() => beginEditGroup(group)} className="flex items-center gap-1.5 rounded-sm border border-outline-variant/20 px-3 py-2 text-xs text-on-surface-variant hover:text-on-surface">
+                          <Icon name="edit" size={14} />重命名
+                        </button>
+                      )}
+                      <button onClick={() => handleDeleteGroup(group)} disabled={groupAction === `delete:${group.id}`} className="flex items-center gap-1.5 rounded-sm border border-error/20 px-3 py-2 text-xs text-error hover:bg-error/10 disabled:opacity-50">
+                        <Icon name="close" size={14} />解散分组
+                      </button>
+                    </div>
+                  </div>
+                  <div className="divide-y divide-outline-variant/10">
+                    {group.models.map((model) => {
+                      const isPrimary = model.id === primaryId;
+                      return (
+                        <div key={model.id} className="flex items-center gap-3 px-4 py-3">
+                          <div className="h-12 w-12 shrink-0 overflow-hidden rounded-sm bg-surface-container-highest">
+                            <ModelThumbnail src={model.thumbnailUrl} alt="" className="h-full w-full object-cover" />
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <div className="flex min-w-0 items-center gap-2">
+                              <p className="truncate text-sm font-medium text-on-surface">{model.originalName || model.name}</p>
+                              {isPrimary && <span className="shrink-0 rounded-sm bg-primary/15 px-1.5 py-0.5 text-[10px] font-medium text-primary">主版本</span>}
+                            </div>
+                            <div className="mt-0.5 flex flex-wrap gap-x-3 gap-y-0.5 text-[11px] text-on-surface-variant">
+                              <span>{formatSize(model.originalSize)}</span>
+                              <span>原始时间：{formatModelDateTime(model.fileModifiedAt)}</span>
+                              <span>上传时间：{formatModelDateTime(model.createdAt)}</span>
+                            </div>
+                          </div>
+                          <div className="flex shrink-0 items-center gap-2">
+                            <Link to={`/model/${model.id}`} target="_blank" className="rounded-sm border border-outline-variant/20 px-2.5 py-1.5 text-xs text-on-surface-variant hover:text-primary">
+                              查看
+                            </Link>
+                            {!isPrimary && (
+                              <button onClick={() => handleSetPrimary(group, model.id)} disabled={groupAction === `primary:${group.id}:${model.id}`} className="rounded-sm border border-outline-variant/20 px-2.5 py-1.5 text-xs text-on-surface-variant hover:text-primary disabled:opacity-50">
+                                设为主版本
+                              </button>
+                            )}
+                            <button
+                              onClick={() => handleRemoveFromGroup(group, model.id)}
+                              disabled={group.model_count <= 2 || groupAction === `remove:${group.id}:${model.id}`}
+                              title={group.model_count <= 2 ? '只有 2 个版本时请使用解散分组' : '移出当前分组'}
+                              className="rounded-sm border border-outline-variant/20 px-2.5 py-1.5 text-xs text-on-surface-variant hover:text-error disabled:opacity-40"
+                            >
+                              移出
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            })}
+            {groupData?.length === 0 && <p className="text-center text-on-surface-variant py-12">还没有已合并的模型分组</p>}
           </div>
         )
       ) : (
@@ -351,6 +1576,7 @@ function DesktopContent() {
                     <td className="px-4 py-3 text-right">
                       <div className="flex items-center justify-end gap-2">
                         <Link to={`/model/${m.model_id}`} target="_blank" className="flex items-center gap-1 px-2.5 py-1 text-xs text-on-surface-variant hover:text-primary hover:bg-primary/10 rounded-sm transition-colors border border-outline-variant/20"><Icon name="open_in_new" size={14} />查看</Link>
+                        <button onClick={() => handleQueueModelRebuild(m)} disabled={queueingModelId === m.model_id} aria-label={`重建预览 ${m.name}`} title="重建预览" className="flex items-center gap-1 px-2.5 py-1 text-xs text-on-surface-variant hover:text-primary hover:bg-primary/10 rounded-sm transition-colors border border-outline-variant/20 disabled:opacity-50"><Icon name="autorenew" size={14} className={queueingModelId === m.model_id ? 'animate-spin' : ''} />重建</button>
                         <button onClick={() => setEditModel(m)} className="flex items-center gap-1 px-2.5 py-1 text-xs text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high rounded-sm transition-colors border border-outline-variant/20"><Icon name="settings" size={14} />编辑</button>
                         <button onClick={() => setDeleteTarget(m)} className="flex items-center gap-1 px-2.5 py-1 text-xs text-on-surface-variant hover:text-error hover:bg-error/10 rounded-sm transition-colors border border-outline-variant/20"><Icon name="close" size={14} />删除</button>
                       </div>
@@ -361,17 +1587,11 @@ function DesktopContent() {
               </tbody>
             </table>
           </div>
-          {data && data.totalPages > 1 && (
-            <div className="flex items-center justify-center gap-2 mt-6">
-              <button onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={page <= 1} className="px-3 py-1.5 text-sm text-on-surface-variant hover:text-on-surface disabled:opacity-30 transition-colors">上一页</button>
-              <span className="text-sm text-on-surface-variant">{page} / {data.totalPages}</span>
-              <button onClick={() => setPage((p) => Math.min(data.totalPages, p + 1))} disabled={page >= data.totalPages} className="px-3 py-1.5 text-sm text-on-surface-variant hover:text-on-surface disabled:opacity-30 transition-colors">下一页</button>
-            </div>
-          )}
         </>
       )
       )}
 
+      <PreviewOperationsModal open={previewOpsOpen} onClose={() => setPreviewOpsOpen(false)} />
       <EditDialog open={!!editModel} model={editModel} categories={categories || []} onClose={() => setEditModel(null)} onSaved={() => mutate()} />
       <AnimatePresence>
         {deleteTarget && (
@@ -396,13 +1616,14 @@ function MobileContent() {
   const { data: settings } = useSWR("publicSettings", () => getCachedPublicSettings());
   const { uploadPolicy } = getBusinessConfig(settings);
   const [search, setSearch] = useState('');
-  const [page, setPage] = useState(1);
   const [editModel, setEditModel] = useState<ServerModelListItem | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<ServerModelListItem | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [queueingModelId, setQueueingModelId] = useState<string | null>(null);
+  const [previewOpsOpen, setPreviewOpsOpen] = useState(false);
 
-  const { data, isLoading, mutate } = useSWR(['/admin/models/m', search, page], () => modelApi.list({ search: search || undefined, page, pageSize: 20, grouped: false }));
+  const { data, isLoading, mutate } = useSWR(['/admin/models/m', search], () => modelApi.list({ search: search || undefined, page: 1, pageSize: MODEL_ADMIN_LIST_LIMIT, grouped: false }));
   const { data: catDataM } = useSWR('/categories-m', () => categoriesApi.tree());
   const categories = catDataM?.items || [];
 
@@ -410,6 +1631,26 @@ function MobileContent() {
     if (!deleteTarget) return;
     setDeleting(true);
     try { await modelApi.delete(deleteTarget.model_id); toast('已删除', 'success'); mutate(); setDeleteTarget(null); } catch { toast('删除失败', 'error'); } finally { setDeleting(false); }
+  };
+
+  const handleQueueModelRebuild = async (model: ServerModelListItem) => {
+    const ok = window.confirm(`将把「${model.name}」加入预览重建队列，重新生成 GLB 和缩略图。是否继续？`);
+    if (!ok) return;
+    setQueueingModelId(model.model_id);
+    try {
+      const result = await modelApi.rebuildPreviewDiagnostics({ status: 'all', modelIds: [model.model_id], limit: 1 });
+      const first = result.items?.[0];
+      if (result.queued > 0) {
+        toast('已加入预览重建队列', 'success');
+        mutate();
+      } else {
+        toast(first?.reason || '未能加入预览重建队列', 'error');
+      }
+    } catch {
+      toast('加入预览重建队列失败', 'error');
+    } finally {
+      setQueueingModelId(null);
+    }
   };
 
   const handleUpload = async (files: FileList) => {
@@ -437,7 +1678,15 @@ function MobileContent() {
         <div className="flex items-start justify-between gap-3">
           <h1 className="text-lg font-bold text-on-surface">模型管理</h1>
           <div className="flex items-center gap-2">
-            <span className="hidden min-[360px]:inline text-xs text-on-surface-variant">{data?.total || 0} 个</span>
+            <span className="shrink-0 text-xs text-on-surface-variant">{data?.total || 0} 个</span>
+            <button
+              onClick={() => setPreviewOpsOpen(true)}
+              className="flex items-center gap-1 rounded-sm border border-outline-variant/25 bg-surface-container-high px-2.5 py-1.5 text-xs font-medium text-on-surface-variant active:scale-95"
+              aria-label="打开预览运维工作台"
+            >
+              <Icon name="view_in_ar" size={14} />
+              运维
+            </button>
             <button onClick={() => document.getElementById('mobile-admin-upload')?.click()} disabled={uploading} className="flex items-center gap-1 px-3 py-1.5 text-xs font-medium text-on-primary bg-primary-container rounded-sm active:scale-95 disabled:opacity-50">
               <Icon name="cloud_upload" size={14} />{uploading ? '上传中...' : '上传'}
             </button>
@@ -445,7 +1694,7 @@ function MobileContent() {
         </div>
         <div className="flex items-center bg-surface-container-high rounded-sm px-3 py-2 border border-outline-variant/30">
           <Icon name="search" size={16} className="text-on-surface-variant mr-2" />
-          <input value={search} onChange={(e) => { setSearch(e.target.value); setPage(1); }} placeholder="搜索模型..." className="bg-transparent border-none outline-none text-sm text-on-surface placeholder:text-on-surface-variant/50 w-full" />
+          <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="搜索模型..." className="bg-transparent border-none outline-none text-sm text-on-surface placeholder:text-on-surface-variant/50 w-full" />
         </div>
         {isLoading ? (
           <SkeletonList rows={5} />
@@ -465,22 +1714,17 @@ function MobileContent() {
                   </div>
                 </div>
                 <div className="flex items-center gap-1.5 shrink-0" onClick={(e) => e.preventDefault()}>
+                  <button onClick={() => handleQueueModelRebuild(m)} disabled={queueingModelId === m.model_id} aria-label={`重建预览 ${m.name}`} title="重建预览" className="px-2 py-1.5 text-xs text-on-surface-variant hover:text-primary rounded-sm border border-outline-variant/20 disabled:opacity-50"><Icon name="autorenew" size={14} className={queueingModelId === m.model_id ? 'animate-spin' : ''} /></button>
                   <button onClick={() => setEditModel(m)} className="px-2 py-1.5 text-xs text-on-surface-variant hover:text-on-surface rounded-sm border border-outline-variant/20"><Icon name="settings" size={14} /></button>
                   <button onClick={() => setDeleteTarget(m)} className="px-2 py-1.5 text-xs text-on-surface-variant hover:text-error rounded-sm border border-outline-variant/20"><Icon name="close" size={14} /></button>
                 </div>
               </Link>
             ))}
             {data?.items.length === 0 && <p className="text-center text-on-surface-variant py-12 text-sm">没有找到模型</p>}
-            {data && data.totalPages > 1 && (
-              <div className="flex items-center justify-center gap-3 pt-2">
-                <button onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={page <= 1} className="px-3 py-1.5 text-xs text-on-surface-variant disabled:opacity-30">上一页</button>
-                <span className="text-xs text-on-surface-variant">{page}/{data.totalPages}</span>
-                <button onClick={() => setPage((p) => Math.min(data.totalPages, p + 1))} disabled={page >= data.totalPages} className="px-3 py-1.5 text-xs text-on-surface-variant disabled:opacity-30">下一页</button>
-              </div>
-            )}
           </div>
         )}
       </div>
+      <PreviewOperationsModal open={previewOpsOpen} onClose={() => setPreviewOpsOpen(false)} compact />
       <EditDialog open={!!editModel} model={editModel} categories={categories || []} onClose={() => setEditModel(null)} onSaved={() => mutate()} />
       <AnimatePresence>
         {deleteTarget && (

@@ -43,7 +43,18 @@ router.get("/api/model-groups", async (_req, res: Response) => {
   const groups = await prisma.modelGroup.findMany({
     include: {
       primary: { select: { id: true, name: true, thumbnailUrl: true } },
-      models: { select: { id: true, name: true, thumbnailUrl: true, originalName: true, originalSize: true, createdAt: true } },
+      models: {
+        select: {
+          id: true,
+          name: true,
+          thumbnailUrl: true,
+          originalName: true,
+          originalSize: true,
+          createdAt: true,
+          fileModifiedAt: true,
+          metadata: true,
+        },
+      },
     },
     orderBy: { createdAt: "desc" },
   });
@@ -53,7 +64,18 @@ router.get("/api/model-groups", async (_req, res: Response) => {
     description: g.description,
     primary: g.primary,
     model_count: g.models.length,
-    models: g.models,
+    models: g.models.map((m: any) => {
+      const meta = (m.metadata as Record<string, unknown>) || {};
+      return {
+        id: m.id,
+        name: m.name,
+        thumbnailUrl: m.thumbnailUrl,
+        originalName: m.originalName,
+        originalSize: m.originalSize,
+        createdAt: m.createdAt,
+        fileModifiedAt: m.fileModifiedAt || meta.originalModifiedAt || null,
+      };
+    }),
     created_at: g.createdAt,
   }));
   res.json({ success: true, data: result });
@@ -147,7 +169,7 @@ router.get("/api/model-groups/:id", async (req, res: Response) => {
       models: {
         select: {
           id: true, name: true, thumbnailUrl: true, originalName: true,
-          originalFormat: true, originalSize: true, gltfUrl: true, createdAt: true,
+          originalFormat: true, originalSize: true, gltfUrl: true, createdAt: true, fileModifiedAt: true,
         },
       },
     },
@@ -160,6 +182,16 @@ router.get("/api/model-groups/:id", async (req, res: Response) => {
 router.put("/api/model-groups/:id", authMiddleware, requireRole("ADMIN"), async (req: AuthRequest, res: Response) => {
   const { name, description, primaryId } = req.body;
   try {
+    if (primaryId !== undefined && primaryId !== null) {
+      const member = await prisma.model.findFirst({
+        where: { id: primaryId, groupId: req.params.id },
+        select: { id: true },
+      });
+      if (!member) {
+        res.status(400).json({ detail: "主版本必须是当前分组内的模型" });
+        return;
+      }
+    }
     const group = await prisma.modelGroup.update({
       where: { id: req.params.id },
       data: {
@@ -216,6 +248,30 @@ router.post("/api/model-groups/:id/models", authMiddleware, requireRole("ADMIN")
 // Remove model from group
 router.delete("/api/model-groups/:id/models/:modelId", authMiddleware, requireRole("ADMIN"), async (req: AuthRequest, res: Response) => {
   try {
+    const group = await prisma.modelGroup.findUnique({
+      where: { id: req.params.id },
+      select: {
+        id: true,
+        primaryId: true,
+        models: { select: { id: true }, orderBy: { createdAt: "desc" } },
+      },
+    });
+    if (!group) {
+      res.status(404).json({ detail: "分组不存在" });
+      return;
+    }
+    const current = group.models.some((m: any) => m.id === req.params.modelId);
+    if (!current) {
+      res.status(404).json({ detail: "模型不在当前分组中" });
+      return;
+    }
+    const remaining = group.models.filter((m: any) => m.id !== req.params.modelId);
+    if (group.primaryId === req.params.modelId) {
+      await prisma.modelGroup.update({
+        where: { id: req.params.id },
+        data: { primaryId: remaining[0]?.id ?? null },
+      });
+    }
     await prisma.model.update({
       where: { id: req.params.modelId },
       data: { groupId: null },

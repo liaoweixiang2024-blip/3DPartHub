@@ -106,7 +106,7 @@ export const DEFAULT_MOBILE_NAV: NavItemConfig[] = [
 ];
 
 export const DEFAULT_UPLOAD_POLICY: UploadPolicy = {
-  modelFormats: ["step", "stp", "x_t", "xt"],
+  modelFormats: ["step", "stp", "iges", "igs", "x_t", "xt"],
   modelMaxSizeMb: 100,
   chunkSizeMb: 5,
   chunkThresholdMb: 20,
@@ -115,6 +115,17 @@ export const DEFAULT_UPLOAD_POLICY: UploadPolicy = {
   ticketAttachmentMaxSizeMb: 5,
   ticketAttachmentExts: [".jpg", ".jpeg", ".png", ".gif", ".webp"],
 };
+
+const DISABLED_MODEL_UPLOAD_FORMATS = new Set(["html", "htm"]);
+
+export function normalizeUploadPolicy(policy: UploadPolicy): UploadPolicy {
+  const modelFormats = Array.from(new Set(
+    (policy.modelFormats || [])
+      .map((item) => item.toLowerCase())
+      .filter((item) => item && !DISABLED_MODEL_UPLOAD_FORMATS.has(item)),
+  ));
+  return { ...policy, modelFormats: modelFormats.length ? modelFormats : DEFAULT_UPLOAD_POLICY.modelFormats };
+}
 
 export const DEFAULT_THREAD_PRIORITY: Record<string, number> = {
   R: 0,
@@ -159,7 +170,7 @@ export function getBusinessConfig(settings: Partial<SystemSettings> = getCachedP
     userNav: enabled(parseSetting(settings.nav_user_items, DEFAULT_USER_NAV)),
     adminNav: enabled(normalizeAdminNav(parseSetting(settings.nav_admin_items, DEFAULT_ADMIN_NAV))),
     mobileNav: enabled(parseSetting(settings.nav_mobile_items, DEFAULT_MOBILE_NAV)),
-    uploadPolicy: { ...DEFAULT_UPLOAD_POLICY, ...parseSetting<Partial<UploadPolicy>>(settings.upload_policy, {}) },
+    uploadPolicy: normalizeUploadPolicy({ ...DEFAULT_UPLOAD_POLICY, ...parseSetting<Partial<UploadPolicy>>(settings.upload_policy, {}) }),
     threadPriority: { ...DEFAULT_THREAD_PRIORITY, ...parseSetting<Record<string, number>>(settings.selection_thread_priority, {}) },
   };
 }

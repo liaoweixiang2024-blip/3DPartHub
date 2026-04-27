@@ -183,7 +183,9 @@ export default function UploadModal({ open, onClose, onConverted }: UploadModalP
                   <div className="text-center min-w-0 max-w-full">
                     <p className="text-on-surface font-medium break-all">{result.original_name}</p>
                     <p className="text-sm text-on-surface-variant mt-1">
-                      已转换为 glTF ({(result.gltf_size / 1024).toFixed(1)} KB)
+                      {result.status === "completed"
+                        ? `已生成 GLB 预览 (${(result.gltf_size / 1024).toFixed(1)} KB)`
+                        : "文件已上传，正在转换中"}
                     </p>
                   </div>
                   <button onClick={handleClose} className="mt-2 bg-primary-container text-on-primary rounded-sm px-6 py-2 text-sm font-medium hover:opacity-90">

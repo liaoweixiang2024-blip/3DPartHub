@@ -1,5 +1,5 @@
-import { useState, useEffect, useMemo, useCallback } from "react";
-import { Link, useNavigate, useSearchParams } from "react-router-dom";
+import { useState, useEffect, useMemo, useCallback, useRef, type UIEvent } from "react";
+import { Link, useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import useSWR from "swr";
 import { useMediaQuery } from "../layouts/hooks/useMediaQuery";
@@ -9,12 +9,21 @@ import BottomNav from "../components/shared/BottomNav";
 import FormatTag from "../components/shared/FormatTag";
 
 import Icon from "../components/shared/Icon";
+import Pagination, { DEFAULT_PAGE_SIZE, normalizePageSize } from "../components/shared/Pagination";
 import ModelThumbnail from "../components/shared/ModelThumbnail";
 import { useModels } from "../hooks/useModels";
 import type { ServerModelListItem } from "../api/models";
 import { categoriesApi, type CategoryItem } from "../api/categories";
 import { useAuthStore, getAccessToken } from "../stores";
 import { getCachedPublicSettings, getAnnouncement, getContactEmail, getSiteTitle, getFooterLinks, getFooterCopyright } from "../lib/publicSettings";
+import {
+  HOME_SEARCH_EVENT,
+  dispatchHomeSearchQuery,
+  normalizeHomeSearchQuery,
+  readHomeSearchQuery,
+  saveHomeSearchQuery,
+  type HomeSearchEventDetail,
+} from "../lib/homeSearchState";
 
 interface Category {
   id: string;
@@ -203,14 +212,182 @@ function SkeletonCardMobile() {
   );
 }
 
-function ProductCard({ product, onDownload, variant = "grid" }: { product: Product; onDownload: (id: string) => void; variant?: "grid" | "list" }) {
+const HOME_SCROLL_POSITION_PREFIX = "home_model_scroll_position:";
+const HOME_SCROLL_TARGET_PREFIX = "home_model_scroll_target:";
+const HOME_BROWSE_STATE_PREFIX = "home_model_browse_state:";
+const HOME_SCROLL_RESTORE_PENDING_KEY = "home_model_scroll_restore_pending_v1";
+
+type HomeBrowseState = {
+  categoryId: string;
+  query: string;
+  page: number;
+  pageSize: number;
+  sort: string;
+  restoreKey: string;
+};
+
+type HomeLocationState = {
+  homeBrowseState?: Partial<HomeBrowseState> | null;
+} | null;
+
+function parsePageParam(value: string | null) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed > 0 ? Math.floor(parsed) : 1;
+}
+
+function normalizeSortParam(value: string | null) {
+  return value === "name" ? "name" : "created_at";
+}
+
+function buildHomeReturnPath() {
+  return "/";
+}
+
+function buildHomeRestoreKey(categoryId: string, query: string, page = 1, sort = "created_at", pageSize = DEFAULT_PAGE_SIZE) {
+  const params = new URLSearchParams();
+  params.set("category", categoryId || "all");
+  if (query) params.set("q", query);
+  if (page > 1) params.set("page", String(page));
+  if (pageSize !== DEFAULT_PAGE_SIZE) params.set("page_size", String(pageSize));
+  if (sort !== "created_at") params.set("sort", sort);
+  return params.toString();
+}
+
+function readHomeBrowseStateFromLocation(state: unknown) {
+  const homeState = (state as HomeLocationState)?.homeBrowseState;
+  return homeState && typeof homeState === "object" ? homeState : null;
+}
+
+function normalizeHomeBrowseState(value: Partial<HomeBrowseState> | null | undefined) {
+  if (!value) return null;
+  const categoryId = typeof value.categoryId === "string" && value.categoryId ? value.categoryId : "all";
+  const query = typeof value.query === "string" ? normalizeHomeSearchQuery(value.query) : "";
+  const page = typeof value.page === "number" ? parsePageParam(String(value.page)) : 1;
+  const pageSize = typeof value.pageSize === "number" ? normalizePageSize(value.pageSize) : DEFAULT_PAGE_SIZE;
+  const sort = normalizeSortParam(typeof value.sort === "string" ? value.sort : null);
+  return {
+    categoryId,
+    query,
+    page,
+    pageSize,
+    sort,
+    restoreKey: value.restoreKey || buildHomeRestoreKey(categoryId, query, page, sort, pageSize),
+  };
+}
+
+function saveHomeBrowseState(restoreKey: string, state: HomeBrowseState) {
+  if (typeof window === "undefined") return;
+  try {
+    window.sessionStorage.setItem(`${HOME_BROWSE_STATE_PREFIX}${restoreKey}`, JSON.stringify(state));
+  } catch {
+    // Ignore private browsing or storage quota failures.
+  }
+}
+
+function readHomeBrowseState(restoreKey: string | null) {
+  if (typeof window === "undefined" || !restoreKey) return null;
+  try {
+    const raw = window.sessionStorage.getItem(`${HOME_BROWSE_STATE_PREFIX}${restoreKey}`);
+    return normalizeHomeBrowseState(raw ? JSON.parse(raw) : null);
+  } catch {
+    return null;
+  }
+}
+
+function readPendingHomeBrowseState() {
+  if (typeof window === "undefined") return null;
+  try {
+    return readHomeBrowseState(window.sessionStorage.getItem(HOME_SCROLL_RESTORE_PENDING_KEY));
+  } catch {
+    return null;
+  }
+}
+
+function saveHomeScrollPosition(restoreKey: string, scrollTop: number, pendingRestore = false, modelId?: string) {
+  if (typeof window === "undefined") return;
+  try {
+    window.sessionStorage.setItem(`${HOME_SCROLL_POSITION_PREFIX}${restoreKey}`, String(Math.max(0, Math.round(scrollTop))));
+    if (modelId) window.sessionStorage.setItem(`${HOME_SCROLL_TARGET_PREFIX}${restoreKey}`, modelId);
+    if (pendingRestore) window.sessionStorage.setItem(HOME_SCROLL_RESTORE_PENDING_KEY, restoreKey);
+  } catch {
+    // Ignore private browsing or storage quota failures.
+  }
+}
+
+function readHomeScrollPosition(restoreKey: string) {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = window.sessionStorage.getItem(`${HOME_SCROLL_POSITION_PREFIX}${restoreKey}`);
+    const parsed = raw ? Number(raw) : null;
+    return parsed != null && Number.isFinite(parsed) ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+function readHomeScrollTarget(restoreKey: string) {
+  if (typeof window === "undefined") return null;
+  try {
+    return window.sessionStorage.getItem(`${HOME_SCROLL_TARGET_PREFIX}${restoreKey}`);
+  } catch {
+    return null;
+  }
+}
+
+function getHomeModelElement(container: HTMLElement, modelId: string) {
+  return Array.from(container.querySelectorAll<HTMLElement>("[data-home-model-id]"))
+    .find((element) => element.dataset.homeModelId === modelId) || null;
+}
+
+function scrollHomeToModel(container: HTMLElement, modelId: string | null, fallbackTop: number | null) {
+  if (modelId) {
+    const target = getHomeModelElement(container, modelId);
+    if (target) {
+      const containerRect = container.getBoundingClientRect();
+      const targetRect = target.getBoundingClientRect();
+      const topPadding = Math.max(16, Math.round(container.clientHeight * 0.14));
+      const top = container.scrollTop + targetRect.top - containerRect.top - topPadding;
+      container.scrollTo({ top: Math.max(0, top), behavior: "auto" });
+      return true;
+    }
+    return false;
+  }
+  if (fallbackTop != null) {
+    container.scrollTo({ top: fallbackTop, behavior: "auto" });
+    return true;
+  }
+  return false;
+}
+
+function getPendingHomeRestoreKey() {
+  if (typeof window === "undefined") return null;
+  try {
+    return window.sessionStorage.getItem(HOME_SCROLL_RESTORE_PENDING_KEY);
+  } catch {
+    return null;
+  }
+}
+
+function clearPendingHomeRestore(restoreKey: string) {
+  if (typeof window === "undefined") return;
+  try {
+    if (window.sessionStorage.getItem(HOME_SCROLL_RESTORE_PENDING_KEY) === restoreKey) {
+      window.sessionStorage.removeItem(HOME_SCROLL_RESTORE_PENDING_KEY);
+    }
+  } catch {
+    // Ignore private browsing or storage quota failures.
+  }
+}
+
+function ProductCard({ product, onDownload, returnPath, homeBrowseState, onBeforeOpen, variant = "grid" }: { product: Product; onDownload: (id: string) => void; returnPath: string; homeBrowseState: HomeBrowseState; onBeforeOpen?: (modelId: string) => void; variant?: "grid" | "list" }) {
+  const detailPath = `/model/${product.id}`;
   if (variant === "list") {
     return (
-      <Link to={`/model/${product.id}`} className="flex group bg-surface-container-high rounded-sm overflow-hidden hover:shadow-[0_8px_20px_rgba(0,0,0,0.35)] transition-all duration-300">
+      <Link to={detailPath} state={{ from: returnPath, homeBrowseState }} onClick={() => onBeforeOpen?.(product.id)} data-home-model-id={product.id} className="flex group bg-surface-container-high rounded-sm overflow-hidden hover:shadow-[0_8px_20px_rgba(0,0,0,0.35)] transition-all duration-300">
         <div className="w-32 shrink-0 bg-surface-container-lowest relative overflow-hidden flex items-center justify-center">
           <ModelThumbnail src={product.thumbnailUrl} alt={product.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
           <div className="absolute top-1.5 left-1.5 flex gap-1">
-            {product.formats.map((f) => <FormatTag key={f} format={f} />)}
+            {product.formats.map((f, index) => <FormatTag key={`${f || "format"}-${index}`} format={f} />)}
           </div>
         </div>
         <div className="flex-1 flex flex-col justify-center p-3 min-w-0">
@@ -242,7 +419,7 @@ function ProductCard({ product, onDownload, variant = "grid" }: { product: Produ
     );
   }
   return (
-    <Link to={`/model/${product.id}`} className="block group bg-surface-container-high rounded-sm overflow-hidden hover:shadow-[0_12px_24px_rgba(0,0,0,0.4)] transition-all duration-300 flex flex-col relative">
+    <Link to={detailPath} state={{ from: returnPath, homeBrowseState }} onClick={() => onBeforeOpen?.(product.id)} data-home-model-id={product.id} className="block group bg-surface-container-high rounded-sm overflow-hidden hover:shadow-[0_12px_24px_rgba(0,0,0,0.4)] transition-all duration-300 flex flex-col relative">
       <div className="aspect-square bg-surface-container-lowest relative overflow-hidden flex items-center justify-center">
         <ModelThumbnail
           src={product.thumbnailUrl}
@@ -250,7 +427,7 @@ function ProductCard({ product, onDownload, variant = "grid" }: { product: Produ
           className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
         />
         <div className="absolute top-2 left-2 flex gap-1">
-          {product.formats.map((f) => <FormatTag key={f} format={f} />)}
+          {product.formats.map((f, index) => <FormatTag key={`${f || "format"}-${index}`} format={f} />)}
         </div>
         <span className="absolute top-2 right-2 bg-surface-container-highest/80 backdrop-blur-md px-1.5 py-0.5 text-[9px] text-on-surface-variant font-mono rounded-sm border border-outline-variant/30">
           {product.fileSize}
@@ -402,10 +579,11 @@ function MobileDrawer({
   );
 }
 
-function ProductCardMobile({ product, onDownload }: { product: Product; onDownload: (id: string) => void }) {
+function ProductCardMobile({ product, onDownload, returnPath, homeBrowseState, onBeforeOpen }: { product: Product; onDownload: (id: string) => void; returnPath: string; homeBrowseState: HomeBrowseState; onBeforeOpen?: (modelId: string) => void }) {
+  const detailPath = `/model/${product.id}`;
   return (
     <div className="bg-surface-container-high rounded-sm overflow-hidden flex flex-col">
-      <Link to={`/model/${product.id}`} className="block">
+      <Link to={detailPath} state={{ from: returnPath, homeBrowseState }} onClick={() => onBeforeOpen?.(product.id)} data-home-model-id={product.id} className="block">
         <div className="h-[140px] bg-surface-container-lowest relative overflow-hidden flex items-center justify-center">
           <ModelThumbnail
             src={product.thumbnailUrl}
@@ -413,7 +591,7 @@ function ProductCardMobile({ product, onDownload }: { product: Product; onDownlo
             className="w-full h-full object-cover"
           />
           <div className="absolute top-2 left-2 flex flex-col gap-0.5">
-            {product.formats.map((f) => <FormatTag key={f} format={f} />)}
+            {product.formats.map((f, index) => <FormatTag key={`${f || "format"}-${index}`} format={f} />)}
           </div>
           <span className="absolute top-2 right-2 text-[9px] text-on-surface-variant/60 bg-black/30 backdrop-blur-sm px-1.5 py-0.5 rounded-sm">{product.fileSize}</span>
         </div>
@@ -454,74 +632,19 @@ function formatFileSize(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-const PAGE_SIZE = 60;
-
-function Pagination({ page, totalPages, onPageChange, compact = false }: { page: number; totalPages: number; onPageChange: (p: number) => void; compact?: boolean }) {
-  if (totalPages <= 1) return null;
-
-  // Build page numbers: always show first, last, current ± 1, and ellipsis
-  const pages: (number | "...")[] = [];
-  const showPages = compact ? 3 : 5;
-
-  if (totalPages <= showPages + 2) {
-    for (let i = 1; i <= totalPages; i++) pages.push(i);
-  } else {
-    pages.push(1);
-    const start = Math.max(2, page - 1);
-    const end = Math.min(totalPages - 1, page + 1);
-    if (start > 2) pages.push("...");
-    for (let i = start; i <= end; i++) pages.push(i);
-    if (end < totalPages - 1) pages.push("...");
-    pages.push(totalPages);
-  }
-
-  const btnBase = compact
-    ? "w-7 h-7 text-xs rounded-sm"
-    : "min-w-[32px] h-8 text-sm rounded-sm";
-
-  return (
-    <div className="flex items-center justify-center gap-1 mt-6 pb-4">
-      <button
-        onClick={() => onPageChange(page - 1)}
-        disabled={page <= 1}
-        className={`${btnBase} px-2 border border-outline-variant/30 text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high disabled:opacity-30 disabled:cursor-not-allowed transition-colors`}
-      >
-        ‹
-      </button>
-      {pages.map((p, i) =>
-        p === "..." ? (
-          <span key={`e${i}`} className={`${btnBase} flex items-center justify-center text-on-surface-variant/50`}>…</span>
-        ) : (
-          <button
-            key={p}
-            onClick={() => onPageChange(p)}
-            className={`${btnBase} flex items-center justify-center transition-colors ${
-              p === page
-                ? "bg-primary-container text-on-primary font-medium"
-                : "border border-outline-variant/30 text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high"
-            }`}
-          >
-            {p}
-          </button>
-        )
-      )}
-      <button
-        onClick={() => onPageChange(page + 1)}
-        disabled={page >= totalPages}
-        className={`${btnBase} px-2 border border-outline-variant/30 text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high disabled:opacity-30 disabled:cursor-not-allowed transition-colors`}
-      >
-        ›
-      </button>
-    </div>
-  );
-}
-
 export default function HomePage() {
   useDocumentTitle();
   const isDesktop = useMediaQuery("(min-width: 768px)");
   const navigate = useNavigate();
+  const location = useLocation();
   const [searchParams, setSearchParams] = useSearchParams();
-  const searchQuery = searchParams.get("q") || "";
+  const legacySearchQuery = normalizeHomeSearchQuery(searchParams.get("q") || "");
+  const initialHomeState = useMemo(
+    () => normalizeHomeBrowseState(readHomeBrowseStateFromLocation(location.state)) || readPendingHomeBrowseState(),
+    // Only seed the initial local browse state once when the page mounts.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    []
+  );
   const { isAuthenticated } = useAuthStore();
   const [browseBlocked, setBrowseBlocked] = useState(false);
 
@@ -539,21 +662,88 @@ export default function HomePage() {
   const [totalModelCount, setTotalModelCount] = useState(0);
 
   const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set());
-  const [activeCategory, setActiveCategory] = useState(() => searchParams.get("category") || "all");
-  const [page, setPage] = useState(1);
-
-  // Sync URL category param to state when it changes externally (e.g. breadcrumb navigation)
-  useEffect(() => {
-    const cat = searchParams.get("category");
-    if (cat && cat !== activeCategory) {
-      setActiveCategory(cat);
-      setPage(1);
-    }
-  }, [searchParams, activeCategory]);
+  const [searchQuery, setSearchQuery] = useState(() => initialHomeState?.query ?? readHomeSearchQuery() ?? legacySearchQuery);
+  const [activeCategory, setActiveCategory] = useState(() => initialHomeState?.categoryId || searchParams.get("category") || "all");
+  const [page, setPage] = useState(() => initialHomeState?.page || parsePageParam(searchParams.get("page")));
+  const [pageSize, setPageSize] = useState(() => initialHomeState?.pageSize || normalizePageSize(searchParams.get("page_size")));
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
-  const [sortBy, setSortBy] = useState("created_at");
+  const [sortBy, setSortBy] = useState(() => initialHomeState?.sort || normalizeSortParam(searchParams.get("sort")));
+  const scrollContainerRef = useRef<HTMLElement | null>(null);
+  const restoreFrameRef = useRef<number | null>(null);
+  const consumedHomeStateKeyRef = useRef<string | null>(null);
+
+  // Keep browsing controls in React/navigation state. Legacy query links still work, then get cleaned from the URL.
+  useEffect(() => {
+    const stateBrowse = normalizeHomeBrowseState(readHomeBrowseStateFromLocation(location.state));
+    if (stateBrowse && consumedHomeStateKeyRef.current !== location.key) {
+      consumedHomeStateKeyRef.current = location.key;
+      if (stateBrowse.query !== searchQuery) {
+        setSearchQuery(stateBrowse.query);
+        saveHomeSearchQuery(stateBrowse.query);
+        dispatchHomeSearchQuery(stateBrowse.query, { preservePage: true });
+      }
+      if (stateBrowse.categoryId !== activeCategory) setActiveCategory(stateBrowse.categoryId);
+      if (stateBrowse.page !== page) setPage(stateBrowse.page);
+      if (stateBrowse.pageSize !== pageSize) setPageSize(stateBrowse.pageSize);
+      if (stateBrowse.sort !== sortBy) setSortBy(stateBrowse.sort);
+      return;
+    }
+
+    const hasLegacySearchQuery = searchParams.has("q");
+    if (hasLegacySearchQuery && legacySearchQuery !== searchQuery) {
+      setSearchQuery(legacySearchQuery);
+      saveHomeSearchQuery(legacySearchQuery);
+      dispatchHomeSearchQuery(legacySearchQuery, { preservePage: true });
+    }
+
+    const legacyCategory = searchParams.get("category");
+    if (legacyCategory && legacyCategory !== activeCategory) setActiveCategory(legacyCategory);
+
+    const nextPage = parsePageParam(searchParams.get("page"));
+    const nextPageSize = normalizePageSize(searchParams.get("page_size"));
+    const nextSort = normalizeSortParam(searchParams.get("sort"));
+    if (nextPage !== page) setPage(nextPage);
+    if (nextPageSize !== pageSize) setPageSize(nextPageSize);
+    if (nextSort !== sortBy) setSortBy(nextSort);
+
+    if (hasLegacySearchQuery || legacyCategory || searchParams.has("page") || searchParams.has("page_size") || searchParams.has("sort")) {
+      const nextParams = new URLSearchParams(searchParams);
+      nextParams.delete("q");
+      nextParams.delete("category");
+      nextParams.delete("page");
+      nextParams.delete("page_size");
+      nextParams.delete("sort");
+      setSearchParams(nextParams, { replace: true });
+    }
+  }, [activeCategory, legacySearchQuery, location.key, location.state, page, pageSize, searchParams, searchQuery, setSearchParams, sortBy]);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [loginPromptOpen, setLoginPromptOpen] = useState(false);
+
+  useEffect(() => {
+    saveHomeSearchQuery(searchQuery);
+  }, [searchQuery]);
+
+  useEffect(() => {
+    const handleSearchEvent = (event: Event) => {
+      const detail = (event as CustomEvent<HomeSearchEventDetail>).detail;
+      if (!detail || typeof detail.query !== "string") return;
+      const query = normalizeHomeSearchQuery(detail.query);
+      setSearchQuery(query);
+      saveHomeSearchQuery(query);
+      if (!detail.preservePage) {
+        if (query && activeCategory !== "all") setActiveCategory("all");
+        setPage(1);
+        scrollContainerRef.current?.scrollTo({ top: 0, behavior: "smooth" });
+      }
+      if (searchParams.has("q")) {
+        const nextParams = new URLSearchParams(searchParams);
+        nextParams.delete("q");
+        setSearchParams(nextParams, { replace: true });
+      }
+    };
+    window.addEventListener(HOME_SEARCH_EVENT, handleSearchEvent);
+    return () => window.removeEventListener(HOME_SEARCH_EVENT, handleSearchEvent);
+  }, [activeCategory, searchParams, setSearchParams]);
 
   const handleDownload = useCallback(async (modelId: string) => {
     const token = getAccessToken();
@@ -571,7 +761,7 @@ export default function HomePage() {
   // Server-side filtering with category ID
   const { data: serverData, isLoading } = useModels({
     page,
-    pageSize: PAGE_SIZE,
+    pageSize,
     search: searchQuery,
     categoryId: activeCategory !== "all" ? activeCategory : undefined,
     sort: sortBy,
@@ -586,6 +776,7 @@ export default function HomePage() {
     if (!serverData?.items) return [];
     return serverData.items.map(serverItemToProduct);
   }, [serverData]);
+  const productIdsKey = useMemo(() => products.map((product) => product.id).join("|"), [products]);
 
   const totalPages = serverData?.totalPages || 1;
   const totalItems = serverData?.total || 0;
@@ -603,12 +794,98 @@ export default function HomePage() {
 
   const handleSelectCategory = (id: string) => {
     setActiveCategory(id);
+    setSearchQuery("");
+    saveHomeSearchQuery("");
+    dispatchHomeSearchQuery("");
     setPage(1);
-    // Clear search when selecting a category
-    if (searchQuery) {
-      setSearchParams({}, { replace: true });
-    }
+    // Clear search when selecting a category; category itself stays in local navigation state.
+    if (searchParams.toString()) setSearchParams(new URLSearchParams(), { replace: true });
   };
+
+  const handlePageChange = useCallback((nextPage: number) => {
+    setPage(nextPage);
+    scrollContainerRef.current?.scrollTo({ top: 0, behavior: "smooth" });
+  }, []);
+
+  const handlePageSizeChange = useCallback((nextPageSize: number) => {
+    const normalizedPageSize = normalizePageSize(nextPageSize);
+    setPageSize(normalizedPageSize);
+    setPage(1);
+    scrollContainerRef.current?.scrollTo({ top: 0, behavior: "smooth" });
+  }, []);
+
+  const handleSortChange = useCallback((nextSort: string) => {
+    const normalizedSort = normalizeSortParam(nextSort);
+    setSortBy(normalizedSort);
+    setPage(1);
+    scrollContainerRef.current?.scrollTo({ top: 0, behavior: "smooth" });
+  }, []);
+
+  const modelReturnPath = useMemo(
+    () => buildHomeReturnPath(),
+    []
+  );
+
+  const homeRestoreKey = useMemo(
+    () => buildHomeRestoreKey(activeCategory, searchQuery, page, sortBy, pageSize),
+    [activeCategory, page, pageSize, searchQuery, sortBy]
+  );
+
+  const homeBrowseState = useMemo<HomeBrowseState>(
+    () => ({
+      categoryId: activeCategory,
+      query: searchQuery,
+      page,
+      pageSize,
+      sort: sortBy,
+      restoreKey: homeRestoreKey,
+    }),
+    [activeCategory, homeRestoreKey, page, pageSize, searchQuery, sortBy]
+  );
+
+  const saveCurrentHomeScroll = useCallback((pendingRestore = false, modelId?: string) => {
+    saveHomeBrowseState(homeRestoreKey, homeBrowseState);
+    saveHomeScrollPosition(homeRestoreKey, scrollContainerRef.current?.scrollTop || 0, pendingRestore, modelId);
+  }, [homeBrowseState, homeRestoreKey]);
+
+  const handleHomeScroll = useCallback((event: UIEvent<HTMLElement>) => {
+    saveHomeScrollPosition(homeRestoreKey, event.currentTarget.scrollTop);
+  }, [homeRestoreKey]);
+
+  useEffect(() => {
+    if (isLoading || getPendingHomeRestoreKey() !== homeRestoreKey) return;
+    const targetTop = readHomeScrollPosition(homeRestoreKey);
+    const targetModelId = readHomeScrollTarget(homeRestoreKey);
+    if (targetTop == null && !targetModelId) return;
+
+    if (restoreFrameRef.current != null) window.cancelAnimationFrame(restoreFrameRef.current);
+    let restored = false;
+    const tryRestore = () => {
+      const container = scrollContainerRef.current;
+      if (!container || restored) return false;
+      restored = scrollHomeToModel(container, targetModelId, targetTop);
+      if (restored) clearPendingHomeRestore(homeRestoreKey);
+      return restored;
+    };
+
+    restoreFrameRef.current = window.requestAnimationFrame(() => {
+      tryRestore();
+      restoreFrameRef.current = window.requestAnimationFrame(() => {
+        tryRestore();
+        restoreFrameRef.current = window.requestAnimationFrame(() => {
+          tryRestore();
+          restoreFrameRef.current = null;
+        });
+      });
+    });
+
+    return () => {
+      if (restoreFrameRef.current != null) {
+        window.cancelAnimationFrame(restoreFrameRef.current);
+        restoreFrameRef.current = null;
+      }
+    };
+  }, [homeRestoreKey, isLoading, productIdsKey, products.length]);
 
   // Resolve breadcrumb
   const breadcrumb = useMemo(() => {
@@ -648,7 +925,7 @@ export default function HomePage() {
             onToggle={toggleCategory}
             onSelect={handleSelectCategory}
           />
-          <main className="flex-1 overflow-y-auto scrollbar-hidden bg-surface-dim p-6 relative">
+          <main ref={scrollContainerRef} onScroll={handleHomeScroll} className="flex-1 overflow-y-auto scrollbar-hidden bg-surface-dim p-6 relative">
             <AnnouncementBanner />
             <div className="flex justify-between items-end mb-6 border-b border-surface-container-low pb-3 flex-wrap gap-3">
               <div>
@@ -674,7 +951,7 @@ export default function HomePage() {
               </div>
               <div className="flex items-center gap-3">
                 <div className="relative">
-                  <select value={sortBy} onChange={(e) => { setSortBy(e.target.value); setPage(1); }} className="bg-surface-container-lowest text-sm text-on-surface rounded-sm pl-3 pr-8 py-1 border border-outline-variant/30 outline-none appearance-none cursor-pointer">
+                  <select value={sortBy} onChange={(e) => handleSortChange(e.target.value)} className="bg-surface-container-lowest text-sm text-on-surface rounded-sm pl-3 pr-8 py-1 border border-outline-variant/30 outline-none appearance-none cursor-pointer">
                     <option value="created_at">最新上传</option>
                     <option value="name">名称排序</option>
                   </select>
@@ -699,7 +976,7 @@ export default function HomePage() {
               <>
                 <div className={`grid gap-3 ${viewMode === "grid" ? "grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5" : "grid-cols-1 gap-2"}`}>
                   {products.map((product) => (
-                    <ProductCard key={product.id} product={product} onDownload={handleDownload} variant={viewMode} />
+                    <ProductCard key={product.id} product={product} onDownload={handleDownload} returnPath={modelReturnPath} homeBrowseState={homeBrowseState} onBeforeOpen={(modelId) => saveCurrentHomeScroll(true, modelId)} variant={viewMode} />
                   ))}
                 </div>
 
@@ -711,7 +988,14 @@ export default function HomePage() {
                 )}
 
                 {/* Pagination */}
-                <Pagination page={page} totalPages={totalPages} onPageChange={setPage} />
+                <Pagination
+                  page={page}
+                  pageSize={pageSize}
+                  totalItems={totalItems}
+                  totalPages={totalPages}
+                  onPageChange={handlePageChange}
+                  onPageSizeChange={handlePageSizeChange}
+                />
               </>
             )}
 
@@ -791,7 +1075,7 @@ export default function HomePage() {
         onToggle={toggleCategory}
         onSelect={handleSelectCategory}
       />
-      <main className="flex-1 overflow-y-auto overflow-x-hidden scrollbar-hidden bg-surface-dim">
+      <main ref={scrollContainerRef} onScroll={handleHomeScroll} className="flex-1 overflow-y-auto overflow-x-hidden scrollbar-hidden bg-surface-dim">
         <div className="p-3 space-y-3 pb-20 min-h-full flex flex-col">
           <AnnouncementBanner />
           {/* Header with category filter button */}
@@ -839,7 +1123,7 @@ export default function HomePage() {
           ) : (
             <div className="grid grid-cols-2 gap-2">
               {products.map((product) => (
-                <ProductCardMobile key={product.id} product={product} onDownload={handleDownload} />
+                <ProductCardMobile key={product.id} product={product} onDownload={handleDownload} returnPath={modelReturnPath} homeBrowseState={homeBrowseState} onBeforeOpen={(modelId) => saveCurrentHomeScroll(true, modelId)} />
               ))}
             </div>
           )}
@@ -852,7 +1136,15 @@ export default function HomePage() {
           )}
 
           {/* Mobile pagination */}
-          <Pagination page={page} totalPages={totalPages} onPageChange={setPage} compact />
+          <Pagination
+            page={page}
+            pageSize={pageSize}
+            totalItems={totalItems}
+            totalPages={totalPages}
+            onPageChange={handlePageChange}
+            onPageSizeChange={handlePageSizeChange}
+            compact
+          />
 
           {/* Footer */}
           <footer className="mt-auto pt-4 border-t border-outline-variant/10 text-center pb-2">

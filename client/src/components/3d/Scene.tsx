@@ -1,13 +1,14 @@
-import { Grid, GizmoHelper, GizmoViewport } from "@react-three/drei";
-import { get3DMaterialConfig } from "../../lib/publicSettings";
+import { Grid } from "@react-three/drei";
+import { get3DMaterialConfig, type ViewerSettingsOverride } from "../../lib/publicSettings";
 
 interface SceneProps {
   showGrid: boolean;
   showAxis?: boolean;
+  viewerSettings?: ViewerSettingsOverride;
 }
 
-export default function Scene({ showGrid, showAxis = true }: SceneProps) {
-  const config = get3DMaterialConfig().viewer;
+export default function Scene({ showGrid, viewerSettings }: SceneProps) {
+  const config = get3DMaterialConfig(viewerSettings).viewer;
 
   return (
     <>
@@ -32,14 +33,6 @@ export default function Scene({ showGrid, showAxis = true }: SceneProps) {
           followCamera={false}
           position={[0, -0.01, 0]}
         />
-      )}
-
-      {showAxis && (
-        <GizmoHelper alignment="bottom-right" margin={[30, 30]}>
-          <group scale={0.6}>
-            <GizmoViewport labelColor="white" axisHeadScale={0.4} />
-          </group>
-        </GizmoHelper>
       )}
     </>
   );

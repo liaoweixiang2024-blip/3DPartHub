@@ -24,10 +24,10 @@ export function useModels(params?: PaginationParams & { category?: string; categ
 }
 
 export function useModel(id: string | undefined) {
-  const { data, error, isLoading } = useSWR<ServerModelDetail>(
+  const { data, error, isLoading, mutate } = useSWR<ServerModelDetail>(
     id ? `/models/${id}` : null,
     () => (id ? modelApi.getById(id) : Promise.reject("No ID"))
   );
 
-  return { data, error, isLoading };
+  return { data, error, isLoading, mutate };
 }

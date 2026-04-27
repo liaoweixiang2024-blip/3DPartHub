@@ -7,6 +7,7 @@ import { authMiddleware, type AuthRequest } from "../middleware/auth.js";
 import { config } from "../lib/config.js";
 import { createNotification } from "./notifications.js";
 import archiver from "archiver";
+import { getPreviewAssetExtension, resolveFileUrlPath } from "../services/gltfAsset.js";
 
 const router = Router();
 
@@ -149,14 +150,13 @@ router.post("/api/favorites/batch-download", authMiddleware, async (req: AuthReq
       }
 
       if (!filePath && m.gltfUrl) {
-        const gltfPath = m.gltfUrl.startsWith("/")
-          ? join(process.cwd(), m.gltfUrl.slice(1))
-          : m.gltfUrl;
+        const gltfPath = resolveFileUrlPath(m.gltfUrl);
         if (existsSync(gltfPath)) {
           filePath = gltfPath;
-          fileName = `${m.name || m.id}.gltf`;
+          const ext = getPreviewAssetExtension(gltfPath);
+          fileName = `${m.name || m.id}.${ext}`;
           const binPath = gltfPath.replace(/\.gltf$/, ".bin");
-          const hasBin = existsSync(binPath) ? binPath : undefined;
+          const hasBin = ext === "gltf" && existsSync(binPath) ? binPath : undefined;
           fileEntries.push({ filePath, fileName, binPath: hasBin });
           continue;
         }

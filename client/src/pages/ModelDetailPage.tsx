@@ -1,5 +1,5 @@
-import { useState, useRef, useCallback, useEffect, useMemo, Suspense } from "react";
-import { useParams, useNavigate, Link } from "react-router-dom";
+import { useState, useRef, useCallback, useEffect, useMemo } from "react";
+import { useParams, useNavigate, Link, useLocation } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { useMediaQuery } from "../layouts/hooks/useMediaQuery";
 import { useDocumentTitle } from "../hooks/useDocumentTitle";
@@ -8,18 +8,22 @@ import BottomNav from "../components/shared/BottomNav";
 import MobileNavDrawer from "../components/shared/MobileNavDrawer";
 import Icon from "../components/shared/Icon";
 import Tooltip from "../components/shared/Tooltip";
-import { ModelViewer, type ViewMode, type CameraPreset } from "../components/3d";
-import LoadingOverlay from "../components/3d/LoadingOverlay";
+import type { ViewMode, CameraPreset } from "../components/3d";
+import CadViewerPanel from "../components/3d/CadViewerPanel";
+import { dispatchFitModel } from "../components/3d/viewerEvents";
+import { DEFAULT_VIEWER_TUNING, viewerTuningFromSettings, type ViewerTuning } from "../components/3d/viewerTuning";
+import { CAMERA_ANGLES, MATERIAL_PRESETS, VIEW_MODES, type MaterialPresetKey } from "../components/3d/viewerControls";
 import { useFavoriteStore, useAuthStore, getAccessToken } from "../stores";
 import ModelThumbnail from "../components/shared/ModelThumbnail";
-import SafeImage from "../components/shared/SafeImage";
 import { useModel } from "../hooks/useModels";
-import { modelApi } from "../api/models";
+import { modelApi, type ModelPreviewMeta } from "../api/models";
 import { categoriesApi, type CategoryItem } from "../api/categories";
 import { useToast } from "../components/shared/Toast";
 import CategorySelect from "../components/shared/CategorySelect";
 import ShareDialog from "../components/shared/ShareDialog";
-import { getCachedPublicSettings, getSiteTitle } from "../lib/publicSettings";
+import { getCachedPublicSettings, getSiteTitle, refreshSiteConfig } from "../lib/publicSettings";
+import { getModelReturnPath, normalizeModelReturnPath } from "../lib/modelReturnPath";
+import { updateSettings } from "../api/settings";
 import type { ModelSpec, ModelDownload } from "../types";
 import useSWR, { mutate as globalMutate } from "swr";
 
@@ -38,6 +42,9 @@ interface ModelInfo {
   id: string;
   name: string;
   subtitle: string;
+  format: string;
+  fileSize: string;
+  createdAtLabel: string;
   category: string;
   categoryId?: string;
   specs: ModelSpec[];
@@ -49,28 +56,73 @@ interface ModelInfo {
   groupId?: string;
   groupName?: string;
   variants?: ModelVariant[];
+  previewMeta?: ModelPreviewMeta | null;
 }
 
-const VIEW_MODES: { key: ViewMode; label: string; icon: string }[] = [
-  { key: "solid", label: "实体", icon: "deployed_code" },
-  { key: "wireframe", label: "线框", icon: "grid_4x4" },
-  { key: "transparent", label: "透明", icon: "layers" },
-  { key: "explode", label: "爆炸", icon: "zoom_out_map" },
-];
+type ViewerDisplayPrefs = {
+  activeView: ViewMode;
+  activeCamera: CameraPreset;
+  showDimensions: boolean;
+  materialPreset: MaterialPresetKey;
+  showEdges: boolean;
+  showAxis: boolean;
+};
 
-const CAMERA_ANGLES: { key: CameraPreset; label: string; icon: string }[] = [
-  { key: "front", label: "正视", icon: "square" },
-  { key: "side", label: "侧视", icon: "view_sidebar" },
-  { key: "iso", label: "等轴测", icon: "box_icon" },
-  { key: "top", label: "俯视", icon: "crop_free" },
-];
+const VIEWER_DISPLAY_PREFS_KEY = "model_viewer_display_prefs_v1";
 
-const MATERIAL_PRESETS = [
-  { key: "default" as const, label: "默认" },
-  { key: "metal" as const, label: "金属" },
-  { key: "plastic" as const, label: "塑料" },
-  { key: "glass" as const, label: "玻璃" },
-];
+const DEFAULT_VIEWER_DISPLAY_PREFS: ViewerDisplayPrefs = {
+  activeView: "solid",
+  activeCamera: "iso",
+  showDimensions: false,
+  materialPreset: "default",
+  showEdges: false,
+  showAxis: false,
+};
+
+type ModelDetailLocationState = {
+  from?: string;
+  homeBrowseState?: {
+    categoryId?: string;
+    query?: string;
+    page?: number;
+    pageSize?: number;
+    sort?: string;
+    restoreKey?: string;
+  } | null;
+} | null;
+
+function getViewerDisplayPrefs(): ViewerDisplayPrefs {
+  if (typeof window === "undefined") return DEFAULT_VIEWER_DISPLAY_PREFS;
+  try {
+    const raw = window.localStorage.getItem(VIEWER_DISPLAY_PREFS_KEY);
+    if (!raw) return DEFAULT_VIEWER_DISPLAY_PREFS;
+    const parsed = JSON.parse(raw) as Partial<ViewerDisplayPrefs>;
+    const rawView = VIEW_MODES.some((mode) => mode.key === parsed.activeView) ? parsed.activeView : DEFAULT_VIEWER_DISPLAY_PREFS.activeView;
+    const view = rawView === "solid" ? rawView : DEFAULT_VIEWER_DISPLAY_PREFS.activeView;
+    const parsedCamera = parsed.activeCamera === "side" ? "right" : parsed.activeCamera;
+    const camera = CAMERA_ANGLES.some((angle) => angle.key === parsedCamera) ? parsedCamera : DEFAULT_VIEWER_DISPLAY_PREFS.activeCamera;
+    const material = MATERIAL_PRESETS.some((preset) => preset.key === parsed.materialPreset) ? parsed.materialPreset : DEFAULT_VIEWER_DISPLAY_PREFS.materialPreset;
+    return {
+      activeView: view as ViewMode,
+      activeCamera: camera as CameraPreset,
+      showDimensions: typeof parsed.showDimensions === "boolean" ? parsed.showDimensions : DEFAULT_VIEWER_DISPLAY_PREFS.showDimensions,
+      materialPreset: material as MaterialPresetKey,
+      showEdges: DEFAULT_VIEWER_DISPLAY_PREFS.showEdges,
+      showAxis: typeof parsed.showAxis === "boolean" ? parsed.showAxis : DEFAULT_VIEWER_DISPLAY_PREFS.showAxis,
+    };
+  } catch {
+    return DEFAULT_VIEWER_DISPLAY_PREFS;
+  }
+}
+
+function saveViewerDisplayPrefs(prefs: ViewerDisplayPrefs) {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(VIEWER_DISPLAY_PREFS_KEY, JSON.stringify(prefs));
+  } catch {
+    // Ignore private browsing or storage quota failures.
+  }
+}
 
 function formatFileSize(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
@@ -78,259 +130,6 @@ function formatFileSize(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-function ViewerPanel({
-  modelId,
-  isAdmin,
-  modelUrl,
-  activeView,
-  onViewChange,
-  activeCamera,
-  onCameraChange,
-  showDimensions,
-  onToggleDimensions,
-  materialPreset,
-  onMaterialChange,
-  clipEnabled,
-  onToggleClip,
-  clipPosition,
-  onClipPositionChange,
-  clipDirection,
-  onClipDirectionChange,
-  showAxis,
-  onToggleAxis,
-  onThumbnailUpdated,
-}: {
-  modelId?: string;
-  isAdmin?: boolean;
-  modelUrl?: string;
-  activeView: ViewMode;
-  onViewChange: (v: ViewMode) => void;
-  activeCamera: CameraPreset;
-  onCameraChange: (c: CameraPreset) => void;
-  showDimensions: boolean;
-  onToggleDimensions: () => void;
-  materialPreset: "metal" | "plastic" | "glass" | "default";
-  onMaterialChange: (p: "metal" | "plastic" | "glass" | "default") => void;
-  clipEnabled: boolean;
-  onToggleClip: () => void;
-  clipPosition: number;
-  onClipPositionChange: (v: number) => void;
-  clipDirection: "x" | "y" | "z";
-  onClipDirectionChange: (d: "x" | "y" | "z") => void;
-  showAxis: boolean;
-  onToggleAxis: () => void;
-  onThumbnailUpdated?: () => void;
-}) {
-  const containerRef = useRef<HTMLDivElement>(null);
-  const [, setLoaded] = useState(false);
-  const [settingThumb, setSettingThumb] = useState(false);
-  const [watermark, setWatermark] = useState<{ show: boolean; image: string }>({ show: false, image: "" });
-  const { toast } = useToast();
-
-  useEffect(() => {
-    getCachedPublicSettings().then(s => {
-      setWatermark({ show: !!s.show_watermark, image: (s as any).watermark_image || "" });
-    }).catch(() => {});
-  }, []);
-
-  const handleScreenshot = useCallback(() => {
-    const canvas = containerRef.current?.querySelector("canvas");
-    if (!canvas) return;
-    const link = document.createElement("a");
-    link.download = "model-screenshot.png";
-    link.href = canvas.toDataURL("image/png");
-    link.click();
-  }, []);
-
-  const handleSetThumbnail = useCallback(async () => {
-    if (!modelId) return;
-    const canvas = containerRef.current?.querySelector("canvas") as HTMLCanvasElement | null;
-    if (!canvas) return;
-    setSettingThumb(true);
-    let ok = false;
-    try {
-      const blob = await new Promise<Blob>((resolve, reject) => {
-        canvas.toBlob((b) => b ? resolve(b) : reject(new Error("toBlob failed")), "image/png");
-      });
-      const file = new File([blob], "thumbnail.png", { type: "image/png" });
-      await modelApi.uploadThumbnail(modelId, file);
-      toast("预览图已更新", "success");
-      ok = true;
-    } catch {
-      toast("设置预览图失败", "error");
-    } finally {
-      setSettingThumb(false);
-    }
-    if (ok) onThumbnailUpdated?.();
-  }, [modelId, toast, onThumbnailUpdated]);
-
-  const handleFullscreen = useCallback(() => {
-    if (containerRef.current) {
-      if (document.fullscreenElement) {
-        document.exitFullscreen();
-      } else {
-        containerRef.current.requestFullscreen();
-      }
-    }
-  }, []);
-
-  return (
-    <div ref={containerRef} className="relative bg-surface-container flex-1 md:w-[60%] overflow-hidden border-r border-outline-variant/20 shrink-0" style={{ contain: 'strict' }}>
-      <LoadingOverlay />
-      <div className="absolute inset-0">
-        <Suspense
-          fallback={
-            <div className="w-full h-full flex items-center justify-center">
-              <div className="flex flex-col items-center gap-3">
-                <Icon name="view_in_ar" size={48} className="text-on-surface-variant/30 animate-pulse" />
-                <span className="text-xs text-on-surface-variant">加载 3D 模型...</span>
-              </div>
-            </div>
-          }
-        >
-          <ModelViewer
-            modelUrl={modelUrl}
-            viewMode={activeView}
-            cameraPreset={activeCamera}
-            showDimensions={showDimensions}
-            showGrid={false}
-            clipEnabled={clipEnabled}
-            clipDirection={clipDirection}
-            clipPosition={clipPosition}
-            materialPreset={materialPreset}
-            showAxis={showAxis}
-            onLoaded={() => setLoaded(true)}
-          />
-        </Suspense>
-      </div>
-
-      <div className="absolute top-4 left-4 micro-glass rounded-sm p-1 flex items-center gap-1">
-        {CAMERA_ANGLES.map((angle) => (
-          <button
-            key={angle.key}
-            onClick={() => onCameraChange(angle.key)}
-            title={angle.label}
-            className={`group relative p-2 text-on-surface-variant hover:text-primary transition-colors rounded-sm ${
-              activeCamera === angle.key ? "text-primary bg-primary-container/10" : ""
-            }`}
-          >
-            <Icon name={angle.icon} size={20} />
-            <span className="absolute left-full ml-2 top-1/2 -translate-y-1/2 px-2 py-0.5 bg-black/90 text-white text-[10px] rounded whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity z-10">{angle.label}</span>
-          </button>
-        ))}
-      </div>
-
-      <div className="absolute top-4 right-4 flex flex-col gap-2">
-        <div className="micro-glass rounded-sm p-1 flex flex-col items-stretch gap-0.5">
-          {VIEW_MODES.map((mode) => (
-            <button
-              key={mode.key}
-              onClick={() => onViewChange(mode.key)}
-              className={`group relative p-2 text-on-surface-variant hover:text-primary transition-colors rounded-sm ${
-                activeView === mode.key ? "text-primary bg-primary-container/10" : ""
-              }`}
-            >
-              <Icon name={mode.icon} size={18} />
-              <span className="absolute right-full mr-2 top-1/2 -translate-y-1/2 px-2 py-0.5 bg-black/90 text-white text-[10px] rounded whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity z-10">{mode.label}</span>
-            </button>
-          ))}
-          <div className="w-full h-px bg-outline-variant/30 my-0.5" />
-          <button onClick={onToggleDimensions} className={`group relative p-2 text-on-surface-variant hover:text-primary transition-colors rounded-sm ${showDimensions ? "text-primary bg-primary-container/10" : ""}`}>
-            <Icon name="straighten" size={18} />
-            <span className="absolute right-full mr-2 top-1/2 -translate-y-1/2 px-2 py-0.5 bg-black/90 text-white text-[10px] rounded whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity z-10">尺寸标注</span>
-          </button>
-          <button onClick={onToggleClip} className={`group relative p-2 text-on-surface-variant hover:text-primary transition-colors rounded-sm ${clipEnabled ? "text-primary bg-primary-container/10" : ""}`}>
-            <Icon name="content_cut" size={18} />
-            <span className="absolute right-full mr-2 top-1/2 -translate-y-1/2 px-2 py-0.5 bg-black/90 text-white text-[10px] rounded whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity z-10">剖面查看</span>
-          </button>
-          <button onClick={onToggleAxis} className={`group relative p-2 text-on-surface-variant hover:text-primary transition-colors rounded-sm ${showAxis ? "text-primary bg-primary-container/10" : ""}`}>
-            <Icon name="3d_rotation" size={18} />
-            <span className="absolute right-full mr-2 top-1/2 -translate-y-1/2 px-2 py-0.5 bg-black/90 text-white text-[10px] rounded whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity z-10">坐标轴</span>
-          </button>
-          <div className="w-full h-px bg-outline-variant/30 my-0.5" />
-          <button onClick={handleScreenshot} className="group relative p-2 text-on-surface-variant hover:text-primary transition-colors">
-            <Icon name="photo_camera" size={18} />
-            <span className="absolute right-full mr-2 top-1/2 -translate-y-1/2 px-2 py-0.5 bg-black/90 text-white text-[10px] rounded whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity z-10">截图下载</span>
-          </button>
-          {isAdmin && (
-          <button onClick={handleSetThumbnail} disabled={settingThumb} className={`group relative p-2 transition-colors ${settingThumb ? "text-primary animate-pulse" : "text-on-surface-variant hover:text-primary"}`}>
-            <Icon name="wallpaper" size={18} />
-            <span className="absolute right-full mr-2 top-1/2 -translate-y-1/2 px-2 py-0.5 bg-black/90 text-white text-[10px] rounded whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity z-10">设为预览图</span>
-          </button>
-          )}
-          <button onClick={handleFullscreen} className="group relative p-2 text-on-surface-variant hover:text-primary transition-colors">
-            <Icon name="fullscreen" size={18} />
-            <span className="absolute right-full mr-2 top-1/2 -translate-y-1/2 px-2 py-0.5 bg-black/90 text-white text-[10px] rounded whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity z-10">全屏</span>
-          </button>
-        </div>
-
-        <AnimatePresence>
-          {clipEnabled && (
-            <motion.div
-              initial={{ opacity: 0, scale: 0.9 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.9 }}
-              className="micro-glass rounded-sm p-3 flex flex-col gap-2"
-            >
-              <span className="text-[10px] text-on-surface-variant uppercase tracking-wider">剖面方向</span>
-              <div className="flex gap-1">
-                {(["x", "y", "z"] as const).map((d) => (
-                  <button
-                    key={d}
-                    onClick={() => onClipDirectionChange(d)}
-                    className={`flex-1 text-[10px] py-1 rounded-sm transition-colors ${
-                      clipDirection === d ? "bg-primary-container/30 text-primary font-bold" : "text-on-surface-variant hover:text-on-surface"
-                    }`}
-                  >
-                    {d.toUpperCase()}
-                  </button>
-                ))}
-              </div>
-              <span className="text-[10px] text-on-surface-variant uppercase tracking-wider mt-1">剖面位置</span>
-              <input
-                type="range"
-                min={-2}
-                max={2}
-                step={0.01}
-                value={clipPosition}
-                onChange={(e) => onClipPositionChange(parseFloat(e.target.value))}
-                className="w-24 accent-primary-container"
-              />
-            </motion.div>
-          )}
-        </AnimatePresence>
-
-        <div className="micro-glass rounded-sm p-2 flex flex-col gap-1">
-          <span className="text-[9px] text-on-surface-variant uppercase tracking-wider px-1">材质</span>
-          {MATERIAL_PRESETS.map((mp) => (
-            <button
-              key={mp.key}
-              onClick={() => onMaterialChange(mp.key)}
-              className={`text-[10px] px-2 py-1 rounded-sm transition-colors text-left ${
-                materialPreset === mp.key ? "bg-primary-container/20 text-primary" : "text-on-surface-variant hover:text-on-surface"
-              }`}
-            >
-              {mp.label}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      {watermark.show && watermark.image && (
-        <div className="absolute inset-0 pointer-events-none flex items-center justify-center select-none">
-          <SafeImage
-            src={watermark.image}
-            alt=""
-            className="opacity-[0.04] select-none"
-            style={{ maxWidth: "40%", maxHeight: "40%", objectFit: "contain" }}
-            fallbackClassName="hidden"
-          />
-        </div>
-      )}
-
-    </div>
-  );
-}
 function DetailEditDialog({ open, modelId, modelName, thumbnailUrl: initialThumb, drawingUrl: initialDrawing, categoryId: initialCat, categories, onClose, onSaved, onDelete }: {
   open: boolean; modelId: string; modelName: string; thumbnailUrl: string | null; drawingUrl: string | null; categoryId?: string | null; categories: CategoryItem[]; onClose: () => void; onSaved: () => void; onDelete?: () => void;
 }) {
@@ -466,7 +265,7 @@ function SpecTable({ specs }: { specs: ModelSpec[] }) {
     <div className="rounded-sm border border-outline-variant/10 overflow-hidden divide-y divide-outline-variant/10">
       {specs.map((spec, i) => (
         <div
-          key={spec.label}
+          key={`${spec.label || "spec"}-${i}`}
           className={`flex items-center justify-between px-4 py-2.5 text-sm ${
             i % 2 === 0 ? "bg-surface-container-lowest" : "bg-surface-container-high"
           }`}
@@ -506,10 +305,11 @@ function DesktopDetail({
             <div className="flex items-center gap-1.5 text-[11px] tracking-[0.05em] uppercase text-on-surface-variant mb-1.5">
               <Link to="/" className="hover:text-primary transition-colors">模型库</Link>
               {categoryBreadcrumb.map((cat, i) => (
-                <span key={cat.id} className="flex items-center gap-1.5">
+                <span key={`${cat.id || cat.name || "category"}-${i}`} className="flex items-center gap-1.5">
                   <Icon name="chevron_right" size={12} className="text-on-surface-variant/40" />
                   <Link
-                    to={`/?category=${cat.id}`}
+                    to="/"
+                    state={{ homeBrowseState: { categoryId: cat.id, page: 1 } }}
                     className={`hover:text-primary transition-colors ${i === categoryBreadcrumb.length - 1 ? "text-primary" : ""}`}
                   >
                     {cat.name}
@@ -557,8 +357,8 @@ function DesktopDetail({
       <div className="p-8 pb-4">
         <h3 className="text-[11px] tracking-[0.05em] uppercase text-on-surface-variant mb-4 border-b border-outline-variant/20 pb-2">技术规格</h3>
         <div className="grid grid-cols-2 gap-x-4 gap-y-2">
-          {modelData.specs.map((spec) => (
-            <div key={spec.label} className="flex flex-col py-2 border-b border-outline-variant/10">
+          {modelData.specs.map((spec, index) => (
+            <div key={`${spec.label || "spec"}-${index}`} className="flex flex-col py-2 border-b border-outline-variant/10">
               <span className="text-xs text-on-secondary-container mb-1">{spec.label}</span>
               <span className="text-sm font-medium text-on-surface">{spec.value}</span>
             </div>
@@ -573,10 +373,11 @@ function DesktopDetail({
             历史版本 ({modelData.variants.length})
           </h3>
           <div className="flex gap-2 overflow-x-auto pb-2">
-            {modelData.variants.map((v) => {
+            {modelData.variants.map((v, index) => {
               const isCurrent = v.model_id === modelData.id;
+              const variantKey = `${v.model_id || v.original_name || "variant"}-${index}`;
               return isCurrent ? (
-                <div key={v.model_id} className="shrink-0">
+                <div key={variantKey} className="shrink-0">
                   <div className="w-20 h-20 rounded-md border-2 border-primary bg-surface-container-lowest overflow-hidden relative">
                     <ModelThumbnail src={v.thumbnail_url} alt="" className="w-full h-full object-cover" />
                     <div className="absolute bottom-0 inset-x-0 bg-primary/90 text-on-primary text-[9px] text-center py-0.5 font-medium">当前</div>
@@ -586,7 +387,7 @@ function DesktopDetail({
                   {v.file_modified_at && <p className="text-[9px] text-on-surface-variant/40 text-center">{new Date(v.file_modified_at).toLocaleDateString("zh-CN")}</p>}
                 </div>
               ) : (
-                <Link key={v.model_id} to={`/model/${v.model_id}`} className="shrink-0 group">
+                <Link key={variantKey} to={`/model/${v.model_id}`} className="shrink-0 group">
                   <div className="w-20 h-20 rounded-md border border-outline-variant/30 bg-surface-container-lowest overflow-hidden hover:border-primary/50 transition-colors relative">
                     <ModelThumbnail src={v.thumbnail_url} alt="" className="w-full h-full object-cover" />
                     {v.is_primary && <div className="absolute top-1 left-1 bg-primary/80 text-on-primary text-[7px] px-1 rounded-sm">主版本</div>}
@@ -603,9 +404,11 @@ function DesktopDetail({
       <div className="p-8 pt-4 flex-grow bg-surface-container-low">
         <h3 className="text-[11px] tracking-[0.05em] uppercase text-on-surface-variant mb-4 border-b border-outline-variant/20 pb-2">文件下载</h3>
         <div className="flex flex-col gap-2">
-          {modelData.downloads.map((file) => (
+          {modelData.downloads.map((file, index) => {
+            const downloadKey = `${file.downloadFormat || file.format || file.fileName || "download"}-${index}`;
+            return (
             file.downloadFormat === "drawing" ? (
-              <a key={file.format} href={modelData.drawingUrl} target="_blank" rel="noreferrer" className="milled-inset bg-surface-container-lowest p-3 rounded-sm flex items-center justify-between border border-outline-variant/10 hover:border-primary/50 transition-colors group cursor-pointer">
+              <a key={downloadKey} href={modelData.drawingUrl} target="_blank" rel="noreferrer" className="milled-inset bg-surface-container-lowest p-3 rounded-sm flex items-center justify-between border border-outline-variant/10 hover:border-primary/50 transition-colors group cursor-pointer">
                 <div className="flex items-center gap-3">
                   <div className="w-9 h-9 rounded-lg bg-error/10 flex items-center justify-center shrink-0">
                     <span className="text-[10px] font-bold text-error">PDF</span>
@@ -620,7 +423,7 @@ function DesktopDetail({
                 </div>
               </a>
             ) : (
-              <div key={file.format} className="milled-inset bg-surface-container-lowest p-3 rounded-sm flex items-center justify-between border border-outline-variant/10 hover:border-primary/50 transition-colors group">
+              <div key={downloadKey} className="milled-inset bg-surface-container-lowest p-3 rounded-sm flex items-center justify-between border border-outline-variant/10 hover:border-primary/50 transition-colors group">
                 <div className="flex items-center gap-3">
                   <div className="w-9 h-9 rounded-lg bg-primary-container/10 flex items-center justify-center shrink-0">
                     <span className="text-[10px] font-bold text-primary-container">{file.format.slice(0, 4)}</span>
@@ -638,7 +441,8 @@ function DesktopDetail({
                 </button>
               </div>
             )
-          ))}
+            );
+          })}
         </div>
       </div>
 
@@ -670,22 +474,28 @@ function DesktopDetail({
 export default function ModelDetailPage() {
   const { id } = useParams();
   const navigate = useNavigate();
+  const location = useLocation();
   useDocumentTitle();
   const isDesktop = useMediaQuery("(min-width: 768px)");
+  const initialViewerPrefs = useMemo(() => getViewerDisplayPrefs(), []);
 
-  const [activeView, setActiveView] = useState<ViewMode>("solid");
-  const [activeCamera, setActiveCamera] = useState<CameraPreset>("iso");
+  const [activeView, setActiveView] = useState<ViewMode>(initialViewerPrefs.activeView);
+  const [activeCamera, setActiveCamera] = useState<CameraPreset>(initialViewerPrefs.activeCamera);
   const [expandedSpecs, setExpandedSpecs] = useState(true);
   const [navOpen, setNavOpen] = useState(false);
-  const [showDimensions, setShowDimensions] = useState(false);
-  const [materialPreset, setMaterialPreset] = useState<"metal" | "plastic" | "glass" | "default">("default");
+  const [showDimensions, setShowDimensions] = useState(initialViewerPrefs.showDimensions);
+  const [materialPreset, setMaterialPreset] = useState<MaterialPresetKey>(initialViewerPrefs.materialPreset);
+  const [showEdges, setShowEdges] = useState(initialViewerPrefs.showEdges);
   const [clipEnabled, setClipEnabled] = useState(false);
   const [clipPosition, setClipPosition] = useState(0);
   const [clipDirection, setClipDirection] = useState<"x" | "y" | "z">("x");
-  const [showAxis, setShowAxis] = useState(true);
+  const [clipInverted, setClipInverted] = useState(false);
+  const [showAxis, setShowAxis] = useState(initialViewerPrefs.showAxis);
+  const [viewerTuning, setViewerTuning] = useState<ViewerTuning>(DEFAULT_VIEWER_TUNING);
+  const [savedViewerTuning, setSavedViewerTuning] = useState<ViewerTuning>(DEFAULT_VIEWER_TUNING);
+  const [viewerTuningOpen, setViewerTuningOpen] = useState(false);
+  const [viewerTuningSaving, setViewerTuningSaving] = useState(false);
   const [sheetExpanded, setSheetExpanded] = useState(false);
-  const [showMoreTools, setShowMoreTools] = useState(false);
-  const mobileViewerRef = useRef<HTMLDivElement>(null);
   const peekContentRef = useRef<HTMLDivElement>(null);
   const sheetRef = useRef<HTMLDivElement>(null);
   const sheetContentRef = useRef<HTMLDivElement>(null);
@@ -695,13 +505,46 @@ export default function ModelDetailPage() {
   const dragStartExpanded = useRef(false);
   const isMouseDraggingSheet = useRef(false);
   const [sheetDragOffset, setSheetDragOffset] = useState(0);
-  const [settingThumb, setSettingThumb] = useState(false);
-  const [watermarkState, setWatermarkState] = useState<{ show: boolean; image: string }>({ show: false, image: "" });
   const [loginPromptOpen, setLoginPromptOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
   const [shareOpen, setShareOpen] = useState(false);
   const isAdmin = useAuthStore.getState().user?.role === "ADMIN";
   const { toast } = useToast();
+  const currentPath = `${location.pathname}${location.search}${location.hash}`;
+  const detailLocationState = location.state as ModelDetailLocationState;
+  const returnPath = useMemo(() => {
+    const params = new URLSearchParams(location.search);
+    const fromQuery = normalizeModelReturnPath(params.get("from"), currentPath);
+    if (fromQuery) return fromQuery;
+
+    const fromState = normalizeModelReturnPath(detailLocationState?.from, currentPath);
+    if (fromState) return fromState;
+
+    const storedPath = getModelReturnPath(currentPath);
+    if (storedPath) return storedPath;
+
+    if (typeof window === "undefined" || !document.referrer) return null;
+    try {
+      const referrer = new URL(document.referrer);
+      if (referrer.origin !== window.location.origin) return null;
+      return normalizeModelReturnPath(`${referrer.pathname}${referrer.search}${referrer.hash}`, currentPath);
+    } catch {
+      return null;
+    }
+  }, [currentPath, detailLocationState?.from, location.search]);
+
+  const handleBack = useCallback(() => {
+    if (returnPath) {
+      navigate(returnPath, detailLocationState?.homeBrowseState ? { state: { homeBrowseState: detailLocationState.homeBrowseState } } : undefined);
+      return;
+    }
+    const historyIndex = typeof window !== "undefined" ? window.history.state?.idx : 0;
+    if (typeof historyIndex === "number" && historyIndex > 0) {
+      navigate(-1);
+      return;
+    }
+    navigate("/");
+  }, [detailLocationState?.homeBrowseState, navigate, returnPath]);
 
   const handleDownload = useCallback(async (modelId: string, format?: string) => {
     const token = getAccessToken();
@@ -721,42 +564,56 @@ export default function ModelDetailPage() {
 
   useEffect(() => {
     getCachedPublicSettings().then(s => {
-      setWatermarkState({ show: !!s.show_watermark, image: (s as any).watermark_image || "" });
+      const nextTuning = viewerTuningFromSettings(s as Partial<ViewerTuning>);
+      setViewerTuning(nextTuning);
+      setSavedViewerTuning(nextTuning);
     }).catch(() => {});
   }, []);
 
-  // Measure peek content height for adaptive bottom sheet
-  useEffect(() => {
-    const measure = () => {
-      if (peekContentRef.current) {
-        const h = peekContentRef.current.getBoundingClientRect().height;
-        if (h > 0) setPeekHeight(Math.ceil(h) + 16); // 8px extra for drag handle padding
-      }
-    };
-    measure();
-    window.addEventListener('resize', measure);
-    return () => window.removeEventListener('resize', measure);
-  }, [id]);
-
-  const handleScreenshot = useCallback(() => {
-    const container = mobileViewerRef.current || document.querySelector(".relative.bg-surface-dim");
-    const canvas = container?.querySelector("canvas");
-    if (!canvas) return;
-    const link = document.createElement("a");
-    link.download = "model-screenshot.png";
-    link.href = canvas.toDataURL("image/png");
-    link.click();
-  }, []);
-
-  const handleFullscreen = useCallback(() => {
-    const container = mobileViewerRef.current || document.querySelector(".relative.bg-surface-dim");
-    if (container) {
-      if (document.fullscreenElement) {
-        document.exitFullscreen();
-      } else {
-        container.requestFullscreen();
-      }
+  const handleSaveViewerTuning = useCallback(async () => {
+    if (!isAdmin) return;
+    setViewerTuningSaving(true);
+    try {
+      const saved = await updateSettings(viewerTuning);
+      const nextTuning = viewerTuningFromSettings(saved as Partial<ViewerTuning>);
+      setViewerTuning(nextTuning);
+      setSavedViewerTuning(nextTuning);
+      await refreshSiteConfig();
+      toast("3D 预览参数已保存", "success");
+    } catch {
+      toast("保存 3D 预览参数失败", "error");
+    } finally {
+      setViewerTuningSaving(false);
     }
+  }, [isAdmin, toast, viewerTuning]);
+
+  const handleResetViewerTuning = useCallback(() => {
+    setViewerTuning(savedViewerTuning);
+  }, [savedViewerTuning]);
+
+  useEffect(() => {
+    saveViewerDisplayPrefs({
+      activeView,
+      activeCamera,
+      showDimensions,
+      materialPreset,
+      showEdges,
+      showAxis,
+    });
+  }, [activeView, activeCamera, showDimensions, materialPreset, showEdges, showAxis]);
+
+  const handleResetViewerDisplay = useCallback(() => {
+    setActiveView(DEFAULT_VIEWER_DISPLAY_PREFS.activeView);
+    setActiveCamera(DEFAULT_VIEWER_DISPLAY_PREFS.activeCamera);
+    setShowDimensions(DEFAULT_VIEWER_DISPLAY_PREFS.showDimensions);
+    setMaterialPreset(DEFAULT_VIEWER_DISPLAY_PREFS.materialPreset);
+    setShowEdges(DEFAULT_VIEWER_DISPLAY_PREFS.showEdges);
+    setShowAxis(DEFAULT_VIEWER_DISPLAY_PREFS.showAxis);
+    setClipEnabled(false);
+    setClipDirection("x");
+    setClipPosition(0);
+    setClipInverted(false);
+    window.setTimeout(dispatchFitModel, 0);
   }, []);
 
   const { isFavorite, toggleFavorite } = useFavoriteStore();
@@ -764,28 +621,6 @@ export default function ModelDetailPage() {
   const { data: serverModel, isLoading, error, mutate } = useModel(id);
   const { data: catTreeData } = useSWR("/categories", () => categoriesApi.tree());
 
-  const handleSetThumbnail = useCallback(async () => {
-    if (!id) return;
-    const container = mobileViewerRef.current || document.querySelector(".relative.bg-surface-dim");
-    const canvas = container?.querySelector("canvas") as HTMLCanvasElement | null;
-    if (!canvas) return;
-    setSettingThumb(true);
-    let ok = false;
-    try {
-      const blob = await new Promise<Blob>((resolve, reject) => {
-        canvas.toBlob((b) => b ? resolve(b) : reject(new Error("toBlob failed")), "image/png");
-      });
-      const file = new File([blob], "thumbnail.png", { type: "image/png" });
-      await modelApi.uploadThumbnail(id, file);
-      toast("预览图已更新", "success");
-      ok = true;
-    } catch {
-      toast("设置预览图失败", "error");
-    } finally {
-      setSettingThumb(false);
-    }
-    if (ok) { mutate(); globalMutate((k: string) => typeof k === 'string' && k.startsWith('/models')); }
-  }, [id, toast, mutate]);
   const categoryTree = catTreeData?.items;
 
   let modelData: ModelInfo | undefined;
@@ -793,21 +628,26 @@ export default function ModelDetailPage() {
   if (serverModel) {
     const format = serverModel.format?.toUpperCase() || "UNKNOWN";
     const name = serverModel.name || serverModel.original_name?.replace(/\.[^.]+$/, "") || "未命名模型";
+    const fileSize = formatFileSize(serverModel.original_size || 0);
+    const createdAtLabel = serverModel.created_at ? new Date(serverModel.created_at).toLocaleString("zh-CN") : "N/A";
     modelData = {
       id: serverModel.model_id,
       name,
       subtitle: `${format} 格式 3D 模型`,
+      format,
+      fileSize,
+      createdAtLabel,
       category: serverModel.category || "模型库",
       categoryId: serverModel.category_id || undefined,
       specs: [
         { label: "格式", value: format },
-        { label: "文件大小", value: formatFileSize(serverModel.original_size || 0) },
+        { label: "文件大小", value: fileSize },
         { label: "文件日期", value: new Date(serverModel.file_modified_at || serverModel.created_at).toLocaleDateString("zh-CN") },
-        { label: "上传时间", value: serverModel.created_at ? new Date(serverModel.created_at).toLocaleString("zh-CN") : "N/A" },
+        { label: "上传时间", value: createdAtLabel },
         ...(serverModel.description ? [{ label: "描述", value: serverModel.description }] : []),
       ],
       downloads: [
-        { format, size: formatFileSize(serverModel.original_size || 0), fileName: serverModel.original_name || `${serverModel.name}.${format.toLowerCase()}`, downloadFormat: "original" },
+        { format, size: fileSize, fileName: serverModel.original_name || `${serverModel.name}.${format.toLowerCase()}`, downloadFormat: "original" },
         ...(serverModel.drawing_url ? [{ format: "PDF", size: serverModel.drawing_size ? formatFileSize(serverModel.drawing_size) : "PDF", fileName: serverModel.drawing_name || `${serverModel.name}.pdf`, downloadFormat: "drawing" as const }] : []),
       ],
       dimensions: "-",
@@ -817,10 +657,43 @@ export default function ModelDetailPage() {
       groupId: serverModel.group?.id,
       groupName: serverModel.group?.name,
       variants: serverModel.group?.variants,
+      previewMeta: serverModel.preview_meta || null,
     };
   }
 
   const fav = modelData ? isFavorite(modelData.id) : false;
+
+  // Measure peek content height after model data and fonts/layout settle.
+  useEffect(() => {
+    const content = peekContentRef.current;
+    if (!content) return;
+
+    let rafId = 0;
+    const measure = () => {
+      window.cancelAnimationFrame(rafId);
+      rafId = window.requestAnimationFrame(() => {
+        const h = content.getBoundingClientRect().height;
+        if (h > 0) {
+          setPeekHeight(Math.max(128, Math.ceil(h) + 16));
+        }
+      });
+    };
+
+    measure();
+    const timeoutId = window.setTimeout(measure, 250);
+    const observer = typeof ResizeObserver !== "undefined" ? new ResizeObserver(measure) : null;
+    observer?.observe(content);
+    window.addEventListener("resize", measure);
+    window.visualViewport?.addEventListener("resize", measure);
+
+    return () => {
+      window.cancelAnimationFrame(rafId);
+      window.clearTimeout(timeoutId);
+      observer?.disconnect();
+      window.removeEventListener("resize", measure);
+      window.visualViewport?.removeEventListener("resize", measure);
+    };
+  }, [id, modelData?.id, modelData?.name, modelData?.subtitle, isAdmin, fav]);
 
   const beginSheetDrag = useCallback((clientY: number) => {
     dragStartY.current = clientY;
@@ -957,7 +830,7 @@ export default function ModelDetailPage() {
         <Icon name="error" size={64} className="text-error" />
         <h1 className="text-2xl font-headline font-bold text-on-surface">加载失败</h1>
         <p className="text-sm text-on-surface-variant">{error?.message || "请稍后重试"}</p>
-        <button onClick={() => navigate("/")} className="text-primary hover:underline">返回首页</button>
+        <button onClick={handleBack} className="text-primary hover:underline">返回上一页</button>
       </div>
     );
   }
@@ -990,13 +863,17 @@ export default function ModelDetailPage() {
       <div className="flex flex-col items-center justify-center h-dvh bg-surface gap-4">
         <Icon name="search_off" size={64} className="text-on-surface-variant" />
         <h1 className="text-2xl font-headline font-bold text-on-surface">模型不存在</h1>
-        <button onClick={() => navigate("/")} className="text-primary hover:underline">返回首页</button>
+        <button onClick={handleBack} className="text-primary hover:underline">返回上一页</button>
       </div>
     );
   }
 
   const viewerProps = {
     modelId: modelData.id,
+    modelName: modelData.name,
+    modelFormat: modelData.format,
+    modelFileSize: modelData.fileSize,
+    modelCreatedAt: modelData.createdAtLabel,
     isAdmin: useAuthStore.getState().user?.role === "ADMIN",
     modelUrl: modelData.modelUrl,
     activeView,
@@ -1008,14 +885,33 @@ export default function ModelDetailPage() {
     onToggleDimensions: () => setShowDimensions(!showDimensions),
     materialPreset,
     onMaterialChange: setMaterialPreset,
+    showEdges,
+    onToggleEdges: () => setShowEdges(!showEdges),
     clipEnabled,
-    onToggleClip: () => setClipEnabled(!clipEnabled),
+    onToggleClip: () => setClipEnabled((enabled) => !enabled),
     clipPosition,
     onClipPositionChange: setClipPosition,
     clipDirection,
     onClipDirectionChange: setClipDirection,
+    clipInverted,
+    onToggleClipInverted: () => setClipInverted((inverted) => !inverted),
+    onResetClip: () => {
+      setClipDirection("x");
+      setClipPosition(0);
+      setClipInverted(false);
+    },
     showAxis,
     onToggleAxis: () => setShowAxis(!showAxis),
+    onResetDisplay: handleResetViewerDisplay,
+    tuningOpen: viewerTuningOpen,
+    onToggleTuning: () => setViewerTuningOpen((prev) => !prev),
+    viewerTuning,
+    previewMeta: modelData.previewMeta,
+    onViewerTuningChange: setViewerTuning,
+    onApplyViewerPreset: setViewerTuning,
+    onResetViewerTuning: handleResetViewerTuning,
+    onSaveViewerTuning: handleSaveViewerTuning,
+    viewerTuningSaving,
   };
 
   if (isDesktop) {
@@ -1023,7 +919,13 @@ export default function ModelDetailPage() {
       <div className="fixed inset-0 flex flex-col overflow-hidden">
         <TopNav />
         <main className="flex-1 min-h-0 overflow-hidden flex flex-col md:flex-row">
-          <ViewerPanel {...viewerProps} onThumbnailUpdated={() => { mutate(); globalMutate((k: string) => typeof k === 'string' && k.startsWith('/models')); }} />
+          <CadViewerPanel
+            variant="desktop"
+            {...viewerProps}
+            showBackButton
+            onBack={handleBack}
+            onThumbnailUpdated={() => { mutate(); globalMutate((k: string) => typeof k === 'string' && k.startsWith('/models')); }}
+          />
           <DesktopDetail
             modelData={modelData}
             isFav={fav}
@@ -1045,7 +947,7 @@ export default function ModelDetailPage() {
           categories={categoryTree || []}
           onClose={() => setEditOpen(false)}
           onSaved={() => { mutate(); globalMutate((k: string) => typeof k === 'string' && k.startsWith('/models')); }}
-          onDelete={async () => { await modelApi.delete(modelData.id); navigate('/'); }}
+          onDelete={async () => { await modelApi.delete(modelData.id); handleBack(); }}
         />
         <ShareDialog
           open={shareOpen}
@@ -1098,151 +1000,15 @@ export default function ModelDetailPage() {
         className="flex-1 min-h-0 relative"
         style={{ marginBottom: "calc(3.5rem + env(safe-area-inset-bottom, 0px))" }}
       >
-        {/* 3D Viewer — fills entire area */}
-        <div ref={mobileViewerRef} className="absolute inset-0 bg-surface-container overflow-hidden rounded-b-2xl" style={{ bottom: peekHeight }} onClick={() => { if (sheetExpanded) setSheetExpanded(false); }}>
-          <LoadingOverlay />
-          <Suspense fallback={<div className="w-full h-full flex items-center justify-center"><Icon name="view_in_ar" size={64} className="text-on-surface-variant/15 animate-pulse" /></div>}>
-            <ModelViewer
-              modelUrl={modelData.modelUrl}
-              viewMode={activeView}
-              cameraPreset={activeCamera}
-              showDimensions={showDimensions}
-              showGrid={false}
-              clipEnabled={clipEnabled}
-              clipDirection={clipDirection}
-              clipPosition={clipPosition}
-              materialPreset={materialPreset}
-              showAxis={showAxis}
-            />
-          </Suspense>
-
-          {/* Back button — hidden when sheet is expanded */}
-          {!sheetExpanded && (
-            <button
-              onClick={() => navigate(-1)}
-              className="absolute top-2 left-2 z-40 w-8 h-8 flex items-center justify-center rounded-full micro-glass text-on-surface-variant hover:text-on-surface active:scale-90 transition-all"
-            >
-              <Icon name="arrow_back" size={18} />
-            </button>
-          )}
-
-          {/* Unified toolbar — right side */}
-          <div className="absolute right-2 top-1/2 -translate-y-1/2 z-10">
-            <div className="micro-glass rounded-sm p-0.5 flex flex-col gap-px">
-              {VIEW_MODES.filter(m => m.key !== "explode").map((mode) => (
-                <button
-                  key={mode.key}
-                  onClick={() => setActiveView(mode.key)}
-                  title={mode.label}
-                  className={`p-1.5 text-on-surface-variant hover:text-primary transition-colors rounded-sm ${
-                    activeView === mode.key ? "text-primary bg-primary-container/10" : ""
-                  }`}
-                >
-                  <Icon name={mode.icon} size={14} />
-                </button>
-              ))}
-              <div className="w-4 h-px bg-white/10 mx-auto" />
-              {CAMERA_ANGLES.filter(a => a.key === "front" || a.key === "iso").map((angle) => (
-                <button
-                  key={angle.key}
-                  onClick={() => setActiveCamera(angle.key)}
-                  title={angle.label}
-                  className={`p-1.5 text-on-surface-variant hover:text-primary transition-colors rounded-sm ${
-                    activeCamera === angle.key ? "text-primary bg-primary-container/10" : ""
-                  }`}
-                >
-                  <Icon name={angle.icon} size={14} />
-                </button>
-              ))}
-              <div className="w-4 h-px bg-white/10 mx-auto" />
-              <button
-                onClick={() => setShowMoreTools(!showMoreTools)}
-                title="更多"
-                className={`p-1.5 text-on-surface-variant hover:text-primary transition-colors rounded-sm ${showMoreTools ? "text-primary bg-primary-container/10" : ""}`}
-              >
-                <Icon name="more_horiz" size={14} />
-              </button>
-            </div>
-            {showMoreTools && (
-              <>
-                <div className="fixed inset-0 z-10" onClick={() => setShowMoreTools(false)} />
-                <div className="absolute top-0 right-full mr-1 micro-glass rounded-sm p-0.5 flex flex-col gap-px z-20">
-                  <button onClick={() => { setActiveView("explode"); }} className={`p-1.5 transition-colors rounded-sm ${activeView === "explode" ? "text-primary bg-primary-container/10" : "text-on-surface-variant hover:text-primary"}`}>
-                    <Icon name={VIEW_MODES[3].icon} size={14} />
-                  </button>
-                  {CAMERA_ANGLES.filter(a => a.key === "side" || a.key === "top").map((angle) => (
-                    <button key={angle.key} onClick={() => { setActiveCamera(angle.key); }} className={`p-1.5 transition-colors rounded-sm ${activeCamera === angle.key ? "text-primary bg-primary-container/10" : "text-on-surface-variant hover:text-primary"}`}>
-                      <Icon name={angle.icon} size={14} />
-                    </button>
-                  ))}
-                  <div className="w-4 h-px bg-white/10 mx-auto" />
-                  <button onClick={() => { setShowDimensions(!showDimensions); }} className={`p-1.5 transition-colors rounded-sm ${showDimensions ? "text-primary bg-primary-container/10" : "text-on-surface-variant hover:text-primary"}`}>
-                    <Icon name="straighten" size={14} />
-                  </button>
-                  <button onClick={() => { setClipEnabled(!clipEnabled); }} className={`p-1.5 transition-colors rounded-sm ${clipEnabled ? "text-primary bg-primary-container/10" : "text-on-surface-variant hover:text-primary"}`}>
-                    <Icon name="content_cut" size={14} />
-                  </button>
-                  <button onClick={() => { setShowAxis(!showAxis); }} className={`p-1.5 transition-colors rounded-sm ${showAxis ? "text-primary bg-primary-container/10" : "text-on-surface-variant hover:text-primary"}`}>
-                    <Icon name="3d_rotation" size={14} />
-                  </button>
-                  <div className="w-4 h-px bg-white/10 mx-auto" />
-                  <button onClick={() => { handleScreenshot(); setShowMoreTools(false); }} className="p-1.5 text-on-surface-variant hover:text-primary transition-colors">
-                    <Icon name="photo_camera" size={14} />
-                  </button>
-                  <button onClick={() => { handleFullscreen(); setShowMoreTools(false); }} className="p-1.5 text-on-surface-variant hover:text-primary transition-colors">
-                    <Icon name="fullscreen" size={14} />
-                  </button>
-                  {useAuthStore.getState().user?.role === "ADMIN" && (
-                    <button onClick={() => { handleSetThumbnail(); setShowMoreTools(false); }} disabled={settingThumb} className={`p-1.5 transition-colors ${settingThumb ? "text-primary animate-pulse" : "text-on-surface-variant hover:text-primary"}`}>
-                      <Icon name="wallpaper" size={14} />
-                    </button>
-                  )}
-                </div>
-              </>
-            )}
-          </div>
-
-          {/* Clip controls */}
-          {clipEnabled && (
-            <div className="absolute bottom-2 left-2 micro-glass rounded-sm p-2 flex flex-col gap-1.5 min-w-[130px]">
-              <div className="flex gap-1">
-                {(["x", "y", "z"] as const).map((d) => (
-                  <button
-                    key={d}
-                    onClick={() => setClipDirection(d)}
-                    className={`flex-1 text-[10px] py-0.5 rounded-sm transition-colors ${
-                      clipDirection === d ? "bg-primary-container/30 text-primary font-bold" : "text-on-surface-variant hover:text-on-surface"
-                    }`}
-                  >
-                    {d.toUpperCase()}
-                  </button>
-                ))}
-              </div>
-              <input
-                type="range"
-                min={-2}
-                max={2}
-                step={0.01}
-                value={clipPosition}
-                onChange={(e) => setClipPosition(parseFloat(e.target.value))}
-                className="w-full accent-primary-container"
-              />
-            </div>
-          )}
-
-          {/* Watermark */}
-          {watermarkState.show && watermarkState.image && (
-            <div className="absolute inset-0 pointer-events-none flex items-center justify-center select-none">
-              <SafeImage
-                src={watermarkState.image}
-                alt=""
-                className="opacity-[0.04] select-none"
-                style={{ maxWidth: "40%", maxHeight: "40%", objectFit: "contain" }}
-                fallbackClassName="hidden"
-              />
-            </div>
-          )}
-        </div>
+        <CadViewerPanel
+          variant="mobile"
+          {...viewerProps}
+          style={{ bottom: peekHeight }}
+          onClick={() => { if (sheetExpanded) setSheetExpanded(false); }}
+          showBackButton={!sheetExpanded}
+          onBack={handleBack}
+          onThumbnailUpdated={() => { mutate(); globalMutate((k: string) => typeof k === 'string' && k.startsWith('/models')); }}
+        />
 
         {/* Bottom sheet */}
         <div
@@ -1264,7 +1030,7 @@ export default function ModelDetailPage() {
           <div className="flex items-center gap-2 pt-2.5 pb-1.5 px-3 shrink-0">
             {sheetExpanded && (
               <button
-                onClick={() => navigate(-1)}
+                onClick={handleBack}
                 className="w-7 h-7 flex items-center justify-center rounded-full text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high active:scale-90 transition-all shrink-0"
               >
                 <Icon name="arrow_back" size={18} />
@@ -1316,10 +1082,11 @@ export default function ModelDetailPage() {
               <div className="flex items-center gap-1.5 text-[11px] text-on-surface-variant overflow-x-auto scrollbar-hidden">
                 <Link to="/" className="hover:text-primary transition-colors">模型库</Link>
                 {categoryBreadcrumb.map((cat, i) => (
-                  <span key={cat.id} className="flex items-center gap-1.5 shrink-0">
+                  <span key={`${cat.id || cat.name || "category"}-${i}`} className="flex items-center gap-1.5 shrink-0">
                     <Icon name="chevron_right" size={12} className="text-on-surface-variant/40" />
                     <Link
-                      to={`/?category=${cat.id}`}
+                      to="/"
+                      state={{ homeBrowseState: { categoryId: cat.id, page: 1 } }}
                       className={`hover:text-primary transition-colors ${i === categoryBreadcrumb.length - 1 ? "text-primary" : ""}`}
                     >
                       {cat.name}
@@ -1355,10 +1122,11 @@ export default function ModelDetailPage() {
                     历史版本 ({modelData.variants.length})
                   </div>
                   <div className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1">
-                    {modelData.variants.map((v) => {
+                    {modelData.variants.map((v, index) => {
                       const isCurrent = v.model_id === modelData.id;
+                      const variantKey = `${v.model_id || v.original_name || "variant"}-${index}`;
                       return isCurrent ? (
-                        <div key={v.model_id} className="shrink-0">
+                        <div key={variantKey} className="shrink-0">
                           <div className="w-16 h-16 rounded-md border-2 border-primary bg-surface-container-lowest overflow-hidden relative">
                             <ModelThumbnail src={v.thumbnail_url} alt="" className="w-full h-full object-cover" />
                             <div className="absolute bottom-0 inset-x-0 bg-primary/90 text-on-primary text-[8px] text-center py-0.5">当前</div>
@@ -1368,7 +1136,7 @@ export default function ModelDetailPage() {
                           {v.file_modified_at && <p className="text-[8px] text-on-surface-variant/40 text-center">{new Date(v.file_modified_at).toLocaleDateString("zh-CN")}</p>}
                         </div>
                       ) : (
-                        <Link key={v.model_id} to={`/model/${v.model_id}`} className="shrink-0">
+                        <Link key={variantKey} to={`/model/${v.model_id}`} className="shrink-0">
                           <div className="w-16 h-16 rounded-md border border-outline-variant/30 bg-surface-container-lowest overflow-hidden relative">
                             <ModelThumbnail src={v.thumbnail_url} alt="" className="w-full h-full object-cover" />
                             {v.is_primary && <div className="absolute top-0.5 left-0.5 bg-primary/80 text-on-primary text-[6px] px-0.5 rounded-sm">主</div>}
@@ -1386,9 +1154,11 @@ export default function ModelDetailPage() {
               <div>
                 <div className="text-[11px] uppercase tracking-widest text-on-surface-variant font-medium mb-2">文件下载</div>
                 <div className="space-y-1.5">
-                  {modelData.downloads.map((file) => (
+                  {modelData.downloads.map((file, index) => {
+                    const downloadKey = `${file.downloadFormat || file.format || file.fileName || "download"}-${index}`;
+                    return (
                     file.downloadFormat === "drawing" ? (
-                      <a key={file.format} href={modelData.drawingUrl} target="_blank" rel="noreferrer" className="flex items-center gap-2.5 px-3 py-2 rounded-sm bg-surface-container-low border border-outline-variant/10 hover:bg-surface-container transition-colors">
+                      <a key={downloadKey} href={modelData.drawingUrl} target="_blank" rel="noreferrer" className="flex items-center gap-2.5 px-3 py-2 rounded-sm bg-surface-container-low border border-outline-variant/10 hover:bg-surface-container transition-colors">
                         <div className="w-7 h-7 rounded bg-error/10 flex items-center justify-center shrink-0">
                           <span className="text-[8px] font-bold text-error">PDF</span>
                         </div>
@@ -1401,7 +1171,7 @@ export default function ModelDetailPage() {
                         </div>
                       </a>
                     ) : (
-                      <div key={file.format} className="flex items-center gap-2 px-3 py-2.5 rounded-sm bg-surface-container-low border border-outline-variant/10">
+                      <div key={downloadKey} className="flex items-center gap-2 px-3 py-2.5 rounded-sm bg-surface-container-low border border-outline-variant/10">
                         <div className="w-7 h-7 rounded bg-primary-container/15 flex items-center justify-center shrink-0">
                           <span className="text-[8px] font-bold text-primary-container">{file.format.slice(0, 3)}</span>
                         </div>
@@ -1414,7 +1184,8 @@ export default function ModelDetailPage() {
                         </button>
                       </div>
                     )
-                  ))}
+                    );
+                  })}
                 </div>
               </div>
 
@@ -1455,7 +1226,7 @@ export default function ModelDetailPage() {
         categories={categoryTree || []}
         onClose={() => setEditOpen(false)}
         onSaved={() => { mutate(); globalMutate((k: string) => typeof k === 'string' && k.startsWith('/models')); }}
-        onDelete={async () => { await modelApi.delete(modelData.id); navigate('/'); }}
+        onDelete={async () => { await modelApi.delete(modelData.id); handleBack(); }}
       />
       <ShareDialog
         open={shareOpen}

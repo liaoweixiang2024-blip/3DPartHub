@@ -7,6 +7,7 @@ import BottomNav from "../components/shared/BottomNav";
 import AppSidebar from "../components/shared/Sidebar";
 import MobileNavDrawer from "../components/shared/MobileNavDrawer";
 import Icon from "../components/shared/Icon";
+import Pagination from "../components/shared/Pagination";
 import client from "../api/client";
 import { useToast } from "../components/shared/Toast";
 import { copyText } from "../lib/clipboard";
@@ -205,26 +206,7 @@ function Content() {
         })}
       </div>
 
-      {/* Pagination */}
-      {totalPages > 1 && (
-        <div className="flex items-center justify-center gap-2 pt-2">
-          <button
-            onClick={() => setPage(p => Math.max(1, p - 1))}
-            disabled={page <= 1}
-            className="px-3 py-1.5 text-xs rounded-md border border-outline-variant/30 text-on-surface-variant disabled:opacity-30 hover:bg-surface-container-high/50 transition-colors"
-          >
-            上一页
-          </button>
-          <span className="text-xs text-on-surface-variant">{page} / {totalPages}</span>
-          <button
-            onClick={() => setPage(p => Math.min(totalPages, p + 1))}
-            disabled={page >= totalPages}
-            className="px-3 py-1.5 text-xs rounded-md border border-outline-variant/30 text-on-surface-variant disabled:opacity-30 hover:bg-surface-container-high/50 transition-colors"
-          >
-            下一页
-          </button>
-        </div>
-      )}
+      <Pagination page={page} totalPages={totalPages} totalItems={total} onPageChange={setPage} className="mt-4 pb-1" />
     </div>
   );
 }

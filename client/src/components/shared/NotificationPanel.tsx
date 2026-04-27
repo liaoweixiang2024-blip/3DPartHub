@@ -36,6 +36,9 @@ function getNotificationRoute(n: Notification, isAdmin: boolean): string | null 
   if (n.type === "ticket") return isAdmin ? `/admin/tickets/${n.relatedId}` : `/my-tickets/${n.relatedId}`;
   if (n.type === "comment") return `/model/${n.relatedId}`;
   if (n.type === "favorite") return `/model/${n.relatedId}`;
+  if (n.type === "download") return `/model/${n.relatedId}`;
+  if (n.type === "success") return `/model/${n.relatedId}`;
+  if (n.type === "error") return `/model/${n.relatedId}`;
   if (n.type === "model_conversion") return `/model/${n.relatedId}`;
   if (n.type === "inquiry") return isAdmin ? `/admin/inquiries/${n.relatedId}` : `/my-inquiries/${n.relatedId}`;
   return null;
@@ -63,21 +66,23 @@ function NotificationItem({
   isAdmin: boolean;
   onRead: (id: string) => void;
   onDelete: (id: string) => void;
-  onNavigate: () => void;
+  onNavigate: (route: string) => void;
 }) {
   const meta = getTypeMeta(n.type);
   const route = getNotificationRoute(n, isAdmin);
 
   const handleClick = () => {
     if (!n.read) onRead(n.id);
-    if (route) onNavigate();
+    if (route) onNavigate(route);
   };
 
   return (
     <div
       onClick={handleClick}
-      className={`group relative flex items-start gap-3 px-3 sm:px-4 py-3 border-b border-outline-variant/5 transition-colors cursor-pointer ${
-        n.read ? "opacity-60" : "hover:bg-surface-container-highest/50"
+      className={`group relative flex items-start gap-3 border-b border-outline-variant/5 px-3 py-3 transition-colors sm:px-4 ${
+        route ? "cursor-pointer hover:bg-surface-container-highest/50 active:bg-surface-container-highest" : "cursor-default"
+      } ${
+        n.read ? "opacity-70" : ""
       }`}
     >
       <span className={`shrink-0 mt-0.5 w-7 h-7 rounded-full flex items-center justify-center ${meta.color}`}>
@@ -92,8 +97,9 @@ function NotificationItem({
         {!n.read && <span className="w-2 h-2 rounded-full bg-primary-container" />}
         <button
           onClick={(e) => { e.stopPropagation(); onDelete(n.id); }}
-          className="opacity-0 group-hover:opacity-60 hover:!opacity-100 p-0.5 text-on-surface-variant hover:text-error transition-opacity"
+          className="flex h-8 w-8 items-center justify-center rounded-full text-on-surface-variant/70 opacity-70 transition hover:bg-error-container/15 hover:text-error hover:opacity-100 sm:h-6 sm:w-6 sm:opacity-0 sm:group-hover:opacity-70"
           title="删除"
+          aria-label="删除通知"
         >
           <Icon name="close" size={12} />
         </button>
@@ -111,6 +117,7 @@ export default function NotificationPanel({ compact = false }: { compact?: boole
   const [unreadCount, setUnreadCount] = useState(0);
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [loading, setLoading] = useState(false);
+  const [loadError, setLoadError] = useState("");
   const ref = useRef<HTMLDivElement>(null);
 
   const iconSize = compact ? 20 : 24;
@@ -149,11 +156,12 @@ export default function NotificationPanel({ compact = false }: { compact?: boole
     let cancelled = false;
     async function fetchList() {
       setLoading(true);
+      setLoadError("");
       try {
         const res = await getNotifications(1, 30);
         if (!cancelled) setNotifications(res.data);
       } catch {
-        // Keep the panel usable when notification loading fails.
+        if (!cancelled) setLoadError("通知加载失败，请稍后重试");
       }
       finally { if (!cancelled) setLoading(false); }
     }
@@ -222,28 +230,35 @@ export default function NotificationPanel({ compact = false }: { compact?: boole
   const panelContent = (
     <>
       {/* Header */}
-      <div className="flex items-center justify-between gap-3 px-4 py-3 border-b border-outline-variant/15">
-        <span className="text-sm font-headline font-bold text-on-surface">
-          {isAdmin ? "管理通知" : "通知"}
-        </span>
-        <div className="flex flex-wrap items-center justify-end gap-x-3 gap-y-1">
-          {unreadCount > 0 && (
-            <button onClick={handleMarkAllRead} className="text-[11px] text-primary-container hover:underline">
-              全部已读
-            </button>
-          )}
-          {notifications.some((n) => n.read) && (
-            <button onClick={handleClearRead} className="text-[11px] text-on-surface-variant hover:text-on-surface transition-colors">
-              清除已读
-            </button>
-          )}
+      <div className="shrink-0 border-b border-outline-variant/15 px-4 py-3">
+        <div className="flex items-center justify-between gap-3">
+          <span className="text-sm font-headline font-bold text-on-surface">
+            {isAdmin ? "管理通知" : "通知"}
+          </span>
+          <div className="flex flex-wrap items-center justify-end gap-x-3 gap-y-1">
+            {unreadCount > 0 && (
+              <button onClick={handleMarkAllRead} className="text-[11px] text-primary-container hover:underline">
+                全部已读
+              </button>
+            )}
+            {notifications.some((n) => n.read) && (
+              <button onClick={handleClearRead} className="text-[11px] text-on-surface-variant hover:text-on-surface transition-colors">
+                清除已读
+              </button>
+            )}
+          </div>
         </div>
+        {loadError && (
+          <div className="mt-2 rounded-md border border-error/20 bg-error-container/10 px-2.5 py-2 text-[11px] text-error">
+            {loadError}
+          </div>
+        )}
       </div>
 
       {/* List */}
-      <div className={`overflow-y-auto scrollbar-hidden ${isMobile ? 'max-h-[calc(100dvh-9rem)] pb-[env(safe-area-inset-bottom)]' : 'max-h-96'}`}>
+      <div className={`scrollbar-hidden overflow-y-auto ${isMobile ? 'min-h-0 flex-1 pb-[max(0.75rem,env(safe-area-inset-bottom))]' : 'max-h-96'}`}>
         {loading && (
-          <div className="flex items-center justify-center py-8">
+          <div className="flex items-center justify-center py-10">
             <Icon name="autorenew" size={24} className="text-on-surface-variant/30 animate-spin" />
           </div>
         )}
@@ -262,17 +277,14 @@ export default function NotificationPanel({ compact = false }: { compact?: boole
             isAdmin={isAdmin}
             onRead={handleMarkRead}
             onDelete={handleDelete}
-            onNavigate={() => {
-              const route = getNotificationRoute(n, isAdmin);
-              if (route) handleNavigate(route);
-            }}
+            onNavigate={handleNavigate}
           />
         ))}
       </div>
     </>
   );
 
-  // Mobile: full-screen drawer
+  // Mobile: bounded notification drawer
   if (isMobile && open) {
     return (
       <>
@@ -298,14 +310,13 @@ export default function NotificationPanel({ compact = false }: { compact?: boole
             onClick={() => setOpen(false)}
           />
           <motion.div
-            initial={{ y: "100%" }}
-            animate={{ y: 0 }}
-            exit={{ y: "100%" }}
-            transition={{ type: "spring", damping: 25, stiffness: 300 }}
-            className="fixed bottom-0 left-0 right-0 z-[201] bg-surface-container-high border-t border-outline-variant/20 rounded-t-2xl shadow-2xl max-h-[calc(100dvh-1rem)] overflow-hidden"
+            initial={{ y: 24, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            exit={{ y: 24, opacity: 0 }}
+            transition={{ type: "spring", damping: 26, stiffness: 320 }}
+            className="fixed bottom-[max(1rem,env(safe-area-inset-bottom))] left-3 right-3 top-[max(1rem,env(safe-area-inset-top))] z-[201] flex min-h-0 flex-col overflow-hidden rounded-2xl border border-outline-variant/20 bg-surface-container-high shadow-2xl"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="w-10 h-1 rounded-full bg-outline-variant/30 mx-auto mt-2" />
             {panelContent}
           </motion.div>
         </AnimatePresence>

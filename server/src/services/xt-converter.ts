@@ -31,5 +31,5 @@ export async function convertXtToGltf(
 ) {
   const stepPath = `${inputPath}.converted.step`;
   await convertXtToStep(inputPath, stepPath);
-  return convertStepToGltf(stepPath, outputDir, modelId, originalName);
+  return convertStepToGltf(stepPath, outputDir, modelId, stepPath);
 }

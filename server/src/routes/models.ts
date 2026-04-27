@@ -9,11 +9,23 @@ import { conversionQueue } from "../lib/queue.js";
 import { convertXtToGltf } from "../services/xt-converter.js";
 import { generateThumbnail } from "../services/thumbnail.js";
 import { compareModels } from "../services/comparison.js";
+import { findPreviewAssetPath, getPreviewAssetExtension, previewAssetFileName, resolveFileUrlPath } from "../services/gltfAsset.js";
+import { ensurePreviewMeta } from "../services/previewMeta.js";
 import { authMiddleware, type AuthRequest } from "../middleware/auth.js";
 import { requireRole } from "../middleware/rbac.js";
 import { getSetting } from "../lib/settings.js";
 import { config } from "../lib/config.js";
 import { getBusinessConfig } from "../lib/businessConfig.js";
+import {
+  MAX_MODEL_PAGE,
+  MAX_MODEL_PAGE_SIZE,
+  enumQuery,
+  getSearchTerms,
+  modelTextSearchWhere,
+  normalizeSearchParam,
+  numericQuery,
+  searchCacheToken,
+} from "../lib/searchQuery.js";
 
 // Parse STEP/IGES file header for the original creation timestamp
 function parseStepFileDate(filePath: string): Date | null {
@@ -64,7 +76,211 @@ function saveMeta(id: string, data: Record<string, unknown>) {
   writeFileSync(join(METADATA_DIR, `${id}.json`), JSON.stringify(data, null, 2));
 }
 
-const ACCEPTED_EXTS = new Set(["step", "stp", "iges", "igs", "xt", "x_t"]);
+function getPreviewMeta(
+  id: string,
+  options: { gltfUrl?: string | null; originalName?: string | null; format?: string | null } = {}
+): Record<string, unknown> | null {
+  return ensurePreviewMeta({
+    modelDir: join(config.staticDir, "models"),
+    modelId: id,
+    preferredUrl: options.gltfUrl,
+    sourceName: options.originalName || id,
+    sourceFormat: options.format || "gltf",
+  }) as Record<string, unknown> | null;
+}
+
+function findOriginalModelPath(m: { id: string; format?: string | null; uploadPath?: string | null }): string | null {
+  if (m.uploadPath && existsSync(m.uploadPath)) return m.uploadPath;
+  const format = String(m.format || "").toLowerCase();
+  if (!format) return null;
+  const fallback = join(config.staticDir, "originals", `${m.id}.${format}`);
+  return existsSync(fallback) ? fallback : null;
+}
+
+type PreviewDiagnosticStatus = "ok" | "warning" | "invalid" | "missing";
+type PreviewDiagnosticFilter = PreviewDiagnosticStatus | "problem" | "all";
+type PreviewAssetStatus = "ok" | "warning" | "invalid" | "missing";
+
+const PREVIEW_DIAGNOSTIC_FILTERS = new Set(["all", "problem", "ok", "warning", "invalid", "missing"]);
+const MIN_THUMBNAIL_BYTES = 1024;
+
+function normalizePreviewDiagnosticFilter(value: unknown): PreviewDiagnosticFilter {
+  const status = String(value || "problem").toLowerCase();
+  return PREVIEW_DIAGNOSTIC_FILTERS.has(status) ? status as PreviewDiagnosticFilter : "problem";
+}
+
+function getPreviewBoundsSize(meta: Record<string, any> | null): [number, number, number] | null {
+  const size = meta?.bounds?.size;
+  if (Array.isArray(size) && size.length >= 3) {
+    const tuple = size.slice(0, 3).map((value: unknown) => Number(value)) as [number, number, number];
+    if (tuple.every((value) => Number.isFinite(value))) return tuple;
+  }
+
+  const parts = Array.isArray(meta?.parts) ? meta.parts : [];
+  const mins: [number, number, number] = [Infinity, Infinity, Infinity];
+  const maxs: [number, number, number] = [-Infinity, -Infinity, -Infinity];
+  let valid = false;
+  for (const part of parts) {
+    const min = part?.bounds?.min;
+    const max = part?.bounds?.max;
+    if (!Array.isArray(min) || !Array.isArray(max) || min.length < 3 || max.length < 3) continue;
+    for (let i = 0; i < 3; i++) {
+      const lo = Number(min[i]);
+      const hi = Number(max[i]);
+      if (!Number.isFinite(lo) || !Number.isFinite(hi)) continue;
+      mins[i] = Math.min(mins[i], lo);
+      maxs[i] = Math.max(maxs[i], hi);
+      valid = true;
+    }
+  }
+  if (!valid) return null;
+  return [
+    Math.max(0, maxs[0] - mins[0]),
+    Math.max(0, maxs[1] - mins[1]),
+    Math.max(0, maxs[2] - mins[2]),
+  ];
+}
+
+function classifyPreviewMeta(meta: Record<string, any> | null): { status: PreviewDiagnosticStatus; label: string; reason: string } {
+  if (!meta) {
+    return { status: "missing", label: "缺少诊断", reason: "没有找到可用的预览诊断或预览资产" };
+  }
+
+  const totals = meta.totals || {};
+  const boundsSize = getPreviewBoundsSize(meta);
+  const hasGeometry = Number(totals.faceCount) > 0 && Number(totals.vertexCount) > 0;
+
+  if (!hasGeometry || !boundsSize || !boundsSize.some((value) => value > 0)) {
+    return { status: "invalid", label: "转换异常", reason: "面片、顶点或包围盒数据异常" };
+  }
+
+  const warnings = Array.isArray(meta.diagnostics?.warnings) ? meta.diagnostics.warnings : [];
+  const skipped = Number(meta.diagnostics?.skippedMeshCount || 0);
+  if (!meta.diagnostics || !meta.bounds) {
+    return { status: "warning", label: "需复核", reason: "旧版诊断缺少完整转换字段" };
+  }
+  if (warnings.length > 0 || skipped > 0) {
+    return { status: "warning", label: "需复核", reason: skipped > 0 ? `转换时跳过 ${skipped} 个网格` : "转换诊断包含警告" };
+  }
+
+  return { status: "ok", label: "正常", reason: "预览诊断正常" };
+}
+
+function inspectFileUrl(
+  value?: string | null,
+  options: { label: string; minBytes?: number } = { label: "文件" }
+): { status: PreviewAssetStatus; reason: string; size: number; path: string | null } {
+  if (!value) {
+    return { status: "missing", reason: `${options.label}地址为空`, size: 0, path: null };
+  }
+
+  try {
+    const filePath = resolveFileUrlPath(value);
+    if (!existsSync(filePath)) {
+      return { status: "missing", reason: `${options.label}不存在`, size: 0, path: filePath };
+    }
+
+    const stats = statSync(filePath);
+    if (!stats.isFile()) {
+      return { status: "invalid", reason: `${options.label}不是有效文件`, size: 0, path: filePath };
+    }
+    if (stats.size <= 0) {
+      return { status: "invalid", reason: `${options.label}为空文件`, size: stats.size, path: filePath };
+    }
+    if (options.minBytes && stats.size < options.minBytes) {
+      return { status: "warning", reason: `${options.label}文件过小，可能是异常图或占位图`, size: stats.size, path: filePath };
+    }
+
+    return { status: "ok", reason: `${options.label}正常`, size: stats.size, path: filePath };
+  } catch {
+    return { status: "invalid", reason: `${options.label}检查失败`, size: 0, path: null };
+  }
+}
+
+function mergePreviewHealth(
+  metaHealth: ReturnType<typeof classifyPreviewMeta>,
+  assetHealth: ReturnType<typeof inspectFileUrl>,
+  thumbnailHealth: ReturnType<typeof inspectFileUrl>
+): { status: PreviewDiagnosticStatus; label: string; reason: string } {
+  if (assetHealth.status === "missing" || assetHealth.status === "invalid") {
+    return {
+      status: assetHealth.status,
+      label: assetHealth.status === "missing" ? "缺少预览" : "预览异常",
+      reason: assetHealth.reason,
+    };
+  }
+
+  if (metaHealth.status === "missing" || metaHealth.status === "invalid") {
+    return metaHealth;
+  }
+
+  if (thumbnailHealth.status === "missing" || thumbnailHealth.status === "invalid") {
+    return {
+      status: "warning",
+      label: "缩略图异常",
+      reason: thumbnailHealth.reason,
+    };
+  }
+
+  if (metaHealth.status === "warning") return metaHealth;
+  if (thumbnailHealth.status === "warning") {
+    return { status: "warning", label: "需复核", reason: thumbnailHealth.reason };
+  }
+
+  return metaHealth;
+}
+
+function shouldIncludePreviewDiagnostic(status: PreviewDiagnosticStatus, filter: PreviewDiagnosticFilter): boolean {
+  if (filter === "all") return true;
+  if (filter === "problem") return status !== "ok";
+  return status === filter;
+}
+
+function buildPreviewDiagnosticItem(m: {
+  id: string;
+  name?: string | null;
+  originalName?: string | null;
+  format?: string | null;
+  thumbnailUrl?: string | null;
+  gltfUrl?: string | null;
+  originalSize?: number | null;
+  createdAt?: Date | string | null;
+  category?: string | null;
+}, meta: Record<string, any> | null) {
+  const metaHealth = classifyPreviewMeta(meta);
+  const assetHealth = inspectFileUrl(m.gltfUrl, { label: "预览资产" });
+  const thumbnailHealth = inspectFileUrl(m.thumbnailUrl, { label: "缩略图", minBytes: MIN_THUMBNAIL_BYTES });
+  const health = mergePreviewHealth(metaHealth, assetHealth, thumbnailHealth);
+  return {
+    model_id: m.id,
+    name: m.name || m.originalName || "未命名模型",
+    original_name: m.originalName || null,
+    format: m.format || null,
+    thumbnail_url: m.thumbnailUrl || null,
+    gltf_url: m.gltfUrl || null,
+    original_size: m.originalSize || 0,
+    category: m.category || null,
+    created_at: m.createdAt instanceof Date ? m.createdAt.toISOString() : m.createdAt || null,
+    preview_status: health.status,
+    preview_label: health.label,
+    preview_reason: health.reason,
+    asset_status: assetHealth.status,
+    asset_reason: assetHealth.reason,
+    asset_size: assetHealth.size,
+    thumbnail_status: thumbnailHealth.status,
+    thumbnail_reason: thumbnailHealth.reason,
+    thumbnail_size: thumbnailHealth.size,
+    part_count: Number(meta?.totals?.partCount || 0),
+    vertex_count: Number(meta?.totals?.vertexCount || 0),
+    face_count: Number(meta?.totals?.faceCount || 0),
+    skipped_mesh_count: Number(meta?.diagnostics?.skippedMeshCount || 0),
+    warnings: Array.isArray(meta?.diagnostics?.warnings) ? meta.diagnostics.warnings : [],
+    bounds_size: getPreviewBoundsSize(meta),
+    converter: meta?.diagnostics?.converter || (meta ? "legacy-meta" : null),
+    generated_at: meta?.diagnostics?.generatedAt || null,
+  };
+}
+
 async function validateModelUpload(file: Express.Multer.File, res: Response): Promise<string | null> {
   const originalName = file.originalname || "unknown.step";
   const ext = originalName.split(".").pop()?.toLowerCase() || "";
@@ -234,6 +450,10 @@ router.post("/api/models/upload", authMiddleware, requireRole("ADMIN"), upload.s
     data: {
       model_id: modelId,
       original_name: originalName,
+      gltf_url: "",
+      thumbnail_url: "",
+      gltf_size: 0,
+      original_size: file.size,
       format: ext,
       status: "queued",
       created_at: createdAt,
@@ -321,8 +541,9 @@ router.post("/api/models/upload-local", authMiddleware, requireRole("ADMIN"), as
       modelId,
       filePath: absPath,
       originalName: fileName,
-      format: ext,
+      ext,
       userId,
+      preserveSource: true,
     });
   } catch (err) {
     console.error("Failed to queue conversion:", err);
@@ -333,6 +554,10 @@ router.post("/api/models/upload-local", authMiddleware, requireRole("ADMIN"), as
     data: {
       model_id: modelId,
       original_name: fileName,
+      gltf_url: "",
+      thumbnail_url: "",
+      gltf_size: 0,
+      original_size: fileSize,
       format: ext,
       status: "queued",
       created_at: createdAt,
@@ -352,31 +577,27 @@ router.get("/api/models", async (req: Request, res: Response) => {
     }
   }
 
-  const page = Number(req.query.page) || 1;
-  const pageSize = Number(req.query.page_size) || 20;
-  const search = req.query.search as string | undefined;
-  const format = req.query.format as string | undefined;
-  const category = req.query.category as string | undefined;
-  const categoryId = req.query.category_id as string | undefined;
-  const sort = (req.query.sort as string) || "created_at";
-  const order = (req.query.order as string) || "desc";
+  const page = numericQuery(req.query.page, 1, 1, MAX_MODEL_PAGE);
+  const pageSize = numericQuery(req.query.page_size, 20, 1, MAX_MODEL_PAGE_SIZE);
+  const search = normalizeSearchParam(req.query.search);
+  const format = normalizeSearchParam(req.query.format, 20).toLowerCase();
+  const category = normalizeSearchParam(req.query.category, 100);
+  const categoryId = normalizeSearchParam(req.query.category_id, 80);
+  const sort = enumQuery(req.query.sort, "created_at", ["created_at", "name", "file_size"] as const);
+  const order = enumQuery(req.query.order, "desc", ["asc", "desc"] as const);
   const grouped = req.query.grouped === "true";
 
   // Try Redis cache
-  const cacheKey = `cache:models:${page}:${pageSize}:${search || ""}:${format || ""}:${category || ""}:${categoryId || ""}:${sort}:${order}:${grouped}`;
+  const cacheKey = `cache:models:${page}:${pageSize}:${searchCacheToken(search)}:${format}:${categoryId || category}:${sort}:${order}:${grouped}`;
   const cached = await cacheGet(cacheKey);
   if (cached) { res.json(cached); return; }
 
   if (prisma) {
     try {
       const where: any = { status: "completed" };
-      if (search) {
-        where.OR = [
-          { name: { contains: search, mode: "insensitive" } },
-          { originalName: { contains: search, mode: "insensitive" } },
-          { description: { contains: search, mode: "insensitive" } },
-        ];
-      }
+      const andConditions: Record<string, unknown>[] = [];
+      const searchCond = modelTextSearchWhere(search);
+      if (searchCond) andConditions.push(searchCond);
       if (format) {
         where.format = format;
       }
@@ -408,28 +629,14 @@ router.get("/api/models", async (req: Request, res: Response) => {
           select: { primaryId: true },
         });
         const primaryIds = groupPrimaries.map((g: any) => g.primaryId).filter(Boolean);
-        where.OR = [
-          { groupId: null },
-          { id: { in: primaryIds } },
-        ];
-        // If there's a search filter, combine with AND
-        if (search) {
-          const searchCond = {
-            OR: [
-              { name: { contains: search, mode: "insensitive" } },
-              { originalName: { contains: search, mode: "insensitive" } },
-              { description: { contains: search, mode: "insensitive" } },
-            ],
-          };
-          // Wrap: (grouped filter) AND (search filter)
-          const groupedCond = where.OR;
-          delete where.OR;
-          where.AND = [
-            { OR: groupedCond },
-            searchCond,
-          ];
-        }
+        andConditions.push({
+          OR: [
+            { groupId: null },
+            { id: { in: primaryIds } },
+          ],
+        });
       }
+      if (andConditions.length) where.AND = andConditions;
 
       const total = await prisma.model.count({ where });
 
@@ -490,9 +697,19 @@ router.get("/api/models", async (req: Request, res: Response) => {
     if (m.status !== "completed") continue;
     if (format && m.format !== format) continue;
     if (search) {
-      const q = search.toLowerCase();
-      const name = (m.original_name || "").toString().toLowerCase();
-      if (!name.includes(q)) continue;
+      const terms = getSearchTerms(search).map((term) => term.toLowerCase());
+      const searchable = [
+        m.name,
+        m.original_name,
+        m.description,
+        m.part_number,
+        m.category,
+        m.dimensions,
+        m.format,
+        m.original_format,
+        m.drawing_name,
+      ].map((value) => (value || "").toString().toLowerCase()).join(" ");
+      if (!terms.every((term) => searchable.includes(term))) continue;
     }
     items.push({
       model_id: m.model_id,
@@ -512,6 +729,240 @@ router.get("/api/models", async (req: Request, res: Response) => {
   items = items.slice(start, start + pageSize);
 
   res.json({ total, items, page, page_size: pageSize });
+});
+
+// Preview diagnostics scan (admin only)
+router.get("/api/models/preview-diagnostics", authMiddleware, requireRole("ADMIN"), async (req: AuthRequest, res: Response) => {
+  const page = Math.max(1, Number(req.query.page) || 1);
+  const pageSize = Math.min(50, Math.max(1, Number(req.query.page_size) || 12));
+  const search = (req.query.search as string | undefined)?.trim();
+  const filter = normalizePreviewDiagnosticFilter(req.query.status);
+  const modelDir = join(config.staticDir, "models");
+
+  try {
+    let rows: Array<{
+      id: string;
+      name?: string | null;
+      originalName?: string | null;
+      format?: string | null;
+      thumbnailUrl?: string | null;
+      gltfUrl?: string | null;
+      originalSize?: number | null;
+      createdAt?: Date | string | null;
+      category?: string | null;
+    }> = [];
+
+    if (prisma) {
+      const where: any = { status: "completed" };
+      if (search) {
+        where.OR = [
+          { name: { contains: search, mode: "insensitive" } },
+          { originalName: { contains: search, mode: "insensitive" } },
+        ];
+      }
+
+      const models = await prisma.model.findMany({
+        where,
+        orderBy: { createdAt: "desc" },
+        select: {
+          id: true,
+          name: true,
+          originalName: true,
+          format: true,
+          thumbnailUrl: true,
+          gltfUrl: true,
+          originalSize: true,
+          createdAt: true,
+          categoryRef: { select: { name: true } },
+        },
+      });
+
+      rows = models.map((m: any) => ({
+        id: m.id,
+        name: m.name,
+        originalName: m.originalName,
+        format: m.format,
+        thumbnailUrl: m.thumbnailUrl,
+        gltfUrl: m.gltfUrl,
+        originalSize: m.originalSize,
+        createdAt: m.createdAt,
+        category: m.categoryRef?.name || null,
+      }));
+    } else {
+      const files = readdirSync(METADATA_DIR).filter((f) => f.endsWith(".json")).sort().reverse();
+      rows = files
+        .map((f) => JSON.parse(readFileSync(join(METADATA_DIR, f), "utf-8")))
+        .filter((m) => m.status === "completed")
+        .filter((m) => {
+          if (!search) return true;
+          const q = search.toLowerCase();
+          return `${m.name || ""} ${m.original_name || ""}`.toLowerCase().includes(q);
+        })
+        .map((m) => ({
+          id: m.model_id,
+          name: m.name || m.original_name,
+          originalName: m.original_name,
+          format: m.format,
+          thumbnailUrl: m.thumbnail_url,
+          gltfUrl: m.gltf_url,
+          originalSize: m.original_size,
+          createdAt: m.created_at,
+          category: null,
+        }));
+    }
+
+    const items = rows.map((m) => {
+      const meta = getPreviewMeta(m.id, {
+        gltfUrl: m.gltfUrl,
+        originalName: m.originalName,
+        format: m.format,
+      });
+      return buildPreviewDiagnosticItem(m, meta);
+    });
+
+    const summary = items.reduce(
+      (acc, item) => {
+        acc[item.preview_status] += 1;
+        return acc;
+      },
+      { total: items.length, ok: 0, warning: 0, invalid: 0, missing: 0, problem: 0 }
+    );
+    summary.problem = summary.warning + summary.invalid + summary.missing;
+
+    const filtered = items.filter((item) => shouldIncludePreviewDiagnostic(item.preview_status, filter));
+    const start = (page - 1) * pageSize;
+
+    res.json({
+      summary,
+      items: filtered.slice(start, start + pageSize),
+      total: filtered.length,
+      page,
+      page_size: pageSize,
+      status: filter,
+    });
+  } catch (err: any) {
+    res.status(500).json({ detail: err?.message || "预览诊断扫描失败" });
+  }
+});
+
+// Queue preview rebuild jobs for models matching preview diagnostics.
+router.post("/api/models/preview-diagnostics/rebuild", authMiddleware, requireRole("ADMIN"), async (req: AuthRequest, res: Response) => {
+  if (!prisma) {
+    res.status(503).json({ detail: "数据库未连接" });
+    return;
+  }
+
+  const rebuildAll = req.body?.all === true || req.body?.scope === "all";
+  const filter = rebuildAll ? "all" : normalizePreviewDiagnosticFilter(req.body?.status || "problem");
+  const defaultLimit = rebuildAll ? 5000 : 50;
+  const maxLimit = rebuildAll ? 10000 : 100;
+  const limit = Math.min(maxLimit, Math.max(1, Number(req.body?.limit) || defaultLimit));
+  const requestedIds = Array.isArray(req.body?.modelIds)
+    ? req.body.modelIds.map((id: unknown) => String(id)).filter(Boolean).slice(0, limit)
+    : [];
+
+  try {
+    const where: any = {
+      status: "completed",
+      ...(requestedIds.length > 0 ? { id: { in: requestedIds } } : {}),
+    };
+
+    const models = await prisma.model.findMany({
+      where,
+      orderBy: { createdAt: "desc" },
+      select: {
+        id: true,
+        name: true,
+        originalName: true,
+        format: true,
+        uploadPath: true,
+        thumbnailUrl: true,
+        gltfUrl: true,
+        originalSize: true,
+        createdAt: true,
+        categoryRef: { select: { name: true } },
+      },
+    });
+
+    const candidates = models
+      .map((m: any) => {
+        const meta = getPreviewMeta(m.id, {
+          gltfUrl: m.gltfUrl,
+          originalName: m.originalName,
+          format: m.format,
+        });
+        return {
+          model: m,
+          diagnostic: buildPreviewDiagnosticItem({
+            id: m.id,
+            name: m.name,
+            originalName: m.originalName,
+            format: m.format,
+            thumbnailUrl: m.thumbnailUrl,
+            gltfUrl: m.gltfUrl,
+            originalSize: m.originalSize,
+            createdAt: m.createdAt,
+            category: m.categoryRef?.name || null,
+          }, meta),
+        };
+      })
+      .filter((entry: { diagnostic: ReturnType<typeof buildPreviewDiagnosticItem> }) => shouldIncludePreviewDiagnostic(entry.diagnostic.preview_status, filter))
+      .slice(0, limit);
+
+    let queued = 0;
+    let skipped = 0;
+    let failed = 0;
+    const items: Array<{ model_id: string; name: string; status: string; reason?: string; job_id?: string | number }> = [];
+
+    for (const { model, diagnostic } of candidates) {
+      const format = String(model.format || "").toLowerCase();
+      if (!format || ["html", "htm"].includes(format)) {
+        skipped++;
+        items.push({ model_id: model.id, name: model.name || model.originalName, status: "skipped", reason: "不支持的源格式" });
+        continue;
+      }
+
+      const originalPath = findOriginalModelPath(model);
+      if (!originalPath) {
+        skipped++;
+        items.push({ model_id: model.id, name: model.name || model.originalName, status: "skipped", reason: "缺少原始模型文件" });
+        continue;
+      }
+
+      try {
+        const job = await conversionQueue.add("convert", {
+          modelId: model.id,
+          filePath: originalPath,
+          originalName: model.originalName || `${model.id}.${format}`,
+          ext: format,
+          userId: req.user!.userId,
+          preserveSource: true,
+          rebuildReason: diagnostic.preview_status,
+        });
+        await prisma.model.update({ where: { id: model.id }, data: { status: "queued" } }).catch(() => {});
+        queued++;
+        items.push({ model_id: model.id, name: model.name || model.originalName, status: "queued", job_id: job.id });
+      } catch (err: any) {
+        failed++;
+        items.push({ model_id: model.id, name: model.name || model.originalName, status: "failed", reason: err?.message || "队列投递失败" });
+      }
+    }
+
+    await cacheDelByPrefix("cache:models:");
+    res.json({
+      success: true,
+      data: {
+        status: filter,
+        total_candidates: candidates.length,
+        queued,
+        skipped,
+        failed,
+        items,
+      },
+    });
+  } catch (err: any) {
+    res.status(500).json({ detail: err?.message || "批量重建预览失败" });
+  }
 });
 
 // Get model detail (public)
@@ -616,7 +1067,8 @@ router.get("/api/models/:id", async (req: Request, res: Response) => {
           file_modified_at: mainFileModifiedAt,
           drawing_url: m.drawingUrl || null,
           drawing_name: m.drawingName || null,
-        drawing_size: m.drawingSize || null,
+          drawing_size: m.drawingSize || null,
+          preview_meta: getPreviewMeta(m.id, { gltfUrl: m.gltfUrl, originalName: m.originalName, format: m.format }),
           group: groupData,
         });
         return;
@@ -641,6 +1093,11 @@ router.get("/api/models/:id", async (req: Request, res: Response) => {
     format: m.format,
     status: m.status,
     created_at: m.created_at,
+    preview_meta: getPreviewMeta(id, {
+      gltfUrl: m.gltf_url as string | null,
+      originalName: m.original_name as string | null,
+      format: m.format as string | null,
+    }),
   });
 });
 
@@ -768,19 +1225,9 @@ router.get("/api/models/:id/download", async (req: Request, res: Response) => {
           }
         }
         if (!filePath) {
-          const gltfPath = m.gltfUrl.startsWith("/")
-            ? m.gltfUrl
-            : join(process.cwd(), m.gltfUrl);
-          if (existsSync(gltfPath)) {
-            filePath = gltfPath;
-          } else {
-            const fallbackGltf = join(process.cwd(), "static", "models", `${id}.gltf`);
-            if (existsSync(fallbackGltf)) {
-              filePath = fallbackGltf;
-            }
-          }
+          filePath = findPreviewAssetPath(join(config.staticDir, "models"), id, m.gltfUrl);
           if (filePath) {
-            fileName = `${displayName}.gltf`;
+            fileName = previewAssetFileName(displayName, filePath);
             fileSize = m.gltfSize;
           }
         }
@@ -800,7 +1247,7 @@ router.get("/api/models/:id/download", async (req: Request, res: Response) => {
                 data: {
                   userId,
                   modelId: id,
-                  format: requestedFormat === "original" ? m.format : "gltf",
+                  format: requestedFormat === "original" ? m.format : getPreviewAssetExtension(filePath || m.gltfUrl),
                   fileSize,
                 },
               });
@@ -834,10 +1281,10 @@ router.get("/api/models/:id/download", async (req: Request, res: Response) => {
     if (!filePath) {
       const gltfUrl = meta.gltf_url as string;
       if (gltfUrl) {
-        filePath = join(process.cwd(), gltfUrl.replace(/^\//, ""));
+        filePath = resolveFileUrlPath(gltfUrl);
         fileName = (meta.original_name as string)
-          ? (meta.original_name as string).replace(/\.[^.]+$/, ".gltf")
-          : `${id}.gltf`;
+          ? (meta.original_name as string).replace(/\.[^.]+$/, `.${getPreviewAssetExtension(gltfUrl)}`)
+          : previewAssetFileName(id, gltfUrl);
       }
     }
   }
@@ -898,9 +1345,13 @@ router.delete("/api/models/:id", authMiddleware, requireRole("ADMIN"), async (re
     origExt = origExt || (m.format as string) || "";
     for (const p of [
       m.upload_path as string,
+      join(config.staticDir, "models", `${id}.glb`),
+      join(config.staticDir, "models", `${id}.meta.json`),
       join(config.staticDir, "models", `${id}.gltf`),
       join(config.staticDir, "models", `${id}.bin`),
       join(config.staticDir, "thumbnails", `${id}.png`),
+      join(config.staticDir, "html-previews", `${id}.html`),
+      join(config.staticDir, "html-previews", `${id}.htm`),
       ...(origExt ? [join(config.staticDir, "originals", `${id}.${origExt}`)] : []),
     ]) {
       if (p && existsSync(p)) rmSync(p, { force: true });
@@ -909,8 +1360,12 @@ router.delete("/api/models/:id", authMiddleware, requireRole("ADMIN"), async (re
     // No filesystem metadata, clean up by convention using DB format
     for (const p of [
       join(config.staticDir, "models", `${id}.gltf`),
+      join(config.staticDir, "models", `${id}.glb`),
+      join(config.staticDir, "models", `${id}.meta.json`),
       join(config.staticDir, "models", `${id}.bin`),
       join(config.staticDir, "thumbnails", `${id}.png`),
+      join(config.staticDir, "html-previews", `${id}.html`),
+      join(config.staticDir, "html-previews", `${id}.htm`),
       ...(origExt ? [join(config.staticDir, "originals", `${id}.${origExt}`)] : []),
     ]) {
       if (existsSync(p)) rmSync(p, { force: true });
@@ -1097,9 +1552,13 @@ router.post("/api/models/:id/replace-file", authMiddleware, requireRole("ADMIN")
     const origExt = m.originalFormat || m.format;
     for (const p of [
       m.uploadPath,
+      join(config.staticDir, "models", `${id}.glb`),
+      join(config.staticDir, "models", `${id}.meta.json`),
       join(config.staticDir, "models", `${id}.gltf`),
       join(config.staticDir, "models", `${id}.bin`),
       join(config.staticDir, "thumbnails", `${id}.png`),
+      join(config.staticDir, "html-previews", `${id}.html`),
+      join(config.staticDir, "html-previews", `${id}.htm`),
       ...(origExt ? [join(config.staticDir, "originals", `${id}.${origExt}`)] : []),
     ]) {
       if (p && existsSync(p)) rmSync(p, { force: true });
@@ -1138,17 +1597,19 @@ router.post("/api/models/:id/replace-file", authMiddleware, requireRole("ADMIN")
     });
 
     // Update filesystem metadata
-    const meta = getMeta(id);
-    if (meta) {
-      Object.assign(meta, {
-        original_name: originalName,
-        original_size: file.size,
-        format: ext,
-        status: "processing",
-        upload_path: destPath,
-      });
-      saveMeta(id, meta);
-    }
+    const meta = getMeta(id) || {
+      model_id: id,
+      created_at: new Date().toISOString(),
+      created_by_id: req.user!.userId,
+    };
+    Object.assign(meta, {
+      original_name: originalName,
+      original_size: file.size,
+      format: ext,
+      status: "processing",
+      upload_path: destPath,
+    });
+    saveMeta(id, meta);
 
     // Enqueue conversion
     try {
@@ -1158,6 +1619,7 @@ router.post("/api/models/:id/replace-file", authMiddleware, requireRole("ADMIN")
         originalName,
         ext,
         userId: req.user!.userId,
+        preserveSource: true,
       });
     } catch (queueErr) {
       console.error("Queue add failed, falling back to sync:", queueErr);
@@ -1208,21 +1670,31 @@ router.post("/api/models/:id/reconvert", authMiddleware, requireRole("ADMIN"), a
       ? m.uploadPath
       : join(config.staticDir, "originals", `${m.id}.${m.format}`);
 
+    if (["html", "htm"].includes(String(m.format || "").toLowerCase())) {
+      res.status(400).json({ detail: "HTML 预览已停用，请上传 STEP/IGES/XT 文件" });
+      return;
+    }
+
     const modelDir = join(config.staticDir, "models");
     let gltfSize = m.gltfSize;
+    let gltfUrl = m.gltfUrl;
+    let previewPath = findPreviewAssetPath(modelDir, m.id, m.gltfUrl);
 
     // Re-convert from original if available, otherwise just regenerate thumbnail from existing glTF
     if (existsSync(origPath)) {
-      const result = await convertStepToGltf(origPath, modelDir, m.id, m.originalName || `${m.id}.${m.format}`);
+      const result = m.format === "xt" || m.format === "x_t"
+        ? await convertXtToGltf(origPath, modelDir, m.id, m.originalName || `${m.id}.${m.format}`)
+        : await convertStepToGltf(origPath, modelDir, m.id, m.originalName || `${m.id}.${m.format}`);
       gltfSize = result.gltfSize;
+      gltfUrl = result.gltfUrl;
+      previewPath = result.gltfPath;
     }
 
-    // Regenerate thumbnail from glTF
+    // Regenerate thumbnail from current preview asset (GLB for new conversions, glTF for legacy assets)
     let thumbnailUrl = m.thumbnailUrl;
-    const gltfPath = join(modelDir, `${m.id}.gltf`);
-    if (existsSync(gltfPath)) {
+    if (previewPath && existsSync(previewPath)) {
       try {
-        const thumb = await generateThumbnail(gltfPath, join(config.staticDir, "thumbnails"), m.id);
+        const thumb = await generateThumbnail(previewPath, join(config.staticDir, "thumbnails"), m.id);
         thumbnailUrl = thumb.thumbnailUrl;
       } catch { /* non-critical */ }
     }
@@ -1234,18 +1706,29 @@ router.post("/api/models/:id/reconvert", authMiddleware, requireRole("ADMIN"), a
     // Update DB with versioned URL
     await prisma.model.update({
       where: { id },
-      data: { ...(gltfSize !== m.gltfSize ? { gltfSize } : {}), ...(versionedUrl !== m.thumbnailUrl ? { thumbnailUrl: versionedUrl } : {}) },
+      data: {
+        ...(gltfUrl !== m.gltfUrl ? { gltfUrl } : {}),
+        ...(gltfSize !== m.gltfSize ? { gltfSize } : {}),
+        ...(versionedUrl !== m.thumbnailUrl ? { thumbnailUrl: versionedUrl } : {}),
+      },
     });
 
     await cacheDelByPrefix("cache:models:");
+    const previewMeta = getPreviewMeta(m.id, {
+      gltfUrl,
+      originalName: m.originalName,
+      format: m.format,
+    });
 
     res.json({
       success: true,
       data: {
         model_id: m.id,
         name: m.name,
+        gltf_url: gltfUrl,
         gltf_size: gltfSize,
         thumbnail_url: versionedUrl,
+        preview_meta: previewMeta,
       },
     });
   } catch (err: any) {
@@ -1264,7 +1747,7 @@ router.post("/api/models/reconvert-all", authMiddleware, requireRole("ADMIN"), a
   try {
     const models = await prisma.model.findMany({
       where: { status: "completed" },
-      select: { id: true, name: true, format: true, uploadPath: true },
+      select: { id: true, name: true, originalName: true, format: true, uploadPath: true },
     });
 
     let success = 0, failed = 0;
@@ -1277,22 +1760,24 @@ router.post("/api/models/reconvert-all", authMiddleware, requireRole("ADMIN"), a
         : join(config.staticDir, "originals", `${m.id}.${m.format}`);
 
       if (!existsSync(origPath)) { failed++; continue; }
+      if (["html", "htm"].includes(String(m.format || "").toLowerCase())) { failed++; continue; }
 
       try {
-        const result = await convertStepToGltf(origPath, modelDir, m.id, `${m.id}.${m.format}`);
+        const result = m.format === "xt" || m.format === "x_t"
+          ? await convertXtToGltf(origPath, modelDir, m.id, m.originalName || `${m.id}.${m.format}`)
+          : await convertStepToGltf(origPath, modelDir, m.id, m.originalName || `${m.id}.${m.format}`);
 
         let thumbnailUrl: string | null = null;
-        const gltfPath = join(modelDir, `${m.id}.gltf`);
-        if (existsSync(gltfPath)) {
+        if (existsSync(result.gltfPath)) {
           try {
-            const thumb = await generateThumbnail(gltfPath, thumbDir, m.id);
+            const thumb = await generateThumbnail(result.gltfPath, thumbDir, m.id);
             thumbnailUrl = `${thumb.thumbnailUrl}?t=${Date.now()}`;
           } catch { /* non-critical */ }
         }
 
         await prisma.model.update({
           where: { id: m.id },
-          data: { gltfSize: result.gltfSize, ...(thumbnailUrl ? { thumbnailUrl } : {}) },
+          data: { gltfUrl: result.gltfUrl, gltfSize: result.gltfSize, ...(thumbnailUrl ? { thumbnailUrl } : {}) },
         });
         success++;
       } catch {
@@ -1355,9 +1840,9 @@ router.post("/api/models/:id/versions", authMiddleware, requireRole("ADMIN"), up
     if (!ext) return;
     const versionNumber = model.currentVersion + 1;
 
-    // Convert file
+    // Convert file into a browser-ready GLB preview.
     const modelDir = join(config.staticDir, "models");
-    let result;
+    let result: { gltfUrl: string; gltfSize: number };
     if (ext === "xt" || ext === "x_t") {
       result = await convertXtToGltf(file.path, modelDir, `${modelId}_v${versionNumber}`, file.originalname || "model.xt");
     } else {

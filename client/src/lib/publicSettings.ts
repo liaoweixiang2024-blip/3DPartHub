@@ -234,8 +234,21 @@ export interface MaterialPresetConfig {
   thickness?: number;
 }
 
-export function get3DMaterialConfig() {
-  const s = cache || {};
+export type ViewerSettingsOverride = Partial<Pick<SystemSettings,
+  "viewer_exposure" |
+  "viewer_ambient_intensity" |
+  "viewer_main_light_intensity" |
+  "viewer_fill_light_intensity" |
+  "viewer_hemisphere_intensity" |
+  "viewer_bg_color" |
+  "mat_default_color" |
+  "mat_default_metalness" |
+  "mat_default_roughness" |
+  "mat_default_envMapIntensity"
+>>;
+
+export function get3DMaterialConfig(overrides?: ViewerSettingsOverride) {
+  const s = { ...(cache || {}), ...(overrides || {}) };
   return {
     presets: {
       default: {

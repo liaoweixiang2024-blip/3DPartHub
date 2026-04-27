@@ -1,5 +1,5 @@
-import { readFileSync } from "node:fs";
 import { prisma } from "../lib/prisma.js";
+import { readGltfAsset, resolveFileUrlPath } from "./gltfAsset.js";
 
 interface ModelStats {
   id: string;
@@ -15,7 +15,7 @@ interface ModelStats {
 
 function extractGltfStats(gltfPath: string): { vertexCount: number; faceCount: number; dimensions: any } | null {
   try {
-    const gltf = JSON.parse(readFileSync(gltfPath, "utf-8"));
+    const { json: gltf } = readGltfAsset(gltfPath);
     let vertexCount = 0;
     let faceCount = 0;
     let minX = Infinity, minY = Infinity, minZ = Infinity;
@@ -27,10 +27,12 @@ function extractGltfStats(gltfPath: string): { vertexCount: number; faceCount: n
     for (const mesh of meshes) {
       for (const prim of (mesh.primitives || [])) {
         const posIdx = prim.attributes?.POSITION;
+        let primitiveVertexCount = 0;
         if (posIdx !== undefined) {
           const acc = accessors[posIdx];
           if (acc) {
-            vertexCount += acc.count || 0;
+            primitiveVertexCount = acc.count || 0;
+            vertexCount += primitiveVertexCount;
             // Use min/max from accessor if available
             if (acc.min) {
               minX = Math.min(minX, acc.min[0]);
@@ -48,9 +50,9 @@ function extractGltfStats(gltfPath: string): { vertexCount: number; faceCount: n
         if (prim.indices !== undefined) {
           const idxAcc = accessors[prim.indices];
           if (idxAcc) faceCount += Math.floor((idxAcc.count || 0) / 3);
-        } else {
-          // Non-indexed: vertexCount / 3
-          faceCount += Math.floor(vertexCount / 3);
+        } else if (primitiveVertexCount > 0) {
+          // Non-indexed: each primitive contributes its own vertexCount / 3.
+          faceCount += Math.floor(primitiveVertexCount / 3);
         }
       }
     }
@@ -77,12 +79,12 @@ export async function compareModels(id1: string, id2: string) {
   let stats2: { vertexCount: number; faceCount: number; dimensions: any } | null = null;
 
   try {
-    const path1 = m1.gltfUrl.replace(/^\//, "");
+    const path1 = resolveFileUrlPath(m1.gltfUrl);
     stats1 = extractGltfStats(path1);
   } catch { /* ignore */ }
 
   try {
-    const path2 = m2.gltfUrl.replace(/^\//, "");
+    const path2 = resolveFileUrlPath(m2.gltfUrl);
     stats2 = extractGltfStats(path2);
   } catch { /* ignore */ }
 

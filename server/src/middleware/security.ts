@@ -29,6 +29,15 @@ export const authLimiter = rateLimit({
   message: { success: false, message: "登录尝试过多，请稍后再试" },
 });
 
+export const searchLimiter = rateLimit({
+  windowMs: 5 * 60 * 1000, // 5 minutes
+  limit: 600,
+  max: 600,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { success: false, message: "搜索请求过于频繁，请稍后再试" },
+});
+
 // Helmet security configuration
 export const securityHeaders = helmet({
   contentSecurityPolicy: false,

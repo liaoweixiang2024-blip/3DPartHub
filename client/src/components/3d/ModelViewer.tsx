@@ -1,6 +1,8 @@
-import { lazy, Suspense } from "react";
+import { lazy, Suspense, useCallback, useEffect, useRef, useState } from "react";
 import * as THREE from "three";
-import { get3DMaterialConfig } from "../../lib/publicSettings";
+import { get3DMaterialConfig, type ViewerSettingsOverride } from "../../lib/publicSettings";
+import type { MaterialPresetKey } from "./viewerControls";
+import type { MeasureMode, MeasurementPoint, MeasurementRecord, MeasurementSnapMode, ModelPartItem } from "./viewerEvents";
 
 const Canvas = lazy(() =>
   import("@react-three/fiber").then((m) => ({ default: m.Canvas }))
@@ -9,25 +11,43 @@ const Canvas = lazy(() =>
 const Scene = lazy(() => import("./Scene"));
 const CameraController = lazy(() => import("./CameraController"));
 const MultiFormatLoader = lazy(() => import("./MultiFormatLoader"));
+const RendererExposure = lazy(() => import("./RendererExposure"));
 const OrbitControls = lazy(() =>
   import("@react-three/drei").then((m) => ({ default: m.OrbitControls }))
 );
 
 export type ViewMode = "solid" | "wireframe" | "transparent" | "explode";
-export type CameraPreset = "front" | "side" | "iso" | "top";
+export type CameraPreset = "front" | "back" | "left" | "right" | "top" | "bottom" | "iso";
 
 interface ModelViewerProps {
   modelUrl?: string;
   viewMode: ViewMode;
+  explodeAmount?: number;
   cameraPreset: CameraPreset;
   showDimensions: boolean;
   showGrid: boolean;
   clipEnabled: boolean;
   clipDirection: "x" | "y" | "z";
   clipPosition: number;
-  materialPreset: "metal" | "plastic" | "glass" | "default";
+  clipRange?: { min: number; max: number; step: number };
+  clipInverted?: boolean;
+  onClipPositionChange?: (position: number) => void;
+  materialPreset: MaterialPresetKey;
+  showEdges: boolean;
   showAxis?: boolean;
   viewportBottom?: number;
+  viewerSettings?: ViewerSettingsOverride;
+  selectedPartId?: string | null;
+  hiddenPartIds?: string[];
+  isolatedPartId?: string | null;
+  onPartsChange?: (parts: ModelPartItem[]) => void;
+  onPartSelect?: (partId: string | null) => void;
+  measurementActive?: boolean;
+  measureMode?: MeasureMode;
+  measurementSnapMode?: MeasurementSnapMode;
+  measurementPoints?: MeasurementPoint[];
+  measurementRecords?: MeasurementRecord[];
+  onMeasurePoint?: (point: MeasurementPoint) => void;
   onLoaded?: () => void;
   onProgress?: (progress: number) => void;
 }
@@ -47,18 +67,60 @@ console.warn = (...args: any[]) => {
 export default function ModelViewer({
   modelUrl,
   viewMode,
+  explodeAmount = 1,
   cameraPreset,
   showDimensions,
   showGrid,
   clipEnabled,
   clipDirection,
   clipPosition,
+  clipRange,
+  clipInverted,
+  onClipPositionChange,
   materialPreset,
-  showAxis = true,
+  showEdges,
+  showAxis = false,
   viewportBottom,
+  viewerSettings,
+  selectedPartId,
+  hiddenPartIds,
+  isolatedPartId,
+  onPartsChange,
+  onPartSelect,
+  measurementActive,
+  measureMode,
+  measurementSnapMode,
+  measurementPoints,
+  measurementRecords,
+  onMeasurePoint,
   onLoaded,
+  onProgress,
 }: ModelViewerProps) {
-  const config = get3DMaterialConfig().viewer;
+  const config = get3DMaterialConfig(viewerSettings).viewer;
+  const controlsRef = useRef<any>(null);
+  const interactionEndTimerRef = useRef<number | null>(null);
+  const controlsInteractingRef = useRef(false);
+  const [controlsInteracting, setControlsInteracting] = useState(false);
+
+  const markControlsInteracting = useCallback(() => {
+    if (interactionEndTimerRef.current) {
+      window.clearTimeout(interactionEndTimerRef.current);
+      interactionEndTimerRef.current = null;
+    }
+    if (!controlsInteractingRef.current) {
+      controlsInteractingRef.current = true;
+      setControlsInteracting(true);
+    }
+    interactionEndTimerRef.current = window.setTimeout(() => {
+      controlsInteractingRef.current = false;
+      setControlsInteracting(false);
+      interactionEndTimerRef.current = null;
+    }, 360);
+  }, []);
+
+  useEffect(() => () => {
+    if (interactionEndTimerRef.current) window.clearTimeout(interactionEndTimerRef.current);
+  }, []);
 
   return (
     <Canvas
@@ -68,9 +130,14 @@ export default function ModelViewer({
       style={{ background: config.bgColor }}
     >
       <Suspense fallback={null}>
-        <Scene showGrid={showGrid} showAxis={showAxis} />
-        <CameraController preset={cameraPreset} viewportBottom={viewportBottom} />
+        <RendererExposure exposure={config.exposure} />
+        <Scene showGrid={showGrid} showAxis={showAxis} viewerSettings={viewerSettings} />
+        <CameraController preset={cameraPreset} viewportBottom={viewportBottom} controlsRef={controlsRef} />
         <OrbitControls
+          ref={controlsRef}
+          onStart={markControlsInteracting}
+          onChange={markControlsInteracting}
+          onEnd={markControlsInteracting}
           enableDamping
           dampingFactor={0.15}
           rotateSpeed={0.8}
@@ -83,12 +150,30 @@ export default function ModelViewer({
           <MultiFormatLoader
             url={modelUrl}
             viewMode={viewMode}
+            explodeAmount={explodeAmount}
             showDimensions={showDimensions}
             clipEnabled={clipEnabled}
             clipDirection={clipDirection}
             clipPosition={clipPosition}
+            clipRange={clipRange}
+            clipInverted={clipInverted}
+            onClipPositionChange={onClipPositionChange}
             materialPreset={materialPreset}
+            showEdges={showEdges && !controlsInteracting}
+            viewerSettings={viewerSettings}
+            selectedPartId={selectedPartId}
+            hiddenPartIds={hiddenPartIds}
+            isolatedPartId={isolatedPartId}
+            onPartsChange={onPartsChange}
+            onPartSelect={onPartSelect}
+            measurementActive={measurementActive}
+            measureMode={measureMode}
+            measurementSnapMode={measurementSnapMode}
+            measurementPoints={measurementPoints}
+            measurementRecords={measurementRecords}
+            onMeasurePoint={onMeasurePoint}
             onLoaded={onLoaded}
+            onProgress={onProgress}
           />
         )}
       </Suspense>

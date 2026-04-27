@@ -27,7 +27,7 @@ import { startBackupScheduler } from "./lib/backup.js";
 import { prisma } from "./lib/prisma.js";
 import { responseHandler } from "./middleware/responseHandler.js";
 import { errorHandler, notFoundHandler } from "./middleware/errorHandler.js";
-import { apiLimiter, uploadLimiter, authLimiter, securityHeaders } from "./middleware/security.js";
+import { apiLimiter, uploadLimiter, authLimiter, searchLimiter, securityHeaders } from "./middleware/security.js";
 import { autoAudit } from "./middleware/autoAudit.js";
 import { ipGuard } from "./middleware/ipGuard.js";
 
@@ -111,6 +111,7 @@ app.use("/static", (req, res, next) => {
     path === "/backups" || path.startsWith("/backups/") ||
     path === "/_backup_db" || path.startsWith("/_backup_db/") ||
     path === "/_safety_snapshots" || path.startsWith("/_safety_snapshots/") ||
+    path === "/html-previews" || path.startsWith("/html-previews/") ||
     path.startsWith("/.restore_")
   ) {
     res.status(404).end();
@@ -134,6 +135,8 @@ app.use("/api/auth/register", authLimiter);
 app.use("/api/models/upload", uploadLimiter);
 app.use("/api/upload", uploadLimiter);
 app.use("/api/batch", uploadLimiter);
+app.get("/api/models", searchLimiter);
+app.get("/api/search", searchLimiter);
 app.use("/api", apiLimiter);
 
 // IP access control & hotlink protection

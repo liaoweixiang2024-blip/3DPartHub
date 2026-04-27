@@ -426,6 +426,7 @@ export default function SelectionPage() {
   }, [liveCat]);
 
   const manualFields = useMemo(() => new Set(columns.filter(isManualColumn).map((col) => col.key)), [columns]);
+  const specKeys = useMemo(() => fields.filter((f) => specs[f]), [fields, specs]);
 
   /* filtered */
   const filtered = useMemo(() => {

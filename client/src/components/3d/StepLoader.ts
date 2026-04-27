@@ -90,13 +90,45 @@ export async function loadCadFile(
 }
 
 export async function loadCadFromUrl(
-  url: string
+  url: string,
+  onProgress?: (progress: number) => void
 ): Promise<THREE.Group> {
+  onProgress?.(3);
   const response = await fetch(url);
   if (!response.ok) throw new Error(`加载失败: ${response.status}`);
-  const buffer = await response.arrayBuffer();
+
+  const total = Number(response.headers.get("Content-Length") || 0);
+  let buffer: ArrayBuffer;
+  if (response.body && total > 0) {
+    const reader = response.body.getReader();
+    const chunks: Uint8Array[] = [];
+    let loaded = 0;
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      if (value) {
+        chunks.push(value);
+        loaded += value.byteLength;
+        onProgress?.(Math.min(55, 5 + Math.round((loaded / total) * 50)));
+      }
+    }
+    const merged = new Uint8Array(loaded);
+    let offset = 0;
+    for (const chunk of chunks) {
+      merged.set(chunk, offset);
+      offset += chunk.byteLength;
+    }
+    buffer = merged.buffer;
+  } else {
+    buffer = await response.arrayBuffer();
+    onProgress?.(55);
+  }
+
+  onProgress?.(70);
   const fileName = url.split("/").pop() || "model.step";
-  return loadCadFile(buffer, fileName);
+  const group = await loadCadFile(buffer, fileName);
+  onProgress?.(100);
+  return group;
 }
 
 function cadResultToThreeGroup(result: OcctResult): THREE.Group {

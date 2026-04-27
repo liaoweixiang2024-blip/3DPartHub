@@ -27,6 +27,12 @@ export interface SystemSettings {
   announcement_text: string;
   announcement_type: string;
   announcement_color: string;
+  maintenance_enabled: boolean;
+  maintenance_auto_enabled: boolean;
+  maintenance_auto_queue_threshold: number;
+  maintenance_title: string;
+  maintenance_message: string;
+  conversion_worker_concurrency: number;
   smtp_host: string;
   smtp_port: number;
   smtp_user: string;
@@ -125,6 +131,16 @@ export interface BackupStats {
   dbSize: string;
 }
 
+export interface MaintenanceStatus {
+  enabled: boolean;
+  manual: boolean;
+  automatic: boolean;
+  pending: number;
+  threshold: number;
+  title: string;
+  message: string;
+}
+
 export interface BackupRecord {
   id: string;
   filename: string;
@@ -218,6 +234,11 @@ export async function sendTestEmail(to: string): Promise<{ message: string }> {
 export async function getPublicSettings(): Promise<Partial<SystemSettings>> {
   const res = await client.get("/settings/public");
   return unwrap<Partial<SystemSettings>>(res);
+}
+
+export async function getMaintenanceStatus(): Promise<MaintenanceStatus> {
+  const res = await client.get("/settings/maintenance-status");
+  return unwrap<MaintenanceStatus>(res);
 }
 
 export async function uploadImage(file: File, key: string): Promise<{ url: string }> {

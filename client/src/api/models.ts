@@ -34,6 +34,73 @@ export interface ModelVariant {
   created_at: string;
 }
 
+export interface ModelGroupModel {
+  id: string;
+  name: string;
+  thumbnailUrl: string | null;
+  originalName: string;
+  originalSize: number;
+  createdAt: string;
+  fileModifiedAt?: string | null;
+}
+
+export interface ModelGroupItem {
+  id: string;
+  name: string;
+  description: string | null;
+  primary: {
+    id: string;
+    name: string;
+    thumbnailUrl: string | null;
+  } | null;
+  model_count: number;
+  models: ModelGroupModel[];
+  created_at: string;
+}
+
+export interface ModelPreviewMeta {
+  version: number;
+  sourceName: string;
+  sourceFormat?: string;
+  unit?: string;
+  totals?: {
+    partCount: number;
+    vertexCount: number;
+    faceCount: number;
+  };
+  bounds?: {
+    min: [number, number, number];
+    max: [number, number, number];
+    size: [number, number, number];
+    center: [number, number, number];
+  };
+  parts?: Array<{
+    id: string;
+    name: string;
+    color: string | null;
+    sourceMeshIndex?: number;
+    vertexCount: number;
+    faceCount: number;
+    bounds: {
+      min: [number, number, number];
+      max: [number, number, number];
+      size?: [number, number, number];
+      center?: [number, number, number];
+    };
+  }>;
+  tree?: Array<{ id: string; name: string; children: string[] }>;
+  diagnostics?: {
+    generatedAt: string;
+    converter: string;
+    tessellation?: Record<string, unknown>;
+    sourceMeshCount?: number;
+    validMeshCount?: number;
+    skippedMeshCount?: number;
+    conversionMs?: number;
+    warnings?: string[];
+  };
+}
+
 export interface ServerModelDetail {
   model_id: string;
   name?: string;
@@ -52,6 +119,7 @@ export interface ServerModelDetail {
   drawing_url?: string | null;
   drawing_name?: string | null;
   drawing_size?: number | null;
+  preview_meta?: ModelPreviewMeta | null;
   group?: {
     id: string;
     name: string;
@@ -64,6 +132,157 @@ export interface ServerModelListResponse {
   items: ServerModelListItem[];
   page: number;
   page_size: number;
+}
+
+export type PreviewDiagnosticStatus = "ok" | "warning" | "invalid" | "missing";
+export type PreviewDiagnosticFilter = PreviewDiagnosticStatus | "problem" | "all";
+
+export interface ModelPreviewDiagnosticItem {
+  model_id: string;
+  name: string;
+  original_name: string | null;
+  format: string | null;
+  thumbnail_url: string | null;
+  gltf_url: string | null;
+  original_size: number;
+  category: string | null;
+  created_at: string | null;
+  preview_status: PreviewDiagnosticStatus;
+  preview_label: string;
+  preview_reason: string;
+  asset_status?: PreviewDiagnosticStatus;
+  asset_reason?: string;
+  asset_size?: number;
+  thumbnail_status?: PreviewDiagnosticStatus;
+  thumbnail_reason?: string;
+  thumbnail_size?: number;
+  part_count: number;
+  vertex_count: number;
+  face_count: number;
+  skipped_mesh_count: number;
+  warnings: string[];
+  bounds_size: [number, number, number] | null;
+  converter: string | null;
+  generated_at: string | null;
+}
+
+export interface ModelPreviewDiagnosticsResponse {
+  summary: {
+    total: number;
+    ok: number;
+    warning: number;
+    invalid: number;
+    missing: number;
+    problem: number;
+  };
+  items: ModelPreviewDiagnosticItem[];
+  total: number;
+  page: number;
+  page_size: number;
+  status: PreviewDiagnosticFilter;
+}
+
+export interface ModelPreviewRebuildResponse {
+  status: PreviewDiagnosticFilter;
+  total_candidates: number;
+  queued: number;
+  skipped: number;
+  failed: number;
+  items: Array<{
+    model_id: string;
+    name: string;
+    status: "queued" | "skipped" | "failed";
+    reason?: string;
+    job_id?: string | number;
+  }>;
+}
+
+export type ConversionQueueState = "active" | "waiting" | "delayed" | "prioritized" | "waiting-children" | "completed" | "failed" | "paused" | "unknown";
+
+export interface ConversionQueueJob {
+  id: string;
+  name: string;
+  state: ConversionQueueState;
+  progress: number;
+  model_id: string | null;
+  model_name: string;
+  original_name: string | null;
+  ext: string | null;
+  rebuild_reason: string | null;
+  attempts_made: number;
+  failed_reason: string | null;
+  timestamp: number | null;
+  processed_on: number | null;
+  finished_on: number | null;
+  active_ms?: number;
+  is_stale?: boolean;
+}
+
+export interface ConversionQueueResponse {
+  counts: {
+    waiting: number;
+    active: number;
+    delayed: number;
+    completed: number;
+    failed: number;
+    paused: number;
+  };
+  queue_counts?: {
+    waiting: number;
+    active: number;
+    delayed: number;
+    completed: number;
+    failed: number;
+    paused: number;
+  };
+  items: ConversionQueueJob[];
+  total: number;
+  filter_state?: ConversionQueueState | "all";
+  generated_at: string;
+}
+
+export interface ConversionQueueActionResponse {
+  cancelled?: number;
+  retried?: number;
+  skipped?: number;
+  failed?: number;
+  active?: number;
+  cleaned?: number;
+  type?: "completed" | "failed";
+  items?: Array<{
+    id: string;
+    model_id: string | null;
+    status: "cancelled" | "retried" | "skipped" | "failed";
+    reason?: string;
+  }>;
+  job_ids?: string[];
+}
+
+export interface ConversionQueueJobDetail extends ConversionQueueJob {
+  stacktrace: string[];
+  log_count: number;
+  logs: string[];
+  model: {
+    id: string;
+    name: string | null;
+    status: string;
+    originalName: string | null;
+    format: string | null;
+    gltfUrl: string | null;
+    thumbnailUrl: string | null;
+    updatedAt: string;
+  } | null;
+  data: {
+    model_id: string | null;
+    original_name: string | null;
+    ext: string | null;
+    preserve_source: boolean;
+    rebuild_reason: string | null;
+    source_path: string | null;
+    source_name: string | null;
+    source_exists: boolean | null;
+  };
+  result: unknown;
 }
 
 function mapListResponse(data: ServerModelListResponse): PaginatedResponse<ServerModelListItem> {
@@ -99,6 +318,64 @@ export const modelApi = {
     return resp.data?.data ?? resp.data ?? resp;
   },
 
+  previewDiagnostics: async (params?: { status?: PreviewDiagnosticFilter; search?: string; page?: number; pageSize?: number }): Promise<ModelPreviewDiagnosticsResponse> => {
+    const { data: resp } = await client.get("/models/preview-diagnostics", {
+      params: {
+        status: params?.status || "problem",
+        search: params?.search || undefined,
+        page: params?.page || 1,
+        page_size: params?.pageSize || 12,
+      },
+    });
+    return resp.data?.data ?? resp.data ?? resp;
+  },
+
+  rebuildPreviewDiagnostics: async (data?: { status?: PreviewDiagnosticFilter; modelIds?: string[]; limit?: number; all?: boolean }): Promise<ModelPreviewRebuildResponse> => {
+    const { data: resp } = await client.post("/models/preview-diagnostics/rebuild", {
+      status: data?.status || "problem",
+      modelIds: data?.modelIds,
+      limit: data?.limit || 50,
+      all: data?.all || undefined,
+    });
+    return resp.data?.data ?? resp.data ?? resp;
+  },
+
+  conversionQueue: async (params?: { limit?: number; state?: ConversionQueueState | "all" }): Promise<ConversionQueueResponse> => {
+    const { data: resp } = await client.get("/tasks/conversion-queue", {
+      params: { limit: params?.limit || 12, state: params?.state },
+    });
+    return resp.data?.data ?? resp.data ?? resp;
+  },
+
+  conversionQueueJob: async (id: string): Promise<ConversionQueueJobDetail> => {
+    const { data: resp } = await client.get(`/tasks/conversion-queue/${id}`);
+    return resp?.success === true ? resp.data : resp;
+  },
+
+  retryFailedConversionJobs: async (data?: { jobIds?: string[]; limit?: number }): Promise<ConversionQueueActionResponse> => {
+    const { data: resp } = await client.post("/tasks/conversion-queue/retry-failed", {
+      jobIds: data?.jobIds,
+      limit: data?.limit || 25,
+    });
+    return resp.data?.data ?? resp.data ?? resp;
+  },
+
+  cancelPreviewRebuildJobs: async (data?: { limit?: number }): Promise<ConversionQueueActionResponse> => {
+    const { data: resp } = await client.post("/tasks/conversion-queue/cancel-rebuilds", {
+      limit: data?.limit || 10000,
+    });
+    return resp.data?.data ?? resp.data ?? resp;
+  },
+
+  cleanConversionQueue: async (data: { type: "completed" | "failed"; graceMs?: number; limit?: number }): Promise<ConversionQueueActionResponse> => {
+    const { data: resp } = await client.post("/tasks/conversion-queue/clean", {
+      type: data.type,
+      graceMs: data.graceMs ?? 0,
+      limit: data.limit || 100,
+    });
+    return resp.data?.data ?? resp.data ?? resp;
+  },
+
   delete: async (id: string): Promise<void> => {
     await client.delete(`/models/${id}`);
   },
@@ -119,7 +396,7 @@ export const modelApi = {
     return resp.data?.data ?? resp.data ?? resp;
   },
 
-  reconvert: async (id: string): Promise<{ model_id: string; gltf_size: number; thumbnail_url: string }> => {
+  reconvert: async (id: string): Promise<{ model_id: string; gltf_size: number; thumbnail_url: string; preview_meta?: ModelPreviewMeta | null }> => {
     const { data: resp } = await client.post(`/models/${id}/reconvert`);
     return resp.data?.data ?? resp.data ?? resp;
   },
@@ -173,5 +450,23 @@ export const modelApi = {
     const { data: resp } = await client.post("/model-groups/batch-merge", { items });
     const inner = resp.data?.data ?? resp.data ?? resp;
     return inner;
+  },
+
+  listModelGroups: async (): Promise<ModelGroupItem[]> => {
+    const { data: resp } = await client.get("/model-groups");
+    return resp.data?.data ?? resp.data ?? resp;
+  },
+
+  updateModelGroup: async (id: string, data: { name?: string; description?: string | null; primaryId?: string | null }): Promise<ModelGroupItem> => {
+    const { data: resp } = await client.put(`/model-groups/${id}`, data);
+    return resp.data?.data ?? resp.data ?? resp;
+  },
+
+  deleteModelGroup: async (id: string): Promise<void> => {
+    await client.delete(`/model-groups/${id}`);
+  },
+
+  removeModelFromGroup: async (groupId: string, modelId: string): Promise<void> => {
+    await client.delete(`/model-groups/${groupId}/models/${modelId}`);
   },
 };

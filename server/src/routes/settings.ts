@@ -7,6 +7,7 @@ import { authMiddleware, type AuthRequest } from "../middleware/auth.js";
 import { verifyToken } from "../lib/jwt.js";
 import { getAllSettings, setSettings, setSetting } from "../lib/settings.js";
 import { cacheGet, cacheSet, cacheDel, TTL } from "../lib/cache.js";
+import { conversionQueue } from "../lib/queue.js";
 import { startBackupJob, getJob, getRestoreJob, startRestoreJob, startRestoreJobFromFile, saveAsBackupRecord, startImportSaveJob, getImportSaveJob, getBackupStats, getBackupHealth, getBackupPolicyCheck, verifyBackupArchive, listBackups, renameBackup, deleteBackup, getBackupArchivePath, getActiveBackupJob } from "../lib/backup.js";
 import { checkUpdateAvailable, getLocalVersion } from "../lib/update.js";
 import { sendTestEmail } from "../lib/email.js";
@@ -52,6 +53,12 @@ function asSingleString(value: unknown): string | undefined {
   if (typeof value === "string") return value;
   if (Array.isArray(value)) return typeof value[0] === "string" ? value[0] : undefined;
   return undefined;
+}
+
+function numberSetting(value: unknown, fallback: number, min: number, max: number): number {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) return fallback;
+  return Math.min(max, Math.max(min, Math.floor(parsed)));
 }
 
 // Map setting key → stable filename (without extension, ext comes from upload)
@@ -531,6 +538,11 @@ router.get("/api/settings/public", async (_req, res: Response) => {
       announcement_text: all.announcement_text ?? "",
       announcement_type: all.announcement_type ?? "info",
       announcement_color: all.announcement_color ?? "",
+      maintenance_enabled: all.maintenance_enabled ?? false,
+      maintenance_auto_enabled: all.maintenance_auto_enabled ?? true,
+      maintenance_auto_queue_threshold: all.maintenance_auto_queue_threshold ?? 50,
+      maintenance_title: all.maintenance_title ?? "系统维护中",
+      maintenance_message: all.maintenance_message ?? "系统正在进行维护、数据恢复或资源重建，部分页面可能暂时不可用。请稍后再访问。",
       color_scheme: all.color_scheme ?? "orange",
       color_custom_dark: all.color_custom_dark ?? "{}",
       color_custom_light: all.color_custom_light ?? "{}",
@@ -604,6 +616,46 @@ router.get("/api/settings/public", async (_req, res: Response) => {
       allow_comments: true,
       show_watermark: false,
       watermark_image: "",
+      maintenance_enabled: false,
+      maintenance_auto_enabled: true,
+      maintenance_auto_queue_threshold: 50,
+      maintenance_title: "系统维护中",
+      maintenance_message: "系统正在进行维护、数据恢复或资源重建，部分页面可能暂时不可用。请稍后再访问。",
+    });
+  }
+});
+
+// Public: maintenance status for front-end route guard.
+router.get("/api/settings/maintenance-status", async (_req, res: Response) => {
+  res.set("Cache-Control", "no-store, no-cache, must-revalidate");
+  res.set("Pragma", "no-cache");
+  try {
+    const all = await getAllSettings();
+    const manual = Boolean(all.maintenance_enabled ?? false);
+    const autoEnabled = Boolean(all.maintenance_auto_enabled ?? true);
+    const threshold = numberSetting(all.maintenance_auto_queue_threshold, 50, 1, 100_000);
+    const counts = await conversionQueue.getJobCounts("waiting", "active", "delayed");
+    const pending = (counts.waiting || 0) + (counts.active || 0) + (counts.delayed || 0);
+    const automatic = autoEnabled && pending >= threshold;
+
+    res.json({
+      enabled: manual || automatic,
+      manual,
+      automatic,
+      pending,
+      threshold,
+      title: all.maintenance_title ?? "系统维护中",
+      message: all.maintenance_message ?? "系统正在进行维护、数据恢复或资源重建，部分页面可能暂时不可用。请稍后再访问。",
+    });
+  } catch {
+    res.json({
+      enabled: false,
+      manual: false,
+      automatic: false,
+      pending: 0,
+      threshold: 50,
+      title: "系统维护中",
+      message: "系统正在进行维护、数据恢复或资源重建，部分页面可能暂时不可用。请稍后再访问。",
     });
   }
 });

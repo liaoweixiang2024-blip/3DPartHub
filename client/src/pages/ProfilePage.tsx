@@ -108,12 +108,14 @@ function NotificationPrefs({ compact = false }: { compact?: boolean }) {
         {expanded && (
           <div className="mt-3 space-y-3">
             {NOTIFICATION_ITEMS.map(item => (
-              <label key={item.key} className="flex items-center justify-between py-1">
-                <div>
+              <label key={item.key} className="flex items-center justify-between gap-3 rounded-md py-1">
+                <div className="min-w-0">
                   <span className="text-sm text-on-surface">{item.label}</span>
-                  <p className="text-[10px] text-on-surface-variant/60">{item.desc}</p>
+                  <p className="text-[10px] leading-snug text-on-surface-variant/60">{item.desc}</p>
                 </div>
-                <Toggle checked={prefs[item.key] !== false} onChange={(v) => handleChange(item.key, v)} />
+                <div className="shrink-0">
+                  <Toggle checked={prefs[item.key] !== false} onChange={(v) => handleChange(item.key, v)} />
+                </div>
               </label>
             ))}
             {changed && (
@@ -150,12 +152,14 @@ function NotificationPrefs({ compact = false }: { compact?: boolean }) {
       {expanded && (
         <div className="mt-5 space-y-4">
           {NOTIFICATION_ITEMS.map(item => (
-            <div key={item.key} className="flex items-center justify-between">
-              <div>
+            <div key={item.key} className="flex items-center justify-between gap-4">
+              <div className="min-w-0">
                 <span className="text-sm text-on-surface">{item.label}</span>
                 <p className="text-xs text-on-surface-variant mt-0.5">{item.desc}</p>
               </div>
-              <Toggle checked={prefs[item.key] !== false} onChange={(v) => handleChange(item.key, v)} />
+              <div className="shrink-0">
+                <Toggle checked={prefs[item.key] !== false} onChange={(v) => handleChange(item.key, v)} />
+              </div>
             </div>
           ))}
           {changed && (

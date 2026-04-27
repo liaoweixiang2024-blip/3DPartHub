@@ -1,13 +1,189 @@
 import { createCanvas } from "canvas";
-import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { mkdirSync, writeFileSync } from "node:fs";
+import { readGltfAsset } from "./gltfAsset.js";
 
 interface Vec3 { x: number; y: number; z: number }
 interface Tri { v0: Vec3; v1: Vec3; v2: Vec3; nx: number; ny: number; nz: number }
+type Mat4 = number[];
+type Projection = { x: number; y: number; depth: number };
 
-// Max triangles to render — larger models get uniformly sampled for performance
-const MAX_RENDER_TRIANGLES = 80000;
+// Keep enough faces for complex CAD assemblies. Too aggressive sampling makes
+// thumbnails look like transparent wireframes.
+const MAX_RENDER_TRIANGLES = 2500000;
+const HIGH_QUALITY_SUPERSAMPLE_LIMIT = 800000;
+const THUMBNAIL_FOV = 45 * Math.PI / 180;
+const THUMBNAIL_VIEW_DIRECTION: Vec3 = { x: 0.62, y: 0.42, z: 0.62 };
+const THUMBNAIL_KEY_LIGHT: Vec3 = { x: 0.35, y: 0.72, z: 0.52 };
+const THUMBNAIL_FILL_LIGHT: Vec3 = { x: -0.5, y: 0.28, z: -0.25 };
+const THUMBNAIL_BASE_COLOR = { r: 174, g: 177, b: 181 };
+
+function computeBounds(triangles: Tri[]) {
+  let minX = Infinity, minY = Infinity, minZ = Infinity;
+  let maxX = -Infinity, maxY = -Infinity, maxZ = -Infinity;
+  for (const tri of triangles) {
+    for (const v of [tri.v0, tri.v1, tri.v2]) {
+      minX = Math.min(minX, v.x); minY = Math.min(minY, v.y); minZ = Math.min(minZ, v.z);
+      maxX = Math.max(maxX, v.x); maxY = Math.max(maxY, v.y); maxZ = Math.max(maxZ, v.z);
+    }
+  }
+  return { minX, minY, minZ, maxX, maxY, maxZ };
+}
+
+function vecSub(a: Vec3, b: Vec3): Vec3 {
+  return { x: a.x - b.x, y: a.y - b.y, z: a.z - b.z };
+}
+
+function vecAdd(a: Vec3, b: Vec3): Vec3 {
+  return { x: a.x + b.x, y: a.y + b.y, z: a.z + b.z };
+}
+
+function vecScale(v: Vec3, scalar: number): Vec3 {
+  return { x: v.x * scalar, y: v.y * scalar, z: v.z * scalar };
+}
+
+function vecDot(a: Vec3, b: Vec3): number {
+  return a.x * b.x + a.y * b.y + a.z * b.z;
+}
+
+function vecCross(a: Vec3, b: Vec3): Vec3 {
+  return {
+    x: a.y * b.z - a.z * b.y,
+    y: a.z * b.x - a.x * b.z,
+    z: a.x * b.y - a.y * b.x,
+  };
+}
+
+function vecNormalize(v: Vec3): Vec3 {
+  const length = Math.sqrt(v.x * v.x + v.y * v.y + v.z * v.z) || 1;
+  return { x: v.x / length, y: v.y / length, z: v.z / length };
+}
+
+function clampByte(value: number): number {
+  return Math.max(0, Math.min(255, Math.round(value)));
+}
+
+function lerp(a: number, b: number, t: number): number {
+  return a + (b - a) * t;
+}
+
+function edgeFunction(a: Projection, b: Projection, x: number, y: number): number {
+  return (x - a.x) * (b.y - a.y) - (y - a.y) * (b.x - a.x);
+}
+
+function identityMat4(): Mat4 {
+  return [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1];
+}
+
+function multiplyMat4(a: Mat4, b: Mat4): Mat4 {
+  const out = new Array(16).fill(0);
+  for (let col = 0; col < 4; col++) {
+    for (let row = 0; row < 4; row++) {
+      out[col * 4 + row] =
+        a[0 * 4 + row] * b[col * 4 + 0] +
+        a[1 * 4 + row] * b[col * 4 + 1] +
+        a[2 * 4 + row] * b[col * 4 + 2] +
+        a[3 * 4 + row] * b[col * 4 + 3];
+    }
+  }
+  return out;
+}
+
+function composeNodeMatrix(node: any): Mat4 {
+  if (Array.isArray(node.matrix) && node.matrix.length === 16) {
+    return node.matrix.map((value: number) => Number(value));
+  }
+
+  const [tx, ty, tz] = Array.isArray(node.translation) ? node.translation : [0, 0, 0];
+  const [sx, sy, sz] = Array.isArray(node.scale) ? node.scale : [1, 1, 1];
+  const [x, y, z, w] = Array.isArray(node.rotation) ? node.rotation : [0, 0, 0, 1];
+  const x2 = x + x, y2 = y + y, z2 = z + z;
+  const xx = x * x2, xy = x * y2, xz = x * z2;
+  const yy = y * y2, yz = y * z2, zz = z * z2;
+  const wx = w * x2, wy = w * y2, wz = w * z2;
+
+  return [
+    (1 - (yy + zz)) * sx, (xy + wz) * sx, (xz - wy) * sx, 0,
+    (xy - wz) * sy, (1 - (xx + zz)) * sy, (yz + wx) * sy, 0,
+    (xz + wy) * sz, (yz - wx) * sz, (1 - (xx + yy)) * sz, 0,
+    tx, ty, tz, 1,
+  ];
+}
+
+function transformPoint(v: Vec3, m: Mat4): Vec3 {
+  return {
+    x: m[0] * v.x + m[4] * v.y + m[8] * v.z + m[12],
+    y: m[1] * v.x + m[5] * v.y + m[9] * v.z + m[13],
+    z: m[2] * v.x + m[6] * v.y + m[10] * v.z + m[14],
+  };
+}
+
+function transformNormal(v: Vec3, m: Mat4): Vec3 {
+  const x = m[0] * v.x + m[4] * v.y + m[8] * v.z;
+  const y = m[1] * v.x + m[5] * v.y + m[9] * v.z;
+  const z = m[2] * v.x + m[6] * v.y + m[10] * v.z;
+  const len = Math.sqrt(x * x + y * y + z * z) || 1;
+  return { x: x / len, y: y / len, z: z / len };
+}
+
+function componentSize(componentType: number): number {
+  if (componentType === 5120 || componentType === 5121) return 1;
+  if (componentType === 5122 || componentType === 5123) return 2;
+  if (componentType === 5125 || componentType === 5126) return 4;
+  throw new Error(`Unsupported accessor component type: ${componentType}`);
+}
+
+function readScalar(view: DataView, offset: number, componentType: number): number {
+  if (componentType === 5120) return view.getInt8(offset);
+  if (componentType === 5121) return view.getUint8(offset);
+  if (componentType === 5122) return view.getInt16(offset, true);
+  if (componentType === 5123) return view.getUint16(offset, true);
+  if (componentType === 5125) return view.getUint32(offset, true);
+  if (componentType === 5126) return view.getFloat32(offset, true);
+  throw new Error(`Unsupported accessor component type: ${componentType}`);
+}
+
+function accessorOffset(accessor: any, bufferView: any): number {
+  return (bufferView.byteOffset || 0) + (accessor.byteOffset || 0);
+}
+
+function readVec3Accessor(accessor: any, bufferView: any, binData: Buffer): Vec3[] {
+  if (!accessor || !bufferView || accessor.type !== "VEC3") return [];
+  const size = componentSize(accessor.componentType);
+  const stride = bufferView.byteStride || size * 3;
+  const offset = accessorOffset(accessor, bufferView);
+  if (offset >= binData.byteLength) return [];
+  const view = new DataView(binData.buffer, binData.byteOffset + offset, Math.max(0, binData.byteLength - offset));
+  const out: Vec3[] = [];
+
+  for (let i = 0; i < accessor.count; i++) {
+    const offset = i * stride;
+    if (offset + size * 3 > view.byteLength) break;
+    out.push({
+      x: readScalar(view, offset, accessor.componentType),
+      y: readScalar(view, offset + size, accessor.componentType),
+      z: readScalar(view, offset + size * 2, accessor.componentType),
+    });
+  }
+  return out;
+}
+
+function readIndexAccessor(accessor: any, bufferView: any, binData: Buffer): number[] {
+  if (!accessor || !bufferView) return [];
+  const size = componentSize(accessor.componentType);
+  const stride = bufferView.byteStride || size;
+  const offset = accessorOffset(accessor, bufferView);
+  if (offset >= binData.byteLength) return [];
+  const view = new DataView(binData.buffer, binData.byteOffset + offset, Math.max(0, binData.byteLength - offset));
+  const out: number[] = [];
+
+  for (let i = 0; i < accessor.count; i++) {
+    const itemOffset = i * stride;
+    if (itemOffset + size > view.byteLength) break;
+    out.push(readScalar(view, itemOffset, accessor.componentType));
+  }
+  return out;
+}
 
 export function generateThumbnail(
   gltfPath: string,
@@ -20,17 +196,18 @@ export function generateThumbnail(
   const pngPath = join(outputDir, `${modelId}.png`);
 
   try {
-    const gltfContent = readFileSync(gltfPath, "utf-8");
-    const gltf = JSON.parse(gltfContent);
-    const binPath = gltfPath.replace(".gltf", ".bin");
-    const binData = readFileSync(binPath);
+    const { json: gltf, binData } = readGltfAsset(gltfPath);
 
-    let triangles = extractTriangles(gltf, binData);
+    const allTriangles = extractTriangles(gltf, binData);
+    let triangles = allTriangles;
     if (triangles.length === 0) {
       return generatePlaceholder(outputDir, modelId, width, height);
     }
 
-    // Subsample if model is too complex (keeps uniform coverage)
+    const bounds = computeBounds(allTriangles);
+
+    // Subsample only for extreme assets. Lower caps create visible holes on
+    // dense CAD surfaces, which users read as broken faces.
     if (triangles.length > MAX_RENDER_TRIANGLES) {
       const step = triangles.length / MAX_RENDER_TRIANGLES;
       const sampled: Tri[] = [];
@@ -40,114 +217,163 @@ export function generateThumbnail(
       triangles = sampled;
     }
 
-    // Compute bounding box
-    let minX = Infinity, minY = Infinity, minZ = Infinity;
-    let maxX = -Infinity, maxY = -Infinity, maxZ = -Infinity;
-    for (const tri of triangles) {
-      for (const v of [tri.v0, tri.v1, tri.v2]) {
-        minX = Math.min(minX, v.x); minY = Math.min(minY, v.y); minZ = Math.min(minZ, v.z);
-        maxX = Math.max(maxX, v.x); maxY = Math.max(maxY, v.y); maxZ = Math.max(maxZ, v.z);
+    const center = {
+      x: (bounds.minX + bounds.maxX) / 2,
+      y: (bounds.minY + bounds.maxY) / 2,
+      z: (bounds.minZ + bounds.maxZ) / 2,
+    };
+    const sx = bounds.maxX - bounds.minX;
+    const sy = bounds.maxY - bounds.minY;
+    const sz = bounds.maxZ - bounds.minZ;
+    const maxDim = Math.max(sx, sy, sz) || 1;
+    const radius = Math.max(Math.sqrt(sx * sx + sy * sy + sz * sz) / 2, maxDim / 2, 0.001);
+
+    const viewDir = vecNormalize(THUMBNAIL_VIEW_DIRECTION);
+    const cameraDistance = (radius / Math.sin(THUMBNAIL_FOV / 2)) * 1.25;
+    const camera = vecAdd(center, vecScale(viewDir, cameraDistance));
+    const forward = vecNormalize(vecSub(center, camera));
+    const worldUp: Vec3 = { x: 0, y: 1, z: 0 };
+    const right = vecNormalize(vecCross(forward, worldUp));
+    const up = vecNormalize(vecCross(right, forward));
+    const focal = 1 / Math.tan(THUMBNAIL_FOV / 2);
+    const keyLight = vecNormalize(THUMBNAIL_KEY_LIGHT);
+    const fillLight = vecNormalize(THUMBNAIL_FILL_LIGHT);
+
+    const projectUnit = (v: Vec3): Projection => {
+      const rel = vecSub(v, camera);
+      const depth = Math.max(vecDot(rel, forward), cameraDistance * 0.05);
+      return {
+        x: (vecDot(rel, right) / depth) * focal,
+        y: (vecDot(rel, up) / depth) * focal,
+        depth,
+      };
+    };
+
+    const unitTriangles = triangles.map((tri) => {
+      const p0 = projectUnit(tri.v0);
+      const p1 = projectUnit(tri.v1);
+      const p2 = projectUnit(tri.v2);
+      return { tri, pts: [p0, p1, p2] as [Projection, Projection, Projection], avgDepth: (p0.depth + p1.depth + p2.depth) / 3 };
+    });
+
+    let minPX = Infinity, minPY = Infinity, maxPX = -Infinity, maxPY = -Infinity;
+    for (const projected of unitTriangles) {
+      for (const p of projected.pts) {
+        minPX = Math.min(minPX, p.x);
+        minPY = Math.min(minPY, p.y);
+        maxPX = Math.max(maxPX, p.x);
+        maxPY = Math.max(maxPY, p.y);
       }
     }
-    const cx = (minX + maxX) / 2, cy = (minY + maxY) / 2, cz = (minZ + maxZ) / 2;
-    const size = Math.max(maxX - minX, maxY - minY, maxZ - minZ) || 1;
+    const projectedWidth = Math.max(maxPX - minPX, 0.001);
+    const projectedHeight = Math.max(maxPY - minPY, 0.001);
+    const margin = 0.60;
+    const screenScale = Math.min(width * margin / projectedWidth, height * margin / projectedHeight);
+    const screenCx = width / 2 - ((minPX + maxPX) / 2) * screenScale;
+    const screenCy = height / 2 + ((minPY + maxPY) / 2) * screenScale;
 
-    // Rotation angles for isometric-ish view
-    const cosA = Math.cos(0.6), sinA = Math.sin(0.6);
-    const cosB = Math.cos(0.4), sinB = Math.sin(0.4);
-
-    // Project, rotate, scale
-    const scale = Math.min(width, height) * 0.32 / size;
-    type Proj = { x: number; y: number; z: number };
-    const projectedTriangles: { pts: [Proj, Proj, Proj]; avgZ: number; shade: number }[] = [];
-
-    // Light direction (normalized) — from upper-right-front
-    const lx = 0.4, ly = 0.7, lz = 0.5;
-    const ll = Math.sqrt(lx * lx + ly * ly + lz * lz);
-
-    for (const tri of triangles) {
-      const project = (v: Vec3): Proj => {
-        const dx = v.x - cx, dy = v.y - cy, dz = v.z - cz;
-        // Y-axis rotation
-        const rx = dx * cosA - dz * sinA;
-        const rz1 = dx * sinA + dz * cosA;
-        // X-axis rotation
-        const ry = dy * cosB - rz1 * sinB;
-        const rz = dy * sinB + rz1 * cosB;
-        return { x: width / 2 + rx * scale, y: height / 2 - ry * scale, z: rz };
-      };
-
-      const p0 = project(tri.v0), p1 = project(tri.v1), p2 = project(tri.v2);
-      const avgZ = (p0.z + p1.z + p2.z) / 3;
-
-      // Compute face normal in projected space for shading
-      const e1x = p1.x - p0.x, e1y = p1.y - p0.y;
-      const e2x = p2.x - p0.x, e2y = p2.y - p0.y;
-      // Cross product z-component (for front/back face detection)
-      const cross = e1x * e2y - e1y * e2x;
-      if (cross > 0) continue; // back-face cull
-
-      // Use original normal for shading
-      const shade = Math.max(0, (tri.nx * lx + tri.ny * ly + tri.nz * lz) / ll);
-
-      projectedTriangles.push({ pts: [p0, p1, p2], avgZ, shade });
-    }
-
-    // Sort back-to-front (painter's algorithm)
-    projectedTriangles.sort((a, b) => a.avgZ - b.avgZ);
-
-    // Render at 4x resolution for aggressive smoothing
-    const ss = 4;
-    const hiW = width * ss, hiH = height * ss;
-    const hiCanvas = createCanvas(hiW, hiH);
-    const hiCtx = hiCanvas.getContext("2d");
-
-    // Background gradient
-    const bgGrad = hiCtx.createLinearGradient(0, 0, hiW, hiH);
-    bgGrad.addColorStop(0, "#f5f6f8");
-    bgGrad.addColorStop(1, "#e8eaef");
-    hiCtx.fillStyle = bgGrad;
-    hiCtx.fillRect(0, 0, hiW, hiH);
-
-    // Scale projected triangles to 4x
-    const hiTriangles: { pts: [Proj, Proj, Proj]; shade: number }[] = [];
-    for (const tri of projectedTriangles) {
-      hiTriangles.push({
+    type Proj = { x: number; y: number; depth: number };
+    const projectedTriangles: { pts: [Proj, Proj, Proj]; avgDepth: number; shade: number; rim: number }[] = [];
+    for (const projected of unitTriangles) {
+      const normal = vecNormalize({ x: projected.tri.nx, y: projected.tri.ny, z: projected.tri.nz });
+      // Two-sided CAD render: mixed winding from STEP/IGES should never create
+      // apparent missing faces in thumbnails.
+      const key = Math.abs(vecDot(normal, keyLight));
+      const fill = Math.abs(vecDot(normal, fillLight)) * 0.35;
+      const view = Math.abs(vecDot(normal, viewDir));
+      const shade = Math.min(1, 0.42 + key * 0.46 + fill);
+      const rim = Math.pow(1 - view, 2) * 0.14;
+      projectedTriangles.push({
         pts: [
-          { x: tri.pts[0].x * ss, y: tri.pts[0].y * ss, z: tri.pts[0].z },
-          { x: tri.pts[1].x * ss, y: tri.pts[1].y * ss, z: tri.pts[1].z },
-          { x: tri.pts[2].x * ss, y: tri.pts[2].y * ss, z: tri.pts[2].z },
+          { x: screenCx + projected.pts[0].x * screenScale, y: screenCy - projected.pts[0].y * screenScale, depth: projected.pts[0].depth },
+          { x: screenCx + projected.pts[1].x * screenScale, y: screenCy - projected.pts[1].y * screenScale, depth: projected.pts[1].depth },
+          { x: screenCx + projected.pts[2].x * screenScale, y: screenCy - projected.pts[2].y * screenScale, depth: projected.pts[2].depth },
         ],
-        shade: tri.shade,
+        avgDepth: projected.avgDepth,
+        shade,
+        rim,
       });
     }
 
-    // Draw solid faces with shading
-    for (const { pts, shade } of hiTriangles) {
-      const ambient = 0.35;
-      const light = ambient + shade * (1 - ambient);
-      const r = Math.round(170 * light + 40);
-      const g = Math.round(180 * light + 45);
-      const b = Math.round(195 * light + 35);
+    // Render at high resolution for smoothing. Very dense assemblies use 2x
+    // to keep thumbnail jobs stable while still preserving all faces.
+    const ss = triangles.length > HIGH_QUALITY_SUPERSAMPLE_LIMIT ? 2 : 4;
+    const hiW = width * ss, hiH = height * ss;
+    const hiCanvas = createCanvas(hiW, hiH);
+    const hiCtx = hiCanvas.getContext("2d");
+    const image = hiCtx.createImageData(hiW, hiH);
+    const pixels = image.data;
+    const zBuffer = new Float32Array(hiW * hiH);
+    zBuffer.fill(Number.POSITIVE_INFINITY);
 
-      hiCtx.beginPath();
-      hiCtx.moveTo(pts[0].x, pts[0].y);
-      hiCtx.lineTo(pts[1].x, pts[1].y);
-      hiCtx.lineTo(pts[2].x, pts[2].y);
-      hiCtx.closePath();
-      hiCtx.fillStyle = `rgb(${r}, ${g}, ${b})`;
-      hiCtx.fill();
+    // Background gradient. Filling the image buffer directly avoids mixing
+    // Canvas painter ordering with the CAD depth pass below.
+    for (let y = 0; y < hiH; y++) {
+      for (let x = 0; x < hiW; x++) {
+        const t = (x + y) / Math.max(1, hiW + hiH - 2);
+        const offset = (y * hiW + x) * 4;
+        pixels[offset] = clampByte(lerp(245, 232, t));
+        pixels[offset + 1] = clampByte(lerp(246, 234, t));
+        pixels[offset + 2] = clampByte(lerp(248, 239, t));
+        pixels[offset + 3] = 255;
+      }
     }
 
-    // Apply strong Gaussian blur to fully blend facets into smooth surfaces
-    const blurCanvas = createCanvas(hiW, hiH);
-    const blurCtx = blurCanvas.getContext("2d");
-    (blurCtx as unknown as { filter: string }).filter = `blur(${ss * 2}px)`;
-    blurCtx.drawImage(hiCanvas, 0, 0);
-    // Use fully blurred version for smooth surface appearance
-    hiCtx.drawImage(blurCanvas, 0, 0);
+    // Scale projected triangles to the supersampled buffer.
+    const hiTriangles: { pts: [Proj, Proj, Proj]; shade: number; rim: number }[] = [];
+    for (const tri of projectedTriangles) {
+      hiTriangles.push({
+        pts: [
+          { x: tri.pts[0].x * ss, y: tri.pts[0].y * ss, depth: tri.pts[0].depth },
+          { x: tri.pts[1].x * ss, y: tri.pts[1].y * ss, depth: tri.pts[1].depth },
+          { x: tri.pts[2].x * ss, y: tri.pts[2].y * ss, depth: tri.pts[2].depth },
+        ],
+        shade: tri.shade,
+        rim: tri.rim,
+      });
+    }
 
-    // Downscale 4x → 1x with bilinear smoothing
+    // Draw solid faces with a z-buffer. Average-depth sorting is fast but
+    // creates broken-looking faces on CAD assemblies with intersecting or
+    // nested parts. A real depth pass keeps thumbnails visually consistent
+    // with the browser/WebGL preview.
+    for (const { pts, shade, rim } of hiTriangles) {
+      const light = Math.min(1.15, shade + rim);
+      const r = clampByte(THUMBNAIL_BASE_COLOR.r * light + 12);
+      const g = clampByte(THUMBNAIL_BASE_COLOR.g * light + 12);
+      const b = clampByte(THUMBNAIL_BASE_COLOR.b * light + 12);
+      const area = edgeFunction(pts[0], pts[1], pts[2].x, pts[2].y);
+      if (Math.abs(area) < 0.0001) continue;
+      const invArea = 1 / area;
+      const minX = Math.max(0, Math.floor(Math.min(pts[0].x, pts[1].x, pts[2].x)));
+      const maxX = Math.min(hiW - 1, Math.ceil(Math.max(pts[0].x, pts[1].x, pts[2].x)));
+      const minY = Math.max(0, Math.floor(Math.min(pts[0].y, pts[1].y, pts[2].y)));
+      const maxY = Math.min(hiH - 1, Math.ceil(Math.max(pts[0].y, pts[1].y, pts[2].y)));
+
+      for (let y = minY; y <= maxY; y++) {
+        const py = y + 0.5;
+        for (let x = minX; x <= maxX; x++) {
+          const px = x + 0.5;
+          const w0 = edgeFunction(pts[1], pts[2], px, py) * invArea;
+          const w1 = edgeFunction(pts[2], pts[0], px, py) * invArea;
+          const w2 = 1 - w0 - w1;
+          if (w0 < -0.00001 || w1 < -0.00001 || w2 < -0.00001) continue;
+
+          const depth = w0 * pts[0].depth + w1 * pts[1].depth + w2 * pts[2].depth;
+          const pixelIndex = y * hiW + x;
+          if (depth >= zBuffer[pixelIndex]) continue;
+          zBuffer[pixelIndex] = depth;
+          const offset = pixelIndex * 4;
+          pixels[offset] = r;
+          pixels[offset + 1] = g;
+          pixels[offset + 2] = b;
+          pixels[offset + 3] = 255;
+        }
+      }
+    }
+    hiCtx.putImageData(image, 0, 0);
+
+    // Downscale supersampled render → 1x with bilinear smoothing.
     const canvas = createCanvas(width, height);
     const ctx = canvas.getContext("2d");
     ctx.drawImage(hiCanvas, 0, 0, hiW, hiH, 0, 0, width, height);
@@ -164,8 +390,11 @@ function extractTriangles(gltf: any, binData: Buffer): Tri[] {
   const accessors: any[] = Array.from(gltf.accessors || []);
   const bufferViews: any[] = Array.from(gltf.bufferViews || []);
   const meshes: any[] = Array.from(gltf.meshes || []);
+  const nodes: any[] = Array.from(gltf.nodes || []);
 
-  for (const mesh of meshes) {
+  const addMeshTriangles = (meshIndex: number, matrix: Mat4) => {
+    const mesh = meshes[meshIndex];
+    if (!mesh) return;
     for (const prim of mesh.primitives || []) {
       const posIdx = prim.attributes?.POSITION;
       if (posIdx === undefined) continue;
@@ -173,13 +402,7 @@ function extractTriangles(gltf: any, binData: Buffer): Tri[] {
       if (!posAcc) continue;
       const posBv = bufferViews[posAcc.bufferView];
 
-      // Read positions
-      const posOffset = posBv.byteOffset || 0;
-      const posFloat = new Float32Array(binData.buffer, binData.byteOffset + posOffset, posAcc.count * 3);
-      const positions: Vec3[] = [];
-      for (let i = 0; i < posAcc.count; i++) {
-        positions.push({ x: posFloat[i * 3], y: posFloat[i * 3 + 1], z: posFloat[i * 3 + 2] });
-      }
+      const positions = readVec3Accessor(posAcc, posBv, binData).map((v) => transformPoint(v, matrix));
 
       // Read normals if available
       let normals: Vec3[] | null = null;
@@ -188,12 +411,7 @@ function extractTriangles(gltf: any, binData: Buffer): Tri[] {
         const normAcc = accessors[normIdx];
         if (normAcc) {
           const normBv = bufferViews[normAcc.bufferView];
-          const normOffset = normBv.byteOffset || 0;
-          const normFloat = new Float32Array(binData.buffer, binData.byteOffset + normOffset, normAcc.count * 3);
-          normals = [];
-          for (let i = 0; i < normAcc.count; i++) {
-            normals.push({ x: normFloat[i * 3], y: normFloat[i * 3 + 1], z: normFloat[i * 3 + 2] });
-          }
+          normals = readVec3Accessor(normAcc, normBv, binData).map((v) => transformNormal(v, matrix));
         }
       }
 
@@ -202,13 +420,7 @@ function extractTriangles(gltf: any, binData: Buffer): Tri[] {
         const idxAcc = accessors[prim.indices];
         if (!idxAcc) continue;
         const idxBv = bufferViews[idxAcc.bufferView];
-        const idxOffset = idxBv.byteOffset || 0;
-        let indices: Uint32Array | Uint16Array;
-        if (idxAcc.componentType === 5125) {
-          indices = new Uint32Array(binData.buffer, binData.byteOffset + idxOffset, idxAcc.count);
-        } else {
-          indices = new Uint16Array(binData.buffer, binData.byteOffset + idxOffset, idxAcc.count);
-        }
+        const indices = readIndexAccessor(idxAcc, idxBv, binData);
         for (let i = 0; i + 2 < indices.length; i += 3) {
           const i0 = indices[i], i1 = indices[i + 1], i2 = indices[i + 2];
           if (i0 >= positions.length || i1 >= positions.length || i2 >= positions.length) continue;
@@ -247,6 +459,26 @@ function extractTriangles(gltf: any, binData: Buffer): Tri[] {
           triangles.push({ v0: positions[i], v1: positions[i + 1], v2: positions[i + 2], nx, ny, nz });
         }
       }
+    }
+  };
+
+  const visitNode = (nodeIndex: number, parentMatrix: Mat4) => {
+    const node = nodes[nodeIndex];
+    if (!node) return;
+    const matrix = multiplyMat4(parentMatrix, composeNodeMatrix(node));
+    if (typeof node.mesh === "number") addMeshTriangles(node.mesh, matrix);
+    for (const childIndex of node.children || []) {
+      visitNode(childIndex, matrix);
+    }
+  };
+
+  const scene = gltf.scenes?.[typeof gltf.scene === "number" ? gltf.scene : 0];
+  const rootNodes = Array.isArray(scene?.nodes) ? scene.nodes : [];
+  if (rootNodes.length > 0 && nodes.length > 0) {
+    for (const nodeIndex of rootNodes) visitNode(nodeIndex, identityMat4());
+  } else {
+    for (let meshIndex = 0; meshIndex < meshes.length; meshIndex++) {
+      addMeshTriangles(meshIndex, identityMat4());
     }
   }
 

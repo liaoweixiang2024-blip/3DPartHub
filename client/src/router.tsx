@@ -5,6 +5,8 @@ import { useAuthStore } from "./stores/useAuthStore";
 
 import Icon from "./components/shared/Icon";
 import BrandMark from "./components/shared/BrandMark";
+import MaintenanceGate from "./components/shared/MaintenanceGate";
+import { isModelDetailPath, saveModelReturnPath } from "./lib/modelReturnPath";
 
 // Static import for the landing page — eliminates flash on first visit
 import HomePage from "./pages/HomePage";
@@ -109,6 +111,17 @@ function NotFoundPage() {
   );
 }
 
+function ModelReturnPathTracker() {
+  const location = useLocation();
+
+  useEffect(() => {
+    if (isModelDetailPath(location.pathname) || location.pathname === "/login") return;
+    saveModelReturnPath(`${location.pathname}${location.search}${location.hash}`);
+  }, [location.hash, location.pathname, location.search]);
+
+  return null;
+}
+
 /** Periodically check token validity and logout if expired */
 function useTokenWatcher() {
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
@@ -135,41 +148,44 @@ export default function Router() {
   useTokenWatcher();
 
   return (
-    <AnimatePresence mode="wait">
-      <Routes location={location} key={location.pathname}>
-        <Route path="/login" element={<ScrollPage><LoginPage /></ScrollPage>} />
-        <Route path="/legal/:type" element={<ScrollPage><LegalPage /></ScrollPage>} />
-        <Route path="/share/:token" element={<ScrollPage><SharePage /></ScrollPage>} />
-        <Route path="/selection/s/:token" element={<ScrollPage><SelectionSharePage /></ScrollPage>} />
-        <Route path="/" element={<PageWrap><HomePage /></PageWrap>} />
-        <Route path="/model/:id" element={<PageWrap><ModelDetailPage /></PageWrap>} />
-        <Route path="/projects" element={<ProtectedPage><ProjectsPage /></ProtectedPage>} />
-        <Route path="/projects/:id" element={<ProtectedPage><ProjectDetailPage /></ProtectedPage>} />
-        <Route path="/downloads" element={<ProtectedPage><DownloadsPage /></ProtectedPage>} />
-        <Route path="/favorites" element={<ProtectedPage><FavoritesPage /></ProtectedPage>} />
-        <Route path="/profile" element={<ProtectedPage><ProfilePage /></ProtectedPage>} />
-        <Route path="/support" element={<ProtectedPage><SupportPage /></ProtectedPage>} />
-        <Route path="/my-tickets" element={<ProtectedPage><MyTicketsPage /></ProtectedPage>} />
-        <Route path="/my-tickets/:id" element={<ProtectedPage><TicketDetailPage /></ProtectedPage>} />
-        <Route path="/admin/categories" element={<ProtectedPage requiredRole="ADMIN"><CategoryAdminPage /></ProtectedPage>} />
-        <Route path="/admin/models" element={<ProtectedPage requiredRole="ADMIN"><ModelAdminPage /></ProtectedPage>} />
-        <Route path="/admin/tickets" element={<ProtectedPage requiredRole="ADMIN"><TicketAdminPage /></ProtectedPage>} />
-        <Route path="/admin/tickets/:id" element={<ProtectedPage requiredRole="ADMIN"><TicketDetailPage /></ProtectedPage>} />
-        <Route path="/admin/settings" element={<ProtectedPage requiredRole="ADMIN"><SettingsPage /></ProtectedPage>} />
-        <Route path="/admin/users" element={<ProtectedPage requiredRole="ADMIN"><UserAdminPage /></ProtectedPage>} />
-        <Route path="/admin/audit" element={<ProtectedPage requiredRole="ADMIN"><AuditLogPage /></ProtectedPage>} />
-        <Route path="/admin/shares" element={<ProtectedPage requiredRole="ADMIN"><ShareAdminPage /></ProtectedPage>} />
-        <Route path="/selection" element={<PageWrap><SelectionPage /></PageWrap>} />
-        <Route path="/admin/selections" element={<ProtectedPage requiredRole="ADMIN"><SelectionAdminPage /></ProtectedPage>} />
-        <Route path="/my-inquiries" element={<ProtectedPage><MyInquiriesPage /></ProtectedPage>} />
-        <Route path="/my-inquiries/:id" element={<ProtectedPage><InquiryDetailPage /></ProtectedPage>} />
-        <Route path="/admin/inquiries" element={<ProtectedPage requiredRole="ADMIN"><InquiryAdminPage /></ProtectedPage>} />
-        <Route path="/admin/inquiries/:id" element={<ProtectedPage requiredRole="ADMIN"><InquiryDetailPage /></ProtectedPage>} />
-        <Route path="/admin/quote-template" element={<ProtectedPage requiredRole="ADMIN"><QuoteTemplateEditor /></ProtectedPage>} />
-        <Route path="/quote/:id" element={<ScrollPage><QuotePrintPage /></ScrollPage>} />
-        <Route path="/document/:type/:id" element={<ScrollPage><QuotePrintPage /></ScrollPage>} />
-        <Route path="*" element={<NotFoundPage />} />
-      </Routes>
-    </AnimatePresence>
+    <MaintenanceGate>
+      <ModelReturnPathTracker />
+      <AnimatePresence mode="wait">
+        <Routes location={location} key={location.pathname}>
+          <Route path="/login" element={<ScrollPage><LoginPage /></ScrollPage>} />
+          <Route path="/legal/:type" element={<ScrollPage><LegalPage /></ScrollPage>} />
+          <Route path="/share/:token" element={<ScrollPage><SharePage /></ScrollPage>} />
+          <Route path="/selection/s/:token" element={<ScrollPage><SelectionSharePage /></ScrollPage>} />
+          <Route path="/" element={<PageWrap><HomePage /></PageWrap>} />
+          <Route path="/model/:id" element={<PageWrap><ModelDetailPage /></PageWrap>} />
+          <Route path="/projects" element={<ProtectedPage><ProjectsPage /></ProtectedPage>} />
+          <Route path="/projects/:id" element={<ProtectedPage><ProjectDetailPage /></ProtectedPage>} />
+          <Route path="/downloads" element={<ProtectedPage><DownloadsPage /></ProtectedPage>} />
+          <Route path="/favorites" element={<ProtectedPage><FavoritesPage /></ProtectedPage>} />
+          <Route path="/profile" element={<ProtectedPage><ProfilePage /></ProtectedPage>} />
+          <Route path="/support" element={<ProtectedPage><SupportPage /></ProtectedPage>} />
+          <Route path="/my-tickets" element={<ProtectedPage><MyTicketsPage /></ProtectedPage>} />
+          <Route path="/my-tickets/:id" element={<ProtectedPage><TicketDetailPage /></ProtectedPage>} />
+          <Route path="/admin/categories" element={<ProtectedPage requiredRole="ADMIN"><CategoryAdminPage /></ProtectedPage>} />
+          <Route path="/admin/models" element={<ProtectedPage requiredRole="ADMIN"><ModelAdminPage /></ProtectedPage>} />
+          <Route path="/admin/tickets" element={<ProtectedPage requiredRole="ADMIN"><TicketAdminPage /></ProtectedPage>} />
+          <Route path="/admin/tickets/:id" element={<ProtectedPage requiredRole="ADMIN"><TicketDetailPage /></ProtectedPage>} />
+          <Route path="/admin/settings" element={<ProtectedPage requiredRole="ADMIN"><SettingsPage /></ProtectedPage>} />
+          <Route path="/admin/users" element={<ProtectedPage requiredRole="ADMIN"><UserAdminPage /></ProtectedPage>} />
+          <Route path="/admin/audit" element={<ProtectedPage requiredRole="ADMIN"><AuditLogPage /></ProtectedPage>} />
+          <Route path="/admin/shares" element={<ProtectedPage requiredRole="ADMIN"><ShareAdminPage /></ProtectedPage>} />
+          <Route path="/selection" element={<PageWrap><SelectionPage /></PageWrap>} />
+          <Route path="/admin/selections" element={<ProtectedPage requiredRole="ADMIN"><SelectionAdminPage /></ProtectedPage>} />
+          <Route path="/my-inquiries" element={<ProtectedPage><MyInquiriesPage /></ProtectedPage>} />
+          <Route path="/my-inquiries/:id" element={<ProtectedPage><InquiryDetailPage /></ProtectedPage>} />
+          <Route path="/admin/inquiries" element={<ProtectedPage requiredRole="ADMIN"><InquiryAdminPage /></ProtectedPage>} />
+          <Route path="/admin/inquiries/:id" element={<ProtectedPage requiredRole="ADMIN"><InquiryDetailPage /></ProtectedPage>} />
+          <Route path="/admin/quote-template" element={<ProtectedPage requiredRole="ADMIN"><QuoteTemplateEditor /></ProtectedPage>} />
+          <Route path="/quote/:id" element={<ScrollPage><QuotePrintPage /></ScrollPage>} />
+          <Route path="/document/:type/:id" element={<ScrollPage><QuotePrintPage /></ScrollPage>} />
+          <Route path="*" element={<NotFoundPage />} />
+        </Routes>
+      </AnimatePresence>
+    </MaintenanceGate>
   );
 }

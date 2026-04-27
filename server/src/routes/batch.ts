@@ -1,12 +1,13 @@
 import { Router, Response } from "express";
 import multer from "multer";
-import { createReadStream, existsSync, mkdirSync, rmSync } from "node:fs";
+import { copyFileSync, createReadStream, existsSync, mkdirSync, rmSync, statSync } from "node:fs";
 import { join } from "node:path";
 import archiver from "archiver";
 import { randomUUID } from "node:crypto";
 import { authMiddleware, type AuthRequest } from "../middleware/auth.js";
 import { requireRole } from "../middleware/rbac.js";
 import { config } from "../lib/config.js";
+import { getPreviewAssetExtension, resolveFileUrlPath } from "../services/gltfAsset.js";
 
 const router = Router();
 
@@ -15,7 +16,7 @@ const upload = multer({
   limits: { fileSize: 500 * 1024 * 1024 }, // 500MB for batch ZIP
 });
 
-// Batch download — create ZIP of multiple models' glTF files
+// Batch download — create ZIP of multiple models' preview assets
 router.post("/api/batch/download", authMiddleware, requireRole("ADMIN"), async (req: AuthRequest, res: Response) => {
   const { modelIds, format } = req.body;
 
@@ -56,14 +57,15 @@ router.post("/api/batch/download", authMiddleware, requireRole("ADMIN"), async (
     archive.pipe(output);
 
     for (const model of models) {
-      const gltfPath = join(process.cwd(), model.gltfUrl.replace(/^\//, ""));
+      const gltfPath = resolveFileUrlPath(model.gltfUrl);
       if (existsSync(gltfPath)) {
-        const fileName = `${model.name || model.id}.${model.format}.gltf`;
+        const ext = getPreviewAssetExtension(gltfPath);
+        const fileName = `${model.name || model.id}.${model.format}.${ext}`;
         archive.file(gltfPath, { name: fileName });
 
-        // Also include .bin file if exists
-        const binPath = gltfPath.replace(".gltf", ".bin");
-        if (existsSync(binPath)) {
+        // Legacy glTF assets need their external .bin next to them.
+        const binPath = gltfPath.replace(/\.gltf$/i, ".bin");
+        if (ext === "gltf" && existsSync(binPath)) {
           archive.file(binPath, { name: `${model.name || model.id}.${model.format}.bin` });
         }
       }
@@ -137,13 +139,20 @@ router.post("/api/batch/upload", authMiddleware, requireRole("ADMIN"), upload.si
 
       const modelId = randomUUID().slice(0, 12);
       const originalName = entry.entryName.split("/").pop() || entry.entryName;
+      let originalDest: string | null = null;
 
       try {
+        const originalsDir = join(config.staticDir, "originals");
+        mkdirSync(originalsDir, { recursive: true });
+        originalDest = join(originalsDir, `${modelId}.${ext}`);
+        copyFileSync(filePath, originalDest);
+        const originalSize = statSync(originalDest).size;
+
         let result;
         if (ext === "xt" || ext === "x_t") {
-          result = await convertXtToGltfLocal(filePath, join(config.staticDir, "models"), modelId, originalName);
+          result = await convertXtToGltfLocal(originalDest, join(config.staticDir, "models"), modelId, originalName);
         } else {
-          result = await convertStepToGltf(filePath, join(config.staticDir, "models"), modelId, originalName);
+          result = await convertStepToGltf(originalDest, join(config.staticDir, "models"), modelId, originalName);
         }
 
         const thumb = await generateThumbnail(result.gltfPath, join(config.staticDir, "thumbnails"), modelId);
@@ -155,13 +164,13 @@ router.post("/api/batch/upload", authMiddleware, requireRole("ADMIN"), upload.si
               name: originalName.replace(/\.[^.]+$/, ""),
               originalName,
               originalFormat: ext,
-              originalSize: result.originalSize,
+              originalSize,
               gltfUrl: result.gltfUrl,
               gltfSize: result.gltfSize,
               thumbnailUrl: thumb.thumbnailUrl,
               format: ext,
               status: "completed",
-              uploadPath: filePath,
+              uploadPath: originalDest,
               createdById: req.user!.userId,
             },
           });
@@ -169,6 +178,7 @@ router.post("/api/batch/upload", authMiddleware, requireRole("ADMIN"), upload.si
 
         results.push({ model_id: modelId, name: originalName, status: "completed" });
       } catch (err) {
+        if (originalDest && existsSync(originalDest)) rmSync(originalDest, { force: true });
         results.push({ name: originalName, status: "failed", error: (err as Error).message });
       }
     }

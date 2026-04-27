@@ -57,6 +57,12 @@ const DEFAULT_SETTINGS: SystemSettings = {
   announcement_text: "",
   announcement_type: "info",
   announcement_color: "",
+  maintenance_enabled: false,
+  maintenance_auto_enabled: true,
+  maintenance_auto_queue_threshold: 50,
+  maintenance_title: "系统维护中",
+  maintenance_message: "系统正在进行维护、数据恢复或资源重建，部分页面可能暂时不可用。请稍后再访问。",
+  conversion_worker_concurrency: 1,
   smtp_host: "",
   smtp_port: 465,
   smtp_user: "",
@@ -218,6 +224,24 @@ const GROUPS: SettingGroup[] = [
     ],
   },
   {
+    title: '维护模式',
+    icon: 'build',
+    items: [
+      { key: 'maintenance_enabled', label: '手动维护页', desc: '用于数据恢复、系统升级、资源重建等全站维护场景，管理员和后台不受影响', type: 'switch' },
+      { key: 'maintenance_auto_enabled', label: '重建自动维护', desc: '转换队列待处理数量达到阈值时自动显示维护页', type: 'switch' },
+      { key: 'maintenance_auto_queue_threshold', label: '自动触发阈值', desc: '待处理转换任务达到该数量后显示维护页', type: 'number', min: 1, max: 100000 },
+      { key: 'maintenance_title', label: '维护标题', desc: '维护页主标题', type: 'text' },
+      { key: 'maintenance_message', label: '维护说明', desc: '维护页说明文字', type: 'textarea' },
+    ],
+  },
+  {
+    title: '转换队列',
+    icon: 'sync',
+    items: [
+      { key: 'conversion_worker_concurrency', label: '转换并发数', desc: '同时处理的模型转换任务数量，建议先设为 2；大模型较多时过高会占满 CPU 和内存', type: 'number', min: 1, max: 8 },
+    ],
+  },
+  {
     title: '邮件服务',
     icon: 'mail',
     items: [
@@ -249,37 +273,6 @@ const GROUPS: SettingGroup[] = [
       { key: 'share_allow_password', label: '允许设置密码', desc: '用户创建分享时是否可以设置访问密码', type: 'switch' },
       { key: 'share_allow_custom_expiry', label: '允许自定义有效期', desc: '用户创建分享时是否可以自行设置有效期', type: 'switch' },
       { key: 'share_allow_preview', label: '默认允许预览', desc: '新创建的分享链接默认是否允许 3D 预览', type: 'switch' },
-    ],
-  },
-  {
-    title: '3D 预览设置',
-    icon: 'view_in_ar',
-    items: [
-      { key: 'viewer_bg_color', label: '预览背景色', desc: '支持 CSS 渐变，如 linear-gradient(180deg, #1a1a2e, #16213e)', type: 'text' },
-      { key: 'show_watermark', label: '3D 水印', desc: '在 3D 模型预览中显示水印标识', type: 'switch' },
-      { key: 'watermark_image', label: '水印图片', desc: '上传水印图片（PNG/SVG），建议使用透明背景', type: 'image' },
-      { key: 'viewer_exposure', label: '曝光度', desc: '色调映射曝光值，越高越亮', type: 'range', min: 0.2, max: 3.0, step: 0.1 },
-      { key: 'viewer_ambient_intensity', label: '环境光', desc: '环境光强度', type: 'range', min: 0, max: 2.0, step: 0.1 },
-      { key: 'viewer_main_light_intensity', label: '主光源', desc: '主方向光强度', type: 'range', min: 0, max: 3.0, step: 0.1 },
-      { key: 'viewer_fill_light_intensity', label: '补光', desc: '补光方向光强度', type: 'range', min: 0, max: 2.0, step: 0.1 },
-      { key: 'viewer_hemisphere_intensity', label: '半球光', desc: '天空/地面双色光强度', type: 'range', min: 0, max: 2.0, step: 0.1 },
-      { key: 'mat_default_color', label: '默认材质 · 颜色', desc: '默认材质的基础颜色', type: 'color' },
-      { key: 'mat_default_metalness', label: '默认材质 · 金属度', desc: '0 = 非金属，1 = 全金属', type: 'range', min: 0, max: 1.0, step: 0.05 },
-      { key: 'mat_default_roughness', label: '默认材质 · 粗糙度', desc: '0 = 镜面，1 = 完全粗糙', type: 'range', min: 0, max: 1.0, step: 0.05 },
-      { key: 'mat_default_envMapIntensity', label: '默认材质 · 环境反射', desc: '环境贴图反射强度', type: 'range', min: 0, max: 3.0, step: 0.1 },
-      { key: 'mat_metal_color', label: '金属材质 · 颜色', desc: '金属材质的基础颜色', type: 'color' },
-      { key: 'mat_metal_metalness', label: '金属材质 · 金属度', desc: '1.0 = 全金属', type: 'range', min: 0, max: 1.0, step: 0.05 },
-      { key: 'mat_metal_roughness', label: '金属材质 · 粗糙度', desc: '0 = 亮面，1 = 哑光', type: 'range', min: 0, max: 1.0, step: 0.05 },
-      { key: 'mat_metal_envMapIntensity', label: '金属材质 · 环境反射', desc: '环境贴图反射强度', type: 'range', min: 0, max: 3.0, step: 0.1 },
-      { key: 'mat_plastic_color', label: '塑料材质 · 颜色', desc: '塑料材质的基础颜色', type: 'color' },
-      { key: 'mat_plastic_metalness', label: '塑料材质 · 金属度', desc: '0 = 非金属', type: 'range', min: 0, max: 1.0, step: 0.05 },
-      { key: 'mat_plastic_roughness', label: '塑料材质 · 粗糙度', desc: '表面粗糙程度', type: 'range', min: 0, max: 1.0, step: 0.05 },
-      { key: 'mat_plastic_envMapIntensity', label: '塑料材质 · 环境反射', desc: '环境贴图反射强度', type: 'range', min: 0, max: 3.0, step: 0.1 },
-      { key: 'mat_glass_color', label: '玻璃材质 · 颜色', desc: '玻璃材质的基础颜色', type: 'color' },
-      { key: 'mat_glass_roughness', label: '玻璃材质 · 粗糙度', desc: '0 = 完全透明', type: 'range', min: 0, max: 1.0, step: 0.05 },
-      { key: 'mat_glass_transmission', label: '玻璃材质 · 透射率', desc: '光线透过率，1 = 全透', type: 'range', min: 0, max: 1.0, step: 0.05 },
-      { key: 'mat_glass_ior', label: '玻璃材质 · 折射率', desc: '折射率 (IOR)，玻璃约 1.5', type: 'range', min: 1.0, max: 2.5, step: 0.1 },
-      { key: 'mat_glass_thickness', label: '玻璃材质 · 厚度', desc: '影响折射效果', type: 'range', min: 0, max: 2.0, step: 0.1 },
     ],
   },
   {
@@ -1989,12 +1982,19 @@ function Content() {
                     <div className="flex items-center gap-2 min-w-0 lg:justify-self-start">
                       <input
                         type="number"
-                        min={0}
+                        min={item.min ?? 0}
+                        max={item.max}
                         value={settings[item.key] as number}
-                        onChange={(e) => updateSetting(item.key, Math.max(0, parseFloat(e.target.value) || 0))}
+                        onChange={(e) => {
+                          const raw = parseFloat(e.target.value) || 0;
+                          const min = item.min ?? 0;
+                          const max = item.max ?? Number.MAX_SAFE_INTEGER;
+                          updateSetting(item.key, Math.min(max, Math.max(min, raw)));
+                        }}
                         className="w-28 bg-surface-container-lowest text-on-surface text-sm text-center rounded-md px-3 py-2 border border-outline-variant/20 outline-none focus:border-primary"
                       />
                       {item.key === 'daily_download_limit' && <span className="text-xs text-on-surface-variant">次/天</span>}
+                      {item.key === 'conversion_worker_concurrency' && <span className="text-xs text-on-surface-variant">个任务</span>}
                     </div>
                   ) : item.type === 'range' ? (
                     <div className="flex items-center gap-3 w-full lg:max-w-sm lg:justify-self-start">

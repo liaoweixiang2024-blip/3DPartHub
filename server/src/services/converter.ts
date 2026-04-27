@@ -1,5 +1,5 @@
 import { createRequire } from "node:module";
-import { readFileSync, writeFileSync, mkdirSync, existsSync } from "node:fs";
+import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
 import { join, basename } from "node:path";
 import { randomUUID } from "node:crypto";
 
@@ -20,35 +20,200 @@ interface OcctResult {
   meshes: OcctMesh[];
 }
 
-interface GltfAsset {
+interface OcctImportParams {
+  linearDeflectionType: "bounding_box_ratio";
+  linearDeflection: number;
+  angularDeflection: number;
+}
+
+interface BoundsMeta {
+  min: [number, number, number];
+  max: [number, number, number];
+  size: [number, number, number];
+  center: [number, number, number];
+}
+
+export interface GltfAsset {
   modelId: string;
   gltfPath: string;
   gltfUrl: string;
+  metaPath: string;
+  metaUrl: string;
   originalName: string;
   gltfSize: number;
   originalSize: number;
 }
 
-function meshesToGltf(meshes: OcctMesh[]): { json: object; bin: Buffer } {
+interface PreviewPartMeta {
+  id: string;
+  name: string;
+  color: string | null;
+  sourceMeshIndex: number;
+  vertexCount: number;
+  faceCount: number;
+  bounds: BoundsMeta;
+}
+
+interface PreviewMeta {
+  version: 2;
+  sourceName: string;
+  sourceFormat: string;
+  unit: "mm";
+  parts: PreviewPartMeta[];
+  totals: {
+    partCount: number;
+    vertexCount: number;
+    faceCount: number;
+  };
+  bounds: BoundsMeta;
+  tree: Array<{ id: string; name: string; children: string[] }>;
+  diagnostics: {
+    generatedAt: string;
+    converter: "occt-import-js";
+    tessellation: OcctImportParams;
+    sourceMeshCount: number;
+    validMeshCount: number;
+    skippedMeshCount: number;
+    conversionMs: number;
+    warnings: string[];
+  };
+}
+
+function colorToHex(color?: [number, number, number]): string | null {
+  if (!color) return null;
+  const [r, g, b] = color;
+  const toByte = (value: number) => Math.max(0, Math.min(255, Math.round(value * 255)));
+  return `#${[toByte(r), toByte(g), toByte(b)].map((value) => value.toString(16).padStart(2, "0")).join("")}`;
+}
+
+function safePartName(name: string | undefined, index: number): string {
+  const trimmed = (name || "").trim();
+  return trimmed || `Part ${index + 1}`;
+}
+
+function makeBounds(min: [number, number, number], max: [number, number, number]): BoundsMeta {
+  const size: [number, number, number] = [
+    Math.max(0, max[0] - min[0]),
+    Math.max(0, max[1] - min[1]),
+    Math.max(0, max[2] - min[2]),
+  ];
+  return {
+    min,
+    max,
+    size,
+    center: [
+      (min[0] + max[0]) / 2,
+      (min[1] + max[1]) / 2,
+      (min[2] + max[2]) / 2,
+    ],
+  };
+}
+
+function emptyBounds(): BoundsMeta {
+  return makeBounds([0, 0, 0], [0, 0, 0]);
+}
+
+function expandBounds(bounds: { min: [number, number, number]; max: [number, number, number] }, partMin: [number, number, number], partMax: [number, number, number]) {
+  for (let i = 0; i < 3; i++) {
+    bounds.min[i] = Math.min(bounds.min[i], partMin[i]);
+    bounds.max[i] = Math.max(bounds.max[i], partMax[i]);
+  }
+}
+
+function meshesToGltf(
+  meshes: OcctMesh[],
+  sourceName: string,
+  options: {
+    sourceFormat: string;
+    sourceMeshCount: number;
+    skippedMeshCount: number;
+    tessellation: OcctImportParams;
+    conversionMs: number;
+  }
+): { json: object; bin: Buffer; meta: PreviewMeta } {
   const bufferViews: object[] = [];
   const accessors: object[] = [];
   const materials: object[] = [];
-  const primitives: object[] = [];
+  const gltfMeshes: object[] = [];
+  const nodes: object[] = [{ name: "converted_model", children: [], extras: { sourceName } }];
+  const parts: PreviewPartMeta[] = [];
+  const warnings: string[] = [];
+  const modelBounds = {
+    min: [Infinity, Infinity, Infinity] as [number, number, number],
+    max: [-Infinity, -Infinity, -Infinity] as [number, number, number],
+  };
   let byteOffset = 0;
+  let defaultMaterialIdx = -1;
 
-  const buffers: ArrayBuffer[] = [];
+  const buffers: Buffer[] = [];
+
+  function getDefaultMaterialIdx(): number {
+    if (defaultMaterialIdx !== -1) return defaultMaterialIdx;
+    defaultMaterialIdx = materials.length;
+    materials.push({
+      pbrMetallicRoughness: {
+        baseColorFactor: [0.75, 0.75, 0.78, 1],
+        metallicFactor: 0.3,
+        roughnessFactor: 0.5,
+      },
+      name: "default",
+      doubleSided: true,
+    });
+    return defaultMaterialIdx;
+  }
 
   for (let mi = 0; mi < meshes.length; mi++) {
     const mesh = meshes[mi];
-    const posArray = new Float32Array(mesh.attributes.position.array);
-    const hasNormals = !!mesh.attributes.normal;
-    const normArray = hasNormals
-      ? new Float32Array(mesh.attributes.normal!.array)
-      : null;
-    const hasIndex = !!mesh.index;
-    const idxArray = hasIndex ? new Uint32Array(mesh.index!.array) : null;
+    let posArray = new Float32Array(mesh.attributes.position.array);
+    const vertexCount = Math.floor(posArray.length / 3);
+    if (vertexCount < 3) continue;
+    if (posArray.length !== vertexCount * 3) {
+      posArray = posArray.slice(0, vertexCount * 3);
+    }
 
-    const vertexCount = posArray.length / 3;
+    const rawNormArray = mesh.attributes.normal
+      ? new Float32Array(mesh.attributes.normal.array)
+      : null;
+    const normArray = rawNormArray && rawNormArray.length >= vertexCount * 3
+      ? rawNormArray.slice(0, vertexCount * 3)
+      : null;
+
+    let idxArray: Uint32Array | null = null;
+    if (mesh.index?.array && mesh.index.array.length >= 3) {
+      const rawIndexArray = new Uint32Array(mesh.index.array);
+      const usableIndexCount = Math.floor(rawIndexArray.length / 3) * 3;
+      let needsSanitize = usableIndexCount !== rawIndexArray.length;
+
+      for (let i = 0; i + 2 < usableIndexCount; i += 3) {
+        const a = rawIndexArray[i];
+        const b = rawIndexArray[i + 1];
+        const c = rawIndexArray[i + 2];
+        if (a >= vertexCount || b >= vertexCount || c >= vertexCount || a === b || b === c || a === c) {
+          needsSanitize = true;
+          break;
+        }
+      }
+
+      if (needsSanitize) {
+        const sanitized: number[] = [];
+        for (let i = 0; i + 2 < usableIndexCount; i += 3) {
+          const a = rawIndexArray[i];
+          const b = rawIndexArray[i + 1];
+          const c = rawIndexArray[i + 2];
+          if (a < vertexCount && b < vertexCount && c < vertexCount && a !== b && b !== c && a !== c) {
+            sanitized.push(a, b, c);
+          }
+        }
+        if (sanitized.length >= 3) {
+          idxArray = new Uint32Array(sanitized);
+          warnings.push(`${safePartName(mesh.name, mi)}: invalid or degenerate triangle indices were removed`);
+        }
+      } else {
+        idxArray = usableIndexCount === rawIndexArray.length
+          ? rawIndexArray
+          : rawIndexArray.slice(0, usableIndexCount);
+      }
+    }
 
     const posBV = { buffer: 0, byteOffset, byteLength: posArray.byteLength, target: 34962 };
     const posAcc = {
@@ -56,8 +221,8 @@ function meshesToGltf(meshes: OcctMesh[]): { json: object; bin: Buffer } {
       componentType: 5126,
       count: vertexCount,
       type: "VEC3",
-      max: [0, 0, 0] as number[],
-      min: [0, 0, 0] as number[],
+      max: [-Infinity, -Infinity, -Infinity] as number[],
+      min: [Infinity, Infinity, Infinity] as number[],
     };
     for (let i = 0; i < vertexCount; i++) {
       for (let j = 0; j < 3; j++) {
@@ -69,7 +234,7 @@ function meshesToGltf(meshes: OcctMesh[]): { json: object; bin: Buffer } {
     const posAccessorIdx = accessors.length;
     bufferViews.push(posBV);
     accessors.push(posAcc);
-    buffers.push(posArray.buffer.slice(0));
+    buffers.push(Buffer.from(posArray.buffer, posArray.byteOffset, posArray.byteLength));
     byteOffset += posArray.byteLength;
 
     let normalAccessorIdx = -1;
@@ -83,7 +248,7 @@ function meshesToGltf(meshes: OcctMesh[]): { json: object; bin: Buffer } {
         count: vertexCount,
         type: "VEC3",
       });
-      buffers.push(normArray.buffer.slice(0));
+      buffers.push(Buffer.from(normArray.buffer, normArray.byteOffset, normArray.byteLength));
       byteOffset += normArray.byteLength;
     }
 
@@ -92,15 +257,30 @@ function meshesToGltf(meshes: OcctMesh[]): { json: object; bin: Buffer } {
       const idxBV = { buffer: 0, byteOffset, byteLength: idxArray.byteLength, target: 34933 };
       indexAccessorIdx = accessors.length;
       bufferViews.push(idxBV);
+      let minIndex = Infinity;
+      let maxIndex = -Infinity;
+      for (const index of idxArray) {
+        if (index < minIndex) minIndex = index;
+        if (index > maxIndex) maxIndex = index;
+      }
       accessors.push({
         bufferView: indexAccessorIdx,
         componentType: 5125,
         count: idxArray.length,
         type: "SCALAR",
+        min: [minIndex],
+        max: [maxIndex],
       });
-      buffers.push(idxArray.buffer.slice(0));
+      buffers.push(Buffer.from(idxArray.buffer, idxArray.byteOffset, idxArray.byteLength));
       byteOffset += idxArray.byteLength;
     }
+
+    const faceCount = idxArray ? Math.floor(idxArray.length / 3) : Math.floor(vertexCount / 3);
+    const partId = `part_${parts.length + 1}`;
+    const partName = safePartName(mesh.name, mi);
+    const partMin = posAcc.min as [number, number, number];
+    const partMax = posAcc.max as [number, number, number];
+    expandBounds(modelBounds, partMin, partMax);
 
     let materialIdx = 0;
     if (mesh.color) {
@@ -120,56 +300,153 @@ function meshesToGltf(meshes: OcctMesh[]): { json: object; bin: Buffer } {
         doubleSided: true,
       });
     } else {
-      if (materials.length === 0) {
-        materials.push({
-          pbrMetallicRoughness: {
-            baseColorFactor: [0.75, 0.75, 0.78, 1],
-            metallicFactor: 0.3,
-            roughnessFactor: 0.5,
-          },
-          name: "default",
-          doubleSided: true,
-        });
-      }
+      materialIdx = getDefaultMaterialIdx();
     }
 
     const prim: Record<string, any> = {
       attributes: { POSITION: posAccessorIdx },
       material: materialIdx,
+      mode: 4,
+      extras: { partId, name: partName, vertexCount, faceCount },
     };
     if (normArray) prim.attributes.NORMAL = normalAccessorIdx;
     if (idxArray) prim.indices = indexAccessorIdx;
 
-    primitives.push(prim);
+    const meshIdx = gltfMeshes.length;
+    gltfMeshes.push({
+      name: partName,
+      primitives: [prim],
+      extras: { partId, name: partName, vertexCount, faceCount },
+    });
+
+    const nodeIdx = nodes.length;
+    (nodes[0] as { children: number[] }).children.push(nodeIdx);
+    nodes.push({
+      mesh: meshIdx,
+      name: partName,
+      extras: {
+        partId,
+        name: partName,
+        color: colorToHex(mesh.color),
+        vertexCount,
+        faceCount,
+      },
+    });
+
+    parts.push({
+      id: partId,
+      name: partName,
+      color: colorToHex(mesh.color),
+      sourceMeshIndex: mi,
+      vertexCount,
+      faceCount,
+      bounds: makeBounds(partMin, partMax),
+    });
   }
 
-  const totalBuffer = Buffer.concat(buffers.map((b) => Buffer.from(b)));
+  const totalBuffer = Buffer.concat(buffers);
+  const totals = parts.reduce(
+    (acc, part) => {
+      acc.vertexCount += part.vertexCount;
+      acc.faceCount += part.faceCount;
+      return acc;
+    },
+    { partCount: parts.length, vertexCount: 0, faceCount: 0 }
+  );
+
+  const bounds = parts.length > 0 ? makeBounds(modelBounds.min, modelBounds.max) : emptyBounds();
+  (nodes[0] as { extras: Record<string, unknown> }).extras = {
+    sourceName,
+    sourceFormat: options.sourceFormat,
+    unit: "mm",
+    totals,
+    bounds,
+  };
 
   const json = {
     asset: { version: "2.0", generator: "model-converter" },
     scene: 0,
     scenes: [{ nodes: [0] }],
-    nodes: [{ mesh: 0, name: "converted_model" }],
-    meshes: [{ name: "model", primitives }],
+    nodes,
+    meshes: gltfMeshes,
     materials,
     accessors,
     bufferViews,
     buffers: [{ uri: "model.bin", byteLength: totalBuffer.length }],
+    extras: {
+      sourceName,
+      sourceFormat: options.sourceFormat,
+      unit: "mm",
+      totals,
+      bounds,
+    },
   };
 
-  return { json, bin: totalBuffer };
+  const meta: PreviewMeta = {
+    version: 2,
+    sourceName,
+    sourceFormat: options.sourceFormat,
+    unit: "mm",
+    parts,
+    totals,
+    bounds,
+    tree: [{ id: "root", name: sourceName.replace(/\.[^.]+$/, "") || "Model", children: parts.map((part) => part.id) }],
+    diagnostics: {
+      generatedAt: new Date().toISOString(),
+      converter: "occt-import-js",
+      tessellation: options.tessellation,
+      sourceMeshCount: options.sourceMeshCount,
+      validMeshCount: meshes.length,
+      skippedMeshCount: options.skippedMeshCount,
+      conversionMs: options.conversionMs,
+      warnings,
+    },
+  };
+
+  return { json, bin: totalBuffer, meta };
 }
 
-function writeGltfSet(gltf: object, binData: Buffer, outputDir: string, modelId: string): string {
-  const gltfPath = join(outputDir, `${modelId}.gltf`);
-  const binPath = join(outputDir, `${modelId}.bin`);
+function paddedBuffer(data: Buffer, paddingByte = 0): Buffer {
+  const padding = (4 - (data.byteLength % 4)) % 4;
+  if (padding === 0) return data;
+  return Buffer.concat([data, Buffer.alloc(padding, paddingByte)]);
+}
 
-  const gltfAny = gltf as { buffers: { uri: string }[] };
-  gltfAny.buffers[0].uri = `${modelId}.bin`;
+function chunkHeader(length: number, type: number): Buffer {
+  const header = Buffer.alloc(8);
+  header.writeUInt32LE(length, 0);
+  header.writeUInt32LE(type, 4);
+  return header;
+}
 
-  writeFileSync(binPath, binData);
-  writeFileSync(gltfPath, JSON.stringify(gltf));
-  return gltfPath;
+function writeGlb(gltf: object, binData: Buffer, outputDir: string, modelId: string): string {
+  const glbPath = join(outputDir, `${modelId}.glb`);
+  const gltfAny = JSON.parse(JSON.stringify(gltf));
+  if (gltfAny.buffers?.[0]) delete gltfAny.buffers[0].uri;
+
+  const jsonChunk = paddedBuffer(Buffer.from(JSON.stringify(gltfAny), "utf8"), 0x20);
+  const binChunk = paddedBuffer(binData);
+  const totalLength = 12 + 8 + jsonChunk.byteLength + 8 + binChunk.byteLength;
+
+  const header = Buffer.alloc(12);
+  header.writeUInt32LE(0x46546c67, 0);
+  header.writeUInt32LE(2, 4);
+  header.writeUInt32LE(totalLength, 8);
+
+  writeFileSync(glbPath, Buffer.concat([
+    header,
+    chunkHeader(jsonChunk.byteLength, 0x4e4f534a),
+    jsonChunk,
+    chunkHeader(binChunk.byteLength, 0x004e4942),
+    binChunk,
+  ]));
+  return glbPath;
+}
+
+function writePreviewMeta(meta: PreviewMeta, outputDir: string, modelId: string): string {
+  const metaPath = join(outputDir, `${modelId}.meta.json`);
+  writeFileSync(metaPath, JSON.stringify(meta, null, 2));
+  return metaPath;
 }
 
 export async function convertStepToGltf(
@@ -178,6 +455,7 @@ export async function convertStepToGltf(
   modelId?: string,
   originalName?: string
 ): Promise<GltfAsset> {
+  const startedAt = Date.now();
   modelId = modelId || randomUUID().slice(0, 12);
   mkdirSync(outputDir, { recursive: true });
 
@@ -187,10 +465,12 @@ export async function convertStepToGltf(
   const nameToCheck = originalName || inputPath;
   const ext = nameToCheck.split(".").pop()?.toLowerCase();
 
-  // Higher tessellation quality for smoother surfaces
-  const tessellationParams = {
-    linearDeflection: 0.01,  // default 0.1 → 10x finer mesh
-    angularDeflection: 0.1,  // default 0.5 → 5x finer mesh
+  // Keep OCCT tessellation tight enough for CAD details. 0.001 is the
+  // library's default bbox ratio; the previous 0.01 was visibly too coarse.
+  const tessellationParams: OcctImportParams = {
+    linearDeflectionType: "bounding_box_ratio",
+    linearDeflection: 0.001,
+    angularDeflection: 0.15,
   };
 
   let result: OcctResult;
@@ -207,24 +487,35 @@ export async function convertStepToGltf(
   }
 
   const validMeshes = result.meshes.filter(
-    (m) => m.attributes.position.array.length > 0
+    (m) => Math.floor(m.attributes.position.array.length / 3) >= 3
   );
   if (validMeshes.length === 0) {
     throw new Error("模型文件中无有效顶点数据");
   }
 
-  const { json, bin } = meshesToGltf(validMeshes);
-  const gltfPath = writeGltfSet(json, bin, outputDir, modelId);
+  const sourceName = originalName || basename(inputPath);
+  const { json, bin, meta } = meshesToGltf(validMeshes, sourceName, {
+    sourceFormat: ext || "unknown",
+    sourceMeshCount: result.meshes.length,
+    skippedMeshCount: result.meshes.length - validMeshes.length,
+    tessellation: tessellationParams,
+    conversionMs: Date.now() - startedAt,
+  });
+  if (meta.parts.length === 0) {
+    throw new Error("模型文件中无可显示零件数据");
+  }
+  const gltfPath = writeGlb(json, bin, outputDir, modelId);
+  const metaPath = writePreviewMeta(meta, outputDir, modelId);
 
   const originalSize = fileBuffer.length;
-  const gltfSize =
-    readFileSync(gltfPath).length +
-    readFileSync(join(outputDir, `${modelId}.bin`)).length;
+  const gltfSize = readFileSync(gltfPath).length;
 
   return {
     modelId,
     gltfPath,
-    gltfUrl: `/static/models/${modelId}.gltf`,
+    gltfUrl: `/static/models/${modelId}.glb`,
+    metaPath,
+    metaUrl: `/static/models/${modelId}.meta.json`,
     originalName: basename(inputPath),
     gltfSize,
     originalSize,

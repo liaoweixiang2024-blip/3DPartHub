@@ -39,10 +39,20 @@ function processQueue(error: unknown, token: string | null) {
   failedQueue = [];
 }
 
+function isSilentBackgroundRequest(config: { method?: unknown; url?: unknown } | undefined) {
+  const method = String(config?.method || "get").toLowerCase();
+  const url = String(config?.url || "");
+  return method === "get" && (
+    url.startsWith("/notifications/unread-count") ||
+    url.startsWith("/notifications?")
+  );
+}
+
 client.interceptors.response.use(
   (response) => response,
   async (error) => {
     const originalRequest = error.config;
+    const silentBackgroundRequest = isSilentBackgroundRequest(originalRequest);
 
     // Don't retry login/register/refresh endpoints
     const isAuthEndpoint =
@@ -55,7 +65,7 @@ client.interceptors.response.use(
       const retryAfter = error.response.headers["retry-after"] || error.response.headers["ratelimit-reset"];
       const seconds = retryAfter ? Math.ceil(Number(retryAfter)) : 60;
       const msg = seconds > 60 ? `请求过于频繁，请 ${Math.ceil(seconds / 60)} 分钟后再试` : `请求过于频繁，请 ${seconds} 秒后再试`;
-      notifyGlobalError(msg);
+      if (!silentBackgroundRequest) notifyGlobalError(msg);
       return Promise.reject(error);
     }
 
@@ -69,7 +79,7 @@ client.interceptors.response.use(
         notifyGlobalError("登录状态已失效，请重新登录");
         useAuthStore.getState().logout();
         window.location.replace("/login");
-      } else if (!isAuthEndpoint) {
+      } else if (!isAuthEndpoint && !silentBackgroundRequest) {
         notifyGlobalError(error);
       }
       return Promise.reject(error);

@@ -1,6 +1,6 @@
 import {
   Menu, Search, Download, Bell, User, CloudUpload, Settings,
-  Eye, Star, X, ArrowLeft, ArrowRight, ChevronRight, ChevronDown, ChevronLeft, ChevronUp,
+  Eye, EyeOff, Star, X, ArrowLeft, ArrowRight, ChevronRight, ChevronDown, ChevronLeft, ChevronUp,
   AlertCircle, CheckCircle, Plus, Upload, Folder, Lock,
   LogOut, Mail, MoreHorizontal, MoreVertical, Link, Send,
   Filter, Calendar, FileArchive, Expand, Grid, List, Package,
@@ -41,6 +41,7 @@ import {
   ListChecks,
   Share2,
   FileText,
+  Palette,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
@@ -60,6 +61,7 @@ const iconMap: Record<string, LucideIcon> = {
 
   // Visibility & Feedback
   visibility: Eye,
+  visibility_off: EyeOff,
   star: Star,
   favorite: Heart,
   "star_off": Heart,
@@ -104,9 +106,13 @@ const iconMap: Record<string, LucideIcon> = {
   "content_cut": Scissors,
   tune: SlidersHorizontal,
   update: RefreshCw,
+  sync: RefreshCw,
   weight: Weight,
   "3d_rotation": RotateCcw,
   "360": RotateCcw,
+  "restart_alt": Undo2,
+  replay: RotateCcw,
+  undo: Undo2,
   badge: BadgeIcon,
   domain: Building2,
   "data_usage": Database,
@@ -128,6 +134,8 @@ const iconMap: Record<string, LucideIcon> = {
   dashboard: Package,
   "hourglass_top": RefreshCw,
   delete: Trash2,
+  delete_sweep: Trash2,
+  cleaning_services: CheckCircle,
   restore: Undo2,
   edit: Pencil,
   save: Save,
@@ -168,6 +176,10 @@ const iconMap: Record<string, LucideIcon> = {
   "locate_fixed": LocateFixed,
   "compass": Compass,
   "circle_dot": CircleDotIcon,
+  palette: Palette,
+  tonality: CircleDotIcon,
+  opacity: Droplets,
+  hexagon: Hexagon,
   waypoints: Waypoints,
 
   // Category icons — parent
@@ -197,6 +209,7 @@ const iconMap: Record<string, LucideIcon> = {
   "cat_smc": CircuitBoard,
   "cat_air_gun": Wind,
   "cat_pneumatic_brand": Cog,
+  merge: Merge,
 
   // Category icons — child: 铜接头
   "cat_copper_sleeve": CircleDot,

@@ -106,7 +106,7 @@ export const DEFAULT_MOBILE_NAV: NavItemConfig[] = [
 ];
 
 export const DEFAULT_UPLOAD_POLICY: UploadPolicy = {
-  modelFormats: ["step", "stp", "x_t", "xt"],
+  modelFormats: ["step", "stp", "iges", "igs", "x_t", "xt"],
   modelMaxSizeMb: Math.max(1, Math.round(config.maxFileSize / 1024 / 1024)),
   chunkSizeMb: 5,
   chunkThresholdMb: 20,
@@ -115,6 +115,17 @@ export const DEFAULT_UPLOAD_POLICY: UploadPolicy = {
   ticketAttachmentMaxSizeMb: 5,
   ticketAttachmentExts: [".jpg", ".jpeg", ".png", ".gif", ".webp"],
 };
+
+const DISABLED_MODEL_UPLOAD_FORMATS = new Set(["html", "htm"]);
+
+export function normalizeUploadPolicy(policy: UploadPolicy): UploadPolicy {
+  const modelFormats = Array.from(new Set(
+    (policy.modelFormats || [])
+      .map((item) => item.toLowerCase())
+      .filter((item) => item && !DISABLED_MODEL_UPLOAD_FORMATS.has(item)),
+  ));
+  return { ...policy, modelFormats: modelFormats.length ? modelFormats : DEFAULT_UPLOAD_POLICY.modelFormats };
+}
 
 export const DEFAULT_SELECTION_THREAD_PRIORITY: Record<string, number> = {
   R: 0,
@@ -155,7 +166,7 @@ export async function getBusinessConfig() {
     navUserItems: jsonSetting<NavItemConfig[]>(all.nav_user_items, DEFAULT_USER_NAV),
     navAdminItems: jsonSetting<NavItemConfig[]>(all.nav_admin_items, DEFAULT_ADMIN_NAV),
     navMobileItems: jsonSetting<NavItemConfig[]>(all.nav_mobile_items, DEFAULT_MOBILE_NAV),
-    uploadPolicy: { ...DEFAULT_UPLOAD_POLICY, ...jsonSetting<Partial<UploadPolicy>>(all.upload_policy, {}) },
+    uploadPolicy: normalizeUploadPolicy({ ...DEFAULT_UPLOAD_POLICY, ...jsonSetting<Partial<UploadPolicy>>(all.upload_policy, {}) }),
     selectionThreadPriority: { ...DEFAULT_SELECTION_THREAD_PRIORITY, ...jsonSetting<Record<string, number>>(all.selection_thread_priority, {}) },
     pageSizePolicy: { ...DEFAULT_PAGE_SIZE_POLICY, ...jsonSetting<Partial<typeof DEFAULT_PAGE_SIZE_POLICY>>(all.page_size_policy, {}) },
   };

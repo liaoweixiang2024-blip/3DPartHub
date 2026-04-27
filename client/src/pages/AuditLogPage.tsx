@@ -6,7 +6,7 @@ import TopNav from "../components/shared/TopNav";
 import BottomNav from "../components/shared/BottomNav";
 import AppSidebar from "../components/shared/Sidebar";
 import MobileNavDrawer from "../components/shared/MobileNavDrawer";
-import Icon from "../components/shared/Icon";
+import Pagination from "../components/shared/Pagination";
 import client from "../api/client";
 
 interface AuditEntry {
@@ -49,11 +49,11 @@ const RESOURCE_MAP: Record<string, string> = {
   download: "下载",
 };
 
-function DetailRow({ label, value }: { label: string; value: string }) {
+function DetailRow({ label, value, compact = false }: { label: string; value: string; compact?: boolean }) {
   return (
     <div className="flex items-start gap-2 text-xs">
       <span className="text-on-surface-variant/60 shrink-0 w-14">{label}</span>
-      <span className="text-on-surface-variant min-w-0 break-all">{value}</span>
+      <span className={`text-on-surface-variant min-w-0 break-all ${compact ? "line-clamp-2" : ""}`}>{value}</span>
     </div>
   );
 }
@@ -76,26 +76,39 @@ function LogRow({ log, isDesktop }: { log: AuditEntry; isDesktop: boolean }) {
 
   if (isDesktop) {
     return (
-      <tr
-        className="border-b border-outline-variant/5 hover:bg-surface-container-high/30 cursor-pointer transition-colors"
-        onClick={() => setExpanded(!expanded)}
-      >
-        <td className="py-2.5 px-4">
-          <span className={`text-[10px] px-2 py-0.5 rounded-sm font-bold ${act.color}`}>
-            {act.label}
-          </span>
-        </td>
-        <td className="py-2.5 px-4 text-xs text-on-surface-variant">{resLabel}</td>
-        <td className="py-2.5 px-4 text-xs text-on-surface-variant/60 font-mono max-w-[120px] truncate" title={log.resourceId || ""}>
-          {log.resourceId || "—"}
-        </td>
-        <td className="py-2.5 px-4 text-xs text-on-surface-variant/60">
-          {log.username || (log.userId ? log.userId.slice(0, 8) + "..." : "系统")}
-        </td>
-        <td className="py-2.5 px-4 text-xs text-on-surface-variant/40 whitespace-nowrap">
-          {new Date(log.createdAt).toLocaleString("zh-CN")}
-        </td>
-      </tr>
+      <>
+        <tr
+          className="border-b border-outline-variant/5 hover:bg-surface-container-high/30 cursor-pointer transition-colors"
+          onClick={() => setExpanded(!expanded)}
+        >
+          <td className="py-2 px-4">
+            <span className={`text-[10px] px-2 py-0.5 rounded-sm font-bold ${act.color}`}>
+              {act.label}
+            </span>
+          </td>
+          <td className="py-2 px-4 text-xs text-on-surface-variant">{resLabel}</td>
+          <td className="py-2 px-4 text-xs text-on-surface-variant/60 font-mono max-w-[160px] truncate" title={log.resourceId || ""}>
+            {log.resourceId || "—"}
+          </td>
+          <td className="py-2 px-4 text-xs text-on-surface-variant/60">
+            {log.username || (log.userId ? log.userId.slice(0, 8) + "..." : "系统")}
+          </td>
+          <td className="py-2 px-4 text-xs text-on-surface-variant/40 whitespace-nowrap">
+            {new Date(log.createdAt).toLocaleString("zh-CN")}
+          </td>
+        </tr>
+        {expanded && detailLines.length > 0 && (
+          <tr className="border-b border-outline-variant/5 bg-surface-container-high/20">
+            <td colSpan={5} className="px-4 py-2">
+              <div className="grid grid-cols-2 gap-x-5 gap-y-1.5">
+                {detailLines.map((d, i) => (
+                  <DetailRow key={i} label={d.label} value={d.value} compact />
+                ))}
+              </div>
+            </td>
+          </tr>
+        )}
+      </>
     );
   }
 
@@ -116,12 +129,12 @@ function LogRow({ log, isDesktop }: { log: AuditEntry; isDesktop: boolean }) {
         </span>
       </div>
       {log.resourceId && (
-        <p className="text-[11px] text-on-surface-variant/50 font-mono break-all">ID: {log.resourceId}</p>
+        <p className="line-clamp-2 text-[11px] text-on-surface-variant/50 font-mono break-all">ID: {log.resourceId}</p>
       )}
       {expanded && detailLines.length > 0 && (
         <div className="mt-2 pt-2 border-t border-outline-variant/10 space-y-1">
           {detailLines.map((d, i) => (
-            <DetailRow key={i} label={d.label} value={d.value} />
+            <DetailRow key={i} label={d.label} value={d.value} compact />
           ))}
         </div>
       )}
@@ -187,24 +200,8 @@ export default function AuditLogPage() {
     </div>
   );
 
-  const pagination = totalPages > 1 && (
-    <div className="flex items-center justify-center gap-3 pt-4">
-      <button
-        onClick={() => setPage(Math.max(1, page - 1))}
-        disabled={page <= 1}
-        className="p-1.5 rounded hover:bg-surface-container-high disabled:opacity-30 text-on-surface-variant"
-      >
-        <Icon name="arrow_back" size={16} />
-      </button>
-      <span className="text-xs text-on-surface-variant">{page} / {totalPages}</span>
-      <button
-        onClick={() => setPage(Math.min(totalPages, page + 1))}
-        disabled={page >= totalPages}
-        className="p-1.5 rounded hover:bg-surface-container-high disabled:opacity-30 text-on-surface-variant"
-      >
-        <Icon name="arrow_forward" size={16} />
-      </button>
-    </div>
+  const pagination = (
+    <Pagination page={page} totalPages={totalPages} totalItems={total} onPageChange={setPage} className="mt-0 pb-0" />
   );
 
   if (isDesktop) {
@@ -213,14 +210,14 @@ export default function AuditLogPage() {
         <TopNav />
         <div className="flex flex-1 overflow-hidden">
           <AppSidebar />
-          <main className="flex-1 overflow-y-auto p-8 scrollbar-hidden bg-surface-dim">
-            <div className="space-y-6">
+          <main className="flex-1 min-h-0 overflow-hidden p-8 bg-surface-dim">
+            <div className="flex h-full min-h-0 flex-col gap-5">
               <div>
                 <h2 className="font-headline text-2xl font-bold tracking-tight text-on-surface uppercase">操作日志</h2>
                 <p className="text-sm text-on-surface-variant mt-1">{total} 条记录</p>
               </div>
               {filterBar}
-              <div className="bg-surface-container-low rounded-lg border border-outline-variant/10 overflow-auto max-h-[calc(100vh-280px)]">
+              <div className="min-h-0 flex-1 overflow-auto rounded-lg border border-outline-variant/10 bg-surface-container-low">
                 <table className="w-full">
                   <thead className="sticky top-0 z-10">
                     <tr className="bg-surface-container-low text-xs uppercase tracking-wider text-on-surface-variant font-bold">
@@ -241,7 +238,9 @@ export default function AuditLogPage() {
                   <div className="text-center py-12 text-on-surface-variant text-sm">暂无操作日志</div>
                 )}
               </div>
-              {pagination}
+              <div className="shrink-0 border-t border-outline-variant/10 bg-surface-dim pt-3">
+                {pagination}
+              </div>
             </div>
           </main>
         </div>
@@ -253,22 +252,24 @@ export default function AuditLogPage() {
     <div className="flex flex-col h-dvh bg-surface">
       <TopNav compact onMenuToggle={() => setNavOpen((v) => !v)} />
       <MobileNavDrawer open={navOpen} onClose={() => setNavOpen(false)} />
-      <main className="flex-1 overflow-y-auto scrollbar-hidden bg-surface-dim">
-        <div className="px-4 py-4 pb-20 space-y-3">
+      <main className="flex-1 min-h-0 overflow-hidden bg-surface-dim">
+        <div className="flex h-full min-h-0 flex-col gap-3 px-4 py-4 pb-20">
           <div>
             <h1 className="text-lg font-bold text-on-surface">操作日志</h1>
             <p className="text-xs text-on-surface-variant mt-0.5">{total} 条记录</p>
           </div>
           {filterBar}
-          <div className="flex flex-col gap-2">
+          <div className="min-h-0 flex-1 overflow-y-auto scrollbar-hidden flex flex-col gap-2">
             {logs.map(log => (
               <LogRow key={log.id} log={log} isDesktop={false} />
             ))}
+            {logs.length === 0 && (
+              <div className="text-center py-10 text-on-surface-variant text-sm">暂无操作日志</div>
+            )}
           </div>
-          {logs.length === 0 && (
-            <div className="text-center py-10 text-on-surface-variant text-sm">暂无操作日志</div>
-          )}
-          {pagination}
+          <div className="shrink-0 border-t border-outline-variant/10 bg-surface-dim pt-2">
+            {pagination}
+          </div>
         </div>
       </main>
       <BottomNav />

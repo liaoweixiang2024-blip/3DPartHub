@@ -19,6 +19,11 @@ interface SettingDef {
   defaultValue: unknown;
 }
 
+const DEFAULT_MAINTENANCE_TITLE = "系统维护中";
+const DEFAULT_MAINTENANCE_MESSAGE = "系统正在进行维护、数据恢复或资源重建，部分页面可能暂时不可用。请稍后再访问。";
+const LEGACY_MAINTENANCE_TITLE = "模型库维护中";
+const LEGACY_MAINTENANCE_MESSAGE = "模型预览资源正在重建，部分模型数量和缩略图可能暂时不完整。请稍后再访问。";
+
 const SETTINGS_SCHEMA: SettingDef[] = [
   { key: "require_login_download", defaultValue: false },
   { key: "require_login_browse", defaultValue: false },
@@ -40,6 +45,12 @@ const SETTINGS_SCHEMA: SettingDef[] = [
   { key: "announcement_text", defaultValue: "" },
   { key: "announcement_type", defaultValue: "info" },
   { key: "announcement_color", defaultValue: "" },
+  { key: "maintenance_enabled", defaultValue: false },
+  { key: "maintenance_auto_enabled", defaultValue: true },
+  { key: "maintenance_auto_queue_threshold", defaultValue: 50 },
+  { key: "maintenance_title", defaultValue: DEFAULT_MAINTENANCE_TITLE },
+  { key: "maintenance_message", defaultValue: DEFAULT_MAINTENANCE_MESSAGE },
+  { key: "conversion_worker_concurrency", defaultValue: 1 },
   { key: "smtp_host", defaultValue: "" },
   { key: "smtp_port", defaultValue: 465 },
   { key: "smtp_user", defaultValue: "" },
@@ -146,6 +157,16 @@ const SETTINGS_SCHEMA: SettingDef[] = [
 const DEFAULTS: Record<string, unknown> = {};
 for (const s of SETTINGS_SCHEMA) DEFAULTS[s.key] = s.defaultValue;
 
+function normalizeLegacyMaintenanceSettings(settings: Record<string, unknown>): Record<string, unknown> {
+  if (settings.maintenance_title === LEGACY_MAINTENANCE_TITLE) {
+    settings.maintenance_title = DEFAULT_MAINTENANCE_TITLE;
+  }
+  if (settings.maintenance_message === LEGACY_MAINTENANCE_MESSAGE) {
+    settings.maintenance_message = DEFAULT_MAINTENANCE_MESSAGE;
+  }
+  return settings;
+}
+
 // In-memory cache
 let cache: Record<string, unknown> | null = null;
 let cacheAt = 0;
@@ -161,7 +182,7 @@ export async function getAllSettings(): Promise<Record<string, unknown>> {
   const now = Date.now();
   if (cache && now - cacheAt < CACHE_TTL) return cache;
 
-  if (!prisma) return { ...DEFAULTS };
+  if (!prisma) return normalizeLegacyMaintenanceSettings({ ...DEFAULTS });
 
   try {
     const rows = await prisma.setting.findMany();
@@ -173,11 +194,12 @@ export async function getAllSettings(): Promise<Record<string, unknown>> {
         result[row.key] = row.value;
       }
     }
+    normalizeLegacyMaintenanceSettings(result);
     cache = result;
     cacheAt = now;
     return result;
   } catch {
-    return { ...DEFAULTS };
+    return normalizeLegacyMaintenanceSettings({ ...DEFAULTS });
   }
 }
 
