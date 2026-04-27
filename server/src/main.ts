@@ -105,15 +105,34 @@ try {
   }
 } catch {}
 
+// Rate limiting
+app.use("/api/auth/login", authLimiter);
+app.use("/api/auth/register", authLimiter);
+app.use("/api/models/upload", uploadLimiter);
+app.use("/api/upload", uploadLimiter);
+app.use("/api/batch", uploadLimiter);
+app.get("/api/models", searchLimiter);
+app.get("/api/search", searchLimiter);
+app.use("/api", apiLimiter);
+
+// IP access control & hotlink protection
+app.use(ipGuard);
+
+const blockedStaticDirs = new Set([
+  "backups",
+  "_backup_db",
+  "_safety_snapshots",
+  "html-previews",
+  "originals",
+  "ticket-attachments",
+  "drawings",
+  "batch",
+]);
+
 app.use("/static", (req, res, next) => {
   const path = req.path;
-  if (
-    path === "/backups" || path.startsWith("/backups/") ||
-    path === "/_backup_db" || path.startsWith("/_backup_db/") ||
-    path === "/_safety_snapshots" || path.startsWith("/_safety_snapshots/") ||
-    path === "/html-previews" || path.startsWith("/html-previews/") ||
-    path.startsWith("/.restore_")
-  ) {
+  const firstSegment = path.split("/").filter(Boolean)[0] || "";
+  if (blockedStaticDirs.has(firstSegment) || firstSegment.startsWith(".restore_")) {
     res.status(404).end();
     return;
   }
@@ -128,19 +147,6 @@ app.use("/static", express.static(join(process.cwd(), config.staticDir), {
   maxAge: "30d",
   immutable: true,
 }));
-
-// Rate limiting
-app.use("/api/auth/login", authLimiter);
-app.use("/api/auth/register", authLimiter);
-app.use("/api/models/upload", uploadLimiter);
-app.use("/api/upload", uploadLimiter);
-app.use("/api/batch", uploadLimiter);
-app.get("/api/models", searchLimiter);
-app.get("/api/search", searchLimiter);
-app.use("/api", apiLimiter);
-
-// IP access control & hotlink protection
-app.use(ipGuard);
 
 // Global response wrapper
 app.use(responseHandler);

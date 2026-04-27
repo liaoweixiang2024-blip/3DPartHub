@@ -11,7 +11,7 @@ import { generateThumbnail } from "../services/thumbnail.js";
 import { compareModels } from "../services/comparison.js";
 import { findPreviewAssetPath, getPreviewAssetExtension, previewAssetFileName, resolveFileUrlPath } from "../services/gltfAsset.js";
 import { ensurePreviewMeta } from "../services/previewMeta.js";
-import { authMiddleware, type AuthRequest } from "../middleware/auth.js";
+import { authMiddleware, verifyRequestToken, type AuthRequest } from "../middleware/auth.js";
 import { requireRole } from "../middleware/rbac.js";
 import { getSetting } from "../lib/settings.js";
 import { config } from "../lib/config.js";
@@ -306,6 +306,10 @@ function pathInside(candidate: string, root: string): boolean {
   return resolved === resolvedRoot || resolved.startsWith(`${resolvedRoot}${sep}`);
 }
 
+function drawingDownloadUrl(modelId: string, drawingUrl?: string | null): string | null {
+  return drawingUrl ? `/api/models/${encodeURIComponent(modelId)}/drawing/download` : null;
+}
+
 async function markQueueUnavailable(modelId: string, meta: Record<string, unknown>, res: Response) {
   meta.status = "failed";
   meta.error = "conversion_queue_unavailable";
@@ -318,6 +322,63 @@ async function markQueueUnavailable(modelId: string, meta: Record<string, unknow
     await cacheDelByPrefix("cache:models:");
   }
   res.status(503).json({ detail: "转换队列暂不可用，请稍后重试" });
+}
+
+class DailyDownloadLimitError extends Error {
+  constructor(readonly limit: number) {
+    super(`每日下载次数已达上限 (${limit} 次)`);
+  }
+}
+
+async function recordModelDownload(options: {
+  userId?: string | null;
+  modelId: string;
+  format: string;
+  fileSize: number;
+  dailyLimit: number;
+  noRecord: boolean;
+}) {
+  const { userId, modelId, format, fileSize, dailyLimit, noRecord } = options;
+  if (!userId) {
+    await prisma.model.update({
+      where: { id: modelId },
+      data: { downloadCount: { increment: 1 } },
+    });
+    return;
+  }
+
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const dayKey = today.toISOString().slice(0, 10);
+
+  await prisma.$transaction(async (tx: any) => {
+    if (dailyLimit > 0) {
+      await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtext(${`download:${userId}:${dayKey}`}))`;
+      const count = await tx.download.count({
+        where: {
+          userId,
+          createdAt: { gte: today },
+        },
+      });
+      if (count >= dailyLimit) throw new DailyDownloadLimitError(dailyLimit);
+    }
+
+    if (!noRecord || dailyLimit > 0) {
+      await tx.download.create({
+        data: {
+          userId,
+          modelId,
+          format,
+          fileSize,
+        },
+      });
+    }
+
+    await tx.model.update({
+      where: { id: modelId },
+      data: { downloadCount: { increment: 1 } },
+    });
+  });
 }
 
 // Upload requires auth
@@ -658,7 +719,7 @@ router.get("/api/models", async (req: Request, res: Response) => {
         category_id: m.categoryId || null,
         download_count: m.downloadCount || 0,
         created_at: m.createdAt,
-        drawing_url: m.drawingUrl || null,
+        drawing_url: drawingDownloadUrl(m.id, m.drawingUrl),
         drawing_name: m.drawingName || null,
         drawing_size: m.drawingSize || null,
         group: m.group ? {
@@ -1054,7 +1115,7 @@ router.get("/api/models/:id", async (req: Request, res: Response) => {
           category_id: m.categoryId || null,
           created_at: m.createdAt,
           file_modified_at: mainFileModifiedAt,
-          drawing_url: m.drawingUrl || null,
+          drawing_url: drawingDownloadUrl(m.id, m.drawingUrl),
           drawing_name: m.drawingName || null,
           drawing_size: m.drawingSize || null,
           preview_meta: getPreviewMeta(m.id, { gltfUrl: m.gltfUrl, originalName: m.originalName, format: m.format }),
@@ -1152,41 +1213,22 @@ router.get("/api/models/:id/download", async (req: Request, res: Response) => {
   // Auth: support both Authorization header and ?token= query param
   const authHeader = req.headers.authorization;
   const queryToken = req.query.token as string | undefined;
-  const authToken = authHeader?.startsWith("Bearer ") ? authHeader.slice(7) : queryToken;
+  const hasAuthToken = Boolean(authHeader?.startsWith("Bearer ") || queryToken);
+  const authPayload = verifyRequestToken(req, { allowQueryToken: true });
 
   // Check if login is required to download
   const requireLogin = await getSetting<boolean>("require_login_download");
-  if (requireLogin && !authToken) {
+  if (requireLogin && !authPayload) {
     res.status(401).json({ detail: "需要登录后才能下载" });
     return;
   }
-
-  // Check daily download limit
   const dailyLimit = await getSetting<number>("daily_download_limit");
-  if (dailyLimit > 0 && authToken) {
-    try {
-      const { verifyToken } = await import("../lib/jwt.js");
-      const payload = verifyToken(authToken);
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
-      if (prisma) {
-        const count = await prisma.download.count({
-          where: {
-            userId: payload.userId,
-            createdAt: { gte: today },
-          },
-        });
-        if (count >= dailyLimit) {
-          res.status(429).json({ detail: `每日下载次数已达上限 (${dailyLimit} 次)` });
-          return;
-        }
-      }
-    } catch { /* token invalid, allow download if login not required */ }
-  }
+  const authUserId = hasAuthToken ? authPayload?.userId : undefined;
 
   let filePath: string | null = null;
   let fileName: string | null = null;
   let fileSize = 0;
+  let downloadRecord: { modelId: string; format: string; fileSize: number } | null = null;
 
   if (prisma) {
     try {
@@ -1221,32 +1263,13 @@ router.get("/api/models/:id/download", async (req: Request, res: Response) => {
           }
         }
 
-        // Record download (best effort, skip if no_record=1)
-        try {
-          const noRecord = req.query.no_record === "1";
-          if (!noRecord && authToken) {
-            let userId: string | undefined;
-            try {
-              const { verifyToken } = await import("../lib/jwt.js");
-              const payload = verifyToken(authToken);
-              userId = payload.userId;
-            } catch { /* token invalid */ }
-            if (userId) {
-              await prisma.download.create({
-                data: {
-                  userId,
-                  modelId: id,
-                  format: requestedFormat === "original" ? m.format : getPreviewAssetExtension(filePath || m.gltfUrl),
-                  fileSize,
-                },
-              });
-            }
-          }
-          await prisma.model.update({
-            where: { id },
-            data: { downloadCount: { increment: 1 } },
-          });
-        } catch { /* ignore download tracking errors */ }
+        if (filePath) {
+          downloadRecord = {
+            modelId: id,
+            format: requestedFormat === "original" ? m.format : getPreviewAssetExtension(filePath),
+            fileSize,
+          };
+        }
       }
     } catch {
       // Fallback
@@ -1281,6 +1304,23 @@ router.get("/api/models/:id/download", async (req: Request, res: Response) => {
   if (!filePath || !existsSync(filePath)) {
     res.status(404).json({ detail: "文件不存在" });
     return;
+  }
+
+  if (prisma && downloadRecord) {
+    try {
+      await recordModelDownload({
+        userId: authUserId,
+        ...downloadRecord,
+        dailyLimit: Number(dailyLimit) || 0,
+        noRecord: req.query.no_record === "1",
+      });
+    } catch (err) {
+      if (err instanceof DailyDownloadLimitError) {
+        res.status(429).json({ detail: err.message });
+        return;
+      }
+      console.error("[models] Failed to record download:", err);
+    }
   }
 
   // RFC 5987: filename* for UTF-8, ASCII fallback for filename
@@ -1417,10 +1457,54 @@ router.post("/api/models/:id/drawing", authMiddleware, requireRole("ADMIN"), upl
     await prisma.model.update({ where: { id }, data: { drawingUrl, drawingName: file.originalname, drawingSize } });
     await cacheDelByPrefix("cache:models:");
 
-    res.json({ success: true, data: { model_id: id, drawing_url: drawingUrl } });
+    res.json({ success: true, data: { model_id: id, drawing_url: drawingDownloadUrl(id, drawingUrl) } });
   } catch (err: any) {
     rmSync(file.path, { force: true });
     res.status(500).json({ detail: err.message || "上传图纸失败" });
+  }
+});
+
+// Authenticated drawing download. Static /drawings is intentionally not public.
+router.get("/api/models/:id/drawing/download", async (req: Request, res: Response) => {
+  const id = req.params.id as string;
+  const user = verifyRequestToken(req, { allowQueryToken: true });
+  if (!user) {
+    res.status(401).json({ detail: "需要登录后才能查看图纸" });
+    return;
+  }
+
+  if (!prisma) {
+    res.status(503).json({ detail: "数据库未连接" });
+    return;
+  }
+
+  try {
+    const m = await prisma.model.findUnique({
+      where: { id },
+      select: { id: true, name: true, drawingUrl: true, drawingName: true },
+    });
+    if (!m?.drawingUrl) {
+      res.status(404).json({ detail: "图纸不存在" });
+      return;
+    }
+
+    const drawingPath = m.drawingUrl.startsWith("/static/")
+      ? resolveFileUrlPath(m.drawingUrl)
+      : join(config.staticDir, "drawings", `${id}.pdf`);
+    if (!existsSync(drawingPath)) {
+      res.status(404).json({ detail: "图纸文件不存在" });
+      return;
+    }
+
+    const fileName = m.drawingName || `${m.name || id}.pdf`;
+    const asciiName = fileName.replace(/[^\x20-\x7E]/g, "_");
+    const utf8Name = encodeURIComponent(fileName);
+    res.setHeader("Cache-Control", "private, max-age=300");
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader("Content-Disposition", `inline; filename="${asciiName}"; filename*=UTF-8''${utf8Name}`);
+    res.sendFile(resolve(drawingPath));
+  } catch (err: any) {
+    res.status(500).json({ detail: err.message || "读取图纸失败" });
   }
 });
 

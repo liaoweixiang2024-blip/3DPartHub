@@ -8,7 +8,7 @@ import { prisma } from "../lib/prisma.js";
 import { conversionQueue, conversionQueueConfig } from "../lib/queue.js";
 import { config } from "../lib/config.js";
 import { cacheDelByPrefix } from "../lib/cache.js";
-import { authMiddleware, type AuthRequest } from "../middleware/auth.js";
+import { authMiddleware, verifyRequestToken, type AuthRequest } from "../middleware/auth.js";
 import { requireRole } from "../middleware/rbac.js";
 import { createNotification } from "./notifications.js";
 import { getBusinessConfig, labelFor, DEFAULT_UPLOAD_POLICY } from "../lib/businessConfig.js";
@@ -39,6 +39,24 @@ const router = Router();
 function param(req: { params: Record<string, string | string[]> }, key: string): string {
   const v = req.params[key];
   return Array.isArray(v) ? v[0] : v;
+}
+
+function ticketAttachmentUrl(ticketId: string, attachment: string | null | undefined): string | null {
+  if (!attachment) return null;
+  const fileName = basename(attachment);
+  if (!fileName || fileName === "." || fileName === "..") return null;
+  return `/api/tickets/${encodeURIComponent(ticketId)}/attachments/${encodeURIComponent(fileName)}`;
+}
+
+function normalizeTicketAttachmentInput(ticketId: string, attachment: unknown): string | null {
+  if (typeof attachment !== "string" || !attachment.trim()) return null;
+  if (
+    !attachment.startsWith(`/api/tickets/${ticketId}/attachments/`) &&
+    !attachment.startsWith("/static/ticket-attachments/")
+  ) {
+    return null;
+  }
+  return ticketAttachmentUrl(ticketId, attachment);
 }
 
 function numericQuery(value: unknown, fallback: number, min: number, max: number) {
@@ -488,9 +506,50 @@ router.get("/api/tickets/:id/messages", authMiddleware, async (req: AuthRequest,
       include: { user: { select: { id: true, username: true, avatar: true } } },
       orderBy: { createdAt: "asc" },
     });
-    res.json(messages);
+    res.json(messages.map((message: any) => ({
+      ...message,
+      attachment: ticketAttachmentUrl(ticketId, message.attachment),
+    })));
   } catch {
     res.status(500).json({ detail: "获取消息失败" });
+  }
+});
+
+router.get("/api/tickets/:id/attachments/:file", async (req, res: Response) => {
+  const ticketId = param(req, "id");
+  const user = verifyRequestToken(req, { allowQueryToken: true });
+  if (!user) {
+    res.status(401).json({ detail: "需要登录后才能查看附件" });
+    return;
+  }
+
+  try {
+    const ticket = await prisma.supportTicket.findUnique({ where: { id: ticketId } });
+    if (!ticket) {
+      res.status(404).json({ detail: "工单不存在" });
+      return;
+    }
+    if (ticket.userId !== user.userId && user.role !== "ADMIN") {
+      res.status(403).json({ detail: "无权访问" });
+      return;
+    }
+
+    const fileName = basename(String(req.params.file || ""));
+    if (!/^[a-f0-9-]+\.[a-z0-9]+$/i.test(fileName)) {
+      res.status(400).json({ detail: "附件参数无效" });
+      return;
+    }
+
+    const filePath = join(process.cwd(), config.staticDir, "ticket-attachments", fileName);
+    if (!existsSync(filePath)) {
+      res.status(404).json({ detail: "附件不存在" });
+      return;
+    }
+
+    res.setHeader("Cache-Control", "private, max-age=300");
+    res.sendFile(filePath);
+  } catch {
+    res.status(500).json({ detail: "读取附件失败" });
   }
 });
 
@@ -498,7 +557,8 @@ router.get("/api/tickets/:id/messages", authMiddleware, async (req: AuthRequest,
 router.post("/api/tickets/:id/messages", authMiddleware, async (req: AuthRequest, res: Response) => {
   const ticketId = param(req, "id");
   const { content, attachment } = req.body;
-  if ((!content || !content.trim()) && !attachment) {
+  const normalizedAttachment = normalizeTicketAttachmentInput(ticketId, attachment);
+  if ((!content || !content.trim()) && !normalizedAttachment) {
     res.status(400).json({ detail: "消息内容不能为空" }); return;
   }
   try {
@@ -526,7 +586,7 @@ router.post("/api/tickets/:id/messages", authMiddleware, async (req: AuthRequest
         ticketId,
         userId: req.user!.userId,
         content: content?.trim() || "",
-        attachment: attachment || null,
+        attachment: normalizedAttachment,
         isAdmin,
       },
       include: { user: { select: { id: true, username: true, avatar: true } } },
@@ -556,7 +616,10 @@ router.post("/api/tickets/:id/messages", authMiddleware, async (req: AuthRequest
         }
       } catch {}
     }
-    res.json(message);
+    res.json({
+      ...message,
+      attachment: ticketAttachmentUrl(ticketId, message.attachment),
+    });
   } catch {
     res.status(500).json({ detail: "发送消息失败" });
   }
@@ -581,7 +644,7 @@ router.post("/api/tickets/:id/messages/upload", authMiddleware, attachmentUpload
     if (ticket.userId !== req.user!.userId && req.user!.role !== "ADMIN") {
       res.status(403).json({ detail: "无权操作" }); return;
     }
-    const attachmentUrl = `/static/ticket-attachments/${req.file.filename}`;
+    const attachmentUrl = ticketAttachmentUrl(ticketId, req.file.filename);
     res.json({ url: attachmentUrl });
   } catch {
     res.status(500).json({ detail: "上传失败" });

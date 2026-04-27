@@ -7,7 +7,7 @@ import { authMiddleware, type AuthRequest } from "../middleware/auth.js";
 import { config } from "../lib/config.js";
 import { createNotification } from "./notifications.js";
 import archiver from "archiver";
-import { getPreviewAssetExtension, resolveFileUrlPath } from "../services/gltfAsset.js";
+import { findPreviewAssetPath, getPreviewAssetExtension } from "../services/gltfAsset.js";
 
 const router = Router();
 
@@ -150,8 +150,8 @@ router.post("/api/favorites/batch-download", authMiddleware, async (req: AuthReq
       }
 
       if (!filePath && m.gltfUrl) {
-        const gltfPath = resolveFileUrlPath(m.gltfUrl);
-        if (existsSync(gltfPath)) {
+        const gltfPath = findPreviewAssetPath(join(config.staticDir, "models"), m.id, m.gltfUrl);
+        if (gltfPath && existsSync(gltfPath)) {
           filePath = gltfPath;
           const ext = getPreviewAssetExtension(gltfPath);
           fileName = `${m.name || m.id}.${ext}`;

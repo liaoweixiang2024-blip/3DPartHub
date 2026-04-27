@@ -18,6 +18,7 @@ import CategorySelect from '../components/shared/CategorySelect';
 import useSWR from 'swr';
 import { getCachedPublicSettings } from '../lib/publicSettings';
 import { getBusinessConfig } from '../lib/businessConfig';
+import { withAccessToken } from '../lib/authUrl';
 
 function formatSize(bytes: number) {
   if (bytes < 1024) return `${bytes} B`;
@@ -1113,7 +1114,7 @@ function EditDialog({ open, model, categories, onClose, onSaved }: {
                     <div className="flex flex-wrap items-center gap-2 flex-1 min-w-0">
                       <Icon name="description" size={20} className="text-primary shrink-0" />
                       <span className="text-sm text-on-surface truncate flex-1">已上传</span>
-                      <a href={drawingUrl} target="_blank" rel="noreferrer" className="text-xs text-primary hover:underline">查看</a>
+                      <a href={withAccessToken(drawingUrl)} target="_blank" rel="noreferrer" className="text-xs text-primary hover:underline">查看</a>
                       <button onClick={async () => { let ok = false; try { await modelApi.deleteDrawing(model.model_id); setDrawingUrl(null); toast('图纸已删除', 'success'); ok = true; } catch { toast('删除失败', 'error'); } if (ok) onSaved(); }} className="text-xs text-error hover:underline">删除</button>
                     </div>
                   ) : (

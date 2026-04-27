@@ -1,14 +1,14 @@
 import { Router, Response } from "express";
 import multer from "multer";
 import { createReadStream, createWriteStream, existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
-import { join, posix } from "node:path";
+import { basename, join, posix } from "node:path";
 import archiver from "archiver";
 import { randomUUID } from "node:crypto";
 import { once } from "node:events";
-import { authMiddleware, type AuthRequest } from "../middleware/auth.js";
+import { authMiddleware, verifyRequestToken, type AuthRequest } from "../middleware/auth.js";
 import { requireRole } from "../middleware/rbac.js";
 import { config } from "../lib/config.js";
-import { getPreviewAssetExtension, resolveFileUrlPath } from "../services/gltfAsset.js";
+import { findPreviewAssetPath, getPreviewAssetExtension } from "../services/gltfAsset.js";
 import { conversionQueue } from "../lib/queue.js";
 import { cacheDelByPrefix } from "../lib/cache.js";
 import { getBusinessConfig } from "../lib/businessConfig.js";
@@ -72,8 +72,8 @@ router.post("/api/batch/download", authMiddleware, requireRole("ADMIN"), async (
     const outputClosed = once(output, "close");
 
     for (const model of models) {
-      const gltfPath = resolveFileUrlPath(model.gltfUrl);
-      if (existsSync(gltfPath)) {
+      const gltfPath = findPreviewAssetPath(join(config.staticDir, "models"), model.id, model.gltfUrl);
+      if (gltfPath && existsSync(gltfPath)) {
         const ext = getPreviewAssetExtension(gltfPath);
         const fileName = `${model.name || model.id}.${model.format}.${ext}`;
         archive.file(gltfPath, { name: fileName });
@@ -107,10 +107,32 @@ router.post("/api/batch/download", authMiddleware, requireRole("ADMIN"), async (
       } catch { /* ignore */ }
     }
 
-    res.json({ url: `/static/batch/${zipName}`, count: models.length });
+    res.json({ url: `/api/batch/downloads/${zipName}`, count: models.length });
   } catch (err) {
     res.status(500).json({ detail: "批量下载失败" });
   }
+});
+
+router.get("/api/batch/downloads/:file", async (req, res: Response) => {
+  const user = verifyRequestToken(req, { allowQueryToken: true });
+  if (!user || user.role !== "ADMIN") {
+    res.status(401).json({ detail: "需要管理员权限" });
+    return;
+  }
+
+  const fileName = basename(String(req.params.file || ""));
+  if (!/^batch_[0-9a-f]{8}\.zip$/i.test(fileName)) {
+    res.status(400).json({ detail: "文件参数无效" });
+    return;
+  }
+
+  const filePath = join(process.cwd(), config.staticDir, "batch", fileName);
+  if (!existsSync(filePath)) {
+    res.status(404).json({ detail: "文件不存在" });
+    return;
+  }
+
+  res.download(filePath, fileName);
 });
 
 // Batch upload from ZIP

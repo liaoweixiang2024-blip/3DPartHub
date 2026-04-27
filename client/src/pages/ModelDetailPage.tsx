@@ -22,6 +22,7 @@ import { useToast } from "../components/shared/Toast";
 import CategorySelect from "../components/shared/CategorySelect";
 import ShareDialog from "../components/shared/ShareDialog";
 import { getCachedPublicSettings, getSiteTitle, refreshSiteConfig } from "../lib/publicSettings";
+import { withAccessToken } from "../lib/authUrl";
 import { getModelReturnPath, normalizeModelReturnPath } from "../lib/modelReturnPath";
 import { updateSettings } from "../api/settings";
 import type { ModelSpec, ModelDownload } from "../types";
@@ -214,7 +215,7 @@ function DetailEditDialog({ open, modelId, modelName, thumbnailUrl: initialThumb
                     <div className="flex items-center gap-2 flex-1">
                       <Icon name="description" size={20} className="text-primary shrink-0" />
                       <span className="text-sm text-on-surface truncate flex-1">已上传</span>
-                      <a href={drawingUrl} target="_blank" rel="noreferrer" className="text-xs text-primary hover:underline">查看</a>
+                      <a href={withAccessToken(drawingUrl)} target="_blank" rel="noreferrer" className="text-xs text-primary hover:underline">查看</a>
                       <button onClick={async () => { let ok = false; try { await modelApi.deleteDrawing(modelId); setDrawingUrl(null); toast('图纸已删除', 'success'); ok = true; } catch { toast('删除失败', 'error'); } if (ok) onSaved(); }} className="text-xs text-error hover:underline">删除</button>
                     </div>
                   ) : (
@@ -408,7 +409,7 @@ function DesktopDetail({
             const downloadKey = `${file.downloadFormat || file.format || file.fileName || "download"}-${index}`;
             return (
             file.downloadFormat === "drawing" ? (
-              <a key={downloadKey} href={modelData.drawingUrl} target="_blank" rel="noreferrer" className="milled-inset bg-surface-container-lowest p-3 rounded-sm flex items-center justify-between border border-outline-variant/10 hover:border-primary/50 transition-colors group cursor-pointer">
+              <a key={downloadKey} href={withAccessToken(modelData.drawingUrl)} target="_blank" rel="noreferrer" className="milled-inset bg-surface-container-lowest p-3 rounded-sm flex items-center justify-between border border-outline-variant/10 hover:border-primary/50 transition-colors group cursor-pointer">
                 <div className="flex items-center gap-3">
                   <div className="w-9 h-9 rounded-lg bg-error/10 flex items-center justify-center shrink-0">
                     <span className="text-[10px] font-bold text-error">PDF</span>
@@ -1158,7 +1159,7 @@ export default function ModelDetailPage() {
                     const downloadKey = `${file.downloadFormat || file.format || file.fileName || "download"}-${index}`;
                     return (
                     file.downloadFormat === "drawing" ? (
-                      <a key={downloadKey} href={modelData.drawingUrl} target="_blank" rel="noreferrer" className="flex items-center gap-2.5 px-3 py-2 rounded-sm bg-surface-container-low border border-outline-variant/10 hover:bg-surface-container transition-colors">
+                      <a key={downloadKey} href={withAccessToken(modelData.drawingUrl)} target="_blank" rel="noreferrer" className="flex items-center gap-2.5 px-3 py-2 rounded-sm bg-surface-container-low border border-outline-variant/10 hover:bg-surface-container transition-colors">
                         <div className="w-7 h-7 rounded bg-error/10 flex items-center justify-center shrink-0">
                           <span className="text-[8px] font-bold text-error">PDF</span>
                         </div>

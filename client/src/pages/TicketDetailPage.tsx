@@ -15,6 +15,7 @@ import client from '../api/client';
 import { getTicketMessages, sendTicketMessage, updateTicketStatus, uploadTicketAttachment, type TicketMessage } from '../api/tickets';
 import { getCachedPublicSettings } from '../lib/publicSettings';
 import { getBusinessConfig, statusInfo } from '../lib/businessConfig';
+import { withAccessToken } from '../lib/authUrl';
 
 interface TicketInfo {
   id: string; userId: string; basePart: string | null;
@@ -43,6 +44,7 @@ function useMessages(ticketId: string) {
 function MessageBubble({ msg }: { msg: TicketMessage }) {
   const isRight = msg.isAdmin;
   const [previewImg, setPreviewImg] = useState<string | null>(null);
+  const attachmentSrc = withAccessToken(msg.attachment);
   return (
     <div className={`flex ${isRight ? 'justify-end' : 'justify-start'} mb-3`}>
       <div className={`max-w-[88%] sm:max-w-[80%] min-w-0 ${isRight ? 'order-2' : 'order-1'}`}>
@@ -65,11 +67,11 @@ function MessageBubble({ msg }: { msg: TicketMessage }) {
           {msg.content}
           {msg.attachment && (
             <SafeImage
-              src={msg.attachment}
+              src={attachmentSrc}
               alt="附件"
               className="mt-2 max-w-full max-h-[240px] rounded cursor-pointer hover:opacity-90 transition-opacity object-contain"
               fallbackClassName="min-h-24"
-              onClick={() => setPreviewImg(msg.attachment)}
+              onClick={() => setPreviewImg(attachmentSrc)}
             />
           )}
         </div>

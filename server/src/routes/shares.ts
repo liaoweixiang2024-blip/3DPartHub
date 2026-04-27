@@ -477,11 +477,18 @@ router.get("/api/shares/:token/download", async (req: Request, res: Response) =>
     return;
   }
 
-  // Increment download count
-  await prisma.shareLink.update({
-    where: { id: share.id },
+  // Atomically claim one download slot before streaming.
+  const claim = await prisma.shareLink.updateMany({
+    where: {
+      id: share.id,
+      ...(share.downloadLimit > 0 ? { downloadCount: { lt: share.downloadLimit } } : {}),
+    },
     data: { downloadCount: { increment: 1 } },
   });
+  if (claim.count === 0) {
+    res.status(429).json({ detail: "下载次数已达上限" });
+    return;
+  }
 
   // Serve file
   const asciiName = fileName.replace(/[^\x20-\x7E]/g, "_");

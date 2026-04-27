@@ -23,13 +23,13 @@ export function resolveFileUrlPath(value: string): string {
 }
 
 export function findPreviewAssetPath(modelDir: string, modelId: string, preferred?: string | null): string | null {
+  const glbPath = join(modelDir, `${modelId}.glb`);
+  if (existsSync(glbPath)) return glbPath;
+
   if (preferred) {
     const preferredPath = resolveFileUrlPath(preferred);
     if (existsSync(preferredPath)) return preferredPath;
   }
-
-  const glbPath = join(modelDir, `${modelId}.glb`);
-  if (existsSync(glbPath)) return glbPath;
 
   const gltfPath = join(modelDir, `${modelId}.gltf`);
   if (existsSync(gltfPath)) return gltfPath;

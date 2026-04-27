@@ -429,7 +429,7 @@ function meshesToGltf(
     materials,
     accessors,
     bufferViews,
-    buffers: [{ uri: "model.bin", byteLength: totalBuffer.length }],
+    buffers: [{ byteLength: totalBuffer.length }],
     extras: {
       sourceName,
       sourceFormat: options.sourceFormat,
@@ -480,7 +480,6 @@ function chunkHeader(length: number, type: number): Buffer {
 function writeGlb(gltf: object, binData: Buffer, outputDir: string, modelId: string): string {
   const glbPath = join(outputDir, `${modelId}.glb`);
   const gltfAny = JSON.parse(JSON.stringify(gltf));
-  if (gltfAny.buffers?.[0]) delete gltfAny.buffers[0].uri;
 
   const jsonChunk = paddedBuffer(Buffer.from(JSON.stringify(gltfAny), "utf8"), 0x20);
   const binChunk = paddedBuffer(binData);

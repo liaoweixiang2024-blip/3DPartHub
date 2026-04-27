@@ -77,6 +77,9 @@ export default function PreviewDiagnosticsDialog({
   const ratio = typeof asset?.compressionRatio === "number" && Number.isFinite(asset.compressionRatio)
     ? `${(asset.compressionRatio * 100).toFixed(1)}%`
     : "-";
+  const optimizationText = optimization
+    ? `${formatBytes(optimization.indexBytesSaved)} / U16 ${formatCompactNumber(optimization.indexComponentTypes?.uint16)}`
+    : "-";
 
   return (
     <AnimatePresence>
@@ -165,9 +168,7 @@ export default function PreviewDiagnosticsDialog({
                 </div>
                 <div className="flex items-center justify-between gap-3 py-1">
                   <span>索引优化</span>
-                  <span className="text-right font-mono text-on-surface">
-                    {formatBytes(optimization?.indexBytesSaved)} / U16 {formatCompactNumber(optimization?.indexComponentTypes?.uint16)}
-                  </span>
+                  <span className="text-right font-mono text-on-surface">{optimizationText}</span>
                 </div>
               </div>
 
