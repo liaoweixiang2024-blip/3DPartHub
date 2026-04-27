@@ -160,6 +160,7 @@ export const conversionWorker = createWorker(async (job) => {
           status: "completed",
           gltfUrl: result.gltfUrl,
           gltfSize: result.gltfSize,
+          previewMeta: result.previewMeta,
           thumbnailUrl: `${thumb.thumbnailUrl}?t=${Date.now()}`,
         },
       });

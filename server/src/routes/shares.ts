@@ -1,9 +1,10 @@
 import { Router, Request, Response } from "express";
 import { randomBytes } from "node:crypto";
 import bcrypt from "bcryptjs";
-import { existsSync, createReadStream } from "node:fs";
+import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { prisma } from "../lib/prisma.js";
+import { sendAcceleratedFile } from "../lib/acceleratedDownload.js";
 import { authMiddleware, AuthRequest } from "../middleware/auth.js";
 import { getAllSettings, getSetting } from "../lib/settings.js";
 import { previewAssetFileName, resolveFileUrlPath } from "../services/gltfAsset.js";
@@ -490,13 +491,12 @@ router.get("/api/shares/:token/download", async (req: Request, res: Response) =>
     return;
   }
 
-  // Serve file
-  const asciiName = fileName.replace(/[^\x20-\x7E]/g, "_");
-  const utf8Name = encodeURIComponent(fileName);
-  res.setHeader("Content-Disposition", `attachment; filename="${asciiName}"; filename*=UTF-8''${utf8Name}`);
-  res.setHeader("Content-Type", "application/octet-stream");
-  const stream = createReadStream(filePath);
-  stream.pipe(res);
+  sendAcceleratedFile(req, res, {
+    filePath,
+    fileName,
+    contentType: "application/octet-stream",
+    disposition: "attachment",
+  });
 });
 
 export default router;

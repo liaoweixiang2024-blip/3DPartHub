@@ -1,6 +1,6 @@
 import { Router, Response } from "express";
 import multer from "multer";
-import { createReadStream, createWriteStream, existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { createWriteStream, existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { basename, join, posix } from "node:path";
 import archiver from "archiver";
 import { randomUUID } from "node:crypto";
@@ -8,6 +8,7 @@ import { once } from "node:events";
 import { authMiddleware, verifyRequestToken, type AuthRequest } from "../middleware/auth.js";
 import { requireRole } from "../middleware/rbac.js";
 import { config } from "../lib/config.js";
+import { sendAcceleratedFile } from "../lib/acceleratedDownload.js";
 import { findPreviewAssetPath, getPreviewAssetExtension } from "../services/gltfAsset.js";
 import { conversionQueue } from "../lib/queue.js";
 import { cacheDelByPrefix } from "../lib/cache.js";
@@ -132,7 +133,12 @@ router.get("/api/batch/downloads/:file", async (req, res: Response) => {
     return;
   }
 
-  res.download(filePath, fileName);
+  sendAcceleratedFile(req, res, {
+    filePath,
+    fileName,
+    contentType: "application/zip",
+    disposition: "attachment",
+  });
 });
 
 // Batch upload from ZIP

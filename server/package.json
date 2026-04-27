@@ -12,6 +12,7 @@
     "prisma:backup": "bash scripts/safe-migrate.sh backup",
     "prisma:force-reset": "bash scripts/safe-migrate.sh force-reset",
     "prisma:studio": "prisma studio",
+    "preview-meta:migrate": "tsx scripts/migrate-preview-meta.ts",
     "backup:e2e": "tsx scripts/backup-e2e-check.ts"
   },
   "dependencies": {

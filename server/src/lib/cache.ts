@@ -23,6 +23,7 @@ export const TTL = {
   CATEGORIES: 600,      // 10 min
   SETTINGS_PUBLIC: 60,  // 1 min — config changes should propagate quickly
   MODELS_LIST: 120,     // 2 min
+  MODEL_DETAIL: 60,     // 1 min — avoid repeated DB + file-stat work on hot models
 } as const;
 
 function markUnavailable() {

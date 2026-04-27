@@ -15,6 +15,7 @@ import { authMiddleware, verifyRequestToken, type AuthRequest } from "../middlew
 import { requireRole } from "../middleware/rbac.js";
 import { getSetting } from "../lib/settings.js";
 import { config } from "../lib/config.js";
+import { sendAcceleratedFile } from "../lib/acceleratedDownload.js";
 import { getBusinessConfig } from "../lib/businessConfig.js";
 import {
   MAX_MODEL_PAGE,
@@ -76,16 +77,22 @@ function saveMeta(id: string, data: Record<string, unknown>) {
   writeFileSync(join(METADATA_DIR, `${id}.json`), JSON.stringify(data, null, 2));
 }
 
-function getPreviewMeta(
+async function getPreviewMeta(
   id: string,
-  options: { gltfUrl?: string | null; originalName?: string | null; format?: string | null } = {}
-): Record<string, unknown> | null {
-  return ensurePreviewMeta({
+  options: { gltfUrl?: string | null; originalName?: string | null; format?: string | null; previewMeta?: unknown } = {}
+): Promise<Record<string, unknown> | null> {
+  return await ensurePreviewMeta({
     modelDir: join(config.staticDir, "models"),
     modelId: id,
     preferredUrl: options.gltfUrl,
     sourceName: options.originalName || id,
     sourceFormat: options.format || "gltf",
+    storedMeta: options.previewMeta,
+    persist: prisma
+      ? async (meta) => {
+          await prisma.model.update({ where: { id }, data: { previewMeta: meta } }).catch(() => {});
+        }
+      : undefined,
   }) as Record<string, unknown> | null;
 }
 
@@ -787,7 +794,6 @@ router.get("/api/models/preview-diagnostics", authMiddleware, requireRole("ADMIN
   const pageSize = Math.min(50, Math.max(1, Number(req.query.page_size) || 12));
   const search = (req.query.search as string | undefined)?.trim();
   const filter = normalizePreviewDiagnosticFilter(req.query.status);
-  const modelDir = join(config.staticDir, "models");
 
   try {
     let rows: Array<{
@@ -800,6 +806,7 @@ router.get("/api/models/preview-diagnostics", authMiddleware, requireRole("ADMIN
       originalSize?: number | null;
       createdAt?: Date | string | null;
       category?: string | null;
+      previewMeta?: unknown;
     }> = [];
 
     if (prisma) {
@@ -822,6 +829,7 @@ router.get("/api/models/preview-diagnostics", authMiddleware, requireRole("ADMIN
           thumbnailUrl: true,
           gltfUrl: true,
           originalSize: true,
+          previewMeta: true,
           createdAt: true,
           categoryRef: { select: { name: true } },
         },
@@ -837,6 +845,7 @@ router.get("/api/models/preview-diagnostics", authMiddleware, requireRole("ADMIN
         originalSize: m.originalSize,
         createdAt: m.createdAt,
         category: m.categoryRef?.name || null,
+        previewMeta: m.previewMeta,
       }));
     } else {
       const files = readdirSync(METADATA_DIR).filter((f) => f.endsWith(".json")).sort().reverse();
@@ -861,14 +870,15 @@ router.get("/api/models/preview-diagnostics", authMiddleware, requireRole("ADMIN
         }));
     }
 
-    const items = rows.map((m) => {
-      const meta = getPreviewMeta(m.id, {
+    const items = await Promise.all(rows.map(async (m) => {
+      const meta = await getPreviewMeta(m.id, {
         gltfUrl: m.gltfUrl,
         originalName: m.originalName,
         format: m.format,
+        previewMeta: m.previewMeta,
       });
       return buildPreviewDiagnosticItem(m, meta);
-    });
+    }));
 
     const summary = items.reduce(
       (acc, item) => {
@@ -929,17 +939,18 @@ router.post("/api/models/preview-diagnostics/rebuild", authMiddleware, requireRo
         thumbnailUrl: true,
         gltfUrl: true,
         originalSize: true,
+        previewMeta: true,
         createdAt: true,
         categoryRef: { select: { name: true } },
       },
     });
 
-    const candidates = models
-      .map((m: any) => {
-        const meta = getPreviewMeta(m.id, {
+    const candidateEntries = await Promise.all(models.map(async (m: any) => {
+        const meta = await getPreviewMeta(m.id, {
           gltfUrl: m.gltfUrl,
           originalName: m.originalName,
           format: m.format,
+          previewMeta: m.previewMeta,
         });
         return {
           model: m,
@@ -955,7 +966,9 @@ router.post("/api/models/preview-diagnostics/rebuild", authMiddleware, requireRo
             category: m.categoryRef?.name || null,
           }, meta),
         };
-      })
+      }));
+
+    const candidates = candidateEntries
       .filter((entry: { diagnostic: ReturnType<typeof buildPreviewDiagnosticItem> }) => shouldIncludePreviewDiagnostic(entry.diagnostic.preview_status, filter))
       .slice(0, limit);
 
@@ -1018,6 +1031,13 @@ router.post("/api/models/preview-diagnostics/rebuild", authMiddleware, requireRo
 // Get model detail (public)
 router.get("/api/models/:id", async (req: Request, res: Response) => {
   const id = req.params.id as string;
+  const cacheKey = `cache:models:detail:${id}`;
+  const cached = await cacheGet(cacheKey);
+  if (cached) {
+    res.json(cached);
+    return;
+  }
+
   if (prisma) {
     try {
       const m = await prisma.model.findUnique({
@@ -1100,7 +1120,14 @@ router.get("/api/models/:id", async (req: Request, res: Response) => {
           }),
         } : null;
 
-        res.json({
+        const previewMeta = await getPreviewMeta(m.id, {
+          gltfUrl: m.gltfUrl,
+          originalName: m.originalName,
+          format: m.format,
+          previewMeta: (m as any).previewMeta,
+        });
+
+        const responseData = {
           model_id: m.id,
           name: m.name,
           original_name: m.originalName,
@@ -1118,9 +1145,11 @@ router.get("/api/models/:id", async (req: Request, res: Response) => {
           drawing_url: drawingDownloadUrl(m.id, m.drawingUrl),
           drawing_name: m.drawingName || null,
           drawing_size: m.drawingSize || null,
-          preview_meta: getPreviewMeta(m.id, { gltfUrl: m.gltfUrl, originalName: m.originalName, format: m.format }),
+          preview_meta: previewMeta,
           group: groupData,
-        });
+        };
+        await cacheSet(cacheKey, responseData, TTL.MODEL_DETAIL);
+        res.json(responseData);
         return;
       }
     } catch {
@@ -1133,7 +1162,13 @@ router.get("/api/models/:id", async (req: Request, res: Response) => {
     res.status(404).json({ detail: "模型不存在" });
     return;
   }
-  res.json({
+  const previewMeta = await getPreviewMeta(id, {
+    gltfUrl: m.gltf_url as string | null,
+    originalName: m.original_name as string | null,
+    format: m.format as string | null,
+  });
+
+  const responseData = {
     model_id: m.model_id,
     original_name: m.original_name,
     gltf_url: m.gltf_url,
@@ -1143,12 +1178,10 @@ router.get("/api/models/:id", async (req: Request, res: Response) => {
     format: m.format,
     status: m.status,
     created_at: m.created_at,
-    preview_meta: getPreviewMeta(id, {
-      gltfUrl: m.gltf_url as string | null,
-      originalName: m.original_name as string | null,
-      format: m.format as string | null,
-    }),
-  });
+    preview_meta: previewMeta,
+  };
+  await cacheSet(cacheKey, responseData, TTL.MODEL_DETAIL);
+  res.json(responseData);
 });
 
 // Update model info (requires auth)
@@ -1323,14 +1356,12 @@ router.get("/api/models/:id/download", async (req: Request, res: Response) => {
     }
   }
 
-  // RFC 5987: filename* for UTF-8, ASCII fallback for filename
-  const asciiName = fileName!.replace(/[^\x20-\x7E]/g, "_");
-  const utf8Name = encodeURIComponent(fileName!);
-  res.setHeader("Content-Disposition", `attachment; filename="${asciiName}"; filename*=UTF-8''${utf8Name}`);
-  res.setHeader("Content-Type", "application/octet-stream");
-  const { createReadStream } = await import("node:fs");
-  const stream = createReadStream(filePath);
-  stream.pipe(res);
+  sendAcceleratedFile(req, res, {
+    filePath,
+    fileName: fileName!,
+    contentType: "application/octet-stream",
+    disposition: "attachment",
+  });
 });
 
 // Delete model requires auth
@@ -1497,12 +1528,12 @@ router.get("/api/models/:id/drawing/download", async (req: Request, res: Respons
     }
 
     const fileName = m.drawingName || `${m.name || id}.pdf`;
-    const asciiName = fileName.replace(/[^\x20-\x7E]/g, "_");
-    const utf8Name = encodeURIComponent(fileName);
-    res.setHeader("Cache-Control", "private, max-age=300");
-    res.setHeader("Content-Type", "application/pdf");
-    res.setHeader("Content-Disposition", `inline; filename="${asciiName}"; filename*=UTF-8''${utf8Name}`);
-    res.sendFile(resolve(drawingPath));
+    sendAcceleratedFile(req, res, {
+      filePath: resolve(drawingPath),
+      fileName,
+      contentType: "application/pdf",
+      disposition: "inline",
+    });
   } catch (err: any) {
     res.status(500).json({ detail: err.message || "读取图纸失败" });
   }
@@ -1664,6 +1695,7 @@ router.post("/api/models/:id/replace-file", authMiddleware, requireRole("ADMIN")
         gltfUrl: "",
         gltfSize: 0,
         thumbnailUrl: null,
+        previewMeta: null,
         ...(originalModifiedAt && { metadata: { ...existingMeta, originalModifiedAt } }),
         ...(originalModifiedAt && { fileModifiedAt: new Date(originalModifiedAt) }),
       },
@@ -1746,6 +1778,7 @@ router.post("/api/models/:id/reconvert", authMiddleware, requireRole("ADMIN"), a
     let gltfSize = m.gltfSize;
     let gltfUrl = m.gltfUrl;
     let previewPath = findPreviewAssetPath(modelDir, m.id, m.gltfUrl);
+    let nextPreviewMeta = (m as any).previewMeta || null;
 
     // Re-convert from original if available, otherwise just regenerate thumbnail from existing glTF
     if (existsSync(origPath)) {
@@ -1755,6 +1788,7 @@ router.post("/api/models/:id/reconvert", authMiddleware, requireRole("ADMIN"), a
       gltfSize = result.gltfSize;
       gltfUrl = result.gltfUrl;
       previewPath = result.gltfPath;
+      nextPreviewMeta = result.previewMeta;
     }
 
     // Regenerate thumbnail from current preview asset (GLB for new conversions, glTF for legacy assets)
@@ -1777,14 +1811,16 @@ router.post("/api/models/:id/reconvert", authMiddleware, requireRole("ADMIN"), a
         ...(gltfUrl !== m.gltfUrl ? { gltfUrl } : {}),
         ...(gltfSize !== m.gltfSize ? { gltfSize } : {}),
         ...(versionedUrl !== m.thumbnailUrl ? { thumbnailUrl: versionedUrl } : {}),
+        previewMeta: nextPreviewMeta,
       },
     });
 
     await cacheDelByPrefix("cache:models:");
-    const previewMeta = getPreviewMeta(m.id, {
+    const previewMeta = await getPreviewMeta(m.id, {
       gltfUrl,
       originalName: m.originalName,
       format: m.format,
+      previewMeta: nextPreviewMeta,
     });
 
     res.json({
@@ -1844,7 +1880,7 @@ router.post("/api/models/reconvert-all", authMiddleware, requireRole("ADMIN"), a
 
         await prisma.model.update({
           where: { id: m.id },
-          data: { gltfUrl: result.gltfUrl, gltfSize: result.gltfSize, ...(thumbnailUrl ? { thumbnailUrl } : {}) },
+          data: { gltfUrl: result.gltfUrl, gltfSize: result.gltfSize, previewMeta: result.previewMeta, ...(thumbnailUrl ? { thumbnailUrl } : {}) },
         });
         success++;
       } catch {
@@ -1909,7 +1945,7 @@ router.post("/api/models/:id/versions", authMiddleware, requireRole("ADMIN"), up
 
     // Convert file into a browser-ready GLB preview.
     const modelDir = join(config.staticDir, "models");
-    let result: { gltfUrl: string; gltfSize: number };
+    let result: Awaited<ReturnType<typeof convertStepToGltf>>;
     if (ext === "xt" || ext === "x_t") {
       result = await convertXtToGltf(file.path, modelDir, `${modelId}_v${versionNumber}`, file.originalname || "model.xt");
     } else {
@@ -1936,6 +1972,7 @@ router.post("/api/models/:id/versions", authMiddleware, requireRole("ADMIN"), up
         currentVersion: versionNumber,
         gltfUrl: result.gltfUrl,
         gltfSize: result.gltfSize,
+        previewMeta: result.previewMeta,
         status: "completed",
       },
     });

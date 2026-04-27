@@ -1,4 +1,4 @@
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { findPreviewAssetPath, readGltfAsset } from "./gltfAsset.js";
 
@@ -324,25 +324,40 @@ function createPreviewMetaFromAsset(
   };
 }
 
+function normalizePreviewMeta(value: unknown): PreviewMeta | null {
+  if (!value || typeof value !== "object") return null;
+  const meta = value as PreviewMeta;
+  if (meta.version !== 2 || !meta.totals || !meta.bounds) return null;
+  return meta;
+}
+
 export function readPreviewMeta(modelDir: string, modelId: string): PreviewMeta | null {
   const metaPath = join(modelDir, `${modelId}.meta.json`);
   if (!existsSync(metaPath)) return null;
   try {
-    return JSON.parse(readFileSync(metaPath, "utf-8")) as PreviewMeta;
+    return normalizePreviewMeta(JSON.parse(readFileSync(metaPath, "utf-8")));
   } catch {
     return null;
   }
 }
 
-export function ensurePreviewMeta(options: {
+export async function ensurePreviewMeta(options: {
   modelDir: string;
   modelId: string;
   preferredUrl?: string | null;
   sourceName?: string | null;
   sourceFormat?: string | null;
-}): PreviewMeta | null {
+  storedMeta?: unknown;
+  persist?: (meta: PreviewMeta) => Promise<void> | void;
+}): Promise<PreviewMeta | null> {
+  const stored = normalizePreviewMeta(options.storedMeta);
+  if (stored) return stored;
+
   const existing = readPreviewMeta(options.modelDir, options.modelId);
-  if (existing) return existing;
+  if (existing) {
+    await options.persist?.(existing);
+    return existing;
+  }
 
   const previewPath = findPreviewAssetPath(options.modelDir, options.modelId, options.preferredUrl);
   if (!previewPath) return null;
@@ -356,7 +371,7 @@ export function ensurePreviewMeta(options: {
       json,
       binData
     );
-    writeFileSync(join(options.modelDir, `${options.modelId}.meta.json`), JSON.stringify(meta, null, 2));
+    await options.persist?.(meta);
     return meta;
   } catch {
     return null;

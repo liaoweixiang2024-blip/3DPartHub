@@ -8,6 +8,7 @@ import { prisma } from "../lib/prisma.js";
 import { conversionQueue, conversionQueueConfig } from "../lib/queue.js";
 import { config } from "../lib/config.js";
 import { cacheDelByPrefix } from "../lib/cache.js";
+import { sendAcceleratedFile } from "../lib/acceleratedDownload.js";
 import { authMiddleware, verifyRequestToken, type AuthRequest } from "../middleware/auth.js";
 import { requireRole } from "../middleware/rbac.js";
 import { createNotification } from "./notifications.js";
@@ -546,8 +547,12 @@ router.get("/api/tickets/:id/attachments/:file", async (req, res: Response) => {
       return;
     }
 
-    res.setHeader("Cache-Control", "private, max-age=300");
-    res.sendFile(filePath);
+    sendAcceleratedFile(req, res, {
+      filePath,
+      fileName,
+      disposition: "inline",
+      cacheControl: "private, max-age=300",
+    });
   } catch {
     res.status(500).json({ detail: "读取附件失败" });
   }

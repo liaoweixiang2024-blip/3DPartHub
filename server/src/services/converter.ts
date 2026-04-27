@@ -37,11 +37,10 @@ export interface GltfAsset {
   modelId: string;
   gltfPath: string;
   gltfUrl: string;
-  metaPath: string;
-  metaUrl: string;
   originalName: string;
   gltfSize: number;
   originalSize: number;
+  previewMeta: PreviewMeta;
 }
 
 interface PreviewPartMeta {
@@ -54,7 +53,7 @@ interface PreviewPartMeta {
   bounds: BoundsMeta;
 }
 
-interface PreviewMeta {
+export interface PreviewMeta {
   version: 2;
   sourceName: string;
   sourceFormat: string;
@@ -500,12 +499,6 @@ function writeGlb(gltf: object, binData: Buffer, outputDir: string, modelId: str
   return glbPath;
 }
 
-function writePreviewMeta(meta: PreviewMeta, outputDir: string, modelId: string): string {
-  const metaPath = join(outputDir, `${modelId}.meta.json`);
-  writeFileSync(metaPath, JSON.stringify(meta, null, 2));
-  return metaPath;
-}
-
 export async function convertStepToGltf(
   inputPath: string,
   outputDir: string,
@@ -570,17 +563,15 @@ export async function convertStepToGltf(
     compressionRatio: originalSize > 0 ? Number((gltfSize / originalSize).toFixed(4)) : null,
   };
   meta.diagnostics.performance = getPerformanceDiagnostics(meta.totals, gltfSize);
-  const metaPath = writePreviewMeta(meta, outputDir, modelId);
 
   return {
     modelId,
     gltfPath,
     gltfUrl: `/static/models/${modelId}.glb`,
-    metaPath,
-    metaUrl: `/static/models/${modelId}.meta.json`,
     originalName: basename(inputPath),
     gltfSize,
     originalSize,
+    previewMeta: meta,
   };
 }
 
