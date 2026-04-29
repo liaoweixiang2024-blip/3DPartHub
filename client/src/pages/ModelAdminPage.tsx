@@ -9,7 +9,7 @@ import Icon from '../components/shared/Icon';
 import ModelThumbnail from '../components/shared/ModelThumbnail';
 import InfiniteLoadTrigger from '../components/shared/InfiniteLoadTrigger';
 import { AdminPageShell } from "../components/shared/AdminPageShell";
-import { AdminManagementPage, AdminPageHero } from "../components/shared/AdminManagementPage";
+import { AdminManagementPage } from "../components/shared/AdminManagementPage";
 import { useToast } from '../components/shared/Toast';
 import { modelApi, type ConversionQueueJob, type ConversionQueueState, type ModelGroupItem, type ModelPreviewDiagnosticItem, type PreviewDiagnosticFilter, type ServerModelListItem } from '../api/models';
 import { openModelDrawing } from '../api/downloads';
@@ -1952,11 +1952,12 @@ function MobileContent() {
   return (
     <>
       <input type="file" multiple accept={uploadPolicy.modelFormats.map((f) => `.${f}`).join(",")} className="hidden" id="mobile-admin-upload" onChange={(e) => { if (e.target.files?.length) handleUpload(e.target.files); e.target.value = ''; }} />
-      <div className="px-4 py-4 space-y-4 pb-20">
-        <AdminPageHero
-          title="模型管理"
-          meta={`${modelTotal} 个`}
-          actions={(
+      <AdminManagementPage
+        title="模型管理"
+        meta={`${modelTotal} 个`}
+        description="维护模型库文件、合并建议和预览运维"
+        contentClassName="gap-3"
+        actions={(
           <div className="flex items-center gap-2">
             <button
               onClick={() => setPreviewOpsOpen(true)}
@@ -1970,8 +1971,8 @@ function MobileContent() {
               <Icon name="cloud_upload" size={14} />{uploading ? '上传中...' : '上传'}
             </button>
           </div>
-          )}
-        />
+        )}
+      >
         <div className="flex items-center bg-surface-container-high rounded-sm px-3 py-2 border border-outline-variant/30">
           <Icon name="search" size={16} className="text-on-surface-variant mr-2" />
           <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="搜索模型..." className="bg-transparent border-none outline-none text-sm text-on-surface placeholder:text-on-surface-variant/50 w-full" />
@@ -2074,21 +2075,21 @@ function MobileContent() {
         ) : isLoadingInitial ? (
           <SkeletonList rows={5} />
         ) : (
-          <div className="admin-tab-panel space-y-2">
+          <div className="admin-tab-panel flex flex-col gap-3">
             {visibleModels.map((m) => (
-              <Link key={m.model_id} to={`/model/${m.model_id}`} target="_blank" className="bg-surface-container-high rounded-sm p-3 flex items-start gap-3 hover:bg-surface-container-highest transition-colors">
-                <div className="w-12 h-12 rounded-sm bg-surface-container-highest shrink-0 overflow-hidden">
+              <Link key={m.model_id} to={`/model/${m.model_id}`} target="_blank" className="flex items-stretch rounded-lg border border-outline-variant/10 bg-surface-container-high shadow-sm transition-colors hover:bg-surface-container-highest">
+                <div className="h-20 w-20 shrink-0 overflow-hidden rounded-l-lg bg-surface-container-highest">
                   <ModelThumbnail src={m.thumbnail_url} alt="" className="w-full h-full object-cover" />
                 </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm text-on-surface font-medium line-clamp-2 break-words">{m.name}</p>
-                  <div className="flex flex-wrap items-center gap-x-2 gap-y-1 mt-0.5">
+                <div className="flex min-w-0 flex-1 flex-col gap-1.5 p-2.5">
+                  <p className="line-clamp-2 break-words text-sm font-semibold leading-snug text-on-surface">{m.name}</p>
+                  <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
                     <span className="text-[10px] font-mono bg-surface-container-highest px-1 py-0.5 rounded-sm">{m.format?.toUpperCase()}</span>
                     <span className="text-[10px] text-on-surface-variant break-words">{m.category || '未分类'}</span>
                     <span className="text-[10px] text-on-surface-variant font-mono">{formatSize(m.original_size)}</span>
                   </div>
                 </div>
-                <div className="flex items-center gap-1.5 shrink-0" onClick={(e) => e.preventDefault()}>
+                <div className="flex shrink-0 items-center gap-1.5 pr-2.5" onClick={(e) => e.preventDefault()}>
                   <button onClick={() => handleQueueModelRebuild(m)} disabled={queueingModelId === m.model_id} aria-label={`重建预览 ${m.name}`} title="重建预览" className="px-2 py-1.5 text-xs text-on-surface-variant hover:text-primary rounded-sm border border-outline-variant/20 disabled:opacity-50"><Icon name="autorenew" size={14} className={queueingModelId === m.model_id ? 'animate-spin' : ''} /></button>
                   <button onClick={() => setEditModel(m)} className="px-2 py-1.5 text-xs text-on-surface-variant hover:text-on-surface rounded-sm border border-outline-variant/20"><Icon name="settings" size={14} /></button>
                   <button onClick={() => setDeleteTarget(m)} className="px-2 py-1.5 text-xs text-on-surface-variant hover:text-error rounded-sm border border-outline-variant/20"><Icon name="close" size={14} /></button>
@@ -2105,7 +2106,7 @@ function MobileContent() {
             {models.length === 0 && <p className="text-center text-on-surface-variant py-12 text-sm">没有找到模型</p>}
           </div>
         )}
-      </div>
+      </AdminManagementPage>
       <PreviewOperationsModal open={previewOpsOpen} onClose={() => setPreviewOpsOpen(false)} compact />
       <EditDialog open={!!editModel} model={editModel} categories={categories || []} onClose={() => setEditModel(null)} onSaved={() => mutate()} />
       <AnimatePresence>
@@ -2131,7 +2132,7 @@ export default function ModelAdminPage() {
   const isDesktop = useMediaQuery('(min-width: 768px)');
 
   return (
-    <AdminPageShell mobileContentClassName="p-0">
+    <AdminPageShell>
       {isDesktop ? <DesktopContent /> : <MobileContent />}
     </AdminPageShell>
   );
