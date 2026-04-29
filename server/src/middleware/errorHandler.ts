@@ -1,20 +1,41 @@
 import { Request, Response, NextFunction } from "express";
+import { isHttpError } from "../lib/http.js";
+import { RequestValidationError } from "../lib/requestValidation.js";
 
 function formatError(status: number, message: string) {
   return { success: false, message };
 }
 
+function isPrismaKnownRequestError(err: Error): err is Error & { code: string } {
+  return err.constructor.name === "PrismaClientKnownRequestError" && "code" in err;
+}
+
 export function errorHandler(err: Error, _req: Request, res: Response, _next: NextFunction) {
+  if (isHttpError(err)) {
+    if (err.status >= 500) console.error("HTTP error:", err);
+    res.status(err.status).json({
+      success: false,
+      message: err.message,
+      ...(err.code ? { code: err.code } : {}),
+      ...(err.details !== undefined ? { details: err.details } : {}),
+    });
+    return;
+  }
+
+  if (err instanceof RequestValidationError) {
+    res.status(err.status).json(formatError(err.status, err.message));
+    return;
+  }
+
   console.error("Unhandled error:", err);
 
   // Prisma known errors
-  if (err.constructor.name === "PrismaClientKnownRequestError") {
-    const prismaErr = err as any;
-    if (prismaErr.code === "P2025") {
+  if (isPrismaKnownRequestError(err)) {
+    if (err.code === "P2025") {
       res.status(404).json(formatError(404, "资源不存在"));
       return;
     }
-    if (prismaErr.code === "P2002") {
+    if (err.code === "P2002") {
       res.status(409).json(formatError(409, "数据冲突，记录已存在"));
       return;
     }

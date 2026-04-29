@@ -8,6 +8,7 @@ import { config } from "../lib/config.js";
 import { createWorker, conversionQueueConfig, normalizeConversionWorkerConcurrency } from "../lib/queue.js";
 import { createNotification } from "../routes/notifications.js";
 import { cacheDelByPrefix } from "../lib/cache.js";
+import { MODEL_STATUS } from "../services/modelStatus.js";
 
 type ConversionPipelineResult = {
   result: GltfAsset;
@@ -142,7 +143,7 @@ export const conversionWorker = createWorker(async (job) => {
     if (prisma) {
       await prisma.model.update({
         where: { id: modelId },
-        data: { status: "processing" },
+        data: { status: MODEL_STATUS.PROCESSING },
       }).catch(() => {});
     }
 
@@ -157,7 +158,7 @@ export const conversionWorker = createWorker(async (job) => {
       await prisma.model.update({
         where: { id: modelId },
         data: {
-          status: "completed",
+          status: MODEL_STATUS.COMPLETED,
           gltfUrl: result.gltfUrl,
           gltfSize: result.gltfSize,
           previewMeta: result.previewMeta,
@@ -226,7 +227,7 @@ export const conversionWorker = createWorker(async (job) => {
     if (prisma) {
       await prisma.model.update({
         where: { id: modelId },
-        data: { status: "failed" },
+        data: { status: MODEL_STATUS.FAILED },
       }).catch(() => {});
       await cacheDelByPrefix("cache:models:");
     }

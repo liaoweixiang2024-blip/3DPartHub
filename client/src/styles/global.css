@@ -2,8 +2,8 @@
 
 @theme {
   --font-headline: "Space Grotesk", system-ui, sans-serif;
-  --font-body: "Noto Sans SC", "Inter", system-ui, sans-serif;
-  --font-label: "Inter", "Noto Sans SC", system-ui, sans-serif;
+  --font-body: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+  --font-label: "Inter", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
 
   --color-surface: #121316;
   --color-surface-dim: #121316;
@@ -170,18 +170,41 @@ body {
   outline: 1px solid rgba(0, 0, 0, 0.08);
 }
 
-.custom-scrollbar::-webkit-scrollbar {
+.model-list-scrollbar::-webkit-scrollbar {
   width: 6px;
+  height: 6px;
 }
-.custom-scrollbar::-webkit-scrollbar-track {
-  background: var(--color-surface);
+.model-list-scrollbar::-webkit-scrollbar-track {
+  background: color-mix(in srgb, var(--color-primary-container) 8%, transparent);
+  border-radius: 999px;
 }
-.custom-scrollbar::-webkit-scrollbar-thumb {
-  background: var(--color-surface-container-high);
-  border-radius: 3px;
+.model-list-scrollbar::-webkit-scrollbar-thumb {
+  background: color-mix(in srgb, var(--color-primary-container) 72%, var(--color-surface-bright));
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--color-primary-container) 18%, transparent);
+  background-clip: padding-box;
 }
-.custom-scrollbar::-webkit-scrollbar-thumb:hover {
-  background: var(--color-surface-variant);
+.model-list-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: var(--color-primary-container);
+}
+.model-list-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-primary-container) color-mix(in srgb, var(--color-primary-container) 8%, transparent);
+  overscroll-behavior-y: contain;
+}
+
+.custom-scrollbar::-webkit-scrollbar,
+.selection-scrollbarless::-webkit-scrollbar {
+  display: none;
+  width: 0;
+  height: 0;
+}
+
+.custom-scrollbar,
+.selection-scrollbarless {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+  overscroll-behavior: contain;
 }
 
 @keyframes fade-in {
@@ -191,6 +214,17 @@ body {
 
 .animate-fade-in {
   animation: fade-in 0.3s ease-out;
+}
+
+@keyframes selection-tab-panel-in {
+  from { opacity: 0; transform: translateY(3px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.admin-tab-panel,
+.selection-tab-panel {
+  animation: selection-tab-panel-in 0.18s ease-out;
+  will-change: opacity, transform;
 }
 
 .mobile-nav-drawer-open .bottom-nav {

@@ -3,26 +3,23 @@ import { useParams, useNavigate, Link, useLocation } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { useMediaQuery } from "../layouts/hooks/useMediaQuery";
 import { useDocumentTitle } from "../hooks/useDocumentTitle";
-import TopNav from "../components/shared/TopNav";
-import BottomNav from "../components/shared/BottomNav";
-import MobileNavDrawer from "../components/shared/MobileNavDrawer";
+import { PublicPageShell } from "../components/shared/PublicPageShell";
 import Icon from "../components/shared/Icon";
-import Tooltip from "../components/shared/Tooltip";
 import type { ViewMode, CameraPreset } from "../components/3d";
 import CadViewerPanel from "../components/3d/CadViewerPanel";
 import { dispatchFitModel } from "../components/3d/viewerEvents";
 import { DEFAULT_VIEWER_TUNING, viewerTuningFromSettings, type ViewerTuning } from "../components/3d/viewerTuning";
 import { CAMERA_ANGLES, MATERIAL_PRESETS, VIEW_MODES, type MaterialPresetKey } from "../components/3d/viewerControls";
-import { useFavoriteStore, useAuthStore, getAccessToken } from "../stores";
+import { useFavoriteStore, useAuthStore } from "../stores";
 import ModelThumbnail from "../components/shared/ModelThumbnail";
 import { useModel } from "../hooks/useModels";
 import { modelApi, type ModelPreviewMeta } from "../api/models";
+import { downloadModelFile, isDownloadAuthRequiredError, openModelDrawing } from "../api/downloads";
 import { categoriesApi, type CategoryItem } from "../api/categories";
 import { useToast } from "../components/shared/Toast";
 import CategorySelect from "../components/shared/CategorySelect";
 import ShareDialog from "../components/shared/ShareDialog";
 import { getCachedPublicSettings, getSiteTitle, refreshSiteConfig } from "../lib/publicSettings";
-import { withAccessToken } from "../lib/authUrl";
 import { getModelReturnPath, normalizeModelReturnPath } from "../lib/modelReturnPath";
 import { updateSettings } from "../api/settings";
 import type { ModelSpec, ModelDownload } from "../types";
@@ -36,7 +33,7 @@ interface ModelVariant {
   original_size: number;
   is_primary: boolean;
   created_at: string;
-  file_modified_at: string | null;
+  file_modified_at?: string | null;
 }
 
 interface ModelInfo {
@@ -92,6 +89,22 @@ type ModelDetailLocationState = {
   } | null;
 } | null;
 
+const HOME_SCROLL_TARGET_PREFIX = "home_model_scroll_target:";
+const HOME_BROWSE_STATE_PREFIX = "home_model_browse_state:";
+const HOME_SCROLL_RESTORE_PENDING_KEY = "home_model_scroll_restore_pending_v1";
+
+function markHomeRestorePending(homeBrowseState: NonNullable<ModelDetailLocationState>["homeBrowseState"], modelId?: string) {
+  if (typeof window === "undefined" || !homeBrowseState?.restoreKey) return;
+  try {
+    const restoreKey = homeBrowseState.restoreKey;
+    window.sessionStorage.setItem(`${HOME_BROWSE_STATE_PREFIX}${restoreKey}`, JSON.stringify(homeBrowseState));
+    if (modelId) window.sessionStorage.setItem(`${HOME_SCROLL_TARGET_PREFIX}${restoreKey}`, modelId);
+    window.sessionStorage.setItem(HOME_SCROLL_RESTORE_PENDING_KEY, restoreKey);
+  } catch {
+    // Ignore private browsing or storage quota failures.
+  }
+}
+
 function getViewerDisplayPrefs(): ViewerDisplayPrefs {
   if (typeof window === "undefined") return DEFAULT_VIEWER_DISPLAY_PREFS;
   try {
@@ -100,7 +113,8 @@ function getViewerDisplayPrefs(): ViewerDisplayPrefs {
     const parsed = JSON.parse(raw) as Partial<ViewerDisplayPrefs>;
     const rawView = VIEW_MODES.some((mode) => mode.key === parsed.activeView) ? parsed.activeView : DEFAULT_VIEWER_DISPLAY_PREFS.activeView;
     const view = rawView === "solid" ? rawView : DEFAULT_VIEWER_DISPLAY_PREFS.activeView;
-    const parsedCamera = parsed.activeCamera === "side" ? "right" : parsed.activeCamera;
+    const storedCamera = parsed.activeCamera as CameraPreset | "side" | undefined;
+    const parsedCamera = storedCamera === "side" ? "right" : storedCamera;
     const camera = CAMERA_ANGLES.some((angle) => angle.key === parsedCamera) ? parsedCamera : DEFAULT_VIEWER_DISPLAY_PREFS.activeCamera;
     const material = MATERIAL_PRESETS.some((preset) => preset.key === parsed.materialPreset) ? parsed.materialPreset : DEFAULT_VIEWER_DISPLAY_PREFS.materialPreset;
     return {
@@ -186,7 +200,7 @@ function DetailEditDialog({ open, modelId, modelName, thumbnailUrl: initialThumb
               <h3 className="font-headline text-lg font-semibold text-on-surface">编辑模型</h3>
               <button onClick={onClose} className="p-1 text-on-surface-variant hover:text-on-surface transition-colors"><Icon name="close" size={20} /></button>
             </div>
-            <div className="px-4 py-4 sm:px-6 space-y-4 overflow-y-auto scrollbar-hidden">
+            <div className="px-4 py-4 sm:px-6 space-y-4 overflow-y-auto scrollbar-hidden sm:custom-scrollbar">
               <div className="flex flex-col gap-1.5">
                 <label className="text-xs uppercase tracking-wider text-on-surface-variant">预览图</label>
                 <div className="flex flex-wrap items-center gap-3">
@@ -215,7 +229,7 @@ function DetailEditDialog({ open, modelId, modelName, thumbnailUrl: initialThumb
                     <div className="flex items-center gap-2 flex-1">
                       <Icon name="description" size={20} className="text-primary shrink-0" />
                       <span className="text-sm text-on-surface truncate flex-1">已上传</span>
-                      <a href={withAccessToken(drawingUrl)} target="_blank" rel="noreferrer" className="text-xs text-primary hover:underline">查看</a>
+                      <button type="button" onClick={() => void openModelDrawing(modelId).catch(() => toast('打开图纸失败', 'error'))} className="text-xs text-primary hover:underline">查看</button>
                       <button onClick={async () => { let ok = false; try { await modelApi.deleteDrawing(modelId); setDrawingUrl(null); toast('图纸已删除', 'success'); ok = true; } catch { toast('删除失败', 'error'); } if (ok) onSaved(); }} className="text-xs text-error hover:underline">删除</button>
                     </div>
                   ) : (
@@ -298,6 +312,8 @@ function DesktopDetail({
   categoryBreadcrumb: { id: string; name: string }[];
   onDownload: (id: string, format?: string) => void;
 }) {
+  const { toast } = useToast();
+
   return (
     <section className="w-full md:w-[40%] md:min-w-[400px] md:max-w-[500px] bg-surface-container-low overflow-y-auto flex flex-col shrink-0 min-h-0">
       <div className="p-8 border-b border-outline-variant/10">
@@ -321,7 +337,13 @@ function DesktopDetail({
             <h1 className="font-headline text-3xl font-bold text-on-surface tracking-tight mb-2">{modelData.name}</h1>
           </div>
           {isAdmin && onEdit && (
-            <button onClick={onEdit} className="p-2 text-on-surface-variant hover:text-primary hover:bg-surface-container-high rounded-sm transition-colors border border-outline-variant/20 shrink-0" title="编辑模型">
+            <button
+              onClick={onEdit}
+              className="p-2 text-on-surface-variant hover:text-primary hover:bg-surface-container-high rounded-sm transition-colors border border-outline-variant/20 shrink-0"
+              aria-label="编辑模型"
+              data-tooltip="编辑模型"
+              data-tooltip-side="left"
+            >
               <Icon name="settings" size={20} />
             </button>
           )}
@@ -334,24 +356,26 @@ function DesktopDetail({
             <Icon name="download" size={18} />
             下载模型
           </button>
-          <Tooltip text="分享">
-            <motion.button
-              whileTap={{ scale: 0.9 }}
-              onClick={onShare}
-              className="bg-surface-container-high border border-outline/40 hover:border-outline text-on-surface rounded-sm p-2 transition-all flex items-center justify-center"
-            >
-              <Icon name="share" size={20} />
-            </motion.button>
-          </Tooltip>
-          <Tooltip text="收藏">
-            <motion.button
-              whileTap={{ scale: 0.9 }}
-              onClick={onToggleFav}
-              className={`bg-surface-container-high border ${isFav ? "border-primary/50" : "border-outline/40"} hover:border-outline text-on-surface rounded-sm p-2 transition-all flex items-center justify-center`}
-            >
-              <Icon name={isFav ? "bookmark" : "bookmark_border"} size={20} className={`${isFav ? "text-primary" : ""}`} fill={isFav} />
-            </motion.button>
-          </Tooltip>
+          <motion.button
+            whileTap={{ scale: 0.9 }}
+            onClick={onShare}
+            aria-label="分享"
+            data-tooltip="分享"
+            data-tooltip-side="left"
+            className="bg-surface-container-high border border-outline/40 hover:border-outline text-on-surface rounded-sm p-2 transition-all flex items-center justify-center"
+          >
+            <Icon name="share" size={20} />
+          </motion.button>
+          <motion.button
+            whileTap={{ scale: 0.9 }}
+            onClick={onToggleFav}
+            aria-label={isFav ? "取消收藏" : "收藏"}
+            data-tooltip={isFav ? "取消收藏" : "收藏"}
+            data-tooltip-side="left"
+            className={`bg-surface-container-high border ${isFav ? "border-primary/50" : "border-outline/40"} hover:border-outline text-on-surface rounded-sm p-2 transition-all flex items-center justify-center`}
+          >
+            <Icon name={isFav ? "bookmark" : "bookmark_border"} size={20} className={`${isFav ? "text-primary" : ""}`} fill={isFav} />
+          </motion.button>
         </div>
       </div>
 
@@ -409,7 +433,7 @@ function DesktopDetail({
             const downloadKey = `${file.downloadFormat || file.format || file.fileName || "download"}-${index}`;
             return (
             file.downloadFormat === "drawing" ? (
-              <a key={downloadKey} href={withAccessToken(modelData.drawingUrl)} target="_blank" rel="noreferrer" className="milled-inset bg-surface-container-lowest p-3 rounded-sm flex items-center justify-between border border-outline-variant/10 hover:border-primary/50 transition-colors group cursor-pointer">
+              <button key={downloadKey} type="button" onClick={() => void openModelDrawing(modelData.id).catch(() => toast('打开图纸失败', 'error'))} className="milled-inset bg-surface-container-lowest p-3 rounded-sm flex items-center justify-between border border-outline-variant/10 hover:border-primary/50 transition-colors group cursor-pointer text-left">
                 <div className="flex items-center gap-3">
                   <div className="w-9 h-9 rounded-lg bg-error/10 flex items-center justify-center shrink-0">
                     <span className="text-[10px] font-bold text-error">PDF</span>
@@ -422,7 +446,7 @@ function DesktopDetail({
                 <div className="text-primary hover:text-primary-container p-2">
                   <Icon name="open_in_new" size={20} />
                 </div>
-              </a>
+              </button>
             ) : (
               <div key={downloadKey} className="milled-inset bg-surface-container-lowest p-3 rounded-sm flex items-center justify-between border border-outline-variant/10 hover:border-primary/50 transition-colors group">
                 <div className="flex items-center gap-3">
@@ -483,7 +507,6 @@ export default function ModelDetailPage() {
   const [activeView, setActiveView] = useState<ViewMode>(initialViewerPrefs.activeView);
   const [activeCamera, setActiveCamera] = useState<CameraPreset>(initialViewerPrefs.activeCamera);
   const [expandedSpecs, setExpandedSpecs] = useState(true);
-  const [navOpen, setNavOpen] = useState(false);
   const [showDimensions, setShowDimensions] = useState(initialViewerPrefs.showDimensions);
   const [materialPreset, setMaterialPreset] = useState<MaterialPresetKey>(initialViewerPrefs.materialPreset);
   const [showEdges, setShowEdges] = useState(initialViewerPrefs.showEdges);
@@ -534,8 +557,28 @@ export default function ModelDetailPage() {
     }
   }, [currentPath, detailLocationState?.from, location.search]);
 
+  useEffect(() => {
+    markHomeRestorePending(detailLocationState?.homeBrowseState, id);
+  }, [detailLocationState?.homeBrowseState, id]);
+
+  useEffect(() => {
+    const handlePageHide = () => {
+      markHomeRestorePending(detailLocationState?.homeBrowseState, id);
+    };
+    const handlePopState = () => {
+      markHomeRestorePending(detailLocationState?.homeBrowseState, id);
+    };
+    window.addEventListener("pagehide", handlePageHide);
+    window.addEventListener("popstate", handlePopState);
+    return () => {
+      window.removeEventListener("pagehide", handlePageHide);
+      window.removeEventListener("popstate", handlePopState);
+    };
+  }, [detailLocationState?.homeBrowseState, id]);
+
   const handleBack = useCallback(() => {
     if (returnPath) {
+      markHomeRestorePending(detailLocationState?.homeBrowseState, id);
       navigate(returnPath, detailLocationState?.homeBrowseState ? { state: { homeBrowseState: detailLocationState.homeBrowseState } } : undefined);
       return;
     }
@@ -545,23 +588,19 @@ export default function ModelDetailPage() {
       return;
     }
     navigate("/");
-  }, [detailLocationState?.homeBrowseState, navigate, returnPath]);
+  }, [detailLocationState?.homeBrowseState, id, navigate, returnPath]);
 
   const handleDownload = useCallback(async (modelId: string, format?: string) => {
-    const token = getAccessToken();
-    if (!token) {
-      setLoginPromptOpen(true);
-      return;
+    try {
+      await downloadModelFile(modelId, format || "original");
+    } catch (error) {
+      if (isDownloadAuthRequiredError(error)) {
+        setLoginPromptOpen(true);
+        return;
+      }
+      toast("下载失败，请稍后重试", "error");
     }
-    // Direct link — browser handles download, no blob in memory
-    const params = new URLSearchParams();
-    if (format) params.set("format", format);
-    params.set("token", token);
-    const a = document.createElement("a");
-    a.href = `/api/models/${modelId}/download?${params.toString()}`;
-    a.download = "";
-    a.click();
-  }, []);
+  }, [toast]);
 
   useEffect(() => {
     getCachedPublicSettings().then(s => {
@@ -917,8 +956,7 @@ export default function ModelDetailPage() {
 
   if (isDesktop) {
     return (
-      <div className="fixed inset-0 flex flex-col overflow-hidden">
-        <TopNav />
+      <PublicPageShell className="fixed inset-0 flex flex-col overflow-hidden">
         <main className="flex-1 min-h-0 overflow-hidden flex flex-col md:flex-row">
           <CadViewerPanel
             variant="desktop"
@@ -942,8 +980,8 @@ export default function ModelDetailPage() {
           open={editOpen}
           modelId={modelData.id}
           modelName={modelData.name}
-          thumbnailUrl={modelData.thumbnailUrl}
-          drawingUrl={modelData.drawingUrl}
+          thumbnailUrl={modelData.thumbnailUrl ?? null}
+          drawingUrl={modelData.drawingUrl ?? null}
           categoryId={modelData.categoryId}
           categories={categoryTree || []}
           onClose={() => setEditOpen(false)}
@@ -987,15 +1025,12 @@ export default function ModelDetailPage() {
             </motion.div>
           )}
         </AnimatePresence>
-      </div>
+      </PublicPageShell>
     );
   }
 
   return (
-    <div className="flex flex-col h-dvh bg-surface">
-      <TopNav compact onMenuToggle={() => setNavOpen((prev) => !prev)} />
-      <MobileNavDrawer open={navOpen} onClose={() => setNavOpen(false)} />
-
+    <PublicPageShell mobileClassName="flex flex-col h-dvh bg-surface" keepMobileDrawerMounted>
       {/* Main area: 3D viewer + bottom sheet */}
       <div
         className="flex-1 min-h-0 relative"
@@ -1055,14 +1090,14 @@ export default function ModelDetailPage() {
               </div>
               <div className="flex items-center gap-0.5 shrink-0">
                 {isAdmin && (
-                  <button onClick={() => setEditOpen(true)} className="w-8 h-8 flex items-center justify-center rounded-full text-on-surface-variant hover:text-primary transition-colors">
+                  <button onClick={() => setEditOpen(true)} aria-label="编辑模型" className="w-8 h-8 flex items-center justify-center rounded-full text-on-surface-variant hover:text-primary transition-colors">
                     <Icon name="settings" size={18} />
                   </button>
                 )}
-                <button onClick={() => setShareOpen(true)} className="w-8 h-8 flex items-center justify-center rounded-full text-on-surface-variant hover:text-primary transition-colors">
+                <button onClick={() => setShareOpen(true)} aria-label="分享" className="w-8 h-8 flex items-center justify-center rounded-full text-on-surface-variant hover:text-primary transition-colors">
                   <Icon name="share" size={18} />
                 </button>
-                <motion.button whileTap={{ scale: 0.9 }} onClick={handleToggleFav} className="w-8 h-8 flex items-center justify-center rounded-full text-on-surface-variant transition-colors">
+                <motion.button whileTap={{ scale: 0.9 }} onClick={handleToggleFav} aria-label={fav ? "取消收藏" : "收藏"} className="w-8 h-8 flex items-center justify-center rounded-full text-on-surface-variant transition-colors">
                   <Icon name={fav ? "star" : "star_border"} size={18} className={fav ? "text-primary" : ""} />
                 </motion.button>
               </div>
@@ -1159,7 +1194,7 @@ export default function ModelDetailPage() {
                     const downloadKey = `${file.downloadFormat || file.format || file.fileName || "download"}-${index}`;
                     return (
                     file.downloadFormat === "drawing" ? (
-                      <a key={downloadKey} href={withAccessToken(modelData.drawingUrl)} target="_blank" rel="noreferrer" className="flex items-center gap-2.5 px-3 py-2 rounded-sm bg-surface-container-low border border-outline-variant/10 hover:bg-surface-container transition-colors">
+                      <button key={downloadKey} type="button" onClick={() => void openModelDrawing(modelData.id).catch(() => toast('打开图纸失败', 'error'))} className="flex items-center gap-2.5 px-3 py-2 rounded-sm bg-surface-container-low border border-outline-variant/10 hover:bg-surface-container transition-colors text-left">
                         <div className="w-7 h-7 rounded bg-error/10 flex items-center justify-center shrink-0">
                           <span className="text-[8px] font-bold text-error">PDF</span>
                         </div>
@@ -1170,7 +1205,7 @@ export default function ModelDetailPage() {
                         <div className="shrink-0 w-7 h-7 flex items-center justify-center rounded-full bg-primary/10 text-primary">
                           <Icon name="open_in_new" size={14} />
                         </div>
-                      </a>
+                      </button>
                     ) : (
                       <div key={downloadKey} className="flex items-center gap-2 px-3 py-2.5 rounded-sm bg-surface-container-low border border-outline-variant/10">
                         <div className="w-7 h-7 rounded bg-primary-container/15 flex items-center justify-center shrink-0">
@@ -1215,14 +1250,12 @@ export default function ModelDetailPage() {
           </div>
         </div>
       </div>
-
-      <BottomNav />
       <DetailEditDialog
         open={editOpen}
         modelId={modelData.id}
         modelName={modelData.name}
-        thumbnailUrl={modelData.thumbnailUrl}
-        drawingUrl={modelData.drawingUrl}
+        thumbnailUrl={modelData.thumbnailUrl ?? null}
+        drawingUrl={modelData.drawingUrl ?? null}
         categoryId={modelData.categoryId}
         categories={categoryTree || []}
         onClose={() => setEditOpen(false)}
@@ -1266,6 +1299,6 @@ export default function ModelDetailPage() {
           </motion.div>
         )}
       </AnimatePresence>
-    </div>
+    </PublicPageShell>
   );
 }

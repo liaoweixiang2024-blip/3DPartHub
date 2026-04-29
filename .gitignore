@@ -7,7 +7,10 @@ dist/
 
 # Environment & secrets
 .env
-.env.production
+*.env
+.env.*
+!*.env.example
+!**/.env.example
 *.local
 
 # OS files
@@ -30,6 +33,7 @@ server/static/watermark/
 server/static/drawings/
 server/static/option-images/
 server/static/ticket-attachments/
+server/static/html-previews/
 server/static/logo/
 server/static/favicon/
 server/static/selection-categories-ai/
@@ -40,13 +44,50 @@ client/public/static/selection-categories-real/
 client/scripts/generate-selection-category-*
 
 # Temp directories
+tmp/
 tmp_*/
 step_import_temp/
 backups/
 stitch-assets/
 
-# Data scripts (not part of application source)
-data/
+# Private working materials
+private-docs/
+/data/
+/.tmp/
+/装配体*.html
+client/public/data/
+client/public/product-wall-assets/
+scripts/import-company-products.mjs
+
+# Private local deployment overrides
+docker-compose.local.yml
+
+# Model/CAD/data exports that should never be published by accident
+*.bak
+*.backup
+*.db
+*.dump
+*.sqlite
+*.sqlite3
+*.tar
+*.tar.gz
+*.tgz
+*.7z
+*.stp
+*.step
+*.iges
+*.igs
+*.stl
+*.obj
+*.fbx
+*.glb
+*.gltf
+*.x_t
+*.xt
+*.sldprt
+*.sldasm
+*.dwg
+*.dxf
 
 # OCR reference images
 docs/ocr-references/
@@ -61,8 +102,9 @@ docs/选型询价实现说明.md
 
 # Product seed data / customer-specific catalogs
 server/prisma/seed-beize.ts
-server/prisma/seeds/run-batch.ts
-server/prisma/seeds/products/
+server/prisma/fix-selection-columns.ts
+server/prisma/selection-column-config.ts
+server/prisma/seeds/
 server/prisma/seeds/cleanup-beize-bad-products.ts
 
 # Archives
@@ -72,7 +114,6 @@ server/prisma/seeds/cleanup-beize-bad-products.ts
 # Docker / local overrides
 .colima/
 docker-compose.override.yml
-docker-compose.local.yml
 
 # Auto-generated
 client/README.md

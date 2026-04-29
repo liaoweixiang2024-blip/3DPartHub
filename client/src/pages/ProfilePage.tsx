@@ -4,12 +4,10 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { useMediaQuery } from '../layouts/hooks/useMediaQuery';
 import { useDocumentTitle } from '../hooks/useDocumentTitle';
 import { SkeletonList } from '../components/shared/Skeleton';
-import TopNav from '../components/shared/TopNav';
-import BottomNav from '../components/shared/BottomNav';
-import AppSidebar from '../components/shared/Sidebar';
-import MobileNavDrawer from '../components/shared/MobileNavDrawer';
 import Icon from '../components/shared/Icon';
 import SafeImage from '../components/shared/SafeImage';
+import { PageBody, PageHeader } from "../components/shared/PagePrimitives";
+import { AdminPageShell } from "../components/shared/AdminPageShell";
 import { authApi } from '../api/auth';
 import { useNavigate } from 'react-router-dom';
 import { listShares, deleteShare, type ShareLink } from '../api/shares';
@@ -19,8 +17,7 @@ import { copyText } from '../lib/clipboard';
 
 const NOTIFICATION_ITEMS = [
   { key: 'ticket', label: '工单通知', desc: '工单回复、状态变更' },
-  { key: 'inquiry', label: '询价通知', desc: '询价回复、报价状态变更' },
-  { key: 'comment', label: '评论通知', desc: '有人评论你的模型' },
+  { key: 'inquiry', label: '询价通知', desc: '询价回复、处理状态变更' },
   { key: 'favorite', label: '收藏通知', desc: '有人收藏你的模型' },
   { key: 'model_conversion', label: '转换通知', desc: '模型转换完成或失败' },
   { key: 'download', label: '下载通知', desc: '模型被下载时通知' },
@@ -521,7 +518,7 @@ function DesktopContent() {
     reader.onload = async () => {
       try {
         const avatar = reader.result as string;
-        const updated = await authApi.updateProfile({ avatar } as any);
+        const updated = await authApi.updateProfile({ avatar });
         updateUser(updated);
         toast('头像已更新', 'success');
       } catch {
@@ -536,15 +533,16 @@ function DesktopContent() {
   }
 
   return (
-    <div className="max-w-6xl mx-auto flex flex-col gap-8 pb-12">
-      <div className="flex justify-between items-end mb-4">
-        <div>
-          <h2 className="font-headline text-2xl font-bold tracking-tight text-on-surface uppercase">个人设置</h2>
-          <p className="text-on-secondary-container mt-2 text-sm">
+    <PageBody className="mx-auto max-w-6xl pb-12">
+      <PageHeader
+        title="个人设置"
+        description={(
+          <>
             用户: <span className="text-primary font-medium">{formData.username || formData.email}</span>
-          </p>
-        </div>
-        <div className="flex gap-3 items-center">
+          </>
+        )}
+        actions={(
+          <>
           {saved && (
             <span className="text-emerald-400 text-sm flex items-center gap-1">
               <Icon name="check_circle" size={20} />
@@ -557,8 +555,9 @@ function DesktopContent() {
           <button onClick={handleSave} disabled={saving} className="px-6 py-2 bg-primary-container text-on-primary rounded-sm text-sm uppercase tracking-wider hover:bg-primary transition-colors shadow-[0_0_15px_rgba(249,115,22,0.15)] disabled:opacity-50">
             {saving ? '保存中...' : '保存设置'}
           </button>
-        </div>
-      </div>
+          </>
+        )}
+      />
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
         <section className="lg:col-span-4 bg-surface-container-low rounded-lg p-6 relative overflow-hidden group">
@@ -660,7 +659,7 @@ function DesktopContent() {
         </section>
       </div>
       <PasswordChangeDialog open={pwdOpen} onClose={() => setPwdOpen(false)} />
-    </div>
+    </PageBody>
   );
 }
 
@@ -731,7 +730,7 @@ function MobileContent() {
     reader.onload = async () => {
       try {
         const avatar = reader.result as string;
-        const updated = await authApi.updateProfile({ avatar } as any);
+        const updated = await authApi.updateProfile({ avatar });
         updateUser(updated);
         toast('头像已更新', 'success');
       } catch {
@@ -742,8 +741,8 @@ function MobileContent() {
   }, [toast, updateUser]);
 
   return (
-    <div className="space-y-4 px-4 py-5 pb-20">
-      <h1 className="text-lg font-bold text-on-surface">个人设置</h1>
+    <PageBody className="px-4 py-5 pb-20">
+      <PageHeader title="个人设置" />
 
       {/* Avatar + basic info */}
       <div className="flex items-center gap-4 rounded-lg bg-surface-container-high p-4">
@@ -889,37 +888,17 @@ function MobileContent() {
       </div>
 
       <PasswordChangeDialog open={pwdOpen} onClose={() => setPwdOpen(false)} />
-    </div>
+    </PageBody>
   );
 }
 
 export default function ProfilePage() {
   useDocumentTitle("个人设置");
   const isDesktop = useMediaQuery('(min-width: 768px)');
-  const [navOpen, setNavOpen] = useState(false);
-
-  if (isDesktop) {
-    return (
-      <div className="flex flex-col h-screen overflow-hidden">
-        <TopNav />
-        <div className="flex flex-1 overflow-hidden">
-          <AppSidebar />
-          <main className="flex-1 overflow-y-auto p-8 scrollbar-hidden bg-surface-dim">
-            <DesktopContent />
-          </main>
-        </div>
-      </div>
-    );
-  }
 
   return (
-    <div className="flex flex-col h-dvh bg-surface">
-      <TopNav compact onMenuToggle={() => setNavOpen(prev => !prev)} />
-      <MobileNavDrawer open={navOpen} onClose={() => setNavOpen(false)} />
-      <main className="flex-1 overflow-y-auto scrollbar-hidden bg-surface-dim">
-        <MobileContent />
-      </main>
-      <BottomNav />
-    </div>
+    <AdminPageShell mobileContentClassName="p-0">
+      {isDesktop ? <DesktopContent /> : <MobileContent />}
+    </AdminPageShell>
   );
 }

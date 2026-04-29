@@ -1,13 +1,13 @@
 import { Router, Response } from "express";
-import { existsSync, createReadStream } from "fs";
-import { join } from "path";
-import { PassThrough } from "stream";
+import { existsSync } from "fs";
 import { prisma } from "../lib/prisma.js";
 import { authMiddleware, type AuthRequest } from "../middleware/auth.js";
-import { config } from "../lib/config.js";
 import { createNotification } from "./notifications.js";
 import archiver from "archiver";
-import { findPreviewAssetPath, getPreviewAssetExtension } from "../services/gltfAsset.js";
+import { getPreviewAssetExtension, withAssetVersion } from "../services/gltfAsset.js";
+import { resolveDbModelDownloadTarget } from "../services/modelDownloadTarget.js";
+import { getSetting } from "../lib/settings.js";
+import { DailyDownloadLimitError, recordModelDownload } from "../services/modelDownloadRecorder.js";
 
 const router = Router();
 
@@ -26,13 +26,20 @@ router.get("/api/favorites", authMiddleware, async (req: AuthRequest, res: Respo
           select: {
             id: true, name: true, originalName: true, format: true,
             thumbnailUrl: true, gltfUrl: true, gltfSize: true, originalSize: true,
-            status: true, createdAt: true,
+            status: true, createdAt: true, updatedAt: true,
           },
         },
       },
       orderBy: { createdAt: "desc" },
     });
-    res.json(favorites);
+    res.json(favorites.map((favorite: any) => ({
+      ...favorite,
+      model: favorite.model ? {
+        ...favorite.model,
+        thumbnailUrl: withAssetVersion(favorite.model.thumbnailUrl, favorite.model.updatedAt),
+        gltfUrl: withAssetVersion(favorite.model.gltfUrl, favorite.model.updatedAt),
+      } : favorite.model,
+    })));
   } catch {
     res.status(500).json({ detail: "获取收藏列表失败" });
   }
@@ -110,16 +117,43 @@ router.post("/api/favorites/batch-download", authMiddleware, async (req: AuthReq
     res.status(400).json({ detail: "请选择要下载的模型" });
     return;
   }
-  if (modelIds.length > 100) {
+  const uniqueModelIds = Array.from(new Set(modelIds.filter((id) => typeof id === "string" && id.trim()).map((id) => id.trim())));
+  if (uniqueModelIds.length === 0) {
+    res.status(400).json({ detail: "请选择要下载的模型" });
+    return;
+  }
+  if (uniqueModelIds.length > 100) {
     res.status(400).json({ detail: "单次最多下载 100 个模型" });
     return;
   }
 
   try {
-    const models = await prisma.model.findMany({
-      where: { id: { in: modelIds }, status: "completed" },
-      select: { id: true, name: true, originalName: true, format: true, gltfUrl: true, uploadPath: true },
+    const favorites = await prisma.favorite.findMany({
+      where: { userId: req.user!.userId, modelId: { in: uniqueModelIds } },
+      include: {
+        model: {
+          select: {
+            id: true,
+            name: true,
+            originalName: true,
+            format: true,
+            originalFormat: true,
+            originalSize: true,
+            gltfUrl: true,
+            gltfSize: true,
+            uploadPath: true,
+            status: true,
+          },
+        },
+      },
     });
+    const modelById = new Map(
+      favorites
+        .map((favorite: any) => favorite.model)
+        .filter((model: any) => model?.status === "completed")
+        .map((model: any) => [model.id, model])
+    );
+    const models = uniqueModelIds.map((id) => modelById.get(id)).filter(Boolean);
 
     if (models.length === 0) {
       res.status(404).json({ detail: "没有可下载的模型" });
@@ -128,48 +162,48 @@ router.post("/api/favorites/batch-download", authMiddleware, async (req: AuthReq
 
     const downloadOriginal = format === "original";
 
-    const staticDir = join(process.cwd(), config.staticDir);
-
     // Pre-scan files before committing response headers
-    const fileEntries: Array<{ filePath: string; fileName: string; binPath?: string }> = [];
+    const fileEntries: Array<{ filePath: string; fileName: string; binPath?: string; record?: { modelId: string; format: string; fileSize: number } }> = [];
     for (const m of models) {
-      let filePath: string | null = null;
-      let fileName = m.originalName || `${m.name || m.id}.${m.format}`;
-
-      if (downloadOriginal && m.uploadPath) {
-        const origPath = m.uploadPath.startsWith("/")
-          ? join(process.cwd(), m.uploadPath.slice(1))
-          : m.uploadPath;
-        if (existsSync(origPath)) {
-          filePath = origPath;
-        } else {
-          const convPath = join(staticDir, "originals", `${m.id}.${m.format}`);
-          if (existsSync(convPath)) filePath = convPath;
-        }
-        fileName = m.originalName || `${m.name || m.id}.${m.format}`;
-      }
-
-      if (!filePath && m.gltfUrl) {
-        const gltfPath = findPreviewAssetPath(join(config.staticDir, "models"), m.id, m.gltfUrl);
-        if (gltfPath && existsSync(gltfPath)) {
-          filePath = gltfPath;
-          const ext = getPreviewAssetExtension(gltfPath);
-          fileName = `${m.name || m.id}.${ext}`;
-          const binPath = gltfPath.replace(/\.gltf$/, ".bin");
-          const hasBin = ext === "gltf" && existsSync(binPath) ? binPath : undefined;
-          fileEntries.push({ filePath, fileName, binPath: hasBin });
-          continue;
-        }
-      }
-
-      if (filePath && existsSync(filePath)) {
-        fileEntries.push({ filePath, fileName });
+      const target = resolveDbModelDownloadTarget(m, downloadOriginal ? "original" : undefined);
+      if (target && existsSync(target.filePath)) {
+        const ext = getPreviewAssetExtension(target.filePath);
+        const binPath = ext === "gltf" ? target.filePath.replace(/\.gltf$/, ".bin") : undefined;
+        fileEntries.push({
+          filePath: target.filePath,
+          fileName: target.fileName,
+          binPath: binPath && existsSync(binPath) ? binPath : undefined,
+          record: target.record,
+        });
       }
     }
 
     if (fileEntries.length === 0) {
       res.status(404).json({ detail: "没有找到可下载的文件" });
       return;
+    }
+
+    const dailyLimit = Number(await getSetting<number>("daily_download_limit")) || 0;
+    if (dailyLimit > 0) {
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const currentCount = await prisma.download.count({
+        where: { userId: req.user!.userId, createdAt: { gte: today } },
+      });
+      if (currentCount + fileEntries.length > dailyLimit) {
+        res.status(429).json({ detail: `每日下载次数已达上限 (${dailyLimit} 次)` });
+        return;
+      }
+    }
+
+    for (const entry of fileEntries) {
+      if (!entry.record) continue;
+      await recordModelDownload(prisma, {
+        userId: req.user!.userId,
+        ...entry.record,
+        dailyLimit,
+        noRecord: false,
+      });
     }
 
     // Now safe to commit headers and stream
@@ -192,6 +226,10 @@ router.post("/api/favorites/batch-download", authMiddleware, async (req: AuthReq
   } catch (err: any) {
     console.error("[favorites] Batch download error:", err.message);
     if (!res.headersSent) {
+      if (err instanceof DailyDownloadLimitError) {
+        res.status(429).json({ detail: err.message });
+        return;
+      }
       res.status(500).json({ detail: "打包下载失败" });
     }
   }

@@ -1,5 +1,5 @@
 import type { SystemSettings } from "../api/settings";
-import { getCachedPublicSettings } from "./publicSettings";
+import { getPublicSettingsSnapshot } from "./publicSettings";
 
 export interface StatusConfig {
   value: string;
@@ -44,12 +44,23 @@ export interface UploadPolicy {
 
 export const DEFAULT_INQUIRY_STATUSES: StatusConfig[] = [
   { value: "draft", label: "草稿", color: "text-on-surface-variant", bg: "bg-surface-container-highest" },
-  { value: "submitted", label: "待报价", color: "text-blue-500", bg: "bg-blue-500/10", tab: true },
-  { value: "quoted", label: "已报价", color: "text-green-600", bg: "bg-green-500/10", tab: true },
-  { value: "accepted", label: "已接受", color: "text-emerald-600", bg: "bg-emerald-500/10", tab: true, terminal: true },
-  { value: "rejected", label: "已拒绝", color: "text-red-500", bg: "bg-red-500/10", tab: true, terminal: true },
+  { value: "submitted", label: "待处理", color: "text-blue-500", bg: "bg-blue-500/10", tab: true },
+  { value: "quoted", label: "已回复", color: "text-green-600", bg: "bg-green-500/10", tab: true },
+  { value: "accepted", label: "已转销售", color: "text-emerald-600", bg: "bg-emerald-500/10", tab: true, terminal: true },
+  { value: "rejected", label: "已关闭", color: "text-red-500", bg: "bg-red-500/10", tab: true, terminal: true },
   { value: "cancelled", label: "已取消", color: "text-on-surface-variant", bg: "bg-surface-container-highest", terminal: true },
 ];
+
+const INQUIRY_STATUS_LABELS: Record<string, string> = {
+  submitted: "待处理",
+  quoted: "已回复",
+  accepted: "已转销售",
+  rejected: "已关闭",
+};
+
+function normalizeInquiryStatuses(items: StatusConfig[]) {
+  return items.map((item) => INQUIRY_STATUS_LABELS[item.value] ? { ...item, label: INQUIRY_STATUS_LABELS[item.value] } : item);
+}
 
 export const DEFAULT_TICKET_STATUSES: StatusConfig[] = [
   { value: "open", label: "待处理", color: "text-primary-container", bg: "bg-primary-container/10", tab: true },
@@ -76,6 +87,8 @@ export const DEFAULT_SUPPORT_STEPS: SupportStepConfig[] = [
 export const DEFAULT_USER_NAV: NavItemConfig[] = [
   { label: "模型库", icon: "dashboard", path: "/", enabled: true },
   { label: "产品选型", icon: "tune", path: "/selection", enabled: true },
+  { label: "产品墙", icon: "image", path: "/product-wall", enabled: true },
+  { label: "规格查询", icon: "straighten", path: "/tools/thread-size", enabled: true },
   { label: "我的收藏", icon: "star", path: "/favorites", enabled: true },
   { label: "我的询价", icon: "request_quote", path: "/my-inquiries", enabled: true },
   { label: "下载历史", icon: "download", path: "/downloads", enabled: true },
@@ -89,10 +102,10 @@ export const DEFAULT_ADMIN_NAV: NavItemConfig[] = [
   { label: "分类管理", icon: "folder", path: "/admin/categories", enabled: true },
   { label: "选型管理", icon: "tune", path: "/admin/selections", enabled: true },
   { label: "询价管理", icon: "receipt_long", path: "/admin/inquiries", enabled: true },
-  { label: "单据模板", icon: "description", path: "/admin/quote-template", enabled: true },
   { label: "工单处理", icon: "build", path: "/admin/tickets", enabled: true },
   { label: "用户管理", icon: "group", path: "/admin/users", enabled: true },
   { label: "分享管理", icon: "share", path: "/admin/shares", enabled: true },
+  { label: "下载统计", icon: "download", path: "/admin/downloads", enabled: true },
   { label: "操作日志", icon: "schedule", path: "/admin/audit", enabled: true },
   { label: "系统设置", icon: "settings", path: "/admin/settings", enabled: true },
 ];
@@ -153,21 +166,38 @@ function enabled<T extends { enabled?: boolean }>(items: T[]) {
   return items.filter((item) => item.enabled !== false);
 }
 
-function normalizeAdminNav(items: NavItemConfig[]) {
-  return items.map((item) => (
-    item.path === "/admin/quote-template" && item.label === "报价模板"
-      ? { ...item, label: "单据模板" }
-      : item
-  ));
+function normalizeUserNav(items: NavItemConfig[]) {
+  const next = [...items];
+  if (!next.some((item) => item.path === "/product-wall")) {
+    const selectionIndex = next.findIndex((item) => item.path === "/selection");
+    next.splice(selectionIndex >= 0 ? selectionIndex + 1 : next.length, 0, { label: "产品墙", icon: "image", path: "/product-wall", enabled: true });
+  }
+  if (next.some((item) => item.path === "/tools/thread-size")) return next;
+  const wallIndex = next.findIndex((item) => item.path === "/product-wall");
+  const selectionIndex = next.findIndex((item) => item.path === "/selection");
+  next.splice(wallIndex >= 0 ? wallIndex + 1 : selectionIndex >= 0 ? selectionIndex + 1 : next.length, 0, { label: "规格查询", icon: "straighten", path: "/tools/thread-size", enabled: true });
+  return next;
 }
 
-export function getBusinessConfig(settings: Partial<SystemSettings> = getCachedPublicSettings()) {
+function normalizeAdminNav(items: NavItemConfig[]) {
+  const normalized = items.filter((item) => item.path !== "/admin/quote-template");
+  const withTools = normalizeUserNav(normalized);
+  if (!withTools.some((item) => item.path === "/admin/downloads")) {
+    const shareIndex = withTools.findIndex((item) => item.path === "/admin/shares");
+    const next = [...withTools];
+    next.splice(shareIndex >= 0 ? shareIndex + 1 : next.length, 0, { label: "下载统计", icon: "download", path: "/admin/downloads", enabled: true });
+    return next;
+  }
+  return withTools;
+}
+
+export function getBusinessConfig(settings: Partial<SystemSettings> = getPublicSettingsSnapshot()) {
   return {
-    inquiryStatuses: parseSetting(settings.inquiry_statuses, DEFAULT_INQUIRY_STATUSES),
+    inquiryStatuses: normalizeInquiryStatuses(parseSetting(settings.inquiry_statuses, DEFAULT_INQUIRY_STATUSES)),
     ticketStatuses: parseSetting(settings.ticket_statuses, DEFAULT_TICKET_STATUSES),
     ticketClassifications: enabled(parseSetting(settings.ticket_classifications, DEFAULT_TICKET_CLASSIFICATIONS)),
     supportProcessSteps: parseSetting(settings.support_process_steps, DEFAULT_SUPPORT_STEPS),
-    userNav: enabled(parseSetting(settings.nav_user_items, DEFAULT_USER_NAV)),
+    userNav: enabled(normalizeUserNav(parseSetting(settings.nav_user_items, DEFAULT_USER_NAV))),
     adminNav: enabled(normalizeAdminNav(parseSetting(settings.nav_admin_items, DEFAULT_ADMIN_NAV))),
     mobileNav: enabled(parseSetting(settings.nav_mobile_items, DEFAULT_MOBILE_NAV)),
     uploadPolicy: normalizeUploadPolicy({ ...DEFAULT_UPLOAD_POLICY, ...parseSetting<Partial<UploadPolicy>>(settings.upload_policy, {}) }),

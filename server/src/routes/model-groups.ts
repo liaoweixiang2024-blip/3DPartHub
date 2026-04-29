@@ -9,12 +9,25 @@ try {
 } catch {}
 
 const router = Router();
+const MAX_GROUP_MODEL_IDS = 200;
+const MAX_BATCH_MERGE_ITEMS = 50;
+const MAX_SUGGESTION_PAGE_SIZE = 100;
+
+function numericQuery(value: unknown, fallback: number, min: number, max: number): number {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) return fallback;
+  return Math.min(max, Math.max(min, Math.floor(parsed)));
+}
 
 // Create group
 router.post("/api/model-groups", authMiddleware, requireRole("ADMIN"), async (req: AuthRequest, res: Response) => {
   const { name, description, modelIds } = req.body;
   if (!name || !modelIds || !Array.isArray(modelIds) || modelIds.length === 0) {
     res.status(400).json({ detail: "需要 name 和 modelIds" });
+    return;
+  }
+  if (modelIds.length > MAX_GROUP_MODEL_IDS) {
+    res.status(400).json({ detail: `单个分组最多支持 ${MAX_GROUP_MODEL_IDS} 个模型` });
     return;
   }
 
@@ -38,7 +51,7 @@ router.post("/api/model-groups", authMiddleware, requireRole("ADMIN"), async (re
 });
 
 // List all groups
-router.get("/api/model-groups", async (_req, res: Response) => {
+router.get("/api/model-groups", authMiddleware, requireRole("ADMIN"), async (_req: AuthRequest, res: Response) => {
   if (!prisma) { res.json({ success: true, data: [] }); return; }
   const groups = await prisma.modelGroup.findMany({
     include: {
@@ -85,8 +98,8 @@ router.get("/api/model-groups", async (_req, res: Response) => {
 router.get("/api/model-groups/suggestions", authMiddleware, requireRole("ADMIN"), async (req: AuthRequest, res: Response) => {
   if (!prisma) { res.json({ success: true, data: [], total: 0 }); return; }
   try {
-    const page = Number(req.query.page) || 1;
-    const pageSize = Number(req.query.page_size) || 20;
+    const page = numericQuery(req.query.page, 1, 1, 100000);
+    const pageSize = numericQuery(req.query.page_size, 20, 1, MAX_SUGGESTION_PAGE_SIZE);
 
     const dupes = await prisma.$queryRaw`
       SELECT name, COUNT(*)::int as cnt
@@ -130,11 +143,29 @@ router.get("/api/model-groups/suggestions", authMiddleware, requireRole("ADMIN")
   }
 });
 
+router.get("/api/model-groups/count", authMiddleware, requireRole("ADMIN"), async (_req: AuthRequest, res: Response) => {
+  if (!prisma) { res.json({ success: true, data: { total: 0 } }); return; }
+  try {
+    const total = await prisma.modelGroup.count();
+    res.json({ success: true, data: { total } });
+  } catch (err: any) {
+    res.status(500).json({ detail: err.message });
+  }
+});
+
 // Batch merge — create groups from multiple name sets
 router.post("/api/model-groups/batch-merge", authMiddleware, requireRole("ADMIN"), async (req: AuthRequest, res: Response) => {
   const { items } = req.body as { items: { name: string; modelIds: string[] }[] };
   if (!items || !Array.isArray(items) || items.length === 0) {
     res.status(400).json({ detail: "需要 items 数组" });
+    return;
+  }
+  if (items.length > MAX_BATCH_MERGE_ITEMS) {
+    res.status(400).json({ detail: `单次最多合并 ${MAX_BATCH_MERGE_ITEMS} 组` });
+    return;
+  }
+  if (items.some((item) => item && Array.isArray(item.modelIds) && item.modelIds.length > MAX_GROUP_MODEL_IDS)) {
+    res.status(400).json({ detail: `单个分组最多支持 ${MAX_GROUP_MODEL_IDS} 个模型` });
     return;
   }
 
@@ -160,7 +191,7 @@ router.post("/api/model-groups/batch-merge", authMiddleware, requireRole("ADMIN"
 });
 
 // Get group detail
-router.get("/api/model-groups/:id", async (req, res: Response) => {
+router.get("/api/model-groups/:id", authMiddleware, requireRole("ADMIN"), async (req: AuthRequest, res: Response) => {
   if (!prisma) { res.status(404).json({ detail: "Not found" }); return; }
   const group = await prisma.modelGroup.findUnique({
     where: { id: req.params.id },
@@ -230,6 +261,10 @@ router.post("/api/model-groups/:id/models", authMiddleware, requireRole("ADMIN")
   const { modelIds } = req.body;
   if (!modelIds || !Array.isArray(modelIds)) {
     res.status(400).json({ detail: "需要 modelIds" });
+    return;
+  }
+  if (modelIds.length > MAX_GROUP_MODEL_IDS) {
+    res.status(400).json({ detail: `单次最多添加 ${MAX_GROUP_MODEL_IDS} 个模型` });
     return;
   }
   try {

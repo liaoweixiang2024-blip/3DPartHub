@@ -5,14 +5,15 @@ import useSWR from 'swr';
 import { useMediaQuery } from '../layouts/hooks/useMediaQuery';
 import { useDocumentTitle } from '../hooks/useDocumentTitle';
 import { SkeletonList } from '../components/shared/Skeleton';
-import TopNav from '../components/shared/TopNav';
-import BottomNav from '../components/shared/BottomNav';
-import AppSidebar from '../components/shared/Sidebar';
-import MobileNavDrawer from '../components/shared/MobileNavDrawer';
 import Icon from '../components/shared/Icon';
 import ModelThumbnail from '../components/shared/ModelThumbnail';
+import InfiniteLoadTrigger from '../components/shared/InfiniteLoadTrigger';
+import { AdminPageShell } from "../components/shared/AdminPageShell";
+import { AdminEmptyState, AdminManagementPage } from "../components/shared/AdminManagementPage";
 import { useToast } from '../components/shared/Toast';
 import { downloadsApi } from '../api/downloads';
+import { getErrorMessage } from '../lib/errorNotifications';
+import { useVisibleItems } from '../hooks/useVisibleItems';
 
 function formatFileSize(bytes: number): string {
   if (!bytes) return '-';
@@ -34,16 +35,19 @@ function formatDate(dateStr: string): string {
 
 function EmptyState() {
   return (
-    <div className="flex flex-col items-center justify-center py-24 gap-4">
-      <Icon name="download" size={64} className="text-on-surface-variant/20" />
-      <p className="text-on-surface-variant text-sm">尚未下载任何模型</p>
-      <Link
-        to="/"
-        className="bg-primary-container text-on-primary px-6 py-2.5 rounded-sm text-sm font-bold uppercase tracking-wider hover:opacity-90 transition-opacity"
-      >
-        浏览模型库
-      </Link>
-    </div>
+    <AdminEmptyState
+      icon="download"
+      title="尚未下载任何模型"
+      description="下载过的模型会保留在这里，方便你重新下载和清理记录。"
+      action={(
+        <Link
+          to="/"
+          className="rounded-md bg-primary-container px-5 py-2.5 text-sm font-semibold text-on-primary transition-opacity hover:opacity-90"
+        >
+          浏览模型库
+        </Link>
+      )}
+    />
   );
 }
 
@@ -85,6 +89,7 @@ function DesktopContent() {
   const [selected, setSelected] = useState<Set<string>>(new Set());
 
   const downloads = useMemo(() => data || [], [data]);
+  const { visibleItems: visibleDownloads, hasMore, loadMore } = useVisibleItems(downloads, 60, String(downloads.length));
 
   const toggleSelect = useCallback((id: string) => {
     setSelected(prev => {
@@ -102,8 +107,8 @@ function DesktopContent() {
     try {
       await downloadsApi.downloadFile(modelId, 'original');
       toast('下载已开始', 'success');
-    } catch (err: any) {
-      toast(err.message || '下载失败', 'error');
+    } catch (err: unknown) {
+      toast(getErrorMessage(err, '下载失败'), 'error');
     }
   }, [toast]);
 
@@ -157,46 +162,46 @@ function DesktopContent() {
     );
   }
 
+  const headerActions = downloads.length > 0 ? (
+    <>
+      {selectMode && (
+        <button onClick={selectAll} className="text-sm text-primary hover:underline">
+          {selected.size === downloads.length ? '取消全选' : '全选'}
+        </button>
+      )}
+      <button
+        onClick={() => { setSelectMode(!selectMode); setSelected(new Set()); }}
+        className={`flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-sm border transition-colors ${
+          selectMode ? 'text-primary border-primary/30 bg-primary-container/10' : 'text-on-surface-variant border-outline-variant/20 hover:text-on-surface hover:border-outline-variant/40'
+        }`}
+      >
+        <Icon name={selectMode ? "close" : "checklist"} size={16} />
+        {selectMode ? '取消选择' : '批量操作'}
+      </button>
+      {!selectMode && (
+        <button
+          onClick={handleClearAll}
+          className="flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-sm border border-error/20 text-error/70 hover:text-error hover:border-error/40 transition-colors"
+        >
+          <Icon name="delete" size={14} />
+          清空
+        </button>
+      )}
+    </>
+  ) : null;
+
   return (
-    <div>
-      <div className="flex justify-between items-end mb-6">
-        <div>
-          <h2 className="font-headline text-2xl font-bold tracking-tight text-on-surface uppercase">下载历史</h2>
-          <p className="text-sm text-on-surface-variant mt-1">{downloads.length} 条记录</p>
-        </div>
-        {downloads.length > 0 && (
-          <div className="flex items-center gap-2">
-            {selectMode && (
-              <button onClick={selectAll} className="text-sm text-primary hover:underline">
-                {selected.size === downloads.length ? '取消全选' : '全选'}
-              </button>
-            )}
-            <button
-              onClick={() => { setSelectMode(!selectMode); setSelected(new Set()); }}
-              className={`flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-sm border transition-colors ${
-                selectMode ? 'text-primary border-primary/30 bg-primary-container/10' : 'text-on-surface-variant border-outline-variant/20 hover:text-on-surface hover:border-outline-variant/40'
-              }`}
-            >
-              <Icon name={selectMode ? "close" : "checklist"} size={16} />
-              {selectMode ? '取消选择' : '批量操作'}
-            </button>
-            {!selectMode && (
-              <button
-                onClick={handleClearAll}
-                className="flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-sm border border-error/20 text-error/70 hover:text-error hover:border-error/40 transition-colors"
-              >
-                <Icon name="delete" size={14} />
-                清空
-              </button>
-            )}
-          </div>
-        )}
-      </div>
+    <AdminManagementPage
+      title="下载历史"
+      meta={`${downloads.length} 条记录`}
+      description="查看和管理你下载过的模型文件"
+      actions={headerActions}
+    >
 
       {/* Batch toolbar */}
       <AnimatePresence>
         {selectMode && selected.size > 0 && (
-          <div className="mb-4">
+          <div className="flex items-center gap-2">
             <BatchToolbar
               selectedCount={selected.size}
               onDelete={handleBatchDelete}
@@ -210,7 +215,7 @@ function DesktopContent() {
         <EmptyState />
       ) : (
         <div className="flex flex-col gap-2">
-          {downloads.map((item) => (
+          {visibleDownloads.map((item) => (
             <div
               key={item.id}
               className={`bg-surface-container-low rounded-lg border transition-all flex items-center gap-4 ${
@@ -258,9 +263,10 @@ function DesktopContent() {
               </div>
             </div>
           ))}
+          <InfiniteLoadTrigger hasMore={hasMore} isLoading={false} onLoadMore={loadMore} />
         </div>
       )}
-    </div>
+    </AdminManagementPage>
   );
 }
 
@@ -268,13 +274,14 @@ function MobileContent() {
   const { data, error, isLoading, mutate } = useSWR('/downloads', () => downloadsApi.list());
   const { toast } = useToast();
   const downloads = data || [];
+  const { visibleItems: visibleDownloads, hasMore, loadMore } = useVisibleItems(downloads, 40, String(downloads.length));
 
   const handleDownload = useCallback(async (modelId: string) => {
     try {
       await downloadsApi.downloadFile(modelId, 'original');
       toast('下载已开始', 'success');
-    } catch (err: any) {
-      toast(err.message || '下载失败', 'error');
+    } catch (err: unknown) {
+      toast(getErrorMessage(err, '下载失败'), 'error');
     }
   }, [toast]);
 
@@ -300,21 +307,19 @@ function MobileContent() {
   }, [mutate, toast]);
 
   return (
-    <div className="space-y-3 px-4 py-4 pb-20">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-lg font-bold text-on-surface">下载历史</h1>
-          <p className="text-xs text-on-surface-variant mt-0.5">{downloads.length} 条记录</p>
-        </div>
-        {downloads.length > 0 && (
+    <AdminManagementPage
+      title="下载历史"
+      meta={`${downloads.length} 条记录`}
+      description="查看和管理你下载过的模型文件"
+      actions={downloads.length > 0 ? (
           <button
             onClick={handleClearAll}
             className="text-xs text-error/70 hover:text-error px-2.5 py-1 border border-error/20 rounded-sm transition-colors"
           >
             清空
           </button>
-        )}
-      </div>
+      ) : null}
+    >
 
       {isLoading ? (
         <SkeletonList rows={6} />
@@ -327,7 +332,7 @@ function MobileContent() {
         <EmptyState />
       ) : (
         <div className="space-y-2">
-          {downloads.map((item) => (
+          {visibleDownloads.map((item) => (
             <div key={item.id} className="rounded-lg bg-surface-container-high p-3 flex items-center gap-3">
               <div className="w-12 h-12 bg-surface-container-lowest shrink-0 rounded-md flex items-center justify-center overflow-hidden">
                 <ModelThumbnail src={item.model?.thumbnail_url} alt="" className="w-full h-full object-cover" />
@@ -354,39 +359,20 @@ function MobileContent() {
               </div>
             </div>
           ))}
+          <InfiniteLoadTrigger hasMore={hasMore} isLoading={false} onLoadMore={loadMore} />
         </div>
       )}
-    </div>
+    </AdminManagementPage>
   );
 }
 
 export default function DownloadsPage() {
   useDocumentTitle("下载历史");
   const isDesktop = useMediaQuery('(min-width: 768px)');
-  const [navOpen, setNavOpen] = useState(false);
-
-  if (isDesktop) {
-    return (
-      <div className="flex flex-col h-screen overflow-hidden">
-        <TopNav />
-        <div className="flex flex-1 overflow-hidden">
-          <AppSidebar />
-          <main className="flex-1 overflow-y-auto p-8 scrollbar-hidden bg-surface-dim">
-            <DesktopContent />
-          </main>
-        </div>
-      </div>
-    );
-  }
 
   return (
-    <div className="flex flex-col h-dvh bg-surface">
-      <TopNav compact onMenuToggle={() => setNavOpen(prev => !prev)} />
-      <MobileNavDrawer open={navOpen} onClose={() => setNavOpen(false)} />
-      <main className="flex-1 overflow-y-auto scrollbar-hidden bg-surface-dim">
-        <MobileContent />
-      </main>
-      <BottomNav />
-    </div>
+    <AdminPageShell>
+      {isDesktop ? <DesktopContent /> : <MobileContent />}
+    </AdminPageShell>
   );
 }

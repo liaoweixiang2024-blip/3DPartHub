@@ -1,17 +1,16 @@
-import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import useSWR from 'swr';
 import { useMediaQuery } from '../layouts/hooks/useMediaQuery';
 import { useDocumentTitle } from '../hooks/useDocumentTitle';
 import { SkeletonList } from '../components/shared/Skeleton';
-import TopNav from '../components/shared/TopNav';
-import BottomNav from '../components/shared/BottomNav';
-import AppSidebar from '../components/shared/Sidebar';
-import MobileNavDrawer from '../components/shared/MobileNavDrawer';
 import Icon from '../components/shared/Icon';
+import InfiniteLoadTrigger from '../components/shared/InfiniteLoadTrigger';
+import { AdminPageShell } from "../components/shared/AdminPageShell";
+import { AdminEmptyState, AdminManagementPage } from "../components/shared/AdminManagementPage";
 import client from '../api/client';
 import { getCachedPublicSettings } from '../lib/publicSettings';
 import { getBusinessConfig, statusInfo } from '../lib/businessConfig';
+import { useVisibleItems } from '../hooks/useVisibleItems';
 
 interface MyTicket {
   id: string;
@@ -35,41 +34,41 @@ function useMyTickets() {
 }
 
 function Content() {
-  const { data: tickets, isLoading } = useMyTickets();
+  const { data: tickets, isLoading, mutate } = useMyTickets();
   const { data: settings } = useSWR("publicSettings", () => getCachedPublicSettings());
   const business = getBusinessConfig(settings);
   const classificationMap = new Map(business.ticketClassifications.map((item) => [item.value, item.label]));
   const navigate = useNavigate();
 
   const list = tickets || [];
+  const { visibleItems: visibleTickets, hasMore, loadMore } = useVisibleItems(list, 60, String(list.length));
 
   return (
-    <>
-      <div className="flex items-center justify-between mb-8">
-        <div>
-          <h2 className="font-headline text-2xl font-bold tracking-tight text-on-surface uppercase">我的工单</h2>
-          <p className="text-sm text-on-surface-variant mt-1">{list.length} 条记录</p>
-        </div>
-        <div className="flex items-center gap-3">
-          <button onClick={() => mutate()} className="flex items-center gap-2 px-4 py-2.5 text-sm text-on-surface-variant hover:text-on-surface border border-outline-variant/20 rounded-lg transition-colors">
-            <Icon name="refresh" size={16} />刷新
-          </button>
-          <Link to="/support" className="flex items-center gap-2 px-5 py-2.5 text-sm font-medium text-on-primary bg-primary-container rounded-lg hover:opacity-90">
-            <Icon name="add" size={16} />新建工单
-          </Link>
-        </div>
-      </div>
+    <AdminManagementPage
+      title="我的工单"
+      meta={`${list.length} 条记录`}
+      description="查看你提交的技术支持工单和处理状态"
+      actions={list.length > 0 ? (
+          <>
+            <button onClick={() => mutate()} className="flex items-center gap-2 rounded-lg border border-outline-variant/20 px-4 py-2.5 text-sm text-on-surface-variant transition-colors hover:text-on-surface">
+              <Icon name="refresh" size={16} />刷新
+            </button>
+            <Link to="/support" className="flex items-center gap-2 rounded-lg bg-primary-container px-5 py-2.5 text-sm font-medium text-on-primary hover:opacity-90">
+              <Icon name="add" size={16} />新建工单
+            </Link>
+          </>
+      ) : null}
+    >
 
       {isLoading ? (
         <SkeletonList rows={4} />
       ) : list.length === 0 ? (
-        <div className="flex flex-col items-center justify-center py-20 gap-4">
-          <Icon name="inbox" size={48} className="text-on-surface-variant/20" />
-          <p className="text-sm text-on-surface-variant">暂无工单记录</p>
-          <Link to="/support" className="bg-primary-container text-on-primary px-6 py-2.5 rounded-lg text-sm font-medium hover:opacity-90">
-            提交工单
-          </Link>
-        </div>
+        <AdminEmptyState
+          icon="inbox"
+          title="暂无工单记录"
+          description="提交技术支持工单后，可以在这里跟进处理状态。"
+          action={<Link to="/support" className="rounded-md bg-primary-container px-5 py-2.5 text-sm font-semibold text-on-primary transition-opacity hover:opacity-90">提交工单</Link>}
+        />
       ) : (
         <div className="bg-surface-container-low rounded-lg border border-outline-variant/10 overflow-auto">
           {/* Table header */}
@@ -81,7 +80,7 @@ function Content() {
             <span>时间</span>
           </div>
           {/* Table rows */}
-          {list.map((ticket) => {
+          {visibleTickets.map((ticket) => {
             const info = statusInfo(business.ticketStatuses, ticket.status);
             return (
               <div key={ticket.id} onClick={() => navigate(`/my-tickets/${ticket.id}`)} className="grid grid-cols-[120px_120px_1fr_140px_160px] gap-4 px-6 py-4 border-b border-outline-variant/5 hover:bg-surface-container-high/50 transition-colors items-center cursor-pointer">
@@ -101,9 +100,10 @@ function Content() {
               </div>
             );
           })}
+          <InfiniteLoadTrigger hasMore={hasMore} isLoading={false} onLoadMore={loadMore} />
         </div>
       )}
-    </>
+    </AdminManagementPage>
   );
 }
 
@@ -115,30 +115,31 @@ function MobileContent() {
   const navigate = useNavigate();
 
   const list = tickets || [];
+  const { visibleItems: visibleTickets, hasMore, loadMore } = useVisibleItems(list, 40, String(list.length));
 
   return (
-    <div className="px-4 py-5 pb-20">
-      <div className="flex items-center justify-between mb-4">
-        <div>
-          <h1 className="text-lg font-bold text-on-surface">我的工单</h1>
-          <p className="text-xs text-on-surface-variant mt-0.5">{list.length} 条记录</p>
-        </div>
-        <Link to="/support" className="flex items-center gap-1.5 px-3 py-2 text-xs font-medium text-on-primary bg-primary-container rounded-lg">
+    <AdminManagementPage
+      title="我的工单"
+      description="查看你提交的技术支持工单和处理状态"
+      actions={list.length > 0 ? (
+        <Link to="/support" className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-lg bg-primary-container px-3 text-xs font-medium text-on-primary">
           <Icon name="add" size={14} />新建
         </Link>
-      </div>
+      ) : null}
+    >
 
       {isLoading ? (
         <SkeletonList rows={4} />
       ) : list.length === 0 ? (
-        <div className="flex flex-col items-center justify-center py-24 gap-4">
-          <Icon name="inbox" size={64} className="text-on-surface-variant/20" />
-          <p className="text-on-surface-variant text-sm">暂无工单记录</p>
-          <Link to="/support" className="bg-primary-container text-on-primary px-6 py-2.5 rounded-sm text-sm font-bold uppercase tracking-wider hover:opacity-90 transition-opacity">提交工单</Link>
-        </div>
+        <AdminEmptyState
+          icon="inbox"
+          title="暂无工单记录"
+          description="提交技术支持工单后，可以在这里跟进处理状态。"
+          action={<Link to="/support" className="rounded-md bg-primary-container px-5 py-2.5 text-sm font-semibold text-on-primary transition-opacity hover:opacity-90">提交工单</Link>}
+        />
       ) : (
         <div className="flex flex-col gap-2.5">
-          {list.map((ticket) => {
+          {visibleTickets.map((ticket) => {
             const info = statusInfo(business.ticketStatuses, ticket.status);
             return (
               <div key={ticket.id} onClick={() => navigate(`/my-tickets/${ticket.id}`)} className="bg-surface-container-high rounded-lg p-3.5 cursor-pointer active:bg-surface-container-highest transition-colors">
@@ -161,39 +162,20 @@ function MobileContent() {
               </div>
             );
           })}
+          <InfiniteLoadTrigger hasMore={hasMore} isLoading={false} onLoadMore={loadMore} />
         </div>
       )}
-    </div>
+    </AdminManagementPage>
   );
 }
 
 export default function MyTicketsPage() {
   useDocumentTitle('我的工单');
   const isDesktop = useMediaQuery('(min-width: 768px)');
-  const [navOpen, setNavOpen] = useState(false);
-
-  if (isDesktop) {
-    return (
-      <div className="flex flex-col h-screen overflow-hidden">
-        <TopNav />
-        <div className="flex flex-1 overflow-hidden">
-          <AppSidebar />
-          <main className="flex-1 overflow-y-auto p-8 scrollbar-hidden bg-surface-dim">
-            <Content />
-          </main>
-        </div>
-      </div>
-    );
-  }
 
   return (
-    <div className="flex flex-col h-dvh bg-surface">
-      <TopNav compact onMenuToggle={() => setNavOpen((prev) => !prev)} />
-      <MobileNavDrawer open={navOpen} onClose={() => setNavOpen(false)} />
-      <main className="flex-1 overflow-y-auto scrollbar-hidden bg-surface-dim">
-        <MobileContent />
-      </main>
-      <BottomNav />
-    </div>
+    <AdminPageShell>
+      {isDesktop ? <Content /> : <MobileContent />}
+    </AdminPageShell>
   );
 }

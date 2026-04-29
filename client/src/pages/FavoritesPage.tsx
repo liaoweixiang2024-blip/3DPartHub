@@ -5,16 +5,14 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useMediaQuery } from '../layouts/hooks/useMediaQuery';
 import { useDocumentTitle } from '../hooks/useDocumentTitle';
 import { SkeletonGrid } from '../components/shared/Skeleton';
-import TopNav from '../components/shared/TopNav';
-import BottomNav from '../components/shared/BottomNav';
-import AppSidebar from '../components/shared/Sidebar';
-import MobileNavDrawer from '../components/shared/MobileNavDrawer';
 import Icon from '../components/shared/Icon';
 import ModelThumbnail from '../components/shared/ModelThumbnail';
+import { AdminPageShell } from "../components/shared/AdminPageShell";
+import { AdminEmptyState, AdminManagementPage } from "../components/shared/AdminManagementPage";
 import { useToast } from '../components/shared/Toast';
 import client from '../api/client';
 import { favoriteApi } from '../api/favorites';
-import { getAccessToken } from '../stores';
+import { downloadModelFile, isDownloadAuthRequiredError } from '../api/downloads';
 import { useFavoriteStore } from '../stores/useFavoriteStore';
 import type { FavoriteItem } from '../api/favorites';
 
@@ -38,16 +36,19 @@ function mapFavorites(items: any[]): FavoriteModel[] {
 
 function EmptyState({ message, actionLabel, actionHref }: { message: string; actionLabel: string; actionHref: string }) {
   return (
-    <div className="flex flex-col items-center justify-center py-24 gap-4">
-      <Icon name="star" size={64} className="text-on-surface-variant/20" />
-      <p className="text-on-surface-variant text-sm">{message}</p>
-      <Link
-        to={actionHref}
-        className="bg-primary-container text-on-primary px-6 py-2.5 rounded-sm text-sm font-bold uppercase tracking-wider hover:opacity-90 transition-opacity"
-      >
-        {actionLabel}
-      </Link>
-    </div>
+    <AdminEmptyState
+      icon="star"
+      title={message}
+      description="收藏后的模型会集中显示在这里，方便后续查看和下载。"
+      action={(
+        <Link
+          to={actionHref}
+          className="rounded-md bg-primary-container px-5 py-2.5 text-sm font-semibold text-on-primary transition-opacity hover:opacity-90"
+        >
+          {actionLabel}
+        </Link>
+      )}
+    />
   );
 }
 
@@ -264,12 +265,11 @@ function DesktopContent() {
   }, [selected, toast]);
 
   const handleSingleDownload = useCallback(async (modelId: string) => {
-    const token = getAccessToken();
-    if (!token) { toast('请先登录', 'error'); return; }
-    const a = document.createElement("a");
-    a.href = `/api/models/${modelId}/download?format=original&token=${encodeURIComponent(token)}`;
-    a.download = "";
-    a.click();
+    try {
+      await downloadModelFile(modelId, "original");
+    } catch (error) {
+      toast(isDownloadAuthRequiredError(error) ? '请先登录' : '下载失败', 'error');
+    }
   }, [toast]);
 
   const models = useMemo(() => (data ? mapFavorites(data) : []), [data]);
@@ -288,35 +288,32 @@ function DesktopContent() {
     );
   }
 
+  const headerActions = models.length > 0 ? (
+    <>
+      {selectMode ? (
+        <button onClick={selectAll} className="text-sm text-primary hover:underline">
+          {selected.size === models.length ? '取消全选' : '全选'}
+        </button>
+      ) : null}
+      <button
+        onClick={() => { setSelectMode(!selectMode); setSelected(new Set()); }}
+        className={`flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-sm border transition-colors ${
+          selectMode ? 'text-primary border-primary/30 bg-primary-container/10' : 'text-on-surface-variant border-outline-variant/20 hover:text-on-surface hover:border-outline-variant/40'
+        }`}
+      >
+        <Icon name={selectMode ? "close" : "checklist"} size={16} />
+        {selectMode ? '取消选择' : '批量操作'}
+      </button>
+    </>
+  ) : null;
+
   return (
-    <div>
-      <div className="flex justify-between items-end mb-6">
-        <div>
-          <h2 className="font-headline text-2xl font-bold tracking-tight text-on-surface uppercase">我的收藏</h2>
-          <p className="text-sm text-on-surface-variant mt-1">{models.length} 个模型</p>
-          {models.length > 1 && (
-            <p className="text-xs text-on-surface-variant/60 mt-1">点击「批量操作」可多选后一键下载 STEP 文件</p>
-          )}
-        </div>
-        {models.length > 0 && (
-          <div className="flex items-center gap-2">
-            {selectMode ? (
-              <button onClick={selectAll} className="text-sm text-primary hover:underline">
-                {selected.size === models.length ? '取消全选' : '全选'}
-              </button>
-            ) : null}
-            <button
-              onClick={() => { setSelectMode(!selectMode); setSelected(new Set()); }}
-              className={`flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-sm border transition-colors ${
-                selectMode ? 'text-primary border-primary/30 bg-primary-container/10' : 'text-on-surface-variant border-outline-variant/20 hover:text-on-surface hover:border-outline-variant/40'
-              }`}
-            >
-              <Icon name={selectMode ? "close" : "checklist"} size={16} />
-              {selectMode ? '取消选择' : '批量操作'}
-            </button>
-          </div>
-        )}
-      </div>
+    <AdminManagementPage
+      title="我的收藏"
+      meta={`${models.length} 个模型`}
+      description={models.length > 1 ? "点击「批量操作」可多选后一键下载 STEP 文件" : "管理你收藏的模型"}
+      actions={headerActions}
+    >
 
       {/* Batch toolbar */}
       <AnimatePresence>
@@ -363,7 +360,7 @@ function DesktopContent() {
           </Link>
         </div>
       )}
-    </div>
+    </AdminManagementPage>
   );
 }
 
@@ -435,34 +432,29 @@ function MobileContent() {
   }, [selected, toast]);
 
   const handleSingleDownload = useCallback(async (modelId: string) => {
-    const token = getAccessToken();
-    if (!token) { toast('请先登录', 'error'); return; }
-    const a = document.createElement("a");
-    a.href = `/api/models/${modelId}/download?format=original&token=${encodeURIComponent(token)}`;
-    a.download = "";
-    a.click();
+    try {
+      await downloadModelFile(modelId, "original");
+    } catch (error) {
+      toast(isDownloadAuthRequiredError(error) ? '请先登录' : '下载失败', 'error');
+    }
   }, [toast]);
 
   return (
-    <div className="px-4 py-5 pb-20">
-      <div className="mb-4">
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-lg font-bold text-on-surface">我的收藏</h1>
-            <p className="text-xs text-on-surface-variant mt-0.5">{models.length} 个模型</p>
-          </div>
-          {models.length > 0 && (
-            <button
-              onClick={() => { setSelectMode(!selectMode); setSelected(new Set()); }}
-              className={`text-xs px-2.5 py-1 rounded-sm border transition-colors ${
-                selectMode ? 'text-primary border-primary/30' : 'text-on-surface-variant border-outline-variant/20'
-              }`}
-            >
-              {selectMode ? '取消' : '批量操作'}
-            </button>
-          )}
-        </div>
-      </div>
+    <AdminManagementPage
+      title="我的收藏"
+      meta={`${models.length} 个模型`}
+      description="管理你收藏的模型"
+      actions={models.length > 0 ? (
+          <button
+            onClick={() => { setSelectMode(!selectMode); setSelected(new Set()); }}
+            className={`text-xs px-2.5 py-1 rounded-sm border transition-colors ${
+              selectMode ? 'text-primary border-primary/30' : 'text-on-surface-variant border-outline-variant/20'
+            }`}
+          >
+            {selectMode ? '取消' : '批量操作'}
+          </button>
+      ) : null}
+    >
 
       {/* Mobile batch toolbar */}
       <AnimatePresence>
@@ -517,37 +509,17 @@ function MobileContent() {
           ))}
         </div>
       )}
-    </div>
+    </AdminManagementPage>
   );
 }
 
 export default function FavoritesPage() {
   useDocumentTitle("我的收藏");
   const isDesktop = useMediaQuery('(min-width: 768px)');
-  const [navOpen, setNavOpen] = useState(false);
-
-  if (isDesktop) {
-    return (
-      <div className="flex flex-col h-screen overflow-hidden">
-        <TopNav />
-        <div className="flex flex-1 overflow-hidden">
-          <AppSidebar />
-          <main className="flex-1 overflow-y-auto p-8 scrollbar-hidden bg-surface-dim">
-            <DesktopContent />
-          </main>
-        </div>
-      </div>
-    );
-  }
 
   return (
-    <div className="flex flex-col h-dvh bg-surface">
-      <TopNav compact onMenuToggle={() => setNavOpen(prev => !prev)} />
-      <MobileNavDrawer open={navOpen} onClose={() => setNavOpen(false)} />
-      <main className="flex-1 overflow-y-auto scrollbar-hidden bg-surface-dim">
-        <MobileContent />
-      </main>
-      <BottomNav />
-    </div>
+    <AdminPageShell>
+      {isDesktop ? <DesktopContent /> : <MobileContent />}
+    </AdminPageShell>
   );
 }

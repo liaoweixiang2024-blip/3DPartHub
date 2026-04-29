@@ -1,15 +1,12 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { useMediaQuery } from '../layouts/hooks/useMediaQuery';
 import { useDocumentTitle } from '../hooks/useDocumentTitle';
 import { SkeletonList } from '../components/shared/Skeleton';
-import TopNav from '../components/shared/TopNav';
-import BottomNav from '../components/shared/BottomNav';
-import AppSidebar from '../components/shared/Sidebar';
-import MobileNavDrawer from '../components/shared/MobileNavDrawer';
 import Icon from '../components/shared/Icon';
 import SafeImage from '../components/shared/SafeImage';
+import { AdminPageShell } from "../components/shared/AdminPageShell";
+import { AdminContentPanel, AdminManagementPage } from "../components/shared/AdminManagementPage";
 import { useToast } from '../components/shared/Toast';
-import { getSettings, updateSettings, uploadImage, sendTestEmail, getBackupStats, getBackupHealth, checkBackupPolicy, verifyBackup, startBackupJob, pollBackupProgress, downloadBackup, renameBackup, deleteBackup, startRestore, pollRestoreProgress, listBackups, importBackup, importBackupAsRecord, pollImportSaveProgress, listServerBackupFiles, importBackupFromPath, type ServerBackupFile, checkUpdate, getVersion, type SystemSettings, type BackupStats, type BackupRecord, type BackupHealth, type BackupPolicyCheck } from '../api/settings';
+import { getSettings, updateSettings, uploadImage, sendTestEmail, getBackupStats, getBackupHealth, checkBackupPolicy, startVerifyBackupJob, pollVerifyBackupProgress, getActiveBackupJob, getActiveRestoreJob, getActiveImportSaveJob, getActiveVerifyBackupJob, startBackupJob, pollBackupProgress, downloadBackup, renameBackup, deleteBackup, startRestore, pollRestoreProgress, listBackups, importBackup, importBackupAsRecord, pollImportSaveProgress, listServerBackupFiles, importBackupFromPath, type ServerBackupFile, checkUpdate, getVersion, type SystemSettings, type BackupStats, type BackupRecord, type BackupHealth, type BackupPolicyCheck } from '../api/settings';
 import { COLOR_PRESETS, COLOR_KEYS } from '../lib/colorSchemes';
 import { applyColorScheme, generatePaletteFromPrimary } from '../lib/colorScheme';
 import {
@@ -36,7 +33,6 @@ const DEFAULT_SETTINGS: SystemSettings = {
   require_login_browse: false,
   allow_register: true,
   daily_download_limit: 0,
-  allow_comments: true,
   show_watermark: false,
   watermark_text: "3DPartHub",
   watermark_image: "",
@@ -110,12 +106,9 @@ const DEFAULT_SETTINGS: SystemSettings = {
   share_allow_custom_expiry: true,
   share_allow_preview: true,
   selection_page_title: "产品选型",
-  selection_page_desc: "选择产品大类，逐步筛选出精确型号",
+  selection_page_desc: "先选产品大类，再按参数逐步缩小范围",
   selection_enable_match: true,
-  field_aliases: "{}",
   selection_thread_priority: JSON.stringify(DEFAULT_THREAD_PRIORITY, null, 2),
-  quote_template: "",
-  document_templates: "",
   inquiry_statuses: JSON.stringify(DEFAULT_INQUIRY_STATUSES, null, 2),
   ticket_statuses: JSON.stringify(DEFAULT_TICKET_STATUSES, null, 2),
   ticket_classifications: JSON.stringify(DEFAULT_TICKET_CLASSIFICATIONS, null, 2),
@@ -150,19 +143,37 @@ const DEFAULT_SETTINGS: SystemSettings = {
   backup_last_auto_at: "",
 };
 
+type SettingItemType = 'switch' | 'number' | 'text' | 'image' | 'textarea' | 'select' | 'color' | 'range' | 'email-test' | 'color-scheme';
+
+interface SettingItemBase {
+  label: string;
+  desc: string;
+  options?: { value: string; label: string }[];
+  step?: number;
+  min?: number;
+  max?: number;
+}
+
+type SystemSettingItem = SettingItemBase & {
+  key: keyof SystemSettings;
+  type: Exclude<SettingItemType, 'email-test'>;
+};
+
+type ActionSettingItem = SettingItemBase & {
+  key: 'smtp_test';
+  type: 'email-test';
+};
+
+type SettingItem = SystemSettingItem | ActionSettingItem;
+
+function isSystemSettingKey(key: SettingItem['key']): key is keyof SystemSettings {
+  return key !== 'smtp_test';
+}
+
 interface SettingGroup {
   title: string;
   icon: string;
-  items: {
-    key: keyof SystemSettings;
-    label: string;
-    desc: string;
-    type: 'switch' | 'number' | 'text' | 'image' | 'textarea' | 'select' | 'color' | 'range' | 'email-test';
-    options?: { value: string; label: string }[];
-    step?: number;
-    min?: number;
-    max?: number;
-  }[];
+  items: SettingItem[];
 }
 
 const GROUPS: SettingGroup[] = [
@@ -173,13 +184,6 @@ const GROUPS: SettingGroup[] = [
       { key: 'require_login_browse', label: '登录浏览', desc: '用户必须登录后才能浏览模型列表', type: 'switch' },
       { key: 'require_login_download', label: '登录下载', desc: '用户必须登录后才能下载模型文件', type: 'switch' },
       { key: 'allow_register', label: '开放注册', desc: '允许新用户自行注册账号', type: 'switch' },
-    ],
-  },
-  {
-    title: '内容管理',
-    icon: 'chat',
-    items: [
-      { key: 'allow_comments', label: '允许评论', desc: '用户可以在模型详情页发表评论', type: 'switch' },
     ],
   },
   {
@@ -279,7 +283,7 @@ const GROUPS: SettingGroup[] = [
     title: '外观设置',
     icon: 'dark_mode',
     items: [
-      { key: 'color_scheme', label: '配色方案', desc: '预设:orange/blue/green/purple/red/teal 或 custom', type: 'color-scheme' as any },
+      { key: 'color_scheme', label: '配色方案', desc: '预设:orange/blue/green/purple/red/teal 或 custom', type: 'color-scheme' },
       { key: 'default_theme', label: '默认主题', desc: '新用户首次访问时看到的默认外观', type: 'select', options: [
         { value: 'dark', label: '暗色模式' },
         { value: 'light', label: '亮色模式' },
@@ -295,9 +299,8 @@ const GROUPS: SettingGroup[] = [
     icon: 'checklist',
     items: [
       { key: 'selection_page_title', label: '选型页标题', desc: '选型页顶部显示的标题文字', type: 'text' },
-      { key: 'selection_page_desc', label: '选型页描述', desc: '选型页标题下方的描述文字', type: 'text' },
+      { key: 'selection_page_desc', label: '选型页描述', desc: '显示在选型页标题下方，引导用户开始筛选', type: 'text' },
       { key: 'selection_enable_match', label: '模型匹配', desc: '在选型结果中自动匹配3D模型', type: 'switch' },
-      { key: 'field_aliases', label: '字段别名', desc: '配置字段间的等价匹配关系，多个别名用逗号分隔', type: 'textarea' },
       { key: 'selection_thread_priority', label: '螺纹排序优先级', desc: '配置螺纹前缀的排序权重，数值越小越靠前', type: 'textarea' },
     ],
   },
@@ -701,7 +704,6 @@ const DEFAULT_PAGE_SIZE_POLICY: PageSizePolicy = {
 
 const STRUCTURED_SETTING_KEYS = new Set<keyof SystemSettings>([
   'footer_links',
-  'field_aliases',
   'selection_thread_priority',
   'inquiry_statuses',
   'ticket_statuses',
@@ -713,60 +715,6 @@ const STRUCTURED_SETTING_KEYS = new Set<keyof SystemSettings>([
   'upload_policy',
   'page_size_policy',
   'email_templates',
-]);
-
-const ADVANCED_SETTING_KEYS = new Set<string>([
-  'site_favicon',
-  'site_description',
-  'site_keywords',
-  'footer_links',
-  'announcement_type',
-  'announcement_color',
-  'email_templates',
-  'share_max_expire_days',
-  'share_max_download_limit',
-  'share_allow_custom_expiry',
-  'share_allow_preview',
-  'viewer_exposure',
-  'viewer_ambient_intensity',
-  'viewer_main_light_intensity',
-  'viewer_fill_light_intensity',
-  'viewer_hemisphere_intensity',
-  'mat_default_color',
-  'mat_default_metalness',
-  'mat_default_roughness',
-  'mat_default_envMapIntensity',
-  'mat_metal_color',
-  'mat_metal_metalness',
-  'mat_metal_roughness',
-  'mat_metal_envMapIntensity',
-  'mat_plastic_color',
-  'mat_plastic_metalness',
-  'mat_plastic_roughness',
-  'mat_plastic_envMapIntensity',
-  'mat_glass_color',
-  'mat_glass_roughness',
-  'mat_glass_transmission',
-  'mat_glass_ior',
-  'mat_glass_thickness',
-  'auto_theme_enabled',
-  'auto_theme_dark_hour',
-  'auto_theme_light_hour',
-  'field_aliases',
-  'selection_thread_priority',
-  'inquiry_statuses',
-  'ticket_statuses',
-  'ticket_classifications',
-  'support_process_steps',
-  'nav_user_items',
-  'nav_admin_items',
-  'nav_mobile_items',
-  'upload_policy',
-  'page_size_policy',
-  'allowed_hosts',
-  'allowed_referers',
-  'backup_mirror_enabled',
-  'backup_mirror_dir',
 ]);
 
 const inputClass = 'w-full min-w-0 bg-surface-container-lowest text-on-surface text-xs rounded-md px-2.5 py-1.5 border border-outline-variant/20 outline-none focus:border-primary placeholder:text-on-surface-variant/30';
@@ -939,7 +887,10 @@ function NavItemsEditor({ itemKey, settings, updateSetting, fallback }: {
   updateSetting: SettingUpdater;
   fallback: NavItemConfig[];
 }) {
-  const items = parseSetting<NavItemConfig[]>(settings[itemKey], fallback);
+  const rawItems = parseSetting<NavItemConfig[]>(settings[itemKey], fallback);
+  const items = itemKey === 'nav_admin_items'
+    ? rawItems.filter((item) => item.path !== '/admin/quote-template')
+    : rawItems;
   const update = (next: NavItemConfig[]) => setJsonSetting(updateSetting, itemKey, next);
   const patch = (index: number, changes: Partial<NavItemConfig>) => update(items.map((item, i) => i === index ? { ...item, ...changes } : item));
 
@@ -1047,30 +998,6 @@ function ThreadPriorityEditor({ settings, updateSetting }: { settings: SystemSet
         </div>
       ))}
       <AddRowButton label="添加前缀" onClick={() => updateRows([...rows, { prefix: '', rank: rows.length }])} />
-    </div>
-  );
-}
-
-function FieldAliasesEditor({ settings, updateSetting }: { settings: SystemSettings; updateSetting: SettingUpdater }) {
-  const aliases = parseSetting<Record<string, string[]>>(settings.field_aliases, {});
-  const rows = Object.entries(aliases).map(([field, values]) => ({ field, values }));
-  const updateRows = (nextRows: { field: string; values: string[] }[]) => {
-    setJsonSetting(updateSetting, 'field_aliases', nextRows.reduce<Record<string, string[]>>((acc, row) => {
-      if (row.field.trim()) acc[row.field.trim()] = row.values;
-      return acc;
-    }, {}));
-  };
-
-  return (
-    <div className="space-y-2 w-full max-w-4xl">
-      {rows.map((row, index) => (
-        <div key={`${row.field}-${index}`} className={`grid grid-cols-1 xl:grid-cols-[1fr_2fr_auto] gap-2 ${compactPanelClass}`}>
-          <input value={row.field} onChange={(e) => updateRows(rows.map((item, i) => i === index ? { ...item, field: e.target.value } : item))} placeholder="标准字段名，如 管径" className={inputClass} />
-          <input value={row.values.join(', ')} onChange={(e) => updateRows(rows.map((item, i) => i === index ? { ...item, values: parseCsv(e.target.value) } : item))} placeholder="别名，用逗号分隔" className={inputClass} />
-          <ListActions index={index} total={rows.length} onMove={(direction) => updateRows(moveListItem(rows, index, direction))} onDelete={() => updateRows(rows.filter((_, i) => i !== index))} />
-        </div>
-      ))}
-      <AddRowButton label="添加字段别名" onClick={() => updateRows([...rows, { field: '', values: [] }])} />
     </div>
   );
 }
@@ -1333,8 +1260,6 @@ function StructuredSettingEditor({ itemKey, settings, updateSetting }: {
   switch (itemKey) {
     case 'footer_links':
       return <FooterLinksEditor settings={settings} updateSetting={updateSetting} />;
-    case 'field_aliases':
-      return <FieldAliasesEditor settings={settings} updateSetting={updateSetting} />;
     case 'selection_thread_priority':
       return <ThreadPriorityEditor settings={settings} updateSetting={updateSetting} />;
     case 'inquiry_statuses':
@@ -1371,15 +1296,8 @@ function Content() {
   const [uploading, setUploading] = useState(false);
   const [testEmailTo, setTestEmailTo] = useState("");
   const [testingEmail, setTestingEmail] = useState(false);
-  const [expandedAdvancedGroups, setExpandedAdvancedGroups] = useState<Set<string>>(() => new Set());
+  const [activeTab, setActiveTab] = useState(GROUPS[0]?.title || '访问控制');
   const imageInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
-  const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(() => {
-    const set = new Set<string>();
-    for (const g of GROUPS) {
-      if (g.items.length > 5) set.add(g.title);
-    }
-    return set;
-  });
 
   // Backup state
   const [backupStats, setBackupStats] = useState<BackupStats | null>(null);
@@ -1390,6 +1308,7 @@ function Content() {
   const [backupList, setBackupList] = useState<BackupRecord[]>([]);
   const [exporting, setExporting] = useState(false);
   const [exportProgress, setExportProgress] = useState({ stage: "", percent: 0, message: "", logs: [] as string[] });
+  const [verifyProgress, setVerifyProgress] = useState({ stage: "", percent: 0, message: "", logs: [] as string[] });
   const [importing, setImporting] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [restoreConfirmFile, setRestoreConfirmFile] = useState<File | null>(null);
@@ -1410,7 +1329,7 @@ function Content() {
   const backupInputRef = useRef<HTMLInputElement>(null);
 
   // Global busy state — prevent concurrent admin operations
-  const adminBusy = exporting || importing || restoring;
+  const adminBusy = exporting || importing || restoring || !!verifyingBackupId;
 
   useEffect(() => {
     loadSettings();
@@ -1427,15 +1346,35 @@ function Content() {
 
   async function resumePendingJobs() {
     // Resume backup job
-    const backupJobId = localStorage.getItem('backupJobId');
+    let backupJobId = localStorage.getItem('backupJobId');
+    try {
+      const activeBackup = await getActiveBackupJob();
+      if (activeBackup?.id) {
+        backupJobId = activeBackup.id;
+        localStorage.setItem('backupJobId', activeBackup.id);
+        setExportProgress({
+          stage: activeBackup.stage || 'resuming',
+          percent: activeBackup.percent ?? 0,
+          message: activeBackup.message || '正在恢复备份任务...',
+          logs: activeBackup.logs || [],
+        });
+      } else if (backupJobId) {
+        localStorage.removeItem('backupJobId');
+        backupJobId = null;
+      }
+    } catch {
+      // Active job lookup is best-effort; the normal saved-job resume still works.
+    }
     if (backupJobId) {
       setExporting(true);
-      setExportProgress({ stage: 'resuming', percent: 0, message: '正在恢复备份任务...', logs: [] });
+      setExportProgress(prev => prev.stage
+        ? prev
+        : { stage: 'resuming', percent: 0, message: '正在恢复备份任务...', logs: [] });
       try {
         await pollBackupProgress(backupJobId, (stage, percent, message, logs) => {
           setExportProgress({ stage, percent, message, logs: logs || [] });
         });
-        toast('备份导出成功', 'success');
+        toast('备份创建成功', 'success');
         loadBackupList();
         loadBackupStats();
         loadBackupHealth();
@@ -1449,12 +1388,33 @@ function Content() {
     }
 
     // Resume restore job
-    const restoreJobId = localStorage.getItem('restoreJobId');
+    let restoreJobId = localStorage.getItem('restoreJobId');
+    try {
+      const activeRestore = await getActiveRestoreJob();
+      if (activeRestore?.id) {
+        restoreJobId = activeRestore.id;
+        localStorage.setItem('restoreJobId', activeRestore.id);
+        setRestoreProgress({
+          stage: activeRestore.stage || 'resuming',
+          percent: activeRestore.percent ?? 0,
+          message: activeRestore.message || '正在恢复备份恢复任务...',
+          logs: activeRestore.logs || [],
+        });
+      } else if (restoreJobId) {
+        localStorage.removeItem('restoreJobId');
+        localStorage.removeItem('restoreConfirmBackupId');
+        restoreJobId = null;
+      }
+    } catch {
+      // Best-effort active lookup; saved job id still works.
+    }
     if (restoreJobId) {
       const savedBackupId = localStorage.getItem('restoreConfirmBackupId');
       if (savedBackupId) setRestoreConfirmId(savedBackupId);
       setRestoring(true);
-      setRestoreProgress({ stage: 'resuming', percent: 0, message: '正在恢复恢复任务...', logs: [] });
+      setRestoreProgress(prev => prev.stage
+        ? prev
+        : { stage: 'resuming', percent: 0, message: '正在恢复备份恢复任务...', logs: [] });
       try {
         const result = await pollRestoreProgress(restoreJobId, (stage, percent, message, logs) => {
           setRestoreProgress({ stage, percent, message, logs: logs || [] });
@@ -1475,10 +1435,30 @@ function Content() {
     }
 
     // Resume import-save job
-    const importSaveJobId = localStorage.getItem('importSaveJobId');
+    let importSaveJobId = localStorage.getItem('importSaveJobId');
+    try {
+      const activeImportSave = await getActiveImportSaveJob();
+      if (activeImportSave?.id) {
+        importSaveJobId = activeImportSave.id;
+        localStorage.setItem('importSaveJobId', activeImportSave.id);
+        setRestoreProgress({
+          stage: activeImportSave.stage || 'resuming',
+          percent: activeImportSave.percent ?? 0,
+          message: activeImportSave.message || '正在恢复导入保存任务...',
+          logs: activeImportSave.logs || [],
+        });
+      } else if (importSaveJobId) {
+        localStorage.removeItem('importSaveJobId');
+        importSaveJobId = null;
+      }
+    } catch {
+      // Best-effort active lookup; saved job id still works.
+    }
     if (importSaveJobId) {
       setImporting(true);
-      setRestoreProgress({ stage: 'resuming', percent: 0, message: '正在恢复导入保存任务...', logs: [] });
+      setRestoreProgress(prev => prev.stage
+        ? prev
+        : { stage: 'resuming', percent: 0, message: '正在恢复导入保存任务...', logs: [] });
       try {
         await pollImportSaveProgress(importSaveJobId, (stage, percent, message, logs) => {
           setRestoreProgress({ stage, percent, message, logs: logs || [] });
@@ -1494,6 +1474,34 @@ function Content() {
         setImporting(false);
         setRestoreProgress({ stage: '', percent: 0, message: '', logs: [] });
       }
+    }
+
+    try {
+      const activeVerify = await getActiveVerifyBackupJob();
+      if (activeVerify?.id && activeVerify.backupId) {
+        setVerifyingBackupId(activeVerify.backupId);
+        setVerifyProgress({
+          stage: activeVerify.stage || 'validating_archive',
+          percent: activeVerify.percent ?? 0,
+          message: activeVerify.message || '正在恢复校验任务...',
+          logs: activeVerify.logs || [],
+        });
+        try {
+          const result = await pollVerifyBackupProgress(activeVerify.id, (stage, percent, message, logs) => {
+            setVerifyProgress({ stage, percent, message, logs: logs || [] });
+          });
+          toast(result.message || '备份校验通过', 'success');
+          loadBackupList();
+          loadBackupHealth();
+        } catch (err: any) {
+          toast(err.message || '备份校验失败', 'error');
+        } finally {
+          setVerifyingBackupId(null);
+          setVerifyProgress({ stage: '', percent: 0, message: '', logs: [] });
+        }
+      }
+    } catch {
+      // Best-effort active lookup; manual verification still works.
     }
   }
 
@@ -1544,8 +1552,12 @@ function Content() {
 
   async function handleVerifyBackup(id: string) {
     setVerifyingBackupId(id);
+    setVerifyProgress({ stage: 'queued', percent: 0, message: '正在准备校验备份...', logs: [] });
     try {
-      const result = await verifyBackup(id);
+      const jobId = await startVerifyBackupJob(id);
+      const result = await pollVerifyBackupProgress(jobId, (stage, percent, message, logs) => {
+        setVerifyProgress({ stage, percent, message, logs: logs || [] });
+      });
       toast(result.message || '备份校验通过', 'success');
       loadBackupList();
       loadBackupHealth();
@@ -1553,6 +1565,7 @@ function Content() {
       toast(err.response?.data?.message || err.message || '备份校验失败', 'error');
     } finally {
       setVerifyingBackupId(null);
+      setVerifyProgress({ stage: '', percent: 0, message: '', logs: [] });
     }
   }
 
@@ -1626,7 +1639,7 @@ function Content() {
       await pollBackupProgress(jobId, (stage, percent, message, logs) => {
         setExportProgress({ stage, percent, message, logs: logs || [] });
       });
-      toast('备份导出成功', 'success');
+      toast('备份创建成功', 'success');
       localStorage.removeItem('backupJobId');
       loadBackupList();
       loadBackupStats();
@@ -1639,7 +1652,7 @@ function Content() {
           await pollBackupProgress(err.jobId, (stage, percent, message, logs) => {
             setExportProgress({ stage, percent, message, logs: logs || [] });
           });
-          toast('备份导出成功', 'success');
+          toast('备份创建成功', 'success');
           loadBackupList();
           loadBackupStats();
           loadBackupHealth();
@@ -1855,62 +1868,75 @@ function Content() {
   }
 
   if (loading) {
-    return <SkeletonList rows={6} />;
+    return (
+      <AdminManagementPage title="系统设置" description="配置平台的全局行为和访问策略">
+        <AdminContentPanel scroll className="p-4">
+          <SkeletonList rows={6} />
+        </AdminContentPanel>
+      </AdminManagementPage>
+    );
   }
 
-  return (
-    <>
-      <div className="flex items-center justify-between mb-8">
-        <div>
-          <h2 className="font-headline text-2xl font-bold tracking-tight text-on-surface uppercase">系统设置</h2>
-          <p className="text-sm text-on-surface-variant mt-1">配置平台的全局行为和访问策略</p>
-        </div>
-        {(() => {
-          const allKeys = [...GROUPS.map(g => g.title), '数据备份'];
-          const allCollapsed = allKeys.every(k => collapsedGroups.has(k));
-          return (
-            <button
-              onClick={() => setCollapsedGroups(allCollapsed ? new Set() : new Set(allKeys))}
-              className="text-sm text-on-surface-variant hover:text-on-surface transition-colors flex items-center gap-1"
-            >
-              <Icon name={allCollapsed ? 'expand_less' : 'expand_more'} size={16} />
-              {allCollapsed ? '全部展开' : '全部收起'}
-            </button>
-          );
-        })()}
+  const tabs = [...GROUPS.map((group) => ({ title: group.title, icon: group.icon })), { title: '数据备份', icon: 'cloud_upload' }];
+  const activeGroup = GROUPS.find((group) => group.title === activeTab);
+  const headerActions = (
+    <div className="flex min-h-10 shrink-0 items-center justify-end gap-2 rounded-xl border border-outline-variant/12 bg-surface-container-low px-2.5 py-1 shadow-sm">
+      <span className={`hidden items-center gap-1.5 whitespace-nowrap rounded-full px-2 text-xs md:inline-flex ${changed ? 'text-amber-500' : 'text-on-surface-variant'}`}>
+        <span className={`h-1.5 w-1.5 rounded-full ${changed ? 'bg-amber-500' : 'bg-emerald-500'}`} />
+        {changed ? '有未保存修改' : '当前配置已保存'}
+      </span>
+      <button
+        onClick={handleSave}
+        disabled={!changed || saving}
+        className="inline-flex h-8 shrink-0 items-center justify-center gap-1.5 rounded-lg bg-primary-container px-3.5 text-xs font-bold text-on-primary shadow-sm transition-all hover:-translate-y-px hover:opacity-95 disabled:translate-y-0 disabled:cursor-not-allowed disabled:bg-surface-container-high disabled:text-on-surface-variant disabled:shadow-none"
+      >
+        <Icon name="save" size={14} />
+        {saving ? '保存中...' : '保存设置'}
+      </button>
+    </div>
+  );
+  const settingsToolbar = (
+    <div className="flex min-h-11 flex-wrap items-center justify-between gap-3">
+      <div className="flex min-h-9 min-w-0 flex-1 flex-wrap items-center gap-x-1 gap-y-1.5">
+        {tabs.map((tab) => (
+          <button
+            key={tab.title}
+            type="button"
+            onClick={() => setActiveTab(tab.title)}
+            className={`relative inline-flex h-9 shrink-0 items-center justify-center gap-1.5 px-3 text-sm font-medium leading-none transition-colors ${
+              activeTab === tab.title
+                ? 'text-primary-container after:absolute after:inset-x-3 after:bottom-0 after:h-0.5 after:rounded-full after:bg-primary-container'
+                : 'text-on-surface-variant hover:text-on-surface'
+            }`}
+          >
+            <Icon name={tab.icon} size={14} />
+            <span className="whitespace-nowrap">{tab.title}</span>
+          </button>
+        ))}
       </div>
+    </div>
+  );
 
-      <div className="flex flex-col gap-6 pb-20">
-        {GROUPS.map(group => {
-          const collapsed = collapsedGroups.has(group.title);
-          const advancedItems = group.items.filter(item => ADVANCED_SETTING_KEYS.has(String(item.key)));
-          const advancedExpanded = expandedAdvancedGroups.has(group.title);
-          const visibleItems = advancedExpanded
-            ? group.items
-            : group.items.filter(item => !ADVANCED_SETTING_KEYS.has(String(item.key)));
-          const shownCount = collapsed ? group.items.length : visibleItems.length;
+  return (
+    <AdminManagementPage title="系统设置" description="配置平台的全局行为和访问策略" actions={headerActions} toolbar={settingsToolbar} contentClassName="min-h-0 overflow-hidden">
+      <AdminContentPanel scroll className="h-full overflow-hidden">
+        <div className="h-full overflow-y-auto overflow-x-hidden p-4 custom-scrollbar">
+
+      <div key={activeTab} className="admin-tab-panel flex flex-col gap-4">
+        {activeGroup ? [activeGroup].map(group => {
+          const visibleItems = group.items;
           return (
           <div key={group.title} className="bg-surface-container-low rounded-lg border border-outline-variant/10 overflow-hidden">
             <div
-              className="px-4 sm:px-6 py-4 border-b border-outline-variant/10 bg-surface-container-high/50 flex items-center gap-2.5 cursor-pointer select-none hover:bg-surface-container-high/80 transition-colors"
-              onClick={() => setCollapsedGroups(prev => {
-                const next = new Set(prev);
-                if (next.has(group.title)) next.delete(group.title);
-                else next.add(group.title);
-                return next;
-              })}
+              className="px-4 sm:px-6 py-4 border-b border-outline-variant/10 bg-surface-container-high/50 flex items-center gap-2.5"
             >
               <Icon name={group.icon} size={18} className="text-primary-container" />
               <h3 className="text-sm font-bold text-on-surface uppercase tracking-wider flex-1">{group.title}</h3>
-              <span className="text-sm text-on-surface-variant mr-3">
-                {advancedItems.length > 0 && !collapsed ? `${shownCount}/${group.items.length}` : group.items.length} 项
-              </span>
-              <Icon name={collapsed ? 'expand_more' : 'expand_less'} size={18} className="text-on-surface-variant" />
             </div>
-            {!collapsed && (
+            <>
             <div className="divide-y divide-outline-variant/5">
               {visibleItems.map((item, itemIndex) => {
-                const structuredEditor = STRUCTURED_SETTING_KEYS.has(item.key)
+                const structuredEditor = isSystemSettingKey(item.key) && STRUCTURED_SETTING_KEYS.has(item.key)
                   ? <StructuredSettingEditor itemKey={item.key} settings={settings} updateSetting={updateSetting} />
                   : null;
                 const isWideControl = Boolean(structuredEditor) || item.type === 'textarea' || item.type === 'email-test';
@@ -2015,7 +2041,7 @@ function Content() {
                         value={settings[item.key] as string}
                         onChange={(e) => updateSetting(item.key, e.target.value)}
                         placeholder={item.desc}
-                        rows={item.key === 'quote_template' ? 20 : 3}
+                        rows={3}
                         className="w-full bg-surface-container-lowest text-on-surface text-sm rounded-md px-3 py-2 border border-outline-variant/20 outline-none focus:border-primary placeholder:text-on-surface-variant/30 resize-y font-mono"
                       />
                       {item.key === 'allowed_hosts' && typeof window !== 'undefined' && (
@@ -2080,46 +2106,22 @@ function Content() {
                 </div>
               );
               })}
-              {advancedItems.length > 0 && (
-                <div className="px-4 sm:px-6 py-3 bg-surface-container-high/15">
-                  <button
-                    type="button"
-                    onClick={() => setExpandedAdvancedGroups(prev => {
-                      const next = new Set(prev);
-                      if (next.has(group.title)) next.delete(group.title);
-                      else next.add(group.title);
-                      return next;
-                    })}
-                    className="w-full flex items-center justify-center gap-2 rounded-md border border-dashed border-outline-variant/25 bg-surface-container-lowest/30 px-3 py-2 text-xs font-medium text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high/40 transition-colors"
-                  >
-                    <Icon name={advancedExpanded ? 'expand_less' : 'expand_more'} size={15} />
-                    {advancedExpanded ? '收起高级设置' : `展开高级设置（${advancedItems.length} 项）`}
-                  </button>
-                </div>
-              )}
             </div>
-            )}
+            </>
           </div>
         );
-      })}
+      }) : null}
 
+        {activeTab === '数据备份' && (
+        <>
         {/* Data Backup Section */}
         <div className="bg-surface-container-low rounded-lg border border-outline-variant/10 overflow-hidden">
           <div
-            className="px-6 py-4 border-b border-outline-variant/10 bg-surface-container-high/50 flex items-center gap-2.5 cursor-pointer select-none hover:bg-surface-container-high/80 transition-colors"
-            onClick={() => setCollapsedGroups(prev => {
-              const next = new Set(prev);
-              if (next.has('数据备份')) next.delete('数据备份');
-              else next.add('数据备份');
-              return next;
-            })}
+            className="px-6 py-4 border-b border-outline-variant/10 bg-surface-container-high/50 flex items-center gap-2.5"
           >
             <Icon name="cloud_upload" size={18} className="text-primary-container" />
             <h3 className="text-sm font-bold text-on-surface uppercase tracking-wider flex-1">数据备份</h3>
-            <span className="text-sm text-on-surface-variant mr-3">5 项</span>
-            <Icon name={collapsedGroups.has('数据备份') ? 'expand_more' : 'expand_less'} size={18} className="text-on-surface-variant" />
           </div>
-          {!collapsedGroups.has('数据备份') && (
           <div className="divide-y divide-outline-variant/5">
             {/* Backup health */}
             {backupHealth && (
@@ -2287,7 +2289,7 @@ function Content() {
                             <Icon name="download" size={13} />下载
                           </button>
                           <button onClick={() => handleVerifyBackup(b.id)} disabled={adminBusy || verifyingBackupId === b.id} className="px-2.5 py-1.5 text-xs font-medium bg-surface-container-high/60 text-on-surface-variant rounded-md hover:bg-surface-container-highest/50 disabled:opacity-50 transition-colors flex items-center gap-1">
-                            <Icon name="verified" size={13} />{verifyingBackupId === b.id ? '校验中' : '校验'}
+                            <Icon name="verified" size={13} />{verifyingBackupId === b.id ? `${verifyProgress.percent}%` : '校验'}
                           </button>
                           <button onClick={() => { setRenamingId(b.id); setRenameValue(b.name); }} disabled={adminBusy} className="px-2.5 py-1.5 text-xs font-medium bg-surface-container-high/60 text-on-surface-variant rounded-md hover:bg-surface-container-highest/50 disabled:opacity-50 transition-colors flex items-center gap-1">
                             <Icon name="edit" size={13} />重命名
@@ -2297,6 +2299,12 @@ function Content() {
                           </button>
                         </div>
                       </div>
+
+                      {verifyingBackupId === b.id && (
+                        <div className="mt-3">
+                          <TaskProgressCard progress={verifyProgress} color="primary" />
+                        </div>
+                      )}
 
                       {restoreConfirmId === b.id && (
                         <div className="mt-3 bg-error-container/10 border border-error/20 rounded-md p-3">
@@ -2577,56 +2585,23 @@ function Content() {
               )}
             </div>
           </div>
-          )}
         </div>
+        </>
+        )}
       </div>
-
-      {/* Floating save button */}
-      {changed && (
-        <div className="fixed bottom-4 right-4 z-50 animate-[fadeInUp_0.2s_ease-out]">
-          <button
-            onClick={handleSave}
-            disabled={saving}
-            className="flex items-center gap-2 px-6 py-3 bg-primary-container text-on-primary rounded-xl text-sm font-bold shadow-lg hover:opacity-90 disabled:opacity-50 active:scale-95 transition-all"
-          >
-            <Icon name="save" size={16} />
-            {saving ? '保存中...' : '保存设置'}
-          </button>
         </div>
-      )}
-    </>
+      </AdminContentPanel>
+
+    </AdminManagementPage>
   );
 }
 
 export default function SettingsPage() {
   useDocumentTitle('系统设置');
-  const isDesktop = useMediaQuery('(min-width: 768px)');
-  const [navOpen, setNavOpen] = useState(false);
-
-  if (isDesktop) {
-    return (
-      <div className="flex flex-col h-screen overflow-hidden">
-        <TopNav />
-        <div className="flex flex-1 overflow-hidden">
-          <AppSidebar />
-          <main className="flex-1 overflow-y-auto p-8 scrollbar-hidden bg-surface-dim">
-            <Content />
-          </main>
-        </div>
-      </div>
-    );
-  }
 
   return (
-    <div className="flex flex-col h-dvh bg-surface">
-      <TopNav compact onMenuToggle={() => setNavOpen(prev => !prev)} />
-      <MobileNavDrawer open={navOpen} onClose={() => setNavOpen(false)} />
-      <main className="flex-1 overflow-y-auto scrollbar-hidden bg-surface-dim">
-        <div className="px-4 py-4 pb-20">
-          <Content />
-        </div>
-      </main>
-      <BottomNav />
-    </div>
+    <AdminPageShell>
+      <Content />
+    </AdminPageShell>
   );
 }

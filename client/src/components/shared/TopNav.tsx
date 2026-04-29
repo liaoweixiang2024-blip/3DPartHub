@@ -1,11 +1,9 @@
 import { Link, useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
-import { useState, useCallback, useEffect, useRef } from "react";
+import { lazy, Suspense, useState, useCallback, useEffect, useRef } from "react";
 import { useThemeStore } from "../../stores/useThemeStore";
 import { useAuthStore } from "../../stores/useAuthStore";
 import { mutate } from "swr";
-import UploadModal from "./UploadModal";
-import NotificationPanel from "./NotificationPanel";
 import Icon from "./Icon";
 import Tooltip from "./Tooltip";
 import BrandMark from "./BrandMark";
@@ -20,9 +18,48 @@ import {
   type HomeSearchEventDetail,
 } from "../../lib/homeSearchState";
 
+const NotificationPanel = lazy(() => import("./NotificationPanel"));
+const UploadModal = lazy(() => import("./UploadModal"));
+
 interface TopNavProps {
   compact?: boolean;
   onMenuToggle?: () => void;
+}
+
+function NotificationPanelLoader({ compact = false }: { compact?: boolean }) {
+  return (
+    <Suspense
+      fallback={
+        <button
+          type="button"
+          className={`${compact ? "h-9 w-9" : "p-2"} rounded-lg text-on-surface-variant`}
+          aria-label="通知"
+          disabled
+        >
+          <Icon name="notifications" size={compact ? 18 : 20} />
+        </button>
+      }
+    >
+      <NotificationPanel compact={compact} />
+    </Suspense>
+  );
+}
+
+function UploadModalLoader({
+  open,
+  onClose,
+  onConverted,
+}: {
+  open: boolean;
+  onClose: () => void;
+  onConverted: () => void;
+}) {
+  if (!open) return null;
+  return (
+    <Suspense fallback={null}>
+      <UploadModal open={open} onClose={onClose} onConverted={onConverted} />
+    </Suspense>
+  );
 }
 
 function UserMenu({ size = 'default' }: { size?: 'compact' | 'default' }) {
@@ -165,7 +202,7 @@ export default function TopNav({ compact = false, onMenuToggle }: TopNavProps) {
   const [localQuery, setLocalQuery] = useState(() => readHomeSearchQuery() ?? searchParams.get("q") ?? "");
   const navigate = useNavigate();
   const location = useLocation();
-  const debounceRef = useRef<ReturnType<typeof setTimeout>>();
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Force re-render when site config changes
   const [, forceUpdate] = useState(0);
   useEffect(() => {
@@ -237,7 +274,7 @@ export default function TopNav({ compact = false, onMenuToggle }: TopNavProps) {
               <BrandMark size="compact" />
             </Link>
             <div className="ml-auto flex h-9 shrink-0 items-center gap-0.5">
-              <NotificationPanel compact />
+              <NotificationPanelLoader compact />
               <ThemeToggle />
               <UserMenu size="compact" />
             </div>
@@ -261,7 +298,7 @@ export default function TopNav({ compact = false, onMenuToggle }: TopNavProps) {
             </form>
           </div>
         </header>
-        <UploadModal open={uploadOpen} onClose={() => setUploadOpen(false)} onConverted={handleUploaded} />
+        <UploadModalLoader open={uploadOpen} onClose={() => setUploadOpen(false)} onConverted={handleUploaded} />
       </>
     );
   }
@@ -335,12 +372,12 @@ export default function TopNav({ compact = false, onMenuToggle }: TopNavProps) {
               <Icon name="support_agent" size={20} />
             </Link>
           </Tooltip>
-          <NotificationPanel />
+          <NotificationPanelLoader />
           <ThemeToggle />
           <UserMenu />
         </div>
       </header>
-      <UploadModal open={uploadOpen} onClose={() => setUploadOpen(false)} onConverted={handleUploaded} />
+      <UploadModalLoader open={uploadOpen} onClose={() => setUploadOpen(false)} onConverted={handleUploaded} />
     </>
   );
 }

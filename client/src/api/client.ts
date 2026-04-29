@@ -1,10 +1,12 @@
 import axios from "axios";
 import { getAccessToken, useAuthStore } from "../stores/useAuthStore";
 import { notifyGlobalError } from "../lib/errorNotifications";
+import { unwrapApiData } from "./response";
 
 const client = axios.create({
   baseURL: import.meta.env.VITE_API_BASE_URL || "/api",
   timeout: 120000,
+  withCredentials: true,
   headers: {
     "Content-Type": "application/json",
   },
@@ -100,18 +102,18 @@ client.interceptors.response.use(
     try {
       const tokens = useAuthStore.getState().tokens;
       const refreshToken = tokens?.refreshToken;
-      if (!refreshToken) throw new Error("No refresh token");
 
       const { data: resp } = await axios.post(
         `${import.meta.env.VITE_API_BASE_URL || "/api"}/auth/refresh`,
-        { refreshToken }
+        refreshToken ? { refreshToken } : {},
+        { withCredentials: true }
       );
 
-      const newAccessToken = resp.data?.data?.accessToken || resp.data?.accessToken || resp.accessToken;
+      const newAccessToken = unwrapApiData<{ accessToken?: string }>(resp).accessToken;
       if (!newAccessToken) throw new Error("No access token in refresh response");
 
-      // Update tokens via store (keeps accessToken in memory only)
-      useAuthStore.getState().setTokens({ accessToken: newAccessToken, refreshToken });
+      // Update in-memory accessToken; refreshToken lives in an HttpOnly cookie.
+      useAuthStore.getState().setAccessToken(newAccessToken, refreshToken);
 
       processQueue(null, newAccessToken);
       originalRequest.headers.Authorization = `Bearer ${newAccessToken}`;

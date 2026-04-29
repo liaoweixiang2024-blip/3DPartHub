@@ -1,4 +1,5 @@
 import client from "./client";
+import { unwrapApiData } from "./response";
 
 export interface CategoryItem {
   id: string;
@@ -6,16 +7,17 @@ export interface CategoryItem {
   icon: string;
   parentId: string | null;
   sortOrder: number;
+  count?: number;
   children: CategoryItem[];
 }
 
 export const categoriesApi = {
   tree: async (): Promise<{ items: CategoryItem[]; total: number }> => {
     const { data: resp } = await client.get("/categories");
-    const raw = resp.data?.data ?? resp.data ?? resp;
+    const raw = unwrapApiData<CategoryItem[] | { data?: CategoryItem[]; total?: number }>(resp);
     // Backend returns { data: [...], total: N } wrapped by responseHandler
     if (typeof raw === "object" && !Array.isArray(raw) && "data" in raw) {
-      return { items: (raw as any).data ?? [], total: (raw as any).total ?? 0 };
+      return { items: raw.data ?? [], total: raw.total ?? 0 };
     }
     if (Array.isArray(raw)) return { items: raw, total: 0 };
     return { items: [], total: 0 };
@@ -23,17 +25,17 @@ export const categoriesApi = {
 
   flat: async (): Promise<CategoryItem[]> => {
     const { data: resp } = await client.get("/categories/flat");
-    return resp.data?.data ?? resp.data ?? resp;
+    return unwrapApiData<CategoryItem[]>(resp);
   },
 
   create: async (payload: { name: string; icon?: string; parentId?: string | null; sortOrder?: number }): Promise<CategoryItem> => {
     const { data: resp } = await client.post("/categories", payload);
-    return resp.data?.data ?? resp.data ?? resp;
+    return unwrapApiData<CategoryItem>(resp);
   },
 
   update: async (id: string, payload: { name?: string; icon?: string; parentId?: string | null; sortOrder?: number }): Promise<CategoryItem> => {
     const { data: resp } = await client.put(`/categories/${id}`, payload);
-    return resp.data?.data ?? resp.data ?? resp;
+    return unwrapApiData<CategoryItem>(resp);
   },
 
   delete: async (id: string): Promise<void> => {

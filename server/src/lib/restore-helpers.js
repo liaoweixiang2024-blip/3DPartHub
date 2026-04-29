@@ -11,20 +11,18 @@
  * These helpers temporarily drop and re-add those constraints.
  */
 
-const { execSync } = require("child_process");
-
-const CONTAINER_DETECT_CMD = "which pg_dump";
+const { execFileSync } = require("child_process");
 
 let _container = undefined;
 
 function getContainer() {
   if (_container !== undefined) return _container;
   try {
-    execSync(CONTAINER_DETECT_CMD, { stdio: "pipe", timeout: 5000 });
+    execFileSync("pg_dump", ["--version"], { stdio: "pipe", timeout: 5000 });
     _container = null;
   } catch {
     try {
-      const names = execSync("docker ps --format '{{.Names}}'", { stdio: "pipe", timeout: 5000 })
+      const names = execFileSync("docker", ["ps", "--format", "{{.Names}}"], { stdio: "pipe", timeout: 5000 })
         .toString()
         .trim()
         .split("\n");
@@ -41,15 +39,15 @@ function runSql(dbUrl, sql) {
   const container = getContainer();
   const dbName = new URL(dbUrl).pathname.replace(/^\//, "");
   const user = new URL(dbUrl).username;
-  const escapedSql = sql.replace(/"/g, '\\"');
 
   if (container) {
-    execSync(
-      `docker exec ${container} psql -U ${user} -d ${dbName} -c "${escapedSql}"`,
+    execFileSync(
+      "docker",
+      ["exec", container, "psql", "-U", user, "-d", dbName, "-c", sql],
       { stdio: "pipe", timeout: 60_000 }
     );
   } else {
-    execSync(`psql "${dbUrl}" -c "${escapedSql}"`, {
+    execFileSync("psql", [dbUrl, "-c", sql], {
       stdio: "pipe",
       timeout: 60_000,
     });

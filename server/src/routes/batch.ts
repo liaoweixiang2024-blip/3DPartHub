@@ -9,10 +9,13 @@ import { authMiddleware, verifyRequestToken, type AuthRequest } from "../middlew
 import { requireRole } from "../middleware/rbac.js";
 import { config } from "../lib/config.js";
 import { sendAcceleratedFile } from "../lib/acceleratedDownload.js";
+import { consumeProtectedResourceToken, createProtectedResourceToken } from "../lib/downloadTokenStore.js";
+import { optionalString } from "../lib/requestValidation.js";
 import { findPreviewAssetPath, getPreviewAssetExtension } from "../services/gltfAsset.js";
 import { conversionQueue } from "../lib/queue.js";
 import { cacheDelByPrefix } from "../lib/cache.js";
 import { getBusinessConfig } from "../lib/businessConfig.js";
+import { MODEL_STATUS } from "../services/modelStatus.js";
 
 const router = Router();
 
@@ -54,7 +57,7 @@ router.post("/api/batch/download", authMiddleware, requireRole("ADMIN"), async (
     }
 
     const models = await prisma.model.findMany({
-      where: { id: { in: modelIds }, status: "completed" },
+      where: { id: { in: modelIds }, status: MODEL_STATUS.COMPLETED },
     });
 
     if (models.length === 0) {
@@ -108,22 +111,40 @@ router.post("/api/batch/download", authMiddleware, requireRole("ADMIN"), async (
       } catch { /* ignore */ }
     }
 
-    res.json({ url: `/api/batch/downloads/${zipName}`, count: models.length });
+    const token = createProtectedResourceToken({
+      type: "batch-download",
+      resourceId: zipName,
+      userId: req.user!.userId,
+      role: req.user!.role,
+      singleUse: true,
+    });
+
+    res.json({
+      url: `/api/batch/downloads/${zipName}?download_token=${encodeURIComponent(token.token)}`,
+      count: models.length,
+    });
   } catch (err) {
     res.status(500).json({ detail: "批量下载失败" });
   }
 });
 
 router.get("/api/batch/downloads/:file", async (req, res: Response) => {
-  const user = verifyRequestToken(req, { allowQueryToken: true });
-  if (!user || user.role !== "ADMIN") {
-    res.status(401).json({ detail: "需要管理员权限" });
-    return;
-  }
-
   const fileName = basename(String(req.params.file || ""));
   if (!/^batch_[0-9a-f]{8}\.zip$/i.test(fileName)) {
     res.status(400).json({ detail: "文件参数无效" });
+    return;
+  }
+
+  const queryToken = optionalString(req.query.download_token, { maxLength: 160 });
+  const tokenPayload = queryToken ? consumeProtectedResourceToken(queryToken, "batch-download", fileName) : null;
+  if (queryToken && !tokenPayload) {
+    res.status(401).json({ detail: "下载令牌无效或已过期" });
+    return;
+  }
+
+  const user = tokenPayload || verifyRequestToken(req);
+  if (!user || user.role !== "ADMIN") {
+    res.status(401).json({ detail: "需要管理员权限" });
     return;
   }
 
@@ -182,13 +203,13 @@ router.post("/api/batch/upload", authMiddleware, requireRole("ADMIN"), upload.si
       try {
         const declaredSize = Number((entry as any).header?.size || 0);
         if (declaredSize > maxModelBytes) {
-          results.push({ name: originalName, status: "failed", error: `文件过大，最大支持 ${uploadPolicy.modelMaxSizeMb}MB` });
+          results.push({ name: originalName, status: MODEL_STATUS.FAILED, error: `文件过大，最大支持 ${uploadPolicy.modelMaxSizeMb}MB` });
           continue;
         }
 
         const data = entry.getData();
         if (data.length <= 0 || data.length > maxModelBytes) {
-          results.push({ name: originalName, status: "failed", error: `文件大小异常，最大支持 ${uploadPolicy.modelMaxSizeMb}MB` });
+          results.push({ name: originalName, status: MODEL_STATUS.FAILED, error: `文件大小异常，最大支持 ${uploadPolicy.modelMaxSizeMb}MB` });
           continue;
         }
 
@@ -208,7 +229,7 @@ router.post("/api/batch/upload", authMiddleware, requireRole("ADMIN"), upload.si
               gltfUrl: "",
               gltfSize: 0,
               format: ext,
-              status: "queued",
+              status: MODEL_STATUS.QUEUED,
               uploadPath: originalDest,
               createdById: req.user!.userId,
             },
@@ -224,21 +245,21 @@ router.post("/api/batch/upload", authMiddleware, requireRole("ADMIN"), upload.si
             userId: req.user!.userId,
             preserveSource: true,
           });
-          results.push({ model_id: modelId, name: originalName, status: "queued" });
+          results.push({ model_id: modelId, name: originalName, status: MODEL_STATUS.QUEUED });
         } catch (err) {
           if (prisma) {
-            await prisma.model.update({ where: { id: modelId }, data: { status: "failed" } }).catch(() => {});
+            await prisma.model.update({ where: { id: modelId }, data: { status: MODEL_STATUS.FAILED } }).catch(() => {});
           }
-          results.push({ model_id: modelId, name: originalName, status: "failed", error: "转换队列暂不可用" });
+          results.push({ model_id: modelId, name: originalName, status: MODEL_STATUS.FAILED, error: "转换队列暂不可用" });
         }
       } catch (err) {
         if (originalDest && existsSync(originalDest)) rmSync(originalDest, { force: true });
-        results.push({ name: originalName, status: "failed", error: (err as Error).message });
+        results.push({ name: originalName, status: MODEL_STATUS.FAILED, error: (err as Error).message });
       }
     }
 
     rmSync(file.path, { force: true });
-    if (results.some((item) => item.status === "queued")) {
+    if (results.some((item) => item.status === MODEL_STATUS.QUEUED)) {
       await cacheDelByPrefix("cache:models:");
     }
 

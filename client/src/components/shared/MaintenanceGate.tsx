@@ -37,9 +37,7 @@ async function fetchMaintenanceStatus(): Promise<MaintenanceStatus> {
 function isBypassedPath(pathname: string) {
   return pathname === "/login"
     || pathname.startsWith("/admin")
-    || pathname.startsWith("/legal")
-    || pathname.startsWith("/quote/")
-    || pathname.startsWith("/document/");
+    || pathname.startsWith("/legal");
 }
 
 export default function MaintenanceGate({ children }: { children: ReactNode }) {

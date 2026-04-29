@@ -1,4 +1,7 @@
 import { prisma } from "./prisma.js";
+import { cacheGetOrSet, TTL } from "./cache.js";
+
+type MatchIndexEntry = [string, { id: string; thumbnailUrl: string | null }];
 
 /**
  * Normalize a string for fuzzy matching:
@@ -17,38 +20,14 @@ export async function buildModelMatchMap(modelNos: string[]) {
 
   if (modelNos.length === 0) return result;
 
-  const allModels = await prisma.model.findMany({
-    select: { id: true, name: true, thumbnailUrl: true, groupId: true },
-  });
+  const { value: matchIndex } = await cacheGetOrSet<MatchIndexEntry[]>(
+    "cache:models:match-index:v2",
+    TTL.MODEL_MATCH_INDEX,
+    buildModelMatchIndex,
+    { lockTtlMs: 30_000, waitTimeoutMs: 20_000, pollMs: 50 }
+  );
 
-  // Collect groupIds to find primary models
-  const groupIds = new Set(allModels.map((m) => m.groupId).filter(Boolean) as string[]);
-  const primaryIds = new Set<string>();
-  if (groupIds.size > 0) {
-    const groups = await prisma.modelGroup.findMany({
-      where: { id: { in: Array.from(groupIds) } },
-      select: { id: true, primaryId: true },
-    });
-    for (const g of groups) {
-      if (g.primaryId) primaryIds.add(g.primaryId);
-    }
-  }
-
-  // Build normalized lookup: normalized name → ALL matching models
-  const normBuckets = new Map<string, { id: string; thumbnailUrl: string | null; isPrimary: boolean }[]>();
-  for (const m of allModels) {
-    const nk = normalizePN(m.name);
-    if (!normBuckets.has(nk)) normBuckets.set(nk, []);
-    normBuckets.get(nk)!.push({ id: m.id, thumbnailUrl: m.thumbnailUrl, isPrimary: primaryIds.has(m.id) });
-  }
-
-  // Flatten: pick primary if available, else first
-  const normMap = new Map<string, { id: string; thumbnailUrl: string | null }>();
-  for (const [nk, bucket] of normBuckets) {
-    const primary = bucket.find((b) => b.isPrimary);
-    normMap.set(nk, primary ?? bucket[0]);
-  }
-
+  const normMap = new Map<string, { id: string; thumbnailUrl: string | null }>(matchIndex);
   const normKeys = Array.from(normMap.keys());
 
   for (const raw of modelNos) {
@@ -86,4 +65,40 @@ export async function buildModelMatchMap(modelNos: string[]) {
   }
 
   return result;
+}
+
+async function buildModelMatchIndex(): Promise<MatchIndexEntry[]> {
+  const allModels = await prisma.model.findMany({
+    select: { id: true, name: true, thumbnailUrl: true, groupId: true },
+  });
+
+  // Collect groupIds to find primary models
+  const groupIds = new Set(allModels.map((m) => m.groupId).filter(Boolean) as string[]);
+  const primaryIds = new Set<string>();
+  if (groupIds.size > 0) {
+    const groups = await prisma.modelGroup.findMany({
+      where: { id: { in: Array.from(groupIds) } },
+      select: { id: true, primaryId: true },
+    });
+    for (const g of groups) {
+      if (g.primaryId) primaryIds.add(g.primaryId);
+    }
+  }
+
+  // Build normalized lookup: normalized name → ALL matching models
+  const normBuckets = new Map<string, { id: string; thumbnailUrl: string | null; isPrimary: boolean }[]>();
+  for (const m of allModels) {
+    const nk = normalizePN(m.name);
+    if (!normBuckets.has(nk)) normBuckets.set(nk, []);
+    normBuckets.get(nk)!.push({ id: m.id, thumbnailUrl: m.thumbnailUrl, isPrimary: primaryIds.has(m.id) });
+  }
+
+  // Flatten: pick primary if available, else first
+  const normMap = new Map<string, { id: string; thumbnailUrl: string | null }>();
+  for (const [nk, bucket] of normBuckets) {
+    const primary = bucket.find((b) => b.isPrimary);
+    const selected = primary ?? bucket[0];
+    normMap.set(nk, { id: selected.id, thumbnailUrl: selected.thumbnailUrl });
+  }
+  return Array.from(normMap.entries());
 }

@@ -4,33 +4,29 @@ import useSWR from 'swr';
 import { useMediaQuery } from '../layouts/hooks/useMediaQuery';
 import { useDocumentTitle } from '../hooks/useDocumentTitle';
 import { SkeletonList } from '../components/shared/Skeleton';
-import TopNav from '../components/shared/TopNav';
-import BottomNav from '../components/shared/BottomNav';
-import AppSidebar from '../components/shared/Sidebar';
-import MobileNavDrawer from '../components/shared/MobileNavDrawer';
 import Icon from '../components/shared/Icon';
 import SafeImage from '../components/shared/SafeImage';
+import { AdminPageShell } from "../components/shared/AdminPageShell";
 import { useToast } from '../components/shared/Toast';
 import client from '../api/client';
+import { unwrapResponse } from '../api/response';
 import { getTicketMessages, sendTicketMessage, updateTicketStatus, uploadTicketAttachment, type TicketMessage } from '../api/tickets';
 import { getCachedPublicSettings } from '../lib/publicSettings';
 import { getBusinessConfig, statusInfo } from '../lib/businessConfig';
-import { withAccessToken } from '../lib/authUrl';
 
 interface TicketInfo {
   id: string; userId: string; basePart: string | null;
   classification: string; description: string; status: string;
   createdAt: string; updatedAt: string;
-  user: { username: string; email: string } | null;
+  user: { username: string; email: string; role?: string } | null;
 }
 
 function useTicket(id: string) {
-  return useSWR<TicketInfo>(`/ticket-${id}`, () =>
-    client.get(`/tickets/${id}`).then(r => {
-      const d = r.data as any;
-      if (d?.data) return d.data;
-      return d;
-    }).catch(() => null), { revalidateOnFocus: false }
+  return useSWR<TicketInfo | null>(`/ticket-${id}`, () =>
+    client
+      .get(`/tickets/${id}`)
+      .then((response) => unwrapResponse<TicketInfo>(response))
+      .catch(() => null), { revalidateOnFocus: false }
   );
 }
 
@@ -44,7 +40,7 @@ function useMessages(ticketId: string) {
 function MessageBubble({ msg }: { msg: TicketMessage }) {
   const isRight = msg.isAdmin;
   const [previewImg, setPreviewImg] = useState<string | null>(null);
-  const attachmentSrc = withAccessToken(msg.attachment);
+  const attachmentSrc = msg.attachment || "";
   return (
     <div className={`flex ${isRight ? 'justify-end' : 'justify-start'} mb-3`}>
       <div className={`max-w-[88%] sm:max-w-[80%] min-w-0 ${isRight ? 'order-2' : 'order-1'}`}>
@@ -151,7 +147,7 @@ function ChatContent({ ticketId }: { ticketId: string }) {
   const [pendingImageUrl, setPendingImageUrl] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const isAdmin = ticket ? (ticket as any)?.user?.role !== undefined : false;
+  const isAdmin = ticket?.user?.role !== undefined;
 
   const scrollToBottom = useCallback(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -208,7 +204,7 @@ function ChatContent({ ticketId }: { ticketId: string }) {
   const msgList = messages || [];
 
   return (
-    <div className="flex flex-col h-full">
+    <div className="flex h-full min-h-0 flex-col">
       {/* Header */}
       <div className="shrink-0 border-b border-outline-variant/10 bg-surface-container px-4 py-3">
         <div className="flex items-center gap-3 mb-2 min-w-0">
@@ -230,7 +226,7 @@ function ChatContent({ ticketId }: { ticketId: string }) {
       </div>
 
       {/* Messages */}
-      <div className="flex-1 overflow-y-auto p-4 scrollbar-hidden">
+      <div className="min-h-0 flex-1 overflow-y-auto p-4 scrollbar-hidden">
         <OriginalMessage ticket={ticket} />
         {msgList.map((msg) => (
           <MessageBubble key={msg.id} msg={msg} />
@@ -239,7 +235,7 @@ function ChatContent({ ticketId }: { ticketId: string }) {
       </div>
 
       {/* Input area */}
-      <div className={`shrink-0 border-t border-outline-variant/10 bg-surface-container ${isDesktop ? 'p-3' : 'p-2 pb-3 mb-20'}`}>
+      <div className={`shrink-0 border-t border-outline-variant/10 bg-surface-container ${isDesktop ? 'p-3' : 'p-2 pb-[calc(0.75rem+env(safe-area-inset-bottom,0px))]'}`}>
         {pendingImageUrl && (
           <div className="mb-2 relative inline-block">
             <SafeImage src={pendingImageUrl} alt="待发送" className={`${isDesktop ? 'h-20' : 'h-16'} rounded border border-outline-variant/20`} />
@@ -293,33 +289,12 @@ function ChatContent({ ticketId }: { ticketId: string }) {
 export default function TicketDetailPage() {
   const { id } = useParams<{ id: string }>();
   useDocumentTitle('工单详情');
-  const isDesktop = useMediaQuery('(min-width: 768px)');
-  const [navOpen, setNavOpen] = useState(false);
 
   if (!id) return null;
 
-  if (isDesktop) {
-    return (
-      <div className="flex flex-col h-screen overflow-hidden">
-        <TopNav />
-        <div className="flex flex-1 overflow-hidden">
-          <AppSidebar />
-          <main className="flex-1 overflow-hidden bg-surface-dim">
-            <ChatContent ticketId={id} />
-          </main>
-        </div>
-      </div>
-    );
-  }
-
   return (
-    <div className="flex flex-col h-dvh bg-surface">
-      <TopNav compact onMenuToggle={() => setNavOpen(prev => !prev)} />
-      <MobileNavDrawer open={navOpen} onClose={() => setNavOpen(false)} />
-      <main className="flex-1 overflow-hidden bg-surface-dim">
-        <ChatContent ticketId={id} />
-      </main>
-      <BottomNav />
-    </div>
+    <AdminPageShell desktopContentClassName="overflow-hidden p-0" mobileMainClassName="overflow-hidden" mobileContentClassName="h-full p-0" hideMobileBottomNav>
+      <ChatContent ticketId={id} />
+    </AdminPageShell>
   );
 }

@@ -6,9 +6,39 @@ export default defineConfig({
   plugins: [react(), tailwindcss()],
   assetsInclude: ['**/*.wasm'],
   build: {
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          const normalizedId = id.replace(/\\/g, '/')
+
+          if (normalizedId.includes('/node_modules/')) {
+            // Keep heavy, route-only toolchains out of the initial vendor chunk.
+            if (
+              normalizedId.includes('/three/') ||
+              normalizedId.includes('/@react-three/') ||
+              normalizedId.includes('/@pmndrs/') ||
+              normalizedId.includes('/xlsx/')
+            ) {
+              return
+            }
+            return 'vendor-app'
+          }
+
+          if (
+            normalizedId.includes('/src/api/') ||
+            normalizedId.includes('/src/components/shared/') ||
+            normalizedId.includes('/src/hooks/') ||
+            normalizedId.includes('/src/lib/') ||
+            normalizedId.includes('/src/stores/')
+          ) {
+            return 'app-shared'
+          }
+        },
+      },
+    },
     // The 3D viewer intentionally keeps three.js in a lazy route chunk.
     // It is large by nature, but no longer affects the initial app bundle.
-    chunkSizeWarningLimit: 900,
+    chunkSizeWarningLimit: 1000,
   },
   optimizeDeps: {
     exclude: ['occt-import-js'],

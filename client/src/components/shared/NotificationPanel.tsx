@@ -121,6 +121,7 @@ export default function NotificationPanel({ compact = false }: { compact?: boole
   const ref = useRef<HTMLDivElement>(null);
 
   const iconSize = compact ? 20 : 24;
+  const safeNotifications = Array.isArray(notifications) ? notifications : [];
 
   // Poll unread count
   useEffect(() => {
@@ -159,7 +160,7 @@ export default function NotificationPanel({ compact = false }: { compact?: boole
       setLoadError("");
       try {
         const res = await getNotifications(1, 30);
-        if (!cancelled) setNotifications(res.data);
+        if (!cancelled) setNotifications(Array.isArray(res.data) ? res.data : []);
       } catch {
         if (!cancelled) setLoadError("通知加载失败，请稍后重试");
       }
@@ -248,7 +249,7 @@ export default function NotificationPanel({ compact = false }: { compact?: boole
                 全部已读
               </button>
             )}
-            {notifications.some((n) => n.read) && (
+            {safeNotifications.some((n) => n.read) && (
               <button onClick={handleClearRead} className="text-[11px] text-on-surface-variant hover:text-on-surface transition-colors">
                 清除已读
               </button>
@@ -279,14 +280,14 @@ export default function NotificationPanel({ compact = false }: { compact?: boole
           </div>
         )}
 
-        {!loading && notifications.length === 0 && (
+        {!loading && safeNotifications.length === 0 && (
           <div className="flex flex-col items-center justify-center py-8 gap-2">
             <Icon name="notifications" size={32} className="text-on-surface-variant/20" />
             <p className="text-xs text-on-surface-variant">{isAdmin ? "暂无管理通知" : "暂无通知"}</p>
           </div>
         )}
 
-        {!loading && notifications.map((n) => (
+        {!loading && safeNotifications.map((n) => (
           <NotificationItem
             key={n.id}
             n={n}
@@ -319,6 +320,7 @@ export default function NotificationPanel({ compact = false }: { compact?: boole
         </div>
         <AnimatePresence>
           <motion.div
+            key="notification-backdrop"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
@@ -326,6 +328,7 @@ export default function NotificationPanel({ compact = false }: { compact?: boole
             onClick={() => setOpen(false)}
           />
           <motion.div
+            key="notification-panel"
             initial={{ y: 24, opacity: 0 }}
             animate={{ y: 0, opacity: 1 }}
             exit={{ y: 24, opacity: 0 }}

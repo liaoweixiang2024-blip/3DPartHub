@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useState } from "react";
 import { createPortal } from "react-dom";
 import { AnimatePresence, motion } from "framer-motion";
 import Icon from "../shared/Icon";
@@ -57,7 +57,7 @@ function ToolbarButton({
   active,
   disabled,
   size,
-  tooltipSide = "left",
+  tooltipSide,
   compact = false,
   onClick,
 }: {
@@ -66,34 +66,16 @@ function ToolbarButton({
   active?: boolean;
   disabled?: boolean;
   size: number;
-  tooltipSide?: "left" | "right";
+  tooltipSide?: "top" | "bottom" | "left" | "right";
   compact?: boolean;
   onClick: () => void;
 }) {
-  const buttonRef = useRef<HTMLButtonElement>(null);
-  const [tooltipPosition, setTooltipPosition] = useState<{ left: number; top: number } | null>(null);
-
-  const showTooltip = () => {
-    if (compact || !buttonRef.current) return;
-    const rect = buttonRef.current.getBoundingClientRect();
-    setTooltipPosition({
-      left: tooltipSide === "right" ? rect.right + 8 : rect.left - 8,
-      top: rect.top + rect.height / 2,
-    });
-  };
-
-  const hideTooltip = () => setTooltipPosition(null);
-
   return (
     <button
-      ref={buttonRef}
       type="button"
-      title={label}
       aria-label={label}
-      onMouseEnter={showTooltip}
-      onMouseLeave={hideTooltip}
-      onFocus={showTooltip}
-      onBlur={hideTooltip}
+      data-tooltip={label}
+      data-tooltip-side={tooltipSide}
       onClick={(event) => {
         event.preventDefault();
         event.stopPropagation();
@@ -109,19 +91,6 @@ function ToolbarButton({
       }`}
     >
       <Icon name={icon} size={size} className={disabled ? "animate-pulse" : ""} />
-      {!compact && tooltipPosition && createPortal(
-        <span
-          className="fixed z-[300] rounded bg-black/90 px-2 py-0.5 text-[10px] text-white shadow-lg pointer-events-none whitespace-nowrap"
-          style={{
-            left: tooltipPosition.left,
-            top: tooltipPosition.top,
-            transform: tooltipSide === "right" ? "translateY(-50%)" : "translate(-100%, -50%)",
-          }}
-        >
-          {label}
-        </span>,
-        document.body
-      )}
     </button>
   );
 }
@@ -250,6 +219,14 @@ function ExplodeControl({
   );
 }
 
+function ToolbarSectionLabel({ children }: { children: string }) {
+  return (
+    <div className="col-span-full px-1 pt-1 text-[10px] font-medium tracking-[0.12em] text-on-surface-variant/70">
+      {children}
+    </div>
+  );
+}
+
 export default function CadViewerToolbar(props: CadViewerToolbarProps) {
   const [moreOpen, setMoreOpen] = useState(false);
   const {
@@ -305,13 +282,13 @@ export default function CadViewerToolbar(props: CadViewerToolbarProps) {
         onPointerDown={(event) => event.stopPropagation()}
       >
         <div className="micro-glass rounded-sm p-0.5 flex max-h-full flex-col gap-px overflow-y-auto overscroll-contain scrollbar-hidden">
-          {onFullscreen && <ToolbarButton compact icon="fullscreen" label="全屏" size={14} onClick={onFullscreen} />}
-          <ToolbarButton compact icon="locate_fixed" label="适配视图" size={14} onClick={dispatchFitModel} />
-          <ToolbarButton compact icon="restart_alt" label="恢复视角" size={14} onClick={onResetDisplay} />
-          <ToolbarButton compact icon="box_icon" label="等轴测" size={14} active={activeCamera === "iso"} onClick={() => onCameraChange("iso")} />
-          <ToolbarButton compact icon="diamond" label="实体边线" size={14} active={showEdges} onClick={onToggleEdges} />
+          {onFullscreen && <ToolbarButton compact icon="fullscreen" label="全屏" size={14} tooltipSide="left" onClick={onFullscreen} />}
+          <ToolbarButton compact icon="locate_fixed" label="适配视图" size={14} tooltipSide="left" onClick={dispatchFitModel} />
+          <ToolbarButton compact icon="restart_alt" label="恢复视角" size={14} tooltipSide="left" onClick={onResetDisplay} />
+          <ToolbarButton compact icon="box_icon" label="等轴测" size={14} tooltipSide="left" active={activeCamera === "iso"} onClick={() => onCameraChange("iso")} />
+          <ToolbarButton compact icon="diamond" label="实体边线" size={14} tooltipSide="left" active={showEdges} onClick={onToggleEdges} />
           <div className="w-4 h-px bg-white/10 mx-auto" />
-          <ToolbarButton compact icon="more_horiz" label="更多" size={14} active={moreOpen} onClick={() => setMoreOpen((open) => !open)} />
+          <ToolbarButton compact icon="more_horiz" label="更多" size={14} tooltipSide="left" active={moreOpen} onClick={() => setMoreOpen((open) => !open)} />
         </div>
 
         {moreOpen && createPortal(
@@ -324,11 +301,12 @@ export default function CadViewerToolbar(props: CadViewerToolbarProps) {
               }}
             />
             <div
-              className="fixed right-12 top-1/2 z-[80] grid w-[4.25rem] max-h-[calc(100dvh-14rem)] -translate-y-1/2 grid-cols-2 gap-0.5 overflow-y-auto overscroll-contain rounded-md border border-outline-variant/25 bg-surface/95 p-1 shadow-xl backdrop-blur-xl touch-pan-y"
+              className="fixed right-12 top-1/2 z-[80] grid w-[12.5rem] max-h-[calc(100dvh-8rem)] -translate-y-1/2 grid-cols-5 gap-1 overflow-y-auto overscroll-contain rounded-md border border-outline-variant/25 bg-surface/95 p-2 shadow-xl backdrop-blur-xl touch-pan-y custom-scrollbar"
               onClick={(event) => event.stopPropagation()}
               onPointerDown={(event) => event.stopPropagation()}
               style={{ WebkitOverflowScrolling: "touch" }}
             >
+              <ToolbarSectionLabel>显示</ToolbarSectionLabel>
               {VIEW_MODES.map((mode) => (
                 <ToolbarButton
                   key={mode.key}
@@ -336,11 +314,13 @@ export default function CadViewerToolbar(props: CadViewerToolbarProps) {
                   icon={mode.icon}
                   label={mode.label}
                   size={14}
+                  tooltipSide="top"
                   active={activeView === mode.key}
                   onClick={() => onViewChange(mode.key)}
                 />
               ))}
-              <div className="col-span-2 my-0.5 h-px bg-white/10" />
+              <div className="col-span-full my-0.5 h-px bg-white/10" />
+              <ToolbarSectionLabel>视角</ToolbarSectionLabel>
               {CAMERA_ANGLES.filter((angle) => angle.key !== "iso").map((angle) => (
                 <ToolbarButton
                   key={angle.key}
@@ -348,27 +328,30 @@ export default function CadViewerToolbar(props: CadViewerToolbarProps) {
                   icon={angle.icon}
                   label={angle.label}
                   size={14}
+                  tooltipSide="top"
                   active={activeCamera === angle.key}
                   onClick={() => onCameraChange(angle.key)}
                 />
               ))}
-              <div className="col-span-2 my-0.5 h-px bg-white/10" />
-              <ToolbarButton compact icon="straighten" label="尺寸标注" size={14} active={showDimensions} onClick={onToggleDimensions} />
+              <div className="col-span-full my-0.5 h-px bg-white/10" />
+              <ToolbarSectionLabel>工具</ToolbarSectionLabel>
+              <ToolbarButton compact icon="straighten" label="尺寸标注" size={14} tooltipSide="top" active={showDimensions} onClick={onToggleDimensions} />
               {onToggleMeasurement && (
-                <ToolbarButton compact icon="compass" label="测量工具" size={14} active={measurementOpen} onClick={() => { onToggleMeasurement(); setMoreOpen(false); }} />
+                <ToolbarButton compact icon="compass" label="测量工具" size={14} tooltipSide="top" active={measurementOpen} onClick={() => { onToggleMeasurement(); setMoreOpen(false); }} />
               )}
               {onToggleProperties && (
-                <ToolbarButton compact icon="description" label="模型属性" size={14} active={propertiesOpen} onClick={() => { onToggleProperties(); setMoreOpen(false); }} />
+                <ToolbarButton compact icon="description" label="模型属性" size={14} tooltipSide="top" active={propertiesOpen} onClick={() => { onToggleProperties(); setMoreOpen(false); }} />
               )}
               {onToggleStructure && (
-                <ToolbarButton compact icon="view_sidebar" label={`模型结构${partCount ? ` ${partCount}` : ""}`} size={14} active={structureOpen} onClick={() => { onToggleStructure(); setMoreOpen(false); }} />
+                <ToolbarButton compact icon="view_sidebar" label={`模型结构${partCount ? ` ${partCount}` : ""}`} size={14} tooltipSide="top" active={structureOpen} onClick={() => { onToggleStructure(); setMoreOpen(false); }} />
               )}
-              <ToolbarButton compact icon="content_cut" label="剖面查看" size={14} active={clipEnabled} onClick={onToggleClip} />
-              <ToolbarButton compact icon="3d_rotation" label="视角盒" size={14} active={showAxis} onClick={onToggleAxis} />
+              <ToolbarButton compact icon="content_cut" label="剖面查看" size={14} tooltipSide="top" active={clipEnabled} onClick={onToggleClip} />
+              <ToolbarButton compact icon="3d_rotation" label="视角盒" size={14} tooltipSide="top" active={showAxis} onClick={onToggleAxis} />
               {isAdmin && onToggleTuning && (
-                <ToolbarButton compact icon="tune" label="预览调试" size={14} active={tuningOpen} onClick={() => { onToggleTuning(); setMoreOpen(false); }} />
+                <ToolbarButton compact icon="tune" label="预览调试" size={14} tooltipSide="top" active={tuningOpen} onClick={() => { onToggleTuning(); setMoreOpen(false); }} />
               )}
-              <div className="col-span-2 my-0.5 h-px bg-white/10" />
+              <div className="col-span-full my-0.5 h-px bg-white/10" />
+              <ToolbarSectionLabel>材质</ToolbarSectionLabel>
               {MATERIAL_PRESETS.map((preset) => (
                 <ToolbarButton
                   key={preset.key}
@@ -376,24 +359,27 @@ export default function CadViewerToolbar(props: CadViewerToolbarProps) {
                   icon={preset.icon}
                   label={preset.label}
                   size={14}
+                  tooltipSide="top"
                   active={materialPreset === preset.key}
                   onClick={() => onMaterialChange(preset.key)}
                 />
               ))}
-              <div className="col-span-2 my-0.5 h-px bg-white/10" />
-              {onScreenshot && <ToolbarButton compact icon="photo_camera" label="截图下载" size={14} onClick={() => { onScreenshot(); setMoreOpen(false); }} />}
+              <div className="col-span-full my-0.5 h-px bg-white/10" />
+              <ToolbarSectionLabel>管理</ToolbarSectionLabel>
+              {onScreenshot && <ToolbarButton compact icon="photo_camera" label="截图下载" size={14} tooltipSide="top" onClick={() => { onScreenshot(); setMoreOpen(false); }} />}
               {isAdmin && onSetThumbnail && (
                 <ToolbarButton
                   compact
                   icon="wallpaper"
                   label="设为预览图"
                   size={14}
+                  tooltipSide="top"
                   disabled={settingThumbnail}
                   onClick={() => { onSetThumbnail(); setMoreOpen(false); }}
                 />
               )}
               {isAdmin && onOpenDiagnostics && (
-                <ToolbarButton compact icon="data_usage" label="预览诊断" size={14} onClick={() => { onOpenDiagnostics(); setMoreOpen(false); }} />
+                <ToolbarButton compact icon="data_usage" label="预览诊断" size={14} tooltipSide="top" onClick={() => { onOpenDiagnostics(); setMoreOpen(false); }} />
               )}
             </div>
           </>,
@@ -463,40 +449,68 @@ export default function CadViewerToolbar(props: CadViewerToolbarProps) {
               icon={mode.icon}
               label={mode.label}
               size={18}
+              tooltipSide="left"
               active={activeView === mode.key}
               onClick={() => onViewChange(mode.key)}
             />
           ))}
           <div className="w-full h-px bg-outline-variant/30 my-0.5" />
-          <ToolbarButton icon="straighten" label="尺寸标注" size={18} active={showDimensions} onClick={onToggleDimensions} />
-          {onToggleMeasurement && (
-            <ToolbarButton icon="compass" label="测量工具" size={18} active={measurementOpen} onClick={onToggleMeasurement} />
-          )}
-          {onToggleProperties && (
-            <ToolbarButton icon="description" label="模型属性" size={18} active={propertiesOpen} onClick={onToggleProperties} />
-          )}
-          {onToggleStructure && (
-            <ToolbarButton icon="view_sidebar" label={`模型结构${partCount ? ` ${partCount}` : ""}`} size={18} active={structureOpen} onClick={onToggleStructure} />
-          )}
-          <ToolbarButton icon="diamond" label="实体边线" size={18} active={showEdges} onClick={onToggleEdges} />
-          <ToolbarButton icon="content_cut" label="剖面查看" size={18} active={clipEnabled} onClick={onToggleClip} />
-          <ToolbarButton icon="3d_rotation" label="视角盒" size={18} active={showAxis} onClick={onToggleAxis} />
-          <ToolbarButton icon="restart_alt" label="重置显示" size={18} onClick={onResetDisplay} />
-          {isAdmin && onToggleTuning && (
-            <ToolbarButton icon="tune" label="预览调试" size={18} active={tuningOpen} onClick={onToggleTuning} />
-          )}
+          <ToolbarButton icon="straighten" label="尺寸标注" size={18} tooltipSide="left" active={showDimensions} onClick={onToggleDimensions} />
+          <ToolbarButton icon="diamond" label="实体边线" size={18} tooltipSide="left" active={showEdges} onClick={onToggleEdges} />
+          <ToolbarButton icon="content_cut" label="剖面查看" size={18} tooltipSide="left" active={clipEnabled} onClick={onToggleClip} />
+          <ToolbarButton icon="3d_rotation" label="视角盒" size={18} tooltipSide="left" active={showAxis} onClick={onToggleAxis} />
+          <ToolbarButton icon="restart_alt" label="重置显示" size={18} tooltipSide="left" onClick={onResetDisplay} />
+          {onFullscreen && <ToolbarButton icon="fullscreen" label="全屏" size={18} tooltipSide="left" onClick={onFullscreen} />}
           <div className="w-full h-px bg-outline-variant/30 my-0.5" />
-          {onScreenshot && <ToolbarButton icon="photo_camera" label="截图下载" size={18} onClick={onScreenshot} />}
-          {isAdmin && onSetThumbnail && (
-            <ToolbarButton icon="wallpaper" label="设为预览图" size={18} disabled={settingThumbnail} onClick={onSetThumbnail} />
-          )}
-          {isAdmin && onOpenDiagnostics && (
-            <ToolbarButton icon="data_usage" label="预览诊断" size={18} onClick={onOpenDiagnostics} />
-          )}
-          {onFullscreen && <ToolbarButton icon="fullscreen" label="全屏" size={18} onClick={onFullscreen} />}
+          <ToolbarButton icon="more_horiz" label="更多工具" size={18} tooltipSide="left" active={moreOpen} onClick={() => setMoreOpen((open) => !open)} />
         </div>
 
         <AnimatePresence>
+          {moreOpen && (
+            <motion.div
+              initial={{ opacity: 0, scale: 0.96, x: 8 }}
+              animate={{ opacity: 1, scale: 1, x: 0 }}
+              exit={{ opacity: 0, scale: 0.96, x: 8 }}
+              className="micro-glass mr-1 grid max-h-[calc(100dvh-2rem)] w-48 grid-cols-4 gap-1 overflow-y-auto rounded-md border border-outline-variant/20 p-2 shadow-xl custom-scrollbar"
+            >
+              <ToolbarSectionLabel>高级工具</ToolbarSectionLabel>
+              {onToggleMeasurement && (
+                <ToolbarButton compact icon="compass" label="测量工具" size={16} tooltipSide="top" active={measurementOpen} onClick={onToggleMeasurement} />
+              )}
+              {onToggleProperties && (
+                <ToolbarButton compact icon="description" label="模型属性" size={16} tooltipSide="top" active={propertiesOpen} onClick={onToggleProperties} />
+              )}
+              {onToggleStructure && (
+                <ToolbarButton compact icon="view_sidebar" label={`模型结构${partCount ? ` ${partCount}` : ""}`} size={16} tooltipSide="top" active={structureOpen} onClick={onToggleStructure} />
+              )}
+              {isAdmin && onToggleTuning && (
+                <ToolbarButton compact icon="tune" label="预览调试" size={16} tooltipSide="top" active={tuningOpen} onClick={onToggleTuning} />
+              )}
+              <div className="col-span-full my-0.5 h-px bg-outline-variant/30" />
+              <ToolbarSectionLabel>材质</ToolbarSectionLabel>
+              {MATERIAL_PRESETS.map((preset) => (
+                <ToolbarButton
+                  key={preset.key}
+                  compact
+                  icon={preset.icon}
+                  label={preset.label}
+                  size={16}
+                  tooltipSide="top"
+                  active={materialPreset === preset.key}
+                  onClick={() => onMaterialChange(preset.key)}
+                />
+              ))}
+              <div className="col-span-full my-0.5 h-px bg-outline-variant/30" />
+              <ToolbarSectionLabel>输出</ToolbarSectionLabel>
+              {onScreenshot && <ToolbarButton compact icon="photo_camera" label="截图下载" size={16} tooltipSide="top" onClick={onScreenshot} />}
+              {isAdmin && onSetThumbnail && (
+                <ToolbarButton compact icon="wallpaper" label="设为预览图" size={16} tooltipSide="top" disabled={settingThumbnail} onClick={onSetThumbnail} />
+              )}
+              {isAdmin && onOpenDiagnostics && (
+                <ToolbarButton compact icon="data_usage" label="预览诊断" size={16} tooltipSide="top" onClick={onOpenDiagnostics} />
+              )}
+            </motion.div>
+          )}
           {activeView === "explode" && onExplodeAmountChange && (
             <motion.div
               initial={{ opacity: 0, scale: 0.9 }}
@@ -529,24 +543,6 @@ export default function CadViewerToolbar(props: CadViewerToolbarProps) {
             </motion.div>
           )}
         </AnimatePresence>
-
-        <div className="micro-glass rounded-sm p-2 flex flex-col gap-1">
-          <span className="text-[9px] text-on-surface-variant uppercase tracking-wider px-1">材质</span>
-          {MATERIAL_PRESETS.map((preset) => (
-            <button
-              key={preset.key}
-              type="button"
-              onClick={() => onMaterialChange(preset.key)}
-              className={`text-[10px] px-2 py-1 rounded-sm transition-colors text-left ${
-                materialPreset === preset.key
-                  ? "bg-primary-container/20 text-primary"
-                  : "text-on-surface-variant hover:text-on-surface"
-              }`}
-            >
-              {preset.label}
-            </button>
-          ))}
-        </div>
       </div>
     </>
   );

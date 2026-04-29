@@ -70,17 +70,15 @@ class RedisRateLimitStore implements Store {
 
   async resetAll() {
     const stream = this.redis.scanStream({ match: `${this.prefix}*`, count: 100 });
-    const batches: string[][] = [];
-    stream.on("data", (keys: string[]) => {
-      if (keys.length > 0) batches.push(keys);
-    });
     await new Promise<void>((resolve, reject) => {
-      stream.on("end", async () => {
-        for (const batch of batches) {
-          await this.redis.del(...batch);
-        }
-        resolve();
+      stream.on("data", (keys: string[]) => {
+        if (keys.length === 0) return;
+        stream.pause();
+        this.redis.del(...keys)
+          .then(() => stream.resume())
+          .catch(reject);
       });
+      stream.on("end", resolve);
       stream.on("error", reject);
     });
   }
@@ -131,7 +129,23 @@ export const searchLimiter = createLimiter("search", {
 
 // Helmet security configuration
 export const securityHeaders = helmet({
-  contentSecurityPolicy: false,
+  contentSecurityPolicy: {
+    useDefaults: true,
+    directives: {
+      "default-src": ["'self'"],
+      "base-uri": ["'self'"],
+      "object-src": ["'none'"],
+      "frame-ancestors": ["'self'"],
+      "form-action": ["'self'"],
+      "script-src": ["'self'", "'unsafe-inline'", "'wasm-unsafe-eval'", "blob:"],
+      "style-src": ["'self'", "'unsafe-inline'"],
+      "img-src": ["'self'", "data:", "blob:"],
+      "font-src": ["'self'", "data:"],
+      "connect-src": ["'self'"],
+      "worker-src": ["'self'", "blob:"],
+    },
+  },
   crossOriginEmbedderPolicy: false,
   crossOriginResourcePolicy: { policy: "cross-origin" },
+  referrerPolicy: { policy: "no-referrer" },
 });

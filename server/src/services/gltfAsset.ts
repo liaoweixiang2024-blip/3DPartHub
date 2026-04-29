@@ -41,6 +41,16 @@ export function previewAssetFileName(baseName: string, pathOrUrl: string): strin
   return `${baseName}.${getPreviewAssetExtension(pathOrUrl)}`;
 }
 
+export function withAssetVersion(value?: string | null, version?: string | number | Date | null): string | null {
+  if (!value) return value ?? null;
+  if (/[?&](v|t)=/.test(value)) return value;
+  const normalizedVersion = version instanceof Date
+    ? version.getTime()
+    : version;
+  if (!normalizedVersion) return value;
+  return `${value}${value.includes("?") ? "&" : "?"}v=${encodeURIComponent(String(normalizedVersion))}`;
+}
+
 function parseGlb(filePath: string): GltfAssetData {
   const data = readFileSync(filePath);
   if (data.byteLength < 20 || data.readUInt32LE(0) !== 0x46546c67) {

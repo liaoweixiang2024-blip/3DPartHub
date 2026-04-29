@@ -24,6 +24,12 @@ export function requireRole(...roles: string[]) {
  * Check if user has the required role within a project.
  * Looks up projectId from req.params.projectId or req.body.projectId.
  */
+const PROJECT_ROLE_RANK: Record<Role, number> = {
+  VIEWER: 1,
+  EDITOR: 2,
+  ADMIN: 3,
+};
+
 export function requireProjectRole(...roles: Role[]) {
   return async (req: AuthRequest, res: Response, next: NextFunction) => {
     if (!req.user) {
@@ -58,7 +64,8 @@ export function requireProjectRole(...roles: Role[]) {
         return;
       }
 
-      if (roles.includes(member.role)) {
+      const requiredRank = Math.min(...roles.map((role) => PROJECT_ROLE_RANK[role]));
+      if (PROJECT_ROLE_RANK[member.role] >= requiredRank) {
         next();
         return;
       }

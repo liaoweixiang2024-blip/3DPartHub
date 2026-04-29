@@ -90,7 +90,7 @@ jobs:
             Includes the React/Vite frontend for 3D preview, product selection, inquiry/quote workflows, sharing, and admin pages.
 
             ```bash
-            # Update deploy/docker-compose.yml IMAGE_TAG to ${{ steps.version.outputs.version }}
+            # Update docker-compose.yml IMAGE_TAG to ${{ steps.version.outputs.version }}
             docker compose pull && docker compose up -d
 
             # Verify health

@@ -4,6 +4,7 @@ import { authMiddleware, type AuthRequest } from "../middleware/auth.js";
 import { userWantsNotification } from "./auth.js";
 
 const router = Router();
+const MAX_NOTIFICATIONS_PAGE_SIZE = 100;
 
 // Get unread notification count
 router.get("/api/notifications/unread-count", authMiddleware, async (req: AuthRequest, res: Response) => {
@@ -22,8 +23,8 @@ router.get("/api/notifications/unread-count", authMiddleware, async (req: AuthRe
 router.get("/api/notifications", authMiddleware, async (req: AuthRequest, res: Response) => {
   try {
     if (!prisma) { res.json({ data: [] }); return; }
-    const page = Number(req.query.page) || 1;
-    const pageSize = Number(req.query.page_size) || 20;
+    const page = Math.max(1, Number(req.query.page) || 1);
+    const pageSize = Math.min(MAX_NOTIFICATIONS_PAGE_SIZE, Math.max(1, Number(req.query.page_size) || 20));
     const where = { userId: req.user!.userId };
 
     const [total, notifications] = await Promise.all([

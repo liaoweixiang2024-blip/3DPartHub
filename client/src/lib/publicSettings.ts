@@ -29,7 +29,9 @@ const listeners = new Set<Listener>();
 
 export function onSiteConfigChange(fn: Listener) {
   listeners.add(fn);
-  return () => listeners.delete(fn);
+  return () => {
+    listeners.delete(fn);
+  };
 }
 
 export function clearCache() {

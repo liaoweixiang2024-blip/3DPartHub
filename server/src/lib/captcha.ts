@@ -1,5 +1,6 @@
 import svgCaptcha from "svg-captcha";
 import Redis from "ioredis";
+import { randomBytes } from "node:crypto";
 import { config } from "./config.js";
 
 const redis = new Redis(config.redisUrl);
@@ -20,7 +21,7 @@ export async function generateCaptcha(): Promise<CaptchaResult> {
     height: 40,
   });
 
-  const captchaId = `cap_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+  const captchaId = `cap_${randomBytes(18).toString("base64url")}`;
   const key = `captcha:${captchaId}`;
 
   await redis.set(key, captcha.text.toLowerCase(), "EX", 300); // 5 min TTL

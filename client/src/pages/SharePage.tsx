@@ -4,7 +4,10 @@ import { useDocumentTitle } from "../hooks/useDocumentTitle";
 import { getSiteTitle } from "../lib/publicSettings";
 import BrandMark from "../components/shared/BrandMark";
 import Icon from "../components/shared/Icon";
+import { PageTitle } from "../components/shared/PagePrimitives";
+import { PublicPageShell } from "../components/shared/PublicPageShell";
 import { getShareInfo, verifySharePassword, getShareDownloadUrl, type ShareInfo } from "../api/shares";
+import { getErrorMessage } from "../lib/errorNotifications";
 
 const isWechat = /MicroMessenger/i.test(navigator.userAgent);
 
@@ -19,6 +22,7 @@ export default function SharePage() {
   const [expired, setExpired] = useState(false);
   const [needPassword, setNeedPassword] = useState(false);
   const [password, setPassword] = useState("");
+  const [shareAccessToken, setShareAccessToken] = useState("");
   const [passwordError, setPasswordError] = useState("");
   const [downloading, setDownloading] = useState(false);
 
@@ -30,12 +34,14 @@ export default function SharePage() {
       const data = await getShareInfo(token);
       setInfo(data);
       setNeedPassword(data.hasPassword);
-    } catch (err: any) {
-      const detail = err.response?.data?.detail || "";
-      if (err.response?.status === 410 || err.response?.data?.expired) {
+    } catch (err: unknown) {
+      const response = err && typeof err === "object" && "response" in err
+        ? (err as { response?: { status?: number; data?: { expired?: boolean } } }).response
+        : undefined;
+      if (response?.status === 410 || response?.data?.expired) {
         setExpired(true);
       } else {
-        setError(detail || "获取分享信息失败");
+        setError(getErrorMessage(err, "获取分享信息失败"));
       }
     } finally {
       setLoading(false);
@@ -48,20 +54,27 @@ export default function SharePage() {
     if (!token || !password.trim()) return;
     setPasswordError("");
     try {
-      await verifySharePassword(token, password);
-      const data = await getShareInfo(token, password);
+      const verified = await verifySharePassword(token, password);
+      if (!verified.accessToken) throw new Error("分享访问令牌缺失");
+      setShareAccessToken(verified.accessToken);
+      setPassword("");
+      const data = await getShareInfo(token, verified.accessToken);
       setInfo(data);
       setNeedPassword(false);
-    } catch (err: any) {
-      setPasswordError(err.response?.data?.detail || "密码错误");
+    } catch (err: unknown) {
+      setPasswordError(getErrorMessage(err, "密码错误"));
     }
   }
 
   function handleDownload() {
     if (!token) return;
+    if (info?.hasPassword && !shareAccessToken) {
+      setNeedPassword(true);
+      return;
+    }
     setDownloading(true);
     const a = document.createElement("a");
-    a.href = getShareDownloadUrl(token, info?.hasPassword ? password : undefined);
+    a.href = getShareDownloadUrl(token, info?.hasPassword ? shareAccessToken : undefined);
     a.download = "";
     a.click();
     setTimeout(() => setDownloading(false), 2000);
@@ -78,47 +91,54 @@ export default function SharePage() {
   // Loading
   if (loading) {
     return (
-      <div className="min-h-screen bg-surface flex items-center justify-center">
+      <PublicPageShell>
+      <div className="flex flex-1 items-center justify-center bg-surface">
         <div className="flex items-center gap-3 text-on-surface-variant">
           <Icon name="progress_activity" size={24} className="animate-spin" />
           <span className="text-sm">加载中...</span>
         </div>
       </div>
+      </PublicPageShell>
     );
   }
 
   // Expired
   if (expired) {
     return (
-      <div className="min-h-screen bg-surface flex items-center justify-center">
+      <PublicPageShell>
+      <div className="flex flex-1 items-center justify-center bg-surface">
         <div className="text-center">
           <Icon name="link_off" size={56} className="text-on-surface-variant/40 mx-auto mb-4" />
-          <h1 className="text-xl font-bold text-on-surface mb-2">链接已失效</h1>
+          <PageTitle className="mb-2">链接已失效</PageTitle>
           <p className="text-sm text-on-surface-variant mb-4">此分享链接已过期或已被撤销</p>
           <Link to="/" className="text-sm text-primary hover:underline">返回首页</Link>
         </div>
       </div>
+      </PublicPageShell>
     );
   }
 
   // Error
   if (error && !info) {
     return (
-      <div className="min-h-screen bg-surface flex items-center justify-center">
+      <PublicPageShell>
+      <div className="flex flex-1 items-center justify-center bg-surface">
         <div className="text-center">
           <Icon name="error" size={56} className="text-error/50 mx-auto mb-4" />
-          <h1 className="text-xl font-bold text-on-surface mb-2">加载失败</h1>
+          <PageTitle className="mb-2">加载失败</PageTitle>
           <p className="text-sm text-on-surface-variant mb-4">{error}</p>
           <Link to="/" className="text-sm text-primary hover:underline">返回首页</Link>
         </div>
       </div>
+      </PublicPageShell>
     );
   }
 
   // Password gate
   if (needPassword && info) {
     return (
-      <div className="min-h-screen bg-surface flex items-center justify-center p-4">
+      <PublicPageShell>
+      <div className="flex flex-1 items-center justify-center bg-surface p-4">
         <div className="w-full max-w-sm">
           <div className="bg-surface-container-low rounded-xl border border-outline-variant/20 overflow-hidden">
             <div className="px-6 py-5 border-b border-outline-variant/10 text-center">
@@ -150,6 +170,7 @@ export default function SharePage() {
           </p>
         </div>
       </div>
+      </PublicPageShell>
     );
   }
 
@@ -157,7 +178,7 @@ export default function SharePage() {
 
   // Main share page
   return (
-    <div className="min-h-screen bg-surface flex flex-col">
+    <PublicPageShell>
       {/* WeChat open-in-browser guide */}
       {isWechat && (
         <div className="bg-primary-container/90 text-on-primary px-4 py-3 text-center text-sm font-bold relative shrink-0">
@@ -191,6 +212,7 @@ export default function SharePage() {
                 clipDirection="x"
                 clipPosition={0}
                 materialPreset="default"
+                showEdges={false}
                 showAxis={false}
               />
             </Suspense>
@@ -200,7 +222,7 @@ export default function SharePage() {
         {/* Info panel */}
         <div className="w-full md:w-80 bg-surface-container-low border-t md:border-t-0 md:border-l border-outline-variant/10 p-5 space-y-4 shrink-0">
           <div>
-            <h1 className="text-lg font-bold text-on-surface break-words">{info.modelName}</h1>
+            <PageTitle className="break-words text-lg md:text-lg md:normal-case">{info.modelName}</PageTitle>
             <div className="flex flex-wrap gap-3 mt-2 text-xs text-on-surface-variant">
               <span className="flex items-center gap-1">
                 <Icon name="description" size={12} />
@@ -259,6 +281,6 @@ export default function SharePage() {
       <footer className="h-10 flex items-center justify-center border-t border-outline-variant/10 shrink-0">
         <span className="text-xs text-on-surface-variant/40">由 {siteTitle} 驱动</span>
       </footer>
-    </div>
+    </PublicPageShell>
   );
 }

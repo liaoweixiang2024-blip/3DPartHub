@@ -1,12 +1,13 @@
-import { execFileSync, execSync, spawn } from "child_process";
-import { existsSync, mkdirSync, rmSync, writeFileSync, statSync, statfsSync, readdirSync, readFileSync, renameSync, openSync, closeSync, writeSync, readSync, createReadStream, createWriteStream, copyFileSync } from "fs";
+import { execFileSync, spawn } from "child_process";
+import { existsSync, mkdirSync, rmSync, writeFileSync, statSync, statfsSync, readdirSync, readFileSync, renameSync, openSync, closeSync, writeSync, readSync, createReadStream, createWriteStream, copyFileSync, cpSync } from "fs";
 import { basename, dirname, isAbsolute, join, resolve, sep } from "path";
 import { createHash } from "crypto";
 import { createInterface } from "readline";
 import { pipeline } from "stream/promises";
 import { Transform } from "stream";
+import { fileURLToPath } from "url";
 import { config } from "./config.js";
-import { syncJob, loadJob } from "./jobStore.js";
+import { syncJob, loadJob, listJobs } from "./jobStore.js";
 
 // Read app version from package.json
 let _appVersion: string | null = null;
@@ -17,6 +18,16 @@ function getAppVersion(): string {
     _appVersion = pkg.version || "unknown";
   } catch { _appVersion = "unknown"; }
   return _appVersion!;
+}
+
+function copyDirectoryContents(source: string, destination: string) {
+  mkdirSync(destination, { recursive: true });
+  for (const entry of readdirSync(source, { withFileTypes: true })) {
+    cpSync(join(source, entry.name), join(destination, entry.name), {
+      recursive: true,
+      force: true,
+    });
+  }
 }
 
 const DB_URL = config.databaseUrl;
@@ -36,19 +47,22 @@ const BACKUP_UPLOADS_ENTRY = `${BACKUP_DB_ENTRY_DIR}/uploads`;
 const STATIC_BACKUP_EXCLUDE_DIRS = new Set(["backups", BACKUP_DB_ENTRY_DIR, "_safety_snapshots"]);
 const UPLOAD_BACKUP_EXCLUDE_DIRS = new Set(["backups", "chunks", "batch", ".download_tokens"]);
 const RESTORE_PRIORITY_DIRS = ["models", "thumbnails", "originals", "drawings"];
+const MODULE_EXT = import.meta.url.endsWith(".ts") ? ".ts" : ".js";
 
 // Detect whether pg_dump/psql are available locally, otherwise use docker exec
-let _dockerContainer: string | null = undefined as any;
+let dockerContainerChecked = false;
+let _dockerContainer: string | null = null;
 function getDockerContainer(): string | null {
-  if (_dockerContainer !== undefined as any) return _dockerContainer;
+  if (dockerContainerChecked) return _dockerContainer;
+  dockerContainerChecked = true;
   try {
-    execSync("which pg_dump", { stdio: "pipe", timeout: 5000 });
+    execFileSync("pg_dump", ["--version"], { stdio: "pipe", timeout: 5000 });
     _dockerContainer = null;
     return null;
   } catch {
     // pg_dump not found locally — try docker
     try {
-      const containers = execSync("docker ps --format '{{.Names}}'", { stdio: "pipe", timeout: 5000 }).toString().trim().split("\n");
+      const containers = execFileSync("docker", ["ps", "--format", "{{.Names}}"], { stdio: "pipe", timeout: 5000 }).toString().trim().split("\n");
       let container = containers.find(c => c.includes("postgres"));
       if (container) {
         container = container.trim();
@@ -62,82 +76,64 @@ function getDockerContainer(): string | null {
   }
 }
 
-/** Run a pg command (pg_dump or psql) — works with local install or Docker container */
-function execPgCommand(command: string, options?: { input?: string; timeout?: number }) {
+/** pg_dump to file — works with local install or Docker container */
+function pgDumpToFile(dbUrl: string, outputPath: string, extraArgs: string[], timeout: number) {
   const container = getDockerContainer();
-  const timeout = options?.timeout || PSQL_COMMAND_TIMEOUT_MS;
-  if (container) {
-    if (options?.input) {
-      // Pass input via stdin — echo ... | docker exec -i container psql ...
-      execSync(`echo '${options.input.replace(/'/g, "'\\''")}' | docker exec -i ${container} ${command}`, {
-        stdio: "pipe",
+  const outputFd = openSync(outputPath, "w");
+  try {
+    if (container) {
+      // Docker: use local connection (no host:port) inside the container
+      const dbName = new URL(dbUrl).pathname.replace(/^\//, "");
+      const user = new URL(dbUrl).username;
+      execFileSync("docker", ["exec", container, "pg_dump", "-U", user, "-d", dbName, ...extraArgs], {
+        stdio: ["ignore", outputFd, "pipe"],
         timeout,
       });
-    } else {
-      execSync(`docker exec ${container} ${command}`, { stdio: "pipe", timeout });
+      return;
     }
-  } else {
-    if (options?.input) {
-      execSync(command, { stdio: ["pipe", "pipe", "pipe"], input: options.input, timeout });
-    } else {
-      execSync(command, { stdio: "pipe", timeout });
-    }
-  }
-}
-
-/** pg_dump to file — works with local install or Docker container */
-function pgDumpToFile(dbUrl: string, outputPath: string, extraArgs: string, timeout: number) {
-  const container = getDockerContainer();
-  if (container) {
-    // Docker: use local connection (no host:port) inside the container
-    const dbName = new URL(dbUrl).pathname.replace(/^\//, "");
-    const user = new URL(dbUrl).username;
-    execSync(`docker exec ${container} pg_dump -U ${user} -d ${dbName} ${extraArgs} > "${outputPath}"`, {
-      stdio: "pipe",
+    execFileSync("pg_dump", [dbUrl, ...extraArgs], {
+      stdio: ["ignore", outputFd, "pipe"],
       timeout,
     });
-  } else {
-    execSync(`pg_dump "${dbUrl}" ${extraArgs} > "${outputPath}"`, {
-      stdio: "pipe",
-      timeout,
-    });
+  } finally {
+    closeSync(outputFd);
   }
 }
 
 /** psql with -f flag — works with local install or Docker container */
-function psqlFromFile(dbUrl: string, sqlPath: string, extraArgs: string, timeout: number) {
+function psqlFromFile(dbUrl: string, sqlPath: string, extraArgs: string[], timeout: number) {
   const container = getDockerContainer();
   if (container) {
     // Copy SQL file into container, run psql, clean up
     const containerPath = `/tmp/restore_${Date.now()}.sql`;
     const dbName = new URL(dbUrl).pathname.replace(/^\//, "");
     const user = new URL(dbUrl).username;
-    execSync(`docker cp "${sqlPath}" ${container}:${containerPath}`, { stdio: "pipe", timeout: 30000 });
+    execFileSync("docker", ["cp", sqlPath, `${container}:${containerPath}`], { stdio: "pipe", timeout: 30000 });
     try {
-      execSync(`docker exec ${container} psql -U ${user} -d ${dbName} ${extraArgs} -f "${containerPath}"`, {
+      execFileSync("docker", ["exec", container, "psql", "-U", user, "-d", dbName, ...extraArgs, "-f", containerPath], {
         stdio: "pipe",
         timeout,
       });
     } finally {
-      try { execSync(`docker exec ${container} rm -f "${containerPath}"`, { stdio: "pipe" }); } catch {}
+      try { execFileSync("docker", ["exec", container, "rm", "-f", containerPath], { stdio: "pipe" }); } catch {}
     }
   } else {
-    execSync(`psql "${dbUrl}" ${extraArgs} -f "${sqlPath}"`, { stdio: "pipe", timeout });
+    execFileSync("psql", [dbUrl, ...extraArgs, "-f", sqlPath], { stdio: "pipe", timeout });
   }
 }
 
 /** psql with -c flag — works with local install or Docker container */
-function psqlCommand(dbUrl: string, sql: string, extraArgs: string, timeout: number) {
+function psqlCommand(dbUrl: string, sql: string, extraArgs: string[], timeout: number) {
   const container = getDockerContainer();
   if (container) {
     const dbName = new URL(dbUrl).pathname.replace(/^\//, "");
     const user = new URL(dbUrl).username;
-    execSync(`docker exec ${container} psql -U ${user} -d ${dbName} ${extraArgs} -c "${sql.replace(/"/g, '\\"')}"`, {
+    execFileSync("docker", ["exec", container, "psql", "-U", user, "-d", dbName, ...extraArgs, "-c", sql], {
       stdio: "pipe",
       timeout,
     });
   } else {
-    execSync(`psql "${dbUrl}" ${extraArgs} -c "${sql.replace(/"/g, '\\"')}"`, {
+    execFileSync("psql", [dbUrl, ...extraArgs, "-c", sql], {
       stdio: "pipe",
       timeout,
     });
@@ -289,6 +285,17 @@ export interface BackupVerificationResult {
   message: string;
 }
 
+interface VerifyJob {
+  id: string;
+  backupId: string;
+  stage: "queued" | "validating_archive" | "hashing_archive" | "writing_record" | "done" | "error";
+  percent: number;
+  message: string;
+  error?: string;
+  result?: BackupVerificationResult;
+  logs: string[];
+}
+
 interface RestoreJob {
   id: string;
   stage: "extracting" | "restoring_db" | "restoring_files" | "done" | "error";
@@ -301,6 +308,7 @@ interface RestoreJob {
 
 const jobs = new Map<string, BackupJob>();
 const restoreJobs = new Map<string, RestoreJob>();
+const verifyJobs = new Map<string, VerifyJob>();
 const pendingRecordNormalizations = new Set<string>();
 
 // File-based lock to prevent concurrent backup/restore across cluster workers
@@ -319,10 +327,32 @@ function lockOwnerIsAlive(): boolean {
   }
 }
 
+function lockContent(pid: number, jobId?: string, source?: "manual" | "scheduled"): string {
+  return [
+    String(pid),
+    new Date().toISOString(),
+    jobId ? `jobId=${jobId}` : "",
+    source ? `source=${source}` : "",
+  ].filter(Boolean).join("\n") + "\n";
+}
+
+function getActiveLockJobId(): string | undefined {
+  try {
+    const raw = readFileSync(LOCK_FILE, "utf-8");
+    return raw.split(/\r?\n/).map((line) => line.trim()).find((line) => line.startsWith("jobId="))?.slice("jobId=".length);
+  } catch {
+    return undefined;
+  }
+}
+
+function setLockOwner(pid: number, jobId: string, source: "manual" | "scheduled"): void {
+  writeFileSync(LOCK_FILE, lockContent(pid, jobId, source));
+}
+
 function acquireLock(): boolean {
   try {
     const fd = openSync(LOCK_FILE, "wx");
-    writeSync(fd, `${process.pid}\n${new Date().toISOString()}\n`);
+    writeSync(fd, lockContent(process.pid));
     closeSync(fd);
     return true;
   } catch {
@@ -347,14 +377,14 @@ function ts(): string {
 
 const MAX_LOG_LINES = 200;
 
-function addLog(job: { logs?: string[] }, text: string) {
+function addLog(job: { id?: string; logs?: string[] }, text: string) {
   if (!job.logs) return;
   job.logs.push(`[${ts()}] ${text}`);
   if (job.logs.length > MAX_LOG_LINES) {
     job.logs = job.logs.slice(-MAX_LOG_LINES);
   }
   console.log(`[Backup] ${text}`);
-  syncJob(job as any);
+  if (job.id) syncJob({ ...job, id: job.id });
 }
 
 export function getJob(id: string): BackupJob | undefined {
@@ -365,11 +395,52 @@ export function getActiveBackupJob(): BackupJob | undefined {
   for (const job of jobs.values()) {
     if (job.stage !== "done" && job.stage !== "error") return job;
   }
+  const lockedJobId = getActiveLockJobId();
+  if (lockedJobId?.startsWith("backup_") && lockOwnerIsAlive()) {
+    const job = loadJob<BackupJob>(lockedJobId);
+    if (job && job.stage !== "done" && job.stage !== "error") return job;
+    return {
+      id: lockedJobId,
+      stage: "packing",
+      percent: 35,
+      message: "备份任务正在后台执行...",
+      logs: [],
+      source: "manual",
+    };
+  }
   return undefined;
 }
 
 export function getRestoreJob(id: string): RestoreJob | undefined {
   return restoreJobs.get(id) || loadJob<RestoreJob>(id);
+}
+
+export function getVerifyJob(id: string): VerifyJob | undefined {
+  return verifyJobs.get(id) || loadJob<VerifyJob>(id);
+}
+
+export function getActiveVerifyJob(): VerifyJob | undefined {
+  for (const job of verifyJobs.values()) {
+    if (job.stage !== "done" && job.stage !== "error") return job;
+  }
+  const lockedJobId = getActiveLockJobId();
+  if (lockedJobId?.startsWith("verify_") && lockOwnerIsAlive()) {
+    const job = loadJob<VerifyJob>(lockedJobId);
+    if (job && job.stage !== "done" && job.stage !== "error") return job;
+  }
+  return undefined;
+}
+
+export function getActiveRestoreJob(): RestoreJob | undefined {
+  for (const job of restoreJobs.values()) {
+    if (job.stage !== "done" && job.stage !== "error") return job;
+  }
+  const lockedJobId = getActiveLockJobId();
+  if (lockedJobId?.startsWith("restore_") && lockOwnerIsAlive()) {
+    const job = loadJob<RestoreJob>(lockedJobId);
+    if (job && job.stage !== "done" && job.stage !== "error") return job;
+  }
+  return undefined;
 }
 
 // ---- Import as backup record (save to backup list) ----
@@ -379,7 +450,7 @@ export async function saveAsBackupRecord(archPath: string, originalName: string)
   const dest = activeArchivePath(id);
 
   try {
-    execSync(`cp "${archPath}" "${dest}"`, { stdio: "pipe" });
+    copyFileSync(archPath, dest);
     if (existsSync(archPath)) rmSync(archPath, { force: true });
 
     const record = await inspectBackupArchive(id, dest, originalName);
@@ -493,62 +564,82 @@ export function getImportSaveJob(id: string): ImportSaveJob | undefined {
   return importSaveJobs.get(id) || loadJob<ImportSaveJob>(id);
 }
 
+export function getActiveImportSaveJob(): ImportSaveJob | undefined {
+  for (const job of importSaveJobs.values()) {
+    if (job.stage !== "done" && job.stage !== "error") return job;
+  }
+  return listJobs<ImportSaveJob>("importsave_").find((job) => job.stage !== "done" && job.stage !== "error");
+}
+
 // ---- Create backup ----
 
 export function startBackupJob(): string {
+  return startBackupProcess("manual");
+}
+
+function startScheduledBackupJob(): string {
+  return startBackupProcess("scheduled");
+}
+
+function startBackupProcess(source: "manual" | "scheduled"): string {
   if (!acquireLock()) {
-    const err = new Error("有备份或恢复任务正在进行中，请等待完成后再试");
+    const err = new Error("有备份、恢复或校验任务正在进行中，请等待完成后再试");
     (err as Error & { jobId?: string }).jobId = getActiveBackupJob()?.id;
     throw err;
   }
   const id = `backup_${Date.now()}`;
-  const job: BackupJob = { id, stage: "dumping", percent: 0, message: "正在导出数据库...", logs: [], source: "manual" };
+  const job: BackupJob = {
+    id,
+    stage: "dumping",
+    percent: 0,
+    message: source === "scheduled" ? "正在执行自动备份..." : "正在导出数据库...",
+    logs: [],
+    source,
+  };
   jobs.set(id, job);
   syncJob(job);
 
-  // Use setImmediate to ensure HTTP response is sent before blocking work
-  setImmediate(() => {
-    runBackup(job).catch((err) => {
-      job.stage = "error";
-      job.error = err.message;
-      // Clean up partial archive
-      if (existsSync(activeArchivePath(id))) rmSync(activeArchivePath(id), { force: true });
-      if (existsSync(activeMetaPath(id))) rmSync(activeMetaPath(id), { force: true });
-      syncJob(job);
-      console.error(`[Backup #${job.id}] Error:`, err.message);
-    }).finally(() => {
-      releaseLock();
+  try {
+    const workerScript = fileURLToPath(new URL(`../scripts/backupWorker${MODULE_EXT}`, import.meta.url));
+    const child = spawn(process.execPath, [...process.execArgv, workerScript, id, source], {
+      cwd: process.cwd(),
+      env: process.env,
+      detached: true,
+      stdio: "ignore",
     });
-  });
+    if (!child.pid) throw new Error("备份后台进程启动失败");
+    setLockOwner(child.pid, id, source);
+    child.unref();
+  } catch (err: any) {
+    job.stage = "error";
+    const message = err.message || "备份后台进程启动失败";
+    job.error = message;
+    job.message = message;
+    syncJob(job);
+    releaseLock();
+    throw err;
+  }
 
   return id;
 }
 
-function startScheduledBackupJob(): string {
-  if (!acquireLock()) {
-    const err = new Error("有备份或恢复任务正在进行中，请等待完成后再试");
-    (err as Error & { jobId?: string }).jobId = getActiveBackupJob()?.id;
-    throw err;
-  }
-  const id = `backup_${Date.now()}`;
-  const job: BackupJob = { id, stage: "dumping", percent: 0, message: "正在执行自动备份...", logs: [], source: "scheduled" };
-  jobs.set(id, job);
+export async function runBackupWorker(jobId: string, source: "manual" | "scheduled" = "manual") {
+  const job = loadJob<BackupJob>(jobId) || {
+    id: jobId,
+    stage: "dumping",
+    percent: 0,
+    message: source === "scheduled" ? "正在执行自动备份..." : "正在导出数据库...",
+    logs: [],
+    source,
+  };
+  job.source = source;
+  jobs.set(job.id, job);
   syncJob(job);
-
-  setImmediate(() => {
-    runBackup(job).catch((err) => {
-      job.stage = "error";
-      job.error = err.message;
-      if (existsSync(activeArchivePath(id))) rmSync(activeArchivePath(id), { force: true });
-      if (existsSync(activeMetaPath(id))) rmSync(activeMetaPath(id), { force: true });
-      syncJob(job);
-      console.error(`[Backup #${job.id}] Scheduled error:`, err.message);
-    }).finally(() => {
-      releaseLock();
-    });
-  });
-
-  return id;
+  try {
+    await runBackup(job);
+  } finally {
+    releaseLock();
+  }
 }
 
 async function runBackup(job: BackupJob) {
@@ -564,7 +655,7 @@ async function runBackup(job: BackupJob) {
     job.message = "正在导出数据库...";
     addLog(job, "正在导出数据库 (pg_dump)...");
 
-    pgDumpToFile(DB_URL_CLEAN, join(tmpDir, "database.sql"), "--no-owner --no-privileges", DB_DUMP_TIMEOUT_MS);
+    pgDumpToFile(DB_URL_CLEAN, join(tmpDir, "database.sql"), ["--no-owner", "--no-privileges"], DB_DUMP_TIMEOUT_MS);
 
     if (!existsSync(join(tmpDir, "database.sql"))) {
       throw new Error("数据库导出失败：文件未生成");
@@ -595,13 +686,15 @@ async function runBackup(job: BackupJob) {
     job.message = "正在打包模型文件...";
     addLog(job, "正在打包模型、预览图和原始文件...");
 
-    // Copy db files into static/_backup_db so tar uses a single -C
-    const dbMarker = join(staticDir, "_backup_db");
-    // Clean up any residual _backup_db from previous crashed backup
-    if (existsSync(dbMarker)) rmSync(dbMarker, { recursive: true, force: true });
+    // Stage database and upload-volume data inside the private backup work dir.
+    // This avoids putting transient backup internals under /static, where dev
+    // restarts or startup cleanup could remove them while tar is still running.
+    const archiveRoot = join(tmpDir, "archive");
+    const dbMarker = join(archiveRoot, BACKUP_DB_ENTRY_DIR);
+    rmSync(archiveRoot, { recursive: true, force: true });
     mkdirSync(dbMarker, { recursive: true });
-    execSync(`cp "${join(tmpDir, "database.sql")}" "${join(dbMarker, "database.sql")}"`, { stdio: "pipe" });
-    execSync(`cp "${join(tmpDir, "meta.json")}" "${join(dbMarker, "meta.json")}"`, { stdio: "pipe" });
+    copyFileSync(join(tmpDir, "database.sql"), join(dbMarker, "database.sql"));
+    copyFileSync(join(tmpDir, "meta.json"), join(dbMarker, "meta.json"));
 
     // Copy uploads data into staging for inclusion in backup. Keep the legacy metadata path too.
     const uploadMetadataDir = join(process.cwd(), config.uploadDir, ".metadata");
@@ -609,12 +702,10 @@ async function runBackup(job: BackupJob) {
     for (const dir of uploadBackupDirs) {
       const source = join(uploadDir, dir);
       const destination = join(stagedUploadsDir, dir);
-      mkdirSync(destination, { recursive: true });
-      execSync(`cp -R "${source}/." "${destination}"`, { stdio: "pipe" });
+      copyDirectoryContents(source, destination);
     }
     if (existsSync(uploadMetadataDir)) {
-      mkdirSync(join(dbMarker, "metadata"), { recursive: true });
-      execSync(`cp -r "${uploadMetadataDir}/." "${join(dbMarker, "metadata")}"`, { stdio: "pipe" });
+      copyDirectoryContents(uploadMetadataDir, join(dbMarker, "metadata"));
     }
 
     const manifestDirs: ArchiveDirectorySpec[] = [
@@ -635,8 +726,8 @@ async function runBackup(job: BackupJob) {
     addLog(job, `备份清单已生成: ${manifest.directories.length} 个目录，数据库校验 ${manifest.database.sha256.slice(0, 12)}...`);
 
     await new Promise<void>((resolve, reject) => {
-      const tmpArchive = `${finalArchive}.tmp`;
-      const args: string[] = ["czf", tmpArchive, "-C", staticDir];
+      const tmpArchive = join(tmpDir, `${job.id}.tar.gz.tmp`);
+      const args: string[] = ["czf", tmpArchive];
       args.push(
         "--exclude=__MACOSX",
         "--exclude=*/__MACOSX",
@@ -647,22 +738,19 @@ async function runBackup(job: BackupJob) {
         "--exclude=backups",
         "--exclude=.restore_*",
       );
-      args.push(BACKUP_DATABASE_ENTRY, BACKUP_META_ENTRY, BACKUP_MANIFEST_ENTRY);
-      if (existsSync(stagedUploadsDir)) args.push(BACKUP_UPLOADS_ENTRY);
-      if (existsSync(join(dbMarker, "metadata"))) args.push(BACKUP_UPLOAD_METADATA_ENTRY);
-      for (const d of existingBackupDirs) args.push(d);
+      args.push("-C", archiveRoot, BACKUP_DB_ENTRY_DIR);
+      for (const d of existingBackupDirs) args.push("-C", staticDir, d);
 
       const proc = spawn("tar", args, { timeout: ARCHIVE_EXTRACT_TIMEOUT_MS });
       let stderr = "";
 
       proc.stderr?.on("data", (d: Buffer) => { stderr += d.toString(); });
       proc.on("error", (err) => {
-        rmSync(dbMarker, { recursive: true, force: true });
+        if (existsSync(tmpArchive)) rmSync(tmpArchive, { force: true });
         reject(err);
       });
       proc.on("close", (code) => {
         clearInterval(progressInterval);
-        rmSync(dbMarker, { recursive: true, force: true });
         if (code === 0) {
           renameSync(tmpArchive, finalArchive);
           resolve();
@@ -995,6 +1083,129 @@ export async function verifyBackupArchive(id: string): Promise<BackupVerificatio
   };
 }
 
+export function startVerifyBackupJob(backupId: string): string {
+  if (!acquireLock()) throw new Error("有备份、恢复或校验任务正在进行中，请等待完成后再试");
+  const id = `verify_${Date.now()}`;
+  const job: VerifyJob = {
+    id,
+    backupId,
+    stage: "queued",
+    percent: 0,
+    message: "正在准备校验备份...",
+    logs: [],
+  };
+  verifyJobs.set(id, job);
+  syncJob(job);
+
+  try {
+    const workerScript = fileURLToPath(new URL(`../scripts/verifyBackupWorker${MODULE_EXT}`, import.meta.url));
+    const child = spawn(process.execPath, [...process.execArgv, workerScript, id, backupId], {
+      cwd: process.cwd(),
+      env: process.env,
+      detached: true,
+      stdio: "ignore",
+    });
+    if (!child.pid) throw new Error("备份校验后台进程启动失败");
+    setLockOwner(child.pid, id, "manual");
+    child.unref();
+  } catch (err: any) {
+    const message = err.message || "备份校验后台进程启动失败";
+    job.stage = "error";
+    job.error = message;
+    job.message = message;
+    syncJob(job);
+    releaseLock();
+    throw err;
+  }
+
+  return id;
+}
+
+export async function runVerifyBackupWorker(jobId: string, backupId: string) {
+  const job = loadJob<VerifyJob>(jobId) || {
+    id: jobId,
+    backupId,
+    stage: "queued",
+    percent: 0,
+    message: "正在准备校验备份...",
+    logs: [],
+  };
+  verifyJobs.set(job.id, job);
+  syncJob(job);
+  try {
+    await runVerifyBackup(job, backupId);
+  } finally {
+    releaseLock();
+  }
+}
+
+async function runVerifyBackup(job: VerifyJob, backupId: string) {
+  try {
+    addLog(job, "开始校验备份...");
+    const archive = archivePath(backupId);
+    if (!existsSync(archive)) throw new Error("备份文件不存在");
+    const meta = metaPath(backupId);
+    const record = existsSync(meta) ? JSON.parse(readFileSync(meta, "utf-8")) as BackupRecord : null;
+
+    job.stage = "validating_archive";
+    job.percent = 10;
+    job.message = "正在校验备份清单、数据库和目录文件数...";
+    syncJob(job);
+    const manifest = await validateBackupArchive(archive, { requireManifest: true });
+    addLog(job, "备份清单、数据库和目录文件数校验通过");
+
+    job.stage = "hashing_archive";
+    job.percent = 70;
+    job.message = "正在计算备份包 SHA256...";
+    syncJob(job);
+    const archiveSha256 = await sha256FileWithProgress(archive, (percent) => {
+      job.percent = Math.max(70, Math.min(95, 70 + Math.round(percent * 0.25)));
+      job.message = `正在计算备份包 SHA256... ${percent}%`;
+      syncJob(job);
+    });
+    if (record?.archiveSha256 && record.archiveSha256 !== archiveSha256) {
+      throw new Error("备份归档 SHA256 与记录不一致");
+    }
+
+    const checkedAt = new Date().toISOString();
+    job.stage = "writing_record";
+    job.percent = 96;
+    job.message = "正在写入校验记录...";
+    syncJob(job);
+    if (record) {
+      writeJsonAtomic(meta, {
+        ...record,
+        archiveSha256,
+        manifestVersion: manifest?.schemaVersion,
+        verifiedAt: checkedAt,
+      });
+    }
+
+    const fileSize = statSync(archive).size;
+    job.result = {
+      id: backupId,
+      ok: true,
+      checkedAt,
+      fileSize,
+      fileSizeText: formatSize(fileSize),
+      manifestVersion: manifest?.schemaVersion,
+      archiveSha256,
+      message: "备份包 manifest、数据库 SHA256、目录文件数校验通过",
+    };
+    job.stage = "done";
+    job.percent = 100;
+    job.message = "备份校验完成";
+    addLog(job, "备份校验完成");
+    syncJob(job);
+  } catch (err: any) {
+    job.stage = "error";
+    job.error = err.message || "备份校验失败";
+    job.message = `备份校验失败: ${job.error}`;
+    addLog(job, job.message);
+    syncJob(job);
+  }
+}
+
 function isMissingManifestError(err: unknown): boolean {
   const message = err instanceof Error ? err.message : String(err || "");
   return message.includes("缺少企业级清单文件");
@@ -1028,23 +1239,18 @@ export function deleteBackup(id: string): boolean {
 // ---- Restore ----
 
 export function startRestoreJob(backupId: string): string {
-  if (!acquireLock()) throw new Error("有备份或恢复任务正在进行中，请等待完成后再试");
+  if (!acquireLock()) throw new Error("有备份、恢复或校验任务正在进行中，请等待完成后再试");
   const jobId = `restore_${Date.now()}`;
   const job: RestoreJob = { id: jobId, stage: "extracting", percent: 0, message: "正在解压备份文件...", logs: [] };
   restoreJobs.set(jobId, job);
   syncJob(job);
 
-  // Use setImmediate to ensure HTTP response is sent before blocking work
-  setImmediate(() => {
-    runRestore(job, backupId).catch((err) => {
-      job.stage = "error";
-      job.error = err.message;
-      addLog(job, `恢复失败: ${err.message}`);
-      console.error(`[Restore #${jobId}] Error:`, err.message);
-    }).finally(() => {
-      releaseLock();
-    });
-  });
+  try {
+    startRestoreWorkerProcess(job, ["backup", backupId]);
+  } catch (err) {
+    releaseLock();
+    throw err;
+  }
 
   return jobId;
 }
@@ -1059,29 +1265,72 @@ async function runRestore(job: RestoreJob, backupId: string) {
 // ---- Restore from uploaded file (import) ----
 
 export function startRestoreJobFromFile(archPath: string, removeAfter = true): string {
-  if (!acquireLock()) throw new Error("有备份或恢复任务正在进行中，请等待完成后再试");
+  if (!acquireLock()) throw new Error("有备份、恢复或校验任务正在进行中，请等待完成后再试");
   const jobId = `restore_${Date.now()}`;
   const job: RestoreJob = { id: jobId, stage: "extracting", percent: 0, message: "正在上传完成，开始解压...", logs: [] };
   restoreJobs.set(jobId, job);
   syncJob(job);
 
-  // Use setImmediate to ensure HTTP response is sent before blocking work
-  setImmediate(() => {
-    runRestoreFromFile(job, archPath, removeAfter).catch((err) => {
-      job.stage = "error";
-      job.error = err.message;
-      addLog(job, `恢复失败: ${err.message}`);
-      console.error(`[Restore #${jobId}] Error:`, err.message);
-    }).finally(() => {
-      releaseLock();
-    });
-  });
+  try {
+    startRestoreWorkerProcess(job, ["file", archPath, removeAfter ? "true" : "false"]);
+  } catch (err) {
+    releaseLock();
+    throw err;
+  }
 
   return jobId;
 }
 
 async function runRestoreFromFile(job: RestoreJob, archPath: string, removeAfter: boolean) {
   await runRestoreFromArchive(job, archPath, removeAfter);
+}
+
+function startRestoreWorkerProcess(job: RestoreJob, args: string[]) {
+  try {
+    const workerScript = fileURLToPath(new URL(`../scripts/restoreWorker${MODULE_EXT}`, import.meta.url));
+    const child = spawn(process.execPath, [...process.execArgv, workerScript, job.id, ...args], {
+      cwd: process.cwd(),
+      env: process.env,
+      detached: true,
+      stdio: "ignore",
+    });
+    if (!child.pid) throw new Error("备份恢复后台进程启动失败");
+    setLockOwner(child.pid, job.id, "manual");
+    child.unref();
+  } catch (err: any) {
+    const message = err.message || "备份恢复后台进程启动失败";
+    job.stage = "error";
+    job.error = message;
+    job.message = message;
+    syncJob(job);
+    throw err;
+  }
+}
+
+export async function runRestoreWorker(
+  jobId: string,
+  mode: "backup" | "file",
+  target: string,
+  removeAfter = true,
+) {
+  const job = loadJob<RestoreJob>(jobId) || {
+    id: jobId,
+    stage: "extracting",
+    percent: 0,
+    message: mode === "backup" ? "正在解压备份文件..." : "正在上传完成，开始解压...",
+    logs: [],
+  };
+  restoreJobs.set(job.id, job);
+  syncJob(job);
+  try {
+    if (mode === "backup") {
+      await runRestore(job, target);
+    } else {
+      await runRestoreFromFile(job, target, removeAfter);
+    }
+  } finally {
+    releaseLock();
+  }
 }
 
 async function runRestoreFromArchive(job: RestoreJob, archPath: string, removeArchiveAfterExtract: boolean) {
@@ -1148,7 +1397,7 @@ async function runRestoreFromArchive(job: RestoreJob, archPath: string, removeAr
       syncJob(job);
       try {
         safetySnapshot = join(tmpDir, "safety_snapshot.sql");
-        pgDumpToFile(DB_URL_CLEAN, safetySnapshot, "--no-owner --no-privileges", DB_DUMP_TIMEOUT_MS);
+        pgDumpToFile(DB_URL_CLEAN, safetySnapshot, ["--no-owner", "--no-privileges"], DB_DUMP_TIMEOUT_MS);
         // Verify the snapshot is not empty
         const snapSize = statSync(safetySnapshot).size;
         if (snapSize === 0) throw new Error("安全快照为空");
@@ -1399,7 +1648,7 @@ async function inspectBackupArchive(id: string, archive: string, originalName: s
     const metaLocations = ["_backup_db/meta.json", "meta.json"];
     for (const loc of metaLocations) {
       try {
-        execSync(`tar xzf "${archive}" -C "${tmpDir}" "${loc}"`, { stdio: "pipe", timeout: ARCHIVE_META_TIMEOUT_MS });
+        execFileSync("tar", ["xzf", archive, "-C", tmpDir, loc], { stdio: "pipe", timeout: ARCHIVE_META_TIMEOUT_MS });
         const metaFile = join(tmpDir, loc);
         if (existsSync(metaFile)) {
           const meta = JSON.parse(readFileSync(metaFile, "utf-8"));
@@ -1434,7 +1683,7 @@ async function inspectBackupArchive(id: string, archive: string, originalName: s
 }
 
 function listArchiveEntries(archive: string): string[] {
-  const raw = execSync(`tar tzf "${archive}"`, { stdio: "pipe", timeout: ARCHIVE_LIST_TIMEOUT_MS }).toString();
+  const raw = execFileSync("tar", ["tzf", archive], { stdio: "pipe", timeout: ARCHIVE_LIST_TIMEOUT_MS }).toString();
   return raw
     .split(/\r?\n/)
     .map((line) => line.trim().replace(/^\.\//, ""))
@@ -1529,7 +1778,7 @@ async function validateBackupArchive(
 
 function readArchiveManifest(archive: string): BackupManifest | null {
   try {
-    const raw = execSync(`tar xOzf "${archive}" "${BACKUP_MANIFEST_ENTRY}"`, {
+    const raw = execFileSync("tar", ["xOzf", archive, BACKUP_MANIFEST_ENTRY], {
       stdio: "pipe",
       timeout: ARCHIVE_META_TIMEOUT_MS,
     }).toString("utf-8");
@@ -1573,13 +1822,30 @@ function writeJsonAtomic(path: string, value: unknown) {
 }
 
 async function sha256File(path: string): Promise<string> {
+  return sha256FileWithProgress(path);
+}
+
+async function sha256FileWithProgress(path: string, onProgress?: (percent: number) => void): Promise<string> {
   const hash = createHash("sha256");
+  const total = statSync(path).size;
+  let processed = 0;
+  let lastPercent = -1;
   await new Promise<void>((resolve, reject) => {
     const stream = createReadStream(path);
-    stream.on("data", (chunk) => hash.update(chunk));
+    stream.on("data", (chunk: Buffer) => {
+      hash.update(chunk);
+      if (!onProgress || total <= 0) return;
+      processed += chunk.length;
+      const percent = Math.min(100, Math.floor((processed / total) * 100));
+      if (percent !== lastPercent) {
+        lastPercent = percent;
+        onProgress(percent);
+      }
+    });
     stream.on("error", reject);
     stream.on("end", resolve);
   });
+  onProgress?.(100);
   return hash.digest("hex");
 }
 
@@ -1709,7 +1975,7 @@ async function preflightRestoreSql(sqlPath: string) {
   const maintenanceUrl = maintenanceDatabaseUrl();
 
   try {
-    psqlCommand(maintenanceUrl, `CREATE DATABASE "${preflightDbName}"`, "-v ON_ERROR_STOP=1", PSQL_COMMAND_TIMEOUT_MS);
+    psqlCommand(maintenanceUrl, `CREATE DATABASE "${preflightDbName}"`, ["-v", "ON_ERROR_STOP=1"], PSQL_COMMAND_TIMEOUT_MS);
     runPrismaMigrations(preflightDbUrl);
     await restoreSqlIntoDatabase(preflightDbUrl, sqlPath, { disableTriggers: true });
     console.log("[Backup] 备份数据库校验通过");
@@ -1719,29 +1985,20 @@ async function preflightRestoreSql(sqlPath: string) {
     console.warn(`[Backup] Preflight skipped (DB user may lack CREATEDB or data incompatible): ${extractCommandError(err)}`);
   } finally {
     try {
-      psqlCommand(maintenanceUrl, `DROP DATABASE IF EXISTS "${preflightDbName}" WITH (FORCE)`, "-v ON_ERROR_STOP=1", PSQL_COMMAND_TIMEOUT_MS);
+      psqlCommand(maintenanceUrl, `DROP DATABASE IF EXISTS "${preflightDbName}" WITH (FORCE)`, ["-v", "ON_ERROR_STOP=1"], PSQL_COMMAND_TIMEOUT_MS);
     } catch {}
   }
 }
 
 async function resetDatabaseSchema(dbUrl: string) {
-  const container = getDockerContainer();
-  const dbName = new URL(dbUrl).pathname.replace(/^\//, "");
-  const user = new URL(dbUrl).username;
-  const cmds = "-c 'DROP SCHEMA public CASCADE' -c 'CREATE SCHEMA public' -c 'GRANT ALL ON SCHEMA public TO public'";
-  if (container) {
-    execSync(`docker exec ${container} psql -U ${user} -d ${dbName} -v ON_ERROR_STOP=1 ${cmds}`, {
-      stdio: "pipe", timeout: PSQL_COMMAND_TIMEOUT_MS,
-    });
-  } else {
-    execSync(`psql "${dbUrl}" -v ON_ERROR_STOP=1 ${cmds}`, {
-      stdio: "pipe", timeout: PSQL_COMMAND_TIMEOUT_MS,
-    });
-  }
+  const args = ["-v", "ON_ERROR_STOP=1"];
+  psqlCommand(dbUrl, "DROP SCHEMA public CASCADE", args, PSQL_COMMAND_TIMEOUT_MS);
+  psqlCommand(dbUrl, "CREATE SCHEMA public", args, PSQL_COMMAND_TIMEOUT_MS);
+  psqlCommand(dbUrl, "GRANT ALL ON SCHEMA public TO public", args, PSQL_COMMAND_TIMEOUT_MS);
 }
 
 function runPrismaMigrations(dbUrl: string) {
-  execSync("npx prisma migrate deploy", {
+  execFileSync("npx", ["prisma", "migrate", "deploy"], {
     stdio: "pipe",
     timeout: PRISMA_MIGRATE_TIMEOUT_MS,
     env: { ...process.env, DATABASE_URL: dbUrl },
@@ -1749,7 +2006,7 @@ function runPrismaMigrations(dbUrl: string) {
 }
 
 function runPrismaDbPush(dbUrl: string) {
-  execSync("npx prisma db push --skip-generate", {
+  execFileSync("npx", ["prisma", "db", "push", "--skip-generate"], {
     stdio: "pipe",
     timeout: PRISMA_MIGRATE_TIMEOUT_MS,
     env: { ...process.env, DATABASE_URL: dbUrl },
@@ -1764,7 +2021,7 @@ async function restoreSqlIntoDatabase(dbUrl: string, sqlPath: string, options: {
       guardedPath = await writeTriggerGuardedSql(sqlPath);
       restorePath = guardedPath;
     }
-    psqlFromFile(dbUrl, restorePath, "-v ON_ERROR_STOP=1", DB_RESTORE_TIMEOUT_MS);
+    psqlFromFile(dbUrl, restorePath, ["-v", "ON_ERROR_STOP=1"], DB_RESTORE_TIMEOUT_MS);
   } finally {
     if (guardedPath) rmSync(guardedPath, { force: true });
   }
@@ -2284,7 +2541,7 @@ function extractCommandError(err: unknown): string {
 
 function extractArchiveEntry(archive: string, destination: string, entry: string): boolean {
   try {
-    execSync(`tar xzf "${archive}" -C "${destination}" "${entry}"`, {
+    execFileSync("tar", ["xzf", archive, "-C", destination, entry], {
       stdio: "pipe",
       timeout: ARCHIVE_EXTRACT_TIMEOUT_MS,
     });
@@ -2302,7 +2559,7 @@ function isArchiveEntryMissing(err: unknown): boolean {
 
 function archiveContainsEntry(archive: string, entry: string): boolean {
   try {
-    execSync(`tar tzf "${archive}" "${entry}"`, {
+    execFileSync("tar", ["tzf", archive, entry], {
       stdio: "pipe",
       timeout: ARCHIVE_LIST_TIMEOUT_MS,
     });
@@ -2325,15 +2582,9 @@ function ensureBackupStoredInActiveDir(id: string) {
   try {
     if (existsSync(targetArchive)) rmSync(targetArchive, { force: true });
     if (existsSync(targetMeta)) rmSync(targetMeta, { force: true });
-    execSync(`mv "${sourceArchive}" "${targetArchive}"`, {
-      stdio: "pipe",
-      timeout: ARCHIVE_EXTRACT_TIMEOUT_MS,
-    });
+    renameSync(sourceArchive, targetArchive);
     if (existsSync(sourceMeta)) {
-      execSync(`mv "${sourceMeta}" "${targetMeta}"`, {
-        stdio: "pipe",
-        timeout: PSQL_COMMAND_TIMEOUT_MS,
-      });
+      renameSync(sourceMeta, targetMeta);
     }
   } catch (err) {
     throw new Error(`迁移备份存储位置失败: ${extractCommandError(err)}`);
@@ -2349,8 +2600,11 @@ function prepareWorkDir(name: string): string {
 
 function normalizeBackupRecord(record: BackupRecord, archive: string, metaFile: string): BackupRecord {
   if (record.countMode === "step_models") return record;
-
-  scheduleBackupRecordNormalization(record, archive, metaFile);
+  // Keep backup listing lightweight. Deep inspection of large archives can block
+  // the API process for seconds or minutes; users can run explicit verification
+  // when they need to normalize or validate an older backup.
+  void archive;
+  void metaFile;
   return record;
 }
 

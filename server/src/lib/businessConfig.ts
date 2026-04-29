@@ -44,12 +44,23 @@ export type UploadPolicy = {
 
 export const DEFAULT_INQUIRY_STATUSES: StatusConfig[] = [
   { value: "draft", label: "草稿", color: "text-on-surface-variant", bg: "bg-surface-container-highest" },
-  { value: "submitted", label: "待报价", color: "text-blue-500", bg: "bg-blue-500/10", tab: true },
-  { value: "quoted", label: "已报价", color: "text-green-600", bg: "bg-green-500/10", tab: true },
-  { value: "accepted", label: "已接受", color: "text-emerald-600", bg: "bg-emerald-500/10", tab: true, terminal: true },
-  { value: "rejected", label: "已拒绝", color: "text-red-500", bg: "bg-red-500/10", tab: true, terminal: true },
+  { value: "submitted", label: "待处理", color: "text-blue-500", bg: "bg-blue-500/10", tab: true },
+  { value: "quoted", label: "已回复", color: "text-green-600", bg: "bg-green-500/10", tab: true },
+  { value: "accepted", label: "已转销售", color: "text-emerald-600", bg: "bg-emerald-500/10", tab: true, terminal: true },
+  { value: "rejected", label: "已关闭", color: "text-red-500", bg: "bg-red-500/10", tab: true, terminal: true },
   { value: "cancelled", label: "已取消", color: "text-on-surface-variant", bg: "bg-surface-container-highest", terminal: true },
 ];
+
+const INQUIRY_STATUS_LABELS: Record<string, string> = {
+  submitted: "待处理",
+  quoted: "已回复",
+  accepted: "已转销售",
+  rejected: "已关闭",
+};
+
+function normalizeInquiryStatuses(items: StatusConfig[]) {
+  return items.map((item) => INQUIRY_STATUS_LABELS[item.value] ? { ...item, label: INQUIRY_STATUS_LABELS[item.value] } : item);
+}
 
 export const DEFAULT_TICKET_STATUSES: StatusConfig[] = [
   { value: "open", label: "待处理", color: "text-primary-container", bg: "bg-primary-container/10", tab: true },
@@ -89,10 +100,10 @@ export const DEFAULT_ADMIN_NAV: NavItemConfig[] = [
   { label: "分类管理", icon: "folder", path: "/admin/categories", enabled: true },
   { label: "选型管理", icon: "tune", path: "/admin/selections", enabled: true },
   { label: "询价管理", icon: "receipt_long", path: "/admin/inquiries", enabled: true },
-  { label: "报价模板", icon: "description", path: "/admin/quote-template", enabled: true },
   { label: "工单处理", icon: "build", path: "/admin/tickets", enabled: true },
   { label: "用户管理", icon: "group", path: "/admin/users", enabled: true },
   { label: "分享管理", icon: "share", path: "/admin/shares", enabled: true },
+  { label: "下载统计", icon: "download", path: "/admin/downloads", enabled: true },
   { label: "操作日志", icon: "schedule", path: "/admin/audit", enabled: true },
   { label: "系统设置", icon: "settings", path: "/admin/settings", enabled: true },
 ];
@@ -127,6 +138,17 @@ export function normalizeUploadPolicy(policy: UploadPolicy): UploadPolicy {
   return { ...policy, modelFormats: modelFormats.length ? modelFormats : DEFAULT_UPLOAD_POLICY.modelFormats };
 }
 
+function normalizeAdminNav(items: NavItemConfig[]) {
+  const normalized = items.filter((item) => item.path !== "/admin/quote-template");
+  if (!normalized.some((item) => item.path === "/admin/downloads")) {
+    const shareIndex = normalized.findIndex((item) => item.path === "/admin/shares");
+    const next = [...normalized];
+    next.splice(shareIndex >= 0 ? shareIndex + 1 : next.length, 0, { label: "下载统计", icon: "download", path: "/admin/downloads", enabled: true });
+    return next;
+  }
+  return normalized;
+}
+
 export const DEFAULT_SELECTION_THREAD_PRIORITY: Record<string, number> = {
   R: 0,
   RC: 0,
@@ -159,14 +181,15 @@ export function jsonSetting<T>(value: unknown, fallback: T): T {
 export async function getBusinessConfig() {
   const all = await getAllSettings();
   return {
-    inquiryStatuses: jsonSetting<StatusConfig[]>(all.inquiry_statuses, DEFAULT_INQUIRY_STATUSES),
+    inquiryStatuses: normalizeInquiryStatuses(jsonSetting<StatusConfig[]>(all.inquiry_statuses, DEFAULT_INQUIRY_STATUSES)),
     ticketStatuses: jsonSetting<StatusConfig[]>(all.ticket_statuses, DEFAULT_TICKET_STATUSES),
     ticketClassifications: jsonSetting<TicketClassificationConfig[]>(all.ticket_classifications, DEFAULT_TICKET_CLASSIFICATIONS),
     supportProcessSteps: jsonSetting<SupportStepConfig[]>(all.support_process_steps, DEFAULT_SUPPORT_STEPS),
     navUserItems: jsonSetting<NavItemConfig[]>(all.nav_user_items, DEFAULT_USER_NAV),
-    navAdminItems: jsonSetting<NavItemConfig[]>(all.nav_admin_items, DEFAULT_ADMIN_NAV),
+    navAdminItems: normalizeAdminNav(jsonSetting<NavItemConfig[]>(all.nav_admin_items, DEFAULT_ADMIN_NAV)),
     navMobileItems: jsonSetting<NavItemConfig[]>(all.nav_mobile_items, DEFAULT_MOBILE_NAV),
     uploadPolicy: normalizeUploadPolicy({ ...DEFAULT_UPLOAD_POLICY, ...jsonSetting<Partial<UploadPolicy>>(all.upload_policy, {}) }),
+    selectionEnableMatch: all.selection_enable_match !== false,
     selectionThreadPriority: { ...DEFAULT_SELECTION_THREAD_PRIORITY, ...jsonSetting<Record<string, number>>(all.selection_thread_priority, {}) },
     pageSizePolicy: { ...DEFAULT_PAGE_SIZE_POLICY, ...jsonSetting<Partial<typeof DEFAULT_PAGE_SIZE_POLICY>>(all.page_size_policy, {}) },
   };

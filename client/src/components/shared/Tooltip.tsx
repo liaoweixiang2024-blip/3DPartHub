@@ -7,9 +7,9 @@ interface TooltipProps {
   delay?: number;
 }
 
-export default function Tooltip({ text, children, side = "top", delay = 400 }: TooltipProps) {
+export default function Tooltip({ text, children, side = "top", delay = 120 }: TooltipProps) {
   const [show, setShow] = useState(false);
-  const timerRef = useRef<ReturnType<typeof setTimeout>>();
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const positionClasses: Record<string, string> = {
     top: "bottom-full left-1/2 -translate-x-1/2 mb-2",
@@ -21,11 +21,12 @@ export default function Tooltip({ text, children, side = "top", delay = 400 }: T
   return (
     <span
       className="relative inline-flex"
+      data-tooltip-ignore
       onMouseEnter={() => {
         timerRef.current = setTimeout(() => setShow(true), delay);
       }}
       onMouseLeave={() => {
-        clearTimeout(timerRef.current);
+        if (timerRef.current) clearTimeout(timerRef.current);
         setShow(false);
       }}
     >

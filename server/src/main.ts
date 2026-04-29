@@ -1,14 +1,17 @@
 import express from "express";
+import cluster from "node:cluster";
 import cors from "cors";
 import compression from "compression";
-import { join } from "node:path";
+import { extname, join } from "node:path";
 import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync } from "node:fs";
 import { config } from "./lib/config.js";
+import modelCompareRouter from "./routes/model-compare.js";
+import modelDrawingsRouter from "./routes/model-drawings.js";
 import modelsRouter from "./routes/models.js";
+import downloadsRouter from "./routes/downloads.js";
 import authRouter from "./routes/auth.js";
 import projectsRouter from "./routes/projects.js";
 import favoritesRouter from "./routes/favorites.js";
-import commentsRouter from "./routes/comments.js";
 import sharesRouter from "./routes/shares.js";
 import tasksRouter from "./routes/tasks.js";
 import uploadRouter from "./routes/upload.js";
@@ -22,7 +25,8 @@ import modelGroupsRouter from "./routes/model-groups.js";
 import selectionsRouter from "./routes/selections.js";
 import inquiriesRouter from "./routes/inquiries.js";
 import selectionSharesRouter from "./routes/selection-shares.js";
-import { initDefaultSettings } from "./lib/settings.js";
+import healthRouter from "./routes/health.js";
+import { getSetting, initDefaultSettings } from "./lib/settings.js";
 import { startBackupScheduler } from "./lib/backup.js";
 import { prisma } from "./lib/prisma.js";
 import { responseHandler } from "./middleware/responseHandler.js";
@@ -30,9 +34,18 @@ import { errorHandler, notFoundHandler } from "./middleware/errorHandler.js";
 import { apiLimiter, uploadLimiter, authLimiter, searchLimiter, securityHeaders } from "./middleware/security.js";
 import { autoAudit } from "./middleware/autoAudit.js";
 import { ipGuard } from "./middleware/ipGuard.js";
+import { getVerifiedRequestUser } from "./middleware/auth.js";
+import { maintenanceGuard } from "./middleware/maintenance.js";
+import { scheduleStartupCacheWarmup } from "./services/cacheWarmup.js";
 
 const app = express();
 const PORT = config.port;
+
+if (!cluster.isWorker) {
+  import("./workers/downloadRecorderWorker.js").catch((err) => {
+    console.error("[download-recorder] failed to start:", err);
+  });
+}
 
 // Security headers
 app.use(securityHeaders);
@@ -52,16 +65,60 @@ app.use(compression({ threshold: 512 }));
 
 app.use(express.json({ limit: "1mb" }));
 
+function intEnv(name: string, fallback: number, min: number, max: number): number {
+  const parsed = Number(process.env[name]);
+  if (!Number.isFinite(parsed)) return fallback;
+  return Math.min(max, Math.max(min, Math.floor(parsed)));
+}
+
+function floatEnv(name: string, fallback: number, min: number, max: number): number {
+  const parsed = Number(process.env[name]);
+  if (!Number.isFinite(parsed)) return fallback;
+  return Math.min(max, Math.max(min, parsed));
+}
+
+const slowRequestThresholdMs = intEnv("SLOW_REQUEST_LOG_THRESHOLD_MS", 200, 0, 60_000);
+const slowRequestWindowMs = intEnv("SLOW_REQUEST_LOG_WINDOW_MS", 10_000, 1000, 60_000);
+const slowRequestBurst = intEnv("SLOW_REQUEST_LOG_BURST", 5, 0, 1000);
+const slowRequestSampleRate = floatEnv("SLOW_REQUEST_LOG_SAMPLE_RATE", 0.01, 0, 1);
+let slowRequestWindowStartedAt = Date.now();
+let slowRequestLoggedInWindow = 0;
+let slowRequestSuppressedInWindow = 0;
+
+function resetSlowRequestWindow(now: number) {
+  if (now - slowRequestWindowStartedAt < slowRequestWindowMs) return;
+  if (slowRequestSuppressedInWindow > 0) {
+    console.log(`[slow-requests] suppressed=${slowRequestSuppressedInWindow} windowMs=${now - slowRequestWindowStartedAt}`);
+  }
+  slowRequestWindowStartedAt = now;
+  slowRequestLoggedInWindow = 0;
+  slowRequestSuppressedInWindow = 0;
+}
+
+function shouldLogSlowRequest(now: number): boolean {
+  resetSlowRequestWindow(now);
+  if (slowRequestLoggedInWindow < slowRequestBurst) {
+    slowRequestLoggedInWindow++;
+    return true;
+  }
+  if (Math.random() < slowRequestSampleRate) {
+    slowRequestLoggedInWindow++;
+    return true;
+  }
+  slowRequestSuppressedInWindow++;
+  return false;
+}
+
 // Request logging — skip health checks and static files, only log slow requests
 app.use((req, _res, next) => {
-  if (req.originalUrl.startsWith("/static/") || req.originalUrl === "/api/health") {
+  if (req.originalUrl.startsWith("/static/") || req.originalUrl.startsWith("/api/health")) {
     next();
     return;
   }
   const start = Date.now();
   _res.on("finish", () => {
     const ms = Date.now() - start;
-    if (ms > 200 || _res.statusCode >= 400) {
+    if (_res.statusCode >= 400 || (ms > slowRequestThresholdMs && shouldLogSlowRequest(Date.now()))) {
       console.log(`${req.method} ${req.originalUrl} ${_res.statusCode} ${ms}ms`);
     }
   });
@@ -118,6 +175,9 @@ app.use("/api", apiLimiter);
 // IP access control & hotlink protection
 app.use(ipGuard);
 
+// Backend maintenance gate for APIs and protected model assets.
+app.use(maintenanceGuard);
+
 const blockedStaticDirs = new Set([
   "backups",
   "_backup_db",
@@ -129,23 +189,54 @@ const blockedStaticDirs = new Set([
   "batch",
 ]);
 
-app.use("/static", (req, res, next) => {
+function setStaticSecurityHeaders(res: express.Response, filePath: string) {
+  res.setHeader("X-Content-Type-Options", "nosniff");
+  if (extname(filePath).toLowerCase() === ".svg") {
+    res.setHeader("Content-Security-Policy", "default-src 'none'; img-src data:; style-src 'unsafe-inline'; sandbox");
+  }
+}
+
+async function staticModelAssetsRequireAuth(): Promise<boolean> {
+  return Boolean(await getSetting<boolean>("require_login_browse"));
+}
+
+app.use("/static", async (req, res, next) => {
   const path = req.path;
   const firstSegment = path.split("/").filter(Boolean)[0] || "";
   if (blockedStaticDirs.has(firstSegment) || firstSegment.startsWith(".restore_")) {
     res.status(404).end();
     return;
   }
+
+  if (firstSegment === "models" && await staticModelAssetsRequireAuth()) {
+    try {
+      const verified = await getVerifiedRequestUser(req);
+      if (!verified) {
+        res.status(401).json({ detail: "需要登录后才能查看模型预览" });
+        return;
+      }
+      if (verified.mustChangePassword) {
+        res.status(403).json({ detail: "首次登录请先修改密码", code: "PASSWORD_CHANGE_REQUIRED" });
+        return;
+      }
+    } catch (err) {
+      console.error("[static] Failed to authorize model asset:", err);
+      res.status(500).json({ detail: "认证服务暂不可用" });
+      return;
+    }
+  }
   next();
 });
 
 app.use("/static/thumbnails", express.static(join(process.cwd(), config.staticDir, "thumbnails"), {
   maxAge: "1h",
+  setHeaders: setStaticSecurityHeaders,
 }));
 
 app.use("/static", express.static(join(process.cwd(), config.staticDir), {
   maxAge: "30d",
   immutable: true,
+  setHeaders: setStaticSecurityHeaders,
 }));
 
 // Global response wrapper
@@ -155,11 +246,14 @@ app.use(responseHandler);
 app.use(autoAudit);
 
 // Routes
+app.use(healthRouter);
+app.use(modelCompareRouter);
+app.use(modelDrawingsRouter);
 app.use(modelsRouter);
+app.use(downloadsRouter);
 app.use(authRouter);
 app.use(projectsRouter);
 app.use(favoritesRouter);
-app.use(commentsRouter);
 app.use(sharesRouter);
 app.use(tasksRouter);
 app.use(uploadRouter);
@@ -190,7 +284,11 @@ app.listen(PORT, async () => {
     const existing = await prisma.user.findFirst({ where: { role: "ADMIN" } });
     if (!existing) {
       const adminUser = process.env.ADMIN_USER || "admin";
-      const adminPass = process.env.ADMIN_PASS || "admin123";
+      const adminPass = process.env.ADMIN_PASS || (process.env.NODE_ENV === "production" ? "" : "admin123");
+      if (process.env.NODE_ENV === "production" && (!adminPass || adminPass === "admin123" || adminPass.length < 12)) {
+        console.error("ADMIN_PASS is required for first production startup and must be at least 12 characters.");
+        process.exit(1);
+      }
       const adminEmail = process.env.ADMIN_EMAIL || `${adminUser}@model.com`;
       const hash = await hashPassword(adminPass);
       try {
@@ -206,7 +304,11 @@ app.listen(PORT, async () => {
         console.log(`\n  👑 Admin account created (first run only):`);
         console.log(`     Username: ${adminUser}`);
         console.log(`     Email: ${adminEmail}`);
-        console.log(`     Password: ${adminPass}`);
+        if (process.env.NODE_ENV === "production") {
+          console.log("     Password: hidden in production logs; use ADMIN_PASS from the server environment");
+        } else {
+          console.log(`     Password: ${adminPass}`);
+        }
         console.log(`     ⚠️  首次登录后将强制修改密码！\n`);
       } catch {
         // Another worker created admin first — safe to ignore
@@ -237,5 +339,9 @@ app.listen(PORT, async () => {
     }
   } catch {
     // _prisma_migrations might not exist yet — ignore
+  }
+
+  if (process.env.CACHE_WARMUP_ENABLED !== "0") {
+    scheduleStartupCacheWarmup(PORT);
   }
 });

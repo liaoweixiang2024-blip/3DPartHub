@@ -154,7 +154,7 @@ router.delete("/api/projects/:id", authMiddleware, async (req: AuthRequest, res:
 // --- Member management ---
 
 // List members
-router.get("/api/projects/:id/members", authMiddleware, async (req: AuthRequest, res: Response) => {
+router.get("/api/projects/:id/members", authMiddleware, requireProjectRole("VIEWER"), async (req: AuthRequest, res: Response) => {
   const projectId = param(req, "id");
   try {
     const members = await prisma.projectMember.findMany({

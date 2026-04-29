@@ -1,4 +1,5 @@
 import client from "./client";
+import { unwrapResponse } from "./response";
 import type { ApiResponse } from "../types/api";
 import type { ServerModelListItem } from "./models";
 import { getAccessToken } from "../stores";
@@ -12,8 +13,8 @@ export interface FavoriteItem {
 
 export const favoriteApi = {
   list: async (): Promise<FavoriteItem[]> => {
-    const { data: resp } = await client.get<ApiResponse<FavoriteItem[]>>("/favorites");
-    return resp.data?.data ?? resp.data ?? resp;
+    const res = await client.get<ApiResponse<FavoriteItem[]>>("/favorites");
+    return unwrapResponse<FavoriteItem[]>(res);
   },
 
   add: async (modelId: string): Promise<void> => {
@@ -25,8 +26,8 @@ export const favoriteApi = {
   },
 
   batchRemove: async (modelIds: string[]): Promise<{ removed: number }> => {
-    const { data: resp } = await client.post("/favorites/batch-remove", { modelIds });
-    return resp.data?.data ?? resp.data ?? resp;
+    const res = await client.post("/favorites/batch-remove", { modelIds });
+    return unwrapResponse<{ removed: number }>(res);
   },
 
   batchDownloadUrl: "/api/favorites/batch-download",

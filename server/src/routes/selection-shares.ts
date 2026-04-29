@@ -2,7 +2,9 @@ import { Router, Request, Response } from "express";
 import { randomBytes } from "node:crypto";
 import { prisma } from "../lib/prisma.js";
 import { authMiddleware, AuthRequest } from "../middleware/auth.js";
+import { requireBrowseAccess } from "../middleware/browseAccess.js";
 import { buildModelMatchMap } from "../lib/modelMatch.js";
+import { getBusinessConfig } from "../lib/businessConfig.js";
 
 const router = Router();
 
@@ -45,6 +47,7 @@ router.post("/api/selection-shares", authMiddleware, async (req: AuthRequest, re
 // ========== Get selection share (public) ==========
 
 router.get("/api/selection-shares/:token", async (req: Request, res: Response) => {
+  if (!(await requireBrowseAccess(req, res))) return;
   try {
     const shareToken = req.params.token as string;
 
@@ -75,8 +78,9 @@ router.get("/api/selection-shares/:token", async (req: Request, res: Response) =
       : [];
 
     // Auto-match models (fuzzy, prefer primary version)
-    const modelNos = products.map((p) => p.modelNo).filter(Boolean) as string[];
-    const modelMap = await buildModelMatchMap(modelNos);
+    const { selectionEnableMatch } = await getBusinessConfig();
+    const modelNos = selectionEnableMatch ? products.map((p) => p.modelNo).filter(Boolean) as string[] : [];
+    const modelMap = selectionEnableMatch ? await buildModelMatchMap(modelNos) : new Map<string, { id: string; thumbnailUrl: string | null }>();
 
     const productsWithMatch = products.map((p) => {
       const matched = p.modelNo ? modelMap.get(p.modelNo) : undefined;
@@ -104,6 +108,7 @@ router.get("/api/selection-shares/:token", async (req: Request, res: Response) =
         groupId: (category?.groupId as string) || null,
         specs: share.specs,
         columns: category?.columns || [],
+        optionOrder: category?.optionOrder || null,
         products: productsWithMatch,
       },
     });

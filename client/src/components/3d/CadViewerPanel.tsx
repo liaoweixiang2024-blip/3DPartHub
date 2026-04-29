@@ -1,4 +1,4 @@
-import { Suspense, useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type MouseEventHandler } from "react";
+import { Component, Suspense, useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type MouseEventHandler, type ReactNode } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { modelApi, type ModelPreviewMeta } from "../../api/models";
 import { getCachedPublicSettings } from "../../lib/publicSettings";
@@ -66,6 +66,59 @@ interface CadViewerPanelProps {
   onBack?: () => void;
 }
 
+function friendlyViewerError(error: Error | null) {
+  const message = error?.message || "";
+  if (message.includes("401") || message.includes("Unauthorized")) {
+    return "预览文件需要访问权限，请刷新页面或重新登录后再试。";
+  }
+  if (message.includes("404") || message.toLowerCase().includes("not found")) {
+    return "预览文件不存在，可能需要重新生成模型预览。";
+  }
+  if (message.includes("Failed to fetch") || message.includes("Could not load") || message.includes("fetch for")) {
+    return "模型预览加载失败，请检查网络或稍后重试。";
+  }
+  return "模型预览暂时无法加载，请稍后重试。";
+}
+
+class ViewerErrorBoundary extends Component<
+  { children: ReactNode; isMobile: boolean; onRetry: () => void },
+  { error: Error | null }
+> {
+  state: { error: Error | null } = { error: null };
+
+  static getDerivedStateFromError(error: Error) {
+    return { error };
+  }
+
+  componentDidCatch(error: Error) {
+    console.error("[viewer] Model preview failed:", error);
+  }
+
+  render() {
+    if (!this.state.error) return this.props.children;
+    return (
+      <div className="flex h-full w-full items-center justify-center px-5">
+        <div className="max-w-sm rounded-lg border border-outline-variant/15 bg-surface-container-low/95 p-5 text-center shadow-xl backdrop-blur">
+          <Icon name="error" size={this.props.isMobile ? 36 : 44} className="mx-auto text-error/70" />
+          <h3 className="mt-3 text-sm font-semibold text-on-surface">模型预览加载失败</h3>
+          <p className="mt-2 text-xs leading-5 text-on-surface-variant">{friendlyViewerError(this.state.error)}</p>
+          <button
+            type="button"
+            onClick={() => {
+              this.setState({ error: null });
+              this.props.onRetry();
+            }}
+            className="mt-4 inline-flex items-center gap-1.5 rounded-md bg-primary-container px-3 py-2 text-xs font-medium text-on-primary-container transition-opacity hover:opacity-90"
+          >
+            <Icon name="refresh" size={14} />
+            重新加载
+          </button>
+        </div>
+      </div>
+    );
+  }
+}
+
 export default function CadViewerPanel({
   variant,
   modelId,
@@ -119,6 +172,7 @@ export default function CadViewerPanel({
   const [settingThumb, setSettingThumb] = useState(false);
   const [diagnosticsOpen, setDiagnosticsOpen] = useState(false);
   const [regeneratingPreview, setRegeneratingPreview] = useState(false);
+  const [viewerRetryKey, setViewerRetryKey] = useState(0);
   const [currentPreviewMeta, setCurrentPreviewMeta] = useState<ModelPreviewMeta | null | undefined>(previewMeta);
   const [modelBounds, setModelBounds] = useState<ModelBoundsDetail | null>(null);
   const [parts, setParts] = useState<ModelPartItem[]>([]);
@@ -134,7 +188,7 @@ export default function CadViewerPanel({
   const [measurementSnapMode, setMeasurementSnapMode] = useState<MeasurementSnapMode>("surface");
   const [measurementPoints, setMeasurementPoints] = useState<MeasurementPoint[]>([]);
   const [measurementRecords, setMeasurementRecords] = useState<MeasurementRecord[]>([]);
-  const [watermark, setWatermark] = useState<{ show: boolean; image: string }>({ show: false, image: "" });
+  const [watermark, setWatermark] = useState<{ show: boolean; image: string; text: string }>({ show: false, image: "", text: "" });
   const { toast } = useToast();
 
   useEffect(() => {
@@ -184,7 +238,11 @@ export default function CadViewerPanel({
   useEffect(() => {
     getCachedPublicSettings()
       .then((settings) => {
-        setWatermark({ show: !!settings.show_watermark, image: (settings as any).watermark_image || "" });
+        setWatermark({
+          show: !!settings.show_watermark,
+          image: settings.watermark_image || "",
+          text: settings.watermark_text?.trim() || "",
+        });
       })
       .catch(() => {});
   }, []);
@@ -397,37 +455,46 @@ export default function CadViewerPanel({
             </div>
           }
         >
-          <ModelViewer
-            modelUrl={modelUrl}
-            viewMode={activeView}
-            explodeAmount={explodeAmount}
-            cameraPreset={activeCamera}
-            showDimensions={showDimensions}
-            showGrid={false}
-            clipEnabled={clipEnabled}
-            clipDirection={clipDirection}
-            clipPosition={clipPosition}
-            clipRange={clipRange}
-            clipInverted={clipInverted}
-            onClipPositionChange={onClipPositionChange}
-            materialPreset={materialPreset}
-            showEdges={showEdges}
-            viewerSettings={viewerTuning}
-            showAxis={showAxis}
-            selectedPartId={selectedPartId}
-            hiddenPartIds={hiddenPartIds}
-            isolatedPartId={isolatedPartId}
-            onPartsChange={handlePartsChange}
-            onPartSelect={setSelectedPartId}
-            measurementActive={measurementOpen && measureMode !== "bounds"}
-            measureMode={measureMode}
-            measurementSnapMode={measurementSnapMode}
-            measurementPoints={measurementOpen && measureMode !== "bounds" ? measurementPoints : []}
-            measurementRecords={measurementOpen ? measurementRecords : []}
-            onMeasurePoint={handleMeasurePoint}
-            onLoaded={handleViewerLoaded}
-            onProgress={handleViewerProgress}
-          />
+          <ViewerErrorBoundary
+            key={`${modelUrl || "empty"}-${viewerRetryKey}`}
+            isMobile={isMobile}
+            onRetry={() => {
+              setLoadProgress(modelUrl ? 0 : null);
+              setViewerRetryKey((key) => key + 1);
+            }}
+          >
+            <ModelViewer
+              modelUrl={modelUrl}
+              viewMode={activeView}
+              explodeAmount={explodeAmount}
+              cameraPreset={activeCamera}
+              showDimensions={showDimensions}
+              showGrid={false}
+              clipEnabled={clipEnabled}
+              clipDirection={clipDirection}
+              clipPosition={clipPosition}
+              clipRange={clipRange}
+              clipInverted={clipInverted}
+              onClipPositionChange={onClipPositionChange}
+              materialPreset={materialPreset}
+              showEdges={showEdges}
+              viewerSettings={viewerTuning}
+              showAxis={showAxis}
+              selectedPartId={selectedPartId}
+              hiddenPartIds={hiddenPartIds}
+              isolatedPartId={isolatedPartId}
+              onPartsChange={handlePartsChange}
+              onPartSelect={setSelectedPartId}
+              measurementActive={measurementOpen && measureMode !== "bounds"}
+              measureMode={measureMode}
+              measurementSnapMode={measurementSnapMode}
+              measurementPoints={measurementOpen && measureMode !== "bounds" ? measurementPoints : []}
+              measurementRecords={measurementOpen ? measurementRecords : []}
+              onMeasurePoint={handleMeasurePoint}
+              onLoaded={handleViewerLoaded}
+              onProgress={handleViewerProgress}
+            />
+          </ViewerErrorBoundary>
         </Suspense>
       </div>
 
@@ -595,15 +662,22 @@ export default function CadViewerPanel({
         )}
       </AnimatePresence>
 
-      {watermark.show && watermark.image && (
-        <div className="absolute inset-0 pointer-events-none flex items-center justify-center select-none">
-          <SafeImage
-            src={watermark.image}
-            alt=""
-            className="opacity-[0.04] select-none"
-            style={{ maxWidth: "40%", maxHeight: "40%", objectFit: "contain" }}
-            fallbackClassName="hidden"
-          />
+      {watermark.show && (watermark.image || watermark.text) && (
+        <div className="absolute inset-0 pointer-events-none flex flex-col items-center justify-center gap-4 select-none">
+          {watermark.image && (
+            <SafeImage
+              src={watermark.image}
+              alt=""
+              className="opacity-[0.04] select-none"
+              style={{ maxWidth: "40%", maxHeight: "40%", objectFit: "contain" }}
+              fallbackClassName="hidden"
+            />
+          )}
+          {watermark.text && (
+            <div className="max-w-[70%] break-words text-center text-3xl font-semibold tracking-normal text-on-surface opacity-[0.05] md:text-5xl">
+              {watermark.text}
+            </div>
+          )}
         </div>
       )}
 

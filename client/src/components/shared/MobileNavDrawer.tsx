@@ -34,7 +34,7 @@ export default function MobileNavDrawer({ open, onClose }: MobileNavDrawerProps)
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 bg-black/50 z-[60]"
+            className="fixed inset-0 bg-black/50 z-[260]"
             onClick={onClose}
           />
           <motion.aside
@@ -42,7 +42,7 @@ export default function MobileNavDrawer({ open, onClose }: MobileNavDrawerProps)
             animate={{ x: 0 }}
             exit={{ x: "-100%" }}
             transition={{ type: "spring", damping: 25, stiffness: 300 }}
-            className="fixed left-0 top-0 w-[min(82vw,280px)] h-dvh bg-surface-container-low z-[70] flex flex-col overflow-y-auto shadow-2xl"
+            className="fixed left-0 top-0 w-[min(82vw,280px)] h-dvh bg-surface-container-low z-[270] flex flex-col overflow-y-auto shadow-2xl"
             style={{
               paddingTop: "env(safe-area-inset-top, 0px)",
               paddingBottom: "env(safe-area-inset-bottom, 0px)",

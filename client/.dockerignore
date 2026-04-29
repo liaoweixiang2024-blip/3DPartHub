@@ -1,5 +1,11 @@
 node_modules/
 dist/
 .env
+.env.*
+!.env.example
+*.local
 *.log
 .DS_Store
+public/data/
+public/product-wall-assets/
+public/static/

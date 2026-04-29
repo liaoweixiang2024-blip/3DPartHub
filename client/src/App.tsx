@@ -3,6 +3,8 @@ import { SWRConfig } from "swr";
 import Router from "./router";
 import { ToastProvider } from "./components/shared/Toast";
 import ErrorBoundary from "./components/shared/ErrorBoundary";
+import ForceChangePassword from "./components/shared/ForceChangePassword";
+import GlobalTooltip from "./components/shared/GlobalTooltip";
 import { notifyGlobalError } from "./lib/errorNotifications";
 
 export default function App() {
@@ -17,6 +19,8 @@ export default function App() {
         <ToastProvider>
           <ErrorBoundary>
             <Router />
+            <ForceChangePassword />
+            <GlobalTooltip />
           </ErrorBoundary>
         </ToastProvider>
       </BrowserRouter>

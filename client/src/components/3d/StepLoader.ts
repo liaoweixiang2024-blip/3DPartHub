@@ -31,12 +31,49 @@ type OcctInstance = any;
 
 declare global {
   var occtimportjs: any;
+  var Module: { locateFile?: (name: string) => string } | undefined;
 }
 
 let _occtCache: OcctInstance | null = null;
+let _occtScriptPromise: Promise<void> | null = null;
+
+function ensureOcctScript(): Promise<void> {
+  if (typeof globalThis.occtimportjs !== "undefined") {
+    return Promise.resolve();
+  }
+
+  if (_occtScriptPromise) {
+    return _occtScriptPromise;
+  }
+
+  if (typeof document === "undefined") {
+    return Promise.reject(new Error("OCCT WASM 模块仅能在浏览器中加载"));
+  }
+
+  globalThis.Module = {
+    ...(globalThis.Module || {}),
+    locateFile: (name: string) => `/${name}`,
+  };
+
+  _occtScriptPromise = new Promise((resolve, reject) => {
+    const script = document.createElement("script");
+    script.src = "/occt-import-js.js";
+    script.async = true;
+    script.onload = () => resolve();
+    script.onerror = () => {
+      _occtScriptPromise = null;
+      reject(new Error("OCCT WASM 模块加载失败，请检查网络连接后重试。"));
+    };
+    document.head.appendChild(script);
+  });
+
+  return _occtScriptPromise;
+}
 
 async function getOcct(): Promise<OcctInstance> {
   if (_occtCache) return _occtCache;
+
+  await ensureOcctScript();
 
   if (typeof globalThis.occtimportjs === "function") {
     _occtCache = await globalThis.occtimportjs();

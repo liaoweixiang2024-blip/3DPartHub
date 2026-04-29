@@ -4,13 +4,14 @@ import { motion, AnimatePresence } from "framer-motion";
 import useSWR from "swr";
 import { useMediaQuery } from "../layouts/hooks/useMediaQuery";
 import { useDocumentTitle } from "../hooks/useDocumentTitle";
-import TopNav from "../components/shared/TopNav";
-import BottomNav from "../components/shared/BottomNav";
-import MobileNavDrawer from "../components/shared/MobileNavDrawer";
+import { PageHeader } from "../components/shared/PagePrimitives";
+import { AdminPageShell } from "../components/shared/AdminPageShell";
 import { projectApi, type Project } from "../api/projects";
 import { useAuthStore } from "../stores";
 import { useToast } from "../components/shared/Toast";
 import Icon from "../components/shared/Icon";
+import InfiniteLoadTrigger from "../components/shared/InfiniteLoadTrigger";
+import { useVisibleItems } from "../hooks/useVisibleItems";
 
 function ProjectCard({ project, onDelete }: { project: Project; onDelete: (id: string) => void }) {
   const [confirming, setConfirming] = useState(false);
@@ -75,7 +76,6 @@ export default function ProjectsPage() {
   const navigate = useNavigate();
   const { isAuthenticated } = useAuthStore();
   const [showCreate, setShowCreate] = useState(false);
-  const [navOpen, setNavOpen] = useState(false);
   const [newName, setNewName] = useState("");
   const [newDesc, setNewDesc] = useState("");
 
@@ -83,6 +83,8 @@ export default function ProjectsPage() {
     isAuthenticated ? "/projects" : null,
     () => projectApi.list()
   );
+  const projectList = projects || [];
+  const { visibleItems: visibleProjects, hasMore, loadMore } = useVisibleItems(projectList, 60, String(projectList.length));
   const { toast } = useToast();
 
   const handleCreate = async () => {
@@ -120,13 +122,7 @@ export default function ProjectsPage() {
   }
 
   return (
-    <div className="flex flex-col h-dvh bg-surface">
-      <TopNav compact={!isDesktop} onMenuToggle={() => setNavOpen(true)} />
-      {!isDesktop && <MobileNavDrawer open={navOpen} onClose={() => setNavOpen(false)} />}
-      <main
-        className="flex-1 overflow-y-auto scrollbar-hidden bg-surface-dim p-4 md:p-8"
-        style={!isDesktop ? { paddingBottom: "calc(5rem + env(safe-area-inset-bottom, 0px))" } : undefined}
-      >
+    <AdminPageShell mobileContentClassName="p-4 pb-20">
         <div className="max-w-6xl mx-auto">
           <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between mb-6 border-b border-surface-container-low pb-4">
             <div className="min-w-0">
@@ -135,7 +131,7 @@ export default function ProjectsPage() {
                 <Icon name="chevron_right" size={12} className="text-on-surface-variant/40" />
                 <span className="text-primary font-medium">项目空间</span>
               </div>
-              <h1 className="font-headline text-2xl font-bold tracking-tight text-on-surface uppercase">项目</h1>
+              <PageHeader title="项目" />
             </div>
             <button
               onClick={() => setShowCreate(true)}
@@ -150,7 +146,7 @@ export default function ProjectsPage() {
             <div className="flex items-center justify-center py-20">
               <Icon name="progress_activity" size={48} className="text-on-surface-variant/30 animate-pulse" />
             </div>
-          ) : projects.length === 0 ? (
+          ) : projectList.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-20 gap-4">
               <Icon name="folder_off" size={56} className="text-on-surface-variant/30" />
               <p className="text-on-surface-variant">还没有项目</p>
@@ -162,23 +158,23 @@ export default function ProjectsPage() {
               </button>
             </div>
           ) : (
-            <div className={`grid gap-4 ${isDesktop ? "grid-cols-3" : "grid-cols-1 sm:grid-cols-2"}`}>
-              {projects.map((p) => (
-                <motion.div
-                  key={p.id}
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.3 }}
-                >
-                  <ProjectCard project={p} onDelete={handleDelete} />
-                </motion.div>
-              ))}
-            </div>
+            <>
+              <div className={`grid gap-4 ${isDesktop ? "grid-cols-3" : "grid-cols-1 sm:grid-cols-2"}`}>
+                {visibleProjects.map((p) => (
+                  <motion.div
+                    key={p.id}
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.3 }}
+                  >
+                    <ProjectCard project={p} onDelete={handleDelete} />
+                  </motion.div>
+                ))}
+              </div>
+              <InfiniteLoadTrigger hasMore={hasMore} isLoading={false} onLoadMore={loadMore} />
+            </>
           )}
         </div>
-      </main>
-
-      {!isDesktop && <BottomNav />}
 
       {/* Create project modal */}
       <AnimatePresence>
@@ -239,6 +235,6 @@ export default function ProjectsPage() {
           </motion.div>
         )}
       </AnimatePresence>
-    </div>
+    </AdminPageShell>
   );
 }

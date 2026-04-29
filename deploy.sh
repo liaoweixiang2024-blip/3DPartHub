@@ -59,10 +59,13 @@ fi
 echo -e "${YELLOW}[3/4] 配置密钥...${NC}"
 if [ ! -f .env ]; then
   cat > .env << EOF
+IMAGE_TAG=v2.5
 DB_PASSWORD=$(openssl rand -hex 16)
 JWT_SECRET=$(openssl rand -hex 32)
+ADMIN_PASS=$(openssl rand -base64 24 | tr -d '\n')
 EOF
-  echo -e "${GREEN}  ✓ .env 已生成（随机密码和密钥）${NC}"
+  echo -e "${GREEN}  ✓ .env 已生成（固定镜像版本、随机数据库密码、JWT 密钥和初始管理员密码）${NC}"
+  echo -e "${YELLOW}  初始管理员密码已写入 .env 的 ADMIN_PASS，请首次登录后立即修改。${NC}"
 else
   echo -e "${GREEN}  ✓ .env 已存在，保持不变${NC}"
 fi

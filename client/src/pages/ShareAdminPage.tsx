@@ -1,16 +1,16 @@
-import { useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import useSWR from "swr";
+import useSWRInfinite from "swr/infinite";
 import { useDocumentTitle } from "../hooks/useDocumentTitle";
-import { useMediaQuery } from "../layouts/hooks/useMediaQuery";
-import TopNav from "../components/shared/TopNav";
-import BottomNav from "../components/shared/BottomNav";
-import AppSidebar from "../components/shared/Sidebar";
-import MobileNavDrawer from "../components/shared/MobileNavDrawer";
 import Icon from "../components/shared/Icon";
-import Pagination from "../components/shared/Pagination";
+import InfiniteLoadTrigger from "../components/shared/InfiniteLoadTrigger";
+import { AdminPageShell } from "../components/shared/AdminPageShell";
+import { AdminManagementPage } from "../components/shared/AdminManagementPage";
 import client from "../api/client";
+import { unwrapResponse } from "../api/response";
 import { useToast } from "../components/shared/Toast";
 import { copyText } from "../lib/clipboard";
+import type { ApiResponse } from "../types/api";
 
 interface ShareItem {
   id: string;
@@ -39,38 +39,51 @@ interface ShareStats {
 
 const PAGE_SIZE = 20;
 
-function fetchAdminShares(page: number, search: string) {
-  return client.get("/admin/shares", { params: { page, page_size: PAGE_SIZE, search: search || undefined } })
-    .then(({ data: resp }) => {
-      const d = (resp as any)?.data ?? resp;
-      return d as { total: number; items: ShareItem[]; page: number; pageSize: number };
-    });
+type AdminSharesResponse = { total: number; items: ShareItem[]; page: number; pageSize: number };
+
+async function fetchAdminShares(page: number, search: string): Promise<AdminSharesResponse> {
+  const res = await client.get<ApiResponse<AdminSharesResponse>>("/admin/shares", {
+    params: { page, page_size: PAGE_SIZE, search: search || undefined },
+  });
+  return unwrapResponse<AdminSharesResponse>(res);
 }
 
-function fetchShareStats() {
-  return client.get("/admin/shares/stats")
-    .then(({ data: resp }) => {
-      const d = (resp as any)?.data ?? resp;
-      return d as ShareStats;
-    });
+async function fetchShareStats(): Promise<ShareStats> {
+  const res = await client.get<ApiResponse<ShareStats>>("/admin/shares/stats");
+  return unwrapResponse<ShareStats>(res);
 }
 
 function Content() {
   const { toast } = useToast();
   const [search, setSearch] = useState("");
-  const [page, setPage] = useState(1);
   const [deleteId, setDeleteId] = useState<string | null>(null);
 
-  const { data, mutate } = useSWR(
-    `/admin/shares?p=${page}&s=${search}`,
-    () => fetchAdminShares(page, search)
+  const { data, mutate, setSize, size, isLoading } = useSWRInfinite(
+    (pageIndex, previousPageData: AdminSharesResponse | null) => {
+      if (previousPageData && previousPageData.page * previousPageData.pageSize >= previousPageData.total) return null;
+      return `/admin/shares?p=${pageIndex + 1}&s=${encodeURIComponent(search)}`;
+    },
+    (key: string) => {
+      const url = new URL(key, window.location.origin);
+      return fetchAdminShares(Number(url.searchParams.get("p") || "1"), search);
+    }
   );
+
+  useEffect(() => {
+    setSize(1);
+  }, [search, setSize]);
 
   const { data: stats } = useSWR("/admin/shares/stats", fetchShareStats);
 
-  const items = data?.items || [];
-  const total = data?.total || 0;
-  const totalPages = Math.ceil(total / PAGE_SIZE);
+  const pages = data || [];
+  const items = pages.flatMap((pageData) => pageData.items);
+  const total = pages[0]?.total || 0;
+  const hasMore = items.length < total;
+  const isLoadingMore = Boolean(size > 0 && !data?.[size - 1]);
+  const loadMore = useCallback(() => {
+    if (!hasMore || isLoadingMore) return;
+    setSize((current) => current + 1);
+  }, [hasMore, isLoadingMore, setSize]);
 
   async function handleDelete(id: string) {
     try {
@@ -97,54 +110,68 @@ function Content() {
     return new Date(expiresAt) < new Date();
   }
 
-  return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <h1 className="text-lg md:text-2xl md:font-headline md:font-bold md:tracking-tight md:uppercase font-bold text-on-surface">分享管理</h1>
-        <span className="text-xs text-on-surface-variant">{total} 条记录</span>
+  const statItems = stats ? [
+    { label: "总数", value: stats.total, icon: "share", accent: "text-primary-container" },
+    { label: "活跃", value: stats.active, icon: "check_circle", accent: "text-emerald-500" },
+    { label: "已过期", value: stats.expired, icon: "schedule", accent: "text-on-surface-variant" },
+    { label: "总浏览", value: stats.totalViews, icon: "visibility", accent: "text-blue-500" },
+    { label: "总下载", value: stats.totalDownloads, icon: "download", accent: "text-amber-500" },
+  ] : [];
+
+  const toolbar = (
+    <div className="flex min-h-12 flex-wrap items-center justify-between gap-3">
+      <div className="grid min-w-0 flex-1 grid-cols-2 sm:grid-cols-3 xl:grid-cols-5">
+        {statItems.map((item, index) => (
+          <div
+            key={item.label}
+            className="flex min-h-12 flex-col items-center justify-center gap-1 border-b border-r border-outline-variant/12 px-3 py-2 text-center even:border-r-0 sm:even:border-r sm:[&:nth-child(3n)]:border-r-0 xl:border-b-0 xl:even:border-r xl:[&:nth-child(3n)]:border-r xl:[&:nth-child(5n)]:border-r-0"
+          >
+            <span className="flex min-w-0 items-center justify-center gap-1.5">
+              <Icon name={item.icon} size={14} className={item.accent} />
+              <span className="truncate text-[10px] text-on-surface-variant">{item.label}</span>
+            </span>
+            <strong className={`block max-w-full truncate tabular-nums leading-tight text-on-surface ${index === 0 ? "text-lg" : "text-base"}`}>
+              {item.value}
+            </strong>
+          </div>
+        ))}
+        {statItems.length === 0 && (
+          <div className="col-span-full h-12 animate-pulse rounded-lg bg-surface-container-low" />
+        )}
       </div>
-
-      {/* Stats cards */}
-      {stats && (
-        <div className="grid grid-cols-2 md:grid-cols-5 gap-2">
-          {[
-            { label: "总数", value: stats.total, icon: "share", color: "text-primary-container" },
-            { label: "活跃", value: stats.active, icon: "check_circle", color: "text-emerald-400" },
-            { label: "已过期", value: stats.expired, icon: "schedule", color: "text-on-surface-variant" },
-            { label: "总浏览", value: stats.totalViews, icon: "visibility", color: "text-blue-400" },
-            { label: "总下载", value: stats.totalDownloads, icon: "download", color: "text-amber-400" },
-          ].map(s => (
-            <div key={s.label} className="bg-surface-container-low rounded-lg border border-outline-variant/10 p-3 flex items-center gap-2.5">
-              <Icon name={s.icon} size={16} className={s.color} />
-              <div>
-                <p className="text-lg font-bold text-on-surface">{s.value}</p>
-                <p className="text-[10px] text-on-surface-variant">{s.label}</p>
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
-
-      {/* Search */}
-      <div className="flex items-center bg-surface-container-lowest rounded-md px-3 py-2 border border-outline-variant/20">
-        <Icon name="search" size={16} className="text-on-surface-variant mr-2 shrink-0" />
+      <div className="ml-auto flex h-9 w-full shrink-0 items-center px-1 sm:w-72">
+        <Icon name="search" size={16} className="mr-2 shrink-0 text-on-surface-variant" />
         <input
           type="text"
           value={search}
-          onChange={(e) => { setSearch(e.target.value); setPage(1); }}
+          onChange={(e) => setSearch(e.target.value)}
           placeholder="搜索模型名、用户名..."
-          className="bg-transparent border-none outline-none text-sm text-on-surface placeholder:text-on-surface-variant/50 w-full"
+          className="w-full border-none bg-transparent text-sm text-on-surface outline-none placeholder:text-on-surface-variant/50"
         />
         {search && (
-          <button onClick={() => { setSearch(""); setPage(1); }} className="p-0.5 text-on-surface-variant hover:text-on-surface">
+          <button onClick={() => setSearch("")} className="p-0.5 text-on-surface-variant hover:text-on-surface">
             <Icon name="close" size={14} />
           </button>
         )}
       </div>
+    </div>
+  );
+
+  return (
+    <AdminManagementPage
+      title="分享管理"
+      description="管理模型分享链接、访问权限和下载记录"
+      toolbar={toolbar}
+    >
 
       {/* List */}
       <div className="space-y-2">
-        {items.length === 0 && (
+        {isLoading && items.length === 0 && (
+          <div className="space-y-2">
+            {[1, 2, 3].map((item) => <div key={item} className="h-20 animate-pulse rounded-md bg-surface-container-low" />)}
+          </div>
+        )}
+        {items.length === 0 && !isLoading && (
           <div className="text-center py-12 text-on-surface-variant">
             <Icon name="share" size={40} className="mx-auto mb-2 opacity-30" />
             <p className="text-sm">暂无分享记录</p>
@@ -204,42 +231,13 @@ function Content() {
             </div>
           );
         })}
+        {items.length > 0 && <InfiniteLoadTrigger hasMore={hasMore} isLoading={isLoadingMore} onLoadMore={loadMore} />}
       </div>
-
-      <Pagination page={page} totalPages={totalPages} totalItems={total} onPageChange={setPage} className="mt-4 pb-1" />
-    </div>
+    </AdminManagementPage>
   );
 }
 
 export default function ShareAdminPage() {
   useDocumentTitle("分享管理");
-  const isDesktop = useMediaQuery("(min-width: 768px)");
-  const [navOpen, setNavOpen] = useState(false);
-
-  if (isDesktop) {
-    return (
-      <div className="flex flex-col h-screen overflow-hidden">
-        <TopNav />
-        <div className="flex flex-1 overflow-hidden">
-          <AppSidebar />
-          <main className="flex-1 overflow-y-auto p-8 scrollbar-hidden bg-surface-dim">
-            <Content />
-          </main>
-        </div>
-      </div>
-    );
-  }
-
-  return (
-    <div className="flex flex-col h-dvh bg-surface">
-      <TopNav compact onMenuToggle={() => setNavOpen(prev => !prev)} />
-      <MobileNavDrawer open={navOpen} onClose={() => setNavOpen(false)} />
-      <main className="flex-1 overflow-y-auto scrollbar-hidden bg-surface-dim">
-        <div className="px-4 py-4 pb-20">
-          <Content />
-        </div>
-      </main>
-      <BottomNav />
-    </div>
-  );
+  return <AdminPageShell><Content /></AdminPageShell>;
 }

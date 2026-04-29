@@ -5,8 +5,8 @@ import { authApi } from '../../api/auth';
 import { useToast } from './Toast';
 
 /**
- * Global overlay that forces the user to change their password.
- * Shown when user.mustChangePassword === true, cannot be dismissed.
+ * Global overlay that forces default/admin accounts to change their password.
+ * Shown only for admins with user.mustChangePassword === true.
  */
 export default function ForceChangePassword() {
   const { user } = useAuthStore();
@@ -16,7 +16,7 @@ export default function ForceChangePassword() {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
-  if (!user?.mustChangePassword) return null;
+  if (user?.role !== 'ADMIN' || !user.mustChangePassword) return null;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

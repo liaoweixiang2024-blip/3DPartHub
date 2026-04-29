@@ -1,4 +1,5 @@
 import client from "./client";
+import { unwrapResponse } from "./response";
 import type { ApiResponse } from "../types/api";
 
 export interface ConversionResponse {
@@ -23,7 +24,7 @@ export const converterApi = {
     const formData = new FormData();
     formData.append("file", file);
     if (options?.categoryId) formData.append("categoryId", options.categoryId);
-    const { data: resp } = await client.post<ApiResponse<ConversionResponse>>(
+    const res = await client.post<ApiResponse<ConversionResponse>>(
       "/models/upload",
       formData,
       {
@@ -31,16 +32,16 @@ export const converterApi = {
         onUploadProgress: options?.onUploadProgress,
       }
     );
-    return resp.data?.data ?? resp.data ?? resp;
+    return unwrapResponse<ConversionResponse>(res);
   },
 
   /** Create model from a file already on the server (after chunked upload) */
   uploadLocal: async (filePath: string, fileName: string, categoryId?: string): Promise<ConversionResponse> => {
-    const { data: resp } = await client.post<ApiResponse<ConversionResponse>>(
+    const res = await client.post<ApiResponse<ConversionResponse>>(
       "/models/upload-local",
       { filePath, fileName, categoryId: categoryId || undefined },
     );
-    return resp.data?.data ?? resp.data ?? resp;
+    return unwrapResponse<ConversionResponse>(res);
   },
 
   deleteModel: async (modelId: string): Promise<void> => {

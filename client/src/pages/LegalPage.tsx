@@ -1,17 +1,17 @@
 import { useParams, Link } from "react-router-dom";
 import { useDocumentTitle } from "../hooks/useDocumentTitle";
-import { useMediaQuery } from "../layouts/hooks/useMediaQuery";
-import TopNav from "../components/shared/TopNav";
 import Icon from "../components/shared/Icon";
+import { PageHeader } from "../components/shared/PagePrimitives";
+import { PublicPageShell } from "../components/shared/PublicPageShell";
 import { getSiteTitle, getFooterLinks, getFooterCopyright, getContactEmail } from "../lib/publicSettings";
 
 const PRIVACY = [
-  { title: "信息收集", content: "我们收集您主动提供的信息，包括：注册账号时的用户名和邮箱、上传的 3D 模型文件及其元数据、评论和反馈内容。系统会自动收集：登录时间和 IP 地址（用于安全审计）、浏览器类型和设备信息（用于优化体验）。" },
+  { title: "信息收集", content: "我们收集您主动提供的信息，包括：注册账号时的用户名和邮箱、上传的 3D 模型文件及其元数据、反馈内容。系统会自动收集：登录时间和 IP 地址（用于安全审计）、浏览器类型和设备信息（用于优化体验）。" },
   { title: "信息使用", content: "您的信息仅用于：提供和维护平台服务、处理模型上传和格式转换、改善用户体验和平台功能、安全防护和异常检测。我们不会将您的个人信息出售或分享给第三方。" },
   { title: "数据存储", content: "所有数据存储在您部署的服务器上，由您完全掌控。数据通过数据库加密存储，文件通过操作系统权限保护。平台开发者无法访问您的数据。" },
   { title: "数据安全", content: "我们采取以下措施保护您的数据：所有 API 通信使用 HTTPS 加密、密码使用 bcrypt 哈希存储、JWT 令牌认证和授权、定期安全审计和漏洞修复。" },
   { title: "Cookie 使用", content: "平台使用本地存储（LocalStorage）保存：登录状态和偏好设置、主题和界面配置。不使用第三方跟踪 Cookie。" },
-  { title: "数据删除", content: "您可以随时：删除自己上传的模型和评论、联系管理员删除您的账号和所有关联数据。删除操作不可恢复。" },
+  { title: "数据删除", content: "您可以随时：删除自己上传的模型、联系管理员删除您的账号和所有关联数据。删除操作不可恢复。" },
   { title: "政策更新", content: "我们可能会不时更新本隐私声明。重大变更会通过平台公告通知用户。继续使用平台即表示您同意更新后的政策。" },
 ];
 
@@ -27,10 +27,10 @@ const TERMS = [
 
 function Footer() {
   return (
-    <footer className="shrink-0 border-t border-outline-variant/10 bg-surface-container-low">
+    <footer className="hidden shrink-0 border-t border-outline-variant/10 bg-surface-container-low md:block">
       <div className="px-8 py-4">
         <div className="flex items-center justify-between gap-8">
-          <span className="font-headline font-semibold text-sm text-on-surface-variant/60 tracking-tight">{getSiteTitle()}</span>
+          <span className="font-headline font-semibold text-sm text-on-surface-variant/60">{getSiteTitle()}</span>
           <div className="flex items-center gap-5">
             {getFooterLinks().map((link, i) => (
               <a key={i} href={link.url} target="_blank" rel="noopener noreferrer" className="text-[11px] text-on-surface-variant/40 hover:text-on-surface-variant/70 transition-colors">
@@ -56,110 +56,54 @@ function Footer() {
 export default function LegalPage() {
   const { type } = useParams<{ type: string }>();
   const isPrivacy = type === "privacy";
-  const isDesktop = useMediaQuery("(min-width: 768px)");
   useDocumentTitle(isPrivacy ? "隐私声明" : "用户协议");
 
   const sections = isPrivacy ? PRIVACY : TERMS;
 
-  if (isDesktop) {
-    return (
-      <div className="flex flex-col h-dvh overflow-hidden bg-surface">
-        <TopNav />
-        <main className="flex-1 overflow-y-auto scrollbar-hidden bg-surface-dim p-6">
-          <div className="max-w-2xl mx-auto">
-            <div className="flex gap-3 mb-8">
-              <Link
-                to="/legal/privacy"
-                className={`px-4 py-2 text-sm font-medium rounded-lg transition-colors ${
-                  isPrivacy ? "bg-primary-container text-on-primary" : "bg-surface-container-high text-on-surface-variant hover:bg-surface-container-highest"
-                }`}
-              >
-                隐私声明
-              </Link>
-              <Link
-                to="/legal/terms"
-                className={`px-4 py-2 text-sm font-medium rounded-lg transition-colors ${
-                  !isPrivacy ? "bg-primary-container text-on-primary" : "bg-surface-container-high text-on-surface-variant hover:bg-surface-container-highest"
-                }`}
-              >
-                用户协议
-              </Link>
-            </div>
-
-            <h1 className="text-2xl font-headline font-bold text-on-surface mb-2">
-              {isPrivacy ? "隐私声明" : "用户协议"}
-            </h1>
-            <p className="text-sm text-on-surface-variant mb-8">
-              最后更新：2026 年 4 月
-            </p>
-
-            <div className="space-y-6 pb-8">
-              {sections.map((section, i) => (
-                <div key={i} className="bg-surface-container-low rounded-lg border border-outline-variant/10 p-5">
-                  <h2 className="text-base font-bold text-on-surface mb-2">
-                    {i + 1}. {section.title}
-                  </h2>
-                  <p className="text-sm text-on-surface-variant leading-relaxed">
-                    {section.content}
-                  </p>
-                </div>
-              ))}
-            </div>
-          </div>
-        </main>
-        <Footer />
-      </div>
-    );
-  }
-
   return (
-    <div className="min-h-screen bg-surface">
-      <TopNav compact />
-      <div className="max-w-2xl mx-auto px-4 py-6">
-        <div className="flex gap-3 mb-6">
-          <Link
-            to="/legal/privacy"
-            className={`px-3 py-1.5 text-sm font-medium rounded-lg transition-colors ${
-              isPrivacy ? "bg-primary-container text-on-primary" : "bg-surface-container-high text-on-surface-variant"
-            }`}
-          >
-            隐私声明
-          </Link>
-          <Link
-            to="/legal/terms"
-            className={`px-3 py-1.5 text-sm font-medium rounded-lg transition-colors ${
-              !isPrivacy ? "bg-primary-container text-on-primary" : "bg-surface-container-high text-on-surface-variant"
-            }`}
-          >
-            用户协议
-          </Link>
-        </div>
+    <PublicPageShell>
+      <main className="flex-1 overflow-y-auto scrollbar-hidden bg-surface-dim px-4 py-5 pb-24 md:p-6">
+        <div className="mx-auto max-w-2xl">
+          <div className="mb-6 flex gap-3 md:mb-8">
+            <Link
+              to="/legal/privacy"
+              className={`rounded-lg px-3 py-1.5 text-sm font-medium transition-colors md:px-4 md:py-2 ${
+                isPrivacy ? "bg-primary-container text-on-primary" : "bg-surface-container-high text-on-surface-variant hover:bg-surface-container-highest"
+              }`}
+            >
+              隐私声明
+            </Link>
+            <Link
+              to="/legal/terms"
+              className={`rounded-lg px-3 py-1.5 text-sm font-medium transition-colors md:px-4 md:py-2 ${
+                !isPrivacy ? "bg-primary-container text-on-primary" : "bg-surface-container-high text-on-surface-variant hover:bg-surface-container-highest"
+              }`}
+            >
+              用户协议
+            </Link>
+          </div>
 
-        <h1 className="text-xl font-headline font-bold text-on-surface mb-2">
-          {isPrivacy ? "隐私声明" : "用户协议"}
-        </h1>
-        <p className="text-xs text-on-surface-variant mb-6">
-          最后更新：2026 年 4 月
-        </p>
+          <PageHeader title={isPrivacy ? "隐私声明" : "用户协议"} description="最后更新：2026 年 4 月" className="mb-6 md:mb-8" />
 
-        <div className="space-y-4 pb-8">
-          {sections.map((section, i) => (
-            <div key={i} className="bg-surface-container-low rounded-lg border border-outline-variant/10 p-4">
-              <h2 className="text-sm font-bold text-on-surface mb-1.5">
-                {i + 1}. {section.title}
-              </h2>
-              <p className="text-xs text-on-surface-variant leading-relaxed">
-                {section.content}
-              </p>
-            </div>
-          ))}
+          <div className="space-y-4 md:space-y-6">
+            {sections.map((section, i) => (
+              <div key={section.title} className="rounded-lg border border-outline-variant/10 bg-surface-container-low p-4 md:p-5">
+                <h2 className="mb-1.5 text-sm font-bold text-on-surface md:mb-2 md:text-base">
+                  {i + 1}. {section.title}
+                </h2>
+                <p className="text-xs leading-relaxed text-on-surface-variant md:text-sm">
+                  {section.content}
+                </p>
+              </div>
+            ))}
+          </div>
         </div>
-      </div>
-      {/* Mobile Footer */}
-      <footer className="border-t border-outline-variant/10 text-center px-4 py-4">
+      </main>
+      <Footer />
+      <footer className="border-t border-outline-variant/10 px-4 py-4 text-center md:hidden">
         <div className="flex flex-col items-center gap-2">
           {getContactEmail() && (
-            <a href={`mailto:${getContactEmail()}`} className="flex items-center gap-1 text-[11px] text-on-surface-variant/40 hover:text-primary transition-colors">
+            <a href={`mailto:${getContactEmail()}`} className="flex items-center gap-1 text-[11px] text-on-surface-variant/40 transition-colors hover:text-primary">
               <Icon name="mail" size={12} />
               <span>{getContactEmail()}</span>
             </a>
@@ -167,6 +111,6 @@ export default function LegalPage() {
           <p className="text-[10px] text-on-surface-variant/40">© {new Date().getFullYear()} {getSiteTitle()}</p>
         </div>
       </footer>
-    </div>
+    </PublicPageShell>
   );
 }

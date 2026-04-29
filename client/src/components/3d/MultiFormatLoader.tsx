@@ -8,7 +8,7 @@ import type { ViewMode } from "./ModelViewer";
 import { centeredBoxFromBounds, dispatchModelBounds, getModelBounds, type MeasureMode, type MeasurementPoint, type MeasurementRecord, type MeasurementSnapMode, type ModelBoundsDetail, type ModelPartItem } from "./viewerEvents";
 import type { MaterialPresetKey } from "./viewerControls";
 import Icon from "../../components/shared/Icon";
-import { get3DMaterialConfig, type ViewerSettingsOverride } from "../../lib/publicSettings";
+import { get3DMaterialConfig, type MaterialPresetConfig, type ViewerSettingsOverride } from "../../lib/publicSettings";
 
 interface MultiFormatLoaderProps {
   url: string;
@@ -57,13 +57,14 @@ function getEnvMap(renderer: THREE.WebGLRenderer): THREE.Texture {
 
 type RenderMaterialPresetKey = Exclude<MaterialPresetKey, "original">;
 type MeshMaterial = THREE.Material | THREE.Material[];
+type WireframeCapableMaterial = THREE.Material & { wireframe?: boolean };
 
 function createMaterial(preset: RenderMaterialPresetKey, renderer?: THREE.WebGLRenderer, viewerSettings?: ViewerSettingsOverride): THREE.MeshStandardMaterial | THREE.MeshPhysicalMaterial {
   const config = get3DMaterialConfig(viewerSettings);
-  const p = config.presets[preset] || config.presets.default;
+  const p: MaterialPresetConfig = config.presets[preset] || config.presets.default;
   const envMap = renderer ? getEnvMap(renderer) : undefined;
   if (preset === "glass") {
-    const glassProps: Record<string, any> = {
+    const glassProps: THREE.MeshPhysicalMaterialParameters = {
       color: p.color,
       metalness: p.metalness,
       roughness: p.roughness,
@@ -75,7 +76,7 @@ function createMaterial(preset: RenderMaterialPresetKey, renderer?: THREE.WebGLR
     if (envMap) glassProps.envMap = envMap;
     return new THREE.MeshPhysicalMaterial(glassProps);
   }
-  const baseProps: Record<string, any> = {
+  const baseProps: THREE.MeshStandardMaterialParameters = {
     color: p.color,
     metalness: p.metalness,
     roughness: p.roughness,
@@ -131,23 +132,23 @@ function applyDisplayState(material: MeshMaterial, viewMode: ViewMode, clippingP
       transparent: boolean;
       depthWrite: boolean;
     };
-    const anyMaterial = item as any;
+    const displayMaterial = item as WireframeCapableMaterial;
 
     item.clippingPlanes = clippingPlanes;
     item.side = clipEnabled ? THREE.DoubleSide : base.side;
 
     if (viewMode === "wireframe") {
-      anyMaterial.wireframe = true;
+      displayMaterial.wireframe = true;
       item.transparent = base.transparent;
       item.opacity = base.opacity;
       item.depthWrite = base.depthWrite;
     } else if (viewMode === "transparent") {
-      anyMaterial.wireframe = false;
+      displayMaterial.wireframe = false;
       item.transparent = true;
       item.opacity = Math.min(base.opacity, 0.32);
       item.depthWrite = false;
     } else {
-      anyMaterial.wireframe = false;
+      displayMaterial.wireframe = false;
       item.transparent = base.transparent;
       item.opacity = base.opacity;
       item.depthWrite = base.depthWrite;
@@ -167,7 +168,7 @@ function applyMaterialPreset(
   if (mesh.userData._matPreset === materialPreset && mesh.userData._matSignature === materialSignature) return;
 
   if (materialPreset === "original") {
-    mesh.material = cloneMeshMaterial(mesh.userData.originalMaterial as MeshMaterial) as any;
+    mesh.material = cloneMeshMaterial(mesh.userData.originalMaterial as MeshMaterial);
   } else if (baseMaterial) {
     mesh.material = baseMaterial.clone();
   }
@@ -884,12 +885,12 @@ function ClipPlaneOverlay({
           <lineBasicMaterial color={color} transparent opacity={0.7} depthTest={false} depthWrite={false} />
         </lineSegments>
       </group>
-      <line raycast={noopRaycast} renderOrder={30}>
+      <lineSegments raycast={noopRaycast} renderOrder={30}>
         <bufferGeometry>
           <bufferAttribute attach="attributes-position" args={[normalLine, 3]} count={2} />
         </bufferGeometry>
         <lineBasicMaterial color={color} transparent opacity={0.75} depthTest={false} depthWrite={false} />
-      </line>
+      </lineSegments>
       <mesh
         raycast={planeRaycast}
         position={normalEndPosition}
@@ -1062,12 +1063,12 @@ function SingleMeasurementOverlay({
   return (
     <group renderOrder={muted ? 18 : 20}>
       {lineSegments.map((segment, index) => (
-        <line key={index} renderOrder={muted ? 18 : 20}>
+        <lineSegments key={index} renderOrder={muted ? 18 : 20}>
           <bufferGeometry>
             <bufferAttribute attach="attributes-position" args={[segment, 3]} count={2} />
           </bufferGeometry>
           <lineBasicMaterial color={lineColor} transparent opacity={lineOpacity} depthTest={false} depthWrite={false} />
-        </line>
+        </lineSegments>
       ))}
       {vectors.map((point, index) => (
         <mesh key={index} position={point} renderOrder={muted ? 19 : 21}>

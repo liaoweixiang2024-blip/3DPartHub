@@ -11,18 +11,26 @@ function workerCount() {
 
 if (cluster.isPrimary) {
   const numWorkers = workerCount();
+  const cacheWarmupId = `${Date.now()}-${process.pid}`;
   console.log(`\n  ⚙️  Primary ${process.pid} forking ${numWorkers} workers...\n`);
 
   for (let i = 0; i < numWorkers; i++) {
-    cluster.fork();
+    cluster.fork({
+      CACHE_WARMUP_ID: cacheWarmupId,
+      CACHE_WARMUP_ENABLED: i === 0 ? "1" : "0",
+    });
   }
 
-  // BullMQ worker runs only in primary to avoid duplicate job processing
+  // Background workers run only in primary to avoid duplicate job processing
   import("./workers/conversionWorker.js");
+  import("./workers/downloadRecorderWorker.js");
 
   cluster.on("exit", (worker, code, signal) => {
     console.error(`Worker ${worker.process.pid} died (${code || signal}). Restarting...`);
-    cluster.fork();
+    cluster.fork({
+      CACHE_WARMUP_ID: cacheWarmupId,
+      CACHE_WARMUP_ENABLED: "0",
+    });
   });
 
   cluster.on("listening", (worker, address) => {

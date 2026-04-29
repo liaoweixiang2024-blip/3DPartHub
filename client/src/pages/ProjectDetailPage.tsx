@@ -2,12 +2,10 @@ import { useState, memo } from "react";
 import { Link, useParams, useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import useSWR from "swr";
-import { useMediaQuery } from "../layouts/hooks/useMediaQuery";
 import { useDocumentTitle } from "../hooks/useDocumentTitle";
-import TopNav from "../components/shared/TopNav";
-import BottomNav from "../components/shared/BottomNav";
-import MobileNavDrawer from "../components/shared/MobileNavDrawer";
-import { projectApi, type Project } from "../api/projects";
+import { PageHeader, PageTitle } from "../components/shared/PagePrimitives";
+import { AdminPageShell } from "../components/shared/AdminPageShell";
+import { projectApi, type Project, type ProjectModel } from "../api/projects";
 import { useAuthStore } from "../stores";
 import { useToast } from "../components/shared/Toast";
 import FormatTag from "../components/shared/FormatTag";
@@ -20,7 +18,7 @@ function formatFileSize(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-const ModelRow = memo(function ModelRow({ model }: { model: any }) {
+const ModelRow = memo(function ModelRow({ model }: { model: ProjectModel }) {
   return (
     <Link
       to={`/model/${model.id}`}
@@ -117,11 +115,9 @@ export default function ProjectDetailPage() {
   const { id } = useParams();
   useDocumentTitle("项目详情");
   const navigate = useNavigate();
-  const isDesktop = useMediaQuery("(min-width: 768px)");
   const { user } = useAuthStore();
   const [showEdit, setShowEdit] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState(false);
-  const [navOpen, setNavOpen] = useState(false);
   const { toast } = useToast();
 
   const { data: project, error, mutate } = useSWR(
@@ -157,22 +153,16 @@ export default function ProjectDetailPage() {
     return (
       <div className="flex flex-col items-center justify-center h-dvh bg-surface gap-4">
         <Icon name="search_off" size={64} className="text-on-surface-variant" />
-        <h1 className="text-2xl font-headline font-bold text-on-surface">
+        <PageTitle>
           {error ? "加载失败" : "加载中..."}
-        </h1>
+        </PageTitle>
         <Link to="/projects" className="text-primary hover:underline">返回项目列表</Link>
       </div>
     );
   }
 
   return (
-    <div className="flex flex-col h-dvh bg-surface">
-      <TopNav compact={!isDesktop} onMenuToggle={() => setNavOpen(true)} />
-      {!isDesktop && <MobileNavDrawer open={navOpen} onClose={() => setNavOpen(false)} />}
-      <main
-        className="flex-1 overflow-y-auto scrollbar-hidden bg-surface-dim p-4 md:p-8"
-        style={!isDesktop ? { paddingBottom: "calc(5rem + env(safe-area-inset-bottom, 0px))" } : undefined}
-      >
+    <AdminPageShell mobileContentClassName="p-4 pb-20">
         <div className="max-w-6xl mx-auto">
           <div className="flex items-center gap-2 text-sm mb-4 overflow-x-auto scrollbar-hidden">
             <Link to="/" className="text-on-surface-variant hover:text-on-surface shrink-0">首页</Link>
@@ -184,10 +174,7 @@ export default function ProjectDetailPage() {
 
           <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between mb-6 border-b border-surface-container-low pb-4">
             <div className="min-w-0">
-              <h1 className="text-2xl font-headline font-bold text-on-surface mb-1 break-words">{project.name}</h1>
-              {project.description && (
-                <p className="text-sm text-on-surface-variant break-words">{project.description}</p>
-              )}
+              <PageHeader title={project.name} description={project.description} />
             </div>
             <div className="flex items-center justify-between sm:justify-end gap-3">
               <div className="text-xs text-on-surface-variant text-right">
@@ -265,7 +252,7 @@ export default function ProjectDetailPage() {
             <h2 className="text-xs uppercase tracking-widest text-on-surface-variant font-medium mb-3">模型列表</h2>
             {project.models && project.models.length > 0 ? (
               <div className="flex flex-col gap-2">
-                {project.models.map((model: any) => (
+                {project.models.map((model) => (
                   <motion.div
                     key={model.id}
                     initial={{ opacity: 0, y: 10 }}
@@ -284,14 +271,12 @@ export default function ProjectDetailPage() {
             )}
           </div>
         </div>
-      </main>
-      {!isDesktop && <BottomNav />}
 
       <AnimatePresence>
         {showEdit && project && (
           <EditModal project={project} onClose={() => setShowEdit(false)} onSaved={() => mutate()} />
         )}
       </AnimatePresence>
-    </div>
+    </AdminPageShell>
   );
 }

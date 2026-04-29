@@ -17,6 +17,7 @@ const SKIP_PREFIXES = [
   "/api/settings/backup/import-save-progress", // polling
   "/api/settings/backup/download/", // one-time token download, logged separately
   "/api/settings/backup/download-token/", // token generation, logged as backup_download
+  "/api/downloads/model-token", // short-lived browser download token generation
   "/api/settings/update/progress", // polling
   "/api/notifications", // GET polling
   "/api/audit", // don't audit the audit log itself

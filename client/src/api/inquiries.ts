@@ -1,4 +1,5 @@
 import client from "./client";
+import { unwrapResponse } from "./response";
 
 export interface InquiryItem {
   id: string;
@@ -8,7 +9,6 @@ export interface InquiryItem {
   modelNo?: string | null;
   specs?: Record<string, string> | null;
   qty: number;
-  unitPrice?: number | null;
   remark?: string | null;
 }
 
@@ -30,7 +30,6 @@ export interface Inquiry {
   company?: string | null;
   contactName?: string | null;
   contactPhone?: string | null;
-  totalAmount?: number | null;
   adminRemark?: string | null;
   items: InquiryItem[];
   messages?: InquiryMessage[];
@@ -53,33 +52,31 @@ export interface CreateInquiryParams {
   contactPhone?: string;
 }
 
-const unwrap = <T>(res: any): T => res.data?.data ?? res.data;
-
 // ========== User API ==========
 
 export async function createInquiry(data: CreateInquiryParams): Promise<Inquiry> {
   const res = await client.post("/inquiries", data);
-  return unwrap(res);
+  return unwrapResponse(res);
 }
 
 export async function getMyInquiries(): Promise<Inquiry[]> {
   const res = await client.get("/inquiries");
-  return unwrap(res);
+  return unwrapResponse(res);
 }
 
 export async function getInquiry(id: string): Promise<Inquiry> {
   const res = await client.get(`/inquiries/${id}`);
-  return unwrap(res);
+  return unwrapResponse(res);
 }
 
 export async function cancelInquiry(id: string): Promise<Inquiry> {
   const res = await client.put(`/inquiries/${id}/cancel`);
-  return unwrap(res);
+  return unwrapResponse(res);
 }
 
 export async function sendInquiryMessage(id: string, content: string, attachment?: string): Promise<InquiryMessage> {
   const res = await client.post(`/inquiries/${id}/messages`, { content, attachment });
-  return unwrap(res);
+  return unwrapResponse(res);
 }
 
 // ========== Admin API ==========
@@ -92,22 +89,10 @@ export async function getAllInquiries(
   const res = await client.get("/admin/inquiries", {
     params: { page, page_size: pageSize, status },
   });
-  return unwrap(res);
-}
-
-export async function quoteInquiry(
-  id: string,
-  data: {
-    items: Array<{ id: string; unitPrice: number }>;
-    totalAmount?: number;
-    adminRemark?: string;
-  }
-): Promise<Inquiry> {
-  const res = await client.put(`/admin/inquiries/${id}/quote`, data);
-  return unwrap(res);
+  return unwrapResponse(res);
 }
 
 export async function updateInquiryStatus(id: string, status: string): Promise<Inquiry> {
   const res = await client.put(`/admin/inquiries/${id}/status`, { status });
-  return unwrap(res);
+  return unwrapResponse(res);
 }

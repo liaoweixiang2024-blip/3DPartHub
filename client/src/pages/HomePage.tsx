@@ -1,21 +1,28 @@
-import { useState, useEffect, useMemo, useCallback, useRef, type UIEvent } from "react";
+import { useState, useEffect, useMemo, useCallback, useRef, type MouseEvent, type UIEvent } from "react";
 import { Link, useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import useSWR from "swr";
 import { useMediaQuery } from "../layouts/hooks/useMediaQuery";
 import { useDocumentTitle } from "../hooks/useDocumentTitle";
-import TopNav from "../components/shared/TopNav";
-import BottomNav from "../components/shared/BottomNav";
+import { PageTitle } from "../components/shared/PagePrimitives";
+import { PublicPageShell } from "../components/shared/PublicPageShell";
 import FormatTag from "../components/shared/FormatTag";
 
 import Icon from "../components/shared/Icon";
-import Pagination, { DEFAULT_PAGE_SIZE, normalizePageSize } from "../components/shared/Pagination";
+import { DEFAULT_PAGE_SIZE, normalizePageSize } from "../components/shared/Pagination";
 import ModelThumbnail from "../components/shared/ModelThumbnail";
-import { useModels } from "../hooks/useModels";
-import type { ServerModelListItem } from "../api/models";
+import InfiniteLoadTrigger from "../components/shared/InfiniteLoadTrigger";
+import { useInfiniteModels } from "../hooks/useModels";
+import { modelApi, type ServerModelListItem } from "../api/models";
+import { createShare } from "../api/shares";
 import { categoriesApi, type CategoryItem } from "../api/categories";
-import { useAuthStore, getAccessToken } from "../stores";
+import { useAuthStore } from "../stores";
+import { useToast } from "../components/shared/Toast";
+import { downloadModelFile, isDownloadAuthRequiredError } from "../api/downloads";
+import { copyText } from "../lib/clipboard";
+import { getErrorMessage } from "../lib/errorNotifications";
 import { getCachedPublicSettings, getAnnouncement, getContactEmail, getSiteTitle, getFooterLinks, getFooterCopyright } from "../lib/publicSettings";
+import { sanitizeHtml } from "../lib/sanitizeHtml";
 import {
   HOME_SEARCH_EVENT,
   dispatchHomeSearchQuery,
@@ -30,7 +37,7 @@ interface Category {
   name: string;
   icon: string;
   count: number;
-  children?: { id: string; name: string; count: number }[];
+  children: { id: string; name: string; count: number }[];
 }
 
 function buildCategories(tree: CategoryItem[]): Category[] {
@@ -38,11 +45,11 @@ function buildCategories(tree: CategoryItem[]): Category[] {
     id: node.id,
     name: node.name,
     icon: node.icon,
-    count: (node as any).count || 0,
-    children: node.children?.map((child) => ({
+    count: node.count || 0,
+    children: (node.children || []).map((child) => ({
       id: child.id,
       name: child.name,
-      count: (child as any).count || 0,
+      count: child.count || 0,
     })),
   }));
 }
@@ -64,6 +71,7 @@ interface Product {
 function AnnouncementBanner() {
   const [ann, setAnn] = useState({ enabled: false, text: "", type: "info", color: "" });
   const [dismissed, setDismissed] = useState(false);
+  const safeAnnouncementHtml = useMemo(() => sanitizeHtml(ann.text), [ann.text]);
 
   useEffect(() => {
     getCachedPublicSettings().then(() => {
@@ -90,7 +98,7 @@ function AnnouncementBanner() {
   return (
     <div className={className} style={style}>
       <Icon name="campaign" size={18} className="shrink-0" />
-      <span className="flex-1 [&_a]:underline [&_a]:font-medium hover:[&_a]:opacity-80" dangerouslySetInnerHTML={{ __html: ann.text }} />
+      <span className="flex-1 [&_a]:underline [&_a]:font-medium hover:[&_a]:opacity-80" dangerouslySetInnerHTML={{ __html: safeAnnouncementHtml }} />
       <button onClick={() => setDismissed(true)} className="shrink-0 opacity-60 hover:opacity-100">
         <Icon name="close" size={16} />
       </button>
@@ -127,7 +135,7 @@ function CategorySidebar({
         >
           <span className="flex items-center gap-2">
             <Icon name="category_all" size={18} />
-            全部
+            全部模型
           </span>
           <span className="text-[10px] bg-primary/20 px-1.5 py-0.5 rounded-sm text-primary font-medium">{totalCount || categoriesData.reduce((s, c) => s + c.count, 0)}</span>
         </button>
@@ -140,6 +148,7 @@ function CategorySidebar({
               <button
                 onClick={() => {
                   if (hasChildren) {
+                    onSelect(cat.id);
                     onToggle(cat.id);
                   } else {
                     onSelect(cat.id);
@@ -284,6 +293,22 @@ function saveHomeBrowseState(restoreKey: string, state: HomeBrowseState) {
   }
 }
 
+function writeHomeBrowseStateToCurrentHistory(state: HomeBrowseState) {
+  if (typeof window === "undefined") return;
+  try {
+    const current = window.history.state;
+    if (!current || typeof current !== "object") return;
+    const usr = current.usr && typeof current.usr === "object" ? current.usr : {};
+    window.history.replaceState(
+      { ...current, usr: { ...usr, homeBrowseState: state } },
+      "",
+      `${window.location.pathname}${window.location.search}${window.location.hash}`
+    );
+  } catch {
+    // Ignore history state failures.
+  }
+}
+
 function readHomeBrowseState(restoreKey: string | null) {
   if (typeof window === "undefined" || !restoreKey) return null;
   try {
@@ -379,11 +404,238 @@ function clearPendingHomeRestore(restoreKey: string) {
   }
 }
 
-function ProductCard({ product, onDownload, returnPath, homeBrowseState, onBeforeOpen, variant = "grid" }: { product: Product; onDownload: (id: string) => void; returnPath: string; homeBrowseState: HomeBrowseState; onBeforeOpen?: (modelId: string) => void; variant?: "grid" | "list" }) {
+function ProductCard({
+  product,
+  onDownload,
+  returnPath,
+  homeBrowseState,
+  onBeforeOpen,
+  onContextMenu,
+  manageOpen,
+  onCloseManage,
+  onOpenManageDetail,
+  onShareModel,
+  onRenameModel,
+  onRequestDelete,
+  variant = "grid",
+}: {
+  product: Product;
+  onDownload: (id: string) => void;
+  returnPath: string;
+  homeBrowseState: HomeBrowseState;
+  onBeforeOpen?: (modelId: string) => void;
+  onContextMenu?: (event: MouseEvent, product: Product) => void;
+  manageOpen?: boolean;
+  onCloseManage?: () => void;
+  onOpenManageDetail?: (product: Product) => void;
+  onShareModel?: (product: Product) => void;
+  onRenameModel?: (product: Product, name: string) => Promise<void>;
+  onRequestDelete?: (product: Product) => void;
+  variant?: "grid" | "list";
+}) {
   const detailPath = `/model/${product.id}`;
+  const [renaming, setRenaming] = useState(false);
+  const [renameValue, setRenameValue] = useState(product.name);
+  const [renameSaving, setRenameSaving] = useState(false);
+  const ignoreNextOverlayClickRef = useRef(false);
+
+  useEffect(() => {
+    if (manageOpen) {
+      setRenameValue(product.name);
+      setRenaming(false);
+      setRenameSaving(false);
+    }
+  }, [manageOpen, product.name]);
+
+  const cancelRename = useCallback(() => {
+    setRenameValue(product.name);
+    setRenaming(false);
+  }, [product.name]);
+
+  const commitRename = useCallback(async () => {
+    const nextName = renameValue.trim();
+    if (renameSaving) return false;
+    if (!nextName || nextName === product.name) {
+      setRenameValue(product.name);
+      setRenaming(false);
+      return true;
+    }
+    setRenameSaving(true);
+    try {
+      await onRenameModel?.(product, nextName);
+      setRenaming(false);
+      return true;
+    } catch {
+      return false;
+    } finally {
+      setRenameSaving(false);
+    }
+  }, [onRenameModel, product, renameSaving, renameValue]);
+
+  const finishRenameThen = useCallback(async (action: () => void) => {
+    if (renaming) {
+      const committed = await commitRename();
+      if (!committed) return;
+    }
+    action();
+  }, [commitRename, renaming]);
+
+  const handleCardClick = useCallback((event: MouseEvent) => {
+    if (manageOpen) {
+      event.preventDefault();
+      event.stopPropagation();
+      return;
+    }
+    onBeforeOpen?.(product.id);
+  }, [manageOpen, onBeforeOpen, product.id]);
+
+  const manageOverlay = manageOpen ? (
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      transition={{ duration: 0.12 }}
+      className="absolute inset-0 z-20 bg-surface-container-high text-on-surface"
+      draggable={false}
+      onDragStartCapture={(event) => event.preventDefault()}
+      onDragOverCapture={(event) => event.preventDefault()}
+      onDropCapture={(event) => event.preventDefault()}
+      onClick={(event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        if (ignoreNextOverlayClickRef.current) {
+          ignoreNextOverlayClickRef.current = false;
+          return;
+        }
+        if (renaming && event.target instanceof Element && !event.target.closest("[data-rename-control]")) {
+          void commitRename();
+        }
+      }}
+      onContextMenu={(event) => {
+        if (event.target instanceof Element && event.target.closest("[data-rename-control]")) {
+          event.stopPropagation();
+          return;
+        }
+        event.preventDefault();
+      }}
+    >
+      <div className="flex h-full flex-col p-3">
+        <div className="flex min-w-0 items-start justify-between gap-2">
+          <div className="min-w-0 flex-1">
+            <p className="text-[10px] font-medium uppercase tracking-[0.14em] text-primary">模型管理</p>
+            {renaming ? (
+              <textarea
+                value={renameValue}
+                onChange={(event) => setRenameValue(event.target.value)}
+                onClick={(event) => event.stopPropagation()}
+                onMouseDown={(event) => {
+                  ignoreNextOverlayClickRef.current = true;
+                  event.stopPropagation();
+                }}
+                onMouseUp={(event) => event.stopPropagation()}
+                onPointerDown={(event) => {
+                  ignoreNextOverlayClickRef.current = true;
+                  event.stopPropagation();
+                }}
+                onPointerUp={(event) => event.stopPropagation()}
+                onDragStart={(event) => event.preventDefault()}
+                onDragOver={(event) => event.preventDefault()}
+                onDrop={(event) => event.preventDefault()}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter") {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    void commitRename();
+                  }
+                  if (event.key === "Escape") {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    cancelRename();
+                  }
+                }}
+                data-rename-control
+                draggable={false}
+                rows={2}
+                className="mt-1 h-20 max-h-36 min-h-16 w-full min-w-0 resize-y rounded-sm border border-primary/40 bg-surface-container-lowest px-2.5 py-1.5 text-sm font-semibold leading-5 text-on-surface outline-none selection:bg-primary/30 focus:border-primary"
+                autoFocus
+              />
+            ) : (
+              <button
+                onClick={(event) => { event.preventDefault(); event.stopPropagation(); setRenaming(true); }}
+                className="mt-1 flex w-full min-w-0 items-start gap-1.5 rounded-sm text-left text-sm font-semibold leading-tight text-on-surface transition-colors hover:text-primary"
+                title="编辑名称"
+              >
+                <span className="line-clamp-2 min-w-0">{product.name}</span>
+              </button>
+            )}
+            <p className="mt-1 text-[11px] text-on-surface-variant">{product.fileSize}</p>
+            {renaming && (
+              <p className="mt-1 text-[10px] text-on-surface-variant/80">点击空白处保存，Esc 取消</p>
+            )}
+          </div>
+          <button
+            onClick={(event) => {
+              event.preventDefault();
+              event.stopPropagation();
+              void finishRenameThen(() => onCloseManage?.());
+            }}
+            data-rename-control
+            className="grid h-7 w-7 shrink-0 place-items-center rounded-sm text-on-surface-variant transition-colors hover:bg-surface-container-highest hover:text-on-surface"
+            title="关闭"
+          >
+            <Icon name="close" size={15} />
+          </button>
+        </div>
+        <div className="mt-auto grid gap-2">
+          <div className="grid grid-cols-2 gap-2">
+            <button
+              onClick={(event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                void finishRenameThen(() => onOpenManageDetail?.(product));
+              }}
+              data-rename-control
+              disabled={renameSaving}
+              className="flex min-w-0 items-center justify-center gap-1.5 rounded-sm bg-primary-container px-2 py-2 text-xs font-medium text-on-primary transition-opacity hover:opacity-90 disabled:opacity-50"
+            >
+              <Icon name={renameSaving ? "progress_activity" : "open_in_new"} size={13} className={renameSaving ? "animate-spin" : ""} />
+              <span className="truncate">打开详情</span>
+            </button>
+            <button
+              onClick={(event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                void finishRenameThen(() => onShareModel?.(product));
+              }}
+              data-rename-control
+              disabled={renameSaving}
+              className="flex min-w-0 items-center justify-center gap-1.5 rounded-sm border border-outline-variant/30 px-2 py-2 text-xs text-on-surface-variant transition-colors hover:bg-surface-container-highest hover:text-on-surface disabled:opacity-50"
+            >
+              <Icon name="share" size={13} />
+              <span className="truncate">分享链接</span>
+            </button>
+            <button
+              onClick={(event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                void finishRenameThen(() => onRequestDelete?.(product));
+              }}
+              data-rename-control
+              disabled={renameSaving}
+              className="col-span-2 flex min-w-0 items-center justify-center gap-1.5 rounded-sm border border-error/30 px-2 py-2 text-xs font-semibold text-error transition-colors hover:bg-error-container/15 disabled:opacity-50"
+            >
+              <Icon name="delete" size={13} />
+              <span className="truncate">删除模型</span>
+            </button>
+          </div>
+        </div>
+      </div>
+    </motion.div>
+  ) : null;
+
   if (variant === "list") {
-    return (
-      <Link to={detailPath} state={{ from: returnPath, homeBrowseState }} onClick={() => onBeforeOpen?.(product.id)} data-home-model-id={product.id} className="flex group bg-surface-container-high rounded-sm overflow-hidden hover:shadow-[0_8px_20px_rgba(0,0,0,0.35)] transition-all duration-300">
+    const content = (
+      <>
         <div className="w-32 shrink-0 bg-surface-container-lowest relative overflow-hidden flex items-center justify-center">
           <ModelThumbnail src={product.thumbnailUrl} alt={product.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
           <div className="absolute top-1.5 left-1.5 flex gap-1">
@@ -415,11 +667,25 @@ function ProductCard({ product, onDownload, returnPath, homeBrowseState, onBefor
             </button>
           </div>
         </div>
+        <AnimatePresence>{manageOverlay}</AnimatePresence>
+      </>
+    );
+    const className = "relative flex group bg-surface-container-high rounded-sm overflow-hidden hover:shadow-[0_8px_20px_rgba(0,0,0,0.35)] transition-all duration-300";
+    if (manageOpen) {
+      return (
+        <div onContextMenu={(event) => onContextMenu?.(event, product)} data-home-model-id={product.id} draggable={false} className={className}>
+          {content}
+        </div>
+      );
+    }
+    return (
+      <Link to={detailPath} state={{ from: returnPath, homeBrowseState }} onClick={handleCardClick} onContextMenu={(event) => onContextMenu?.(event, product)} data-home-model-id={product.id} draggable={false} className={className}>
+        {content}
       </Link>
     );
   }
-  return (
-    <Link to={detailPath} state={{ from: returnPath, homeBrowseState }} onClick={() => onBeforeOpen?.(product.id)} data-home-model-id={product.id} className="block group bg-surface-container-high rounded-sm overflow-hidden hover:shadow-[0_12px_24px_rgba(0,0,0,0.4)] transition-all duration-300 flex flex-col relative">
+  const content = (
+    <>
       <div className="aspect-square bg-surface-container-lowest relative overflow-hidden flex items-center justify-center">
         <ModelThumbnail
           src={product.thumbnailUrl}
@@ -458,6 +724,20 @@ function ProductCard({ product, onDownload, returnPath, homeBrowseState, onBefor
           </button>
         </div>
       </div>
+      <AnimatePresence>{manageOverlay}</AnimatePresence>
+    </>
+  );
+  const className = "block group bg-surface-container-high rounded-sm overflow-hidden hover:shadow-[0_12px_24px_rgba(0,0,0,0.4)] transition-all duration-300 flex flex-col relative";
+  if (manageOpen) {
+    return (
+      <div onContextMenu={(event) => onContextMenu?.(event, product)} data-home-model-id={product.id} draggable={false} className={className}>
+        {content}
+      </div>
+    );
+  }
+  return (
+    <Link to={detailPath} state={{ from: returnPath, homeBrowseState }} onClick={handleCardClick} onContextMenu={(event) => onContextMenu?.(event, product)} data-home-model-id={product.id} draggable={false} className={className}>
+      {content}
     </Link>
   );
 }
@@ -490,13 +770,13 @@ function MobileDrawer({
     <AnimatePresence>
       {open && (
         <>
-          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 bg-black/50 z-[80]" onClick={onClose} />
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 bg-black/50 z-[260]" onClick={onClose} />
           <motion.aside
             initial={{ x: "-100%" }}
             animate={{ x: 0 }}
             exit={{ x: "-100%" }}
             transition={{ type: "spring", damping: 25, stiffness: 300 }}
-            className="fixed left-0 top-0 bottom-0 w-72 bg-surface-container-low flex flex-col overflow-y-auto scrollbar-hidden z-[90]"
+            className="fixed left-0 top-0 bottom-0 w-72 bg-surface-container-low flex flex-col overflow-y-auto scrollbar-hidden z-[270]"
           >
             <div className="flex items-center justify-between p-4 border-b border-outline-variant/20">
               <h2 className="text-sm font-bold text-on-surface tracking-wider uppercase font-headline">产品目录</h2>
@@ -513,7 +793,7 @@ function MobileDrawer({
               >
                 <span className="flex items-center gap-2">
                   <Icon name="category_all" size={18} />
-                  全部
+                全部模型
                 </span>
                 <span className="text-[10px] bg-primary/20 px-1.5 py-0.5 rounded-sm text-primary font-medium">{totalCount || categoriesData.reduce((s, c) => s + c.count, 0)}</span>
               </button>
@@ -526,6 +806,7 @@ function MobileDrawer({
                     <button
                       onClick={() => {
                         if (hasChildren) {
+                          onSelect(cat.id);
                           onToggle(cat.id);
                         } else {
                           onSelect(cat.id);
@@ -637,6 +918,7 @@ export default function HomePage() {
   const isDesktop = useMediaQuery("(min-width: 768px)");
   const navigate = useNavigate();
   const location = useLocation();
+  const { toast } = useToast();
   const [searchParams, setSearchParams] = useSearchParams();
   const legacySearchQuery = normalizeHomeSearchQuery(searchParams.get("q") || "");
   const initialHomeState = useMemo(
@@ -645,8 +927,12 @@ export default function HomePage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
     []
   );
-  const { isAuthenticated } = useAuthStore();
+  const { isAuthenticated, user } = useAuthStore();
+  const isAdmin = user?.role === "ADMIN";
   const [browseBlocked, setBrowseBlocked] = useState(false);
+  const [contextMenu, setContextMenu] = useState<{ product: Product } | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<Product | null>(null);
+  const [deletingModel, setDeletingModel] = useState(false);
 
   useEffect(() => {
     if (!isAuthenticated) {
@@ -657,9 +943,12 @@ export default function HomePage() {
   }, [isAuthenticated]);
 
   // Fetch category tree (with counts from server)
-  const { data: categoryData } = useSWR("/categories", () => categoriesApi.tree());
+  const { data: categoryData, mutate: mutateCategories } = useSWR("/categories", () => categoriesApi.tree());
   const categories = useMemo(() => buildCategories(categoryData?.items || []), [categoryData]);
-  const [totalModelCount, setTotalModelCount] = useState(0);
+  const totalModelCount = useMemo(
+    () => categoryData?.total ?? categories.reduce((sum, category) => sum + category.count, 0),
+    [categories, categoryData?.total]
+  );
 
   const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set());
   const [searchQuery, setSearchQuery] = useState(() => initialHomeState?.query ?? readHomeSearchQuery() ?? legacySearchQuery);
@@ -699,12 +988,18 @@ export default function HomePage() {
     const legacyCategory = searchParams.get("category");
     if (legacyCategory && legacyCategory !== activeCategory) setActiveCategory(legacyCategory);
 
-    const nextPage = parsePageParam(searchParams.get("page"));
-    const nextPageSize = normalizePageSize(searchParams.get("page_size"));
-    const nextSort = normalizeSortParam(searchParams.get("sort"));
-    if (nextPage !== page) setPage(nextPage);
-    if (nextPageSize !== pageSize) setPageSize(nextPageSize);
-    if (nextSort !== sortBy) setSortBy(nextSort);
+    if (searchParams.has("page")) {
+      const nextPage = parsePageParam(searchParams.get("page"));
+      if (nextPage !== page) setPage(nextPage);
+    }
+    if (searchParams.has("page_size")) {
+      const nextPageSize = normalizePageSize(searchParams.get("page_size"));
+      if (nextPageSize !== pageSize) setPageSize(nextPageSize);
+    }
+    if (searchParams.has("sort")) {
+      const nextSort = normalizeSortParam(searchParams.get("sort"));
+      if (nextSort !== sortBy) setSortBy(nextSort);
+    }
 
     if (hasLegacySearchQuery || legacyCategory || searchParams.has("page") || searchParams.has("page_size") || searchParams.has("sort")) {
       const nextParams = new URLSearchParams(searchParams);
@@ -746,31 +1041,36 @@ export default function HomePage() {
   }, [activeCategory, searchParams, setSearchParams]);
 
   const handleDownload = useCallback(async (modelId: string) => {
-    const token = getAccessToken();
-    if (!token) {
-      setLoginPromptOpen(true);
-      return;
+    try {
+      await downloadModelFile(modelId, "original");
+    } catch (error) {
+      if (isDownloadAuthRequiredError(error)) {
+        setLoginPromptOpen(true);
+        return;
+      }
+      toast("下载失败，请稍后重试", "error");
     }
-    // Direct link — browser handles download, no blob in memory
-    const a = document.createElement("a");
-    a.href = `/api/models/${modelId}/download?format=original&token=${encodeURIComponent(token)}`;
-    a.download = "";
-    a.click();
-  }, []);
+  }, [toast]);
 
   // Server-side filtering with category ID
-  const { data: serverData, isLoading } = useModels({
+  const {
+    data: serverData,
+    isLoading,
+    mutate: mutateModels,
+    hasMore,
+    isLoadingMore,
+    setSize: setModelPageSize,
+  } = useInfiniteModels({
     page,
     pageSize,
     search: searchQuery,
     categoryId: activeCategory !== "all" ? activeCategory : undefined,
     sort: sortBy,
-  });
+  }, page);
 
   useEffect(() => {
-    if (serverData?.total != null) setTotalModelCount(serverData.total);
-    else if (categoryData?.total != null) setTotalModelCount(categoryData.total);
-  }, [serverData?.total, categoryData?.total]);
+    setModelPageSize(page);
+  }, [page, setModelPageSize]);
 
   const products = useMemo(() => {
     if (!serverData?.items) return [];
@@ -778,7 +1078,6 @@ export default function HomePage() {
   }, [serverData]);
   const productIdsKey = useMemo(() => products.map((product) => product.id).join("|"), [products]);
 
-  const totalPages = serverData?.totalPages || 1;
   const totalItems = serverData?.total || 0;
 
   const toggleCategory = (id: string) => {
@@ -802,17 +1101,10 @@ export default function HomePage() {
     if (searchParams.toString()) setSearchParams(new URLSearchParams(), { replace: true });
   };
 
-  const handlePageChange = useCallback((nextPage: number) => {
-    setPage(nextPage);
-    scrollContainerRef.current?.scrollTo({ top: 0, behavior: "smooth" });
-  }, []);
-
-  const handlePageSizeChange = useCallback((nextPageSize: number) => {
-    const normalizedPageSize = normalizePageSize(nextPageSize);
-    setPageSize(normalizedPageSize);
-    setPage(1);
-    scrollContainerRef.current?.scrollTo({ top: 0, behavior: "smooth" });
-  }, []);
+  const handleLoadMore = useCallback(() => {
+    if (!hasMore || isLoadingMore) return;
+    setPage((current) => current + 1);
+  }, [hasMore, isLoadingMore]);
 
   const handleSortChange = useCallback((nextSort: string) => {
     const normalizedSort = normalizeSortParam(nextSort);
@@ -845,12 +1137,99 @@ export default function HomePage() {
 
   const saveCurrentHomeScroll = useCallback((pendingRestore = false, modelId?: string) => {
     saveHomeBrowseState(homeRestoreKey, homeBrowseState);
+    writeHomeBrowseStateToCurrentHistory(homeBrowseState);
     saveHomeScrollPosition(homeRestoreKey, scrollContainerRef.current?.scrollTop || 0, pendingRestore, modelId);
+  }, [homeBrowseState, homeRestoreKey]);
+
+  useEffect(() => {
+    saveHomeBrowseState(homeRestoreKey, homeBrowseState);
+    writeHomeBrowseStateToCurrentHistory(homeBrowseState);
   }, [homeBrowseState, homeRestoreKey]);
 
   const handleHomeScroll = useCallback((event: UIEvent<HTMLElement>) => {
     saveHomeScrollPosition(homeRestoreKey, event.currentTarget.scrollTop);
+    setContextMenu((current) => current ? null : current);
   }, [homeRestoreKey]);
+
+  const handleModelContextMenu = useCallback((event: MouseEvent, product: Product) => {
+    if (!isDesktop || !isAdmin) return;
+    event.preventDefault();
+    event.stopPropagation();
+    setContextMenu({ product });
+  }, [isAdmin, isDesktop]);
+
+  useEffect(() => {
+    if (!contextMenu) return;
+    const close = () => setContextMenu(null);
+    const closeWithEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setContextMenu(null);
+    };
+    window.addEventListener("click", close);
+    window.addEventListener("contextmenu", close);
+    window.addEventListener("resize", close);
+    window.addEventListener("keydown", closeWithEscape);
+    return () => {
+      window.removeEventListener("click", close);
+      window.removeEventListener("contextmenu", close);
+      window.removeEventListener("resize", close);
+      window.removeEventListener("keydown", closeWithEscape);
+    };
+  }, [contextMenu]);
+
+  const handleDeleteModel = useCallback(async () => {
+    if (!deleteTarget) return;
+    setDeletingModel(true);
+    try {
+      await modelApi.delete(deleteTarget.id);
+      toast("模型已删除", "success");
+      setDeleteTarget(null);
+      setContextMenu(null);
+      await Promise.all([mutateModels(), mutateCategories()]);
+    } catch {
+      toast("删除失败，请稍后重试", "error");
+    } finally {
+      setDeletingModel(false);
+    }
+  }, [deleteTarget, mutateCategories, mutateModels, toast]);
+
+  const openManagedModelDetail = useCallback((product: Product) => {
+    saveCurrentHomeScroll(true, product.id);
+    setContextMenu(null);
+    navigate(`/model/${product.id}`, { state: { from: modelReturnPath, homeBrowseState } });
+  }, [homeBrowseState, modelReturnPath, navigate, saveCurrentHomeScroll]);
+
+  const shareManagedModel = useCallback(async (product: Product) => {
+    try {
+      const result = await createShare({
+        modelId: product.id,
+        allowPreview: true,
+        allowDownload: true,
+        downloadLimit: 0,
+      });
+      await copyText(`${window.location.origin}/share/${result.token}`);
+      toast("分享链接已复制", "success");
+    } catch (error: unknown) {
+      toast(getErrorMessage(error, "创建分享失败"), "error");
+    }
+    setContextMenu(null);
+  }, [toast]);
+
+  const renameManagedModel = useCallback(async (_product: Product, name: string) => {
+    try {
+      await modelApi.update(_product.id, { name });
+      toast("模型名称已更新", "success");
+      setContextMenu(null);
+      await mutateModels();
+    } catch (error: unknown) {
+      toast(getErrorMessage(error, "改名失败"), "error");
+      throw error;
+    }
+  }, [mutateModels, toast]);
+
+  const requestManagedModelDelete = useCallback((product: Product) => {
+    setDeleteTarget(product);
+    setContextMenu(null);
+  }, []);
 
   useEffect(() => {
     if (isLoading || getPendingHomeRestoreKey() !== homeRestoreKey) return;
@@ -889,7 +1268,7 @@ export default function HomePage() {
 
   // Resolve breadcrumb
   const breadcrumb = useMemo(() => {
-    if (activeCategory === "all") return { parent: null, child: null, label: "全部" };
+    if (activeCategory === "all") return { parent: null, child: null, label: "全部模型" };
     const parent = categories.find((c) => c.id === activeCategory);
     if (parent) return { parent: parent.name, child: null, label: parent.name };
     for (const cat of categories) {
@@ -914,8 +1293,7 @@ export default function HomePage() {
 
   if (isDesktop) {
     return (
-      <div className="flex flex-col h-dvh overflow-hidden bg-surface">
-        <TopNav />
+      <PublicPageShell>
         <div className="flex flex-1 overflow-hidden">
           <CategorySidebar
             expandedCategories={expandedCategories}
@@ -925,12 +1303,12 @@ export default function HomePage() {
             onToggle={toggleCategory}
             onSelect={handleSelectCategory}
           />
-          <main ref={scrollContainerRef} onScroll={handleHomeScroll} className="flex-1 overflow-y-auto scrollbar-hidden bg-surface-dim p-6 relative">
+          <main ref={scrollContainerRef} onScroll={handleHomeScroll} className="flex-1 overflow-y-auto model-list-scrollbar bg-surface-dim p-6 relative">
             <AnnouncementBanner />
             <div className="flex justify-between items-end mb-6 border-b border-surface-container-low pb-3 flex-wrap gap-3">
               <div>
                 <div className="flex items-center gap-2 text-sm mb-1.5">
-                  <Link to="/" className="text-on-surface-variant hover:text-on-surface cursor-pointer transition-colors">首页</Link>
+                  <button type="button" onClick={() => handleSelectCategory("all")} className="text-on-surface-variant hover:text-on-surface cursor-pointer transition-colors">首页</button>
                   <Icon name="chevron_right" size={12} className="text-on-surface-variant/40" />
                   {breadcrumb.parent && !breadcrumb.child ? (
                     <span className="text-primary font-medium">{breadcrumb.label}</span>
@@ -945,7 +1323,7 @@ export default function HomePage() {
                   )}
                 </div>
                 <div className="flex items-center gap-3">
-                  <h1 className="text-2xl font-headline font-bold text-on-surface tracking-tight">零件模型库</h1>
+                  <PageTitle>零件模型库</PageTitle>
                   <span className="bg-surface-container-high px-2 py-0.5 text-xs text-on-surface-variant rounded-sm border border-outline-variant/20">{totalItems} 个模型</span>
                 </div>
               </div>
@@ -976,7 +1354,22 @@ export default function HomePage() {
               <>
                 <div className={`grid gap-3 ${viewMode === "grid" ? "grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5" : "grid-cols-1 gap-2"}`}>
                   {products.map((product) => (
-                    <ProductCard key={product.id} product={product} onDownload={handleDownload} returnPath={modelReturnPath} homeBrowseState={homeBrowseState} onBeforeOpen={(modelId) => saveCurrentHomeScroll(true, modelId)} variant={viewMode} />
+                    <ProductCard
+                      key={product.id}
+                      product={product}
+                      onDownload={handleDownload}
+                      onContextMenu={handleModelContextMenu}
+                      manageOpen={contextMenu?.product.id === product.id}
+                      onCloseManage={() => setContextMenu(null)}
+                      onOpenManageDetail={openManagedModelDetail}
+                      onShareModel={shareManagedModel}
+                      onRenameModel={renameManagedModel}
+                      onRequestDelete={requestManagedModelDelete}
+                      returnPath={modelReturnPath}
+                      homeBrowseState={homeBrowseState}
+                      onBeforeOpen={(modelId) => saveCurrentHomeScroll(true, modelId)}
+                      variant={viewMode}
+                    />
                   ))}
                 </div>
 
@@ -987,14 +1380,10 @@ export default function HomePage() {
                   </div>
                 )}
 
-                {/* Pagination */}
-                <Pagination
-                  page={page}
-                  pageSize={pageSize}
-                  totalItems={totalItems}
-                  totalPages={totalPages}
-                  onPageChange={handlePageChange}
-                  onPageSizeChange={handlePageSizeChange}
+                <InfiniteLoadTrigger
+                  hasMore={hasMore}
+                  isLoading={isLoadingMore}
+                  onLoadMore={handleLoadMore}
                 />
               </>
             )}
@@ -1006,7 +1395,7 @@ export default function HomePage() {
           <div className="px-8 py-4">
             <div className="flex items-center justify-between gap-8">
               {/* Left: Brand */}
-              <span className="font-headline font-semibold text-sm text-on-surface-variant/60 tracking-tight">{getSiteTitle()}</span>
+              <span className="font-headline font-semibold text-sm text-on-surface-variant/60">{getSiteTitle()}</span>
               {/* Right: Links + Email */}
               <div className="flex items-center gap-5">
                 {getFooterLinks().map((link, i) => (
@@ -1028,6 +1417,71 @@ export default function HomePage() {
             </p>
           </div>
         </footer>
+        <AnimatePresence>
+          {deleteTarget && (
+            <motion.div
+              key="model-delete-dialog"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="fixed inset-0 z-[250] flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm"
+              onClick={() => !deletingModel && setDeleteTarget(null)}
+            >
+              <motion.div
+                initial={{ opacity: 0, scale: 0.96, y: 8 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                exit={{ opacity: 0, scale: 0.96, y: 8 }}
+                transition={{ duration: 0.16 }}
+                className="w-full max-w-lg overflow-hidden rounded-lg border border-outline-variant/20 bg-surface-container-high shadow-2xl"
+                onClick={(event) => event.stopPropagation()}
+              >
+                <div className="flex gap-4 border-b border-outline-variant/10 bg-error-container/10 p-5">
+                  <div className="h-16 w-16 shrink-0 overflow-hidden rounded-md border border-error/20 bg-surface-container-lowest">
+                    <ModelThumbnail src={deleteTarget.thumbnailUrl} alt={deleteTarget.name} className="h-full w-full object-cover" />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <div className="mb-1 flex items-center gap-2 text-error">
+                      <Icon name="warning" size={18} />
+                      <h3 className="font-headline text-base font-bold">确认删除模型</h3>
+                    </div>
+                    <p className="line-clamp-2 text-sm font-medium text-on-surface">{deleteTarget.name}</p>
+                    <p className="mt-1 text-xs text-on-surface-variant">这个操作会立即删除模型资产与数据库关联记录。</p>
+                  </div>
+                </div>
+                <div className="space-y-4 p-5">
+                  <div className="rounded-md border border-error/20 bg-error-container/10 px-3 py-2.5 text-sm leading-relaxed text-on-surface">
+                    删除后无法恢复，请确认当前模型不再需要展示、下载或作为变体使用。
+                  </div>
+                  <div className="grid grid-cols-2 gap-2 text-xs text-on-surface-variant">
+                    {["STEP/原始文件", "生成预览文件", "缩略图与图纸", "版本文件", "收藏/下载等关联", "数据库模型记录"].map((item) => (
+                      <div key={item} className="flex items-center gap-2 rounded-md bg-surface-container-low px-2.5 py-2">
+                        <Icon name="check" size={13} className="text-error" />
+                        <span className="min-w-0 truncate">{item}</span>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="flex justify-end gap-3 pt-1">
+                    <button
+                      onClick={() => setDeleteTarget(null)}
+                      disabled={deletingModel}
+                      className="rounded-md border border-outline-variant/30 px-4 py-2 text-sm text-on-surface-variant transition-colors hover:bg-surface-container-highest disabled:opacity-50"
+                    >
+                      先不删除
+                    </button>
+                    <button
+                      onClick={handleDeleteModel}
+                      disabled={deletingModel}
+                      className="flex items-center gap-2 rounded-md bg-error px-4 py-2 text-sm font-medium text-on-error transition-opacity hover:opacity-90 disabled:opacity-50"
+                    >
+                      {deletingModel && <Icon name="progress_activity" size={15} className="animate-spin" />}
+                      {deletingModel ? "正在删除..." : "确认永久删除"}
+                    </button>
+                  </div>
+                </div>
+              </motion.div>
+            </motion.div>
+          )}
+        </AnimatePresence>
         {loginPromptOpen && (
           <motion.div
             initial={{ opacity: 0 }}
@@ -1057,33 +1511,36 @@ export default function HomePage() {
             </motion.div>
           </motion.div>
         )}
-      </div>
+      </PublicPageShell>
     );
   }
 
   // Mobile layout
   return (
-    <div className="flex flex-col h-dvh bg-surface">
-      <TopNav compact onMenuToggle={() => setDrawerOpen((prev) => !prev)} />
-      <MobileDrawer
-        open={drawerOpen}
-        onClose={() => setDrawerOpen(false)}
-        expandedCategories={expandedCategories}
-        activeCategory={activeCategory}
-        categories={categories}
-        totalCount={totalModelCount}
-        onToggle={toggleCategory}
-        onSelect={handleSelectCategory}
-      />
+    <PublicPageShell
+      onMobileMenuToggle={() => setDrawerOpen((prev) => !prev)}
+      mobileDrawer={
+        <MobileDrawer
+          open={drawerOpen}
+          onClose={() => setDrawerOpen(false)}
+          expandedCategories={expandedCategories}
+          activeCategory={activeCategory}
+          categories={categories}
+          totalCount={totalModelCount}
+          onToggle={toggleCategory}
+          onSelect={handleSelectCategory}
+        />
+      }
+    >
       <main ref={scrollContainerRef} onScroll={handleHomeScroll} className="flex-1 overflow-y-auto overflow-x-hidden scrollbar-hidden bg-surface-dim">
         <div className="p-3 space-y-3 pb-20 min-h-full flex flex-col">
           <AnnouncementBanner />
           {/* Header with category filter button */}
           <div className="flex items-center justify-between">
             <div>
-              <h1 className="text-base font-headline font-bold text-on-surface">
-                {breadcrumb.label === "全部" ? "零件目录" : breadcrumb.label}
-              </h1>
+              <PageTitle className="text-base md:text-base md:normal-case">
+                {activeCategory === "all" ? "零件目录" : breadcrumb.label}
+              </PageTitle>
               <span className="text-[10px] text-on-surface-variant">{totalItems} 个模型</span>
             </div>
             <button onClick={() => setDrawerOpen(true)} className="p-2 text-on-surface-variant hover:text-on-surface bg-surface-container-high rounded-sm flex items-center gap-1.5">
@@ -1100,7 +1557,7 @@ export default function HomePage() {
                 activeCategory === "all" ? "bg-primary-container text-on-primary" : "bg-surface-container-high text-on-surface-variant"
               }`}
             >
-              全部
+              全部模型
             </button>
             {categories.map((cat) => (
               <button
@@ -1135,15 +1592,10 @@ export default function HomePage() {
             </div>
           )}
 
-          {/* Mobile pagination */}
-          <Pagination
-            page={page}
-            pageSize={pageSize}
-            totalItems={totalItems}
-            totalPages={totalPages}
-            onPageChange={handlePageChange}
-            onPageSizeChange={handlePageSizeChange}
-            compact
+          <InfiniteLoadTrigger
+            hasMore={hasMore}
+            isLoading={isLoadingMore}
+            onLoadMore={handleLoadMore}
           />
 
           {/* Footer */}
@@ -1160,7 +1612,6 @@ export default function HomePage() {
           </footer>
         </div>
       </main>
-      <BottomNav />
       {loginPromptOpen && (
         <motion.div
           initial={{ opacity: 0 }}
@@ -1190,6 +1641,6 @@ export default function HomePage() {
           </motion.div>
         </motion.div>
       )}
-    </div>
+    </PublicPageShell>
   );
 }

@@ -30,6 +30,10 @@ function shouldSkipMessage(message: string) {
   return now - last < DEDUPE_MS;
 }
 
+function isMessageObject(value: unknown): value is { message?: string; detail?: string; error?: string } {
+  return !!value && typeof value === "object";
+}
+
 export function getErrorMessage(error: unknown, fallback = "操作失败，请稍后重试") {
   if (axios.isAxiosError(error)) {
     const status = error.response?.status;
@@ -39,9 +43,11 @@ export function getErrorMessage(error: unknown, fallback = "操作失败，请�
       | undefined;
 
     if (typeof data === "string" && data.trim()) return data;
-    if (data?.message) return data.message;
-    if (data?.detail) return data.detail;
-    if (data?.error) return data.error;
+    if (isMessageObject(data)) {
+      if (data.message) return data.message;
+      if (data.detail) return data.detail;
+      if (data.error) return data.error;
+    }
     if (status === 0 || error.code === "ERR_NETWORK") return "网络连接失败，请检查服务器或网络";
     if (status === 401) return "登录状态已失效，请重新登录";
     if (status === 403) return "没有权限执行该操作";

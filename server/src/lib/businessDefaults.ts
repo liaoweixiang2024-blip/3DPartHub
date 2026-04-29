@@ -3,10 +3,10 @@ import type { NavItemConfig, StatusConfig, SupportStepConfig, TicketClassificati
 
 export const DEFAULT_INQUIRY_STATUSES_FOR_SETTINGS: StatusConfig[] = [
   { value: "draft", label: "草稿", color: "text-on-surface-variant", bg: "bg-surface-container-highest" },
-  { value: "submitted", label: "待报价", color: "text-blue-500", bg: "bg-blue-500/10", tab: true },
-  { value: "quoted", label: "已报价", color: "text-green-600", bg: "bg-green-500/10", tab: true },
-  { value: "accepted", label: "已接受", color: "text-emerald-600", bg: "bg-emerald-500/10", tab: true, terminal: true },
-  { value: "rejected", label: "已拒绝", color: "text-red-500", bg: "bg-red-500/10", tab: true, terminal: true },
+  { value: "submitted", label: "待处理", color: "text-blue-500", bg: "bg-blue-500/10", tab: true },
+  { value: "quoted", label: "已回复", color: "text-green-600", bg: "bg-green-500/10", tab: true },
+  { value: "accepted", label: "已转销售", color: "text-emerald-600", bg: "bg-emerald-500/10", tab: true, terminal: true },
+  { value: "rejected", label: "已关闭", color: "text-red-500", bg: "bg-red-500/10", tab: true, terminal: true },
   { value: "cancelled", label: "已取消", color: "text-on-surface-variant", bg: "bg-surface-container-highest", terminal: true },
 ];
 
@@ -35,6 +35,7 @@ export const DEFAULT_SUPPORT_STEPS_FOR_SETTINGS: SupportStepConfig[] = [
 export const DEFAULT_USER_NAV_FOR_SETTINGS: NavItemConfig[] = [
   { label: "模型库", icon: "dashboard", path: "/", enabled: true },
   { label: "产品选型", icon: "tune", path: "/selection", enabled: true },
+  { label: "规格查询", icon: "straighten", path: "/tools/thread-size", enabled: true },
   { label: "我的收藏", icon: "star", path: "/favorites", enabled: true },
   { label: "我的询价", icon: "request_quote", path: "/my-inquiries", enabled: true },
   { label: "下载历史", icon: "download", path: "/downloads", enabled: true },
@@ -48,7 +49,6 @@ export const DEFAULT_ADMIN_NAV_FOR_SETTINGS: NavItemConfig[] = [
   { label: "分类管理", icon: "folder", path: "/admin/categories", enabled: true },
   { label: "选型管理", icon: "tune", path: "/admin/selections", enabled: true },
   { label: "询价管理", icon: "receipt_long", path: "/admin/inquiries", enabled: true },
-  { label: "单据模板", icon: "description", path: "/admin/quote-template", enabled: true },
   { label: "工单处理", icon: "build", path: "/admin/tickets", enabled: true },
   { label: "用户管理", icon: "group", path: "/admin/users", enabled: true },
   { label: "分享管理", icon: "share", path: "/admin/shares", enabled: true },

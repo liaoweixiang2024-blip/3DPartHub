@@ -1,5 +1,6 @@
 import { prisma } from "../lib/prisma.js";
 import { readGltfAsset, resolveFileUrlPath } from "./gltfAsset.js";
+import { MODEL_STATUS } from "./modelStatus.js";
 
 interface ModelStats {
   id: string;
@@ -73,6 +74,9 @@ export async function compareModels(id1: string, id2: string) {
   ]);
 
   if (!m1 || !m2) throw new Error("模型不存在");
+  if (m1.status !== MODEL_STATUS.COMPLETED || m2.status !== MODEL_STATUS.COMPLETED) {
+    throw new Error("模型不存在");
+  }
 
   // Try to extract stats from glTF files
   let stats1: { vertexCount: number; faceCount: number; dimensions: any } | null = null;

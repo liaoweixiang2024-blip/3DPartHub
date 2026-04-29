@@ -3,6 +3,7 @@ import Icon from "./Icon";
 import { createShare, type CreateShareParams } from "../../api/shares";
 import { getPublicSettingsSnapshot } from "../../lib/publicSettings";
 import { copyText } from "../../lib/clipboard";
+import { getErrorMessage } from "../../lib/errorNotifications";
 
 interface ShareDialogProps {
   open: boolean;
@@ -60,8 +61,8 @@ export default function ShareDialog({ open, onClose, modelId, modelName }: Share
       };
       const result = await createShare(params);
       setShareUrl(`${window.location.origin}/share/${result.token}`);
-    } catch (err: any) {
-      setError(err.response?.data?.detail || err.response?.data?.message || "创建失败");
+    } catch (err: unknown) {
+      setError(getErrorMessage(err, "创建失败"));
     } finally {
       setCreating(false);
     }

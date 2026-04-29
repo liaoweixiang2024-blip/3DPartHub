@@ -1,7 +1,9 @@
 node_modules/
 dist/
 .env
-.env.production
+.env.*
+!.env.example
+*.local
 *.log
 .DS_Store
 
@@ -17,11 +19,43 @@ static/_safety_snapshots/
 static/drawings/
 static/option-images/
 static/ticket-attachments/
+static/html-previews/
 static/logo/
 static/favicon/
 static/selection-categories-ai/
+static/js/
 static/watermark/
 .occt-import-js.cache/
+backups/
+tmp/
+tmp_*/
+*.bak
+*.backup
+*.db
+*.dump
+*.sqlite
+*.sqlite3
+*.tar
+*.tar.gz
+*.tgz
+*.7z
+*.zip
+*.rar
+*.stp
+*.step
+*.iges
+*.igs
+*.stl
+*.obj
+*.fbx
+*.glb
+*.gltf
+*.x_t
+*.xt
+*.sldprt
+*.sldasm
+*.dwg
+*.dxf
 
 # Prisma seeds (non-runtime)
 prisma/seeds/

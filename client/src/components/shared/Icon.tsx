@@ -42,8 +42,10 @@ import {
   Share2,
   FileText,
   Palette,
+  Sparkles,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
+import type { CSSProperties } from "react";
 
 const iconMap: Record<string, LucideIcon> = {
   // Navigation & Actions
@@ -56,6 +58,7 @@ const iconMap: Record<string, LucideIcon> = {
   person: User,
   close: X,
   add: Plus,
+  "auto_awesome": Sparkles,
   upload: Upload,
   send: Send,
 
@@ -256,15 +259,17 @@ interface IconProps {
   size?: number;
   className?: string;
   fill?: boolean;
+  style?: CSSProperties;
 }
 
-export default function Icon({ name, size = 20, className = "", fill }: IconProps) {
+export default function Icon({ name, size = 20, className = "", fill, style }: IconProps) {
   const LucideComp = iconMap[name];
-  if (!LucideComp) return <span style={{ width: size, height: size, display: "inline-block" }} />;
+  if (!LucideComp) return <span style={{ width: size, height: size, display: "inline-block", ...style }} />;
   return (
     <LucideComp
       size={size}
       className={`inline-block ${fill ? "fill-current" : ""} ${className}`}
+      style={style}
     />
   );
 }

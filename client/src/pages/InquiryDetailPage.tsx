@@ -1,13 +1,9 @@
 import { useState, useRef, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import useSWR from "swr";
-import { useMediaQuery } from "../layouts/hooks/useMediaQuery";
 import { useDocumentTitle } from "../hooks/useDocumentTitle";
-import TopNav from "../components/shared/TopNav";
-import BottomNav from "../components/shared/BottomNav";
-import AppSidebar from "../components/shared/Sidebar";
-import MobileNavDrawer from "../components/shared/MobileNavDrawer";
 import Icon from "../components/shared/Icon";
+import { AdminPageShell } from "../components/shared/AdminPageShell";
 import { useToast } from "../components/shared/Toast";
 import { useAuthStore } from "../stores/useAuthStore";
 import { getCachedPublicSettings } from "../lib/publicSettings";
@@ -16,7 +12,6 @@ import {
   getInquiry,
   sendInquiryMessage,
   cancelInquiry,
-  quoteInquiry,
   updateInquiryStatus,
   type Inquiry,
   type InquiryMessage,
@@ -55,63 +50,58 @@ function MessageBubble({ msg }: { msg: InquiryMessage }) {
   );
 }
 
-// Quote table for items
-function ItemsTable({ items, adminMode, quotePrices, onPriceChange }: {
+function ItemsTable({ items }: {
   items: Inquiry["items"];
-  adminMode: boolean;
-  quotePrices: Record<string, string>;
-  onPriceChange: (id: string, val: string) => void;
 }) {
   return (
-    <div className="overflow-auto rounded-lg border border-outline-variant/15 max-h-[50vh]">
-      <table className="min-w-[640px] w-full text-sm">
+    <>
+      <div className="space-y-2 md:hidden">
+        {items.map((item, index) => (
+          <div key={item.id} className="rounded-lg border border-outline-variant/12 bg-surface-container-low p-3">
+            <div className="mb-2 flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <p className="break-words text-sm font-semibold text-on-surface">{item.modelNo || item.productName}</p>
+                {item.modelNo && item.productName !== item.modelNo && (
+                  <p className="mt-0.5 break-words text-xs text-on-surface-variant">{item.productName}</p>
+                )}
+              </div>
+              <span className="shrink-0 rounded-md bg-surface-container-high px-2 py-1 text-xs font-semibold tabular-nums text-on-surface">
+                x{item.qty}
+              </span>
+            </div>
+            <div className="flex items-center justify-between gap-3 border-t border-outline-variant/8 pt-2 text-xs text-on-surface-variant">
+              <span>序号 {index + 1}</span>
+              <span className="min-w-0 truncate text-right">{item.remark || "无备注"}</span>
+            </div>
+          </div>
+        ))}
+      </div>
+      <div className="hidden overflow-auto rounded-lg border border-outline-variant/15 max-h-[50vh] md:block">
+        <table className="min-w-[520px] w-full text-sm">
         <thead className="sticky top-0 z-10">
           <tr className="bg-surface-container-low">
             <th className="px-4 py-2 text-left text-xs font-bold text-on-surface-variant">型号/产品</th>
             <th className="px-4 py-2 text-left text-xs font-bold text-on-surface-variant">数量</th>
             <th className="px-4 py-2 text-left text-xs font-bold text-on-surface-variant">备注</th>
-            <th className="px-4 py-2 text-right text-xs font-bold text-on-surface-variant">单价</th>
-            <th className="px-4 py-2 text-right text-xs font-bold text-on-surface-variant">小计</th>
           </tr>
         </thead>
         <tbody>
-          {items.map((item) => {
-            const price = item.unitPrice ? Number(item.unitPrice) : null;
-            const inputPrice = quotePrices[item.id] ?? (price ? String(price) : "");
-            const subtotal = inputPrice ? Number(inputPrice) * item.qty : null;
-            return (
-              <tr key={item.id} className="border-t border-outline-variant/5">
-                <td className="px-4 py-2.5">
-                  <p className="text-on-surface font-medium break-words">{item.modelNo || item.productName}</p>
-                  {item.modelNo && item.productName !== item.modelNo && (
-                    <p className="text-xs text-on-surface-variant break-words">{item.productName}</p>
-                  )}
-                </td>
-                <td className="px-4 py-2.5 text-on-surface">{item.qty}</td>
-                <td className="px-4 py-2.5 text-xs text-on-surface-variant">{item.remark || "—"}</td>
-                <td className="px-4 py-2.5 text-right">
-                  {adminMode ? (
-                    <input
-                      type="number"
-                      step="0.01"
-                      value={inputPrice}
-                      onChange={(e) => onPriceChange(item.id, e.target.value)}
-                      placeholder="0.00"
-                      className="w-24 text-right bg-surface-container-lowest text-on-surface text-sm rounded px-2 py-1 border border-outline-variant/20 outline-none focus:border-primary"
-                    />
-                  ) : (
-                    <span className="text-on-surface">{price ? `¥${price.toFixed(2)}` : "—"}</span>
-                  )}
-                </td>
-                <td className="px-4 py-2.5 text-right text-on-surface">
-                  {subtotal !== null ? `¥${subtotal.toFixed(2)}` : "—"}
-                </td>
-              </tr>
-            );
-          })}
+          {items.map((item) => (
+            <tr key={item.id} className="border-t border-outline-variant/5">
+              <td className="px-4 py-2.5">
+                <p className="text-on-surface font-medium break-words">{item.modelNo || item.productName}</p>
+                {item.modelNo && item.productName !== item.modelNo && (
+                  <p className="text-xs text-on-surface-variant break-words">{item.productName}</p>
+                )}
+              </td>
+              <td className="px-4 py-2.5 text-on-surface">{item.qty}</td>
+              <td className="px-4 py-2.5 text-xs text-on-surface-variant">{item.remark || "—"}</td>
+            </tr>
+          ))}
         </tbody>
-      </table>
-    </div>
+        </table>
+      </div>
+    </>
   );
 }
 
@@ -131,25 +121,7 @@ function DetailContent({ id }: { id: string }) {
   );
 
   const [msgInput, setMsgInput] = useState("");
-  const [quotePrices, setQuotePrices] = useState<Record<string, string>>({});
-  const [totalAmount, setTotalAmount] = useState("");
-  const [adminRemark, setAdminRemark] = useState("");
   const [sending, setSending] = useState(false);
-  const [quoting, setQuoting] = useState(false);
-
-  const quotedTotal = inquiry?.items.reduce((sum, it) => {
-    const current = quotePrices[it.id] ?? (it.unitPrice ? String(it.unitPrice) : "");
-    return sum + (Number(current) || 0) * it.qty;
-  }, 0) || 0;
-
-  useEffect(() => {
-    if (!inquiry) return;
-    setQuotePrices((prev) => {
-      if (Object.keys(prev).length > 0) return prev;
-      return Object.fromEntries(inquiry.items.map((item) => [item.id, item.unitPrice ? String(item.unitPrice) : ""]));
-    });
-    if (!adminRemark && inquiry.adminRemark) setAdminRemark(inquiry.adminRemark);
-  }, [inquiry, adminRemark]);
 
   const prevMsgCount = useRef<number | undefined>(undefined);
   useEffect(() => {
@@ -192,27 +164,6 @@ function DetailContent({ id }: { id: string }) {
     }
   }
 
-  async function handleQuote() {
-    setQuoting(true);
-    try {
-      const items = inquiry.items.map((it) => ({
-        id: it.id,
-        unitPrice: Number(quotePrices[it.id] || 0),
-      }));
-      await quoteInquiry(id, {
-        items,
-        totalAmount: totalAmount ? Number(totalAmount) : quotedTotal,
-        adminRemark: adminRemark || undefined,
-      });
-      mutate();
-      toast("报价已提交", "success");
-    } catch {
-      toast("报价失败", "error");
-    } finally {
-      setQuoting(false);
-    }
-  }
-
   async function handleStatusUpdate(status: string) {
     try {
       await updateInquiryStatus(id, status);
@@ -223,172 +174,133 @@ function DetailContent({ id }: { id: string }) {
     }
   }
 
+  const canMessage = inquiry.status !== "cancelled" && inquiry.status !== "draft";
+
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
-        <div>
-          <div className="flex items-center gap-3 mb-1">
-            <button onClick={() => navigate(-1)} className="text-on-surface-variant hover:text-on-surface">
-              <Icon name="arrow_back" size={20} />
-            </button>
-            <h2 className="font-headline text-xl font-bold text-on-surface">询价单详情</h2>
-            <StatusBadge status={inquiry.status} statuses={statuses} />
-          </div>
-          <p className="text-xs text-on-surface-variant ml-8">
-            {new Date(inquiry.createdAt).toLocaleString("zh-CN")}
-            {inquiry.user && ` · ${inquiry.user.username}`}
-            {inquiry.company && ` · ${inquiry.company}`}
-          </p>
+    <div className="flex h-full min-h-0 flex-col">
+      <div className="shrink-0 border-b border-outline-variant/10 bg-surface-container px-4 py-3">
+        <div className="mb-2 flex min-w-0 items-center gap-3">
+          <button onClick={() => navigate(-1)} className="text-on-surface-variant transition-colors hover:text-on-surface">
+            <Icon name="arrow_back" size={20} />
+          </button>
+          <h2 className="min-w-0 flex-1 truncate font-headline text-lg font-bold text-on-surface">询价单详情</h2>
+          <StatusBadge status={inquiry.status} statuses={statuses} />
         </div>
-        <div className="flex gap-2 ml-8 md:ml-0 flex-wrap">
-          {(inquiry.status === "quoted" || inquiry.status === "accepted") && (
-            <button onClick={() => navigate(`/quote/${inquiry.id}`)} className="px-4 py-2 text-sm font-medium bg-primary-container text-on-primary rounded-lg hover:opacity-90 inline-flex items-center gap-1.5">
-              <Icon name="receipt_long" size={16} />生成报价单
-            </button>
-          )}
-          {inquiry.status === "accepted" && (
-            <button onClick={() => navigate(`/document/contract/${inquiry.id}`)} className="px-4 py-2 text-sm font-medium bg-surface-container-high text-on-surface rounded-lg hover:bg-surface-container-highest inline-flex items-center gap-1.5">
-              <Icon name="description" size={16} />生成合同
-            </button>
-          )}
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-on-surface-variant">
+          <span className="flex min-w-0 items-center gap-1">
+            <Icon name="schedule" size={12} className="shrink-0" />
+            <span className="truncate">{new Date(inquiry.createdAt).toLocaleString("zh-CN")}</span>
+          </span>
+          {inquiry.user ? (
+            <span className="flex min-w-0 items-center gap-1">
+              <Icon name="person" size={12} className="shrink-0" />
+              <span className="truncate">{inquiry.user.username}</span>
+            </span>
+          ) : null}
+          {inquiry.company ? <span className="truncate">{inquiry.company}</span> : null}
+        </div>
+        <div className="mt-3 flex flex-wrap gap-2">
           {inquiry.status === "submitted" && !isAdmin && (
-            <button onClick={handleCancel} className="px-4 py-2 text-sm border border-outline-variant/40 text-on-surface-variant rounded-lg hover:bg-surface-container-high/50">
+            <button onClick={handleCancel} className="rounded-lg border border-outline-variant/40 px-3 py-1.5 text-xs text-on-surface-variant transition-colors hover:bg-surface-container-high/50">
               取消询价
             </button>
           )}
+          {isAdmin && inquiry.status === "submitted" && (
+            <>
+              <button onClick={() => handleStatusUpdate("quoted")} className="rounded-lg bg-primary-container px-3 py-1.5 text-xs font-medium text-on-primary transition-opacity hover:opacity-90">
+                标记已回复
+              </button>
+              <button onClick={() => handleStatusUpdate("rejected")} className="rounded-lg bg-red-500/15 px-3 py-1.5 text-xs font-medium text-red-500 transition-opacity hover:opacity-90">
+                关闭
+              </button>
+            </>
+          )}
           {isAdmin && inquiry.status === "quoted" && (
             <>
-              <button onClick={() => handleStatusUpdate("accepted")} className="px-4 py-2 text-sm font-medium bg-green-500/15 text-green-600 rounded-lg hover:opacity-90">
-                接受
+              <button onClick={() => handleStatusUpdate("accepted")} className="rounded-lg bg-green-500/15 px-3 py-1.5 text-xs font-medium text-green-600 transition-opacity hover:opacity-90">
+                转销售跟进
               </button>
-              <button onClick={() => handleStatusUpdate("rejected")} className="px-4 py-2 text-sm font-medium bg-red-500/15 text-red-500 rounded-lg hover:opacity-90">
-                拒绝
+              <button onClick={() => handleStatusUpdate("rejected")} className="rounded-lg bg-red-500/15 px-3 py-1.5 text-xs font-medium text-red-500 transition-opacity hover:opacity-90">
+                关闭
               </button>
             </>
           )}
         </div>
       </div>
 
-      {/* Contact info */}
-      {(inquiry.company || inquiry.contactName || inquiry.contactPhone) && (
-        <div className="rounded-lg border border-outline-variant/15 bg-surface-container-low p-4">
-          <h3 className="text-sm font-bold text-on-surface mb-2">联系信息</h3>
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4 text-sm">
-            {inquiry.company && <div className="min-w-0"><span className="text-on-surface-variant">公司：</span><span className="text-on-surface break-words">{inquiry.company}</span></div>}
-            {inquiry.contactName && <div className="min-w-0"><span className="text-on-surface-variant">联系人：</span><span className="text-on-surface break-words">{inquiry.contactName}</span></div>}
-            {inquiry.contactPhone && <div className="min-w-0"><span className="text-on-surface-variant">电话：</span><span className="text-on-surface break-words">{inquiry.contactPhone}</span></div>}
+      <div className="min-h-0 flex-1 overflow-y-auto p-4 scrollbar-hidden">
+        <div className="space-y-6">
+          {(inquiry.company || inquiry.contactName || inquiry.contactPhone) && (
+            <div className="rounded-lg border border-outline-variant/15 bg-surface-container-low p-4">
+              <h3 className="mb-2 text-sm font-bold text-on-surface">联系信息</h3>
+              <div className="grid grid-cols-1 gap-3 text-sm sm:grid-cols-3 sm:gap-4">
+                {inquiry.company && <div className="min-w-0"><span className="text-on-surface-variant">公司：</span><span className="break-words text-on-surface">{inquiry.company}</span></div>}
+                {inquiry.contactName && <div className="min-w-0"><span className="text-on-surface-variant">联系人：</span><span className="break-words text-on-surface">{inquiry.contactName}</span></div>}
+                {inquiry.contactPhone && <div className="min-w-0"><span className="text-on-surface-variant">电话：</span><span className="break-words text-on-surface">{inquiry.contactPhone}</span></div>}
+              </div>
+            </div>
+          )}
+
+          <div>
+            <h3 className="mb-2 text-sm font-bold text-on-surface">产品明细</h3>
+            <ItemsTable items={inquiry.items} />
+          </div>
+
+          {inquiry.adminRemark && (
+            <div className="rounded-lg border border-outline-variant/15 bg-surface-container-low p-4">
+              <h3 className="mb-1 text-sm font-bold text-on-surface">跟进备注</h3>
+              <p className="text-sm text-on-surface-variant">{inquiry.adminRemark}</p>
+            </div>
+          )}
+
+          {inquiry.remark && (
+            <div className="rounded-lg border border-outline-variant/15 bg-surface-container-low p-4">
+              <h3 className="mb-1 text-sm font-bold text-on-surface">用户备注</h3>
+              <p className="text-sm text-on-surface-variant">{inquiry.remark}</p>
+            </div>
+          )}
+
+          <div>
+            <h3 className="mb-3 text-sm font-bold text-on-surface">沟通记录</h3>
+            <div className="rounded-lg border border-outline-variant/15 bg-surface-container-low p-4">
+              {(inquiry.messages || []).length === 0 ? (
+                <p className="flex min-h-32 items-center justify-center text-center text-sm text-on-surface-variant">暂无消息</p>
+              ) : (
+                (inquiry.messages || []).map((msg) => <MessageBubble key={msg.id} msg={msg} />)
+              )}
+              <div ref={messagesEndRef} />
+            </div>
           </div>
         </div>
-      )}
-
-      {/* Quote table */}
-      <div>
-        <h3 className="text-sm font-bold text-on-surface mb-2">产品明细</h3>
-        <ItemsTable
-          items={inquiry.items}
-          adminMode={isAdmin && inquiry.status === "submitted"}
-          quotePrices={quotePrices}
-          onPriceChange={(itemId, val) => setQuotePrices((prev) => ({ ...prev, [itemId]: val }))}
-        />
       </div>
 
-      {/* Admin quote action */}
-      {isAdmin && inquiry.status === "submitted" && (
-        <div className="rounded-lg border border-primary-container/20 bg-primary-container/5 p-4 space-y-3">
-          <h3 className="text-sm font-bold text-on-surface">提交报价</h3>
-          <div className="grid gap-3 grid-cols-1 sm:grid-cols-2">
-            <div>
-              <label className="block text-xs text-on-surface-variant mb-1">总金额</label>
-              <input
-                type="number"
-                step="0.01"
-                value={totalAmount}
-                onChange={(e) => setTotalAmount(e.target.value)}
-                placeholder={`自动计算 ¥${quotedTotal.toFixed(2)}`}
-                className="w-full bg-surface-container-lowest text-on-surface text-sm rounded-md px-3 py-2 border border-outline-variant/20 outline-none focus:border-primary"
-              />
-            </div>
-            <div>
-              <label className="block text-xs text-on-surface-variant mb-1">备注</label>
-              <input
-                value={adminRemark}
-                onChange={(e) => setAdminRemark(e.target.value)}
-                placeholder="有效期、含税等"
-                className="w-full bg-surface-container-lowest text-on-surface text-sm rounded-md px-3 py-2 border border-outline-variant/20 outline-none focus:border-primary"
-              />
-            </div>
-          </div>
-          <div className="flex items-center justify-between rounded-md bg-surface-container-lowest px-3 py-2 text-sm">
-            <span className="text-on-surface-variant">系统按单价 × 数量计算</span>
-            <span className="font-headline font-bold text-on-surface">¥{quotedTotal.toFixed(2)}</span>
-          </div>
-          <button
-            onClick={handleQuote}
-            disabled={quoting}
-            className="px-6 py-2.5 text-sm font-bold bg-primary-container text-on-primary rounded-lg hover:opacity-90 disabled:opacity-50"
-          >
-            {quoting ? "提交中..." : "确认报价"}
-          </button>
-        </div>
-      )}
-
-      {/* Admin remark (displayed after quote) */}
-      {inquiry.adminRemark && (
-        <div className="rounded-lg border border-outline-variant/15 bg-surface-container-low p-4">
-          <h3 className="text-sm font-bold text-on-surface mb-1">管理员备注</h3>
-          <p className="text-sm text-on-surface-variant">{inquiry.adminRemark}</p>
-        </div>
-      )}
-
-      {/* Total amount */}
-      {inquiry.totalAmount && (
-        <div className="rounded-lg border border-green-500/20 bg-green-500/5 p-4 flex items-center justify-between">
-          <span className="text-sm font-medium text-on-surface">报价总额</span>
-          <span className="text-xl font-headline font-bold text-green-600">¥{Number(inquiry.totalAmount).toFixed(2)}</span>
-        </div>
-      )}
-
-      {/* User remark */}
-      {inquiry.remark && (
-        <div className="rounded-lg border border-outline-variant/15 bg-surface-container-low p-4">
-          <h3 className="text-sm font-bold text-on-surface mb-1">用户备注</h3>
-          <p className="text-sm text-on-surface-variant">{inquiry.remark}</p>
-        </div>
-      )}
-
-      {/* Messages */}
-      <div>
-        <h3 className="text-sm font-bold text-on-surface mb-3">沟通记录</h3>
-        <div className="max-h-80 overflow-y-auto rounded-lg border border-outline-variant/15 bg-surface-container-low p-4">
-          {(inquiry.messages || []).length === 0 ? (
-            <p className="text-center text-sm text-on-surface-variant py-6">暂无消息</p>
-          ) : (
-            (inquiry.messages || []).map((msg) => <MessageBubble key={msg.id} msg={msg} />)
-          )}
-          <div ref={messagesEndRef} />
-        </div>
-
-        {/* Message input */}
-        {(inquiry.status !== "cancelled" && inquiry.status !== "draft") && (
-          <div className="mt-3 flex gap-2">
-            <input
+      {canMessage && (
+        <div className="shrink-0 border-t border-outline-variant/10 bg-surface-container p-3 pb-[calc(0.75rem+env(safe-area-inset-bottom,0px))]">
+          <div className="flex items-end gap-2">
+            <textarea
               value={msgInput}
               onChange={(e) => setMsgInput(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && handleSendMsg()}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && !e.shiftKey) {
+                  e.preventDefault();
+                  handleSendMsg();
+                }
+              }}
               placeholder="输入消息..."
-              className="flex-1 bg-surface-container-lowest text-on-surface text-sm rounded-lg px-4 py-2.5 border border-outline-variant/20 outline-none focus:border-primary-container"
+              rows={1}
+              className="max-h-28 min-h-10 min-w-0 flex-1 resize-none rounded-lg border border-outline-variant/20 bg-surface-container-high px-3 py-2.5 text-sm text-on-surface outline-none transition-colors placeholder:text-on-surface-variant/45 focus:border-primary-container"
             />
             <button
               onClick={handleSendMsg}
               disabled={sending || !msgInput.trim()}
-              className="px-4 py-2.5 text-sm font-medium bg-primary-container text-on-primary rounded-lg hover:opacity-90 disabled:opacity-50"
+              className="inline-flex h-10 shrink-0 items-center justify-center gap-1.5 rounded-lg bg-primary-container px-4 text-sm font-medium text-on-primary transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
             >
-              发送
+              <Icon name="send" size={14} />
+              <span className="hidden sm:inline">发送</span>
             </button>
           </div>
-        )}
-      </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -396,33 +308,12 @@ function DetailContent({ id }: { id: string }) {
 export default function InquiryDetailPage() {
   const { id } = useParams<{ id: string }>();
   useDocumentTitle("询价单详情");
-  const isDesktop = useMediaQuery("(min-width: 768px)");
-  const [navOpen, setNavOpen] = useState(false);
 
   const content = <DetailContent id={id!} />;
 
-  if (isDesktop) {
-    return (
-      <div className="flex flex-col h-screen overflow-hidden">
-        <TopNav />
-        <div className="flex flex-1 overflow-hidden">
-          <AppSidebar />
-          <main className="flex-1 overflow-y-auto p-8 scrollbar-hidden bg-surface-dim">
-            {content}
-          </main>
-        </div>
-      </div>
-    );
-  }
-
   return (
-    <div className="flex flex-col h-dvh bg-surface">
-      <TopNav compact onMenuToggle={() => setNavOpen((p) => !p)} />
-      <MobileNavDrawer open={navOpen} onClose={() => setNavOpen(false)} />
-      <main className="flex-1 overflow-y-auto px-4 py-5 pb-20 scrollbar-hidden bg-surface-dim">
-        {content}
-      </main>
-      <BottomNav />
-    </div>
+    <AdminPageShell desktopContentClassName="overflow-hidden p-0" mobileMainClassName="overflow-hidden" mobileContentClassName="h-full p-0" hideMobileBottomNav>
+      {content}
+    </AdminPageShell>
   );
 }

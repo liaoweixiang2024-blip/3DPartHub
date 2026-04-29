@@ -78,6 +78,7 @@ export interface PreviewMeta {
       gltfSize: number;
       originalSize: number;
       compressionRatio: number | null;
+      cacheVersion?: string;
     };
     optimization: {
       indexComponentTypes: {
@@ -85,9 +86,16 @@ export interface PreviewMeta {
         uint32: number;
       };
       indexBytesSaved: number;
+      duplicateMaterialsMerged?: number;
     };
     performance?: {
       level: "normal" | "large" | "huge";
+      hints: string[];
+    };
+    precheck?: {
+      sourceBytes: number;
+      sourceLevel: "normal" | "large" | "huge";
+      estimatedPeakMemoryMb: number;
       hints: string[];
     };
     warnings: string[];
@@ -151,7 +159,7 @@ function getPerformanceDiagnostics(totals: { partCount: number; vertexCount: num
 
   if (totals.faceCount >= 1_500_000 || totals.vertexCount >= 3_000_000 || gltfSize >= 120 * 1024 * 1024) {
     level = "huge";
-    hints.push("模型规模很大，建议后续生成轻量预览版本或开启 mesh 压缩。");
+    hints.push("模型规模很大，建议控制转换并发，并优先评估不降低几何质量的压缩与缓存策略。");
   } else if (totals.faceCount >= 500_000 || totals.vertexCount >= 1_000_000 || gltfSize >= 50 * 1024 * 1024) {
     level = "large";
     hints.push("模型规模偏大，移动端首次加载可能较慢。");
@@ -163,6 +171,31 @@ function getPerformanceDiagnostics(totals: { partCount: number; vertexCount: num
   }
 
   return { level, hints };
+}
+
+function getPrecheckDiagnostics(sourceBytes: number): NonNullable<PreviewMeta["diagnostics"]["precheck"]> {
+  const hints: string[] = [];
+  let sourceLevel: "normal" | "large" | "huge" = "normal";
+  const sourceMb = sourceBytes / 1024 / 1024;
+  const estimatedPeakMemoryMb = Math.max(64, Math.ceil(sourceMb * 10));
+
+  if (sourceBytes >= 80 * 1024 * 1024) {
+    sourceLevel = "huge";
+    hints.push("源文件很大，转换和首次预览可能占用较高内存。");
+  } else if (sourceBytes >= 40 * 1024 * 1024) {
+    sourceLevel = "large";
+    hints.push("源文件偏大，建议在低峰期批量重建预览。");
+  }
+
+  if (estimatedPeakMemoryMb >= 1024) {
+    hints.push("预估峰值内存超过 1GB，建议避免同时开启过高转换并发。");
+  }
+
+  return { sourceBytes, sourceLevel, estimatedPeakMemoryMb, hints };
+}
+
+function versionedAssetUrl(url: string, version: string): string {
+  return `${url}${url.includes("?") ? "&" : "?"}v=${encodeURIComponent(version)}`;
 }
 
 function meshesToGltf(
@@ -186,7 +219,9 @@ function meshesToGltf(
   const optimization = {
     indexComponentTypes: { uint16: 0, uint32: 0 },
     indexBytesSaved: 0,
+    duplicateMaterialsMerged: 0,
   };
+  const materialCache = new Map<string, number>();
   const modelBounds = {
     min: [Infinity, Infinity, Infinity] as [number, number, number],
     max: [-Infinity, -Infinity, -Infinity] as [number, number, number],
@@ -340,21 +375,29 @@ function meshesToGltf(
 
     let materialIdx = 0;
     if (mesh.color) {
-      materialIdx = materials.length;
       let [r, g, b] = mesh.color;
       // Boost very dark colors for better visibility in dark theme
       if (r + g + b < 1.0) {
         r = Math.max(r, 0.55); g = Math.max(g, 0.55); b = Math.max(b, 0.58);
       }
-      materials.push({
-        pbrMetallicRoughness: {
-          baseColorFactor: [r, g, b, 1],
-          metallicFactor: 0.3,
-          roughnessFactor: 0.5,
-        },
-        name: mesh.name || `material_${mi}`,
-        doubleSided: true,
-      });
+      const materialKey = `${r.toFixed(4)}:${g.toFixed(4)}:${b.toFixed(4)}`;
+      const existingMaterialIdx = materialCache.get(materialKey);
+      if (existingMaterialIdx !== undefined) {
+        materialIdx = existingMaterialIdx;
+        optimization.duplicateMaterialsMerged++;
+      } else {
+        materialIdx = materials.length;
+        materialCache.set(materialKey, materialIdx);
+        materials.push({
+          pbrMetallicRoughness: {
+            baseColorFactor: [r, g, b, 1],
+            metallicFactor: 0.3,
+            roughnessFactor: 0.5,
+          },
+          name: mesh.name || `material_${mi}`,
+          doubleSided: true,
+        });
+      }
     } else {
       materialIdx = getDefaultMaterialIdx();
     }
@@ -557,17 +600,20 @@ export async function convertStepToGltf(
   const gltfPath = writeGlb(json, bin, outputDir, modelId);
   const originalSize = fileBuffer.length;
   const gltfSize = readFileSync(gltfPath).length;
+  const cacheVersion = Date.now().toString(36);
   meta.diagnostics.asset = {
     gltfSize,
     originalSize,
     compressionRatio: originalSize > 0 ? Number((gltfSize / originalSize).toFixed(4)) : null,
+    cacheVersion,
   };
+  meta.diagnostics.precheck = getPrecheckDiagnostics(originalSize);
   meta.diagnostics.performance = getPerformanceDiagnostics(meta.totals, gltfSize);
 
   return {
     modelId,
     gltfPath,
-    gltfUrl: `/static/models/${modelId}.glb`,
+    gltfUrl: versionedAssetUrl(`/static/models/${modelId}.glb`, cacheVersion),
     originalName: basename(inputPath),
     gltfSize,
     originalSize,

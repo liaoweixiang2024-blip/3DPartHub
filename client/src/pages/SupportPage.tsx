@@ -3,11 +3,9 @@ import { Link, useLocation } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useMediaQuery } from '../layouts/hooks/useMediaQuery';
 import { useDocumentTitle } from '../hooks/useDocumentTitle';
-import TopNav from '../components/shared/TopNav';
-import BottomNav from '../components/shared/BottomNav';
-import AppSidebar from '../components/shared/Sidebar';
-import MobileNavDrawer from '../components/shared/MobileNavDrawer';
 import Icon from "../components/shared/Icon";
+import { PageHeader } from "../components/shared/PagePrimitives";
+import { AdminPageShell } from "../components/shared/AdminPageShell";
 import { useToast } from "../components/shared/Toast";
 import client from "../api/client";
 import useSWR from "swr";
@@ -108,10 +106,11 @@ function DesktopContent() {
   return (
     <div className="max-w-6xl mx-auto">
       {/* Header */}
-      <div className="mb-10">
-        <h2 className="font-headline text-2xl font-bold tracking-tight text-on-surface uppercase">技术支持</h2>
-        <p className="text-sm text-on-surface-variant mt-1">提交定制需求或技术问题，我们的工程师团队将为您处理</p>
-      </div>
+      <PageHeader
+        title="技术支持"
+        description="提交定制需求或技术问题，我们的工程师团队将为您处理"
+        className="mb-10"
+      />
 
       {/* Process Steps */}
       <div className="grid grid-cols-4 gap-4 mb-10">
@@ -269,7 +268,7 @@ function DesktopContent() {
                     </div>
                     <div>
                       <p className="text-sm text-on-surface font-medium">复杂定制</p>
-                      <p className="text-xs text-on-surface-variant">需要初步评估后报价</p>
+                      <p className="text-xs text-on-surface-variant">需要工程师初步评估</p>
                     </div>
                   </div>
                 </div>
@@ -344,10 +343,7 @@ function MobileContent() {
 
   return (
     <div className="px-4 py-4 pb-20 space-y-5">
-      <div>
-        <h1 className="text-lg font-bold text-on-surface">技术支持</h1>
-        <p className="text-xs text-on-surface-variant mt-1">提交定制需求，工程师团队为您处理</p>
-      </div>
+      <PageHeader title="技术支持" description="提交定制需求，工程师团队为您处理" />
 
       {ctx && <ContextCard ctx={ctx} />}
 
@@ -428,30 +424,10 @@ function MobileContent() {
 export default function SupportPage() {
   useDocumentTitle("技术支持");
   const isDesktop = useMediaQuery('(min-width: 768px)');
-  const [navOpen, setNavOpen] = useState(false);
-
-  if (isDesktop) {
-    return (
-      <div className="flex flex-col h-screen overflow-hidden">
-        <TopNav />
-        <div className="flex flex-1 overflow-hidden">
-          <AppSidebar />
-          <main className="flex-1 overflow-y-auto p-8 scrollbar-hidden bg-surface-dim">
-            <DesktopContent />
-          </main>
-        </div>
-      </div>
-    );
-  }
 
   return (
-    <div className="flex flex-col h-dvh bg-surface">
-      <TopNav compact onMenuToggle={() => setNavOpen(prev => !prev)} />
-      <MobileNavDrawer open={navOpen} onClose={() => setNavOpen(false)} />
-      <main className="flex-1 overflow-y-auto scrollbar-hidden bg-surface-dim">
-        <MobileContent />
-      </main>
-      <BottomNav />
-    </div>
+    <AdminPageShell mobileContentClassName="p-0">
+      {isDesktop ? <DesktopContent /> : <MobileContent />}
+    </AdminPageShell>
   );
 }

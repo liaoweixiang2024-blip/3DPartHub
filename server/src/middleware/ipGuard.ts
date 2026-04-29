@@ -89,7 +89,7 @@ export async function ipGuard(req: Request, res: Response, next: NextFunction) {
       if (!isHostAllowed(host, cachedAllowedHosts)) {
         // Always allow admin settings API so admin can fix config
         const path = req.path;
-        if (path.startsWith("/api/settings") || path === "/api/health") {
+        if (path.startsWith("/api/settings") || path.startsWith("/api/health")) {
           next();
           return;
         }

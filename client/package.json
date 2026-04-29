@@ -1,12 +1,14 @@
 {
   "name": "3dparthub-client",
   "private": true,
-  "version": "2.4.0",
+  "version": "2.5.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
+    "typecheck": "tsc --noEmit -p tsconfig.app.json",
     "lint": "eslint .",
+    "verify": "npm run typecheck && npm run lint && npm run build",
     "preview": "vite preview"
   },
   "dependencies": {
@@ -25,9 +27,10 @@
     "react-dom": "^19.2.4",
     "react-dropzone": "^15.0.0",
     "react-router-dom": "^6.30.3",
+    "read-excel-file": "^9.0.6",
     "swr": "^2.4.1",
     "three": "^0.184.0",
-    "xlsx": "^0.18.5",
+    "write-excel-file": "^4.0.4",
     "zustand": "^5.0.12"
   },
   "devDependencies": {

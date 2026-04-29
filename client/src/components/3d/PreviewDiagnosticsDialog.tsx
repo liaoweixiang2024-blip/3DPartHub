@@ -70,15 +70,19 @@ export default function PreviewDiagnosticsDialog({
 }: PreviewDiagnosticsDialogProps) {
   const health = getPreviewHealth(meta);
   const warnings = meta?.diagnostics?.warnings || [];
-  const performanceHints = meta?.diagnostics?.performance?.hints || [];
+  const performanceHints = [
+    ...(meta?.diagnostics?.precheck?.hints || []),
+    ...(meta?.diagnostics?.performance?.hints || []),
+  ];
   const conversionMs = meta?.diagnostics?.conversionMs;
   const asset = meta?.diagnostics?.asset;
   const optimization = meta?.diagnostics?.optimization;
+  const precheck = meta?.diagnostics?.precheck;
   const ratio = typeof asset?.compressionRatio === "number" && Number.isFinite(asset.compressionRatio)
     ? `${(asset.compressionRatio * 100).toFixed(1)}%`
     : "-";
   const optimizationText = optimization
-    ? `${formatBytes(optimization.indexBytesSaved)} / U16 ${formatCompactNumber(optimization.indexComponentTypes?.uint16)}`
+    ? `${formatBytes(optimization.indexBytesSaved)} / U16 ${formatCompactNumber(optimization.indexComponentTypes?.uint16)} / 材质 ${formatCompactNumber(optimization.duplicateMaterialsMerged)}`
     : "-";
 
   return (
@@ -169,6 +173,18 @@ export default function PreviewDiagnosticsDialog({
                 <div className="flex items-center justify-between gap-3 py-1">
                   <span>索引优化</span>
                   <span className="text-right font-mono text-on-surface">{optimizationText}</span>
+                </div>
+                <div className="flex items-center justify-between gap-3 py-1">
+                  <span>预检查</span>
+                  <span className="text-right font-mono text-on-surface">
+                    {precheck ? `${precheck.sourceLevel || "-"} / ${formatCompactNumber(precheck.estimatedPeakMemoryMb)} MB` : "-"}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between gap-3 py-1">
+                  <span>缓存版本</span>
+                  <span className="max-w-[12rem] truncate text-right font-mono text-on-surface" title={asset?.cacheVersion || ""}>
+                    {asset?.cacheVersion || "-"}
+                  </span>
                 </div>
               </div>
 

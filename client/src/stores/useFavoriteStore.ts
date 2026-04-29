@@ -48,7 +48,7 @@ export const useFavoriteStore = create<FavoriteState>()(
       hydrate: async () => {
         try {
           const items = await favoriteApi.list();
-          set({ favoriteIds: new Set(items.map((f: any) => f.modelId || f.model?.id)) });
+          set({ favoriteIds: new Set(items.map((f) => f.modelId || f.model?.model_id).filter(Boolean)) });
         } catch {
           // Silently fail — local state preserved
         }

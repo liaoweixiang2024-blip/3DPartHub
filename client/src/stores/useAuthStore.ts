@@ -12,10 +12,11 @@ interface AuthState {
   logout: () => void;
   updateUser: (user: Partial<User>) => void;
   setTokens: (tokens: AuthTokens) => void;
+  setAccessToken: (accessToken: string, refreshToken?: string | null) => void;
   checkAndRefreshToken: () => Promise<boolean>;
 }
 
-// In-memory accessToken — also persisted to localStorage for page refresh
+// In-memory accessToken. Refresh is restored through an HttpOnly cookie.
 let _accessToken: string | null = null;
 
 export function getAccessToken(): string | null {
@@ -50,10 +51,15 @@ export const useAuthStore = create<AuthState>()(
       isAuthenticated: false,
       login: (user, tokens) => {
         _accessToken = tokens.accessToken;
-        set({ user, tokens, isAuthenticated: true });
+        set({ user, tokens: null, isAuthenticated: true });
         useFavoriteStore.getState().hydrate();
       },
       logout: () => {
+        void axios.post(
+          `${import.meta.env.VITE_API_BASE_URL || "/api"}/auth/logout`,
+          {},
+          { withCredentials: true }
+        ).catch(() => {});
         _accessToken = null;
         set({ user: null, tokens: null, isAuthenticated: false });
       },
@@ -65,16 +71,20 @@ export const useAuthStore = create<AuthState>()(
         _accessToken = tokens.accessToken;
         set({ tokens });
       },
+      setAccessToken: (accessToken, refreshToken) => {
+        _accessToken = accessToken;
+        set({ tokens: refreshToken ? { accessToken, refreshToken } : null });
+      },
       checkAndRefreshToken: async () => {
         const { tokens, isAuthenticated, logout } = get();
-        if (!tokens || !isAuthenticated) return false;
+        if (!isAuthenticated) return false;
 
         // If access token is still valid, nothing to do
         if (!isTokenExpired(_accessToken)) return true;
 
         // Access token expired — try to refresh
-        const refreshToken = tokens.refreshToken;
-        if (!refreshToken || isTokenExpired(refreshToken)) {
+        const refreshToken = tokens?.refreshToken;
+        if (refreshToken && isTokenExpired(refreshToken)) {
           logout();
           return false;
         }
@@ -82,13 +92,14 @@ export const useAuthStore = create<AuthState>()(
         try {
           const { data: resp } = await axios.post(
             `${import.meta.env.VITE_API_BASE_URL || "/api"}/auth/refresh`,
-            { refreshToken }
+            refreshToken ? { refreshToken } : {},
+            { withCredentials: true }
           );
           const newAccessToken = resp.data?.data?.accessToken || resp.data?.accessToken || resp.accessToken;
           if (!newAccessToken) throw new Error("No token in response");
 
           _accessToken = newAccessToken;
-          set({ tokens: { accessToken: newAccessToken, refreshToken } });
+          set({ tokens: refreshToken ? { accessToken: newAccessToken, refreshToken } : null });
           return true;
         } catch {
           logout();
@@ -98,16 +109,14 @@ export const useAuthStore = create<AuthState>()(
     }),
     {
       name: "auth-v2",
-      version: 1,
+      version: 2,
       partialize: (state) => ({
         user: state.user,
-        tokens: state.tokens,
+        tokens: null,
         isAuthenticated: state.isAuthenticated,
       }),
-      onRehydrateStorage: () => (state) => {
-        if (state?.tokens?.accessToken) {
-          _accessToken = state.tokens.accessToken;
-        }
+      onRehydrateStorage: () => () => {
+        _accessToken = null;
       },
       // Migrate from old "auth-storage" format
       migrate: (persisted, version) => {
@@ -115,7 +124,8 @@ export const useAuthStore = create<AuthState>()(
           // Old format had accessToken as "" — force re-login
           return { user: null, tokens: null, isAuthenticated: false } as any;
         }
-        return persisted as any;
+        const state = (persisted || {}) as Partial<AuthState>;
+        return { ...state, tokens: null } as any;
       },
     }
   )

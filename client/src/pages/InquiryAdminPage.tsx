@@ -1,60 +1,133 @@
-import { useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import useSWR from "swr";
+import useSWRInfinite from "swr/infinite";
 import { useDocumentTitle } from "../hooks/useDocumentTitle";
 import { useMediaQuery } from "../layouts/hooks/useMediaQuery";
-import TopNav from "../components/shared/TopNav";
-import BottomNav from "../components/shared/BottomNav";
-import AppSidebar from "../components/shared/Sidebar";
-import MobileNavDrawer from "../components/shared/MobileNavDrawer";
 import Icon from "../components/shared/Icon";
-import Pagination from "../components/shared/Pagination";
+import InfiniteLoadTrigger from "../components/shared/InfiniteLoadTrigger";
+import { AdminPageShell } from "../components/shared/AdminPageShell";
+import { AdminManagementPage } from "../components/shared/AdminManagementPage";
 import { getAllInquiries } from "../api/inquiries";
 import { getCachedPublicSettings } from "../lib/publicSettings";
 import { getBusinessConfig, statusInfo } from "../lib/businessConfig";
 
-function DesktopContent() {
-  const navigate = useNavigate();
-  const [statusFilter, setStatusFilter] = useState("all");
-  const [page, setPage] = useState(1);
-  const { data: settings } = useSWR("publicSettings", () => getCachedPublicSettings());
-  const statuses = getBusinessConfig(settings).inquiryStatuses;
-  const statusTabs = [{ value: "all", label: "全部" }, ...statuses.filter((s) => s.tab).map((s) => ({ value: s.value, label: s.label }))];
+const INQUIRY_PAGE_SIZE = 20;
+type InquiryStatusTab = { value: string; label: string };
 
-  const { data, isLoading } = useSWR(
-    ["admin-inquiries", statusFilter, page],
-    () => getAllInquiries(page, 20, statusFilter === "all" ? undefined : statusFilter)
+function useInfiniteInquiries(statusFilter: string) {
+  const { data, isLoading, setSize, size } = useSWRInfinite(
+    (pageIndex, previousPageData: Awaited<ReturnType<typeof getAllInquiries>> | null) => {
+      if (previousPageData && previousPageData.page * previousPageData.pageSize >= previousPageData.total) return null;
+      return ["admin-inquiries", statusFilter, pageIndex + 1] as const;
+    },
+    ([, status, page]) => getAllInquiries(page, INQUIRY_PAGE_SIZE, status === "all" ? undefined : status)
   );
-  const inquiries = data?.items ?? [];
-  const total = data?.total ?? 0;
-  const totalPages = Math.ceil(total / 20);
 
-  return (
-    <>
-      <div className="flex items-center justify-between mb-6">
-        <div>
-          <h2 className="font-headline text-2xl font-bold tracking-tight text-on-surface uppercase">询价管理</h2>
-          <p className="text-sm text-on-surface-variant mt-1">共 {total} 条询价单</p>
-        </div>
-      </div>
+  useEffect(() => {
+    setSize(1);
+  }, [statusFilter, setSize]);
 
-      {/* Status tabs */}
-      <div className="flex gap-1 mb-6 border-b border-outline-variant/10">
-        {statusTabs.map((tab) => (
+  const pages = data || [];
+  const inquiries = pages.flatMap((page) => page.items);
+  const total = pages[0]?.total ?? 0;
+  const hasMore = inquiries.length < total;
+  const isLoadingMore = Boolean(size > 0 && !data?.[size - 1]);
+  const loadMore = useCallback(() => {
+    if (!hasMore || isLoadingMore) return;
+    setSize((current) => current + 1);
+  }, [hasMore, isLoadingMore, setSize]);
+
+  return { inquiries, total, isLoading: isLoading && pages.length === 0, isLoadingMore, hasMore, loadMore };
+}
+
+function useInquiryStatusCounts(tabs: InquiryStatusTab[]) {
+  const statusValues = tabs.map((tab) => tab.value);
+  const { data } = useSWR(["admin-inquiry-status-counts", ...statusValues], async () => {
+    const entries = await Promise.all(
+      statusValues.map(async (status) => {
+        const result = await getAllInquiries(1, 1, status === "all" ? undefined : status);
+        return [status, result.total] as const;
+      })
+    );
+    return Object.fromEntries(entries) as Record<string, number>;
+  });
+
+  return data ?? {};
+}
+
+function StatusTabs({
+  tabs,
+  active,
+  counts,
+  onChange,
+  compact = false,
+}: {
+  tabs: InquiryStatusTab[];
+  active: string;
+  counts: Record<string, number>;
+  onChange: (value: string) => void;
+  compact?: boolean;
+}) {
+  if (compact) {
+    return (
+      <div className="flex h-9 items-center gap-1 overflow-x-auto scrollbar-none">
+        {tabs.map((tab) => (
           <button
             key={tab.value}
-            onClick={() => { setStatusFilter(tab.value); setPage(1); }}
-            className={`px-4 py-2.5 text-sm font-medium border-b-2 transition-colors ${
-              statusFilter === tab.value
-                ? "border-primary-container text-primary-container"
-                : "border-transparent text-on-surface-variant hover:text-on-surface"
+            onClick={() => onChange(tab.value)}
+            className={`relative inline-flex h-8 shrink-0 items-center justify-center gap-1.5 px-3 text-xs font-medium leading-none transition-colors ${
+              active === tab.value
+                ? "font-bold text-primary-container after:absolute after:inset-x-2 after:bottom-0 after:h-0.5 after:rounded-full after:bg-primary-container"
+                : "text-on-surface-variant hover:text-on-surface"
             }`}
           >
-            {tab.label}
+            <span className="whitespace-nowrap tabular-nums">{tab.label} ({counts[tab.value] ?? 0})</span>
           </button>
         ))}
       </div>
+    );
+  }
 
+  return (
+    <div className="flex h-9 items-center gap-1 overflow-x-auto scrollbar-none">
+      {tabs.map((tab) => (
+        <button
+          key={tab.value}
+          onClick={() => onChange(tab.value)}
+          className={`relative inline-flex h-9 shrink-0 items-center justify-center gap-1.5 px-4 text-sm font-medium leading-none transition-colors ${
+            active === tab.value
+              ? "text-primary-container after:absolute after:inset-x-3 after:bottom-0 after:h-0.5 after:rounded-full after:bg-primary-container"
+              : "text-on-surface-variant hover:text-on-surface"
+          }`}
+        >
+          <span className="whitespace-nowrap tabular-nums">{tab.label} ({counts[tab.value] ?? 0})</span>
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function DesktopContent() {
+  const navigate = useNavigate();
+  const [statusFilter, setStatusFilter] = useState("all");
+  const { data: settings } = useSWR("publicSettings", () => getCachedPublicSettings());
+  const statuses = getBusinessConfig(settings).inquiryStatuses;
+  const statusTabs = [{ value: "all", label: "全部" }, ...statuses.filter((s) => s.tab).map((s) => ({ value: s.value, label: s.label }))];
+  const counts = useInquiryStatusCounts(statusTabs);
+
+  const { inquiries, isLoading, isLoadingMore, hasMore, loadMore } = useInfiniteInquiries(statusFilter);
+
+  return (
+    <AdminManagementPage
+      title="询价管理"
+      description="跟进客户提交的选型询价和产品需求"
+      toolbar={(
+        <StatusTabs tabs={statusTabs} active={statusFilter} counts={counts} onChange={setStatusFilter} />
+      )}
+    >
+
+      <div key={statusFilter} className="admin-tab-panel">
       {isLoading ? (
         <div className="space-y-3">
           {[1, 2, 3].map((i) => (
@@ -68,11 +141,10 @@ function DesktopContent() {
         </div>
       ) : (
         <div className="bg-surface-container-low rounded-lg border border-outline-variant/10 overflow-auto max-h-[calc(100vh-260px)]">
-          <div className="grid grid-cols-[80px_1fr_140px_100px_120px_80px] gap-4 px-6 py-3 bg-surface-container-low text-xs uppercase tracking-wider text-on-surface-variant font-bold border-b border-outline-variant/10 sticky top-0 z-10">
+          <div className="grid grid-cols-[80px_1fr_150px_120px_80px] gap-4 px-6 py-3 bg-surface-container-low text-xs uppercase tracking-wider text-on-surface-variant font-bold border-b border-outline-variant/10 sticky top-0 z-10">
             <span>状态</span>
             <span>用户 / 产品</span>
             <span>公司</span>
-            <span>金额</span>
             <span>时间</span>
             <span>操作</span>
           </div>
@@ -81,7 +153,7 @@ function DesktopContent() {
             return (
               <div
                 key={inq.id}
-                className="grid grid-cols-[80px_1fr_140px_100px_120px_80px] gap-4 px-6 py-4 border-b border-outline-variant/5 hover:bg-surface-container-high/50 transition-colors items-center"
+                className="grid grid-cols-[80px_1fr_150px_120px_80px] gap-4 px-6 py-4 border-b border-outline-variant/5 hover:bg-surface-container-high/50 transition-colors items-center"
               >
                 <span className={`inline-flex items-center text-xs px-2 py-0.5 rounded-md font-bold ${info.color || ""} ${info.bg || ""}`}>
                   {info.label}
@@ -93,7 +165,6 @@ function DesktopContent() {
                   <p className="text-xs text-on-surface-variant">{inq.user?.username || "—"} · {inq.items.length} 项</p>
                 </div>
                 <span className="text-xs text-on-surface-variant truncate">{inq.user?.company || inq.company || "—"}</span>
-                <span className="text-sm text-on-surface">{inq.totalAmount ? `¥${Number(inq.totalAmount).toFixed(2)}` : "—"}</span>
                 <span className="text-xs text-on-surface-variant">{new Date(inq.createdAt).toLocaleDateString("zh-CN")}</span>
                 <button onClick={() => navigate(`/admin/inquiries/${inq.id}`)} className="text-xs text-primary-container hover:underline">
                   详情
@@ -101,11 +172,11 @@ function DesktopContent() {
               </div>
             );
           })}
+          <InfiniteLoadTrigger hasMore={hasMore} isLoading={isLoadingMore} onLoadMore={loadMore} />
         </div>
       )}
-
-      <Pagination page={page} totalPages={totalPages} totalItems={total} onPageChange={setPage} className="mt-4 pb-0" />
-    </>
+      </div>
+    </AdminManagementPage>
   );
 }
 
@@ -115,33 +186,20 @@ function MobileContent() {
   const { data: settings } = useSWR("publicSettings", () => getCachedPublicSettings());
   const statuses = getBusinessConfig(settings).inquiryStatuses;
   const statusTabs = [{ value: "all", label: "全部" }, ...statuses.filter((s) => s.tab).map((s) => ({ value: s.value, label: s.label }))];
+  const counts = useInquiryStatusCounts(statusTabs);
 
-  const { data, isLoading } = useSWR(
-    ["admin-inquiries", statusFilter],
-    () => getAllInquiries(1, 50, statusFilter === "all" ? undefined : statusFilter)
-  );
-  const inquiries = data?.items ?? [];
+  const { inquiries, isLoading, isLoadingMore, hasMore, loadMore } = useInfiniteInquiries(statusFilter);
 
   return (
-    <div className="px-4 py-5 pb-20">
-      <h1 className="text-lg font-bold text-on-surface mb-4">询价管理</h1>
+    <AdminManagementPage
+      title="询价管理"
+      description="跟进客户提交的选型询价和产品需求"
+      toolbar={(
+        <StatusTabs tabs={statusTabs} active={statusFilter} counts={counts} onChange={setStatusFilter} compact />
+      )}
+    >
 
-      <div className="flex gap-1 mb-4 overflow-x-auto scrollbar-none">
-        {statusTabs.map((tab) => (
-          <button
-            key={tab.value}
-            onClick={() => setStatusFilter(tab.value)}
-            className={`shrink-0 px-3 py-1.5 text-xs font-medium rounded-lg transition-colors ${
-              statusFilter === tab.value
-                ? "bg-primary-container/15 text-primary-container font-bold"
-                : "text-on-surface-variant bg-surface-container-high"
-            }`}
-          >
-            {tab.label}
-          </button>
-        ))}
-      </div>
-
+      <div key={statusFilter} className="admin-tab-panel">
       {isLoading ? (
         <div className="space-y-3">
           {[1, 2, 3].map((i) => (
@@ -172,44 +230,26 @@ function MobileContent() {
                 </p>
                 <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-on-surface-variant">
                   <span className="min-w-0 break-words">{inq.user?.username || "—"} · {inq.items.length} 项</span>
-                  <span>{inq.totalAmount ? `¥${Number(inq.totalAmount).toFixed(2)}` : "待报价"}</span>
+                  <span>查看详情</span>
                 </div>
               </div>
             );
           })}
+          <InfiniteLoadTrigger hasMore={hasMore} isLoading={isLoadingMore} onLoadMore={loadMore} />
         </div>
       )}
-    </div>
+      </div>
+    </AdminManagementPage>
   );
 }
 
 export default function InquiryAdminPage() {
   useDocumentTitle("询价管理");
   const isDesktop = useMediaQuery("(min-width: 768px)");
-  const [navOpen, setNavOpen] = useState(false);
-
-  if (isDesktop) {
-    return (
-      <div className="flex flex-col h-screen overflow-hidden">
-        <TopNav />
-        <div className="flex flex-1 overflow-hidden">
-          <AppSidebar />
-          <main className="flex-1 overflow-y-auto p-8 scrollbar-hidden bg-surface-dim">
-            <DesktopContent />
-          </main>
-        </div>
-      </div>
-    );
-  }
 
   return (
-    <div className="flex flex-col h-dvh bg-surface">
-      <TopNav compact onMenuToggle={() => setNavOpen((p) => !p)} />
-      <MobileNavDrawer open={navOpen} onClose={() => setNavOpen(false)} />
-      <main className="flex-1 overflow-y-auto scrollbar-hidden bg-surface-dim">
-        <MobileContent />
-      </main>
-      <BottomNav />
-    </div>
+    <AdminPageShell>
+      {isDesktop ? <DesktopContent /> : <MobileContent />}
+    </AdminPageShell>
   );
 }

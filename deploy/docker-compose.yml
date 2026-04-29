@@ -1,10 +1,15 @@
 # ============================================================
-# 3DPartHub — 纯镜像一键部署配置
+# 3DPartHub — 历史纯镜像部署配置
 # ============================================================
 #
+# 注意：
+#   生产部署主入口以仓库根目录 docker-compose.yml 为准。
+#   本文件只作为历史部署参考，避免同时维护两份不一致配置。
+#
 # 【快速开始】
-#   1. 安装 Docker + Docker Compose
-#   2. 复制本文件到服务器，创建 .env 文件填写密钥（见下方）
+#   1. 优先使用仓库根目录 docker-compose.yml
+#   2. 创建 .env 文件填写密钥（见下方）
+#      printf "IMAGE_TAG=v2.5\nDB_PASSWORD=%s\nJWT_SECRET=%s\nADMIN_PASS=%s\n" "$(openssl rand -hex 24)" "$(openssl rand -hex 32)" "$(openssl rand -base64 24)" > .env
 #   3. docker compose up -d
 #   4. 访问 http://服务器IP:3780
 #
@@ -27,12 +32,20 @@
 #
 # ============================================================
 
-# <<< 修改版本号后执行 docker compose pull && docker compose up -d
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "50m"
+    max-file: "5"
+
+# <<< 修改 .env 中 IMAGE_TAG 后执行 docker compose pull && docker compose up -d
 
 services:
   api:
-    image: ghcr.io/liaoweixiang2024-blip/3dparthub-api:latest
+    image: ghcr.io/liaoweixiang2024-blip/3dparthub-api:${IMAGE_TAG:-v2.5}
     container_name: 3dparthub-api
+    init: true
+    shm_size: ${API_SHM_SIZE:-1g}
     deploy:
       resources:
         limits:
@@ -42,16 +55,23 @@ services:
           memory: 512M
     environment:
       TZ: Asia/Shanghai
+      NODE_ENV: production
       PORT: 8000
-      DATABASE_URL: "postgresql://modeluser:${DB_PASSWORD:-modelpass}@postgres:5432/3dparthub?connection_limit=${DB_CONNECTION_LIMIT:-5}&pool_timeout=10"
+      DATABASE_URL: "postgresql://modeluser:${DB_PASSWORD:?set_DB_PASSWORD_in_env}@postgres:5432/3dparthub?connection_limit=${DB_CONNECTION_LIMIT:-5}&pool_timeout=10"
       # <<< 必改: 使用随机字符串 (openssl rand -hex 32)
-      JWT_SECRET: ${JWT_SECRET:-change-me-to-a-random-secret-string}
+      JWT_SECRET: "${JWT_SECRET:?set_JWT_SECRET_in_env}"
       JWT_EXPIRES_IN: 7d
       UPLOAD_DIR: uploads
       STATIC_DIR: static
       API_WORKERS: ${API_WORKERS:-2}
+      CONVERSION_WORKER_CONCURRENCY: ${CONVERSION_WORKER_CONCURRENCY:-1}
+      SLOW_REQUEST_LOG_BURST: ${SLOW_REQUEST_LOG_BURST:-5}
+      SLOW_REQUEST_LOG_SAMPLE_RATE: ${SLOW_REQUEST_LOG_SAMPLE_RATE:-0.01}
       MAX_FILE_SIZE: 104857600
       REDIS_URL: redis://redis:6379
+      ADMIN_USER: ${ADMIN_USER:-admin}
+      ADMIN_EMAIL: ${ADMIN_EMAIL:-admin@model.local}
+      ADMIN_PASS: "${ADMIN_PASS:?set_ADMIN_PASS_in_env}"
       # <<< 可选: 允许的来源域名 (多个用逗号分隔)
       ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-}
       # <<< 可选: 邮件通知 (注册验证码)
@@ -63,30 +83,51 @@ services:
       postgres:
         condition: service_healthy
       redis:
-        condition: service_started
+        condition: service_healthy
     volumes:
       - uploads-data:/app/uploads
       - static-data:/app/static
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8000/api/health >/dev/null || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 60s
     restart: unless-stopped
+    stop_grace_period: 5m
+    logging: *default-logging
     networks:
       - internal
 
   web:
-    image: ghcr.io/liaoweixiang2024-blip/3dparthub-web:latest
+    image: ghcr.io/liaoweixiang2024-blip/3dparthub-web:${IMAGE_TAG:-v2.5}
     container_name: 3dparthub-web
+    init: true
     ports:
       - "${PORT:-3780}:80"
+    ulimits:
+      nofile:
+        soft: 65535
+        hard: 65535
     deploy:
       resources:
         limits:
           memory: 256M
           cpus: "0.5"
     depends_on:
-      - api
+      api:
+        condition: service_healthy
     volumes:
       - static-data:/app/static:ro
       - uploads-data:/app/uploads:ro
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost/healthz >/dev/null 2>&1 || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
     restart: unless-stopped
+    logging: *default-logging
     networks:
       - internal
 
@@ -102,27 +143,50 @@ services:
       POSTGRES_DB: 3dparthub
       POSTGRES_USER: modeluser
       # <<< 必改: 数据库密码 (与 DB_PASSWORD 一致)
-      POSTGRES_PASSWORD: ${DB_PASSWORD:-modelpass}
+      POSTGRES_PASSWORD: "${DB_PASSWORD:?set_DB_PASSWORD_in_env}"
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U modeluser -d 3dparthub"]
-      interval: 5s
+      interval: 10s
       timeout: 5s
       retries: 5
+      start_period: 20s
     restart: unless-stopped
+    logging: *default-logging
     networks:
       - internal
 
   redis:
     image: redis:7-alpine
     container_name: 3dparthub-redis
+    command:
+      - redis-server
+      - --save
+      - ""
+      - --appendonly
+      - "yes"
+      - --appendfsync
+      - everysec
+      - --maxmemory
+      - ${REDIS_MAXMEMORY:-192mb}
+      - --maxmemory-policy
+      - noeviction
     deploy:
       resources:
         limits:
-          memory: 128M
+          memory: 256M
           cpus: "0.5"
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
     restart: unless-stopped
+    logging: *default-logging
     networks:
       - internal
 
@@ -130,6 +194,7 @@ volumes:
   pgdata:
   uploads-data:
   static-data:
+  redis-data:
 
 networks:
   internal:

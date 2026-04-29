@@ -1,13 +1,23 @@
-import { useState } from "react";
-import useSWR from "swr";
+import { useCallback, useEffect, useState } from "react";
+import useSWRInfinite from "swr/infinite";
 import { useDocumentTitle } from "../hooks/useDocumentTitle";
 import { useMediaQuery } from "../layouts/hooks/useMediaQuery";
-import TopNav from "../components/shared/TopNav";
-import BottomNav from "../components/shared/BottomNav";
-import AppSidebar from "../components/shared/Sidebar";
-import MobileNavDrawer from "../components/shared/MobileNavDrawer";
-import Pagination from "../components/shared/Pagination";
+import InfiniteLoadTrigger from "../components/shared/InfiniteLoadTrigger";
+import { AdminPageShell } from "../components/shared/AdminPageShell";
+import { AdminManagementPage, AdminContentPanel, AdminEmptyState } from "../components/shared/AdminManagementPage";
+import Icon from "../components/shared/Icon";
 import client from "../api/client";
+import { unwrapResponse } from "../api/response";
+
+type AuditDetails = {
+  body?: {
+    name?: string;
+    status?: string;
+    content?: string;
+  };
+  path?: string;
+  statusCode?: number;
+};
 
 interface AuditEntry {
   id: string;
@@ -16,7 +26,7 @@ interface AuditEntry {
   action: string;
   resource: string;
   resourceId: string | null;
-  details: any;
+  details: AuditDetails | null;
   createdAt: string;
 }
 
@@ -48,6 +58,17 @@ const RESOURCE_MAP: Record<string, string> = {
   favorite: "收藏",
   download: "下载",
 };
+
+const AUDIT_PAGE_SIZE = 30;
+
+async function fetchAuditLogs(page: number, filterAction: string, filterResource: string) {
+  const params: Record<string, string | number> = { page, size: AUDIT_PAGE_SIZE };
+  if (filterAction) params.action = filterAction;
+  if (filterResource) params.resource = filterResource;
+  return client
+    .get("/audit", { params })
+    .then((response) => unwrapResponse<{ total: number; items: AuditEntry[]; page: number }>(response));
+}
 
 function DetailRow({ label, value, compact = false }: { label: string; value: string; compact?: boolean }) {
   return (
@@ -114,7 +135,7 @@ function LogRow({ log, isDesktop }: { log: AuditEntry; isDesktop: boolean }) {
 
   return (
     <div
-      className="bg-surface-container-low rounded-lg p-3 cursor-pointer active:bg-surface-container-high transition-colors"
+      className="rounded-lg border border-outline-variant/10 bg-surface-container-low p-3 cursor-pointer active:bg-surface-container-high transition-colors"
       onClick={() => setExpanded(!expanded)}
     >
       <div className="flex flex-wrap items-center gap-2 mb-1.5">
@@ -145,134 +166,191 @@ function LogRow({ log, isDesktop }: { log: AuditEntry; isDesktop: boolean }) {
 export default function AuditLogPage() {
   useDocumentTitle("操作日志");
   const isDesktop = useMediaQuery("(min-width: 768px)");
-  const [navOpen, setNavOpen] = useState(false);
-  const [page, setPage] = useState(1);
   const [filterAction, setFilterAction] = useState("");
   const [filterResource, setFilterResource] = useState("");
+  const [search, setSearch] = useState("");
 
-  const { data } = useSWR(
-    `/audit?page=${page}&action=${filterAction}&resource=${filterResource}`,
-    () => {
-      const params: Record<string, string | number> = { page, size: 30 };
-      if (filterAction) params.action = filterAction;
-      if (filterResource) params.resource = filterResource;
-      return client.get("/audit", { params }).then(r => {
-        const d = (r.data as any)?.data ?? r.data;
-        return d as { total: number; items: AuditEntry[]; page: number };
-      });
-    }
+  const { data, isLoading, setSize, size } = useSWRInfinite(
+    (pageIndex, previousPageData: { total: number; items: AuditEntry[]; page: number } | null) => {
+      if (previousPageData && previousPageData.page * AUDIT_PAGE_SIZE >= previousPageData.total) return null;
+      return ["/audit", filterAction, filterResource, pageIndex + 1] as const;
+    },
+    ([, action, resource, nextPage]) => fetchAuditLogs(nextPage, action, resource)
   );
 
-  const logs = data?.items || [];
-  const total = data?.total || 0;
-  const totalPages = Math.ceil(total / 30);
+  useEffect(() => {
+    setSize(1);
+  }, [filterAction, filterResource, setSize]);
 
+  const pages = data || [];
+  const logs = pages.flatMap((pageData) => pageData.items);
+  const searchText = search.trim().toLowerCase();
+  const visibleLogs = searchText
+    ? logs.filter((log) => {
+        const body = log.details?.body;
+        const haystack = [
+          log.id,
+          log.username,
+          log.userId,
+          log.action,
+          ACTION_MAP[log.action]?.label,
+          log.resource,
+          RESOURCE_MAP[log.resource],
+          log.resourceId,
+          log.details?.path,
+          log.details?.statusCode,
+          body?.name,
+          body?.status,
+          body?.content,
+          log.createdAt,
+        ].filter(Boolean).join(" ").toLowerCase();
+        return haystack.includes(searchText);
+      })
+    : logs;
+  const total = pages[0]?.total || 0;
+  const hasMore = logs.length < total;
+  const isLoadingMore = Boolean(size > 0 && !data?.[size - 1]);
+  const loadMore = useCallback(() => {
+    if (!hasMore || isLoadingMore) return;
+    setSize((current) => current + 1);
+  }, [hasMore, isLoadingMore, setSize]);
+
+  const selectedActionLabel = filterAction ? ACTION_MAP[filterAction]?.label || filterAction : "全部操作";
+  const selectedResourceLabel = filterResource ? RESOURCE_MAP[filterResource] || filterResource : "全部资源";
   const filterBar = (
-    <div className="flex items-center gap-2 flex-wrap">
-      <select
-        value={filterAction}
-        onChange={e => { setFilterAction(e.target.value); setPage(1); }}
-        className="bg-surface-container-high text-on-surface text-xs rounded-md px-2.5 py-1.5 border border-outline-variant/20 outline-none focus:border-primary min-w-0 flex-1 sm:flex-none"
-      >
-        <option value="">全部操作</option>
-        {Object.entries(ACTION_MAP).map(([k, v]) => (
-          <option key={k} value={k}>{v.label}</option>
-        ))}
-      </select>
-      <select
-        value={filterResource}
-        onChange={e => { setFilterResource(e.target.value); setPage(1); }}
-        className="bg-surface-container-high text-on-surface text-xs rounded-md px-2.5 py-1.5 border border-outline-variant/20 outline-none focus:border-primary min-w-0 flex-1 sm:flex-none"
-      >
-        <option value="">全部资源</option>
-        {Object.entries(RESOURCE_MAP).map(([k, v]) => (
-          <option key={k} value={k}>{v}</option>
-        ))}
-      </select>
+    <div className="flex min-h-11 flex-wrap items-center gap-3">
+      <div className="flex min-h-9 flex-wrap items-center gap-2">
+      <div className={`relative inline-flex h-9 w-[6.5rem] shrink-0 items-center justify-center text-sm font-medium leading-none transition-colors after:absolute after:inset-x-3 after:bottom-0 after:h-0.5 after:rounded-full ${filterAction ? "text-primary-container after:bg-primary-container" : "text-on-surface-variant after:bg-transparent hover:text-on-surface"}`}>
+        <select
+          value={filterAction}
+          onChange={e => setFilterAction(e.target.value)}
+          className="relative z-10 h-full w-full cursor-pointer appearance-none border-0 bg-transparent pl-3 pr-7 text-center outline-none [text-align-last:center]"
+        >
+          <option value="">全部操作</option>
+          {Object.entries(ACTION_MAP).map(([k, v]) => (
+            <option key={k} value={k}>{v.label}</option>
+          ))}
+        </select>
+        <Icon name="expand_more" size={14} className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-current opacity-60" />
+      </div>
+      <div className={`relative inline-flex h-9 w-[6.5rem] shrink-0 items-center justify-center text-sm font-medium leading-none transition-colors after:absolute after:inset-x-3 after:bottom-0 after:h-0.5 after:rounded-full ${filterResource ? "text-primary-container after:bg-primary-container" : "text-on-surface-variant after:bg-transparent hover:text-on-surface"}`}>
+        <select
+          value={filterResource}
+          onChange={e => setFilterResource(e.target.value)}
+          className="relative z-10 h-full w-full cursor-pointer appearance-none border-0 bg-transparent pl-3 pr-7 text-center outline-none [text-align-last:center]"
+        >
+          <option value="">全部资源</option>
+          {Object.entries(RESOURCE_MAP).map(([k, v]) => (
+            <option key={k} value={k}>{v}</option>
+          ))}
+        </select>
+        <Icon name="expand_more" size={14} className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-current opacity-60" />
+      </div>
       {(filterAction || filterResource) && (
         <button
-          onClick={() => { setFilterAction(""); setFilterResource(""); setPage(1); }}
-          className="text-xs text-on-surface-variant hover:text-on-surface transition-colors"
+          onClick={() => { setFilterAction(""); setFilterResource(""); }}
+          className="relative z-20 inline-flex h-9 items-center justify-center px-3 text-xs font-bold text-on-surface-variant transition-colors hover:text-on-surface"
         >
           清除筛选
         </button>
       )}
+      </div>
+      <div className="ml-auto flex min-w-0 items-center gap-3 overflow-x-auto scrollbar-none text-xs text-on-surface-variant">
+        <span className="whitespace-nowrap">日志记录 <strong className="ml-1 text-on-surface">{total}</strong></span>
+        {searchText && (
+          <>
+            <span className="h-3 w-px shrink-0 bg-outline-variant/20" />
+            <span className="whitespace-nowrap">当前匹配 <strong className="ml-1 text-on-surface">{visibleLogs.length}</strong></span>
+          </>
+        )}
+        <span className="h-3 w-px shrink-0 bg-outline-variant/20" />
+        <span className="inline-flex whitespace-nowrap">
+          <span>操作</span>
+          <strong className="ml-1 inline-block w-[4em] text-center text-on-surface">{selectedActionLabel}</strong>
+        </span>
+        <span className="h-3 w-px shrink-0 bg-outline-variant/20" />
+        <span className="inline-flex whitespace-nowrap">
+          <span>资源</span>
+          <strong className="ml-1 inline-block w-[4em] text-center text-on-surface">{selectedResourceLabel}</strong>
+        </span>
+      </div>
+      <div className="flex h-9 w-full items-center rounded-lg border border-outline-variant/15 bg-surface-container px-3 sm:w-72">
+        <Icon name="search" size={15} className="mr-2 shrink-0 text-on-surface-variant" />
+        <input
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder="搜索用户、资源ID、内容"
+          className="min-w-0 flex-1 border-none bg-transparent text-sm text-on-surface outline-none placeholder:text-on-surface-variant/50"
+        />
+        {search && (
+          <button onClick={() => setSearch("")} className="p-0.5 text-on-surface-variant hover:text-on-surface">
+            <Icon name="close" size={14} />
+          </button>
+        )}
+      </div>
     </div>
-  );
-
-  const pagination = (
-    <Pagination page={page} totalPages={totalPages} totalItems={total} onPageChange={setPage} className="mt-0 pb-0" />
   );
 
   if (isDesktop) {
     return (
-      <div className="flex flex-col h-screen overflow-hidden">
-        <TopNav />
-        <div className="flex flex-1 overflow-hidden">
-          <AppSidebar />
-          <main className="flex-1 min-h-0 overflow-hidden p-8 bg-surface-dim">
-            <div className="flex h-full min-h-0 flex-col gap-5">
-              <div>
-                <h2 className="font-headline text-2xl font-bold tracking-tight text-on-surface uppercase">操作日志</h2>
-                <p className="text-sm text-on-surface-variant mt-1">{total} 条记录</p>
-              </div>
-              {filterBar}
-              <div className="min-h-0 flex-1 overflow-auto rounded-lg border border-outline-variant/10 bg-surface-container-low">
-                <table className="w-full">
-                  <thead className="sticky top-0 z-10">
-                    <tr className="bg-surface-container-low text-xs uppercase tracking-wider text-on-surface-variant font-bold">
-                      <th className="py-3 px-4 text-left">操作</th>
-                      <th className="py-3 px-4 text-left">资源</th>
-                      <th className="py-3 px-4 text-left">资源ID</th>
-                      <th className="py-3 px-4 text-left">用户</th>
-                      <th className="py-3 px-4 text-left">时间</th>
+      <AdminPageShell desktopContentClassName="min-h-0 overflow-hidden">
+        <AdminManagementPage title="操作日志" description="查看后台操作、登录、下载和数据变更记录" toolbar={filterBar} contentClassName="min-h-0 overflow-hidden">
+          <AdminContentPanel scroll className="h-full overflow-hidden">
+            <div className="h-full overflow-auto custom-scrollbar">
+              <table className="w-full">
+                <thead className="sticky top-0 z-10">
+                  <tr className="bg-surface-container-low text-xs uppercase tracking-wider text-on-surface-variant font-bold">
+                    <th className="py-3 px-4 text-left">操作</th>
+                    <th className="py-3 px-4 text-left">资源</th>
+                    <th className="py-3 px-4 text-left">资源ID</th>
+                    <th className="py-3 px-4 text-left">用户</th>
+                    <th className="py-3 px-4 text-left">时间</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {visibleLogs.map(log => (
+                    <LogRow key={log.id} log={log} isDesktop />
+                  ))}
+                  {logs.length > 0 && !searchText && (
+                    <tr>
+                      <td colSpan={5}>
+                        <InfiniteLoadTrigger hasMore={hasMore} isLoading={isLoadingMore} onLoadMore={loadMore} />
+                      </td>
                     </tr>
-                  </thead>
-                  <tbody>
-                    {logs.map(log => (
-                      <LogRow key={log.id} log={log} isDesktop />
-                    ))}
-                  </tbody>
-                </table>
-                {logs.length === 0 && (
-                  <div className="text-center py-12 text-on-surface-variant text-sm">暂无操作日志</div>
-                )}
-              </div>
-              <div className="shrink-0 border-t border-outline-variant/10 bg-surface-dim pt-3">
-                {pagination}
-              </div>
+                  )}
+                </tbody>
+              </table>
             </div>
-          </main>
-        </div>
-      </div>
+            {isLoading && logs.length === 0 && (
+              <div className="flex min-h-[360px] items-center justify-center text-sm text-on-surface-variant">加载中...</div>
+            )}
+            {visibleLogs.length === 0 && !isLoading && (
+              <AdminEmptyState icon={searchText ? "search_off" : "schedule"} title={searchText ? "没有匹配的日志" : "暂无操作日志"} description={searchText ? "请换个关键词，或清空搜索后再看。" : "后台操作、登录、下载和数据变更记录会显示在这里。"} />
+            )}
+          </AdminContentPanel>
+        </AdminManagementPage>
+      </AdminPageShell>
     );
   }
 
   return (
-    <div className="flex flex-col h-dvh bg-surface">
-      <TopNav compact onMenuToggle={() => setNavOpen((v) => !v)} />
-      <MobileNavDrawer open={navOpen} onClose={() => setNavOpen(false)} />
-      <main className="flex-1 min-h-0 overflow-hidden bg-surface-dim">
-        <div className="flex h-full min-h-0 flex-col gap-3 px-4 py-4 pb-20">
-          <div>
-            <h1 className="text-lg font-bold text-on-surface">操作日志</h1>
-            <p className="text-xs text-on-surface-variant mt-0.5">{total} 条记录</p>
-          </div>
-          {filterBar}
-          <div className="min-h-0 flex-1 overflow-y-auto scrollbar-hidden flex flex-col gap-2">
-            {logs.map(log => (
+    <AdminPageShell mobileMainClassName="min-h-0 overflow-hidden" mobileContentClassName="flex h-full min-h-0 flex-col px-4 py-4 pb-20">
+      <AdminManagementPage title="操作日志" description="查看后台操作、登录、下载和数据变更记录" toolbar={filterBar} contentClassName="min-h-0 overflow-hidden">
+        <AdminContentPanel scroll>
+          <div className="min-h-0 flex-1 overflow-y-auto scrollbar-hidden flex flex-col gap-2 p-3">
+            {visibleLogs.map(log => (
               <LogRow key={log.id} log={log} isDesktop={false} />
             ))}
-            {logs.length === 0 && (
-              <div className="text-center py-10 text-on-surface-variant text-sm">暂无操作日志</div>
+            {logs.length > 0 && !searchText && <InfiniteLoadTrigger hasMore={hasMore} isLoading={isLoadingMore} onLoadMore={loadMore} />}
+            {isLoading && logs.length === 0 && (
+              <div className="flex min-h-[320px] items-center justify-center text-sm text-on-surface-variant">加载中...</div>
+            )}
+            {visibleLogs.length === 0 && !isLoading && (
+              <AdminEmptyState icon={searchText ? "search_off" : "schedule"} title={searchText ? "没有匹配的日志" : "暂无操作日志"} description={searchText ? "请换个关键词，或清空搜索后再看。" : "后台操作、登录、下载和数据变更记录会显示在这里。"} className="min-h-[320px] md:min-h-[360px]" />
             )}
           </div>
-          <div className="shrink-0 border-t border-outline-variant/10 bg-surface-dim pt-2">
-            {pagination}
-          </div>
-        </div>
-      </main>
-      <BottomNav />
-    </div>
+        </AdminContentPanel>
+      </AdminManagementPage>
+    </AdminPageShell>
   );
 }

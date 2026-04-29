@@ -5,8 +5,13 @@ import { useAuthStore } from "../stores/useAuthStore";
 import { useDocumentTitle } from "../hooks/useDocumentTitle";
 import BrandMark from "../components/shared/BrandMark";
 import Icon from "../components/shared/Icon";
+import { PageTitle } from "../components/shared/PagePrimitives";
+import { PublicPageShell } from "../components/shared/PublicPageShell";
+import { sanitizeHtml } from "../lib/sanitizeHtml";
 import { getPublicSettings } from "../api/settings";
 import client from "../api/client";
+import { unwrapResponse } from "../api/response";
+import { getErrorMessage } from "../lib/errorNotifications";
 
 type AuthMode = "login" | "register";
 
@@ -18,6 +23,10 @@ interface FormErrors {
   captchaText?: string;
   emailCode?: string;
 }
+
+type LoginLocationState = {
+  from?: string;
+};
 
 function validateEmail(email: string): boolean {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
@@ -37,7 +46,7 @@ export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false);
   const navigate = useNavigate();
   const location = useLocation();
-  const from = (location.state as any)?.from || "/";
+  const from = (location.state as LoginLocationState | null)?.from || "/";
   const { login } = useAuthStore();
   const [allowRegister, setAllowRegister] = useState(true);
 
@@ -60,8 +69,8 @@ export default function LoginPage() {
   // Fetch captcha on mount and when switching to register
   const refreshCaptcha = useCallback(async () => {
     try {
-      const { data: resp } = await client.get("/auth/captcha");
-      const d = resp?.data ?? resp;
+      const res = await client.get("/auth/captcha");
+      const d = unwrapResponse<{ captchaSvg: string; captchaId: string }>(res);
       setCaptchaSvg(d.captchaSvg);
       setCaptchaId(d.captchaId);
       setCaptchaText("");
@@ -96,9 +105,8 @@ export default function LoginPage() {
       await client.post("/auth/email-code", { email, captchaId, captchaText });
       setEmailCountdown(60);
       setErrors(prev => ({ ...prev, captchaText: undefined }));
-    } catch (err: any) {
-      const msg = err.response?.data?.message || err.response?.data?.detail || "发送失败";
-      setApiError(msg);
+    } catch (err: unknown) {
+      setApiError(getErrorMessage(err, "发送失败"));
       refreshCaptcha();
     } finally {
       setSendingCode(false);
@@ -138,9 +146,8 @@ export default function LoginPage() {
         login(result.user, result.tokens);
         navigate(from, { replace: true });
       }
-    } catch (err: any) {
-      const msg = err.response?.data?.message || err.response?.data?.detail || (mode === "login" ? "邮箱或密码错误" : "注册失败，请重试");
-      setApiError(msg);
+    } catch (err: unknown) {
+      setApiError(getErrorMessage(err, mode === "login" ? "邮箱或密码错误" : "注册失败，请重试"));
       if (mode === "register") refreshCaptcha();
     } finally {
       setLoading(false);
@@ -158,7 +165,8 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen bg-surface p-4 overflow-x-hidden">
+    <PublicPageShell showMobileBottomNav={false}>
+    <div className="flex-1 overflow-y-auto overflow-x-hidden bg-surface p-4">
       <div className="my-4 w-full max-w-md mx-auto">
         <motion.div
           initial={{ opacity: 0, scale: 0.95 }}
@@ -168,9 +176,9 @@ export default function LoginPage() {
         <div className="bg-surface-container-low rounded-lg border border-outline-variant/20 overflow-hidden">
           <div className="p-6 sm:p-8 border-b border-outline-variant/10 text-center">
             <BrandMark size="hero" centered className="mx-auto mb-3 max-w-full" />
-            <h1 className="text-2xl font-headline font-bold text-on-surface tracking-tight">
+            <PageTitle>
               {mode === "login" ? "欢迎回来" : "创建账户"}
-            </h1>
+            </PageTitle>
             <p className="text-sm text-on-surface-variant mt-2">
               {mode === "login" ? "登录您的账户继续" : "注册以开始使用平台"}
             </p>
@@ -264,7 +272,7 @@ export default function LoginPage() {
                       onClick={refreshCaptcha}
                       className="shrink-0 cursor-pointer rounded-sm overflow-hidden border border-outline-variant/30 hover:opacity-80 transition-opacity"
                       title="点击刷新验证码"
-                      dangerouslySetInnerHTML={{ __html: captchaSvg }}
+                      dangerouslySetInnerHTML={{ __html: sanitizeHtml(captchaSvg) }}
                       style={{ width: 100, height: 40 }}
                     />
                   )}
@@ -400,5 +408,6 @@ export default function LoginPage() {
       </motion.div>
       </div>
     </div>
+    </PublicPageShell>
   );
 }

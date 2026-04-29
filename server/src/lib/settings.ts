@@ -29,7 +29,6 @@ const SETTINGS_SCHEMA: SettingDef[] = [
   { key: "require_login_browse", defaultValue: false },
   { key: "allow_register", defaultValue: true },
   { key: "daily_download_limit", defaultValue: 0 },
-  { key: "allow_comments", defaultValue: true },
   { key: "show_watermark", defaultValue: false },
   { key: "watermark_text", defaultValue: "3DPartHub" },
   { key: "watermark_image", defaultValue: "" },
@@ -112,14 +111,9 @@ const SETTINGS_SCHEMA: SettingDef[] = [
 
   // Selection wizard
   { key: "selection_page_title", defaultValue: "产品选型" },
-  { key: "selection_page_desc", defaultValue: "选择产品大类，逐步筛选出精确型号" },
+  { key: "selection_page_desc", defaultValue: "先选产品大类，再按参数逐步缩小范围" },
   { key: "selection_enable_match", defaultValue: true },
-  { key: "field_aliases", defaultValue: "{}" },
   { key: "selection_thread_priority", defaultValue: JSON.stringify(DEFAULT_SELECTION_THREAD_PRIORITY_FOR_SETTINGS, null, 2) },
-
-  // Document templates
-  { key: "quote_template", defaultValue: "" },
-  { key: "document_templates", defaultValue: "" },
 
   // Business dictionaries and policies
   { key: "inquiry_statuses", defaultValue: JSON.stringify(DEFAULT_INQUIRY_STATUSES_FOR_SETTINGS, null, 2) },

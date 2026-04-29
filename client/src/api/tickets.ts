@@ -1,4 +1,5 @@
 import client from "./client";
+import { unwrapResponse } from "./response";
 
 export interface Ticket {
   id: string;
@@ -23,30 +24,24 @@ export interface TicketMessage {
   user: { id: string; username: string; avatar: string | null };
 }
 
-function unwrap<T>(res: { data: unknown }): T {
-  const d = res.data as any;
-  if (d && typeof d === 'object' && 'data' in d) return d.data as T;
-  return d as T;
-}
-
 export async function getTickets() {
   const res = await client.get("/tickets");
-  return unwrap<Ticket[]>(res);
+  return unwrapResponse<Ticket[]>(res);
 }
 
 export async function updateTicketStatus(id: string, status: string) {
   const res = await client.put(`/tickets/${id}`, { status });
-  return unwrap<any>(res);
+  return unwrapResponse<Ticket>(res);
 }
 
 export async function getTicketMessages(ticketId: string) {
   const res = await client.get(`/tickets/${ticketId}/messages`);
-  return unwrap<TicketMessage[]>(res);
+  return unwrapResponse<TicketMessage[]>(res);
 }
 
 export async function sendTicketMessage(ticketId: string, content: string, attachment?: string) {
   const res = await client.post(`/tickets/${ticketId}/messages`, { content, attachment });
-  return unwrap<TicketMessage>(res);
+  return unwrapResponse<TicketMessage>(res);
 }
 
 export async function uploadTicketAttachment(ticketId: string, file: File) {
@@ -55,5 +50,5 @@ export async function uploadTicketAttachment(ticketId: string, file: File) {
   const res = await client.post(`/tickets/${ticketId}/messages/upload`, form, {
     headers: { "Content-Type": "multipart/form-data" },
   });
-  return unwrap<{ url: string }>(res);
+  return unwrapResponse<{ url: string }>(res);
 }

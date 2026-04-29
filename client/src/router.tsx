@@ -31,13 +31,14 @@ const SettingsPage = lazy(() => import("./pages/SettingsPage"));
 const UserAdminPage = lazy(() => import("./pages/UserAdminPage"));
 const AuditLogPage = lazy(() => import("./pages/AuditLogPage"));
 const ShareAdminPage = lazy(() => import("./pages/ShareAdminPage"));
+const DownloadAdminPage = lazy(() => import("./pages/DownloadAdminPage"));
 const SelectionPage = lazy(() => import("./pages/SelectionPage"));
+const ThreadSizeToolPage = lazy(() => import("./pages/ThreadSizeToolPage"));
+const ProductWallPage = lazy(() => import("./pages/ProductWallPage"));
 const SelectionAdminPage = lazy(() => import("./pages/SelectionAdminPage"));
 const MyInquiriesPage = lazy(() => import("./pages/MyInquiriesPage"));
 const InquiryDetailPage = lazy(() => import("./pages/InquiryDetailPage"));
 const InquiryAdminPage = lazy(() => import("./pages/InquiryAdminPage"));
-const QuotePrintPage = lazy(() => import("./pages/QuotePrintPage"));
-const QuoteTemplateEditor = lazy(() => import("./pages/QuoteTemplateEditor"));
 const SelectionSharePage = lazy(() => import("./pages/SelectionSharePage"));
 
 const pageVariants = {
@@ -126,7 +127,7 @@ function ModelReturnPathTracker() {
 function useTokenWatcher() {
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
   const checkAndRefreshToken = useAuthStore((s) => s.checkAndRefreshToken);
-  const timerRef = useRef<ReturnType<typeof setInterval>>();
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {
     if (!isAuthenticated) return;
@@ -139,7 +140,9 @@ function useTokenWatcher() {
       checkAndRefreshToken();
     }, 60_000);
 
-    return () => clearInterval(timerRef.current);
+    return () => {
+      if (timerRef.current) clearInterval(timerRef.current);
+    };
   }, [isAuthenticated, checkAndRefreshToken]);
 }
 
@@ -174,15 +177,15 @@ export default function Router() {
           <Route path="/admin/users" element={<ProtectedPage requiredRole="ADMIN"><UserAdminPage /></ProtectedPage>} />
           <Route path="/admin/audit" element={<ProtectedPage requiredRole="ADMIN"><AuditLogPage /></ProtectedPage>} />
           <Route path="/admin/shares" element={<ProtectedPage requiredRole="ADMIN"><ShareAdminPage /></ProtectedPage>} />
+          <Route path="/admin/downloads" element={<ProtectedPage requiredRole="ADMIN"><DownloadAdminPage /></ProtectedPage>} />
           <Route path="/selection" element={<PageWrap><SelectionPage /></PageWrap>} />
+          <Route path="/tools/thread-size" element={<ProtectedPage><ThreadSizeToolPage /></ProtectedPage>} />
+          <Route path="/product-wall" element={<PageWrap><ProductWallPage /></PageWrap>} />
           <Route path="/admin/selections" element={<ProtectedPage requiredRole="ADMIN"><SelectionAdminPage /></ProtectedPage>} />
           <Route path="/my-inquiries" element={<ProtectedPage><MyInquiriesPage /></ProtectedPage>} />
           <Route path="/my-inquiries/:id" element={<ProtectedPage><InquiryDetailPage /></ProtectedPage>} />
           <Route path="/admin/inquiries" element={<ProtectedPage requiredRole="ADMIN"><InquiryAdminPage /></ProtectedPage>} />
           <Route path="/admin/inquiries/:id" element={<ProtectedPage requiredRole="ADMIN"><InquiryDetailPage /></ProtectedPage>} />
-          <Route path="/admin/quote-template" element={<ProtectedPage requiredRole="ADMIN"><QuoteTemplateEditor /></ProtectedPage>} />
-          <Route path="/quote/:id" element={<ScrollPage><QuotePrintPage /></ScrollPage>} />
-          <Route path="/document/:type/:id" element={<ScrollPage><QuotePrintPage /></ScrollPage>} />
           <Route path="*" element={<NotFoundPage />} />
         </Routes>
       </AnimatePresence>
