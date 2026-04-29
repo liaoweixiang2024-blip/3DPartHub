@@ -1832,6 +1832,9 @@ function MobileContent() {
   const categories = catDataM?.items || [];
   const [selectedNames, setSelectedNames] = useState<Set<string>>(new Set());
   const [merging, setMerging] = useState(false);
+  const [editingGroupId, setEditingGroupId] = useState<string | null>(null);
+  const [groupNameDraft, setGroupNameDraft] = useState('');
+  const [groupAction, setGroupAction] = useState<string | null>(null);
   const {
     groups: suggestionGroups,
     total: activeSuggestionCount,
@@ -1949,6 +1952,103 @@ function MobileContent() {
     }
   };
 
+  const handleMergeSingleSuggestion = async (group: { name: string; models: { id: string }[] }) => {
+    if (group.models.length < 2) return;
+    setMerging(true);
+    try {
+      const result = await modelApi.batchMerge([{ name: group.name, modelIds: group.models.map((m) => m.id) }]);
+      toast(`已合并 ${result.merged} 组`, 'success');
+      setSelectedNames((prev) => {
+        const next = new Set(prev);
+        next.delete(group.name);
+        return next;
+      });
+      sugMutate();
+      suggestionCountMutate();
+      groupMutate();
+      mutate();
+    } catch {
+      toast('合并失败', 'error');
+    } finally {
+      setMerging(false);
+    }
+  };
+
+  const beginEditGroup = (group: ModelGroupItem) => {
+    setEditingGroupId(group.id);
+    setGroupNameDraft(group.name);
+  };
+
+  const handleSaveGroup = async (group: ModelGroupItem) => {
+    const name = groupNameDraft.trim();
+    if (!name) {
+      toast('分组名称不能为空', 'error');
+      return;
+    }
+    setGroupAction(`rename:${group.id}`);
+    try {
+      await modelApi.updateModelGroup(group.id, { name });
+      toast('分组已更新', 'success');
+      setEditingGroupId(null);
+      groupMutate();
+      mutate();
+    } catch {
+      toast('更新分组失败', 'error');
+    } finally {
+      setGroupAction(null);
+    }
+  };
+
+  const handleSetPrimary = async (group: ModelGroupItem, modelId: string) => {
+    setGroupAction(`primary:${group.id}:${modelId}`);
+    try {
+      await modelApi.updateModelGroup(group.id, { primaryId: modelId });
+      toast('已设置主版本', 'success');
+      groupMutate();
+      mutate();
+    } catch {
+      toast('设置主版本失败', 'error');
+    } finally {
+      setGroupAction(null);
+    }
+  };
+
+  const handleRemoveFromGroup = async (group: ModelGroupItem, modelId: string) => {
+    const ok = window.confirm('确定将该模型移出当前合并分组吗？模型不会被删除。');
+    if (!ok) return;
+    setGroupAction(`remove:${group.id}:${modelId}`);
+    try {
+      await modelApi.removeModelFromGroup(group.id, modelId);
+      toast('已移出分组', 'success');
+      groupMutate();
+      sugMutate();
+      suggestionCountMutate();
+      mutate();
+    } catch {
+      toast('移出分组失败', 'error');
+    } finally {
+      setGroupAction(null);
+    }
+  };
+
+  const handleDeleteGroup = async (group: ModelGroupItem) => {
+    const ok = window.confirm(`确定解散「${group.name}」吗？模型文件不会删除，只会取消合并关系。`);
+    if (!ok) return;
+    setGroupAction(`delete:${group.id}`);
+    try {
+      await modelApi.deleteModelGroup(group.id);
+      toast('分组已解散', 'success');
+      groupMutate();
+      sugMutate();
+      suggestionCountMutate();
+      mutate();
+    } catch {
+      toast('解散分组失败', 'error');
+    } finally {
+      setGroupAction(null);
+    }
+  };
+
   return (
     <>
       <input type="file" multiple accept={uploadPolicy.modelFormats.map((f) => `.${f}`).join(",")} className="hidden" id="mobile-admin-upload" onChange={(e) => { if (e.target.files?.length) handleUpload(e.target.files); e.target.value = ''; }} />
@@ -2018,9 +2118,15 @@ function MobileContent() {
                       <p className="truncate text-sm font-bold text-on-surface">{group.name}</p>
                       <p className="text-[11px] text-on-surface-variant">{group.count} 个同名模型</p>
                     </div>
+                    <button
+                      onClick={() => toggleSelect(group.name)}
+                      className="rounded-sm border border-outline-variant/20 px-2.5 py-1.5 text-xs text-on-surface-variant"
+                    >
+                      {selectedNames.has(group.name) ? '取消' : '选中'}
+                    </button>
                   </div>
                   <div className="mt-3 flex gap-2 overflow-x-auto scrollbar-hidden">
-                    {group.models.slice(0, 8).map((m) => (
+                    {group.models.map((m) => (
                       <div key={m.id} className="w-14 shrink-0">
                         <div className="h-14 w-14 overflow-hidden rounded bg-surface-container-highest">
                           <ModelThumbnail src={m.thumbnailUrl} alt="" className="h-full w-full object-cover" />
@@ -2028,6 +2134,16 @@ function MobileContent() {
                         <p className="mt-1 truncate text-[9px] text-on-surface-variant">{m.originalName.replace(/\.[^.]+$/, '')}</p>
                       </div>
                     ))}
+                  </div>
+                  <div className="mt-3 flex items-center justify-between gap-2 border-t border-outline-variant/10 pt-3">
+                    <span className="text-[11px] text-on-surface-variant">将这 {group.models.length} 个同名模型合并为一组</span>
+                    <button
+                      onClick={() => handleMergeSingleSuggestion(group)}
+                      disabled={merging || group.models.length < 2}
+                      className="shrink-0 rounded-sm bg-primary-container px-3 py-1.5 text-xs font-bold text-on-primary disabled:opacity-40"
+                    >
+                      合并本组
+                    </button>
                   </div>
                 </div>
               ))}
@@ -2044,29 +2160,104 @@ function MobileContent() {
             <SkeletonList rows={5} />
           ) : (
             <div className="admin-tab-panel space-y-3">
-              {groupData?.map((group) => (
-                <div key={group.id} className="rounded-lg bg-surface-container-high p-3">
-                  <div className="flex items-start gap-3">
-                    <span className="grid h-10 w-10 shrink-0 place-items-center rounded bg-surface-container-highest text-primary-container">
-                      <Icon name="folder_special" size={18} />
-                    </span>
-                    <div className="min-w-0 flex-1">
-                      <p className="truncate text-sm font-bold text-on-surface">{group.name}</p>
-                      <p className="mt-0.5 text-[11px] text-on-surface-variant">{group.model_count} 个版本 · 主版本：{group.primary?.name || '未设置'}</p>
+              {groupData?.map((group) => {
+                const editing = editingGroupId === group.id;
+                const primaryId = group.primary?.id;
+                return (
+                  <div key={group.id} className="rounded-lg bg-surface-container-high p-3">
+                    <div className="flex items-start gap-3">
+                      <span className="grid h-10 w-10 shrink-0 place-items-center rounded bg-surface-container-highest text-primary-container">
+                        <Icon name="folder_special" size={18} />
+                      </span>
+                      <div className="min-w-0 flex-1">
+                        {editing ? (
+                          <input
+                            value={groupNameDraft}
+                            onChange={(e) => setGroupNameDraft(e.target.value)}
+                            className="w-full rounded-sm border border-outline-variant/25 bg-surface-container-lowest px-3 py-2 text-sm font-semibold text-on-surface outline-none focus:border-primary"
+                            autoFocus
+                          />
+                        ) : (
+                          <>
+                            <p className="truncate text-sm font-bold text-on-surface">{group.name}</p>
+                            <p className="mt-0.5 text-[11px] text-on-surface-variant">{group.model_count} 个版本 · 主版本：{group.primary?.name || '未设置'}</p>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      {editing ? (
+                        <>
+                          <button
+                            onClick={() => handleSaveGroup(group)}
+                            disabled={groupAction === `rename:${group.id}`}
+                            className="rounded-sm bg-primary-container px-3 py-1.5 text-xs font-bold text-on-primary disabled:opacity-40"
+                          >
+                            保存
+                          </button>
+                          <button onClick={() => setEditingGroupId(null)} className="rounded-sm border border-outline-variant/20 px-3 py-1.5 text-xs text-on-surface-variant">
+                            取消
+                          </button>
+                        </>
+                      ) : (
+                        <button onClick={() => beginEditGroup(group)} className="rounded-sm border border-outline-variant/20 px-3 py-1.5 text-xs text-on-surface-variant">
+                          重命名
+                        </button>
+                      )}
+                      <button
+                        onClick={() => handleDeleteGroup(group)}
+                        disabled={groupAction === `delete:${group.id}`}
+                        className="rounded-sm border border-error/20 px-3 py-1.5 text-xs text-error disabled:opacity-40"
+                      >
+                        解散分组
+                      </button>
+                    </div>
+                    <div className="mt-3 space-y-2">
+                      {group.models.map((model) => {
+                        const isPrimary = model.id === primaryId;
+                        return (
+                          <div key={model.id} className="rounded-lg bg-surface-container-low p-2.5">
+                            <div className="flex items-start gap-2.5">
+                              <Link to={`/model/${model.id}`} target="_blank" className="h-14 w-14 shrink-0 overflow-hidden rounded bg-surface-container-highest">
+                                <ModelThumbnail src={model.thumbnailUrl} alt="" className="h-full w-full object-cover" />
+                              </Link>
+                              <div className="min-w-0 flex-1">
+                                <div className="flex min-w-0 items-center gap-1.5">
+                                  <p className="truncate text-xs font-semibold text-on-surface">{model.originalName || model.name}</p>
+                                  {isPrimary && <span className="shrink-0 rounded-sm bg-primary/15 px-1.5 py-0.5 text-[10px] font-medium text-primary">主版本</span>}
+                                </div>
+                                <p className="mt-0.5 text-[10px] text-on-surface-variant">{formatSize(model.originalSize)} · {formatModelDateTime(model.createdAt)}</p>
+                              </div>
+                            </div>
+                            <div className="mt-2 flex flex-wrap justify-end gap-2">
+                              <Link to={`/model/${model.id}`} target="_blank" className="rounded-sm border border-outline-variant/20 px-2.5 py-1.5 text-xs text-on-surface-variant">
+                                查看
+                              </Link>
+                              {!isPrimary && (
+                                <button
+                                  onClick={() => handleSetPrimary(group, model.id)}
+                                  disabled={groupAction === `primary:${group.id}:${model.id}`}
+                                  className="rounded-sm border border-outline-variant/20 px-2.5 py-1.5 text-xs text-on-surface-variant disabled:opacity-40"
+                                >
+                                  设为主版本
+                                </button>
+                              )}
+                              <button
+                                onClick={() => handleRemoveFromGroup(group, model.id)}
+                                disabled={group.model_count <= 2 || groupAction === `remove:${group.id}:${model.id}`}
+                                title={group.model_count <= 2 ? '只有 2 个版本时请使用解散分组' : '移出当前分组'}
+                                className="rounded-sm border border-outline-variant/20 px-2.5 py-1.5 text-xs text-on-surface-variant disabled:opacity-40"
+                              >
+                                移出
+                              </button>
+                            </div>
+                          </div>
+                        );
+                      })}
                     </div>
                   </div>
-                  <div className="mt-3 flex gap-2 overflow-x-auto scrollbar-hidden">
-                    {group.models.slice(0, 10).map((model) => (
-                      <Link key={model.id} to={`/model/${model.id}`} target="_blank" className="w-14 shrink-0">
-                        <div className="h-14 w-14 overflow-hidden rounded bg-surface-container-highest">
-                          <ModelThumbnail src={model.thumbnailUrl} alt="" className="h-full w-full object-cover" />
-                        </div>
-                        <p className="mt-1 truncate text-[9px] text-on-surface-variant">{model.originalName || model.name}</p>
-                      </Link>
-                    ))}
-                  </div>
-                </div>
-              ))}
+                );
+              })}
               {groupData?.length === 0 && (
                 <p className="rounded-lg bg-surface-container-high px-4 py-12 text-center text-sm text-on-surface-variant">还没有已合并的模型分组</p>
               )}
