@@ -997,21 +997,23 @@ function PreviewOperationsPanel({ compact = false }: { compact?: boolean }) {
 
   return (
     <section className={`rounded-lg border border-outline-variant/10 bg-surface-container-low ${compact ? 'p-3' : 'p-4'}`}>
-      <div className="flex items-center justify-between gap-3 border-b border-outline-variant/10 pb-3 pr-10">
-        <div className="min-w-0">
-          <div className="flex items-center gap-2">
-            <span className="inline-flex h-7 w-7 items-center justify-center rounded-sm bg-primary-container/10 text-primary">
-              <Icon name="view_in_ar" size={16} />
-            </span>
-            <div className="min-w-0">
-              <h3 className="text-sm font-semibold text-on-surface">预览运维工作台</h3>
-              <p className="mt-0.5 text-[11px] text-on-surface-variant">诊断、重建、队列状态</p>
+      {!compact && (
+        <div className="flex items-center justify-between gap-3 border-b border-outline-variant/10 pb-3 pr-10">
+          <div className="min-w-0">
+            <div className="flex items-center gap-2">
+              <span className="inline-flex h-7 w-7 items-center justify-center rounded-sm bg-primary-container/10 text-primary">
+                <Icon name="view_in_ar" size={16} />
+              </span>
+              <div className="min-w-0">
+                <h3 className="text-sm font-semibold text-on-surface">预览运维工作台</h3>
+                <p className="mt-0.5 text-[11px] text-on-surface-variant">诊断、重建、队列状态</p>
+              </div>
             </div>
           </div>
         </div>
-      </div>
+      )}
 
-      <div className={`grid gap-2 pt-3 ${compact ? 'grid-cols-2' : 'grid-cols-2 lg:grid-cols-4'}`}>
+      <div className={`grid gap-2 ${compact ? 'grid-cols-2' : 'grid-cols-2 pt-3 lg:grid-cols-4'}`}>
         <PreviewOpsMetricCard
           label="全部模型"
           value={diagnosticsSummary?.total}
@@ -1090,6 +1092,13 @@ function PreviewOperationsPanel({ compact = false }: { compact?: boolean }) {
 }
 
 function PreviewOperationsModal({ open, onClose, compact = false }: { open: boolean; onClose: () => void; compact?: boolean }) {
+  const backdropClassName = compact
+    ? "fixed inset-0 z-[500] flex items-stretch justify-center bg-surface-dim/75 backdrop-blur-sm"
+    : "fixed inset-0 z-[500] flex items-end justify-center bg-surface-dim/70 px-3 py-4 backdrop-blur-sm sm:items-center sm:px-5";
+  const panelClassName = compact
+    ? "relative flex h-dvh max-h-dvh w-full flex-col overflow-hidden bg-surface-container-low shadow-xl"
+    : "relative max-h-[92dvh] w-full max-w-[100rem] overflow-y-auto rounded-lg border border-outline-variant/20 bg-surface-container-low shadow-xl";
+
   return (
     <AnimatePresence>
       {open && (
@@ -1097,7 +1106,7 @@ function PreviewOperationsModal({ open, onClose, compact = false }: { open: bool
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
-          className="fixed inset-0 z-[90] flex items-end justify-center bg-surface-dim/70 px-3 py-4 backdrop-blur-sm sm:items-center sm:px-5"
+          className={backdropClassName}
           onClick={onClose}
         >
           <motion.div
@@ -1105,21 +1114,42 @@ function PreviewOperationsModal({ open, onClose, compact = false }: { open: bool
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 16, scale: 0.98 }}
             transition={{ duration: 0.18 }}
-            className={`relative w-full max-w-[100rem] overflow-y-auto rounded-lg border border-outline-variant/20 bg-surface-container-low shadow-xl ${
-              compact ? 'h-[calc(100dvh-24px)] max-h-[calc(100dvh-24px)]' : 'max-h-[92dvh]'
-            }`}
+            className={panelClassName}
             onClick={(event) => event.stopPropagation()}
           >
-            <button
-              onClick={onClose}
-              className="absolute right-3 top-3 z-10 inline-flex h-8 w-8 items-center justify-center rounded-sm border border-outline-variant/20 bg-surface-container-lowest text-on-surface-variant shadow-sm hover:bg-surface-container-high hover:text-on-surface"
-              aria-label="关闭预览运维工作台"
-            >
-              <Icon name="close" size={16} />
-            </button>
-            <div className={compact ? 'p-2' : 'p-3'}>
-              <PreviewOperationsPanel compact={compact} />
-            </div>
+            {compact ? (
+              <>
+                <div className="sticky top-0 z-20 flex shrink-0 items-center justify-between gap-3 border-b border-outline-variant/10 bg-surface-container-low/95 px-4 py-3 backdrop-blur">
+                  <div className="min-w-0">
+                    <h2 className="truncate text-base font-semibold text-on-surface">预览运维工作台</h2>
+                    <p className="mt-0.5 truncate text-xs text-on-surface-variant">诊断、重建、转换队列</p>
+                  </div>
+                  <button
+                    onClick={onClose}
+                    className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-sm border border-outline-variant/20 bg-surface-container-lowest text-on-surface-variant shadow-sm"
+                    aria-label="关闭预览运维工作台"
+                  >
+                    <Icon name="close" size={17} />
+                  </button>
+                </div>
+                <div className="min-h-0 flex-1 overflow-y-auto px-3 py-3 pb-[calc(1rem+env(safe-area-inset-bottom))] scrollbar-hidden">
+                  <PreviewOperationsPanel compact />
+                </div>
+              </>
+            ) : (
+              <>
+                <button
+                  onClick={onClose}
+                  className="absolute right-3 top-3 z-10 inline-flex h-8 w-8 items-center justify-center rounded-sm border border-outline-variant/20 bg-surface-container-lowest text-on-surface-variant shadow-sm hover:bg-surface-container-high hover:text-on-surface"
+                  aria-label="关闭预览运维工作台"
+                >
+                  <Icon name="close" size={16} />
+                </button>
+                <div className="p-3">
+                  <PreviewOperationsPanel />
+                </div>
+              </>
+            )}
           </motion.div>
         </motion.div>
       )}
