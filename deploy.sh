@@ -59,12 +59,12 @@ fi
 echo -e "${YELLOW}[3/4] 配置密钥...${NC}"
 if [ ! -f .env ]; then
   cat > .env << EOF
-IMAGE_TAG=v2.5
+IMAGE_TAG=latest
 DB_PASSWORD=$(openssl rand -hex 16)
 JWT_SECRET=$(openssl rand -hex 32)
 ADMIN_PASS=$(openssl rand -base64 24 | tr -d '\n')
 EOF
-  echo -e "${GREEN}  ✓ .env 已生成（固定镜像版本、随机数据库密码、JWT 密钥和初始管理员密码）${NC}"
+  echo -e "${GREEN}  ✓ .env 已生成（latest 镜像、随机数据库密码、JWT 密钥和初始管理员密码）${NC}"
   echo -e "${YELLOW}  初始管理员密码已写入 .env 的 ADMIN_PASS，请首次登录后立即修改。${NC}"
 else
   echo -e "${GREEN}  ✓ .env 已存在，保持不变${NC}"
@@ -133,8 +133,8 @@ SERVER_IP=$(hostname -I 2>/dev/null | awk '{print $1}' || echo "服务器IP")
 echo "  访问地址: http://${SERVER_IP}:${PORT:-3780}"
 echo ""
 echo "  默认管理员:"
-echo "    邮箱: admin@model.com"
-echo "    密码: admin123"
+echo "    邮箱: admin@model.local"
+echo "    密码: .env 中的 ADMIN_PASS"
 echo "    (首次登录强制修改密码)"
 echo ""
 
@@ -148,5 +148,6 @@ echo "  常用命令:"
 echo "    日志:  docker compose logs -f api"
 echo "    状态:  docker compose ps"
 echo "    停止:  docker compose down"
-echo "    升级:  改 IMAGE_TAG 版本号 → docker compose pull && docker compose up -d"
+echo "    升级:  docker compose pull && docker compose up -d --force-recreate"
+echo "    自动:  Watchtower 每小时自动检查并更新 api/web"
 echo ""

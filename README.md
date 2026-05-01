@@ -15,7 +15,7 @@
 
 3DPartHub 专为制造企业团队管理 3D 零件模型与产品选型数据而设计。系统支持 STEP / IGES / Parasolid 文件自动转换为 glTF，在浏览器内实时 3D 预览，并提供分类管理、选型筛选、询价报价、分享、审计、备份恢复和完整后台设置。
 
-> V2.6 发行版只包含通用源码、数据库结构、迁移、Docker/CI 配置和文档。数据库、模型文件、缩略图、Logo、Favicon、产品图片、企业资料、业务批次脚本、Excel/PDF 私有资料等运行时或定制内容不会随 Git 仓库和镜像发布。
+> V2.6.1 发行版只包含通用源码、数据库结构、迁移、Docker/CI 配置和文档。数据库、模型文件、缩略图、Logo、Favicon、产品图片、企业资料、业务批次脚本、Excel/PDF 私有资料等运行时或定制内容不会随 Git 仓库和镜像发布。
 
 ## 先看运行规范
 
@@ -38,6 +38,12 @@
 bash scripts/verify-local.sh
 ```
 
+## V2.6.1 更新
+
+- **自动更新默认开启**：生产 Compose 默认使用 `latest` 镜像，并启动 Watchtower 每小时自动检查和更新 API/Web 容器。
+- **后台更新命令修复**：后台「系统更新」里的命令去掉 shell 提示符 `$`，并自动把旧 `.env` 中的 `IMAGE_TAG` 改为 `latest`，避免继续锁在旧版本。
+- **部署文档同步**：README、历史部署说明、一键部署脚本和 Release 自动说明同步改为 `latest + Watchtower` 的更新方式。
+
 ## V2.6 更新
 
 - **产品墙后台化**：产品墙从静态素材升级为数据库管理，支持图片/文件夹/ZIP/RAR 上传、分类、审核、批量操作、收藏、下载、复制链接和后台管理。
@@ -45,24 +51,24 @@ bash scripts/verify-local.sh
 - **登录与后台体验修复**：优化认证状态 hydration、Token 检查、受保护路由跳转、后台分页/管理页布局、审计、询价、工单、下载、模型和设置页体验。
 - **站点内容与法务配置**：抽离法务内容、补充公开设置接口、扩展业务配置默认值和后台显示字段，便于部署后做站点级配置。
 - **备份恢复与上传增强**：备份范围覆盖产品墙资源，上传会话、任务状态、验证码和 cookie 处理更稳，导入恢复流程继续保护运行时数据。
-- **NAS/服务器部署优化**：Compose 默认 `v2.6` 镜像，支持无 `.env` 快速启动、默认初始管理员、离线镜像包导入和慢网络部署说明。
+- **NAS/服务器部署优化**：Compose 默认使用 `latest` 镜像并启用 Watchtower 自动更新 API/Web，支持无 `.env` 快速启动、默认初始管理员、离线镜像包导入和慢网络部署说明。
 
 ## Release 与镜像
 
 | 项目 | 值 |
 |------|----|
-| Tag | `v2.6` |
-| Release 标题 | `V2.6 - 产品墙后台化与 NAS 部署优化` |
-| API 镜像 | `ghcr.io/liaoweixiang2024-blip/3dparthub-api:v2.6` |
-| Web 镜像 | `ghcr.io/liaoweixiang2024-blip/3dparthub-web:v2.6` |
-| Latest 镜像 | `ghcr.io/liaoweixiang2024-blip/3dparthub-api:latest` / `ghcr.io/liaoweixiang2024-blip/3dparthub-web:latest` |
+| Tag | `v2.6.1` |
+| Release 标题 | `V2.6.1 - 自动更新与后台升级命令修复` |
+| API 镜像 | `ghcr.io/liaoweixiang2024-blip/3dparthub-api:v2.6.1` / `ghcr.io/liaoweixiang2024-blip/3dparthub-api:latest` |
+| Web 镜像 | `ghcr.io/liaoweixiang2024-blip/3dparthub-web:v2.6.1` / `ghcr.io/liaoweixiang2024-blip/3dparthub-web:latest` |
+| 自动更新 | 默认部署使用 `latest`，Watchtower 每小时自动更新 API/Web 容器 |
 
 镜像说明：
 
 - `3dparthub-api`：Express 5 + Prisma 后端，包含数据库迁移、隔离模型转换、转换队列、预览元数据、后台设置、备份/恢复、审计与 API 服务。
 - `3dparthub-web`：React 19 + Vite 前端，包含 CAD 在线查看器、3D 预览、产品选型、询价报价、分享页和后台管理界面。
 
-后台 **设置 -> 系统更新 -> 检查更新** 会读取 GitHub 最新 Release 的描述内容，并显示为后台更新日志。发布 V2.6 时，请以 Release 描述作为用户可见更新简介。
+后台 **设置 -> 系统更新 -> 检查更新** 会读取 GitHub 最新 Release 的描述内容，并显示为后台更新日志。发布 V2.6.1 时，请以 Release 描述作为用户可见更新简介。
 
 ---
 
@@ -115,10 +121,19 @@ curl -O https://raw.githubusercontent.com/liaoweixiang2024-blip/3DPartHub/main/d
 docker compose up -d
 ```
 
-根目录 [docker-compose.yml](docker-compose.yml) 内置了可直接启动的默认值，适合绿联 NAS、测试机或内网快速部署。正式公网环境建议在同目录创建 `.env` 覆盖数据库密码、JWT 密钥和初始管理员密码：
+根目录 [docker-compose.yml](docker-compose.yml) 内置了可直接启动的默认值，适合绿联 NAS、测试机或内网快速部署。默认使用 `latest` 镜像，并通过 Watchtower 每小时自动检查和更新 API/Web 容器；PostgreSQL 和 Redis 不会被自动更新。
+
+正式公网环境建议在同目录创建 `.env` 覆盖数据库密码、JWT 密钥和初始管理员密码：
 
 ```bash
-printf "IMAGE_TAG=v2.6\nDB_PASSWORD=%s\nJWT_SECRET=%s\nADMIN_PASS=%s\n" "$(openssl rand -hex 24)" "$(openssl rand -hex 32)" "$(openssl rand -base64 24)" > .env
+DB_PASSWORD="$(openssl rand -hex 24)"
+JWT_SECRET="$(openssl rand -hex 32)"
+ADMIN_PASS="$(openssl rand -base64 24)"
+cat > .env <<EOF
+DB_PASSWORD=${DB_PASSWORD}
+JWT_SECRET=${JWT_SECRET}
+ADMIN_PASS=${ADMIN_PASS}
+EOF
 docker compose up -d
 ```
 
@@ -163,24 +178,42 @@ curl http://localhost:3780/api/health
 | `ADMIN_USER` | 否 | `admin` | 初始管理员用户名，仅首次启动 |
 | `ADMIN_EMAIL` | 否 | `admin@model.local` | 初始管理员邮箱，仅首次启动 |
 | `ADMIN_PASS` | 否 | `3DPartHub@2026` | 初始管理员密码，仅空数据库首次启动生效 |
+| `IMAGE_TAG` | 否 | `latest` | 镜像标签；默认自动跟随最新版本，写入 `v2.6.1` 等固定标签可锁定版本 |
+| `WATCHTOWER_POLL_INTERVAL` | 否 | `3600` | Watchtower 自动检查间隔，单位秒 |
 | `SMTP_HOST` | 否 | - | SMTP 服务器 |
 | `SMTP_USER` | 否 | - | SMTP 用户名 |
 | `SMTP_PASS` | 否 | - | SMTP 密码或授权码 |
+
+### 自动更新与立即升级
+
+默认部署会启动 `3dparthub-watchtower`，它只更新带标签的 `api` 和 `web` 容器。需要立即升级时执行：
+
+```bash
+cd /opt/3dparthub
+curl -L -o docker-compose.yml https://raw.githubusercontent.com/liaoweixiang2024-blip/3DPartHub/main/docker-compose.yml
+touch .env
+grep -q '^IMAGE_TAG=' .env && sed -i 's/^IMAGE_TAG=.*/IMAGE_TAG=latest/' .env || echo 'IMAGE_TAG=latest' >> .env
+docker compose pull
+docker compose up -d --force-recreate
+docker compose logs -f api
+```
 
 ### 使用指定版本镜像
 
 ```bash
 cd /opt/3dparthub
-IMAGE_TAG=v2.6 docker compose pull
-IMAGE_TAG=v2.6 docker compose up -d
+IMAGE_TAG=v2.6.1 docker compose pull
+IMAGE_TAG=v2.6.1 docker compose up -d
 curl http://localhost:3780/api/health
 ```
 
 也可以在 `.env` 中写入：
 
 ```bash
-IMAGE_TAG=v2.6
+IMAGE_TAG=v2.6.1
 ```
+
+写入固定 `IMAGE_TAG` 后，部署会锁定在该版本，不会自动升级到新的 Release；要恢复自动更新，请删除 `.env` 中的 `IMAGE_TAG` 或改为 `IMAGE_TAG=latest`。
 
 ### 升级版本
 
@@ -188,16 +221,20 @@ IMAGE_TAG=v2.6
 cd /opt/3dparthub
 
 # 1. 更新部署配置
-curl -O https://raw.githubusercontent.com/liaoweixiang2024-blip/3DPartHub/main/docker-compose.yml
+curl -L -o docker-compose.yml https://raw.githubusercontent.com/liaoweixiang2024-blip/3DPartHub/main/docker-compose.yml
 
-# 2. 拉取新镜像并重启
+# 2. 确保恢复 latest 自动更新
+touch .env
+grep -q '^IMAGE_TAG=' .env && sed -i 's/^IMAGE_TAG=.*/IMAGE_TAG=latest/' .env || echo 'IMAGE_TAG=latest' >> .env
+
+# 3. 拉取新镜像并重启
 docker compose pull
-docker compose up -d
+docker compose up -d --force-recreate
 
-# 3. 检查迁移和服务日志
+# 4. 检查迁移和服务日志
 docker compose logs -f api
 
-# 4. 验证服务正常
+# 5. 验证服务正常
 curl http://localhost:3780/api/health
 ```
 

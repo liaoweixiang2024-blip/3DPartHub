@@ -90,8 +90,14 @@ jobs:
             Includes the React/Vite frontend for 3D preview, product selection, inquiry/quote workflows, sharing, and admin pages.
 
             ```bash
-            # Update docker-compose.yml IMAGE_TAG to ${{ steps.version.outputs.version }}
-            docker compose pull && docker compose up -d
+            # Default deployment follows latest and uses Watchtower for api/web auto-updates.
+            # Run this when you want to update immediately:
+            cd /opt/3dparthub
+            curl -L -o docker-compose.yml https://raw.githubusercontent.com/${{ github.repository }}/main/docker-compose.yml
+            touch .env
+            grep -q '^IMAGE_TAG=' .env && sed -i 's/^IMAGE_TAG=.*/IMAGE_TAG=latest/' .env || echo 'IMAGE_TAG=latest' >> .env
+            docker compose pull
+            docker compose up -d --force-recreate
 
             # Verify health
             curl http://localhost:3780/api/health

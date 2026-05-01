@@ -11,12 +11,21 @@
 #
 # 【更安全的方式】
 #   如需自定义密码，在同目录创建 .env 覆盖默认值：
-#   printf "IMAGE_TAG=v2.6\nDB_PASSWORD=%s\nJWT_SECRET=%s\nADMIN_PASS=%s\n" "$(openssl rand -hex 24)" "$(openssl rand -hex 32)" "$(openssl rand -base64 24)" > .env
+#   DB_PASSWORD="$(openssl rand -hex 24)"
+#   JWT_SECRET="$(openssl rand -hex 32)"
+#   ADMIN_PASS="$(openssl rand -base64 24)"
+#   cat > .env <<EOF
+#   DB_PASSWORD=${DB_PASSWORD}
+#   JWT_SECRET=${JWT_SECRET}
+#   ADMIN_PASS=${ADMIN_PASS}
+#   EOF
 #   docker compose up -d
 #   访问 http://服务器IP:3780
 #
-# 【升级版本】
-#   修改 .env 中 IMAGE_TAG 后执行 docker compose pull && docker compose up -d
+# 【自动更新】
+#   默认使用 latest 镜像，Watchtower 每小时自动检查并更新 api/web 容器
+#   如需立即更新: docker compose pull && docker compose up -d --force-recreate
+#   如需锁定版本: 在 .env 中写入 IMAGE_TAG=v2.6.1
 #   检查日志: docker compose logs -f api
 #
 # 【数据安全】
@@ -49,14 +58,16 @@ x-logging: &default-logging
     max-size: "50m"
     max-file: "5"
 
-# <<< 修改 .env 中 IMAGE_TAG 后执行 docker compose pull && docker compose up -d
+# <<< 默认使用 latest；手动立即更新执行 docker compose pull && docker compose up -d --force-recreate
 
 services:
   api:
-    image: ghcr.io/liaoweixiang2024-blip/3dparthub-api:${IMAGE_TAG:-v2.6}
+    image: ghcr.io/liaoweixiang2024-blip/3dparthub-api:${IMAGE_TAG:-latest}
     container_name: 3dparthub-api
     init: true
     shm_size: ${API_SHM_SIZE:-1g}
+    labels:
+      com.centurylinklabs.watchtower.enable: "true"
     deploy:
       resources:
         limits:
@@ -111,9 +122,11 @@ services:
       - internal
 
   web:
-    image: ghcr.io/liaoweixiang2024-blip/3dparthub-web:${IMAGE_TAG:-v2.6}
+    image: ghcr.io/liaoweixiang2024-blip/3dparthub-web:${IMAGE_TAG:-latest}
     container_name: 3dparthub-web
     init: true
+    labels:
+      com.centurylinklabs.watchtower.enable: "true"
     ports:
       - "${PORT:-3780}:80"
     ulimits:
@@ -137,6 +150,25 @@ services:
       timeout: 5s
       retries: 5
       start_period: 15s
+    restart: unless-stopped
+    logging: *default-logging
+    networks:
+      - internal
+
+  watchtower:
+    image: ghcr.io/containrrr/watchtower:latest
+    container_name: 3dparthub-watchtower
+    command:
+      - --label-enable
+      - --cleanup
+      - --rolling-restart
+      - --include-restarting
+      - --interval
+      - "${WATCHTOWER_POLL_INTERVAL:-3600}"
+    environment:
+      TZ: Asia/Shanghai
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
     restart: unless-stopped
     logging: *default-logging
     networks:

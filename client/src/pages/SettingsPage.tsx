@@ -1741,23 +1741,52 @@ function Content() {
   const [restoreProgress, setRestoreProgress] = useState({ stage: '', percent: 0, message: '', logs: [] as string[] });
   const backupInputRef = useRef<HTMLInputElement>(null);
   const backupActionInFlight = useRef(false);
-  const successfulBackupToastIds = useRef<Set<string>>(new Set());
+  const restoreActionInFlight = useRef(false);
+  const importActionInFlight = useRef(false);
+  const verifyActionInFlight = useRef(false);
+  const policyCheckInFlight = useRef(false);
+  const jobToastKeys = useRef<Set<string>>(new Set());
 
   // Global busy state — prevent concurrent admin operations
   const adminBusy = exporting || importing || restoring || !!verifyingBackupId;
 
-  function toastBackupCreatedOnce(jobId?: string | null) {
-    const key = jobId || 'unknown';
-    if (successfulBackupToastIds.current.has(key)) return;
+  function toastJobOnce(
+    namespace: string,
+    jobId: string | null | undefined,
+    message: string,
+    type: 'success' | 'error' | 'info' = 'success',
+  ) {
+    const key = `${namespace}:${jobId || 'unknown'}`;
+    if (jobToastKeys.current.has(key)) return;
 
     if (jobId) {
-      const storageKey = `backupSuccessToast:${jobId}`;
-      if (window.sessionStorage.getItem(storageKey)) return;
-      window.sessionStorage.setItem(storageKey, '1');
+      const storageKey = `jobToast:${key}`;
+      try {
+        if (window.sessionStorage.getItem(storageKey)) return;
+        window.sessionStorage.setItem(storageKey, '1');
+      } catch {
+        // sessionStorage can be unavailable in some privacy modes; in-memory guard still works.
+      }
     }
 
-    successfulBackupToastIds.current.add(key);
-    toast('备份创建成功', 'success');
+    jobToastKeys.current.add(key);
+    toast(message, type);
+  }
+
+  function toastBackupCreatedOnce(jobId?: string | null) {
+    toastJobOnce('backup-create', jobId, '备份创建成功');
+  }
+
+  function toastRestoreSuccessOnce(jobId: string | null | undefined, result: { modelCount: number; thumbnailCount: number }) {
+    toastJobOnce('backup-restore', jobId, `恢复成功：${result.modelCount} 个 STEP 模型，${result.thumbnailCount} 张缩略图`);
+  }
+
+  function toastImportSaveSuccessOnce(jobId?: string | null) {
+    toastJobOnce('backup-import-save', jobId, '备份文件已保存到备份记录列表');
+  }
+
+  function toastVerifySuccessOnce(jobId: string | null | undefined, message?: string) {
+    toastJobOnce('backup-verify', jobId, message || '备份校验通过');
   }
 
   useEffect(() => {
@@ -1848,7 +1877,7 @@ function Content() {
         const result = await pollRestoreProgress(restoreJobId, (stage, percent, message, logs) => {
           setRestoreProgress({ stage, percent, message, logs: logs || [] });
         });
-        toast(`恢复成功：${result.modelCount} 个 STEP 模型，${result.thumbnailCount} 张缩略图`, 'success');
+        toastRestoreSuccessOnce(restoreJobId, result);
         setRestoreConfirmId(null);
         loadBackupList();
         loadBackupStats();
@@ -1892,7 +1921,7 @@ function Content() {
         await pollImportSaveProgress(importSaveJobId, (stage, percent, message, logs) => {
           setRestoreProgress({ stage, percent, message, logs: logs || [] });
         });
-        toast('备份文件已保存到备份记录列表', 'success');
+        toastImportSaveSuccessOnce(importSaveJobId);
         loadBackupList();
         loadBackupStats();
         loadBackupHealth();
@@ -1919,7 +1948,7 @@ function Content() {
           const result = await pollVerifyBackupProgress(activeVerify.id, (stage, percent, message, logs) => {
             setVerifyProgress({ stage, percent, message, logs: logs || [] });
           });
-          toast(result.message || '备份校验通过', 'success');
+          toastVerifySuccessOnce(activeVerify.id, result.message);
           loadBackupList();
           loadBackupHealth();
         } catch (err: any) {
@@ -1964,6 +1993,8 @@ function Content() {
   }
 
   async function handleBackupPolicyCheck() {
+    if (policyCheckInFlight.current) return;
+    policyCheckInFlight.current = true;
     setCheckingBackupPolicy(true);
     try {
       const result = await checkBackupPolicy();
@@ -1975,11 +2006,14 @@ function Content() {
     } catch (err: any) {
       toast(err.message || '备份策略体检失败', 'error');
     } finally {
+      policyCheckInFlight.current = false;
       setCheckingBackupPolicy(false);
     }
   }
 
   async function handleVerifyBackup(id: string) {
+    if (verifyActionInFlight.current) return;
+    verifyActionInFlight.current = true;
     setVerifyingBackupId(id);
     setVerifyProgress({ stage: 'queued', percent: 0, message: '正在准备校验备份...', logs: [] });
     try {
@@ -1987,12 +2021,13 @@ function Content() {
       const result = await pollVerifyBackupProgress(jobId, (stage, percent, message, logs) => {
         setVerifyProgress({ stage, percent, message, logs: logs || [] });
       });
-      toast(result.message || '备份校验通过', 'success');
+      toastVerifySuccessOnce(jobId, result.message);
       loadBackupList();
       loadBackupHealth();
     } catch (err: any) {
       toast(err.response?.data?.message || err.message || '备份校验失败', 'error');
     } finally {
+      verifyActionInFlight.current = false;
       setVerifyingBackupId(null);
       setVerifyProgress({ stage: '', percent: 0, message: '', logs: [] });
     }
@@ -2152,12 +2187,15 @@ function Content() {
 
   async function handleImport(mode: 'restore' | 'save') {
     if (!restoreConfirmFile) return;
+    if (importActionInFlight.current) return;
+    importActionInFlight.current = true;
     setImporting(true);
     setUploadProgress(0);
     try {
       if (mode === 'save') {
         // Save as backup record (no restore)
         const isLarge = restoreConfirmFile.size >= 100 * 1024 * 1024;
+        let importSaveJobId: string | null = null;
         await importBackupAsRecord(
           restoreConfirmFile,
           isLarge ? 'chunked' : 'direct',
@@ -2167,10 +2205,11 @@ function Content() {
           },
           (jobId) => {
             // Persist jobId for page refresh resume
+            importSaveJobId = jobId;
             localStorage.setItem('importSaveJobId', jobId);
           },
         );
-        toast('备份文件已保存到备份记录列表', 'success');
+        toastImportSaveSuccessOnce(importSaveJobId);
         setRestoreConfirmFile(null);
         loadBackupList();
         loadBackupStats();
@@ -2185,7 +2224,7 @@ function Content() {
         const result = await pollRestoreProgress(jobId, (stage, percent, message, logs) => {
           setRestoreProgress({ stage, percent, message, logs: logs || [] });
         });
-        toast(`恢复成功：${result.modelCount} 个 STEP 模型，${result.thumbnailCount} 张缩略图`, 'success');
+        toastRestoreSuccessOnce(jobId, result);
         setRestoreConfirmFile(null);
         loadBackupList();
         loadBackupStats();
@@ -2196,6 +2235,7 @@ function Content() {
     } finally {
       localStorage.removeItem('restoreJobId');
       localStorage.removeItem('importSaveJobId');
+      importActionInFlight.current = false;
       setImporting(false);
       setUploadProgress(0);
       setRestoreProgress({ stage: '', percent: 0, message: '', logs: [] });
@@ -2217,6 +2257,8 @@ function Content() {
   }
 
   async function handleServerFileImport(file: ServerBackupFile) {
+    if (importActionInFlight.current) return;
+    importActionInFlight.current = true;
     setServerFileConfirm(null);
     setImporting(true);
     setRestoreProgress({ stage: 'starting', percent: 0, message: '正在从服务器路径恢复...', logs: [] });
@@ -2226,7 +2268,7 @@ function Content() {
       const result = await pollRestoreProgress(jobId, (stage, percent, message, logs) => {
         setRestoreProgress({ stage, percent, message, logs: logs || [] });
       });
-      toast(`恢复成功：${result.modelCount} 个 STEP 模型，${result.thumbnailCount} 张缩略图`, 'success');
+      toastRestoreSuccessOnce(jobId, result);
       loadBackupList();
       loadBackupStats();
       loadBackupHealth();
@@ -2234,6 +2276,7 @@ function Content() {
       toast(err.message || '恢复失败', 'error');
     } finally {
       localStorage.removeItem('restoreJobId');
+      importActionInFlight.current = false;
       setImporting(false);
       setRestoreProgress({ stage: '', percent: 0, message: '', logs: [] });
     }
@@ -2279,6 +2322,8 @@ function Content() {
 
   async function handleRestoreConfirm() {
     if (!restoreConfirmId) return;
+    if (restoreActionInFlight.current) return;
+    restoreActionInFlight.current = true;
     setRestoring(true);
     setRestoreProgress({ stage: 'starting', percent: 0, message: '正在启动恢复...', logs: [] });
     try {
@@ -2288,7 +2333,7 @@ function Content() {
       const result = await pollRestoreProgress(jobId, (stage, percent, message, logs) => {
         setRestoreProgress({ stage, percent, message, logs: logs || [] });
       });
-      toast(`恢复成功：${result.modelCount} 个 STEP 模型，${result.thumbnailCount} 张缩略图`, 'success');
+      toastRestoreSuccessOnce(jobId, result);
       setRestoreConfirmId(null);
       loadBackupList();
       loadBackupStats();
@@ -2298,6 +2343,7 @@ function Content() {
     } finally {
       localStorage.removeItem('restoreJobId');
       localStorage.removeItem('restoreConfirmBackupId');
+      restoreActionInFlight.current = false;
       setRestoring(false);
       setRestoreProgress({ stage: '', percent: 0, message: '', logs: [] });
     }
@@ -2985,12 +3031,16 @@ function Content() {
 
                   {/* Upgrade command */}
                   <div className="px-4 py-3 border-t border-primary/10">
-                    <p className="text-xs text-on-surface-variant mb-2">在服务器上执行以下命令升级：</p>
+                    <p className="text-xs text-on-surface-variant mb-2">服务器默认启用自动更新；如需立即更新，执行：</p>
                     <div className="bg-surface-container rounded p-3 font-mono text-xs text-on-surface select-all space-y-1">
-                      <div><span className="text-on-surface-variant/50">$</span> docker compose pull</div>
-                      <div><span className="text-on-surface-variant/50">$</span> docker compose up -d</div>
+                      <div>cd /opt/3dparthub</div>
+                      <div>curl -L -o docker-compose.yml https://raw.githubusercontent.com/liaoweixiang2024-blip/3DPartHub/main/docker-compose.yml</div>
+                      <div>touch .env</div>
+                      <div>grep -q '^IMAGE_TAG=' .env && sed -i 's/^IMAGE_TAG=.*/IMAGE_TAG=latest/' .env || echo 'IMAGE_TAG=latest' &gt;&gt; .env</div>
+                      <div>docker compose pull</div>
+                      <div>docker compose up -d --force-recreate</div>
                     </div>
-                    <p className="text-[10px] text-on-surface-variant/50 mt-2">升级后数据库会自动迁移，请查看日志确认: docker compose logs -f api</p>
+                    <p className="text-[10px] text-on-surface-variant/50 mt-2">不要复制 shell 提示符；升级后数据库会自动迁移，请查看日志确认: docker compose logs -f api</p>
                     {updateInfo.releaseUrl && (
                       <a
                         href={updateInfo.releaseUrl}
