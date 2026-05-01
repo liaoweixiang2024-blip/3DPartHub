@@ -1,5 +1,6 @@
 import { Router, Response } from "express";
 import { prisma } from "../../lib/prisma.js";
+import { getBusinessConfig } from "../../lib/businessConfig.js";
 import { authMiddleware, type AuthRequest } from "../../middleware/auth.js";
 import { adminOnly, asSingleString } from "./common.js";
 
@@ -10,8 +11,11 @@ export function createAdminSharesRouter() {
   router.get("/api/admin/shares", authMiddleware, async (req: AuthRequest, res: Response) => {
     if (!adminOnly(req, res)) return;
     try {
+      const { pageSizePolicy } = await getBusinessConfig();
+      const defaultPageSize = Math.max(1, Math.floor(Number(pageSizePolicy.shareAdminDefault) || 20));
+      const maxPageSize = Math.max(1, Math.floor(Number(pageSizePolicy.shareAdminMax) || 100));
       const page = Math.max(1, Number(req.query.page) || 1);
-      const pageSize = Math.min(100, Math.max(1, Number(req.query.page_size) || 20));
+      const pageSize = Math.min(maxPageSize, Math.max(1, Number(req.query.page_size) || defaultPageSize));
       const search = (req.query.search as string) || "";
 
       const where = search

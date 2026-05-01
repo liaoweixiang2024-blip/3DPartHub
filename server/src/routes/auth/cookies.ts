@@ -9,20 +9,31 @@ function requestIsHttps(req: Request): boolean {
   return req.secure || req.headers["x-forwarded-proto"] === "https" || process.env.AUTH_COOKIE_SECURE === "true";
 }
 
-function authCookieOptions(req: Request, maxAge: number): CookieOptions {
-  return {
+function authCookieOptions(req: Request, maxAge?: number): CookieOptions {
+  const options: CookieOptions = {
     httpOnly: true,
     sameSite: "lax",
     secure: requestIsHttps(req),
     path: "/",
-    maxAge,
   };
+  if (maxAge) options.maxAge = maxAge;
+  return options;
 }
 
-export function setAuthCookies(req: Request, res: Response, accessToken: string, refreshToken?: string): void {
+export function setAuthCookies(
+  req: Request,
+  res: Response,
+  accessToken: string,
+  refreshToken?: string,
+  options: { rememberMe?: boolean } = {},
+): void {
   res.cookie(ACCESS_COOKIE, accessToken, authCookieOptions(req, ACCESS_COOKIE_MAX_AGE_MS));
   if (refreshToken) {
-    res.cookie(REFRESH_COOKIE, refreshToken, authCookieOptions(req, REFRESH_COOKIE_MAX_AGE_MS));
+    res.cookie(
+      REFRESH_COOKIE,
+      refreshToken,
+      authCookieOptions(req, options.rememberMe ? REFRESH_COOKIE_MAX_AGE_MS : undefined),
+    );
   }
 }
 

@@ -78,6 +78,9 @@ client.interceptors.response.use(
     ) {
       // For 401 on non-auth endpoints, session expired — redirect to login
       if (error.response?.status === 401 && !isAuthEndpoint) {
+        if (!useAuthStore.getState().hasHydrated) {
+          return Promise.reject(error);
+        }
         notifyGlobalError("登录状态已失效，请重新登录");
         useAuthStore.getState().logout();
         window.location.replace("/login");
@@ -120,6 +123,9 @@ client.interceptors.response.use(
       return client(originalRequest);
     } catch (refreshError) {
       processQueue(refreshError, null);
+      if (!useAuthStore.getState().hasHydrated) {
+        return Promise.reject(refreshError);
+      }
       notifyGlobalError("登录状态已失效，请重新登录");
       useAuthStore.getState().logout();
       window.location.replace("/login");

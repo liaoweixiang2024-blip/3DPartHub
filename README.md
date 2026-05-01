@@ -15,7 +15,7 @@
 
 3DPartHub 专为制造企业团队管理 3D 零件模型与产品选型数据而设计。系统支持 STEP / IGES / Parasolid 文件自动转换为 glTF，在浏览器内实时 3D 预览，并提供分类管理、选型筛选、询价报价、分享、审计、备份恢复和完整后台设置。
 
-> V2.5 发行版只包含通用源码、数据库结构、迁移、Docker/CI 配置和文档。数据库、模型文件、缩略图、Logo、Favicon、产品图片、企业资料、业务批次脚本、Excel/PDF 私有资料等运行时或定制内容不会随 Git 仓库和镜像发布。
+> V2.6 发行版只包含通用源码、数据库结构、迁移、Docker/CI 配置和文档。数据库、模型文件、缩略图、Logo、Favicon、产品图片、企业资料、业务批次脚本、Excel/PDF 私有资料等运行时或定制内容不会随 Git 仓库和镜像发布。
 
 ## 先看运行规范
 
@@ -38,23 +38,23 @@
 bash scripts/verify-local.sh
 ```
 
-## V2.5 更新
+## V2.6 更新
 
-- **隐私与发布安全**：仓库和 GHCR 镜像改为私有，补充发布前隐私审计脚本、Git/Docker ignore 防误传规则，生产环境强制设置 `DB_PASSWORD`、`JWT_SECRET` 和强 `ADMIN_PASS`。
-- **后台架构整理**：后端路由按 auth、models、settings、shares、tasks、selections、inquiries 等模块拆分，统一响应处理、请求校验、错误处理和权限边界。
-- **下载与私有资源保护**：新增下载令牌、下载记录队列、受保护图纸/附件/模型资源入口，改进下载次数记录、审计和后台下载管理。
-- **后台体验升级**：新增通用后台页面骨架、全局 Tooltip、可见项加载、下载管理、维护模式、健康检查和缓存预热，优化模型、分类、选型、询价、工单、用户、审计等页面。
-- **选型与产品展示增强**：选型后台、公开选型页、产品墙、螺纹尺寸工具和参数/套件展示体验升级，补充产品名称与字段同步工具。
-- **备份恢复与运维增强**：备份、恢复、校验任务改为 worker 化执行，补充恢复辅助、维护入口、Nginx 私有静态保护、Compose 健康检查、Redis 持久化和日志滚动。
+- **产品墙后台化**：产品墙从静态素材升级为数据库管理，支持图片/文件夹/ZIP/RAR 上传、分类、审核、批量操作、收藏、下载、复制链接和后台管理。
+- **螺纹尺寸工具增强**：螺纹、管径、软管和接头尺寸数据迁移到数据库，补充大规格条目、筛选、移动端布局和后台可维护能力。
+- **登录与后台体验修复**：优化认证状态 hydration、Token 检查、受保护路由跳转、后台分页/管理页布局、审计、询价、工单、下载、模型和设置页体验。
+- **站点内容与法务配置**：抽离法务内容、补充公开设置接口、扩展业务配置默认值和后台显示字段，便于部署后做站点级配置。
+- **备份恢复与上传增强**：备份范围覆盖产品墙资源，上传会话、任务状态、验证码和 cookie 处理更稳，导入恢复流程继续保护运行时数据。
+- **NAS/服务器部署优化**：Compose 默认 `v2.6` 镜像，支持无 `.env` 快速启动、默认初始管理员、离线镜像包导入和慢网络部署说明。
 
 ## Release 与镜像
 
 | 项目 | 值 |
 |------|----|
-| Tag | `v2.5` |
-| Release 标题 | `V2.5 - 隐私安全加固与后台体验升级` |
-| API 镜像 | `ghcr.io/liaoweixiang2024-blip/3dparthub-api:v2.5` |
-| Web 镜像 | `ghcr.io/liaoweixiang2024-blip/3dparthub-web:v2.5` |
+| Tag | `v2.6` |
+| Release 标题 | `V2.6 - 产品墙后台化与 NAS 部署优化` |
+| API 镜像 | `ghcr.io/liaoweixiang2024-blip/3dparthub-api:v2.6` |
+| Web 镜像 | `ghcr.io/liaoweixiang2024-blip/3dparthub-web:v2.6` |
 | Latest 镜像 | `ghcr.io/liaoweixiang2024-blip/3dparthub-api:latest` / `ghcr.io/liaoweixiang2024-blip/3dparthub-web:latest` |
 
 镜像说明：
@@ -62,7 +62,7 @@ bash scripts/verify-local.sh
 - `3dparthub-api`：Express 5 + Prisma 后端，包含数据库迁移、隔离模型转换、转换队列、预览元数据、后台设置、备份/恢复、审计与 API 服务。
 - `3dparthub-web`：React 19 + Vite 前端，包含 CAD 在线查看器、3D 预览、产品选型、询价报价、分享页和后台管理界面。
 
-后台 **设置 -> 系统更新 -> 检查更新** 会读取 GitHub 最新 Release 的描述内容，并显示为后台更新日志。发布 V2.5 时，请以 Release 描述作为用户可见更新简介。
+后台 **设置 -> 系统更新 -> 检查更新** 会读取 GitHub 最新 Release 的描述内容，并显示为后台更新日志。发布 V2.6 时，请以 Release 描述作为用户可见更新简介。
 
 ---
 
@@ -112,12 +112,25 @@ bash scripts/verify-local.sh
 ```bash
 mkdir -p /opt/3dparthub && cd /opt/3dparthub
 curl -O https://raw.githubusercontent.com/liaoweixiang2024-blip/3DPartHub/main/docker-compose.yml
-printf "IMAGE_TAG=v2.5\nDB_PASSWORD=%s\nJWT_SECRET=%s\nADMIN_PASS=%s\n" "$(openssl rand -hex 24)" "$(openssl rand -hex 32)" "$(openssl rand -base64 24)" > .env
-docker login ghcr.io -u liaoweixiang2024-blip
 docker compose up -d
 ```
 
-仓库和镜像均为私有，服务器需要使用有 `read:packages` 权限的 GitHub Token 登录 GHCR 后才能拉取镜像。若服务器要直接拉取源码，请使用只读 Deploy Key 或具备仓库读取权限的 Token。
+根目录 [docker-compose.yml](docker-compose.yml) 内置了可直接启动的默认值，适合绿联 NAS、测试机或内网快速部署。正式公网环境建议在同目录创建 `.env` 覆盖数据库密码、JWT 密钥和初始管理员密码：
+
+```bash
+printf "IMAGE_TAG=v2.6\nDB_PASSWORD=%s\nJWT_SECRET=%s\nADMIN_PASS=%s\n" "$(openssl rand -hex 24)" "$(openssl rand -hex 32)" "$(openssl rand -base64 24)" > .env
+docker compose up -d
+```
+
+如果 GHCR 镜像包仍为私有，服务器需要先使用有 `read:packages` 权限的 GitHub Token 登录：
+
+```bash
+echo "你的GitHub Token" | docker login ghcr.io -u liaoweixiang2024-blip --password-stdin
+docker compose pull
+docker compose up -d
+```
+
+如果服务器或 NAS 拉取 Docker Hub / GHCR 速度过慢，可以在可访问外网的机器上导出离线镜像包，然后在目标机器执行 `docker load -i 3dparthub-images.tar` 后再 `docker compose up -d`。
 
 检查服务状态：
 
@@ -132,22 +145,24 @@ curl http://localhost:3780/api/health
 | 项目 | 默认值 |
 |------|--------|
 | 邮箱 | `.env` 中的 `ADMIN_EMAIL`，默认 `admin@model.local` |
-| 密码 | `.env` 中的 `ADMIN_PASS` |
-| 说明 | 生产环境必须设置强初始密码，首次登录后仍会强制修改密码 |
+| 密码 | `.env` 中的 `ADMIN_PASS`，未设置时为 `3DPartHub@2026` |
+| 说明 | 管理员只在空数据库首次启动时创建；首次登录后会强制修改密码 |
 
 自定义管理员账号可在 `.env` 中设置 `ADMIN_USER`、`ADMIN_EMAIL`、`ADMIN_PASS`，仅首次启动时生效。
+
+如果已经启动过、恢复过备份或 Docker volume 中已有管理员账号，修改 `ADMIN_PASS` 不会覆盖旧密码。需要重置时可在 `api` 容器内更新管理员密码。
 
 ### 环境变量
 
 | 变量 | 必填 | 默认值 | 说明 |
 |------|------|--------|------|
-| `DB_PASSWORD` | 是 | - | 数据库密码 |
-| `JWT_SECRET` | 是 | - | JWT 签名密钥，建议至少 32 位 |
+| `DB_PASSWORD` | 否 | `3dparthub-default-db-password-change-me-2026` | 数据库密码，正式环境建议在 `.env` 中覆盖 |
+| `JWT_SECRET` | 否 | `3dparthub-default-jwt-secret-change-me-2026-04-30` | JWT 签名密钥，正式环境建议至少 32 位随机字符串 |
 | `PORT` | 否 | `3780` | 对外访问端口 |
 | `ALLOWED_ORIGINS` | 否 | - | CORS 域名，多个用逗号分隔 |
 | `ADMIN_USER` | 否 | `admin` | 初始管理员用户名，仅首次启动 |
 | `ADMIN_EMAIL` | 否 | `admin@model.local` | 初始管理员邮箱，仅首次启动 |
-| `ADMIN_PASS` | 是 | - | 初始管理员密码，仅首次启动；生产环境至少 12 位 |
+| `ADMIN_PASS` | 否 | `3DPartHub@2026` | 初始管理员密码，仅空数据库首次启动生效 |
 | `SMTP_HOST` | 否 | - | SMTP 服务器 |
 | `SMTP_USER` | 否 | - | SMTP 用户名 |
 | `SMTP_PASS` | 否 | - | SMTP 密码或授权码 |
@@ -156,15 +171,15 @@ curl http://localhost:3780/api/health
 
 ```bash
 cd /opt/3dparthub
-IMAGE_TAG=v2.5 docker compose pull
-IMAGE_TAG=v2.5 docker compose up -d
+IMAGE_TAG=v2.6 docker compose pull
+IMAGE_TAG=v2.6 docker compose up -d
 curl http://localhost:3780/api/health
 ```
 
 也可以在 `.env` 中写入：
 
 ```bash
-IMAGE_TAG=v2.5
+IMAGE_TAG=v2.6
 ```
 
 ### 升级版本
@@ -214,7 +229,7 @@ curl http://localhost:3780/api/health
 
 ## 备份与恢复
 
-V2.5 备份包沿用完整备份格式，包含：
+V2.6 备份包沿用完整备份格式，包含：
 
 - PostgreSQL 全量 dump。
 - `static` 下自动发现的业务目录，例如 `models`、`thumbnails`、`originals`、`drawings`、`option-images`、`logo`、`favicon`、`watermark` 等。
@@ -230,7 +245,7 @@ V2.5 备份包沿用完整备份格式，包含：
 - 文件目录按目录逐个恢复，保留旧目录回滚副本；文件恢复失败会回滚已替换目录。
 - 恢复完成后清理缓存，使后台立即读取恢复后的数据。
 
-本仓库已用本地真实数据做过 V2.3 端到端校验：创建备份、导入备份、从导入备份恢复，再比对数据库和业务文件指纹。校验结果为 `22` 张表、`15522` 行、`19872` 个业务文件、约 `24.68GB` 恢复前后一致。V2.5 继续沿用完整备份格式，并将备份、恢复、校验执行链路 worker 化，继续使用同一套恢复校验机制。
+本仓库已用本地真实数据做过 V2.3 端到端校验：创建备份、导入备份、从导入备份恢复，再比对数据库和业务文件指纹。校验结果为 `22` 张表、`15522` 行、`19872` 个业务文件、约 `24.68GB` 恢复前后一致。V2.6 继续沿用完整备份格式，并将产品墙资源纳入运行时备份范围，继续使用同一套恢复校验机制。
 
 ### 迁移到新服务器
 

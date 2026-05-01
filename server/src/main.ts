@@ -25,6 +25,8 @@ import modelGroupsRouter from "./routes/model-groups.js";
 import selectionsRouter from "./routes/selections.js";
 import inquiriesRouter from "./routes/inquiries.js";
 import selectionSharesRouter from "./routes/selection-shares.js";
+import productWallRouter from "./routes/product-wall.js";
+import threadSizeRouter from "./routes/thread-size.js";
 import healthRouter from "./routes/health.js";
 import { getSetting, initDefaultSettings } from "./lib/settings.js";
 import { startBackupScheduler } from "./lib/backup.js";
@@ -267,6 +269,8 @@ app.use(modelGroupsRouter);
 app.use(selectionsRouter);
 app.use(inquiriesRouter);
 app.use(selectionSharesRouter);
+app.use(productWallRouter());
+app.use(threadSizeRouter);
 
 // 404 handler
 app.use(notFoundHandler);

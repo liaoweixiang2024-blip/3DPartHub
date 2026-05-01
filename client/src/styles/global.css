@@ -137,10 +137,19 @@ body {
   display: none;
 }
 
+.scrollbar-none::-webkit-scrollbar {
+  display: none;
+}
+
 .scrollbar-hidden {
   -ms-overflow-style: none;
   scrollbar-width: none;
   overscroll-behavior-y: contain;
+}
+
+.scrollbar-none {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
 }
 
 .micro-glass {
@@ -217,14 +226,14 @@ body {
 }
 
 @keyframes selection-tab-panel-in {
-  from { opacity: 0; transform: translateY(3px); }
-  to { opacity: 1; transform: translateY(0); }
+  from { opacity: 0; }
+  to { opacity: 1; }
 }
 
 .admin-tab-panel,
 .selection-tab-panel {
-  animation: selection-tab-panel-in 0.18s ease-out;
-  will-change: opacity, transform;
+  animation: selection-tab-panel-in 0.12s ease-out;
+  will-change: opacity;
 }
 
 .mobile-nav-drawer-open .bottom-nav {

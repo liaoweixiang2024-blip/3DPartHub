@@ -6,7 +6,7 @@
  * knowledge of the job. This module persists job state to /tmp so any worker can
  * read the current progress.
  */
-import { mkdirSync, writeFileSync, readFileSync, rmSync, readdirSync, statSync } from "fs";
+import { mkdirSync, writeFileSync, readFileSync, rmSync, readdirSync, statSync, renameSync } from "fs";
 import { join } from "path";
 
 const JOB_DIR = "/tmp/model_job_state";
@@ -18,7 +18,10 @@ export type PersistedJobState = {
 export function syncJob<T extends PersistedJobState>(job: T) {
   try {
     mkdirSync(JOB_DIR, { recursive: true });
-    writeFileSync(join(JOB_DIR, `${job.id}.json`), JSON.stringify(job));
+    const target = join(JOB_DIR, `${job.id}.json`);
+    const tmp = join(JOB_DIR, `${job.id}.${process.pid}.tmp`);
+    writeFileSync(tmp, JSON.stringify(job));
+    renameSync(tmp, target);
   } catch {}
 }
 

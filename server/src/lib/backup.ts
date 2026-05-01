@@ -1,4 +1,5 @@
 import { execFileSync, spawn } from "child_process";
+import type { ChildProcess } from "child_process";
 import { existsSync, mkdirSync, rmSync, writeFileSync, statSync, statfsSync, readdirSync, readFileSync, renameSync, openSync, closeSync, writeSync, readSync, createReadStream, createWriteStream, copyFileSync, cpSync } from "fs";
 import { basename, dirname, isAbsolute, join, resolve, sep } from "path";
 import { createHash } from "crypto";
@@ -7,7 +8,7 @@ import { pipeline } from "stream/promises";
 import { Transform } from "stream";
 import { fileURLToPath } from "url";
 import { config } from "./config.js";
-import { syncJob, loadJob, listJobs } from "./jobStore.js";
+import { syncJob, loadJob } from "./jobStore.js";
 
 // Read app version from package.json
 let _appVersion: string | null = null;
@@ -38,6 +39,7 @@ const ACTIVE_BACKUP_DIR = join(process.cwd(), config.staticDir, "backups");
 const LEGACY_BACKUP_DIR = join(process.cwd(), config.uploadDir, "backups");
 const BACKUP_DIRS = Array.from(new Set([ACTIVE_BACKUP_DIR, LEGACY_BACKUP_DIR]));
 const BACKUP_WORK_DIR = join(ACTIVE_BACKUP_DIR, ".work");
+const SAFETY_SNAPSHOT_DIR = join(ACTIVE_BACKUP_DIR, "_safety_snapshots");
 const BACKUP_DB_ENTRY_DIR = "_backup_db";
 const BACKUP_DATABASE_ENTRY = `${BACKUP_DB_ENTRY_DIR}/database.sql`;
 const BACKUP_META_ENTRY = `${BACKUP_DB_ENTRY_DIR}/meta.json`;
@@ -371,6 +373,10 @@ function releaseLock(): void {
   try { rmSync(LOCK_FILE, { force: true }); } catch {}
 }
 
+function releaseLockForJob(jobId: string): void {
+  if (getActiveLockJobId() === jobId) releaseLock();
+}
+
 function ts(): string {
   return new Date().toLocaleTimeString("zh-CN", { hour12: false });
 }
@@ -387,12 +393,57 @@ function addLog(job: { id?: string; logs?: string[] }, text: string) {
   if (job.id) syncJob({ ...job, id: job.id });
 }
 
+type MonitoredWorkerJob = {
+  id: string;
+  stage: string;
+  message: string;
+  error?: string;
+  logs?: string[];
+};
+
+function markWorkerExitIfStillRunning<T extends MonitoredWorkerJob>(job: T, message: string) {
+  const latest = loadJob<T>(job.id) || job;
+  if (latest.stage === "done" || latest.stage === "error") return;
+  latest.stage = "error";
+  latest.error = message;
+  latest.message = message;
+  addLog(latest, message);
+  syncJob(latest);
+  releaseLockForJob(job.id);
+}
+
+function monitorWorkerExit<T extends MonitoredWorkerJob>(child: ChildProcess, job: T, label: string) {
+  child.once("error", (err) => {
+    markWorkerExitIfStillRunning(job, `${label}后台进程启动失败: ${err.message}`);
+  });
+  child.once("exit", (code, signal) => {
+    setTimeout(() => {
+      const detail = signal ? `signal=${signal}` : `code=${code ?? "unknown"}`;
+      const message = code === 0 && !signal
+        ? `${label}后台进程已退出，但任务未写入完成状态，请重试`
+        : `${label}后台进程异常退出（${detail}），请查看服务端日志后重试`;
+      markWorkerExitIfStillRunning(job, message);
+    }, 1000);
+  });
+}
+
+function latestPersistedJob<T extends { id: string }>(job: T): T {
+  return loadJob<T>(job.id) || job;
+}
+
 export function getJob(id: string): BackupJob | undefined {
-  return jobs.get(id) || loadJob<BackupJob>(id);
+  const persisted = loadJob<BackupJob>(id);
+  if (persisted) {
+    jobs.set(id, persisted);
+    return persisted;
+  }
+  return jobs.get(id);
 }
 
 export function getActiveBackupJob(): BackupJob | undefined {
-  for (const job of jobs.values()) {
+  for (const current of jobs.values()) {
+    const job = latestPersistedJob(current);
+    jobs.set(job.id, job);
     if (job.stage !== "done" && job.stage !== "error") return job;
   }
   const lockedJobId = getActiveLockJobId();
@@ -412,15 +463,27 @@ export function getActiveBackupJob(): BackupJob | undefined {
 }
 
 export function getRestoreJob(id: string): RestoreJob | undefined {
-  return restoreJobs.get(id) || loadJob<RestoreJob>(id);
+  const persisted = loadJob<RestoreJob>(id);
+  if (persisted) {
+    restoreJobs.set(id, persisted);
+    return persisted;
+  }
+  return restoreJobs.get(id);
 }
 
 export function getVerifyJob(id: string): VerifyJob | undefined {
-  return verifyJobs.get(id) || loadJob<VerifyJob>(id);
+  const persisted = loadJob<VerifyJob>(id);
+  if (persisted) {
+    verifyJobs.set(id, persisted);
+    return persisted;
+  }
+  return verifyJobs.get(id);
 }
 
 export function getActiveVerifyJob(): VerifyJob | undefined {
-  for (const job of verifyJobs.values()) {
+  for (const current of verifyJobs.values()) {
+    const job = latestPersistedJob(current);
+    verifyJobs.set(job.id, job);
     if (job.stage !== "done" && job.stage !== "error") return job;
   }
   const lockedJobId = getActiveLockJobId();
@@ -432,7 +495,9 @@ export function getActiveVerifyJob(): VerifyJob | undefined {
 }
 
 export function getActiveRestoreJob(): RestoreJob | undefined {
-  for (const job of restoreJobs.values()) {
+  for (const current of restoreJobs.values()) {
+    const job = latestPersistedJob(current);
+    restoreJobs.set(job.id, job);
     if (job.stage !== "done" && job.stage !== "error") return job;
   }
   const lockedJobId = getActiveLockJobId();
@@ -478,97 +543,149 @@ interface ImportSaveJob {
 const importSaveJobs = new Map<string, ImportSaveJob>();
 
 export function startImportSaveJob(archPath: string, originalName: string): string {
+  if (!acquireLock()) throw new Error("有备份、恢复、校验或导入任务正在进行中，请等待完成后再试");
   const jobId = `importsave_${Date.now()}`;
   const job: ImportSaveJob = { id: jobId, stage: "verifying_archive", percent: 5, message: "正在校验备份文件...", logs: [] };
   importSaveJobs.set(jobId, job);
   syncJob(job);
 
-  setImmediate(async () => {
-    try {
-      addLog(job, `开始导入保存: ${originalName}`);
-
-      // Stage 1: Verify archive
-      job.stage = "verifying_archive";
-      job.percent = 10;
-      job.message = "正在校验备份归档...";
-      syncJob(job);
-      if (!existsSync(archPath)) throw new Error("上传的备份文件不存在");
-      const fileSize = statSync(archPath).size;
-      addLog(job, `备份文件大小: ${formatSize(fileSize)}`);
-
-      const entries = listArchiveEntries(archPath);
-      if (entries.length === 0) throw new Error("备份归档内容为空");
-      addLog(job, `归档包含 ${entries.length} 个条目`);
-
-      // Stage 2: Read meta
-      job.stage = "reading_meta";
-      job.percent = 20;
-      job.message = "正在读取备份元数据...";
-      syncJob(job);
-
-      // Stage 3: Count models (async — uses streaming)
-      job.stage = "counting_models";
-      job.percent = 30;
-      job.message = "正在统计模型数量...";
-      syncJob(job);
-      const tmpDir = prepareWorkDir(`peek_${jobId}`);
-      try {
-        const sqlPath = extractRestoreSqlPath(archPath, tmpDir);
-        if (sqlPath) {
-          const modelCount = await countStepModelsInSqlDump(sqlPath);
-          if (modelCount > 0) addLog(job, `发现 ${modelCount} 个 STEP 模型`);
-        }
-      } catch {
-        // Model counting is best-effort
-      } finally {
-        if (existsSync(tmpDir)) rmSync(tmpDir, { recursive: true, force: true });
-      }
-
-      // Stage 4: Copy archive to backup storage
-      job.stage = "copying_archive";
-      job.percent = 50;
-      job.message = "正在保存备份文件...";
-      addLog(job, "正在复制归档到备份存储...");
-      syncJob(job);
-
-      const record = await saveAsBackupRecord(archPath, originalName);
-
-      // Stage 5: Write record
-      job.stage = "writing_record";
-      job.percent = 90;
-      job.message = "正在写入备份记录...";
-      syncJob(job);
-
-      addLog(job, `备份记录已保存: ${record.name}`);
-      addLog(job, `${record.modelCount} 个模型, ${record.thumbnailCount} 张预览图, 数据库 ${record.dbSize}`);
-
-      job.stage = "done";
-      job.percent = 100;
-      job.message = "保存完成";
-      job.result = record;
-      syncJob(job);
-    } catch (err: any) {
-      job.stage = "error";
-      job.error = err.message;
-      job.message = `保存失败: ${err.message}`;
-      addLog(job, `保存失败: ${err.message}`);
-      syncJob(job);
-      if (existsSync(archPath)) rmSync(archPath, { force: true });
-    }
-  });
+  try {
+    const workerScript = fileURLToPath(new URL(`../scripts/importSaveWorker${MODULE_EXT}`, import.meta.url));
+    const child = spawn(process.execPath, [...process.execArgv, workerScript, jobId, archPath, originalName], {
+      cwd: process.cwd(),
+      env: process.env,
+      detached: true,
+      stdio: "ignore",
+    });
+    if (!child.pid) throw new Error("备份导入保存后台进程启动失败");
+    setLockOwner(child.pid, jobId, "manual");
+    monitorWorkerExit(child, job, "备份导入保存");
+    child.unref();
+  } catch (err: any) {
+    const message = err.message || "备份导入保存后台进程启动失败";
+    job.stage = "error";
+    job.error = message;
+    job.message = message;
+    syncJob(job);
+    releaseLock();
+    throw err;
+  }
 
   return jobId;
 }
 
+export async function runImportSaveWorker(jobId: string, archPath: string, originalName: string) {
+  const job = loadJob<ImportSaveJob>(jobId) || {
+    id: jobId,
+    stage: "verifying_archive",
+    percent: 5,
+    message: "正在校验备份文件...",
+    logs: [],
+  };
+  importSaveJobs.set(job.id, job);
+  syncJob(job);
+  try {
+    await runImportSave(job, archPath, originalName);
+  } finally {
+    releaseLockForJob(job.id);
+  }
+}
+
+async function runImportSave(job: ImportSaveJob, archPath: string, originalName: string) {
+  try {
+    addLog(job, `开始导入保存: ${originalName}`);
+
+    // Stage 1: Verify archive
+    job.stage = "verifying_archive";
+    job.percent = 10;
+    job.message = "正在校验备份归档...";
+    syncJob(job);
+    if (!existsSync(archPath)) throw new Error("上传的备份文件不存在");
+    const fileSize = statSync(archPath).size;
+    addLog(job, `备份文件大小: ${formatSize(fileSize)}`);
+
+    const entries = listArchiveEntries(archPath);
+    if (entries.length === 0) throw new Error("备份归档内容为空");
+    addLog(job, `归档包含 ${entries.length} 个条目`);
+
+    // Stage 2: Read meta
+    job.stage = "reading_meta";
+    job.percent = 20;
+    job.message = "正在读取备份元数据...";
+    syncJob(job);
+
+    // Stage 3: Count models (async — uses streaming)
+    job.stage = "counting_models";
+    job.percent = 30;
+    job.message = "正在统计模型数量...";
+    syncJob(job);
+    const tmpDir = prepareWorkDir(`peek_${job.id}`);
+    try {
+      const sqlPath = extractRestoreSqlPath(archPath, tmpDir);
+      if (sqlPath) {
+        const modelCount = await countStepModelsInSqlDump(sqlPath);
+        if (modelCount > 0) addLog(job, `发现 ${modelCount} 个 STEP 模型`);
+      }
+    } catch {
+      // Model counting is best-effort
+    } finally {
+      if (existsSync(tmpDir)) rmSync(tmpDir, { recursive: true, force: true });
+    }
+
+    // Stage 4: Copy archive to backup storage
+    job.stage = "copying_archive";
+    job.percent = 50;
+    job.message = "正在保存备份文件...";
+    addLog(job, "正在复制归档到备份存储...");
+    syncJob(job);
+
+    const record = await saveAsBackupRecord(archPath, originalName);
+
+    // Stage 5: Write record
+    job.stage = "writing_record";
+    job.percent = 90;
+    job.message = "正在写入备份记录...";
+    syncJob(job);
+
+    addLog(job, `备份记录已保存: ${record.name}`);
+    addLog(job, `${record.modelCount} 个模型, ${record.thumbnailCount} 张预览图, 数据库 ${record.dbSize}`);
+
+    job.stage = "done";
+    job.percent = 100;
+    job.message = "保存完成";
+    job.result = record;
+    syncJob(job);
+  } catch (err: any) {
+    job.stage = "error";
+    job.error = err.message;
+    job.message = `保存失败: ${err.message}`;
+    addLog(job, `保存失败: ${err.message}`);
+    syncJob(job);
+    if (existsSync(archPath)) rmSync(archPath, { force: true });
+  }
+}
+
 export function getImportSaveJob(id: string): ImportSaveJob | undefined {
-  return importSaveJobs.get(id) || loadJob<ImportSaveJob>(id);
+  const persisted = loadJob<ImportSaveJob>(id);
+  if (persisted) {
+    importSaveJobs.set(id, persisted);
+    return persisted;
+  }
+  return importSaveJobs.get(id);
 }
 
 export function getActiveImportSaveJob(): ImportSaveJob | undefined {
-  for (const job of importSaveJobs.values()) {
+  for (const current of importSaveJobs.values()) {
+    const job = latestPersistedJob(current);
+    importSaveJobs.set(job.id, job);
     if (job.stage !== "done" && job.stage !== "error") return job;
   }
-  return listJobs<ImportSaveJob>("importsave_").find((job) => job.stage !== "done" && job.stage !== "error");
+  const lockedJobId = getActiveLockJobId();
+  if (lockedJobId?.startsWith("importsave_") && lockOwnerIsAlive()) {
+    const job = loadJob<ImportSaveJob>(lockedJobId);
+    if (job && job.stage !== "done" && job.stage !== "error") return job;
+  }
+  return undefined;
 }
 
 // ---- Create backup ----
@@ -609,6 +726,7 @@ function startBackupProcess(source: "manual" | "scheduled"): string {
     });
     if (!child.pid) throw new Error("备份后台进程启动失败");
     setLockOwner(child.pid, id, source);
+    monitorWorkerExit(child, job, "备份创建");
     child.unref();
   } catch (err: any) {
     job.stage = "error";
@@ -638,7 +756,7 @@ export async function runBackupWorker(jobId: string, source: "manual" | "schedul
   try {
     await runBackup(job);
   } finally {
-    releaseLock();
+    releaseLockForJob(job.id);
   }
 }
 
@@ -770,8 +888,10 @@ async function runBackup(job: BackupJob) {
           if (p < 55) job.message = "正在打包模型文件...";
           else if (p < 75) job.message = "正在压缩归档...";
           else job.message = "即将完成...";
-          syncJob(job);
+        } else if (existsSync(tmpArchive)) {
+          job.message = `正在压缩归档... 已生成 ${formatSize(statSync(tmpArchive).size)}`;
         }
+        syncJob(job);
       }, 3000);
     });
 
@@ -782,7 +902,14 @@ async function runBackup(job: BackupJob) {
     syncJob(job);
     addLog(job, `打包完成，文件大小: ${formatSize(statSync(finalArchive).size)}`);
     addLog(job, "正在校验备份包完整性...");
-    await validateBackupArchive(finalArchive, { expectedManifest: manifest });
+    await validateBackupArchive(finalArchive, {
+      expectedManifest: manifest,
+      onEntryProgress: ({ elapsedMs, entryCount }) => {
+        const elapsedSec = Math.max(1, Math.round(elapsedMs / 1000));
+        job.message = `正在校验备份包完整性... 已扫描 ${entryCount} 项，用时 ${elapsedSec}s`;
+        syncJob(job);
+      },
+    });
     addLog(job, "备份包完整性校验通过");
     addLog(job, "正在计算备份包 SHA256...");
     const archiveSha256 = await sha256File(finalArchive);
@@ -1107,6 +1234,7 @@ export function startVerifyBackupJob(backupId: string): string {
     });
     if (!child.pid) throw new Error("备份校验后台进程启动失败");
     setLockOwner(child.pid, id, "manual");
+    monitorWorkerExit(child, job, "备份校验");
     child.unref();
   } catch (err: any) {
     const message = err.message || "备份校验后台进程启动失败";
@@ -1135,7 +1263,7 @@ export async function runVerifyBackupWorker(jobId: string, backupId: string) {
   try {
     await runVerifyBackup(job, backupId);
   } finally {
-    releaseLock();
+    releaseLockForJob(job.id);
   }
 }
 
@@ -1151,7 +1279,15 @@ async function runVerifyBackup(job: VerifyJob, backupId: string) {
     job.percent = 10;
     job.message = "正在校验备份清单、数据库和目录文件数...";
     syncJob(job);
-    const manifest = await validateBackupArchive(archive, { requireManifest: true });
+    const manifest = await validateBackupArchive(archive, {
+      requireManifest: true,
+      onEntryProgress: ({ elapsedMs, entryCount }) => {
+        const elapsedSec = Math.max(1, Math.round(elapsedMs / 1000));
+        job.percent = Math.min(65, 10 + Math.floor(elapsedSec / 4));
+        job.message = `正在校验备份清单、数据库和目录文件数... 已扫描 ${entryCount} 项，用时 ${elapsedSec}s`;
+        syncJob(job);
+      },
+    });
     addLog(job, "备份清单、数据库和目录文件数校验通过");
 
     job.stage = "hashing_archive";
@@ -1296,6 +1432,7 @@ function startRestoreWorkerProcess(job: RestoreJob, args: string[]) {
     });
     if (!child.pid) throw new Error("备份恢复后台进程启动失败");
     setLockOwner(child.pid, job.id, "manual");
+    monitorWorkerExit(child, job, "备份恢复");
     child.unref();
   } catch (err: any) {
     const message = err.message || "备份恢复后台进程启动失败";
@@ -1329,7 +1466,7 @@ export async function runRestoreWorker(
       await runRestoreFromFile(job, target, removeAfter);
     }
   } finally {
-    releaseLock();
+    releaseLockForJob(job.id);
   }
 }
 
@@ -1682,13 +1819,67 @@ async function inspectBackupArchive(id: string, archive: string, originalName: s
   return record;
 }
 
-function listArchiveEntries(archive: string): string[] {
-  const raw = execFileSync("tar", ["tzf", archive], { stdio: "pipe", timeout: ARCHIVE_LIST_TIMEOUT_MS }).toString();
+function normalizeArchiveEntryList(raw: string): string[] {
   return raw
     .split(/\r?\n/)
     .map((line) => line.trim().replace(/^\.\//, ""))
     .filter(Boolean)
     .filter((line) => !isIgnoredArchiveEntry(line));
+}
+
+function listArchiveEntries(archive: string): string[] {
+  const raw = execFileSync("tar", ["tzf", archive], { stdio: "pipe", timeout: ARCHIVE_LIST_TIMEOUT_MS }).toString();
+  return normalizeArchiveEntryList(raw);
+}
+
+function listArchiveEntriesWithProgress(
+  archive: string,
+  onProgress?: (info: { elapsedMs: number; entryCount: number }) => void,
+): Promise<string[]> {
+  return new Promise((resolve, reject) => {
+    const startedAt = Date.now();
+    const chunks: Buffer[] = [];
+    let stderr = "";
+    let entryCount = 0;
+    let settled = false;
+    const proc = spawn("tar", ["tzf", archive], { stdio: ["ignore", "pipe", "pipe"] });
+    const heartbeat = setInterval(() => {
+      onProgress?.({ elapsedMs: Date.now() - startedAt, entryCount });
+    }, 5000);
+    const timeout = setTimeout(() => {
+      if (settled) return;
+      proc.kill("SIGKILL");
+      reject(new Error(`tar list timed out after ${Math.round(ARCHIVE_LIST_TIMEOUT_MS / 1000)}s`));
+    }, ARCHIVE_LIST_TIMEOUT_MS);
+
+    proc.stdout?.on("data", (chunk: Buffer) => {
+      chunks.push(chunk);
+      const text = chunk.toString("utf-8");
+      entryCount += (text.match(/\n/g) || []).length;
+    });
+    proc.stderr?.on("data", (chunk: Buffer) => {
+      stderr += chunk.toString("utf-8");
+    });
+    proc.on("error", (err) => {
+      if (settled) return;
+      settled = true;
+      clearInterval(heartbeat);
+      clearTimeout(timeout);
+      reject(err);
+    });
+    proc.on("close", (code) => {
+      if (settled) return;
+      settled = true;
+      clearInterval(heartbeat);
+      clearTimeout(timeout);
+      onProgress?.({ elapsedMs: Date.now() - startedAt, entryCount });
+      if (code === 0) {
+        resolve(normalizeArchiveEntryList(Buffer.concat(chunks).toString("utf-8")));
+      } else {
+        reject(new Error(`tar list failed (code ${code ?? "unknown"}): ${stderr}`));
+      }
+    });
+  });
 }
 
 async function createBackupManifest(
@@ -1720,13 +1911,17 @@ async function createBackupManifest(
 
 async function validateBackupArchive(
   archive: string,
-  options: { expectedManifest?: BackupManifest; requireManifest?: boolean } = {},
+  options: {
+    expectedManifest?: BackupManifest;
+    requireManifest?: boolean;
+    onEntryProgress?: (info: { elapsedMs: number; entryCount: number }) => void;
+  } = {},
 ): Promise<BackupManifest | null> {
   if (!existsSync(archive)) throw new Error("备份文件不存在");
   const archiveSize = statSync(archive).size;
   if (archiveSize <= 0) throw new Error("备份文件为空");
 
-  const entries = listArchiveEntries(archive);
+  const entries = await listArchiveEntriesWithProgress(archive, options.onEntryProgress);
   if (entries.length === 0) throw new Error("备份归档内容为空");
   if (!archiveHasEntry(entries, BACKUP_DATABASE_ENTRY) && !archiveHasEntry(entries, "database.sql")) {
     throw new Error("备份包缺少数据库文件");
@@ -2052,7 +2247,7 @@ async function recoverDatabaseToCleanSchema() {
 }
 
 /** Rollback to the pre-restore safety snapshot. Falls back to clean schema if snapshot is unavailable. */
-async function rollbackToSafetySnapshot(snapshotPath: string | null, job: { logs?: string[] }) {
+async function rollbackToSafetySnapshot(snapshotPath: string | null, job: { id?: string; logs?: string[] }): Promise<boolean> {
   if (snapshotPath && existsSync(snapshotPath)) {
     try {
       addLog(job, "正在回滚到恢复前的安全快照...");
@@ -2061,14 +2256,33 @@ async function rollbackToSafetySnapshot(snapshotPath: string | null, job: { logs
       // Apply migrations in case the snapshot was from an older schema version
       try { runPrismaMigrations(DB_URL_CLEAN); } catch {}
       addLog(job, "已成功回滚到恢复前的数据库状态");
-      return;
+      return true;
     } catch (rollbackErr: any) {
-      addLog(job, `安全快照回滚失败: ${rollbackErr.message}，尝试恢复空 schema...`);
+      const preservedPath = preserveSafetySnapshot(snapshotPath, job);
+      const preservedMessage = preservedPath ? `；安全快照已保留: ${preservedPath}` : "";
+      addLog(job, `安全快照回滚失败: ${rollbackErr.message}${preservedMessage}，尝试恢复空 schema...`);
       console.error(`[Restore] Safety snapshot rollback failed: ${rollbackErr.message}`);
     }
+  } else {
+    addLog(job, "未找到可用安全快照，尝试恢复空 schema...");
   }
   // No snapshot or rollback failed — fall back to clean empty schema
   await recoverDatabaseToCleanSchema();
+  return false;
+}
+
+function preserveSafetySnapshot(snapshotPath: string | null, job: { id?: string; logs?: string[] }): string | null {
+  if (!snapshotPath || !existsSync(snapshotPath)) return null;
+  try {
+    mkdirSync(SAFETY_SNAPSHOT_DIR, { recursive: true });
+    const safeJobId = (job.id || "restore").replace(/[^a-zA-Z0-9_-]/g, "_");
+    const destination = join(SAFETY_SNAPSHOT_DIR, `${safeJobId}_${Date.now()}_safety_snapshot.sql`);
+    copyFileSync(snapshotPath, destination);
+    return destination;
+  } catch (err: any) {
+    addLog(job, `安全快照保留失败: ${err?.message || err}`);
+    return null;
+  }
 }
 
 interface RestoreStaticDirPlan {

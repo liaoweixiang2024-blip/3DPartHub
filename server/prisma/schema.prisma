@@ -35,8 +35,49 @@ model User {
   notifications   Notification[]
   inquiries       Inquiry[]
   inquiryMessages InquiryMessage[]
+  uploadedProductWallImages ProductWallImage[] @relation("ProductWallUploads")
+  reviewedProductWallImages ProductWallImage[] @relation("ProductWallReviews")
 
   @@map("users")
+}
+
+model ProductWallImage {
+  id              String   @id @default(uuid())
+  title           String
+  kind            String   @default("公司产品")
+  imageUrl        String   @map("image_url")
+  previewImageUrl String?  @map("preview_image_url")
+  ratio           String   @default("4 / 5")
+  tags            Json?
+  sortOrder       Int      @default(0) @map("sort_order")
+  status          String   @default("pending")
+  uploaderId      String?  @map("uploader_id")
+  uploader        User?    @relation("ProductWallUploads", fields: [uploaderId], references: [id], onDelete: SetNull)
+  uploaderName    String?  @map("uploader_name")
+  reviewedAt      DateTime? @map("reviewed_at")
+  reviewedById    String?  @map("reviewed_by_id")
+  reviewer        User?    @relation("ProductWallReviews", fields: [reviewedById], references: [id], onDelete: SetNull)
+  rejectReason    String?  @map("reject_reason")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  @@index([status])
+  @@index([kind])
+  @@index([sortOrder])
+  @@index([createdAt])
+  @@index([uploaderId])
+  @@map("product_wall_images")
+}
+
+model ProductWallCategory {
+  id        String   @id @default(uuid())
+  name      String   @unique
+  sortOrder Int      @default(0) @map("sort_order")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([sortOrder])
+  @@map("product_wall_categories")
 }
 
 enum Role {
@@ -316,6 +357,28 @@ model Setting {
   updatedAt DateTime @updatedAt @map("updated_at")
 
   @@map("settings")
+}
+
+model ThreadSizeEntry {
+  id        String   @id @default(uuid())
+  kind      String
+  family    String?
+  hoseKind  String?  @map("hose_kind")
+  primary   String
+  secondary String   @default("")
+  meta      String   @default("")
+  note      String   @default("")
+  data      Json?
+  sortOrder Int      @default(0) @map("sort_order")
+  enabled   Boolean  @default(true)
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([kind])
+  @@index([family])
+  @@index([hoseKind])
+  @@index([sortOrder])
+  @@map("thread_size_entries")
 }
 
 model ModelGroup {

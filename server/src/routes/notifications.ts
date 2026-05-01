@@ -1,10 +1,10 @@
 import { Router, Response } from "express";
 import { prisma } from "../lib/prisma.js";
+import { getBusinessConfig } from "../lib/businessConfig.js";
 import { authMiddleware, type AuthRequest } from "../middleware/auth.js";
 import { userWantsNotification } from "./auth.js";
 
 const router = Router();
-const MAX_NOTIFICATIONS_PAGE_SIZE = 100;
 
 // Get unread notification count
 router.get("/api/notifications/unread-count", authMiddleware, async (req: AuthRequest, res: Response) => {
@@ -23,8 +23,11 @@ router.get("/api/notifications/unread-count", authMiddleware, async (req: AuthRe
 router.get("/api/notifications", authMiddleware, async (req: AuthRequest, res: Response) => {
   try {
     if (!prisma) { res.json({ data: [] }); return; }
+    const { pageSizePolicy } = await getBusinessConfig();
+    const defaultPageSize = Math.max(1, Math.floor(Number(pageSizePolicy.notificationDefault) || 20));
+    const maxPageSize = Math.max(1, Math.floor(Number(pageSizePolicy.notificationMax) || 100));
     const page = Math.max(1, Number(req.query.page) || 1);
-    const pageSize = Math.min(MAX_NOTIFICATIONS_PAGE_SIZE, Math.max(1, Number(req.query.page_size) || 20));
+    const pageSize = Math.min(maxPageSize, Math.max(1, Number(req.query.page_size) || defaultPageSize));
     const where = { userId: req.user!.userId };
 
     const [total, notifications] = await Promise.all([

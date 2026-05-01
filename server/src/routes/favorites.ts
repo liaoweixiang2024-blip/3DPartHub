@@ -7,6 +7,7 @@ import archiver from "archiver";
 import { getPreviewAssetExtension, withAssetVersion } from "../services/gltfAsset.js";
 import { resolveDbModelDownloadTarget } from "../services/modelDownloadTarget.js";
 import { getSetting } from "../lib/settings.js";
+import { getBusinessConfig } from "../lib/businessConfig.js";
 import { DailyDownloadLimitError, recordModelDownload } from "../services/modelDownloadRecorder.js";
 
 const router = Router();
@@ -122,8 +123,10 @@ router.post("/api/favorites/batch-download", authMiddleware, async (req: AuthReq
     res.status(400).json({ detail: "请选择要下载的模型" });
     return;
   }
-  if (uniqueModelIds.length > 100) {
-    res.status(400).json({ detail: "单次最多下载 100 个模型" });
+  const { pageSizePolicy } = await getBusinessConfig();
+  const batchMax = Math.max(1, Math.floor(Number(pageSizePolicy.userBatchDownloadMax) || 100));
+  if (uniqueModelIds.length > batchMax) {
+    res.status(400).json({ detail: `单次最多下载 ${batchMax} 个模型` });
     return;
   }
 

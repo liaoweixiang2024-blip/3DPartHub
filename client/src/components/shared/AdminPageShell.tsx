@@ -1,5 +1,7 @@
 import { lazy, Suspense, useState, type ReactNode } from "react";
+import useSWR from "swr";
 import { useMediaQuery } from "../../layouts/hooks/useMediaQuery";
+import { getCachedPublicSettings, getFooterCopyright, getSiteTitle } from "../../lib/publicSettings";
 import TopNav from "./TopNav";
 import BottomNav from "./BottomNav";
 import AppSidebar from "./Sidebar";
@@ -13,6 +15,22 @@ interface AdminPageShellProps {
   mobileMainClassName?: string;
   mobileContentClassName?: string;
   hideMobileBottomNav?: boolean;
+}
+
+function AdminCopyrightBadge() {
+  const { data: settings } = useSWR("publicSettings", () => getCachedPublicSettings());
+  const text = (settings?.footer_copyright as string | undefined)?.trim()
+    || getFooterCopyright()
+    || `\u00a9 ${new Date().getFullYear()} ${getSiteTitle()}. All rights reserved.`;
+  const year = new Date().getFullYear();
+
+  return (
+    <div className="pointer-events-none fixed bottom-3 right-5 z-20 hidden max-w-[min(46vw,560px)] items-center gap-2 text-[11px] font-medium text-on-surface-variant/45 md:flex">
+      <span className="h-px w-8 bg-gradient-to-r from-transparent to-outline-variant/35" />
+      <span className="max-w-[min(38vw,480px)] truncate">{text}</span>
+      {!text.includes(String(year)) ? <span className="tabular-nums text-on-surface-variant/35">{year}</span> : null}
+    </div>
+  );
 }
 
 export function AdminPageShell({
@@ -34,6 +52,7 @@ export function AdminPageShell({
           <main className={mergeClassName("flex flex-1 flex-col overflow-y-auto bg-surface-dim p-8 custom-scrollbar", desktopContentClassName)}>
             {children}
           </main>
+          <AdminCopyrightBadge />
         </div>
       </div>
     );

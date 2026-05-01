@@ -14,7 +14,9 @@ const router = Router();
 
 const CHUNKS_DIR = join(config.uploadDir, "chunks");
 const UPLOAD_ROOT = resolve(process.cwd(), config.uploadDir);
-const MAX_UPLOAD_CHUNKS = 10_000;
+const MAX_UPLOAD_CHUNKS = 20_000;
+const MAX_BACKUP_UPLOAD_BYTES = 100 * 1024 * 1024 * 1024;
+const COMPLETED_BACKUP_UPLOAD_TTL_MS = 24 * 60 * 60 * 1000;
 mkdirSync(CHUNKS_DIR, { recursive: true });
 
 function normalizeUploadFileName(fileName: unknown): string | null {
@@ -31,13 +33,43 @@ function resolveUploadPath(fileName: string): string | null {
   return null;
 }
 
+function isBackupArchiveName(fileName: string): boolean {
+  const lower = fileName.toLowerCase();
+  return lower.endsWith(".tar.gz") || lower.endsWith(".tgz");
+}
+
+function isCompletedBackupUploadName(fileName: string): boolean {
+  return /^[0-9a-f-]{16}_.+\.(?:tar\.gz|tgz)$/i.test(fileName);
+}
+
+function cleanupCompletedBackupUploads() {
+  const now = Date.now();
+  try {
+    if (!existsSync(UPLOAD_ROOT)) return;
+    for (const entry of readdirSync(UPLOAD_ROOT, { withFileTypes: true })) {
+      if (!entry.isFile() || !isCompletedBackupUploadName(entry.name)) continue;
+      const fullPath = join(UPLOAD_ROOT, entry.name);
+      const ageMs = now - statSync(fullPath).mtime.getTime();
+      if (ageMs <= COMPLETED_BACKUP_UPLOAD_TTL_MS) continue;
+      rmSync(fullPath, { force: true });
+      console.log(`[Upload] Cleaned unclaimed backup upload: ${entry.name}`);
+    }
+  } catch (err: any) {
+    console.warn(`[Upload] Failed to clean completed backup uploads: ${err?.message || err}`);
+  }
+}
+
 // Clean up expired sessions on startup and every 30 minutes
 cleanupExpiredSessions(CHUNKS_DIR);
-setInterval(() => cleanupExpiredSessions(CHUNKS_DIR), 30 * 60 * 1000);
+cleanupCompletedBackupUploads();
+setInterval(() => {
+  cleanupExpiredSessions(CHUNKS_DIR);
+  cleanupCompletedBackupUploads();
+}, 30 * 60 * 1000);
 
 // Initialize chunked upload
 router.post("/api/upload/init", authMiddleware, requireRole("ADMIN"), async (req: AuthRequest, res: Response) => {
-  const { fileName, fileSize, totalChunks } = req.body;
+  const { fileName, fileSize, totalChunks, purpose } = req.body;
 
   const normalizedFileSize = Number(fileSize);
   const normalizedTotalChunks = Number(totalChunks);
@@ -49,6 +81,36 @@ router.post("/api/upload/init", authMiddleware, requireRole("ADMIN"), async (req
   }
   if (normalizedFileSize <= 0 || normalizedTotalChunks <= 0 || normalizedTotalChunks > MAX_UPLOAD_CHUNKS) {
     res.status(400).json({ detail: "文件参数无效" });
+    return;
+  }
+  if (purpose === "backup") {
+    if (!isBackupArchiveName(safeFileName)) {
+      res.status(400).json({ detail: "备份文件只支持 .tar.gz / .tgz 格式" });
+      return;
+    }
+    if (normalizedFileSize > MAX_BACKUP_UPLOAD_BYTES) {
+      res.status(400).json({ detail: "备份文件过大，最大支持 100GB" });
+      return;
+    }
+    const uploadId = randomUUID().slice(0, 16);
+    const chunkSize = Math.ceil(normalizedFileSize / normalizedTotalChunks);
+
+    saveUploadSession(uploadId, {
+      fileName: safeFileName,
+      fileSize: normalizedFileSize,
+      totalChunks: normalizedTotalChunks,
+      chunkSize,
+      userId: req.user!.userId,
+      createdAt: Date.now(),
+      purpose: "backup",
+    });
+
+    mkdirSync(join(CHUNKS_DIR, uploadId), { recursive: true });
+
+    res.json({
+      uploadId,
+      chunkSize,
+    });
     return;
   }
   const { uploadPolicy } = await getBusinessConfig();
@@ -73,6 +135,7 @@ router.post("/api/upload/init", authMiddleware, requireRole("ADMIN"), async (req
     chunkSize,
     userId: req.user!.userId,
     createdAt: Date.now(),
+    purpose: "model",
   });
 
   mkdirSync(join(CHUNKS_DIR, uploadId), { recursive: true });
@@ -110,6 +173,7 @@ router.put("/api/upload/chunk", authMiddleware, requireRole("ADMIN"), async (req
     res.status(403).json({ detail: "无权操作" });
     return;
   }
+  saveUploadSession(uploadId, { ...session, createdAt: Date.now() });
 
   if (ci >= session.totalChunks) {
     res.status(400).json({ detail: "分片索引越界" });

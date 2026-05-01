@@ -5,6 +5,7 @@ import Icon from '../components/shared/Icon';
 import SafeImage from '../components/shared/SafeImage';
 import { AdminPageShell } from "../components/shared/AdminPageShell";
 import { AdminContentPanel, AdminManagementPage } from "../components/shared/AdminManagementPage";
+import ResponsiveSectionTabs from '../components/shared/ResponsiveSectionTabs';
 import { useToast } from '../components/shared/Toast';
 import { getSettings, updateSettings, uploadImage, sendTestEmail, getBackupStats, getBackupHealth, checkBackupPolicy, startVerifyBackupJob, pollVerifyBackupProgress, getActiveBackupJob, getActiveRestoreJob, getActiveImportSaveJob, getActiveVerifyBackupJob, startBackupJob, pollBackupProgress, downloadBackup, renameBackup, deleteBackup, startRestore, pollRestoreProgress, listBackups, importBackup, importBackupAsRecord, pollImportSaveProgress, listServerBackupFiles, importBackupFromPath, type ServerBackupFile, checkUpdate, getVersion, type SystemSettings, type BackupStats, type BackupRecord, type BackupHealth, type BackupPolicyCheck } from '../api/settings';
 import { COLOR_PRESETS, COLOR_KEYS } from '../lib/colorSchemes';
@@ -26,6 +27,11 @@ import {
   type TicketClassificationConfig,
   type UploadPolicy,
 } from '../lib/businessConfig';
+import {
+  DEFAULT_PRIVACY_SECTIONS,
+  DEFAULT_TERMS_SECTIONS,
+  type LegalSection,
+} from '../lib/legalContent';
 // Note: pollBackupProgress is used by handleExport
 
 const DEFAULT_SETTINGS: SystemSettings = {
@@ -49,6 +55,10 @@ const DEFAULT_SETTINGS: SystemSettings = {
   contact_address: "",
   footer_links: "",
   footer_copyright: "",
+  legal_privacy_updated_at: "2026 年 4 月",
+  legal_terms_updated_at: "2026 年 4 月",
+  legal_privacy_sections: JSON.stringify(DEFAULT_PRIVACY_SECTIONS, null, 2),
+  legal_terms_sections: JSON.stringify(DEFAULT_TERMS_SECTIONS, null, 2),
   announcement_enabled: false,
   announcement_text: "",
   announcement_type: "info",
@@ -98,6 +108,16 @@ const DEFAULT_SETTINGS: SystemSettings = {
   viewer_fill_light_intensity: 0.6,
   viewer_hemisphere_intensity: 0.3,
   viewer_bg_color: "linear-gradient(180deg, #2a2a3e 0%, #1e2a42 50%, #162040 100%)",
+  viewer_edge_threshold_angle: 28,
+  viewer_edge_vertex_limit: 700000,
+  viewer_measure_default_unit: "auto",
+  viewer_measure_record_limit: 12,
+  security_email_code_cooldown_seconds: 60,
+  security_email_code_ttl_seconds: 600,
+  security_captcha_ttl_seconds: 300,
+  security_password_min_length: 8,
+  security_username_min_length: 2,
+  security_username_max_length: 32,
   share_default_expire_days: 0,
   share_max_expire_days: 0,
   share_default_download_limit: 0,
@@ -120,9 +140,27 @@ const DEFAULT_SETTINGS: SystemSettings = {
   page_size_policy: JSON.stringify({
     selectionDefault: 50,
     selectionMax: 50000,
+    homeDefault: 60,
+    homeMax: 10000,
+    homeOption1: 30,
+    homeOption2: 60,
+    homeOption3: 120,
+    homeOption4: 180,
+    selectionAdminRenderBatch: 120,
+    selectionGeneratePreviewPageSize: 50,
     inquiryAdminDefault: 20,
     inquiryAdminMax: 100,
     ticketListMax: 50,
+    notificationDefault: 20,
+    notificationMax: 100,
+    adminUserDefault: 20,
+    adminUserMax: 100,
+    shareAdminDefault: 20,
+    shareAdminMax: 100,
+    auditDefault: 50,
+    auditMax: 100,
+    userBatchDownloadMax: 100,
+    adminBatchDownloadMax: 50,
   }, null, 2),
   anti_proxy_enabled: false,
   allowed_hosts: "",
@@ -214,6 +252,16 @@ const GROUPS: SettingGroup[] = [
     ],
   },
   {
+    title: '法律条款',
+    icon: 'shield',
+    items: [
+      { key: 'legal_privacy_updated_at', label: '隐私声明更新时间', desc: '显示在隐私声明标题下方，如：2026 年 4 月', type: 'text' },
+      { key: 'legal_privacy_sections', label: '隐私声明正文', desc: '维护 /legal/privacy 页面的正式条款章节，前台按书面文档格式展示', type: 'textarea' },
+      { key: 'legal_terms_updated_at', label: '用户协议更新时间', desc: '显示在用户协议标题下方，如：2026 年 4 月', type: 'text' },
+      { key: 'legal_terms_sections', label: '用户协议正文', desc: '维护 /legal/terms 页面的正式协议章节，适合放账号、权限、资料使用等规则', type: 'textarea' },
+    ],
+  },
+  {
     title: '系统公告',
     icon: 'campaign',
     items: [
@@ -295,6 +343,33 @@ const GROUPS: SettingGroup[] = [
     ],
   },
   {
+    title: '3D预览',
+    icon: 'view_in_ar',
+    items: [
+      { key: 'viewer_edge_threshold_angle', label: '边线角度', desc: '数值越小边线越多，模型更清晰但更耗性能', type: 'number', min: 1, max: 89 },
+      { key: 'viewer_edge_vertex_limit', label: '边线顶点上限', desc: '顶点超过该数量时跳过边线叠加，0 表示不限制', type: 'number', min: 0, max: 5000000 },
+      { key: 'viewer_measure_default_unit', label: '测量默认单位', desc: '测量工具打开时默认使用的单位', type: 'select', options: [
+        { value: 'auto', label: '自动' },
+        { value: 'mm', label: '毫米 mm' },
+        { value: 'cm', label: '厘米 cm' },
+        { value: 'm', label: '米 m' },
+      ] },
+      { key: 'viewer_measure_record_limit', label: '测量记录数量', desc: '测量面板最多保留最近多少条记录', type: 'number', min: 1, max: 100 },
+    ],
+  },
+  {
+    title: '账号安全',
+    icon: 'shield',
+    items: [
+      { key: 'security_email_code_cooldown_seconds', label: '邮箱验证码间隔', desc: '同一邮箱两次发送验证码的最小间隔，单位秒', type: 'number', min: 10, max: 3600 },
+      { key: 'security_email_code_ttl_seconds', label: '邮箱验证码有效期', desc: '邮箱验证码过期时间，单位秒', type: 'number', min: 60, max: 86400 },
+      { key: 'security_captcha_ttl_seconds', label: '图形验证码有效期', desc: '图形验证码过期时间，单位秒', type: 'number', min: 60, max: 3600 },
+      { key: 'security_password_min_length', label: '注册密码最小长度', desc: '新用户注册时密码最少位数', type: 'number', min: 6, max: 64 },
+      { key: 'security_username_min_length', label: '用户名最小长度', desc: '注册用户名允许的最小长度', type: 'number', min: 1, max: 32 },
+      { key: 'security_username_max_length', label: '用户名最大长度', desc: '注册用户名允许的最大长度', type: 'number', min: 1, max: 64 },
+    ],
+  },
+  {
     title: '选型设置',
     icon: 'checklist',
     items: [
@@ -324,11 +399,17 @@ const GROUPS: SettingGroup[] = [
     ],
   },
   {
-    title: '上传策略',
+    title: '上传与导入',
     icon: 'upload_file',
     items: [
-      { key: 'upload_policy', label: '上传策略', desc: '配置模型、选项图片和工单附件的格式与大小限制', type: 'textarea' },
-      { key: 'page_size_policy', label: '分页策略', desc: '配置选型、询价和工单列表的默认分页与上限', type: 'textarea' },
+      { key: 'upload_policy', label: '文件上传与导入限制', desc: '配置模型上传、选型图片、选型 Excel 导入、产品影像上传和工单附件限制', type: 'textarea' },
+    ],
+  },
+  {
+    title: '分页与批量',
+    icon: 'checklist',
+    items: [
+      { key: 'page_size_policy', label: '列表分页与批量上限', desc: '配置选型、通知、用户、分享、日志等列表分页，以及用户/后台批量下载数量', type: 'textarea' },
     ],
   },
   {
@@ -596,9 +677,27 @@ type EmailTemplateConfig = {
 type PageSizePolicy = {
   selectionDefault: number;
   selectionMax: number;
+  homeDefault: number;
+  homeMax: number;
+  homeOption1: number;
+  homeOption2: number;
+  homeOption3: number;
+  homeOption4: number;
+  selectionAdminRenderBatch: number;
+  selectionGeneratePreviewPageSize: number;
   inquiryAdminDefault: number;
   inquiryAdminMax: number;
   ticketListMax: number;
+  notificationDefault: number;
+  notificationMax: number;
+  adminUserDefault: number;
+  adminUserMax: number;
+  shareAdminDefault: number;
+  shareAdminMax: number;
+  auditDefault: number;
+  auditMax: number;
+  userBatchDownloadMax: number;
+  adminBatchDownloadMax: number;
 };
 
 const emailShellStart = `<div style="max-width:560px;margin:0 auto;background:#ffffff;font-family:Arial,'Microsoft YaHei',sans-serif;color:#1f2937;">
@@ -697,13 +796,33 @@ ${emailShellEnd}`,
 const DEFAULT_PAGE_SIZE_POLICY: PageSizePolicy = {
   selectionDefault: 50,
   selectionMax: 50000,
+  homeDefault: 60,
+  homeMax: 10000,
+  homeOption1: 30,
+  homeOption2: 60,
+  homeOption3: 120,
+  homeOption4: 180,
+  selectionAdminRenderBatch: 120,
+  selectionGeneratePreviewPageSize: 50,
   inquiryAdminDefault: 20,
   inquiryAdminMax: 100,
   ticketListMax: 50,
+  notificationDefault: 20,
+  notificationMax: 100,
+  adminUserDefault: 20,
+  adminUserMax: 100,
+  shareAdminDefault: 20,
+  shareAdminMax: 100,
+  auditDefault: 50,
+  auditMax: 100,
+  userBatchDownloadMax: 100,
+  adminBatchDownloadMax: 50,
 };
 
 const STRUCTURED_SETTING_KEYS = new Set<keyof SystemSettings>([
   'footer_links',
+  'legal_privacy_sections',
+  'legal_terms_sections',
   'selection_thread_priority',
   'inquiry_statuses',
   'ticket_statuses',
@@ -742,6 +861,129 @@ function parseCsv(value: string | string[] | undefined) {
 function toNumber(value: unknown, fallback = 0) {
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : fallback;
+}
+
+function clampNumber(value: unknown, fallback: number, min: number, max = Number.MAX_SAFE_INTEGER) {
+  const parsed = toNumber(value, fallback);
+  return Math.min(max, Math.max(min, parsed));
+}
+
+function numberSettingUnit(key: keyof SystemSettings) {
+  if (key.includes("_seconds")) return "秒";
+  if (key.includes("_days")) return "天";
+  if (key.includes("_hour")) return "点";
+  if (key.includes("_limit") || key.includes("_count")) return key === "daily_download_limit" ? "次/天" : "个";
+  if (key.includes("_length")) return "位";
+  if (key === "viewer_edge_threshold_angle") return "度";
+  if (key === "viewer_edge_vertex_limit") return "顶点";
+  if (key === "smtp_port") return "端口";
+  return "";
+}
+
+function normalizePageSizePolicyForSave(value: unknown) {
+  const policy = { ...DEFAULT_PAGE_SIZE_POLICY, ...parseSetting<Partial<PageSizePolicy>>(value, {}) };
+  const homeOptions = [policy.homeOption1, policy.homeOption2, policy.homeOption3, policy.homeOption4]
+    .map((item, index) => clampNumber(item, [30, 60, 120, 180][index] || 60, 1, 100000))
+    .sort((a, b) => a - b);
+  const normalized: PageSizePolicy = {
+    ...policy,
+    homeDefault: clampNumber(policy.homeDefault, DEFAULT_PAGE_SIZE_POLICY.homeDefault, 1, 100000),
+    homeMax: clampNumber(policy.homeMax, DEFAULT_PAGE_SIZE_POLICY.homeMax, 1, 100000),
+    homeOption1: homeOptions[0],
+    homeOption2: homeOptions[1],
+    homeOption3: homeOptions[2],
+    homeOption4: homeOptions[3],
+    selectionDefault: clampNumber(policy.selectionDefault, DEFAULT_PAGE_SIZE_POLICY.selectionDefault, 1, 100000),
+    selectionMax: clampNumber(policy.selectionMax, DEFAULT_PAGE_SIZE_POLICY.selectionMax, 1, 100000),
+    selectionAdminRenderBatch: clampNumber(policy.selectionAdminRenderBatch, DEFAULT_PAGE_SIZE_POLICY.selectionAdminRenderBatch, 20, 5000),
+    selectionGeneratePreviewPageSize: clampNumber(policy.selectionGeneratePreviewPageSize, DEFAULT_PAGE_SIZE_POLICY.selectionGeneratePreviewPageSize, 1, 5000),
+    inquiryAdminDefault: clampNumber(policy.inquiryAdminDefault, DEFAULT_PAGE_SIZE_POLICY.inquiryAdminDefault, 1, 1000),
+    inquiryAdminMax: clampNumber(policy.inquiryAdminMax, DEFAULT_PAGE_SIZE_POLICY.inquiryAdminMax, 1, 5000),
+    ticketListMax: clampNumber(policy.ticketListMax, DEFAULT_PAGE_SIZE_POLICY.ticketListMax, 1, 5000),
+    notificationDefault: clampNumber(policy.notificationDefault, DEFAULT_PAGE_SIZE_POLICY.notificationDefault, 1, 1000),
+    notificationMax: clampNumber(policy.notificationMax, DEFAULT_PAGE_SIZE_POLICY.notificationMax, 1, 5000),
+    adminUserDefault: clampNumber(policy.adminUserDefault, DEFAULT_PAGE_SIZE_POLICY.adminUserDefault, 1, 1000),
+    adminUserMax: clampNumber(policy.adminUserMax, DEFAULT_PAGE_SIZE_POLICY.adminUserMax, 1, 5000),
+    shareAdminDefault: clampNumber(policy.shareAdminDefault, DEFAULT_PAGE_SIZE_POLICY.shareAdminDefault, 1, 1000),
+    shareAdminMax: clampNumber(policy.shareAdminMax, DEFAULT_PAGE_SIZE_POLICY.shareAdminMax, 1, 5000),
+    auditDefault: clampNumber(policy.auditDefault, DEFAULT_PAGE_SIZE_POLICY.auditDefault, 1, 1000),
+    auditMax: clampNumber(policy.auditMax, DEFAULT_PAGE_SIZE_POLICY.auditMax, 1, 5000),
+    userBatchDownloadMax: clampNumber(policy.userBatchDownloadMax, DEFAULT_PAGE_SIZE_POLICY.userBatchDownloadMax, 1, 5000),
+    adminBatchDownloadMax: clampNumber(policy.adminBatchDownloadMax, DEFAULT_PAGE_SIZE_POLICY.adminBatchDownloadMax, 1, 5000),
+  };
+  normalized.homeMax = Math.max(normalized.homeMax, normalized.homeDefault, normalized.homeOption4);
+  normalized.selectionMax = Math.max(normalized.selectionMax, normalized.selectionDefault);
+  normalized.inquiryAdminMax = Math.max(normalized.inquiryAdminMax, normalized.inquiryAdminDefault);
+  normalized.notificationMax = Math.max(normalized.notificationMax, normalized.notificationDefault);
+  normalized.adminUserMax = Math.max(normalized.adminUserMax, normalized.adminUserDefault);
+  normalized.shareAdminMax = Math.max(normalized.shareAdminMax, normalized.shareAdminDefault);
+  normalized.auditMax = Math.max(normalized.auditMax, normalized.auditDefault);
+  return normalized;
+}
+
+function normalizeUploadPolicyForSave(value: unknown) {
+  const policy = { ...DEFAULT_UPLOAD_POLICY, ...parseSetting<Partial<UploadPolicy>>(value, {}) };
+  return {
+    ...policy,
+    modelFormats: Array.from(new Set(parseCsv(policy.modelFormats).map((item) => item.toLowerCase()))),
+    modelMaxSizeMb: clampNumber(policy.modelMaxSizeMb, DEFAULT_UPLOAD_POLICY.modelMaxSizeMb, 1, 102400),
+    chunkSizeMb: clampNumber(policy.chunkSizeMb, DEFAULT_UPLOAD_POLICY.chunkSizeMb, 1, 1024),
+    chunkThresholdMb: clampNumber(policy.chunkThresholdMb, DEFAULT_UPLOAD_POLICY.chunkThresholdMb, 1, 102400),
+    optionImageMaxSizeMb: clampNumber(policy.optionImageMaxSizeMb, DEFAULT_UPLOAD_POLICY.optionImageMaxSizeMb, 1, 100),
+    selectionImportMaxSizeMb: clampNumber(policy.selectionImportMaxSizeMb, DEFAULT_UPLOAD_POLICY.selectionImportMaxSizeMb, 1, 100),
+    selectionImportMaxRows: clampNumber(policy.selectionImportMaxRows, DEFAULT_UPLOAD_POLICY.selectionImportMaxRows, 1, 200000),
+    selectionImportMaxColumns: clampNumber(policy.selectionImportMaxColumns, DEFAULT_UPLOAD_POLICY.selectionImportMaxColumns, 1, 1000),
+    productWallImageMaxSizeMb: clampNumber(policy.productWallImageMaxSizeMb, DEFAULT_UPLOAD_POLICY.productWallImageMaxSizeMb, 1, 50),
+    productWallUploadMaxFiles: clampNumber(policy.productWallUploadMaxFiles, DEFAULT_UPLOAD_POLICY.productWallUploadMaxFiles, 1, 50),
+    ticketAttachmentMaxSizeMb: clampNumber(policy.ticketAttachmentMaxSizeMb, DEFAULT_UPLOAD_POLICY.ticketAttachmentMaxSizeMb, 1, 100),
+    ticketAttachmentExts: parseCsv(policy.ticketAttachmentExts).map((item) => item.startsWith(".") ? item : `.${item}`),
+  };
+}
+
+function parseEditableLegalSections(value: unknown, fallback: LegalSection[]) {
+  const source = typeof value === 'string'
+    ? (() => {
+      try { return JSON.parse(value); } catch { return null; }
+    })()
+    : value;
+  if (!Array.isArray(source)) return fallback;
+  const rows = source.map((item) => {
+    const section = item && typeof item === 'object' ? item as Partial<LegalSection> : {};
+    return {
+      title: typeof section.title === 'string' ? section.title : '',
+      content: typeof section.content === 'string' ? section.content : '',
+    };
+  });
+  return rows.length > 0 ? rows : fallback;
+}
+
+function normalizeLegalSectionsForSave(value: unknown, fallback: LegalSection[]) {
+  const sections = parseEditableLegalSections(value, fallback)
+    .map((section) => ({ title: section.title.trim(), content: section.content.trim() }))
+    .filter((section) => section.title && section.content);
+  return sections.length > 0 ? sections : fallback;
+}
+
+function normalizeSettingsForSave(settings: SystemSettings): SystemSettings {
+  const usernameMin = clampNumber(settings.security_username_min_length, 2, 1, 64);
+  const usernameMax = Math.max(usernameMin, clampNumber(settings.security_username_max_length, 32, 1, 64));
+  return {
+    ...settings,
+    viewer_edge_threshold_angle: clampNumber(settings.viewer_edge_threshold_angle, 28, 1, 89),
+    viewer_edge_vertex_limit: clampNumber(settings.viewer_edge_vertex_limit, 700000, 0, 5000000),
+    viewer_measure_record_limit: clampNumber(settings.viewer_measure_record_limit, 12, 1, 100),
+    viewer_measure_default_unit: ["auto", "mm", "cm", "m"].includes(settings.viewer_measure_default_unit) ? settings.viewer_measure_default_unit : "auto",
+    security_email_code_cooldown_seconds: clampNumber(settings.security_email_code_cooldown_seconds, 60, 10, 3600),
+    security_email_code_ttl_seconds: clampNumber(settings.security_email_code_ttl_seconds, 600, 60, 86400),
+    security_captcha_ttl_seconds: clampNumber(settings.security_captcha_ttl_seconds, 300, 60, 3600),
+    security_password_min_length: clampNumber(settings.security_password_min_length, 8, 6, 64),
+    security_username_min_length: usernameMin,
+    security_username_max_length: usernameMax,
+    legal_privacy_sections: JSON.stringify(normalizeLegalSectionsForSave(settings.legal_privacy_sections, DEFAULT_PRIVACY_SECTIONS), null, 2),
+    legal_terms_sections: JSON.stringify(normalizeLegalSectionsForSave(settings.legal_terms_sections, DEFAULT_TERMS_SECTIONS), null, 2),
+    upload_policy: JSON.stringify(normalizeUploadPolicyForSave(settings.upload_policy), null, 2),
+    page_size_policy: JSON.stringify(normalizePageSizePolicyForSave(settings.page_size_policy), null, 2),
+  };
 }
 
 function ListActions({ index, total, onMove, onDelete }: {
@@ -918,7 +1160,14 @@ function UploadPolicyEditor({ settings, updateSetting }: { settings: SystemSetti
   const update = (changes: Partial<UploadPolicy>) => setJsonSetting(updateSetting, 'upload_policy', { ...policy, ...changes });
 
   return (
-    <div className={`grid grid-cols-1 lg:grid-cols-2 gap-3 w-full max-w-4xl ${compactPanelClass}`}>
+    <div className={`w-full max-w-4xl ${compactPanelClass}`}>
+      <div className="mb-3 flex flex-wrap items-center gap-2 text-[11px] text-on-surface-variant">
+        <span className="rounded-full bg-primary-container/10 px-2 py-1 text-primary-container">模型上传</span>
+        <span className="rounded-full bg-primary-container/10 px-2 py-1 text-primary-container">选型导入</span>
+        <span className="rounded-full bg-primary-container/10 px-2 py-1 text-primary-container">产品影像</span>
+        <span className="rounded-full bg-primary-container/10 px-2 py-1 text-primary-container">工单附件</span>
+      </div>
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
       <label className="space-y-1">
         <span className="text-xs text-on-surface-variant">模型格式</span>
         <input value={policy.modelFormats.join(', ')} onChange={(e) => update({ modelFormats: parseCsv(e.target.value) })} placeholder="step, stp, x_t, xt" className={inputClass} />
@@ -944,6 +1193,26 @@ function UploadPolicyEditor({ settings, updateSetting }: { settings: SystemSetti
         <input value={policy.optionImageMimePattern} onChange={(e) => update({ optionImageMimePattern: e.target.value })} placeholder="image\\/(png|jpe?g|gif|webp)" className={inputClass} />
       </label>
       <label className="space-y-1">
+        <span className="text-xs text-on-surface-variant">选型导入文件上限 MB</span>
+        <input type="number" min={1} value={policy.selectionImportMaxSizeMb} onChange={(e) => update({ selectionImportMaxSizeMb: toNumber(e.target.value, policy.selectionImportMaxSizeMb) })} className={numberInputClass} />
+      </label>
+      <label className="space-y-1">
+        <span className="text-xs text-on-surface-variant">选型单次导入行数</span>
+        <input type="number" min={1} value={policy.selectionImportMaxRows} onChange={(e) => update({ selectionImportMaxRows: toNumber(e.target.value, policy.selectionImportMaxRows) })} className={numberInputClass} />
+      </label>
+      <label className="space-y-1">
+        <span className="text-xs text-on-surface-variant">选型导入列数上限</span>
+        <input type="number" min={1} value={policy.selectionImportMaxColumns} onChange={(e) => update({ selectionImportMaxColumns: toNumber(e.target.value, policy.selectionImportMaxColumns) })} className={numberInputClass} />
+      </label>
+      <label className="space-y-1">
+        <span className="text-xs text-on-surface-variant">产品墙单图上限 MB</span>
+        <input type="number" min={1} value={policy.productWallImageMaxSizeMb} onChange={(e) => update({ productWallImageMaxSizeMb: toNumber(e.target.value, policy.productWallImageMaxSizeMb) })} className={numberInputClass} />
+      </label>
+      <label className="space-y-1">
+        <span className="text-xs text-on-surface-variant">产品墙单次上传张数</span>
+        <input type="number" min={1} value={policy.productWallUploadMaxFiles} onChange={(e) => update({ productWallUploadMaxFiles: toNumber(e.target.value, policy.productWallUploadMaxFiles) })} className={numberInputClass} />
+      </label>
+      <label className="space-y-1">
         <span className="text-xs text-on-surface-variant">工单附件上限 MB</span>
         <input type="number" min={1} value={policy.ticketAttachmentMaxSizeMb} onChange={(e) => update({ ticketAttachmentMaxSizeMb: toNumber(e.target.value, policy.ticketAttachmentMaxSizeMb) })} className={numberInputClass} />
       </label>
@@ -951,6 +1220,7 @@ function UploadPolicyEditor({ settings, updateSetting }: { settings: SystemSetti
         <span className="text-xs text-on-surface-variant">工单附件格式</span>
         <input value={policy.ticketAttachmentExts.join(', ')} onChange={(e) => update({ ticketAttachmentExts: parseCsv(e.target.value) })} placeholder=".jpg, .png, .webp" className={inputClass} />
       </label>
+      </div>
     </div>
   );
 }
@@ -959,21 +1229,47 @@ function PageSizePolicyEditor({ settings, updateSetting }: { settings: SystemSet
   const policy = { ...DEFAULT_PAGE_SIZE_POLICY, ...parseSetting<Partial<PageSizePolicy>>(settings.page_size_policy, {}) };
   const update = (key: keyof PageSizePolicy, value: number) => setJsonSetting(updateSetting, 'page_size_policy', { ...policy, [key]: value });
   const fields: { key: keyof PageSizePolicy; label: string }[] = [
+    { key: 'homeDefault', label: '首页默认条数' },
+    { key: 'homeMax', label: '首页接口最大条数' },
+    { key: 'homeOption1', label: '首页分页选项 1' },
+    { key: 'homeOption2', label: '首页分页选项 2' },
+    { key: 'homeOption3', label: '首页分页选项 3' },
+    { key: 'homeOption4', label: '首页分页选项 4' },
     { key: 'selectionDefault', label: '选型默认条数' },
     { key: 'selectionMax', label: '选型最大条数' },
+    { key: 'selectionAdminRenderBatch', label: '选型后台加载批次' },
+    { key: 'selectionGeneratePreviewPageSize', label: '选型生成预览条数' },
     { key: 'inquiryAdminDefault', label: '询价后台默认条数' },
     { key: 'inquiryAdminMax', label: '询价后台最大条数' },
     { key: 'ticketListMax', label: '工单列表最大条数' },
+    { key: 'notificationDefault', label: '通知默认条数' },
+    { key: 'notificationMax', label: '通知最大条数' },
+    { key: 'adminUserDefault', label: '用户后台默认条数' },
+    { key: 'adminUserMax', label: '用户后台最大条数' },
+    { key: 'shareAdminDefault', label: '分享后台默认条数' },
+    { key: 'shareAdminMax', label: '分享后台最大条数' },
+    { key: 'auditDefault', label: '日志默认条数' },
+    { key: 'auditMax', label: '日志最大条数' },
+    { key: 'userBatchDownloadMax', label: '用户批量下载上限' },
+    { key: 'adminBatchDownloadMax', label: '后台批量下载上限' },
   ];
 
   return (
-    <div className={`grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3 w-full max-w-4xl ${compactPanelClass}`}>
+    <div className={`w-full max-w-4xl ${compactPanelClass}`}>
+      <div className="mb-3 flex flex-wrap items-center gap-2 text-[11px] text-on-surface-variant">
+        <span className="rounded-full bg-primary-container/10 px-2 py-1 text-primary-container">选型后台</span>
+        <span className="rounded-full bg-primary-container/10 px-2 py-1 text-primary-container">通知/用户/分享</span>
+        <span className="rounded-full bg-primary-container/10 px-2 py-1 text-primary-container">操作日志</span>
+        <span className="rounded-full bg-primary-container/10 px-2 py-1 text-primary-container">批量下载</span>
+      </div>
+      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">
       {fields.map(field => (
         <label key={field.key} className="space-y-1">
           <span className="text-xs text-on-surface-variant">{field.label}</span>
           <input type="number" min={1} value={policy[field.key]} onChange={(e) => update(field.key, toNumber(e.target.value, policy[field.key]))} className={numberInputClass} />
         </label>
       ))}
+      </div>
     </div>
   );
 }
@@ -1017,6 +1313,119 @@ function FooterLinksEditor({ settings, updateSetting }: { settings: SystemSettin
         </div>
       ))}
       <AddRowButton label="添加页脚链接" onClick={() => update([...links, { label: '', url: '' }])} />
+    </div>
+  );
+}
+
+function LegalSectionsEditor({ itemKey, settings, updateSetting, fallback }: {
+  itemKey: 'legal_privacy_sections' | 'legal_terms_sections';
+  settings: SystemSettings;
+  updateSetting: SettingUpdater;
+  fallback: LegalSection[];
+}) {
+  const sections = parseEditableLegalSections(settings[itemKey], fallback);
+  const [activeIndex, setActiveIndex] = useState(0);
+  const safeActiveIndex = Math.min(activeIndex, Math.max(0, sections.length - 1));
+  const activeSection = sections[safeActiveIndex] || { title: '', content: '' };
+  const update = (next: LegalSection[]) => setJsonSetting(updateSetting, itemKey, next);
+  const patch = (index: number, changes: Partial<LegalSection>) => update(sections.map((section, i) => i === index ? { ...section, ...changes } : section));
+  const deleteSection = (index: number) => {
+    update(sections.filter((_, i) => i !== index));
+    setActiveIndex(Math.max(0, index - 1));
+  };
+  const addSection = () => {
+    const next = [...sections, { title: '', content: '' }];
+    update(next);
+    setActiveIndex(next.length - 1);
+  };
+
+  return (
+    <div className="w-full max-w-6xl space-y-3">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="min-w-0">
+          <p className="text-xs font-semibold text-on-surface">正式条款文档 · {sections.length} 个章节</p>
+          <p className="text-[11px] text-on-surface-variant">左侧选择章节，右侧编辑标题和正文；正文换行会在前台拆成自然段。</p>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            onClick={addSection}
+            className="inline-flex h-8 items-center justify-center gap-1.5 rounded-md bg-primary-container/15 px-2.5 text-xs font-medium text-primary-container transition-colors hover:bg-primary-container/25"
+          >
+            <Icon name="add" size={14} />
+            添加章节
+          </button>
+          <button
+            type="button"
+            onClick={() => { update(fallback); setActiveIndex(0); }}
+            className="inline-flex h-8 items-center justify-center gap-1.5 rounded-md px-2.5 text-xs font-medium text-on-surface-variant transition-colors hover:bg-surface-container-highest hover:text-on-surface"
+          >
+            <Icon name="restore" size={14} />
+            恢复默认
+          </button>
+        </div>
+      </div>
+
+      <div className="grid min-h-[420px] grid-cols-1 gap-4 lg:grid-cols-[260px_minmax(0,1fr)]">
+        <div className="min-w-0">
+          <div className="max-h-64 space-y-1 overflow-y-auto pr-1 custom-scrollbar lg:max-h-[560px]">
+            {sections.map((section, index) => (
+              <button
+                key={`${section.title}-${index}`}
+                type="button"
+                onClick={() => setActiveIndex(index)}
+                className={`flex w-full min-w-0 items-center gap-2 rounded-md px-2.5 py-2 text-left text-xs transition-colors ${
+                  index === safeActiveIndex ? 'bg-primary-container/15 text-primary-container' : 'text-on-surface-variant hover:bg-surface-container-high/50 hover:text-on-surface'
+                }`}
+              >
+                <span className={`grid h-6 w-6 shrink-0 place-items-center rounded text-[11px] font-bold tabular-nums ${index === safeActiveIndex ? 'bg-primary-container text-on-primary' : 'bg-surface-container-high'}`}>{index + 1}</span>
+                <span className="min-w-0 flex-1 truncate font-medium">{section.title || '未命名章节'}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className="min-w-0">
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+            <div className="min-w-0">
+              <p className="text-sm font-semibold text-on-surface">第 {safeActiveIndex + 1} 条</p>
+              <p className="text-xs text-on-surface-variant">当前章节会同步出现在前台目录中，可点击目录跳转。</p>
+            </div>
+            <ListActions
+              index={safeActiveIndex}
+              total={sections.length}
+              onMove={(direction) => {
+                update(moveListItem(sections, safeActiveIndex, direction));
+                setActiveIndex(safeActiveIndex + direction);
+              }}
+              onDelete={() => deleteSection(safeActiveIndex)}
+            />
+          </div>
+
+          <div className="space-y-3">
+            <label className="block space-y-1.5">
+              <span className="text-xs font-medium text-on-surface-variant">章节标题</span>
+              <input
+                value={activeSection.title}
+                onChange={(e) => patch(safeActiveIndex, { title: e.target.value })}
+                placeholder="例如：定义与适用主体"
+                className="w-full bg-surface-container-lowest text-on-surface text-sm rounded-md px-3 py-2.5 border border-outline-variant/20 outline-none focus:border-primary"
+              />
+            </label>
+
+            <label className="block space-y-1.5">
+              <span className="text-xs font-medium text-on-surface-variant">章节正文</span>
+              <textarea
+                value={activeSection.content}
+                onChange={(e) => patch(safeActiveIndex, { content: e.target.value })}
+                placeholder="每一行或空行会作为前台自然段展示，适合维护正式条款内容。"
+                rows={14}
+                className="min-h-72 w-full resize-y rounded-md border border-outline-variant/20 bg-surface-container-lowest px-3 py-3 text-sm leading-7 text-on-surface outline-none focus:border-primary"
+              />
+            </label>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
@@ -1260,6 +1669,10 @@ function StructuredSettingEditor({ itemKey, settings, updateSetting }: {
   switch (itemKey) {
     case 'footer_links':
       return <FooterLinksEditor settings={settings} updateSetting={updateSetting} />;
+    case 'legal_privacy_sections':
+      return <LegalSectionsEditor itemKey={itemKey} settings={settings} updateSetting={updateSetting} fallback={DEFAULT_PRIVACY_SECTIONS} />;
+    case 'legal_terms_sections':
+      return <LegalSectionsEditor itemKey={itemKey} settings={settings} updateSetting={updateSetting} fallback={DEFAULT_TERMS_SECTIONS} />;
     case 'selection_thread_priority':
       return <ThreadPriorityEditor settings={settings} updateSetting={updateSetting} />;
     case 'inquiry_statuses':
@@ -1327,9 +1740,25 @@ function Content() {
   const [restoring, setRestoring] = useState(false);
   const [restoreProgress, setRestoreProgress] = useState({ stage: '', percent: 0, message: '', logs: [] as string[] });
   const backupInputRef = useRef<HTMLInputElement>(null);
+  const backupActionInFlight = useRef(false);
+  const successfulBackupToastIds = useRef<Set<string>>(new Set());
 
   // Global busy state — prevent concurrent admin operations
   const adminBusy = exporting || importing || restoring || !!verifyingBackupId;
+
+  function toastBackupCreatedOnce(jobId?: string | null) {
+    const key = jobId || 'unknown';
+    if (successfulBackupToastIds.current.has(key)) return;
+
+    if (jobId) {
+      const storageKey = `backupSuccessToast:${jobId}`;
+      if (window.sessionStorage.getItem(storageKey)) return;
+      window.sessionStorage.setItem(storageKey, '1');
+    }
+
+    successfulBackupToastIds.current.add(key);
+    toast('备份创建成功', 'success');
+  }
 
   useEffect(() => {
     loadSettings();
@@ -1374,7 +1803,7 @@ function Content() {
         await pollBackupProgress(backupJobId, (stage, percent, message, logs) => {
           setExportProgress({ stage, percent, message, logs: logs || [] });
         });
-        toast('备份创建成功', 'success');
+        toastBackupCreatedOnce(backupJobId);
         loadBackupList();
         loadBackupStats();
         loadBackupHealth();
@@ -1508,7 +1937,7 @@ function Content() {
   async function loadSettings() {
     try {
       const data = await getSettings();
-      setSettings(data);
+      setSettings({ ...DEFAULT_SETTINGS, ...data });
     } catch {
       toast('加载设置失败', 'error');
     } finally {
@@ -1572,7 +2001,11 @@ function Content() {
   async function handleSave() {
     setSaving(true);
     try {
-      const data = await updateSettings(settings);
+      const normalizedSettings = normalizeSettingsForSave(settings);
+      if (JSON.stringify(normalizedSettings) !== JSON.stringify(settings)) {
+        setSettings(normalizedSettings);
+      }
+      const data = await updateSettings(normalizedSettings);
       setSettings(data);
       setChanged(false);
       // Refresh site config: re-fetch settings, apply title/logo/favicon, notify components
@@ -1631,6 +2064,8 @@ function Content() {
   }
 
   async function handleExport() {
+    if (backupActionInFlight.current) return;
+    backupActionInFlight.current = true;
     setExporting(true);
     setExportProgress({ stage: "dumping", percent: 0, message: "正在准备...", logs: [] });
     try {
@@ -1639,7 +2074,7 @@ function Content() {
       await pollBackupProgress(jobId, (stage, percent, message, logs) => {
         setExportProgress({ stage, percent, message, logs: logs || [] });
       });
-      toast('备份创建成功', 'success');
+      toastBackupCreatedOnce(jobId);
       localStorage.removeItem('backupJobId');
       loadBackupList();
       loadBackupStats();
@@ -1652,7 +2087,7 @@ function Content() {
           await pollBackupProgress(err.jobId, (stage, percent, message, logs) => {
             setExportProgress({ stage, percent, message, logs: logs || [] });
           });
-          toast('备份创建成功', 'success');
+          toastBackupCreatedOnce(err.jobId);
           loadBackupList();
           loadBackupStats();
           loadBackupHealth();
@@ -1666,6 +2101,7 @@ function Content() {
         toast(err.message || '导出失败', 'error');
       }
     } finally {
+      backupActionInFlight.current = false;
       setExporting(false);
       setExportProgress({ stage: "", percent: 0, message: "", logs: [] });
     }
@@ -1880,7 +2316,7 @@ function Content() {
   const tabs = [...GROUPS.map((group) => ({ title: group.title, icon: group.icon })), { title: '数据备份', icon: 'cloud_upload' }];
   const activeGroup = GROUPS.find((group) => group.title === activeTab);
   const headerActions = (
-    <div className="flex min-h-10 shrink-0 items-center justify-end gap-2 rounded-xl border border-outline-variant/12 bg-surface-container-low px-2.5 py-1 shadow-sm">
+    <div className="flex min-h-10 shrink-0 items-center justify-end gap-2">
       <span className={`hidden items-center gap-1.5 whitespace-nowrap rounded-full px-2 text-xs md:inline-flex ${changed ? 'text-amber-500' : 'text-on-surface-variant'}`}>
         <span className={`h-1.5 w-1.5 rounded-full ${changed ? 'bg-amber-500' : 'bg-emerald-500'}`} />
         {changed ? '有未保存修改' : '当前配置已保存'}
@@ -1888,37 +2324,63 @@ function Content() {
       <button
         onClick={handleSave}
         disabled={!changed || saving}
-        className="inline-flex h-8 shrink-0 items-center justify-center gap-1.5 rounded-lg bg-primary-container px-3.5 text-xs font-bold text-on-primary shadow-sm transition-all hover:-translate-y-px hover:opacity-95 disabled:translate-y-0 disabled:cursor-not-allowed disabled:bg-surface-container-high disabled:text-on-surface-variant disabled:shadow-none"
+        className="inline-flex h-9 shrink-0 items-center justify-center gap-1.5 rounded-lg bg-primary-container px-3.5 text-xs font-bold text-on-primary shadow-sm transition-all hover:-translate-y-px hover:opacity-95 disabled:translate-y-0 disabled:cursor-not-allowed disabled:bg-surface-container-high disabled:text-on-surface-variant disabled:shadow-none md:h-8"
       >
         <Icon name="save" size={14} />
         {saving ? '保存中...' : '保存设置'}
       </button>
     </div>
   );
-  const settingsToolbar = (
-    <div className="flex min-h-11 flex-wrap items-center justify-between gap-3">
-      <div className="flex min-h-9 min-w-0 flex-1 flex-wrap items-center gap-x-1 gap-y-1.5">
-        {tabs.map((tab) => (
-          <button
-            key={tab.title}
-            type="button"
-            onClick={() => setActiveTab(tab.title)}
-            className={`relative inline-flex h-9 shrink-0 items-center justify-center gap-1.5 px-3 text-sm font-medium leading-none transition-colors ${
-              activeTab === tab.title
-                ? 'text-primary-container after:absolute after:inset-x-3 after:bottom-0 after:h-0.5 after:rounded-full after:bg-primary-container'
-                : 'text-on-surface-variant hover:text-on-surface'
-            }`}
-          >
-            <Icon name={tab.icon} size={14} />
-            <span className="whitespace-nowrap">{tab.title}</span>
-          </button>
-        ))}
-      </div>
+  const tabItems = tabs.map((tab) => ({ value: tab.title, label: tab.title, icon: tab.icon }));
+  const mobileSettingsPicker = (
+    <div className="md:hidden">
+      <ResponsiveSectionTabs
+        tabs={tabItems}
+        value={activeTab}
+        onChange={setActiveTab}
+        mobileTitle="当前分类"
+        mobileTriggerVariant="surface"
+      />
     </div>
+  );
+  const desktopSettingsSidebar = (
+    <aside className="hidden min-h-0 rounded-xl border border-outline-variant/15 bg-surface-container-low p-2 md:block">
+      <div className="h-full overflow-y-auto pr-1 custom-scrollbar">
+        <div className="space-y-1">
+          {tabItems.map((tab) => {
+            const active = tab.value === activeTab;
+            return (
+              <button
+                key={tab.value}
+                type="button"
+                onClick={() => setActiveTab(tab.value)}
+                className={`group flex min-h-11 w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left transition-colors ${
+                  active
+                    ? 'bg-primary-container text-on-primary shadow-sm'
+                    : 'text-on-surface-variant hover:bg-surface-container hover:text-on-surface'
+                }`}
+              >
+                <span className={`grid h-7 w-7 shrink-0 place-items-center rounded-lg ${
+                  active ? 'bg-on-primary/15 text-on-primary' : 'bg-surface-container-high text-on-surface-variant group-hover:text-on-surface'
+                }`}>
+                  <Icon name={tab.icon || 'tune'} size={15} />
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-sm font-semibold leading-tight">{tab.label}</span>
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+    </aside>
   );
 
   return (
-    <AdminManagementPage title="系统设置" description="配置平台的全局行为和访问策略" actions={headerActions} toolbar={settingsToolbar} contentClassName="min-h-0 overflow-hidden">
+    <AdminManagementPage title="系统设置" description="配置平台的全局行为和访问策略" actions={headerActions} contentClassName="min-h-0 overflow-hidden">
+      <div className="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)] gap-3 md:grid-cols-[220px_minmax(0,1fr)] md:grid-rows-1 md:gap-4">
+        {mobileSettingsPicker}
+        {desktopSettingsSidebar}
       <AdminContentPanel scroll className="h-full overflow-hidden">
         <div className="h-full overflow-y-auto overflow-x-hidden p-4 custom-scrollbar">
 
@@ -1926,15 +2388,7 @@ function Content() {
         {activeGroup ? [activeGroup].map(group => {
           const visibleItems = group.items;
           return (
-          <div key={group.title} className="bg-surface-container-low rounded-lg border border-outline-variant/10 overflow-hidden">
-            <div
-              className="px-4 sm:px-6 py-4 border-b border-outline-variant/10 bg-surface-container-high/50 flex items-center gap-2.5"
-            >
-              <Icon name={group.icon} size={18} className="text-primary-container" />
-              <h3 className="text-sm font-bold text-on-surface uppercase tracking-wider flex-1">{group.title}</h3>
-            </div>
-            <>
-            <div className="divide-y divide-outline-variant/5">
+          <div key={group.title} className="divide-y divide-outline-variant/5">
               {visibleItems.map((item, itemIndex) => {
                 const structuredEditor = isSystemSettingKey(item.key) && STRUCTURED_SETTING_KEYS.has(item.key)
                   ? <StructuredSettingEditor itemKey={item.key} settings={settings} updateSetting={updateSetting} />
@@ -2019,8 +2473,7 @@ function Content() {
                         }}
                         className="w-28 bg-surface-container-lowest text-on-surface text-sm text-center rounded-md px-3 py-2 border border-outline-variant/20 outline-none focus:border-primary"
                       />
-                      {item.key === 'daily_download_limit' && <span className="text-xs text-on-surface-variant">次/天</span>}
-                      {item.key === 'conversion_worker_concurrency' && <span className="text-xs text-on-surface-variant">个任务</span>}
+                      {numberSettingUnit(item.key) && <span className="text-xs text-on-surface-variant">{numberSettingUnit(item.key)}</span>}
                     </div>
                   ) : item.type === 'range' ? (
                     <div className="flex items-center gap-3 w-full lg:max-w-sm lg:justify-self-start">
@@ -2106,8 +2559,6 @@ function Content() {
                 </div>
               );
               })}
-            </div>
-            </>
           </div>
         );
       }) : null}
@@ -2116,16 +2567,10 @@ function Content() {
         <>
         {/* Data Backup Section */}
         <div className="bg-surface-container-low rounded-lg border border-outline-variant/10 overflow-hidden">
-          <div
-            className="px-6 py-4 border-b border-outline-variant/10 bg-surface-container-high/50 flex items-center gap-2.5"
-          >
-            <Icon name="cloud_upload" size={18} className="text-primary-container" />
-            <h3 className="text-sm font-bold text-on-surface uppercase tracking-wider flex-1">数据备份</h3>
-          </div>
           <div className="divide-y divide-outline-variant/5">
             {/* Backup health */}
             {backupHealth && (
-              <div className="px-6 py-4">
+              <div className="px-4 py-4 sm:px-6">
                 <div className={`rounded-lg border p-4 ${
                   backupHealth.status === 'ok'
                     ? 'bg-green-500/10 border-green-500/20'
@@ -2133,7 +2578,7 @@ function Content() {
                       ? 'bg-yellow-500/10 border-yellow-500/20'
                       : 'bg-surface-container-high/40 border-outline-variant/10'
                 }`}>
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div className="space-y-3">
                     <div className="min-w-0">
                       <div className="flex items-center gap-2">
                         <Icon
@@ -2145,15 +2590,7 @@ function Content() {
                       </div>
                       <p className="text-xs text-on-surface-variant mt-1">{backupHealth.message}</p>
                     </div>
-                    <button
-                      onClick={handleBackupPolicyCheck}
-                      disabled={checkingBackupPolicy || adminBusy}
-                      className="px-3 py-1.5 text-xs font-medium bg-primary-container/15 text-primary-container rounded-md hover:bg-primary-container/25 disabled:opacity-50 transition-colors flex items-center gap-1.5 shrink-0"
-                    >
-                      <Icon name="fact_check" size={14} />
-                      {checkingBackupPolicy ? '体检中...' : '策略体检'}
-                    </button>
-                    <div className="flex flex-wrap gap-2 text-xs">
+                    <div className="grid grid-cols-2 gap-2 text-xs sm:flex sm:flex-wrap">
                       <span className="px-2 py-1 rounded bg-surface-container-lowest/70 text-on-surface-variant">
                         自动备份 {backupHealth.enabled ? `每日 ${backupHealth.scheduleTime}` : '未开启'}
                       </span>
@@ -2167,8 +2604,16 @@ function Content() {
                         外部镜像 {backupHealth.mirrorEnabled ? '已开启' : '未开启'}
                       </span>
                     </div>
+                    <button
+                      onClick={handleBackupPolicyCheck}
+                      disabled={checkingBackupPolicy || adminBusy}
+                      className="w-full sm:w-auto px-3 py-2 text-xs font-medium bg-primary-container/15 text-primary-container rounded-md hover:bg-primary-container/25 disabled:opacity-50 transition-colors flex items-center justify-center gap-1.5"
+                    >
+                      <Icon name="fact_check" size={14} />
+                      {checkingBackupPolicy ? '体检中...' : '策略体检'}
+                    </button>
                   </div>
-                  <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-xs text-on-surface-variant">
+                  <div className="mt-3 grid gap-1 text-xs text-on-surface-variant sm:flex sm:flex-wrap sm:gap-x-4">
                     {backupHealth.latestBackup && <span>最近备份：{new Date(backupHealth.latestBackup.createdAt).toLocaleString('zh-CN')}</span>}
                     {backupHealth.nextRunAt && <span>下次自动：{new Date(backupHealth.nextRunAt).toLocaleString('zh-CN')}</span>}
                     {backupHealth.lastAutoMessage && <span>自动任务：{backupHealth.lastAutoMessage}</span>}
@@ -2201,21 +2646,21 @@ function Content() {
             )}
 
             {/* Stats */}
-            <div className="px-6 py-4">
-              <div className="flex flex-wrap gap-4 text-sm">
+            <div className="px-4 py-4 sm:px-6">
+              <div className="grid grid-cols-1 gap-2 text-sm sm:flex sm:flex-wrap sm:gap-4">
                 {backupStats && (
                   <>
-                    <div className="flex items-center gap-2 bg-surface-container-high/50 px-3 py-1.5 rounded-md">
+                    <div className="flex items-center justify-between gap-2 bg-surface-container-high/50 px-3 py-2 sm:py-1.5 rounded-md">
                       <Icon name="view_in_ar" size={14} className="text-primary-container" />
                       <span className="text-on-surface-variant">STEP 模型</span>
                       <span className="font-medium text-on-surface">{backupStats.modelCount} 个</span>
                     </div>
-                    <div className="flex items-center gap-2 bg-surface-container-high/50 px-3 py-1.5 rounded-md">
+                    <div className="flex items-center justify-between gap-2 bg-surface-container-high/50 px-3 py-2 sm:py-1.5 rounded-md">
                       <Icon name="wallpaper" size={14} className="text-primary-container" />
                       <span className="text-on-surface-variant">预览图</span>
                       <span className="font-medium text-on-surface">{backupStats.thumbnailCount} 张</span>
                     </div>
-                    <div className="flex items-center gap-2 bg-surface-container-high/50 px-3 py-1.5 rounded-md">
+                    <div className="flex items-center justify-between gap-2 bg-surface-container-high/50 px-3 py-2 sm:py-1.5 rounded-md">
                       <Icon name="data_usage" size={14} className="text-primary-container" />
                       <span className="text-on-surface-variant">数据库</span>
                       <span className="font-medium text-on-surface">{backupStats.dbSize}</span>
@@ -2226,8 +2671,8 @@ function Content() {
             </div>
 
             {/* Export */}
-            <div className="px-6 py-4">
-              <div className="flex items-center justify-between gap-4 mb-2">
+            <div className="px-4 py-4 sm:px-6">
+              <div className="flex flex-col gap-3 mb-2 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
                 <div>
                   <p className="text-sm font-medium text-on-surface">创建备份</p>
                   <p className="text-xs text-on-surface-variant mt-0.5">打包数据库、模型文件和缩略图到服务器</p>
@@ -2235,7 +2680,7 @@ function Content() {
                 <button
                   onClick={handleExport}
                   disabled={adminBusy}
-                  className="px-4 py-2 text-xs font-medium bg-primary-container/20 text-primary-container rounded-md hover:bg-primary-container/30 disabled:opacity-50 transition-colors flex items-center gap-1.5 shrink-0"
+                  className="w-full sm:w-auto px-4 py-2.5 sm:py-2 text-xs font-medium bg-primary-container/20 text-primary-container rounded-md hover:bg-primary-container/30 disabled:opacity-50 transition-colors flex items-center justify-center gap-1.5 shrink-0"
                 >
                   <Icon name="add" size={14} />
                   {exporting ? `${exportProgress.percent}%` : '创建备份'}
@@ -2248,15 +2693,15 @@ function Content() {
 
             {/* Backup List */}
             {backupList.length > 0 && (
-              <div className="px-6 py-4">
+              <div className="px-4 py-4 sm:px-6">
                 <p className="text-sm font-medium text-on-surface mb-3">备份记录</p>
                 <div className="space-y-2">
                   {backupList.map(b => (
-                    <div key={b.id} className="bg-surface-container-high/30 rounded-lg border border-outline-variant/10 p-4">
-                      <div className="flex items-start justify-between gap-3">
+                    <div key={b.id} className="bg-surface-container-high/30 rounded-lg border border-outline-variant/10 p-3 sm:p-4">
+                      <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
                         <div className="min-w-0 flex-1">
                           {renamingId === b.id ? (
-                            <div className="flex items-center gap-2 mb-2">
+                            <div className="flex flex-col gap-2 mb-2 sm:flex-row sm:items-center">
                               <input
                                 type="text"
                                 value={renameValue}
@@ -2265,13 +2710,15 @@ function Content() {
                                 className="flex-1 bg-surface-container-lowest text-on-surface text-sm rounded-md px-3 py-1.5 border border-outline-variant/30 outline-none focus:border-primary"
                                 autoFocus
                               />
-                              <button onClick={() => handleRename(b.id)} className="px-2 py-1.5 text-xs text-primary-container hover:bg-primary-container/10 rounded-md">保存</button>
-                              <button onClick={() => { setRenamingId(null); setRenameValue(''); }} className="px-2 py-1.5 text-xs text-on-surface-variant hover:bg-surface-container-high/50 rounded-md">取消</button>
+                              <div className="grid grid-cols-2 gap-2 sm:flex">
+                                <button onClick={() => handleRename(b.id)} className="px-2 py-1.5 text-xs text-primary-container hover:bg-primary-container/10 rounded-md">保存</button>
+                                <button onClick={() => { setRenamingId(null); setRenameValue(''); }} className="px-2 py-1.5 text-xs text-on-surface-variant hover:bg-surface-container-high/50 rounded-md">取消</button>
+                              </div>
                             </div>
                           ) : (
                             <p className="text-sm font-medium text-on-surface truncate">{b.name}</p>
                           )}
-                          <div className="flex flex-wrap gap-x-4 gap-y-1 mt-1.5 text-xs text-on-surface-variant">
+                          <div className="grid grid-cols-2 gap-x-3 gap-y-1 mt-1.5 text-xs text-on-surface-variant sm:flex sm:flex-wrap sm:gap-x-4">
                             <span>{new Date(b.createdAt).toLocaleString('zh-CN')}</span>
                             <span>{b.fileSizeText}</span>
                             <span>{b.modelCount ?? 0} 个 STEP 模型</span>
@@ -2281,20 +2728,20 @@ function Content() {
                             {b.verifiedAt && <span>已校验</span>}
                           </div>
                         </div>
-                        <div className="flex flex-wrap items-center gap-1.5 shrink-0">
-                          <button onClick={() => handleRestoreRequest(b.id)} disabled={adminBusy} className="px-2.5 py-1.5 text-xs font-medium bg-primary-container/15 text-primary-container rounded-md hover:bg-primary-container/25 disabled:opacity-50 transition-colors flex items-center gap-1">
+                        <div className="grid grid-cols-2 gap-2 sm:grid-cols-5 lg:flex lg:flex-wrap lg:items-center lg:gap-1.5 lg:shrink-0">
+                          <button onClick={() => handleRestoreRequest(b.id)} disabled={adminBusy} className="px-2.5 py-2 lg:py-1.5 text-xs font-medium bg-primary-container/15 text-primary-container rounded-md hover:bg-primary-container/25 disabled:opacity-50 transition-colors flex items-center justify-center gap-1">
                             <Icon name="restore" size={13} />恢复
                           </button>
-                          <button onClick={() => handleDownloadBackup(b.id)} disabled={adminBusy} className="px-2.5 py-1.5 text-xs font-medium bg-surface-container-high/60 text-on-surface-variant rounded-md hover:bg-surface-container-highest/50 disabled:opacity-50 transition-colors flex items-center gap-1">
+                          <button onClick={() => handleDownloadBackup(b.id)} disabled={adminBusy} className="px-2.5 py-2 lg:py-1.5 text-xs font-medium bg-surface-container-high/60 text-on-surface-variant rounded-md hover:bg-surface-container-highest/50 disabled:opacity-50 transition-colors flex items-center justify-center gap-1">
                             <Icon name="download" size={13} />下载
                           </button>
-                          <button onClick={() => handleVerifyBackup(b.id)} disabled={adminBusy || verifyingBackupId === b.id} className="px-2.5 py-1.5 text-xs font-medium bg-surface-container-high/60 text-on-surface-variant rounded-md hover:bg-surface-container-highest/50 disabled:opacity-50 transition-colors flex items-center gap-1">
+                          <button onClick={() => handleVerifyBackup(b.id)} disabled={adminBusy || verifyingBackupId === b.id} className="px-2.5 py-2 lg:py-1.5 text-xs font-medium bg-surface-container-high/60 text-on-surface-variant rounded-md hover:bg-surface-container-highest/50 disabled:opacity-50 transition-colors flex items-center justify-center gap-1">
                             <Icon name="verified" size={13} />{verifyingBackupId === b.id ? `${verifyProgress.percent}%` : '校验'}
                           </button>
-                          <button onClick={() => { setRenamingId(b.id); setRenameValue(b.name); }} disabled={adminBusy} className="px-2.5 py-1.5 text-xs font-medium bg-surface-container-high/60 text-on-surface-variant rounded-md hover:bg-surface-container-highest/50 disabled:opacity-50 transition-colors flex items-center gap-1">
+                          <button onClick={() => { setRenamingId(b.id); setRenameValue(b.name); }} disabled={adminBusy} className="px-2.5 py-2 lg:py-1.5 text-xs font-medium bg-surface-container-high/60 text-on-surface-variant rounded-md hover:bg-surface-container-highest/50 disabled:opacity-50 transition-colors flex items-center justify-center gap-1">
                             <Icon name="edit" size={13} />重命名
                           </button>
-                          <button onClick={() => handleDelete(b.id)} disabled={adminBusy} className="px-2.5 py-1.5 text-xs font-medium bg-error-container/10 text-error rounded-md hover:bg-error-container/20 disabled:opacity-50 transition-colors flex items-center gap-1">
+                          <button onClick={() => handleDelete(b.id)} disabled={adminBusy} className="px-2.5 py-2 lg:py-1.5 text-xs font-medium bg-error-container/10 text-error rounded-md hover:bg-error-container/20 disabled:opacity-50 transition-colors flex items-center justify-center gap-1">
                             <Icon name="delete" size={13} />删除
                           </button>
                         </div>
@@ -2315,7 +2762,7 @@ function Content() {
                                 <>
                                   <p className="text-xs font-medium text-on-surface">确认恢复到此备份？</p>
                                   <p className="text-xs text-error/80 mt-1">此操作将覆盖当前数据库和模型文件，不可撤销！</p>
-                                  <div className="flex gap-2 mt-2">
+                                  <div className="grid grid-cols-1 gap-2 mt-2 sm:flex">
                                     <button
                                       onClick={handleRestoreConfirm}
                                       className="px-3 py-1 text-xs font-medium bg-error text-on-error-container rounded-md hover:opacity-90 transition-opacity"
@@ -2344,13 +2791,13 @@ function Content() {
             )}
 
             {/* Import from file */}
-            <div className="px-6 py-4">
-              <div className="flex items-center justify-between gap-4 mb-3">
+            <div className="px-4 py-4 sm:px-6">
+              <div className="flex flex-col gap-3 mb-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
                 <div>
                   <p className="text-sm font-medium text-on-surface">导入恢复</p>
                   <p className="text-xs text-on-surface-variant mt-0.5">上传备份文件恢复数据（将覆盖当前数据）</p>
                 </div>
-                <div className="flex gap-2">
+                <div className="grid grid-cols-2 gap-2 sm:flex">
                   <input
                     ref={backupInputRef}
                     type="file"
@@ -2360,7 +2807,7 @@ function Content() {
                   <button
                     onClick={() => backupInputRef.current?.click()}
                     disabled={adminBusy}
-                    className="px-4 py-2 text-xs font-medium border border-outline-variant/40 text-on-surface-variant rounded-md hover:text-on-surface hover:bg-surface-container-high/50 disabled:opacity-50 transition-colors flex items-center gap-1.5"
+                    className="px-4 py-2.5 sm:py-2 text-xs font-medium border border-outline-variant/40 text-on-surface-variant rounded-md hover:text-on-surface hover:bg-surface-container-high/50 disabled:opacity-50 transition-colors flex items-center justify-center gap-1.5"
                   >
                     <Icon name="upload" size={14} />
                     本地上传
@@ -2368,7 +2815,7 @@ function Content() {
                   <button
                     onClick={() => { setServerFileConfirm(null); handleLoadServerFiles(); }}
                     disabled={adminBusy}
-                    className="px-4 py-2 text-xs font-medium border border-outline-variant/40 text-on-surface-variant rounded-md hover:text-on-surface hover:bg-surface-container-high/50 disabled:opacity-50 transition-colors flex items-center gap-1.5"
+                    className="px-4 py-2.5 sm:py-2 text-xs font-medium border border-outline-variant/40 text-on-surface-variant rounded-md hover:text-on-surface hover:bg-surface-container-high/50 disabled:opacity-50 transition-colors flex items-center justify-center gap-1.5"
                   >
                     <Icon name="folder" size={14} />
                     服务器文件
@@ -2402,7 +2849,7 @@ function Content() {
               {!loadingServerFiles && serverFiles.length > 0 && !importing && (
                 <div className="mt-3 border border-outline-variant/20 rounded-md divide-y divide-outline-variant/10">
                   {serverFiles.map(f => (
-                    <div key={f.path} className="flex items-center justify-between px-3 py-2 hover:bg-surface-container-high/30">
+                    <div key={f.path} className="flex flex-col gap-2 px-3 py-3 hover:bg-surface-container-high/30 sm:flex-row sm:items-center sm:justify-between">
                       <div className="flex-1 min-w-0">
                         <p className="text-xs font-medium text-on-surface truncate">{f.name}</p>
                         <p className="text-xs text-on-surface-variant">{(f.size / 1024 / 1024).toFixed(1)} MB · {new Date(f.modifiedAt).toLocaleString('zh-CN')}</p>
@@ -2410,7 +2857,7 @@ function Content() {
                       <button
                         onClick={() => setServerFileConfirm(f)}
                         disabled={adminBusy}
-                        className="ml-2 px-3 py-1 text-xs font-medium text-primary border border-primary/30 rounded hover:bg-primary/10 disabled:opacity-50 transition-colors shrink-0"
+                        className="w-full sm:w-auto sm:ml-2 px-3 py-1.5 text-xs font-medium text-primary border border-primary/30 rounded hover:bg-primary/10 disabled:opacity-50 transition-colors shrink-0"
                       >
                         恢复
                       </button>
@@ -2432,8 +2879,8 @@ function Content() {
                       <p className="text-xs text-on-surface-variant mt-1">
                         文件：{serverFileConfirm.name}（{(serverFileConfirm.size / 1024 / 1024).toFixed(1)} MB）
                       </p>
-                      <p className="text-xs text-on-surface-variant mt-0.5">路径：{serverFileConfirm.path}</p>
-                      <div className="mt-3 flex gap-2">
+                      <p className="text-xs text-on-surface-variant mt-0.5 break-all">路径：{serverFileConfirm.path}</p>
+                      <div className="mt-3 grid grid-cols-1 gap-2 sm:flex">
                         <button
                           onClick={() => handleServerFileImport(serverFileConfirm)}
                           className="px-4 py-1.5 text-xs font-medium text-on-error bg-error rounded-md hover:bg-error/90 transition-colors"
@@ -2591,6 +3038,7 @@ function Content() {
       </div>
         </div>
       </AdminContentPanel>
+      </div>
 
     </AdminManagementPage>
   );

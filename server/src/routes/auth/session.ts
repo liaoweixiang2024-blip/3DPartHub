@@ -14,7 +14,8 @@ export function createAuthSessionRouter() {
   // Generate graphical captcha
   router.get("/api/auth/captcha", async (_req: Request, res: Response) => {
     try {
-      const result = await generateCaptcha();
+      const ttlSeconds = await getSetting<number>("security_captcha_ttl_seconds");
+      const result = await generateCaptcha(Math.max(60, Math.floor(Number(ttlSeconds) || 300)));
       res.json(result);
     } catch {
       res.status(500).json({ detail: "生成验证码失败" });
@@ -36,17 +37,18 @@ export function createAuthSessionRouter() {
       return;
     }
 
-    // Rate limit: 60s per email
+    const cooldownSeconds = Math.max(10, Math.floor(Number(await getSetting<number>("security_email_code_cooldown_seconds")) || 60));
+    const emailCodeTtlSeconds = Math.max(60, Math.floor(Number(await getSetting<number>("security_email_code_ttl_seconds")) || 600));
     const rateKey = `email_rate:${email}`;
-    const allowed = await checkRateLimit(rateKey, 60);
+    const allowed = await checkRateLimit(rateKey, cooldownSeconds);
     if (!allowed) {
-      res.status(429).json({ detail: "发送太频繁，请60秒后重试" });
+      res.status(429).json({ detail: `发送太频繁，请${cooldownSeconds}秒后重试` });
       return;
     }
 
     // Generate 6-digit code
     const code = String(randomInt(100000, 1000000));
-    await storeEmailCode(email, code);
+    await storeEmailCode(email, code, emailCodeTtlSeconds);
 
     try {
       await sendVerifyCode(email, code);
@@ -78,8 +80,12 @@ export function createAuthSessionRouter() {
       return;
     }
 
-    if (password.length < 8) {
-      res.status(400).json({ detail: "密码长度至少8位" });
+    const passwordMinLength = Math.max(6, Math.floor(Number(await getSetting<number>("security_password_min_length")) || 8));
+    const usernameMinLength = Math.max(1, Math.floor(Number(await getSetting<number>("security_username_min_length")) || 2));
+    const usernameMaxLength = Math.max(usernameMinLength, Math.floor(Number(await getSetting<number>("security_username_max_length")) || 32));
+
+    if (password.length < passwordMinLength) {
+      res.status(400).json({ detail: `密码长度至少${passwordMinLength}位` });
       return;
     }
 
@@ -88,8 +94,8 @@ export function createAuthSessionRouter() {
       return;
     }
 
-    if (username.length < 2 || username.length > 32) {
-      res.status(400).json({ detail: "用户名长度应在2-32位之间" });
+    if (username.length < usernameMinLength || username.length > usernameMaxLength) {
+      res.status(400).json({ detail: `用户名长度应在${usernameMinLength}-${usernameMaxLength}位之间` });
       return;
     }
 
@@ -111,7 +117,7 @@ export function createAuthSessionRouter() {
       const payload = { userId: user.id, role: user.role };
       const accessToken = signAccessToken(payload);
       const refreshToken = signRefreshToken(payload);
-      setAuthCookies(req, res, accessToken, refreshToken);
+      setAuthCookies(req, res, accessToken, refreshToken, { rememberMe: true });
 
       res.json({
         user,
@@ -123,7 +129,7 @@ export function createAuthSessionRouter() {
   });
 
   router.post("/api/auth/login", async (req: Request, res: Response) => {
-    const { email, password } = req.body;
+    const { email, password, rememberMe } = req.body;
 
     if (!email || !password) {
       res.status(400).json({ detail: "邮箱和密码不能为空" });
@@ -146,7 +152,7 @@ export function createAuthSessionRouter() {
       const payload = { userId: user.id, role: user.role };
       const accessToken = signAccessToken(payload);
       const refreshToken = signRefreshToken(payload);
-      setAuthCookies(req, res, accessToken, refreshToken);
+      setAuthCookies(req, res, accessToken, refreshToken, { rememberMe: Boolean(rememberMe) });
 
       res.json({
         user: {

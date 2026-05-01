@@ -9,8 +9,10 @@ import InfiniteLoadTrigger from "../components/shared/InfiniteLoadTrigger";
 import { useVisibleItems } from "../hooks/useVisibleItems";
 import { AdminPageShell } from "../components/shared/AdminPageShell";
 import { AdminManagementPage } from "../components/shared/AdminManagementPage";
+import ResponsiveSectionTabs from "../components/shared/ResponsiveSectionTabs";
 import { useToast } from "../components/shared/Toast";
 import { KIT_LIST_TITLE_OPTION_KEY } from "../lib/kitList";
+import { getBusinessConfig, type UploadPolicy } from "../lib/businessConfig";
 import {
   getSelectionCategories,
   createCategory,
@@ -33,17 +35,16 @@ import {
 } from "../api/selections";
 
 type Tab = "categories" | "products";
-const PRODUCT_RENDER_BATCH_SIZE = 120;
-const BATCH_IMPORT_MAX_FILE_SIZE = 5 * 1024 * 1024;
-const BATCH_IMPORT_MAX_ROWS = 10_000;
-const BATCH_IMPORT_MAX_COLUMNS = 200;
 const PRODUCT_IMPORT_BASE_HEADERS = ["名称", "型号编号"];
 const PRODUCT_IMPORT_EXTRA_HEADERS = ["图片", "PDF链接", "是否套件", "组件(JSON)"];
 const PRODUCT_MODEL_HEADERS = ["型号编号", "型号", "modelNo", "modelno", "ModelNo"];
 const PRODUCT_NAME_HEADERS = ["名称", "产品名称", "name", "Name"];
+type SelectionImportPolicy = Pick<UploadPolicy, "selectionImportMaxSizeMb" | "selectionImportMaxRows" | "selectionImportMaxColumns">;
 const SELECTION_TOOLBAR_BUTTON_BASE = "box-border inline-flex h-9 w-full shrink-0 items-center justify-center rounded-md border px-1.5 text-[11px] font-bold leading-none transition-colors focus:outline-none disabled:cursor-not-allowed disabled:opacity-35 md:w-[5.9rem] md:px-2 md:text-xs [&_svg]:block [&_svg]:shrink-0";
 const SELECTION_TOOLBAR_BUTTON_PRIMARY = `${SELECTION_TOOLBAR_BUTTON_BASE} border-primary-container bg-primary-container text-on-primary hover:opacity-90`;
 const SELECTION_TOOLBAR_BUTTON_SECONDARY = `${SELECTION_TOOLBAR_BUTTON_BASE} border-outline-variant/18 bg-surface-container-lowest text-on-surface-variant hover:border-primary-container/35 hover:bg-surface-container-high hover:text-on-surface`;
+const SELECTION_ICON_BUTTON_EDIT = "grid h-8 w-8 shrink-0 place-items-center rounded-full border border-primary-container/12 bg-primary-container/8 text-primary-container transition-colors hover:border-primary-container/25 hover:bg-primary-container/14";
+const SELECTION_ICON_BUTTON_DELETE = "grid h-8 w-8 shrink-0 place-items-center rounded-full border border-error/10 bg-error/6 text-error/75 transition-colors hover:border-error/22 hover:bg-error/10 hover:text-error";
 
 function SelectionToolbarButtonContent({ icon, children }: { icon: string; children: string }) {
   return (
@@ -68,16 +69,16 @@ function normalizeImportCell(value: unknown): string {
   return String(value).trim();
 }
 
-function rowsToImportObjects(rows: unknown[][]): Record<string, string>[] {
+function rowsToImportObjects(rows: unknown[][], policy: SelectionImportPolicy): Record<string, string>[] {
   const nonEmptyRows = rows.filter((row) => row.some((cell) => normalizeImportCell(cell)));
   if (nonEmptyRows.length <= 1) return [];
-  if (nonEmptyRows.length - 1 > BATCH_IMPORT_MAX_ROWS) {
-    throw new Error(`最多一次导入 ${BATCH_IMPORT_MAX_ROWS} 行`);
+  if (nonEmptyRows.length - 1 > policy.selectionImportMaxRows) {
+    throw new Error(`最多一次导入 ${policy.selectionImportMaxRows} 行`);
   }
 
   const headers = nonEmptyRows[0].map(normalizeImportCell);
-  if (headers.length > BATCH_IMPORT_MAX_COLUMNS) {
-    throw new Error(`最多支持 ${BATCH_IMPORT_MAX_COLUMNS} 列`);
+  if (headers.length > policy.selectionImportMaxColumns) {
+    throw new Error(`最多支持 ${policy.selectionImportMaxColumns} 列`);
   }
 
   return nonEmptyRows.slice(1).map((row) => {
@@ -130,18 +131,19 @@ function parseCsvRows(text: string): string[][] {
   return rows;
 }
 
-async function readProductImportRows(file: File): Promise<Record<string, string>[]> {
-  if (file.size > BATCH_IMPORT_MAX_FILE_SIZE) {
-    throw new Error("导入文件不能超过 5MB");
+async function readProductImportRows(file: File, policy: SelectionImportPolicy): Promise<Record<string, string>[]> {
+  const maxSizeMb = Math.max(1, Number(policy.selectionImportMaxSizeMb) || 5);
+  if (file.size > maxSizeMb * 1024 * 1024) {
+    throw new Error(`导入文件不能超过 ${maxSizeMb}MB`);
   }
 
   const lowerName = file.name.toLowerCase();
   if (lowerName.endsWith(".csv")) {
-    return rowsToImportObjects(parseCsvRows(await file.text()));
+    return rowsToImportObjects(parseCsvRows(await file.text()), policy);
   }
   if (lowerName.endsWith(".xlsx")) {
     const { readSheet } = await import("read-excel-file/browser");
-    return rowsToImportObjects(await readSheet(file));
+    return rowsToImportObjects(await readSheet(file), policy);
   }
   throw new Error("仅支持 .xlsx / .csv 文件");
 }
@@ -526,8 +528,9 @@ function ColumnEditor({ columns, onChange }: { columns: ColumnDef[]; onChange: (
                   <button
                     type="button"
                     onClick={() => removeCol(i)}
-                    className="grid h-9 w-9 place-items-center rounded-lg text-error/70 hover:bg-error-container/10 hover:text-error md:hidden"
+                    className={`${SELECTION_ICON_BUTTON_DELETE} md:hidden`}
                     aria-label="删除参数列"
+                    title="删除参数列"
                   >
                     <Icon name="delete" size={15} />
                   </button>
@@ -536,8 +539,9 @@ function ColumnEditor({ columns, onChange }: { columns: ColumnDef[]; onChange: (
                 <button
                   type="button"
                   onClick={() => removeCol(i)}
-                  className="hidden h-9 w-9 place-items-center rounded-lg text-error/70 hover:bg-error-container/10 hover:text-error md:grid"
+                  className={`${SELECTION_ICON_BUTTON_DELETE} hidden md:grid`}
                   aria-label="删除参数列"
+                  title="删除参数列"
                 >
                   <Icon name="delete" size={15} />
                 </button>
@@ -626,6 +630,10 @@ function ColumnEditor({ columns, onChange }: { columns: ColumnDef[]; onChange: (
 // ========== Content ==========
 function Content() {
   const { toast } = useToast();
+  const businessConfig = useMemo(() => getBusinessConfig(), []);
+  const { uploadPolicy, pageSizePolicy } = businessConfig;
+  const productRenderBatchSize = Math.max(20, Number(pageSizePolicy.selectionAdminRenderBatch) || 120);
+  const initialGeneratePreviewPageSize = Math.max(1, Number(pageSizePolicy.selectionGeneratePreviewPageSize) || 50);
   const [tab, setTab] = useState<Tab>("categories");
   const [catFilter, setCatFilter] = useState<"all" | "empty">("all");
   const [catSearch, setCatSearch] = useState("");
@@ -676,7 +684,7 @@ function Content() {
   const [generateExcludeRules, setGenerateExcludeRules] = useState("");
   const [generatePreview, setGeneratePreview] = useState<GeneratedProductDraft[]>([]);
   const [generatePreviewSearch, setGeneratePreviewSearch] = useState("");
-  const [generatePreviewPageSize, setGeneratePreviewPageSize] = useState(50);
+  const [generatePreviewPageSize, setGeneratePreviewPageSize] = useState(initialGeneratePreviewPageSize);
   const [generatePreviewPage, setGeneratePreviewPage] = useState(1);
   const [generateErrors, setGenerateErrors] = useState<string[]>([]);
   const [generateImporting, setGenerateImporting] = useState(false);
@@ -782,7 +790,7 @@ function Content() {
   }, [products, prodSearch]);
   const { visibleItems: visibleProducts, hasMore: hasMoreProducts, loadMore: loadMoreProducts } = useVisibleItems(
     filteredProducts,
-    PRODUCT_RENDER_BATCH_SIZE,
+    productRenderBatchSize,
     `${selectedCatId}:${prodSearch}`
   );
   const handleProductTableScroll = () => {
@@ -1048,7 +1056,7 @@ function Content() {
     setBatchParsed(null);
     void (async () => {
       try {
-        const rows = await readProductImportRows(file);
+        const rows = await readProductImportRows(file, uploadPolicy);
         if (rows.length === 0) {
           setBatchErrors(["文件中没有数据"]);
           return;
@@ -1411,23 +1419,18 @@ function Content() {
       description="管理选型分类、产品、参数列定义和批量导入数据"
       toolbar={(
         <div className="grid items-start gap-3 md:min-h-11 md:grid-cols-[18rem_minmax(0,1fr)_18rem] md:items-center">
-          <div className="grid h-9 min-w-0 grid-cols-2 items-center gap-1 overflow-visible md:flex">
-            {(["categories", "products"] as Tab[]).map((t) => (
-              <button
-                key={t}
-                onClick={() => { setTab(t); setCatFilter("all"); }}
-                className={`inline-flex h-9 w-full shrink-0 items-center justify-center px-2 text-sm font-medium leading-none transition-colors focus:outline-none md:w-36 md:px-3 ${
-                  tab === t
-                    ? "text-primary-container"
-                    : "text-on-surface-variant hover:text-on-surface"
-                }`}
-              >
-                <span className="inline-flex h-full w-28 items-center justify-center whitespace-nowrap tabular-nums">
-                  {t === "categories" ? `分类管理 (${totalCats})` : `产品管理 (${totalProducts})`}
-                </span>
-              </button>
-            ))}
-          </div>
+          <ResponsiveSectionTabs
+            tabs={[
+              { value: "categories", label: "分类管理", count: totalCats, icon: "category" },
+              { value: "products", label: "产品管理", count: totalProducts, icon: "inventory_2" },
+            ]}
+            value={tab}
+            onChange={(next) => {
+              setTab(next as Tab);
+              setCatFilter("all");
+            }}
+            mobileTitle="选型管理"
+          />
           <div className="grid min-w-0 grid-cols-4 items-center gap-1.5 overflow-visible md:flex md:h-9 md:flex-nowrap md:justify-end md:gap-2">
             <button
               onClick={openNewProd}
@@ -1516,8 +1519,8 @@ function Content() {
               </div>
             );
             return (
-              <div className="overflow-hidden">
-                <div className="hidden grid-cols-[minmax(220px,1.4fr)_minmax(120px,0.8fr)_92px_92px_80px_104px] items-center gap-3 px-1 pb-2 pt-1 text-[10px] font-bold uppercase tracking-[0.12em] text-on-surface-variant/55 md:grid sticky top-0 z-10 bg-surface-dim/95 backdrop-blur-sm">
+              <div className="overflow-hidden rounded-xl border border-outline-variant/12 bg-surface-container-low">
+                <div className="sticky top-0 z-10 hidden grid-cols-[minmax(220px,1.4fr)_minmax(120px,0.8fr)_92px_92px_80px_104px] items-center gap-3 border-b border-outline-variant/10 bg-surface-container-low px-4 py-2 text-xs font-bold text-on-surface-variant md:grid">
                   <span>分类名称</span>
                   <span>分组</span>
                   <span className="text-center">参数列</span>
@@ -1527,7 +1530,7 @@ function Content() {
                 </div>
                 <div className="max-h-[calc(100vh-280px)] overflow-y-auto selection-scrollbarless">
                   {filtered.map((cat) => (
-                    <div key={cat.id} className="group grid grid-cols-[minmax(0,1fr)_auto] items-start gap-2.5 border-t border-outline-variant/[0.08] px-1 py-4 first:border-t-0 transition-colors md:grid-cols-[minmax(220px,1.4fr)_minmax(120px,0.8fr)_92px_92px_80px_104px] md:items-center md:gap-3 md:py-3">
+                    <div key={cat.id} className="group grid grid-cols-[minmax(0,1fr)_auto] items-start gap-2.5 border-t border-outline-variant/[0.08] px-4 py-4 first:border-t-0 transition-colors hover:bg-surface-container-high/35 md:grid-cols-[minmax(220px,1.4fr)_minmax(120px,0.8fr)_92px_92px_80px_104px] md:items-center md:gap-3 md:py-3">
                       <div className="min-w-0">
                         <div className="flex items-start gap-2.5 md:items-center md:gap-2">
                           <span className="grid h-7 w-7 shrink-0 place-items-center rounded-full text-primary-container">
@@ -1551,7 +1554,7 @@ function Content() {
                       <span className="hidden text-center text-xs tabular-nums text-on-surface md:block">{cat.productCount ?? 0}</span>
                       <span className="hidden text-xs tabular-nums text-on-surface-variant md:block">{cat.sortOrder}</span>
                       <div className="flex shrink-0 items-center justify-end gap-2 pt-0.5 md:gap-1 md:pt-0">
-                        <button onClick={() => openEditCat(cat)} className="grid h-8 w-8 place-items-center text-primary-container transition-colors hover:text-primary" aria-label="编辑分类">
+                        <button onClick={() => openEditCat(cat)} className={SELECTION_ICON_BUTTON_EDIT} aria-label="编辑分类" title="编辑分类">
                           <Icon name="edit" size={14} />
                         </button>
                         {deleteCatId === cat.id ? (
@@ -1560,7 +1563,7 @@ function Content() {
                             <button onClick={() => setDeleteCatId(null)} className="h-8 px-2 text-xs text-on-surface-variant hover:text-on-surface md:text-[10px]">取消</button>
                           </>
                         ) : (
-                          <button onClick={() => setDeleteCatId(cat.id)} className="grid h-8 w-8 place-items-center text-error transition-colors hover:text-error/80" aria-label="删除分类">
+                          <button onClick={() => setDeleteCatId(cat.id)} className={SELECTION_ICON_BUTTON_DELETE} aria-label="删除分类" title="删除分类">
                             <Icon name="delete" size={14} />
                           </button>
                         )}
@@ -1726,7 +1729,7 @@ function Content() {
                                   {subtitle && <div className="mt-0.5 text-xs leading-snug text-on-surface-variant break-words">{subtitle}</div>}
                                 </div>
                                 <div className="flex shrink-0 items-center gap-1">
-                                  <button onClick={() => openEditProd(p)} className="grid h-8 w-8 place-items-center text-primary-container hover:bg-primary-container/10 rounded" aria-label="编辑产品">
+                                  <button onClick={() => openEditProd(p)} className={SELECTION_ICON_BUTTON_EDIT} aria-label="编辑产品" title="编辑产品">
                                     <Icon name="edit" size={14} />
                                   </button>
                                   {deleteProdId === p.id ? (
@@ -1735,7 +1738,7 @@ function Content() {
                                       <button onClick={() => setDeleteProdId(null)} className="h-8 px-2 text-[10px] text-on-surface-variant bg-surface-container-high rounded">取消</button>
                                     </>
                                   ) : (
-                                    <button onClick={() => setDeleteProdId(p.id)} className="grid h-8 w-8 place-items-center text-error hover:bg-error-container/10 rounded" aria-label="删除产品">
+                                    <button onClick={() => setDeleteProdId(p.id)} className={SELECTION_ICON_BUTTON_DELETE} aria-label="删除产品" title="删除产品">
                                       <Icon name="delete" size={14} />
                                     </button>
                                   )}
@@ -1784,7 +1787,7 @@ function Content() {
                                 ))}
                                 <td className="px-3 py-2 text-right">
                                   <div className="flex items-center justify-end gap-1">
-                                    <button onClick={() => openEditProd(p)} className="text-primary-container hover:bg-primary-container/10 rounded p-1" aria-label="编辑产品">
+                                    <button onClick={() => openEditProd(p)} className={SELECTION_ICON_BUTTON_EDIT} aria-label="编辑产品" title="编辑产品">
                                       <Icon name="edit" size={13} />
                                     </button>
                                     {deleteProdId === p.id ? (
@@ -1793,7 +1796,7 @@ function Content() {
                                         <button onClick={() => setDeleteProdId(null)} className="px-1.5 py-0.5 text-[10px] text-on-surface-variant">取消</button>
                                       </>
                                     ) : (
-                                      <button onClick={() => setDeleteProdId(p.id)} className="text-error hover:bg-error-container/10 rounded p-1" aria-label="删除产品">
+                                      <button onClick={() => setDeleteProdId(p.id)} className={SELECTION_ICON_BUTTON_DELETE} aria-label="删除产品" title="删除产品">
                                         <Icon name="delete" size={13} />
                                       </button>
                                     )}
@@ -2314,7 +2317,7 @@ function Content() {
                           <span className="text-xs font-medium text-on-surface break-words line-clamp-2 flex-1 min-w-0">{val}</span>
                           <button
                             onClick={() => { setRenameField(optImgField); setRenameOldVal(val); setRenameNewVal(val); }}
-                            className="w-7 h-7 rounded flex items-center justify-center bg-primary-container/10 hover:bg-primary-container/20 text-primary-container shrink-0 transition-colors"
+                            className={SELECTION_ICON_BUTTON_EDIT}
                             title="改名"
                           >
                             <Icon name="edit" size={12} />
@@ -2372,7 +2375,7 @@ function Content() {
                         )}
                         <button
                           onClick={() => { setRenameField(optImgField); setRenameOldVal(val); setRenameNewVal(val); }}
-                          className="w-6 h-6 rounded flex items-center justify-center bg-primary-container/10 hover:bg-primary-container/20 text-primary-container shrink-0 transition-colors"
+                          className={SELECTION_ICON_BUTTON_EDIT}
                           title="改名"
                         >
                           <Icon name="edit" size={13} />
@@ -2871,7 +2874,9 @@ function Content() {
                 >
                   <Icon name="upload_file" size={28} className="text-on-surface-variant/40 mb-2" />
                   <span className="text-sm text-on-surface-variant">点击选择或拖拽导入文件</span>
-                  <span className="text-[10px] text-on-surface-variant/50 mt-1">.xlsx / .csv，最大 5MB，最多 {BATCH_IMPORT_MAX_ROWS} 行</span>
+                  <span className="text-[10px] text-on-surface-variant/50 mt-1">
+                    .xlsx / .csv，最大 {uploadPolicy.selectionImportMaxSizeMb}MB，最多 {uploadPolicy.selectionImportMaxRows} 行
+                  </span>
                   <input type="file" accept=".xlsx,.csv" className="hidden" onChange={(e) => {
                     const f = e.target.files?.[0];
                     if (f) handleExcelFile(f);
@@ -3296,8 +3301,9 @@ function Content() {
                           toast("分组已删除", "success");
                           mutateCats();
                         }}
-                        className="text-error/70 hover:text-error rounded p-1"
+                        className={SELECTION_ICON_BUTTON_DELETE}
                         aria-label="删除分组"
+                        title="删除分组"
                       >
                         <Icon name="delete" size={13} />
                       </button>

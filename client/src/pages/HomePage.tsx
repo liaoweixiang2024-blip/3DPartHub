@@ -22,6 +22,7 @@ import { downloadModelFile, isDownloadAuthRequiredError } from "../api/downloads
 import { copyText } from "../lib/clipboard";
 import { getErrorMessage } from "../lib/errorNotifications";
 import { getCachedPublicSettings, getAnnouncement, getContactEmail, getSiteTitle, getFooterLinks, getFooterCopyright } from "../lib/publicSettings";
+import { getBusinessConfig } from "../lib/businessConfig";
 import { sanitizeHtml } from "../lib/sanitizeHtml";
 import {
   HOME_SEARCH_EVENT,
@@ -246,6 +247,13 @@ function parsePageParam(value: string | null) {
 
 function normalizeSortParam(value: string | null) {
   return value === "name" ? "name" : "created_at";
+}
+
+function normalizeHomePageSizeOptions(policy: Record<string, number>) {
+  const options = [policy.homeOption1, policy.homeOption2, policy.homeOption3, policy.homeOption4]
+    .map((value) => Math.floor(Number(value) || 0))
+    .filter((value) => value > 0);
+  return Array.from(new Set(options)).sort((a, b) => a - b);
 }
 
 function buildHomeReturnPath() {
@@ -920,6 +928,10 @@ export default function HomePage() {
   const location = useLocation();
   const { toast } = useToast();
   const [searchParams, setSearchParams] = useSearchParams();
+  const { data: publicSettings } = useSWR("publicSettings", () => getCachedPublicSettings());
+  const homePageSizePolicy = getBusinessConfig(publicSettings || undefined).pageSizePolicy;
+  const homePageSizeOptions = normalizeHomePageSizeOptions(homePageSizePolicy);
+  const homeDefaultPageSize = homePageSizeOptions.includes(homePageSizePolicy.homeDefault) ? homePageSizePolicy.homeDefault : homePageSizeOptions[0] || DEFAULT_PAGE_SIZE;
   const legacySearchQuery = normalizeHomeSearchQuery(searchParams.get("q") || "");
   const initialHomeState = useMemo(
     () => normalizeHomeBrowseState(readHomeBrowseStateFromLocation(location.state)) || readPendingHomeBrowseState(),
@@ -954,7 +966,7 @@ export default function HomePage() {
   const [searchQuery, setSearchQuery] = useState(() => initialHomeState?.query ?? readHomeSearchQuery() ?? legacySearchQuery);
   const [activeCategory, setActiveCategory] = useState(() => initialHomeState?.categoryId || searchParams.get("category") || "all");
   const [page, setPage] = useState(() => initialHomeState?.page || parsePageParam(searchParams.get("page")));
-  const [pageSize, setPageSize] = useState(() => initialHomeState?.pageSize || normalizePageSize(searchParams.get("page_size")));
+  const [pageSize, setPageSize] = useState(() => initialHomeState?.pageSize || normalizePageSize(searchParams.get("page_size"), homePageSizeOptions, homeDefaultPageSize));
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
   const [sortBy, setSortBy] = useState(() => initialHomeState?.sort || normalizeSortParam(searchParams.get("sort")));
   const scrollContainerRef = useRef<HTMLElement | null>(null);
@@ -993,7 +1005,7 @@ export default function HomePage() {
       if (nextPage !== page) setPage(nextPage);
     }
     if (searchParams.has("page_size")) {
-      const nextPageSize = normalizePageSize(searchParams.get("page_size"));
+      const nextPageSize = normalizePageSize(searchParams.get("page_size"), homePageSizeOptions, homeDefaultPageSize);
       if (nextPageSize !== pageSize) setPageSize(nextPageSize);
     }
     if (searchParams.has("sort")) {
@@ -1010,7 +1022,7 @@ export default function HomePage() {
       nextParams.delete("sort");
       setSearchParams(nextParams, { replace: true });
     }
-  }, [activeCategory, legacySearchQuery, location.key, location.state, page, pageSize, searchParams, searchQuery, setSearchParams, sortBy]);
+  }, [activeCategory, homeDefaultPageSize, homePageSizeOptions, legacySearchQuery, location.key, location.state, page, pageSize, searchParams, searchQuery, setSearchParams, sortBy]);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [loginPromptOpen, setLoginPromptOpen] = useState(false);
 

@@ -5,7 +5,6 @@ import { requireBrowseAccess } from "../../middleware/browseAccess.js";
 import { cacheGetOrSet, TTL } from "../../lib/cache.js";
 import {
   MAX_MODEL_PAGE,
-  MAX_MODEL_PAGE_SIZE,
   enumQuery,
   getSearchTerms,
   modelTextSearchWhere,
@@ -13,6 +12,7 @@ import {
   numericQuery,
   searchCacheToken,
 } from "../../lib/searchQuery.js";
+import { getBusinessConfig } from "../../lib/businessConfig.js";
 import { MODEL_STATUS } from "../../services/modelStatus.js";
 import { withAssetVersion } from "../../services/gltfAsset.js";
 
@@ -33,8 +33,11 @@ export function createModelListRouter({
   router.get("/api/models", async (req: Request, res: Response) => {
     if (!(await requireBrowseAccess(req, res))) return;
 
+    const { pageSizePolicy } = await getBusinessConfig();
+    const defaultPageSize = Math.max(1, Math.floor(Number(pageSizePolicy.homeDefault) || 60));
+    const maxPageSize = Math.max(1, Math.floor(Number(pageSizePolicy.homeMax) || 10000));
     const page = numericQuery(req.query.page, 1, 1, MAX_MODEL_PAGE);
-    const pageSize = numericQuery(req.query.page_size, 20, 1, MAX_MODEL_PAGE_SIZE);
+    const pageSize = numericQuery(req.query.page_size, defaultPageSize, 1, maxPageSize);
     const search = normalizeSearchParam(req.query.search);
     const format = normalizeSearchParam(req.query.format, 20).toLowerCase();
     const category = normalizeSearchParam(req.query.category, 100);

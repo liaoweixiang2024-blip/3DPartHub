@@ -66,8 +66,12 @@ function PageWrap({ children }: { children: React.ReactNode }) {
 // Protected pages — check auth BEFORE entering motion animation
 // so redirect to login is instant (no exit animation delay)
 function ProtectedPage({ children, requiredRole }: { children: React.ReactNode; requiredRole?: string }) {
-  const { isAuthenticated, user } = useAuthStore();
+  const { isAuthenticated, user, hasHydrated } = useAuthStore();
   const location = useLocation();
+
+  if (!hasHydrated) {
+    return null;
+  }
 
   if (!isAuthenticated) {
     return <Navigate to="/login" state={{ from: location.pathname }} replace />;
@@ -126,11 +130,12 @@ function ModelReturnPathTracker() {
 /** Periodically check token validity and logout if expired */
 function useTokenWatcher() {
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
+  const hasHydrated = useAuthStore((s) => s.hasHydrated);
   const checkAndRefreshToken = useAuthStore((s) => s.checkAndRefreshToken);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {
-    if (!isAuthenticated) return;
+    if (!hasHydrated || !isAuthenticated) return;
 
     // Check immediately on mount / auth change
     checkAndRefreshToken();
@@ -143,7 +148,7 @@ function useTokenWatcher() {
     return () => {
       if (timerRef.current) clearInterval(timerRef.current);
     };
-  }, [isAuthenticated, checkAndRefreshToken]);
+  }, [hasHydrated, isAuthenticated, checkAndRefreshToken]);
 }
 
 export default function Router() {

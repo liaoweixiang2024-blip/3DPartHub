@@ -7,6 +7,7 @@ import { SkeletonList } from '../components/shared/Skeleton';
 import Icon from '../components/shared/Icon';
 import SafeImage from '../components/shared/SafeImage';
 import { AdminPageShell } from "../components/shared/AdminPageShell";
+import { AdminDetailHeader } from "../components/shared/AdminManagementPage";
 import { useToast } from '../components/shared/Toast';
 import client from '../api/client';
 import { unwrapResponse } from '../api/response';
@@ -205,25 +206,23 @@ function ChatContent({ ticketId }: { ticketId: string }) {
 
   return (
     <div className="flex h-full min-h-0 flex-col">
-      {/* Header */}
-      <div className="shrink-0 border-b border-outline-variant/10 bg-surface-container px-4 py-3">
-        <div className="flex items-center gap-3 mb-2 min-w-0">
-          <button onClick={() => navigate(-1)} className="text-on-surface-variant hover:text-on-surface transition-colors">
-            <Icon name="arrow_back" size={20} />
-          </button>
-          <h2 className="font-headline text-lg font-bold text-on-surface flex-1 truncate">
-            {classificationMap.get(ticket.classification) || ticket.classification}
-          </h2>
-          <span className={`text-[10px] px-2 py-0.5 rounded-sm font-bold shrink-0 ${info.color || ""} ${info.bg || ""}`}>
+      <AdminDetailHeader
+        title={classificationMap.get(ticket.classification) || ticket.classification}
+        onBack={() => navigate(-1)}
+        actions={(
+          <span className={`shrink-0 rounded-sm px-2 py-0.5 text-[10px] font-bold ${info.color || ""} ${info.bg || ""}`}>
             {info.label}
           </span>
-        </div>
-        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-on-surface-variant">
+        )}
+        description={(
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
           <span className="flex items-center gap-1 min-w-0"><Icon name="person" size={12} className="shrink-0" /><span className="truncate">{ticket.user?.username || '未知'}</span></span>
           <span className="flex items-center gap-1"><Icon name="schedule" size={12} className="shrink-0" />{new Date(ticket.createdAt).toLocaleString('zh-CN')}</span>
-          {isAdmin && <StatusActions ticketId={ticketId} status={ticket.status} onUpdate={handleStatusUpdate} />}
-        </div>
-      </div>
+          </div>
+        )}
+      >
+        {isAdmin && <StatusActions ticketId={ticketId} status={ticket.status} onUpdate={handleStatusUpdate} />}
+      </AdminDetailHeader>
 
       {/* Messages */}
       <div className="min-h-0 flex-1 overflow-y-auto p-4 scrollbar-hidden">

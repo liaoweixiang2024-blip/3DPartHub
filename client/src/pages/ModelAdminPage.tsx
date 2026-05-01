@@ -10,6 +10,7 @@ import ModelThumbnail from '../components/shared/ModelThumbnail';
 import InfiniteLoadTrigger from '../components/shared/InfiniteLoadTrigger';
 import { AdminPageShell } from "../components/shared/AdminPageShell";
 import { AdminManagementPage } from "../components/shared/AdminManagementPage";
+import ResponsiveSectionTabs, { type ResponsiveSectionTab } from "../components/shared/ResponsiveSectionTabs";
 import { useToast } from '../components/shared/Toast';
 import { modelApi, type ConversionQueueJob, type ConversionQueueState, type ModelGroupItem, type ModelPreviewDiagnosticItem, type PreviewDiagnosticFilter, type ServerModelListItem } from '../api/models';
 import { openModelDrawing } from '../api/downloads';
@@ -48,6 +49,7 @@ const MODEL_ADMIN_VISIBLE_BATCH_SIZE = 80;
 const MOBILE_MODEL_VISIBLE_BATCH_SIZE = 40;
 const MERGE_SUGGESTION_PAGE_SIZE = 40;
 const MODEL_ADMIN_PANEL_CLASS = "rounded-lg border border-outline-variant/10 bg-surface-container-low overflow-auto min-h-[calc(100vh-220px)] max-h-[calc(100vh-220px)]";
+type ModelAdminTab = 'models' | 'suggestions' | 'groups';
 
 const DIAGNOSTIC_FILTERS: Array<{ key: PreviewDiagnosticFilter; label: string; icon: string }> = [
   { key: 'all', label: '全部', icon: 'inventory_2' },
@@ -1321,7 +1323,7 @@ function DesktopContent() {
   const [uploading, setUploading] = useState(false);
   const [queueingModelId, setQueueingModelId] = useState<string | null>(null);
   const [previewOpsOpen, setPreviewOpsOpen] = useState(false);
-  const [activeTab, setActiveTab] = useState<'models' | 'suggestions' | 'groups'>('models');
+  const [activeTab, setActiveTab] = useState<ModelAdminTab>('models');
 
   const {
     items: models,
@@ -1369,11 +1371,11 @@ function DesktopContent() {
   const suggestionCount = activeTab === 'suggestions' ? activeSuggestionCount : suggestionCountData?.total ?? 0;
   const mergedGroupCount = groupData?.length;
   const headerButtonBase = "inline-flex h-9 w-[122px] items-center justify-center gap-1.5 rounded-sm px-3 text-sm font-medium transition-colors";
-  const modelTabButton = (active: boolean) => `relative inline-flex h-9 shrink-0 items-center justify-center gap-1.5 px-4 text-sm font-medium leading-none transition-colors ${
-    active
-      ? "text-primary-container after:absolute after:inset-x-3 after:bottom-0 after:h-0.5 after:rounded-full after:bg-primary-container"
-      : "text-on-surface-variant hover:text-on-surface"
-  }`;
+  const modelAdminTabs: ResponsiveSectionTab[] = [
+    { value: 'models', label: '全部模型', count: modelTotal, icon: 'inventory_2' },
+    { value: 'suggestions', label: '合并建议', count: suggestionCount, icon: 'merge_type' },
+    { value: 'groups', label: '已合并', count: mergedGroupCount, icon: 'category' },
+  ];
 
   useEffect(() => {
     setSelectedNames(new Set());
@@ -1423,7 +1425,7 @@ function DesktopContent() {
     mutate();
   };
 
-  const handleTabChange = (tab: 'models' | 'suggestions' | 'groups') => {
+  const handleTabChange = (tab: ModelAdminTab) => {
     startTransition(() => setActiveTab(tab));
   };
 
@@ -1548,17 +1550,13 @@ function DesktopContent() {
         description="统一维护模型文件、分类归属、预览重建和同名模型合并关系。"
         toolbar={(
           <div className="flex min-h-11 flex-wrap items-center justify-between gap-3">
-            <div className="flex h-9 min-w-0 items-center gap-1 overflow-x-auto scrollbar-none">
-              <button onClick={() => handleTabChange('models')} className={modelTabButton(activeTab === 'models')}>
-                <span className="whitespace-nowrap tabular-nums">全部模型 ({modelTotal})</span>
-              </button>
-              <button onClick={() => handleTabChange('suggestions')} className={modelTabButton(activeTab === 'suggestions')}>
-                <span className="whitespace-nowrap tabular-nums">合并建议 ({suggestionCount})</span>
-              </button>
-              <button onClick={() => handleTabChange('groups')} className={modelTabButton(activeTab === 'groups')}>
-                <span className="whitespace-nowrap tabular-nums">已合并{typeof mergedGroupCount === 'number' ? ` (${mergedGroupCount})` : ''}</span>
-              </button>
-            </div>
+            <ResponsiveSectionTabs
+              tabs={modelAdminTabs}
+              value={activeTab}
+              onChange={(value) => handleTabChange(value as ModelAdminTab)}
+              mobileTitle="模型管理分类"
+              className="min-w-[280px] flex-1"
+            />
             <div className="ml-auto flex min-h-9 flex-wrap items-center justify-end gap-2">
               <button
                 onClick={() => setPreviewOpsOpen(true)}
@@ -1842,7 +1840,7 @@ function MobileContent() {
   const [uploading, setUploading] = useState(false);
   const [queueingModelId, setQueueingModelId] = useState<string | null>(null);
   const [previewOpsOpen, setPreviewOpsOpen] = useState(false);
-  const [activeTab, setActiveTab] = useState<'models' | 'suggestions' | 'groups'>('models');
+  const [activeTab, setActiveTab] = useState<ModelAdminTab>('models');
 
   const {
     items: models,
@@ -1887,11 +1885,11 @@ function MobileContent() {
   const allSuggestionsSelected = suggestionNames.length > 0 && selectedSuggestionCount === suggestionNames.length;
   const suggestionCount = activeTab === 'suggestions' ? activeSuggestionCount : suggestionCountData?.total ?? 0;
   const mergedGroupCount = groupData?.length;
-  const mobileTabButton = (active: boolean) => `relative inline-flex h-10 flex-1 items-center justify-center whitespace-nowrap px-2 text-xs font-bold transition-colors focus:outline-none ${
-    active
-      ? 'text-primary-container after:absolute after:inset-x-3 after:bottom-0 after:h-0.5 after:rounded-full after:bg-primary-container'
-      : 'text-on-surface-variant'
-  }`;
+  const modelAdminTabs: ResponsiveSectionTab[] = [
+    { value: 'models', label: '全部模型', count: modelTotal, icon: 'inventory_2' },
+    { value: 'suggestions', label: '合并建议', count: suggestionCount, icon: 'merge_type' },
+    { value: 'groups', label: '已合并', count: mergedGroupCount, icon: 'category' },
+  ];
 
   useEffect(() => {
     setSelectedNames(new Set());
@@ -2107,17 +2105,13 @@ function MobileContent() {
           <Icon name="search" size={16} className="text-on-surface-variant mr-2" />
           <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="搜索模型..." className="bg-transparent border-none outline-none text-sm text-on-surface placeholder:text-on-surface-variant/50 w-full" />
         </div>
-        <div className="flex items-center rounded-lg border border-outline-variant/12 bg-surface-container-low px-1">
-          <button onClick={() => startTransition(() => setActiveTab('models'))} className={mobileTabButton(activeTab === 'models')}>
-            全部模型 ({modelTotal})
-          </button>
-          <button onClick={() => startTransition(() => setActiveTab('suggestions'))} className={mobileTabButton(activeTab === 'suggestions')}>
-            合并建议 ({suggestionCount})
-          </button>
-          <button onClick={() => startTransition(() => setActiveTab('groups'))} className={mobileTabButton(activeTab === 'groups')}>
-            已合并{typeof mergedGroupCount === 'number' ? ` (${mergedGroupCount})` : ''}
-          </button>
-        </div>
+        <ResponsiveSectionTabs
+          tabs={modelAdminTabs}
+          value={activeTab}
+          onChange={(value) => startTransition(() => setActiveTab(value as ModelAdminTab))}
+          mobileTitle="模型管理分类"
+          mobileTriggerVariant="surface"
+        />
 
         {activeTab === 'suggestions' ? (
           sugLoading ? (

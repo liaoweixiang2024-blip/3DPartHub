@@ -3,6 +3,7 @@ import { prisma } from "../lib/prisma.js";
 import { authMiddleware, type AuthRequest } from "../middleware/auth.js";
 import { requireRole } from "../middleware/rbac.js";
 import { asyncHandler } from "../lib/http.js";
+import { getBusinessConfig } from "../lib/businessConfig.js";
 import { optionalString, paginationQuery } from "../lib/requestValidation.js";
 
 const router = Router();
@@ -14,10 +15,13 @@ router.get("/api/audit", authMiddleware, requireRole("ADMIN"), asyncHandler<Auth
   const userId = optionalString(req.query.userId, { maxLength: 160 });
   const from = optionalString(req.query.from, { maxLength: 40 });
   const to = optionalString(req.query.to, { maxLength: 40 });
+  const { pageSizePolicy } = await getBusinessConfig();
+  const defaultPageSize = Math.max(1, Math.floor(Number(pageSizePolicy.auditDefault) || 50));
+  const maxPageSize = Math.max(1, Math.floor(Number(pageSizePolicy.auditMax) || 100));
   const { page, pageSize, skip, take } = paginationQuery(req.query, {
     pageSizeKey: "size",
-    defaultPageSize: 50,
-    maxPageSize: 100,
+    defaultPageSize,
+    maxPageSize,
   });
 
   const where: any = {};

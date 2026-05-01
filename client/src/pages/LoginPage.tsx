@@ -138,12 +138,12 @@ export default function LoginPage() {
     try {
       const { authApi } = await import("../api");
       if (mode === "login") {
-        const result = await authApi.login({ email, password });
-        login(result.user, result.tokens);
+        const result = await authApi.login({ email, password, rememberMe });
+        login(result.user, result.tokens, rememberMe);
         navigate(from, { replace: true });
       } else {
         const result = await authApi.register({ username, email, password, emailCode, phone: phone || undefined, company: company || undefined });
-        login(result.user, result.tokens);
+        login(result.user, result.tokens, true);
         navigate(from, { replace: true });
       }
     } catch (err: unknown) {

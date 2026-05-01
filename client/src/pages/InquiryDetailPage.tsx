@@ -4,6 +4,7 @@ import useSWR from "swr";
 import { useDocumentTitle } from "../hooks/useDocumentTitle";
 import Icon from "../components/shared/Icon";
 import { AdminPageShell } from "../components/shared/AdminPageShell";
+import { AdminDetailHeader } from "../components/shared/AdminManagementPage";
 import { useToast } from "../components/shared/Toast";
 import { useAuthStore } from "../stores/useAuthStore";
 import { getCachedPublicSettings } from "../lib/publicSettings";
@@ -178,15 +179,12 @@ function DetailContent({ id }: { id: string }) {
 
   return (
     <div className="flex h-full min-h-0 flex-col">
-      <div className="shrink-0 border-b border-outline-variant/10 bg-surface-container px-4 py-3">
-        <div className="mb-2 flex min-w-0 items-center gap-3">
-          <button onClick={() => navigate(-1)} className="text-on-surface-variant transition-colors hover:text-on-surface">
-            <Icon name="arrow_back" size={20} />
-          </button>
-          <h2 className="min-w-0 flex-1 truncate font-headline text-lg font-bold text-on-surface">询价单详情</h2>
-          <StatusBadge status={inquiry.status} statuses={statuses} />
-        </div>
-        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-on-surface-variant">
+      <AdminDetailHeader
+        title="询价单详情"
+        onBack={() => navigate(-1)}
+        actions={<StatusBadge status={inquiry.status} statuses={statuses} />}
+        description={(
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
           <span className="flex min-w-0 items-center gap-1">
             <Icon name="schedule" size={12} className="shrink-0" />
             <span className="truncate">{new Date(inquiry.createdAt).toLocaleString("zh-CN")}</span>
@@ -198,8 +196,9 @@ function DetailContent({ id }: { id: string }) {
             </span>
           ) : null}
           {inquiry.company ? <span className="truncate">{inquiry.company}</span> : null}
-        </div>
-        <div className="mt-3 flex flex-wrap gap-2">
+          </div>
+        )}
+      >
           {inquiry.status === "submitted" && !isAdmin && (
             <button onClick={handleCancel} className="rounded-lg border border-outline-variant/40 px-3 py-1.5 text-xs text-on-surface-variant transition-colors hover:bg-surface-container-high/50">
               取消询价
@@ -225,8 +224,7 @@ function DetailContent({ id }: { id: string }) {
               </button>
             </>
           )}
-        </div>
-      </div>
+      </AdminDetailHeader>
 
       <div className="min-h-0 flex-1 overflow-y-auto p-4 scrollbar-hidden">
         <div className="space-y-6">

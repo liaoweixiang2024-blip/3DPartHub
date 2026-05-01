@@ -3,6 +3,7 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 RUN_SERVER_TESTS="${RUN_SERVER_TESTS:-0}"
+RUN_STACK_CHECK="${RUN_STACK_CHECK:-0}"
 SKIP_DOCKER="${SKIP_DOCKER:-0}"
 
 run_step() {
@@ -26,6 +27,13 @@ if [[ "$RUN_SERVER_TESTS" == "1" ]]; then
 else
   echo
   echo "==> Server tests skipped (set RUN_SERVER_TESTS=1 to run)"
+fi
+
+if [[ "$RUN_STACK_CHECK" == "1" ]]; then
+  run_step "Local stack health" bash -c "cd \"$ROOT_DIR\" && CHECK_VITE=1 node scripts/check-local-stack.mjs"
+else
+  echo
+  echo "==> Local stack health skipped (set RUN_STACK_CHECK=1 when 3780/5173 are running)"
 fi
 
 if [[ "$SKIP_DOCKER" == "1" ]]; then

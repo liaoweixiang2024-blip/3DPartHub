@@ -62,6 +62,10 @@ const SETTINGS_SCHEMA: SettingDef[] = [
   { key: "contact_address", defaultValue: "" },
   { key: "footer_links", defaultValue: "" },
   { key: "footer_copyright", defaultValue: "" },
+  { key: "legal_privacy_updated_at", defaultValue: "2026 年 4 月" },
+  { key: "legal_terms_updated_at", defaultValue: "2026 年 4 月" },
+  { key: "legal_privacy_sections", defaultValue: "" },
+  { key: "legal_terms_sections", defaultValue: "" },
   { key: "color_scheme", defaultValue: "orange" },
   { key: "color_custom_dark", defaultValue: "{}" },
   { key: "color_custom_light", defaultValue: "{}" },
@@ -100,6 +104,19 @@ const SETTINGS_SCHEMA: SettingDef[] = [
   { key: "viewer_fill_light_intensity", defaultValue: 0.6 },
   { key: "viewer_hemisphere_intensity", defaultValue: 0.3 },
   { key: "viewer_bg_color", defaultValue: "linear-gradient(180deg, #2a2a3e 0%, #1e2a42 50%, #162040 100%)" },
+  { key: "viewer_edge_threshold_angle", defaultValue: 28 },
+  { key: "viewer_edge_vertex_limit", defaultValue: 700000 },
+  { key: "viewer_measure_default_unit", defaultValue: "auto" },
+  { key: "viewer_measure_record_limit", defaultValue: 12 },
+
+  // Account security
+  { key: "security_email_code_cooldown_seconds", defaultValue: 60 },
+  { key: "security_email_code_ttl_seconds", defaultValue: 600 },
+  { key: "security_captcha_ttl_seconds", defaultValue: 300 },
+  { key: "security_password_min_length", defaultValue: 8 },
+  { key: "security_username_min_length", defaultValue: 2 },
+  { key: "security_username_max_length", defaultValue: 32 },
+
   // Share policy
   { key: "share_default_expire_days", defaultValue: 0 },
   { key: "share_max_expire_days", defaultValue: 0 },

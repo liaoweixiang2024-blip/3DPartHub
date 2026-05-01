@@ -1,6 +1,6 @@
 import { Router, Response } from "express";
 import multer from "multer";
-import { existsSync, readdirSync, statSync } from "node:fs";
+import { existsSync, readdirSync, rmSync, statSync } from "node:fs";
 import { join, resolve, sep } from "node:path";
 import {
   deleteBackup,
@@ -52,6 +52,11 @@ function blockBackupMutationIfBusy(res: Response): boolean {
     jobId: active.id,
   });
   return true;
+}
+
+function cleanupTempBackupUpload(path: string | undefined) {
+  if (!path) return;
+  try { rmSync(path, { force: true }); } catch {}
 }
 
 const backupUpload = multer({
@@ -324,6 +329,7 @@ export function createSettingsBackupRouter() {
       const jobId = startRestoreJobFromFile(file.path);
       res.json({ jobId });
     } catch (err: any) {
+      cleanupTempBackupUpload(file.path);
       const status = err.message?.includes("正在进行中") ? 409 : 500;
       res.status(status).json({ detail: err.message || "启动恢复失败" });
     }
@@ -354,6 +360,7 @@ export function createSettingsBackupRouter() {
       const jobId = startRestoreJobFromFile(managedPath);
       res.json({ jobId });
     } catch (err: any) {
+      cleanupTempBackupUpload(managedPath);
       const status = err.message?.includes("正在进行中") ? 409 : 500;
       res.status(status).json({ detail: err.message || "启动恢复失败" });
     }
@@ -406,9 +413,15 @@ export function createSettingsBackupRouter() {
   }, backupUpload.single("file"), async (req: AuthRequest, res: Response) => {
     const file = req.file;
     if (!file) { res.status(400).json({ detail: "请选择备份文件" }); return; }
-    // Return async job - inspection of large archives can be slow
-    const jobId = startImportSaveJob(file.path, file.originalname);
-    res.json({ jobId });
+    try {
+      // Return async job - inspection of large archives can be slow
+      const jobId = startImportSaveJob(file.path, file.originalname);
+      res.json({ jobId });
+    } catch (err: any) {
+      cleanupTempBackupUpload(file.path);
+      const status = err.message?.includes("正在进行中") ? 409 : 500;
+      res.status(status).json({ detail: err.message || "启动保存任务失败" });
+    }
   });
 
   // Admin: save chunked upload as backup record (no restore) - async job
@@ -420,8 +433,14 @@ export function createSettingsBackupRouter() {
       res.status(400).json({ detail: "文件路径无效" });
       return;
     }
-    const jobId = startImportSaveJob(managedPath, fileName || "备份文件");
-    res.json({ jobId });
+    try {
+      const jobId = startImportSaveJob(managedPath, fileName || "备份文件");
+      res.json({ jobId });
+    } catch (err: any) {
+      cleanupTempBackupUpload(managedPath);
+      const status = err.message?.includes("正在进行中") ? 409 : 500;
+      res.status(status).json({ detail: err.message || "启动保存任务失败" });
+    }
   });
 
   return router;

@@ -23,6 +23,10 @@ export interface SystemSettings {
   contact_address: string;
   footer_links: string;
   footer_copyright: string;
+  legal_privacy_updated_at: string;
+  legal_terms_updated_at: string;
+  legal_privacy_sections: string;
+  legal_terms_sections: string;
   announcement_enabled: boolean;
   announcement_text: string;
   announcement_type: string;
@@ -77,6 +81,17 @@ export interface SystemSettings {
   viewer_fill_light_intensity: number;
   viewer_hemisphere_intensity: number;
   viewer_bg_color: string;
+  viewer_edge_threshold_angle: number;
+  viewer_edge_vertex_limit: number;
+  viewer_measure_default_unit: string;
+  viewer_measure_record_limit: number;
+  // Account security
+  security_email_code_cooldown_seconds: number;
+  security_email_code_ttl_seconds: number;
+  security_captcha_ttl_seconds: number;
+  security_password_min_length: number;
+  security_username_min_length: number;
+  security_username_max_length: number;
   // Share policy
   share_default_expire_days: number;
   share_max_expire_days: number;
@@ -673,6 +688,7 @@ async function initChunkedUpload(file: File): Promise<string> {
     fileName: file.name,
     fileSize: file.size,
     totalChunks,
+    purpose: "backup",
   });
   const initData = unwrapApiData<{ uploadId?: string }>(initResp);
   const uploadId = initData.uploadId;

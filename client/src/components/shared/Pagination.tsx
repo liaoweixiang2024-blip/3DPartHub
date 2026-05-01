@@ -3,10 +3,10 @@ import Icon from "./Icon";
 export const DEFAULT_PAGE_SIZE = 60;
 export const PAGE_SIZE_OPTIONS = [30, 60, 120, 180] as const;
 
-export function normalizePageSize(value: string | number | null | undefined) {
+export function normalizePageSize(value: string | number | null | undefined, options: readonly number[] = PAGE_SIZE_OPTIONS, defaultSize = DEFAULT_PAGE_SIZE) {
   const parsed = Number(value);
-  const normalized = Number.isFinite(parsed) ? Math.floor(parsed) : DEFAULT_PAGE_SIZE;
-  return PAGE_SIZE_OPTIONS.includes(normalized as (typeof PAGE_SIZE_OPTIONS)[number]) ? normalized : DEFAULT_PAGE_SIZE;
+  const normalized = Number.isFinite(parsed) ? Math.floor(parsed) : defaultSize;
+  return options.includes(normalized) ? normalized : defaultSize;
 }
 
 interface PaginationProps {

@@ -8,7 +8,7 @@ import type { ViewMode } from "./ModelViewer";
 import { centeredBoxFromBounds, dispatchModelBounds, getModelBounds, type MeasureMode, type MeasurementPoint, type MeasurementRecord, type MeasurementSnapMode, type ModelBoundsDetail, type ModelPartItem } from "./viewerEvents";
 import type { MaterialPresetKey } from "./viewerControls";
 import Icon from "../../components/shared/Icon";
-import { get3DMaterialConfig, type MaterialPresetConfig, type ViewerSettingsOverride } from "../../lib/publicSettings";
+import { get3DMaterialConfig, getPublicSettingsSnapshot, type MaterialPresetConfig, type ViewerSettingsOverride } from "../../lib/publicSettings";
 
 interface MultiFormatLoaderProps {
   url: string;
@@ -187,6 +187,14 @@ const CAD_FORMATS = new Set(["step", "stp", "iges", "igs"]);
 const EDGE_THRESHOLD_ANGLE = 28;
 const EDGE_VERTEX_LIMIT = 700000;
 
+function getEdgeOverlaySettings() {
+  const settings = getPublicSettingsSnapshot();
+  return {
+    thresholdAngle: Math.max(1, Math.min(89, Number(settings.viewer_edge_threshold_angle) || EDGE_THRESHOLD_ANGLE)),
+    vertexLimit: Math.max(0, Math.floor(Number(settings.viewer_edge_vertex_limit) || EDGE_VERTEX_LIMIT)),
+  };
+}
+
 function centeredDetail(detail: ModelBoundsDetail): ModelBoundsDetail {
   return {
     ...detail,
@@ -198,12 +206,13 @@ function syncEdgeOverlay(mesh: THREE.Mesh, visible: boolean, clippingPlanes: THR
   let overlay = mesh.userData.edgeOverlay as THREE.LineSegments | undefined;
   if (!overlay && visible) {
     const vertexCount = mesh.geometry.getAttribute("position")?.count || 0;
-    if (vertexCount > EDGE_VERTEX_LIMIT) {
+    const edgeSettings = getEdgeOverlaySettings();
+    if (edgeSettings.vertexLimit > 0 && vertexCount > edgeSettings.vertexLimit) {
       mesh.userData.edgeOverlaySkipped = true;
       return;
     }
 
-    const edgeGeometry = new THREE.EdgesGeometry(mesh.geometry, EDGE_THRESHOLD_ANGLE);
+    const edgeGeometry = new THREE.EdgesGeometry(mesh.geometry, edgeSettings.thresholdAngle);
     const edgeMaterial = new THREE.LineBasicMaterial({
       color: 0x26313a,
       transparent: true,
@@ -1124,76 +1133,27 @@ function MeasurementOverlay({
   );
 }
 
-function XtServerConverter({ url, ...props }: MultiFormatLoaderProps) {
-  const [status, setStatus] = useState<"idle" | "converting" | "done" | "error">("idle");
-  const [gltfUrl, setGltfUrl] = useState<string | null>(null);
-  const [errorMsg, setErrorMsg] = useState<string | null>(null);
-
-  useEffect(() => {
-    let cancelled = false;
-    async function convert() {
-      setStatus("converting");
-      try {
-        const response = await fetch("/api/models/convert-xt", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ url }),
-        });
-        if (!response.ok) {
-          const data = await response.json().catch(() => ({}));
-          throw new Error(data.detail || "转换请求失败");
-        }
-        const data = await response.json();
-        if (!cancelled) {
-          setGltfUrl(data.gltf_url);
-          setStatus("done");
-        }
-      } catch (err) {
-        if (!cancelled) {
-          setErrorMsg(err instanceof Error ? err.message : "转换失败");
-          setStatus("error");
-        }
-      }
-    }
-    convert();
-    return () => { cancelled = true; };
-  }, [url]);
-
-  if (status === "converting") {
-    return (
-      <Html center>
-        <div className="flex flex-col items-center gap-3">
-          <Icon name="autorenew" size={48} className="text-primary-container/60 animate-spin" />
-          <span className="text-xs text-on-surface-variant">正在转换 Parasolid (.x_t) 格式...</span>
+function XtPendingPreview() {
+  return (
+    <Html center>
+      <div className="flex max-w-sm flex-col items-center gap-3 rounded-lg border border-outline-variant/20 bg-surface/95 px-5 py-4 text-center shadow-xl">
+        <Icon name="hourglass_empty" size={48} className="text-primary-container/70" />
+        <div>
+          <p className="text-sm font-semibold text-on-surface">XT 文件正在等待后台预览转换</p>
+          <p className="mt-1 text-xs leading-5 text-on-surface-variant">
+            这里不会再调用不存在的即时转换接口。请在后台模型管理等待转换队列完成，或使用「从模型重新生成」生成 GLB 预览后再打开。
+          </p>
         </div>
-      </Html>
-    );
-  }
-
-  if (status === "error") {
-    return (
-      <Html center>
-        <div className="flex flex-col items-center gap-3 text-center max-w-sm">
-          <Icon name="error" size={56} className="text-error/60" />
-          <p className="text-xs text-error">{errorMsg}</p>
-          <p className="text-xs text-on-surface-variant">请先将文件上传至服务器进行转换，或转换为 STEP 格式后重试。</p>
-        </div>
-      </Html>
-    );
-  }
-
-  if (status === "done" && gltfUrl) {
-    return <GltfModel {...props} url={gltfUrl} />;
-  }
-
-  return null;
+      </div>
+    </Html>
+  );
 }
 
 export default function MultiFormatLoader(props: MultiFormatLoaderProps) {
   const format = getModelFormat(props.url);
 
   if (format === "xt" || format === "x_t" || format === "xmt_txt") {
-    return <XtServerConverter {...props} url={props.url} />;
+    return <XtPendingPreview />;
   }
 
   if (format === "glb" || format === "gltf") {

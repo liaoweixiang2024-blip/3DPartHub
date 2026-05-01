@@ -188,6 +188,7 @@ export default function CadViewerPanel({
   const [measurementSnapMode, setMeasurementSnapMode] = useState<MeasurementSnapMode>("surface");
   const [measurementPoints, setMeasurementPoints] = useState<MeasurementPoint[]>([]);
   const [measurementRecords, setMeasurementRecords] = useState<MeasurementRecord[]>([]);
+  const [measurementConfig, setMeasurementConfig] = useState({ defaultUnit: "auto", recordLimit: 12 });
   const [watermark, setWatermark] = useState<{ show: boolean; image: string; text: string }>({ show: false, image: "", text: "" });
   const { toast } = useToast();
 
@@ -242,6 +243,10 @@ export default function CadViewerPanel({
           show: !!settings.show_watermark,
           image: settings.watermark_image || "",
           text: settings.watermark_text?.trim() || "",
+        });
+        setMeasurementConfig({
+          defaultUnit: typeof settings.viewer_measure_default_unit === "string" ? settings.viewer_measure_default_unit : "auto",
+          recordLimit: Math.max(1, Math.floor(Number(settings.viewer_measure_record_limit) || 12)),
         });
       })
       .catch(() => {});
@@ -377,11 +382,11 @@ export default function CadViewerPanel({
             points: next,
             createdAt: Date.now(),
           },
-        ].slice(-12));
+        ].slice(-measurementConfig.recordLimit));
       }
       return next;
     });
-  }, [measureMode]);
+  }, [measureMode, measurementConfig.recordLimit]);
 
   const handleMeasureModeChange = useCallback((nextMode: MeasureMode) => {
     setMeasureMode(nextMode);
@@ -574,6 +579,8 @@ export default function CadViewerPanel({
               snapMode={measurementSnapMode}
               bounds={modelBounds}
               active={measurementOpen && measureMode !== "bounds"}
+              defaultUnit={measurementConfig.defaultUnit}
+              recordLimit={measurementConfig.recordLimit}
               onModeChange={handleMeasureModeChange}
               onSnapModeChange={setMeasurementSnapMode}
               onClear={() => setMeasurementPoints([])}

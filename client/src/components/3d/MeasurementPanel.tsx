@@ -10,6 +10,8 @@ interface MeasurementPanelProps {
   snapMode: MeasurementSnapMode;
   bounds: ModelBoundsDetail | null;
   active: boolean;
+  defaultUnit?: string;
+  recordLimit?: number;
   onModeChange: (mode: MeasureMode) => void;
   onSnapModeChange: (mode: MeasurementSnapMode) => void;
   onClear: () => void;
@@ -118,6 +120,8 @@ export default function MeasurementPanel({
   snapMode,
   bounds,
   active,
+  defaultUnit = "auto",
+  recordLimit = 12,
   onModeChange,
   onSnapModeChange,
   onClear,
@@ -125,7 +129,8 @@ export default function MeasurementPanel({
   onRemoveRecord,
   onClose,
 }: MeasurementPanelProps) {
-  const [unit, setUnit] = useState<MeasureUnit>("auto");
+  const normalizedDefaultUnit: MeasureUnit = defaultUnit === "mm" || defaultUnit === "cm" || defaultUnit === "m" ? defaultUnit : "auto";
+  const [unit, setUnit] = useState<MeasureUnit>(normalizedDefaultUnit);
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
   const panelClass = variant === "mobile"
     ? "absolute left-3 right-12 bottom-4 z-40"
@@ -319,7 +324,7 @@ export default function MeasurementPanel({
             <div className="flex items-center justify-between gap-2 border-b border-outline-variant/10 px-2.5 py-2">
               <div className="min-w-0">
                 <div className="text-[11px] font-medium text-on-surface">测量历史</div>
-                <div className="text-[10px] text-on-surface-variant">最多保留最近 12 条</div>
+                <div className="text-[10px] text-on-surface-variant">最多保留最近 {recordLimit} 条</div>
               </div>
               <button
                 type="button"

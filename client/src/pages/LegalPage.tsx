@@ -1,116 +1,118 @@
+import useSWR from "swr";
 import { useParams, Link } from "react-router-dom";
 import { useDocumentTitle } from "../hooks/useDocumentTitle";
-import Icon from "../components/shared/Icon";
-import { PageHeader } from "../components/shared/PagePrimitives";
-import { PublicPageShell } from "../components/shared/PublicPageShell";
-import { getSiteTitle, getFooterLinks, getFooterCopyright, getContactEmail } from "../lib/publicSettings";
+import { AdminPageShell } from "../components/shared/AdminPageShell";
+import { AdminContentPanel, AdminManagementPage } from "../components/shared/AdminManagementPage";
+import { getCachedPublicSettings } from "../lib/publicSettings";
+import { DEFAULT_PRIVACY_SECTIONS, DEFAULT_TERMS_SECTIONS, parseLegalSections } from "../lib/legalContent";
 
-const PRIVACY = [
-  { title: "信息收集", content: "我们收集您主动提供的信息，包括：注册账号时的用户名和邮箱、上传的 3D 模型文件及其元数据、反馈内容。系统会自动收集：登录时间和 IP 地址（用于安全审计）、浏览器类型和设备信息（用于优化体验）。" },
-  { title: "信息使用", content: "您的信息仅用于：提供和维护平台服务、处理模型上传和格式转换、改善用户体验和平台功能、安全防护和异常检测。我们不会将您的个人信息出售或分享给第三方。" },
-  { title: "数据存储", content: "所有数据存储在您部署的服务器上，由您完全掌控。数据通过数据库加密存储，文件通过操作系统权限保护。平台开发者无法访问您的数据。" },
-  { title: "数据安全", content: "我们采取以下措施保护您的数据：所有 API 通信使用 HTTPS 加密、密码使用 bcrypt 哈希存储、JWT 令牌认证和授权、定期安全审计和漏洞修复。" },
-  { title: "Cookie 使用", content: "平台使用本地存储（LocalStorage）保存：登录状态和偏好设置、主题和界面配置。不使用第三方跟踪 Cookie。" },
-  { title: "数据删除", content: "您可以随时：删除自己上传的模型、联系管理员删除您的账号和所有关联数据。删除操作不可恢复。" },
-  { title: "政策更新", content: "我们可能会不时更新本隐私声明。重大变更会通过平台公告通知用户。继续使用平台即表示您同意更新后的政策。" },
-];
+function splitParagraphs(content: string) {
+  return content
+    .split(/\n+/)
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
 
-const TERMS = [
-  { title: "服务说明", content: "3DPartHub 是一个开源的 3D 零件模型管理平台，提供模型上传、格式转换、在线预览和团队协作功能。平台按「现状」提供服务，不保证服务的持续可用性。" },
-  { title: "用户账号", content: "您需要注册账号才能使用完整功能。您应当：提供真实准确的注册信息、妥善保管账号密码、对账号下的所有活动负责。如发现未授权使用，请立即通知管理员。" },
-  { title: "用户内容", content: "您保留对上传内容的所有权。您声明并保证：拥有上传内容的合法权利、内容不侵犯他人的知识产权、内容不违反法律法规。平台有权删除违规内容。" },
-  { title: "使用规范", content: "您不得：上传恶意软件或病毒、尝试未授权访问系统、干扰平台正常运行、利用平台从事违法活动。违反规定的账号将被暂停或删除。" },
-  { title: "免责声明", content: "平台不承担以下责任：因网络故障导致的数据丢失、模型格式转换的精度损失、因不可抗力导致的服务中断。建议定期使用备份功能保存数据。" },
-  { title: "知识产权", content: "3DPartHub 基于 MIT 开源许可证发布。平台源代码可自由使用、修改和分发。用户上传的内容版权归原所有者所有。" },
-  { title: "终止服务", content: "管理员有权暂停或终止违反使用条款的账号。您可以在管理员的协助下删除您的账号。账号删除后，相关数据将从服务器永久移除。" },
-];
-
-function Footer() {
-  return (
-    <footer className="hidden shrink-0 border-t border-outline-variant/10 bg-surface-container-low md:block">
-      <div className="px-8 py-4">
-        <div className="flex items-center justify-between gap-8">
-          <span className="font-headline font-semibold text-sm text-on-surface-variant/60">{getSiteTitle()}</span>
-          <div className="flex items-center gap-5">
-            {getFooterLinks().map((link, i) => (
-              <a key={i} href={link.url} target="_blank" rel="noopener noreferrer" className="text-[11px] text-on-surface-variant/40 hover:text-on-surface-variant/70 transition-colors">
-                {link.label}
-              </a>
-            ))}
-            {getContactEmail() && (
-              <a href={`mailto:${getContactEmail()}`} className="flex items-center gap-1.5 text-[11px] text-on-surface-variant/40 hover:text-primary transition-colors">
-                <Icon name="mail" size={13} />
-                <span>{getContactEmail()}</span>
-              </a>
-            )}
-          </div>
-        </div>
-        <p className="text-[10px] text-on-surface-variant/25 mt-2.5">
-          {getFooterCopyright() || `© ${new Date().getFullYear()} ${getSiteTitle()}. All rights reserved.`}
-        </p>
-      </div>
-    </footer>
-  );
+function sectionId(index: number) {
+  return `legal-section-${index + 1}`;
 }
 
 export default function LegalPage() {
   const { type } = useParams<{ type: string }>();
   const isPrivacy = type === "privacy";
+  const { data: settings } = useSWR("publicSettings", () => getCachedPublicSettings());
   useDocumentTitle(isPrivacy ? "隐私声明" : "用户协议");
 
-  const sections = isPrivacy ? PRIVACY : TERMS;
+  const sections = parseLegalSections(
+    isPrivacy ? settings?.legal_privacy_sections : settings?.legal_terms_sections,
+    isPrivacy ? DEFAULT_PRIVACY_SECTIONS : DEFAULT_TERMS_SECTIONS,
+  );
+  const updatedAt = String(isPrivacy ? settings?.legal_privacy_updated_at || "2026 年 4 月" : settings?.legal_terms_updated_at || "2026 年 4 月");
+  const preface = isPrivacy
+    ? "请用户在使用本站前仔细阅读并理解本隐私声明。本声明说明本站在账号登录、模型资料管理、产品选型、规格查询、工单协作及后台管理过程中如何收集、使用、存储和保护相关信息。"
+    : "请用户在使用本站前仔细阅读并充分理解本协议。用户登录、浏览、上传、下载、分享或使用本站功能的行为，即表示用户已理解并同意遵守本协议约定。";
+  const tabs = (
+    <div className="flex min-w-0 gap-2">
+      <Link
+        to="/legal/privacy"
+        className={`inline-flex h-9 items-center justify-center rounded-lg px-3 text-sm font-bold transition-colors ${
+          isPrivacy ? "bg-primary-container text-on-primary" : "border border-outline-variant/15 bg-surface-container-lowest text-on-surface-variant hover:bg-surface-container"
+        }`}
+      >
+        隐私声明
+      </Link>
+      <Link
+        to="/legal/terms"
+        className={`inline-flex h-9 items-center justify-center rounded-lg px-3 text-sm font-bold transition-colors ${
+          !isPrivacy ? "bg-primary-container text-on-primary" : "border border-outline-variant/15 bg-surface-container-lowest text-on-surface-variant hover:bg-surface-container"
+        }`}
+      >
+        用户协议
+      </Link>
+    </div>
+  );
 
   return (
-    <PublicPageShell>
-      <main className="flex-1 overflow-y-auto scrollbar-hidden bg-surface-dim px-4 py-5 pb-24 md:p-6">
-        <div className="mx-auto max-w-2xl">
-          <div className="mb-6 flex gap-3 md:mb-8">
-            <Link
-              to="/legal/privacy"
-              className={`rounded-lg px-3 py-1.5 text-sm font-medium transition-colors md:px-4 md:py-2 ${
-                isPrivacy ? "bg-primary-container text-on-primary" : "bg-surface-container-high text-on-surface-variant hover:bg-surface-container-highest"
-              }`}
-            >
-              隐私声明
-            </Link>
-            <Link
-              to="/legal/terms"
-              className={`rounded-lg px-3 py-1.5 text-sm font-medium transition-colors md:px-4 md:py-2 ${
-                !isPrivacy ? "bg-primary-container text-on-primary" : "bg-surface-container-high text-on-surface-variant hover:bg-surface-container-highest"
-              }`}
-            >
-              用户协议
-            </Link>
-          </div>
-
-          <PageHeader title={isPrivacy ? "隐私声明" : "用户协议"} description="最后更新：2026 年 4 月" className="mb-6 md:mb-8" />
-
-          <div className="space-y-4 md:space-y-6">
-            {sections.map((section, i) => (
-              <div key={section.title} className="rounded-lg border border-outline-variant/10 bg-surface-container-low p-4 md:p-5">
-                <h2 className="mb-1.5 text-sm font-bold text-on-surface md:mb-2 md:text-base">
-                  {i + 1}. {section.title}
-                </h2>
-                <p className="text-xs leading-relaxed text-on-surface-variant md:text-sm">
-                  {section.content}
-                </p>
+    <AdminPageShell desktopContentClassName="p-8" mobileContentClassName="px-4 py-4 pb-20">
+      <AdminManagementPage
+        title={isPrivacy ? "隐私声明" : "用户协议"}
+        description="平台服务条款与数据处理说明"
+        meta={`最后更新：${updatedAt}`}
+        actions={tabs}
+        contentClassName="overflow-hidden"
+      >
+        <AdminContentPanel scroll className="overflow-y-auto bg-surface p-5 md:p-8">
+          <article className="w-full text-on-surface">
+            <header className="border-b border-outline-variant/20 pb-7 text-center md:pb-9">
+              <h1 className="text-[26px] font-bold tracking-normal md:text-[34px]">
+                {isPrivacy ? "隐私声明" : "用户协议"}
+              </h1>
+              <div className="mt-4 flex flex-wrap items-center justify-center gap-x-5 gap-y-1 text-xs text-on-surface-variant md:text-sm">
+                <span>更新日期：{updatedAt}</span>
+                <span>生效日期：{updatedAt}</span>
               </div>
-            ))}
-          </div>
-        </div>
-      </main>
-      <Footer />
-      <footer className="border-t border-outline-variant/10 px-4 py-4 text-center md:hidden">
-        <div className="flex flex-col items-center gap-2">
-          {getContactEmail() && (
-            <a href={`mailto:${getContactEmail()}`} className="flex items-center gap-1 text-[11px] text-on-surface-variant/40 transition-colors hover:text-primary">
-              <Icon name="mail" size={12} />
-              <span>{getContactEmail()}</span>
-            </a>
-          )}
-          <p className="text-[10px] text-on-surface-variant/40">© {new Date().getFullYear()} {getSiteTitle()}</p>
-        </div>
-      </footer>
-    </PublicPageShell>
+            </header>
+
+            <p className="mt-7 max-w-6xl text-sm leading-8 text-on-surface-variant md:mt-9 md:text-[15px]">
+              {preface}
+            </p>
+
+            <nav className="mt-7 border-y border-outline-variant/12 py-4 md:mt-8">
+              <p className="text-sm font-bold text-on-surface">目录</p>
+              <ol className="mt-3 grid grid-cols-1 gap-x-8 gap-y-2 text-sm text-on-surface-variant sm:grid-cols-2 xl:grid-cols-3">
+                {sections.map((section, i) => (
+                  <li key={`toc-${section.title}-${i}`} className="min-w-0">
+                    <a
+                      href={`#${sectionId(i)}`}
+                      className="flex min-w-0 gap-2 rounded-md px-2 py-1.5 transition-colors hover:bg-surface-container-high hover:text-on-surface"
+                    >
+                      <span className="shrink-0 tabular-nums">{i + 1}.</span>
+                      <span className="truncate">{section.title}</span>
+                    </a>
+                  </li>
+                ))}
+              </ol>
+            </nav>
+
+            <div className="mt-8 space-y-8 md:mt-10 md:space-y-9">
+              {sections.map((section, i) => (
+                <section id={sectionId(i)} key={`${section.title}-${i}`} className="scroll-mt-24 break-inside-avoid">
+                  <h2 className="border-b border-outline-variant/10 pb-2 text-base font-bold leading-7 text-on-surface md:text-lg">
+                    第 {i + 1} 条 {section.title}
+                  </h2>
+                  <div className="mt-3 max-w-6xl space-y-3">
+                    {splitParagraphs(section.content).map((paragraph, paragraphIndex) => (
+                      <p key={`${section.title}-${paragraphIndex}`} className="text-justify text-sm leading-7 text-on-surface-variant md:text-[15px] md:leading-8">
+                        {paragraph}
+                      </p>
+                    ))}
+                  </div>
+                </section>
+              ))}
+            </div>
+          </article>
+        </AdminContentPanel>
+      </AdminManagementPage>
+    </AdminPageShell>
   );
 }

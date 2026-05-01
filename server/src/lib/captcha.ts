@@ -11,7 +11,7 @@ interface CaptchaResult {
   captchaSvg: string;
 }
 
-export async function generateCaptcha(): Promise<CaptchaResult> {
+export async function generateCaptcha(ttlSeconds = 300): Promise<CaptchaResult> {
   const captcha = svgCaptcha.create({
     size: 4,
     noise: 3,
@@ -24,7 +24,7 @@ export async function generateCaptcha(): Promise<CaptchaResult> {
   const captchaId = `cap_${randomBytes(18).toString("base64url")}`;
   const key = `captcha:${captchaId}`;
 
-  await redis.set(key, captcha.text.toLowerCase(), "EX", 300); // 5 min TTL
+  await redis.set(key, captcha.text.toLowerCase(), "EX", Math.max(60, ttlSeconds));
 
   return { captchaId, captchaSvg: captcha.data };
 }
@@ -44,9 +44,9 @@ export async function checkRateLimit(key: string, ttlSeconds: number): Promise<b
   return true;
 }
 
-export async function storeEmailCode(email: string, code: string): Promise<void> {
+export async function storeEmailCode(email: string, code: string, ttlSeconds = 600): Promise<void> {
   const key = `email_code:${email}`;
-  await redis.set(key, code, "EX", 600); // 10 min TTL
+  await redis.set(key, code, "EX", Math.max(60, ttlSeconds));
 }
 
 export async function verifyEmailCode(email: string, code: string): Promise<boolean> {

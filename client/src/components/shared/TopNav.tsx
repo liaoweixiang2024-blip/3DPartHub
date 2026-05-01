@@ -258,6 +258,8 @@ export default function TopNav({ compact = false, onMenuToggle }: TopNavProps) {
     mutate((key) => typeof key === "string" && key.startsWith("/models"));
   }, []);
 
+  const desktopIconClass = "p-2 text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high rounded-lg transition-colors";
+
   if (compact) {
     return (
       <>
@@ -328,6 +330,16 @@ export default function TopNav({ compact = false, onMenuToggle }: TopNavProps) {
         </form>
 
         <div className="flex items-center gap-0.5 shrink-0 ml-auto pr-6">
+          <Tooltip text="产品影像" side="bottom">
+            <Link to="/product-wall" className={desktopIconClass}>
+              <Icon name="image" size={20} />
+            </Link>
+          </Tooltip>
+          <Tooltip text="规格查询" side="bottom">
+            <Link to="/tools/thread-size" className={desktopIconClass}>
+              <Icon name="straighten" size={20} />
+            </Link>
+          </Tooltip>
           {isAdmin && (
             <Tooltip text="后台设置" side="bottom">
               <Link to="/admin/settings" className="p-2 text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high rounded-lg transition-colors">

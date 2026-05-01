@@ -215,66 +215,72 @@ export default function AuditLogPage() {
     setSize((current) => current + 1);
   }, [hasMore, isLoadingMore, setSize]);
 
-  const selectedActionLabel = filterAction ? ACTION_MAP[filterAction]?.label || filterAction : "全部操作";
-  const selectedResourceLabel = filterResource ? RESOURCE_MAP[filterResource] || filterResource : "全部资源";
   const filterBar = (
-    <div className="flex min-h-11 flex-wrap items-center gap-3">
-      <div className="flex min-h-9 flex-wrap items-center gap-2">
-      <div className={`relative inline-flex h-9 w-[6.5rem] shrink-0 items-center justify-center text-sm font-medium leading-none transition-colors after:absolute after:inset-x-3 after:bottom-0 after:h-0.5 after:rounded-full ${filterAction ? "text-primary-container after:bg-primary-container" : "text-on-surface-variant after:bg-transparent hover:text-on-surface"}`}>
-        <select
-          value={filterAction}
-          onChange={e => setFilterAction(e.target.value)}
-          className="relative z-10 h-full w-full cursor-pointer appearance-none border-0 bg-transparent pl-3 pr-7 text-center outline-none [text-align-last:center]"
-        >
-          <option value="">全部操作</option>
-          {Object.entries(ACTION_MAP).map(([k, v]) => (
-            <option key={k} value={k}>{v.label}</option>
-          ))}
-        </select>
-        <Icon name="expand_more" size={14} className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-current opacity-60" />
+    <div className="grid min-h-11 items-center gap-3 md:grid-cols-[minmax(0,auto)_minmax(0,1fr)_18rem]">
+      <div className="grid min-w-0 grid-cols-2 items-center gap-0 md:inline-flex md:grid-cols-none">
+        {[
+          {
+            value: filterAction,
+            onChange: setFilterAction,
+            label: "操作",
+            allLabel: "全部操作",
+            options: Object.entries(ACTION_MAP).map(([value, item]) => ({ value, label: item.label })),
+          },
+          {
+            value: filterResource,
+            onChange: setFilterResource,
+            label: "资源",
+            allLabel: "全部资源",
+            options: Object.entries(RESOURCE_MAP).map(([value, label]) => ({ value, label })),
+          },
+        ].map((filter, index) => (
+          <div
+            key={filter.label}
+            className={`relative inline-flex h-9 min-w-0 items-center justify-center text-sm font-medium leading-none transition-colors after:absolute after:inset-x-3 after:bottom-0 after:h-0.5 after:rounded-full md:w-[7.25rem] ${
+              filter.value
+                ? "text-primary-container after:bg-primary-container"
+                : "text-on-surface-variant after:bg-transparent hover:text-on-surface"
+            }`}
+          >
+            {index > 0 ? <span className="absolute left-0 top-1/2 hidden h-3.5 w-px -translate-y-1/2 bg-outline-variant/20 md:block" /> : null}
+            <select
+              value={filter.value}
+              onChange={(event) => filter.onChange(event.target.value)}
+              aria-label={filter.label}
+              className="relative z-10 h-full w-full cursor-pointer appearance-none truncate border-0 bg-transparent pl-3 pr-7 text-center outline-none [text-align-last:center]"
+            >
+              <option value="">{filter.allLabel}</option>
+              {filter.options.map((option) => (
+                <option key={option.value} value={option.value}>{option.label}</option>
+              ))}
+            </select>
+            <Icon name="expand_more" size={14} className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-current opacity-60" />
+          </div>
+        ))}
       </div>
-      <div className={`relative inline-flex h-9 w-[6.5rem] shrink-0 items-center justify-center text-sm font-medium leading-none transition-colors after:absolute after:inset-x-3 after:bottom-0 after:h-0.5 after:rounded-full ${filterResource ? "text-primary-container after:bg-primary-container" : "text-on-surface-variant after:bg-transparent hover:text-on-surface"}`}>
-        <select
-          value={filterResource}
-          onChange={e => setFilterResource(e.target.value)}
-          className="relative z-10 h-full w-full cursor-pointer appearance-none border-0 bg-transparent pl-3 pr-7 text-center outline-none [text-align-last:center]"
-        >
-          <option value="">全部资源</option>
-          {Object.entries(RESOURCE_MAP).map(([k, v]) => (
-            <option key={k} value={k}>{v}</option>
-          ))}
-        </select>
-        <Icon name="expand_more" size={14} className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-current opacity-60" />
-      </div>
-      {(filterAction || filterResource) && (
-        <button
-          onClick={() => { setFilterAction(""); setFilterResource(""); }}
-          className="relative z-20 inline-flex h-9 items-center justify-center px-3 text-xs font-bold text-on-surface-variant transition-colors hover:text-on-surface"
-        >
-          清除筛选
-        </button>
-      )}
-      </div>
-      <div className="ml-auto flex min-w-0 items-center gap-3 overflow-x-auto scrollbar-none text-xs text-on-surface-variant">
-        <span className="whitespace-nowrap">日志记录 <strong className="ml-1 text-on-surface">{total}</strong></span>
-        {searchText && (
+
+      <div className="flex min-w-0 items-center gap-3 overflow-x-auto scrollbar-none text-xs text-on-surface-variant md:justify-end">
+        <span className="whitespace-nowrap">共 <strong className="text-on-surface tabular-nums">{total}</strong> 条</span>
+        {searchText ? (
           <>
             <span className="h-3 w-px shrink-0 bg-outline-variant/20" />
-            <span className="whitespace-nowrap">当前匹配 <strong className="ml-1 text-on-surface">{visibleLogs.length}</strong></span>
+            <span className="whitespace-nowrap">匹配 <strong className="text-on-surface tabular-nums">{visibleLogs.length}</strong> 条</span>
           </>
-        )}
-        <span className="h-3 w-px shrink-0 bg-outline-variant/20" />
-        <span className="inline-flex whitespace-nowrap">
-          <span>操作</span>
-          <strong className="ml-1 inline-block w-[4em] text-center text-on-surface">{selectedActionLabel}</strong>
-        </span>
-        <span className="h-3 w-px shrink-0 bg-outline-variant/20" />
-        <span className="inline-flex whitespace-nowrap">
-          <span>资源</span>
-          <strong className="ml-1 inline-block w-[4em] text-center text-on-surface">{selectedResourceLabel}</strong>
-        </span>
+        ) : null}
+        {(filterAction || filterResource) ? (
+          <>
+            <span className="h-3 w-px shrink-0 bg-outline-variant/20" />
+            <button
+              onClick={() => { setFilterAction(""); setFilterResource(""); }}
+              className="shrink-0 text-xs font-semibold text-primary-container transition-colors hover:text-on-surface"
+            >
+              清除筛选
+            </button>
+          </>
+        ) : null}
       </div>
-      <div className="flex h-9 w-full items-center rounded-lg border border-outline-variant/15 bg-surface-container px-3 sm:w-72">
+
+      <div className="flex h-9 w-full min-w-0 items-center rounded-sm border border-outline-variant/15 bg-surface-container px-3 md:w-72">
         <Icon name="search" size={15} className="mr-2 shrink-0 text-on-surface-variant" />
         <input
           value={search}

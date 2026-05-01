@@ -1,8 +1,7 @@
 import { Router, Response } from "express";
 import { prisma } from "../../lib/prisma.js";
+import { getBusinessConfig } from "../../lib/businessConfig.js";
 import { authMiddleware, type AuthRequest } from "../../middleware/auth.js";
-
-const MAX_ADMIN_USERS_PAGE_SIZE = 100;
 
 function adminGuard(req: AuthRequest, res: Response): boolean {
   if (req.user?.role !== "ADMIN") {
@@ -56,8 +55,11 @@ export function createAdminUsersRouter() {
   router.get("/api/admin/users", authMiddleware, async (req: AuthRequest, res: Response) => {
     if (!adminGuard(req, res)) return;
     try {
+      const { pageSizePolicy } = await getBusinessConfig();
+      const defaultPageSize = Math.max(1, Math.floor(Number(pageSizePolicy.adminUserDefault) || 20));
+      const maxPageSize = Math.max(1, Math.floor(Number(pageSizePolicy.adminUserMax) || 100));
       const page = Math.max(1, Number(req.query.page) || 1);
-      const pageSize = Math.min(MAX_ADMIN_USERS_PAGE_SIZE, Math.max(1, Number(req.query.page_size) || 20));
+      const pageSize = Math.min(maxPageSize, Math.max(1, Number(req.query.page_size) || defaultPageSize));
       const search = req.query.search as string | undefined;
       const role = queryRole(req.query.role);
 

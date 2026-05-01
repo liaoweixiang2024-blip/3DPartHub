@@ -38,6 +38,11 @@ export type UploadPolicy = {
   chunkThresholdMb: number;
   optionImageMaxSizeMb: number;
   optionImageMimePattern: string;
+  selectionImportMaxSizeMb: number;
+  selectionImportMaxRows: number;
+  selectionImportMaxColumns: number;
+  productWallImageMaxSizeMb: number;
+  productWallUploadMaxFiles: number;
   ticketAttachmentMaxSizeMb: number;
   ticketAttachmentExts: string[];
 };
@@ -87,6 +92,7 @@ export const DEFAULT_SUPPORT_STEPS: SupportStepConfig[] = [
 export const DEFAULT_USER_NAV: NavItemConfig[] = [
   { label: "模型库", icon: "dashboard", path: "/", enabled: true },
   { label: "产品选型", icon: "tune", path: "/selection", enabled: true },
+  { label: "产品影像", icon: "image", path: "/product-wall", enabled: true },
   { label: "我的收藏", icon: "star", path: "/favorites", enabled: true },
   { label: "我的询价", icon: "request_quote", path: "/my-inquiries", enabled: true },
   { label: "下载历史", icon: "download", path: "/downloads", enabled: true },
@@ -123,6 +129,11 @@ export const DEFAULT_UPLOAD_POLICY: UploadPolicy = {
   chunkThresholdMb: 20,
   optionImageMaxSizeMb: 5,
   optionImageMimePattern: "image\\/(png|jpe?g|gif|webp|svg\\+xml)",
+  selectionImportMaxSizeMb: 5,
+  selectionImportMaxRows: 10000,
+  selectionImportMaxColumns: 200,
+  productWallImageMaxSizeMb: 8,
+  productWallUploadMaxFiles: 20,
   ticketAttachmentMaxSizeMb: 5,
   ticketAttachmentExts: [".jpg", ".jpeg", ".png", ".gif", ".webp"],
 };
@@ -161,11 +172,29 @@ export const DEFAULT_SELECTION_THREAD_PRIORITY: Record<string, number> = {
 };
 
 export const DEFAULT_PAGE_SIZE_POLICY = {
+  homeDefault: 60,
+  homeMax: 10000,
+  homeOption1: 30,
+  homeOption2: 60,
+  homeOption3: 120,
+  homeOption4: 180,
   selectionDefault: 50,
   selectionMax: 50000,
+  selectionAdminRenderBatch: 120,
+  selectionGeneratePreviewPageSize: 50,
   inquiryAdminDefault: 20,
   inquiryAdminMax: 100,
   ticketListMax: 50,
+  notificationDefault: 20,
+  notificationMax: 100,
+  adminUserDefault: 20,
+  adminUserMax: 100,
+  shareAdminDefault: 20,
+  shareAdminMax: 100,
+  auditDefault: 50,
+  auditMax: 100,
+  userBatchDownloadMax: 100,
+  adminBatchDownloadMax: 50,
 };
 
 export function jsonSetting<T>(value: unknown, fallback: T): T {

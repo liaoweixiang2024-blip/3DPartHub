@@ -43,8 +43,10 @@ router.post("/api/batch/download", authMiddleware, requireRole("ADMIN"), async (
     return;
   }
 
-  if (modelIds.length > 50) {
-    res.status(400).json({ detail: "一次最多下载 50 个模型" });
+  const { pageSizePolicy } = await getBusinessConfig();
+  const batchMax = Math.max(1, Math.floor(Number(pageSizePolicy.adminBatchDownloadMax) || 50));
+  if (modelIds.length > batchMax) {
+    res.status(400).json({ detail: `一次最多下载 ${batchMax} 个模型` });
     return;
   }
 

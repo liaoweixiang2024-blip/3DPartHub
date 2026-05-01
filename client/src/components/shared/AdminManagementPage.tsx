@@ -41,6 +41,14 @@ interface AdminEmptyStateProps {
   className?: string;
 }
 
+interface AdminDetailHeaderProps {
+  title: ReactNode;
+  description?: ReactNode;
+  actions?: ReactNode;
+  onBack?: () => void;
+  children?: ReactNode;
+}
+
 const toneClasses: Record<NonNullable<AdminStatItem["tone"]>, string> = {
   primary: "bg-primary-container/12 text-primary-container",
   success: "bg-emerald-500/12 text-emerald-400",
@@ -54,15 +62,40 @@ export function AdminPageHero({ title, meta, description, actions }: Omit<AdminM
   return (
     <section className="shrink-0 rounded-xl border border-outline-variant/15 bg-surface-container-low px-4 py-3 md:px-5">
       <div className="flex min-h-[58px] items-center justify-between gap-3">
-        <div className="min-w-0">
+        <div className="min-w-0 flex-1">
           <div className="flex min-h-7 flex-wrap items-center gap-x-2.5 gap-y-1">
             <h1 className="truncate text-lg font-bold leading-7 tracking-tight text-on-surface md:text-xl">{title}</h1>
             {meta ? <span className="rounded-md border border-outline-variant/15 bg-surface-container px-2 py-0.5 text-[11px] font-medium text-on-surface-variant">{meta}</span> : null}
           </div>
           {description ? <p className="mt-0.5 line-clamp-1 text-xs text-on-surface-variant">{description}</p> : null}
         </div>
-        {actions ? <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">{actions}</div> : null}
+        {actions ? <div className="flex shrink-0 items-center justify-end gap-2 md:flex-wrap">{actions}</div> : null}
       </div>
+    </section>
+  );
+}
+
+export function AdminDetailHeader({ title, description, actions, onBack, children }: AdminDetailHeaderProps) {
+  return (
+    <section className="shrink-0 border-b border-outline-variant/10 bg-surface-container px-4 py-3">
+      <div className="flex min-h-9 min-w-0 items-center gap-3">
+        {onBack ? (
+          <button
+            type="button"
+            onClick={onBack}
+            className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-on-surface-variant transition-colors hover:bg-surface-container-high hover:text-on-surface"
+            aria-label="返回"
+          >
+            <Icon name="arrow_back" size={20} />
+          </button>
+        ) : null}
+        <div className="min-w-0 flex-1">
+          <h1 className="truncate text-lg font-bold leading-7 tracking-tight text-on-surface md:text-xl">{title}</h1>
+          {description ? <div className="mt-0.5 min-w-0 text-xs text-on-surface-variant">{description}</div> : null}
+        </div>
+        {actions ? <div className="flex shrink-0 items-center justify-end gap-2">{actions}</div> : null}
+      </div>
+      {children ? <div className="mt-3 flex flex-wrap items-center gap-2">{children}</div> : null}
     </section>
   );
 }

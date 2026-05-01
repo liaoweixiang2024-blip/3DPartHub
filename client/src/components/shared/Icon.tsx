@@ -33,7 +33,7 @@ import {
   Compass,
   CircleDotIcon,  Heart,
   AlertTriangle,
-  Pencil, Undo2, Save,
+  PencilLine, Trash, Undo2, Save,
   Users, Receipt, Megaphone,
   MessageCircle, BellOff,
   Phone,
@@ -43,6 +43,8 @@ import {
   FileText,
   Palette,
   Sparkles,
+  ZoomIn,
+  ZoomOut,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import type { CSSProperties } from "react";
@@ -136,11 +138,11 @@ const iconMap: Record<string, LucideIcon> = {
   build: Wrench,
   dashboard: Package,
   "hourglass_top": RefreshCw,
-  delete: Trash2,
+  delete: Trash,
   delete_sweep: Trash2,
   cleaning_services: CheckCircle,
   restore: Undo2,
-  edit: Pencil,
+  edit: PencilLine,
   save: Save,
   group: Users,
   receipt_long: Receipt,
@@ -164,6 +166,8 @@ const iconMap: Record<string, LucideIcon> = {
   inbox: Inbox,
   checklist: ListChecks,
   share: Share2,
+  zoom_in: ZoomIn,
+  zoom_out: ZoomOut,
   description: FileText,
   "request_quote": Receipt,
   rule: ListChecks,
@@ -184,6 +188,7 @@ const iconMap: Record<string, LucideIcon> = {
   opacity: Droplets,
   hexagon: Hexagon,
   waypoints: Waypoints,
+  category: Layers,
 
   // Category icons — parent
   "category_all": Layers,
@@ -213,6 +218,7 @@ const iconMap: Record<string, LucideIcon> = {
   "cat_air_gun": Wind,
   "cat_pneumatic_brand": Cog,
   merge: Merge,
+  merge_type: Merge,
 
   // Category icons — child: 铜接头
   "cat_copper_sleeve": CircleDot,

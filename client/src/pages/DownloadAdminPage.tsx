@@ -37,25 +37,27 @@ function StatsPanel({
   icon,
   iconClassName,
   children,
+  className = "",
 }: {
   title: string;
   description: string;
   icon: string;
   iconClassName: string;
   children: ReactNode;
+  className?: string;
 }) {
   return (
-    <section className="flex min-h-[320px] flex-col overflow-hidden rounded-xl border border-outline-variant/12 bg-surface-container-low">
-      <div className="flex min-h-[72px] shrink-0 items-center justify-between gap-3 border-b border-outline-variant/10 px-4 py-3">
+    <section className={`flex min-h-[320px] flex-col overflow-hidden border-t border-outline-variant/12 pt-4 xl:px-5 ${className}`}>
+      <div className="flex min-h-12 shrink-0 items-center justify-between gap-3">
         <div className="min-w-0">
           <h2 className="truncate text-sm font-semibold text-on-surface">{title}</h2>
           <p className="mt-1 truncate text-xs text-on-surface-variant">{description}</p>
         </div>
-        <span className={`grid h-9 w-9 shrink-0 place-items-center rounded-lg ${iconClassName}`}>
+        <span className={`grid h-8 w-8 shrink-0 place-items-center rounded-lg ${iconClassName}`}>
           <Icon name={icon} size={18} />
         </span>
       </div>
-      <div className="min-h-0 flex-1 p-4">{children}</div>
+      <div className="min-h-0 flex-1 pt-4">{children}</div>
     </section>
   );
 }
@@ -68,6 +70,7 @@ function ChartPanel({ data }: { data: DownloadAdminStats["dailyStats"] }) {
       description="按用户下载记录统计"
       icon="data_usage"
       iconClassName="bg-primary-container/10 text-primary-container"
+      className="xl:pl-0 xl:pr-5"
     >
       <div className="flex h-full min-h-[220px] items-end gap-1.5 sm:gap-2">
         {data.map((item) => {
@@ -97,6 +100,7 @@ function TopModels({ models }: { models: DownloadAdminStats["topModels"] }) {
       description="按模型累计下载量排序"
       icon="download"
       iconClassName="bg-amber-500/10 text-amber-500"
+      className="xl:pl-0 xl:pr-5"
     >
       <div className="space-y-2">
         {models.length === 0 ? (
@@ -105,7 +109,7 @@ function TopModels({ models }: { models: DownloadAdminStats["topModels"] }) {
           <Link
             key={model.model_id}
             to={`/model/${model.model_id}`}
-            className="flex items-center gap-3 rounded-md border border-outline-variant/10 bg-surface-container-lowest p-2 transition-colors hover:border-primary-container/30 hover:bg-surface-container"
+            className="flex items-center gap-3 rounded-md p-2 transition-colors hover:bg-surface-container-high/45"
           >
             <span className="w-6 shrink-0 text-center text-xs font-semibold text-on-surface-variant">
               {index + 1}
@@ -137,6 +141,7 @@ function RecentDownloads({ items }: { items: DownloadAdminStats["recentDownloads
       description="仅包含登录用户产生的下载历史"
       icon="schedule"
       iconClassName="bg-blue-500/10 text-blue-500"
+      className="xl:border-l xl:border-outline-variant/12 xl:pl-5 xl:pr-0"
     >
       <div className="space-y-2">
         {items.length === 0 ? (
@@ -145,7 +150,7 @@ function RecentDownloads({ items }: { items: DownloadAdminStats["recentDownloads
           <Link
             key={item.id}
             to={`/model/${item.model_id}`}
-            className="flex items-center gap-3 rounded-md bg-surface-container-lowest p-2 transition-colors hover:bg-surface-container"
+            className="flex items-center gap-3 rounded-md p-2 transition-colors hover:bg-surface-container-high/45"
           >
             <div className="h-10 w-12 shrink-0 overflow-hidden rounded bg-surface-container-high">
               <ModelThumbnail src={item.thumbnail_url} alt="" className="h-full w-full object-cover" />
@@ -172,6 +177,7 @@ function FormatStats({ items }: { items: DownloadAdminStats["formatStats"] }) {
       description="按用户下载记录统计"
       icon="inventory_2"
       iconClassName="bg-emerald-500/10 text-emerald-500"
+      className="xl:border-l xl:border-outline-variant/12 xl:pl-5 xl:pr-0"
     >
       <div className="space-y-3">
         {items.length === 0 ? (
@@ -257,13 +263,12 @@ function Content() {
       刷新
     </button>
   );
-  const toolbar = (
-    <div className="flex min-h-12 items-center">
-      <div className="grid min-w-0 flex-1 grid-cols-2 sm:grid-cols-3 xl:grid-cols-5">
+  const metrics = (
+    <div className="grid min-w-0 grid-cols-2 sm:grid-cols-3 xl:grid-cols-5">
         {metricItems.map((item, index) => (
           <div
             key={item.label}
-            className="flex min-h-12 flex-col items-center justify-center gap-1 border-b border-r border-outline-variant/12 px-3 py-2 text-center even:border-r-0 sm:even:border-r sm:[&:nth-child(3n)]:border-r-0 xl:border-b-0 xl:even:border-r xl:[&:nth-child(3n)]:border-r xl:[&:nth-child(5n)]:border-r-0"
+            className="flex min-h-14 flex-col items-center justify-center gap-1 border-b border-r border-outline-variant/12 px-3 py-2 text-center even:border-r-0 sm:even:border-r sm:[&:nth-child(3n)]:border-r-0 xl:border-b-0 xl:even:border-r xl:[&:nth-child(3n)]:border-r xl:[&:nth-child(5n)]:border-r-0"
           >
             <span className="flex min-w-0 items-center justify-center gap-1.5">
               <Icon name={item.icon} size={14} className={item.accent} />
@@ -274,7 +279,6 @@ function Content() {
             </span>
           </div>
         ))}
-      </div>
     </div>
   );
 
@@ -283,17 +287,21 @@ function Content() {
       title="下载统计"
       description="统计模型下载量、用户下载历史、热门模型和格式分布"
       actions={actions}
-      toolbar={toolbar}
       contentClassName="min-h-0"
     >
-      <AdminContentPanel scroll>
-        <div className="h-full overflow-y-auto overflow-x-hidden p-4 custom-scrollbar">
-          <div className="grid gap-4 xl:grid-cols-2">
-            <ChartPanel data={data.dailyStats} />
-            <FormatStats items={data.formatStats} />
-            <TopModels models={data.topModels} />
-            <RecentDownloads items={data.recentDownloads} />
+      <AdminContentPanel scroll className="!border-0 !bg-transparent">
+        <div className="h-full overflow-y-auto overflow-x-hidden pb-4 custom-scrollbar">
+          <section className="rounded-xl border border-outline-variant/15 bg-surface-container-low px-4 py-4 md:px-5">
+          <div className="space-y-5">
+            {metrics}
+            <div className="grid gap-y-8 xl:grid-cols-2 xl:gap-x-0">
+              <ChartPanel data={data.dailyStats} />
+              <FormatStats items={data.formatStats} />
+              <TopModels models={data.topModels} />
+              <RecentDownloads items={data.recentDownloads} />
+            </div>
           </div>
+          </section>
         </div>
       </AdminContentPanel>
     </AdminManagementPage>

@@ -6,7 +6,8 @@ import { SkeletonList } from '../components/shared/Skeleton';
 import Icon from '../components/shared/Icon';
 import InfiniteLoadTrigger from '../components/shared/InfiniteLoadTrigger';
 import { AdminPageShell } from "../components/shared/AdminPageShell";
-import { AdminManagementPage } from "../components/shared/AdminManagementPage";
+import { AdminEmptyState, AdminManagementPage } from "../components/shared/AdminManagementPage";
+import ResponsiveSectionTabs from "../components/shared/ResponsiveSectionTabs";
 import { useAuthStore } from '../stores/useAuthStore';
 import { getTickets, updateTicketStatus, type Ticket } from '../api/tickets';
 import useSWR from 'swr';
@@ -59,64 +60,40 @@ function useTicketAdminData() {
   };
 }
 
-function StatusTabs({
+function TicketStatusTabs({
   tabs,
   active,
   counts,
   onChange,
-  compact = false,
 }: {
   tabs: Array<{ value: string; label: string }>;
   active: string;
   counts: Record<string, number>;
   onChange: (value: string) => void;
-  compact?: boolean;
 }) {
-  if (compact) {
-    return (
-      <div className="flex h-9 items-center gap-1 overflow-x-auto scrollbar-none">
-        {tabs.map((tab) => (
-          <button
-            key={tab.value}
-            onClick={() => onChange(tab.value)}
-            className={`relative inline-flex h-8 shrink-0 items-center justify-center gap-1.5 px-3 text-xs font-medium leading-none transition-colors ${
-              active === tab.value
-                ? "font-bold text-primary-container after:absolute after:inset-x-2 after:bottom-0 after:h-0.5 after:rounded-full after:bg-primary-container"
-                : "text-on-surface-variant hover:text-on-surface"
-            }`}
-          >
-            <span className="whitespace-nowrap tabular-nums">{tab.label} ({counts[tab.value] ?? 0})</span>
-          </button>
-        ))}
-      </div>
-    );
-  }
-
   return (
-    <div className="flex h-9 items-center gap-1 overflow-x-auto scrollbar-none">
-      {tabs.map((tab) => (
-        <button
-          key={tab.value}
-          onClick={() => onChange(tab.value)}
-          className={`relative inline-flex h-9 shrink-0 items-center justify-center gap-1.5 px-4 text-sm font-medium leading-none transition-colors ${
-            active === tab.value
-              ? "text-primary-container after:absolute after:inset-x-3 after:bottom-0 after:h-0.5 after:rounded-full after:bg-primary-container"
-              : "text-on-surface-variant hover:text-on-surface"
-          }`}
-        >
-          <span className="whitespace-nowrap tabular-nums">{tab.label} ({counts[tab.value] ?? 0})</span>
-        </button>
-      ))}
-    </div>
+    <ResponsiveSectionTabs
+      tabs={tabs.map((tab) => ({
+        value: tab.value,
+        label: tab.label,
+        count: counts[tab.value] ?? 0,
+        icon: tab.value === "all" ? "format_list_bulleted" : "radio_button_checked",
+      }))}
+      value={active}
+      onChange={onChange}
+      mobileTitle="工单状态"
+      countUnit="单"
+    />
   );
 }
 
 function EmptyTickets() {
   return (
-    <div className="text-center py-20">
-      <Icon name="inbox" size={48} className="mx-auto mb-3 text-on-surface-variant/20" />
-      <p className="text-sm text-on-surface-variant">暂无工单</p>
-    </div>
+    <AdminEmptyState
+      icon="inbox"
+      title="暂无工单"
+      description="切换状态或等待用户提交新的技术支持工单。"
+    />
   );
 }
 
@@ -157,7 +134,7 @@ function DesktopContent() {
           </button>
       )}
       toolbar={(
-        <StatusTabs tabs={statusTabs} active={filter} counts={counts} onChange={setFilter} />
+        <TicketStatusTabs tabs={statusTabs} active={filter} counts={counts} onChange={setFilter} />
       )}
     >
 
@@ -256,7 +233,7 @@ function MobileContent() {
         </button>
       )}
       toolbar={(
-        <StatusTabs tabs={statusTabs} active={filter} counts={counts} onChange={setFilter} compact />
+        <TicketStatusTabs tabs={statusTabs} active={filter} counts={counts} onChange={setFilter} />
       )}
     >
       <div key={filter} className="admin-tab-panel">

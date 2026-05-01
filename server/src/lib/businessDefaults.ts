@@ -35,6 +35,7 @@ export const DEFAULT_SUPPORT_STEPS_FOR_SETTINGS: SupportStepConfig[] = [
 export const DEFAULT_USER_NAV_FOR_SETTINGS: NavItemConfig[] = [
   { label: "模型库", icon: "dashboard", path: "/", enabled: true },
   { label: "产品选型", icon: "tune", path: "/selection", enabled: true },
+  { label: "产品影像", icon: "image", path: "/product-wall", enabled: true },
   { label: "规格查询", icon: "straighten", path: "/tools/thread-size", enabled: true },
   { label: "我的收藏", icon: "star", path: "/favorites", enabled: true },
   { label: "我的询价", icon: "request_quote", path: "/my-inquiries", enabled: true },
@@ -52,6 +53,7 @@ export const DEFAULT_ADMIN_NAV_FOR_SETTINGS: NavItemConfig[] = [
   { label: "工单处理", icon: "build", path: "/admin/tickets", enabled: true },
   { label: "用户管理", icon: "group", path: "/admin/users", enabled: true },
   { label: "分享管理", icon: "share", path: "/admin/shares", enabled: true },
+  { label: "下载统计", icon: "download", path: "/admin/downloads", enabled: true },
   { label: "操作日志", icon: "schedule", path: "/admin/audit", enabled: true },
   { label: "系统设置", icon: "settings", path: "/admin/settings", enabled: true },
 ];
@@ -71,6 +73,11 @@ export const DEFAULT_UPLOAD_POLICY_FOR_SETTINGS: UploadPolicy = {
   chunkThresholdMb: 20,
   optionImageMaxSizeMb: 5,
   optionImageMimePattern: "image\\/(png|jpe?g|gif|webp|svg\\+xml)",
+  selectionImportMaxSizeMb: 5,
+  selectionImportMaxRows: 10000,
+  selectionImportMaxColumns: 200,
+  productWallImageMaxSizeMb: 8,
+  productWallUploadMaxFiles: 20,
   ticketAttachmentMaxSizeMb: 5,
   ticketAttachmentExts: [".jpg", ".jpeg", ".png", ".gif", ".webp"],
 };
@@ -87,9 +94,27 @@ export const DEFAULT_SELECTION_THREAD_PRIORITY_FOR_SETTINGS: Record<string, numb
 };
 
 export const DEFAULT_PAGE_SIZE_POLICY_FOR_SETTINGS = {
+  homeDefault: 60,
+  homeMax: 10000,
+  homeOption1: 30,
+  homeOption2: 60,
+  homeOption3: 120,
+  homeOption4: 180,
   selectionDefault: 50,
   selectionMax: 50000,
+  selectionAdminRenderBatch: 120,
+  selectionGeneratePreviewPageSize: 50,
   inquiryAdminDefault: 20,
   inquiryAdminMax: 100,
   ticketListMax: 50,
+  notificationDefault: 20,
+  notificationMax: 100,
+  adminUserDefault: 20,
+  adminUserMax: 100,
+  shareAdminDefault: 20,
+  shareAdminMax: 100,
+  auditDefault: 50,
+  auditMax: 100,
+  userBatchDownloadMax: 100,
+  adminBatchDownloadMax: 50,
 };
