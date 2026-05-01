@@ -15,7 +15,7 @@
 
 3DPartHub 专为制造企业团队管理 3D 零件模型与产品选型数据而设计。系统支持 STEP / IGES / Parasolid 文件自动转换为 glTF，在浏览器内实时 3D 预览，并提供分类管理、选型筛选、询价报价、分享、审计、备份恢复和完整后台设置。
 
-> V2.6.2 发行版只包含通用源码、数据库结构、迁移、Docker/CI 配置和文档。数据库、模型文件、缩略图、Logo、Favicon、产品图片、企业资料、业务批次脚本、Excel/PDF 私有资料等运行时或定制内容不会随 Git 仓库和镜像发布。
+> V2.6.3 发行版只包含通用源码、数据库结构、迁移、Docker/CI 配置和文档。数据库、模型文件、缩略图、Logo、Favicon、产品图片、企业资料、业务批次脚本、Excel/PDF 私有资料等运行时或定制内容不会随 Git 仓库和镜像发布。
 
 ## 先看运行规范
 
@@ -37,6 +37,12 @@
 ```bash
 bash scripts/verify-local.sh
 ```
+
+## V2.6.3 更新
+
+- **备份目录权限自动修复**：新增 `backup-permissions` 一次性初始化服务，在 API 启动前自动创建 `/app/static/backups/.work` 并把宿主机备份目录授权给容器内 `node` 用户。
+- **新服务器部署更稳**：避免宿主机目录由 `root` 创建后导致 API 报 `EACCES: permission denied, mkdir '/app/static/backups/.work'`。
+- **历史部署可自愈**：更新 compose 后执行 `docker compose up -d --force-recreate` 会先运行权限初始化，再启动 API/Web。
 
 ## V2.6.2 更新
 
@@ -64,10 +70,10 @@ bash scripts/verify-local.sh
 
 | 项目 | 值 |
 |------|----|
-| Tag | `v2.6.2` |
-| Release 标题 | `V2.6.2 - 备份目录挂载与本地开发规范修复` |
-| API 镜像 | `ghcr.io/liaoweixiang2024-blip/3dparthub-api:v2.6.2` / `ghcr.io/liaoweixiang2024-blip/3dparthub-api:latest` |
-| Web 镜像 | `ghcr.io/liaoweixiang2024-blip/3dparthub-web:v2.6.2` / `ghcr.io/liaoweixiang2024-blip/3dparthub-web:latest` |
+| Tag | `v2.6.3` |
+| Release 标题 | `V2.6.3 - 自动修复备份目录权限` |
+| API 镜像 | `ghcr.io/liaoweixiang2024-blip/3dparthub-api:v2.6.3` / `ghcr.io/liaoweixiang2024-blip/3dparthub-api:latest` |
+| Web 镜像 | `ghcr.io/liaoweixiang2024-blip/3dparthub-web:v2.6.3` / `ghcr.io/liaoweixiang2024-blip/3dparthub-web:latest` |
 | 自动更新 | 默认部署使用 `latest`，Watchtower 每小时自动更新 API/Web 容器 |
 
 镜像说明：
@@ -75,7 +81,7 @@ bash scripts/verify-local.sh
 - `3dparthub-api`：Express 5 + Prisma 后端，包含数据库迁移、隔离模型转换、转换队列、预览元数据、后台设置、备份/恢复、审计与 API 服务。
 - `3dparthub-web`：React 19 + Vite 前端，包含 CAD 在线查看器、3D 预览、产品选型、询价报价、分享页和后台管理界面。
 
-后台 **设置 -> 系统更新 -> 检查更新** 会读取 GitHub 最新 Release 的描述内容，并显示为后台更新日志。发布 V2.6.2 时，请以 Release 描述作为用户可见更新简介。
+后台 **设置 -> 系统更新 -> 检查更新** 会读取 GitHub 最新 Release 的描述内容，并显示为后台更新日志。发布 V2.6.3 时，请以 Release 描述作为用户可见更新简介。
 
 ---
 
@@ -185,7 +191,7 @@ curl http://localhost:3780/api/health
 | `ADMIN_USER` | 否 | `admin` | 初始管理员用户名，仅首次启动 |
 | `ADMIN_EMAIL` | 否 | `admin@model.local` | 初始管理员邮箱，仅首次启动 |
 | `ADMIN_PASS` | 否 | `3DPartHub@2026` | 初始管理员密码，仅空数据库首次启动生效 |
-| `IMAGE_TAG` | 否 | `latest` | 镜像标签；默认自动跟随最新版本，写入 `v2.6.2` 等固定标签可锁定版本 |
+| `IMAGE_TAG` | 否 | `latest` | 镜像标签；默认自动跟随最新版本，写入 `v2.6.3` 等固定标签可锁定版本 |
 | `WATCHTOWER_POLL_INTERVAL` | 否 | `3600` | Watchtower 自动检查间隔，单位秒 |
 | `SMTP_HOST` | 否 | - | SMTP 服务器 |
 | `SMTP_USER` | 否 | - | SMTP 用户名 |
@@ -209,15 +215,15 @@ docker compose logs -f api
 
 ```bash
 cd /opt/3dparthub
-IMAGE_TAG=v2.6.2 docker compose pull
-IMAGE_TAG=v2.6.2 docker compose up -d
+IMAGE_TAG=v2.6.3 docker compose pull
+IMAGE_TAG=v2.6.3 docker compose up -d
 curl http://localhost:3780/api/health
 ```
 
 也可以在 `.env` 中写入：
 
 ```bash
-IMAGE_TAG=v2.6.2
+IMAGE_TAG=v2.6.3
 ```
 
 写入固定 `IMAGE_TAG` 后，部署会锁定在该版本，不会自动升级到新的 Release；要恢复自动更新，请删除 `.env` 中的 `IMAGE_TAG` 或改为 `IMAGE_TAG=latest`。
@@ -273,6 +279,23 @@ curl http://localhost:3780/api/health
 
 备份包单独映射到宿主机目录 `/opt/3dparthub/server/static/backups`，容器内路径为 `/app/static/backups`。网页创建的备份和手动放入的 `.tar.gz/.tgz` 备份包都会使用这个目录。
 
+**备份文件位置：**
+
+```text
+/opt/3dparthub/server/static/backups
+```
+
+**从其他机器导入备份到服务器：** 只要把备份文件放进这个目录即可，后台会在 **设置 -> 数据备份 -> 服务器文件** 里识别。备份通常包含一个 `.tar.gz` 或 `.tgz` 归档，以及同名 `.json` 记录文件；有 `.json` 时一起放进去。
+
+```bash
+mkdir -p /opt/3dparthub/server/static/backups
+cp /tmp/backup_XXXX.* /opt/3dparthub/server/static/backups/
+```
+
+不需要再执行 `docker cp`，也不要把备份包提交到 Git。
+
+Compose 会先运行 `backup-permissions` 一次性初始化服务，自动修复该目录的 UID/GID 权限，避免 API 因无法创建 `/app/static/backups/.work` 而启动失败。
+
 ## 备份与恢复
 
 V2.6 备份包沿用完整备份格式，包含：
@@ -316,7 +339,7 @@ mkdir -p /opt/3dparthub/server/static/backups
 cp /tmp/backup_XXXX.* /opt/3dparthub/server/static/backups/
 ```
 
-然后打开后台 **设置 -> 数据备份**，选择该备份执行恢复。也可以直接在网页上传 `.tar.gz` 备份包，系统会保存为备份记录或直接恢复。
+然后打开后台 **设置 -> 数据备份 -> 服务器文件**，选择该备份执行恢复。也可以直接在网页上传 `.tar.gz` / `.tgz` 备份包，系统会保存为备份记录或直接恢复。
 
 ---
 

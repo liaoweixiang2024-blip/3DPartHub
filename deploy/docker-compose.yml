@@ -28,7 +28,7 @@
 # 【自动更新】
 #   1. 默认使用 latest 镜像，Watchtower 每小时自动检查并更新 api/web 容器
 #   2. 如需立即更新: docker compose pull && docker compose up -d --force-recreate
-#   3. 如需锁定版本: 在 .env 中写入 IMAGE_TAG=v2.6.2
+#   3. 如需锁定版本: 在 .env 中写入 IMAGE_TAG=v2.6.3
 #   4. 检查日志: docker compose logs -f api
 #      确认 prisma migrate deploy 成功，无报错
 #   5. 检查健康: curl http://localhost:3780/api/health
@@ -40,6 +40,7 @@
 #     static-data  — 转换后的模型、缩略图等运行文件
 #   备份包单独映射到宿主机目录，方便人工拷贝和迁移：
 #     ./server/static/backups -> /app/static/backups
+#   backup-permissions 会在 api 启动前自动修复该目录权限
 #
 # 【备份恢复】
 #   网页端: 设置 → 数据备份 → 服务器文件
@@ -56,6 +57,21 @@ x-logging: &default-logging
 # <<< 默认使用 latest；手动立即更新执行 docker compose pull && docker compose up -d --force-recreate
 
 services:
+  backup-permissions:
+    image: ghcr.io/liaoweixiang2024-blip/3dparthub-api:${IMAGE_TAG:-latest}
+    container_name: 3dparthub-backup-permissions
+    user: "0:0"
+    command:
+      - sh
+      - -c
+      - mkdir -p /app/static/backups/.work && chown -R 1000:1000 /app/static/backups && chmod -R ug+rwX /app/static/backups
+    volumes:
+      - ./server/static/backups:/app/static/backups
+    restart: "no"
+    logging: *default-logging
+    networks:
+      - internal
+
   api:
     image: ghcr.io/liaoweixiang2024-blip/3dparthub-api:${IMAGE_TAG:-latest}
     container_name: 3dparthub-api
@@ -97,6 +113,8 @@ services:
       SMTP_USER: ${SMTP_USER:-}
       SMTP_PASS: ${SMTP_PASS:-}
     depends_on:
+      backup-permissions:
+        condition: service_completed_successfully
       postgres:
         condition: service_healthy
       redis:
