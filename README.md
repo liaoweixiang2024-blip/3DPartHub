@@ -15,7 +15,7 @@
 
 3DPartHub 专为制造企业团队管理 3D 零件模型与产品选型数据而设计。系统支持 STEP / IGES / Parasolid 文件自动转换为 glTF，在浏览器内实时 3D 预览，并提供分类管理、选型筛选、询价报价、分享、审计、备份恢复和完整后台设置。
 
-> V2.6.1 发行版只包含通用源码、数据库结构、迁移、Docker/CI 配置和文档。数据库、模型文件、缩略图、Logo、Favicon、产品图片、企业资料、业务批次脚本、Excel/PDF 私有资料等运行时或定制内容不会随 Git 仓库和镜像发布。
+> V2.6.2 发行版只包含通用源码、数据库结构、迁移、Docker/CI 配置和文档。数据库、模型文件、缩略图、Logo、Favicon、产品图片、企业资料、业务批次脚本、Excel/PDF 私有资料等运行时或定制内容不会随 Git 仓库和镜像发布。
 
 ## 先看运行规范
 
@@ -38,6 +38,13 @@
 bash scripts/verify-local.sh
 ```
 
+## V2.6.2 更新
+
+- **备份目录宿主机化**：生产 Compose 将 `/app/static/backups` 单独映射到 `/opt/3dparthub/server/static/backups`，网页备份和手动导入备份都能直接在宿主机目录查看与迁移。
+- **备份恢复体验增强**：刷新页面后能区分备份记录恢复、上传恢复和服务器文件恢复，恢复任务状态显示更准确；备份包 SHA256 计算阶段增加进度反馈。
+- **本地开发入口固定**：前端开发端口固定为 `127.0.0.1:5173`，后端固定为 `127.0.0.1:8000`，本地检查脚本和运行规范同步更新，避免端口漂移。
+- **部署脚本同步**：一键部署脚本会创建宿主机备份目录，并提示旧 Compose 未挂载备份目录的情况。
+
 ## V2.6.1 更新
 
 - **自动更新默认开启**：生产 Compose 默认使用 `latest` 镜像，并启动 Watchtower 每小时自动检查和更新 API/Web 容器。
@@ -57,10 +64,10 @@ bash scripts/verify-local.sh
 
 | 项目 | 值 |
 |------|----|
-| Tag | `v2.6.1` |
-| Release 标题 | `V2.6.1 - 自动更新与后台升级命令修复` |
-| API 镜像 | `ghcr.io/liaoweixiang2024-blip/3dparthub-api:v2.6.1` / `ghcr.io/liaoweixiang2024-blip/3dparthub-api:latest` |
-| Web 镜像 | `ghcr.io/liaoweixiang2024-blip/3dparthub-web:v2.6.1` / `ghcr.io/liaoweixiang2024-blip/3dparthub-web:latest` |
+| Tag | `v2.6.2` |
+| Release 标题 | `V2.6.2 - 备份目录挂载与本地开发规范修复` |
+| API 镜像 | `ghcr.io/liaoweixiang2024-blip/3dparthub-api:v2.6.2` / `ghcr.io/liaoweixiang2024-blip/3dparthub-api:latest` |
+| Web 镜像 | `ghcr.io/liaoweixiang2024-blip/3dparthub-web:v2.6.2` / `ghcr.io/liaoweixiang2024-blip/3dparthub-web:latest` |
 | 自动更新 | 默认部署使用 `latest`，Watchtower 每小时自动更新 API/Web 容器 |
 
 镜像说明：
@@ -68,7 +75,7 @@ bash scripts/verify-local.sh
 - `3dparthub-api`：Express 5 + Prisma 后端，包含数据库迁移、隔离模型转换、转换队列、预览元数据、后台设置、备份/恢复、审计与 API 服务。
 - `3dparthub-web`：React 19 + Vite 前端，包含 CAD 在线查看器、3D 预览、产品选型、询价报价、分享页和后台管理界面。
 
-后台 **设置 -> 系统更新 -> 检查更新** 会读取 GitHub 最新 Release 的描述内容，并显示为后台更新日志。发布 V2.6.1 时，请以 Release 描述作为用户可见更新简介。
+后台 **设置 -> 系统更新 -> 检查更新** 会读取 GitHub 最新 Release 的描述内容，并显示为后台更新日志。发布 V2.6.2 时，请以 Release 描述作为用户可见更新简介。
 
 ---
 
@@ -178,7 +185,7 @@ curl http://localhost:3780/api/health
 | `ADMIN_USER` | 否 | `admin` | 初始管理员用户名，仅首次启动 |
 | `ADMIN_EMAIL` | 否 | `admin@model.local` | 初始管理员邮箱，仅首次启动 |
 | `ADMIN_PASS` | 否 | `3DPartHub@2026` | 初始管理员密码，仅空数据库首次启动生效 |
-| `IMAGE_TAG` | 否 | `latest` | 镜像标签；默认自动跟随最新版本，写入 `v2.6.1` 等固定标签可锁定版本 |
+| `IMAGE_TAG` | 否 | `latest` | 镜像标签；默认自动跟随最新版本，写入 `v2.6.2` 等固定标签可锁定版本 |
 | `WATCHTOWER_POLL_INTERVAL` | 否 | `3600` | Watchtower 自动检查间隔，单位秒 |
 | `SMTP_HOST` | 否 | - | SMTP 服务器 |
 | `SMTP_USER` | 否 | - | SMTP 用户名 |
@@ -202,15 +209,15 @@ docker compose logs -f api
 
 ```bash
 cd /opt/3dparthub
-IMAGE_TAG=v2.6.1 docker compose pull
-IMAGE_TAG=v2.6.1 docker compose up -d
+IMAGE_TAG=v2.6.2 docker compose pull
+IMAGE_TAG=v2.6.2 docker compose up -d
 curl http://localhost:3780/api/health
 ```
 
 也可以在 `.env` 中写入：
 
 ```bash
-IMAGE_TAG=v2.6.1
+IMAGE_TAG=v2.6.2
 ```
 
 写入固定 `IMAGE_TAG` 后，部署会锁定在该版本，不会自动升级到新的 Release；要恢复自动更新，请删除 `.env` 中的 `IMAGE_TAG` 或改为 `IMAGE_TAG=latest`。
@@ -262,7 +269,9 @@ curl http://localhost:3780/api/health
 |------|-----------|------|
 | `pgdata` | `/var/lib/postgresql/data` | PostgreSQL 数据库 |
 | `uploads-data` | `/app/uploads` | 上传附件、上传元数据 |
-| `static-data` | `/app/static` | 转换模型、缩略图、原始文件、站点运行时静态资料、备份包 |
+| `static-data` | `/app/static` | 转换模型、缩略图、原始文件、站点运行时静态资料 |
+
+备份包单独映射到宿主机目录 `/opt/3dparthub/server/static/backups`，容器内路径为 `/app/static/backups`。网页创建的备份和手动放入的 `.tar.gz/.tgz` 备份包都会使用这个目录。
 
 ## 备份与恢复
 
@@ -290,12 +299,11 @@ V2.6 备份包沿用完整备份格式，包含：
 
 ```bash
 # 1. 后台「设置 -> 数据备份」创建并校验备份
-# 2. 导出备份记录和归档
-docker cp 3dparthub-api:/app/static/backups/backup_XXXX.json /tmp/
-docker cp 3dparthub-api:/app/static/backups/backup_XXXX.tar.gz /tmp/
+# 2. 备份文件在宿主机目录
+ls /opt/3dparthub/server/static/backups/
 
 # 3. 传到新服务器
-scp /tmp/backup_XXXX.* root@新服务器IP:/tmp/
+scp /opt/3dparthub/server/static/backups/backup_XXXX.* root@新服务器IP:/tmp/
 ```
 
 新服务器：
@@ -304,8 +312,8 @@ scp /tmp/backup_XXXX.* root@新服务器IP:/tmp/
 cd /opt/3dparthub
 docker compose up -d
 
-docker cp /tmp/backup_XXXX.json 3dparthub-api:/app/static/backups/
-docker cp /tmp/backup_XXXX.tar.gz 3dparthub-api:/app/static/backups/
+mkdir -p /opt/3dparthub/server/static/backups
+cp /tmp/backup_XXXX.* /opt/3dparthub/server/static/backups/
 ```
 
 然后打开后台 **设置 -> 数据备份**，选择该备份执行恢复。也可以直接在网页上传 `.tar.gz` 备份包，系统会保存为备份记录或直接恢复。

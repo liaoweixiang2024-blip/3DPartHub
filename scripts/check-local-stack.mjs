@@ -6,13 +6,13 @@ const timeoutMs = Number(process.env.STACK_CHECK_TIMEOUT_MS || 5000);
 const requireVite = process.env.CHECK_VITE === "1";
 const skipDb = process.env.SKIP_DB === "1";
 
-const webBaseUrl = (process.env.LOCAL_WEB_URL || "http://localhost:3780").replace(/\/+$/, "");
+const apiBaseUrl = (process.env.LOCAL_API_URL || "http://localhost:8000").replace(/\/+$/, "");
 const viteBaseUrl = (process.env.LOCAL_VITE_URL || "http://localhost:5173").replace(/\/+$/, "");
 
 const checks = [
   {
-    name: "nginx/API health",
-    url: `${webBaseUrl}/api/health`,
+    name: "API health",
+    url: `${apiBaseUrl}/api/health`,
     required: true,
     expectSuccess: true,
   },
@@ -190,7 +190,7 @@ const failed = results.some((result) => !result.ok && result.required);
 
 if (failed) {
   console.error("\nLocal stack check failed.");
-  console.error("Tip: Vite should proxy to 3780 by default. Only set VITE_DEV_PROXY_TARGET=http://localhost:8000 when the local server dev process is running.");
+  console.error("Tip: daily local development uses Vite 5173 + API 8000. If 5173 is occupied, stop the old Vite process instead of using 5174/5175.");
   process.exit(1);
 }
 

@@ -912,8 +912,18 @@ async function runBackup(job: BackupJob) {
     });
     addLog(job, "备份包完整性校验通过");
     addLog(job, "正在计算备份包 SHA256...");
-    const archiveSha256 = await sha256File(finalArchive);
+    job.percent = 97;
+    job.message = "正在计算备份包 SHA256... 0%";
+    syncJob(job);
+    const archiveSha256 = await sha256FileWithProgress(finalArchive, (percent) => {
+      job.percent = Math.max(97, Math.min(99, 97 + Math.floor(percent / 50)));
+      job.message = `正在计算备份包 SHA256... ${percent}%`;
+      syncJob(job);
+    });
     addLog(job, "正在保存备份记录...");
+    job.percent = 99;
+    job.message = "正在写入备份记录...";
+    syncJob(job);
 
     const stats = await getBackupStats();
     const fileSize = statSync(finalArchive).size;

@@ -28,7 +28,7 @@
 # 【自动更新】
 #   1. 默认使用 latest 镜像，Watchtower 每小时自动检查并更新 api/web 容器
 #   2. 如需立即更新: docker compose pull && docker compose up -d --force-recreate
-#   3. 如需锁定版本: 在 .env 中写入 IMAGE_TAG=v2.6.1
+#   3. 如需锁定版本: 在 .env 中写入 IMAGE_TAG=v2.6.2
 #   4. 检查日志: docker compose logs -f api
 #      确认 prisma migrate deploy 成功，无报错
 #   5. 检查健康: curl http://localhost:3780/api/health
@@ -37,11 +37,13 @@
 #   所有数据存储在 Docker 命名卷中，升级/重建容器不会丢失：
 #     pgdata       — PostgreSQL 数据库
 #     uploads-data — 上传的原始模型文件
-#     static-data  — 转换后的模型、缩略图、备份文件
+#     static-data  — 转换后的模型、缩略图等运行文件
+#   备份包单独映射到宿主机目录，方便人工拷贝和迁移：
+#     ./server/static/backups -> /app/static/backups
 #
 # 【备份恢复】
 #   网页端: 设置 → 数据备份 → 服务器文件
-#   命令行: docker cp backup.tar.gz 3dparthub-api:/app/static/backups/
+#   命令行: cp backup.tar.gz ./server/static/backups/
 #
 # ============================================================
 
@@ -102,6 +104,7 @@ services:
     volumes:
       - uploads-data:/app/uploads
       - static-data:/app/static
+      - ./server/static/backups:/app/static/backups
     healthcheck:
       test: ["CMD-SHELL", "curl -fsS http://localhost:8000/api/health >/dev/null || exit 1"]
       interval: 30s

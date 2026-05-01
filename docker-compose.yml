@@ -25,29 +25,29 @@
 # 【自动更新】
 #   默认使用 latest 镜像，Watchtower 每小时自动检查并更新 api/web 容器
 #   如需立即更新: docker compose pull && docker compose up -d --force-recreate
-#   如需锁定版本: 在 .env 中写入 IMAGE_TAG=v2.6.1
+#   如需锁定版本: 在 .env 中写入 IMAGE_TAG=v2.6.2
 #   检查日志: docker compose logs -f api
 #
 # 【数据安全】
 #   所有数据存储在 Docker 命名卷中，升级/重建容器不会丢失：
 #     pgdata       — PostgreSQL 数据库
 #     uploads-data — 上传的原始模型文件
-#     static-data  — 转换后的模型、缩略图、备份文件
+#     static-data  — 转换后的模型、缩略图等运行文件
+#   备份包单独映射到宿主机目录，方便人工拷贝和迁移：
+#     ./server/static/backups -> /app/static/backups
 #
 # 【备份恢复】
-#   网页创建的备份存储在 Docker 命名卷中，重启不丢失
-#   从外部导入备份: docker cp backup_xxx.json 3dparthub-api:/app/static/backups/
-#                   docker cp backup_xxx.tar.gz 3dparthub-api:/app/static/backups/
+#   网页创建的备份存储在宿主机 ./server/static/backups，重启/升级不丢失
+#   从外部导入备份: cp backup_xxx.json ./server/static/backups/
+#                   cp backup_xxx.tar.gz ./server/static/backups/
 #   然后网页端「设置 → 数据备份」恢复
 #
 # 【迁移到新服务器】
 #   1. 旧服务器：设置 → 数据备份 → 创建备份
-#   2. 备份文件在 static-data 卷内，可通过 docker cp 导出：
-#      docker cp 3dparthub-api:/app/static/backups/. /tmp/backups/
-#      scp /tmp/backups/* 新服务器:/tmp/backups/
+#   2. 备份文件位于宿主机 ./server/static/backups，可直接复制：
+#      scp ./server/static/backups/backup_xxx.* 新服务器:/tmp/backups/
 #   3. 新服务器部署后导入：
-#      docker cp /tmp/backups/backup_xxx.json 3dparthub-api:/app/static/backups/
-#      docker cp /tmp/backups/backup_xxx.tar.gz 3dparthub-api:/app/static/backups/
+#      cp /tmp/backups/backup_xxx.* ./server/static/backups/
 #   4. 网页端恢复
 #
 # ============================================================
@@ -109,6 +109,7 @@ services:
     volumes:
       - uploads-data:/app/uploads
       - static-data:/app/static
+      - ./server/static/backups:/app/static/backups
     healthcheck:
       test: ["CMD-SHELL", "curl -fsS http://localhost:8000/api/health >/dev/null || exit 1"]
       interval: 30s

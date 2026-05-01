@@ -34,6 +34,8 @@ import {
 } from '../lib/legalContent';
 // Note: pollBackupProgress is used by handleExport
 
+const RESTORE_JOB_SOURCE_KEY = 'restoreJobSource';
+
 const DEFAULT_SETTINGS: SystemSettings = {
   require_login_download: false,
   require_login_browse: false,
@@ -1868,11 +1870,16 @@ function Content() {
     }
     if (restoreJobId) {
       const savedBackupId = localStorage.getItem('restoreConfirmBackupId');
+      const restoreJobSource = localStorage.getItem(RESTORE_JOB_SOURCE_KEY);
       if (savedBackupId) setRestoreConfirmId(savedBackupId);
-      setRestoring(true);
+      if (savedBackupId || restoreJobSource === 'backup-record') {
+        setRestoring(true);
+      } else {
+        setImporting(true);
+      }
       setRestoreProgress(prev => prev.stage
         ? prev
-        : { stage: 'resuming', percent: 0, message: '正在恢复备份恢复任务...', logs: [] });
+        : { stage: 'resuming', percent: 0, message: savedBackupId ? '正在恢复备份记录...' : '正在恢复导入任务...', logs: [] });
       try {
         const result = await pollRestoreProgress(restoreJobId, (stage, percent, message, logs) => {
           setRestoreProgress({ stage, percent, message, logs: logs || [] });
@@ -1887,7 +1894,9 @@ function Content() {
       } finally {
         localStorage.removeItem('restoreJobId');
         localStorage.removeItem('restoreConfirmBackupId');
+        localStorage.removeItem(RESTORE_JOB_SOURCE_KEY);
         setRestoring(false);
+        setImporting(false);
         setRestoreProgress({ stage: '', percent: 0, message: '', logs: [] });
       }
     }
@@ -2220,6 +2229,7 @@ function Content() {
           setUploadProgress(p);
         });
         localStorage.setItem('restoreJobId', jobId);
+        localStorage.setItem(RESTORE_JOB_SOURCE_KEY, 'import-file');
         setRestoreProgress({ stage: 'uploading', percent: 100, message: '上传完成，正在恢复...', logs: [] });
         const result = await pollRestoreProgress(jobId, (stage, percent, message, logs) => {
           setRestoreProgress({ stage, percent, message, logs: logs || [] });
@@ -2235,6 +2245,7 @@ function Content() {
     } finally {
       localStorage.removeItem('restoreJobId');
       localStorage.removeItem('importSaveJobId');
+      localStorage.removeItem(RESTORE_JOB_SOURCE_KEY);
       importActionInFlight.current = false;
       setImporting(false);
       setUploadProgress(0);
@@ -2265,6 +2276,7 @@ function Content() {
     try {
       const jobId = await importBackupFromPath(file.path);
       localStorage.setItem('restoreJobId', jobId);
+      localStorage.setItem(RESTORE_JOB_SOURCE_KEY, 'server-file');
       const result = await pollRestoreProgress(jobId, (stage, percent, message, logs) => {
         setRestoreProgress({ stage, percent, message, logs: logs || [] });
       });
@@ -2276,6 +2288,7 @@ function Content() {
       toast(err.message || '恢复失败', 'error');
     } finally {
       localStorage.removeItem('restoreJobId');
+      localStorage.removeItem(RESTORE_JOB_SOURCE_KEY);
       importActionInFlight.current = false;
       setImporting(false);
       setRestoreProgress({ stage: '', percent: 0, message: '', logs: [] });
@@ -2330,6 +2343,7 @@ function Content() {
       const jobId = await startRestore(restoreConfirmId);
       localStorage.setItem('restoreJobId', jobId);
       localStorage.setItem('restoreConfirmBackupId', restoreConfirmId);
+      localStorage.setItem(RESTORE_JOB_SOURCE_KEY, 'backup-record');
       const result = await pollRestoreProgress(jobId, (stage, percent, message, logs) => {
         setRestoreProgress({ stage, percent, message, logs: logs || [] });
       });
@@ -2343,6 +2357,7 @@ function Content() {
     } finally {
       localStorage.removeItem('restoreJobId');
       localStorage.removeItem('restoreConfirmBackupId');
+      localStorage.removeItem(RESTORE_JOB_SOURCE_KEY);
       restoreActionInFlight.current = false;
       setRestoring(false);
       setRestoreProgress({ stage: '', percent: 0, message: '', logs: [] });

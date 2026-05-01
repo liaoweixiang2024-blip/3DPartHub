@@ -20,6 +20,7 @@ RED='\033[0;31m'
 NC='\033[0m'
 
 INSTALL_DIR="/opt/3dparthub"
+BACKUP_DIR="$INSTALL_DIR/server/static/backups"
 BACKUP_SOURCE="$1"
 
 echo ""
@@ -43,8 +44,10 @@ fi
 # ---------- 1. 创建目录 ----------
 echo -e "${YELLOW}[1/4] 创建项目目录...${NC}"
 mkdir -p "$INSTALL_DIR"
+mkdir -p "$BACKUP_DIR"
 cd "$INSTALL_DIR"
 echo -e "${GREEN}  ✓ $INSTALL_DIR${NC}"
+echo -e "${GREEN}  ✓ 备份目录: $BACKUP_DIR${NC}"
 
 # ---------- 2. 下载配置 ----------
 echo -e "${YELLOW}[2/4] 下载配置文件...${NC}"
@@ -53,6 +56,10 @@ if [ ! -f docker-compose.yml ]; then
   echo -e "${GREEN}  ✓ docker-compose.yml 已下载${NC}"
 else
   echo -e "${GREEN}  ✓ docker-compose.yml 已存在${NC}"
+  if ! grep -q "./server/static/backups:/app/static/backups" docker-compose.yml 2>/dev/null; then
+    echo -e "${YELLOW}  ⚠ 当前 docker-compose.yml 未挂载宿主机备份目录，建议更新为新版配置。${NC}"
+    echo -e "${YELLOW}    否则网页备份仍会留在 Docker 卷中，不会直接出现在 $BACKUP_DIR${NC}"
+  fi
 fi
 
 # ---------- 3. 生成密钥 ----------
@@ -111,10 +118,10 @@ if [ -n "$BACKUP_SOURCE" ] && [ "$HEALTH_OK" = true ]; then
   if [ -z "$TARGZ" ]; then
     echo -e "${RED}  ✗ 未找到 backup_*.tar.gz${NC}"
   else
-    # docker cp 到容器
-    docker cp "$TARGZ" 3dparthub-api:/app/static/backups/ 2>/dev/null && echo -e "${GREEN}  ✓ $(basename "$TARGZ") 已复制${NC}" || echo -e "${RED}  ✗ 复制失败${NC}"
+    # 复制到宿主机备份目录；新版 compose 会挂载到容器 /app/static/backups
+    cp "$TARGZ" "$BACKUP_DIR/" && echo -e "${GREEN}  ✓ $(basename "$TARGZ") 已复制到 $BACKUP_DIR${NC}" || echo -e "${RED}  ✗ 复制失败${NC}"
     if [ -n "$JSON" ] && [ -f "$JSON" ]; then
-      docker cp "$JSON" 3dparthub-api:/app/static/backups/ 2>/dev/null && echo -e "${GREEN}  ✓ $(basename "$JSON") 已复制${NC}" || true
+      cp "$JSON" "$BACKUP_DIR/" && echo -e "${GREEN}  ✓ $(basename "$JSON") 已复制到 $BACKUP_DIR${NC}" || true
     fi
     echo ""
     echo -e "${YELLOW}  备份文件已导入容器，请登录网页恢复：${NC}"
