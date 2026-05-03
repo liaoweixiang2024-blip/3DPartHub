@@ -173,8 +173,16 @@ export function parseSetting<T>(value: unknown, fallback: T): T {
   }
 }
 
-function enabled<T extends { enabled?: boolean }>(items: T[]) {
-  return items.filter((item) => item.enabled !== false);
+function enabled<T extends { enabled?: boolean; path?: string }>(items: T[]): T[] {
+  const seen = new Set<string>();
+  return items.filter((item) => {
+    if (item.enabled === false) return false;
+    if ("path" in item && typeof item.path === "string") {
+      if (seen.has(item.path)) return false;
+      seen.add(item.path);
+    }
+    return true;
+  });
 }
 
 const DEAD_USER_PATHS = new Set([
