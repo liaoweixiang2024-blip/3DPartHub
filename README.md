@@ -15,38 +15,16 @@
 
 3DPartHub 专为制造企业团队管理 3D 零件模型与产品选型数据而设计。系统支持 STEP / IGES / Parasolid 文件自动转换为 glTF，在浏览器内实时 3D 预览，并提供分类管理、选型筛选、询价报价、分享、审计、备份恢复和完整后台设置。
 
-> V2.6.3 发行版只包含通用源码、数据库结构、迁移、Docker/CI 配置和文档。数据库、模型文件、缩略图、Logo、Favicon、产品图片、企业资料、业务批次脚本、Excel/PDF 私有资料等运行时或定制内容不会随 Git 仓库和镜像发布。
+> V2.7.0 发行版只包含通用源码、数据库结构、迁移、Docker/CI 配置和文档。数据库、模型文件、缩略图、Logo、Favicon、产品图片、企业资料、业务批次脚本、Excel/PDF 私有资料等运行时或定制内容不会随 Git 仓库和镜像发布。
 
-## 先看运行规范
+## V2.7.0 更新
 
-本项目区分三种运行模式：本地开发调试、本地完整容器测试、生产纯 Docker 部署。启动项目前请先阅读 [运行环境规范](docs/运行环境规范.md)，避免把 `5173`、`8000`、`5433`、`6380`、`3780` 和生产容器网络混在一起。
-
-目录职责请看 [Project Structure](PROJECT_STRUCTURE.md)，私有资料、运行时文件和源码不要混放。代码提交前检查、API 响应解析、错误提示和分层规则请看 [代码维护规范](docs/代码维护规范.md)。上线前压测和并发参数请看 [并发压测与部署调优](docs/并发压测与部署调优.md)。
-
-生产部署以仓库根目录的 [docker-compose.yml](docker-compose.yml) 为唯一主入口，`deploy/` 目录只保留历史部署参考说明。
-
-常用约定：
-
-| 场景 | 前端 | 后端 | 数据库 | Redis |
-|------|------|------|--------|-------|
-| 本地开发 | `localhost:5173` | `localhost:8000` | `localhost:5433` | `localhost:6380` |
-| 生产部署 | Docker `web` | Docker `api` | Docker `postgres:5432` | Docker `redis:6379` |
-
-提交前可执行：
-
-```bash
-bash scripts/verify-local.sh
-```
-
-本地一键启动：
-
-```bash
-bash scripts/start-local.sh
-```
-
-该脚本会自动启动 Colima，旧的 `3dparthub-postgres` / `3dparthub-redis` 容器存在时会先重启，缺失时才创建；如果旧前端或后端进程占用 `5173` / `8000`，会先结束旧进程再启动本地源码服务。
-
-## V2.6.3 更新
+- **产品图库**：全新图片式产品图库页面，支持图片上传、收藏、标签管理、批量操作、无限滚动加载和 content-visibility 性能优化。
+- **选型系统**：分类级别 PDF 画册支持，可选按接头形态共享给其他分类；改进分类和产品页面布局。
+- **模型管理**：改进模型删除时的文件清理逻辑；修复版本显示、转换任务详情、模型数量统计等多个 Bug。
+- **系统管理**：新增缓存垃圾清理功能（孤立文件、过期临时文件、旧快照）；规格查询工具改为公开访问。
+- **性能优化**：离屏卡片使用 content-visibility 加速滚动；优化轮询间隔和缓存策略。
+- **部署运维**：Docker 镜像自动更新机制；改进部署脚本和资源调优。
 
 - **备份目录权限自动修复**：API 容器启动时会自动创建 `/app/static/backups/.work` 并修复宿主机备份目录权限，避免额外增加长期业务容器。
 - **新服务器部署更稳**：避免宿主机目录由 `root` 创建后导致 API 报 `EACCES: permission denied, mkdir '/app/static/backups/.work'`。
@@ -78,10 +56,10 @@ bash scripts/start-local.sh
 
 | 项目 | 值 |
 |------|----|
-| Tag | `v2.6.3` |
-| Release 标题 | `V2.6.3 - 自动修复备份目录权限` |
-| API 镜像 | `ghcr.io/liaoweixiang2024-blip/3dparthub-api:v2.6.3` / `ghcr.io/liaoweixiang2024-blip/3dparthub-api:latest` |
-| Web 镜像 | `ghcr.io/liaoweixiang2024-blip/3dparthub-web:v2.6.3` / `ghcr.io/liaoweixiang2024-blip/3dparthub-web:latest` |
+| Tag | `v2.7.0` |
+| Release 标题 | `v2.7.0` |
+| API 镜像 | `ghcr.io/liaoweixiang2024-blip/3dparthub-api:v2.7.0` / `ghcr.io/liaoweixiang2024-blip/3dparthub-api:latest` |
+| Web 镜像 | `ghcr.io/liaoweixiang2024-blip/3dparthub-web:v2.7.0` / `ghcr.io/liaoweixiang2024-blip/3dparthub-web:latest` |
 | 更新方式 | 默认部署使用 `latest`，需要升级时手动拉取并重建 API/Web 容器 |
 
 镜像说明：
@@ -89,7 +67,7 @@ bash scripts/start-local.sh
 - `3dparthub-api`：Express 5 + Prisma 后端，包含数据库迁移、隔离模型转换、转换队列、预览元数据、后台设置、备份/恢复、审计与 API 服务。
 - `3dparthub-web`：React 19 + Vite 前端，包含 CAD 在线查看器、3D 预览、产品选型、询价报价、分享页和后台管理界面。
 
-后台 **设置 -> 系统更新 -> 检查更新** 会读取 GitHub 最新 Release 的描述内容，并显示为后台更新日志。发布 V2.6.3 时，请以 Release 描述作为用户可见更新简介。
+后台 **设置 -> 系统更新 -> 检查更新** 会读取 GitHub 最新 Release 的描述内容，并显示为后台更新日志。发布 V2.7.0 时，请以 Release 描述作为用户可见更新简介。
 
 ---
 
@@ -244,15 +222,15 @@ docker compose logs -f api
 
 ```bash
 cd /opt/3dparthub
-IMAGE_TAG=v2.6.3 docker compose pull
-IMAGE_TAG=v2.6.3 docker compose up -d
+IMAGE_TAG=v2.7.0 docker compose pull
+IMAGE_TAG=v2.7.0 docker compose up -d
 curl http://localhost:3780/api/health
 ```
 
 也可以在 `.env` 中写入：
 
 ```bash
-IMAGE_TAG=v2.6.3
+IMAGE_TAG=v2.7.0
 ```
 
 写入固定 `IMAGE_TAG` 后，部署会锁定在该版本；要恢复跟随最新镜像，请删除 `.env` 中的 `IMAGE_TAG` 或改为 `IMAGE_TAG=latest`，再执行更新命令。
