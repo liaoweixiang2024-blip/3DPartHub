@@ -20,8 +20,6 @@ import {
   DEFAULT_TICKET_STATUSES,
   DEFAULT_UPLOAD_POLICY,
   DEFAULT_USER_NAV,
-  normalizeAdminNav,
-  normalizeUserNav,
   parseSetting,
   type NavItemConfig,
   type StatusConfig,
@@ -1243,11 +1241,7 @@ function NavItemsEditor({ itemKey, settings, updateSetting, fallback }: {
   fallback: NavItemConfig[];
 }) {
   const rawItems = parseSetting<NavItemConfig[]>(settings[itemKey], fallback);
-  const items = itemKey === 'nav_admin_items'
-    ? normalizeAdminNav(rawItems)
-    : itemKey === 'nav_user_items'
-    ? normalizeUserNav(rawItems)
-    : rawItems;
+  const items = rawItems;
   const update = (next: NavItemConfig[]) => setJsonSetting(updateSetting, itemKey, next);
   const patch = (index: number, changes: Partial<NavItemConfig>) => update(items.map((item: NavItemConfig, i: number) => i === index ? { ...item, ...changes } : item));
   const presetKey = itemKey === 'nav_admin_items' ? 'admin' : itemKey === 'nav_user_items' ? 'user' : 'mobile';
