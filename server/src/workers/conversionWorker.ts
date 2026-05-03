@@ -137,6 +137,10 @@ export const conversionWorker = createWorker(async (job) => {
   await logStep(`开始转换: ${originalName} (${ext})`);
   await job.updateProgress(10);
 
+  const initialSourcePath = resolve(filePath);
+  let activeSourcePath = initialSourcePath;
+  let shouldCleanupInitialSource = !preserveSource;
+
   try {
     // Update status to processing
     await logStep("更新模型状态为 processing");
@@ -149,7 +153,40 @@ export const conversionWorker = createWorker(async (job) => {
 
     await job.updateProgress(20);
 
+    if (!existsSync(initialSourcePath)) {
+      throw new Error(`源文件不存在: ${filePath}`);
+    }
+
+    const originalsDir = resolve(config.staticDir, "originals");
+    mkdirSync(originalsDir, { recursive: true });
+    const persistedSourcePath = resolve(originalsDir, `${modelId}.${ext}`);
+    if (initialSourcePath !== persistedSourcePath) {
+      await logStep(`预先保存原始文件: ${persistedSourcePath}`);
+      copyFileSync(initialSourcePath, persistedSourcePath);
+      activeSourcePath = persistedSourcePath;
+      shouldCleanupInitialSource = !preserveSource;
+      try {
+        await job.updateData({ ...job.data, filePath: persistedSourcePath, preserveSource: true });
+      } catch {
+        shouldCleanupInitialSource = false;
+        await logStep("updateData 失败，保留原始源文件以防重试需要");
+      }
+    } else {
+      await logStep("源文件已在 originals 目录");
+      activeSourcePath = initialSourcePath;
+      shouldCleanupInitialSource = false;
+    }
+
+    if (prisma) {
+      await prisma.model.update({
+        where: { id: modelId },
+        data: { uploadPath: activeSourcePath },
+      }).catch(() => {});
+    }
+
     await logStep(`启动隔离转换子进程，超时 ${formatDuration(conversionQueueConfig.jobTimeoutMs)}`);
+    job.data.filePath = activeSourcePath;
+    job.data.preserveSource = true;
     const { result, thumb } = await runConversionPipeline(job);
 
     // Update database
@@ -167,31 +204,9 @@ export const conversionWorker = createWorker(async (job) => {
       });
     }
 
-    // Persist original file when the source is a temp upload. Existing originals are kept in place.
-    const sourcePath = resolve(filePath);
-    if (existsSync(sourcePath)) {
-      const originalsDir = resolve(config.staticDir, "originals");
-      mkdirSync(originalsDir, { recursive: true });
-      const destPath = resolve(originalsDir, `${modelId}.${ext}`);
-      if (sourcePath !== destPath) {
-        await logStep(`保存原始文件: ${destPath}`);
-        copyFileSync(sourcePath, destPath);
-      } else {
-        await logStep("源文件已在 originals 目录，跳过重复复制");
-      }
-
-      // Update DB with original file path
-      if (prisma) {
-        await prisma.model.update({
-          where: { id: modelId },
-          data: { uploadPath: destPath },
-        }).catch(() => {});
-      }
-
-      if (!preserveSource && sourcePath !== destPath) {
-        await logStep("清理临时上传文件");
-        rmSync(sourcePath, { force: true });
-      }
+    if (shouldCleanupInitialSource && initialSourcePath !== activeSourcePath && existsSync(initialSourcePath)) {
+      await logStep("清理临时上传文件");
+      rmSync(initialSourcePath, { force: true });
     }
 
     await job.updateProgress(100);
@@ -217,14 +232,16 @@ export const conversionWorker = createWorker(async (job) => {
     }
 
     // Clean up temp upload file on failure
-    const sourcePath = resolve(filePath);
-    if (!preserveSource && existsSync(sourcePath)) {
-      try { rmSync(sourcePath, { force: true }); } catch {}
-    } else if (preserveSource) {
+    if (shouldCleanupInitialSource && initialSourcePath !== activeSourcePath && existsSync(initialSourcePath)) {
+      try { rmSync(initialSourcePath, { force: true }); } catch {}
+    } else if (!shouldCleanupInitialSource) {
       await logStep("保留原始源文件，跳过失败清理");
     }
 
-    if (prisma) {
+    const maxAttempts = job.opts?.attempts || 1;
+    const isFinalAttempt = job.attemptsMade >= maxAttempts - 1;
+
+    if (isFinalAttempt && prisma) {
       await prisma.model.update({
         where: { id: modelId },
         data: { status: MODEL_STATUS.FAILED },
@@ -232,14 +249,15 @@ export const conversionWorker = createWorker(async (job) => {
       await cacheDelByPrefix("cache:models:");
     }
 
-    // Notify user of failure
-    await createNotification({
-      userId,
-      title: "模型转换失败",
-      message: `${originalName} 转换失败: ${message}`,
-      type: "error",
-      relatedId: modelId,
-    });
+    if (isFinalAttempt) {
+      await createNotification({
+        userId,
+        title: "模型转换失败",
+        message: `${originalName} 转换失败: ${message}`,
+        type: "error",
+        relatedId: modelId,
+      });
+    }
 
     throw new Error(message);
   }

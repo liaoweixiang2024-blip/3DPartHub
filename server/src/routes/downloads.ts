@@ -1,8 +1,9 @@
 import { Router, Request, Response } from "express";
 import { prisma } from "../lib/prisma.js";
-import { authMiddleware, type AuthRequest } from "../middleware/auth.js";
+import { authMiddleware, optionalAuthMiddleware, type AuthRequest } from "../middleware/auth.js";
 import { createModelDownloadToken, createProtectedResourceToken } from "../lib/downloadTokenStore.js";
 import { optionalString } from "../lib/requestValidation.js";
+import { getSetting } from "../lib/settings.js";
 
 const router = Router();
 
@@ -210,8 +211,14 @@ router.get("/api/admin/downloads/stats", authMiddleware, async (req: AuthRequest
 
 // Generate a short-lived one-time token for browser downloads.
 // This avoids placing the user's JWT in URLs, browser history, reverse-proxy logs, or Referer headers.
-router.post("/api/downloads/model-token", authMiddleware, async (req: AuthRequest, res: Response) => {
+router.post("/api/downloads/model-token", optionalAuthMiddleware, async (req: AuthRequest, res: Response) => {
   try {
+    const requireLogin = await getSetting<boolean>("require_login_download");
+    if (requireLogin && !req.user) {
+      res.status(401).json({ detail: "需要登录后才能下载" });
+      return;
+    }
+
     const modelId = optionalString((req.body as Record<string, unknown>)?.modelId, { maxLength: 128 });
     const format = optionalString((req.body as Record<string, unknown>)?.format, { maxLength: 20 }) || "original";
     if (!modelId) {
@@ -219,10 +226,10 @@ router.post("/api/downloads/model-token", authMiddleware, async (req: AuthReques
       return;
     }
 
-    const created = createModelDownloadToken({
+    const created = await createModelDownloadToken({
       modelId,
       format,
-      userId: req.user!.userId,
+      userId: req.user?.userId,
     });
 
     res.json(created);
@@ -272,6 +279,7 @@ router.post("/api/downloads/batch-delete", authMiddleware, async (req: AuthReque
     if (!prisma) { res.status(503).json({ detail: "DB unavailable" }); return; }
     const { ids } = req.body as { ids: string[] };
     if (!ids || !Array.isArray(ids)) { res.status(400).json({ detail: "参数错误" }); return; }
+    if (ids.length > 1000) { res.status(400).json({ detail: "单次最多删除 1000 条记录" }); return; }
     const result = await prisma.download.deleteMany({
       where: { id: { in: ids }, userId: req.user!.userId },
     });

@@ -47,7 +47,7 @@ export async function recordModelDownload(prisma: DownloadRecorderPrisma, option
 
   const today = new Date();
   today.setHours(0, 0, 0, 0);
-  const dayKey = today.toISOString().slice(0, 10);
+  const dayKey = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
 
   await prisma.$transaction(async (tx: DownloadRecorderTransaction) => {
     if (dailyLimit > 0) {

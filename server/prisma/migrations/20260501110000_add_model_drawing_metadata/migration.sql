@@ -1,0 +1,2 @@
+ALTER TABLE "models" ADD COLUMN IF NOT EXISTS "drawing_name" TEXT;
+ALTER TABLE "models" ADD COLUMN IF NOT EXISTS "drawing_size" INTEGER;

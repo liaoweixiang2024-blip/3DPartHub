@@ -3,7 +3,7 @@ import Redis from "ioredis";
 import { randomBytes } from "node:crypto";
 import { config } from "./config.js";
 
-const redis = new Redis(config.redisUrl);
+export const redis = new Redis(config.redisUrl);
 redis.on("error", (err) => console.error("Redis (captcha) error:", err.message));
 
 interface CaptchaResult {
@@ -13,12 +13,13 @@ interface CaptchaResult {
 
 export async function generateCaptcha(ttlSeconds = 300): Promise<CaptchaResult> {
   const captcha = svgCaptcha.create({
-    size: 4,
-    noise: 3,
+    size: 6,
+    noise: 5,
     color: true,
     background: "#f0f0f0",
-    width: 120,
-    height: 40,
+    width: 150,
+    height: 44,
+    ignoreChars: "o0il1",
   });
 
   const captchaId = `cap_${randomBytes(18).toString("base64url")}`;
@@ -31,17 +32,24 @@ export async function generateCaptcha(ttlSeconds = 300): Promise<CaptchaResult> 
 
 export async function verifyCaptcha(captchaId: string, text: string): Promise<boolean> {
   const key = `captcha:${captchaId}`;
-  const stored = await redis.get(key);
-  if (!stored) return false;
-  await redis.del(key); // one-time use
-  return stored === text.toLowerCase();
+  const result = await redis.eval(
+    `local stored = redis.call("GET", KEYS[1])
+     if not stored then return 0 end
+     if stored == ARGV[1] then
+       redis.call("DEL", KEYS[1])
+       return 1
+     end
+     return 0`,
+    1,
+    key,
+    text.toLowerCase(),
+  );
+  return result === 1;
 }
 
 export async function checkRateLimit(key: string, ttlSeconds: number): Promise<boolean> {
-  const exists = await redis.exists(key);
-  if (exists) return false; // rate limited
-  await redis.set(key, "1", "EX", ttlSeconds);
-  return true;
+  const result = await redis.set(key, "1", "EX", Math.max(1, ttlSeconds), "NX");
+  return result === "OK";
 }
 
 export async function storeEmailCode(email: string, code: string, ttlSeconds = 600): Promise<void> {
@@ -51,8 +59,17 @@ export async function storeEmailCode(email: string, code: string, ttlSeconds = 6
 
 export async function verifyEmailCode(email: string, code: string): Promise<boolean> {
   const key = `email_code:${email}`;
-  const stored = await redis.get(key);
-  if (!stored) return false;
-  await redis.del(key); // one-time use
-  return stored === code;
+  const result = await redis.eval(
+    `local stored = redis.call("GET", KEYS[1])
+     if not stored then return 0 end
+     if stored == ARGV[1] then
+       redis.call("DEL", KEYS[1])
+       return 1
+     end
+     return 0`,
+    1,
+    key,
+    code,
+  );
+  return result === 1;
 }

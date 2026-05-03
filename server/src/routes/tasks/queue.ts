@@ -111,7 +111,9 @@ export function createConversionQueueRouter() {
         },
         queue_counts: queueCounts,
         items,
-        total: stateFilter === "all" ? items.length : queueCounts[stateFilter] || items.length,
+        total: stateFilter === "all"
+          ? Object.values(queueCounts).reduce((sum, c) => sum + c, 0)
+          : queueCounts[stateFilter] || items.length,
         filter_state: stateFilter,
         generated_at: new Date().toISOString(),
       });
@@ -153,14 +155,15 @@ export function createConversionQueueRouter() {
           items.push({ id: String(job.id), model_id: job.data?.modelId || null, status: "retried" });
         } catch (err: any) {
           failed++;
-          items.push({ id: String(job.id), model_id: job.data?.modelId || null, status: "failed", reason: err?.message || "重试失败" });
+          items.push({ id: String(job.id), model_id: job.data?.modelId || null, status: "failed", reason: "重试失败" });
         }
       }
 
       if (retried > 0) await cacheDelByPrefix("cache:models:");
       res.json({ retried, skipped, failed, items });
     } catch (err: any) {
-      res.status(500).json({ detail: err?.message || "重试失败任务失败" });
+      console.error("[queue] Retry-failed error:", err);
+      res.status(500).json({ detail: "重试失败任务失败" });
     }
   });
 
@@ -200,7 +203,7 @@ export function createConversionQueueRouter() {
           items.push({ id: String(job.id), model_id: job.data?.modelId || null, status: "cancelled" });
         } catch (err: any) {
           failed++;
-          items.push({ id: String(job.id), model_id: job.data?.modelId || null, status: "failed", reason: err?.message || "取消失败" });
+          items.push({ id: String(job.id), model_id: job.data?.modelId || null, status: "failed", reason: "取消失败" });
         }
       }
 
@@ -214,7 +217,8 @@ export function createConversionQueueRouter() {
 
       res.json({ cancelled, skipped, failed, active, items });
     } catch (err: any) {
-      res.status(500).json({ detail: err?.message || "取消预览重建任务失败" });
+      console.error("[queue] Cancel-rebuilds error:", err);
+      res.status(500).json({ detail: "取消预览重建任务失败" });
     }
   });
 
@@ -227,7 +231,8 @@ export function createConversionQueueRouter() {
       const jobIds = await conversionQueue.clean(graceMs, limit, type);
       res.json({ type, cleaned: jobIds.length, job_ids: jobIds });
     } catch (err: any) {
-      res.status(500).json({ detail: err?.message || "清理转换队列失败" });
+      console.error("[queue] Clean error:", err);
+      res.status(500).json({ detail: "清理转换队列失败" });
     }
   });
 
@@ -238,10 +243,6 @@ export function createConversionQueueRouter() {
       const job = await conversionQueue.getJob(taskId);
       if (!job) {
         res.status(404).json({ detail: "任务不存在" });
-        return;
-      }
-      if (job.data?.userId !== req.user!.userId && req.user!.role !== "ADMIN") {
-        res.status(403).json({ detail: "无权访问" });
         return;
       }
 
@@ -296,7 +297,8 @@ export function createConversionQueueRouter() {
         log_count: logResult.count,
       });
     } catch (err: any) {
-      res.status(500).json({ detail: err?.message || "获取转换任务详情失败" });
+      console.error("[queue] Get-job error:", err);
+      res.status(500).json({ detail: "获取转换任务详情失败" });
     }
   });
 

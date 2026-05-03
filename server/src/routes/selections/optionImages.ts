@@ -55,6 +55,9 @@ function optionImageMimeAllowed(mimeType: string, pattern: string): boolean {
   const normalized = normalizeMimeType(mimeType);
   if (!normalized) return false;
   const source = pattern?.trim() || DEFAULT_UPLOAD_POLICY.optionImageMimePattern;
+  if (source.length > 200) return false;
+  const quantifierNesting = (source.match(/\+/g) || []).length + (source.match(/\*/g) || []).length;
+  if (quantifierNesting > 10) return false;
   try {
     return new RegExp(source, "i").test(normalized);
   } catch {

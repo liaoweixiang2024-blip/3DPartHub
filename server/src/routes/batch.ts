@@ -1,8 +1,9 @@
 import { Router, Response } from "express";
 import multer from "multer";
-import { createWriteStream, existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { createWriteStream, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { basename, join, posix } from "node:path";
 import archiver from "archiver";
+import { createExtractorFromData } from "node-unrar-js";
 import { randomUUID } from "node:crypto";
 import { once } from "node:events";
 import { authMiddleware, verifyRequestToken, type AuthRequest } from "../middleware/auth.js";
@@ -13,15 +14,17 @@ import { consumeProtectedResourceToken, createProtectedResourceToken } from "../
 import { optionalString } from "../lib/requestValidation.js";
 import { findPreviewAssetPath, getPreviewAssetExtension } from "../services/gltfAsset.js";
 import { conversionQueue } from "../lib/queue.js";
+import { clearCategoryCache } from "./categories/common.js";
 import { cacheDelByPrefix } from "../lib/cache.js";
 import { getBusinessConfig } from "../lib/businessConfig.js";
+import { normalizeUploadFilename } from "../lib/filenameEncoding.js";
 import { MODEL_STATUS } from "../services/modelStatus.js";
 
 const router = Router();
 
 const upload = multer({
   dest: join(config.uploadDir, "batch"),
-  limits: { fileSize: 500 * 1024 * 1024 }, // 500MB for batch ZIP
+  limits: { fileSize: 500 * 1024 * 1024 }, // 500MB for batch archives
 });
 
 const MAX_BATCH_MODEL_FILES = 200;
@@ -34,9 +37,16 @@ function normalizeZipEntryName(entryName: string): string | null {
   return clean;
 }
 
+function isSupportedBatchArchive(fileName: string) {
+  const lower = fileName.toLowerCase();
+  return lower.endsWith(".zip") || lower.endsWith(".rar");
+}
+
 // Batch download — create ZIP of multiple models' preview assets
 router.post("/api/batch/download", authMiddleware, requireRole("ADMIN"), async (req: AuthRequest, res: Response) => {
   const { modelIds, format } = req.body;
+
+  let zipPath: string | undefined;
 
   if (!Array.isArray(modelIds) || modelIds.length === 0) {
     res.status(400).json({ detail: "请选择要下载的模型" });
@@ -68,7 +78,7 @@ router.post("/api/batch/download", authMiddleware, requireRole("ADMIN"), async (
     }
 
     const zipName = `batch_${randomUUID().slice(0, 8)}.zip`;
-    const zipPath = join(config.staticDir, "batch", zipName);
+    zipPath = join(config.staticDir, "batch", zipName);
     mkdirSync(join(config.staticDir, "batch"), { recursive: true });
 
     const archive = archiver("zip", { zlib: { level: 5 } });
@@ -77,39 +87,45 @@ router.post("/api/batch/download", authMiddleware, requireRole("ADMIN"), async (
     archive.pipe(output);
     const outputClosed = once(output, "close");
 
+    const archivedModelIds = new Set<string>();
+
     for (const model of models) {
       const gltfPath = findPreviewAssetPath(join(config.staticDir, "models"), model.id, model.gltfUrl);
       if (gltfPath && existsSync(gltfPath)) {
         const ext = getPreviewAssetExtension(gltfPath);
-        const fileName = `${model.name || model.id}.${model.format}.${ext}`;
+        const safeName = (model.name || model.id).replace(/[<>:"/\\|?*]/g, "_");
+        const fileName = `${safeName}.${model.format}.${ext}`;
         archive.file(gltfPath, { name: fileName });
 
-        // Legacy glTF assets need their external .bin next to them.
         const binPath = gltfPath.replace(/\.gltf$/i, ".bin");
         if (ext === "gltf" && existsSync(binPath)) {
-          archive.file(binPath, { name: `${model.name || model.id}.${model.format}.bin` });
+          archive.file(binPath, { name: `${safeName}.${model.format}.bin` });
         }
+        archivedModelIds.add(model.id);
       }
     }
 
     await archive.finalize();
     await outputClosed;
 
-    // Record downloads
+    // Record downloads only for models actually archived
     for (const model of models) {
+      if (!archivedModelIds.has(model.id)) continue;
       try {
-        await prisma.download.create({
-          data: {
-            userId: req.user!.userId,
-            modelId: model.id,
-            format: "zip-batch",
-            fileSize: model.gltfSize,
-          },
-        });
-        await prisma.model.update({
-          where: { id: model.id },
-          data: { downloadCount: { increment: 1 } },
-        });
+        await prisma.$transaction([
+          prisma.download.create({
+            data: {
+              userId: req.user!.userId,
+              modelId: model.id,
+              format: "zip-batch",
+              fileSize: model.gltfSize,
+            },
+          }),
+          prisma.model.update({
+            where: { id: model.id },
+            data: { downloadCount: { increment: 1 } },
+          }),
+        ]);
       } catch { /* ignore */ }
     }
 
@@ -123,9 +139,10 @@ router.post("/api/batch/download", authMiddleware, requireRole("ADMIN"), async (
 
     res.json({
       url: `/api/batch/downloads/${zipName}?download_token=${encodeURIComponent(token.token)}`,
-      count: models.length,
+      count: archivedModelIds.size,
     });
   } catch (err) {
+    try { if (typeof zipPath !== "undefined") rmSync(zipPath, { force: true }); } catch {}
     res.status(500).json({ detail: "批量下载失败" });
   }
 });
@@ -162,9 +179,15 @@ router.get("/api/batch/downloads/:file", async (req, res: Response) => {
     contentType: "application/zip",
     disposition: "attachment",
   });
+
+  const cleanup = () => {
+    try { rmSync(filePath, { force: true }); } catch {}
+  };
+  res.on("close", cleanup);
+  setTimeout(cleanup, 600_000);
 });
 
-// Batch upload from ZIP
+// Batch upload from ZIP/RAR
 router.post("/api/batch/upload", authMiddleware, requireRole("ADMIN"), upload.single("file"), async (req: AuthRequest, res: Response) => {
   const file = req.file;
   if (!file) {
@@ -172,9 +195,9 @@ router.post("/api/batch/upload", authMiddleware, requireRole("ADMIN"), upload.si
     return;
   }
 
-  if (!file.originalname?.toLowerCase().endsWith(".zip")) {
+  if (!isSupportedBatchArchive(file.originalname || "")) {
     rmSync(file.path, { force: true });
-    res.status(400).json({ detail: "请上传 ZIP 文件" });
+    res.status(400).json({ detail: "请上传 ZIP 或 RAR 压缩包" });
     return;
   }
 
@@ -183,36 +206,17 @@ router.post("/api/batch/upload", authMiddleware, requireRole("ADMIN"), upload.si
     const { uploadPolicy } = await getBusinessConfig();
     const acceptedExts = uploadPolicy.modelFormats.map((item) => item.toLowerCase());
     const maxModelBytes = Math.max(1, uploadPolicy.modelMaxSizeMb) * 1024 * 1024;
-
-    const AdmZip = (await import("adm-zip")).default;
-    const zip = new AdmZip(file.path);
+    const categoryId = optionalString(req.body?.categoryId, { maxLength: 80 }) || null;
     const results: any[] = [];
-    const entries = zip.getEntries()
-      .filter((entry) => !entry.isDirectory)
-      .map((entry) => ({ entry, safeName: normalizeZipEntryName(entry.entryName) }))
-      .filter((item) => Boolean(item.safeName))
-      .slice(0, MAX_BATCH_MODEL_FILES);
 
-    for (const { entry, safeName } of entries) {
-      const cleanName = safeName!;
-      const ext = cleanName.split(".").pop()?.toLowerCase();
-      if (!ext || !acceptedExts.includes(ext)) continue;
-
+    const queueModelFromBuffer = async (originalName: string, ext: string, data: Buffer) => {
       const modelId = randomUUID().slice(0, 12);
-      const originalName = posix.basename(cleanName);
       let originalDest: string | null = null;
 
       try {
-        const declaredSize = Number((entry as any).header?.size || 0);
-        if (declaredSize > maxModelBytes) {
-          results.push({ name: originalName, status: MODEL_STATUS.FAILED, error: `文件过大，最大支持 ${uploadPolicy.modelMaxSizeMb}MB` });
-          continue;
-        }
-
-        const data = entry.getData();
         if (data.length <= 0 || data.length > maxModelBytes) {
           results.push({ name: originalName, status: MODEL_STATUS.FAILED, error: `文件大小异常，最大支持 ${uploadPolicy.modelMaxSizeMb}MB` });
-          continue;
+          return;
         }
 
         const originalsDir = join(config.staticDir, "originals");
@@ -234,11 +238,12 @@ router.post("/api/batch/upload", authMiddleware, requireRole("ADMIN"), upload.si
               status: MODEL_STATUS.QUEUED,
               uploadPath: originalDest,
               createdById: req.user!.userId,
+              ...(categoryId && { categoryId }),
             },
           });
-        }
+  }
 
-        try {
+  try {
           await conversionQueue.add("convert", {
             modelId,
             filePath: originalDest,
@@ -258,11 +263,81 @@ router.post("/api/batch/upload", authMiddleware, requireRole("ADMIN"), upload.si
         if (originalDest && existsSync(originalDest)) rmSync(originalDest, { force: true });
         results.push({ name: originalName, status: MODEL_STATUS.FAILED, error: (err as Error).message });
       }
+    };
+
+    if (file.originalname.toLowerCase().endsWith(".zip")) {
+      const AdmZip = (await import("adm-zip")).default;
+      const zip = new AdmZip(file.path);
+      const entries = zip.getEntries()
+        .filter((entry) => !entry.isDirectory)
+        .map((entry) => ({ entry, safeName: normalizeZipEntryName(entry.entryName) }))
+        .filter((item) => Boolean(item.safeName))
+        .slice(0, MAX_BATCH_MODEL_FILES);
+
+      const maxTotalExtractBytes = maxModelBytes * MAX_BATCH_MODEL_FILES;
+      let totalExtractedBytes = 0;
+
+      for (const { entry, safeName } of entries) {
+        const cleanName = safeName!;
+        const ext = cleanName.split(".").pop()?.toLowerCase();
+        if (!ext || !acceptedExts.includes(ext)) continue;
+        const originalName = normalizeUploadFilename(posix.basename(cleanName));
+        const data = entry.getData();
+        if (data.length > maxModelBytes || totalExtractedBytes + data.length > maxTotalExtractBytes) {
+          results.push({ name: originalName, status: MODEL_STATUS.FAILED, error: `文件过大或解压总量超限` });
+          continue;
+        }
+        totalExtractedBytes += data.length;
+        await queueModelFromBuffer(originalName, ext, data);
+      }
+    } else {
+      const MAX_RAR_MEMORY_BYTES = 100 * 1024 * 1024;
+      const { statSync } = await import("node:fs");
+      const stat = statSync(file.path);
+      if (stat.size > MAX_RAR_MEMORY_BYTES) {
+        rmSync(file.path, { force: true });
+        res.status(400).json({ detail: "RAR 压缩包超过 100MB，请使用 ZIP 格式" });
+        return;
+      }
+      const archiveBuffer = readFileSync(file.path);
+      const archiveData = archiveBuffer.buffer.slice(archiveBuffer.byteOffset, archiveBuffer.byteOffset + archiveBuffer.byteLength);
+      const extractor = await createExtractorFromData({ data: archiveData });
+      const extracted = extractor.extract({
+        files: (header) => !header.flags.directory && Boolean(normalizeZipEntryName(header.name)),
+      });
+      const maxTotalExtractBytes = maxModelBytes * MAX_BATCH_MODEL_FILES;
+      let rarTotalBytes = 0;
+      let processed = 0;
+      for (const item of extracted.files) {
+        if (processed >= MAX_BATCH_MODEL_FILES) break;
+        const safeName = normalizeZipEntryName(item.fileHeader.name);
+        if (!safeName) continue;
+        const ext = safeName.split(".").pop()?.toLowerCase();
+        if (!ext || !acceptedExts.includes(ext)) continue;
+        processed += 1;
+        const originalName = normalizeUploadFilename(posix.basename(safeName));
+        const content = item.extraction;
+        if (!content?.byteLength) {
+          results.push({ name: originalName, status: MODEL_STATUS.FAILED, error: "文件为空或无法解压" });
+          continue;
+        }
+        if (content.byteLength > maxModelBytes || rarTotalBytes + content.byteLength > maxTotalExtractBytes) {
+          results.push({ name: originalName, status: MODEL_STATUS.FAILED, error: `解压后文件过大或总量超限` });
+          continue;
+        }
+        rarTotalBytes += content.byteLength;
+        await queueModelFromBuffer(originalName, ext, Buffer.from(content));
+      }
     }
 
     rmSync(file.path, { force: true });
+    if (!results.length) {
+      res.status(400).json({ detail: `压缩包内没有识别到支持的模型文件，请上传 ${acceptedExts.map((item) => `.${item}`).join(" / ")} 文件` });
+      return;
+    }
     if (results.some((item) => item.status === MODEL_STATUS.QUEUED)) {
       await cacheDelByPrefix("cache:models:");
+      await clearCategoryCache();
     }
 
     res.json({ total: results.length, results });

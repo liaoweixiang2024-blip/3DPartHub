@@ -8,18 +8,30 @@ export interface CategoryItem {
   parentId: string | null;
   sortOrder: number;
   count?: number;
+  totalCount?: number;
   children: CategoryItem[];
 }
 
 export const categoriesApi = {
   tree: async (): Promise<{ items: CategoryItem[]; total: number }> => {
     const { data: resp } = await client.get("/categories");
+    const payload = resp as { data?: unknown; total?: unknown };
+    if (Array.isArray(payload.data)) {
+      return { items: payload.data as CategoryItem[], total: typeof payload.total === "number" ? payload.total : 0 };
+    }
+    if (payload.data && typeof payload.data === "object") {
+      const inner = payload.data as { data?: unknown; total?: unknown };
+      if (Array.isArray(inner.data)) {
+        return { items: inner.data as CategoryItem[], total: typeof inner.total === "number" ? inner.total : 0 };
+      }
+    }
     const raw = unwrapApiData<CategoryItem[] | { data?: CategoryItem[]; total?: number }>(resp);
-    // Backend returns { data: [...], total: N } wrapped by responseHandler
     if (typeof raw === "object" && !Array.isArray(raw) && "data" in raw) {
       return { items: raw.data ?? [], total: raw.total ?? 0 };
     }
-    if (Array.isArray(raw)) return { items: raw, total: 0 };
+    if (Array.isArray(raw)) {
+      return { items: raw, total: 0 };
+    }
     return { items: [], total: 0 };
   },
 

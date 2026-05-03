@@ -1,18 +1,42 @@
 import { Router, Request, Response } from "express";
 import { randomInt } from "node:crypto";
-import { generateCaptcha, verifyCaptcha, checkRateLimit, storeEmailCode, verifyEmailCode } from "../../lib/captcha.js";
+import { generateCaptcha, verifyCaptcha, checkRateLimit, storeEmailCode, verifyEmailCode, redis } from "../../lib/captcha.js";
 import { sendVerifyCode } from "../../lib/email.js";
-import { signAccessToken, signRefreshToken, verifyRefreshToken } from "../../lib/jwt.js";
+import { signAccessToken, signRefreshToken, verifyRefreshToken, verifyAccessToken, revokeToken, isRefreshTokenRevoked, revokeRefreshFamily, checkAndRevokeRefreshFamily, revokeAllTokensBefore } from "../../lib/jwt.js";
 import { hashPassword, verifyPassword } from "../../lib/password.js";
 import { prisma } from "../../lib/prisma.js";
 import { getSetting } from "../../lib/settings.js";
 import { clearAuthCookies, readCookie, REFRESH_COOKIE, setAuthCookies } from "./cookies.js";
+import { getRequestToken } from "../../middleware/auth.js";
+import { apiLimiter } from "../../middleware/security.js";
+import { cacheGet } from "../../lib/cache.js";
+
+const DUMMY_HASH = "$2a$12$LiVmGbGyGZkP1WQOB7SXOOJ7JqBhDmuOg2WjFwvCSCmXFGpOFHHze";
+const LOGIN_FAIL_PREFIX = "login_fail:";
+const LOGIN_MAX_FAILS = 5;
+const LOGIN_LOCK_SECONDS = 900;
+
+async function recordLoginFailure(email: string): Promise<number> {
+  const key = `${LOGIN_FAIL_PREFIX}${email.toLowerCase()}`;
+  const fails = await redis.incr(key);
+  if (fails === 1) await redis.expire(key, LOGIN_LOCK_SECONDS);
+  return fails;
+}
+
+async function clearLoginFailures(email: string): Promise<void> {
+  await redis.del(`${LOGIN_FAIL_PREFIX}${email.toLowerCase()}`);
+}
+
+async function getLoginFailureCount(email: string): Promise<number> {
+  const val = await redis.get(`${LOGIN_FAIL_PREFIX}${email.toLowerCase()}`);
+  return Number(val) || 0;
+}
 
 export function createAuthSessionRouter() {
   const router = Router();
 
   // Generate graphical captcha
-  router.get("/api/auth/captcha", async (_req: Request, res: Response) => {
+  router.get("/api/auth/captcha", apiLimiter, async (_req: Request, res: Response) => {
     try {
       const ttlSeconds = await getSetting<number>("security_captcha_ttl_seconds");
       const result = await generateCaptcha(Math.max(60, Math.floor(Number(ttlSeconds) || 300)));
@@ -54,11 +78,13 @@ export function createAuthSessionRouter() {
       await sendVerifyCode(email, code);
       res.json({ message: "验证码已发送" });
     } catch (err: any) {
-      res.status(500).json({ detail: err.message || "邮件发送失败" });
+      await redis.del(`email_code:${email}`);
+      console.error("[auth] Email send failed:", err.message);
+      res.status(500).json({ detail: "邮件发送失败" });
     }
   });
 
-  router.post("/api/auth/register", async (req: Request, res: Response) => {
+  router.post("/api/auth/register", apiLimiter, async (req: Request, res: Response) => {
     // Check if registration is allowed
     const allowRegister = await getSetting<boolean>("allow_register");
     if (!allowRegister) {
@@ -73,19 +99,12 @@ export function createAuthSessionRouter() {
       return;
     }
 
-    // Verify email code
-    const codeOk = await verifyEmailCode(email, emailCode);
-    if (!codeOk) {
-      res.status(400).json({ detail: "邮箱验证码错误或已过期" });
-      return;
-    }
-
     const passwordMinLength = Math.max(6, Math.floor(Number(await getSetting<number>("security_password_min_length")) || 8));
     const usernameMinLength = Math.max(1, Math.floor(Number(await getSetting<number>("security_username_min_length")) || 2));
     const usernameMaxLength = Math.max(usernameMinLength, Math.floor(Number(await getSetting<number>("security_username_max_length")) || 32));
 
-    if (password.length < passwordMinLength) {
-      res.status(400).json({ detail: `密码长度至少${passwordMinLength}位` });
+    if (password.length < passwordMinLength || password.length > 128) {
+      res.status(400).json({ detail: `密码长度应在${passwordMinLength}-128位之间` });
       return;
     }
 
@@ -99,19 +118,37 @@ export function createAuthSessionRouter() {
       return;
     }
 
+    if (!/^[\p{L}\p{N}_\-.]+$/u.test(username)) {
+      res.status(400).json({ detail: "用户名只能包含字母、数字、下划线、连字符和点" });
+      return;
+    }
+
+    // Check uniqueness BEFORE consuming email code
     try {
       const existing = await prisma.user.findFirst({
-        where: { OR: [{ username }, { email }] },
+        where: { OR: [{ username }, { email: email.toLowerCase() }] },
       });
       if (existing) {
         res.status(409).json({ detail: "用户名或邮箱已存在" });
         return;
       }
+    } catch {
+      res.status(500).json({ detail: "注册失败" });
+      return;
+    }
 
+    const codeOk = await verifyEmailCode(email, emailCode);
+    if (!codeOk) {
+      res.status(400).json({ detail: "邮箱验证码错误或已过期" });
+      return;
+    }
+
+    try {
       const passwordHash = await hashPassword(password);
+      const normalizedEmail = email.toLowerCase();
       const user = await prisma.user.create({
-        data: { username, email, passwordHash, phone: phone || null, company: company || null },
-        select: { id: true, username: true, email: true, role: true, createdAt: true },
+        data: { username, email: normalizedEmail, passwordHash, phone: phone || null, company: company || null },
+        select: { id: true, username: true, email: true, role: true, mustChangePassword: true, createdAt: true },
       });
 
       const payload = { userId: user.id, role: user.role };
@@ -123,7 +160,11 @@ export function createAuthSessionRouter() {
         user,
         tokens: { accessToken },
       });
-    } catch (err) {
+    } catch (err: any) {
+      if (err?.code === "P2002") {
+        res.status(409).json({ detail: "用户名或邮箱已存在" });
+        return;
+      }
       res.status(500).json({ detail: "注册失败" });
     }
   });
@@ -137,17 +178,25 @@ export function createAuthSessionRouter() {
     }
 
     try {
-      const user = await prisma.user.findUnique({ where: { email } });
-      if (!user) {
-        res.status(401).json({ detail: "邮箱或密码错误" });
+      const failCount = await getLoginFailureCount(email);
+      if (failCount >= LOGIN_MAX_FAILS) {
+        res.status(429).json({ detail: `登录失败次数过多，请${Math.ceil(LOGIN_LOCK_SECONDS / 60)}分钟后重试` });
         return;
       }
 
-      const valid = await verifyPassword(password, user.passwordHash);
-      if (!valid) {
-        res.status(401).json({ detail: "邮箱或密码错误" });
+      const user = await prisma.user.findUnique({ where: { email: email.toLowerCase() } });
+      const valid = await verifyPassword(password, user?.passwordHash ?? DUMMY_HASH);
+      if (!user || !valid) {
+        const totalFails = await recordLoginFailure(email);
+        if (totalFails >= LOGIN_MAX_FAILS) {
+          res.status(429).json({ detail: `登录失败次数过多，请${Math.ceil(LOGIN_LOCK_SECONDS / 60)}分钟后重试` });
+        } else {
+          res.status(401).json({ detail: "邮箱或密码错误" });
+        }
         return;
       }
+
+      await clearLoginFailures(email);
 
       const payload = { userId: user.id, role: user.role };
       const accessToken = signAccessToken(payload);
@@ -171,8 +220,7 @@ export function createAuthSessionRouter() {
   });
 
   router.post("/api/auth/refresh", async (req: Request, res: Response) => {
-    const { refreshToken: bodyRefreshToken } = req.body;
-    const refreshToken = bodyRefreshToken || readCookie(req, REFRESH_COOKIE);
+    const refreshToken = readCookie(req, REFRESH_COOKIE);
     if (!refreshToken) {
       res.status(400).json({ detail: "缺少 refresh token" });
       return;
@@ -180,7 +228,13 @@ export function createAuthSessionRouter() {
 
     try {
       const payload = verifyRefreshToken(refreshToken);
-      // Verify user still exists in database
+
+      const revokeBefore = await cacheGet<number>(`token_revoke_before:${payload.userId}`);
+      if (revokeBefore && payload.iat && payload.iat < revokeBefore) {
+        res.status(401).json({ detail: "会话已失效，请重新登录" });
+        return;
+      }
+
       const user = await prisma.user.findUnique({
         where: { id: payload.userId },
         select: { id: true, role: true },
@@ -189,15 +243,45 @@ export function createAuthSessionRouter() {
         res.status(401).json({ detail: "用户不存在，请重新登录" });
         return;
       }
+
+      if (payload.familyId) {
+        const notRevoked = await checkAndRevokeRefreshFamily(payload.userId, payload.familyId);
+        if (!notRevoked) {
+          await revokeAllTokensBefore(payload.userId, Math.floor(Date.now() / 1000));
+          res.status(401).json({ detail: "refresh token 已失效，请重新登录" });
+          return;
+        }
+      }
+
+      const newFamilyId = `fam_${Date.now().toString(36)}`;
       const accessToken = signAccessToken({ userId: user.id, role: user.role });
-      setAuthCookies(req, res, accessToken);
+      const newRefreshToken = signRefreshToken({ userId: user.id, role: user.role, familyId: newFamilyId });
+      setAuthCookies(req, res, accessToken, newRefreshToken);
       res.json({ accessToken });
     } catch {
       res.status(401).json({ detail: "refresh token 无效或已过期" });
     }
   });
 
-  router.post("/api/auth/logout", (req: Request, res: Response) => {
+  router.post("/api/auth/logout", async (req: Request, res: Response) => {
+    try {
+      const token = getRequestToken(req);
+      if (token) {
+        const payload = verifyAccessToken(token);
+        if (payload.iat) {
+          await revokeToken(payload.userId, payload.iat, 24 * 3600);
+        }
+      }
+    } catch {}
+    try {
+      const refreshCookie = readCookie(req, REFRESH_COOKIE);
+      if (refreshCookie) {
+        const refreshPayload = verifyRefreshToken(refreshCookie);
+        if (refreshPayload.familyId) {
+          await revokeRefreshFamily(refreshPayload.userId, refreshPayload.familyId);
+        }
+      }
+    } catch {}
     clearAuthCookies(req, res);
     res.json({ success: true });
   });

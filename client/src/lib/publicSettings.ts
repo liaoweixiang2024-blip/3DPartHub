@@ -4,6 +4,7 @@ import { applyServerThemeDefaults } from "../stores/useThemeStore";
 
 let cache: Partial<SystemSettings> | null = null;
 let fetchedAt = 0;
+let inflight: Promise<Partial<SystemSettings>> | null = null;
 const STORAGE_KEY = "site_config_cache";
 const TTL = 2 * 60 * 1000; // 2 minutes — config changes propagate faster
 
@@ -70,24 +71,32 @@ export async function getCachedPublicSettings(): Promise<Partial<SystemSettings>
     if (stored && now - stored.ts < TTL) {
       cache = stored.data;
       fetchedAt = stored.ts;
-      // Notify listeners so components can render with cached values immediately
       listeners.forEach(fn => fn());
     }
   }
 
-  try {
-    cache = await getPublicSettings();
-    fetchedAt = now;
-    saveToStorage(cache);
-    applyMetaTags();
-    applyFavicon();
-    applyAppearanceSettings(cache);
-    // Notify listeners with fresh API data
-    listeners.forEach(fn => fn());
-    return cache;
-  } catch {
-    return cache || { show_watermark: false, watermark_image: "", site_title: "", site_logo: "" };
-  }
+  // Deduplicate concurrent calls
+  if (inflight) return inflight;
+
+  inflight = (async () => {
+    try {
+      const data = await getPublicSettings();
+      cache = data;
+      fetchedAt = Date.now();
+      saveToStorage(cache);
+      applyMetaTags();
+      applyFavicon();
+      applyAppearanceSettings(cache);
+      listeners.forEach(fn => fn());
+      return cache;
+    } catch {
+      return cache || { show_watermark: false, watermark_image: "", site_title: "", site_logo: "" };
+    } finally {
+      inflight = null;
+    }
+  })();
+
+  return inflight;
 }
 
 // Synchronous getter for already-fetched settings

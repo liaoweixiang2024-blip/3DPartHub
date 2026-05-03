@@ -105,6 +105,10 @@ export function createSelectionAdminProductsRouter() {
         res.status(400).json({ detail: "products 必须是非空数组" });
         return;
       }
+      if (products.length > 1000) {
+        res.status(400).json({ detail: "单次最多导入 1000 个产品" });
+        return;
+      }
 
       const category = await prisma.selectionCategory.findUnique({ where: { id: categoryId } });
       if (!category) {
@@ -125,40 +129,40 @@ export function createSelectionAdminProductsRouter() {
       let created = 0;
       let updated = 0;
 
-      for (let i = 0; i < products.length; i++) {
-        const p = products[i] as any;
-        const modelNo = p.modelNo || null;
-        const specs = p.specs ?? {};
-        if (modelNo && specs && typeof specs === "object" && !Array.isArray(specs)) {
-          specs["型号"] = modelNo;
-        }
-        const data = {
-          name: cleanProductName(p.name || `产品 ${i + 1}`, modelNo),
-          modelNo,
-          specs,
-          image: p.image || null,
-          pdfUrl: p.pdfUrl || null,
-          sortOrder: p.sortOrder ?? i,
-          isKit: p.isKit ?? false,
-          components: p.components ?? undefined,
-        };
+      await prisma.$transaction(async (tx: any) => {
+        for (let i = 0; i < products.length; i++) {
+          const p = products[i] as any;
+          const modelNo = p.modelNo || null;
+          const specs = p.specs ? { ...p.specs } : {};
+          if (modelNo && specs && typeof specs === "object" && !Array.isArray(specs)) {
+            specs["型号"] = modelNo;
+          }
+          const data = {
+            name: cleanProductName(p.name || `产品 ${i + 1}`, modelNo),
+            modelNo,
+            specs,
+            image: p.image || null,
+            pdfUrl: p.pdfUrl || null,
+            sortOrder: p.sortOrder ?? i,
+            isKit: p.isKit ?? false,
+            components: p.components ?? undefined,
+          };
 
-        if (modelNo && existingMap.has(modelNo)) {
-          // Update existing product
-          await prisma.selectionProduct.update({
-            where: { id: existingMap.get(modelNo)! },
-            data,
-          });
-          updated++;
-        } else {
-          // Create new product
-          const createdProduct = await prisma.selectionProduct.create({
-            data: { categoryId, ...data },
-          });
-          if (modelNo) existingMap.set(modelNo, createdProduct.id);
-          created++;
+          if (modelNo && existingMap.has(modelNo)) {
+            await tx.selectionProduct.update({
+              where: { id: existingMap.get(modelNo)! },
+              data,
+            });
+            updated++;
+          } else {
+            const createdProduct = await tx.selectionProduct.create({
+              data: { categoryId, ...data },
+            });
+            if (modelNo) existingMap.set(modelNo, createdProduct.id);
+            created++;
+          }
         }
-      }
+      });
 
       await invalidateSelectionCache();
       res.status(201).json({ created, updated });

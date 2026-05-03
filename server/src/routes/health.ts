@@ -47,11 +47,7 @@ async function checkWritableDir(name: string, dir: string) {
 }
 
 router.get("/api/health", (_req, res: Response) => {
-  res.json({
-    status: "ok",
-    service: "model-converter",
-    timestamp: new Date().toISOString(),
-  });
+  res.json({ status: "ok" });
 });
 
 router.get("/api/health/deep", authMiddleware, requireRole("ADMIN"), async (_req, res: Response) => {

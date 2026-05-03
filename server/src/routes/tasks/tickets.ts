@@ -7,6 +7,7 @@ import { sendAcceleratedFile } from "../../lib/acceleratedDownload.js";
 import { DEFAULT_UPLOAD_POLICY, getBusinessConfig, labelFor } from "../../lib/businessConfig.js";
 import { config } from "../../lib/config.js";
 import { createProtectedResourceToken, verifyProtectedResourceToken } from "../../lib/downloadTokenStore.js";
+import { getSetting } from "../../lib/settings.js";
 import { prisma } from "../../lib/prisma.js";
 import { optionalString } from "../../lib/requestValidation.js";
 import { authMiddleware, verifyRequestToken, type AuthRequest } from "../../middleware/auth.js";
@@ -25,12 +26,11 @@ const attachmentUpload = multer({
       cb(null, `${randomUUID().slice(0, 12)}${ext}`);
     },
   }),
-  limits: { fileSize: 100 * 1024 * 1024 },
+  limits: { fileSize: 200 * 1024 * 1024 },
   fileFilter: (_req, file, cb) => {
-    const allowed = [".jpg", ".jpeg", ".png", ".gif", ".webp", ".pdf", ".step", ".stp", ".iges", ".igs", ".stl"];
     const ext = extname(file.originalname).toLowerCase();
-    if (allowed.includes(ext)) cb(null, true);
-    else cb(new Error("仅支持 jpg/png/gif/webp 格式"));
+    if (ext) cb(null, true);
+    else cb(new Error("文件必须包含扩展名"));
   },
 });
 
@@ -134,9 +134,12 @@ export function createSupportTicketRouter() {
       if (!prisma) { res.json([]); return; }
       const { pageSizePolicy } = await getBusinessConfig();
       const ticketListMax = Math.max(1, Math.floor(Number(pageSizePolicy.ticketListMax) || 50));
+      const page = Math.max(1, Number(req.query.page) || 1);
+      const skip = (page - 1) * ticketListMax;
       const tickets = await prisma.supportTicket.findMany({
         orderBy: { createdAt: "desc" },
         take: ticketListMax,
+        skip,
         include: { user: { select: { username: true, email: true, avatar: true } } },
       });
       res.json(tickets);
@@ -201,7 +204,7 @@ export function createSupportTicketRouter() {
       const ticket = await prisma.supportTicket.findUnique({ where: { id: ticketId } });
       if (!ticket) { res.status(404).json({ detail: "工单不存在" }); return; }
       if (ticket.userId !== req.user!.userId && req.user!.role !== "ADMIN") {
-        res.status(403).json({ detail: "无权访问" }); return;
+        res.status(403).json({ detail: "无权操作" }); return;
       }
       const messages = await prisma.ticketMessage.findMany({
         where: { ticketId },
@@ -285,16 +288,27 @@ export function createSupportTicketRouter() {
       }
       const isAdmin = req.user!.role === "ADMIN";
       const { ticketStatuses, ticketClassifications } = await getBusinessConfig();
-      // Status flow: admin reply -> waiting_user, user reply -> in_progress
+      const terminalStatuses = new Set(["closed", "resolved"]);
+      if (terminalStatuses.has(ticket.status)) {
+        res.status(400).json({ detail: "该工单已关闭，无法发送消息" });
+        return;
+      }
       let newStatus: string | null = null;
       if (isAdmin) {
-        newStatus = "waiting_user"; // Admin replied, waiting for user
+        newStatus = "waiting_user";
       } else {
-        newStatus = "in_progress"; // User replied, needs admin attention
+        newStatus = "in_progress";
       }
       if (newStatus && !ticketStatuses.some((item) => item.value === newStatus)) newStatus = null;
       if (newStatus && ticket.status !== newStatus) {
-        await prisma.supportTicket.update({ where: { id: ticketId }, data: { status: newStatus } });
+        const updated = await prisma.supportTicket.updateMany({
+          where: { id: ticketId, status: { notIn: [...terminalStatuses] } },
+          data: { status: newStatus },
+        });
+        if (updated.count === 0) {
+          res.status(400).json({ detail: "该工单已关闭，无法发送消息" });
+          return;
+        }
       }
       const message = await prisma.ticketMessage.create({
         data: {
@@ -320,15 +334,15 @@ export function createSupportTicketRouter() {
       if (!isAdmin) {
         try {
           const admins = await prisma.user.findMany({ where: { role: "ADMIN" }, select: { id: true } });
-          for (const admin of admins) {
-            await createNotification({
+          await Promise.all(admins.map((admin: any) =>
+            createNotification({
               userId: admin.id,
               title: "工单新回复",
               message: `用户回复了工单「${labelFor(ticketClassifications, ticket.classification)}」`,
               type: "ticket",
               relatedId: ticketId,
-            });
-          }
+            }).catch(() => {})
+          ));
         } catch {}
       }
       res.json({
@@ -345,10 +359,11 @@ export function createSupportTicketRouter() {
     const ticketId = param(req, "id");
     try {
       if (!req.file) { res.status(400).json({ detail: "请选择文件" }); return; }
-      const { uploadPolicy } = await getBusinessConfig();
-      const maxBytes = Math.max(1, uploadPolicy.ticketAttachmentMaxSizeMb || DEFAULT_UPLOAD_POLICY.ticketAttachmentMaxSizeMb) * 1024 * 1024;
+      const maxMb = Math.max(1, (await getSetting<number>("ticket_attachment_max_mb")) || 100);
+      const maxBytes = maxMb * 1024 * 1024;
+      const typesStr = (await getSetting<string>("ticket_attachment_types")) || "jpg,jpeg,png,gif,webp,svg,pdf,doc,docx,xls,xlsx,ppt,pptx,zip,rar,7z,step,stp,iges,igs,xt,binary";
+      const allowed = typesStr.split(",").map((s: string) => `.${s.trim().toLowerCase()}`);
       const ext = extname(req.file.originalname).toLowerCase();
-      const allowed = (uploadPolicy.ticketAttachmentExts || DEFAULT_UPLOAD_POLICY.ticketAttachmentExts).map((item) => item.toLowerCase());
       if (req.file.size > maxBytes || !allowed.includes(ext)) {
         rmSync(req.file.path, { force: true });
         res.status(400).json({ detail: `附件仅支持 ${allowed.join("/")}，最大 ${Math.round(maxBytes / 1024 / 1024)}MB` });

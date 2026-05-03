@@ -17,6 +17,7 @@ import { modelApi, type ServerModelListItem } from "../api/models";
 import { createShare } from "../api/shares";
 import { categoriesApi, type CategoryItem } from "../api/categories";
 import { useAuthStore } from "../stores";
+import { favoriteApi } from "../api/favorites";
 import { useToast } from "../components/shared/Toast";
 import { downloadModelFile, isDownloadAuthRequiredError } from "../api/downloads";
 import { copyText } from "../lib/clipboard";
@@ -46,11 +47,11 @@ function buildCategories(tree: CategoryItem[]): Category[] {
     id: node.id,
     name: node.name,
     icon: node.icon,
-    count: node.count || 0,
+    count: node.totalCount ?? node.count ?? 0,
     children: (node.children || []).map((child) => ({
       id: child.id,
       name: child.name,
-      count: child.count || 0,
+      count: child.totalCount ?? child.count ?? 0,
     })),
   }));
 }
@@ -445,7 +446,10 @@ function ProductCard({
   const [renaming, setRenaming] = useState(false);
   const [renameValue, setRenameValue] = useState(product.name);
   const [renameSaving, setRenameSaving] = useState(false);
+  const [isFavorited, setIsFavorited] = useState(false);
+  const [favLoading, setFavLoading] = useState(false);
   const ignoreNextOverlayClickRef = useRef(false);
+  const { isAuthenticated } = useAuthStore();
 
   useEffect(() => {
     if (manageOpen) {
@@ -454,6 +458,26 @@ function ProductCard({
       setRenameSaving(false);
     }
   }, [manageOpen, product.name]);
+
+  const toggleFavorite = useCallback(async (e: MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (favLoading || !isAuthenticated) return;
+    setFavLoading(true);
+    try {
+      if (isFavorited) {
+        await favoriteApi.remove(product.id);
+        setIsFavorited(false);
+      } else {
+        await favoriteApi.add(product.id);
+        setIsFavorited(true);
+      }
+    } catch {
+      // 收藏失败时保持当前状态，避免一次网络波动打断浏览。
+    } finally {
+      setFavLoading(false);
+    }
+  }, [favLoading, isFavorited, product.id, isAuthenticated]);
 
   const cancelRename = useCallback(() => {
     setRenameValue(product.name);
@@ -706,11 +730,21 @@ function ProductCard({
         <span className="absolute top-2 right-2 bg-surface-container-highest/80 backdrop-blur-md px-1.5 py-0.5 text-[9px] text-on-surface-variant font-mono rounded-sm border border-outline-variant/30">
           {product.fileSize}
         </span>
-        <div className="absolute bottom-2 right-2 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+        <div className="absolute right-2 bottom-2 z-20 flex items-center gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity delay-[240ms]">
+          {isAuthenticated && (
+            <button
+              onClick={toggleFavorite}
+              disabled={favLoading}
+              className={`inline-flex h-7 w-7 items-center justify-center rounded-full border border-outline-variant/20 bg-surface-container-lowest/40 backdrop-blur-sm transition-colors ${isFavorited ? "text-primary-container border-primary-container/30" : "text-on-surface-variant/60 hover:text-on-surface-variant"}`}
+              aria-label={isFavorited ? "取消收藏" : "收藏"}
+              data-tooltip-ignore
+            >
+              <Icon name={isFavorited ? "favorite" : "star"} size={14} />
+            </button>
+          )}
           {product.variantCount && product.variantCount > 1 && (
             <span className="bg-primary/90 text-on-primary text-[9px] font-bold px-1.5 py-0.5 rounded-sm">×{product.variantCount}</span>
           )}
-          <Icon name="360" size={18} className="text-primary" />
         </div>
       </div>
       <div className="flex-1 flex flex-col p-2.5">
@@ -1091,6 +1125,9 @@ export default function HomePage() {
   const productIdsKey = useMemo(() => products.map((product) => product.id).join("|"), [products]);
 
   const totalItems = serverData?.total || 0;
+  const displayTotalItems = activeCategory === "all" && !searchQuery.trim()
+    ? (totalModelCount || totalItems)
+    : totalItems;
 
   const toggleCategory = (id: string) => {
     setExpandedCategories((prev) => {
@@ -1336,7 +1373,7 @@ export default function HomePage() {
                 </div>
                 <div className="flex items-center gap-3">
                   <PageTitle>零件模型库</PageTitle>
-                  <span className="bg-surface-container-high px-2 py-0.5 text-xs text-on-surface-variant rounded-sm border border-outline-variant/20">{totalItems} 个模型</span>
+                  <span className="bg-surface-container-high px-2 py-0.5 text-xs text-on-surface-variant rounded-sm border border-outline-variant/20">{displayTotalItems} 个模型</span>
                 </div>
               </div>
               <div className="flex items-center gap-3">
@@ -1388,7 +1425,27 @@ export default function HomePage() {
                 {products.length === 0 && (
                   <div className="flex flex-col items-center justify-center py-20 gap-4">
                     <Icon name="search_off" size={48} className="text-on-surface-variant/30" />
-                    <p className="text-on-surface-variant">没有找到匹配的模型</p>
+                    <div className="text-center">
+                      <p className="text-on-surface-variant">没有找到匹配的模型</p>
+                      {searchQuery.trim() && (
+                        <p className="mt-1 text-xs text-on-surface-variant/60">可以提交需求，请管理员补充或完善模型库。</p>
+                      )}
+                    </div>
+                    {searchQuery.trim() && (
+                      <Link
+                        to="/support"
+                        state={{
+                          source: "model_search",
+                          searchQuery: searchQuery.trim(),
+                          classification: "novel",
+                          description: `模型库未搜索到：${searchQuery.trim()}\n请协助补充或完善该模型。`,
+                        }}
+                        className="inline-flex items-center gap-2 rounded-lg bg-primary-container px-4 py-2 text-sm font-bold text-on-primary transition-opacity hover:opacity-90"
+                      >
+                        <Icon name="assignment_add" size={16} />
+                        申请完善模型
+                      </Link>
+                    )}
                   </div>
                 )}
 
@@ -1553,7 +1610,7 @@ export default function HomePage() {
               <PageTitle className="text-base md:text-base md:normal-case">
                 {activeCategory === "all" ? "零件目录" : breadcrumb.label}
               </PageTitle>
-              <span className="text-[10px] text-on-surface-variant">{totalItems} 个模型</span>
+              <span className="text-[10px] text-on-surface-variant">{displayTotalItems} 个模型</span>
             </div>
             <button onClick={() => setDrawerOpen(true)} className="p-2 text-on-surface-variant hover:text-on-surface bg-surface-container-high rounded-sm flex items-center gap-1.5">
               <Icon name="tune" size={18} />
@@ -1600,7 +1657,25 @@ export default function HomePage() {
           {products.length === 0 && !isLoading && (
             <div className="flex flex-col items-center justify-center py-16 gap-3">
               <Icon name="search_off" size={40} className="text-on-surface-variant/30" />
-              <p className="text-sm text-on-surface-variant">没有找到匹配的模型</p>
+              <div className="text-center">
+                <p className="text-sm text-on-surface-variant">没有找到匹配的模型</p>
+                {searchQuery.trim() && <p className="mt-1 text-[11px] text-on-surface-variant/60">提交需求让管理员补充模型。</p>}
+              </div>
+              {searchQuery.trim() && (
+                <Link
+                  to="/support"
+                  state={{
+                    source: "model_search",
+                    searchQuery: searchQuery.trim(),
+                    classification: "novel",
+                    description: `模型库未搜索到：${searchQuery.trim()}\n请协助补充或完善该模型。`,
+                  }}
+                  className="inline-flex items-center gap-1.5 rounded-lg bg-primary-container px-3 py-2 text-xs font-bold text-on-primary"
+                >
+                  <Icon name="assignment_add" size={14} />
+                  申请完善模型
+                </Link>
+              )}
             </div>
           )}
 

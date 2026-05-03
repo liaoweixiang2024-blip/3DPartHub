@@ -149,7 +149,8 @@ export function createPreviewDiagnosticsRouter({
         status: filter,
       });
     } catch (err: any) {
-      res.status(500).json({ detail: err?.message || "预览诊断扫描失败" });
+      console.error("[previewDiagnostics] Scan failed:", err);
+      res.status(500).json({ detail: "预览诊断扫描失败" });
     }
   });
 
@@ -270,7 +271,8 @@ export function createPreviewDiagnosticsRouter({
         },
       });
     } catch (err: any) {
-      res.status(500).json({ detail: err?.message || "批量重建预览失败" });
+      console.error("[previewDiagnostics] Batch rebuild failed:", err);
+      res.status(500).json({ detail: "批量重建预览失败" });
     }
   });
 

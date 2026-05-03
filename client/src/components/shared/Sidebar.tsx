@@ -1,13 +1,10 @@
-import { useRef, useEffect, useState, useCallback, useMemo } from "react";
+import React, { useRef, useEffect, useState, useCallback, useMemo } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import useSWR from "swr";
 import { useAuthStore } from "../../stores/useAuthStore";
 import { getCachedPublicSettings } from "../../lib/publicSettings";
-import { DEFAULT_ADMIN_NAV, DEFAULT_USER_NAV, getBusinessConfig, type NavItemConfig } from "../../lib/businessConfig";
+import { getBusinessConfig } from "../../lib/businessConfig";
 import Icon from "./Icon";
-
-export const userNav: NavItemConfig[] = DEFAULT_USER_NAV;
-export const adminNav: NavItemConfig[] = DEFAULT_ADMIN_NAV;
 
 const footerNav = [
   { label: "个人设置", icon: "settings", path: "/profile" },
@@ -75,11 +72,20 @@ export default function AppSidebar() {
           const isActive =
             location.pathname === item.path ||
             (item.path !== "/" && location.pathname.startsWith(item.path));
+          const showDivider = isAdmin && item.path === "/admin/models";
           return (
-            <Link key={item.path} to={item.path} ref={isActive ? activeRef : undefined} className={navCls(isActive)}>
-              <Icon name={item.icon} size={24} />
-              <span className="font-headline uppercase tracking-widest">{item.label}</span>
-            </Link>
+            <React.Fragment key={item.path}>
+              {showDivider && (
+                <div className="flex items-center gap-3 px-4 pt-4 pb-1">
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-on-surface-variant/40">后台管理</span>
+                  <div className="flex-1 border-t border-outline-variant/15" />
+                </div>
+              )}
+              <Link to={item.path} ref={isActive ? activeRef : undefined} className={navCls(isActive)}>
+                <Icon name={item.icon} size={24} />
+                <span className="font-headline uppercase tracking-widest">{item.label}</span>
+              </Link>
+            </React.Fragment>
           );
         })}
       </nav>

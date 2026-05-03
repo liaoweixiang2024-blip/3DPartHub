@@ -16,16 +16,19 @@ import { getBusinessConfig } from "../lib/businessConfig";
 interface SupportContext {
   modelNo?: string;
   modelName?: string;
+  searchQuery?: string;
+  classification?: string;
+  description?: string;
   specs?: Record<string, string>;
-  source?: 'selection' | 'model';
+  source?: 'selection' | 'model' | 'model_search';
 }
 
 function useContextState(): { basePart: string; ctx: SupportContext | null } {
   const location = useLocation();
   const ctx = (location.state as SupportContext) || {};
-  const hasCtx = ctx.modelNo || ctx.modelName;
+  const hasCtx = ctx.modelNo || ctx.modelName || ctx.searchQuery || ctx.description;
   return {
-    basePart: ctx.modelNo || ctx.modelName || '',
+    basePart: ctx.modelNo || ctx.modelName || ctx.searchQuery || '',
     ctx: hasCtx ? ctx : null,
   };
 }
@@ -35,6 +38,7 @@ function buildContextSuffix(ctx: SupportContext): string {
   let suffix = '';
   if (ctx.source === 'model' && ctx.modelName) suffix += `来源模型：${ctx.modelName}\n`;
   if (ctx.source === 'selection' && ctx.modelNo) suffix += `选型型号：${ctx.modelNo}\n`;
+  if (ctx.source === 'model_search' && ctx.searchQuery) suffix += `模型库搜索词：${ctx.searchQuery}\n`;
   if (ctx.specs && Object.keys(ctx.specs).length > 0) {
     const lines = Object.entries(ctx.specs)
       .filter(([, v]) => v && v !== '—')
@@ -46,8 +50,8 @@ function buildContextSuffix(ctx: SupportContext): string {
 
 /** Read-only context card shown above the form */
 function ContextCard({ ctx }: { ctx: SupportContext }) {
-  const label = ctx.source === 'model' ? '来自模型' : ctx.source === 'selection' ? '来自选型' : '关联产品';
-  const name = ctx.modelName || ctx.modelNo || '';
+  const label = ctx.source === 'model_search' ? '来自模型搜索' : ctx.source === 'model' ? '来自模型' : ctx.source === 'selection' ? '来自选型' : '关联产品';
+  const name = ctx.modelName || ctx.modelNo || ctx.searchQuery || '';
   const specEntries = Object.entries(ctx.specs || {}).filter(([, v]) => v && v !== '—');
   return (
     <div className="flex items-start gap-2.5 px-3.5 py-2.5 rounded-lg bg-primary-container/8 border border-primary-container/15">
@@ -69,7 +73,7 @@ function ContextCard({ ctx }: { ctx: SupportContext }) {
 
 function DesktopContent() {
   const { basePart: initBasePart, ctx } = useContextState();
-  const [formData, setFormData] = useState({ basePart: initBasePart, classification: '', description: '' });
+  const [formData, setFormData] = useState({ basePart: initBasePart, classification: ctx?.classification || '', description: ctx?.description || '' });
   const [submitted, setSubmitted] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -307,7 +311,7 @@ function DesktopContent() {
 
 function MobileContent() {
   const { basePart: initBasePart, ctx } = useContextState();
-  const [formData, setFormData] = useState({ basePart: initBasePart, classification: '', description: '' });
+  const [formData, setFormData] = useState({ basePart: initBasePart, classification: ctx?.classification || '', description: ctx?.description || '' });
   const [submitted, setSubmitted] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);

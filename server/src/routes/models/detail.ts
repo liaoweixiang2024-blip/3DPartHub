@@ -43,10 +43,21 @@ export function createModelDetailRouter({
 
     if (prisma) {
       try {
+        if (canViewUnpublished) {
+          // Admin may view non-completed models — skip cache, always fresh
+        } else {
+          const cached = await cacheGet(cacheKey);
+          if (cached) {
+            res.set("X-Cache", "HIT");
+            res.json(cached);
+            return;
+          }
+        }
+
         const m = await prisma.model.findUnique({
           where: { id },
           include: {
-            categoryRef: { select: { name: true } },
+            categoryRef: { select: { name: true, parent: { select: { id: true, name: true } } } },
             group: {
               include: {
                 models: {
@@ -63,12 +74,7 @@ export function createModelDetailRouter({
             return;
           }
           if (m.status === MODEL_STATUS.COMPLETED) {
-            const cached = await cacheGet(cacheKey);
-            if (cached) {
-              res.set("X-Cache", "HIT");
-              res.json(cached);
-              return;
-            }
+            // Cache was already checked above for non-admin
           }
 
           // Get original file date: STEP header > DB dedicated column > fs mtime > metadata.
@@ -99,25 +105,31 @@ export function createModelDetailRouter({
             // keep DB fallback
           }
 
-          const variantStats = await Promise.all(
-            (m.group?.models ?? []).map(async (v: any) => {
-              try {
-                if (v.fileModifiedAt) return v.fileModifiedAt.toISOString();
-                const vMeta = (v.metadata as Record<string, unknown>) || {};
-                if (vMeta.originalModifiedAt) return vMeta.originalModifiedAt as string;
-                if (v.uploadPath) {
-                  const p = resolveStoredPath(v.uploadPath);
-                  if (p && existsSync(p)) {
-                    const stat = await statAsync(p);
-                    return stat.mtime.toISOString();
+          const [variantStats, previewMeta] = await Promise.all([
+            Promise.all(
+              (m.group?.models ?? []).map(async (v: any) => {
+                try {
+                  if (v.fileModifiedAt) return v.fileModifiedAt.toISOString();
+                  const vMeta = (v.metadata as Record<string, unknown>) || {};
+                  if (vMeta.originalModifiedAt) return vMeta.originalModifiedAt as string;
+                  if (v.uploadPath) {
+                    const p = resolveStoredPath(v.uploadPath);
+                    if (p && existsSync(p)) {
+                      const stat = await statAsync(p);
+                      return stat.mtime.toISOString();
+                    }
                   }
-                }
-              } catch {
-                // fallback below
-              }
-              return v.createdAt ? v.createdAt.toISOString() : null;
-            })
-          );
+                } catch {}
+                return v.createdAt ? v.createdAt.toISOString() : null;
+              })
+            ),
+            getPreviewMeta(m.id, {
+              gltfUrl: m.gltfUrl,
+              originalName: m.originalName,
+              format: m.format,
+              previewMeta: (m as any).previewMeta,
+            }),
+          ]);
 
           const groupData = m.group ? {
             id: m.group.id,
@@ -134,13 +146,6 @@ export function createModelDetailRouter({
             })),
           } : null;
 
-          const previewMeta = await getPreviewMeta(m.id, {
-            gltfUrl: m.gltfUrl,
-            originalName: m.originalName,
-            format: m.format,
-            previewMeta: (m as any).previewMeta,
-          });
-
           const responseData = {
             model_id: m.id,
             name: m.name,
@@ -154,6 +159,7 @@ export function createModelDetailRouter({
             description: m.description,
             category: (m as any).categoryRef?.name || null,
             category_id: m.categoryId || null,
+            category_parent: (m as any).categoryRef?.parent || null,
             created_at: m.createdAt,
             file_modified_at: mainFileModifiedAt,
             drawing_url: drawingDownloadUrl(m.id, m.drawingUrl),

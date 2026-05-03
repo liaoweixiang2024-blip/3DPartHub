@@ -3,8 +3,10 @@ import { unwrapResponse } from "./response";
 
 export interface ShareLink {
   id: string;
+  rawId?: string;
+  type?: "model" | "selection";
   token: string;
-  modelId?: string;
+  modelId?: string | null;
   modelName?: string;
   allowPreview: boolean;
   allowDownload: boolean;

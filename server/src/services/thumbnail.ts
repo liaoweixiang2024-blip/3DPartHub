@@ -192,6 +192,7 @@ export function generateThumbnail(
   width = 512,
   height = 512
 ): { thumbnailPath: string; thumbnailUrl: string } {
+  width = Math.min(width || 512, 1024); height = Math.min(height || 512, 1024);
   mkdirSync(outputDir, { recursive: true });
   const pngPath = join(outputDir, `${modelId}.png`);
 

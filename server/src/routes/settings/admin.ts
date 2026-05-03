@@ -24,6 +24,7 @@ export function createSettingsAdminRouter() {
     if (!adminOnly(req, res)) return;
     try {
       const settings = await getAllSettings();
+      if (settings.smtp_pass) settings.smtp_pass = "********";
       res.json(settings);
     } catch {
       res.status(500).json({ detail: "获取设置失败" });
@@ -36,6 +37,7 @@ export function createSettingsAdminRouter() {
     try {
       await setSettings(req.body);
       const settings = await getAllSettings();
+      if (settings.smtp_pass) settings.smtp_pass = "********";
       res.json(settings);
     } catch {
       res.status(500).json({ detail: "更新设置失败" });
@@ -54,7 +56,7 @@ export function createSettingsAdminRouter() {
       await sendTestEmail(to);
       res.json({ message: "测试邮件已发送" });
     } catch (err: any) {
-      res.status(500).json({ detail: err.message || "测试邮件发送失败" });
+      res.status(500).json({ detail: "测试邮件发送失败" });
     }
   });
 

@@ -2,6 +2,7 @@ import { Router, Response, NextFunction } from "express";
 import { prisma } from "../lib/prisma.js";
 import { authMiddleware, type AuthRequest } from "../middleware/auth.js";
 import { requireProjectRole } from "../middleware/rbac.js";
+import { MODEL_STATUS } from "../services/modelStatus.js";
 
 const router = Router();
 
@@ -60,6 +61,7 @@ router.post("/api/projects", authMiddleware, async (req: AuthRequest, res: Respo
       },
       include: {
         owner: { select: { id: true, username: true, avatar: true } },
+        members: { include: { user: { select: { id: true, username: true, avatar: true } } } },
         _count: { select: { models: true } },
       },
     });
@@ -81,7 +83,7 @@ router.get("/api/projects/:id", authMiddleware, async (req: AuthRequest, res: Re
           include: { user: { select: { id: true, username: true, avatar: true, role: true } } },
         },
         models: {
-          where: { status: "completed" },
+          where: { status: MODEL_STATUS.COMPLETED },
           orderBy: { createdAt: "desc" },
           take: 50,
         },
@@ -112,6 +114,25 @@ router.put("/api/projects/:id", authMiddleware, requireProjectRole("ADMIN"), asy
   const id = param(req, "id");
   const { name, description, coverImage } = req.body;
 
+  if (name !== undefined) {
+    if (typeof name !== "string" || name.trim().length === 0) {
+      res.status(400).json({ detail: "项目名称不能为空" });
+      return;
+    }
+    if (name.length > 100) {
+      res.status(400).json({ detail: "项目名称不能超过100个字符" });
+      return;
+    }
+  }
+  if (description !== undefined && typeof description !== "string") {
+    res.status(400).json({ detail: "项目描述必须是字符串" });
+    return;
+  }
+  if (coverImage !== undefined && typeof coverImage !== "string") {
+    res.status(400).json({ detail: "封面图必须是字符串" });
+    return;
+  }
+
   try {
     const project = await prisma.project.update({
       where: { id },
@@ -121,7 +142,8 @@ router.put("/api/projects/:id", authMiddleware, requireProjectRole("ADMIN"), asy
         ...(coverImage !== undefined && { coverImage }),
       },
       include: {
-        owner: { select: { id: true, username: true } },
+        owner: { select: { id: true, username: true, avatar: true } },
+        members: { include: { user: { select: { id: true, username: true, avatar: true } } } },
         _count: { select: { models: true } },
       },
     });
@@ -144,7 +166,11 @@ router.delete("/api/projects/:id", authMiddleware, async (req: AuthRequest, res:
       res.status(403).json({ detail: "只有项目拥有者可以删除项目" });
       return;
     }
-    await prisma.project.delete({ where: { id } });
+    await prisma.$transaction([
+      prisma.model.updateMany({ where: { projectId: id }, data: { projectId: null } }),
+      prisma.projectMember.deleteMany({ where: { projectId: id } }),
+      prisma.project.delete({ where: { id } }),
+    ]);
     res.json({ message: "项目已删除" });
   } catch {
     res.status(500).json({ detail: "删除项目失败" });
@@ -159,7 +185,7 @@ router.get("/api/projects/:id/members", authMiddleware, requireProjectRole("VIEW
   try {
     const members = await prisma.projectMember.findMany({
       where: { projectId },
-      include: { user: { select: { id: true, username: true, avatar: true, email: true } } },
+      include: { user: { select: { id: true, username: true, avatar: true } } },
       orderBy: { joinedAt: "asc" },
     });
     res.json(members);
@@ -175,6 +201,12 @@ router.post("/api/projects/:id/members", authMiddleware, requireProjectRole("ADM
 
   if (!userId) {
     res.status(400).json({ detail: "缺少用户 ID" });
+    return;
+  }
+
+  const VALID_PROJECT_ROLES = ["ADMIN", "EDITOR", "VIEWER"];
+  if (role && !VALID_PROJECT_ROLES.includes(role)) {
+    res.status(400).json({ detail: "无效的项目角色" });
     return;
   }
 
@@ -204,7 +236,22 @@ router.put("/api/projects/:id/members/:userId", authMiddleware, requireProjectRo
     return;
   }
 
+  const VALID_PROJECT_ROLES_UPDATE = ["ADMIN", "EDITOR", "VIEWER"];
+  if (!VALID_PROJECT_ROLES_UPDATE.includes(role)) {
+    res.status(400).json({ detail: "无效的项目角色" });
+    return;
+  }
+
   try {
+    if (userId === req.user!.userId && role !== "ADMIN") {
+      res.status(400).json({ detail: "不能降级自己的角色" });
+      return;
+    }
+    const project = await prisma.project.findUnique({ where: { id: projectId }, select: { ownerId: true } });
+    if (project && userId === project.ownerId) {
+      res.status(403).json({ detail: "不能修改项目拥有者的角色" });
+      return;
+    }
     const member = await prisma.projectMember.update({
       where: { projectId_userId: { projectId, userId } },
       data: { role },
@@ -221,6 +268,12 @@ router.delete("/api/projects/:id/members/:userId", authMiddleware, requireProjec
   const projectId = param(req, "id");
   const userId = param(req, "userId");
   try {
+    const project = await prisma.project.findUnique({ where: { id: projectId }, select: { ownerId: true } });
+    if (!project) { res.status(404).json({ detail: "项目不存在" }); return; }
+    if (userId === project.ownerId) {
+      res.status(403).json({ detail: "不能移除项目拥有者" });
+      return;
+    }
     await prisma.projectMember.delete({
       where: { projectId_userId: { projectId, userId } },
     });

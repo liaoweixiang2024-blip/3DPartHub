@@ -378,7 +378,8 @@ export const modelApi = {
 
   conversionQueueJob: async (id: string): Promise<ConversionQueueJobDetail> => {
     const res = await client.get(`/tasks/conversion-queue/${id}`);
-    return unwrapResponse<ConversionQueueJobDetail>(res);
+    const wrapper = res.data as Record<string, unknown>;
+    return (wrapper?.data ?? wrapper) as ConversionQueueJobDetail;
   },
 
   retryFailedConversionJobs: async (data?: { jobIds?: string[]; limit?: number }): Promise<ConversionQueueActionResponse> => {
@@ -423,6 +424,21 @@ export const modelApi = {
       headers: { "Content-Type": "multipart/form-data" },
     });
     return unwrapResponse<{ model_id: string; status: string }>(res);
+  },
+
+  batchUploadFromArchive: async (file: File, options?: { categoryId?: string }): Promise<{ total: number; results: Array<{ name: string; model_id?: string; status: string; error?: string }> }> => {
+    const form = new FormData();
+    form.append("file", file);
+    if (options?.categoryId) form.append("categoryId", options.categoryId);
+    const res = await client.post("/batch/upload", form, {
+      headers: { "Content-Type": "multipart/form-data" },
+      timeout: 300000,
+    });
+    return unwrapResponse(res);
+  },
+
+  batchUploadFromZip: async (file: File, options?: { categoryId?: string }): Promise<{ total: number; results: Array<{ name: string; model_id?: string; status: string; error?: string }> }> => {
+    return modelApi.batchUploadFromArchive(file, options);
   },
 
   reconvert: async (id: string): Promise<{ model_id: string; gltf_size: number; thumbnail_url: string; preview_meta?: ModelPreviewMeta | null }> => {
@@ -471,9 +487,10 @@ export const modelApi = {
     const res = await client.get("/model-groups/suggestions", {
       params: { page: params?.page || 1, page_size: params?.pageSize || 20 },
     });
-    const inner = unwrapResponse<{ data?: { name: string; count: number; models: { id: string; name: string; thumbnailUrl: string | null; originalName: string; originalSize: number; createdAt: string }[] }[]; total?: number } | { name: string; count: number; models: { id: string; name: string; thumbnailUrl: string | null; originalName: string; originalSize: number; createdAt: string }[] }[]>(res);
+    const inner = unwrapResponse<{ items?: { name: string; count: number; models: { id: string; name: string; thumbnailUrl: string | null; originalName: string; originalSize: number; createdAt: string }[] }[]; total?: number } | { name: string; count: number; models: { id: string; name: string; thumbnailUrl: string | null; originalName: string; originalSize: number; createdAt: string }[] }[]>(res);
     if (Array.isArray(inner)) return { data: inner, total: 0 };
-    return { data: inner.data ?? [], total: inner.total ?? 0 };
+    const items = (inner as any).items || (inner as any).data || [];
+    return { data: items, total: (inner as any).total ?? 0 };
   },
 
   batchMerge: async (items: { name: string; modelIds: string[] }[]): Promise<{ merged: number }> => {
@@ -488,6 +505,11 @@ export const modelApi = {
 
   getModelGroupCount: async (): Promise<{ total: number }> => {
     const res = await client.get("/model-groups/count");
+    return unwrapResponse<{ total: number }>(res);
+  },
+
+  getModelCount: async (): Promise<{ total: number }> => {
+    const res = await client.get("/models/count");
     return unwrapResponse<{ total: number }>(res);
   },
 

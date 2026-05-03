@@ -37,6 +37,7 @@ model User {
   inquiryMessages InquiryMessage[]
   uploadedProductWallImages ProductWallImage[] @relation("ProductWallUploads")
   reviewedProductWallImages ProductWallImage[] @relation("ProductWallReviews")
+  productWallFavorites     ProductWallImageFavorite[]
 
   @@map("users")
 }
@@ -44,16 +45,17 @@ model User {
 model ProductWallImage {
   id              String   @id @default(uuid())
   title           String
-  kind            String   @default("公司产品")
+  description     String?  @db.Text
+  kind            String   @default("公司产品") @db.VarChar(50)
   imageUrl        String   @map("image_url")
   previewImageUrl String?  @map("preview_image_url")
-  ratio           String   @default("4 / 5")
+  ratio           String   @default("4 / 5") @db.VarChar(20)
   tags            Json?
   sortOrder       Int      @default(0) @map("sort_order")
-  status          String   @default("pending")
+  status          String   @default("pending") @db.VarChar(20)
   uploaderId      String?  @map("uploader_id")
   uploader        User?    @relation("ProductWallUploads", fields: [uploaderId], references: [id], onDelete: SetNull)
-  uploaderName    String?  @map("uploader_name")
+
   reviewedAt      DateTime? @map("reviewed_at")
   reviewedById    String?  @map("reviewed_by_id")
   reviewer        User?    @relation("ProductWallReviews", fields: [reviewedById], references: [id], onDelete: SetNull)
@@ -61,12 +63,28 @@ model ProductWallImage {
   createdAt       DateTime @default(now()) @map("created_at")
   updatedAt       DateTime @updatedAt @map("updated_at")
 
+  favorites       ProductWallImageFavorite[]
+
   @@index([status])
   @@index([kind])
   @@index([sortOrder])
   @@index([createdAt])
   @@index([uploaderId])
+  @@index([status, kind, sortOrder])
   @@map("product_wall_images")
+}
+
+model ProductWallImageFavorite {
+  id        String            @id @default(uuid())
+  userId    String            @map("user_id")
+  user      User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  imageId   String            @map("image_id")
+  image     ProductWallImage  @relation(fields: [imageId], references: [id], onDelete: Cascade)
+  createdAt DateTime          @default(now()) @map("created_at")
+
+  @@unique([userId, imageId])
+  @@index([userId])
+  @@map("product_wall_image_favorites")
 }
 
 model ProductWallCategory {
@@ -180,6 +198,7 @@ model ModelVersion {
   fileKey        String   @map("file_key")
   format         String
   fileSize       Int      @map("file_size")
+  previewMeta    Json?    @map("preview_meta")
   vertexCount    Int?     @map("vertex_count")
   faceCount      Int?     @map("face_count")
   changeLog      String?  @map("change_log")
@@ -411,6 +430,9 @@ model SelectionCategory {
   groupImage   String?  @map("group_image")
   groupImageFit String? @map("group_image_fit")
   kind         String?  @default("product")
+  catalogPdf    String?  @map("catalog_pdf")
+  catalogShared Boolean  @default(false) @map("catalog_shared")
+  optionCatalogs Json?   @map("option_catalogs")
   createdAt    DateTime @default(now()) @map("created_at")
   updatedAt    DateTime @updatedAt @map("updated_at")
   products     SelectionProduct[]

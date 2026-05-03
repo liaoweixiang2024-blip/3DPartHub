@@ -20,7 +20,22 @@ router.post("/api/selection-shares", authMiddleware, async (req: AuthRequest, re
       return;
     }
 
+    if (typeof specs !== "object" || Array.isArray(specs) || JSON.stringify(specs).length > 10000) {
+      res.status(400).json({ detail: "规格参数无效或过大" });
+      return;
+    }
+
+    const categoryExists = await prisma.selectionCategory.findUnique({ where: { slug: categorySlug } });
+    if (!categoryExists) {
+      res.status(400).json({ detail: "分类不存在" });
+      return;
+    }
+
     const ids = Array.isArray(productIds) ? productIds : [];
+    if (ids.length > 500) {
+      res.status(400).json({ detail: "产品数量不能超过 500" });
+      return;
+    }
 
     const token = randomBytes(12).toString("hex");
 
@@ -40,7 +55,7 @@ router.post("/api/selection-shares", authMiddleware, async (req: AuthRequest, re
     });
   } catch (err: any) {
     console.error("Create selection share error:", err?.message ?? err, err?.code ?? "", err?.meta ?? "");
-    res.status(500).json({ detail: `创建分享失败: ${err?.message ?? "未知错误"}` });
+    res.status(500).json({ detail: "创建分享失败" });
   }
 });
 
@@ -57,25 +72,26 @@ router.get("/api/selection-shares/:token", async (req: Request, res: Response) =
       return;
     }
 
-    // Increment view count
-    await prisma.selectionShare.update({
+    // Increment view count (fire-and-forget)
+    prisma.selectionShare.update({
       where: { id: share.id },
       data: { viewCount: { increment: 1 } },
-    });
+    }).catch(() => {});
 
-    // Get category info
-    const category = await prisma.selectionCategory.findUnique({
-      where: { slug: share.categorySlug },
-    });
-
-    // Get products by IDs
-    const ids = share.productIds as string[];
-    const products = ids.length > 0
-      ? await prisma.selectionProduct.findMany({
-          where: { id: { in: ids } },
-          orderBy: { sortOrder: "asc" },
-        })
-      : [];
+    const [category, products] = await Promise.all([
+      prisma.selectionCategory.findUnique({
+        where: { slug: share.categorySlug },
+      }),
+      (async () => {
+        const ids = share.productIds as string[];
+        return ids.length > 0
+          ? await prisma.selectionProduct.findMany({
+              where: { id: { in: ids } },
+              orderBy: { sortOrder: "asc" },
+            })
+          : [];
+      })(),
+    ]);
 
     // Auto-match models (fuzzy, prefer primary version)
     const { selectionEnableMatch } = await getBusinessConfig();

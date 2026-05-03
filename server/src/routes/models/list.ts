@@ -15,6 +15,7 @@ import {
 import { getBusinessConfig } from "../../lib/businessConfig.js";
 import { MODEL_STATUS } from "../../services/modelStatus.js";
 import { withAssetVersion } from "../../services/gltfAsset.js";
+import { groupedVisibleModelWhere } from "../../services/modelVisibility.js";
 
 type ModelListContext = {
   prisma: any;
@@ -33,18 +34,20 @@ export function createModelListRouter({
   router.get("/api/models", async (req: Request, res: Response) => {
     if (!(await requireBrowseAccess(req, res))) return;
 
-    const { pageSizePolicy } = await getBusinessConfig();
-    const defaultPageSize = Math.max(1, Math.floor(Number(pageSizePolicy.homeDefault) || 60));
-    const maxPageSize = Math.max(1, Math.floor(Number(pageSizePolicy.homeMax) || 10000));
     const page = numericQuery(req.query.page, 1, 1, MAX_MODEL_PAGE);
-    const pageSize = numericQuery(req.query.page_size, defaultPageSize, 1, maxPageSize);
     const search = normalizeSearchParam(req.query.search);
     const format = normalizeSearchParam(req.query.format, 20).toLowerCase();
     const category = normalizeSearchParam(req.query.category, 100);
     const categoryId = normalizeSearchParam(req.query.category_id, 80);
     const sort = enumQuery(req.query.sort, "created_at", ["created_at", "name", "file_size"] as const);
     const order = enumQuery(req.query.order, "desc", ["asc", "desc"] as const);
-    const grouped = req.query.grouped === "true";
+    const grouped = req.query.grouped !== "false";
+
+    // Compute page size — needed to build cache key
+    const { pageSizePolicy } = await getBusinessConfig();
+    const defaultPageSize = Math.max(1, Math.floor(Number(pageSizePolicy.homeDefault) || 60));
+    const maxPageSize = Math.max(1, Math.floor(Number(pageSizePolicy.homeMax) || 10000));
+    const pageSize = numericQuery(req.query.page_size, defaultPageSize, 1, maxPageSize);
 
     const cacheKey = `cache:models:${page}:${pageSize}:${searchCacheToken(search)}:${format}:${categoryId || category}:${sort}:${order}:${grouped}`;
 
@@ -59,39 +62,42 @@ export function createModelListRouter({
             where.format = format;
           }
           if (categoryId) {
-            // Filter by category ID, including children (single query)
-            const catIds = await prisma.category.findMany({
-              where: { OR: [{ id: categoryId }, { parentId: categoryId }] },
-              select: { id: true },
-            });
-            where.categoryId = { in: catIds.map((c: any) => c.id) };
+            const catIdsRaw: { id: string }[] = await prisma.$queryRawUnsafe(
+              `WITH RECURSIVE cat_tree AS (
+                SELECT id FROM categories WHERE id = $1
+                UNION ALL
+                SELECT c.id FROM categories c JOIN cat_tree ct ON c.parent_id = ct.id
+              ) SELECT id FROM cat_tree`,
+              categoryId
+            );
+            const catIds = catIdsRaw.map((c: any) => c.id);
+            if (catIds.length > 0) {
+              where.categoryId = { in: catIds };
+            } else {
+              where.categoryId = categoryId;
+            }
           } else if (category) {
             // Find category and its children to include all subcategory models
             const cat = await prisma.category.findFirst({ where: { name: category } });
             if (cat) {
-              const catIds = await prisma.category.findMany({
-                where: { OR: [{ id: cat.id }, { parentId: cat.id }] },
-                select: { id: true },
-              });
-              where.categoryId = { in: catIds.map((c: any) => c.id) };
+              const catIdsRaw: { id: string }[] = await prisma.$queryRawUnsafe(
+                `WITH RECURSIVE cat_tree AS (
+                  SELECT id FROM categories WHERE id = $1
+                  UNION ALL
+                  SELECT c.id FROM categories c JOIN cat_tree ct ON c.parent_id = ct.id
+                ) SELECT id FROM cat_tree`,
+                cat.id
+              );
+              const catIds = catIdsRaw.map((c: any) => c.id);
+              where.categoryId = { in: catIds };
             } else {
               // Fallback: match by category string field
               where.category = category;
             }
           }
 
-          // When grouped mode, only show: ungrouped models + primary models of each group
           if (grouped) {
-            const groupPrimaries = await prisma.modelGroup.findMany({
-              select: { primaryId: true },
-            });
-            const primaryIds = groupPrimaries.map((g: any) => g.primaryId).filter(Boolean);
-            andConditions.push({
-              OR: [
-                { groupId: null },
-                { id: { in: primaryIds } },
-              ],
-            });
+            andConditions.push(await groupedVisibleModelWhere(prisma));
           }
           if (andConditions.length) where.AND = andConditions;
 
@@ -152,6 +158,7 @@ export function createModelListRouter({
     for (const f of files) {
       const m = JSON.parse(readFileSync(join(metadataDir, f), "utf-8"));
       if (m.status !== MODEL_STATUS.COMPLETED) continue;
+      if (category && m.category !== category) continue;
       if (format && m.format !== format) continue;
       if (search) {
         const terms = getSearchTerms(search).map((term) => term.toLowerCase());

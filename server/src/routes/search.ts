@@ -10,6 +10,8 @@ import {
 } from "../lib/searchQuery.js";
 import { withAssetVersion } from "../services/gltfAsset.js";
 import { requireBrowseAccess } from "../middleware/browseAccess.js";
+import { MODEL_STATUS } from "../services/modelStatus.js";
+import { groupedVisibleModelWhere } from "../services/modelVisibility.js";
 import { cacheGetOrSet, TTL } from "../lib/cache.js";
 
 const router = Router();
@@ -31,6 +33,8 @@ router.get("/api/search", async (req, res: Response) => {
     return;
   }
 
+  const grouped = req.query.grouped !== "false";
+
   const cacheKey = [
     "cache:models:search",
     page,
@@ -40,11 +44,12 @@ router.get("/api/search", async (req, res: Response) => {
     format,
     searchCacheToken(project),
     sort,
+    grouped,
   ].join(":");
 
   try {
     const { value: responseData, hit } = await cacheGetOrSet(cacheKey, TTL.MODELS_SEARCH, async () => {
-      const where: any = { status: "completed" };
+      const where: any = { status: MODEL_STATUS.COMPLETED };
       const andConditions: Record<string, unknown>[] = [];
 
       // Text search
@@ -79,23 +84,32 @@ router.get("/api/search", async (req, res: Response) => {
       }
       if (andConditions.length) where.AND = andConditions;
 
+      // Grouped visibility filter (consistent with homepage count)
+      if (grouped) {
+        andConditions.push(await groupedVisibleModelWhere(prisma));
+        if (andConditions.length) where.AND = andConditions;
+      }
+
       // Sort
       let orderBy: any = { createdAt: "desc" };
       if (sort === "name") orderBy = { name: "asc" };
       else if (sort === "size") orderBy = { gltfSize: "desc" };
       else if (sort === "downloads") orderBy = { downloadCount: "desc" };
+      else if (sort === "relevance" && q) orderBy = { name: "asc" };
 
-      const total = await prisma.model.count({ where });
-
-      const models = await prisma.model.findMany({
-        where,
-        orderBy,
-        skip: (page - 1) * size,
-        take: size,
-        include: {
-          project: { select: { id: true, name: true } },
-        },
-      });
+      const [total, models] = await Promise.all([
+        prisma.model.count({ where }),
+        prisma.model.findMany({
+          where,
+          orderBy,
+          skip: (page - 1) * size,
+          take: size,
+          include: {
+            categoryRef: { select: { name: true } },
+            project: { select: { id: true, name: true } },
+          },
+        }),
+      ]);
       const userIds = Array.from(new Set(models.map((model: any) => model.createdById).filter(Boolean)));
       const users = userIds.length
         ? await prisma.user.findMany({
@@ -115,8 +129,8 @@ router.get("/api/search", async (req, res: Response) => {
         gltf_url: withAssetVersion(m.gltfUrl, m.updatedAt),
         file_size: m.gltfSize,
         original_size: m.originalSize,
-        category: m.category,
-        downloads: m.downloadCount,
+        category: m.categoryRef?.name || null,
+        download_count: m.downloadCount || 0,
         created_at: m.createdAt,
         created_by: usersById.get(m.createdById) || null,
         project: m.project,

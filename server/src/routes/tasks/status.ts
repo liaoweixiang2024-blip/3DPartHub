@@ -26,7 +26,7 @@ export function createTaskStatusRouter() {
       }
 
       const state = await job.getState();
-      const progress = job.progress as number || 0;
+      const progress = typeof job.progress === "number" ? job.progress : 0;
 
       res.json({
         id: job.id,
@@ -47,16 +47,16 @@ export function createTaskStatusRouter() {
   // List recent tasks for user
   router.get("/api/tasks", authMiddleware, async (req: AuthRequest, res: Response) => {
     try {
-      const jobs = await conversionQueue.getJobs(["active", "waiting", "completed", "failed"], 0, 20);
-      const tasks = jobs
-        .filter((j) => j.data?.userId === req.user!.userId)
-        .map((j) => ({
-          id: j.id,
-          state: "unknown",
-          progress: j.progress as number || 0,
-          modelId: j.data?.modelId,
-          createdAt: j.timestamp,
-        }));
+      const isAdmin = req.user!.role === "ADMIN";
+      const jobs = await conversionQueue.getJobs(["active", "waiting", "completed", "failed"], 0, isAdmin ? 500 : 100);
+      const userJobs = jobs.filter((j) => j.data?.userId === req.user!.userId);
+      const tasks = await Promise.all(userJobs.slice(0, 50).map(async (j) => ({
+        id: j.id,
+        state: await j.getState(),
+        progress: typeof j.progress === "number" ? j.progress : 0,
+        modelId: j.data?.modelId,
+        createdAt: j.timestamp,
+      })));
       res.json(tasks);
     } catch {
       res.json([]);

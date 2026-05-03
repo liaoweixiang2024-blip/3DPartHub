@@ -34,6 +34,8 @@ function NotificationPanelLoader({ compact = false }: { compact?: boolean }) {
           type="button"
           className={`${compact ? "h-9 w-9" : "p-2"} rounded-lg text-on-surface-variant`}
           aria-label="通知"
+          data-tooltip="通知"
+          data-tooltip-side="bottom"
           disabled
         >
           <Icon name="notifications" size={compact ? 18 : 20} />
@@ -92,6 +94,7 @@ function UserMenu({ size = 'default' }: { size?: 'compact' | 'default' }) {
     { label: '个人中心', icon: 'person', onClick: () => { setOpen(false); navigate('/profile'); } },
     { label: '修改密码', icon: 'lock', onClick: () => { setOpen(false); navigate('/profile?tab=security'); } },
     { label: '下载历史', icon: 'download', onClick: () => { setOpen(false); navigate('/downloads'); } },
+    { label: '我的分享', icon: 'share', onClick: () => { setOpen(false); navigate('/my-shares'); } },
     { label: '退出登录', icon: 'logout', onClick: handleLogout, danger: true },
   ];
 
@@ -122,6 +125,7 @@ function UserMenu({ size = 'default' }: { size?: 'compact' | 'default' }) {
         onClick={() => setOpen(!open)}
         className={`flex items-center gap-2 cursor-pointer ${compactButtonClass} ${isCompact ? '' : 'ml-2'}`}
         aria-label="用户菜单"
+        data-tooltip-ignore
       >
         <div className={`${avatarSize} rounded-full bg-surface-container-highest flex items-center justify-center`}>
           <Icon name="person" size={iconSize} className="text-on-surface-variant" />
@@ -177,6 +181,8 @@ function ThemeToggle() {
       className="flex h-9 w-9 items-center justify-center text-on-surface-variant hover:text-on-surface transition-colors rounded-sm hover:bg-surface-container-high"
       title={theme === "dark" ? "切换亮色模式" : "切换暗色模式"}
       aria-label={theme === "dark" ? "切换亮色模式" : "切换暗色模式"}
+      data-tooltip={theme === "dark" ? "切换亮色模式" : "切换暗色模式"}
+      data-tooltip-side="bottom"
     >
       <AnimatePresence mode="wait">
         <motion.span
@@ -269,6 +275,7 @@ export default function TopNav({ compact = false, onMenuToggle }: TopNavProps) {
               onClick={() => onMenuToggle?.()}
               className="flex h-9 w-9 shrink-0 items-center justify-center rounded-sm text-primary-container transition-colors hover:bg-surface-container-high hover:text-on-surface"
               aria-label="打开菜单"
+              data-tooltip-ignore
             >
               <Icon name="menu" size={22} />
             </button>
@@ -330,23 +337,21 @@ export default function TopNav({ compact = false, onMenuToggle }: TopNavProps) {
         </form>
 
         <div className="flex items-center gap-0.5 shrink-0 ml-auto pr-6">
-          <Tooltip text="产品影像" side="bottom">
+          <Tooltip text="产品选型" side="bottom">
+            <Link to="/selection" className={desktopIconClass}>
+              <Icon name="tune" size={20} />
+            </Link>
+          </Tooltip>
+          <Tooltip text="产品图库" side="bottom">
             <Link to="/product-wall" className={desktopIconClass}>
               <Icon name="image" size={20} />
             </Link>
           </Tooltip>
           <Tooltip text="规格查询" side="bottom">
-            <Link to="/tools/thread-size" className={desktopIconClass}>
+            <Link to="/thread-size" className={desktopIconClass}>
               <Icon name="straighten" size={20} />
             </Link>
           </Tooltip>
-          {isAdmin && (
-            <Tooltip text="后台设置" side="bottom">
-              <Link to="/admin/settings" className="p-2 text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high rounded-lg transition-colors">
-                <Icon name="settings" size={20} />
-              </Link>
-            </Tooltip>
-          )}
           {isAdmin && (
             <Tooltip text="上传模型" side="bottom">
               <button onClick={() => setUploadOpen(true)} className="p-2 text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high rounded-lg transition-colors">
@@ -354,14 +359,14 @@ export default function TopNav({ compact = false, onMenuToggle }: TopNavProps) {
               </button>
             </Tooltip>
           )}
-          <Tooltip text="产品选型" side="bottom">
-            <Link to="/selection" className="p-2 text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high rounded-lg transition-colors">
-              <Icon name="tune" size={20} />
-            </Link>
-          </Tooltip>
           <Tooltip text="我的收藏" side="bottom">
             <Link to="/favorites" className="p-2 text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high rounded-lg transition-colors">
               <Icon name="star" size={20} />
+            </Link>
+          </Tooltip>
+          <Tooltip text="我的分享" side="bottom">
+            <Link to="/my-shares" className="p-2 text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high rounded-lg transition-colors">
+              <Icon name="share" size={20} />
             </Link>
           </Tooltip>
           <Tooltip text="下载历史" side="bottom">
@@ -372,11 +377,6 @@ export default function TopNav({ compact = false, onMenuToggle }: TopNavProps) {
           <Tooltip text="我的询价" side="bottom">
             <Link to="/my-inquiries" className="p-2 text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high rounded-lg transition-colors">
               <Icon name="request_quote" size={20} />
-            </Link>
-          </Tooltip>
-          <Tooltip text="我的工单" side="bottom">
-            <Link to="/my-tickets" className="p-2 text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high rounded-lg transition-colors">
-              <Icon name="assignment_add" size={20} />
             </Link>
           </Tooltip>
           <Tooltip text="技术支持" side="bottom">

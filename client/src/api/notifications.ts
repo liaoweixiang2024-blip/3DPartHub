@@ -13,7 +13,9 @@ export interface Notification {
 
 export async function getNotifications(page = 1, pageSize = 20) {
   const res = await client.get(`/notifications?page=${page}&page_size=${pageSize}`);
-  return unwrapResponse<{ data: Notification[]; total: number }>(res);
+  // ResponseHandler wraps as { success: true, data: { data: [...], total } }
+  // Extract just the first data layer to preserve inner structure
+  return (res.data as { data: unknown }).data as { data: Notification[]; total: number };
 }
 
 export async function getUnreadCount() {

@@ -186,9 +186,6 @@ export default function SharePage() {
         </div>
       )}
       <header className="min-h-12 flex items-center justify-between gap-3 px-4 py-2 bg-surface-container-low border-b border-outline-variant/10 shrink-0">
-        <Link to="/" className="flex items-center gap-2 min-w-0 hover:opacity-80 transition-opacity">
-          <BrandMark size="compact" />
-        </Link>
         <span className="text-xs text-on-surface-variant/50 shrink-0">分享预览</span>
       </header>
 

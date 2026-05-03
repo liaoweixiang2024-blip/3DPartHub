@@ -15,6 +15,10 @@ export function createUserInquiriesRouter() {
         res.status(400).json({ detail: "至少需要一个询价项目" });
         return;
       }
+      if (items.length > 100) {
+        res.status(400).json({ detail: "单个询价单最多包含 100 个项目" });
+        return;
+      }
 
       // Resolve product names/specs from productId
       const productIds = items.map((i: any) => i.productId).filter(Boolean) as string[];
@@ -43,7 +47,7 @@ export function createUserInquiriesRouter() {
                 modelNo: product?.modelNo || item.modelNo || null,
                 specs: product?.specs || item.specs || null,
                 unit: product?.unit || item.unit || "个",
-                qty: item.qty || 1,
+                qty: item.qty ?? 1,
                 remark: item.remark || null,
               };
             }),
@@ -55,15 +59,15 @@ export function createUserInquiriesRouter() {
       // Notify admins
       try {
         const admins = await prisma.user.findMany({ where: { role: "ADMIN" }, select: { id: true } });
-        for (const admin of admins) {
-          await createNotification({
+        await Promise.all(admins.map((admin: any) =>
+          createNotification({
             userId: admin.id,
             title: "新询价单",
             message: `用户提交了一份新的询价单，包含 ${inquiry.items.length} 个产品`,
             type: "inquiry",
             relatedId: inquiry.id,
-          });
-        }
+          }).catch(() => {})
+        ));
       } catch {}
 
       res.status(201).json(inquiry);
@@ -76,14 +80,21 @@ export function createUserInquiriesRouter() {
   // List my inquiries
   router.get("/api/inquiries", authMiddleware, async (req: AuthRequest, res: Response) => {
     try {
-      const inquiries = await prisma.inquiry.findMany({
-        where: { userId: req.user!.userId },
-        orderBy: { createdAt: "desc" },
-        include: {
-          items: { select: { id: true, productName: true, modelNo: true, qty: true, unit: true, remark: true } },
-        },
-      });
-      res.json(inquiries);
+      const page = Math.max(1, Number(req.query.page) || 1);
+      const pageSize = Math.min(100, Math.max(1, Number(req.query.page_size) || 20));
+      const [inquiries, total] = await Promise.all([
+        prisma.inquiry.findMany({
+          where: { userId: req.user!.userId },
+          orderBy: { createdAt: "desc" },
+          skip: (page - 1) * pageSize,
+          take: pageSize,
+          include: {
+            items: { select: { id: true, productName: true, modelNo: true, qty: true, unit: true, remark: true } },
+          },
+        }),
+        prisma.inquiry.count({ where: { userId: req.user!.userId } }),
+      ]);
+      res.json({ items: inquiries, total, page, page_size: pageSize });
     } catch (err) {
       console.error("[Inquiries] List error:", err);
       res.status(500).json({ detail: "获取询价单列表失败" });

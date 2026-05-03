@@ -1,5 +1,5 @@
 import { existsSync, readFileSync } from "node:fs";
-import { dirname, extname, isAbsolute, join } from "node:path";
+import { dirname, extname, isAbsolute, join, resolve, sep } from "node:path";
 
 export interface GltfAssetData {
   json: any;
@@ -14,12 +14,16 @@ export function getPreviewAssetExtension(value: string): "glb" | "gltf" {
   return extname(cleanPath(value)).toLowerCase() === ".glb" ? "glb" : "gltf";
 }
 
-export function resolveFileUrlPath(value: string): string {
+export function resolveFileUrlPath(value: string): string | null {
   const clean = cleanPath(value);
-  if (isAbsolute(clean) && !clean.startsWith("/static/")) return clean;
-  return clean.startsWith("/")
+  if (isAbsolute(clean) && !clean.startsWith("/static/")) return null;
+  const cwd = resolve(process.cwd());
+  const candidate = clean.startsWith("/")
     ? join(process.cwd(), clean.slice(1))
     : join(process.cwd(), clean);
+  const resolved = resolve(candidate);
+  if (resolved !== cwd && !resolved.startsWith(`${cwd}${sep}`)) return null;
+  return resolved;
 }
 
 export function findPreviewAssetPath(modelDir: string, modelId: string, preferred?: string | null): string | null {
@@ -28,7 +32,7 @@ export function findPreviewAssetPath(modelDir: string, modelId: string, preferre
 
   if (preferred) {
     const preferredPath = resolveFileUrlPath(preferred);
-    if (existsSync(preferredPath)) return preferredPath;
+    if (preferredPath && existsSync(preferredPath)) return preferredPath;
   }
 
   const gltfPath = join(modelDir, `${modelId}.gltf`);

@@ -1,0 +1,256 @@
+.product-wall-image-surface,
+.product-wall-preview-canvas,
+.product-wall-mode-swatch {
+  background-color: #ffffff;
+}
+.product-wall-canvas-checker,
+.product-wall-mode-swatch {
+  background-color: #f6f3ed;
+  background-image:
+    linear-gradient(45deg, rgba(25, 23, 20, 0.045) 25%, transparent 25%),
+    linear-gradient(-45deg, rgba(25, 23, 20, 0.045) 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, rgba(25, 23, 20, 0.045) 75%),
+    linear-gradient(-45deg, transparent 75%, rgba(25, 23, 20, 0.045) 75%);
+  background-position: 0 0, 0 6px, 6px -6px, -6px 0;
+  background-size: 12px 12px;
+}
+.product-wall-canvas-white {
+  background-color: #ffffff;
+  background-image: none;
+}
+.product-wall-image-surface::after {
+  position: absolute;
+  inset: 0;
+  z-index: 11;
+  pointer-events: none;
+  content: "";
+  box-shadow: inset 0 0 0 1px rgba(30, 27, 23, 0.08);
+}
+.product-wall-card-actions {
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(-5px) scale(0.96);
+  transform-origin: top right;
+  transition:
+    opacity 180ms ease,
+    transform 180ms cubic-bezier(0.2, 0.8, 0.2, 1);
+  transition-delay: 0ms;
+}
+.product-wall-card-action {
+  display: inline-flex;
+  width: 32px;
+  height: 32px;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid rgba(20, 18, 15, 0.08);
+  border-radius: 999px;
+  color: rgba(35, 31, 27, 0.72);
+  background: rgba(255, 255, 255, 0.78);
+  box-shadow: 0 10px 28px rgba(15, 23, 42, 0.12);
+  backdrop-filter: blur(14px);
+  transition:
+    color 160ms ease,
+    background 160ms ease,
+    border-color 160ms ease,
+    transform 160ms ease,
+    box-shadow 160ms ease;
+}
+.product-wall-card-action:hover,
+.product-wall-card-action:focus-visible {
+  color: rgba(25, 22, 18, 0.95);
+  background: rgba(255, 255, 255, 0.96);
+  border-color: rgba(20, 18, 15, 0.14);
+  box-shadow: 0 14px 32px rgba(15, 23, 42, 0.16);
+  transform: translateY(-1px);
+  outline: none;
+}
+.product-wall-card-action.is-active {
+  color: var(--color-primary-container);
+  background: color-mix(in srgb, var(--color-primary-container) 14%, white);
+  border-color: color-mix(in srgb, var(--color-primary-container) 22%, transparent);
+}
+.product-wall-card-action.is-danger {
+  color: #dc2626;
+}
+.product-wall-card-action.is-danger:hover,
+.product-wall-card-action.is-danger:focus-visible {
+  color: #b91c1c;
+  background: rgba(255, 255, 255, 0.96);
+  border-color: rgba(220, 38, 38, 0.16);
+}
+@media (hover: hover) and (pointer: fine) {
+  .product-wall-card:hover > .product-wall-card-actions,
+  .product-wall-card:focus-within > .product-wall-card-actions {
+    opacity: 1;
+    pointer-events: auto;
+    transform: translateY(0) scale(1);
+    transition-delay: 240ms;
+  }
+}
+@media (hover: none) {
+  .product-wall-card-actions {
+    display: none;
+  }
+}
+@media (max-width: 767px) {
+  .product-wall-toolbar {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 10px;
+  }
+  .product-wall-toolbar .product-wall-search,
+  .product-wall-toolbar .product-wall-filter-row {
+    width: 100%;
+  }
+  .product-wall-toolbar .product-wall-search {
+    order: 1;
+  }
+  .product-wall-toolbar .product-wall-filter-row {
+    order: 2;
+    min-width: 0;
+  }
+  .product-wall-action-row {
+    display: flex;
+    min-width: 0;
+    max-width: 100%;
+    gap: 6px;
+  }
+  .product-wall-action-row .product-wall-action,
+  .product-wall-action-row > button {
+    flex: 0 0 auto;
+    min-width: 0;
+  }
+  .product-wall-action > button,
+  .product-wall-action-row > button {
+    min-width: 0;
+    justify-content: center;
+  }
+}
+.product-wall-masonry {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  align-items: start;
+}
+.product-wall-masonry-column {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 12px;
+}
+@media (min-width: 640px) {
+  .product-wall-masonry {
+    gap: 16px;
+  }
+  .product-wall-masonry-column {
+    gap: 16px;
+  }
+}
+@media (min-width: 860px) {
+  .product-wall-masonry {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 20px;
+  }
+  .product-wall-masonry-column {
+    gap: 20px;
+  }
+}
+@media (min-width: 1280px) {
+  .product-wall-masonry {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 24px;
+  }
+  .product-wall-masonry-column {
+    gap: 24px;
+  }
+}
+@media (min-width: 1680px) {
+  .product-wall-masonry {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+  }
+}
+.product-wall-card {
+  contain: layout paint style;
+  content-visibility: auto;
+  contain-intrinsic-size: 0 240px;
+}
+@media (prefers-reduced-motion: reduce) {
+  .product-wall-card { content-visibility: visible; }
+}
+@keyframes productWallSkeletonPulse {
+  0%, 100% { opacity: 0.68; }
+  50% { opacity: 1; }
+}
+.product-wall-skeleton-grid {
+  min-height: 520px;
+}
+.product-wall-skeleton-card {
+  background:
+    linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.45), transparent),
+    color-mix(in srgb, var(--color-surface-container-high) 62%, transparent);
+  background-size: 220% 100%, 100% 100%;
+  animation: productWallSkeletonPulse 1.35s ease-in-out infinite;
+}
+@keyframes productWallLoadMore {
+  0%, 100% { opacity: 0.5; }
+  50% { opacity: 1; }
+}
+.product-wall-load-more {
+  animation: productWallLoadMore 1.8s ease-in-out infinite;
+}
+@keyframes productWallPreviewIn {
+  0% {
+    opacity: 0;
+    transform: translateY(18px) scale(0.92);
+    filter: blur(8px);
+  }
+  62% {
+    opacity: 1;
+    transform: translateY(0) scale(1.012);
+    filter: blur(0);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+    filter: blur(0);
+  }
+}
+.product-wall-preview-panel {
+  animation: productWallPreviewIn 320ms cubic-bezier(0.2, 0.9, 0.18, 1) both;
+  transform-origin: center center;
+}
+@media (max-width: 767px) {
+  .product-wall-preview-panel {
+    background: var(--color-surface-container-low, #f8f6f2);
+  }
+  .product-wall-preview-canvas {
+    flex: 1 1 auto;
+    min-height: 0;
+    padding: max(0.75rem, env(safe-area-inset-top)) 0.75rem 0.75rem;
+  }
+  .product-wall-preview-image {
+    max-height: 100%;
+    object-fit: contain;
+  }
+  .product-wall-preview-close {
+    top: max(0.75rem, env(safe-area-inset-top));
+    right: 0.75rem;
+  }
+  .product-wall-preview-info {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 12px;
+    box-shadow: 0 -14px 36px rgba(15, 23, 42, 0.08);
+  }
+  .product-wall-preview-actions {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    width: 100%;
+    gap: 8px;
+  }
+  .product-wall-preview-action {
+    width: 100%;
+    border-radius: 10px;
+    background: var(--color-surface-container-low);
+  }
+}

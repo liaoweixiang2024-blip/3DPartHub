@@ -100,8 +100,8 @@ export const useAuthStore = create<AuthState>()(
       restoreSessionFromCookie: async () => {
         if (!isTokenExpired(_accessToken) && get().user) return true;
         const rememberedUser = get().rememberMe ? get().user : null;
-        set({ user: rememberedUser, tokens: null, isAuthenticated: false });
         const refreshToken = get().tokens?.refreshToken;
+        set({ user: rememberedUser, tokens: null, isAuthenticated: false });
         if (refreshToken && isTokenExpired(refreshToken)) {
           _accessToken = null;
           set({ user: null, tokens: null, isAuthenticated: false, rememberMe: false });

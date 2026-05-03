@@ -45,12 +45,20 @@ export function auditLog(action: string, resource: string) {
   };
 }
 
+const SENSITIVE_KEYS = new Set([
+  "password", "passwordHash", "token", "secret", "apiKey", "api_key",
+  "authorization", "access_token", "refresh_token", "newPassword", "oldPassword",
+  "confirmPassword", "smtp_pass", "smtpPass", "creditCard", "ssn",
+  "privateKey", "credential", "cookie",
+]);
+
 function sanitizeBody(body: any): any {
   if (!body || typeof body !== "object") return body;
   const sanitized = { ...body };
-  // Remove sensitive fields
-  for (const key of ["password", "passwordHash", "token", "secret"]) {
-    if (key in sanitized) sanitized[key] = "[REDACTED]";
+  for (const key of Object.keys(sanitized)) {
+    if (SENSITIVE_KEYS.has(key) || /pass|secret|token|key|credential/i.test(key)) {
+      sanitized[key] = "[REDACTED]";
+    }
   }
   return sanitized;
 }

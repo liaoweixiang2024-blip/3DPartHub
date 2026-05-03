@@ -6,11 +6,12 @@ import { config } from "./config.js";
 type Disposition = "attachment" | "inline";
 
 function asciiFileName(fileName: string) {
-  return fileName.replace(/[^\x20-\x7E]/g, "_");
+  return fileName.replace(/[^\x20-\x7E]/g, "_").replace(/"/g, "'");
 }
 
 function contentDisposition(disposition: Disposition, fileName: string) {
-  return `${disposition}; filename="${asciiFileName(fileName)}"; filename*=UTF-8''${encodeURIComponent(fileName)}`;
+  const safeName = asciiFileName(fileName);
+  return `${disposition}; filename="${safeName}"; filename*=UTF-8''${encodeURIComponent(fileName)}`;
 }
 
 function contentTypeForFile(fileName: string) {
@@ -64,6 +65,14 @@ export function sendAcceleratedFile(req: Request, res: Response, options: {
   if (accelPath) {
     res.setHeader("X-Accel-Redirect", accelPath);
     res.status(200).end();
+    return;
+  }
+
+  const absolutePath = resolve(filePath);
+  const allowedRoots = [resolve(process.cwd(), config.staticDir), resolve(process.cwd(), config.uploadDir)];
+  const isContained = allowedRoots.some((root) => absolutePath === root || absolutePath.startsWith(`${root}${sep}`));
+  if (!isContained) {
+    res.status(403).json({ detail: "文件访问被拒绝" });
     return;
   }
 

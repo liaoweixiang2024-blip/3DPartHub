@@ -1,7 +1,7 @@
 import { Router, Request, Response } from "express";
 import multer from "multer";
-import { copyFileSync, existsSync, mkdirSync, rmSync, statSync } from "node:fs";
-import { join, resolve } from "node:path";
+import { copyFileSync, existsSync, mkdirSync, openSync, readSync, closeSync, rmSync, statSync } from "node:fs";
+import { join, resolve, sep } from "node:path";
 import { prisma } from "../lib/prisma.js";
 import { config } from "../lib/config.js";
 import { cacheDelByPrefix } from "../lib/cache.js";
@@ -22,11 +22,17 @@ function drawingDownloadUrl(modelId: string, drawingUrl?: string | null): string
   return drawingUrl ? `/api/models/${encodeURIComponent(modelId)}/drawing/download` : null;
 }
 
-function resolveDrawingPath(modelId: string, drawingUrl?: string | null): string {
+function resolveDrawingPath(modelId: string, drawingUrl?: string | null): string | null {
+  let candidate: string;
   if (drawingUrl?.startsWith("/static/")) {
-    return join(config.staticDir, drawingUrl.slice("/static/".length));
+    candidate = join(config.staticDir, drawingUrl.slice("/static/".length));
+  } else {
+    candidate = join(config.staticDir, "drawings", `${modelId}.pdf`);
   }
-  return join(config.staticDir, "drawings", `${modelId}.pdf`);
+  const resolved = resolve(candidate);
+  const staticRoot = resolve(config.staticDir);
+  if (resolved !== staticRoot && !resolved.startsWith(`${staticRoot}${sep}`)) return null;
+  return resolved;
 }
 
 // Upload drawing (PDF) for a model.
@@ -42,6 +48,22 @@ router.post("/api/models/:id/drawing", authMiddleware, requireRole("ADMIN"), upl
   if (file.mimetype !== "application/pdf") {
     rmSync(file.path, { force: true });
     res.status(400).json({ detail: "仅支持 PDF 格式" });
+    return;
+  }
+
+  try {
+    const buf = Buffer.alloc(5);
+    const fd = openSync(file.path, "r");
+    readSync(fd, buf, 0, 5, 0);
+    closeSync(fd);
+    if (buf.toString() !== "%PDF-") {
+      rmSync(file.path, { force: true });
+      res.status(400).json({ detail: "文件内容不是有效的 PDF" });
+      return;
+    }
+  } catch {
+    rmSync(file.path, { force: true });
+    res.status(400).json({ detail: "无法读取文件内容" });
     return;
   }
 
@@ -67,8 +89,13 @@ router.post("/api/models/:id/drawing", authMiddleware, requireRole("ADMIN"), upl
 
     res.json({ success: true, data: { model_id: id, drawing_url: drawingDownloadUrl(id, drawingUrl) } });
   } catch (err: any) {
-    rmSync(file.path, { force: true });
-    res.status(500).json({ detail: err.message || "上传图纸失败" });
+    try { rmSync(file.path, { force: true }); } catch {}
+    try {
+      const orphanPath = join(config.staticDir, "drawings", `${id}.pdf`);
+      if (existsSync(orphanPath)) rmSync(orphanPath, { force: true });
+    } catch {}
+    console.error("[model-drawings] Upload error:", err);
+    res.status(500).json({ detail: "上传图纸失败" });
   }
 });
 
@@ -98,20 +125,21 @@ router.get("/api/models/:id/drawing/download", async (req: Request, res: Respons
     }
 
     const drawingPath = resolveDrawingPath(id, m.drawingUrl);
-    if (!existsSync(drawingPath)) {
+    if (!drawingPath || !existsSync(drawingPath)) {
       res.status(404).json({ detail: "图纸文件不存在" });
       return;
     }
 
     const fileName = m.drawingName || `${m.name || id}.pdf`;
     sendAcceleratedFile(req, res, {
-      filePath: resolve(drawingPath),
+      filePath: drawingPath,
       fileName,
       contentType: "application/pdf",
       disposition: "inline",
     });
   } catch (err: any) {
-    res.status(500).json({ detail: err.message || "读取图纸失败" });
+    console.error("[model-drawings] Download error:", err);
+    res.status(500).json({ detail: "读取图纸失败" });
   }
 });
 
@@ -127,14 +155,16 @@ router.delete("/api/models/:id/drawing", authMiddleware, requireRole("ADMIN"), a
     }
 
     const drawingPath = resolveDrawingPath(id, m.drawingUrl);
-    if (existsSync(drawingPath)) rmSync(drawingPath, { force: true });
 
-    await prisma.model.update({ where: { id }, data: { drawingUrl: null } });
+    await prisma.model.update({ where: { id }, data: { drawingUrl: null, drawingName: null, drawingSize: null } });
     await cacheDelByPrefix("cache:models:");
+
+    if (drawingPath && existsSync(drawingPath)) rmSync(drawingPath, { force: true });
 
     res.json({ success: true, data: { model_id: id, drawing_url: null } });
   } catch (err: any) {
-    res.status(500).json({ detail: err.message || "删除图纸失败" });
+    console.error("[model-drawings] Delete error:", err);
+    res.status(500).json({ detail: "删除图纸失败" });
   }
 });
 

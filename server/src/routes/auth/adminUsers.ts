@@ -2,6 +2,7 @@ import { Router, Response } from "express";
 import { prisma } from "../../lib/prisma.js";
 import { getBusinessConfig } from "../../lib/businessConfig.js";
 import { authMiddleware, type AuthRequest } from "../../middleware/auth.js";
+import { revokeAllTokensBefore } from "../../lib/jwt.js";
 
 function adminGuard(req: AuthRequest, res: Response): boolean {
   if (req.user?.role !== "ADMIN") {
@@ -110,14 +111,24 @@ export function createAdminUsersRouter() {
       return;
     }
     try {
-      const user = await prisma.user.update({
-        where: { id: userId },
-        data: { role },
-        select: { id: true, username: true, email: true, role: true },
+      const user = await prisma.$transaction(async (tx: any) => {
+        const current = await tx.user.findUnique({ where: { id: userId }, select: { role: true } });
+        if (!current) throw Object.assign(new Error("NOT_FOUND"), { code: "P2025" });
+        if (current.role === "ADMIN" && role !== "ADMIN") {
+          const adminCount = await tx.user.count({ where: { role: "ADMIN" } });
+          if (adminCount <= 1) throw Object.assign(new Error("LAST_ADMIN"), { code: "LAST_ADMIN" });
+        }
+        return tx.user.update({
+          where: { id: userId },
+          data: { role },
+          select: { id: true, username: true, email: true, role: true },
+        });
       });
+      await revokeAllTokensBefore(userId, Math.floor(Date.now() / 1000));
       res.json({ data: user });
     } catch (err: any) {
       if (err.code === "P2025") { res.status(404).json({ detail: "用户不存在" }); return; }
+      if (err.code === "LAST_ADMIN") { res.status(400).json({ detail: "不能移除最后一个管理员" }); return; }
       res.status(500).json({ detail: "修改角色失败" });
     }
   });
@@ -132,6 +143,8 @@ export function createAdminUsersRouter() {
       return;
     }
     try {
+      const { revokeAllTokensBefore } = await import("../../lib/jwt.js");
+      await revokeAllTokensBefore(userId, Math.floor(Date.now() / 1000)).catch(() => {});
       await prisma.user.delete({ where: { id: userId } });
       res.json({ message: "用户已删除" });
     } catch (err: any) {

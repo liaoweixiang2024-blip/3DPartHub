@@ -92,7 +92,7 @@ function createLimiter(prefix: string, options: Partial<Options>) {
   return rateLimit({
     standardHeaders: true,
     legacyHeaders: false,
-    passOnStoreError: true,
+    passOnStoreError: false,
     store: new RedisRateLimitStore(prefix),
     ...options,
   });
@@ -107,9 +107,9 @@ export const apiLimiter = createLimiter("api", {
 });
 
 export const uploadLimiter = createLimiter("upload", {
-  windowMs: 60 * 60 * 1000, // 1 hour
-  limit: 5000, // Allow up to 5000 upload requests/hour (~50GB at 10MB/chunk)
-  max: 5000,
+  windowMs: 60 * 60 * 1000,
+  limit: 200,
+  max: 200,
   message: { success: false, message: "上传次数超出限制" },
 });
 

@@ -10,7 +10,7 @@ export function createSelectionAdminCategoriesRouter() {
   router.post("/api/admin/selections/categories", authMiddleware, async (req: AuthRequest, res) => {
     if (!adminOnly(req, res)) return;
     try {
-      const { name, slug, description, icon, sortOrder, columns, image, optionImages, optionOrder, groupId, groupName, groupIcon, groupImage, groupImageFit, kind } = req.body;
+      const { name, slug, description, icon, sortOrder, columns, image, optionImages, optionOrder, groupId, groupName, groupIcon, groupImage, groupImageFit, kind, catalogPdf, catalogShared, optionCatalogs } = req.body;
       if (!name || !slug) {
         res.status(400).json({ detail: "分类名称和标识不能为空" });
         return;
@@ -25,7 +25,7 @@ export function createSelectionAdminCategoriesRouter() {
       }
 
       const category = await prisma.selectionCategory.create({
-        data: { name, slug, description, icon, sortOrder: sortOrder ?? 0, columns, image, optionImages, optionOrder, groupId, groupName, groupIcon, groupImage, groupImageFit, kind },
+        data: { name, slug, description, icon, sortOrder: sortOrder ?? 0, columns, image, optionImages, optionOrder, groupId, groupName, groupIcon, groupImage, groupImageFit, kind, catalogPdf: catalogPdf || null, catalogShared: catalogShared ?? false, optionCatalogs: optionCatalogs || null },
       });
       await invalidateSelectionCache();
       res.status(201).json(category);
@@ -44,7 +44,7 @@ export function createSelectionAdminCategoriesRouter() {
     if (!adminOnly(req, res)) return;
     try {
       const id = req.params.id as string;
-      const { name, slug, description, icon, sortOrder, columns, image, optionImages, optionOrder, groupId, groupName, groupIcon, groupImage, groupImageFit, kind } = req.body;
+      const { name, slug, description, icon, sortOrder, columns, image, optionImages, optionOrder, groupId, groupName, groupIcon, groupImage, groupImageFit, kind, catalogPdf, catalogShared, optionCatalogs } = req.body;
       const data: any = {};
       if (name !== undefined) data.name = name;
       if (slug !== undefined) data.slug = slug;
@@ -73,6 +73,9 @@ export function createSelectionAdminCategoriesRouter() {
         data.groupImageFit = groupImageFit;
       }
       if (kind !== undefined) data.kind = kind;
+      if (catalogPdf !== undefined) data.catalogPdf = catalogPdf || null;
+      if (catalogShared !== undefined) data.catalogShared = Boolean(catalogShared);
+      if (optionCatalogs !== undefined) data.optionCatalogs = optionCatalogs || null;
 
       const category = await prisma.selectionCategory.update({
         where: { id },
@@ -99,6 +102,13 @@ export function createSelectionAdminCategoriesRouter() {
     if (!adminOnly(req, res)) return;
     try {
       const id = req.params.id as string;
+      const category = await prisma.selectionCategory.findUnique({ where: { id } });
+      if (!category) {
+        res.status(404).json({ detail: "分类不存在" });
+        return;
+      }
+      await prisma.selectionShare.deleteMany({ where: { categorySlug: category.slug } });
+      await prisma.selectionProduct.deleteMany({ where: { categoryId: id } });
       await prisma.selectionCategory.delete({ where: { id } });
       await invalidateSelectionCache();
       res.json({ ok: true });
@@ -119,6 +129,10 @@ export function createSelectionAdminCategoriesRouter() {
       const { items }: { items: { id: string; sortOrder: number }[] } = req.body;
       if (!Array.isArray(items)) {
         res.status(400).json({ detail: "items 必须是数组" });
+        return;
+      }
+      if (items.length > 500) {
+        res.status(400).json({ detail: "排序数组长度不能超过 500" });
         return;
       }
       await prisma.$transaction(
@@ -164,38 +178,47 @@ export function createSelectionAdminCategoriesRouter() {
       }
 
       // Batch update products
-      const products = await prisma.selectionProduct.findMany({
-        where: { categoryId: id },
-        select: { id: true, specs: true },
+      const updated = await prisma.$transaction(async (tx: any) => {
+        const products = await tx.selectionProduct.findMany({
+          where: { categoryId: id },
+          select: { id: true, specs: true },
+        });
+
+        const optImages = category.optionImages as Record<string, Record<string, string>> | null;
+
+        let count = 0;
+        const updateOps = [];
+        for (const p of products) {
+          const specs = p.specs as Record<string, string>;
+          if (specs[field] === oldValue) {
+            specs[field] = newValue;
+            updateOps.push(tx.selectionProduct.update({
+              where: { id: p.id },
+              data: { specs },
+            }));
+            count++;
+          }
+        }
+
+        if (optImages?.[field]?.[oldValue] !== undefined) {
+          const updatedImages = { ...optImages };
+          updatedImages[field] = { ...updatedImages[field] };
+          updatedImages[field][newValue] = updatedImages[field][oldValue];
+          delete updatedImages[field][oldValue];
+          updateOps.push(tx.selectionCategory.update({
+            where: { id },
+            data: { optionImages: updatedImages },
+          }));
+        }
+
+        if (updateOps.length > 0) {
+          await Promise.all(updateOps);
+        }
+
+        return count;
       });
 
-      let updated = 0;
-      for (const p of products) {
-        const specs = p.specs as Record<string, string>;
-        if (specs[field] === oldValue) {
-          specs[field] = newValue;
-          await prisma.selectionProduct.update({
-            where: { id: p.id },
-            data: { specs },
-          });
-          updated++;
-        }
-      }
-
-      // Also update optionImages if exists
-      const optImages = category.optionImages as Record<string, Record<string, string>> | null;
-      if (optImages?.[field]?.[oldValue] !== undefined) {
-        const updatedImages = { ...optImages };
-        updatedImages[field] = { ...updatedImages[field] };
-        updatedImages[field][newValue] = updatedImages[field][oldValue];
-        delete updatedImages[field][oldValue];
-        await prisma.selectionCategory.update({
-          where: { id },
-          data: { optionImages: updatedImages },
-        });
-      }
-
-      if (updated > 0 || optImages?.[field]?.[oldValue] !== undefined) {
+      if (updated > 0) {
         await invalidateSelectionCache();
       }
       res.json({ updated });

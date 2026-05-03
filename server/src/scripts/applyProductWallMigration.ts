@@ -37,6 +37,7 @@ const statements = [
   `CREATE INDEX IF NOT EXISTS "product_wall_images_sort_order_idx" ON "product_wall_images"("sort_order")`,
   `CREATE INDEX IF NOT EXISTS "product_wall_images_created_at_idx" ON "product_wall_images"("created_at")`,
   `CREATE INDEX IF NOT EXISTS "product_wall_images_uploader_id_idx" ON "product_wall_images"("uploader_id")`,
+  `ALTER TABLE "product_wall_images" ADD COLUMN IF NOT EXISTS "description" TEXT`,
   `DO $$
   BEGIN
     IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'product_wall_images_uploader_id_fkey') THEN
@@ -112,7 +113,7 @@ async function main() {
           tags: ["本地图片"],
           sortOrder: sortOrder++,
           status: "approved",
-          uploaderName: "本地图片",
+
         };
       }),
     });

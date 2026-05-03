@@ -5,6 +5,8 @@ import { sendAcceleratedFile } from "../../lib/acceleratedDownload.js";
 import { createProtectedResourceToken } from "../../lib/downloadTokenStore.js";
 import { prisma } from "../../lib/prisma.js";
 import { getSetting } from "../../lib/settings.js";
+import { redis } from "../../lib/captcha.js";
+import { cacheGetOrSet, TTL } from "../../lib/cache.js";
 import { withAssetVersion } from "../../services/gltfAsset.js";
 import { resolveDbModelDownloadTarget } from "../../services/modelDownloadTarget.js";
 import { asSingleString, hasShareAccess, SHARE_ACCESS_TOKEN_TTL_MS } from "./common.js";
@@ -20,18 +22,20 @@ export function createPublicSharesRouter() {
       return;
     }
 
-    const share = await prisma.shareLink.findUnique({
-      where: { token },
-      include: {
-        model: {
-          select: {
-            id: true, name: true, originalName: true, format: true,
-            originalSize: true, gltfUrl: true, gltfSize: true,
-            originalFormat: true, uploadPath: true, thumbnailUrl: true,
-            description: true, updatedAt: true,
+    const { value: share } = await cacheGetOrSet(`cache:share:info:${token}`, TTL.MODEL_DETAIL, async () => {
+      return prisma.shareLink.findUnique({
+        where: { token },
+        include: {
+          model: {
+            select: {
+              id: true, name: true, originalName: true, format: true,
+              originalSize: true, gltfUrl: true, gltfSize: true,
+              originalFormat: true, uploadPath: true, thumbnailUrl: true,
+              description: true, updatedAt: true,
+            },
           },
         },
-      },
+      });
     }) as any;
 
     if (!share) {
@@ -97,6 +101,14 @@ export function createPublicSharesRouter() {
 
     if (!share.password) {
       res.json({ verified: true });
+      return;
+    }
+
+    const attemptsKey = `share_verify:${share.id}`;
+    const attempts = await redis.incr(attemptsKey);
+    if (attempts === 1) await redis.expire(attemptsKey, 300);
+    if (attempts > 10) {
+      res.status(429).json({ detail: "尝试次数过多，请稍后再试" });
       return;
     }
 

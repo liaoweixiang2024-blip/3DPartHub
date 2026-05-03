@@ -84,12 +84,12 @@ export async function compareModels(id1: string, id2: string) {
 
   try {
     const path1 = resolveFileUrlPath(m1.gltfUrl);
-    stats1 = extractGltfStats(path1);
+    if (path1) stats1 = extractGltfStats(path1);
   } catch { /* ignore */ }
 
   try {
     const path2 = resolveFileUrlPath(m2.gltfUrl);
-    stats2 = extractGltfStats(path2);
+    if (path2) stats2 = extractGltfStats(path2);
   } catch { /* ignore */ }
 
   const info1: ModelStats = {

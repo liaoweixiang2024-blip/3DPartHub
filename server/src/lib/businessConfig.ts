@@ -92,7 +92,7 @@ export const DEFAULT_SUPPORT_STEPS: SupportStepConfig[] = [
 export const DEFAULT_USER_NAV: NavItemConfig[] = [
   { label: "模型库", icon: "dashboard", path: "/", enabled: true },
   { label: "产品选型", icon: "tune", path: "/selection", enabled: true },
-  { label: "产品影像", icon: "image", path: "/product-wall", enabled: true },
+  { label: "产品图库", icon: "image", path: "/product-wall", enabled: true },
   { label: "我的收藏", icon: "star", path: "/favorites", enabled: true },
   { label: "我的询价", icon: "request_quote", path: "/my-inquiries", enabled: true },
   { label: "下载历史", icon: "download", path: "/downloads", enabled: true },

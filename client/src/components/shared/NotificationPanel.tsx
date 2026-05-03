@@ -309,6 +309,9 @@ export default function NotificationPanel({ compact = false }: { compact?: boole
           <button
             onClick={() => setOpen(!open)}
             className="p-2 text-on-surface-variant hover:text-on-surface transition-colors relative"
+            aria-label="通知"
+            data-tooltip="通知"
+            data-tooltip-side="bottom"
           >
             <Icon name="notifications" size={iconSize} />
             {unreadCount > 0 && (
@@ -350,6 +353,9 @@ export default function NotificationPanel({ compact = false }: { compact?: boole
       <button
         onClick={() => setOpen(!open)}
         className="p-2 text-on-surface-variant hover:text-on-surface transition-colors relative rounded-sm hover:bg-surface-container-high"
+        aria-label="通知"
+        data-tooltip="通知"
+        data-tooltip-side="bottom"
       >
         <Icon name="notifications" size={iconSize} />
         {unreadCount > 0 && (

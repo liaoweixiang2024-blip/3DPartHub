@@ -149,6 +149,21 @@ const SETTINGS_SCHEMA: SettingDef[] = [
   { key: "hotlink_protection_enabled", defaultValue: false },
   { key: "allowed_referers", defaultValue: "" },
 
+  // Product wall upload limits
+  { key: "product_wall_max_image_mb", defaultValue: 50 },
+  { key: "product_wall_max_batch_count", defaultValue: 50 },
+  { key: "product_wall_max_zip_extract", defaultValue: 100 },
+
+  // Download token TTL
+  { key: "download_token_ttl_minutes", defaultValue: 5 },
+
+  // Ticket attachment limits
+  { key: "ticket_attachment_max_mb", defaultValue: 100 },
+  { key: "ticket_attachment_types", defaultValue: "jpg,jpeg,png,gif,webp,svg,pdf,doc,docx,xls,xlsx,ppt,pptx,zip,rar,7z,step,stp,iges,igs,xt,binary" },
+
+  // API rate limiting
+  { key: "api_rate_limit", defaultValue: 5000 },
+
   // Enterprise backup policy
   { key: "backup_auto_enabled", defaultValue: false },
   { key: "backup_schedule_time", defaultValue: "03:00" },
@@ -231,9 +246,13 @@ export async function setSetting(key: string, value: unknown): Promise<void> {
   await cacheDel("cache:settings:public");
 }
 
+const SETTINGS_KEYS = new Set(SETTINGS_SCHEMA.map((s) => s.key));
+
 export async function setSettings(settings: Record<string, unknown>): Promise<void> {
   if (!prisma) return;
-  const ops = Object.entries(settings).map(([key, value]) =>
+  const filtered = Object.entries(settings).filter(([key]) => SETTINGS_KEYS.has(key));
+  if (filtered.length === 0) return;
+  const ops = filtered.map(([key, value]) =>
     prisma.setting.upsert({
       where: { key },
       update: { value: JSON.stringify(value) },
@@ -248,16 +267,9 @@ export async function setSettings(settings: Record<string, unknown>): Promise<vo
 
 export async function initDefaultSettings(): Promise<void> {
   if (!prisma) return;
-  for (const def of SETTINGS_SCHEMA) {
-    try {
-      await prisma.setting.upsert({
-        where: { key: def.key },
-        update: {},
-        create: { key: def.key, value: JSON.stringify(def.defaultValue) },
-      });
-    } catch {
-      // Ignore duplicate key errors from concurrent workers
-    }
-  }
+  await prisma.setting.createMany({
+    data: SETTINGS_SCHEMA.map((def) => ({ key: def.key, value: JSON.stringify(def.defaultValue) })),
+    skipDuplicates: true,
+  });
   cache = null;
 }

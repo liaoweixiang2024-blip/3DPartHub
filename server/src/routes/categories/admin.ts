@@ -42,6 +42,10 @@ export function createAdminCategoriesRouter() {
       res.status(400).json({ detail: "参数格式错误" });
       return;
     }
+    if (items.length > 500) {
+      res.status(400).json({ detail: "排序数组长度不能超过 500" });
+      return;
+    }
 
     try {
       await prisma.$transaction(
@@ -103,18 +107,30 @@ export function createAdminCategoriesRouter() {
     const id = req.params.id as string;
 
     try {
-      const childCount = await prisma.category.count({ where: { parentId: id } });
-      if (childCount > 0) {
-        res.status(400).json({ detail: "请先删除子分类" });
-        return;
-      }
-
-      await prisma.category.delete({ where: { id } });
+      await prisma.$transaction(async (tx: any) => {
+        const childCount = await tx.category.count({ where: { parentId: id } });
+        if (childCount > 0) {
+          throw Object.assign(new Error("HAS_CHILDREN"), { code: "HAS_CHILDREN" });
+        }
+        const modelCount = await tx.model.count({ where: { categoryId: id } });
+        if (modelCount > 0) {
+          throw Object.assign(new Error("HAS_MODELS"), { code: "HAS_MODELS" });
+        }
+        await tx.category.delete({ where: { id } });
+      });
       await clearCategoryCache();
       res.json({ message: "分类已删除" });
     } catch (err: any) {
       if (err.code === "P2025") {
         res.status(404).json({ detail: "分类不存在" });
+        return;
+      }
+      if (err.code === "HAS_CHILDREN") {
+        res.status(400).json({ detail: "请先删除子分类" });
+        return;
+      }
+      if (err.code === "HAS_MODELS") {
+        res.status(400).json({ detail: "该分类下还有模型，请先移动或删除" });
         return;
       }
       res.status(500).json({ detail: "删除分类失败" });

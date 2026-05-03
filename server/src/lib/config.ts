@@ -17,6 +17,7 @@ const isProduction = process.env.NODE_ENV === "production";
 const WEAK_JWT_SECRETS = new Set([
   "change-me-to-a-random-secret-string",
   "local-dev-secret-do-not-use-in-production",
+  "3dparthub-default-jwt-secret-change-me-2026-04-30",
 ]);
 
 const failConfig = (message: string): never => {
@@ -35,6 +36,9 @@ const validateDatabaseUrl = (value: string): string => {
   if (isProduction && /:\/\/[^:]+:modelpass@/.test(value)) {
     failConfig("DATABASE_URL uses the default database password; set DB_PASSWORD to a strong value.");
   }
+  if (isProduction && /:\/\/[^:]+:3dparthub-default/i.test(value)) {
+    failConfig("DATABASE_URL uses the docker-compose default password; set DB_PASSWORD to a strong value in .env.");
+  }
   return value;
 };
 
@@ -45,7 +49,7 @@ export const config = {
   jwtExpiresIn: optional("JWT_EXPIRES_IN", "7d"),
   uploadDir: optional("UPLOAD_DIR", "uploads"),
   staticDir: optional("STATIC_DIR", "static"),
-  maxFileSize: Number(optional("MAX_FILE_SIZE", String(100 * 1024 * 1024))),
+  maxFileSize: Number(optional("MAX_FILE_SIZE", String(100 * 1024 * 1024))) || 100 * 1024 * 1024,
   redisUrl: optional("REDIS_URL", "redis://localhost:6379"),
   storageType: optional("STORAGE_TYPE", "local"),
   allowedOrigins: optional("ALLOWED_ORIGINS", "http://localhost:5173"),

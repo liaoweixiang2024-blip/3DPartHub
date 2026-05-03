@@ -38,9 +38,17 @@
 bash scripts/verify-local.sh
 ```
 
+本地一键启动：
+
+```bash
+bash scripts/start-local.sh
+```
+
+该脚本会自动启动 Colima，旧的 `3dparthub-postgres` / `3dparthub-redis` 容器存在时会先重启，缺失时才创建；如果旧前端或后端进程占用 `5173` / `8000`，会先结束旧进程再启动本地源码服务。
+
 ## V2.6.3 更新
 
-- **备份目录权限自动修复**：新增 `backup-permissions` 一次性初始化服务，在 API 启动前自动创建 `/app/static/backups/.work` 并把宿主机备份目录授权给容器内 `node` 用户。
+- **备份目录权限自动修复**：API 容器启动时会自动创建 `/app/static/backups/.work` 并修复宿主机备份目录权限，避免额外增加长期业务容器。
 - **新服务器部署更稳**：避免宿主机目录由 `root` 创建后导致 API 报 `EACCES: permission denied, mkdir '/app/static/backups/.work'`。
 - **历史部署可自愈**：更新 compose 后执行 `docker compose up -d --force-recreate` 会先运行权限初始化，再启动 API/Web。
 
@@ -53,9 +61,9 @@ bash scripts/verify-local.sh
 
 ## V2.6.1 更新
 
-- **自动更新默认开启**：生产 Compose 默认使用 `latest` 镜像，并启动 Watchtower 每小时自动检查和更新 API/Web 容器。
+- **更新命令简化**：生产 Compose 默认使用 `latest` 镜像，保持 `api/web/postgres/redis` 四个核心容器；升级时手动执行 `docker compose pull && docker compose up -d --force-recreate`。
 - **后台更新命令修复**：后台「系统更新」里的命令去掉 shell 提示符 `$`，并自动把旧 `.env` 中的 `IMAGE_TAG` 改为 `latest`，避免继续锁在旧版本。
-- **部署文档同步**：README、历史部署说明、一键部署脚本和 Release 自动说明同步改为 `latest + Watchtower` 的更新方式。
+- **部署文档同步**：README、历史部署说明和一键部署脚本同步改为四容器手动更新方式。
 
 ## V2.6 更新
 
@@ -64,7 +72,7 @@ bash scripts/verify-local.sh
 - **登录与后台体验修复**：优化认证状态 hydration、Token 检查、受保护路由跳转、后台分页/管理页布局、审计、询价、工单、下载、模型和设置页体验。
 - **站点内容与法务配置**：抽离法务内容、补充公开设置接口、扩展业务配置默认值和后台显示字段，便于部署后做站点级配置。
 - **备份恢复与上传增强**：备份范围覆盖产品墙资源，上传会话、任务状态、验证码和 cookie 处理更稳，导入恢复流程继续保护运行时数据。
-- **NAS/服务器部署优化**：Compose 默认使用 `latest` 镜像并启用 Watchtower 自动更新 API/Web，支持无 `.env` 快速启动、默认初始管理员、离线镜像包导入和慢网络部署说明。
+- **NAS/服务器部署优化**：Compose 默认使用 `latest` 镜像并保持四个核心容器，支持无 `.env` 快速启动、默认初始管理员、离线镜像包导入和慢网络部署说明。
 
 ## Release 与镜像
 
@@ -74,7 +82,7 @@ bash scripts/verify-local.sh
 | Release 标题 | `V2.6.3 - 自动修复备份目录权限` |
 | API 镜像 | `ghcr.io/liaoweixiang2024-blip/3dparthub-api:v2.6.3` / `ghcr.io/liaoweixiang2024-blip/3dparthub-api:latest` |
 | Web 镜像 | `ghcr.io/liaoweixiang2024-blip/3dparthub-web:v2.6.3` / `ghcr.io/liaoweixiang2024-blip/3dparthub-web:latest` |
-| 自动更新 | 默认部署使用 `latest`，Watchtower 每小时自动更新 API/Web 容器 |
+| 更新方式 | 默认部署使用 `latest`，需要升级时手动拉取并重建 API/Web 容器 |
 
 镜像说明：
 
@@ -134,7 +142,7 @@ curl -O https://raw.githubusercontent.com/liaoweixiang2024-blip/3DPartHub/main/d
 docker compose up -d
 ```
 
-根目录 [docker-compose.yml](docker-compose.yml) 内置了可直接启动的默认值，适合绿联 NAS、测试机或内网快速部署。默认使用 `latest` 镜像，并通过 Watchtower 每小时自动检查和更新 API/Web 容器；PostgreSQL 和 Redis 不会被自动更新。
+根目录 [docker-compose.yml](docker-compose.yml) 内置了可直接启动的默认值，适合绿联 NAS、测试机或内网快速部署。默认使用 `latest` 镜像，并只启动 `api`、`web`、`postgres`、`redis` 四个核心容器。
 
 正式公网环境建议在同目录创建 `.env` 覆盖数据库密码、JWT 密钥和初始管理员密码：
 
@@ -168,6 +176,28 @@ docker compose logs api | tail -20
 curl http://localhost:3780/api/health
 ```
 
+### 自动调整容器上限
+
+服务器或 NAS 已经部署好以后，可以单独运行资源调优脚本。它会按服务器总内存自动选择 `4G`、`8G`、`16G` 或 `32G+` 档位，先写入 `.env`，再用 `docker update` 直接调整正在运行的 `api`、`web`、`postgres`、`redis` 容器内存和 CPU 上限。
+
+```bash
+cd /opt/3dparthub
+curl -L -o tune-resources.sh https://raw.githubusercontent.com/liaoweixiang2024-blip/3DPartHub/main/scripts/tune-resources.sh
+sh tune-resources.sh .env
+docker stats --no-stream
+```
+
+自动分配参考：
+
+| 服务器内存 | API | PostgreSQL | Redis | Web |
+|------------|-----|------------|-------|-----|
+| 4G | 2G / 1.5 CPU | 768M / 1 CPU | 256M / 0.5 CPU | 256M / 0.5 CPU |
+| 8G | 4G / 2 CPU | 1G / 1 CPU | 512M / 0.5 CPU | 512M / 0.75 CPU |
+| 16G | 8G / 3 CPU | 2G / 2 CPU | 1G / 1 CPU | 512M / 1 CPU |
+| 32G+ | 12G / 4 CPU | 4G / 2 CPU | 2G / 1 CPU | 1G / 1 CPU |
+
+说明：容器内存/CPU 上限会即时生效；`API_WORKERS`、`API_SHM_SIZE`、`DB_CONNECTION_LIMIT` 等启动参数会同步写入 `.env`，执行 `docker compose up -d --force-recreate api` 后完全生效。
+
 首次启动会自动创建管理员账号：
 
 | 项目 | 默认值 |
@@ -192,14 +222,13 @@ curl http://localhost:3780/api/health
 | `ADMIN_EMAIL` | 否 | `admin@model.local` | 初始管理员邮箱，仅首次启动 |
 | `ADMIN_PASS` | 否 | `3DPartHub@2026` | 初始管理员密码，仅空数据库首次启动生效 |
 | `IMAGE_TAG` | 否 | `latest` | 镜像标签；默认自动跟随最新版本，写入 `v2.6.3` 等固定标签可锁定版本 |
-| `WATCHTOWER_POLL_INTERVAL` | 否 | `3600` | Watchtower 自动检查间隔，单位秒 |
 | `SMTP_HOST` | 否 | - | SMTP 服务器 |
 | `SMTP_USER` | 否 | - | SMTP 用户名 |
 | `SMTP_PASS` | 否 | - | SMTP 密码或授权码 |
 
-### 自动更新与立即升级
+### 更新与立即升级
 
-默认部署会启动 `3dparthub-watchtower`，它只更新带标签的 `api` 和 `web` 容器。需要立即升级时执行：
+需要立即升级时执行：
 
 ```bash
 cd /opt/3dparthub
@@ -226,7 +255,7 @@ curl http://localhost:3780/api/health
 IMAGE_TAG=v2.6.3
 ```
 
-写入固定 `IMAGE_TAG` 后，部署会锁定在该版本，不会自动升级到新的 Release；要恢复自动更新，请删除 `.env` 中的 `IMAGE_TAG` 或改为 `IMAGE_TAG=latest`。
+写入固定 `IMAGE_TAG` 后，部署会锁定在该版本；要恢复跟随最新镜像，请删除 `.env` 中的 `IMAGE_TAG` 或改为 `IMAGE_TAG=latest`，再执行更新命令。
 
 ### 升级版本
 
@@ -236,7 +265,7 @@ cd /opt/3dparthub
 # 1. 更新部署配置
 curl -L -o docker-compose.yml https://raw.githubusercontent.com/liaoweixiang2024-blip/3DPartHub/main/docker-compose.yml
 
-# 2. 确保恢复 latest 自动更新
+# 2. 确保恢复 latest 最新镜像
 touch .env
 grep -q '^IMAGE_TAG=' .env && sed -i 's/^IMAGE_TAG=.*/IMAGE_TAG=latest/' .env || echo 'IMAGE_TAG=latest' >> .env
 
@@ -294,7 +323,7 @@ cp /tmp/backup_XXXX.* /opt/3dparthub/server/static/backups/
 
 不需要再执行 `docker cp`，也不要把备份包提交到 Git。
 
-Compose 会先运行 `backup-permissions` 一次性初始化服务，自动修复该目录的 UID/GID 权限，避免 API 因无法创建 `/app/static/backups/.work` 而启动失败。
+API 容器启动时会自动修复该目录的 UID/GID 权限，避免因无法创建 `/app/static/backups/.work` 而启动失败。
 
 ## 备份与恢复
 

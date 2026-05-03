@@ -14,16 +14,16 @@ export const useFavoriteStore = create<FavoriteState>()(
     (set, get) => ({
       favoriteIds: new Set<string>(),
       toggleFavorite: async (model) => {
-        const prev = new Set(get().favoriteIds);
-        const wasFavorite = prev.has(model.id);
+        const snapshot = new Set(get().favoriteIds);
+        const wasFavorite = snapshot.has(model.id);
 
-        // Optimistic update
+        const next = new Set(snapshot);
         if (wasFavorite) {
-          prev.delete(model.id);
+          next.delete(model.id);
         } else {
-          prev.add(model.id);
+          next.add(model.id);
         }
-        set({ favoriteIds: new Set(prev) });
+        set({ favoriteIds: next });
 
         try {
           if (wasFavorite) {
@@ -32,16 +32,7 @@ export const useFavoriteStore = create<FavoriteState>()(
             await favoriteApi.add(model.id);
           }
         } catch {
-          // Rollback on failure
-          set({ favoriteIds: new Set(get().favoriteIds).add(model.id) === prev ? prev : new Set(get().favoriteIds) });
-          // Simple rollback: re-toggle
-          const rollback = new Set(get().favoriteIds);
-          if (wasFavorite) {
-            rollback.add(model.id);
-          } else {
-            rollback.delete(model.id);
-          }
-          set({ favoriteIds: rollback });
+          set({ favoriteIds: snapshot });
         }
       },
       isFavorite: (id) => get().favoriteIds.has(id),

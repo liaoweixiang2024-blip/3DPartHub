@@ -134,6 +134,17 @@ export interface SystemSettings {
   backup_last_auto_message: string;
   backup_last_auto_job_id: string;
   backup_last_auto_at: string;
+  // Product wall upload limits
+  product_wall_max_image_mb: number;
+  product_wall_max_batch_count: number;
+  product_wall_max_zip_extract: number;
+  // Download token TTL
+  download_token_ttl_minutes: number;
+  // Ticket attachment limits
+  ticket_attachment_max_mb: number;
+  ticket_attachment_types: string;
+  // API rate limiting
+  api_rate_limit: number;
 }
 
 export interface BackupStats {
@@ -866,4 +877,40 @@ export interface UpdateCheckResult {
 export async function checkUpdate(): Promise<UpdateCheckResult> {
   const res = await client.get("/settings/update/check", { timeout: 30000 });
   return unwrapResponse<UpdateCheckResult>(res);
+}
+
+// ===== Garbage Cleanup =====
+
+export interface CleanupCategory {
+  key: string;
+  label: string;
+  count: number;
+  totalSize: number;
+  totalSizeText: string;
+  samplePaths: string[];
+}
+
+export interface CleanupScanResult {
+  categories: CleanupCategory[];
+  totalFiles: number;
+  totalSize: number;
+  totalSizeText: string;
+}
+
+export interface CleanupResult {
+  deletedCount: number;
+  freedBytes: number;
+  freedSizeText: string;
+  failedCount: number;
+  errors?: string[];
+}
+
+export async function scanCleanup(): Promise<CleanupScanResult> {
+  const res = await client.get("/settings/cleanup/scan", { timeout: 60000 });
+  return unwrapResponse<CleanupScanResult>(res);
+}
+
+export async function executeCleanup(targets: string[]): Promise<CleanupResult> {
+  const res = await client.post("/settings/cleanup/execute", { targets }, { timeout: 120000 });
+  return unwrapResponse<CleanupResult>(res);
 }

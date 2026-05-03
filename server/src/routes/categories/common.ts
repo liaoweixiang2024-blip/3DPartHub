@@ -11,6 +11,7 @@ export type CategoryTreeNode = {
   createdAt: Date;
   updatedAt: Date;
   count: number;
+  totalCount: number;
   children: CategoryTreeNode[];
 };
 

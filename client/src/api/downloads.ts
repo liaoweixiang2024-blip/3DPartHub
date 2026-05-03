@@ -1,6 +1,7 @@
 import client from "./client";
 import { getAccessToken } from "../stores/useAuthStore";
 import { unwrapApiData } from "./response";
+import { getPublicSettingsSnapshot } from "../lib/publicSettings";
 
 export interface DownloadHistoryItem {
   id: string;
@@ -71,7 +72,9 @@ export function isDownloadAuthRequiredError(error: unknown): error is DownloadAu
 }
 
 function requireDownloadAuth() {
-  if (!getAccessToken()) throw new DownloadAuthRequiredError();
+  const settings = getPublicSettingsSnapshot();
+  const requireLogin = settings.require_login_download;
+  if (requireLogin && !getAccessToken()) throw new DownloadAuthRequiredError();
 }
 
 export async function createModelDownloadUrl(

@@ -7,7 +7,7 @@ import { AdminPageShell } from "../components/shared/AdminPageShell";
 import { AdminContentPanel, AdminManagementPage } from "../components/shared/AdminManagementPage";
 import ResponsiveSectionTabs from '../components/shared/ResponsiveSectionTabs';
 import { useToast } from '../components/shared/Toast';
-import { getSettings, updateSettings, uploadImage, sendTestEmail, getBackupStats, getBackupHealth, checkBackupPolicy, startVerifyBackupJob, pollVerifyBackupProgress, getActiveBackupJob, getActiveRestoreJob, getActiveImportSaveJob, getActiveVerifyBackupJob, startBackupJob, pollBackupProgress, downloadBackup, renameBackup, deleteBackup, startRestore, pollRestoreProgress, listBackups, importBackup, importBackupAsRecord, pollImportSaveProgress, listServerBackupFiles, importBackupFromPath, type ServerBackupFile, checkUpdate, getVersion, type SystemSettings, type BackupStats, type BackupRecord, type BackupHealth, type BackupPolicyCheck } from '../api/settings';
+import { getSettings, updateSettings, uploadImage, sendTestEmail, getBackupStats, getBackupHealth, checkBackupPolicy, startVerifyBackupJob, pollVerifyBackupProgress, getActiveBackupJob, getActiveRestoreJob, getActiveImportSaveJob, getActiveVerifyBackupJob, startBackupJob, pollBackupProgress, downloadBackup, renameBackup, deleteBackup, startRestore, pollRestoreProgress, listBackups, importBackup, importBackupAsRecord, pollImportSaveProgress, listServerBackupFiles, importBackupFromPath, type ServerBackupFile, checkUpdate, getVersion, type SystemSettings, type BackupStats, type BackupRecord, type BackupHealth, type BackupPolicyCheck, scanCleanup, executeCleanup, type CleanupScanResult, type CleanupCategory } from '../api/settings';
 import { COLOR_PRESETS, COLOR_KEYS } from '../lib/colorSchemes';
 import { applyColorScheme, generatePaletteFromPrimary } from '../lib/colorScheme';
 import {
@@ -20,6 +20,8 @@ import {
   DEFAULT_TICKET_STATUSES,
   DEFAULT_UPLOAD_POLICY,
   DEFAULT_USER_NAV,
+  normalizeAdminNav,
+  normalizeUserNav,
   parseSetting,
   type NavItemConfig,
   type StatusConfig,
@@ -181,6 +183,13 @@ const DEFAULT_SETTINGS: SystemSettings = {
   backup_last_auto_message: "",
   backup_last_auto_job_id: "",
   backup_last_auto_at: "",
+  product_wall_max_image_mb: 50,
+  product_wall_max_batch_count: 50,
+  product_wall_max_zip_extract: 100,
+  download_token_ttl_minutes: 5,
+  ticket_attachment_max_mb: 100,
+  ticket_attachment_types: "jpg,jpeg,png,gif,webp,svg,pdf,doc,docx,xls,xlsx,ppt,pptx,zip,rar,7z,step,stp,iges,igs,xt,binary",
+  api_rate_limit: 5000,
 };
 
 type SettingItemType = 'switch' | 'number' | 'text' | 'image' | 'textarea' | 'select' | 'color' | 'range' | 'email-test' | 'color-scheme';
@@ -404,7 +413,7 @@ const GROUPS: SettingGroup[] = [
     title: '上传与导入',
     icon: 'upload_file',
     items: [
-      { key: 'upload_policy', label: '文件上传与导入限制', desc: '配置模型上传、选型图片、选型 Excel 导入、产品影像上传和工单附件限制', type: 'textarea' },
+      { key: 'upload_policy', label: '文件上传与导入限制', desc: '配置模型上传、选型图片、选型 Excel 导入、产品图库上传和工单附件限制', type: 'textarea' },
     ],
   },
   {
@@ -433,6 +442,37 @@ const GROUPS: SettingGroup[] = [
       { key: 'backup_retention_count', label: '保留备份份数', desc: '自动清理更早的备份，建议至少保留 7 份', type: 'number', min: 1, max: 60 },
       { key: 'backup_mirror_enabled', label: '外部镜像备份', desc: '备份成功后自动复制一份到外部目录，建议挂载到独立磁盘或 NAS', type: 'switch' },
       { key: 'backup_mirror_dir', label: '外部镜像目录', desc: '服务器上的绝对路径，如 /mnt/backup/3dparthub 或 /Volumes/Backup/3dparthub', type: 'text' },
+    ],
+  },
+  {
+    title: '产品图库上传',
+    icon: 'photo_library',
+    items: [
+      { key: 'product_wall_max_image_mb', label: '单张图片上限 (MB)', desc: '单张图片文件的最大体积，超出会被拒绝', type: 'number', min: 1, max: 200 },
+      { key: 'product_wall_max_batch_count', label: '单次批量上限', desc: '单次上传（含压缩包内图片）的最大数量', type: 'number', min: 1, max: 200 },
+      { key: 'product_wall_max_zip_extract', label: '压缩包提取上限', desc: '从单个 zip/rar 压缩包中最多提取的图片数量', type: 'number', min: 1, max: 500 },
+    ],
+  },
+  {
+    title: '下载令牌',
+    icon: 'key',
+    items: [
+      { key: 'download_token_ttl_minutes', label: '令牌有效期 (分钟)', desc: '下载令牌的有效时间，过期后需重新获取', type: 'number', min: 1, max: 60 },
+    ],
+  },
+  {
+    title: '工单附件',
+    icon: 'attach_file',
+    items: [
+      { key: 'ticket_attachment_max_mb', label: '附件大小上限 (MB)', desc: '工单消息中单个附件的最大体积', type: 'number', min: 1, max: 200 },
+      { key: 'ticket_attachment_types', label: '允许的文件类型', desc: '用逗号分隔的文件扩展名，如：jpg,png,pdf,step,zip', type: 'text' },
+    ],
+  },
+  {
+    title: 'API 限速',
+    icon: 'speed',
+    items: [
+      { key: 'api_rate_limit', label: '15 分钟请求上限', desc: '每个 IP 在 15 分钟内允许的最大请求数，修改后需重启服务生效', type: 'number', min: 100, max: 100000 },
     ],
   },
 ];
@@ -1125,6 +1165,83 @@ function SupportStepsEditor({ settings, updateSetting }: { settings: SystemSetti
   );
 }
 
+const NAV_PRESETS: Record<string, { label: string; icon: string; path: string }[]> = {
+  user: [
+    { label: "模型库", icon: "dashboard", path: "/" },
+    { label: "产品选型", icon: "tune", path: "/selection" },
+    { label: "产品图库", icon: "image", path: "/product-wall" },
+    { label: "规格查询", icon: "straighten", path: "/thread-size" },
+    { label: "我的收藏", icon: "star", path: "/favorites" },
+    { label: "我的分享", icon: "share", path: "/my-shares" },
+    { label: "下载历史", icon: "download", path: "/downloads" },
+    { label: "我的询价", icon: "request_quote", path: "/my-inquiries" },
+    { label: "我的工单", icon: "assignment_add", path: "/my-tickets" },
+    { label: "技术支持", icon: "support_agent", path: "/support" },
+  ],
+  admin: [
+    { label: "模型管理", icon: "view_in_ar", path: "/admin/models" },
+    { label: "分类管理", icon: "folder", path: "/admin/categories" },
+    { label: "选型管理", icon: "tune", path: "/admin/selections" },
+    { label: "询价管理", icon: "receipt_long", path: "/admin/inquiries" },
+    { label: "工单处理", icon: "build", path: "/admin/tickets" },
+    { label: "用户管理", icon: "group", path: "/admin/users" },
+    { label: "分享管理", icon: "share", path: "/admin/shares" },
+    { label: "下载统计", icon: "download", path: "/admin/downloads" },
+    { label: "操作日志", icon: "schedule", path: "/admin/audit" },
+    { label: "系统设置", icon: "settings", path: "/admin/settings" },
+  ],
+  mobile: [
+    { label: "首页", icon: "dashboard", path: "/" },
+    { label: "选型", icon: "tune", path: "/selection" },
+    { label: "收藏", icon: "star", path: "/favorites" },
+    { label: "工单", icon: "assignment_add", path: "/my-tickets" },
+    { label: "我的", icon: "person", path: "/profile" },
+  ],
+};
+
+const ICON_OPTIONS = [
+  "dashboard", "tune", "image", "photo_library", "straighten", "star",
+  "share", "download", "request_quote", "assignment_add", "support_agent",
+  "view_in_ar", "folder", "build", "group", "schedule", "settings",
+  "person", "cloud_upload", "receipt_long", "search", "notifications",
+  "visibility", "link", "mail", "lock", "filter_list", "calendar_today",
+  "inventory_2", "category", "bookmark", "favorite", "edit", "delete",
+  "send", "add", "close", "check_circle", "error", "warning",
+  "share", "attachment", "chat", "phone", "description", "shield",
+  "campaign", "rule", "checklist", "more_horiz", "more_vert",
+  "auto_awesome", "upload_file", "refresh", "science",
+];
+
+function IconPicker({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="relative">
+      <button type="button" onClick={() => setOpen(!open)} className={`${inputClass} flex items-center gap-2 text-left`}>
+        <Icon name={value} size={16} className="shrink-0 text-on-surface-variant" />
+        <span className="truncate text-sm">{value}</span>
+      </button>
+      {open && (
+        <div className="absolute z-50 mt-1 left-0 right-0 min-w-[220px] bg-surface-container-lowest border border-outline-variant/20 rounded-lg shadow-xl p-2 max-h-[240px] overflow-y-auto">
+          <div className="grid grid-cols-6 gap-1">
+            {ICON_OPTIONS.map((name) => (
+              <button
+                key={name}
+                type="button"
+                title={name}
+                onClick={() => { onChange(name); setOpen(false); }}
+                className={`p-2 rounded-md flex items-center justify-center transition-colors ${name === value ? "bg-primary-container/20 text-primary-container" : "text-on-surface-variant hover:bg-surface-container-high"}`}
+              >
+                <Icon name={name} size={20} />
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+      {open && <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />}
+    </div>
+  );
+}
+
 function NavItemsEditor({ itemKey, settings, updateSetting, fallback }: {
   itemKey: keyof SystemSettings;
   settings: SystemSettings;
@@ -1133,25 +1250,58 @@ function NavItemsEditor({ itemKey, settings, updateSetting, fallback }: {
 }) {
   const rawItems = parseSetting<NavItemConfig[]>(settings[itemKey], fallback);
   const items = itemKey === 'nav_admin_items'
-    ? rawItems.filter((item) => item.path !== '/admin/quote-template')
+    ? normalizeAdminNav(rawItems)
+    : itemKey === 'nav_user_items'
+    ? normalizeUserNav(rawItems)
     : rawItems;
   const update = (next: NavItemConfig[]) => setJsonSetting(updateSetting, itemKey, next);
-  const patch = (index: number, changes: Partial<NavItemConfig>) => update(items.map((item, i) => i === index ? { ...item, ...changes } : item));
+  const patch = (index: number, changes: Partial<NavItemConfig>) => update(items.map((item: NavItemConfig, i: number) => i === index ? { ...item, ...changes } : item));
+  const presetKey = itemKey === 'nav_admin_items' ? 'admin' : itemKey === 'nav_user_items' ? 'user' : 'mobile';
+  const presets = NAV_PRESETS[presetKey];
 
   return (
     <div className={compactListClass}>
-      {items.map((item, index) => (
-        <div key={`${item.path}-${index}`} className={`grid grid-cols-1 xl:grid-cols-[1fr_1fr_2fr_auto_auto] gap-2 ${compactPanelClass}`}>
-          <input value={item.label} onChange={(e) => patch(index, { label: e.target.value })} placeholder="菜单名称" className={inputClass} />
-          <input value={item.icon} onChange={(e) => patch(index, { icon: e.target.value })} placeholder="图标名" className={inputClass} />
-          <input value={item.path} onChange={(e) => patch(index, { path: e.target.value })} placeholder="路径，如 /admin/models" className={inputClass} />
-          <label className="flex items-center gap-1.5 text-xs text-on-surface-variant px-1">
-            <input type="checkbox" checked={item.enabled !== false} onChange={(e) => patch(index, { enabled: e.target.checked })} className="accent-[var(--color-primary-container)]" />
-            启用
-          </label>
-          <ListActions index={index} total={items.length} onMove={(direction) => update(moveListItem(items, index, direction))} onDelete={() => update(items.filter((_, i) => i !== index))} />
-        </div>
-      ))}
+      {/* Header row */}
+      <div className="hidden xl:grid xl:grid-cols-[1fr_1fr_2fr_auto_auto] gap-2 px-3 pb-1 text-[11px] text-on-surface-variant/60 font-medium uppercase tracking-wider">
+        <span>名称</span>
+        <span>图标</span>
+        <span>页面路径</span>
+        <span className="w-10 text-center">启用</span>
+        <span className="w-16" />
+      </div>
+      {items.map((item: NavItemConfig, index: number) => {
+        const isPreset = presets.some((p) => p.path === item.path);
+        return (
+          <div key={`${item.path}-${index}`} className={`grid grid-cols-1 xl:grid-cols-[1fr_1fr_2fr_auto_auto] gap-2 ${compactPanelClass}`}>
+            <label className="space-y-0.5 xl:hidden"><span className="text-[10px] text-on-surface-variant">名称</span>
+              <input value={item.label} onChange={(e) => patch(index, { label: e.target.value })} placeholder="菜单名称" className={inputClass} />
+            </label>
+            <label className="space-y-0.5 xl:hidden"><span className="text-[10px] text-on-surface-variant">图标</span>
+              <IconPicker value={item.icon} onChange={(v) => patch(index, { icon: v })} />
+            </label>
+            <label className="space-y-0.5 xl:hidden"><span className="text-[10px] text-on-surface-variant">页面路径</span>
+              <select value={item.path} onChange={(e) => patch(index, { path: e.target.value })} className={`${inputClass} truncate`}>
+                {!isPreset && <option value={item.path}>{item.path}（自定义）</option>}
+                {presets.map((p) => <option key={p.path} value={p.path}>{p.label}</option>)}
+              </select>
+            </label>
+            {/* Desktop inline */}
+            <input value={item.label} onChange={(e) => patch(index, { label: e.target.value })} placeholder="菜单名称" className={`${inputClass} hidden xl:block`} />
+            <div className="hidden xl:block">
+              <IconPicker value={item.icon} onChange={(v) => patch(index, { icon: v })} />
+            </div>
+            <select value={item.path} onChange={(e) => patch(index, { path: e.target.value })} className={`${inputClass} truncate hidden xl:block`}>
+              {!isPreset && <option value={item.path}>{item.path}（自定义）</option>}
+              {presets.map((p) => <option key={p.path} value={p.path}>{p.label}</option>)}
+            </select>
+            <label className="flex items-center gap-1.5 text-xs text-on-surface-variant px-1">
+              <input type="checkbox" checked={item.enabled !== false} onChange={(e) => patch(index, { enabled: e.target.checked })} className="accent-[var(--color-primary-container)]" />
+              <span className="xl:hidden">启用</span>
+            </label>
+            <ListActions index={index} total={items.length} onMove={(direction) => update(moveListItem(items, index, direction))} onDelete={() => update(items.filter((_: NavItemConfig, i: number) => i !== index))} />
+          </div>
+        );
+      })}
       <AddRowButton label="添加菜单" onClick={() => update([...items, { label: '', icon: 'circle', path: '/', enabled: true }])} />
     </div>
   );
@@ -1166,7 +1316,6 @@ function UploadPolicyEditor({ settings, updateSetting }: { settings: SystemSetti
       <div className="mb-3 flex flex-wrap items-center gap-2 text-[11px] text-on-surface-variant">
         <span className="rounded-full bg-primary-container/10 px-2 py-1 text-primary-container">模型上传</span>
         <span className="rounded-full bg-primary-container/10 px-2 py-1 text-primary-container">选型导入</span>
-        <span className="rounded-full bg-primary-container/10 px-2 py-1 text-primary-container">产品影像</span>
         <span className="rounded-full bg-primary-container/10 px-2 py-1 text-primary-container">工单附件</span>
       </div>
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
@@ -1205,14 +1354,6 @@ function UploadPolicyEditor({ settings, updateSetting }: { settings: SystemSetti
       <label className="space-y-1">
         <span className="text-xs text-on-surface-variant">选型导入列数上限</span>
         <input type="number" min={1} value={policy.selectionImportMaxColumns} onChange={(e) => update({ selectionImportMaxColumns: toNumber(e.target.value, policy.selectionImportMaxColumns) })} className={numberInputClass} />
-      </label>
-      <label className="space-y-1">
-        <span className="text-xs text-on-surface-variant">产品墙单图上限 MB</span>
-        <input type="number" min={1} value={policy.productWallImageMaxSizeMb} onChange={(e) => update({ productWallImageMaxSizeMb: toNumber(e.target.value, policy.productWallImageMaxSizeMb) })} className={numberInputClass} />
-      </label>
-      <label className="space-y-1">
-        <span className="text-xs text-on-surface-variant">产品墙单次上传张数</span>
-        <input type="number" min={1} value={policy.productWallUploadMaxFiles} onChange={(e) => update({ productWallUploadMaxFiles: toNumber(e.target.value, policy.productWallUploadMaxFiles) })} className={numberInputClass} />
       </label>
       <label className="space-y-1">
         <span className="text-xs text-on-surface-variant">工单附件上限 MB</span>
@@ -1748,6 +1889,12 @@ function Content() {
   const verifyActionInFlight = useRef(false);
   const policyCheckInFlight = useRef(false);
   const jobToastKeys = useRef<Set<string>>(new Set());
+
+  // Cleanup state
+  const [cleanupScan, setCleanupScan] = useState<CleanupScanResult | null>(null);
+  const [cleanupScanning, setCleanupScanning] = useState(false);
+  const [cleanupSelectedKeys, setCleanupSelectedKeys] = useState<Set<string>>(new Set());
+  const [cleanupRunning, setCleanupRunning] = useState(false);
 
   // Global busy state — prevent concurrent admin operations
   const adminBusy = exporting || importing || restoring || !!verifyingBackupId;
@@ -2374,7 +2521,7 @@ function Content() {
     );
   }
 
-  const tabs = [...GROUPS.map((group) => ({ title: group.title, icon: group.icon })), { title: '数据备份', icon: 'cloud_upload' }];
+  const tabs = [...GROUPS.map((group) => ({ title: group.title, icon: group.icon })), { title: '数据备份', icon: 'cloud_upload' }, { title: '缓存清理', icon: 'cleaning_services' }];
   const activeGroup = GROUPS.find((group) => group.title === activeTab);
   const headerActions = (
     <div className="flex min-h-10 shrink-0 items-center justify-end gap-2">
@@ -3100,6 +3247,154 @@ function Content() {
         </div>
         </>
         )}
+
+        {activeTab === '缓存清理' && (
+        <div className="space-y-4">
+          {/* Scan header */}
+          <div className="bg-surface-container-low rounded-lg border border-outline-variant/10 p-4">
+            <div className="flex items-center justify-between gap-4 flex-wrap">
+              <div>
+                <h3 className="text-sm font-semibold text-on-surface">缓存垃圾清理</h3>
+                <p className="text-xs text-on-surface-variant mt-1">扫描磁盘上与数据库记录不匹配的孤立文件、过期临时文件等，释放磁盘空间</p>
+              </div>
+              <button
+                onClick={async () => {
+                  if (cleanupScanning) return;
+                  setCleanupScanning(true);
+                  setCleanupScan(null);
+                  setCleanupSelectedKeys(new Set());
+                  try {
+                    const result = await scanCleanup();
+                    setCleanupScan(result);
+                  } catch (err: any) {
+                    toast(err.message || '扫描失败', 'error');
+                  } finally {
+                    setCleanupScanning(false);
+                  }
+                }}
+                disabled={cleanupScanning || cleanupRunning}
+                className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-primary-container px-4 text-xs font-bold text-on-primary shadow-sm transition-all hover:-translate-y-px hover:opacity-95 disabled:translate-y-0 disabled:cursor-not-allowed disabled:bg-surface-container-high disabled:text-on-surface-variant disabled:shadow-none"
+              >
+                <Icon name={cleanupScanning ? 'hourglass_empty' : 'search'} size={14} />
+                {cleanupScanning ? '扫描中...' : '开始扫描'}
+              </button>
+            </div>
+          </div>
+
+          {/* Scan results */}
+          {cleanupScan && (
+            <>
+              {cleanupScan.totalFiles === 0 ? (
+                <div className="bg-emerald-500/10 border border-emerald-500/20 rounded-lg p-4 flex items-center gap-3">
+                  <Icon name="verified" size={20} className="text-emerald-500 shrink-0" />
+                  <div>
+                    <p className="text-sm font-medium text-on-surface">系统很干净</p>
+                    <p className="text-xs text-on-surface-variant mt-0.5">未发现缓存垃圾文件</p>
+                  </div>
+                </div>
+              ) : (
+                <>
+                  {/* Summary */}
+                  <div className="bg-surface-container-low rounded-lg border border-outline-variant/10 p-4">
+                    <div className="flex items-center gap-2 mb-3">
+                      <Icon name="info" size={16} className="text-on-surface-variant" />
+                      <span className="text-sm text-on-surface">发现 <strong>{cleanupScan.totalFiles}</strong> 个垃圾文件，共 <strong>{cleanupScan.totalSizeText}</strong></span>
+                    </div>
+
+                    {/* Category list */}
+                    <div className="space-y-2">
+                      {cleanupScan.categories.map((cat: CleanupCategory) => {
+                        const selected = cleanupSelectedKeys.has(cat.key);
+                        return (
+                          <label
+                            key={cat.key}
+                            className={`flex items-center gap-3 rounded-lg border p-3 cursor-pointer transition-colors ${
+                              selected ? 'bg-primary-container/20 border-primary/30' : 'bg-surface-container-high/40 border-outline-variant/10 hover:bg-surface-container-high/60'
+                            }`}
+                          >
+                            <input
+                              type="checkbox"
+                              checked={selected}
+                              onChange={() => {
+                                    setCleanupSelectedKeys((prev) => {
+                                  const next = new Set(prev);
+                                  if (next.has(cat.key)) next.delete(cat.key);
+                                  else next.add(cat.key);
+                                  return next;
+                                });
+                              }}
+                              disabled={cleanupRunning}
+                              className="h-4 w-4 rounded border-outline-variant text-primary accent-primary"
+                            />
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-2 text-sm text-on-surface">
+                                <span className="font-medium">{cat.label}</span>
+                                <span className="text-xs px-1.5 py-0.5 rounded bg-surface-container-high text-on-surface-variant">
+                                  {cat.count} 个文件
+                                </span>
+                                <span className="text-xs px-1.5 py-0.5 rounded bg-surface-container-high text-on-surface-variant">
+                                  {cat.totalSizeText}
+                                </span>
+                              </div>
+                              {cat.samplePaths.length > 0 && (
+                                <p className="text-xs text-on-surface-variant mt-1 truncate">
+                                  示例: {cat.samplePaths.join(', ')}
+                                </p>
+                              )}
+                            </div>
+                          </label>
+                        );
+                      })}
+                    </div>
+
+                    {/* Select all + Clean button */}
+                    <div className="flex items-center justify-between gap-3 mt-4 pt-3 border-t border-outline-variant/10">
+                      <button
+                        onClick={() => {
+                          if (cleanupSelectedKeys.size === cleanupScan.categories.length) {
+                            setCleanupSelectedKeys(new Set());
+                          } else {
+                            setCleanupSelectedKeys(new Set(cleanupScan.categories.map((c: CleanupCategory) => c.key)));
+                          }
+                        }}
+                        disabled={cleanupRunning}
+                        className="text-xs text-primary hover:underline disabled:text-on-surface-variant"
+                      >
+                        {cleanupSelectedKeys.size === cleanupScan.categories.length ? '取消全选' : '全选'}
+                      </button>
+                      <button
+                        onClick={async () => {
+                          if (cleanupSelectedKeys.size === 0 || cleanupRunning) return;
+                          if (!window.confirm(`确认清理 ${cleanupSelectedKeys.size} 个分类的缓存文件？此操作不可撤销。`)) return;
+                          setCleanupRunning(true);
+                          try {
+                            const result = await executeCleanup(Array.from(cleanupSelectedKeys));
+                            toast(`清理完成：删除 ${result.deletedCount} 个文件，释放 ${result.freedSizeText}${result.failedCount > 0 ? `，${result.failedCount} 个文件删除失败` : ''}`, result.failedCount > 0 ? 'info' : 'success');
+                            // Re-scan after cleanup
+                            setCleanupSelectedKeys(new Set());
+                            const newScan = await scanCleanup();
+                            setCleanupScan(newScan);
+                          } catch (err: any) {
+                            toast(err.message || '清理失败', 'error');
+                          } finally {
+                            setCleanupRunning(false);
+                          }
+                        }}
+                        disabled={cleanupSelectedKeys.size === 0 || cleanupRunning}
+                        className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-error/90 px-4 text-xs font-bold text-white shadow-sm transition-all hover:-translate-y-px hover:opacity-95 disabled:translate-y-0 disabled:cursor-not-allowed disabled:bg-surface-container-high disabled:text-on-surface-variant disabled:shadow-none"
+                      >
+                        <Icon name={cleanupRunning ? 'hourglass_empty' : 'delete'} size={14} />
+                        {cleanupRunning ? '清理中...' : `清理选中 (${cleanupSelectedKeys.size})`}
+                      </button>
+                    </div>
+                  </div>
+                </>
+              )}
+            </>
+          )}
+        </div>
+        )}
+
       </div>
         </div>
       </AdminContentPanel>

@@ -61,7 +61,8 @@ export async function createInquiry(data: CreateInquiryParams): Promise<Inquiry>
 
 export async function getMyInquiries(): Promise<Inquiry[]> {
   const res = await client.get("/inquiries");
-  return unwrapResponse(res);
+  const data = unwrapResponse<{ items?: Inquiry[] } | Inquiry[]>(res);
+  return Array.isArray(data) ? data : data?.items || [];
 }
 
 export async function getInquiry(id: string): Promise<Inquiry> {

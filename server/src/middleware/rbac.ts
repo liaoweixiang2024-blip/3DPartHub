@@ -64,7 +64,12 @@ export function requireProjectRole(...roles: Role[]) {
         return;
       }
 
-      const requiredRank = Math.min(...roles.map((role) => PROJECT_ROLE_RANK[role]));
+      if (roles.length === 0) {
+        next();
+        return;
+      }
+
+      const requiredRank = Math.max(...roles.map((role) => PROJECT_ROLE_RANK[role]));
       if (PROJECT_ROLE_RANK[member.role] >= requiredRank) {
         next();
         return;

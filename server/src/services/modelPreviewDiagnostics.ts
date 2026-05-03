@@ -80,7 +80,7 @@ function inspectFileUrl(
 
   try {
     const filePath = resolveFileUrlPath(value);
-    if (!existsSync(filePath)) {
+    if (!filePath || !existsSync(filePath)) {
       return { status: "missing", reason: `${options.label}不存在`, size: 0, path: filePath };
     }
 

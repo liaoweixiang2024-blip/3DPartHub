@@ -239,3 +239,11 @@ body {
 .mobile-nav-drawer-open .bottom-nav {
   display: none;
 }
+
+/* Skip rendering off-screen model cards for scroll perf */
+@media (prefers-reduced-motion: no-preference) {
+  [data-home-model-id] {
+    content-visibility: auto;
+    contain-intrinsic-size: 0 280px;
+  }
+}

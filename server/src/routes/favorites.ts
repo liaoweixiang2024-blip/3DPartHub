@@ -9,6 +9,7 @@ import { resolveDbModelDownloadTarget } from "../services/modelDownloadTarget.js
 import { getSetting } from "../lib/settings.js";
 import { getBusinessConfig } from "../lib/businessConfig.js";
 import { DailyDownloadLimitError, recordModelDownload } from "../services/modelDownloadRecorder.js";
+import { MODEL_STATUS } from "../services/modelStatus.js";
 
 const router = Router();
 
@@ -20,7 +21,10 @@ function param(req: { params: Record<string, string | string[]> }, key: string):
 // List user's favorites
 router.get("/api/favorites", authMiddleware, async (req: AuthRequest, res: Response) => {
   try {
-    const favorites = await prisma.favorite.findMany({
+    const cacheKey = `cache:favorites:${req.user!.userId}`;
+    const { cacheGetOrSet, TTL } = await import("../lib/cache.js");
+    const { value: favorites, hit } = await cacheGetOrSet(cacheKey, TTL.MODELS_LIST, async () => {
+      return prisma.favorite.findMany({
       where: { userId: req.user!.userId },
       include: {
         model: {
@@ -32,14 +36,23 @@ router.get("/api/favorites", authMiddleware, async (req: AuthRequest, res: Respo
         },
       },
       orderBy: { createdAt: "desc" },
+      });
     });
     res.json(favorites.map((favorite: any) => ({
-      ...favorite,
+      id: favorite.id,
+      modelId: favorite.modelId,
+      createdAt: favorite.createdAt,
       model: favorite.model ? {
-        ...favorite.model,
-        thumbnailUrl: withAssetVersion(favorite.model.thumbnailUrl, favorite.model.updatedAt),
-        gltfUrl: withAssetVersion(favorite.model.gltfUrl, favorite.model.updatedAt),
-      } : favorite.model,
+        model_id: favorite.model.id,
+        name: favorite.model.name,
+        original_name: favorite.model.originalName,
+        format: favorite.model.format,
+        thumbnail_url: withAssetVersion(favorite.model.thumbnailUrl, favorite.model.updatedAt),
+        gltf_url: withAssetVersion(favorite.model.gltfUrl, favorite.model.updatedAt),
+        file_size: favorite.model.gltfSize,
+        original_size: favorite.model.originalSize,
+        created_at: favorite.model.createdAt,
+      } : null,
     })));
   } catch {
     res.status(500).json({ detail: "获取收藏列表失败" });
@@ -53,6 +66,8 @@ router.post("/api/models/:id/favorite", authMiddleware, async (req: AuthRequest,
     const favorite = await prisma.favorite.create({
       data: { userId: req.user!.userId, modelId },
     });
+    const { cacheDel } = await import("../lib/cache.js");
+    await cacheDel(`cache:favorites:${req.user!.userId}`);
     // Notify model owner about new favorite
     if (prisma) {
       try {
@@ -85,6 +100,8 @@ router.delete("/api/models/:id/favorite", authMiddleware, async (req: AuthReques
     await prisma.favorite.deleteMany({
       where: { userId: req.user!.userId, modelId },
     });
+    const { cacheDel } = await import("../lib/cache.js");
+    await cacheDel(`cache:favorites:${req.user!.userId}`);
     res.json({ message: "已取消收藏" });
   } catch {
     res.status(500).json({ detail: "取消收藏失败" });
@@ -98,6 +115,10 @@ router.post("/api/favorites/batch-remove", authMiddleware, async (req: AuthReque
     res.status(400).json({ detail: "请选择要取消收藏的模型" });
     return;
   }
+  if (modelIds.length > 1000) {
+    res.status(400).json({ detail: "单次最多取消收藏 1000 个模型" });
+    return;
+  }
   try {
     const result = await prisma.favorite.deleteMany({
       where: {
@@ -105,6 +126,8 @@ router.post("/api/favorites/batch-remove", authMiddleware, async (req: AuthReque
         modelId: { in: modelIds },
       },
     });
+    const { cacheDel } = await import("../lib/cache.js");
+    await cacheDel(`cache:favorites:${req.user!.userId}`);
     res.json({ removed: result.count });
   } catch {
     res.status(500).json({ detail: "批量取消收藏失败" });
@@ -153,7 +176,7 @@ router.post("/api/favorites/batch-download", authMiddleware, async (req: AuthReq
     const modelById = new Map(
       favorites
         .map((favorite: any) => favorite.model)
-        .filter((model: any) => model?.status === "completed")
+        .filter((model: any) => model?.status === MODEL_STATUS.COMPLETED)
         .map((model: any) => [model.id, model])
     );
     const models = uniqueModelIds.map((id) => modelById.get(id)).filter(Boolean);
@@ -187,26 +210,22 @@ router.post("/api/favorites/batch-download", authMiddleware, async (req: AuthReq
     }
 
     const dailyLimit = Number(await getSetting<number>("daily_download_limit")) || 0;
-    if (dailyLimit > 0) {
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
-      const currentCount = await prisma.download.count({
-        where: { userId: req.user!.userId, createdAt: { gte: today } },
-      });
-      if (currentCount + fileEntries.length > dailyLimit) {
-        res.status(429).json({ detail: `每日下载次数已达上限 (${dailyLimit} 次)` });
-        return;
-      }
-    }
 
     for (const entry of fileEntries) {
       if (!entry.record) continue;
-      await recordModelDownload(prisma, {
-        userId: req.user!.userId,
-        ...entry.record,
-        dailyLimit,
-        noRecord: false,
-      });
+      try {
+        await recordModelDownload(prisma, {
+          userId: req.user!.userId,
+          ...entry.record,
+          dailyLimit,
+          noRecord: false,
+        });
+      } catch (err: any) {
+        if (err instanceof DailyDownloadLimitError) {
+          res.status(429).json({ detail: err.message });
+          return;
+        }
+      }
     }
 
     // Now safe to commit headers and stream
@@ -216,12 +235,18 @@ router.post("/api/favorites/batch-download", authMiddleware, async (req: AuthReq
     const archive = archiver("zip", { zlib: { level: 5 } });
     archive.pipe(res);
 
+    const usedNames = new Map<string, number>();
     for (const entry of fileEntries) {
       const safeName = (entry.fileName.replace(/\.[^.]+$/, "") || "file").replace(/[<>:"/\\|?*]/g, "_");
-      const ext = entry.filePath.split(".").pop();
-      archive.file(entry.filePath, { name: `${safeName}.${ext}` });
+      const ext = entry.filePath.split(".").pop()?.toLowerCase() || "bin";
+      const baseName = `${safeName}.${ext}`;
+      const count = usedNames.get(baseName) || 0;
+      usedNames.set(baseName, count + 1);
+      const finalName = count > 0 ? `${safeName}_${count}.${ext}` : baseName;
+      archive.file(entry.filePath, { name: finalName });
       if (entry.binPath) {
-        archive.file(entry.binPath, { name: `${safeName}.bin` });
+        const binName = count > 0 ? `${safeName}_${count}.bin` : `${safeName}.bin`;
+        archive.file(entry.binPath, { name: binName });
       }
     }
 

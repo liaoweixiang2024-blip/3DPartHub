@@ -13,9 +13,16 @@ export interface UploadSession {
 
 const SESSION_DIR = "/tmp/model_upload_sessions";
 const SESSION_TTL_MS = 4 * 60 * 60 * 1000; // 4 hours
+const SAFE_UPLOAD_ID_RE = /^[a-zA-Z0-9_-]{1,64}$/;
+
+function validateUploadId(uploadId: string): string | null {
+  return SAFE_UPLOAD_ID_RE.test(uploadId) ? uploadId : null;
+}
 
 function sessionPath(uploadId: string) {
-  return join(SESSION_DIR, `${uploadId}.json`);
+  const safe = validateUploadId(uploadId);
+  if (!safe) throw new Error("Invalid upload ID");
+  return join(SESSION_DIR, `${safe}.json`);
 }
 
 export function saveUploadSession(uploadId: string, session: UploadSession) {

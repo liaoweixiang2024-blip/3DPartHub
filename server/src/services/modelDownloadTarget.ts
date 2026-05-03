@@ -1,5 +1,5 @@
 import { existsSync } from "node:fs";
-import { join } from "node:path";
+import { join, resolve, sep } from "node:path";
 import { config } from "../lib/config.js";
 import { findPreviewAssetPath, getPreviewAssetExtension, previewAssetFileName, resolveFileUrlPath } from "./gltfAsset.js";
 import { findOriginalModelPath, resolveStoredPath, type ModelFileRef } from "./modelFiles.js";
@@ -17,12 +17,18 @@ export type ModelDownloadTarget = {
   record?: ModelDownloadRecord;
 };
 
-function resolvePreviewUrlPath(value: string): string {
+function resolvePreviewUrlPath(value: string): string | null {
   const clean = value.split(/[?#]/)[0];
+  let candidate: string;
   if (clean.startsWith("/static/")) {
-    return join(config.staticDir, clean.slice("/static/".length));
+    candidate = join(config.staticDir, clean.slice("/static/".length));
+  } else {
+    return resolveFileUrlPath(value);
   }
-  return resolveFileUrlPath(value);
+  const resolved = resolve(candidate);
+  const staticRoot = resolve(config.staticDir);
+  if (resolved !== staticRoot && !resolved.startsWith(`${staticRoot}${sep}`)) return null;
+  return resolved;
 }
 
 export function resolveDbModelDownloadTarget(model: ModelFileRef & {
@@ -44,7 +50,7 @@ export function resolveDbModelDownloadTarget(model: ModelFileRef & {
         contentType: "application/octet-stream",
         record: {
           modelId: model.id,
-          format: model.format || originalFormat,
+          format: originalFormat,
           fileSize: Number(model.originalSize || 0),
         },
       };
@@ -76,7 +82,7 @@ export function resolveMetadataModelDownloadTarget(
     if (originalPath && existsSync(originalPath)) {
       return {
         filePath: originalPath,
-        fileName: (meta.original_name as string) || `${id}.${meta.format}`,
+        fileName: (meta.original_name as string) || `${id}.${meta.format || "step"}`,
         contentType: "application/octet-stream",
       };
     }
@@ -86,6 +92,7 @@ export function resolveMetadataModelDownloadTarget(
   if (!gltfUrl) return null;
 
   const filePath = resolvePreviewUrlPath(gltfUrl);
+  if (!filePath) return null;
   return {
     filePath,
     fileName: (meta.original_name as string)

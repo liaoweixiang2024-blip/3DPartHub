@@ -15,6 +15,7 @@ import HomePage from "./pages/HomePage";
 const ModelDetailPage = lazy(() => import("./pages/ModelDetailPage"));
 const DownloadsPage = lazy(() => import("./pages/DownloadsPage"));
 const FavoritesPage = lazy(() => import("./pages/FavoritesPage"));
+const MySharesPage = lazy(() => import("./pages/MySharesPage"));
 const ProfilePage = lazy(() => import("./pages/ProfilePage"));
 const SupportPage = lazy(() => import("./pages/SupportPage"));
 const MyTicketsPage = lazy(() => import("./pages/MyTicketsPage"));
@@ -170,6 +171,7 @@ export default function Router() {
           <Route path="/projects/:id" element={<ProtectedPage><ProjectDetailPage /></ProtectedPage>} />
           <Route path="/downloads" element={<ProtectedPage><DownloadsPage /></ProtectedPage>} />
           <Route path="/favorites" element={<ProtectedPage><FavoritesPage /></ProtectedPage>} />
+          <Route path="/my-shares" element={<ProtectedPage><MySharesPage /></ProtectedPage>} />
           <Route path="/profile" element={<ProtectedPage><ProfilePage /></ProtectedPage>} />
           <Route path="/support" element={<ProtectedPage><SupportPage /></ProtectedPage>} />
           <Route path="/my-tickets" element={<ProtectedPage><MyTicketsPage /></ProtectedPage>} />
@@ -184,7 +186,7 @@ export default function Router() {
           <Route path="/admin/shares" element={<ProtectedPage requiredRole="ADMIN"><ShareAdminPage /></ProtectedPage>} />
           <Route path="/admin/downloads" element={<ProtectedPage requiredRole="ADMIN"><DownloadAdminPage /></ProtectedPage>} />
           <Route path="/selection" element={<PageWrap><SelectionPage /></PageWrap>} />
-          <Route path="/tools/thread-size" element={<ProtectedPage><ThreadSizeToolPage /></ProtectedPage>} />
+          <Route path="/thread-size" element={<PageWrap><ThreadSizeToolPage /></PageWrap>} />
           <Route path="/product-wall" element={<PageWrap><ProductWallPage /></PageWrap>} />
           <Route path="/admin/selections" element={<ProtectedPage requiredRole="ADMIN"><SelectionAdminPage /></ProtectedPage>} />
           <Route path="/my-inquiries" element={<ProtectedPage><MyInquiriesPage /></ProtectedPage>} />

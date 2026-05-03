@@ -3,20 +3,36 @@ import { cacheGetOrSet, TTL } from "../../lib/cache.js";
 import { prisma } from "../../lib/prisma.js";
 import { requireBrowseAccess } from "../../middleware/browseAccess.js";
 import { CATEGORY_CACHE_PREFIX, type CategoryTreeNode } from "./common.js";
+import { MODEL_STATUS } from "../../services/modelStatus.js";
+import { groupedVisibleModelSql } from "../../services/modelVisibility.js";
 
 export function createPublicCategoriesRouter() {
   const router = Router();
 
+  // Clear stale category cache keys on startup
+  import("../../lib/cache.js").then(({ cacheDel }) => {
+    cacheDel("cache:categories:tree").catch(() => {});
+    cacheDel("cache:categories:tree:v2").catch(() => {});
+  });
+
   router.get("/api/categories", async (req, res: Response) => {
     if (!(await requireBrowseAccess(req, res))) return;
     try {
-      const { value: result, hit } = await cacheGetOrSet(`${CATEGORY_CACHE_PREFIX}tree`, TTL.CATEGORIES, async () => {
+      const visibleModelSql = groupedVisibleModelSql();
+      const { value: result, hit } = await cacheGetOrSet(`${CATEGORY_CACHE_PREFIX}tree:v3`, TTL.CATEGORIES, async () => {
         const categories = await prisma.category.findMany({
           orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
         });
 
         const modelCounts: { category_id: string; cnt: bigint }[] =
-          await prisma.$queryRaw`SELECT category_id, COUNT(*) as cnt FROM models WHERE status = 'completed' AND category_id IS NOT NULL GROUP BY category_id`;
+          await prisma.$queryRaw`
+            SELECT category_id, COUNT(*)::int as cnt
+            FROM models
+            WHERE status = ${MODEL_STATUS.COMPLETED}
+              AND category_id IS NOT NULL
+              AND ${visibleModelSql}
+            GROUP BY category_id
+          `;
         const countMap = new Map<string, number>();
         for (const mc of modelCounts) {
           countMap.set(mc.category_id, Number(mc.cnt));
@@ -36,6 +52,7 @@ export function createPublicCategoriesRouter() {
             createdAt: cat.createdAt,
             updatedAt: cat.updatedAt,
             count,
+            totalCount: count,
             children: [],
           });
         }
@@ -51,17 +68,23 @@ export function createPublicCategoriesRouter() {
           }
         }
 
-        for (const root of roots) {
-          if (root.children.length > 0) {
-            let childTotal = 0;
-            for (const child of root.children) {
-              childTotal += child.count;
-            }
-            root.count = (countMap.get(root.id) || 0) + childTotal;
+        function aggregateCounts(node: CategoryTreeNode): number {
+          let total = node.count || 0;
+          for (const child of (node.children || [])) {
+            total += aggregateCounts(child);
           }
+          node.totalCount = total;
+          return total;
         }
+        for (const root of roots) aggregateCounts(root);
 
-        const totalModels = await prisma.model.count({ where: { status: "completed" } });
+        const totalRows: { cnt: number }[] = await prisma.$queryRaw`
+          SELECT COUNT(*)::int as cnt
+          FROM models
+          WHERE status = ${MODEL_STATUS.COMPLETED}
+            AND ${visibleModelSql}
+        `;
+        const totalModels = Number(totalRows[0]?.cnt || 0);
 
         return { data: roots, total: totalModels };
       });

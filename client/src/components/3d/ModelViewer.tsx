@@ -128,6 +128,15 @@ export default function ModelViewer({
       camera={{ position: [5, 3, 5], fov: 45, near: 0.01, far: 100000 }}
       dpr={[1, 2]}
       style={{ background: config.bgColor }}
+      onCreated={({ gl }) => {
+        const canvas = gl.domElement;
+        canvas.addEventListener("webglcontextlost", (e) => {
+          e.preventDefault();
+        });
+        canvas.addEventListener("webglcontextrestored", () => {
+          gl.info.reset();
+        });
+      }}
     >
       <Suspense fallback={null}>
         <RendererExposure exposure={config.exposure} />

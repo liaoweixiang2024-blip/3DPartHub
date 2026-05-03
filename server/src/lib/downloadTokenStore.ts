@@ -2,8 +2,7 @@ import { randomBytes } from "node:crypto";
 import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { config } from "./config.js";
-
-const MODEL_DOWNLOAD_TOKEN_TTL_MS = 5 * 60 * 1000;
+import { getSetting } from "./settings.js";
 const PROTECTED_RESOURCE_TOKEN_TTL_MS = 5 * 60 * 1000;
 const CLEANUP_INTERVAL_MS = 5 * 60 * 1000;
 const TOKEN_PATTERN = /^[A-Za-z0-9_-]{32,}$/;
@@ -16,7 +15,7 @@ let lastResourceCleanupAt = 0;
 export interface ModelDownloadTokenPayload {
   modelId: string;
   format: string;
-  userId: string;
+  userId?: string;
   expiresAt: number;
 }
 
@@ -59,7 +58,6 @@ function isPayload(value: unknown): value is ModelDownloadTokenPayload {
     payload &&
     typeof payload.modelId === "string" &&
     typeof payload.format === "string" &&
-    typeof payload.userId === "string" &&
     typeof payload.expiresAt === "number"
   );
 }
@@ -186,14 +184,15 @@ function verifyTokenFile<T extends ExpiringTokenPayload>(
   return valid;
 }
 
-export function createModelDownloadToken(input: {
+export async function createModelDownloadToken(input: {
   modelId: string;
   format?: string;
-  userId: string;
-}): CreatedModelDownloadToken {
+  userId?: string;
+}): Promise<CreatedModelDownloadToken> {
   lastModelCleanupAt = cleanupExpiredTokenFiles(modelTokenDir, lastModelCleanupAt, readPayload);
+  const ttlMinutes = (await getSetting<number>("download_token_ttl_minutes")) || 5;
   return createTokenFile(modelTokenDir, () => {
-    const expiresAt = Date.now() + MODEL_DOWNLOAD_TOKEN_TTL_MS;
+    const expiresAt = Date.now() + ttlMinutes * 60 * 1000;
     return {
       modelId: input.modelId,
       format: input.format || "original",

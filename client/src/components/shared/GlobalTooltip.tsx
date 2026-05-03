@@ -12,10 +12,8 @@ const TOOLTIP_SELECTOR = [
 ].join(",");
 
 const DELAY_MS = 120;
-const GAP = 8;
+const GAP = 10;
 const EDGE_PADDING = 12;
-const CENTER_SAFE_WIDTH = 96;
-const SIDE_SAFE_WIDTH = 132;
 
 type TooltipState = {
   text: string;
@@ -43,62 +41,122 @@ function isPlacement(value: string | undefined): value is TooltipPlacement {
   return value === "top" || value === "bottom" || value === "left" || value === "right";
 }
 
-function choosePlacement(element: HTMLElement, rect: DOMRect): TooltipPlacement {
-  const requested = element.dataset.tooltipSide;
-  const viewportWidth = window.innerWidth;
-  const viewportHeight = window.innerHeight;
-  let placement: TooltipPlacement;
-
-  if (isPlacement(requested)) {
-    placement = requested;
-  } else if (rect.right > viewportWidth - SIDE_SAFE_WIDTH) {
-    placement = "left";
-  } else if (rect.left < SIDE_SAFE_WIDTH) {
-    placement = "right";
-  } else {
-    placement = rect.top < 56 ? "bottom" : "top";
-  }
-
-  if (placement === "left" && rect.left < SIDE_SAFE_WIDTH) return "right";
-  if (placement === "right" && viewportWidth - rect.right < SIDE_SAFE_WIDTH) return "left";
-  if (placement === "top" && rect.top < 44) return "bottom";
-  if (placement === "bottom" && viewportHeight - rect.bottom < 44) return "top";
-  return placement;
+function clamp(value: number, min: number, max: number) {
+  return Math.min(Math.max(value, min), max);
 }
 
-function tooltipPoint(rect: DOMRect, placement: TooltipPlacement) {
+function canFitHorizontally(rect: DOMRect, tooltipWidth: number, vw: number) {
+  const center = rect.left + rect.width / 2;
+  const left = center - tooltipWidth / 2;
+  const right = center + tooltipWidth / 2;
+  return left >= EDGE_PADDING && right <= vw - EDGE_PADDING;
+}
+
+function choosePlacement(
+  rect: DOMRect,
+  tooltipWidth: number,
+  tooltipHeight: number,
+  preferred?: TooltipPlacement
+): TooltipPlacement {
+  const vw = window.innerWidth;
+  const vh = window.innerHeight;
+
+  const spaceTop = rect.top - GAP - tooltipHeight;
+  const spaceBottom = vh - rect.bottom - GAP - tooltipHeight;
+  const spaceLeft = rect.left - GAP - tooltipWidth;
+  const spaceRight = vw - rect.right - GAP - tooltipWidth;
+
+  // If user explicitly requested a side, try it first
+  if (preferred) {
+    if (preferred === "top" && spaceTop >= 0 && canFitHorizontally(rect, tooltipWidth, vw)) return "top";
+    if (preferred === "bottom" && spaceBottom >= 0 && canFitHorizontally(rect, tooltipWidth, vw)) return "bottom";
+    if (preferred === "left" && spaceLeft >= 0) return "left";
+    if (preferred === "right" && spaceRight >= 0) return "right";
+  }
+
+  // Auto-select: prefer the direction with the most space
+  const scores: [TooltipPlacement, number][] = [
+    ["bottom", spaceBottom],
+    ["top", spaceTop],
+    ["right", spaceRight],
+    ["left", spaceLeft],
+  ];
+
+  // Filter to directions that actually fit (including horizontal check for top/bottom)
+  const viable = scores.filter(([dir]) => {
+    if (dir === "top" || dir === "bottom") {
+      return canFitHorizontally(rect, tooltipWidth, vw);
+    }
+    return true;
+  });
+
+  if (viable.length > 0) {
+    viable.sort((a, b) => b[1] - a[1]);
+    return viable[0][0];
+  }
+
+  // Fallback: pick direction with most space even if it doesn't fully fit
+  scores.sort((a, b) => b[1] - a[1]);
+  return scores[0][0];
+}
+
+function tooltipPoint(
+  rect: DOMRect,
+  placement: TooltipPlacement,
+  width: number,
+  height: number
+) {
+  const vw = window.innerWidth;
+  const vh = window.innerHeight;
+
+  if (placement === "top") {
+    const left = clamp(rect.left + rect.width / 2 - width / 2, EDGE_PADDING, vw - width - EDGE_PADDING);
+    const top = rect.top - GAP - height;
+    return { left, top };
+  }
+  if (placement === "bottom") {
+    const left = clamp(rect.left + rect.width / 2 - width / 2, EDGE_PADDING, vw - width - EDGE_PADDING);
+    const top = rect.bottom + GAP;
+    return { left, top };
+  }
   if (placement === "left") {
-    return {
-      left: rect.left - GAP,
-      top: Math.min(Math.max(rect.top + rect.height / 2, EDGE_PADDING), window.innerHeight - EDGE_PADDING),
-    };
+    const left = rect.left - GAP - width;
+    const top = clamp(rect.top + rect.height / 2 - height / 2, EDGE_PADDING, vh - height - EDGE_PADDING);
+    return { left, top };
   }
-  if (placement === "right") {
-    return {
-      left: rect.right + GAP,
-      top: Math.min(Math.max(rect.top + rect.height / 2, EDGE_PADDING), window.innerHeight - EDGE_PADDING),
-    };
-  }
-  return {
-    left: Math.min(
-      Math.max(rect.left + rect.width / 2, CENTER_SAFE_WIDTH),
-      Math.max(CENTER_SAFE_WIDTH, window.innerWidth - CENTER_SAFE_WIDTH)
-    ),
-    top: placement === "top" ? rect.top - GAP : rect.bottom + GAP,
-  };
+  // right
+  const left = rect.right + GAP;
+  const top = clamp(rect.top + rect.height / 2 - height / 2, EDGE_PADDING, vh - height - EDGE_PADDING);
+  return { left, top };
 }
 
-function transformForPlacement(placement: TooltipPlacement) {
-  if (placement === "top") return "translate(-50%, -100%)";
-  if (placement === "bottom") return "translateX(-50%)";
-  if (placement === "left") return "translate(-100%, -50%)";
-  return "translateY(-50%)";
-}
+const isTouchDevice = typeof window !== "undefined" && ("ontouchstart" in window || navigator.maxTouchPoints > 0);
 
 export default function GlobalTooltip() {
   const [tooltip, setTooltip] = useState<TooltipState | null>(null);
+  const [measured, setMeasured] = useState<{ width: number; height: number } | null>(null);
+  const measureRef = useRef<HTMLDivElement>(null);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const activeRef = useRef<HTMLElement | null>(null);
+
+  // Phase 2: measure the hidden tooltip and compute final position
+  useEffect(() => {
+    if (!tooltip || measured) return;
+    const el = measureRef.current;
+    if (!el) return;
+    const width = el.offsetWidth;
+    const height = el.offsetHeight;
+    setMeasured({ width, height });
+
+    // Re-position with actual dimensions
+    const active = activeRef.current;
+    if (!active) return;
+    const rect = active.getBoundingClientRect();
+    const requested = isPlacement(active.dataset.tooltipSide) ? active.dataset.tooltipSide : undefined;
+    const placement = choosePlacement(rect, width, height, requested);
+    const point = tooltipPoint(rect, placement, width, height);
+    setTooltip({ text: tooltip.text, left: point.left, top: point.top, placement });
+  }, [tooltip, measured]);
 
   useEffect(() => {
     const clearTimer = () => {
@@ -120,6 +178,7 @@ export default function GlobalTooltip() {
       restoreNativeTitle(activeRef.current);
       activeRef.current = null;
       setTooltip(null);
+      setMeasured(null);
     };
 
     const showFor = (element: HTMLElement) => {
@@ -138,15 +197,18 @@ export default function GlobalTooltip() {
       }
 
       timerRef.current = setTimeout(() => {
+        // Phase 1: render with placeholder position (will be measured)
         const rect = element.getBoundingClientRect();
-        const placement = choosePlacement(element, rect);
-        const point = tooltipPoint(rect, placement);
+        const requested = isPlacement(element.dataset.tooltipSide) ? element.dataset.tooltipSide : undefined;
+        // Estimate placement for initial render (without dimensions)
+        const placement = requested || (rect.top < 56 ? "bottom" : "top");
         setTooltip({
           text,
-          left: point.left,
-          top: point.top,
+          left: rect.left + rect.width / 2,
+          top: placement === "top" ? rect.top - GAP : rect.bottom + GAP,
           placement,
         });
+        setMeasured(null);
       }, DELAY_MS);
     };
 
@@ -191,16 +253,22 @@ export default function GlobalTooltip() {
     };
   }, []);
 
-  if (!tooltip) return null;
+  if (!tooltip || isTouchDevice) return null;
+
+  const isVisible = measured !== null;
 
   return createPortal(
     <div
+      ref={measureRef}
       role="tooltip"
-      className="pointer-events-none fixed z-[500] max-w-[12rem] rounded bg-inverse-surface px-2.5 py-1 text-xs font-medium leading-snug text-inverse-on-surface shadow-lg animate-in fade-in zoom-in-95 duration-100"
+      className="pointer-events-none fixed z-[500] max-w-[12rem] rounded bg-inverse-surface px-2.5 py-1 text-xs font-medium leading-snug text-inverse-on-surface shadow-lg"
       style={{
         left: tooltip.left,
         top: tooltip.top,
-        transform: transformForPlacement(tooltip.placement),
+        visibility: isVisible ? "visible" : "hidden",
+        opacity: isVisible ? 1 : 0,
+        transform: measured ? "none" : "translateX(-50%)",
+        transition: "opacity 0.1s ease-in",
       }}
     >
       {tooltip.text}

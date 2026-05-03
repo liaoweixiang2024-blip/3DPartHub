@@ -22,8 +22,8 @@ test.after(() => {
   rmSync(root, { recursive: true, force: true });
 });
 
-test("model download tokens are single-use and bound to payload", () => {
-  const created = createModelDownloadToken({
+test("model download tokens are single-use and bound to payload", async () => {
+  const created = await createModelDownloadToken({
     modelId: "model-1",
     format: "original",
     userId: "user-1",

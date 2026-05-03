@@ -30,7 +30,7 @@ export const favoriteApi = {
     return unwrapResponse<{ removed: number }>(res);
   },
 
-  batchDownloadUrl: "/api/favorites/batch-download",
+  batchDownloadUrl: `${import.meta.env.VITE_API_BASE_URL || "/api"}/favorites/batch-download`,
 
   batchDownload: async (modelIds: string[], format: string = "gltf"): Promise<void> => {
     const token = getAccessToken();

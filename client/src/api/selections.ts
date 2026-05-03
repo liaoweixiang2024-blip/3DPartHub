@@ -9,8 +9,10 @@ export interface ColumnDef {
   inputType?: "select" | "manual";
   optionDisplay?: "auto" | "text" | "image";
   showCount?: boolean;
+  /** undefined/true = auto confirm the only available option; false = require manual confirmation */
   autoSelectSingle?: boolean;
   skipWhenNoOptions?: boolean;
+  required?: boolean;
   hideInResults?: boolean;
   legacyPlaceholder?: string;
   placeholder?: string;
@@ -35,6 +37,9 @@ export interface SelectionCategory {
   groupImage?: string | null;
   groupImageFit?: "cover" | "contain" | null;
   kind?: string | null;
+  catalogPdf?: string | null;
+  catalogShared?: boolean;
+  optionCatalogs?: Record<string, Record<string, string>> | null;
   productCount?: number;
 }
 
@@ -59,6 +64,7 @@ export interface SelectionProduct {
   components?: SelectionComponent[] | null;
   matchedModelId?: string | null;
   matchedModelThumbnail?: string | null;
+  categoryCatalogPdf?: string | null;
 }
 
 export interface SelectionModelMatch {
@@ -72,6 +78,9 @@ export interface SelectionFilterResult {
   pageSize: number;
   options: Array<{ val: string; count: number }>;
   items: SelectionProduct[];
+  resolvedSpecs?: Record<string, string>;
+  resolvedSkipped?: string[];
+  autoAdvanced?: Array<{ field: string; value?: string; reason: "single" | "empty" }>;
 }
 
 // ========== Public API ==========
@@ -117,6 +126,8 @@ export async function filterSelectionProducts(
     specs?: Record<string, string>;
     field?: string | null;
     search?: string;
+    skipped?: string[];
+    autoAdvance?: boolean;
     page?: number;
     pageSize?: number;
     includeItems?: boolean;
@@ -143,6 +154,9 @@ export async function updateCategory(id: string, data: Partial<{
   sortOrder: number; columns: ColumnDef[]; image: string;
   optionImages: Record<string, Record<string, string>>;
   optionOrder: Record<string, string[] | string>;
+  catalogPdf: string | null;
+  catalogShared: boolean;
+  optionCatalogs: Record<string, Record<string, string>>;
   groupId: string | null;
   groupName: string | null;
   groupIcon: string | null;

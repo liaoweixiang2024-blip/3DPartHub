@@ -31,10 +31,20 @@ export function normalizeConversionWorkerConcurrency(value: unknown, fallback = 
   );
 }
 
-const connection = {
-  host: config.redisUrl.replace("redis://", "").split(":")[0] || "localhost",
-  port: Number(config.redisUrl.replace("redis://", "").split(":")[1]) || 6379,
-};
+function parseRedisUrl(url: string): { host: string; port: number; password?: string } {
+  try {
+    const u = new URL(url);
+    return {
+      host: u.hostname || "localhost",
+      port: Number(u.port) || 6379,
+      password: u.password || undefined,
+    };
+  } catch {
+    return { host: "localhost", port: 6379 };
+  }
+}
+
+const connection = parseRedisUrl(config.redisUrl);
 
 export const conversionQueue = new Queue("model-conversion", {
   connection,

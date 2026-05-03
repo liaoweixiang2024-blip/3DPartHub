@@ -23,14 +23,20 @@ export function responseHandler(req: AuthRequest, res: Response, next: NextFunct
       return originalJson({ success: true, data: body });
     }
 
-    // Error responses: wrap as { success: false, message: ... } and keep extra payload fields.
+    // Error responses: wrap as { success: false, message: ... } with safe extras
     if (typeof body === "object" && body !== null) {
       const payload = body as Record<string, unknown>;
-      const { detail, message, ...rest } = payload;
+      const { detail, message, code, ...rest } = payload;
+      const safeExtras: Record<string, unknown> = {};
+      if (code && typeof code === "string") safeExtras.code = code;
+      const allowedKeys = ["status", "total", "page", "pageSize", "items", "data"];
+      for (const k of allowedKeys) {
+        if (k in rest) safeExtras[k] = rest[k];
+      }
       return originalJson({
         success: false,
         message: detail || message || "请求失败",
-        ...rest,
+        ...safeExtras,
       });
     }
 

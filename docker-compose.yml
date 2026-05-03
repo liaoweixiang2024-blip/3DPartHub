@@ -6,8 +6,7 @@
 #   mkdir -p /opt/3dparthub && cd /opt/3dparthub
 #   curl -O https://raw.githubusercontent.com/liaoweixiang2024-blip/3DPartHub/main/docker-compose.yml
 #   docker compose up -d
-#   默认后台账号: admin / 3DPartHub@2026
-#   首次登录后会强制修改密码
+#   默认后台账号: admin （密码见下方 ADMIN_PASS，首次登录后会强制修改密码）
 #
 # 【更安全的方式】
 #   如需自定义密码，在同目录创建 .env 覆盖默认值：
@@ -22,9 +21,9 @@
 #   docker compose up -d
 #   访问 http://服务器IP:3780
 #
-# 【自动更新】
-#   默认使用 latest 镜像，Watchtower 每小时自动检查并更新 api/web 容器
-#   如需立即更新: docker compose pull && docker compose up -d --force-recreate
+# 【更新】
+#   默认使用 latest 镜像
+#   手动更新: docker compose pull && docker compose up -d --force-recreate
 #   如需锁定版本: 在 .env 中写入 IMAGE_TAG=v2.6.3
 #   检查日志: docker compose logs -f api
 #
@@ -35,7 +34,7 @@
 #     static-data  — 转换后的模型、缩略图等运行文件
 #   备份包单独映射到宿主机目录，方便人工拷贝和迁移：
 #     ./server/static/backups -> /app/static/backups
-#   backup-permissions 会在 api 启动前自动修复该目录权限
+#   api 启动时会自动修复该目录权限
 #
 # 【备份恢复】
 #   网页创建的备份存储在宿主机 ./server/static/backups，重启/升级不丢失
@@ -62,35 +61,21 @@ x-logging: &default-logging
 # <<< 默认使用 latest；手动立即更新执行 docker compose pull && docker compose up -d --force-recreate
 
 services:
-  backup-permissions:
-    image: ghcr.io/liaoweixiang2024-blip/3dparthub-api:${IMAGE_TAG:-latest}
-    container_name: 3dparthub-backup-permissions
-    user: "0:0"
-    command:
-      - sh
-      - -c
-      - mkdir -p /app/static/backups/.work && chown -R 1000:1000 /app/static/backups && chmod -R ug+rwX /app/static/backups
-    volumes:
-      - ./server/static/backups:/app/static/backups
-    restart: "no"
-    logging: *default-logging
-    networks:
-      - internal
-
   api:
     image: ghcr.io/liaoweixiang2024-blip/3dparthub-api:${IMAGE_TAG:-latest}
     container_name: 3dparthub-api
     init: true
     shm_size: ${API_SHM_SIZE:-1g}
-    labels:
-      com.centurylinklabs.watchtower.enable: "true"
+    mem_limit: ${API_MEMORY_LIMIT:-2G}
+    mem_reservation: ${API_MEMORY_RESERVATION:-512M}
+    cpus: "${API_CPU_LIMIT:-2}"
     deploy:
       resources:
         limits:
-          memory: 2G
-          cpus: "2"
+          memory: ${API_MEMORY_LIMIT:-2G}
+          cpus: "${API_CPU_LIMIT:-2}"
         reservations:
-          memory: 512M
+          memory: ${API_MEMORY_RESERVATION:-512M}
     environment:
       TZ: Asia/Shanghai
       NODE_ENV: production
@@ -106,7 +91,7 @@ services:
       SLOW_REQUEST_LOG_BURST: ${SLOW_REQUEST_LOG_BURST:-5}
       SLOW_REQUEST_LOG_SAMPLE_RATE: ${SLOW_REQUEST_LOG_SAMPLE_RATE:-0.01}
       MAX_FILE_SIZE: 104857600
-      REDIS_URL: redis://redis:6379
+      REDIS_URL: redis://:${REDIS_PASSWORD:-changeme-set-in-env}@redis:6379
       ADMIN_USER: ${ADMIN_USER:-admin}
       ADMIN_EMAIL: ${ADMIN_EMAIL:-admin@model.local}
       ADMIN_PASS: "${ADMIN_PASS:-3DPartHub@2026}"
@@ -118,8 +103,6 @@ services:
       SMTP_USER: ${SMTP_USER:-}
       SMTP_PASS: ${SMTP_PASS:-}
     depends_on:
-      backup-permissions:
-        condition: service_completed_successfully
       postgres:
         condition: service_healthy
       redis:
@@ -144,8 +127,8 @@ services:
     image: ghcr.io/liaoweixiang2024-blip/3dparthub-web:${IMAGE_TAG:-latest}
     container_name: 3dparthub-web
     init: true
-    labels:
-      com.centurylinklabs.watchtower.enable: "true"
+    mem_limit: ${WEB_MEMORY_LIMIT:-256M}
+    cpus: "${WEB_CPU_LIMIT:-0.5}"
     ports:
       - "${PORT:-3780}:80"
     ulimits:
@@ -155,8 +138,8 @@ services:
     deploy:
       resources:
         limits:
-          memory: 256M
-          cpus: "0.5"
+          memory: ${WEB_MEMORY_LIMIT:-256M}
+          cpus: "${WEB_CPU_LIMIT:-0.5}"
     depends_on:
       api:
         condition: service_healthy
@@ -174,33 +157,16 @@ services:
     networks:
       - internal
 
-  watchtower:
-    image: ghcr.io/containrrr/watchtower:latest
-    container_name: 3dparthub-watchtower
-    command:
-      - --label-enable
-      - --cleanup
-      - --rolling-restart
-      - --include-restarting
-      - --interval
-      - "${WATCHTOWER_POLL_INTERVAL:-3600}"
-    environment:
-      TZ: Asia/Shanghai
-    volumes:
-      - /var/run/docker.sock:/var/run/docker.sock
-    restart: unless-stopped
-    logging: *default-logging
-    networks:
-      - internal
-
   postgres:
     image: postgres:16-alpine
     container_name: 3dparthub-postgres
+    mem_limit: ${POSTGRES_MEMORY_LIMIT:-512M}
+    cpus: "${POSTGRES_CPU_LIMIT:-1}"
     deploy:
       resources:
         limits:
-          memory: 512M
-          cpus: "1"
+          memory: ${POSTGRES_MEMORY_LIMIT:-512M}
+          cpus: "${POSTGRES_CPU_LIMIT:-1}"
     environment:
       POSTGRES_DB: 3dparthub
       POSTGRES_USER: modeluser
@@ -222,8 +188,12 @@ services:
   redis:
     image: redis:7-alpine
     container_name: 3dparthub-redis
+    mem_limit: ${REDIS_MEMORY_LIMIT:-256M}
+    cpus: "${REDIS_CPU_LIMIT:-0.5}"
     command:
       - redis-server
+      - --requirepass
+      - "${REDIS_PASSWORD:-changeme-set-in-env}"
       - --save
       - ""
       - --appendonly
@@ -237,12 +207,12 @@ services:
     deploy:
       resources:
         limits:
-          memory: 256M
-          cpus: "0.5"
+          memory: ${REDIS_MEMORY_LIMIT:-256M}
+          cpus: "${REDIS_CPU_LIMIT:-0.5}"
     volumes:
       - redis-data:/data
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD:-changeme-set-in-env}", "ping"]
       interval: 10s
       timeout: 5s
       retries: 5

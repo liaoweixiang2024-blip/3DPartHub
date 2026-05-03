@@ -4,15 +4,16 @@ type AxiosLikeResponse = {
 
 export function unwrapApiData<T>(value: unknown): T {
   if (value && typeof value === "object" && "data" in value) {
-    const data = (value as { data?: unknown }).data;
-    if (data && typeof data === "object" && "data" in data) {
-      return (data as { data?: T }).data as T;
+    const outer = (value as { data?: unknown }).data;
+    if (outer && typeof outer === "object" && "data" in outer) {
+      return (outer as { data?: T }).data as T;
     }
-    return data as T;
+    return outer as T;
   }
   return value as T;
 }
 
 export function unwrapResponse<T>(response: AxiosLikeResponse): T {
-  return unwrapApiData<T>(response.data);
+  const result = unwrapApiData<T>(response.data);
+  return result;
 }

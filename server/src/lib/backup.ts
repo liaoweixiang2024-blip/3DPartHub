@@ -2,13 +2,36 @@ import { execFileSync, spawn } from "child_process";
 import type { ChildProcess } from "child_process";
 import { existsSync, mkdirSync, rmSync, writeFileSync, statSync, statfsSync, readdirSync, readFileSync, renameSync, openSync, closeSync, writeSync, readSync, createReadStream, createWriteStream, copyFileSync, cpSync } from "fs";
 import { basename, dirname, isAbsolute, join, resolve, sep } from "path";
-import { createHash } from "crypto";
+import { createHash, randomBytes } from "crypto";
 import { createInterface } from "readline";
 import { pipeline } from "stream/promises";
 import { Transform } from "stream";
 import { fileURLToPath } from "url";
 import { config } from "./config.js";
 import { syncJob, loadJob } from "./jobStore.js";
+
+let _backupPrisma: any = null;
+async function getBackupPrisma() {
+  if (!_backupPrisma) {
+    const { PrismaClient } = await import("@prisma/client");
+    _backupPrisma = new PrismaClient();
+  }
+  return _backupPrisma;
+}
+
+const WORKER_ENV_BLOCKLIST = new Set([
+  "SMTP_PASS", "smtp_pass", "ADMIN_PASS", "MINIO_SECRET_KEY",
+]);
+
+function sanitizeWorkerEnv(): NodeJS.ProcessEnv {
+  const env = { ...process.env };
+  for (const key of Object.keys(env)) {
+    if (WORKER_ENV_BLOCKLIST.has(key)) delete env[key];
+  }
+  return env;
+}
+
+const workerEnv = sanitizeWorkerEnv();
 
 // Read app version from package.json
 let _appVersion: string | null = null;
@@ -84,7 +107,6 @@ function pgDumpToFile(dbUrl: string, outputPath: string, extraArgs: string[], ti
   const outputFd = openSync(outputPath, "w");
   try {
     if (container) {
-      // Docker: use local connection (no host:port) inside the container
       const dbName = new URL(dbUrl).pathname.replace(/^\//, "");
       const user = new URL(dbUrl).username;
       execFileSync("docker", ["exec", container, "pg_dump", "-U", user, "-d", dbName, ...extraArgs], {
@@ -93,9 +115,12 @@ function pgDumpToFile(dbUrl: string, outputPath: string, extraArgs: string[], ti
       });
       return;
     }
-    execFileSync("pg_dump", [dbUrl, ...extraArgs], {
+    const url = new URL(dbUrl);
+    const env = { ...process.env, PGPASSWORD: url.password };
+    execFileSync("pg_dump", ["-U", url.username, "-d", url.pathname.replace(/^\//, ""), "-h", url.hostname, "-p", url.port || "5432", ...extraArgs], {
       stdio: ["ignore", outputFd, "pipe"],
       timeout,
+      env,
     });
   } finally {
     closeSync(outputFd);
@@ -120,7 +145,9 @@ function psqlFromFile(dbUrl: string, sqlPath: string, extraArgs: string[], timeo
       try { execFileSync("docker", ["exec", container, "rm", "-f", containerPath], { stdio: "pipe" }); } catch {}
     }
   } else {
-    execFileSync("psql", [dbUrl, ...extraArgs, "-f", sqlPath], { stdio: "pipe", timeout });
+    const url = new URL(dbUrl);
+    const env = { ...process.env, PGPASSWORD: url.password };
+    execFileSync("psql", ["-U", url.username, "-d", url.pathname.replace(/^\//, ""), "-h", url.hostname, "-p", url.port || "5432", ...extraArgs, "-f", sqlPath], { stdio: "pipe", timeout, env });
   }
 }
 
@@ -201,8 +228,16 @@ interface BackupManifest {
   requiredEntries: string[];
 }
 
-function buildMetaPath(baseDir: string, id: string) { return join(baseDir, `${id}.json`); }
-function buildArchivePath(baseDir: string, id: string) { return join(baseDir, `${id}.tar.gz`); }
+const SAFE_BACKUP_ID_RE = /^[a-zA-Z0-9_\-.:]+$/;
+
+function buildMetaPath(baseDir: string, id: string) {
+  if (!SAFE_BACKUP_ID_RE.test(id) || id.includes("..")) throw new Error(`Invalid backup ID: ${id}`);
+  return join(baseDir, `${id}.json`);
+}
+function buildArchivePath(baseDir: string, id: string) {
+  if (!SAFE_BACKUP_ID_RE.test(id) || id.includes("..")) throw new Error(`Invalid backup ID: ${id}`);
+  return join(baseDir, `${id}.tar.gz`);
+}
 
 function resolveBackupDir(id: string): string | null {
   for (const dir of BACKUP_DIRS) {
@@ -511,7 +546,7 @@ export function getActiveRestoreJob(): RestoreJob | undefined {
 // ---- Import as backup record (save to backup list) ----
 
 export async function saveAsBackupRecord(archPath: string, originalName: string): Promise<BackupRecord> {
-  const id = `backup_${Date.now()}`;
+  const id = `backup_${Date.now()}_${randomBytes(4).toString("hex")}`;
   const dest = activeArchivePath(id);
 
   try {
@@ -553,7 +588,7 @@ export function startImportSaveJob(archPath: string, originalName: string): stri
     const workerScript = fileURLToPath(new URL(`../scripts/importSaveWorker${MODULE_EXT}`, import.meta.url));
     const child = spawn(process.execPath, [...process.execArgv, workerScript, jobId, archPath, originalName], {
       cwd: process.cwd(),
-      env: process.env,
+      env: workerEnv,
       detached: true,
       stdio: "ignore",
     });
@@ -704,7 +739,7 @@ function startBackupProcess(source: "manual" | "scheduled"): string {
     (err as Error & { jobId?: string }).jobId = getActiveBackupJob()?.id;
     throw err;
   }
-  const id = `backup_${Date.now()}`;
+  const id = `backup_${Date.now()}_${randomBytes(4).toString("hex")}`;
   const job: BackupJob = {
     id,
     stage: "dumping",
@@ -720,7 +755,7 @@ function startBackupProcess(source: "manual" | "scheduled"): string {
     const workerScript = fileURLToPath(new URL(`../scripts/backupWorker${MODULE_EXT}`, import.meta.url));
     const child = spawn(process.execPath, [...process.execArgv, workerScript, id, source], {
       cwd: process.cwd(),
-      env: process.env,
+      env: workerEnv,
       detached: true,
       stdio: "ignore",
     });
@@ -1238,7 +1273,7 @@ export function startVerifyBackupJob(backupId: string): string {
     const workerScript = fileURLToPath(new URL(`../scripts/verifyBackupWorker${MODULE_EXT}`, import.meta.url));
     const child = spawn(process.execPath, [...process.execArgv, workerScript, id, backupId], {
       cwd: process.cwd(),
-      env: process.env,
+      env: workerEnv,
       detached: true,
       stdio: "ignore",
     });
@@ -1436,7 +1471,7 @@ function startRestoreWorkerProcess(job: RestoreJob, args: string[]) {
     const workerScript = fileURLToPath(new URL(`../scripts/restoreWorker${MODULE_EXT}`, import.meta.url));
     const child = spawn(process.execPath, [...process.execArgv, workerScript, job.id, ...args], {
       cwd: process.cwd(),
-      env: process.env,
+      env: workerEnv,
       detached: true,
       stdio: "ignore",
     });
@@ -1495,7 +1530,10 @@ async function runRestoreFromArchive(job: RestoreJob, archPath: string, removeAr
     syncJob(job);
 
     addLog(job, "正在执行备份包完整性预检...");
-    await validateBackupArchive(archPath);
+    const manifest = await validateBackupArchive(archPath, { requireManifest: true });
+    if (!manifest) {
+      throw new Error("备份包缺少清单文件，无法验证完整性");
+    }
     addLog(job, "备份包完整性预检通过");
 
     const sqlPath = extractRestoreSqlPath(archPath, tmpDir);
@@ -1745,11 +1783,9 @@ export async function getBackupStats(): Promise<{
   let dbSize = "unknown";
 
   try {
-    const { PrismaClient } = await import("@prisma/client");
-    const prisma = new PrismaClient();
+    const prisma = await getBackupPrisma();
     modelCount = await prisma.model.count({ where: completedStepWhere });
     const r = await prisma.$queryRaw<Array<{ pg_size_pretty: string }>>`SELECT pg_size_pretty(pg_database_size(current_database())) as pg_size_pretty`;
-    await prisma.$disconnect();
     if (r[0]?.pg_size_pretty) dbSize = r[0].pg_size_pretty;
   } catch {}
 
@@ -2116,10 +2152,33 @@ async function sanitizeSqlDumpStreaming(
   const ws = createWriteStream(destination, { encoding: "utf-8" });
   let pendingAlterTableLine: string | null = null;
 
+  const DANGEROUS_SQL = [
+    /^\\/,                                      // psql meta-commands (\!, \copy, \i, etc.)
+    /^\s*COPY\s+.*\s+(TO|FROM\s+PROGRAM)\s+/i,  // COPY ... TO / COPY ... FROM PROGRAM
+    /^\s*CREATE\s+(OR\s+REPLACE\s+)?FUNCTION\b/i,
+    /^\s*CREATE\s+(OR\s+REPLACE\s+)?PROCEDURE\b/i,
+    /^\s*CREATE\s+(OR\s+REPLACE\s+)?TRIGGER\b/i,
+    /^\s*CREATE\s+(OR\s+REPLACE\s+)?EVENT\s+TRIGGER\b/i,
+    /^\s*DO\s+\$\$/i,                           // anonymous DO blocks
+    /^\s*ALTER\s+SYSTEM\b/i,                    // PostgreSQL config manipulation
+  ];
+
+  let insideCopyFrom = false;
+
   const writeIfAllowed = (line: string) => {
-    if (line !== "SET transaction_timeout = 0;") {
+    if (line === "SET transaction_timeout = 0;") return;
+    if (line === "\\.") { ws.write(line + "\n"); insideCopyFrom = false; return; }
+    if (insideCopyFrom) { ws.write(line + "\n"); return; }
+    if (/^\s*COPY\s+.*\s+FROM\s+stdin;/i.test(line)) {
+      insideCopyFrom = true;
       ws.write(line + "\n");
+      return;
     }
+    const trimmed = line.trim();
+    for (const pat of DANGEROUS_SQL) {
+      if (pat.test(trimmed)) return;
+    }
+    ws.write(line + "\n");
   };
 
   for await (const line of rl) {
@@ -2133,6 +2192,9 @@ async function sanitizeSqlDumpStreaming(
     }
 
     if (options.skipForeignKeys && /^ALTER TABLE ONLY public\./.test(line)) {
+      if (/\bFOREIGN KEY\b/.test(line)) {
+        continue;
+      }
       pendingAlterTableLine = line;
       continue;
     }
@@ -2477,13 +2539,15 @@ async function commitRestoreFilePlan(plan: RestoreFilePlan, job: RestoreJob): Pr
       addLog(job, `上传元数据恢复完成 (${metadataCount} 个文件)`);
     }
 
-    cleanupDirectoryBackups(replacements);
+    const result = { restoredSourceFiles, thumbnailCount };
     job.percent = 94;
     syncJob(job);
-    return { restoredSourceFiles, thumbnailCount };
+    return result;
   } catch (err: any) {
     rollbackDirectoryReplacements(replacements, job);
     throw new Error(`文件目录恢复失败，已回滚已替换目录: ${err?.message || err}`);
+  } finally {
+    cleanupDirectoryBackups(replacements);
   }
 }
 
@@ -2806,9 +2870,23 @@ function ensureBackupStoredInActiveDir(id: string) {
   try {
     if (existsSync(targetArchive)) rmSync(targetArchive, { force: true });
     if (existsSync(targetMeta)) rmSync(targetMeta, { force: true });
-    renameSync(sourceArchive, targetArchive);
+    try {
+      renameSync(sourceArchive, targetArchive);
+    } catch (err: any) {
+      if (err?.code === "EXDEV") {
+        copyFileSync(sourceArchive, targetArchive);
+        rmSync(sourceArchive, { force: true });
+      } else throw err;
+    }
     if (existsSync(sourceMeta)) {
-      renameSync(sourceMeta, targetMeta);
+      try {
+        renameSync(sourceMeta, targetMeta);
+      } catch (err: any) {
+        if (err?.code === "EXDEV") {
+          copyFileSync(sourceMeta, targetMeta);
+          rmSync(sourceMeta, { force: true });
+        } else throw err;
+      }
     }
   } catch (err) {
     throw new Error(`迁移备份存储位置失败: ${extractCommandError(err)}`);
@@ -2982,10 +3060,15 @@ async function mirrorBackupIfEnabled(record: BackupRecord, job: { logs?: string[
   }
 }
 
+const SYSTEM_PATH_BLOCKLIST = [
+  "/bin", "/sbin", "/usr", "/etc", "/var", "/sys", "/proc", "/dev", "/boot", "/lib", "/lib64", "/run",
+];
+
 function resolveMirrorBackupDir(value: string): string | null {
   const raw = value.trim();
   if (!raw || !isAbsolute(raw)) return null;
   const target = resolve(raw);
+  if (SYSTEM_PATH_BLOCKLIST.some((blocked) => target === blocked || target.startsWith(`${blocked}/`))) return null;
   const forbidden = [resolve(ACTIVE_BACKUP_DIR), resolve(LEGACY_BACKUP_DIR), resolve(BACKUP_WORK_DIR)];
   if (forbidden.some((dir) => target === dir || target.startsWith(`${dir}${sep}`))) return null;
   return target;
@@ -3122,9 +3205,13 @@ function clampRetentionCount(value: unknown): number {
 }
 
 function isScheduleDue(scheduleTime: string): boolean {
+  const [h, m] = scheduleTime.split(":").map(Number);
+  if (!Number.isFinite(h) || !Number.isFinite(m)) return false;
   const now = new Date();
-  const current = `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
-  return current === scheduleTime;
+  const target = new Date(now);
+  target.setHours(h, m, 0, 0);
+  const diffMs = now.getTime() - target.getTime();
+  return diffMs >= 0 && diffMs < 120_000;
 }
 
 function localDateKey(date = new Date()): string {
@@ -3169,13 +3256,8 @@ const completedStepWhere = {
 };
 
 async function countStepModelsInDatabase(): Promise<number> {
-  const { PrismaClient } = await import("@prisma/client");
-  const prisma = new PrismaClient();
-  try {
-    return await prisma.model.count({ where: completedStepWhere });
-  } finally {
-    await prisma.$disconnect();
-  }
+  const prisma = await getBackupPrisma();
+  return await prisma.model.count({ where: completedStepWhere });
 }
 
 async function countStepModelsInSqlDump(sqlPath: string): Promise<number> {

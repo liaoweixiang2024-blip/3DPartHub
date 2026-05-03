@@ -1,6 +1,6 @@
 import { Router, Response } from "express";
 import { randomUUID } from "node:crypto";
-import { copyFileSync, existsSync, mkdirSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, realpathSync, rmSync } from "node:fs";
 import { stat as statAsync } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { conversionQueue } from "../../lib/queue.js";
@@ -10,6 +10,7 @@ import { optionalString, requiredString, RequestValidationError } from "../../li
 import { authMiddleware, type AuthRequest } from "../../middleware/auth.js";
 import { requireRole } from "../../middleware/rbac.js";
 import { getBusinessConfig } from "../../lib/businessConfig.js";
+import { normalizeUploadFilename } from "../../lib/filenameEncoding.js";
 import { MODEL_STATUS } from "../../services/modelStatus.js";
 import { parseStepFileDate } from "../../services/modelFileDates.js";
 import { modelUpload, pathInside, validateModelUpload } from "./uploadHelpers.js";
@@ -44,7 +45,7 @@ export function createModelUploadRouter({ prisma, saveMeta }: ModelUploadContext
       return;
     }
 
-    const originalName = file.originalname || "unknown.step";
+    const originalName = normalizeUploadFilename(file.originalname, "unknown.step");
     const ext = await validateModelUpload(file, res);
     if (!ext) return;
 
@@ -74,6 +75,7 @@ export function createModelUploadRouter({ prisma, saveMeta }: ModelUploadContext
     saveMeta(modelId, meta);
 
     // Save initial DB record
+    let dbSaved = false;
     if (prisma) {
       try {
         await prisma.model.upsert({
@@ -96,6 +98,7 @@ export function createModelUploadRouter({ prisma, saveMeta }: ModelUploadContext
           },
           update: {},
         });
+        dbSaved = true;
       } catch (dbErr) {
         console.error("Database save failed:", dbErr);
       }
@@ -107,27 +110,50 @@ export function createModelUploadRouter({ prisma, saveMeta }: ModelUploadContext
         const modelName = originalName.replace(/\.[^.]+$/, "");
         const sameNameModels = await prisma.model.findMany({
           where: { name: modelName, status: MODEL_STATUS.COMPLETED, id: { not: modelId } },
-          select: { id: true, groupId: true },
+          select: { id: true, groupId: true, fileModifiedAt: true, createdAt: true },
         });
         if (sameNameModels.length > 0) {
+          const allModels = [{ id: modelId, fileModifiedAt: originalModifiedAt, createdAt }, ...sameNameModels];
+          const toTime = (m: any) => m.fileModifiedAt ? new Date(m.fileModifiedAt).getTime() : new Date(m.createdAt).getTime();
+          allModels.sort((a: any, b: any) => toTime(b) - toTime(a));
+          const primaryId = allModels.length > 1
+            ? allModels.find((m: any) => m.id !== modelId)?.id || allModels[0].id
+            : allModels[0].id;
+
           const existingGroup = sameNameModels.find((m: any) => m.groupId);
           if (existingGroup?.groupId) {
             await prisma.model.update({ where: { id: modelId }, data: { groupId: existingGroup.groupId } });
-            await prisma.modelGroup.update({ where: { id: existingGroup.groupId }, data: { primaryId: modelId } });
+            await prisma.modelGroup.update({ where: { id: existingGroup.groupId }, data: { primaryId } });
           } else {
             const allIds = [modelId, ...sameNameModels.map((m: any) => m.id)];
-            await prisma.modelGroup.create({
-              data: {
-                name: modelName,
-                primaryId: modelId,
-                models: { connect: allIds.map(id => ({ id })) },
-              },
+            await prisma.$transaction(async (tx: any) => {
+              const existing = await tx.modelGroup.findFirst({
+                where: { models: { some: { name: modelName } } },
+              });
+              if (existing) {
+                await tx.model.update({ where: { id: modelId }, data: { groupId: existing.id } });
+                await tx.modelGroup.update({ where: { id: existing.id }, data: { primaryId } });
+              } else {
+                await tx.modelGroup.create({
+                  data: {
+                    name: modelName,
+                    primaryId,
+                    models: { connect: allIds.map(id => ({ id })) },
+                  },
+                });
+              }
             });
           }
         }
       } catch (mergeErr) {
         console.error("Auto-merge failed (non-critical):", mergeErr);
       }
+    }
+
+    if (!dbSaved) {
+      try { rmSync(file.path, { force: true }); } catch {}
+      res.status(500).json({ detail: "保存模型记录失败" });
+      return;
     }
 
     try {
@@ -166,7 +192,7 @@ export function createModelUploadRouter({ prisma, saveMeta }: ModelUploadContext
     let fileName: string;
     try {
       filePath = requiredString(req.body?.filePath, "filePath");
-      fileName = requiredString(req.body?.fileName, "fileName", { maxLength: 255 });
+      fileName = normalizeUploadFilename(requiredString(req.body?.fileName, "fileName", { maxLength: 255 }), "unknown.step");
     } catch (err) {
       if (err instanceof RequestValidationError) {
         res.status(err.status).json({ detail: err.message });
@@ -178,13 +204,20 @@ export function createModelUploadRouter({ prisma, saveMeta }: ModelUploadContext
     const categoryId = optionalString(req.body?.categoryId, { maxLength: 80 }) || null;
 
     const absPath = resolve(process.cwd(), filePath);
-    const allowedDirs = [join(process.cwd(), config.uploadDir), join(process.cwd(), "uploads"), "/tmp"];
-    const isAllowed = allowedDirs.some((d) => pathInside(absPath, d));
+    const allowedDirs = [join(process.cwd(), config.uploadDir), join(process.cwd(), "uploads")];
+    let resolvedPath: string;
+    try {
+      resolvedPath = realpathSync(absPath);
+    } catch {
+      res.status(400).json({ detail: "文件不存在" });
+      return;
+    }
+    const isAllowed = allowedDirs.some((d) => pathInside(resolvedPath, d));
     if (!isAllowed) {
       res.status(400).json({ detail: "文件路径不在允许的目录内" });
       return;
     }
-    if (!existsSync(absPath)) {
+    if (!existsSync(resolvedPath)) {
       res.status(400).json({ detail: "文件不存在" });
       return;
     }
@@ -192,7 +225,7 @@ export function createModelUploadRouter({ prisma, saveMeta }: ModelUploadContext
     const ext = fileName.split(".").pop()?.toLowerCase() || "";
     const { uploadPolicy } = await getBusinessConfig();
     const formats = uploadPolicy.modelFormats.map((item) => item.toLowerCase());
-    const fileSize = (await statAsync(absPath)).size;
+    const fileSize = (await statAsync(resolvedPath)).size;
     const maxBytes = Math.max(1, uploadPolicy.modelMaxSizeMb) * 1024 * 1024;
     if (!formats.includes(ext)) {
       res.status(400).json({ detail: `不支持的格式，请上传 ${formats.map((item) => `.${item}`).join(" / ")} 文件` });
@@ -206,12 +239,12 @@ export function createModelUploadRouter({ prisma, saveMeta }: ModelUploadContext
     const createdAt = new Date().toISOString();
     const userId = req.user!.userId;
     const managedUploadRoot = resolve(process.cwd(), config.uploadDir);
-    let storedUploadPath = absPath;
-    if (!pathInside(absPath, managedUploadRoot)) {
+    let storedUploadPath = resolvedPath;
+    if (!pathInside(resolvedPath, managedUploadRoot)) {
       try {
         mkdirSync(managedUploadRoot, { recursive: true });
         storedUploadPath = join(managedUploadRoot, `${modelId}.${ext}`);
-        copyFileSync(absPath, storedUploadPath);
+        copyFileSync(resolvedPath, storedUploadPath);
       } catch {
         res.status(500).json({ detail: "保存模型文件失败" });
         return;
@@ -230,6 +263,7 @@ export function createModelUploadRouter({ prisma, saveMeta }: ModelUploadContext
     };
     saveMeta(modelId, meta);
 
+    let dbSaved = false;
     if (prisma) {
       try {
         await prisma.model.upsert({
@@ -250,9 +284,16 @@ export function createModelUploadRouter({ prisma, saveMeta }: ModelUploadContext
           },
           update: {},
         });
+        dbSaved = true;
       } catch (dbErr) {
         console.error("Database save failed:", dbErr);
       }
+    }
+
+    if (!dbSaved) {
+      try { rmSync(storedUploadPath, { force: true }); } catch {}
+      res.status(500).json({ detail: "保存模型记录失败" });
+      return;
     }
 
     try {
@@ -266,6 +307,8 @@ export function createModelUploadRouter({ prisma, saveMeta }: ModelUploadContext
       });
     } catch (err) {
       console.error("Failed to queue conversion:", err);
+      await markQueueUnavailable(modelId, meta, res);
+      return;
     }
 
     res.json({

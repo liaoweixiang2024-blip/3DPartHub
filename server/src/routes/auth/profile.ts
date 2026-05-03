@@ -1,7 +1,10 @@
 import { Router, Response } from "express";
 import { hashPassword, verifyPassword } from "../../lib/password.js";
 import { prisma } from "../../lib/prisma.js";
-import { authMiddleware, type AuthRequest } from "../../middleware/auth.js";
+import { getSetting } from "../../lib/settings.js";
+import { revokeToken, revokeAllTokensBefore, signAccessToken, signRefreshToken } from "../../lib/jwt.js";
+import { authMiddleware, getRequestToken, type AuthRequest } from "../../middleware/auth.js";
+import { setAuthCookies } from "./cookies.js";
 
 export function createAuthProfileRouter() {
   const router = Router();
@@ -24,6 +27,33 @@ export function createAuthProfileRouter() {
 
   router.put("/api/auth/profile", authMiddleware, async (req: AuthRequest, res: Response) => {
     const { username, company, phone, avatar } = req.body;
+
+    if (username !== undefined) {
+      if (typeof username !== "string" || username.trim().length === 0) {
+        res.status(400).json({ detail: "用户名不能为空" });
+        return;
+      }
+      const usernameMinLength = Math.max(1, Math.floor(Number(await getSetting<number>("security_username_min_length")) || 2));
+      const usernameMaxLength = Math.max(usernameMinLength, Math.floor(Number(await getSetting<number>("security_username_max_length")) || 32));
+      if (username.length < usernameMinLength || username.length > usernameMaxLength) {
+        res.status(400).json({ detail: `用户名长度应在${usernameMinLength}-${usernameMaxLength}位之间` });
+        return;
+      }
+      if (!/^[\p{L}\p{N}_\-.]+$/u.test(username)) {
+        res.status(400).json({ detail: "用户名只能包含字母、数字、下划线、连字符和点" });
+        return;
+      }
+    }
+    if (avatar !== undefined) {
+      if (typeof avatar !== "string" || avatar.length > 500) {
+        res.status(400).json({ detail: "头像格式无效" });
+        return;
+      }
+      if (avatar && !/^\/(static|api)\//.test(avatar) && !/^https?:\/\//i.test(avatar)) {
+        res.status(400).json({ detail: "头像 URL 格式无效" });
+        return;
+      }
+    }
 
     try {
       // Check username uniqueness if changing
@@ -49,7 +79,11 @@ export function createAuthProfileRouter() {
       });
 
       res.json(user);
-    } catch {
+    } catch (err: any) {
+      if (err?.code === "P2002") {
+        res.status(409).json({ detail: "用户名已被使用" });
+        return;
+      }
       res.status(500).json({ detail: "更新资料失败" });
     }
   });
@@ -60,15 +94,15 @@ export function createAuthProfileRouter() {
       res.status(400).json({ detail: "请输入新密码" });
       return;
     }
-    if (newPassword.length < 8) {
-      res.status(400).json({ detail: "新密码长度至少8位" });
+    const passwordMinLength = Math.max(6, Math.floor(Number(await getSetting<number>("security_password_min_length")) || 8));
+    if (newPassword.length < passwordMinLength || newPassword.length > 128) {
+      res.status(400).json({ detail: `新密码长度应在${passwordMinLength}-128位之间` });
       return;
     }
     try {
       const userId = req.user!.userId;
       const user = await prisma.user.findUnique({ where: { id: userId } });
       if (!user) {
-        console.error(`[password] user not found: ${userId}`);
         res.status(401).json({ detail: "用户不存在，请重新登录" });
         return;
       }
@@ -85,11 +119,49 @@ export function createAuthProfileRouter() {
         }
         const valid = await verifyPassword(oldPassword, user.passwordHash);
         if (!valid) { res.status(401).json({ detail: "旧密码错误" }); return; }
+      } else {
+        if (!oldPassword) {
+          const token = getRequestToken(req);
+          if (token) {
+            try {
+              const { verifyAccessToken } = await import("../../lib/jwt.js");
+              const payload = verifyAccessToken(token);
+              const age = Date.now() / 1000 - (payload.iat || 0);
+              if (age > 300) {
+                res.status(403).json({ detail: "首次修改密码请在登录后5分钟内完成，请重新登录", code: "PASSWORD_CHANGE_REQUIRED" });
+                return;
+              }
+            } catch {
+              res.status(403).json({ detail: "无法验证登录时间", code: "PASSWORD_CHANGE_REQUIRED" });
+              return;
+            }
+          } else {
+            res.status(403).json({ detail: "无法验证登录时间", code: "PASSWORD_CHANGE_REQUIRED" });
+            return;
+          }
+        } else {
+          const valid = await verifyPassword(oldPassword, user.passwordHash);
+          if (!valid) { res.status(401).json({ detail: "旧密码错误" }); return; }
+        }
       }
 
       const hash = await hashPassword(newPassword);
       await prisma.user.update({ where: { id: req.user!.userId }, data: { passwordHash: hash, mustChangePassword: false } });
-      res.json({ message: "密码修改成功" });
+
+      if (req.user) {
+        try {
+          await revokeAllTokensBefore(req.user.userId, Math.floor(Date.now() / 1000));
+        } catch (err) {
+          console.error("[profile] Failed to revoke tokens after password change:", err);
+        }
+        const newPayload = { userId: req.user.userId, role: req.user.role };
+        const newAccess = signAccessToken(newPayload);
+        const newRefresh = signRefreshToken(newPayload);
+        setAuthCookies(req, res, newAccess, newRefresh, {});
+        res.json({ message: "密码修改成功" });
+      } else {
+        res.json({ message: "密码修改成功，请重新登录" });
+      }
     } catch (err) {
       console.error("[password] change failed:", err);
       res.status(500).json({ detail: "密码修改失败" });

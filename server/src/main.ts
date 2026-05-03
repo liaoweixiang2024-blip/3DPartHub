@@ -47,6 +47,9 @@ if (!cluster.isWorker) {
   import("./workers/downloadRecorderWorker.js").catch((err) => {
     console.error("[download-recorder] failed to start:", err);
   });
+  import("./workers/conversionWorker.js").catch((err) => {
+    console.error("[conversion-worker] failed to start:", err);
+  });
 }
 
 // Security headers
@@ -121,7 +124,7 @@ app.use((req, _res, next) => {
   _res.on("finish", () => {
     const ms = Date.now() - start;
     if (_res.statusCode >= 400 || (ms > slowRequestThresholdMs && shouldLogSlowRequest(Date.now()))) {
-      console.log(`${req.method} ${req.originalUrl} ${_res.statusCode} ${ms}ms`);
+      console.log(`${req.method} ${req.originalUrl.replace(/[\r\n]/g, "_")} ${_res.statusCode} ${ms}ms`);
     }
   });
   next();
@@ -251,6 +254,29 @@ app.use(autoAudit);
 app.use(healthRouter);
 app.use(modelCompareRouter);
 app.use(modelDrawingsRouter);
+// Model count — must be registered before modelsRouter to avoid /api/models/:id catching "count"
+app.get("/api/models/count", async (req, res) => {
+  try {
+    const { cacheGetOrSet, TTL } = await import("./lib/cache.js");
+    const mod = await import("./lib/prisma.js");
+    const { MODEL_STATUS } = await import("./services/modelStatus.js");
+    const grouped = req.query.grouped !== "false";
+    const cacheKey = grouped ? "cache:models:count:grouped" : "cache:models:count:all";
+    const { value, hit } = await cacheGetOrSet(cacheKey, TTL.MODELS_LIST, async () => {
+      const where: any = { status: MODEL_STATUS.COMPLETED };
+      if (grouped) {
+        const { groupedVisibleModelWhere } = await import("./services/modelVisibility.js");
+        const vis = await groupedVisibleModelWhere(mod.prisma);
+        where.AND = [vis];
+      }
+      const total = await mod.prisma.model.count({ where });
+      return { total };
+    });
+    res.set("X-Cache", hit ? "HIT" : "MISS").json(value);
+  } catch {
+    res.json({ total: 0 });
+  }
+});
 app.use(modelsRouter);
 app.use(downloadsRouter);
 app.use(authRouter);
@@ -289,7 +315,7 @@ app.listen(PORT, async () => {
     if (!existing) {
       const adminUser = process.env.ADMIN_USER || "admin";
       const adminPass = process.env.ADMIN_PASS || (process.env.NODE_ENV === "production" ? "" : "admin123");
-      if (process.env.NODE_ENV === "production" && (!adminPass || adminPass === "admin123" || adminPass.length < 12)) {
+      if (process.env.NODE_ENV === "production" && (!adminPass || adminPass === "admin123" || adminPass === "3DPartHub@2026" || adminPass.length < 12)) {
         console.error("ADMIN_PASS is required for first production startup and must be at least 12 characters.");
         process.exit(1);
       }
@@ -311,7 +337,7 @@ app.listen(PORT, async () => {
         if (process.env.NODE_ENV === "production") {
           console.log("     Password: hidden in production logs; use ADMIN_PASS from the server environment");
         } else {
-          console.log(`     Password: ${adminPass}`);
+          console.log(`     Password: [check your .env or ADMIN_PASS environment variable]`);
         }
         console.log(`     ⚠️  首次登录后将强制修改密码！\n`);
       } catch {

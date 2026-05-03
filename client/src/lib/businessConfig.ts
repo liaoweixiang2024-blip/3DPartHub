@@ -92,11 +92,12 @@ export const DEFAULT_SUPPORT_STEPS: SupportStepConfig[] = [
 export const DEFAULT_USER_NAV: NavItemConfig[] = [
   { label: "模型库", icon: "dashboard", path: "/", enabled: true },
   { label: "产品选型", icon: "tune", path: "/selection", enabled: true },
-  { label: "产品影像", icon: "image", path: "/product-wall", enabled: true },
-  { label: "规格查询", icon: "straighten", path: "/tools/thread-size", enabled: true },
+  { label: "产品图库", icon: "image", path: "/product-wall", enabled: true },
+  { label: "规格查询", icon: "straighten", path: "/thread-size", enabled: true },
   { label: "我的收藏", icon: "star", path: "/favorites", enabled: true },
-  { label: "我的询价", icon: "request_quote", path: "/my-inquiries", enabled: true },
+  { label: "我的分享", icon: "share", path: "/my-shares", enabled: true },
   { label: "下载历史", icon: "download", path: "/downloads", enabled: true },
+  { label: "我的询价", icon: "request_quote", path: "/my-inquiries", enabled: true },
   { label: "我的工单", icon: "assignment_add", path: "/my-tickets", enabled: true },
   { label: "技术支持", icon: "support_agent", path: "/support", enabled: true },
 ];
@@ -176,32 +177,45 @@ function enabled<T extends { enabled?: boolean }>(items: T[]) {
   return items.filter((item) => item.enabled !== false);
 }
 
-function normalizeUserNav(items: NavItemConfig[]) {
-  const next = [...items];
+const DEAD_USER_PATHS = new Set([
+  "/admin/quote-template",
+  "/admin/product-wall",
+]);
+
+export function normalizeUserNav(items: NavItemConfig[]) {
+  const next = items.filter((item) => !DEAD_USER_PATHS.has(item.path));
   if (!next.some((item) => item.path === "/product-wall")) {
     const selectionIndex = next.findIndex((item) => item.path === "/selection");
-    next.splice(selectionIndex >= 0 ? selectionIndex + 1 : next.length, 0, { label: "产品影像", icon: "image", path: "/product-wall", enabled: true });
+    next.splice(selectionIndex >= 0 ? selectionIndex + 1 : next.length, 0, { label: "产品图库", icon: "image", path: "/product-wall", enabled: true });
   }
   next.forEach((item) => {
-    if (item.path === "/product-wall") item.label = "产品影像";
+    if (item.path === "/product-wall") item.label = "产品图库";
   });
-  if (next.some((item) => item.path === "/tools/thread-size")) return next;
+  if (!next.some((item) => item.path === "/my-shares")) {
+    const favoriteIndex = next.findIndex((item) => item.path === "/favorites");
+    const inquiryIndex = next.findIndex((item) => item.path === "/my-inquiries");
+    next.splice(favoriteIndex >= 0 ? favoriteIndex + 1 : inquiryIndex >= 0 ? inquiryIndex : next.length, 0, { label: "我的分享", icon: "share", path: "/my-shares", enabled: true });
+  }
+  if (next.some((item) => item.path === "/thread-size")) return next;
   const wallIndex = next.findIndex((item) => item.path === "/product-wall");
   const selectionIndex = next.findIndex((item) => item.path === "/selection");
-  next.splice(wallIndex >= 0 ? wallIndex + 1 : selectionIndex >= 0 ? selectionIndex + 1 : next.length, 0, { label: "规格查询", icon: "straighten", path: "/tools/thread-size", enabled: true });
+  next.splice(wallIndex >= 0 ? wallIndex + 1 : selectionIndex >= 0 ? selectionIndex + 1 : next.length, 0, { label: "规格查询", icon: "straighten", path: "/thread-size", enabled: true });
   return next;
 }
 
-function normalizeAdminNav(items: NavItemConfig[]) {
-  const normalized = items.filter((item) => item.path !== "/admin/quote-template");
-  const withTools = normalizeUserNav(normalized);
-  if (!withTools.some((item) => item.path === "/admin/downloads")) {
-    const shareIndex = withTools.findIndex((item) => item.path === "/admin/shares");
-    const next = [...withTools];
+const DEAD_PATHS = new Set([
+  "/admin/quote-template",
+  "/admin/product-wall",
+]);
+
+export function normalizeAdminNav(items: NavItemConfig[]) {
+  const withTools = normalizeUserNav(items);
+  const next = withTools.filter((item) => !DEAD_PATHS.has(item.path));
+  if (!next.some((item) => item.path === "/admin/downloads")) {
+    const shareIndex = next.findIndex((item) => item.path === "/admin/shares");
     next.splice(shareIndex >= 0 ? shareIndex + 1 : next.length, 0, { label: "下载统计", icon: "download", path: "/admin/downloads", enabled: true });
-    return next;
   }
-  return withTools;
+  return next;
 }
 
 export function getBusinessConfig(settings: Partial<SystemSettings> = getPublicSettingsSnapshot()) {

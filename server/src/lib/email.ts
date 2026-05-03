@@ -79,8 +79,8 @@ async function createTransporter(): Promise<nodemailer.Transporter> {
 }
 
 function formatFrom(from: string, siteTitle: string): string {
-  if (from.includes("<")) return from;
-  return `"${siteTitle || "3DPartHub"}" <${from}>`;
+  const safeTitle = (siteTitle || "3DPartHub").replace(/["\\\r\n]/g, "");
+  return `"${safeTitle}" <${from}>`;
 }
 
 export async function sendTemplateEmail(templateKey: string, toEmail: string, vars: TemplateVars = {}): Promise<void> {

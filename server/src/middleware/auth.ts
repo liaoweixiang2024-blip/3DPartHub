@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from "express";
-import { verifyAccessToken, type TokenPayload } from "../lib/jwt.js";
+import { verifyAccessToken, isTokenRevoked, revokeAllTokensBefore, type TokenPayload, type VerifiedTokenPayload } from "../lib/jwt.js";
 import { prisma } from "../lib/prisma.js";
+import { cacheGet } from "../lib/cache.js";
 
 export interface AuthRequest extends Request {
   user?: TokenPayload;
@@ -30,7 +31,7 @@ export function getRequestToken(req: Request): string | undefined {
   return readCookie(req, ACCESS_COOKIE);
 }
 
-export function verifyRequestToken(req: Request): TokenPayload | null {
+export function verifyRequestToken(req: Request): VerifiedTokenPayload | null {
   const token = getRequestToken(req);
   if (!token) return null;
   try {
@@ -54,6 +55,11 @@ export async function getVerifiedRequestUser(req: Request): Promise<{ payload: T
   const payload = verifyRequestToken(req);
   if (!payload?.userId) return null;
 
+  if (payload.iat && await isTokenRevoked(payload.userId, payload.iat)) return null;
+
+  const revokeBefore = await cacheGet<number>(`token_revoke_before:${payload.userId}`);
+  if (revokeBefore && payload.iat && payload.iat < revokeBefore) return null;
+
   const user = await prisma.user.findUnique({
     where: { id: payload.userId },
     select: { id: true, role: true, mustChangePassword: true },
@@ -66,7 +72,7 @@ export async function getVerifiedRequestUser(req: Request): Promise<{ payload: T
       role: user.role,
       tokenType: payload.tokenType,
     },
-    mustChangePassword: user.role === "ADMIN" && user.mustChangePassword,
+    mustChangePassword: user.mustChangePassword,
   };
 }
 
@@ -94,5 +100,24 @@ export async function authMiddleware(req: AuthRequest, res: Response, next: Next
     return;
   }
 
+  next();
+}
+
+export async function optionalAuthMiddleware(req: AuthRequest, res: Response, next: NextFunction) {
+  try {
+    const verified = await getVerifiedRequestUser(req);
+    if (verified) {
+      req.user = verified.payload;
+      if (verified.mustChangePassword && !mayContinueBeforePasswordChange(req)) {
+        res.status(403).json({
+          detail: "首次登录请先修改密码",
+          code: "PASSWORD_CHANGE_REQUIRED",
+        });
+        return;
+      }
+    }
+  } catch {
+    // Ignore — proceed without auth
+  }
   next();
 }

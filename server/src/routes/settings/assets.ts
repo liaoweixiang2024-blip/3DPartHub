@@ -57,7 +57,9 @@ export function createSettingsAssetsRouter() {
       res.status(400).json({ detail: `不支持的上传类型: ${key}` });
       return;
     }
-    const ext = file.originalname?.split(".").pop() || "png";
+    const ALLOWED_IMAGE_EXTENSIONS = new Set(["png", "jpg", "jpeg", "svg", "webp", "ico"]);
+    const rawExt = (file.originalname?.split(".").pop() || "").toLowerCase();
+    const ext = ALLOWED_IMAGE_EXTENSIONS.has(rawExt) ? rawExt : "png";
     const finalName = `${baseName}.${ext}`;
     const finalPath = join(targetDir, finalName);
     // Use copy+rm instead of rename to avoid EXDEV cross-device error in Docker

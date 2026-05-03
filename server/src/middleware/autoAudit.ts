@@ -100,7 +100,7 @@ export function autoAudit(req: Request, _res: Response, next: NextFunction) {
 
   // Attach a listener to log after response
   _res.on("finish", () => {
-    if (_res.statusCode >= 400) return; // Don't log failed requests
+    if (_res.statusCode >= 500) return;
 
     setImmediate(async () => {
       try {

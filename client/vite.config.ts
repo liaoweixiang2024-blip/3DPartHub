@@ -40,15 +40,12 @@ export default defineConfig({
     },
     // The 3D viewer intentionally keeps three.js in a lazy route chunk.
     // It is large by nature, but no longer affects the initial app bundle.
-    chunkSizeWarningLimit: 1000,
+    chunkSizeWarningLimit: 1200,
   },
   optimizeDeps: {
     exclude: ['occt-import-js'],
   },
   server: {
-    host: '127.0.0.1',
-    port: 5173,
-    strictPort: true,
     proxy: {
       '/api': {
         target: devProxyTarget,

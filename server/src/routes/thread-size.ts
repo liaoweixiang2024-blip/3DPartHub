@@ -76,17 +76,39 @@ function orderBy() {
 const router = Router();
 
 router.get("/api/thread-size", async (_req, res: Response) => {
-  const rows = await entryTable().findMany({
-    where: { enabled: true },
-    orderBy: orderBy(),
-  });
-  res.json({ items: rows });
+  try {
+    const { cacheGetOrSet, TTL } = await import("../lib/cache.js");
+    const { value: rows } = await cacheGetOrSet("cache:thread-size:public", TTL.CATEGORIES, async () => {
+      return entryTable().findMany({
+        where: { enabled: true },
+        orderBy: orderBy(),
+      });
+    });
+    res.json({ items: rows });
+  } catch {
+    res.json({ items: [] });
+  }
 });
+
+async function invalidateThreadSizeCache() {
+  try {
+    const { cacheDel } = await import("../lib/cache.js");
+    await cacheDel("cache:thread-size:list");
+    await cacheDel("cache:thread-size:public");
+  } catch {}
+}
 
 router.get("/api/admin/thread-size", authMiddleware, async (req: AuthRequest, res: Response) => {
   if (!adminOnly(req, res)) return;
-  const rows = await entryTable().findMany({ orderBy: orderBy() });
-  res.json({ items: rows });
+  try {
+    const { cacheGetOrSet, TTL } = await import("../lib/cache.js");
+    const { value: rows } = await cacheGetOrSet("cache:thread-size:list", TTL.CATEGORIES, async () => {
+      return entryTable().findMany({ orderBy: orderBy() });
+    });
+    res.json({ items: rows });
+  } catch {
+    res.json({ items: [] });
+  }
 });
 
 router.post("/api/admin/thread-size", authMiddleware, async (req: AuthRequest, res: Response) => {
@@ -94,7 +116,8 @@ router.post("/api/admin/thread-size", authMiddleware, async (req: AuthRequest, r
   try {
     const data = normalizeInput(req.body || {});
     const row = await entryTable().create({ data });
-    res.json(row);
+    await invalidateThreadSizeCache();
+    res.status(201).json(row);
   } catch (err: any) {
     res.status(400).json({ detail: err?.message || "新增失败" });
   }
@@ -105,6 +128,7 @@ router.put("/api/admin/thread-size/:id", authMiddleware, async (req: AuthRequest
   try {
     const data = normalizeInput(req.body || {});
     const row = await entryTable().update({ where: { id: req.params.id }, data });
+    await invalidateThreadSizeCache();
     res.json(row);
   } catch (err: any) {
     res.status(400).json({ detail: err?.message || "保存失败" });
@@ -114,11 +138,13 @@ router.put("/api/admin/thread-size/:id", authMiddleware, async (req: AuthRequest
 router.delete("/api/admin/thread-size/:id", authMiddleware, async (req: AuthRequest, res: Response) => {
   if (!adminOnly(req, res)) return;
   await entryTable().delete({ where: { id: req.params.id } });
+  await invalidateThreadSizeCache();
   res.json({ ok: true });
 });
 
 router.post("/api/admin/thread-size/import", authMiddleware, async (req: AuthRequest, res: Response) => {
   if (!adminOnly(req, res)) return;
+  if (req.body?.items?.length > 1000) { res.status(400).json({ detail: "单次最多导入 1000 条数据" }); return; }
   const rows = Array.isArray(req.body?.items) ? req.body.items : [];
   if (!rows.length) {
     res.status(400).json({ detail: "没有可导入的数据" });
@@ -144,6 +170,7 @@ router.post("/api/admin/thread-size/import", authMiddleware, async (req: AuthReq
         imported += 1;
       }
     });
+    await invalidateThreadSizeCache();
     const total = await table.count();
     res.json({ imported, total });
   } catch (err: any) {

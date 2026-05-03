@@ -219,9 +219,47 @@ function ExplodeControl({
   );
 }
 
+function ListMenuItem({
+  icon,
+  label,
+  active,
+  disabled,
+  onClick,
+}: {
+  icon: string;
+  label: string;
+  active?: boolean;
+  disabled?: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={(event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        onClick();
+      }}
+      disabled={disabled}
+      className={`flex w-full items-center gap-2.5 rounded-sm px-2.5 py-1.5 text-left text-xs transition-colors disabled:opacity-50 ${
+        active
+          ? "bg-primary-container/12 text-primary font-medium"
+          : "text-on-surface hover:bg-surface-container-high"
+      }`}
+    >
+      <Icon name={icon} size={16} className={active ? "text-primary" : "text-on-surface-variant"} />
+      <span className="min-w-0 truncate">{label}</span>
+    </button>
+  );
+}
+
+function ListSectionDivider() {
+  return <div className="my-1 h-px bg-outline-variant/15" />;
+}
+
 function ToolbarSectionLabel({ children }: { children: string }) {
   return (
-    <div className="col-span-full px-1 pt-1 text-[10px] font-medium tracking-[0.12em] text-on-surface-variant/70">
+    <div className="px-2 pt-1 pb-0.5 text-[10px] font-semibold tracking-[0.08em] uppercase text-on-surface-variant/60">
       {children}
     </div>
   );
@@ -255,23 +293,13 @@ export default function CadViewerToolbar(props: CadViewerToolbarProps) {
     clipInverted,
     onToggleClipInverted,
     onResetClip,
-    showAxis,
-    onToggleAxis,
     measurementOpen,
     onToggleMeasurement,
-    propertiesOpen,
-    onToggleProperties,
-    structureOpen,
-    onToggleStructure,
-    partCount,
     onResetDisplay,
-    tuningOpen,
-    onToggleTuning,
     onScreenshot,
     onFullscreen,
     onSetThumbnail,
     settingThumbnail,
-    onOpenDiagnostics,
   } = props;
 
   if (variant === "mobile") {
@@ -301,85 +329,55 @@ export default function CadViewerToolbar(props: CadViewerToolbarProps) {
               }}
             />
             <div
-              className="fixed right-12 top-1/2 z-[80] grid w-[12.5rem] max-h-[calc(100dvh-8rem)] -translate-y-1/2 grid-cols-5 gap-1 overflow-y-auto overscroll-contain rounded-md border border-outline-variant/25 bg-surface/95 p-2 shadow-xl backdrop-blur-xl touch-pan-y custom-scrollbar"
+              className="fixed right-12 top-1/2 z-[80] max-h-[calc(100dvh-8rem)] w-[10.5rem] -translate-y-1/2 overflow-y-auto overscroll-contain rounded-md border border-outline-variant/25 bg-surface/95 py-1.5 shadow-xl backdrop-blur-xl touch-pan-y custom-scrollbar"
               onClick={(event) => event.stopPropagation()}
               onPointerDown={(event) => event.stopPropagation()}
               style={{ WebkitOverflowScrolling: "touch" }}
             >
               <ToolbarSectionLabel>显示</ToolbarSectionLabel>
               {VIEW_MODES.map((mode) => (
-                <ToolbarButton
+                <ListMenuItem
                   key={mode.key}
-                  compact
                   icon={mode.icon}
                   label={mode.label}
-                  size={14}
-                  tooltipSide="top"
                   active={activeView === mode.key}
                   onClick={() => onViewChange(mode.key)}
                 />
               ))}
-              <div className="col-span-full my-0.5 h-px bg-white/10" />
+              <ListSectionDivider />
               <ToolbarSectionLabel>视角</ToolbarSectionLabel>
               {CAMERA_ANGLES.filter((angle) => angle.key !== "iso").map((angle) => (
-                <ToolbarButton
+                <ListMenuItem
                   key={angle.key}
-                  compact
                   icon={angle.icon}
                   label={angle.label}
-                  size={14}
-                  tooltipSide="top"
                   active={activeCamera === angle.key}
                   onClick={() => onCameraChange(angle.key)}
                 />
               ))}
-              <div className="col-span-full my-0.5 h-px bg-white/10" />
+              <ListSectionDivider />
               <ToolbarSectionLabel>工具</ToolbarSectionLabel>
-              <ToolbarButton compact icon="straighten" label="尺寸标注" size={14} tooltipSide="top" active={showDimensions} onClick={onToggleDimensions} />
+              <ListMenuItem icon="straighten" label="尺寸标注" active={showDimensions} onClick={onToggleDimensions} />
               {onToggleMeasurement && (
-                <ToolbarButton compact icon="compass" label="测量工具" size={14} tooltipSide="top" active={measurementOpen} onClick={() => { onToggleMeasurement(); setMoreOpen(false); }} />
+                <ListMenuItem icon="compass" label="测量工具" active={measurementOpen} onClick={() => { onToggleMeasurement(); setMoreOpen(false); }} />
               )}
-              {onToggleProperties && (
-                <ToolbarButton compact icon="description" label="模型属性" size={14} tooltipSide="top" active={propertiesOpen} onClick={() => { onToggleProperties(); setMoreOpen(false); }} />
-              )}
-              {onToggleStructure && (
-                <ToolbarButton compact icon="view_sidebar" label={`模型结构${partCount ? ` ${partCount}` : ""}`} size={14} tooltipSide="top" active={structureOpen} onClick={() => { onToggleStructure(); setMoreOpen(false); }} />
-              )}
-              <ToolbarButton compact icon="content_cut" label="剖面查看" size={14} tooltipSide="top" active={clipEnabled} onClick={onToggleClip} />
-              <ToolbarButton compact icon="3d_rotation" label="视角盒" size={14} tooltipSide="top" active={showAxis} onClick={onToggleAxis} />
-              {isAdmin && onToggleTuning && (
-                <ToolbarButton compact icon="tune" label="预览调试" size={14} tooltipSide="top" active={tuningOpen} onClick={() => { onToggleTuning(); setMoreOpen(false); }} />
-              )}
-              <div className="col-span-full my-0.5 h-px bg-white/10" />
+              <ListMenuItem icon="content_cut" label="剖面查看" active={clipEnabled} onClick={onToggleClip} />
+              <ListSectionDivider />
               <ToolbarSectionLabel>材质</ToolbarSectionLabel>
-              {MATERIAL_PRESETS.map((preset) => (
-                <ToolbarButton
+              {MATERIAL_PRESETS.filter((p) => p.key === "original" || p.key === "default").map((preset) => (
+                <ListMenuItem
                   key={preset.key}
-                  compact
                   icon={preset.icon}
                   label={preset.label}
-                  size={14}
-                  tooltipSide="top"
                   active={materialPreset === preset.key}
                   onClick={() => onMaterialChange(preset.key)}
                 />
               ))}
-              <div className="col-span-full my-0.5 h-px bg-white/10" />
-              <ToolbarSectionLabel>管理</ToolbarSectionLabel>
-              {onScreenshot && <ToolbarButton compact icon="photo_camera" label="截图下载" size={14} tooltipSide="top" onClick={() => { onScreenshot(); setMoreOpen(false); }} />}
+              <ListSectionDivider />
+              <ToolbarSectionLabel>输出</ToolbarSectionLabel>
+              {onScreenshot && <ListMenuItem icon="photo_camera" label="截图下载" onClick={() => { onScreenshot(); setMoreOpen(false); }} />}
               {isAdmin && onSetThumbnail && (
-                <ToolbarButton
-                  compact
-                  icon="wallpaper"
-                  label="设为预览图"
-                  size={14}
-                  tooltipSide="top"
-                  disabled={settingThumbnail}
-                  onClick={() => { onSetThumbnail(); setMoreOpen(false); }}
-                />
-              )}
-              {isAdmin && onOpenDiagnostics && (
-                <ToolbarButton compact icon="data_usage" label="预览诊断" size={14} tooltipSide="top" onClick={() => { onOpenDiagnostics(); setMoreOpen(false); }} />
+                <ListMenuItem icon="wallpaper" label="设为预览图" disabled={settingThumbnail} onClick={() => { onSetThumbnail(); setMoreOpen(false); }} />
               )}
             </div>
           </>,
@@ -428,21 +426,21 @@ export default function CadViewerToolbar(props: CadViewerToolbarProps) {
             icon={angle.icon}
             label={angle.label}
             size={20}
-            tooltipSide="right"
+            tooltipSide="bottom"
             active={activeCamera === angle.key}
             onClick={() => onCameraChange(angle.key)}
           />
         ))}
         <div className="h-6 w-px bg-outline-variant/30 mx-0.5" />
-        <ToolbarButton icon="locate_fixed" label="适配视图" size={20} tooltipSide="right" onClick={dispatchFitModel} />
+        <ToolbarButton icon="locate_fixed" label="适配视图" size={20} tooltipSide="bottom" onClick={dispatchFitModel} />
       </div>
 
       <div
-        className="absolute right-3 top-3 bottom-3 z-30 flex flex-col items-end gap-2 overflow-y-auto overscroll-contain pr-0.5 scrollbar-hidden"
+        className="absolute right-3 top-3 bottom-3 z-30 flex flex-col items-end pr-0.5"
         onClick={(event) => event.stopPropagation()}
         onPointerDown={(event) => event.stopPropagation()}
       >
-        <div className="micro-glass rounded-sm p-1 flex flex-col items-stretch gap-0.5">
+        <div className="micro-glass rounded-sm p-1 flex flex-col items-stretch gap-0.5 origin-top-right">
           {VIEW_MODES.map((mode) => (
             <ToolbarButton
               key={mode.key}
@@ -458,64 +456,38 @@ export default function CadViewerToolbar(props: CadViewerToolbarProps) {
           <ToolbarButton icon="straighten" label="尺寸标注" size={18} tooltipSide="left" active={showDimensions} onClick={onToggleDimensions} />
           <ToolbarButton icon="diamond" label="实体边线" size={18} tooltipSide="left" active={showEdges} onClick={onToggleEdges} />
           <ToolbarButton icon="content_cut" label="剖面查看" size={18} tooltipSide="left" active={clipEnabled} onClick={onToggleClip} />
-          <ToolbarButton icon="3d_rotation" label="视角盒" size={18} tooltipSide="left" active={showAxis} onClick={onToggleAxis} />
           <ToolbarButton icon="restart_alt" label="重置显示" size={18} tooltipSide="left" onClick={onResetDisplay} />
           {onFullscreen && <ToolbarButton icon="fullscreen" label="全屏" size={18} tooltipSide="left" onClick={onFullscreen} />}
           <div className="w-full h-px bg-outline-variant/30 my-0.5" />
-          <ToolbarButton icon="more_horiz" label="更多工具" size={18} tooltipSide="left" active={moreOpen} onClick={() => setMoreOpen((open) => !open)} />
+          {onToggleMeasurement && (
+            <ToolbarButton icon="compass" label="测量工具" size={18} tooltipSide="left" active={measurementOpen} onClick={onToggleMeasurement} />
+          )}
+          <div className="w-full h-px bg-outline-variant/30 my-0.5" />
+          {MATERIAL_PRESETS.filter((p) => p.key === "original" || p.key === "default").map((preset) => (
+            <ToolbarButton
+              key={preset.key}
+              icon={preset.icon}
+              label={preset.label}
+              size={18}
+              tooltipSide="left"
+              active={materialPreset === preset.key}
+              onClick={() => onMaterialChange(preset.key)}
+            />
+          ))}
+          <div className="w-full h-px bg-outline-variant/30 my-0.5" />
+          {onScreenshot && <ToolbarButton icon="photo_camera" label="截图下载" size={18} tooltipSide="left" onClick={onScreenshot} />}
+          {isAdmin && onSetThumbnail && (
+            <ToolbarButton icon="wallpaper" label="设为预览图" size={18} tooltipSide="left" disabled={settingThumbnail} onClick={onSetThumbnail} />
+          )}
         </div>
 
         <AnimatePresence>
-          {moreOpen && (
-            <motion.div
-              initial={{ opacity: 0, scale: 0.96, x: 8 }}
-              animate={{ opacity: 1, scale: 1, x: 0 }}
-              exit={{ opacity: 0, scale: 0.96, x: 8 }}
-              className="micro-glass mr-1 grid max-h-[calc(100dvh-2rem)] w-48 grid-cols-4 gap-1 overflow-y-auto rounded-md border border-outline-variant/20 p-2 shadow-xl custom-scrollbar"
-            >
-              <ToolbarSectionLabel>高级工具</ToolbarSectionLabel>
-              {onToggleMeasurement && (
-                <ToolbarButton compact icon="compass" label="测量工具" size={16} tooltipSide="top" active={measurementOpen} onClick={onToggleMeasurement} />
-              )}
-              {onToggleProperties && (
-                <ToolbarButton compact icon="description" label="模型属性" size={16} tooltipSide="top" active={propertiesOpen} onClick={onToggleProperties} />
-              )}
-              {onToggleStructure && (
-                <ToolbarButton compact icon="view_sidebar" label={`模型结构${partCount ? ` ${partCount}` : ""}`} size={16} tooltipSide="top" active={structureOpen} onClick={onToggleStructure} />
-              )}
-              {isAdmin && onToggleTuning && (
-                <ToolbarButton compact icon="tune" label="预览调试" size={16} tooltipSide="top" active={tuningOpen} onClick={onToggleTuning} />
-              )}
-              <div className="col-span-full my-0.5 h-px bg-outline-variant/30" />
-              <ToolbarSectionLabel>材质</ToolbarSectionLabel>
-              {MATERIAL_PRESETS.map((preset) => (
-                <ToolbarButton
-                  key={preset.key}
-                  compact
-                  icon={preset.icon}
-                  label={preset.label}
-                  size={16}
-                  tooltipSide="top"
-                  active={materialPreset === preset.key}
-                  onClick={() => onMaterialChange(preset.key)}
-                />
-              ))}
-              <div className="col-span-full my-0.5 h-px bg-outline-variant/30" />
-              <ToolbarSectionLabel>输出</ToolbarSectionLabel>
-              {onScreenshot && <ToolbarButton compact icon="photo_camera" label="截图下载" size={16} tooltipSide="top" onClick={onScreenshot} />}
-              {isAdmin && onSetThumbnail && (
-                <ToolbarButton compact icon="wallpaper" label="设为预览图" size={16} tooltipSide="top" disabled={settingThumbnail} onClick={onSetThumbnail} />
-              )}
-              {isAdmin && onOpenDiagnostics && (
-                <ToolbarButton compact icon="data_usage" label="预览诊断" size={16} tooltipSide="top" onClick={onOpenDiagnostics} />
-              )}
-            </motion.div>
-          )}
           {activeView === "explode" && onExplodeAmountChange && (
             <motion.div
               initial={{ opacity: 0, scale: 0.9 }}
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.9 }}
+              className="mt-2"
             >
               <ExplodeControl
                 explodeAmount={explodeAmount}
@@ -529,6 +501,7 @@ export default function CadViewerToolbar(props: CadViewerToolbarProps) {
               initial={{ opacity: 0, scale: 0.9 }}
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.9 }}
+              className="mt-2"
             >
               <ClipControl
                 clipDirection={clipDirection}

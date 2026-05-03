@@ -1,12 +1,11 @@
-import { useState, useCallback, useRef } from "react";
+import { useState, useCallback, useMemo, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { useNavigate } from "react-router-dom";
 import useSWR from "swr";
-import { converterApi, type ConversionResponse } from "../../api";
+import { converterApi, modelApi, type ConversionResponse } from "../../api";
 import client from "../../api/client";
 import { categoriesApi } from "../../api/categories";
-import { useAuthStore } from "../../stores";
 import { getBusinessConfig } from "../../lib/businessConfig";
+import { mutate as swrMutate } from "swr";
 import Icon from "../shared/Icon";
 import CategorySelect from "./CategorySelect";
 
@@ -16,30 +15,45 @@ interface UploadModalProps {
   onConverted?: (result: ConversionResponse) => void;
 }
 
+type UploadResult =
+  | { type: "single"; data: ConversionResponse }
+  | { type: "batch"; ok: number; fail: number; total: number }
+  | { type: "archive"; ok: number; fail: number; total: number; archiveType: "ZIP" | "RAR" };
+
+const CONCURRENCY = 3;
+
 export default function UploadModal({ open, onClose, onConverted }: UploadModalProps) {
-  const navigate = useNavigate();
-  const { isAuthenticated } = useAuthStore();
   const [dragActive, setDragActive] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [progress, setProgress] = useState(0);
+  const [progressLabel, setProgressLabel] = useState("");
   const [error, setError] = useState<string | null>(null);
-  const [result, setResult] = useState<ConversionResponse | null>(null);
+  const [result, setResult] = useState<UploadResult | null>(null);
   const [categoryId, setCategoryId] = useState("");
+  const [pendingFiles, setPendingFiles] = useState<File[]>([]);
   const inputRef = useRef<HTMLInputElement>(null);
   const { uploadPolicy } = getBusinessConfig();
-  const acceptedFormats = uploadPolicy.modelFormats.map((f) => `.${f}`).join(",");
+  const modelFormats = uploadPolicy.modelFormats;
+  const acceptedFormats = useMemo(() => [...modelFormats.map((f) => `.${f}`), ".zip", ".rar"].join(","), [modelFormats]);
   const chunkSize = Math.max(1, uploadPolicy.chunkSizeMb) * 1024 * 1024;
   const chunkThreshold = Math.max(1, uploadPolicy.chunkThresholdMb) * 1024 * 1024;
-  const maxSize = Math.max(1, uploadPolicy.modelMaxSizeMb) * 1024 * 1024;
+  const formats = useMemo(() => modelFormats.map((f) => f.toLowerCase()), [modelFormats]);
+  const formatLabel = useMemo(() => modelFormats.map((f) => f.toUpperCase()).join(" / "), [modelFormats]);
+  const unsupportedFormatMessage = useMemo(
+    () => `不支持的格式，请上传 ${modelFormats.map((f) => `.${f}`).join(" / ")} 或 .zip / .rar 文件`,
+    [modelFormats],
+  );
 
   const { data: categoryData } = useSWR(open ? "/categories" : null, () => categoriesApi.tree());
 
   const reset = useCallback(() => {
     setProgress(0);
+    setProgressLabel("");
     setError(null);
     setResult(null);
     setUploading(false);
     setCategoryId("");
+    setPendingFiles([]);
   }, []);
 
   const handleClose = useCallback(() => {
@@ -50,7 +64,6 @@ export default function UploadModal({ open, onClose, onConverted }: UploadModalP
   const uploadChunked = useCallback(async (file: File) => {
     const totalChunks = Math.ceil(file.size / chunkSize);
 
-    // Init
     const { data: initResp } = await client.post("/upload/init", {
       fileName: file.name,
       fileSize: file.size,
@@ -58,7 +71,6 @@ export default function UploadModal({ open, onClose, onConverted }: UploadModalP
     });
     const { uploadId } = initResp?.data || initResp;
 
-    // Upload chunks
     for (let i = 0; i < totalChunks; i++) {
       const start = i * chunkSize;
       const end = Math.min(start + chunkSize, file.size);
@@ -71,48 +83,28 @@ export default function UploadModal({ open, onClose, onConverted }: UploadModalP
       setProgress(5 + Math.round(((i + 1) / totalChunks) * 60));
     }
 
-    // Complete
     const { data: completeResp } = await client.post("/upload/complete", { uploadId });
     return completeResp?.data || completeResp;
   }, [chunkSize]);
 
-  const handleFile = useCallback(async (file: File) => {
-    if (!isAuthenticated) {
-      setError("请先登录后再上传模型");
-      setTimeout(() => { handleClose(); navigate("/login"); }, 1500);
-      return;
-    }
-
-    const ext = file.name.split(".").pop()?.toLowerCase();
-    if (!ext || !uploadPolicy.modelFormats.map((f) => f.toLowerCase()).includes(ext)) {
-      setError(`不支持的格式，请上传 ${uploadPolicy.modelFormats.map((f) => `.${f}`).join(" / ")} 文件`);
-      return;
-    }
-
-    if (file.size > maxSize) {
-      setError(`文件过大，最大支持 ${uploadPolicy.modelMaxSizeMb}MB`);
-      return;
-    }
-
+  const handleSingleFile = useCallback(async (file: File) => {
     setUploading(true);
     setError(null);
     setProgress(5);
+    setProgressLabel(file.name);
 
     try {
       let res: ConversionResponse;
 
       if (file.size > chunkThreshold) {
-        // Chunked upload path: upload chunks → merge on server → create from local file
         const uploadResult = await uploadChunked(file);
         setProgress(75);
-        // Create model from the already-merged file on server — no re-upload
         res = await converterApi.uploadLocal(
           uploadResult.filePath,
           uploadResult.fileName || file.name,
           categoryId || undefined,
         );
       } else {
-        // Standard upload
         res = await converterApi.uploadAndConvert(file, {
           categoryId: categoryId || undefined,
           onUploadProgress: (e) => {
@@ -125,7 +117,8 @@ export default function UploadModal({ open, onClose, onConverted }: UploadModalP
       }
 
       setProgress(100);
-      setResult(res);
+      const uploadRes: UploadResult = { type: "single", data: res };
+      setResult(uploadRes);
       onConverted?.(res);
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : "上传失败";
@@ -133,19 +126,113 @@ export default function UploadModal({ open, onClose, onConverted }: UploadModalP
     } finally {
       setUploading(false);
     }
-  }, [categoryId, isAuthenticated, onConverted, handleClose, navigate, uploadChunked, uploadPolicy, maxSize, chunkThreshold]);
+  }, [categoryId, chunkThreshold, onConverted, uploadChunked]);
+
+  const handleMultiFile = useCallback(async (files: File[]) => {
+    setUploading(true);
+    setError(null);
+    let ok = 0;
+    let fail = 0;
+    const total = files.length;
+
+    for (let i = 0; i < total; i += CONCURRENCY) {
+      const batch = files.slice(i, i + CONCURRENCY);
+      const results = await Promise.allSettled(
+        batch.map(f => modelApi.upload(f, { categoryId: categoryId || undefined }))
+      );
+      for (const r of results) {
+        if (r.status === "fulfilled") ok++;
+        else fail++;
+      }
+      setProgress(Math.round(((i + batch.length) / total) * 100));
+      setProgressLabel(`上传中 ${Math.min(i + CONCURRENCY, total)}/${total}`);
+    }
+
+    setResult({ type: "batch", ok, fail, total });
+    swrMutate("/models/count");
+    setUploading(false);
+  }, [categoryId]);
+
+  const isArchiveFile = useCallback((file: File) => /\.(zip|rar)$/i.test(file.name), []);
+
+  const handleArchiveFile = useCallback(async (file: File) => {
+    setUploading(true);
+    setError(null);
+    setProgress(10);
+    setProgressLabel(`正在上传 ${file.name}...`);
+
+    try {
+      const resp = await modelApi.batchUploadFromArchive(file, { categoryId: categoryId || undefined });
+      setProgress(100);
+      const ok = resp.results.filter((r: any) => r.status === "queued" || r.status === "completed").length;
+      const fail = resp.results.length - ok;
+      setResult({ type: "archive", archiveType: file.name.toLowerCase().endsWith(".rar") ? "RAR" : "ZIP", ok, fail, total: resp.total });
+      swrMutate("/models/count");
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "压缩包上传失败";
+      setError(message);
+    } finally {
+      setUploading(false);
+    }
+  }, [categoryId]);
+
+  const startUpload = useCallback(() => {
+    if (pendingFiles.length === 0) return;
+    if (pendingFiles.length === 1 && !isArchiveFile(pendingFiles[0])) {
+      handleSingleFile(pendingFiles[0]);
+    } else if (pendingFiles.length === 1 && isArchiveFile(pendingFiles[0])) {
+      handleArchiveFile(pendingFiles[0]);
+    } else {
+      handleMultiFile(pendingFiles);
+    }
+  }, [pendingFiles, handleSingleFile, handleMultiFile, handleArchiveFile, isArchiveFile]);
+
+  const filterFiles = useCallback((fileList: FileList | File[]): File[] => {
+    return Array.from(fileList).filter(f => {
+      const ext = f.name.split(".").pop()?.toLowerCase() || "";
+      return formats.includes(ext) || ext === "zip" || ext === "rar";
+    });
+  }, [formats]);
 
   const handleDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault();
     setDragActive(false);
-    const file = e.dataTransfer.files?.[0];
-    if (file) handleFile(file);
-  }, [handleFile]);
+    if (!e.dataTransfer.files?.length) return;
+    const filtered = filterFiles(e.dataTransfer.files);
+    if (filtered.length === 0) {
+      setError(unsupportedFormatMessage);
+      return;
+    }
+    setError(null);
+
+    if (filtered.length === 1 && !isArchiveFile(filtered[0])) {
+      handleSingleFile(filtered[0]);
+    } else {
+      setPendingFiles(filtered);
+    }
+  }, [filterFiles, handleSingleFile, isArchiveFile, unsupportedFormatMessage]);
 
   const handleChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) handleFile(file);
-  }, [handleFile]);
+    const files = e.target.files;
+    if (!files?.length) return;
+    const filtered = filterFiles(files);
+    if (filtered.length === 0) {
+      setError(unsupportedFormatMessage);
+      return;
+    }
+    setError(null);
+
+    if (filtered.length === 1 && !isArchiveFile(filtered[0])) {
+      handleSingleFile(filtered[0]);
+    } else {
+      setPendingFiles(filtered);
+    }
+    e.target.value = "";
+  }, [filterFiles, handleSingleFile, isArchiveFile, unsupportedFormatMessage]);
+
+  const removePendingFile = useCallback((index: number) => {
+    setPendingFiles(prev => prev.filter((_, i) => i !== index));
+  }, []);
 
   return (
     <AnimatePresence>
@@ -177,24 +264,81 @@ export default function UploadModal({ open, onClose, onConverted }: UploadModalP
             <div className="p-4 sm:p-6 overflow-y-auto">
               {result ? (
                 <div className="flex flex-col items-center gap-4 py-4">
-                  <div className="w-16 h-16 rounded-full bg-green-500/10 flex items-center justify-center">
-                    <Icon name="check_circle" size={36} className="text-green-500" />
+                  <div className={`w-16 h-16 rounded-full flex items-center justify-center ${result.type === "single" ? "bg-green-500/10" : "bg-primary-container/20"}`}>
+                    <Icon name="check_circle" size={36} className={result.type === "single" ? "text-green-500" : "text-primary"} />
                   </div>
                   <div className="text-center min-w-0 max-w-full">
-                    <p className="text-on-surface font-medium break-all">{result.original_name}</p>
-                    <p className="text-sm text-on-surface-variant mt-1">
-                      {result.status === "completed"
-                        ? `已生成 GLB 预览 (${(result.gltf_size / 1024).toFixed(1)} KB)`
-                        : "文件已上传，正在转换中"}
-                    </p>
+                    {result.type === "single" ? (
+                      <>
+                        <p className="text-on-surface font-medium break-all">{result.data.original_name}</p>
+                        <p className="text-sm text-on-surface-variant mt-1">
+                          {result.data.status === "completed"
+                            ? `已生成 GLB 预览 (${(result.data.gltf_size / 1024).toFixed(1)} KB)`
+                            : "文件已上传，正在转换中"}
+                        </p>
+                      </>
+                    ) : (
+                      <>
+                        <p className="text-on-surface font-medium">
+                          {result.type === "archive" ? `${result.archiveType} 批量上传完成` : "批量上传完成"}
+                        </p>
+                        <p className="text-sm text-on-surface-variant mt-1">
+                          共 {result.total} 个文件：{result.ok} 成功{result.fail > 0 ? `，${result.fail} 失败` : ""}
+                        </p>
+                      </>
+                    )}
                   </div>
                   <button onClick={handleClose} className="mt-2 bg-primary-container text-on-primary rounded-sm px-6 py-2 text-sm font-medium hover:opacity-90">
                     完成
                   </button>
                 </div>
+              ) : pendingFiles.length > 0 ? (
+                <>
+                  {!uploading && categoryData?.items && categoryData.items.length > 0 && (
+                    <div className="mb-4">
+                      <label className="text-xs uppercase tracking-wider text-on-surface-variant mb-1.5 block">分类</label>
+                      <CategorySelect
+                        categories={categoryData.items}
+                        value={categoryId}
+                        onChange={setCategoryId}
+                        placeholder="选择分类（可选）"
+                      />
+                    </div>
+                  )}
+                  <div className="border border-outline-variant/20 rounded-lg divide-y divide-outline-variant/10 max-h-60 overflow-y-auto mb-4">
+                    {pendingFiles.map((f, i) => (
+                      <div key={i} className="flex items-center gap-2 px-3 py-2 text-sm">
+                        <Icon name={isArchiveFile(f) ? "folder_zip" : "description"} size={18} className="text-on-surface-variant shrink-0" />
+                        <span className="truncate flex-1 text-on-surface">{f.name}</span>
+                        <span className="text-xs text-on-surface-variant shrink-0">{(f.size / 1024 / 1024).toFixed(1)} MB</span>
+                        {!uploading && (
+                          <button onClick={() => removePendingFile(i)} className="text-on-surface-variant hover:text-error shrink-0">
+                            <Icon name="close" size={16} />
+                          </button>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                  {uploading ? (
+                    <div className="flex flex-col items-center gap-2">
+                      <p className="text-sm text-on-surface-variant">{progressLabel || `上传中... ${progress}%`}</p>
+                      <div className="w-full max-w-xs h-1.5 bg-surface-container-high rounded-full overflow-hidden">
+                        <motion.div className="h-full bg-primary rounded-full" initial={{ width: "5%" }} animate={{ width: `${progress}%` }} transition={{ duration: 0.3 }} />
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="flex gap-2">
+                      <button onClick={() => setPendingFiles([])} className="flex-1 border border-outline-variant/30 text-on-surface-variant rounded-sm px-4 py-2 text-sm font-medium hover:bg-surface-container-high">
+                        取消
+                      </button>
+                      <button onClick={startUpload} className="flex-1 bg-primary-container text-on-primary rounded-sm px-4 py-2 text-sm font-medium hover:opacity-90">
+                        开始上传 ({pendingFiles.length} 个文件)
+                      </button>
+                    </div>
+                  )}
+                </>
               ) : (
                 <>
-                  {/* Category selector */}
                   {!uploading && categoryData?.items && categoryData.items.length > 0 && (
                     <div className="mb-4">
                       <label className="text-xs uppercase tracking-wider text-on-surface-variant mb-1.5 block">分类</label>
@@ -215,12 +359,12 @@ export default function UploadModal({ open, onClose, onConverted }: UploadModalP
                       dragActive ? "border-primary bg-primary-container/5" : "border-outline-variant/30 hover:border-primary/50 hover:bg-surface-container/50"
                     } ${uploading ? "pointer-events-none opacity-60" : ""}`}
                   >
-                    <input ref={inputRef} type="file" accept={acceptedFormats} onChange={handleChange} className="hidden" />
+                    <input ref={inputRef} type="file" multiple accept={acceptedFormats} onChange={handleChange} className="hidden" />
                     <Icon name={uploading ? "hourglass_top" : "cloud_upload"} size={48} className="text-on-surface-variant/40 mb-3 block" />
                     {uploading ? (
                       <div className="flex flex-col items-center gap-2">
                         <p className="text-sm text-on-surface-variant">
-                          {progress < 80 ? `上传中... ${progress}%` : "正在转换中..."}
+                          {progressLabel || (progress < 80 ? `上传中... ${progress}%` : "正在转换中...")}
                         </p>
                         <div className="w-full max-w-xs h-1.5 bg-surface-container-high rounded-full overflow-hidden">
                           <motion.div className="h-full bg-primary rounded-full" initial={{ width: "5%" }} animate={{ width: `${progress}%` }} transition={{ duration: 0.3 }} />
@@ -229,7 +373,7 @@ export default function UploadModal({ open, onClose, onConverted }: UploadModalP
                     ) : (
                       <>
                         <p className="text-sm text-on-surface mb-1">拖放文件到此处，或点击选择</p>
-                        <p className="text-xs text-on-surface-variant">支持 {uploadPolicy.modelFormats.map((f) => f.toUpperCase()).join(" / ")} 格式，最大 {uploadPolicy.modelMaxSizeMb}MB</p>
+                        <p className="text-xs text-on-surface-variant">支持 {formatLabel} 格式，可多选或上传 ZIP/RAR 压缩包</p>
                       </>
                     )}
                   </div>

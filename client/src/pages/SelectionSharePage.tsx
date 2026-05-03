@@ -9,7 +9,6 @@ import {
   type ColumnDef,
 } from "../api/selections";
 import { getSiteTitle } from "../lib/publicSettings";
-import BrandMark from "../components/shared/BrandMark";
 import Icon from "../components/shared/Icon";
 import SafeImage from "../components/shared/SafeImage";
 import { PageHeader } from "../components/shared/PagePrimitives";
@@ -201,9 +200,6 @@ export default function SelectionSharePage() {
     return (
       <PublicPageShell>
       <div className="flex flex-1 flex-col items-center justify-center bg-surface gap-4">
-        <div className="flex items-center gap-2 mb-2">
-          <BrandMark size="nav" />
-        </div>
         <Icon name="link_off" size={48} className="text-on-surface-variant/30" />
         <p className="text-sm text-on-surface-variant">分享链接无效或已过期</p>
         <Link to="/" className="text-primary-container hover:underline mt-2 text-sm">返回首页</Link>
@@ -240,9 +236,8 @@ export default function SelectionSharePage() {
       {/* Top bar */}
       <div className="border-b border-outline-variant/10 bg-surface-container-low px-4 md:px-8 py-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center gap-2 min-w-0">
-          <BrandMark size="compact" />
-          <span className="text-on-surface-variant/30 shrink-0">·</span>
-          <span className="text-sm text-on-surface-variant shrink-0">选型分享</span>
+          <Icon name="share" size={16} className="text-primary-container" />
+          <span className="text-sm font-medium text-on-surface shrink-0">选型分享</span>
         </div>
         <div className="flex items-center gap-3 self-end sm:self-auto">
           <Link to="/selection" className="text-xs text-primary-container hover:underline">开始新的选型</Link>

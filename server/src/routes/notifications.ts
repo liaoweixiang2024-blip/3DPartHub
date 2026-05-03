@@ -83,7 +83,7 @@ router.put("/api/notifications/batch-read", authMiddleware, async (req: AuthRequ
   try {
     if (!prisma) { res.json({ count: 0 }); return; }
     const { ids } = req.body as { ids: string[] };
-    if (!ids?.length) { res.json({ count: 0 }); return; }
+    if (!Array.isArray(ids) || !ids.length || ids.length > 1000) { res.status(400).json({ detail: "ids 必须是非空数组且不超过 1000" }); return; }
     const result = await prisma.notification.updateMany({
       where: { id: { in: ids }, userId: req.user!.userId },
       data: { read: true },
@@ -99,7 +99,7 @@ router.delete("/api/notifications/batch", authMiddleware, async (req: AuthReques
   try {
     if (!prisma) { res.json({ count: 0 }); return; }
     const { ids } = req.body as { ids: string[] };
-    if (!ids?.length) { res.json({ count: 0 }); return; }
+    if (!Array.isArray(ids) || !ids.length || ids.length > 1000) { res.status(400).json({ detail: "ids 必须是非空数组且不超过 1000" }); return; }
     const result = await prisma.notification.deleteMany({
       where: { id: { in: ids }, userId: req.user!.userId },
     });

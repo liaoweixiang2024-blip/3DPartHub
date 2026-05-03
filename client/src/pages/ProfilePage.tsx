@@ -9,11 +9,10 @@ import SafeImage from '../components/shared/SafeImage';
 import { PageBody, PageHeader } from "../components/shared/PagePrimitives";
 import { AdminPageShell } from "../components/shared/AdminPageShell";
 import { authApi } from '../api/auth';
-import { useNavigate } from 'react-router-dom';
-import { listShares, deleteShare, type ShareLink } from '../api/shares';
+import { Link, useNavigate } from 'react-router-dom';
+import { listShares, type ShareLink } from '../api/shares';
 import { useAuthStore } from '../stores/useAuthStore';
 import { useToast } from '../components/shared/Toast';
-import { copyText } from '../lib/clipboard';
 
 const NOTIFICATION_ITEMS = [
   { key: 'ticket', label: '工单通知', desc: '工单回复、状态变更' },
@@ -32,15 +31,6 @@ function Toggle({ checked, onChange }: { checked: boolean; onChange: (v: boolean
       <span className={`absolute top-0.5 h-4 w-4 rounded-full bg-on-surface transition-transform ${checked ? 'left-[18px]' : 'left-0.5'}`} />
     </button>
   );
-}
-
-async function copyShareLink(token: string, toast: (message: string, type?: "success" | "error" | "info") => void) {
-  try {
-    await copyText(`${window.location.origin}/share/${token}`);
-    toast('链接已复制', 'success');
-  } catch {
-    toast('复制失败，请手动复制链接', 'error');
-  }
 }
 
 function NotificationPrefs({ compact = false }: { compact?: boolean }) {
@@ -294,158 +284,25 @@ function PasswordChangeDialog({ open, onClose }: { open: boolean; onClose: () =>
   );
 }
 
-function MySharesSection({ compact = false }: { compact?: boolean }) {
-  const { toast } = useToast();
-  const [deleteId, setDeleteId] = useState<string | null>(null);
-  const { data: shares, mutate } = useSWR<ShareLink[]>('/shares/mine', listShares);
 
-  const items = shares || [];
-
-  async function handleDelete(id: string) {
-    try {
-      await deleteShare(id);
-      toast('已删除', 'success');
-      setDeleteId(null);
-      mutate();
-    } catch (err: any) {
-      toast(err.response?.data?.message || err.response?.data?.detail || '删除失败', 'error');
-    }
-  }
-
-  function isExpired(expiresAt: string | null) {
-    if (!expiresAt) return false;
-    return new Date(expiresAt) < new Date();
-  }
-
-  if (compact) {
-    return (
-      <div className="space-y-3">
-        <div className="flex items-center gap-2 mb-4">
-          <Icon name="share" size={20} className="text-on-surface-variant" />
-          <h3 className="font-headline text-sm font-semibold text-on-surface uppercase tracking-wide">我的分享</h3>
-        </div>
-        {items.length === 0 && (
-          <div className="text-center py-6 text-on-surface-variant/50">
-            <Icon name="share" size={28} className="mx-auto mb-1 opacity-30" />
-            <p className="text-xs">暂无分享记录</p>
-          </div>
-        )}
-        {items.map(s => {
-          const expired = isExpired(s.expiresAt);
-          return (
-            <div key={s.id} className="bg-surface-container-lowest rounded-md border border-outline-variant/10 p-3">
-              <div className="flex items-start justify-between gap-2">
-                <span className="text-sm text-on-surface line-clamp-2 break-words min-w-0">{s.modelName || s.modelId}</span>
-                {expired ? (
-                  <span className="text-[10px] px-1.5 py-0.5 rounded-sm bg-on-surface-variant/10 text-on-surface-variant shrink-0">已过期</span>
-                ) : s.expiresAt ? (
-                  <span className="text-[10px] px-1.5 py-0.5 rounded-sm bg-emerald-500/15 text-emerald-400 shrink-0">有效</span>
-                ) : (
-                  <span className="text-[10px] px-1.5 py-0.5 rounded-sm bg-primary-container/15 text-primary-container shrink-0">永久</span>
-                )}
-              </div>
-              <div className="flex flex-wrap items-center gap-x-2 gap-y-1 mt-1.5 text-[10px] text-on-surface-variant/60">
-                <span><Icon name="visibility" size={10} /> {s.viewCount}</span>
-                <span><Icon name="download" size={10} /> {s.downloadCount}{s.downloadLimit > 0 ? `/${s.downloadLimit}` : ''}</span>
-                {s.hasPassword && <span>有密码</span>}
-              </div>
-              <div className="flex flex-wrap items-center gap-1.5 mt-2">
-                <button
-                  onClick={() => copyShareLink(s.token, toast)}
-                  className="px-2 py-1 text-[10px] text-primary-container hover:bg-primary-container/10 rounded transition-colors"
-                >
-                  <Icon name="link" size={12} className="inline mr-0.5" />复制链接
-                </button>
-                {deleteId === s.id ? (
-                  <>
-                    <button onClick={() => handleDelete(s.id)} className="px-2 py-1 text-[10px] font-medium bg-error text-on-error-container rounded">确认</button>
-                    <button onClick={() => setDeleteId(null)} className="px-2 py-1 text-[10px] text-on-surface-variant hover:bg-surface-container-high/50 rounded">取消</button>
-                  </>
-                ) : (
-                  <button
-                    onClick={() => setDeleteId(s.id)}
-                    className="px-2 py-1 text-[10px] text-error hover:bg-error-container/10 rounded transition-colors"
-                  >
-                    删除
-                  </button>
-                )}
-              </div>
-            </div>
-          );
-        })}
-      </div>
-    );
-  }
+function MobileSharesMenu() {
+  const { data: shares } = useSWR<ShareLink[]>('/shares/mine', listShares);
+  const count = shares?.length ?? 0;
 
   return (
-    <div className="bg-surface-container-low rounded-lg p-6 border border-outline-variant/10">
-      <div className="flex items-center gap-2 mb-5">
-        <Icon name="share" size={24} className="text-on-surface-variant" />
-        <h3 className="font-headline text-sm font-semibold uppercase tracking-wide text-on-surface">我的分享</h3>
-        <span className="text-xs text-on-surface-variant ml-auto">{items.length} 条</span>
+    <Link
+      to="/my-shares"
+      className="w-full flex items-center justify-between rounded-lg bg-surface-container-high px-4 py-3 text-left"
+    >
+      <div className="flex min-w-0 items-center gap-3">
+        <Icon name="share" size={20} className="text-on-surface/50" />
+        <span className="text-sm text-on-surface">我的分享</span>
       </div>
-      {items.length === 0 && (
-        <div className="text-center py-8 text-on-surface-variant/50">
-          <Icon name="share" size={36} className="mx-auto mb-2 opacity-30" />
-          <p className="text-sm">暂无分享记录</p>
-        </div>
-      )}
-      <div className="space-y-2">
-        {items.map(s => {
-          const expired = isExpired(s.expiresAt);
-          return (
-            <div key={s.id} className="bg-surface-container-lowest rounded-md border border-outline-variant/10 p-3">
-              <div className="flex items-start justify-between gap-3">
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <span className="font-medium text-sm text-on-surface break-words sm:truncate sm:max-w-[240px]">{s.modelName || s.modelId}</span>
-                    {expired ? (
-                      <span className="text-[10px] px-1.5 py-0.5 rounded-sm font-medium bg-on-surface-variant/10 text-on-surface-variant">已过期</span>
-                    ) : s.expiresAt ? (
-                      <span className="text-[10px] px-1.5 py-0.5 rounded-sm font-medium bg-emerald-500/15 text-emerald-400">有效</span>
-                    ) : (
-                      <span className="text-[10px] px-1.5 py-0.5 rounded-sm font-medium bg-primary-container/15 text-primary-container">永久</span>
-                    )}
-                    {s.hasPassword && (
-                      <span className="text-[10px] px-1.5 py-0.5 rounded-sm font-medium bg-amber-500/15 text-amber-400">有密码</span>
-                    )}
-                  </div>
-                  <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1.5 text-[10px] text-on-surface-variant/70">
-                    <span className="flex items-center gap-0.5"><Icon name="visibility" size={10} />{s.viewCount} 次浏览</span>
-                    <span className="flex items-center gap-0.5"><Icon name="download" size={10} />{s.downloadCount}{s.downloadLimit > 0 ? `/${s.downloadLimit}` : ''} 次下载</span>
-                    {s.expiresAt && <span className="flex items-center gap-0.5"><Icon name="schedule" size={10} />{new Date(s.expiresAt).toLocaleDateString('zh-CN')}</span>}
-                    <span>{new Date(s.createdAt).toLocaleDateString('zh-CN')}</span>
-                  </div>
-                </div>
-                <div className="flex items-center gap-1 shrink-0">
-                  <button
-                    onClick={() => copyShareLink(s.token, toast)}
-                    className="px-2 py-1 text-[10px] text-primary-container hover:bg-primary-container/10 rounded transition-colors"
-                    title="复制链接"
-                  >
-                    <Icon name="link" size={14} />
-                  </button>
-                  {deleteId === s.id ? (
-                    <>
-                      <button onClick={() => handleDelete(s.id)} className="px-2 py-1 text-[10px] font-medium bg-error text-on-error-container rounded">确认</button>
-                      <button onClick={() => setDeleteId(null)} className="px-2 py-1 text-[10px] text-on-surface-variant hover:bg-surface-container-high/50 rounded">取消</button>
-                    </>
-                  ) : (
-                    <button
-                      onClick={() => setDeleteId(s.id)}
-                      className="px-2 py-1 text-[10px] text-error hover:bg-error-container/10 rounded transition-colors"
-                      title="删除"
-                    >
-                      <Icon name="delete" size={14} />
-                    </button>
-                  )}
-                </div>
-              </div>
-            </div>
-          );
-        })}
+      <div className="flex shrink-0 items-center gap-2 text-on-surface-variant">
+        <span className="text-xs">{count} 条</span>
+        <Icon name="chevron_right" size={20} className="text-on-surface/30" />
       </div>
-    </div>
+    </Link>
   );
 }
 
@@ -652,10 +509,6 @@ function DesktopContent() {
 
         <section className="lg:col-span-12">
           <NotificationPrefs />
-        </section>
-
-        <section className="lg:col-span-12">
-          <MySharesSection />
         </section>
       </div>
       <PasswordChangeDialog open={pwdOpen} onClose={() => setPwdOpen(false)} />
@@ -883,9 +736,7 @@ function MobileContent() {
       </div>
 
       {/* My shares */}
-      <div className="rounded-lg bg-surface-container-high p-4">
-        <MySharesSection compact />
-      </div>
+      <MobileSharesMenu />
 
       <PasswordChangeDialog open={pwdOpen} onClose={() => setPwdOpen(false)} />
     </PageBody>

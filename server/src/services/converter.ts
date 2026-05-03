@@ -4,7 +4,7 @@ import { join, basename } from "node:path";
 import { randomUUID } from "node:crypto";
 
 const require = createRequire(import.meta.url);
-const occtimportjs = require("../../occt-import-js.node.cjs");
+const occtimportjs = require("occt-import-js");
 
 interface OcctMesh {
   index?: { array: ArrayLike<number> };
@@ -614,7 +614,7 @@ export async function convertStepToGltf(
     modelId,
     gltfPath,
     gltfUrl: versionedAssetUrl(`/static/models/${modelId}.glb`, cacheVersion),
-    originalName: basename(inputPath),
+    originalName: originalName || basename(inputPath),
     gltfSize,
     originalSize,
     previewMeta: meta,
@@ -644,7 +644,7 @@ export async function getMeshStats(inputPath: string): Promise<{
   let totalVertices = 0;
   let totalFaces = 0;
   for (const mesh of result.meshes) {
-    totalVertices += mesh.attributes.position.array.length / 3;
+    totalVertices += Math.floor(mesh.attributes.position.array.length / 3);
     if (mesh.index) {
       totalFaces += mesh.index.array.length / 3;
     } else if (mesh.attributes.position) {

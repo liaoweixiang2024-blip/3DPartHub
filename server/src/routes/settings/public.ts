@@ -121,6 +121,17 @@ export function createSettingsPublicRouter() {
           upload_policy: all.upload_policy ?? "",
           selection_thread_priority: all.selection_thread_priority ?? "",
           page_size_policy: all.page_size_policy ?? "",
+          // Product wall limits
+          product_wall_max_image_mb: all.product_wall_max_image_mb ?? 50,
+          product_wall_max_batch_count: all.product_wall_max_batch_count ?? 50,
+          product_wall_max_zip_extract: all.product_wall_max_zip_extract ?? 100,
+          // Download token TTL
+          download_token_ttl_minutes: all.download_token_ttl_minutes ?? 5,
+          // Ticket attachment limits
+          ticket_attachment_max_mb: all.ticket_attachment_max_mb ?? 100,
+          ticket_attachment_types: all.ticket_attachment_types ?? "jpg,jpeg,png,gif,webp,svg,pdf,doc,docx,xls,xlsx,ppt,pptx,zip,rar,7z,step,stp,iges,igs,xt,binary",
+          // API rate limiting
+          api_rate_limit: all.api_rate_limit ?? 5000,
         };
       });
       res.set("X-Cache", hit ? "HIT" : "MISS");

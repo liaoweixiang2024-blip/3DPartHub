@@ -1,4 +1,5 @@
 import { Router, Request, Response } from "express";
+import { existsSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { cacheDelByPrefix } from "../../lib/cache.js";
 import { config } from "../../lib/config.js";
@@ -7,6 +8,7 @@ import { requireBrowseAccess } from "../../middleware/browseAccess.js";
 import { requireRole } from "../../middleware/rbac.js";
 import { convertStepToGltf } from "../../services/converter.js";
 import { MODEL_STATUS } from "../../services/modelStatus.js";
+import { generateThumbnail } from "../../services/thumbnail.js";
 import { convertXtToGltf } from "../../services/xt-converter.js";
 import { modelUpload, validateModelUpload } from "./uploadHelpers.js";
 
@@ -47,7 +49,7 @@ export function createModelVersionsRouter({ prisma, optionalVerifiedUser }: Mode
 
   // Upload new version
   router.post("/api/models/:id/versions", authMiddleware, requireRole("ADMIN"), modelUpload.single("file"), async (req: AuthRequest, res: Response) => {
-    const modelId = req.params.id;
+    const modelId = req.params.id as string;
     const file = req.file;
     const changeLog = req.body.changeLog as string | undefined;
 
@@ -68,20 +70,34 @@ export function createModelVersionsRouter({ prisma, optionalVerifiedUser }: Mode
         return;
       }
 
-      const ext = await validateModelUpload(file, res);
-      if (!ext) return;
-      const versionNumber = model.currentVersion + 1;
-
-      // Convert file into a browser-ready GLB preview.
-      const modelDir = join(config.staticDir, "models");
-      let result: Awaited<ReturnType<typeof convertStepToGltf>>;
-      if (ext === "xt" || ext === "x_t") {
-        result = await convertXtToGltf(file.path, modelDir, `${modelId}_v${versionNumber}`, file.originalname || "model.xt");
-      } else {
-        result = await convertStepToGltf(file.path, modelDir, `${modelId}_v${versionNumber}`, file.originalname || "model.step");
+      if (model.status === MODEL_STATUS.QUEUED || model.status === MODEL_STATUS.PROCESSING) {
+        try { rmSync(file.path, { force: true }); } catch {}
+        res.status(409).json({ detail: "模型正在转换中，请稍后重试" });
+        return;
       }
 
-      // Create version record
+      const ext = await validateModelUpload(file, res);
+      if (!ext) return;
+
+      const updated = await prisma.model.update({
+        where: { id: modelId },
+        data: { currentVersion: { increment: 1 } },
+        select: { currentVersion: true },
+      });
+      const versionNumber = updated.currentVersion;
+
+      const modelDir = join(config.staticDir, "models");
+      let result: Awaited<ReturnType<typeof convertStepToGltf>>;
+      try {
+        if (ext === "xt" || ext === "x_t") {
+          result = await convertXtToGltf(file.path, modelDir, `${modelId}_v${versionNumber}`, file.originalname || "model.xt");
+        } else {
+          result = await convertStepToGltf(file.path, modelDir, `${modelId}_v${versionNumber}`, file.originalname || "model.step");
+        }
+      } finally {
+        try { rmSync(file.path, { force: true }); } catch {}
+      }
+
       const version = await prisma.modelVersion.create({
         data: {
           modelId,
@@ -89,19 +105,27 @@ export function createModelVersionsRouter({ prisma, optionalVerifiedUser }: Mode
           fileKey: result.gltfUrl,
           format: ext,
           fileSize: result.gltfSize,
+          previewMeta: result.previewMeta,
           changeLog: changeLog || `版本 ${versionNumber}`,
           createdById: req.user!.userId,
         },
       });
 
-      // Update model's current version and glTF URL
+      let thumbnailUrl: string | null = null;
+      if (existsSync(result.gltfPath)) {
+        try {
+          const thumb = await generateThumbnail(result.gltfPath, join(config.staticDir, "thumbnails"), modelId);
+          thumbnailUrl = `${thumb.thumbnailUrl}?t=${Date.now()}`;
+        } catch { /* non-critical */ }
+      }
+
       await prisma.model.update({
         where: { id: modelId },
         data: {
-          currentVersion: versionNumber,
           gltfUrl: result.gltfUrl,
           gltfSize: result.gltfSize,
           previewMeta: result.previewMeta,
+          ...(thumbnailUrl && { thumbnailUrl }),
           status: MODEL_STATUS.COMPLETED,
         },
       });
@@ -117,14 +141,15 @@ export function createModelVersionsRouter({ prisma, optionalVerifiedUser }: Mode
         change_log: changeLog,
       });
     } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : "上传版本失败";
-      res.status(500).json({ detail: message });
+      console.error("[versions] Upload failed:", err);
+      res.status(500).json({ detail: "上传版本失败" });
     }
   });
 
   // Rollback to a specific version
   router.post("/api/models/:id/versions/:versionId/rollback", authMiddleware, requireRole("ADMIN"), async (req: AuthRequest, res: Response) => {
-    const { id: modelId, versionId } = req.params;
+    const modelId = req.params.id as string;
+    const versionId = req.params.versionId as string;
 
     if (!prisma) {
       res.status(503).json({ detail: "数据库未连接" });
@@ -138,12 +163,32 @@ export function createModelVersionsRouter({ prisma, optionalVerifiedUser }: Mode
         return;
       }
 
+      const currentModel = await prisma.model.findUnique({ where: { id: modelId }, select: { status: true } });
+      if (currentModel?.status === MODEL_STATUS.QUEUED || currentModel?.status === MODEL_STATUS.PROCESSING) {
+        res.status(409).json({ detail: "模型正在转换中，无法回滚" });
+        return;
+      }
+
+      const glbPath = join(config.staticDir, "models", version.fileKey);
+      if (!existsSync(glbPath)) {
+        res.status(410).json({ detail: "版本文件不存在，无法回滚" });
+        return;
+      }
+
+      let thumbnailUrl: string | null = null;
+      try {
+        const thumb = await generateThumbnail(glbPath, join(config.staticDir, "thumbnails"), modelId);
+        thumbnailUrl = `${thumb.thumbnailUrl}?t=${Date.now()}`;
+      } catch { /* non-critical */ }
+
       await prisma.model.update({
         where: { id: modelId },
         data: {
           gltfUrl: version.fileKey,
           gltfSize: version.fileSize,
-          currentVersion: version.versionNumber,
+          previewMeta: version.previewMeta,
+          ...(thumbnailUrl && { thumbnailUrl }),
+          status: MODEL_STATUS.COMPLETED,
         },
       });
 

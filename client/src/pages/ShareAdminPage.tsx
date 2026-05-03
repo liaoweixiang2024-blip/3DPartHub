@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
-import useSWR from "swr";
+import { Link } from "react-router-dom";
+import useSWR, { useSWRConfig } from "swr";
 import useSWRInfinite from "swr/infinite";
 import { useDocumentTitle } from "../hooks/useDocumentTitle";
 import Icon from "../components/shared/Icon";
@@ -14,8 +15,10 @@ import type { ApiResponse } from "../types/api";
 
 interface ShareItem {
   id: string;
+  rawId: string;
+  type: "model" | "selection";
   token: string;
-  modelId: string;
+  modelId: string | null;
   modelName: string;
   createdById: string;
   createdByUsername: string;
@@ -35,6 +38,8 @@ interface ShareStats {
   expired: number;
   totalDownloads: number;
   totalViews: number;
+  modelShares?: number;
+  selectionShares?: number;
 }
 
 const PAGE_SIZE = 20;
@@ -53,10 +58,18 @@ async function fetchShareStats(): Promise<ShareStats> {
   return unwrapResponse<ShareStats>(res);
 }
 
+function getSharePath(item: ShareItem) {
+  return item.type === "selection" ? `/selection/s/${item.token}` : `/share/${item.token}`;
+}
+
 function Content() {
   const { toast } = useToast();
+  const { mutate: mutateGlobal } = useSWRConfig();
   const [search, setSearch] = useState("");
   const [deleteId, setDeleteId] = useState<string | null>(null);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [batchDeleteOpen, setBatchDeleteOpen] = useState(false);
+  const [batchDeleting, setBatchDeleting] = useState(false);
 
   const { data, mutate, setSize, size, isLoading } = useSWRInfinite(
     (pageIndex, previousPageData: AdminSharesResponse | null) => {
@@ -71,6 +84,7 @@ function Content() {
 
   useEffect(() => {
     setSize(1);
+    setSelectedIds(new Set());
   }, [search, setSize]);
 
   const { data: stats } = useSWR("/admin/shares/stats", fetchShareStats);
@@ -78,6 +92,10 @@ function Content() {
   const pages = data || [];
   const items = pages.flatMap((pageData) => pageData.items);
   const total = pages[0]?.total || 0;
+  const visibleIds = items.map((item) => item.id);
+  const selectedVisibleCount = visibleIds.filter((id) => selectedIds.has(id)).length;
+  const allVisibleSelected = visibleIds.length > 0 && selectedVisibleCount === visibleIds.length;
+  const selectedCount = selectedIds.size;
   const hasMore = items.length < total;
   const isLoadingMore = Boolean(size > 0 && !data?.[size - 1]);
   const loadMore = useCallback(() => {
@@ -90,15 +108,62 @@ function Content() {
       await client.delete(`/admin/shares/${id}`);
       toast("已删除", "success");
       setDeleteId(null);
+      setSelectedIds((prev) => {
+        const next = new Set(prev);
+        next.delete(id);
+        return next;
+      });
       mutate();
+      mutateGlobal("/admin/shares/stats");
     } catch (err: any) {
       toast(err.response?.data?.detail || "删除失败", "error");
     }
   }
 
-  async function handleCopy(token: string) {
+  async function handleBatchDelete() {
+    const ids = Array.from(selectedIds);
+    if (ids.length === 0) return;
+    setBatchDeleting(true);
     try {
-      await copyText(`${window.location.origin}/share/${token}`);
+      const res = await client.post<ApiResponse<{ ok: boolean; deleted: number }>>("/admin/shares/batch-delete", { ids });
+      const result = unwrapResponse<{ ok: boolean; deleted: number }>(res);
+      toast(`已删除 ${result.deleted} 条分享`, "success");
+      setSelectedIds(new Set());
+      setBatchDeleteOpen(false);
+      await mutate();
+      mutateGlobal("/admin/shares/stats");
+    } catch (err: any) {
+      toast(err.response?.data?.detail || "批量删除失败", "error");
+    } finally {
+      setBatchDeleting(false);
+    }
+  }
+
+  function toggleSelected(id: string) {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  function toggleSelectVisible() {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (allVisibleSelected) {
+        visibleIds.forEach((id) => next.delete(id));
+      } else {
+        visibleIds.forEach((id) => next.add(id));
+      }
+      return next;
+    });
+  }
+
+  async function handleCopy(item: ShareItem) {
+    try {
+      const path = item.type === "selection" ? `/selection/s/${item.token}` : `/share/${item.token}`;
+      await copyText(`${window.location.origin}${path}`);
       toast("链接已复制", "success");
     } catch {
       toast("复制失败，请手动复制链接", "error");
@@ -112,6 +177,8 @@ function Content() {
 
   const statItems = stats ? [
     { label: "总数", value: stats.total, icon: "share", accent: "text-primary-container" },
+    { label: "模型", value: stats.modelShares ?? 0, icon: "deployed_code", accent: "text-cyan-500" },
+    { label: "选型", value: stats.selectionShares ?? 0, icon: "fact_check", accent: "text-purple-500" },
     { label: "活跃", value: stats.active, icon: "check_circle", accent: "text-emerald-500" },
     { label: "已过期", value: stats.expired, icon: "schedule", accent: "text-on-surface-variant" },
     { label: "总浏览", value: stats.totalViews, icon: "visibility", accent: "text-blue-500" },
@@ -120,11 +187,11 @@ function Content() {
 
   const toolbar = (
     <div className="flex min-h-12 flex-wrap items-center justify-between gap-3">
-      <div className="grid min-w-0 flex-1 grid-cols-2 sm:grid-cols-3 xl:grid-cols-5">
+      <div className="grid min-w-0 flex-1 grid-cols-2 sm:grid-cols-3 xl:grid-cols-7">
         {statItems.map((item, index) => (
           <div
             key={item.label}
-            className="flex min-h-12 flex-col items-center justify-center gap-1 border-b border-r border-outline-variant/12 px-3 py-2 text-center even:border-r-0 sm:even:border-r sm:[&:nth-child(3n)]:border-r-0 xl:border-b-0 xl:even:border-r xl:[&:nth-child(3n)]:border-r xl:[&:nth-child(5n)]:border-r-0"
+            className="flex min-h-12 flex-col items-center justify-center gap-1 border-b border-r border-outline-variant/12 px-3 py-2 text-center even:border-r-0 sm:even:border-r sm:[&:nth-child(3n)]:border-r-0 xl:border-b-0 xl:even:border-r xl:[&:nth-child(3n)]:border-r xl:[&:nth-child(7n)]:border-r-0"
           >
             <span className="flex min-w-0 items-center justify-center gap-1.5">
               <Icon name={item.icon} size={14} className={item.accent} />
@@ -145,7 +212,7 @@ function Content() {
           type="text"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          placeholder="搜索模型名、用户名..."
+          placeholder="搜索模型、选型、用户名..."
           className="w-full border-none bg-transparent text-sm text-on-surface outline-none placeholder:text-on-surface-variant/50"
         />
         {search && (
@@ -154,6 +221,40 @@ function Content() {
           </button>
         )}
       </div>
+      {items.length > 0 && (
+        <div className="flex w-full flex-wrap items-center justify-between gap-2 border-t border-outline-variant/10 pt-2">
+          <button
+            type="button"
+            onClick={toggleSelectVisible}
+            className="inline-flex h-8 items-center gap-2 rounded-lg px-2 text-xs font-medium text-on-surface-variant transition-colors hover:bg-surface-container-high hover:text-on-surface"
+          >
+            <span className={`grid h-4 w-4 place-items-center rounded border ${allVisibleSelected ? "border-primary-container bg-primary-container text-on-primary" : "border-outline-variant/40"}`}>
+              {allVisibleSelected ? <Icon name="check" size={12} /> : null}
+            </span>
+            {allVisibleSelected ? "取消全选已加载" : "全选已加载"}
+          </button>
+          {selectedCount > 0 && (
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-on-surface-variant">已选 <strong className="text-on-surface">{selectedCount}</strong> 条</span>
+              <button
+                type="button"
+                onClick={() => setSelectedIds(new Set())}
+                className="rounded-lg px-2.5 py-1.5 text-xs text-on-surface-variant transition-colors hover:bg-surface-container-high hover:text-on-surface"
+              >
+                取消选择
+              </button>
+              <button
+                type="button"
+                onClick={() => setBatchDeleteOpen(true)}
+                className="inline-flex items-center gap-1.5 rounded-lg bg-error-container px-3 py-1.5 text-xs font-bold text-error transition-opacity hover:opacity-90"
+              >
+                <Icon name="delete" size={14} />
+                批量删除
+              </button>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 
@@ -179,35 +280,60 @@ function Content() {
         )}
         {items.map(s => {
           const expired = isExpired(s.expiresAt);
+          const checked = selectedIds.has(s.id);
           return (
-            <div key={s.id} className="bg-surface-container-low rounded-md border border-outline-variant/10 p-3">
-              <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <span className="font-medium text-sm text-on-surface break-words sm:truncate sm:max-w-[200px]">{s.modelName}</span>
+            <div key={s.id} className={`rounded-md border px-2.5 py-2 transition-colors sm:p-3 ${checked ? "border-primary-container/35 bg-primary-container/8" : "border-outline-variant/10 bg-surface-container-low"}`}>
+              <div className="flex min-w-0 items-center gap-2 sm:flex-row sm:items-start sm:justify-between sm:gap-3">
+                <div className="flex min-w-0 flex-1 items-center gap-2 sm:items-start sm:gap-3">
+                  <button
+                    type="button"
+                    onClick={() => toggleSelected(s.id)}
+                    className={`grid h-5 w-5 shrink-0 place-items-center rounded border transition-colors sm:mt-0.5 ${checked ? "border-primary-container bg-primary-container text-on-primary" : "border-outline-variant/35 text-transparent hover:border-primary-container/50"}`}
+                    aria-label={checked ? "取消选择分享" : "选择分享"}
+                  >
+                    <Icon name="check" size={13} />
+                  </button>
+                  <Link
+                    to={getSharePath(s)}
+                    className="min-w-0 flex-1 rounded-md outline-none transition-colors hover:bg-surface-container/45 focus-visible:ring-2 focus-visible:ring-primary-container/45 sm:-mx-2 sm:px-2 sm:py-1"
+                  >
+                  <div className="flex min-w-0 items-center gap-1.5 sm:flex-wrap sm:gap-2">
+                    <span className="min-w-0 flex-1 truncate text-sm font-medium text-on-surface hover:text-primary-container sm:max-w-[240px]">{s.modelName}</span>
+                    <Icon name="open_in_new" size={12} className="hidden shrink-0 text-on-surface-variant/50 sm:block" />
+                    <span className={`shrink-0 rounded-sm px-1.5 py-0.5 text-[10px] font-medium ${
+                      s.type === "selection"
+                        ? "bg-purple-500/15 text-purple-500"
+                        : "bg-cyan-500/15 text-cyan-500"
+                    }`}>
+                      {s.type === "selection" ? "选型" : "模型"}
+                    </span>
                     {expired ? (
-                      <span className="text-[10px] px-1.5 py-0.5 rounded-sm font-medium bg-on-surface-variant/10 text-on-surface-variant">已过期</span>
+                      <span className="hidden rounded-sm bg-on-surface-variant/10 px-1.5 py-0.5 text-[10px] font-medium text-on-surface-variant sm:inline-flex">已过期</span>
                     ) : s.expiresAt ? (
-                      <span className="text-[10px] px-1.5 py-0.5 rounded-sm font-medium bg-emerald-500/15 text-emerald-400">有效</span>
+                      <span className="hidden rounded-sm bg-emerald-500/15 px-1.5 py-0.5 text-[10px] font-medium text-emerald-400 sm:inline-flex">有效</span>
                     ) : (
-                      <span className="text-[10px] px-1.5 py-0.5 rounded-sm font-medium bg-primary-container/15 text-primary-container">永久</span>
+                      <span className="hidden rounded-sm bg-primary-container/15 px-1.5 py-0.5 text-[10px] font-medium text-primary-container sm:inline-flex">永久</span>
                     )}
                     {s.hasPassword && (
-                      <span className="text-[10px] px-1.5 py-0.5 rounded-sm font-medium bg-amber-500/15 text-amber-400">有密码</span>
+                      <span className="hidden rounded-sm bg-amber-500/15 px-1.5 py-0.5 text-[10px] font-medium text-amber-400 sm:inline-flex">有密码</span>
                     )}
                   </div>
-                  <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1.5 text-[10px] text-on-surface-variant/70">
-                    <span className="flex items-center gap-0.5"><Icon name="person" size={10} />{s.createdByUsername}</span>
-                    <span className="flex items-center gap-0.5"><Icon name="visibility" size={10} />{s.viewCount} 次浏览</span>
-                    <span className="flex items-center gap-0.5"><Icon name="download" size={10} />{s.downloadCount}{s.downloadLimit > 0 ? `/${s.downloadLimit}` : ""} 次下载</span>
-                    {s.expiresAt && <span className="flex items-center gap-0.5"><Icon name="schedule" size={10} />{new Date(s.expiresAt).toLocaleDateString("zh-CN")}</span>}
-                    <span>{new Date(s.createdAt).toLocaleDateString("zh-CN")}</span>
+                  <div className="mt-0.5 flex min-w-0 items-center gap-1.5 overflow-hidden text-[10px] text-on-surface-variant/70 sm:mt-1.5 sm:flex-wrap sm:gap-x-3 sm:gap-y-1 sm:overflow-visible">
+                    <span className="hidden min-w-0 items-center gap-0.5 truncate sm:flex"><Icon name="person" size={10} />{s.createdByUsername}</span>
+                    <span className="flex shrink-0 items-center gap-0.5"><Icon name="visibility" size={10} />{s.viewCount}</span>
+                    {s.type === "model" && (
+                      <span className="flex shrink-0 items-center gap-0.5"><Icon name="download" size={10} />{s.downloadCount}{s.downloadLimit > 0 ? `/${s.downloadLimit}` : ""}</span>
+                    )}
+                    {s.expiresAt && <span className="hidden items-center gap-0.5 sm:flex"><Icon name="schedule" size={10} />{new Date(s.expiresAt).toLocaleDateString("zh-CN")}</span>}
+                    <span className="shrink-0">{new Date(s.createdAt).toLocaleDateString("zh-CN", { month: "2-digit", day: "2-digit" })}</span>
+                    <span className="min-w-0 truncate sm:hidden">{s.createdByUsername}</span>
                   </div>
+                  </Link>
                 </div>
-                <div className="flex items-center justify-end gap-1 shrink-0">
+                <div className="flex shrink-0 items-center justify-end gap-0.5 sm:gap-1">
                   <button
-                    onClick={() => handleCopy(s.token)}
-                    className="px-2 py-1 text-[10px] text-primary-container hover:bg-primary-container/10 rounded transition-colors"
+                    onClick={() => handleCopy(s)}
+                    className="rounded px-1.5 py-1 text-[10px] text-primary-container transition-colors hover:bg-primary-container/10 sm:px-2"
                     title="复制链接"
                   >
                     <Icon name="link" size={14} />
@@ -215,12 +341,12 @@ function Content() {
                   {deleteId === s.id ? (
                     <>
                       <button onClick={() => handleDelete(s.id)} className="px-2 py-1 text-[10px] font-medium bg-error text-on-error-container rounded">确认</button>
-                      <button onClick={() => setDeleteId(null)} className="px-2 py-1 text-[10px] text-on-surface-variant hover:bg-surface-container-high/50 rounded">取消</button>
+                      <button onClick={() => setDeleteId(null)} className="hidden px-2 py-1 text-[10px] text-on-surface-variant hover:bg-surface-container-high/50 rounded sm:inline-flex">取消</button>
                     </>
                   ) : (
                     <button
                       onClick={() => setDeleteId(s.id)}
-                      className="px-2 py-1 text-[10px] text-error hover:bg-error-container/10 rounded transition-colors"
+                      className="rounded px-1.5 py-1 text-[10px] text-error transition-colors hover:bg-error-container/10 sm:px-2"
                       title="删除"
                     >
                       <Icon name="delete" size={14} />
@@ -233,6 +359,41 @@ function Content() {
         })}
         {items.length > 0 && <InfiniteLoadTrigger hasMore={hasMore} isLoading={isLoadingMore} onLoadMore={loadMore} />}
       </div>
+      {batchDeleteOpen && (
+        <div className="fixed inset-0 z-[120] flex items-center justify-center bg-black/40 p-4 backdrop-blur-sm" onClick={() => !batchDeleting && setBatchDeleteOpen(false)}>
+          <div className="w-full max-w-sm rounded-2xl border border-outline-variant/20 bg-surface-container-low p-5 shadow-2xl" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-start gap-3">
+              <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-error-container text-error">
+                <Icon name="delete" size={20} />
+              </span>
+              <div className="min-w-0">
+                <h3 className="text-base font-bold text-on-surface">批量删除分享</h3>
+                <p className="mt-1 text-sm leading-relaxed text-on-surface-variant">
+                  将删除已选的 {selectedCount} 条分享链接。删除后外部链接会立即失效，此操作不可恢复。
+                </p>
+              </div>
+            </div>
+            <div className="mt-5 grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => setBatchDeleteOpen(false)}
+                disabled={batchDeleting}
+                className="rounded-lg border border-outline-variant/25 px-4 py-2.5 text-sm font-medium text-on-surface-variant transition-colors hover:bg-surface-container-high disabled:opacity-50"
+              >
+                取消
+              </button>
+              <button
+                type="button"
+                onClick={handleBatchDelete}
+                disabled={batchDeleting}
+                className="rounded-lg bg-error px-4 py-2.5 text-sm font-bold text-on-error-container transition-opacity hover:opacity-90 disabled:opacity-50"
+              >
+                {batchDeleting ? "删除中..." : "确认删除"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </AdminManagementPage>
   );
 }

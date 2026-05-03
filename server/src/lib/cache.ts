@@ -2,7 +2,7 @@ import Redis from "ioredis";
 import { randomUUID } from "node:crypto";
 import { config } from "./config.js";
 
-const redis = new Redis(config.redisUrl, {
+export const redis = new Redis(config.redisUrl, {
   connectTimeout: 2000,
   commandTimeout: 1000,
   maxRetriesPerRequest: 0,
@@ -23,9 +23,9 @@ redis.on("close", () => { available = false; });
 export const TTL = {
   CATEGORIES: 600,      // 10 min
   SETTINGS_PUBLIC: 60,  // 1 min — config changes should propagate quickly
-  MODELS_LIST: 120,     // 2 min
+  MODELS_LIST: 300,     // 5 min
   MODELS_SEARCH: 60,    // 1 min — keep search fresh while absorbing bursts
-  MODEL_DETAIL: 60,     // 1 min — avoid repeated DB + file-stat work on hot models
+  MODEL_DETAIL: 300,     // 5 min
   MODEL_MATCH_INDEX: 600, // 10 min — model changes actively clear cache:models:
   SELECTION_CATEGORIES: 600, // 10 min
   SELECTION_PRODUCTS: 600, // 10 min — admin changes actively clear cache:selections:

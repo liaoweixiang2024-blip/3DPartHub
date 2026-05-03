@@ -1,5 +1,5 @@
 import { createReadStream, createWriteStream, existsSync, mkdirSync, readdirSync, rmSync, statSync, unlinkSync } from "node:fs";
-import { join, dirname } from "node:path";
+import { join, dirname, resolve, sep } from "node:path";
 import { pipeline } from "node:stream/promises";
 import { config } from "./config.js";
 
@@ -23,7 +23,11 @@ class LocalStorage implements StorageProvider {
   }
 
   private resolve(key: string): string {
-    const p = join(this.basePath, key);
+    const p = resolve(this.basePath, key);
+    const basePathResolved = resolve(this.basePath);
+    if (p !== basePathResolved && !p.startsWith(basePathResolved + sep)) {
+      throw new Error("Storage key escapes base path");
+    }
     mkdirSync(dirname(p), { recursive: true });
     return p;
   }
@@ -35,11 +39,7 @@ class LocalStorage implements StorageProvider {
       await writeFile(filePath, data);
     } else {
       const ws = createWriteStream(filePath);
-      data.pipe(ws);
-      await new Promise<void>((resolve, reject) => {
-        ws.on("finish", resolve);
-        ws.on("error", reject);
-      });
+      await pipeline(data, ws);
     }
     return `/static/${key}`;
   }

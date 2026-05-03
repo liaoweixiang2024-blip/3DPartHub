@@ -54,5 +54,5 @@ export function errorHandler(err: Error, _req: Request, res: Response, _next: Ne
 }
 
 export function notFoundHandler(req: Request, res: Response) {
-  res.status(404).json(formatError(404, `接口不存在: ${req.method} ${req.path}`));
+  res.status(404).json(formatError(404, "接口不存在"));
 }

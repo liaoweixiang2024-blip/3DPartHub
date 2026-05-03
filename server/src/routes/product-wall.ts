@@ -1,6 +1,6 @@
 import { Router, Response, type NextFunction } from "express";
 import AdmZip from "adm-zip";
-import { Image } from "canvas";
+import { Image, createCanvas, loadImage } from "canvas";
 import { createExtractorFromData } from "node-unrar-js";
 import multer from "multer";
 import { randomUUID } from "node:crypto";
@@ -14,6 +14,7 @@ import type { ProductWallCategory as ProductWallCategoryRow, ProductWallImage as
 import { config } from "../lib/config.js";
 import { prisma } from "../lib/prisma.js";
 import { getBusinessConfig } from "../lib/businessConfig.js";
+import { getSetting } from "../lib/settings.js";
 import { badRequest } from "../lib/http.js";
 import { authMiddleware, type AuthRequest } from "../middleware/auth.js";
 
@@ -31,6 +32,7 @@ type ProductWallCategoryItem = {
 type ProductWallItem = {
   id: string;
   title: string;
+  description?: string;
   kind: ProductWallKind;
   image: string;
   previewImage?: string;
@@ -40,7 +42,6 @@ type ProductWallItem = {
   createdAt: string;
   status: ProductWallStatus;
   uploaderId?: string;
-  uploaderName?: string;
   reviewedAt?: string;
   reviewedBy?: string;
   rejectReason?: string;
@@ -48,8 +49,7 @@ type ProductWallItem = {
 
 const PRODUCT_WALL_DIR = join(process.cwd(), config.staticDir, "product-wall");
 const FALLBACK_MAX_IMAGE_BYTES = 8 * 1024 * 1024;
-const MULTER_MAX_IMAGE_BYTES = 50 * 1024 * 1024;
-const MULTER_MAX_IMAGE_FILES = 50;
+const MULTER_MAX_IMAGE_FILES = 200;
 const DEFAULT_PRODUCT_WALL_CATEGORIES: ProductWallKind[] = ["公司产品", "使用案例", "客户案例", "海报"];
 const IMAGE_EXTENSIONS: Record<string, string> = {
   "image/png": "png",
@@ -171,6 +171,25 @@ function safeTitle(value: unknown, fallback = "产品图片") {
   return text.slice(0, 80);
 }
 
+function safeDescription(value: unknown) {
+  return String(value || "")
+    .replace(/[\u0000-\u001f\u007f-\u009f]/g, "")
+    .trim()
+    .slice(0, 500);
+}
+
+function requirePublicUploadMeta(req: AuthRequest, res: Response, files?: Express.Multer.File[]) {
+  if (req.user?.role === "ADMIN") return true;
+  const title = safeTitle(req.body?.title, "");
+  const description = safeDescription(req.body?.description);
+  if (title && description) return true;
+  if (files?.length) {
+    for (const file of files) rmSync(file.path, { force: true });
+  }
+  res.status(400).json({ detail: title ? "请填写图片描述" : "请填写图片标题" });
+  return false;
+}
+
 function tagsFromJson(value: unknown, fallbackTitle: string) {
   return Array.isArray(value) ? value.map(String).filter(Boolean) : parseTags(value, fallbackTitle);
 }
@@ -179,6 +198,7 @@ function toProductWallItem(row: ProductWallImageRow): ProductWallItem {
   return {
     id: row.id,
     title: row.title,
+    description: row.description || undefined,
     kind: normalizeKind(row.kind),
     image: row.imageUrl,
     previewImage: row.previewImageUrl || row.imageUrl,
@@ -188,7 +208,6 @@ function toProductWallItem(row: ProductWallImageRow): ProductWallItem {
     createdAt: row.createdAt.toISOString(),
     status: normalizeStatus(row.status),
     uploaderId: row.uploaderId || undefined,
-    uploaderName: row.uploaderName || undefined,
     reviewedAt: row.reviewedAt?.toISOString(),
     reviewedBy: row.reviewedById || undefined,
     rejectReason: row.rejectReason || undefined,
@@ -214,7 +233,69 @@ async function ensureCategorySeed() {
   });
 }
 
+let productWallSchemaReady: Promise<void> | null = null;
+
+async function ensureProductWallSchema() {
+  productWallSchemaReady ||= (async () => {
+    const statements = [
+      `CREATE TABLE IF NOT EXISTS "product_wall_images" (
+        "id" TEXT NOT NULL,
+        "title" TEXT NOT NULL,
+        "description" TEXT,
+        "kind" TEXT NOT NULL DEFAULT '公司产品',
+        "image_url" TEXT NOT NULL,
+        "preview_image_url" TEXT,
+        "ratio" TEXT NOT NULL DEFAULT '4 / 5',
+        "tags" JSONB,
+        "sort_order" INTEGER NOT NULL DEFAULT 0,
+        "status" TEXT NOT NULL DEFAULT 'pending',
+        "uploader_id" TEXT,
+        "reviewed_at" TIMESTAMP(3),
+        "reviewed_by_id" TEXT,
+        "reject_reason" TEXT,
+        "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        "updated_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        CONSTRAINT "product_wall_images_pkey" PRIMARY KEY ("id")
+      )`,
+      `ALTER TABLE "product_wall_images" ADD COLUMN IF NOT EXISTS "description" TEXT`,
+      `CREATE INDEX IF NOT EXISTS "product_wall_images_status_idx" ON "product_wall_images"("status")`,
+      `CREATE INDEX IF NOT EXISTS "product_wall_images_kind_idx" ON "product_wall_images"("kind")`,
+      `CREATE INDEX IF NOT EXISTS "product_wall_images_sort_order_idx" ON "product_wall_images"("sort_order")`,
+      `CREATE INDEX IF NOT EXISTS "product_wall_images_created_at_idx" ON "product_wall_images"("created_at")`,
+      `CREATE INDEX IF NOT EXISTS "product_wall_images_uploader_id_idx" ON "product_wall_images"("uploader_id")`,
+      `CREATE INDEX IF NOT EXISTS "product_wall_images_status_kind_sort_order_idx" ON "product_wall_images"("status", "kind", "sort_order")`,
+      `CREATE TABLE IF NOT EXISTS "product_wall_categories" (
+        "id" TEXT NOT NULL,
+        "name" TEXT NOT NULL,
+        "sort_order" INTEGER NOT NULL DEFAULT 0,
+        "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        "updated_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        CONSTRAINT "product_wall_categories_pkey" PRIMARY KEY ("id")
+      )`,
+      `CREATE UNIQUE INDEX IF NOT EXISTS "product_wall_categories_name_key" ON "product_wall_categories"("name")`,
+      `CREATE INDEX IF NOT EXISTS "product_wall_categories_sort_order_idx" ON "product_wall_categories"("sort_order")`,
+      `CREATE TABLE IF NOT EXISTS "product_wall_image_favorites" (
+        "id" TEXT NOT NULL,
+        "user_id" TEXT NOT NULL,
+        "image_id" TEXT NOT NULL,
+        "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        CONSTRAINT "product_wall_image_favorites_pkey" PRIMARY KEY ("id")
+      )`,
+      `CREATE UNIQUE INDEX IF NOT EXISTS "product_wall_image_favorites_userId_imageId_key" ON "product_wall_image_favorites"("user_id", "image_id")`,
+      `CREATE INDEX IF NOT EXISTS "product_wall_image_favorites_userId_idx" ON "product_wall_image_favorites"("user_id")`,
+    ];
+    for (const statement of statements) {
+      await prisma.$executeRawUnsafe(statement);
+    }
+  })().catch((error) => {
+    productWallSchemaReady = null;
+    throw error;
+  });
+  return productWallSchemaReady;
+}
+
 async function ensureProductWallData() {
+  await ensureProductWallSchema();
   await ensureCategorySeed();
 }
 
@@ -273,13 +354,15 @@ function removeManagedImage(url?: string | null) {
 
 const imageUpload = multer({
   dest: PRODUCT_WALL_DIR,
-  limits: { fileSize: MULTER_MAX_IMAGE_BYTES, files: MULTER_MAX_IMAGE_FILES },
+  limits: { fileSize: 200 * 1024 * 1024, files: MULTER_MAX_IMAGE_FILES },
 });
 
 async function getProductWallUploadPolicy() {
   const { uploadPolicy } = await getBusinessConfig();
-  const maxSizeMb = Math.max(1, Math.min(50, Math.floor(Number(uploadPolicy.productWallImageMaxSizeMb) || 8)));
-  const maxFiles = Math.max(1, Math.min(MULTER_MAX_IMAGE_FILES, Math.floor(Number(uploadPolicy.productWallUploadMaxFiles) || 20)));
+  const maxImageMb = Math.max(1, Number(await getSetting<number>("product_wall_max_image_mb")) || 50);
+  const maxBatch = Math.max(1, Number(await getSetting<number>("product_wall_max_batch_count")) || 50);
+  const maxSizeMb = Math.max(1, Math.min(maxImageMb, Math.floor(Number(uploadPolicy.productWallImageMaxSizeMb) || 8)));
+  const maxFiles = Math.max(1, Math.min(maxBatch, Math.floor(Number(uploadPolicy.productWallUploadMaxFiles) || 20)));
   return { maxSizeMb, maxBytes: maxSizeMb * 1024 * 1024, maxFiles };
 }
 
@@ -313,6 +396,7 @@ function cleanupPendingImages(images: PendingProductWallImage[]) {
 
 function imageRatioFromBuffer(buffer: Buffer) {
   try {
+    if (buffer.length > 20 * 1024 * 1024) return "4 / 5";
     const image = new Image();
     image.src = buffer;
     if (!image.width || !image.height) return "4 / 5";
@@ -326,6 +410,24 @@ function imageRatioFromBuffer(buffer: Buffer) {
 
 function imageRatioFromPath(path: string) {
   return imageRatioFromBuffer(readFileSync(path));
+}
+
+async function generatePreviewImage(sourcePath: string, maxWidth = 400): Promise<string | null> {
+  try {
+    const image = await loadImage(sourcePath);
+    if (image.width <= maxWidth) return null;
+    const scale = maxWidth / image.width;
+    const height = Math.max(1, Math.round(image.height * scale));
+    const canvas = createCanvas(maxWidth, height);
+    const ctx = canvas.getContext("2d");
+    ctx.drawImage(image, 0, 0, maxWidth, height);
+    const previewFilename = `preview_${randomUUID()}.jpg`;
+    const previewPath = join(PRODUCT_WALL_DIR, previewFilename);
+    writeFileSync(previewPath, canvas.toBuffer("image/jpeg", { quality: 0.75 }));
+    return `/static/product-wall/${previewFilename}`;
+  } catch {
+    return null;
+  }
 }
 
 async function collectProductWallUploadImages(files: Express.Multer.File[]) {
@@ -352,12 +454,18 @@ async function collectProductWallUploadImages(files: Express.Multer.File[]) {
         throw badRequest("压缩包读取失败，请上传 zip 格式文件");
       }
       try {
+        const maxZipExtract = Math.max(1, Number(await getSetting<number>("product_wall_max_zip_extract")) || 100);
+        const MAX_SINGLE_IMAGE_BYTES = 50 * 1024 * 1024;
         for (const entry of zip.getEntries()) {
+          if (images.length >= maxZipExtract) break;
           if (entry.isDirectory || entry.entryName.startsWith("__MACOSX/")) continue;
           const ext = imageExtFromFilename(entry.entryName);
           if (!ext) continue;
+          const declaredSize = entry.header.size;
+          if (declaredSize > MAX_SINGLE_IMAGE_BYTES) continue;
           const buffer = entry.getData();
           if (!buffer.length) continue;
+          if (buffer.length > MAX_SINGLE_IMAGE_BYTES) continue;
           if (!canAddImage(buffer.length)) continue;
           images.push({
             title: basename(entry.entryName),
@@ -381,7 +489,9 @@ async function collectProductWallUploadImages(files: Express.Multer.File[]) {
         const extracted = extractor.extract({
           files: (header) => !header.flags.directory && Boolean(imageExtFromFilename(header.name)),
         });
+        const maxRarExtract = Math.max(1, Number(await getSetting<number>("product_wall_max_zip_extract")) || 100);
         for (const item of extracted.files) {
+          if (images.length >= maxRarExtract) break;
           const ext = imageExtFromFilename(item.fileHeader.name);
           const content = item.extraction;
           if (!ext || !content?.length) continue;
@@ -435,19 +545,21 @@ async function createItemsFromUploadedFiles(req: AuthRequest, files: Express.Mul
     if (image.sourcePath) renameSync(image.sourcePath, targetPath);
     else if (image.buffer) writeFileSync(targetPath, image.buffer);
     const imageUrl = `/static/product-wall/${filename}`;
+    const previewUrl = (await generatePreviewImage(targetPath)) || imageUrl;
     const title = safeTitle(req.body?.title, image.title || "产品图片");
+    const description = safeDescription(req.body?.description);
     const row: ProductWallImageRow = await prisma.productWallImage.create({
       data: {
         title,
+        description: description || null,
         kind: normalizeKind(req.body?.kind),
         imageUrl,
-        previewImageUrl: imageUrl,
+        previewImageUrl: previewUrl,
         ratio: image.ratio || "4 / 5",
         tags: parseTags(req.body?.tags, title),
         sortOrder: startSortOrder + created.length,
         status,
         uploaderId: req.user?.userId,
-        uploaderName: req.user?.role === "ADMIN" ? "管理员" : "用户投稿",
       },
     });
     created.push(toProductWallItem(row));
@@ -487,19 +599,21 @@ async function createItemFromRemoteUrl(req: AuthRequest, res: Response, status: 
       const { maxBytes } = await getProductWallUploadPolicy();
       await pipeline(resp.body, createMaxBytesTransform(maxBytes || FALLBACK_MAX_IMAGE_BYTES), createWriteStream(filePath));
       const imageUrl = `/static/product-wall/${filename}`;
+      const previewUrl = (await generatePreviewImage(filePath)) || imageUrl;
       const title = safeTitle(req.body?.title || parsedUrl.pathname.split("/").pop(), "链接图片");
+      const description = safeDescription(req.body?.description);
       const item = await prisma.productWallImage.create({
         data: {
           title,
+          description: description || null,
           kind: normalizeKind(req.body?.kind),
           imageUrl,
-          previewImageUrl: imageUrl,
+          previewImageUrl: previewUrl,
           ratio: imageRatioFromPath(filePath),
           tags: parseTags(req.body?.tags, title),
           sortOrder: await nextSortOrder(),
           status,
           uploaderId: req.user?.userId,
-          uploaderName: req.user?.role === "ADMIN" ? "管理员" : "用户投稿",
         },
       });
       res.json({ item: toProductWallItem(item) });
@@ -535,14 +649,22 @@ export default function productWallRouter() {
     }
   });
 
-  router.get("/api/product-wall", async (_req, res, next) => {
+  router.get("/api/product-wall", async (req, res, next) => {
     try {
       await ensureProductWallData();
-      const rows = await prisma.productWallImage.findMany({
-        where: { status: "approved" },
-        orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
-      });
-      res.json(rows.map(toProductWallItem));
+      const page = Math.max(1, Number(req.query.page) || 1);
+      const pageSize = Math.min(200, Math.max(1, Number(req.query.page_size) || 50));
+      const where = { status: "approved" };
+      const [rows, total] = await Promise.all([
+        prisma.productWallImage.findMany({
+          where,
+          orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
+          skip: (page - 1) * pageSize,
+          take: pageSize,
+        }),
+        prisma.productWallImage.count({ where }),
+      ]);
+      res.json({ items: rows.map(toProductWallItem), total, page, page_size: pageSize });
     } catch (err) {
       next(err);
     }
@@ -625,24 +747,22 @@ export default function productWallRouter() {
   router.delete("/api/admin/product-wall/categories/:id", authMiddleware, requireAdmin, async (req: AuthRequest, res: Response, next) => {
     try {
       const id = String(req.params.id);
-      const existing = await prisma.productWallCategory.findUnique({ where: { id } });
-      if (!existing) {
-        res.status(404).json({ detail: "分类不存在" });
-        return;
-      }
-      const imageCount = await prisma.productWallImage.count({ where: { kind: existing.name } });
-      if (imageCount > 0) {
-        res.status(409).json({ detail: `分类下还有 ${imageCount} 张图片，请先移动或删除图片` });
-        return;
-      }
-      const categoryCount = await prisma.productWallCategory.count();
-      if (categoryCount <= 1) {
-        res.status(400).json({ detail: "至少保留一个分类" });
-        return;
-      }
-      await prisma.productWallCategory.delete({ where: { id } });
+      const result = await prisma.$transaction(async (tx) => {
+        const existing = await tx.productWallCategory.findUnique({ where: { id } });
+        if (!existing) throw Object.assign(new Error("NOT_FOUND"), { statusCode: 404 });
+        const imageCount = await tx.productWallImage.count({ where: { kind: existing.name } });
+        if (imageCount > 0) throw Object.assign(new Error(`分类下还有 ${imageCount} 张图片，请先移动或删除图片`), { statusCode: 409 });
+        const categoryCount = await tx.productWallCategory.count();
+        if (categoryCount <= 1) throw Object.assign(new Error("至少保留一个分类"), { statusCode: 400 });
+        await tx.productWallCategory.delete({ where: { id } });
+        return true;
+      });
       res.json({ ok: true });
-    } catch (err) {
+    } catch (err: any) {
+      if (err?.statusCode) {
+        res.status(err.statusCode).json({ detail: err.message });
+        return;
+      }
       next(err);
     }
   });
@@ -654,6 +774,8 @@ export default function productWallRouter() {
         res.status(400).json({ detail: "请选择图片、文件夹或 zip/rar 压缩包" });
         return;
       }
+      await validateProductWallUploadFiles(files);
+      if (!requirePublicUploadMeta(req, res, files)) return;
       const created = await createItemsFromUploadedFiles(req, files, req.user?.role === "ADMIN" ? "approved" : "pending");
       if (!created.length) {
         res.status(400).json({ detail: "没有识别到可上传的图片" });
@@ -672,6 +794,7 @@ export default function productWallRouter() {
         res.status(400).json({ detail: "请选择图片、文件夹或 zip/rar 压缩包" });
         return;
       }
+      await validateProductWallUploadFiles(files);
       const created = await createItemsFromUploadedFiles(req, files, "approved");
       if (!created.length) {
         res.status(400).json({ detail: "没有识别到可上传的图片" });
@@ -684,6 +807,7 @@ export default function productWallRouter() {
   });
 
   router.post("/api/product-wall/from-url", authMiddleware, async (req: AuthRequest, res: Response) => {
+    if (!requirePublicUploadMeta(req, res)) return;
     await createItemFromRemoteUrl(req, res, req.user?.role === "ADMIN" ? "approved" : "pending");
   });
 
@@ -694,11 +818,12 @@ export default function productWallRouter() {
   router.patch("/api/admin/product-wall/:id/review", authMiddleware, requireAdmin, async (req: AuthRequest, res: Response, next) => {
     try {
       const id = String(req.params.id);
-      const status = normalizeStatus(req.body?.status);
-      if (status === "pending") {
-        res.status(400).json({ detail: "审核只能设置为通过或拒绝" });
+      const rawStatus = req.body?.status;
+      if (rawStatus !== "approved" && rawStatus !== "rejected") {
+        res.status(400).json({ detail: "状态只能是 approved 或 rejected" });
         return;
       }
+      const status: ProductWallStatus = rawStatus;
       const item = await prisma.productWallImage.update({
         where: { id },
         data: {
@@ -730,9 +855,10 @@ export default function productWallRouter() {
         where: { id },
         data: {
           title: req.body?.title !== undefined ? safeTitle(req.body.title, existing.title) : undefined,
+          description: req.body?.description !== undefined ? (safeDescription(req.body.description) || null) : undefined,
           kind: req.body?.kind !== undefined ? normalizeKind(req.body.kind) : undefined,
           tags: req.body?.tags !== undefined ? parseTags(req.body.tags, existing.title) : undefined,
-          sortOrder: Number.isFinite(Number(req.body?.sortOrder)) ? Number(req.body.sortOrder) : undefined,
+          sortOrder: Number.isFinite(Number(req.body?.sortOrder)) ? Math.min(2147483647, Math.max(-2147483648, Math.trunc(Number(req.body?.sortOrder) || 0))) : undefined,
         },
       });
       res.json(toProductWallItem(item));
@@ -748,12 +874,16 @@ export default function productWallRouter() {
         res.status(400).json({ detail: "请选择要删除的图片" });
         return;
       }
+      if (ids.length > 200) {
+        res.status(400).json({ detail: "单次最多删除 200 张图片" });
+        return;
+      }
       const targets = await prisma.productWallImage.findMany({ where: { id: { in: ids } } });
+      await prisma.productWallImage.deleteMany({ where: { id: { in: ids } } });
       for (const item of targets) {
         removeManagedImage(item.imageUrl);
         removeManagedImage(item.previewImageUrl);
       }
-      await prisma.productWallImage.deleteMany({ where: { id: { in: ids } } });
       res.json({ ok: true, deleted: targets.length });
     } catch (err) {
       next(err);
@@ -768,13 +898,55 @@ export default function productWallRouter() {
         res.status(404).json({ detail: "图片不存在" });
         return;
       }
+      await prisma.productWallImage.delete({ where: { id } });
       removeManagedImage(target.imageUrl);
       removeManagedImage(target.previewImageUrl);
-      await prisma.productWallImage.delete({ where: { id } });
       res.json({ ok: true });
     } catch (err) {
       next(err);
     }
+  });
+
+  // ── 收藏 ──────────────────────────────────────────────────
+
+  router.get("/api/product-wall/favorites", authMiddleware, async (req: AuthRequest, res: Response, next) => {
+    try {
+      const userId = req.user?.userId;
+      if (!userId) { res.status(401).json({ detail: "请先登录" }); return; }
+      const rows = await prisma.productWallImageFavorite.findMany({
+        where: { userId },
+        select: { imageId: true },
+      });
+      res.json(rows.map((r) => r.imageId));
+    } catch (err) { next(err); }
+  });
+
+  router.post("/api/product-wall/:id/favorite", authMiddleware, async (req: AuthRequest, res: Response, next) => {
+    try {
+      const userId = req.user?.userId;
+      if (!userId) { res.status(401).json({ detail: "请先登录" }); return; }
+      const imageId = String(req.params.id);
+      const image = await prisma.productWallImage.findUnique({ where: { id: imageId } });
+      if (!image) { res.status(404).json({ detail: "图片不存在" }); return; }
+      await prisma.productWallImageFavorite.upsert({
+        where: { userId_imageId: { userId, imageId } },
+        update: {},
+        create: { userId, imageId },
+      });
+      res.json({ ok: true });
+    } catch (err) { next(err); }
+  });
+
+  router.delete("/api/product-wall/:id/favorite", authMiddleware, async (req: AuthRequest, res: Response, next) => {
+    try {
+      const userId = req.user?.userId;
+      if (!userId) { res.status(401).json({ detail: "请先登录" }); return; }
+      const imageId = String(req.params.id);
+      await prisma.productWallImageFavorite.deleteMany({
+        where: { userId, imageId },
+      });
+      res.json({ ok: true });
+    } catch (err) { next(err); }
   });
 
   return router;

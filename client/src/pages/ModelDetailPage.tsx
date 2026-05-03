@@ -342,7 +342,7 @@ function DesktopDetail({
               className="p-2 text-on-surface-variant hover:text-primary hover:bg-surface-container-high rounded-sm transition-colors border border-outline-variant/20 shrink-0"
               aria-label="编辑模型"
               data-tooltip="编辑模型"
-              data-tooltip-side="left"
+              data-tooltip-side="bottom"
             >
               <Icon name="settings" size={20} />
             </button>
@@ -361,7 +361,7 @@ function DesktopDetail({
             onClick={onShare}
             aria-label="分享"
             data-tooltip="分享"
-            data-tooltip-side="left"
+            data-tooltip-side="bottom"
             className="bg-surface-container-high border border-outline/40 hover:border-outline text-on-surface rounded-sm p-2 transition-all flex items-center justify-center"
           >
             <Icon name="share" size={20} />
@@ -371,7 +371,7 @@ function DesktopDetail({
             onClick={onToggleFav}
             aria-label={isFav ? "取消收藏" : "收藏"}
             data-tooltip={isFav ? "取消收藏" : "收藏"}
-            data-tooltip-side="left"
+            data-tooltip-side="bottom"
             className={`bg-surface-container-high border ${isFav ? "border-primary/50" : "border-outline/40"} hover:border-outline text-on-surface rounded-sm p-2 transition-all flex items-center justify-center`}
           >
             <Icon name={isFav ? "bookmark" : "bookmark_border"} size={20} className={`${isFav ? "text-primary" : ""}`} fill={isFav} />
@@ -392,7 +392,7 @@ function DesktopDetail({
       </div>
 
       {/* Variant selector */}
-      {modelData.variants && modelData.variants.length > 0 && (
+      {modelData.variants && modelData.variants.length > 1 && (
         <div className="px-8 pt-4">
           <h3 className="text-[11px] tracking-[0.05em] uppercase text-on-surface-variant mb-4 border-b border-outline-variant/20 pb-2">
             历史版本 ({modelData.variants.length})
@@ -434,7 +434,7 @@ function DesktopDetail({
             return (
             file.downloadFormat === "drawing" ? (
               <button key={downloadKey} type="button" onClick={() => void openModelDrawing(modelData.id).catch(() => toast('打开图纸失败', 'error'))} className="milled-inset bg-surface-container-lowest p-3 rounded-sm flex items-center justify-between border border-outline-variant/10 hover:border-primary/50 transition-colors group cursor-pointer text-left">
-                <div className="flex items-center gap-3">
+                <div className="flex items-center gap-3 min-w-0 flex-1">
                   <div className="w-9 h-9 rounded-lg bg-error/10 flex items-center justify-center shrink-0">
                     <span className="text-[10px] font-bold text-error">PDF</span>
                   </div>
@@ -449,12 +449,12 @@ function DesktopDetail({
               </button>
             ) : (
               <div key={downloadKey} className="milled-inset bg-surface-container-lowest p-3 rounded-sm flex items-center justify-between border border-outline-variant/10 hover:border-primary/50 transition-colors group">
-                <div className="flex items-center gap-3">
+                <div className="flex items-center gap-3 min-w-0 flex-1">
                   <div className="w-9 h-9 rounded-lg bg-primary-container/10 flex items-center justify-center shrink-0">
                     <span className="text-[10px] font-bold text-primary-container">{file.format.slice(0, 4)}</span>
                   </div>
                   <div className="min-w-0">
-                    <div className="text-sm font-medium text-on-surface font-mono truncate">{modelData.name}.{file.format.toLowerCase()}</div>
+                    <div className="text-sm font-medium text-on-surface font-mono flex min-w-0"><span className="truncate">{modelData.name}</span><span className="shrink-0 text-on-surface-variant">.{file.format.toLowerCase()}</span></div>
                     <div className="text-[11px] text-on-surface-variant mt-0.5">{file.format} · {file.size}</div>
                   </div>
                 </div>
@@ -986,7 +986,10 @@ export default function ModelDetailPage() {
           categories={categoryTree || []}
           onClose={() => setEditOpen(false)}
           onSaved={() => { mutate(); globalMutate((k: string) => typeof k === 'string' && k.startsWith('/models')); }}
-          onDelete={async () => { await modelApi.delete(modelData.id); handleBack(); }}
+          onDelete={async () => {
+              await modelApi.delete(modelData.id);
+              handleBack();
+            }}
         />
         <ShareDialog
           open={shareOpen}
@@ -1152,7 +1155,7 @@ export default function ModelDetailPage() {
               </div>
 
               {/* Variants */}
-              {modelData.variants && modelData.variants.length > 0 && (
+              {modelData.variants && modelData.variants.length > 1 && (
                 <div>
                   <div className="text-[11px] uppercase tracking-widest text-on-surface-variant font-medium mb-3">
                     历史版本 ({modelData.variants.length})
@@ -1212,7 +1215,7 @@ export default function ModelDetailPage() {
                           <span className="text-[8px] font-bold text-primary-container">{file.format.slice(0, 3)}</span>
                         </div>
                         <div className="flex-1 min-w-0">
-                          <span className="text-xs font-medium text-on-surface line-clamp-2 break-words" title={file.fileName}>{file.fileName || file.format}</span>
+                          <div className="text-xs font-medium text-on-surface flex min-w-0"><span className="truncate">{file.fileName || file.format}</span></div>
                           <span className="text-[10px] text-on-surface-variant">{file.format} · {file.size}</span>
                         </div>
                         <button onClick={() => handleDownload(modelData.id, file.downloadFormat === "original" ? "original" : undefined)} className="shrink-0 w-7 h-7 flex items-center justify-center rounded-full bg-primary/10 hover:bg-primary/20 text-primary active:scale-90 transition-all">
@@ -1260,7 +1263,26 @@ export default function ModelDetailPage() {
         categories={categoryTree || []}
         onClose={() => setEditOpen(false)}
         onSaved={() => { mutate(); globalMutate((k: string) => typeof k === 'string' && k.startsWith('/models')); }}
-        onDelete={async () => { await modelApi.delete(modelData.id); handleBack(); }}
+        onDelete={async () => {
+            await modelApi.delete(modelData.id);
+            globalMutate(
+              (k: string) => typeof k === 'string' && k.includes('/models/infinite'),
+              (pages: any[] | undefined) => {
+                if (!pages) return pages;
+                return pages.map((p: any) => ({
+                  ...p,
+                  items: p.items?.filter((m: any) => m.id !== modelData.id),
+                  total: Math.max(0, (p.total ?? 0) - (p.items?.some((m: any) => m.id === modelData.id) ? 1 : 0)),
+                }));
+              },
+              false,
+            );
+            await Promise.all([
+                globalMutate('/models/count'),
+                globalMutate((k: string) => typeof k === 'string' && (k.startsWith('/categories') || k.includes('/categories'))),
+              ]);
+            handleBack();
+          }}
       />
       <ShareDialog
         open={shareOpen}

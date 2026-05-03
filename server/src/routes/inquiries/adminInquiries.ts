@@ -58,7 +58,12 @@ export function createAdminInquiriesRouter() {
         res.status(404).json({ detail: "询价单不存在" });
         return;
       }
+      if (status === current.status) {
+        res.json(current);
+        return;
+      }
       const transitions: Record<string, string[]> = {
+        draft: ["quoted", "rejected"],
         submitted: ["quoted", "rejected"],
         quoted: ["accepted", "rejected"],
         accepted: [],
@@ -66,7 +71,7 @@ export function createAdminInquiriesRouter() {
         cancelled: [],
       };
       const nextStatuses = transitions[current.status] || [];
-      if (status !== current.status && !nextStatuses.includes(status)) {
+      if (!nextStatuses.includes(status)) {
         res.status(400).json({ detail: "当前状态不支持该操作" });
         return;
       }

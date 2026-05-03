@@ -4,7 +4,7 @@
   "type": "module",
   "scripts": {
     "dev": "node --import tsx src/main.ts",
-    "dev:local": "PORT=8000 node --import tsx src/main.ts",
+    "dev:local": "PORT=8000 API_WORKERS=1 node --import tsx src/cluster.ts",
     "dev:watch": "tsx watch src/main.ts",
     "start": "node --import tsx src/cluster.ts",
     "test": "DATABASE_URL=postgresql://test:test@localhost:5432/test JWT_SECRET=test-secret node --import tsx --test src/**/*.test.ts",

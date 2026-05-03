@@ -32,6 +32,12 @@ import { adminOnly, asSingleString } from "./common.js";
 const managedUploadRoot = resolve(process.cwd(), config.uploadDir);
 const managedBackupRoot = resolve(process.cwd(), config.staticDir, "backups");
 
+const SAFE_BACKUP_ID_RE = /^[a-zA-Z0-9_\-.:]+$/;
+function validateBackupId(id: string | null | undefined): string | null {
+  if (!id || !SAFE_BACKUP_ID_RE.test(id) || id.includes("..")) return null;
+  return id;
+}
+
 function getActiveBackupOperation(): { id: string; label: string } | null {
   const backupJob = getActiveBackupJob();
   if (backupJob) return { id: backupJob.id, label: "备份创建" };
@@ -124,22 +130,24 @@ export function createSettingsBackupRouter() {
       const result = await getBackupPolicyCheck();
       res.json(result);
     } catch (err: any) {
-      res.status(500).json({ detail: err.message || "备份策略体检失败" });
+      console.error("[backup] Policy check failed:", err);
+      res.status(500).json({ detail: "备份策略体检失败" });
     }
   });
 
   // Admin: verify one backup archive without restoring it
   router.post("/api/settings/backup/verify/:id", authMiddleware, async (req: AuthRequest, res: Response) => {
     if (!adminOnly(req, res)) return;
-    const backupId = asSingleString(req.params.id);
+    const backupId = validateBackupId(asSingleString(req.params.id));
     if (!backupId) { res.status(400).json({ detail: "备份参数无效" }); return; }
     try {
       const jobId = startVerifyBackupJob(backupId);
       res.json({ jobId });
     } catch (err: any) {
-      const status = err.message?.includes("正在进行中") ? 409 : 400;
-      res.status(status).json({
-        detail: err.message || "备份校验失败",
+      const isBusy = err?.message?.includes("正在进行中") || err?.message?.includes("locked");
+      console.error("[backup] Verify failed:", err);
+      res.status(isBusy ? 409 : 400).json({
+        detail: isBusy ? "任务正在进行中" : "备份校验失败",
         jobId: err.jobId,
       });
     }
@@ -212,9 +220,10 @@ export function createSettingsBackupRouter() {
       const jobId = startBackupJob();
       res.json({ jobId });
     } catch (err: any) {
-      const status = err.message?.includes("正在进行中") ? 409 : 500;
-      res.status(status).json({
-        detail: err.message || "启动备份失败",
+      const isBusy = err?.message?.includes("正在进行中") || err?.message?.includes("locked");
+      console.error("[backup] Create failed:", err);
+      res.status(isBusy ? 409 : 500).json({
+        detail: isBusy ? "任务正在进行中" : "启动备份失败",
         jobId: err.jobId || getActiveBackupJob()?.id,
       });
     }
@@ -223,7 +232,7 @@ export function createSettingsBackupRouter() {
   // Admin: poll backup progress
   router.get("/api/settings/backup/progress/:id", authMiddleware, async (req: AuthRequest, res: Response) => {
     if (!adminOnly(req, res)) return;
-    const jobId = asSingleString(req.params.id);
+    const jobId = validateBackupId(asSingleString(req.params.id));
     if (!jobId) { res.status(400).json({ detail: "备份任务参数无效" }); return; }
     const job = getJob(jobId);
     if (!job) {
@@ -236,7 +245,7 @@ export function createSettingsBackupRouter() {
   // Admin: generate a short-lived download token
   router.post("/api/settings/backup/download-token/:id", authMiddleware, async (req: AuthRequest, res: Response) => {
     if (!adminOnly(req, res)) return;
-    const backupId = asSingleString(req.params.id);
+    const backupId = validateBackupId(asSingleString(req.params.id));
     if (!backupId) { res.status(400).json({ detail: "备份参数无效" }); return; }
     const filePath = getBackupArchivePath(backupId);
     if (!filePath) { res.status(404).json({ detail: "备份文件不存在" }); return; }
@@ -255,7 +264,7 @@ export function createSettingsBackupRouter() {
 
   // Download backup file using one-time token (no JWT in URL)
   router.get("/api/settings/backup/download/:id/:token", async (req: AuthRequest, res: Response) => {
-    const backupId = asSingleString(req.params.id);
+    const backupId = validateBackupId(asSingleString(req.params.id));
     const token = asSingleString(req.params.token);
     if (!backupId || !token) { res.status(400).json({ detail: "下载令牌无效" }); return; }
     const tokenPayload = consumeProtectedResourceToken(token, "backup-download", backupId);
@@ -274,7 +283,7 @@ export function createSettingsBackupRouter() {
     if (blockBackupMutationIfBusy(res)) return;
     const { name } = req.body;
     if (!name) { res.status(400).json({ detail: "名称不能为空" }); return; }
-    const backupId = asSingleString(req.params.id);
+    const backupId = validateBackupId(asSingleString(req.params.id));
     if (!backupId) { res.status(400).json({ detail: "备份参数无效" }); return; }
     const record = renameBackup(backupId, name);
     if (!record) { res.status(404).json({ detail: "备份不存在" }); return; }
@@ -285,23 +294,25 @@ export function createSettingsBackupRouter() {
   router.delete("/api/settings/backup/delete/:id", authMiddleware, async (req: AuthRequest, res: Response) => {
     if (!adminOnly(req, res)) return;
     if (blockBackupMutationIfBusy(res)) return;
-    const backupId = asSingleString(req.params.id);
+    const backupId = validateBackupId(asSingleString(req.params.id));
     if (!backupId) { res.status(400).json({ detail: "备份参数无效" }); return; }
     const ok = deleteBackup(backupId);
-    res.json({ success: ok });
+    if (!ok) { res.status(404).json({ detail: "备份不存在" }); return; }
+    res.json({ success: true });
   });
 
   // Admin: start restore job from a saved backup
   router.post("/api/settings/backup/restore/:id", authMiddleware, async (req: AuthRequest, res: Response) => {
     if (!adminOnly(req, res)) return;
     try {
-      const backupId = asSingleString(req.params.id);
+      const backupId = validateBackupId(asSingleString(req.params.id));
       if (!backupId) { res.status(400).json({ detail: "备份参数无效" }); return; }
       const jobId = startRestoreJob(backupId);
       res.json({ jobId });
     } catch (err: any) {
-      const status = err.message?.includes("正在进行中") ? 409 : 500;
-      res.status(status).json({ detail: err.message || "启动恢复失败" });
+      const isBusy = err?.message?.includes("正在进行中") || err?.message?.includes("locked");
+      console.error("[backup] Restore failed:", err);
+      res.status(isBusy ? 409 : 500).json({ detail: isBusy ? "任务正在进行中" : "启动恢复失败" });
     }
   });
 
@@ -330,8 +341,9 @@ export function createSettingsBackupRouter() {
       res.json({ jobId });
     } catch (err: any) {
       cleanupTempBackupUpload(file.path);
-      const status = err.message?.includes("正在进行中") ? 409 : 500;
-      res.status(status).json({ detail: err.message || "启动恢复失败" });
+      const isBusy = err?.message?.includes("正在进行中") || err?.message?.includes("locked");
+      console.error("[backup] Import failed:", err);
+      res.status(isBusy ? 409 : 500).json({ detail: isBusy ? "任务正在进行中" : "启动恢复失败" });
     }
   });
 
@@ -361,8 +373,9 @@ export function createSettingsBackupRouter() {
       res.json({ jobId });
     } catch (err: any) {
       cleanupTempBackupUpload(managedPath);
-      const status = err.message?.includes("正在进行中") ? 409 : 500;
-      res.status(status).json({ detail: err.message || "启动恢复失败" });
+      const isBusy = err?.message?.includes("正在进行中") || err?.message?.includes("locked");
+      console.error("[backup] Chunked import failed:", err);
+      res.status(isBusy ? 409 : 500).json({ detail: isBusy ? "任务正在进行中" : "启动恢复失败" });
     }
   });
 
@@ -379,8 +392,9 @@ export function createSettingsBackupRouter() {
       const jobId = startRestoreJobFromFile(resolved, false); // Don't delete server-local files
       res.json({ jobId });
     } catch (err: any) {
-      const status = err.message?.includes("正在进行中") ? 409 : 500;
-      res.status(status).json({ detail: err.message || "启动恢复失败" });
+      const isBusy = err?.message?.includes("正在进行中") || err?.message?.includes("locked");
+      console.error("[backup] Path import failed:", err);
+      res.status(isBusy ? 409 : 500).json({ detail: isBusy ? "任务正在进行中" : "启动恢复失败" });
     }
   });
 
@@ -419,8 +433,9 @@ export function createSettingsBackupRouter() {
       res.json({ jobId });
     } catch (err: any) {
       cleanupTempBackupUpload(file.path);
-      const status = err.message?.includes("正在进行中") ? 409 : 500;
-      res.status(status).json({ detail: err.message || "启动保存任务失败" });
+      const isBusy = err?.message?.includes("正在进行中") || err?.message?.includes("locked");
+      console.error("[backup] Import-save failed:", err);
+      res.status(isBusy ? 409 : 500).json({ detail: isBusy ? "任务正在进行中" : "启动保存任务失败" });
     }
   });
 
@@ -438,8 +453,9 @@ export function createSettingsBackupRouter() {
       res.json({ jobId });
     } catch (err: any) {
       cleanupTempBackupUpload(managedPath);
-      const status = err.message?.includes("正在进行中") ? 409 : 500;
-      res.status(status).json({ detail: err.message || "启动保存任务失败" });
+      const isBusy = err?.message?.includes("正在进行中") || err?.message?.includes("locked");
+      console.error("[backup] Chunked import-save failed:", err);
+      res.status(isBusy ? 409 : 500).json({ detail: isBusy ? "任务正在进行中" : "启动保存任务失败" });
     }
   });
 

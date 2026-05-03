@@ -190,9 +190,15 @@ router.put("/api/upload/chunk", authMiddleware, requireRole("ADMIN"), async (req
 
   // Validate chunk size doesn't exceed expected (with 20% tolerance for last chunk)
   const expectedMax = Math.ceil(session.chunkSize * 1.2);
-  if (receivedBytes > expectedMax && ci < session.totalChunks - 1) {
+  const maxOverallBytes = session.fileSize * 1.1;
+  if (receivedBytes > expectedMax || (ci === session.totalChunks - 1 && receivedBytes > session.fileSize)) {
     rmSync(chunkPath, { force: true });
-    res.status(400).json({ detail: `分片大小(${receivedBytes})超出预期(${expectedMax})` });
+    res.status(400).json({ detail: `分片大小(${receivedBytes})超出预期` });
+    return;
+  }
+  if (receivedBytes > maxOverallBytes) {
+    rmSync(chunkPath, { force: true });
+    res.status(400).json({ detail: `上传数据超出文件总大小` });
     return;
   }
 

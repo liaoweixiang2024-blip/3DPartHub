@@ -17,7 +17,7 @@ import { openModelDrawing } from '../api/downloads';
 import { categoriesApi, type CategoryItem } from '../api/categories';
 import { getSettings, updateSettings } from '../api/settings';
 import CategorySelect from '../components/shared/CategorySelect';
-import useSWR from 'swr';
+import useSWR, { mutate as swrMutate } from 'swr';
 import useSWRInfinite from 'swr/infinite';
 import { getCachedPublicSettings } from '../lib/publicSettings';
 import { getBusinessConfig } from '../lib/businessConfig';
@@ -630,7 +630,6 @@ function ConversionQueuePanel({ compact = false, embedded = false }: { compact?:
               to={`/model/${job.model_id}`}
               target="_blank"
               className="inline-flex items-center justify-center rounded-sm border border-outline-variant/20 p-1 text-on-surface-variant hover:bg-surface-container-high hover:text-primary"
-              title="打开模型"
             >
               <Icon name="open_in_new" size={14} />
             </Link>
@@ -665,7 +664,6 @@ function ConversionQueuePanel({ compact = false, embedded = false }: { compact?:
             onClick={() => mutate()}
             disabled={isLoading}
             className={`${previewOpsButtonClass(compact)} border border-outline-variant/20 text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface`}
-            title="刷新队列"
           >
             <Icon name="refresh" size={15} className={isLoading ? 'animate-spin' : ''} />
             <span>刷新</span>
@@ -674,7 +672,6 @@ function ConversionQueuePanel({ compact = false, embedded = false }: { compact?:
             onClick={handleRetryFailed}
             disabled={isLoading || !!queueAction || failedCount <= 0}
             className={`${previewOpsButtonClass(compact)} border border-outline-variant/20 text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface`}
-            title="重试失败任务"
           >
             <Icon name="replay" size={14} className={queueAction === 'retry' ? 'animate-spin' : ''} />
             <span>重试</span>
@@ -683,7 +680,6 @@ function ConversionQueuePanel({ compact = false, embedded = false }: { compact?:
             onClick={handleCancelPreviewRebuilds}
             disabled={isLoading || !!queueAction || running <= 0}
             className={`${previewOpsButtonClass(compact)} border border-error/20 text-error hover:bg-error/10`}
-            title="取消等待中的预览重建任务"
           >
             <Icon name="close" size={14} className={queueAction === 'cancel-rebuilds' ? 'animate-spin' : ''} />
             <span>停止重建</span>
@@ -692,7 +688,6 @@ function ConversionQueuePanel({ compact = false, embedded = false }: { compact?:
             onClick={() => handleCleanQueue('completed')}
             disabled={isLoading || !!queueAction || completedQueueCount <= 0}
             className={`${previewOpsButtonClass(compact)} border border-outline-variant/20 text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface`}
-            title={`清理 BullMQ 保留的完成记录：${formatCount(completedQueueCount)} 条`}
           >
             <Icon name="cleaning_services" size={14} className={queueAction === 'clean-completed' ? 'animate-spin' : ''} />
             清理完成
@@ -718,7 +713,6 @@ function ConversionQueuePanel({ compact = false, embedded = false }: { compact?:
                 type="button"
                 onClick={() => setSelectedQueueState((current) => current === item.key ? 'all' : item.key)}
                 className={previewOpsFilterButtonClass(compact, active)}
-                title={item.key === 'completed' ? '完成数按模型库实际完成数量统计，点击查看队列保留的完成记录' : `点击筛选${item.label}任务`}
               >
                 <span>{item.label}</span>
                 <span className="font-mono font-semibold">{formatCount(data?.counts[item.key])}</span>
@@ -736,7 +730,6 @@ function ConversionQueuePanel({ compact = false, embedded = false }: { compact?:
               type="button"
               onClick={() => setSelectedQueueState((current) => current === item.key ? 'all' : item.key)}
               className={`min-h-[68px] rounded-sm border px-3 py-2 text-left transition ${active ? 'border-primary bg-primary-container/20 text-primary ring-1 ring-primary/30' : getQueueStateTone(item.key)} hover:-translate-y-0.5 hover:shadow-sm`}
-              title={item.key === 'completed' ? '完成数按模型库实际完成数量统计，点击查看队列保留的完成记录' : `点击筛选${item.label}任务`}
             >
               <div className="flex items-center justify-between gap-2">
                 <span className="text-[11px] font-medium">{item.label}</span>
@@ -1334,12 +1327,20 @@ function DesktopContent() {
     loadMore,
     mutate,
   } = useModelAdminList(search);
+  const { data: modelCountData } = useSWR('/models/count', () => modelApi.getModelCount());
+  const displayModelTotal = modelCountData?.total ?? modelTotal;
   const {
     visibleItems: visibleModels,
     hasMore: hasMoreVisibleModels,
     loadMore: loadMoreVisibleModels,
   } = useVisibleItems(models, MODEL_ADMIN_VISIBLE_BATCH_SIZE, search.trim());
   const { data: catData } = useSWR('/categories', () => categoriesApi.tree());
+
+  // Force refresh count + list when page mounts (e.g. after deleting a model on detail page)
+  useEffect(() => {
+    mutate(undefined, { revalidate: true });
+    swrMutate('/models/count');
+  }, [mutate]);
   const categories = catData?.items || [];
 
   // Merge suggestions
@@ -1347,6 +1348,9 @@ function DesktopContent() {
   const [merging, setMerging] = useState(false);
   const [editingGroupId, setEditingGroupId] = useState<string | null>(null);
   const [groupNameDraft, setGroupNameDraft] = useState('');
+  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
+  const [groupSearch, setGroupSearch] = useState('');
+  const [suggestionSearch, setSuggestionSearch] = useState('');
   const [groupAction, setGroupAction] = useState<string | null>(null);
   const {
     groups: suggestionGroups,
@@ -1365,14 +1369,21 @@ function DesktopContent() {
     activeTab === 'groups' ? '/model-groups' : null,
     () => modelApi.listModelGroups()
   );
-  const suggestionNames = suggestionGroups.map((group) => group.name);
+  const { data: groupCountData } = useSWR('/model-groups/count', () => modelApi.getModelGroupCount());
+  const filteredSuggestions = suggestionSearch
+    ? suggestionGroups.filter((g) => g.name.toLowerCase().includes(suggestionSearch.toLowerCase()))
+    : suggestionGroups;
+  const suggestionNames = filteredSuggestions.map((group) => group.name);
   const selectedSuggestionCount = suggestionNames.filter((name) => selectedNames.has(name)).length;
   const allSuggestionsSelected = suggestionNames.length > 0 && selectedSuggestionCount === suggestionNames.length;
   const suggestionCount = activeTab === 'suggestions' ? activeSuggestionCount : suggestionCountData?.total ?? 0;
-  const mergedGroupCount = groupData?.length;
+  const mergedGroupCount = groupCountData?.total ?? groupData?.length;
+  const filteredGroups = groupData && groupSearch
+    ? groupData.filter((g) => g.name.toLowerCase().includes(groupSearch.toLowerCase()) || g.models.some((m) => m.name.toLowerCase().includes(groupSearch.toLowerCase()) || (m.originalName || '').toLowerCase().includes(groupSearch.toLowerCase())))
+    : groupData;
   const headerButtonBase = "inline-flex h-9 w-[122px] items-center justify-center gap-1.5 rounded-sm px-3 text-sm font-medium transition-colors";
   const modelAdminTabs: ResponsiveSectionTab[] = [
-    { value: 'models', label: '全部模型', count: modelTotal, icon: 'inventory_2' },
+    { value: 'models', label: '全部模型', count: displayModelTotal, icon: 'inventory_2' },
     { value: 'suggestions', label: '合并建议', count: suggestionCount, icon: 'merge_type' },
     { value: 'groups', label: '已合并', count: mergedGroupCount, icon: 'category' },
   ];
@@ -1409,16 +1420,28 @@ function DesktopContent() {
 
   const handleUpload = async (files: FileList) => {
     const formats = uploadPolicy.modelFormats.map((f) => f.toLowerCase());
-    const accepted = Array.from(files).filter(f => { const ext = f.name.split('.').pop()?.toLowerCase() || ''; return formats.includes(ext) && f.size <= uploadPolicy.modelMaxSizeMb * 1024 * 1024; });
-    if (accepted.length === 0) { toast(`请选择 ${uploadPolicy.modelFormats.map((f) => f.toUpperCase()).join('/')} 格式且小于 ${uploadPolicy.modelMaxSizeMb}MB 的文件`, 'error'); return; }
+    const maxModelBytes = uploadPolicy.modelMaxSizeMb * 1024 * 1024;
+    const picked = Array.from(files);
+    const acceptedModels = picked.filter(f => { const ext = f.name.split('.').pop()?.toLowerCase() || ''; return formats.includes(ext) && f.size <= maxModelBytes; });
+    const acceptedArchives = picked.filter(f => /\.(zip|rar)$/i.test(f.name));
+    if (acceptedModels.length === 0 && acceptedArchives.length === 0) { toast(`请选择 ${uploadPolicy.modelFormats.map((f) => f.toUpperCase()).join('/')} 或 ZIP/RAR 压缩包，单个模型小于 ${uploadPolicy.modelMaxSizeMb}MB`, 'error'); return; }
     setUploading(true);
     let ok = 0, fail = 0;
     // Upload with limited concurrency (3 at a time)
     const CONCURRENCY = 3;
-    for (let i = 0; i < accepted.length; i += CONCURRENCY) {
-      const batch = accepted.slice(i, i + CONCURRENCY);
+    for (let i = 0; i < acceptedModels.length; i += CONCURRENCY) {
+      const batch = acceptedModels.slice(i, i + CONCURRENCY);
       const results = await Promise.allSettled(batch.map(f => modelApi.upload(f)));
       for (const r of results) { if (r.status === "fulfilled") ok++; else fail++; }
+    }
+    for (const archive of acceptedArchives) {
+      try {
+        const result = await modelApi.batchUploadFromArchive(archive);
+        ok += result.results.filter((item) => item.status === "queued" || item.status === "completed").length;
+        fail += result.results.filter((item) => item.status !== "queued" && item.status !== "completed").length;
+      } catch {
+        fail++;
+      }
     }
     setUploading(false);
     toast(`上传完成: ${ok} 成功${fail > 0 ? `, ${fail} 失败` : ''}`, fail > 0 ? 'error' : 'success');
@@ -1453,7 +1476,7 @@ function DesktopContent() {
     if (selectedSuggestionCount === 0) return;
     setMerging(true);
     try {
-      const items = suggestionGroups.filter(s => selectedNames.has(s.name)).map(s => ({
+      const items = filteredSuggestions.filter(s => selectedNames.has(s.name)).map(s => ({
         name: s.name,
         modelIds: s.models.map(m => m.id),
       }));
@@ -1544,7 +1567,7 @@ function DesktopContent() {
 
   return (
     <>
-      <input type="file" multiple accept={uploadPolicy.modelFormats.map((f) => `.${f}`).join(",")} className="hidden" id="admin-file-upload" onChange={(e) => { if (e.target.files?.length) handleUpload(e.target.files); e.target.value = ''; }} />
+      <input type="file" multiple accept={[...uploadPolicy.modelFormats.map((f) => `.${f}`), ".zip", ".rar"].join(",")} className="hidden" id="admin-file-upload" onChange={(e) => { if (e.target.files?.length) handleUpload(e.target.files); e.target.value = ''; }} />
       <AdminManagementPage
         title="模型管理"
         description="统一维护模型文件、分类归属、预览重建和同名模型合并关系。"
@@ -1568,10 +1591,24 @@ function DesktopContent() {
               <button onClick={() => document.getElementById('admin-file-upload')?.click()} disabled={uploading} className={`${headerButtonBase} bg-primary-container text-on-primary hover:opacity-90 active:scale-95 disabled:opacity-50`}>
                 <Icon name="cloud_upload" size={18} />{uploading ? '上传中...' : '上传模型'}
               </button>
+              {activeTab === 'models' && (
               <div className="flex h-9 items-center rounded-sm border border-outline-variant/30 bg-surface-container-lowest px-3">
                 <Icon name="search" size={16} className="text-on-surface-variant mr-2" />
                 <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="搜索模型..." className="w-48 border-none bg-transparent text-sm text-on-surface outline-none placeholder:text-on-surface-variant/50" />
               </div>
+              )}
+              {activeTab === 'suggestions' && (
+              <div className="flex h-9 items-center rounded-sm border border-outline-variant/30 bg-surface-container-lowest px-3">
+                <Icon name="search" size={16} className="text-on-surface-variant mr-2" />
+                <input value={suggestionSearch} onChange={(e) => setSuggestionSearch(e.target.value)} placeholder="搜索建议..." className="w-48 border-none bg-transparent text-sm text-on-surface outline-none placeholder:text-on-surface-variant/50" />
+              </div>
+              )}
+              {activeTab === 'groups' && (
+              <div className="flex h-9 items-center rounded-sm border border-outline-variant/30 bg-surface-container-lowest px-3">
+                <Icon name="search" size={16} className="text-on-surface-variant mr-2" />
+                <input value={groupSearch} onChange={(e) => setGroupSearch(e.target.value)} placeholder="搜索分组..." className="w-48 border-none bg-transparent text-sm text-on-surface outline-none placeholder:text-on-surface-variant/50" />
+              </div>
+              )}
             </div>
           </div>
         )}
@@ -1581,10 +1618,10 @@ function DesktopContent() {
       {activeTab === 'suggestions' ? (
         sugLoading ? <SkeletonList rows={5} /> : (
           <div className={`${MODEL_ADMIN_PANEL_CLASS} p-3`}>
-            {suggestionGroups.length > 0 && (
+            {filteredSuggestions.length > 0 && (
               <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3 bg-surface-container-low rounded-sm border border-outline-variant/10">
                 <span className="text-sm text-on-surface">
-                  已加载 <strong className="text-primary">{suggestionGroups.length}</strong> / 共 <strong className="text-primary">{suggestionCount}</strong> 组建议
+                  已加载 <strong className="text-primary">{filteredSuggestions.length}</strong> / 共 <strong className="text-primary">{suggestionCount}</strong> 组建议
                   {selectedSuggestionCount > 0 && <>，已选择 <strong className="text-primary">{selectedSuggestionCount}</strong> 组</>}
                 </span>
                 <div className="flex flex-wrap items-center gap-2">
@@ -1611,7 +1648,7 @@ function DesktopContent() {
               </div>
             )}
             <div className="space-y-3">
-              {suggestionGroups.map((group) => (
+              {filteredSuggestions.map((group) => (
                 <div key={group.name} className="overflow-hidden rounded-sm border border-outline-variant/10 bg-surface-container-low">
                 <div className="flex items-center gap-3 px-4 py-3">
                   <input type="checkbox" checked={selectedNames.has(group.name)} onChange={() => toggleSelect(group.name)} className="w-4 h-4 accent-primary-container rounded" />
@@ -1624,17 +1661,17 @@ function DesktopContent() {
                       <div className="w-16 h-16 rounded-sm bg-surface-container-highest overflow-hidden border border-outline-variant/10">
                         <ModelThumbnail src={m.thumbnailUrl} alt="" className="w-full h-full object-cover" />
                       </div>
-                      <p className="text-[9px] text-on-surface-variant mt-1 truncate" title={m.originalName}>{m.originalName.replace(/\.[^.]+$/, '')}</p>
+                      <p className="text-[9px] text-on-surface-variant mt-1 truncate">{m.originalName.replace(/\.[^.]+$/, '')}</p>
                     </div>
                   ))}
                 </div>
               </div>
               ))}
             </div>
-            {suggestionGroups.length > 0 && (
+            {filteredSuggestions.length > 0 && (
               <InfiniteLoadTrigger hasMore={suggestionsHasMore} isLoading={suggestionsLoadingMore} onLoadMore={loadMoreSuggestions} />
             )}
-            {suggestionGroups.length === 0 && (
+            {filteredSuggestions.length === 0 && (
               <div className="flex min-h-[320px] flex-col items-center justify-center text-center">
                 <Icon name="merge" size={38} className="mb-3 text-on-surface-variant/25" />
                 <p className="text-sm font-medium text-on-surface">没有需要合并的同名模型</p>
@@ -1646,14 +1683,25 @@ function DesktopContent() {
       ) : activeTab === 'groups' ? (
         groupsLoading ? <SkeletonList rows={5} /> : (
           <div className={`${MODEL_ADMIN_PANEL_CLASS} p-3`}>
-            <div className="space-y-3">
-            {groupData?.map((group) => {
+            <div className="space-y-2">
+            {filteredGroups?.map((group) => {
               const editing = editingGroupId === group.id;
               const primaryId = group.primary?.id;
+              const expanded = expandedGroups.has(group.id);
+              const toggleExpand = () => setExpandedGroups((prev) => {
+                const next = new Set(prev);
+                if (next.has(group.id)) next.delete(group.id);
+                else next.add(group.id);
+                return next;
+              });
               return (
                 <div key={group.id} className="bg-surface-container-low rounded-sm border border-outline-variant/10 overflow-hidden">
-                  <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3 border-b border-outline-variant/10">
+                  <div
+                    className="flex flex-wrap items-center justify-between gap-3 px-4 py-3 cursor-pointer select-none"
+                    onClick={() => { if (!editing) toggleExpand(); }}
+                  >
                     <div className="flex min-w-0 flex-1 items-center gap-3">
+                      <Icon name={expanded ? "expand_more" : "chevron_right"} size={18} className="shrink-0 text-on-surface-variant" />
                       <Icon name="folder_special" size={18} className="shrink-0 text-primary-container" />
                       {editing ? (
                         <input
@@ -1661,6 +1709,7 @@ function DesktopContent() {
                           onChange={(e) => setGroupNameDraft(e.target.value)}
                           className="min-w-0 flex-1 rounded-sm border border-outline-variant/25 bg-surface-container-lowest px-3 py-2 text-sm text-on-surface outline-none focus:border-primary"
                           autoFocus
+                          onClick={(e) => e.stopPropagation()}
                         />
                       ) : (
                         <div className="min-w-0">
@@ -1669,7 +1718,7 @@ function DesktopContent() {
                         </div>
                       )}
                     </div>
-                    <div className="flex flex-wrap items-center gap-2">
+                    <div className="flex flex-wrap items-center gap-2" onClick={(e) => e.stopPropagation()}>
                       {editing ? (
                         <>
                           <button onClick={() => handleSaveGroup(group)} disabled={groupAction === `rename:${group.id}`} className="flex items-center gap-1.5 rounded-sm bg-primary-container px-3 py-2 text-xs font-medium text-on-primary disabled:opacity-50">
@@ -1685,51 +1734,52 @@ function DesktopContent() {
                         </button>
                       )}
                       <button onClick={() => handleDeleteGroup(group)} disabled={groupAction === `delete:${group.id}`} className="flex items-center gap-1.5 rounded-sm border border-error/20 px-3 py-2 text-xs text-error hover:bg-error/10 disabled:opacity-50">
-                        <Icon name="close" size={14} />解散分组
+                        <Icon name="close" size={14} />解散
                       </button>
                     </div>
                   </div>
-                  <div className="divide-y divide-outline-variant/10">
-                    {group.models.map((model) => {
-                      const isPrimary = model.id === primaryId;
-                      return (
-                        <div key={model.id} className="flex items-center gap-3 px-4 py-3">
-                          <div className="h-12 w-12 shrink-0 overflow-hidden rounded-sm bg-surface-container-highest">
-                            <ModelThumbnail src={model.thumbnailUrl} alt="" className="h-full w-full object-cover" />
-                          </div>
-                          <div className="min-w-0 flex-1">
-                            <div className="flex min-w-0 items-center gap-2">
-                              <p className="truncate text-sm font-medium text-on-surface">{model.originalName || model.name}</p>
-                              {isPrimary && <span className="shrink-0 rounded-sm bg-primary/15 px-1.5 py-0.5 text-[10px] font-medium text-primary">主版本</span>}
+                  {expanded && (
+                    <div className="divide-y divide-outline-variant/10">
+                      {group.models.map((model) => {
+                        const isPrimary = model.id === primaryId;
+                        return (
+                          <div key={model.id} className="flex items-center gap-3 px-4 py-3">
+                            <div className="h-12 w-12 shrink-0 overflow-hidden rounded-sm bg-surface-container-highest">
+                              <ModelThumbnail src={model.thumbnailUrl} alt="" className="h-full w-full object-cover" />
                             </div>
-                            <div className="mt-0.5 flex flex-wrap gap-x-3 gap-y-0.5 text-[11px] text-on-surface-variant">
-                              <span>{formatSize(model.originalSize)}</span>
-                              <span>原始时间：{formatModelDateTime(model.fileModifiedAt)}</span>
-                              <span>上传时间：{formatModelDateTime(model.createdAt)}</span>
+                            <div className="min-w-0 flex-1">
+                              <div className="flex min-w-0 items-center gap-2">
+                                <p className="truncate text-sm font-medium text-on-surface">{model.originalName || model.name}</p>
+                                {isPrimary && <span className="shrink-0 rounded-sm bg-primary/15 px-1.5 py-0.5 text-[10px] font-medium text-primary">主版本</span>}
+                              </div>
+                              <div className="mt-0.5 flex flex-wrap gap-x-3 gap-y-0.5 text-[11px] text-on-surface-variant">
+                                <span>{formatSize(model.originalSize)}</span>
+                                <span>原始时间：{formatModelDateTime(model.fileModifiedAt)}</span>
+                                <span>上传时间：{formatModelDateTime(model.createdAt)}</span>
+                              </div>
                             </div>
-                          </div>
-                          <div className="flex shrink-0 items-center gap-2">
-                            <Link to={`/model/${model.id}`} target="_blank" className="rounded-sm border border-outline-variant/20 px-2.5 py-1.5 text-xs text-on-surface-variant hover:text-primary">
-                              查看
-                            </Link>
-                            {!isPrimary && (
-                              <button onClick={() => handleSetPrimary(group, model.id)} disabled={groupAction === `primary:${group.id}:${model.id}`} className="rounded-sm border border-outline-variant/20 px-2.5 py-1.5 text-xs text-on-surface-variant hover:text-primary disabled:opacity-50">
-                                设为主版本
+                            <div className="flex shrink-0 items-center gap-2">
+                              <Link to={`/model/${model.id}`} target="_blank" className="rounded-sm border border-outline-variant/20 px-2.5 py-1.5 text-xs text-on-surface-variant hover:text-primary">
+                                查看
+                              </Link>
+                              {!isPrimary && (
+                                <button onClick={() => handleSetPrimary(group, model.id)} disabled={groupAction === `primary:${group.id}:${model.id}`} className="rounded-sm border border-outline-variant/20 px-2.5 py-1.5 text-xs text-on-surface-variant hover:text-primary disabled:opacity-50">
+                                  设为主版本
+                                </button>
+                              )}
+                              <button
+                                onClick={() => handleRemoveFromGroup(group, model.id)}
+                                disabled={group.model_count <= 2 || groupAction === `remove:${group.id}:${model.id}`}
+                                className="rounded-sm border border-outline-variant/20 px-2.5 py-1.5 text-xs text-on-surface-variant hover:text-error disabled:opacity-40"
+                              >
+                                移出
                               </button>
-                            )}
-                            <button
-                              onClick={() => handleRemoveFromGroup(group, model.id)}
-                              disabled={group.model_count <= 2 || groupAction === `remove:${group.id}:${model.id}`}
-                              title={group.model_count <= 2 ? '只有 2 个版本时请使用解散分组' : '移出当前分组'}
-                              className="rounded-sm border border-outline-variant/20 px-2.5 py-1.5 text-xs text-on-surface-variant hover:text-error disabled:opacity-40"
-                            >
-                              移出
-                            </button>
+                            </div>
                           </div>
-                        </div>
-                      );
-                    })}
-                  </div>
+                        );
+                      })}
+                    </div>
+                  )}
                 </div>
               );
             })}
@@ -1739,6 +1789,11 @@ function DesktopContent() {
                 <Icon name="folder_special" size={38} className="mb-3 text-on-surface-variant/25" />
                 <p className="text-sm font-medium text-on-surface">还没有已合并的模型分组</p>
                 <p className="mt-1 text-xs text-on-surface-variant">合并完成后会在这里统一维护主版本和分组关系。</p>
+              </div>
+            )}
+            {(groupData?.length ?? 0) > 0 && filteredGroups?.length === 0 && (
+              <div className="flex min-h-[200px] flex-col items-center justify-center text-center">
+                <p className="text-sm text-on-surface-variant">没有匹配「{groupSearch}」的分组</p>
               </div>
             )}
           </div>
@@ -1781,7 +1836,6 @@ function DesktopContent() {
                     <td className="px-4 py-3 text-right">
                       <div className="flex items-center justify-end gap-2">
                         <Link to={`/model/${m.model_id}`} target="_blank" className="flex items-center gap-1 px-2.5 py-1 text-xs text-on-surface-variant hover:text-primary hover:bg-primary/10 rounded-sm transition-colors border border-outline-variant/20"><Icon name="open_in_new" size={14} />查看</Link>
-                        <button onClick={() => handleQueueModelRebuild(m)} disabled={queueingModelId === m.model_id} aria-label={`重建预览 ${m.name}`} title="重建预览" className="flex items-center gap-1 px-2.5 py-1 text-xs text-on-surface-variant hover:text-primary hover:bg-primary/10 rounded-sm transition-colors border border-outline-variant/20 disabled:opacity-50"><Icon name="autorenew" size={14} className={queueingModelId === m.model_id ? 'animate-spin' : ''} />重建</button>
                         <button onClick={() => setEditModel(m)} className="flex items-center gap-1 px-2.5 py-1 text-xs text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high rounded-sm transition-colors border border-outline-variant/20"><Icon name="settings" size={14} />编辑</button>
                         <button onClick={() => setDeleteTarget(m)} className="flex items-center gap-1 px-2.5 py-1 text-xs text-on-surface-variant hover:text-error hover:bg-error/10 rounded-sm transition-colors border border-outline-variant/20"><Icon name="close" size={14} />删除</button>
                       </div>
@@ -1851,6 +1905,8 @@ function MobileContent() {
     loadMore,
     mutate,
   } = useModelAdminList(search);
+  const { data: modelCountDataM } = useSWR('/models/count', () => modelApi.getModelCount());
+  const displayModelTotalM = modelCountDataM?.total ?? modelTotal;
   const {
     visibleItems: visibleModels,
     hasMore: hasMoreVisibleModels,
@@ -1858,11 +1914,20 @@ function MobileContent() {
   } = useVisibleItems(models, MOBILE_MODEL_VISIBLE_BATCH_SIZE, search.trim());
   const { data: catDataM } = useSWR('/categories-m', () => categoriesApi.tree());
   const categories = catDataM?.items || [];
+
+  // Force refresh count + list when page mounts
+  useEffect(() => {
+    mutate(undefined, { revalidate: true });
+    swrMutate('/models/count');
+  }, [mutate]);
   const [selectedNames, setSelectedNames] = useState<Set<string>>(new Set());
   const [merging, setMerging] = useState(false);
   const [editingGroupId, setEditingGroupId] = useState<string | null>(null);
   const [groupNameDraft, setGroupNameDraft] = useState('');
   const [groupAction, setGroupAction] = useState<string | null>(null);
+  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
+  const [groupSearch, setGroupSearch] = useState('');
+  const [suggestionSearch, setSuggestionSearch] = useState('');
   const {
     groups: suggestionGroups,
     total: activeSuggestionCount,
@@ -1880,13 +1945,21 @@ function MobileContent() {
     activeTab === 'groups' ? '/model-groups-mobile' : null,
     () => modelApi.listModelGroups()
   );
-  const suggestionNames = suggestionGroups.map((group) => group.name);
+  const { data: groupCountData } = useSWR('/model-groups/count', () => modelApi.getModelGroupCount());
+  const filteredGroups = groupData && groupSearch
+    ? groupData.filter((g) => g.name.toLowerCase().includes(groupSearch.toLowerCase()) || g.models.some((m) => m.name.toLowerCase().includes(groupSearch.toLowerCase()) || (m.originalName || '').toLowerCase().includes(groupSearch.toLowerCase())))
+    : groupData;
+
+  const filteredSuggestions = suggestionSearch
+    ? suggestionGroups.filter((g) => g.name.toLowerCase().includes(suggestionSearch.toLowerCase()))
+    : suggestionGroups;
+  const suggestionNames = filteredSuggestions.map((group) => group.name);
   const selectedSuggestionCount = suggestionNames.filter((name) => selectedNames.has(name)).length;
   const allSuggestionsSelected = suggestionNames.length > 0 && selectedSuggestionCount === suggestionNames.length;
   const suggestionCount = activeTab === 'suggestions' ? activeSuggestionCount : suggestionCountData?.total ?? 0;
-  const mergedGroupCount = groupData?.length;
+  const mergedGroupCount = groupCountData?.total ?? groupData?.length;
   const modelAdminTabs: ResponsiveSectionTab[] = [
-    { value: 'models', label: '全部模型', count: modelTotal, icon: 'inventory_2' },
+    { value: 'models', label: '全部模型', count: displayModelTotalM, icon: 'inventory_2' },
     { value: 'suggestions', label: '合并建议', count: suggestionCount, icon: 'merge_type' },
     { value: 'groups', label: '已合并', count: mergedGroupCount, icon: 'category' },
   ];
@@ -1923,16 +1996,28 @@ function MobileContent() {
 
   const handleUpload = async (files: FileList) => {
     const formats = uploadPolicy.modelFormats.map((f) => f.toLowerCase());
-    const accepted = Array.from(files).filter(f => { const ext = f.name.split('.').pop()?.toLowerCase() || ''; return formats.includes(ext) && f.size <= uploadPolicy.modelMaxSizeMb * 1024 * 1024; });
-    if (accepted.length === 0) { toast(`请选择 ${uploadPolicy.modelFormats.map((f) => f.toUpperCase()).join('/')} 格式且小于 ${uploadPolicy.modelMaxSizeMb}MB 的文件`, 'error'); return; }
+    const maxModelBytes = uploadPolicy.modelMaxSizeMb * 1024 * 1024;
+    const picked = Array.from(files);
+    const acceptedModels = picked.filter(f => { const ext = f.name.split('.').pop()?.toLowerCase() || ''; return formats.includes(ext) && f.size <= maxModelBytes; });
+    const acceptedArchives = picked.filter(f => /\.(zip|rar)$/i.test(f.name));
+    if (acceptedModels.length === 0 && acceptedArchives.length === 0) { toast(`请选择 ${uploadPolicy.modelFormats.map((f) => f.toUpperCase()).join('/')} 或 ZIP/RAR 压缩包，单个模型小于 ${uploadPolicy.modelMaxSizeMb}MB`, 'error'); return; }
     setUploading(true);
     let ok = 0, fail = 0;
     // Upload with limited concurrency (3 at a time)
     const CONCURRENCY = 3;
-    for (let i = 0; i < accepted.length; i += CONCURRENCY) {
-      const batch = accepted.slice(i, i + CONCURRENCY);
+    for (let i = 0; i < acceptedModels.length; i += CONCURRENCY) {
+      const batch = acceptedModels.slice(i, i + CONCURRENCY);
       const results = await Promise.allSettled(batch.map(f => modelApi.upload(f)));
       for (const r of results) { if (r.status === "fulfilled") ok++; else fail++; }
+    }
+    for (const archive of acceptedArchives) {
+      try {
+        const result = await modelApi.batchUploadFromArchive(archive);
+        ok += result.results.filter((item) => item.status === "queued" || item.status === "completed").length;
+        fail += result.results.filter((item) => item.status !== "queued" && item.status !== "completed").length;
+      } catch {
+        fail++;
+      }
     }
     setUploading(false);
     toast(`上传完成: ${ok} 成功${fail > 0 ? `, ${fail} 失败` : ''}`, fail > 0 ? 'error' : 'success');
@@ -1963,7 +2048,7 @@ function MobileContent() {
     if (selectedSuggestionCount === 0) return;
     setMerging(true);
     try {
-      const items = suggestionGroups.filter(s => selectedNames.has(s.name)).map(s => ({
+      const items = filteredSuggestions.filter(s => selectedNames.has(s.name)).map(s => ({
         name: s.name,
         modelIds: s.models.map(m => m.id),
       }));
@@ -2079,10 +2164,9 @@ function MobileContent() {
 
   return (
     <>
-      <input type="file" multiple accept={uploadPolicy.modelFormats.map((f) => `.${f}`).join(",")} className="hidden" id="mobile-admin-upload" onChange={(e) => { if (e.target.files?.length) handleUpload(e.target.files); e.target.value = ''; }} />
+      <input type="file" multiple accept={[...uploadPolicy.modelFormats.map((f) => `.${f}`), ".zip", ".rar"].join(",")} className="hidden" id="mobile-admin-upload" onChange={(e) => { if (e.target.files?.length) handleUpload(e.target.files); e.target.value = ''; }} />
       <AdminManagementPage
         title="模型管理"
-        meta={`${modelTotal} 个`}
         description="维护模型库文件、合并建议和预览运维"
         contentClassName="gap-3"
         actions={(
@@ -2101,10 +2185,25 @@ function MobileContent() {
           </div>
         )}
       >
+        {activeTab === 'models' && (
         <div className="flex items-center bg-surface-container-high rounded-sm px-3 py-2 border border-outline-variant/30">
           <Icon name="search" size={16} className="text-on-surface-variant mr-2" />
           <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="搜索模型..." className="bg-transparent border-none outline-none text-sm text-on-surface placeholder:text-on-surface-variant/50 w-full" />
         </div>
+        )}
+        {activeTab === 'groups' && (
+        <div className="flex items-center bg-surface-container-high rounded-sm px-3 py-2 border border-outline-variant/30">
+          <Icon name="search" size={16} className="text-on-surface-variant mr-2" />
+          <input value={groupSearch} onChange={(e) => setGroupSearch(e.target.value)} placeholder="搜索分组..." className="bg-transparent border-none outline-none text-sm text-on-surface placeholder:text-on-surface-variant/50 w-full" />
+        </div>
+        )}
+
+        {activeTab === 'suggestions' && (
+        <div className="flex items-center bg-surface-container-high rounded-sm px-3 py-2 border border-outline-variant/30">
+          <Icon name="search" size={16} className="text-on-surface-variant mr-2" />
+          <input value={suggestionSearch} onChange={(e) => setSuggestionSearch(e.target.value)} placeholder="搜索建议..." className="bg-transparent border-none outline-none text-sm text-on-surface placeholder:text-on-surface-variant/50 w-full" />
+        </div>
+        )}
         <ResponsiveSectionTabs
           tabs={modelAdminTabs}
           value={activeTab}
@@ -2118,10 +2217,10 @@ function MobileContent() {
             <SkeletonList rows={5} />
           ) : (
             <div className="admin-tab-panel space-y-3">
-              {suggestionGroups.length > 0 && (
+              {filteredSuggestions.length > 0 && (
                 <div className="flex items-center justify-between gap-2 rounded-lg bg-surface-container-high px-3 py-2">
                   <div className="min-w-0 text-xs text-on-surface-variant">
-                    已加载 <span className="font-bold text-primary-container">{suggestionGroups.length}</span> / {suggestionCount}
+                    已加载 <span className="font-bold text-primary-container">{filteredSuggestions.length}</span> / {suggestionCount}
                     {selectedSuggestionCount > 0 && <span>，已选 {selectedSuggestionCount}</span>}
                   </div>
                   <div className="flex shrink-0 items-center gap-2">
@@ -2134,7 +2233,7 @@ function MobileContent() {
                   </div>
                 </div>
               )}
-              {suggestionGroups.map((group) => (
+              {filteredSuggestions.map((group) => (
                 <div key={group.name} className="rounded-lg bg-surface-container-high p-3">
                   <div className="flex items-center gap-3">
                     <input type="checkbox" checked={selectedNames.has(group.name)} onChange={() => toggleSelect(group.name)} className="h-4 w-4 accent-primary-container" />
@@ -2171,10 +2270,10 @@ function MobileContent() {
                   </div>
                 </div>
               ))}
-              {suggestionGroups.length > 0 && (
+              {filteredSuggestions.length > 0 && (
                 <InfiniteLoadTrigger hasMore={suggestionsHasMore} isLoading={suggestionsLoadingMore} onLoadMore={loadMoreSuggestions} />
               )}
-              {suggestionGroups.length === 0 && (
+              {filteredSuggestions.length === 0 && (
                 <p className="rounded-lg bg-surface-container-high px-4 py-12 text-center text-sm text-on-surface-variant">没有需要合并的同名模型</p>
               )}
             </div>
@@ -2183,13 +2282,21 @@ function MobileContent() {
           groupsLoading ? (
             <SkeletonList rows={5} />
           ) : (
-            <div className="admin-tab-panel space-y-3">
-              {groupData?.map((group) => {
+            <div className="admin-tab-panel space-y-2">
+              {filteredGroups?.map((group) => {
                 const editing = editingGroupId === group.id;
                 const primaryId = group.primary?.id;
+                const expanded = expandedGroups.has(group.id);
+                const toggleExpand = () => setExpandedGroups((prev) => {
+                  const next = new Set(prev);
+                  if (next.has(group.id)) next.delete(group.id);
+                  else next.add(group.id);
+                  return next;
+                });
                 return (
                   <div key={group.id} className="rounded-lg bg-surface-container-high p-3">
-                    <div className="flex items-start gap-3">
+                    <div className="flex items-start gap-3 cursor-pointer" onClick={() => { if (!editing) toggleExpand(); }}>
+                      <Icon name={expanded ? "expand_more" : "chevron_right"} size={18} className="mt-2 shrink-0 text-on-surface-variant" />
                       <span className="grid h-10 w-10 shrink-0 place-items-center rounded bg-surface-container-highest text-primary-container">
                         <Icon name="folder_special" size={18} />
                       </span>
@@ -2200,6 +2307,7 @@ function MobileContent() {
                             onChange={(e) => setGroupNameDraft(e.target.value)}
                             className="w-full rounded-sm border border-outline-variant/25 bg-surface-container-lowest px-3 py-2 text-sm font-semibold text-on-surface outline-none focus:border-primary"
                             autoFocus
+                            onClick={(e) => e.stopPropagation()}
                           />
                         ) : (
                           <>
@@ -2236,6 +2344,7 @@ function MobileContent() {
                         解散分组
                       </button>
                     </div>
+                    {expanded && (
                     <div className="mt-3 space-y-2">
                       {group.models.map((model) => {
                         const isPrimary = model.id === primaryId;
@@ -2269,7 +2378,6 @@ function MobileContent() {
                               <button
                                 onClick={() => handleRemoveFromGroup(group, model.id)}
                                 disabled={group.model_count <= 2 || groupAction === `remove:${group.id}:${model.id}`}
-                                title={group.model_count <= 2 ? '只有 2 个版本时请使用解散分组' : '移出当前分组'}
                                 className="rounded-sm border border-outline-variant/20 px-2.5 py-1.5 text-xs text-on-surface-variant disabled:opacity-40"
                               >
                                 移出
@@ -2279,6 +2387,7 @@ function MobileContent() {
                         );
                       })}
                     </div>
+                    )}
                   </div>
                 );
               })}
@@ -2305,7 +2414,6 @@ function MobileContent() {
                   </div>
                 </div>
                 <div className="flex shrink-0 items-center gap-1.5 pr-2.5" onClick={(e) => e.preventDefault()}>
-                  <button onClick={() => handleQueueModelRebuild(m)} disabled={queueingModelId === m.model_id} aria-label={`重建预览 ${m.name}`} title="重建预览" className="px-2 py-1.5 text-xs text-on-surface-variant hover:text-primary rounded-sm border border-outline-variant/20 disabled:opacity-50"><Icon name="autorenew" size={14} className={queueingModelId === m.model_id ? 'animate-spin' : ''} /></button>
                   <button onClick={() => setEditModel(m)} className="px-2 py-1.5 text-xs text-on-surface-variant hover:text-on-surface rounded-sm border border-outline-variant/20"><Icon name="settings" size={14} /></button>
                   <button onClick={() => setDeleteTarget(m)} className="px-2 py-1.5 text-xs text-on-surface-variant hover:text-error rounded-sm border border-outline-variant/20"><Icon name="close" size={14} /></button>
                 </div>

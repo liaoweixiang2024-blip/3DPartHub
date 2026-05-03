@@ -2,6 +2,7 @@ import { Router, Response } from "express";
 import { copyFileSync, mkdirSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { cacheDelByPrefix } from "../../lib/cache.js";
+import { clearCategoryCache } from "../categories/common.js";
 import { config } from "../../lib/config.js";
 import { authMiddleware, type AuthRequest } from "../../middleware/auth.js";
 import { requireRole } from "../../middleware/rbac.js";
@@ -30,6 +31,23 @@ export function createModelManagementRouter({ prisma, metadataDir, getMeta, save
           res.status(404).json({ detail: "模型不存在" });
           return;
         }
+        if (name !== undefined) {
+          if (!name.trim()) {
+            res.status(400).json({ detail: "模型名称不能为空" });
+            return;
+          }
+          if (name.length > 200) {
+            res.status(400).json({ detail: "模型名称不能超过 200 个字符" });
+            return;
+          }
+        }
+        if (categoryId !== undefined && categoryId !== null) {
+          const catExists = await prisma.category.findUnique({ where: { id: categoryId } });
+          if (!catExists) {
+            res.status(400).json({ detail: "分类不存在" });
+            return;
+          }
+        }
 
         const updated = await prisma.model.update({
           where: { id },
@@ -38,19 +56,36 @@ export function createModelManagementRouter({ prisma, metadataDir, getMeta, save
             ...(description !== undefined && { description }),
             ...(categoryId !== undefined && { categoryId }),
           },
-          include: { categoryRef: { select: { name: true } } },
+          include: {
+            categoryRef: { select: { name: true } },
+            group: { select: { id: true, name: true, primaryId: true, _count: { select: { models: true } } } },
+          },
         });
 
         await cacheDelByPrefix("cache:models:");
+        await clearCategoryCache();
 
         res.json({
           model_id: updated.id,
           name: updated.name,
           original_name: updated.originalName,
           description: updated.description,
-          category: (updated as any).categoryRef?.name || null,
           format: updated.format,
           status: updated.status,
+          thumbnail_url: updated.thumbnailUrl,
+          gltf_url: updated.gltfUrl,
+          gltf_size: updated.gltfSize,
+          original_size: updated.originalSize,
+          category: (updated as any).categoryRef?.name || null,
+          category_id: updated.categoryId || null,
+          download_count: updated.downloadCount || 0,
+          created_at: updated.createdAt,
+          file_modified_at: updated.fileModifiedAt || null,
+          drawing_url: updated.drawingUrl,
+          drawing_name: updated.drawingName || null,
+          drawing_size: updated.drawingSize || null,
+          preview_meta: (updated as any).previewMeta || null,
+          group: (updated as any).group || null,
         });
         return;
       } catch {
@@ -136,33 +171,33 @@ export function createModelManagementRouter({ prisma, metadataDir, getMeta, save
           format: dbFileInfo?.format,
           originalFormat: dbFileInfo?.originalFormat,
         });
-    if (cleanup.failed.length > 0) {
-      console.warn("[models] Some model files could not be deleted:", cleanup.failed);
-    }
+    const allFailed = [...cleanup.failed];
 
     const staticUrlCleanup = removeExistingFiles(relatedStaticUrls.map((url) => {
       const cleanUrl = String(url).split("?")[0];
       if (!cleanUrl.startsWith("/static/")) return null;
       return join(config.staticDir, cleanUrl.slice("/static/".length));
     }));
-    if (staticUrlCleanup.failed.length > 0) {
-      console.warn("[models] Some related static files could not be deleted:", staticUrlCleanup.failed);
-    }
+    allFailed.push(...staticUrlCleanup.failed);
+
+    const metaPath = join(metadataDir, `${id}.json`);
+    const metaCleanup = removeExistingFiles([metaPath]);
+    allFailed.push(...metaCleanup.failed);
 
     // Delete from database after files are cleaned up
     if (prisma) {
       try {
         await prisma.model.delete({ where: { id } }).catch(() => {});
         await cacheDelByPrefix("cache:models:");
+        await clearCategoryCache();
       } catch { /* ignore */ }
     }
 
-    const metaPath = join(metadataDir, `${id}.json`);
-    const metaCleanup = removeExistingFiles([metaPath]);
-    if (metaCleanup.failed.length > 0) {
-      console.warn("[models] Metadata file could not be deleted:", metaCleanup.failed);
+    if (allFailed.length > 0) {
+      console.warn("[models] Some files could not be deleted:", allFailed);
+      res.json({ message: "删除成功，但部分文件清理失败", warnings: allFailed.length });
+      return;
     }
-
     res.json({ message: "删除成功" });
   });
 
@@ -201,14 +236,15 @@ export function createModelManagementRouter({ prisma, metadataDir, getMeta, save
       // Save thumbnail as {id}.png in thumbnails dir
       const thumbDir = join(config.staticDir, "thumbnails");
       mkdirSync(thumbDir, { recursive: true });
-      const thumbPath = join(thumbDir, `${id}.png`);
+      const mimeToExt: Record<string, string> = { "image/png": "png", "image/jpeg": "jpg", "image/webp": "webp" };
+      const ext = mimeToExt[file.mimetype] || "png";
+      const thumbPath = join(thumbDir, `${id}.${ext}`);
 
-      // Move uploaded file to thumbnail path
       copyFileSync(file.path, thumbPath);
       rmSync(file.path, { force: true });
 
       const ts = Date.now();
-      const thumbnailUrl = `/static/thumbnails/${id}.png?t=${ts}`;
+      const thumbnailUrl = `/static/thumbnails/${id}.${ext}?t=${ts}`;
 
       await prisma.model.update({
         where: { id },
@@ -216,11 +252,13 @@ export function createModelManagementRouter({ prisma, metadataDir, getMeta, save
       });
 
       await cacheDelByPrefix("cache:models:");
+      await clearCategoryCache();
 
       res.json({ success: true, data: { model_id: id, thumbnail_url: thumbnailUrl } });
     } catch (err: any) {
+      console.error("[management] Thumbnail upload failed:", err);
       rmSync(file.path, { force: true });
-      res.status(500).json({ detail: err.message || "上传预览图失败" });
+      res.status(500).json({ detail: "上传预览图失败" });
     }
   });
 

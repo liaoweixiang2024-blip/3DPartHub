@@ -59,6 +59,22 @@ export function createModelConversionRouter({ prisma, getMeta, saveMeta, getPrev
         return;
       }
 
+      if (m.status === MODEL_STATUS.QUEUED || m.status === MODEL_STATUS.PROCESSING) {
+        try { rmSync(file.path, { force: true }); } catch {}
+        res.status(409).json({ detail: "模型正在转换中，请稍后重试" });
+        return;
+      }
+
+      const statusUpdate = await prisma.model.updateMany({
+        where: { id, status: { notIn: [MODEL_STATUS.QUEUED, MODEL_STATUS.PROCESSING] } },
+        data: { status: MODEL_STATUS.PROCESSING },
+      });
+      if (statusUpdate.count === 0) {
+        try { rmSync(file.path, { force: true }); } catch {}
+        res.status(409).json({ detail: "模型正在转换中，请稍后重试" });
+        return;
+      }
+
       const cleanup = removeModelFiles({
         id,
         uploadPath: m.uploadPath,
@@ -144,8 +160,15 @@ export function createModelConversionRouter({ prisma, getMeta, saveMeta, getPrev
       await cacheDelByPrefix("cache:models:");
       res.json({ success: true, data: { model_id: id, status: MODEL_STATUS.PROCESSING } });
     } catch (err: any) {
+      if (prisma) {
+        await prisma.model.update({
+          where: { id },
+          data: { status: MODEL_STATUS.FAILED },
+        }).catch(() => {});
+        await cacheDelByPrefix("cache:models:");
+      }
       console.error("Replace file failed:", err);
-      res.status(500).json({ detail: err.message || "替换文件失败" });
+      res.status(500).json({ detail: "替换文件失败" });
     }
   });
 
@@ -165,10 +188,32 @@ export function createModelConversionRouter({ prisma, getMeta, saveMeta, getPrev
         return;
       }
 
+      if (m.status === MODEL_STATUS.QUEUED || m.status === MODEL_STATUS.PROCESSING) {
+        res.status(409).json({ detail: "模型正在转换中，请稍后重试" });
+        return;
+      }
+
       const origPath = findOriginalModelPath(m);
 
       if (isDeprecatedHtmlPreviewFormat(m.format)) {
         res.status(400).json({ detail: "HTML 预览已停用，请上传 STEP/IGES/XT 文件" });
+        return;
+      }
+
+      if (!origPath) {
+        const previewPath = findPreviewAssetPath(join(config.staticDir, "models"), m.id, m.gltfUrl);
+        if (!previewPath || !existsSync(previewPath)) {
+          res.status(400).json({ detail: "模型无原始文件且无预览文件，无法重新转换" });
+          return;
+        }
+      }
+
+      const statusUpdate = await prisma.model.updateMany({
+        where: { id, status: { notIn: [MODEL_STATUS.QUEUED, MODEL_STATUS.PROCESSING] } },
+        data: { status: MODEL_STATUS.PROCESSING },
+      });
+      if (statusUpdate.count === 0) {
+        res.status(409).json({ detail: "模型正在转换中，请稍后重试" });
         return;
       }
 
@@ -210,6 +255,7 @@ export function createModelConversionRouter({ prisma, getMeta, saveMeta, getPrev
           ...(gltfSize !== m.gltfSize ? { gltfSize } : {}),
           ...(versionedUrl !== m.thumbnailUrl ? { thumbnailUrl: versionedUrl } : {}),
           previewMeta: nextPreviewMeta,
+          status: MODEL_STATUS.COMPLETED,
         },
       });
 
@@ -233,8 +279,12 @@ export function createModelConversionRouter({ prisma, getMeta, saveMeta, getPrev
         },
       });
     } catch (err: any) {
+      await prisma.model.update({
+        where: { id },
+        data: { status: MODEL_STATUS.FAILED },
+      }).catch(() => {});
       console.error("Re-convert failed:", err);
-      res.status(500).json({ detail: err.message || "重新转换失败" });
+      res.status(500).json({ detail: "重新转换失败" });
     }
   });
 
@@ -262,6 +312,14 @@ export function createModelConversionRouter({ prisma, getMeta, saveMeta, getPrev
         if (isDeprecatedHtmlPreviewFormat(m.format)) { failed++; continue; }
 
         try {
+          const recheck = await prisma.model.findUnique({ where: { id: m.id }, select: { status: true } });
+          if (!recheck || recheck.status !== MODEL_STATUS.COMPLETED) { failed++; continue; }
+
+          await prisma.model.update({
+            where: { id: m.id },
+            data: { status: MODEL_STATUS.PROCESSING },
+          });
+
           const result = m.format === "xt" || m.format === "x_t"
             ? await convertXtToGltf(origPath, modelDir, m.id, m.originalName || `${m.id}.${m.format}`)
             : await convertStepToGltf(origPath, modelDir, m.id, m.originalName || `${m.id}.${m.format}`);
@@ -276,10 +334,14 @@ export function createModelConversionRouter({ prisma, getMeta, saveMeta, getPrev
 
           await prisma.model.update({
             where: { id: m.id },
-            data: { gltfUrl: result.gltfUrl, gltfSize: result.gltfSize, previewMeta: result.previewMeta, ...(thumbnailUrl ? { thumbnailUrl } : {}) },
+            data: { gltfUrl: result.gltfUrl, gltfSize: result.gltfSize, previewMeta: result.previewMeta, status: MODEL_STATUS.COMPLETED, ...(thumbnailUrl ? { thumbnailUrl } : {}) },
           });
           success++;
         } catch {
+          await prisma.model.update({
+            where: { id: m.id },
+            data: { status: MODEL_STATUS.FAILED },
+          }).catch(() => {});
           failed++;
         }
       }
@@ -287,7 +349,8 @@ export function createModelConversionRouter({ prisma, getMeta, saveMeta, getPrev
       await cacheDelByPrefix("cache:models:");
       res.json({ success: true, data: { total: models.length, success, failed } });
     } catch (err: any) {
-      res.status(500).json({ detail: err.message || "批量重新转换失败" });
+      console.error("[conversion] Batch reconvert failed:", err);
+      res.status(500).json({ detail: "批量重新转换失败" });
     }
   });
 

@@ -5,7 +5,30 @@ import { getAllSettings } from "../../lib/settings.js";
 import { prisma } from "../../lib/prisma.js";
 import { authMiddleware, type AuthRequest } from "../../middleware/auth.js";
 import { MODEL_STATUS } from "../../services/modelStatus.js";
-import { asSingleString } from "./common.js";
+import { asSingleString, buildSelectionShareNameMap } from "./common.js";
+
+type UserShareItem = {
+  id: string;
+  rawId: string;
+  type: "model" | "selection";
+  token: string;
+  modelId: string | null;
+  modelName: string;
+  allowPreview: boolean;
+  allowDownload: boolean;
+  downloadLimit: number;
+  downloadCount: number;
+  viewCount: number;
+  hasPassword: boolean;
+  expiresAt: Date | null;
+  createdAt: Date;
+};
+
+function parseUserShareId(value: string): { type: "model" | "selection"; id: string } {
+  if (value.startsWith("model:")) return { type: "model", id: value.slice("model:".length) };
+  if (value.startsWith("selection:")) return { type: "selection", id: value.slice("selection:".length) };
+  return { type: "model", id: value };
+}
 
 export function createUserSharesRouter() {
   const router = Router();
@@ -28,6 +51,10 @@ export function createUserSharesRouter() {
       }
       if (model.status !== MODEL_STATUS.COMPLETED) {
         res.status(404).json({ detail: "模型不存在" });
+        return;
+      }
+      if (model.createdById !== userId) {
+        res.status(403).json({ detail: "只能分享自己的模型" });
         return;
       }
 
@@ -76,7 +103,7 @@ export function createUserSharesRouter() {
         downloadLimit = sMaxDownloadLimit;
       }
 
-      const token = randomBytes(12).toString("hex");
+      const token = randomBytes(16).toString("hex");
       const hashedPassword = password ? await bcrypt.hash(password, 10) : null;
 
       const share = await prisma.shareLink.create({
@@ -98,29 +125,50 @@ export function createUserSharesRouter() {
         allowPreview: share.allowPreview,
         allowDownload: share.allowDownload,
         downloadLimit: share.downloadLimit,
+        downloadCount: share.downloadCount,
+        viewCount: share.viewCount,
+        hasPassword: !!share.password,
         expiresAt: share.expiresAt,
         createdAt: share.createdAt,
         url: `${req.protocol}://${req.get("host")}/share/${share.token}`,
       });
     } catch (err) {
       console.error("[Shares] Create error:", err);
-      res.status(500).json({ detail: "创建分享失败", error: err instanceof Error ? err.message : String(err) });
+      res.status(500).json({ detail: "创建分享失败" });
     }
   });
 
   // List my shares
   router.get("/api/shares", authMiddleware, async (req: AuthRequest, res: Response) => {
     const userId = req.user!.userId;
-    const shares = await prisma.shareLink.findMany({
-      where: { createdById: userId },
-      include: {
-        model: { select: { id: true, name: true, originalName: true, format: true } },
-      },
-      orderBy: { createdAt: "desc" },
-    }) as any[];
+    const [modelShares, selectionShares] = await Promise.all([
+      prisma.shareLink.findMany({
+        where: { createdById: userId },
+        include: {
+          model: { select: { id: true, name: true, originalName: true, format: true } },
+        },
+        orderBy: { createdAt: "desc" },
+      }),
+      prisma.selectionShare.findMany({
+        where: { createdById: userId },
+        orderBy: { createdAt: "desc" },
+      }),
+    ]);
 
-    res.json(shares.map(s => ({
-      id: s.id,
+    const selectionSlugs = Array.from(new Set(selectionShares.map((row) => row.categorySlug).filter(Boolean)));
+    const selectionCategories = selectionSlugs.length
+      ? await prisma.selectionCategory.findMany({
+          where: { slug: { in: selectionSlugs } },
+          select: { slug: true, name: true },
+        })
+      : [];
+    const selectionCategoryMap = new Map(selectionCategories.map((item) => [item.slug, item.name]));
+    const selectionNameMap = await buildSelectionShareNameMap(selectionShares, selectionCategoryMap);
+
+    const modelItems: UserShareItem[] = modelShares.map((s) => ({
+      id: `model:${s.id}`,
+      rawId: s.id,
+      type: "model",
       token: s.token,
       modelId: s.modelId,
       modelName: s.model.name || s.model.originalName,
@@ -132,7 +180,25 @@ export function createUserSharesRouter() {
       hasPassword: !!s.password,
       expiresAt: s.expiresAt,
       createdAt: s.createdAt,
-    })));
+    }));
+    const selectionItems: UserShareItem[] = selectionShares.map((s) => ({
+      id: `selection:${s.id}`,
+      rawId: s.id,
+      type: "selection",
+      token: s.token,
+      modelId: null,
+      modelName: selectionNameMap.get(s.id) || selectionCategoryMap.get(s.categorySlug) || s.categorySlug || "产品选型",
+      allowPreview: true,
+      allowDownload: false,
+      downloadLimit: 0,
+      downloadCount: 0,
+      viewCount: s.viewCount,
+      hasPassword: false,
+      expiresAt: null,
+      createdAt: s.createdAt,
+    }));
+
+    res.json([...modelItems, ...selectionItems].sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime()));
   });
 
   // List shares for a specific model
@@ -171,13 +237,25 @@ export function createUserSharesRouter() {
       return;
     }
 
-    const share = await prisma.shareLink.findUnique({ where: { id } });
+    const target = parseUserShareId(id);
+    if (target.type === "selection") {
+      const selectionShare = await prisma.selectionShare.findUnique({ where: { id: target.id } });
+      if (!selectionShare || selectionShare.createdById !== userId) {
+        res.status(404).json({ detail: "分享链接不存在" });
+        return;
+      }
+      await prisma.selectionShare.delete({ where: { id: target.id } });
+      res.json({ ok: true });
+      return;
+    }
+
+    const share = await prisma.shareLink.findUnique({ where: { id: target.id } });
     if (!share || share.createdById !== userId) {
       res.status(404).json({ detail: "分享链接不存在" });
       return;
     }
 
-    await prisma.shareLink.delete({ where: { id } });
+    await prisma.shareLink.delete({ where: { id: target.id } });
     res.json({ ok: true });
   });
 
