@@ -8,7 +8,10 @@ import { pipeline } from "stream/promises";
 import { Transform } from "stream";
 import { fileURLToPath } from "url";
 import { config } from "./config.js";
+import { createLogger } from "./logger.js";
 import { syncJob, loadJob } from "./jobStore.js";
+
+const log = createLogger({ component: "backup" });
 
 let _backupPrisma: any = null;
 async function getBackupPrisma() {
@@ -55,8 +58,18 @@ function copyDirectoryContents(source: string, destination: string) {
 }
 
 const DB_URL = config.databaseUrl;
-// Strip Prisma-specific query params that pg_dump/psql don't understand
-const DB_URL_CLEAN = DB_URL.replace(/\?.*/, "");
+// Strip Prisma-specific query params that pg_dump/psql don't understand, preserving SSL params
+function stripPrismaParams(url: string): string {
+  try {
+    const u = new URL(url);
+    u.searchParams.delete("connection_limit");
+    u.searchParams.delete("pool_timeout");
+    return u.toString();
+  } catch {
+    return url.replace(/\?.*/, "");
+  }
+}
+const DB_URL_CLEAN = stripPrismaParams(DB_URL);
 // Prefer static/backups (bind-mount in Docker → host disk space) over uploads/backups (named volume → limited space)
 const ACTIVE_BACKUP_DIR = join(process.cwd(), config.staticDir, "backups");
 const LEGACY_BACKUP_DIR = join(process.cwd(), config.uploadDir, "backups");
@@ -91,7 +104,7 @@ function getDockerContainer(): string | null {
       let container = containers.find(c => c.includes("postgres"));
       if (container) {
         container = container.trim();
-        console.log(`[Backup] pg_dump not found locally, using docker exec ${container}`);
+        log.info({ container }, "pg_dump not found locally, using docker exec");
         _dockerContainer = container;
         return container;
       }
@@ -424,7 +437,7 @@ function addLog(job: { id?: string; logs?: string[] }, text: string) {
   if (job.logs.length > MAX_LOG_LINES) {
     job.logs = job.logs.slice(-MAX_LOG_LINES);
   }
-  console.log(`[Backup] ${text}`);
+  log.info(text);
   if (job.id) syncJob({ ...job, id: job.id });
 }
 
@@ -995,7 +1008,7 @@ async function runBackup(job: BackupJob) {
       });
     }
 
-    console.log(`[Backup #${job.id}] Done: ${formatSize(fileSize)}`);
+    log.info({ jobId: job.id, fileSize: formatSize(fileSize) }, "Backup completed");
   } catch (err: any) {
     job.stage = "error";
     job.error = err.message;
@@ -1010,7 +1023,7 @@ async function runBackup(job: BackupJob) {
     }
     if (existsSync(finalArchive)) rmSync(finalArchive, { force: true });
     if (existsSync(activeMetaPath(job.id))) rmSync(activeMetaPath(job.id), { force: true });
-    console.error(`[Backup #${job.id}] Error:`, err.message);
+    log.error({ err, jobId: job.id }, "Backup failed");
   } finally {
     if (existsSync(tmpDir)) rmSync(tmpDir, { recursive: true, force: true });
   }
@@ -1646,7 +1659,7 @@ async function runRestoreFromArchive(job: RestoreJob, archPath: string, removeAr
             addLog(job, "schema 同步完成");
           } catch (pushErr) {
             addLog(job, `schema 同步提示: ${extractCommandError(pushErr)}`);
-            console.warn(`[Restore] Post-restore schema sync warning: ${extractCommandError(pushErr)}`);
+            log.warn({ error: extractCommandError(pushErr) }, "Post-restore schema sync warning");
           }
         }
       } else {
@@ -1750,13 +1763,13 @@ async function runRestoreFromArchive(job: RestoreJob, archPath: string, removeAr
     job.result = result;
     syncJob(job);
 
-    console.log(`[Restore #${job.id}] Done: ${result.modelCount} step models, ${result.thumbnailCount} thumbnails`);
+    log.info({ jobId: job.id, modelCount: result.modelCount, thumbnailCount: result.thumbnailCount }, "Restore completed");
   } catch (err: any) {
     job.stage = "error";
     job.error = err.message;
     addLog(job, `恢复失败: ${err.message}`);
     syncJob(job);
-    console.error(`[Restore #${job.id}] Error:`, err.message);
+    log.error({ err, jobId: job.id }, "Restore failed");
   } finally {
     if (removeArchiveAfterExtract && existsSync(archPath)) rmSync(archPath, { force: true });
     if (existsSync(tmpDir)) rmSync(tmpDir, { recursive: true, force: true });
@@ -2245,11 +2258,11 @@ async function preflightRestoreSql(sqlPath: string) {
     psqlCommand(maintenanceUrl, `CREATE DATABASE "${preflightDbName}"`, ["-v", "ON_ERROR_STOP=1"], PSQL_COMMAND_TIMEOUT_MS);
     runPrismaMigrations(preflightDbUrl);
     await restoreSqlIntoDatabase(preflightDbUrl, sqlPath, { disableTriggers: true });
-    console.log("[Backup] 备份数据库校验通过");
+    log.info("Backup database preflight verification passed");
   } catch (err: any) {
     // Preflight failed — could be missing CREATEDB privilege or incompatible data.
     // Skip preflight and let the actual restore handle errors with recovery.
-    console.warn(`[Backup] Preflight skipped (DB user may lack CREATEDB or data incompatible): ${extractCommandError(err)}`);
+    log.warn({ error: extractCommandError(err) }, "Preflight skipped (DB user may lack CREATEDB or data incompatible)");
   } finally {
     try {
       psqlCommand(maintenanceUrl, `DROP DATABASE IF EXISTS "${preflightDbName}" WITH (FORCE)`, ["-v", "ON_ERROR_STOP=1"], PSQL_COMMAND_TIMEOUT_MS);
@@ -2333,7 +2346,7 @@ async function rollbackToSafetySnapshot(snapshotPath: string | null, job: { id?:
       const preservedPath = preserveSafetySnapshot(snapshotPath, job);
       const preservedMessage = preservedPath ? `；安全快照已保留: ${preservedPath}` : "";
       addLog(job, `安全快照回滚失败: ${rollbackErr.message}${preservedMessage}，尝试恢复空 schema...`);
-      console.error(`[Restore] Safety snapshot rollback failed: ${rollbackErr.message}`);
+      log.error({ err: rollbackErr }, "Safety snapshot rollback failed");
     }
   } else {
     addLog(job, "未找到可用安全快照，尝试恢复空 schema...");
@@ -2920,9 +2933,9 @@ function scheduleBackupRecordNormalization(record: BackupRecord, archive: string
       refreshed.name = record.name;
       refreshed.dbSize = record.dbSize || refreshed.dbSize;
       writeFileSync(metaFile, JSON.stringify(refreshed, null, 2));
-      console.log(`[Backup] Normalized legacy backup record: ${record.id}`);
+      log.info({ recordId: record.id }, "Normalized legacy backup record");
     } catch (err: any) {
-      console.warn(`[Backup] Failed to normalize backup record ${record.id}: ${err?.message || err}`);
+      log.warn({ recordId: record.id, err }, "Failed to normalize backup record");
     } finally {
       pendingRecordNormalizations.delete(record.id);
     }
@@ -2952,7 +2965,7 @@ export function startBackupScheduler() {
   backupSchedulerStarted = true;
   const interval = setInterval(() => {
     runBackupSchedulerTick().catch((err) => {
-      console.warn(`[BackupScheduler] ${err?.message || err}`);
+      log.warn({ err }, "Backup scheduler tick error");
     });
   }, 60_000);
   interval.unref?.();
@@ -2973,14 +2986,14 @@ async function runBackupSchedulerTick() {
       backup_last_auto_job_id: jobId,
       backup_last_auto_at: new Date().toISOString(),
     });
-    console.log(`[BackupScheduler] Started scheduled backup: ${jobId}`);
+    log.info({ jobId }, "Started scheduled backup");
   } catch (err: any) {
     await updateBackupPolicySettings({
       backup_last_auto_status: "skipped",
       backup_last_auto_message: err?.message || "自动备份跳过",
       backup_last_auto_at: new Date().toISOString(),
     });
-    console.warn(`[BackupScheduler] Skipped: ${err?.message || err}`);
+    log.warn({ err }, "Scheduled backup skipped");
   }
 }
 
@@ -3236,10 +3249,10 @@ function cleanupPartialArchives(dir: string) {
     const partials = readdirSync(dir).filter((file) => file.endsWith(".tar.gz.tmp"));
     for (const file of partials) {
       rmSync(join(dir, file), { force: true });
-      console.warn(`[Backup] Removed orphan partial archive: ${join(dir, file)}`);
+      log.warn({ path: join(dir, file) }, "Removed orphan partial archive");
     }
   } catch (err: any) {
-    console.warn(`[Backup] Failed to clean partial archives in ${dir}: ${err?.message || err}`);
+    log.warn({ dir, err }, "Failed to clean partial archives");
   }
 }
 

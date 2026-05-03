@@ -227,22 +227,13 @@ interface SettingGroup {
 
 const GROUPS: SettingGroup[] = [
   {
-    title: '访问控制',
-    icon: 'lock',
-    items: [
-      { key: 'require_login_browse', label: '登录浏览', desc: '用户必须登录后才能浏览模型列表', type: 'switch' },
-      { key: 'require_login_download', label: '登录下载', desc: '用户必须登录后才能下载模型文件', type: 'switch' },
-      { key: 'allow_register', label: '开放注册', desc: '允许新用户自行注册账号', type: 'switch' },
-    ],
-  },
-  {
-    title: '站点信息',
+    title: '站点与品牌',
     icon: 'domain',
     items: [
       { key: 'site_title', label: '网站名称', desc: '显示在导航栏、登录页和浏览器标签的站点名称', type: 'text' },
       { key: 'site_browser_title', label: '浏览器标题', desc: '浏览器标签页显示的标题，留空则使用网站名称', type: 'text' },
-      { key: 'site_logo', label: '站点 Logo', desc: '用于“仅 Logo”模式，适合横版长条图；导航会按高度自适应，不会拉伸变形', type: 'image' },
-      { key: 'site_icon', label: '站点图标', desc: '用于“图标 + 标题”模式，推荐方形图标；若误传横版图，导航也会限制宽高避免挤压标题', type: 'image' },
+      { key: 'site_logo', label: '站点 Logo', desc: '用于”仅 Logo”模式，适合横版长条图；导航会按高度自适应，不会拉伸变形', type: 'image' },
+      { key: 'site_icon', label: '站点图标', desc: '用于”图标 + 标题”模式，推荐方形图标；若误传横版图，导航也会限制宽高避免挤压标题', type: 'image' },
       { key: 'site_logo_display', label: 'Logo 显示方式', desc: '图标 + 标题适合大多数站点；仅 Logo 适合已包含文字的横版品牌图', type: 'select', options: [
         { value: 'logo_and_title', label: '图标 + 标题' },
         { value: 'logo_only', label: '仅 Logo（长条）' },
@@ -252,24 +243,25 @@ const GROUPS: SettingGroup[] = [
       { key: 'site_description', label: '网站描述', desc: '用于 SEO 和分享链接的站点描述', type: 'text' },
       { key: 'site_keywords', label: '关键词', desc: 'SEO 关键词，多个用逗号分隔', type: 'text' },
       { key: 'contact_email', label: '联系邮箱', desc: '显示在页脚的联系邮箱，用户可直接点击发送邮件', type: 'text' },
-    ],
-  },
-  {
-    title: '页脚设置',
-    icon: 'link',
-    items: [
+      { key: 'contact_phone', label: '联系电话', desc: '显示在页脚的联系电话', type: 'text' },
+      { key: 'contact_address', label: '联系地址', desc: '显示在页脚的公司/办公地址', type: 'text' },
       { key: 'footer_copyright', label: '版权信息', desc: '页脚左侧显示的版权文字，如：© 2024 公司名称 版权所有', type: 'text' },
       { key: 'footer_links', label: '页脚链接', desc: '管理页脚链接的显示文字和跳转地址', type: 'textarea' },
     ],
   },
   {
-    title: '法律条款',
-    icon: 'shield',
+    title: '外观与主题',
+    icon: 'palette',
     items: [
-      { key: 'legal_privacy_updated_at', label: '隐私声明更新时间', desc: '显示在隐私声明标题下方，如：2026 年 4 月', type: 'text' },
-      { key: 'legal_privacy_sections', label: '隐私声明正文', desc: '维护 /legal/privacy 页面的正式条款章节，前台按书面文档格式展示', type: 'textarea' },
-      { key: 'legal_terms_updated_at', label: '用户协议更新时间', desc: '显示在用户协议标题下方，如：2026 年 4 月', type: 'text' },
-      { key: 'legal_terms_sections', label: '用户协议正文', desc: '维护 /legal/terms 页面的正式协议章节，适合放账号、权限、资料使用等规则', type: 'textarea' },
+      { key: 'color_scheme', label: '配色方案', desc: '预设:orange/blue/green/purple/red/teal 或 custom', type: 'color-scheme' },
+      { key: 'default_theme', label: '默认主题', desc: '新用户首次访问时看到的默认外观', type: 'select', options: [
+        { value: 'dark', label: '暗色模式' },
+        { value: 'light', label: '亮色模式' },
+        { value: 'system', label: '跟随系统' },
+      ] },
+      { key: 'auto_theme_enabled', label: '定时切换', desc: '按时间段自动在亮色和暗色之间切换', type: 'switch' },
+      { key: 'auto_theme_dark_hour', label: '暗色开始', desc: '几点切换为暗色模式（24小时制）', type: 'number' },
+      { key: 'auto_theme_light_hour', label: '亮色开始', desc: '几点切换为亮色模式（24小时制）', type: 'number' },
     ],
   },
   {
@@ -277,7 +269,7 @@ const GROUPS: SettingGroup[] = [
     icon: 'campaign',
     items: [
       { key: 'announcement_enabled', label: '启用公告', desc: '在首页顶部显示系统公告横幅', type: 'switch' },
-      { key: 'announcement_text', label: '公告内容', desc: '支持 HTML，如输入 <a href="https://..." >链接</a> 可插入超链接', type: 'textarea' },
+      { key: 'announcement_text', label: '公告内容', desc: '支持 HTML，如输入 <a href=”https://...” >链接</a> 可插入超链接', type: 'textarea' },
       { key: 'announcement_type', label: '公告样式', desc: '选择公告横幅的预设配色方案', type: 'select', options: [
         { value: 'info', label: '信息 (蓝色)' },
         { value: 'warning', label: '警告 (黄色)' },
@@ -287,21 +279,134 @@ const GROUPS: SettingGroup[] = [
     ],
   },
   {
-    title: '维护模式',
-    icon: 'build',
+    title: '菜单配置',
+    icon: 'menu',
     items: [
-      { key: 'maintenance_enabled', label: '手动维护页', desc: '用于数据恢复、系统升级、资源重建等全站维护场景，管理员和后台不受影响', type: 'switch' },
-      { key: 'maintenance_auto_enabled', label: '重建自动维护', desc: '转换队列待处理数量达到阈值时自动显示维护页', type: 'switch' },
-      { key: 'maintenance_auto_queue_threshold', label: '自动触发阈值', desc: '待处理转换任务达到该数量后显示维护页', type: 'number', min: 1, max: 100000 },
-      { key: 'maintenance_title', label: '维护标题', desc: '维护页主标题', type: 'text' },
-      { key: 'maintenance_message', label: '维护说明', desc: '维护页说明文字', type: 'textarea' },
+      { key: 'nav_user_items', label: '用户侧边栏菜单', desc: '配置用户侧边栏的菜单名称、图标、路径和启用状态', type: 'textarea' },
+      { key: 'nav_admin_items', label: '管理员侧边栏菜单', desc: '配置管理员侧边栏的菜单名称、图标、路径和启用状态', type: 'textarea' },
+      { key: 'nav_mobile_items', label: '移动端底部菜单', desc: '配置移动端底部导航，建议最多 5 项', type: 'textarea' },
     ],
   },
   {
-    title: '转换队列',
-    icon: 'sync',
+    title: '访问控制',
+    icon: 'lock',
     items: [
-      { key: 'conversion_worker_concurrency', label: '转换并发数', desc: '同时处理的模型转换任务数量，建议先设为 2；大模型较多时过高会占满 CPU 和内存', type: 'number', min: 1, max: 8 },
+      { key: 'require_login_browse', label: '登录浏览', desc: '用户必须登录后才能浏览模型列表', type: 'switch' },
+      { key: 'require_login_download', label: '登录下载', desc: '用户必须登录后才能下载模型文件', type: 'switch' },
+      { key: 'allow_register', label: '开放注册', desc: '允许新用户自行注册账号', type: 'switch' },
+    ],
+  },
+  {
+    title: '安全防护',
+    icon: 'shield',
+    items: [
+      { key: 'anti_proxy_enabled', label: '反向代理防护', desc: '启用后，通过非授权域名访问将显示警告页面，防止恶意反向代理', type: 'switch' },
+      { key: 'allowed_hosts', label: '授权域名', desc: '允许访问的域名列表，逗号或换行分隔。如：mysite.com, www.mysite.com。填写您部署的正式域名', type: 'textarea' },
+      { key: 'hotlink_protection_enabled', label: '防盗链保护', desc: '阻止外部网站直接引用本站静态资源（图片、模型文件等）', type: 'switch' },
+      { key: 'allowed_referers', label: '允许的来源域名', desc: '允许引用资源的域名列表，逗号分隔。如：mysite.com, www.mysite.com', type: 'textarea' },
+      { key: 'security_email_code_cooldown_seconds', label: '邮箱验证码间隔', desc: '同一邮箱两次发送验证码的最小间隔，单位秒', type: 'number', min: 10, max: 3600 },
+      { key: 'security_email_code_ttl_seconds', label: '邮箱验证码有效期', desc: '邮箱验证码过期时间，单位秒', type: 'number', min: 60, max: 86400 },
+      { key: 'security_captcha_ttl_seconds', label: '图形验证码有效期', desc: '图形验证码过期时间，单位秒', type: 'number', min: 60, max: 3600 },
+      { key: 'security_password_min_length', label: '注册密码最小长度', desc: '新用户注册时密码最少位数', type: 'number', min: 6, max: 64 },
+      { key: 'security_username_min_length', label: '用户名最小长度', desc: '注册用户名允许的最小长度', type: 'number', min: 1, max: 32 },
+      { key: 'security_username_max_length', label: '用户名最大长度', desc: '注册用户名允许的最大长度', type: 'number', min: 1, max: 64 },
+    ],
+  },
+  {
+    title: '下载与分享',
+    icon: 'download',
+    items: [
+      { key: 'daily_download_limit', label: '每日下载上限', desc: '每个用户每天最多下载次数，0 表示不限制', type: 'number' },
+      { key: 'download_token_ttl_minutes', label: '下载令牌有效期 (分钟)', desc: '下载令牌的有效时间，过期后需重新获取', type: 'number', min: 1, max: 60 },
+      { key: 'share_default_expire_days', label: '分享默认有效期', desc: '用户创建分享时的默认有效期天数，0 表示永久有效', type: 'number' },
+      { key: 'share_max_expire_days', label: '分享最大有效期', desc: '分享链接最大有效期天数，0 表示不限制', type: 'number' },
+      { key: 'share_default_download_limit', label: '分享默认下载上限', desc: '用户创建分享时的默认下载次数限制，0 表示不限制', type: 'number' },
+      { key: 'share_max_download_limit', label: '分享最大下载上限', desc: '分享链接最大下载次数，0 表示不限制', type: 'number' },
+      { key: 'share_allow_password', label: '允许设置密码', desc: '用户创建分享时是否可以设置访问密码', type: 'switch' },
+      { key: 'share_allow_custom_expiry', label: '允许自定义有效期', desc: '用户创建分享时是否可以自行设置有效期', type: 'switch' },
+      { key: 'share_allow_preview', label: '默认允许预览', desc: '新创建的分享链接默认是否允许 3D 预览', type: 'switch' },
+      { key: 'show_watermark', label: '下载水印', desc: '在下载的模型图片上叠加水印，保护知识产权', type: 'switch' },
+      { key: 'watermark_text', label: '水印文字', desc: '水印显示的文字内容，如公司名或品牌名', type: 'text' },
+      { key: 'watermark_image', label: '水印图片', desc: '上传透明背景 PNG 图片作为水印，留空则使用文字水印', type: 'image' },
+    ],
+  },
+  {
+    title: '3D 预览',
+    icon: 'view_in_ar',
+    items: [
+      // 边线与测量
+      { key: 'viewer_edge_threshold_angle', label: '边线角度', desc: '数值越小边线越多，模型更清晰但更耗性能', type: 'number', min: 1, max: 89 },
+      { key: 'viewer_edge_vertex_limit', label: '边线顶点上限', desc: '顶点超过该数量时跳过边线叠加，0 表示不限制', type: 'number', min: 0, max: 5000000 },
+      { key: 'viewer_measure_default_unit', label: '测量默认单位', desc: '测量工具打开时默认使用的单位', type: 'select', options: [
+        { value: 'auto', label: '自动' },
+        { value: 'mm', label: '毫米 mm' },
+        { value: 'cm', label: '厘米 cm' },
+        { value: 'm', label: '米 m' },
+      ] },
+      { key: 'viewer_measure_record_limit', label: '测量记录数量', desc: '测量面板最多保留最近多少条记录', type: 'number', min: 1, max: 100 },
+      // 灯光与环境
+      { key: 'viewer_exposure', label: '曝光度', desc: '场景整体亮度，1.0 为标准曝光', type: 'number', min: 0.1, max: 3.0 },
+      { key: 'viewer_ambient_intensity', label: '环境光强度', desc: '场景全局填充光，影响整体基础亮度', type: 'number', min: 0, max: 2.0 },
+      { key: 'viewer_main_light_intensity', label: '主灯强度', desc: '主要定向光源，决定模型主体明暗对比', type: 'number', min: 0, max: 3.0 },
+      { key: 'viewer_fill_light_intensity', label: '补光强度', desc: '对侧柔光，减轻主灯产生的阴影', type: 'number', min: 0, max: 2.0 },
+      { key: 'viewer_hemisphere_intensity', label: '半球光强度', desc: '天地渐变光，模拟自然天空散射', type: 'number', min: 0, max: 2.0 },
+      { key: 'viewer_bg_color', label: '背景色', desc: '3D 视图背景，支持纯色或 CSS 渐变', type: 'text' },
+      // 材质预设 — 默认
+      { key: 'mat_default_color', label: '默认材质 · 颜色', desc: '模型加载后的初始颜色', type: 'color' },
+      { key: 'mat_default_metalness', label: '默认材质 · 金属度', desc: '0 = 完全非金属，1 = 完全金属', type: 'number', min: 0, max: 1.0 },
+      { key: 'mat_default_roughness', label: '默认材质 · 粗糙度', desc: '0 = 镜面光滑，1 = 完全粗糙', type: 'number', min: 0, max: 1.0 },
+      { key: 'mat_default_envMapIntensity', label: '默认材质 · 环境反射', desc: '环境贴图对材质的影响强度', type: 'number', min: 0, max: 3.0 },
+      // 材质预设 — 金属
+      { key: 'mat_metal_color', label: '金属材质 · 颜色', desc: '金属预设的基础颜色', type: 'color' },
+      { key: 'mat_metal_metalness', label: '金属材质 · 金属度', desc: '金属材质的金属感', type: 'number', min: 0, max: 1.0 },
+      { key: 'mat_metal_roughness', label: '金属材质 · 粗糙度', desc: '金属材质的光泽度', type: 'number', min: 0, max: 1.0 },
+      { key: 'mat_metal_envMapIntensity', label: '金属材质 · 环境反射', desc: '金属材质的环境反射强度', type: 'number', min: 0, max: 3.0 },
+      // 材质预设 — 塑料
+      { key: 'mat_plastic_color', label: '塑料材质 · 颜色', desc: '塑料预设的基础颜色', type: 'color' },
+      { key: 'mat_plastic_metalness', label: '塑料材质 · 金属度', desc: '塑料材质通常为 0', type: 'number', min: 0, max: 1.0 },
+      { key: 'mat_plastic_roughness', label: '塑料材质 · 粗糙度', desc: '塑料材质的表面粗糙程度', type: 'number', min: 0, max: 1.0 },
+      { key: 'mat_plastic_envMapIntensity', label: '塑料材质 · 环境反射', desc: '塑料材质的环境反射强度', type: 'number', min: 0, max: 3.0 },
+      // 材质预设 — 玻璃
+      { key: 'mat_glass_color', label: '玻璃材质 · 颜色', desc: '玻璃预设的色调', type: 'color' },
+      { key: 'mat_glass_metalness', label: '玻璃材质 · 金属度', desc: '玻璃材质通常为 0', type: 'number', min: 0, max: 1.0 },
+      { key: 'mat_glass_roughness', label: '玻璃材质 · 粗糙度', desc: '玻璃材质通常为 0（完全光滑）', type: 'number', min: 0, max: 1.0 },
+      { key: 'mat_glass_envMapIntensity', label: '玻璃材质 · 环境反射', desc: '玻璃材质的环境反射强度', type: 'number', min: 0, max: 3.0 },
+      { key: 'mat_glass_transmission', label: '玻璃材质 · 透射率', desc: '光线穿过材质的比例，1 = 完全透明', type: 'number', min: 0, max: 1.0 },
+      { key: 'mat_glass_ior', label: '玻璃材质 · 折射率', desc: '玻璃的折射率，普通玻璃约 1.5', type: 'number', min: 1.0, max: 2.5 },
+      { key: 'mat_glass_thickness', label: '玻璃材质 · 厚度', desc: '虚拟厚度，影响折射和透射效果', type: 'number', min: 0, max: 5.0 },
+    ],
+  },
+  {
+    title: '选型设置',
+    icon: 'checklist',
+    items: [
+      { key: 'selection_page_title', label: '选型页标题', desc: '选型页顶部显示的标题文字', type: 'text' },
+      { key: 'selection_page_desc', label: '选型页描述', desc: '显示在选型页标题下方，引导用户开始筛选', type: 'text' },
+      { key: 'selection_enable_match', label: '模型匹配', desc: '在选型结果中自动匹配3D模型', type: 'switch' },
+      { key: 'selection_thread_priority', label: '螺纹排序优先级', desc: '配置螺纹前缀的排序权重，数值越小越靠前', type: 'textarea' },
+    ],
+  },
+  {
+    title: '业务字典',
+    icon: 'tune',
+    items: [
+      { key: 'inquiry_statuses', label: '询价状态', desc: '用于筛选、标签和通知文案，可配置颜色、标签页展示和终态', type: 'textarea' },
+      { key: 'ticket_statuses', label: '工单状态', desc: '用于状态流转、筛选标签和状态徽标', type: 'textarea' },
+      { key: 'ticket_classifications', label: '工单分类', desc: '用于技术支持提交入口，可配置图标、说明和启用状态', type: 'textarea' },
+      { key: 'support_process_steps', label: '支持流程', desc: '用于技术支持页流程展示，可配置图标、标题和说明', type: 'textarea' },
+    ],
+  },
+  {
+    title: '上传与限制',
+    icon: 'upload_file',
+    items: [
+      { key: 'upload_policy', label: '文件上传与导入限制', desc: '配置模型上传、选型图片、选型 Excel 导入、产品图库上传和工单附件限制', type: 'textarea' },
+      { key: 'product_wall_max_image_mb', label: '产品图库单张上限 (MB)', desc: '单张图片文件的最大体积，超出会被拒绝', type: 'number', min: 1, max: 200 },
+      { key: 'product_wall_max_batch_count', label: '产品图库批量上限', desc: '单次上传（含压缩包内图片）的最大数量', type: 'number', min: 1, max: 200 },
+      { key: 'product_wall_max_zip_extract', label: '压缩包提取上限', desc: '从单个 zip/rar 压缩包中最多提取的图片数量', type: 'number', min: 1, max: 500 },
+      { key: 'ticket_attachment_max_mb', label: '工单附件上限 (MB)', desc: '工单消息中单个附件的最大体积', type: 'number', min: 1, max: 200 },
+      { key: 'ticket_attachment_types', label: '工单附件类型', desc: '用逗号分隔的文件扩展名，如：jpg,png,pdf,step,zip', type: 'text' },
+      { key: 'page_size_policy', label: '列表分页与批量上限', desc: '配置选型、通知、用户、分享、日志等列表分页，以及用户/后台批量下载数量', type: 'textarea' },
     ],
   },
   {
@@ -319,160 +424,31 @@ const GROUPS: SettingGroup[] = [
     ],
   },
   {
-    title: '下载限制',
-    icon: 'download',
+    title: '法律条款',
+    icon: 'description',
     items: [
-      { key: 'daily_download_limit', label: '每日下载上限', desc: '每个用户每天最多下载次数，0 表示不限制', type: 'number' },
+      { key: 'legal_privacy_updated_at', label: '隐私声明更新时间', desc: '显示在隐私声明标题下方，如：2026 年 4 月', type: 'text' },
+      { key: 'legal_privacy_sections', label: '隐私声明正文', desc: '维护 /legal/privacy 页面的正式条款章节，前台按书面文档格式展示', type: 'textarea' },
+      { key: 'legal_terms_updated_at', label: '用户协议更新时间', desc: '显示在用户协议标题下方，如：2026 年 4 月', type: 'text' },
+      { key: 'legal_terms_sections', label: '用户协议正文', desc: '维护 /legal/terms 页面的正式协议章节，适合放账号、权限、资料使用等规则', type: 'textarea' },
     ],
   },
   {
-    title: '分享设置',
-    icon: 'share',
-    items: [
-      { key: 'share_default_expire_days', label: '默认有效期', desc: '用户创建分享时的默认有效期天数，0 表示永久有效', type: 'number' },
-      { key: 'share_max_expire_days', label: '最大有效期', desc: '分享链接最大有效期天数，0 表示不限制', type: 'number' },
-      { key: 'share_default_download_limit', label: '默认下载上限', desc: '用户创建分享时的默认下载次数限制，0 表示不限制', type: 'number' },
-      { key: 'share_max_download_limit', label: '最大下载上限', desc: '分享链接最大下载次数，0 表示不限制', type: 'number' },
-      { key: 'share_allow_password', label: '允许设置密码', desc: '用户创建分享时是否可以设置访问密码', type: 'switch' },
-      { key: 'share_allow_custom_expiry', label: '允许自定义有效期', desc: '用户创建分享时是否可以自行设置有效期', type: 'switch' },
-      { key: 'share_allow_preview', label: '默认允许预览', desc: '新创建的分享链接默认是否允许 3D 预览', type: 'switch' },
-    ],
-  },
-  {
-    title: '外观设置',
-    icon: 'dark_mode',
-    items: [
-      { key: 'color_scheme', label: '配色方案', desc: '预设:orange/blue/green/purple/red/teal 或 custom', type: 'color-scheme' },
-      { key: 'default_theme', label: '默认主题', desc: '新用户首次访问时看到的默认外观', type: 'select', options: [
-        { value: 'dark', label: '暗色模式' },
-        { value: 'light', label: '亮色模式' },
-        { value: 'system', label: '跟随系统' },
-      ] },
-      { key: 'auto_theme_enabled', label: '定时切换', desc: '按时间段自动在亮色和暗色之间切换', type: 'switch' },
-      { key: 'auto_theme_dark_hour', label: '暗色开始', desc: '几点切换为暗色模式（24小时制）', type: 'number' },
-      { key: 'auto_theme_light_hour', label: '亮色开始', desc: '几点切换为亮色模式（24小时制）', type: 'number' },
-    ],
-  },
-  {
-    title: '3D预览',
-    icon: 'view_in_ar',
-    items: [
-      { key: 'viewer_edge_threshold_angle', label: '边线角度', desc: '数值越小边线越多，模型更清晰但更耗性能', type: 'number', min: 1, max: 89 },
-      { key: 'viewer_edge_vertex_limit', label: '边线顶点上限', desc: '顶点超过该数量时跳过边线叠加，0 表示不限制', type: 'number', min: 0, max: 5000000 },
-      { key: 'viewer_measure_default_unit', label: '测量默认单位', desc: '测量工具打开时默认使用的单位', type: 'select', options: [
-        { value: 'auto', label: '自动' },
-        { value: 'mm', label: '毫米 mm' },
-        { value: 'cm', label: '厘米 cm' },
-        { value: 'm', label: '米 m' },
-      ] },
-      { key: 'viewer_measure_record_limit', label: '测量记录数量', desc: '测量面板最多保留最近多少条记录', type: 'number', min: 1, max: 100 },
-    ],
-  },
-  {
-    title: '账号安全',
-    icon: 'shield',
-    items: [
-      { key: 'security_email_code_cooldown_seconds', label: '邮箱验证码间隔', desc: '同一邮箱两次发送验证码的最小间隔，单位秒', type: 'number', min: 10, max: 3600 },
-      { key: 'security_email_code_ttl_seconds', label: '邮箱验证码有效期', desc: '邮箱验证码过期时间，单位秒', type: 'number', min: 60, max: 86400 },
-      { key: 'security_captcha_ttl_seconds', label: '图形验证码有效期', desc: '图形验证码过期时间，单位秒', type: 'number', min: 60, max: 3600 },
-      { key: 'security_password_min_length', label: '注册密码最小长度', desc: '新用户注册时密码最少位数', type: 'number', min: 6, max: 64 },
-      { key: 'security_username_min_length', label: '用户名最小长度', desc: '注册用户名允许的最小长度', type: 'number', min: 1, max: 32 },
-      { key: 'security_username_max_length', label: '用户名最大长度', desc: '注册用户名允许的最大长度', type: 'number', min: 1, max: 64 },
-    ],
-  },
-  {
-    title: '选型设置',
-    icon: 'checklist',
-    items: [
-      { key: 'selection_page_title', label: '选型页标题', desc: '选型页顶部显示的标题文字', type: 'text' },
-      { key: 'selection_page_desc', label: '选型页描述', desc: '显示在选型页标题下方，引导用户开始筛选', type: 'text' },
-      { key: 'selection_enable_match', label: '模型匹配', desc: '在选型结果中自动匹配3D模型', type: 'switch' },
-      { key: 'selection_thread_priority', label: '螺纹排序优先级', desc: '配置螺纹前缀的排序权重，数值越小越靠前', type: 'textarea' },
-    ],
-  },
-  {
-    title: '业务字典',
-    icon: 'rule',
-    items: [
-      { key: 'inquiry_statuses', label: '询价状态', desc: '用于筛选、标签和通知文案，可配置颜色、标签页展示和终态', type: 'textarea' },
-      { key: 'ticket_statuses', label: '工单状态', desc: '用于状态流转、筛选标签和状态徽标', type: 'textarea' },
-      { key: 'ticket_classifications', label: '工单分类', desc: '用于技术支持提交入口，可配置图标、说明和启用状态', type: 'textarea' },
-      { key: 'support_process_steps', label: '支持流程', desc: '用于技术支持页流程展示，可配置图标、标题和说明', type: 'textarea' },
-    ],
-  },
-  {
-    title: '菜单配置',
-    icon: 'menu',
-    items: [
-      { key: 'nav_user_items', label: '用户侧边栏菜单', desc: '配置用户侧边栏的菜单名称、图标、路径和启用状态', type: 'textarea' },
-      { key: 'nav_admin_items', label: '管理员侧边栏菜单', desc: '配置管理员侧边栏的菜单名称、图标、路径和启用状态', type: 'textarea' },
-      { key: 'nav_mobile_items', label: '移动端底部菜单', desc: '配置移动端底部导航，建议最多 5 项', type: 'textarea' },
-    ],
-  },
-  {
-    title: '上传与导入',
-    icon: 'upload_file',
-    items: [
-      { key: 'upload_policy', label: '文件上传与导入限制', desc: '配置模型上传、选型图片、选型 Excel 导入、产品图库上传和工单附件限制', type: 'textarea' },
-    ],
-  },
-  {
-    title: '分页与批量',
-    icon: 'checklist',
-    items: [
-      { key: 'page_size_policy', label: '列表分页与批量上限', desc: '配置选型、通知、用户、分享、日志等列表分页，以及用户/后台批量下载数量', type: 'textarea' },
-    ],
-  },
-  {
-    title: '安全防护',
+    title: '系统运维',
     icon: 'build',
     items: [
-      { key: 'anti_proxy_enabled', label: '反向代理防护', desc: '启用后，通过非授权域名访问将显示警告页面，防止恶意反向代理', type: 'switch' },
-      { key: 'allowed_hosts', label: '授权域名', desc: '允许访问的域名列表，逗号或换行分隔。如：mysite.com, www.mysite.com。填写您部署的正式域名', type: 'textarea' },
-      { key: 'hotlink_protection_enabled', label: '防盗链保护', desc: '阻止外部网站直接引用本站静态资源（图片、模型文件等）', type: 'switch' },
-      { key: 'allowed_referers', label: '允许的来源域名', desc: '允许引用资源的域名列表，逗号分隔。如：mysite.com, www.mysite.com', type: 'textarea' },
-    ],
-  },
-  {
-    title: '备份策略',
-    icon: 'shield',
-    items: [
+      { key: 'maintenance_enabled', label: '手动维护页', desc: '用于数据恢复、系统升级、资源重建等全站维护场景，管理员和后台不受影响', type: 'switch' },
+      { key: 'maintenance_auto_enabled', label: '重建自动维护', desc: '转换队列待处理数量达到阈值时自动显示维护页', type: 'switch' },
+      { key: 'maintenance_auto_queue_threshold', label: '自动触发阈值', desc: '待处理转换任务达到该数量后显示维护页', type: 'number', min: 1, max: 100000 },
+      { key: 'maintenance_title', label: '维护标题', desc: '维护页主标题', type: 'text' },
+      { key: 'maintenance_message', label: '维护说明', desc: '维护页说明文字', type: 'textarea' },
+      { key: 'conversion_worker_concurrency', label: '转换并发数', desc: '同时处理的模型转换任务数量，建议先设为 2；大模型较多时过高会占满 CPU 和内存', type: 'number', min: 1, max: 8 },
+      { key: 'api_rate_limit', label: 'API 限速 (15分钟)', desc: '每个 IP 在 15 分钟内允许的最大请求数，修改后需重启服务生效', type: 'number', min: 100, max: 100000 },
       { key: 'backup_auto_enabled', label: '自动每日备份', desc: '开启后服务端每天按设定时间自动创建一次企业级校验备份', type: 'switch' },
       { key: 'backup_schedule_time', label: '自动备份时间', desc: '24小时制，例如 03:00。建议选择业务低峰期', type: 'text' },
       { key: 'backup_retention_count', label: '保留备份份数', desc: '自动清理更早的备份，建议至少保留 7 份', type: 'number', min: 1, max: 60 },
       { key: 'backup_mirror_enabled', label: '外部镜像备份', desc: '备份成功后自动复制一份到外部目录，建议挂载到独立磁盘或 NAS', type: 'switch' },
       { key: 'backup_mirror_dir', label: '外部镜像目录', desc: '服务器上的绝对路径，如 /mnt/backup/3dparthub 或 /Volumes/Backup/3dparthub', type: 'text' },
-    ],
-  },
-  {
-    title: '产品图库上传',
-    icon: 'photo_library',
-    items: [
-      { key: 'product_wall_max_image_mb', label: '单张图片上限 (MB)', desc: '单张图片文件的最大体积，超出会被拒绝', type: 'number', min: 1, max: 200 },
-      { key: 'product_wall_max_batch_count', label: '单次批量上限', desc: '单次上传（含压缩包内图片）的最大数量', type: 'number', min: 1, max: 200 },
-      { key: 'product_wall_max_zip_extract', label: '压缩包提取上限', desc: '从单个 zip/rar 压缩包中最多提取的图片数量', type: 'number', min: 1, max: 500 },
-    ],
-  },
-  {
-    title: '下载令牌',
-    icon: 'key',
-    items: [
-      { key: 'download_token_ttl_minutes', label: '令牌有效期 (分钟)', desc: '下载令牌的有效时间，过期后需重新获取', type: 'number', min: 1, max: 60 },
-    ],
-  },
-  {
-    title: '工单附件',
-    icon: 'attach_file',
-    items: [
-      { key: 'ticket_attachment_max_mb', label: '附件大小上限 (MB)', desc: '工单消息中单个附件的最大体积', type: 'number', min: 1, max: 200 },
-      { key: 'ticket_attachment_types', label: '允许的文件类型', desc: '用逗号分隔的文件扩展名，如：jpg,png,pdf,step,zip', type: 'text' },
-    ],
-  },
-  {
-    title: 'API 限速',
-    icon: 'speed',
-    items: [
-      { key: 'api_rate_limit', label: '15 分钟请求上限', desc: '每个 IP 在 15 分钟内允许的最大请求数，修改后需重启服务生效', type: 'number', min: 100, max: 100000 },
     ],
   },
 ];

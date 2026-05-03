@@ -2,15 +2,63 @@ import { Router, Response } from "express";
 import { randomUUID } from "node:crypto";
 import { once } from "node:events";
 import { join, resolve, sep } from "node:path";
-import { mkdirSync, readdirSync, createReadStream, createWriteStream, rmSync, statSync, existsSync } from "node:fs";
+import { mkdirSync, readdirSync, createReadStream, createWriteStream, rmSync, statSync, existsSync, openSync, readSync, closeSync } from "node:fs";
 import { pipeline } from "node:stream/promises";
 import { authMiddleware, type AuthRequest } from "../middleware/auth.js";
 import { requireRole } from "../middleware/rbac.js";
 import { config } from "../lib/config.js";
 import { deleteUploadSession, loadUploadSession, saveUploadSession, cleanupExpiredSessions } from "../lib/uploadSessionStore.js";
 import { getBusinessConfig } from "../lib/businessConfig.js";
+import { logger } from "../lib/logger.js";
 
 const router = Router();
+
+// Magic byte signatures for 3D model formats
+const FILE_SIGNATURES: Record<string, Array<{ offset: number; bytes: number[] }>> = {
+  step:  [{ offset: 0, bytes: [0x49, 0x53, 0x4F] }],            // ISO-10303
+  stp:   [{ offset: 0, bytes: [0x49, 0x53, 0x4F] }],
+  iges:  [{ offset: 0, bytes: [] }],                              // text-based, no reliable magic
+  igs:   [{ offset: 0, bytes: [] }],
+  stl:   [{ offset: 0, bytes: [0x73, 0x6F, 0x6C, 0x69, 0x64] }, // "solid" (ASCII) or binary
+          { offset: 0, bytes: [] }],                               // binary STL has no fixed magic
+  obj:   [{ offset: 0, bytes: [] }],                              // text-based
+  f3d:   [{ offset: 0, bytes: [] }],                              // proprietary, no check
+  "3mf":  [{ offset: 0, bytes: [0x3C, 0x3F, 0x78, 0x6D] }],      // <?xml
+  glb:   [{ offset: 0, bytes: [0x67, 0x6C, 0x54, 0x46] }],      // glTF
+  gltf:  [{ offset: 0, bytes: [0x7B] }],                          // { (JSON)
+  zip:   [{ offset: 0, bytes: [0x50, 0x4B, 0x03, 0x04] }],      // PK
+  "tar.gz": [{ offset: 0, bytes: [0x1F, 0x8B] }],                // gzip
+  tgz:   [{ offset: 0, bytes: [0x1F, 0x8B] }],
+};
+
+function readFileMagic(filePath: string, bytesToRead: number): Buffer {
+  const fd = openSync(filePath, "r");
+  try {
+    const buf = Buffer.alloc(bytesToRead);
+    const n = readSync(fd, buf, 0, bytesToRead, 0);
+    return buf.subarray(0, n);
+  } finally {
+    closeSync(fd);
+  }
+}
+
+function validateFileMagic(filePath: string, ext: string): boolean {
+  const signatures = FILE_SIGNATURES[ext];
+  if (!signatures) return true; // Unknown extension — skip validation
+  if (signatures.length === 1 && signatures[0].bytes.length === 0) return true; // Text formats — no magic check
+
+  const maxLen = Math.max(...signatures.map((s) => s.offset + s.bytes.length));
+  const header = readFileMagic(filePath, maxLen);
+  if (header.length < maxLen) return true; // File too small to validate
+
+  const match = signatures.some((sig) => {
+    if (sig.bytes.length === 0) return true;
+    const slice = header.subarray(sig.offset, sig.offset + sig.bytes.length);
+    return sig.bytes.every((b, i) => slice[i] === b);
+  });
+
+  return match;
+}
 
 const CHUNKS_DIR = join(config.uploadDir, "chunks");
 const UPLOAD_ROOT = resolve(process.cwd(), config.uploadDir);
@@ -52,10 +100,10 @@ function cleanupCompletedBackupUploads() {
       const ageMs = now - statSync(fullPath).mtime.getTime();
       if (ageMs <= COMPLETED_BACKUP_UPLOAD_TTL_MS) continue;
       rmSync(fullPath, { force: true });
-      console.log(`[Upload] Cleaned unclaimed backup upload: ${entry.name}`);
+      logger.info({ file: entry.name }, "Cleaned unclaimed backup upload");
     }
   } catch (err: any) {
-    console.warn(`[Upload] Failed to clean completed backup uploads: ${err?.message || err}`);
+    logger.warn({ err }, "Failed to clean completed backup uploads");
   }
 }
 
@@ -65,7 +113,7 @@ cleanupCompletedBackupUploads();
 setInterval(() => {
   cleanupExpiredSessions(CHUNKS_DIR);
   cleanupCompletedBackupUploads();
-}, 30 * 60 * 1000);
+}, 30 * 60 * 1000).unref();
 
 // Initialize chunked upload
 router.post("/api/upload/init", authMiddleware, requireRole("ADMIN"), async (req: AuthRequest, res: Response) => {
@@ -287,6 +335,15 @@ router.post("/api/upload/complete", authMiddleware, requireRole("ADMIN"), async 
   if (mergedSize !== session.fileSize) {
     rmSync(mergedPath, { force: true });
     res.status(400).json({ detail: "合并后的文件大小异常，请重新上传" });
+    return;
+  }
+
+  // Magic byte validation — verify file content matches declared extension
+  const ext = session.fileName.split(".").pop()?.toLowerCase() || "";
+  if (!validateFileMagic(mergedPath, ext)) {
+    logger.warn({ fileName: session.fileName, ext, uploadId, userId: session.userId }, "Upload rejected: file magic bytes don't match extension");
+    rmSync(mergedPath, { force: true });
+    res.status(400).json({ detail: "文件内容与扩展名不匹配，请上传正确的文件" });
     return;
   }
 

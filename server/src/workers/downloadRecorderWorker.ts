@@ -6,6 +6,7 @@ import {
   retryModelDownloadRecords,
 } from "../services/modelDownloadQueue.js";
 import { recordQueuedModelDownloads } from "../services/modelDownloadRecorder.js";
+import { logger } from "../lib/logger.js";
 
 const BATCH_SIZE = Math.min(5000, Math.max(50, Number(process.env.DOWNLOAD_RECORD_BATCH_SIZE) || 500));
 const POLL_MS = Math.min(10_000, Math.max(250, Number(process.env.DOWNLOAD_RECORD_FLUSH_MS) || 1000));
@@ -25,34 +26,34 @@ async function flushOnce() {
         await ackModelDownloadRecords(claimed);
       } catch (err) {
         await retryModelDownloadRecords(claimed).catch((retryErr) => {
-          console.error("[download-recorder] retry queue failed:", retryErr);
+          logger.error({ retryErr }, "[download-recorder] retry queue failed");
         });
-        console.error("[download-recorder] flush failed:", err);
+        logger.error({ err }, "[download-recorder] flush failed");
         break;
       }
 
       if (claimed.length < BATCH_SIZE) break;
     }
   } catch (err) {
-    console.error("[download-recorder] worker tick failed:", err);
+    logger.error({ err }, "[download-recorder] worker tick failed");
   } finally {
     running = false;
   }
 }
 
 await recoverProcessingDownloadRecords().catch((err) => {
-  console.error("[download-recorder] recover failed:", err);
+  logger.error({ err }, "[download-recorder] recover failed");
 });
 
-console.log(`  ⚙️  Download recorder async flush: batch=${BATCH_SIZE}, interval=${POLL_MS}ms`);
+logger.info(`  ⚙️  Download recorder async flush: batch=${BATCH_SIZE}, interval=${POLL_MS}ms`);
 
 const timer = setInterval(() => {
   flushOnce().catch((err) => {
-    console.error("[download-recorder] scheduled flush failed:", err);
+    logger.error({ err }, "[download-recorder] scheduled flush failed");
   });
 }, POLL_MS);
 timer.unref?.();
 
 flushOnce().catch((err) => {
-  console.error("[download-recorder] initial flush failed:", err);
+  logger.error({ err }, "[download-recorder] initial flush failed");
 });

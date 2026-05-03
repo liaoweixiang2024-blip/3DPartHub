@@ -13,6 +13,7 @@ import {
   shouldIncludePreviewDiagnostic,
 } from "../../services/modelPreviewDiagnostics.js";
 import { findOriginalModelPath, isDeprecatedHtmlPreviewFormat } from "../../services/modelFiles.js";
+import { logger } from "../../lib/logger.js";
 
 type PreviewMetaOptions = {
   gltfUrl?: string | null;
@@ -149,7 +150,7 @@ export function createPreviewDiagnosticsRouter({
         status: filter,
       });
     } catch (err: any) {
-      console.error("[previewDiagnostics] Scan failed:", err);
+      logger.error({ err }, "[previewDiagnostics] Scan failed");
       res.status(500).json({ detail: "预览诊断扫描失败" });
     }
   });
@@ -271,7 +272,7 @@ export function createPreviewDiagnosticsRouter({
         },
       });
     } catch (err: any) {
-      console.error("[previewDiagnostics] Batch rebuild failed:", err);
+      logger.error({ err }, "[previewDiagnostics] Batch rebuild failed");
       res.status(500).json({ detail: "批量重建预览失败" });
     }
   });

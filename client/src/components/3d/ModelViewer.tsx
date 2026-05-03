@@ -102,6 +102,25 @@ export default function ModelViewer({
   const controlsInteractingRef = useRef(false);
   const [controlsInteracting, setControlsInteracting] = useState(false);
 
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const [contextLost, setContextLost] = useState(false);
+
+  function contextLostHandler(e: Event) {
+    e.preventDefault();
+    setContextLost(true);
+  }
+  function contextRestoredHandler() {
+    setContextLost(false);
+  }
+
+  const cleanupContextListeners = useCallback(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    canvas.removeEventListener("webglcontextlost", contextLostHandler);
+    canvas.removeEventListener("webglcontextrestored", contextRestoredHandler);
+    canvasRef.current = null;
+  }, []);
+
   const markControlsInteracting = useCallback(() => {
     if (interactionEndTimerRef.current) {
       window.clearTimeout(interactionEndTimerRef.current);
@@ -120,22 +139,43 @@ export default function ModelViewer({
 
   useEffect(() => () => {
     if (interactionEndTimerRef.current) window.clearTimeout(interactionEndTimerRef.current);
-  }, []);
+    cleanupContextListeners();
+  }, [cleanupContextListeners]);
 
-  return (
-    <Canvas
+  return contextLost ? (
+    <div
+      style={{
+        width: "100%", height: "100%",
+        display: "flex", flexDirection: "column",
+        alignItems: "center", justifyContent: "center",
+        background: "#1a1a2e", color: "#94a3b8",
+        gap: 12,
+      }}
+    >
+      <div style={{ fontSize: 14 }}>GPU 上下文丢失，请点击刷新</div>
+      <button
+        onClick={() => setContextLost(false)}
+        style={{
+          padding: "8px 20px", borderRadius: 6,
+          background: "#3b82f6", color: "#fff",
+          border: "none", cursor: "pointer", fontSize: 14,
+        }}
+      >
+        重新加载
+      </button>
+    </div>
+  ) : (
+  <Canvas
       gl={{ preserveDrawingBuffer: true, antialias: true, toneMapping: THREE.ACESFilmicToneMapping, toneMappingExposure: config.exposure, localClippingEnabled: true }}
       camera={{ position: [5, 3, 5], fov: 45, near: 0.01, far: 100000 }}
       dpr={[1, 2]}
       style={{ background: config.bgColor }}
       onCreated={({ gl }) => {
         const canvas = gl.domElement;
-        canvas.addEventListener("webglcontextlost", (e) => {
-          e.preventDefault();
-        });
-        canvas.addEventListener("webglcontextrestored", () => {
-          gl.info.reset();
-        });
+        cleanupContextListeners();
+        canvasRef.current = canvas;
+        canvas.addEventListener("webglcontextlost", contextLostHandler);
+        canvas.addEventListener("webglcontextrestored", contextRestoredHandler);
       }}
     >
       <Suspense fallback={null}>

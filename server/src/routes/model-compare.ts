@@ -4,6 +4,7 @@ import { optionalString } from "../lib/requestValidation.js";
 import { requireBrowseAccess } from "../middleware/browseAccess.js";
 import { prisma } from "../lib/prisma.js";
 import { MODEL_STATUS } from "../services/modelStatus.js";
+import { logger } from "../lib/logger.js";
 
 const router = Router();
 
@@ -30,7 +31,7 @@ router.get("/api/models/compare", async (req: Request, res: Response) => {
     const result = await compareModels(id1, id2);
     res.json(result);
   } catch (err: any) {
-    console.error("[model-compare] Error:", err.message);
+    logger.error({ err_message: err.message }, "[model-compare] Error");
     res.status(400).json({ detail: "对比失败" });
   }
 });

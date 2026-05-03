@@ -11,6 +11,7 @@ import { MODEL_STATUS } from "../../services/modelStatus.js";
 import { generateThumbnail } from "../../services/thumbnail.js";
 import { convertXtToGltf } from "../../services/xt-converter.js";
 import { modelUpload, validateModelUpload } from "./uploadHelpers.js";
+import { logger } from "../../lib/logger.js";
 
 type ModelVersionsContext = {
   prisma: any;
@@ -141,7 +142,7 @@ export function createModelVersionsRouter({ prisma, optionalVerifiedUser }: Mode
         change_log: changeLog,
       });
     } catch (err: unknown) {
-      console.error("[versions] Upload failed:", err);
+      logger.error({ err }, "[versions] Upload failed");
       res.status(500).json({ detail: "上传版本失败" });
     }
   });

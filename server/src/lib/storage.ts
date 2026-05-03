@@ -2,6 +2,7 @@ import { createReadStream, createWriteStream, existsSync, mkdirSync, readdirSync
 import { join, dirname, resolve, sep } from "node:path";
 import { pipeline } from "node:stream/promises";
 import { config } from "./config.js";
+import { logger } from "../lib/logger.js";
 
 export interface StorageProvider {
   upload(key: string, data: Buffer | NodeJS.ReadableStream, contentType?: string): Promise<string>;
@@ -80,7 +81,7 @@ class MinioStorage implements StorageProvider {
 
   constructor() {
     this.bucket = config.minioBucket;
-    this.init().catch(console.error);
+    this.init().catch((err) => logger.error({ err }, "init failed"));
   }
 
   private async init() {
@@ -99,9 +100,9 @@ class MinioStorage implements StorageProvider {
       if (!exists) {
         await this.client.makeBucket(this.bucket);
       }
-      console.log(`  📦 MinIO storage ready (bucket: ${this.bucket})`);
+      logger.info(`  📦 MinIO storage ready (bucket: ${this.bucket})`);
     } catch (err) {
-      console.warn("  ⚠️  MinIO not available, falling back to local storage");
+      logger.warn("  ⚠️  MinIO not available, falling back to local storage");
       this.client = null;
     }
   }

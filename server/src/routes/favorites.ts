@@ -10,6 +10,7 @@ import { getSetting } from "../lib/settings.js";
 import { getBusinessConfig } from "../lib/businessConfig.js";
 import { DailyDownloadLimitError, recordModelDownload } from "../services/modelDownloadRecorder.js";
 import { MODEL_STATUS } from "../services/modelStatus.js";
+import { logger } from "../lib/logger.js";
 
 const router = Router();
 
@@ -25,7 +26,7 @@ router.get("/api/favorites", authMiddleware, async (req: AuthRequest, res: Respo
     const { cacheGetOrSet, TTL } = await import("../lib/cache.js");
     const { value: favorites, hit } = await cacheGetOrSet(cacheKey, TTL.MODELS_LIST, async () => {
       return prisma.favorite.findMany({
-      where: { userId: req.user!.userId },
+      where: { userId: req.user!.userId, modelId: { not: "" }, model: { is: {} } },
       include: {
         model: {
           select: {
@@ -38,7 +39,7 @@ router.get("/api/favorites", authMiddleware, async (req: AuthRequest, res: Respo
       orderBy: { createdAt: "desc" },
       });
     });
-    res.json(favorites.map((favorite: any) => ({
+    res.json(favorites.filter((f: any) => f.model).map((favorite: any) => ({
       id: favorite.id,
       modelId: favorite.modelId,
       createdAt: favorite.createdAt,
@@ -252,7 +253,7 @@ router.post("/api/favorites/batch-download", authMiddleware, async (req: AuthReq
 
     await archive.finalize();
   } catch (err: any) {
-    console.error("[favorites] Batch download error:", err.message);
+    logger.error({ err_message: err.message }, "[favorites] Batch download error");
     if (!res.headersSent) {
       if (err instanceof DailyDownloadLimitError) {
         res.status(429).json({ detail: err.message });

@@ -42,6 +42,14 @@ const validateDatabaseUrl = (value: string): string => {
   return value;
 };
 
+const validateMinioCredentials = (key: string, fallback: string): string => {
+  const value = process.env[key] || fallback;
+  if (isProduction && value === "minioadmin" && process.env.STORAGE_TYPE === "minio") {
+    failConfig(`${key} uses the default "minioadmin" credential; set a strong value for production MinIO.`);
+  }
+  return value;
+};
+
 export const config = {
   port: Number(optional("PORT", "8000")),
   databaseUrl: validateDatabaseUrl(required("DATABASE_URL")),
@@ -56,7 +64,7 @@ export const config = {
   // MinIO (used when STORAGE_TYPE=minio)
   minioEndpoint: optional("MINIO_ENDPOINT", "localhost"),
   minioPort: Number(optional("MINIO_PORT", "9000")),
-  minioAccessKey: optional("MINIO_ACCESS_KEY", "minioadmin"),
-  minioSecretKey: optional("MINIO_SECRET_KEY", "minioadmin"),
+  minioAccessKey: validateMinioCredentials("MINIO_ACCESS_KEY", "minioadmin"),
+  minioSecretKey: validateMinioCredentials("MINIO_SECRET_KEY", "minioadmin"),
   minioBucket: optional("MINIO_BUCKET", "models"),
 };

@@ -4,6 +4,7 @@ import { prisma } from "../../lib/prisma.js";
 import { authMiddleware, type AuthRequest } from "../../middleware/auth.js";
 import { createNotification } from "../notifications.js";
 import { adminOnly, param } from "./common.js";
+import { logger } from "../../lib/logger.js";
 
 export function createAdminInquiriesRouter() {
   const router = Router();
@@ -33,7 +34,7 @@ export function createAdminInquiriesRouter() {
       ]);
       res.json({ total, page, pageSize, items });
     } catch (err) {
-      console.error("[Inquiries] Admin list error:", err);
+      logger.error({ err }, "[Inquiries] Admin list error");
       res.status(500).json({ detail: "获取询价单列表失败" });
     }
   });
@@ -94,7 +95,7 @@ export function createAdminInquiriesRouter() {
         res.status(404).json({ detail: "询价单不存在" });
         return;
       }
-      console.error("[Inquiries] Status update error:", err);
+      logger.error({ err }, "[Inquiries] Status update error");
       res.status(500).json({ detail: "更新状态失败" });
     }
   });

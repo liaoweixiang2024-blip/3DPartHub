@@ -4,6 +4,9 @@ import { authMiddleware, optionalAuthMiddleware, type AuthRequest } from "../mid
 import { createModelDownloadToken, createProtectedResourceToken } from "../lib/downloadTokenStore.js";
 import { optionalString } from "../lib/requestValidation.js";
 import { getSetting } from "../lib/settings.js";
+import { createLogger } from "../lib/logger.js";
+
+const log = createLogger({ component: "downloads" });
 
 const router = Router();
 
@@ -68,7 +71,7 @@ router.get("/api/downloads", authMiddleware, async (req: Request, res: Response)
     }));
     res.json({ data: items });
   } catch (err) {
-    console.error("Failed to fetch downloads:", err);
+    log.error({ err }, "Failed to fetch downloads");
     res.status(500).json({ detail: "获取下载历史失败" });
   }
 });
@@ -204,7 +207,7 @@ router.get("/api/admin/downloads/stats", authMiddleware, async (req: AuthRequest
       dailyStats: Array.from(dailyMap.entries()).map(([date, value]) => ({ date, ...value })),
     });
   } catch (err) {
-    console.error("[downloads] Admin stats error:", err);
+    log.error({ err }, "Admin stats error");
     res.status(500).json({ detail: "获取下载统计失败" });
   }
 });
@@ -234,7 +237,7 @@ router.post("/api/downloads/model-token", optionalAuthMiddleware, async (req: Au
 
     res.json(created);
   } catch (err) {
-    console.error("[downloads] Failed to create model download token:", err);
+    log.error({ err }, "Failed to create model download token");
     res.status(500).json({ detail: "创建下载令牌失败" });
   }
 });
@@ -268,7 +271,7 @@ router.post("/api/downloads/drawing-token", authMiddleware, async (req: AuthRequ
     const url = `/api/models/${encodeURIComponent(modelId)}/drawing/download?download_token=${encodeURIComponent(created.token)}`;
     res.json({ ...created, url });
   } catch (err) {
-    console.error("[downloads] Failed to create drawing token:", err);
+    log.error({ err }, "Failed to create drawing token");
     res.status(500).json({ detail: "创建图纸访问令牌失败" });
   }
 });

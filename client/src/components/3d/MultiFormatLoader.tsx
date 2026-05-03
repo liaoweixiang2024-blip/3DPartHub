@@ -474,11 +474,12 @@ function CadModel({
   );
 
   useEffect(() => {
+    const controller = new AbortController();
     let cancelled = false;
     onProgress?.(0);
     loadCadFromUrl(url, (progress) => {
       if (!cancelled) onProgress?.(progress);
-    })
+    }, controller.signal)
       .then((group) => {
         if (!cancelled) {
           setCadGroup(group);
@@ -487,7 +488,7 @@ function CadModel({
       .catch((err) => {
         if (!cancelled) setError(err.message || "模型加载失败");
       });
-    return () => { cancelled = true; };
+    return () => { cancelled = true; controller.abort(); };
   }, [onProgress, url]);
 
   useEffect(() => {
@@ -514,9 +515,12 @@ function CadModel({
   const boundsDetail = useMemo(() => cadGroup ? getModelBounds(cadGroup) : null, [cadGroup]);
   const partItems = useMemo(() => cadGroup ? collectModelParts(cadGroup) : [], [cadGroup]);
   const centeredBox = useMemo(() => boundsDetail ? centeredBoxFromBounds(boundsDetail) : null, [boundsDetail]);
-  const modelOffset = boundsDetail
-    ? new THREE.Vector3(-boundsDetail.center.x, -boundsDetail.center.y, -boundsDetail.center.z)
-    : new THREE.Vector3();
+  const modelOffset = useMemo(
+    () => boundsDetail
+      ? new THREE.Vector3(-boundsDetail.center.x, -boundsDetail.center.y, -boundsDetail.center.z)
+      : new THREE.Vector3(),
+    [boundsDetail]
+  );
 
   useEffect(() => {
     if (!cadGroup) return;
@@ -644,9 +648,12 @@ function GltfModel({
   const boundsDetail = useMemo(() => getModelBounds(clonedScene), [clonedScene]);
   const partItems = useMemo(() => collectModelParts(clonedScene), [clonedScene]);
   const centeredBox = useMemo(() => boundsDetail ? centeredBoxFromBounds(boundsDetail) : null, [boundsDetail]);
-  const modelOffset = boundsDetail
-    ? new THREE.Vector3(-boundsDetail.center.x, -boundsDetail.center.y, -boundsDetail.center.z)
-    : new THREE.Vector3();
+  const modelOffset = useMemo(
+    () => boundsDetail
+      ? new THREE.Vector3(-boundsDetail.center.x, -boundsDetail.center.y, -boundsDetail.center.z)
+      : new THREE.Vector3(),
+    [boundsDetail]
+  );
 
   // Cache base material — only recreate when preset changes
   const materialSignature = useMemo(

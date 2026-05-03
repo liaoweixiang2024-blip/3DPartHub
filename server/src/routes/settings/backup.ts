@@ -28,6 +28,9 @@ import { config } from "../../lib/config.js";
 import { createProtectedResourceToken, consumeProtectedResourceToken } from "../../lib/downloadTokenStore.js";
 import { authMiddleware, type AuthRequest } from "../../middleware/auth.js";
 import { adminOnly, asSingleString } from "./common.js";
+import { createLogger } from "../../lib/logger.js";
+
+const log = createLogger({ component: "settings-backup" });
 
 const managedUploadRoot = resolve(process.cwd(), config.uploadDir);
 const managedBackupRoot = resolve(process.cwd(), config.staticDir, "backups");
@@ -130,7 +133,7 @@ export function createSettingsBackupRouter() {
       const result = await getBackupPolicyCheck();
       res.json(result);
     } catch (err: any) {
-      console.error("[backup] Policy check failed:", err);
+      log.error({ err }, "Policy check failed");
       res.status(500).json({ detail: "备份策略体检失败" });
     }
   });
@@ -145,7 +148,7 @@ export function createSettingsBackupRouter() {
       res.json({ jobId });
     } catch (err: any) {
       const isBusy = err?.message?.includes("正在进行中") || err?.message?.includes("locked");
-      console.error("[backup] Verify failed:", err);
+      log.error({ err }, "Verify failed");
       res.status(isBusy ? 409 : 400).json({
         detail: isBusy ? "任务正在进行中" : "备份校验失败",
         jobId: err.jobId,
@@ -221,7 +224,7 @@ export function createSettingsBackupRouter() {
       res.json({ jobId });
     } catch (err: any) {
       const isBusy = err?.message?.includes("正在进行中") || err?.message?.includes("locked");
-      console.error("[backup] Create failed:", err);
+      log.error({ err }, "Backup create failed");
       res.status(isBusy ? 409 : 500).json({
         detail: isBusy ? "任务正在进行中" : "启动备份失败",
         jobId: err.jobId || getActiveBackupJob()?.id,
@@ -311,7 +314,7 @@ export function createSettingsBackupRouter() {
       res.json({ jobId });
     } catch (err: any) {
       const isBusy = err?.message?.includes("正在进行中") || err?.message?.includes("locked");
-      console.error("[backup] Restore failed:", err);
+      log.error({ err }, "Restore failed");
       res.status(isBusy ? 409 : 500).json({ detail: isBusy ? "任务正在进行中" : "启动恢复失败" });
     }
   });
@@ -342,7 +345,7 @@ export function createSettingsBackupRouter() {
     } catch (err: any) {
       cleanupTempBackupUpload(file.path);
       const isBusy = err?.message?.includes("正在进行中") || err?.message?.includes("locked");
-      console.error("[backup] Import failed:", err);
+      log.error({ err }, "Import failed");
       res.status(isBusy ? 409 : 500).json({ detail: isBusy ? "任务正在进行中" : "启动恢复失败" });
     }
   });
@@ -374,7 +377,7 @@ export function createSettingsBackupRouter() {
     } catch (err: any) {
       cleanupTempBackupUpload(managedPath);
       const isBusy = err?.message?.includes("正在进行中") || err?.message?.includes("locked");
-      console.error("[backup] Chunked import failed:", err);
+      log.error({ err }, "Chunked import failed");
       res.status(isBusy ? 409 : 500).json({ detail: isBusy ? "任务正在进行中" : "启动恢复失败" });
     }
   });
@@ -393,7 +396,7 @@ export function createSettingsBackupRouter() {
       res.json({ jobId });
     } catch (err: any) {
       const isBusy = err?.message?.includes("正在进行中") || err?.message?.includes("locked");
-      console.error("[backup] Path import failed:", err);
+      log.error({ err }, "Path import failed");
       res.status(isBusy ? 409 : 500).json({ detail: isBusy ? "任务正在进行中" : "启动恢复失败" });
     }
   });
@@ -434,7 +437,7 @@ export function createSettingsBackupRouter() {
     } catch (err: any) {
       cleanupTempBackupUpload(file.path);
       const isBusy = err?.message?.includes("正在进行中") || err?.message?.includes("locked");
-      console.error("[backup] Import-save failed:", err);
+      log.error({ err }, "Import-save failed");
       res.status(isBusy ? 409 : 500).json({ detail: isBusy ? "任务正在进行中" : "启动保存任务失败" });
     }
   });
@@ -454,7 +457,7 @@ export function createSettingsBackupRouter() {
     } catch (err: any) {
       cleanupTempBackupUpload(managedPath);
       const isBusy = err?.message?.includes("正在进行中") || err?.message?.includes("locked");
-      console.error("[backup] Chunked import-save failed:", err);
+      log.error({ err }, "Chunked import-save failed");
       res.status(isBusy ? 409 : 500).json({ detail: isBusy ? "任务正在进行中" : "启动保存任务失败" });
     }
   });

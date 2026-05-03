@@ -11,6 +11,7 @@ import { DEFAULT_UPLOAD_POLICY, getBusinessConfig, type UploadPolicy } from "../
 import { config } from "../../lib/config.js";
 import { authMiddleware, type AuthRequest } from "../../middleware/auth.js";
 import { adminOnly } from "./common.js";
+import { logger } from "../../lib/logger.js";
 
 const OPTION_IMAGE_EXTENSIONS: Record<string, string> = {
   "image/png": "png",
@@ -224,7 +225,7 @@ export function createSelectionOptionImagesRouter() {
       res.json({ url });
     } catch (err) {
       cleanupUploadedFile(file);
-      console.error("[Selections] Upload option image error:", err);
+      logger.error({ err }, "[Selections] Upload option image error");
       res.status(500).json({ detail: "上传失败" });
     }
   });
@@ -268,7 +269,7 @@ export function createSelectionOptionImagesRouter() {
       });
     } catch (err) {
       cleanupUploadedFile(file);
-      console.error("[Selections] Upload product asset error:", err);
+      logger.error({ err }, "[Selections] Upload product asset error");
       res.status(500).json({ detail: "上传失败" });
     }
   });
@@ -360,7 +361,7 @@ export function createSelectionOptionImagesRouter() {
         res.status(400).json({ detail: "下载图片失败，请确认地址可访问且没有跳转" });
         return;
       }
-      console.error("[Selections] Download option image from URL error:", err);
+      logger.error({ err }, "[Selections] Download option image from URL error");
       res.status(500).json({ detail: "下载图片失败" });
     }
   });

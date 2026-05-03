@@ -16,6 +16,9 @@ model User {
   role              Role     @default(VIEWER)
   company           String?
   phone             String?
+  department        String?
+  address           String?
+  bio               String?  @db.Text
   metadata          Json?
   mustChangePassword Boolean @default(false) @map("must_change_password")
   createdAt         DateTime @default(now()) @map("created_at")

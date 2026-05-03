@@ -12,6 +12,7 @@ import { createModelManagementRouter } from "./models/management.js";
 import { createModelUploadRouter } from "./models/upload.js";
 import { createModelVersionsRouter } from "./models/versions.js";
 import { createPreviewDiagnosticsRouter } from "./models/previewDiagnostics.js";
+import { logger } from "../lib/logger.js";
 
 // Try to import Prisma, fallback to null if DB is not configured
 let prisma: any = null;
@@ -19,7 +20,7 @@ try {
   const mod = await import("../lib/prisma.js");
   prisma = mod.prisma;
 } catch {
-  console.log("  ⚠️  Prisma not available, using filesystem storage");
+  logger.info("  ⚠️  Prisma not available, using filesystem storage");
 }
 
 const router = Router();

@@ -14,6 +14,12 @@ import { listShares, type ShareLink } from '../api/shares';
 import { useAuthStore } from '../stores/useAuthStore';
 import { useToast } from '../components/shared/Toast';
 
+const ROLE_LABELS: Record<string, string> = {
+  ADMIN: '管理员',
+  EDITOR: '编辑者',
+  VIEWER: '查看者',
+};
+
 const NOTIFICATION_ITEMS = [
   { key: 'ticket', label: '工单通知', desc: '工单回复、状态变更' },
   { key: 'inquiry', label: '询价通知', desc: '询价回复、处理状态变更' },
@@ -315,6 +321,9 @@ function DesktopContent() {
     email: '',
     company: '',
     phone: '',
+    department: '',
+    address: '',
+    bio: '',
   });
   const [saved, setSaved] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -329,6 +338,9 @@ function DesktopContent() {
         email: src.email || '',
         company: src.company || '',
         phone: src.phone || '',
+        department: (src as any).department || '',
+        address: (src as any).address || '',
+        bio: (src as any).bio || '',
       });
     }
   }, [profile, user]);
@@ -345,6 +357,9 @@ function DesktopContent() {
         email: src.email || '',
         company: src.company || '',
         phone: src.phone || '',
+        department: (src as any).department || '',
+        address: (src as any).address || '',
+        bio: (src as any).bio || '',
       });
     }
   };
@@ -459,6 +474,19 @@ function DesktopContent() {
                 type="email"
               />
             </div>
+            <div className="flex flex-col gap-1.5">
+              <label className="text-xs uppercase tracking-wider text-on-surface-variant">个人简介</label>
+              <textarea
+                name="bio"
+                value={formData.bio}
+                onChange={(e) => setFormData(prev => ({ ...prev, bio: e.target.value }))}
+                maxLength={500}
+                rows={3}
+                className="w-full bg-surface-container-lowest text-on-surface border-none border-l-2 border-transparent focus:border-primary focus:ring-0 px-4 py-2.5 text-sm transition-colors rounded-none resize-none"
+                placeholder="简短介绍自己"
+              />
+              <span className="text-[10px] text-on-surface-variant/50 text-right">{formData.bio.length}/500</span>
+            </div>
           </div>
         </section>
 
@@ -481,6 +509,17 @@ function DesktopContent() {
                 />
               </div>
               <div className="flex flex-col gap-1.5">
+                <label className="text-xs uppercase tracking-wider text-on-surface-variant">部门/职位</label>
+                <input
+                  name="department"
+                  value={formData.department}
+                  onChange={handleChange}
+                  className="w-full bg-surface-container-lowest text-on-surface border-none border-l-2 border-transparent focus:border-primary focus:ring-0 px-4 py-2.5 text-sm transition-colors rounded-none"
+                  type="text"
+                  placeholder="如：技术部/工程师"
+                />
+              </div>
+              <div className="flex flex-col gap-1.5">
                 <label className="text-xs uppercase tracking-wider text-on-surface-variant">联系电话</label>
                 <input
                   name="phone"
@@ -489,6 +528,17 @@ function DesktopContent() {
                   className="w-full bg-surface-container-lowest text-on-surface border-none border-l-2 border-transparent focus:border-primary focus:ring-0 px-4 py-2.5 text-sm transition-colors rounded-none"
                   type="tel"
                   placeholder="填写联系电话"
+                />
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <label className="text-xs uppercase tracking-wider text-on-surface-variant">地址</label>
+                <input
+                  name="address"
+                  value={formData.address}
+                  onChange={handleChange}
+                  className="w-full bg-surface-container-lowest text-on-surface border-none border-l-2 border-transparent focus:border-primary focus:ring-0 px-4 py-2.5 text-sm transition-colors rounded-none"
+                  type="text"
+                  placeholder="填写通讯地址"
                 />
               </div>
             </div>
@@ -504,6 +554,27 @@ function DesktopContent() {
             <button onClick={() => setPwdOpen(true)} className="px-4 py-1.5 bg-transparent text-secondary border border-secondary/30 hover:border-secondary transition-colors rounded-sm text-xs uppercase tracking-wider">
               修改密码
             </button>
+          </div>
+        </section>
+
+        <section className="lg:col-span-12 bg-surface-container-low rounded-lg p-6">
+          <div className="flex items-center gap-2 mb-4 border-b border-outline-variant/20 pb-4">
+            <Icon name="shield" size={24} className="text-primary" />
+            <h3 className="font-headline text-sm font-semibold uppercase tracking-wide text-on-surface">账户信息</h3>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
+            <div>
+              <span className="text-xs uppercase tracking-wider text-on-surface-variant">角色</span>
+              <p className="text-sm text-on-surface mt-1">{ROLE_LABELS[(profile || user)?.role || ''] || (profile || user)?.role}</p>
+            </div>
+            <div>
+              <span className="text-xs uppercase tracking-wider text-on-surface-variant">注册时间</span>
+              <p className="text-sm text-on-surface mt-1">{(profile || user)?.createdAt ? new Date((profile || user)!.createdAt!).toLocaleDateString('zh-CN', { year: 'numeric', month: 'long', day: 'numeric' }) : '-'}</p>
+            </div>
+            <div>
+              <span className="text-xs uppercase tracking-wider text-on-surface-variant">用户ID</span>
+              <p className="text-xs text-on-surface-variant font-mono mt-1 break-all">{(profile || user)?.id}</p>
+            </div>
           </div>
         </section>
 
@@ -528,6 +599,9 @@ function MobileContent() {
     email: '',
     company: '',
     phone: '',
+    department: '',
+    address: '',
+    bio: '',
   });
   const avatarInputRef = useRef<HTMLInputElement>(null);
 
@@ -538,6 +612,9 @@ function MobileContent() {
         email: user.email || '',
         company: user.company || '',
         phone: user.phone || '',
+        department: (user as any).department || '',
+        address: (user as any).address || '',
+        bio: (user as any).bio || '',
       });
     }
   }, [user]);
@@ -567,6 +644,9 @@ function MobileContent() {
         email: user.email || '',
         company: user.company || '',
         phone: user.phone || '',
+        department: (user as any).department || '',
+        address: (user as any).address || '',
+        bio: (user as any).bio || '',
       });
     }
     setEditing(false);
@@ -671,6 +751,40 @@ function MobileContent() {
               placeholder="填写联系电话"
             />
           </div>
+          <div className="flex flex-col gap-1">
+            <label className="text-[10px] uppercase tracking-wider text-on-surface-variant">部门/职位</label>
+            <input
+              name="department"
+              value={formData.department}
+              onChange={handleFieldChange}
+              className="w-full bg-surface-container-lowest text-on-surface border border-outline-variant/30 focus:border-primary px-3 py-2 text-sm rounded-md outline-none"
+              type="text"
+              placeholder="如：技术部/工程师"
+            />
+          </div>
+          <div className="flex flex-col gap-1">
+            <label className="text-[10px] uppercase tracking-wider text-on-surface-variant">地址</label>
+            <input
+              name="address"
+              value={formData.address}
+              onChange={handleFieldChange}
+              className="w-full bg-surface-container-lowest text-on-surface border border-outline-variant/30 focus:border-primary px-3 py-2 text-sm rounded-md outline-none"
+              type="text"
+              placeholder="填写通讯地址"
+            />
+          </div>
+          <div className="flex flex-col gap-1">
+            <label className="text-[10px] uppercase tracking-wider text-on-surface-variant">个人简介</label>
+            <textarea
+              name="bio"
+              value={formData.bio}
+              onChange={(e) => setFormData(prev => ({ ...prev, bio: e.target.value }))}
+              maxLength={500}
+              rows={2}
+              className="w-full bg-surface-container-lowest text-on-surface border border-outline-variant/30 focus:border-primary px-3 py-2 text-sm rounded-md outline-none resize-none"
+              placeholder="简短介绍自己"
+            />
+          </div>
           <div className="flex gap-3 pt-2">
             <button
               onClick={handleCancel}
@@ -703,8 +817,47 @@ function MobileContent() {
             </div>
             <span className="text-sm text-on-surface-variant text-right break-words min-w-0">{user?.phone || '-'}</span>
           </div>
+          <div className="flex items-center justify-between gap-3 rounded-lg bg-surface-container-high px-4 py-3">
+            <div className="flex items-center gap-3">
+              <Icon name="badge" size={20} className="text-on-surface/50" />
+              <span className="text-sm text-on-surface">部门/职位</span>
+            </div>
+            <span className="text-sm text-on-surface-variant text-right break-words min-w-0">{(user as any)?.department || '-'}</span>
+          </div>
+          <div className="flex items-center justify-between gap-3 rounded-lg bg-surface-container-high px-4 py-3">
+            <div className="flex items-center gap-3">
+              <Icon name="link" size={20} className="text-on-surface/50" />
+              <span className="text-sm text-on-surface">地址</span>
+            </div>
+            <span className="text-sm text-on-surface-variant text-right break-words min-w-0">{(user as any)?.address || '-'}</span>
+          </div>
+          {(user as any)?.bio && (
+            <div className="rounded-lg bg-surface-container-high px-4 py-3">
+              <div className="flex items-center gap-3 mb-1">
+                <Icon name="description" size={20} className="text-on-surface/50" />
+                <span className="text-sm text-on-surface">个人简介</span>
+              </div>
+              <p className="text-sm text-on-surface-variant pl-8">{(user as any).bio}</p>
+            </div>
+          )}
         </div>
       )}
+
+      {/* Account info */}
+      <div className="rounded-lg bg-surface-container-high px-4 py-3 space-y-3">
+        <div className="flex items-center gap-2 border-b border-outline-variant/10 pb-2">
+          <Icon name="shield" size={18} className="text-on-surface/50" />
+          <span className="text-xs font-medium text-on-surface-variant uppercase tracking-wider">账户信息</span>
+        </div>
+        <div className="flex items-center justify-between">
+          <span className="text-xs text-on-surface-variant">角色</span>
+          <span className="text-sm text-on-surface">{ROLE_LABELS[user?.role || ''] || user?.role}</span>
+        </div>
+        <div className="flex items-center justify-between">
+          <span className="text-xs text-on-surface-variant">注册时间</span>
+          <span className="text-sm text-on-surface">{user?.createdAt ? new Date(user.createdAt).toLocaleDateString('zh-CN', { year: 'numeric', month: 'long', day: 'numeric' }) : '-'}</span>
+        </div>
+      </div>
 
       {/* Password */}
       <button

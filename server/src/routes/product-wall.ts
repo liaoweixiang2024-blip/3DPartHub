@@ -233,69 +233,7 @@ async function ensureCategorySeed() {
   });
 }
 
-let productWallSchemaReady: Promise<void> | null = null;
-
-async function ensureProductWallSchema() {
-  productWallSchemaReady ||= (async () => {
-    const statements = [
-      `CREATE TABLE IF NOT EXISTS "product_wall_images" (
-        "id" TEXT NOT NULL,
-        "title" TEXT NOT NULL,
-        "description" TEXT,
-        "kind" TEXT NOT NULL DEFAULT '公司产品',
-        "image_url" TEXT NOT NULL,
-        "preview_image_url" TEXT,
-        "ratio" TEXT NOT NULL DEFAULT '4 / 5',
-        "tags" JSONB,
-        "sort_order" INTEGER NOT NULL DEFAULT 0,
-        "status" TEXT NOT NULL DEFAULT 'pending',
-        "uploader_id" TEXT,
-        "reviewed_at" TIMESTAMP(3),
-        "reviewed_by_id" TEXT,
-        "reject_reason" TEXT,
-        "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-        "updated_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-        CONSTRAINT "product_wall_images_pkey" PRIMARY KEY ("id")
-      )`,
-      `ALTER TABLE "product_wall_images" ADD COLUMN IF NOT EXISTS "description" TEXT`,
-      `CREATE INDEX IF NOT EXISTS "product_wall_images_status_idx" ON "product_wall_images"("status")`,
-      `CREATE INDEX IF NOT EXISTS "product_wall_images_kind_idx" ON "product_wall_images"("kind")`,
-      `CREATE INDEX IF NOT EXISTS "product_wall_images_sort_order_idx" ON "product_wall_images"("sort_order")`,
-      `CREATE INDEX IF NOT EXISTS "product_wall_images_created_at_idx" ON "product_wall_images"("created_at")`,
-      `CREATE INDEX IF NOT EXISTS "product_wall_images_uploader_id_idx" ON "product_wall_images"("uploader_id")`,
-      `CREATE INDEX IF NOT EXISTS "product_wall_images_status_kind_sort_order_idx" ON "product_wall_images"("status", "kind", "sort_order")`,
-      `CREATE TABLE IF NOT EXISTS "product_wall_categories" (
-        "id" TEXT NOT NULL,
-        "name" TEXT NOT NULL,
-        "sort_order" INTEGER NOT NULL DEFAULT 0,
-        "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-        "updated_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-        CONSTRAINT "product_wall_categories_pkey" PRIMARY KEY ("id")
-      )`,
-      `CREATE UNIQUE INDEX IF NOT EXISTS "product_wall_categories_name_key" ON "product_wall_categories"("name")`,
-      `CREATE INDEX IF NOT EXISTS "product_wall_categories_sort_order_idx" ON "product_wall_categories"("sort_order")`,
-      `CREATE TABLE IF NOT EXISTS "product_wall_image_favorites" (
-        "id" TEXT NOT NULL,
-        "user_id" TEXT NOT NULL,
-        "image_id" TEXT NOT NULL,
-        "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-        CONSTRAINT "product_wall_image_favorites_pkey" PRIMARY KEY ("id")
-      )`,
-      `CREATE UNIQUE INDEX IF NOT EXISTS "product_wall_image_favorites_userId_imageId_key" ON "product_wall_image_favorites"("user_id", "image_id")`,
-      `CREATE INDEX IF NOT EXISTS "product_wall_image_favorites_userId_idx" ON "product_wall_image_favorites"("user_id")`,
-    ];
-    for (const statement of statements) {
-      await prisma.$executeRawUnsafe(statement);
-    }
-  })().catch((error) => {
-    productWallSchemaReady = null;
-    throw error;
-  });
-  return productWallSchemaReady;
-}
-
 async function ensureProductWallData() {
-  await ensureProductWallSchema();
   await ensureCategorySeed();
 }
 
@@ -352,9 +290,18 @@ function removeManagedImage(url?: string | null) {
   rmSync(filePath, { force: true });
 }
 
+const ALLOWED_IMAGE_MIMES = new Set(["image/jpeg", "image/png", "image/gif", "image/webp", "image/svg+xml"]);
+
 const imageUpload = multer({
   dest: PRODUCT_WALL_DIR,
   limits: { fileSize: 200 * 1024 * 1024, files: MULTER_MAX_IMAGE_FILES },
+  fileFilter(_req, file, cb) {
+    if (ALLOWED_IMAGE_MIMES.has(file.mimetype)) {
+      cb(null, true);
+    } else {
+      cb(new Error(`不支持的图片格式: ${file.mimetype}`));
+    }
+  },
 });
 
 async function getProductWallUploadPolicy() {

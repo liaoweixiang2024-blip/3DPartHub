@@ -1,6 +1,9 @@
 import Redis from "ioredis";
 import { randomUUID } from "node:crypto";
 import { config } from "./config.js";
+import { createLogger } from "./logger.js";
+
+const log = createLogger({ component: "cache" });
 
 export const redis = new Redis(config.redisUrl, {
   connectTimeout: 2000,
@@ -15,7 +18,7 @@ export const redis = new Redis(config.redisUrl, {
 let available = false;
 redis.on("ready", () => { available = true; });
 redis.on("error", (err) => {
-  if (available) console.error("[cache] Redis error:", err.message);
+  if (available) log.error({ err }, "Redis error");
   available = false;
 });
 redis.on("close", () => { available = false; });

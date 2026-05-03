@@ -18,6 +18,7 @@ import {
 import { parseStepFileDate } from "../../services/modelFileDates.js";
 import { MODEL_STATUS } from "../../services/modelStatus.js";
 import { modelUpload, validateModelUpload } from "./uploadHelpers.js";
+import { logger } from "../../lib/logger.js";
 
 type ModelConversionContext = {
   prisma: any;
@@ -82,7 +83,7 @@ export function createModelConversionRouter({ prisma, getMeta, saveMeta, getPrev
         originalFormat: m.originalFormat,
       });
       if (cleanup.failed.length > 0) {
-        console.warn("[models] Some old model files could not be deleted:", cleanup.failed);
+        logger.warn({ detail: cleanup.failed }, "[models] Some old model files could not be deleted");
       }
 
       // Save new file as original
@@ -144,7 +145,7 @@ export function createModelConversionRouter({ prisma, getMeta, saveMeta, getPrev
           preserveSource: true,
         });
       } catch (queueErr) {
-        console.error("Queue add failed:", queueErr);
+        logger.error({ queueErr }, "Queue add failed");
         meta.status = MODEL_STATUS.FAILED;
         meta.error = "conversion_queue_unavailable";
         saveMeta(id, meta);
@@ -167,7 +168,7 @@ export function createModelConversionRouter({ prisma, getMeta, saveMeta, getPrev
         }).catch(() => {});
         await cacheDelByPrefix("cache:models:");
       }
-      console.error("Replace file failed:", err);
+      logger.error({ err }, "Replace file failed");
       res.status(500).json({ detail: "替换文件失败" });
     }
   });
@@ -283,7 +284,7 @@ export function createModelConversionRouter({ prisma, getMeta, saveMeta, getPrev
         where: { id },
         data: { status: MODEL_STATUS.FAILED },
       }).catch(() => {});
-      console.error("Re-convert failed:", err);
+      logger.error({ err }, "Re-convert failed");
       res.status(500).json({ detail: "重新转换失败" });
     }
   });
@@ -349,7 +350,7 @@ export function createModelConversionRouter({ prisma, getMeta, saveMeta, getPrev
       await cacheDelByPrefix("cache:models:");
       res.json({ success: true, data: { total: models.length, success, failed } });
     } catch (err: any) {
-      console.error("[conversion] Batch reconvert failed:", err);
+      logger.error({ err }, "[conversion] Batch reconvert failed");
       res.status(500).json({ detail: "批量重新转换失败" });
     }
   });

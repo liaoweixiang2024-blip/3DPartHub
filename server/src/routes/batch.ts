@@ -22,9 +22,21 @@ import { MODEL_STATUS } from "../services/modelStatus.js";
 
 const router = Router();
 
+const ALLOWED_ARCHIVE_MIMES = new Set([
+  "application/zip", "application/x-zip-compressed", "application/x-zip",
+  "application/vnd.rar", "application/x-rar-compressed",
+]);
+
 const upload = multer({
   dest: join(config.uploadDir, "batch"),
   limits: { fileSize: 500 * 1024 * 1024 }, // 500MB for batch archives
+  fileFilter(_req, file, cb) {
+    if (ALLOWED_ARCHIVE_MIMES.has(file.mimetype) || file.originalname.toLowerCase().endsWith(".zip") || file.originalname.toLowerCase().endsWith(".rar")) {
+      cb(null, true);
+    } else {
+      cb(new Error(`不支持的批量上传格式: ${file.mimetype}`));
+    }
+  },
 });
 
 const MAX_BATCH_MODEL_FILES = 200;

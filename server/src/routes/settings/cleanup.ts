@@ -5,6 +5,9 @@ import { config } from "../../lib/config.js";
 import { authMiddleware, type AuthRequest } from "../../middleware/auth.js";
 import { adminOnly } from "./common.js";
 import { prisma } from "../../lib/prisma.js";
+import { createLogger } from "../../lib/logger.js";
+
+const log = createLogger({ component: "cleanup" });
 
 export function createSettingsCleanupRouter() {
   const router = Router();
@@ -179,7 +182,7 @@ export function createSettingsCleanupRouter() {
         totalSizeText: formatBytes(totalSize),
       });
     } catch (err: any) {
-      console.error("[cleanup] Scan failed:", err);
+      log.error({ err }, "Scan failed");
       res.status(500).json({ detail: "扫描失败" });
     }
   });
@@ -313,7 +316,7 @@ export function createSettingsCleanupRouter() {
         safeDelete(all.filter((f) => fileAgeDays(f) > 7));
       }
 
-      console.log(`[cleanup] Deleted ${deletedCount} files, freed ${formatBytes(freedBytes)}, ${failedCount} failed`);
+      log.info({ deletedCount, freedBytes, freedSizeText: formatBytes(freedBytes), failedCount }, "Cleanup completed");
       res.json({
         deletedCount,
         freedBytes,
@@ -322,7 +325,7 @@ export function createSettingsCleanupRouter() {
         errors: errors.length > 0 ? errors : undefined,
       });
     } catch (err: any) {
-      console.error("[cleanup] Execute failed:", err);
+      log.error({ err }, "Execute failed");
       res.status(500).json({ detail: "清理执行失败" });
     }
   });

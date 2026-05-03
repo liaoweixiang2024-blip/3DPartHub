@@ -196,7 +196,7 @@ function normalizeLegacyMaintenanceSettings(settings: Record<string, unknown>): 
 // In-memory cache
 let cache: Record<string, unknown> | null = null;
 let cacheAt = 0;
-const CACHE_TTL = 300_000; // 5 minutes — public config rarely changes
+const CACHE_TTL = 30_000; // 30 seconds — fast propagation across workers
 
 /** Clear the in-memory settings cache (used after restore) */
 export function clearSettingsCache(): void {
@@ -248,9 +248,56 @@ export async function setSetting(key: string, value: unknown): Promise<void> {
 
 const SETTINGS_KEYS = new Set(SETTINGS_SCHEMA.map((s) => s.key));
 
+const NUMERIC_KEYS = new Set([
+  "daily_download_limit", "smtp_port", "maintenance_auto_queue_threshold",
+  "conversion_worker_concurrency", "mat_default_metalness", "mat_default_roughness",
+  "mat_default_envMapIntensity", "mat_metal_metalness", "mat_metal_roughness",
+  "mat_metal_envMapIntensity", "mat_plastic_metalness", "mat_plastic_roughness",
+  "mat_plastic_envMapIntensity", "mat_glass_metalness", "mat_glass_roughness",
+  "mat_glass_envMapIntensity", "mat_glass_transmission", "mat_glass_ior",
+  "mat_glass_thickness", "viewer_exposure", "viewer_ambient_intensity",
+  "viewer_main_light_intensity", "viewer_fill_light_intensity",
+  "viewer_hemisphere_intensity", "viewer_edge_threshold_angle", "viewer_edge_vertex_limit",
+  "viewer_measure_record_limit", "security_email_code_cooldown_seconds",
+  "security_email_code_ttl_seconds", "security_captcha_ttl_seconds",
+  "security_password_min_length", "security_username_min_length",
+  "security_username_max_length", "share_default_expire_days", "share_max_expire_days",
+  "share_default_download_limit", "share_max_download_limit",
+  "auto_theme_dark_hour", "auto_theme_light_hour",
+  "product_wall_max_image_mb", "product_wall_max_batch_count", "product_wall_max_zip_extract",
+  "download_token_ttl_minutes", "ticket_attachment_max_mb", "api_rate_limit",
+  "backup_retention_count",
+]);
+
+const BOOLEAN_KEYS = new Set([
+  "require_login_download", "require_login_browse", "allow_register", "show_watermark",
+  "announcement_enabled", "maintenance_enabled", "maintenance_auto_enabled",
+  "smtp_secure", "auto_theme_enabled", "selection_enable_match",
+  "share_allow_password", "share_allow_custom_expiry", "share_allow_preview",
+  "anti_proxy_enabled", "hotlink_protection_enabled", "backup_auto_enabled",
+  "backup_mirror_enabled",
+]);
+
+function validateSettingValue(key: string, value: unknown): unknown {
+  if (NUMERIC_KEYS.has(key)) {
+    const n = Number(value);
+    if (!Number.isFinite(n)) return DEFAULTS[key];
+    return n;
+  }
+  if (BOOLEAN_KEYS.has(key)) {
+    return Boolean(value);
+  }
+  if (typeof value === "string" && value.length > 1_000_000) {
+    return value.slice(0, 1_000_000);
+  }
+  return value;
+}
+
 export async function setSettings(settings: Record<string, unknown>): Promise<void> {
   if (!prisma) return;
-  const filtered = Object.entries(settings).filter(([key]) => SETTINGS_KEYS.has(key));
+  const filtered = Object.entries(settings)
+    .filter(([key]) => SETTINGS_KEYS.has(key))
+    .map(([key, value]) => [key, validateSettingValue(key, value)] as [string, unknown]);
   if (filtered.length === 0) return;
   const ops = filtered.map(([key, value]) =>
     prisma.setting.upsert({

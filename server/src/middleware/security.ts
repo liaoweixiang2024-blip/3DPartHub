@@ -2,6 +2,7 @@ import rateLimit, { type Options, type Store } from "express-rate-limit";
 import helmet from "helmet";
 import Redis from "ioredis";
 import { config } from "../lib/config.js";
+import { logger } from "../lib/logger.js";
 
 class RedisRateLimitStore implements Store {
   prefix: string;
@@ -21,7 +22,7 @@ class RedisRateLimitStore implements Store {
       },
     });
     this.redis.on("error", (err) => {
-      console.error(`[rate-limit] Redis error (${prefix}):`, err.message);
+      logger.error({ err, prefix }, "Rate limit Redis error");
     });
   }
 
@@ -127,10 +128,36 @@ export const searchLimiter = createLimiter("search", {
   message: { success: false, message: "搜索请求过于频繁，请稍后再试" },
 });
 
+export const refreshLimiter = createLimiter("refresh", {
+  windowMs: 15 * 60 * 1000,
+  limit: 100,
+  max: 100,
+  message: { success: false, message: "令牌刷新过于频繁，请重新登录" },
+});
+
+export const tokenGenLimiter = createLimiter("token-gen", {
+  windowMs: 5 * 60 * 1000,
+  limit: 100,
+  max: 100,
+  message: { success: false, message: "下载请求过于频繁，请稍后再试" },
+});
+
+export const mutationLimiter = createLimiter("mutation", {
+  windowMs: 15 * 60 * 1000,
+  limit: 500,
+  max: 500,
+  message: { success: false, message: "操作过于频繁，请稍后再试" },
+});
+
 // Helmet security configuration
 const isDev = process.env.NODE_ENV !== "production";
 
 export const securityHeaders = helmet({
+  hsts: {
+    maxAge: 31536000,
+    includeSubDomains: true,
+    preload: true,
+  },
   contentSecurityPolicy: {
     useDefaults: true,
     directives: {
@@ -156,4 +183,5 @@ export const securityHeaders = helmet({
   crossOriginEmbedderPolicy: false,
   crossOriginResourcePolicy: { policy: "cross-origin" },
   referrerPolicy: { policy: "no-referrer" },
+  permittedCrossDomainPolicies: { permittedPolicies: "none" },
 });

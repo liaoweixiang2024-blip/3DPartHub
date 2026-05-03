@@ -22,7 +22,7 @@ import { useToast } from "../components/shared/Toast";
 import { downloadModelFile, isDownloadAuthRequiredError } from "../api/downloads";
 import { copyText } from "../lib/clipboard";
 import { getErrorMessage } from "../lib/errorNotifications";
-import { getCachedPublicSettings, getAnnouncement, getContactEmail, getSiteTitle, getFooterLinks, getFooterCopyright } from "../lib/publicSettings";
+import { getCachedPublicSettings, getAnnouncement, getContactEmail, getContactPhone, getContactAddress, getSiteTitle, getFooterLinks, getFooterCopyright } from "../lib/publicSettings";
 import { getBusinessConfig } from "../lib/businessConfig";
 import { sanitizeHtml } from "../lib/sanitizeHtml";
 import {
@@ -1465,7 +1465,7 @@ export default function HomePage() {
             <div className="flex items-center justify-between gap-8">
               {/* Left: Brand */}
               <span className="font-headline font-semibold text-sm text-on-surface-variant/60">{getSiteTitle()}</span>
-              {/* Right: Links + Email */}
+              {/* Right: Links + Contact */}
               <div className="flex items-center gap-5">
                 {getFooterLinks().map((link, i) => (
                   <a key={i} href={link.url} target="_blank" rel="noopener noreferrer" className="text-[11px] text-on-surface-variant/40 hover:text-on-surface-variant/70 transition-colors">
@@ -1478,12 +1478,26 @@ export default function HomePage() {
                     <span>{getContactEmail()}</span>
                   </a>
                 )}
+                {getContactPhone() && (
+                  <a href={`tel:${getContactPhone()}`} className="flex items-center gap-1.5 text-[11px] text-on-surface-variant/40 hover:text-primary transition-colors">
+                    <Icon name="phone" size={13} />
+                    <span>{getContactPhone()}</span>
+                  </a>
+                )}
               </div>
             </div>
-            {/* Copyright line */}
-            <p className="text-[10px] text-on-surface-variant/25 mt-2.5">
-              {getFooterCopyright() || `© ${new Date().getFullYear()} ${getSiteTitle()}. All rights reserved.`}
-            </p>
+            {/* Copyright + Address line */}
+            <div className="flex items-center justify-between mt-2.5">
+              <p className="text-[10px] text-on-surface-variant/25">
+                {getFooterCopyright() || `© ${new Date().getFullYear()} ${getSiteTitle()}. All rights reserved.`}
+              </p>
+              {getContactAddress() && (
+                <span className="flex items-center gap-1 text-[10px] text-on-surface-variant/25">
+                  <Icon name="domain" size={11} />
+                  {getContactAddress()}
+                </span>
+              )}
+            </div>
           </div>
         </footer>
         <AnimatePresence>
@@ -1693,6 +1707,18 @@ export default function HomePage() {
                   <Icon name="mail" size={12} />
                   <span>{getContactEmail()}</span>
                 </a>
+              )}
+              {getContactPhone() && (
+                <a href={`tel:${getContactPhone()}`} className="flex items-center gap-1 text-[11px] text-on-surface-variant/40 hover:text-primary transition-colors">
+                  <Icon name="phone" size={12} />
+                  <span>{getContactPhone()}</span>
+                </a>
+              )}
+              {getContactAddress() && (
+                <span className="flex items-center gap-1 text-[10px] text-on-surface-variant/30">
+                  <Icon name="domain" size={11} />
+                  {getContactAddress()}
+                </span>
               )}
               <p className="text-[10px] text-on-surface-variant/40">© {new Date().getFullYear()} {getSiteTitle()}</p>
             </div>

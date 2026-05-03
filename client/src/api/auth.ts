@@ -23,7 +23,7 @@ export const authApi = {
     return unwrapResponse<User>(res);
   },
 
-  updateProfile: async (updates: Partial<Pick<User, 'username' | 'email' | 'avatar' | 'company' | 'phone'>>) => {
+  updateProfile: async (updates: Partial<Pick<User, 'username' | 'email' | 'avatar' | 'company' | 'phone' | 'department' | 'address' | 'bio'>>) => {
     const res = await client.put<ApiResponse<User>>("/auth/profile", updates);
     return unwrapResponse<User>(res);
   },

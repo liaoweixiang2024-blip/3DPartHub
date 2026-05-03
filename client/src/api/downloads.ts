@@ -121,6 +121,9 @@ export async function openModelDrawing(modelId: string): Promise<void> {
   const opened = window.open("", "_blank", "noopener,noreferrer");
   try {
     const url = await createModelDrawingUrl(modelId);
+    if (!url.startsWith("/api/") && !url.startsWith(window.location.origin)) {
+      throw new Error("Invalid download URL");
+    }
     if (opened) {
       opened.location.href = url;
     } else {

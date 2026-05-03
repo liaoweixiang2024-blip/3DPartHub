@@ -7,6 +7,7 @@ import { conversionQueue, conversionQueueConfig } from "../../lib/queue.js";
 import { cacheDelByPrefix } from "../../lib/cache.js";
 import { authMiddleware, type AuthRequest } from "../../middleware/auth.js";
 import { requireRole } from "../../middleware/rbac.js";
+import { logger } from "../../lib/logger.js";
 
 const queueStates = ["waiting", "active", "delayed", "completed", "failed", "paused", "prioritized", "waiting-children"] as const;
 type QueueStateFilter = typeof queueStates[number] | "all";
@@ -162,7 +163,7 @@ export function createConversionQueueRouter() {
       if (retried > 0) await cacheDelByPrefix("cache:models:");
       res.json({ retried, skipped, failed, items });
     } catch (err: any) {
-      console.error("[queue] Retry-failed error:", err);
+      logger.error({ err }, "[queue] Retry-failed error");
       res.status(500).json({ detail: "重试失败任务失败" });
     }
   });
@@ -217,7 +218,7 @@ export function createConversionQueueRouter() {
 
       res.json({ cancelled, skipped, failed, active, items });
     } catch (err: any) {
-      console.error("[queue] Cancel-rebuilds error:", err);
+      logger.error({ err }, "[queue] Cancel-rebuilds error");
       res.status(500).json({ detail: "取消预览重建任务失败" });
     }
   });
@@ -231,7 +232,7 @@ export function createConversionQueueRouter() {
       const jobIds = await conversionQueue.clean(graceMs, limit, type);
       res.json({ type, cleaned: jobIds.length, job_ids: jobIds });
     } catch (err: any) {
-      console.error("[queue] Clean error:", err);
+      logger.error({ err }, "[queue] Clean error");
       res.status(500).json({ detail: "清理转换队列失败" });
     }
   });
@@ -297,7 +298,7 @@ export function createConversionQueueRouter() {
         log_count: logResult.count,
       });
     } catch (err: any) {
-      console.error("[queue] Get-job error:", err);
+      logger.error({ err }, "[queue] Get-job error");
       res.status(500).json({ detail: "获取转换任务详情失败" });
     }
   });

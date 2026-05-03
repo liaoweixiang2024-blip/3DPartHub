@@ -1,6 +1,9 @@
 import { Request, Response, NextFunction } from "express";
 import { isHttpError } from "../lib/http.js";
 import { RequestValidationError } from "../lib/requestValidation.js";
+import { logger } from "../lib/logger.js";
+
+const isProduction = process.env.NODE_ENV === "production";
 
 function formatError(status: number, message: string) {
   return { success: false, message };
@@ -12,13 +15,20 @@ function isPrismaKnownRequestError(err: Error): err is Error & { code: string } 
 
 export function errorHandler(err: Error, _req: Request, res: Response, _next: NextFunction) {
   if (isHttpError(err)) {
-    if (err.status >= 500) console.error("HTTP error:", err);
-    res.status(err.status).json({
-      success: false,
-      message: err.message,
-      ...(err.code ? { code: err.code } : {}),
-      ...(err.details !== undefined ? { details: err.details } : {}),
-    });
+    if (err.status >= 500) {
+      logger.error({ err, status: err.status }, "HTTP 5xx error");
+    }
+    // Hide internal details for 5xx errors in production
+    if (isProduction && err.status >= 500) {
+      res.status(err.status).json(formatError(err.status, "服务器内部错误"));
+    } else {
+      res.status(err.status).json({
+        success: false,
+        message: err.message,
+        ...(err.code ? { code: err.code } : {}),
+        ...(err.details !== undefined ? { details: err.details } : {}),
+      });
+    }
     return;
   }
 
@@ -27,7 +37,7 @@ export function errorHandler(err: Error, _req: Request, res: Response, _next: Ne
     return;
   }
 
-  console.error("Unhandled error:", err);
+  logger.error({ err }, "Unhandled error");
 
   // Prisma known errors
   if (isPrismaKnownRequestError(err)) {

@@ -91,7 +91,7 @@ class ViewerErrorBoundary extends Component<
   }
 
   componentDidCatch(error: Error) {
-    console.error("[viewer] Model preview failed:", error);
+    if (import.meta.env.DEV) console.error("[viewer] Model preview failed:", error);
   }
 
   render() {

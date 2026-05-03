@@ -2448,7 +2448,7 @@ function Content() {
                     toast("设置已保存", "success");
                     mutateCats();
                   } catch (err) {
-                    console.error("保存设置失败:", err);
+                    if (import.meta.env.DEV) console.error("保存设置失败:", err);
                     toast("保存失败", "error");
                   }
                 }}
@@ -3272,7 +3272,21 @@ function Content() {
                             e.target.value = "";
                           }}
                         />
-                        <button onClick={importManagedGroupCover} className="px-3 py-1.5 text-xs font-bold bg-primary-container text-on-primary rounded hover:opacity-90 shrink-0">上传封面</button>
+                        <div className="flex items-center gap-1.5">
+                          {g?.image && (
+                            <button
+                              onClick={async () => {
+                                const saved = await saveManagedGroupImage("", g?.imageFit || "cover");
+                                if (saved) {
+                                  updateManagedGroup({ image: "" });
+                                  toast("分组封面已删除", "success");
+                                }
+                              }}
+                              className="px-3 py-1.5 text-xs font-medium border border-outline-variant/30 text-error/70 hover:text-error rounded hover:border-error/30 shrink-0"
+                            >删除封面</button>
+                          )}
+                          <button onClick={importManagedGroupCover} className="px-3 py-1.5 text-xs font-bold bg-primary-container text-on-primary rounded hover:opacity-90 shrink-0">上传封面</button>
+                        </div>
                       </div>
                     </div>
                     <p className="text-[10px] text-on-surface-variant font-bold uppercase tracking-wide">当前分组内（{catsInGroup.length}）</p>

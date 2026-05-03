@@ -510,7 +510,7 @@ export async function downloadBackup(id: string): Promise<void> {
   const created = unwrapApiData<{ token?: string; url?: string }>(resp);
   const url = created.url || (created.token ? `/api/settings/backup/download/${encodeURIComponent(id)}/${encodeURIComponent(created.token)}` : "");
   if (!url) throw new Error("获取下载令牌失败");
-  window.open(url, "_blank");
+  window.open(url, "_blank", "noopener,noreferrer");
 }
 
 export async function renameBackup(id: string, name: string): Promise<BackupRecord> {

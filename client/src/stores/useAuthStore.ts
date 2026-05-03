@@ -3,6 +3,7 @@ import { persist } from "zustand/middleware";
 import axios from "axios";
 import type { User, AuthTokens } from "../types";
 import { useFavoriteStore } from "./useFavoriteStore";
+import client from "../api/client";
 
 interface AuthState {
   user: User | null;
@@ -45,10 +46,6 @@ function isTokenExpired(token: string | null): boolean {
   const payload = decodeJwtPayload(token);
   if (!payload?.exp) return true;
   return Date.now() >= payload.exp * 1000 - 30_000; // 30s grace
-}
-
-function apiBaseUrl() {
-  return import.meta.env.VITE_API_BASE_URL || "/api";
 }
 
 function unwrapApiPayload<T>(value: unknown): T {
@@ -109,21 +106,13 @@ export const useAuthStore = create<AuthState>()(
         }
 
         try {
-          const { data: refreshResp } = await axios.post(
-            `${apiBaseUrl()}/auth/refresh`,
-            refreshToken ? { refreshToken } : {},
-            { withCredentials: true }
+          const { data: refreshResp } = await client.post(
+            "/auth/refresh",
+            refreshToken ? { refreshToken } : {}
           );
           const { accessToken } = unwrapApiPayload<{ accessToken?: string }>(refreshResp);
-          if (!accessToken) throw new Error("No token in response");
 
-          const { data: profileResp } = await axios.get(
-            `${apiBaseUrl()}/auth/profile`,
-            {
-              withCredentials: true,
-              headers: { Authorization: `Bearer ${accessToken}` },
-            }
-          );
+          const { data: profileResp } = await client.get("/auth/profile");
           const user = unwrapApiPayload<User>(profileResp);
 
           _accessToken = accessToken;
@@ -164,10 +153,9 @@ export const useAuthStore = create<AuthState>()(
         }
 
         try {
-          const { data: resp } = await axios.post(
-            `${apiBaseUrl()}/auth/refresh`,
-            refreshToken ? { refreshToken } : {},
-            { withCredentials: true }
+          const { data: resp } = await client.post(
+            "/auth/refresh",
+            refreshToken ? { refreshToken } : {}
           );
           const newAccessToken = unwrapApiPayload<{ accessToken?: string }>(resp).accessToken;
           if (!newAccessToken) throw new Error("No token in response");

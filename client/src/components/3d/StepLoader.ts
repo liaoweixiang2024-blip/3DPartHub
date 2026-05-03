@@ -128,10 +128,11 @@ export async function loadCadFile(
 
 export async function loadCadFromUrl(
   url: string,
-  onProgress?: (progress: number) => void
+  onProgress?: (progress: number) => void,
+  signal?: AbortSignal
 ): Promise<THREE.Group> {
   onProgress?.(3);
-  const response = await fetch(url);
+  const response = await fetch(url, { signal });
   if (!response.ok) throw new Error(`加载失败: ${response.status}`);
 
   const total = Number(response.headers.get("Content-Length") || 0);

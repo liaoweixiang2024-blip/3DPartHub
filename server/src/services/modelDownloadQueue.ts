@@ -1,6 +1,7 @@
 import Redis from "ioredis";
 import { config } from "../lib/config.js";
 import type { QueuedModelDownloadRecord } from "./modelDownloadRecorder.js";
+import { logger } from "../lib/logger.js";
 
 const WAITING_KEY = "queue:model-download-records:v1";
 const PROCESSING_KEY = "queue:model-download-records:processing:v1";
@@ -28,7 +29,7 @@ function getRedis() {
       },
     });
     redis.on("error", (err) => {
-      console.error("[download-record-queue] Redis error:", err.message);
+      logger.error({ err: err }, "[download-record-queue] Redis error");
     });
   }
   return redis;
@@ -69,7 +70,7 @@ export async function enqueueModelDownloadRecord(record: QueuedModelDownloadReco
     return true;
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
-    console.error("[download-record-queue] enqueue failed:", message);
+    logger.error({ message }, "[download-record-queue] enqueue failed");
     return false;
   }
 }
@@ -83,7 +84,7 @@ export async function recoverProcessingDownloadRecords(): Promise<void> {
   pipeline.del(PROCESSING_KEY);
   pipeline.rpush(WAITING_KEY, ...payloads);
   await pipeline.exec();
-  console.warn(`[download-record-queue] recovered ${payloads.length} processing records`);
+  logger.warn(`[download-record-queue] recovered ${payloads.length} processing records`);
 }
 
 export async function claimModelDownloadRecordBatch(limit: number): Promise<ClaimedDownloadRecord[]> {

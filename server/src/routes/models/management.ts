@@ -1,13 +1,14 @@
 import { Router, Response } from "express";
 import { copyFileSync, mkdirSync, rmSync } from "node:fs";
 import { join } from "node:path";
-import { cacheDelByPrefix } from "../../lib/cache.js";
+import { cacheDelByPrefix, cacheDel } from "../../lib/cache.js";
 import { clearCategoryCache } from "../categories/common.js";
 import { config } from "../../lib/config.js";
 import { authMiddleware, type AuthRequest } from "../../middleware/auth.js";
 import { requireRole } from "../../middleware/rbac.js";
 import { removeExistingFiles, removeModelFiles } from "../../services/modelFiles.js";
 import { modelUpload } from "./uploadHelpers.js";
+import { logger } from "../../lib/logger.js";
 
 type ModelManagementContext = {
   prisma: any;
@@ -187,14 +188,25 @@ export function createModelManagementRouter({ prisma, metadataDir, getMeta, save
     // Delete from database after files are cleaned up
     if (prisma) {
       try {
+        // Clean up related data before deleting (safety net for non-cascade)
+        await prisma.favorite.deleteMany({ where: { modelId: id } }).catch(() => {});
+        await prisma.download.deleteMany({ where: { modelId: id } }).catch(() => {});
+        await prisma.shareLink.deleteMany({ where: { modelId: id } }).catch(() => {});
+        await prisma.comment.deleteMany({ where: { modelId: id } }).catch(() => {});
+        await prisma.modelVersion.deleteMany({ where: { modelId: id } }).catch(() => {});
         await prisma.model.delete({ where: { id } }).catch(() => {});
         await cacheDelByPrefix("cache:models:");
+        await cacheDelByPrefix("cache:favorites:");
+        await cacheDelByPrefix("cache:share:info:");
+        await cacheDel("cache:model-groups:list");
+        await cacheDel("cache:models:count:grouped");
+        await cacheDel("cache:models:count:all");
         await clearCategoryCache();
       } catch { /* ignore */ }
     }
 
     if (allFailed.length > 0) {
-      console.warn("[models] Some files could not be deleted:", allFailed);
+      logger.warn({ detail: allFailed }, "[models] Some files could not be deleted");
       res.json({ message: "删除成功，但部分文件清理失败", warnings: allFailed.length });
       return;
     }
@@ -256,7 +268,7 @@ export function createModelManagementRouter({ prisma, metadataDir, getMeta, save
 
       res.json({ success: true, data: { model_id: id, thumbnail_url: thumbnailUrl } });
     } catch (err: any) {
-      console.error("[management] Thumbnail upload failed:", err);
+      logger.error({ err }, "[management] Thumbnail upload failed");
       rmSync(file.path, { force: true });
       res.status(500).json({ detail: "上传预览图失败" });
     }

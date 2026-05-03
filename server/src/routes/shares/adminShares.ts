@@ -3,6 +3,7 @@ import { prisma } from "../../lib/prisma.js";
 import { getBusinessConfig } from "../../lib/businessConfig.js";
 import { authMiddleware, type AuthRequest } from "../../middleware/auth.js";
 import { adminOnly, asSingleString, buildSelectionShareNameMap } from "./common.js";
+import { logger } from "../../lib/logger.js";
 
 type AdminShareItem = {
   id: string;
@@ -143,7 +144,7 @@ export function createAdminSharesRouter() {
         items: pagedItems,
       });
     } catch (err) {
-      console.error("[Shares] Admin list error:", err);
+      logger.error({ err }, "[Shares] Admin list error");
       res.status(500).json({ detail: "获取分享列表失败" });
     }
   });
@@ -170,7 +171,7 @@ export function createAdminSharesRouter() {
         selectionShares: selectionTotal,
       });
     } catch (err) {
-      console.error("[Shares] Admin stats error:", err);
+      logger.error({ err }, "[Shares] Admin stats error");
       res.status(500).json({ detail: "获取分享统计失败" });
     }
   });
@@ -203,7 +204,7 @@ export function createAdminSharesRouter() {
       await prisma.shareLink.delete({ where: { id: target.id } });
       res.json({ ok: true });
     } catch (err) {
-      console.error("[Shares] Admin delete error:", err);
+      logger.error({ err }, "[Shares] Admin delete error");
       res.status(500).json({ detail: "删除分享失败" });
     }
   });
@@ -233,7 +234,7 @@ export function createAdminSharesRouter() {
       ]);
       res.json({ ok: true, deleted: modelResult.count + selectionResult.count });
     } catch (err) {
-      console.error("[Shares] Admin batch delete error:", err);
+      logger.error({ err }, "[Shares] Admin batch delete error");
       res.status(500).json({ detail: "批量删除分享失败" });
     }
   });

@@ -22,7 +22,7 @@ export function createPublicSharesRouter() {
       return;
     }
 
-    const { value: share } = await cacheGetOrSet(`cache:share:info:${token}`, TTL.MODEL_DETAIL, async () => {
+    const { value: share, hit } = await cacheGetOrSet(`cache:share:info:${token}`, TTL.MODEL_DETAIL, async () => {
       return prisma.shareLink.findUnique({
         where: { token },
         include: {
@@ -40,6 +40,13 @@ export function createPublicSharesRouter() {
 
     if (!share) {
       res.status(404).json({ detail: "分享链接不存在" });
+      return;
+    }
+
+    if (!share.model) {
+      const { cacheDel } = await import("../../lib/cache.js");
+      await cacheDel(`cache:share:info:${token}`);
+      res.status(404).json({ detail: "分享的模型已被删除" });
       return;
     }
 

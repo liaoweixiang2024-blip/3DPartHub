@@ -3,6 +3,7 @@ import { prisma } from "../lib/prisma.js";
 import { getBusinessConfig } from "../lib/businessConfig.js";
 import { authMiddleware, type AuthRequest } from "../middleware/auth.js";
 import { userWantsNotification } from "./auth.js";
+import { logger } from "../lib/logger.js";
 
 const router = Router();
 
@@ -161,7 +162,7 @@ export async function createNotification(params: {
       },
     });
   } catch (err) {
-    console.error("Failed to create notification:", err);
+    logger.error({ err }, "Failed to create notification");
     return null;
   }
 }

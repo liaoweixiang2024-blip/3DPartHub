@@ -2,6 +2,7 @@ import { Request, Response, NextFunction } from "express";
 import { verifyAccessToken, isTokenRevoked, revokeAllTokensBefore, type TokenPayload, type VerifiedTokenPayload } from "../lib/jwt.js";
 import { prisma } from "../lib/prisma.js";
 import { cacheGet } from "../lib/cache.js";
+import { logger } from "../lib/logger.js";
 
 export interface AuthRequest extends Request {
   user?: TokenPayload;
@@ -81,7 +82,7 @@ export async function authMiddleware(req: AuthRequest, res: Response, next: Next
   try {
     verified = await getVerifiedRequestUser(req);
   } catch (err) {
-    console.error("[auth] Failed to verify request user:", err);
+    logger.error({ err }, "[auth] Failed to verify request user");
     res.status(500).json({ detail: "认证服务暂不可用" });
     return;
   }

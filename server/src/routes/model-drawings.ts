@@ -10,6 +10,9 @@ import { consumeProtectedResourceToken } from "../lib/downloadTokenStore.js";
 import { authMiddleware, verifyRequestToken, type AuthRequest } from "../middleware/auth.js";
 import { requireRole } from "../middleware/rbac.js";
 import { optionalString, requiredString } from "../lib/requestValidation.js";
+import { createLogger } from "../lib/logger.js";
+
+const log = createLogger({ component: "model-drawings" });
 
 const upload = multer({
   dest: config.uploadDir,
@@ -94,7 +97,7 @@ router.post("/api/models/:id/drawing", authMiddleware, requireRole("ADMIN"), upl
       const orphanPath = join(config.staticDir, "drawings", `${id}.pdf`);
       if (existsSync(orphanPath)) rmSync(orphanPath, { force: true });
     } catch {}
-    console.error("[model-drawings] Upload error:", err);
+    log.error({ err, modelId: id }, "Upload error");
     res.status(500).json({ detail: "上传图纸失败" });
   }
 });
@@ -138,7 +141,7 @@ router.get("/api/models/:id/drawing/download", async (req: Request, res: Respons
       disposition: "inline",
     });
   } catch (err: any) {
-    console.error("[model-drawings] Download error:", err);
+    log.error({ err, modelId: id }, "Download error");
     res.status(500).json({ detail: "读取图纸失败" });
   }
 });
@@ -163,7 +166,7 @@ router.delete("/api/models/:id/drawing", authMiddleware, requireRole("ADMIN"), a
 
     res.json({ success: true, data: { model_id: id, drawing_url: null } });
   } catch (err: any) {
-    console.error("[model-drawings] Delete error:", err);
+    log.error({ err, modelId: id }, "Delete error");
     res.status(500).json({ detail: "删除图纸失败" });
   }
 });

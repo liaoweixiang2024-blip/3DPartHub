@@ -864,7 +864,7 @@ export default function ModelDetailPage() {
   }, [categoryTree, modelData]);
 
   if (error) {
-    console.error("Model load error:", error);
+    if (import.meta.env.DEV) console.error("Model load error:", error);
     return (
       <div className="flex flex-col items-center justify-center h-dvh bg-surface gap-4">
         <Icon name="error" size={64} className="text-error" />

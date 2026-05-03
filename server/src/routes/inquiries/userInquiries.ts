@@ -3,6 +3,7 @@ import { prisma } from "../../lib/prisma.js";
 import { authMiddleware, type AuthRequest } from "../../middleware/auth.js";
 import { createNotification } from "../notifications.js";
 import { param } from "./common.js";
+import { logger } from "../../lib/logger.js";
 
 export function createUserInquiriesRouter() {
   const router = Router();
@@ -72,7 +73,7 @@ export function createUserInquiriesRouter() {
 
       res.status(201).json(inquiry);
     } catch (err) {
-      console.error("[Inquiries] Create error:", err);
+      logger.error({ err }, "[Inquiries] Create error");
       res.status(500).json({ detail: "创建询价单失败" });
     }
   });
@@ -96,7 +97,7 @@ export function createUserInquiriesRouter() {
       ]);
       res.json({ items: inquiries, total, page, page_size: pageSize });
     } catch (err) {
-      console.error("[Inquiries] List error:", err);
+      logger.error({ err }, "[Inquiries] List error");
       res.status(500).json({ detail: "获取询价单列表失败" });
     }
   });
@@ -126,7 +127,7 @@ export function createUserInquiriesRouter() {
       }
       res.json(inquiry);
     } catch (err) {
-      console.error("[Inquiries] Get error:", err);
+      logger.error({ err }, "[Inquiries] Get error");
       res.status(500).json({ detail: "获取询价单详情失败" });
     }
   });
@@ -154,7 +155,7 @@ export function createUserInquiriesRouter() {
       });
       res.json(updated);
     } catch (err) {
-      console.error("[Inquiries] Cancel error:", err);
+      logger.error({ err }, "[Inquiries] Cancel error");
       res.status(500).json({ detail: "取消询价单失败" });
     }
   });
@@ -218,7 +219,7 @@ export function createUserInquiriesRouter() {
 
       res.json(message);
     } catch (err) {
-      console.error("[Inquiries] Message error:", err);
+      logger.error({ err }, "[Inquiries] Message error");
       res.status(500).json({ detail: "发送消息失败" });
     }
   });

@@ -1,5 +1,6 @@
 import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { logger } from "../lib/logger.js";
 
 export interface UploadSession {
   fileName: string;
@@ -62,7 +63,7 @@ export function cleanupExpiredSessions(chunksDir: string) {
           rmSync(join(SESSION_DIR, file), { force: true });
           // Delete chunk directory
           try { rmSync(join(chunksDir, uploadId), { recursive: true, force: true }); } catch {}
-          console.log(`[Upload] Cleaned expired session: ${uploadId}`);
+          logger.info(`[Upload] Cleaned expired session: ${uploadId}`);
         } else {
           activeUploadIds.add(uploadId);
         }
@@ -82,7 +83,7 @@ function cleanupOrphanChunkDirs(chunksDir: string, activeUploadIds: Set<string>,
       const ageMs = now - statSync(dir).mtime.getTime();
       if (ageMs > SESSION_TTL_MS) {
         rmSync(dir, { recursive: true, force: true });
-        console.log(`[Upload] Cleaned orphan chunk directory: ${entry.name}`);
+        logger.info(`[Upload] Cleaned orphan chunk directory: ${entry.name}`);
       }
     } catch {}
   }

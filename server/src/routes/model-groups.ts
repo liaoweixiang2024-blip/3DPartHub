@@ -3,6 +3,9 @@ import { authMiddleware, type AuthRequest } from "../middleware/auth.js";
 import { requireRole } from "../middleware/rbac.js";
 import { MODEL_STATUS } from "../services/modelStatus.js";
 import { clearCategoryCache } from "./categories/common.js";
+import { createLogger } from "../lib/logger.js";
+
+const log = createLogger({ component: "model-groups" });
 
 let prisma: any = null;
 try {
@@ -56,7 +59,7 @@ router.post("/api/model-groups", authMiddleware, requireRole("ADMIN"), async (re
     await clearCategoryCache();
     res.json({ success: true, data: group });
   } catch (err: any) {
-    console.error("[model-groups] Error:", err);
+    log.error({ err }, "Operation failed");
     res.status(500).json({ detail: "操作失败" });
   }
 });
@@ -105,7 +108,7 @@ router.get("/api/model-groups", authMiddleware, requireRole("ADMIN"), async (_re
     });
     res.json({ success: true, data });
   } catch (err: any) {
-    console.error("[model-groups] Error:", err);
+    log.error({ err }, "Operation failed");
     res.status(500).json({ detail: "操作失败" });
   }
 });
@@ -169,7 +172,7 @@ router.get("/api/model-groups/suggestions", authMiddleware, requireRole("ADMIN")
 
     res.json({ success: true, data: { items, total, page, page_size: pageSize } });
   } catch (err: any) {
-    console.error("[model-groups] Error:", err);
+    log.error({ err }, "Operation failed");
     res.status(500).json({ detail: "操作失败" });
   }
 });
@@ -180,7 +183,7 @@ router.get("/api/model-groups/count", authMiddleware, requireRole("ADMIN"), asyn
     const total = await prisma.modelGroup.count();
     res.json({ success: true, data: { total } });
   } catch (err: any) {
-    console.error("[model-groups] Error:", err);
+    log.error({ err }, "Operation failed");
     res.status(500).json({ detail: "操作失败" });
   }
 });
@@ -227,7 +230,7 @@ router.post("/api/model-groups/batch-merge", authMiddleware, requireRole("ADMIN"
     await clearCategoryCache();
     res.json({ success: true, data: { merged: results.length, groups: results } });
   } catch (err: any) {
-    console.error("[model-groups] Error:", err);
+    log.error({ err }, "Operation failed");
     res.status(500).json({ detail: "操作失败" });
   }
 });
@@ -297,7 +300,7 @@ router.put("/api/model-groups/:id", authMiddleware, requireRole("ADMIN"), async 
       },
     });
   } catch (err: any) {
-    console.error("[model-groups] Error:", err);
+    log.error({ err }, "Operation failed");
     res.status(500).json({ detail: "操作失败" });
   }
 });
@@ -319,7 +322,7 @@ router.delete("/api/model-groups/:id", authMiddleware, requireRole("ADMIN"), asy
     await clearCategoryCache();
     res.json({ success: true });
   } catch (err: any) {
-    console.error("[model-groups] Error:", err);
+    log.error({ err }, "Operation failed");
     res.status(500).json({ detail: "操作失败" });
   }
 });
@@ -384,7 +387,7 @@ router.post("/api/model-groups/:id/models", authMiddleware, requireRole("ADMIN")
       res.status(400).json({ detail: `分组最多支持 ${MAX_GROUP_MODEL_IDS} 个模型，当前已有 ${current} 个` });
       return;
     }
-    console.error("[model-groups] Error:", err);
+    log.error({ err }, "Operation failed");
     res.status(500).json({ detail: "操作失败" });
   }
 });
@@ -443,7 +446,7 @@ router.delete("/api/model-groups/:id/models/:modelId", authMiddleware, requireRo
       res.status(404).json({ detail: "模型不在当前分组中" });
       return;
     }
-    console.error("[model-groups] Error:", err);
+    log.error({ err }, "Operation failed");
     res.status(500).json({ detail: "操作失败" });
   }
 });

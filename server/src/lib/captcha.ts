@@ -2,9 +2,17 @@ import svgCaptcha from "svg-captcha";
 import Redis from "ioredis";
 import { randomBytes } from "node:crypto";
 import { config } from "./config.js";
+import { createLogger } from "./logger.js";
 
-export const redis = new Redis(config.redisUrl);
-redis.on("error", (err) => console.error("Redis (captcha) error:", err.message));
+const log = createLogger({ component: "captcha" });
+
+export const redis = new Redis(config.redisUrl, {
+  connectTimeout: 2000,
+  commandTimeout: 1000,
+  maxRetriesPerRequest: 0,
+  retryStrategy(times) { if (times > 3) return null; return Math.min(times * 200, 2000); },
+});
+redis.on("error", (err) => log.error({ err }, "Redis error"));
 
 interface CaptchaResult {
   captchaId: string;

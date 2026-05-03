@@ -1,6 +1,7 @@
 import type { NextFunction, Request, Response } from "express";
 import { getMaintenanceStatus } from "../lib/maintenance.js";
 import { getVerifiedRequestUser } from "./auth.js";
+import { logger } from "../lib/logger.js";
 
 const PUBLIC_API_ALLOWLIST = [
   /^\/api\/health(?:\/|$)/,
@@ -41,7 +42,7 @@ export async function maintenanceGuard(req: Request, res: Response, next: NextFu
       return;
     }
   } catch (err) {
-    console.error("[maintenance] Failed to verify admin bypass:", err);
+    logger.error({ err }, "[maintenance] Failed to verify admin bypass");
   }
 
   res.setHeader("Retry-After", "60");

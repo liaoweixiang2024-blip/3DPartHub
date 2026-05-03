@@ -1,4 +1,5 @@
 import { cacheGetOrSet, cachePing } from "../lib/cache.js";
+import { logger } from "../lib/logger.js";
 
 type WarmupPathResult = {
   path: string;
@@ -89,7 +90,7 @@ export async function runStartupCacheWarmup(port: number): Promise<WarmupResult>
     const detail = result.results
       .map((item) => `${item.path}:${item.status}${item.cache ? `/${item.cache}` : ""}/${item.ms}ms`)
       .join(" ");
-    console.log(`[cache-warmup] warmed ${ok}/${result.results.length} paths in ${result.durationMs}ms ${detail}`);
+    logger.info(`[cache-warmup] warmed ${ok}/${result.results.length} paths in ${result.durationMs}ms ${detail}`);
   }
 
   return result;
@@ -100,7 +101,7 @@ export function scheduleStartupCacheWarmup(port: number): void {
   const timer = setTimeout(() => {
     runStartupCacheWarmup(port).catch((err) => {
       const message = err instanceof Error ? err.message : String(err);
-      console.warn(`[cache-warmup] failed: ${message}`);
+      logger.warn(`[cache-warmup] failed: ${message}`);
     });
   }, delayMs);
   timer.unref();

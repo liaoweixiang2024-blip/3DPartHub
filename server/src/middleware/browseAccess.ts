@@ -1,6 +1,7 @@
 import type { Request, Response } from "express";
 import { getSetting } from "../lib/settings.js";
 import { getVerifiedRequestUser, type AuthRequest } from "./auth.js";
+import { logger } from "../lib/logger.js";
 
 export async function requireBrowseAccess(req: Request, res: Response): Promise<boolean> {
   const requireLogin = await getSetting<boolean>("require_login_browse");
@@ -10,7 +11,7 @@ export async function requireBrowseAccess(req: Request, res: Response): Promise<
   try {
     verified = await getVerifiedRequestUser(req);
   } catch (err) {
-    console.error("[browse] Failed to verify request user:", err);
+    logger.error({ err }, "Failed to verify browse access user");
     res.status(500).json({ detail: "认证服务暂不可用" });
     return false;
   }

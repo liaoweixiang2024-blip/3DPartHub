@@ -76,5 +76,8 @@ export function sendAcceleratedFile(req: Request, res: Response, options: {
     return;
   }
 
-  createReadStream(filePath).pipe(res);
+  const stream = createReadStream(filePath);
+  stream.on("error", () => stream.destroy());
+  res.on("close", () => { if (!stream.destroyed) stream.destroy(); });
+  stream.pipe(res);
 }

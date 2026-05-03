@@ -62,14 +62,13 @@ export function createModelListRouter({
             where.format = format;
           }
           if (categoryId) {
-            const catIdsRaw: { id: string }[] = await prisma.$queryRawUnsafe(
-              `WITH RECURSIVE cat_tree AS (
-                SELECT id FROM categories WHERE id = $1
+            const catIdsRaw = await prisma.$queryRaw<Array<{ id: string }>>`
+              WITH RECURSIVE cat_tree AS (
+                SELECT id FROM categories WHERE id = ${categoryId}
                 UNION ALL
                 SELECT c.id FROM categories c JOIN cat_tree ct ON c.parent_id = ct.id
-              ) SELECT id FROM cat_tree`,
-              categoryId
-            );
+              ) SELECT id FROM cat_tree
+            `;
             const catIds = catIdsRaw.map((c: any) => c.id);
             if (catIds.length > 0) {
               where.categoryId = { in: catIds };
@@ -80,15 +79,14 @@ export function createModelListRouter({
             // Find category and its children to include all subcategory models
             const cat = await prisma.category.findFirst({ where: { name: category } });
             if (cat) {
-              const catIdsRaw: { id: string }[] = await prisma.$queryRawUnsafe(
-                `WITH RECURSIVE cat_tree AS (
-                  SELECT id FROM categories WHERE id = $1
+              const catIdsRaw = await prisma.$queryRaw<Array<{ id: string }>>`
+                WITH RECURSIVE cat_tree AS (
+                  SELECT id FROM categories WHERE id = ${cat.id}
                   UNION ALL
                   SELECT c.id FROM categories c JOIN cat_tree ct ON c.parent_id = ct.id
-                ) SELECT id FROM cat_tree`,
-                cat.id
-              );
-              const catIds = catIdsRaw.map((c: any) => c.id);
+                ) SELECT id FROM cat_tree
+              `;
+              const catIds = catIdsRaw.map((c: { id: string }) => c.id);
               where.categoryId = { in: catIds };
             } else {
               // Fallback: match by category string field

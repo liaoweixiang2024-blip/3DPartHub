@@ -99,7 +99,7 @@ export function autoAudit(req: Request, _res: Response, next: NextFunction) {
   const resource = extractResource(path);
 
   // Attach a listener to log after response
-  _res.on("finish", () => {
+  _res.once("finish", () => {
     if (_res.statusCode >= 500) return;
 
     setImmediate(async () => {

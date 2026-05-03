@@ -63,4 +63,7 @@ ENV HOME=/home/node
 
 EXPOSE 8000
 
+HEALTHCHECK --interval=30s --timeout=3s --start-period=10s --retries=3 \
+  CMD curl -fsS http://localhost:8000/api/health/ready || exit 1
+
 CMD ["sh", "-c", "mkdir -p /app/uploads /app/static/backups/.work && chown node:node /app/static/backups /app/static/backups/.work && chmod ug+rwX /app/static/backups /app/static/backups/.work && chown -R node:node /app/static/backups/.work && exec su-exec node:node sh -c 'npx prisma migrate deploy && exec node dist/cluster.js'"]

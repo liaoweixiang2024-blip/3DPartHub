@@ -5,6 +5,9 @@ import { authMiddleware, AuthRequest } from "../middleware/auth.js";
 import { requireBrowseAccess } from "../middleware/browseAccess.js";
 import { buildModelMatchMap } from "../lib/modelMatch.js";
 import { getBusinessConfig } from "../lib/businessConfig.js";
+import { createLogger } from "../lib/logger.js";
+
+const log = createLogger({ component: "selection-shares" });
 
 const router = Router();
 
@@ -54,7 +57,7 @@ router.post("/api/selection-shares", authMiddleware, async (req: AuthRequest, re
       data: { id: share.id, token: share.token },
     });
   } catch (err: any) {
-    console.error("Create selection share error:", err?.message ?? err, err?.code ?? "", err?.meta ?? "");
+    log.error({ err }, "Create selection share error");
     res.status(500).json({ detail: "创建分享失败" });
   }
 });
@@ -129,7 +132,7 @@ router.get("/api/selection-shares/:token", async (req: Request, res: Response) =
       },
     });
   } catch (err: any) {
-    console.error("Get selection share error:", err);
+    log.error({ err }, "Get selection share error");
     res.status(500).json({ detail: "获取分享失败" });
   }
 });

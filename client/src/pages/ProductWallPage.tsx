@@ -611,6 +611,11 @@ export default function ProductWallPage() {
   }, [visibleItems.length, hasMoreVisibleItems, renderedItems.length, wallReady, loadMoreVisibleItems]);
   const previewZoomRef = useRef(previewZoom);
   previewZoomRef.current = previewZoom;
+  const setPreviewZoomLevel = (value: number) => {
+    const nextZoom = Math.min(5, Math.max(1, value));
+    setPreviewZoom(nextZoom);
+    if (nextZoom <= 1.01) setPreviewPan({ x: 0, y: 0 });
+  };
   useEffect(() => {
     const el = previewCanvasRef.current;
     if (!el) return;
@@ -638,11 +643,6 @@ export default function ProductWallPage() {
     window.addEventListener("keydown", closePreview);
     return () => window.removeEventListener("keydown", closePreview);
   }, [active, editingItem, deleteDialog]);
-  const setPreviewZoomLevel = (value: number) => {
-    const nextZoom = Math.min(5, Math.max(1, value));
-    setPreviewZoom(nextZoom);
-    if (nextZoom <= 1.01) setPreviewPan({ x: 0, y: 0 });
-  };
   const togglePreviewZoom = () => {
     setPreviewZoomLevel(previewZoomed ? 1 : 2.15);
   };

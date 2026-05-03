@@ -6,6 +6,7 @@ import { prisma } from "../../lib/prisma.js";
 import { normalizeSearchParam, searchCacheToken } from "../../lib/searchQuery.js";
 import { numericValue, optionalString, stringArray } from "../../lib/requestValidation.js";
 import { requireBrowseAccess } from "../../middleware/browseAccess.js";
+import { logger } from "../../lib/logger.js";
 
 function cacheKeyPart(value: string): string {
   return encodeURIComponent(value);
@@ -104,6 +105,67 @@ function nextSelectionField(columns: SelectionColumnDef[], specs: Record<string,
 export function createSelectionPublicRouter() {
   const router = Router();
 
+  // Global product search across all categories
+  router.get("/api/selections/search", async (req, res) => {
+    if (!(await requireBrowseAccess(req, res))) return;
+    try {
+      const search = normalizeSearchParam(req.query.q);
+      if (!search || search.length < 1) {
+        res.json({ items: [], total: 0, query: search || "" });
+        return;
+      }
+      const page = Math.max(1, Number(req.query.page) || 1);
+      const pageSize = Math.min(50, Math.max(1, Number(req.query.page_size) || 20));
+      const { selectionEnableMatch } = await getBusinessConfig();
+
+      const cacheKey = `cache:selections:search:${cacheKeyPart(search)}:${page}:${pageSize}`;
+      const { value: result } = await cacheGetOrSet(cacheKey, TTL.SELECTION_PRODUCTS, async () => {
+        const where = {
+          OR: [
+            { name: { contains: search, mode: "insensitive" as const } },
+            { modelNo: { contains: search, mode: "insensitive" as const } },
+          ],
+        };
+
+        const [total, items] = await Promise.all([
+          prisma.selectionProduct.count({ where }),
+          prisma.selectionProduct.findMany({
+            where,
+            orderBy: { sortOrder: "asc" },
+            skip: (page - 1) * pageSize,
+            take: pageSize,
+            include: {
+              category: {
+                select: {
+                  id: true, name: true, slug: true, icon: true,
+                  groupId: true, groupName: true, groupIcon: true,
+                },
+              },
+            },
+          }),
+        ]);
+
+        const modelNos = selectionEnableMatch ? items.map((p) => p.modelNo).filter(Boolean) as string[] : [];
+        const modelMap = selectionEnableMatch ? await buildModelMatchMap(modelNos) : new Map<string, { id: string; thumbnailUrl: string | null }>();
+
+        return {
+          total,
+          page,
+          pageSize,
+          items: items.map((p) => ({
+            ...selectionProductPayload(p, modelMap),
+            category: p.category,
+          })),
+        };
+      });
+
+      res.json(result || { items: [], total: 0, page: 1, pageSize, query: search });
+    } catch (err) {
+      logger.error({ err }, "[Selections] Global search error");
+      res.status(500).json({ detail: "搜索失败" });
+    }
+  });
+
   // List all categories
   router.get("/api/selections/categories", async (req, res) => {
     if (!(await requireBrowseAccess(req, res))) return;
@@ -139,7 +201,7 @@ export function createSelectionPublicRouter() {
       res.set("X-Cache", hit ? "HIT" : "MISS");
       res.json(categories);
     } catch (err) {
-      console.error("[Selections] List categories error:", err);
+      logger.error({ err }, "[Selections] List categories error");
       res.status(500).json({ detail: "获取分类列表失败" });
     }
   });
@@ -151,7 +213,7 @@ export function createSelectionPublicRouter() {
       const modelMap = await buildModelMatchMap(modelNos);
       res.json(Object.fromEntries(modelMap.entries()));
     } catch (err) {
-      console.error("[Selections] Match models error:", err);
+      logger.error({ err }, "[Selections] Match models error");
       res.status(500).json({ detail: "匹配模型失败" });
     }
   });
@@ -323,7 +385,7 @@ export function createSelectionPublicRouter() {
       res.set("X-Cache", hit ? "HIT" : "MISS");
       res.json(result);
     } catch (err) {
-      console.error("[Selections] Filter products error:", err);
+      logger.error({ err }, "[Selections] Filter products error");
       res.status(500).json({ detail: "筛选产品失败" });
     }
   });
@@ -363,7 +425,7 @@ export function createSelectionPublicRouter() {
         kind: category.kind,
       });
     } catch (err) {
-      console.error("[Selections] Get category error:", err);
+      logger.error({ err }, "[Selections] Get category error");
       res.status(500).json({ detail: "获取分类详情失败" });
     }
   });
@@ -423,7 +485,7 @@ export function createSelectionPublicRouter() {
       res.set("X-Cache", hit ? "HIT" : "MISS");
       res.json(result);
     } catch (err) {
-      console.error("[Selections] List products error:", err);
+      logger.error({ err }, "[Selections] List products error");
       res.status(500).json({ detail: "获取产品列表失败" });
     }
   });

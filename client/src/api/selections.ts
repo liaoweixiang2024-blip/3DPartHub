@@ -90,6 +90,23 @@ export async function getSelectionCategories(): Promise<SelectionCategory[]> {
   return unwrapResponse(res);
 }
 
+export interface SelectionSearchResult {
+  total: number;
+  page: number;
+  pageSize: number;
+  items: Array<SelectionProduct & {
+    category: { id: string; name: string; slug: string; icon: string | null; groupId: string | null; groupName: string | null; groupIcon: string | null };
+  }>;
+}
+
+export async function searchSelectionProducts(query: string, page = 1, pageSize = 20): Promise<SelectionSearchResult> {
+  if (!query.trim()) return { total: 0, page: 1, pageSize, items: [] };
+  const res = await client.get("/selections/search", {
+    params: { q: query.trim(), page, page_size: pageSize },
+  });
+  return unwrapResponse(res);
+}
+
 export async function getSelectionCategory(slug: string): Promise<SelectionCategory> {
   const res = await client.get(`/selections/categories/${slug}`);
   return unwrapResponse(res);

@@ -10,6 +10,7 @@ import { clearAuthCookies, readCookie, REFRESH_COOKIE, setAuthCookies } from "./
 import { getRequestToken } from "../../middleware/auth.js";
 import { apiLimiter } from "../../middleware/security.js";
 import { cacheGet } from "../../lib/cache.js";
+import { logger } from "../../lib/logger.js";
 
 const DUMMY_HASH = "$2a$12$LiVmGbGyGZkP1WQOB7SXOOJ7JqBhDmuOg2WjFwvCSCmXFGpOFHHze";
 const LOGIN_FAIL_PREFIX = "login_fail:";
@@ -79,7 +80,7 @@ export function createAuthSessionRouter() {
       res.json({ message: "验证码已发送" });
     } catch (err: any) {
       await redis.del(`email_code:${email}`);
-      console.error("[auth] Email send failed:", err.message);
+      logger.error({ err: err }, "[auth] Email send failed");
       res.status(500).json({ detail: "邮件发送失败" });
     }
   });

@@ -1,4 +1,7 @@
 import { PrismaClient } from "@prisma/client";
+import { createLogger } from "./logger.js";
+
+const log = createLogger({ component: "prisma" });
 
 const globalForPrisma = globalThis as unknown as { prisma: PrismaClient };
 
@@ -28,7 +31,7 @@ if (process.env.NODE_ENV !== "production") globalForPrisma.prisma = prisma;
 
 // Graceful shutdown — disconnect Prisma before exiting
 async function shutdown(signal: string) {
-  console.log(`[prisma] ${signal} received, disconnecting...`);
+  log.info({ signal }, "Received shutdown signal, disconnecting Prisma");
   try { await prisma.$disconnect(); } catch {}
   process.exit(0);
 }

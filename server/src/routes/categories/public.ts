@@ -5,6 +5,7 @@ import { requireBrowseAccess } from "../../middleware/browseAccess.js";
 import { CATEGORY_CACHE_PREFIX, type CategoryTreeNode } from "./common.js";
 import { MODEL_STATUS } from "../../services/modelStatus.js";
 import { groupedVisibleModelSql } from "../../services/modelVisibility.js";
+import { logger } from "../../lib/logger.js";
 
 export function createPublicCategoriesRouter() {
   const router = Router();
@@ -91,7 +92,7 @@ export function createPublicCategoriesRouter() {
       res.set("X-Cache", hit ? "HIT" : "MISS");
       res.json(result);
     } catch (err) {
-      console.error("[categories] Error:", err);
+      logger.error({ err }, "[categories] Error");
       res.status(500).json({ detail: "获取分类失败" });
     }
   });

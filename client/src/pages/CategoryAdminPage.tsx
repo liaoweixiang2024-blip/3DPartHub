@@ -346,8 +346,7 @@ function collectCategoryStats(items: CategoryItem[] = []) {
   };
 
   walk(items);
-  // Parent category counts from the API already include child categories, so only sum roots.
-  const modelCount = items.reduce((sum, cat) => sum + (cat.count || 0), 0);
+  const modelCount = items.reduce((sum, cat) => sum + (cat.totalCount || 0), 0);
   return { total, roots: items.length, children, modelCount };
 }
 
@@ -489,26 +488,44 @@ function Content() {
       title="分类管理"
       description="维护模型库分类、子分类和图标展示"
       toolbar={(
-        <div className="flex min-h-11 flex-wrap items-center justify-between gap-3">
-          <div className="flex min-w-0 flex-wrap items-center gap-x-4 gap-y-1.5">
-            {[
-              ["全部分类", stats.total],
-              ["一级分类", stats.roots],
-              ["子分类", stats.children],
-              ["关联模型", stats.modelCount],
-            ].map(([label, value]) => (
-              <span key={label} className="inline-flex items-baseline gap-1.5 text-xs text-on-surface-variant">
-                <span className="whitespace-nowrap">{label}</span>
-                <strong className="tabular-nums text-base font-bold leading-none text-on-surface">{value}</strong>
-              </span>
-            ))}
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between sm:gap-3">
+          <div className="flex items-center gap-2 overflow-x-auto">
+            <div className="flex h-8 items-center gap-1.5 rounded-full bg-primary-container/10 px-3 text-xs font-medium text-primary-container">
+              <Icon name="folder" size={14} />
+              <span>大类</span>
+              <strong className="tabular-nums text-sm">{stats.roots}</strong>
+            </div>
+            <div className="flex h-8 items-center gap-1.5 rounded-full bg-surface-container-high px-3 text-xs font-medium text-on-surface-variant">
+              <Icon name="folder_open" size={14} />
+              <span>子类</span>
+              <strong className="tabular-nums text-sm text-on-surface">{stats.children}</strong>
+            </div>
+            <div className="flex h-8 items-center gap-1.5 rounded-full bg-surface-container-high px-3 text-xs font-medium text-on-surface-variant">
+              <Icon name="view_in_ar" size={14} />
+              <span>型号</span>
+              <strong className="tabular-nums text-sm text-on-surface">{stats.modelCount.toLocaleString()}</strong>
+            </div>
             {toolbarStatus && (
               <span className="min-w-0 truncate px-1 text-xs text-on-surface-variant/75">
                 {toolbarStatus}
               </span>
             )}
           </div>
-          <div className="ml-auto flex min-h-9 flex-wrap items-center justify-end gap-2">
+          <div className="flex min-h-9 flex-wrap items-center justify-end gap-2">
+            <div className="flex h-9 w-full items-center rounded-sm border border-outline-variant/30 bg-surface-container-lowest px-3 sm:w-56">
+              <Icon name="search" size={16} className="mr-2 shrink-0 text-on-surface-variant" />
+              <input
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="搜索分类..."
+                className="min-w-0 flex-1 border-none bg-transparent text-sm text-on-surface outline-none placeholder:text-on-surface-variant/50"
+              />
+              {query && (
+                <button onClick={() => setQuery("")} className="p-0.5 text-on-surface-variant hover:text-on-surface">
+                  <Icon name="close" size={14} />
+                </button>
+              )}
+            </div>
             <button
               type="button"
               onClick={() => setCollapsedIds(allRootChildrenCollapsed ? new Set() : new Set(rootIdsWithChildren))}
@@ -523,22 +540,8 @@ function Content() {
               className="inline-flex h-9 shrink-0 items-center justify-center gap-1.5 rounded-sm bg-primary-container px-3 text-xs font-bold text-on-primary transition-opacity hover:opacity-90"
             >
               <Icon name="add" size={15} />
-              添加模型分类
+              添加分类
             </button>
-            <div className="flex h-9 w-full items-center rounded-sm border border-outline-variant/30 bg-surface-container-lowest px-3 sm:w-72">
-              <Icon name="search" size={16} className="mr-2 shrink-0 text-on-surface-variant" />
-              <input
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-                placeholder="搜索分类名称、图标或 ID"
-                className="min-w-0 flex-1 border-none bg-transparent text-sm text-on-surface outline-none placeholder:text-on-surface-variant/50"
-              />
-              {query && (
-                <button onClick={() => setQuery("")} className="p-0.5 text-on-surface-variant hover:text-on-surface">
-                  <Icon name="close" size={14} />
-                </button>
-              )}
-            </div>
           </div>
         </div>
       )}

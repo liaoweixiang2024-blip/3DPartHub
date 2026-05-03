@@ -10,7 +10,6 @@ interface TooltipProps {
 }
 
 export default function Tooltip({ text, children, side = "top", delay = 120 }: TooltipProps) {
-  if (isTouchDevice) return <>{children}</>;
   const [show, setShow] = useState(false);
   const [adjusted, setAdjusted] = useState<{ x: number; side: "top" | "bottom" | "left" | "right" }>({ x: 0, side });
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -35,6 +34,8 @@ export default function Tooltip({ text, children, side = "top", delay = 120 }: T
 
     setAdjusted({ x, side: newSide });
   }, [show, side, text]);
+
+  if (isTouchDevice) return <>{children}</>;
 
   const positionClasses: Record<string, string> = {
     top: "bottom-full left-1/2 -translate-x-1/2 mb-2",

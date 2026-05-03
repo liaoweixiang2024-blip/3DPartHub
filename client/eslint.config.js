@@ -20,6 +20,7 @@ export default defineConfig([
       globals: globals.browser,
     },
     rules: {
+      'no-use-before-define': ['error', { variables: true, functions: false }],
       '@typescript-eslint/no-explicit-any': 'off',
       'react-hooks/immutability': 'off',
       'react-hooks/preserve-manual-memoization': 'off',

@@ -6,6 +6,7 @@ import { prisma } from "../../lib/prisma.js";
 import { authMiddleware, type AuthRequest } from "../../middleware/auth.js";
 import { MODEL_STATUS } from "../../services/modelStatus.js";
 import { asSingleString, buildSelectionShareNameMap } from "./common.js";
+import { logger } from "../../lib/logger.js";
 
 type UserShareItem = {
   id: string;
@@ -133,7 +134,7 @@ export function createUserSharesRouter() {
         url: `${req.protocol}://${req.get("host")}/share/${share.token}`,
       });
     } catch (err) {
-      console.error("[Shares] Create error:", err);
+      logger.error({ err }, "[Shares] Create error");
       res.status(500).json({ detail: "创建分享失败" });
     }
   });
@@ -165,7 +166,7 @@ export function createUserSharesRouter() {
     const selectionCategoryMap = new Map(selectionCategories.map((item) => [item.slug, item.name]));
     const selectionNameMap = await buildSelectionShareNameMap(selectionShares, selectionCategoryMap);
 
-    const modelItems: UserShareItem[] = modelShares.map((s) => ({
+    const modelItems: UserShareItem[] = modelShares.filter((s: any) => s.model).map((s: any) => ({
       id: `model:${s.id}`,
       rawId: s.id,
       type: "model",

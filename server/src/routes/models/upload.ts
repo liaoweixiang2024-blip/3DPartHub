@@ -14,6 +14,8 @@ import { normalizeUploadFilename } from "../../lib/filenameEncoding.js";
 import { MODEL_STATUS } from "../../services/modelStatus.js";
 import { parseStepFileDate } from "../../services/modelFileDates.js";
 import { modelUpload, pathInside, validateModelUpload } from "./uploadHelpers.js";
+import { logger } from "../../lib/logger.js";
+
 
 type ModelUploadContext = {
   prisma: any;
@@ -100,7 +102,7 @@ export function createModelUploadRouter({ prisma, saveMeta }: ModelUploadContext
         });
         dbSaved = true;
       } catch (dbErr) {
-        console.error("Database save failed:", dbErr);
+        logger.error({ dbErr }, "Database save failed");
       }
     }
 
@@ -146,7 +148,7 @@ export function createModelUploadRouter({ prisma, saveMeta }: ModelUploadContext
           }
         }
       } catch (mergeErr) {
-        console.error("Auto-merge failed (non-critical):", mergeErr);
+        logger.error({ mergeErr }, "Auto-merge failed (non-critical)");
       }
     }
 
@@ -165,7 +167,7 @@ export function createModelUploadRouter({ prisma, saveMeta }: ModelUploadContext
         userId,
       });
     } catch (queueErr) {
-      console.error("Queue add failed:", queueErr);
+      logger.error({ queueErr }, "Queue add failed");
       await markQueueUnavailable(modelId, meta, res);
       return;
     }
@@ -286,7 +288,7 @@ export function createModelUploadRouter({ prisma, saveMeta }: ModelUploadContext
         });
         dbSaved = true;
       } catch (dbErr) {
-        console.error("Database save failed:", dbErr);
+        logger.error({ dbErr }, "Database save failed");
       }
     }
 
@@ -306,7 +308,7 @@ export function createModelUploadRouter({ prisma, saveMeta }: ModelUploadContext
         preserveSource: true,
       });
     } catch (err) {
-      console.error("Failed to queue conversion:", err);
+      logger.error({ err }, "Failed to queue conversion");
       await markQueueUnavailable(modelId, meta, res);
       return;
     }

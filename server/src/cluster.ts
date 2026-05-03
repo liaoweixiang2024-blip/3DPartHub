@@ -1,5 +1,6 @@
 import cluster from "node:cluster";
 import { availableParallelism } from "node:os";
+import { logger } from "./lib/logger.js";
 
 function workerCount() {
   const configured = Number(process.env.API_WORKERS);
@@ -12,7 +13,7 @@ function workerCount() {
 if (cluster.isPrimary) {
   const numWorkers = workerCount();
   const cacheWarmupId = `${Date.now()}-${process.pid}`;
-  console.log(`\n  ⚙️  Primary ${process.pid} forking ${numWorkers} workers...\n`);
+  logger.info({ workers: numWorkers, pid: process.pid }, "Primary forking workers");
 
   for (let i = 0; i < numWorkers; i++) {
     cluster.fork({
@@ -33,12 +34,12 @@ if (cluster.isPrimary) {
     if (code === 0 || signal === "SIGTERM") return;
     const prevCount = workerRestartCounts.get(worker.id) || 0;
     if (prevCount >= MAX_RESTARTS) {
-      console.error(`Worker ${worker.id} restart limit (${MAX_RESTARTS}) reached. Exiting.`);
+      logger.error({ workerId: worker.id, restarts: MAX_RESTARTS }, "Worker restart limit reached, exiting");
       process.exit(1);
     }
     const nextCount = prevCount + 1;
     const delay = Math.min(30000, nextCount * 2000);
-    console.error(`Worker ${worker.process.pid} died (${code || signal}). Restarting in ${delay}ms (attempt ${nextCount}/${MAX_RESTARTS})...`);
+    logger.error({ pid: worker.process.pid, code, signal, attempt: nextCount, maxRestarts: MAX_RESTARTS, delay }, "Worker died, restarting");
     setTimeout(() => {
       const newWorker = cluster.fork({
         CACHE_WARMUP_ID: cacheWarmupId,
@@ -50,7 +51,7 @@ if (cluster.isPrimary) {
   });
 
   cluster.on("listening", (worker, address) => {
-    console.log(`  👷 Worker ${worker.process.pid} ready on port ${address.port}`);
+    logger.info({ pid: worker.process.pid, port: address.port }, "Worker ready");
     if (restartingWorkerIds.has(worker.id)) {
       restartingWorkerIds.delete(worker.id);
       workerRestartCounts.delete(worker.id);
@@ -62,9 +63,9 @@ if (cluster.isPrimary) {
   async function gracefulShutdown(signal: string) {
     if (shuttingDown) return;
     shuttingDown = true;
-    console.log(`\n  ⏹  ${signal} received, shutting down gracefully...`);
+    logger.info({ signal }, "Graceful shutdown initiated");
     const timeout = setTimeout(() => {
-      console.log("  ⏹  Forced shutdown after 15s");
+      logger.warn("Forced shutdown after 15s timeout");
       process.exit(1);
     }, 15000);
     for (const id in cluster.workers) {
@@ -74,40 +75,32 @@ if (cluster.isPrimary) {
     cluster.on("exit", () => {
       if (Object.keys(cluster.workers || {}).length === 0) {
         clearTimeout(timeout);
-        console.log("  ⏹  All workers stopped.");
+        logger.info("All workers stopped, exiting");
         process.exit(0);
       }
     });
   }
   process.on("SIGTERM", () => gracefulShutdown("SIGTERM"));
   process.on("SIGINT", () => gracefulShutdown("SIGINT"));
+  process.on("unhandledRejection", (reason) => {
+    logger.fatal({ err: reason }, "Unhandled promise rejection in primary");
+    process.exit(1);
+  });
 
   // Worker memory monitoring — restart workers that exceed the RSS limit
   const WORKER_MEMORY_LIMIT_MB = Number(process.env.WORKER_MEMORY_LIMIT_MB) || 1024;
-  const memoryCheckInterval = setInterval(() => {
-    for (const id in cluster.workers) {
-      const worker = cluster.workers[id];
-      if (!worker || !worker.process.pid) continue;
-      try {
-        const mem = process.memoryUsage?.();
-        // Check via worker.send IPC — simpler: just log RSS from primary
-      } catch {}
-    }
-  }, 60000);
 
-  // Use worker message to monitor memory from each worker
+  // Workers send RSS via IPC every 60s; check against limit here
   const memoryMap = new Map<number, number>();
   cluster.on("message", (worker, message) => {
     if (message && message.type === "memory" && typeof message.rss === "number") {
       memoryMap.set(worker.id, message.rss);
       if (message.rss > WORKER_MEMORY_LIMIT_MB * 1024 * 1024) {
-        console.warn(`[cluster] Worker ${worker.process.pid} RSS ${(message.rss / 1024 / 1024).toFixed(0)}MB exceeds limit ${WORKER_MEMORY_LIMIT_MB}MB, restarting...`);
+        logger.warn({ pid: worker.process.pid, rssMB: (message.rss / 1024 / 1024).toFixed(0), limitMB: WORKER_MEMORY_LIMIT_MB }, "Worker RSS exceeds limit, restarting");
         worker.kill("SIGTERM");
       }
     }
   });
-
-  process.on("exit", () => clearInterval(memoryCheckInterval));
 } else {
   // Workers run the Express app only
   import("./main.js");

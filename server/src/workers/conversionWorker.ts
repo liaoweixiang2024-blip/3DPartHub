@@ -9,6 +9,7 @@ import { createWorker, conversionQueueConfig, normalizeConversionWorkerConcurren
 import { createNotification } from "../routes/notifications.js";
 import { cacheDelByPrefix } from "../lib/cache.js";
 import { MODEL_STATUS } from "../services/modelStatus.js";
+import { logger } from "../lib/logger.js";
 
 type ConversionPipelineResult = {
   result: GltfAsset;
@@ -62,10 +63,10 @@ function runConversionPipeline(job: Job): Promise<ConversionPipelineResult> {
     }, timeoutMs);
 
     child.stdout?.on("data", (chunk) => {
-      console.log(`[conversion:${job.id}] ${String(chunk).trimEnd()}`);
+      logger.info(`[conversion:${job.id}] ${String(chunk).trimEnd()}`);
     });
     child.stderr?.on("data", (chunk) => {
-      console.error(`[conversion:${job.id}] ${String(chunk).trimEnd()}`);
+      logger.error(`[conversion:${job.id}] ${String(chunk).trimEnd()}`);
     });
     child.on("message", (message: unknown) => {
       const msg = message as Record<string, any>;
@@ -270,25 +271,25 @@ async function syncWorkerConcurrency() {
   if (nextConcurrency === appliedConcurrency && conversionWorker.concurrency === nextConcurrency) return;
   conversionWorker.concurrency = nextConcurrency;
   appliedConcurrency = nextConcurrency;
-  console.log(`  ⚙️  Conversion worker concurrency set to ${nextConcurrency}`);
+  logger.info(`  ⚙️  Conversion worker concurrency set to ${nextConcurrency}`);
 }
 
-console.log(`  ⚙️  Conversion worker concurrency initial: ${initialWorkerConcurrency}`);
+logger.info(`  ⚙️  Conversion worker concurrency initial: ${initialWorkerConcurrency}`);
 const concurrencySyncTimer = setInterval(() => {
   syncWorkerConcurrency().catch((err) => {
-    console.warn("  ⚠️  Failed to sync conversion worker concurrency:", err?.message || err);
+    logger.warn({ detail: err?.message || err }, "  ⚠️  Failed to sync conversion worker concurrency");
   });
 }, 15_000);
 concurrencySyncTimer.unref?.();
 
 conversionWorker.on("completed", (job) => {
-  console.log(`  ✅ Conversion job ${job.id} completed (model: ${job.data.modelId})`);
+  logger.info(`  ✅ Conversion job ${job.id} completed (model: ${job.data.modelId})`);
 });
 
 conversionWorker.on("failed", (job, err) => {
-  console.error(`  ❌ Conversion job ${job?.id} failed:`, err.message);
+  logger.error({ err: err }, `  ❌ Conversion job ${job?.id} failed:`);
 });
 
 conversionWorker.on("stalled", (jobId) => {
-  console.warn(`  ⚠️  Conversion job ${jobId} stalled; it will be retried by the queue if allowed`);
+  logger.warn(`  ⚠️  Conversion job ${jobId} stalled; it will be retried by the queue if allowed`);
 });

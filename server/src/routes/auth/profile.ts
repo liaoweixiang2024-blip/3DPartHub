@@ -5,6 +5,7 @@ import { getSetting } from "../../lib/settings.js";
 import { revokeToken, revokeAllTokensBefore, signAccessToken, signRefreshToken } from "../../lib/jwt.js";
 import { authMiddleware, getRequestToken, type AuthRequest } from "../../middleware/auth.js";
 import { setAuthCookies } from "./cookies.js";
+import { logger } from "../../lib/logger.js";
 
 export function createAuthProfileRouter() {
   const router = Router();
@@ -13,7 +14,7 @@ export function createAuthProfileRouter() {
     try {
       const user = await prisma.user.findUnique({
         where: { id: req.user!.userId },
-        select: { id: true, username: true, email: true, role: true, mustChangePassword: true, company: true, phone: true, avatar: true, createdAt: true },
+        select: { id: true, username: true, email: true, role: true, mustChangePassword: true, company: true, phone: true, department: true, address: true, bio: true, avatar: true, createdAt: true },
       });
       if (!user) {
         res.status(401).json({ detail: "用户不存在，请重新登录" });
@@ -26,7 +27,7 @@ export function createAuthProfileRouter() {
   });
 
   router.put("/api/auth/profile", authMiddleware, async (req: AuthRequest, res: Response) => {
-    const { username, company, phone, avatar } = req.body;
+    const { username, company, phone, department, address, bio, avatar } = req.body;
 
     if (username !== undefined) {
       if (typeof username !== "string" || username.trim().length === 0) {
@@ -54,6 +55,10 @@ export function createAuthProfileRouter() {
         return;
       }
     }
+    if (bio !== undefined && typeof bio === "string" && bio.length > 500) {
+      res.status(400).json({ detail: "个人简介不能超过500字" });
+      return;
+    }
 
     try {
       // Check username uniqueness if changing
@@ -73,9 +78,12 @@ export function createAuthProfileRouter() {
           ...(username !== undefined && { username }),
           ...(company !== undefined && { company }),
           ...(phone !== undefined && { phone }),
+          ...(department !== undefined && { department }),
+          ...(address !== undefined && { address }),
+          ...(bio !== undefined && { bio }),
           ...(avatar !== undefined && { avatar }),
         },
-        select: { id: true, username: true, email: true, role: true, mustChangePassword: true, company: true, phone: true, avatar: true, createdAt: true },
+        select: { id: true, username: true, email: true, role: true, mustChangePassword: true, company: true, phone: true, department: true, address: true, bio: true, avatar: true, createdAt: true },
       });
 
       res.json(user);
@@ -160,7 +168,7 @@ export function createAuthProfileRouter() {
         try {
           await revokeAllTokensBefore(req.user.userId, Math.floor(Date.now() / 1000));
         } catch (err) {
-          console.error("[profile] Failed to revoke tokens after password change:", err);
+          logger.error({ err }, "[profile] Failed to revoke tokens after password change");
         }
         const newPayload = { userId: req.user.userId, role: req.user.role };
         const newAccess = signAccessToken(newPayload);
@@ -171,7 +179,7 @@ export function createAuthProfileRouter() {
         res.json({ message: "密码修改成功，请重新登录" });
       }
     } catch (err) {
-      console.error("[password] change failed:", err);
+      logger.error({ err }, "[password] change failed");
       res.status(500).json({ detail: "密码修改失败" });
     }
   });

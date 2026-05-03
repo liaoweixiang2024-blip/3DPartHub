@@ -73,5 +73,5 @@ export function notifyGlobalError(error: unknown, fallback?: string, type: Error
     return;
   }
 
-  console.error(message, error);
+  if (import.meta.env.DEV) console.error(message, error);
 }

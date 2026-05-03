@@ -18,6 +18,8 @@ import {
   shouldSkipDownloadRecord,
 } from "../../services/modelDownloadRecorder.js";
 import { MODEL_STATUS } from "../../services/modelStatus.js";
+import { logger } from "../../lib/logger.js";
+
 
 type ModelDownloadContext = {
   prisma: any;
@@ -54,7 +56,7 @@ export function createModelDownloadRouter({ prisma, getMeta }: ModelDownloadCont
       try {
         verifiedAuthUser = await getVerifiedRequestUser(req);
       } catch (err) {
-        console.error("[models] Failed to verify download user:", err);
+        logger.error({ err }, "[models] Failed to verify download user");
         res.status(500).json({ detail: "认证服务暂不可用" });
         return;
       }
@@ -139,7 +141,7 @@ export function createModelDownloadRouter({ prisma, getMeta }: ModelDownloadCont
           res.status(429).json({ detail: err.message });
           return;
         }
-        console.error("[models] Failed to record download:", err);
+        logger.error({ err }, "[models] Failed to record download");
       }
     }
 

@@ -2,6 +2,7 @@ import { Router, Response } from "express";
 import { prisma } from "../../lib/prisma.js";
 import { authMiddleware, type AuthRequest } from "../../middleware/auth.js";
 import { adminOnly, asSingleString, invalidateSelectionCache, isValidGroupImageFit } from "./common.js";
+import { logger } from "../../lib/logger.js";
 
 export function createSelectionAdminCategoriesRouter() {
   const router = Router();
@@ -34,7 +35,7 @@ export function createSelectionAdminCategoriesRouter() {
         res.status(409).json({ detail: "slug 已存在" });
         return;
       }
-      console.error("[Selections] Create category error:", err);
+      logger.error({ err }, "[Selections] Create category error");
       res.status(500).json({ detail: "创建分类失败" });
     }
   });
@@ -88,7 +89,7 @@ export function createSelectionAdminCategoriesRouter() {
         res.status(404).json({ detail: "分类不存在" });
         return;
       }
-      console.error("[Selections] Update category error:", err);
+      logger.error({ err }, "[Selections] Update category error");
       if (err.code === "P2022") {
         res.status(500).json({ detail: "数据库字段缺失，请执行迁移并重启服务后再试" });
         return;
@@ -117,7 +118,7 @@ export function createSelectionAdminCategoriesRouter() {
         res.status(404).json({ detail: "分类不存在" });
         return;
       }
-      console.error("[Selections] Delete category error:", err);
+      logger.error({ err }, "[Selections] Delete category error");
       res.status(500).json({ detail: "删除分类失败" });
     }
   });
@@ -146,7 +147,7 @@ export function createSelectionAdminCategoriesRouter() {
       await invalidateSelectionCache();
       res.json({ ok: true });
     } catch (err) {
-      console.error("[Selections] Sort categories error:", err);
+      logger.error({ err }, "[Selections] Sort categories error");
       res.status(500).json({ detail: "排序失败" });
     }
   });
@@ -223,7 +224,7 @@ export function createSelectionAdminCategoriesRouter() {
       }
       res.json({ updated });
     } catch (err) {
-      console.error("[Selections] Rename option error:", err);
+      logger.error({ err }, "[Selections] Rename option error");
       res.status(500).json({ detail: "修改失败" });
     }
   });

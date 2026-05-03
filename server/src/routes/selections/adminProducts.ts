@@ -2,6 +2,7 @@ import { Router } from "express";
 import { prisma } from "../../lib/prisma.js";
 import { authMiddleware, type AuthRequest } from "../../middleware/auth.js";
 import { adminOnly, invalidateSelectionCache } from "./common.js";
+import { logger } from "../../lib/logger.js";
 
 function cleanProductName(name: string, modelNo?: string | null) {
   if (!name || !modelNo) return name;
@@ -32,7 +33,7 @@ export function createSelectionAdminProductsRouter() {
       await invalidateSelectionCache();
       res.status(201).json(product);
     } catch (err) {
-      console.error("[Selections] Create product error:", err);
+      logger.error({ err }, "[Selections] Create product error");
       res.status(500).json({ detail: "创建产品失败" });
     }
   });
@@ -69,7 +70,7 @@ export function createSelectionAdminProductsRouter() {
         res.status(404).json({ detail: "产品不存在" });
         return;
       }
-      console.error("[Selections] Update product error:", err);
+      logger.error({ err }, "[Selections] Update product error");
       res.status(500).json({ detail: "更新产品失败" });
     }
   });
@@ -87,7 +88,7 @@ export function createSelectionAdminProductsRouter() {
         res.status(404).json({ detail: "产品不存在" });
         return;
       }
-      console.error("[Selections] Delete product error:", err);
+      logger.error({ err }, "[Selections] Delete product error");
       res.status(500).json({ detail: "删除产品失败" });
     }
   });
@@ -167,7 +168,7 @@ export function createSelectionAdminProductsRouter() {
       await invalidateSelectionCache();
       res.status(201).json({ created, updated });
     } catch (err) {
-      console.error("[Selections] Batch import error:", err);
+      logger.error({ err }, "[Selections] Batch import error");
       res.status(500).json({ detail: "批量导入失败" });
     }
   });

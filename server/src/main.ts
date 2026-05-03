@@ -32,9 +32,10 @@ import healthRouter from "./routes/health.js";
 import { getSetting, initDefaultSettings } from "./lib/settings.js";
 import { startBackupScheduler } from "./lib/backup.js";
 import { prisma } from "./lib/prisma.js";
+import { logger, createLogger } from "./lib/logger.js";
 import { responseHandler } from "./middleware/responseHandler.js";
 import { errorHandler, notFoundHandler } from "./middleware/errorHandler.js";
-import { apiLimiter, uploadLimiter, authLimiter, searchLimiter, securityHeaders } from "./middleware/security.js";
+import { apiLimiter, uploadLimiter, authLimiter, searchLimiter, securityHeaders, refreshLimiter, tokenGenLimiter, mutationLimiter } from "./middleware/security.js";
 import { autoAudit } from "./middleware/autoAudit.js";
 import { ipGuard } from "./middleware/ipGuard.js";
 import { getVerifiedRequestUser } from "./middleware/auth.js";
@@ -44,12 +45,17 @@ import { scheduleStartupCacheWarmup } from "./services/cacheWarmup.js";
 const app = express();
 const PORT = config.port;
 
+process.on("unhandledRejection", (reason) => {
+  logger.fatal({ err: reason, worker: cluster.isWorker }, "Unhandled promise rejection");
+  process.exit(1);
+});
+
 if (!cluster.isWorker) {
   import("./workers/downloadRecorderWorker.js").catch((err) => {
-    console.error("[download-recorder] failed to start:", err);
+    logger.error({ err }, "download-recorder failed to start");
   });
   import("./workers/conversionWorker.js").catch((err) => {
-    console.error("[conversion-worker] failed to start:", err);
+    logger.error({ err }, "conversion-worker failed to start");
   });
 }
 
@@ -61,6 +67,7 @@ const allowedOrigins = config.allowedOrigins.split(",").map((s) => s.trim());
 app.use(cors({
   origin: allowedOrigins,
   credentials: true,
+  methods: ["GET", "POST", "PUT", "DELETE", "PATCH"],
 }));
 
 // Trust nginx proxy — needed for express-rate-limit with X-Forwarded-For
@@ -94,7 +101,7 @@ let slowRequestSuppressedInWindow = 0;
 function resetSlowRequestWindow(now: number) {
   if (now - slowRequestWindowStartedAt < slowRequestWindowMs) return;
   if (slowRequestSuppressedInWindow > 0) {
-    console.log(`[slow-requests] suppressed=${slowRequestSuppressedInWindow} windowMs=${now - slowRequestWindowStartedAt}`);
+    logger.debug({ suppressed: slowRequestSuppressedInWindow, windowMs: now - slowRequestWindowStartedAt }, "Slow request log window summary");
   }
   slowRequestWindowStartedAt = now;
   slowRequestLoggedInWindow = 0;
@@ -116,6 +123,7 @@ function shouldLogSlowRequest(now: number): boolean {
 }
 
 // Request logging — skip health checks and static files, only log slow requests
+const reqLogger = createLogger({ component: "request" });
 app.use((req, _res, next) => {
   // Attach a request ID for log correlation
   req.headers["x-request-id"] = req.headers["x-request-id"] || randomUUID();
@@ -126,10 +134,16 @@ app.use((req, _res, next) => {
     return;
   }
   const start = Date.now();
-  _res.on("finish", () => {
+  _res.once("finish", () => {
     const ms = Date.now() - start;
     if (_res.statusCode >= 400 || (ms > slowRequestThresholdMs && shouldLogSlowRequest(Date.now()))) {
-      console.log(`${req.method} ${req.originalUrl.replace(/[\r\n]/g, "_")} ${_res.statusCode} ${ms}ms`);
+      reqLogger.info({
+        method: req.method,
+        url: req.originalUrl.replace(/[\r\n]/g, "_"),
+        status: _res.statusCode,
+        ms,
+        requestId: req.headers["x-request-id"],
+      });
     }
   });
   next();
@@ -161,7 +175,7 @@ function backupRestoreLockIsActive(): boolean {
 try {
   const staticDir = join(process.cwd(), config.staticDir);
   if (backupRestoreLockIsActive()) {
-    console.log("  ⏳ Backup/restore lock is active; skipped internal workdir cleanup");
+    logger.info("Backup/restore lock active, skipped internal workdir cleanup");
   } else {
     rmSync(join(staticDir, "_backup_db"), { recursive: true, force: true });
     for (const entry of readdirSync(staticDir, { withFileTypes: true })) {
@@ -175,11 +189,19 @@ try {
 // Rate limiting
 app.use("/api/auth/login", authLimiter);
 app.use("/api/auth/register", authLimiter);
+app.use("/api/auth/refresh", refreshLimiter);
 app.use("/api/models/upload", uploadLimiter);
 app.use("/api/upload", uploadLimiter);
 app.use("/api/batch", uploadLimiter);
 app.get("/api/models", searchLimiter);
 app.get("/api/search", searchLimiter);
+app.post("/api/downloads/model-token", tokenGenLimiter);
+app.post("/api/downloads/drawing-token", tokenGenLimiter);
+app.use("/api/favorites/batch-remove", mutationLimiter);
+app.use("/api/notifications/batch", mutationLimiter);
+app.use("/api/notifications/batch-read", mutationLimiter);
+app.use("/api/downloads/batch-delete", mutationLimiter);
+app.use("/api/model-groups/batch-merge", mutationLimiter);
 app.use("/api", apiLimiter);
 
 // IP access control & hotlink protection
@@ -230,7 +252,7 @@ app.use("/static", async (req, res, next) => {
         return;
       }
     } catch (err) {
-      console.error("[static] Failed to authorize model asset:", err);
+      logger.error({ err }, "Failed to authorize model asset");
       res.status(500).json({ detail: "认证服务暂不可用" });
       return;
     }
@@ -310,18 +332,33 @@ app.use(notFoundHandler);
 app.use(errorHandler);
 
 app.listen(PORT, async () => {
+  // Startup check: warn if database migrations are not up to date
+  try {
+    const pending = await prisma.$queryRaw<Array<{ count: bigint }>>`
+      SELECT COUNT(*)::int as count FROM _prisma_migrations WHERE finished_at IS NULL
+    `;
+    if (pending[0] && Number(pending[0].count) > 0) {
+      logger.warn({ pending: Number(pending[0].count) }, "Database has pending migrations — run 'npm run prisma:deploy' to apply");
+    }
+  } catch {
+    // _prisma_migrations might not exist yet — ignore
+  }
+
   await initDefaultSettings();
-  startBackupScheduler();
+
+  // Backup scheduler should only run in one process (primary handles background jobs)
+  if (!cluster.isWorker) {
+    startBackupScheduler();
+  }
   // Seed admin account on first run
   try {
     const { hashPassword } = await import("./lib/password.js");
-    const { randomUUID } = await import("node:crypto");
     const existing = await prisma.user.findFirst({ where: { role: "ADMIN" } });
     if (!existing) {
       const adminUser = process.env.ADMIN_USER || "admin";
       const adminPass = process.env.ADMIN_PASS || (process.env.NODE_ENV === "production" ? "" : "admin123");
       if (process.env.NODE_ENV === "production" && (!adminPass || adminPass === "admin123" || adminPass === "3DPartHub@2026" || adminPass.length < 12)) {
-        console.error("ADMIN_PASS is required for first production startup and must be at least 12 characters.");
+        logger.fatal("ADMIN_PASS is required for first production startup and must be at least 12 characters");
         process.exit(1);
       }
       const adminEmail = process.env.ADMIN_EMAIL || `${adminUser}@model.com`;
@@ -336,27 +373,13 @@ app.listen(PORT, async () => {
             mustChangePassword: true,
           },
         });
-        console.log(`\n  👑 Admin account created (first run only):`);
-        console.log(`     Username: ${adminUser}`);
-        console.log(`     Email: ${adminEmail}`);
-        if (process.env.NODE_ENV === "production") {
-          console.log("     Password: hidden in production logs; use ADMIN_PASS from the server environment");
-        } else {
-          console.log(`     Password: [check your .env or ADMIN_PASS environment variable]`);
-        }
-        console.log(`     ⚠️  首次登录后将强制修改密码！\n`);
+        logger.info({ username: adminUser, email: adminEmail, env: process.env.NODE_ENV }, "Admin account created (first run only)");
       } catch {
         // Another worker created admin first — safe to ignore
       }
     }
   } catch {}
-  console.log(`\n  ⚙️  3DPartHub API running: http://localhost:${PORT}`);
-  console.log(`  📡 Health check: http://localhost:${PORT}/api/health`);
-  console.log(`  📁 Upload dir: ${join(process.cwd(), config.uploadDir)}`);
-  console.log(`  📁 Static dir: ${join(process.cwd(), config.staticDir)}`);
-  console.log(`  🗄️  Storage: ${config.storageType}`);
-  console.log(`  🗃️  Database: ${config.databaseUrl.replace(/:[^:@]+@/, ":****@")}`);
-  console.log(`  🔒 Security: Helmet + Rate Limit enabled`);
+  logger.info({ port: PORT, uploadDir: join(process.cwd(), config.uploadDir), staticDir: join(process.cwd(), config.staticDir), storage: config.storageType }, "3DPartHub API started");
 
   // Startup safety check — warn if DB was recently reset or no recent backup
   try {
@@ -368,8 +391,7 @@ app.listen(PORT, async () => {
       const lastTs = migrations[migrations.length - 1].started_at.getTime();
       // If all migrations applied within 2 seconds, DB was likely reset
       if (migrations.length >= 3 && lastTs - firstTs < 2000) {
-        console.log(`\n  ⚠️  数据库疑似最近被重置（${migrations.length} 个迁移在 ${lastTs - firstTs}ms 内完成）`);
-        console.log(`  ⚠️  如有数据丢失，请通过后台「数据备份」或服务器备份目录恢复\n`);
+        logger.warn({ migrations: migrations.length, spanMs: lastTs - firstTs }, "Database possibly recently reset — all migrations applied within 2s");
       }
     }
   } catch {

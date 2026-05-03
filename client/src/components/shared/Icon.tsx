@@ -45,6 +45,11 @@ import {
   Sparkles,
   ZoomIn,
   ZoomOut,
+  ImageIcon as PhotoLibraryIcon,
+  KeyRound,
+  Paperclip as AttachFileIcon,
+  Gauge as SpeedIcon,
+  Circle,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import type { CSSProperties } from "react";
@@ -158,6 +163,11 @@ const iconMap: Record<string, LucideIcon> = {
   "crop_free": Scan,
   "wallpaper": ImageIcon,
   image: PhotoIcon,
+  "photo_library": PhotoLibraryIcon,
+  key: KeyRound,
+  "attach_file": AttachFileIcon,
+  speed: SpeedIcon,
+  circle: Circle,
   attachment: Paperclip,
   chat: MessageCircle,
   notifications_off: BellOff,

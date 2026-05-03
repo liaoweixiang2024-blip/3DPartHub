@@ -2,15 +2,8 @@ import { Router, Response } from "express";
 import { prisma } from "../../lib/prisma.js";
 import { getBusinessConfig } from "../../lib/businessConfig.js";
 import { authMiddleware, type AuthRequest } from "../../middleware/auth.js";
+import { requireRole } from "../../middleware/rbac.js";
 import { revokeAllTokensBefore } from "../../lib/jwt.js";
-
-function adminGuard(req: AuthRequest, res: Response): boolean {
-  if (req.user?.role !== "ADMIN") {
-    res.status(403).json({ detail: "需要管理员权限" });
-    return false;
-  }
-  return true;
-}
 
 function routeParam(value: string | string[] | undefined): string | undefined {
   return Array.isArray(value) ? value[0] : value;
@@ -24,8 +17,7 @@ function queryRole(value: unknown): "ADMIN" | "EDITOR" | "VIEWER" | undefined {
 export function createAdminUsersRouter() {
   const router = Router();
 
-  router.get("/api/admin/users/stats", authMiddleware, async (req: AuthRequest, res: Response) => {
-    if (!adminGuard(req, res)) return;
+  router.get("/api/admin/users/stats", authMiddleware, requireRole("ADMIN"), async (req: AuthRequest, res: Response) => {
     try {
       const [total, roleGroups, active] = await Promise.all([
         prisma.user.count(),
@@ -53,8 +45,7 @@ export function createAdminUsersRouter() {
   });
 
   // List users (admin)
-  router.get("/api/admin/users", authMiddleware, async (req: AuthRequest, res: Response) => {
-    if (!adminGuard(req, res)) return;
+  router.get("/api/admin/users", authMiddleware, requireRole("ADMIN"), async (req: AuthRequest, res: Response) => {
     try {
       const { pageSizePolicy } = await getBusinessConfig();
       const defaultPageSize = Math.max(1, Math.floor(Number(pageSizePolicy.adminUserDefault) || 20));
@@ -96,8 +87,7 @@ export function createAdminUsersRouter() {
   });
 
   // Update user role (admin)
-  router.put("/api/admin/users/:id/role", authMiddleware, async (req: AuthRequest, res: Response) => {
-    if (!adminGuard(req, res)) return;
+  router.put("/api/admin/users/:id/role", authMiddleware, requireRole("ADMIN"), async (req: AuthRequest, res: Response) => {
     const { role } = req.body;
     const userId = routeParam(req.params.id);
     if (!userId) { res.status(400).json({ detail: "用户参数无效" }); return; }
@@ -134,8 +124,7 @@ export function createAdminUsersRouter() {
   });
 
   // Delete user (admin)
-  router.delete("/api/admin/users/:id", authMiddleware, async (req: AuthRequest, res: Response) => {
-    if (!adminGuard(req, res)) return;
+  router.delete("/api/admin/users/:id", authMiddleware, requireRole("ADMIN"), async (req: AuthRequest, res: Response) => {
     const userId = routeParam(req.params.id);
     if (!userId) { res.status(400).json({ detail: "用户参数无效" }); return; }
     if (userId === req.user!.userId) {
