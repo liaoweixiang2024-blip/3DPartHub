@@ -128,6 +128,8 @@ export const searchLimiter = createLimiter("search", {
 });
 
 // Helmet security configuration
+const isDev = process.env.NODE_ENV !== "production";
+
 export const securityHeaders = helmet({
   contentSecurityPolicy: {
     useDefaults: true,
@@ -137,7 +139,13 @@ export const securityHeaders = helmet({
       "object-src": ["'none'"],
       "frame-ancestors": ["'self'"],
       "form-action": ["'self'"],
-      "script-src": ["'self'", "'unsafe-inline'", "'wasm-unsafe-eval'", "blob:"],
+      "script-src": [
+        "'self'",
+        // Vite HMR needs unsafe-inline in dev; production bundles are file-based
+        ...(isDev ? ["'unsafe-inline'"] : []),
+        "'wasm-unsafe-eval'",
+        "blob:",
+      ],
       "style-src": ["'self'", "'unsafe-inline'"],
       "img-src": ["'self'", "data:", "blob:"],
       "font-src": ["'self'", "data:"],

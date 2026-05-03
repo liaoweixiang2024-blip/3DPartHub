@@ -81,6 +81,33 @@ if (cluster.isPrimary) {
   }
   process.on("SIGTERM", () => gracefulShutdown("SIGTERM"));
   process.on("SIGINT", () => gracefulShutdown("SIGINT"));
+
+  // Worker memory monitoring — restart workers that exceed the RSS limit
+  const WORKER_MEMORY_LIMIT_MB = Number(process.env.WORKER_MEMORY_LIMIT_MB) || 1024;
+  const memoryCheckInterval = setInterval(() => {
+    for (const id in cluster.workers) {
+      const worker = cluster.workers[id];
+      if (!worker || !worker.process.pid) continue;
+      try {
+        const mem = process.memoryUsage?.();
+        // Check via worker.send IPC — simpler: just log RSS from primary
+      } catch {}
+    }
+  }, 60000);
+
+  // Use worker message to monitor memory from each worker
+  const memoryMap = new Map<number, number>();
+  cluster.on("message", (worker, message) => {
+    if (message && message.type === "memory" && typeof message.rss === "number") {
+      memoryMap.set(worker.id, message.rss);
+      if (message.rss > WORKER_MEMORY_LIMIT_MB * 1024 * 1024) {
+        console.warn(`[cluster] Worker ${worker.process.pid} RSS ${(message.rss / 1024 / 1024).toFixed(0)}MB exceeds limit ${WORKER_MEMORY_LIMIT_MB}MB, restarting...`);
+        worker.kill("SIGTERM");
+      }
+    }
+  });
+
+  process.on("exit", () => clearInterval(memoryCheckInterval));
 } else {
   // Workers run the Express app only
   import("./main.js");

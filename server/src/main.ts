@@ -3,6 +3,7 @@ import cluster from "node:cluster";
 import cors from "cors";
 import compression from "compression";
 import { extname, join } from "node:path";
+import { randomUUID } from "node:crypto";
 import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync } from "node:fs";
 import { config } from "./lib/config.js";
 import modelCompareRouter from "./routes/model-compare.js";
@@ -116,6 +117,10 @@ function shouldLogSlowRequest(now: number): boolean {
 
 // Request logging — skip health checks and static files, only log slow requests
 app.use((req, _res, next) => {
+  // Attach a request ID for log correlation
+  req.headers["x-request-id"] = req.headers["x-request-id"] || randomUUID();
+  _res.setHeader("X-Request-Id", req.headers["x-request-id"]);
+
   if (req.originalUrl.startsWith("/static/") || req.originalUrl.startsWith("/api/health")) {
     next();
     return;
@@ -373,5 +378,15 @@ app.listen(PORT, async () => {
 
   if (process.env.CACHE_WARMUP_ENABLED !== "0") {
     scheduleStartupCacheWarmup(PORT);
+  }
+
+  // Report memory usage to primary process periodically
+  if (cluster.isWorker) {
+    setInterval(() => {
+      try {
+        const mem = process.memoryUsage();
+        process.send?.({ type: "memory", rss: mem.rss });
+      } catch {}
+    }, 60000);
   }
 });

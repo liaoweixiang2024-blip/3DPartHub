@@ -99,6 +99,14 @@ export function createAuthProfileRouter() {
       res.status(400).json({ detail: `新密码长度应在${passwordMinLength}-128位之间` });
       return;
     }
+    // Password complexity: must contain at least two of letter/number/symbol
+    const hasLetter = /[a-zA-Z]/.test(newPassword);
+    const hasNumber = /[0-9]/.test(newPassword);
+    const hasSymbol = /[^a-zA-Z0-9]/.test(newPassword);
+    if (Number(hasLetter) + Number(hasNumber) + Number(hasSymbol) < 2) {
+      res.status(400).json({ detail: "新密码需包含字母、数字和特殊字符中的至少两种" });
+      return;
+    }
     try {
       const userId = req.user!.userId;
       const user = await prisma.user.findUnique({ where: { id: userId } });

@@ -12,6 +12,39 @@ const client = axios.create({
   },
 });
 
+// Simple circuit breaker — if too many consecutive server errors, pause requests briefly
+let consecutiveServerErrors = 0;
+let circuitOpenUntil = 0;
+const CIRCUIT_THRESHOLD = 5;
+const CIRCUIT_COOLDOWN_MS = 15000;
+
+function isCircuitOpen(): boolean {
+  if (Date.now() < circuitOpenUntil) return true;
+  circuitOpenUntil = 0;
+  return false;
+}
+
+function recordServerError() {
+  consecutiveServerErrors++;
+  if (consecutiveServerErrors >= CIRCUIT_THRESHOLD) {
+    circuitOpenUntil = Date.now() + CIRCUIT_COOLDOWN_MS;
+    notifyGlobalError("服务器暂时不可用，正在自动重试...");
+  }
+}
+
+function resetCircuit() {
+  consecutiveServerErrors = 0;
+  circuitOpenUntil = 0;
+}
+
+// Reject requests when circuit is open
+client.interceptors.request.use((config) => {
+  if (isCircuitOpen()) {
+    return Promise.reject(new Error("服务暂时不可用，请稍后再试"));
+  }
+  return config;
+});
+
 client.interceptors.request.use((config) => {
   const accessToken = getAccessToken();
   if (accessToken) {
@@ -51,7 +84,10 @@ function isSilentBackgroundRequest(config: { method?: unknown; url?: unknown } |
 }
 
 client.interceptors.response.use(
-  (response) => response,
+  (response) => {
+    resetCircuit();
+    return response;
+  },
   async (error) => {
     const originalRequest = error.config;
     const silentBackgroundRequest = isSilentBackgroundRequest(originalRequest);
@@ -61,6 +97,11 @@ client.interceptors.response.use(
       originalRequest.url?.includes("/auth/login") ||
       originalRequest.url?.includes("/auth/register") ||
       originalRequest.url?.includes("/auth/refresh");
+
+    // Track server errors for circuit breaker
+    if (error.response && error.response.status >= 500) {
+      recordServerError();
+    }
 
     // Show rate limit notification
     if (error.response?.status === 429) {

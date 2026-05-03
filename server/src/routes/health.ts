@@ -50,6 +50,37 @@ router.get("/api/health", (_req, res: Response) => {
   res.json({ status: "ok" });
 });
 
+// Readiness probe — checks core dependencies (DB + Redis) are available
+router.get("/api/health/ready", async (_req, res: Response) => {
+  try {
+    const checks = await Promise.all([
+      withTimeout(prisma.$queryRaw`SELECT 1`.then(() => true), 2000),
+      withTimeout(cachePing().then(() => true), 2000),
+    ]);
+    if (checks.every(Boolean)) {
+      res.json({ status: "ready" });
+    } else {
+      res.status(503).json({ status: "not_ready", checks: { database: checks[0], redis: checks[1] } });
+    }
+  } catch {
+    res.status(503).json({ status: "not_ready" });
+  }
+});
+
+// Liveness probe — lightweight check that the process isn't hung
+router.get("/api/health/live", (_req, res: Response) => {
+  const mem = process.memoryUsage();
+  res.json({
+    status: "alive",
+    uptime_seconds: Math.floor(process.uptime()),
+    memory: {
+      rss_mb: Math.round(mem.rss / 1024 / 1024),
+      heap_used_mb: Math.round(mem.heapUsed / 1024 / 1024),
+      heap_total_mb: Math.round(mem.heapTotal / 1024 / 1024),
+    },
+  });
+});
+
 router.get("/api/health/deep", authMiddleware, requireRole("ADMIN"), async (_req, res: Response) => {
   const checks = await Promise.all([
     check("database", async () => {
