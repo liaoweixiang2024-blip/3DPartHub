@@ -182,21 +182,24 @@ const DEAD_USER_PATHS = new Set([
   "/admin/product-wall",
 ]);
 
-export function normalizeUserNav(items: NavItemConfig[]) {
+const hasActive = (items: NavItemConfig[], path: string) =>
+  items.some((item) => item.path === path && item.enabled !== false);
+
+export function normalizeUserNav(items: NavItemConfig[], isCustom = false) {
   const next = items.filter((item) => !DEAD_USER_PATHS.has(item.path));
-  if (!next.some((item) => item.path === "/product-wall")) {
+  if (!isCustom && !hasActive(next, "/product-wall")) {
     const selectionIndex = next.findIndex((item) => item.path === "/selection");
     next.splice(selectionIndex >= 0 ? selectionIndex + 1 : next.length, 0, { label: "产品图库", icon: "image", path: "/product-wall", enabled: true });
   }
   next.forEach((item) => {
     if (item.path === "/product-wall") item.label = "产品图库";
   });
-  if (!next.some((item) => item.path === "/my-shares")) {
+  if (!isCustom && !hasActive(next, "/my-shares")) {
     const favoriteIndex = next.findIndex((item) => item.path === "/favorites");
     const inquiryIndex = next.findIndex((item) => item.path === "/my-inquiries");
     next.splice(favoriteIndex >= 0 ? favoriteIndex + 1 : inquiryIndex >= 0 ? inquiryIndex : next.length, 0, { label: "我的分享", icon: "share", path: "/my-shares", enabled: true });
   }
-  if (next.some((item) => item.path === "/thread-size")) return next;
+  if (isCustom || hasActive(next, "/thread-size")) return next;
   const wallIndex = next.findIndex((item) => item.path === "/product-wall");
   const selectionIndex = next.findIndex((item) => item.path === "/selection");
   next.splice(wallIndex >= 0 ? wallIndex + 1 : selectionIndex >= 0 ? selectionIndex + 1 : next.length, 0, { label: "规格查询", icon: "straighten", path: "/thread-size", enabled: true });
@@ -208,10 +211,10 @@ const DEAD_PATHS = new Set([
   "/admin/product-wall",
 ]);
 
-export function normalizeAdminNav(items: NavItemConfig[]) {
-  const withTools = normalizeUserNav(items);
+export function normalizeAdminNav(items: NavItemConfig[], isCustom = false) {
+  const withTools = normalizeUserNav(items, isCustom);
   const next = withTools.filter((item) => !DEAD_PATHS.has(item.path));
-  if (!next.some((item) => item.path === "/admin/downloads")) {
+  if (!isCustom && !hasActive(next, "/admin/downloads")) {
     const shareIndex = next.findIndex((item) => item.path === "/admin/shares");
     next.splice(shareIndex >= 0 ? shareIndex + 1 : next.length, 0, { label: "下载统计", icon: "download", path: "/admin/downloads", enabled: true });
   }
@@ -251,8 +254,8 @@ export function getBusinessConfig(settings: Partial<SystemSettings> = getPublicS
     ticketStatuses: parseSetting(settings.ticket_statuses, DEFAULT_TICKET_STATUSES),
     ticketClassifications: enabled(parseSetting(settings.ticket_classifications, DEFAULT_TICKET_CLASSIFICATIONS)),
     supportProcessSteps: parseSetting(settings.support_process_steps, DEFAULT_SUPPORT_STEPS),
-    userNav: enabled(normalizeUserNav(parseSetting(settings.nav_user_items, DEFAULT_USER_NAV))),
-    adminNav: enabled(normalizeAdminNav(parseSetting(settings.nav_admin_items, DEFAULT_ADMIN_NAV))),
+    userNav: enabled(normalizeUserNav(parseSetting(settings.nav_user_items, DEFAULT_USER_NAV), !!settings.nav_user_items)),
+    adminNav: enabled(normalizeAdminNav(parseSetting(settings.nav_admin_items, DEFAULT_ADMIN_NAV), !!settings.nav_admin_items)),
     mobileNav: enabled(parseSetting(settings.nav_mobile_items, DEFAULT_MOBILE_NAV)),
     uploadPolicy: normalizeUploadPolicy({ ...DEFAULT_UPLOAD_POLICY, ...parseSetting<Partial<UploadPolicy>>(settings.upload_policy, {}) }),
     threadPriority: { ...DEFAULT_THREAD_PRIORITY, ...parseSetting<Record<string, number>>(settings.selection_thread_priority, {}) },

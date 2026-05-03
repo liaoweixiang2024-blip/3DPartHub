@@ -1,13 +1,15 @@
 import { Link, useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
-import { lazy, Suspense, useState, useCallback, useEffect, useRef } from "react";
+import { lazy, Suspense, useState, useCallback, useEffect, useRef, useMemo } from "react";
+import useSWR from "swr";
 import { useThemeStore } from "../../stores/useThemeStore";
 import { useAuthStore } from "../../stores/useAuthStore";
 import { mutate } from "swr";
 import Icon from "./Icon";
 import Tooltip from "./Tooltip";
 import BrandMark from "./BrandMark";
-import { onSiteConfigChange } from "../../lib/publicSettings";
+import { onSiteConfigChange, getCachedPublicSettings } from "../../lib/publicSettings";
+import { getBusinessConfig } from "../../lib/businessConfig";
 import {
   HOME_SEARCH_EVENT,
   HOME_SEARCH_MAX_LENGTH,
@@ -214,6 +216,11 @@ export default function TopNav({ compact = false, onMenuToggle }: TopNavProps) {
   useEffect(() => {
     return onSiteConfigChange(() => forceUpdate(n => n + 1));
   }, []);
+  const { data: settings } = useSWR("publicSettings", () => getCachedPublicSettings());
+  const topNavItems = useMemo(() => {
+    const business = getBusinessConfig(settings);
+    return business.userNav.filter((item) => item.path !== "/");
+  }, [settings]);
 
   useEffect(() => {
     const stored = readHomeSearchQuery();
@@ -337,21 +344,13 @@ export default function TopNav({ compact = false, onMenuToggle }: TopNavProps) {
         </form>
 
         <div className="flex items-center gap-0.5 shrink-0 ml-auto pr-6">
-          <Tooltip text="产品选型" side="bottom">
-            <Link to="/selection" className={desktopIconClass}>
-              <Icon name="tune" size={20} />
-            </Link>
-          </Tooltip>
-          <Tooltip text="产品图库" side="bottom">
-            <Link to="/product-wall" className={desktopIconClass}>
-              <Icon name="image" size={20} />
-            </Link>
-          </Tooltip>
-          <Tooltip text="规格查询" side="bottom">
-            <Link to="/thread-size" className={desktopIconClass}>
-              <Icon name="straighten" size={20} />
-            </Link>
-          </Tooltip>
+          {topNavItems.map((item) => (
+            <Tooltip key={item.path} text={item.label} side="bottom">
+              <Link to={item.path} className={desktopIconClass}>
+                <Icon name={item.icon} size={20} />
+              </Link>
+            </Tooltip>
+          ))}
           {isAdmin && (
             <Tooltip text="上传模型" side="bottom">
               <button onClick={() => setUploadOpen(true)} className="p-2 text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high rounded-lg transition-colors">
@@ -359,31 +358,6 @@ export default function TopNav({ compact = false, onMenuToggle }: TopNavProps) {
               </button>
             </Tooltip>
           )}
-          <Tooltip text="我的收藏" side="bottom">
-            <Link to="/favorites" className="p-2 text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high rounded-lg transition-colors">
-              <Icon name="star" size={20} />
-            </Link>
-          </Tooltip>
-          <Tooltip text="我的分享" side="bottom">
-            <Link to="/my-shares" className="p-2 text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high rounded-lg transition-colors">
-              <Icon name="share" size={20} />
-            </Link>
-          </Tooltip>
-          <Tooltip text="下载历史" side="bottom">
-            <Link to="/downloads" className="p-2 text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high rounded-lg transition-colors">
-              <Icon name="download" size={20} />
-            </Link>
-          </Tooltip>
-          <Tooltip text="我的询价" side="bottom">
-            <Link to="/my-inquiries" className="p-2 text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high rounded-lg transition-colors">
-              <Icon name="request_quote" size={20} />
-            </Link>
-          </Tooltip>
-          <Tooltip text="技术支持" side="bottom">
-            <Link to="/support" className="p-2 text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high rounded-lg transition-colors">
-              <Icon name="support_agent" size={20} />
-            </Link>
-          </Tooltip>
           <NotificationPanelLoader />
           <ThemeToggle />
           <UserMenu />
