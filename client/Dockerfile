@@ -6,6 +6,10 @@ COPY package.json package-lock.json ./
 RUN npm ci
 
 COPY . .
+ARG VITE_SENTRY_DSN=""
+ARG VITE_APP_VERSION=""
+ENV VITE_SENTRY_DSN=$VITE_SENTRY_DSN
+ENV VITE_APP_VERSION=$VITE_APP_VERSION
 RUN npm run build
 
 # Pre-compress static assets for gzip_static

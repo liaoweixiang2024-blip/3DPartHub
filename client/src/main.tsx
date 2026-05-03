@@ -9,6 +9,9 @@ import "@fontsource/inter/latin-700.css";
 import "./styles/global.css";
 import App from "./App";
 import { getCachedPublicSettings } from "./lib/publicSettings";
+import { initSentry } from "./lib/sentry";
+
+initSentry();
 
 // Pre-fetch site config so TopNav renders with correct title/logo immediately
 getCachedPublicSettings();
