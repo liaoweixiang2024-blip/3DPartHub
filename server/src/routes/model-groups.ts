@@ -119,25 +119,27 @@ router.get("/api/model-groups/suggestions", authMiddleware, requireRole("ADMIN")
 
     const COMPLETED = MODEL_STATUS.COMPLETED;
     const offset = (page - 1) * pageSize;
-    const dupes = await prisma.$queryRawUnsafe(
-      `SELECT name, COUNT(*)::int as cnt
-       FROM models
-       WHERE group_id IS NULL AND status = $1
-       GROUP BY name
-       HAVING COUNT(*) > 1
-       ORDER BY cnt DESC, name ASC
-       LIMIT $2 OFFSET $3`,
-      COMPLETED, pageSize, offset
-    ) as { name: string; cnt: number }[];
+    const dupes = await prisma.$queryRaw<
+      Array<{ name: string; cnt: number }>
+    >`
+      SELECT name, COUNT(*)::int as cnt
+      FROM models
+      WHERE group_id IS NULL AND status = ${COMPLETED}
+      GROUP BY name
+      HAVING COUNT(*) > 1
+      ORDER BY cnt DESC, name ASC
+      LIMIT ${pageSize} OFFSET ${offset}
+    `;
 
-    const totalResult = await prisma.$queryRawUnsafe(
-      `SELECT COUNT(*)::int as total FROM (
+    const totalResult = await prisma.$queryRaw<
+      Array<{ total: number }>
+    >`
+      SELECT COUNT(*)::int as total FROM (
         SELECT name FROM models
-        WHERE group_id IS NULL AND status = $1
+        WHERE group_id IS NULL AND status = ${COMPLETED}
         GROUP BY name HAVING COUNT(*) > 1
-      ) sub`,
-      COMPLETED
-    ) as { total: number }[];
+      ) sub
+    `;
     const total = totalResult[0]?.total || 0;
     const paged = dupes;
 
@@ -146,7 +148,7 @@ router.get("/api/model-groups/suggestions", authMiddleware, requireRole("ADMIN")
       // Batch query: fetch all models for paged names in one go
       const allModels = await prisma.model.findMany({
         where: {
-          name: { in: paged.map(d => d.name) },
+          name: { in: paged.map((d: any) => d.name) },
           groupId: null,
           status: MODEL_STATUS.COMPLETED,
         },

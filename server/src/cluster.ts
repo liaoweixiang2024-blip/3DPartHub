@@ -56,6 +56,31 @@ if (cluster.isPrimary) {
       workerRestartCounts.delete(worker.id);
     }
   });
+
+  // Graceful shutdown — stop accepting new connections, wait for workers to finish
+  let shuttingDown = false;
+  async function gracefulShutdown(signal: string) {
+    if (shuttingDown) return;
+    shuttingDown = true;
+    console.log(`\n  ⏹  ${signal} received, shutting down gracefully...`);
+    const timeout = setTimeout(() => {
+      console.log("  ⏹  Forced shutdown after 15s");
+      process.exit(1);
+    }, 15000);
+    for (const id in cluster.workers) {
+      const w = cluster.workers[id];
+      if (w) w.kill("SIGTERM");
+    }
+    cluster.on("exit", () => {
+      if (Object.keys(cluster.workers || {}).length === 0) {
+        clearTimeout(timeout);
+        console.log("  ⏹  All workers stopped.");
+        process.exit(0);
+      }
+    });
+  }
+  process.on("SIGTERM", () => gracefulShutdown("SIGTERM"));
+  process.on("SIGINT", () => gracefulShutdown("SIGINT"));
 } else {
   // Workers run the Express app only
   import("./main.js");

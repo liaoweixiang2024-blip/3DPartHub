@@ -8,6 +8,7 @@ export default defineConfig({
   plugins: [react(), tailwindcss()],
   assetsInclude: ['**/*.wasm'],
   build: {
+    sourcemap: false,
     rollupOptions: {
       output: {
         manualChunks(id) {
