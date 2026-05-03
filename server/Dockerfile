@@ -1,5 +1,5 @@
 # === Stage 1: Build (install deps + compile native modules) ===
-FROM node:20-alpine AS builder
+FROM node:24-alpine AS builder
 
 RUN apk update && apk add --no-cache python3 make g++ pkgconfig openssl pixman-dev cairo-dev pango-dev
 
@@ -36,7 +36,7 @@ RUN echo $APP_VERSION > /app/VERSION
 RUN npm prune --omit=dev
 
 # === Stage 2: Runtime (no compilers, no -dev headers) ===
-FROM node:20-alpine
+FROM node:24-alpine
 
 RUN apk update && apk add --no-cache openssl pixman cairo pango giflib libjpeg-turbo \
     postgresql-client curl \
