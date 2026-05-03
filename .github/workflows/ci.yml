@@ -49,3 +49,7 @@ jobs:
       - name: Server verify
         working-directory: server
         run: npm run verify
+
+      - name: Check pending Prisma migration
+        working-directory: server
+        run: npx prisma migrate diff --from-migrations prisma/migrations --to-schema-datamodel prisma/schema.prisma --script > /dev/null
