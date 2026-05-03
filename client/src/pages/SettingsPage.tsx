@@ -982,6 +982,21 @@ function normalizeLegalSectionsForSave(value: unknown, fallback: LegalSection[])
   return sections.length > 0 ? sections : fallback;
 }
 
+function dedupNavItems(json: string): string {
+  try {
+    const items = JSON.parse(json);
+    if (!Array.isArray(items)) return json;
+    const seen = new Set<string>();
+    const deduped = items.filter((item: { path?: string }) => {
+      if (!item.path) return true;
+      if (seen.has(item.path)) return false;
+      seen.add(item.path);
+      return true;
+    });
+    return JSON.stringify(deduped, null, 2);
+  } catch { return json; }
+}
+
 function normalizeSettingsForSave(settings: SystemSettings): SystemSettings {
   const usernameMin = clampNumber(settings.security_username_min_length, 2, 1, 64);
   const usernameMax = Math.max(usernameMin, clampNumber(settings.security_username_max_length, 32, 1, 64));
@@ -997,6 +1012,9 @@ function normalizeSettingsForSave(settings: SystemSettings): SystemSettings {
     security_password_min_length: clampNumber(settings.security_password_min_length, 8, 6, 64),
     security_username_min_length: usernameMin,
     security_username_max_length: usernameMax,
+    nav_user_items: dedupNavItems(settings.nav_user_items),
+    nav_admin_items: dedupNavItems(settings.nav_admin_items),
+    nav_mobile_items: dedupNavItems(settings.nav_mobile_items),
     legal_privacy_sections: JSON.stringify(normalizeLegalSectionsForSave(settings.legal_privacy_sections, DEFAULT_PRIVACY_SECTIONS), null, 2),
     legal_terms_sections: JSON.stringify(normalizeLegalSectionsForSave(settings.legal_terms_sections, DEFAULT_TERMS_SECTIONS), null, 2),
     upload_policy: JSON.stringify(normalizeUploadPolicyForSave(settings.upload_policy), null, 2),
