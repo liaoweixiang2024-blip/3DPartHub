@@ -72,36 +72,33 @@
 ### 一键部署
 
 ```bash
-mkdir -p /opt/3dparthub && cd /opt/3dparthub
-curl -O https://raw.githubusercontent.com/liaoweixiang2024-blip/3DPartHub/main/docker-compose.yml
-docker compose up -d
+# 全新部署
+curl -L https://raw.githubusercontent.com/liaoweixiang2024-blip/3DPartHub/main/deploy.sh | bash
+
+# 或者先下载再执行
+curl -L -O https://raw.githubusercontent.com/liaoweixiang2024-blip/3DPartHub/main/deploy.sh
+bash deploy.sh
 ```
 
-根目录 [docker-compose.yml](docker-compose.yml) 内置了可直接启动的默认值，适合绿联 NAS、测试机或内网快速部署。默认使用 `latest` 镜像，并只启动 `api`、`web`、`postgres`、`redis` 四个核心容器。
+脚本会自动完成：安装 Docker → 下载 docker-compose.yml → 生成随机密钥 → 按服务器内存自动分配资源 → 拉取最新镜像并启动。
 
-正式公网环境建议在同目录创建 `.env` 覆盖数据库密码、JWT 密钥和初始管理员密码：
+**带备份恢复部署：**
 
 ```bash
-DB_PASSWORD="$(openssl rand -hex 24)"
-JWT_SECRET="$(openssl rand -hex 32)"
-ADMIN_PASS="$(openssl rand -base64 24)"
-cat > .env <<EOF
-DB_PASSWORD=${DB_PASSWORD}
-JWT_SECRET=${JWT_SECRET}
-ADMIN_PASS=${ADMIN_PASS}
-EOF
-docker compose up -d
+# 将备份文件上传到服务器后执行
+bash deploy.sh /path/to/backup_xxx.tar.gz
 ```
+
+脚本会自动恢复数据库和文件数据。
 
 如果 GHCR 镜像包仍为私有，服务器需要先使用有 `read:packages` 权限的 GitHub Token 登录：
 
 ```bash
 echo "你的GitHub Token" | docker login ghcr.io -u liaoweixiang2024-blip --password-stdin
-docker compose pull
-docker compose up -d
+bash deploy.sh
 ```
 
-如果服务器或 NAS 拉取 Docker Hub / GHCR 速度过慢，可以在可访问外网的机器上导出离线镜像包，然后在目标机器执行 `docker load -i 3dparthub-images.tar` 后再 `docker compose up -d`。
+如果服务器或 NAS 拉取 Docker Hub / GHCR 速度过慢，可以在可访问外网的机器上导出离线镜像包，然后在目标机器执行 `docker load -i 3dparthub-images.tar` 后再 `bash deploy.sh`。
 
 检查服务状态：
 
@@ -166,19 +163,19 @@ docker stats --no-stream
 ```bash
 cd /opt/3dparthub
 
-# 1. 更新部署配置
-curl -L -o docker-compose.yml https://raw.githubusercontent.com/liaoweixiang2024-blip/3DPartHub/main/docker-compose.yml
-
-# 2. 确保使用 latest 最新镜像
-touch .env
-grep -q '^IMAGE_TAG=' .env && sed -i 's/^IMAGE_TAG=.*/IMAGE_TAG=latest/' .env || echo 'IMAGE_TAG=latest' >> .env
-
-# 3. 拉取新镜像并重启
+# 拉取最新镜像并重启
 docker compose pull
 docker compose up -d --force-recreate
 
-# 4. 验证服务正常
+# 验证服务正常
 curl http://localhost:3780/api/health
+```
+
+如需锁定特定版本，修改 `.env` 中的 `IMAGE_TAG`：
+
+```bash
+sed -i 's/IMAGE_TAG=.*/IMAGE_TAG=v2.8.0/' .env
+docker compose pull && docker compose up -d --force-recreate
 ```
 
 升级前建议在后台 **设置 -> 数据备份** 创建并校验一次备份。
