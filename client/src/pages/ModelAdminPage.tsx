@@ -1314,7 +1314,6 @@ function DesktopContent() {
   const [deleteTarget, setDeleteTarget] = useState<ServerModelListItem | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [uploading, setUploading] = useState(false);
-  const [queueingModelId, setQueueingModelId] = useState<string | null>(null);
   const [previewOpsOpen, setPreviewOpsOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<ModelAdminTab>('models');
 
@@ -1396,26 +1395,6 @@ function DesktopContent() {
     if (!deleteTarget) return;
     setDeleting(true);
     try { await modelApi.delete(deleteTarget.model_id); toast('已删除', 'success'); mutate(); setDeleteTarget(null); } catch { toast('删除失败', 'error'); } finally { setDeleting(false); }
-  };
-
-  const handleQueueModelRebuild = async (model: ServerModelListItem) => {
-    const ok = window.confirm(`将把「${model.name}」加入预览重建队列，重新生成 GLB 和缩略图。是否继续？`);
-    if (!ok) return;
-    setQueueingModelId(model.model_id);
-    try {
-      const result = await modelApi.rebuildPreviewDiagnostics({ status: 'all', modelIds: [model.model_id], limit: 1 });
-      const first = result.items?.[0];
-      if (result.queued > 0) {
-        toast('已加入预览重建队列', 'success');
-        mutate();
-      } else {
-        toast(first?.reason || '未能加入预览重建队列', 'error');
-      }
-    } catch {
-      toast('加入预览重建队列失败', 'error');
-    } finally {
-      setQueueingModelId(null);
-    }
   };
 
   const handleUpload = async (files: FileList) => {
@@ -1892,7 +1871,6 @@ function MobileContent() {
   const [deleteTarget, setDeleteTarget] = useState<ServerModelListItem | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [uploading, setUploading] = useState(false);
-  const [queueingModelId, setQueueingModelId] = useState<string | null>(null);
   const [previewOpsOpen, setPreviewOpsOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<ModelAdminTab>('models');
 
@@ -1972,26 +1950,6 @@ function MobileContent() {
     if (!deleteTarget) return;
     setDeleting(true);
     try { await modelApi.delete(deleteTarget.model_id); toast('已删除', 'success'); mutate(); setDeleteTarget(null); } catch { toast('删除失败', 'error'); } finally { setDeleting(false); }
-  };
-
-  const handleQueueModelRebuild = async (model: ServerModelListItem) => {
-    const ok = window.confirm(`将把「${model.name}」加入预览重建队列，重新生成 GLB 和缩略图。是否继续？`);
-    if (!ok) return;
-    setQueueingModelId(model.model_id);
-    try {
-      const result = await modelApi.rebuildPreviewDiagnostics({ status: 'all', modelIds: [model.model_id], limit: 1 });
-      const first = result.items?.[0];
-      if (result.queued > 0) {
-        toast('已加入预览重建队列', 'success');
-        mutate();
-      } else {
-        toast(first?.reason || '未能加入预览重建队列', 'error');
-      }
-    } catch {
-      toast('加入预览重建队列失败', 'error');
-    } finally {
-      setQueueingModelId(null);
-    }
   };
 
   const handleUpload = async (files: FileList) => {

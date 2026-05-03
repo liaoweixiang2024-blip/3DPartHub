@@ -115,10 +115,10 @@ export const useAuthStore = create<AuthState>()(
           const { data: profileResp } = await client.get("/auth/profile");
           const user = unwrapApiPayload<User>(profileResp);
 
-          _accessToken = accessToken;
+          _accessToken = accessToken ?? null;
           set({
             user,
-            tokens: refreshToken ? { accessToken, refreshToken } : null,
+            tokens: refreshToken && accessToken ? { accessToken, refreshToken } : null,
             isAuthenticated: true,
           });
           useFavoriteStore.getState().hydrate();

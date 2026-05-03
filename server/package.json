@@ -18,7 +18,10 @@
     "prisma:force-reset": "bash scripts/safe-migrate.sh force-reset",
     "prisma:studio": "prisma studio",
     "preview-meta:migrate": "tsx scripts/migrate-preview-meta.ts",
-    "backup:e2e": "tsx scripts/backup-e2e-check.ts"
+    "backup:e2e": "tsx scripts/backup-e2e-check.ts",
+    "seed:batch": "tsx prisma/seeds/run-batch.ts",
+    "seed:all": "tsx prisma/seeds/import-selection-products.ts",
+    "seed:range": "tsx prisma/seeds/run-batch.ts"
   },
   "dependencies": {
     "@prisma/client": "^5.22.0",
