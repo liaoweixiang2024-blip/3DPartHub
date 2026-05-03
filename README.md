@@ -163,13 +163,15 @@ docker stats --no-stream
 ```bash
 cd /opt/3dparthub
 
-# 拉取最新镜像并重启
+# 拉取最新镜像并强制重建容器
 docker compose pull
 docker compose up -d --force-recreate
 
 # 验证服务正常
 curl http://localhost:3780/api/health
 ```
+
+> **注意：** 更新后如果页面没有变化，用 `Ctrl+Shift+R`（Mac: `Cmd+Shift+R`）强制刷新浏览器缓存。如果仍然不生效，执行 `docker compose down && docker compose pull && docker compose up -d` 彻底重建。
 
 如需锁定特定版本，修改 `.env` 中的 `IMAGE_TAG`：
 
