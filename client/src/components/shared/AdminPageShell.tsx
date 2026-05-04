@@ -1,4 +1,4 @@
-import { lazy, Suspense, useState, type ReactNode } from 'react';
+import { lazy, Suspense, useState, type ReactNode, type Ref } from 'react';
 import useSWR from 'swr';
 import { useMediaQuery } from '../../layouts/hooks/useMediaQuery';
 import { getCachedPublicSettings, getFooterCopyright, getSiteTitle } from '../../lib/publicSettings';
@@ -14,6 +14,7 @@ interface AdminPageShellProps {
   desktopContentClassName?: string;
   mobileMainClassName?: string;
   mobileContentClassName?: string;
+  mobileMainRef?: Ref<HTMLElement>;
   hideMobileBottomNav?: boolean;
 }
 
@@ -39,6 +40,7 @@ export function AdminPageShell({
   desktopContentClassName,
   mobileMainClassName,
   mobileContentClassName,
+  mobileMainRef,
   hideMobileBottomNav = false,
 }: AdminPageShellProps) {
   const isDesktop = useMediaQuery('(min-width: 768px)');
@@ -72,7 +74,10 @@ export function AdminPageShell({
           <MobileNavDrawer open={navOpen} onClose={() => setNavOpen(false)} />
         </Suspense>
       ) : null}
-      <main className={mergeClassName('flex-1 overflow-y-auto bg-surface-dim scrollbar-hidden', mobileMainClassName)}>
+      <main
+        ref={mobileMainRef}
+        className={mergeClassName('flex-1 overflow-y-auto bg-surface-dim scrollbar-hidden', mobileMainClassName)}
+      >
         <div
           className={mergeClassName(
             `flex min-h-full flex-col px-4 py-4 ${hideMobileBottomNav ? '' : 'pb-20'}`,

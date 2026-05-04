@@ -104,6 +104,7 @@ export interface SystemSettings {
   security_username_min_length: number;
   security_username_max_length: number;
   // Share policy
+  share_enabled: boolean;
   share_default_expire_days: number;
   share_max_expire_days: number;
   share_default_download_limit: number;

@@ -1,7 +1,7 @@
+import { mutate } from 'swr';
 import { getPublicSettings, type SystemSettings } from '../api/settings';
 import { applyServerThemeDefaults } from '../stores/useThemeStore';
 import { applyColorScheme } from './colorScheme';
-import { mutate } from 'swr';
 
 let cache: Partial<SystemSettings> | null = null;
 let fetchedAt = 0;

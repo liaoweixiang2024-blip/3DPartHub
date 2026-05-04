@@ -28,7 +28,7 @@
 # 【更新】
 #   1. 默认使用 latest 镜像
 #   2. 手动更新: docker compose pull && docker compose up -d --force-recreate
-#   3. 如需锁定版本: 在 .env 中写入 IMAGE_TAG=v2.8.1
+#   3. 如需锁定版本: 在 .env 中写入 IMAGE_TAG=V2.8.6
 #   4. 检查日志: docker compose logs -f api
 #      确认 prisma migrate deploy 成功，无报错
 #   5. 检查健康: curl http://localhost:3780/api/health

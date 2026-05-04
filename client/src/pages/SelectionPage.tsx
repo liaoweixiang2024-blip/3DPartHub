@@ -643,7 +643,7 @@ export default function SelectionPage() {
     error: categoriesError,
     isLoading: categoriesLoading,
     mutate: retryCategories,
-  } = useSWR('selections/categories', getSelectionCategories, { keepPreviousData: true });
+  } = useSWR('selections/categories', getSelectionCategories);
 
   /* pre-fill from share link state or URL params */
   const shareStateRef = useRef<{ shareSlug?: string; shareSpecs?: Record<string, string> } | null>(null);
@@ -790,9 +790,10 @@ export default function SelectionPage() {
         pageSize: resultPageSize,
         includeItems: includeFilterItems,
       }),
-    { revalidateOnFocus: false, keepPreviousData: true },
+    { revalidateOnFocus: false },
   );
   const [showFilterLoading, setShowFilterLoading] = useState(false);
+  const shouldShowFilterLoading = Boolean(showFilterLoading || (isLoading && !filterData));
   useEffect(() => {
     if (!isLoading) {
       setShowFilterLoading(false);
@@ -869,7 +870,7 @@ export default function SelectionPage() {
   const { data: modelMatchMap = {} } = useSWR(
     shouldLoadModelMatches && visibleModelNos.length ? ['sel-model-matches', visibleModelNos.join('|')] : null,
     () => getSelectionModelMatches(visibleModelNos),
-    { revalidateOnFocus: false, keepPreviousData: true },
+    { revalidateOnFocus: false },
   );
   const withVisibleMatch = useCallback(
     (product: SelectionProduct) => {
@@ -886,6 +887,7 @@ export default function SelectionPage() {
   const wizardWrapRef = useRef<HTMLDivElement>(null);
   const resultRef = useRef<HTMLDivElement>(null);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const mobileMainRef = useRef<HTMLElement>(null);
   const lastUserScrollAtRef = useRef(0);
   const resultRevealTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -1055,32 +1057,30 @@ export default function SelectionPage() {
   /* handlers */
   const pickGroup = useCallback((id: string) => {
     setPressedCategoryKey(`group:${id}`);
-    startTransition(() => {
-      setGroupId(id);
-      setSlug(null);
-      setSpecs({});
-      setManualDrafts({});
-      setSkipped(new Set());
-      setAutoSelectedFields(new Set());
-      setSearchDraft('');
-      setSelectedIds(new Set());
-      setExpandedKits(new Set());
-    });
+    setGroupId(id);
+    setSlug(null);
+    setSpecs({});
+    setManualDrafts({});
+    setSkipped(new Set());
+    setAutoSelectedFields(new Set());
+    setSearchDraft('');
+    setSelectedIds(new Set());
+    setExpandedKits(new Set());
     window.setTimeout(() => setPressedCategoryKey(null), 260);
   }, []);
   const pickSub = useCallback((s: string) => {
     setPressedCategoryKey(`sub:${s}`);
+    suppressAutoAdvanceScrollRef.current = true;
+    pendingAutoAdvanceScrollRef.current = false;
     pushRecent(s);
-    startTransition(() => {
-      setSlug(s);
-      setSpecs({});
-      setManualDrafts({});
-      setSkipped(new Set());
-      setAutoSelectedFields(new Set());
-      setSearchDraft('');
-      setSelectedIds(new Set());
-      setExpandedKits(new Set());
-    });
+    setSlug(s);
+    setSpecs({});
+    setManualDrafts({});
+    setSkipped(new Set());
+    setAutoSelectedFields(new Set());
+    setSearchDraft('');
+    setSelectedIds(new Set());
+    setExpandedKits(new Set());
     window.setTimeout(() => setPressedCategoryKey(null), 260);
   }, []);
   const pickVal = useCallback((key: string, val: string) => {
@@ -1173,11 +1173,6 @@ export default function SelectionPage() {
     if (!slug) return;
     if (!user) {
       requireLogin();
-      return;
-    }
-    const ps = getCachedPublicSettings();
-    if (ps.share_enabled === false && user.role !== 'ADMIN') {
-      toast('分享功能已关闭，请联系管理员', 'error');
       return;
     }
     setSharing(true);
@@ -1330,11 +1325,12 @@ export default function SelectionPage() {
     prefersReducedMotion
       ? { initial: false as const }
       : {
-          initial: { opacity: 0 },
-          animate: { opacity: 1 },
+          initial: { opacity: 0, y: 8 },
+          whileInView: { opacity: 1, y: 0, scale: 1 },
+          viewport: { once: true, amount: 0.25, margin: '-12px 0px -12px 0px' },
           transition: {
-            duration: 0.18,
-            delay: Math.min((index % categoryColumns) * 0.02, 0.06),
+            duration: 0.16,
+            delay: Math.min((index % categoryColumns) * 0.015, 0.045),
             ease: 'easeOut' as const,
           },
         };
@@ -1364,7 +1360,7 @@ export default function SelectionPage() {
       key={key}
       onClick={onClick}
       className={categoryCardClass(active)}
-      whileHover={prefersReducedMotion ? undefined : { scale: 1.005 }}
+      whileHover={prefersReducedMotion ? undefined : { y: -1 }}
       whileTap={prefersReducedMotion ? undefined : { scale: 0.985 }}
       {...categoryItemMotionProps(index)}
     >
@@ -1387,21 +1383,9 @@ export default function SelectionPage() {
   );
   const categoryStatusContent =
     categoriesLoading && cats.length === 0 ? (
-      <div className={categoryGridClass}>
-        {Array.from({ length: 6 }).map((_, i) => (
-          <div
-            key={i}
-            className="flex items-stretch rounded-lg border border-outline-variant/8 bg-surface-container/50 overflow-hidden"
-          >
-            <div className="w-14 shrink-0 bg-surface-container-high animate-pulse" />
-            <div className="flex min-w-0 flex-1 items-center gap-2 px-3 py-2.5">
-              <div className="min-w-0 flex-1 space-y-1.5">
-                <div className="h-4 w-2/3 rounded bg-surface-container-high animate-pulse" />
-                <div className="h-3 w-1/2 rounded bg-surface-container-highest/50 animate-pulse" />
-              </div>
-            </div>
-          </div>
-        ))}
+      <div className="flex items-center justify-center py-12">
+        <Icon name="progress_activity" size={24} className="animate-spin text-on-surface-variant/30" />
+        <span className="ml-3 text-sm text-on-surface-variant">正在加载分类...</span>
       </div>
     ) : categoriesError && cats.length === 0 ? (
       <div className="text-center py-12">
@@ -1538,7 +1522,7 @@ export default function SelectionPage() {
                     定制值不参与固定库存筛选，提交询价时会写入规格并替换型号占位符。
                   </p>
                 </form>
-              ) : showFilterLoading ? (
+              ) : shouldShowFilterLoading ? (
                 <div className="py-6 text-center">
                   <p className="text-sm text-on-surface-variant">正在匹配可选项...</p>
                 </div>
@@ -1677,10 +1661,10 @@ export default function SelectionPage() {
   const isMobileResultView = !isDesktop && phase === 'wizard' && !search && !curField;
   const wizardTransitionKey = search ? `search-${search}` : curField ? `field-${curField}` : 'selection-results';
   const wizardTransition = {
-    initial: { opacity: 0 },
-    animate: { opacity: 1 },
-    exit: { opacity: 0 },
-    transition: { duration: 0.12, ease: 'easeOut' },
+    initial: { opacity: 0, y: 6 },
+    animate: { opacity: 1, y: 0 },
+    exit: { opacity: 0, y: -4 },
+    transition: { duration: 0.16, ease: 'easeOut' },
   } as const;
 
   /* ── results block (only rendered when !curField) ── */
@@ -1716,7 +1700,7 @@ export default function SelectionPage() {
           )}
         </div>
       </div>
-      {showFilterLoading ? (
+      {shouldShowFilterLoading ? (
         <div className="py-8 text-center">
           <p className="text-sm text-on-surface-variant">正在整理选型结果...</p>
         </div>
@@ -2221,13 +2205,22 @@ export default function SelectionPage() {
         : `selection-wizard-${slug || 'none'}`;
   const desktopScrollContainerClass = 'h-full min-h-0 overflow-y-auto overflow-x-hidden custom-scrollbar';
 
+  useEffect(() => {
+    if (isDesktop) return;
+    const frame = window.requestAnimationFrame(() => {
+      mobileMainRef.current?.scrollTo({ top: 0, left: 0, behavior: 'auto' });
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [isDesktop, selectionPhaseKey]);
+
   const contentBody = (
-    <AnimatePresence initial={false}>
+    <AnimatePresence mode="wait" initial={false}>
       <motion.div
         key={selectionPhaseKey}
-        initial={{ opacity: 0 }}
+        initial={{ opacity: 0.9 }}
         animate={{ opacity: 1 }}
-        transition={{ duration: 0.15, ease: 'easeOut' }}
+        exit={{ opacity: 0.96 }}
+        transition={{ duration: 0.12, ease: 'easeOut' }}
         className="min-w-0"
       >
         {phase === 'group' && groupContent}
@@ -2237,7 +2230,7 @@ export default function SelectionPage() {
             <div ref={wizardWrapRef} className="px-4 py-4 md:px-5 md:py-5">
               {pageHeader}
               <div className="space-y-0">
-                <AnimatePresence initial={false}>
+                <AnimatePresence mode="wait" initial={false}>
                   <motion.div key={wizardTransitionKey} {...wizardTransition} className="min-w-0">
                     {isMobileResultView ? (
                       resultsJSX
@@ -2280,7 +2273,10 @@ export default function SelectionPage() {
 
   /* ══════════ Mobile Layout ══════════ */
   return (
-    <AdminPageShell mobileContentClassName="flex flex-col gap-3 px-3 py-3 pb-4 min-h-full">
+    <AdminPageShell
+      mobileMainRef={mobileMainRef}
+      mobileContentClassName="flex flex-col gap-3 px-3 py-3 pb-4 min-h-full"
+    >
       <AdminManagementPage
         title={shellTitle}
         description={shellDescription}

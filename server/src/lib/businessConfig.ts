@@ -175,22 +175,6 @@ export function normalizeUploadPolicy(policy: UploadPolicy): UploadPolicy {
   return { ...policy, modelFormats: modelFormats.length ? modelFormats : DEFAULT_UPLOAD_POLICY.modelFormats };
 }
 
-function normalizeAdminNav(items: NavItemConfig[]) {
-  const normalized = items.filter((item) => item.path !== '/admin/quote-template');
-  if (!normalized.some((item) => item.path === '/admin/downloads')) {
-    const shareIndex = normalized.findIndex((item) => item.path === '/admin/shares');
-    const next = [...normalized];
-    next.splice(shareIndex >= 0 ? shareIndex + 1 : next.length, 0, {
-      label: '下载统计',
-      icon: 'download',
-      path: '/admin/downloads',
-      enabled: true,
-    });
-    return next;
-  }
-  return normalized;
-}
-
 export function isAdminOnly(item: NavItemConfig): boolean {
   if (item.roles?.includes('ADMIN')) return true;
   return item.path.startsWith('/admin/');

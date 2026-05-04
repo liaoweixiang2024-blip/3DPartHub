@@ -24,7 +24,7 @@
 # 【更新】
 #   默认使用 latest 镜像
 #   手动更新: docker compose pull && docker compose up -d --force-recreate
-#   如需锁定版本: 在 .env 中写入 IMAGE_TAG=v2.8.1
+#   如需锁定版本: 在 .env 中写入 IMAGE_TAG=V2.8.6
 #   检查日志: docker compose logs -f api
 #
 # 【数据安全】

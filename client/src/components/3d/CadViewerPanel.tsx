@@ -321,27 +321,41 @@ export default function CadViewerPanel({
     if (ok) onThumbnailUpdated?.();
   }, [modelId, onThumbnailUpdated, toast]);
 
+  const [pseudoFullscreen, setPseudoFullscreen] = useState(false);
+
   const handleFullscreen = useCallback(() => {
     const el = containerRef.current;
     if (!el) return;
-    if (document.fullscreenElement) {
+    if (pseudoFullscreen) {
+      setPseudoFullscreen(false);
+      return;
+    }
+    if (document.fullscreenElement || (document as any).webkitFullscreenElement) {
       void (document.exitFullscreen || (document as any).webkitExitFullscreen).call(document).catch(() => {});
     } else {
       const fn = el.requestFullscreen || (el as any).webkitRequestFullscreen;
-      if (fn) void fn.call(el).catch(() => {});
+      if (fn) {
+        void fn.call(el).catch(() => setPseudoFullscreen(true));
+      } else {
+        setPseudoFullscreen(true);
+      }
     }
-  }, []);
+  }, [pseudoFullscreen]);
 
   const handleBackClick = useCallback<MouseEventHandler<HTMLButtonElement>>(
     (event) => {
       event.stopPropagation();
-      if (document.fullscreenElement) {
+      if (pseudoFullscreen) {
+        setPseudoFullscreen(false);
+        return;
+      }
+      if (document.fullscreenElement || (document as any).webkitFullscreenElement) {
         void (document.exitFullscreen || (document as any).webkitExitFullscreen).call(document).catch(() => {});
         return;
       }
       onBack?.();
     },
-    [onBack],
+    [onBack, pseudoFullscreen],
   );
 
   const handleViewerProgress = useCallback((progress: number) => {
@@ -356,7 +370,7 @@ export default function CadViewerPanel({
   useEffect(() => {
     const getFullscreenEl = () => document.fullscreenElement || (document as any).webkitFullscreenElement;
     const updateFullscreenState = () => {
-      setIsFullscreen(Boolean(getFullscreenEl()));
+      setIsFullscreen(Boolean(getFullscreenEl()) || pseudoFullscreen);
     };
     updateFullscreenState();
     document.addEventListener('fullscreenchange', updateFullscreenState);
@@ -365,7 +379,7 @@ export default function CadViewerPanel({
       document.removeEventListener('fullscreenchange', updateFullscreenState);
       document.removeEventListener('webkitfullscreenchange', updateFullscreenState);
     };
-  }, []);
+  }, [pseudoFullscreen]);
 
   const handlePartsChange = useCallback((nextParts: ModelPartItem[]) => {
     setParts(nextParts);
@@ -475,7 +489,12 @@ export default function CadViewerPanel({
   const panelStyle = isMobile ? style : ({ contain: 'strict', ...style } as CSSProperties);
 
   return (
-    <div ref={containerRef} className={`${baseClassName} ${className}`} style={panelStyle} onClick={onClick}>
+    <div
+      ref={containerRef}
+      className={`${baseClassName} ${className} ${pseudoFullscreen ? 'fixed inset-0 z-[9999] rounded-none' : ''}`}
+      style={panelStyle}
+      onClick={onClick}
+    >
       <LoadingOverlay progress={loadProgress} />
       <div className={isMobile ? 'absolute inset-0' : 'absolute inset-0'}>
         <Suspense

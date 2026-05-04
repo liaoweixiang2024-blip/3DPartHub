@@ -1,11 +1,11 @@
 import { AnimatePresence, motion } from 'framer-motion';
 import { useState } from 'react';
 import { createPortal } from 'react-dom';
+import { getPublicSettingsSnapshot } from '../../lib/publicSettings';
 import Icon from '../shared/Icon';
 import type { CameraPreset, ViewMode } from './ModelViewer';
 import { CAMERA_ANGLES, MATERIAL_PRESETS, VIEW_MODES, type MaterialPresetKey } from './viewerControls';
 import { dispatchFitModel } from './viewerEvents';
-import { getPublicSettingsSnapshot } from '../../lib/publicSettings';
 
 interface CadViewerToolbarProps {
   variant: 'desktop' | 'mobile';

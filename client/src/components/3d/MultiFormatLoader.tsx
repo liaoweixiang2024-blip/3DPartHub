@@ -3,8 +3,8 @@ import { useFrame, useLoader, useThree } from '@react-three/fiber';
 import { useCallback, useMemo, useEffect, useState, useRef } from 'react';
 import * as THREE from 'three';
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
-import { Line2 } from 'three/examples/jsm/lines/Line2.js';
 import { LineMaterial } from 'three/examples/jsm/lines/LineMaterial.js';
+import { LineSegments2 } from 'three/examples/jsm/lines/LineSegments2.js';
 import { LineSegmentsGeometry } from 'three/examples/jsm/lines/LineSegmentsGeometry.js';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import Icon from '../../components/shared/Icon';
@@ -252,12 +252,12 @@ function syncEdgeOverlay(
   visible: boolean,
   clippingPlanes: THREE.Plane[],
 ) {
-  let overlay = mesh.userData.edgeOverlay as (THREE.LineSegments | Line2) | undefined;
+  let overlay = mesh.userData.edgeOverlay as (THREE.LineSegments | LineSegments2) | undefined;
   const edgeStyle = getEdgeStyleConfig();
 
-  // Check if overlay type needs to change (Line2 vs LineSegments)
+  // Check if overlay type needs to change (thick vs basic line segments)
   const needsThick = edgeStyle.width > 1 && renderer;
-  const isThick = overlay instanceof Line2;
+  const isThick = overlay instanceof LineSegments2;
   if (overlay && needsThick !== isThick) {
     overlay.geometry?.dispose();
     (overlay.material as THREE.Material)?.dispose();
@@ -307,7 +307,7 @@ function syncEdgeOverlay(
       resolution: size,
       worldUnits: false,
     });
-    overlay = new Line2(lineGeo, lineMat);
+    overlay = new LineSegments2(lineGeo, lineMat);
     overlay.computeLineDistances();
   } else {
     const edgeMat = new THREE.LineBasicMaterial({
@@ -333,7 +333,7 @@ function syncEdgeOverlay(
 function syncEdgeTransforms(root: THREE.Object3D) {
   root.traverse((child) => {
     if (!(child instanceof THREE.Mesh)) return;
-    const overlay = child.userData.edgeOverlay as (THREE.LineSegments | Line2) | undefined;
+    const overlay = child.userData.edgeOverlay as (THREE.LineSegments | LineSegments2) | undefined;
     if (!overlay || !overlay.visible) return;
     child.updateWorldMatrix(true, false);
     if (overlay.parent) {
@@ -669,6 +669,7 @@ function CadModel({
     clipDirection,
     clipPosition,
     clipInverted,
+    gl,
     materialPreset,
     materialSignature,
     baseMaterial,
@@ -682,7 +683,7 @@ function CadModel({
     if (!cadGroup) return;
     cadGroup.traverse((child) => {
       if (child instanceof THREE.Mesh && !child.name.startsWith('__cad_')) {
-        const overlay = child.userData.edgeOverlay as (THREE.LineSegments | Line2) | undefined;
+        const overlay = child.userData.edgeOverlay as (THREE.LineSegments | LineSegments2) | undefined;
         if (overlay) {
           overlay.visible = edgesVisible && edgeViewMode !== 'wireframe';
         } else if (edgesVisible && edgeViewMode !== 'wireframe' && !child.userData.edgeOverlaySkipped) {
@@ -939,6 +940,7 @@ function GltfModel({
     clipPosition,
     clipInverted,
     clipPlane,
+    gl,
     materialPreset,
     materialSignature,
     baseMaterial,
@@ -954,7 +956,7 @@ function GltfModel({
     if (!edgeScene) return;
     edgeScene.traverse((child) => {
       if (child instanceof THREE.Mesh && !child.name.startsWith('__cad_')) {
-        const overlay = child.userData.edgeOverlay as (THREE.LineSegments | Line2) | undefined;
+        const overlay = child.userData.edgeOverlay as (THREE.LineSegments | LineSegments2) | undefined;
         if (overlay) {
           overlay.visible = edgesVisible2 && edgeViewMode2 !== 'wireframe';
         } else if (edgesVisible2 && edgeViewMode2 !== 'wireframe' && !child.userData.edgeOverlaySkipped) {

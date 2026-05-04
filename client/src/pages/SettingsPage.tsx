@@ -4030,8 +4030,7 @@ function Content() {
                                         updateSetting={updateSetting}
                                       />
                                     ) : null;
-                                  const isWideControl =
-                                    Boolean(structuredEditor) || item.type === 'textarea' || item.type === 'email-test';
+                                  const isWideControl = Boolean(structuredEditor) || item.type === 'textarea';
                                   const rowClass =
                                     item.type === 'color-scheme'
                                       ? 'px-4 sm:px-6 py-4 flex flex-col gap-4'

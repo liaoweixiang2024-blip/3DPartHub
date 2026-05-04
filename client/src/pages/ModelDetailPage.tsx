@@ -21,7 +21,13 @@ import { useDocumentTitle } from '../hooks/useDocumentTitle';
 import { useModel } from '../hooks/useModels';
 import { useMediaQuery } from '../layouts/hooks/useMediaQuery';
 import { getModelReturnPath, normalizeModelReturnPath } from '../lib/modelReturnPath';
-import { getCachedPublicSettings, getDefaultPreset, getSiteTitle, refreshSiteConfig } from '../lib/publicSettings';
+import {
+  getCachedPublicSettings,
+  getDefaultPreset,
+  getPublicSettingsSnapshot,
+  getSiteTitle,
+  refreshSiteConfig,
+} from '../lib/publicSettings';
 import { useFavoriteStore, useAuthStore } from '../stores';
 import type { ModelSpec, ModelDownload } from '../types';
 
@@ -73,7 +79,7 @@ const DEFAULT_VIEWER_DISPLAY_PREFS: ViewerDisplayPrefs = {
   activeCamera: 'iso',
   showDimensions: false,
   materialPreset: (getDefaultPreset() as MaterialPresetKey) || 'default',
-  showEdges: getCachedPublicSettings().viewer_edge_enabled !== false,
+  showEdges: getPublicSettingsSnapshot().viewer_edge_enabled !== false,
   showAxis: false,
 };
 

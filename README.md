@@ -176,13 +176,13 @@ curl http://localhost:3780/api/health
 如需锁定特定版本，修改 `.env` 中的 `IMAGE_TAG`：
 
 ```bash
-sed -i 's/IMAGE_TAG=.*/IMAGE_TAG=v2.8.1/' .env
+sed -i 's/IMAGE_TAG=.*/IMAGE_TAG=V2.8.6/' .env
 docker compose pull && docker compose up -d --force-recreate
 ```
 
 升级前建议在后台 **设置 -> 数据备份** 创建并校验一次备份。
 
-要锁定到指定版本，在 `.env` 中设置 `IMAGE_TAG=v2.8.1` 等固定标签即可。
+要锁定到指定版本，在 `.env` 中设置 `IMAGE_TAG=V2.8.6` 等固定标签即可。
 
 ---
 
