@@ -56,6 +56,11 @@ export interface SystemSettings {
   mat_default_metalness: number;
   mat_default_roughness: number;
   mat_default_envMapIntensity: number;
+  // 3D Material — original (empty = no override)
+  mat_original_color: string;
+  mat_original_metalness: string | number;
+  mat_original_roughness: string | number;
+  mat_original_envMapIntensity: string | number;
   // 3D Material — metal
   mat_metal_color: string;
   mat_metal_metalness: number;
@@ -81,8 +86,14 @@ export interface SystemSettings {
   viewer_fill_light_intensity: number;
   viewer_hemisphere_intensity: number;
   viewer_bg_color: string;
+  viewer_default_preset: string;
+  viewer_visible_presets: string;
+  viewer_edge_enabled: boolean;
   viewer_edge_threshold_angle: number;
   viewer_edge_vertex_limit: number;
+  viewer_edge_color: string;
+  viewer_edge_opacity: number;
+  viewer_edge_width: number;
   viewer_measure_default_unit: string;
   viewer_measure_record_limit: number;
   // Account security

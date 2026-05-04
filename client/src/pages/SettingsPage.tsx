@@ -124,6 +124,10 @@ const DEFAULT_SETTINGS: SystemSettings = {
   mat_default_metalness: 0.5,
   mat_default_roughness: 0.25,
   mat_default_envMapIntensity: 1.5,
+  mat_original_color: '',
+  mat_original_metalness: '',
+  mat_original_roughness: '',
+  mat_original_envMapIntensity: '',
   mat_metal_color: '#f0f0f4',
   mat_metal_metalness: 1.0,
   mat_metal_roughness: 0.05,
@@ -145,8 +149,14 @@ const DEFAULT_SETTINGS: SystemSettings = {
   viewer_fill_light_intensity: 0.8,
   viewer_hemisphere_intensity: 0.5,
   viewer_bg_color: '#ffffff',
+  viewer_default_preset: 'default',
+  viewer_visible_presets: 'original,default,metal,plastic,glass',
+  viewer_edge_enabled: true,
   viewer_edge_threshold_angle: 28,
   viewer_edge_vertex_limit: 700000,
+  viewer_edge_color: '#000000',
+  viewer_edge_opacity: 1.0,
+  viewer_edge_width: 1,
   viewer_measure_default_unit: 'auto',
   viewer_measure_record_limit: 12,
   security_email_code_cooldown_seconds: 60,
@@ -264,14 +274,18 @@ type ActionSettingItem = SettingItemBase & {
 
 type SettingItem = SystemSettingItem | ActionSettingItem;
 
+interface SettingGroup {
+  title: string;
+  icon: string;
+  items: (SettingItem | { _section: string })[];
+}
+
 function isSystemSettingKey(key: SettingItem['key']): key is keyof SystemSettings {
   return key !== 'smtp_test';
 }
 
-interface SettingGroup {
-  title: string;
-  icon: string;
-  items: SettingItem[];
+function isSection(item: SettingItem | { _section: string }): item is { _section: string } {
+  return '_section' in item;
 }
 
 const GROUPS: SettingGroup[] = [
@@ -558,215 +572,7 @@ const GROUPS: SettingGroup[] = [
   {
     title: '3D 预览',
     icon: 'view_in_ar',
-    items: [
-      // 边线与测量
-      {
-        key: 'viewer_edge_threshold_angle',
-        label: '边线角度',
-        desc: '数值越小边线越多，模型更清晰但更耗性能',
-        type: 'number',
-        min: 1,
-        max: 89,
-      },
-      {
-        key: 'viewer_edge_vertex_limit',
-        label: '边线顶点上限',
-        desc: '顶点超过该数量时跳过边线叠加，0 表示不限制',
-        type: 'number',
-        min: 0,
-        max: 5000000,
-      },
-      {
-        key: 'viewer_measure_default_unit',
-        label: '测量默认单位',
-        desc: '测量工具打开时默认使用的单位',
-        type: 'select',
-        options: [
-          { value: 'auto', label: '自动' },
-          { value: 'mm', label: '毫米 mm' },
-          { value: 'cm', label: '厘米 cm' },
-          { value: 'm', label: '米 m' },
-        ],
-      },
-      {
-        key: 'viewer_measure_record_limit',
-        label: '测量记录数量',
-        desc: '测量面板最多保留最近多少条记录',
-        type: 'number',
-        min: 1,
-        max: 100,
-      },
-      // 灯光与环境
-      {
-        key: 'viewer_exposure',
-        label: '曝光度',
-        desc: '场景整体亮度，1.0 为标准曝光',
-        type: 'number',
-        min: 0.1,
-        max: 3.0,
-      },
-      {
-        key: 'viewer_ambient_intensity',
-        label: '环境光强度',
-        desc: '场景全局填充光，影响整体基础亮度',
-        type: 'number',
-        min: 0,
-        max: 2.0,
-      },
-      {
-        key: 'viewer_main_light_intensity',
-        label: '主灯强度',
-        desc: '主要定向光源，决定模型主体明暗对比',
-        type: 'number',
-        min: 0,
-        max: 3.0,
-      },
-      {
-        key: 'viewer_fill_light_intensity',
-        label: '补光强度',
-        desc: '对侧柔光，减轻主灯产生的阴影',
-        type: 'number',
-        min: 0,
-        max: 2.0,
-      },
-      {
-        key: 'viewer_hemisphere_intensity',
-        label: '半球光强度',
-        desc: '天地渐变光，模拟自然天空散射',
-        type: 'number',
-        min: 0,
-        max: 2.0,
-      },
-      { key: 'viewer_bg_color', label: '背景色', desc: '3D 视图背景，支持纯色或 CSS 渐变', type: 'text' },
-      // 材质预设 — 默认
-      { key: 'mat_default_color', label: '默认材质 · 颜色', desc: '模型加载后的初始颜色', type: 'color' },
-      {
-        key: 'mat_default_metalness',
-        label: '默认材质 · 金属度',
-        desc: '0 = 完全非金属，1 = 完全金属',
-        type: 'number',
-        min: 0,
-        max: 1.0,
-      },
-      {
-        key: 'mat_default_roughness',
-        label: '默认材质 · 粗糙度',
-        desc: '0 = 镜面光滑，1 = 完全粗糙',
-        type: 'number',
-        min: 0,
-        max: 1.0,
-      },
-      {
-        key: 'mat_default_envMapIntensity',
-        label: '默认材质 · 环境反射',
-        desc: '环境贴图对材质的影响强度',
-        type: 'number',
-        min: 0,
-        max: 3.0,
-      },
-      // 材质预设 — 金属
-      { key: 'mat_metal_color', label: '金属材质 · 颜色', desc: '金属预设的基础颜色', type: 'color' },
-      {
-        key: 'mat_metal_metalness',
-        label: '金属材质 · 金属度',
-        desc: '金属材质的金属感',
-        type: 'number',
-        min: 0,
-        max: 1.0,
-      },
-      {
-        key: 'mat_metal_roughness',
-        label: '金属材质 · 粗糙度',
-        desc: '金属材质的光泽度',
-        type: 'number',
-        min: 0,
-        max: 1.0,
-      },
-      {
-        key: 'mat_metal_envMapIntensity',
-        label: '金属材质 · 环境反射',
-        desc: '金属材质的环境反射强度',
-        type: 'number',
-        min: 0,
-        max: 3.0,
-      },
-      // 材质预设 — 塑料
-      { key: 'mat_plastic_color', label: '塑料材质 · 颜色', desc: '塑料预设的基础颜色', type: 'color' },
-      {
-        key: 'mat_plastic_metalness',
-        label: '塑料材质 · 金属度',
-        desc: '塑料材质通常为 0',
-        type: 'number',
-        min: 0,
-        max: 1.0,
-      },
-      {
-        key: 'mat_plastic_roughness',
-        label: '塑料材质 · 粗糙度',
-        desc: '塑料材质的表面粗糙程度',
-        type: 'number',
-        min: 0,
-        max: 1.0,
-      },
-      {
-        key: 'mat_plastic_envMapIntensity',
-        label: '塑料材质 · 环境反射',
-        desc: '塑料材质的环境反射强度',
-        type: 'number',
-        min: 0,
-        max: 3.0,
-      },
-      // 材质预设 — 玻璃
-      { key: 'mat_glass_color', label: '玻璃材质 · 颜色', desc: '玻璃预设的色调', type: 'color' },
-      {
-        key: 'mat_glass_metalness',
-        label: '玻璃材质 · 金属度',
-        desc: '玻璃材质通常为 0',
-        type: 'number',
-        min: 0,
-        max: 1.0,
-      },
-      {
-        key: 'mat_glass_roughness',
-        label: '玻璃材质 · 粗糙度',
-        desc: '玻璃材质通常为 0（完全光滑）',
-        type: 'number',
-        min: 0,
-        max: 1.0,
-      },
-      {
-        key: 'mat_glass_envMapIntensity',
-        label: '玻璃材质 · 环境反射',
-        desc: '玻璃材质的环境反射强度',
-        type: 'number',
-        min: 0,
-        max: 3.0,
-      },
-      {
-        key: 'mat_glass_transmission',
-        label: '玻璃材质 · 透射率',
-        desc: '光线穿过材质的比例，1 = 完全透明',
-        type: 'number',
-        min: 0,
-        max: 1.0,
-      },
-      {
-        key: 'mat_glass_ior',
-        label: '玻璃材质 · 折射率',
-        desc: '玻璃的折射率，普通玻璃约 1.5',
-        type: 'number',
-        min: 1.0,
-        max: 2.5,
-      },
-      {
-        key: 'mat_glass_thickness',
-        label: '玻璃材质 · 厚度',
-        desc: '虚拟厚度，影响折射和透射效果',
-        type: 'number',
-        min: 0,
-        max: 5.0,
-      },
-    ],
+    items: [],
   },
   {
     title: '选型设置',
@@ -989,6 +795,265 @@ const GROUPS: SettingGroup[] = [
       },
     ],
   },
+];
+
+// ── 3D Preview sub-tabs & material preset definitions ──
+type PreviewSubtab = 'general' | 'edge' | 'measure' | 'light' | 'material';
+type MaterialPresetKey = 'original' | 'default' | 'metal' | 'plastic' | 'glass';
+
+const PREVIEW_SUBTABS: { key: PreviewSubtab; label: string; icon: string }[] = [
+  { key: 'general', label: '通用', icon: 'tune' },
+  { key: 'edge', label: '边线', icon: 'content_cut' },
+  { key: 'measure', label: '测量', icon: 'straighten' },
+  { key: 'light', label: '灯光', icon: 'light_mode' },
+  { key: 'material', label: '材质', icon: 'palette' },
+];
+
+const MAT_PRESET_OPTIONS: { value: MaterialPresetKey; label: string }[] = [
+  { value: 'original', label: '原色' },
+  { value: 'default', label: '智能灰' },
+  { value: 'metal', label: '金属' },
+  { value: 'plastic', label: '塑料' },
+  { value: 'glass', label: '玻璃' },
+];
+
+const PREVIEW_TAB_ITEMS: Record<Exclude<PreviewSubtab, 'material'>, SystemSettingItem[]> = {
+  general: [
+    {
+      key: 'viewer_default_preset',
+      label: '默认材质预设',
+      desc: '打开模型详情页时默认使用的材质风格',
+      type: 'select',
+      options: MAT_PRESET_OPTIONS,
+    },
+    { key: 'viewer_visible_presets', label: '__preset_checkboxes__', desc: '', type: 'text' },
+  ],
+  edge: [
+    { key: 'viewer_edge_enabled', label: '显示边线', desc: '关闭后模型默认不叠加实体边线', type: 'switch' },
+    {
+      key: 'viewer_edge_threshold_angle',
+      label: '边线角度',
+      desc: '数值越小边线越多，模型更清晰但更耗性能',
+      type: 'range',
+      min: 1,
+      max: 89,
+      step: 1,
+    },
+    {
+      key: 'viewer_edge_vertex_limit',
+      label: '边线顶点上限',
+      desc: '顶点超过该数量时跳过边线叠加，0 表示不限制',
+      type: 'number',
+      min: 0,
+      max: 5000000,
+    },
+    { key: 'viewer_edge_color', label: '边线颜色', desc: '3D 模型边线叠加的颜色', type: 'color' },
+    {
+      key: 'viewer_edge_opacity',
+      label: '边线透明度',
+      desc: '1.0 = 完全不透明，0.1 = 几乎透明',
+      type: 'range',
+      min: 0.1,
+      max: 1.0,
+      step: 0.05,
+    },
+    {
+      key: 'viewer_edge_width',
+      label: '边线宽度',
+      desc: '1 = 标准细线，数值越大线越粗',
+      type: 'range',
+      min: 1,
+      max: 5,
+      step: 0.1,
+    },
+  ],
+  measure: [
+    {
+      key: 'viewer_measure_default_unit',
+      label: '测量默认单位',
+      desc: '测量工具打开时默认使用的单位',
+      type: 'select',
+      options: [
+        { value: 'auto', label: '自动' },
+        { value: 'mm', label: '毫米 mm' },
+        { value: 'cm', label: '厘米 cm' },
+        { value: 'm', label: '米 m' },
+      ],
+    },
+    {
+      key: 'viewer_measure_record_limit',
+      label: '测量记录数量',
+      desc: '测量面板最多保留最近多少条记录',
+      type: 'range',
+      min: 1,
+      max: 100,
+      step: 1,
+    },
+  ],
+  light: [
+    {
+      key: 'viewer_exposure',
+      label: '曝光度',
+      desc: '场景整体亮度，1.0 为标准曝光',
+      type: 'range',
+      min: 0.1,
+      max: 3.0,
+      step: 0.05,
+    },
+    {
+      key: 'viewer_ambient_intensity',
+      label: '环境光强度',
+      desc: '场景全局填充光，影响整体基础亮度',
+      type: 'range',
+      min: 0,
+      max: 2.0,
+      step: 0.05,
+    },
+    {
+      key: 'viewer_main_light_intensity',
+      label: '主灯强度',
+      desc: '主要定向光源，决定模型主体明暗对比',
+      type: 'range',
+      min: 0,
+      max: 3.0,
+      step: 0.05,
+    },
+    {
+      key: 'viewer_fill_light_intensity',
+      label: '补光强度',
+      desc: '对侧柔光，减轻主灯产生的阴影',
+      type: 'range',
+      min: 0,
+      max: 2.0,
+      step: 0.05,
+    },
+    {
+      key: 'viewer_hemisphere_intensity',
+      label: '半球光强度',
+      desc: '天地渐变光，模拟自然天空散射',
+      type: 'range',
+      min: 0,
+      max: 2.0,
+      step: 0.05,
+    },
+    { key: 'viewer_bg_color', label: '背景色', desc: '3D 视图背景，支持纯色或 CSS 渐变', type: 'text' },
+  ],
+};
+
+interface MatPresetField {
+  key: keyof SystemSettings;
+  label: string;
+  desc: string;
+  type: 'range' | 'color';
+  min?: number;
+  max?: number;
+  step?: number;
+  canEmpty?: boolean;
+}
+
+const MAT_PRESET_FIELDS: Record<MaterialPresetKey, MatPresetField[]> = {
+  original: [
+    { key: 'mat_original_color', label: '颜色', desc: '留空使用模型自带颜色', type: 'color', canEmpty: true },
+    {
+      key: 'mat_original_metalness',
+      label: '金属度',
+      desc: '留空使用模型原始值',
+      type: 'range',
+      min: 0,
+      max: 1,
+      step: 0.01,
+      canEmpty: true,
+    },
+    {
+      key: 'mat_original_roughness',
+      label: '粗糙度',
+      desc: '留空使用模型原始值',
+      type: 'range',
+      min: 0,
+      max: 1,
+      step: 0.01,
+      canEmpty: true,
+    },
+    {
+      key: 'mat_original_envMapIntensity',
+      label: '环境反射',
+      desc: '留空使用模型原始值',
+      type: 'range',
+      min: 0,
+      max: 3,
+      step: 0.01,
+      canEmpty: true,
+    },
+  ],
+  default: [
+    { key: 'mat_default_color', label: '颜色', desc: '', type: 'color' },
+    { key: 'mat_default_metalness', label: '金属度', desc: '', type: 'range', min: 0, max: 1, step: 0.01 },
+    { key: 'mat_default_roughness', label: '粗糙度', desc: '', type: 'range', min: 0, max: 1, step: 0.01 },
+    { key: 'mat_default_envMapIntensity', label: '环境反射', desc: '', type: 'range', min: 0, max: 3, step: 0.01 },
+  ],
+  metal: [
+    { key: 'mat_metal_color', label: '颜色', desc: '', type: 'color' },
+    { key: 'mat_metal_metalness', label: '金属度', desc: '', type: 'range', min: 0, max: 1, step: 0.01 },
+    { key: 'mat_metal_roughness', label: '粗糙度', desc: '', type: 'range', min: 0, max: 1, step: 0.01 },
+    { key: 'mat_metal_envMapIntensity', label: '环境反射', desc: '', type: 'range', min: 0, max: 3, step: 0.01 },
+  ],
+  plastic: [
+    { key: 'mat_plastic_color', label: '颜色', desc: '', type: 'color' },
+    { key: 'mat_plastic_metalness', label: '金属度', desc: '', type: 'range', min: 0, max: 1, step: 0.01 },
+    { key: 'mat_plastic_roughness', label: '粗糙度', desc: '', type: 'range', min: 0, max: 1, step: 0.01 },
+    { key: 'mat_plastic_envMapIntensity', label: '环境反射', desc: '', type: 'range', min: 0, max: 3, step: 0.01 },
+  ],
+  glass: [
+    { key: 'mat_glass_color', label: '颜色', desc: '', type: 'color' },
+    { key: 'mat_glass_metalness', label: '金属度', desc: '', type: 'range', min: 0, max: 1, step: 0.01 },
+    { key: 'mat_glass_roughness', label: '粗糙度', desc: '', type: 'range', min: 0, max: 1, step: 0.01 },
+    { key: 'mat_glass_envMapIntensity', label: '环境反射', desc: '', type: 'range', min: 0, max: 3, step: 0.01 },
+    { key: 'mat_glass_transmission', label: '透射率', desc: '', type: 'range', min: 0, max: 1, step: 0.01 },
+    { key: 'mat_glass_ior', label: '折射率', desc: '', type: 'range', min: 1, max: 2.5, step: 0.01 },
+    { key: 'mat_glass_thickness', label: '厚度', desc: '', type: 'range', min: 0, max: 5, step: 0.01 },
+  ],
+};
+
+// All 3D preview setting keys (used by reset-to-defaults)
+const PREVIEW_SETTING_KEYS: (keyof SystemSettings)[] = [
+  'viewer_default_preset',
+  'viewer_edge_enabled',
+  'viewer_edge_threshold_angle',
+  'viewer_edge_vertex_limit',
+  'viewer_edge_color',
+  'viewer_edge_opacity',
+  'viewer_edge_width',
+  'viewer_measure_default_unit',
+  'viewer_measure_record_limit',
+  'viewer_exposure',
+  'viewer_ambient_intensity',
+  'viewer_main_light_intensity',
+  'viewer_fill_light_intensity',
+  'viewer_hemisphere_intensity',
+  'viewer_bg_color',
+  'mat_original_color',
+  'mat_original_metalness',
+  'mat_original_roughness',
+  'mat_original_envMapIntensity',
+  'mat_default_color',
+  'mat_default_metalness',
+  'mat_default_roughness',
+  'mat_default_envMapIntensity',
+  'mat_metal_color',
+  'mat_metal_metalness',
+  'mat_metal_roughness',
+  'mat_metal_envMapIntensity',
+  'mat_plastic_color',
+  'mat_plastic_metalness',
+  'mat_plastic_roughness',
+  'mat_plastic_envMapIntensity',
+  'mat_glass_color',
+  'mat_glass_metalness',
+  'mat_glass_roughness',
+  'mat_glass_envMapIntensity',
+  'mat_glass_transmission',
+  'mat_glass_ior',
+  'mat_glass_thickness',
 ];
 
 /** Shared progress card — used by backup create, restore, import-restore, import-save, update */
@@ -3000,6 +3065,8 @@ function Content() {
   const [testEmailTo, setTestEmailTo] = useState('');
   const [testingEmail, setTestingEmail] = useState(false);
   const [activeTab, setActiveTab] = useState(GROUPS[0]?.title || '访问控制');
+  const [previewSubtab, setPreviewSubtab] = useState<PreviewSubtab>('general');
+  const [matPresetEdit, setMatPresetEdit] = useState<MaterialPresetKey>('default');
   const imageInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
 
   // Backup state
@@ -3385,9 +3452,7 @@ function Content() {
 
   function handleReset3DPreview() {
     const defaults = Object.fromEntries(
-      activeGroup!.items
-        .filter((item): item is SystemSettingItem => isSystemSettingKey(item.key))
-        .map((item) => [item.key, DEFAULT_SETTINGS[item.key]]),
+      PREVIEW_SETTING_KEYS.map((key) => [key, DEFAULT_SETTINGS[key]]),
     ) as Partial<SystemSettings>;
     setSettings((prev) => ({ ...prev, ...defaults }) as SystemSettings);
     setChanged(true);
@@ -3787,22 +3852,413 @@ function Content() {
             <div key={activeTab} className="admin-tab-panel flex flex-col gap-4">
               {activeGroup
                 ? [activeGroup].map((group) => {
-                    const visibleItems = group.items;
                     const is3DPreview = group.title === '3D 预览';
-                    return (
-                      <div key={group.title} className="divide-y divide-outline-variant/5">
-                        {is3DPreview && (
-                          <div className="flex items-center justify-end px-4 py-2">
+
+                    // ── 3D Preview: custom tabbed layout ──
+                    if (is3DPreview) {
+                      return (
+                        <div key={group.title}>
+                          <div className="flex items-center justify-between px-4 py-2">
+                            <div className="flex gap-1 overflow-x-auto">
+                              {PREVIEW_SUBTABS.map((tab) => (
+                                <button
+                                  key={tab.key}
+                                  onClick={() => setPreviewSubtab(tab.key)}
+                                  className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap transition-colors ${
+                                    previewSubtab === tab.key
+                                      ? 'bg-primary-container/20 text-primary-container'
+                                      : 'text-on-surface-variant hover:bg-surface-container-high'
+                                  }`}
+                                >
+                                  <Icon name={tab.icon} size={14} />
+                                  {tab.label}
+                                </button>
+                              ))}
+                            </div>
                             <button
                               onClick={handleReset3DPreview}
-                              className="inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium text-on-surface-variant transition-colors hover:bg-surface-container-high hover:text-on-surface"
+                              className="inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium text-on-surface-variant transition-colors hover:bg-surface-container-high hover:text-on-surface shrink-0 ml-2"
                             >
                               <Icon name="restart_alt" size={14} />
-                              恢复默认设置
+                              恢复默认
                             </button>
                           </div>
-                        )}
-                        {visibleItems.map((item, itemIndex) => {
+
+                          <div className="divide-y divide-outline-variant/5">
+                            {/* Material tab: dropdown + dynamic fields */}
+                            {previewSubtab === 'material' ? (
+                              <>
+                                <div className="px-4 sm:px-6 py-4 grid grid-cols-1 lg:grid-cols-[minmax(180px,260px)_minmax(0,1fr)] gap-3 lg:gap-6 lg:items-center">
+                                  <div className="min-w-0 max-w-2xl">
+                                    <p className="text-sm font-medium text-on-surface">选择预设</p>
+                                    <p className="text-xs text-on-surface-variant mt-0.5">选择要编辑的材质预设方案</p>
+                                  </div>
+                                  <select
+                                    value={matPresetEdit}
+                                    onChange={(e) => setMatPresetEdit(e.target.value as MaterialPresetKey)}
+                                    className="w-full lg:max-w-sm bg-surface-container-lowest text-on-surface text-sm rounded-md px-3 py-2 border border-outline-variant/20 outline-none focus:border-primary"
+                                  >
+                                    {MAT_PRESET_OPTIONS.map((opt) => (
+                                      <option key={opt.value} value={opt.value}>
+                                        {opt.label}
+                                      </option>
+                                    ))}
+                                  </select>
+                                </div>
+                                {MAT_PRESET_FIELDS[matPresetEdit].map((field) => {
+                                  const val = settings[field.key];
+                                  const isEmpty = val === '' || val === undefined;
+                                  return (
+                                    <div
+                                      key={field.key}
+                                      className="px-4 sm:px-6 py-4 grid grid-cols-1 lg:grid-cols-[minmax(180px,260px)_minmax(0,1fr)] gap-3 lg:gap-6 lg:items-center hover:bg-surface-container-high/30 transition-colors"
+                                    >
+                                      <div className="min-w-0 max-w-2xl">
+                                        <p className="text-sm font-medium text-on-surface">
+                                          {field.label}
+                                          {field.canEmpty && !isEmpty && (
+                                            <button
+                                              onClick={() => updateSetting(field.key, '')}
+                                              className="ml-2 text-[10px] text-error hover:underline"
+                                            >
+                                              重置
+                                            </button>
+                                          )}
+                                        </p>
+                                        <p className="text-xs text-on-surface-variant mt-0.5">{field.desc}</p>
+                                      </div>
+                                      {field.type === 'color' ? (
+                                        <div className="flex items-center gap-2 w-full lg:max-w-sm lg:justify-self-start">
+                                          {!isEmpty && (
+                                            <span
+                                              className="w-6 h-6 rounded-md border border-outline-variant/30 shrink-0"
+                                              style={{ backgroundColor: val as string }}
+                                            />
+                                          )}
+                                          <input
+                                            type="text"
+                                            value={(val as string) || ''}
+                                            onChange={(e) => updateSetting(field.key, e.target.value)}
+                                            placeholder={field.canEmpty ? '留空 = 使用模型原色' : '#FF6600'}
+                                            className="w-full bg-surface-container-lowest text-on-surface text-sm rounded-md px-3 py-2 border border-outline-variant/20 outline-none focus:border-primary placeholder:text-on-surface-variant/30 font-mono"
+                                          />
+                                          <input
+                                            type="color"
+                                            value={(val as string) || '#000000'}
+                                            onChange={(e) => updateSetting(field.key, e.target.value)}
+                                            className="w-8 h-8 rounded cursor-pointer border-0 p-0"
+                                          />
+                                        </div>
+                                      ) : field.canEmpty ? (
+                                        <div className="space-y-2 w-full lg:max-w-sm">
+                                          <div className="flex items-center gap-2">
+                                            <Switch
+                                              checked={!isEmpty}
+                                              onChange={(on) => {
+                                                if (on) {
+                                                  updateSetting(field.key, field.min ?? 0);
+                                                } else {
+                                                  updateSetting(field.key, '');
+                                                }
+                                              }}
+                                            />
+                                            <span className="text-xs text-on-surface-variant">
+                                              {isEmpty ? '使用模型原色' : '自定义覆盖'}
+                                            </span>
+                                          </div>
+                                          {!isEmpty && (
+                                            <div className="flex items-center gap-3">
+                                              <input
+                                                type="range"
+                                                min={field.min ?? 0}
+                                                max={field.max ?? 1}
+                                                step={field.step ?? 0.01}
+                                                value={Number(val) || (field.min ?? 0)}
+                                                onChange={(e) => updateSetting(field.key, parseFloat(e.target.value))}
+                                                className="w-full accent-[var(--color-primary-container)]"
+                                              />
+                                              <span className="text-xs font-mono text-on-surface w-10 text-right">
+                                                {(Number(val) || 0).toFixed(
+                                                  field.step && field.step < 0.1
+                                                    ? 2
+                                                    : field.step && field.step < 1
+                                                      ? 1
+                                                      : 0,
+                                                )}
+                                              </span>
+                                            </div>
+                                          )}
+                                        </div>
+                                      ) : (
+                                        <div className="flex items-center gap-3 w-full lg:max-w-sm lg:justify-self-start">
+                                          <input
+                                            type="range"
+                                            min={field.min ?? 0}
+                                            max={field.max ?? 1}
+                                            step={field.step ?? 0.01}
+                                            value={Number(val) || 0}
+                                            onChange={(e) => updateSetting(field.key, parseFloat(e.target.value))}
+                                            className="w-full accent-[var(--color-primary-container)]"
+                                          />
+                                          <span className="text-xs font-mono text-on-surface w-10 text-right">
+                                            {(Number(val) || 0).toFixed(
+                                              field.step && field.step < 0.1 ? 2 : field.step && field.step < 1 ? 1 : 0,
+                                            )}
+                                          </span>
+                                        </div>
+                                      )}
+                                    </div>
+                                  );
+                                })}
+                              </>
+                            ) : (
+                              /* Non-material tabs: standard rendering */
+                              PREVIEW_TAB_ITEMS[previewSubtab as Exclude<PreviewSubtab, 'material'>].map(
+                                (item, itemIndex) => {
+                                  const structuredEditor =
+                                    isSystemSettingKey(item.key) && STRUCTURED_SETTING_KEYS.has(item.key) ? (
+                                      <StructuredSettingEditor
+                                        itemKey={item.key}
+                                        settings={settings}
+                                        updateSetting={updateSetting}
+                                      />
+                                    ) : null;
+                                  const isWideControl =
+                                    Boolean(structuredEditor) || item.type === 'textarea' || item.type === 'email-test';
+                                  const rowClass =
+                                    item.type === 'color-scheme'
+                                      ? 'px-4 sm:px-6 py-4 flex flex-col gap-4'
+                                      : isWideControl
+                                        ? 'px-4 sm:px-6 py-4 flex flex-col gap-3'
+                                        : 'px-4 sm:px-6 py-4 grid grid-cols-1 lg:grid-cols-[minmax(180px,260px)_minmax(0,1fr)] gap-3 lg:gap-6 lg:items-center';
+                                  return (
+                                    <div
+                                      key={`preview-${item.key}-${itemIndex}`}
+                                      className={`${rowClass} hover:bg-surface-container-high/30 transition-colors`}
+                                    >
+                                      {item.type === 'color-scheme' ? (
+                                        <ColorSchemeEditor settings={settings} updateSetting={updateSetting} />
+                                      ) : (
+                                        <>
+                                          <div className="min-w-0 max-w-2xl">
+                                            <p className="text-sm font-medium text-on-surface">
+                                              {item.label === '__preset_checkboxes__' ? '可见预设' : item.label}
+                                            </p>
+                                            <p className="text-xs text-on-surface-variant mt-0.5">
+                                              {item.label === '__preset_checkboxes__'
+                                                ? '勾选要在模型查看器工具栏中显示的材质预设'
+                                                : item.desc}
+                                            </p>
+                                          </div>
+                                          {item.key === 'viewer_visible_presets' ? (
+                                            <div className="flex flex-wrap gap-2">
+                                              {MAT_PRESET_OPTIONS.map((opt) => {
+                                                const current = String(settings.viewer_visible_presets ?? '');
+                                                const selected =
+                                                  current.trim() === ''
+                                                    ? MAT_PRESET_OPTIONS.map((o) => o.value)
+                                                    : current
+                                                        .split(',')
+                                                        .map((s) => s.trim())
+                                                        .filter(Boolean);
+                                                const enabled = selected.includes(opt.value);
+                                                return (
+                                                  <button
+                                                    key={opt.value}
+                                                    onClick={() => {
+                                                      let next: string[];
+                                                      if (enabled && selected.length <= 1) return;
+                                                      if (enabled) {
+                                                        next = selected.filter((k) => k !== opt.value);
+                                                      } else {
+                                                        next = [...selected, opt.value];
+                                                      }
+                                                      updateSetting('viewer_visible_presets', next.join(','));
+                                                    }}
+                                                    className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors border ${
+                                                      enabled
+                                                        ? 'bg-primary-container/20 text-primary-container border-primary-container/30'
+                                                        : 'bg-surface-container-highest/20 text-on-surface-variant/50 border-outline-variant/10'
+                                                    }`}
+                                                  >
+                                                    <Icon name={enabled ? 'check_circle' : 'circle'} size={14} />
+                                                    {opt.label}
+                                                  </button>
+                                                );
+                                              })}
+                                            </div>
+                                          ) : (
+                                            structuredEditor ||
+                                            (item.type === 'switch' ? (
+                                              <Switch
+                                                checked={settings[item.key] as boolean}
+                                                onChange={(v) => updateSetting(item.key, v)}
+                                              />
+                                            ) : item.type === 'image' ? (
+                                              <div className="flex flex-wrap items-center gap-3 min-w-0 lg:justify-self-start">
+                                                {settings[item.key] && (
+                                                  <SafeImage
+                                                    src={settings[item.key] as string}
+                                                    alt="预览"
+                                                    className={`${item.key === 'site_icon' || item.key === 'site_favicon' ? 'h-12 w-12' : 'h-12 w-32'} object-contain bg-surface-container-lowest rounded border border-outline-variant/20`}
+                                                    fallbackIcon="image"
+                                                  />
+                                                )}
+                                                <div className="flex items-center gap-2">
+                                                  <input
+                                                    ref={(el) => {
+                                                      imageInputRefs.current[item.key] = el;
+                                                    }}
+                                                    type="file"
+                                                    accept="image/png,image/jpeg,image/svg+xml,image/webp,image/x-icon,image/vnd.microsoft.icon,.ico"
+                                                    onChange={(e) => handleImageUpload(item.key, e)}
+                                                    className="hidden"
+                                                  />
+                                                  <button
+                                                    onClick={() => imageInputRefs.current[item.key]?.click()}
+                                                    disabled={uploading}
+                                                    className="px-3 py-1.5 text-xs font-medium bg-primary-container/20 text-primary-container rounded-md hover:bg-primary-container/30 disabled:opacity-50 transition-colors"
+                                                  >
+                                                    {uploading
+                                                      ? '上传中...'
+                                                      : settings[item.key]
+                                                        ? '更换图片'
+                                                        : '上传图片'}
+                                                  </button>
+                                                  {settings[item.key] && (
+                                                    <button
+                                                      onClick={() => {
+                                                        updateSetting(item.key, '');
+                                                      }}
+                                                      className="px-2 py-1.5 text-xs text-error hover:bg-error-container/10 rounded-md transition-colors"
+                                                    >
+                                                      移除
+                                                    </button>
+                                                  )}
+                                                </div>
+                                              </div>
+                                            ) : item.type === 'number' ? (
+                                              <div className="flex items-center gap-2 min-w-0 lg:justify-self-start">
+                                                <input
+                                                  type="number"
+                                                  min={item.min ?? 0}
+                                                  max={item.max}
+                                                  value={settings[item.key] as number}
+                                                  onChange={(e) => {
+                                                    const raw = parseFloat(e.target.value) || 0;
+                                                    const min = item.min ?? 0;
+                                                    const max = item.max ?? Number.MAX_SAFE_INTEGER;
+                                                    updateSetting(item.key, Math.min(max, Math.max(min, raw)));
+                                                  }}
+                                                  className="w-28 bg-surface-container-lowest text-on-surface text-sm text-center rounded-md px-3 py-2 border border-outline-variant/20 outline-none focus:border-primary"
+                                                />
+                                                {numberSettingUnit(item.key) && (
+                                                  <span className="text-xs text-on-surface-variant">
+                                                    {numberSettingUnit(item.key)}
+                                                  </span>
+                                                )}
+                                              </div>
+                                            ) : item.type === 'range' ? (
+                                              <div className="flex items-center gap-3 w-full lg:max-w-sm lg:justify-self-start">
+                                                <input
+                                                  type="range"
+                                                  min={item.min ?? 0}
+                                                  max={item.max ?? 1}
+                                                  step={item.step ?? 0.01}
+                                                  value={Number(settings[item.key]) || 0}
+                                                  onChange={(e) => updateSetting(item.key, parseFloat(e.target.value))}
+                                                  className="w-full accent-[var(--color-primary-container)]"
+                                                />
+                                                <span className="text-xs font-mono text-on-surface w-10 text-right">
+                                                  {(Number(settings[item.key]) || 0).toFixed(
+                                                    item.step && item.step < 0.1
+                                                      ? 2
+                                                      : item.step && item.step < 1
+                                                        ? 1
+                                                        : 0,
+                                                  )}
+                                                </span>
+                                              </div>
+                                            ) : item.type === 'textarea' ? (
+                                              <div className="w-full">
+                                                <textarea
+                                                  value={settings[item.key] as string}
+                                                  onChange={(e) => updateSetting(item.key, e.target.value)}
+                                                  placeholder={item.desc}
+                                                  rows={3}
+                                                  className="w-full bg-surface-container-lowest text-on-surface text-sm rounded-md px-3 py-2 border border-outline-variant/20 outline-none focus:border-primary placeholder:text-on-surface-variant/30 resize-y font-mono"
+                                                />
+                                              </div>
+                                            ) : item.type === 'select' ? (
+                                              <select
+                                                value={settings[item.key] as string}
+                                                onChange={(e) => updateSetting(item.key, e.target.value)}
+                                                className="w-full lg:max-w-sm bg-surface-container-lowest text-on-surface text-sm rounded-md px-3 py-2 border border-outline-variant/20 outline-none focus:border-primary"
+                                              >
+                                                {item.options?.map((opt) => (
+                                                  <option key={opt.value} value={opt.value}>
+                                                    {opt.label}
+                                                  </option>
+                                                ))}
+                                              </select>
+                                            ) : item.type === 'color' ? (
+                                              <div className="flex items-center gap-2 w-full lg:max-w-sm lg:justify-self-start">
+                                                {settings[item.key] && (
+                                                  <span
+                                                    className="w-6 h-6 rounded-md border border-outline-variant/30 shrink-0"
+                                                    style={{ backgroundColor: settings[item.key] as string }}
+                                                  />
+                                                )}
+                                                <input
+                                                  type="text"
+                                                  value={settings[item.key] as string}
+                                                  onChange={(e) => updateSetting(item.key, e.target.value)}
+                                                  placeholder="#FF6600"
+                                                  className="w-full bg-surface-container-lowest text-on-surface text-sm rounded-md px-3 py-2 border border-outline-variant/20 outline-none focus:border-primary placeholder:text-on-surface-variant/30 font-mono"
+                                                />
+                                                <input
+                                                  type="color"
+                                                  value={(settings[item.key] as string) || '#000000'}
+                                                  onChange={(e) => updateSetting(item.key, e.target.value)}
+                                                  className="w-8 h-8 rounded cursor-pointer border-0 p-0"
+                                                />
+                                              </div>
+                                            ) : (
+                                              <input
+                                                type="text"
+                                                value={settings[item.key] as string}
+                                                onChange={(e) => updateSetting(item.key, e.target.value)}
+                                                placeholder={item.desc}
+                                                className="w-full lg:max-w-md bg-surface-container-lowest text-on-surface text-sm rounded-md px-3 py-2 border border-outline-variant/20 outline-none focus:border-primary placeholder:text-on-surface-variant/30"
+                                              />
+                                            ))
+                                          )}
+                                        </>
+                                      )}
+                                    </div>
+                                  );
+                                },
+                              )
+                            )}
+                          </div>
+                        </div>
+                      );
+                    }
+
+                    // ── Standard group rendering ──
+                    return (
+                      <div key={group.title} className="divide-y divide-outline-variant/5">
+                        {group.items.map((item, itemIndex) => {
+                          if (isSection(item)) {
+                            return (
+                              <div key={`section-${itemIndex}`} className="px-4 sm:px-6 pt-5 pb-1">
+                                <p className="text-xs font-bold uppercase tracking-wider text-primary/70">
+                                  {item._section}
+                                </p>
+                                <div className="mt-1 h-px bg-outline-variant/10" />
+                              </div>
+                            );
+                          }
                           const structuredEditor =
                             isSystemSettingKey(item.key) && STRUCTURED_SETTING_KEYS.has(item.key) ? (
                               <StructuredSettingEditor
@@ -3915,12 +4371,12 @@ function Content() {
                                           min={item.min ?? 0}
                                           max={item.max ?? 1}
                                           step={item.step ?? 0.01}
-                                          value={settings[item.key] as number}
+                                          value={Number(settings[item.key]) || 0}
                                           onChange={(e) => updateSetting(item.key, parseFloat(e.target.value))}
                                           className="w-full accent-[var(--color-primary-container)]"
                                         />
                                         <span className="text-xs font-mono text-on-surface w-10 text-right">
-                                          {(settings[item.key] as number).toFixed(
+                                          {(Number(settings[item.key]) || 0).toFixed(
                                             item.step && item.step < 0.1 ? 2 : item.step && item.step < 1 ? 1 : 0,
                                           )}
                                         </span>

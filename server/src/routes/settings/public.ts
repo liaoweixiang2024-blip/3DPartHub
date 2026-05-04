@@ -74,6 +74,11 @@ export function createSettingsPublicRouter() {
             mat_default_metalness: all.mat_default_metalness ?? 0.5,
             mat_default_roughness: all.mat_default_roughness ?? 0.25,
             mat_default_envMapIntensity: all.mat_default_envMapIntensity ?? 1.5,
+            // 3D Material - original (empty = no override)
+            mat_original_color: all.mat_original_color ?? '',
+            mat_original_metalness: all.mat_original_metalness ?? '',
+            mat_original_roughness: all.mat_original_roughness ?? '',
+            mat_original_envMapIntensity: all.mat_original_envMapIntensity ?? '',
             // 3D Material - metal
             mat_metal_color: all.mat_metal_color ?? '#f0f0f4',
             mat_metal_metalness: all.mat_metal_metalness ?? 1.0,
@@ -99,8 +104,14 @@ export function createSettingsPublicRouter() {
             viewer_fill_light_intensity: all.viewer_fill_light_intensity ?? 0.8,
             viewer_hemisphere_intensity: all.viewer_hemisphere_intensity ?? 0.5,
             viewer_bg_color: all.viewer_bg_color ?? '#ffffff',
+            viewer_default_preset: all.viewer_default_preset ?? 'default',
+            viewer_visible_presets: all.viewer_visible_presets ?? 'original,default,metal,plastic,glass',
+            viewer_edge_enabled: all.viewer_edge_enabled ?? true,
             viewer_edge_threshold_angle: all.viewer_edge_threshold_angle ?? 28,
             viewer_edge_vertex_limit: all.viewer_edge_vertex_limit ?? 700000,
+            viewer_edge_color: all.viewer_edge_color ?? '#000000',
+            viewer_edge_opacity: all.viewer_edge_opacity ?? 1.0,
+            viewer_edge_width: all.viewer_edge_width ?? 1,
             viewer_measure_default_unit: all.viewer_measure_default_unit ?? 'auto',
             viewer_measure_record_limit: all.viewer_measure_record_limit ?? 12,
             // Share policy

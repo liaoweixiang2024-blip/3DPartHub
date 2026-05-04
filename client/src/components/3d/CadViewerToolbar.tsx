@@ -5,6 +5,7 @@ import Icon from '../shared/Icon';
 import type { CameraPreset, ViewMode } from './ModelViewer';
 import { CAMERA_ANGLES, MATERIAL_PRESETS, VIEW_MODES, type MaterialPresetKey } from './viewerControls';
 import { dispatchFitModel } from './viewerEvents';
+import { getPublicSettingsSnapshot } from '../../lib/publicSettings';
 
 interface CadViewerToolbarProps {
   variant: 'desktop' | 'mobile';
@@ -49,6 +50,16 @@ interface CadViewerToolbarProps {
   onSetThumbnail?: () => void;
   settingThumbnail?: boolean;
   onOpenDiagnostics?: () => void;
+}
+
+function getVisiblePresets() {
+  const raw = (getPublicSettingsSnapshot().viewer_visible_presets as string) || '';
+  if (!raw.trim()) return MATERIAL_PRESETS;
+  const keys = raw
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean);
+  return MATERIAL_PRESETS.filter((p) => keys.includes(p.key));
 }
 
 function ToolbarButton({
@@ -415,7 +426,7 @@ export default function CadViewerToolbar(props: CadViewerToolbarProps) {
                 <ListMenuItem icon="content_cut" label="剖面查看" active={clipEnabled} onClick={onToggleClip} />
                 <ListSectionDivider />
                 <ToolbarSectionLabel>材质</ToolbarSectionLabel>
-                {MATERIAL_PRESETS.filter((p) => p.key === 'original' || p.key === 'default').map((preset) => (
+                {getVisiblePresets().map((preset) => (
                   <ListMenuItem
                     key={preset.key}
                     icon={preset.icon}
@@ -561,7 +572,7 @@ export default function CadViewerToolbar(props: CadViewerToolbarProps) {
             />
           )}
           <div className="w-full h-px bg-outline-variant/30 my-0.5" />
-          {MATERIAL_PRESETS.filter((p) => p.key === 'original' || p.key === 'default').map((preset) => (
+          {getVisiblePresets().map((preset) => (
             <ToolbarButton
               key={preset.key}
               icon={preset.icon}

@@ -3,10 +3,14 @@ import { useFrame, useLoader, useThree } from '@react-three/fiber';
 import { useCallback, useMemo, useEffect, useState, useRef } from 'react';
 import * as THREE from 'three';
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
+import { Line2 } from 'three/examples/jsm/lines/Line2.js';
+import { LineMaterial } from 'three/examples/jsm/lines/LineMaterial.js';
+import { LineSegmentsGeometry } from 'three/examples/jsm/lines/LineSegmentsGeometry.js';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import Icon from '../../components/shared/Icon';
 import {
   get3DMaterialConfig,
+  getEdgeStyleConfig,
   getPublicSettingsSnapshot,
   type MaterialPresetConfig,
   type ViewerSettingsOverride,
@@ -191,7 +195,23 @@ function applyMaterialPreset(
   if (mesh.userData._matPreset === materialPreset && mesh.userData._matSignature === materialSignature) return;
 
   if (materialPreset === 'original') {
-    mesh.material = cloneMeshMaterial(mesh.userData.originalMaterial as MeshMaterial);
+    const config = get3DMaterialConfig();
+    const override = config.presets.original;
+    if (override && (override.color || override.metalness !== undefined || override.roughness !== undefined)) {
+      const cloned = cloneMeshMaterial(mesh.userData.originalMaterial as MeshMaterial);
+      forEachMeshMaterial(cloned, (mat) => {
+        if ('color' in mat && override.color) (mat as THREE.MeshStandardMaterial).color.set(override.color);
+        if ('metalness' in mat && override.metalness !== undefined)
+          (mat as THREE.MeshStandardMaterial).metalness = override.metalness;
+        if ('roughness' in mat && override.roughness !== undefined)
+          (mat as THREE.MeshStandardMaterial).roughness = override.roughness;
+        if ('envMapIntensity' in mat && override.envMapIntensity !== undefined)
+          (mat as THREE.MeshStandardMaterial).envMapIntensity = override.envMapIntensity;
+      });
+      mesh.material = cloned;
+    } else {
+      mesh.material = cloneMeshMaterial(mesh.userData.originalMaterial as MeshMaterial);
+    }
   } else if (baseMaterial) {
     mesh.material = baseMaterial.clone();
   }
@@ -228,48 +248,92 @@ function centeredDetail(detail: ModelBoundsDetail): ModelBoundsDetail {
 function syncEdgeOverlay(
   mesh: THREE.Mesh,
   edgeGroup: THREE.Group | null,
+  renderer: THREE.WebGLRenderer | null,
   visible: boolean,
   clippingPlanes: THREE.Plane[],
 ) {
-  let overlay = mesh.userData.edgeOverlay as THREE.LineSegments | undefined;
+  let overlay = mesh.userData.edgeOverlay as (THREE.LineSegments | Line2) | undefined;
+  const edgeStyle = getEdgeStyleConfig();
 
-  if (!overlay && visible && edgeGroup) {
-    const vertexCount = mesh.geometry.getAttribute('position')?.count || 0;
-    const edgeSettings = getEdgeOverlaySettings();
-    if (edgeSettings.vertexLimit > 0 && vertexCount > edgeSettings.vertexLimit) {
-      mesh.userData.edgeOverlaySkipped = true;
-      return;
-    }
+  // Check if overlay type needs to change (Line2 vs LineSegments)
+  const needsThick = edgeStyle.width > 1 && renderer;
+  const isThick = overlay instanceof Line2;
+  if (overlay && needsThick !== isThick) {
+    overlay.geometry?.dispose();
+    (overlay.material as THREE.Material)?.dispose();
+    overlay.parent?.remove(overlay);
+    overlay = undefined;
+    mesh.userData.edgeOverlay = undefined;
+  }
 
-    const edgesGeo = new THREE.EdgesGeometry(mesh.geometry, edgeSettings.thresholdAngle);
+  // Update material properties on existing overlay
+  if (overlay) {
+    overlay.visible = visible;
+    const mat = overlay.material as THREE.LineBasicMaterial | LineMaterial;
+    mat.color.set(edgeStyle.color);
+    mat.opacity = edgeStyle.opacity;
+    mat.transparent = edgeStyle.opacity < 1;
+    if (mat instanceof LineMaterial) mat.linewidth = edgeStyle.width;
+    mat.clippingPlanes = clippingPlanes;
+    mat.needsUpdate = true;
+    return;
+  }
+
+  if (!visible || !edgeGroup) return;
+  const vertexCount = mesh.geometry.getAttribute('position')?.count || 0;
+  const edgeSettings = getEdgeOverlaySettings();
+  if (edgeSettings.vertexLimit > 0 && vertexCount > edgeSettings.vertexLimit) {
+    mesh.userData.edgeOverlaySkipped = true;
+    return;
+  }
+
+  const edgesGeo = new THREE.EdgesGeometry(mesh.geometry, edgeSettings.thresholdAngle);
+  const useThick = edgeStyle.width > 1 && renderer;
+
+  if (useThick) {
+    const posAttr = edgesGeo.getAttribute('position');
+    const lineGeo = new LineSegmentsGeometry();
+    lineGeo.setPositions(posAttr.array as Float32Array);
+    const size = renderer!.getSize(new THREE.Vector2());
+    const lineMat = new LineMaterial({
+      color: new THREE.Color(edgeStyle.color).getHex(),
+      linewidth: edgeStyle.width,
+      transparent: edgeStyle.opacity < 1,
+      opacity: edgeStyle.opacity,
+      depthWrite: false,
+      polygonOffset: true,
+      polygonOffsetFactor: -1,
+      polygonOffsetUnits: -1,
+      resolution: size,
+      worldUnits: false,
+    });
+    overlay = new Line2(lineGeo, lineMat);
+    overlay.computeLineDistances();
+  } else {
     const edgeMat = new THREE.LineBasicMaterial({
-      color: 0x000000,
+      color: edgeStyle.color,
+      transparent: edgeStyle.opacity < 1,
+      opacity: edgeStyle.opacity,
       depthWrite: false,
       polygonOffset: true,
       polygonOffsetFactor: -1,
       polygonOffsetUnits: -1,
     });
-
     overlay = new THREE.LineSegments(edgesGeo, edgeMat);
-    overlay.name = '__cad_feature_edges';
-    overlay.renderOrder = 999;
-    overlay.frustumCulled = false;
-    overlay.matrixAutoUpdate = false;
-    edgeGroup.add(overlay);
-    mesh.userData.edgeOverlay = overlay;
   }
 
-  if (!overlay) return;
-  overlay.visible = visible;
-  const material = overlay.material as THREE.LineBasicMaterial;
-  material.clippingPlanes = clippingPlanes;
-  material.needsUpdate = true;
+  overlay.name = '__cad_feature_edges';
+  overlay.renderOrder = 999;
+  overlay.frustumCulled = false;
+  overlay.matrixAutoUpdate = false;
+  edgeGroup.add(overlay);
+  mesh.userData.edgeOverlay = overlay;
 }
 
 function syncEdgeTransforms(root: THREE.Object3D) {
   root.traverse((child) => {
     if (!(child instanceof THREE.Mesh)) return;
-    const overlay = child.userData.edgeOverlay as THREE.LineSegments | undefined;
+    const overlay = child.userData.edgeOverlay as (THREE.LineSegments | Line2) | undefined;
     if (!overlay || !overlay.visible) return;
     child.updateWorldMatrix(true, false);
     if (overlay.parent) {
@@ -593,7 +657,7 @@ function CadModel({
         applyMaterialPreset(child, materialPreset, materialSignature, baseMaterial);
         applyDisplayState(child.material as MeshMaterial, viewMode, clippingPlanes, clipEnabled);
 
-        syncEdgeOverlay(child, edgeGroupRef.current, showEdges && viewMode !== 'wireframe', clippingPlanes);
+        syncEdgeOverlay(child, edgeGroupRef.current, gl, showEdges && viewMode !== 'wireframe', clippingPlanes);
         const partId = child.userData.partId as string | undefined;
         syncSelectionOverlay(child, !!partId && selectedPartId === partId, clippingPlanes);
       }
@@ -618,11 +682,11 @@ function CadModel({
     if (!cadGroup) return;
     cadGroup.traverse((child) => {
       if (child instanceof THREE.Mesh && !child.name.startsWith('__cad_')) {
-        const overlay = child.userData.edgeOverlay as THREE.LineSegments | undefined;
+        const overlay = child.userData.edgeOverlay as (THREE.LineSegments | Line2) | undefined;
         if (overlay) {
           overlay.visible = edgesVisible && edgeViewMode !== 'wireframe';
         } else if (edgesVisible && edgeViewMode !== 'wireframe' && !child.userData.edgeOverlaySkipped) {
-          syncEdgeOverlay(child, edgeGroupRef.current, true, []);
+          syncEdgeOverlay(child, edgeGroupRef.current, gl, true, []);
         }
       }
     });
@@ -863,7 +927,7 @@ function GltfModel({
         const clippingPlanes = clipEnabled ? [clipPlane] : [];
         applyMaterialPreset(child, materialPreset, materialSignature, baseMaterial);
         applyDisplayState(child.material as MeshMaterial, viewMode, clippingPlanes, clipEnabled);
-        syncEdgeOverlay(child, edgeGroupRef.current, showEdges && viewMode !== 'wireframe', clippingPlanes);
+        syncEdgeOverlay(child, edgeGroupRef.current, gl, showEdges && viewMode !== 'wireframe', clippingPlanes);
         const partId = child.userData.partId as string | undefined;
         syncSelectionOverlay(child, !!partId && selectedPartId === partId, clippingPlanes);
       }
@@ -890,11 +954,11 @@ function GltfModel({
     if (!edgeScene) return;
     edgeScene.traverse((child) => {
       if (child instanceof THREE.Mesh && !child.name.startsWith('__cad_')) {
-        const overlay = child.userData.edgeOverlay as THREE.LineSegments | undefined;
+        const overlay = child.userData.edgeOverlay as (THREE.LineSegments | Line2) | undefined;
         if (overlay) {
           overlay.visible = edgesVisible2 && edgeViewMode2 !== 'wireframe';
         } else if (edgesVisible2 && edgeViewMode2 !== 'wireframe' && !child.userData.edgeOverlaySkipped) {
-          syncEdgeOverlay(child, edgeGroupRef.current, true, []);
+          syncEdgeOverlay(child, edgeGroupRef.current, gl, true, []);
         }
       }
     });
