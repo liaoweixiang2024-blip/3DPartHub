@@ -756,7 +756,7 @@ export default function productWallRouter() {
     async (req: AuthRequest, res: Response, next) => {
       try {
         const id = String(req.params.id);
-        const result = await prisma.$transaction(async (tx) => {
+        await prisma.$transaction(async (tx) => {
           const existing = await tx.productWallCategory.findUnique({ where: { id } });
           if (!existing) throw Object.assign(new Error('NOT_FOUND'), { statusCode: 404 });
           const imageCount = await tx.productWallImage.count({ where: { kind: existing.name } });
@@ -765,7 +765,6 @@ export default function productWallRouter() {
           const categoryCount = await tx.productWallCategory.count();
           if (categoryCount <= 1) throw Object.assign(new Error('至少保留一个分类'), { statusCode: 400 });
           await tx.productWallCategory.delete({ where: { id } });
-          return true;
         });
         res.json({ ok: true });
       } catch (err: any) {

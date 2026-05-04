@@ -1,12 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import { cacheGet } from '../lib/cache.js';
-import {
-  verifyAccessToken,
-  isTokenRevoked,
-  revokeAllTokensBefore,
-  type TokenPayload,
-  type VerifiedTokenPayload,
-} from '../lib/jwt.js';
+import { verifyAccessToken, isTokenRevoked, type TokenPayload, type VerifiedTokenPayload } from '../lib/jwt.js';
 import { logger } from '../lib/logger.js';
 import { prisma } from '../lib/prisma.js';
 

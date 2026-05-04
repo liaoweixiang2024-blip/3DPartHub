@@ -1,14 +1,5 @@
-import {
-  createReadStream,
-  createWriteStream,
-  existsSync,
-  mkdirSync,
-  readdirSync,
-  rmSync,
-  statSync,
-  unlinkSync,
-} from 'node:fs';
-import { join, dirname, resolve, sep } from 'node:path';
+import { createReadStream, createWriteStream, existsSync, mkdirSync, statSync, unlinkSync } from 'node:fs';
+import { dirname, resolve, sep } from 'node:path';
 import { pipeline } from 'node:stream/promises';
 import { logger } from '../lib/logger.js';
 import { config } from './config.js';
@@ -110,7 +101,7 @@ class MinioStorage implements StorageProvider {
         await this.client.makeBucket(this.bucket);
       }
       logger.info(`  📦 MinIO storage ready (bucket: ${this.bucket})`);
-    } catch (err) {
+    } catch {
       logger.warn('  ⚠️  MinIO not available, falling back to local storage');
       this.client = null;
     }

@@ -22,8 +22,6 @@ import {
 } from 'fs';
 import { basename, dirname, isAbsolute, join, resolve, sep } from 'path';
 import { createInterface } from 'readline';
-import { Transform } from 'stream';
-import { pipeline } from 'stream/promises';
 import { fileURLToPath } from 'url';
 import { config } from './config.js';
 import { syncJob, loadJob } from './jobStore.js';
@@ -905,6 +903,7 @@ async function runBackup(job: BackupJob) {
   const finalArchive = activeArchivePath(job.id);
 
   try {
+    let t: number;
     addLog(job, '开始备份任务...');
 
     // Step 1: pg_dump (0-30%)
@@ -1029,7 +1028,6 @@ async function runBackup(job: BackupJob) {
         }
       });
 
-      // Progress simulation
       let p = 35;
       const progressInterval = setInterval(() => {
         if (p < 95) {
@@ -1046,13 +1044,14 @@ async function runBackup(job: BackupJob) {
       }, 3000);
     });
 
-    // Step 3: Save metadata (95-100%)
+    // Step 3: Validate + compute SHA256 (serial — safe for HDD)
     job.stage = 'saving';
     job.percent = 96;
-    job.message = '正在保存备份记录...';
+    job.message = '正在校验备份包完整性...';
     syncJob(job);
     addLog(job, `打包完成，文件大小: ${formatSize(statSync(finalArchive).size)}`);
-    addLog(job, '正在校验备份包完整性...');
+
+    t = addLogStart(job, '正在校验备份包完整性...');
     await validateBackupArchive(finalArchive, {
       expectedManifest: manifest,
       onEntryProgress: ({ elapsedMs, entryCount }) => {
@@ -1061,17 +1060,19 @@ async function runBackup(job: BackupJob) {
         syncJob(job);
       },
     });
-    addLog(job, '备份包完整性校验通过');
-    addLog(job, '正在计算备份包 SHA256...');
+    addLogEnd(job, t, '备份包完整性校验通过');
+
     job.percent = 97;
     job.message = '正在计算备份包 SHA256... 0%';
     syncJob(job);
+    t = addLogStart(job, '正在计算备份包 SHA256...');
     const archiveSha256 = await sha256FileWithProgress(finalArchive, (percent) => {
       job.percent = Math.max(97, Math.min(99, 97 + Math.floor(percent / 50)));
       job.message = `正在计算备份包 SHA256... ${percent}%`;
       syncJob(job);
     });
-    addLog(job, '正在保存备份记录...');
+    addLogEnd(job, t, 'SHA256 计算完成');
+
     job.percent = 99;
     job.message = '正在写入备份记录...';
     syncJob(job);
@@ -2169,7 +2170,7 @@ function buildFilePlanFromEntries(
   tmpDir: string,
   entries: string[],
   staticDirsToRestore: string[],
-  manifest: BackupManifest,
+  _manifest: BackupManifest,
 ): RestoreFilePlan {
   const staticDir = join(process.cwd(), config.staticDir);
   const uploadDir = join(process.cwd(), config.uploadDir);
@@ -2675,7 +2676,7 @@ interface DirectoryReplacement {
   backup: string | null;
 }
 
-async function prepareRestoreFilePlan(
+async function _prepareRestoreFilePlan(
   archive: string,
   tmpDir: string,
   staticDirsToRestore: string[],
@@ -2772,7 +2773,7 @@ async function stageArchiveDirectory(
   return { root, stagedPath };
 }
 
-async function replaceArchiveDirectory(
+async function _replaceArchiveDirectory(
   plan: RestoreFilePlan,
   archiveEntry: string,
   destination: string,
@@ -2937,7 +2938,7 @@ function cleanupDirectoryBackups(replacements: DirectoryReplacement[]) {
   }
 }
 
-async function restoreArchiveDirectory(
+async function _restoreArchiveDirectory(
   archive: string,
   staticDir: string,
   folder: string,
@@ -3065,7 +3066,7 @@ function discoverTopLevelDirs(root: string, include: (name: string) => boolean):
     .sort((a, b) => a.localeCompare(b));
 }
 
-function getRestorableStaticDirs(archive: string): string[] {
+function _getRestorableStaticDirs(archive: string): string[] {
   const manifest = readArchiveManifest(archive);
   const dirs = manifest
     ? manifest.directories.map((dir) => dir.path)
@@ -3087,7 +3088,7 @@ function getRestorableStaticDirs(archive: string): string[] {
   return [...priority, ...rest];
 }
 
-function restoreMessageForStaticDir(dir: string): string {
+function _restoreMessageForStaticDir(dir: string): string {
   if (dir === 'models') return '正在恢复转换模型文件...';
   if (dir === 'thumbnails') return '正在恢复缩略图...';
   if (dir === 'originals') return '正在恢复 STEP 原始文件...';
@@ -3095,7 +3096,7 @@ function restoreMessageForStaticDir(dir: string): string {
   return `正在恢复 ${dir}/...`;
 }
 
-async function restoreUploadDirectoriesFromArchive(archive: string, staticDir: string): Promise<number> {
+async function _restoreUploadDirectoriesFromArchive(archive: string, staticDir: string): Promise<number> {
   if (!archiveContainsEntry(archive, BACKUP_UPLOADS_ENTRY)) return 0;
 
   const uploadDir = join(process.cwd(), config.uploadDir);
@@ -3139,7 +3140,7 @@ async function restoreUploadDirectoriesFromArchive(archive: string, staticDir: s
   }
 }
 
-async function restoreLegacyUploadMetadataFromArchive(archive: string, staticDir: string): Promise<number> {
+async function _restoreLegacyUploadMetadataFromArchive(archive: string, staticDir: string): Promise<number> {
   if (!archiveContainsEntry(archive, BACKUP_UPLOAD_METADATA_ENTRY)) return 0;
 
   const uploadDir = join(process.cwd(), config.uploadDir);
@@ -3262,7 +3263,7 @@ function normalizeBackupRecord(record: BackupRecord, archive: string, metaFile: 
   return record;
 }
 
-function scheduleBackupRecordNormalization(record: BackupRecord, archive: string, metaFile: string) {
+function _scheduleBackupRecordNormalization(record: BackupRecord, archive: string, metaFile: string) {
   if (pendingRecordNormalizations.has(record.id)) return;
 
   pendingRecordNormalizations.add(record.id);

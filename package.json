@@ -2,6 +2,8 @@
   "name": "3dparthub",
   "private": true,
   "scripts": {
+    "build": "npm --prefix client run build && npm --prefix server run build",
+    "dev:local": "bash scripts/start-local.sh",
     "prepare": "husky"
   },
   "devDependencies": {
@@ -14,6 +16,9 @@
       "prettier --write"
     ],
     "server/src/**/*.ts": [
+      "prettier --write"
+    ],
+    "server/prisma/*.ts": [
       "prettier --write"
     ],
     "*.{json,md,css}": [

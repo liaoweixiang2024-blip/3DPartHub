@@ -1,5 +1,5 @@
 import { Router, Response } from 'express';
-import { revokeToken, revokeAllTokensBefore, signAccessToken, signRefreshToken } from '../../lib/jwt.js';
+import { revokeAllTokensBefore, signAccessToken, signRefreshToken } from '../../lib/jwt.js';
 import { logger } from '../../lib/logger.js';
 import { hashPassword, verifyPassword } from '../../lib/password.js';
 import { prisma } from '../../lib/prisma.js';

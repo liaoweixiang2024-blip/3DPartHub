@@ -121,21 +121,21 @@ docker stats --no-stream
 
 自动分配参考：
 
-| 服务器内存 | API | PostgreSQL | Redis | Web |
-|------------|-----|------------|-------|-----|
-| 4G | 2G / 1.5 CPU | 768M / 1 CPU | 256M / 0.5 CPU | 256M / 0.5 CPU |
-| 8G | 4G / 2 CPU | 1G / 1 CPU | 512M / 0.5 CPU | 512M / 0.75 CPU |
-| 16G | 8G / 3 CPU | 2G / 2 CPU | 1G / 1 CPU | 512M / 1 CPU |
-| 32G+ | 12G / 4 CPU | 4G / 2 CPU | 2G / 1 CPU | 1G / 1 CPU |
+| 服务器内存 | API          | PostgreSQL   | Redis          | Web             |
+| ---------- | ------------ | ------------ | -------------- | --------------- |
+| 4G         | 2G / 1.5 CPU | 768M / 1 CPU | 256M / 0.5 CPU | 256M / 0.5 CPU  |
+| 8G         | 4G / 2 CPU   | 1G / 1 CPU   | 512M / 0.5 CPU | 512M / 0.75 CPU |
+| 16G        | 8G / 3 CPU   | 2G / 2 CPU   | 1G / 1 CPU     | 512M / 1 CPU    |
+| 32G+       | 12G / 4 CPU  | 4G / 2 CPU   | 2G / 1 CPU     | 1G / 1 CPU      |
 
 说明：容器内存/CPU 上限会即时生效；`API_WORKERS`、`API_SHM_SIZE`、`DB_CONNECTION_LIMIT` 等启动参数会同步写入 `.env`，执行 `docker compose up -d --force-recreate api` 后完全生效。
 
 首次启动会自动创建管理员账号：
 
-| 项目 | 默认值 |
-|------|--------|
-| 邮箱 | `.env` 中的 `ADMIN_EMAIL`，默认 `admin@model.local` |
-| 密码 | `.env` 中的 `ADMIN_PASS`，未设置时为 `3DPartHub@2026` |
+| 项目 | 默认值                                                     |
+| ---- | ---------------------------------------------------------- |
+| 邮箱 | `.env` 中的 `ADMIN_EMAIL`，默认 `admin@model.local`        |
+| 密码 | `.env` 中的 `ADMIN_PASS`，未设置时为 `3DPartHub@2026`      |
 | 说明 | 管理员只在空数据库首次启动时创建；首次登录后会强制修改密码 |
 
 自定义管理员账号可在 `.env` 中设置 `ADMIN_USER`、`ADMIN_EMAIL`、`ADMIN_PASS`，仅首次启动时生效。
@@ -144,19 +144,19 @@ docker stats --no-stream
 
 ### 环境变量
 
-| 变量 | 必填 | 默认值 | 说明 |
-|------|------|--------|------|
-| `DB_PASSWORD` | 否 | `3dparthub-default-db-password-change-me-2026` | 数据库密码，正式环境建议在 `.env` 中覆盖 |
-| `JWT_SECRET` | 否 | `3dparthub-default-jwt-secret-change-me-2026-04-30` | JWT 签名密钥，正式环境建议至少 32 位随机字符串 |
-| `PORT` | 否 | `3780` | 对外访问端口 |
-| `ALLOWED_ORIGINS` | 否 | - | CORS 域名，多个用逗号分隔 |
-| `ADMIN_USER` | 否 | `admin` | 初始管理员用户名，仅首次启动 |
-| `ADMIN_EMAIL` | 否 | `admin@model.local` | 初始管理员邮箱，仅首次启动 |
-| `ADMIN_PASS` | 否 | `3DPartHub@2026` | 初始管理员密码，仅空数据库首次启动生效 |
-| `IMAGE_TAG` | 否 | `latest` | 镜像标签；默认自动跟随最新版本，写入固定标签可锁定版本 |
-| `SMTP_HOST` | 否 | - | SMTP 服务器 |
-| `SMTP_USER` | 否 | - | SMTP 用户名 |
-| `SMTP_PASS` | 否 | - | SMTP 密码或授权码 |
+| 变量              | 必填 | 默认值                                              | 说明                                                   |
+| ----------------- | ---- | --------------------------------------------------- | ------------------------------------------------------ |
+| `DB_PASSWORD`     | 否   | `3dparthub-default-db-password-change-me-2026`      | 数据库密码，正式环境建议在 `.env` 中覆盖               |
+| `JWT_SECRET`      | 否   | `3dparthub-default-jwt-secret-change-me-2026-04-30` | JWT 签名密钥，正式环境建议至少 32 位随机字符串         |
+| `PORT`            | 否   | `3780`                                              | 对外访问端口                                           |
+| `ALLOWED_ORIGINS` | 否   | -                                                   | CORS 域名，多个用逗号分隔                              |
+| `ADMIN_USER`      | 否   | `admin`                                             | 初始管理员用户名，仅首次启动                           |
+| `ADMIN_EMAIL`     | 否   | `admin@model.local`                                 | 初始管理员邮箱，仅首次启动                             |
+| `ADMIN_PASS`      | 否   | `3DPartHub@2026`                                    | 初始管理员密码，仅空数据库首次启动生效                 |
+| `IMAGE_TAG`       | 否   | `latest`                                            | 镜像标签；默认自动跟随最新版本，写入固定标签可锁定版本 |
+| `SMTP_HOST`       | 否   | -                                                   | SMTP 服务器                                            |
+| `SMTP_USER`       | 否   | -                                                   | SMTP 用户名                                            |
+| `SMTP_PASS`       | 否   | -                                                   | SMTP 密码或授权码                                      |
 
 ### 更新与升级
 
@@ -176,13 +176,13 @@ curl http://localhost:3780/api/health
 如需锁定特定版本，修改 `.env` 中的 `IMAGE_TAG`：
 
 ```bash
-sed -i 's/IMAGE_TAG=.*/IMAGE_TAG=v2.8.0/' .env
+sed -i 's/IMAGE_TAG=.*/IMAGE_TAG=v2.8.1/' .env
 docker compose pull && docker compose up -d --force-recreate
 ```
 
 升级前建议在后台 **设置 -> 数据备份** 创建并校验一次备份。
 
-要锁定到指定版本，在 `.env` 中设置 `IMAGE_TAG=v2.7.0` 等固定标签即可。
+要锁定到指定版本，在 `.env` 中设置 `IMAGE_TAG=v2.8.1` 等固定标签即可。
 
 ---
 
@@ -202,11 +202,11 @@ docker compose pull && docker compose up -d --force-recreate
 
 默认 Docker Compose 使用命名卷持久化数据：
 
-| 卷名 | 容器内路径 | 内容 |
-|------|-----------|------|
-| `pgdata` | `/var/lib/postgresql/data` | PostgreSQL 数据库 |
-| `uploads-data` | `/app/uploads` | 上传附件、上传元数据 |
-| `static-data` | `/app/static` | 转换模型、缩略图、原始文件、站点运行时静态资料 |
+| 卷名           | 容器内路径                 | 内容                                           |
+| -------------- | -------------------------- | ---------------------------------------------- |
+| `pgdata`       | `/var/lib/postgresql/data` | PostgreSQL 数据库                              |
+| `uploads-data` | `/app/uploads`             | 上传附件、上传元数据                           |
+| `static-data`  | `/app/static`              | 转换模型、缩略图、原始文件、站点运行时静态资料 |
 
 备份包单独映射到宿主机目录 `/opt/3dparthub/server/static/backups`，容器内路径为 `/app/static/backups`。网页创建的备份和手动放入的 `.tar.gz/.tgz` 备份包都会使用这个目录。
 
@@ -317,15 +317,15 @@ docker compose logs redis --tail 80
 
 ## 技术栈
 
-| 层级 | 技术 |
-|------|------|
-| 前端 | React 19, TypeScript, Vite, Three.js (R3F), Zustand, TailwindCSS |
-| 后端 | Express 5, TypeScript, Prisma ORM, JWT, Node.js Cluster |
-| 数据库 | PostgreSQL 16 |
-| 缓存/队列 | Redis 7, BullMQ |
-| 3D 转换 | OpenCASCADE (`occt-import-js`) |
-| 预览图 | Node.js Canvas + Three.js, Puppeteer + Chromium |
-| 反向代理 | Nginx |
+| 层级      | 技术                                                             |
+| --------- | ---------------------------------------------------------------- |
+| 前端      | React 19, TypeScript, Vite, Three.js (R3F), Zustand, TailwindCSS |
+| 后端      | Express 5, TypeScript, Prisma ORM, JWT, Node.js Cluster          |
+| 数据库    | PostgreSQL 16                                                    |
+| 缓存/队列 | Redis 7, BullMQ                                                  |
+| 3D 转换   | OpenCASCADE (`occt-import-js`)                                   |
+| 预览图    | Node.js Canvas + Three.js, Puppeteer + Chromium                  |
+| 反向代理  | Nginx                                                            |
 
 ## 项目结构
 

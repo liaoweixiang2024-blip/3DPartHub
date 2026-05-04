@@ -63,7 +63,7 @@ function isSupportedBatchArchive(fileName: string) {
 
 // Batch download — create ZIP of multiple models' preview assets
 router.post('/api/batch/download', authMiddleware, requireRole('ADMIN'), async (req: AuthRequest, res: Response) => {
-  const { modelIds, format } = req.body;
+  const { modelIds } = req.body;
 
   let zipPath: string | undefined;
 
@@ -162,7 +162,7 @@ router.post('/api/batch/download', authMiddleware, requireRole('ADMIN'), async (
       url: `/api/batch/downloads/${zipName}?download_token=${encodeURIComponent(token.token)}`,
       count: archivedModelIds.size,
     });
-  } catch (err) {
+  } catch {
     try {
       if (typeof zipPath !== 'undefined') rmSync(zipPath, { force: true });
     } catch {}
@@ -290,7 +290,7 @@ router.post(
               preserveSource: true,
             });
             results.push({ model_id: modelId, name: originalName, status: MODEL_STATUS.QUEUED });
-          } catch (err) {
+          } catch {
             if (prisma) {
               await prisma.model
                 .update({ where: { id: modelId }, data: { status: MODEL_STATUS.FAILED } })
@@ -303,7 +303,7 @@ router.post(
               error: '转换队列暂不可用',
             });
           }
-        } catch (err) {
+        } catch {
           if (originalDest && existsSync(originalDest)) rmSync(originalDest, { force: true });
           results.push({ name: originalName, status: MODEL_STATUS.FAILED, error: '处理失败' });
         }
@@ -391,7 +391,7 @@ router.post(
       }
 
       res.json({ total: results.length, results });
-    } catch (err) {
+    } catch {
       rmSync(file.path, { force: true });
       res.status(500).json({ detail: '批量上传处理失败' });
     }

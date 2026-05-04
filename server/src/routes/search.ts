@@ -151,7 +151,7 @@ router.get('/api/search', async (req, res: Response) => {
 
     res.set('X-Cache', hit ? 'HIT' : 'MISS');
     res.json(responseData);
-  } catch (err) {
+  } catch {
     res.status(500).json({ detail: '搜索失败' });
   }
 });

@@ -1,4 +1,4 @@
-import { Router, Response, NextFunction } from 'express';
+import { Router, Response } from 'express';
 import { prisma } from '../lib/prisma.js';
 import { authMiddleware, type AuthRequest } from '../middleware/auth.js';
 import { requireProjectRole } from '../middleware/rbac.js';

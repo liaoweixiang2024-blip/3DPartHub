@@ -22,7 +22,7 @@ export function createPublicSharesRouter() {
       return;
     }
 
-    const { value: share, hit } = (await cacheGetOrSet(`cache:share:info:${token}`, TTL.MODEL_DETAIL, async () => {
+    const { value: share } = (await cacheGetOrSet(`cache:share:info:${token}`, TTL.MODEL_DETAIL, async () => {
       return prisma.shareLink.findUnique({
         where: { token },
         include: {

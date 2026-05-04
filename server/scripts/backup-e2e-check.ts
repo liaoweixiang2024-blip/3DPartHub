@@ -1,4 +1,4 @@
-import { existsSync, linkSync, lstatSync, mkdirSync, readdirSync, rmSync, statSync } from 'node:fs';
+import { existsSync, linkSync, lstatSync, mkdirSync, readdirSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
 import { PrismaClient } from '@prisma/client';

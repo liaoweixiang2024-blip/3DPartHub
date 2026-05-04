@@ -16,7 +16,6 @@ import {
   verifyRefreshToken,
   verifyAccessToken,
   revokeToken,
-  isRefreshTokenRevoked,
   revokeRefreshFamily,
   checkAndRevokeRefreshFamily,
   revokeAllTokensBefore,

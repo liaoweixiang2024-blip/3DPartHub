@@ -349,7 +349,7 @@ router.post('/api/upload/complete', authMiddleware, requireRole('ADMIN'), async 
     }
     ws.end();
     await once(ws, 'finish');
-  } catch (error) {
+  } catch {
     ws.destroy();
     rmSync(mergedPath, { force: true });
     res.status(500).json({ detail: '合并上传文件失败' });

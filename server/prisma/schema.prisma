@@ -190,6 +190,8 @@ model Model {
   @@index([groupId])
   @@index([status, createdAt])
   @@index([status, categoryId, createdAt])
+  @@index([name])
+  @@index([name, status])
   @@map("models")
 }
 

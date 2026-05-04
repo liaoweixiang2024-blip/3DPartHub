@@ -1,8 +1,8 @@
-import react from '@vitejs/plugin-react'
-import tailwindcss from '@tailwindcss/vite'
-import { defineConfig } from 'vite'
+import tailwindcss from '@tailwindcss/vite';
+import react from '@vitejs/plugin-react';
+import { defineConfig } from 'vite';
 
-const devProxyTarget = process.env.VITE_DEV_PROXY_TARGET || 'http://127.0.0.1:8000'
+const devProxyTarget = process.env.VITE_DEV_PROXY_TARGET || 'http://127.0.0.1:8000';
 
 export default defineConfig({
   plugins: [react(), tailwindcss()],
@@ -12,7 +12,7 @@ export default defineConfig({
     rollupOptions: {
       output: {
         manualChunks(id: string) {
-          const normalizedId = id.replace(/\\/g, '/')
+          const normalizedId = id.replace(/\\/g, '/');
 
           if (normalizedId.includes('/node_modules/')) {
             // Keep heavy, route-only toolchains out of the initial vendor chunk.
@@ -22,9 +22,9 @@ export default defineConfig({
               normalizedId.includes('/@pmndrs/') ||
               normalizedId.includes('/xlsx/')
             ) {
-              return
+              return;
             }
-            return 'vendor-app'
+            return 'vendor-app';
           }
 
           if (
@@ -34,7 +34,7 @@ export default defineConfig({
             normalizedId.includes('/src/lib/') ||
             normalizedId.includes('/src/stores/')
           ) {
-            return 'app-shared'
+            return 'app-shared';
           }
         },
       },
@@ -62,4 +62,4 @@ export default defineConfig({
       },
     },
   },
-})
+});

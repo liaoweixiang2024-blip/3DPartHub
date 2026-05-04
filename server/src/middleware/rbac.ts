@@ -76,7 +76,7 @@ export function requireProjectRole(...roles: Role[]) {
       }
 
       res.status(403).json({ detail: '项目权限不足' });
-    } catch (err) {
+    } catch {
       res.status(500).json({ detail: '权限检查失败' });
     }
   };

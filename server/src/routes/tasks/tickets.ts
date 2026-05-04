@@ -4,7 +4,7 @@ import { basename, extname, join } from 'node:path';
 import { Router, Response } from 'express';
 import multer from 'multer';
 import { sendAcceleratedFile } from '../../lib/acceleratedDownload.js';
-import { DEFAULT_UPLOAD_POLICY, getBusinessConfig, labelFor } from '../../lib/businessConfig.js';
+import { getBusinessConfig, labelFor } from '../../lib/businessConfig.js';
 import { config } from '../../lib/config.js';
 import { createProtectedResourceToken, verifyProtectedResourceToken } from '../../lib/downloadTokenStore.js';
 import { prisma } from '../../lib/prisma.js';

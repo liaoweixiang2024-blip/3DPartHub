@@ -24,7 +24,7 @@ router.get('/api/favorites', authMiddleware, async (req: AuthRequest, res: Respo
   try {
     const cacheKey = `cache:favorites:${req.user!.userId}`;
     const { cacheGetOrSet, TTL } = await import('../lib/cache.js');
-    const { value: favorites, hit } = await cacheGetOrSet(cacheKey, TTL.MODELS_LIST, async () => {
+    const { value: favorites } = await cacheGetOrSet(cacheKey, TTL.MODELS_LIST, async () => {
       return prisma.favorite.findMany({
         where: { userId: req.user!.userId, modelId: { not: '' }, model: { is: {} } },
         take: 200,

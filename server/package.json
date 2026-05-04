@@ -1,6 +1,6 @@
 {
   "name": "3dparthub-server",
-  "version": "2.6.3",
+  "version": "2.8.1",
   "type": "module",
   "scripts": {
     "dev": "node --import tsx src/main.ts",
@@ -12,8 +12,8 @@
     "build": "tsc",
     "typecheck": "tsc --noEmit",
     "lint": "eslint .",
-    "format": "prettier --write \"src/**/*.ts\"",
-    "format:check": "prettier --check \"src/**/*.ts\"",
+    "format": "prettier --write \"src/**/*.ts\" \"prisma/*.ts\"",
+    "format:check": "prettier --check \"src/**/*.ts\" \"prisma/*.ts\"",
     "verify": "npm run typecheck && npm run lint && npm run format:check && npm run build && npm test",
     "prisma:generate": "bash scripts/safe-migrate.sh generate",
     "prisma:migrate": "bash scripts/safe-migrate.sh dev",

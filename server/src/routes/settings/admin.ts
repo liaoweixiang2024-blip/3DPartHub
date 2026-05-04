@@ -55,7 +55,7 @@ export function createSettingsAdminRouter() {
     try {
       await sendTestEmail(to);
       res.json({ message: '测试邮件已发送' });
-    } catch (err: any) {
+    } catch {
       res.status(500).json({ detail: '测试邮件发送失败' });
     }
   });

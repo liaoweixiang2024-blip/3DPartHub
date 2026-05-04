@@ -11,7 +11,6 @@ on:
 
 env:
   REGISTRY: ghcr.io
-  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
   build-and-push:
@@ -22,7 +21,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Determine version
         id: version
@@ -77,17 +76,21 @@ jobs:
         with:
           generate_release_notes: true
           body: |
+            ## Tag
+
+            `${{ steps.version.outputs.version }}`
+
+            Tag description: 3DPartHub ${{ steps.version.outputs.version }} production release with schema alignment, CI hardening, backup progress polish, and Docker deployment metadata.
+
             ## Docker Images
 
-            API image:
-            `ghcr.io/${{ github.repository_owner }}/3dparthub-api:${{ steps.version.outputs.version }}`
+            API image: `ghcr.io/${{ github.repository_owner }}/3dparthub-api:${{ steps.version.outputs.version }}`
 
-            Includes the Express/Prisma API service, migrations, model conversion workers, backup/restore, audit logs, admin settings, and background jobs.
+            API image description: Express/Prisma API service with migrations, model conversion workers, backup/restore, audit logs, admin settings, queues, and background jobs.
 
-            Web image:
-            `ghcr.io/${{ github.repository_owner }}/3dparthub-web:${{ steps.version.outputs.version }}`
+            Web image: `ghcr.io/${{ github.repository_owner }}/3dparthub-web:${{ steps.version.outputs.version }}`
 
-            Includes the React/Vite frontend for 3D preview, product selection, inquiry/quote workflows, sharing, and admin pages.
+            Web image description: React/Vite frontend for 3D preview, product selection, inquiry/quote workflows, sharing, profile management, and admin pages.
 
             ```bash
             # Default deployment follows latest and uses Watchtower for api/web auto-updates.

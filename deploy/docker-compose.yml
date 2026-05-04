@@ -28,7 +28,7 @@
 # 【更新】
 #   1. 默认使用 latest 镜像
 #   2. 手动更新: docker compose pull && docker compose up -d --force-recreate
-#   3. 如需锁定版本: 在 .env 中写入 IMAGE_TAG=v2.6.3
+#   3. 如需锁定版本: 在 .env 中写入 IMAGE_TAG=v2.8.1
 #   4. 检查日志: docker compose logs -f api
 #      确认 prisma migrate deploy 成功，无报错
 #   5. 检查健康: curl http://localhost:3780/api/health
@@ -51,8 +51,8 @@
 x-logging: &default-logging
   driver: json-file
   options:
-    max-size: "50m"
-    max-file: "5"
+    max-size: '50m'
+    max-file: '5'
 
 # <<< 默认使用 latest；手动立即更新执行 docker compose pull && docker compose up -d --force-recreate
 
@@ -64,21 +64,21 @@ services:
     shm_size: ${API_SHM_SIZE:-1g}
     mem_limit: ${API_MEMORY_LIMIT:-2G}
     mem_reservation: ${API_MEMORY_RESERVATION:-512M}
-    cpus: "${API_CPU_LIMIT:-2}"
+    cpus: '${API_CPU_LIMIT:-2}'
     deploy:
       resources:
         limits:
           memory: ${API_MEMORY_LIMIT:-2G}
-          cpus: "${API_CPU_LIMIT:-2}"
+          cpus: '${API_CPU_LIMIT:-2}'
         reservations:
           memory: ${API_MEMORY_RESERVATION:-512M}
     environment:
       TZ: Asia/Shanghai
       NODE_ENV: production
       PORT: 8000
-      DATABASE_URL: "postgresql://modeluser:${DB_PASSWORD:-3dparthub-default-db-password-change-me-2026}@postgres:5432/3dparthub?connection_limit=${DB_CONNECTION_LIMIT:-5}&pool_timeout=10"
+      DATABASE_URL: 'postgresql://modeluser:${DB_PASSWORD:-3dparthub-default-db-password-change-me-2026}@postgres:5432/3dparthub?connection_limit=${DB_CONNECTION_LIMIT:-5}&pool_timeout=10'
       # <<< 建议在 .env 中覆盖为随机字符串 (openssl rand -hex 32)
-      JWT_SECRET: "${JWT_SECRET:-3dparthub-default-jwt-secret-change-me-2026-04-30}"
+      JWT_SECRET: '${JWT_SECRET:-3dparthub-default-jwt-secret-change-me-2026-04-30}'
       JWT_EXPIRES_IN: 7d
       UPLOAD_DIR: uploads
       STATIC_DIR: static
@@ -90,7 +90,7 @@ services:
       REDIS_URL: redis://:${REDIS_PASSWORD:-changeme-set-in-env}@redis:6379
       ADMIN_USER: ${ADMIN_USER:-admin}
       ADMIN_EMAIL: ${ADMIN_EMAIL:-admin@model.local}
-      ADMIN_PASS: "${ADMIN_PASS:-3DPartHub@2026}"
+      ADMIN_PASS: '${ADMIN_PASS:-3DPartHub@2026}'
       # <<< 可选: 允许的来源域名 (多个用逗号分隔)
       ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-}
       # <<< 可选: 邮件通知 (注册验证码)
@@ -108,7 +108,7 @@ services:
       - static-data:/app/static
       - ./server/static/backups:/app/static/backups
     healthcheck:
-      test: ["CMD-SHELL", "curl -fsS http://localhost:8000/api/health/ready >/dev/null || exit 1"]
+      test: ['CMD-SHELL', 'curl -fsS http://localhost:8000/api/health/ready >/dev/null || exit 1']
       interval: 30s
       timeout: 5s
       retries: 5
@@ -124,9 +124,9 @@ services:
     container_name: 3dparthub-web
     init: true
     mem_limit: ${WEB_MEMORY_LIMIT:-256M}
-    cpus: "${WEB_CPU_LIMIT:-0.5}"
+    cpus: '${WEB_CPU_LIMIT:-0.5}'
     ports:
-      - "${PORT:-3780}:80"
+      - '${PORT:-3780}:80'
     ulimits:
       nofile:
         soft: 65535
@@ -135,7 +135,7 @@ services:
       resources:
         limits:
           memory: ${WEB_MEMORY_LIMIT:-256M}
-          cpus: "${WEB_CPU_LIMIT:-0.5}"
+          cpus: '${WEB_CPU_LIMIT:-0.5}'
     depends_on:
       api:
         condition: service_healthy
@@ -143,7 +143,7 @@ services:
       - static-data:/app/static:ro
       - uploads-data:/app/uploads:ro
     healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://localhost/healthz >/dev/null 2>&1 || exit 1"]
+      test: ['CMD-SHELL', 'wget -qO- http://localhost/healthz >/dev/null 2>&1 || exit 1']
       interval: 30s
       timeout: 5s
       retries: 5
@@ -157,21 +157,21 @@ services:
     image: postgres:16-alpine
     container_name: 3dparthub-postgres
     mem_limit: ${POSTGRES_MEMORY_LIMIT:-512M}
-    cpus: "${POSTGRES_CPU_LIMIT:-1}"
+    cpus: '${POSTGRES_CPU_LIMIT:-1}'
     deploy:
       resources:
         limits:
           memory: ${POSTGRES_MEMORY_LIMIT:-512M}
-          cpus: "${POSTGRES_CPU_LIMIT:-1}"
+          cpus: '${POSTGRES_CPU_LIMIT:-1}'
     environment:
       POSTGRES_DB: 3dparthub
       POSTGRES_USER: modeluser
       # <<< 建议在 .env 中覆盖为强密码，与 API 的 DB_PASSWORD 一致
-      POSTGRES_PASSWORD: "${DB_PASSWORD:-3dparthub-default-db-password-change-me-2026}"
+      POSTGRES_PASSWORD: '${DB_PASSWORD:-3dparthub-default-db-password-change-me-2026}'
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U modeluser -d 3dparthub"]
+      test: ['CMD-SHELL', 'pg_isready -U modeluser -d 3dparthub']
       interval: 10s
       timeout: 5s
       retries: 5
@@ -185,15 +185,15 @@ services:
     image: redis:7-alpine
     container_name: 3dparthub-redis
     mem_limit: ${REDIS_MEMORY_LIMIT:-256M}
-    cpus: "${REDIS_CPU_LIMIT:-0.5}"
+    cpus: '${REDIS_CPU_LIMIT:-0.5}'
     command:
       - redis-server
       - --requirepass
-      - "${REDIS_PASSWORD:-changeme-set-in-env}"
+      - '${REDIS_PASSWORD:-changeme-set-in-env}'
       - --save
-      - ""
+      - ''
       - --appendonly
-      - "yes"
+      - 'yes'
       - --appendfsync
       - everysec
       - --maxmemory
@@ -204,11 +204,11 @@ services:
       resources:
         limits:
           memory: ${REDIS_MEMORY_LIMIT:-256M}
-          cpus: "${REDIS_CPU_LIMIT:-0.5}"
+          cpus: '${REDIS_CPU_LIMIT:-0.5}'
     volumes:
       - redis-data:/data
     healthcheck:
-      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD:-changeme-set-in-env}", "ping"]
+      test: ['CMD', 'redis-cli', '-a', '${REDIS_PASSWORD:-changeme-set-in-env}', 'ping']
       interval: 10s
       timeout: 5s
       retries: 5

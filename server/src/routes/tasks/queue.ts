@@ -198,7 +198,7 @@ export function createConversionQueueRouter() {
             }
             retried++;
             items.push({ id: String(job.id), model_id: job.data?.modelId || null, status: 'retried' });
-          } catch (err: any) {
+          } catch {
             failed++;
             items.push({
               id: String(job.id),
@@ -266,7 +266,7 @@ export function createConversionQueueRouter() {
             cancelled++;
             if (job.data?.modelId) modelIds.push(String(job.data.modelId));
             items.push({ id: String(job.id), model_id: job.data?.modelId || null, status: 'cancelled' });
-          } catch (err: any) {
+          } catch {
             failed++;
             items.push({
               id: String(job.id),

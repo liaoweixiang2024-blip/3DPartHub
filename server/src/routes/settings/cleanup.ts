@@ -1,5 +1,5 @@
 import { readdirSync, statSync, rmSync, existsSync } from 'node:fs';
-import { join, extname } from 'node:path';
+import { join } from 'node:path';
 import { Router, Response } from 'express';
 import { config } from '../../lib/config.js';
 import { createLogger } from '../../lib/logger.js';
@@ -56,7 +56,6 @@ export function createSettingsCleanupRouter() {
       // Collect DB-known IDs
       const dbModelIds = new Set<string>();
       const dbThumbnails = new Set<string>();
-      const dbOriginals = new Set<string>();
       const dbUploadPaths = new Set<string>();
       const dbGltfUrls = new Set<string>();
       const dbDrawingUrls = new Set<string>();

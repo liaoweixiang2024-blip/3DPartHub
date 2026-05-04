@@ -114,7 +114,7 @@ router.post('/api/admin/thread-size', authMiddleware, async (req: AuthRequest, r
     const row = await entryTable().create({ data });
     await invalidateThreadSizeCache();
     res.status(201).json(row);
-  } catch (err: any) {
+  } catch {
     res.status(400).json({ detail: '新增失败' });
   }
 });
@@ -126,7 +126,7 @@ router.put('/api/admin/thread-size/:id', authMiddleware, async (req: AuthRequest
     const row = await entryTable().update({ where: { id: req.params.id }, data });
     await invalidateThreadSizeCache();
     res.json(row);
-  } catch (err: any) {
+  } catch {
     res.status(400).json({ detail: '保存失败' });
   }
 });

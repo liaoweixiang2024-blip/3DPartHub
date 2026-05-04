@@ -2,7 +2,6 @@ import { randomUUID } from 'node:crypto';
 import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { join, basename } from 'node:path';
-
 const require = createRequire(import.meta.url);
 const occtimportjs = require('occt-import-js');
 
