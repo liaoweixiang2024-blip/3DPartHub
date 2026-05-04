@@ -102,9 +102,7 @@ docs/*产品批次*
 docs/选型询价实现说明.md
 
 # Product seed data / customer-specific catalogs
-server/prisma/seed-beize.ts
 server/prisma/fix-selection-columns.ts
-server/prisma/selection-column-config.ts
 server/prisma/seeds/
 server/prisma/seeds/cleanup-beize-bad-products.ts
 

@@ -1,6 +1,7 @@
 import { getPublicSettings, type SystemSettings } from '../api/settings';
 import { applyServerThemeDefaults } from '../stores/useThemeStore';
 import { applyColorScheme } from './colorScheme';
+import { mutate } from 'swr';
 
 let cache: Partial<SystemSettings> | null = null;
 let fetchedAt = 0;
@@ -61,6 +62,8 @@ export async function refreshSiteConfig() {
   }
   // Notify all listeners with fresh cache populated
   listeners.forEach((fn) => fn());
+  // Invalidate SWR cache so components using useSWR('publicSettings') re-render
+  void mutate('publicSettings', cache, { revalidate: false });
 }
 
 export async function getCachedPublicSettings(): Promise<Partial<SystemSettings>> {

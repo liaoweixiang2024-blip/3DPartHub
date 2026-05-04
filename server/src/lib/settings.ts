@@ -1,14 +1,13 @@
 import {
-  DEFAULT_ADMIN_NAV_FOR_SETTINGS,
   DEFAULT_INQUIRY_STATUSES_FOR_SETTINGS,
   DEFAULT_MOBILE_NAV_FOR_SETTINGS,
+  DEFAULT_NAV_FOR_SETTINGS,
   DEFAULT_PAGE_SIZE_POLICY_FOR_SETTINGS,
   DEFAULT_SELECTION_THREAD_PRIORITY_FOR_SETTINGS,
   DEFAULT_SUPPORT_STEPS_FOR_SETTINGS,
   DEFAULT_TICKET_CLASSIFICATIONS_FOR_SETTINGS,
   DEFAULT_TICKET_STATUSES_FOR_SETTINGS,
   DEFAULT_UPLOAD_POLICY_FOR_SETTINGS,
-  DEFAULT_USER_NAV_FOR_SETTINGS,
 } from './businessDefaults.js';
 import { cacheDel } from './cache.js';
 import { DEFAULT_EMAIL_TEMPLATES } from './emailTemplates.js';
@@ -140,8 +139,7 @@ const SETTINGS_SCHEMA: SettingDef[] = [
   { key: 'ticket_statuses', defaultValue: JSON.stringify(DEFAULT_TICKET_STATUSES_FOR_SETTINGS, null, 2) },
   { key: 'ticket_classifications', defaultValue: JSON.stringify(DEFAULT_TICKET_CLASSIFICATIONS_FOR_SETTINGS, null, 2) },
   { key: 'support_process_steps', defaultValue: JSON.stringify(DEFAULT_SUPPORT_STEPS_FOR_SETTINGS, null, 2) },
-  { key: 'nav_user_items', defaultValue: JSON.stringify(DEFAULT_USER_NAV_FOR_SETTINGS, null, 2) },
-  { key: 'nav_admin_items', defaultValue: JSON.stringify(DEFAULT_ADMIN_NAV_FOR_SETTINGS, null, 2) },
+  { key: 'nav_items', defaultValue: JSON.stringify(DEFAULT_NAV_FOR_SETTINGS, null, 2) },
   { key: 'nav_mobile_items', defaultValue: JSON.stringify(DEFAULT_MOBILE_NAV_FOR_SETTINGS, null, 2) },
   { key: 'upload_policy', defaultValue: JSON.stringify(DEFAULT_UPLOAD_POLICY_FOR_SETTINGS, null, 2) },
   { key: 'page_size_policy', defaultValue: JSON.stringify(DEFAULT_PAGE_SIZE_POLICY_FOR_SETTINGS, null, 2) },

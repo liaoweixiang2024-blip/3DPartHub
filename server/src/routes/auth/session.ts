@@ -288,7 +288,7 @@ export function createAuthSessionRouter() {
       const newFamilyId = `fam_${Date.now().toString(36)}`;
       const accessToken = signAccessToken({ userId: user.id, role: user.role });
       const newRefreshToken = signRefreshToken({ userId: user.id, role: user.role, familyId: newFamilyId });
-      setAuthCookies(req, res, accessToken, newRefreshToken);
+      setAuthCookies(req, res, accessToken, newRefreshToken, { persistRefresh: true });
       res.json({ accessToken });
     } catch {
       res.status(401).json({ detail: 'refresh token 无效或已过期' });

@@ -58,30 +58,27 @@ export const DEFAULT_SUPPORT_STEPS_FOR_SETTINGS: SupportStepConfig[] = [
   { icon: 'check_circle', title: '交付验收', desc: '确认最终模型' },
 ];
 
-export const DEFAULT_USER_NAV_FOR_SETTINGS: NavItemConfig[] = [
+export const DEFAULT_NAV_FOR_SETTINGS: NavItemConfig[] = [
   { label: '模型库', icon: 'dashboard', path: '/', enabled: true },
   { label: '产品选型', icon: 'tune', path: '/selection', enabled: true },
   { label: '产品图库', icon: 'image', path: '/product-wall', enabled: true },
-  { label: '规格查询', icon: 'straighten', path: '/tools/thread-size', enabled: true },
+  { label: '规格查询', icon: 'straighten', path: '/thread-size', enabled: true },
   { label: '我的收藏', icon: 'star', path: '/favorites', enabled: true },
-  { label: '我的询价', icon: 'request_quote', path: '/my-inquiries', enabled: true },
+  { label: '我的分享', icon: 'share', path: '/my-shares', enabled: true },
   { label: '下载历史', icon: 'download', path: '/downloads', enabled: true },
+  { label: '我的询价', icon: 'request_quote', path: '/my-inquiries', enabled: true },
   { label: '我的工单', icon: 'assignment_add', path: '/my-tickets', enabled: true },
   { label: '技术支持', icon: 'support_agent', path: '/support', enabled: true },
-];
-
-export const DEFAULT_ADMIN_NAV_FOR_SETTINGS: NavItemConfig[] = [
-  ...DEFAULT_USER_NAV_FOR_SETTINGS,
-  { label: '模型管理', icon: 'view_in_ar', path: '/admin/models', enabled: true },
-  { label: '分类管理', icon: 'folder', path: '/admin/categories', enabled: true },
-  { label: '选型管理', icon: 'tune', path: '/admin/selections', enabled: true },
-  { label: '询价管理', icon: 'receipt_long', path: '/admin/inquiries', enabled: true },
-  { label: '工单处理', icon: 'build', path: '/admin/tickets', enabled: true },
-  { label: '用户管理', icon: 'group', path: '/admin/users', enabled: true },
-  { label: '分享管理', icon: 'share', path: '/admin/shares', enabled: true },
-  { label: '下载统计', icon: 'download', path: '/admin/downloads', enabled: true },
-  { label: '操作日志', icon: 'schedule', path: '/admin/audit', enabled: true },
-  { label: '系统设置', icon: 'settings', path: '/admin/settings', enabled: true },
+  { label: '模型管理', icon: 'view_in_ar', path: '/admin/models', enabled: true, roles: ['ADMIN'] },
+  { label: '分类管理', icon: 'folder', path: '/admin/categories', enabled: true, roles: ['ADMIN'] },
+  { label: '选型管理', icon: 'tune', path: '/admin/selections', enabled: true, roles: ['ADMIN'] },
+  { label: '询价管理', icon: 'receipt_long', path: '/admin/inquiries', enabled: true, roles: ['ADMIN'] },
+  { label: '工单处理', icon: 'build', path: '/admin/tickets', enabled: true, roles: ['ADMIN'] },
+  { label: '用户管理', icon: 'group', path: '/admin/users', enabled: true, roles: ['ADMIN'] },
+  { label: '分享管理', icon: 'share', path: '/admin/shares', enabled: true, roles: ['ADMIN'] },
+  { label: '下载统计', icon: 'download', path: '/admin/downloads', enabled: true, roles: ['ADMIN'] },
+  { label: '操作日志', icon: 'schedule', path: '/admin/audit', enabled: true, roles: ['ADMIN'] },
+  { label: '系统设置', icon: 'settings', path: '/admin/settings', enabled: true, roles: ['ADMIN'] },
 ];
 
 export const DEFAULT_MOBILE_NAV_FOR_SETTINGS: NavItemConfig[] = [

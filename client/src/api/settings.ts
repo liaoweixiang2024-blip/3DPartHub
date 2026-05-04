@@ -112,6 +112,7 @@ export interface SystemSettings {
   support_process_steps: string;
   nav_user_items: string;
   nav_admin_items: string;
+  nav_items: string;
   nav_mobile_items: string;
   upload_policy: string;
   page_size_policy: string;

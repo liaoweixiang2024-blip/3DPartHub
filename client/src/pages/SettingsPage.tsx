@@ -48,15 +48,15 @@ import { SkeletonList } from '../components/shared/Skeleton';
 import { useToast } from '../components/shared/Toast';
 import { useDocumentTitle } from '../hooks/useDocumentTitle';
 import {
-  DEFAULT_ADMIN_NAV,
   DEFAULT_INQUIRY_STATUSES,
   DEFAULT_MOBILE_NAV,
+  DEFAULT_NAV,
   DEFAULT_SUPPORT_STEPS,
   DEFAULT_THREAD_PRIORITY,
   DEFAULT_TICKET_CLASSIFICATIONS,
   DEFAULT_TICKET_STATUSES,
   DEFAULT_UPLOAD_POLICY,
-  DEFAULT_USER_NAV,
+  isAdminOnly,
   parseSetting,
   type NavItemConfig,
   type StatusConfig,
@@ -170,8 +170,9 @@ const DEFAULT_SETTINGS: SystemSettings = {
   ticket_statuses: JSON.stringify(DEFAULT_TICKET_STATUSES, null, 2),
   ticket_classifications: JSON.stringify(DEFAULT_TICKET_CLASSIFICATIONS, null, 2),
   support_process_steps: JSON.stringify(DEFAULT_SUPPORT_STEPS, null, 2),
-  nav_user_items: JSON.stringify(DEFAULT_USER_NAV, null, 2),
-  nav_admin_items: JSON.stringify(DEFAULT_ADMIN_NAV, null, 2),
+  nav_items: JSON.stringify(DEFAULT_NAV, null, 2),
+  nav_user_items: '',
+  nav_admin_items: '',
   nav_mobile_items: JSON.stringify(DEFAULT_MOBILE_NAV, null, 2),
   upload_policy: JSON.stringify(DEFAULT_UPLOAD_POLICY, null, 2),
   page_size_policy: JSON.stringify(
@@ -389,15 +390,9 @@ const GROUPS: SettingGroup[] = [
     icon: 'menu',
     items: [
       {
-        key: 'nav_user_items',
-        label: '用户侧边栏菜单',
-        desc: '配置用户侧边栏的菜单名称、图标、路径和启用状态',
-        type: 'textarea',
-      },
-      {
-        key: 'nav_admin_items',
-        label: '管理员侧边栏菜单',
-        desc: '配置管理员侧边栏的菜单名称、图标、路径和启用状态',
+        key: 'nav_items',
+        label: '侧边栏菜单',
+        desc: '统一配置侧边栏菜单，管理员项仅管理员可见',
         type: 'textarea',
       },
       { key: 'nav_mobile_items', label: '移动端底部菜单', desc: '配置移动端底部导航，建议最多 5 项', type: 'textarea' },
@@ -1414,8 +1409,7 @@ const STRUCTURED_SETTING_KEYS = new Set<keyof SystemSettings>([
   'ticket_statuses',
   'ticket_classifications',
   'support_process_steps',
-  'nav_user_items',
-  'nav_admin_items',
+  'nav_items',
   'nav_mobile_items',
   'upload_policy',
   'page_size_policy',
@@ -1645,8 +1639,7 @@ function normalizeSettingsForSave(settings: SystemSettings): SystemSettings {
     security_password_min_length: clampNumber(settings.security_password_min_length, 8, 6, 64),
     security_username_min_length: usernameMin,
     security_username_max_length: usernameMax,
-    nav_user_items: dedupNavItems(settings.nav_user_items),
-    nav_admin_items: dedupNavItems(settings.nav_admin_items),
+    nav_items: dedupNavItems(settings.nav_items),
     nav_mobile_items: dedupNavItems(settings.nav_mobile_items),
     legal_privacy_sections: JSON.stringify(
       normalizeLegalSectionsForSave(settings.legal_privacy_sections, DEFAULT_PRIVACY_SECTIONS),
@@ -1920,8 +1913,8 @@ function SupportStepsEditor({ settings, updateSetting }: { settings: SystemSetti
   );
 }
 
-const NAV_PRESETS: Record<string, { label: string; icon: string; path: string }[]> = {
-  user: [
+const NAV_PRESETS: Record<string, { label: string; icon: string; path: string; roles?: ('USER' | 'ADMIN')[] }[]> = {
+  all: [
     { label: '模型库', icon: 'dashboard', path: '/' },
     { label: '产品选型', icon: 'tune', path: '/selection' },
     { label: '产品图库', icon: 'image', path: '/product-wall' },
@@ -1932,18 +1925,16 @@ const NAV_PRESETS: Record<string, { label: string; icon: string; path: string }[
     { label: '我的询价', icon: 'request_quote', path: '/my-inquiries' },
     { label: '我的工单', icon: 'assignment_add', path: '/my-tickets' },
     { label: '技术支持', icon: 'support_agent', path: '/support' },
-  ],
-  admin: [
-    { label: '模型管理', icon: 'view_in_ar', path: '/admin/models' },
-    { label: '分类管理', icon: 'folder', path: '/admin/categories' },
-    { label: '选型管理', icon: 'tune', path: '/admin/selections' },
-    { label: '询价管理', icon: 'receipt_long', path: '/admin/inquiries' },
-    { label: '工单处理', icon: 'build', path: '/admin/tickets' },
-    { label: '用户管理', icon: 'group', path: '/admin/users' },
-    { label: '分享管理', icon: 'share', path: '/admin/shares' },
-    { label: '下载统计', icon: 'download', path: '/admin/downloads' },
-    { label: '操作日志', icon: 'schedule', path: '/admin/audit' },
-    { label: '系统设置', icon: 'settings', path: '/admin/settings' },
+    { label: '模型管理', icon: 'view_in_ar', path: '/admin/models', roles: ['ADMIN'] },
+    { label: '分类管理', icon: 'folder', path: '/admin/categories', roles: ['ADMIN'] },
+    { label: '选型管理', icon: 'tune', path: '/admin/selections', roles: ['ADMIN'] },
+    { label: '询价管理', icon: 'receipt_long', path: '/admin/inquiries', roles: ['ADMIN'] },
+    { label: '工单处理', icon: 'build', path: '/admin/tickets', roles: ['ADMIN'] },
+    { label: '用户管理', icon: 'group', path: '/admin/users', roles: ['ADMIN'] },
+    { label: '分享管理', icon: 'share', path: '/admin/shares', roles: ['ADMIN'] },
+    { label: '下载统计', icon: 'download', path: '/admin/downloads', roles: ['ADMIN'] },
+    { label: '操作日志', icon: 'schedule', path: '/admin/audit', roles: ['ADMIN'] },
+    { label: '系统设置', icon: 'settings', path: '/admin/settings', roles: ['ADMIN'] },
   ],
   mobile: [
     { label: '首页', icon: 'dashboard', path: '/' },
@@ -2065,26 +2056,92 @@ function NavItemsEditor({
   const update = (next: NavItemConfig[]) => setJsonSetting(updateSetting, itemKey, next);
   const patch = (index: number, changes: Partial<NavItemConfig>) =>
     update(items.map((item: NavItemConfig, i: number) => (i === index ? { ...item, ...changes } : item)));
-  const presetKey = itemKey === 'nav_admin_items' ? 'admin' : itemKey === 'nav_user_items' ? 'user' : 'mobile';
+  const presetKey = itemKey === 'nav_items' ? 'all' : 'mobile';
   const presets = NAV_PRESETS[presetKey];
+  const [dragIndex, setDragIndex] = useState<number | null>(null);
+  const [dropTarget, setDropTarget] = useState<number | null>(null);
+
+  const handleDragStart = (index: number) => (e: React.DragEvent) => {
+    setDragIndex(index);
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', String(index));
+  };
+
+  const handleDragOver = (index: number) => (e: React.DragEvent) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    setDropTarget(index);
+  };
+
+  const handleDrop = (index: number) => (e: React.DragEvent) => {
+    e.preventDefault();
+    if (dragIndex === null || dragIndex === index) {
+      setDragIndex(null);
+      setDropTarget(null);
+      return;
+    }
+    const next = [...items];
+    const [moved] = next.splice(dragIndex, 1);
+    next.splice(index, 0, moved);
+    update(next);
+    setDragIndex(null);
+    setDropTarget(null);
+  };
+
+  const handleDragEnd = () => {
+    setDragIndex(null);
+    setDropTarget(null);
+  };
+
+  const isAdmin = itemKey === 'nav_items';
+  const dragHandleClass =
+    'cursor-grab active:cursor-grabbing text-on-surface-variant/40 hover:text-on-surface-variant transition-colors';
 
   return (
     <div className={compactListClass}>
       {/* Header row */}
-      <div className="hidden xl:grid xl:grid-cols-[1fr_1fr_2fr_auto_auto] gap-2 px-3 pb-1 text-[11px] text-on-surface-variant/60 font-medium uppercase tracking-wider">
+      <div className="hidden xl:grid xl:grid-cols-[20px_1fr_1fr_2fr_auto_24px] gap-2 px-3 pb-1 text-[11px] text-on-surface-variant/60 font-medium uppercase tracking-wider">
+        <span />
         <span>名称</span>
         <span>图标</span>
         <span>页面路径</span>
         <span className="w-10 text-center">启用</span>
-        <span className="w-16" />
+        <span />
       </div>
       {items.map((item: NavItemConfig, index: number) => {
         const isPreset = presets.some((p) => p.path === item.path);
+        const adminOnly = isAdmin && isAdminOnly(item);
+        const isDragging = dragIndex === index;
+        const isDropTarget = dropTarget === index && dragIndex !== index;
         return (
           <div
             key={`${item.path}-${index}`}
-            className={`grid grid-cols-1 xl:grid-cols-[1fr_1fr_2fr_auto_auto] gap-2 ${compactPanelClass}`}
+            draggable={dragIndex === null || dragIndex === index}
+            onDragStart={handleDragStart(index)}
+            onDragOver={handleDragOver(index)}
+            onDrop={handleDrop(index)}
+            onDragEnd={handleDragEnd}
+            className={`grid grid-cols-1 xl:grid-cols-[20px_1fr_1fr_2fr_auto_24px] gap-2 ${compactPanelClass} ${
+              isDragging ? 'opacity-40 scale-[0.98]' : ''
+            } ${isDropTarget ? 'ring-2 ring-primary-container/40' : ''} transition-all duration-150`}
           >
+            {/* Mobile: drag handle + visibility icon */}
+            <div className="flex items-center gap-2 xl:hidden">
+              <div className={dragHandleClass} {...({} as React.HTMLAttributes<HTMLDivElement>)}>
+                <Icon name="grip_vertical" size={16} />
+              </div>
+              <span
+                title={adminOnly ? '仅管理员可见' : '所有用户可见'}
+                className={`inline-flex items-center gap-0.5 text-[10px] font-medium ${adminOnly ? 'text-amber-600' : 'text-green-600'}`}
+              >
+                <Icon name={adminOnly ? 'admin_panel_settings' : 'visibility'} size={12} />
+                {adminOnly ? '管理员' : '用户'}
+              </span>
+            </div>
+            {/* Desktop: drag handle */}
+            <div className={`hidden xl:flex items-center justify-center ${dragHandleClass}`}>
+              <Icon name="grip_vertical" size={16} />
+            </div>
             <label className="space-y-0.5 xl:hidden">
               <span className="text-[10px] text-on-surface-variant">名称</span>
               <input
@@ -2123,18 +2180,27 @@ function NavItemsEditor({
             <div className="hidden xl:block">
               <IconPicker value={item.icon} onChange={(v) => patch(index, { icon: v })} />
             </div>
-            <select
-              value={item.path}
-              onChange={(e) => patch(index, { path: e.target.value })}
-              className={`${inputClass} truncate hidden xl:block`}
-            >
-              {!isPreset && <option value={item.path}>{item.path}（自定义）</option>}
-              {presets.map((p) => (
-                <option key={p.path} value={p.path}>
-                  {p.label}
-                </option>
-              ))}
-            </select>
+            <div className="hidden xl:flex items-center gap-2">
+              <select
+                value={item.path}
+                onChange={(e) => patch(index, { path: e.target.value })}
+                className={`${inputClass} truncate flex-1`}
+              >
+                {!isPreset && <option value={item.path}>{item.path}（自定义）</option>}
+                {presets.map((p) => (
+                  <option key={p.path} value={p.path}>
+                    {p.label}
+                  </option>
+                ))}
+              </select>
+              <span
+                title={adminOnly ? '仅管理员可见' : '所有用户可见'}
+                className={`inline-flex items-center gap-0.5 text-[10px] font-medium whitespace-nowrap ${adminOnly ? 'text-amber-600' : 'text-green-600'}`}
+              >
+                <Icon name={adminOnly ? 'admin_panel_settings' : 'visibility'} size={12} />
+                {adminOnly ? '管理员' : '用户'}
+              </span>
+            </div>
             <label className="flex items-center gap-1.5 text-xs text-on-surface-variant px-1">
               <input
                 type="checkbox"
@@ -2144,12 +2210,14 @@ function NavItemsEditor({
               />
               <span className="xl:hidden">启用</span>
             </label>
-            <ListActions
-              index={index}
-              total={items.length}
-              onMove={(direction) => update(moveListItem(items, index, direction))}
-              onDelete={() => update(items.filter((_: NavItemConfig, i: number) => i !== index))}
-            />
+            <button
+              type="button"
+              title="删除"
+              onClick={() => update(items.filter((_: NavItemConfig, i: number) => i !== index))}
+              className="w-6 h-6 inline-flex items-center justify-center rounded-md text-on-surface-variant/40 hover:text-red-500 hover:bg-red-500/10 transition-colors"
+            >
+              <Icon name="close" size={14} />
+            </button>
           </div>
         );
       })}
@@ -2898,23 +2966,9 @@ function StructuredSettingEditor({
       return <ClassificationEditor settings={settings} updateSetting={updateSetting} />;
     case 'support_process_steps':
       return <SupportStepsEditor settings={settings} updateSetting={updateSetting} />;
-    case 'nav_user_items':
+    case 'nav_items':
       return (
-        <NavItemsEditor
-          itemKey={itemKey}
-          settings={settings}
-          updateSetting={updateSetting}
-          fallback={DEFAULT_USER_NAV}
-        />
-      );
-    case 'nav_admin_items':
-      return (
-        <NavItemsEditor
-          itemKey={itemKey}
-          settings={settings}
-          updateSetting={updateSetting}
-          fallback={DEFAULT_ADMIN_NAV}
-        />
+        <NavItemsEditor itemKey={itemKey} settings={settings} updateSetting={updateSetting} fallback={DEFAULT_NAV} />
       );
     case 'nav_mobile_items':
       return (

@@ -70,10 +70,12 @@ export default function AppSidebar() {
       </div>
 
       <nav ref={navRef} className="flex-1 px-3 flex flex-col gap-1 overflow-y-auto scrollbar-hidden -mt-4">
-        {navItems.map((item) => {
+        {navItems.map((item, idx) => {
           const isActive =
             location.pathname === item.path || (item.path !== '/' && location.pathname.startsWith(item.path));
-          const showDivider = isAdmin && item.path === '/admin/models';
+          const isAdminPath = item.path.startsWith('/admin/');
+          const showDivider =
+            isAdmin && isAdminPath && !navItems.slice(0, idx).some((p) => p.path.startsWith('/admin/'));
           return (
             <React.Fragment key={item.path}>
               {showDivider && (

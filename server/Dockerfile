@@ -1,7 +1,7 @@
 # === Stage 1: Build (install deps + compile native modules) ===
 FROM node:24-alpine AS builder
 
-RUN apk update && apk add --no-cache python3 make g++ pkgconfig openssl pixman-dev cairo-dev pango-dev
+RUN apk update && apk add --no-cache python3 make g++ pkgconfig openssl pixman-dev cairo-dev pango-dev curl
 
 WORKDIR /app
 
@@ -20,13 +20,19 @@ RUN npx prisma generate
 # Compile TypeScript for production runtime
 RUN npm run build
 
-# Copy Three.js to static/js/ for thumbnail renderer
+# Compile prisma seed scripts (outside src/, needs separate step)
+RUN npx tsc --outDir dist/prisma --rootDir prisma --module ESNext --moduleResolution bundler --target ES2022 --esModuleInterop --strict --resolveJsonModule --skipLibCheck prisma/seed-categories.ts prisma/seed-beize.ts prisma/selection-column-config.ts
+
+# Copy Three.js + HDR to static/js/ for thumbnail renderer (Puppeteer headless)
 RUN mkdir -p /app/static/js/addons && \
     cp node_modules/three/build/three.module.js /app/static/js/ && \
     cp node_modules/three/build/three.core.js /app/static/js/ && \
     cp -r node_modules/three/examples/jsm/loaders /app/static/js/addons/ && \
     cp -r node_modules/three/examples/jsm/environments /app/static/js/addons/ && \
-    cp -r node_modules/three/examples/jsm/utils /app/static/js/addons/
+    cp -r node_modules/three/examples/jsm/utils /app/static/js/addons/ && \
+    (test -f /app/static/js/potsdamer_platz_1k.hdr || curl -sSfL \
+      "https://raw.githubusercontent.com/mrdoob/three.js/dev/examples/textures/equirectangular/potsdamer_platz_1k.hdr" \
+      -o /app/static/js/potsdamer_platz_1k.hdr || true)
 
 # Inject version from git tag (fall back to "dev")
 ARG APP_VERSION=dev

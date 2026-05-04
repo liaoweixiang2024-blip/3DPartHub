@@ -1,7 +1,6 @@
 import axios from 'axios';
 import { notifyGlobalError } from '../lib/errorNotifications';
 import { getAccessToken, useAuthStore } from '../stores/useAuthStore';
-import { unwrapApiData } from './response';
 
 const client = axios.create({
   baseURL: import.meta.env.VITE_API_BASE_URL || '/api',
@@ -57,11 +56,13 @@ client.interceptors.request.use((config) => {
   return config;
 });
 
-let isRefreshing = false;
+// Queue for requests that failed with 401 while a refresh is in-flight.
+// The refresh lock is managed by useAuthStore._refreshPromise.
 let failedQueue: Array<{
   resolve: (token: string) => void;
   reject: (err: unknown) => void;
 }> = [];
+let refreshInProgress = false;
 
 function processQueue(error: unknown, token: string | null) {
   failedQueue.forEach((prom) => {
@@ -113,21 +114,25 @@ client.interceptors.response.use(
     }
 
     if (error.response?.status !== 401 || originalRequest._retry || isAuthEndpoint) {
-      // For 401 on non-auth endpoints, session expired — redirect to login
+      // For 401 on non-auth endpoints, check if it's a transient issue
       if (error.response?.status === 401 && !isAuthEndpoint) {
         if (!useAuthStore.getState().hasHydrated) {
           return Promise.reject(error);
         }
-        notifyGlobalError('登录状态已失效，请重新登录');
-        useAuthStore.getState().logout();
-        window.location.replace('/login');
+        // Only force logout if we're certain the session is gone (not during hydration)
+        const isAuthenticated = useAuthStore.getState().isAuthenticated;
+        if (isAuthenticated) {
+          notifyGlobalError('登录状态已失效，请重新登录');
+          useAuthStore.getState().logout();
+          window.location.replace('/login');
+        }
       } else if (!isAuthEndpoint && !silentBackgroundRequest) {
         notifyGlobalError(error);
       }
       return Promise.reject(error);
     }
 
-    if (isRefreshing) {
+    if (refreshInProgress) {
       return new Promise((resolve, reject) => {
         failedQueue.push({ resolve, reject });
       }).then((token) => {
@@ -137,23 +142,33 @@ client.interceptors.response.use(
     }
 
     originalRequest._retry = true;
-    isRefreshing = true;
+    refreshInProgress = true;
 
     try {
-      const tokens = useAuthStore.getState().tokens;
-      const refreshToken = tokens?.refreshToken;
+      const ok = await useAuthStore.getState().restoreSessionFromCookie();
+      if (!ok) {
+        // restoreSessionFromCookie returns false for network errors too —
+        // only logout if the access token was actually cleared (auth rejection)
+        const newAccessToken = getAccessToken();
+        if (!newAccessToken) {
+          // Refresh truly failed (auth rejection), logout
+          processQueue(new Error('Session expired'), null);
+          if (useAuthStore.getState().hasHydrated) {
+            notifyGlobalError('登录状态已失效，请重新登录');
+            useAuthStore.getState().logout();
+            window.location.replace('/login');
+          }
+          return Promise.reject(new Error('Session expired'));
+        }
+        // Token still present — was a transient network issue, don't retry with
+        // old (possibly expired) token to avoid infinite 401 → retry → 401 loop.
+        // Just reject and let the user retry manually.
+        processQueue(null, newAccessToken);
+        return Promise.reject(error);
+      }
 
-      const { data: resp } = await axios.post(
-        `${import.meta.env.VITE_API_BASE_URL || '/api'}/auth/refresh`,
-        refreshToken ? { refreshToken } : {},
-        { withCredentials: true },
-      );
-
-      const newAccessToken = unwrapApiData<{ accessToken?: string }>(resp).accessToken;
-      if (!newAccessToken) throw new Error('No access token in refresh response');
-
-      // Update in-memory accessToken; refreshToken lives in an HttpOnly cookie.
-      useAuthStore.getState().setAccessToken(newAccessToken, refreshToken);
+      const newAccessToken = getAccessToken();
+      if (!newAccessToken) throw new Error('No access token after refresh');
 
       processQueue(null, newAccessToken);
       originalRequest.headers.Authorization = `Bearer ${newAccessToken}`;
@@ -168,7 +183,7 @@ client.interceptors.response.use(
       window.location.replace('/login');
       return Promise.reject(refreshError);
     } finally {
-      isRefreshing = false;
+      refreshInProgress = false;
     }
   },
 );

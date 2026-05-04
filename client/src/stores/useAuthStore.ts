@@ -24,6 +24,10 @@ interface AuthState {
 // In-memory accessToken. Refresh is restored through an HttpOnly cookie.
 let _accessToken: string | null = null;
 
+// Singleton refresh lock to prevent concurrent /auth/refresh calls which
+// would invalidate each other's familyId and trigger token revocation.
+let _refreshPromise: Promise<boolean> | null = null;
+
 export function getAccessToken(): string | null {
   return _accessToken;
 }
@@ -57,6 +61,61 @@ function unwrapApiPayload<T>(value: unknown): T {
     return data as T;
   }
   return value as T;
+}
+
+async function doRefresh(get: () => AuthState, set: (partial: Partial<AuthState>) => void): Promise<boolean> {
+  if (_refreshPromise) return _refreshPromise;
+
+  _refreshPromise = (async () => {
+    try {
+      const { data: refreshResp } = await client.post('/auth/refresh');
+      const { accessToken } = unwrapApiPayload<{ accessToken?: string }>(refreshResp);
+      _accessToken = accessToken ?? null;
+
+      let user: User | null = null;
+      try {
+        const { data: profileResp } = await client.get('/auth/profile');
+        user = unwrapApiPayload<User>(profileResp);
+      } catch {
+        // Profile fetch failed but refresh succeeded — keep session alive
+        user = get().user;
+      }
+
+      if (user) {
+        set({ user, tokens: null, isAuthenticated: true });
+        useFavoriteStore.getState().hydrate();
+        return true;
+      }
+
+      // Refresh succeeded but no user — genuine auth failure
+      _accessToken = null;
+      set({ user: null, tokens: null, isAuthenticated: false, rememberMe: false });
+      return false;
+    } catch (err) {
+      // Distinguish network errors from auth rejection (401/403)
+      const status = (err as { response?: { status?: number } })?.response?.status;
+      const isNetworkError = !status; // no response = network failure / timeout / CORS
+      const isServerError = status && status >= 500;
+
+      if (isNetworkError || isServerError) {
+        // Transient failure — restore session if we had a user before
+        const prevUser = get().user;
+        if (prevUser) {
+          set({ user: prevUser, tokens: null, isAuthenticated: true });
+        }
+        return false;
+      }
+
+      // Auth rejection (401/403/etc) — genuinely expired or revoked
+      _accessToken = null;
+      set({ user: null, tokens: null, isAuthenticated: false, rememberMe: false });
+      return false;
+    } finally {
+      _refreshPromise = null;
+    }
+  })();
+
+  return _refreshPromise;
 }
 
 export const useAuthStore = create<AuthState>()(
@@ -94,71 +153,19 @@ export const useAuthStore = create<AuthState>()(
       setHasHydrated: (hasHydrated) => set({ hasHydrated }),
       restoreSessionFromCookie: async () => {
         if (!isTokenExpired(_accessToken) && get().user) return true;
+
         const rememberedUser = get().rememberMe ? get().user : null;
-        const refreshToken = get().tokens?.refreshToken;
         set({ user: rememberedUser, tokens: null, isAuthenticated: false });
-        if (refreshToken && isTokenExpired(refreshToken)) {
-          _accessToken = null;
-          set({ user: null, tokens: null, isAuthenticated: false, rememberMe: false });
-          return false;
-        }
 
-        try {
-          const { data: refreshResp } = await client.post('/auth/refresh', refreshToken ? { refreshToken } : {});
-          const { accessToken } = unwrapApiPayload<{ accessToken?: string }>(refreshResp);
-
-          const { data: profileResp } = await client.get('/auth/profile');
-          const user = unwrapApiPayload<User>(profileResp);
-
-          _accessToken = accessToken ?? null;
-          set({
-            user,
-            tokens: refreshToken && accessToken ? { accessToken, refreshToken } : null,
-            isAuthenticated: true,
-          });
-          useFavoriteStore.getState().hydrate();
-          return true;
-        } catch (error) {
-          _accessToken = null;
-          const status = axios.isAxiosError(error) ? error.response?.status : undefined;
-          if (status && [400, 401, 403].includes(status)) {
-            set({ user: null, tokens: null, isAuthenticated: false, rememberMe: false });
-          } else {
-            set((state) => ({
-              user: state.rememberMe ? state.user : null,
-              tokens: null,
-              isAuthenticated: false,
-            }));
-          }
-          return false;
-        }
+        return doRefresh(get, set);
       },
       checkAndRefreshToken: async () => {
-        const { tokens, isAuthenticated, logout } = get();
+        const { isAuthenticated } = get();
         if (!isAuthenticated) return false;
 
-        // If access token is still valid, nothing to do
         if (!isTokenExpired(_accessToken)) return true;
 
-        // Access token expired — try to refresh
-        const refreshToken = tokens?.refreshToken;
-        if (refreshToken && isTokenExpired(refreshToken)) {
-          logout();
-          return false;
-        }
-
-        try {
-          const { data: resp } = await client.post('/auth/refresh', refreshToken ? { refreshToken } : {});
-          const newAccessToken = unwrapApiPayload<{ accessToken?: string }>(resp).accessToken;
-          if (!newAccessToken) throw new Error('No token in response');
-
-          _accessToken = newAccessToken;
-          set({ tokens: refreshToken ? { accessToken: newAccessToken, refreshToken } : null });
-          return true;
-        } catch {
-          logout();
-          return false;
-        }
+        return doRefresh(get, set);
       },
     }),
     {

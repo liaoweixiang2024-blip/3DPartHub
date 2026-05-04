@@ -58,6 +58,5 @@ tmp_*/
 *.dwg
 *.dxf
 
-# Prisma seeds (non-runtime)
+# Prisma batch seeds (large product data, not needed at runtime)
 prisma/seeds/
-prisma/seed-categories.ts

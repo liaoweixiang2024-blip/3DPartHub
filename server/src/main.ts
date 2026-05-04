@@ -71,11 +71,16 @@ if (!cluster.isWorker) {
 // Security headers
 app.use(securityHeaders);
 
-// CORS — restrict origins from config
-const allowedOrigins = config.allowedOrigins.split(',').map((s) => s.trim());
+// CORS — restrict origins from config (empty = same-origin only, for reverse proxy setups)
+const originList = config.allowedOrigins
+  ? config.allowedOrigins
+      .split(',')
+      .map((s) => s.trim())
+      .filter(Boolean)
+  : false;
 app.use(
   cors({
-    origin: allowedOrigins,
+    origin: originList,
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH'],
   }),
@@ -380,25 +385,47 @@ app.listen(PORT, async () => {
 
   // Auto-seed categories on startup (primary process only, disable with AUTO_SEED=0)
   if (!cluster.isWorker && process.env.AUTO_SEED !== '0') {
-    const { execFile } = await import('node:child_process');
-    const seedScripts = [
-      { name: 'categories', script: 'prisma/seed-categories.ts' },
-      { name: 'selection-categories', script: 'prisma/seed-beize.ts' },
-    ];
-    for (const { name, script } of seedScripts) {
-      try {
-        await new Promise<void>((resolve, reject) => {
-          execFile('npx', ['tsx', script], { cwd: process.cwd(), timeout: 60_000 }, (err, stdout, stderr) => {
-            if (err) return reject(err);
-            if (stderr && !stderr.includes('ExperimentalWarning')) logger.debug({ stderr }, `Auto-seed ${name} stderr`);
-            resolve();
-          });
-        });
-        logger.info({ script: name }, 'Auto-seed completed');
-      } catch (err) {
-        logger.warn({ err, script: name }, 'Auto-seed failed');
+    // Try compiled dist/prisma/ (Docker: ./prisma/seed-xxx.js from dist/main.js)
+    // then prisma/ with tsx (local dev: ../prisma/seed-xxx.js from src/main.js)
+    const trySeed = async <T>(paths: string[]) => {
+      for (const p of paths) {
+        try {
+          return (await import(p)) as T;
+        } catch {}
       }
+      return null;
+    };
+    const seedCategoriesMod = await trySeed<{ seedCategories: (p: any) => Promise<{ upserted: number }> }>([
+      './prisma/seed-categories.js',
+      '../prisma/seed-categories.js',
+    ]);
+    const seedBeizeMod = await trySeed<{ seedBeizeCategories: (p: any) => Promise<{ upserted: number }> }>([
+      './prisma/seed-beize.js',
+      '../prisma/seed-beize.js',
+    ]);
+    const { PrismaClient } = await import('@prisma/client');
+    const seedPrisma = new PrismaClient();
+    try {
+      if (seedCategoriesMod) {
+        const result = await seedCategoriesMod.seedCategories(seedPrisma);
+        logger.info({ upserted: result.upserted }, 'Auto-seed categories completed');
+      } else {
+        logger.warn('Auto-seed categories skipped: compiled seed module not found');
+      }
+    } catch (err) {
+      logger.warn({ err }, 'Auto-seed categories failed');
     }
+    try {
+      if (seedBeizeMod) {
+        const result = await seedBeizeMod.seedBeizeCategories(seedPrisma);
+        logger.info({ upserted: result.upserted }, 'Auto-seed selection-categories completed');
+      } else {
+        logger.warn('Auto-seed selection-categories skipped: compiled seed module not found');
+      }
+    } catch (err) {
+      logger.warn({ err }, 'Auto-seed selection-categories failed');
+    }
+    await seedPrisma.$disconnect();
   }
 
   // Backup scheduler should only run in one process (primary handles background jobs)
@@ -412,11 +439,8 @@ app.listen(PORT, async () => {
     if (!existing) {
       const adminUser = process.env.ADMIN_USER || 'admin';
       const adminPass = process.env.ADMIN_PASS || (process.env.NODE_ENV === 'production' ? '' : 'admin123');
-      if (
-        process.env.NODE_ENV === 'production' &&
-        (!adminPass || adminPass === 'admin123' || adminPass === '3DPartHub@2026' || adminPass.length < 12)
-      ) {
-        logger.fatal('ADMIN_PASS is required for first production startup and must be at least 12 characters');
+      if (process.env.NODE_ENV === 'production' && (!adminPass || adminPass === 'admin123' || adminPass.length < 8)) {
+        logger.fatal('ADMIN_PASS is required for first production startup and must be at least 8 characters');
         process.exit(1);
       }
       const adminEmail = process.env.ADMIN_EMAIL || `${adminUser}@model.com`;

@@ -29,6 +29,7 @@ export type NavItemConfig = {
   icon: string;
   path: string;
   enabled?: boolean;
+  roles?: ('USER' | 'ADMIN')[];
 };
 
 export type UploadPolicy = {
@@ -111,30 +112,31 @@ export const DEFAULT_SUPPORT_STEPS: SupportStepConfig[] = [
   { icon: 'check_circle', title: '交付验收', desc: '确认最终模型' },
 ];
 
-export const DEFAULT_USER_NAV: NavItemConfig[] = [
+export const DEFAULT_NAV: NavItemConfig[] = [
   { label: '模型库', icon: 'dashboard', path: '/', enabled: true },
   { label: '产品选型', icon: 'tune', path: '/selection', enabled: true },
   { label: '产品图库', icon: 'image', path: '/product-wall', enabled: true },
+  { label: '规格查询', icon: 'straighten', path: '/thread-size', enabled: true },
   { label: '我的收藏', icon: 'star', path: '/favorites', enabled: true },
-  { label: '我的询价', icon: 'request_quote', path: '/my-inquiries', enabled: true },
+  { label: '我的分享', icon: 'share', path: '/my-shares', enabled: true },
   { label: '下载历史', icon: 'download', path: '/downloads', enabled: true },
+  { label: '我的询价', icon: 'request_quote', path: '/my-inquiries', enabled: true },
   { label: '我的工单', icon: 'assignment_add', path: '/my-tickets', enabled: true },
   { label: '技术支持', icon: 'support_agent', path: '/support', enabled: true },
+  { label: '模型管理', icon: 'view_in_ar', path: '/admin/models', enabled: true, roles: ['ADMIN'] },
+  { label: '分类管理', icon: 'folder', path: '/admin/categories', enabled: true, roles: ['ADMIN'] },
+  { label: '选型管理', icon: 'tune', path: '/admin/selections', enabled: true, roles: ['ADMIN'] },
+  { label: '询价管理', icon: 'receipt_long', path: '/admin/inquiries', enabled: true, roles: ['ADMIN'] },
+  { label: '工单处理', icon: 'build', path: '/admin/tickets', enabled: true, roles: ['ADMIN'] },
+  { label: '用户管理', icon: 'group', path: '/admin/users', enabled: true, roles: ['ADMIN'] },
+  { label: '分享管理', icon: 'share', path: '/admin/shares', enabled: true, roles: ['ADMIN'] },
+  { label: '下载统计', icon: 'download', path: '/admin/downloads', enabled: true, roles: ['ADMIN'] },
+  { label: '操作日志', icon: 'schedule', path: '/admin/audit', enabled: true, roles: ['ADMIN'] },
+  { label: '系统设置', icon: 'settings', path: '/admin/settings', enabled: true, roles: ['ADMIN'] },
 ];
 
-export const DEFAULT_ADMIN_NAV: NavItemConfig[] = [
-  ...DEFAULT_USER_NAV,
-  { label: '模型管理', icon: 'view_in_ar', path: '/admin/models', enabled: true },
-  { label: '分类管理', icon: 'folder', path: '/admin/categories', enabled: true },
-  { label: '选型管理', icon: 'tune', path: '/admin/selections', enabled: true },
-  { label: '询价管理', icon: 'receipt_long', path: '/admin/inquiries', enabled: true },
-  { label: '工单处理', icon: 'build', path: '/admin/tickets', enabled: true },
-  { label: '用户管理', icon: 'group', path: '/admin/users', enabled: true },
-  { label: '分享管理', icon: 'share', path: '/admin/shares', enabled: true },
-  { label: '下载统计', icon: 'download', path: '/admin/downloads', enabled: true },
-  { label: '操作日志', icon: 'schedule', path: '/admin/audit', enabled: true },
-  { label: '系统设置', icon: 'settings', path: '/admin/settings', enabled: true },
-];
+export const DEFAULT_USER_NAV = DEFAULT_NAV.filter((item) => !isAdminOnly(item));
+export const DEFAULT_ADMIN_NAV = DEFAULT_NAV;
 
 export const DEFAULT_MOBILE_NAV: NavItemConfig[] = [
   { label: '首页', icon: 'dashboard', path: '/', enabled: true },
@@ -187,6 +189,42 @@ function normalizeAdminNav(items: NavItemConfig[]) {
     return next;
   }
   return normalized;
+}
+
+export function isAdminOnly(item: NavItemConfig): boolean {
+  if (item.roles?.includes('ADMIN')) return true;
+  return item.path.startsWith('/admin/');
+}
+
+function enabled<T extends { enabled?: boolean; path?: string }>(items: T[]): T[] {
+  const seen = new Set<string>();
+  return items.filter((item) => {
+    if (item.enabled === false) return false;
+    if ('path' in item && typeof item.path === 'string') {
+      if (seen.has(item.path)) return false;
+      seen.add(item.path);
+    }
+    return true;
+  });
+}
+
+function migrateLegacyNav(all: Record<string, unknown>): NavItemConfig[] | null {
+  const navItems = jsonSetting<NavItemConfig[] | undefined>(all.nav_items, undefined);
+  if (navItems) return navItems;
+
+  const userItems = jsonSetting<NavItemConfig[] | undefined>(all.nav_user_items, undefined);
+  const adminItems = jsonSetting<NavItemConfig[] | undefined>(all.nav_admin_items, undefined);
+  if (!userItems && !adminItems) return null;
+
+  const merged: NavItemConfig[] = [...(userItems || [])];
+  const existingPaths = new Set(merged.map((i) => i.path));
+  for (const item of adminItems || []) {
+    if (!existingPaths.has(item.path)) {
+      merged.push({ ...item, roles: ['ADMIN'] });
+      existingPaths.add(item.path);
+    }
+  }
+  return merged;
 }
 
 export const DEFAULT_SELECTION_THREAD_PRIORITY: Record<string, number> = {
@@ -248,9 +286,8 @@ export async function getBusinessConfig() {
       DEFAULT_TICKET_CLASSIFICATIONS,
     ),
     supportProcessSteps: jsonSetting<SupportStepConfig[]>(all.support_process_steps, DEFAULT_SUPPORT_STEPS),
-    navUserItems: jsonSetting<NavItemConfig[]>(all.nav_user_items, DEFAULT_USER_NAV),
-    navAdminItems: normalizeAdminNav(jsonSetting<NavItemConfig[]>(all.nav_admin_items, DEFAULT_ADMIN_NAV)),
-    navMobileItems: jsonSetting<NavItemConfig[]>(all.nav_mobile_items, DEFAULT_MOBILE_NAV),
+    navItems: enabled(migrateLegacyNav(all) || DEFAULT_NAV),
+    navMobileItems: enabled(jsonSetting<NavItemConfig[]>(all.nav_mobile_items, DEFAULT_MOBILE_NAV)),
     uploadPolicy: normalizeUploadPolicy({
       ...DEFAULT_UPLOAD_POLICY,
       ...jsonSetting<Partial<UploadPolicy>>(all.upload_policy, {}),

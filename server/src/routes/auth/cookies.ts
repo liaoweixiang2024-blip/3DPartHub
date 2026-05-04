@@ -2,7 +2,7 @@ import { Request, Response, type CookieOptions } from 'express';
 
 const ACCESS_COOKIE = 'access_token';
 const REFRESH_COOKIE = 'refresh_token';
-const ACCESS_COOKIE_MAX_AGE_MS = 24 * 60 * 60 * 1000;
+const ACCESS_COOKIE_MAX_AGE_MS = 8 * 24 * 60 * 60 * 1000;
 const REFRESH_COOKIE_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000;
 
 function requestIsHttps(req: Request): boolean {
@@ -25,14 +25,14 @@ export function setAuthCookies(
   res: Response,
   accessToken: string,
   refreshToken?: string,
-  options: { rememberMe?: boolean } = {},
+  options: { rememberMe?: boolean; persistRefresh?: boolean } = {},
 ): void {
   res.cookie(ACCESS_COOKIE, accessToken, authCookieOptions(req, ACCESS_COOKIE_MAX_AGE_MS));
   if (refreshToken) {
     res.cookie(
       REFRESH_COOKIE,
       refreshToken,
-      authCookieOptions(req, options.rememberMe ? REFRESH_COOKIE_MAX_AGE_MS : undefined),
+      authCookieOptions(req, options.rememberMe || options.persistRefresh ? REFRESH_COOKIE_MAX_AGE_MS : undefined),
     );
   }
 }

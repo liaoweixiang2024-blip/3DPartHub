@@ -121,6 +121,7 @@ export function createSettingsPublicRouter() {
             support_process_steps: all.support_process_steps ?? '',
             nav_user_items: all.nav_user_items ?? '',
             nav_admin_items: all.nav_admin_items ?? '',
+            nav_items: all.nav_items ?? '',
             nav_mobile_items: all.nav_mobile_items ?? '',
             upload_policy: all.upload_policy ?? '',
             selection_thread_priority: all.selection_thread_priority ?? '',

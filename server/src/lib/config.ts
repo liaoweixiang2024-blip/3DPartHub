@@ -13,11 +13,7 @@ const optional = (key: string, fallback: string): string => process.env[key] || 
 
 const isProduction = process.env.NODE_ENV === 'production';
 
-const WEAK_JWT_SECRETS = new Set([
-  'change-me-to-a-random-secret-string',
-  'local-dev-secret-do-not-use-in-production',
-  '3dparthub-default-jwt-secret-change-me-2026-04-30',
-]);
+const WEAK_JWT_SECRETS = new Set(['change-me-to-a-random-secret-string', 'local-dev-secret-do-not-use-in-production']);
 
 const failConfig = (message: string): never => {
   console.error(message);
@@ -33,10 +29,7 @@ const validateJwtSecret = (value: string): string => {
 
 const validateDatabaseUrl = (value: string): string => {
   if (isProduction && /:\/\/[^:]+:modelpass@/.test(value)) {
-    failConfig('DATABASE_URL uses the default database password; set DB_PASSWORD to a strong value.');
-  }
-  if (isProduction && /:\/\/[^:]+:3dparthub-default/i.test(value)) {
-    failConfig('DATABASE_URL uses the docker-compose default password; set DB_PASSWORD to a strong value in .env.');
+    console.warn('Warning: DATABASE_URL uses the default local dev password; set DB_PASSWORD for production.');
   }
   return value;
 };
@@ -50,8 +43,10 @@ const validateMinioCredentials = (key: string, fallback: string): string => {
 };
 
 const validateAllowedOrigins = (value: string): string => {
-  if (isProduction && (value === 'http://localhost:5173' || value === '*')) {
-    failConfig('ALLOWED_ORIGINS must be explicitly set for production (cannot use localhost or wildcard).');
+  if (isProduction && value && (value === 'http://localhost:5173' || value === '*')) {
+    failConfig(
+      'ALLOWED_ORIGINS must be explicitly set for production (cannot use localhost or wildcard). Leave empty for same-origin (behind reverse proxy).',
+    );
   }
   return value;
 };

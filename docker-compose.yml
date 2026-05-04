@@ -95,13 +95,22 @@ services:
       ADMIN_USER: ${ADMIN_USER:-admin}
       ADMIN_EMAIL: ${ADMIN_EMAIL:-admin@model.local}
       ADMIN_PASS: '${ADMIN_PASS:-3DPartHub@2026}'
-      # <<< 可选: 允许的来源域名 (多个用逗号分隔)
+      # <<< 可选: 允许的来源域名 (多个用逗号分隔，留空则仅同源)
       ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-}
+      STORAGE_TYPE: ${STORAGE_TYPE:-local}
+      MINIO_ENDPOINT: ${MINIO_ENDPOINT:-}
+      MINIO_PORT: ${MINIO_PORT:-9000}
+      MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY:-}
+      MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:-}
+      MINIO_BUCKET: ${MINIO_BUCKET:-models}
+      MINIO_USE_SSL: ${MINIO_USE_SSL:-false}
       # <<< 可选: 邮件通知 (注册验证码)
       SMTP_HOST: ${SMTP_HOST:-}
       SMTP_PORT: ${SMTP_PORT:-465}
       SMTP_USER: ${SMTP_USER:-}
       SMTP_PASS: ${SMTP_PASS:-}
+      # <<< 可选: 启动时自动同步分类数据 (设为 0 禁用)
+      AUTO_SEED: ${AUTO_SEED:-1}
     depends_on:
       postgres:
         condition: service_healthy

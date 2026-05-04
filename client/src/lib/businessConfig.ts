@@ -29,6 +29,7 @@ export interface NavItemConfig {
   icon: string;
   path: string;
   enabled?: boolean;
+  roles?: ('USER' | 'ADMIN')[];
 }
 
 export interface UploadPolicy {
@@ -111,7 +112,7 @@ export const DEFAULT_SUPPORT_STEPS: SupportStepConfig[] = [
   { icon: 'check_circle', title: '交付验收', desc: '确认最终模型' },
 ];
 
-export const DEFAULT_USER_NAV: NavItemConfig[] = [
+export const DEFAULT_NAV: NavItemConfig[] = [
   { label: '模型库', icon: 'dashboard', path: '/', enabled: true },
   { label: '产品选型', icon: 'tune', path: '/selection', enabled: true },
   { label: '产品图库', icon: 'image', path: '/product-wall', enabled: true },
@@ -122,21 +123,21 @@ export const DEFAULT_USER_NAV: NavItemConfig[] = [
   { label: '我的询价', icon: 'request_quote', path: '/my-inquiries', enabled: true },
   { label: '我的工单', icon: 'assignment_add', path: '/my-tickets', enabled: true },
   { label: '技术支持', icon: 'support_agent', path: '/support', enabled: true },
+  { label: '模型管理', icon: 'view_in_ar', path: '/admin/models', enabled: true, roles: ['ADMIN'] },
+  { label: '分类管理', icon: 'folder', path: '/admin/categories', enabled: true, roles: ['ADMIN'] },
+  { label: '选型管理', icon: 'tune', path: '/admin/selections', enabled: true, roles: ['ADMIN'] },
+  { label: '询价管理', icon: 'receipt_long', path: '/admin/inquiries', enabled: true, roles: ['ADMIN'] },
+  { label: '工单处理', icon: 'build', path: '/admin/tickets', enabled: true, roles: ['ADMIN'] },
+  { label: '用户管理', icon: 'group', path: '/admin/users', enabled: true, roles: ['ADMIN'] },
+  { label: '分享管理', icon: 'share', path: '/admin/shares', enabled: true, roles: ['ADMIN'] },
+  { label: '下载统计', icon: 'download', path: '/admin/downloads', enabled: true, roles: ['ADMIN'] },
+  { label: '操作日志', icon: 'schedule', path: '/admin/audit', enabled: true, roles: ['ADMIN'] },
+  { label: '系统设置', icon: 'settings', path: '/admin/settings', enabled: true, roles: ['ADMIN'] },
 ];
 
-export const DEFAULT_ADMIN_NAV: NavItemConfig[] = [
-  ...DEFAULT_USER_NAV,
-  { label: '模型管理', icon: 'view_in_ar', path: '/admin/models', enabled: true },
-  { label: '分类管理', icon: 'folder', path: '/admin/categories', enabled: true },
-  { label: '选型管理', icon: 'tune', path: '/admin/selections', enabled: true },
-  { label: '询价管理', icon: 'receipt_long', path: '/admin/inquiries', enabled: true },
-  { label: '工单处理', icon: 'build', path: '/admin/tickets', enabled: true },
-  { label: '用户管理', icon: 'group', path: '/admin/users', enabled: true },
-  { label: '分享管理', icon: 'share', path: '/admin/shares', enabled: true },
-  { label: '下载统计', icon: 'download', path: '/admin/downloads', enabled: true },
-  { label: '操作日志', icon: 'schedule', path: '/admin/audit', enabled: true },
-  { label: '系统设置', icon: 'settings', path: '/admin/settings', enabled: true },
-];
+// Legacy aliases for backward compatibility
+export const DEFAULT_USER_NAV = DEFAULT_NAV.filter((item) => !isAdminOnly(item));
+export const DEFAULT_ADMIN_NAV = DEFAULT_NAV;
 
 export const DEFAULT_MOBILE_NAV: NavItemConfig[] = [
   { label: '首页', icon: 'dashboard', path: '/', enabled: true },
@@ -197,6 +198,11 @@ export function parseSetting<T>(value: unknown, fallback: T): T {
   }
 }
 
+export function isAdminOnly(item: NavItemConfig): boolean {
+  if (item.roles?.includes('ADMIN')) return true;
+  return item.path.startsWith('/admin/');
+}
+
 function enabled<T extends { enabled?: boolean; path?: string }>(items: T[]): T[] {
   const seen = new Set<string>();
   return items.filter((item) => {
@@ -209,62 +215,24 @@ function enabled<T extends { enabled?: boolean; path?: string }>(items: T[]): T[
   });
 }
 
-const DEAD_USER_PATHS = new Set(['/admin/quote-template', '/admin/product-wall']);
+// Migrate legacy split nav_user_items + nav_admin_items into unified nav_items
+function migrateLegacyNav(settings: Partial<SystemSettings>): NavItemConfig[] | null {
+  const navItems = parseSetting<NavItemConfig[] | undefined>(settings.nav_items, undefined);
+  if (navItems) return navItems;
 
-const hasActive = (items: NavItemConfig[], path: string) =>
-  items.some((item) => item.path === path && item.enabled !== false);
+  const userItems = parseSetting<NavItemConfig[] | undefined>(settings.nav_user_items, undefined);
+  const adminItems = parseSetting<NavItemConfig[] | undefined>(settings.nav_admin_items, undefined);
+  if (!userItems && !adminItems) return null;
 
-export function normalizeUserNav(items: NavItemConfig[], isCustom = false) {
-  const next = items.filter((item) => !DEAD_USER_PATHS.has(item.path));
-  if (!isCustom && !hasActive(next, '/product-wall')) {
-    const selectionIndex = next.findIndex((item) => item.path === '/selection');
-    next.splice(selectionIndex >= 0 ? selectionIndex + 1 : next.length, 0, {
-      label: '产品图库',
-      icon: 'image',
-      path: '/product-wall',
-      enabled: true,
-    });
+  const merged: NavItemConfig[] = [...(userItems || [])];
+  const existingPaths = new Set(merged.map((i) => i.path));
+  for (const item of adminItems || []) {
+    if (!existingPaths.has(item.path)) {
+      merged.push({ ...item, roles: ['ADMIN'] });
+      existingPaths.add(item.path);
+    }
   }
-  next.forEach((item) => {
-    if (item.path === '/product-wall') item.label = '产品图库';
-  });
-  if (!isCustom && !hasActive(next, '/my-shares')) {
-    const favoriteIndex = next.findIndex((item) => item.path === '/favorites');
-    const inquiryIndex = next.findIndex((item) => item.path === '/my-inquiries');
-    next.splice(favoriteIndex >= 0 ? favoriteIndex + 1 : inquiryIndex >= 0 ? inquiryIndex : next.length, 0, {
-      label: '我的分享',
-      icon: 'share',
-      path: '/my-shares',
-      enabled: true,
-    });
-  }
-  if (isCustom || hasActive(next, '/thread-size')) return next;
-  const wallIndex = next.findIndex((item) => item.path === '/product-wall');
-  const selectionIndex = next.findIndex((item) => item.path === '/selection');
-  next.splice(wallIndex >= 0 ? wallIndex + 1 : selectionIndex >= 0 ? selectionIndex + 1 : next.length, 0, {
-    label: '规格查询',
-    icon: 'straighten',
-    path: '/thread-size',
-    enabled: true,
-  });
-  return next;
-}
-
-const DEAD_PATHS = new Set(['/admin/quote-template', '/admin/product-wall']);
-
-export function normalizeAdminNav(items: NavItemConfig[], isCustom = false) {
-  const withTools = normalizeUserNav(items, isCustom);
-  const next = withTools.filter((item) => !DEAD_PATHS.has(item.path));
-  if (!isCustom && !hasActive(next, '/admin/downloads')) {
-    const shareIndex = next.findIndex((item) => item.path === '/admin/shares');
-    next.splice(shareIndex >= 0 ? shareIndex + 1 : next.length, 0, {
-      label: '下载统计',
-      icon: 'download',
-      path: '/admin/downloads',
-      enabled: true,
-    });
-  }
-  return next;
+  return merged;
 }
 
 export function getBusinessConfig(settings: Partial<SystemSettings> = getPublicSettingsSnapshot()) {
@@ -295,17 +263,16 @@ export function getBusinessConfig(settings: Partial<SystemSettings> = getPublicS
     ...parseSetting<Record<string, number>>(settings.page_size_policy, {}),
   };
 
+  const allNav = migrateLegacyNav(settings) || DEFAULT_NAV;
+  const filteredNav = enabled(allNav);
+
   return {
     inquiryStatuses: normalizeInquiryStatuses(parseSetting(settings.inquiry_statuses, DEFAULT_INQUIRY_STATUSES)),
     ticketStatuses: parseSetting(settings.ticket_statuses, DEFAULT_TICKET_STATUSES),
     ticketClassifications: enabled(parseSetting(settings.ticket_classifications, DEFAULT_TICKET_CLASSIFICATIONS)),
     supportProcessSteps: parseSetting(settings.support_process_steps, DEFAULT_SUPPORT_STEPS),
-    userNav: enabled(
-      normalizeUserNav(parseSetting(settings.nav_user_items, DEFAULT_USER_NAV), !!settings.nav_user_items),
-    ),
-    adminNav: enabled(
-      normalizeAdminNav(parseSetting(settings.nav_admin_items, DEFAULT_ADMIN_NAV), !!settings.nav_admin_items),
-    ),
+    userNav: filteredNav.filter((item) => !isAdminOnly(item)),
+    adminNav: filteredNav,
     mobileNav: enabled(parseSetting(settings.nav_mobile_items, DEFAULT_MOBILE_NAV)),
     uploadPolicy: normalizeUploadPolicy({
       ...DEFAULT_UPLOAD_POLICY,

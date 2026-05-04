@@ -1,5 +1,5 @@
 import { motion, AnimatePresence } from 'framer-motion';
-import { lazy, Suspense, useEffect, useRef } from 'react';
+import { lazy, Suspense, useEffect, useRef, useState } from 'react';
 import { Routes, Route, Link, useLocation, Navigate } from 'react-router-dom';
 import BrandMark from './components/shared/BrandMark';
 import Icon from './components/shared/Icon';
@@ -65,10 +65,22 @@ function PageWrap({ children }: { children: React.ReactNode }) {
 // Protected pages — check auth BEFORE entering motion animation
 // so redirect to login is instant (no exit animation delay)
 function ProtectedPage({ children, requiredRole }: { children: React.ReactNode; requiredRole?: string }) {
-  const { isAuthenticated, user, hasHydrated } = useAuthStore();
+  const { isAuthenticated, user, hasHydrated, restoreSessionFromCookie } = useAuthStore();
   const location = useLocation();
+  const [authRetryDone, setAuthRetryDone] = useState(false);
+  const [authRetrying, setAuthRetrying] = useState(false);
 
-  if (!hasHydrated) {
+  useEffect(() => {
+    if (!hasHydrated || isAuthenticated || authRetryDone || authRetrying) return;
+
+    setAuthRetrying(true);
+    void restoreSessionFromCookie().finally(() => {
+      setAuthRetryDone(true);
+      setAuthRetrying(false);
+    });
+  }, [authRetryDone, authRetrying, hasHydrated, isAuthenticated, restoreSessionFromCookie]);
+
+  if (!hasHydrated || authRetrying || (!isAuthenticated && !authRetryDone)) {
     return null;
   }
 
@@ -134,7 +146,7 @@ function ModelReturnPathTracker() {
   return null;
 }
 
-/** Periodically check token validity and logout if expired */
+/** Periodically check token validity and refresh when near expiry */
 function useTokenWatcher() {
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
   const hasHydrated = useAuthStore((s) => s.hasHydrated);
@@ -144,13 +156,17 @@ function useTokenWatcher() {
   useEffect(() => {
     if (!hasHydrated || !isAuthenticated) return;
 
-    // Check immediately on mount / auth change
-    checkAndRefreshToken();
-
-    // Then check every 60 seconds
-    timerRef.current = setInterval(() => {
+    const check = () => {
+      // Skip if browser is offline — avoid false-positive logouts from network failures
+      if (typeof navigator !== 'undefined' && !navigator.onLine) return;
       checkAndRefreshToken();
-    }, 60_000);
+    };
+
+    // Initial check
+    check();
+
+    // Then check every 5 minutes (token lifetime is 7 days, no need for 60s polling)
+    timerRef.current = setInterval(check, 300_000);
 
     return () => {
       if (timerRef.current) clearInterval(timerRef.current);
