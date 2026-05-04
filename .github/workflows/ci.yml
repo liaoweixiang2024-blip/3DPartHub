@@ -36,6 +36,10 @@ jobs:
         working-directory: server
         run: npm ci
 
+      - name: Generate Prisma client
+        working-directory: server
+        run: npx prisma generate
+
       - name: Install scan tools
         run: sudo apt-get update && sudo apt-get install -y ripgrep
 

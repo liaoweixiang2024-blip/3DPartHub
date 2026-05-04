@@ -5,7 +5,6 @@ import BrandMark from './components/shared/BrandMark';
 import Icon from './components/shared/Icon';
 import MaintenanceGate from './components/shared/MaintenanceGate';
 import { isModelDetailPath, saveModelReturnPath } from './lib/modelReturnPath';
-
 // Static import for the landing page — eliminates flash on first visit
 import HomePage from './pages/HomePage';
 import { useAuthStore } from './stores/useAuthStore';
