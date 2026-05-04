@@ -8,10 +8,11 @@
     <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
     <link rel="manifest" href="/site.webmanifest" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-    <meta name="description" content="3DPartHub - Enterprise 3D Part Model Management Platform" />
+    <title>3DPartHub</title>
+    <meta name="description" content="" />
     <meta name="theme-color" content="#1a1a1a" />
-    <meta property="og:title" content="3DPartHub" />
-    <meta property="og:description" content="3DPartHub - Enterprise 3D Part Model Management Platform" />
+    <meta property="og:title" content="" />
+    <meta property="og:description" content="" />
     <meta property="og:type" content="website" />
     <script>
       // Apply site config from localStorage before React hydrates to prevent flash
@@ -22,8 +23,18 @@
           var stored = JSON.parse(raw);
           var cfg = stored && stored.data;
           if (!cfg) return;
-          if (cfg.site_title) {
-            document.title = cfg.site_title;
+          var title = cfg.site_browser_title || cfg.site_title;
+          if (title) {
+            document.title = title;
+            var ogTitle = document.querySelector('meta[property="og:title"]');
+            if (ogTitle) ogTitle.setAttribute('content', title);
+          }
+          var desc = cfg.site_description;
+          if (desc) {
+            var metaDesc = document.querySelector('meta[name="description"]');
+            if (metaDesc) metaDesc.setAttribute('content', desc);
+            var ogDesc = document.querySelector('meta[property="og:description"]');
+            if (ogDesc) ogDesc.setAttribute('content', desc);
           }
           if (cfg.site_favicon) {
             var link = document.querySelector('link[rel="icon"]');
@@ -32,7 +43,6 @@
         } catch(e) {}
       })();
     </script>
-    <title>3DPartHub</title>
   </head>
   <body>
     <div id="root"></div>

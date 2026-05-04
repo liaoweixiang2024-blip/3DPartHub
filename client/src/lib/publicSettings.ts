@@ -183,7 +183,7 @@ function applyMetaTags() {
   if (!cache) return;
   const desc = (cache.site_description as string) || '';
   const keywords = (cache.site_keywords as string) || '';
-  const title = getSiteTitle();
+  const title = getBrowserTitle();
 
   // Update <meta name="description">
   const metaDesc = document.querySelector('meta[name="description"]');

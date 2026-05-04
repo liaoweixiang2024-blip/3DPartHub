@@ -322,11 +322,13 @@ export default function CadViewerPanel({
   }, [modelId, onThumbnailUpdated, toast]);
 
   const handleFullscreen = useCallback(() => {
-    if (!containerRef.current) return;
+    const el = containerRef.current;
+    if (!el) return;
     if (document.fullscreenElement) {
-      void document.exitFullscreen().catch(() => {});
+      void (document.exitFullscreen || (document as any).webkitExitFullscreen).call(document).catch(() => {});
     } else {
-      void containerRef.current.requestFullscreen().catch(() => {});
+      const fn = el.requestFullscreen || (el as any).webkitRequestFullscreen;
+      if (fn) void fn.call(el).catch(() => {});
     }
   }, []);
 
@@ -334,7 +336,7 @@ export default function CadViewerPanel({
     (event) => {
       event.stopPropagation();
       if (document.fullscreenElement) {
-        void document.exitFullscreen().catch(() => {});
+        void (document.exitFullscreen || (document as any).webkitExitFullscreen).call(document).catch(() => {});
         return;
       }
       onBack?.();
@@ -352,12 +354,17 @@ export default function CadViewerPanel({
   }, []);
 
   useEffect(() => {
+    const getFullscreenEl = () => document.fullscreenElement || (document as any).webkitFullscreenElement;
     const updateFullscreenState = () => {
-      setIsFullscreen(Boolean(document.fullscreenElement));
+      setIsFullscreen(Boolean(getFullscreenEl()));
     };
     updateFullscreenState();
     document.addEventListener('fullscreenchange', updateFullscreenState);
-    return () => document.removeEventListener('fullscreenchange', updateFullscreenState);
+    document.addEventListener('webkitfullscreenchange', updateFullscreenState);
+    return () => {
+      document.removeEventListener('fullscreenchange', updateFullscreenState);
+      document.removeEventListener('webkitfullscreenchange', updateFullscreenState);
+    };
   }, []);
 
   const handlePartsChange = useCallback((nextParts: ModelPartItem[]) => {

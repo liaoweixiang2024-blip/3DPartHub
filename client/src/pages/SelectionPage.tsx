@@ -643,7 +643,7 @@ export default function SelectionPage() {
     error: categoriesError,
     isLoading: categoriesLoading,
     mutate: retryCategories,
-  } = useSWR('selections/categories', getSelectionCategories);
+  } = useSWR('selections/categories', getSelectionCategories, { keepPreviousData: true });
 
   /* pre-fill from share link state or URL params */
   const shareStateRef = useRef<{ shareSlug?: string; shareSpecs?: Record<string, string> } | null>(null);
@@ -790,7 +790,7 @@ export default function SelectionPage() {
         pageSize: resultPageSize,
         includeItems: includeFilterItems,
       }),
-    { revalidateOnFocus: false },
+    { revalidateOnFocus: false, keepPreviousData: true },
   );
   const [showFilterLoading, setShowFilterLoading] = useState(false);
   useEffect(() => {
@@ -869,7 +869,7 @@ export default function SelectionPage() {
   const { data: modelMatchMap = {} } = useSWR(
     shouldLoadModelMatches && visibleModelNos.length ? ['sel-model-matches', visibleModelNos.join('|')] : null,
     () => getSelectionModelMatches(visibleModelNos),
-    { revalidateOnFocus: false },
+    { revalidateOnFocus: false, keepPreviousData: true },
   );
   const withVisibleMatch = useCallback(
     (product: SelectionProduct) => {
@@ -1175,6 +1175,11 @@ export default function SelectionPage() {
       requireLogin();
       return;
     }
+    const ps = getCachedPublicSettings();
+    if (ps.share_enabled === false && user.role !== 'ADMIN') {
+      toast('分享功能已关闭，请联系管理员', 'error');
+      return;
+    }
     setSharing(true);
     try {
       const productIds =
@@ -1325,12 +1330,11 @@ export default function SelectionPage() {
     prefersReducedMotion
       ? { initial: false as const }
       : {
-          initial: { opacity: 0, y: 8 },
-          whileInView: { opacity: 1, y: 0, scale: 1 },
-          viewport: { once: true, amount: 0.25, margin: '-12px 0px -12px 0px' },
+          initial: { opacity: 0 },
+          animate: { opacity: 1 },
           transition: {
-            duration: 0.16,
-            delay: Math.min((index % categoryColumns) * 0.015, 0.045),
+            duration: 0.18,
+            delay: Math.min((index % categoryColumns) * 0.02, 0.06),
             ease: 'easeOut' as const,
           },
         };
@@ -1360,7 +1364,7 @@ export default function SelectionPage() {
       key={key}
       onClick={onClick}
       className={categoryCardClass(active)}
-      whileHover={prefersReducedMotion ? undefined : { y: -1 }}
+      whileHover={prefersReducedMotion ? undefined : { scale: 1.005 }}
       whileTap={prefersReducedMotion ? undefined : { scale: 0.985 }}
       {...categoryItemMotionProps(index)}
     >
@@ -1383,9 +1387,21 @@ export default function SelectionPage() {
   );
   const categoryStatusContent =
     categoriesLoading && cats.length === 0 ? (
-      <div className="flex items-center justify-center py-12">
-        <Icon name="progress_activity" size={24} className="animate-spin text-on-surface-variant/30" />
-        <span className="ml-3 text-sm text-on-surface-variant">正在加载分类...</span>
+      <div className={categoryGridClass}>
+        {Array.from({ length: 6 }).map((_, i) => (
+          <div
+            key={i}
+            className="flex items-stretch rounded-lg border border-outline-variant/8 bg-surface-container/50 overflow-hidden"
+          >
+            <div className="w-14 shrink-0 bg-surface-container-high animate-pulse" />
+            <div className="flex min-w-0 flex-1 items-center gap-2 px-3 py-2.5">
+              <div className="min-w-0 flex-1 space-y-1.5">
+                <div className="h-4 w-2/3 rounded bg-surface-container-high animate-pulse" />
+                <div className="h-3 w-1/2 rounded bg-surface-container-highest/50 animate-pulse" />
+              </div>
+            </div>
+          </div>
+        ))}
       </div>
     ) : categoriesError && cats.length === 0 ? (
       <div className="text-center py-12">
@@ -1661,10 +1677,10 @@ export default function SelectionPage() {
   const isMobileResultView = !isDesktop && phase === 'wizard' && !search && !curField;
   const wizardTransitionKey = search ? `search-${search}` : curField ? `field-${curField}` : 'selection-results';
   const wizardTransition = {
-    initial: { opacity: 0, y: 6 },
-    animate: { opacity: 1, y: 0 },
-    exit: { opacity: 0, y: -4 },
-    transition: { duration: 0.16, ease: 'easeOut' },
+    initial: { opacity: 0 },
+    animate: { opacity: 1 },
+    exit: { opacity: 0 },
+    transition: { duration: 0.12, ease: 'easeOut' },
   } as const;
 
   /* ── results block (only rendered when !curField) ── */
@@ -2206,13 +2222,12 @@ export default function SelectionPage() {
   const desktopScrollContainerClass = 'h-full min-h-0 overflow-y-auto overflow-x-hidden custom-scrollbar';
 
   const contentBody = (
-    <AnimatePresence mode="wait" initial={false}>
+    <AnimatePresence initial={false}>
       <motion.div
         key={selectionPhaseKey}
-        initial={{ opacity: 0.9 }}
+        initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
-        exit={{ opacity: 0.96 }}
-        transition={{ duration: 0.12, ease: 'easeOut' }}
+        transition={{ duration: 0.15, ease: 'easeOut' }}
         className="min-w-0"
       >
         {phase === 'group' && groupContent}
@@ -2222,7 +2237,7 @@ export default function SelectionPage() {
             <div ref={wizardWrapRef} className="px-4 py-4 md:px-5 md:py-5">
               {pageHeader}
               <div className="space-y-0">
-                <AnimatePresence mode="wait" initial={false}>
+                <AnimatePresence initial={false}>
                   <motion.div key={wizardTransitionKey} {...wizardTransition} className="min-w-0">
                     {isMobileResultView ? (
                       resultsJSX

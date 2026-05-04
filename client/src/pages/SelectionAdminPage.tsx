@@ -1980,7 +1980,8 @@ function Content() {
                           const primaryColumn = productColumns.find((col) => col.displayOnly) || productColumns[0];
                           const title =
                             p.modelNo || (primaryColumn ? specs[primaryColumn.key] : '') || p.name || '未命名产品';
-                          const subtitle = p.name && p.name !== title ? p.name : '';
+                          const cleanName = cleanProductName(p.name, p.modelNo);
+                          const subtitle = cleanName && cleanName !== title ? cleanName : '';
                           const displayColumns = productColumns
                             .filter((col) => col.key !== primaryColumn?.key)
                             .slice(0, 6);
