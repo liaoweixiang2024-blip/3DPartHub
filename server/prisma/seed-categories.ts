@@ -57,22 +57,53 @@ const categories = [
 export async function seedCategories(prisma: PrismaClient): Promise<{ upserted: number }> {
   let upserted = 0;
 
+  async function upsertCategory(input: {
+    id: string;
+    name: string;
+    icon?: string;
+    parentId?: string | null;
+    sortOrder: number;
+  }) {
+    const data = {
+      name: input.name,
+      ...(input.icon !== undefined && { icon: input.icon }),
+      parentId: input.parentId ?? null,
+      sortOrder: input.sortOrder,
+    };
+
+    const existingById = await prisma.category.findUnique({ where: { id: input.id } });
+    if (existingById) {
+      return prisma.category.update({ where: { id: existingById.id }, data });
+    }
+
+    const existingByName = await prisma.category.findFirst({
+      where: { name: input.name, parentId: input.parentId ?? null },
+      orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+    });
+    if (existingByName) {
+      return prisma.category.update({ where: { id: existingByName.id }, data });
+    }
+
+    return prisma.category.create({ data: { id: input.id, ...data } });
+  }
+
   for (const cat of categories) {
-    await prisma.category.upsert({
-      where: { id: cat.name },
-      update: { name: cat.name, icon: cat.icon, sortOrder: cat.sortOrder },
-      create: { id: cat.name, name: cat.name, icon: cat.icon, sortOrder: cat.sortOrder },
+    const parent = await upsertCategory({
+      id: cat.name,
+      name: cat.name,
+      icon: cat.icon,
+      sortOrder: cat.sortOrder,
     });
     upserted += 1;
 
     if (cat.children) {
-      const parent = await prisma.category.findUniqueOrThrow({ where: { id: cat.name } });
       for (let i = 0; i < cat.children.length; i++) {
         const childName = cat.children[i];
-        await prisma.category.upsert({
-          where: { id: `${cat.name}_${childName}` },
-          update: { name: childName, sortOrder: i, parentId: parent.id },
-          create: { id: `${cat.name}_${childName}`, name: childName, parentId: parent.id, sortOrder: i },
+        await upsertCategory({
+          id: `${cat.name}_${childName}`,
+          name: childName,
+          parentId: parent.id,
+          sortOrder: i,
         });
         upserted += 1;
       }

@@ -97,12 +97,12 @@ const SETTINGS_SCHEMA: SettingDef[] = [
   { key: 'mat_glass_ior', defaultValue: 1.5 },
   { key: 'mat_glass_thickness', defaultValue: 0.5 },
   // 3D Viewer lighting
-  { key: 'viewer_exposure', defaultValue: 1.2 },
-  { key: 'viewer_ambient_intensity', defaultValue: 0.6 },
-  { key: 'viewer_main_light_intensity', defaultValue: 1.4 },
-  { key: 'viewer_fill_light_intensity', defaultValue: 0.6 },
-  { key: 'viewer_hemisphere_intensity', defaultValue: 0.3 },
-  { key: 'viewer_bg_color', defaultValue: 'linear-gradient(180deg, #2a2a3e 0%, #1e2a42 50%, #162040 100%)' },
+  { key: 'viewer_exposure', defaultValue: 1.4 },
+  { key: 'viewer_ambient_intensity', defaultValue: 1.0 },
+  { key: 'viewer_main_light_intensity', defaultValue: 2.0 },
+  { key: 'viewer_fill_light_intensity', defaultValue: 0.8 },
+  { key: 'viewer_hemisphere_intensity', defaultValue: 0.5 },
+  { key: 'viewer_bg_color', defaultValue: '#ffffff' },
   { key: 'viewer_edge_threshold_angle', defaultValue: 28 },
   { key: 'viewer_edge_vertex_limit', defaultValue: 700000 },
   { key: 'viewer_measure_default_unit', defaultValue: 'auto' },
@@ -186,6 +186,14 @@ const SETTINGS_SCHEMA: SettingDef[] = [
 
 const DEFAULTS: Record<string, unknown> = {};
 for (const s of SETTINGS_SCHEMA) DEFAULTS[s.key] = s.defaultValue;
+
+export function getSettingDefaults(keys: string[]): Record<string, unknown> {
+  const result: Record<string, unknown> = {};
+  for (const key of keys) {
+    if (key in DEFAULTS) result[key] = DEFAULTS[key];
+  }
+  return result;
+}
 
 function normalizeLegacyMaintenanceSettings(settings: Record<string, unknown>): Record<string, unknown> {
   if (settings.maintenance_title === LEGACY_MAINTENANCE_TITLE) {

@@ -1,6 +1,7 @@
 import { lazy, Suspense, useState, type ReactNode } from 'react';
 import { useMediaQuery } from '../../layouts/hooks/useMediaQuery';
 import BottomNav from './BottomNav';
+import { mergeClassName } from './PagePrimitives';
 import TopNav from './TopNav';
 
 const MobileNavDrawer = lazy(() => import('./MobileNavDrawer'));
@@ -29,7 +30,7 @@ export function PublicPageShell({
 
   if (isDesktop) {
     return (
-      <div className={className || 'flex h-dvh flex-col overflow-hidden bg-surface'}>
+      <div className={mergeClassName('flex h-dvh flex-col overflow-hidden bg-surface', className)}>
         <TopNav />
         {children}
       </div>
@@ -39,7 +40,7 @@ export function PublicPageShell({
   const handleMenuToggle = onMobileMenuToggle || (() => setNavOpen((prev) => !prev));
 
   return (
-    <div className={mobileClassName || className || 'flex h-dvh flex-col bg-surface'}>
+    <div className={mergeClassName('flex h-dvh flex-col overflow-hidden bg-surface', mobileClassName || className)}>
       <TopNav compact onMenuToggle={handleMenuToggle} />
       {mobileDrawer ||
         (keepMobileDrawerMounted || navOpen ? (

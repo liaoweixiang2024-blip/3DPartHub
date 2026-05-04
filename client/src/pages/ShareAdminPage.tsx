@@ -181,7 +181,7 @@ function Content() {
     ? [
         { label: '总数', value: stats.total, icon: 'share', accent: 'text-primary-container' },
         { label: '模型', value: stats.modelShares ?? 0, icon: 'deployed_code', accent: 'text-cyan-500' },
-        { label: '选型', value: stats.selectionShares ?? 0, icon: 'fact_check', accent: 'text-purple-500' },
+        { label: '选型', value: stats.selectionShares ?? 0, icon: 'checklist', accent: 'text-purple-500' },
         { label: '活跃', value: stats.active, icon: 'check_circle', accent: 'text-emerald-500' },
         { label: '已过期', value: stats.expired, icon: 'schedule', accent: 'text-on-surface-variant' },
         { label: '总浏览', value: stats.totalViews, icon: 'visibility', accent: 'text-blue-500' },

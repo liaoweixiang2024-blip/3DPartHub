@@ -160,6 +160,18 @@ export interface ServerModelListResponse {
   page_size: number;
 }
 
+export interface BatchDeleteModelsResponse {
+  allMatching?: boolean;
+  requested: number;
+  deleted: number;
+  warnings: number;
+  items: Array<{
+    id: string;
+    deleted: boolean;
+    warnings: number;
+  }>;
+}
+
 export type PreviewDiagnosticStatus = 'ok' | 'warning' | 'invalid' | 'missing';
 export type PreviewDiagnosticFilter = PreviewDiagnosticStatus | 'problem' | 'all';
 
@@ -448,6 +460,15 @@ export const modelApi = {
     await client.delete(`/models/${id}`);
   },
 
+  batchDelete: async (data: {
+    modelIds?: string[];
+    allMatching?: boolean;
+    filters?: { search?: string; categoryId?: string };
+  }): Promise<BatchDeleteModelsResponse> => {
+    const res = await client.post('/models/batch-delete', data);
+    return unwrapResponse<BatchDeleteModelsResponse>(res);
+  },
+
   update: async (
     id: string,
     data: { name?: string; description?: string; categoryId?: string | null },
@@ -469,7 +490,7 @@ export const modelApi = {
 
   batchUploadFromArchive: async (
     file: File,
-    options?: { categoryId?: string },
+    options?: { categoryId?: string; onUploadProgress?: (progressEvent: { loaded: number; total: number }) => void },
   ): Promise<{
     total: number;
     results: Array<{ name: string; model_id?: string; status: string; error?: string }>;
@@ -480,6 +501,7 @@ export const modelApi = {
     const res = await client.post('/batch/upload', form, {
       headers: { 'Content-Type': 'multipart/form-data' },
       timeout: 300000,
+      onUploadProgress: options?.onUploadProgress as any,
     });
     return unwrapResponse(res);
   },

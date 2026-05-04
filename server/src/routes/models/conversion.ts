@@ -3,6 +3,7 @@ import { join } from 'node:path';
 import { Router, Response } from 'express';
 import { cacheDelByPrefix } from '../../lib/cache.js';
 import { config } from '../../lib/config.js';
+import { normalizeUploadFilename } from '../../lib/filenameEncoding.js';
 import { logger } from '../../lib/logger.js';
 import { conversionQueue } from '../../lib/queue.js';
 import { authMiddleware, type AuthRequest } from '../../middleware/auth.js';
@@ -43,7 +44,7 @@ export function createModelConversionRouter({ prisma, getMeta, saveMeta, getPrev
         return;
       }
 
-      const originalName = file.originalname || 'unknown.step';
+      const originalName = normalizeUploadFilename(file.originalname, 'unknown.step');
       const ext = await validateModelUpload(file, res);
       if (!ext) return;
 

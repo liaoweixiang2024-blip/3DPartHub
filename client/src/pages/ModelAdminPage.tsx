@@ -56,6 +56,7 @@ const MODEL_ADMIN_PAGE_SIZE = 60;
 const MODEL_ADMIN_VISIBLE_BATCH_SIZE = 80;
 const MOBILE_MODEL_VISIBLE_BATCH_SIZE = 40;
 const MERGE_SUGGESTION_PAGE_SIZE = 40;
+const CATEGORY_FILTER_ALL = '__all__';
 const MODEL_ADMIN_PANEL_CLASS =
   'rounded-lg border border-outline-variant/10 bg-surface-container-low overflow-auto min-h-[calc(100vh-220px)] max-h-[calc(100vh-220px)]';
 type ModelAdminTab = 'models' | 'suggestions' | 'groups';
@@ -92,21 +93,33 @@ function useDebouncedValue<T>(value: T, delay = 300) {
   return debouncedValue;
 }
 
-function useModelAdminList(search: string) {
+function flattenCategoryOptions(categories: CategoryItem[]) {
+  return categories.flatMap((category) => [
+    { id: category.id, label: category.name },
+    ...(category.children || []).map((child) => ({
+      id: child.id,
+      label: `${category.name} / ${child.name}`,
+    })),
+  ]);
+}
+
+function useModelAdminList(search: string, categoryId: string) {
   const debouncedSearch = useDebouncedValue(search.trim(), 300);
+  const normalizedCategoryId = categoryId === CATEGORY_FILTER_ALL ? '' : categoryId;
   const getKey = useCallback(
     (pageIndex: number, previousPageData: Awaited<ReturnType<typeof modelApi.list>> | null) => {
       if (previousPageData && previousPageData.page >= previousPageData.totalPages) return null;
-      return ['/admin/models', debouncedSearch, pageIndex + 1] as const;
+      return ['/admin/models', debouncedSearch, normalizedCategoryId, pageIndex + 1] as const;
     },
-    [debouncedSearch],
+    [debouncedSearch, normalizedCategoryId],
   );
 
   const { data, error, isLoading, isValidating, mutate, setSize, size } = useSWRInfinite(
     getKey,
-    ([, query, page]) =>
+    ([, query, selectedCategoryId, page]) =>
       modelApi.list({
         search: query || undefined,
+        categoryId: selectedCategoryId || undefined,
         page,
         pageSize: MODEL_ADMIN_PAGE_SIZE,
         grouped: false,
@@ -116,7 +129,7 @@ function useModelAdminList(search: string) {
 
   useEffect(() => {
     setSize(1);
-  }, [debouncedSearch, setSize]);
+  }, [debouncedSearch, normalizedCategoryId, setSize]);
 
   const pages = data || [];
   const items = pages.flatMap((page) => page.items);
@@ -1656,9 +1669,14 @@ function DesktopContent() {
   const { data: settings } = useSWR('publicSettings', () => getCachedPublicSettings());
   const { uploadPolicy } = getBusinessConfig(settings);
   const [search, setSearch] = useState('');
+  const [categoryFilter, setCategoryFilter] = useState(CATEGORY_FILTER_ALL);
   const [editModel, setEditModel] = useState<ServerModelListItem | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<ServerModelListItem | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const [selectedModelIds, setSelectedModelIds] = useState<Set<string>>(new Set());
+  const [selectedAllMatching, setSelectedAllMatching] = useState(false);
+  const [batchDeleteOpen, setBatchDeleteOpen] = useState(false);
+  const [batchDeleting, setBatchDeleting] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [previewOpsOpen, setPreviewOpsOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<ModelAdminTab>('models');
@@ -1671,15 +1689,22 @@ function DesktopContent() {
     hasMore,
     loadMore,
     mutate,
-  } = useModelAdminList(search);
+  } = useModelAdminList(search, categoryFilter);
   const { data: modelCountData } = useSWR('/models/count', () => modelApi.getModelCount());
-  const displayModelTotal = modelCountData?.total ?? modelTotal;
+  const displayModelTotal =
+    categoryFilter === CATEGORY_FILTER_ALL && !search.trim() ? (modelCountData?.total ?? modelTotal) : modelTotal;
   const {
     visibleItems: visibleModels,
     hasMore: hasMoreVisibleModels,
     loadMore: loadMoreVisibleModels,
   } = useVisibleItems(models, MODEL_ADMIN_VISIBLE_BATCH_SIZE, search.trim());
   const { data: catData } = useSWR('/categories', () => categoriesApi.tree());
+  const categoryOptions = flattenCategoryOptions(catData?.items || []);
+  const visibleModelIds = visibleModels.map((model) => model.model_id);
+  const selectedModelCount = selectedAllMatching ? displayModelTotal : selectedModelIds.size;
+  const allVisibleModelsSelected =
+    visibleModelIds.length > 0 &&
+    (selectedAllMatching || visibleModelIds.every((modelId) => selectedModelIds.has(modelId)));
 
   // Force refresh count + list when page mounts (e.g. after deleting a model on detail page)
   useEffect(() => {
@@ -1723,18 +1748,18 @@ function DesktopContent() {
   const allSuggestionsSelected = suggestionNames.length > 0 && selectedSuggestionCount === suggestionNames.length;
   const suggestionCount = activeTab === 'suggestions' ? activeSuggestionCount : (suggestionCountData?.total ?? 0);
   const mergedGroupCount = groupCountData?.total ?? groupData?.length;
-  const filteredGroups =
-    groupData && groupSearch
-      ? groupData.filter(
-          (g) =>
-            g.name.toLowerCase().includes(groupSearch.toLowerCase()) ||
-            g.models.some(
-              (m) =>
-                m.name.toLowerCase().includes(groupSearch.toLowerCase()) ||
-                (m.originalName || '').toLowerCase().includes(groupSearch.toLowerCase()),
-            ),
-        )
-      : groupData;
+  const groups = Array.isArray(groupData) ? groupData : [];
+  const filteredGroups = groupSearch
+    ? groups.filter(
+        (g) =>
+          g.name.toLowerCase().includes(groupSearch.toLowerCase()) ||
+          g.models.some(
+            (m) =>
+              m.name.toLowerCase().includes(groupSearch.toLowerCase()) ||
+              (m.originalName || '').toLowerCase().includes(groupSearch.toLowerCase()),
+          ),
+      )
+    : groups;
   const headerButtonBase =
     'inline-flex h-9 w-[122px] items-center justify-center gap-1.5 rounded-sm px-3 text-sm font-medium transition-colors';
   const modelAdminTabs: ResponsiveSectionTab[] = [
@@ -1747,18 +1772,103 @@ function DesktopContent() {
     setSelectedNames(new Set());
   }, [activeTab]);
 
+  useEffect(() => {
+    setSelectedModelIds(new Set());
+    setSelectedAllMatching(false);
+  }, [activeTab, search, categoryFilter]);
+
+  const refreshModelAdminData = () => {
+    mutate();
+    swrMutate('/models/count');
+    swrMutate('/categories');
+    sugMutate();
+    suggestionCountMutate();
+    groupMutate();
+  };
+
   const handleDelete = async () => {
     if (!deleteTarget) return;
     setDeleting(true);
     try {
       await modelApi.delete(deleteTarget.model_id);
       toast('已删除', 'success');
-      mutate();
+      setSelectedModelIds((prev) => {
+        const next = new Set(prev);
+        next.delete(deleteTarget.model_id);
+        return next;
+      });
+      refreshModelAdminData();
       setDeleteTarget(null);
     } catch {
       toast('删除失败', 'error');
     } finally {
       setDeleting(false);
+    }
+  };
+
+  const toggleSelectModel = (modelId: string) => {
+    if (selectedAllMatching) {
+      setSelectedAllMatching(false);
+      setSelectedModelIds(new Set(visibleModelIds.filter((id) => id !== modelId)));
+      return;
+    }
+    setSelectedModelIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(modelId)) next.delete(modelId);
+      else next.add(modelId);
+      return next;
+    });
+  };
+
+  const toggleSelectVisibleModels = () => {
+    setSelectedAllMatching(false);
+    setSelectedModelIds((prev) => {
+      const next = new Set(prev);
+      if (allVisibleModelsSelected) {
+        visibleModelIds.forEach((modelId) => next.delete(modelId));
+      } else {
+        visibleModelIds.forEach((modelId) => next.add(modelId));
+      }
+      return next;
+    });
+  };
+
+  const selectAllMatchingModels = () => {
+    if (displayModelTotal <= 0) return;
+    setSelectedAllMatching(true);
+    setSelectedModelIds(new Set());
+  };
+
+  const clearSelectedModels = () => {
+    setSelectedAllMatching(false);
+    setSelectedModelIds(new Set());
+  };
+
+  const handleBatchDelete = async () => {
+    const modelIds = Array.from(selectedModelIds);
+    if (!selectedAllMatching && modelIds.length === 0) return;
+    setBatchDeleting(true);
+    try {
+      const result = await modelApi.batchDelete(
+        selectedAllMatching
+          ? {
+              allMatching: true,
+              filters: {
+                search: search.trim() || undefined,
+                categoryId: categoryFilter === CATEGORY_FILTER_ALL ? undefined : categoryFilter,
+              },
+            }
+          : { modelIds },
+      );
+      const warningText = result.warnings > 0 ? `，${result.warnings} 个文件清理警告` : '';
+      toast(`已删除 ${result.deleted} 个模型${warningText}`, result.warnings > 0 ? 'error' : 'success');
+      clearSelectedModels();
+      setBatchDeleteOpen(false);
+      refreshModelAdminData();
+    } catch {
+      toast('批量删除失败', 'error');
+    } finally {
+      setBatchDeleting(false);
     }
   };
 
@@ -2275,10 +2385,62 @@ function DesktopContent() {
             <SkeletonList rows={5} />
           ) : (
             <>
+              {models.length > 0 && (
+                <div className="mb-2 flex flex-wrap items-center justify-between gap-3 rounded-sm border border-outline-variant/10 bg-surface-container-low px-4 py-3">
+                  <div className="text-sm text-on-surface-variant">
+                    已加载 <strong className="text-primary">{visibleModels.length}</strong> / 共{' '}
+                    <strong className="text-primary">{displayModelTotal}</strong> 个模型
+                    {selectedModelCount > 0 && (
+                      <>
+                        ，已选择 <strong className="text-primary">{selectedModelCount}</strong> 个
+                      </>
+                    )}
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <button
+                      onClick={toggleSelectVisibleModels}
+                      disabled={visibleModelIds.length === 0}
+                      className="flex items-center gap-2 rounded-sm border border-outline-variant/20 bg-surface-container-high px-3 py-2 text-sm font-medium text-on-surface-variant transition-colors hover:bg-surface-container-highest hover:text-on-surface disabled:opacity-40"
+                    >
+                      <Icon name="checklist" size={16} />
+                      {allVisibleModelsSelected ? '取消已显示' : '全选已显示'}
+                    </button>
+                    {selectedModelCount > 0 && (
+                      <>
+                        <button
+                          onClick={() => setSelectedModelIds(new Set())}
+                          className="flex items-center gap-2 rounded-sm border border-outline-variant/20 bg-surface-container-high px-3 py-2 text-sm font-medium text-on-surface-variant transition-colors hover:bg-surface-container-highest hover:text-on-surface"
+                        >
+                          <Icon name="close" size={16} />
+                          清空
+                        </button>
+                        <button
+                          onClick={() => setBatchDeleteOpen(true)}
+                          disabled={batchDeleting}
+                          className="flex items-center gap-2 rounded-sm border border-error/20 bg-error/10 px-3 py-2 text-sm font-medium text-error transition-colors hover:bg-error/15 disabled:opacity-50"
+                        >
+                          <Icon name="delete" size={16} />
+                          批量删除
+                        </button>
+                      </>
+                    )}
+                  </div>
+                </div>
+              )}
               <div className={MODEL_ADMIN_PANEL_CLASS}>
                 <table className="w-full text-sm">
                   <thead className="sticky top-0 z-10">
                     <tr className="border-b border-outline-variant/20 bg-surface-container-low">
+                      <th className="w-12 px-4 py-3">
+                        <input
+                          type="checkbox"
+                          checked={allVisibleModelsSelected}
+                          disabled={visibleModelIds.length === 0}
+                          onChange={toggleSelectVisibleModels}
+                          className="h-4 w-4 accent-primary-container"
+                          aria-label={allVisibleModelsSelected ? '取消选择已显示模型' : '选择已显示模型'}
+                        />
+                      </th>
                       <th className="text-left px-4 py-3 text-xs uppercase tracking-wider text-on-surface-variant font-medium">
                         模型
                       </th>
@@ -2305,6 +2467,15 @@ function DesktopContent() {
                         key={m.model_id}
                         className="border-b border-outline-variant/10 hover:bg-surface-container-high/50 transition-colors"
                       >
+                        <td className="px-4 py-3 align-middle">
+                          <input
+                            type="checkbox"
+                            checked={selectedModelIds.has(m.model_id)}
+                            onChange={() => toggleSelectModel(m.model_id)}
+                            className="h-4 w-4 accent-primary-container"
+                            aria-label={`选择 ${m.name}`}
+                          />
+                        </td>
                         <td className="px-4 py-3">
                           <Link
                             to={`/model/${m.model_id}`}
@@ -2370,7 +2541,7 @@ function DesktopContent() {
                     ))}
                     {models.length > 0 && (
                       <tr>
-                        <td colSpan={6}>
+                        <td colSpan={7}>
                           <InfiniteLoadTrigger
                             hasMore={hasMoreVisibleModels || hasMore}
                             isLoading={isLoadingMore}
@@ -2381,7 +2552,7 @@ function DesktopContent() {
                     )}
                     {models.length === 0 && (
                       <tr>
-                        <td colSpan={6} className="px-4 py-12 text-center text-on-surface-variant">
+                        <td colSpan={7} className="px-4 py-12 text-center text-on-surface-variant">
                           没有找到模型
                         </td>
                       </tr>
@@ -2440,6 +2611,47 @@ function DesktopContent() {
             </motion.div>
           )}
         </AnimatePresence>
+        <AnimatePresence>
+          {batchDeleteOpen && selectedModelCount > 0 && (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="fixed inset-0 z-50 flex items-center justify-center bg-surface-dim/70 backdrop-blur-sm"
+              onClick={() => !batchDeleting && setBatchDeleteOpen(false)}
+            >
+              <motion.div
+                initial={{ scale: 0.95 }}
+                animate={{ scale: 1 }}
+                exit={{ scale: 0.95 }}
+                onClick={(e) => e.stopPropagation()}
+                className="bg-surface-container-low rounded-lg shadow-xl border border-outline-variant/20 w-full max-w-sm mx-4 p-6"
+              >
+                <h3 className="font-headline text-lg font-semibold text-on-surface mb-2">确认批量删除</h3>
+                <p className="text-sm text-on-surface-variant mb-6">
+                  确定要删除已选择的 {selectedModelCount}{' '}
+                  个模型吗？模型文件、图纸、版本记录、收藏和分享记录都会一并清理，此操作不可撤销。
+                </p>
+                <div className="flex justify-end gap-3">
+                  <button
+                    onClick={() => setBatchDeleteOpen(false)}
+                    disabled={batchDeleting}
+                    className="px-4 py-2 text-sm text-on-surface-variant hover:text-on-surface transition-colors disabled:opacity-50"
+                  >
+                    取消
+                  </button>
+                  <button
+                    onClick={handleBatchDelete}
+                    disabled={batchDeleting}
+                    className="px-4 py-2 bg-error text-white rounded-sm text-sm hover:bg-error/90 transition-colors disabled:opacity-50"
+                  >
+                    {batchDeleting ? '删除中...' : '确认删除'}
+                  </button>
+                </div>
+              </motion.div>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </AdminManagementPage>
     </>
   );
@@ -2453,6 +2665,9 @@ function MobileContent() {
   const [editModel, setEditModel] = useState<ServerModelListItem | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<ServerModelListItem | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const [selectedModelIds, setSelectedModelIds] = useState<Set<string>>(new Set());
+  const [batchDeleteOpen, setBatchDeleteOpen] = useState(false);
+  const [batchDeleting, setBatchDeleting] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [previewOpsOpen, setPreviewOpsOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<ModelAdminTab>('models');
@@ -2475,6 +2690,10 @@ function MobileContent() {
   } = useVisibleItems(models, MOBILE_MODEL_VISIBLE_BATCH_SIZE, search.trim());
   const { data: catDataM } = useSWR('/categories-m', () => categoriesApi.tree());
   const categories = catDataM?.items || [];
+  const visibleModelIds = visibleModels.map((model) => model.model_id);
+  const selectedModelCount = selectedModelIds.size;
+  const allVisibleModelsSelected =
+    visibleModelIds.length > 0 && visibleModelIds.every((modelId) => selectedModelIds.has(modelId));
 
   // Force refresh count + list when page mounts
   useEffect(() => {
@@ -2508,18 +2727,18 @@ function MobileContent() {
     mutate: groupMutate,
   } = useSWR(activeTab === 'groups' ? '/model-groups-mobile' : null, () => modelApi.listModelGroups());
   const { data: groupCountData } = useSWR('/model-groups/count', () => modelApi.getModelGroupCount());
-  const filteredGroups =
-    groupData && groupSearch
-      ? groupData.filter(
-          (g) =>
-            g.name.toLowerCase().includes(groupSearch.toLowerCase()) ||
-            g.models.some(
-              (m) =>
-                m.name.toLowerCase().includes(groupSearch.toLowerCase()) ||
-                (m.originalName || '').toLowerCase().includes(groupSearch.toLowerCase()),
-            ),
-        )
-      : groupData;
+  const groups = Array.isArray(groupData) ? groupData : [];
+  const filteredGroups = groupSearch
+    ? groups.filter(
+        (g) =>
+          g.name.toLowerCase().includes(groupSearch.toLowerCase()) ||
+          g.models.some(
+            (m) =>
+              m.name.toLowerCase().includes(groupSearch.toLowerCase()) ||
+              (m.originalName || '').toLowerCase().includes(groupSearch.toLowerCase()),
+          ),
+      )
+    : groups;
 
   const filteredSuggestions = suggestionSearch
     ? suggestionGroups.filter((g) => g.name.toLowerCase().includes(suggestionSearch.toLowerCase()))
@@ -2539,18 +2758,75 @@ function MobileContent() {
     setSelectedNames(new Set());
   }, [activeTab]);
 
+  useEffect(() => {
+    setSelectedModelIds(new Set());
+  }, [activeTab, search]);
+
+  const refreshModelAdminData = () => {
+    mutate();
+    swrMutate('/models/count');
+    swrMutate('/categories-m');
+    sugMutate();
+    suggestionCountMutate();
+    groupMutate();
+  };
+
   const handleDelete = async () => {
     if (!deleteTarget) return;
     setDeleting(true);
     try {
       await modelApi.delete(deleteTarget.model_id);
       toast('已删除', 'success');
-      mutate();
+      setSelectedModelIds((prev) => {
+        const next = new Set(prev);
+        next.delete(deleteTarget.model_id);
+        return next;
+      });
+      refreshModelAdminData();
       setDeleteTarget(null);
     } catch {
       toast('删除失败', 'error');
     } finally {
       setDeleting(false);
+    }
+  };
+
+  const toggleSelectModel = (modelId: string) => {
+    setSelectedModelIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(modelId)) next.delete(modelId);
+      else next.add(modelId);
+      return next;
+    });
+  };
+
+  const toggleSelectVisibleModels = () => {
+    setSelectedModelIds((prev) => {
+      const next = new Set(prev);
+      if (allVisibleModelsSelected) {
+        visibleModelIds.forEach((modelId) => next.delete(modelId));
+      } else {
+        visibleModelIds.forEach((modelId) => next.add(modelId));
+      }
+      return next;
+    });
+  };
+
+  const handleBatchDelete = async () => {
+    const modelIds = Array.from(selectedModelIds);
+    if (modelIds.length === 0) return;
+    setBatchDeleting(true);
+    try {
+      const result = await modelApi.batchDelete(modelIds);
+      const warningText = result.warnings > 0 ? `，${result.warnings} 个文件清理警告` : '';
+      toast(`已删除 ${result.deleted} 个模型${warningText}`, result.warnings > 0 ? 'error' : 'success');
+      setSelectedModelIds(new Set());
+      setBatchDeleteOpen(false);
+      refreshModelAdminData();
+    } catch {
+      toast('批量删除失败', 'error');
+    } finally {
+      setBatchDeleting(false);
     }
   };
 
@@ -2818,6 +3094,34 @@ function MobileContent() {
           mobileTriggerVariant="surface"
         />
 
+        {activeTab === 'models' && models.length > 0 && (
+          <div className="flex items-center justify-between gap-2 rounded-lg border border-outline-variant/10 bg-surface-container-high px-3 py-2">
+            <div className="min-w-0 text-xs text-on-surface-variant">
+              已加载 <span className="font-bold text-primary-container">{visibleModels.length}</span> /{' '}
+              {displayModelTotalM}
+              {selectedModelCount > 0 && <span>，已选 {selectedModelCount}</span>}
+            </div>
+            <div className="flex shrink-0 items-center gap-2">
+              <button
+                onClick={toggleSelectVisibleModels}
+                disabled={visibleModelIds.length === 0}
+                className="rounded-sm border border-outline-variant/20 px-2.5 py-1.5 text-xs text-on-surface-variant disabled:opacity-40"
+              >
+                {allVisibleModelsSelected ? '取消' : '全选'}
+              </button>
+              {selectedModelCount > 0 && (
+                <button
+                  onClick={() => setBatchDeleteOpen(true)}
+                  disabled={batchDeleting}
+                  className="rounded-sm border border-error/20 bg-error/10 px-2.5 py-1.5 text-xs font-bold text-error disabled:opacity-40"
+                >
+                  删除
+                </button>
+              )}
+            </div>
+          </div>
+        )}
+
         {activeTab === 'suggestions' ? (
           sugLoading ? (
             <SkeletonList rows={5} />
@@ -3074,8 +3378,25 @@ function MobileContent() {
                 key={m.model_id}
                 to={`/model/${m.model_id}`}
                 target="_blank"
-                className="flex items-stretch rounded-lg border border-outline-variant/10 bg-surface-container-high shadow-sm transition-colors hover:bg-surface-container-highest"
+                className={`flex items-stretch rounded-lg border border-outline-variant/10 bg-surface-container-high shadow-sm transition-colors hover:bg-surface-container-highest ${
+                  selectedModelIds.has(m.model_id) ? 'ring-1 ring-primary-container/40' : ''
+                }`}
               >
+                <div
+                  className="flex shrink-0 items-center pl-3"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                  }}
+                >
+                  <input
+                    type="checkbox"
+                    checked={selectedModelIds.has(m.model_id)}
+                    onChange={() => toggleSelectModel(m.model_id)}
+                    className="h-4 w-4 accent-primary-container"
+                    aria-label={`选择 ${m.name}`}
+                  />
+                </div>
                 <div className="h-20 w-20 shrink-0 overflow-hidden rounded-l-lg bg-surface-container-highest">
                   <ModelThumbnail src={m.thumbnail_url} alt="" className="w-full h-full object-cover" />
                 </div>
@@ -3154,6 +3475,47 @@ function MobileContent() {
                   className="px-4 py-2 bg-error text-white rounded-sm text-sm disabled:opacity-50"
                 >
                   {deleting ? '删除中...' : '删除'}
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+      <AnimatePresence>
+        {batchDeleteOpen && selectedModelCount > 0 && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 flex items-center justify-center bg-surface-dim/70 backdrop-blur-sm"
+            onClick={() => !batchDeleting && setBatchDeleteOpen(false)}
+          >
+            <motion.div
+              initial={{ scale: 0.95 }}
+              animate={{ scale: 1 }}
+              exit={{ scale: 0.95 }}
+              onClick={(e) => e.stopPropagation()}
+              className="bg-surface-container-low rounded-lg shadow-xl border border-outline-variant/20 w-full max-w-sm mx-4 p-5 sm:p-6"
+            >
+              <h3 className="font-headline text-base font-semibold text-on-surface mb-2">确认批量删除</h3>
+              <p className="text-sm text-on-surface-variant mb-5 break-words">
+                确定要删除已选择的 {selectedModelCount}{' '}
+                个模型吗？相关模型文件、图纸、版本记录、收藏和分享记录都会一并清理。
+              </p>
+              <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-2 sm:gap-3">
+                <button
+                  onClick={() => setBatchDeleteOpen(false)}
+                  disabled={batchDeleting}
+                  className="px-4 py-2 text-sm text-on-surface-variant disabled:opacity-50"
+                >
+                  取消
+                </button>
+                <button
+                  onClick={handleBatchDelete}
+                  disabled={batchDeleting}
+                  className="px-4 py-2 bg-error text-white rounded-sm text-sm disabled:opacity-50"
+                >
+                  {batchDeleting ? '删除中...' : '确认删除'}
                 </button>
               </div>
             </motion.div>

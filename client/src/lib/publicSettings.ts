@@ -301,12 +301,12 @@ export function get3DMaterialConfig(overrides?: ViewerSettingsOverride) {
       } satisfies MaterialPresetConfig,
     },
     viewer: {
-      exposure: (s.viewer_exposure as number) ?? 1.2,
-      ambientIntensity: (s.viewer_ambient_intensity as number) ?? 0.6,
-      mainLightIntensity: (s.viewer_main_light_intensity as number) ?? 1.4,
-      fillLightIntensity: (s.viewer_fill_light_intensity as number) ?? 0.6,
-      hemisphereIntensity: (s.viewer_hemisphere_intensity as number) ?? 0.3,
-      bgColor: (s.viewer_bg_color as string) || 'linear-gradient(180deg, #2a2a3e 0%, #1e2a42 50%, #162040 100%)',
+      exposure: (s.viewer_exposure as number) ?? 1.4,
+      ambientIntensity: (s.viewer_ambient_intensity as number) ?? 1.0,
+      mainLightIntensity: (s.viewer_main_light_intensity as number) ?? 2.0,
+      fillLightIntensity: (s.viewer_fill_light_intensity as number) ?? 0.8,
+      hemisphereIntensity: (s.viewer_hemisphere_intensity as number) ?? 0.5,
+      bgColor: (s.viewer_bg_color as string) || '#ffffff',
     },
   };
 }

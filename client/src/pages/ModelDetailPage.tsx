@@ -73,7 +73,7 @@ const DEFAULT_VIEWER_DISPLAY_PREFS: ViewerDisplayPrefs = {
   activeCamera: 'iso',
   showDimensions: false,
   materialPreset: 'default',
-  showEdges: false,
+  showEdges: true,
   showAxis: false,
 };
 

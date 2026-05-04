@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { join, basename } from 'node:path';
+import { normalizeCadLabel } from '../lib/filenameEncoding.js';
 const require = createRequire(import.meta.url);
 const occtimportjs = require('occt-import-js');
 
@@ -111,8 +112,7 @@ function colorToHex(color?: [number, number, number]): string | null {
 }
 
 function safePartName(name: string | undefined, index: number): string {
-  const trimmed = (name || '').trim();
-  return trimmed || `Part ${index + 1}`;
+  return normalizeCadLabel(name, `Part ${index + 1}`);
 }
 
 function makeBounds(min: [number, number, number], max: [number, number, number]): BoundsMeta {
@@ -394,7 +394,7 @@ function meshesToGltf(
             metallicFactor: 0.3,
             roughnessFactor: 0.5,
           },
-          name: mesh.name || `material_${mi}`,
+          name: normalizeCadLabel(mesh.name, `material_${mi}`),
           doubleSided: true,
         });
       }

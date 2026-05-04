@@ -179,7 +179,7 @@ function CategoryRow({
           {!isChild && (
             <button
               onClick={() => onAddChild(cat.id)}
-              className="hidden rounded-lg px-2.5 py-2 text-xs font-medium text-primary-container hover:bg-primary-container/10 sm:inline-flex sm:items-center sm:gap-1"
+              className="inline-flex items-center gap-1 rounded-lg px-2.5 py-2 text-xs font-medium text-primary-container hover:bg-primary-container/10"
               aria-label="添加子分类"
             >
               <Icon name="add" size={14} /> 子类
@@ -551,18 +551,18 @@ function Content() {
       description="维护模型库分类、子分类和图标展示"
       toolbar={
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between sm:gap-3">
-          <div className="flex items-center gap-2 overflow-x-auto">
-            <div className="flex h-8 items-center gap-1.5 rounded-full bg-primary-container/10 px-3 text-xs font-medium text-primary-container">
+          <div className="flex items-center divide-x divide-outline-variant/20 overflow-x-auto">
+            <div className="flex items-center gap-1.5 px-3 text-xs font-medium text-primary-container first:pl-0">
               <Icon name="folder" size={14} />
               <span>大类</span>
               <strong className="tabular-nums text-sm">{stats.roots}</strong>
             </div>
-            <div className="flex h-8 items-center gap-1.5 rounded-full bg-surface-container-high px-3 text-xs font-medium text-on-surface-variant">
+            <div className="flex items-center gap-1.5 px-3 text-xs font-medium text-on-surface-variant">
               <Icon name="folder_open" size={14} />
               <span>子类</span>
               <strong className="tabular-nums text-sm text-on-surface">{stats.children}</strong>
             </div>
-            <div className="flex h-8 items-center gap-1.5 rounded-full bg-surface-container-high px-3 text-xs font-medium text-on-surface-variant">
+            <div className="flex items-center gap-1.5 px-3 text-xs font-medium text-on-surface-variant">
               <Icon name="view_in_ar" size={14} />
               <span>型号</span>
               <strong className="tabular-nums text-sm text-on-surface">{stats.modelCount.toLocaleString()}</strong>

@@ -139,12 +139,12 @@ const DEFAULT_SETTINGS: SystemSettings = {
   mat_glass_transmission: 0.95,
   mat_glass_ior: 1.5,
   mat_glass_thickness: 0.5,
-  viewer_exposure: 1.2,
-  viewer_ambient_intensity: 0.6,
-  viewer_main_light_intensity: 1.4,
-  viewer_fill_light_intensity: 0.6,
-  viewer_hemisphere_intensity: 0.3,
-  viewer_bg_color: 'linear-gradient(180deg, #2a2a3e 0%, #1e2a42 50%, #162040 100%)',
+  viewer_exposure: 1.4,
+  viewer_ambient_intensity: 1.0,
+  viewer_main_light_intensity: 2.0,
+  viewer_fill_light_intensity: 0.8,
+  viewer_hemisphere_intensity: 0.5,
+  viewer_bg_color: '#ffffff',
   viewer_edge_threshold_angle: 28,
   viewer_edge_vertex_limit: 700000,
   viewer_measure_default_unit: 'auto',
@@ -3383,6 +3383,17 @@ function Content() {
     setChanged(true);
   }
 
+  function handleReset3DPreview() {
+    const defaults = Object.fromEntries(
+      activeGroup!.items
+        .filter((item): item is SystemSettingItem => isSystemSettingKey(item.key))
+        .map((item) => [item.key, DEFAULT_SETTINGS[item.key]]),
+    ) as Partial<SystemSettings>;
+    setSettings((prev) => ({ ...prev, ...defaults }) as SystemSettings);
+    setChanged(true);
+    toast('已恢复为默认设置，点击保存生效', 'success');
+  }
+
   async function handleSendTestEmail() {
     if (!testEmailTo.trim()) {
       toast('请输入测试收件邮箱', 'error');
@@ -3777,8 +3788,20 @@ function Content() {
               {activeGroup
                 ? [activeGroup].map((group) => {
                     const visibleItems = group.items;
+                    const is3DPreview = group.title === '3D 预览';
                     return (
                       <div key={group.title} className="divide-y divide-outline-variant/5">
+                        {is3DPreview && (
+                          <div className="flex items-center justify-end px-4 py-2">
+                            <button
+                              onClick={handleReset3DPreview}
+                              className="inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium text-on-surface-variant transition-colors hover:bg-surface-container-high hover:text-on-surface"
+                            >
+                              <Icon name="restart_alt" size={14} />
+                              恢复默认设置
+                            </button>
+                          </div>
+                        )}
                         {visibleItems.map((item, itemIndex) => {
                           const structuredEditor =
                             isSystemSettingKey(item.key) && STRUCTURED_SETTING_KEYS.has(item.key) ? (

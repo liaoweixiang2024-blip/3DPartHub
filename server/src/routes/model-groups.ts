@@ -72,7 +72,7 @@ router.get('/api/model-groups', authMiddleware, requireRole('ADMIN'), async (_re
   }
   try {
     const { cacheGetOrSet, TTL } = await import('../lib/cache.js');
-    const data = await cacheGetOrSet('cache:model-groups:list', TTL.MODELS_LIST, async () => {
+    const result = await cacheGetOrSet('cache:model-groups:list', TTL.MODELS_LIST, async () => {
       const groups = await prisma.modelGroup.findMany({
         include: {
           primary: { select: { id: true, name: true, thumbnailUrl: true } },
@@ -110,7 +110,7 @@ router.get('/api/model-groups', authMiddleware, requireRole('ADMIN'), async (_re
         created_at: g.createdAt,
       }));
     });
-    res.json({ success: true, data });
+    res.json({ success: true, data: result.value });
   } catch (err: any) {
     log.error({ err }, 'Operation failed');
     res.status(500).json({ detail: '操作失败' });

@@ -14,10 +14,10 @@ export default function Scene({ showGrid, viewerSettings }: SceneProps) {
     <>
       <ambientLight intensity={config.ambientIntensity} />
       <directionalLight position={[10, 10, 5]} intensity={config.mainLightIntensity} />
-      <directionalLight position={[-8, 6, -8]} intensity={config.fillLightIntensity} color="#b0c4de" />
-      <directionalLight position={[0, -5, 10]} intensity={0.3} color="#e0e8f0" />
-      <pointLight position={[0, 15, 0]} intensity={0.4} />
-      <hemisphereLight args={['#b1e1ff', '#b97a20', config.hemisphereIntensity]} />
+      <directionalLight position={[-10, 8, -5]} intensity={config.fillLightIntensity} color="#c8d8e8" />
+      <directionalLight position={[0, -5, 10]} intensity={0.5} color="#e0e8f0" />
+      <pointLight position={[0, 15, 0]} intensity={0.6} />
+      <hemisphereLight args={['#ffffff', '#e8dcc8', config.hemisphereIntensity]} />
 
       {showGrid && (
         <Grid

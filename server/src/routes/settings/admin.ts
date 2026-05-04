@@ -1,6 +1,6 @@
 import { Router, Response } from 'express';
 import { sendTestEmail } from '../../lib/email.js';
-import { getAllSettings, setSettings } from '../../lib/settings.js';
+import { getAllSettings, getSettingDefaults, setSettings } from '../../lib/settings.js';
 import { checkUpdateAvailable } from '../../lib/update.js';
 import { authMiddleware, type AuthRequest } from '../../middleware/auth.js';
 import { adminOnly } from './common.js';
@@ -58,6 +58,17 @@ export function createSettingsAdminRouter() {
     } catch {
       res.status(500).json({ detail: '测试邮件发送失败' });
     }
+  });
+
+  // Admin: get default values for given setting keys
+  router.post('/api/settings/defaults', authMiddleware, async (req: AuthRequest, res: Response) => {
+    if (!adminOnly(req, res)) return;
+    const keys = req.body.keys;
+    if (!Array.isArray(keys)) {
+      res.status(400).json({ detail: '需要 keys 数组' });
+      return;
+    }
+    res.json({ success: true, data: getSettingDefaults(keys) });
   });
 
   // Admin: get current client IP (for IP whitelist configuration)

@@ -90,9 +90,6 @@ export default function ModelViewer({
 }: ModelViewerProps) {
   const config = get3DMaterialConfig(viewerSettings).viewer;
   const controlsRef = useRef<any>(null);
-  const interactionEndTimerRef = useRef<number | null>(null);
-  const controlsInteractingRef = useRef(false);
-  const [controlsInteracting, setControlsInteracting] = useState(false);
 
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const [contextLost, setContextLost] = useState(false);
@@ -113,22 +110,6 @@ export default function ModelViewer({
     canvasRef.current = null;
   }, []);
 
-  const markControlsInteracting = useCallback(() => {
-    if (interactionEndTimerRef.current) {
-      window.clearTimeout(interactionEndTimerRef.current);
-      interactionEndTimerRef.current = null;
-    }
-    if (!controlsInteractingRef.current) {
-      controlsInteractingRef.current = true;
-      setControlsInteracting(true);
-    }
-    interactionEndTimerRef.current = window.setTimeout(() => {
-      controlsInteractingRef.current = false;
-      setControlsInteracting(false);
-      interactionEndTimerRef.current = null;
-    }, 360);
-  }, []);
-
   useEffect(() => {
     const origWarn = console.warn;
     console.warn = (...args: any[]) => {
@@ -143,7 +124,6 @@ export default function ModelViewer({
 
   useEffect(
     () => () => {
-      if (interactionEndTimerRef.current) window.clearTimeout(interactionEndTimerRef.current);
       cleanupContextListeners();
     },
     [cleanupContextListeners],
@@ -205,9 +185,6 @@ export default function ModelViewer({
         <CameraController preset={cameraPreset} viewportBottom={viewportBottom} controlsRef={controlsRef} />
         <OrbitControls
           ref={controlsRef}
-          onStart={markControlsInteracting}
-          onChange={markControlsInteracting}
-          onEnd={markControlsInteracting}
           enableDamping
           dampingFactor={0.15}
           rotateSpeed={0.8}
@@ -229,7 +206,7 @@ export default function ModelViewer({
             clipInverted={clipInverted}
             onClipPositionChange={onClipPositionChange}
             materialPreset={materialPreset}
-            showEdges={showEdges && !controlsInteracting}
+            showEdges={showEdges}
             viewerSettings={viewerSettings}
             selectedPartId={selectedPartId}
             hiddenPartIds={hiddenPartIds}

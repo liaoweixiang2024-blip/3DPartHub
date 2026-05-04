@@ -144,18 +144,25 @@ export default function UploadModal({ open, onClose, onConverted }: UploadModalP
       let ok = 0;
       let fail = 0;
       const total = files.length;
+      let done = 0;
 
       for (let i = 0; i < total; i += CONCURRENCY) {
         const batch = files.slice(i, i + CONCURRENCY);
+        const batchBase = done;
         const results = await Promise.allSettled(
-          batch.map((f) => modelApi.upload(f, { categoryId: categoryId || undefined })),
+          batch.map((f, bi) =>
+            modelApi.upload(f, { categoryId: categoryId || undefined }).then((r) => {
+              done = batchBase + bi + 1;
+              setProgress(Math.round((done / total) * 100));
+              setProgressLabel(`上传中 ${done}/${total}`);
+              return r;
+            }),
+          ),
         );
         for (const r of results) {
           if (r.status === 'fulfilled') ok++;
           else fail++;
         }
-        setProgress(Math.round(((i + batch.length) / total) * 100));
-        setProgressLabel(`上传中 ${Math.min(i + CONCURRENCY, total)}/${total}`);
       }
 
       setResult({ type: 'batch', ok, fail, total });
@@ -171,14 +178,24 @@ export default function UploadModal({ open, onClose, onConverted }: UploadModalP
     async (file: File) => {
       setUploading(true);
       setError(null);
-      setProgress(10);
+      setProgress(5);
       setProgressLabel(`正在上传 ${file.name}...`);
 
       try {
-        const resp = await modelApi.batchUploadFromArchive(file, { categoryId: categoryId || undefined });
-        setProgress(100);
+        const resp = await modelApi.batchUploadFromArchive(file, {
+          categoryId: categoryId || undefined,
+          onUploadProgress: (e) => {
+            if (e.total) {
+              const pct = Math.round((e.loaded / e.total) * 50);
+              setProgress(5 + pct);
+            }
+          },
+        });
+        setProgress(55);
+        setProgressLabel('解压处理中...');
         const ok = resp.results.filter((r: any) => r.status === 'queued' || r.status === 'completed').length;
         const fail = resp.results.length - ok;
+        setProgress(100);
         setResult({
           type: 'archive',
           archiveType: file.name.toLowerCase().endsWith('.rar') ? 'RAR' : 'ZIP',

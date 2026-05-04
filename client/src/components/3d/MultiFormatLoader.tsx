@@ -1,5 +1,5 @@
 import { Html } from '@react-three/drei';
-import { useLoader, useThree } from '@react-three/fiber';
+import { useFrame, useLoader, useThree } from '@react-three/fiber';
 import { useCallback, useMemo, useEffect, useState, useRef } from 'react';
 import * as THREE from 'three';
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
@@ -11,6 +11,7 @@ import {
   type MaterialPresetConfig,
   type ViewerSettingsOverride,
 } from '../../lib/publicSettings';
+import { normalizeCadLabel } from '../../lib/textEncoding';
 import type { ViewMode } from './ModelViewer';
 import { loadCadFromUrl } from './StepLoader';
 import type { MaterialPresetKey } from './viewerControls';
@@ -63,7 +64,7 @@ function getEnvMap(renderer: THREE.WebGLRenderer): THREE.Texture {
   pmrem.compileEquirectangularShader();
   const roomEnv = new RoomEnvironment();
   const envScene = new THREE.Scene();
-  envScene.background = new THREE.Color(0x888888);
+  envScene.background = new THREE.Color(0xf0f0f0);
   envScene.add(roomEnv);
   _envMap = pmrem.fromScene(envScene, 0.04).texture;
   pmrem.dispose();
@@ -101,7 +102,7 @@ function createMaterial(
     roughness: p.roughness,
     envMapIntensity: p.envMapIntensity,
   };
-  if (preset === 'metal' && envMap) {
+  if (envMap) {
     baseProps.envMap = envMap;
   }
   return new THREE.MeshStandardMaterial(baseProps);
@@ -224,9 +225,15 @@ function centeredDetail(detail: ModelBoundsDetail): ModelBoundsDetail {
   };
 }
 
-function syncEdgeOverlay(mesh: THREE.Mesh, visible: boolean, clippingPlanes: THREE.Plane[]) {
+function syncEdgeOverlay(
+  mesh: THREE.Mesh,
+  edgeGroup: THREE.Group | null,
+  visible: boolean,
+  clippingPlanes: THREE.Plane[],
+) {
   let overlay = mesh.userData.edgeOverlay as THREE.LineSegments | undefined;
-  if (!overlay && visible) {
+
+  if (!overlay && visible && edgeGroup) {
     const vertexCount = mesh.geometry.getAttribute('position')?.count || 0;
     const edgeSettings = getEdgeOverlaySettings();
     if (edgeSettings.vertexLimit > 0 && vertexCount > edgeSettings.vertexLimit) {
@@ -234,18 +241,21 @@ function syncEdgeOverlay(mesh: THREE.Mesh, visible: boolean, clippingPlanes: THR
       return;
     }
 
-    const edgeGeometry = new THREE.EdgesGeometry(mesh.geometry, edgeSettings.thresholdAngle);
-    const edgeMaterial = new THREE.LineBasicMaterial({
-      color: 0x26313a,
-      transparent: true,
-      opacity: 0.28,
-      depthTest: false,
+    const edgesGeo = new THREE.EdgesGeometry(mesh.geometry, edgeSettings.thresholdAngle);
+    const edgeMat = new THREE.LineBasicMaterial({
+      color: 0x000000,
       depthWrite: false,
+      polygonOffset: true,
+      polygonOffsetFactor: -1,
+      polygonOffsetUnits: -1,
     });
-    overlay = new THREE.LineSegments(edgeGeometry, edgeMaterial);
+
+    overlay = new THREE.LineSegments(edgesGeo, edgeMat);
     overlay.name = '__cad_feature_edges';
-    overlay.renderOrder = 8;
-    mesh.add(overlay);
+    overlay.renderOrder = 999;
+    overlay.frustumCulled = false;
+    overlay.matrixAutoUpdate = false;
+    edgeGroup.add(overlay);
     mesh.userData.edgeOverlay = overlay;
   }
 
@@ -254,6 +264,22 @@ function syncEdgeOverlay(mesh: THREE.Mesh, visible: boolean, clippingPlanes: THR
   const material = overlay.material as THREE.LineBasicMaterial;
   material.clippingPlanes = clippingPlanes;
   material.needsUpdate = true;
+}
+
+function syncEdgeTransforms(root: THREE.Object3D) {
+  root.traverse((child) => {
+    if (!(child instanceof THREE.Mesh)) return;
+    const overlay = child.userData.edgeOverlay as THREE.LineSegments | undefined;
+    if (!overlay || !overlay.visible) return;
+    child.updateWorldMatrix(true, false);
+    if (overlay.parent) {
+      overlay.parent.updateWorldMatrix(true, false);
+      overlay.matrix.copy(overlay.parent.matrixWorld).invert().multiply(child.matrixWorld);
+    } else {
+      overlay.matrix.copy(child.matrixWorld);
+    }
+    overlay.matrixWorldNeedsUpdate = true;
+  });
 }
 
 function findPartMesh(object: THREE.Object3D | null): THREE.Mesh | null {
@@ -269,14 +295,14 @@ function meshPath(mesh: THREE.Mesh) {
   const names: string[] = [];
   let current: THREE.Object3D | null = mesh;
   while (current) {
-    if (current.name && !current.name.startsWith('__')) names.unshift(current.name);
+    if (current.name && !current.name.startsWith('__')) names.unshift(normalizeCadLabel(current.name, current.name));
     current = current.parent;
   }
   return names.join(' / ');
 }
 
 function cleanPartName(value: string | undefined, index: number) {
-  const clean = value?.replace(/[_-]+/g, ' ').replace(/\s+/g, ' ').trim();
+  const clean = normalizeCadLabel(value, '').replace(/[_-]+/g, ' ').replace(/\s+/g, ' ').trim();
   return clean || `零件 ${index + 1}`;
 }
 
@@ -487,6 +513,7 @@ function CadModel({
   const gl = useThree((state) => state.gl);
   const onLoadedRef = useRef(onLoaded);
   onLoadedRef.current = onLoaded;
+  const edgeGroupRef = useRef<THREE.Group>(null);
 
   // Cache base material — only recreate when preset changes
   const materialSignature = useMemo(
@@ -561,12 +588,12 @@ function CadModel({
     );
 
     cadGroup.traverse((child) => {
-      if (child instanceof THREE.Mesh) {
+      if (child instanceof THREE.Mesh && !child.name.startsWith('__cad_')) {
         const clippingPlanes = clipEnabled ? [clipPlane] : [];
         applyMaterialPreset(child, materialPreset, materialSignature, baseMaterial);
         applyDisplayState(child.material as MeshMaterial, viewMode, clippingPlanes, clipEnabled);
 
-        syncEdgeOverlay(child, showEdges && viewMode !== 'wireframe', clippingPlanes);
+        syncEdgeOverlay(child, edgeGroupRef.current, showEdges && viewMode !== 'wireframe', clippingPlanes);
         const partId = child.userData.partId as string | undefined;
         syncSelectionOverlay(child, !!partId && selectedPartId === partId, clippingPlanes);
       }
@@ -584,6 +611,25 @@ function CadModel({
     showEdges,
     selectedPartId,
   ]);
+
+  const edgesVisible = showEdges;
+  const edgeViewMode = viewMode;
+  useFrame(() => {
+    if (!cadGroup) return;
+    cadGroup.traverse((child) => {
+      if (child instanceof THREE.Mesh && !child.name.startsWith('__cad_')) {
+        const overlay = child.userData.edgeOverlay as THREE.LineSegments | undefined;
+        if (overlay) {
+          overlay.visible = edgesVisible && edgeViewMode !== 'wireframe';
+        } else if (edgesVisible && edgeViewMode !== 'wireframe' && !child.userData.edgeOverlaySkipped) {
+          syncEdgeOverlay(child, edgeGroupRef.current, true, []);
+        }
+      }
+    });
+    if (edgesVisible && edgeViewMode !== 'wireframe') {
+      syncEdgeTransforms(cadGroup);
+    }
+  });
 
   const boundsDetail = useMemo(() => (cadGroup ? getModelBounds(cadGroup) : null), [cadGroup]);
   const partItems = useMemo(() => (cadGroup ? collectModelParts(cadGroup) : []), [cadGroup]);
@@ -660,6 +706,7 @@ function CadModel({
     <group onClick={handlePartClick}>
       <group position={modelOffset}>
         <primitive object={cadGroup} />
+        <group ref={edgeGroupRef} />
       </group>
       {showDimensions && centeredBox && (
         <group>
@@ -737,6 +784,7 @@ function GltfModel({
   });
   const scene = gltf.scene;
   const gl = useThree((state) => state.gl);
+  const edgeGroupRef = useRef<THREE.Group>(null);
 
   const clonedScene = useMemo(() => scene.clone(true), [scene]);
   const boundsDetail = useMemo(() => getModelBounds(clonedScene), [clonedScene]);
@@ -811,11 +859,11 @@ function GltfModel({
     }
 
     clonedScene.traverse((child) => {
-      if (child instanceof THREE.Mesh) {
+      if (child instanceof THREE.Mesh && !child.name.startsWith('__cad_')) {
         const clippingPlanes = clipEnabled ? [clipPlane] : [];
         applyMaterialPreset(child, materialPreset, materialSignature, baseMaterial);
         applyDisplayState(child.material as MeshMaterial, viewMode, clippingPlanes, clipEnabled);
-        syncEdgeOverlay(child, showEdges && viewMode !== 'wireframe', clippingPlanes);
+        syncEdgeOverlay(child, edgeGroupRef.current, showEdges && viewMode !== 'wireframe', clippingPlanes);
         const partId = child.userData.partId as string | undefined;
         syncSelectionOverlay(child, !!partId && selectedPartId === partId, clippingPlanes);
       }
@@ -834,6 +882,26 @@ function GltfModel({
     showEdges,
     selectedPartId,
   ]);
+
+  const edgesVisible2 = showEdges;
+  const edgeViewMode2 = viewMode;
+  const edgeScene = clonedScene;
+  useFrame(() => {
+    if (!edgeScene) return;
+    edgeScene.traverse((child) => {
+      if (child instanceof THREE.Mesh && !child.name.startsWith('__cad_')) {
+        const overlay = child.userData.edgeOverlay as THREE.LineSegments | undefined;
+        if (overlay) {
+          overlay.visible = edgesVisible2 && edgeViewMode2 !== 'wireframe';
+        } else if (edgesVisible2 && edgeViewMode2 !== 'wireframe' && !child.userData.edgeOverlaySkipped) {
+          syncEdgeOverlay(child, edgeGroupRef.current, true, []);
+        }
+      }
+    });
+    if (edgesVisible2 && edgeViewMode2 !== 'wireframe') {
+      syncEdgeTransforms(edgeScene);
+    }
+  });
 
   useEffect(() => {
     if (clipEnabled) {
@@ -876,6 +944,7 @@ function GltfModel({
     <group onClick={handlePartClick}>
       <group position={modelOffset}>
         <primitive object={clonedScene} />
+        <group ref={edgeGroupRef} />
       </group>
       {showDimensions && centeredBox && (
         <group>

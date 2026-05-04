@@ -296,6 +296,11 @@ export async function updateSettings(data: Partial<SystemSettings>): Promise<Sys
   return unwrapResponse<SystemSettings>(res);
 }
 
+export async function getSettingDefaults(keys: string[]): Promise<Record<string, unknown>> {
+  const res = await client.post('/settings/defaults', { keys });
+  return unwrapResponse<Record<string, unknown>>(res);
+}
+
 export async function sendTestEmail(to: string): Promise<{ message: string }> {
   const res = await client.post('/settings/email/test', { to }, { timeout: 30000 });
   return unwrapResponse<{ message: string }>(res);

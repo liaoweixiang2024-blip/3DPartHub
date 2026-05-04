@@ -509,10 +509,7 @@ function ColumnEditor({ columns, onChange }: { columns: ColumnDef[]; onChange: (
               >
                 <div className="grid gap-2 px-3 py-3 md:grid-cols-[36px_44px_minmax(150px,1.1fr)_minmax(170px,1.1fr)_76px_118px_104px_40px] md:items-center">
                   <div className="flex items-center justify-between md:contents">
-                    <span
-                      className="inline-flex h-8 w-8 cursor-grab select-none items-center justify-center rounded-lg text-on-surface-variant/45 hover:bg-surface-container-high hover:text-on-surface-variant active:cursor-grabbing"
-                      title="拖拽排序"
-                    >
+                    <span className="inline-flex h-8 w-8 cursor-grab select-none items-center justify-center rounded-lg text-on-surface-variant/45 hover:bg-surface-container-high hover:text-on-surface-variant active:cursor-grabbing">
                       ⠿
                     </span>
                     <span className="inline-flex h-7 min-w-7 items-center justify-center rounded-full bg-surface-container-high px-2 text-xs font-bold text-on-surface-variant md:justify-self-start">
@@ -587,7 +584,6 @@ function ColumnEditor({ columns, onChange }: { columns: ColumnDef[]; onChange: (
                       onClick={() => removeCol(i)}
                       className={`${SELECTION_ICON_BUTTON_DELETE} md:hidden`}
                       aria-label="删除参数列"
-                      title="删除参数列"
                     >
                       <Icon name="delete" size={15} />
                     </button>
@@ -598,7 +594,6 @@ function ColumnEditor({ columns, onChange }: { columns: ColumnDef[]; onChange: (
                     onClick={() => removeCol(i)}
                     className={`${SELECTION_ICON_BUTTON_DELETE} hidden md:grid`}
                     aria-label="删除参数列"
-                    title="删除参数列"
                   >
                     <Icon name="delete" size={15} />
                   </button>
@@ -1602,7 +1597,7 @@ function Content() {
       title="选型管理"
       description="管理选型分类、产品、参数列定义和批量导入数据"
       toolbar={
-        <div className="grid items-start gap-3 md:min-h-11 md:grid-cols-[18rem_minmax(0,1fr)_18rem] md:items-center">
+        <div className="grid items-start gap-3 md:min-h-11 md:grid-cols-[minmax(12rem,18rem)_minmax(0,1fr)_minmax(10rem,18rem)] md:items-center">
           <ResponsiveSectionTabs
             tabs={[
               { value: 'categories', label: '分类管理', count: totalCats, icon: 'category' },
@@ -1619,7 +1614,6 @@ function Content() {
             <button
               onClick={openNewProd}
               disabled={!selectedCatId || !activeCat}
-              title={!selectedCatId ? '请先选择分类' : undefined}
               className={SELECTION_TOOLBAR_BUTTON_PRIMARY}
             >
               <SelectionToolbarButtonContent icon="add">新建产品</SelectionToolbarButtonContent>
@@ -1631,7 +1625,6 @@ function Content() {
                 setShowBatchModal(true);
               }}
               disabled={!selectedCatId || !activeCat}
-              title={!selectedCatId ? '请先选择分类' : undefined}
               className={SELECTION_TOOLBAR_BUTTON_SECONDARY}
             >
               <SelectionToolbarButtonContent icon="upload">批量导入</SelectionToolbarButtonContent>
@@ -1639,14 +1632,12 @@ function Content() {
             <button
               onClick={openGenerateProducts}
               disabled={!selectedCatId || !activeCat}
-              title={!selectedCatId ? '请先选择分类' : undefined}
               className={SELECTION_TOOLBAR_BUTTON_SECONDARY}
             >
               <SelectionToolbarButtonContent icon="auto_awesome">批量生成</SelectionToolbarButtonContent>
             </button>
             <button
               disabled={!selectedCatId || !activeCat}
-              title={!selectedCatId ? '请先选择分类' : undefined}
               onClick={exportCurrentProducts}
               className={SELECTION_TOOLBAR_BUTTON_SECONDARY}
             >
@@ -1660,7 +1651,6 @@ function Content() {
                 setShowOptImgModal(true);
               }}
               disabled={!selectedCatId || !activeCat}
-              title={!selectedCatId ? '请先选择分类' : undefined}
               className={SELECTION_TOOLBAR_BUTTON_SECONDARY}
             >
               <SelectionToolbarButtonContent icon="settings">选项设置</SelectionToolbarButtonContent>
@@ -1782,7 +1772,6 @@ function Content() {
                           onClick={() => openEditCat(cat)}
                           className={SELECTION_ICON_BUTTON_EDIT}
                           aria-label="编辑分类"
-                          title="编辑分类"
                         >
                           <Icon name="edit" size={14} />
                         </button>
@@ -1806,7 +1795,6 @@ function Content() {
                             onClick={() => setDeleteCatId(cat.id)}
                             className={SELECTION_ICON_BUTTON_DELETE}
                             aria-label="删除分类"
-                            title="删除分类"
                           >
                             <Icon name="delete" size={14} />
                           </button>
@@ -2018,7 +2006,6 @@ function Content() {
                                     onClick={() => openEditProd(p)}
                                     className={SELECTION_ICON_BUTTON_EDIT}
                                     aria-label="编辑产品"
-                                    title="编辑产品"
                                   >
                                     <Icon name="edit" size={14} />
                                   </button>
@@ -2042,7 +2029,6 @@ function Content() {
                                       onClick={() => setDeleteProdId(p.id)}
                                       className={SELECTION_ICON_BUTTON_DELETE}
                                       aria-label="删除产品"
-                                      title="删除产品"
                                     >
                                       <Icon name="delete" size={14} />
                                     </button>
@@ -2107,7 +2093,6 @@ function Content() {
                                       onClick={() => openEditProd(p)}
                                       className={SELECTION_ICON_BUTTON_EDIT}
                                       aria-label="编辑产品"
-                                      title="编辑产品"
                                     >
                                       <Icon name="edit" size={13} />
                                     </button>
@@ -2131,7 +2116,6 @@ function Content() {
                                         onClick={() => setDeleteProdId(p.id)}
                                         className={SELECTION_ICON_BUTTON_DELETE}
                                         aria-label="删除产品"
-                                        title="删除产品"
                                       >
                                         <Icon name="delete" size={13} />
                                       </button>
@@ -2746,14 +2730,12 @@ function Content() {
                   <button
                     onClick={() => setOptViewMode('grid')}
                     className={`px-3 py-2 text-xs flex items-center justify-center gap-1 transition-colors ${optViewMode === 'grid' ? 'bg-primary-container text-on-primary' : 'bg-surface-container-lowest text-on-surface-variant hover:bg-surface-container-high'}`}
-                    title="卡片视图"
                   >
                     <Icon name="grid_view" size={14} /> 卡片
                   </button>
                   <button
                     onClick={() => setOptViewMode('list')}
                     className={`px-3 py-2 text-xs flex items-center justify-center gap-1 transition-colors ${optViewMode === 'list' ? 'bg-primary-container text-on-primary' : 'bg-surface-container-lowest text-on-surface-variant hover:bg-surface-container-high'}`}
-                    title="列表视图"
                   >
                     <Icon name="view_list" size={14} /> 列表
                   </button>
@@ -2766,7 +2748,6 @@ function Content() {
                     setOrderItems(smartSortOptions(orderItems, colDef?.sortType));
                   }}
                   className="w-full sm:w-auto px-3 py-2 text-xs font-medium bg-surface-container-lowest text-on-surface-variant border border-outline-variant/20 rounded-md hover:bg-surface-container-high hover:text-on-surface transition-colors shrink-0"
-                  title="按智能规则排序（螺纹/数字优先）"
                 >
                   <Icon name="sort" size={13} className="mr-0.5" /> 一键排序
                 </button>
@@ -2833,7 +2814,6 @@ function Content() {
                               setRenameNewVal(val);
                             }}
                             className={SELECTION_ICON_BUTTON_EDIT}
-                            title="改名"
                           >
                             <Icon name="edit" size={12} />
                           </button>
@@ -2907,7 +2887,6 @@ function Content() {
                             setRenameNewVal(val);
                           }}
                           className={SELECTION_ICON_BUTTON_EDIT}
-                          title="改名"
                         >
                           <Icon name="edit" size={13} />
                         </button>
@@ -3442,7 +3421,6 @@ function Content() {
                               setGeneratePreviewPage(1);
                             }}
                             className="absolute right-2 top-1/2 -translate-y-1/2 text-on-surface-variant hover:text-on-surface"
-                            title="清空搜索"
                           >
                             <Icon name="close" size={14} />
                           </button>
@@ -4031,7 +4009,6 @@ function Content() {
                               mutateCats();
                             }}
                             className="text-error/60 hover:text-error shrink-0"
-                            title="移出分组"
                           >
                             <Icon name="close" size={14} />
                           </button>
@@ -4190,7 +4167,6 @@ function Content() {
                       <button
                         onClick={() => setManageGroupCatsId(g.id)}
                         className="text-primary-container hover:bg-primary-container/10 rounded p-1"
-                        title="管理分类"
                       >
                         <Icon name="settings" size={13} />
                       </button>
@@ -4212,7 +4188,6 @@ function Content() {
                         }}
                         className={SELECTION_ICON_BUTTON_DELETE}
                         aria-label="删除分组"
-                        title="删除分组"
                       >
                         <Icon name="delete" size={13} />
                       </button>
