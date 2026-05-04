@@ -199,16 +199,24 @@ fi
 # ---------- 3. 生成密钥 ----------
 echo -e "${YELLOW}[3/4] 配置密钥...${NC}"
 if [ ! -f .env ]; then
+  DETECTED_IP=$(hostname -I 2>/dev/null | awk '{print $1}' || echo "localhost")
   cat > .env << EOF
 IMAGE_TAG=latest
 DB_PASSWORD=$(openssl rand -hex 16)
 JWT_SECRET=$(openssl rand -hex 32)
 ADMIN_PASS=$(openssl rand -base64 24 | tr -d '\n')
+ALLOWED_ORIGINS=http://${DETECTED_IP}:${PORT:-3780}
 EOF
   echo -e "${GREEN}  ✓ .env 已生成（latest 镜像、随机数据库密码、JWT 密钥和初始管理员密码）${NC}"
+  echo -e "${GREEN}  ✓ ALLOWED_ORIGINS 自动设置为 http://${DETECTED_IP}:${PORT:-3780}${NC}"
   echo -e "${YELLOW}  初始管理员密码已写入 .env 的 ADMIN_PASS，请首次登录后立即修改。${NC}"
 else
   echo -e "${GREEN}  ✓ .env 已存在，保持不变${NC}"
+  if ! grep -q '^ALLOWED_ORIGINS=' .env 2>/dev/null; then
+    DETECTED_IP=$(hostname -I 2>/dev/null | awk '{print $1}' || echo "localhost")
+    upsert_env ALLOWED_ORIGINS "http://${DETECTED_IP}:${PORT:-3780}"
+    echo -e "${GREEN}  ✓ 已自动补写 ALLOWED_ORIGINS=http://${DETECTED_IP}:${PORT:-3780}${NC}"
+  fi
 fi
 apply_resource_profile
 
