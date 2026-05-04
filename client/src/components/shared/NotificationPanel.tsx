@@ -1,9 +1,6 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import Icon from './Icon';
-import { useAuthStore } from '../../stores/useAuthStore';
-import { useMediaQuery } from '../../layouts/hooks/useMediaQuery';
 import {
   getNotifications,
   getUnreadCount,
@@ -13,6 +10,9 @@ import {
   clearReadNotifications,
   type Notification,
 } from '../../api/notifications';
+import { useMediaQuery } from '../../layouts/hooks/useMediaQuery';
+import { useAuthStore } from '../../stores/useAuthStore';
+import Icon from './Icon';
 
 const TYPE_META: Record<string, { icon: string; color: string }> = {
   ticket: { icon: 'assignment_add', color: 'text-primary-container bg-primary-container/10' },

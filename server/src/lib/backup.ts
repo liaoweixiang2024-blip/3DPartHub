@@ -1,5 +1,6 @@
 import { execFileSync, spawn } from 'child_process';
 import type { ChildProcess } from 'child_process';
+import { createHash, randomBytes } from 'crypto';
 import {
   existsSync,
   mkdirSync,
@@ -20,14 +21,13 @@ import {
   cpSync,
 } from 'fs';
 import { basename, dirname, isAbsolute, join, resolve, sep } from 'path';
-import { createHash, randomBytes } from 'crypto';
 import { createInterface } from 'readline';
-import { pipeline } from 'stream/promises';
 import { Transform } from 'stream';
+import { pipeline } from 'stream/promises';
 import { fileURLToPath } from 'url';
 import { config } from './config.js';
-import { createLogger } from './logger.js';
 import { syncJob, loadJob } from './jobStore.js';
+import { createLogger } from './logger.js';
 
 const log = createLogger({ component: 'backup' });
 
@@ -1643,7 +1643,7 @@ export async function runRestoreWorker(jobId: string, mode: 'backup' | 'file', t
 async function runRestoreFromArchive(job: RestoreJob, archPath: string, removeArchiveAfterExtract: boolean) {
   const tmpDir = prepareWorkDir(job.id);
   const result = { dbRestored: false, modelCount: 0, thumbnailCount: 0 };
-  let safetySnapshot: string | null = null; // Pre-restore safety backup
+  let safetySnapshot: string | null = null;
 
   try {
     const archiveSize = statSync(archPath).size;
@@ -1651,30 +1651,55 @@ async function runRestoreFromArchive(job: RestoreJob, archPath: string, removeAr
 
     job.stage = 'extracting';
     job.percent = 5;
-    job.message = '正在校验备份包完整性...';
+    job.message = '正在读取备份包...';
     syncJob(job);
 
-    let t = addLogStart(job, '正在执行备份包完整性预检（读取文件列表 + SHA256 校验）...');
-    const manifest = await validateBackupArchive(archPath, { requireManifest: true });
-    if (!manifest) {
+    // ── Phase 1: Single-pass pre-extraction (read tar ONCE) ──
+    let t = addLogStart(job, '正在读取备份包文件列表...');
+    const allEntries = await listArchiveEntriesWithProgress(archPath);
+    addLogEnd(job, t, `文件列表读取完成（${allEntries.length} 个条目）`);
+
+    t = addLogStart(job, '正在读取备份清单...');
+    const archiveManifest = readArchiveManifestFromEntries(archPath, allEntries);
+    if (!archiveManifest) {
       throw new Error('备份包缺少清单文件，无法验证完整性');
     }
-    addLogEnd(job, t, '备份包完整性预检通过');
+    addLogEnd(job, t, '备份清单读取完成');
 
     job.percent = 10;
-    job.message = '正在提取数据库文件...';
-    syncJob(job);
-    t = addLogStart(job, `正在从备份包提取数据库文件（${formatSize(manifest.database.size)}）...`);
-    const sqlPath = extractRestoreSqlPath(archPath, tmpDir);
-    addLogEnd(job, t, sqlPath ? '数据库文件提取完成' : '未找到数据库文件（仅恢复文件）');
-    job.percent = 30;
+    job.message = '正在校验备份完整性...';
     syncJob(job);
 
-    job.message = '正在预检备份文件目录...';
-    addLog(job, '正在预检模型、上传、静态文件目录...');
+    t = addLogStart(job, '正在校验备份包完整性（条目检查 + SHA256）...');
+    validateArchiveEntries(allEntries, archiveManifest);
+    addLogEnd(job, t, '备份包完整性校验通过');
+
+    job.percent = 15;
+    job.message = '正在提取数据库文件...';
     syncJob(job);
-    const staticDirsToRestore = getRestorableStaticDirs(archPath);
-    const filePlan = await prepareRestoreFilePlan(archPath, tmpDir, staticDirsToRestore);
+
+    t = addLogStart(job, `正在从备份包提取数据库文件（${formatSize(archiveManifest.database.size)}）...`);
+    const dbEntry = archiveManifest.database.path;
+    const sqlPath = extractDbToTmp(archPath, tmpDir, dbEntry);
+    addLogEnd(job, t, '数据库文件提取完成');
+    job.percent = 25;
+    syncJob(job);
+
+    t = addLogStart(job, '正在校验数据库文件 SHA256...');
+    const actualSha256 = await sha256File(sqlPath);
+    if (actualSha256 !== archiveManifest.database.sha256) {
+      throw new Error('数据库备份 SHA256 校验失败');
+    }
+    addLogEnd(job, t, '数据库文件 SHA256 校验通过');
+
+    // ── Phase 2: Build file plan from cached entries (no tar read) ──
+    job.percent = 28;
+    job.message = '正在准备文件恢复计划...';
+    syncJob(job);
+    addLog(job, '正在预检模型、上传、静态文件目录...');
+
+    const staticDirsToRestore = computeRestorableDirs(allEntries, archiveManifest);
+    const filePlan = buildFilePlanFromEntries(archPath, tmpDir, allEntries, staticDirsToRestore, archiveManifest);
     assertRestoreHasDiskSpace(filePlan);
     addLog(
       job,
@@ -1834,6 +1859,7 @@ async function runRestoreFromArchive(job: RestoreJob, archPath: string, removeAr
     job.percent = 75;
     job.message = '正在恢复备份文件目录...';
     syncJob(job);
+
     let restoredSourceFiles = 0;
     try {
       t = addLogStart(job, '正在恢复文件目录（模型、缩略图、上传文件）...');
@@ -1861,7 +1887,6 @@ async function runRestoreFromArchive(job: RestoreJob, archPath: string, removeAr
 
     addLog(job, `恢复完成: ${result.modelCount} 个 STEP 模型, ${result.thumbnailCount} 张缩略图`);
 
-    // Clear all caches so the app uses restored data immediately
     try {
       const { cacheDelByPrefix } = await import('./cache.js');
       await cacheDelByPrefix('cache:');
@@ -2093,6 +2118,100 @@ async function createBackupManifest(
     directories,
     requiredEntries,
   };
+}
+
+function readArchiveManifestFromEntries(archive: string, entries: string[]): BackupManifest | null {
+  if (!archiveHasEntry(entries, BACKUP_MANIFEST_ENTRY)) return null;
+  return readArchiveManifest(archive);
+}
+
+function validateArchiveEntries(entries: string[], manifest: BackupManifest): void {
+  if (entries.length === 0) throw new Error('备份归档内容为空');
+  if (!archiveHasEntry(entries, manifest.database.path)) {
+    throw new Error(`备份包缺少数据库文件: ${manifest.database.path}`);
+  }
+  for (const entry of manifest.requiredEntries) {
+    if (!archiveHasEntry(entries, entry)) {
+      throw new Error(`备份包缺少必要条目: ${entry}`);
+    }
+  }
+  for (const dir of manifest.directories) {
+    if (!archiveHasEntry(entries, dir.path)) {
+      throw new Error(`备份包缺少业务目录: ${dir.path}`);
+    }
+    const archivedCount = countArchiveFiles(entries, dir.path);
+    if (archivedCount !== dir.fileCount) {
+      throw new Error(`备份目录文件数不一致: ${dir.path} manifest=${dir.fileCount}, archive=${archivedCount}`);
+    }
+  }
+}
+
+function extractDbToTmp(archive: string, tmpDir: string, dbEntry: string): string {
+  if (!extractArchiveEntry(archive, tmpDir, dbEntry)) {
+    throw new Error(`备份包缺少数据库文件: ${dbEntry}`);
+  }
+  return join(tmpDir, dbEntry);
+}
+
+function computeRestorableDirs(entries: string[], manifest: BackupManifest): string[] {
+  const dirs = manifest.directories.map((dir) => dir.path);
+  const staticDirs = dirs
+    .filter((dir) => !dir.startsWith(`${BACKUP_DB_ENTRY_DIR}/`) && dir !== BACKUP_DB_ENTRY_DIR)
+    .filter((dir) => !STATIC_BACKUP_EXCLUDE_DIRS.has(dir))
+    .filter((dir) => !dir.startsWith('.') && !dir.startsWith('_'));
+  const priority = RESTORE_PRIORITY_DIRS.filter((dir) => staticDirs.includes(dir));
+  const rest = staticDirs.filter((dir) => !priority.includes(dir)).sort((a, b) => a.localeCompare(b));
+  return [...priority, ...rest];
+}
+
+function buildFilePlanFromEntries(
+  archive: string,
+  tmpDir: string,
+  entries: string[],
+  staticDirsToRestore: string[],
+  manifest: BackupManifest,
+): RestoreFilePlan {
+  const staticDir = join(process.cwd(), config.staticDir);
+  const uploadDir = join(process.cwd(), config.uploadDir);
+  const plan: RestoreFilePlan = { archive, stagingRoot: join(tmpDir, 'restore_files'), staticDirs: [], uploadDirs: [] };
+
+  for (const dir of staticDirsToRestore) {
+    if (!archiveHasEntry(entries, dir)) continue;
+    plan.staticDirs.push({
+      dir,
+      destination: join(staticDir, dir),
+      archiveEntry: dir,
+    });
+  }
+
+  const uploadPrefix = `${BACKUP_UPLOADS_ENTRY}/`;
+  const uploadNames = Array.from(
+    new Set(
+      entries
+        .filter((entry) => entry.startsWith(uploadPrefix))
+        .map((entry) => entry.slice(uploadPrefix.length).split('/')[0])
+        .filter(Boolean),
+    ),
+  )
+    .filter((name) => !UPLOAD_BACKUP_EXCLUDE_DIRS.has(name))
+    .sort((a, b) => a.localeCompare(b));
+  for (const name of uploadNames) {
+    plan.uploadDirs.push({
+      name,
+      destination: join(uploadDir, name),
+      archiveEntry: `${BACKUP_UPLOADS_ENTRY}/${name}`,
+    });
+  }
+
+  if (plan.uploadDirs.length === 0 && archiveHasEntry(entries, BACKUP_UPLOAD_METADATA_ENTRY)) {
+    plan.legacyMetadata = {
+      name: '.metadata',
+      destination: join(uploadDir, '.metadata'),
+      archiveEntry: BACKUP_UPLOAD_METADATA_ENTRY,
+    };
+  }
+
+  return plan;
 }
 
 async function validateBackupArchive(
@@ -2673,7 +2792,27 @@ async function commitRestoreFilePlan(plan: RestoreFilePlan, job: RestoreJob): Pr
   let thumbnailCount = 0;
 
   try {
-    const totalSteps = plan.staticDirs.length + plan.uploadDirs.length + (plan.legacyMetadata ? 1 : 0);
+    const allItems: Array<{ archiveEntry: string; destination: string; label: string }> = [
+      ...plan.staticDirs.map((item) => ({
+        archiveEntry: item.archiveEntry,
+        destination: item.destination,
+        label: item.dir,
+      })),
+      ...plan.uploadDirs.map((item) => ({
+        archiveEntry: item.archiveEntry,
+        destination: item.destination,
+        label: `uploads/${item.name}`,
+      })),
+    ];
+    if (plan.legacyMetadata) {
+      allItems.push({
+        archiveEntry: plan.legacyMetadata.archiveEntry,
+        destination: plan.legacyMetadata.destination,
+        label: '上传元数据',
+      });
+    }
+
+    const totalSteps = allItems.length;
     let step = 0;
     const updateFileProgress = (message: string) => {
       job.percent = Math.min(94, 75 + Math.round((step / Math.max(totalSteps, 1)) * 19));
@@ -2681,42 +2820,47 @@ async function commitRestoreFilePlan(plan: RestoreFilePlan, job: RestoreJob): Pr
       syncJob(job);
     };
 
-    for (const item of plan.staticDirs) {
-      updateFileProgress(restoreMessageForStaticDir(item.dir));
-      addLog(job, `正在恢复 ${item.dir}/...`);
-      replacements.push(await replaceArchiveDirectory(plan, item.archiveEntry, item.destination, step));
+    // Phase 1: Extract ALL directories from the archive in a single tar pass
+    const batchStageRoot = join(plan.stagingRoot, 'batch_restore');
+    rmSync(batchStageRoot, { recursive: true, force: true });
+    mkdirSync(batchStageRoot, { recursive: true });
 
-      if (item.dir === 'thumbnails') {
+    const entriesToExtract = allItems.map((item) => item.archiveEntry);
+    updateFileProgress('正在解压所有文件目录...');
+    const t = addLogStart(job, `一次性解压 ${entriesToExtract.length} 个目录（避免重复扫描备份包）...`);
+
+    await extractMultipleArchiveEntries(plan.archive, batchStageRoot, entriesToExtract);
+    addLogEnd(job, t, '全部目录解压完成');
+
+    // Phase 2: Replace each directory one by one (fast — just filesystem moves)
+    for (const item of allItems) {
+      updateFileProgress(`正在恢复 ${item.label}/...`);
+      addLog(job, `正在恢复 ${item.label}/...`);
+
+      const stagedPath = join(batchStageRoot, item.archiveEntry);
+      if (!existsSync(stagedPath)) {
+        addLog(job, `跳过 ${item.label}/（备份中不存在）`);
+        step += 1;
+        continue;
+      }
+      pruneIgnoredFiles(stagedPath);
+      replacements.push(replaceStagedDirectory(stagedPath, item.destination));
+
+      const dir = item.label;
+      if (dir === 'thumbnails') {
         thumbnailCount = countFilesRecursive(item.destination, (name) => name.endsWith('.png'));
         addLog(job, `缩略图恢复完成: ${thumbnailCount} 张`);
-      } else if (item.dir === 'originals') {
+      } else if (dir === 'originals') {
         restoredSourceFiles = countFilesRecursive(item.destination, isStepFileName);
         addLog(job, `原始文件恢复完成: ${restoredSourceFiles} 个`);
       } else {
         const count = countFilesRecursive(item.destination);
-        addLog(job, `${item.dir}/ 恢复完成${count > 0 ? ` (${count} 个文件)` : ''}`);
+        addLog(job, `${dir}/ 恢复完成${count > 0 ? ` (${count} 个文件)` : ''}`);
       }
       step += 1;
     }
 
-    for (const item of plan.uploadDirs) {
-      updateFileProgress(`正在恢复 uploads/${item.name}/...`);
-      addLog(job, `正在恢复 uploads/${item.name}/...`);
-      replacements.push(await replaceArchiveDirectory(plan, item.archiveEntry, item.destination, step));
-      step += 1;
-    }
-    if (plan.uploadDirs.length > 0) {
-      addLog(job, `uploads/ 恢复完成 (${plan.uploadDirs.length} 个目录)`);
-    }
-
-    if (plan.legacyMetadata) {
-      updateFileProgress('正在恢复上传元数据...');
-      replacements.push(
-        await replaceArchiveDirectory(plan, plan.legacyMetadata.archiveEntry, plan.legacyMetadata.destination, step),
-      );
-      const metadataCount = countFilesRecursive(plan.legacyMetadata.destination);
-      addLog(job, `上传元数据恢复完成 (${metadataCount} 个文件)`);
-    }
+    rmSync(batchStageRoot, { recursive: true, force: true });
 
     const result = { restoredSourceFiles, thumbnailCount };
     job.percent = 94;
@@ -2833,6 +2977,25 @@ async function restoreArchiveDirectory(
   } finally {
     if (existsSync(stagingRoot)) rmSync(stagingRoot, { recursive: true, force: true });
   }
+}
+
+async function extractMultipleArchiveEntries(archive: string, destination: string, entries: string[]): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const args = ['xzf', archive, '-C', destination, ...entries];
+    const proc = spawn('tar', args, { timeout: ARCHIVE_EXTRACT_TIMEOUT_MS });
+    let stderr = '';
+    proc.stderr?.on('data', (chunk: Buffer) => {
+      stderr += chunk.toString();
+    });
+    proc.on('error', (err) => reject(new Error(`解压失败: ${err.message}`)));
+    proc.on('close', (code) => {
+      if (code === 0) return resolve();
+      if (stderr && /not found in archive|could not find/i.test(stderr)) {
+        return reject(new Error(`备份包缺少部分目录: ${stderr.trim()}`));
+      }
+      reject(new Error(`解压失败 (exit ${code}): ${stderr.trim()}`));
+    });
+  });
 }
 
 function extractArchiveEntryAsync(archive: string, destination: string, entry: string): Promise<boolean> {

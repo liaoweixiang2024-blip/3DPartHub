@@ -1,12 +1,12 @@
 import { Router } from 'express';
-import { cacheGetOrSet, TTL } from '../../lib/cache.js';
 import { getBusinessConfig } from '../../lib/businessConfig.js';
+import { cacheGetOrSet, TTL } from '../../lib/cache.js';
+import { logger } from '../../lib/logger.js';
 import { buildModelMatchMap } from '../../lib/modelMatch.js';
 import { prisma } from '../../lib/prisma.js';
-import { normalizeSearchParam, searchCacheToken } from '../../lib/searchQuery.js';
 import { numericValue, optionalString, stringArray } from '../../lib/requestValidation.js';
+import { normalizeSearchParam, searchCacheToken } from '../../lib/searchQuery.js';
 import { requireBrowseAccess } from '../../middleware/browseAccess.js';
-import { logger } from '../../lib/logger.js';
 
 function cacheKeyPart(value: string): string {
   return encodeURIComponent(value);

@@ -1,9 +1,9 @@
 import { Router, Response } from 'express';
-import { prisma } from '../lib/prisma.js';
 import { getBusinessConfig } from '../lib/businessConfig.js';
+import { logger } from '../lib/logger.js';
+import { prisma } from '../lib/prisma.js';
 import { authMiddleware, type AuthRequest } from '../middleware/auth.js';
 import { userWantsNotification } from './auth.js';
-import { logger } from '../lib/logger.js';
 
 const router = Router();
 

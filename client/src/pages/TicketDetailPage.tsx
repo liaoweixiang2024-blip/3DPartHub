@@ -1,14 +1,6 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import useSWR from 'swr';
-import { useMediaQuery } from '../layouts/hooks/useMediaQuery';
-import { useDocumentTitle } from '../hooks/useDocumentTitle';
-import { SkeletonList } from '../components/shared/Skeleton';
-import Icon from '../components/shared/Icon';
-import SafeImage from '../components/shared/SafeImage';
-import { AdminPageShell } from '../components/shared/AdminPageShell';
-import { AdminDetailHeader } from '../components/shared/AdminManagementPage';
-import { useToast } from '../components/shared/Toast';
 import client from '../api/client';
 import { unwrapResponse } from '../api/response';
 import {
@@ -18,8 +10,16 @@ import {
   uploadTicketAttachment,
   type TicketMessage,
 } from '../api/tickets';
-import { getCachedPublicSettings } from '../lib/publicSettings';
+import { AdminDetailHeader } from '../components/shared/AdminManagementPage';
+import { AdminPageShell } from '../components/shared/AdminPageShell';
+import Icon from '../components/shared/Icon';
+import SafeImage from '../components/shared/SafeImage';
+import { SkeletonList } from '../components/shared/Skeleton';
+import { useToast } from '../components/shared/Toast';
+import { useDocumentTitle } from '../hooks/useDocumentTitle';
+import { useMediaQuery } from '../layouts/hooks/useMediaQuery';
 import { getBusinessConfig, statusInfo } from '../lib/businessConfig';
+import { getCachedPublicSettings } from '../lib/publicSettings';
 
 interface TicketInfo {
   id: string;

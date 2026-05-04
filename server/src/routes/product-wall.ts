@@ -1,8 +1,3 @@
-import { Router, Response, type NextFunction } from 'express';
-import AdmZip from 'adm-zip';
-import { Image, createCanvas, loadImage } from 'canvas';
-import { createExtractorFromData } from 'node-unrar-js';
-import multer from 'multer';
 import { randomUUID } from 'node:crypto';
 import { lookup } from 'node:dns/promises';
 import { mkdirSync, renameSync, rmSync, createWriteStream, writeFileSync, readFileSync } from 'node:fs';
@@ -14,11 +9,16 @@ import type {
   ProductWallCategory as ProductWallCategoryRow,
   ProductWallImage as ProductWallImageRow,
 } from '@prisma/client';
-import { config } from '../lib/config.js';
-import { prisma } from '../lib/prisma.js';
+import AdmZip from 'adm-zip';
+import { Image, createCanvas, loadImage } from 'canvas';
+import { Router, Response, type NextFunction } from 'express';
+import multer from 'multer';
+import { createExtractorFromData } from 'node-unrar-js';
 import { getBusinessConfig } from '../lib/businessConfig.js';
-import { getSetting } from '../lib/settings.js';
+import { config } from '../lib/config.js';
 import { badRequest } from '../lib/http.js';
+import { prisma } from '../lib/prisma.js';
+import { getSetting } from '../lib/settings.js';
 import { authMiddleware, type AuthRequest } from '../middleware/auth.js';
 
 type ProductWallKind = string;

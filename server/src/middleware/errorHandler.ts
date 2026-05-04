@@ -1,7 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import { isHttpError } from '../lib/http.js';
-import { RequestValidationError } from '../lib/requestValidation.js';
 import { logger } from '../lib/logger.js';
+import { RequestValidationError } from '../lib/requestValidation.js';
 
 const isProduction = process.env.NODE_ENV === 'production';
 

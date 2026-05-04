@@ -1,6 +1,6 @@
-import svgCaptcha from 'svg-captcha';
-import Redis from 'ioredis';
 import { randomBytes } from 'node:crypto';
+import Redis from 'ioredis';
+import svgCaptcha from 'svg-captcha';
 import { config } from './config.js';
 import { createLogger } from './logger.js';
 

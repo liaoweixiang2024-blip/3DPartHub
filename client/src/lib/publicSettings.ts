@@ -1,6 +1,6 @@
 import { getPublicSettings, type SystemSettings } from '../api/settings';
-import { applyColorScheme } from './colorScheme';
 import { applyServerThemeDefaults } from '../stores/useThemeStore';
+import { applyColorScheme } from './colorScheme';
 
 let cache: Partial<SystemSettings> | null = null;
 let fetchedAt = 0;

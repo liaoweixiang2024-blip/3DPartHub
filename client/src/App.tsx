@@ -1,11 +1,11 @@
 import { BrowserRouter } from 'react-router-dom';
 import { SWRConfig } from 'swr';
-import Router from './router';
-import { ToastProvider } from './components/shared/Toast';
 import ErrorBoundary from './components/shared/ErrorBoundary';
 import ForceChangePassword from './components/shared/ForceChangePassword';
 import GlobalTooltip from './components/shared/GlobalTooltip';
+import { ToastProvider } from './components/shared/Toast';
 import { notifyGlobalError } from './lib/errorNotifications';
+import Router from './router';
 
 export default function App() {
   return (

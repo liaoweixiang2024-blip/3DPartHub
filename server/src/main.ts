@@ -1,40 +1,21 @@
-import express from 'express';
 import cluster from 'node:cluster';
-import cors from 'cors';
-import compression from 'compression';
-import { extname, join } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync } from 'node:fs';
-import { config } from './lib/config.js';
-import modelCompareRouter from './routes/model-compare.js';
-import modelDrawingsRouter from './routes/model-drawings.js';
-import modelsRouter from './routes/models.js';
-import downloadsRouter from './routes/downloads.js';
-import authRouter from './routes/auth.js';
-import projectsRouter from './routes/projects.js';
-import favoritesRouter from './routes/favorites.js';
-import sharesRouter from './routes/shares.js';
-import tasksRouter from './routes/tasks.js';
-import uploadRouter from './routes/upload.js';
-import searchRouter from './routes/search.js';
-import auditRouter from './routes/audit.js';
-import batchRouter from './routes/batch.js';
-import categoriesRouter from './routes/categories.js';
-import notificationsRouter from './routes/notifications.js';
-import settingsRouter from './routes/settings.js';
-import modelGroupsRouter from './routes/model-groups.js';
-import selectionsRouter from './routes/selections.js';
-import inquiriesRouter from './routes/inquiries.js';
-import selectionSharesRouter from './routes/selection-shares.js';
-import productWallRouter from './routes/product-wall.js';
-import threadSizeRouter from './routes/thread-size.js';
-import healthRouter from './routes/health.js';
-import { getSetting, initDefaultSettings } from './lib/settings.js';
+import { extname, join } from 'node:path';
+import compression from 'compression';
+import cors from 'cors';
+import express from 'express';
 import { startBackupScheduler } from './lib/backup.js';
-import { prisma } from './lib/prisma.js';
+import { config } from './lib/config.js';
 import { logger, createLogger } from './lib/logger.js';
-import { responseHandler } from './middleware/responseHandler.js';
+import { prisma } from './lib/prisma.js';
+import { getSetting, initDefaultSettings } from './lib/settings.js';
+import { getVerifiedRequestUser } from './middleware/auth.js';
+import { autoAudit } from './middleware/autoAudit.js';
 import { errorHandler, notFoundHandler } from './middleware/errorHandler.js';
+import { ipGuard } from './middleware/ipGuard.js';
+import { maintenanceGuard } from './middleware/maintenance.js';
+import { responseHandler } from './middleware/responseHandler.js';
 import {
   apiLimiter,
   uploadLimiter,
@@ -45,10 +26,29 @@ import {
   tokenGenLimiter,
   mutationLimiter,
 } from './middleware/security.js';
-import { autoAudit } from './middleware/autoAudit.js';
-import { ipGuard } from './middleware/ipGuard.js';
-import { getVerifiedRequestUser } from './middleware/auth.js';
-import { maintenanceGuard } from './middleware/maintenance.js';
+import auditRouter from './routes/audit.js';
+import authRouter from './routes/auth.js';
+import batchRouter from './routes/batch.js';
+import categoriesRouter from './routes/categories.js';
+import downloadsRouter from './routes/downloads.js';
+import favoritesRouter from './routes/favorites.js';
+import healthRouter from './routes/health.js';
+import inquiriesRouter from './routes/inquiries.js';
+import modelCompareRouter from './routes/model-compare.js';
+import modelDrawingsRouter from './routes/model-drawings.js';
+import modelGroupsRouter from './routes/model-groups.js';
+import modelsRouter from './routes/models.js';
+import notificationsRouter from './routes/notifications.js';
+import productWallRouter from './routes/product-wall.js';
+import projectsRouter from './routes/projects.js';
+import searchRouter from './routes/search.js';
+import selectionSharesRouter from './routes/selection-shares.js';
+import selectionsRouter from './routes/selections.js';
+import settingsRouter from './routes/settings.js';
+import sharesRouter from './routes/shares.js';
+import tasksRouter from './routes/tasks.js';
+import threadSizeRouter from './routes/thread-size.js';
+import uploadRouter from './routes/upload.js';
 import { scheduleStartupCacheWarmup } from './services/cacheWarmup.js';
 
 const app = express();

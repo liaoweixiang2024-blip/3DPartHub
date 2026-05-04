@@ -1,20 +1,20 @@
-import { Router, Response } from 'express';
 import { copyFileSync, existsSync, mkdirSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
+import { Router, Response } from 'express';
 import { cacheDelByPrefix } from '../../lib/cache.js';
 import { config } from '../../lib/config.js';
+import { logger } from '../../lib/logger.js';
 import { conversionQueue } from '../../lib/queue.js';
 import { authMiddleware, type AuthRequest } from '../../middleware/auth.js';
 import { requireRole } from '../../middleware/rbac.js';
 import { convertStepToGltf } from '../../services/converter.js';
 import { findPreviewAssetPath } from '../../services/gltfAsset.js';
+import { parseStepFileDate } from '../../services/modelFileDates.js';
+import { findOriginalModelPath, isDeprecatedHtmlPreviewFormat, removeModelFiles } from '../../services/modelFiles.js';
+import { MODEL_STATUS } from '../../services/modelStatus.js';
 import { generateThumbnail } from '../../services/thumbnail.js';
 import { convertXtToGltf } from '../../services/xt-converter.js';
-import { findOriginalModelPath, isDeprecatedHtmlPreviewFormat, removeModelFiles } from '../../services/modelFiles.js';
-import { parseStepFileDate } from '../../services/modelFileDates.js';
-import { MODEL_STATUS } from '../../services/modelStatus.js';
 import { modelUpload, validateModelUpload } from './uploadHelpers.js';
-import { logger } from '../../lib/logger.js';
 
 type ModelConversionContext = {
   prisma: any;

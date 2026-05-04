@@ -1,6 +1,6 @@
 import axios from 'axios';
-import { getAccessToken, useAuthStore } from '../stores/useAuthStore';
 import { notifyGlobalError } from '../lib/errorNotifications';
+import { getAccessToken, useAuthStore } from '../stores/useAuthStore';
 import { unwrapApiData } from './response';
 
 const client = axios.create({

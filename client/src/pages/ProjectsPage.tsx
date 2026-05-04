@@ -1,17 +1,17 @@
+import { motion, AnimatePresence } from 'framer-motion';
 import { useState, useCallback } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { motion, AnimatePresence } from 'framer-motion';
 import useSWR from 'swr';
-import { useMediaQuery } from '../layouts/hooks/useMediaQuery';
-import { useDocumentTitle } from '../hooks/useDocumentTitle';
-import { PageHeader } from '../components/shared/PagePrimitives';
-import { AdminPageShell } from '../components/shared/AdminPageShell';
 import { projectApi, type Project } from '../api/projects';
-import { useAuthStore } from '../stores';
-import { useToast } from '../components/shared/Toast';
+import { AdminPageShell } from '../components/shared/AdminPageShell';
 import Icon from '../components/shared/Icon';
 import InfiniteLoadTrigger from '../components/shared/InfiniteLoadTrigger';
+import { PageHeader } from '../components/shared/PagePrimitives';
+import { useToast } from '../components/shared/Toast';
+import { useDocumentTitle } from '../hooks/useDocumentTitle';
 import { useVisibleItems } from '../hooks/useVisibleItems';
+import { useMediaQuery } from '../layouts/hooks/useMediaQuery';
+import { useAuthStore } from '../stores';
 
 function ProjectCard({ project, onDelete }: { project: Project; onDelete: (id: string) => void }) {
   const [confirming, setConfirming] = useState(false);

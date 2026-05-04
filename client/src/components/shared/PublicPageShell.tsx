@@ -1,7 +1,7 @@
 import { lazy, Suspense, useState, type ReactNode } from 'react';
 import { useMediaQuery } from '../../layouts/hooks/useMediaQuery';
-import TopNav from './TopNav';
 import BottomNav from './BottomNav';
+import TopNav from './TopNav';
 
 const MobileNavDrawer = lazy(() => import('./MobileNavDrawer'));
 

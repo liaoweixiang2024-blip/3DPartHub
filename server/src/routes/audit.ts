@@ -1,10 +1,10 @@
 import { Router, Response } from 'express';
+import { getBusinessConfig } from '../lib/businessConfig.js';
+import { asyncHandler } from '../lib/http.js';
 import { prisma } from '../lib/prisma.js';
+import { optionalString, paginationQuery } from '../lib/requestValidation.js';
 import { authMiddleware, type AuthRequest } from '../middleware/auth.js';
 import { requireRole } from '../middleware/rbac.js';
-import { asyncHandler } from '../lib/http.js';
-import { getBusinessConfig } from '../lib/businessConfig.js';
-import { optionalString, paginationQuery } from '../lib/requestValidation.js';
 
 const router = Router();
 

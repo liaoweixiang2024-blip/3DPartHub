@@ -1,5 +1,6 @@
 import js from '@eslint/js'
 import globals from 'globals'
+import importPlugin from 'eslint-plugin-import'
 import reactHooks from 'eslint-plugin-react-hooks'
 import reactRefresh from 'eslint-plugin-react-refresh'
 import tseslint from 'typescript-eslint'
@@ -9,6 +10,7 @@ export default defineConfig([
   globalIgnores(['dist']),
   {
     files: ['**/*.{ts,tsx}'],
+    plugins: { import: importPlugin },
     extends: [
       js.configs.recommended,
       tseslint.configs.recommended,
@@ -22,6 +24,14 @@ export default defineConfig([
     rules: {
       'no-use-before-define': ['error', { variables: true, functions: false }],
       '@typescript-eslint/no-explicit-any': 'off',
+      'import/order': [
+        'warn',
+        {
+          groups: ['builtin', 'external', 'internal', 'parent', 'sibling', 'index'],
+          'newlines-between': 'never',
+          alphabetize: { order: 'asc', caseInsensitive: true },
+        },
+      ],
       'react-hooks/immutability': 'off',
       'react-hooks/preserve-manual-memoization': 'off',
       'react-hooks/refs': 'off',

@@ -1,4 +1,3 @@
-import { config } from './config.js';
 import type {
   NavItemConfig,
   StatusConfig,
@@ -6,6 +5,7 @@ import type {
   TicketClassificationConfig,
   UploadPolicy,
 } from './businessConfig.js';
+import { config } from './config.js';
 
 export const DEFAULT_INQUIRY_STATUSES_FOR_SETTINGS: StatusConfig[] = [
   { value: 'draft', label: '草稿', color: 'text-on-surface-variant', bg: 'bg-surface-container-highest' },

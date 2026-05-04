@@ -1,8 +1,8 @@
-import test from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
 import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import test from 'node:test';
 import { parseStepFileDate } from './modelFileDates.js';
 
 const root = mkdtempSync(join(tmpdir(), 'model-file-dates-test-'));

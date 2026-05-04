@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react';
+import { getLogoDisplayMode, getSiteIcon, getSiteLogo, getSiteTitle } from '../../lib/publicSettings';
 import Icon from './Icon';
 import SafeImage from './SafeImage';
-import { getLogoDisplayMode, getSiteIcon, getSiteLogo, getSiteTitle } from '../../lib/publicSettings';
 
 type BrandMarkSize = 'compact' | 'nav' | 'hero';
 

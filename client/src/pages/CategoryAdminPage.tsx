@@ -1,13 +1,13 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import useSWR from 'swr';
-import { useDocumentTitle } from '../hooks/useDocumentTitle';
-import { SkeletonList } from '../components/shared/Skeleton';
-import Icon from '../components/shared/Icon';
-import { AdminPageShell } from '../components/shared/AdminPageShell';
-import { AdminContentPanel, AdminManagementPage } from '../components/shared/AdminManagementPage';
 import { categoriesApi, type CategoryItem } from '../api/categories';
+import { AdminContentPanel, AdminManagementPage } from '../components/shared/AdminManagementPage';
+import { AdminPageShell } from '../components/shared/AdminPageShell';
+import Icon from '../components/shared/Icon';
+import { SkeletonList } from '../components/shared/Skeleton';
 import { useToast } from '../components/shared/Toast';
+import { useDocumentTitle } from '../hooks/useDocumentTitle';
 import { getErrorMessage } from '../lib/errorNotifications';
 
 function CategoryRow({

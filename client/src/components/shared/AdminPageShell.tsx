@@ -2,10 +2,10 @@ import { lazy, Suspense, useState, type ReactNode } from 'react';
 import useSWR from 'swr';
 import { useMediaQuery } from '../../layouts/hooks/useMediaQuery';
 import { getCachedPublicSettings, getFooterCopyright, getSiteTitle } from '../../lib/publicSettings';
-import TopNav from './TopNav';
 import BottomNav from './BottomNav';
-import AppSidebar from './Sidebar';
 import { mergeClassName } from './PagePrimitives';
+import AppSidebar from './Sidebar';
+import TopNav from './TopNav';
 
 const MobileNavDrawer = lazy(() => import('./MobileNavDrawer'));
 

@@ -1,10 +1,10 @@
 import { Router, Request, Response } from 'express';
-import { compareModels } from '../services/comparison.js';
+import { logger } from '../lib/logger.js';
+import { prisma } from '../lib/prisma.js';
 import { optionalString } from '../lib/requestValidation.js';
 import { requireBrowseAccess } from '../middleware/browseAccess.js';
-import { prisma } from '../lib/prisma.js';
+import { compareModels } from '../services/comparison.js';
 import { MODEL_STATUS } from '../services/modelStatus.js';
-import { logger } from '../lib/logger.js';
 
 const router = Router();
 

@@ -1,5 +1,5 @@
-import { prisma } from './prisma.js';
 import { cacheGetOrSet, TTL } from './cache.js';
+import { prisma } from './prisma.js';
 
 type MatchIndexEntry = [string, { id: string; thumbnailUrl: string | null }];
 

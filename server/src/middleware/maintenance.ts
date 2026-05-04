@@ -1,7 +1,7 @@
 import type { NextFunction, Request, Response } from 'express';
+import { logger } from '../lib/logger.js';
 import { getMaintenanceStatus } from '../lib/maintenance.js';
 import { getVerifiedRequestUser } from './auth.js';
-import { logger } from '../lib/logger.js';
 
 const PUBLIC_API_ALLOWLIST = [
   /^\/api\/health(?:\/|$)/,

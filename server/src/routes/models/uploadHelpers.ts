@@ -1,9 +1,9 @@
-import { Response } from 'express';
-import multer from 'multer';
 import { rmSync } from 'node:fs';
 import { resolve, sep } from 'node:path';
-import { config } from '../../lib/config.js';
+import { Response } from 'express';
+import multer from 'multer';
 import { getBusinessConfig } from '../../lib/businessConfig.js';
+import { config } from '../../lib/config.js';
 
 export const modelUpload = multer({
   dest: config.uploadDir,

@@ -1,8 +1,9 @@
-import { Router, Request, Response } from 'express';
 import { existsSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
+import { Router, Request, Response } from 'express';
 import { cacheDelByPrefix } from '../../lib/cache.js';
 import { config } from '../../lib/config.js';
+import { logger } from '../../lib/logger.js';
 import { authMiddleware, type AuthRequest } from '../../middleware/auth.js';
 import { requireBrowseAccess } from '../../middleware/browseAccess.js';
 import { requireRole } from '../../middleware/rbac.js';
@@ -11,7 +12,6 @@ import { MODEL_STATUS } from '../../services/modelStatus.js';
 import { generateThumbnail } from '../../services/thumbnail.js';
 import { convertXtToGltf } from '../../services/xt-converter.js';
 import { modelUpload, validateModelUpload } from './uploadHelpers.js';
-import { logger } from '../../lib/logger.js';
 
 type ModelVersionsContext = {
   prisma: any;

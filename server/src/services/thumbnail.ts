@@ -1,6 +1,6 @@
-import { createCanvas } from 'canvas';
-import { join } from 'node:path';
 import { mkdirSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { createCanvas } from 'canvas';
 import { readGltfAsset } from './gltfAsset.js';
 
 interface Vec3 {

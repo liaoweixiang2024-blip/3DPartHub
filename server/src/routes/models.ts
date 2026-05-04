@@ -1,7 +1,8 @@
-import { Router, Request } from 'express';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { Router, Request } from 'express';
 import { config } from '../lib/config.js';
+import { logger } from '../lib/logger.js';
 import { getVerifiedRequestUser, verifyRequestToken, type AuthRequest } from '../middleware/auth.js';
 import { ensurePreviewMeta } from '../services/previewMeta.js';
 import { createModelConversionRouter } from './models/conversion.js';
@@ -9,10 +10,9 @@ import { createModelDetailRouter } from './models/detail.js';
 import { createModelDownloadRouter } from './models/download.js';
 import { createModelListRouter } from './models/list.js';
 import { createModelManagementRouter } from './models/management.js';
+import { createPreviewDiagnosticsRouter } from './models/previewDiagnostics.js';
 import { createModelUploadRouter } from './models/upload.js';
 import { createModelVersionsRouter } from './models/versions.js';
-import { createPreviewDiagnosticsRouter } from './models/previewDiagnostics.js';
-import { logger } from '../lib/logger.js';
 
 // Try to import Prisma, fallback to null if DB is not configured
 let prisma: any = null;

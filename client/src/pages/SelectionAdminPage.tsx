@@ -1,18 +1,6 @@
 import { useState, useMemo, useEffect, useRef, useCallback } from 'react';
 import useSWR from 'swr';
 import type { SheetData } from 'write-excel-file/browser';
-import { useDocumentTitle } from '../hooks/useDocumentTitle';
-import { smartSortOptions } from '../lib/selectionSort';
-import Icon from '../components/shared/Icon';
-import SafeImage from '../components/shared/SafeImage';
-import InfiniteLoadTrigger from '../components/shared/InfiniteLoadTrigger';
-import { useVisibleItems } from '../hooks/useVisibleItems';
-import { AdminPageShell } from '../components/shared/AdminPageShell';
-import { AdminManagementPage } from '../components/shared/AdminManagementPage';
-import ResponsiveSectionTabs from '../components/shared/ResponsiveSectionTabs';
-import { useToast } from '../components/shared/Toast';
-import { KIT_LIST_TITLE_OPTION_KEY } from '../lib/kitList';
-import { getBusinessConfig, type UploadPolicy } from '../lib/businessConfig';
 import {
   getSelectionCategories,
   createCategory,
@@ -33,6 +21,18 @@ import {
   type SelectionComponent,
   type ColumnDef,
 } from '../api/selections';
+import { AdminManagementPage } from '../components/shared/AdminManagementPage';
+import { AdminPageShell } from '../components/shared/AdminPageShell';
+import Icon from '../components/shared/Icon';
+import InfiniteLoadTrigger from '../components/shared/InfiniteLoadTrigger';
+import ResponsiveSectionTabs from '../components/shared/ResponsiveSectionTabs';
+import SafeImage from '../components/shared/SafeImage';
+import { useToast } from '../components/shared/Toast';
+import { useDocumentTitle } from '../hooks/useDocumentTitle';
+import { useVisibleItems } from '../hooks/useVisibleItems';
+import { getBusinessConfig, type UploadPolicy } from '../lib/businessConfig';
+import { KIT_LIST_TITLE_OPTION_KEY } from '../lib/kitList';
+import { smartSortOptions } from '../lib/selectionSort';
 
 type Tab = 'categories' | 'products';
 const PRODUCT_IMPORT_BASE_HEADERS = ['名称', '型号编号'];

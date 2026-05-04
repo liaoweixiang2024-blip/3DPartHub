@@ -1,4 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
+import { cacheGet } from '../lib/cache.js';
 import {
   verifyAccessToken,
   isTokenRevoked,
@@ -6,9 +7,8 @@ import {
   type TokenPayload,
   type VerifiedTokenPayload,
 } from '../lib/jwt.js';
-import { prisma } from '../lib/prisma.js';
-import { cacheGet } from '../lib/cache.js';
 import { logger } from '../lib/logger.js';
+import { prisma } from '../lib/prisma.js';
 
 export interface AuthRequest extends Request {
   user?: TokenPayload;

@@ -1,6 +1,6 @@
+import type { PaginatedResponse, PaginationParams } from '../types';
 import client from './client';
 import { unwrapApiData, unwrapResponse } from './response';
-import type { PaginatedResponse, PaginationParams } from '../types';
 
 export interface ServerModelListItem {
   model_id: string;

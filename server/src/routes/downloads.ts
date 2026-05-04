@@ -1,10 +1,10 @@
 import { Router, Request, Response } from 'express';
-import { prisma } from '../lib/prisma.js';
-import { authMiddleware, optionalAuthMiddleware, type AuthRequest } from '../middleware/auth.js';
 import { createModelDownloadToken, createProtectedResourceToken } from '../lib/downloadTokenStore.js';
+import { createLogger } from '../lib/logger.js';
+import { prisma } from '../lib/prisma.js';
 import { optionalString } from '../lib/requestValidation.js';
 import { getSetting } from '../lib/settings.js';
-import { createLogger } from '../lib/logger.js';
+import { authMiddleware, optionalAuthMiddleware, type AuthRequest } from '../middleware/auth.js';
 
 const log = createLogger({ component: 'downloads' });
 

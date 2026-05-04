@@ -1,13 +1,13 @@
 import { useState, useEffect, lazy, Suspense, useCallback } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { useDocumentTitle } from '../hooks/useDocumentTitle';
-import { getSiteTitle } from '../lib/publicSettings';
+import { getShareInfo, verifySharePassword, getShareDownloadUrl, type ShareInfo } from '../api/shares';
 import BrandMark from '../components/shared/BrandMark';
 import Icon from '../components/shared/Icon';
 import { PageTitle } from '../components/shared/PagePrimitives';
 import { PublicPageShell } from '../components/shared/PublicPageShell';
-import { getShareInfo, verifySharePassword, getShareDownloadUrl, type ShareInfo } from '../api/shares';
+import { useDocumentTitle } from '../hooks/useDocumentTitle';
 import { getErrorMessage } from '../lib/errorNotifications';
+import { getSiteTitle } from '../lib/publicSettings';
 
 const isWechat = /MicroMessenger/i.test(navigator.userAgent);
 

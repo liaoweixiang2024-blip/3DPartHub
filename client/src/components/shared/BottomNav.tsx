@@ -1,9 +1,9 @@
-import { Link, useLocation } from 'react-router-dom';
-import Icon from './Icon';
 import { useEffect } from 'react';
+import { Link, useLocation } from 'react-router-dom';
 import useSWR from 'swr';
-import { getCachedPublicSettings } from '../../lib/publicSettings';
 import { DEFAULT_MOBILE_NAV, getBusinessConfig } from '../../lib/businessConfig';
+import { getCachedPublicSettings } from '../../lib/publicSettings';
+import Icon from './Icon';
 
 const tabs = DEFAULT_MOBILE_NAV;
 

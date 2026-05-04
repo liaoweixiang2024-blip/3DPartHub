@@ -1,16 +1,16 @@
+import { motion, AnimatePresence } from 'framer-motion';
 import { useState, useRef } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { motion, AnimatePresence } from 'framer-motion';
-import { useMediaQuery } from '../layouts/hooks/useMediaQuery';
-import { useDocumentTitle } from '../hooks/useDocumentTitle';
+import useSWR from 'swr';
+import client from '../api/client';
+import { AdminPageShell } from '../components/shared/AdminPageShell';
 import Icon from '../components/shared/Icon';
 import { PageHeader } from '../components/shared/PagePrimitives';
-import { AdminPageShell } from '../components/shared/AdminPageShell';
 import { useToast } from '../components/shared/Toast';
-import client from '../api/client';
-import useSWR from 'swr';
-import { getCachedPublicSettings } from '../lib/publicSettings';
+import { useDocumentTitle } from '../hooks/useDocumentTitle';
+import { useMediaQuery } from '../layouts/hooks/useMediaQuery';
 import { getBusinessConfig } from '../lib/businessConfig';
+import { getCachedPublicSettings } from '../lib/publicSettings';
 
 /* ── Context passed via navigate(state) ── */
 interface SupportContext {

@@ -1,7 +1,7 @@
 import type { Request, Response } from 'express';
+import { logger } from '../lib/logger.js';
 import { getSetting } from '../lib/settings.js';
 import { getVerifiedRequestUser, type AuthRequest } from './auth.js';
-import { logger } from '../lib/logger.js';
 
 export async function requireBrowseAccess(req: Request, res: Response): Promise<boolean> {
   const requireLogin = await getSetting<boolean>('require_login_browse');

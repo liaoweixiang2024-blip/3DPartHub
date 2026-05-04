@@ -1,7 +1,7 @@
-import { useState, useRef, useEffect, useMemo } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
-import Icon from './Icon';
+import { useState, useRef, useEffect, useMemo } from 'react';
 import type { CategoryItem } from '../../api/categories';
+import Icon from './Icon';
 
 interface CategorySelectProps {
   categories: CategoryItem[];

@@ -1,14 +1,8 @@
+import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
 import { startTransition, useState, useCallback, useMemo, useEffect, useRef } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
-import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
 import useSWR from 'swr';
-import { useDocumentTitle } from '../hooks/useDocumentTitle';
-import { useMediaQuery } from '../layouts/hooks/useMediaQuery';
-import Icon from '../components/shared/Icon';
-import SafeImage from '../components/shared/SafeImage';
-import { AdminPageShell } from '../components/shared/AdminPageShell';
-import { AdminContentPanel, AdminManagementPage } from '../components/shared/AdminManagementPage';
-import { useAuthStore } from '../stores/useAuthStore';
+import { createInquiry } from '../api/inquiries';
 import {
   type ColumnDef,
   filterSelectionProducts,
@@ -18,13 +12,19 @@ import {
   type SelectionComponent,
   createSelectionShare,
 } from '../api/selections';
-import { createInquiry } from '../api/inquiries';
+import { AdminContentPanel, AdminManagementPage } from '../components/shared/AdminManagementPage';
+import { AdminPageShell } from '../components/shared/AdminPageShell';
+import Icon from '../components/shared/Icon';
+import SafeImage from '../components/shared/SafeImage';
 import { useToast } from '../components/shared/Toast';
-import { compareOptionValues } from '../lib/selectionSort';
-import { getCachedPublicSettings } from '../lib/publicSettings';
+import { useDocumentTitle } from '../hooks/useDocumentTitle';
+import { useMediaQuery } from '../layouts/hooks/useMediaQuery';
 import { getBusinessConfig } from '../lib/businessConfig';
 import { copyText } from '../lib/clipboard';
 import { downloadKitList, formatKitList, getKitListTitle } from '../lib/kitList';
+import { getCachedPublicSettings } from '../lib/publicSettings';
+import { compareOptionValues } from '../lib/selectionSort';
+import { useAuthStore } from '../stores/useAuthStore';
 
 function sv(specs: Record<string, string>, key: string): string {
   if (specs[key]) return specs[key];

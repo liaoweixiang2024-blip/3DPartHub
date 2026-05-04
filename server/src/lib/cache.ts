@@ -1,5 +1,5 @@
-import Redis from 'ioredis';
 import { randomUUID } from 'node:crypto';
+import Redis from 'ioredis';
 import { config } from './config.js';
 import { createLogger } from './logger.js';
 

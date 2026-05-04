@@ -1,8 +1,8 @@
 import { Router, Response } from 'express';
+import { logger } from '../../lib/logger.js';
 import { prisma } from '../../lib/prisma.js';
 import { authMiddleware, type AuthRequest } from '../../middleware/auth.js';
 import { adminOnly, asSingleString, invalidateSelectionCache, isValidGroupImageFit } from './common.js';
-import { logger } from '../../lib/logger.js';
 
 export function createSelectionAdminCategoriesRouter() {
   const router = Router();

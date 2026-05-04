@@ -1,5 +1,5 @@
-import test from 'node:test';
 import assert from 'node:assert/strict';
+import test from 'node:test';
 
 process.env.DATABASE_URL ||= 'postgresql://test:test@localhost:5432/test';
 process.env.JWT_SECRET ||= 'test-secret';

@@ -1,11 +1,11 @@
 import { Router, Response } from 'express';
 import { cacheGetOrSet, TTL } from '../../lib/cache.js';
+import { logger } from '../../lib/logger.js';
 import { prisma } from '../../lib/prisma.js';
 import { requireBrowseAccess } from '../../middleware/browseAccess.js';
-import { CATEGORY_CACHE_PREFIX, type CategoryTreeNode } from './common.js';
 import { MODEL_STATUS } from '../../services/modelStatus.js';
 import { groupedVisibleModelSql } from '../../services/modelVisibility.js';
-import { logger } from '../../lib/logger.js';
+import { CATEGORY_CACHE_PREFIX, type CategoryTreeNode } from './common.js';
 
 export function createPublicCategoriesRouter() {
   const router = Router();

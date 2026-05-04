@@ -1,7 +1,7 @@
-import { Router, Response } from 'express';
-import multer from 'multer';
 import { copyFileSync, mkdirSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
+import { Router, Response } from 'express';
+import multer from 'multer';
 import { config } from '../../lib/config.js';
 import { setSetting } from '../../lib/settings.js';
 import { authMiddleware, type AuthRequest } from '../../middleware/auth.js';

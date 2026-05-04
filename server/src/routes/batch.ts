@@ -1,24 +1,24 @@
-import { Router, Response } from 'express';
-import multer from 'multer';
+import { randomUUID } from 'node:crypto';
+import { once } from 'node:events';
 import { createWriteStream, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { basename, join, posix } from 'node:path';
 import archiver from 'archiver';
+import { Router, Response } from 'express';
+import multer from 'multer';
 import { createExtractorFromData } from 'node-unrar-js';
-import { randomUUID } from 'node:crypto';
-import { once } from 'node:events';
+import { sendAcceleratedFile } from '../lib/acceleratedDownload.js';
+import { getBusinessConfig } from '../lib/businessConfig.js';
+import { cacheDelByPrefix } from '../lib/cache.js';
+import { config } from '../lib/config.js';
+import { consumeProtectedResourceToken, createProtectedResourceToken } from '../lib/downloadTokenStore.js';
+import { normalizeUploadFilename } from '../lib/filenameEncoding.js';
+import { conversionQueue } from '../lib/queue.js';
+import { optionalString } from '../lib/requestValidation.js';
 import { authMiddleware, verifyRequestToken, type AuthRequest } from '../middleware/auth.js';
 import { requireRole } from '../middleware/rbac.js';
-import { config } from '../lib/config.js';
-import { sendAcceleratedFile } from '../lib/acceleratedDownload.js';
-import { consumeProtectedResourceToken, createProtectedResourceToken } from '../lib/downloadTokenStore.js';
-import { optionalString } from '../lib/requestValidation.js';
 import { findPreviewAssetPath, getPreviewAssetExtension } from '../services/gltfAsset.js';
-import { conversionQueue } from '../lib/queue.js';
-import { clearCategoryCache } from './categories/common.js';
-import { cacheDelByPrefix } from '../lib/cache.js';
-import { getBusinessConfig } from '../lib/businessConfig.js';
-import { normalizeUploadFilename } from '../lib/filenameEncoding.js';
 import { MODEL_STATUS } from '../services/modelStatus.js';
+import { clearCategoryCache } from './categories/common.js';
 
 const router = Router();
 

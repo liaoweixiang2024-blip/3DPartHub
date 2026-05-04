@@ -1,7 +1,7 @@
-import { Router, Request, Response } from 'express';
 import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { requireBrowseAccess } from '../../middleware/browseAccess.js';
+import { Router, Request, Response } from 'express';
+import { getBusinessConfig } from '../../lib/businessConfig.js';
 import { cacheGetOrSet, TTL } from '../../lib/cache.js';
 import {
   MAX_MODEL_PAGE,
@@ -12,9 +12,9 @@ import {
   numericQuery,
   searchCacheToken,
 } from '../../lib/searchQuery.js';
-import { getBusinessConfig } from '../../lib/businessConfig.js';
-import { MODEL_STATUS } from '../../services/modelStatus.js';
+import { requireBrowseAccess } from '../../middleware/browseAccess.js';
 import { withAssetVersion } from '../../services/gltfAsset.js';
+import { MODEL_STATUS } from '../../services/modelStatus.js';
 import { groupedVisibleModelWhere } from '../../services/modelVisibility.js';
 
 type ModelListContext = {

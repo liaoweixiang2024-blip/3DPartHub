@@ -1,11 +1,11 @@
 import { Router, Response } from 'express';
+import { revokeToken, revokeAllTokensBefore, signAccessToken, signRefreshToken } from '../../lib/jwt.js';
+import { logger } from '../../lib/logger.js';
 import { hashPassword, verifyPassword } from '../../lib/password.js';
 import { prisma } from '../../lib/prisma.js';
 import { getSetting } from '../../lib/settings.js';
-import { revokeToken, revokeAllTokensBefore, signAccessToken, signRefreshToken } from '../../lib/jwt.js';
 import { authMiddleware, getRequestToken, type AuthRequest } from '../../middleware/auth.js';
 import { setAuthCookies } from './cookies.js';
-import { logger } from '../../lib/logger.js';
 
 export function createAuthProfileRouter() {
   const router = Router();

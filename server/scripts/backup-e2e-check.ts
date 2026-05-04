@@ -1,7 +1,7 @@
-import { existsSync, linkSync, lstatSync, mkdirSync, readdirSync, rmSync, statSync } from "node:fs";
-import { join } from "node:path";
-import { setTimeout as delay } from "node:timers/promises";
-import { PrismaClient } from "@prisma/client";
+import { existsSync, linkSync, lstatSync, mkdirSync, readdirSync, rmSync, statSync } from 'node:fs';
+import { join } from 'node:path';
+import { setTimeout as delay } from 'node:timers/promises';
+import { PrismaClient } from '@prisma/client';
 import {
   getImportSaveJob,
   getJob,
@@ -11,24 +11,24 @@ import {
   startImportSaveJob,
   startRestoreJob,
   verifyBackupArchive,
-} from "../src/lib/backup.js";
+} from '../src/lib/backup.js';
 
 const prisma = new PrismaClient();
 
-const STATIC_BACKUP_EXCLUDE_DIRS = new Set(["backups", "_backup_db", "_safety_snapshots"]);
-const UPLOAD_BACKUP_EXCLUDE_DIRS = new Set(["backups", "chunks", "batch", ".download_tokens"]);
+const STATIC_BACKUP_EXCLUDE_DIRS = new Set(['backups', '_backup_db', '_safety_snapshots']);
+const UPLOAD_BACKUP_EXCLUDE_DIRS = new Set(['backups', 'chunks', 'batch', '.download_tokens']);
 
 type DbFingerprint = Record<string, { count: number; hash: string }>;
 type DirFingerprint = Record<string, { files: number; bytes: number }>;
 
 async function main() {
-  console.log("== Backup E2E Check ==");
-  console.log("1) Capturing current DB and file fingerprints...");
+  console.log('== Backup E2E Check ==');
+  console.log('1) Capturing current DB and file fingerprints...');
   const beforeDb = await fingerprintDatabase();
   const beforeFiles = fingerprintBusinessFiles();
-  printSummary("Before", beforeDb, beforeFiles);
+  printSummary('Before', beforeDb, beforeFiles);
 
-  console.log("2) Creating a new enterprise backup...");
+  console.log('2) Creating a new enterprise backup...');
   const backupId = startBackupJob();
   await waitBackup(backupId);
   const createdRecord = listBackups().find((backup) => backup.id === backupId);
@@ -36,11 +36,11 @@ async function main() {
   await verifyBackupArchive(backupId);
   console.log(`   Created and verified: ${backupId} (${createdRecord.fileSizeText})`);
 
-  console.log("3) Importing the created backup as a new backup record...");
-  const sourceArchive = join(process.cwd(), "static", "backups", `${backupId}.tar.gz`);
+  console.log('3) Importing the created backup as a new backup record...');
+  const sourceArchive = join(process.cwd(), 'static', 'backups', `${backupId}.tar.gz`);
   if (!existsSync(sourceArchive)) throw new Error(`Created archive not found: ${sourceArchive}`);
-  const importSource = join(process.cwd(), "static", "backups", ".work", `${backupId}.import-source.tar.gz`);
-  mkdirSync(join(process.cwd(), "static", "backups", ".work"), { recursive: true });
+  const importSource = join(process.cwd(), 'static', 'backups', '.work', `${backupId}.import-source.tar.gz`);
+  mkdirSync(join(process.cwd(), 'static', 'backups', '.work'), { recursive: true });
   rmSync(importSource, { force: true });
   linkSync(sourceArchive, importSource);
   const importJobId = startImportSaveJob(importSource, `${backupId}.tar.gz`);
@@ -48,28 +48,34 @@ async function main() {
   await verifyBackupArchive(importedRecord.id);
   console.log(`   Imported and verified: ${importedRecord.id} (${importedRecord.fileSizeText})`);
 
-  console.log("4) Restoring from the imported backup record...");
+  console.log('4) Restoring from the imported backup record...');
   const restoreJobId = startRestoreJob(importedRecord.id);
   await waitRestore(restoreJobId);
   console.log(`   Restored from: ${importedRecord.id}`);
 
-  console.log("5) Comparing DB and file fingerprints after restore...");
+  console.log('5) Comparing DB and file fingerprints after restore...');
   const afterDb = await fingerprintDatabase();
   const afterFiles = fingerprintBusinessFiles();
-  assertEqual("database fingerprint", beforeDb, afterDb);
-  assertEqual("business file fingerprint", beforeFiles, afterFiles);
-  printSummary("After", afterDb, afterFiles);
+  assertEqual('database fingerprint', beforeDb, afterDb);
+  assertEqual('business file fingerprint', beforeFiles, afterFiles);
+  printSummary('After', afterDb, afterFiles);
 
-  console.log("== Backup E2E Check Passed ==");
-  console.log(JSON.stringify({
-    createdBackupId: backupId,
-    importedBackupId: importedRecord.id,
-    restoredFromBackupId: importedRecord.id,
-  }, null, 2));
+  console.log('== Backup E2E Check Passed ==');
+  console.log(
+    JSON.stringify(
+      {
+        createdBackupId: backupId,
+        importedBackupId: importedRecord.id,
+        restoredFromBackupId: importedRecord.id,
+      },
+      null,
+      2,
+    ),
+  );
 }
 
 async function waitBackup(jobId: string) {
-  let last = "";
+  let last = '';
   while (true) {
     const job = getJob(jobId);
     if (!job) throw new Error(`Backup job not found: ${jobId}`);
@@ -78,14 +84,14 @@ async function waitBackup(jobId: string) {
       console.log(`   backup ${job.percent}% ${job.stage} - ${job.message}`);
       last = line;
     }
-    if (job.stage === "done") return;
-    if (job.stage === "error") throw new Error(`Backup failed: ${job.error || job.message}`);
+    if (job.stage === 'done') return;
+    if (job.stage === 'error') throw new Error(`Backup failed: ${job.error || job.message}`);
     await delay(2000);
   }
 }
 
 async function waitImportSave(jobId: string) {
-  let last = "";
+  let last = '';
   while (true) {
     const job = getImportSaveJob(jobId);
     if (!job) throw new Error(`Import job not found: ${jobId}`);
@@ -94,17 +100,17 @@ async function waitImportSave(jobId: string) {
       console.log(`   import ${job.percent}% ${job.stage} - ${job.message}`);
       last = line;
     }
-    if (job.stage === "done") {
+    if (job.stage === 'done') {
       if (!job.result) throw new Error(`Import job finished without a result: ${jobId}`);
       return job.result;
     }
-    if (job.stage === "error") throw new Error(`Import failed: ${job.error || job.message}`);
+    if (job.stage === 'error') throw new Error(`Import failed: ${job.error || job.message}`);
     await delay(2000);
   }
 }
 
 async function waitRestore(jobId: string) {
-  let last = "";
+  let last = '';
   while (true) {
     const job = getRestoreJob(jobId);
     if (!job) throw new Error(`Restore job not found: ${jobId}`);
@@ -113,8 +119,8 @@ async function waitRestore(jobId: string) {
       console.log(`   restore ${job.percent}% ${job.stage} - ${job.message}`);
       last = line;
     }
-    if (job.stage === "done") return;
-    if (job.stage === "error") throw new Error(`Restore failed: ${job.error || job.message}`);
+    if (job.stage === 'done') return;
+    if (job.stage === 'error') throw new Error(`Restore failed: ${job.error || job.message}`);
     await delay(2000);
   }
 }
@@ -139,7 +145,7 @@ async function fingerprintDatabase(): Promise<DbFingerprint> {
     `);
     result[table_name] = {
       count: Number(rows[0]?.count || 0),
-      hash: rows[0]?.hash || "",
+      hash: rows[0]?.hash || '',
     };
   }
   return result;
@@ -147,11 +153,11 @@ async function fingerprintDatabase(): Promise<DbFingerprint> {
 
 function fingerprintBusinessFiles(): DirFingerprint {
   const result: DirFingerprint = {};
-  const staticDir = join(process.cwd(), "static");
+  const staticDir = join(process.cwd(), 'static');
   for (const dir of discoverStaticBackupDirs(staticDir)) {
     result[`static/${dir}`] = countFiles(join(staticDir, dir));
   }
-  const uploadDir = join(process.cwd(), "uploads");
+  const uploadDir = join(process.cwd(), 'uploads');
   for (const dir of discoverUploadBackupDirs(uploadDir)) {
     result[`uploads/${dir}`] = countFiles(join(uploadDir, dir));
   }
@@ -161,8 +167,8 @@ function fingerprintBusinessFiles(): DirFingerprint {
 function discoverStaticBackupDirs(staticDir: string): string[] {
   return discoverTopLevelDirs(staticDir, (name) => {
     if (STATIC_BACKUP_EXCLUDE_DIRS.has(name)) return false;
-    if (name.startsWith(".")) return false;
-    if (name.startsWith("_")) return false;
+    if (name.startsWith('.')) return false;
+    if (name.startsWith('_')) return false;
     return true;
   });
 }
@@ -170,8 +176,8 @@ function discoverStaticBackupDirs(staticDir: string): string[] {
 function discoverUploadBackupDirs(uploadDir: string): string[] {
   return discoverTopLevelDirs(uploadDir, (name) => {
     if (UPLOAD_BACKUP_EXCLUDE_DIRS.has(name)) return false;
-    if (name.startsWith(".") && name !== ".metadata") return false;
-    if (name.startsWith("_")) return false;
+    if (name.startsWith('.') && name !== '.metadata') return false;
+    if (name.startsWith('_')) return false;
     return true;
   });
 }
@@ -218,11 +224,13 @@ function printSummary(label: string, db: DbFingerprint, files: DirFingerprint) {
   const dbRows = Object.values(db).reduce((sum, item) => sum + item.count, 0);
   const fileRows = Object.values(files).reduce((sum, item) => sum + item.files, 0);
   const fileBytes = Object.values(files).reduce((sum, item) => sum + item.bytes, 0);
-  console.log(`   ${label}: ${Object.keys(db).length} tables / ${dbRows} rows; ${fileRows} files / ${formatBytes(fileBytes)}`);
+  console.log(
+    `   ${label}: ${Object.keys(db).length} tables / ${dbRows} rows; ${fileRows} files / ${formatBytes(fileBytes)}`,
+  );
 }
 
 function formatBytes(bytes: number): string {
-  const units = ["B", "KB", "MB", "GB", "TB"];
+  const units = ['B', 'KB', 'MB', 'GB', 'TB'];
   let value = bytes;
   let index = 0;
   while (value >= 1024 && index < units.length - 1) {
@@ -234,7 +242,7 @@ function formatBytes(bytes: number): string {
 
 main()
   .catch((err) => {
-    console.error("== Backup E2E Check Failed ==");
+    console.error('== Backup E2E Check Failed ==');
     console.error(err);
     process.exitCode = 1;
   })

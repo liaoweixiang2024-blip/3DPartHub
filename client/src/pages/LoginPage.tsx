@@ -1,17 +1,17 @@
+import { motion } from 'framer-motion';
 import { useState, useEffect, useCallback } from 'react';
 import { useNavigate, useLocation, Link } from 'react-router-dom';
-import { motion } from 'framer-motion';
-import { useAuthStore } from '../stores/useAuthStore';
-import { useDocumentTitle } from '../hooks/useDocumentTitle';
+import client from '../api/client';
+import { unwrapResponse } from '../api/response';
+import { getPublicSettings } from '../api/settings';
 import BrandMark from '../components/shared/BrandMark';
 import Icon from '../components/shared/Icon';
 import { PageTitle } from '../components/shared/PagePrimitives';
 import { PublicPageShell } from '../components/shared/PublicPageShell';
-import { sanitizeHtml } from '../lib/sanitizeHtml';
-import { getPublicSettings } from '../api/settings';
-import client from '../api/client';
-import { unwrapResponse } from '../api/response';
+import { useDocumentTitle } from '../hooks/useDocumentTitle';
 import { getErrorMessage } from '../lib/errorNotifications';
+import { sanitizeHtml } from '../lib/sanitizeHtml';
+import { useAuthStore } from '../stores/useAuthStore';
 
 type AuthMode = 'login' | 'register';
 

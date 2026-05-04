@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useRef, type MutableRefObject } from 'react';
 import { useThree } from '@react-three/fiber';
+import { useCallback, useEffect, useRef, type MutableRefObject } from 'react';
 import * as THREE from 'three';
 import type { CameraPreset } from './ModelViewer';
 import { FIT_MODEL_EVENT, MODEL_BOUNDS_EVENT, type ModelBoundsDetail } from './viewerEvents';

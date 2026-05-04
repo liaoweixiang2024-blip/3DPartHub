@@ -11,18 +11,6 @@ import {
 } from 'react';
 import useSWR from 'swr';
 import '../styles/product-wall.css';
-import { useDocumentTitle } from '../hooks/useDocumentTitle';
-import SafeImage from '../components/shared/SafeImage';
-import { AdminPageShell } from '../components/shared/AdminPageShell';
-import { AdminManagementPage } from '../components/shared/AdminManagementPage';
-import Icon from '../components/shared/Icon';
-import ProductWallActionMenu from '../components/product-wall/ActionMenu';
-import ProductWallManagementPanel from '../components/product-wall/ManagementPanel';
-import ResponsiveSectionTabs from '../components/shared/ResponsiveSectionTabs';
-import { copyText } from '../lib/clipboard';
-import { getBusinessConfig } from '../lib/businessConfig';
-import { useAuthStore } from '../stores/useAuthStore';
-import { useToast } from '../components/shared/Toast';
 import {
   createProductWallCategory,
   deleteProductWallCategory,
@@ -43,6 +31,18 @@ import {
   type ProductWallKind,
   type ProductWallStatus,
 } from '../api/productWall';
+import ProductWallActionMenu from '../components/product-wall/ActionMenu';
+import ProductWallManagementPanel from '../components/product-wall/ManagementPanel';
+import { AdminManagementPage } from '../components/shared/AdminManagementPage';
+import { AdminPageShell } from '../components/shared/AdminPageShell';
+import Icon from '../components/shared/Icon';
+import ResponsiveSectionTabs from '../components/shared/ResponsiveSectionTabs';
+import SafeImage from '../components/shared/SafeImage';
+import { useToast } from '../components/shared/Toast';
+import { useDocumentTitle } from '../hooks/useDocumentTitle';
+import { getBusinessConfig } from '../lib/businessConfig';
+import { copyText } from '../lib/clipboard';
+import { useAuthStore } from '../stores/useAuthStore';
 
 type WallItem = ProductWallItem;
 

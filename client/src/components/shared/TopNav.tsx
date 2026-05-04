@@ -1,14 +1,8 @@
-import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { lazy, Suspense, useState, useCallback, useEffect, useRef, useMemo } from 'react';
+import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import useSWR from 'swr';
-import { useThemeStore } from '../../stores/useThemeStore';
-import { useAuthStore } from '../../stores/useAuthStore';
 import { mutate } from 'swr';
-import Icon from './Icon';
-import Tooltip from './Tooltip';
-import BrandMark from './BrandMark';
-import { onSiteConfigChange, getCachedPublicSettings } from '../../lib/publicSettings';
 import { getBusinessConfig } from '../../lib/businessConfig';
 import {
   HOME_SEARCH_EVENT,
@@ -19,6 +13,12 @@ import {
   saveHomeSearchQuery,
   type HomeSearchEventDetail,
 } from '../../lib/homeSearchState';
+import { onSiteConfigChange, getCachedPublicSettings } from '../../lib/publicSettings';
+import { useAuthStore } from '../../stores/useAuthStore';
+import { useThemeStore } from '../../stores/useThemeStore';
+import BrandMark from './BrandMark';
+import Icon from './Icon';
+import Tooltip from './Tooltip';
 
 const NotificationPanel = lazy(() => import('./NotificationPanel'));
 const UploadModal = lazy(() => import('./UploadModal'));

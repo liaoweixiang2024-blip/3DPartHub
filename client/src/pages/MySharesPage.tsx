@@ -1,14 +1,14 @@
 import { useEffect, useMemo, useState } from 'react';
-import useSWR from 'swr';
 import { Link } from 'react-router-dom';
-import { AdminPageShell } from '../components/shared/AdminPageShell';
+import useSWR from 'swr';
+import { deleteShare, listShares, type ShareLink } from '../api/shares';
 import { AdminEmptyState, AdminManagementPage } from '../components/shared/AdminManagementPage';
+import { AdminPageShell } from '../components/shared/AdminPageShell';
 import Icon from '../components/shared/Icon';
 import { SkeletonList } from '../components/shared/Skeleton';
 import { useToast } from '../components/shared/Toast';
 import { useDocumentTitle } from '../hooks/useDocumentTitle';
 import { copyText } from '../lib/clipboard';
-import { deleteShare, listShares, type ShareLink } from '../api/shares';
 
 function getShareUrl(share: ShareLink) {
   const path = share.type === 'selection' ? `/selection/s/${share.token}` : `/share/${share.token}`;

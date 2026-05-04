@@ -1,11 +1,11 @@
-import { useState, useCallback, useMemo, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { useState, useCallback, useMemo, useRef } from 'react';
 import useSWR from 'swr';
-import { converterApi, modelApi, type ConversionResponse } from '../../api';
-import client from '../../api/client';
-import { categoriesApi } from '../../api/categories';
-import { getBusinessConfig } from '../../lib/businessConfig';
 import { mutate as swrMutate } from 'swr';
+import { converterApi, modelApi, type ConversionResponse } from '../../api';
+import { categoriesApi } from '../../api/categories';
+import client from '../../api/client';
+import { getBusinessConfig } from '../../lib/businessConfig';
 import Icon from '../shared/Icon';
 import CategorySelect from './CategorySelect';
 

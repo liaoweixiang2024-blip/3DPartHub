@@ -10,8 +10,8 @@ import {
 } from 'node:fs';
 import { join, dirname, resolve, sep } from 'node:path';
 import { pipeline } from 'node:stream/promises';
-import { config } from './config.js';
 import { logger } from '../lib/logger.js';
+import { config } from './config.js';
 
 export interface StorageProvider {
   upload(key: string, data: Buffer | NodeJS.ReadableStream, contentType?: string): Promise<string>;

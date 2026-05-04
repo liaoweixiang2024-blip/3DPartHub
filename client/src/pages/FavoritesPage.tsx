@@ -1,20 +1,20 @@
+import { motion, AnimatePresence } from 'framer-motion';
 import { useState, useCallback, memo, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import useSWR from 'swr';
-import { motion, AnimatePresence } from 'framer-motion';
-import { useMediaQuery } from '../layouts/hooks/useMediaQuery';
-import { useDocumentTitle } from '../hooks/useDocumentTitle';
-import { SkeletonGrid } from '../components/shared/Skeleton';
+import client from '../api/client';
+import { downloadModelFile, isDownloadAuthRequiredError } from '../api/downloads';
+import { favoriteApi } from '../api/favorites';
+import type { FavoriteItem } from '../api/favorites';
+import { AdminEmptyState, AdminManagementPage } from '../components/shared/AdminManagementPage';
+import { AdminPageShell } from '../components/shared/AdminPageShell';
 import Icon from '../components/shared/Icon';
 import ModelThumbnail from '../components/shared/ModelThumbnail';
-import { AdminPageShell } from '../components/shared/AdminPageShell';
-import { AdminEmptyState, AdminManagementPage } from '../components/shared/AdminManagementPage';
+import { SkeletonGrid } from '../components/shared/Skeleton';
 import { useToast } from '../components/shared/Toast';
-import client from '../api/client';
-import { favoriteApi } from '../api/favorites';
-import { downloadModelFile, isDownloadAuthRequiredError } from '../api/downloads';
+import { useDocumentTitle } from '../hooks/useDocumentTitle';
+import { useMediaQuery } from '../layouts/hooks/useMediaQuery';
 import { useFavoriteStore } from '../stores/useFavoriteStore';
-import type { FavoriteItem } from '../api/favorites';
 
 interface FavoriteModel {
   id: string;

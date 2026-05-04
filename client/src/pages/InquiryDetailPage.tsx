@@ -1,14 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import useSWR from 'swr';
-import { useDocumentTitle } from '../hooks/useDocumentTitle';
-import Icon from '../components/shared/Icon';
-import { AdminPageShell } from '../components/shared/AdminPageShell';
-import { AdminDetailHeader } from '../components/shared/AdminManagementPage';
-import { useToast } from '../components/shared/Toast';
-import { useAuthStore } from '../stores/useAuthStore';
-import { getCachedPublicSettings } from '../lib/publicSettings';
-import { getBusinessConfig, statusInfo, type StatusConfig } from '../lib/businessConfig';
 import {
   getInquiry,
   sendInquiryMessage,
@@ -17,6 +9,14 @@ import {
   type Inquiry,
   type InquiryMessage,
 } from '../api/inquiries';
+import { AdminDetailHeader } from '../components/shared/AdminManagementPage';
+import { AdminPageShell } from '../components/shared/AdminPageShell';
+import Icon from '../components/shared/Icon';
+import { useToast } from '../components/shared/Toast';
+import { useDocumentTitle } from '../hooks/useDocumentTitle';
+import { getBusinessConfig, statusInfo, type StatusConfig } from '../lib/businessConfig';
+import { getCachedPublicSettings } from '../lib/publicSettings';
+import { useAuthStore } from '../stores/useAuthStore';
 
 function StatusBadge({ status, statuses }: { status: string; statuses: StatusConfig[] }) {
   const info = statusInfo(statuses, status);

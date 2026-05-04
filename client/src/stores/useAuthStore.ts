@@ -1,9 +1,9 @@
+import axios from 'axios';
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import axios from 'axios';
+import client from '../api/client';
 import type { User, AuthTokens } from '../types';
 import { useFavoriteStore } from './useFavoriteStore';
-import client from '../api/client';
 
 interface AuthState {
   user: User | null;

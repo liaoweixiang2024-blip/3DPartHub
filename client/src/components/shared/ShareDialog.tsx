@@ -1,9 +1,9 @@
 import { useState } from 'react';
-import Icon from './Icon';
 import { createShare, type CreateShareParams } from '../../api/shares';
-import { getPublicSettingsSnapshot } from '../../lib/publicSettings';
 import { copyText } from '../../lib/clipboard';
 import { getErrorMessage } from '../../lib/errorNotifications';
+import { getPublicSettingsSnapshot } from '../../lib/publicSettings';
+import Icon from './Icon';
 
 interface ShareDialogProps {
   open: boolean;

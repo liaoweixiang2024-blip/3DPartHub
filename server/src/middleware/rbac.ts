@@ -1,7 +1,7 @@
+import { Role } from '@prisma/client';
 import { Response, NextFunction } from 'express';
 import { prisma } from '../lib/prisma.js';
 import type { AuthRequest } from './auth.js';
-import { Role } from '@prisma/client';
 
 /**
  * Check if user has one of the required global roles.

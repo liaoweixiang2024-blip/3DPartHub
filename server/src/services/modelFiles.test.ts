@@ -1,8 +1,8 @@
-import test from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
-import { join, relative } from 'node:path';
 import { tmpdir } from 'node:os';
+import { join, relative } from 'node:path';
+import test from 'node:test';
 
 process.env.DATABASE_URL ||= 'postgresql://test:test@localhost:5432/test';
 process.env.JWT_SECRET ||= 'test-secret';

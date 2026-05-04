@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
-import Icon from '../shared/Icon';
 import type { ModelPreviewMeta } from '../../api/models';
+import Icon from '../shared/Icon';
 import type { ModelBoundsDetail, ModelPartItem } from './viewerEvents';
 
 interface ModelPropertiesPanelProps {

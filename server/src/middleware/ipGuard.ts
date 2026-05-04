@@ -1,6 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
-import { getSetting } from '../lib/settings.js';
 import { isRefererAllowed } from '../lib/ipMatch.js';
+import { getSetting } from '../lib/settings.js';
 
 // Cache settings for 60 seconds
 let cachedAntiProxyEnabled = false;

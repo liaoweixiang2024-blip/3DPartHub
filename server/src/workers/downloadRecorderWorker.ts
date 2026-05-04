@@ -1,3 +1,4 @@
+import { logger } from '../lib/logger.js';
 import { prisma } from '../lib/prisma.js';
 import {
   ackModelDownloadRecords,
@@ -6,7 +7,6 @@ import {
   retryModelDownloadRecords,
 } from '../services/modelDownloadQueue.js';
 import { recordQueuedModelDownloads } from '../services/modelDownloadRecorder.js';
-import { logger } from '../lib/logger.js';
 
 const BATCH_SIZE = Math.min(5000, Math.max(50, Number(process.env.DOWNLOAD_RECORD_BATCH_SIZE) || 500));
 const POLL_MS = Math.min(10_000, Math.max(250, Number(process.env.DOWNLOAD_RECORD_FLUSH_MS) || 1000));

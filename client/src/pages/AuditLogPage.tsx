@@ -1,13 +1,13 @@
 import { useCallback, useEffect, useState } from 'react';
 import useSWRInfinite from 'swr/infinite';
-import { useDocumentTitle } from '../hooks/useDocumentTitle';
-import { useMediaQuery } from '../layouts/hooks/useMediaQuery';
-import InfiniteLoadTrigger from '../components/shared/InfiniteLoadTrigger';
-import { AdminPageShell } from '../components/shared/AdminPageShell';
-import { AdminManagementPage, AdminContentPanel, AdminEmptyState } from '../components/shared/AdminManagementPage';
-import Icon from '../components/shared/Icon';
 import client from '../api/client';
 import { unwrapResponse } from '../api/response';
+import { AdminManagementPage, AdminContentPanel, AdminEmptyState } from '../components/shared/AdminManagementPage';
+import { AdminPageShell } from '../components/shared/AdminPageShell';
+import Icon from '../components/shared/Icon';
+import InfiniteLoadTrigger from '../components/shared/InfiniteLoadTrigger';
+import { useDocumentTitle } from '../hooks/useDocumentTitle';
+import { useMediaQuery } from '../layouts/hooks/useMediaQuery';
 
 type AuditDetails = {
   body?: {

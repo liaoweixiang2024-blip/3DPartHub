@@ -1,13 +1,13 @@
-import { existsSync, readdirSync, readFileSync, rmSync } from "node:fs";
-import { join } from "node:path";
-import { prisma } from "../src/lib/prisma.js";
-import { config } from "../src/lib/config.js";
+import { existsSync, readdirSync, readFileSync, rmSync } from 'node:fs';
+import { join } from 'node:path';
+import { config } from '../src/lib/config.js';
+import { prisma } from '../src/lib/prisma.js';
 
-const shouldDeleteFiles = process.argv.includes("--delete-files");
-const modelDir = join(config.staticDir, "models");
+const shouldDeleteFiles = process.argv.includes('--delete-files');
+const modelDir = join(config.staticDir, 'models');
 
 function isPreviewMeta(value: unknown) {
-  if (!value || typeof value !== "object") return false;
+  if (!value || typeof value !== 'object') return false;
   const meta = value as Record<string, any>;
   return meta.version === 2 && Boolean(meta.totals) && Boolean(meta.bounds);
 }
@@ -18,17 +18,17 @@ async function main() {
     return;
   }
 
-  const files = readdirSync(modelDir).filter((file) => file.endsWith(".meta.json"));
+  const files = readdirSync(modelDir).filter((file) => file.endsWith('.meta.json'));
   let imported = 0;
   let deleted = 0;
   let skipped = 0;
 
   for (const file of files) {
-    const modelId = file.replace(/\.meta\.json$/, "");
+    const modelId = file.replace(/\.meta\.json$/, '');
     const filePath = join(modelDir, file);
 
     try {
-      const meta = JSON.parse(readFileSync(filePath, "utf-8"));
+      const meta = JSON.parse(readFileSync(filePath, 'utf-8'));
       if (!isPreviewMeta(meta)) {
         skipped++;
         continue;

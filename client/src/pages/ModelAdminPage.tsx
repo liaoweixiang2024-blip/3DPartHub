@@ -1,17 +1,10 @@
+import { AnimatePresence, motion } from 'framer-motion';
 import { startTransition, useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { AnimatePresence, motion } from 'framer-motion';
-import { useMediaQuery } from '../layouts/hooks/useMediaQuery';
-import { useDocumentTitle } from '../hooks/useDocumentTitle';
-import { useVisibleItems } from '../hooks/useVisibleItems';
-import { SkeletonList } from '../components/shared/Skeleton';
-import Icon from '../components/shared/Icon';
-import ModelThumbnail from '../components/shared/ModelThumbnail';
-import InfiniteLoadTrigger from '../components/shared/InfiniteLoadTrigger';
-import { AdminPageShell } from '../components/shared/AdminPageShell';
-import { AdminManagementPage } from '../components/shared/AdminManagementPage';
-import ResponsiveSectionTabs, { type ResponsiveSectionTab } from '../components/shared/ResponsiveSectionTabs';
-import { useToast } from '../components/shared/Toast';
+import useSWR, { mutate as swrMutate } from 'swr';
+import useSWRInfinite from 'swr/infinite';
+import { categoriesApi, type CategoryItem } from '../api/categories';
+import { openModelDrawing } from '../api/downloads';
 import {
   modelApi,
   type ConversionQueueJob,
@@ -21,14 +14,21 @@ import {
   type PreviewDiagnosticFilter,
   type ServerModelListItem,
 } from '../api/models';
-import { openModelDrawing } from '../api/downloads';
-import { categoriesApi, type CategoryItem } from '../api/categories';
 import { getSettings, updateSettings } from '../api/settings';
+import { AdminManagementPage } from '../components/shared/AdminManagementPage';
+import { AdminPageShell } from '../components/shared/AdminPageShell';
 import CategorySelect from '../components/shared/CategorySelect';
-import useSWR, { mutate as swrMutate } from 'swr';
-import useSWRInfinite from 'swr/infinite';
-import { getCachedPublicSettings } from '../lib/publicSettings';
+import Icon from '../components/shared/Icon';
+import InfiniteLoadTrigger from '../components/shared/InfiniteLoadTrigger';
+import ModelThumbnail from '../components/shared/ModelThumbnail';
+import ResponsiveSectionTabs, { type ResponsiveSectionTab } from '../components/shared/ResponsiveSectionTabs';
+import { SkeletonList } from '../components/shared/Skeleton';
+import { useToast } from '../components/shared/Toast';
+import { useDocumentTitle } from '../hooks/useDocumentTitle';
+import { useVisibleItems } from '../hooks/useVisibleItems';
+import { useMediaQuery } from '../layouts/hooks/useMediaQuery';
 import { getBusinessConfig } from '../lib/businessConfig';
+import { getCachedPublicSettings } from '../lib/publicSettings';
 
 function formatSize(bytes: number) {
   if (bytes < 1024) return `${bytes} B`;

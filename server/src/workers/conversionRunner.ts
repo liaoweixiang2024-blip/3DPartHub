@@ -1,8 +1,8 @@
 import { join } from 'node:path';
-import { convertStepToGltf, type GltfAsset } from '../services/converter.js';
-import { convertXtToGltf } from '../services/xt-converter.js';
-import { generateThumbnail } from '../services/thumbnail.js';
 import { config } from '../lib/config.js';
+import { convertStepToGltf, type GltfAsset } from '../services/converter.js';
+import { generateThumbnail } from '../services/thumbnail.js';
+import { convertXtToGltf } from '../services/xt-converter.js';
 
 type ConversionPayload = {
   modelId: string;

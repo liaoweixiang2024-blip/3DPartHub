@@ -1,16 +1,16 @@
+import { motion, AnimatePresence } from 'framer-motion';
 import { useState, memo } from 'react';
 import { Link, useParams, useNavigate } from 'react-router-dom';
-import { motion, AnimatePresence } from 'framer-motion';
 import useSWR from 'swr';
-import { useDocumentTitle } from '../hooks/useDocumentTitle';
-import { PageHeader, PageTitle } from '../components/shared/PagePrimitives';
-import { AdminPageShell } from '../components/shared/AdminPageShell';
 import { projectApi, type Project, type ProjectModel } from '../api/projects';
-import { useAuthStore } from '../stores';
-import { useToast } from '../components/shared/Toast';
+import { AdminPageShell } from '../components/shared/AdminPageShell';
 import FormatTag from '../components/shared/FormatTag';
 import Icon from '../components/shared/Icon';
 import ModelThumbnail from '../components/shared/ModelThumbnail';
+import { PageHeader, PageTitle } from '../components/shared/PagePrimitives';
+import { useToast } from '../components/shared/Toast';
+import { useDocumentTitle } from '../hooks/useDocumentTitle';
+import { useAuthStore } from '../stores';
 
 function formatFileSize(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;

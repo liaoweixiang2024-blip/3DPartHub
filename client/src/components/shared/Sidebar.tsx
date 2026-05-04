@@ -1,9 +1,9 @@
 import React, { useRef, useEffect, useState, useCallback, useMemo } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import useSWR from 'swr';
-import { useAuthStore } from '../../stores/useAuthStore';
-import { getCachedPublicSettings } from '../../lib/publicSettings';
 import { getBusinessConfig } from '../../lib/businessConfig';
+import { getCachedPublicSettings } from '../../lib/publicSettings';
+import { useAuthStore } from '../../stores/useAuthStore';
 import Icon from './Icon';
 
 const footerNav = [

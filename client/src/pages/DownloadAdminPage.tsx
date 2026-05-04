@@ -1,12 +1,12 @@
-import useSWR from 'swr';
-import { Link } from 'react-router-dom';
 import type { ReactNode } from 'react';
-import { useDocumentTitle } from '../hooks/useDocumentTitle';
+import { Link } from 'react-router-dom';
+import useSWR from 'swr';
 import { downloadsApi, type DownloadAdminStats } from '../api/downloads';
+import { AdminContentPanel, AdminEmptyState, AdminManagementPage } from '../components/shared/AdminManagementPage';
+import { AdminPageShell } from '../components/shared/AdminPageShell';
 import Icon from '../components/shared/Icon';
 import ModelThumbnail from '../components/shared/ModelThumbnail';
-import { AdminPageShell } from '../components/shared/AdminPageShell';
-import { AdminContentPanel, AdminEmptyState, AdminManagementPage } from '../components/shared/AdminManagementPage';
+import { useDocumentTitle } from '../hooks/useDocumentTitle';
 
 const numberFormatter = new Intl.NumberFormat('zh-CN');
 

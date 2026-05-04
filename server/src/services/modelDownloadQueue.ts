@@ -1,7 +1,7 @@
 import Redis from 'ioredis';
 import { config } from '../lib/config.js';
-import type { QueuedModelDownloadRecord } from './modelDownloadRecorder.js';
 import { logger } from '../lib/logger.js';
+import type { QueuedModelDownloadRecord } from './modelDownloadRecorder.js';
 
 const WAITING_KEY = 'queue:model-download-records:v1';
 const PROCESSING_KEY = 'queue:model-download-records:processing:v1';

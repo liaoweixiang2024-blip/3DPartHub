@@ -1,7 +1,7 @@
 import nodemailer from 'nodemailer';
-import { getAllSettings } from './settings.js';
-import { parseEmailTemplates } from './emailTemplates.js';
 import { config } from './config.js';
+import { parseEmailTemplates } from './emailTemplates.js';
+import { getAllSettings } from './settings.js';
 
 type TemplateVars = Record<string, string | number | boolean | null | undefined>;
 

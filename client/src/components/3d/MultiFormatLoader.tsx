@@ -1,10 +1,19 @@
-import { useCallback, useMemo, useEffect, useState, useRef } from 'react';
 import { Html } from '@react-three/drei';
 import { useLoader, useThree } from '@react-three/fiber';
+import { useCallback, useMemo, useEffect, useState, useRef } from 'react';
 import * as THREE from 'three';
+import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
-import { loadCadFromUrl } from './StepLoader';
+import Icon from '../../components/shared/Icon';
+import {
+  get3DMaterialConfig,
+  getPublicSettingsSnapshot,
+  type MaterialPresetConfig,
+  type ViewerSettingsOverride,
+} from '../../lib/publicSettings';
 import type { ViewMode } from './ModelViewer';
+import { loadCadFromUrl } from './StepLoader';
+import type { MaterialPresetKey } from './viewerControls';
 import {
   centeredBoxFromBounds,
   dispatchModelBounds,
@@ -16,14 +25,6 @@ import {
   type ModelBoundsDetail,
   type ModelPartItem,
 } from './viewerEvents';
-import type { MaterialPresetKey } from './viewerControls';
-import Icon from '../../components/shared/Icon';
-import {
-  get3DMaterialConfig,
-  getPublicSettingsSnapshot,
-  type MaterialPresetConfig,
-  type ViewerSettingsOverride,
-} from '../../lib/publicSettings';
 
 interface MultiFormatLoaderProps {
   url: string;
@@ -55,7 +56,6 @@ interface MultiFormatLoaderProps {
 }
 
 // Generate a professional environment map for metallic reflections
-import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
 let _envMap: THREE.Texture | null = null;
 function getEnvMap(renderer: THREE.WebGLRenderer): THREE.Texture {
   if (_envMap) return _envMap;

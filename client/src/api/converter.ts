@@ -1,6 +1,6 @@
+import type { ApiResponse } from '../types/api';
 import client from './client';
 import { unwrapResponse } from './response';
-import type { ApiResponse } from '../types/api';
 
 export interface ConversionResponse {
   model_id: string;

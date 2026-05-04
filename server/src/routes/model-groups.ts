@@ -1,9 +1,9 @@
 import { Router, Response } from 'express';
+import { createLogger } from '../lib/logger.js';
 import { authMiddleware, type AuthRequest } from '../middleware/auth.js';
 import { requireRole } from '../middleware/rbac.js';
 import { MODEL_STATUS } from '../services/modelStatus.js';
 import { clearCategoryCache } from './categories/common.js';
-import { createLogger } from '../lib/logger.js';
 
 const log = createLogger({ component: 'model-groups' });
 

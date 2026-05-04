@@ -1,10 +1,10 @@
-import useSWR from 'swr';
 import { useParams, Link } from 'react-router-dom';
-import { useDocumentTitle } from '../hooks/useDocumentTitle';
-import { AdminPageShell } from '../components/shared/AdminPageShell';
+import useSWR from 'swr';
 import { AdminContentPanel, AdminManagementPage } from '../components/shared/AdminManagementPage';
-import { getCachedPublicSettings } from '../lib/publicSettings';
+import { AdminPageShell } from '../components/shared/AdminPageShell';
+import { useDocumentTitle } from '../hooks/useDocumentTitle';
 import { DEFAULT_PRIVACY_SECTIONS, DEFAULT_TERMS_SECTIONS, parseLegalSections } from '../lib/legalContent';
+import { getCachedPublicSettings } from '../lib/publicSettings';
 
 function splitParagraphs(content: string) {
   return content

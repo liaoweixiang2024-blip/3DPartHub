@@ -1,12 +1,4 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { useDocumentTitle } from '../hooks/useDocumentTitle';
-import { SkeletonList } from '../components/shared/Skeleton';
-import Icon from '../components/shared/Icon';
-import SafeImage from '../components/shared/SafeImage';
-import { AdminPageShell } from '../components/shared/AdminPageShell';
-import { AdminContentPanel, AdminManagementPage } from '../components/shared/AdminManagementPage';
-import ResponsiveSectionTabs from '../components/shared/ResponsiveSectionTabs';
-import { useToast } from '../components/shared/Toast';
 import {
   getSettings,
   updateSettings,
@@ -47,8 +39,14 @@ import {
   type CleanupScanResult,
   type CleanupCategory,
 } from '../api/settings';
-import { COLOR_PRESETS, COLOR_KEYS } from '../lib/colorSchemes';
-import { applyColorScheme, generatePaletteFromPrimary } from '../lib/colorScheme';
+import { AdminContentPanel, AdminManagementPage } from '../components/shared/AdminManagementPage';
+import { AdminPageShell } from '../components/shared/AdminPageShell';
+import Icon from '../components/shared/Icon';
+import ResponsiveSectionTabs from '../components/shared/ResponsiveSectionTabs';
+import SafeImage from '../components/shared/SafeImage';
+import { SkeletonList } from '../components/shared/Skeleton';
+import { useToast } from '../components/shared/Toast';
+import { useDocumentTitle } from '../hooks/useDocumentTitle';
 import {
   DEFAULT_ADMIN_NAV,
   DEFAULT_INQUIRY_STATUSES,
@@ -66,6 +64,8 @@ import {
   type TicketClassificationConfig,
   type UploadPolicy,
 } from '../lib/businessConfig';
+import { applyColorScheme, generatePaletteFromPrimary } from '../lib/colorScheme';
+import { COLOR_PRESETS, COLOR_KEYS } from '../lib/colorSchemes';
 import { DEFAULT_PRIVACY_SECTIONS, DEFAULT_TERMS_SECTIONS, type LegalSection } from '../lib/legalContent';
 // Note: pollBackupProgress is used by handleExport
 

@@ -1,5 +1,6 @@
-import { Router, Request, Response } from 'express';
 import { randomInt } from 'node:crypto';
+import { Router, Request, Response } from 'express';
+import { cacheGet } from '../../lib/cache.js';
 import {
   generateCaptcha,
   verifyCaptcha,
@@ -20,14 +21,13 @@ import {
   checkAndRevokeRefreshFamily,
   revokeAllTokensBefore,
 } from '../../lib/jwt.js';
+import { logger } from '../../lib/logger.js';
 import { hashPassword, verifyPassword } from '../../lib/password.js';
 import { prisma } from '../../lib/prisma.js';
 import { getSetting } from '../../lib/settings.js';
-import { clearAuthCookies, readCookie, REFRESH_COOKIE, setAuthCookies } from './cookies.js';
 import { getRequestToken } from '../../middleware/auth.js';
 import { apiLimiter } from '../../middleware/security.js';
-import { cacheGet } from '../../lib/cache.js';
-import { logger } from '../../lib/logger.js';
+import { clearAuthCookies, readCookie, REFRESH_COOKIE, setAuthCookies } from './cookies.js';
 
 const DUMMY_HASH = '$2a$12$LiVmGbGyGZkP1WQOB7SXOOJ7JqBhDmuOg2WjFwvCSCmXFGpOFHHze';
 const LOGIN_FAIL_PREFIX = 'login_fail:';

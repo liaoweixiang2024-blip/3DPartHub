@@ -15,3 +15,4 @@
 - [ ] Any `dangerouslySetInnerHTML` usage passes through `sanitizeHtml`.
 - [ ] API response parsing uses `unwrapApiData` / `unwrapResponse`.
 - [ ] Database, backup, migration, or file-storage changes include a rollback note.
+- [ ] If `schema.prisma` changed, migration file was generated via `npm run prisma:migrate -- --create-only --name <name>`.

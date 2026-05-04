@@ -1,8 +1,8 @@
+import { motion, AnimatePresence } from 'framer-motion';
 import { createContext, useContext, useState, useCallback, useEffect, useRef, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
-import { motion, AnimatePresence } from 'framer-motion';
-import Icon from './Icon';
 import { notifyGlobalError, setGlobalErrorNotifier } from '../../lib/errorNotifications';
+import Icon from './Icon';
 
 type ToastType = 'success' | 'error' | 'info';
 

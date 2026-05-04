@@ -1,6 +1,6 @@
 import { Component, type ReactNode } from 'react';
-import Icon from './Icon';
 import { notifyGlobalError } from '../../lib/errorNotifications';
+import Icon from './Icon';
 
 interface Props {
   children: ReactNode;

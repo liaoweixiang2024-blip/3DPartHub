@@ -1,5 +1,5 @@
-import test from 'node:test';
 import assert from 'node:assert/strict';
+import test from 'node:test';
 import { MODEL_STATUS, isModelStatus } from './modelStatus.js';
 
 test('defines stable model status values', () => {

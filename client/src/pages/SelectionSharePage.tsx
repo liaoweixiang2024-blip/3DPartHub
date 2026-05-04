@@ -8,13 +8,13 @@ import {
   type SelectionComponent,
   type ColumnDef,
 } from '../api/selections';
-import { getSiteTitle } from '../lib/publicSettings';
 import Icon from '../components/shared/Icon';
-import SafeImage from '../components/shared/SafeImage';
 import { PageHeader } from '../components/shared/PagePrimitives';
 import { PublicPageShell } from '../components/shared/PublicPageShell';
+import SafeImage from '../components/shared/SafeImage';
 import { copyText } from '../lib/clipboard';
 import { downloadKitList, formatKitList, getKitListTitle } from '../lib/kitList';
+import { getSiteTitle } from '../lib/publicSettings';
 
 function sv(specs: Record<string, string>, key: string): string {
   return specs[key] || '—';

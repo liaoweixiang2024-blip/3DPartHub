@@ -1,16 +1,16 @@
-import { Router, Request, Response } from 'express';
-import multer from 'multer';
 import { copyFileSync, existsSync, mkdirSync, openSync, readSync, closeSync, rmSync, statSync } from 'node:fs';
 import { join, resolve, sep } from 'node:path';
-import { prisma } from '../lib/prisma.js';
-import { config } from '../lib/config.js';
-import { cacheDelByPrefix } from '../lib/cache.js';
+import { Router, Request, Response } from 'express';
+import multer from 'multer';
 import { sendAcceleratedFile } from '../lib/acceleratedDownload.js';
+import { cacheDelByPrefix } from '../lib/cache.js';
+import { config } from '../lib/config.js';
 import { consumeProtectedResourceToken } from '../lib/downloadTokenStore.js';
+import { createLogger } from '../lib/logger.js';
+import { prisma } from '../lib/prisma.js';
+import { optionalString, requiredString } from '../lib/requestValidation.js';
 import { authMiddleware, verifyRequestToken, type AuthRequest } from '../middleware/auth.js';
 import { requireRole } from '../middleware/rbac.js';
-import { optionalString, requiredString } from '../lib/requestValidation.js';
-import { createLogger } from '../lib/logger.js';
 
 const log = createLogger({ component: 'model-drawings' });
 

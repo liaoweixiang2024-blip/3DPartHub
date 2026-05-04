@@ -1,6 +1,6 @@
+import type { ApiResponse, AuthTokens, LoginRequest, RegisterRequest, User } from '../types';
 import client from './client';
 import { unwrapApiData, unwrapResponse } from './response';
-import type { ApiResponse, AuthTokens, LoginRequest, RegisterRequest, User } from '../types';
 
 export const authApi = {
   login: async (req: LoginRequest) => {

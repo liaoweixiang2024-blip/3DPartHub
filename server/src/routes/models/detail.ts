@@ -1,12 +1,12 @@
-import { Router, Request, Response } from 'express';
 import { existsSync } from 'node:fs';
 import { stat as statAsync } from 'node:fs/promises';
-import { requireBrowseAccess } from '../../middleware/browseAccess.js';
+import { Router, Request, Response } from 'express';
 import { cacheGet, cacheSet, TTL } from '../../lib/cache.js';
-import { MODEL_STATUS } from '../../services/modelStatus.js';
+import { requireBrowseAccess } from '../../middleware/browseAccess.js';
 import { withAssetVersion } from '../../services/gltfAsset.js';
-import { findOriginalModelPath, resolveStoredPath } from '../../services/modelFiles.js';
 import { parseStepFileDate } from '../../services/modelFileDates.js';
+import { findOriginalModelPath, resolveStoredPath } from '../../services/modelFiles.js';
+import { MODEL_STATUS } from '../../services/modelStatus.js';
 
 type PreviewMetaOptions = {
   gltfUrl?: string | null;

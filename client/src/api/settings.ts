@@ -1,6 +1,6 @@
+import { getAccessToken } from '../stores';
 import client from './client';
 import { unwrapApiData, unwrapResponse } from './response';
-import { getAccessToken } from '../stores';
 
 export interface SystemSettings {
   require_login_download: boolean;

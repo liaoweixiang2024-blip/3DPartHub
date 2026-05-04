@@ -1,19 +1,19 @@
+import { AnimatePresence, motion } from 'framer-motion';
 import { useState, useCallback, useMemo } from 'react';
 import { Link } from 'react-router-dom';
-import { AnimatePresence, motion } from 'framer-motion';
 import useSWR from 'swr';
-import { useMediaQuery } from '../layouts/hooks/useMediaQuery';
-import { useDocumentTitle } from '../hooks/useDocumentTitle';
-import { SkeletonList } from '../components/shared/Skeleton';
-import Icon from '../components/shared/Icon';
-import ModelThumbnail from '../components/shared/ModelThumbnail';
-import InfiniteLoadTrigger from '../components/shared/InfiniteLoadTrigger';
-import { AdminPageShell } from '../components/shared/AdminPageShell';
-import { AdminEmptyState, AdminManagementPage } from '../components/shared/AdminManagementPage';
-import { useToast } from '../components/shared/Toast';
 import { downloadsApi } from '../api/downloads';
-import { getErrorMessage } from '../lib/errorNotifications';
+import { AdminEmptyState, AdminManagementPage } from '../components/shared/AdminManagementPage';
+import { AdminPageShell } from '../components/shared/AdminPageShell';
+import Icon from '../components/shared/Icon';
+import InfiniteLoadTrigger from '../components/shared/InfiniteLoadTrigger';
+import ModelThumbnail from '../components/shared/ModelThumbnail';
+import { SkeletonList } from '../components/shared/Skeleton';
+import { useToast } from '../components/shared/Toast';
+import { useDocumentTitle } from '../hooks/useDocumentTitle';
 import { useVisibleItems } from '../hooks/useVisibleItems';
+import { useMediaQuery } from '../layouts/hooks/useMediaQuery';
+import { getErrorMessage } from '../lib/errorNotifications';
 
 function formatFileSize(bytes: number): string {
   if (!bytes) return '-';

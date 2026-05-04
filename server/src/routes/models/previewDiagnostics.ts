@@ -1,19 +1,19 @@
-import { Router, Response } from 'express';
 import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { conversionQueue } from '../../lib/queue.js';
+import { Router, Response } from 'express';
 import { cacheDelByPrefix } from '../../lib/cache.js';
+import { logger } from '../../lib/logger.js';
+import { conversionQueue } from '../../lib/queue.js';
+import { numericValue, stringArray } from '../../lib/requestValidation.js';
 import { authMiddleware, type AuthRequest } from '../../middleware/auth.js';
 import { requireRole } from '../../middleware/rbac.js';
-import { numericValue, stringArray } from '../../lib/requestValidation.js';
-import { MODEL_STATUS } from '../../services/modelStatus.js';
+import { findOriginalModelPath, isDeprecatedHtmlPreviewFormat } from '../../services/modelFiles.js';
 import {
   buildPreviewDiagnosticItem,
   normalizePreviewDiagnosticFilter,
   shouldIncludePreviewDiagnostic,
 } from '../../services/modelPreviewDiagnostics.js';
-import { findOriginalModelPath, isDeprecatedHtmlPreviewFormat } from '../../services/modelFiles.js';
-import { logger } from '../../lib/logger.js';
+import { MODEL_STATUS } from '../../services/modelStatus.js';
 
 type PreviewMetaOptions = {
   gltfUrl?: string | null;

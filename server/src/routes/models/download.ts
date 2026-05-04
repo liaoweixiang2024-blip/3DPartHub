@@ -1,24 +1,24 @@
-import { Router, Request, Response } from 'express';
 import { existsSync } from 'node:fs';
+import { Router, Request, Response } from 'express';
 import { sendAcceleratedFile } from '../../lib/acceleratedDownload.js';
 import { consumeModelDownloadToken } from '../../lib/downloadTokenStore.js';
+import { logger } from '../../lib/logger.js';
 import { optionalString, booleanFlag } from '../../lib/requestValidation.js';
 import { getSetting } from '../../lib/settings.js';
 import { getVerifiedRequestUser, verifyRequestToken } from '../../middleware/auth.js';
 import { enqueueModelDownloadRecord } from '../../services/modelDownloadQueue.js';
-import {
-  resolveDbModelDownloadTarget,
-  resolveMetadataModelDownloadTarget,
-  type ModelDownloadTarget,
-} from '../../services/modelDownloadTarget.js';
 import {
   DailyDownloadLimitError,
   recordModelDownload,
   shouldRecordDownloadSynchronously,
   shouldSkipDownloadRecord,
 } from '../../services/modelDownloadRecorder.js';
+import {
+  resolveDbModelDownloadTarget,
+  resolveMetadataModelDownloadTarget,
+  type ModelDownloadTarget,
+} from '../../services/modelDownloadTarget.js';
 import { MODEL_STATUS } from '../../services/modelStatus.js';
-import { logger } from '../../lib/logger.js';
 
 type ModelDownloadContext = {
   prisma: any;

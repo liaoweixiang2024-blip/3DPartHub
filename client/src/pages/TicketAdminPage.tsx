@@ -1,19 +1,19 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useDocumentTitle } from '../hooks/useDocumentTitle';
-import { useMediaQuery } from '../layouts/hooks/useMediaQuery';
-import { SkeletonList } from '../components/shared/Skeleton';
+import useSWR from 'swr';
+import { getTickets, updateTicketStatus, type Ticket } from '../api/tickets';
+import { AdminEmptyState, AdminManagementPage } from '../components/shared/AdminManagementPage';
+import { AdminPageShell } from '../components/shared/AdminPageShell';
 import Icon from '../components/shared/Icon';
 import InfiniteLoadTrigger from '../components/shared/InfiniteLoadTrigger';
-import { AdminPageShell } from '../components/shared/AdminPageShell';
-import { AdminEmptyState, AdminManagementPage } from '../components/shared/AdminManagementPage';
 import ResponsiveSectionTabs from '../components/shared/ResponsiveSectionTabs';
-import { useAuthStore } from '../stores/useAuthStore';
-import { getTickets, updateTicketStatus, type Ticket } from '../api/tickets';
-import useSWR from 'swr';
-import { getCachedPublicSettings } from '../lib/publicSettings';
-import { getBusinessConfig, statusInfo } from '../lib/businessConfig';
+import { SkeletonList } from '../components/shared/Skeleton';
+import { useDocumentTitle } from '../hooks/useDocumentTitle';
 import { useVisibleItems } from '../hooks/useVisibleItems';
+import { useMediaQuery } from '../layouts/hooks/useMediaQuery';
+import { getBusinessConfig, statusInfo } from '../lib/businessConfig';
+import { getCachedPublicSettings } from '../lib/publicSettings';
+import { useAuthStore } from '../stores/useAuthStore';
 
 function useTicketAdminData() {
   const { user } = useAuthStore();

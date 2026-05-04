@@ -1,27 +1,34 @@
+import { motion, AnimatePresence } from 'framer-motion';
 import { useState, useEffect, useMemo, useCallback, useRef, type MouseEvent, type UIEvent } from 'react';
 import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
-import { motion, AnimatePresence } from 'framer-motion';
 import useSWR from 'swr';
-import { useMediaQuery } from '../layouts/hooks/useMediaQuery';
-import { useDocumentTitle } from '../hooks/useDocumentTitle';
-import { PageTitle } from '../components/shared/PagePrimitives';
-import { PublicPageShell } from '../components/shared/PublicPageShell';
-import FormatTag from '../components/shared/FormatTag';
-
-import Icon from '../components/shared/Icon';
-import { DEFAULT_PAGE_SIZE, normalizePageSize } from '../components/shared/Pagination';
-import ModelThumbnail from '../components/shared/ModelThumbnail';
-import InfiniteLoadTrigger from '../components/shared/InfiniteLoadTrigger';
-import { useInfiniteModels } from '../hooks/useModels';
+import { categoriesApi, type CategoryItem } from '../api/categories';
+import { downloadModelFile, isDownloadAuthRequiredError } from '../api/downloads';
+import { favoriteApi } from '../api/favorites';
 import { modelApi, type ServerModelListItem } from '../api/models';
 import { createShare } from '../api/shares';
-import { categoriesApi, type CategoryItem } from '../api/categories';
-import { useAuthStore } from '../stores';
-import { favoriteApi } from '../api/favorites';
+import FormatTag from '../components/shared/FormatTag';
+import Icon from '../components/shared/Icon';
+import InfiniteLoadTrigger from '../components/shared/InfiniteLoadTrigger';
+import ModelThumbnail from '../components/shared/ModelThumbnail';
+import { PageTitle } from '../components/shared/PagePrimitives';
+import { DEFAULT_PAGE_SIZE, normalizePageSize } from '../components/shared/Pagination';
+import { PublicPageShell } from '../components/shared/PublicPageShell';
 import { useToast } from '../components/shared/Toast';
-import { downloadModelFile, isDownloadAuthRequiredError } from '../api/downloads';
+import { useDocumentTitle } from '../hooks/useDocumentTitle';
+import { useInfiniteModels } from '../hooks/useModels';
+import { useMediaQuery } from '../layouts/hooks/useMediaQuery';
+import { getBusinessConfig } from '../lib/businessConfig';
 import { copyText } from '../lib/clipboard';
 import { getErrorMessage } from '../lib/errorNotifications';
+import {
+  HOME_SEARCH_EVENT,
+  dispatchHomeSearchQuery,
+  normalizeHomeSearchQuery,
+  readHomeSearchQuery,
+  saveHomeSearchQuery,
+  type HomeSearchEventDetail,
+} from '../lib/homeSearchState';
 import {
   getCachedPublicSettings,
   getAnnouncement,
@@ -32,16 +39,8 @@ import {
   getFooterLinks,
   getFooterCopyright,
 } from '../lib/publicSettings';
-import { getBusinessConfig } from '../lib/businessConfig';
 import { sanitizeHtml } from '../lib/sanitizeHtml';
-import {
-  HOME_SEARCH_EVENT,
-  dispatchHomeSearchQuery,
-  normalizeHomeSearchQuery,
-  readHomeSearchQuery,
-  saveHomeSearchQuery,
-  type HomeSearchEventDetail,
-} from '../lib/homeSearchState';
+import { useAuthStore } from '../stores';
 
 interface Category {
   id: string;

@@ -1,6 +1,6 @@
-import type { Request, Response } from 'express';
 import { createReadStream } from 'node:fs';
 import { extname, relative, resolve, sep } from 'node:path';
+import type { Request, Response } from 'express';
 import { config } from './config.js';
 
 type Disposition = 'attachment' | 'inline';

@@ -1,8 +1,8 @@
-import client from './client';
-import { unwrapResponse } from './response';
-import type { ApiResponse } from '../types/api';
-import type { ServerModelListItem } from './models';
 import { getAccessToken } from '../stores';
+import type { ApiResponse } from '../types/api';
+import client from './client';
+import type { ServerModelListItem } from './models';
+import { unwrapResponse } from './response';
 
 export interface FavoriteItem {
   id: string;

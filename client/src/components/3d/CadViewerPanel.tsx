@@ -1,3 +1,4 @@
+import { AnimatePresence, motion } from 'framer-motion';
 import {
   Component,
   Suspense,
@@ -10,21 +11,20 @@ import {
   type MouseEventHandler,
   type ReactNode,
 } from 'react';
-import { AnimatePresence, motion } from 'framer-motion';
 import { modelApi, type ModelPreviewMeta } from '../../api/models';
 import { getCachedPublicSettings } from '../../lib/publicSettings';
-import { useToast } from '../shared/Toast';
 import Icon from '../shared/Icon';
 import SafeImage from '../shared/SafeImage';
+import { useToast } from '../shared/Toast';
 import CadViewerToolbar from './CadViewerToolbar';
 import LoadingOverlay from './LoadingOverlay';
 import MeasurementPanel from './MeasurementPanel';
 import ModelPropertiesPanel from './ModelPropertiesPanel';
+import ModelStructurePanel from './ModelStructurePanel';
 import ModelViewer, { type CameraPreset, type ViewMode } from './ModelViewer';
 import PreviewDiagnosticsDialog from './PreviewDiagnosticsDialog';
-import ModelStructurePanel from './ModelStructurePanel';
 import ViewCube from './ViewCube';
-import ViewerTuningPanel from './ViewerTuningPanel';
+import type { MaterialPresetKey } from './viewerControls';
 import {
   MODEL_BOUNDS_EVENT,
   type MeasureMode,
@@ -34,8 +34,8 @@ import {
   type ModelBoundsDetail,
   type ModelPartItem,
 } from './viewerEvents';
-import type { MaterialPresetKey } from './viewerControls';
 import type { ViewerTuning } from './viewerTuning';
+import ViewerTuningPanel from './ViewerTuningPanel';
 
 interface CadViewerPanelProps {
   variant: 'desktop' | 'mobile';

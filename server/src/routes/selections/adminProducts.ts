@@ -1,8 +1,8 @@
 import { Router } from 'express';
+import { logger } from '../../lib/logger.js';
 import { prisma } from '../../lib/prisma.js';
 import { authMiddleware, type AuthRequest } from '../../middleware/auth.js';
 import { adminOnly, invalidateSelectionCache } from './common.js';
-import { logger } from '../../lib/logger.js';
 
 function cleanProductName(name: string, modelNo?: string | null) {
   if (!name || !modelNo) return name;

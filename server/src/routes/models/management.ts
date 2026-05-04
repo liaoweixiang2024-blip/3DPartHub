@@ -1,14 +1,14 @@
-import { Router, Response } from 'express';
 import { copyFileSync, mkdirSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
+import { Router, Response } from 'express';
 import { cacheDelByPrefix, cacheDel } from '../../lib/cache.js';
-import { clearCategoryCache } from '../categories/common.js';
 import { config } from '../../lib/config.js';
+import { logger } from '../../lib/logger.js';
 import { authMiddleware, type AuthRequest } from '../../middleware/auth.js';
 import { requireRole } from '../../middleware/rbac.js';
 import { removeExistingFiles, removeModelFiles } from '../../services/modelFiles.js';
+import { clearCategoryCache } from '../categories/common.js';
 import { modelUpload } from './uploadHelpers.js';
-import { logger } from '../../lib/logger.js';
 
 type ModelManagementContext = {
   prisma: any;

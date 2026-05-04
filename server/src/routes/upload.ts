@@ -1,7 +1,5 @@
-import { Router, Response } from 'express';
 import { randomUUID } from 'node:crypto';
 import { once } from 'node:events';
-import { join, resolve, sep } from 'node:path';
 import {
   mkdirSync,
   readdirSync,
@@ -14,18 +12,20 @@ import {
   readSync,
   closeSync,
 } from 'node:fs';
+import { join, resolve, sep } from 'node:path';
 import { pipeline } from 'node:stream/promises';
-import { authMiddleware, type AuthRequest } from '../middleware/auth.js';
-import { requireRole } from '../middleware/rbac.js';
+import { Router, Response } from 'express';
+import { getBusinessConfig } from '../lib/businessConfig.js';
 import { config } from '../lib/config.js';
+import { logger } from '../lib/logger.js';
 import {
   deleteUploadSession,
   loadUploadSession,
   saveUploadSession,
   cleanupExpiredSessions,
 } from '../lib/uploadSessionStore.js';
-import { getBusinessConfig } from '../lib/businessConfig.js';
-import { logger } from '../lib/logger.js';
+import { authMiddleware, type AuthRequest } from '../middleware/auth.js';
+import { requireRole } from '../middleware/rbac.js';
 
 const router = Router();
 

@@ -1,4 +1,5 @@
 import { Router, Response } from 'express';
+import { cacheGetOrSet, TTL } from '../lib/cache.js';
 import { prisma } from '../lib/prisma.js';
 import {
   MAX_MODEL_PAGE,
@@ -8,11 +9,10 @@ import {
   numericQuery,
   searchCacheToken,
 } from '../lib/searchQuery.js';
-import { withAssetVersion } from '../services/gltfAsset.js';
 import { requireBrowseAccess } from '../middleware/browseAccess.js';
+import { withAssetVersion } from '../services/gltfAsset.js';
 import { MODEL_STATUS } from '../services/modelStatus.js';
 import { groupedVisibleModelWhere } from '../services/modelVisibility.js';
-import { cacheGetOrSet, TTL } from '../lib/cache.js';
 
 const router = Router();
 

@@ -1,6 +1,6 @@
 import jwt from 'jsonwebtoken';
-import { config } from './config.js';
 import { cacheGet, cacheSet, redis } from './cache.js';
+import { config } from './config.js';
 
 const JWT_SECRET = config.jwtSecret;
 const ACCESS_EXPIRES = config.jwtExpiresIn as jwt.SignOptions['expiresIn'];

@@ -1,5 +1,3 @@
-import { prisma } from './prisma.js';
-import { cacheDel } from './cache.js';
 import {
   DEFAULT_ADMIN_NAV_FOR_SETTINGS,
   DEFAULT_INQUIRY_STATUSES_FOR_SETTINGS,
@@ -12,7 +10,9 @@ import {
   DEFAULT_UPLOAD_POLICY_FOR_SETTINGS,
   DEFAULT_USER_NAV_FOR_SETTINGS,
 } from './businessDefaults.js';
+import { cacheDel } from './cache.js';
 import { DEFAULT_EMAIL_TEMPLATES } from './emailTemplates.js';
+import { prisma } from './prisma.js';
 
 interface SettingDef {
   key: string;

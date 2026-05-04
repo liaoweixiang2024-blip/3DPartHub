@@ -1,9 +1,9 @@
 import { Router, Response } from 'express';
-import { prisma } from '../../lib/prisma.js';
 import { getBusinessConfig } from '../../lib/businessConfig.js';
+import { revokeAllTokensBefore } from '../../lib/jwt.js';
+import { prisma } from '../../lib/prisma.js';
 import { authMiddleware, type AuthRequest } from '../../middleware/auth.js';
 import { requireRole } from '../../middleware/rbac.js';
-import { revokeAllTokensBefore } from '../../lib/jwt.js';
 
 function routeParam(value: string | string[] | undefined): string | undefined {
   return Array.isArray(value) ? value[0] : value;
