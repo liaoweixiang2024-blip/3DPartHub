@@ -1,5 +1,5 @@
-import client from "./client";
-import { unwrapResponse } from "./response";
+import client from './client';
+import { unwrapResponse } from './response';
 
 export interface Ticket {
   id: string;
@@ -25,7 +25,7 @@ export interface TicketMessage {
 }
 
 export async function getTickets() {
-  const res = await client.get("/tickets");
+  const res = await client.get('/tickets');
   return unwrapResponse<Ticket[]>(res);
 }
 
@@ -46,9 +46,9 @@ export async function sendTicketMessage(ticketId: string, content: string, attac
 
 export async function uploadTicketAttachment(ticketId: string, file: File) {
   const form = new FormData();
-  form.append("file", file);
+  form.append('file', file);
   const res = await client.post(`/tickets/${ticketId}/messages/upload`, form, {
-    headers: { "Content-Type": "multipart/form-data" },
+    headers: { 'Content-Type': 'multipart/form-data' },
   });
   return unwrapResponse<{ url: string }>(res);
 }

@@ -1,25 +1,44 @@
-import { Component, Suspense, useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type MouseEventHandler, type ReactNode } from "react";
-import { AnimatePresence, motion } from "framer-motion";
-import { modelApi, type ModelPreviewMeta } from "../../api/models";
-import { getCachedPublicSettings } from "../../lib/publicSettings";
-import { useToast } from "../shared/Toast";
-import Icon from "../shared/Icon";
-import SafeImage from "../shared/SafeImage";
-import CadViewerToolbar from "./CadViewerToolbar";
-import LoadingOverlay from "./LoadingOverlay";
-import MeasurementPanel from "./MeasurementPanel";
-import ModelPropertiesPanel from "./ModelPropertiesPanel";
-import ModelViewer, { type CameraPreset, type ViewMode } from "./ModelViewer";
-import PreviewDiagnosticsDialog from "./PreviewDiagnosticsDialog";
-import ModelStructurePanel from "./ModelStructurePanel";
-import ViewCube from "./ViewCube";
-import ViewerTuningPanel from "./ViewerTuningPanel";
-import { MODEL_BOUNDS_EVENT, type MeasureMode, type MeasurementPoint, type MeasurementRecord, type MeasurementSnapMode, type ModelBoundsDetail, type ModelPartItem } from "./viewerEvents";
-import type { MaterialPresetKey } from "./viewerControls";
-import type { ViewerTuning } from "./viewerTuning";
+import {
+  Component,
+  Suspense,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type CSSProperties,
+  type MouseEventHandler,
+  type ReactNode,
+} from 'react';
+import { AnimatePresence, motion } from 'framer-motion';
+import { modelApi, type ModelPreviewMeta } from '../../api/models';
+import { getCachedPublicSettings } from '../../lib/publicSettings';
+import { useToast } from '../shared/Toast';
+import Icon from '../shared/Icon';
+import SafeImage from '../shared/SafeImage';
+import CadViewerToolbar from './CadViewerToolbar';
+import LoadingOverlay from './LoadingOverlay';
+import MeasurementPanel from './MeasurementPanel';
+import ModelPropertiesPanel from './ModelPropertiesPanel';
+import ModelViewer, { type CameraPreset, type ViewMode } from './ModelViewer';
+import PreviewDiagnosticsDialog from './PreviewDiagnosticsDialog';
+import ModelStructurePanel from './ModelStructurePanel';
+import ViewCube from './ViewCube';
+import ViewerTuningPanel from './ViewerTuningPanel';
+import {
+  MODEL_BOUNDS_EVENT,
+  type MeasureMode,
+  type MeasurementPoint,
+  type MeasurementRecord,
+  type MeasurementSnapMode,
+  type ModelBoundsDetail,
+  type ModelPartItem,
+} from './viewerEvents';
+import type { MaterialPresetKey } from './viewerControls';
+import type { ViewerTuning } from './viewerTuning';
 
 interface CadViewerPanelProps {
-  variant: "desktop" | "mobile";
+  variant: 'desktop' | 'mobile';
   modelId?: string;
   modelName?: string;
   modelFormat?: string;
@@ -41,8 +60,8 @@ interface CadViewerPanelProps {
   onToggleClip: () => void;
   clipPosition: number;
   onClipPositionChange: (position: number) => void;
-  clipDirection: "x" | "y" | "z";
-  onClipDirectionChange: (direction: "x" | "y" | "z") => void;
+  clipDirection: 'x' | 'y' | 'z';
+  onClipDirectionChange: (direction: 'x' | 'y' | 'z') => void;
   clipInverted?: boolean;
   onToggleClipInverted?: () => void;
   onResetClip?: () => void;
@@ -67,17 +86,17 @@ interface CadViewerPanelProps {
 }
 
 function friendlyViewerError(error: Error | null) {
-  const message = error?.message || "";
-  if (message.includes("401") || message.includes("Unauthorized")) {
-    return "预览文件需要访问权限，请刷新页面或重新登录后再试。";
+  const message = error?.message || '';
+  if (message.includes('401') || message.includes('Unauthorized')) {
+    return '预览文件需要访问权限，请刷新页面或重新登录后再试。';
   }
-  if (message.includes("404") || message.toLowerCase().includes("not found")) {
-    return "预览文件不存在，可能需要重新生成模型预览。";
+  if (message.includes('404') || message.toLowerCase().includes('not found')) {
+    return '预览文件不存在，可能需要重新生成模型预览。';
   }
-  if (message.includes("Failed to fetch") || message.includes("Could not load") || message.includes("fetch for")) {
-    return "模型预览加载失败，请检查网络或稍后重试。";
+  if (message.includes('Failed to fetch') || message.includes('Could not load') || message.includes('fetch for')) {
+    return '模型预览加载失败，请检查网络或稍后重试。';
   }
-  return "模型预览暂时无法加载，请稍后重试。";
+  return '模型预览暂时无法加载，请稍后重试。';
 }
 
 class ViewerErrorBoundary extends Component<
@@ -91,7 +110,7 @@ class ViewerErrorBoundary extends Component<
   }
 
   componentDidCatch(error: Error) {
-    if (import.meta.env.DEV) console.error("[viewer] Model preview failed:", error);
+    if (import.meta.env.DEV) console.error('[viewer] Model preview failed:', error);
   }
 
   render() {
@@ -160,7 +179,7 @@ export default function CadViewerPanel({
   viewerTuningSaving,
   previewMeta,
   onThumbnailUpdated,
-  className = "",
+  className = '',
   style,
   onClick,
   showBackButton = false,
@@ -184,12 +203,16 @@ export default function CadViewerPanel({
   const [propertiesOpen, setPropertiesOpen] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [explodeAmount, setExplodeAmount] = useState(1);
-  const [measureMode, setMeasureMode] = useState<MeasureMode>("distance");
-  const [measurementSnapMode, setMeasurementSnapMode] = useState<MeasurementSnapMode>("surface");
+  const [measureMode, setMeasureMode] = useState<MeasureMode>('distance');
+  const [measurementSnapMode, setMeasurementSnapMode] = useState<MeasurementSnapMode>('surface');
   const [measurementPoints, setMeasurementPoints] = useState<MeasurementPoint[]>([]);
   const [measurementRecords, setMeasurementRecords] = useState<MeasurementRecord[]>([]);
-  const [measurementConfig, setMeasurementConfig] = useState({ defaultUnit: "auto", recordLimit: 12 });
-  const [watermark, setWatermark] = useState<{ show: boolean; image: string; text: string }>({ show: false, image: "", text: "" });
+  const [measurementConfig, setMeasurementConfig] = useState({ defaultUnit: 'auto', recordLimit: 12 });
+  const [watermark, setWatermark] = useState<{ show: boolean; image: string; text: string }>({
+    show: false,
+    image: '',
+    text: '',
+  });
   const { toast } = useToast();
 
   useEffect(() => {
@@ -221,11 +244,8 @@ export default function CadViewerPanel({
     const fallback = { min: -2, max: 2, step: 0.01 };
     if (!modelBounds) return fallback;
 
-    const axisSize = clipDirection === "x"
-      ? modelBounds.size.x
-      : clipDirection === "y"
-        ? modelBounds.size.y
-        : modelBounds.size.z;
+    const axisSize =
+      clipDirection === 'x' ? modelBounds.size.x : clipDirection === 'y' ? modelBounds.size.y : modelBounds.size.z;
     const limit = Math.max(axisSize * 0.55, modelBounds.maxDim * 0.05, 0.01);
     const step = Math.max(limit / 240, 0.001);
     return { min: -limit, max: limit, step };
@@ -241,11 +261,12 @@ export default function CadViewerPanel({
       .then((settings) => {
         setWatermark({
           show: !!settings.show_watermark,
-          image: settings.watermark_image || "",
-          text: settings.watermark_text?.trim() || "",
+          image: settings.watermark_image || '',
+          text: settings.watermark_text?.trim() || '',
         });
         setMeasurementConfig({
-          defaultUnit: typeof settings.viewer_measure_default_unit === "string" ? settings.viewer_measure_default_unit : "auto",
+          defaultUnit:
+            typeof settings.viewer_measure_default_unit === 'string' ? settings.viewer_measure_default_unit : 'auto',
           recordLimit: Math.max(1, Math.floor(Number(settings.viewer_measure_record_limit) || 12)),
         });
       })
@@ -253,30 +274,30 @@ export default function CadViewerPanel({
   }, []);
 
   const handleScreenshot = useCallback(() => {
-    const canvas = containerRef.current?.querySelector("canvas");
+    const canvas = containerRef.current?.querySelector('canvas');
     if (!canvas) return;
-    const link = document.createElement("a");
-    link.download = "model-screenshot.png";
-    link.href = canvas.toDataURL("image/png");
+    const link = document.createElement('a');
+    link.download = 'model-screenshot.png';
+    link.href = canvas.toDataURL('image/png');
     link.click();
   }, []);
 
   const handleSetThumbnail = useCallback(async () => {
     if (!modelId) return;
-    const canvas = containerRef.current?.querySelector("canvas") as HTMLCanvasElement | null;
+    const canvas = containerRef.current?.querySelector('canvas') as HTMLCanvasElement | null;
     if (!canvas) return;
     setSettingThumb(true);
     let ok = false;
     try {
       const blob = await new Promise<Blob>((resolve, reject) => {
-        canvas.toBlob((result) => result ? resolve(result) : reject(new Error("toBlob failed")), "image/png");
+        canvas.toBlob((result) => (result ? resolve(result) : reject(new Error('toBlob failed'))), 'image/png');
       });
-      const file = new File([blob], "thumbnail.png", { type: "image/png" });
+      const file = new File([blob], 'thumbnail.png', { type: 'image/png' });
       await modelApi.uploadThumbnail(modelId, file);
-      toast("预览图已更新", "success");
+      toast('预览图已更新', 'success');
       ok = true;
     } catch {
-      toast("设置预览图失败", "error");
+      toast('设置预览图失败', 'error');
     } finally {
       setSettingThumb(false);
     }
@@ -290,10 +311,10 @@ export default function CadViewerPanel({
     try {
       const result = await modelApi.reconvert(modelId);
       setCurrentPreviewMeta(result.preview_meta || null);
-      toast("GLB 与缩略图已重新生成", "success");
+      toast('GLB 与缩略图已重新生成', 'success');
       ok = true;
     } catch {
-      toast("重新生成预览失败", "error");
+      toast('重新生成预览失败', 'error');
     } finally {
       setRegeneratingPreview(false);
     }
@@ -309,14 +330,17 @@ export default function CadViewerPanel({
     }
   }, []);
 
-  const handleBackClick = useCallback<MouseEventHandler<HTMLButtonElement>>((event) => {
-    event.stopPropagation();
-    if (document.fullscreenElement) {
-      void document.exitFullscreen().catch(() => {});
-      return;
-    }
-    onBack?.();
-  }, [onBack]);
+  const handleBackClick = useCallback<MouseEventHandler<HTMLButtonElement>>(
+    (event) => {
+      event.stopPropagation();
+      if (document.fullscreenElement) {
+        void document.exitFullscreen().catch(() => {});
+        return;
+      }
+      onBack?.();
+    },
+    [onBack],
+  );
 
   const handleViewerProgress = useCallback((progress: number) => {
     setLoadProgress(progress >= 100 ? null : progress);
@@ -332,8 +356,8 @@ export default function CadViewerPanel({
       setIsFullscreen(Boolean(document.fullscreenElement));
     };
     updateFullscreenState();
-    document.addEventListener("fullscreenchange", updateFullscreenState);
-    return () => document.removeEventListener("fullscreenchange", updateFullscreenState);
+    document.addEventListener('fullscreenchange', updateFullscreenState);
+    return () => document.removeEventListener('fullscreenchange', updateFullscreenState);
   }, []);
 
   const handlePartsChange = useCallback((nextParts: ModelPartItem[]) => {
@@ -348,11 +372,7 @@ export default function CadViewerPanel({
   }, [parts]);
 
   const handleTogglePartHidden = useCallback((partId: string) => {
-    setHiddenPartIds((prev) => (
-      prev.includes(partId)
-        ? prev.filter((id) => id !== partId)
-        : [...prev, partId]
-    ));
+    setHiddenPartIds((prev) => (prev.includes(partId) ? prev.filter((id) => id !== partId) : [...prev, partId]));
     setSelectedPartId(partId);
   }, []);
 
@@ -369,24 +389,29 @@ export default function CadViewerPanel({
     setIsolatedPartId(null);
   }, []);
 
-  const handleMeasurePoint = useCallback((point: MeasurementPoint) => {
-    setMeasurementPoints((prev) => {
-      const required = measureMode === "angle" || measureMode === "diameter" ? 3 : 2;
-      const next = prev.length >= required ? [point] : [...prev, point];
-      if (measureMode !== "bounds" && next.length === required) {
-        setMeasurementRecords((records) => [
-          ...records,
-          {
-            id: `${Date.now()}-${records.length}`,
-            mode: measureMode,
-            points: next,
-            createdAt: Date.now(),
-          },
-        ].slice(-measurementConfig.recordLimit));
-      }
-      return next;
-    });
-  }, [measureMode, measurementConfig.recordLimit]);
+  const handleMeasurePoint = useCallback(
+    (point: MeasurementPoint) => {
+      setMeasurementPoints((prev) => {
+        const required = measureMode === 'angle' || measureMode === 'diameter' ? 3 : 2;
+        const next = prev.length >= required ? [point] : [...prev, point];
+        if (measureMode !== 'bounds' && next.length === required) {
+          setMeasurementRecords((records) =>
+            [
+              ...records,
+              {
+                id: `${Date.now()}-${records.length}`,
+                mode: measureMode,
+                points: next,
+                createdAt: Date.now(),
+              },
+            ].slice(-measurementConfig.recordLimit),
+          );
+        }
+        return next;
+      });
+    },
+    [measureMode, measurementConfig.recordLimit],
+  );
 
   const handleMeasureModeChange = useCallback((nextMode: MeasureMode) => {
     setMeasureMode(nextMode);
@@ -436,16 +461,16 @@ export default function CadViewerPanel({
     onResetDisplay();
   }, [onResetDisplay]);
 
-  const isMobile = variant === "mobile";
+  const isMobile = variant === 'mobile';
   const baseClassName = isMobile
-    ? "absolute inset-0 bg-surface-container overflow-hidden rounded-b-2xl"
-    : "relative bg-surface-container flex-1 md:w-[60%] overflow-hidden border-r border-outline-variant/20 shrink-0";
-  const panelStyle = isMobile ? style : ({ contain: "strict", ...style } as CSSProperties);
+    ? 'absolute inset-0 bg-surface-container overflow-hidden rounded-b-2xl'
+    : 'relative bg-surface-container flex-1 md:w-[60%] overflow-hidden border-r border-outline-variant/20 shrink-0';
+  const panelStyle = isMobile ? style : ({ contain: 'strict', ...style } as CSSProperties);
 
   return (
     <div ref={containerRef} className={`${baseClassName} ${className}`} style={panelStyle} onClick={onClick}>
       <LoadingOverlay progress={loadProgress} />
-      <div className={isMobile ? "absolute inset-0" : "absolute inset-0"}>
+      <div className={isMobile ? 'absolute inset-0' : 'absolute inset-0'}>
         <Suspense
           fallback={
             <div className="w-full h-full flex items-center justify-center">
@@ -461,7 +486,7 @@ export default function CadViewerPanel({
           }
         >
           <ViewerErrorBoundary
-            key={`${modelUrl || "empty"}-${viewerRetryKey}`}
+            key={`${modelUrl || 'empty'}-${viewerRetryKey}`}
             isMobile={isMobile}
             onRetry={() => {
               setLoadProgress(modelUrl ? 0 : null);
@@ -490,10 +515,10 @@ export default function CadViewerPanel({
               isolatedPartId={isolatedPartId}
               onPartsChange={handlePartsChange}
               onPartSelect={setSelectedPartId}
-              measurementActive={measurementOpen && measureMode !== "bounds"}
+              measurementActive={measurementOpen && measureMode !== 'bounds'}
               measureMode={measureMode}
               measurementSnapMode={measurementSnapMode}
-              measurementPoints={measurementOpen && measureMode !== "bounds" ? measurementPoints : []}
+              measurementPoints={measurementOpen && measureMode !== 'bounds' ? measurementPoints : []}
               measurementRecords={measurementOpen ? measurementRecords : []}
               onMeasurePoint={handleMeasurePoint}
               onLoaded={handleViewerLoaded}
@@ -507,14 +532,14 @@ export default function CadViewerPanel({
         <button
           onClick={handleBackClick}
           className={
-            variant === "desktop"
-              ? "absolute bottom-4 left-4 z-40 inline-flex h-10 items-center gap-2 rounded-md border border-outline-variant/20 bg-surface/90 px-3 text-sm font-medium text-on-surface-variant shadow-xl backdrop-blur-xl transition-all hover:bg-surface-container-high hover:text-on-surface active:scale-[0.98]"
-              : "absolute top-2 left-2 z-40 w-8 h-8 flex items-center justify-center rounded-full micro-glass text-on-surface-variant hover:text-on-surface active:scale-90 transition-all"
+            variant === 'desktop'
+              ? 'absolute bottom-4 left-4 z-40 inline-flex h-10 items-center gap-2 rounded-md border border-outline-variant/20 bg-surface/90 px-3 text-sm font-medium text-on-surface-variant shadow-xl backdrop-blur-xl transition-all hover:bg-surface-container-high hover:text-on-surface active:scale-[0.98]'
+              : 'absolute top-2 left-2 z-40 w-8 h-8 flex items-center justify-center rounded-full micro-glass text-on-surface-variant hover:text-on-surface active:scale-90 transition-all'
           }
-          aria-label={isFullscreen ? "退出全屏" : "返回上一页"}
+          aria-label={isFullscreen ? '退出全屏' : '返回上一页'}
         >
           <Icon name="arrow_back" size={18} />
-          {variant === "desktop" && <span>{isFullscreen ? "退出全屏" : "返回"}</span>}
+          {variant === 'desktop' && <span>{isFullscreen ? '退出全屏' : '返回'}</span>}
         </button>
       )}
 
@@ -578,14 +603,16 @@ export default function CadViewerPanel({
               records={measurementRecords}
               snapMode={measurementSnapMode}
               bounds={modelBounds}
-              active={measurementOpen && measureMode !== "bounds"}
+              active={measurementOpen && measureMode !== 'bounds'}
               defaultUnit={measurementConfig.defaultUnit}
               recordLimit={measurementConfig.recordLimit}
               onModeChange={handleMeasureModeChange}
               onSnapModeChange={setMeasurementSnapMode}
               onClear={() => setMeasurementPoints([])}
               onClearRecords={() => setMeasurementRecords([])}
-              onRemoveRecord={(recordId) => setMeasurementRecords((records) => records.filter((record) => record.id !== recordId))}
+              onRemoveRecord={(recordId) =>
+                setMeasurementRecords((records) => records.filter((record) => record.id !== recordId))
+              }
               onClose={() => setMeasurementOpen(false)}
             />
           </motion.div>
@@ -644,7 +671,9 @@ export default function CadViewerPanel({
         <ViewCube
           activeCamera={activeCamera}
           onCameraChange={onCameraChange}
-          className={isMobile ? "absolute bottom-2 left-2 z-10 origin-bottom-left scale-75" : "absolute bottom-4 right-4 z-10"}
+          className={
+            isMobile ? 'absolute bottom-2 left-2 z-10 origin-bottom-left scale-75' : 'absolute bottom-4 right-4 z-10'
+          }
         />
       )}
 
@@ -654,7 +683,7 @@ export default function CadViewerPanel({
             initial={isMobile ? { opacity: 0, y: 8 } : { opacity: 0, x: 10 }}
             animate={isMobile ? { opacity: 1, y: 0 } : { opacity: 1, x: 0 }}
             exit={isMobile ? { opacity: 0, y: 8 } : { opacity: 0, x: 10 }}
-            className={isMobile ? "absolute left-3 right-12 top-3 z-50" : "absolute top-4 right-20 z-20"}
+            className={isMobile ? 'absolute left-3 right-12 top-3 z-50' : 'absolute top-4 right-20 z-20'}
           >
             <ViewerTuningPanel
               value={viewerTuning}
@@ -676,7 +705,7 @@ export default function CadViewerPanel({
               src={watermark.image}
               alt=""
               className="opacity-[0.04] select-none"
-              style={{ maxWidth: "40%", maxHeight: "40%", objectFit: "contain" }}
+              style={{ maxWidth: '40%', maxHeight: '40%', objectFit: 'contain' }}
               fallbackClassName="hidden"
             />
           )}

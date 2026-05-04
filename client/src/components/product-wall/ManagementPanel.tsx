@@ -1,9 +1,9 @@
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import Icon from "../shared/Icon";
-import type { ProductWallItem, ProductWallCategory, ProductWallKind, ProductWallStatus } from "../../api/productWall";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import Icon from '../shared/Icon';
+import type { ProductWallItem, ProductWallCategory, ProductWallKind, ProductWallStatus } from '../../api/productWall';
 
-type ReviewFilter = "all" | "approved" | "pending" | "rejected";
-type ManagementKindFilter = "全部" | ProductWallKind;
+type ReviewFilter = 'all' | 'approved' | 'pending' | 'rejected';
+type ManagementKindFilter = '全部' | ProductWallKind;
 
 interface ManagementPanelProps {
   items: ProductWallItem[];
@@ -18,7 +18,7 @@ interface ManagementPanelProps {
   setManagementRenderCount: (v: number | ((prev: number) => number)) => void;
   canManageItem: (item: ProductWallItem) => boolean;
   close: () => void;
-  onReview: (id: string, input: { status: "approved" | "rejected"; rejectReason?: string }) => void;
+  onReview: (id: string, input: { status: 'approved' | 'rejected'; rejectReason?: string }) => void;
   onUpdateItem: (id: string) => void;
   onDeleteItem: (id: string) => void;
   onSaveCategory: (name: string) => void;
@@ -34,25 +34,29 @@ interface ManagementPanelProps {
 
 function StatusBadge({ status }: { status: ProductWallStatus }) {
   const config: Record<string, { label: string; className: string }> = {
-    approved: { label: "已通过", className: "bg-green-100 text-green-700" },
-    pending: { label: "待审核", className: "bg-yellow-100 text-yellow-700" },
-    rejected: { label: "已拒绝", className: "bg-red-100 text-red-700" },
+    approved: { label: '已通过', className: 'bg-green-100 text-green-700' },
+    pending: { label: '待审核', className: 'bg-yellow-100 text-yellow-700' },
+    rejected: { label: '已拒绝', className: 'bg-red-100 text-red-700' },
   };
-  const { label, className } = config[status] || { label: status, className: "bg-gray-100 text-gray-700" };
-  return <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${className}`}>{label}</span>;
+  const { label, className } = config[status] || { label: status, className: 'bg-gray-100 text-gray-700' };
+  return (
+    <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${className}`}>
+      {label}
+    </span>
+  );
 }
 
 function normalizeProductWallImageUrl(src?: string) {
-  if (!src) return "";
+  if (!src) return '';
   if (/^(https?:|data:|blob:)/i.test(src)) return src;
-  return src.startsWith("/") ? src : `/${src}`;
+  return src.startsWith('/') ? src : `/${src}`;
 }
 
 const REVIEW_FILTERS: { key: ReviewFilter; label: string }[] = [
-  { key: "approved", label: "已通过" },
-  { key: "pending", label: "待审核" },
-  { key: "rejected", label: "已拒绝" },
-  { key: "all", label: "全部" },
+  { key: 'approved', label: '已通过' },
+  { key: 'pending', label: '待审核' },
+  { key: 'rejected', label: '已拒绝' },
+  { key: 'all', label: '全部' },
 ];
 
 export default memo(function ProductWallManagementPanel({
@@ -108,16 +112,22 @@ export default memo(function ProductWallManagementPanel({
     if (!hasMore) return;
     const target = loadMoreRef.current;
     if (!target) return;
-    const observer = new IntersectionObserver(([entry]) => {
-      if (!entry?.isIntersecting) return;
-      loadMoreItems();
-    }, { root: scrollerRef.current, rootMargin: "360px 0px" });
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (!entry?.isIntersecting) return;
+        loadMoreItems();
+      },
+      { root: scrollerRef.current, rootMargin: '360px 0px' },
+    );
     observer.observe(target);
     return () => observer.disconnect();
   }, [hasMore, loadMoreItems]);
 
   return (
-    <div className="fixed inset-0 z-[9998] flex items-center justify-center bg-black/35 px-3 py-4 backdrop-blur-sm md:px-6 md:py-8" onClick={close}>
+    <div
+      className="fixed inset-0 z-[9998] flex items-center justify-center bg-black/35 px-3 py-4 backdrop-blur-sm md:px-6 md:py-8"
+      onClick={close}
+    >
       <section
         className="flex h-[92dvh] w-full max-w-7xl flex-col overflow-hidden rounded-lg border border-outline-variant/16 bg-surface shadow-[0_28px_100px_rgba(0,0,0,0.28)]"
         onClick={(event) => event.stopPropagation()}
@@ -142,7 +152,7 @@ export default memo(function ProductWallManagementPanel({
               <button
                 type="button"
                 onClick={() => {
-                  const name = prompt("新分类名称");
+                  const name = prompt('新分类名称');
                   if (name?.trim()) onSaveCategory(name.trim());
                 }}
                 className="flex h-8 w-full items-center justify-center gap-1 rounded-md border border-dashed border-outline-variant/28 text-xs font-medium text-on-surface-variant transition-colors hover:bg-surface-container-high"
@@ -155,14 +165,22 @@ export default memo(function ProductWallManagementPanel({
               {/* All items */}
               <button
                 type="button"
-                onClick={() => setManagementKindFilter("全部")}
+                onClick={() => setManagementKindFilter('全部')}
                 className={`flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm transition-colors ${
-                  managementKindFilter === "全部" ? "bg-primary-container/8" : "hover:bg-surface-container-high"
+                  managementKindFilter === '全部' ? 'bg-primary-container/8' : 'hover:bg-surface-container-high'
                 }`}
               >
-                <Icon name="apps" size={16} className={managementKindFilter === "全部" ? "text-primary-container" : "text-on-surface-variant"} />
-                <span className={managementKindFilter === "全部" ? "font-medium text-primary-container" : "text-on-surface"}>全部</span>
-                {managementKindFilter === "全部" && (
+                <Icon
+                  name="apps"
+                  size={16}
+                  className={managementKindFilter === '全部' ? 'text-primary-container' : 'text-on-surface-variant'}
+                />
+                <span
+                  className={managementKindFilter === '全部' ? 'font-medium text-primary-container' : 'text-on-surface'}
+                >
+                  全部
+                </span>
+                {managementKindFilter === '全部' && (
                   <span className="ml-auto text-xs text-on-surface-variant">{items.length}</span>
                 )}
               </button>
@@ -174,17 +192,25 @@ export default memo(function ProductWallManagementPanel({
                       type="button"
                       onClick={() => setManagementKindFilter(category.name)}
                       className={`flex flex-1 items-center gap-2 rounded-md px-3 py-2 text-left text-sm transition-colors ${
-                        activeCategory ? "bg-primary-container/8" : "hover:bg-surface-container-high"
+                        activeCategory ? 'bg-primary-container/8' : 'hover:bg-surface-container-high'
                       }`}
                     >
-                      <Icon name="folder" size={16} className={activeCategory ? "text-primary-container" : "text-on-surface-variant"} />
-                      <span className={`truncate ${activeCategory ? "font-medium text-primary-container" : "text-on-surface"}`}>{category.name}</span>
+                      <Icon
+                        name="folder"
+                        size={16}
+                        className={activeCategory ? 'text-primary-container' : 'text-on-surface-variant'}
+                      />
+                      <span
+                        className={`truncate ${activeCategory ? 'font-medium text-primary-container' : 'text-on-surface'}`}
+                      >
+                        {category.name}
+                      </span>
                     </button>
                     <div className="absolute right-1 hidden group-hover:flex items-center gap-0.5">
                       <button
                         type="button"
                         onClick={() => {
-                          const name = prompt("重命名分类", category.name);
+                          const name = prompt('重命名分类', category.name);
                           if (name?.trim() && name.trim() !== category.name) onRenameCategory(category.id, name.trim());
                         }}
                         className="h-6 w-6 rounded text-on-surface-variant/55 hover:bg-surface-container-high hover:text-on-surface"
@@ -221,8 +247,8 @@ export default memo(function ProductWallManagementPanel({
                       onClick={() => setReviewFilter(item.key)}
                       className={`px-3 py-1.5 text-xs font-medium transition-colors ${
                         activeReview
-                          ? "bg-primary-container/12 text-primary-container"
-                          : "text-on-surface-variant hover:bg-surface-container-high"
+                          ? 'bg-primary-container/12 text-primary-container'
+                          : 'text-on-surface-variant hover:bg-surface-container-high'
                       }`}
                     >
                       {item.label}
@@ -238,11 +264,17 @@ export default memo(function ProductWallManagementPanel({
               >
                 <option value="全部">全部分类</option>
                 {categories.map((c) => (
-                  <option key={c.id} value={c.name}>{c.name}</option>
+                  <option key={c.id} value={c.name}>
+                    {c.name}
+                  </option>
                 ))}
               </select>
               <div className="relative flex-1 min-w-[140px] max-w-xs">
-                <Icon name="search" size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-on-surface-variant/50" />
+                <Icon
+                  name="search"
+                  size={14}
+                  className="absolute left-2.5 top-1/2 -translate-y-1/2 text-on-surface-variant/50"
+                />
                 <input
                   type="text"
                   placeholder="搜索标题、分类..."
@@ -252,7 +284,11 @@ export default memo(function ProductWallManagementPanel({
                 />
               </div>
               {managementQuery && (
-                <button type="button" onClick={() => setManagementQuery("")} className="text-xs text-primary-container hover:underline">
+                <button
+                  type="button"
+                  onClick={() => setManagementQuery('')}
+                  className="text-xs text-primary-container hover:underline"
+                >
                   清空搜索
                 </button>
               )}
@@ -266,7 +302,10 @@ export default memo(function ProductWallManagementPanel({
                     const imageSrc = normalizeProductWallImageUrl(item.previewImage || item.image);
                     const fallbackSrc = normalizeProductWallImageUrl(item.image);
                     return (
-                      <div key={item.id} className="product-wall-management-card group relative overflow-hidden rounded-lg border border-outline-variant/12 bg-surface-container-low/50">
+                      <div
+                        key={item.id}
+                        className="product-wall-management-card group relative overflow-hidden rounded-lg border border-outline-variant/12 bg-surface-container-low/50"
+                      >
                         <div className="aspect-square overflow-hidden">
                           <img
                             src={imageSrc}
@@ -276,33 +315,57 @@ export default memo(function ProductWallManagementPanel({
                             decoding="async"
                             onError={(event) => {
                               const img = event.currentTarget;
-                              if (!fallbackSrc || img.dataset.fallback === "1" || img.src.endsWith(fallbackSrc)) return;
-                              img.dataset.fallback = "1";
+                              if (!fallbackSrc || img.dataset.fallback === '1' || img.src.endsWith(fallbackSrc)) return;
+                              img.dataset.fallback = '1';
                               img.src = fallbackSrc;
                             }}
                           />
                         </div>
                         <div className="p-2">
                           <p className="truncate text-xs font-medium text-on-surface">{item.title}</p>
-                          <p className="mt-0.5 truncate text-[10px] text-on-surface-variant">{item.description || item.kind}</p>
+                          <p className="mt-0.5 truncate text-[10px] text-on-surface-variant">
+                            {item.description || item.kind}
+                          </p>
                           <div className="mt-1 flex items-center justify-between">
                             <StatusBadge status={item.status} />
                             {canManageItem(item) && (
                               <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                                {item.status === "pending" && (
+                                {item.status === 'pending' && (
                                   <>
-                                    <button type="button" onClick={() => onReview(item.id, { status: "approved" })} className="h-5 w-5 rounded text-green-600 hover:bg-green-50">
+                                    <button
+                                      type="button"
+                                      onClick={() => onReview(item.id, { status: 'approved' })}
+                                      className="h-5 w-5 rounded text-green-600 hover:bg-green-50"
+                                    >
                                       <Icon name="check" size={12} />
                                     </button>
-                                    <button type="button" onClick={() => { const reason = prompt("拒绝原因"); if (reason) onReview(item.id, { status: "rejected", rejectReason: reason }); }} className="h-5 w-5 rounded text-red-500 hover:bg-red-50" title="拒绝">
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        const reason = prompt('拒绝原因');
+                                        if (reason) onReview(item.id, { status: 'rejected', rejectReason: reason });
+                                      }}
+                                      className="h-5 w-5 rounded text-red-500 hover:bg-red-50"
+                                      title="拒绝"
+                                    >
                                       <Icon name="close" size={12} />
                                     </button>
                                   </>
                                 )}
-                                <button type="button" onClick={() => onUpdateItem(item.id)} className="h-5 w-5 rounded text-on-surface-variant hover:bg-surface-container-high" title="编辑">
+                                <button
+                                  type="button"
+                                  onClick={() => onUpdateItem(item.id)}
+                                  className="h-5 w-5 rounded text-on-surface-variant hover:bg-surface-container-high"
+                                  title="编辑"
+                                >
                                   <Icon name="edit" size={12} />
                                 </button>
-                                <button type="button" onClick={() => onDeleteItem(item.id)} className="h-5 w-5 rounded text-red-500 hover:bg-red-50" title="删除">
+                                <button
+                                  type="button"
+                                  onClick={() => onDeleteItem(item.id)}
+                                  className="h-5 w-5 rounded text-red-500 hover:bg-red-50"
+                                  title="删除"
+                                >
                                   <Icon name="delete" size={12} />
                                 </button>
                               </div>
@@ -336,34 +399,73 @@ export default memo(function ProductWallManagementPanel({
 
         {/* Edit modal */}
         {editingItem && (
-          <div className="absolute inset-0 z-10 flex items-center justify-center bg-black/20" onClick={() => setEditingItem(null)}>
-            <div className="w-full max-w-md rounded-lg border border-outline-variant/16 bg-surface p-4 shadow-xl" onClick={(e) => e.stopPropagation()}>
+          <div
+            className="absolute inset-0 z-10 flex items-center justify-center bg-black/20"
+            onClick={() => setEditingItem(null)}
+          >
+            <div
+              className="w-full max-w-md rounded-lg border border-outline-variant/16 bg-surface p-4 shadow-xl"
+              onClick={(e) => e.stopPropagation()}
+            >
               <h3 className="text-sm font-semibold text-on-surface">编辑图片</h3>
               <div className="mt-3 space-y-3">
                 <div>
                   <label className="text-xs text-on-surface-variant">标题</label>
-                  <input type="text" value={editForm.title} onChange={(e) => setEditForm({ ...editForm, title: e.target.value })} className="mt-1 w-full rounded-md border border-outline-variant/18 px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-primary-container/35" />
+                  <input
+                    type="text"
+                    value={editForm.title}
+                    onChange={(e) => setEditForm({ ...editForm, title: e.target.value })}
+                    className="mt-1 w-full rounded-md border border-outline-variant/18 px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-primary-container/35"
+                  />
                 </div>
                 <div>
                   <label className="text-xs text-on-surface-variant">描述</label>
-                  <textarea value={editForm.description || ""} onChange={(e) => setEditForm({ ...editForm, description: e.target.value })} rows={3} className="mt-1 w-full resize-none rounded-md border border-outline-variant/18 px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-primary-container/35" />
+                  <textarea
+                    value={editForm.description || ''}
+                    onChange={(e) => setEditForm({ ...editForm, description: e.target.value })}
+                    rows={3}
+                    className="mt-1 w-full resize-none rounded-md border border-outline-variant/18 px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-primary-container/35"
+                  />
                 </div>
                 <div>
                   <label className="text-xs text-on-surface-variant">分类</label>
-                  <select value={editForm.kind} onChange={(e) => setEditForm({ ...editForm, kind: e.target.value as ProductWallKind })} className="mt-1 w-full rounded-md border border-outline-variant/18 px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-primary-container/35">
+                  <select
+                    value={editForm.kind}
+                    onChange={(e) => setEditForm({ ...editForm, kind: e.target.value as ProductWallKind })}
+                    className="mt-1 w-full rounded-md border border-outline-variant/18 px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-primary-container/35"
+                  >
                     {resolvedFilters.map((f) => (
-                      <option key={f} value={f}>{f}</option>
+                      <option key={f} value={f}>
+                        {f}
+                      </option>
                     ))}
                   </select>
                 </div>
                 <div>
                   <label className="text-xs text-on-surface-variant">标签（逗号分隔）</label>
-                  <input type="text" value={editForm.tags} onChange={(e) => setEditForm({ ...editForm, tags: e.target.value })} className="mt-1 w-full rounded-md border border-outline-variant/18 px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-primary-container/35" />
+                  <input
+                    type="text"
+                    value={editForm.tags}
+                    onChange={(e) => setEditForm({ ...editForm, tags: e.target.value })}
+                    className="mt-1 w-full rounded-md border border-outline-variant/18 px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-primary-container/35"
+                  />
                 </div>
               </div>
               <div className="mt-4 flex justify-end gap-2">
-                <button type="button" onClick={() => setEditingItem(null)} className="rounded-md px-3 py-1.5 text-sm text-on-surface-variant hover:bg-surface-container-high">取消</button>
-                <button type="button" onClick={saveEdit} className="rounded-md bg-primary-container px-3 py-1.5 text-sm font-medium text-on-primary-container hover:bg-primary-container/90">保存</button>
+                <button
+                  type="button"
+                  onClick={() => setEditingItem(null)}
+                  className="rounded-md px-3 py-1.5 text-sm text-on-surface-variant hover:bg-surface-container-high"
+                >
+                  取消
+                </button>
+                <button
+                  type="button"
+                  onClick={saveEdit}
+                  className="rounded-md bg-primary-container px-3 py-1.5 text-sm font-medium text-on-primary-container hover:bg-primary-container/90"
+                >
+                  保存
+                </button>
               </div>
             </div>
           </div>

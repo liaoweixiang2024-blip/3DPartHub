@@ -1,5 +1,5 @@
-import client from "./client";
-import { unwrapResponse } from "./response";
+import client from './client';
+import { unwrapResponse } from './response';
 
 export interface Notification {
   id: string;
@@ -20,7 +20,7 @@ export async function getNotifications(page = 1, pageSize = 20) {
 
 export async function getUnreadCount() {
   try {
-    const res = await client.get("/notifications/unread-count");
+    const res = await client.get('/notifications/unread-count');
     const inner = unwrapResponse<{ count?: number }>(res);
     return (inner?.count ?? 0) as number;
   } catch {
@@ -34,7 +34,7 @@ export async function markAsRead(id: string) {
 }
 
 export async function markAllAsRead() {
-  const res = await client.put("/notifications/read-all");
+  const res = await client.put('/notifications/read-all');
   return unwrapResponse<{ success?: boolean }>(res);
 }
 
@@ -44,6 +44,6 @@ export async function deleteNotification(id: string) {
 }
 
 export async function clearReadNotifications() {
-  const res = await client.delete("/notifications/read/clear");
+  const res = await client.delete('/notifications/read/clear');
   return unwrapResponse<{ count: number }>(res);
 }

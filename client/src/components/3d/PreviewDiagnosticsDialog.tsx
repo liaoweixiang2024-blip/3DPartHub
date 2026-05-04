@@ -1,6 +1,6 @@
-import { AnimatePresence, motion } from "framer-motion";
-import type { ModelPreviewMeta } from "../../api/models";
-import Icon from "../shared/Icon";
+import { AnimatePresence, motion } from 'framer-motion';
+import type { ModelPreviewMeta } from '../../api/models';
+import Icon from '../shared/Icon';
 
 interface PreviewDiagnosticsDialogProps {
   open: boolean;
@@ -11,12 +11,12 @@ interface PreviewDiagnosticsDialogProps {
 }
 
 function formatCompactNumber(value?: number): string {
-  if (typeof value !== "number" || !Number.isFinite(value)) return "-";
-  return new Intl.NumberFormat("zh-CN").format(value);
+  if (typeof value !== 'number' || !Number.isFinite(value)) return '-';
+  return new Intl.NumberFormat('zh-CN').format(value);
 }
 
 function formatBytes(value?: number): string {
-  if (typeof value !== "number" || !Number.isFinite(value) || value <= 0) return "-";
+  if (typeof value !== 'number' || !Number.isFinite(value) || value <= 0) return '-';
   if (value >= 1024 * 1024 * 1024) return `${(value / 1024 / 1024 / 1024).toFixed(2)} GB`;
   if (value >= 1024 * 1024) return `${(value / 1024 / 1024).toFixed(2)} MB`;
   if (value >= 1024) return `${(value / 1024).toFixed(1)} KB`;
@@ -25,16 +25,16 @@ function formatBytes(value?: number): string {
 
 function formatPreviewSize(meta?: ModelPreviewMeta | null): string {
   const size = meta?.bounds?.size;
-  if (!size) return "-";
-  return `${size.map((value) => value.toFixed(value >= 100 ? 0 : 1)).join(" x ")} ${meta?.unit || "mm"}`;
+  if (!size) return '-';
+  return `${size.map((value) => value.toFixed(value >= 100 ? 0 : 1)).join(' x ')} ${meta?.unit || 'mm'}`;
 }
 
 function getPreviewHealth(meta?: ModelPreviewMeta | null): { label: string; className: string; hint: string } {
   if (!meta) {
     return {
-      label: "缺少诊断",
-      className: "bg-amber-500/10 text-amber-500",
-      hint: "当前模型没有可用的预览诊断，建议重新生成 GLB 和缩略图。",
+      label: '缺少诊断',
+      className: 'bg-amber-500/10 text-amber-500',
+      hint: '当前模型没有可用的预览诊断，建议重新生成 GLB 和缩略图。',
     };
   }
   const totals = meta.totals;
@@ -42,22 +42,22 @@ function getPreviewHealth(meta?: ModelPreviewMeta | null): { label: string; clas
   const skipped = meta.diagnostics?.skippedMeshCount || 0;
   if (!totals?.faceCount || !totals?.vertexCount) {
     return {
-      label: "转换异常",
-      className: "bg-error/10 text-error",
-      hint: "没有检测到有效面片，优先检查源文件或重新转换。",
+      label: '转换异常',
+      className: 'bg-error/10 text-error',
+      hint: '没有检测到有效面片，优先检查源文件或重新转换。',
     };
   }
   if (warnings.length > 0 || skipped > 0) {
     return {
-      label: "需复核",
-      className: "bg-amber-500/10 text-amber-500",
-      hint: "转换时有网格被跳过或修复，可能影响缩略图或局部显示。",
+      label: '需复核',
+      className: 'bg-amber-500/10 text-amber-500',
+      hint: '转换时有网格被跳过或修复，可能影响缩略图或局部显示。',
     };
   }
   return {
-    label: "正常",
-    className: "bg-primary-container/10 text-primary",
-    hint: "当前 GLB 已生成转换诊断，可用于判断显示和缩略图问题。",
+    label: '正常',
+    className: 'bg-primary-container/10 text-primary',
+    hint: '当前 GLB 已生成转换诊断，可用于判断显示和缩略图问题。',
   };
 }
 
@@ -78,12 +78,13 @@ export default function PreviewDiagnosticsDialog({
   const asset = meta?.diagnostics?.asset;
   const optimization = meta?.diagnostics?.optimization;
   const precheck = meta?.diagnostics?.precheck;
-  const ratio = typeof asset?.compressionRatio === "number" && Number.isFinite(asset.compressionRatio)
-    ? `${(asset.compressionRatio * 100).toFixed(1)}%`
-    : "-";
+  const ratio =
+    typeof asset?.compressionRatio === 'number' && Number.isFinite(asset.compressionRatio)
+      ? `${(asset.compressionRatio * 100).toFixed(1)}%`
+      : '-';
   const optimizationText = optimization
     ? `${formatBytes(optimization.indexBytesSaved)} / U16 ${formatCompactNumber(optimization.indexComponentTypes?.uint16)} / 材质 ${formatCompactNumber(optimization.duplicateMaterialsMerged)}`
-    : "-";
+    : '-';
 
   return (
     <AnimatePresence>
@@ -113,7 +114,11 @@ export default function PreviewDiagnosticsDialog({
                 </div>
                 <p className="mt-1 text-xs leading-relaxed text-on-surface-variant">{health.hint}</p>
               </div>
-              <button onClick={onClose} className="shrink-0 rounded-sm p-1 text-on-surface-variant hover:text-on-surface" aria-label="关闭">
+              <button
+                onClick={onClose}
+                className="shrink-0 rounded-sm p-1 text-on-surface-variant hover:text-on-surface"
+                aria-label="关闭"
+              >
                 <Icon name="close" size={18} />
               </button>
             </div>
@@ -122,26 +127,36 @@ export default function PreviewDiagnosticsDialog({
               <div className="mb-4 flex items-center justify-between gap-3">
                 <span className={`rounded-sm px-2.5 py-1 text-xs font-medium ${health.className}`}>{health.label}</span>
                 <span className="text-[11px] text-on-surface-variant">
-                  {meta?.diagnostics?.generatedAt ? new Date(meta.diagnostics.generatedAt).toLocaleString("zh-CN") : "未生成"}
+                  {meta?.diagnostics?.generatedAt
+                    ? new Date(meta.diagnostics.generatedAt).toLocaleString('zh-CN')
+                    : '未生成'}
                 </span>
               </div>
 
               <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
                 <div className="rounded-sm bg-surface-container-lowest p-3">
                   <span className="block text-[10px] text-on-surface-variant">零件</span>
-                  <span className="font-mono text-sm text-on-surface">{formatCompactNumber(meta?.totals?.partCount)}</span>
+                  <span className="font-mono text-sm text-on-surface">
+                    {formatCompactNumber(meta?.totals?.partCount)}
+                  </span>
                 </div>
                 <div className="rounded-sm bg-surface-container-lowest p-3">
                   <span className="block text-[10px] text-on-surface-variant">面片</span>
-                  <span className="font-mono text-sm text-on-surface">{formatCompactNumber(meta?.totals?.faceCount)}</span>
+                  <span className="font-mono text-sm text-on-surface">
+                    {formatCompactNumber(meta?.totals?.faceCount)}
+                  </span>
                 </div>
                 <div className="rounded-sm bg-surface-container-lowest p-3">
                   <span className="block text-[10px] text-on-surface-variant">顶点</span>
-                  <span className="font-mono text-sm text-on-surface">{formatCompactNumber(meta?.totals?.vertexCount)}</span>
+                  <span className="font-mono text-sm text-on-surface">
+                    {formatCompactNumber(meta?.totals?.vertexCount)}
+                  </span>
                 </div>
                 <div className="rounded-sm bg-surface-container-lowest p-3">
                   <span className="block text-[10px] text-on-surface-variant">跳过网格</span>
-                  <span className="font-mono text-sm text-on-surface">{formatCompactNumber(meta?.diagnostics?.skippedMeshCount)}</span>
+                  <span className="font-mono text-sm text-on-surface">
+                    {formatCompactNumber(meta?.diagnostics?.skippedMeshCount)}
+                  </span>
                 </div>
               </div>
 
@@ -152,11 +167,13 @@ export default function PreviewDiagnosticsDialog({
                 </div>
                 <div className="flex items-center justify-between gap-3 py-1">
                   <span>转换耗时</span>
-                  <span className="font-mono text-on-surface">{typeof conversionMs === "number" ? `${(conversionMs / 1000).toFixed(2)}s` : "-"}</span>
+                  <span className="font-mono text-on-surface">
+                    {typeof conversionMs === 'number' ? `${(conversionMs / 1000).toFixed(2)}s` : '-'}
+                  </span>
                 </div>
                 <div className="flex items-center justify-between gap-3 py-1">
                   <span>转换器</span>
-                  <span className="font-mono text-on-surface">{meta?.diagnostics?.converter || "-"}</span>
+                  <span className="font-mono text-on-surface">{meta?.diagnostics?.converter || '-'}</span>
                 </div>
                 <div className="flex items-center justify-between gap-3 py-1">
                   <span>GLB 大小</span>
@@ -177,13 +194,18 @@ export default function PreviewDiagnosticsDialog({
                 <div className="flex items-center justify-between gap-3 py-1">
                   <span>预检查</span>
                   <span className="text-right font-mono text-on-surface">
-                    {precheck ? `${precheck.sourceLevel || "-"} / ${formatCompactNumber(precheck.estimatedPeakMemoryMb)} MB` : "-"}
+                    {precheck
+                      ? `${precheck.sourceLevel || '-'} / ${formatCompactNumber(precheck.estimatedPeakMemoryMb)} MB`
+                      : '-'}
                   </span>
                 </div>
                 <div className="flex items-center justify-between gap-3 py-1">
                   <span>缓存版本</span>
-                  <span className="max-w-[12rem] truncate text-right font-mono text-on-surface" title={asset?.cacheVersion || ""}>
-                    {asset?.cacheVersion || "-"}
+                  <span
+                    className="max-w-[12rem] truncate text-right font-mono text-on-surface"
+                    title={asset?.cacheVersion || ''}
+                  >
+                    {asset?.cacheVersion || '-'}
                   </span>
                 </div>
               </div>
@@ -191,7 +213,9 @@ export default function PreviewDiagnosticsDialog({
               {warnings.length > 0 && (
                 <div className="mt-4 rounded-sm bg-amber-500/10 px-3 py-2 text-xs text-amber-500">
                   {warnings.map((warning, index) => (
-                    <div key={`${warning || "warning"}-${index}`} className="py-0.5">{warning}</div>
+                    <div key={`${warning || 'warning'}-${index}`} className="py-0.5">
+                      {warning}
+                    </div>
                   ))}
                 </div>
               )}
@@ -199,14 +223,19 @@ export default function PreviewDiagnosticsDialog({
               {performanceHints.length > 0 && (
                 <div className="mt-4 rounded-sm bg-primary-container/10 px-3 py-2 text-xs text-primary">
                   {performanceHints.map((hint, index) => (
-                    <div key={`${hint || "hint"}-${index}`} className="py-0.5">{hint}</div>
+                    <div key={`${hint || 'hint'}-${index}`} className="py-0.5">
+                      {hint}
+                    </div>
                   ))}
                 </div>
               )}
             </div>
 
             <div className="flex flex-wrap items-center justify-end gap-2 border-t border-outline-variant/15 px-4 py-3 sm:px-5">
-              <button onClick={onClose} className="rounded-sm px-3 py-2 text-xs text-on-surface-variant hover:text-on-surface">
+              <button
+                onClick={onClose}
+                className="rounded-sm px-3 py-2 text-xs text-on-surface-variant hover:text-on-surface"
+              >
                 关闭
               </button>
               {onRegenerate && (
@@ -216,7 +245,7 @@ export default function PreviewDiagnosticsDialog({
                   className="flex items-center gap-1.5 rounded-sm bg-primary-container px-3 py-2 text-xs font-medium text-on-primary hover:bg-primary disabled:opacity-50"
                 >
                   <Icon name="refresh" size={14} />
-                  {regenerating ? "生成中..." : "重新生成 GLB / 缩略图"}
+                  {regenerating ? '生成中...' : '重新生成 GLB / 缩略图'}
                 </button>
               )}
             </div>

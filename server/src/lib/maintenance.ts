@@ -1,5 +1,5 @@
-import { conversionQueue } from "./queue.js";
-import { getAllSettings } from "./settings.js";
+import { conversionQueue } from './queue.js';
+import { getAllSettings } from './settings.js';
 
 export type MaintenanceStatus = {
   enabled: boolean;
@@ -26,8 +26,8 @@ function fallbackMaintenanceStatus(): MaintenanceStatus {
     automatic: false,
     pending: 0,
     threshold: 50,
-    title: "系统维护中",
-    message: "系统正在进行维护、数据恢复或资源重建，部分页面可能暂时不可用。请稍后再访问。",
+    title: '系统维护中',
+    message: '系统正在进行维护、数据恢复或资源重建，部分页面可能暂时不可用。请稍后再访问。',
   };
 }
 
@@ -42,13 +42,14 @@ export async function getMaintenanceStatus(): Promise<MaintenanceStatus> {
     const manual = Boolean(all.maintenance_enabled ?? false);
     const autoEnabled = Boolean(all.maintenance_auto_enabled ?? true);
     const threshold = numberSetting(all.maintenance_auto_queue_threshold, 50, 1, 100_000);
-    const counts = await conversionQueue.getJobCounts("waiting", "active", "delayed");
+    const counts = await conversionQueue.getJobCounts('waiting', 'active', 'delayed');
     const pending = (counts.waiting || 0) + (counts.active || 0) + (counts.delayed || 0);
     const automatic = autoEnabled && pending >= threshold;
-    const title = typeof all.maintenance_title === "string" ? all.maintenance_title : "系统维护中";
-    const message = typeof all.maintenance_message === "string"
-      ? all.maintenance_message
-      : "系统正在进行维护、数据恢复或资源重建，部分页面可能暂时不可用。请稍后再访问。";
+    const title = typeof all.maintenance_title === 'string' ? all.maintenance_title : '系统维护中';
+    const message =
+      typeof all.maintenance_message === 'string'
+        ? all.maintenance_message
+        : '系统正在进行维护、数据恢复或资源重建，部分页面可能暂时不可用。请稍后再访问。';
 
     const result: MaintenanceStatus = {
       enabled: manual || automatic,

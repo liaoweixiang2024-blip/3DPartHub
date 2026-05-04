@@ -1,6 +1,6 @@
-import { Component, type ReactNode } from "react";
-import Icon from "./Icon";
-import { notifyGlobalError } from "../../lib/errorNotifications";
+import { Component, type ReactNode } from 'react';
+import Icon from './Icon';
+import { notifyGlobalError } from '../../lib/errorNotifications';
 
 interface Props {
   children: ReactNode;
@@ -19,7 +19,7 @@ export default class ErrorBoundary extends Component<Props, State> {
   }
 
   componentDidCatch(error: Error) {
-    notifyGlobalError(error, "页面出现错误，请刷新后重试");
+    notifyGlobalError(error, '页面出现错误，请刷新后重试');
   }
 
   render() {
@@ -29,7 +29,7 @@ export default class ErrorBoundary extends Component<Props, State> {
           <Icon name="error" size={48} className="text-error" />
           <h2 className="font-headline text-lg font-semibold text-on-surface">页面出现错误</h2>
           <p className="text-on-surface-variant text-sm max-w-md text-center">
-            {this.state.error?.message || "发生了未知错误"}
+            {this.state.error?.message || '发生了未知错误'}
           </p>
           <button
             onClick={() => {

@@ -1,4 +1,4 @@
-import type { User } from "./user";
+import type { User } from './user';
 
 export interface Project {
   id: string;
@@ -14,6 +14,6 @@ export interface Project {
 export interface ProjectMember {
   userId: string;
   user: User;
-  role: "admin" | "editor" | "viewer";
+  role: 'admin' | 'editor' | 'viewer';
   joinedAt: string;
 }

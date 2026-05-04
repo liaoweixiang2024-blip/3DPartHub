@@ -1,6 +1,6 @@
-import { existsSync, readFileSync } from "node:fs";
-import { join } from "node:path";
-import { findPreviewAssetPath, readGltfAsset } from "./gltfAsset.js";
+import { existsSync, readFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { findPreviewAssetPath, readGltfAsset } from './gltfAsset.js';
 
 type Vec3Tuple = [number, number, number];
 type Mat4 = number[];
@@ -30,7 +30,7 @@ interface PreviewMeta {
   version: 2;
   sourceName: string;
   sourceFormat: string;
-  unit: "mm";
+  unit: 'mm';
   parts: PreviewPartMeta[];
   totals: {
     partCount: number;
@@ -46,7 +46,7 @@ interface PreviewMeta {
   tree: Array<{ id: string; name: string; children: string[] }>;
   diagnostics: {
     generatedAt: string;
-    converter: "gltf-asset-inspector";
+    converter: 'gltf-asset-inspector';
     tessellation: Record<string, never>;
     sourceMeshCount: number;
     validMeshCount: number;
@@ -82,16 +82,36 @@ function composeNodeMatrix(node: any): Mat4 {
   const [tx, ty, tz] = Array.isArray(node.translation) ? node.translation : [0, 0, 0];
   const [sx, sy, sz] = Array.isArray(node.scale) ? node.scale : [1, 1, 1];
   const [x, y, z, w] = Array.isArray(node.rotation) ? node.rotation : [0, 0, 0, 1];
-  const x2 = x + x, y2 = y + y, z2 = z + z;
-  const xx = x * x2, xy = x * y2, xz = x * z2;
-  const yy = y * y2, yz = y * z2, zz = z * z2;
-  const wx = w * x2, wy = w * y2, wz = w * z2;
+  const x2 = x + x,
+    y2 = y + y,
+    z2 = z + z;
+  const xx = x * x2,
+    xy = x * y2,
+    xz = x * z2;
+  const yy = y * y2,
+    yz = y * z2,
+    zz = z * z2;
+  const wx = w * x2,
+    wy = w * y2,
+    wz = w * z2;
 
   return [
-    (1 - (yy + zz)) * sx, (xy + wz) * sx, (xz - wy) * sx, 0,
-    (xy - wz) * sy, (1 - (xx + zz)) * sy, (yz + wx) * sy, 0,
-    (xz + wy) * sz, (yz - wx) * sz, (1 - (xx + yy)) * sz, 0,
-    tx, ty, tz, 1,
+    (1 - (yy + zz)) * sx,
+    (xy + wz) * sx,
+    (xz - wy) * sx,
+    0,
+    (xy - wz) * sy,
+    (1 - (xx + zz)) * sy,
+    (yz + wx) * sy,
+    0,
+    (xz + wy) * sz,
+    (yz - wx) * sz,
+    (1 - (xx + yy)) * sz,
+    0,
+    tx,
+    ty,
+    tz,
+    1,
   ];
 }
 
@@ -127,18 +147,10 @@ function includeBounds(bounds: BoundsBuilder, next: BoundsBuilder) {
 }
 
 function finalizeBounds(bounds: BoundsBuilder) {
-  const min = bounds.valid ? bounds.min : [0, 0, 0] as Vec3Tuple;
-  const max = bounds.valid ? bounds.max : [0, 0, 0] as Vec3Tuple;
-  const size = [
-    Math.max(0, max[0] - min[0]),
-    Math.max(0, max[1] - min[1]),
-    Math.max(0, max[2] - min[2]),
-  ] as Vec3Tuple;
-  const center = [
-    (min[0] + max[0]) / 2,
-    (min[1] + max[1]) / 2,
-    (min[2] + max[2]) / 2,
-  ] as Vec3Tuple;
+  const min = bounds.valid ? bounds.min : ([0, 0, 0] as Vec3Tuple);
+  const max = bounds.valid ? bounds.max : ([0, 0, 0] as Vec3Tuple);
+  const size = [Math.max(0, max[0] - min[0]), Math.max(0, max[1] - min[1]), Math.max(0, max[2] - min[2])] as Vec3Tuple;
+  const center = [(min[0] + max[0]) / 2, (min[1] + max[1]) / 2, (min[2] + max[2]) / 2] as Vec3Tuple;
   return { min, max, size, center };
 }
 
@@ -164,7 +176,7 @@ function accessorOffset(accessor: any, bufferView: any): number {
 }
 
 function forEachVec3(accessor: any, bufferView: any, binData: Buffer, visit: (point: Vec3Tuple) => void) {
-  if (!accessor || !bufferView || accessor.type !== "VEC3") return;
+  if (!accessor || !bufferView || accessor.type !== 'VEC3') return;
   const size = componentSize(accessor.componentType);
   const stride = bufferView.byteStride || size * 3;
   const offset = accessorOffset(accessor, bufferView);
@@ -185,10 +197,13 @@ function forEachVec3(accessor: any, bufferView: any, binData: Buffer, visit: (po
 function materialColor(material: any): string | null {
   const factor = material?.pbrMetallicRoughness?.baseColorFactor;
   if (!Array.isArray(factor) || factor.length < 3) return null;
-  return `#${factor.slice(0, 3).map((value: number) => {
-    const byte = Math.max(0, Math.min(255, Math.round(Number(value) * 255)));
-    return byte.toString(16).padStart(2, "0");
-  }).join("")}`;
+  return `#${factor
+    .slice(0, 3)
+    .map((value: number) => {
+      const byte = Math.max(0, Math.min(255, Math.round(Number(value) * 255)));
+      return byte.toString(16).padStart(2, '0');
+    })
+    .join('')}`;
 }
 
 function analyzePrimitive(
@@ -196,7 +211,7 @@ function analyzePrimitive(
   gltf: any,
   binData: Buffer,
   matrix: Mat4,
-  bounds: BoundsBuilder
+  bounds: BoundsBuilder,
 ): { vertexCount: number; faceCount: number; hasGeometry: boolean } {
   const accessors = Array.from(gltf.accessors || []) as any[];
   const bufferViews = Array.from(gltf.bufferViews || []) as any[];
@@ -230,7 +245,7 @@ function createPreviewMetaFromAsset(
   sourceName: string,
   sourceFormat: string,
   gltf: any,
-  binData: Buffer
+  binData: Buffer,
 ): PreviewMeta {
   const started = Date.now();
   const nodes = Array.from(gltf.nodes || []) as any[];
@@ -279,11 +294,11 @@ function createPreviewMetaFromAsset(
     const node = nodes[nodeIndex];
     if (!node) return;
     const matrix = multiplyMat4(parentMatrix, composeNodeMatrix(node));
-    if (typeof node.mesh === "number") addMeshPart(node.mesh, matrix, node.name);
+    if (typeof node.mesh === 'number') addMeshPart(node.mesh, matrix, node.name);
     for (const childIndex of node.children || []) visitNode(childIndex, matrix);
   };
 
-  const scene = gltf.scenes?.[typeof gltf.scene === "number" ? gltf.scene : 0];
+  const scene = gltf.scenes?.[typeof gltf.scene === 'number' ? gltf.scene : 0];
   const rootNodes = Array.isArray(scene?.nodes) ? scene.nodes : [];
   if (rootNodes.length > 0 && nodes.length > 0) {
     for (const nodeIndex of rootNodes) visitNode(nodeIndex, identityMat4());
@@ -299,33 +314,33 @@ function createPreviewMetaFromAsset(
       acc.faceCount += part.faceCount;
       return acc;
     },
-    { partCount: parts.length, vertexCount: 0, faceCount: 0 }
+    { partCount: parts.length, vertexCount: 0, faceCount: 0 },
   );
 
   return {
     version: 2,
     sourceName,
     sourceFormat,
-    unit: "mm",
+    unit: 'mm',
     parts,
     totals,
     bounds: finalizeBounds(modelBounds),
-    tree: [{ id: "root", name: sourceName || modelId, children: parts.map((part) => part.id) }],
+    tree: [{ id: 'root', name: sourceName || modelId, children: parts.map((part) => part.id) }],
     diagnostics: {
       generatedAt: new Date().toISOString(),
-      converter: "gltf-asset-inspector",
+      converter: 'gltf-asset-inspector',
       tessellation: {},
       sourceMeshCount: meshes.length,
       validMeshCount: parts.length,
       skippedMeshCount,
       conversionMs: Date.now() - started,
-      warnings: parts.length === 0 ? ["No valid mesh geometry was detected in the preview asset"] : [],
+      warnings: parts.length === 0 ? ['No valid mesh geometry was detected in the preview asset'] : [],
     },
   };
 }
 
 function normalizePreviewMeta(value: unknown): PreviewMeta | null {
-  if (!value || typeof value !== "object") return null;
+  if (!value || typeof value !== 'object') return null;
   const meta = value as PreviewMeta;
   if (meta.version !== 2 || !meta.totals || !meta.bounds) return null;
   return meta;
@@ -335,7 +350,7 @@ export function readPreviewMeta(modelDir: string, modelId: string): PreviewMeta 
   const metaPath = join(modelDir, `${modelId}.meta.json`);
   if (!existsSync(metaPath)) return null;
   try {
-    return normalizePreviewMeta(JSON.parse(readFileSync(metaPath, "utf-8")));
+    return normalizePreviewMeta(JSON.parse(readFileSync(metaPath, 'utf-8')));
   } catch {
     return null;
   }
@@ -367,9 +382,9 @@ export async function ensurePreviewMeta(options: {
     const meta = createPreviewMetaFromAsset(
       options.modelId,
       options.sourceName || options.modelId,
-      (options.sourceFormat || "gltf").toLowerCase(),
+      (options.sourceFormat || 'gltf').toLowerCase(),
       json,
-      binData
+      binData,
     );
     await options.persist?.(meta);
     return meta;

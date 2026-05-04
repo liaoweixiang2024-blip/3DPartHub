@@ -1,16 +1,16 @@
-import { createHash, randomUUID } from "node:crypto";
-import { readdirSync, readFileSync } from "node:fs";
-import { extname, join } from "node:path";
-import { PrismaClient } from "@prisma/client";
+import { createHash, randomUUID } from 'node:crypto';
+import { readdirSync, readFileSync } from 'node:fs';
+import { extname, join } from 'node:path';
+import { PrismaClient } from '@prisma/client';
 
 const prisma = new PrismaClient();
-const migrationName = "20260430103000_add_product_wall_images";
-const migrationPath = join(process.cwd(), "prisma/migrations", migrationName, "migration.sql");
-const categoryMigrationName = "20260430112000_add_product_wall_categories";
-const categoryMigrationPath = join(process.cwd(), "prisma/migrations", categoryMigrationName, "migration.sql");
-const productWallDir = join(process.cwd(), "static/product-wall");
-const imageExts = new Set([".jpg", ".jpeg", ".png", ".webp", ".gif", ".svg"]);
-const defaultCategories = ["公司产品", "使用案例", "客户案例", "海报"];
+const migrationName = '20260430103000_add_product_wall_images';
+const migrationPath = join(process.cwd(), 'prisma/migrations', migrationName, 'migration.sql');
+const categoryMigrationName = '20260430112000_add_product_wall_categories';
+const categoryMigrationPath = join(process.cwd(), 'prisma/migrations', categoryMigrationName, 'migration.sql');
+const productWallDir = join(process.cwd(), 'static/product-wall');
+const imageExts = new Set(['.jpg', '.jpeg', '.png', '.webp', '.gif', '.svg']);
+const defaultCategories = ['公司产品', '使用案例', '客户案例', '海报'];
 
 const statements = [
   `CREATE TABLE IF NOT EXISTS "product_wall_images" (
@@ -68,11 +68,11 @@ const statements = [
 
 async function markMigrationApplied(migrationName: string, migrationPath: string) {
   const applied = await prisma.$queryRawUnsafe<Array<{ exists: number }>>(
-    "SELECT 1 AS exists FROM _prisma_migrations WHERE migration_name = $1 LIMIT 1",
+    'SELECT 1 AS exists FROM _prisma_migrations WHERE migration_name = $1 LIMIT 1',
     migrationName,
   );
   if (applied.length) return;
-  const checksum = createHash("sha256").update(readFileSync(migrationPath)).digest("hex");
+  const checksum = createHash('sha256').update(readFileSync(migrationPath)).digest('hex');
   await prisma.$executeRawUnsafe(
     `INSERT INTO _prisma_migrations
       (id, checksum, finished_at, migration_name, logs, rolled_back_at, started_at, applied_steps_count)
@@ -103,25 +103,32 @@ async function main() {
   if (localImages.length) {
     await prisma.productWallImage.createMany({
       data: localImages.map((url) => {
-        const title = url.split("/").pop()?.replace(/\.[^.]+$/, "") || "产品图片";
+        const title =
+          url
+            .split('/')
+            .pop()
+            ?.replace(/\.[^.]+$/, '') || '产品图片';
         return {
           title,
-          kind: "公司产品",
+          kind: '公司产品',
           imageUrl: url,
           previewImageUrl: url,
-          ratio: "4 / 5",
-          tags: ["本地图片"],
+          ratio: '4 / 5',
+          tags: ['本地图片'],
           sortOrder: sortOrder++,
-          status: "approved",
-
+          status: 'approved',
         };
       }),
     });
   }
 
-  const existingCategories = new Set((await prisma.productWallCategory.findMany({ select: { name: true } })).map((row) => row.name));
-  const distinctKinds = await prisma.productWallImage.findMany({ distinct: ["kind"], select: { kind: true } });
-  const categoryNames = Array.from(new Set([...defaultCategories, ...distinctKinds.map((row) => row.kind).filter(Boolean)]));
+  const existingCategories = new Set(
+    (await prisma.productWallCategory.findMany({ select: { name: true } })).map((row) => row.name),
+  );
+  const distinctKinds = await prisma.productWallImage.findMany({ distinct: ['kind'], select: { kind: true } });
+  const categoryNames = Array.from(
+    new Set([...defaultCategories, ...distinctKinds.map((row) => row.kind).filter(Boolean)]),
+  );
   const missingCategories = categoryNames.filter((name) => !existingCategories.has(name));
   if (missingCategories.length) {
     const maxCategorySort = await prisma.productWallCategory.aggregate({ _max: { sortOrder: true } });
@@ -134,9 +141,19 @@ async function main() {
     });
   }
 
-  const count = await prisma.$queryRawUnsafe<Array<{ count: number }>>("SELECT COUNT(*)::int AS count FROM product_wall_images");
-  const categoryCount = await prisma.$queryRawUnsafe<Array<{ count: number }>>("SELECT COUNT(*)::int AS count FROM product_wall_categories");
-  console.log(JSON.stringify({ ok: true, productWallImages: count[0]?.count ?? 0, productWallCategories: categoryCount[0]?.count ?? 0 }, null, 2));
+  const count = await prisma.$queryRawUnsafe<Array<{ count: number }>>(
+    'SELECT COUNT(*)::int AS count FROM product_wall_images',
+  );
+  const categoryCount = await prisma.$queryRawUnsafe<Array<{ count: number }>>(
+    'SELECT COUNT(*)::int AS count FROM product_wall_categories',
+  );
+  console.log(
+    JSON.stringify(
+      { ok: true, productWallImages: count[0]?.count ?? 0, productWallCategories: categoryCount[0]?.count ?? 0 },
+      null,
+      2,
+    ),
+  );
 }
 
 main()

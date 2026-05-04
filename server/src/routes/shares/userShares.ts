@@ -1,17 +1,17 @@
-import { Router, Response } from "express";
-import { randomBytes } from "node:crypto";
-import bcrypt from "bcryptjs";
-import { getAllSettings } from "../../lib/settings.js";
-import { prisma } from "../../lib/prisma.js";
-import { authMiddleware, type AuthRequest } from "../../middleware/auth.js";
-import { MODEL_STATUS } from "../../services/modelStatus.js";
-import { asSingleString, buildSelectionShareNameMap } from "./common.js";
-import { logger } from "../../lib/logger.js";
+import { Router, Response } from 'express';
+import { randomBytes } from 'node:crypto';
+import bcrypt from 'bcryptjs';
+import { getAllSettings } from '../../lib/settings.js';
+import { prisma } from '../../lib/prisma.js';
+import { authMiddleware, type AuthRequest } from '../../middleware/auth.js';
+import { MODEL_STATUS } from '../../services/modelStatus.js';
+import { asSingleString, buildSelectionShareNameMap } from './common.js';
+import { logger } from '../../lib/logger.js';
 
 type UserShareItem = {
   id: string;
   rawId: string;
-  type: "model" | "selection";
+  type: 'model' | 'selection';
   token: string;
   modelId: string | null;
   modelName: string;
@@ -25,37 +25,37 @@ type UserShareItem = {
   createdAt: Date;
 };
 
-function parseUserShareId(value: string): { type: "model" | "selection"; id: string } {
-  if (value.startsWith("model:")) return { type: "model", id: value.slice("model:".length) };
-  if (value.startsWith("selection:")) return { type: "selection", id: value.slice("selection:".length) };
-  return { type: "model", id: value };
+function parseUserShareId(value: string): { type: 'model' | 'selection'; id: string } {
+  if (value.startsWith('model:')) return { type: 'model', id: value.slice('model:'.length) };
+  if (value.startsWith('selection:')) return { type: 'selection', id: value.slice('selection:'.length) };
+  return { type: 'model', id: value };
 }
 
 export function createUserSharesRouter() {
   const router = Router();
 
   // Create share link
-  router.post("/api/shares", authMiddleware, async (req: AuthRequest, res: Response) => {
+  router.post('/api/shares', authMiddleware, async (req: AuthRequest, res: Response) => {
     try {
       const userId = req.user!.userId;
       let { modelId, password, allowPreview, allowDownload = true, downloadLimit = 0, expiresAt } = req.body;
 
       if (!modelId) {
-        res.status(400).json({ detail: "缺少 modelId" });
+        res.status(400).json({ detail: '缺少 modelId' });
         return;
       }
 
       const model = await prisma.model.findUnique({ where: { id: modelId } });
       if (!model) {
-        res.status(404).json({ detail: "模型不存在" });
+        res.status(404).json({ detail: '模型不存在' });
         return;
       }
       if (model.status !== MODEL_STATUS.COMPLETED) {
-        res.status(404).json({ detail: "模型不存在" });
+        res.status(404).json({ detail: '模型不存在' });
         return;
       }
       if (model.createdById !== userId) {
-        res.status(403).json({ detail: "只能分享自己的模型" });
+        res.status(403).json({ detail: '只能分享自己的模型' });
         return;
       }
 
@@ -104,7 +104,7 @@ export function createUserSharesRouter() {
         downloadLimit = sMaxDownloadLimit;
       }
 
-      const token = randomBytes(16).toString("hex");
+      const token = randomBytes(16).toString('hex');
       const hashedPassword = password ? await bcrypt.hash(password, 10) : null;
 
       const share = await prisma.shareLink.create({
@@ -131,16 +131,16 @@ export function createUserSharesRouter() {
         hasPassword: !!share.password,
         expiresAt: share.expiresAt,
         createdAt: share.createdAt,
-        url: `${req.protocol}://${req.get("host")}/share/${share.token}`,
+        url: `${req.protocol}://${req.get('host')}/share/${share.token}`,
       });
     } catch (err) {
-      logger.error({ err }, "[Shares] Create error");
-      res.status(500).json({ detail: "创建分享失败" });
+      logger.error({ err }, '[Shares] Create error');
+      res.status(500).json({ detail: '创建分享失败' });
     }
   });
 
   // List my shares
-  router.get("/api/shares", authMiddleware, async (req: AuthRequest, res: Response) => {
+  router.get('/api/shares', authMiddleware, async (req: AuthRequest, res: Response) => {
     const userId = req.user!.userId;
     const [modelShares, selectionShares] = await Promise.all([
       prisma.shareLink.findMany({
@@ -148,11 +148,13 @@ export function createUserSharesRouter() {
         include: {
           model: { select: { id: true, name: true, originalName: true, format: true } },
         },
-        orderBy: { createdAt: "desc" },
+        orderBy: { createdAt: 'desc' },
+        take: 100,
       }),
       prisma.selectionShare.findMany({
         where: { createdById: userId },
-        orderBy: { createdAt: "desc" },
+        orderBy: { createdAt: 'desc' },
+        take: 100,
       }),
     ]);
 
@@ -166,29 +168,31 @@ export function createUserSharesRouter() {
     const selectionCategoryMap = new Map(selectionCategories.map((item) => [item.slug, item.name]));
     const selectionNameMap = await buildSelectionShareNameMap(selectionShares, selectionCategoryMap);
 
-    const modelItems: UserShareItem[] = modelShares.filter((s: any) => s.model).map((s: any) => ({
-      id: `model:${s.id}`,
-      rawId: s.id,
-      type: "model",
-      token: s.token,
-      modelId: s.modelId,
-      modelName: s.model.name || s.model.originalName,
-      allowPreview: s.allowPreview,
-      allowDownload: s.allowDownload,
-      downloadLimit: s.downloadLimit,
-      downloadCount: s.downloadCount,
-      viewCount: s.viewCount,
-      hasPassword: !!s.password,
-      expiresAt: s.expiresAt,
-      createdAt: s.createdAt,
-    }));
+    const modelItems: UserShareItem[] = modelShares
+      .filter((s: any) => s.model)
+      .map((s: any) => ({
+        id: `model:${s.id}`,
+        rawId: s.id,
+        type: 'model',
+        token: s.token,
+        modelId: s.modelId,
+        modelName: s.model.name || s.model.originalName,
+        allowPreview: s.allowPreview,
+        allowDownload: s.allowDownload,
+        downloadLimit: s.downloadLimit,
+        downloadCount: s.downloadCount,
+        viewCount: s.viewCount,
+        hasPassword: !!s.password,
+        expiresAt: s.expiresAt,
+        createdAt: s.createdAt,
+      }));
     const selectionItems: UserShareItem[] = selectionShares.map((s) => ({
       id: `selection:${s.id}`,
       rawId: s.id,
-      type: "selection",
+      type: 'selection',
       token: s.token,
       modelId: null,
-      modelName: selectionNameMap.get(s.id) || selectionCategoryMap.get(s.categorySlug) || s.categorySlug || "产品选型",
+      modelName: selectionNameMap.get(s.id) || selectionCategoryMap.get(s.categorySlug) || s.categorySlug || '产品选型',
       allowPreview: true,
       allowDownload: false,
       downloadLimit: 0,
@@ -203,46 +207,49 @@ export function createUserSharesRouter() {
   });
 
   // List shares for a specific model
-  router.get("/api/models/:id/shares", authMiddleware, async (req: AuthRequest, res: Response) => {
+  router.get('/api/models/:id/shares', authMiddleware, async (req: AuthRequest, res: Response) => {
     const modelId = asSingleString(req.params.id);
     const userId = req.user!.userId;
     if (!modelId) {
-      res.status(400).json({ detail: "模型参数无效" });
+      res.status(400).json({ detail: '模型参数无效' });
       return;
     }
     const shares = await prisma.shareLink.findMany({
       where: { modelId, createdById: userId },
-      orderBy: { createdAt: "desc" },
+      orderBy: { createdAt: 'desc' },
+      take: 50,
     });
 
-    res.json(shares.map(s => ({
-      id: s.id,
-      token: s.token,
-      allowPreview: s.allowPreview,
-      allowDownload: s.allowDownload,
-      downloadLimit: s.downloadLimit,
-      downloadCount: s.downloadCount,
-      viewCount: s.viewCount,
-      hasPassword: !!s.password,
-      expiresAt: s.expiresAt,
-      createdAt: s.createdAt,
-    })));
+    res.json(
+      shares.map((s) => ({
+        id: s.id,
+        token: s.token,
+        allowPreview: s.allowPreview,
+        allowDownload: s.allowDownload,
+        downloadLimit: s.downloadLimit,
+        downloadCount: s.downloadCount,
+        viewCount: s.viewCount,
+        hasPassword: !!s.password,
+        expiresAt: s.expiresAt,
+        createdAt: s.createdAt,
+      })),
+    );
   });
 
   // Delete share
-  router.delete("/api/shares/:id", authMiddleware, async (req: AuthRequest, res: Response) => {
+  router.delete('/api/shares/:id', authMiddleware, async (req: AuthRequest, res: Response) => {
     const userId = req.user!.userId;
     const id = asSingleString(req.params.id);
     if (!id) {
-      res.status(400).json({ detail: "分享参数无效" });
+      res.status(400).json({ detail: '分享参数无效' });
       return;
     }
 
     const target = parseUserShareId(id);
-    if (target.type === "selection") {
+    if (target.type === 'selection') {
       const selectionShare = await prisma.selectionShare.findUnique({ where: { id: target.id } });
       if (!selectionShare || selectionShare.createdById !== userId) {
-        res.status(404).json({ detail: "分享链接不存在" });
+        res.status(404).json({ detail: '分享链接不存在' });
         return;
       }
       await prisma.selectionShare.delete({ where: { id: target.id } });
@@ -252,7 +259,7 @@ export function createUserSharesRouter() {
 
     const share = await prisma.shareLink.findUnique({ where: { id: target.id } });
     if (!share || share.createdById !== userId) {
-      res.status(404).json({ detail: "分享链接不存在" });
+      res.status(404).json({ detail: '分享链接不存在' });
       return;
     }
 

@@ -1,10 +1,21 @@
-import { createCanvas } from "canvas";
-import { join } from "node:path";
-import { mkdirSync, writeFileSync } from "node:fs";
-import { readGltfAsset } from "./gltfAsset.js";
+import { createCanvas } from 'canvas';
+import { join } from 'node:path';
+import { mkdirSync, writeFileSync } from 'node:fs';
+import { readGltfAsset } from './gltfAsset.js';
 
-interface Vec3 { x: number; y: number; z: number }
-interface Tri { v0: Vec3; v1: Vec3; v2: Vec3; nx: number; ny: number; nz: number }
+interface Vec3 {
+  x: number;
+  y: number;
+  z: number;
+}
+interface Tri {
+  v0: Vec3;
+  v1: Vec3;
+  v2: Vec3;
+  nx: number;
+  ny: number;
+  nz: number;
+}
 type Mat4 = number[];
 type Projection = { x: number; y: number; depth: number };
 
@@ -12,19 +23,27 @@ type Projection = { x: number; y: number; depth: number };
 // thumbnails look like transparent wireframes.
 const MAX_RENDER_TRIANGLES = 2500000;
 const HIGH_QUALITY_SUPERSAMPLE_LIMIT = 800000;
-const THUMBNAIL_FOV = 45 * Math.PI / 180;
+const THUMBNAIL_FOV = (45 * Math.PI) / 180;
 const THUMBNAIL_VIEW_DIRECTION: Vec3 = { x: 0.62, y: 0.42, z: 0.62 };
 const THUMBNAIL_KEY_LIGHT: Vec3 = { x: 0.35, y: 0.72, z: 0.52 };
 const THUMBNAIL_FILL_LIGHT: Vec3 = { x: -0.5, y: 0.28, z: -0.25 };
 const THUMBNAIL_BASE_COLOR = { r: 174, g: 177, b: 181 };
 
 function computeBounds(triangles: Tri[]) {
-  let minX = Infinity, minY = Infinity, minZ = Infinity;
-  let maxX = -Infinity, maxY = -Infinity, maxZ = -Infinity;
+  let minX = Infinity,
+    minY = Infinity,
+    minZ = Infinity;
+  let maxX = -Infinity,
+    maxY = -Infinity,
+    maxZ = -Infinity;
   for (const tri of triangles) {
     for (const v of [tri.v0, tri.v1, tri.v2]) {
-      minX = Math.min(minX, v.x); minY = Math.min(minY, v.y); minZ = Math.min(minZ, v.z);
-      maxX = Math.max(maxX, v.x); maxY = Math.max(maxY, v.y); maxZ = Math.max(maxZ, v.z);
+      minX = Math.min(minX, v.x);
+      minY = Math.min(minY, v.y);
+      minZ = Math.min(minZ, v.z);
+      maxX = Math.max(maxX, v.x);
+      maxY = Math.max(maxY, v.y);
+      maxZ = Math.max(maxZ, v.z);
     }
   }
   return { minX, minY, minZ, maxX, maxY, maxZ };
@@ -97,16 +116,36 @@ function composeNodeMatrix(node: any): Mat4 {
   const [tx, ty, tz] = Array.isArray(node.translation) ? node.translation : [0, 0, 0];
   const [sx, sy, sz] = Array.isArray(node.scale) ? node.scale : [1, 1, 1];
   const [x, y, z, w] = Array.isArray(node.rotation) ? node.rotation : [0, 0, 0, 1];
-  const x2 = x + x, y2 = y + y, z2 = z + z;
-  const xx = x * x2, xy = x * y2, xz = x * z2;
-  const yy = y * y2, yz = y * z2, zz = z * z2;
-  const wx = w * x2, wy = w * y2, wz = w * z2;
+  const x2 = x + x,
+    y2 = y + y,
+    z2 = z + z;
+  const xx = x * x2,
+    xy = x * y2,
+    xz = x * z2;
+  const yy = y * y2,
+    yz = y * z2,
+    zz = z * z2;
+  const wx = w * x2,
+    wy = w * y2,
+    wz = w * z2;
 
   return [
-    (1 - (yy + zz)) * sx, (xy + wz) * sx, (xz - wy) * sx, 0,
-    (xy - wz) * sy, (1 - (xx + zz)) * sy, (yz + wx) * sy, 0,
-    (xz + wy) * sz, (yz - wx) * sz, (1 - (xx + yy)) * sz, 0,
-    tx, ty, tz, 1,
+    (1 - (yy + zz)) * sx,
+    (xy + wz) * sx,
+    (xz - wy) * sx,
+    0,
+    (xy - wz) * sy,
+    (1 - (xx + zz)) * sy,
+    (yz + wx) * sy,
+    0,
+    (xz + wy) * sz,
+    (yz - wx) * sz,
+    (1 - (xx + yy)) * sz,
+    0,
+    tx,
+    ty,
+    tz,
+    1,
   ];
 }
 
@@ -148,7 +187,7 @@ function accessorOffset(accessor: any, bufferView: any): number {
 }
 
 function readVec3Accessor(accessor: any, bufferView: any, binData: Buffer): Vec3[] {
-  if (!accessor || !bufferView || accessor.type !== "VEC3") return [];
+  if (!accessor || !bufferView || accessor.type !== 'VEC3') return [];
   const size = componentSize(accessor.componentType);
   const stride = bufferView.byteStride || size * 3;
   const offset = accessorOffset(accessor, bufferView);
@@ -190,9 +229,10 @@ export function generateThumbnail(
   outputDir: string,
   modelId: string,
   width = 512,
-  height = 512
+  height = 512,
 ): { thumbnailPath: string; thumbnailUrl: string } {
-  width = Math.min(width || 512, 1024); height = Math.min(height || 512, 1024);
+  width = Math.min(width || 512, 1024);
+  height = Math.min(height || 512, 1024);
   mkdirSync(outputDir, { recursive: true });
   const pngPath = join(outputDir, `${modelId}.png`);
 
@@ -254,10 +294,17 @@ export function generateThumbnail(
       const p0 = projectUnit(tri.v0);
       const p1 = projectUnit(tri.v1);
       const p2 = projectUnit(tri.v2);
-      return { tri, pts: [p0, p1, p2] as [Projection, Projection, Projection], avgDepth: (p0.depth + p1.depth + p2.depth) / 3 };
+      return {
+        tri,
+        pts: [p0, p1, p2] as [Projection, Projection, Projection],
+        avgDepth: (p0.depth + p1.depth + p2.depth) / 3,
+      };
     });
 
-    let minPX = Infinity, minPY = Infinity, maxPX = -Infinity, maxPY = -Infinity;
+    let minPX = Infinity,
+      minPY = Infinity,
+      maxPX = -Infinity,
+      maxPY = -Infinity;
     for (const projected of unitTriangles) {
       for (const p of projected.pts) {
         minPX = Math.min(minPX, p.x);
@@ -268,8 +315,8 @@ export function generateThumbnail(
     }
     const projectedWidth = Math.max(maxPX - minPX, 0.001);
     const projectedHeight = Math.max(maxPY - minPY, 0.001);
-    const margin = 0.60;
-    const screenScale = Math.min(width * margin / projectedWidth, height * margin / projectedHeight);
+    const margin = 0.6;
+    const screenScale = Math.min((width * margin) / projectedWidth, (height * margin) / projectedHeight);
     const screenCx = width / 2 - ((minPX + maxPX) / 2) * screenScale;
     const screenCy = height / 2 + ((minPY + maxPY) / 2) * screenScale;
 
@@ -286,9 +333,21 @@ export function generateThumbnail(
       const rim = Math.pow(1 - view, 2) * 0.14;
       projectedTriangles.push({
         pts: [
-          { x: screenCx + projected.pts[0].x * screenScale, y: screenCy - projected.pts[0].y * screenScale, depth: projected.pts[0].depth },
-          { x: screenCx + projected.pts[1].x * screenScale, y: screenCy - projected.pts[1].y * screenScale, depth: projected.pts[1].depth },
-          { x: screenCx + projected.pts[2].x * screenScale, y: screenCy - projected.pts[2].y * screenScale, depth: projected.pts[2].depth },
+          {
+            x: screenCx + projected.pts[0].x * screenScale,
+            y: screenCy - projected.pts[0].y * screenScale,
+            depth: projected.pts[0].depth,
+          },
+          {
+            x: screenCx + projected.pts[1].x * screenScale,
+            y: screenCy - projected.pts[1].y * screenScale,
+            depth: projected.pts[1].depth,
+          },
+          {
+            x: screenCx + projected.pts[2].x * screenScale,
+            y: screenCy - projected.pts[2].y * screenScale,
+            depth: projected.pts[2].depth,
+          },
         ],
         avgDepth: projected.avgDepth,
         shade,
@@ -299,9 +358,10 @@ export function generateThumbnail(
     // Render at high resolution for smoothing. Very dense assemblies use 2x
     // to keep thumbnail jobs stable while still preserving all faces.
     const ss = triangles.length > HIGH_QUALITY_SUPERSAMPLE_LIMIT ? 2 : 4;
-    const hiW = width * ss, hiH = height * ss;
+    const hiW = width * ss,
+      hiH = height * ss;
     const hiCanvas = createCanvas(hiW, hiH);
-    const hiCtx = hiCanvas.getContext("2d");
+    const hiCtx = hiCanvas.getContext('2d');
     const image = hiCtx.createImageData(hiW, hiH);
     const pixels = image.data;
     const zBuffer = new Float32Array(hiW * hiH);
@@ -376,10 +436,10 @@ export function generateThumbnail(
 
     // Downscale supersampled render → 1x with bilinear smoothing.
     const canvas = createCanvas(width, height);
-    const ctx = canvas.getContext("2d");
+    const ctx = canvas.getContext('2d');
     ctx.drawImage(hiCanvas, 0, 0, hiW, hiH, 0, 0, width, height);
 
-    writeFileSync(pngPath, canvas.toBuffer("image/png"));
+    writeFileSync(pngPath, canvas.toBuffer('image/png'));
     return { thumbnailPath: pngPath, thumbnailUrl: `/static/thumbnails/${modelId}.png` };
   } catch {
     return generatePlaceholder(outputDir, modelId, width, height);
@@ -423,26 +483,38 @@ function extractTriangles(gltf: any, binData: Buffer): Tri[] {
         const idxBv = bufferViews[idxAcc.bufferView];
         const indices = readIndexAccessor(idxAcc, idxBv, binData);
         for (let i = 0; i + 2 < indices.length; i += 3) {
-          const i0 = indices[i], i1 = indices[i + 1], i2 = indices[i + 2];
+          const i0 = indices[i],
+            i1 = indices[i + 1],
+            i2 = indices[i + 2];
           if (i0 >= positions.length || i1 >= positions.length || i2 >= positions.length) continue;
 
           // Use per-face normal: average vertex normals or compute from cross product
-          let nx = 0, ny = 0, nz = 0;
+          let nx = 0,
+            ny = 0,
+            nz = 0;
           if (normals) {
             nx = (normals[i0].x + normals[i1].x + normals[i2].x) / 3;
             ny = (normals[i0].y + normals[i1].y + normals[i2].y) / 3;
             nz = (normals[i0].z + normals[i1].z + normals[i2].z) / 3;
             const len = Math.sqrt(nx * nx + ny * ny + nz * nz) || 1;
-            nx /= len; ny /= len; nz /= len;
+            nx /= len;
+            ny /= len;
+            nz /= len;
           } else {
             // Compute from cross product
-            const e1x = positions[i1].x - positions[i0].x, e1y = positions[i1].y - positions[i0].y, e1z = positions[i1].z - positions[i0].z;
-            const e2x = positions[i2].x - positions[i0].x, e2y = positions[i2].y - positions[i0].y, e2z = positions[i2].z - positions[i0].z;
+            const e1x = positions[i1].x - positions[i0].x,
+              e1y = positions[i1].y - positions[i0].y,
+              e1z = positions[i1].z - positions[i0].z;
+            const e2x = positions[i2].x - positions[i0].x,
+              e2y = positions[i2].y - positions[i0].y,
+              e2z = positions[i2].z - positions[i0].z;
             nx = e1y * e2z - e1z * e2y;
             ny = e1z * e2x - e1x * e2z;
             nz = e1x * e2y - e1y * e2x;
             const len = Math.sqrt(nx * nx + ny * ny + nz * nz) || 1;
-            nx /= len; ny /= len; nz /= len;
+            nx /= len;
+            ny /= len;
+            nz /= len;
           }
 
           triangles.push({ v0: positions[i0], v1: positions[i1], v2: positions[i2], nx, ny, nz });
@@ -450,13 +522,19 @@ function extractTriangles(gltf: any, binData: Buffer): Tri[] {
       } else {
         // Non-indexed: every 3 verts = 1 triangle
         for (let i = 0; i + 2 < positions.length; i += 3) {
-          const e1x = positions[i + 1].x - positions[i].x, e1y = positions[i + 1].y - positions[i].y, e1z = positions[i + 1].z - positions[i].z;
-          const e2x = positions[i + 2].x - positions[i].x, e2y = positions[i + 2].y - positions[i].y, e2z = positions[i + 2].z - positions[i].z;
+          const e1x = positions[i + 1].x - positions[i].x,
+            e1y = positions[i + 1].y - positions[i].y,
+            e1z = positions[i + 1].z - positions[i].z;
+          const e2x = positions[i + 2].x - positions[i].x,
+            e2y = positions[i + 2].y - positions[i].y,
+            e2z = positions[i + 2].z - positions[i].z;
           let nx = e1y * e2z - e1z * e2y;
           let ny = e1z * e2x - e1x * e2z;
           let nz = e1x * e2y - e1y * e2x;
           const len = Math.sqrt(nx * nx + ny * ny + nz * nz) || 1;
-          nx /= len; ny /= len; nz /= len;
+          nx /= len;
+          ny /= len;
+          nz /= len;
           triangles.push({ v0: positions[i], v1: positions[i + 1], v2: positions[i + 2], nx, ny, nz });
         }
       }
@@ -467,13 +545,13 @@ function extractTriangles(gltf: any, binData: Buffer): Tri[] {
     const node = nodes[nodeIndex];
     if (!node) return;
     const matrix = multiplyMat4(parentMatrix, composeNodeMatrix(node));
-    if (typeof node.mesh === "number") addMeshTriangles(node.mesh, matrix);
+    if (typeof node.mesh === 'number') addMeshTriangles(node.mesh, matrix);
     for (const childIndex of node.children || []) {
       visitNode(childIndex, matrix);
     }
   };
 
-  const scene = gltf.scenes?.[typeof gltf.scene === "number" ? gltf.scene : 0];
+  const scene = gltf.scenes?.[typeof gltf.scene === 'number' ? gltf.scene : 0];
   const rootNodes = Array.isArray(scene?.nodes) ? scene.nodes : [];
   if (rootNodes.length > 0 && nodes.length > 0) {
     for (const nodeIndex of rootNodes) visitNode(nodeIndex, identityMat4());
@@ -490,13 +568,13 @@ function generatePlaceholder(
   outputDir: string,
   modelId: string,
   width: number,
-  height: number
+  height: number,
 ): { thumbnailPath: string; thumbnailUrl: string } {
   const pngPath = join(outputDir, `${modelId}.png`);
   const canvas = createCanvas(width, height);
-  const ctx = canvas.getContext("2d");
+  const ctx = canvas.getContext('2d');
 
-  ctx.fillStyle = "#e8eaed";
+  ctx.fillStyle = '#e8eaed';
   ctx.fillRect(0, 0, width, height);
 
   const cx = width / 2;
@@ -509,17 +587,17 @@ function generatePlaceholder(
   ctx.lineTo(cx, cy + size);
   ctx.lineTo(cx - size, cy);
   ctx.closePath();
-  ctx.fillStyle = "#b0b8c4";
+  ctx.fillStyle = '#b0b8c4';
   ctx.fill();
-  ctx.strokeStyle = "#8090a0";
+  ctx.strokeStyle = '#8090a0';
   ctx.lineWidth = 2;
   ctx.stroke();
 
-  ctx.fillStyle = "rgba(80, 90, 100, 0.8)";
-  ctx.font = "14px sans-serif";
-  ctx.textAlign = "center";
-  ctx.fillText("3D 模型", cx, cy + size + 30);
+  ctx.fillStyle = 'rgba(80, 90, 100, 0.8)';
+  ctx.font = '14px sans-serif';
+  ctx.textAlign = 'center';
+  ctx.fillText('3D 模型', cx, cy + size + 30);
 
-  writeFileSync(pngPath, canvas.toBuffer("image/png"));
+  writeFileSync(pngPath, canvas.toBuffer('image/png'));
   return { thumbnailPath: pngPath, thumbnailUrl: `/static/thumbnails/${modelId}.png` };
 }

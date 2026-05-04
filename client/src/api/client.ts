@@ -1,14 +1,14 @@
-import axios from "axios";
-import { getAccessToken, useAuthStore } from "../stores/useAuthStore";
-import { notifyGlobalError } from "../lib/errorNotifications";
-import { unwrapApiData } from "./response";
+import axios from 'axios';
+import { getAccessToken, useAuthStore } from '../stores/useAuthStore';
+import { notifyGlobalError } from '../lib/errorNotifications';
+import { unwrapApiData } from './response';
 
 const client = axios.create({
-  baseURL: import.meta.env.VITE_API_BASE_URL || "/api",
+  baseURL: import.meta.env.VITE_API_BASE_URL || '/api',
   timeout: 120000,
   withCredentials: true,
   headers: {
-    "Content-Type": "application/json",
+    'Content-Type': 'application/json',
   },
 });
 
@@ -28,7 +28,7 @@ function recordServerError() {
   consecutiveServerErrors++;
   if (consecutiveServerErrors >= CIRCUIT_THRESHOLD) {
     circuitOpenUntil = Date.now() + CIRCUIT_COOLDOWN_MS;
-    notifyGlobalError("服务器暂时不可用，正在自动重试...");
+    notifyGlobalError('服务器暂时不可用，正在自动重试...');
   }
 }
 
@@ -40,7 +40,7 @@ function resetCircuit() {
 // Reject requests when circuit is open
 client.interceptors.request.use((config) => {
   if (isCircuitOpen()) {
-    return Promise.reject(new Error("服务暂时不可用，请稍后再试"));
+    return Promise.reject(new Error('服务暂时不可用，请稍后再试'));
   }
   return config;
 });
@@ -52,7 +52,7 @@ client.interceptors.request.use((config) => {
   }
   // Let browser set Content-Type with boundary for FormData
   if (config.data instanceof FormData) {
-    delete config.headers["Content-Type"];
+    delete config.headers['Content-Type'];
   }
   return config;
 });
@@ -75,12 +75,9 @@ function processQueue(error: unknown, token: string | null) {
 }
 
 function isSilentBackgroundRequest(config: { method?: unknown; url?: unknown } | undefined) {
-  const method = String(config?.method || "get").toLowerCase();
-  const url = String(config?.url || "");
-  return method === "get" && (
-    url.startsWith("/notifications/unread-count") ||
-    url.startsWith("/notifications?")
-  );
+  const method = String(config?.method || 'get').toLowerCase();
+  const url = String(config?.url || '');
+  return method === 'get' && (url.startsWith('/notifications/unread-count') || url.startsWith('/notifications?'));
 }
 
 client.interceptors.response.use(
@@ -94,9 +91,9 @@ client.interceptors.response.use(
 
     // Don't retry login/register/refresh endpoints
     const isAuthEndpoint =
-      originalRequest.url?.includes("/auth/login") ||
-      originalRequest.url?.includes("/auth/register") ||
-      originalRequest.url?.includes("/auth/refresh");
+      originalRequest.url?.includes('/auth/login') ||
+      originalRequest.url?.includes('/auth/register') ||
+      originalRequest.url?.includes('/auth/refresh');
 
     // Track server errors for circuit breaker
     if (error.response && error.response.status >= 500) {
@@ -105,26 +102,25 @@ client.interceptors.response.use(
 
     // Show rate limit notification
     if (error.response?.status === 429) {
-      const retryAfter = error.response.headers["retry-after"] || error.response.headers["ratelimit-reset"];
+      const retryAfter = error.response.headers['retry-after'] || error.response.headers['ratelimit-reset'];
       const seconds = retryAfter ? Math.ceil(Number(retryAfter)) : 60;
-      const msg = seconds > 60 ? `请求过于频繁，请 ${Math.ceil(seconds / 60)} 分钟后再试` : `请求过于频繁，请 ${seconds} 秒后再试`;
+      const msg =
+        seconds > 60
+          ? `请求过于频繁，请 ${Math.ceil(seconds / 60)} 分钟后再试`
+          : `请求过于频繁，请 ${seconds} 秒后再试`;
       if (!silentBackgroundRequest) notifyGlobalError(msg);
       return Promise.reject(error);
     }
 
-    if (
-      error.response?.status !== 401 ||
-      originalRequest._retry ||
-      isAuthEndpoint
-    ) {
+    if (error.response?.status !== 401 || originalRequest._retry || isAuthEndpoint) {
       // For 401 on non-auth endpoints, session expired — redirect to login
       if (error.response?.status === 401 && !isAuthEndpoint) {
         if (!useAuthStore.getState().hasHydrated) {
           return Promise.reject(error);
         }
-        notifyGlobalError("登录状态已失效，请重新登录");
+        notifyGlobalError('登录状态已失效，请重新登录');
         useAuthStore.getState().logout();
-        window.location.replace("/login");
+        window.location.replace('/login');
       } else if (!isAuthEndpoint && !silentBackgroundRequest) {
         notifyGlobalError(error);
       }
@@ -148,13 +144,13 @@ client.interceptors.response.use(
       const refreshToken = tokens?.refreshToken;
 
       const { data: resp } = await axios.post(
-        `${import.meta.env.VITE_API_BASE_URL || "/api"}/auth/refresh`,
+        `${import.meta.env.VITE_API_BASE_URL || '/api'}/auth/refresh`,
         refreshToken ? { refreshToken } : {},
-        { withCredentials: true }
+        { withCredentials: true },
       );
 
       const newAccessToken = unwrapApiData<{ accessToken?: string }>(resp).accessToken;
-      if (!newAccessToken) throw new Error("No access token in refresh response");
+      if (!newAccessToken) throw new Error('No access token in refresh response');
 
       // Update in-memory accessToken; refreshToken lives in an HttpOnly cookie.
       useAuthStore.getState().setAccessToken(newAccessToken, refreshToken);
@@ -167,14 +163,14 @@ client.interceptors.response.use(
       if (!useAuthStore.getState().hasHydrated) {
         return Promise.reject(refreshError);
       }
-      notifyGlobalError("登录状态已失效，请重新登录");
+      notifyGlobalError('登录状态已失效，请重新登录');
       useAuthStore.getState().logout();
-      window.location.replace("/login");
+      window.location.replace('/login');
       return Promise.reject(refreshError);
     } finally {
       isRefreshing = false;
     }
-  }
+  },
 );
 
 export default client;

@@ -1,13 +1,16 @@
 export function firstString(value: unknown): string | undefined {
-  if (typeof value === "string") return value;
+  if (typeof value === 'string') return value;
   if (Array.isArray(value)) {
     const first = value[0];
-    return typeof first === "string" ? first : undefined;
+    return typeof first === 'string' ? first : undefined;
   }
   return undefined;
 }
 
-export function optionalString(value: unknown, options: { trim?: boolean; maxLength?: number } = {}): string | undefined {
+export function optionalString(
+  value: unknown,
+  options: { trim?: boolean; maxLength?: number } = {},
+): string | undefined {
   const raw = firstString(value);
   if (raw === undefined) return undefined;
   const result = options.trim === false ? raw : raw.trim();
@@ -18,7 +21,11 @@ export function optionalString(value: unknown, options: { trim?: boolean; maxLen
   return result;
 }
 
-export function requiredString(value: unknown, fieldName: string, options: { trim?: boolean; maxLength?: number } = {}): string {
+export function requiredString(
+  value: unknown,
+  fieldName: string,
+  options: { trim?: boolean; maxLength?: number } = {},
+): string {
   const result = optionalString(value, options);
   if (result === undefined) {
     throw new RequestValidationError(`缺少 ${fieldName}`);
@@ -28,7 +35,7 @@ export function requiredString(value: unknown, fieldName: string, options: { tri
 
 export function booleanFlag(value: unknown): boolean {
   const text = optionalString(value)?.toLowerCase();
-  return text === "1" || text === "true" || text === "yes" || text === "on";
+  return text === '1' || text === 'true' || text === 'yes' || text === 'on';
 }
 
 export function numericValue(value: unknown, fallback: number, min: number, max: number): number {
@@ -38,7 +45,7 @@ export function numericValue(value: unknown, fallback: number, min: number, max:
   return Math.min(max, Math.max(min, Math.floor(parsed)));
 }
 
-export function routeParam(value: unknown, fieldName = "id"): string {
+export function routeParam(value: unknown, fieldName = 'id'): string {
   const result = optionalString(value, { maxLength: 160 });
   if (!result) {
     throw new RequestValidationError(`缺少 ${fieldName}`);
@@ -52,8 +59,8 @@ export function stringArray(value: unknown, options: { limit?: number; maxLength
   const items = Array.isArray(value) ? value : [value];
   return items
     .map((item) => {
-      if (typeof item === "string") return optionalString(item, { maxLength });
-      if (typeof item === "number" || typeof item === "boolean") return optionalString(String(item), { maxLength });
+      if (typeof item === 'string') return optionalString(item, { maxLength });
+      if (typeof item === 'number' || typeof item === 'boolean') return optionalString(String(item), { maxLength });
       return undefined;
     })
     .filter((item): item is string => Boolean(item))
@@ -68,10 +75,10 @@ export function paginationQuery(
     defaultPage?: number;
     defaultPageSize?: number;
     maxPageSize?: number;
-  } = {}
+  } = {},
 ) {
-  const pageKey = options.pageKey ?? "page";
-  const pageSizeKey = options.pageSizeKey ?? "page_size";
+  const pageKey = options.pageKey ?? 'page';
+  const pageSizeKey = options.pageSizeKey ?? 'page_size';
   const page = numericValue(query[pageKey], options.defaultPage ?? 1, 1, 100000);
   const pageSize = numericValue(query[pageSizeKey], options.defaultPageSize ?? 20, 1, options.maxPageSize ?? 100);
   return {
@@ -83,7 +90,10 @@ export function paginationQuery(
 }
 
 export class RequestValidationError extends Error {
-  constructor(message: string, readonly status = 400) {
+  constructor(
+    message: string,
+    readonly status = 400,
+  ) {
     super(message);
   }
 }

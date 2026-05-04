@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState } from 'react';
 
 /**
  * Unified model thumbnail component with a geometric SVG placeholder
@@ -56,11 +56,11 @@ export default function ModelThumbnail({ src, alt, className, placeholderClassNa
   }, [src]);
 
   if (src && !failed) {
-    return <img src={src} alt={alt || ""} className={className} loading="lazy" onError={() => setFailed(true)} />;
+    return <img src={src} alt={alt || ''} className={className} loading="lazy" onError={() => setFailed(true)} />;
   }
 
   return (
-    <div className={`text-on-surface-variant ${placeholderClassName || className || ""}`}>
+    <div className={`text-on-surface-variant ${placeholderClassName || className || ''}`}>
       <PlaceholderSVG />
     </div>
   );

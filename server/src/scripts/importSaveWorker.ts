@@ -1,9 +1,9 @@
-import { runImportSaveWorker } from "../lib/backup.js";
+import { runImportSaveWorker } from '../lib/backup.js';
 
 const [jobId, archivePath, originalName] = process.argv.slice(2);
 
 if (!jobId || !archivePath || !originalName) {
-  console.error("[ImportSaveWorker] Missing job id, archive path, or original name");
+  console.error('[ImportSaveWorker] Missing job id, archive path, or original name');
   process.exit(1);
 }
 

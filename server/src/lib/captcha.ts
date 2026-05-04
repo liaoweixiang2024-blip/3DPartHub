@@ -1,18 +1,21 @@
-import svgCaptcha from "svg-captcha";
-import Redis from "ioredis";
-import { randomBytes } from "node:crypto";
-import { config } from "./config.js";
-import { createLogger } from "./logger.js";
+import svgCaptcha from 'svg-captcha';
+import Redis from 'ioredis';
+import { randomBytes } from 'node:crypto';
+import { config } from './config.js';
+import { createLogger } from './logger.js';
 
-const log = createLogger({ component: "captcha" });
+const log = createLogger({ component: 'captcha' });
 
 export const redis = new Redis(config.redisUrl, {
   connectTimeout: 2000,
   commandTimeout: 1000,
   maxRetriesPerRequest: 0,
-  retryStrategy(times) { if (times > 3) return null; return Math.min(times * 200, 2000); },
+  retryStrategy(times) {
+    if (times > 3) return null;
+    return Math.min(times * 200, 2000);
+  },
 });
-redis.on("error", (err) => log.error({ err }, "Redis error"));
+redis.on('error', (err) => log.error({ err }, 'Redis error'));
 
 interface CaptchaResult {
   captchaId: string;
@@ -24,16 +27,16 @@ export async function generateCaptcha(ttlSeconds = 300): Promise<CaptchaResult> 
     size: 6,
     noise: 5,
     color: true,
-    background: "#f0f0f0",
+    background: '#f0f0f0',
     width: 150,
     height: 44,
-    ignoreChars: "o0il1",
+    ignoreChars: 'o0il1',
   });
 
-  const captchaId = `cap_${randomBytes(18).toString("base64url")}`;
+  const captchaId = `cap_${randomBytes(18).toString('base64url')}`;
   const key = `captcha:${captchaId}`;
 
-  await redis.set(key, captcha.text.toLowerCase(), "EX", Math.max(60, ttlSeconds));
+  await redis.set(key, captcha.text.toLowerCase(), 'EX', Math.max(60, ttlSeconds));
 
   return { captchaId, captchaSvg: captcha.data };
 }
@@ -56,13 +59,13 @@ export async function verifyCaptcha(captchaId: string, text: string): Promise<bo
 }
 
 export async function checkRateLimit(key: string, ttlSeconds: number): Promise<boolean> {
-  const result = await redis.set(key, "1", "EX", Math.max(1, ttlSeconds), "NX");
-  return result === "OK";
+  const result = await redis.set(key, '1', 'EX', Math.max(1, ttlSeconds), 'NX');
+  return result === 'OK';
 }
 
 export async function storeEmailCode(email: string, code: string, ttlSeconds = 600): Promise<void> {
   const key = `email_code:${email}`;
-  await redis.set(key, code, "EX", Math.max(60, ttlSeconds));
+  await redis.set(key, code, 'EX', Math.max(60, ttlSeconds));
 }
 
 export async function verifyEmailCode(email: string, code: string): Promise<boolean> {

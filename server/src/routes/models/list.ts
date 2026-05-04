@@ -1,8 +1,8 @@
-import { Router, Request, Response } from "express";
-import { readdirSync, readFileSync } from "node:fs";
-import { join } from "node:path";
-import { requireBrowseAccess } from "../../middleware/browseAccess.js";
-import { cacheGetOrSet, TTL } from "../../lib/cache.js";
+import { Router, Request, Response } from 'express';
+import { readdirSync, readFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { requireBrowseAccess } from '../../middleware/browseAccess.js';
+import { cacheGetOrSet, TTL } from '../../lib/cache.js';
 import {
   MAX_MODEL_PAGE,
   enumQuery,
@@ -11,11 +11,11 @@ import {
   normalizeSearchParam,
   numericQuery,
   searchCacheToken,
-} from "../../lib/searchQuery.js";
-import { getBusinessConfig } from "../../lib/businessConfig.js";
-import { MODEL_STATUS } from "../../services/modelStatus.js";
-import { withAssetVersion } from "../../services/gltfAsset.js";
-import { groupedVisibleModelWhere } from "../../services/modelVisibility.js";
+} from '../../lib/searchQuery.js';
+import { getBusinessConfig } from '../../lib/businessConfig.js';
+import { MODEL_STATUS } from '../../services/modelStatus.js';
+import { withAssetVersion } from '../../services/gltfAsset.js';
+import { groupedVisibleModelWhere } from '../../services/modelVisibility.js';
 
 type ModelListContext = {
   prisma: any;
@@ -23,15 +23,11 @@ type ModelListContext = {
   drawingDownloadUrl: (modelId: string, drawingUrl?: string | null) => string | null;
 };
 
-export function createModelListRouter({
-  prisma,
-  metadataDir,
-  drawingDownloadUrl,
-}: ModelListContext) {
+export function createModelListRouter({ prisma, metadataDir, drawingDownloadUrl }: ModelListContext) {
   const router = Router();
 
   // List models (public, with optional pagination/search/category)
-  router.get("/api/models", async (req: Request, res: Response) => {
+  router.get('/api/models', async (req: Request, res: Response) => {
     if (!(await requireBrowseAccess(req, res))) return;
 
     const page = numericQuery(req.query.page, 1, 1, MAX_MODEL_PAGE);
@@ -39,9 +35,9 @@ export function createModelListRouter({
     const format = normalizeSearchParam(req.query.format, 20).toLowerCase();
     const category = normalizeSearchParam(req.query.category, 100);
     const categoryId = normalizeSearchParam(req.query.category_id, 80);
-    const sort = enumQuery(req.query.sort, "created_at", ["created_at", "name", "file_size"] as const);
-    const order = enumQuery(req.query.order, "desc", ["asc", "desc"] as const);
-    const grouped = req.query.grouped !== "false";
+    const sort = enumQuery(req.query.sort, 'created_at', ['created_at', 'name', 'file_size'] as const);
+    const order = enumQuery(req.query.order, 'desc', ['asc', 'desc'] as const);
+    const grouped = req.query.grouped !== 'false';
 
     // Compute page size — needed to build cache key
     const { pageSizePolicy } = await getBusinessConfig();
@@ -102,8 +98,8 @@ export function createModelListRouter({
           const total = await prisma.model.count({ where });
 
           const orderBy: any = {};
-          if (sort === "name") orderBy.name = order;
-          else if (sort === "file_size") orderBy.gltfSize = order;
+          if (sort === 'name') orderBy.name = order;
+          else if (sort === 'file_size') orderBy.gltfSize = order;
           else orderBy.createdAt = order;
 
           const models = await prisma.model.findMany({
@@ -132,17 +128,19 @@ export function createModelListRouter({
             drawing_url: drawingDownloadUrl(m.id, m.drawingUrl),
             drawing_name: m.drawingName || null,
             drawing_size: m.drawingSize || null,
-            group: m.group ? {
-              id: m.group.id,
-              name: m.group.name,
-              is_primary: m.id === m.group.primaryId,
-              variant_count: m.group._count.models,
-            } : null,
+            group: m.group
+              ? {
+                  id: m.group.id,
+                  name: m.group.name,
+                  is_primary: m.id === m.group.primaryId,
+                  variant_count: m.group._count.models,
+                }
+              : null,
           }));
 
           return { total, items, page, page_size: pageSize };
         });
-        res.set("X-Cache", hit ? "HIT" : "MISS");
+        res.set('X-Cache', hit ? 'HIT' : 'MISS');
         res.json(responseData);
         return;
       } catch {
@@ -152,9 +150,12 @@ export function createModelListRouter({
 
     // Filesystem fallback
     let items: any[] = [];
-    const files = readdirSync(metadataDir).filter((f) => f.endsWith(".json")).sort().reverse();
+    const files = readdirSync(metadataDir)
+      .filter((f) => f.endsWith('.json'))
+      .sort()
+      .reverse();
     for (const f of files) {
-      const m = JSON.parse(readFileSync(join(metadataDir, f), "utf-8"));
+      const m = JSON.parse(readFileSync(join(metadataDir, f), 'utf-8'));
       if (m.status !== MODEL_STATUS.COMPLETED) continue;
       if (category && m.category !== category) continue;
       if (format && m.format !== format) continue;
@@ -170,7 +171,9 @@ export function createModelListRouter({
           m.format,
           m.original_format,
           m.drawing_name,
-        ].map((value) => (value || "").toString().toLowerCase()).join(" ");
+        ]
+          .map((value) => (value || '').toString().toLowerCase())
+          .join(' ');
         if (!terms.every((term) => searchable.includes(term))) continue;
       }
       items.push({

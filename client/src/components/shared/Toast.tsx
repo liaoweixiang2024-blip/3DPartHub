@@ -1,10 +1,10 @@
-import { createContext, useContext, useState, useCallback, useEffect, useRef, type ReactNode } from "react";
-import { createPortal } from "react-dom";
-import { motion, AnimatePresence } from "framer-motion";
-import Icon from "./Icon";
-import { notifyGlobalError, setGlobalErrorNotifier } from "../../lib/errorNotifications";
+import { createContext, useContext, useState, useCallback, useEffect, useRef, type ReactNode } from 'react';
+import { createPortal } from 'react-dom';
+import { motion, AnimatePresence } from 'framer-motion';
+import Icon from './Icon';
+import { notifyGlobalError, setGlobalErrorNotifier } from '../../lib/errorNotifications';
 
-type ToastType = "success" | "error" | "info";
+type ToastType = 'success' | 'error' | 'info';
 
 interface Toast {
   id: number;
@@ -20,16 +20,16 @@ const ToastContext = createContext<ToastContextValue>({ toast: () => {} });
 export const useToast = () => useContext(ToastContext);
 
 const iconMap: Record<ToastType, { name: string; color: string }> = {
-  success: { name: "check_circle", color: "text-emerald-400" },
-  error: { name: "error", color: "text-red-400" },
-  info: { name: "info", color: "text-blue-400" },
+  success: { name: 'check_circle', color: 'text-emerald-400' },
+  error: { name: 'error', color: 'text-red-400' },
+  info: { name: 'info', color: 'text-blue-400' },
 };
 
 export function ToastProvider({ children }: { children: ReactNode }) {
   const [toasts, setToasts] = useState<Toast[]>([]);
   const counter = useRef(0);
 
-  const toast = useCallback((message: string, type: ToastType = "info") => {
+  const toast = useCallback((message: string, type: ToastType = 'info') => {
     const id = ++counter.current;
     setToasts((prev) => [...prev, { id, message, type }]);
     setTimeout(() => {
@@ -38,25 +38,25 @@ export function ToastProvider({ children }: { children: ReactNode }) {
   }, []);
 
   useEffect(() => {
-    setGlobalErrorNotifier((message, type = "error") => toast(message, type));
+    setGlobalErrorNotifier((message, type = 'error') => toast(message, type));
     return () => setGlobalErrorNotifier(null);
   }, [toast]);
 
   useEffect(() => {
     const handleError = (event: ErrorEvent) => {
-      notifyGlobalError(event.error || event.message, "页面运行出错，请刷新后重试");
+      notifyGlobalError(event.error || event.message, '页面运行出错，请刷新后重试');
     };
 
     const handleUnhandledRejection = (event: PromiseRejectionEvent) => {
-      notifyGlobalError(event.reason, "操作失败，请稍后重试");
+      notifyGlobalError(event.reason, '操作失败，请稍后重试');
     };
 
-    window.addEventListener("error", handleError);
-    window.addEventListener("unhandledrejection", handleUnhandledRejection);
+    window.addEventListener('error', handleError);
+    window.addEventListener('unhandledrejection', handleUnhandledRejection);
 
     return () => {
-      window.removeEventListener("error", handleError);
-      window.removeEventListener("unhandledrejection", handleUnhandledRejection);
+      window.removeEventListener('error', handleError);
+      window.removeEventListener('unhandledrejection', handleUnhandledRejection);
     };
   }, []);
 

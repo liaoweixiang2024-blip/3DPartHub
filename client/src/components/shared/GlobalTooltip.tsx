@@ -1,15 +1,15 @@
-import { useEffect, useRef, useState } from "react";
-import { createPortal } from "react-dom";
+import { useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 
 const TOOLTIP_SELECTOR = [
-  "[data-tooltip]",
-  "button[aria-label]",
-  "a[aria-label]",
+  '[data-tooltip]',
+  'button[aria-label]',
+  'a[aria-label]',
   "[role='button'][aria-label]",
-  "button[title]",
-  "a[title]",
+  'button[title]',
+  'a[title]',
   "[role='button'][title]",
-].join(",");
+].join(',');
 
 const DELAY_MS = 120;
 const GAP = 10;
@@ -22,15 +22,10 @@ type TooltipState = {
   placement: TooltipPlacement;
 };
 
-type TooltipPlacement = "top" | "bottom" | "left" | "right";
+type TooltipPlacement = 'top' | 'bottom' | 'left' | 'right';
 
 function getTooltipText(element: HTMLElement) {
-  return (
-    element.dataset.tooltip ||
-    element.getAttribute("aria-label") ||
-    element.getAttribute("title") ||
-    ""
-  ).trim();
+  return (element.dataset.tooltip || element.getAttribute('aria-label') || element.getAttribute('title') || '').trim();
 }
 
 function isTooltipTarget(element: Element | null): element is HTMLElement {
@@ -38,7 +33,7 @@ function isTooltipTarget(element: Element | null): element is HTMLElement {
 }
 
 function isPlacement(value: string | undefined): value is TooltipPlacement {
-  return value === "top" || value === "bottom" || value === "left" || value === "right";
+  return value === 'top' || value === 'bottom' || value === 'left' || value === 'right';
 }
 
 function clamp(value: number, min: number, max: number) {
@@ -56,7 +51,7 @@ function choosePlacement(
   rect: DOMRect,
   tooltipWidth: number,
   tooltipHeight: number,
-  preferred?: TooltipPlacement
+  preferred?: TooltipPlacement,
 ): TooltipPlacement {
   const vw = window.innerWidth;
   const vh = window.innerHeight;
@@ -68,23 +63,23 @@ function choosePlacement(
 
   // If user explicitly requested a side, try it first
   if (preferred) {
-    if (preferred === "top" && spaceTop >= 0 && canFitHorizontally(rect, tooltipWidth, vw)) return "top";
-    if (preferred === "bottom" && spaceBottom >= 0 && canFitHorizontally(rect, tooltipWidth, vw)) return "bottom";
-    if (preferred === "left" && spaceLeft >= 0) return "left";
-    if (preferred === "right" && spaceRight >= 0) return "right";
+    if (preferred === 'top' && spaceTop >= 0 && canFitHorizontally(rect, tooltipWidth, vw)) return 'top';
+    if (preferred === 'bottom' && spaceBottom >= 0 && canFitHorizontally(rect, tooltipWidth, vw)) return 'bottom';
+    if (preferred === 'left' && spaceLeft >= 0) return 'left';
+    if (preferred === 'right' && spaceRight >= 0) return 'right';
   }
 
   // Auto-select: prefer the direction with the most space
   const scores: [TooltipPlacement, number][] = [
-    ["bottom", spaceBottom],
-    ["top", spaceTop],
-    ["right", spaceRight],
-    ["left", spaceLeft],
+    ['bottom', spaceBottom],
+    ['top', spaceTop],
+    ['right', spaceRight],
+    ['left', spaceLeft],
   ];
 
   // Filter to directions that actually fit (including horizontal check for top/bottom)
   const viable = scores.filter(([dir]) => {
-    if (dir === "top" || dir === "bottom") {
+    if (dir === 'top' || dir === 'bottom') {
       return canFitHorizontally(rect, tooltipWidth, vw);
     }
     return true;
@@ -100,26 +95,21 @@ function choosePlacement(
   return scores[0][0];
 }
 
-function tooltipPoint(
-  rect: DOMRect,
-  placement: TooltipPlacement,
-  width: number,
-  height: number
-) {
+function tooltipPoint(rect: DOMRect, placement: TooltipPlacement, width: number, height: number) {
   const vw = window.innerWidth;
   const vh = window.innerHeight;
 
-  if (placement === "top") {
+  if (placement === 'top') {
     const left = clamp(rect.left + rect.width / 2 - width / 2, EDGE_PADDING, vw - width - EDGE_PADDING);
     const top = rect.top - GAP - height;
     return { left, top };
   }
-  if (placement === "bottom") {
+  if (placement === 'bottom') {
     const left = clamp(rect.left + rect.width / 2 - width / 2, EDGE_PADDING, vw - width - EDGE_PADDING);
     const top = rect.bottom + GAP;
     return { left, top };
   }
-  if (placement === "left") {
+  if (placement === 'left') {
     const left = rect.left - GAP - width;
     const top = clamp(rect.top + rect.height / 2 - height / 2, EDGE_PADDING, vh - height - EDGE_PADDING);
     return { left, top };
@@ -130,7 +120,7 @@ function tooltipPoint(
   return { left, top };
 }
 
-const isTouchDevice = typeof window !== "undefined" && ("ontouchstart" in window || navigator.maxTouchPoints > 0);
+const isTouchDevice = typeof window !== 'undefined' && ('ontouchstart' in window || navigator.maxTouchPoints > 0);
 
 export default function GlobalTooltip() {
   const [tooltip, setTooltip] = useState<TooltipState | null>(null);
@@ -168,7 +158,7 @@ export default function GlobalTooltip() {
       if (!element) return;
       const nativeTitle = element.dataset.nativeTitle;
       if (nativeTitle !== undefined) {
-        element.setAttribute("title", nativeTitle);
+        element.setAttribute('title', nativeTitle);
         delete element.dataset.nativeTitle;
       }
     };
@@ -182,7 +172,7 @@ export default function GlobalTooltip() {
     };
 
     const showFor = (element: HTMLElement) => {
-      if (element.closest("[data-tooltip-ignore]")) return;
+      if (element.closest('[data-tooltip-ignore]')) return;
       const text = getTooltipText(element);
       if (!text) return;
 
@@ -190,10 +180,10 @@ export default function GlobalTooltip() {
       restoreNativeTitle(activeRef.current);
       activeRef.current = element;
 
-      const title = element.getAttribute("title");
+      const title = element.getAttribute('title');
       if (title) {
         element.dataset.nativeTitle = title;
-        element.removeAttribute("title");
+        element.removeAttribute('title');
       }
 
       timerRef.current = setTimeout(() => {
@@ -201,11 +191,11 @@ export default function GlobalTooltip() {
         const rect = element.getBoundingClientRect();
         const requested = isPlacement(element.dataset.tooltipSide) ? element.dataset.tooltipSide : undefined;
         // Estimate placement for initial render (without dimensions)
-        const placement = requested || (rect.top < 56 ? "bottom" : "top");
+        const placement = requested || (rect.top < 56 ? 'bottom' : 'top');
         setTooltip({
           text,
           left: rect.left + rect.width / 2,
-          top: placement === "top" ? rect.top - GAP : rect.bottom + GAP,
+          top: placement === 'top' ? rect.top - GAP : rect.bottom + GAP,
           placement,
         });
         setMeasured(null);
@@ -235,20 +225,20 @@ export default function GlobalTooltip() {
 
     const handleScroll = () => hide();
 
-    document.addEventListener("mouseover", handleMouseOver, true);
-    document.addEventListener("mouseout", handleMouseOut, true);
-    document.addEventListener("focusin", handleFocusIn, true);
-    document.addEventListener("focusout", handleFocusOut, true);
-    window.addEventListener("scroll", handleScroll, true);
-    window.addEventListener("resize", hide);
+    document.addEventListener('mouseover', handleMouseOver, true);
+    document.addEventListener('mouseout', handleMouseOut, true);
+    document.addEventListener('focusin', handleFocusIn, true);
+    document.addEventListener('focusout', handleFocusOut, true);
+    window.addEventListener('scroll', handleScroll, true);
+    window.addEventListener('resize', hide);
 
     return () => {
-      document.removeEventListener("mouseover", handleMouseOver, true);
-      document.removeEventListener("mouseout", handleMouseOut, true);
-      document.removeEventListener("focusin", handleFocusIn, true);
-      document.removeEventListener("focusout", handleFocusOut, true);
-      window.removeEventListener("scroll", handleScroll, true);
-      window.removeEventListener("resize", hide);
+      document.removeEventListener('mouseover', handleMouseOver, true);
+      document.removeEventListener('mouseout', handleMouseOut, true);
+      document.removeEventListener('focusin', handleFocusIn, true);
+      document.removeEventListener('focusout', handleFocusOut, true);
+      window.removeEventListener('scroll', handleScroll, true);
+      window.removeEventListener('resize', hide);
       hide();
     };
   }, []);
@@ -265,14 +255,14 @@ export default function GlobalTooltip() {
       style={{
         left: tooltip.left,
         top: tooltip.top,
-        visibility: isVisible ? "visible" : "hidden",
+        visibility: isVisible ? 'visible' : 'hidden',
         opacity: isVisible ? 1 : 0,
-        transform: measured ? "none" : "translateX(-50%)",
-        transition: "opacity 0.1s ease-in",
+        transform: measured ? 'none' : 'translateX(-50%)',
+        transition: 'opacity 0.1s ease-in',
       }}
     >
       {tooltip.text}
     </div>,
-    document.body
+    document.body,
   );
 }

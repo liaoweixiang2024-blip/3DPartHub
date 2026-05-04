@@ -1,10 +1,10 @@
-import { runBackupWorker } from "../lib/backup.js";
+import { runBackupWorker } from '../lib/backup.js';
 
 const [jobId, rawSource] = process.argv.slice(2);
-const source = rawSource === "scheduled" ? "scheduled" : "manual";
+const source = rawSource === 'scheduled' ? 'scheduled' : 'manual';
 
 if (!jobId) {
-  console.error("[BackupWorker] Missing job id");
+  console.error('[BackupWorker] Missing job id');
   process.exit(1);
 }
 

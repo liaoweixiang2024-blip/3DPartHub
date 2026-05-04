@@ -1,8 +1,8 @@
-import client from "./client";
-import { unwrapResponse } from "./response";
+import client from './client';
+import { unwrapResponse } from './response';
 
 export type ProductWallKind = string;
-export type ProductWallStatus = "pending" | "approved" | "rejected";
+export type ProductWallStatus = 'pending' | 'approved' | 'rejected';
 
 export interface ProductWallCategory {
   id: string;
@@ -46,7 +46,7 @@ export interface ProductWallUpdateInput {
 }
 
 export async function listProductWallItems(): Promise<ProductWallItem[]> {
-  const res = await client.get("/product-wall", { params: { page: 1, page_size: 200 } });
+  const res = await client.get('/product-wall', { params: { page: 1, page_size: 200 } });
   const data = unwrapResponse<ProductWallItem[] | ProductWallListResponse>(res);
   if (Array.isArray(data)) return data;
 
@@ -56,7 +56,7 @@ export async function listProductWallItems(): Promise<ProductWallItem[]> {
   let page = Number(data.page) || 1;
   while (items.length < total) {
     page += 1;
-    const nextRes = await client.get("/product-wall", { params: { page, page_size: pageSize } });
+    const nextRes = await client.get('/product-wall', { params: { page, page_size: pageSize } });
     const nextData = unwrapResponse<ProductWallItem[] | ProductWallListResponse>(nextRes);
     const nextItems = Array.isArray(nextData) ? nextData : nextData.items || [];
     if (!nextItems.length) break;
@@ -66,22 +66,22 @@ export async function listProductWallItems(): Promise<ProductWallItem[]> {
 }
 
 export async function listAdminProductWallItems(): Promise<ProductWallItem[]> {
-  const res = await client.get("/admin/product-wall");
+  const res = await client.get('/admin/product-wall');
   return unwrapResponse<ProductWallItem[]>(res);
 }
 
 export async function listProductWallCategories(): Promise<ProductWallCategory[]> {
-  const res = await client.get("/product-wall/categories");
+  const res = await client.get('/product-wall/categories');
   return unwrapResponse<ProductWallCategory[]>(res);
 }
 
 export async function listAdminProductWallCategories(): Promise<ProductWallCategory[]> {
-  const res = await client.get("/admin/product-wall/categories");
+  const res = await client.get('/admin/product-wall/categories');
   return unwrapResponse<ProductWallCategory[]>(res);
 }
 
 export async function createProductWallCategory(name: string): Promise<ProductWallCategory> {
-  const res = await client.post("/admin/product-wall/categories", { name });
+  const res = await client.post('/admin/product-wall/categories', { name });
   return unwrapResponse<ProductWallCategory>(res);
 }
 
@@ -103,12 +103,12 @@ export async function uploadProductWallImages(
   options: { title?: string; description?: string; kind?: ProductWallKind; tags?: string; admin?: boolean } = {},
 ): Promise<{ items: ProductWallItem[] }> {
   const form = new FormData();
-  files.forEach((file) => form.append("files", file));
-  if (options.title) form.append("title", options.title);
-  if (options.description) form.append("description", options.description);
-  if (options.kind) form.append("kind", options.kind);
-  if (options.tags) form.append("tags", options.tags);
-  const res = await client.post(options.admin ? "/admin/product-wall/upload" : "/product-wall/upload", form);
+  files.forEach((file) => form.append('files', file));
+  if (options.title) form.append('title', options.title);
+  if (options.description) form.append('description', options.description);
+  if (options.kind) form.append('kind', options.kind);
+  if (options.tags) form.append('tags', options.tags);
+  const res = await client.post(options.admin ? '/admin/product-wall/upload' : '/product-wall/upload', form);
   return unwrapResponse<{ items: ProductWallItem[] }>(res);
 }
 
@@ -121,13 +121,13 @@ export async function uploadProductWallImageFromUrl(input: {
   admin?: boolean;
 }): Promise<{ item: ProductWallItem }> {
   const { admin, ...body } = input;
-  const res = await client.post(admin ? "/admin/product-wall/from-url" : "/product-wall/from-url", body);
+  const res = await client.post(admin ? '/admin/product-wall/from-url' : '/product-wall/from-url', body);
   return unwrapResponse<{ item: ProductWallItem }>(res);
 }
 
 export async function reviewProductWallItem(
   id: string,
-  input: { status: "approved" | "rejected"; rejectReason?: string },
+  input: { status: 'approved' | 'rejected'; rejectReason?: string },
 ): Promise<ProductWallItem> {
   const res = await client.patch(`/admin/product-wall/${id}/review`, input);
   return unwrapResponse<ProductWallItem>(res);
@@ -144,12 +144,12 @@ export async function deleteProductWallItem(id: string): Promise<{ ok: true }> {
 }
 
 export async function deleteProductWallItems(ids: string[]): Promise<{ ok: true; deleted: number }> {
-  const res = await client.post("/admin/product-wall/batch-delete", { ids });
+  const res = await client.post('/admin/product-wall/batch-delete', { ids });
   return unwrapResponse<{ ok: true; deleted: number }>(res);
 }
 
 export async function listProductWallFavorites(): Promise<string[]> {
-  const res = await client.get("/product-wall/favorites");
+  const res = await client.get('/product-wall/favorites');
   return unwrapResponse<string[]>(res);
 }
 

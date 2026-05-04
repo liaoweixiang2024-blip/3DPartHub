@@ -7,8 +7,8 @@ import { useDocumentTitle } from '../hooks/useDocumentTitle';
 import { SkeletonGrid } from '../components/shared/Skeleton';
 import Icon from '../components/shared/Icon';
 import ModelThumbnail from '../components/shared/ModelThumbnail';
-import { AdminPageShell } from "../components/shared/AdminPageShell";
-import { AdminEmptyState, AdminManagementPage } from "../components/shared/AdminManagementPage";
+import { AdminPageShell } from '../components/shared/AdminPageShell';
+import { AdminEmptyState, AdminManagementPage } from '../components/shared/AdminManagementPage';
 import { useToast } from '../components/shared/Toast';
 import client from '../api/client';
 import { favoriteApi } from '../api/favorites';
@@ -34,26 +34,39 @@ function mapFavorites(items: any[]): FavoriteModel[] {
   }));
 }
 
-function EmptyState({ message, actionLabel, actionHref }: { message: string; actionLabel: string; actionHref: string }) {
+function EmptyState({
+  message,
+  actionLabel,
+  actionHref,
+}: {
+  message: string;
+  actionLabel: string;
+  actionHref: string;
+}) {
   return (
     <AdminEmptyState
       icon="star"
       title={message}
       description="收藏后的模型会集中显示在这里，方便后续查看和下载。"
-      action={(
+      action={
         <Link
           to={actionHref}
           className="rounded-md bg-primary-container px-5 py-2.5 text-sm font-semibold text-on-primary transition-opacity hover:opacity-90"
         >
           {actionLabel}
         </Link>
-      )}
+      }
     />
   );
 }
 
 // Batch action toolbar
-function BatchToolbar({ selectedCount, onDownload, onRemove, onCancel }: {
+function BatchToolbar({
+  selectedCount,
+  onDownload,
+  onRemove,
+  onCancel,
+}: {
   selectedCount: number;
   onDownload: () => void;
   onRemove: () => void;
@@ -72,13 +85,15 @@ function BatchToolbar({ selectedCount, onDownload, onRemove, onCancel }: {
         onClick={onDownload}
         className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-on-primary bg-primary-container rounded-sm hover:opacity-90 transition-opacity"
       >
-        <Icon name="download" size={14} />下载 STEP
+        <Icon name="download" size={14} />
+        下载 STEP
       </button>
       <button
         onClick={onRemove}
         className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-error bg-error/10 rounded-sm border border-error/20 hover:bg-error/20 transition-colors"
       >
-        <Icon name="star_off" size={14} />取消收藏
+        <Icon name="star_off" size={14} />
+        取消收藏
       </button>
       <button
         onClick={onCancel}
@@ -90,11 +105,25 @@ function BatchToolbar({ selectedCount, onDownload, onRemove, onCancel }: {
   );
 }
 
-const ModelCard = memo(function ModelCard({ model, selected, onSelect, onRemove, onDownload, showCheckbox }: {
-  model: FavoriteModel; selected: boolean; onSelect: (id: string) => void; onRemove: (id: string) => void; onDownload: (id: string) => void; showCheckbox: boolean;
+const ModelCard = memo(function ModelCard({
+  model,
+  selected,
+  onSelect,
+  onRemove,
+  onDownload,
+  showCheckbox,
+}: {
+  model: FavoriteModel;
+  selected: boolean;
+  onSelect: (id: string) => void;
+  onRemove: (id: string) => void;
+  onDownload: (id: string) => void;
+  showCheckbox: boolean;
 }) {
   return (
-    <div className={`bg-surface-container-high rounded-sm group relative transition-all flex flex-col ${selected ? 'ring-2 ring-primary shadow-[0_0_0_1px_var(--color-primary)]' : 'hover:shadow-[0_12px_24px_rgba(0,0,0,0.4)]'}`}>
+    <div
+      className={`bg-surface-container-high rounded-sm group relative transition-all flex flex-col ${selected ? 'ring-2 ring-primary shadow-[0_0_0_1px_var(--color-primary)]' : 'hover:shadow-[0_12px_24px_rgba(0,0,0,0.4)]'}`}
+    >
       <div className="aspect-[4/3] bg-surface-container-lowest w-full relative overflow-hidden flex items-center justify-center">
         <Link to={`/model/${model.id}`} className="absolute inset-0 z-0">
           <ModelThumbnail
@@ -105,7 +134,11 @@ const ModelCard = memo(function ModelCard({ model, selected, onSelect, onRemove,
         </Link>
         {showCheckbox && (
           <button
-            onClick={(e) => { e.preventDefault(); e.stopPropagation(); onSelect(model.id); }}
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              onSelect(model.id);
+            }}
             className={`absolute top-2 left-2 z-10 w-6 h-6 rounded-sm border-2 flex items-center justify-center transition-all ${
               selected ? 'bg-primary border-primary' : 'bg-surface/80 border-outline-variant/40 hover:border-primary'
             }`}
@@ -117,7 +150,11 @@ const ModelCard = memo(function ModelCard({ model, selected, onSelect, onRemove,
           {model.format.toUpperCase()}
         </span>
         <button
-          onClick={(e) => { e.preventDefault(); e.stopPropagation(); onRemove(model.id); }}
+          onClick={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            onRemove(model.id);
+          }}
           className="absolute top-2 right-2 z-10 opacity-0 group-hover:opacity-100 transition-opacity w-7 h-7 flex items-center justify-center rounded-full bg-surface/80 backdrop-blur-sm text-on-surface-variant hover:text-error hover:bg-error/20"
         >
           <Icon name="star_off" size={14} />
@@ -129,13 +166,20 @@ const ModelCard = memo(function ModelCard({ model, selected, onSelect, onRemove,
         </Link>
         <div className="flex items-center gap-2 mt-auto pt-2">
           <button
-            onClick={(e) => { e.preventDefault(); e.stopPropagation(); onDownload(model.id); }}
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              onDownload(model.id);
+            }}
             className="flex-1 bg-primary-container text-on-primary rounded-sm py-1.5 px-3 text-xs font-medium hover:opacity-90 flex items-center justify-center gap-1"
           >
             <Icon name="download" size={14} />
             下载
           </button>
-          <Link to={`/model/${model.id}`} className="flex-1 border border-outline-variant/40 text-on-surface-variant hover:text-on-surface rounded-sm py-1.5 px-3 text-xs text-center flex items-center justify-center gap-1">
+          <Link
+            to={`/model/${model.id}`}
+            className="flex-1 border border-outline-variant/40 text-on-surface-variant hover:text-on-surface rounded-sm py-1.5 px-3 text-xs text-center flex items-center justify-center gap-1"
+          >
             <Icon name="visibility" size={14} />
             预览
           </Link>
@@ -145,11 +189,25 @@ const ModelCard = memo(function ModelCard({ model, selected, onSelect, onRemove,
   );
 });
 
-const MobileModelCard = memo(function MobileModelCard({ model, selected, onSelect, onRemove, onDownload, showCheckbox }: {
-  model: FavoriteModel; selected: boolean; onSelect: (id: string) => void; onRemove: (id: string) => void; onDownload: (id: string) => void; showCheckbox: boolean;
+const MobileModelCard = memo(function MobileModelCard({
+  model,
+  selected,
+  onSelect,
+  onRemove,
+  onDownload,
+  showCheckbox,
+}: {
+  model: FavoriteModel;
+  selected: boolean;
+  onSelect: (id: string) => void;
+  onRemove: (id: string) => void;
+  onDownload: (id: string) => void;
+  showCheckbox: boolean;
 }) {
   return (
-    <div className={`bg-surface-container-high rounded-lg border shadow-sm relative transition-all ${selected ? 'border-primary ring-2 ring-primary/30' : 'border-outline-variant/10'}`}>
+    <div
+      className={`bg-surface-container-high rounded-lg border shadow-sm relative transition-all ${selected ? 'border-primary ring-2 ring-primary/30' : 'border-outline-variant/10'}`}
+    >
       {showCheckbox && (
         <button
           onClick={() => onSelect(model.id)}
@@ -174,18 +232,28 @@ const MobileModelCard = memo(function MobileModelCard({ model, selected, onSelec
                 {new Date(model.createdAt).toLocaleDateString('zh-CN')}
               </span>
             </div>
-            <h3 className="text-sm font-semibold text-on-surface leading-snug line-clamp-2 break-words">{model.name}</h3>
+            <h3 className="text-sm font-semibold text-on-surface leading-snug line-clamp-2 break-words">
+              {model.name}
+            </h3>
           </div>
           <div className="flex flex-wrap items-center gap-2 mt-auto">
             <button
-              onClick={(e) => { e.preventDefault(); e.stopPropagation(); onDownload(model.id); }}
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                onDownload(model.id);
+              }}
               className="flex items-center justify-center gap-1 bg-primary-container text-on-primary rounded-sm py-1.5 px-3 text-xs font-medium hover:opacity-90 transition-opacity"
             >
               <Icon name="download" size={13} />
               下载
             </button>
             <button
-              onClick={(e) => { e.preventDefault(); e.stopPropagation(); onRemove(model.id); }}
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                onRemove(model.id);
+              }}
               className="flex items-center gap-1 border border-outline-variant/30 text-on-surface-variant rounded-sm py-1.5 px-3 text-xs hover:text-error hover:border-error/30 transition-colors"
             >
               <Icon name="star_off" size={13} />
@@ -200,38 +268,42 @@ const MobileModelCard = memo(function MobileModelCard({ model, selected, onSelec
 
 function DesktopContent() {
   const { data, error, isLoading, mutate } = useSWR<FavoriteItem[]>('/favorites', () =>
-    client.get('/favorites').then((r) => r.data?.data || r.data)
+    client.get('/favorites').then((r) => r.data?.data || r.data),
   );
   const { toast } = useToast();
   const [selectMode, setSelectMode] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [downloading, setDownloading] = useState(false);
 
-  const handleRemove = useCallback(async (modelId: string) => {
-    try {
-      await favoriteApi.remove(modelId);
-      const store = useFavoriteStore.getState();
-      const updated = new Set(store.favoriteIds);
-      updated.delete(modelId);
-      useFavoriteStore.setState({ favoriteIds: updated });
-      mutate();
-      toast('已取消收藏', 'success');
-    } catch {
-      toast('取消收藏失败，请重试', 'error');
-    }
-  }, [mutate, toast]);
+  const handleRemove = useCallback(
+    async (modelId: string) => {
+      try {
+        await favoriteApi.remove(modelId);
+        const store = useFavoriteStore.getState();
+        const updated = new Set(store.favoriteIds);
+        updated.delete(modelId);
+        useFavoriteStore.setState({ favoriteIds: updated });
+        mutate();
+        toast('已取消收藏', 'success');
+      } catch {
+        toast('取消收藏失败，请重试', 'error');
+      }
+    },
+    [mutate, toast],
+  );
 
   const toggleSelect = useCallback((id: string) => {
-    setSelected(prev => {
+    setSelected((prev) => {
       const next = new Set(prev);
-      if (next.has(id)) next.delete(id); else next.add(id);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
       return next;
     });
   }, []);
 
   const selectAll = useCallback(() => {
     if (!data) return;
-    setSelected(new Set(mapFavorites(data).map(m => m.id)));
+    setSelected(new Set(mapFavorites(data).map((m) => m.id)));
   }, [data]);
 
   const handleBatchRemove = useCallback(async () => {
@@ -240,7 +312,7 @@ function DesktopContent() {
       await favoriteApi.batchRemove(Array.from(selected));
       const store = useFavoriteStore.getState();
       const updated = new Set(store.favoriteIds);
-      selected.forEach(id => updated.delete(id));
+      selected.forEach((id) => updated.delete(id));
       useFavoriteStore.setState({ favoriteIds: updated });
       setSelected(new Set());
       setSelectMode(false);
@@ -251,26 +323,32 @@ function DesktopContent() {
     }
   }, [selected, mutate, toast]);
 
-  const handleBatchDownload = useCallback(async (format: string = "original") => {
-    if (selected.size === 0) return;
-    setDownloading(true);
-    try {
-      await favoriteApi.batchDownload(Array.from(selected), format);
-      toast('下载已开始', 'success');
-    } catch (err: any) {
-      toast(err.message || '下载失败', 'error');
-    } finally {
-      setDownloading(false);
-    }
-  }, [selected, toast]);
+  const handleBatchDownload = useCallback(
+    async (format: string = 'original') => {
+      if (selected.size === 0) return;
+      setDownloading(true);
+      try {
+        await favoriteApi.batchDownload(Array.from(selected), format);
+        toast('下载已开始', 'success');
+      } catch (err: any) {
+        toast(err.message || '下载失败', 'error');
+      } finally {
+        setDownloading(false);
+      }
+    },
+    [selected, toast],
+  );
 
-  const handleSingleDownload = useCallback(async (modelId: string) => {
-    try {
-      await downloadModelFile(modelId, "original");
-    } catch (error) {
-      toast(isDownloadAuthRequiredError(error) ? '请先登录' : '下载失败', 'error');
-    }
-  }, [toast]);
+  const handleSingleDownload = useCallback(
+    async (modelId: string) => {
+      try {
+        await downloadModelFile(modelId, 'original');
+      } catch (error) {
+        toast(isDownloadAuthRequiredError(error) ? '请先登录' : '下载失败', 'error');
+      }
+    },
+    [toast],
+  );
 
   const models = useMemo(() => (data ? mapFavorites(data) : []), [data]);
 
@@ -283,47 +361,57 @@ function DesktopContent() {
       <div className="flex flex-col items-center justify-center py-24 gap-4">
         <Icon name="error" size={48} className="text-error" />
         <p className="text-on-surface-variant text-sm">加载收藏失败</p>
-        <button onClick={() => location.reload()} className="text-primary text-sm hover:underline">重试</button>
+        <button onClick={() => location.reload()} className="text-primary text-sm hover:underline">
+          重试
+        </button>
       </div>
     );
   }
 
-  const headerActions = models.length > 0 ? (
-    <>
-      {selectMode ? (
-        <button onClick={selectAll} className="text-sm text-primary hover:underline">
-          {selected.size === models.length ? '取消全选' : '全选'}
+  const headerActions =
+    models.length > 0 ? (
+      <>
+        {selectMode ? (
+          <button onClick={selectAll} className="text-sm text-primary hover:underline">
+            {selected.size === models.length ? '取消全选' : '全选'}
+          </button>
+        ) : null}
+        <button
+          onClick={() => {
+            setSelectMode(!selectMode);
+            setSelected(new Set());
+          }}
+          className={`flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-sm border transition-colors ${
+            selectMode
+              ? 'text-primary border-primary/30 bg-primary-container/10'
+              : 'text-on-surface-variant border-outline-variant/20 hover:text-on-surface hover:border-outline-variant/40'
+          }`}
+        >
+          <Icon name={selectMode ? 'close' : 'checklist'} size={16} />
+          {selectMode ? '取消选择' : '批量操作'}
         </button>
-      ) : null}
-      <button
-        onClick={() => { setSelectMode(!selectMode); setSelected(new Set()); }}
-        className={`flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-sm border transition-colors ${
-          selectMode ? 'text-primary border-primary/30 bg-primary-container/10' : 'text-on-surface-variant border-outline-variant/20 hover:text-on-surface hover:border-outline-variant/40'
-        }`}
-      >
-        <Icon name={selectMode ? "close" : "checklist"} size={16} />
-        {selectMode ? '取消选择' : '批量操作'}
-      </button>
-    </>
-  ) : null;
+      </>
+    ) : null;
 
   return (
     <AdminManagementPage
       title="我的收藏"
       meta={`${models.length} 个模型`}
-      description={models.length > 1 ? "点击「批量操作」可多选后一键下载 STEP 文件" : "管理你收藏的模型"}
+      description={models.length > 1 ? '点击「批量操作」可多选后一键下载 STEP 文件' : '管理你收藏的模型'}
       actions={headerActions}
     >
-
       {/* Batch toolbar */}
       <AnimatePresence>
         {selectMode && selected.size > 0 && !downloading && (
           <div className="mb-4">
             <BatchToolbar
               selectedCount={selected.size}
-              onDownload={() => handleBatchDownload("original")}
+              onDownload={() => handleBatchDownload('original')}
               onRemove={handleBatchRemove}
-              onCancel={() => { setSelectMode(false); setSelected(new Set()); }}
+              onCancel={() => {
+                setSelectMode(false);
+                setSelected(new Set());
+              }}
             />
           </div>
         )}
@@ -351,7 +439,10 @@ function DesktopContent() {
               showCheckbox={selectMode}
             />
           ))}
-          <Link to="/" className="bg-surface-container-lowest border border-outline-variant/20 border-dashed rounded-sm group cursor-pointer hover:border-primary/50 hover:bg-surface-container-low transition-all flex flex-col items-center justify-center min-h-[200px]">
+          <Link
+            to="/"
+            className="bg-surface-container-lowest border border-outline-variant/20 border-dashed rounded-sm group cursor-pointer hover:border-primary/50 hover:bg-surface-container-low transition-all flex flex-col items-center justify-center min-h-[200px]"
+          >
             <div className="w-12 h-12 rounded-sm bg-surface-container-high flex items-center justify-center mb-3 group-hover:text-primary transition-colors text-on-surface-variant">
               <Icon name="search" size={32} />
             </div>
@@ -366,31 +457,35 @@ function DesktopContent() {
 
 function MobileContent() {
   const { data, error, isLoading, mutate } = useSWR<FavoriteItem[]>('/favorites', () =>
-    client.get('/favorites').then((r) => r.data?.data || r.data)
+    client.get('/favorites').then((r) => r.data?.data || r.data),
   );
   const { toast } = useToast();
   const [selectMode, setSelectMode] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [downloading, setDownloading] = useState(false);
 
-  const handleRemove = useCallback(async (modelId: string) => {
-    try {
-      await favoriteApi.remove(modelId);
-      const store = useFavoriteStore.getState();
-      const updated = new Set(store.favoriteIds);
-      updated.delete(modelId);
-      useFavoriteStore.setState({ favoriteIds: updated });
-      mutate();
-      toast('已取消收藏', 'success');
-    } catch {
-      toast('取消收藏失败，请重试', 'error');
-    }
-  }, [mutate, toast]);
+  const handleRemove = useCallback(
+    async (modelId: string) => {
+      try {
+        await favoriteApi.remove(modelId);
+        const store = useFavoriteStore.getState();
+        const updated = new Set(store.favoriteIds);
+        updated.delete(modelId);
+        useFavoriteStore.setState({ favoriteIds: updated });
+        mutate();
+        toast('已取消收藏', 'success');
+      } catch {
+        toast('取消收藏失败，请重试', 'error');
+      }
+    },
+    [mutate, toast],
+  );
 
   const toggleSelect = useCallback((id: string) => {
-    setSelected(prev => {
+    setSelected((prev) => {
       const next = new Set(prev);
-      if (next.has(id)) next.delete(id); else next.add(id);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
       return next;
     });
   }, []);
@@ -398,7 +493,7 @@ function MobileContent() {
   const models = useMemo(() => (data ? mapFavorites(data) : []), [data]);
 
   const selectAll = useCallback(() => {
-    setSelected(new Set(models.map(m => m.id)));
+    setSelected(new Set(models.map((m) => m.id)));
   }, [models]);
 
   const handleBatchRemove = useCallback(async () => {
@@ -407,7 +502,7 @@ function MobileContent() {
       await favoriteApi.batchRemove(Array.from(selected));
       const store = useFavoriteStore.getState();
       const updated = new Set(store.favoriteIds);
-      selected.forEach(id => updated.delete(id));
+      selected.forEach((id) => updated.delete(id));
       useFavoriteStore.setState({ favoriteIds: updated });
       setSelected(new Set());
       setSelectMode(false);
@@ -418,44 +513,54 @@ function MobileContent() {
     }
   }, [selected, mutate, toast]);
 
-  const handleBatchDownload = useCallback(async (format: string = "original") => {
-    if (selected.size === 0) return;
-    setDownloading(true);
-    try {
-      await favoriteApi.batchDownload(Array.from(selected), format);
-      toast('下载已开始', 'success');
-    } catch (err: any) {
-      toast(err.message || '下载失败', 'error');
-    } finally {
-      setDownloading(false);
-    }
-  }, [selected, toast]);
+  const handleBatchDownload = useCallback(
+    async (format: string = 'original') => {
+      if (selected.size === 0) return;
+      setDownloading(true);
+      try {
+        await favoriteApi.batchDownload(Array.from(selected), format);
+        toast('下载已开始', 'success');
+      } catch (err: any) {
+        toast(err.message || '下载失败', 'error');
+      } finally {
+        setDownloading(false);
+      }
+    },
+    [selected, toast],
+  );
 
-  const handleSingleDownload = useCallback(async (modelId: string) => {
-    try {
-      await downloadModelFile(modelId, "original");
-    } catch (error) {
-      toast(isDownloadAuthRequiredError(error) ? '请先登录' : '下载失败', 'error');
-    }
-  }, [toast]);
+  const handleSingleDownload = useCallback(
+    async (modelId: string) => {
+      try {
+        await downloadModelFile(modelId, 'original');
+      } catch (error) {
+        toast(isDownloadAuthRequiredError(error) ? '请先登录' : '下载失败', 'error');
+      }
+    },
+    [toast],
+  );
 
   return (
     <AdminManagementPage
       title="我的收藏"
       meta={`${models.length} 个模型`}
       description="管理你收藏的模型"
-      actions={models.length > 0 ? (
+      actions={
+        models.length > 0 ? (
           <button
-            onClick={() => { setSelectMode(!selectMode); setSelected(new Set()); }}
+            onClick={() => {
+              setSelectMode(!selectMode);
+              setSelected(new Set());
+            }}
             className={`text-xs px-2.5 py-1 rounded-sm border transition-colors ${
               selectMode ? 'text-primary border-primary/30' : 'text-on-surface-variant border-outline-variant/20'
             }`}
           >
             {selectMode ? '取消' : '批量操作'}
           </button>
-      ) : null}
+        ) : null
+      }
     >
-
       {/* Mobile batch toolbar */}
       <AnimatePresence>
         {selectMode && !downloading && (
@@ -465,10 +570,15 @@ function MobileContent() {
             exit={{ opacity: 0, y: 10 }}
             className="mb-3 flex items-center gap-2 bg-surface-container-high rounded-lg px-3 py-2.5 border border-outline-variant/10"
           >
-            <button onClick={selectAll} className="text-xs text-primary">全选</button>
+            <button onClick={selectAll} className="text-xs text-primary">
+              全选
+            </button>
             <div className="flex-1" />
             <span className="text-xs text-on-surface-variant">{selected.size} 已选</span>
-            <button onClick={() => handleBatchDownload("original")} className="text-xs text-on-surface-variant hover:text-on-surface px-2 py-1">
+            <button
+              onClick={() => handleBatchDownload('original')}
+              className="text-xs text-on-surface-variant hover:text-on-surface px-2 py-1"
+            >
               下载 STEP
             </button>
             <button onClick={handleBatchRemove} className="text-xs text-error px-2 py-1">
@@ -514,12 +624,8 @@ function MobileContent() {
 }
 
 export default function FavoritesPage() {
-  useDocumentTitle("我的收藏");
+  useDocumentTitle('我的收藏');
   const isDesktop = useMediaQuery('(min-width: 768px)');
 
-  return (
-    <AdminPageShell>
-      {isDesktop ? <DesktopContent /> : <MobileContent />}
-    </AdminPageShell>
-  );
+  return <AdminPageShell>{isDesktop ? <DesktopContent /> : <MobileContent />}</AdminPageShell>;
 }

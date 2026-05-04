@@ -1,8 +1,17 @@
-import { createReadStream, createWriteStream, existsSync, mkdirSync, readdirSync, rmSync, statSync, unlinkSync } from "node:fs";
-import { join, dirname, resolve, sep } from "node:path";
-import { pipeline } from "node:stream/promises";
-import { config } from "./config.js";
-import { logger } from "../lib/logger.js";
+import {
+  createReadStream,
+  createWriteStream,
+  existsSync,
+  mkdirSync,
+  readdirSync,
+  rmSync,
+  statSync,
+  unlinkSync,
+} from 'node:fs';
+import { join, dirname, resolve, sep } from 'node:path';
+import { pipeline } from 'node:stream/promises';
+import { config } from './config.js';
+import { logger } from '../lib/logger.js';
 
 export interface StorageProvider {
   upload(key: string, data: Buffer | NodeJS.ReadableStream, contentType?: string): Promise<string>;
@@ -27,7 +36,7 @@ class LocalStorage implements StorageProvider {
     const p = resolve(this.basePath, key);
     const basePathResolved = resolve(this.basePath);
     if (p !== basePathResolved && !p.startsWith(basePathResolved + sep)) {
-      throw new Error("Storage key escapes base path");
+      throw new Error('Storage key escapes base path');
     }
     mkdirSync(dirname(p), { recursive: true });
     return p;
@@ -36,7 +45,7 @@ class LocalStorage implements StorageProvider {
   async upload(key: string, data: Buffer | NodeJS.ReadableStream): Promise<string> {
     const filePath = this.resolve(key);
     if (Buffer.isBuffer(data)) {
-      const { writeFile } = await import("node:fs/promises");
+      const { writeFile } = await import('node:fs/promises');
       await writeFile(filePath, data);
     } else {
       const ws = createWriteStream(filePath);
@@ -47,7 +56,7 @@ class LocalStorage implements StorageProvider {
 
   async uploadFile(localPath: string, key: string): Promise<string> {
     const filePath = this.resolve(key);
-    const { copyFile } = await import("node:fs/promises");
+    const { copyFile } = await import('node:fs/promises');
     await copyFile(localPath, filePath);
     return `/static/${key}`;
   }
@@ -81,16 +90,16 @@ class MinioStorage implements StorageProvider {
 
   constructor() {
     this.bucket = config.minioBucket;
-    this.init().catch((err) => logger.error({ err }, "init failed"));
+    this.init().catch((err) => logger.error({ err }, 'init failed'));
   }
 
   private async init() {
     try {
-      const Minio = (await import("minio")).default;
+      const Minio = (await import('minio')).default;
       this.client = new Minio.Client({
         endPoint: config.minioEndpoint,
         port: config.minioPort,
-        useSSL: false,
+        useSSL: config.minioUseSSL,
         accessKey: config.minioAccessKey,
         secretKey: config.minioSecretKey,
       });
@@ -102,15 +111,15 @@ class MinioStorage implements StorageProvider {
       }
       logger.info(`  📦 MinIO storage ready (bucket: ${this.bucket})`);
     } catch (err) {
-      logger.warn("  ⚠️  MinIO not available, falling back to local storage");
+      logger.warn('  ⚠️  MinIO not available, falling back to local storage');
       this.client = null;
     }
   }
 
   async upload(key: string, data: Buffer | NodeJS.ReadableStream, contentType?: string): Promise<string> {
-    if (!this.client) throw new Error("MinIO not initialized");
+    if (!this.client) throw new Error('MinIO not initialized');
 
-    const metadata = contentType ? { "Content-Type": contentType } : {};
+    const metadata = contentType ? { 'Content-Type': contentType } : {};
     if (Buffer.isBuffer(data)) {
       await this.client.putObject(this.bucket, key, data, data.length, metadata);
     } else {
@@ -120,16 +129,16 @@ class MinioStorage implements StorageProvider {
   }
 
   async uploadFile(localPath: string, key: string, contentType?: string): Promise<string> {
-    if (!this.client) throw new Error("MinIO not initialized");
+    if (!this.client) throw new Error('MinIO not initialized');
     const stat = statSync(localPath);
     const stream = createReadStream(localPath);
-    const metadata = contentType ? { "Content-Type": contentType } : {};
+    const metadata = contentType ? { 'Content-Type': contentType } : {};
     await this.client.putObject(this.bucket, key, stream, stat.size, metadata);
     return `/storage/${this.bucket}/${key}`;
   }
 
   async getFile(key: string): Promise<NodeJS.ReadableStream> {
-    if (!this.client) throw new Error("MinIO not initialized");
+    if (!this.client) throw new Error('MinIO not initialized');
     return this.client.getObject(this.bucket, key);
   }
 
@@ -160,7 +169,7 @@ let storageInstance: StorageProvider | null = null;
 
 export function getStorage(): StorageProvider {
   if (!storageInstance) {
-    if (config.storageType === "minio") {
+    if (config.storageType === 'minio') {
       storageInstance = new MinioStorage();
     } else {
       storageInstance = new LocalStorage(config.staticDir);

@@ -1,4 +1,4 @@
-import { Prisma } from "@prisma/client";
+import { Prisma } from '@prisma/client';
 
 type PrismaLike = {
   modelGroup: {
@@ -27,9 +27,6 @@ export async function groupedVisibleModelWhere(prisma: PrismaLike) {
   const groups = await prisma.modelGroup.findMany({ select: { primaryId: true } });
   const primaryIds = groups.map((group) => group.primaryId).filter((id): id is string => Boolean(id));
   return {
-    OR: [
-      { groupId: null },
-      ...(primaryIds.length > 0 ? [{ id: { in: primaryIds } }] : []),
-    ],
+    OR: [{ groupId: null }, ...(primaryIds.length > 0 ? [{ id: { in: primaryIds } }] : [])],
   };
 }

@@ -5,7 +5,7 @@
 
 /** Parse IPv4 to 32-bit integer */
 function parseIPv4(ip: string): number | null {
-  const parts = ip.split(".");
+  const parts = ip.split('.');
   if (parts.length !== 4) return null;
   let n = 0;
   for (const p of parts) {
@@ -20,15 +20,15 @@ function parseIPv4(ip: string): number | null {
 function parseIPv6(ip: string): [bigint, bigint] | null {
   // Handle :: expansion
   let expanded = ip;
-  if (expanded.includes("::")) {
-    const [left, right] = expanded.split("::");
-    const leftParts = left ? left.split(":") : [];
-    const rightParts = right ? right.split(":") : [];
+  if (expanded.includes('::')) {
+    const [left, right] = expanded.split('::');
+    const leftParts = left ? left.split(':') : [];
+    const rightParts = right ? right.split(':') : [];
     const missing = 8 - leftParts.length - rightParts.length;
-    expanded = [...leftParts, ...Array(missing).fill("0"), ...rightParts].join(":");
+    expanded = [...leftParts, ...Array(missing).fill('0'), ...rightParts].join(':');
   }
 
-  const parts = expanded.split(":");
+  const parts = expanded.split(':');
   if (parts.length !== 8) return null;
 
   let high = 0n;
@@ -47,7 +47,7 @@ function parseIPv6(ip: string): [bigint, bigint] | null {
 
 /** Check if an IPv4 address matches a CIDR range */
 function matchIPv4CIDR(ip: string, cidr: string): boolean {
-  const [range, bitsStr] = cidr.split("/");
+  const [range, bitsStr] = cidr.split('/');
   const ipNum = parseIPv4(ip);
   const rangeNum = parseIPv4(range);
   if (ipNum === null || rangeNum === null) return false;
@@ -62,7 +62,7 @@ function matchIPv4CIDR(ip: string, cidr: string): boolean {
 
 /** Check if an IPv6 address matches a CIDR range */
 function matchIPv6CIDR(ip: string, cidr: string): boolean {
-  const [range, bitsStr] = cidr.split("/");
+  const [range, bitsStr] = cidr.split('/');
   const ipParsed = parseIPv6(ip);
   const rangeParsed = parseIPv6(range);
   if (!ipParsed || !rangeParsed) return false;
@@ -86,7 +86,7 @@ function matchIPv6CIDR(ip: string, cidr: string): boolean {
 }
 
 function isIPv6(ip: string): boolean {
-  return ip.includes(":");
+  return ip.includes(':');
 }
 
 /**
@@ -99,10 +99,10 @@ export function isIpAllowed(ip: string, whitelist: string[]): boolean {
   for (let entry of whitelist) {
     entry = entry.trim();
     if (!entry) continue;
-    if (entry === "*") return true;
+    if (entry === '*') return true;
 
     // CIDR notation
-    if (entry.includes("/")) {
+    if (entry.includes('/')) {
       if (isIPv6(entry) && isIPv6(ip)) {
         if (matchIPv6CIDR(ip, entry)) return true;
       } else if (!isIPv6(entry) && !isIPv6(ip)) {
@@ -115,7 +115,7 @@ export function isIpAllowed(ip: string, whitelist: string[]): boolean {
     if (entry === ip) return true;
 
     // IPv4-mapped IPv6: ::ffff:1.2.3.4 → try matching against 1.2.3.4
-    if (ip.startsWith("::ffff:") && !isIPv6(entry)) {
+    if (ip.startsWith('::ffff:') && !isIPv6(entry)) {
       const v4 = ip.slice(7);
       if (entry === v4) return true;
     }

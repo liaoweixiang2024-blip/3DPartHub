@@ -1,6 +1,6 @@
-import { useEffect, useState } from "react";
-import type { CSSProperties } from "react";
-import Icon from "./Icon";
+import { useEffect, useState } from 'react';
+import type { CSSProperties } from 'react';
+import Icon from './Icon';
 
 interface SafeImageProps {
   src?: string | null;
@@ -8,7 +8,7 @@ interface SafeImageProps {
   className?: string;
   fallbackClassName?: string;
   fallbackIcon?: string;
-  loading?: "lazy" | "eager";
+  loading?: 'lazy' | 'eager';
   onClick?: () => void;
   title?: string;
   style?: CSSProperties;
@@ -16,11 +16,11 @@ interface SafeImageProps {
 
 export default function SafeImage({
   src,
-  alt = "",
-  className = "",
-  fallbackClassName = "",
-  fallbackIcon = "image",
-  loading = "lazy",
+  alt = '',
+  className = '',
+  fallbackClassName = '',
+  fallbackIcon = 'image',
+  loading = 'lazy',
   onClick,
   title,
   style,
@@ -38,7 +38,7 @@ export default function SafeImage({
         onClick={onClick}
         title={title}
         style={style}
-        role={onClick ? "button" : undefined}
+        role={onClick ? 'button' : undefined}
       >
         <Icon name={fallbackIcon} size={22} />
       </div>

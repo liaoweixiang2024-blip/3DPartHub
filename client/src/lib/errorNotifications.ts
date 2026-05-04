@@ -1,6 +1,6 @@
-import axios from "axios";
+import axios from 'axios';
 
-type ErrorToastType = "error" | "info";
+type ErrorToastType = 'error' | 'info';
 type ErrorNotifier = (message: string, type?: ErrorToastType) => void;
 
 let notifier: ErrorNotifier | null = null;
@@ -12,7 +12,7 @@ export function setGlobalErrorNotifier(next: ErrorNotifier | null) {
 }
 
 function normalizeMessage(message: string) {
-  return message.replace(/\s+/g, " ").trim();
+  return message.replace(/\s+/g, ' ').trim();
 }
 
 function shouldSkipMessage(message: string) {
@@ -31,40 +31,37 @@ function shouldSkipMessage(message: string) {
 }
 
 function isMessageObject(value: unknown): value is { message?: string; detail?: string; error?: string } {
-  return !!value && typeof value === "object";
+  return !!value && typeof value === 'object';
 }
 
-export function getErrorMessage(error: unknown, fallback = "操作失败，请稍后重试") {
+export function getErrorMessage(error: unknown, fallback = '操作失败，请稍后重试') {
   if (axios.isAxiosError(error)) {
     const status = error.response?.status;
-    const data = error.response?.data as
-      | { message?: string; detail?: string; error?: string }
-      | string
-      | undefined;
+    const data = error.response?.data as { message?: string; detail?: string; error?: string } | string | undefined;
 
-    if (typeof data === "string" && data.trim()) return data;
+    if (typeof data === 'string' && data.trim()) return data;
     if (isMessageObject(data)) {
       if (data.message) return data.message;
       if (data.detail) return data.detail;
       if (data.error) return data.error;
     }
-    if (status === 0 || error.code === "ERR_NETWORK") return "网络连接失败，请检查服务器或网络";
-    if (status === 401) return "登录状态已失效，请重新登录";
-    if (status === 403) return "没有权限执行该操作";
-    if (status === 404) return "请求的资源不存在";
-    if (status === 413) return "上传内容过大";
-    if (status === 429) return "请求过于频繁，请稍后再试";
-    if (status && status >= 500) return "服务器异常，请稍后重试";
+    if (status === 0 || error.code === 'ERR_NETWORK') return '网络连接失败，请检查服务器或网络';
+    if (status === 401) return '登录状态已失效，请重新登录';
+    if (status === 403) return '没有权限执行该操作';
+    if (status === 404) return '请求的资源不存在';
+    if (status === 413) return '上传内容过大';
+    if (status === 429) return '请求过于频繁，请稍后再试';
+    if (status && status >= 500) return '服务器异常，请稍后重试';
     if (error.message) return error.message;
   }
 
   if (error instanceof Error && error.message) return error.message;
-  if (typeof error === "string" && error.trim()) return error;
+  if (typeof error === 'string' && error.trim()) return error;
 
   return fallback;
 }
 
-export function notifyGlobalError(error: unknown, fallback?: string, type: ErrorToastType = "error") {
+export function notifyGlobalError(error: unknown, fallback?: string, type: ErrorToastType = 'error') {
   const message = getErrorMessage(error, fallback);
   if (shouldSkipMessage(message)) return;
 

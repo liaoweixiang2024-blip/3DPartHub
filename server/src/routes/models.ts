@@ -1,38 +1,38 @@
-import { Router, Request } from "express";
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
-import { config } from "../lib/config.js";
-import { getVerifiedRequestUser, verifyRequestToken, type AuthRequest } from "../middleware/auth.js";
-import { ensurePreviewMeta } from "../services/previewMeta.js";
-import { createModelConversionRouter } from "./models/conversion.js";
-import { createModelDetailRouter } from "./models/detail.js";
-import { createModelDownloadRouter } from "./models/download.js";
-import { createModelListRouter } from "./models/list.js";
-import { createModelManagementRouter } from "./models/management.js";
-import { createModelUploadRouter } from "./models/upload.js";
-import { createModelVersionsRouter } from "./models/versions.js";
-import { createPreviewDiagnosticsRouter } from "./models/previewDiagnostics.js";
-import { logger } from "../lib/logger.js";
+import { Router, Request } from 'express';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { config } from '../lib/config.js';
+import { getVerifiedRequestUser, verifyRequestToken, type AuthRequest } from '../middleware/auth.js';
+import { ensurePreviewMeta } from '../services/previewMeta.js';
+import { createModelConversionRouter } from './models/conversion.js';
+import { createModelDetailRouter } from './models/detail.js';
+import { createModelDownloadRouter } from './models/download.js';
+import { createModelListRouter } from './models/list.js';
+import { createModelManagementRouter } from './models/management.js';
+import { createModelUploadRouter } from './models/upload.js';
+import { createModelVersionsRouter } from './models/versions.js';
+import { createPreviewDiagnosticsRouter } from './models/previewDiagnostics.js';
+import { logger } from '../lib/logger.js';
 
 // Try to import Prisma, fallback to null if DB is not configured
 let prisma: any = null;
 try {
-  const mod = await import("../lib/prisma.js");
+  const mod = await import('../lib/prisma.js');
   prisma = mod.prisma;
 } catch {
-  logger.info("  ⚠️  Prisma not available, using filesystem storage");
+  logger.info('  ⚠️  Prisma not available, using filesystem storage');
 }
 
 const router = Router();
 
-const METADATA_DIR = join(config.uploadDir, ".metadata");
+const METADATA_DIR = join(config.uploadDir, '.metadata');
 mkdirSync(METADATA_DIR, { recursive: true });
 
 // Filesystem fallback helpers
 function getMeta(id: string): Record<string, unknown> | null {
   const p = join(METADATA_DIR, `${id}.json`);
   if (!existsSync(p)) return null;
-  return JSON.parse(readFileSync(p, "utf-8"));
+  return JSON.parse(readFileSync(p, 'utf-8'));
 }
 
 function saveMeta(id: string, data: Record<string, unknown>) {
@@ -42,21 +42,26 @@ function saveMeta(id: string, data: Record<string, unknown>) {
 
 async function getPreviewMeta(
   id: string,
-  options: { gltfUrl?: string | null; originalName?: string | null; format?: string | null; previewMeta?: unknown } = {}
+  options: {
+    gltfUrl?: string | null;
+    originalName?: string | null;
+    format?: string | null;
+    previewMeta?: unknown;
+  } = {},
 ): Promise<Record<string, unknown> | null> {
-  return await ensurePreviewMeta({
-    modelDir: join(config.staticDir, "models"),
+  return (await ensurePreviewMeta({
+    modelDir: join(config.staticDir, 'models'),
     modelId: id,
     preferredUrl: options.gltfUrl,
     sourceName: options.originalName || id,
-    sourceFormat: options.format || "gltf",
+    sourceFormat: options.format || 'gltf',
     storedMeta: options.previewMeta,
     persist: prisma
       ? async (meta) => {
           await prisma.model.update({ where: { id }, data: { previewMeta: meta } }).catch(() => {});
         }
       : undefined,
-  }) as Record<string, unknown> | null;
+  })) as Record<string, unknown> | null;
 }
 
 function drawingDownloadUrl(modelId: string, drawingUrl?: string | null): string | null {

@@ -6,42 +6,56 @@ import { useDocumentTitle } from '../hooks/useDocumentTitle';
 import { SkeletonList } from '../components/shared/Skeleton';
 import Icon from '../components/shared/Icon';
 import SafeImage from '../components/shared/SafeImage';
-import { AdminPageShell } from "../components/shared/AdminPageShell";
-import { AdminDetailHeader } from "../components/shared/AdminManagementPage";
+import { AdminPageShell } from '../components/shared/AdminPageShell';
+import { AdminDetailHeader } from '../components/shared/AdminManagementPage';
 import { useToast } from '../components/shared/Toast';
 import client from '../api/client';
 import { unwrapResponse } from '../api/response';
-import { getTicketMessages, sendTicketMessage, updateTicketStatus, uploadTicketAttachment, type TicketMessage } from '../api/tickets';
+import {
+  getTicketMessages,
+  sendTicketMessage,
+  updateTicketStatus,
+  uploadTicketAttachment,
+  type TicketMessage,
+} from '../api/tickets';
 import { getCachedPublicSettings } from '../lib/publicSettings';
 import { getBusinessConfig, statusInfo } from '../lib/businessConfig';
 
 interface TicketInfo {
-  id: string; userId: string; basePart: string | null;
-  classification: string; description: string; status: string;
-  createdAt: string; updatedAt: string;
+  id: string;
+  userId: string;
+  basePart: string | null;
+  classification: string;
+  description: string;
+  status: string;
+  createdAt: string;
+  updatedAt: string;
   user: { username: string; email: string; role?: string } | null;
 }
 
 function useTicket(id: string) {
-  return useSWR<TicketInfo | null>(`/ticket-${id}`, () =>
-    client
-      .get(`/tickets/${id}`)
-      .then((response) => unwrapResponse<TicketInfo>(response))
-      .catch(() => null), { revalidateOnFocus: false }
+  return useSWR<TicketInfo | null>(
+    `/ticket-${id}`,
+    () =>
+      client
+        .get(`/tickets/${id}`)
+        .then((response) => unwrapResponse<TicketInfo>(response))
+        .catch(() => null),
+    { revalidateOnFocus: false },
   );
 }
 
 function useMessages(ticketId: string) {
-  return useSWR<TicketMessage[]>(`/ticket-messages-${ticketId}`, () =>
-    getTicketMessages(ticketId).catch(() => []), { refreshInterval: 5000 }
-  );
+  return useSWR<TicketMessage[]>(`/ticket-messages-${ticketId}`, () => getTicketMessages(ticketId).catch(() => []), {
+    refreshInterval: 5000,
+  });
 }
 
 // Chat bubble for a message
 function MessageBubble({ msg }: { msg: TicketMessage }) {
   const isRight = msg.isAdmin;
   const [previewImg, setPreviewImg] = useState<string | null>(null);
-  const attachmentSrc = msg.attachment || "";
+  const attachmentSrc = msg.attachment || '';
   return (
     <div className={`flex ${isRight ? 'justify-end' : 'justify-start'} mb-3`}>
       <div className={`max-w-[88%] sm:max-w-[80%] min-w-0 ${isRight ? 'order-2' : 'order-1'}`}>
@@ -52,15 +66,15 @@ function MessageBubble({ msg }: { msg: TicketMessage }) {
           <span className="text-[10px] text-on-surface-variant/60">
             {new Date(msg.createdAt).toLocaleString('zh-CN')}
           </span>
-          {isRight && (
-            <span className="text-[11px] font-medium text-primary">管理员</span>
-          )}
+          {isRight && <span className="text-[11px] font-medium text-primary">管理员</span>}
         </div>
-        <div className={`rounded-lg px-3.5 py-2.5 text-sm leading-relaxed whitespace-pre-wrap break-words ${
-          isRight
-            ? 'bg-primary-container/20 text-on-surface border border-primary/10'
-            : 'bg-surface-container-high text-on-surface border border-outline-variant/10'
-        }`}>
+        <div
+          className={`rounded-lg px-3.5 py-2.5 text-sm leading-relaxed whitespace-pre-wrap break-words ${
+            isRight
+              ? 'bg-primary-container/20 text-on-surface border border-primary/10'
+              : 'bg-surface-container-high text-on-surface border border-outline-variant/10'
+          }`}
+        >
           {msg.content}
           {msg.attachment && (
             <SafeImage
@@ -75,7 +89,10 @@ function MessageBubble({ msg }: { msg: TicketMessage }) {
       </div>
       {/* Image preview overlay */}
       {previewImg && (
-        <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center" onClick={() => setPreviewImg(null)}>
+        <div
+          className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center"
+          onClick={() => setPreviewImg(null)}
+        >
           <SafeImage src={previewImg} alt="预览" className="max-w-[90vw] max-h-[90vh] object-contain" />
         </div>
       )}
@@ -110,22 +127,34 @@ function StatusActions({ status, onUpdate }: { ticketId: string; status: string;
   return (
     <div className="flex items-center gap-1.5 flex-wrap">
       {status === 'open' && (
-        <button onClick={() => onUpdate('in_progress')} className="px-2.5 py-1 text-xs text-blue-500 border border-blue-500/30 rounded-sm hover:bg-blue-500/10 transition-colors">
+        <button
+          onClick={() => onUpdate('in_progress')}
+          className="px-2.5 py-1 text-xs text-blue-500 border border-blue-500/30 rounded-sm hover:bg-blue-500/10 transition-colors"
+        >
           开始处理
         </button>
       )}
       {status === 'in_progress' && (
-        <button onClick={() => onUpdate('resolved')} className="px-2.5 py-1 text-xs text-green-500 border border-green-500/30 rounded-sm hover:bg-green-500/10 transition-colors">
+        <button
+          onClick={() => onUpdate('resolved')}
+          className="px-2.5 py-1 text-xs text-green-500 border border-green-500/30 rounded-sm hover:bg-green-500/10 transition-colors"
+        >
           标记解决
         </button>
       )}
       {status !== 'closed' && (
-        <button onClick={() => onUpdate('closed')} className="px-2.5 py-1 text-xs text-on-surface-variant border border-outline-variant/20 rounded-sm hover:bg-surface-container-highest transition-colors">
+        <button
+          onClick={() => onUpdate('closed')}
+          className="px-2.5 py-1 text-xs text-on-surface-variant border border-outline-variant/20 rounded-sm hover:bg-surface-container-highest transition-colors"
+        >
           关闭工单
         </button>
       )}
       {status === 'closed' && (
-        <button onClick={() => onUpdate('open')} className="px-2.5 py-1 text-xs text-primary-container border border-primary-container/30 rounded-sm hover:bg-primary-container/10 transition-colors">
+        <button
+          onClick={() => onUpdate('open')}
+          className="px-2.5 py-1 text-xs text-primary-container border border-primary-container/30 rounded-sm hover:bg-primary-container/10 transition-colors"
+        >
           重新打开
         </button>
       )}
@@ -138,7 +167,7 @@ function ChatContent({ ticketId }: { ticketId: string }) {
   const { toast } = useToast();
   const isDesktop = useMediaQuery('(min-width: 768px)');
   const { data: ticket } = useTicket(ticketId);
-  const { data: settings } = useSWR("publicSettings", () => getCachedPublicSettings());
+  const { data: settings } = useSWR('publicSettings', () => getCachedPublicSettings());
   const business = getBusinessConfig(settings);
   const classificationMap = new Map(business.ticketClassifications.map((item) => [item.value, item.label]));
   const { data: messages, mutate: mutateMessages } = useMessages(ticketId);
@@ -154,7 +183,9 @@ function ChatContent({ ticketId }: { ticketId: string }) {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, []);
 
-  useEffect(() => { scrollToBottom(); }, [messages, scrollToBottom]);
+  useEffect(() => {
+    scrollToBottom();
+  }, [messages, scrollToBottom]);
 
   const handleSend = useCallback(async () => {
     if ((!input.trim() && !pendingImage) || sending) return;
@@ -172,30 +203,42 @@ function ChatContent({ ticketId }: { ticketId: string }) {
     }
   }, [input, sending, ticketId, pendingImage, mutateMessages, toast]);
 
-  const handleImageSelect = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    if (!file.type.startsWith('image/')) { toast('请选择图片文件', 'error'); return; }
-    if (file.size > business.uploadPolicy.ticketAttachmentMaxSizeMb * 1024 * 1024) { toast(`附件不能超过 ${business.uploadPolicy.ticketAttachmentMaxSizeMb}MB`, 'error'); return; }
-    try {
-      setPendingImageUrl(URL.createObjectURL(file));
-      const { url } = await uploadTicketAttachment(ticketId, file);
-      setPendingImage(url);
-    } catch {
-      toast('图片上传失败', 'error');
-      setPendingImageUrl(null);
-    }
-    e.target.value = '';
-  }, [ticketId, toast, business.uploadPolicy.ticketAttachmentMaxSizeMb]);
+  const handleImageSelect = useCallback(
+    async (e: React.ChangeEvent<HTMLInputElement>) => {
+      const file = e.target.files?.[0];
+      if (!file) return;
+      if (!file.type.startsWith('image/')) {
+        toast('请选择图片文件', 'error');
+        return;
+      }
+      if (file.size > business.uploadPolicy.ticketAttachmentMaxSizeMb * 1024 * 1024) {
+        toast(`附件不能超过 ${business.uploadPolicy.ticketAttachmentMaxSizeMb}MB`, 'error');
+        return;
+      }
+      try {
+        setPendingImageUrl(URL.createObjectURL(file));
+        const { url } = await uploadTicketAttachment(ticketId, file);
+        setPendingImage(url);
+      } catch {
+        toast('图片上传失败', 'error');
+        setPendingImageUrl(null);
+      }
+      e.target.value = '';
+    },
+    [ticketId, toast, business.uploadPolicy.ticketAttachmentMaxSizeMb],
+  );
 
-  const handleStatusUpdate = useCallback(async (status: string) => {
-    try {
-      await updateTicketStatus(ticketId, status);
-      toast('状态已更新', 'success');
-    } catch {
-      toast('更新状态失败', 'error');
-    }
-  }, [ticketId, toast]);
+  const handleStatusUpdate = useCallback(
+    async (status: string) => {
+      try {
+        await updateTicketStatus(ticketId, status);
+        toast('状态已更新', 'success');
+      } catch {
+        toast('更新状态失败', 'error');
+      }
+    },
+    [ticketId, toast],
+  );
 
   if (!ticket) {
     return <SkeletonList rows={4} />;
@@ -209,17 +252,25 @@ function ChatContent({ ticketId }: { ticketId: string }) {
       <AdminDetailHeader
         title={classificationMap.get(ticket.classification) || ticket.classification}
         onBack={() => navigate(-1)}
-        actions={(
-          <span className={`shrink-0 rounded-sm px-2 py-0.5 text-[10px] font-bold ${info.color || ""} ${info.bg || ""}`}>
+        actions={
+          <span
+            className={`shrink-0 rounded-sm px-2 py-0.5 text-[10px] font-bold ${info.color || ''} ${info.bg || ''}`}
+          >
             {info.label}
           </span>
-        )}
-        description={(
+        }
+        description={
           <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
-          <span className="flex items-center gap-1 min-w-0"><Icon name="person" size={12} className="shrink-0" /><span className="truncate">{ticket.user?.username || '未知'}</span></span>
-          <span className="flex items-center gap-1"><Icon name="schedule" size={12} className="shrink-0" />{new Date(ticket.createdAt).toLocaleString('zh-CN')}</span>
+            <span className="flex items-center gap-1 min-w-0">
+              <Icon name="person" size={12} className="shrink-0" />
+              <span className="truncate">{ticket.user?.username || '未知'}</span>
+            </span>
+            <span className="flex items-center gap-1">
+              <Icon name="schedule" size={12} className="shrink-0" />
+              {new Date(ticket.createdAt).toLocaleString('zh-CN')}
+            </span>
           </div>
-        )}
+        }
       >
         {isAdmin && <StatusActions ticketId={ticketId} status={ticket.status} onUpdate={handleStatusUpdate} />}
       </AdminDetailHeader>
@@ -234,12 +285,21 @@ function ChatContent({ ticketId }: { ticketId: string }) {
       </div>
 
       {/* Input area */}
-      <div className={`shrink-0 border-t border-outline-variant/10 bg-surface-container ${isDesktop ? 'p-3' : 'p-2 pb-[calc(0.75rem+env(safe-area-inset-bottom,0px))]'}`}>
+      <div
+        className={`shrink-0 border-t border-outline-variant/10 bg-surface-container ${isDesktop ? 'p-3' : 'p-2 pb-[calc(0.75rem+env(safe-area-inset-bottom,0px))]'}`}
+      >
         {pendingImageUrl && (
           <div className="mb-2 relative inline-block">
-            <SafeImage src={pendingImageUrl} alt="待发送" className={`${isDesktop ? 'h-20' : 'h-16'} rounded border border-outline-variant/20`} />
+            <SafeImage
+              src={pendingImageUrl}
+              alt="待发送"
+              className={`${isDesktop ? 'h-20' : 'h-16'} rounded border border-outline-variant/20`}
+            />
             <button
-              onClick={() => { setPendingImage(null); setPendingImageUrl(null); }}
+              onClick={() => {
+                setPendingImage(null);
+                setPendingImageUrl(null);
+              }}
               className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-error text-on-primary rounded-full flex items-center justify-center text-xs"
             >
               <Icon name="close" size={10} />
@@ -252,7 +312,10 @@ function ChatContent({ ticketId }: { ticketId: string }) {
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={(e) => {
-              if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend(); }
+              if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                handleSend();
+              }
             }}
             placeholder={isDesktop ? '输入回复内容... (Enter 发送, Shift+Enter 换行)' : '输入回复...'}
             rows={1}
@@ -292,7 +355,12 @@ export default function TicketDetailPage() {
   if (!id) return null;
 
   return (
-    <AdminPageShell desktopContentClassName="overflow-hidden p-0" mobileMainClassName="overflow-hidden" mobileContentClassName="h-full p-0" hideMobileBottomNav>
+    <AdminPageShell
+      desktopContentClassName="overflow-hidden p-0"
+      mobileMainClassName="overflow-hidden"
+      mobileContentClassName="h-full p-0"
+      hideMobileBottomNav
+    >
       <ChatContent ticketId={id} />
     </AdminPageShell>
   );

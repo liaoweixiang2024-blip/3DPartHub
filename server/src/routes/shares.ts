@@ -1,7 +1,7 @@
-import { Router } from "express";
-import { createAdminSharesRouter } from "./shares/adminShares.js";
-import { createPublicSharesRouter } from "./shares/publicShares.js";
-import { createUserSharesRouter } from "./shares/userShares.js";
+import { Router } from 'express';
+import { createAdminSharesRouter } from './shares/adminShares.js';
+import { createPublicSharesRouter } from './shares/publicShares.js';
+import { createUserSharesRouter } from './shares/userShares.js';
 
 const router = Router();
 

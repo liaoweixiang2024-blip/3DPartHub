@@ -1,10 +1,10 @@
-import { createRequire } from "node:module";
-import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
-import { join, basename } from "node:path";
-import { randomUUID } from "node:crypto";
+import { createRequire } from 'node:module';
+import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
+import { join, basename } from 'node:path';
+import { randomUUID } from 'node:crypto';
 
 const require = createRequire(import.meta.url);
-const occtimportjs = require("occt-import-js");
+const occtimportjs = require('occt-import-js');
 
 interface OcctMesh {
   index?: { array: ArrayLike<number> };
@@ -21,7 +21,7 @@ interface OcctResult {
 }
 
 interface OcctImportParams {
-  linearDeflectionType: "bounding_box_ratio";
+  linearDeflectionType: 'bounding_box_ratio';
   linearDeflection: number;
   angularDeflection: number;
 }
@@ -57,7 +57,7 @@ export interface PreviewMeta {
   version: 2;
   sourceName: string;
   sourceFormat: string;
-  unit: "mm";
+  unit: 'mm';
   parts: PreviewPartMeta[];
   totals: {
     partCount: number;
@@ -68,7 +68,7 @@ export interface PreviewMeta {
   tree: Array<{ id: string; name: string; children: string[] }>;
   diagnostics: {
     generatedAt: string;
-    converter: "occt-import-js";
+    converter: 'occt-import-js';
     tessellation: OcctImportParams;
     sourceMeshCount: number;
     validMeshCount: number;
@@ -89,12 +89,12 @@ export interface PreviewMeta {
       duplicateMaterialsMerged?: number;
     };
     performance?: {
-      level: "normal" | "large" | "huge";
+      level: 'normal' | 'large' | 'huge';
       hints: string[];
     };
     precheck?: {
       sourceBytes: number;
-      sourceLevel: "normal" | "large" | "huge";
+      sourceLevel: 'normal' | 'large' | 'huge';
       estimatedPeakMemoryMb: number;
       hints: string[];
     };
@@ -108,11 +108,11 @@ function colorToHex(color?: [number, number, number]): string | null {
   if (!color) return null;
   const [r, g, b] = color;
   const toByte = (value: number) => Math.max(0, Math.min(255, Math.round(value * 255)));
-  return `#${[toByte(r), toByte(g), toByte(b)].map((value) => value.toString(16).padStart(2, "0")).join("")}`;
+  return `#${[toByte(r), toByte(g), toByte(b)].map((value) => value.toString(16).padStart(2, '0')).join('')}`;
 }
 
 function safePartName(name: string | undefined, index: number): string {
-  const trimmed = (name || "").trim();
+  const trimmed = (name || '').trim();
   return trimmed || `Part ${index + 1}`;
 }
 
@@ -126,11 +126,7 @@ function makeBounds(min: [number, number, number], max: [number, number, number]
     min,
     max,
     size,
-    center: [
-      (min[0] + max[0]) / 2,
-      (min[1] + max[1]) / 2,
-      (min[2] + max[2]) / 2,
-    ],
+    center: [(min[0] + max[0]) / 2, (min[1] + max[1]) / 2, (min[2] + max[2]) / 2],
   };
 }
 
@@ -138,7 +134,11 @@ function emptyBounds(): BoundsMeta {
   return makeBounds([0, 0, 0], [0, 0, 0]);
 }
 
-function expandBounds(bounds: { min: [number, number, number]; max: [number, number, number] }, partMin: [number, number, number], partMax: [number, number, number]) {
+function expandBounds(
+  bounds: { min: [number, number, number]; max: [number, number, number] },
+  partMin: [number, number, number],
+  partMax: [number, number, number],
+) {
   for (let i = 0; i < 3; i++) {
     bounds.min[i] = Math.min(bounds.min[i], partMin[i]);
     bounds.max[i] = Math.max(bounds.max[i], partMax[i]);
@@ -147,55 +147,57 @@ function expandBounds(bounds: { min: [number, number, number]; max: [number, num
 
 function compactIndexArray(values: Uint32Array | number[], usableCount: number, vertexCount: number): GltfIndexArray {
   const canUseUint16 = vertexCount <= 65535;
-  const source = values instanceof Uint32Array
-    ? (usableCount === values.length ? values : values.slice(0, usableCount))
-    : values;
+  const source =
+    values instanceof Uint32Array ? (usableCount === values.length ? values : values.slice(0, usableCount)) : values;
   return canUseUint16 ? Uint16Array.from(source) : Uint32Array.from(source);
 }
 
-function getPerformanceDiagnostics(totals: { partCount: number; vertexCount: number; faceCount: number }, gltfSize: number): PreviewMeta["diagnostics"]["performance"] {
+function getPerformanceDiagnostics(
+  totals: { partCount: number; vertexCount: number; faceCount: number },
+  gltfSize: number,
+): PreviewMeta['diagnostics']['performance'] {
   const hints: string[] = [];
-  let level: "normal" | "large" | "huge" = "normal";
+  let level: 'normal' | 'large' | 'huge' = 'normal';
 
   if (totals.faceCount >= 1_500_000 || totals.vertexCount >= 3_000_000 || gltfSize >= 120 * 1024 * 1024) {
-    level = "huge";
-    hints.push("模型规模很大，建议控制转换并发，并优先评估不降低几何质量的压缩与缓存策略。");
+    level = 'huge';
+    hints.push('模型规模很大，建议控制转换并发，并优先评估不降低几何质量的压缩与缓存策略。');
   } else if (totals.faceCount >= 500_000 || totals.vertexCount >= 1_000_000 || gltfSize >= 50 * 1024 * 1024) {
-    level = "large";
-    hints.push("模型规模偏大，移动端首次加载可能较慢。");
+    level = 'large';
+    hints.push('模型规模偏大，移动端首次加载可能较慢。');
   }
 
   if (totals.partCount >= 1500) {
-    hints.push("零件数量较多，后续可考虑合并静态小零件或启用懒加载。");
-    if (level === "normal") level = "large";
+    hints.push('零件数量较多，后续可考虑合并静态小零件或启用懒加载。');
+    if (level === 'normal') level = 'large';
   }
 
   return { level, hints };
 }
 
-function getPrecheckDiagnostics(sourceBytes: number): NonNullable<PreviewMeta["diagnostics"]["precheck"]> {
+function getPrecheckDiagnostics(sourceBytes: number): NonNullable<PreviewMeta['diagnostics']['precheck']> {
   const hints: string[] = [];
-  let sourceLevel: "normal" | "large" | "huge" = "normal";
+  let sourceLevel: 'normal' | 'large' | 'huge' = 'normal';
   const sourceMb = sourceBytes / 1024 / 1024;
   const estimatedPeakMemoryMb = Math.max(64, Math.ceil(sourceMb * 10));
 
   if (sourceBytes >= 80 * 1024 * 1024) {
-    sourceLevel = "huge";
-    hints.push("源文件很大，转换和首次预览可能占用较高内存。");
+    sourceLevel = 'huge';
+    hints.push('源文件很大，转换和首次预览可能占用较高内存。');
   } else if (sourceBytes >= 40 * 1024 * 1024) {
-    sourceLevel = "large";
-    hints.push("源文件偏大，建议在低峰期批量重建预览。");
+    sourceLevel = 'large';
+    hints.push('源文件偏大，建议在低峰期批量重建预览。');
   }
 
   if (estimatedPeakMemoryMb >= 1024) {
-    hints.push("预估峰值内存超过 1GB，建议避免同时开启过高转换并发。");
+    hints.push('预估峰值内存超过 1GB，建议避免同时开启过高转换并发。');
   }
 
   return { sourceBytes, sourceLevel, estimatedPeakMemoryMb, hints };
 }
 
 function versionedAssetUrl(url: string, version: string): string {
-  return `${url}${url.includes("?") ? "&" : "?"}v=${encodeURIComponent(version)}`;
+  return `${url}${url.includes('?') ? '&' : '?'}v=${encodeURIComponent(version)}`;
 }
 
 function meshesToGltf(
@@ -207,13 +209,13 @@ function meshesToGltf(
     skippedMeshCount: number;
     tessellation: OcctImportParams;
     conversionMs: number;
-  }
+  },
 ): { json: object; bin: Buffer; meta: PreviewMeta } {
   const bufferViews: object[] = [];
   const accessors: object[] = [];
   const materials: object[] = [];
   const gltfMeshes: object[] = [];
-  const nodes: object[] = [{ name: "converted_model", children: [], extras: { sourceName } }];
+  const nodes: object[] = [{ name: 'converted_model', children: [], extras: { sourceName } }];
   const parts: PreviewPartMeta[] = [];
   const warnings: string[] = [];
   const optimization = {
@@ -240,7 +242,7 @@ function meshesToGltf(
         metallicFactor: 0.3,
         roughnessFactor: 0.5,
       },
-      name: "default",
+      name: 'default',
       doubleSided: true,
     });
     return defaultMaterialIdx;
@@ -255,12 +257,9 @@ function meshesToGltf(
       posArray = posArray.slice(0, vertexCount * 3);
     }
 
-    const rawNormArray = mesh.attributes.normal
-      ? new Float32Array(mesh.attributes.normal.array)
-      : null;
-    const normArray = rawNormArray && rawNormArray.length >= vertexCount * 3
-      ? rawNormArray.slice(0, vertexCount * 3)
-      : null;
+    const rawNormArray = mesh.attributes.normal ? new Float32Array(mesh.attributes.normal.array) : null;
+    const normArray =
+      rawNormArray && rawNormArray.length >= vertexCount * 3 ? rawNormArray.slice(0, vertexCount * 3) : null;
 
     let idxArray: GltfIndexArray | null = null;
     if (mesh.index?.array && mesh.index.array.length >= 3) {
@@ -311,7 +310,7 @@ function meshesToGltf(
       bufferView: bufferViews.length,
       componentType: 5126,
       count: vertexCount,
-      type: "VEC3",
+      type: 'VEC3',
       max: [-Infinity, -Infinity, -Infinity] as number[],
       min: [Infinity, Infinity, Infinity] as number[],
     };
@@ -337,7 +336,7 @@ function meshesToGltf(
         bufferView: normalAccessorIdx,
         componentType: 5126,
         count: vertexCount,
-        type: "VEC3",
+        type: 'VEC3',
       });
       buffers.push(Buffer.from(normArray.buffer, normArray.byteOffset, normArray.byteLength));
       byteOffset += normArray.byteLength;
@@ -358,7 +357,7 @@ function meshesToGltf(
         bufferView: indexAccessorIdx,
         componentType: idxArray instanceof Uint16Array ? 5123 : 5125,
         count: idxArray.length,
-        type: "SCALAR",
+        type: 'SCALAR',
         min: [minIndex],
         max: [maxIndex],
       });
@@ -378,7 +377,9 @@ function meshesToGltf(
       let [r, g, b] = mesh.color;
       // Boost very dark colors for better visibility in dark theme
       if (r + g + b < 1.0) {
-        r = Math.max(r, 0.55); g = Math.max(g, 0.55); b = Math.max(b, 0.58);
+        r = Math.max(r, 0.55);
+        g = Math.max(g, 0.55);
+        b = Math.max(b, 0.58);
       }
       const materialKey = `${r.toFixed(4)}:${g.toFixed(4)}:${b.toFixed(4)}`;
       const existingMaterialIdx = materialCache.get(materialKey);
@@ -450,20 +451,20 @@ function meshesToGltf(
       acc.faceCount += part.faceCount;
       return acc;
     },
-    { partCount: parts.length, vertexCount: 0, faceCount: 0 }
+    { partCount: parts.length, vertexCount: 0, faceCount: 0 },
   );
 
   const bounds = parts.length > 0 ? makeBounds(modelBounds.min, modelBounds.max) : emptyBounds();
   (nodes[0] as { extras: Record<string, unknown> }).extras = {
     sourceName,
     sourceFormat: options.sourceFormat,
-    unit: "mm",
+    unit: 'mm',
     totals,
     bounds,
   };
 
   const json = {
-    asset: { version: "2.0", generator: "model-converter" },
+    asset: { version: '2.0', generator: 'model-converter' },
     scene: 0,
     scenes: [{ nodes: [0] }],
     nodes,
@@ -475,7 +476,7 @@ function meshesToGltf(
     extras: {
       sourceName,
       sourceFormat: options.sourceFormat,
-      unit: "mm",
+      unit: 'mm',
       totals,
       bounds,
     },
@@ -485,14 +486,14 @@ function meshesToGltf(
     version: 2,
     sourceName,
     sourceFormat: options.sourceFormat,
-    unit: "mm",
+    unit: 'mm',
     parts,
     totals,
     bounds,
-    tree: [{ id: "root", name: sourceName.replace(/\.[^.]+$/, "") || "Model", children: parts.map((part) => part.id) }],
+    tree: [{ id: 'root', name: sourceName.replace(/\.[^.]+$/, '') || 'Model', children: parts.map((part) => part.id) }],
     diagnostics: {
       generatedAt: new Date().toISOString(),
-      converter: "occt-import-js",
+      converter: 'occt-import-js',
       tessellation: options.tessellation,
       sourceMeshCount: options.sourceMeshCount,
       validMeshCount: meshes.length,
@@ -523,7 +524,7 @@ function writeGlb(gltf: object, binData: Buffer, outputDir: string, modelId: str
   const glbPath = join(outputDir, `${modelId}.glb`);
   const gltfAny = JSON.parse(JSON.stringify(gltf));
 
-  const jsonChunk = paddedBuffer(Buffer.from(JSON.stringify(gltfAny), "utf8"), 0x20);
+  const jsonChunk = paddedBuffer(Buffer.from(JSON.stringify(gltfAny), 'utf8'), 0x20);
   const binChunk = paddedBuffer(binData);
   const totalLength = 12 + 8 + jsonChunk.byteLength + 8 + binChunk.byteLength;
 
@@ -532,13 +533,16 @@ function writeGlb(gltf: object, binData: Buffer, outputDir: string, modelId: str
   header.writeUInt32LE(2, 4);
   header.writeUInt32LE(totalLength, 8);
 
-  writeFileSync(glbPath, Buffer.concat([
-    header,
-    chunkHeader(jsonChunk.byteLength, 0x4e4f534a),
-    jsonChunk,
-    chunkHeader(binChunk.byteLength, 0x004e4942),
-    binChunk,
-  ]));
+  writeFileSync(
+    glbPath,
+    Buffer.concat([
+      header,
+      chunkHeader(jsonChunk.byteLength, 0x4e4f534a),
+      jsonChunk,
+      chunkHeader(binChunk.byteLength, 0x004e4942),
+      binChunk,
+    ]),
+  );
   return glbPath;
 }
 
@@ -546,7 +550,7 @@ export async function convertStepToGltf(
   inputPath: string,
   outputDir: string,
   modelId?: string,
-  originalName?: string
+  originalName?: string,
 ): Promise<GltfAsset> {
   const startedAt = Date.now();
   modelId = modelId || randomUUID().slice(0, 12);
@@ -556,46 +560,44 @@ export async function convertStepToGltf(
 
   const fileBuffer = new Uint8Array(readFileSync(inputPath));
   const nameToCheck = originalName || inputPath;
-  const ext = nameToCheck.split(".").pop()?.toLowerCase();
+  const ext = nameToCheck.split('.').pop()?.toLowerCase();
 
   // Keep OCCT tessellation tight enough for CAD details. 0.001 is the
   // library's default bbox ratio; the previous 0.01 was visibly too coarse.
   const tessellationParams: OcctImportParams = {
-    linearDeflectionType: "bounding_box_ratio",
+    linearDeflectionType: 'bounding_box_ratio',
     linearDeflection: 0.001,
     angularDeflection: 0.15,
   };
 
   let result: OcctResult;
-  if (ext === "step" || ext === "stp") {
+  if (ext === 'step' || ext === 'stp') {
     result = occt.ReadStepFile(fileBuffer, tessellationParams) as OcctResult;
-  } else if (ext === "iges" || ext === "igs") {
+  } else if (ext === 'iges' || ext === 'igs') {
     result = occt.ReadIgesFile(fileBuffer, tessellationParams) as OcctResult;
   } else {
     throw new Error(`Unsupported format: ${ext}`);
   }
 
   if (!result?.meshes || result.meshes.length === 0) {
-    throw new Error("无法解析模型文件 - 没有有效网格数据");
+    throw new Error('无法解析模型文件 - 没有有效网格数据');
   }
 
-  const validMeshes = result.meshes.filter(
-    (m) => Math.floor(m.attributes.position.array.length / 3) >= 3
-  );
+  const validMeshes = result.meshes.filter((m) => Math.floor(m.attributes.position.array.length / 3) >= 3);
   if (validMeshes.length === 0) {
-    throw new Error("模型文件中无有效顶点数据");
+    throw new Error('模型文件中无有效顶点数据');
   }
 
   const sourceName = originalName || basename(inputPath);
   const { json, bin, meta } = meshesToGltf(validMeshes, sourceName, {
-    sourceFormat: ext || "unknown",
+    sourceFormat: ext || 'unknown',
     sourceMeshCount: result.meshes.length,
     skippedMeshCount: result.meshes.length - validMeshes.length,
     tessellation: tessellationParams,
     conversionMs: Date.now() - startedAt,
   });
   if (meta.parts.length === 0) {
-    throw new Error("模型文件中无可显示零件数据");
+    throw new Error('模型文件中无可显示零件数据');
   }
   const gltfPath = writeGlb(json, bin, outputDir, modelId);
   const originalSize = fileBuffer.length;
@@ -628,12 +630,12 @@ export async function getMeshStats(inputPath: string): Promise<{
 }> {
   const occt = await occtimportjs();
   const fileBuffer = new Uint8Array(readFileSync(inputPath));
-  const ext = inputPath.split(".").pop()?.toLowerCase();
+  const ext = inputPath.split('.').pop()?.toLowerCase();
 
   let result: OcctResult;
-  if (ext === "step" || ext === "stp") {
+  if (ext === 'step' || ext === 'stp') {
     result = occt.ReadStepFile(fileBuffer, null) as OcctResult;
-  } else if (ext === "iges" || ext === "igs") {
+  } else if (ext === 'iges' || ext === 'igs') {
     result = occt.ReadIgesFile(fileBuffer, null) as OcctResult;
   } else {
     return { vertices: 0, faces: 0, meshes: 0 };

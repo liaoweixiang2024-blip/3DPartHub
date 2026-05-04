@@ -1,46 +1,46 @@
-import { Router, Request, Response } from "express";
-import { randomBytes } from "node:crypto";
-import { prisma } from "../lib/prisma.js";
-import { authMiddleware, AuthRequest } from "../middleware/auth.js";
-import { requireBrowseAccess } from "../middleware/browseAccess.js";
-import { buildModelMatchMap } from "../lib/modelMatch.js";
-import { getBusinessConfig } from "../lib/businessConfig.js";
-import { createLogger } from "../lib/logger.js";
+import { Router, Request, Response } from 'express';
+import { randomBytes } from 'node:crypto';
+import { prisma } from '../lib/prisma.js';
+import { authMiddleware, AuthRequest } from '../middleware/auth.js';
+import { requireBrowseAccess } from '../middleware/browseAccess.js';
+import { buildModelMatchMap } from '../lib/modelMatch.js';
+import { getBusinessConfig } from '../lib/businessConfig.js';
+import { createLogger } from '../lib/logger.js';
 
-const log = createLogger({ component: "selection-shares" });
+const log = createLogger({ component: 'selection-shares' });
 
 const router = Router();
 
 // ========== Create selection share (authenticated) ==========
 
-router.post("/api/selection-shares", authMiddleware, async (req: AuthRequest, res: Response) => {
+router.post('/api/selection-shares', authMiddleware, async (req: AuthRequest, res: Response) => {
   try {
     const userId = req.user!.userId;
     const { categorySlug, specs, productIds } = req.body;
 
     if (!categorySlug || !specs) {
-      res.status(400).json({ detail: "缺少必要参数" });
+      res.status(400).json({ detail: '缺少必要参数' });
       return;
     }
 
-    if (typeof specs !== "object" || Array.isArray(specs) || JSON.stringify(specs).length > 10000) {
-      res.status(400).json({ detail: "规格参数无效或过大" });
+    if (typeof specs !== 'object' || Array.isArray(specs) || JSON.stringify(specs).length > 10000) {
+      res.status(400).json({ detail: '规格参数无效或过大' });
       return;
     }
 
     const categoryExists = await prisma.selectionCategory.findUnique({ where: { slug: categorySlug } });
     if (!categoryExists) {
-      res.status(400).json({ detail: "分类不存在" });
+      res.status(400).json({ detail: '分类不存在' });
       return;
     }
 
     const ids = Array.isArray(productIds) ? productIds : [];
     if (ids.length > 500) {
-      res.status(400).json({ detail: "产品数量不能超过 500" });
+      res.status(400).json({ detail: '产品数量不能超过 500' });
       return;
     }
 
-    const token = randomBytes(12).toString("hex");
+    const token = randomBytes(12).toString('hex');
 
     const share = await prisma.selectionShare.create({
       data: {
@@ -57,29 +57,31 @@ router.post("/api/selection-shares", authMiddleware, async (req: AuthRequest, re
       data: { id: share.id, token: share.token },
     });
   } catch (err: any) {
-    log.error({ err }, "Create selection share error");
-    res.status(500).json({ detail: "创建分享失败" });
+    log.error({ err }, 'Create selection share error');
+    res.status(500).json({ detail: '创建分享失败' });
   }
 });
 
 // ========== Get selection share (public) ==========
 
-router.get("/api/selection-shares/:token", async (req: Request, res: Response) => {
+router.get('/api/selection-shares/:token', async (req: Request, res: Response) => {
   if (!(await requireBrowseAccess(req, res))) return;
   try {
     const shareToken = req.params.token as string;
 
     const share = await prisma.selectionShare.findUnique({ where: { token: shareToken } });
     if (!share) {
-      res.status(404).json({ detail: "分享不存在" });
+      res.status(404).json({ detail: '分享不存在' });
       return;
     }
 
     // Increment view count (fire-and-forget)
-    prisma.selectionShare.update({
-      where: { id: share.id },
-      data: { viewCount: { increment: 1 } },
-    }).catch(() => {});
+    prisma.selectionShare
+      .update({
+        where: { id: share.id },
+        data: { viewCount: { increment: 1 } },
+      })
+      .catch(() => {});
 
     const [category, products] = await Promise.all([
       prisma.selectionCategory.findUnique({
@@ -90,7 +92,7 @@ router.get("/api/selection-shares/:token", async (req: Request, res: Response) =
         return ids.length > 0
           ? await prisma.selectionProduct.findMany({
               where: { id: { in: ids } },
-              orderBy: { sortOrder: "asc" },
+              orderBy: { sortOrder: 'asc' },
             })
           : [];
       })(),
@@ -98,8 +100,10 @@ router.get("/api/selection-shares/:token", async (req: Request, res: Response) =
 
     // Auto-match models (fuzzy, prefer primary version)
     const { selectionEnableMatch } = await getBusinessConfig();
-    const modelNos = selectionEnableMatch ? products.map((p) => p.modelNo).filter(Boolean) as string[] : [];
-    const modelMap = selectionEnableMatch ? await buildModelMatchMap(modelNos) : new Map<string, { id: string; thumbnailUrl: string | null }>();
+    const modelNos = selectionEnableMatch ? (products.map((p) => p.modelNo).filter(Boolean) as string[]) : [];
+    const modelMap = selectionEnableMatch
+      ? await buildModelMatchMap(modelNos)
+      : new Map<string, { id: string; thumbnailUrl: string | null }>();
 
     const productsWithMatch = products.map((p) => {
       const matched = p.modelNo ? modelMap.get(p.modelNo) : undefined;
@@ -123,7 +127,7 @@ router.get("/api/selection-shares/:token", async (req: Request, res: Response) =
       success: true,
       data: {
         categorySlug: share.categorySlug,
-        categoryName: category?.name || "",
+        categoryName: category?.name || '',
         groupId: (category?.groupId as string) || null,
         specs: share.specs,
         columns: category?.columns || [],
@@ -132,8 +136,8 @@ router.get("/api/selection-shares/:token", async (req: Request, res: Response) =
       },
     });
   } catch (err: any) {
-    log.error({ err }, "Get selection share error");
-    res.status(500).json({ detail: "获取分享失败" });
+    log.error({ err }, 'Get selection share error');
+    res.status(500).json({ detail: '获取分享失败' });
   }
 });
 

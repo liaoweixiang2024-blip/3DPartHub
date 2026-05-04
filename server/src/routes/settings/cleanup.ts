@@ -1,21 +1,21 @@
-import { Router, Response } from "express";
-import { readdirSync, statSync, rmSync, existsSync } from "node:fs";
-import { join, extname } from "node:path";
-import { config } from "../../lib/config.js";
-import { authMiddleware, type AuthRequest } from "../../middleware/auth.js";
-import { adminOnly } from "./common.js";
-import { prisma } from "../../lib/prisma.js";
-import { createLogger } from "../../lib/logger.js";
+import { Router, Response } from 'express';
+import { readdirSync, statSync, rmSync, existsSync } from 'node:fs';
+import { join, extname } from 'node:path';
+import { config } from '../../lib/config.js';
+import { authMiddleware, type AuthRequest } from '../../middleware/auth.js';
+import { adminOnly } from './common.js';
+import { prisma } from '../../lib/prisma.js';
+import { createLogger } from '../../lib/logger.js';
 
-const log = createLogger({ component: "cleanup" });
+const log = createLogger({ component: 'cleanup' });
 
 export function createSettingsCleanupRouter() {
   const router = Router();
 
   function formatBytes(bytes: number): string {
-    if (bytes === 0) return "0 B";
+    if (bytes === 0) return '0 B';
     const k = 1024;
-    const sizes = ["B", "KB", "MB", "GB"];
+    const sizes = ['B', 'KB', 'MB', 'GB'];
     const i = Math.floor(Math.log(bytes) / Math.log(k));
     return `${(bytes / Math.pow(k, i)).toFixed(1)} ${sizes[i]}`;
   }
@@ -45,7 +45,7 @@ export function createSettingsCleanupRouter() {
     }
   }
 
-  router.get("/api/settings/cleanup/scan", authMiddleware, async (req: AuthRequest, res: Response) => {
+  router.get('/api/settings/cleanup/scan', authMiddleware, async (req: AuthRequest, res: Response) => {
     if (!adminOnly(req, res)) return;
 
     try {
@@ -75,12 +75,12 @@ export function createSettingsCleanupRouter() {
         });
         for (const m of models) {
           dbModelIds.add(m.id);
-          if (m.thumbnailUrl) dbThumbnails.add(m.thumbnailUrl.split("?")[0]);
+          if (m.thumbnailUrl) dbThumbnails.add(m.thumbnailUrl.split('?')[0]);
           if (m.uploadPath) dbUploadPaths.add(m.uploadPath);
-          if (m.gltfUrl) dbGltfUrls.add(m.gltfUrl.split("?")[0]);
-          if (m.drawingUrl) dbDrawingUrls.add(m.drawingUrl.split("?")[0]);
+          if (m.gltfUrl) dbGltfUrls.add(m.gltfUrl.split('?')[0]);
+          if (m.drawingUrl) dbDrawingUrls.add(m.drawingUrl.split('?')[0]);
           for (const v of m.versions) {
-            if (v.fileKey) dbVersionKeys.add(v.fileKey.split("?")[0]);
+            if (v.fileKey) dbVersionKeys.add(v.fileKey.split('?')[0]);
           }
         }
       }
@@ -105,11 +105,11 @@ export function createSettingsCleanupRouter() {
       }
 
       // 1. Orphan GLTF files in static/models/
-      const modelsDir = join(staticDir, "models");
+      const modelsDir = join(staticDir, 'models');
       const allModelFiles = collectFiles(modelsDir, false);
       const orphanModels = allModelFiles.filter((f) => {
-        const rel = "/static/" + f.slice(staticDir.length + 1).replace(/\\/g, "/");
-        const cleanRel = rel.split("?")[0];
+        const rel = '/static/' + f.slice(staticDir.length + 1).replace(/\\/g, '/');
+        const cleanRel = rel.split('?')[0];
         // Keep if referenced by any model gltfUrl or version fileKey
         if (dbGltfUrls.has(cleanRel)) return false;
         if (dbVersionKeys.has(cleanRel)) return false;
@@ -119,51 +119,51 @@ export function createSettingsCleanupRouter() {
         if (dbModelIds.has(modelId)) return false;
         return true;
       });
-      addCategory("orphan_models", "孤立模型文件 (static/models)", orphanModels);
+      addCategory('orphan_models', '孤立模型文件 (static/models)', orphanModels);
 
       // 2. Orphan thumbnails in static/thumbnails/
-      const thumbsDir = join(staticDir, "thumbnails");
+      const thumbsDir = join(staticDir, 'thumbnails');
       const allThumbs = collectFiles(thumbsDir, false);
       const orphanThumbs = allThumbs.filter((f) => {
-        const rel = "/static/" + f.slice(staticDir.length + 1).replace(/\\/g, "/");
+        const rel = '/static/' + f.slice(staticDir.length + 1).replace(/\\/g, '/');
         if (dbThumbnails.has(rel)) return false;
         const base = f.slice(thumbsDir.length + 1);
         const modelId = base.split(/[._]/)[0];
         if (dbModelIds.has(modelId)) return false;
         return true;
       });
-      addCategory("orphan_thumbnails", "孤立缩略图 (static/thumbnails)", orphanThumbs);
+      addCategory('orphan_thumbnails', '孤立缩略图 (static/thumbnails)', orphanThumbs);
 
       // 3. Orphan originals
-      const originalsDir = join(staticDir, "originals");
+      const originalsDir = join(staticDir, 'originals');
       const allOriginals = collectFiles(originalsDir, false);
       const orphanOriginals = allOriginals.filter((f) => {
-        const rel = "/static/" + f.slice(staticDir.length + 1).replace(/\\/g, "/");
+        const rel = '/static/' + f.slice(staticDir.length + 1).replace(/\\/g, '/');
         if (dbUploadPaths.has(rel)) return false;
         const base = f.slice(originalsDir.length + 1);
         const modelId = base.split(/[._]/)[0];
         if (dbModelIds.has(modelId)) return false;
         return true;
       });
-      addCategory("orphan_originals", "孤立原始文件 (static/originals)", orphanOriginals);
+      addCategory('orphan_originals', '孤立原始文件 (static/originals)', orphanOriginals);
 
       // 4. Stale upload chunks (> 1 day old)
-      const chunksDir = join(uploadDir, "chunks");
+      const chunksDir = join(uploadDir, 'chunks');
       const allChunks = collectFiles(chunksDir, true);
       const staleChunks = allChunks.filter((f) => fileAgeDays(f) > 1);
-      addCategory("stale_chunks", "过期的上传分片 (> 1天)", staleChunks);
+      addCategory('stale_chunks', '过期的上传分片 (> 1天)', staleChunks);
 
       // 5. Stale batch temp files (> 1 day old)
-      const batchDir = join(uploadDir, "batch");
+      const batchDir = join(uploadDir, 'batch');
       const allBatch = collectFiles(batchDir, true);
       const staleBatch = allBatch.filter((f) => fileAgeDays(f) > 1);
-      addCategory("stale_batch", "过期的批量导入临时文件 (> 1天)", staleBatch);
+      addCategory('stale_batch', '过期的批量导入临时文件 (> 1天)', staleBatch);
 
       // 6. Old safety snapshots (> 7 days)
-      const snapshotsDir = join(staticDir, "_safety_snapshots");
+      const snapshotsDir = join(staticDir, '_safety_snapshots');
       const allSnapshots = collectFiles(snapshotsDir, true);
       const oldSnapshots = allSnapshots.filter((f) => fileAgeDays(f) > 7);
-      addCategory("old_snapshots", "旧安全快照 (> 7天)", oldSnapshots);
+      addCategory('old_snapshots', '旧安全快照 (> 7天)', oldSnapshots);
 
       const totalFiles = categories.reduce((s, c) => s + c.items.length, 0);
       const totalSize = categories.reduce((s, c) => s + c.totalSize, 0);
@@ -175,35 +175,35 @@ export function createSettingsCleanupRouter() {
           count: c.items.length,
           totalSize: c.totalSize,
           totalSizeText: formatBytes(c.totalSize),
-          samplePaths: c.items.slice(0, 5).map((i) => i.path.split("/").pop() || i.path),
+          samplePaths: c.items.slice(0, 5).map((i) => i.path.split('/').pop() || i.path),
         })),
         totalFiles,
         totalSize,
         totalSizeText: formatBytes(totalSize),
       });
     } catch (err: any) {
-      log.error({ err }, "Scan failed");
-      res.status(500).json({ detail: "扫描失败" });
+      log.error({ err }, 'Scan failed');
+      res.status(500).json({ detail: '扫描失败' });
     }
   });
 
-  router.post("/api/settings/cleanup/execute", authMiddleware, async (req: AuthRequest, res: Response) => {
+  router.post('/api/settings/cleanup/execute', authMiddleware, async (req: AuthRequest, res: Response) => {
     if (!adminOnly(req, res)) return;
 
     const targets = req.body.targets as string[] | undefined;
     if (!targets || !Array.isArray(targets) || targets.length === 0) {
-      res.status(400).json({ detail: "请指定要清理的分类" });
+      res.status(400).json({ detail: '请指定要清理的分类' });
       return;
     }
 
     // Validate targets against allowed keys
     const allowedKeys = new Set([
-      "orphan_models",
-      "orphan_thumbnails",
-      "orphan_originals",
-      "stale_chunks",
-      "stale_batch",
-      "old_snapshots",
+      'orphan_models',
+      'orphan_thumbnails',
+      'orphan_originals',
+      'stale_chunks',
+      'stale_batch',
+      'old_snapshots',
     ]);
     for (const key of targets) {
       if (!allowedKeys.has(key)) {
@@ -236,11 +236,11 @@ export function createSettingsCleanupRouter() {
         });
         for (const m of models) {
           dbModelIds.add(m.id);
-          if (m.thumbnailUrl) dbThumbnails.add(m.thumbnailUrl.split("?")[0]);
+          if (m.thumbnailUrl) dbThumbnails.add(m.thumbnailUrl.split('?')[0]);
           if (m.uploadPath) dbUploadPaths.add(m.uploadPath);
-          if (m.gltfUrl) dbGltfUrls.add(m.gltfUrl.split("?")[0]);
+          if (m.gltfUrl) dbGltfUrls.add(m.gltfUrl.split('?')[0]);
           for (const v of m.versions) {
-            if (v.fileKey) dbVersionKeys.add(v.fileKey.split("?")[0]);
+            if (v.fileKey) dbVersionKeys.add(v.fileKey.split('?')[0]);
           }
         }
       }
@@ -264,14 +264,14 @@ export function createSettingsCleanupRouter() {
         }
       }
 
-      const modelsDir = join(staticDir, "models");
-      const thumbsDir = join(staticDir, "thumbnails");
-      const originalsDir = join(staticDir, "originals");
+      const modelsDir = join(staticDir, 'models');
+      const thumbsDir = join(staticDir, 'thumbnails');
+      const originalsDir = join(staticDir, 'originals');
 
-      if (targets.includes("orphan_models")) {
+      if (targets.includes('orphan_models')) {
         const all = collectFiles(modelsDir, false);
         const orphans = all.filter((f) => {
-          const rel = "/static/" + f.slice(staticDir.length + 1).replace(/\\/g, "/");
+          const rel = '/static/' + f.slice(staticDir.length + 1).replace(/\\/g, '/');
           if (dbGltfUrls.has(rel) || dbVersionKeys.has(rel)) return false;
           const modelId = f.slice(modelsDir.length + 1).split(/[._/]/)[0];
           return !dbModelIds.has(modelId);
@@ -279,10 +279,10 @@ export function createSettingsCleanupRouter() {
         safeDelete(orphans);
       }
 
-      if (targets.includes("orphan_thumbnails")) {
+      if (targets.includes('orphan_thumbnails')) {
         const all = collectFiles(thumbsDir, false);
         const orphans = all.filter((f) => {
-          const rel = "/static/" + f.slice(staticDir.length + 1).replace(/\\/g, "/");
+          const rel = '/static/' + f.slice(staticDir.length + 1).replace(/\\/g, '/');
           if (dbThumbnails.has(rel)) return false;
           const modelId = f.slice(thumbsDir.length + 1).split(/[._]/)[0];
           return !dbModelIds.has(modelId);
@@ -290,10 +290,10 @@ export function createSettingsCleanupRouter() {
         safeDelete(orphans);
       }
 
-      if (targets.includes("orphan_originals")) {
+      if (targets.includes('orphan_originals')) {
         const all = collectFiles(originalsDir, false);
         const orphans = all.filter((f) => {
-          const rel = "/static/" + f.slice(staticDir.length + 1).replace(/\\/g, "/");
+          const rel = '/static/' + f.slice(staticDir.length + 1).replace(/\\/g, '/');
           if (dbUploadPaths.has(rel)) return false;
           const modelId = f.slice(originalsDir.length + 1).split(/[._]/)[0];
           return !dbModelIds.has(modelId);
@@ -301,22 +301,22 @@ export function createSettingsCleanupRouter() {
         safeDelete(orphans);
       }
 
-      if (targets.includes("stale_chunks")) {
-        const all = collectFiles(join(uploadDir, "chunks"), true);
+      if (targets.includes('stale_chunks')) {
+        const all = collectFiles(join(uploadDir, 'chunks'), true);
         safeDelete(all.filter((f) => fileAgeDays(f) > 1));
       }
 
-      if (targets.includes("stale_batch")) {
-        const all = collectFiles(join(uploadDir, "batch"), true);
+      if (targets.includes('stale_batch')) {
+        const all = collectFiles(join(uploadDir, 'batch'), true);
         safeDelete(all.filter((f) => fileAgeDays(f) > 1));
       }
 
-      if (targets.includes("old_snapshots")) {
-        const all = collectFiles(join(staticDir, "_safety_snapshots"), true);
+      if (targets.includes('old_snapshots')) {
+        const all = collectFiles(join(staticDir, '_safety_snapshots'), true);
         safeDelete(all.filter((f) => fileAgeDays(f) > 7));
       }
 
-      log.info({ deletedCount, freedBytes, freedSizeText: formatBytes(freedBytes), failedCount }, "Cleanup completed");
+      log.info({ deletedCount, freedBytes, freedSizeText: formatBytes(freedBytes), failedCount }, 'Cleanup completed');
       res.json({
         deletedCount,
         freedBytes,
@@ -325,8 +325,8 @@ export function createSettingsCleanupRouter() {
         errors: errors.length > 0 ? errors : undefined,
       });
     } catch (err: any) {
-      log.error({ err }, "Execute failed");
-      res.status(500).json({ detail: "清理执行失败" });
+      log.error({ err }, 'Execute failed');
+      res.status(500).json({ detail: '清理执行失败' });
     }
   });
 

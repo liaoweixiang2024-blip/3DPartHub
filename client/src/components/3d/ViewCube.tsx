@@ -1,6 +1,6 @@
-import Icon from "../shared/Icon";
-import type { CameraPreset } from "./ModelViewer";
-import { dispatchFitModel } from "./viewerEvents";
+import Icon from '../shared/Icon';
+import type { CameraPreset } from './ModelViewer';
+import { dispatchFitModel } from './viewerEvents';
 
 interface ViewCubeProps {
   activeCamera: CameraPreset;
@@ -9,16 +9,16 @@ interface ViewCubeProps {
 }
 
 const FACE_BUTTONS: Array<{ key: CameraPreset; label: string; title: string }> = [
-  { key: "front", label: "正", title: "正视图" },
-  { key: "back", label: "后", title: "后视图" },
-  { key: "left", label: "左", title: "左视图" },
-  { key: "right", label: "右", title: "右视图" },
-  { key: "top", label: "俯", title: "俯视图" },
-  { key: "bottom", label: "仰", title: "仰视图" },
-  { key: "iso", label: "轴", title: "等轴测" },
+  { key: 'front', label: '正', title: '正视图' },
+  { key: 'back', label: '后', title: '后视图' },
+  { key: 'left', label: '左', title: '左视图' },
+  { key: 'right', label: '右', title: '右视图' },
+  { key: 'top', label: '俯', title: '俯视图' },
+  { key: 'bottom', label: '仰', title: '仰视图' },
+  { key: 'iso', label: '轴', title: '等轴测' },
 ];
 
-export default function ViewCube({ activeCamera, onCameraChange, className = "" }: ViewCubeProps) {
+export default function ViewCube({ activeCamera, onCameraChange, className = '' }: ViewCubeProps) {
   return (
     <div
       className={`micro-glass rounded-sm p-1.5 shadow-lg ${className}`}
@@ -34,8 +34,8 @@ export default function ViewCube({ activeCamera, onCameraChange, className = "" 
             onClick={() => onCameraChange(face.key)}
             className={`h-7 w-7 rounded-sm border text-[11px] font-medium transition-colors ${
               activeCamera === face.key
-                ? "border-primary/60 bg-primary-container/20 text-primary"
-                : "border-outline-variant/30 bg-surface-container-high/60 text-on-surface-variant hover:border-primary/40 hover:text-primary"
+                ? 'border-primary/60 bg-primary-container/20 text-primary'
+                : 'border-outline-variant/30 bg-surface-container-high/60 text-on-surface-variant hover:border-primary/40 hover:text-primary'
             }`}
           >
             {face.label}

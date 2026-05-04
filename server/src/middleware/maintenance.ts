@@ -1,7 +1,7 @@
-import type { NextFunction, Request, Response } from "express";
-import { getMaintenanceStatus } from "../lib/maintenance.js";
-import { getVerifiedRequestUser } from "./auth.js";
-import { logger } from "../lib/logger.js";
+import type { NextFunction, Request, Response } from 'express';
+import { getMaintenanceStatus } from '../lib/maintenance.js';
+import { getVerifiedRequestUser } from './auth.js';
+import { logger } from '../lib/logger.js';
 
 const PUBLIC_API_ALLOWLIST = [
   /^\/api\/health(?:\/|$)/,
@@ -16,7 +16,7 @@ const PUBLIC_API_ALLOWLIST = [
 ];
 
 function shouldCheckMaintenance(path: string): boolean {
-  return path.startsWith("/api/") || path === "/static/models" || path.startsWith("/static/models/");
+  return path.startsWith('/api/') || path === '/static/models' || path.startsWith('/static/models/');
 }
 
 function isAllowlisted(path: string): boolean {
@@ -37,18 +37,18 @@ export async function maintenanceGuard(req: Request, res: Response, next: NextFu
 
   try {
     const verified = await getVerifiedRequestUser(req);
-    if (verified?.payload.role === "ADMIN" && !verified.mustChangePassword) {
+    if (verified?.payload.role === 'ADMIN' && !verified.mustChangePassword) {
       next();
       return;
     }
   } catch (err) {
-    logger.error({ err }, "[maintenance] Failed to verify admin bypass");
+    logger.error({ err }, '[maintenance] Failed to verify admin bypass');
   }
 
-  res.setHeader("Retry-After", "60");
+  res.setHeader('Retry-After', '60');
   res.status(503).json({
     detail: status.message,
-    code: "MAINTENANCE_MODE",
+    code: 'MAINTENANCE_MODE',
     maintenance: status,
   });
 }

@@ -1,6 +1,6 @@
-import client from "./client";
-import { unwrapResponse } from "./response";
-import type { ApiResponse } from "../types/api";
+import client from './client';
+import { unwrapResponse } from './response';
+import type { ApiResponse } from '../types/api';
 
 export interface ProjectMember {
   id: string;
@@ -35,7 +35,7 @@ export interface Project {
 
 export const projectApi = {
   list: async (): Promise<Project[]> => {
-    const res = await client.get<ApiResponse<Project[]>>("/projects");
+    const res = await client.get<ApiResponse<Project[]>>('/projects');
     return unwrapResponse<Project[]>(res);
   },
 
@@ -45,7 +45,7 @@ export const projectApi = {
   },
 
   create: async (data: { name: string; description?: string }): Promise<Project> => {
-    const res = await client.post<ApiResponse<Project>>("/projects", data);
+    const res = await client.post<ApiResponse<Project>>('/projects', data);
     return unwrapResponse<Project>(res);
   },
 
@@ -58,7 +58,7 @@ export const projectApi = {
     await client.delete(`/projects/${id}`);
   },
 
-  addMember: async (projectId: string, userId: string, role: string = "VIEWER"): Promise<ProjectMember> => {
+  addMember: async (projectId: string, userId: string, role: string = 'VIEWER'): Promise<ProjectMember> => {
     const res = await client.post<ApiResponse<ProjectMember>>(`/projects/${projectId}/members`, { userId, role });
     return unwrapResponse<ProjectMember>(res);
   },

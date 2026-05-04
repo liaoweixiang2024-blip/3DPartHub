@@ -1,10 +1,10 @@
-import Redis from "ioredis";
-import { config } from "../lib/config.js";
-import type { QueuedModelDownloadRecord } from "./modelDownloadRecorder.js";
-import { logger } from "../lib/logger.js";
+import Redis from 'ioredis';
+import { config } from '../lib/config.js';
+import type { QueuedModelDownloadRecord } from './modelDownloadRecorder.js';
+import { logger } from '../lib/logger.js';
 
-const WAITING_KEY = "queue:model-download-records:v1";
-const PROCESSING_KEY = "queue:model-download-records:processing:v1";
+const WAITING_KEY = 'queue:model-download-records:v1';
+const PROCESSING_KEY = 'queue:model-download-records:processing:v1';
 const MAX_ATTEMPTS = 5;
 
 type ClaimedDownloadRecord = {
@@ -28,8 +28,8 @@ function getRedis() {
         return Math.min(times * 200, 1000);
       },
     });
-    redis.on("error", (err) => {
-      logger.error({ err: err }, "[download-record-queue] Redis error");
+    redis.on('error', (err) => {
+      logger.error({ err: err }, '[download-record-queue] Redis error');
     });
   }
   return redis;
@@ -46,18 +46,18 @@ function encode(record: QueuedModelDownloadRecord & { attempts?: number; queuedA
   });
 }
 
-function decode(payload: string): ClaimedDownloadRecord["record"] | null {
+function decode(payload: string): ClaimedDownloadRecord['record'] | null {
   try {
     const parsed = JSON.parse(payload) as Record<string, unknown>;
-    if (!parsed.modelId || typeof parsed.modelId !== "string") return null;
-    if (!parsed.format || typeof parsed.format !== "string") return null;
+    if (!parsed.modelId || typeof parsed.modelId !== 'string') return null;
+    if (!parsed.format || typeof parsed.format !== 'string') return null;
     return {
-      userId: typeof parsed.userId === "string" ? parsed.userId : null,
+      userId: typeof parsed.userId === 'string' ? parsed.userId : null,
       modelId: parsed.modelId,
       format: parsed.format,
       fileSize: Number(parsed.fileSize) || 0,
       attempts: Number(parsed.attempts) || 0,
-      queuedAt: typeof parsed.queuedAt === "string" ? parsed.queuedAt : undefined,
+      queuedAt: typeof parsed.queuedAt === 'string' ? parsed.queuedAt : undefined,
     };
   } catch {
     return null;
@@ -70,7 +70,7 @@ export async function enqueueModelDownloadRecord(record: QueuedModelDownloadReco
     return true;
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
-    logger.error({ message }, "[download-record-queue] enqueue failed");
+    logger.error({ message }, '[download-record-queue] enqueue failed');
     return false;
   }
 }
@@ -92,7 +92,7 @@ export async function claimModelDownloadRecordBatch(limit: number): Promise<Clai
   const claimed: ClaimedDownloadRecord[] = [];
 
   for (let i = 0; i < limit; i += 1) {
-    const payload = await client.call("LMOVE", WAITING_KEY, PROCESSING_KEY, "LEFT", "RIGHT") as string | null;
+    const payload = (await client.call('LMOVE', WAITING_KEY, PROCESSING_KEY, 'LEFT', 'RIGHT')) as string | null;
     if (!payload) break;
     const record = decode(payload);
     if (!record) {

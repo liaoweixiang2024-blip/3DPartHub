@@ -1,9 +1,9 @@
-import { runVerifyBackupWorker } from "../lib/backup.js";
+import { runVerifyBackupWorker } from '../lib/backup.js';
 
 const [jobId, backupId] = process.argv.slice(2);
 
 if (!jobId || !backupId) {
-  console.error("[VerifyBackupWorker] Missing job id or backup id");
+  console.error('[VerifyBackupWorker] Missing job id or backup id');
   process.exit(1);
 }
 

@@ -1,4 +1,4 @@
-import { createHash } from "node:crypto";
+import { createHash } from 'node:crypto';
 
 export const MAX_SEARCH_LENGTH = 200;
 export const MAX_SEARCH_TERMS = 12;
@@ -14,9 +14,9 @@ function firstQueryValue(value: unknown): unknown {
 
 export function normalizeSearchParam(value: unknown, maxLength = MAX_SEARCH_LENGTH): string {
   const raw = firstQueryValue(value);
-  if (typeof raw !== "string") return "";
-  const normalized = raw.replace(CONTROL_CHARS, " ").replace(WHITESPACE, " ").trim();
-  return Array.from(normalized).slice(0, maxLength).join("");
+  if (typeof raw !== 'string') return '';
+  const normalized = raw.replace(CONTROL_CHARS, ' ').replace(WHITESPACE, ' ').trim();
+  return Array.from(normalized).slice(0, maxLength).join('');
 }
 
 export function numericQuery(value: unknown, fallback: number, min: number, max: number): number {
@@ -28,21 +28,25 @@ export function numericQuery(value: unknown, fallback: number, min: number, max:
 
 export function enumQuery<T extends string>(value: unknown, fallback: T, allowed: readonly T[]): T {
   const raw = firstQueryValue(value);
-  if (typeof raw !== "string") return fallback;
-  return allowed.includes(raw as T) ? raw as T : fallback;
+  if (typeof raw !== 'string') return fallback;
+  return allowed.includes(raw as T) ? (raw as T) : fallback;
 }
 
 export function searchCacheToken(search: string): string {
-  if (!search) return "";
-  return createHash("sha256").update(search).digest("hex").slice(0, 20);
+  if (!search) return '';
+  return createHash('sha256').update(search).digest('hex').slice(0, 20);
 }
 
 export function getSearchTerms(search: string): string[] {
-  return search.split(WHITESPACE).map((term) => term.trim()).filter(Boolean).slice(0, MAX_SEARCH_TERMS);
+  return search
+    .split(WHITESPACE)
+    .map((term) => term.trim())
+    .filter(Boolean)
+    .slice(0, MAX_SEARCH_TERMS);
 }
 
 export function modelTextSearchCondition(term: string): Record<string, unknown> {
-  const contains = { contains: term, mode: "insensitive" as const };
+  const contains = { contains: term, mode: 'insensitive' as const };
   return {
     OR: [
       { name: contains },

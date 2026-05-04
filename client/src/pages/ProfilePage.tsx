@@ -6,8 +6,8 @@ import { useDocumentTitle } from '../hooks/useDocumentTitle';
 import { SkeletonList } from '../components/shared/Skeleton';
 import Icon from '../components/shared/Icon';
 import SafeImage from '../components/shared/SafeImage';
-import { PageBody, PageHeader } from "../components/shared/PagePrimitives";
-import { AdminPageShell } from "../components/shared/AdminPageShell";
+import { PageBody, PageHeader } from '../components/shared/PagePrimitives';
+import { AdminPageShell } from '../components/shared/AdminPageShell';
 import { authApi } from '../api/auth';
 import { Link, useNavigate } from 'react-router-dom';
 import { listShares, type ShareLink } from '../api/shares';
@@ -34,7 +34,9 @@ function Toggle({ checked, onChange }: { checked: boolean; onChange: (v: boolean
       onClick={() => onChange(!checked)}
       className={`relative h-5 w-9 rounded-full transition-colors ${checked ? 'bg-primary-container' : 'bg-surface-container-highest'}`}
     >
-      <span className={`absolute top-0.5 h-4 w-4 rounded-full bg-on-surface transition-transform ${checked ? 'left-[18px]' : 'left-0.5'}`} />
+      <span
+        className={`absolute top-0.5 h-4 w-4 rounded-full bg-on-surface transition-transform ${checked ? 'left-[18px]' : 'left-0.5'}`}
+      />
     </button>
   );
 }
@@ -48,14 +50,17 @@ function NotificationPrefs({ compact = false }: { compact?: boolean }) {
   const [expanded, setExpanded] = useState(false);
 
   useEffect(() => {
-    authApi.getNotificationPrefs().then(p => {
-      setPrefs(p);
-      setLoading(false);
-    }).catch(() => setLoading(false));
+    authApi
+      .getNotificationPrefs()
+      .then((p) => {
+        setPrefs(p);
+        setLoading(false);
+      })
+      .catch(() => setLoading(false));
   }, []);
 
   const handleChange = (key: string, value: boolean) => {
-    setPrefs(prev => ({ ...prev, [key]: value }));
+    setPrefs((prev) => ({ ...prev, [key]: value }));
     setChanged(true);
   };
 
@@ -84,10 +89,7 @@ function NotificationPrefs({ compact = false }: { compact?: boolean }) {
   if (compact) {
     return (
       <div>
-        <button
-          onClick={() => setExpanded(!expanded)}
-          className="w-full flex items-center justify-between"
-        >
+        <button onClick={() => setExpanded(!expanded)} className="w-full flex items-center justify-between">
           <div className="flex items-center gap-2">
             <Icon name="notifications" size={20} className="text-on-surface-variant" />
             <h3 className="font-headline text-sm font-semibold text-on-surface uppercase tracking-wide">通知设置</h3>
@@ -100,7 +102,7 @@ function NotificationPrefs({ compact = false }: { compact?: boolean }) {
         </button>
         {expanded && (
           <div className="mt-3 space-y-3">
-            {NOTIFICATION_ITEMS.map(item => (
+            {NOTIFICATION_ITEMS.map((item) => (
               <label key={item.key} className="flex items-center justify-between gap-3 rounded-md py-1">
                 <div className="min-w-0">
                   <span className="text-sm text-on-surface">{item.label}</span>
@@ -128,10 +130,7 @@ function NotificationPrefs({ compact = false }: { compact?: boolean }) {
 
   return (
     <div className="bg-surface-container-low rounded-lg p-6 border border-outline-variant/10">
-      <button
-        onClick={() => setExpanded(!expanded)}
-        className="w-full flex items-center justify-between"
-      >
+      <button onClick={() => setExpanded(!expanded)} className="w-full flex items-center justify-between">
         <div className="flex items-center gap-2">
           <Icon name="notifications" size={24} className="text-on-surface-variant" />
           <h3 className="font-headline text-sm font-semibold uppercase tracking-wide text-on-surface">通知偏好</h3>
@@ -144,7 +143,7 @@ function NotificationPrefs({ compact = false }: { compact?: boolean }) {
       </button>
       {expanded && (
         <div className="mt-5 space-y-4">
-          {NOTIFICATION_ITEMS.map(item => (
+          {NOTIFICATION_ITEMS.map((item) => (
             <div key={item.key} className="flex items-center justify-between gap-4">
               <div className="min-w-0">
                 <span className="text-sm text-on-surface">{item.label}</span>
@@ -198,7 +197,7 @@ function PasswordChangeDialog({ open, onClose }: { open: boolean; onClose: () =>
       onClose();
       setTimeout(() => {
         useAuthStore.getState().logout();
-        window.location.replace("/login");
+        window.location.replace('/login');
       }, 1000);
     } catch (err: any) {
       const msg = err?.response?.data?.message || err?.response?.data?.detail || '密码修改失败，请重试';
@@ -271,7 +270,11 @@ function PasswordChangeDialog({ open, onClose }: { open: boolean; onClose: () =>
               </div>
               {error && <p className="text-red-400 text-xs">{error}</p>}
               <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-3 pt-2">
-                <button type="button" onClick={onClose} className="px-4 py-2 text-sm text-on-surface-variant hover:text-on-surface transition-colors">
+                <button
+                  type="button"
+                  onClick={onClose}
+                  className="px-4 py-2 text-sm text-on-surface-variant hover:text-on-surface transition-colors"
+                >
                   取消
                 </button>
                 <button
@@ -289,7 +292,6 @@ function PasswordChangeDialog({ open, onClose }: { open: boolean; onClose: () =>
     </AnimatePresence>
   );
 }
-
 
 function MobileSharesMenu() {
   const { data: shares } = useSWR<ShareLink[]>('/shares/mine', listShares);
@@ -379,26 +381,29 @@ function DesktopContent() {
     }
   };
 
-  const handleAvatarChange = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    if (file.size > 2 * 1024 * 1024) {
-      toast('头像文件不能超过 2MB', 'error');
-      return;
-    }
-    const reader = new FileReader();
-    reader.onload = async () => {
-      try {
-        const avatar = reader.result as string;
-        const updated = await authApi.updateProfile({ avatar });
-        updateUser(updated);
-        toast('头像已更新', 'success');
-      } catch {
-        toast('头像上传失败', 'error');
+  const handleAvatarChange = useCallback(
+    async (e: React.ChangeEvent<HTMLInputElement>) => {
+      const file = e.target.files?.[0];
+      if (!file) return;
+      if (file.size > 2 * 1024 * 1024) {
+        toast('头像文件不能超过 2MB', 'error');
+        return;
       }
-    };
-    reader.readAsDataURL(file);
-  }, [toast, updateUser]);
+      const reader = new FileReader();
+      reader.onload = async () => {
+        try {
+          const avatar = reader.result as string;
+          const updated = await authApi.updateProfile({ avatar });
+          updateUser(updated);
+          toast('头像已更新', 'success');
+        } catch {
+          toast('头像上传失败', 'error');
+        }
+      };
+      reader.readAsDataURL(file);
+    },
+    [toast, updateUser],
+  );
 
   if (isLoading) {
     return <SkeletonList rows={4} />;
@@ -408,27 +413,34 @@ function DesktopContent() {
     <PageBody className="mx-auto max-w-6xl pb-12">
       <PageHeader
         title="个人设置"
-        description={(
+        description={
           <>
             用户: <span className="text-primary font-medium">{formData.username || formData.email}</span>
           </>
-        )}
-        actions={(
+        }
+        actions={
           <>
-          {saved && (
-            <span className="text-emerald-400 text-sm flex items-center gap-1">
-              <Icon name="check_circle" size={20} />
-              已保存
-            </span>
-          )}
-          <button onClick={handleDiscard} className="px-4 py-2 bg-transparent text-outline border border-outline/40 hover:border-outline hover:text-on-surface transition-all rounded-sm text-sm uppercase tracking-wider">
-            放弃修改
-          </button>
-          <button onClick={handleSave} disabled={saving} className="px-6 py-2 bg-primary-container text-on-primary rounded-sm text-sm uppercase tracking-wider hover:bg-primary transition-colors shadow-[0_0_15px_rgba(249,115,22,0.15)] disabled:opacity-50">
-            {saving ? '保存中...' : '保存设置'}
-          </button>
+            {saved && (
+              <span className="text-emerald-400 text-sm flex items-center gap-1">
+                <Icon name="check_circle" size={20} />
+                已保存
+              </span>
+            )}
+            <button
+              onClick={handleDiscard}
+              className="px-4 py-2 bg-transparent text-outline border border-outline/40 hover:border-outline hover:text-on-surface transition-all rounded-sm text-sm uppercase tracking-wider"
+            >
+              放弃修改
+            </button>
+            <button
+              onClick={handleSave}
+              disabled={saving}
+              className="px-6 py-2 bg-primary-container text-on-primary rounded-sm text-sm uppercase tracking-wider hover:bg-primary transition-colors shadow-[0_0_15px_rgba(249,115,22,0.15)] disabled:opacity-50"
+            >
+              {saving ? '保存中...' : '保存设置'}
+            </button>
           </>
-        )}
+        }
       />
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
@@ -443,7 +455,12 @@ function DesktopContent() {
             <div onClick={() => avatarInputRef.current?.click()} className="relative group cursor-pointer mb-4">
               <div className="w-24 h-24 rounded-full bg-surface-container-highest flex items-center justify-center">
                 {user?.avatar ? (
-                  <SafeImage src={user.avatar} alt="" className="w-full h-full rounded-full object-cover" fallbackIcon="person" />
+                  <SafeImage
+                    src={user.avatar}
+                    alt=""
+                    className="w-full h-full rounded-full object-cover"
+                    fallbackIcon="person"
+                  />
                 ) : (
                   <Icon name="person" size={48} className="text-on-surface-variant" />
                 )}
@@ -479,7 +496,7 @@ function DesktopContent() {
               <textarea
                 name="bio"
                 value={formData.bio}
-                onChange={(e) => setFormData(prev => ({ ...prev, bio: e.target.value }))}
+                onChange={(e) => setFormData((prev) => ({ ...prev, bio: e.target.value }))}
                 maxLength={500}
                 rows={3}
                 className="w-full bg-surface-container-lowest text-on-surface border-none border-l-2 border-transparent focus:border-primary focus:ring-0 px-4 py-2.5 text-sm transition-colors rounded-none resize-none"
@@ -551,7 +568,10 @@ function DesktopContent() {
                 <p className="text-xs text-on-secondary-container mt-0.5">定期更新密码以保障账户安全</p>
               </div>
             </div>
-            <button onClick={() => setPwdOpen(true)} className="px-4 py-1.5 bg-transparent text-secondary border border-secondary/30 hover:border-secondary transition-colors rounded-sm text-xs uppercase tracking-wider">
+            <button
+              onClick={() => setPwdOpen(true)}
+              className="px-4 py-1.5 bg-transparent text-secondary border border-secondary/30 hover:border-secondary transition-colors rounded-sm text-xs uppercase tracking-wider"
+            >
               修改密码
             </button>
           </div>
@@ -565,11 +585,21 @@ function DesktopContent() {
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
             <div>
               <span className="text-xs uppercase tracking-wider text-on-surface-variant">角色</span>
-              <p className="text-sm text-on-surface mt-1">{ROLE_LABELS[(profile || user)?.role || ''] || (profile || user)?.role}</p>
+              <p className="text-sm text-on-surface mt-1">
+                {ROLE_LABELS[(profile || user)?.role || ''] || (profile || user)?.role}
+              </p>
             </div>
             <div>
               <span className="text-xs uppercase tracking-wider text-on-surface-variant">注册时间</span>
-              <p className="text-sm text-on-surface mt-1">{(profile || user)?.createdAt ? new Date((profile || user)!.createdAt!).toLocaleDateString('zh-CN', { year: 'numeric', month: 'long', day: 'numeric' }) : '-'}</p>
+              <p className="text-sm text-on-surface mt-1">
+                {(profile || user)?.createdAt
+                  ? new Date((profile || user)!.createdAt!).toLocaleDateString('zh-CN', {
+                      year: 'numeric',
+                      month: 'long',
+                      day: 'numeric',
+                    })
+                  : '-'}
+              </p>
             </div>
             <div>
               <span className="text-xs uppercase tracking-wider text-on-surface-variant">用户ID</span>
@@ -652,26 +682,29 @@ function MobileContent() {
     setEditing(false);
   };
 
-  const handleAvatarChange = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    if (file.size > 2 * 1024 * 1024) {
-      toast('头像文件不能超过 2MB', 'error');
-      return;
-    }
-    const reader = new FileReader();
-    reader.onload = async () => {
-      try {
-        const avatar = reader.result as string;
-        const updated = await authApi.updateProfile({ avatar });
-        updateUser(updated);
-        toast('头像已更新', 'success');
-      } catch {
-        toast('头像上传失败', 'error');
+  const handleAvatarChange = useCallback(
+    async (e: React.ChangeEvent<HTMLInputElement>) => {
+      const file = e.target.files?.[0];
+      if (!file) return;
+      if (file.size > 2 * 1024 * 1024) {
+        toast('头像文件不能超过 2MB', 'error');
+        return;
       }
-    };
-    reader.readAsDataURL(file);
-  }, [toast, updateUser]);
+      const reader = new FileReader();
+      reader.onload = async () => {
+        try {
+          const avatar = reader.result as string;
+          const updated = await authApi.updateProfile({ avatar });
+          updateUser(updated);
+          toast('头像已更新', 'success');
+        } catch {
+          toast('头像上传失败', 'error');
+        }
+      };
+      reader.readAsDataURL(file);
+    },
+    [toast, updateUser],
+  );
 
   return (
     <PageBody className="px-4 py-5 pb-20">
@@ -683,7 +716,12 @@ function MobileContent() {
         <div onClick={() => avatarInputRef.current?.click()} className="relative group cursor-pointer shrink-0">
           <div className="h-14 w-14 rounded-full bg-surface-container-lowest flex items-center justify-center">
             {user?.avatar ? (
-              <SafeImage src={user.avatar} alt="" className="w-full h-full rounded-full object-cover" fallbackIcon="person" />
+              <SafeImage
+                src={user.avatar}
+                alt=""
+                className="w-full h-full rounded-full object-cover"
+                fallbackIcon="person"
+              />
             ) : (
               <Icon name="person" size={32} className="text-on-surface-variant/40" />
             )}
@@ -778,7 +816,7 @@ function MobileContent() {
             <textarea
               name="bio"
               value={formData.bio}
-              onChange={(e) => setFormData(prev => ({ ...prev, bio: e.target.value }))}
+              onChange={(e) => setFormData((prev) => ({ ...prev, bio: e.target.value }))}
               maxLength={500}
               rows={2}
               className="w-full bg-surface-container-lowest text-on-surface border border-outline-variant/30 focus:border-primary px-3 py-2 text-sm rounded-md outline-none resize-none"
@@ -808,7 +846,9 @@ function MobileContent() {
               <Icon name="domain" size={20} className="text-on-surface/50" />
               <span className="text-sm text-on-surface">公司</span>
             </div>
-            <span className="text-sm text-on-surface-variant text-right break-words min-w-0">{user?.company || '-'}</span>
+            <span className="text-sm text-on-surface-variant text-right break-words min-w-0">
+              {user?.company || '-'}
+            </span>
           </div>
           <div className="flex items-center justify-between gap-3 rounded-lg bg-surface-container-high px-4 py-3">
             <div className="flex items-center gap-3">
@@ -822,14 +862,18 @@ function MobileContent() {
               <Icon name="badge" size={20} className="text-on-surface/50" />
               <span className="text-sm text-on-surface">部门/职位</span>
             </div>
-            <span className="text-sm text-on-surface-variant text-right break-words min-w-0">{(user as any)?.department || '-'}</span>
+            <span className="text-sm text-on-surface-variant text-right break-words min-w-0">
+              {(user as any)?.department || '-'}
+            </span>
           </div>
           <div className="flex items-center justify-between gap-3 rounded-lg bg-surface-container-high px-4 py-3">
             <div className="flex items-center gap-3">
               <Icon name="link" size={20} className="text-on-surface/50" />
               <span className="text-sm text-on-surface">地址</span>
             </div>
-            <span className="text-sm text-on-surface-variant text-right break-words min-w-0">{(user as any)?.address || '-'}</span>
+            <span className="text-sm text-on-surface-variant text-right break-words min-w-0">
+              {(user as any)?.address || '-'}
+            </span>
           </div>
           {(user as any)?.bio && (
             <div className="rounded-lg bg-surface-container-high px-4 py-3">
@@ -855,7 +899,11 @@ function MobileContent() {
         </div>
         <div className="flex items-center justify-between">
           <span className="text-xs text-on-surface-variant">注册时间</span>
-          <span className="text-sm text-on-surface">{user?.createdAt ? new Date(user.createdAt).toLocaleDateString('zh-CN', { year: 'numeric', month: 'long', day: 'numeric' }) : '-'}</span>
+          <span className="text-sm text-on-surface">
+            {user?.createdAt
+              ? new Date(user.createdAt).toLocaleDateString('zh-CN', { year: 'numeric', month: 'long', day: 'numeric' })
+              : '-'}
+          </span>
         </div>
       </div>
 
@@ -897,12 +945,10 @@ function MobileContent() {
 }
 
 export default function ProfilePage() {
-  useDocumentTitle("个人设置");
+  useDocumentTitle('个人设置');
   const isDesktop = useMediaQuery('(min-width: 768px)');
 
   return (
-    <AdminPageShell mobileContentClassName="p-0">
-      {isDesktop ? <DesktopContent /> : <MobileContent />}
-    </AdminPageShell>
+    <AdminPageShell mobileContentClassName="p-0">{isDesktop ? <DesktopContent /> : <MobileContent />}</AdminPageShell>
   );
 }

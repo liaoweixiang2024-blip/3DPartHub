@@ -1,7 +1,7 @@
-import { Router, Response } from "express";
-import type { Prisma } from "@prisma/client";
-import { prisma } from "../../lib/prisma.js";
-import { authMiddleware, type AuthRequest } from "../../middleware/auth.js";
+import { Router, Response } from 'express';
+import type { Prisma } from '@prisma/client';
+import { prisma } from '../../lib/prisma.js';
+import { authMiddleware, type AuthRequest } from '../../middleware/auth.js';
 
 const DEFAULT_NOTIFICATION_PREFS: Record<string, boolean> = {
   ticket: true,
@@ -11,14 +11,16 @@ const DEFAULT_NOTIFICATION_PREFS: Record<string, boolean> = {
 };
 
 function jsonObject(value: unknown): Prisma.JsonObject {
-  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
   return { ...(value as Prisma.JsonObject) };
 }
 
 function booleanRecord(value: unknown): Record<string, boolean> {
-  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
   return Object.fromEntries(
-    Object.entries(value as Record<string, unknown>).filter((entry): entry is [string, boolean] => typeof entry[1] === "boolean")
+    Object.entries(value as Record<string, unknown>).filter(
+      (entry): entry is [string, boolean] => typeof entry[1] === 'boolean',
+    ),
   );
 }
 
@@ -47,7 +49,7 @@ export function createAuthPreferencesRouter() {
   const router = Router();
 
   // GET /api/auth/notification-prefs - get user's notification preferences
-  router.get("/api/auth/notification-prefs", authMiddleware, async (req: AuthRequest, res: Response) => {
+  router.get('/api/auth/notification-prefs', authMiddleware, async (req: AuthRequest, res: Response) => {
     try {
       const user = await prisma.user.findUnique({
         where: { id: req.user!.userId },
@@ -60,7 +62,7 @@ export function createAuthPreferencesRouter() {
   });
 
   // PUT /api/auth/notification-prefs
-  router.put("/api/auth/notification-prefs", authMiddleware, async (req: AuthRequest, res: Response) => {
+  router.put('/api/auth/notification-prefs', authMiddleware, async (req: AuthRequest, res: Response) => {
     try {
       const prefs = {
         ...DEFAULT_NOTIFICATION_PREFS,
@@ -78,7 +80,7 @@ export function createAuthPreferencesRouter() {
       });
       res.json(prefs);
     } catch {
-      res.status(500).json({ detail: "更新通知偏好失败" });
+      res.status(500).json({ detail: '更新通知偏好失败' });
     }
   });
 

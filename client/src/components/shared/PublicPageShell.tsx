@@ -1,9 +1,9 @@
-import { lazy, Suspense, useState, type ReactNode } from "react";
-import { useMediaQuery } from "../../layouts/hooks/useMediaQuery";
-import TopNav from "./TopNav";
-import BottomNav from "./BottomNav";
+import { lazy, Suspense, useState, type ReactNode } from 'react';
+import { useMediaQuery } from '../../layouts/hooks/useMediaQuery';
+import TopNav from './TopNav';
+import BottomNav from './BottomNav';
 
-const MobileNavDrawer = lazy(() => import("./MobileNavDrawer"));
+const MobileNavDrawer = lazy(() => import('./MobileNavDrawer'));
 
 interface PublicPageShellProps {
   children: ReactNode;
@@ -24,12 +24,12 @@ export function PublicPageShell({
   showMobileBottomNav = true,
   keepMobileDrawerMounted = false,
 }: PublicPageShellProps) {
-  const isDesktop = useMediaQuery("(min-width: 768px)");
+  const isDesktop = useMediaQuery('(min-width: 768px)');
   const [navOpen, setNavOpen] = useState(false);
 
   if (isDesktop) {
     return (
-      <div className={className || "flex h-dvh flex-col overflow-hidden bg-surface"}>
+      <div className={className || 'flex h-dvh flex-col overflow-hidden bg-surface'}>
         <TopNav />
         {children}
       </div>
@@ -39,15 +39,14 @@ export function PublicPageShell({
   const handleMenuToggle = onMobileMenuToggle || (() => setNavOpen((prev) => !prev));
 
   return (
-    <div className={mobileClassName || className || "flex h-dvh flex-col bg-surface"}>
+    <div className={mobileClassName || className || 'flex h-dvh flex-col bg-surface'}>
       <TopNav compact onMenuToggle={handleMenuToggle} />
-      {mobileDrawer || (
-        keepMobileDrawerMounted || navOpen ? (
+      {mobileDrawer ||
+        (keepMobileDrawerMounted || navOpen ? (
           <Suspense fallback={null}>
             <MobileNavDrawer open={navOpen} onClose={() => setNavOpen(false)} />
           </Suspense>
-        ) : null
-      )}
+        ) : null)}
       {children}
       {showMobileBottomNav ? <BottomNav /> : null}
     </div>

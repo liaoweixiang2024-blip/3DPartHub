@@ -1,13 +1,13 @@
-import { lazy, Suspense, useState, type ReactNode } from "react";
-import useSWR from "swr";
-import { useMediaQuery } from "../../layouts/hooks/useMediaQuery";
-import { getCachedPublicSettings, getFooterCopyright, getSiteTitle } from "../../lib/publicSettings";
-import TopNav from "./TopNav";
-import BottomNav from "./BottomNav";
-import AppSidebar from "./Sidebar";
-import { mergeClassName } from "./PagePrimitives";
+import { lazy, Suspense, useState, type ReactNode } from 'react';
+import useSWR from 'swr';
+import { useMediaQuery } from '../../layouts/hooks/useMediaQuery';
+import { getCachedPublicSettings, getFooterCopyright, getSiteTitle } from '../../lib/publicSettings';
+import TopNav from './TopNav';
+import BottomNav from './BottomNav';
+import AppSidebar from './Sidebar';
+import { mergeClassName } from './PagePrimitives';
 
-const MobileNavDrawer = lazy(() => import("./MobileNavDrawer"));
+const MobileNavDrawer = lazy(() => import('./MobileNavDrawer'));
 
 interface AdminPageShellProps {
   children: ReactNode;
@@ -18,10 +18,11 @@ interface AdminPageShellProps {
 }
 
 function AdminCopyrightBadge() {
-  const { data: settings } = useSWR("publicSettings", () => getCachedPublicSettings());
-  const text = (settings?.footer_copyright as string | undefined)?.trim()
-    || getFooterCopyright()
-    || `\u00a9 ${new Date().getFullYear()} ${getSiteTitle()}. All rights reserved.`;
+  const { data: settings } = useSWR('publicSettings', () => getCachedPublicSettings());
+  const text =
+    (settings?.footer_copyright as string | undefined)?.trim() ||
+    getFooterCopyright() ||
+    `\u00a9 ${new Date().getFullYear()} ${getSiteTitle()}. All rights reserved.`;
   const year = new Date().getFullYear();
 
   return (
@@ -40,7 +41,7 @@ export function AdminPageShell({
   mobileContentClassName,
   hideMobileBottomNav = false,
 }: AdminPageShellProps) {
-  const isDesktop = useMediaQuery("(min-width: 768px)");
+  const isDesktop = useMediaQuery('(min-width: 768px)');
   const [navOpen, setNavOpen] = useState(false);
 
   if (isDesktop) {
@@ -49,7 +50,12 @@ export function AdminPageShell({
         <TopNav />
         <div className="flex flex-1 overflow-hidden">
           <AppSidebar />
-          <main className={mergeClassName("flex flex-1 flex-col overflow-y-auto bg-surface-dim p-8 custom-scrollbar", desktopContentClassName)}>
+          <main
+            className={mergeClassName(
+              'flex flex-1 flex-col overflow-y-auto bg-surface-dim p-8 custom-scrollbar',
+              desktopContentClassName,
+            )}
+          >
             {children}
           </main>
           <AdminCopyrightBadge />
@@ -66,8 +72,15 @@ export function AdminPageShell({
           <MobileNavDrawer open={navOpen} onClose={() => setNavOpen(false)} />
         </Suspense>
       ) : null}
-      <main className={mergeClassName("flex-1 overflow-y-auto bg-surface-dim scrollbar-hidden", mobileMainClassName)}>
-        <div className={mergeClassName(`flex min-h-full flex-col px-4 py-4 ${hideMobileBottomNav ? "" : "pb-20"}`, mobileContentClassName)}>{children}</div>
+      <main className={mergeClassName('flex-1 overflow-y-auto bg-surface-dim scrollbar-hidden', mobileMainClassName)}>
+        <div
+          className={mergeClassName(
+            `flex min-h-full flex-col px-4 py-4 ${hideMobileBottomNav ? '' : 'pb-20'}`,
+            mobileContentClassName,
+          )}
+        >
+          {children}
+        </div>
       </main>
       {hideMobileBottomNav ? null : <BottomNav />}
     </div>

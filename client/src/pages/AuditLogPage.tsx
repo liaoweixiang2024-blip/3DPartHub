@@ -1,13 +1,13 @@
-import { useCallback, useEffect, useState } from "react";
-import useSWRInfinite from "swr/infinite";
-import { useDocumentTitle } from "../hooks/useDocumentTitle";
-import { useMediaQuery } from "../layouts/hooks/useMediaQuery";
-import InfiniteLoadTrigger from "../components/shared/InfiniteLoadTrigger";
-import { AdminPageShell } from "../components/shared/AdminPageShell";
-import { AdminManagementPage, AdminContentPanel, AdminEmptyState } from "../components/shared/AdminManagementPage";
-import Icon from "../components/shared/Icon";
-import client from "../api/client";
-import { unwrapResponse } from "../api/response";
+import { useCallback, useEffect, useState } from 'react';
+import useSWRInfinite from 'swr/infinite';
+import { useDocumentTitle } from '../hooks/useDocumentTitle';
+import { useMediaQuery } from '../layouts/hooks/useMediaQuery';
+import InfiniteLoadTrigger from '../components/shared/InfiniteLoadTrigger';
+import { AdminPageShell } from '../components/shared/AdminPageShell';
+import { AdminManagementPage, AdminContentPanel, AdminEmptyState } from '../components/shared/AdminManagementPage';
+import Icon from '../components/shared/Icon';
+import client from '../api/client';
+import { unwrapResponse } from '../api/response';
 
 type AuditDetails = {
   body?: {
@@ -31,32 +31,32 @@ interface AuditEntry {
 }
 
 const ACTION_MAP: Record<string, { label: string; color: string }> = {
-  create: { label: "创建", color: "text-green-500 bg-green-500/10" },
-  upload: { label: "上传", color: "text-green-500 bg-green-500/10" },
-  update: { label: "更新", color: "text-blue-500 bg-blue-500/10" },
-  delete: { label: "删除", color: "text-red-500 bg-red-500/10" },
-  login: { label: "登录", color: "text-amber-500 bg-amber-500/10" },
-  download: { label: "下载", color: "text-purple-500 bg-purple-500/10" },
-  register: { label: "注册", color: "text-teal-500 bg-teal-500/10" },
-  settings_update: { label: "设置", color: "text-cyan-500 bg-cyan-500/10" },
-  favorite: { label: "收藏", color: "text-pink-500 bg-pink-500/10" },
-  unfavorite: { label: "取消收藏", color: "text-on-surface-variant bg-surface-container-highest" },
-  comment: { label: "评论", color: "text-indigo-500 bg-indigo-500/10" },
-  ticket_create: { label: "创建工单", color: "text-primary-container bg-primary-container/10" },
-  ticket_reply: { label: "回复工单", color: "text-blue-500 bg-blue-500/10" },
-  ticket_status: { label: "工单状态", color: "text-amber-500 bg-amber-500/10" },
+  create: { label: '创建', color: 'text-green-500 bg-green-500/10' },
+  upload: { label: '上传', color: 'text-green-500 bg-green-500/10' },
+  update: { label: '更新', color: 'text-blue-500 bg-blue-500/10' },
+  delete: { label: '删除', color: 'text-red-500 bg-red-500/10' },
+  login: { label: '登录', color: 'text-amber-500 bg-amber-500/10' },
+  download: { label: '下载', color: 'text-purple-500 bg-purple-500/10' },
+  register: { label: '注册', color: 'text-teal-500 bg-teal-500/10' },
+  settings_update: { label: '设置', color: 'text-cyan-500 bg-cyan-500/10' },
+  favorite: { label: '收藏', color: 'text-pink-500 bg-pink-500/10' },
+  unfavorite: { label: '取消收藏', color: 'text-on-surface-variant bg-surface-container-highest' },
+  comment: { label: '评论', color: 'text-indigo-500 bg-indigo-500/10' },
+  ticket_create: { label: '创建工单', color: 'text-primary-container bg-primary-container/10' },
+  ticket_reply: { label: '回复工单', color: 'text-blue-500 bg-blue-500/10' },
+  ticket_status: { label: '工单状态', color: 'text-amber-500 bg-amber-500/10' },
 };
 
 const RESOURCE_MAP: Record<string, string> = {
-  model: "模型",
-  user: "用户",
-  settings: "系统设置",
-  category: "分类",
-  comment: "评论",
-  auth: "认证",
-  ticket: "工单",
-  favorite: "收藏",
-  download: "下载",
+  model: '模型',
+  user: '用户',
+  settings: '系统设置',
+  category: '分类',
+  comment: '评论',
+  auth: '认证',
+  ticket: '工单',
+  favorite: '收藏',
+  download: '下载',
 };
 
 const AUDIT_PAGE_SIZE = 30;
@@ -66,7 +66,7 @@ async function fetchAuditLogs(page: number, filterAction: string, filterResource
   if (filterAction) params.action = filterAction;
   if (filterResource) params.resource = filterResource;
   return client
-    .get("/audit", { params })
+    .get('/audit', { params })
     .then((response) => unwrapResponse<{ total: number; items: AuditEntry[]; page: number }>(response));
 }
 
@@ -74,26 +74,29 @@ function DetailRow({ label, value, compact = false }: { label: string; value: st
   return (
     <div className="flex items-start gap-2 text-xs">
       <span className="text-on-surface-variant/60 shrink-0 w-14">{label}</span>
-      <span className={`text-on-surface-variant min-w-0 break-all ${compact ? "line-clamp-2" : ""}`}>{value}</span>
+      <span className={`text-on-surface-variant min-w-0 break-all ${compact ? 'line-clamp-2' : ''}`}>{value}</span>
     </div>
   );
 }
 
 function LogRow({ log, isDesktop }: { log: AuditEntry; isDesktop: boolean }) {
   const [expanded, setExpanded] = useState(false);
-  const act = ACTION_MAP[log.action] || { label: log.action, color: "text-on-surface-variant bg-surface-container-highest" };
+  const act = ACTION_MAP[log.action] || {
+    label: log.action,
+    color: 'text-on-surface-variant bg-surface-container-highest',
+  };
   const resLabel = RESOURCE_MAP[log.resource] || log.resource;
 
   const detailLines: { label: string; value: string }[] = [];
-  if (log.resourceId) detailLines.push({ label: "资源ID", value: log.resourceId });
+  if (log.resourceId) detailLines.push({ label: '资源ID', value: log.resourceId });
   if (log.details?.body) {
     const body = log.details.body;
-    if (body.name) detailLines.push({ label: "名称", value: body.name });
-    if (body.status) detailLines.push({ label: "状态", value: body.status });
-    if (body.content) detailLines.push({ label: "内容", value: String(body.content).slice(0, 100) });
+    if (body.name) detailLines.push({ label: '名称', value: body.name });
+    if (body.status) detailLines.push({ label: '状态', value: body.status });
+    if (body.content) detailLines.push({ label: '内容', value: String(body.content).slice(0, 100) });
   }
-  if (log.details?.path) detailLines.push({ label: "路径", value: log.details.path });
-  if (log.details?.statusCode) detailLines.push({ label: "状态码", value: String(log.details.statusCode) });
+  if (log.details?.path) detailLines.push({ label: '路径', value: log.details.path });
+  if (log.details?.statusCode) detailLines.push({ label: '状态码', value: String(log.details.statusCode) });
 
   if (isDesktop) {
     return (
@@ -103,19 +106,20 @@ function LogRow({ log, isDesktop }: { log: AuditEntry; isDesktop: boolean }) {
           onClick={() => setExpanded(!expanded)}
         >
           <td className="py-2 px-4">
-            <span className={`text-[10px] px-2 py-0.5 rounded-sm font-bold ${act.color}`}>
-              {act.label}
-            </span>
+            <span className={`text-[10px] px-2 py-0.5 rounded-sm font-bold ${act.color}`}>{act.label}</span>
           </td>
           <td className="py-2 px-4 text-xs text-on-surface-variant">{resLabel}</td>
-          <td className="py-2 px-4 text-xs text-on-surface-variant/60 font-mono max-w-[160px] truncate" title={log.resourceId || ""}>
-            {log.resourceId || "—"}
+          <td
+            className="py-2 px-4 text-xs text-on-surface-variant/60 font-mono max-w-[160px] truncate"
+            title={log.resourceId || ''}
+          >
+            {log.resourceId || '—'}
           </td>
           <td className="py-2 px-4 text-xs text-on-surface-variant/60">
-            {log.username || (log.userId ? log.userId.slice(0, 8) + "..." : "系统")}
+            {log.username || (log.userId ? log.userId.slice(0, 8) + '...' : '系统')}
           </td>
           <td className="py-2 px-4 text-xs text-on-surface-variant/40 whitespace-nowrap">
-            {new Date(log.createdAt).toLocaleString("zh-CN")}
+            {new Date(log.createdAt).toLocaleString('zh-CN')}
           </td>
         </tr>
         {expanded && detailLines.length > 0 && (
@@ -139,14 +143,17 @@ function LogRow({ log, isDesktop }: { log: AuditEntry; isDesktop: boolean }) {
       onClick={() => setExpanded(!expanded)}
     >
       <div className="flex flex-wrap items-center gap-2 mb-1.5">
-        <span className={`text-[10px] px-2 py-0.5 rounded-sm font-bold ${act.color}`}>
-          {act.label}
-        </span>
+        <span className={`text-[10px] px-2 py-0.5 rounded-sm font-bold ${act.color}`}>{act.label}</span>
         <span className="text-[10px] text-on-surface-variant bg-surface-container-highest px-1.5 py-0.5 rounded-sm">
           {resLabel}
         </span>
         <span className="text-[10px] text-on-surface-variant/40 ml-auto whitespace-nowrap">
-          {new Date(log.createdAt).toLocaleString("zh-CN", { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" })}
+          {new Date(log.createdAt).toLocaleString('zh-CN', {
+            month: '2-digit',
+            day: '2-digit',
+            hour: '2-digit',
+            minute: '2-digit',
+          })}
         </span>
       </div>
       {log.resourceId && (
@@ -164,18 +171,18 @@ function LogRow({ log, isDesktop }: { log: AuditEntry; isDesktop: boolean }) {
 }
 
 export default function AuditLogPage() {
-  useDocumentTitle("操作日志");
-  const isDesktop = useMediaQuery("(min-width: 768px)");
-  const [filterAction, setFilterAction] = useState("");
-  const [filterResource, setFilterResource] = useState("");
-  const [search, setSearch] = useState("");
+  useDocumentTitle('操作日志');
+  const isDesktop = useMediaQuery('(min-width: 768px)');
+  const [filterAction, setFilterAction] = useState('');
+  const [filterResource, setFilterResource] = useState('');
+  const [search, setSearch] = useState('');
 
   const { data, isLoading, setSize, size } = useSWRInfinite(
     (pageIndex, previousPageData: { total: number; items: AuditEntry[]; page: number } | null) => {
       if (previousPageData && previousPageData.page * AUDIT_PAGE_SIZE >= previousPageData.total) return null;
-      return ["/audit", filterAction, filterResource, pageIndex + 1] as const;
+      return ['/audit', filterAction, filterResource, pageIndex + 1] as const;
     },
-    ([, action, resource, nextPage]) => fetchAuditLogs(nextPage, action, resource)
+    ([, action, resource, nextPage]) => fetchAuditLogs(nextPage, action, resource),
   );
 
   useEffect(() => {
@@ -203,7 +210,10 @@ export default function AuditLogPage() {
           body?.status,
           body?.content,
           log.createdAt,
-        ].filter(Boolean).join(" ").toLowerCase();
+        ]
+          .filter(Boolean)
+          .join(' ')
+          .toLowerCase();
         return haystack.includes(searchText);
       })
     : logs;
@@ -222,15 +232,15 @@ export default function AuditLogPage() {
           {
             value: filterAction,
             onChange: setFilterAction,
-            label: "操作",
-            allLabel: "全部操作",
+            label: '操作',
+            allLabel: '全部操作',
             options: Object.entries(ACTION_MAP).map(([value, item]) => ({ value, label: item.label })),
           },
           {
             value: filterResource,
             onChange: setFilterResource,
-            label: "资源",
-            allLabel: "全部资源",
+            label: '资源',
+            allLabel: '全部资源',
             options: Object.entries(RESOURCE_MAP).map(([value, label]) => ({ value, label })),
           },
         ].map((filter, index) => (
@@ -238,11 +248,13 @@ export default function AuditLogPage() {
             key={filter.label}
             className={`relative inline-flex h-9 min-w-0 items-center justify-center text-sm font-medium leading-none transition-colors after:absolute after:inset-x-3 after:bottom-0 after:h-0.5 after:rounded-full md:w-[7.25rem] ${
               filter.value
-                ? "text-primary-container after:bg-primary-container"
-                : "text-on-surface-variant after:bg-transparent hover:text-on-surface"
+                ? 'text-primary-container after:bg-primary-container'
+                : 'text-on-surface-variant after:bg-transparent hover:text-on-surface'
             }`}
           >
-            {index > 0 ? <span className="absolute left-0 top-1/2 hidden h-3.5 w-px -translate-y-1/2 bg-outline-variant/20 md:block" /> : null}
+            {index > 0 ? (
+              <span className="absolute left-0 top-1/2 hidden h-3.5 w-px -translate-y-1/2 bg-outline-variant/20 md:block" />
+            ) : null}
             <select
               value={filter.value}
               onChange={(event) => filter.onChange(event.target.value)}
@@ -251,27 +263,40 @@ export default function AuditLogPage() {
             >
               <option value="">{filter.allLabel}</option>
               {filter.options.map((option) => (
-                <option key={option.value} value={option.value}>{option.label}</option>
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
               ))}
             </select>
-            <Icon name="expand_more" size={14} className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-current opacity-60" />
+            <Icon
+              name="expand_more"
+              size={14}
+              className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-current opacity-60"
+            />
           </div>
         ))}
       </div>
 
       <div className="flex min-w-0 items-center gap-3 overflow-x-auto scrollbar-none text-xs text-on-surface-variant md:justify-end">
-        <span className="whitespace-nowrap">共 <strong className="text-on-surface tabular-nums">{total}</strong> 条</span>
+        <span className="whitespace-nowrap">
+          共 <strong className="text-on-surface tabular-nums">{total}</strong> 条
+        </span>
         {searchText ? (
           <>
             <span className="h-3 w-px shrink-0 bg-outline-variant/20" />
-            <span className="whitespace-nowrap">匹配 <strong className="text-on-surface tabular-nums">{visibleLogs.length}</strong> 条</span>
+            <span className="whitespace-nowrap">
+              匹配 <strong className="text-on-surface tabular-nums">{visibleLogs.length}</strong> 条
+            </span>
           </>
         ) : null}
-        {(filterAction || filterResource) ? (
+        {filterAction || filterResource ? (
           <>
             <span className="h-3 w-px shrink-0 bg-outline-variant/20" />
             <button
-              onClick={() => { setFilterAction(""); setFilterResource(""); }}
+              onClick={() => {
+                setFilterAction('');
+                setFilterResource('');
+              }}
               className="shrink-0 text-xs font-semibold text-primary-container transition-colors hover:text-on-surface"
             >
               清除筛选
@@ -289,7 +314,7 @@ export default function AuditLogPage() {
           className="min-w-0 flex-1 border-none bg-transparent text-sm text-on-surface outline-none placeholder:text-on-surface-variant/50"
         />
         {search && (
-          <button onClick={() => setSearch("")} className="p-0.5 text-on-surface-variant hover:text-on-surface">
+          <button onClick={() => setSearch('')} className="p-0.5 text-on-surface-variant hover:text-on-surface">
             <Icon name="close" size={14} />
           </button>
         )}
@@ -300,7 +325,12 @@ export default function AuditLogPage() {
   if (isDesktop) {
     return (
       <AdminPageShell desktopContentClassName="min-h-0 overflow-hidden">
-        <AdminManagementPage title="操作日志" description="查看后台操作、登录、下载和数据变更记录" toolbar={filterBar} contentClassName="min-h-0 overflow-hidden">
+        <AdminManagementPage
+          title="操作日志"
+          description="查看后台操作、登录、下载和数据变更记录"
+          toolbar={filterBar}
+          contentClassName="min-h-0 overflow-hidden"
+        >
           <AdminContentPanel scroll className="h-full overflow-hidden">
             <div className="h-full overflow-auto custom-scrollbar">
               <table className="w-full">
@@ -314,7 +344,7 @@ export default function AuditLogPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {visibleLogs.map(log => (
+                  {visibleLogs.map((log) => (
                     <LogRow key={log.id} log={log} isDesktop />
                   ))}
                   {logs.length > 0 && !searchText && (
@@ -328,10 +358,18 @@ export default function AuditLogPage() {
               </table>
             </div>
             {isLoading && logs.length === 0 && (
-              <div className="flex min-h-[360px] items-center justify-center text-sm text-on-surface-variant">加载中...</div>
+              <div className="flex min-h-[360px] items-center justify-center text-sm text-on-surface-variant">
+                加载中...
+              </div>
             )}
             {visibleLogs.length === 0 && !isLoading && (
-              <AdminEmptyState icon={searchText ? "search_off" : "schedule"} title={searchText ? "没有匹配的日志" : "暂无操作日志"} description={searchText ? "请换个关键词，或清空搜索后再看。" : "后台操作、登录、下载和数据变更记录会显示在这里。"} />
+              <AdminEmptyState
+                icon={searchText ? 'search_off' : 'schedule'}
+                title={searchText ? '没有匹配的日志' : '暂无操作日志'}
+                description={
+                  searchText ? '请换个关键词，或清空搜索后再看。' : '后台操作、登录、下载和数据变更记录会显示在这里。'
+                }
+              />
             )}
           </AdminContentPanel>
         </AdminManagementPage>
@@ -340,19 +378,38 @@ export default function AuditLogPage() {
   }
 
   return (
-    <AdminPageShell mobileMainClassName="min-h-0 overflow-hidden" mobileContentClassName="flex h-full min-h-0 flex-col px-4 py-4 pb-20">
-      <AdminManagementPage title="操作日志" description="查看后台操作、登录、下载和数据变更记录" toolbar={filterBar} contentClassName="min-h-0 overflow-hidden">
+    <AdminPageShell
+      mobileMainClassName="min-h-0 overflow-hidden"
+      mobileContentClassName="flex h-full min-h-0 flex-col px-4 py-4 pb-20"
+    >
+      <AdminManagementPage
+        title="操作日志"
+        description="查看后台操作、登录、下载和数据变更记录"
+        toolbar={filterBar}
+        contentClassName="min-h-0 overflow-hidden"
+      >
         <AdminContentPanel scroll>
           <div className="min-h-0 flex-1 overflow-y-auto scrollbar-hidden flex flex-col gap-2 p-3">
-            {visibleLogs.map(log => (
+            {visibleLogs.map((log) => (
               <LogRow key={log.id} log={log} isDesktop={false} />
             ))}
-            {logs.length > 0 && !searchText && <InfiniteLoadTrigger hasMore={hasMore} isLoading={isLoadingMore} onLoadMore={loadMore} />}
+            {logs.length > 0 && !searchText && (
+              <InfiniteLoadTrigger hasMore={hasMore} isLoading={isLoadingMore} onLoadMore={loadMore} />
+            )}
             {isLoading && logs.length === 0 && (
-              <div className="flex min-h-[320px] items-center justify-center text-sm text-on-surface-variant">加载中...</div>
+              <div className="flex min-h-[320px] items-center justify-center text-sm text-on-surface-variant">
+                加载中...
+              </div>
             )}
             {visibleLogs.length === 0 && !isLoading && (
-              <AdminEmptyState icon={searchText ? "search_off" : "schedule"} title={searchText ? "没有匹配的日志" : "暂无操作日志"} description={searchText ? "请换个关键词，或清空搜索后再看。" : "后台操作、登录、下载和数据变更记录会显示在这里。"} className="min-h-[320px] md:min-h-[360px]" />
+              <AdminEmptyState
+                icon={searchText ? 'search_off' : 'schedule'}
+                title={searchText ? '没有匹配的日志' : '暂无操作日志'}
+                description={
+                  searchText ? '请换个关键词，或清空搜索后再看。' : '后台操作、登录、下载和数据变更记录会显示在这里。'
+                }
+                className="min-h-[320px] md:min-h-[360px]"
+              />
             )}
           </div>
         </AdminContentPanel>

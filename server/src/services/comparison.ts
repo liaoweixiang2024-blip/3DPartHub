@@ -1,6 +1,6 @@
-import { prisma } from "../lib/prisma.js";
-import { readGltfAsset, resolveFileUrlPath } from "./gltfAsset.js";
-import { MODEL_STATUS } from "./modelStatus.js";
+import { prisma } from '../lib/prisma.js';
+import { readGltfAsset, resolveFileUrlPath } from './gltfAsset.js';
+import { MODEL_STATUS } from './modelStatus.js';
 
 interface ModelStats {
   id: string;
@@ -19,14 +19,18 @@ function extractGltfStats(gltfPath: string): { vertexCount: number; faceCount: n
     const { json: gltf } = readGltfAsset(gltfPath);
     let vertexCount = 0;
     let faceCount = 0;
-    let minX = Infinity, minY = Infinity, minZ = Infinity;
-    let maxX = -Infinity, maxY = -Infinity, maxZ = -Infinity;
+    let minX = Infinity,
+      minY = Infinity,
+      minZ = Infinity;
+    let maxX = -Infinity,
+      maxY = -Infinity,
+      maxZ = -Infinity;
 
     const accessors: any[] = Array.from(gltf.accessors || []);
     const meshes: any[] = Array.from(gltf.meshes || []);
 
     for (const mesh of meshes) {
-      for (const prim of (mesh.primitives || [])) {
+      for (const prim of mesh.primitives || []) {
         const posIdx = prim.attributes?.POSITION;
         let primitiveVertexCount = 0;
         if (posIdx !== undefined) {
@@ -58,7 +62,7 @@ function extractGltfStats(gltfPath: string): { vertexCount: number; faceCount: n
       }
     }
 
-    const dimensions = (minX !== Infinity) ? { minX, minY, minZ, maxX, maxY, maxZ } : null;
+    const dimensions = minX !== Infinity ? { minX, minY, minZ, maxX, maxY, maxZ } : null;
     return { vertexCount, faceCount, dimensions };
   } catch {
     return null;
@@ -66,16 +70,16 @@ function extractGltfStats(gltfPath: string): { vertexCount: number; faceCount: n
 }
 
 export async function compareModels(id1: string, id2: string) {
-  if (!prisma) throw new Error("数据库未连接");
+  if (!prisma) throw new Error('数据库未连接');
 
   const [m1, m2] = await Promise.all([
     prisma.model.findUnique({ where: { id: id1 } }),
     prisma.model.findUnique({ where: { id: id2 } }),
   ]);
 
-  if (!m1 || !m2) throw new Error("模型不存在");
+  if (!m1 || !m2) throw new Error('模型不存在');
   if (m1.status !== MODEL_STATUS.COMPLETED || m2.status !== MODEL_STATUS.COMPLETED) {
-    throw new Error("模型不存在");
+    throw new Error('模型不存在');
   }
 
   // Try to extract stats from glTF files
@@ -85,16 +89,23 @@ export async function compareModels(id1: string, id2: string) {
   try {
     const path1 = resolveFileUrlPath(m1.gltfUrl);
     if (path1) stats1 = extractGltfStats(path1);
-  } catch { /* ignore */ }
+  } catch {
+    /* ignore */
+  }
 
   try {
     const path2 = resolveFileUrlPath(m2.gltfUrl);
     if (path2) stats2 = extractGltfStats(path2);
-  } catch { /* ignore */ }
+  } catch {
+    /* ignore */
+  }
 
   const info1: ModelStats = {
-    id: m1.id, name: m1.name, format: m1.format,
-    gltfSize: m1.gltfSize, originalSize: m1.originalSize,
+    id: m1.id,
+    name: m1.name,
+    format: m1.format,
+    gltfSize: m1.gltfSize,
+    originalSize: m1.originalSize,
     vertexCount: stats1?.vertexCount || 0,
     faceCount: stats1?.faceCount || 0,
     dimensions: stats1?.dimensions || null,
@@ -102,8 +113,11 @@ export async function compareModels(id1: string, id2: string) {
   };
 
   const info2: ModelStats = {
-    id: m2.id, name: m2.name, format: m2.format,
-    gltfSize: m2.gltfSize, originalSize: m2.originalSize,
+    id: m2.id,
+    name: m2.name,
+    format: m2.format,
+    gltfSize: m2.gltfSize,
+    originalSize: m2.originalSize,
     vertexCount: stats2?.vertexCount || 0,
     faceCount: stats2?.faceCount || 0,
     dimensions: stats2?.dimensions || null,

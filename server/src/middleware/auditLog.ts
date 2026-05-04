@@ -1,6 +1,6 @@
-import { Response, NextFunction } from "express";
-import { prisma } from "../lib/prisma.js";
-import type { AuthRequest } from "./auth.js";
+import { Response, NextFunction } from 'express';
+import { prisma } from '../lib/prisma.js';
+import type { AuthRequest } from './auth.js';
 
 /**
  * Audit log middleware — records mutation operations to the database.
@@ -46,18 +46,33 @@ export function auditLog(action: string, resource: string) {
 }
 
 const SENSITIVE_KEYS = new Set([
-  "password", "passwordHash", "token", "secret", "apiKey", "api_key",
-  "authorization", "access_token", "refresh_token", "newPassword", "oldPassword",
-  "confirmPassword", "smtp_pass", "smtpPass", "creditCard", "ssn",
-  "privateKey", "credential", "cookie",
+  'password',
+  'passwordHash',
+  'token',
+  'secret',
+  'apiKey',
+  'api_key',
+  'authorization',
+  'access_token',
+  'refresh_token',
+  'newPassword',
+  'oldPassword',
+  'confirmPassword',
+  'smtp_pass',
+  'smtpPass',
+  'creditCard',
+  'ssn',
+  'privateKey',
+  'credential',
+  'cookie',
 ]);
 
 function sanitizeBody(body: any): any {
-  if (!body || typeof body !== "object") return body;
+  if (!body || typeof body !== 'object') return body;
   const sanitized = { ...body };
   for (const key of Object.keys(sanitized)) {
     if (SENSITIVE_KEYS.has(key) || /pass|secret|token|key|credential/i.test(key)) {
-      sanitized[key] = "[REDACTED]";
+      sanitized[key] = '[REDACTED]';
     }
   }
   return sanitized;

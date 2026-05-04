@@ -1,9 +1,15 @@
-import Redis from "ioredis";
-import { randomUUID } from "node:crypto";
-import { config } from "./config.js";
-import { createLogger } from "./logger.js";
+import Redis from 'ioredis';
+import { randomUUID } from 'node:crypto';
+import { config } from './config.js';
+import { createLogger } from './logger.js';
 
-const log = createLogger({ component: "cache" });
+const log = createLogger({ component: 'cache' });
+
+const KEY_PREFIX = (process.env.REDIS_KEY_PREFIX || process.env.NODE_ENV || 'dev') + ':';
+
+function pk(key: string): string {
+  return KEY_PREFIX + key;
+}
 
 export const redis = new Redis(config.redisUrl, {
   connectTimeout: 2000,
@@ -16,19 +22,23 @@ export const redis = new Redis(config.redisUrl, {
 });
 
 let available = false;
-redis.on("ready", () => { available = true; });
-redis.on("error", (err) => {
-  if (available) log.error({ err }, "Redis error");
+redis.on('ready', () => {
+  available = true;
+});
+redis.on('error', (err) => {
+  if (available) log.error({ err }, 'Redis error');
   available = false;
 });
-redis.on("close", () => { available = false; });
+redis.on('close', () => {
+  available = false;
+});
 
 export const TTL = {
-  CATEGORIES: 600,      // 10 min
-  SETTINGS_PUBLIC: 60,  // 1 min — config changes should propagate quickly
-  MODELS_LIST: 300,     // 5 min
-  MODELS_SEARCH: 60,    // 1 min — keep search fresh while absorbing bursts
-  MODEL_DETAIL: 300,     // 5 min
+  CATEGORIES: 600, // 10 min
+  SETTINGS_PUBLIC: 60, // 1 min — config changes should propagate quickly
+  MODELS_LIST: 300, // 5 min
+  MODELS_SEARCH: 60, // 1 min — keep search fresh while absorbing bursts
+  MODEL_DETAIL: 300, // 5 min
   MODEL_MATCH_INDEX: 600, // 10 min — model changes actively clear cache:models:
   SELECTION_CATEGORIES: 600, // 10 min
   SELECTION_PRODUCTS: 600, // 10 min — admin changes actively clear cache:selections:
@@ -41,7 +51,7 @@ function markUnavailable() {
 export async function cacheGet<T>(key: string): Promise<T | null> {
   if (!available) return null;
   try {
-    const raw = await redis.get(key);
+    const raw = await redis.get(pk(key));
     if (!raw) return null;
     return JSON.parse(raw) as T;
   } catch {
@@ -53,7 +63,7 @@ export async function cacheGet<T>(key: string): Promise<T | null> {
 export async function cacheSet(key: string, value: unknown, ttlSeconds: number): Promise<void> {
   if (!available) return;
   try {
-    await redis.set(key, JSON.stringify(value), "EX", ttlSeconds);
+    await redis.set(pk(key), JSON.stringify(value), 'EX', ttlSeconds);
   } catch {
     markUnavailable();
   }
@@ -101,7 +111,7 @@ async function releaseLock(lockKey: string, token: string): Promise<void> {
     `,
     1,
     lockKey,
-    token
+    token,
   );
 }
 
@@ -109,7 +119,7 @@ export async function cacheGetOrSet<T>(
   key: string,
   ttlSeconds: number,
   load: () => Promise<T>,
-  options: { lockTtlMs?: number; waitTimeoutMs?: number; pollMs?: number } = {}
+  options: { lockTtlMs?: number; waitTimeoutMs?: number; pollMs?: number } = {},
 ): Promise<CacheLoadResult<T>> {
   const cached = await cacheGet<T>(key);
   if (cached !== null) return { value: cached, hit: true };
@@ -118,15 +128,15 @@ export async function cacheGetOrSet<T>(
     return { value: await loadOnce(key, load), hit: false };
   }
 
-  const lockKey = `lock:${key}`;
+  const lockKey = pk(`lock:${key}`);
   const token = randomUUID();
   const lockTtlMs = options.lockTtlMs ?? 5000;
   const waitTimeoutMs = options.waitTimeoutMs ?? 1500;
   const pollMs = options.pollMs ?? 25;
 
   try {
-    const locked = await redis.set(lockKey, token, "PX", lockTtlMs, "NX");
-    if (locked === "OK") {
+    const locked = await redis.set(lockKey, token, 'PX', lockTtlMs, 'NX');
+    if (locked === 'OK') {
       try {
         const value = await loadOnce(key, load);
         await cacheSet(key, value, ttlSeconds);
@@ -152,7 +162,7 @@ export async function cacheGetOrSet<T>(
 export async function cacheDel(key: string): Promise<void> {
   if (!available) return;
   try {
-    await redis.del(key);
+    await redis.del(pk(key));
   } catch {
     markUnavailable();
   }
@@ -161,18 +171,18 @@ export async function cacheDel(key: string): Promise<void> {
 export async function cacheDelByPrefix(prefix: string): Promise<void> {
   if (!available) return;
   try {
-    // Use SCAN instead of KEYS to avoid blocking Redis on large key sets
-    const stream = redis.scanStream({ match: prefix + "*", count: 100 });
+    const stream = redis.scanStream({ match: pk(prefix) + '*', count: 100 });
     await new Promise<void>((resolve, reject) => {
-      stream.on("data", (keys: string[]) => {
+      stream.on('data', (keys: string[]) => {
         if (keys.length === 0) return;
         stream.pause();
-        redis.del(...keys)
+        redis
+          .del(...keys)
           .then(() => stream.resume())
           .catch(reject);
       });
-      stream.on("end", resolve);
-      stream.on("error", reject);
+      stream.on('end', resolve);
+      stream.on('error', reject);
     });
   } catch {
     markUnavailable();

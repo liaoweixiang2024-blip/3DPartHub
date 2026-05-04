@@ -1,19 +1,19 @@
-import jwt from "jsonwebtoken";
-import { config } from "./config.js";
-import { cacheGet, cacheSet, redis } from "./cache.js";
+import jwt from 'jsonwebtoken';
+import { config } from './config.js';
+import { cacheGet, cacheSet, redis } from './cache.js';
 
 const JWT_SECRET = config.jwtSecret;
-const ACCESS_EXPIRES = config.jwtExpiresIn as jwt.SignOptions["expiresIn"];
-const REFRESH_EXPIRES = "30d";
+const ACCESS_EXPIRES = config.jwtExpiresIn as jwt.SignOptions['expiresIn'];
+const REFRESH_EXPIRES = '30d';
 
 export interface TokenPayload {
   userId: string;
   role: string;
-  tokenType?: "access" | "refresh";
+  tokenType?: 'access' | 'refresh';
 }
 
 export type VerifiedTokenPayload = TokenPayload & {
-  tokenType: "access" | "refresh";
+  tokenType: 'access' | 'refresh';
   iat: number;
   jti?: string;
   familyId?: string;
@@ -50,13 +50,13 @@ export async function revokeAllTokensBefore(userId: string, beforeIat: number): 
 
 export async function revokeToken(userId: string, iat: number, ttlSeconds = 30 * 24 * 3600): Promise<void> {
   const key = tokenBlacklistKey(userId, iat);
-  await cacheSet(key, "1", ttlSeconds);
+  await cacheSet(key, '1', ttlSeconds);
 }
 
 export async function isRefreshTokenRevoked(userId: string, familyId: string): Promise<boolean> {
   const key = refreshTokenFamilyKey(userId, familyId);
   const val = await cacheGet<string>(key);
-  return val === "revoked";
+  return val === 'revoked';
 }
 
 export async function checkAndRevokeRefreshFamily(userId: string, familyId: string): Promise<boolean> {
@@ -75,33 +75,44 @@ export async function checkAndRevokeRefreshFamily(userId: string, familyId: stri
 
 export async function revokeRefreshFamily(userId: string, familyId: string): Promise<void> {
   const key = refreshTokenFamilyKey(userId, familyId);
-  await cacheSet(key, "revoked", 31 * 24 * 3600);
+  await cacheSet(key, 'revoked', 31 * 24 * 3600);
 }
 
 export function signAccessToken(payload: TokenPayload): string {
-  return jwt.sign({ userId: payload.userId, role: payload.role, tokenType: "access" }, JWT_SECRET, { expiresIn: ACCESS_EXPIRES });
+  return jwt.sign({ userId: payload.userId, role: payload.role, tokenType: 'access' }, JWT_SECRET, {
+    expiresIn: ACCESS_EXPIRES,
+  });
 }
 
 export function signRefreshToken(payload: TokenPayload & { familyId?: string }): string {
-  return jwt.sign({ userId: payload.userId, role: payload.role, tokenType: "refresh", familyId: payload.familyId || `fam_${Date.now().toString(36)}` }, JWT_SECRET, { expiresIn: REFRESH_EXPIRES });
+  return jwt.sign(
+    {
+      userId: payload.userId,
+      role: payload.role,
+      tokenType: 'refresh',
+      familyId: payload.familyId || `fam_${Date.now().toString(36)}`,
+    },
+    JWT_SECRET,
+    { expiresIn: REFRESH_EXPIRES },
+  );
 }
 
 export function verifyToken(token: string): VerifiedTokenPayload {
   const payload = jwt.verify(token, JWT_SECRET) as VerifiedTokenPayload;
-  if (payload.tokenType !== "access" && payload.tokenType !== "refresh") {
-    throw new Error("Invalid token type");
+  if (payload.tokenType !== 'access' && payload.tokenType !== 'refresh') {
+    throw new Error('Invalid token type');
   }
   return payload;
 }
 
 export function verifyAccessToken(token: string): VerifiedTokenPayload {
   const payload = verifyToken(token);
-  if (payload.tokenType !== "access") throw new Error("Invalid access token");
+  if (payload.tokenType !== 'access') throw new Error('Invalid access token');
   return payload;
 }
 
 export function verifyRefreshToken(token: string): VerifiedTokenPayload {
   const payload = verifyToken(token);
-  if (payload.tokenType !== "refresh") throw new Error("Invalid refresh token");
+  if (payload.tokenType !== 'refresh') throw new Error('Invalid refresh token');
   return payload;
 }

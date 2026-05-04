@@ -1,9 +1,9 @@
-import { useMemo, useState } from "react";
-import Icon from "../shared/Icon";
-import type { ModelPartItem } from "./viewerEvents";
+import { useMemo, useState } from 'react';
+import Icon from '../shared/Icon';
+import type { ModelPartItem } from './viewerEvents';
 
 interface ModelStructurePanelProps {
-  variant: "desktop" | "mobile";
+  variant: 'desktop' | 'mobile';
   parts: ModelPartItem[];
   selectedPartId?: string | null;
   hiddenPartIds: string[];
@@ -33,21 +33,22 @@ export default function ModelStructurePanel({
   onShowAll,
   onClose,
 }: ModelStructurePanelProps) {
-  const [query, setQuery] = useState("");
+  const [query, setQuery] = useState('');
   const hiddenSet = useMemo(() => new Set(hiddenPartIds), [hiddenPartIds]);
   const filteredParts = useMemo(() => {
     const text = query.trim().toLowerCase();
-    const result = text
-      ? parts.filter((part) => `${part.name} ${part.path}`.toLowerCase().includes(text))
-      : parts;
+    const result = text ? parts.filter((part) => `${part.name} ${part.path}`.toLowerCase().includes(text)) : parts;
     return result.slice(0, 400);
   }, [parts, query]);
-  const visibleCount = parts.filter((part) => (!isolatedPartId || part.id === isolatedPartId) && !hiddenSet.has(part.id)).length;
+  const visibleCount = parts.filter(
+    (part) => (!isolatedPartId || part.id === isolatedPartId) && !hiddenSet.has(part.id),
+  ).length;
   const totalTriangles = useMemo(() => parts.reduce((sum, part) => sum + part.triangleCount, 0), [parts]);
 
-  const panelClass = variant === "mobile"
-    ? "absolute left-3 right-12 top-14 bottom-4 z-40"
-    : "absolute left-4 top-20 bottom-4 z-30 w-80";
+  const panelClass =
+    variant === 'mobile'
+      ? 'absolute left-3 right-12 top-14 bottom-4 z-40'
+      : 'absolute left-4 top-20 bottom-4 z-30 w-80';
 
   return (
     <div
@@ -105,7 +106,10 @@ export default function ModelStructurePanel({
         </div>
       </div>
 
-      <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-2" style={{ WebkitOverflowScrolling: "touch" }}>
+      <div
+        className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-2"
+        style={{ WebkitOverflowScrolling: 'touch' }}
+      >
         {parts.length === 0 ? (
           <div className="flex h-full flex-col items-center justify-center gap-2 text-center text-xs text-on-surface-variant">
             <Icon name="view_in_ar" size={30} className="opacity-40" />
@@ -124,20 +128,22 @@ export default function ModelStructurePanel({
               const selected = selectedPartId === part.id;
               return (
                 <div
-                  key={`${part.id || part.name || "part"}-${index}`}
+                  key={`${part.id || part.name || 'part'}-${index}`}
                   role="button"
                   tabIndex={0}
                   onClick={() => onSelect(part.id)}
                   onKeyDown={(event) => {
-                    if (event.key === "Enter" || event.key === " ") onSelect(part.id);
+                    if (event.key === 'Enter' || event.key === ' ') onSelect(part.id);
                   }}
                   className={`group flex w-full items-center gap-2 rounded-sm border px-2 py-2 text-left transition-colors ${
                     selected
-                      ? "border-primary/40 bg-primary-container/15"
-                      : "border-transparent hover:border-outline-variant/20 hover:bg-surface-container-high/60"
-                  } ${hidden ? "opacity-45" : ""}`}
+                      ? 'border-primary/40 bg-primary-container/15'
+                      : 'border-transparent hover:border-outline-variant/20 hover:bg-surface-container-high/60'
+                  } ${hidden ? 'opacity-45' : ''}`}
                 >
-                  <span className={`mt-0.5 h-2 w-2 shrink-0 rounded-full ${isolated ? "bg-primary" : selected ? "bg-cyan-400" : "bg-outline-variant/60"}`} />
+                  <span
+                    className={`mt-0.5 h-2 w-2 shrink-0 rounded-full ${isolated ? 'bg-primary' : selected ? 'bg-cyan-400' : 'bg-outline-variant/60'}`}
+                  />
                   <span className="min-w-0 flex-1">
                     <span className="block truncate text-xs font-medium text-on-surface">{part.name}</span>
                     <span className="mt-0.5 block truncate text-[10px] text-on-surface-variant">
@@ -147,18 +153,18 @@ export default function ModelStructurePanel({
                   <span className="flex shrink-0 items-center gap-0.5 opacity-70 transition-opacity group-hover:opacity-100">
                     <button
                       type="button"
-                      title={hidden ? "显示零件" : "隐藏零件"}
+                      title={hidden ? '显示零件' : '隐藏零件'}
                       onClick={(event) => {
                         event.stopPropagation();
                         onToggleHidden(part.id);
                       }}
                       className="flex h-7 w-7 items-center justify-center rounded-sm text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface"
                     >
-                      <Icon name={hidden ? "visibility_off" : "visibility"} size={14} />
+                      <Icon name={hidden ? 'visibility_off' : 'visibility'} size={14} />
                     </button>
                     <button
                       type="button"
-                      title={isolated ? "取消隔离" : "隔离零件"}
+                      title={isolated ? '取消隔离' : '隔离零件'}
                       onClick={(event) => {
                         event.stopPropagation();
                         onIsolate(isolated ? null : part.id);

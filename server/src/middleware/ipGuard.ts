@@ -1,6 +1,6 @@
-import { Request, Response, NextFunction } from "express";
-import { getSetting } from "../lib/settings.js";
-import { isRefererAllowed } from "../lib/ipMatch.js";
+import { Request, Response, NextFunction } from 'express';
+import { getSetting } from '../lib/settings.js';
+import { isRefererAllowed } from '../lib/ipMatch.js';
 
 // Cache settings for 60 seconds
 let cachedAntiProxyEnabled = false;
@@ -15,26 +15,36 @@ async function refreshCache() {
   if (now - cachedAt < CACHE_TTL) return;
 
   const [antiProxy, allowedHosts, hotlinkEnabled, allowedDomains] = await Promise.all([
-    getSetting<boolean>("anti_proxy_enabled"),
-    getSetting<string>("allowed_hosts"),
-    getSetting<boolean>("hotlink_protection_enabled"),
-    getSetting<string>("allowed_referers"),
+    getSetting<boolean>('anti_proxy_enabled'),
+    getSetting<string>('allowed_hosts'),
+    getSetting<boolean>('hotlink_protection_enabled'),
+    getSetting<string>('allowed_referers'),
   ]);
 
   cachedAntiProxyEnabled = !!antiProxy;
-  cachedAllowedHosts = typeof allowedHosts === "string"
-    ? allowedHosts.split(/[,\n]+/).map(s => s.trim().toLowerCase()).filter(Boolean) : [];
+  cachedAllowedHosts =
+    typeof allowedHosts === 'string'
+      ? allowedHosts
+          .split(/[,\n]+/)
+          .map((s) => s.trim().toLowerCase())
+          .filter(Boolean)
+      : [];
   cachedHotlinkEnabled = !!hotlinkEnabled;
-  cachedAllowedDomains = typeof allowedDomains === "string"
-    ? allowedDomains.split(/[,\n]+/).map(s => s.trim()).filter(Boolean) : [];
+  cachedAllowedDomains =
+    typeof allowedDomains === 'string'
+      ? allowedDomains
+          .split(/[,\n]+/)
+          .map((s) => s.trim())
+          .filter(Boolean)
+      : [];
   cachedAt = now;
 }
 
 /** Match host against allowed list (exact or subdomain) */
 function isHostAllowed(host: string | undefined, allowed: string[]): boolean {
   if (!host) return false;
-  const h = host.split(":")[0].toLowerCase(); // strip port
-  return allowed.some(a => h === a || h.endsWith(`.${a}`));
+  const h = host.split(':')[0].toLowerCase(); // strip port
+  return allowed.some((a) => h === a || h.endsWith(`.${a}`));
 }
 
 const PROXY_WARNING_HTML = `<!DOCTYPE html>
@@ -89,17 +99,17 @@ export async function ipGuard(req: Request, res: Response, next: NextFunction) {
       if (!isHostAllowed(host, cachedAllowedHosts)) {
         // Allow health check so monitoring tools don't break
         const path = req.path;
-        if (path === "/api/health") {
+        if (path === '/api/health') {
           next();
           return;
         }
 
         // API requests get JSON
-        if (req.path.startsWith("/api/")) {
+        if (req.path.startsWith('/api/')) {
           res.status(403).json({
             success: false,
-            message: "访问被拒绝：检测到未授权的域名访问",
-            detail: "UNAUTHORIZED_HOST",
+            message: '访问被拒绝：检测到未授权的域名访问',
+            detail: 'UNAUTHORIZED_HOST',
           });
           return;
         }
@@ -112,18 +122,36 @@ export async function ipGuard(req: Request, res: Response, next: NextFunction) {
 
     // 2. Hotlink/referer protection (static assets only)
     if (cachedHotlinkEnabled && cachedAllowedDomains.length > 0) {
-      const isStaticAsset = req.path.startsWith("/static/");
+      const isStaticAsset = req.path.startsWith('/static/');
       if (isStaticAsset) {
         const referer = req.headers.referer;
         if (referer && !isRefererAllowed(referer, cachedAllowedDomains)) {
           const host = req.headers.host;
-          try { if (host && new URL(referer).host === host) { next(); return; } } catch {}
+          try {
+            if (host && new URL(referer).host === host) {
+              next();
+              return;
+            }
+          } catch {}
 
-          const blockedExts = [".png", ".jpg", ".jpeg", ".gif", ".webp", ".svg", ".step", ".stp", ".stl", ".obj", ".glb", ".gltf"];
+          const blockedExts = [
+            '.png',
+            '.jpg',
+            '.jpeg',
+            '.gif',
+            '.webp',
+            '.svg',
+            '.step',
+            '.stp',
+            '.stl',
+            '.obj',
+            '.glb',
+            '.gltf',
+          ];
           const path = req.path.toLowerCase();
-          if (blockedExts.some(ext => path.endsWith(ext))) {
-            if (req.accepts("json") && !req.accepts("html")) {
-              res.status(403).json({ success: false, message: "资源引用受限：检测到盗链", detail: "HOTLINK_DENIED" });
+          if (blockedExts.some((ext) => path.endsWith(ext))) {
+            if (req.accepts('json') && !req.accepts('html')) {
+              res.status(403).json({ success: false, message: '资源引用受限：检测到盗链', detail: 'HOTLINK_DENIED' });
             } else {
               res.status(403).send(HOTLINK_HTML);
             }

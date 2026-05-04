@@ -1,5 +1,5 @@
-import client from "./client";
-import { unwrapResponse } from "./response";
+import client from './client';
+import { unwrapResponse } from './response';
 
 export interface InquiryItem {
   id: string;
@@ -33,7 +33,14 @@ export interface Inquiry {
   adminRemark?: string | null;
   items: InquiryItem[];
   messages?: InquiryMessage[];
-  user?: { id: string; username: string; email: string; avatar?: string | null; company?: string | null; phone?: string | null };
+  user?: {
+    id: string;
+    username: string;
+    email: string;
+    avatar?: string | null;
+    company?: string | null;
+    phone?: string | null;
+  };
   createdAt: string;
   updatedAt: string;
 }
@@ -55,12 +62,12 @@ export interface CreateInquiryParams {
 // ========== User API ==========
 
 export async function createInquiry(data: CreateInquiryParams): Promise<Inquiry> {
-  const res = await client.post("/inquiries", data);
+  const res = await client.post('/inquiries', data);
   return unwrapResponse(res);
 }
 
 export async function getMyInquiries(): Promise<Inquiry[]> {
-  const res = await client.get("/inquiries");
+  const res = await client.get('/inquiries');
   const data = unwrapResponse<{ items?: Inquiry[] } | Inquiry[]>(res);
   return Array.isArray(data) ? data : data?.items || [];
 }
@@ -85,9 +92,9 @@ export async function sendInquiryMessage(id: string, content: string, attachment
 export async function getAllInquiries(
   page = 1,
   pageSize = 20,
-  status?: string
+  status?: string,
 ): Promise<{ total: number; page: number; pageSize: number; items: Inquiry[] }> {
-  const res = await client.get("/admin/inquiries", {
+  const res = await client.get('/admin/inquiries', {
     params: { page, page_size: pageSize, status },
   });
   return unwrapResponse(res);

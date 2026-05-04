@@ -1,4 +1,4 @@
-declare module "occt-import-js" {
+declare module 'occt-import-js' {
   interface MeshAttribute {
     array: ArrayLike<number>;
   }

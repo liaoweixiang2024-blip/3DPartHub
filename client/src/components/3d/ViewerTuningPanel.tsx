@@ -1,5 +1,5 @@
-import Icon from "../shared/Icon";
-import { VIEWER_TUNING_FIELDS, VIEWER_TUNING_PRESETS, type ViewerTuning } from "./viewerTuning";
+import Icon from '../shared/Icon';
+import { VIEWER_TUNING_FIELDS, VIEWER_TUNING_PRESETS, type ViewerTuning } from './viewerTuning';
 
 interface ViewerTuningPanelProps {
   value: ViewerTuning;
@@ -53,7 +53,7 @@ export default function ViewerTuningPanel({
           <label className="text-[10px] text-on-surface-variant">背景</label>
           <input
             value={value.viewer_bg_color}
-            onChange={(event) => update("viewer_bg_color", event.target.value)}
+            onChange={(event) => update('viewer_bg_color', event.target.value)}
             className="w-44 min-w-0 rounded-sm border border-outline-variant/20 bg-surface-container-lowest px-2 py-1 text-[10px] text-on-surface outline-none focus:border-primary"
           />
           <label className="text-[10px] text-on-surface-variant">材质色</label>
@@ -61,7 +61,7 @@ export default function ViewerTuningPanel({
             <input
               type="color"
               value={value.mat_default_color}
-              onChange={(event) => update("mat_default_color", event.target.value)}
+              onChange={(event) => update('mat_default_color', event.target.value)}
               className="h-7 w-9 rounded border border-outline-variant/20 bg-transparent"
             />
             <span className="w-20 text-[10px] font-mono text-on-surface-variant">{value.mat_default_color}</span>
@@ -98,7 +98,7 @@ export default function ViewerTuningPanel({
             className="flex items-center gap-1.5 rounded-sm bg-primary-container px-3 py-1.5 text-xs font-medium text-on-primary hover:bg-primary disabled:opacity-50"
           >
             <Icon name="save" size={13} />
-            {saving ? "保存中" : "保存"}
+            {saving ? '保存中' : '保存'}
           </button>
         </div>
       </div>

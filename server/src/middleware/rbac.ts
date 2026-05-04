@@ -1,7 +1,7 @@
-import { Response, NextFunction } from "express";
-import { prisma } from "../lib/prisma.js";
-import type { AuthRequest } from "./auth.js";
-import { Role } from "@prisma/client";
+import { Response, NextFunction } from 'express';
+import { prisma } from '../lib/prisma.js';
+import type { AuthRequest } from './auth.js';
+import { Role } from '@prisma/client';
 
 /**
  * Check if user has one of the required global roles.
@@ -9,14 +9,14 @@ import { Role } from "@prisma/client";
 export function requireRole(...roles: string[]) {
   return (req: AuthRequest, res: Response, next: NextFunction) => {
     if (!req.user) {
-      res.status(401).json({ detail: "未认证" });
+      res.status(401).json({ detail: '未认证' });
       return;
     }
     if (roles.includes(req.user.role)) {
       next();
       return;
     }
-    res.status(403).json({ detail: "权限不足" });
+    res.status(403).json({ detail: '权限不足' });
   };
 }
 
@@ -33,13 +33,13 @@ const PROJECT_ROLE_RANK: Record<Role, number> = {
 export function requireProjectRole(...roles: Role[]) {
   return async (req: AuthRequest, res: Response, next: NextFunction) => {
     if (!req.user) {
-      res.status(401).json({ detail: "未认证" });
+      res.status(401).json({ detail: '未认证' });
       return;
     }
 
     const projectId = req.params.projectId || req.params.id || req.body.projectId;
     if (!projectId) {
-      res.status(400).json({ detail: "缺少项目 ID" });
+      res.status(400).json({ detail: '缺少项目 ID' });
       return;
     }
 
@@ -47,7 +47,7 @@ export function requireProjectRole(...roles: Role[]) {
     try {
       const project = await prisma.project.findUnique({ where: { id: projectId } });
       if (!project) {
-        res.status(404).json({ detail: "项目不存在" });
+        res.status(404).json({ detail: '项目不存在' });
         return;
       }
       if (project.ownerId === req.user.userId) {
@@ -60,7 +60,7 @@ export function requireProjectRole(...roles: Role[]) {
       });
 
       if (!member) {
-        res.status(403).json({ detail: "不是项目成员" });
+        res.status(403).json({ detail: '不是项目成员' });
         return;
       }
 
@@ -75,9 +75,9 @@ export function requireProjectRole(...roles: Role[]) {
         return;
       }
 
-      res.status(403).json({ detail: "项目权限不足" });
+      res.status(403).json({ detail: '项目权限不足' });
     } catch (err) {
-      res.status(500).json({ detail: "权限检查失败" });
+      res.status(500).json({ detail: '权限检查失败' });
     }
   };
 }

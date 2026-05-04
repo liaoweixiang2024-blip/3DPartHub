@@ -1,9 +1,9 @@
-import { Router } from "express";
-import { createSettingsAdminRouter } from "./settings/admin.js";
-import { createSettingsAssetsRouter } from "./settings/assets.js";
-import { createSettingsBackupRouter } from "./settings/backup.js";
-import { createSettingsPublicRouter } from "./settings/public.js";
-import { createSettingsCleanupRouter } from "./settings/cleanup.js";
+import { Router } from 'express';
+import { createSettingsAdminRouter } from './settings/admin.js';
+import { createSettingsAssetsRouter } from './settings/assets.js';
+import { createSettingsBackupRouter } from './settings/backup.js';
+import { createSettingsPublicRouter } from './settings/public.js';
+import { createSettingsCleanupRouter } from './settings/cleanup.js';
 
 const router = Router();
 

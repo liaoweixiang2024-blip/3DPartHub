@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useState } from "react";
-import * as THREE from "three";
-import Icon from "../shared/Icon";
+import { useEffect, useMemo, useState } from 'react';
+import * as THREE from 'three';
+import Icon from '../shared/Icon';
 
 interface LoadingOverlayProps {
   progress?: number | null;
@@ -45,17 +45,16 @@ export default function LoadingOverlay({ progress: externalProgress }: LoadingOv
     };
   }, []);
 
-  const hasExternalProgress = typeof externalProgress === "number" && Number.isFinite(externalProgress) && externalProgress < 100;
+  const hasExternalProgress =
+    typeof externalProgress === 'number' && Number.isFinite(externalProgress) && externalProgress < 100;
   const visible = loading || hasExternalProgress;
-  const displayProgress = hasExternalProgress
-    ? Math.max(0, Math.min(99, Math.round(externalProgress)))
-    : progress;
+  const displayProgress = hasExternalProgress ? Math.max(0, Math.min(99, Math.round(externalProgress))) : progress;
   const phase = useMemo(() => {
-    if (displayProgress < 8) return "准备模型";
-    if (displayProgress < 55) return "下载模型";
-    if (displayProgress < 88) return "解析几何";
-    if (displayProgress < 100) return "上传 GPU";
-    return "渲染中";
+    if (displayProgress < 8) return '准备模型';
+    if (displayProgress < 55) return '下载模型';
+    if (displayProgress < 88) return '解析几何';
+    if (displayProgress < 100) return '上传 GPU';
+    return '渲染中';
   }, [displayProgress]);
 
   if (!visible) return null;
@@ -70,7 +69,7 @@ export default function LoadingOverlay({ progress: externalProgress }: LoadingOv
         />
       </div>
       <span className="text-xs text-on-surface-variant font-mono mt-2">
-        {displayProgress < 100 ? `${phase} ${displayProgress}%` : "渲染中..."}
+        {displayProgress < 100 ? `${phase} ${displayProgress}%` : '渲染中...'}
       </span>
     </div>
   );

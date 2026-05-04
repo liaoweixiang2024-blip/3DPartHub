@@ -1,6 +1,6 @@
-import { create } from "zustand";
-import { persist } from "zustand/middleware";
-import { favoriteApi } from "../api/favorites";
+import { create } from 'zustand';
+import { persist } from 'zustand/middleware';
+import { favoriteApi } from '../api/favorites';
 
 interface FavoriteState {
   favoriteIds: Set<string>;
@@ -46,7 +46,7 @@ export const useFavoriteStore = create<FavoriteState>()(
       },
     }),
     {
-      name: "favorites-storage",
+      name: 'favorites-storage',
       storage: {
         getItem: (name) => {
           const str = localStorage.getItem(name);
@@ -72,6 +72,6 @@ export const useFavoriteStore = create<FavoriteState>()(
         },
         removeItem: (name) => localStorage.removeItem(name),
       },
-    }
-  )
+    },
+  ),
 );

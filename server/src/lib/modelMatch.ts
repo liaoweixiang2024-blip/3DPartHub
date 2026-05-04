@@ -1,5 +1,5 @@
-import { prisma } from "./prisma.js";
-import { cacheGetOrSet, TTL } from "./cache.js";
+import { prisma } from './prisma.js';
+import { cacheGetOrSet, TTL } from './cache.js';
 
 type MatchIndexEntry = [string, { id: string; thumbnailUrl: string | null }];
 
@@ -8,7 +8,7 @@ type MatchIndexEntry = [string, { id: string; thumbnailUrl: string | null }];
  * - lowercase, remove spaces, treat _ and / as equivalent
  */
 function normalizePN(s: string): string {
-  return s.toLowerCase().replace(/\s+/g, "").replace(/[/]/g, "_");
+  return s.toLowerCase().replace(/\s+/g, '').replace(/[/]/g, '_');
 }
 
 /**
@@ -21,10 +21,10 @@ export async function buildModelMatchMap(modelNos: string[]) {
   if (modelNos.length === 0) return result;
 
   const { value: matchIndex } = await cacheGetOrSet<MatchIndexEntry[]>(
-    "cache:models:match-index:v2",
+    'cache:models:match-index:v2',
     TTL.MODEL_MATCH_INDEX,
     buildModelMatchIndex,
-    { lockTtlMs: 30_000, waitTimeoutMs: 20_000, pollMs: 50 }
+    { lockTtlMs: 30_000, waitTimeoutMs: 20_000, pollMs: 50 },
   );
 
   const normMap = new Map<string, { id: string; thumbnailUrl: string | null }>(matchIndex);
@@ -35,7 +35,10 @@ export async function buildModelMatchMap(modelNos: string[]) {
 
     // 1) Exact normalized match
     const exact = normMap.get(nq);
-    if (exact) { result.set(raw, exact); continue; }
+    if (exact) {
+      result.set(raw, exact);
+      continue;
+    }
 
     // 2) Segment match — modelNo must appear as a complete _-delimited segment
     //    e.g. "PC10-04" matches "白色直快插_PC10-04" (segment after _, ends at string end)
@@ -52,9 +55,9 @@ export async function buildModelMatchMap(modelNos: string[]) {
       if (nk.includes(nq)) {
         const idx = nk.indexOf(nq);
         const end = idx + nq.length;
-        const precededBySep = idx > 0 && nk[idx - 1] === "_";
+        const precededBySep = idx > 0 && nk[idx - 1] === '_';
         const followedByEnd = end === nk.length;
-        const followedBySep = end < nk.length && nk[end] === "_";
+        const followedBySep = end < nk.length && nk[end] === '_';
         if (precededBySep && (followedByEnd || followedBySep)) {
           best = normMap.get(nk);
           break;

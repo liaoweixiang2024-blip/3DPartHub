@@ -1,7 +1,7 @@
-import * as THREE from "three";
+import * as THREE from 'three';
 
-export const MODEL_BOUNDS_EVENT = "model-bounds";
-export const FIT_MODEL_EVENT = "model-fit";
+export const MODEL_BOUNDS_EVENT = 'model-bounds';
+export const FIT_MODEL_EVENT = 'model-fit';
 
 export interface ModelBoundsDetail {
   center: { x: number; y: number; z: number };
@@ -18,8 +18,8 @@ export interface ModelPartItem {
   triangleCount: number;
 }
 
-export type MeasureMode = "distance" | "angle" | "diameter" | "bounds";
-export type MeasurementSnapMode = "surface" | "edge" | "vertex";
+export type MeasureMode = 'distance' | 'angle' | 'diameter' | 'bounds';
+export type MeasurementSnapMode = 'surface' | 'edge' | 'vertex';
 
 export interface MeasurementPoint {
   x: number;
@@ -30,7 +30,7 @@ export interface MeasurementPoint {
 
 export interface MeasurementRecord {
   id: string;
-  mode: Exclude<MeasureMode, "bounds">;
+  mode: Exclude<MeasureMode, 'bounds'>;
   points: MeasurementPoint[];
   createdAt: number;
 }

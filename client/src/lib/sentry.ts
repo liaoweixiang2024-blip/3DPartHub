@@ -1,4 +1,4 @@
-import * as Sentry from "@sentry/react";
+import * as Sentry from '@sentry/react';
 
 const SENTRY_DSN = import.meta.env.VITE_SENTRY_DSN;
 
@@ -24,11 +24,11 @@ export function initSentry() {
     release: import.meta.env.VITE_APP_VERSION || undefined,
     // Ignore common noise
     ignoreErrors: [
-      "Network Error",
-      "ResizeObserver loop limit exceeded",
-      "Non-Error promise rejection captured",
-      "Load failed",
-      "Cancelled",
+      'Network Error',
+      'ResizeObserver loop limit exceeded',
+      'Non-Error promise rejection captured',
+      'Load failed',
+      'Cancelled',
       /rate.?limit/i,
     ],
     beforeSend(event) {

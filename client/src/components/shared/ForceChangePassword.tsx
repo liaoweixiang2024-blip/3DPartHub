@@ -37,7 +37,7 @@ export default function ForceChangePassword() {
       toast('密码修改成功，请重新登录', 'success');
       setTimeout(() => {
         useAuthStore.getState().logout();
-        window.location.replace("/login");
+        window.location.replace('/login');
       }, 800);
     } catch (err: any) {
       const msg = err?.response?.data?.message || err?.response?.data?.detail || '密码修改失败，请重试';
@@ -61,14 +61,22 @@ export default function ForceChangePassword() {
         >
           <div className="flex flex-col items-center mb-6">
             <div className="w-14 h-14 rounded-full bg-primary-container/20 flex items-center justify-center mb-4">
-              <svg className="w-7 h-7 text-primary-container" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+              <svg
+                className="w-7 h-7 text-primary-container"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+                strokeWidth={2}
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"
+                />
               </svg>
             </div>
             <h2 className="text-xl font-bold text-on-surface">首次登录，请修改密码</h2>
-            <p className="text-sm text-on-surface-variant mt-2 text-center">
-              为保障账户安全，请先设置一个新的登录密码
-            </p>
+            <p className="text-sm text-on-surface-variant mt-2 text-center">为保障账户安全，请先设置一个新的登录密码</p>
           </div>
 
           <form onSubmit={handleSubmit} className="space-y-4">
@@ -77,7 +85,10 @@ export default function ForceChangePassword() {
               <input
                 type="password"
                 value={newPassword}
-                onChange={(e) => { setNewPassword(e.target.value); setError(''); }}
+                onChange={(e) => {
+                  setNewPassword(e.target.value);
+                  setError('');
+                }}
                 required
                 minLength={8}
                 className="w-full bg-surface-container-lowest text-on-surface border border-outline-variant/30 focus:border-primary px-3 py-2 text-sm rounded-sm outline-none"
@@ -90,7 +101,10 @@ export default function ForceChangePassword() {
               <input
                 type="password"
                 value={confirmPassword}
-                onChange={(e) => { setConfirmPassword(e.target.value); setError(''); }}
+                onChange={(e) => {
+                  setConfirmPassword(e.target.value);
+                  setError('');
+                }}
                 required
                 minLength={8}
                 className="w-full bg-surface-container-lowest text-on-surface border border-outline-variant/30 focus:border-primary px-3 py-2 text-sm rounded-sm outline-none"

@@ -1,23 +1,23 @@
-import { Router, Response } from "express";
-import multer from "multer";
-import { randomUUID } from "node:crypto";
-import { existsSync, mkdirSync, rmSync } from "node:fs";
-import { basename, extname, join } from "node:path";
-import { sendAcceleratedFile } from "../../lib/acceleratedDownload.js";
-import { DEFAULT_UPLOAD_POLICY, getBusinessConfig, labelFor } from "../../lib/businessConfig.js";
-import { config } from "../../lib/config.js";
-import { createProtectedResourceToken, verifyProtectedResourceToken } from "../../lib/downloadTokenStore.js";
-import { getSetting } from "../../lib/settings.js";
-import { prisma } from "../../lib/prisma.js";
-import { optionalString } from "../../lib/requestValidation.js";
-import { authMiddleware, verifyRequestToken, type AuthRequest } from "../../middleware/auth.js";
-import { requireRole } from "../../middleware/rbac.js";
-import { createNotification } from "../notifications.js";
+import { Router, Response } from 'express';
+import multer from 'multer';
+import { randomUUID } from 'node:crypto';
+import { existsSync, mkdirSync, rmSync } from 'node:fs';
+import { basename, extname, join } from 'node:path';
+import { sendAcceleratedFile } from '../../lib/acceleratedDownload.js';
+import { DEFAULT_UPLOAD_POLICY, getBusinessConfig, labelFor } from '../../lib/businessConfig.js';
+import { config } from '../../lib/config.js';
+import { createProtectedResourceToken, verifyProtectedResourceToken } from '../../lib/downloadTokenStore.js';
+import { getSetting } from '../../lib/settings.js';
+import { prisma } from '../../lib/prisma.js';
+import { optionalString } from '../../lib/requestValidation.js';
+import { authMiddleware, verifyRequestToken, type AuthRequest } from '../../middleware/auth.js';
+import { requireRole } from '../../middleware/rbac.js';
+import { createNotification } from '../notifications.js';
 
 const attachmentUpload = multer({
   storage: multer.diskStorage({
     destination: (_req, _file, cb) => {
-      const dir = join(process.cwd(), config.staticDir, "ticket-attachments");
+      const dir = join(process.cwd(), config.staticDir, 'ticket-attachments');
       if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
       cb(null, dir);
     },
@@ -30,7 +30,7 @@ const attachmentUpload = multer({
   fileFilter: (_req, file, cb) => {
     const ext = extname(file.originalname).toLowerCase();
     if (ext) cb(null, true);
-    else cb(new Error("文件必须包含扩展名"));
+    else cb(new Error('文件必须包含扩展名'));
   },
 });
 
@@ -42,7 +42,7 @@ function param(req: { params: Record<string, string | string[]> }, key: string):
 function ticketAttachmentFileName(attachment: string | null | undefined): string | null {
   if (!attachment) return null;
   const fileName = basename(attachment.split(/[?#]/)[0]);
-  if (!fileName || fileName === "." || fileName === "..") return null;
+  if (!fileName || fileName === '.' || fileName === '..') return null;
   return fileName;
 }
 
@@ -53,15 +53,19 @@ function ticketAttachmentResourceId(ticketId: string, fileName: string): string 
 function ticketAttachmentUrl(ticketId: string, attachment: string | null | undefined, token?: string): string | null {
   const fileName = ticketAttachmentFileName(attachment);
   if (!fileName) return null;
-  const params = token ? `?download_token=${encodeURIComponent(token)}` : "";
+  const params = token ? `?download_token=${encodeURIComponent(token)}` : '';
   return `/api/tickets/${encodeURIComponent(ticketId)}/attachments/${encodeURIComponent(fileName)}${params}`;
 }
 
-function createTicketAttachmentUrl(ticketId: string, attachment: string | null | undefined, user: { userId: string; role: string }): string | null {
+function createTicketAttachmentUrl(
+  ticketId: string,
+  attachment: string | null | undefined,
+  user: { userId: string; role: string },
+): string | null {
   const fileName = ticketAttachmentFileName(attachment);
   if (!fileName) return null;
   const created = createProtectedResourceToken({
-    type: "ticket-attachment",
+    type: 'ticket-attachment',
     resourceId: ticketAttachmentResourceId(ticketId, fileName),
     userId: user.userId,
     role: user.role,
@@ -71,10 +75,10 @@ function createTicketAttachmentUrl(ticketId: string, attachment: string | null |
 }
 
 function normalizeTicketAttachmentInput(ticketId: string, attachment: unknown): string | null {
-  if (typeof attachment !== "string" || !attachment.trim()) return null;
+  if (typeof attachment !== 'string' || !attachment.trim()) return null;
   if (
     !attachment.startsWith(`/api/tickets/${ticketId}/attachments/`) &&
-    !attachment.startsWith("/static/ticket-attachments/")
+    !attachment.startsWith('/static/ticket-attachments/')
   ) {
     return null;
   }
@@ -85,18 +89,22 @@ export function createSupportTicketRouter() {
   const router = Router();
 
   // Create support ticket
-  router.post("/api/tasks", authMiddleware, async (req: AuthRequest, res: Response) => {
+  router.post('/api/tasks', authMiddleware, async (req: AuthRequest, res: Response) => {
     const { basePart, classification, description } = req.body;
 
     if (!description || !description.trim()) {
-      res.status(400).json({ detail: "问题描述不能为空" });
+      res.status(400).json({ detail: '问题描述不能为空' });
       return;
     }
 
     try {
       const { ticketClassifications } = await getBusinessConfig();
-      const enabledClassifications = ticketClassifications.filter((item) => item.enabled !== false).map((item) => item.value);
-      const normalizedClassification = enabledClassifications.includes(classification) ? classification : enabledClassifications[0] || "dimension";
+      const enabledClassifications = ticketClassifications
+        .filter((item) => item.enabled !== false)
+        .map((item) => item.value);
+      const normalizedClassification = enabledClassifications.includes(classification)
+        ? classification
+        : enabledClassifications[0] || 'dimension';
       const ticket = await prisma.supportTicket.create({
         data: {
           userId: req.user!.userId,
@@ -107,19 +115,22 @@ export function createSupportTicketRouter() {
       });
       res.json({ id: ticket.id, status: ticket.status });
     } catch {
-      res.status(500).json({ detail: "创建工单失败" });
+      res.status(500).json({ detail: '创建工单失败' });
     }
   });
 
   // User: list own support tickets
-  router.get("/api/my-tickets", authMiddleware, async (req: AuthRequest, res: Response) => {
+  router.get('/api/my-tickets', authMiddleware, async (req: AuthRequest, res: Response) => {
     try {
-      if (!prisma) { res.json([]); return; }
+      if (!prisma) {
+        res.json([]);
+        return;
+      }
       const { pageSizePolicy } = await getBusinessConfig();
       const ticketListMax = Math.max(1, Math.floor(Number(pageSizePolicy.ticketListMax) || 50));
       const tickets = await prisma.supportTicket.findMany({
         where: { userId: req.user!.userId },
-        orderBy: { createdAt: "desc" },
+        orderBy: { createdAt: 'desc' },
         take: ticketListMax,
       });
       res.json(tickets);
@@ -129,15 +140,18 @@ export function createSupportTicketRouter() {
   });
 
   // Admin: list all support tickets
-  router.get("/api/tickets", authMiddleware, requireRole("ADMIN"), async (req: AuthRequest, res: Response) => {
+  router.get('/api/tickets', authMiddleware, requireRole('ADMIN'), async (req: AuthRequest, res: Response) => {
     try {
-      if (!prisma) { res.json([]); return; }
+      if (!prisma) {
+        res.json([]);
+        return;
+      }
       const { pageSizePolicy } = await getBusinessConfig();
       const ticketListMax = Math.max(1, Math.floor(Number(pageSizePolicy.ticketListMax) || 50));
       const page = Math.max(1, Number(req.query.page) || 1);
       const skip = (page - 1) * ticketListMax;
       const tickets = await prisma.supportTicket.findMany({
-        orderBy: { createdAt: "desc" },
+        orderBy: { createdAt: 'desc' },
         take: ticketListMax,
         skip,
         include: { user: { select: { username: true, email: true, avatar: true } } },
@@ -149,32 +163,42 @@ export function createSupportTicketRouter() {
   });
 
   // Get single ticket (owner or admin)
-  router.get("/api/tickets/:id", authMiddleware, async (req: AuthRequest, res: Response) => {
-    const ticketId = param(req, "id");
+  router.get('/api/tickets/:id', authMiddleware, async (req: AuthRequest, res: Response) => {
+    const ticketId = param(req, 'id');
     try {
-      if (!prisma) { res.status(404).json({ detail: "工单不存在" }); return; }
+      if (!prisma) {
+        res.status(404).json({ detail: '工单不存在' });
+        return;
+      }
       const ticket = await prisma.supportTicket.findUnique({
         where: { id: ticketId },
         include: { user: { select: { username: true, email: true, avatar: true } } },
       });
-      if (!ticket) { res.status(404).json({ detail: "工单不存在" }); return; }
-      if (ticket.userId !== req.user!.userId && req.user!.role !== "ADMIN") {
-        res.status(403).json({ detail: "无权访问" }); return;
+      if (!ticket) {
+        res.status(404).json({ detail: '工单不存在' });
+        return;
+      }
+      if (ticket.userId !== req.user!.userId && req.user!.role !== 'ADMIN') {
+        res.status(403).json({ detail: '无权访问' });
+        return;
       }
       res.json(ticket);
     } catch {
-      res.status(500).json({ detail: "获取工单失败" });
+      res.status(500).json({ detail: '获取工单失败' });
     }
   });
 
   // Admin: update ticket status
-  router.put("/api/tickets/:id", authMiddleware, requireRole("ADMIN"), async (req: AuthRequest, res: Response) => {
+  router.put('/api/tickets/:id', authMiddleware, requireRole('ADMIN'), async (req: AuthRequest, res: Response) => {
     try {
-      if (!prisma) { res.status(500).json({ error: "DB unavailable" }); return; }
+      if (!prisma) {
+        res.status(500).json({ error: 'DB unavailable' });
+        return;
+      }
       const { status } = req.body;
       const { ticketStatuses, ticketClassifications } = await getBusinessConfig();
       if (!ticketStatuses.some((item) => item.value === status)) {
-        res.status(400).json({ detail: "无效状态" });
+        res.status(400).json({ detail: '无效状态' });
         return;
       }
       const ticket = await prisma.supportTicket.update({
@@ -185,119 +209,136 @@ export function createSupportTicketRouter() {
       // Notify user about status change
       await createNotification({
         userId: ticket.userId,
-        title: "工单状态更新",
+        title: '工单状态更新',
         message: `您的工单「${labelFor(ticketClassifications, ticket.classification)}」状态已更新为「${labelFor(ticketStatuses, status)}」`,
-        type: "ticket",
+        type: 'ticket',
         relatedId: ticket.id,
       }).catch(() => {});
       res.json(ticket);
     } catch {
-      res.status(500).json({ error: "更新失败" });
+      res.status(500).json({ error: '更新失败' });
     }
   });
 
   // Get ticket messages (ticket owner or admin)
-  router.get("/api/tickets/:id/messages", authMiddleware, async (req: AuthRequest, res: Response) => {
-    const ticketId = param(req, "id");
+  router.get('/api/tickets/:id/messages', authMiddleware, async (req: AuthRequest, res: Response) => {
+    const ticketId = param(req, 'id');
     try {
-      if (!prisma) { res.json([]); return; }
+      if (!prisma) {
+        res.json([]);
+        return;
+      }
       const ticket = await prisma.supportTicket.findUnique({ where: { id: ticketId } });
-      if (!ticket) { res.status(404).json({ detail: "工单不存在" }); return; }
-      if (ticket.userId !== req.user!.userId && req.user!.role !== "ADMIN") {
-        res.status(403).json({ detail: "无权操作" }); return;
+      if (!ticket) {
+        res.status(404).json({ detail: '工单不存在' });
+        return;
+      }
+      if (ticket.userId !== req.user!.userId && req.user!.role !== 'ADMIN') {
+        res.status(403).json({ detail: '无权操作' });
+        return;
       }
       const messages = await prisma.ticketMessage.findMany({
         where: { ticketId },
         include: { user: { select: { id: true, username: true, avatar: true } } },
-        orderBy: { createdAt: "asc" },
+        orderBy: { createdAt: 'asc' },
       });
-      res.json(messages.map((message: any) => ({
-        ...message,
-        attachment: createTicketAttachmentUrl(ticketId, message.attachment, req.user!),
-      })));
+      res.json(
+        messages.map((message: any) => ({
+          ...message,
+          attachment: createTicketAttachmentUrl(ticketId, message.attachment, req.user!),
+        })),
+      );
     } catch {
-      res.status(500).json({ detail: "获取消息失败" });
+      res.status(500).json({ detail: '获取消息失败' });
     }
   });
 
-  router.get("/api/tickets/:id/attachments/:file", async (req, res: Response) => {
-    const ticketId = param(req, "id");
-    const fileName = basename(String(req.params.file || ""));
+  router.get('/api/tickets/:id/attachments/:file', async (req, res: Response) => {
+    const ticketId = param(req, 'id');
+    const fileName = basename(String(req.params.file || ''));
     if (!/^[a-f0-9-]+\.[a-z0-9]+$/i.test(fileName)) {
-      res.status(400).json({ detail: "附件参数无效" });
+      res.status(400).json({ detail: '附件参数无效' });
       return;
     }
 
     const queryToken = optionalString(req.query.download_token, { maxLength: 160 });
     const tokenPayload = queryToken
-      ? verifyProtectedResourceToken(queryToken, "ticket-attachment", ticketAttachmentResourceId(ticketId, fileName))
+      ? verifyProtectedResourceToken(queryToken, 'ticket-attachment', ticketAttachmentResourceId(ticketId, fileName))
       : null;
     if (queryToken && !tokenPayload) {
-      res.status(401).json({ detail: "附件访问令牌无效或已过期" });
+      res.status(401).json({ detail: '附件访问令牌无效或已过期' });
       return;
     }
 
     const user = tokenPayload || verifyRequestToken(req);
     if (!user) {
-      res.status(401).json({ detail: "需要登录后才能查看附件" });
+      res.status(401).json({ detail: '需要登录后才能查看附件' });
       return;
     }
 
     try {
       const ticket = await prisma.supportTicket.findUnique({ where: { id: ticketId } });
       if (!ticket) {
-        res.status(404).json({ detail: "工单不存在" });
+        res.status(404).json({ detail: '工单不存在' });
         return;
       }
-      if (ticket.userId !== user.userId && user.role !== "ADMIN") {
-        res.status(403).json({ detail: "无权访问" });
+      if (ticket.userId !== user.userId && user.role !== 'ADMIN') {
+        res.status(403).json({ detail: '无权访问' });
         return;
       }
 
-      const filePath = join(process.cwd(), config.staticDir, "ticket-attachments", fileName);
+      const filePath = join(process.cwd(), config.staticDir, 'ticket-attachments', fileName);
       if (!existsSync(filePath)) {
-        res.status(404).json({ detail: "附件不存在" });
+        res.status(404).json({ detail: '附件不存在' });
         return;
       }
 
       sendAcceleratedFile(req, res, {
         filePath,
         fileName,
-        disposition: "inline",
-        cacheControl: "private, max-age=300",
+        disposition: 'inline',
+        cacheControl: 'private, max-age=300',
       });
     } catch {
-      res.status(500).json({ detail: "读取附件失败" });
+      res.status(500).json({ detail: '读取附件失败' });
     }
   });
 
   // Send ticket message (ticket owner or admin)
-  router.post("/api/tickets/:id/messages", authMiddleware, async (req: AuthRequest, res: Response) => {
-    const ticketId = param(req, "id");
+  router.post('/api/tickets/:id/messages', authMiddleware, async (req: AuthRequest, res: Response) => {
+    const ticketId = param(req, 'id');
     const { content, attachment } = req.body;
     const normalizedAttachment = normalizeTicketAttachmentInput(ticketId, attachment);
     if ((!content || !content.trim()) && !normalizedAttachment) {
-      res.status(400).json({ detail: "消息内容不能为空" }); return;
+      res.status(400).json({ detail: '消息内容不能为空' });
+      return;
     }
     try {
-      if (!prisma) { res.status(500).json({ detail: "DB unavailable" }); return; }
-      const ticket = await prisma.supportTicket.findUnique({ where: { id: ticketId } });
-      if (!ticket) { res.status(404).json({ detail: "工单不存在" }); return; }
-      if (ticket.userId !== req.user!.userId && req.user!.role !== "ADMIN") {
-        res.status(403).json({ detail: "无权操作" }); return;
+      if (!prisma) {
+        res.status(500).json({ detail: 'DB unavailable' });
+        return;
       }
-      const isAdmin = req.user!.role === "ADMIN";
+      const ticket = await prisma.supportTicket.findUnique({ where: { id: ticketId } });
+      if (!ticket) {
+        res.status(404).json({ detail: '工单不存在' });
+        return;
+      }
+      if (ticket.userId !== req.user!.userId && req.user!.role !== 'ADMIN') {
+        res.status(403).json({ detail: '无权操作' });
+        return;
+      }
+      const isAdmin = req.user!.role === 'ADMIN';
       const { ticketStatuses, ticketClassifications } = await getBusinessConfig();
-      const terminalStatuses = new Set(["closed", "resolved"]);
+      const terminalStatuses = new Set(['closed', 'resolved']);
       if (terminalStatuses.has(ticket.status)) {
-        res.status(400).json({ detail: "该工单已关闭，无法发送消息" });
+        res.status(400).json({ detail: '该工单已关闭，无法发送消息' });
         return;
       }
       let newStatus: string | null = null;
       if (isAdmin) {
-        newStatus = "waiting_user";
+        newStatus = 'waiting_user';
       } else {
-        newStatus = "in_progress";
+        newStatus = 'in_progress';
       }
       if (newStatus && !ticketStatuses.some((item) => item.value === newStatus)) newStatus = null;
       if (newStatus && ticket.status !== newStatus) {
@@ -306,7 +347,7 @@ export function createSupportTicketRouter() {
           data: { status: newStatus },
         });
         if (updated.count === 0) {
-          res.status(400).json({ detail: "该工单已关闭，无法发送消息" });
+          res.status(400).json({ detail: '该工单已关闭，无法发送消息' });
           return;
         }
       }
@@ -314,7 +355,7 @@ export function createSupportTicketRouter() {
         data: {
           ticketId,
           userId: req.user!.userId,
-          content: content?.trim() || "",
+          content: content?.trim() || '',
           attachment: normalizedAttachment,
           isAdmin,
         },
@@ -324,25 +365,27 @@ export function createSupportTicketRouter() {
       if (isAdmin) {
         await createNotification({
           userId: ticket.userId,
-          title: "工单回复",
+          title: '工单回复',
           message: `管理员回复了您的工单「${labelFor(ticketClassifications, ticket.classification)}」`,
-          type: "ticket",
+          type: 'ticket',
           relatedId: ticketId,
         }).catch(() => {});
       }
       // Notify admins when user replies
       if (!isAdmin) {
         try {
-          const admins = await prisma.user.findMany({ where: { role: "ADMIN" }, select: { id: true } });
-          await Promise.all(admins.map((admin: any) =>
-            createNotification({
-              userId: admin.id,
-              title: "工单新回复",
-              message: `用户回复了工单「${labelFor(ticketClassifications, ticket.classification)}」`,
-              type: "ticket",
-              relatedId: ticketId,
-            }).catch(() => {})
-          ));
+          const admins = await prisma.user.findMany({ where: { role: 'ADMIN' }, select: { id: true } });
+          await Promise.all(
+            admins.map((admin: any) =>
+              createNotification({
+                userId: admin.id,
+                title: '工单新回复',
+                message: `用户回复了工单「${labelFor(ticketClassifications, ticket.classification)}」`,
+                type: 'ticket',
+                relatedId: ticketId,
+              }).catch(() => {}),
+            ),
+          );
         } catch {}
       }
       res.json({
@@ -350,36 +393,52 @@ export function createSupportTicketRouter() {
         attachment: createTicketAttachmentUrl(ticketId, message.attachment, req.user!),
       });
     } catch {
-      res.status(500).json({ detail: "发送消息失败" });
+      res.status(500).json({ detail: '发送消息失败' });
     }
   });
 
   // Upload attachment for ticket message
-  router.post("/api/tickets/:id/messages/upload", authMiddleware, attachmentUpload.single("file"), async (req: AuthRequest, res: Response) => {
-    const ticketId = param(req, "id");
-    try {
-      if (!req.file) { res.status(400).json({ detail: "请选择文件" }); return; }
-      const maxMb = Math.max(1, (await getSetting<number>("ticket_attachment_max_mb")) || 100);
-      const maxBytes = maxMb * 1024 * 1024;
-      const typesStr = (await getSetting<string>("ticket_attachment_types")) || "jpg,jpeg,png,gif,webp,svg,pdf,doc,docx,xls,xlsx,ppt,pptx,zip,rar,7z,step,stp,iges,igs,xt,binary";
-      const allowed = typesStr.split(",").map((s: string) => `.${s.trim().toLowerCase()}`);
-      const ext = extname(req.file.originalname).toLowerCase();
-      if (req.file.size > maxBytes || !allowed.includes(ext)) {
-        rmSync(req.file.path, { force: true });
-        res.status(400).json({ detail: `附件仅支持 ${allowed.join("/")}，最大 ${Math.round(maxBytes / 1024 / 1024)}MB` });
-        return;
+  router.post(
+    '/api/tickets/:id/messages/upload',
+    authMiddleware,
+    attachmentUpload.single('file'),
+    async (req: AuthRequest, res: Response) => {
+      const ticketId = param(req, 'id');
+      try {
+        if (!req.file) {
+          res.status(400).json({ detail: '请选择文件' });
+          return;
+        }
+        const maxMb = Math.max(1, (await getSetting<number>('ticket_attachment_max_mb')) || 100);
+        const maxBytes = maxMb * 1024 * 1024;
+        const typesStr =
+          (await getSetting<string>('ticket_attachment_types')) ||
+          'jpg,jpeg,png,gif,webp,svg,pdf,doc,docx,xls,xlsx,ppt,pptx,zip,rar,7z,step,stp,iges,igs,xt,binary';
+        const allowed = typesStr.split(',').map((s: string) => `.${s.trim().toLowerCase()}`);
+        const ext = extname(req.file.originalname).toLowerCase();
+        if (req.file.size > maxBytes || !allowed.includes(ext)) {
+          rmSync(req.file.path, { force: true });
+          res
+            .status(400)
+            .json({ detail: `附件仅支持 ${allowed.join('/')}，最大 ${Math.round(maxBytes / 1024 / 1024)}MB` });
+          return;
+        }
+        const ticket = await prisma.supportTicket.findUnique({ where: { id: ticketId } });
+        if (!ticket) {
+          res.status(404).json({ detail: '工单不存在' });
+          return;
+        }
+        if (ticket.userId !== req.user!.userId && req.user!.role !== 'ADMIN') {
+          res.status(403).json({ detail: '无权操作' });
+          return;
+        }
+        const attachmentUrl = createTicketAttachmentUrl(ticketId, req.file.filename, req.user!);
+        res.json({ url: attachmentUrl });
+      } catch {
+        res.status(500).json({ detail: '上传失败' });
       }
-      const ticket = await prisma.supportTicket.findUnique({ where: { id: ticketId } });
-      if (!ticket) { res.status(404).json({ detail: "工单不存在" }); return; }
-      if (ticket.userId !== req.user!.userId && req.user!.role !== "ADMIN") {
-        res.status(403).json({ detail: "无权操作" }); return;
-      }
-      const attachmentUrl = createTicketAttachmentUrl(ticketId, req.file.filename, req.user!);
-      res.json({ url: attachmentUrl });
-    } catch {
-      res.status(500).json({ detail: "上传失败" });
-    }
-  });
+    },
+  );
 
   return router;
 }

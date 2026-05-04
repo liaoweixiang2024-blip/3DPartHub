@@ -1,8 +1,8 @@
-import { create } from "zustand";
-import { persist } from "zustand/middleware";
+import { create } from 'zustand';
+import { persist } from 'zustand/middleware';
 
-type Theme = "dark" | "light";
-type ThemeMode = "dark" | "light" | "system";
+type Theme = 'dark' | 'light';
+type ThemeMode = 'dark' | 'light' | 'system';
 
 interface ThemeState {
   theme: Theme;
@@ -18,16 +18,16 @@ interface ThemeState {
 }
 
 function applyThemeClass(theme: Theme) {
-  if (theme === "light") {
-    document.documentElement.classList.add("theme-light");
+  if (theme === 'light') {
+    document.documentElement.classList.add('theme-light');
   } else {
-    document.documentElement.classList.remove("theme-light");
+    document.documentElement.classList.remove('theme-light');
   }
 }
 
 function resolveTheme(mode: ThemeMode): Theme {
-  if (mode === "system") {
-    return window.matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark";
+  if (mode === 'system') {
+    return window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
   }
   return mode;
 }
@@ -43,15 +43,15 @@ function clearAutoSwitchTimer() {
 
 function getAutoTheme(darkHour: number, lightHour: number): Theme {
   const hour = new Date().getHours();
-  if (hour >= darkHour || hour < lightHour) return "dark";
-  return "light";
+  if (hour >= darkHour || hour < lightHour) return 'dark';
+  return 'light';
 }
 
 export const useThemeStore = create<ThemeState>()(
   persist(
     (set, get) => ({
-      theme: "light",
-      themeMode: "light",
+      theme: 'light',
+      themeMode: 'light',
       userExplicitlySet: false,
       autoSwitchEnabled: false,
       autoSwitchDarkHour: 20,
@@ -59,7 +59,7 @@ export const useThemeStore = create<ThemeState>()(
 
       toggleTheme: () => {
         const state = get();
-        const next: Theme = state.theme === "dark" ? "light" : "dark";
+        const next: Theme = state.theme === 'dark' ? 'light' : 'dark';
         applyThemeClass(next);
         // Mark as explicitly set by user
         set({ theme: next, themeMode: next, userExplicitlySet: true });
@@ -81,7 +81,13 @@ export const useThemeStore = create<ThemeState>()(
         if (enabled) {
           const autoTheme = getAutoTheme(darkHour, lightHour);
           applyThemeClass(autoTheme);
-          set({ autoSwitchEnabled: true, autoSwitchDarkHour: darkHour, autoSwitchLightHour: lightHour, theme: autoTheme, themeMode: "system" });
+          set({
+            autoSwitchEnabled: true,
+            autoSwitchDarkHour: darkHour,
+            autoSwitchLightHour: lightHour,
+            theme: autoTheme,
+            themeMode: 'system',
+          });
           autoSwitchTimer = setInterval(() => {
             const state = get();
             if (!state.autoSwitchEnabled) return;
@@ -97,13 +103,13 @@ export const useThemeStore = create<ThemeState>()(
       },
     }),
     {
-      name: "theme-storage",
+      name: 'theme-storage',
       onRehydrateStorage: () => (state) => {
         if (!state) return;
-        if (state.theme === "light") {
-          document.documentElement.classList.add("theme-light");
+        if (state.theme === 'light') {
+          document.documentElement.classList.add('theme-light');
         } else {
-          document.documentElement.classList.remove("theme-light");
+          document.documentElement.classList.remove('theme-light');
         }
         // Restore auto-switch timer if enabled
         if (state.autoSwitchEnabled) {
@@ -113,15 +119,20 @@ export const useThemeStore = create<ThemeState>()(
           }, 0);
         }
       },
-    }
-  )
+    },
+  ),
 );
 
 /**
  * Apply server-configured default theme and auto-switch settings.
  * Called from publicSettings.ts after fetching settings.
  */
-export function applyServerThemeDefaults(defaultTheme: string, autoEnabled: boolean, autoDarkHour: number, autoLightHour: number) {
+export function applyServerThemeDefaults(
+  defaultTheme: string,
+  autoEnabled: boolean,
+  autoDarkHour: number,
+  autoLightHour: number,
+) {
   const state = useThemeStore.getState();
 
   if (autoEnabled) {
@@ -129,8 +140,8 @@ export function applyServerThemeDefaults(defaultTheme: string, autoEnabled: bool
     state.setAutoSwitch(true, autoDarkHour, autoLightHour);
   } else if (!state.userExplicitlySet) {
     // Only apply server default if user hasn't manually toggled theme
-    if (defaultTheme === "system") {
-      state.setThemeMode("system");
+    if (defaultTheme === 'system') {
+      state.setThemeMode('system');
     } else {
       state.setTheme(defaultTheme as Theme);
       set({ themeMode: defaultTheme as ThemeMode });

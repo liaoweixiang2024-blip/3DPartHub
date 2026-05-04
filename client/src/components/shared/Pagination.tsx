@@ -1,9 +1,13 @@
-import Icon from "./Icon";
+import Icon from './Icon';
 
 export const DEFAULT_PAGE_SIZE = 60;
 export const PAGE_SIZE_OPTIONS = [30, 60, 120, 180] as const;
 
-export function normalizePageSize(value: string | number | null | undefined, options: readonly number[] = PAGE_SIZE_OPTIONS, defaultSize = DEFAULT_PAGE_SIZE) {
+export function normalizePageSize(
+  value: string | number | null | undefined,
+  options: readonly number[] = PAGE_SIZE_OPTIONS,
+  defaultSize = DEFAULT_PAGE_SIZE,
+) {
   const parsed = Number(value);
   const normalized = Number.isFinite(parsed) ? Math.floor(parsed) : defaultSize;
   return options.includes(normalized) ? normalized : defaultSize;
@@ -26,7 +30,7 @@ export default function Pagination({
   totalPages,
   totalItems = 0,
   compact = false,
-  className = "",
+  className = '',
   pageSize,
   pageSizeOptions = PAGE_SIZE_OPTIONS,
   onPageChange,
@@ -50,13 +54,19 @@ export default function Pagination({
       <select
         value={pageSize}
         onChange={(event) => onPageSizeChange?.(Number(event.target.value))}
-        className={`${compact ? "h-9 border border-outline-variant/20 bg-surface-container px-2.5 pr-6 text-xs" : "h-9 px-3 pr-8 text-sm"} appearance-none rounded-md font-medium text-on-surface outline-none transition-colors hover:bg-surface-container-high`}
+        className={`${compact ? 'h-9 border border-outline-variant/20 bg-surface-container px-2.5 pr-6 text-xs' : 'h-9 px-3 pr-8 text-sm'} appearance-none rounded-md font-medium text-on-surface outline-none transition-colors hover:bg-surface-container-high`}
       >
         {pageSizeOptions.map((size) => (
-          <option key={size} value={size}>{size}/页</option>
+          <option key={size} value={size}>
+            {size}/页
+          </option>
         ))}
       </select>
-      <Icon name="expand_more" size={12} className={`pointer-events-none absolute ${compact ? "right-1.5" : "right-2"} top-1/2 -translate-y-1/2 text-on-surface-variant`} />
+      <Icon
+        name="expand_more"
+        size={12}
+        className={`pointer-events-none absolute ${compact ? 'right-1.5' : 'right-2'} top-1/2 -translate-y-1/2 text-on-surface-variant`}
+      />
     </label>
   ) : null;
 
@@ -75,7 +85,10 @@ export default function Pagination({
           </button>
           <div className="min-w-0 flex-1 px-1">
             <div className="h-1 overflow-hidden rounded-full bg-surface-container-high">
-              <div className="h-full rounded-full bg-primary-container transition-all duration-300" style={{ width: `${progress}%` }} />
+              <div
+                className="h-full rounded-full bg-primary-container transition-all duration-300"
+                style={{ width: `${progress}%` }}
+              />
             </div>
           </div>
           {pageSizeSelect}
@@ -93,7 +106,7 @@ export default function Pagination({
     );
   }
 
-  const pages: (number | "...")[] = [];
+  const pages: (number | '...')[] = [];
   const showPages = 5;
   if (safeTotalPages <= showPages + 2) {
     for (let i = 1; i <= safeTotalPages; i += 1) pages.push(i);
@@ -101,9 +114,9 @@ export default function Pagination({
     pages.push(1);
     const start = Math.max(2, safePage - 1);
     const end = Math.min(safeTotalPages - 1, safePage + 1);
-    if (start > 2) pages.push("...");
+    if (start > 2) pages.push('...');
     for (let i = start; i <= end; i += 1) pages.push(i);
-    if (end < safeTotalPages - 1) pages.push("...");
+    if (end < safeTotalPages - 1) pages.push('...');
     pages.push(safeTotalPages);
   }
 
@@ -121,23 +134,28 @@ export default function Pagination({
         </button>
         <div className="mx-0.5 h-5 w-px shrink-0 bg-outline-variant/20" />
         {pages.map((p, i) =>
-          p === "..." ? (
-            <span key={`e${i}`} className="flex h-9 w-9 shrink-0 items-center justify-center text-sm text-on-surface-variant/45">...</span>
+          p === '...' ? (
+            <span
+              key={`e${i}`}
+              className="flex h-9 w-9 shrink-0 items-center justify-center text-sm text-on-surface-variant/45"
+            >
+              ...
+            </span>
           ) : (
             <button
               key={p}
               type="button"
               onClick={() => changePage(p)}
-              aria-current={p === safePage ? "page" : undefined}
+              aria-current={p === safePage ? 'page' : undefined}
               className={`flex h-9 min-w-9 shrink-0 items-center justify-center rounded-md px-3 text-sm font-medium transition-colors ${
                 p === safePage
-                  ? "bg-primary-container text-on-primary shadow-sm"
-                  : "text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface"
+                  ? 'bg-primary-container text-on-primary shadow-sm'
+                  : 'text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface'
               }`}
             >
               {p}
             </button>
-          )
+          ),
         )}
         <div className="mx-0.5 h-5 w-px shrink-0 bg-outline-variant/20" />
         <button

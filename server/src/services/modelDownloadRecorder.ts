@@ -1,4 +1,4 @@
-import type { Prisma, PrismaClient } from "@prisma/client";
+import type { Prisma, PrismaClient } from '@prisma/client';
 
 export class DailyDownloadLimitError extends Error {
   constructor(readonly limit: number) {
@@ -6,7 +6,7 @@ export class DailyDownloadLimitError extends Error {
   }
 }
 
-type DownloadRecorderPrisma = Pick<PrismaClient, "$transaction" | "model" | "download">;
+type DownloadRecorderPrisma = Pick<PrismaClient, '$transaction' | 'model' | 'download'>;
 type DownloadRecorderTransaction = Prisma.TransactionClient;
 
 export type ModelDownloadRecordOptions = {
@@ -47,7 +47,7 @@ export async function recordModelDownload(prisma: DownloadRecorderPrisma, option
 
   const today = new Date();
   today.setHours(0, 0, 0, 0);
-  const dayKey = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+  const dayKey = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
 
   await prisma.$transaction(async (tx: DownloadRecorderTransaction) => {
     if (dailyLimit > 0) {
@@ -79,10 +79,7 @@ export async function recordModelDownload(prisma: DownloadRecorderPrisma, option
   });
 }
 
-export async function recordQueuedModelDownloads(
-  prisma: DownloadRecorderPrisma,
-  records: QueuedModelDownloadRecord[]
-) {
+export async function recordQueuedModelDownloads(prisma: DownloadRecorderPrisma, records: QueuedModelDownloadRecord[]) {
   if (records.length === 0) return;
 
   const downloads = records
@@ -104,10 +101,12 @@ export async function recordQueuedModelDownloads(
     operations.push(prisma.download.createMany({ data: downloads }));
   }
   for (const [modelId, count] of increments) {
-    operations.push(prisma.model.update({
-      where: { id: modelId },
-      data: { downloadCount: { increment: count } },
-    }));
+    operations.push(
+      prisma.model.update({
+        where: { id: modelId },
+        data: { downloadCount: { increment: count } },
+      }),
+    );
   }
 
   if (operations.length > 0) {

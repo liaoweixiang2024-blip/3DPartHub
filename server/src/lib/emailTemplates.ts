@@ -29,13 +29,13 @@ const emailShellEnd = `
 </div>
 `.trim();
 
-const commonTokens = ["siteTitle", "siteLogo", "siteUrl", "contactEmail", "currentYear", "email"];
+const commonTokens = ['siteTitle', 'siteLogo', 'siteUrl', 'contactEmail', 'currentYear', 'email'];
 
 export const DEFAULT_EMAIL_TEMPLATES: EmailTemplateMap = {
   register_verify: {
-    label: "注册邮箱验证码",
-    description: "用户注册账号时发送验证码",
-    subject: "{{siteTitle}} 注册验证码",
+    label: '注册邮箱验证码',
+    description: '用户注册账号时发送验证码',
+    subject: '{{siteTitle}} 注册验证码',
     html: `
 ${emailShellStart}
   <h2 style="margin:0 0 18px;color:#111827;">注册验证码</h2>
@@ -43,24 +43,24 @@ ${emailShellStart}
   <div style="margin:18px 0;padding:18px;border-radius:10px;background:#fff7ed;text-align:center;font-size:32px;font-weight:700;letter-spacing:8px;color:#f97316;">{{code}}</div>
   <p style="margin:0;color:#6b7280;font-size:13px;">验证码 {{expireMinutes}} 分钟内有效，请勿泄露给他人。</p>
 ${emailShellEnd}`.trim(),
-    tokens: [...commonTokens, "code", "expireMinutes"],
+    tokens: [...commonTokens, 'code', 'expireMinutes'],
   },
   smtp_test: {
-    label: "邮件服务测试",
-    description: "管理员在系统设置中测试 SMTP 配置",
-    subject: "{{siteTitle}} 邮件测试",
+    label: '邮件服务测试',
+    description: '管理员在系统设置中测试 SMTP 配置',
+    subject: '{{siteTitle}} 邮件测试',
     html: `
 ${emailShellStart}
   <h2 style="margin:0 0 14px;color:#f97316;">邮件服务测试成功</h2>
   <p style="margin:0 0 10px;">这是一封来自 {{siteTitle}} 的测试邮件。</p>
   <p style="margin:0;color:#6b7280;font-size:13px;">发送时间：{{testTime}}</p>
 ${emailShellEnd}`.trim(),
-    tokens: [...commonTokens, "testTime"],
+    tokens: [...commonTokens, 'testTime'],
   },
   inquiry_submitted: {
-    label: "询价提交通知",
-    description: "用户提交询价后发送确认或通知",
-    subject: "{{siteTitle}} 已收到您的询价 {{inquiryNo}}",
+    label: '询价提交通知',
+    description: '用户提交询价后发送确认或通知',
+    subject: '{{siteTitle}} 已收到您的询价 {{inquiryNo}}',
     html: `
 ${emailShellStart}
   <h2 style="margin:0 0 14px;">询价已提交</h2>
@@ -68,12 +68,12 @@ ${emailShellStart}
   <p style="margin:0 0 10px;">询价编号：<strong>{{inquiryNo}}</strong></p>
   <p style="margin:0;color:#6b7280;font-size:13px;">我们会尽快处理并与您联系。</p>
 ${emailShellEnd}`.trim(),
-    tokens: [...commonTokens, "username", "inquiryNo"],
+    tokens: [...commonTokens, 'username', 'inquiryNo'],
   },
   inquiry_status_changed: {
-    label: "询价状态变更",
-    description: "询价状态更新时通知用户",
-    subject: "{{siteTitle}} 询价 {{inquiryNo}} 状态已更新",
+    label: '询价状态变更',
+    description: '询价状态更新时通知用户',
+    subject: '{{siteTitle}} 询价 {{inquiryNo}} 状态已更新',
     html: `
 ${emailShellStart}
   <h2 style="margin:0 0 14px;">询价状态已更新</h2>
@@ -81,12 +81,12 @@ ${emailShellStart}
   <p style="margin:0 0 10px;">当前状态：<strong>{{statusLabel}}</strong></p>
   <p style="margin:0;color:#6b7280;font-size:13px;">您可以登录 {{siteTitle}} 查看详情。</p>
 ${emailShellEnd}`.trim(),
-    tokens: [...commonTokens, "inquiryNo", "statusLabel"],
+    tokens: [...commonTokens, 'inquiryNo', 'statusLabel'],
   },
   ticket_created: {
-    label: "工单创建通知",
-    description: "用户提交技术支持工单后发送确认",
-    subject: "{{siteTitle}} 已收到您的工单",
+    label: '工单创建通知',
+    description: '用户提交技术支持工单后发送确认',
+    subject: '{{siteTitle}} 已收到您的工单',
     html: `
 ${emailShellStart}
   <h2 style="margin:0 0 14px;">工单已创建</h2>
@@ -94,12 +94,12 @@ ${emailShellStart}
   <p style="margin:0 0 10px;">工单标题：<strong>{{ticketTitle}}</strong></p>
   <p style="margin:0;color:#6b7280;font-size:13px;">我们会尽快回复。</p>
 ${emailShellEnd}`.trim(),
-    tokens: [...commonTokens, "username", "ticketTitle"],
+    tokens: [...commonTokens, 'username', 'ticketTitle'],
   },
   ticket_replied: {
-    label: "工单回复通知",
-    description: "管理员回复工单时通知用户",
-    subject: "{{siteTitle}} 您的工单有新回复",
+    label: '工单回复通知',
+    description: '管理员回复工单时通知用户',
+    subject: '{{siteTitle}} 您的工单有新回复',
     html: `
 ${emailShellStart}
   <h2 style="margin:0 0 14px;">工单有新回复</h2>
@@ -107,27 +107,28 @@ ${emailShellStart}
   <p style="margin:0 0 10px;">回复摘要：{{replyPreview}}</p>
   <p style="margin:0;color:#6b7280;font-size:13px;">请登录 {{siteTitle}} 查看完整内容。</p>
 ${emailShellEnd}`.trim(),
-    tokens: [...commonTokens, "ticketTitle", "replyPreview"],
+    tokens: [...commonTokens, 'ticketTitle', 'replyPreview'],
   },
 };
 
 export function parseEmailTemplates(value: unknown): EmailTemplateMap {
   let parsed: unknown = value;
-  if (typeof value === "string") {
+  if (typeof value === 'string') {
     try {
       parsed = JSON.parse(value);
     } catch {
       parsed = {};
     }
   }
-  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
     return DEFAULT_EMAIL_TEMPLATES;
   }
   const custom = parsed as Record<string, Partial<EmailTemplate>>;
   const merged: EmailTemplateMap = {};
   for (const [key, fallback] of Object.entries(DEFAULT_EMAIL_TEMPLATES)) {
     const item = custom[key] || {};
-    const legacyHtml = typeof item.html === "string" && !item.html.includes("{{siteLogo}}") && !item.html.includes("siteLogo");
+    const legacyHtml =
+      typeof item.html === 'string' && !item.html.includes('{{siteLogo}}') && !item.html.includes('siteLogo');
     const itemTokens = Array.isArray(item.tokens) ? item.tokens : [];
     merged[key] = {
       ...fallback,

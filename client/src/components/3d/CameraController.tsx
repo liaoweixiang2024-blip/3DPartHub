@@ -1,8 +1,8 @@
-import { useCallback, useEffect, useRef, type MutableRefObject } from "react";
-import { useThree } from "@react-three/fiber";
-import * as THREE from "three";
-import type { CameraPreset } from "./ModelViewer";
-import { FIT_MODEL_EVENT, MODEL_BOUNDS_EVENT, type ModelBoundsDetail } from "./viewerEvents";
+import { useCallback, useEffect, useRef, type MutableRefObject } from 'react';
+import { useThree } from '@react-three/fiber';
+import * as THREE from 'three';
+import type { CameraPreset } from './ModelViewer';
+import { FIT_MODEL_EVENT, MODEL_BOUNDS_EVENT, type ModelBoundsDetail } from './viewerEvents';
 
 interface CamPreset {
   position: THREE.Vector3;
@@ -33,32 +33,41 @@ export default function CameraController({
   const modelDataRef = useRef<ModelBoundsDetail | null>(null);
   const presetsRef = useRef<Record<CameraPreset, CamPreset>>(defaultPresets);
 
-  const updateCameraClipping = useCallback((detail: ModelBoundsDetail, targetOverride?: THREE.Vector3) => {
-    const perspective = camera as THREE.PerspectiveCamera;
-    const target = targetOverride || controlsRef?.current?.target || new THREE.Vector3(detail.center.x, detail.center.y, detail.center.z);
-    const radius = Math.max(detail.radius || detail.maxDim / 2, detail.maxDim / 2, 0.001);
-    const cameraDistance = Math.max(perspective.position.distanceTo(target), radius * 1.05);
-    const surfaceGap = Math.max(cameraDistance - radius, radius * 0.02, 0.001);
-    const desiredNear = Math.max(radius / 100, cameraDistance / 500, 0.001);
-    const near = Math.max(Math.min(desiredNear, surfaceGap * 0.5), 0.0001);
-    const far = Math.max(cameraDistance + radius * 2.5, radius * 4, near * 100);
+  const updateCameraClipping = useCallback(
+    (detail: ModelBoundsDetail, targetOverride?: THREE.Vector3) => {
+      const perspective = camera as THREE.PerspectiveCamera;
+      const target =
+        targetOverride ||
+        controlsRef?.current?.target ||
+        new THREE.Vector3(detail.center.x, detail.center.y, detail.center.z);
+      const radius = Math.max(detail.radius || detail.maxDim / 2, detail.maxDim / 2, 0.001);
+      const cameraDistance = Math.max(perspective.position.distanceTo(target), radius * 1.05);
+      const surfaceGap = Math.max(cameraDistance - radius, radius * 0.02, 0.001);
+      const desiredNear = Math.max(radius / 100, cameraDistance / 500, 0.001);
+      const near = Math.max(Math.min(desiredNear, surfaceGap * 0.5), 0.0001);
+      const far = Math.max(cameraDistance + radius * 2.5, radius * 4, near * 100);
 
-    if (Math.abs(perspective.near - near) > near * 0.05 || Math.abs(perspective.far - far) > far * 0.05) {
-      perspective.near = near;
-      perspective.far = far;
-      perspective.updateProjectionMatrix();
-    }
-  }, [camera, controlsRef]);
+      if (Math.abs(perspective.near - near) > near * 0.05 || Math.abs(perspective.far - far) > far * 0.05) {
+        perspective.near = near;
+        perspective.far = far;
+        perspective.updateProjectionMatrix();
+      }
+    },
+    [camera, controlsRef],
+  );
 
-  const applyPreset = useCallback((p: CamPreset) => {
-    camera.position.copy(p.position);
-    camera.up.copy(p.up || new THREE.Vector3(0, 1, 0));
-    camera.lookAt(p.target);
-    if (controlsRef?.current) {
-      controlsRef.current.target.copy(p.target);
-      controlsRef.current.update();
-    }
-  }, [camera, controlsRef]);
+  const applyPreset = useCallback(
+    (p: CamPreset) => {
+      camera.position.copy(p.position);
+      camera.up.copy(p.up || new THREE.Vector3(0, 1, 0));
+      camera.lookAt(p.target);
+      if (controlsRef?.current) {
+        controlsRef.current.target.copy(p.target);
+        controlsRef.current.update();
+      }
+    },
+    [camera, controlsRef],
+  );
 
   const buildPresets = useCallback((center: THREE.Vector3, distance: number) => {
     presetsRef.current = {
@@ -79,11 +88,7 @@ export default function CameraController({
         target: center.clone(),
       },
       iso: {
-        position: new THREE.Vector3(
-          center.x + distance * 0.62,
-          center.y + distance * 0.42,
-          center.z + distance * 0.62
-        ),
+        position: new THREE.Vector3(center.x + distance * 0.62, center.y + distance * 0.42, center.z + distance * 0.62),
         target: center.clone(),
       },
       top: {
@@ -99,38 +104,42 @@ export default function CameraController({
     };
   }, []);
 
-  const applyCamera = useCallback((detail: ModelBoundsDetail) => {
-    const center = new THREE.Vector3(detail.center.x, detail.center.y, detail.center.z);
-    const perspective = camera as THREE.PerspectiveCamera;
-    const verticalFov = ((perspective.fov || 45) * Math.PI) / 180;
-    const aspect = gl.domElement.clientWidth > 0 && gl.domElement.clientHeight > 0
-      ? gl.domElement.clientWidth / gl.domElement.clientHeight
-      : perspective.aspect || 1;
-    const horizontalFov = 2 * Math.atan(Math.tan(verticalFov / 2) * aspect);
-    const fitFov = Math.max(0.1, Math.min(verticalFov, horizontalFov));
-    const radius = Math.max(detail.radius || detail.maxDim / 2, 0.001);
-    let distance = (radius / Math.sin(fitFov / 2)) * 1.25;
+  const applyCamera = useCallback(
+    (detail: ModelBoundsDetail) => {
+      const center = new THREE.Vector3(detail.center.x, detail.center.y, detail.center.z);
+      const perspective = camera as THREE.PerspectiveCamera;
+      const verticalFov = ((perspective.fov || 45) * Math.PI) / 180;
+      const aspect =
+        gl.domElement.clientWidth > 0 && gl.domElement.clientHeight > 0
+          ? gl.domElement.clientWidth / gl.domElement.clientHeight
+          : perspective.aspect || 1;
+      const horizontalFov = 2 * Math.atan(Math.tan(verticalFov / 2) * aspect);
+      const fitFov = Math.max(0.1, Math.min(verticalFov, horizontalFov));
+      const radius = Math.max(detail.radius || detail.maxDim / 2, 0.001);
+      let distance = (radius / Math.sin(fitFov / 2)) * 1.25;
 
-    if (viewportBottom > 0) {
-      const canvasHeight = gl.domElement.clientHeight;
-      if (canvasHeight > 0 && canvasHeight > viewportBottom) {
-        const ratio = canvasHeight / (canvasHeight - viewportBottom);
-        distance *= ratio;
-        center.y += (viewportBottom / canvasHeight) * distance * Math.tan(verticalFov / 2);
+      if (viewportBottom > 0) {
+        const canvasHeight = gl.domElement.clientHeight;
+        if (canvasHeight > 0 && canvasHeight > viewportBottom) {
+          const ratio = canvasHeight / (canvasHeight - viewportBottom);
+          distance *= ratio;
+          center.y += (viewportBottom / canvasHeight) * distance * Math.tan(verticalFov / 2);
+        }
       }
-    }
 
-    if (controlsRef?.current) {
-      controlsRef.current.minDistance = Math.max(detail.maxDim * 0.002, 0.01);
-      controlsRef.current.maxDistance = Math.max(detail.maxDim * 30, distance * 12, 100);
-      controlsRef.current.target.copy(center);
-      controlsRef.current.update();
-    }
+      if (controlsRef?.current) {
+        controlsRef.current.minDistance = Math.max(detail.maxDim * 0.002, 0.01);
+        controlsRef.current.maxDistance = Math.max(detail.maxDim * 30, distance * 12, 100);
+        controlsRef.current.target.copy(center);
+        controlsRef.current.update();
+      }
 
-    buildPresets(center, distance);
-    applyPreset(presetsRef.current[preset]);
-    updateCameraClipping(detail, center);
-  }, [applyPreset, buildPresets, camera, controlsRef, gl, preset, updateCameraClipping, viewportBottom]);
+      buildPresets(center, distance);
+      applyPreset(presetsRef.current[preset]);
+      updateCameraClipping(detail, center);
+    },
+    [applyPreset, buildPresets, camera, controlsRef, gl, preset, updateCameraClipping, viewportBottom],
+  );
 
   useEffect(() => {
     const handler = (e: Event) => {
@@ -171,8 +180,8 @@ export default function CameraController({
       const handler = () => {
         if (modelDataRef.current) updateCameraClipping(modelDataRef.current);
       };
-      controls.addEventListener("change", handler);
-      detach = () => controls.removeEventListener?.("change", handler);
+      controls.addEventListener('change', handler);
+      detach = () => controls.removeEventListener?.('change', handler);
     };
 
     frameId = window.requestAnimationFrame(attach);

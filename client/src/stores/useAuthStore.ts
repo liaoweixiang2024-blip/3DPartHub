@@ -1,9 +1,9 @@
-import { create } from "zustand";
-import { persist } from "zustand/middleware";
-import axios from "axios";
-import type { User, AuthTokens } from "../types";
-import { useFavoriteStore } from "./useFavoriteStore";
-import client from "../api/client";
+import { create } from 'zustand';
+import { persist } from 'zustand/middleware';
+import axios from 'axios';
+import type { User, AuthTokens } from '../types';
+import { useFavoriteStore } from './useFavoriteStore';
+import client from '../api/client';
 
 interface AuthState {
   user: User | null;
@@ -31,9 +31,9 @@ export function getAccessToken(): string | null {
 /** Decode JWT payload without a library */
 function decodeJwtPayload(token: string): { exp?: number; [k: string]: unknown } | null {
   try {
-    const part = token.split(".")[1];
+    const part = token.split('.')[1];
     if (!part) return null;
-    const json = atob(part.replace(/-/g, "+").replace(/_/g, "/"));
+    const json = atob(part.replace(/-/g, '+').replace(/_/g, '/'));
     return JSON.parse(json);
   } catch {
     return null;
@@ -49,9 +49,9 @@ function isTokenExpired(token: string | null): boolean {
 }
 
 function unwrapApiPayload<T>(value: unknown): T {
-  if (value && typeof value === "object" && "data" in value) {
+  if (value && typeof value === 'object' && 'data' in value) {
     const data = (value as { data?: unknown }).data;
-    if (data && typeof data === "object" && "data" in data) {
+    if (data && typeof data === 'object' && 'data' in data) {
       return (data as { data?: T }).data as T;
     }
     return data as T;
@@ -73,11 +73,9 @@ export const useAuthStore = create<AuthState>()(
         useFavoriteStore.getState().hydrate();
       },
       logout: () => {
-        void axios.post(
-          `${import.meta.env.VITE_API_BASE_URL || "/api"}/auth/logout`,
-          {},
-          { withCredentials: true }
-        ).catch(() => {});
+        void axios
+          .post(`${import.meta.env.VITE_API_BASE_URL || '/api'}/auth/logout`, {}, { withCredentials: true })
+          .catch(() => {});
         _accessToken = null;
         set({ user: null, tokens: null, isAuthenticated: false, rememberMe: false });
       },
@@ -106,13 +104,10 @@ export const useAuthStore = create<AuthState>()(
         }
 
         try {
-          const { data: refreshResp } = await client.post(
-            "/auth/refresh",
-            refreshToken ? { refreshToken } : {}
-          );
+          const { data: refreshResp } = await client.post('/auth/refresh', refreshToken ? { refreshToken } : {});
           const { accessToken } = unwrapApiPayload<{ accessToken?: string }>(refreshResp);
 
-          const { data: profileResp } = await client.get("/auth/profile");
+          const { data: profileResp } = await client.get('/auth/profile');
           const user = unwrapApiPayload<User>(profileResp);
 
           _accessToken = accessToken ?? null;
@@ -153,12 +148,9 @@ export const useAuthStore = create<AuthState>()(
         }
 
         try {
-          const { data: resp } = await client.post(
-            "/auth/refresh",
-            refreshToken ? { refreshToken } : {}
-          );
+          const { data: resp } = await client.post('/auth/refresh', refreshToken ? { refreshToken } : {});
           const newAccessToken = unwrapApiPayload<{ accessToken?: string }>(resp).accessToken;
-          if (!newAccessToken) throw new Error("No token in response");
+          if (!newAccessToken) throw new Error('No token in response');
 
           _accessToken = newAccessToken;
           set({ tokens: refreshToken ? { accessToken: newAccessToken, refreshToken } : null });
@@ -170,7 +162,7 @@ export const useAuthStore = create<AuthState>()(
       },
     }),
     {
-      name: "auth-v2",
+      name: 'auth-v2',
       version: 3,
       partialize: (state) => ({
         user: state.rememberMe ? state.user : null,
@@ -198,6 +190,6 @@ export const useAuthStore = create<AuthState>()(
           hasHydrated: false,
         } as any;
       },
-    }
-  )
+    },
+  ),
 );

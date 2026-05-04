@@ -1,6 +1,6 @@
-import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
-import { logger } from "../lib/logger.js";
+import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { logger } from '../lib/logger.js';
 
 export interface UploadSession {
   fileName: string;
@@ -9,10 +9,10 @@ export interface UploadSession {
   chunkSize: number;
   userId: string;
   createdAt: number;
-  purpose?: "backup" | "model";
+  purpose?: 'backup' | 'model';
 }
 
-const SESSION_DIR = "/tmp/model_upload_sessions";
+const SESSION_DIR = '/tmp/model_upload_sessions';
 const SESSION_TTL_MS = 4 * 60 * 60 * 1000; // 4 hours
 const SAFE_UPLOAD_ID_RE = /^[a-zA-Z0-9_-]{1,64}$/;
 
@@ -22,7 +22,7 @@ function validateUploadId(uploadId: string): string | null {
 
 function sessionPath(uploadId: string) {
   const safe = validateUploadId(uploadId);
-  if (!safe) throw new Error("Invalid upload ID");
+  if (!safe) throw new Error('Invalid upload ID');
   return join(SESSION_DIR, `${safe}.json`);
 }
 
@@ -33,7 +33,7 @@ export function saveUploadSession(uploadId: string, session: UploadSession) {
 
 export function loadUploadSession(uploadId: string): UploadSession | undefined {
   try {
-    const raw = readFileSync(sessionPath(uploadId), "utf-8");
+    const raw = readFileSync(sessionPath(uploadId), 'utf-8');
     return JSON.parse(raw) as UploadSession;
   } catch {
     return undefined;
@@ -51,18 +51,20 @@ export function cleanupExpiredSessions(chunksDir: string) {
   const now = Date.now();
   try {
     mkdirSync(SESSION_DIR, { recursive: true });
-    const files = readdirSync(SESSION_DIR).filter(f => f.endsWith(".json"));
+    const files = readdirSync(SESSION_DIR).filter((f) => f.endsWith('.json'));
     const activeUploadIds = new Set<string>();
     for (const file of files) {
       try {
-        const raw = readFileSync(join(SESSION_DIR, file), "utf-8");
+        const raw = readFileSync(join(SESSION_DIR, file), 'utf-8');
         const session = JSON.parse(raw) as UploadSession;
-        const uploadId = file.replace(".json", "");
+        const uploadId = file.replace('.json', '');
         if (now - session.createdAt > SESSION_TTL_MS) {
           // Delete session file
           rmSync(join(SESSION_DIR, file), { force: true });
           // Delete chunk directory
-          try { rmSync(join(chunksDir, uploadId), { recursive: true, force: true }); } catch {}
+          try {
+            rmSync(join(chunksDir, uploadId), { recursive: true, force: true });
+          } catch {}
           logger.info(`[Upload] Cleaned expired session: ${uploadId}`);
         } else {
           activeUploadIds.add(uploadId);

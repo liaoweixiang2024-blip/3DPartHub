@@ -1,5 +1,5 @@
-import { Grid } from "@react-three/drei";
-import { get3DMaterialConfig, type ViewerSettingsOverride } from "../../lib/publicSettings";
+import { Grid } from '@react-three/drei';
+import { get3DMaterialConfig, type ViewerSettingsOverride } from '../../lib/publicSettings';
 
 interface SceneProps {
   showGrid: boolean;
@@ -17,7 +17,7 @@ export default function Scene({ showGrid, viewerSettings }: SceneProps) {
       <directionalLight position={[-8, 6, -8]} intensity={config.fillLightIntensity} color="#b0c4de" />
       <directionalLight position={[0, -5, 10]} intensity={0.3} color="#e0e8f0" />
       <pointLight position={[0, 15, 0]} intensity={0.4} />
-      <hemisphereLight args={["#b1e1ff", "#b97a20", config.hemisphereIntensity]} />
+      <hemisphereLight args={['#b1e1ff', '#b97a20', config.hemisphereIntensity]} />
 
       {showGrid && (
         <Grid

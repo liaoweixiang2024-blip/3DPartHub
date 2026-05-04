@@ -1,17 +1,17 @@
-import { useState, useCallback } from "react";
-import { Link, useNavigate } from "react-router-dom";
-import { motion, AnimatePresence } from "framer-motion";
-import useSWR from "swr";
-import { useMediaQuery } from "../layouts/hooks/useMediaQuery";
-import { useDocumentTitle } from "../hooks/useDocumentTitle";
-import { PageHeader } from "../components/shared/PagePrimitives";
-import { AdminPageShell } from "../components/shared/AdminPageShell";
-import { projectApi, type Project } from "../api/projects";
-import { useAuthStore } from "../stores";
-import { useToast } from "../components/shared/Toast";
-import Icon from "../components/shared/Icon";
-import InfiniteLoadTrigger from "../components/shared/InfiniteLoadTrigger";
-import { useVisibleItems } from "../hooks/useVisibleItems";
+import { useState, useCallback } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
+import { motion, AnimatePresence } from 'framer-motion';
+import useSWR from 'swr';
+import { useMediaQuery } from '../layouts/hooks/useMediaQuery';
+import { useDocumentTitle } from '../hooks/useDocumentTitle';
+import { PageHeader } from '../components/shared/PagePrimitives';
+import { AdminPageShell } from '../components/shared/AdminPageShell';
+import { projectApi, type Project } from '../api/projects';
+import { useAuthStore } from '../stores';
+import { useToast } from '../components/shared/Toast';
+import Icon from '../components/shared/Icon';
+import InfiniteLoadTrigger from '../components/shared/InfiniteLoadTrigger';
+import { useVisibleItems } from '../hooks/useVisibleItems';
 
 function ProjectCard({ project, onDelete }: { project: Project; onDelete: (id: string) => void }) {
   const [confirming, setConfirming] = useState(false);
@@ -45,12 +45,10 @@ function ProjectCard({ project, onDelete }: { project: Project; onDelete: (id: s
             <p className="text-xs text-on-surface-variant line-clamp-2 break-words">{project.description}</p>
           )}
           <div className="flex items-center gap-2 mt-3">
-            <span className="text-[10px] text-on-surface-variant">
-              {project.members.length} 成员
-            </span>
+            <span className="text-[10px] text-on-surface-variant">{project.members.length} 成员</span>
             <span className="text-on-surface-variant/30">·</span>
             <span className="text-[10px] text-on-surface-variant">
-              {new Date(project.updatedAt).toLocaleDateString("zh-CN")}
+              {new Date(project.updatedAt).toLocaleDateString('zh-CN')}
             </span>
           </div>
         </div>
@@ -59,32 +57,33 @@ function ProjectCard({ project, onDelete }: { project: Project; onDelete: (id: s
         onClick={handleDelete}
         className={`absolute top-2 left-2 p-1.5 rounded-sm transition-all z-10 ${
           confirming
-            ? "bg-error text-on-error"
-            : "bg-surface-container-high/80 text-on-surface-variant opacity-0 group-hover:opacity-100 hover:text-error"
+            ? 'bg-error text-on-error'
+            : 'bg-surface-container-high/80 text-on-surface-variant opacity-0 group-hover:opacity-100 hover:text-error'
         }`}
-        title={confirming ? "确认删除" : "删除项目"}
+        title={confirming ? '确认删除' : '删除项目'}
       >
-        <Icon name={confirming ? "delete" : "delete_outline"} size={16} />
+        <Icon name={confirming ? 'delete' : 'delete_outline'} size={16} />
       </button>
     </div>
   );
 }
 
 export default function ProjectsPage() {
-  useDocumentTitle("项目");
-  const isDesktop = useMediaQuery("(min-width: 768px)");
+  useDocumentTitle('项目');
+  const isDesktop = useMediaQuery('(min-width: 768px)');
   const navigate = useNavigate();
   const { isAuthenticated } = useAuthStore();
   const [showCreate, setShowCreate] = useState(false);
-  const [newName, setNewName] = useState("");
-  const [newDesc, setNewDesc] = useState("");
+  const [newName, setNewName] = useState('');
+  const [newDesc, setNewDesc] = useState('');
 
-  const { data: projects, mutate } = useSWR(
-    isAuthenticated ? "/projects" : null,
-    () => projectApi.list()
-  );
+  const { data: projects, mutate } = useSWR(isAuthenticated ? '/projects' : null, () => projectApi.list());
   const projectList = projects || [];
-  const { visibleItems: visibleProjects, hasMore, loadMore } = useVisibleItems(projectList, 60, String(projectList.length));
+  const {
+    visibleItems: visibleProjects,
+    hasMore,
+    loadMore,
+  } = useVisibleItems(projectList, 60, String(projectList.length));
   const { toast } = useToast();
 
   const handleCreate = async () => {
@@ -93,88 +92,92 @@ export default function ProjectsPage() {
       await projectApi.create({ name: newName.trim(), description: newDesc.trim() || undefined });
       mutate();
       setShowCreate(false);
-      setNewName("");
-      setNewDesc("");
-      toast("项目已创建", "success");
+      setNewName('');
+      setNewDesc('');
+      toast('项目已创建', 'success');
     } catch {
-      toast("创建失败", "error");
+      toast('创建失败', 'error');
     }
   };
 
-  const handleDelete = useCallback(async (id: string) => {
-    try {
-      await projectApi.delete(id);
-      mutate();
-      toast("项目已删除", "success");
-    } catch {
-      toast("删除失败", "error");
-    }
-  }, [mutate, toast]);
+  const handleDelete = useCallback(
+    async (id: string) => {
+      try {
+        await projectApi.delete(id);
+        mutate();
+        toast('项目已删除', 'success');
+      } catch {
+        toast('删除失败', 'error');
+      }
+    },
+    [mutate, toast],
+  );
 
   if (!isAuthenticated) {
     return (
       <div className="flex flex-col items-center justify-center h-dvh bg-surface gap-4">
         <Icon name="lock" size={64} className="text-on-surface-variant/30" />
         <p className="text-on-surface-variant">请先登录查看项目</p>
-        <button onClick={() => navigate("/login")} className="text-primary hover:underline">前往登录</button>
+        <button onClick={() => navigate('/login')} className="text-primary hover:underline">
+          前往登录
+        </button>
       </div>
     );
   }
 
   return (
     <AdminPageShell mobileContentClassName="p-4 pb-20">
-        <div className="max-w-6xl mx-auto">
-          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between mb-6 border-b border-surface-container-low pb-4">
-            <div className="min-w-0">
-              <div className="flex items-center gap-2 text-sm mb-2 overflow-x-auto scrollbar-hidden">
-                <Link to="/" className="text-on-surface-variant hover:text-on-surface">首页</Link>
-                <Icon name="chevron_right" size={12} className="text-on-surface-variant/40" />
-                <span className="text-primary font-medium">项目空间</span>
-              </div>
-              <PageHeader title="项目" />
+      <div className="max-w-6xl mx-auto">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between mb-6 border-b border-surface-container-low pb-4">
+          <div className="min-w-0">
+            <div className="flex items-center gap-2 text-sm mb-2 overflow-x-auto scrollbar-hidden">
+              <Link to="/" className="text-on-surface-variant hover:text-on-surface">
+                首页
+              </Link>
+              <Icon name="chevron_right" size={12} className="text-on-surface-variant/40" />
+              <span className="text-primary font-medium">项目空间</span>
             </div>
-            <button
-              onClick={() => setShowCreate(true)}
-              className="bg-primary-container text-on-primary rounded-sm px-4 py-2 text-sm font-medium hover:opacity-90 flex items-center gap-2"
-            >
-              <Icon name="add" size={20} />
-              新建项目
+            <PageHeader title="项目" />
+          </div>
+          <button
+            onClick={() => setShowCreate(true)}
+            className="bg-primary-container text-on-primary rounded-sm px-4 py-2 text-sm font-medium hover:opacity-90 flex items-center gap-2"
+          >
+            <Icon name="add" size={20} />
+            新建项目
+          </button>
+        </div>
+
+        {!projects ? (
+          <div className="flex items-center justify-center py-20">
+            <Icon name="progress_activity" size={48} className="text-on-surface-variant/30 animate-pulse" />
+          </div>
+        ) : projectList.length === 0 ? (
+          <div className="flex flex-col items-center justify-center py-20 gap-4">
+            <Icon name="folder_off" size={56} className="text-on-surface-variant/30" />
+            <p className="text-on-surface-variant">还没有项目</p>
+            <button onClick={() => setShowCreate(true)} className="text-primary hover:underline text-sm">
+              创建第一个项目
             </button>
           </div>
-
-          {!projects ? (
-            <div className="flex items-center justify-center py-20">
-              <Icon name="progress_activity" size={48} className="text-on-surface-variant/30 animate-pulse" />
+        ) : (
+          <>
+            <div className={`grid gap-4 ${isDesktop ? 'grid-cols-3' : 'grid-cols-1 sm:grid-cols-2'}`}>
+              {visibleProjects.map((p) => (
+                <motion.div
+                  key={p.id}
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.3 }}
+                >
+                  <ProjectCard project={p} onDelete={handleDelete} />
+                </motion.div>
+              ))}
             </div>
-          ) : projectList.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-20 gap-4">
-              <Icon name="folder_off" size={56} className="text-on-surface-variant/30" />
-              <p className="text-on-surface-variant">还没有项目</p>
-              <button
-                onClick={() => setShowCreate(true)}
-                className="text-primary hover:underline text-sm"
-              >
-                创建第一个项目
-              </button>
-            </div>
-          ) : (
-            <>
-              <div className={`grid gap-4 ${isDesktop ? "grid-cols-3" : "grid-cols-1 sm:grid-cols-2"}`}>
-                {visibleProjects.map((p) => (
-                  <motion.div
-                    key={p.id}
-                    initial={{ opacity: 0, y: 20 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ duration: 0.3 }}
-                  >
-                    <ProjectCard project={p} onDelete={handleDelete} />
-                  </motion.div>
-                ))}
-              </div>
-              <InfiniteLoadTrigger hasMore={hasMore} isLoading={false} onLoadMore={loadMore} />
-            </>
-          )}
-        </div>
+            <InfiniteLoadTrigger hasMore={hasMore} isLoading={false} onLoadMore={loadMore} />
+          </>
+        )}
+      </div>
 
       {/* Create project modal */}
       <AnimatePresence>

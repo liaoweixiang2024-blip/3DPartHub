@@ -1,7 +1,7 @@
-import { useState, useRef, useEffect, useMemo } from "react";
-import { AnimatePresence, motion } from "framer-motion";
-import Icon from "./Icon";
-import type { CategoryItem } from "../../api/categories";
+import { useState, useRef, useEffect, useMemo } from 'react';
+import { AnimatePresence, motion } from 'framer-motion';
+import Icon from './Icon';
+import type { CategoryItem } from '../../api/categories';
 
 interface CategorySelectProps {
   categories: CategoryItem[];
@@ -10,15 +10,15 @@ interface CategorySelectProps {
   placeholder?: string;
 }
 
-export default function CategorySelect({ categories, value, onChange, placeholder = "选择分类" }: CategorySelectProps) {
+export default function CategorySelect({ categories, value, onChange, placeholder = '选择分类' }: CategorySelectProps) {
   const [open, setOpen] = useState(false);
-  const [search, setSearch] = useState("");
+  const [search, setSearch] = useState('');
   const ref = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
   // Find selected category name
   const selectedName = useMemo(() => {
-    if (!value) return "";
+    if (!value) return '';
     for (const c of categories) {
       if (c.id === value) return c.name;
       if (c.children) {
@@ -27,7 +27,7 @@ export default function CategorySelect({ categories, value, onChange, placeholde
         }
       }
     }
-    return "";
+    return '';
   }, [categories, value]);
 
   // Filter categories by search
@@ -51,14 +51,14 @@ export default function CategorySelect({ categories, value, onChange, placeholde
     const handler = (e: MouseEvent) => {
       if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
     };
-    document.addEventListener("mousedown", handler);
-    return () => document.removeEventListener("mousedown", handler);
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
   }, [open]);
 
   // Focus search input on open
   useEffect(() => {
     if (open) {
-      setSearch("");
+      setSearch('');
       setTimeout(() => inputRef.current?.focus(), 50);
     }
   }, [open]);
@@ -75,10 +75,10 @@ export default function CategorySelect({ categories, value, onChange, placeholde
         onClick={() => setOpen(!open)}
         className="w-full flex items-center justify-between bg-surface-container-lowest text-on-surface border border-outline-variant/30 focus:border-primary px-3 py-2 text-sm rounded-sm outline-none cursor-pointer text-left min-w-0"
       >
-        <span className={`min-w-0 truncate ${selectedName ? "text-on-surface" : "text-on-surface-variant/50"}`}>
+        <span className={`min-w-0 truncate ${selectedName ? 'text-on-surface' : 'text-on-surface-variant/50'}`}>
           {selectedName || placeholder}
         </span>
-        <Icon name={open ? "expand_less" : "expand_more"} size={18} className="text-on-surface-variant shrink-0" />
+        <Icon name={open ? 'expand_less' : 'expand_more'} size={18} className="text-on-surface-variant shrink-0" />
       </button>
 
       <AnimatePresence>
@@ -107,9 +107,11 @@ export default function CategorySelect({ categories, value, onChange, placeholde
               {/* Uncategorized option */}
               <button
                 type="button"
-                onClick={() => handleSelect("")}
+                onClick={() => handleSelect('')}
                 className={`w-full text-left px-3 py-2 text-sm transition-colors flex items-center gap-2 ${
-                  !value ? "bg-primary-container/20 text-primary" : "text-on-surface-variant hover:bg-surface-container-high"
+                  !value
+                    ? 'bg-primary-container/20 text-primary'
+                    : 'text-on-surface-variant hover:bg-surface-container-high'
                 }`}
               >
                 <Icon name="folder_off" size={14} className="shrink-0" />
@@ -127,10 +129,12 @@ export default function CategorySelect({ categories, value, onChange, placeholde
                     type="button"
                     onClick={() => handleSelect(cat.id)}
                     className={`w-full text-left px-3 py-2 text-sm transition-colors flex items-center gap-2 ${
-                      value === cat.id ? "bg-primary-container/20 text-primary" : "text-on-surface hover:bg-surface-container-high"
+                      value === cat.id
+                        ? 'bg-primary-container/20 text-primary'
+                        : 'text-on-surface hover:bg-surface-container-high'
                     }`}
                   >
-                    <Icon name={cat.icon || "folder"} size={14} className="shrink-0 text-on-surface-variant" />
+                    <Icon name={cat.icon || 'folder'} size={14} className="shrink-0 text-on-surface-variant" />
                     <span className="font-medium min-w-0 break-words">{cat.name}</span>
                     {cat.count !== undefined && (
                       <span className="text-[10px] text-on-surface-variant/60 ml-auto">{cat.count}</span>
@@ -144,7 +148,9 @@ export default function CategorySelect({ categories, value, onChange, placeholde
                       type="button"
                       onClick={() => handleSelect(child.id)}
                       className={`w-full text-left pl-8 pr-3 py-1.5 text-sm transition-colors flex items-center gap-2 ${
-                        value === child.id ? "bg-primary-container/20 text-primary" : "text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface"
+                        value === child.id
+                          ? 'bg-primary-container/20 text-primary'
+                          : 'text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface'
                       }`}
                     >
                       <span className="text-on-surface-variant/30">└</span>

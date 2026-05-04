@@ -1,14 +1,14 @@
-import { useState, useRef, useEffect } from "react";
-import { useParams, useNavigate } from "react-router-dom";
-import useSWR from "swr";
-import { useDocumentTitle } from "../hooks/useDocumentTitle";
-import Icon from "../components/shared/Icon";
-import { AdminPageShell } from "../components/shared/AdminPageShell";
-import { AdminDetailHeader } from "../components/shared/AdminManagementPage";
-import { useToast } from "../components/shared/Toast";
-import { useAuthStore } from "../stores/useAuthStore";
-import { getCachedPublicSettings } from "../lib/publicSettings";
-import { getBusinessConfig, statusInfo, type StatusConfig } from "../lib/businessConfig";
+import { useState, useRef, useEffect } from 'react';
+import { useParams, useNavigate } from 'react-router-dom';
+import useSWR from 'swr';
+import { useDocumentTitle } from '../hooks/useDocumentTitle';
+import Icon from '../components/shared/Icon';
+import { AdminPageShell } from '../components/shared/AdminPageShell';
+import { AdminDetailHeader } from '../components/shared/AdminManagementPage';
+import { useToast } from '../components/shared/Toast';
+import { useAuthStore } from '../stores/useAuthStore';
+import { getCachedPublicSettings } from '../lib/publicSettings';
+import { getBusinessConfig, statusInfo, type StatusConfig } from '../lib/businessConfig';
 import {
   getInquiry,
   sendInquiryMessage,
@@ -16,12 +16,14 @@ import {
   updateInquiryStatus,
   type Inquiry,
   type InquiryMessage,
-} from "../api/inquiries";
+} from '../api/inquiries';
 
 function StatusBadge({ status, statuses }: { status: string; statuses: StatusConfig[] }) {
   const info = statusInfo(statuses, status);
   return (
-    <span className={`inline-flex items-center gap-1 text-xs px-2.5 py-1 rounded-md font-bold ${info.color || ""} ${info.bg || ""}`}>
+    <span
+      className={`inline-flex items-center gap-1 text-xs px-2.5 py-1 rounded-md font-bold ${info.color || ''} ${info.bg || ''}`}
+    >
       {info.label}
     </span>
   );
@@ -31,29 +33,33 @@ function StatusBadge({ status, statuses }: { status: string; statuses: StatusCon
 function MessageBubble({ msg }: { msg: InquiryMessage }) {
   const isRight = msg.isAdmin;
   return (
-    <div className={`flex ${isRight ? "justify-end" : "justify-start"} mb-3`}>
-      <div className={`max-w-[80%] rounded-xl px-4 py-2.5 ${
-        isRight
-          ? "bg-primary-container/15 text-on-surface"
-          : "bg-surface-container-high text-on-surface"
-      }`}>
+    <div className={`flex ${isRight ? 'justify-end' : 'justify-start'} mb-3`}>
+      <div
+        className={`max-w-[80%] rounded-xl px-4 py-2.5 ${
+          isRight ? 'bg-primary-container/15 text-on-surface' : 'bg-surface-container-high text-on-surface'
+        }`}
+      >
         <p className="text-sm whitespace-pre-wrap">{msg.content}</p>
         {msg.attachment && (
-          <a href={msg.attachment} target="_blank" rel="noopener" className="mt-1 inline-flex items-center gap-1 text-xs text-primary-container">
-            <Icon name="attach_file" size={12} />附件
+          <a
+            href={msg.attachment}
+            target="_blank"
+            rel="noopener"
+            className="mt-1 inline-flex items-center gap-1 text-xs text-primary-container"
+          >
+            <Icon name="attach_file" size={12} />
+            附件
           </a>
         )}
         <div className="mt-1 text-[10px] text-on-surface-variant">
-          {msg.user?.username || "用户"} · {new Date(msg.createdAt).toLocaleString("zh-CN")}
+          {msg.user?.username || '用户'} · {new Date(msg.createdAt).toLocaleString('zh-CN')}
         </div>
       </div>
     </div>
   );
 }
 
-function ItemsTable({ items }: {
-  items: Inquiry["items"];
-}) {
+function ItemsTable({ items }: { items: Inquiry['items'] }) {
   return (
     <>
       <div className="space-y-2 md:hidden">
@@ -72,34 +78,34 @@ function ItemsTable({ items }: {
             </div>
             <div className="flex items-center justify-between gap-3 border-t border-outline-variant/8 pt-2 text-xs text-on-surface-variant">
               <span>序号 {index + 1}</span>
-              <span className="min-w-0 truncate text-right">{item.remark || "无备注"}</span>
+              <span className="min-w-0 truncate text-right">{item.remark || '无备注'}</span>
             </div>
           </div>
         ))}
       </div>
       <div className="hidden overflow-auto rounded-lg border border-outline-variant/15 max-h-[50vh] md:block">
         <table className="min-w-[520px] w-full text-sm">
-        <thead className="sticky top-0 z-10">
-          <tr className="bg-surface-container-low">
-            <th className="px-4 py-2 text-left text-xs font-bold text-on-surface-variant">型号/产品</th>
-            <th className="px-4 py-2 text-left text-xs font-bold text-on-surface-variant">数量</th>
-            <th className="px-4 py-2 text-left text-xs font-bold text-on-surface-variant">备注</th>
-          </tr>
-        </thead>
-        <tbody>
-          {items.map((item) => (
-            <tr key={item.id} className="border-t border-outline-variant/5">
-              <td className="px-4 py-2.5">
-                <p className="text-on-surface font-medium break-words">{item.modelNo || item.productName}</p>
-                {item.modelNo && item.productName !== item.modelNo && (
-                  <p className="text-xs text-on-surface-variant break-words">{item.productName}</p>
-                )}
-              </td>
-              <td className="px-4 py-2.5 text-on-surface">{item.qty}</td>
-              <td className="px-4 py-2.5 text-xs text-on-surface-variant">{item.remark || "—"}</td>
+          <thead className="sticky top-0 z-10">
+            <tr className="bg-surface-container-low">
+              <th className="px-4 py-2 text-left text-xs font-bold text-on-surface-variant">型号/产品</th>
+              <th className="px-4 py-2 text-left text-xs font-bold text-on-surface-variant">数量</th>
+              <th className="px-4 py-2 text-left text-xs font-bold text-on-surface-variant">备注</th>
             </tr>
-          ))}
-        </tbody>
+          </thead>
+          <tbody>
+            {items.map((item) => (
+              <tr key={item.id} className="border-t border-outline-variant/5">
+                <td className="px-4 py-2.5">
+                  <p className="text-on-surface font-medium break-words">{item.modelNo || item.productName}</p>
+                  {item.modelNo && item.productName !== item.modelNo && (
+                    <p className="text-xs text-on-surface-variant break-words">{item.productName}</p>
+                  )}
+                </td>
+                <td className="px-4 py-2.5 text-on-surface">{item.qty}</td>
+                <td className="px-4 py-2.5 text-xs text-on-surface-variant">{item.remark || '—'}</td>
+              </tr>
+            ))}
+          </tbody>
         </table>
       </div>
     </>
@@ -110,25 +116,23 @@ function DetailContent({ id }: { id: string }) {
   const navigate = useNavigate();
   const { toast } = useToast();
   const { user } = useAuthStore();
-  const isAdmin = user?.role === "ADMIN";
-  const { data: settings } = useSWR("publicSettings", () => getCachedPublicSettings());
+  const isAdmin = user?.role === 'ADMIN';
+  const { data: settings } = useSWR('publicSettings', () => getCachedPublicSettings());
   const statuses = getBusinessConfig(settings).inquiryStatuses;
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  const { data: inquiry, mutate } = useSWR<Inquiry>(
-    id ? `inquiry-${id}` : null,
-    () => getInquiry(id),
-    { refreshInterval: 5000 }
-  );
+  const { data: inquiry, mutate } = useSWR<Inquiry>(id ? `inquiry-${id}` : null, () => getInquiry(id), {
+    refreshInterval: 5000,
+  });
 
-  const [msgInput, setMsgInput] = useState("");
+  const [msgInput, setMsgInput] = useState('');
   const [sending, setSending] = useState(false);
 
   const prevMsgCount = useRef<number | undefined>(undefined);
   useEffect(() => {
     const len = inquiry?.messages?.length;
     if (len !== undefined && prevMsgCount.current !== undefined && len > prevMsgCount.current) {
-      messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
     }
     prevMsgCount.current = len;
   }, [inquiry?.messages?.length]);
@@ -146,10 +150,10 @@ function DetailContent({ id }: { id: string }) {
     setSending(true);
     try {
       await sendInquiryMessage(id, msgInput.trim());
-      setMsgInput("");
+      setMsgInput('');
       mutate();
     } catch {
-      toast("发送失败", "error");
+      toast('发送失败', 'error');
     } finally {
       setSending(false);
     }
@@ -159,9 +163,9 @@ function DetailContent({ id }: { id: string }) {
     try {
       await cancelInquiry(id);
       mutate();
-      toast("已取消", "success");
+      toast('已取消', 'success');
     } catch {
-      toast("取消失败", "error");
+      toast('取消失败', 'error');
     }
   }
 
@@ -169,13 +173,13 @@ function DetailContent({ id }: { id: string }) {
     try {
       await updateInquiryStatus(id, status);
       mutate();
-      toast(`状态已更新`, "success");
+      toast(`状态已更新`, 'success');
     } catch {
-      toast("操作失败", "error");
+      toast('操作失败', 'error');
     }
   }
 
-  const canMessage = inquiry.status !== "cancelled" && inquiry.status !== "draft";
+  const canMessage = inquiry.status !== 'cancelled' && inquiry.status !== 'draft';
 
   return (
     <div className="flex h-full min-h-0 flex-col">
@@ -183,47 +187,62 @@ function DetailContent({ id }: { id: string }) {
         title="询价单详情"
         onBack={() => navigate(-1)}
         actions={<StatusBadge status={inquiry.status} statuses={statuses} />}
-        description={(
+        description={
           <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
-          <span className="flex min-w-0 items-center gap-1">
-            <Icon name="schedule" size={12} className="shrink-0" />
-            <span className="truncate">{new Date(inquiry.createdAt).toLocaleString("zh-CN")}</span>
-          </span>
-          {inquiry.user ? (
             <span className="flex min-w-0 items-center gap-1">
-              <Icon name="person" size={12} className="shrink-0" />
-              <span className="truncate">{inquiry.user.username}</span>
+              <Icon name="schedule" size={12} className="shrink-0" />
+              <span className="truncate">{new Date(inquiry.createdAt).toLocaleString('zh-CN')}</span>
             </span>
-          ) : null}
-          {inquiry.company ? <span className="truncate">{inquiry.company}</span> : null}
+            {inquiry.user ? (
+              <span className="flex min-w-0 items-center gap-1">
+                <Icon name="person" size={12} className="shrink-0" />
+                <span className="truncate">{inquiry.user.username}</span>
+              </span>
+            ) : null}
+            {inquiry.company ? <span className="truncate">{inquiry.company}</span> : null}
           </div>
-        )}
+        }
       >
-          {inquiry.status === "submitted" && !isAdmin && (
-            <button onClick={handleCancel} className="rounded-lg border border-outline-variant/40 px-3 py-1.5 text-xs text-on-surface-variant transition-colors hover:bg-surface-container-high/50">
-              取消询价
+        {inquiry.status === 'submitted' && !isAdmin && (
+          <button
+            onClick={handleCancel}
+            className="rounded-lg border border-outline-variant/40 px-3 py-1.5 text-xs text-on-surface-variant transition-colors hover:bg-surface-container-high/50"
+          >
+            取消询价
+          </button>
+        )}
+        {isAdmin && inquiry.status === 'submitted' && (
+          <>
+            <button
+              onClick={() => handleStatusUpdate('quoted')}
+              className="rounded-lg bg-primary-container px-3 py-1.5 text-xs font-medium text-on-primary transition-opacity hover:opacity-90"
+            >
+              标记已回复
             </button>
-          )}
-          {isAdmin && inquiry.status === "submitted" && (
-            <>
-              <button onClick={() => handleStatusUpdate("quoted")} className="rounded-lg bg-primary-container px-3 py-1.5 text-xs font-medium text-on-primary transition-opacity hover:opacity-90">
-                标记已回复
-              </button>
-              <button onClick={() => handleStatusUpdate("rejected")} className="rounded-lg bg-red-500/15 px-3 py-1.5 text-xs font-medium text-red-500 transition-opacity hover:opacity-90">
-                关闭
-              </button>
-            </>
-          )}
-          {isAdmin && inquiry.status === "quoted" && (
-            <>
-              <button onClick={() => handleStatusUpdate("accepted")} className="rounded-lg bg-green-500/15 px-3 py-1.5 text-xs font-medium text-green-600 transition-opacity hover:opacity-90">
-                转销售跟进
-              </button>
-              <button onClick={() => handleStatusUpdate("rejected")} className="rounded-lg bg-red-500/15 px-3 py-1.5 text-xs font-medium text-red-500 transition-opacity hover:opacity-90">
-                关闭
-              </button>
-            </>
-          )}
+            <button
+              onClick={() => handleStatusUpdate('rejected')}
+              className="rounded-lg bg-red-500/15 px-3 py-1.5 text-xs font-medium text-red-500 transition-opacity hover:opacity-90"
+            >
+              关闭
+            </button>
+          </>
+        )}
+        {isAdmin && inquiry.status === 'quoted' && (
+          <>
+            <button
+              onClick={() => handleStatusUpdate('accepted')}
+              className="rounded-lg bg-green-500/15 px-3 py-1.5 text-xs font-medium text-green-600 transition-opacity hover:opacity-90"
+            >
+              转销售跟进
+            </button>
+            <button
+              onClick={() => handleStatusUpdate('rejected')}
+              className="rounded-lg bg-red-500/15 px-3 py-1.5 text-xs font-medium text-red-500 transition-opacity hover:opacity-90"
+            >
+              关闭
+            </button>
+          </>
+        )}
       </AdminDetailHeader>
 
       <div className="min-h-0 flex-1 overflow-y-auto p-4 scrollbar-hidden">
@@ -232,9 +251,24 @@ function DetailContent({ id }: { id: string }) {
             <div className="rounded-lg border border-outline-variant/15 bg-surface-container-low p-4">
               <h3 className="mb-2 text-sm font-bold text-on-surface">联系信息</h3>
               <div className="grid grid-cols-1 gap-3 text-sm sm:grid-cols-3 sm:gap-4">
-                {inquiry.company && <div className="min-w-0"><span className="text-on-surface-variant">公司：</span><span className="break-words text-on-surface">{inquiry.company}</span></div>}
-                {inquiry.contactName && <div className="min-w-0"><span className="text-on-surface-variant">联系人：</span><span className="break-words text-on-surface">{inquiry.contactName}</span></div>}
-                {inquiry.contactPhone && <div className="min-w-0"><span className="text-on-surface-variant">电话：</span><span className="break-words text-on-surface">{inquiry.contactPhone}</span></div>}
+                {inquiry.company && (
+                  <div className="min-w-0">
+                    <span className="text-on-surface-variant">公司：</span>
+                    <span className="break-words text-on-surface">{inquiry.company}</span>
+                  </div>
+                )}
+                {inquiry.contactName && (
+                  <div className="min-w-0">
+                    <span className="text-on-surface-variant">联系人：</span>
+                    <span className="break-words text-on-surface">{inquiry.contactName}</span>
+                  </div>
+                )}
+                {inquiry.contactPhone && (
+                  <div className="min-w-0">
+                    <span className="text-on-surface-variant">电话：</span>
+                    <span className="break-words text-on-surface">{inquiry.contactPhone}</span>
+                  </div>
+                )}
               </div>
             </div>
           )}
@@ -262,7 +296,9 @@ function DetailContent({ id }: { id: string }) {
             <h3 className="mb-3 text-sm font-bold text-on-surface">沟通记录</h3>
             <div className="rounded-lg border border-outline-variant/15 bg-surface-container-low p-4">
               {(inquiry.messages || []).length === 0 ? (
-                <p className="flex min-h-32 items-center justify-center text-center text-sm text-on-surface-variant">暂无消息</p>
+                <p className="flex min-h-32 items-center justify-center text-center text-sm text-on-surface-variant">
+                  暂无消息
+                </p>
               ) : (
                 (inquiry.messages || []).map((msg) => <MessageBubble key={msg.id} msg={msg} />)
               )}
@@ -279,7 +315,7 @@ function DetailContent({ id }: { id: string }) {
               value={msgInput}
               onChange={(e) => setMsgInput(e.target.value)}
               onKeyDown={(e) => {
-                if (e.key === "Enter" && !e.shiftKey) {
+                if (e.key === 'Enter' && !e.shiftKey) {
                   e.preventDefault();
                   handleSendMsg();
                 }
@@ -305,12 +341,17 @@ function DetailContent({ id }: { id: string }) {
 
 export default function InquiryDetailPage() {
   const { id } = useParams<{ id: string }>();
-  useDocumentTitle("询价单详情");
+  useDocumentTitle('询价单详情');
 
   const content = <DetailContent id={id!} />;
 
   return (
-    <AdminPageShell desktopContentClassName="overflow-hidden p-0" mobileMainClassName="overflow-hidden" mobileContentClassName="h-full p-0" hideMobileBottomNav>
+    <AdminPageShell
+      desktopContentClassName="overflow-hidden p-0"
+      mobileMainClassName="overflow-hidden"
+      mobileContentClassName="h-full p-0"
+      hideMobileBottomNav
+    >
       {content}
     </AdminPageShell>
   );

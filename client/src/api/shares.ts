@@ -1,10 +1,10 @@
-import client from "./client";
-import { unwrapResponse } from "./response";
+import client from './client';
+import { unwrapResponse } from './response';
 
 export interface ShareLink {
   id: string;
   rawId?: string;
-  type?: "model" | "selection";
+  type?: 'model' | 'selection';
   token: string;
   modelId?: string | null;
   modelName?: string;
@@ -47,12 +47,12 @@ export interface CreateShareParams {
 }
 
 export async function createShare(params: CreateShareParams): Promise<ShareLink & { url: string }> {
-  const res = await client.post("/shares", params);
+  const res = await client.post('/shares', params);
   return unwrapResponse(res);
 }
 
 export async function listShares(): Promise<ShareLink[]> {
-  const res = await client.get("/shares");
+  const res = await client.get('/shares');
   return unwrapResponse(res);
 }
 
@@ -72,12 +72,15 @@ export async function getShareInfo(token: string, accessToken?: string): Promise
   return unwrapResponse(res);
 }
 
-export async function verifySharePassword(token: string, password: string): Promise<{ accessToken?: string; expiresAt?: number }> {
+export async function verifySharePassword(
+  token: string,
+  password: string,
+): Promise<{ accessToken?: string; expiresAt?: number }> {
   const res = await client.post(`/shares/${token}/verify`, { password });
   return unwrapResponse(res);
 }
 
 export function getShareDownloadUrl(token: string, accessToken?: string): string {
-  const query = accessToken ? `?share_access_token=${encodeURIComponent(accessToken)}` : "";
+  const query = accessToken ? `?share_access_token=${encodeURIComponent(accessToken)}` : '';
   return `/api/shares/${token}/download${query}`;
 }

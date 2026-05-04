@@ -1,5 +1,5 @@
-import { Router, Response } from "express";
-import { prisma } from "../lib/prisma.js";
+import { Router, Response } from 'express';
+import { prisma } from '../lib/prisma.js';
 import {
   MAX_MODEL_PAGE,
   enumQuery,
@@ -7,36 +7,36 @@ import {
   normalizeSearchParam,
   numericQuery,
   searchCacheToken,
-} from "../lib/searchQuery.js";
-import { withAssetVersion } from "../services/gltfAsset.js";
-import { requireBrowseAccess } from "../middleware/browseAccess.js";
-import { MODEL_STATUS } from "../services/modelStatus.js";
-import { groupedVisibleModelWhere } from "../services/modelVisibility.js";
-import { cacheGetOrSet, TTL } from "../lib/cache.js";
+} from '../lib/searchQuery.js';
+import { withAssetVersion } from '../services/gltfAsset.js';
+import { requireBrowseAccess } from '../middleware/browseAccess.js';
+import { MODEL_STATUS } from '../services/modelStatus.js';
+import { groupedVisibleModelWhere } from '../services/modelVisibility.js';
+import { cacheGetOrSet, TTL } from '../lib/cache.js';
 
 const router = Router();
 
 // Full-text search with filters
-router.get("/api/search", async (req, res: Response) => {
+router.get('/api/search', async (req, res: Response) => {
   if (!(await requireBrowseAccess(req, res))) return;
 
   const q = normalizeSearchParam(req.query.q);
   const tags = normalizeSearchParam(req.query.tags);
   const format = normalizeSearchParam(req.query.format, 20).toLowerCase();
   const project = normalizeSearchParam(req.query.project, 80);
-  const sort = enumQuery(req.query.sort, "relevance", ["relevance", "name", "size", "downloads"] as const);
+  const sort = enumQuery(req.query.sort, 'relevance', ['relevance', 'name', 'size', 'downloads'] as const);
   const page = numericQuery(req.query.page, 1, 1, MAX_MODEL_PAGE);
   const size = numericQuery(req.query.page_size, 20, 1, 50);
 
   if (!prisma) {
-    res.status(503).json({ detail: "数据库未连接" });
+    res.status(503).json({ detail: '数据库未连接' });
     return;
   }
 
-  const grouped = req.query.grouped !== "false";
+  const grouped = req.query.grouped !== 'false';
 
   const cacheKey = [
-    "cache:models:search",
+    'cache:models:search',
     page,
     size,
     searchCacheToken(q),
@@ -45,7 +45,7 @@ router.get("/api/search", async (req, res: Response) => {
     searchCacheToken(project),
     sort,
     grouped,
-  ].join(":");
+  ].join(':');
 
   try {
     const { value: responseData, hit } = await cacheGetOrSet(cacheKey, TTL.MODELS_SEARCH, async () => {
@@ -68,15 +68,19 @@ router.get("/api/search", async (req, res: Response) => {
 
       // Tag filter (search in description/name for tag keywords)
       if (tags) {
-        const tagList = tags.split(",").map((t) => normalizeSearchParam(t, 40)).filter(Boolean).slice(0, 10);
+        const tagList = tags
+          .split(',')
+          .map((t) => normalizeSearchParam(t, 40))
+          .filter(Boolean)
+          .slice(0, 10);
         if (tagList.length > 0) {
           const tagConditions = tagList.map((tag) => ({
             OR: [
-              { name: { contains: tag, mode: "insensitive" } },
-              { description: { contains: tag, mode: "insensitive" } },
-              { partNumber: { contains: tag, mode: "insensitive" } },
-              { category: { contains: tag, mode: "insensitive" } },
-              { categoryRef: { is: { name: { contains: tag, mode: "insensitive" } } } },
+              { name: { contains: tag, mode: 'insensitive' } },
+              { description: { contains: tag, mode: 'insensitive' } },
+              { partNumber: { contains: tag, mode: 'insensitive' } },
+              { category: { contains: tag, mode: 'insensitive' } },
+              { categoryRef: { is: { name: { contains: tag, mode: 'insensitive' } } } },
             ],
           }));
           andConditions.push(...tagConditions);
@@ -91,11 +95,11 @@ router.get("/api/search", async (req, res: Response) => {
       }
 
       // Sort
-      let orderBy: any = { createdAt: "desc" };
-      if (sort === "name") orderBy = { name: "asc" };
-      else if (sort === "size") orderBy = { gltfSize: "desc" };
-      else if (sort === "downloads") orderBy = { downloadCount: "desc" };
-      else if (sort === "relevance" && q) orderBy = { name: "asc" };
+      let orderBy: any = { createdAt: 'desc' };
+      if (sort === 'name') orderBy = { name: 'asc' };
+      else if (sort === 'size') orderBy = { gltfSize: 'desc' };
+      else if (sort === 'downloads') orderBy = { downloadCount: 'desc' };
+      else if (sort === 'relevance' && q) orderBy = { name: 'asc' };
 
       const [total, models] = await Promise.all([
         prisma.model.count({ where }),
@@ -145,10 +149,10 @@ router.get("/api/search", async (req, res: Response) => {
       };
     });
 
-    res.set("X-Cache", hit ? "HIT" : "MISS");
+    res.set('X-Cache', hit ? 'HIT' : 'MISS');
     res.json(responseData);
   } catch (err) {
-    res.status(500).json({ detail: "搜索失败" });
+    res.status(500).json({ detail: '搜索失败' });
   }
 });
 

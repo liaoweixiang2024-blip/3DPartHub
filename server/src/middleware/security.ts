@@ -1,8 +1,8 @@
-import rateLimit, { type Options, type Store } from "express-rate-limit";
-import helmet from "helmet";
-import Redis from "ioredis";
-import { config } from "../lib/config.js";
-import { logger } from "../lib/logger.js";
+import rateLimit, { type Options, type Store } from 'express-rate-limit';
+import helmet from 'helmet';
+import Redis from 'ioredis';
+import { config } from '../lib/config.js';
+import { logger } from '../lib/logger.js';
 
 class RedisRateLimitStore implements Store {
   prefix: string;
@@ -21,8 +21,8 @@ class RedisRateLimitStore implements Store {
         return Math.min(times * 200, 2000);
       },
     });
-    this.redis.on("error", (err) => {
-      logger.error({ err, prefix }, "Rate limit Redis error");
+    this.redis.on('error', (err) => {
+      logger.error({ err, prefix }, 'Rate limit Redis error');
     });
   }
 
@@ -36,7 +36,7 @@ class RedisRateLimitStore implements Store {
 
   async increment(key: string) {
     const redisKey = this.key(key);
-    const [hitsRaw, ttlRaw] = await this.redis.eval(
+    const [hitsRaw, ttlRaw] = (await this.redis.eval(
       `
       local hits = redis.call("INCR", KEYS[1])
       local ttl = redis.call("PTTL", KEYS[1])
@@ -48,8 +48,8 @@ class RedisRateLimitStore implements Store {
       `,
       1,
       redisKey,
-      String(this.windowMs)
-    ) as [number | string, number | string];
+      String(this.windowMs),
+    )) as [number | string, number | string];
 
     const totalHits = Number(hitsRaw) || 1;
     const ttl = Math.max(0, Number(ttlRaw) || this.windowMs);
@@ -72,15 +72,16 @@ class RedisRateLimitStore implements Store {
   async resetAll() {
     const stream = this.redis.scanStream({ match: `${this.prefix}*`, count: 100 });
     await new Promise<void>((resolve, reject) => {
-      stream.on("data", (keys: string[]) => {
+      stream.on('data', (keys: string[]) => {
         if (keys.length === 0) return;
         stream.pause();
-        this.redis.del(...keys)
+        this.redis
+          .del(...keys)
           .then(() => stream.resume())
           .catch(reject);
       });
-      stream.on("end", resolve);
-      stream.on("error", reject);
+      stream.on('end', resolve);
+      stream.on('error', reject);
     });
   }
 
@@ -100,57 +101,57 @@ function createLimiter(prefix: string, options: Partial<Options>) {
 }
 
 // Rate limiting configurations
-export const apiLimiter = createLimiter("api", {
+export const apiLimiter = createLimiter('api', {
   windowMs: 15 * 60 * 1000, // 15 minutes
   limit: 5000,
   max: 5000,
-  message: { success: false, message: "请求过于频繁，请稍后再试" },
+  message: { success: false, message: '请求过于频繁，请稍后再试' },
 });
 
-export const uploadLimiter = createLimiter("upload", {
+export const uploadLimiter = createLimiter('upload', {
   windowMs: 60 * 60 * 1000,
   limit: 200,
   max: 200,
-  message: { success: false, message: "上传次数超出限制" },
+  message: { success: false, message: '上传次数超出限制' },
 });
 
-export const authLimiter = createLimiter("auth", {
+export const authLimiter = createLimiter('auth', {
   windowMs: 15 * 60 * 1000, // 15 minutes
   limit: 50,
   max: 50,
-  message: { success: false, message: "登录尝试过多，请稍后再试" },
+  message: { success: false, message: '登录尝试过多，请稍后再试' },
 });
 
-export const searchLimiter = createLimiter("search", {
+export const searchLimiter = createLimiter('search', {
   windowMs: 5 * 60 * 1000, // 5 minutes
   limit: 600,
   max: 600,
-  message: { success: false, message: "搜索请求过于频繁，请稍后再试" },
+  message: { success: false, message: '搜索请求过于频繁，请稍后再试' },
 });
 
-export const refreshLimiter = createLimiter("refresh", {
+export const refreshLimiter = createLimiter('refresh', {
   windowMs: 15 * 60 * 1000,
   limit: 100,
   max: 100,
-  message: { success: false, message: "令牌刷新过于频繁，请重新登录" },
+  message: { success: false, message: '令牌刷新过于频繁，请重新登录' },
 });
 
-export const tokenGenLimiter = createLimiter("token-gen", {
+export const tokenGenLimiter = createLimiter('token-gen', {
   windowMs: 5 * 60 * 1000,
   limit: 100,
   max: 100,
-  message: { success: false, message: "下载请求过于频繁，请稍后再试" },
+  message: { success: false, message: '下载请求过于频繁，请稍后再试' },
 });
 
-export const mutationLimiter = createLimiter("mutation", {
+export const mutationLimiter = createLimiter('mutation', {
   windowMs: 15 * 60 * 1000,
   limit: 500,
   max: 500,
-  message: { success: false, message: "操作过于频繁，请稍后再试" },
+  message: { success: false, message: '操作过于频繁，请稍后再试' },
 });
 
 // Helmet security configuration
-const isDev = process.env.NODE_ENV !== "production";
+const isDev = process.env.NODE_ENV !== 'production';
 
 export const securityHeaders = helmet({
   hsts: {
@@ -161,27 +162,27 @@ export const securityHeaders = helmet({
   contentSecurityPolicy: {
     useDefaults: true,
     directives: {
-      "default-src": ["'self'"],
-      "base-uri": ["'self'"],
-      "object-src": ["'none'"],
-      "frame-ancestors": ["'self'"],
-      "form-action": ["'self'"],
-      "script-src": [
+      'default-src': ["'self'"],
+      'base-uri': ["'self'"],
+      'object-src': ["'none'"],
+      'frame-ancestors': ["'self'"],
+      'form-action': ["'self'"],
+      'script-src': [
         "'self'",
         // Vite HMR needs unsafe-inline in dev; production bundles are file-based
         ...(isDev ? ["'unsafe-inline'"] : []),
         "'wasm-unsafe-eval'",
-        "blob:",
+        'blob:',
       ],
-      "style-src": ["'self'", "'unsafe-inline'"],
-      "img-src": ["'self'", "data:", "blob:"],
-      "font-src": ["'self'", "data:"],
-      "connect-src": ["'self'"],
-      "worker-src": ["'self'", "blob:"],
+      'style-src': ["'self'", "'unsafe-inline'"],
+      'img-src': ["'self'", 'data:', 'blob:'],
+      'font-src': ["'self'", 'data:'],
+      'connect-src': ["'self'"],
+      'worker-src': ["'self'", 'blob:'],
     },
   },
   crossOriginEmbedderPolicy: false,
-  crossOriginResourcePolicy: { policy: "cross-origin" },
-  referrerPolicy: { policy: "no-referrer" },
-  permittedCrossDomainPolicies: { permittedPolicies: "none" },
+  crossOriginResourcePolicy: { policy: 'cross-origin' },
+  referrerPolicy: { policy: 'no-referrer' },
+  permittedCrossDomainPolicies: { permittedPolicies: 'none' },
 });

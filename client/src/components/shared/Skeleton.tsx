@@ -42,12 +42,12 @@ export function SkeletonRow({ cols = 3 }: { cols?: number }) {
 /** Full-page skeleton grid — drop-in replacement for centered spinners */
 export function SkeletonGrid({ count = 12, compact = false }: { count?: number; compact?: boolean }) {
   const Comp = compact ? SkeletonCardCompact : SkeletonCard;
-  const cols = compact
-    ? "grid-cols-2"
-    : "grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6";
+  const cols = compact ? 'grid-cols-2' : 'grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6';
   return (
     <div className={`grid gap-3 ${cols}`}>
-      {Array.from({ length: count }).map((_, i) => <Comp key={i} />)}
+      {Array.from({ length: count }).map((_, i) => (
+        <Comp key={i} />
+      ))}
     </div>
   );
 }
@@ -56,7 +56,9 @@ export function SkeletonGrid({ count = 12, compact = false }: { count?: number; 
 export function SkeletonList({ rows = 8 }: { rows?: number }) {
   return (
     <div className="space-y-0 divide-y divide-outline-variant/10">
-      {Array.from({ length: rows }).map((_, i) => <SkeletonRow key={i} />)}
+      {Array.from({ length: rows }).map((_, i) => (
+        <SkeletonRow key={i} />
+      ))}
     </div>
   );
 }

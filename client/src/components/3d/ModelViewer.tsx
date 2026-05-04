@@ -1,23 +1,25 @@
-import { lazy, Suspense, useCallback, useEffect, useRef, useState } from "react";
-import * as THREE from "three";
-import { get3DMaterialConfig, type ViewerSettingsOverride } from "../../lib/publicSettings";
-import type { MaterialPresetKey } from "./viewerControls";
-import type { MeasureMode, MeasurementPoint, MeasurementRecord, MeasurementSnapMode, ModelPartItem } from "./viewerEvents";
+import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react';
+import * as THREE from 'three';
+import { get3DMaterialConfig, type ViewerSettingsOverride } from '../../lib/publicSettings';
+import type { MaterialPresetKey } from './viewerControls';
+import type {
+  MeasureMode,
+  MeasurementPoint,
+  MeasurementRecord,
+  MeasurementSnapMode,
+  ModelPartItem,
+} from './viewerEvents';
 
-const Canvas = lazy(() =>
-  import("@react-three/fiber").then((m) => ({ default: m.Canvas }))
-);
+const Canvas = lazy(() => import('@react-three/fiber').then((m) => ({ default: m.Canvas })));
 
-const Scene = lazy(() => import("./Scene"));
-const CameraController = lazy(() => import("./CameraController"));
-const MultiFormatLoader = lazy(() => import("./MultiFormatLoader"));
-const RendererExposure = lazy(() => import("./RendererExposure"));
-const OrbitControls = lazy(() =>
-  import("@react-three/drei").then((m) => ({ default: m.OrbitControls }))
-);
+const Scene = lazy(() => import('./Scene'));
+const CameraController = lazy(() => import('./CameraController'));
+const MultiFormatLoader = lazy(() => import('./MultiFormatLoader'));
+const RendererExposure = lazy(() => import('./RendererExposure'));
+const OrbitControls = lazy(() => import('@react-three/drei').then((m) => ({ default: m.OrbitControls })));
 
-export type ViewMode = "solid" | "wireframe" | "transparent" | "explode";
-export type CameraPreset = "front" | "back" | "left" | "right" | "top" | "bottom" | "iso";
+export type ViewMode = 'solid' | 'wireframe' | 'transparent' | 'explode';
+export type CameraPreset = 'front' | 'back' | 'left' | 'right' | 'top' | 'bottom' | 'iso';
 
 interface ModelViewerProps {
   modelUrl?: string;
@@ -27,7 +29,7 @@ interface ModelViewerProps {
   showDimensions: boolean;
   showGrid: boolean;
   clipEnabled: boolean;
-  clipDirection: "x" | "y" | "z";
+  clipDirection: 'x' | 'y' | 'z';
   clipPosition: number;
   clipRange?: { min: number; max: number; step: number };
   clipInverted?: boolean;
@@ -52,17 +54,7 @@ interface ModelViewerProps {
   onProgress?: (progress: number) => void;
 }
 
-// Suppress known Three.js deprecation warnings from R3F internals
-const origWarn = console.warn;
-const suppressedPatterns = [
-  "THREE.Clock: This module has been deprecated",
-  "PCFSoftShadowMap has been deprecated",
-];
-console.warn = (...args: any[]) => {
-  const msg = typeof args[0] === "string" ? args[0] : "";
-  if (suppressedPatterns.some((p) => msg.includes(p))) return;
-  origWarn.apply(console, args);
-};
+const suppressedWarnPatterns = ['THREE.Clock: This module has been deprecated', 'PCFSoftShadowMap has been deprecated'];
 
 export default function ModelViewer({
   modelUrl,
@@ -116,8 +108,8 @@ export default function ModelViewer({
   const cleanupContextListeners = useCallback(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
-    canvas.removeEventListener("webglcontextlost", contextLostHandler);
-    canvas.removeEventListener("webglcontextrestored", contextRestoredHandler);
+    canvas.removeEventListener('webglcontextlost', contextLostHandler);
+    canvas.removeEventListener('webglcontextrestored', contextRestoredHandler);
     canvasRef.current = null;
   }, []);
 
@@ -137,18 +129,37 @@ export default function ModelViewer({
     }, 360);
   }, []);
 
-  useEffect(() => () => {
-    if (interactionEndTimerRef.current) window.clearTimeout(interactionEndTimerRef.current);
-    cleanupContextListeners();
-  }, [cleanupContextListeners]);
+  useEffect(() => {
+    const origWarn = console.warn;
+    console.warn = (...args: any[]) => {
+      const msg = typeof args[0] === 'string' ? args[0] : '';
+      if (suppressedWarnPatterns.some((p) => msg.includes(p))) return;
+      origWarn.apply(console, args);
+    };
+    return () => {
+      console.warn = origWarn;
+    };
+  }, []);
+
+  useEffect(
+    () => () => {
+      if (interactionEndTimerRef.current) window.clearTimeout(interactionEndTimerRef.current);
+      cleanupContextListeners();
+    },
+    [cleanupContextListeners],
+  );
 
   return contextLost ? (
     <div
       style={{
-        width: "100%", height: "100%",
-        display: "flex", flexDirection: "column",
-        alignItems: "center", justifyContent: "center",
-        background: "#1a1a2e", color: "#94a3b8",
+        width: '100%',
+        height: '100%',
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'center',
+        background: '#1a1a2e',
+        color: '#94a3b8',
         gap: 12,
       }}
     >
@@ -156,17 +167,27 @@ export default function ModelViewer({
       <button
         onClick={() => setContextLost(false)}
         style={{
-          padding: "8px 20px", borderRadius: 6,
-          background: "#3b82f6", color: "#fff",
-          border: "none", cursor: "pointer", fontSize: 14,
+          padding: '8px 20px',
+          borderRadius: 6,
+          background: '#3b82f6',
+          color: '#fff',
+          border: 'none',
+          cursor: 'pointer',
+          fontSize: 14,
         }}
       >
         重新加载
       </button>
     </div>
   ) : (
-  <Canvas
-      gl={{ preserveDrawingBuffer: true, antialias: true, toneMapping: THREE.ACESFilmicToneMapping, toneMappingExposure: config.exposure, localClippingEnabled: true }}
+    <Canvas
+      gl={{
+        preserveDrawingBuffer: true,
+        antialias: true,
+        toneMapping: THREE.ACESFilmicToneMapping,
+        toneMappingExposure: config.exposure,
+        localClippingEnabled: true,
+      }}
       camera={{ position: [5, 3, 5], fov: 45, near: 0.01, far: 100000 }}
       dpr={[1, 2]}
       style={{ background: config.bgColor }}
@@ -174,8 +195,8 @@ export default function ModelViewer({
         const canvas = gl.domElement;
         cleanupContextListeners();
         canvasRef.current = canvas;
-        canvas.addEventListener("webglcontextlost", contextLostHandler);
-        canvas.addEventListener("webglcontextrestored", contextRestoredHandler);
+        canvas.addEventListener('webglcontextlost', contextLostHandler);
+        canvas.addEventListener('webglcontextrestored', contextRestoredHandler);
       }}
     >
       <Suspense fallback={null}>

@@ -1,7 +1,7 @@
-import client from "./client";
-import { getAccessToken } from "../stores/useAuthStore";
-import { unwrapApiData } from "./response";
-import { getPublicSettingsSnapshot } from "../lib/publicSettings";
+import client from './client';
+import { getAccessToken } from '../stores/useAuthStore';
+import { unwrapApiData } from './response';
+import { getPublicSettingsSnapshot } from '../lib/publicSettings';
 
 export interface DownloadHistoryItem {
   id: string;
@@ -62,8 +62,8 @@ type DownloadHistoryResponse = DownloadHistoryItem[] | { data?: DownloadHistoryI
 
 export class DownloadAuthRequiredError extends Error {
   constructor() {
-    super("请先登录");
-    this.name = "DownloadAuthRequiredError";
+    super('请先登录');
+    this.name = 'DownloadAuthRequiredError';
   }
 }
 
@@ -79,50 +79,50 @@ function requireDownloadAuth() {
 
 export async function createModelDownloadUrl(
   modelId: string,
-  format = "original",
-  options: { noRecord?: boolean } = {}
+  format = 'original',
+  options: { noRecord?: boolean } = {},
 ): Promise<string> {
   requireDownloadAuth();
 
-  const { data } = await client.post("/downloads/model-token", { modelId, format });
+  const { data } = await client.post('/downloads/model-token', { modelId, format });
   const created = unwrapApiData<{ token: string }>(data);
-  if (!created?.token) throw new Error("创建下载令牌失败");
+  if (!created?.token) throw new Error('创建下载令牌失败');
 
   const params = new URLSearchParams({
     format,
     download_token: created.token,
   });
-  if (options.noRecord) params.set("no_record", "1");
+  if (options.noRecord) params.set('no_record', '1');
   return `/api/models/${encodeURIComponent(modelId)}/download?${params.toString()}`;
 }
 
 export async function downloadModelFile(
   modelId: string,
-  format = "original",
-  options: { noRecord?: boolean } = {}
+  format = 'original',
+  options: { noRecord?: boolean } = {},
 ): Promise<void> {
   const href = await createModelDownloadUrl(modelId, format, options);
-  const a = document.createElement("a");
+  const a = document.createElement('a');
   a.href = href;
-  a.download = "";
+  a.download = '';
   a.click();
 }
 
 export async function createModelDrawingUrl(modelId: string): Promise<string> {
   requireDownloadAuth();
 
-  const { data } = await client.post("/downloads/drawing-token", { modelId });
+  const { data } = await client.post('/downloads/drawing-token', { modelId });
   const created = unwrapApiData<{ url: string }>(data);
-  if (!created?.url) throw new Error("创建图纸访问令牌失败");
+  if (!created?.url) throw new Error('创建图纸访问令牌失败');
   return created.url;
 }
 
 export async function openModelDrawing(modelId: string): Promise<void> {
-  const opened = window.open("", "_blank", "noopener,noreferrer");
+  const opened = window.open('', '_blank', 'noopener,noreferrer');
   try {
     const url = await createModelDrawingUrl(modelId);
-    if (!url.startsWith("/api/") && !url.startsWith(window.location.origin)) {
-      throw new Error("Invalid download URL");
+    if (!url.startsWith('/api/') && !url.startsWith(window.location.origin)) {
+      throw new Error('Invalid download URL');
     }
     if (opened) {
       opened.location.href = url;
@@ -137,7 +137,7 @@ export async function openModelDrawing(modelId: string): Promise<void> {
 
 export const downloadsApi = {
   list: async (): Promise<DownloadHistoryItem[]> => {
-    const { data: resp } = await client.get("/downloads");
+    const { data: resp } = await client.get('/downloads');
     const data = unwrapApiData<DownloadHistoryResponse>(resp);
     if (Array.isArray(data)) return data;
     if (Array.isArray(data?.data)) return data.data;
@@ -149,20 +149,20 @@ export const downloadsApi = {
   },
 
   batchDelete: async (ids: string[]) => {
-    await client.post("/downloads/batch-delete", { ids });
+    await client.post('/downloads/batch-delete', { ids });
   },
 
   clearAll: async () => {
-    await client.delete("/downloads/clear");
+    await client.delete('/downloads/clear');
   },
 
   adminStats: async (): Promise<DownloadAdminStats> => {
-    const { data: resp } = await client.get("/admin/downloads/stats");
+    const { data: resp } = await client.get('/admin/downloads/stats');
     return unwrapApiData<DownloadAdminStats>(resp);
   },
 
   /** Download file via direct link (no blob in memory) */
   downloadFile: async (modelId: string, format?: string) => {
-    await downloadModelFile(modelId, format || "original", { noRecord: true });
+    await downloadModelFile(modelId, format || 'original', { noRecord: true });
   },
 };

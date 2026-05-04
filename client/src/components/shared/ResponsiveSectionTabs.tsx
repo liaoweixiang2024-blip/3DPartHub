@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useRef, useState } from "react";
-import Icon from "./Icon";
+import { useEffect, useMemo, useRef, useState } from 'react';
+import Icon from './Icon';
 
 export type ResponsiveSectionTab = {
   value: string;
@@ -14,7 +14,7 @@ interface ResponsiveSectionTabsProps {
   value: string;
   onChange: (value: string) => void;
   mobileTitle?: string;
-  mobileTriggerVariant?: "plain" | "surface";
+  mobileTriggerVariant?: 'plain' | 'surface';
   countUnit?: string;
   className?: string;
 }
@@ -23,10 +23,10 @@ export default function ResponsiveSectionTabs({
   tabs,
   value,
   onChange,
-  mobileTitle = "选择分类",
-  mobileTriggerVariant = "plain",
-  countUnit = "",
-  className = "",
+  mobileTitle = '选择分类',
+  mobileTriggerVariant = 'plain',
+  countUnit = '',
+  className = '',
 }: ResponsiveSectionTabsProps) {
   const [open, setOpen] = useState(false);
   const [canScrollDesktop, setCanScrollDesktop] = useState(false);
@@ -39,28 +39,28 @@ export default function ResponsiveSectionTabs({
     if (!scroller) return;
     const update = () => setCanScrollDesktop(tabs.length > 3 && scroller.scrollWidth > scroller.clientWidth + 2);
     update();
-    window.addEventListener("resize", update);
-    return () => window.removeEventListener("resize", update);
+    window.addEventListener('resize', update);
+    return () => window.removeEventListener('resize', update);
   }, [tabs.length]);
 
   useEffect(() => {
     if (!canScrollDesktop) return;
     const scroller = desktopScrollerRef.current;
     const activeButton = scroller?.querySelector<HTMLElement>("[data-tab-active='true']");
-    activeButton?.scrollIntoView({ block: "nearest", inline: "nearest" });
+    activeButton?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
   }, [canScrollDesktop, value]);
 
   useEffect(() => {
     if (!open) return;
     const previousOverflow = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
+    document.body.style.overflow = 'hidden';
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setOpen(false);
+      if (event.key === 'Escape') setOpen(false);
     };
-    document.addEventListener("keydown", onKeyDown);
+    document.addEventListener('keydown', onKeyDown);
     return () => {
       document.body.style.overflow = previousOverflow;
-      document.removeEventListener("keydown", onKeyDown);
+      document.removeEventListener('keydown', onKeyDown);
     };
   }, [open]);
 
@@ -72,7 +72,7 @@ export default function ResponsiveSectionTabs({
   const scrollDesktopTabs = (direction: -1 | 1) => {
     const scroller = desktopScrollerRef.current;
     if (!scroller) return;
-    scroller.scrollBy({ left: direction * Math.max(220, scroller.clientWidth * 0.55), behavior: "smooth" });
+    scroller.scrollBy({ left: direction * Math.max(220, scroller.clientWidth * 0.55), behavior: 'smooth' });
   };
 
   return (
@@ -99,27 +99,31 @@ export default function ResponsiveSectionTabs({
                 <button
                   key={tab.value}
                   type="button"
-                  data-tab-active={active ? "true" : undefined}
+                  data-tab-active={active ? 'true' : undefined}
                   onClick={() => onChange(tab.value)}
                   className={`relative inline-flex h-9 shrink-0 items-center justify-center gap-1.5 px-3 text-sm font-medium leading-none transition-colors ${
-                    active
-                      ? "text-primary-container"
-                      : "text-on-surface-variant hover:text-on-surface"
+                    active ? 'text-primary-container' : 'text-on-surface-variant hover:text-on-surface'
                   }`}
                 >
-                  {index > 0 ? <span className="absolute left-0 top-1/2 h-3.5 w-px -translate-y-1/2 bg-outline-variant/20" /> : null}
+                  {index > 0 ? (
+                    <span className="absolute left-0 top-1/2 h-3.5 w-px -translate-y-1/2 bg-outline-variant/20" />
+                  ) : null}
                   {tab.icon ? <Icon name={tab.icon} size={15} /> : null}
                   <span className="whitespace-nowrap">{tab.label}</span>
-                  {typeof tab.count === "number" ? (
-                    <span className={`ml-0.5 inline-flex items-baseline gap-0.5 text-[11px] font-medium leading-none ${
-                      active ? "text-primary-container/70" : "text-on-surface-variant/70"
-                    }`}>
+                  {typeof tab.count === 'number' ? (
+                    <span
+                      className={`ml-0.5 inline-flex items-baseline gap-0.5 text-[11px] font-medium leading-none ${
+                        active ? 'text-primary-container/70' : 'text-on-surface-variant/70'
+                      }`}
+                    >
                       <span>共</span>
                       <span className="text-xs font-semibold tabular-nums">{tab.count}</span>
                       {countUnit ? <span>{countUnit}</span> : null}
                     </span>
                   ) : null}
-                  {active ? <span className="absolute inset-x-3 bottom-0 h-0.5 rounded-full bg-primary-container" /> : null}
+                  {active ? (
+                    <span className="absolute inset-x-3 bottom-0 h-0.5 rounded-full bg-primary-container" />
+                  ) : null}
                 </button>
               );
             })}
@@ -149,34 +153,40 @@ export default function ResponsiveSectionTabs({
         aria-label="切换分类"
         title="切换分类"
         className={`flex w-full min-w-0 items-center justify-between gap-3 text-left transition-colors md:hidden ${
-          mobileTriggerVariant === "plain"
-            ? "h-10 rounded-md bg-transparent px-1 active:bg-surface-container-high/60"
-            : "h-12 rounded-lg bg-surface px-3 active:bg-surface-container-high"
+          mobileTriggerVariant === 'plain'
+            ? 'h-10 rounded-md bg-transparent px-1 active:bg-surface-container-high/60'
+            : 'h-12 rounded-lg bg-surface px-3 active:bg-surface-container-high'
         }`}
       >
         <span className="flex min-w-0 items-center gap-2.5">
-          <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full ${
-            mobileTriggerVariant === "plain"
-              ? "bg-primary-container/10 text-primary-container"
-              : "bg-primary-container text-on-primary shadow-sm"
-          }`}>
+          <span
+            className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full ${
+              mobileTriggerVariant === 'plain'
+                ? 'bg-primary-container/10 text-primary-container'
+                : 'bg-primary-container text-on-primary shadow-sm'
+            }`}
+          >
             {activeTab?.icon ? <Icon name={activeTab.icon} size={17} /> : <Icon name="tune" size={17} />}
           </span>
           <span className="flex min-w-0 items-center gap-2">
-            <span className="truncate text-sm font-bold leading-tight text-on-surface">{activeTab?.label ?? "请选择"}</span>
+            <span className="truncate text-sm font-bold leading-tight text-on-surface">
+              {activeTab?.label ?? '请选择'}
+            </span>
           </span>
         </span>
         <span className="flex shrink-0 items-center gap-2">
-          {typeof activeTab?.count === "number" ? (
+          {typeof activeTab?.count === 'number' ? (
             <span className="inline-flex items-baseline gap-0.5 text-xs font-medium leading-none text-on-surface-variant/75">
               <span>共</span>
               <span className="text-sm font-bold tabular-nums text-primary-container">{activeTab.count}</span>
               {countUnit ? <span>{countUnit}</span> : null}
             </span>
           ) : null}
-          <span className={`flex h-9 w-9 items-center justify-center rounded-full text-on-surface-variant transition-colors ${
-            mobileTriggerVariant === "plain" ? "bg-surface-container-low/60" : "bg-surface-container"
-          }`}>
+          <span
+            className={`flex h-9 w-9 items-center justify-center rounded-full text-on-surface-variant transition-colors ${
+              mobileTriggerVariant === 'plain' ? 'bg-surface-container-low/60' : 'bg-surface-container'
+            }`}
+          >
             <Icon name="tune" size={17} />
           </span>
         </span>
@@ -205,19 +215,23 @@ export default function ResponsiveSectionTabs({
                     }}
                     className={`flex min-h-11 items-center gap-2.5 rounded-lg border px-2.5 py-2 text-left transition-all ${
                       active
-                        ? "border-primary-container/35 bg-primary-container text-on-primary shadow-sm"
-                        : "border-outline-variant/10 bg-surface-container-low text-on-surface active:bg-surface-container-high"
+                        ? 'border-primary-container/35 bg-primary-container text-on-primary shadow-sm'
+                        : 'border-outline-variant/10 bg-surface-container-low text-on-surface active:bg-surface-container-high'
                     }`}
                     style={{ animation: `sectionPickerItem 180ms ease-out ${Math.min(index, 5) * 18}ms both` }}
                   >
-                    <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ${active ? "bg-on-primary/15" : "bg-surface-container-high text-on-surface-variant"}`}>
+                    <span
+                      className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ${active ? 'bg-on-primary/15' : 'bg-surface-container-high text-on-surface-variant'}`}
+                    >
                       {tab.icon ? <Icon name={tab.icon} size={16} /> : <Icon name="tune" size={16} />}
                     </span>
                     <span className="min-w-0 flex-1 truncate text-sm font-bold leading-tight">{tab.label}</span>
-                    {typeof tab.count === "number" ? (
-                      <span className={`inline-flex shrink-0 items-baseline gap-0.5 text-[11px] font-medium leading-none ${
-                        active ? "text-on-primary/70" : "text-on-surface-variant/70"
-                      }`}>
+                    {typeof tab.count === 'number' ? (
+                      <span
+                        className={`inline-flex shrink-0 items-baseline gap-0.5 text-[11px] font-medium leading-none ${
+                          active ? 'text-on-primary/70' : 'text-on-surface-variant/70'
+                        }`}
+                      >
                         <span>共</span>
                         <span className="text-xs font-semibold tabular-nums">{tab.count}</span>
                         {countUnit ? <span>{countUnit}</span> : null}
@@ -270,21 +284,31 @@ export default function ResponsiveSectionTabs({
                     }}
                     className={`flex min-h-12 w-full items-center gap-2.5 rounded-xl border px-2.5 py-2 text-left transition-all ${
                       active
-                        ? "border-primary-container/35 bg-primary-container text-on-primary shadow-sm"
-                        : "border-outline-variant/10 bg-surface-container-low text-on-surface hover:border-outline-variant/20 hover:bg-surface-container"
+                        ? 'border-primary-container/35 bg-primary-container text-on-primary shadow-sm'
+                        : 'border-outline-variant/10 bg-surface-container-low text-on-surface hover:border-outline-variant/20 hover:bg-surface-container'
                     }`}
                   >
-                    <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ${active ? "bg-on-primary/15" : "bg-surface-container-high text-on-surface-variant"}`}>
+                    <span
+                      className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ${active ? 'bg-on-primary/15' : 'bg-surface-container-high text-on-surface-variant'}`}
+                    >
                       {tab.icon ? <Icon name={tab.icon} size={17} /> : <Icon name="tune" size={17} />}
                     </span>
                     <span className="min-w-0 flex-1">
                       <span className="block truncate text-sm font-bold leading-tight">{tab.label}</span>
-                      {tab.description ? <span className={`mt-0.5 block truncate text-xs ${active ? "text-on-primary/75" : "text-on-surface-variant"}`}>{tab.description}</span> : null}
+                      {tab.description ? (
+                        <span
+                          className={`mt-0.5 block truncate text-xs ${active ? 'text-on-primary/75' : 'text-on-surface-variant'}`}
+                        >
+                          {tab.description}
+                        </span>
+                      ) : null}
                     </span>
-                    {typeof tab.count === "number" ? (
-                      <span className={`inline-flex shrink-0 items-baseline gap-0.5 text-[11px] font-medium leading-none ${
-                        active ? "text-on-primary/70" : "text-on-surface-variant/70"
-                      }`}>
+                    {typeof tab.count === 'number' ? (
+                      <span
+                        className={`inline-flex shrink-0 items-baseline gap-0.5 text-[11px] font-medium leading-none ${
+                          active ? 'text-on-primary/70' : 'text-on-surface-variant/70'
+                        }`}
+                      >
                         <span>共</span>
                         <span className="text-xs font-semibold tabular-nums">{tab.count}</span>
                         {countUnit ? <span>{countUnit}</span> : null}

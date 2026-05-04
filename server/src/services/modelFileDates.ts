@@ -1,13 +1,13 @@
-import { closeSync, openSync, readSync } from "node:fs";
+import { closeSync, openSync, readSync } from 'node:fs';
 
 // Parse STEP/IGES file header for the original creation timestamp.
 export function parseStepFileDate(filePath: string): Date | null {
   let fd: number | undefined;
   try {
-    fd = openSync(filePath, "r");
+    fd = openSync(filePath, 'r');
     const buffer = Buffer.alloc(2000);
     const bytesRead = readSync(fd, buffer, 0, buffer.length, 0);
-    const head = buffer.toString("utf-8", 0, bytesRead);
+    const head = buffer.toString('utf-8', 0, bytesRead);
 
     // STEP: FILE_NAME('name', '2026-03-19T09:10:22', ...)
     const match = head.match(/FILE_NAME\s*\([^;]*?'(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2})'/);

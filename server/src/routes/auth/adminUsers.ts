@@ -1,51 +1,53 @@
-import { Router, Response } from "express";
-import { prisma } from "../../lib/prisma.js";
-import { getBusinessConfig } from "../../lib/businessConfig.js";
-import { authMiddleware, type AuthRequest } from "../../middleware/auth.js";
-import { requireRole } from "../../middleware/rbac.js";
-import { revokeAllTokensBefore } from "../../lib/jwt.js";
+import { Router, Response } from 'express';
+import { prisma } from '../../lib/prisma.js';
+import { getBusinessConfig } from '../../lib/businessConfig.js';
+import { authMiddleware, type AuthRequest } from '../../middleware/auth.js';
+import { requireRole } from '../../middleware/rbac.js';
+import { revokeAllTokensBefore } from '../../lib/jwt.js';
 
 function routeParam(value: string | string[] | undefined): string | undefined {
   return Array.isArray(value) ? value[0] : value;
 }
 
-function queryRole(value: unknown): "ADMIN" | "EDITOR" | "VIEWER" | undefined {
+function queryRole(value: unknown): 'ADMIN' | 'EDITOR' | 'VIEWER' | undefined {
   const role = Array.isArray(value) ? value[0] : value;
-  return role === "ADMIN" || role === "EDITOR" || role === "VIEWER" ? role : undefined;
+  return role === 'ADMIN' || role === 'EDITOR' || role === 'VIEWER' ? role : undefined;
 }
 
 export function createAdminUsersRouter() {
   const router = Router();
 
-  router.get("/api/admin/users/stats", authMiddleware, requireRole("ADMIN"), async (req: AuthRequest, res: Response) => {
-    try {
-      const [total, roleGroups, active] = await Promise.all([
-        prisma.user.count(),
-        prisma.user.groupBy({ by: ["role"], _count: { _all: true } }),
-        prisma.user.count({
-          where: {
-            OR: [
-              { downloads: { some: {} } },
-              { favorites: { some: {} } },
-            ],
-          },
-        }),
-      ]);
-      const roleCounts = Object.fromEntries(roleGroups.map((item) => [item.role, item._count._all]));
-      res.json({
-        total,
-        admin: roleCounts.ADMIN || 0,
-        editor: roleCounts.EDITOR || 0,
-        viewer: roleCounts.VIEWER || 0,
-        active,
-      });
-    } catch {
-      res.status(500).json({ detail: "获取用户统计失败" });
-    }
-  });
+  router.get(
+    '/api/admin/users/stats',
+    authMiddleware,
+    requireRole('ADMIN'),
+    async (req: AuthRequest, res: Response) => {
+      try {
+        const [total, roleGroups, active] = await Promise.all([
+          prisma.user.count(),
+          prisma.user.groupBy({ by: ['role'], _count: { _all: true } }),
+          prisma.user.count({
+            where: {
+              OR: [{ downloads: { some: {} } }, { favorites: { some: {} } }],
+            },
+          }),
+        ]);
+        const roleCounts = Object.fromEntries(roleGroups.map((item) => [item.role, item._count._all]));
+        res.json({
+          total,
+          admin: roleCounts.ADMIN || 0,
+          editor: roleCounts.EDITOR || 0,
+          viewer: roleCounts.VIEWER || 0,
+          active,
+        });
+      } catch {
+        res.status(500).json({ detail: '获取用户统计失败' });
+      }
+    },
+  );
 
   // List users (admin)
-  router.get("/api/admin/users", authMiddleware, requireRole("ADMIN"), async (req: AuthRequest, res: Response) => {
+  router.get('/api/admin/users', authMiddleware, requireRole('ADMIN'), async (req: AuthRequest, res: Response) => {
     try {
       const { pageSizePolicy } = await getBusinessConfig();
       const defaultPageSize = Math.max(1, Math.floor(Number(pageSizePolicy.adminUserDefault) || 20));
@@ -59,21 +61,27 @@ export function createAdminUsersRouter() {
       if (role) where.role = role;
       if (search) {
         where.OR = [
-          { username: { contains: search, mode: "insensitive" } },
-          { email: { contains: search, mode: "insensitive" } },
-          { company: { contains: search, mode: "insensitive" } },
+          { username: { contains: search, mode: 'insensitive' } },
+          { email: { contains: search, mode: 'insensitive' } },
+          { company: { contains: search, mode: 'insensitive' } },
         ];
       }
 
       const [users, total] = await Promise.all([
         prisma.user.findMany({
           where,
-          orderBy: { createdAt: "desc" },
+          orderBy: { createdAt: 'desc' },
           skip: (page - 1) * pageSize,
           take: pageSize,
           select: {
-            id: true, username: true, email: true, role: true,
-            company: true, phone: true, avatar: true, createdAt: true,
+            id: true,
+            username: true,
+            email: true,
+            role: true,
+            company: true,
+            phone: true,
+            avatar: true,
+            createdAt: true,
             _count: { select: { downloads: true, favorites: true } },
           },
         }),
@@ -82,65 +90,90 @@ export function createAdminUsersRouter() {
 
       res.json({ total, items: users, page, pageSize });
     } catch {
-      res.status(500).json({ detail: "获取用户列表失败" });
+      res.status(500).json({ detail: '获取用户列表失败' });
     }
   });
 
   // Update user role (admin)
-  router.put("/api/admin/users/:id/role", authMiddleware, requireRole("ADMIN"), async (req: AuthRequest, res: Response) => {
-    const { role } = req.body;
-    const userId = routeParam(req.params.id);
-    if (!userId) { res.status(400).json({ detail: "用户参数无效" }); return; }
-    if (!["ADMIN", "EDITOR", "VIEWER"].includes(role)) {
-      res.status(400).json({ detail: "无效的角色" });
-      return;
-    }
-    // Prevent self-demotion
-    if (userId === req.user!.userId && role !== "ADMIN") {
-      res.status(400).json({ detail: "不能修改自己的角色" });
-      return;
-    }
-    try {
-      const user = await prisma.$transaction(async (tx: any) => {
-        const current = await tx.user.findUnique({ where: { id: userId }, select: { role: true } });
-        if (!current) throw Object.assign(new Error("NOT_FOUND"), { code: "P2025" });
-        if (current.role === "ADMIN" && role !== "ADMIN") {
-          const adminCount = await tx.user.count({ where: { role: "ADMIN" } });
-          if (adminCount <= 1) throw Object.assign(new Error("LAST_ADMIN"), { code: "LAST_ADMIN" });
-        }
-        return tx.user.update({
-          where: { id: userId },
-          data: { role },
-          select: { id: true, username: true, email: true, role: true },
+  router.put(
+    '/api/admin/users/:id/role',
+    authMiddleware,
+    requireRole('ADMIN'),
+    async (req: AuthRequest, res: Response) => {
+      const { role } = req.body;
+      const userId = routeParam(req.params.id);
+      if (!userId) {
+        res.status(400).json({ detail: '用户参数无效' });
+        return;
+      }
+      if (!['ADMIN', 'EDITOR', 'VIEWER'].includes(role)) {
+        res.status(400).json({ detail: '无效的角色' });
+        return;
+      }
+      // Prevent self-demotion
+      if (userId === req.user!.userId && role !== 'ADMIN') {
+        res.status(400).json({ detail: '不能修改自己的角色' });
+        return;
+      }
+      try {
+        const user = await prisma.$transaction(async (tx: any) => {
+          const current = await tx.user.findUnique({ where: { id: userId }, select: { role: true } });
+          if (!current) throw Object.assign(new Error('NOT_FOUND'), { code: 'P2025' });
+          if (current.role === 'ADMIN' && role !== 'ADMIN') {
+            const adminCount = await tx.user.count({ where: { role: 'ADMIN' } });
+            if (adminCount <= 1) throw Object.assign(new Error('LAST_ADMIN'), { code: 'LAST_ADMIN' });
+          }
+          return tx.user.update({
+            where: { id: userId },
+            data: { role },
+            select: { id: true, username: true, email: true, role: true },
+          });
         });
-      });
-      await revokeAllTokensBefore(userId, Math.floor(Date.now() / 1000));
-      res.json({ data: user });
-    } catch (err: any) {
-      if (err.code === "P2025") { res.status(404).json({ detail: "用户不存在" }); return; }
-      if (err.code === "LAST_ADMIN") { res.status(400).json({ detail: "不能移除最后一个管理员" }); return; }
-      res.status(500).json({ detail: "修改角色失败" });
-    }
-  });
+        await revokeAllTokensBefore(userId, Math.floor(Date.now() / 1000));
+        res.json({ data: user });
+      } catch (err: any) {
+        if (err.code === 'P2025') {
+          res.status(404).json({ detail: '用户不存在' });
+          return;
+        }
+        if (err.code === 'LAST_ADMIN') {
+          res.status(400).json({ detail: '不能移除最后一个管理员' });
+          return;
+        }
+        res.status(500).json({ detail: '修改角色失败' });
+      }
+    },
+  );
 
   // Delete user (admin)
-  router.delete("/api/admin/users/:id", authMiddleware, requireRole("ADMIN"), async (req: AuthRequest, res: Response) => {
-    const userId = routeParam(req.params.id);
-    if (!userId) { res.status(400).json({ detail: "用户参数无效" }); return; }
-    if (userId === req.user!.userId) {
-      res.status(400).json({ detail: "不能删除自己" });
-      return;
-    }
-    try {
-      const { revokeAllTokensBefore } = await import("../../lib/jwt.js");
-      await revokeAllTokensBefore(userId, Math.floor(Date.now() / 1000)).catch(() => {});
-      await prisma.user.delete({ where: { id: userId } });
-      res.json({ message: "用户已删除" });
-    } catch (err: any) {
-      if (err.code === "P2025") { res.status(404).json({ detail: "用户不存在" }); return; }
-      res.status(500).json({ detail: "删除用户失败" });
-    }
-  });
+  router.delete(
+    '/api/admin/users/:id',
+    authMiddleware,
+    requireRole('ADMIN'),
+    async (req: AuthRequest, res: Response) => {
+      const userId = routeParam(req.params.id);
+      if (!userId) {
+        res.status(400).json({ detail: '用户参数无效' });
+        return;
+      }
+      if (userId === req.user!.userId) {
+        res.status(400).json({ detail: '不能删除自己' });
+        return;
+      }
+      try {
+        const { revokeAllTokensBefore } = await import('../../lib/jwt.js');
+        await revokeAllTokensBefore(userId, Math.floor(Date.now() / 1000)).catch(() => {});
+        await prisma.user.delete({ where: { id: userId } });
+        res.json({ message: '用户已删除' });
+      } catch (err: any) {
+        if (err.code === 'P2025') {
+          res.status(404).json({ detail: '用户不存在' });
+          return;
+        }
+        res.status(500).json({ detail: '删除用户失败' });
+      }
+    },
+  );
 
   return router;
 }

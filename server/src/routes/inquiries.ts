@@ -1,6 +1,6 @@
-import { Router } from "express";
-import { createAdminInquiriesRouter } from "./inquiries/adminInquiries.js";
-import { createUserInquiriesRouter } from "./inquiries/userInquiries.js";
+import { Router } from 'express';
+import { createAdminInquiriesRouter } from './inquiries/adminInquiries.js';
+import { createUserInquiriesRouter } from './inquiries/userInquiries.js';
 
 const router = Router();
 

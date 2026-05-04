@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import type { ReactNode } from 'react';
 
 interface PageTitleProps {
   children: ReactNode;
@@ -26,8 +26,8 @@ export function PageTitle({ children, className }: PageTitleProps) {
   return (
     <h1
       className={mergeClassName(
-        "text-lg font-bold leading-6 text-on-surface md:font-headline md:text-2xl md:leading-8 md:uppercase",
-        className
+        'text-lg font-bold leading-6 text-on-surface md:font-headline md:text-2xl md:leading-8 md:uppercase',
+        className,
       )}
     >
       {children}
@@ -37,7 +37,12 @@ export function PageTitle({ children, className }: PageTitleProps) {
 
 export function PageHeader({ title, description, meta, actions, className }: PageHeaderProps) {
   return (
-    <header className={mergeClassName("flex min-h-[56px] flex-col justify-center gap-3 sm:min-h-[64px] sm:flex-row sm:items-center sm:justify-between", className)}>
+    <header
+      className={mergeClassName(
+        'flex min-h-[56px] flex-col justify-center gap-3 sm:min-h-[64px] sm:flex-row sm:items-center sm:justify-between',
+        className,
+      )}
+    >
       <div className="min-w-0">
         <div className="flex min-h-8 flex-wrap items-center gap-x-3 gap-y-1">
           <PageTitle>{title}</PageTitle>
@@ -51,5 +56,5 @@ export function PageHeader({ title, description, meta, actions, className }: Pag
 }
 
 export function PageBody({ children, className }: PageBodyProps) {
-  return <div className={mergeClassName("space-y-4", className)}>{children}</div>;
+  return <div className={mergeClassName('space-y-4', className)}>{children}</div>;
 }

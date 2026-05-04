@@ -3,14 +3,14 @@ import { Link, useLocation } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useMediaQuery } from '../layouts/hooks/useMediaQuery';
 import { useDocumentTitle } from '../hooks/useDocumentTitle';
-import Icon from "../components/shared/Icon";
-import { PageHeader } from "../components/shared/PagePrimitives";
-import { AdminPageShell } from "../components/shared/AdminPageShell";
-import { useToast } from "../components/shared/Toast";
-import client from "../api/client";
-import useSWR from "swr";
-import { getCachedPublicSettings } from "../lib/publicSettings";
-import { getBusinessConfig } from "../lib/businessConfig";
+import Icon from '../components/shared/Icon';
+import { PageHeader } from '../components/shared/PagePrimitives';
+import { AdminPageShell } from '../components/shared/AdminPageShell';
+import { useToast } from '../components/shared/Toast';
+import client from '../api/client';
+import useSWR from 'swr';
+import { getCachedPublicSettings } from '../lib/publicSettings';
+import { getBusinessConfig } from '../lib/businessConfig';
 
 /* ── Context passed via navigate(state) ── */
 interface SupportContext {
@@ -50,20 +50,33 @@ function buildContextSuffix(ctx: SupportContext): string {
 
 /** Read-only context card shown above the form */
 function ContextCard({ ctx }: { ctx: SupportContext }) {
-  const label = ctx.source === 'model_search' ? '来自模型搜索' : ctx.source === 'model' ? '来自模型' : ctx.source === 'selection' ? '来自选型' : '关联产品';
+  const label =
+    ctx.source === 'model_search'
+      ? '来自模型搜索'
+      : ctx.source === 'model'
+        ? '来自模型'
+        : ctx.source === 'selection'
+          ? '来自选型'
+          : '关联产品';
   const name = ctx.modelName || ctx.modelNo || ctx.searchQuery || '';
   const specEntries = Object.entries(ctx.specs || {}).filter(([, v]) => v && v !== '—');
   return (
     <div className="flex items-start gap-2.5 px-3.5 py-2.5 rounded-lg bg-primary-container/8 border border-primary-container/15">
       <Icon name="link" size={14} className="text-primary-container shrink-0 mt-0.5" />
       <div className="min-w-0">
-        <p className="text-xs font-medium text-primary-container break-all">{label}：{name}</p>
+        <p className="text-xs font-medium text-primary-container break-all">
+          {label}：{name}
+        </p>
         {specEntries.length > 0 && (
           <div className="flex flex-wrap gap-x-3 gap-y-0.5 mt-1">
             {specEntries.slice(0, 6).map(([k, v]) => (
-              <span key={k} className="text-[11px] text-on-surface-variant break-words">{k}: {v}</span>
+              <span key={k} className="text-[11px] text-on-surface-variant break-words">
+                {k}: {v}
+              </span>
             ))}
-            {specEntries.length > 6 && <span className="text-[11px] text-on-surface-variant">+{specEntries.length - 6} 项</span>}
+            {specEntries.length > 6 && (
+              <span className="text-[11px] text-on-surface-variant">+{specEntries.length - 6} 项</span>
+            )}
           </div>
         )}
       </div>
@@ -73,12 +86,16 @@ function ContextCard({ ctx }: { ctx: SupportContext }) {
 
 function DesktopContent() {
   const { basePart: initBasePart, ctx } = useContextState();
-  const [formData, setFormData] = useState({ basePart: initBasePart, classification: ctx?.classification || '', description: ctx?.description || '' });
+  const [formData, setFormData] = useState({
+    basePart: initBasePart,
+    classification: ctx?.classification || '',
+    description: ctx?.description || '',
+  });
   const [submitted, setSubmitted] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
-  const { data: settings } = useSWR("publicSettings", () => getCachedPublicSettings());
+  const { data: settings } = useSWR('publicSettings', () => getCachedPublicSettings());
   const business = getBusinessConfig(settings);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
@@ -86,8 +103,14 @@ function DesktopContent() {
   };
 
   const handleSubmit = async () => {
-    if (!formData.classification) { toast('请选择请求分类', 'error'); return; }
-    if (!formData.description.trim()) { toast('请填写问题描述', 'error'); return; }
+    if (!formData.classification) {
+      toast('请选择请求分类', 'error');
+      return;
+    }
+    if (!formData.description.trim()) {
+      toast('请填写问题描述', 'error');
+      return;
+    }
     setSubmitting(true);
     const suffix = ctx ? buildContextSuffix(ctx) : '';
     try {
@@ -110,16 +133,15 @@ function DesktopContent() {
   return (
     <div className="max-w-6xl mx-auto">
       {/* Header */}
-      <PageHeader
-        title="技术支持"
-        description="提交定制需求或技术问题，我们的工程师团队将为您处理"
-        className="mb-10"
-      />
+      <PageHeader title="技术支持" description="提交定制需求或技术问题，我们的工程师团队将为您处理" className="mb-10" />
 
       {/* Process Steps */}
       <div className="grid grid-cols-4 gap-4 mb-10">
         {business.supportProcessSteps.map((step, i) => (
-          <div key={step.title} className="flex items-center gap-4 bg-surface-container-low rounded-lg p-4 border border-outline-variant/10">
+          <div
+            key={step.title}
+            className="flex items-center gap-4 bg-surface-container-low rounded-lg p-4 border border-outline-variant/10"
+          >
             <div className="w-10 h-10 rounded-full bg-primary-container/15 flex items-center justify-center shrink-0">
               <span className="text-xs font-bold text-primary-container">{i + 1}</span>
             </div>
@@ -143,7 +165,10 @@ function DesktopContent() {
             </div>
             <h3 className="font-headline text-xl font-bold text-on-surface mb-2">工单提交成功</h3>
             <p className="text-sm text-on-surface-variant mb-6">工程师将在24小时内响应您的请求</p>
-            <Link to="/my-tickets" className="px-6 py-2.5 bg-primary-container text-on-primary rounded-sm text-sm font-medium hover:opacity-90">
+            <Link
+              to="/my-tickets"
+              className="px-6 py-2.5 bg-primary-container text-on-primary rounded-sm text-sm font-medium hover:opacity-90"
+            >
               查看我的工单
             </Link>
           </motion.div>
@@ -161,17 +186,23 @@ function DesktopContent() {
                   <Icon name="assignment_add" size={20} className="text-primary-container" />
                   提交需求
                 </h3>
-                {ctx && <div className="mb-5"><ContextCard ctx={ctx} /></div>}
+                {ctx && (
+                  <div className="mb-5">
+                    <ContextCard ctx={ctx} />
+                  </div>
+                )}
 
                 <div className="space-y-6">
                   {/* Classification cards */}
                   <div>
-                    <label className="block text-xs uppercase tracking-wider text-on-surface-variant mb-3">请求分类</label>
+                    <label className="block text-xs uppercase tracking-wider text-on-surface-variant mb-3">
+                      请求分类
+                    </label>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                       {business.ticketClassifications.map((c) => (
                         <button
                           key={c.value}
-                          onClick={() => setFormData(prev => ({ ...prev, classification: c.value }))}
+                          onClick={() => setFormData((prev) => ({ ...prev, classification: c.value }))}
                           className={`text-left p-4 rounded-lg border transition-all ${
                             formData.classification === c.value
                               ? 'border-primary bg-primary-container/10'
@@ -179,8 +210,20 @@ function DesktopContent() {
                           }`}
                         >
                           <div className="flex items-center gap-2.5 mb-1">
-                            <Icon name={c.icon} size={16} className={formData.classification === c.value ? 'text-primary-container' : 'text-on-surface-variant'} />
-                            <span className={`text-sm font-medium ${formData.classification === c.value ? 'text-primary-container' : 'text-on-surface'}`}>{c.label}</span>
+                            <Icon
+                              name={c.icon}
+                              size={16}
+                              className={
+                                formData.classification === c.value
+                                  ? 'text-primary-container'
+                                  : 'text-on-surface-variant'
+                              }
+                            />
+                            <span
+                              className={`text-sm font-medium ${formData.classification === c.value ? 'text-primary-container' : 'text-on-surface'}`}
+                            >
+                              {c.label}
+                            </span>
                           </div>
                           <p className="text-[11px] text-on-surface-variant sm:ml-7">{c.desc}</p>
                         </button>
@@ -191,7 +234,9 @@ function DesktopContent() {
                   {/* Base part + description */}
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
-                      <label className="block text-xs uppercase tracking-wider text-on-surface-variant mb-2">基础零件编号</label>
+                      <label className="block text-xs uppercase tracking-wider text-on-surface-variant mb-2">
+                        基础零件编号
+                      </label>
                       <input
                         name="basePart"
                         value={formData.basePart}
@@ -201,7 +246,9 @@ function DesktopContent() {
                       />
                     </div>
                     <div>
-                      <label className="block text-xs uppercase tracking-wider text-on-surface-variant mb-2">附件</label>
+                      <label className="block text-xs uppercase tracking-wider text-on-surface-variant mb-2">
+                        附件
+                      </label>
                       <input
                         ref={fileInputRef}
                         type="file"
@@ -220,7 +267,9 @@ function DesktopContent() {
                   </div>
 
                   <div>
-                    <label className="block text-xs uppercase tracking-wider text-on-surface-variant mb-2">问题描述</label>
+                    <label className="block text-xs uppercase tracking-wider text-on-surface-variant mb-2">
+                      问题描述
+                    </label>
                     <textarea
                       name="description"
                       value={formData.description}
@@ -232,7 +281,10 @@ function DesktopContent() {
                   </div>
 
                   <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 pt-2">
-                    <Link to="/my-tickets" className="text-sm text-on-surface-variant hover:text-on-surface flex items-center gap-1.5">
+                    <Link
+                      to="/my-tickets"
+                      className="text-sm text-on-surface-variant hover:text-on-surface flex items-center gap-1.5"
+                    >
                       <Icon name="schedule" size={14} />
                       查看历史工单
                     </Link>
@@ -311,12 +363,16 @@ function DesktopContent() {
 
 function MobileContent() {
   const { basePart: initBasePart, ctx } = useContextState();
-  const [formData, setFormData] = useState({ basePart: initBasePart, classification: ctx?.classification || '', description: ctx?.description || '' });
+  const [formData, setFormData] = useState({
+    basePart: initBasePart,
+    classification: ctx?.classification || '',
+    description: ctx?.description || '',
+  });
   const [submitted, setSubmitted] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
-  const { data: settings } = useSWR("publicSettings", () => getCachedPublicSettings());
+  const { data: settings } = useSWR('publicSettings', () => getCachedPublicSettings());
   const business = getBusinessConfig(settings);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
@@ -324,8 +380,14 @@ function MobileContent() {
   };
 
   const handleSubmit = async () => {
-    if (!formData.classification) { toast('请选择请求分类', 'error'); return; }
-    if (!formData.description.trim()) { toast('请填写问题描述', 'error'); return; }
+    if (!formData.classification) {
+      toast('请选择请求分类', 'error');
+      return;
+    }
+    if (!formData.description.trim()) {
+      toast('请填写问题描述', 'error');
+      return;
+    }
     setSubmitting(true);
     const suffix = ctx ? buildContextSuffix(ctx) : '';
     try {
@@ -356,7 +418,12 @@ function MobileContent() {
           <Icon name="check_circle" size={40} className="text-emerald-400 mb-3" />
           <h3 className="font-bold text-on-surface mb-1">提交成功</h3>
           <p className="text-xs text-on-surface-variant mb-4">工程师将在24小时内响应</p>
-          <Link to="/my-tickets" className="px-5 py-2 bg-primary-container text-on-primary rounded-sm text-xs font-medium">查看我的工单</Link>
+          <Link
+            to="/my-tickets"
+            className="px-5 py-2 bg-primary-container text-on-primary rounded-sm text-xs font-medium"
+          >
+            查看我的工单
+          </Link>
         </div>
       ) : (
         <>
@@ -365,7 +432,7 @@ function MobileContent() {
             {business.ticketClassifications.map((c) => (
               <button
                 key={c.value}
-                onClick={() => setFormData(prev => ({ ...prev, classification: c.value }))}
+                onClick={() => setFormData((prev) => ({ ...prev, classification: c.value }))}
                 className={`text-left p-3 rounded-lg border transition-all ${
                   formData.classification === c.value
                     ? 'border-primary bg-primary-container/10'
@@ -373,8 +440,18 @@ function MobileContent() {
                 }`}
               >
                 <div className="flex items-center gap-2 mb-0.5 min-w-0">
-                  <Icon name={c.icon} size={14} className={formData.classification === c.value ? 'text-primary-container' : 'text-on-surface-variant'} />
-                  <span className={`text-xs font-medium break-words ${formData.classification === c.value ? 'text-primary-container' : 'text-on-surface'}`}>{c.label}</span>
+                  <Icon
+                    name={c.icon}
+                    size={14}
+                    className={
+                      formData.classification === c.value ? 'text-primary-container' : 'text-on-surface-variant'
+                    }
+                  />
+                  <span
+                    className={`text-xs font-medium break-words ${formData.classification === c.value ? 'text-primary-container' : 'text-on-surface'}`}
+                  >
+                    {c.label}
+                  </span>
                 </div>
                 <p className="text-[10px] text-on-surface-variant min-[380px]:ml-6 break-words">{c.desc}</p>
               </button>
@@ -426,12 +503,10 @@ function MobileContent() {
 }
 
 export default function SupportPage() {
-  useDocumentTitle("技术支持");
+  useDocumentTitle('技术支持');
   const isDesktop = useMediaQuery('(min-width: 768px)');
 
   return (
-    <AdminPageShell mobileContentClassName="p-0">
-      {isDesktop ? <DesktopContent /> : <MobileContent />}
-    </AdminPageShell>
+    <AdminPageShell mobileContentClassName="p-0">{isDesktop ? <DesktopContent /> : <MobileContent />}</AdminPageShell>
   );
 }

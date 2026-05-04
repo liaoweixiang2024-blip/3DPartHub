@@ -1,5 +1,5 @@
-import { existsSync, readFileSync } from "node:fs";
-import { dirname, extname, isAbsolute, join, resolve, sep } from "node:path";
+import { existsSync, readFileSync } from 'node:fs';
+import { dirname, extname, isAbsolute, join, resolve, sep } from 'node:path';
 
 export interface GltfAssetData {
   json: any;
@@ -10,17 +10,15 @@ function cleanPath(value: string): string {
   return value.split(/[?#]/)[0];
 }
 
-export function getPreviewAssetExtension(value: string): "glb" | "gltf" {
-  return extname(cleanPath(value)).toLowerCase() === ".glb" ? "glb" : "gltf";
+export function getPreviewAssetExtension(value: string): 'glb' | 'gltf' {
+  return extname(cleanPath(value)).toLowerCase() === '.glb' ? 'glb' : 'gltf';
 }
 
 export function resolveFileUrlPath(value: string): string | null {
   const clean = cleanPath(value);
-  if (isAbsolute(clean) && !clean.startsWith("/static/")) return null;
+  if (isAbsolute(clean) && !clean.startsWith('/static/')) return null;
   const cwd = resolve(process.cwd());
-  const candidate = clean.startsWith("/")
-    ? join(process.cwd(), clean.slice(1))
-    : join(process.cwd(), clean);
+  const candidate = clean.startsWith('/') ? join(process.cwd(), clean.slice(1)) : join(process.cwd(), clean);
   const resolved = resolve(candidate);
   if (resolved !== cwd && !resolved.startsWith(`${cwd}${sep}`)) return null;
   return resolved;
@@ -48,17 +46,15 @@ export function previewAssetFileName(baseName: string, pathOrUrl: string): strin
 export function withAssetVersion(value?: string | null, version?: string | number | Date | null): string | null {
   if (!value) return value ?? null;
   if (/[?&](v|t)=/.test(value)) return value;
-  const normalizedVersion = version instanceof Date
-    ? version.getTime()
-    : version;
+  const normalizedVersion = version instanceof Date ? version.getTime() : version;
   if (!normalizedVersion) return value;
-  return `${value}${value.includes("?") ? "&" : "?"}v=${encodeURIComponent(String(normalizedVersion))}`;
+  return `${value}${value.includes('?') ? '&' : '?'}v=${encodeURIComponent(String(normalizedVersion))}`;
 }
 
 function parseGlb(filePath: string): GltfAssetData {
   const data = readFileSync(filePath);
   if (data.byteLength < 20 || data.readUInt32LE(0) !== 0x46546c67) {
-    throw new Error("Invalid GLB header");
+    throw new Error('Invalid GLB header');
   }
   const version = data.readUInt32LE(4);
   if (version !== 2) throw new Error(`Unsupported GLB version: ${version}`);
@@ -76,33 +72,33 @@ function parseGlb(filePath: string): GltfAssetData {
 
     const chunk = data.subarray(chunkStart, chunkEnd);
     if (chunkType === 0x4e4f534a) {
-      json = JSON.parse(chunk.toString("utf8").trim());
+      json = JSON.parse(chunk.toString('utf8').trim());
     } else if (chunkType === 0x004e4942) {
       binData = chunk;
     }
     offset = chunkEnd;
   }
 
-  if (!json) throw new Error("GLB JSON chunk missing");
+  if (!json) throw new Error('GLB JSON chunk missing');
   return { json, binData };
 }
 
 function readExternalBuffer(gltf: any, filePath: string): Buffer {
   const uri = gltf.buffers?.[0]?.uri;
-  if (typeof uri === "string" && uri.startsWith("data:")) {
-    const base64 = uri.split(",")[1] || "";
-    return Buffer.from(base64, "base64");
+  if (typeof uri === 'string' && uri.startsWith('data:')) {
+    const base64 = uri.split(',')[1] || '';
+    return Buffer.from(base64, 'base64');
   }
-  if (typeof uri === "string" && uri.length > 0) {
+  if (typeof uri === 'string' && uri.length > 0) {
     return readFileSync(join(dirname(filePath), uri));
   }
-  const binPath = filePath.replace(/\.gltf$/i, ".bin");
+  const binPath = filePath.replace(/\.gltf$/i, '.bin');
   return existsSync(binPath) ? readFileSync(binPath) : Buffer.alloc(0);
 }
 
 export function readGltfAsset(filePath: string): GltfAssetData {
-  if (getPreviewAssetExtension(filePath) === "glb") return parseGlb(filePath);
+  if (getPreviewAssetExtension(filePath) === 'glb') return parseGlb(filePath);
 
-  const json = JSON.parse(readFileSync(filePath, "utf-8"));
+  const json = JSON.parse(readFileSync(filePath, 'utf-8'));
   return { json, binData: readExternalBuffer(json, filePath) };
 }

@@ -1,5 +1,5 @@
-import { readFileSync } from "node:fs";
-import https from "node:https";
+import { readFileSync } from 'node:fs';
+import https from 'node:https';
 
 /**
  * Get local version from the VERSION file injected at Docker build time.
@@ -7,10 +7,12 @@ import https from "node:https";
  */
 export function getLocalVersion(): string {
   try {
-    const version = readFileSync("/app/VERSION", "utf-8").trim();
+    const version = readFileSync('/app/VERSION', 'utf-8').trim();
     if (version) return version;
-  } catch { /* no VERSION file */ }
-  return "unknown";
+  } catch {
+    /* no VERSION file */
+  }
+  return 'unknown';
 }
 
 interface GithubRelease {
@@ -23,26 +25,33 @@ interface GithubRelease {
 function fetchLatestRelease(repo: string): Promise<GithubRelease | null> {
   return new Promise((resolve) => {
     const options = {
-      hostname: "api.github.com",
+      hostname: 'api.github.com',
       path: `/repos/${repo}/releases/latest`,
-      headers: { "User-Agent": "3DPartHub" },
+      headers: { 'User-Agent': '3DPartHub' },
       timeout: 10000,
     };
     const req = https.get(options, (res) => {
-      let data = "";
-      res.on("data", (chunk) => { data += chunk; });
-      res.on("end", () => {
+      let data = '';
+      res.on('data', (chunk) => {
+        data += chunk;
+      });
+      res.on('end', () => {
         try {
           if (res.statusCode === 200) {
             resolve(JSON.parse(data));
           } else {
             resolve(null);
           }
-        } catch { resolve(null); }
+        } catch {
+          resolve(null);
+        }
       });
     });
-    req.on("error", () => resolve(null));
-    req.on("timeout", () => { req.destroy(); resolve(null); });
+    req.on('error', () => resolve(null));
+    req.on('timeout', () => {
+      req.destroy();
+      resolve(null);
+    });
   });
 }
 
@@ -60,14 +69,14 @@ export interface UpdateCheckResult {
  */
 export async function checkUpdateAvailable(): Promise<UpdateCheckResult> {
   const current = getLocalVersion();
-  const release = await fetchLatestRelease("liaoweixiang2024-blip/3DPartHub");
+  const release = await fetchLatestRelease('liaoweixiang2024-blip/3DPartHub');
 
   if (!release) {
-    return { current, remote: "unknown", updateAvailable: false };
+    return { current, remote: 'unknown', updateAvailable: false };
   }
 
   const remote = release.tag_name;
-  const updateAvailable = current !== remote && current !== "unknown";
+  const updateAvailable = current !== remote && current !== 'unknown';
 
   return {
     current,

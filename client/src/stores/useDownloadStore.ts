@@ -1,5 +1,5 @@
-import { create } from "zustand";
-import { persist } from "zustand/middleware";
+import { create } from 'zustand';
+import { persist } from 'zustand/middleware';
 
 interface DownloadItem {
   id: string;
@@ -9,13 +9,13 @@ interface DownloadItem {
   format: string;
   fileSize: string;
   downloadedAt: string;
-  status: "completed" | "expired";
+  status: 'completed' | 'expired';
   project?: string;
 }
 
 interface DownloadState {
   downloads: DownloadItem[];
-  addDownload: (item: Omit<DownloadItem, "id" | "downloadedAt">) => void;
+  addDownload: (item: Omit<DownloadItem, 'id' | 'downloadedAt'>) => void;
   removeDownload: (id: string) => void;
   clearExpired: () => void;
 }
@@ -41,9 +41,9 @@ export const useDownloadStore = create<DownloadState>()(
         })),
       clearExpired: () =>
         set((state) => ({
-          downloads: state.downloads.filter((d) => d.status !== "expired"),
+          downloads: state.downloads.filter((d) => d.status !== 'expired'),
         })),
     }),
-    { name: "downloads-storage" }
-  )
+    { name: 'downloads-storage' },
+  ),
 );

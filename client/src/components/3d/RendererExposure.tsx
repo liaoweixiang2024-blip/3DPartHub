@@ -1,6 +1,6 @@
-import { useEffect } from "react";
-import { useThree } from "@react-three/fiber";
-import * as THREE from "three";
+import { useEffect } from 'react';
+import { useThree } from '@react-three/fiber';
+import * as THREE from 'three';
 
 export default function RendererExposure({ exposure }: { exposure: number }) {
   const gl = useThree((state) => state.gl);

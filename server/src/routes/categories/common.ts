@@ -1,6 +1,6 @@
-import { cacheDelByPrefix } from "../../lib/cache.js";
+import { cacheDelByPrefix } from '../../lib/cache.js';
 
-export const CATEGORY_CACHE_PREFIX = "cache:categories:";
+export const CATEGORY_CACHE_PREFIX = 'cache:categories:';
 
 export type CategoryTreeNode = {
   id: string;

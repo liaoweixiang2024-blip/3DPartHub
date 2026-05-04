@@ -1,11 +1,11 @@
-import { getPublicSettings, type SystemSettings } from "../api/settings";
-import { applyColorScheme } from "./colorScheme";
-import { applyServerThemeDefaults } from "../stores/useThemeStore";
+import { getPublicSettings, type SystemSettings } from '../api/settings';
+import { applyColorScheme } from './colorScheme';
+import { applyServerThemeDefaults } from '../stores/useThemeStore';
 
 let cache: Partial<SystemSettings> | null = null;
 let fetchedAt = 0;
 let inflight: Promise<Partial<SystemSettings>> | null = null;
-const STORAGE_KEY = "site_config_cache";
+const STORAGE_KEY = 'site_config_cache';
 const TTL = 2 * 60 * 1000; // 2 minutes — config changes propagate faster
 
 function loadFromStorage(): { data: Partial<SystemSettings>; ts: number } | null {
@@ -13,7 +13,9 @@ function loadFromStorage(): { data: Partial<SystemSettings>; ts: number } | null
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return null;
     return JSON.parse(raw);
-  } catch { return null; }
+  } catch {
+    return null;
+  }
 }
 
 function saveToStorage(data: Partial<SystemSettings>) {
@@ -39,7 +41,7 @@ export function clearCache() {
   cache = null;
   fetchedAt = 0;
   // Notify all listeners so React components re-render
-  listeners.forEach(fn => fn());
+  listeners.forEach((fn) => fn());
 }
 
 // Refresh config: clear all caches, re-fetch, apply, then notify listeners
@@ -58,7 +60,7 @@ export async function refreshSiteConfig() {
     // Keep stale/default config if the public settings endpoint is unavailable.
   }
   // Notify all listeners with fresh cache populated
-  listeners.forEach(fn => fn());
+  listeners.forEach((fn) => fn());
 }
 
 export async function getCachedPublicSettings(): Promise<Partial<SystemSettings>> {
@@ -71,7 +73,7 @@ export async function getCachedPublicSettings(): Promise<Partial<SystemSettings>
     if (stored && now - stored.ts < TTL) {
       cache = stored.data;
       fetchedAt = stored.ts;
-      listeners.forEach(fn => fn());
+      listeners.forEach((fn) => fn());
     }
   }
 
@@ -87,10 +89,10 @@ export async function getCachedPublicSettings(): Promise<Partial<SystemSettings>
       applyMetaTags();
       applyFavicon();
       applyAppearanceSettings(cache);
-      listeners.forEach(fn => fn());
+      listeners.forEach((fn) => fn());
       return cache;
     } catch {
-      return cache || { show_watermark: false, watermark_image: "", site_title: "", site_logo: "" };
+      return cache || { show_watermark: false, watermark_image: '', site_title: '', site_logo: '' };
     } finally {
       inflight = null;
     }
@@ -101,12 +103,12 @@ export async function getCachedPublicSettings(): Promise<Partial<SystemSettings>
 
 // Synchronous getter for already-fetched settings
 export function getPublicSettingsSnapshot(): Partial<SystemSettings> {
-  return cache || { show_watermark: false, watermark_image: "", site_title: "", site_logo: "" };
+  return cache || { show_watermark: false, watermark_image: '', site_title: '', site_logo: '' };
 }
 
 // Get site title (sync, with fallback) — used in nav bar, login page
 export function getSiteTitle(): string {
-  return (cache?.site_title as string) || "3DPartHub";
+  return (cache?.site_title as string) || '3DPartHub';
 }
 
 // Get browser title (sync) — used in document.title / browser tab
@@ -118,85 +120,87 @@ export function getBrowserTitle(): string {
 
 // Get site logo URL (sync, empty string = no custom logo)
 export function getSiteLogo(): string {
-  return (cache?.site_logo as string) || "";
+  return (cache?.site_logo as string) || '';
 }
 
 // Get site icon URL (sync, square icon for logo+title mode)
 export function getSiteIcon(): string {
-  return (cache?.site_icon as string) || "";
+  return (cache?.site_icon as string) || '';
 }
 
 // Get logo display mode: 'logo_and_title' | 'logo_only' | 'title_only'
 export function getLogoDisplayMode(): string {
-  return (cache?.site_logo_display as string) || "logo_and_title";
+  return (cache?.site_logo_display as string) || 'logo_and_title';
 }
 
 // Get site favicon URL (sync, empty string = no custom favicon)
 export function getSiteFavicon(): string {
-  return (cache?.site_favicon as string) || "";
+  return (cache?.site_favicon as string) || '';
 }
 
 // Get announcement config (sync)
 export function getAnnouncement(): { enabled: boolean; text: string; type: string; color: string } {
   return {
     enabled: (cache?.announcement_enabled as boolean) || false,
-    text: (cache?.announcement_text as string) || "",
-    type: (cache?.announcement_type as string) || "info",
-    color: (cache?.announcement_color as string) || "",
+    text: (cache?.announcement_text as string) || '',
+    type: (cache?.announcement_type as string) || 'info',
+    color: (cache?.announcement_color as string) || '',
   };
 }
 
 // Get contact email (sync)
 export function getContactEmail(): string {
-  return (cache?.contact_email as string) || "";
+  return (cache?.contact_email as string) || '';
 }
 export function getContactPhone(): string {
-  return (cache?.contact_phone as string) || "";
+  return (cache?.contact_phone as string) || '';
 }
 export function getContactAddress(): string {
-  return (cache?.contact_address as string) || "";
+  return (cache?.contact_address as string) || '';
 }
 
 // Get footer links (sync) — JSON string or empty
 export function getFooterLinks(): { label: string; url: string }[] {
   try {
-    const raw = (cache?.footer_links as string) || "";
+    const raw = (cache?.footer_links as string) || '';
     if (!raw) return [];
     return JSON.parse(raw);
-  } catch { return []; }
+  } catch {
+    return [];
+  }
 }
 
 // Get footer copyright text (sync)
 export function getFooterCopyright(): string {
-  return (cache?.footer_copyright as string) || "";
+  return (cache?.footer_copyright as string) || '';
 }
 
 // Apply dynamic meta tags (description, keywords, og:title, og:description)
 function applyMetaTags() {
   if (!cache) return;
-  const desc = (cache.site_description as string) || "";
-  const keywords = (cache.site_keywords as string) || "";
+  const desc = (cache.site_description as string) || '';
+  const keywords = (cache.site_keywords as string) || '';
   const title = getSiteTitle();
 
   // Update <meta name="description">
   const metaDesc = document.querySelector('meta[name="description"]');
-  if (metaDesc) metaDesc.setAttribute("content", desc);
+  if (metaDesc) metaDesc.setAttribute('content', desc);
   // Update <meta name="keywords">
   if (keywords) {
     let metaKeywords = document.querySelector('meta[name="keywords"]');
     if (!metaKeywords) {
-      metaKeywords = document.createElement("meta");
-      metaKeywords.setAttribute("name", "keywords");
+      metaKeywords = document.createElement('meta');
+      metaKeywords.setAttribute('name', 'keywords');
       document.head.appendChild(metaKeywords);
     }
-    metaKeywords.setAttribute("content", keywords);
+    metaKeywords.setAttribute('content', keywords);
   }
   // Update og:title
   const ogTitle = document.querySelector('meta[property="og:title"]');
-  if (ogTitle) ogTitle.setAttribute("content", title);
+  if (ogTitle) ogTitle.setAttribute('content', title);
   // Update og:description
   const ogDesc = document.querySelector('meta[property="og:description"]');
-  if (ogDesc) ogDesc.setAttribute("content", desc);
+  if (ogDesc) ogDesc.setAttribute('content', desc);
 }
 
 // Apply dynamic favicon
@@ -207,15 +211,15 @@ function applyFavicon() {
 
   let link = document.querySelector('link[rel="icon"]') as HTMLLinkElement | null;
   if (!link) {
-    link = document.createElement("link");
-    link.rel = "icon";
+    link = document.createElement('link');
+    link.rel = 'icon';
     document.head.appendChild(link);
   }
   // Determine type from extension
-  if (favicon.endsWith(".svg")) link.type = "image/svg+xml";
-  else if (favicon.endsWith(".ico")) link.type = "image/x-icon";
-  else if (favicon.endsWith(".png")) link.type = "image/png";
-  else if (favicon.endsWith(".jpg") || favicon.endsWith(".jpeg")) link.type = "image/jpeg";
+  if (favicon.endsWith('.svg')) link.type = 'image/svg+xml';
+  else if (favicon.endsWith('.ico')) link.type = 'image/x-icon';
+  else if (favicon.endsWith('.png')) link.type = 'image/png';
+  else if (favicon.endsWith('.jpg') || favicon.endsWith('.jpeg')) link.type = 'image/jpeg';
   link.href = favicon + (favicon.includes('?') ? '&' : '?') + '_t=' + Date.now();
 }
 
@@ -245,43 +249,46 @@ export interface MaterialPresetConfig {
   thickness?: number;
 }
 
-export type ViewerSettingsOverride = Partial<Pick<SystemSettings,
-  "viewer_exposure" |
-  "viewer_ambient_intensity" |
-  "viewer_main_light_intensity" |
-  "viewer_fill_light_intensity" |
-  "viewer_hemisphere_intensity" |
-  "viewer_bg_color" |
-  "mat_default_color" |
-  "mat_default_metalness" |
-  "mat_default_roughness" |
-  "mat_default_envMapIntensity"
->>;
+export type ViewerSettingsOverride = Partial<
+  Pick<
+    SystemSettings,
+    | 'viewer_exposure'
+    | 'viewer_ambient_intensity'
+    | 'viewer_main_light_intensity'
+    | 'viewer_fill_light_intensity'
+    | 'viewer_hemisphere_intensity'
+    | 'viewer_bg_color'
+    | 'mat_default_color'
+    | 'mat_default_metalness'
+    | 'mat_default_roughness'
+    | 'mat_default_envMapIntensity'
+  >
+>;
 
 export function get3DMaterialConfig(overrides?: ViewerSettingsOverride) {
   const s = { ...(cache || {}), ...(overrides || {}) };
   return {
     presets: {
       default: {
-        color: (s.mat_default_color as string) || "#c8cad0",
+        color: (s.mat_default_color as string) || '#c8cad0',
         metalness: (s.mat_default_metalness as number) ?? 0.5,
         roughness: (s.mat_default_roughness as number) ?? 0.25,
         envMapIntensity: (s.mat_default_envMapIntensity as number) ?? 1.5,
       } satisfies MaterialPresetConfig,
       metal: {
-        color: (s.mat_metal_color as string) || "#f0f0f4",
+        color: (s.mat_metal_color as string) || '#f0f0f4',
         metalness: (s.mat_metal_metalness as number) ?? 1.0,
         roughness: (s.mat_metal_roughness as number) ?? 0.05,
         envMapIntensity: (s.mat_metal_envMapIntensity as number) ?? 2.0,
       } satisfies MaterialPresetConfig,
       plastic: {
-        color: (s.mat_plastic_color as string) || "#4499ff",
+        color: (s.mat_plastic_color as string) || '#4499ff',
         metalness: (s.mat_plastic_metalness as number) ?? 0.0,
         roughness: (s.mat_plastic_roughness as number) ?? 0.35,
         envMapIntensity: (s.mat_plastic_envMapIntensity as number) ?? 0.6,
       } satisfies MaterialPresetConfig,
       glass: {
-        color: (s.mat_glass_color as string) || "#ffffff",
+        color: (s.mat_glass_color as string) || '#ffffff',
         metalness: (s.mat_glass_metalness as number) ?? 0.0,
         roughness: (s.mat_glass_roughness as number) ?? 0.0,
         envMapIntensity: (s.mat_glass_envMapIntensity as number) ?? 1.0,
@@ -296,7 +303,7 @@ export function get3DMaterialConfig(overrides?: ViewerSettingsOverride) {
       mainLightIntensity: (s.viewer_main_light_intensity as number) ?? 1.4,
       fillLightIntensity: (s.viewer_fill_light_intensity as number) ?? 0.6,
       hemisphereIntensity: (s.viewer_hemisphere_intensity as number) ?? 0.3,
-      bgColor: (s.viewer_bg_color as string) || "linear-gradient(180deg, #2a2a3e 0%, #1e2a42 50%, #162040 100%)",
+      bgColor: (s.viewer_bg_color as string) || 'linear-gradient(180deg, #2a2a3e 0%, #1e2a42 50%, #162040 100%)',
     },
   };
 }
