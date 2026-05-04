@@ -1697,7 +1697,7 @@ function DesktopContent() {
     visibleItems: visibleModels,
     hasMore: hasMoreVisibleModels,
     loadMore: loadMoreVisibleModels,
-  } = useVisibleItems(models, MODEL_ADMIN_VISIBLE_BATCH_SIZE, search.trim());
+  } = useVisibleItems(models, MODEL_ADMIN_VISIBLE_BATCH_SIZE, `${search.trim()}:${categoryFilter}`);
   const { data: catData } = useSWR('/categories', () => categoriesApi.tree());
   const categoryOptions = flattenCategoryOptions(catData?.items || []);
   const visibleModelIds = visibleModels.map((model) => model.model_id);
@@ -2080,15 +2080,29 @@ function DesktopContent() {
                 {uploading ? '上传中...' : '上传模型'}
               </button>
               {activeTab === 'models' && (
-                <div className="flex h-9 items-center rounded-sm border border-outline-variant/30 bg-surface-container-lowest px-3">
-                  <Icon name="search" size={16} className="text-on-surface-variant mr-2" />
-                  <input
-                    value={search}
-                    onChange={(e) => setSearch(e.target.value)}
-                    placeholder="搜索模型..."
-                    className="w-48 border-none bg-transparent text-sm text-on-surface outline-none placeholder:text-on-surface-variant/50"
-                  />
-                </div>
+                <>
+                  <select
+                    value={categoryFilter}
+                    onChange={(e) => setCategoryFilter(e.target.value)}
+                    className="h-9 w-52 rounded-sm border border-outline-variant/30 bg-surface-container-lowest px-3 text-sm text-on-surface outline-none focus:border-primary"
+                  >
+                    <option value={CATEGORY_FILTER_ALL}>全部分类</option>
+                    {categoryOptions.map((option) => (
+                      <option key={option.id} value={option.id}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                  <div className="flex h-9 items-center rounded-sm border border-outline-variant/30 bg-surface-container-lowest px-3">
+                    <Icon name="search" size={16} className="text-on-surface-variant mr-2" />
+                    <input
+                      value={search}
+                      onChange={(e) => setSearch(e.target.value)}
+                      placeholder="搜索模型..."
+                      className="w-48 border-none bg-transparent text-sm text-on-surface outline-none placeholder:text-on-surface-variant/50"
+                    />
+                  </div>
+                </>
               )}
               {activeTab === 'suggestions' && (
                 <div className="flex h-9 items-center rounded-sm border border-outline-variant/30 bg-surface-container-lowest px-3">
@@ -2390,13 +2404,27 @@ function DesktopContent() {
                   <div className="text-sm text-on-surface-variant">
                     已加载 <strong className="text-primary">{visibleModels.length}</strong> / 共{' '}
                     <strong className="text-primary">{displayModelTotal}</strong> 个模型
-                    {selectedModelCount > 0 && (
+                    {selectedAllMatching ? (
+                      <>
+                        ，已选择 <strong className="text-primary">全部匹配的 {selectedModelCount}</strong> 个
+                      </>
+                    ) : selectedModelCount > 0 ? (
                       <>
                         ，已选择 <strong className="text-primary">{selectedModelCount}</strong> 个
                       </>
-                    )}
+                    ) : null}
                   </div>
                   <div className="flex flex-wrap items-center gap-2">
+                    {displayModelTotal > visibleModels.length && (
+                      <button
+                        onClick={selectAllMatchingModels}
+                        disabled={displayModelTotal === 0}
+                        className="flex items-center gap-2 rounded-sm border border-primary/20 bg-primary/10 px-3 py-2 text-sm font-medium text-primary transition-colors hover:bg-primary/15 disabled:opacity-40"
+                      >
+                        <Icon name="select_all" size={16} />
+                        全选全部匹配 ({displayModelTotal})
+                      </button>
+                    )}
                     <button
                       onClick={toggleSelectVisibleModels}
                       disabled={visibleModelIds.length === 0}
@@ -2408,7 +2436,7 @@ function DesktopContent() {
                     {selectedModelCount > 0 && (
                       <>
                         <button
-                          onClick={() => setSelectedModelIds(new Set())}
+                          onClick={clearSelectedModels}
                           className="flex items-center gap-2 rounded-sm border border-outline-variant/20 bg-surface-container-high px-3 py-2 text-sm font-medium text-on-surface-variant transition-colors hover:bg-surface-container-highest hover:text-on-surface"
                         >
                           <Icon name="close" size={16} />
@@ -2629,6 +2657,7 @@ function DesktopContent() {
               >
                 <h3 className="font-headline text-lg font-semibold text-on-surface mb-2">确认批量删除</h3>
                 <p className="text-sm text-on-surface-variant mb-6">
+                  {selectedAllMatching && ' 本次会按当前分类和搜索条件删除全部匹配模型。'}
                   确定要删除已选择的 {selectedModelCount}{' '}
                   个模型吗？模型文件、图纸、版本记录、收藏和分享记录都会一并清理，此操作不可撤销。
                 </p>
@@ -2662,10 +2691,12 @@ function MobileContent() {
   const { data: settings } = useSWR('publicSettings', () => getCachedPublicSettings());
   const { uploadPolicy } = getBusinessConfig(settings);
   const [search, setSearch] = useState('');
+  const [categoryFilter, setCategoryFilter] = useState(CATEGORY_FILTER_ALL);
   const [editModel, setEditModel] = useState<ServerModelListItem | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<ServerModelListItem | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [selectedModelIds, setSelectedModelIds] = useState<Set<string>>(new Set());
+  const [selectedAllMatching, setSelectedAllMatching] = useState(false);
   const [batchDeleteOpen, setBatchDeleteOpen] = useState(false);
   const [batchDeleting, setBatchDeleting] = useState(false);
   const [uploading, setUploading] = useState(false);
@@ -2680,20 +2711,23 @@ function MobileContent() {
     hasMore,
     loadMore,
     mutate,
-  } = useModelAdminList(search);
+  } = useModelAdminList(search, categoryFilter);
   const { data: modelCountDataM } = useSWR('/models/count', () => modelApi.getModelCount());
-  const displayModelTotalM = modelCountDataM?.total ?? modelTotal;
+  const displayModelTotalM =
+    categoryFilter === CATEGORY_FILTER_ALL && !search.trim() ? (modelCountDataM?.total ?? modelTotal) : modelTotal;
   const {
     visibleItems: visibleModels,
     hasMore: hasMoreVisibleModels,
     loadMore: loadMoreVisibleModels,
-  } = useVisibleItems(models, MOBILE_MODEL_VISIBLE_BATCH_SIZE, search.trim());
+  } = useVisibleItems(models, MOBILE_MODEL_VISIBLE_BATCH_SIZE, `${search.trim()}:${categoryFilter}`);
   const { data: catDataM } = useSWR('/categories-m', () => categoriesApi.tree());
   const categories = catDataM?.items || [];
+  const categoryOptions = flattenCategoryOptions(categories);
   const visibleModelIds = visibleModels.map((model) => model.model_id);
-  const selectedModelCount = selectedModelIds.size;
+  const selectedModelCount = selectedAllMatching ? displayModelTotalM : selectedModelIds.size;
   const allVisibleModelsSelected =
-    visibleModelIds.length > 0 && visibleModelIds.every((modelId) => selectedModelIds.has(modelId));
+    visibleModelIds.length > 0 &&
+    (selectedAllMatching || visibleModelIds.every((modelId) => selectedModelIds.has(modelId)));
 
   // Force refresh count + list when page mounts
   useEffect(() => {
@@ -2760,7 +2794,8 @@ function MobileContent() {
 
   useEffect(() => {
     setSelectedModelIds(new Set());
-  }, [activeTab, search]);
+    setSelectedAllMatching(false);
+  }, [activeTab, search, categoryFilter]);
 
   const refreshModelAdminData = () => {
     mutate();
@@ -2792,6 +2827,11 @@ function MobileContent() {
   };
 
   const toggleSelectModel = (modelId: string) => {
+    if (selectedAllMatching) {
+      setSelectedAllMatching(false);
+      setSelectedModelIds(new Set(visibleModelIds.filter((id) => id !== modelId)));
+      return;
+    }
     setSelectedModelIds((prev) => {
       const next = new Set(prev);
       if (next.has(modelId)) next.delete(modelId);
@@ -2801,6 +2841,7 @@ function MobileContent() {
   };
 
   const toggleSelectVisibleModels = () => {
+    setSelectedAllMatching(false);
     setSelectedModelIds((prev) => {
       const next = new Set(prev);
       if (allVisibleModelsSelected) {
@@ -2812,15 +2853,36 @@ function MobileContent() {
     });
   };
 
+  const selectAllMatchingModels = () => {
+    if (displayModelTotalM <= 0) return;
+    setSelectedAllMatching(true);
+    setSelectedModelIds(new Set());
+  };
+
+  const clearSelectedModels = () => {
+    setSelectedAllMatching(false);
+    setSelectedModelIds(new Set());
+  };
+
   const handleBatchDelete = async () => {
     const modelIds = Array.from(selectedModelIds);
-    if (modelIds.length === 0) return;
+    if (!selectedAllMatching && modelIds.length === 0) return;
     setBatchDeleting(true);
     try {
-      const result = await modelApi.batchDelete(modelIds);
+      const result = await modelApi.batchDelete(
+        selectedAllMatching
+          ? {
+              allMatching: true,
+              filters: {
+                search: search.trim() || undefined,
+                categoryId: categoryFilter === CATEGORY_FILTER_ALL ? undefined : categoryFilter,
+              },
+            }
+          : { modelIds },
+      );
       const warningText = result.warnings > 0 ? `，${result.warnings} 个文件清理警告` : '';
       toast(`已删除 ${result.deleted} 个模型${warningText}`, result.warnings > 0 ? 'error' : 'success');
-      setSelectedModelIds(new Set());
+      clearSelectedModels();
       setBatchDeleteOpen(false);
       refreshModelAdminData();
     } catch {
@@ -3053,14 +3115,28 @@ function MobileContent() {
         }
       >
         {activeTab === 'models' && (
-          <div className="flex items-center bg-surface-container-high rounded-sm px-3 py-2 border border-outline-variant/30">
-            <Icon name="search" size={16} className="text-on-surface-variant mr-2" />
-            <input
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="搜索模型..."
-              className="bg-transparent border-none outline-none text-sm text-on-surface placeholder:text-on-surface-variant/50 w-full"
-            />
+          <div className="grid gap-2">
+            <select
+              value={categoryFilter}
+              onChange={(e) => setCategoryFilter(e.target.value)}
+              className="h-10 rounded-sm border border-outline-variant/30 bg-surface-container-high px-3 text-sm text-on-surface outline-none"
+            >
+              <option value={CATEGORY_FILTER_ALL}>全部分类</option>
+              {categoryOptions.map((option) => (
+                <option key={option.id} value={option.id}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+            <div className="flex items-center bg-surface-container-high rounded-sm px-3 py-2 border border-outline-variant/30">
+              <Icon name="search" size={16} className="text-on-surface-variant mr-2" />
+              <input
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="搜索模型..."
+                className="bg-transparent border-none outline-none text-sm text-on-surface placeholder:text-on-surface-variant/50 w-full"
+              />
+            </div>
           </div>
         )}
         {activeTab === 'groups' && (
@@ -3099,9 +3175,22 @@ function MobileContent() {
             <div className="min-w-0 text-xs text-on-surface-variant">
               已加载 <span className="font-bold text-primary-container">{visibleModels.length}</span> /{' '}
               {displayModelTotalM}
-              {selectedModelCount > 0 && <span>，已选 {selectedModelCount}</span>}
+              {selectedAllMatching ? (
+                <span>，已选全部匹配 {selectedModelCount}</span>
+              ) : selectedModelCount > 0 ? (
+                <span>，已选 {selectedModelCount}</span>
+              ) : null}
             </div>
             <div className="flex shrink-0 items-center gap-2">
+              {displayModelTotalM > visibleModels.length && (
+                <button
+                  onClick={selectAllMatchingModels}
+                  disabled={displayModelTotalM === 0}
+                  className="rounded-sm border border-primary/20 bg-primary/10 px-2.5 py-1.5 text-xs font-bold text-primary disabled:opacity-40"
+                >
+                  全选全部
+                </button>
+              )}
               <button
                 onClick={toggleSelectVisibleModels}
                 disabled={visibleModelIds.length === 0}
@@ -3501,6 +3590,7 @@ function MobileContent() {
               <p className="text-sm text-on-surface-variant mb-5 break-words">
                 确定要删除已选择的 {selectedModelCount}{' '}
                 个模型吗？相关模型文件、图纸、版本记录、收藏和分享记录都会一并清理。
+                {selectedAllMatching && ' 本次会按当前分类和搜索条件删除全部匹配模型。'}
               </p>
               <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-2 sm:gap-3">
                 <button
