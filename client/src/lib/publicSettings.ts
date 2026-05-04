@@ -270,8 +270,21 @@ export type ViewerSettingsOverride = Partial<
 
 export function get3DMaterialConfig(overrides?: ViewerSettingsOverride) {
   const s = { ...(cache || {}), ...(overrides || {}) };
+  const originalOverride: Partial<MaterialPresetConfig> | null =
+    (s.mat_original_color as string) ||
+    (s.mat_original_metalness as string) !== '' ||
+    (s.mat_original_roughness as string) !== '' ||
+    (s.mat_original_envMapIntensity as string) !== ''
+      ? {
+          color: (s.mat_original_color as string) || undefined,
+          metalness: (s.mat_original_metalness as number) ?? undefined,
+          roughness: (s.mat_original_roughness as number) ?? undefined,
+          envMapIntensity: (s.mat_original_envMapIntensity as number) ?? undefined,
+        }
+      : null;
   return {
     presets: {
+      original: originalOverride,
       default: {
         color: (s.mat_default_color as string) || '#c8cad0',
         metalness: (s.mat_default_metalness as number) ?? 0.5,
@@ -309,4 +322,17 @@ export function get3DMaterialConfig(overrides?: ViewerSettingsOverride) {
       bgColor: (s.viewer_bg_color as string) || '#ffffff',
     },
   };
+}
+
+export function getEdgeStyleConfig() {
+  const s = cache || {};
+  return {
+    color: (s.viewer_edge_color as string) || '#000000',
+    opacity: (s.viewer_edge_opacity as number) ?? 1.0,
+    width: (s.viewer_edge_width as number) ?? 1,
+  };
+}
+
+export function getDefaultPreset(): string {
+  return (cache?.viewer_default_preset as string) || 'default';
 }

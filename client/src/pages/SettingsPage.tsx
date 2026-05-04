@@ -165,6 +165,7 @@ const DEFAULT_SETTINGS: SystemSettings = {
   security_password_min_length: 8,
   security_username_min_length: 2,
   security_username_max_length: 32,
+  share_enabled: true,
   share_default_expire_days: 0,
   share_max_expire_days: 0,
   share_default_download_limit: 0,
@@ -516,6 +517,12 @@ const GROUPS: SettingGroup[] = [
         type: 'number',
         min: 1,
         max: 60,
+      },
+      {
+        key: 'share_enabled',
+        label: '允许分享',
+        desc: '关闭后用户将无法创建模型分享链接',
+        type: 'switch',
       },
       {
         key: 'share_default_expire_days',

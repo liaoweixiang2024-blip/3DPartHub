@@ -4,6 +4,7 @@ import { getBusinessConfig } from '../lib/businessConfig.js';
 import { createLogger } from '../lib/logger.js';
 import { buildModelMatchMap } from '../lib/modelMatch.js';
 import { prisma } from '../lib/prisma.js';
+import { getAllSettings } from '../lib/settings.js';
 import { authMiddleware, AuthRequest } from '../middleware/auth.js';
 import { requireBrowseAccess } from '../middleware/browseAccess.js';
 
@@ -16,6 +17,13 @@ const router = Router();
 router.post('/api/selection-shares', authMiddleware, async (req: AuthRequest, res: Response) => {
   try {
     const userId = req.user!.userId;
+
+    const settings = await getAllSettings();
+    if (settings.share_enabled === false && req.user!.role !== 'ADMIN') {
+      res.status(403).json({ detail: '分享功能已关闭，请联系管理员' });
+      return;
+    }
+
     const { categorySlug, specs, productIds } = req.body;
 
     if (!categorySlug || !specs) {

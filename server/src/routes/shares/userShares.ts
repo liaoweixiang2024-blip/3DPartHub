@@ -54,13 +54,14 @@ export function createUserSharesRouter() {
         res.status(404).json({ detail: '模型不存在' });
         return;
       }
-      if (model.createdById !== userId) {
-        res.status(403).json({ detail: '只能分享自己的模型' });
-        return;
-      }
 
       // --- Apply share policy ---
       const settings = await getAllSettings();
+      const sShareEnabled = settings.share_enabled !== false;
+      if (!sShareEnabled && req.user!.role !== 'ADMIN') {
+        res.status(403).json({ detail: '分享功能已关闭，请联系管理员' });
+        return;
+      }
       const sAllowPassword = settings.share_allow_password ?? true;
       const sAllowCustomExpiry = settings.share_allow_custom_expiry ?? true;
       const sDefaultExpireDays = Number(settings.share_default_expire_days) || 0;

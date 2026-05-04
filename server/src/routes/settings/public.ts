@@ -115,6 +115,7 @@ export function createSettingsPublicRouter() {
             viewer_measure_default_unit: all.viewer_measure_default_unit ?? 'auto',
             viewer_measure_record_limit: all.viewer_measure_record_limit ?? 12,
             // Share policy
+            share_enabled: all.share_enabled ?? true,
             share_default_expire_days: all.share_default_expire_days ?? 0,
             share_max_expire_days: all.share_max_expire_days ?? 0,
             share_default_download_limit: all.share_default_download_limit ?? 0,
