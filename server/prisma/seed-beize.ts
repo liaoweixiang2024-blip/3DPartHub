@@ -1,5 +1,5 @@
 import type { PrismaClient } from '@prisma/client';
-import { buildColumnsFromFields, loadBeizeStructure } from './selection-column-config.ts';
+import { buildColumnsFromFields, loadBeizeStructure } from './selection-column-config.js';
 
 type RawStructure = {
   commonSpecs: string[];
