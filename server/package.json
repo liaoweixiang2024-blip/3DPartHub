@@ -45,7 +45,7 @@
     "minio": "^8.0.7",
     "multer": "^1.4.5-lts.2",
     "node-unrar-js": "^2.0.2",
-    "nodemailer": "^8.0.5",
+    "nodemailer": "^8.0.7",
     "occt-import-js": "^0.0.23",
     "pino": "^10.3.1",
     "prisma": "^5.22.0",
