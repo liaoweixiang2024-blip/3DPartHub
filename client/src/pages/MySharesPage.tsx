@@ -8,6 +8,7 @@ import Icon from '../components/shared/Icon';
 import { SkeletonList } from '../components/shared/Skeleton';
 import { useToast } from '../components/shared/Toast';
 import { useDocumentTitle } from '../hooks/useDocumentTitle';
+import { useImeSafeSearchInput } from '../hooks/useImeSafeSearchInput';
 import { copyText } from '../lib/clipboard';
 
 function getShareUrl(share: ShareLink) {
@@ -167,7 +168,12 @@ function ShareRow({
 export default function MySharesPage() {
   useDocumentTitle('我的分享');
   const { toast } = useToast();
-  const [search, setSearch] = useState('');
+  const {
+    value: search,
+    draftValue: searchInputValue,
+    setValue: setSearch,
+    inputProps: searchInputProps,
+  } = useImeSafeSearchInput();
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [selectMode, setSelectMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -258,12 +264,11 @@ export default function MySharesPage() {
           className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant/60"
         />
         <input
-          value={search}
-          onChange={(event) => setSearch(event.target.value)}
+          {...searchInputProps}
           placeholder="搜索名称、链接或类型"
           className="h-9 w-full rounded-lg border border-outline-variant/15 bg-surface-container px-9 text-sm text-on-surface outline-none transition-colors placeholder:text-on-surface-variant/50 focus:border-primary-container/50"
         />
-        {search ? (
+        {searchInputValue ? (
           <button
             type="button"
             onClick={() => setSearch('')}

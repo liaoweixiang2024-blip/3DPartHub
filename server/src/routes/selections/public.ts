@@ -90,6 +90,8 @@ type SelectionColumnDef = {
   autoSelectSingle?: boolean;
   skipWhenNoOptions?: boolean;
   required?: boolean;
+  presetOptions?: string[];
+  dependsOn?: { field: string; minIndex: number };
 };
 
 function nextSelectionField(columns: SelectionColumnDef[], specs: Record<string, string>, skipped: Set<string>) {
@@ -266,7 +268,9 @@ export function createSelectionPublicRouter() {
 
           const columns = Array.isArray(category.columns) ? (category.columns as SelectionColumnDef[]) : [];
           const manualFields = new Set(
-            columns.filter((col) => col.inputType === 'manual' && col.key).map((col) => col.key as string),
+            columns
+              .filter((col) => (col.inputType === 'manual' || col.inputType === 'preset') && col.key)
+              .map((col) => col.key as string),
           );
           const resolvedSpecs = { ...specs };
           const resolvedSkipped = new Set(requestedSkipped);
@@ -275,7 +279,7 @@ export function createSelectionPublicRouter() {
           if (autoAdvance && !search) {
             for (let guard = 0; guard < columns.length; guard += 1) {
               const nextField = nextSelectionField(columns, resolvedSpecs, resolvedSkipped);
-              if (!nextField?.key || nextField.inputType === 'manual') break;
+              if (!nextField?.key || nextField.inputType === 'manual' || nextField.inputType === 'preset') break;
 
               const where = selectionSpecsWhere(category.id, resolvedSpecs, manualFields);
               const optionRows = await prisma.selectionProduct.findMany({ where, select: { specs: true } });

@@ -18,6 +18,7 @@ import Icon from '../components/shared/Icon';
 import SafeImage from '../components/shared/SafeImage';
 import { useToast } from '../components/shared/Toast';
 import { useDocumentTitle } from '../hooks/useDocumentTitle';
+import { useImeSafeSearchInput } from '../hooks/useImeSafeSearchInput';
 import { useMediaQuery } from '../layouts/hooks/useMediaQuery';
 import { getBusinessConfig } from '../lib/businessConfig';
 import { copyText } from '../lib/clipboard';
@@ -33,6 +34,10 @@ function sv(specs: Record<string, string>, key: string): string {
 
 function isManualColumn(col?: ColumnDef) {
   return col?.inputType === 'manual';
+}
+
+function isPresetColumn(col?: ColumnDef) {
+  return col?.inputType === 'preset';
 }
 
 function normalizeManualValue(col: ColumnDef | undefined, value: string) {
@@ -81,22 +86,43 @@ function applyManualSpecs(
   columns: ColumnDef[],
   specs: Record<string, string>,
 ): SelectionProduct {
-  const manualEntries = columns
-    .filter((col) => isManualColumn(col) && specs[col.key])
-    .map((col) => [col.key, normalizeManualValue(col, specs[col.key])] as const);
+  const userEntries = columns
+    .filter((col) => (isManualColumn(col) || isPresetColumn(col)) && specs[col.key])
+    .map((col) => {
+      const raw = specs[col.key];
+      const value = isManualColumn(col) ? normalizeManualValue(col, raw) : raw;
+      return [col.key, value] as const;
+    });
 
-  if (!manualEntries.length) return product;
+  if (!userEntries.length) return product;
 
   const nextSpecs = { ...(product.specs as Record<string, string>) };
-  for (const [key, value] of manualEntries) nextSpecs[key] = value;
+  for (const [key, value] of userEntries) nextSpecs[key] = value;
   if (typeof nextSpecs['型号'] === 'string') {
-    nextSpecs['型号'] = replaceManualPlaceholders(nextSpecs['型号'], manualEntries, columns) || nextSpecs['型号'];
+    nextSpecs['型号'] = replaceManualPlaceholders(nextSpecs['型号'], userEntries, columns) || nextSpecs['型号'];
   }
 
-  const modelNo = replaceManualPlaceholders(product.modelNo, manualEntries, columns);
-  const name = replaceManualPlaceholders(product.name, manualEntries, columns) || product.name;
+  const modelNo = replaceManualPlaceholders(product.modelNo, userEntries, columns);
+  const name = replaceManualPlaceholders(product.name, userEntries, columns) || product.name;
 
-  return { ...product, name, modelNo, specs: nextSpecs };
+  let nextComponents = product.components;
+  const outletComponents: SelectionComponent[] = [];
+  for (const col of columns) {
+    if (!isPresetColumn(col) || !col.dependsOn || !specs[col.key]) continue;
+    const routeIndex = col.dependsOn.minIndex;
+    outletComponents.push({
+      name: `第${routeIndex}路出口接头`,
+      modelNo: `PL${specs[col.key]}-02`,
+      qty: 1,
+    });
+  }
+  if (outletComponents.length > 0) {
+    const existing = (nextComponents || []) as SelectionComponent[];
+    nextComponents = [...existing, ...outletComponents];
+    nextSpecs['BOM条数'] = String(nextComponents.length);
+  }
+
+  return { ...product, name, modelNo, specs: nextSpecs, components: nextComponents };
 }
 
 function formatModelCount(count: number) {
@@ -612,7 +638,12 @@ export default function SelectionPage() {
   const [manualDrafts, setManualDrafts] = useState<Record<string, string>>({});
   const [skipped, setSkipped] = useState<Set<string>>(new Set());
   const [autoSelectedFields, setAutoSelectedFields] = useState<Set<string>>(new Set());
-  const [searchDraft, setSearchDraft] = useState('');
+  const {
+    value: searchDraft,
+    draftValue: searchDraftInputValue,
+    setValue: setSearchDraft,
+    inputProps: searchDraftInputProps,
+  } = useImeSafeSearchInput();
   const search = useDebouncedValue(searchDraft.trim(), 250);
   const [pressedCategoryKey, setPressedCategoryKey] = useState<string | null>(null);
 
@@ -725,7 +756,10 @@ export default function SelectionPage() {
     return [];
   }, [liveCat]);
 
-  const manualFields = useMemo(() => new Set(columns.filter(isManualColumn).map((col) => col.key)), [columns]);
+  const manualFields = useMemo(
+    () => new Set(columns.filter((col) => isManualColumn(col) || isPresetColumn(col)).map((col) => col.key)),
+    [columns],
+  );
   const specKeys = useMemo(() => fields.filter((f) => specs[f]), [fields, specs]);
 
   const curField = useMemo(() => {
@@ -894,6 +928,18 @@ export default function SelectionPage() {
   /* track user-initiated undo to suppress immediate auto-skip */
   const userUndoRef = useRef(false);
 
+  /* auto-skip preset columns whose dependsOn condition is not met */
+  useEffect(() => {
+    if (!curField) return;
+    const colDef = columns.find((c) => c.key === curField);
+    if (!colDef?.dependsOn) return;
+    const countValue = Number(specs[colDef.dependsOn.field]) || 0;
+    if (countValue >= colDef.dependsOn.minIndex) return;
+    startTransition(() => {
+      setSkipped((p) => new Set(p).add(curField));
+    });
+  }, [curField, columns, specs]);
+
   /* auto-skip: single-value params get auto-selected; zero-option params get skipped */
   useEffect(() => {
     if (filterAutoAdvance) return;
@@ -1055,34 +1101,40 @@ export default function SelectionPage() {
   }, [curField, filteredTotal, filterSpecKey, isDesktop, isLoading, phase, search, skippedKey]);
 
   /* handlers */
-  const pickGroup = useCallback((id: string) => {
-    setPressedCategoryKey(`group:${id}`);
-    setGroupId(id);
-    setSlug(null);
-    setSpecs({});
-    setManualDrafts({});
-    setSkipped(new Set());
-    setAutoSelectedFields(new Set());
-    setSearchDraft('');
-    setSelectedIds(new Set());
-    setExpandedKits(new Set());
-    window.setTimeout(() => setPressedCategoryKey(null), 260);
-  }, []);
-  const pickSub = useCallback((s: string) => {
-    setPressedCategoryKey(`sub:${s}`);
-    suppressAutoAdvanceScrollRef.current = true;
-    pendingAutoAdvanceScrollRef.current = false;
-    pushRecent(s);
-    setSlug(s);
-    setSpecs({});
-    setManualDrafts({});
-    setSkipped(new Set());
-    setAutoSelectedFields(new Set());
-    setSearchDraft('');
-    setSelectedIds(new Set());
-    setExpandedKits(new Set());
-    window.setTimeout(() => setPressedCategoryKey(null), 260);
-  }, []);
+  const pickGroup = useCallback(
+    (id: string) => {
+      setPressedCategoryKey(`group:${id}`);
+      setGroupId(id);
+      setSlug(null);
+      setSpecs({});
+      setManualDrafts({});
+      setSkipped(new Set());
+      setAutoSelectedFields(new Set());
+      setSearchDraft('');
+      setSelectedIds(new Set());
+      setExpandedKits(new Set());
+      window.setTimeout(() => setPressedCategoryKey(null), 260);
+    },
+    [setSearchDraft],
+  );
+  const pickSub = useCallback(
+    (s: string) => {
+      setPressedCategoryKey(`sub:${s}`);
+      suppressAutoAdvanceScrollRef.current = true;
+      pendingAutoAdvanceScrollRef.current = false;
+      pushRecent(s);
+      setSlug(s);
+      setSpecs({});
+      setManualDrafts({});
+      setSkipped(new Set());
+      setAutoSelectedFields(new Set());
+      setSearchDraft('');
+      setSelectedIds(new Set());
+      setExpandedKits(new Set());
+      window.setTimeout(() => setPressedCategoryKey(null), 260);
+    },
+    [setSearchDraft],
+  );
   const pickVal = useCallback((key: string, val: string) => {
     setAutoSelectedFields((prev) => {
       if (!prev.has(key)) return prev;
@@ -1114,7 +1166,7 @@ export default function SelectionPage() {
       setSkipped(new Set());
       setSearchDraft('');
     },
-    [specs],
+    [specs, setSearchDraft],
   );
   const goHome = useCallback(() => {
     startTransition(() => {
@@ -1128,7 +1180,7 @@ export default function SelectionPage() {
       setSelectedIds(new Set());
       setExpandedKits(new Set());
     });
-  }, []);
+  }, [setSearchDraft]);
   const restart = useCallback(() => {
     startTransition(() => {
       setSpecs({});
@@ -1139,7 +1191,7 @@ export default function SelectionPage() {
       setSelectedIds(new Set());
       setExpandedKits(new Set());
     });
-  }, []);
+  }, [setSearchDraft]);
   const toggleSel = useCallback(
     (id: string) =>
       setSelectedIds((p) => {
@@ -1436,6 +1488,7 @@ export default function SelectionPage() {
     const colDef = columns.find((c) => c.key === field);
     const fieldLabel = colDef?.label || field;
     const isManual = isManualColumn(colDef);
+    const isPreset = isPresetColumn(colDef);
 
     if (isCompleted) {
       return (
@@ -1522,6 +1575,18 @@ export default function SelectionPage() {
                     定制值不参与固定库存筛选，提交询价时会写入规格并替换型号占位符。
                   </p>
                 </form>
+              ) : isPreset ? (
+                <div className="flex flex-wrap gap-2">
+                  {(colDef?.presetOptions || []).map((opt) => (
+                    <button
+                      key={opt}
+                      onClick={() => pickVal(field, opt)}
+                      className="rounded-xl border border-outline-variant/20 bg-surface-container-low hover:border-primary-container/40 px-4 py-2.5 text-sm font-medium text-on-surface transition-all active:scale-[0.97]"
+                    >
+                      {opt}
+                    </button>
+                  ))}
+                </div>
               ) : shouldShowFilterLoading ? (
                 <div className="py-6 text-center">
                   <p className="text-sm text-on-surface-variant">正在匹配可选项...</p>
@@ -2114,12 +2179,11 @@ export default function SelectionPage() {
             />
             <input
               type="text"
-              value={searchDraft}
-              onChange={(e) => setSearchDraft(e.target.value)}
+              {...searchDraftInputProps}
               placeholder="输入型号或名称"
               className={`h-8 w-full rounded-lg border border-outline-variant/15 bg-surface-container pl-8 pr-7 text-xs text-on-surface outline-none focus:border-primary-container md:h-9 md:pr-8 md:text-sm ${selectionMotion}`}
             />
-            {searchDraft && (
+            {searchDraftInputValue && (
               <button
                 onClick={() => setSearchDraft('')}
                 className={`absolute right-2.5 top-1/2 -translate-y-1/2 text-on-surface-variant hover:text-on-surface ${selectionPress}`}

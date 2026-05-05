@@ -8,6 +8,7 @@ import Icon from '../components/shared/Icon';
 import { SkeletonList } from '../components/shared/Skeleton';
 import { useToast } from '../components/shared/Toast';
 import { useDocumentTitle } from '../hooks/useDocumentTitle';
+import { useImeSafeSearchInput } from '../hooks/useImeSafeSearchInput';
 import { getErrorMessage } from '../lib/errorNotifications';
 
 function CategoryRow({
@@ -441,7 +442,12 @@ function Content() {
   const [editingCat, setEditingCat] = useState<CategoryItem | null>(null);
   const [addParentId, setAddParentId] = useState<string | null>(null);
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
-  const [query, setQuery] = useState('');
+  const {
+    value: query,
+    draftValue: queryInputValue,
+    setValue: setQuery,
+    inputProps: queryInputProps,
+  } = useImeSafeSearchInput();
   const [collapsedIds, setCollapsedIds] = useState<Set<string>>(new Set());
   const [dragItem, setDragItem] = useState<{ id: string; parentId: string | null } | null>(null);
   const [sorting, setSorting] = useState(false);
@@ -575,12 +581,11 @@ function Content() {
             <div className="flex h-9 w-full items-center rounded-sm border border-outline-variant/30 bg-surface-container-lowest px-3 sm:w-56">
               <Icon name="search" size={16} className="mr-2 shrink-0 text-on-surface-variant" />
               <input
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
+                {...queryInputProps}
                 placeholder="搜索分类..."
-                className="min-w-0 flex-1 border-none bg-transparent text-sm text-on-surface outline-none placeholder:text-on-surface-variant/50"
+                className="h-full min-w-0 flex-1 border-none bg-transparent p-0 text-sm leading-none text-on-surface outline-none placeholder:text-on-surface-variant/50"
               />
-              {query && (
+              {queryInputValue && (
                 <button onClick={() => setQuery('')} className="p-0.5 text-on-surface-variant hover:text-on-surface">
                   <Icon name="close" size={14} />
                 </button>

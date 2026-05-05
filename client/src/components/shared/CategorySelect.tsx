@@ -1,6 +1,7 @@
 import { AnimatePresence, motion } from 'framer-motion';
 import { useState, useRef, useEffect, useMemo } from 'react';
 import type { CategoryItem } from '../../api/categories';
+import { useImeSafeSearchInput } from '../../hooks/useImeSafeSearchInput';
 import Icon from './Icon';
 
 interface CategorySelectProps {
@@ -12,7 +13,7 @@ interface CategorySelectProps {
 
 export default function CategorySelect({ categories, value, onChange, placeholder = '选择分类' }: CategorySelectProps) {
   const [open, setOpen] = useState(false);
-  const [search, setSearch] = useState('');
+  const { value: search, setValue: setSearch, inputProps: searchInputProps } = useImeSafeSearchInput();
   const ref = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -61,7 +62,7 @@ export default function CategorySelect({ categories, value, onChange, placeholde
       setSearch('');
       setTimeout(() => inputRef.current?.focus(), 50);
     }
-  }, [open]);
+  }, [open, setSearch]);
 
   const handleSelect = (id: string) => {
     onChange(id);
@@ -95,8 +96,7 @@ export default function CategorySelect({ categories, value, onChange, placeholde
               <Icon name="search" size={14} className="text-on-surface-variant shrink-0" />
               <input
                 ref={inputRef}
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
+                {...searchInputProps}
                 placeholder="搜索分类..."
                 className="bg-transparent border-none outline-none text-sm text-on-surface placeholder:text-on-surface-variant/50 w-full"
               />

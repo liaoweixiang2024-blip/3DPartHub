@@ -25,6 +25,7 @@ import ResponsiveSectionTabs, { type ResponsiveSectionTab } from '../components/
 import { SkeletonList } from '../components/shared/Skeleton';
 import { useToast } from '../components/shared/Toast';
 import { useDocumentTitle } from '../hooks/useDocumentTitle';
+import { useImeSafeSearchInput } from '../hooks/useImeSafeSearchInput';
 import { useVisibleItems } from '../hooks/useVisibleItems';
 import { useMediaQuery } from '../layouts/hooks/useMediaQuery';
 import { getBusinessConfig } from '../lib/businessConfig';
@@ -1668,7 +1669,7 @@ function DesktopContent() {
   const { toast } = useToast();
   const { data: settings } = useSWR('publicSettings', () => getCachedPublicSettings());
   const { uploadPolicy } = getBusinessConfig(settings);
-  const [search, setSearch] = useState('');
+  const { value: search, inputProps: searchInputProps } = useImeSafeSearchInput();
   const [categoryFilter, setCategoryFilter] = useState(CATEGORY_FILTER_ALL);
   const [editModel, setEditModel] = useState<ServerModelListItem | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<ServerModelListItem | null>(null);
@@ -1719,8 +1720,8 @@ function DesktopContent() {
   const [editingGroupId, setEditingGroupId] = useState<string | null>(null);
   const [groupNameDraft, setGroupNameDraft] = useState('');
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
-  const [groupSearch, setGroupSearch] = useState('');
-  const [suggestionSearch, setSuggestionSearch] = useState('');
+  const { value: groupSearch, inputProps: groupSearchInputProps } = useImeSafeSearchInput();
+  const { value: suggestionSearch, inputProps: suggestionSearchInputProps } = useImeSafeSearchInput();
   const [groupAction, setGroupAction] = useState<string | null>(null);
   const {
     groups: suggestionGroups,
@@ -2096,10 +2097,9 @@ function DesktopContent() {
                   <div className="flex h-9 items-center rounded-sm border border-outline-variant/30 bg-surface-container-lowest px-3">
                     <Icon name="search" size={16} className="text-on-surface-variant mr-2" />
                     <input
-                      value={search}
-                      onChange={(e) => setSearch(e.target.value)}
+                      {...searchInputProps}
                       placeholder="搜索模型..."
-                      className="w-48 border-none bg-transparent text-sm text-on-surface outline-none placeholder:text-on-surface-variant/50"
+                      className="h-full w-48 border-none bg-transparent p-0 text-sm leading-none text-on-surface outline-none placeholder:text-on-surface-variant/50"
                     />
                   </div>
                 </>
@@ -2108,10 +2108,9 @@ function DesktopContent() {
                 <div className="flex h-9 items-center rounded-sm border border-outline-variant/30 bg-surface-container-lowest px-3">
                   <Icon name="search" size={16} className="text-on-surface-variant mr-2" />
                   <input
-                    value={suggestionSearch}
-                    onChange={(e) => setSuggestionSearch(e.target.value)}
+                    {...suggestionSearchInputProps}
                     placeholder="搜索建议..."
-                    className="w-48 border-none bg-transparent text-sm text-on-surface outline-none placeholder:text-on-surface-variant/50"
+                    className="h-full w-48 border-none bg-transparent p-0 text-sm leading-none text-on-surface outline-none placeholder:text-on-surface-variant/50"
                   />
                 </div>
               )}
@@ -2119,10 +2118,9 @@ function DesktopContent() {
                 <div className="flex h-9 items-center rounded-sm border border-outline-variant/30 bg-surface-container-lowest px-3">
                   <Icon name="search" size={16} className="text-on-surface-variant mr-2" />
                   <input
-                    value={groupSearch}
-                    onChange={(e) => setGroupSearch(e.target.value)}
+                    {...groupSearchInputProps}
                     placeholder="搜索分组..."
-                    className="w-48 border-none bg-transparent text-sm text-on-surface outline-none placeholder:text-on-surface-variant/50"
+                    className="h-full w-48 border-none bg-transparent p-0 text-sm leading-none text-on-surface outline-none placeholder:text-on-surface-variant/50"
                   />
                 </div>
               )}
@@ -2690,7 +2688,7 @@ function MobileContent() {
   const { toast } = useToast();
   const { data: settings } = useSWR('publicSettings', () => getCachedPublicSettings());
   const { uploadPolicy } = getBusinessConfig(settings);
-  const [search, setSearch] = useState('');
+  const { value: search, inputProps: searchInputProps } = useImeSafeSearchInput();
   const [categoryFilter, setCategoryFilter] = useState(CATEGORY_FILTER_ALL);
   const [editModel, setEditModel] = useState<ServerModelListItem | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<ServerModelListItem | null>(null);
@@ -2740,8 +2738,8 @@ function MobileContent() {
   const [groupNameDraft, setGroupNameDraft] = useState('');
   const [groupAction, setGroupAction] = useState<string | null>(null);
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
-  const [groupSearch, setGroupSearch] = useState('');
-  const [suggestionSearch, setSuggestionSearch] = useState('');
+  const { value: groupSearch, inputProps: groupSearchInputProps } = useImeSafeSearchInput();
+  const { value: suggestionSearch, inputProps: suggestionSearchInputProps } = useImeSafeSearchInput();
   const {
     groups: suggestionGroups,
     total: activeSuggestionCount,
@@ -3128,37 +3126,34 @@ function MobileContent() {
                 </option>
               ))}
             </select>
-            <div className="flex items-center bg-surface-container-high rounded-sm px-3 py-2 border border-outline-variant/30">
+            <div className="flex h-10 items-center bg-surface-container-high rounded-sm px-3 border border-outline-variant/30">
               <Icon name="search" size={16} className="text-on-surface-variant mr-2" />
               <input
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
+                {...searchInputProps}
                 placeholder="搜索模型..."
-                className="bg-transparent border-none outline-none text-sm text-on-surface placeholder:text-on-surface-variant/50 w-full"
+                className="h-full min-w-0 flex-1 border-none bg-transparent p-0 text-base leading-none text-on-surface outline-none placeholder:text-on-surface-variant/50"
               />
             </div>
           </div>
         )}
         {activeTab === 'groups' && (
-          <div className="flex items-center bg-surface-container-high rounded-sm px-3 py-2 border border-outline-variant/30">
+          <div className="flex h-10 items-center bg-surface-container-high rounded-sm px-3 border border-outline-variant/30">
             <Icon name="search" size={16} className="text-on-surface-variant mr-2" />
             <input
-              value={groupSearch}
-              onChange={(e) => setGroupSearch(e.target.value)}
+              {...groupSearchInputProps}
               placeholder="搜索分组..."
-              className="bg-transparent border-none outline-none text-sm text-on-surface placeholder:text-on-surface-variant/50 w-full"
+              className="h-full min-w-0 flex-1 border-none bg-transparent p-0 text-base leading-none text-on-surface outline-none placeholder:text-on-surface-variant/50"
             />
           </div>
         )}
 
         {activeTab === 'suggestions' && (
-          <div className="flex items-center bg-surface-container-high rounded-sm px-3 py-2 border border-outline-variant/30">
+          <div className="flex h-10 items-center bg-surface-container-high rounded-sm px-3 border border-outline-variant/30">
             <Icon name="search" size={16} className="text-on-surface-variant mr-2" />
             <input
-              value={suggestionSearch}
-              onChange={(e) => setSuggestionSearch(e.target.value)}
+              {...suggestionSearchInputProps}
               placeholder="搜索建议..."
-              className="bg-transparent border-none outline-none text-sm text-on-surface placeholder:text-on-surface-variant/50 w-full"
+              className="h-full min-w-0 flex-1 border-none bg-transparent p-0 text-base leading-none text-on-surface outline-none placeholder:text-on-surface-variant/50"
             />
           </div>
         )}

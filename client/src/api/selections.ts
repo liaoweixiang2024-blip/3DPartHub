@@ -6,7 +6,9 @@ export interface ColumnDef {
   label: string;
   unit: string;
   sortType?: 'thread' | 'numeric' | 'default';
-  inputType?: 'select' | 'manual';
+  inputType?: 'select' | 'manual' | 'preset';
+  presetOptions?: string[];
+  dependsOn?: { field: string; minIndex: number };
   optionDisplay?: 'auto' | 'text' | 'image';
   showCount?: boolean;
   /** undefined/true = auto confirm the only available option; false = require manual confirmation */

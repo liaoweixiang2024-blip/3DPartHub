@@ -29,6 +29,7 @@ import ResponsiveSectionTabs from '../components/shared/ResponsiveSectionTabs';
 import SafeImage from '../components/shared/SafeImage';
 import { useToast } from '../components/shared/Toast';
 import { useDocumentTitle } from '../hooks/useDocumentTitle';
+import { useImeSafeSearchInput } from '../hooks/useImeSafeSearchInput';
 import { useVisibleItems } from '../hooks/useVisibleItems';
 import { getBusinessConfig, type UploadPolicy } from '../lib/businessConfig';
 import { KIT_LIST_TITLE_OPTION_KEY } from '../lib/kitList';
@@ -380,7 +381,7 @@ function ColumnEditor({ columns, onChange }: { columns: ColumnDef[]; onChange: (
     };
     onChange(next);
   }
-  function updateColumnMode(i: number, mode: 'select' | 'manual' | 'displayOnly') {
+  function updateColumnMode(i: number, mode: 'select' | 'manual' | 'preset' | 'displayOnly') {
     const next = [...columns];
     const current = { ...next[i] };
     if (mode === 'manual') {
@@ -392,6 +393,20 @@ function ColumnEditor({ columns, onChange }: { columns: ColumnDef[]; onChange: (
       delete current.autoSelectSingle;
       delete current.skipWhenNoOptions;
       delete current.required;
+      delete current.presetOptions;
+      delete current.dependsOn;
+    } else if (mode === 'preset') {
+      current.inputType = 'preset';
+      delete current.displayOnly;
+      delete current.optionDisplay;
+      delete current.sortType;
+      delete current.showCount;
+      delete current.autoSelectSingle;
+      delete current.skipWhenNoOptions;
+      delete current.required;
+      delete current.placeholder;
+      delete current.suffix;
+      if (!current.presetOptions) current.presetOptions = [];
     } else if (mode === 'displayOnly') {
       current.displayOnly = true;
       delete current.inputType;
@@ -480,15 +495,30 @@ function ColumnEditor({ columns, onChange }: { columns: ColumnDef[]; onChange: (
           </div>
         ) : (
           columns.map((col, i) => {
-            const mode = col.displayOnly ? 'displayOnly' : col.inputType === 'manual' ? 'manual' : 'select';
+            const mode = col.displayOnly
+              ? 'displayOnly'
+              : col.inputType === 'manual'
+                ? 'manual'
+                : col.inputType === 'preset'
+                  ? 'preset'
+                  : 'select';
             const isAdvancedOpen = openAdvancedIdx === i;
             const modeTone =
               mode === 'manual'
                 ? 'bg-amber-500/10 text-amber-700'
-                : mode === 'displayOnly'
-                  ? 'bg-surface-container-high text-on-surface-variant'
-                  : 'bg-primary-container/10 text-primary-container';
-            const modeLabel = mode === 'manual' ? '客户填写' : mode === 'displayOnly' ? '只展示' : '客户选择';
+                : mode === 'preset'
+                  ? 'bg-purple-500/10 text-purple-700'
+                  : mode === 'displayOnly'
+                    ? 'bg-surface-container-high text-on-surface-variant'
+                    : 'bg-primary-container/10 text-primary-container';
+            const modeLabel =
+              mode === 'manual'
+                ? '客户填写'
+                : mode === 'preset'
+                  ? '固定选项'
+                  : mode === 'displayOnly'
+                    ? '只展示'
+                    : '客户选择';
 
             return (
               <div
@@ -557,11 +587,14 @@ function ColumnEditor({ columns, onChange }: { columns: ColumnDef[]; onChange: (
                     <span className="mb-1 block text-[10px] font-medium text-on-surface-variant md:hidden">类型</span>
                     <select
                       value={mode}
-                      onChange={(e) => updateColumnMode(i, e.target.value as 'select' | 'manual' | 'displayOnly')}
+                      onChange={(e) =>
+                        updateColumnMode(i, e.target.value as 'select' | 'manual' | 'preset' | 'displayOnly')
+                      }
                       className="h-9 w-full rounded-lg border border-outline-variant/15 bg-surface-container-lowest px-2 text-sm text-on-surface outline-none transition-colors focus:border-primary-container focus:ring-2 focus:ring-primary-container/10"
                     >
                       <option value="select">客户选择</option>
                       <option value="manual">客户填写</option>
+                      <option value="preset">固定选项</option>
                       <option value="displayOnly">只展示</option>
                     </select>
                   </label>
@@ -606,12 +639,74 @@ function ColumnEditor({ columns, onChange }: { columns: ColumnDef[]; onChange: (
                       <span>
                         {mode === 'manual'
                           ? `型号模板中写 [${col.key || '数据字段'}]，会替换为客户填写值。`
-                          : mode === 'displayOnly'
-                            ? '只在结果中展示，不会成为客户选择步骤。'
-                            : '用于生成筛选选项，可配置排序、图片展示和字段完整性；只有一个可选值时前台会自动确认。'}
+                          : mode === 'preset'
+                            ? `固定选项供客户选择，型号模板中写 [${col.key || '数据字段'}] 会被替换。`
+                            : mode === 'displayOnly'
+                              ? '只在结果中展示，不会成为客户选择步骤。'
+                              : '用于生成筛选选项，可配置排序、图片展示和字段完整性；只有一个可选值时前台会自动确认。'}
                       </span>
                     </div>
                     <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-4">
+                      {mode === 'preset' && (
+                        <>
+                          <label className="sm:col-span-2">
+                            <span className="mb-1 block text-[10px] text-on-surface-variant">可选值（逗号分隔）</span>
+                            <input
+                              value={(col.presetOptions || []).join(',')}
+                              onChange={(e) => {
+                                const val = e.target.value
+                                  .split(',')
+                                  .map((s: string) => s.trim())
+                                  .filter(Boolean);
+                                updateCol(i, 'presetOptions', val.length ? val : undefined);
+                              }}
+                              placeholder="如：04,06,08,10,12"
+                              className="h-9 w-full rounded-lg border border-outline-variant/15 bg-surface-container-low px-3 text-xs text-on-surface outline-none focus:border-primary-container"
+                            />
+                          </label>
+                          <label>
+                            <span className="mb-1 block text-[10px] text-on-surface-variant">依赖字段</span>
+                            <select
+                              value={col.dependsOn?.field || ''}
+                              onChange={(e) => {
+                                const field = e.target.value;
+                                if (!field) {
+                                  updateCol(i, 'dependsOn', undefined);
+                                } else {
+                                  updateCol(i, 'dependsOn', { field, minIndex: col.dependsOn?.minIndex ?? 1 });
+                                }
+                              }}
+                              className="h-9 w-full rounded-lg border border-outline-variant/15 bg-surface-container-low px-2 text-xs text-on-surface outline-none focus:border-primary-container"
+                            >
+                              <option value="">无（始终显示）</option>
+                              {columns.map((c, ci) =>
+                                ci !== i && c.key ? (
+                                  <option key={c.key} value={c.key}>
+                                    {c.label || c.key}
+                                  </option>
+                                ) : null,
+                              )}
+                            </select>
+                          </label>
+                          <label>
+                            <span className="mb-1 block text-[10px] text-on-surface-variant">依赖最小序号</span>
+                            <input
+                              type="number"
+                              min={1}
+                              value={col.dependsOn?.minIndex ?? ''}
+                              onChange={(e) => {
+                                const v = Number(e.target.value);
+                                if (col.dependsOn?.field && v >= 1) {
+                                  updateCol(i, 'dependsOn', { field: col.dependsOn.field, minIndex: v });
+                                }
+                              }}
+                              disabled={!col.dependsOn?.field}
+                              placeholder="如：1 表示依赖字段≥1时显示"
+                              className="h-9 w-full rounded-lg border border-outline-variant/15 bg-surface-container-low px-3 text-xs text-on-surface outline-none focus:border-primary-container disabled:opacity-40"
+                            />
+                          </label>
+                        </>
+                      )}
                       <label>
                         <span className="mb-1 block text-[10px] text-on-surface-variant">输入提示</span>
                         <input
@@ -748,7 +843,12 @@ function Content() {
   const initialGeneratePreviewPageSize = Math.max(1, Number(pageSizePolicy.selectionGeneratePreviewPageSize) || 50);
   const [tab, setTab] = useState<Tab>('categories');
   const [catFilter, setCatFilter] = useState<'all' | 'empty'>('all');
-  const [catSearch, setCatSearch] = useState('');
+  const {
+    value: catSearch,
+    draftValue: catSearchInputValue,
+    setValue: setCatSearch,
+    inputProps: catSearchInputProps,
+  } = useImeSafeSearchInput();
 
   // Category state
   const [showCatModal, setShowCatModal] = useState(false);
@@ -785,7 +885,11 @@ function Content() {
   // Product state
   const [selectedCatId, setSelectedCatId] = useState<string>('');
   const [productCatOpen, setProductCatOpen] = useState(false);
-  const [productCatQuery, setProductCatQuery] = useState('');
+  const {
+    value: productCatQuery,
+    setValue: setProductCatQuery,
+    inputProps: productCatQueryInputProps,
+  } = useImeSafeSearchInput();
   const productCatPickerRef = useRef<HTMLDivElement | null>(null);
   const [showProdModal, setShowProdModal] = useState(false);
   const [editProd, setEditProd] = useState<SelectionProduct | null>(null);
@@ -812,14 +916,24 @@ function Content() {
   const [generateOptionTexts, setGenerateOptionTexts] = useState<Record<string, string>>({});
   const [generateExcludeRules, setGenerateExcludeRules] = useState('');
   const [generatePreview, setGeneratePreview] = useState<GeneratedProductDraft[]>([]);
-  const [generatePreviewSearch, setGeneratePreviewSearch] = useState('');
   const [generatePreviewPageSize, setGeneratePreviewPageSize] = useState(initialGeneratePreviewPageSize);
   const [generatePreviewPage, setGeneratePreviewPage] = useState(1);
+  const {
+    value: generatePreviewSearch,
+    draftValue: generatePreviewSearchInputValue,
+    setValue: setGeneratePreviewSearch,
+    inputProps: generatePreviewSearchInputProps,
+  } = useImeSafeSearchInput({ onCommit: () => setGeneratePreviewPage(1) });
   const [generateErrors, setGenerateErrors] = useState<string[]>([]);
   const [generateImporting, setGenerateImporting] = useState(false);
   const [showOptImgModal, setShowOptImgModal] = useState(false);
   const [optImgField, setOptImgField] = useState<string>('');
-  const [optSettingsSearch, setOptSettingsSearch] = useState('');
+  const {
+    value: optSettingsSearch,
+    draftValue: optSettingsSearchInputValue,
+    setValue: setOptSettingsSearch,
+    inputProps: optSettingsSearchInputProps,
+  } = useImeSafeSearchInput();
   const [uploadingVal, setUploadingVal] = useState<string | null>(null);
   const [editOptVal, setEditOptVal] = useState<string | null>(null);
 
@@ -911,7 +1025,12 @@ function Content() {
   );
 
   const products = useMemo(() => productsData?.items ?? [], [productsData]);
-  const [prodSearch, setProdSearch] = useState('');
+  const {
+    value: prodSearch,
+    draftValue: prodSearchInputValue,
+    setValue: setProdSearch,
+    inputProps: prodSearchInputProps,
+  } = useImeSafeSearchInput();
   const filteredProducts = useMemo(() => {
     if (!prodSearch) return products;
     const q = prodSearch.toLowerCase();
@@ -1674,12 +1793,11 @@ function Content() {
           <div className="flex h-9 w-full min-w-0 items-center rounded-sm border border-outline-variant/30 bg-surface-container-lowest px-3 md:w-72 md:justify-self-end">
             <Icon name="search" size={15} className="mr-2 shrink-0 text-on-surface-variant" />
             <input
-              value={tab === 'categories' ? catSearch : prodSearch}
-              onChange={(e) => (tab === 'categories' ? setCatSearch(e.target.value) : setProdSearch(e.target.value))}
+              {...(tab === 'categories' ? catSearchInputProps : prodSearchInputProps)}
               placeholder={tab === 'categories' ? '搜索分类名称、slug 或分组' : '搜索产品名称、型号、参数值'}
-              className="min-w-0 flex-1 border-none bg-transparent text-sm text-on-surface outline-none placeholder:text-on-surface-variant/50"
+              className="h-full min-w-0 flex-1 border-none bg-transparent p-0 text-sm leading-none text-on-surface outline-none placeholder:text-on-surface-variant/50"
             />
-            {(tab === 'categories' ? catSearch : prodSearch) && (
+            {(tab === 'categories' ? catSearchInputValue : prodSearchInputValue) && (
               <button
                 onClick={() => (tab === 'categories' ? setCatSearch('') : setProdSearch(''))}
                 className="p-0.5 text-on-surface-variant hover:text-on-surface"
@@ -1859,8 +1977,7 @@ function Content() {
                           />
                           <input
                             autoFocus
-                            value={productCatQuery}
-                            onChange={(e) => setProductCatQuery(e.target.value)}
+                            {...productCatQueryInputProps}
                             placeholder="搜索分类名称、slug 或分组"
                             className="w-full rounded-lg border border-outline-variant/15 bg-surface-container-low px-3 py-2 pl-9 text-sm text-on-surface outline-none focus:border-primary-container"
                           />
@@ -2703,12 +2820,11 @@ function Content() {
                     className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-on-surface-variant/60"
                   />
                   <input
-                    value={optSettingsSearch}
-                    onChange={(e) => setOptSettingsSearch(e.target.value)}
+                    {...optSettingsSearchInputProps}
                     placeholder="搜索选项、型号或产品名..."
                     className="w-full rounded bg-surface-container-lowest py-2 pl-8 pr-8 text-sm text-on-surface outline-none border border-outline-variant/20 focus:border-primary-container"
                   />
-                  {optSettingsSearch && (
+                  {optSettingsSearchInputValue && (
                     <button
                       onClick={() => setOptSettingsSearch('')}
                       className="absolute right-2 top-1/2 -translate-y-1/2 text-on-surface-variant hover:text-on-surface"
@@ -3406,15 +3522,11 @@ function Content() {
                           className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-on-surface-variant/60"
                         />
                         <input
-                          value={generatePreviewSearch}
-                          onChange={(e) => {
-                            setGeneratePreviewSearch(e.target.value);
-                            setGeneratePreviewPage(1);
-                          }}
+                          {...generatePreviewSearchInputProps}
                           placeholder="搜索名称、型号或参数"
                           className="w-full rounded-md border border-outline-variant/20 bg-surface-container-low px-8 py-2 text-xs text-on-surface outline-none focus:border-primary-container"
                         />
-                        {generatePreviewSearch && (
+                        {generatePreviewSearchInputValue && (
                           <button
                             type="button"
                             onClick={() => {

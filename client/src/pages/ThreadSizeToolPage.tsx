@@ -7,6 +7,7 @@ import Icon from '../components/shared/Icon';
 import ResponsiveSectionTabs from '../components/shared/ResponsiveSectionTabs';
 import { useToast } from '../components/shared/Toast';
 import { useDocumentTitle } from '../hooks/useDocumentTitle';
+import { useImeSafeSearchInput } from '../hooks/useImeSafeSearchInput';
 import { useAuthStore } from '../stores/useAuthStore';
 
 type ThreadFamily = 'metric' | 'metricH' | 'metricA' | 'metricC' | 'metricD' | 'g' | 'r' | 'npt' | 'jic';
@@ -648,11 +649,16 @@ export default function ThreadSizeToolPage() {
   const [activeTab, setActiveTab] = useState<ToolTab>('thread');
   const [family, setFamily] = useState<'all' | ThreadFamily>('all');
   const [hoseKind, setHoseKind] = useState<'all' | 'hydraulic' | 'air'>('all');
-  const [query, setQuery] = useState('');
   const [showGuide, setShowGuide] = useState(false);
+  const {
+    value: query,
+    draftValue: queryInputValue,
+    setValue: setQuery,
+    inputProps: queryInputProps,
+  } = useImeSafeSearchInput({ onDraftChange: () => setShowGuide(false) });
   const [managementOpen, setManagementOpen] = useState(false);
   const [managementCategory, setManagementCategory] = useState('thread:all');
-  const [managementQuery, setManagementQuery] = useState('');
+  const { value: managementQuery, inputProps: managementQueryInputProps } = useImeSafeSearchInput();
   const [editingEntry, setEditingEntry] = useState<ThreadSizeEntry | 'new' | null>(null);
   const [entryDraft, setEntryDraft] = useState({
     kind: 'thread' as DataTab,
@@ -1006,19 +1012,17 @@ export default function ThreadSizeToolPage() {
                 className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant/50"
               />
               <input
-                value={query}
-                onChange={(e) => {
-                  setQuery(e.target.value);
-                  setShowGuide(false);
-                }}
+                {...queryInputProps}
                 onKeyDown={(e) => {
+                  queryInputProps.onKeyDown?.(e);
+                  if (e.defaultPrevented) return;
                   if (e.key === 'Escape') clearSearch();
                   if (e.key === 'Enter') e.currentTarget.blur();
                 }}
                 placeholder="搜索规格、俗称、测量值..."
                 className="h-10 w-full rounded-lg border border-outline-variant/25 bg-surface-container-lowest pl-9 pr-14 text-sm text-on-surface outline-none placeholder:text-on-surface-variant/50 focus:border-primary-container/60"
               />
-              {query && (
+              {queryInputValue && (
                 <button
                   onClick={clearSearch}
                   className="absolute right-1.5 top-1/2 -translate-y-1/2 rounded-md px-2 py-1 text-xs font-medium text-on-surface-variant transition-colors hover:bg-surface-container-high hover:text-on-surface"
@@ -1505,8 +1509,7 @@ export default function ThreadSizeToolPage() {
                   className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant/50"
                 />
                 <input
-                  value={managementQuery}
-                  onChange={(event) => setManagementQuery(event.target.value)}
+                  {...managementQueryInputProps}
                   placeholder="搜索规格、型号、说明..."
                   className="h-9 w-full rounded-lg border border-outline-variant/25 bg-surface-container-lowest pl-9 pr-3 text-sm text-on-surface outline-none placeholder:text-on-surface-variant/50 focus:border-primary-container/60"
                 />

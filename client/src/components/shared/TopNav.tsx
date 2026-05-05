@@ -1,5 +1,17 @@
 import { motion, AnimatePresence } from 'framer-motion';
-import { lazy, Suspense, useState, useCallback, useEffect, useRef, useMemo } from 'react';
+import {
+  lazy,
+  Suspense,
+  useState,
+  useCallback,
+  useEffect,
+  useRef,
+  useMemo,
+  type ChangeEvent,
+  type CompositionEvent,
+  type FormEvent,
+  type KeyboardEvent as ReactKeyboardEvent,
+} from 'react';
 import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import useSWR from 'swr';
 import { mutate } from 'swr';
@@ -26,6 +38,14 @@ const UploadModal = lazy(() => import('./UploadModal'));
 interface TopNavProps {
   compact?: boolean;
   onMenuToggle?: () => void;
+}
+
+function clampSearchInput(value: string) {
+  return Array.from(value).slice(0, HOME_SEARCH_MAX_LENGTH).join('');
+}
+
+function isComposingNativeEvent(event: Event) {
+  return Boolean((event as Event & { isComposing?: boolean }).isComposing);
 }
 
 function NotificationPanelLoader({ compact = false }: { compact?: boolean }) {
@@ -232,6 +252,7 @@ export default function TopNav({ compact = false, onMenuToggle }: TopNavProps) {
   const navigate = useNavigate();
   const location = useLocation();
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const searchCompositionRef = useRef(false);
   // Force re-render when site config changes
   const [, forceUpdate] = useState(0);
   useEffect(() => {
@@ -272,29 +293,101 @@ export default function TopNav({ compact = false, onMenuToggle }: TopNavProps) {
     [location.pathname, navigate],
   );
 
-  const handleSearchChange = useCallback(
+  const clearSearchDebounce = useCallback(() => {
+    if (debounceRef.current) {
+      clearTimeout(debounceRef.current);
+      debounceRef.current = null;
+    }
+  }, []);
+
+  useEffect(() => clearSearchDebounce, [clearSearchDebounce]);
+
+  const scheduleSearch = useCallback(
     (value: string) => {
-      const nextValue = Array.from(value).slice(0, HOME_SEARCH_MAX_LENGTH).join('');
-      setLocalQuery(nextValue);
-      if (debounceRef.current) clearTimeout(debounceRef.current);
+      clearSearchDebounce();
+      const nextValue = clampSearchInput(value);
       if (!nextValue.trim()) {
         doSearch('');
         return;
       }
       debounceRef.current = setTimeout(() => {
+        debounceRef.current = null;
         doSearch(nextValue);
       }, 500);
     },
-    [doSearch],
+    [clearSearchDebounce, doSearch],
   );
 
-  const handleSearchSubmit = useCallback(
-    (e: React.FormEvent) => {
+  const handleSearchChange = useCallback(
+    (e: ChangeEvent<HTMLInputElement>) => {
+      const nextValue = clampSearchInput(e.target.value);
+      setLocalQuery(nextValue);
+      if (searchCompositionRef.current || isComposingNativeEvent(e.nativeEvent)) {
+        clearSearchDebounce();
+        return;
+      }
+      scheduleSearch(nextValue);
+    },
+    [clearSearchDebounce, scheduleSearch],
+  );
+
+  const handleSearchInput = useCallback(
+    (e: FormEvent<HTMLInputElement>) => {
+      const nextValue = clampSearchInput(e.currentTarget.value);
+      setLocalQuery(nextValue);
+      if (searchCompositionRef.current || isComposingNativeEvent(e.nativeEvent)) {
+        clearSearchDebounce();
+        return;
+      }
+      scheduleSearch(nextValue);
+    },
+    [clearSearchDebounce, scheduleSearch],
+  );
+
+  const handleSearchCompositionStart = useCallback(() => {
+    searchCompositionRef.current = true;
+    clearSearchDebounce();
+  }, [clearSearchDebounce]);
+
+  const handleSearchCompositionUpdate = useCallback(
+    (e: CompositionEvent<HTMLInputElement>) => {
+      setLocalQuery(clampSearchInput(e.currentTarget.value));
+      clearSearchDebounce();
+    },
+    [clearSearchDebounce],
+  );
+
+  const handleSearchCompositionEnd = useCallback(
+    (e: CompositionEvent<HTMLInputElement>) => {
+      searchCompositionRef.current = false;
+      const nextValue = clampSearchInput(e.currentTarget.value);
+      setLocalQuery(nextValue);
+      scheduleSearch(nextValue);
+    },
+    [scheduleSearch],
+  );
+
+  const handleSearchKeyDown = useCallback((e: ReactKeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter' && (searchCompositionRef.current || isComposingNativeEvent(e.nativeEvent))) {
       e.preventDefault();
-      if (debounceRef.current) clearTimeout(debounceRef.current);
+    }
+  }, []);
+
+  const handleClearSearch = useCallback(() => {
+    searchCompositionRef.current = false;
+    setLocalQuery('');
+    clearSearchDebounce();
+    doSearch('');
+  }, [clearSearchDebounce, doSearch]);
+
+  const handleSearchSubmit = useCallback(
+    (e: FormEvent<HTMLFormElement>) => {
+      e.preventDefault();
+      if (searchCompositionRef.current || isComposingNativeEvent(e.nativeEvent)) return;
+      clearSearchDebounce();
       doSearch(localQuery);
     },
-    [localQuery, doSearch],
+    [clearSearchDebounce, localQuery, doSearch],
   );
 
   const handleUploaded = useCallback(() => {
@@ -332,24 +425,29 @@ export default function TopNav({ compact = false, onMenuToggle }: TopNavProps) {
           <div className="px-3 pb-2">
             <form
               onSubmit={handleSearchSubmit}
-              className="flex items-center bg-surface-container-lowest rounded-sm px-2.5 py-1.5 border border-outline-variant/30 focus-within:ring-1 focus-within:ring-primary-container transition-all"
+              className="flex h-10 items-center overflow-hidden bg-surface-container-lowest rounded-sm px-2.5 border border-outline-variant/30 focus-within:ring-1 focus-within:ring-primary-container transition-colors"
             >
               <Icon name="search" size={16} className="text-on-surface-variant mr-2 shrink-0" />
               <input
                 type="text"
                 value={localQuery}
-                onChange={(e) => handleSearchChange(e.target.value)}
+                onChange={handleSearchChange}
+                onInput={handleSearchInput}
+                onCompositionStart={handleSearchCompositionStart}
+                onCompositionUpdate={handleSearchCompositionUpdate}
+                onCompositionEnd={handleSearchCompositionEnd}
+                onKeyDown={handleSearchKeyDown}
                 maxLength={HOME_SEARCH_MAX_LENGTH}
+                enterKeyHint="search"
+                autoComplete="off"
+                spellCheck={false}
                 placeholder="搜索模型..."
-                className="bg-transparent border-none outline-none text-base text-on-surface placeholder:text-on-surface-variant/50 w-full"
+                className="h-full min-w-0 flex-1 appearance-none border-none bg-transparent p-0 text-base leading-none text-on-surface outline-none placeholder:text-on-surface-variant/50"
               />
               {localQuery && (
                 <button
                   type="button"
-                  onClick={() => {
-                    setLocalQuery('');
-                    doSearch('');
-                  }}
+                  onClick={handleClearSearch}
                   className="p-0.5 text-on-surface-variant hover:text-on-surface shrink-0"
                 >
                   <Icon name="close" size={14} />
@@ -375,24 +473,29 @@ export default function TopNav({ compact = false, onMenuToggle }: TopNavProps) {
 
         <form
           onSubmit={handleSearchSubmit}
-          className="hidden md:flex items-center flex-1 max-w-lg bg-surface-container-lowest rounded-lg px-3 py-1.5 border border-outline-variant/20 focus-within:ring-1 focus-within:ring-primary-container transition-all"
+          className="hidden h-9 md:flex items-center flex-1 max-w-lg bg-surface-container-lowest rounded-lg px-3 border border-outline-variant/20 focus-within:ring-1 focus-within:ring-primary-container transition-colors"
         >
           <Icon name="search" size={16} className="text-on-surface-variant mr-2 shrink-0" />
           <input
             type="text"
             value={localQuery}
-            onChange={(e) => handleSearchChange(e.target.value)}
+            onChange={handleSearchChange}
+            onInput={handleSearchInput}
+            onCompositionStart={handleSearchCompositionStart}
+            onCompositionUpdate={handleSearchCompositionUpdate}
+            onCompositionEnd={handleSearchCompositionEnd}
+            onKeyDown={handleSearchKeyDown}
             maxLength={HOME_SEARCH_MAX_LENGTH}
+            enterKeyHint="search"
+            autoComplete="off"
+            spellCheck={false}
             placeholder="搜索模型、规格..."
-            className="bg-transparent border-none outline-none text-sm text-on-surface placeholder:text-on-surface-variant/50 w-full"
+            className="h-full min-w-0 flex-1 appearance-none border-none bg-transparent p-0 text-sm leading-none text-on-surface outline-none placeholder:text-on-surface-variant/50"
           />
           {localQuery && (
             <button
               type="button"
-              onClick={() => {
-                setLocalQuery('');
-                doSearch('');
-              }}
+              onClick={handleClearSearch}
               className="p-0.5 text-on-surface-variant hover:text-on-surface shrink-0"
             >
               <Icon name="close" size={14} />

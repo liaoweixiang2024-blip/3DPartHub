@@ -24,6 +24,10 @@ function isManualColumn(col?: ColumnDef) {
   return col?.inputType === 'manual';
 }
 
+function isPresetColumn(col?: ColumnDef) {
+  return col?.inputType === 'preset';
+}
+
 function normalizeManualValue(col: ColumnDef | undefined, value: string) {
   const trimmed = value.trim();
   if (!trimmed) return '';
@@ -56,22 +60,43 @@ function applyManualSpecs(
   columns: ColumnDef[],
   specs: Record<string, string>,
 ): SelectionProduct {
-  const manualEntries = columns
-    .filter((col) => isManualColumn(col) && specs[col.key])
-    .map((col) => [col.key, normalizeManualValue(col, specs[col.key])] as const);
+  const userEntries = columns
+    .filter((col) => (isManualColumn(col) || isPresetColumn(col)) && specs[col.key])
+    .map((col) => {
+      const raw = specs[col.key];
+      const value = isManualColumn(col) ? normalizeManualValue(col, raw) : raw;
+      return [col.key, value] as const;
+    });
 
-  if (!manualEntries.length) return product;
+  if (!userEntries.length) return product;
 
   const nextSpecs = { ...(product.specs as Record<string, string>) };
-  for (const [key, value] of manualEntries) nextSpecs[key] = value;
+  for (const [key, value] of userEntries) nextSpecs[key] = value;
   if (typeof nextSpecs['型号'] === 'string') {
-    nextSpecs['型号'] = replaceManualPlaceholders(nextSpecs['型号'], manualEntries, columns) || nextSpecs['型号'];
+    nextSpecs['型号'] = replaceManualPlaceholders(nextSpecs['型号'], userEntries, columns) || nextSpecs['型号'];
   }
 
-  const modelNo = replaceManualPlaceholders(product.modelNo, manualEntries, columns);
-  const name = replaceManualPlaceholders(product.name, manualEntries, columns) || product.name;
+  const modelNo = replaceManualPlaceholders(product.modelNo, userEntries, columns);
+  const name = replaceManualPlaceholders(product.name, userEntries, columns) || product.name;
 
-  return { ...product, name, modelNo, specs: nextSpecs };
+  let nextComponents = product.components;
+  const outletComponents: SelectionComponent[] = [];
+  for (const col of columns) {
+    if (!isPresetColumn(col) || !col.dependsOn || !specs[col.key]) continue;
+    const routeIndex = col.dependsOn.minIndex;
+    outletComponents.push({
+      name: `第${routeIndex}路出口接头`,
+      modelNo: `PL${specs[col.key]}-02`,
+      qty: 1,
+    });
+  }
+  if (outletComponents.length > 0) {
+    const existing = (nextComponents || []) as SelectionComponent[];
+    nextComponents = [...existing, ...outletComponents];
+    nextSpecs['BOM条数'] = String(nextComponents.length);
+  }
+
+  return { ...product, name, modelNo, specs: nextSpecs, components: nextComponents };
 }
 
 function ShareResultCard({

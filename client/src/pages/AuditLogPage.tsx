@@ -7,6 +7,7 @@ import { AdminPageShell } from '../components/shared/AdminPageShell';
 import Icon from '../components/shared/Icon';
 import InfiniteLoadTrigger from '../components/shared/InfiniteLoadTrigger';
 import { useDocumentTitle } from '../hooks/useDocumentTitle';
+import { useImeSafeSearchInput } from '../hooks/useImeSafeSearchInput';
 import { useMediaQuery } from '../layouts/hooks/useMediaQuery';
 
 type AuditDetails = {
@@ -175,7 +176,12 @@ export default function AuditLogPage() {
   const isDesktop = useMediaQuery('(min-width: 768px)');
   const [filterAction, setFilterAction] = useState('');
   const [filterResource, setFilterResource] = useState('');
-  const [search, setSearch] = useState('');
+  const {
+    value: search,
+    draftValue: searchInputValue,
+    setValue: setSearch,
+    inputProps: searchInputProps,
+  } = useImeSafeSearchInput();
 
   const { data, isLoading, setSize, size } = useSWRInfinite(
     (pageIndex, previousPageData: { total: number; items: AuditEntry[]; page: number } | null) => {
@@ -308,12 +314,11 @@ export default function AuditLogPage() {
       <div className="flex h-9 w-full min-w-0 items-center rounded-sm border border-outline-variant/15 bg-surface-container px-3 md:w-72">
         <Icon name="search" size={15} className="mr-2 shrink-0 text-on-surface-variant" />
         <input
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
+          {...searchInputProps}
           placeholder="搜索用户、资源ID、内容"
-          className="min-w-0 flex-1 border-none bg-transparent text-sm text-on-surface outline-none placeholder:text-on-surface-variant/50"
+          className="h-full min-w-0 flex-1 border-none bg-transparent p-0 text-sm leading-none text-on-surface outline-none placeholder:text-on-surface-variant/50"
         />
-        {search && (
+        {searchInputValue && (
           <button onClick={() => setSearch('')} className="p-0.5 text-on-surface-variant hover:text-on-surface">
             <Icon name="close" size={14} />
           </button>

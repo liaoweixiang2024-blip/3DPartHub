@@ -40,6 +40,7 @@ import ResponsiveSectionTabs from '../components/shared/ResponsiveSectionTabs';
 import SafeImage from '../components/shared/SafeImage';
 import { useToast } from '../components/shared/Toast';
 import { useDocumentTitle } from '../hooks/useDocumentTitle';
+import { useImeSafeSearchInput } from '../hooks/useImeSafeSearchInput';
 import { getBusinessConfig } from '../lib/businessConfig';
 import { copyText } from '../lib/clipboard';
 import { useAuthStore } from '../stores/useAuthStore';
@@ -268,7 +269,12 @@ export default function ProductWallPage() {
   const [filter, setFilter] = useState<WallFilter>('全部');
   const [reviewFilter, setReviewFilter] = useState<ReviewFilter>('approved');
   const [managementKindFilter, setManagementKindFilter] = useState<ManagementKindFilter>('全部');
-  const [query, setQuery] = useState('');
+  const {
+    value: query,
+    draftValue: queryInputValue,
+    setValue: setQuery,
+    inputProps: queryInputProps,
+  } = useImeSafeSearchInput();
   const [managementOpen, setManagementOpen] = useState(false);
   const [managementQuery, setManagementQuery] = useState('');
   const [dragActive, setDragActive] = useState(false);
@@ -1054,12 +1060,11 @@ export default function ProductWallPage() {
               <label className="product-wall-search flex h-9 w-full min-w-0 items-center rounded-sm border border-outline-variant/30 bg-surface-container-lowest px-3 md:ml-auto md:w-72">
                 <Icon name="search" size={15} className="mr-2 shrink-0 text-on-surface-variant" />
                 <input
-                  value={query}
-                  onChange={(event) => setQuery(event.target.value)}
+                  {...queryInputProps}
                   placeholder="搜索标题或标签..."
-                  className="min-w-0 flex-1 border-none bg-transparent text-sm text-on-surface outline-none placeholder:text-on-surface-variant/50"
+                  className="h-full min-w-0 flex-1 border-none bg-transparent p-0 text-sm leading-none text-on-surface outline-none placeholder:text-on-surface-variant/50"
                 />
-                {query && (
+                {queryInputValue && (
                   <button
                     type="button"
                     onClick={() => setQuery('')}

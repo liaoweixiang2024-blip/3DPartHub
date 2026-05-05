@@ -1,4 +1,5 @@
-import { useMemo, useState } from 'react';
+import { useMemo } from 'react';
+import { useImeSafeSearchInput } from '../../hooks/useImeSafeSearchInput';
 import Icon from '../shared/Icon';
 import type { ModelPartItem } from './viewerEvents';
 
@@ -33,7 +34,7 @@ export default function ModelStructurePanel({
   onShowAll,
   onClose,
 }: ModelStructurePanelProps) {
-  const [query, setQuery] = useState('');
+  const { value: query, inputProps: queryInputProps } = useImeSafeSearchInput();
   const hiddenSet = useMemo(() => new Set(hiddenPartIds), [hiddenPartIds]);
   const filteredParts = useMemo(() => {
     const text = query.trim().toLowerCase();
@@ -80,8 +81,7 @@ export default function ModelStructurePanel({
         <div className="flex items-center gap-2 rounded-sm border border-outline-variant/20 bg-surface-container-low px-2 py-1.5">
           <Icon name="search" size={14} className="text-on-surface-variant" />
           <input
-            value={query}
-            onChange={(event) => setQuery(event.target.value)}
+            {...queryInputProps}
             placeholder="搜索零件"
             className="min-w-0 flex-1 bg-transparent text-xs text-on-surface outline-none placeholder:text-on-surface-variant/50"
           />

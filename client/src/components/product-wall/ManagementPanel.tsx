@@ -1,5 +1,6 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { ProductWallItem, ProductWallCategory, ProductWallKind, ProductWallStatus } from '../../api/productWall';
+import { useImeSafeSearchInput } from '../../hooks/useImeSafeSearchInput';
 import Icon from '../shared/Icon';
 
 type ReviewFilter = 'all' | 'approved' | 'pending' | 'rejected';
@@ -87,6 +88,14 @@ export default memo(function ProductWallManagementPanel({
 }: ManagementPanelProps) {
   const scrollerRef = useRef<HTMLDivElement | null>(null);
   const loadMoreRef = useRef<HTMLButtonElement | null>(null);
+  const {
+    draftValue: managementQueryInputValue,
+    inputProps: managementQueryInputProps,
+    setValue: setManagementQueryInternal,
+  } = useImeSafeSearchInput({
+    initialValue: managementQuery,
+    onCommit: setManagementQuery,
+  });
   const [localRenderCount, setLocalRenderCount] = useState(managementRenderCount);
   const renderedItems = useMemo(() => items.slice(0, localRenderCount), [items, localRenderCount]);
   const hasMore = localRenderCount < items.length;
@@ -278,15 +287,14 @@ export default memo(function ProductWallManagementPanel({
                 <input
                   type="text"
                   placeholder="搜索标题、分类..."
-                  value={managementQuery}
-                  onChange={(e) => setManagementQuery(e.target.value)}
+                  {...managementQueryInputProps}
                   className="w-full rounded-md border border-outline-variant/18 bg-surface py-1.5 pl-8 pr-3 text-xs text-on-surface placeholder:text-on-surface-variant/40 focus:outline-none focus:ring-1 focus:ring-primary-container/35"
                 />
               </div>
-              {managementQuery && (
+              {managementQueryInputValue && (
                 <button
                   type="button"
-                  onClick={() => setManagementQuery('')}
+                  onClick={() => setManagementQueryInternal('')}
                   className="text-xs text-primary-container hover:underline"
                 >
                   清空搜索

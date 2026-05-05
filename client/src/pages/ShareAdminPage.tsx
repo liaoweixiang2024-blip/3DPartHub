@@ -10,6 +10,7 @@ import Icon from '../components/shared/Icon';
 import InfiniteLoadTrigger from '../components/shared/InfiniteLoadTrigger';
 import { useToast } from '../components/shared/Toast';
 import { useDocumentTitle } from '../hooks/useDocumentTitle';
+import { useImeSafeSearchInput } from '../hooks/useImeSafeSearchInput';
 import { copyText } from '../lib/clipboard';
 import type { ApiResponse } from '../types/api';
 
@@ -65,7 +66,12 @@ function getSharePath(item: ShareItem) {
 function Content() {
   const { toast } = useToast();
   const { mutate: mutateGlobal } = useSWRConfig();
-  const [search, setSearch] = useState('');
+  const {
+    value: search,
+    draftValue: searchInputValue,
+    setValue: setSearch,
+    inputProps: searchInputProps,
+  } = useImeSafeSearchInput();
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [batchDeleteOpen, setBatchDeleteOpen] = useState(false);
@@ -216,12 +222,11 @@ function Content() {
         <Icon name="search" size={16} className="mr-2 shrink-0 text-on-surface-variant" />
         <input
           type="text"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
+          {...searchInputProps}
           placeholder="搜索模型、选型、用户名..."
-          className="w-full border-none bg-transparent text-sm text-on-surface outline-none placeholder:text-on-surface-variant/50"
+          className="h-full min-w-0 flex-1 border-none bg-transparent p-0 text-sm leading-none text-on-surface outline-none placeholder:text-on-surface-variant/50"
         />
-        {search && (
+        {searchInputValue && (
           <button onClick={() => setSearch('')} className="p-0.5 text-on-surface-variant hover:text-on-surface">
             <Icon name="close" size={14} />
           </button>
