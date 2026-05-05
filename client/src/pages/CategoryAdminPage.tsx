@@ -74,6 +74,7 @@ function CategoryRow({
               : 'cursor-grab hover:bg-surface-container-high hover:text-on-surface-variant active:cursor-grabbing'
           }`}
           title={dragDisabled ? '搜索时暂不支持拖拽排序' : '拖拽排序'}
+          data-tooltip-ignore
         >
           ⠿
         </span>
@@ -83,8 +84,8 @@ function CategoryRow({
               type="button"
               onClick={() => onToggleCollapse(cat.id)}
               className="grid h-8 w-8 shrink-0 place-items-center rounded-lg text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface"
+              data-tooltip-ignore
               aria-label={collapsed ? '展开子分类' : '收起子分类'}
-              title={collapsed ? '展开子分类' : '收起子分类'}
             >
               <Icon
                 name="expand_more"
@@ -116,6 +117,7 @@ function CategoryRow({
                 : 'cursor-grab hover:bg-surface-container-high hover:text-on-surface-variant active:cursor-grabbing'
             }`}
             title={dragDisabled ? '搜索时暂不支持拖拽排序' : '拖拽排序'}
+            data-tooltip-ignore
           >
             ⠿
           </span>
@@ -125,8 +127,8 @@ function CategoryRow({
                 type="button"
                 onClick={() => onToggleCollapse(cat.id)}
                 className="grid h-8 w-8 shrink-0 place-items-center rounded-lg text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface"
+                data-tooltip-ignore
                 aria-label={collapsed ? '展开子分类' : '收起子分类'}
-                title={collapsed ? '展开子分类' : '收起子分类'}
               >
                 <Icon
                   name="expand_more"
@@ -181,6 +183,7 @@ function CategoryRow({
             <button
               onClick={() => onAddChild(cat.id)}
               className="inline-flex items-center gap-1 rounded-lg px-2.5 py-2 text-xs font-medium text-primary-container hover:bg-primary-container/10"
+              data-tooltip-ignore
               aria-label="添加子分类"
             >
               <Icon name="add" size={14} /> 子类
@@ -189,6 +192,7 @@ function CategoryRow({
           <button
             onClick={() => onEdit(cat)}
             className="grid h-8 w-8 place-items-center rounded-lg text-on-surface-variant transition-colors hover:bg-primary-container/10 hover:text-primary-container"
+            data-tooltip-ignore
             aria-label="编辑"
           >
             <Icon name="edit" size={15} />
@@ -196,6 +200,7 @@ function CategoryRow({
           <button
             onClick={() => onDelete(cat)}
             className="grid h-8 w-8 place-items-center rounded-lg text-on-surface-variant transition-colors hover:bg-error-container/10 hover:text-error"
+            data-tooltip-ignore
             aria-label="删除"
           >
             <Icon name="delete" size={15} />

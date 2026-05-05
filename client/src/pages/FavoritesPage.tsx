@@ -1,6 +1,6 @@
 import { motion, AnimatePresence } from 'framer-motion';
 import { useState, useCallback, memo, useMemo } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import useSWR from 'swr';
 import client from '../api/client';
 import { downloadModelFile, isDownloadAuthRequiredError } from '../api/downloads';
@@ -9,6 +9,8 @@ import type { FavoriteItem } from '../api/favorites';
 import { AdminEmptyState, AdminManagementPage } from '../components/shared/AdminManagementPage';
 import { AdminPageShell } from '../components/shared/AdminPageShell';
 import Icon from '../components/shared/Icon';
+import LoginConfirmDialog from '../components/shared/LoginConfirmDialog';
+import { isLoginDialogEnabled } from '../components/shared/ProtectedLink';
 import ModelThumbnail from '../components/shared/ModelThumbnail';
 import { SkeletonGrid } from '../components/shared/Skeleton';
 import { useToast } from '../components/shared/Toast';
@@ -206,59 +208,52 @@ const MobileModelCard = memo(function MobileModelCard({
 }) {
   return (
     <div
-      className={`bg-surface-container-high rounded-lg border shadow-sm relative transition-all ${selected ? 'border-primary ring-2 ring-primary/30' : 'border-outline-variant/10'}`}
+      className={`bg-surface-container-high rounded-xl border relative transition-all overflow-hidden ${selected ? 'border-primary ring-2 ring-primary/30' : 'border-outline-variant/10'}`}
     >
       {showCheckbox && (
         <button
           onClick={() => onSelect(model.id)}
-          className={`absolute top-2 left-2 z-10 w-6 h-6 rounded-sm border-2 flex items-center justify-center transition-all ${
+          className={`absolute top-2 left-2 z-10 w-5 h-5 rounded-full border-2 flex items-center justify-center transition-all ${
             selected ? 'bg-primary border-primary' : 'bg-surface/80 border-outline-variant/40'
           }`}
         >
-          {selected && <Icon name="check" size={14} className="text-on-primary" />}
+          {selected && <Icon name="check" size={12} className="text-on-primary" />}
         </button>
       )}
-      <Link to={`/model/${model.id}`} className="flex items-stretch">
-        <div className="w-20 h-20 bg-surface-container-lowest flex-shrink-0 flex items-center justify-center overflow-hidden rounded-l-lg">
+      <Link to={`/model/${model.id}`} className="flex h-20">
+        <div className="w-20 h-20 bg-surface-container-lowest flex-shrink-0 overflow-hidden">
           <ModelThumbnail src={model.thumbnailUrl} alt={model.name} className="w-full h-full object-cover" />
         </div>
-        <div className="flex-1 min-w-0 p-2.5 flex flex-col gap-1.5">
-          <div>
-            <div className="flex items-center gap-2 mb-1 min-w-0">
-              <span className="text-[10px] font-bold tracking-widest uppercase text-primary bg-primary/10 px-1.5 py-0.5 rounded-sm">
-                {model.format.toUpperCase()}
-              </span>
-              <span className="text-[11px] text-on-surface-variant truncate">
-                {new Date(model.createdAt).toLocaleDateString('zh-CN')}
-              </span>
+        <div className="flex-1 min-w-0 px-3 pt-3 pb-2 flex flex-col justify-between">
+          <h3 className="text-sm text-on-surface leading-snug line-clamp-1">{model.name}</h3>
+          <div className="flex items-center justify-between">
+            <span className="text-[10px] text-on-surface-variant/50">
+              {model.format.toUpperCase()} · {new Date(model.createdAt).toLocaleDateString('zh-CN')}
+            </span>
+            <div className="flex items-center gap-1">
+              <button
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  onDownload(model.id);
+                }}
+                className="flex items-center justify-center w-7 h-7 rounded-lg text-on-surface-variant active:scale-[0.95] transition-transform"
+                aria-label="下载"
+              >
+                <Icon name="download" size={16} />
+              </button>
+              <button
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  onRemove(model.id);
+                }}
+                className="flex items-center justify-center w-7 h-7 rounded-lg text-on-surface-variant hover:text-error transition-colors"
+                aria-label="取消收藏"
+              >
+                <Icon name="star_off" size={16} />
+              </button>
             </div>
-            <h3 className="text-sm font-semibold text-on-surface leading-snug line-clamp-2 break-words">
-              {model.name}
-            </h3>
-          </div>
-          <div className="flex flex-wrap items-center gap-2 mt-auto">
-            <button
-              onClick={(e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                onDownload(model.id);
-              }}
-              className="flex items-center justify-center gap-1 bg-primary-container text-on-primary rounded-sm py-1.5 px-3 text-xs font-medium hover:opacity-90 transition-opacity"
-            >
-              <Icon name="download" size={13} />
-              下载
-            </button>
-            <button
-              onClick={(e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                onRemove(model.id);
-              }}
-              className="flex items-center gap-1 border border-outline-variant/30 text-on-surface-variant rounded-sm py-1.5 px-3 text-xs hover:text-error hover:border-error/30 transition-colors"
-            >
-              <Icon name="star_off" size={13} />
-              取消收藏
-            </button>
           </div>
         </div>
       </Link>
@@ -267,6 +262,7 @@ const MobileModelCard = memo(function MobileModelCard({
 });
 
 function DesktopContent() {
+  const navigate = useNavigate();
   const { data, error, isLoading, mutate } = useSWR<FavoriteItem[]>('/favorites', () =>
     client.get('/favorites').then((r) => r.data?.data || r.data),
   );
@@ -274,6 +270,7 @@ function DesktopContent() {
   const [selectMode, setSelectMode] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [downloading, setDownloading] = useState(false);
+  const [loginDialogOpen, setLoginDialogOpen] = useState(false);
 
   const handleRemove = useCallback(
     async (modelId: string) => {
@@ -344,7 +341,15 @@ function DesktopContent() {
       try {
         await downloadModelFile(modelId, 'original');
       } catch (error) {
-        toast(isDownloadAuthRequiredError(error) ? '请先登录' : '下载失败', 'error');
+        if (isDownloadAuthRequiredError(error)) {
+          if (isLoginDialogEnabled()) {
+            setLoginDialogOpen(true);
+          } else {
+            navigate('/login', { state: { from: '/favorites' } });
+          }
+        } else {
+          toast('下载失败', 'error');
+        }
       }
     },
     [toast],
@@ -451,11 +456,13 @@ function DesktopContent() {
           </Link>
         </div>
       )}
+      <LoginConfirmDialog open={loginDialogOpen} onClose={() => setLoginDialogOpen(false)} reason="下载模型" />
     </AdminManagementPage>
   );
 }
 
 function MobileContent() {
+  const navigate = useNavigate();
   const { data, error, isLoading, mutate } = useSWR<FavoriteItem[]>('/favorites', () =>
     client.get('/favorites').then((r) => r.data?.data || r.data),
   );
@@ -463,6 +470,7 @@ function MobileContent() {
   const [selectMode, setSelectMode] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [downloading, setDownloading] = useState(false);
+  const [loginDialogOpen, setLoginDialogOpen] = useState(false);
 
   const handleRemove = useCallback(
     async (modelId: string) => {
@@ -534,7 +542,15 @@ function MobileContent() {
       try {
         await downloadModelFile(modelId, 'original');
       } catch (error) {
-        toast(isDownloadAuthRequiredError(error) ? '请先登录' : '下载失败', 'error');
+        if (isDownloadAuthRequiredError(error)) {
+          if (isLoginDialogEnabled()) {
+            setLoginDialogOpen(true);
+          } else {
+            navigate('/login', { state: { from: '/favorites' } });
+          }
+        } else {
+          toast('下载失败', 'error');
+        }
       }
     },
     [toast],
@@ -605,7 +621,7 @@ function MobileContent() {
       ) : models.length === 0 ? (
         <EmptyState message="尚未收藏任何模型" actionLabel="浏览模型库" actionHref="/" />
       ) : (
-        <div className="flex flex-col gap-3">
+        <div className="flex flex-col gap-2.5">
           {models.map((model) => (
             <MobileModelCard
               key={model.id}
@@ -619,6 +635,7 @@ function MobileContent() {
           ))}
         </div>
       )}
+      <LoginConfirmDialog open={loginDialogOpen} onClose={() => setLoginDialogOpen(false)} reason="下载模型" />
     </AdminManagementPage>
   );
 }

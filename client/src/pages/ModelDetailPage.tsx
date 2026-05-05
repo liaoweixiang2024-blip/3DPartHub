@@ -16,6 +16,8 @@ import Icon from '../components/shared/Icon';
 import ModelThumbnail from '../components/shared/ModelThumbnail';
 import { PublicPageShell } from '../components/shared/PublicPageShell';
 import ShareDialog from '../components/shared/ShareDialog';
+import LoginConfirmDialog from '../components/shared/LoginConfirmDialog';
+import { isLoginDialogEnabled, checkProtectedAccess } from '../components/shared/ProtectedLink';
 import { useToast } from '../components/shared/Toast';
 import { useDocumentTitle } from '../hooks/useDocumentTitle';
 import { useModel } from '../hooks/useModels';
@@ -543,6 +545,8 @@ function DesktopDetail({
   onShare,
   categoryBreadcrumb,
   onDownload,
+  onLoginDialog,
+  onNavigateToLogin,
 }: {
   modelData: ModelInfo;
   isFav: boolean;
@@ -552,6 +556,8 @@ function DesktopDetail({
   onShare: () => void;
   categoryBreadcrumb: { id: string; name: string }[];
   onDownload: (id: string, format?: string) => void;
+  onLoginDialog: (reason: string) => void;
+  onNavigateToLogin: (from: string) => void;
 }) {
   const { toast } = useToast();
 
@@ -773,6 +779,16 @@ function DesktopDetail({
             specs: Object.fromEntries(modelData.specs.map((s) => [s.label, s.value])),
             source: 'model',
           }}
+          onClick={(e) => {
+            const result = checkProtectedAccess('/support');
+            if (result.action === 'dialog') {
+              e.preventDefault();
+              onLoginDialog(result.reason);
+            } else if (result.action === 'redirect') {
+              e.preventDefault();
+              onNavigateToLogin('/support');
+            }
+          }}
           className="flex items-center gap-3 p-3 rounded-sm bg-surface-container-high hover:bg-surface-container-highest transition-colors group"
         >
           <div className="w-10 h-10 rounded-full bg-primary-container/15 flex items-center justify-center shrink-0">
@@ -840,11 +856,25 @@ export default function ModelDetailPage() {
   const isMouseDraggingSheet = useRef(false);
   const [sheetDragOffset, setSheetDragOffset] = useState(0);
   const [loginPromptOpen, setLoginPromptOpen] = useState(false);
+  const [loginPromptReason, setLoginPromptReason] = useState('');
   const [editOpen, setEditOpen] = useState(false);
   const [shareOpen, setShareOpen] = useState(false);
   const isAdmin = useAuthStore.getState().user?.role === 'ADMIN';
   const { toast } = useToast();
   const currentPath = `${location.pathname}${location.search}${location.hash}`;
+
+  const handleShare = useCallback(() => {
+    if (!useAuthStore.getState().isAuthenticated) {
+      if (isLoginDialogEnabled()) {
+        setLoginPromptReason('分享模型');
+        setLoginPromptOpen(true);
+      } else {
+        navigate('/login', { state: { from: location.pathname } });
+      }
+      return;
+    }
+    setShareOpen(true);
+  }, []);
   const detailLocationState = location.state as ModelDetailLocationState;
   const returnPath = useMemo(() => {
     const params = new URLSearchParams(location.search);
@@ -911,7 +941,12 @@ export default function ModelDetailPage() {
         await downloadModelFile(modelId, format || 'original');
       } catch (error) {
         if (isDownloadAuthRequiredError(error)) {
-          setLoginPromptOpen(true);
+          if (isLoginDialogEnabled()) {
+            setLoginPromptReason('下载模型');
+            setLoginPromptOpen(true);
+          } else {
+            navigate('/login', { state: { from: location.pathname } });
+          }
           return;
         }
         toast('下载失败，请稍后重试', 'error');
@@ -1182,6 +1217,16 @@ export default function ModelDetailPage() {
 
   const handleToggleFav = useCallback(async () => {
     if (!modelData) return;
+    const { isAuthenticated } = useAuthStore.getState();
+    if (!isAuthenticated) {
+      if (isLoginDialogEnabled()) {
+        setLoginPromptReason('收藏模型');
+        setLoginPromptOpen(true);
+      } else {
+        navigate('/login', { state: { from: location.pathname } });
+      }
+      return;
+    }
     const wasFav = isFavorite(modelData.id);
     await toggleFavorite({
       id: modelData.id,
@@ -1333,9 +1378,14 @@ export default function ModelDetailPage() {
             isAdmin={isAdmin}
             onToggleFav={handleToggleFav}
             onEdit={() => setEditOpen(true)}
-            onShare={() => setShareOpen(true)}
+            onShare={handleShare}
             categoryBreadcrumb={categoryBreadcrumb}
             onDownload={handleDownload}
+            onLoginDialog={(reason) => {
+              setLoginPromptReason(reason);
+              setLoginPromptOpen(true);
+            }}
+            onNavigateToLogin={(from) => navigate('/login', { state: { from } })}
           />
         </main>
         <DetailEditDialog
@@ -1362,50 +1412,12 @@ export default function ModelDetailPage() {
           modelId={modelData.id}
           modelName={modelData.name}
         />
-        <AnimatePresence>
-          {loginPromptOpen && (
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              className="fixed inset-0 z-[200] flex items-center justify-center bg-black/50 backdrop-blur-sm"
-              onClick={() => setLoginPromptOpen(false)}
-            >
-              <motion.div
-                initial={{ scale: 0.9, opacity: 0 }}
-                animate={{ scale: 1, opacity: 1 }}
-                exit={{ scale: 0.9, opacity: 0 }}
-                className="bg-surface-container-high rounded-lg shadow-2xl p-6 w-80 border border-outline-variant/20"
-                onClick={(e) => e.stopPropagation()}
-              >
-                <div className="flex items-center gap-3 mb-3">
-                  <div className="w-10 h-10 rounded-full bg-primary-container/20 flex items-center justify-center">
-                    <Icon name="lock" size={20} className="text-primary-container" />
-                  </div>
-                  <h3 className="text-lg font-headline font-bold text-on-surface">需要登录</h3>
-                </div>
-                <p className="text-sm text-on-surface-variant mb-5">下载模型需要先登录账号，是否前往登录？</p>
-                <div className="flex gap-3">
-                  <button
-                    onClick={() => setLoginPromptOpen(false)}
-                    className="flex-1 py-2.5 text-sm text-on-surface-variant border border-outline-variant/30 rounded-lg hover:bg-surface-container-highest transition-colors"
-                  >
-                    取消
-                  </button>
-                  <button
-                    onClick={() => {
-                      setLoginPromptOpen(false);
-                      navigate('/login');
-                    }}
-                    className="flex-1 py-2.5 text-sm font-medium text-on-primary bg-primary-container rounded-lg hover:opacity-90 transition-opacity"
-                  >
-                    前往登录
-                  </button>
-                </div>
-              </motion.div>
-            </motion.div>
-          )}
-        </AnimatePresence>
+        <LoginConfirmDialog
+          open={loginPromptOpen}
+          onClose={() => setLoginPromptOpen(false)}
+          reason={loginPromptReason || '下载模型'}
+          returnUrl={currentPath}
+        />
       </PublicPageShell>
     );
   }
@@ -1481,7 +1493,7 @@ export default function ModelDetailPage() {
                   </button>
                 )}
                 <button
-                  onClick={() => setShareOpen(true)}
+                  onClick={handleShare}
                   aria-label="分享"
                   className="w-8 h-8 flex items-center justify-center rounded-full text-on-surface-variant hover:text-primary transition-colors"
                 >
@@ -1694,6 +1706,17 @@ export default function ModelDetailPage() {
                     specs: Object.fromEntries(modelData.specs.map((s) => [s.label, s.value])),
                     source: 'model',
                   }}
+                  onClick={(e) => {
+                    const result = checkProtectedAccess('/support');
+                    if (result.action === 'dialog') {
+                      e.preventDefault();
+                      setLoginPromptReason(result.reason);
+                      setLoginPromptOpen(true);
+                    } else if (result.action === 'redirect') {
+                      e.preventDefault();
+                      navigate('/login', { state: { from: '/support' } });
+                    }
+                  }}
                   className="flex items-center gap-3 p-3 rounded-sm bg-surface-container-high hover:bg-surface-container-highest transition-colors group"
                 >
                   <div className="w-8 h-8 rounded-full bg-primary-container/15 flex items-center justify-center shrink-0">
@@ -1760,50 +1783,12 @@ export default function ModelDetailPage() {
         modelId={modelData.id}
         modelName={modelData.name}
       />
-      <AnimatePresence>
-        {loginPromptOpen && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 z-[200] flex items-center justify-center bg-black/50 backdrop-blur-sm"
-            onClick={() => setLoginPromptOpen(false)}
-          >
-            <motion.div
-              initial={{ scale: 0.9, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              exit={{ scale: 0.9, opacity: 0 }}
-              className="bg-surface-container-high rounded-lg shadow-2xl p-6 w-80 border border-outline-variant/20"
-              onClick={(e) => e.stopPropagation()}
-            >
-              <div className="flex items-center gap-3 mb-3">
-                <div className="w-10 h-10 rounded-full bg-primary-container/20 flex items-center justify-center">
-                  <Icon name="lock" size={20} className="text-primary-container" />
-                </div>
-                <h3 className="text-lg font-headline font-bold text-on-surface">需要登录</h3>
-              </div>
-              <p className="text-sm text-on-surface-variant mb-5">下载模型需要先登录账号，是否前往登录？</p>
-              <div className="flex gap-3">
-                <button
-                  onClick={() => setLoginPromptOpen(false)}
-                  className="flex-1 py-2.5 text-sm text-on-surface-variant border border-outline-variant/30 rounded-lg hover:bg-surface-container-highest transition-colors"
-                >
-                  取消
-                </button>
-                <button
-                  onClick={() => {
-                    setLoginPromptOpen(false);
-                    navigate('/login');
-                  }}
-                  className="flex-1 py-2.5 text-sm font-medium text-on-primary bg-primary-container rounded-lg hover:opacity-90 transition-opacity"
-                >
-                  前往登录
-                </button>
-              </div>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+      <LoginConfirmDialog
+        open={loginPromptOpen}
+        onClose={() => setLoginPromptOpen(false)}
+        reason={loginPromptReason || '下载模型'}
+        returnUrl={currentPath}
+      />
     </PublicPageShell>
   );
 }

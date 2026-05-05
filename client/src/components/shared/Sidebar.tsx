@@ -5,6 +5,8 @@ import { getBusinessConfig } from '../../lib/businessConfig';
 import { getCachedPublicSettings } from '../../lib/publicSettings';
 import { useAuthStore } from '../../stores/useAuthStore';
 import Icon from './Icon';
+import LoginConfirmDialog from './LoginConfirmDialog';
+import { checkProtectedAccess } from './ProtectedLink';
 
 const footerNav = [
   { label: '个人设置', icon: 'settings', path: '/profile' },
@@ -24,6 +26,9 @@ export default function AppSidebar() {
   const { logout, user } = useAuthStore();
   const { data: settings } = useSWR('publicSettings', () => getCachedPublicSettings());
   const isAdmin = user?.role === 'ADMIN';
+  const [loginDialogOpen, setLoginDialogOpen] = useState(false);
+  const [loginReturnUrl, setLoginReturnUrl] = useState('');
+  const [loginDialogReason, setLoginDialogReason] = useState('');
   const navItems = useMemo(() => {
     const business = getBusinessConfig(settings);
     return isAdmin ? business.adminNav : business.userNav;
@@ -86,7 +91,23 @@ export default function AppSidebar() {
                   <div className="flex-1 border-t border-outline-variant/15" />
                 </div>
               )}
-              <Link to={item.path} ref={isActive ? activeRef : undefined} className={navCls(isActive)}>
+              <Link
+                to={item.path}
+                ref={isActive ? activeRef : undefined}
+                className={navCls(isActive)}
+                onClick={(e) => {
+                  const result = checkProtectedAccess(item.path);
+                  if (result.action === 'dialog') {
+                    e.preventDefault();
+                    setLoginReturnUrl(result.returnUrl);
+                    setLoginDialogReason(result.reason);
+                    setLoginDialogOpen(true);
+                  } else if (result.action === 'redirect') {
+                    e.preventDefault();
+                    navigate('/login', { state: { from: result.returnUrl } });
+                  }
+                }}
+              >
                 <Icon name={item.icon} size={24} />
                 <span className="font-headline uppercase tracking-widest">{item.label}</span>
               </Link>
@@ -103,34 +124,58 @@ export default function AppSidebar() {
       </div>
 
       <div className="px-3 mt-auto">
-        <div className="border-t border-outline-variant/20 my-3 pt-4 flex flex-col gap-1">
-          {footerNav.map((item) => {
-            if (item.path === '') {
+        {user && (
+          <div className="border-t border-outline-variant/20 my-3 pt-4 flex flex-col gap-1">
+            {footerNav.map((item) => {
+              if (item.path === '') {
+                return (
+                  <button
+                    key={item.label}
+                    onClick={() => {
+                      logout();
+                      navigate('/login');
+                    }}
+                    className="flex items-center gap-4 px-6 py-3 text-sm transition-colors duration-150 cursor-pointer rounded-sm text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface w-full border-l-4 border-transparent"
+                  >
+                    <Icon name={item.icon} size={24} />
+                    <span className="font-headline uppercase tracking-widest">{item.label}</span>
+                  </button>
+                );
+              }
+              const isActive =
+                location.pathname === item.path || (item.path !== '/' && location.pathname.startsWith(item.path));
               return (
-                <button
-                  key={item.label}
-                  onClick={() => {
-                    logout();
-                    navigate('/login');
+                <Link
+                  key={item.path}
+                  to={item.path}
+                  className={navCls(isActive)}
+                  onClick={(e) => {
+                    const result = checkProtectedAccess(item.path);
+                    if (result.action === 'dialog') {
+                      e.preventDefault();
+                      setLoginReturnUrl(result.returnUrl);
+                      setLoginDialogReason(result.reason);
+                      setLoginDialogOpen(true);
+                    } else if (result.action === 'redirect') {
+                      e.preventDefault();
+                      navigate('/login', { state: { from: result.returnUrl } });
+                    }
                   }}
-                  className="flex items-center gap-4 px-6 py-3 text-sm transition-colors duration-150 cursor-pointer rounded-sm text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface w-full border-l-4 border-transparent"
                 >
                   <Icon name={item.icon} size={24} />
                   <span className="font-headline uppercase tracking-widest">{item.label}</span>
-                </button>
+                </Link>
               );
-            }
-            const isActive =
-              location.pathname === item.path || (item.path !== '/' && location.pathname.startsWith(item.path));
-            return (
-              <Link key={item.path} to={item.path} className={navCls(isActive)}>
-                <Icon name={item.icon} size={24} />
-                <span className="font-headline uppercase tracking-widest">{item.label}</span>
-              </Link>
-            );
-          })}
-        </div>
+            })}
+          </div>
+        )}
       </div>
+      <LoginConfirmDialog
+        open={loginDialogOpen}
+        onClose={() => setLoginDialogOpen(false)}
+        reason={loginDialogReason}
+        returnUrl={loginReturnUrl}
+      />
     </aside>
   );
 }

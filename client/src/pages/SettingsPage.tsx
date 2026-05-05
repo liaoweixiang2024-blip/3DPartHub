@@ -240,6 +240,15 @@ const DEFAULT_SETTINGS: SystemSettings = {
   ticket_attachment_types:
     'jpg,jpeg,png,gif,webp,svg,pdf,doc,docx,xls,xlsx,ppt,pptx,zip,rar,7z,step,stp,iges,igs,xt,binary',
   api_rate_limit: 5000,
+  login_dialog_enabled: true,
+  login_dialog_favorites: true,
+  login_dialog_downloads: true,
+  login_dialog_my_shares: true,
+  login_dialog_profile: true,
+  login_dialog_support: true,
+  login_dialog_my_tickets: true,
+  login_dialog_my_inquiries: true,
+  login_dialog_projects: true,
 };
 
 type SettingItemType =
@@ -420,6 +429,21 @@ const GROUPS: SettingGroup[] = [
       { key: 'require_login_browse', label: '登录浏览', desc: '用户必须登录后才能浏览模型列表', type: 'switch' },
       { key: 'require_login_download', label: '登录下载', desc: '用户必须登录后才能下载模型文件', type: 'switch' },
       { key: 'allow_register', label: '开放注册', desc: '允许新用户自行注册账号', type: 'switch' },
+      {
+        key: 'login_dialog_enabled',
+        label: '登录弹窗提示',
+        desc: '未登录用户访问受限页面时弹出确认弹窗，关闭后将直接跳转到登录页',
+        type: 'switch',
+      },
+      { _section: '按页面控制（仅主开关开启时生效）' },
+      { key: 'login_dialog_favorites', label: '查看收藏', desc: '访问收藏页面时弹出登录确认', type: 'switch' },
+      { key: 'login_dialog_downloads', label: '下载历史', desc: '访问下载历史页面时弹出登录确认', type: 'switch' },
+      { key: 'login_dialog_my_shares', label: '我的分享', desc: '访问我的分享页面时弹出登录确认', type: 'switch' },
+      { key: 'login_dialog_profile', label: '个人设置', desc: '访问个人设置页面时弹出登录确认', type: 'switch' },
+      { key: 'login_dialog_support', label: '技术支持', desc: '访问技术支持页面时弹出登录确认', type: 'switch' },
+      { key: 'login_dialog_my_tickets', label: '我的工单', desc: '访问我的工单页面时弹出登录确认', type: 'switch' },
+      { key: 'login_dialog_my_inquiries', label: '我的询价', desc: '访问我的询价页面时弹出登录确认', type: 'switch' },
+      { key: 'login_dialog_projects', label: '我的项目', desc: '访问我的项目页面时弹出登录确认', type: 'switch' },
     ],
   },
   {
@@ -1104,11 +1128,20 @@ function TaskProgressCard({
   );
 }
 
-function Switch({ checked, onChange }: { checked: boolean; onChange: (v: boolean) => void }) {
+function Switch({
+  checked,
+  onChange,
+  disabled,
+}: {
+  checked: boolean;
+  onChange: (v: boolean) => void;
+  disabled?: boolean;
+}) {
   return (
     <button
-      onClick={() => onChange(!checked)}
-      className={`relative w-11 h-6 rounded-full transition-colors duration-200 shrink-0 ${checked ? 'bg-primary-container' : 'bg-outline-variant/30'}`}
+      onClick={disabled ? undefined : () => onChange(!checked)}
+      className={`relative w-11 h-6 rounded-full transition-colors duration-200 shrink-0 ${disabled ? 'opacity-40 cursor-not-allowed' : ''} ${checked ? 'bg-primary-container' : 'bg-outline-variant/30'}`}
+      disabled={disabled}
     >
       <span
         className={`absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white shadow-sm transition-transform duration-200 ${checked ? 'translate-x-5' : 'translate-x-0'}`}
@@ -4037,10 +4070,14 @@ function Content() {
                                       : isWideControl
                                         ? 'px-4 sm:px-6 py-4 flex flex-col gap-3'
                                         : 'px-4 sm:px-6 py-4 grid grid-cols-1 lg:grid-cols-[minmax(180px,260px)_minmax(0,1fr)] gap-3 lg:gap-6 lg:items-center';
+                                  const loginDialogDisabled =
+                                    item.key.startsWith('login_dialog_') &&
+                                    item.key !== 'login_dialog_enabled' &&
+                                    !settings.login_dialog_enabled;
                                   return (
                                     <div
                                       key={`preview-${item.key}-${itemIndex}`}
-                                      className={`${rowClass} hover:bg-surface-container-high/30 transition-colors`}
+                                      className={`${rowClass} ${loginDialogDisabled ? 'opacity-40 pointer-events-none' : 'hover:bg-surface-container-high/30'} transition-colors`}
                                     >
                                       {item.type === 'color-scheme' ? (
                                         <ColorSchemeEditor settings={settings} updateSetting={updateSetting} />
@@ -4099,6 +4136,7 @@ function Content() {
                                               <Switch
                                                 checked={settings[item.key] as boolean}
                                                 onChange={(v) => updateSetting(item.key, v)}
+                                                disabled={loginDialogDisabled}
                                               />
                                             ) : item.type === 'image' ? (
                                               <div className="flex flex-wrap items-center gap-3 min-w-0 lg:justify-self-start">
@@ -4281,10 +4319,14 @@ function Content() {
                               : isWideControl
                                 ? 'px-4 sm:px-6 py-4 flex flex-col gap-3'
                                 : 'px-4 sm:px-6 py-4 grid grid-cols-1 lg:grid-cols-[minmax(180px,260px)_minmax(0,1fr)] gap-3 lg:gap-6 lg:items-center';
+                          const loginDialogDisabled =
+                            item.key.startsWith('login_dialog_') &&
+                            item.key !== 'login_dialog_enabled' &&
+                            !settings.login_dialog_enabled;
                           return (
                             <div
                               key={`${group.title}-${item.key}-${itemIndex}`}
-                              className={`${rowClass} hover:bg-surface-container-high/30 transition-colors`}
+                              className={`${rowClass} ${loginDialogDisabled ? 'opacity-40 pointer-events-none' : 'hover:bg-surface-container-high/30'} transition-colors`}
                             >
                               {item.type === 'color-scheme' ? (
                                 <ColorSchemeEditor settings={settings} updateSetting={updateSetting} />
@@ -4309,6 +4351,7 @@ function Content() {
                                       <Switch
                                         checked={settings[item.key] as boolean}
                                         onChange={(v) => updateSetting(item.key, v)}
+                                        disabled={loginDialogDisabled}
                                       />
                                     ) : item.type === 'image' ? (
                                       <div className="flex flex-wrap items-center gap-3 min-w-0 lg:justify-self-start">

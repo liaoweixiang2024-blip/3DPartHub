@@ -17,6 +17,7 @@ type UserShareItem = {
   modelName: string;
   allowPreview: boolean;
   allowDownload: boolean;
+  allowDrawing: boolean;
   downloadLimit: number;
   downloadCount: number;
   viewCount: number;
@@ -38,7 +39,15 @@ export function createUserSharesRouter() {
   router.post('/api/shares', authMiddleware, async (req: AuthRequest, res: Response) => {
     try {
       const userId = req.user!.userId;
-      let { modelId, password, allowPreview, allowDownload = true, downloadLimit = 0, expiresAt } = req.body;
+      let {
+        modelId,
+        password,
+        allowPreview,
+        allowDownload = true,
+        allowDrawing = true,
+        downloadLimit = 0,
+        expiresAt,
+      } = req.body;
 
       if (!modelId) {
         res.status(400).json({ detail: '缺少 modelId' });
@@ -115,6 +124,7 @@ export function createUserSharesRouter() {
           password: hashedPassword,
           allowPreview,
           allowDownload,
+          allowDrawing,
           downloadLimit,
           expiresAt: finalExpiresAt,
           createdById: userId,
@@ -126,6 +136,7 @@ export function createUserSharesRouter() {
         token: share.token,
         allowPreview: share.allowPreview,
         allowDownload: share.allowDownload,
+        allowDrawing: share.allowDrawing,
         downloadLimit: share.downloadLimit,
         downloadCount: share.downloadCount,
         viewCount: share.viewCount,
@@ -180,6 +191,7 @@ export function createUserSharesRouter() {
         modelName: s.model.name || s.model.originalName,
         allowPreview: s.allowPreview,
         allowDownload: s.allowDownload,
+        allowDrawing: s.allowDrawing ?? true,
         downloadLimit: s.downloadLimit,
         downloadCount: s.downloadCount,
         viewCount: s.viewCount,
@@ -196,6 +208,7 @@ export function createUserSharesRouter() {
       modelName: selectionNameMap.get(s.id) || selectionCategoryMap.get(s.categorySlug) || s.categorySlug || '产品选型',
       allowPreview: true,
       allowDownload: false,
+      allowDrawing: false,
       downloadLimit: 0,
       downloadCount: 0,
       viewCount: s.viewCount,
@@ -227,6 +240,7 @@ export function createUserSharesRouter() {
         token: s.token,
         allowPreview: s.allowPreview,
         allowDownload: s.allowDownload,
+        allowDrawing: s.allowDrawing ?? true,
         downloadLimit: s.downloadLimit,
         downloadCount: s.downloadCount,
         viewCount: s.viewCount,

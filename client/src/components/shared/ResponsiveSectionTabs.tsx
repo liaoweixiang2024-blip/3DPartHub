@@ -84,6 +84,7 @@ export default function ResponsiveSectionTabs({
             onClick={() => scrollDesktopTabs(-1)}
             className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-on-surface-variant transition-colors hover:bg-surface-container-high hover:text-on-surface"
             aria-label="向左查看更多分类"
+            data-tooltip-ignore
           >
             <Icon name="chevron_left" size={18} />
           </button>
@@ -141,6 +142,7 @@ export default function ResponsiveSectionTabs({
             onClick={() => scrollDesktopTabs(1)}
             className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-on-surface-variant transition-colors hover:bg-surface-container-high hover:text-on-surface"
             aria-label="向右查看更多分类"
+            data-tooltip-ignore
           >
             <Icon name="chevron_right" size={18} />
           </button>
@@ -150,8 +152,8 @@ export default function ResponsiveSectionTabs({
       <button
         type="button"
         onClick={() => setOpen(true)}
+        data-tooltip-ignore
         aria-label="切换分类"
-        title="切换分类"
         className={`flex w-full min-w-0 items-center justify-between gap-3 text-left transition-colors md:hidden ${
           mobileTriggerVariant === 'plain'
             ? 'h-10 rounded-md bg-transparent px-1 active:bg-surface-container-high/60'
@@ -197,6 +199,7 @@ export default function ResponsiveSectionTabs({
           <button
             type="button"
             aria-label="关闭分类选择"
+            data-tooltip-ignore
             className="fixed inset-0 z-[70] h-full w-full bg-transparent"
             onClick={() => setOpen(false)}
           />
@@ -249,10 +252,11 @@ export default function ResponsiveSectionTabs({
           <button
             type="button"
             aria-label="关闭分类选择"
+            data-tooltip-ignore
             className="absolute inset-0 h-full w-full bg-black/30 backdrop-blur-[2px]"
             onClick={() => setOpen(false)}
           />
-          <div className="absolute inset-x-0 bottom-0 overflow-hidden rounded-t-[1.35rem] border border-outline-variant/12 bg-surface pb-[max(env(safe-area-inset-bottom),0.5rem)] shadow-2xl animate-[sectionPickerSheet_180ms_ease-out]">
+          <div className="absolute inset-x-0 bottom-[calc(3.5rem+env(safe-area-inset-bottom,0px))] max-h-[85dvh] overflow-hidden rounded-t-[1.35rem] border border-outline-variant/12 bg-surface pb-2 shadow-2xl animate-[sectionPickerSheet_180ms_ease-out]">
             <div className="flex justify-center pt-2">
               <span className="h-1 w-10 rounded-full bg-outline-variant/35" />
             </div>
@@ -266,11 +270,12 @@ export default function ResponsiveSectionTabs({
                 onClick={() => setOpen(false)}
                 className="flex h-9 w-9 items-center justify-center rounded-full text-on-surface-variant transition-colors hover:bg-surface-container-high hover:text-on-surface"
                 aria-label="关闭"
+                data-tooltip-ignore
               >
                 <Icon name="close" size={18} />
               </button>
             </div>
-            <div className="grid max-h-[66vh] grid-cols-2 gap-2 overflow-y-auto border-t border-outline-variant/10 p-3 custom-scrollbar">
+            <div className="grid max-h-[60dvh] grid-cols-2 gap-2 overflow-y-auto border-t border-outline-variant/10 p-3 custom-scrollbar">
               {tabs.map((tab) => {
                 const active = tab.value === value;
                 return (

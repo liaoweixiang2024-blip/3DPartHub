@@ -1,5 +1,5 @@
 import { getPublicSettingsSnapshot } from '../lib/publicSettings';
-import { getAccessToken } from '../stores/useAuthStore';
+import { getAccessToken, useAuthStore } from '../stores/useAuthStore';
 import client from './client';
 import { unwrapApiData } from './response';
 
@@ -71,10 +71,14 @@ export function isDownloadAuthRequiredError(error: unknown): error is DownloadAu
   return error instanceof DownloadAuthRequiredError;
 }
 
-function requireDownloadAuth() {
+async function requireDownloadAuth() {
   const settings = getPublicSettingsSnapshot();
   const requireLogin = settings.require_login_download;
-  if (requireLogin && !getAccessToken()) throw new DownloadAuthRequiredError();
+  if (!requireLogin) return;
+  const { isAuthenticated } = useAuthStore.getState();
+  if (!isAuthenticated) throw new DownloadAuthRequiredError();
+  if (getAccessToken()) return;
+  await useAuthStore.getState().checkAndRefreshToken();
 }
 
 export async function createModelDownloadUrl(
@@ -82,7 +86,7 @@ export async function createModelDownloadUrl(
   format = 'original',
   options: { noRecord?: boolean } = {},
 ): Promise<string> {
-  requireDownloadAuth();
+  await requireDownloadAuth();
 
   const { data } = await client.post('/downloads/model-token', { modelId, format });
   const created = unwrapApiData<{ token: string }>(data);
@@ -109,7 +113,7 @@ export async function downloadModelFile(
 }
 
 export async function createModelDrawingUrl(modelId: string): Promise<string> {
-  requireDownloadAuth();
+  await requireDownloadAuth();
 
   const { data } = await client.post('/downloads/drawing-token', { modelId });
   const created = unwrapApiData<{ url: string }>(data);

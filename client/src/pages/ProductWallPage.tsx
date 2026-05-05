@@ -9,6 +9,7 @@ import {
   type FormEvent,
   type PointerEvent,
 } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import useSWR from 'swr';
 import '../styles/product-wall.css';
 import {
@@ -36,6 +37,8 @@ import ProductWallManagementPanel from '../components/product-wall/ManagementPan
 import { AdminManagementPage } from '../components/shared/AdminManagementPage';
 import { AdminPageShell } from '../components/shared/AdminPageShell';
 import Icon from '../components/shared/Icon';
+import LoginConfirmDialog from '../components/shared/LoginConfirmDialog';
+import { isLoginDialogEnabled } from '../components/shared/ProtectedLink';
 import ResponsiveSectionTabs from '../components/shared/ResponsiveSectionTabs';
 import SafeImage from '../components/shared/SafeImage';
 import { useToast } from '../components/shared/Toast';
@@ -235,6 +238,8 @@ function PreviewActionButton({
 
 export default function ProductWallPage() {
   useDocumentTitle('产品图库');
+  const navigate = useNavigate();
+  const location = useLocation();
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const folderInputRef = useRef<HTMLInputElement | null>(null);
   const loadMoreRef = useRef<HTMLButtonElement | null>(null);
@@ -417,9 +422,16 @@ export default function ProductWallPage() {
     setEditingItem((current) => (current?.id === updated.id ? updated : current));
     void mutate((current) => current?.map((item) => (item.id === updated.id ? updated : item)), { revalidate: false });
   };
+  const [loginDialogOpen, setLoginDialogOpen] = useState(false);
+  const [loginDialogReason, setLoginDialogReason] = useState('');
   const toggleFavoriteItem = async (item: WallItem) => {
     if (!isLoggedIn) {
-      toast('请先登录后再收藏图片', 'error');
+      if (isLoginDialogEnabled()) {
+        setLoginDialogReason('收藏图片');
+        setLoginDialogOpen(true);
+      } else {
+        navigate('/login', { state: { from: location.pathname } });
+      }
       return;
     }
     const wasFavorite = favoriteIds.has(item.id);
@@ -474,7 +486,12 @@ export default function ProductWallPage() {
   const uploadFiles = useCallback(
     async (fileList: FileList | File[], meta?: { title?: string; description?: string }) => {
       if (!canUpload) {
-        toast('请先登录后再上传图片', 'error');
+        if (isLoginDialogEnabled()) {
+          setLoginDialogReason('上传图片');
+          setLoginDialogOpen(true);
+        } else {
+          navigate('/login', { state: { from: location.pathname } });
+        }
         return;
       }
       if (!uploadKind) {
@@ -1638,6 +1655,7 @@ export default function ProductWallPage() {
           </div>
         </div>
       )}
+      <LoginConfirmDialog open={loginDialogOpen} onClose={() => setLoginDialogOpen(false)} reason={loginDialogReason} />
     </AdminPageShell>
   );
 }

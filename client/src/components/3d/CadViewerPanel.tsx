@@ -563,6 +563,7 @@ export default function CadViewerPanel({
               : 'absolute top-2 left-2 z-40 w-8 h-8 flex items-center justify-center rounded-full micro-glass text-on-surface-variant hover:text-on-surface active:scale-90 transition-all'
           }
           aria-label={isFullscreen ? '退出全屏' : '返回上一页'}
+          data-tooltip-ignore
         >
           <Icon name="arrow_back" size={18} />
           {variant === 'desktop' && <span>{isFullscreen ? '退出全屏' : '返回'}</span>}

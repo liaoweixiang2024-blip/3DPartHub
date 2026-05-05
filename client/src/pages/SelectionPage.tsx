@@ -15,6 +15,8 @@ import {
 import { AdminContentPanel, AdminManagementPage } from '../components/shared/AdminManagementPage';
 import { AdminPageShell } from '../components/shared/AdminPageShell';
 import Icon from '../components/shared/Icon';
+import LoginConfirmDialog from '../components/shared/LoginConfirmDialog';
+import { isLoginDialogEnabled } from '../components/shared/ProtectedLink';
 import SafeImage from '../components/shared/SafeImage';
 import { useToast } from '../components/shared/Toast';
 import { useDocumentTitle } from '../hooks/useDocumentTitle';
@@ -1216,15 +1218,22 @@ export default function SelectionPage() {
   /* ── share handler ── */
   const [sharing, setSharing] = useState(false);
 
-  function requireLogin() {
-    toast('请先登录后分享', 'error');
-    navigate('/login', { state: { from: location.pathname + location.search } });
+  const [loginDialogOpen, setLoginDialogOpen] = useState(false);
+  const [loginDialogReason, setLoginDialogReason] = useState('');
+
+  function requireLogin(reason: string) {
+    if (isLoginDialogEnabled()) {
+      setLoginDialogReason(reason);
+      setLoginDialogOpen(true);
+    } else {
+      navigate('/login', { state: { from: location.pathname } });
+    }
   }
 
   async function handleShare(withResults = false) {
     if (!slug) return;
     if (!user) {
-      requireLogin();
+      requireLogin('分享选型');
       return;
     }
     setSharing(true);
@@ -1465,6 +1474,10 @@ export default function SelectionPage() {
 
   /* ── subcategory selection ── */
   async function handleShareSub(chSlug: string) {
+    if (!user) {
+      requireLogin('分享选型');
+      return;
+    }
     setSharing(true);
     try {
       const url = `${window.location.origin}/selection?g=${encodeURIComponent(chSlug)}`;
@@ -2147,6 +2160,10 @@ export default function SelectionPage() {
     ) : null;
 
   const handleToolbarShare = () => {
+    if (!user) {
+      requireLogin('分享选型');
+      return;
+    }
     if (phase === 'wizard' && liveCat) {
       void handleShare(false);
       return;
@@ -2316,47 +2333,63 @@ export default function SelectionPage() {
   /* ══════════ Desktop Layout ══════════ */
   if (isDesktop) {
     return (
-      <AdminPageShell>
-        <AdminManagementPage
-          title={shellTitle}
-          description={shellDescription}
-          toolbar={selectionToolbar}
-          contentClassName="min-h-0"
-        >
-          <AdminContentPanel scroll>
-            <div ref={scrollContainerRef} className={desktopScrollContainerClass}>
-              {contentBody}
-            </div>
-            {actionBar}
-          </AdminContentPanel>
-        </AdminManagementPage>
-        <InquiryDialog open={inquiryOpen} onClose={() => setInquiryOpen(false)} products={selectedProds} />
-      </AdminPageShell>
+      <>
+        <AdminPageShell>
+          <AdminManagementPage
+            title={shellTitle}
+            description={shellDescription}
+            toolbar={selectionToolbar}
+            contentClassName="min-h-0"
+          >
+            <AdminContentPanel scroll>
+              <div ref={scrollContainerRef} className={desktopScrollContainerClass}>
+                {contentBody}
+              </div>
+              {actionBar}
+            </AdminContentPanel>
+          </AdminManagementPage>
+          <InquiryDialog open={inquiryOpen} onClose={() => setInquiryOpen(false)} products={selectedProds} />
+        </AdminPageShell>
+        <LoginConfirmDialog
+          open={loginDialogOpen}
+          onClose={() => setLoginDialogOpen(false)}
+          reason={loginDialogReason}
+          returnUrl={location.pathname + location.search}
+        />
+      </>
     );
   }
 
   /* ══════════ Mobile Layout ══════════ */
   return (
-    <AdminPageShell
-      mobileMainRef={mobileMainRef}
-      mobileContentClassName="flex flex-col gap-3 px-3 py-3 pb-4 min-h-full"
-    >
-      <AdminManagementPage
-        title={shellTitle}
-        description={shellDescription}
-        actions={shellActions}
-        toolbar={selectionToolbar}
-        className="flex-1 h-auto min-h-[auto] flex flex-col gap-3"
-        contentClassName="flex-1 min-h-[auto] flex flex-col"
+    <>
+      <AdminPageShell
+        mobileMainRef={mobileMainRef}
+        mobileContentClassName="flex flex-col gap-3 px-3 py-3 pb-4 min-h-full"
       >
-        <AdminContentPanel className="flex-1">
-          {contentBody}
-          {selectedIds.size > 0 && <div className="h-28" />}
-          {actionBar}
-        </AdminContentPanel>
-      </AdminManagementPage>
+        <AdminManagementPage
+          title={shellTitle}
+          description={shellDescription}
+          actions={shellActions}
+          toolbar={selectionToolbar}
+          className="flex-1 h-auto min-h-[auto] flex flex-col gap-3"
+          contentClassName="flex-1 min-h-[auto] flex flex-col"
+        >
+          <AdminContentPanel className="flex-1">
+            {contentBody}
+            {selectedIds.size > 0 && <div className="h-28" />}
+            {actionBar}
+          </AdminContentPanel>
+        </AdminManagementPage>
 
-      <InquiryDialog open={inquiryOpen} onClose={() => setInquiryOpen(false)} products={selectedProds} />
-    </AdminPageShell>
+        <InquiryDialog open={inquiryOpen} onClose={() => setInquiryOpen(false)} products={selectedProds} />
+      </AdminPageShell>
+      <LoginConfirmDialog
+        open={loginDialogOpen}
+        onClose={() => setLoginDialogOpen(false)}
+        reason={loginDialogReason}
+        returnUrl={location.pathname + location.search}
+      />
+    </>
   );
 }

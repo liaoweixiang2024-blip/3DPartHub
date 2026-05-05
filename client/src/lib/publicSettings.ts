@@ -106,7 +106,9 @@ export async function getCachedPublicSettings(): Promise<Partial<SystemSettings>
 
 // Synchronous getter for already-fetched settings
 export function getPublicSettingsSnapshot(): Partial<SystemSettings> {
-  return cache || { show_watermark: false, watermark_image: '', site_title: '', site_logo: '' };
+  return (
+    cache || { show_watermark: false, watermark_image: '', site_title: '', site_logo: '', login_dialog_enabled: true }
+  );
 }
 
 // Get site title (sync, with fallback) — used in nav bar, login page

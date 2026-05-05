@@ -765,6 +765,7 @@ function ProductCard({
               onClick={(e) => {
                 e.preventDefault();
                 e.stopPropagation();
+                onOpenManageDetail?.(product);
               }}
               className="border border-outline-variant/40 text-on-surface-variant hover:text-on-surface rounded-sm py-1 px-3 text-xs flex items-center gap-1"
             >
@@ -857,6 +858,7 @@ function ProductCard({
             onClick={(e) => {
               e.preventDefault();
               e.stopPropagation();
+              onOpenManageDetail?.(product);
             }}
             className="flex-1 border border-outline-variant/40 text-on-surface-variant hover:text-on-surface rounded-sm py-1.5 px-3 text-xs text-center flex items-center justify-center gap-1"
           >

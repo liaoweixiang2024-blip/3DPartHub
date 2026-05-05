@@ -5,6 +5,7 @@ import useSWR from 'swr';
 import { authApi } from '../api/auth';
 import { listShares, type ShareLink } from '../api/shares';
 import { AdminPageShell } from '../components/shared/AdminPageShell';
+import { AdminPageHero } from '../components/shared/AdminManagementPage';
 import Icon from '../components/shared/Icon';
 import { PageBody, PageHeader } from '../components/shared/PagePrimitives';
 import SafeImage from '../components/shared/SafeImage';
@@ -90,9 +91,9 @@ function NotificationPrefs({ compact = false }: { compact?: boolean }) {
     return (
       <div>
         <button onClick={() => setExpanded(!expanded)} className="w-full flex items-center justify-between">
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-3">
             <Icon name="notifications" size={20} className="text-on-surface-variant" />
-            <h3 className="font-headline text-sm font-semibold text-on-surface uppercase tracking-wide">通知设置</h3>
+            <span className="text-sm text-on-surface">通知设置</span>
           </div>
           <Icon
             name="expand_more"
@@ -707,8 +708,8 @@ function MobileContent() {
   );
 
   return (
-    <PageBody className="px-4 py-5 pb-20">
-      <PageHeader title="个人设置" />
+    <PageBody className="pb-20 space-y-4">
+      <AdminPageHero title="个人设置" description="管理你的账户信息和偏好" />
 
       {/* Avatar + basic info */}
       <div className="flex items-center gap-4 rounded-lg bg-surface-container-high p-4">
@@ -731,8 +732,19 @@ function MobileContent() {
           </div>
         </div>
         <div className="min-w-0 flex-1">
-          <h2 className="text-sm font-bold text-on-surface truncate">{user?.username || '用户'}</h2>
+          <div className="flex items-center gap-2">
+            <h2 className="text-sm font-bold text-on-surface truncate">{user?.username || '用户'}</h2>
+            <span className="shrink-0 rounded-md bg-primary-container/15 px-1.5 py-0.5 text-[10px] font-medium text-primary-container">
+              {ROLE_LABELS[user?.role || ''] || user?.role}
+            </span>
+          </div>
           <p className="text-xs text-on-surface-variant break-all line-clamp-2">{user?.email}</p>
+          {user?.createdAt && (
+            <p className="text-[10px] text-on-surface-variant/50 mt-0.5">
+              {new Date(user.createdAt).toLocaleDateString('zh-CN', { year: 'numeric', month: 'long', day: 'numeric' })}
+              加入
+            </p>
+          )}
         </div>
         {!editing && (
           <button
@@ -842,36 +854,34 @@ function MobileContent() {
       ) : (
         <div className="space-y-2">
           <div className="flex items-center justify-between gap-3 rounded-lg bg-surface-container-high px-4 py-3">
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-3 shrink-0">
               <Icon name="domain" size={20} className="text-on-surface/50" />
               <span className="text-sm text-on-surface">公司</span>
             </div>
-            <span className="text-sm text-on-surface-variant text-right break-words min-w-0">
-              {user?.company || '-'}
-            </span>
+            <span className="text-sm text-on-surface-variant text-right truncate min-w-0">{user?.company || '-'}</span>
           </div>
           <div className="flex items-center justify-between gap-3 rounded-lg bg-surface-container-high px-4 py-3">
             <div className="flex items-center gap-3">
               <Icon name="phone" size={20} className="text-on-surface/50" />
               <span className="text-sm text-on-surface">电话</span>
             </div>
-            <span className="text-sm text-on-surface-variant text-right break-words min-w-0">{user?.phone || '-'}</span>
+            <span className="text-sm text-on-surface-variant text-right truncate min-w-0">{user?.phone || '-'}</span>
           </div>
           <div className="flex items-center justify-between gap-3 rounded-lg bg-surface-container-high px-4 py-3">
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-3 shrink-0">
               <Icon name="badge" size={20} className="text-on-surface/50" />
               <span className="text-sm text-on-surface">部门/职位</span>
             </div>
-            <span className="text-sm text-on-surface-variant text-right break-words min-w-0">
+            <span className="text-sm text-on-surface-variant text-right truncate min-w-0">
               {(user as any)?.department || '-'}
             </span>
           </div>
           <div className="flex items-center justify-between gap-3 rounded-lg bg-surface-container-high px-4 py-3">
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-3 shrink-0">
               <Icon name="link" size={20} className="text-on-surface/50" />
               <span className="text-sm text-on-surface">地址</span>
             </div>
-            <span className="text-sm text-on-surface-variant text-right break-words min-w-0">
+            <span className="text-sm text-on-surface-variant text-right truncate min-w-0">
               {(user as any)?.address || '-'}
             </span>
           </div>
@@ -886,26 +896,6 @@ function MobileContent() {
           )}
         </div>
       )}
-
-      {/* Account info */}
-      <div className="rounded-lg bg-surface-container-high px-4 py-3 space-y-3">
-        <div className="flex items-center gap-2 border-b border-outline-variant/10 pb-2">
-          <Icon name="shield" size={18} className="text-on-surface/50" />
-          <span className="text-xs font-medium text-on-surface-variant uppercase tracking-wider">账户信息</span>
-        </div>
-        <div className="flex items-center justify-between">
-          <span className="text-xs text-on-surface-variant">角色</span>
-          <span className="text-sm text-on-surface">{ROLE_LABELS[user?.role || ''] || user?.role}</span>
-        </div>
-        <div className="flex items-center justify-between">
-          <span className="text-xs text-on-surface-variant">注册时间</span>
-          <span className="text-sm text-on-surface">
-            {user?.createdAt
-              ? new Date(user.createdAt).toLocaleDateString('zh-CN', { year: 'numeric', month: 'long', day: 'numeric' })
-              : '-'}
-          </span>
-        </div>
-      </div>
 
       {/* Password */}
       <button
@@ -932,7 +922,7 @@ function MobileContent() {
       </button>
 
       {/* Notification prefs */}
-      <div className="rounded-lg bg-surface-container-high p-4">
+      <div className="rounded-lg bg-surface-container-high px-4 py-3">
         <NotificationPrefs compact />
       </div>
 
@@ -948,7 +938,5 @@ export default function ProfilePage() {
   useDocumentTitle('个人设置');
   const isDesktop = useMediaQuery('(min-width: 768px)');
 
-  return (
-    <AdminPageShell mobileContentClassName="p-0">{isDesktop ? <DesktopContent /> : <MobileContent />}</AdminPageShell>
-  );
+  return <AdminPageShell>{isDesktop ? <DesktopContent /> : <MobileContent />}</AdminPageShell>;
 }

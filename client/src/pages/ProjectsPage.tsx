@@ -1,10 +1,12 @@
 import { motion, AnimatePresence } from 'framer-motion';
 import { useState, useCallback } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, Navigate } from 'react-router-dom';
 import useSWR from 'swr';
 import { projectApi, type Project } from '../api/projects';
 import { AdminPageShell } from '../components/shared/AdminPageShell';
 import Icon from '../components/shared/Icon';
+import LoginConfirmDialog from '../components/shared/LoginConfirmDialog';
+import { isLoginDialogEnabled } from '../components/shared/ProtectedLink';
 import InfiniteLoadTrigger from '../components/shared/InfiniteLoadTrigger';
 import { PageHeader } from '../components/shared/PagePrimitives';
 import { useToast } from '../components/shared/Toast';
@@ -71,10 +73,10 @@ function ProjectCard({ project, onDelete }: { project: Project; onDelete: (id: s
 export default function ProjectsPage() {
   useDocumentTitle('项目');
   const isDesktop = useMediaQuery('(min-width: 768px)');
-  const navigate = useNavigate();
   const { isAuthenticated } = useAuthStore();
   const [showCreate, setShowCreate] = useState(false);
   const [newName, setNewName] = useState('');
+  const [loginDialogOpen, setLoginDialogOpen] = useState(!isAuthenticated);
   const [newDesc, setNewDesc] = useState('');
 
   const { data: projects, mutate } = useSWR(isAuthenticated ? '/projects' : null, () => projectApi.list());
@@ -114,13 +116,17 @@ export default function ProjectsPage() {
   );
 
   if (!isAuthenticated) {
+    if (!isLoginDialogEnabled()) {
+      return <Navigate to="/login" state={{ from: '/projects' }} replace />;
+    }
     return (
       <div className="flex flex-col items-center justify-center h-dvh bg-surface gap-4">
         <Icon name="lock" size={64} className="text-on-surface-variant/30" />
         <p className="text-on-surface-variant">请先登录查看项目</p>
-        <button onClick={() => navigate('/login')} className="text-primary hover:underline">
+        <button onClick={() => setLoginDialogOpen(true)} className="text-primary hover:underline">
           前往登录
         </button>
+        <LoginConfirmDialog open={loginDialogOpen} onClose={() => setLoginDialogOpen(false)} reason="查看项目" />
       </div>
     );
   }

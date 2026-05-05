@@ -30,7 +30,9 @@ import { useAuthStore } from '../../stores/useAuthStore';
 import { useThemeStore } from '../../stores/useThemeStore';
 import BrandMark from './BrandMark';
 import Icon from './Icon';
+import LoginConfirmDialog from './LoginConfirmDialog';
 import Tooltip from './Tooltip';
+import { checkProtectedAccess } from './ProtectedLink';
 
 const NotificationPanel = lazy(() => import('./NotificationPanel'));
 const UploadModal = lazy(() => import('./UploadModal'));
@@ -86,7 +88,13 @@ function UploadModalLoader({
   );
 }
 
-function UserMenu({ size = 'default' }: { size?: 'compact' | 'default' }) {
+function UserMenu({
+  size = 'default',
+  onLoginRequired,
+}: {
+  size?: 'compact' | 'default';
+  onLoginRequired: (reason: string, returnUrl: string) => void;
+}) {
   const [open, setOpen] = useState(false);
   const { user, logout } = useAuthStore();
   const navigate = useNavigate();
@@ -116,37 +124,26 @@ function UserMenu({ size = 'default' }: { size?: 'compact' | 'default' }) {
     {
       label: '个人中心',
       icon: 'person',
-      onClick: () => {
-        setOpen(false);
-        navigate('/profile');
-      },
+      path: '/profile',
     },
     {
       label: '修改密码',
       icon: 'lock',
-      onClick: () => {
-        setOpen(false);
-        navigate('/profile?tab=security');
-      },
+      path: '/profile?tab=security',
     },
     {
       label: '下载历史',
       icon: 'download',
-      onClick: () => {
-        setOpen(false);
-        navigate('/downloads');
-      },
+      path: '/downloads',
     },
     {
       label: '我的分享',
       icon: 'share',
-      onClick: () => {
-        setOpen(false);
-        navigate('/my-shares');
-      },
+      path: '/my-shares',
     },
-    { label: '退出登录', icon: 'logout', onClick: handleLogout, danger: true },
   ];
+
+  const isAdminUser = user?.role === 'ADMIN';
 
   if (!user) {
     return (
@@ -197,17 +194,42 @@ function UserMenu({ size = 'default' }: { size?: 'compact' | 'default' }) {
               {menuItems.map((item) => (
                 <button
                   key={item.label}
-                  onClick={item.onClick}
-                  className={`w-full flex items-center gap-3 px-4 py-2.5 text-sm transition-colors ${
-                    'danger' in item
-                      ? 'text-error hover:bg-error-container/10'
-                      : 'text-on-surface hover:bg-surface-container-highest'
-                  }`}
+                  onClick={() => {
+                    setOpen(false);
+                    const result = checkProtectedAccess(item.path);
+                    if (result.action === 'dialog') {
+                      onLoginRequired(result.reason, result.returnUrl);
+                    } else if (result.action === 'redirect') {
+                      navigate('/login', { state: { from: result.returnUrl } });
+                    } else {
+                      navigate(item.path);
+                    }
+                  }}
+                  className="w-full flex items-center gap-3 px-4 py-2.5 text-sm transition-colors text-on-surface hover:bg-surface-container-highest"
                 >
                   <Icon name={item.icon} size={18} />
                   {item.label}
                 </button>
               ))}
+              {isAdminUser && (
+                <button
+                  onClick={() => {
+                    setOpen(false);
+                    navigate('/admin/models');
+                  }}
+                  className="w-full flex items-center gap-3 px-4 py-2.5 text-sm transition-colors text-on-surface hover:bg-surface-container-highest"
+                >
+                  <Icon name="admin_panel_settings" size={18} />
+                  后台管理
+                </button>
+              )}
+              <button
+                onClick={handleLogout}
+                className="w-full flex items-center gap-3 px-4 py-2.5 text-sm transition-colors text-error hover:bg-error-container/10"
+              >
+                <Icon name="logout" size={18} />
+                退出登录
+              </button>
             </div>
           </motion.div>
         )}
@@ -221,7 +243,7 @@ function ThemeToggle() {
   return (
     <button
       onClick={toggleTheme}
-      className="flex h-9 w-9 items-center justify-center text-on-surface-variant hover:text-on-surface transition-colors rounded-sm hover:bg-surface-container-high"
+      className="p-2 text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high rounded-lg transition-colors"
       title={theme === 'dark' ? '切换亮色模式' : '切换暗色模式'}
       aria-label={theme === 'dark' ? '切换亮色模式' : '切换暗色模式'}
       data-tooltip={theme === 'dark' ? '切换亮色模式' : '切换暗色模式'}
@@ -236,7 +258,7 @@ function ThemeToggle() {
           transition={{ duration: 0.2 }}
           style={{ display: 'block' }}
         >
-          <Icon name={theme === 'dark' ? 'light_mode' : 'dark_mode'} size={24} />
+          <Icon name={theme === 'dark' ? 'light_mode' : 'dark_mode'} size={20} />
         </motion.span>
       </AnimatePresence>
     </button>
@@ -245,6 +267,9 @@ function ThemeToggle() {
 
 export default function TopNav({ compact = false, onMenuToggle }: TopNavProps) {
   const [uploadOpen, setUploadOpen] = useState(false);
+  const [loginDialogOpen, setLoginDialogOpen] = useState(false);
+  const [loginReturnUrl, setLoginReturnUrl] = useState('');
+  const [loginDialogReason, setLoginDialogReason] = useState('');
   const { user } = useAuthStore();
   const isAdmin = user?.role === 'ADMIN';
   const [searchParams] = useSearchParams();
@@ -419,7 +444,14 @@ export default function TopNav({ compact = false, onMenuToggle }: TopNavProps) {
             <div className="ml-auto flex h-9 shrink-0 items-center gap-0.5">
               <NotificationPanelLoader compact />
               <ThemeToggle />
-              <UserMenu size="compact" />
+              <UserMenu
+                size="compact"
+                onLoginRequired={(reason, returnUrl) => {
+                  setLoginReturnUrl(returnUrl);
+                  setLoginDialogReason(reason);
+                  setLoginDialogOpen(true);
+                }}
+              />
             </div>
           </div>
           <div className="px-3 pb-2">
@@ -457,6 +489,12 @@ export default function TopNav({ compact = false, onMenuToggle }: TopNavProps) {
           </div>
         </header>
         <UploadModalLoader open={uploadOpen} onClose={() => setUploadOpen(false)} onConverted={handleUploaded} />
+        <LoginConfirmDialog
+          open={loginDialogOpen}
+          onClose={() => setLoginDialogOpen(false)}
+          reason={loginDialogReason}
+          returnUrl={loginReturnUrl}
+        />
       </>
     );
   }
@@ -506,7 +544,22 @@ export default function TopNav({ compact = false, onMenuToggle }: TopNavProps) {
         <div className="flex items-center gap-0.5 shrink-0 ml-auto pr-6">
           {topNavItems.map((item) => (
             <Tooltip key={item.path} text={item.label} side="bottom">
-              <Link to={item.path} className={desktopIconClass}>
+              <Link
+                to={item.path}
+                className={desktopIconClass}
+                onClick={(e) => {
+                  const result = checkProtectedAccess(item.path);
+                  if (result.action === 'dialog') {
+                    e.preventDefault();
+                    setLoginReturnUrl(result.returnUrl);
+                    setLoginDialogReason(result.reason);
+                    setLoginDialogOpen(true);
+                  } else if (result.action === 'redirect') {
+                    e.preventDefault();
+                    navigate('/login', { state: { from: result.returnUrl } });
+                  }
+                }}
+              >
                 <Icon name={item.icon} size={20} />
               </Link>
             </Tooltip>
@@ -523,10 +576,22 @@ export default function TopNav({ compact = false, onMenuToggle }: TopNavProps) {
           )}
           <NotificationPanelLoader />
           <ThemeToggle />
-          <UserMenu />
+          <UserMenu
+            onLoginRequired={(reason, returnUrl) => {
+              setLoginReturnUrl(returnUrl);
+              setLoginDialogReason(reason);
+              setLoginDialogOpen(true);
+            }}
+          />
         </div>
       </header>
       <UploadModalLoader open={uploadOpen} onClose={() => setUploadOpen(false)} onConverted={handleUploaded} />
+      <LoginConfirmDialog
+        open={loginDialogOpen}
+        onClose={() => setLoginDialogOpen(false)}
+        reason={loginDialogReason}
+        returnUrl={loginReturnUrl}
+      />
     </>
   );
 }

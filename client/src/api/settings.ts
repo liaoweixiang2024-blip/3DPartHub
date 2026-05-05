@@ -158,6 +158,16 @@ export interface SystemSettings {
   ticket_attachment_types: string;
   // API rate limiting
   api_rate_limit: number;
+  // Login dialog
+  login_dialog_enabled: boolean;
+  login_dialog_favorites: boolean;
+  login_dialog_downloads: boolean;
+  login_dialog_my_shares: boolean;
+  login_dialog_profile: boolean;
+  login_dialog_support: boolean;
+  login_dialog_my_tickets: boolean;
+  login_dialog_my_inquiries: boolean;
+  login_dialog_projects: boolean;
 }
 
 export interface BackupStats {

@@ -39,6 +39,7 @@ export function createPublicSharesRouter() {
               uploadPath: true,
               thumbnailUrl: true,
               description: true,
+              drawingUrl: true,
               updatedAt: true,
             },
           },
@@ -86,6 +87,7 @@ export function createPublicSharesRouter() {
       expiresAt: share.expiresAt,
       siteTitle,
       gltfUrl: share.allowPreview && accessVerified ? withAssetVersion(model.gltfUrl, model.updatedAt) : undefined,
+      drawingUrl: share.allowDrawing && model.drawingUrl ? withAssetVersion(model.drawingUrl, model.updatedAt) : null,
     });
   });
 

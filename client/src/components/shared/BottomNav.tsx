@@ -1,16 +1,23 @@
-import { useEffect } from 'react';
-import { Link, useLocation } from 'react-router-dom';
+import { useEffect, useState } from 'react';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import useSWR from 'swr';
 import { DEFAULT_MOBILE_NAV, getBusinessConfig } from '../../lib/businessConfig';
 import { getCachedPublicSettings } from '../../lib/publicSettings';
+
 import Icon from './Icon';
+import LoginConfirmDialog from './LoginConfirmDialog';
+import { checkProtectedAccess } from './ProtectedLink';
 
 const tabs = DEFAULT_MOBILE_NAV;
 
 export default function BottomNav() {
   const location = useLocation();
+  const navigate = useNavigate();
   const { data: settings } = useSWR('publicSettings', () => getCachedPublicSettings());
   const visibleTabs = getBusinessConfig(settings).mobileNav.slice(0, 5);
+  const [loginDialogOpen, setLoginDialogOpen] = useState(false);
+  const [loginReturnUrl, setLoginReturnUrl] = useState('');
+  const [loginDialogReason, setLoginDialogReason] = useState('');
 
   useEffect(() => {
     const viewport = window.visualViewport;
@@ -55,6 +62,18 @@ export default function BottomNav() {
           <Link
             key={tab.path}
             to={tab.path}
+            onClick={(e) => {
+              const result = checkProtectedAccess(tab.path);
+              if (result.action === 'dialog') {
+                e.preventDefault();
+                setLoginReturnUrl(result.returnUrl);
+                setLoginDialogReason(result.reason);
+                setLoginDialogOpen(true);
+              } else if (result.action === 'redirect') {
+                e.preventDefault();
+                navigate('/login', { state: { from: result.returnUrl } });
+              }
+            }}
             className={`flex flex-col items-center gap-0.5 py-1 min-w-[48px] min-h-[44px] justify-center cursor-pointer active:scale-95 transition-transform ${
               active ? 'text-primary-container border-t-2 border-primary-container -mt-px' : 'text-on-surface-variant'
             }`}
@@ -64,6 +83,12 @@ export default function BottomNav() {
           </Link>
         );
       })}
+      <LoginConfirmDialog
+        open={loginDialogOpen}
+        onClose={() => setLoginDialogOpen(false)}
+        reason={loginDialogReason}
+        returnUrl={loginReturnUrl}
+      />
     </nav>
   );
 }

@@ -124,10 +124,19 @@ const isTouchDevice = typeof window !== 'undefined' && ('ontouchstart' in window
 
 export default function GlobalTooltip() {
   const [tooltip, setTooltip] = useState<TooltipState | null>(null);
+  const [isMobile, setIsMobile] = useState(() => typeof window !== 'undefined' && window.innerWidth < 768);
   const [measured, setMeasured] = useState<{ width: number; height: number } | null>(null);
   const measureRef = useRef<HTMLDivElement>(null);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const activeRef = useRef<HTMLElement | null>(null);
+
+  useEffect(() => {
+    const mq = window.matchMedia('(max-width: 767px)');
+    const update = () => setIsMobile(mq.matches);
+    update();
+    mq.addEventListener('change', update);
+    return () => mq.removeEventListener('change', update);
+  }, []);
 
   // Phase 2: measure the hidden tooltip and compute final position
   useEffect(() => {
@@ -243,7 +252,7 @@ export default function GlobalTooltip() {
     };
   }, []);
 
-  if (!tooltip || isTouchDevice) return null;
+  if (!tooltip || isTouchDevice || isMobile) return null;
 
   const isVisible = measured !== null;
 

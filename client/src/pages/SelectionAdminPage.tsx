@@ -64,6 +64,52 @@ function SelectionToolbarButtonContent({ icon, children }: { icon: string; child
   );
 }
 
+function ToolbarMoreMenu({
+  items,
+}: {
+  items: { label: string; icon: string; action: () => void; disabled?: boolean }[];
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [open]);
+
+  return (
+    <div className="relative" ref={ref}>
+      <button onClick={() => setOpen(!open)} className={SELECTION_TOOLBAR_BUTTON_SECONDARY}>
+        <SelectionToolbarButtonContent icon="settings">更多设置</SelectionToolbarButtonContent>
+      </button>
+      {open && (
+        <div className="absolute right-0 top-full z-50 mt-1.5 min-w-[10rem] overflow-hidden rounded-lg border border-outline-variant/15 bg-surface-container-high shadow-lg animate-in fade-in-0 zoom-in-95">
+          {items.map((item) => (
+            <button
+              key={item.label}
+              onClick={() => {
+                if (!item.disabled) {
+                  setOpen(false);
+                  item.action();
+                }
+              }}
+              disabled={item.disabled}
+              className="flex w-full items-center gap-2.5 px-3 py-2 text-xs font-medium text-on-surface-variant transition-colors hover:bg-surface-container-highest hover:text-on-surface disabled:opacity-35"
+            >
+              <Icon name={item.icon} size={14} />
+              <span className="whitespace-nowrap">{item.label}</span>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function getApiErrorMessage(err: unknown, fallback: string) {
   const error = err as { response?: { data?: { detail?: string; message?: string } }; message?: string };
   const data = error.response?.data;
@@ -357,7 +403,11 @@ function ColumnEditor({ columns, onChange }: { columns: ColumnDef[]; onChange: (
   function addColumn() {
     onChange([...columns, { key: `col_${columns.length}`, label: '', unit: '' }]);
   }
-  function updateCol(i: number, field: keyof ColumnDef, value: string | boolean | undefined) {
+  function updateCol(
+    i: number,
+    field: keyof ColumnDef,
+    value: string | boolean | string[] | Record<string, unknown> | undefined,
+  ) {
     const next = [...columns];
     next[i] = { ...next[i], [field]: value };
     if (field === 'key' && typeof value === 'string')
@@ -616,6 +666,7 @@ function ColumnEditor({ columns, onChange }: { columns: ColumnDef[]; onChange: (
                       type="button"
                       onClick={() => removeCol(i)}
                       className={`${SELECTION_ICON_BUTTON_DELETE} md:hidden`}
+                      data-tooltip-ignore
                       aria-label="删除参数列"
                     >
                       <Icon name="delete" size={15} />
@@ -626,6 +677,7 @@ function ColumnEditor({ columns, onChange }: { columns: ColumnDef[]; onChange: (
                     type="button"
                     onClick={() => removeCol(i)}
                     className={`${SELECTION_ICON_BUTTON_DELETE} hidden md:grid`}
+                    data-tooltip-ignore
                     aria-label="删除参数列"
                   >
                     <Icon name="delete" size={15} />
@@ -1133,6 +1185,7 @@ function Content() {
 
   // ---- Product handlers ----
   const activeCat = categories.find((c) => c.id === selectedCatId);
+  const noProductCat = tab !== 'products' || !selectedCatId || !activeCat;
   const productColumns = (activeCat?.columns as ColumnDef[]) || [];
   const productsLoading = Boolean(selectedCatId && activeCat && !productsData);
   const selectableProductColumns = generatableProductColumns(productColumns);
@@ -1715,26 +1768,68 @@ function Content() {
     <AdminManagementPage
       title="选型管理"
       description="管理选型分类、产品、参数列定义和批量导入数据"
-      toolbar={
-        <div className="grid items-start gap-3 md:min-h-11 md:grid-cols-[minmax(12rem,18rem)_minmax(0,1fr)_minmax(10rem,18rem)] md:items-center">
-          <ResponsiveSectionTabs
-            tabs={[
-              { value: 'categories', label: '分类管理', count: totalCats, icon: 'category' },
-              { value: 'products', label: '产品管理', count: totalProducts, icon: 'inventory_2' },
+      actions={
+        <div className="hidden items-center gap-2 md:flex">
+          <button onClick={openNewProd} disabled={noProductCat} className={SELECTION_TOOLBAR_BUTTON_PRIMARY}>
+            <SelectionToolbarButtonContent icon="add">新建产品</SelectionToolbarButtonContent>
+          </button>
+          <ToolbarMoreMenu
+            items={[
+              {
+                label: '批量导入',
+                icon: 'upload',
+                disabled: noProductCat,
+                action: () => {
+                  setBatchParsed(null);
+                  setBatchErrors([]);
+                  setShowBatchModal(true);
+                },
+              },
+              { label: '批量生成', icon: 'auto_awesome', disabled: noProductCat, action: openGenerateProducts },
+              { label: '导出', icon: 'download', disabled: noProductCat, action: exportCurrentProducts },
+              {
+                label: '选项设置',
+                icon: 'settings',
+                disabled: noProductCat,
+                action: () => {
+                  setOptImgField('');
+                  setOptSettingsSearch('');
+                  setOrderItems([]);
+                  setShowOptImgModal(true);
+                },
+              },
+              { label: '新建分类', icon: 'add', action: openNewCat },
+              { label: '分组管理', icon: 'folder', action: openGroupManager },
+              {
+                label: '排序',
+                icon: 'view_list',
+                action: () => {
+                  setCatSortItems(categories.map((c) => ({ id: c.id, name: c.name })));
+                  setShowCatSortModal(true);
+                },
+              },
             ]}
-            value={tab}
-            onChange={(next) => {
-              setTab(next as Tab);
-              setCatFilter('all');
-            }}
-            mobileTitle="选型管理"
           />
-          <div className="grid min-w-0 grid-cols-4 items-center gap-1.5 overflow-visible md:flex md:h-9 md:flex-nowrap md:justify-end md:gap-2">
-            <button
-              onClick={openNewProd}
-              disabled={!selectedCatId || !activeCat}
-              className={SELECTION_TOOLBAR_BUTTON_PRIMARY}
-            >
+        </div>
+      }
+      toolbar={
+        <div className="grid items-start gap-3 md:flex md:flex-nowrap md:items-center md:gap-3 md:min-h-11">
+          <div className="min-w-0 md:shrink-0">
+            <ResponsiveSectionTabs
+              tabs={[
+                { value: 'categories', label: '分类管理', count: totalCats, icon: 'category' },
+                { value: 'products', label: '产品管理', count: totalProducts, icon: 'inventory_2' },
+              ]}
+              value={tab}
+              onChange={(next) => {
+                setTab(next as Tab);
+                setCatFilter('all');
+              }}
+              mobileTitle="选型管理"
+            />
+          </div>
+          <div className="grid min-w-0 grid-cols-4 items-center gap-1.5 overflow-visible md:hidden">
+            <button onClick={openNewProd} disabled={noProductCat} className={SELECTION_TOOLBAR_BUTTON_PRIMARY}>
               <SelectionToolbarButtonContent icon="add">新建产品</SelectionToolbarButtonContent>
             </button>
             <button
@@ -1743,20 +1838,20 @@ function Content() {
                 setBatchErrors([]);
                 setShowBatchModal(true);
               }}
-              disabled={!selectedCatId || !activeCat}
+              disabled={noProductCat}
               className={SELECTION_TOOLBAR_BUTTON_SECONDARY}
             >
               <SelectionToolbarButtonContent icon="upload">批量导入</SelectionToolbarButtonContent>
             </button>
             <button
               onClick={openGenerateProducts}
-              disabled={!selectedCatId || !activeCat}
+              disabled={noProductCat}
               className={SELECTION_TOOLBAR_BUTTON_SECONDARY}
             >
               <SelectionToolbarButtonContent icon="auto_awesome">批量生成</SelectionToolbarButtonContent>
             </button>
             <button
-              disabled={!selectedCatId || !activeCat}
+              disabled={noProductCat}
               onClick={exportCurrentProducts}
               className={SELECTION_TOOLBAR_BUTTON_SECONDARY}
             >
@@ -1769,7 +1864,7 @@ function Content() {
                 setOrderItems([]);
                 setShowOptImgModal(true);
               }}
-              disabled={!selectedCatId || !activeCat}
+              disabled={noProductCat}
               className={SELECTION_TOOLBAR_BUTTON_SECONDARY}
             >
               <SelectionToolbarButtonContent icon="settings">选项设置</SelectionToolbarButtonContent>
@@ -1790,7 +1885,7 @@ function Content() {
               <SelectionToolbarButtonContent icon="view_list">排序</SelectionToolbarButtonContent>
             </button>
           </div>
-          <div className="flex h-9 w-full min-w-0 items-center rounded-sm border border-outline-variant/30 bg-surface-container-lowest px-3 md:w-72 md:justify-self-end">
+          <div className="flex h-9 w-full min-w-0 items-center rounded-sm border border-outline-variant/30 bg-surface-container-lowest px-3 md:ml-auto md:w-56 md:shrink-0 lg:w-72">
             <Icon name="search" size={15} className="mr-2 shrink-0 text-on-surface-variant" />
             <input
               {...(tab === 'categories' ? catSearchInputProps : prodSearchInputProps)}
@@ -1889,6 +1984,7 @@ function Content() {
                         <button
                           onClick={() => openEditCat(cat)}
                           className={SELECTION_ICON_BUTTON_EDIT}
+                          data-tooltip-ignore
                           aria-label="编辑分类"
                         >
                           <Icon name="edit" size={14} />
@@ -1912,6 +2008,7 @@ function Content() {
                           <button
                             onClick={() => setDeleteCatId(cat.id)}
                             className={SELECTION_ICON_BUTTON_DELETE}
+                            data-tooltip-ignore
                             aria-label="删除分类"
                           >
                             <Icon name="delete" size={14} />
@@ -2123,6 +2220,7 @@ function Content() {
                                   <button
                                     onClick={() => openEditProd(p)}
                                     className={SELECTION_ICON_BUTTON_EDIT}
+                                    data-tooltip-ignore
                                     aria-label="编辑产品"
                                   >
                                     <Icon name="edit" size={14} />
@@ -2146,6 +2244,7 @@ function Content() {
                                     <button
                                       onClick={() => setDeleteProdId(p.id)}
                                       className={SELECTION_ICON_BUTTON_DELETE}
+                                      data-tooltip-ignore
                                       aria-label="删除产品"
                                     >
                                       <Icon name="delete" size={14} />
@@ -2210,6 +2309,7 @@ function Content() {
                                     <button
                                       onClick={() => openEditProd(p)}
                                       className={SELECTION_ICON_BUTTON_EDIT}
+                                      data-tooltip-ignore
                                       aria-label="编辑产品"
                                     >
                                       <Icon name="edit" size={13} />
@@ -2233,6 +2333,7 @@ function Content() {
                                       <button
                                         onClick={() => setDeleteProdId(p.id)}
                                         className={SELECTION_ICON_BUTTON_DELETE}
+                                        data-tooltip-ignore
                                         aria-label="删除产品"
                                       >
                                         <Icon name="delete" size={13} />
@@ -2313,6 +2414,7 @@ function Content() {
               <button
                 onClick={() => setShowCatModal(false)}
                 className="grid h-8 w-8 place-items-center rounded-full text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface sm:hidden"
+                data-tooltip-ignore
                 aria-label="关闭"
               >
                 <Icon name="close" size={18} />
@@ -2828,6 +2930,7 @@ function Content() {
                     <button
                       onClick={() => setOptSettingsSearch('')}
                       className="absolute right-2 top-1/2 -translate-y-1/2 text-on-surface-variant hover:text-on-surface"
+                      data-tooltip-ignore
                       aria-label="清空搜索"
                     >
                       <Icon name="close" size={14} />
@@ -4300,6 +4403,7 @@ function Content() {
                           mutateCats();
                         }}
                         className={SELECTION_ICON_BUTTON_DELETE}
+                        data-tooltip-ignore
                         aria-label="删除分组"
                       >
                         <Icon name="delete" size={13} />

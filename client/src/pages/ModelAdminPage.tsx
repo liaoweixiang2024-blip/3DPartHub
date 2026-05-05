@@ -1,5 +1,5 @@
 import { AnimatePresence, motion } from 'framer-motion';
-import { startTransition, useCallback, useEffect, useState } from 'react';
+import { startTransition, useCallback, useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import useSWR, { mutate as swrMutate } from 'swr';
 import useSWRInfinite from 'swr/infinite';
@@ -1311,6 +1311,7 @@ function PreviewOperationsModal({
                   <button
                     onClick={onClose}
                     className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-sm border border-outline-variant/20 bg-surface-container-lowest text-on-surface-variant shadow-sm"
+                    data-tooltip-ignore
                     aria-label="关闭预览运维工作台"
                   >
                     <Icon name="close" size={17} />
@@ -1325,6 +1326,7 @@ function PreviewOperationsModal({
                 <button
                   onClick={onClose}
                   className="absolute right-3 top-3 z-10 inline-flex h-8 w-8 items-center justify-center rounded-sm border border-outline-variant/20 bg-surface-container-lowest text-on-surface-variant shadow-sm hover:bg-surface-container-high hover:text-on-surface"
+                  data-tooltip-ignore
                   aria-label="关闭预览运维工作台"
                 >
                   <Icon name="close" size={16} />
@@ -1662,6 +1664,73 @@ function EditDialog({
         </motion.div>
       )}
     </AnimatePresence>
+  );
+}
+
+function ModelCategoryFilter({
+  value,
+  onChange,
+  options,
+  allValue,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  options: { id: string; label: string }[];
+  allValue: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [open]);
+
+  const selected = options.find((o) => o.id === value);
+  const label = selected ? selected.label : '全部分类';
+
+  return (
+    <div className="relative" ref={ref}>
+      <button
+        onClick={() => setOpen(!open)}
+        className="flex h-9 items-center gap-2 rounded-sm border border-outline-variant/20 bg-surface-container-high px-3 text-sm font-medium text-on-surface-variant transition-colors hover:bg-surface-container-highest hover:text-on-surface"
+      >
+        <Icon name="filter_list" size={14} />
+        <span className="max-w-[8rem] truncate">{label}</span>
+        <Icon name="expand_more" size={14} className="ml-0.5" />
+      </button>
+      {open && (
+        <div className="absolute left-0 top-full z-50 mt-1.5 max-h-64 min-w-[10rem] overflow-y-auto rounded-lg border border-outline-variant/15 bg-surface-container-high shadow-lg">
+          <button
+            onClick={() => {
+              onChange(allValue);
+              setOpen(false);
+            }}
+            className={`flex w-full items-center gap-2 px-3 py-2 text-sm transition-colors ${value === allValue ? 'font-medium text-primary-container bg-primary-container/10' : 'text-on-surface-variant hover:bg-surface-container-highest hover:text-on-surface'}`}
+          >
+            <Icon name="category_all" size={14} />
+            全部分类
+          </button>
+          {options.map((opt) => (
+            <button
+              key={opt.id}
+              onClick={() => {
+                onChange(opt.id);
+                setOpen(false);
+              }}
+              className={`flex w-full items-center gap-2 px-3 py-2 text-sm transition-colors ${value === opt.id ? 'font-medium text-primary-container bg-primary-container/10' : 'text-on-surface-variant hover:bg-surface-container-highest hover:text-on-surface'}`}
+            >
+              <Icon name="folder" size={14} />
+              <span className="truncate">{opt.label}</span>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -2055,8 +2124,27 @@ function DesktopContent() {
       <AdminManagementPage
         title="模型管理"
         description="统一维护模型文件、分类归属、预览重建和同名模型合并关系。"
+        actions={
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setPreviewOpsOpen(true)}
+              className={`${headerButtonBase} border border-outline-variant/25 bg-surface-container-low text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface`}
+            >
+              <Icon name="view_in_ar" size={18} />
+              预览运维
+            </button>
+            <button
+              onClick={() => document.getElementById('admin-file-upload')?.click()}
+              disabled={uploading}
+              className={`${headerButtonBase} bg-primary-container text-on-primary hover:opacity-90 active:scale-95 disabled:opacity-50`}
+            >
+              <Icon name="cloud_upload" size={18} />
+              {uploading ? '上传中...' : '上传模型'}
+            </button>
+          </div>
+        }
         toolbar={
-          <div className="flex min-h-11 flex-wrap items-center justify-between gap-3">
+          <div className="flex min-h-11 flex-wrap items-center gap-3">
             <ResponsiveSectionTabs
               tabs={modelAdminTabs}
               value={activeTab}
@@ -2064,66 +2152,19 @@ function DesktopContent() {
               mobileTitle="模型管理分类"
               className="min-w-[280px] flex-1"
             />
-            <div className="ml-auto flex min-h-9 flex-wrap items-center justify-end gap-2">
-              <button
-                onClick={() => setPreviewOpsOpen(true)}
-                className={`${headerButtonBase} border border-outline-variant/25 bg-surface-container-low text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface`}
-              >
-                <Icon name="view_in_ar" size={18} />
-                预览运维
-              </button>
-              <button
-                onClick={() => document.getElementById('admin-file-upload')?.click()}
-                disabled={uploading}
-                className={`${headerButtonBase} bg-primary-container text-on-primary hover:opacity-90 active:scale-95 disabled:opacity-50`}
-              >
-                <Icon name="cloud_upload" size={18} />
-                {uploading ? '上传中...' : '上传模型'}
-              </button>
-              {activeTab === 'models' && (
-                <>
-                  <select
-                    value={categoryFilter}
-                    onChange={(e) => setCategoryFilter(e.target.value)}
-                    className="h-9 w-52 rounded-sm border border-outline-variant/30 bg-surface-container-lowest px-3 text-sm text-on-surface outline-none focus:border-primary"
-                  >
-                    <option value={CATEGORY_FILTER_ALL}>全部分类</option>
-                    {categoryOptions.map((option) => (
-                      <option key={option.id} value={option.id}>
-                        {option.label}
-                      </option>
-                    ))}
-                  </select>
-                  <div className="flex h-9 items-center rounded-sm border border-outline-variant/30 bg-surface-container-lowest px-3">
-                    <Icon name="search" size={16} className="text-on-surface-variant mr-2" />
-                    <input
-                      {...searchInputProps}
-                      placeholder="搜索模型..."
-                      className="h-full w-48 border-none bg-transparent p-0 text-sm leading-none text-on-surface outline-none placeholder:text-on-surface-variant/50"
-                    />
-                  </div>
-                </>
-              )}
-              {activeTab === 'suggestions' && (
-                <div className="flex h-9 items-center rounded-sm border border-outline-variant/30 bg-surface-container-lowest px-3">
-                  <Icon name="search" size={16} className="text-on-surface-variant mr-2" />
-                  <input
-                    {...suggestionSearchInputProps}
-                    placeholder="搜索建议..."
-                    className="h-full w-48 border-none bg-transparent p-0 text-sm leading-none text-on-surface outline-none placeholder:text-on-surface-variant/50"
-                  />
-                </div>
-              )}
-              {activeTab === 'groups' && (
-                <div className="flex h-9 items-center rounded-sm border border-outline-variant/30 bg-surface-container-lowest px-3">
-                  <Icon name="search" size={16} className="text-on-surface-variant mr-2" />
-                  <input
-                    {...groupSearchInputProps}
-                    placeholder="搜索分组..."
-                    className="h-full w-48 border-none bg-transparent p-0 text-sm leading-none text-on-surface outline-none placeholder:text-on-surface-variant/50"
-                  />
-                </div>
-              )}
+            <div className="ml-auto flex h-9 w-[252px] shrink-0 items-center rounded-sm border border-outline-variant/30 bg-surface-container-lowest px-3">
+              <Icon name="search" size={16} className="text-on-surface-variant mr-2 shrink-0" />
+              <input
+                {...(activeTab === 'models'
+                  ? searchInputProps
+                  : activeTab === 'suggestions'
+                    ? suggestionSearchInputProps
+                    : groupSearchInputProps)}
+                placeholder={
+                  activeTab === 'models' ? '搜索模型...' : activeTab === 'suggestions' ? '搜索建议...' : '搜索分组...'
+                }
+                className="h-full min-w-0 flex-1 border-none bg-transparent p-0 text-sm leading-none text-on-surface outline-none placeholder:text-on-surface-variant/50"
+              />
             </div>
           </div>
         }
@@ -2413,6 +2454,12 @@ function DesktopContent() {
                     ) : null}
                   </div>
                   <div className="flex flex-wrap items-center gap-2">
+                    <ModelCategoryFilter
+                      value={categoryFilter}
+                      onChange={setCategoryFilter}
+                      options={categoryOptions}
+                      allValue={CATEGORY_FILTER_ALL}
+                    />
                     {displayModelTotal > visibleModels.length && (
                       <button
                         onClick={selectAllMatchingModels}
@@ -2420,17 +2467,9 @@ function DesktopContent() {
                         className="flex items-center gap-2 rounded-sm border border-primary/20 bg-primary/10 px-3 py-2 text-sm font-medium text-primary transition-colors hover:bg-primary/15 disabled:opacity-40"
                       >
                         <Icon name="select_all" size={16} />
-                        全选全部匹配 ({displayModelTotal})
+                        选择全部
                       </button>
                     )}
-                    <button
-                      onClick={toggleSelectVisibleModels}
-                      disabled={visibleModelIds.length === 0}
-                      className="flex items-center gap-2 rounded-sm border border-outline-variant/20 bg-surface-container-high px-3 py-2 text-sm font-medium text-on-surface-variant transition-colors hover:bg-surface-container-highest hover:text-on-surface disabled:opacity-40"
-                    >
-                      <Icon name="checklist" size={16} />
-                      {allVisibleModelsSelected ? '取消已显示' : '全选已显示'}
-                    </button>
                     {selectedModelCount > 0 && (
                       <>
                         <button

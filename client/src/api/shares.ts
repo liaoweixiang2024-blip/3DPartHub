@@ -10,6 +10,7 @@ export interface ShareLink {
   modelName?: string;
   allowPreview: boolean;
   allowDownload: boolean;
+  allowDrawing?: boolean;
   downloadLimit: number;
   downloadCount: number;
   viewCount: number;
@@ -35,6 +36,7 @@ export interface ShareInfo {
   expiresAt: string | null;
   siteTitle: string;
   gltfUrl?: string;
+  drawingUrl?: string | null;
 }
 
 export interface CreateShareParams {
@@ -42,6 +44,7 @@ export interface CreateShareParams {
   password?: string;
   allowPreview?: boolean;
   allowDownload?: boolean;
+  allowDrawing?: boolean;
   downloadLimit?: number;
   expiresAt?: string;
 }

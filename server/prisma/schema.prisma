@@ -266,6 +266,7 @@ model ShareLink {
   password        String?
   allowPreview    Boolean   @default(true) @map("allow_preview")
   allowDownload   Boolean   @default(true) @map("allow_download")
+  allowDrawing    Boolean   @default(true) @map("allow_drawing")
   downloadLimit   Int       @default(0) @map("download_limit")
   downloadCount   Int       @default(0) @map("download_count")
   viewCount       Int       @default(0) @map("view_count")

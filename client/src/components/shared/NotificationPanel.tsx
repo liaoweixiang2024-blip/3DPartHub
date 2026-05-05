@@ -123,7 +123,7 @@ export default function NotificationPanel({ compact = false }: { compact?: boole
   const [loadError, setLoadError] = useState('');
   const ref = useRef<HTMLDivElement>(null);
 
-  const iconSize = compact ? 20 : 24;
+  const iconSize = compact ? 20 : 20;
   const safeNotifications = Array.isArray(notifications) ? notifications : [];
 
   // Poll unread count
@@ -324,7 +324,7 @@ export default function NotificationPanel({ compact = false }: { compact?: boole
         <div className="relative" ref={ref}>
           <button
             onClick={() => setOpen(!open)}
-            className="p-2 text-on-surface-variant hover:text-on-surface transition-colors relative"
+            className="p-2 text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high rounded-lg transition-colors relative"
             aria-label="通知"
             data-tooltip="通知"
             data-tooltip-side="bottom"
@@ -368,7 +368,7 @@ export default function NotificationPanel({ compact = false }: { compact?: boole
     <div className="relative" ref={ref}>
       <button
         onClick={() => setOpen(!open)}
-        className="p-2 text-on-surface-variant hover:text-on-surface transition-colors relative rounded-sm hover:bg-surface-container-high"
+        className="p-2 text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high rounded-lg transition-colors relative"
         aria-label="通知"
         data-tooltip="通知"
         data-tooltip-side="bottom"

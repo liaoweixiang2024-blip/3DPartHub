@@ -1,10 +1,12 @@
 import { motion, AnimatePresence } from 'framer-motion';
 import { lazy, Suspense, useEffect, useRef, useState } from 'react';
-import { Routes, Route, Link, useLocation, Navigate } from 'react-router-dom';
+import { Routes, Route, Link, useLocation, useNavigate, Navigate } from 'react-router-dom';
 import BrandMark from './components/shared/BrandMark';
 import Icon from './components/shared/Icon';
+import LoginConfirmDialog from './components/shared/LoginConfirmDialog';
 import MaintenanceGate from './components/shared/MaintenanceGate';
 import { isModelDetailPath, saveModelReturnPath } from './lib/modelReturnPath';
+import { checkProtectedAccess } from './components/shared/ProtectedLink';
 // Static import for the landing page — eliminates flash on first visit
 import HomePage from './pages/HomePage';
 import { useAuthStore } from './stores/useAuthStore';
@@ -67,8 +69,10 @@ function PageWrap({ children }: { children: React.ReactNode }) {
 function ProtectedPage({ children, requiredRole }: { children: React.ReactNode; requiredRole?: string }) {
   const { isAuthenticated, user, hasHydrated, restoreSessionFromCookie } = useAuthStore();
   const location = useLocation();
+  const navigate = useNavigate();
   const [authRetryDone, setAuthRetryDone] = useState(false);
   const [authRetrying, setAuthRetrying] = useState(false);
+  const [loginDialogOpen, setLoginDialogOpen] = useState(false);
 
   useEffect(() => {
     if (!hasHydrated || isAuthenticated || authRetryDone || authRetrying) return;
@@ -80,11 +84,31 @@ function ProtectedPage({ children, requiredRole }: { children: React.ReactNode; 
     });
   }, [authRetryDone, authRetrying, hasHydrated, isAuthenticated, restoreSessionFromCookie]);
 
+  useEffect(() => {
+    if (hasHydrated && !authRetrying && authRetryDone && !isAuthenticated) {
+      setLoginDialogOpen(true);
+    }
+  }, [hasHydrated, authRetrying, authRetryDone, isAuthenticated]);
+
   if (!hasHydrated || authRetrying || (!isAuthenticated && !authRetryDone)) {
     return null;
   }
 
   if (!isAuthenticated) {
+    const access = checkProtectedAccess(location.pathname);
+    if (access.action === 'dialog') {
+      return (
+        <LoginConfirmDialog
+          open={loginDialogOpen}
+          onClose={() => {
+            setLoginDialogOpen(false);
+            navigate('/', { replace: true });
+          }}
+          reason={access.reason}
+          returnUrl={access.returnUrl}
+        />
+      );
+    }
     return <Navigate to="/login" state={{ from: location.pathname }} replace />;
   }
   if (requiredRole && user?.role !== requiredRole) {

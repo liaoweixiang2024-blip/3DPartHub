@@ -1,17 +1,40 @@
 import { useState, useEffect, lazy, Suspense, useCallback } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { getShareInfo, verifySharePassword, getShareDownloadUrl, type ShareInfo } from '../api/shares';
+import { MATERIAL_PRESETS, type MaterialPresetKey } from '../components/3d/viewerControls';
 import BrandMark from '../components/shared/BrandMark';
 import Icon from '../components/shared/Icon';
 import { PageTitle } from '../components/shared/PagePrimitives';
 import { PublicPageShell } from '../components/shared/PublicPageShell';
 import { useDocumentTitle } from '../hooks/useDocumentTitle';
 import { getErrorMessage } from '../lib/errorNotifications';
-import { getSiteTitle } from '../lib/publicSettings';
+import { getDefaultPreset, getPublicSettingsSnapshot, getSiteTitle } from '../lib/publicSettings';
 
 const isWechat = /MicroMessenger/i.test(navigator.userAgent);
 
 const ModelViewer = lazy(() => import('../components/3d/ModelViewer'));
+
+const VIEWER_PREFS_KEY = 'model_viewer_display_prefs_v1';
+
+function getShareViewerPrefs() {
+  const settings = getPublicSettingsSnapshot();
+  const defaultPreset = (getDefaultPreset() as MaterialPresetKey) || 'default';
+  const defaultEdges = settings.viewer_edge_enabled !== false;
+  try {
+    const raw = window.localStorage.getItem(VIEWER_PREFS_KEY);
+    if (!raw) return { materialPreset: defaultPreset, showEdges: defaultEdges };
+    const parsed = JSON.parse(raw);
+    const material = MATERIAL_PRESETS.some((p) => p.key === parsed.materialPreset)
+      ? parsed.materialPreset
+      : defaultPreset;
+    return {
+      materialPreset: material as MaterialPresetKey,
+      showEdges: typeof parsed.showEdges === 'boolean' ? parsed.showEdges : defaultEdges,
+    };
+  } catch {
+    return { materialPreset: defaultPreset, showEdges: defaultEdges };
+  }
+}
 
 export default function SharePage() {
   const { token } = useParams<{ token: string }>();
@@ -221,8 +244,8 @@ export default function SharePage() {
                 clipEnabled={false}
                 clipDirection="x"
                 clipPosition={0}
-                materialPreset="default"
-                showEdges={false}
+                materialPreset={getShareViewerPrefs().materialPreset}
+                showEdges={getShareViewerPrefs().showEdges}
                 showAxis={false}
               />
             </Suspense>
@@ -250,6 +273,20 @@ export default function SharePage() {
           </div>
 
           {info.description && <p className="text-sm text-on-surface-variant break-words">{info.description}</p>}
+
+          {/* Drawing */}
+          {info.drawingUrl && (
+            <a
+              href={info.drawingUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center gap-3 rounded-lg bg-surface-container-high px-4 py-3 text-sm text-on-surface hover:bg-surface-container-highest transition-colors"
+            >
+              <Icon name="description" size={20} className="text-on-surface-variant shrink-0" />
+              <span className="truncate">PDF 图纸</span>
+              <Icon name="open_in_new" size={16} className="text-on-surface-variant/50 shrink-0 ml-auto" />
+            </a>
+          )}
 
           {/* Download button */}
           {info.allowDownload && (

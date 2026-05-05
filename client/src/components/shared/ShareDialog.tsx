@@ -26,6 +26,7 @@ export default function ShareDialog({ open, onClose, modelId, modelName }: Share
 
   const [allowPreview, setAllowPreview] = useState(defaultAllowPreview);
   const [allowDownload, setAllowDownload] = useState(true);
+  const [allowDrawing, setAllowDrawing] = useState(true);
   const [downloadLimit, setDownloadLimit] = useState(0);
   const [usePassword, setUsePassword] = useState(false);
   const [password, setPassword] = useState('');
@@ -59,6 +60,7 @@ export default function ShareDialog({ open, onClose, modelId, modelName }: Share
         modelId,
         allowPreview,
         allowDownload,
+        allowDrawing,
         downloadLimit,
         ...(usePassword && canPassword && { password }),
         ...(expiresAt && { expiresAt }),
@@ -83,6 +85,7 @@ export default function ShareDialog({ open, onClose, modelId, modelName }: Share
     setCopied(false);
     setAllowPreview(defaultAllowPreview);
     setAllowDownload(true);
+    setAllowDrawing(true);
     setDownloadLimit(0);
     setUsePassword(false);
     setPassword('');
@@ -196,6 +199,22 @@ export default function ShareDialog({ open, onClose, modelId, modelName }: Share
                     >
                       <span
                         className={`absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white shadow-sm transition-transform duration-200 ${allowDownload ? 'translate-x-5' : 'translate-x-0'}`}
+                      />
+                    </button>
+                  </div>
+
+                  {/* Drawing permission */}
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm text-on-surface">显示 PDF 图纸</p>
+                      <p className="text-xs text-on-surface-variant">分享页面可以查看和下载图纸</p>
+                    </div>
+                    <button
+                      onClick={() => setAllowDrawing(!allowDrawing)}
+                      className={`relative w-11 h-6 rounded-full transition-colors duration-200 shrink-0 ${allowDrawing ? 'bg-primary-container' : 'bg-outline-variant/30'}`}
+                    >
+                      <span
+                        className={`absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white shadow-sm transition-transform duration-200 ${allowDrawing ? 'translate-x-5' : 'translate-x-0'}`}
                       />
                     </button>
                   </div>
