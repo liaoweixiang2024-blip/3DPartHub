@@ -240,14 +240,12 @@ function DesktopContent() {
       {downloads.length === 0 ? (
         <EmptyState />
       ) : (
-        <div className="flex flex-col gap-2">
+        <div className="flex flex-col">
           {visibleDownloads.map((item) => (
             <div
               key={item.id}
-              className={`bg-surface-container-low rounded-lg border transition-all flex items-center gap-4 ${
-                selectMode && selected.has(item.id)
-                  ? 'border-primary ring-1 ring-primary/30'
-                  : 'border-outline-variant/10 hover:bg-surface-container-high'
+              className={`flex items-center gap-0 border-b border-outline-variant/10 last:border-b-0 ${
+                selectMode && selected.has(item.id) ? 'bg-primary-container/5' : ''
               }`}
             >
               {selectMode && (
@@ -262,18 +260,23 @@ function DesktopContent() {
                   {selected.has(item.id) && <Icon name="check" size={12} className="text-on-primary" />}
                 </button>
               )}
-              <div className="w-16 h-16 bg-surface-container-lowest shrink-0 flex items-center justify-center p-1 rounded-md overflow-hidden m-3">
-                <ModelThumbnail src={item.model?.thumbnail_url} alt="" className="w-full h-full object-contain" />
-              </div>
-              <div className="flex-1 min-w-0">
-                <h3 className="text-sm font-medium text-on-surface truncate">{item.model?.name || '未知模型'}</h3>
-                <div className="flex gap-3 text-xs text-on-surface-variant mt-1">
-                  <span>{item.format?.toUpperCase() || '-'}</span>
-                  <span>{formatFileSize(item.fileSize)}</span>
-                  <span>{formatDate(item.createdAt)}</span>
+              <Link
+                to={`/model/${item.modelId}`}
+                className="min-w-0 flex-1 flex items-center gap-3 rounded-md px-3 py-2.5 transition-colors hover:bg-surface-container/45 md:px-4 md:py-3 md:gap-4"
+              >
+                <div className="w-14 h-14 bg-surface-container-lowest shrink-0 flex items-center justify-center p-1 rounded-md overflow-hidden">
+                  <ModelThumbnail src={item.model?.thumbnail_url} alt="" className="w-full h-full object-contain" />
                 </div>
-              </div>
-              <div className="flex items-center gap-2 shrink-0 pr-4">
+                <div className="min-w-0 flex-1">
+                  <h3 className="text-sm font-medium text-on-surface truncate">{item.model?.name || '未知模型'}</h3>
+                  <div className="flex gap-3 text-xs text-on-surface-variant mt-1">
+                    <span>{item.format?.toUpperCase() || '-'}</span>
+                    <span>{formatFileSize(item.fileSize)}</span>
+                    <span>{formatDate(item.createdAt)}</span>
+                  </div>
+                </div>
+              </Link>
+              <div className="flex shrink-0 items-center gap-1.5 pr-4">
                 <button
                   onClick={() => handleDownload(item.modelId)}
                   className="flex items-center gap-1 px-3 py-1.5 text-xs font-medium text-on-primary bg-primary-container rounded-sm hover:opacity-90 transition-opacity"
@@ -285,7 +288,6 @@ function DesktopContent() {
                   <button
                     onClick={() => handleDeleteOne(item.id)}
                     className="p-1.5 text-on-surface-variant/40 hover:text-error rounded-sm hover:bg-error/10 transition-colors"
-                    title="删除"
                   >
                     <Icon name="delete" size={14} />
                   </button>
@@ -372,34 +374,49 @@ function MobileContent() {
       ) : downloads.length === 0 ? (
         <EmptyState />
       ) : (
-        <div className="space-y-2">
+        <div className="flex flex-col gap-2.5">
           {visibleDownloads.map((item) => (
-            <div key={item.id} className="rounded-lg bg-surface-container-high p-3 flex items-center gap-3">
-              <div className="w-12 h-12 bg-surface-container-lowest shrink-0 rounded-md flex items-center justify-center overflow-hidden">
-                <ModelThumbnail src={item.model?.thumbnail_url} alt="" className="w-full h-full object-cover" />
-              </div>
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium text-on-surface line-clamp-2 break-words">
-                  {item.model?.name || '未知模型'}
-                </p>
-                <p className="text-[11px] text-on-surface-variant mt-0.5 truncate">
-                  {formatDate(item.createdAt)} · {formatFileSize(item.fileSize)}
-                </p>
-              </div>
-              <div className="flex items-center gap-1.5 shrink-0">
-                <button
-                  onClick={() => handleDownload(item.modelId)}
-                  className="p-2 text-on-primary bg-primary-container rounded-sm"
-                >
-                  <Icon name="download" size={16} />
-                </button>
-                <button
-                  onClick={() => handleDelete(item.id)}
-                  className="p-2 text-on-surface-variant/50 hover:text-error rounded-sm hover:bg-error/10 transition-colors"
-                >
-                  <Icon name="delete" size={16} />
-                </button>
-              </div>
+            <div
+              key={item.id}
+              className="bg-surface-container-high rounded-xl border border-outline-variant/10 overflow-hidden"
+            >
+              <Link to={`/model/${item.modelId}`} className="flex h-20">
+                <div className="w-20 h-20 bg-surface-container-lowest shrink-0 overflow-hidden">
+                  <ModelThumbnail src={item.model?.thumbnail_url} alt="" className="w-full h-full object-cover" />
+                </div>
+                <div className="flex-1 min-w-0 px-3 pt-2.5 pb-2 flex flex-col justify-between">
+                  <h3 className="text-sm text-on-surface leading-snug line-clamp-1">
+                    {item.model?.name || '未知模型'}
+                  </h3>
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] text-on-surface-variant/50">
+                      {formatFileSize(item.fileSize)} · {formatDate(item.createdAt)}
+                    </span>
+                    <div className="flex items-center gap-1">
+                      <button
+                        onClick={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          handleDownload(item.modelId);
+                        }}
+                        className="flex items-center justify-center w-7 h-7 rounded-lg text-on-surface-variant active:scale-[0.95] transition-transform"
+                      >
+                        <Icon name="download" size={16} />
+                      </button>
+                      <button
+                        onClick={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          handleDelete(item.id);
+                        }}
+                        className="flex items-center justify-center w-7 h-7 rounded-lg text-on-surface-variant hover:text-error transition-colors"
+                      >
+                        <Icon name="delete" size={16} />
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </Link>
             </div>
           ))}
           <InfiniteLoadTrigger hasMore={hasMore} isLoading={false} onLoadMore={loadMore} />

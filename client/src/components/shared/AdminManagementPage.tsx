@@ -93,7 +93,7 @@ export function AdminDetailHeader({ title, description, actions, onBack, childre
             type="button"
             onClick={onBack}
             className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-on-surface-variant transition-colors hover:bg-surface-container-high hover:text-on-surface"
-            aria-label="返回"
+            aria-label=""
           >
             <Icon name="arrow_back" size={20} />
           </button>

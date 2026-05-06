@@ -128,6 +128,7 @@ function ShareRow({
           onClick={() => onCopy(item)}
           className="inline-flex h-8 w-8 items-center justify-center rounded-md text-primary-container transition-colors hover:bg-primary-container/10 md:w-auto md:gap-1.5 md:px-2.5 md:text-xs md:font-medium"
           aria-label="复制链接"
+          data-tooltip-ignore
         >
           <Icon name="link" size={15} />
           <span className="hidden md:inline">复制</span>
@@ -155,6 +156,7 @@ function ShareRow({
             onClick={() => onDeleteStart(item.id)}
             className="inline-flex h-8 w-8 items-center justify-center rounded-md text-error transition-colors hover:bg-error-container/10 md:w-auto md:gap-1.5 md:px-2.5 md:text-xs md:font-medium"
             aria-label="删除"
+            data-tooltip-ignore
           >
             <Icon name="delete" size={15} />
             <span className="hidden md:inline">删除</span>

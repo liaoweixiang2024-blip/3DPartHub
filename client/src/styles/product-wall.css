@@ -236,10 +236,12 @@
 .product-wall-preview-panel {
   animation: productWallPreviewIn 320ms cubic-bezier(0.2, 0.9, 0.18, 1) both;
   transform-origin: center center;
+  -webkit-transform: translateZ(0);
 }
 @media (max-width: 767px) {
   .product-wall-preview-panel {
     background: var(--color-surface-container-low, #f8f6f2);
+    animation: none;
   }
   .product-wall-preview-canvas {
     flex: 1 1 auto;
@@ -255,19 +257,19 @@
     right: 0.75rem;
   }
   .product-wall-preview-info {
-    display: grid;
+    display: grid !important;
     grid-template-columns: minmax(0, 1fr);
-    gap: 12px;
+    gap: 10px;
     box-shadow: 0 -14px 36px rgba(15, 23, 42, 0.08);
   }
   .product-wall-preview-actions {
-    display: grid;
+    display: grid !important;
     grid-template-columns: repeat(4, minmax(0, 1fr));
     width: 100%;
-    gap: 8px;
+    gap: 6px;
   }
   .product-wall-preview-action {
-    width: 100%;
+    width: 100% !important;
     border-radius: 10px;
     background: var(--color-surface-container-low);
   }

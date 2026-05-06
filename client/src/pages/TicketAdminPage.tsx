@@ -147,9 +147,9 @@ function DesktopContent() {
       actions={
         <button
           onClick={loadTickets}
-          className="inline-flex items-center gap-1.5 rounded-md border border-outline-variant/20 bg-surface-container-low px-3 py-2 text-xs font-medium text-on-surface transition-colors hover:bg-surface-container"
+          className="inline-flex items-center gap-1.5 rounded-lg bg-surface-container-high px-3.5 py-2 text-xs font-medium text-on-surface-variant transition-colors hover:bg-surface-container-highest hover:text-on-surface active:scale-[0.97]"
         >
-          <Icon name="refresh" size={16} />
+          <Icon name="refresh" size={15} />
           刷新
         </button>
       }
@@ -161,49 +161,38 @@ function DesktopContent() {
         ) : filtered.length === 0 ? (
           <EmptyTickets />
         ) : (
-          <div className="bg-surface-container-low rounded-lg border border-outline-variant/10 overflow-auto max-h-[calc(100vh-260px)]">
-            <div className="grid grid-cols-[90px_110px_minmax(0,1fr)_140px_130px_170px] gap-4 px-6 py-3 bg-surface-container-low text-xs uppercase tracking-wider text-on-surface-variant font-bold border-b border-outline-variant/10 sticky top-0 z-10">
-              <span>状态</span>
-              <span>分类</span>
-              <span>用户 / 描述</span>
-              <span>基础零件</span>
-              <span>时间</span>
-              <span className="text-right">操作</span>
-            </div>
+          <div className="overflow-auto max-h-[calc(100vh-260px)] space-y-2">
             {visibleTickets.map((ticket) => {
               const info = statusInfo(statuses, ticket.status);
               return (
                 <div
                   key={ticket.id}
-                  className="grid grid-cols-[90px_110px_minmax(0,1fr)_140px_130px_170px] gap-4 px-6 py-4 border-b border-outline-variant/5 hover:bg-surface-container-high/50 transition-colors items-center"
+                  onClick={() => navigate(`/admin/tickets/${ticket.id}`)}
+                  className="group flex items-center gap-4 rounded-xl bg-surface-container-low border border-outline-variant/8 px-5 py-3.5 cursor-pointer transition-all hover:bg-surface-container-high/60 hover:border-outline-variant/15 hover:shadow-sm"
                 >
                   <span
-                    className={`inline-flex w-fit items-center text-xs px-2 py-0.5 rounded-md font-bold ${info.color || ''} ${info.bg || ''}`}
+                    className={`shrink-0 inline-flex items-center text-[11px] px-2.5 py-1 rounded-lg font-bold ${info.color || ''} ${info.bg || ''}`}
                   >
                     {info.label}
                   </span>
-                  <span className="text-xs text-on-surface-variant truncate">
+                  <span className="shrink-0 text-xs text-on-surface-variant bg-surface-container-high/80 px-2 py-0.5 rounded-md">
                     {classificationMap.get(ticket.classification) || ticket.classification}
                   </span>
-                  <div className="min-w-0">
+                  <div className="min-w-0 flex-1">
                     <p className="text-sm text-on-surface truncate">{ticket.description}</p>
-                    <p className="text-xs text-on-surface-variant">{ticket.user?.username || '未知用户'}</p>
+                    <p className="text-[11px] text-on-surface-variant/70 mt-0.5">
+                      {ticket.user?.username || '未知用户'}
+                      {ticket.basePart ? ` · ${ticket.basePart}` : ''}
+                    </p>
                   </div>
-                  <span className="text-xs text-on-surface-variant truncate">{ticket.basePart || '—'}</span>
-                  <span className="text-xs text-on-surface-variant">
+                  <span className="shrink-0 text-xs text-on-surface-variant/50 tabular-nums">
                     {new Date(ticket.createdAt).toLocaleDateString('zh-CN')}
                   </span>
-                  <div className="flex flex-wrap items-center justify-end gap-1">
-                    <button
-                      onClick={() => navigate(`/admin/tickets/${ticket.id}`)}
-                      className="text-xs text-primary-container hover:underline"
-                    >
-                      详情
-                    </button>
+                  <div className="flex shrink-0 items-center gap-1" onClick={(e) => e.stopPropagation()}>
                     {ticket.status !== 'in_progress' && ticket.status !== 'resolved' && (
                       <button
                         onClick={() => handleStatusChange(ticket.id, 'in_progress')}
-                        className="text-xs text-blue-500 hover:underline"
+                        className="whitespace-nowrap rounded-full px-3 py-1 text-[11px] font-medium text-blue-600 bg-blue-500/10 hover:bg-blue-500/20 active:scale-[0.96] transition-all"
                       >
                         处理
                       </button>
@@ -211,7 +200,7 @@ function DesktopContent() {
                     {ticket.status === 'in_progress' && (
                       <button
                         onClick={() => handleStatusChange(ticket.id, 'resolved')}
-                        className="text-xs text-green-500 hover:underline"
+                        className="whitespace-nowrap rounded-full px-3 py-1 text-[11px] font-medium text-emerald-600 bg-emerald-500/10 hover:bg-emerald-500/20 active:scale-[0.96] transition-all"
                       >
                         解决
                       </button>
@@ -219,7 +208,7 @@ function DesktopContent() {
                     {ticket.status !== 'closed' && (
                       <button
                         onClick={() => handleStatusChange(ticket.id, 'closed')}
-                        className="text-xs text-on-surface-variant hover:underline"
+                        className="whitespace-nowrap rounded-full px-3 py-1 text-[11px] font-medium text-on-surface-variant bg-surface-container-highest/70 hover:bg-surface-container-highest active:scale-[0.96] transition-all"
                       >
                         关闭
                       </button>
@@ -227,11 +216,14 @@ function DesktopContent() {
                     {ticket.status === 'closed' && (
                       <button
                         onClick={() => handleStatusChange(ticket.id, 'open')}
-                        className="text-xs text-primary-container hover:underline"
+                        className="whitespace-nowrap rounded-full px-3 py-1 text-[11px] font-medium text-primary-container bg-primary-container/10 hover:bg-primary-container/20 active:scale-[0.96] transition-all"
                       >
                         重开
                       </button>
                     )}
+                    <span className="ml-0.5 text-on-surface-variant/30 group-hover:text-on-surface-variant/60 transition-colors">
+                      <Icon name="chevron_right" size={16} />
+                    </span>
                   </div>
                 </div>
               );
@@ -278,7 +270,7 @@ function MobileContent() {
       actions={
         <button
           onClick={loadTickets}
-          className="inline-flex items-center gap-1.5 rounded-md border border-outline-variant/20 bg-surface-container-low px-3 py-2 text-xs font-medium text-on-surface"
+          className="inline-flex items-center gap-1.5 rounded-lg bg-surface-container-high px-3 py-2 text-xs font-medium text-on-surface-variant active:scale-[0.97] transition-all"
         >
           <Icon name="refresh" size={14} />
           刷新
@@ -290,7 +282,7 @@ function MobileContent() {
         {loading ? (
           <div className="space-y-3">
             {[1, 2, 3].map((i) => (
-              <div key={i} className="h-20 bg-surface-container-high rounded-lg animate-pulse" />
+              <div key={i} className="h-24 bg-surface-container-high rounded-xl animate-pulse" />
             ))}
           </div>
         ) : filtered.length === 0 ? (
@@ -302,36 +294,38 @@ function MobileContent() {
               return (
                 <div
                   key={ticket.id}
-                  className="bg-surface-container-high rounded-lg p-3.5 active:bg-surface-container-highest transition-colors"
+                  className="bg-surface-container-low rounded-xl border border-outline-variant/8 overflow-hidden active:bg-surface-container-high/60 transition-all"
                 >
-                  <div onClick={() => navigate(`/admin/tickets/${ticket.id}`)} className="cursor-pointer">
-                    <div className="flex flex-wrap items-center gap-2 mb-2">
+                  <div
+                    onClick={() => navigate(`/admin/tickets/${ticket.id}`)}
+                    className="cursor-pointer px-3.5 pt-3 pb-2"
+                  >
+                    <div className="flex items-center gap-2 mb-2">
                       <span
-                        className={`text-[10px] px-2 py-0.5 rounded-sm font-bold ${info.color || ''} ${info.bg || ''}`}
+                        className={`text-[10px] px-2 py-0.5 rounded-md font-bold ${info.color || ''} ${info.bg || ''}`}
                       >
                         {info.label}
                       </span>
-                      <span className="text-[10px] text-on-surface-variant bg-surface-container-highest px-2 py-0.5 rounded-sm">
+                      <span className="text-[10px] text-on-surface-variant bg-surface-container-highest/80 px-2 py-0.5 rounded-md">
                         {classificationMap.get(ticket.classification) || ticket.classification}
                       </span>
-                      <span className="text-[10px] text-on-surface-variant">
+                      <span className="text-[10px] text-on-surface-variant/50 ml-auto tabular-nums">
                         {new Date(ticket.createdAt).toLocaleDateString('zh-CN')}
                       </span>
                     </div>
-                    <p className="text-sm text-on-surface mb-1 line-clamp-2 break-words">{ticket.description}</p>
-                    <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-on-surface-variant">
-                      <span className="min-w-0 break-words">{ticket.user?.username || '未知用户'}</span>
-                      <span>查看详情</span>
+                    <p className="text-sm text-on-surface mb-1.5 line-clamp-2 break-words leading-relaxed">
+                      {ticket.description}
+                    </p>
+                    <div className="flex items-center justify-between gap-2 text-xs text-on-surface-variant/60">
+                      <span className="truncate">{ticket.user?.username || '未知用户'}</span>
+                      <Icon name="chevron_right" size={14} className="shrink-0 text-on-surface-variant/30" />
                     </div>
-                    {ticket.basePart && (
-                      <p className="mt-1 text-[11px] text-on-surface-variant break-all">基准零件：{ticket.basePart}</p>
-                    )}
                   </div>
-                  <div className="mt-3 flex flex-wrap items-center gap-1 border-t border-outline-variant/10 pt-3">
+                  <div className="flex items-center gap-1.5 border-t border-outline-variant/8 px-3.5 py-2">
                     {ticket.status !== 'in_progress' && ticket.status !== 'resolved' && (
                       <button
                         onClick={() => handleStatusChange(ticket.id, 'in_progress')}
-                        className="px-2.5 py-1 text-xs text-blue-500 border border-blue-500/30 rounded-sm"
+                        className="whitespace-nowrap rounded-full px-3 py-1 text-[11px] font-medium text-blue-600 bg-blue-500/10 active:scale-[0.96] transition-all"
                       >
                         开始处理
                       </button>
@@ -339,7 +333,7 @@ function MobileContent() {
                     {ticket.status === 'in_progress' && (
                       <button
                         onClick={() => handleStatusChange(ticket.id, 'resolved')}
-                        className="px-2.5 py-1 text-xs text-green-500 border border-green-500/30 rounded-sm"
+                        className="whitespace-nowrap rounded-full px-3 py-1 text-[11px] font-medium text-emerald-600 bg-emerald-500/10 active:scale-[0.96] transition-all"
                       >
                         标记解决
                       </button>
@@ -347,14 +341,14 @@ function MobileContent() {
                     {ticket.status !== 'closed' ? (
                       <button
                         onClick={() => handleStatusChange(ticket.id, 'closed')}
-                        className="px-2.5 py-1 text-xs text-on-surface-variant border border-outline-variant/20 rounded-sm"
+                        className="whitespace-nowrap rounded-full px-3 py-1 text-[11px] font-medium text-on-surface-variant bg-surface-container-highest/70 active:scale-[0.96] transition-all"
                       >
                         关闭
                       </button>
                     ) : (
                       <button
                         onClick={() => handleStatusChange(ticket.id, 'open')}
-                        className="px-2.5 py-1 text-xs text-primary-container border border-primary-container/30 rounded-sm"
+                        className="whitespace-nowrap rounded-full px-3 py-1 text-[11px] font-medium text-primary-container bg-primary-container/10 active:scale-[0.96] transition-all"
                       >
                         重新打开
                       </button>

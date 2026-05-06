@@ -9,6 +9,7 @@ import {
   type FormEvent,
   type PointerEvent,
 } from 'react';
+import { createPortal } from 'react-dom';
 import { useLocation, useNavigate } from 'react-router-dom';
 import useSWR from 'swr';
 import '../styles/product-wall.css';
@@ -208,34 +209,6 @@ function formatFileSize(bytes: number) {
   return `${(bytes / 1024 / 1024).toFixed(1)}MB`;
 }
 
-function PreviewActionButton({
-  icon,
-  label,
-  active,
-  onClick,
-}: {
-  icon: string;
-  label: string;
-  active?: boolean;
-  onClick?: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={`product-wall-preview-action inline-flex h-9 w-9 items-center justify-center rounded-full border transition-colors ${
-        active
-          ? 'border-primary-container/25 bg-primary-container/10 text-primary-container'
-          : 'border-outline-variant/16 bg-transparent text-on-surface-variant hover:border-outline-variant/28 hover:bg-surface-container-high hover:text-on-surface'
-      }`}
-      aria-label={label}
-      data-tooltip-ignore
-    >
-      <Icon name={icon} size={16} />
-    </button>
-  );
-}
-
 export default function ProductWallPage() {
   useDocumentTitle('产品图库');
   const navigate = useNavigate();
@@ -245,6 +218,9 @@ export default function ProductWallPage() {
   const loadMoreRef = useRef<HTMLButtonElement | null>(null);
   const previewCloseRef = useRef<HTMLButtonElement | null>(null);
   const previewDragRef = useRef({ active: false, moved: false, startX: 0, startY: 0, panX: 0, panY: 0 });
+  const pinchRef = useRef({ active: false, startDist: 0, startZoom: 1, cx: 0, cy: 0 });
+  const momentumRef = useRef({ vx: 0, vy: 0, raf: 0, lastTime: 0, lastX: 0, lastY: 0 });
+  const doubleTapRef = useRef({ lastTap: 0, x: 0, y: 0 });
   const { user, isAuthenticated, hasHydrated } = useAuthStore();
   const { toast } = useToast();
   const { uploadPolicy } = getBusinessConfig();
@@ -700,6 +676,9 @@ export default function ProductWallPage() {
     setPreviewPan({ x: 0, y: 0 });
     setPreviewDragging(false);
     previewDragRef.current = { active: false, moved: false, startX: 0, startY: 0, panX: 0, panY: 0 };
+    pinchRef.current = { active: false, startDist: 0, startZoom: 1, cx: 0, cy: 0 };
+    cancelAnimationFrame(momentumRef.current.raf);
+    momentumRef.current = { vx: 0, vy: 0, raf: 0, lastTime: 0, lastX: 0, lastY: 0 };
     if (activeId) requestAnimationFrame(() => previewCloseRef.current?.focus());
   }, [activeId]);
   const { data: favoriteData } = useSWR(isLoggedIn ? 'product-wall-favorites' : null, listProductWallFavorites);
@@ -739,6 +718,7 @@ export default function ProductWallPage() {
     if (!el) return;
     const handler = (e: globalThis.WheelEvent) => {
       e.preventDefault();
+      cancelAnimationFrame(momentumRef.current.raf);
       setPreviewZoomLevel(previewZoomRef.current + (e.deltaY > 0 ? -0.18 : 0.18));
     };
     el.addEventListener('wheel', handler, { passive: false });
@@ -761,13 +741,29 @@ export default function ProductWallPage() {
     window.addEventListener('keydown', closePreview);
     return () => window.removeEventListener('keydown', closePreview);
   }, [active, editingItem, deleteDialog]);
+  const runMomentum = (vx: number, vy: number) => {
+    cancelAnimationFrame(momentumRef.current.raf);
+    let velX = vx;
+    let velY = vy;
+    const friction = 0.92;
+    const tick = () => {
+      velX *= friction;
+      velY *= friction;
+      if (Math.abs(velX) < 0.3 && Math.abs(velY) < 0.3) return;
+      setPreviewPan((prev) => ({ x: prev.x + velX, y: prev.y + velY }));
+      momentumRef.current.raf = requestAnimationFrame(tick);
+    };
+    momentumRef.current.raf = requestAnimationFrame(tick);
+  };
   const togglePreviewZoom = () => {
     setPreviewZoomLevel(previewZoomed ? 1 : 2.15);
   };
   const handlePreviewPointerDown = (event: PointerEvent<HTMLButtonElement>) => {
     if (!previewZoomed) return;
     event.preventDefault();
+    cancelAnimationFrame(momentumRef.current.raf);
     event.currentTarget.setPointerCapture(event.pointerId);
+    const now = performance.now();
     previewDragRef.current = {
       active: true,
       moved: false,
@@ -776,6 +772,11 @@ export default function ProductWallPage() {
       panX: previewPan.x,
       panY: previewPan.y,
     };
+    momentumRef.current.lastTime = now;
+    momentumRef.current.lastX = event.clientX;
+    momentumRef.current.lastY = event.clientY;
+    momentumRef.current.vx = 0;
+    momentumRef.current.vy = 0;
     setPreviewDragging(true);
   };
   const handlePreviewPointerMove = (event: PointerEvent<HTMLButtonElement>) => {
@@ -784,6 +785,15 @@ export default function ProductWallPage() {
     const dx = event.clientX - dragState.startX;
     const dy = event.clientY - dragState.startY;
     if (Math.abs(dx) + Math.abs(dy) > 3) dragState.moved = true;
+    const now = performance.now();
+    const dt = now - momentumRef.current.lastTime;
+    if (dt > 0) {
+      momentumRef.current.vx = ((event.clientX - momentumRef.current.lastX) / dt) * 16;
+      momentumRef.current.vy = ((event.clientY - momentumRef.current.lastY) / dt) * 16;
+      momentumRef.current.lastTime = now;
+      momentumRef.current.lastX = event.clientX;
+      momentumRef.current.lastY = event.clientY;
+    }
     setPreviewPan({ x: dragState.panX + dx, y: dragState.panY + dy });
   };
   const handlePreviewPointerUp = (event: PointerEvent<HTMLButtonElement>) => {
@@ -791,6 +801,9 @@ export default function ProductWallPage() {
     event.currentTarget.releasePointerCapture(event.pointerId);
     previewDragRef.current.active = false;
     setPreviewDragging(false);
+    if (previewDragRef.current.moved && previewZoomRef.current > 1.01) {
+      runMomentum(momentumRef.current.vx, momentumRef.current.vy);
+    }
   };
   const handlePreviewImageClick = () => {
     if (previewDragRef.current.moved) {
@@ -798,6 +811,64 @@ export default function ProductWallPage() {
       return;
     }
     togglePreviewZoom();
+  };
+  const handleCanvasTouchStart = (e: React.TouchEvent) => {
+    if (e.touches.length === 2) {
+      e.preventDefault();
+      cancelAnimationFrame(momentumRef.current.raf);
+      const t0 = e.touches[0];
+      const t1 = e.touches[1];
+      const dx = t1.clientX - t0.clientX;
+      const dy = t1.clientY - t0.clientY;
+      pinchRef.current = {
+        active: true,
+        startDist: Math.hypot(dx, dy),
+        startZoom: previewZoomRef.current,
+        cx: (t0.clientX + t1.clientX) / 2,
+        cy: (t0.clientY + t1.clientY) / 2,
+      };
+      previewDragRef.current.active = false;
+      setPreviewDragging(true);
+    } else if (e.touches.length === 1) {
+      const now = Date.now();
+      const x = e.touches[0].clientX;
+      const y = e.touches[0].clientY;
+      const prev = doubleTapRef.current;
+      if (now - prev.lastTap < 300 && Math.hypot(x - prev.x, y - prev.y) < 30) {
+        e.preventDefault();
+        setPreviewZoomLevel(previewZoomRef.current > 1.01 ? 1 : 2.5);
+        doubleTapRef.current.lastTap = 0;
+      } else {
+        doubleTapRef.current = { lastTap: now, x, y };
+      }
+    }
+  };
+  const handleCanvasTouchMove = (e: React.TouchEvent) => {
+    if (!pinchRef.current.active || e.touches.length < 2) return;
+    e.preventDefault();
+    const t0 = e.touches[0];
+    const t1 = e.touches[1];
+    const dx = t1.clientX - t0.clientX;
+    const dy = t1.clientY - t0.clientY;
+    const dist = Math.hypot(dx, dy);
+    const scale = dist / pinchRef.current.startDist;
+    setPreviewZoomLevel(pinchRef.current.startZoom * scale);
+    const cx = (t0.clientX + t1.clientX) / 2;
+    const cy = (t0.clientY + t1.clientY) / 2;
+    const panDx = cx - pinchRef.current.cx;
+    const panDy = cy - pinchRef.current.cy;
+    if (Math.abs(panDx) > 1 || Math.abs(panDy) > 1) {
+      setPreviewPan((prev) => ({ x: prev.x + panDx * 0.5, y: prev.y + panDy * 0.5 }));
+      pinchRef.current.cx = cx;
+      pinchRef.current.cy = cy;
+    }
+  };
+  const handleCanvasTouchEnd = (e: React.TouchEvent) => {
+    if (!pinchRef.current.active) return;
+    if (e.touches.length < 2) {
+      pinchRef.current.active = false;
+      setPreviewDragging(false);
+    }
   };
   const openEditItem = (item: WallItem) => {
     setEditingItem(item);
@@ -1550,45 +1621,19 @@ export default function ProductWallPage() {
         </div>
       )}
 
-      {active && (
-        <div
-          className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/68 p-0 backdrop-blur-xl md:p-6"
-          onClick={() => setActive(null)}
-        >
+      {active &&
+        createPortal(
           <div
-            className="product-wall-preview-panel relative flex h-dvh w-full flex-col overflow-hidden bg-surface shadow-none md:h-[94dvh] md:max-w-[1500px] md:rounded-xl md:border md:border-outline-variant/18 md:shadow-[0_34px_120px_rgba(0,0,0,0.34)]"
-            onClick={(event) => event.stopPropagation()}
+            className="fixed inset-0 z-[9999] flex items-center justify-center p-0 md:p-6"
+            onClick={() => setActive(null)}
           >
+            {/* backdrop */}
+            <div className="fixed inset-0 bg-black/68" aria-hidden="true" />
             <div
-              className={`product-wall-preview-canvas product-wall-canvas-${canvasMode} relative flex min-h-0 flex-1 items-center justify-center overflow-hidden p-0 ${previewZoomed ? 'select-none' : ''}`}
-              ref={previewCanvasRef}
+              className="relative flex h-dvh w-full flex-col bg-surface shadow-none md:h-[94dvh] md:max-w-[1500px] md:rounded-xl md:border md:border-outline-variant/18 md:shadow-[0_34px_120px_rgba(0,0,0,0.34)]"
+              onClick={(event) => event.stopPropagation()}
             >
-              <div
-                className="pointer-events-none absolute inset-0 scale-125 bg-cover bg-center opacity-10 blur-3xl"
-                style={{ backgroundImage: `url(${productWallPreviewImage(active)})` }}
-              />
-              <button
-                type="button"
-                onClick={handlePreviewImageClick}
-                onPointerDown={handlePreviewPointerDown}
-                onPointerMove={handlePreviewPointerMove}
-                onPointerUp={handlePreviewPointerUp}
-                onPointerCancel={handlePreviewPointerUp}
-                className={`product-wall-preview-zoom-target relative z-10 flex h-full w-full shrink-0 touch-none items-center justify-center border-none bg-transparent p-0 focus:outline-none ${
-                  previewZoomed ? (previewDragging ? 'cursor-grabbing' : 'cursor-grab') : 'cursor-zoom-in'
-                }`}
-                aria-label={previewZoomed ? '还原图片' : '放大图片'}
-                data-tooltip-ignore
-              >
-                <SafeImage
-                  src={productWallPreviewImage(active)}
-                  alt={active.title}
-                  loading="eager"
-                  className={`product-wall-preview-image h-full w-full object-contain drop-shadow-[0_16px_42px_rgba(0,0,0,0.18)] ${previewDragging ? '' : 'transition-transform duration-300 ease-out'}`}
-                  fallbackClassName="h-full w-full"
-                  style={{ transform: `translate3d(${previewPan.x}px, ${previewPan.y}px, 0) scale(${previewZoom})` }}
-                />
-              </button>
+              {/* Close button — uses inline style for safe-area on iOS */}
               <button
                 ref={previewCloseRef}
                 type="button"
@@ -1596,65 +1641,136 @@ export default function ProductWallPage() {
                   setPreviewZoomLevel(1);
                   setActive(null);
                 }}
-                className="product-wall-preview-close absolute right-4 top-4 z-20 inline-flex h-9 w-9 items-center justify-center rounded-full border border-black/8 bg-white/78 text-neutral-800 shadow-[0_8px_24px_rgba(0,0,0,0.14)] backdrop-blur-md transition-colors hover:bg-white"
+                style={{
+                  position: 'absolute',
+                  right: 12,
+                  top: 'max(12px, env(safe-area-inset-top))',
+                  zIndex: 50,
+                }}
+                className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-black/50 text-white shadow-lg transition-colors active:bg-black/70 md:h-9 md:w-9 md:bg-white/78 md:text-neutral-800 md:shadow-[0_8px_24px_rgba(0,0,0,0.14)]"
                 aria-label="关闭"
-                data-tooltip-ignore
               >
                 <svg
-                  width="17"
-                  height="17"
+                  width="18"
+                  height="18"
                   viewBox="0 0 24 24"
                   fill="none"
                   stroke="currentColor"
-                  strokeWidth="2"
+                  strokeWidth="2.5"
                   strokeLinecap="round"
                 >
                   <line x1="18" y1="6" x2="6" y2="18" />
                   <line x1="6" y1="6" x2="18" y2="18" />
                 </svg>
               </button>
-            </div>
-            <div className="product-wall-preview-info z-20 flex shrink-0 items-center justify-between gap-3 border-t border-outline-variant/12 bg-surface px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-3 text-on-surface md:px-5 md:py-3">
-              <div className="min-w-0">
-                <p className="text-[11px] font-semibold tracking-[0.18em] text-primary-container">{active.kind}</p>
-                <h2 className="mt-1 truncate text-base font-bold md:text-lg">{active.title}</h2>
-                {active.description ? (
-                  <p className="mt-1 line-clamp-2 text-xs leading-5 text-on-surface-variant">{active.description}</p>
-                ) : null}
-              </div>
-              <div className="product-wall-preview-actions flex shrink-0 items-center gap-1.5">
-                <PreviewActionButton
-                  icon={previewZoomed ? 'zoom_out' : 'zoom_in'}
-                  label={previewZoomed ? '还原' : '放大'}
-                  active={previewZoomed}
-                  onClick={togglePreviewZoom}
+
+              {/* Canvas area */}
+              <div
+                className={`product-wall-canvas-${canvasMode} relative flex min-h-0 flex-1 items-center justify-center overflow-hidden`}
+                ref={previewCanvasRef}
+                onTouchStart={handleCanvasTouchStart}
+                onTouchMove={handleCanvasTouchMove}
+                onTouchEnd={handleCanvasTouchEnd}
+                onTouchCancel={handleCanvasTouchEnd}
+              >
+                <div
+                  className="pointer-events-none absolute inset-0 scale-125 bg-cover bg-center opacity-10 blur-3xl"
+                  style={{ backgroundImage: `url(${productWallPreviewImage(active)})` }}
                 />
-                <PreviewActionButton
-                  icon={activeFavorited ? 'favorite' : 'star'}
-                  label={activeFavorited ? '取消收藏' : '收藏'}
-                  active={activeFavorited}
-                  onClick={toggleFavorite}
-                />
-                <PreviewActionButton
-                  icon={shareState === 'copied' ? 'check' : 'share'}
-                  label={shareState === 'copied' ? '已复制' : '分享'}
-                  active={shareState === 'copied'}
-                  onClick={shareActiveImage}
-                />
-                <a
-                  href={active.image}
-                  download={productWallDownloadName(active)}
-                  className="product-wall-preview-action inline-flex h-9 w-9 items-center justify-center rounded-full border border-outline-variant/16 bg-transparent text-on-surface-variant transition-colors hover:border-outline-variant/28 hover:bg-surface-container-high hover:text-on-surface"
-                  aria-label="下载"
-                  data-tooltip-ignore
+                <button
+                  type="button"
+                  onClick={handlePreviewImageClick}
+                  onPointerDown={handlePreviewPointerDown}
+                  onPointerMove={handlePreviewPointerMove}
+                  onPointerUp={handlePreviewPointerUp}
+                  onPointerCancel={handlePreviewPointerUp}
+                  className={`relative z-10 flex h-full w-full shrink-0 touch-none items-center justify-center border-none bg-transparent p-0 focus:outline-none ${
+                    previewZoomed ? (previewDragging ? 'cursor-grabbing' : 'cursor-grab') : 'cursor-zoom-in'
+                  }`}
+                  aria-label={previewZoomed ? '还原图片' : '放大图片'}
                 >
-                  <Icon name="download" size={16} />
-                </a>
+                  <SafeImage
+                    src={productWallPreviewImage(active)}
+                    alt={active.title}
+                    loading="eager"
+                    className={`h-full w-full object-contain drop-shadow-[0_16px_42px_rgba(0,0,0,0.18)] ${previewDragging ? '' : 'transition-transform duration-300 ease-out'}`}
+                    fallbackClassName="h-full w-full"
+                    style={{
+                      transform: `translate3d(${previewPan.x}px, ${previewPan.y}px, 0) scale(${previewZoom})`,
+                      willChange: previewZoomed ? 'transform' : undefined,
+                    }}
+                  />
+                </button>
+              </div>
+
+              {/* Bottom info bar with action buttons */}
+              <div
+                className="relative z-20 shrink-0 border-t border-outline-variant/12 bg-surface px-4 pt-3 text-on-surface md:flex md:items-center md:justify-between md:px-5 md:py-3"
+                style={{ paddingBottom: 'max(1rem, env(safe-area-inset-bottom))' }}
+              >
+                <div className="min-w-0">
+                  <p className="text-[11px] font-semibold tracking-[0.18em] text-primary-container">{active.kind}</p>
+                  <h2 className="mt-1 truncate text-base font-bold md:text-lg">{active.title}</h2>
+                  {active.description ? (
+                    <p className="mt-1 line-clamp-2 text-xs leading-5 text-on-surface-variant">{active.description}</p>
+                  ) : null}
+                </div>
+                {/* Action buttons: grid on mobile, flex row on desktop */}
+                <div className="mt-3 grid grid-cols-4 gap-2 md:mt-0 md:flex md:shrink-0 md:items-center md:gap-1.5">
+                  <button
+                    type="button"
+                    onClick={togglePreviewZoom}
+                    className={`inline-flex h-10 items-center justify-center gap-1.5 rounded-xl border text-sm font-medium transition-colors md:h-9 md:w-9 md:rounded-full md:text-xs ${
+                      previewZoomed
+                        ? 'border-primary-container/25 bg-primary-container/10 text-primary-container'
+                        : 'border-outline-variant/16 bg-surface-container-low text-on-surface-variant active:bg-surface-container-high'
+                    }`}
+                    aria-label={previewZoomed ? '还原' : '放大'}
+                  >
+                    <Icon name={previewZoomed ? 'zoom_out' : 'zoom_in'} size={16} />
+                    <span className="md:hidden">{previewZoomed ? '还原' : '放大'}</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={toggleFavorite}
+                    className={`inline-flex h-10 items-center justify-center gap-1.5 rounded-xl border text-sm font-medium transition-colors md:h-9 md:w-9 md:rounded-full md:text-xs ${
+                      activeFavorited
+                        ? 'border-primary-container/25 bg-primary-container/10 text-primary-container'
+                        : 'border-outline-variant/16 bg-surface-container-low text-on-surface-variant active:bg-surface-container-high'
+                    }`}
+                    aria-label={activeFavorited ? '取消收藏' : '收藏'}
+                  >
+                    <Icon name={activeFavorited ? 'favorite' : 'star'} size={16} />
+                    <span className="md:hidden">{activeFavorited ? '取消收藏' : '收藏'}</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={shareActiveImage}
+                    className={`inline-flex h-10 items-center justify-center gap-1.5 rounded-xl border text-sm font-medium transition-colors md:h-9 md:w-9 md:rounded-full md:text-xs ${
+                      shareState === 'copied'
+                        ? 'border-primary-container/25 bg-primary-container/10 text-primary-container'
+                        : 'border-outline-variant/16 bg-surface-container-low text-on-surface-variant active:bg-surface-container-high'
+                    }`}
+                    aria-label={shareState === 'copied' ? '已复制' : '分享'}
+                  >
+                    <Icon name={shareState === 'copied' ? 'check' : 'share'} size={16} />
+                    <span className="md:hidden">{shareState === 'copied' ? '已复制' : '分享'}</span>
+                  </button>
+                  <a
+                    href={active.image}
+                    download={productWallDownloadName(active)}
+                    className="inline-flex h-10 items-center justify-center gap-1.5 rounded-xl border border-outline-variant/16 bg-surface-container-low text-sm font-medium text-on-surface-variant transition-colors active:bg-surface-container-high md:h-9 md:w-9 md:rounded-full md:text-xs"
+                    aria-label="下载"
+                  >
+                    <Icon name="download" size={16} />
+                    <span className="md:hidden">下载</span>
+                  </a>
+                </div>
               </div>
             </div>
-          </div>
-        </div>
-      )}
+          </div>,
+          document.body,
+        )}
       <LoginConfirmDialog open={loginDialogOpen} onClose={() => setLoginDialogOpen(false)} reason={loginDialogReason} />
     </AdminPageShell>
   );

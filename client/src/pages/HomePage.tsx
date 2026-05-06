@@ -1074,12 +1074,12 @@ function ProductCardMobile({
       >
         <div className="h-[140px] bg-surface-container-lowest relative overflow-hidden flex items-center justify-center">
           <ModelThumbnail src={product.thumbnailUrl} alt={product.name} className="w-full h-full object-cover" />
-          <div className="absolute top-2 left-2 flex flex-col gap-0.5">
+          <div className="absolute top-1.5 left-1.5 flex flex-col gap-0.5 opacity-70">
             {product.formats.map((f, index) => (
-              <FormatTag key={`${f || 'format'}-${index}`} format={f} />
+              <FormatTag key={`${f || 'format'}-${index}`} format={f} size="xs" />
             ))}
           </div>
-          <span className="absolute top-2 right-2 text-[9px] text-on-surface-variant/60 bg-black/30 backdrop-blur-sm px-1.5 py-0.5 rounded-sm">
+          <span className="absolute top-1.5 right-1.5 text-[7px] text-on-surface-variant/50 bg-black/25 backdrop-blur-sm px-1 py-px rounded-sm">
             {product.fileSize}
           </span>
         </div>

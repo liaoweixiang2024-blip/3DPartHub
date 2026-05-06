@@ -129,7 +129,7 @@ function StatusActions({ status, onUpdate }: { ticketId: string; status: string;
       {status === 'open' && (
         <button
           onClick={() => onUpdate('in_progress')}
-          className="px-2.5 py-1 text-xs text-blue-500 border border-blue-500/30 rounded-sm hover:bg-blue-500/10 transition-colors"
+          className="whitespace-nowrap rounded-full px-3 py-1 text-[11px] font-medium text-blue-600 bg-blue-500/10 hover:bg-blue-500/20 active:scale-[0.96] transition-all"
         >
           开始处理
         </button>
@@ -137,7 +137,7 @@ function StatusActions({ status, onUpdate }: { ticketId: string; status: string;
       {status === 'in_progress' && (
         <button
           onClick={() => onUpdate('resolved')}
-          className="px-2.5 py-1 text-xs text-green-500 border border-green-500/30 rounded-sm hover:bg-green-500/10 transition-colors"
+          className="whitespace-nowrap rounded-full px-3 py-1 text-[11px] font-medium text-emerald-600 bg-emerald-500/10 hover:bg-emerald-500/20 active:scale-[0.96] transition-all"
         >
           标记解决
         </button>
@@ -145,7 +145,7 @@ function StatusActions({ status, onUpdate }: { ticketId: string; status: string;
       {status !== 'closed' && (
         <button
           onClick={() => onUpdate('closed')}
-          className="px-2.5 py-1 text-xs text-on-surface-variant border border-outline-variant/20 rounded-sm hover:bg-surface-container-highest transition-colors"
+          className="whitespace-nowrap rounded-full px-3 py-1 text-[11px] font-medium text-on-surface-variant bg-surface-container-highest/70 hover:bg-surface-container-highest active:scale-[0.96] transition-all"
         >
           关闭工单
         </button>
@@ -153,7 +153,7 @@ function StatusActions({ status, onUpdate }: { ticketId: string; status: string;
       {status === 'closed' && (
         <button
           onClick={() => onUpdate('open')}
-          className="px-2.5 py-1 text-xs text-primary-container border border-primary-container/30 rounded-sm hover:bg-primary-container/10 transition-colors"
+          className="whitespace-nowrap rounded-full px-3 py-1 text-[11px] font-medium text-primary-container bg-primary-container/10 hover:bg-primary-container/20 active:scale-[0.96] transition-all"
         >
           重新打开
         </button>
