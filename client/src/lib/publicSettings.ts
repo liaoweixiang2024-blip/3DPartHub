@@ -9,6 +9,17 @@ let inflight: Promise<Partial<SystemSettings>> | null = null;
 const STORAGE_KEY = 'site_config_cache';
 const TTL = 2 * 60 * 1000; // 2 minutes — config changes propagate faster
 
+// Eagerly hydrate cache from localStorage so synchronous getters
+// (getSiteTitle, getSiteLogo, etc.) always return the last-known values,
+// even on cold start or when the network is slow.
+{
+  const stored = loadFromStorage();
+  if (stored) {
+    cache = stored.data;
+    fetchedAt = stored.ts;
+  }
+}
+
 function loadFromStorage(): { data: Partial<SystemSettings>; ts: number } | null {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);

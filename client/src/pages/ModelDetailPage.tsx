@@ -859,6 +859,7 @@ export default function ModelDetailPage() {
   const [loginPromptReason, setLoginPromptReason] = useState('');
   const [editOpen, setEditOpen] = useState(false);
   const [shareOpen, setShareOpen] = useState(false);
+  const [viewerFullscreen, setViewerFullscreen] = useState(false);
   const isAdmin = useAuthStore.getState().user?.role === 'ADMIN';
   const { toast } = useToast();
   const currentPath = `${location.pathname}${location.search}${location.hash}`;
@@ -1438,6 +1439,7 @@ export default function ModelDetailPage() {
           }}
           showBackButton={!sheetExpanded}
           onBack={handleBack}
+          onPseudoFullscreenChange={setViewerFullscreen}
           onThumbnailUpdated={() => {
             mutate();
             globalMutate((k: string) => typeof k === 'string' && k.startsWith('/models'));
@@ -1447,7 +1449,7 @@ export default function ModelDetailPage() {
         {/* Bottom sheet */}
         <div
           ref={sheetRef}
-          className="absolute bottom-0 left-0 right-0 z-30 bg-surface-container-low rounded-t-2xl shadow-[0_-2px_20px_rgba(0,0,0,0.25)] border-t border-outline-variant/10 flex flex-col overflow-hidden"
+          className={`absolute bottom-0 left-0 right-0 ${viewerFullscreen ? 'z-[10000]' : 'z-30'} bg-surface-container-low rounded-t-2xl shadow-[0_-2px_20px_rgba(0,0,0,0.25)] border-t border-outline-variant/10 flex flex-col overflow-hidden`}
           onTouchStart={handleSheetTouchStart}
           onTouchEnd={handleSheetTouchEnd}
           onTouchCancel={cancelSheetDrag}

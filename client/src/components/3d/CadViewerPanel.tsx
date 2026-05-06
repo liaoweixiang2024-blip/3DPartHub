@@ -83,6 +83,7 @@ interface CadViewerPanelProps {
   onClick?: MouseEventHandler<HTMLDivElement>;
   showBackButton?: boolean;
   onBack?: () => void;
+  onPseudoFullscreenChange?: (active: boolean) => void;
 }
 
 function friendlyViewerError(error: Error | null) {
@@ -184,6 +185,7 @@ export default function CadViewerPanel({
   onClick,
   showBackButton = false,
   onBack,
+  onPseudoFullscreenChange,
 }: CadViewerPanelProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [, setLoaded] = useState(false);
@@ -381,6 +383,10 @@ export default function CadViewerPanel({
     };
   }, [pseudoFullscreen]);
 
+  useEffect(() => {
+    onPseudoFullscreenChange?.(pseudoFullscreen);
+  }, [pseudoFullscreen, onPseudoFullscreenChange]);
+
   const handlePartsChange = useCallback((nextParts: ModelPartItem[]) => {
     setParts(nextParts);
   }, []);
@@ -491,7 +497,7 @@ export default function CadViewerPanel({
   return (
     <div
       ref={containerRef}
-      className={`${baseClassName} ${className} ${pseudoFullscreen ? 'fixed inset-0 z-[9999] rounded-none' : ''}`}
+      className={`${baseClassName} ${className} ${pseudoFullscreen ? (isMobile ? 'fixed top-0 right-0 left-0 z-[9999] rounded-none' : 'fixed inset-0 z-[9999] rounded-none') : ''}`}
       style={panelStyle}
       onClick={onClick}
     >

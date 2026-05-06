@@ -1,4 +1,5 @@
-import { lazy, Suspense, useState, type ReactNode } from 'react';
+import { lazy, Suspense, useState, useContext, type ReactNode } from 'react';
+import { ShellLayoutContext } from './AdminPageShell';
 import { useMediaQuery } from '../../layouts/hooks/useMediaQuery';
 import BottomNav from './BottomNav';
 import { mergeClassName } from './PagePrimitives';
@@ -25,9 +26,20 @@ export function PublicPageShell({
   showMobileBottomNav = true,
   keepMobileDrawerMounted = false,
 }: PublicPageShellProps) {
+  const inLayout = useContext(ShellLayoutContext);
   const isDesktop = useMediaQuery('(min-width: 768px)');
   const [navOpen, setNavOpen] = useState(false);
 
+  // Inside layout route — layout handles TopNav/BottomNav, just render content
+  if (inLayout) {
+    if (isDesktop) {
+      return <div className={mergeClassName('flex flex-1 flex-col min-h-0', className)}>{children}</div>;
+    }
+    // Mobile inside layout — wrap in flex container so children with flex-1 get proper height
+    return <div className="flex flex-1 flex-col min-h-0">{children}</div>;
+  }
+
+  // Standalone (fallback) — render full shell
   if (isDesktop) {
     return (
       <div className={mergeClassName('flex h-dvh flex-col overflow-hidden bg-surface', className)}>

@@ -32,9 +32,9 @@ import BrandMark from './BrandMark';
 import Icon from './Icon';
 import LoginConfirmDialog from './LoginConfirmDialog';
 import Tooltip from './Tooltip';
+import NotificationPanel from './NotificationPanel';
 import { checkProtectedAccess } from './ProtectedLink';
 
-const NotificationPanel = lazy(() => import('./NotificationPanel'));
 const UploadModal = lazy(() => import('./UploadModal'));
 
 interface TopNavProps {
@@ -51,24 +51,7 @@ function isComposingNativeEvent(event: Event) {
 }
 
 function NotificationPanelLoader({ compact = false }: { compact?: boolean }) {
-  return (
-    <Suspense
-      fallback={
-        <button
-          type="button"
-          className={`${compact ? 'h-9 w-9' : 'p-2'} rounded-lg text-on-surface-variant`}
-          aria-label="通知"
-          data-tooltip="通知"
-          data-tooltip-side="bottom"
-          disabled
-        >
-          <Icon name="notifications" size={compact ? 18 : 20} />
-        </button>
-      }
-    >
-      <NotificationPanel compact={compact} />
-    </Suspense>
-  );
+  return <NotificationPanel compact={compact} />;
 }
 
 function UploadModalLoader({
@@ -425,10 +408,9 @@ export default function TopNav({ compact = false, onMenuToggle }: TopNavProps) {
   if (compact) {
     return (
       <>
-        <header
-          className="bg-surface-container-low border-b border-surface-container-highest shrink-0 z-[250]"
-          style={{ paddingTop: 'env(safe-area-inset-top, 0px)' }}
-        >
+        <header className="bg-surface-container-low border-b border-surface-container-highest shrink-0 z-[250]">
+          {/* Safe area spacer — keeps Logo and icons clickable */}
+          <div style={{ height: 'env(safe-area-inset-top, 0px)' }} />
           <div className="flex h-12 items-center gap-1 px-3">
             <button
               onClick={() => onMenuToggle?.()}
@@ -438,8 +420,17 @@ export default function TopNav({ compact = false, onMenuToggle }: TopNavProps) {
             >
               <Icon name="menu" size={22} />
             </button>
-            <Link to="/" className="flex h-9 min-w-0 flex-1 items-center">
-              <BrandMark size="compact" />
+            <Link
+              to="/"
+              onClick={(e) => {
+                if (location.pathname === '/') {
+                  e.preventDefault();
+                  window.location.reload();
+                }
+              }}
+              className="flex h-9 min-w-0 flex-1 items-center rounded-sm active:opacity-60 transition-opacity duration-100"
+            >
+              <BrandMark size="compact" eagerLoad />
             </Link>
             <div className="ml-auto flex h-9 shrink-0 items-center gap-0.5">
               <NotificationPanelLoader compact />
@@ -504,9 +495,15 @@ export default function TopNav({ compact = false, onMenuToggle }: TopNavProps) {
       <header className="h-14 flex items-center bg-surface-container-low border-b border-outline-variant/10 shrink-0 z-50">
         <Link
           to="/"
-          className="flex w-56 shrink-0 cursor-pointer items-center px-5 transition-all hover:opacity-80 active:scale-95"
+          onClick={(e) => {
+            if (location.pathname === '/') {
+              e.preventDefault();
+              window.location.reload();
+            }
+          }}
+          className="flex w-56 shrink-0 cursor-pointer items-center px-5 transition-[opacity,transform] hover:opacity-80 active:scale-95"
         >
-          <BrandMark size="nav" className="w-full" />
+          <BrandMark size="nav" className="w-full" eagerLoad />
         </Link>
 
         <form

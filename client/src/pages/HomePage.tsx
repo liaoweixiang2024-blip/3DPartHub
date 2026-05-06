@@ -1,5 +1,6 @@
 import { motion, AnimatePresence } from 'framer-motion';
 import { useState, useEffect, useMemo, useCallback, useRef, type MouseEvent, type UIEvent } from 'react';
+import { createPortal } from 'react-dom';
 import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import useSWR from 'swr';
 import { categoriesApi, type CategoryItem } from '../api/categories';
@@ -257,6 +258,7 @@ function SkeletonCardMobile() {
 
 const HOME_SCROLL_POSITION_PREFIX = 'home_model_scroll_position:';
 const HOME_SCROLL_TARGET_PREFIX = 'home_model_scroll_target:';
+const HOME_SCROLL_OFFSET_PREFIX = 'home_model_scroll_offset:';
 const HOME_BROWSE_STATE_PREFIX = 'home_model_browse_state:';
 const HOME_SCROLL_RESTORE_PENDING_KEY = 'home_model_scroll_restore_pending_v1';
 
@@ -375,14 +377,25 @@ function readPendingHomeBrowseState() {
   }
 }
 
-function saveHomeScrollPosition(restoreKey: string, scrollTop: number, pendingRestore = false, modelId?: string) {
+function saveHomeScrollPosition(
+  restoreKey: string,
+  scrollTop: number,
+  pendingRestore = false,
+  modelId?: string,
+  viewportOffset?: number,
+) {
   if (typeof window === 'undefined') return;
   try {
     window.sessionStorage.setItem(
       `${HOME_SCROLL_POSITION_PREFIX}${restoreKey}`,
       String(Math.max(0, Math.round(scrollTop))),
     );
-    if (modelId) window.sessionStorage.setItem(`${HOME_SCROLL_TARGET_PREFIX}${restoreKey}`, modelId);
+    if (modelId) {
+      window.sessionStorage.setItem(`${HOME_SCROLL_TARGET_PREFIX}${restoreKey}`, modelId);
+      if (viewportOffset != null) {
+        window.sessionStorage.setItem(`${HOME_SCROLL_OFFSET_PREFIX}${restoreKey}`, String(Math.round(viewportOffset)));
+      }
+    }
     if (pendingRestore) window.sessionStorage.setItem(HOME_SCROLL_RESTORE_PENDING_KEY, restoreKey);
   } catch {
     // Ignore private browsing or storage quota failures.
@@ -409,6 +422,17 @@ function readHomeScrollTarget(restoreKey: string) {
   }
 }
 
+function readHomeScrollOffset(restoreKey: string) {
+  if (typeof window === 'undefined') return null;
+  try {
+    const raw = window.sessionStorage.getItem(`${HOME_SCROLL_OFFSET_PREFIX}${restoreKey}`);
+    const parsed = raw ? Number(raw) : null;
+    return parsed != null && Number.isFinite(parsed) ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
 function getHomeModelElement(container: HTMLElement, modelId: string) {
   return (
     Array.from(container.querySelectorAll<HTMLElement>('[data-home-model-id]')).find(
@@ -417,19 +441,25 @@ function getHomeModelElement(container: HTMLElement, modelId: string) {
   );
 }
 
-function scrollHomeToModel(container: HTMLElement, modelId: string | null, fallbackTop: number | null) {
+function scrollHomeToModel(
+  container: HTMLElement,
+  modelId: string | null,
+  fallbackTop: number | null,
+  savedOffset: number | null,
+) {
+  // Best: find the target model element and restore its exact visual position
   if (modelId) {
     const target = getHomeModelElement(container, modelId);
     if (target) {
       const containerRect = container.getBoundingClientRect();
       const targetRect = target.getBoundingClientRect();
-      const topPadding = Math.max(16, Math.round(container.clientHeight * 0.14));
-      const top = container.scrollTop + targetRect.top - containerRect.top - topPadding;
+      const offset = savedOffset ?? 0;
+      const top = container.scrollTop + targetRect.top - containerRect.top - offset;
       container.scrollTo({ top: Math.max(0, top), behavior: 'auto' });
       return true;
     }
-    return false;
   }
+  // Fallback: use raw scrollTop
   if (fallbackTop != null) {
     container.scrollTo({ top: fallbackTop, behavior: 'auto' });
     return true;
@@ -1183,6 +1213,15 @@ export default function HomePage() {
   const scrollContainerRef = useRef<HTMLElement | null>(null);
   const restoreFrameRef = useRef<number | null>(null);
   const consumedHomeStateKeyRef = useRef<string | null>(null);
+  const isRestoringScrollRef = useRef(false);
+
+  // Pull-to-refresh (mobile only)
+  const pullStateRef = useRef<'idle' | 'pulling' | 'ready' | 'refreshing'>('idle');
+  const pullStartY = useRef(0);
+  const [pullOffset, setPullOffset] = useState(0);
+  const [pullState, setPullState] = useState<'idle' | 'pulling' | 'ready' | 'refreshing'>('idle');
+  const pullThreshold = typeof window !== 'undefined' ? Math.round(window.innerHeight / 3) : 200;
+  const pullMaxVisual = 80;
 
   // Keep browsing controls in React/navigation state. Legacy query links still work, then get cleaned from the URL.
   useEffect(() => {
@@ -1270,7 +1309,7 @@ export default function HomePage() {
       if (!detail.preservePage) {
         if (query && activeCategory !== 'all') setActiveCategory('all');
         setPage(1);
-        scrollContainerRef.current?.scrollTo({ top: 0, behavior: 'smooth' });
+        if (!isRestoringScrollRef.current) scrollContainerRef.current?.scrollTo({ top: 0, behavior: 'smooth' });
       }
       if (searchParams.has('q')) {
         const nextParams = new URLSearchParams(searchParams);
@@ -1360,7 +1399,7 @@ export default function HomePage() {
     const normalizedSort = normalizeSortParam(nextSort);
     setSortBy(normalizedSort);
     setPage(1);
-    scrollContainerRef.current?.scrollTo({ top: 0, behavior: 'smooth' });
+    if (!isRestoringScrollRef.current) scrollContainerRef.current?.scrollTo({ top: 0, behavior: 'smooth' });
   }, []);
 
   const modelReturnPath = useMemo(() => buildHomeReturnPath(), []);
@@ -1386,7 +1425,18 @@ export default function HomePage() {
     (pendingRestore = false, modelId?: string) => {
       saveHomeBrowseState(homeRestoreKey, homeBrowseState);
       writeHomeBrowseStateToCurrentHistory(homeBrowseState);
-      saveHomeScrollPosition(homeRestoreKey, scrollContainerRef.current?.scrollTop || 0, pendingRestore, modelId);
+      // Compute the model element's offset from the visible top of the scroll container
+      let viewportOffset: number | undefined;
+      const container = scrollContainerRef.current;
+      if (modelId && container) {
+        const target = getHomeModelElement(container, modelId);
+        if (target) {
+          const containerRect = container.getBoundingClientRect();
+          const targetRect = target.getBoundingClientRect();
+          viewportOffset = targetRect.top - containerRect.top;
+        }
+      }
+      saveHomeScrollPosition(homeRestoreKey, container?.scrollTop || 0, pendingRestore, modelId, viewportOffset);
     },
     [homeBrowseState, homeRestoreKey],
   );
@@ -1398,11 +1448,90 @@ export default function HomePage() {
 
   const handleHomeScroll = useCallback(
     (event: UIEvent<HTMLElement>) => {
+      if (isRestoringScrollRef.current) return;
       saveHomeScrollPosition(homeRestoreKey, event.currentTarget.scrollTop);
       setContextMenu((current) => (current ? null : current));
     },
     [homeRestoreKey],
   );
+
+  // ─── Pull-to-refresh touch handlers (mobile) ───
+  const handlePullTouchStart = useCallback(
+    (e: React.TouchEvent) => {
+      if (isDesktop || pullStateRef.current === 'refreshing') return;
+      const container = scrollContainerRef.current;
+      if (!container || container.scrollTop > 0) return;
+      pullStartY.current = e.touches[0].clientY;
+    },
+    [isDesktop],
+  );
+
+  const handlePullTouchMove = useCallback(
+    (e: React.TouchEvent) => {
+      if (isDesktop || pullStateRef.current === 'refreshing') return;
+      const container = scrollContainerRef.current;
+      if (!container) return;
+      if (container.scrollTop > 0 && pullStateRef.current === 'idle') return;
+
+      const delta = e.touches[0].clientY - pullStartY.current;
+      if (delta <= 0) {
+        if (pullStateRef.current !== 'idle') {
+          pullStateRef.current = 'idle';
+          setPullState('idle');
+          setPullOffset(0);
+        }
+        return;
+      }
+
+      // Prevent native pull-to-refresh / overscroll
+      if (container.scrollTop <= 0 && pullStateRef.current !== 'idle') {
+        e.preventDefault();
+      }
+
+      // Rubber-band: ease out as user pulls further
+      const resisted = Math.round(pullMaxVisual * (1 - Math.exp(-delta / pullThreshold)));
+      const state = delta >= pullThreshold ? 'ready' : 'pulling';
+      pullStateRef.current = state;
+      setPullState(state);
+      setPullOffset(resisted);
+    },
+    [isDesktop, pullThreshold],
+  );
+
+  const handlePullTouchEnd = useCallback(async () => {
+    if (isDesktop) return;
+    if (pullStateRef.current === 'refreshing') return;
+
+    if (pullStateRef.current === 'ready') {
+      pullStateRef.current = 'refreshing';
+      setPullState('refreshing');
+      setPullOffset(pullMaxVisual);
+      const started = Date.now();
+      try {
+        setPage(1);
+        await Promise.all([mutateModels(), mutateCategories()]);
+      } catch {
+        // SWR handles error reporting
+      }
+      // Keep the spinner visible at least 800ms so the user sees the animation
+      const elapsed = Date.now() - started;
+      if (elapsed < 800) {
+        await new Promise((r) => setTimeout(r, 800 - elapsed));
+      }
+    }
+
+    // Animate back
+    pullStateRef.current = 'idle';
+    setPullState('idle');
+    setPullOffset(0);
+  }, [isDesktop, mutateModels, mutateCategories]);
+
+  const handlePullTransitionEnd = useCallback(() => {
+    // Reset after collapse animation
+    if (pullStateRef.current === 'idle') {
+      setPullOffset(0);
+    }
+  }, []);
 
   const handleModelContextMenu = useCallback(
     (event: MouseEvent, product: Product) => {
@@ -1496,34 +1625,64 @@ export default function HomePage() {
     setContextMenu(null);
   }, []);
 
+  // Scroll restoration: save model element offset for pixel-perfect return,
+  // then continuously correct for layout shifts until stable.
   useEffect(() => {
     if (isLoading || getPendingHomeRestoreKey() !== homeRestoreKey) return;
     const targetTop = readHomeScrollPosition(homeRestoreKey);
     const targetModelId = readHomeScrollTarget(homeRestoreKey);
+    const savedOffset = readHomeScrollOffset(homeRestoreKey);
     if (targetTop == null && !targetModelId) return;
 
     if (restoreFrameRef.current != null) window.cancelAnimationFrame(restoreFrameRef.current);
-    let restored = false;
-    const tryRestore = () => {
+    let cancelled = false;
+    let lastScrollTop = -1;
+    let stableCount = 0;
+    const DEADLINE_MS = 3000;
+    const startTime = Date.now();
+
+    isRestoringScrollRef.current = true;
+
+    const doRestore = () => {
+      if (cancelled) return;
       const container = scrollContainerRef.current;
-      if (!container || restored) return false;
-      restored = scrollHomeToModel(container, targetModelId, targetTop);
-      if (restored) clearPendingHomeRestore(homeRestoreKey);
-      return restored;
+      if (!container) return;
+
+      if (targetModelId) {
+        const target = getHomeModelElement(container, targetModelId);
+        if (target) {
+          const containerRect = container.getBoundingClientRect();
+          const targetRect = target.getBoundingClientRect();
+          const offset = savedOffset ?? 0;
+          const top = container.scrollTop + targetRect.top - containerRect.top - offset;
+          container.scrollTo({ top: Math.max(0, top), behavior: 'auto' });
+          if (Math.abs(container.scrollTop - lastScrollTop) < 1) {
+            stableCount++;
+          } else {
+            stableCount = 0;
+          }
+          lastScrollTop = container.scrollTop;
+          if (stableCount >= 3 || Date.now() - startTime > DEADLINE_MS) {
+            clearPendingHomeRestore(homeRestoreKey);
+            isRestoringScrollRef.current = false;
+            return;
+          }
+        }
+      } else if (targetTop != null) {
+        container.scrollTo({ top: targetTop, behavior: 'auto' });
+        clearPendingHomeRestore(homeRestoreKey);
+        isRestoringScrollRef.current = false;
+        return;
+      }
+
+      restoreFrameRef.current = window.requestAnimationFrame(doRestore);
     };
 
-    restoreFrameRef.current = window.requestAnimationFrame(() => {
-      tryRestore();
-      restoreFrameRef.current = window.requestAnimationFrame(() => {
-        tryRestore();
-        restoreFrameRef.current = window.requestAnimationFrame(() => {
-          tryRestore();
-          restoreFrameRef.current = null;
-        });
-      });
-    });
+    restoreFrameRef.current = window.requestAnimationFrame(doRestore);
 
     return () => {
+      cancelled = true;
+      isRestoringScrollRef.current = false;
       if (restoreFrameRef.current != null) {
         window.cancelAnimationFrame(restoreFrameRef.current);
         restoreFrameRef.current = null;
@@ -1713,59 +1872,6 @@ export default function HomePage() {
             )}
           </main>
         </div>
-        {/* Full-width Footer */}
-        <footer className="shrink-0 border-t border-outline-variant/10 bg-surface-container-low">
-          <div className="px-8 py-4">
-            <div className="flex items-center justify-between gap-8">
-              {/* Left: Brand */}
-              <span className="font-headline font-semibold text-sm text-on-surface-variant/60">{getSiteTitle()}</span>
-              {/* Right: Links + Contact */}
-              <div className="flex items-center gap-5">
-                {getFooterLinks().map((link, i) => (
-                  <a
-                    key={i}
-                    href={link.url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-[11px] text-on-surface-variant/40 hover:text-on-surface-variant/70 transition-colors"
-                  >
-                    {link.label}
-                  </a>
-                ))}
-                {getContactEmail() && (
-                  <a
-                    href={`mailto:${getContactEmail()}`}
-                    className="flex items-center gap-1.5 text-[11px] text-on-surface-variant/40 hover:text-primary transition-colors"
-                  >
-                    <Icon name="mail" size={13} />
-                    <span>{getContactEmail()}</span>
-                  </a>
-                )}
-                {getContactPhone() && (
-                  <a
-                    href={`tel:${getContactPhone()}`}
-                    className="flex items-center gap-1.5 text-[11px] text-on-surface-variant/40 hover:text-primary transition-colors"
-                  >
-                    <Icon name="phone" size={13} />
-                    <span>{getContactPhone()}</span>
-                  </a>
-                )}
-              </div>
-            </div>
-            {/* Copyright + Address line */}
-            <div className="flex items-center justify-between mt-2.5">
-              <p className="text-[10px] text-on-surface-variant/25">
-                {getFooterCopyright() || `© ${new Date().getFullYear()} ${getSiteTitle()}. All rights reserved.`}
-              </p>
-              {getContactAddress() && (
-                <span className="flex items-center gap-1 text-[10px] text-on-surface-variant/25">
-                  <Icon name="domain" size={11} />
-                  {getContactAddress()}
-                </span>
-              )}
-            </div>
-          </div>
-        </footer>
         <AnimatePresence>
           {deleteTarget && (
             <motion.div
@@ -1892,27 +1998,53 @@ export default function HomePage() {
   }
 
   // Mobile layout
+  const mobileFilterDrawer = (
+    <MobileDrawer
+      open={drawerOpen}
+      onClose={() => setDrawerOpen(false)}
+      expandedCategories={expandedCategories}
+      activeCategory={activeCategory}
+      categories={categories}
+      totalCount={totalModelCount}
+      onToggle={toggleCategory}
+      onSelect={handleSelectCategory}
+    />
+  );
+
   return (
-    <PublicPageShell
-      onMobileMenuToggle={() => setDrawerOpen((prev) => !prev)}
-      mobileDrawer={
-        <MobileDrawer
-          open={drawerOpen}
-          onClose={() => setDrawerOpen(false)}
-          expandedCategories={expandedCategories}
-          activeCategory={activeCategory}
-          categories={categories}
-          totalCount={totalModelCount}
-          onToggle={toggleCategory}
-          onSelect={handleSelectCategory}
-        />
-      }
-    >
+    <PublicPageShell onMobileMenuToggle={() => setDrawerOpen((prev) => !prev)}>
+      {createPortal(mobileFilterDrawer, document.body)}
       <main
         ref={scrollContainerRef}
         onScroll={handleHomeScroll}
+        onTouchStart={!isDesktop ? handlePullTouchStart : undefined}
+        onTouchMove={!isDesktop ? handlePullTouchMove : undefined}
+        onTouchEnd={!isDesktop ? handlePullTouchEnd : undefined}
         className="flex-1 overflow-y-auto overflow-x-hidden scrollbar-hidden bg-surface-dim"
       >
+        {/* Pull-to-refresh indicator (mobile only) */}
+        {!isDesktop && pullOffset > 0 && (
+          <div
+            className="flex items-center justify-center gap-2 text-xs text-on-surface-variant select-none overflow-hidden"
+            style={{
+              height: pullOffset,
+              transition: pullState === 'idle' ? 'height 0.3s cubic-bezier(0.25, 0.1, 0.25, 1)' : 'none',
+            }}
+            onTransitionEnd={handlePullTransitionEnd}
+          >
+            {pullState === 'refreshing' ? (
+              <Icon name="autorenew" size={18} className="text-primary-container animate-spin" />
+            ) : (
+              <Icon
+                name="arrow_downward"
+                size={18}
+                className="text-primary-container transition-transform duration-200"
+                style={{ transform: pullState === 'ready' ? 'rotate(180deg)' : 'rotate(0deg)' }}
+              />
+            )}
+            <span>{pullState === 'refreshing' ? '正在刷新...' : pullState === 'ready' ? '松开刷新' : '下拉刷新'}</span>
+          </div>
+        )}
         <div className="p-3 space-y-3 pb-20 min-h-full flex flex-col">
           <AnnouncementBanner />
           {/* Header with category filter button */}

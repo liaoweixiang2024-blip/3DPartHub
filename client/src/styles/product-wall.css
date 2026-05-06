@@ -247,6 +247,8 @@
     flex: 1 1 auto;
     min-height: 0;
     padding: max(0.75rem, env(safe-area-inset-top)) 0.75rem 0.75rem;
+    background-color: transparent !important;
+    background-image: none !important;
   }
   .product-wall-preview-image {
     max-height: 100%;

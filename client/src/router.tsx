@@ -1,6 +1,6 @@
-import { motion, AnimatePresence } from 'framer-motion';
 import { lazy, Suspense, useEffect, useRef, useState } from 'react';
 import { Routes, Route, Link, useLocation, useNavigate, Navigate } from 'react-router-dom';
+import { AdminLayout, PublicLayout } from './components/shared/AdminPageShell';
 import BrandMark from './components/shared/BrandMark';
 import Icon from './components/shared/Icon';
 import LoginConfirmDialog from './components/shared/LoginConfirmDialog';
@@ -42,12 +42,6 @@ const InquiryDetailPage = lazy(() => import('./pages/InquiryDetailPage'));
 const InquiryAdminPage = lazy(() => import('./pages/InquiryAdminPage'));
 const SelectionSharePage = lazy(() => import('./pages/SelectionSharePage'));
 
-const pageVariants = {
-  initial: { opacity: 0 },
-  animate: { opacity: 1, transition: { duration: 0.15 } },
-  exit: { opacity: 0, transition: { duration: 0.1 } },
-};
-
 function PageWrap({ children }: { children: React.ReactNode }) {
   return (
     <Suspense
@@ -57,14 +51,12 @@ function PageWrap({ children }: { children: React.ReactNode }) {
         </div>
       }
     >
-      <motion.div variants={pageVariants} initial="initial" animate="animate" exit="exit" className="h-full">
-        {children}
-      </motion.div>
+      {children}
     </Suspense>
   );
 }
 
-// Protected pages — check auth BEFORE entering motion animation
+// Protected pages — check auth BEFORE rendering
 // so redirect to login is instant (no exit animation delay)
 function ProtectedPage({ children, requiredRole }: { children: React.ReactNode; requiredRole?: string }) {
   const { isAuthenticated, user, hasHydrated, restoreSessionFromCookie } = useAuthStore();
@@ -123,9 +115,7 @@ function ProtectedPage({ children, requiredRole }: { children: React.ReactNode; 
         </div>
       }
     >
-      <motion.div variants={pageVariants} initial="initial" animate="animate" exit="exit" className="h-full">
-        {children}
-      </motion.div>
+      {children}
     </Suspense>
   );
 }
@@ -205,40 +195,19 @@ export default function Router() {
   return (
     <MaintenanceGate>
       <ModelReturnPathTracker />
-      <AnimatePresence mode="wait">
-        <Routes location={location} key={location.pathname}>
-          <Route
-            path="/login"
-            element={
-              <ScrollPage>
-                <LoginPage />
-              </ScrollPage>
-            }
-          />
-          <Route
-            path="/legal/:type"
-            element={
-              <ScrollPage>
-                <LegalPage />
-              </ScrollPage>
-            }
-          />
-          <Route
-            path="/share/:token"
-            element={
-              <ScrollPage>
-                <SharePage />
-              </ScrollPage>
-            }
-          />
-          <Route
-            path="/selection/s/:token"
-            element={
-              <ScrollPage>
-                <SelectionSharePage />
-              </ScrollPage>
-            }
-          />
+      <Routes location={location}>
+        {/* ── No shell ── */}
+        <Route
+          path="/login"
+          element={
+            <ScrollPage>
+              <LoginPage />
+            </ScrollPage>
+          }
+        />
+
+        {/* ── Public layout (TopNav, no sidebar) ── */}
+        <Route element={<PublicLayout />}>
           <Route
             path="/"
             element={
@@ -252,6 +221,58 @@ export default function Router() {
             element={
               <PageWrap>
                 <ModelDetailPage />
+              </PageWrap>
+            }
+          />
+          <Route
+            path="/legal/:type"
+            element={
+              <PageWrap>
+                <LegalPage />
+              </PageWrap>
+            }
+          />
+          <Route
+            path="/share/:token"
+            element={
+              <PageWrap>
+                <SharePage />
+              </PageWrap>
+            }
+          />
+          <Route
+            path="/selection/s/:token"
+            element={
+              <PageWrap>
+                <SelectionSharePage />
+              </PageWrap>
+            }
+          />
+        </Route>
+
+        {/* ── Admin layout (TopNav + Sidebar) ── */}
+        <Route element={<AdminLayout />}>
+          <Route
+            path="/selection"
+            element={
+              <PageWrap>
+                <SelectionPage />
+              </PageWrap>
+            }
+          />
+          <Route
+            path="/thread-size"
+            element={
+              <PageWrap>
+                <ThreadSizeToolPage />
+              </PageWrap>
+            }
+          />
+          <Route
+            path="/product-wall"
+            element={
+              <PageWrap>
+                <ProductWallPage />
               </PageWrap>
             }
           />
@@ -400,30 +421,6 @@ export default function Router() {
             }
           />
           <Route
-            path="/selection"
-            element={
-              <PageWrap>
-                <SelectionPage />
-              </PageWrap>
-            }
-          />
-          <Route
-            path="/thread-size"
-            element={
-              <PageWrap>
-                <ThreadSizeToolPage />
-              </PageWrap>
-            }
-          />
-          <Route
-            path="/product-wall"
-            element={
-              <PageWrap>
-                <ProductWallPage />
-              </PageWrap>
-            }
-          />
-          <Route
             path="/admin/selections"
             element={
               <ProtectedPage requiredRole="ADMIN">
@@ -463,9 +460,10 @@ export default function Router() {
               </ProtectedPage>
             }
           />
-          <Route path="*" element={<NotFoundPage />} />
-        </Routes>
-      </AnimatePresence>
+        </Route>
+
+        <Route path="*" element={<NotFoundPage />} />
+      </Routes>
     </MaintenanceGate>
   );
 }

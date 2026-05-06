@@ -32,6 +32,17 @@ export default function SafeImage({
   }, [src]);
 
   if (!src || failed) {
+    if (fallbackIcon === 'hide') {
+      return (
+        <div
+          className={`${className} ${fallbackClassName}`}
+          onClick={onClick}
+          title={title}
+          style={style}
+          role={onClick ? 'button' : undefined}
+        />
+      );
+    }
     return (
       <div
         className={`flex items-center justify-center bg-surface-container-high text-on-surface-variant/35 ${className} ${fallbackClassName}`}

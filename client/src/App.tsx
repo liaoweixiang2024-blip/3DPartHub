@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import { BrowserRouter } from 'react-router-dom';
 import { SWRConfig } from 'swr';
 import ErrorBoundary from './components/shared/ErrorBoundary';
@@ -8,6 +9,20 @@ import { notifyGlobalError } from './lib/errorNotifications';
 import Router from './router';
 
 export default function App() {
+  useEffect(() => {
+    // Wait for the headline font, then reveal the page in the next frame
+    // Using rAF ensures the browser has painted the hidden state first
+    document.fonts
+      .load('bold 1px "Space Grotesk"')
+      .catch(() => {})
+      .finally(() => {
+        requestAnimationFrame(() => {
+          const root = document.getElementById('root');
+          if (root) root.style.opacity = '1';
+        });
+      });
+  }, []);
+
   return (
     <SWRConfig
       value={{

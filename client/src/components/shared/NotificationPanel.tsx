@@ -123,7 +123,7 @@ export default function NotificationPanel({ compact = false }: { compact?: boole
   const [loadError, setLoadError] = useState('');
   const ref = useRef<HTMLDivElement>(null);
 
-  const iconSize = compact ? 20 : 20;
+  const iconSize = 20;
   const safeNotifications = Array.isArray(notifications) ? notifications : [];
 
   // Poll unread count
@@ -237,7 +237,27 @@ export default function NotificationPanel({ compact = false }: { compact?: boole
     [navigate],
   );
 
-  if (!isAuthenticated) return null;
+  // Always render the bell icon so it's visible in PWA standalone mode
+  // where session restoration may be slow. If not authenticated, tapping
+  // it triggers the login flow via UserMenu's onLoginRequired.
+  if (!isAuthenticated) {
+    if (compact) {
+      return (
+        <button
+          onClick={() => {
+            // Redirect to login when not authenticated
+            window.location.href = '/login';
+          }}
+          className="p-2 rounded-lg text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high transition-colors"
+          aria-label="通知"
+          title="登录后查看通知"
+        >
+          <Icon name="notifications" size={20} />
+        </button>
+      );
+    }
+    return null;
+  }
 
   const mobilePanelStyle = isMobile
     ? {

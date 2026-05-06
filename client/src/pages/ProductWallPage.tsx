@@ -221,6 +221,7 @@ export default function ProductWallPage() {
   const pinchRef = useRef({ active: false, startDist: 0, startZoom: 1, cx: 0, cy: 0 });
   const momentumRef = useRef({ vx: 0, vy: 0, raf: 0, lastTime: 0, lastX: 0, lastY: 0 });
   const doubleTapRef = useRef({ lastTap: 0, x: 0, y: 0 });
+  const pinchJustEndedRef = useRef(false);
   const { user, isAuthenticated, hasHydrated } = useAuthStore();
   const { toast } = useToast();
   const { uploadPolicy } = getBusinessConfig();
@@ -806,6 +807,10 @@ export default function ProductWallPage() {
     }
   };
   const handlePreviewImageClick = () => {
+    if (pinchJustEndedRef.current) {
+      pinchJustEndedRef.current = false;
+      return;
+    }
     if (previewDragRef.current.moved) {
       previewDragRef.current.moved = false;
       return;
@@ -867,7 +872,11 @@ export default function ProductWallPage() {
     if (!pinchRef.current.active) return;
     if (e.touches.length < 2) {
       pinchRef.current.active = false;
+      pinchJustEndedRef.current = true;
       setPreviewDragging(false);
+      setTimeout(() => {
+        pinchJustEndedRef.current = false;
+      }, 400);
     }
   };
   const openEditItem = (item: WallItem) => {
@@ -1200,6 +1209,7 @@ export default function ProductWallPage() {
                                 return;
                               }
                               setActive(item);
+                              setManageMenuOpen(false);
                             }}
                             className={`block w-full overflow-hidden rounded-xl text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-container/35 ${
                               selectionMode && !selectable ? 'cursor-not-allowed opacity-55' : ''
@@ -1624,7 +1634,7 @@ export default function ProductWallPage() {
       {active &&
         createPortal(
           <div
-            className="fixed inset-0 z-[9999] flex items-center justify-center p-0 md:p-6"
+            className="fixed inset-0 z-[10002] flex items-center justify-center p-0 md:p-6"
             onClick={() => setActive(null)}
           >
             {/* backdrop */}
@@ -1666,7 +1676,7 @@ export default function ProductWallPage() {
 
               {/* Canvas area */}
               <div
-                className={`product-wall-canvas-${canvasMode} relative flex min-h-0 flex-1 items-center justify-center overflow-hidden`}
+                className={`product-wall-canvas-${canvasMode} product-wall-preview-canvas relative flex min-h-0 flex-1 items-center justify-center overflow-hidden`}
                 ref={previewCanvasRef}
                 onTouchStart={handleCanvasTouchStart}
                 onTouchMove={handleCanvasTouchMove}

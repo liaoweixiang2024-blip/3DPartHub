@@ -40,18 +40,20 @@ export default function MobileNavDrawer({ open, onClose }: MobileNavDrawerProps)
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
+              transition={{ duration: 0.25, ease: [0.4, 0, 0.2, 1] }}
               className="fixed inset-0 bg-black/50 z-[260]"
               onClick={onClose}
             />
             <motion.aside
-              initial={{ x: '-100%' }}
-              animate={{ x: 0 }}
-              exit={{ x: '-100%' }}
-              transition={{ type: 'spring', damping: 25, stiffness: 300 }}
+              initial={{ x: '-100%', opacity: 0.6 }}
+              animate={{ x: 0, opacity: 1 }}
+              exit={{ x: '-100%', opacity: 0.6 }}
+              transition={{ duration: 0.28, ease: [0.32, 0.72, 0, 1] }}
               className="fixed left-0 top-0 w-[min(82vw,280px)] h-dvh bg-surface-container-low z-[270] flex flex-col overflow-y-auto shadow-2xl"
               style={{
                 paddingTop: 'env(safe-area-inset-top, 0px)',
                 paddingBottom: 'env(safe-area-inset-bottom, 0px)',
+                willChange: 'transform',
               }}
             >
               <div className="px-6 py-4 border-b border-surface">

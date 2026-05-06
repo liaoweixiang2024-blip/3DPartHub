@@ -1,5 +1,49 @@
 @import 'tailwindcss';
 
+/* Headline font: block + preloaded in index.html to prevent any FOUT jitter */
+@font-face {
+  font-family: 'Space Grotesk';
+  font-display: block;
+  font-style: normal;
+  font-weight: 400;
+  src: url('/fonts/space-grotesk-latin-400-normal.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Space Grotesk';
+  font-display: block;
+  font-style: normal;
+  font-weight: 600;
+  src: url('/fonts/space-grotesk-latin-600-normal.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Space Grotesk';
+  font-display: block;
+  font-style: normal;
+  font-weight: 700;
+  src: url('/fonts/space-grotesk-latin-700-normal.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Inter';
+  font-display: optional;
+  font-style: normal;
+  font-weight: 400;
+  src: url('@fontsource/inter/files/inter-latin-400-normal.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Inter';
+  font-display: optional;
+  font-style: normal;
+  font-weight: 600;
+  src: url('@fontsource/inter/files/inter-latin-600-normal.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Inter';
+  font-display: optional;
+  font-style: normal;
+  font-weight: 700;
+  src: url('@fontsource/inter/files/inter-latin-700-normal.woff2') format('woff2');
+}
+
 @theme {
   --font-headline: 'Space Grotesk', system-ui, sans-serif;
   --font-body: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
@@ -122,6 +166,7 @@ body {
   inset: 0;
   width: 100%;
   isolation: isolate;
+  opacity: 0;
 }
 
 .overflow-y-auto,
@@ -278,10 +323,6 @@ body {
 .selection-tab-panel {
   animation: selection-tab-panel-in 0.12s ease-out;
   will-change: opacity;
-}
-
-.mobile-nav-drawer-open .bottom-nav {
-  display: none;
 }
 
 /* Skip rendering off-screen model cards for scroll perf */

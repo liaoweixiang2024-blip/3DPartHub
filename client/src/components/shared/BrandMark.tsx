@@ -1,5 +1,11 @@
-import type { ReactNode } from 'react';
-import { getLogoDisplayMode, getSiteIcon, getSiteLogo, getSiteTitle } from '../../lib/publicSettings';
+import { memo, useEffect, useState, type ReactNode } from 'react';
+import {
+  getLogoDisplayMode,
+  getSiteIcon,
+  getSiteLogo,
+  getSiteTitle,
+  onSiteConfigChange,
+} from '../../lib/publicSettings';
 import Icon from './Icon';
 import SafeImage from './SafeImage';
 
@@ -10,6 +16,7 @@ interface BrandMarkProps {
   centered?: boolean;
   className?: string;
   titleSuffix?: ReactNode;
+  eagerLoad?: boolean;
 }
 
 const sizeClass = {
@@ -36,7 +43,17 @@ const sizeClass = {
   },
 };
 
-export default function BrandMark({ size = 'nav', centered = false, className = '', titleSuffix }: BrandMarkProps) {
+const BrandMark = memo(function BrandMark({
+  size = 'nav',
+  centered = false,
+  className = '',
+  titleSuffix,
+  eagerLoad,
+}: BrandMarkProps) {
+  // Re-render when site config updates (e.g. async load from API completes)
+  const [, setTick] = useState(0);
+  useEffect(() => onSiteConfigChange(() => setTick((t) => t + 1)), []);
+
   const displayMode = getLogoDisplayMode();
   const siteLogo = getSiteLogo();
   const siteIcon = getSiteIcon();
@@ -44,9 +61,7 @@ export default function BrandMark({ size = 'nav', centered = false, className = 
   const cfg = sizeClass[size];
 
   const title = (
-    <span
-      className={`${cfg.title} min-w-0 truncate font-headline font-bold leading-none tracking-tight text-on-surface`}
-    >
+    <span className={`${cfg.title} min-w-0 truncate font-bold leading-none tracking-tight text-on-surface`}>
       {siteTitle}
     </span>
   );
@@ -60,12 +75,16 @@ export default function BrandMark({ size = 'nav', centered = false, className = 
         src={src}
         alt=""
         className="block max-h-full max-w-full object-contain align-middle"
-        fallbackIcon="view_in_ar"
+        fallbackIcon="hide"
+        loading={eagerLoad ? 'eager' : 'lazy'}
       />
     </span>
   );
 
-  const fallbackIcon = <Icon name="view_in_ar" size={cfg.fallback} className="shrink-0 text-primary-container" />;
+  const fallbackIcon =
+    siteIcon || siteLogo ? null : (
+      <Icon name="view_in_ar" size={cfg.fallback} className="shrink-0 text-primary-container" />
+    );
 
   let content: ReactNode;
   if (displayMode === 'title_only') {
@@ -96,4 +115,6 @@ export default function BrandMark({ size = 'nav', centered = false, className = 
       {titleSuffix}
     </span>
   );
-}
+});
+
+export default BrandMark;
