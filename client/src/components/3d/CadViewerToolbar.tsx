@@ -1,6 +1,4 @@
 import { AnimatePresence, motion } from 'framer-motion';
-import { useState } from 'react';
-import { createPortal } from 'react-dom';
 import { getPublicSettingsSnapshot } from '../../lib/publicSettings';
 import Icon from '../shared/Icon';
 import type { CameraPreset, ViewMode } from './ModelViewer';
@@ -234,52 +232,7 @@ function ExplodeControl({
   );
 }
 
-function ListMenuItem({
-  icon,
-  label,
-  active,
-  disabled,
-  onClick,
-}: {
-  icon: string;
-  label: string;
-  active?: boolean;
-  disabled?: boolean;
-  onClick: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={(event) => {
-        event.preventDefault();
-        event.stopPropagation();
-        onClick();
-      }}
-      disabled={disabled}
-      className={`flex w-full items-center gap-2.5 rounded-sm px-2.5 py-1.5 text-left text-xs transition-colors disabled:opacity-50 ${
-        active ? 'bg-primary-container/12 text-primary font-medium' : 'text-on-surface hover:bg-surface-container-high'
-      }`}
-    >
-      <Icon name={icon} size={16} className={active ? 'text-primary' : 'text-on-surface-variant'} />
-      <span className="min-w-0 truncate">{label}</span>
-    </button>
-  );
-}
-
-function ListSectionDivider() {
-  return <div className="my-1 h-px bg-outline-variant/15" />;
-}
-
-function ToolbarSectionLabel({ children }: { children: string }) {
-  return (
-    <div className="px-2 pt-1 pb-0.5 text-[10px] font-semibold tracking-[0.08em] uppercase text-on-surface-variant/60">
-      {children}
-    </div>
-  );
-}
-
 export default function CadViewerToolbar(props: CadViewerToolbarProps) {
-  const [moreOpen, setMoreOpen] = useState(false);
   const {
     variant,
     isAdmin,
@@ -323,33 +276,31 @@ export default function CadViewerToolbar(props: CadViewerToolbarProps) {
         onPointerDown={(event) => event.stopPropagation()}
       >
         <div className="micro-glass rounded-sm p-0.5 flex max-h-full flex-col gap-px overflow-y-auto overscroll-contain scrollbar-hidden">
-          {onFullscreen && (
-            <ToolbarButton compact icon="fullscreen" label="全屏" size={14} tooltipSide="left" onClick={onFullscreen} />
-          )}
           <ToolbarButton
             compact
-            icon="locate_fixed"
-            label="适配视图"
+            icon="straighten"
+            label="尺寸标注"
             size={14}
             tooltipSide="left"
-            onClick={dispatchFitModel}
+            active={showDimensions}
+            onClick={onToggleDimensions}
+          />
+          <ToolbarButton
+            compact
+            icon="content_cut"
+            label="剖面"
+            size={14}
+            tooltipSide="left"
+            active={clipEnabled}
+            onClick={onToggleClip}
           />
           <ToolbarButton
             compact
             icon="restart_alt"
-            label="恢复视角"
+            label="重置显示"
             size={14}
             tooltipSide="left"
             onClick={onResetDisplay}
-          />
-          <ToolbarButton
-            compact
-            icon="box_icon"
-            label="等轴测"
-            size={14}
-            tooltipSide="left"
-            active={activeCamera === 'iso'}
-            onClick={() => onCameraChange('iso')}
           />
           <ToolbarButton
             compact
@@ -360,108 +311,29 @@ export default function CadViewerToolbar(props: CadViewerToolbarProps) {
             active={showEdges}
             onClick={onToggleEdges}
           />
-          <div className="w-4 h-px bg-white/10 mx-auto" />
           <ToolbarButton
             compact
-            icon="more_horiz"
-            label="更多"
+            icon="opacity"
+            label="透明"
             size={14}
             tooltipSide="left"
-            active={moreOpen}
-            onClick={() => setMoreOpen((open) => !open)}
+            active={activeView === 'transparent'}
+            onClick={() => onViewChange(activeView === 'transparent' ? 'solid' : 'transparent')}
           />
-        </div>
-
-        {moreOpen &&
-          createPortal(
-            <>
-              <div
-                className="fixed inset-0 z-[70]"
-                onClick={(event) => {
-                  event.stopPropagation();
-                  setMoreOpen(false);
-                }}
-              />
-              <div
-                className="fixed right-12 top-1/2 z-[80] max-h-[calc(100dvh-8rem)] w-[10.5rem] -translate-y-1/2 overflow-y-auto overscroll-contain rounded-md border border-outline-variant/25 bg-surface/95 py-1.5 shadow-xl backdrop-blur-xl touch-pan-y custom-scrollbar"
-                onClick={(event) => event.stopPropagation()}
-                onPointerDown={(event) => event.stopPropagation()}
-                style={{ WebkitOverflowScrolling: 'touch' }}
-              >
-                <ToolbarSectionLabel>显示</ToolbarSectionLabel>
-                {VIEW_MODES.map((mode) => (
-                  <ListMenuItem
-                    key={mode.key}
-                    icon={mode.icon}
-                    label={mode.label}
-                    active={activeView === mode.key}
-                    onClick={() => onViewChange(mode.key)}
-                  />
-                ))}
-                <ListSectionDivider />
-                <ToolbarSectionLabel>视角</ToolbarSectionLabel>
-                {CAMERA_ANGLES.filter((angle) => angle.key !== 'iso').map((angle) => (
-                  <ListMenuItem
-                    key={angle.key}
-                    icon={angle.icon}
-                    label={angle.label}
-                    active={activeCamera === angle.key}
-                    onClick={() => onCameraChange(angle.key)}
-                  />
-                ))}
-                <ListSectionDivider />
-                <ToolbarSectionLabel>工具</ToolbarSectionLabel>
-                <ListMenuItem icon="straighten" label="尺寸标注" active={showDimensions} onClick={onToggleDimensions} />
-                {onToggleMeasurement && (
-                  <ListMenuItem
-                    icon="compass"
-                    label="测量工具"
-                    active={measurementOpen}
-                    onClick={() => {
-                      onToggleMeasurement();
-                      setMoreOpen(false);
-                    }}
-                  />
-                )}
-                <ListMenuItem icon="content_cut" label="剖面查看" active={clipEnabled} onClick={onToggleClip} />
-                <ListSectionDivider />
-                <ToolbarSectionLabel>材质</ToolbarSectionLabel>
-                {getVisiblePresets().map((preset) => (
-                  <ListMenuItem
-                    key={preset.key}
-                    icon={preset.icon}
-                    label={preset.label}
-                    active={materialPreset === preset.key}
-                    onClick={() => onMaterialChange(preset.key)}
-                  />
-                ))}
-                <ListSectionDivider />
-                <ToolbarSectionLabel>输出</ToolbarSectionLabel>
-                {onScreenshot && (
-                  <ListMenuItem
-                    icon="photo_camera"
-                    label="截图下载"
-                    onClick={() => {
-                      onScreenshot();
-                      setMoreOpen(false);
-                    }}
-                  />
-                )}
-                {isAdmin && onSetThumbnail && (
-                  <ListMenuItem
-                    icon="wallpaper"
-                    label="设为预览图"
-                    disabled={settingThumbnail}
-                    onClick={() => {
-                      onSetThumbnail();
-                      setMoreOpen(false);
-                    }}
-                  />
-                )}
-              </div>
-            </>,
-            document.body,
+          {onScreenshot && (
+            <ToolbarButton
+              compact
+              icon="photo_camera"
+              label="截图下载"
+              size={14}
+              tooltipSide="left"
+              onClick={onScreenshot}
+            />
           )}
+          {onFullscreen && (
+            <ToolbarButton compact icon="fullscreen" label="全屏" size={14} tooltipSide="left" onClick={onFullscreen} />
+          )}
+        </div>
 
         {clipEnabled && (
           <div className="absolute bottom-0 right-full mr-1 z-20">
@@ -475,16 +347,6 @@ export default function CadViewerToolbar(props: CadViewerToolbarProps) {
               clipInverted={clipInverted}
               onToggleClipInverted={onToggleClipInverted}
               onResetClip={onResetClip}
-            />
-          </div>
-        )}
-        {activeView === 'explode' && onExplodeAmountChange && (
-          <div className="absolute top-0 right-full mr-1 z-20">
-            <ExplodeControl
-              compact
-              explodeAmount={explodeAmount}
-              onExplodeAmountChange={onExplodeAmountChange}
-              onResetExplode={onResetExplode}
             />
           </div>
         )}

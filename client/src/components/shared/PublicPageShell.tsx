@@ -33,7 +33,7 @@ export function PublicPageShell({
   // Inside layout route — layout handles TopNav/BottomNav, just render content
   if (inLayout) {
     if (isDesktop) {
-      return <div className={mergeClassName('flex flex-1 flex-col min-h-0', className)}>{children}</div>;
+      return <div className="flex flex-1 flex-col min-h-0">{children}</div>;
     }
     // Mobile inside layout — wrap in flex container so children with flex-1 get proper height
     return <div className="flex flex-1 flex-col min-h-0">{children}</div>;

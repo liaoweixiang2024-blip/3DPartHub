@@ -425,7 +425,10 @@ export default function TopNav({ compact = false, onMenuToggle }: TopNavProps) {
               onClick={(e) => {
                 if (location.pathname === '/') {
                   e.preventDefault();
-                  window.location.reload();
+                  const scroller = document.querySelector<HTMLElement>('main.overflow-y-auto');
+                  if (scroller && scroller.scrollTop > 0) {
+                    scroller.scrollTo({ top: 0, behavior: 'smooth' });
+                  }
                 }
               }}
               className="flex h-9 min-w-0 flex-1 items-center rounded-sm active:opacity-60 transition-opacity duration-100"

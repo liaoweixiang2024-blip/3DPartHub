@@ -44,7 +44,6 @@ export function AdminLayout() {
   const isDesktop = useMediaQuery('(min-width: 768px)');
   const [navOpen, setNavOpen] = useState(false);
   const [hideBottomNav, setHideBottomNav] = useState(false);
-  const location = useLocation();
 
   const bottomNavCtx = { hide: hideBottomNav, setHide: setHideBottomNav };
 
@@ -57,7 +56,7 @@ export function AdminLayout() {
             <div className="flex flex-1 overflow-hidden">
               <AppSidebar />
               <main className="flex flex-1 flex-col overflow-y-auto bg-surface-dim custom-scrollbar">
-                <Outlet key={location.pathname} />
+                <Outlet />
               </main>
               <AdminCopyrightBadge />
             </div>
@@ -76,7 +75,7 @@ export function AdminLayout() {
             <MobileNavDrawer open={navOpen} onClose={() => setNavOpen(false)} />
           </Suspense>
           <div className="flex flex-1 flex-col overflow-hidden">
-            <Outlet key={location.pathname} />
+            <Outlet />
           </div>
           {hideBottomNav ? null : <BottomNav />}
         </div>
@@ -97,7 +96,7 @@ export function PublicLayout() {
         <div className="flex h-dvh flex-col overflow-hidden bg-surface">
           <TopNav />
           <div className="flex flex-1 flex-col overflow-hidden">
-            <Outlet key={location.pathname} />
+            <Outlet />
           </div>
           {location.pathname === '/' && <HomeFooter />}
         </div>
@@ -113,7 +112,7 @@ export function PublicLayout() {
           <MobileNavDrawer open={navOpen} onClose={() => setNavOpen(false)} />
         </Suspense>
         <div className="flex flex-1 flex-col overflow-hidden">
-          <Outlet key={location.pathname} />
+          <Outlet />
         </div>
         <BottomNav />
       </div>

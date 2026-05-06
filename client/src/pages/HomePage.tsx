@@ -1,5 +1,14 @@
 import { motion, AnimatePresence } from 'framer-motion';
-import { useState, useEffect, useMemo, useCallback, useRef, type MouseEvent, type UIEvent } from 'react';
+import {
+  useState,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useCallback,
+  useRef,
+  type MouseEvent,
+  type UIEvent,
+} from 'react';
 import { createPortal } from 'react-dom';
 import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import useSWR from 'swr';
@@ -37,8 +46,6 @@ import {
   getContactPhone,
   getContactAddress,
   getSiteTitle,
-  getFooterLinks,
-  getFooterCopyright,
 } from '../lib/publicSettings';
 import { sanitizeHtml } from '../lib/sanitizeHtml';
 import { useAuthStore } from '../stores';
@@ -439,32 +446,6 @@ function getHomeModelElement(container: HTMLElement, modelId: string) {
       (element) => element.dataset.homeModelId === modelId,
     ) || null
   );
-}
-
-function scrollHomeToModel(
-  container: HTMLElement,
-  modelId: string | null,
-  fallbackTop: number | null,
-  savedOffset: number | null,
-) {
-  // Best: find the target model element and restore its exact visual position
-  if (modelId) {
-    const target = getHomeModelElement(container, modelId);
-    if (target) {
-      const containerRect = container.getBoundingClientRect();
-      const targetRect = target.getBoundingClientRect();
-      const offset = savedOffset ?? 0;
-      const top = container.scrollTop + targetRect.top - containerRect.top - offset;
-      container.scrollTo({ top: Math.max(0, top), behavior: 'auto' });
-      return true;
-    }
-  }
-  // Fallback: use raw scrollTop
-  if (fallbackTop != null) {
-    container.scrollTo({ top: fallbackTop, behavior: 'auto' });
-    return true;
-  }
-  return false;
 }
 
 function getPendingHomeRestoreKey() {
@@ -961,18 +942,26 @@ function MobileDrawer({
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
+            transition={{ duration: 0.25, ease: [0.4, 0, 0.2, 1] }}
             className="fixed inset-0 bg-black/50 z-[260]"
             onClick={onClose}
           />
           <motion.aside
-            initial={{ x: '-100%' }}
-            animate={{ x: 0 }}
-            exit={{ x: '-100%' }}
-            transition={{ type: 'spring', damping: 25, stiffness: 300 }}
-            className="fixed left-0 top-0 bottom-0 w-72 bg-surface-container-low flex flex-col overflow-y-auto scrollbar-hidden z-[270]"
+            initial={{ x: '-100%', opacity: 0.6 }}
+            animate={{ x: 0, opacity: 1 }}
+            exit={{ x: '-100%', opacity: 0.6 }}
+            transition={{ duration: 0.28, ease: [0.32, 0.72, 0, 1] }}
+            className="fixed left-0 top-0 w-[min(82vw,280px)] h-dvh bg-surface-container-low z-[270] flex flex-col overflow-y-auto scrollbar-hidden shadow-2xl"
+            style={{
+              paddingTop: 'env(safe-area-inset-top, 0px)',
+              paddingBottom: 'env(safe-area-inset-bottom, 0px)',
+              willChange: 'transform',
+            }}
           >
             <div className="flex items-center justify-between p-4 border-b border-outline-variant/20">
-              <h2 className="text-sm font-bold text-on-surface tracking-wider uppercase font-headline">产品目录</h2>
+              <h2 className="text-sm font-bold text-on-surface-variant tracking-wider uppercase font-headline">
+                产品目录
+              </h2>
               <button onClick={onClose} className="p-1 text-on-surface-variant">
                 <Icon name="close" size={24} />
               </button>
@@ -1222,6 +1211,10 @@ export default function HomePage() {
   const [pullState, setPullState] = useState<'idle' | 'pulling' | 'ready' | 'refreshing'>('idle');
   const pullThreshold = typeof window !== 'undefined' ? Math.round(window.innerHeight / 3) : 200;
   const pullMaxVisual = 80;
+
+  // Detect when title row scrolls out of view (for sticky filter button swap)
+  const titleRowRef = useRef<HTMLDivElement | null>(null);
+  const [chipsStuck, setChipsStuck] = useState(false);
 
   // Keep browsing controls in React/navigation state. Legacy query links still work, then get cleaned from the URL.
   useEffect(() => {
@@ -1625,14 +1618,45 @@ export default function HomePage() {
     setContextMenu(null);
   }, []);
 
-  // Scroll restoration: save model element offset for pixel-perfect return,
+  // Sync layout: restore scrollTop + set chipsStuck before first paint to avoid flash.
+  // Must run after data vars (isLoading, homeRestoreKey, products) are declared.
+  useLayoutEffect(() => {
+    if (isDesktop) return;
+    // 1. Restore simple scrollTop synchronously
+    if (!isLoading && getPendingHomeRestoreKey() === homeRestoreKey && !readHomeScrollTarget(homeRestoreKey)) {
+      const targetTop = readHomeScrollPosition(homeRestoreKey);
+      if (targetTop != null) {
+        const container = scrollContainerRef.current;
+        if (container) {
+          isRestoringScrollRef.current = true;
+          container.scrollTo({ top: targetTop, behavior: 'auto' });
+          clearPendingHomeRestore(homeRestoreKey);
+          requestAnimationFrame(() => {
+            isRestoringScrollRef.current = false;
+          });
+        }
+      }
+    }
+    // 2. Set chipsStuck based on actual (possibly restored) position
+    const el = titleRowRef.current;
+    if (!el) return;
+    const rect = el.getBoundingClientRect();
+    if (rect.bottom <= 0) setChipsStuck(true);
+    const observer = new IntersectionObserver(([entry]) => setChipsStuck(!entry.isIntersecting), {
+      threshold: 0,
+      rootMargin: '0px 0px -1px 0px',
+    });
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [isDesktop, isLoading, homeRestoreKey, productIdsKey, products.length]);
+
+  // Scroll restoration (async): model-targeted restore needs to wait for DOM elements,
   // then continuously correct for layout shifts until stable.
   useEffect(() => {
     if (isLoading || getPendingHomeRestoreKey() !== homeRestoreKey) return;
-    const targetTop = readHomeScrollPosition(homeRestoreKey);
     const targetModelId = readHomeScrollTarget(homeRestoreKey);
+    if (!targetModelId) return; // simple scrollTop restore handled in useLayoutEffect above
     const savedOffset = readHomeScrollOffset(homeRestoreKey);
-    if (targetTop == null && !targetModelId) return;
 
     if (restoreFrameRef.current != null) window.cancelAnimationFrame(restoreFrameRef.current);
     let cancelled = false;
@@ -1648,31 +1672,24 @@ export default function HomePage() {
       const container = scrollContainerRef.current;
       if (!container) return;
 
-      if (targetModelId) {
-        const target = getHomeModelElement(container, targetModelId);
-        if (target) {
-          const containerRect = container.getBoundingClientRect();
-          const targetRect = target.getBoundingClientRect();
-          const offset = savedOffset ?? 0;
-          const top = container.scrollTop + targetRect.top - containerRect.top - offset;
-          container.scrollTo({ top: Math.max(0, top), behavior: 'auto' });
-          if (Math.abs(container.scrollTop - lastScrollTop) < 1) {
-            stableCount++;
-          } else {
-            stableCount = 0;
-          }
-          lastScrollTop = container.scrollTop;
-          if (stableCount >= 3 || Date.now() - startTime > DEADLINE_MS) {
-            clearPendingHomeRestore(homeRestoreKey);
-            isRestoringScrollRef.current = false;
-            return;
-          }
+      const target = getHomeModelElement(container, targetModelId);
+      if (target) {
+        const containerRect = container.getBoundingClientRect();
+        const targetRect = target.getBoundingClientRect();
+        const offset = savedOffset ?? 0;
+        const top = container.scrollTop + targetRect.top - containerRect.top - offset;
+        container.scrollTo({ top: Math.max(0, top), behavior: 'auto' });
+        if (Math.abs(container.scrollTop - lastScrollTop) < 1) {
+          stableCount++;
+        } else {
+          stableCount = 0;
         }
-      } else if (targetTop != null) {
-        container.scrollTo({ top: targetTop, behavior: 'auto' });
-        clearPendingHomeRestore(homeRestoreKey);
-        isRestoringScrollRef.current = false;
-        return;
+        lastScrollTop = container.scrollTop;
+        if (stableCount >= 3 || Date.now() - startTime > DEADLINE_MS) {
+          clearPendingHomeRestore(homeRestoreKey);
+          isRestoringScrollRef.current = false;
+          return;
+        }
       }
 
       restoreFrameRef.current = window.requestAnimationFrame(doRestore);
@@ -2047,8 +2064,8 @@ export default function HomePage() {
         )}
         <div className="p-3 space-y-3 pb-20 min-h-full flex flex-col">
           <AnnouncementBanner />
-          {/* Header with category filter button */}
-          <div className="flex items-center justify-between">
+          {/* Header with filter button (visible when not scrolled) */}
+          <div ref={titleRowRef} className="flex items-center justify-between">
             <div>
               <PageTitle className="text-base md:text-base md:normal-case">
                 {activeCategory === 'all' ? '零件目录' : breadcrumb.label}
@@ -2057,38 +2074,48 @@ export default function HomePage() {
             </div>
             <button
               onClick={() => setDrawerOpen(true)}
-              className="p-2 text-on-surface-variant hover:text-on-surface bg-surface-container-high rounded-sm flex items-center gap-1.5"
+              className={`p-2 text-on-surface-variant hover:text-on-surface bg-surface-container-high rounded-sm flex items-center gap-1.5 transition-opacity duration-200 ${chipsStuck ? 'opacity-0 pointer-events-none' : 'opacity-100'}`}
             >
               <Icon name="tune" size={18} />
               <span className="text-xs">筛选</span>
             </button>
           </div>
 
-          {/* Horizontal scrollable category chips */}
-          <div className="flex gap-2 overflow-x-auto scrollbar-hidden pb-1 -mx-3 px-3">
-            <button
-              onClick={() => handleSelectCategory('all')}
-              className={`shrink-0 px-3 py-1 rounded-full text-xs font-medium transition-colors ${
-                activeCategory === 'all'
-                  ? 'bg-primary-container text-on-primary'
-                  : 'bg-surface-container-high text-on-surface-variant'
-              }`}
-            >
-              全部模型
-            </button>
-            {categories.map((cat) => (
+          {/* Sticky category chips + filter button on right */}
+          <div className="sticky top-0 z-10 -mx-3 px-3 py-2 bg-surface-dim">
+            <div className="flex items-center gap-2">
+              <div className="flex-1 flex gap-2 overflow-x-auto scrollbar-hidden">
+                <button
+                  onClick={() => handleSelectCategory('all')}
+                  className={`shrink-0 px-3 py-1 rounded-full text-xs font-medium transition-colors ${
+                    activeCategory === 'all'
+                      ? 'bg-primary-container text-on-primary'
+                      : 'bg-surface-container-high text-on-surface-variant'
+                  }`}
+                >
+                  全部模型
+                </button>
+                {categories.map((cat) => (
+                  <button
+                    key={cat.id}
+                    onClick={() => handleSelectCategory(cat.id)}
+                    className={`shrink-0 px-3 py-1 rounded-full text-xs font-medium transition-colors ${
+                      activeCategory === cat.id
+                        ? 'bg-primary-container text-on-primary'
+                        : 'bg-surface-container-high text-on-surface-variant'
+                    }`}
+                  >
+                    {cat.name}
+                  </button>
+                ))}
+              </div>
               <button
-                key={cat.id}
-                onClick={() => handleSelectCategory(cat.id)}
-                className={`shrink-0 px-3 py-1 rounded-full text-xs font-medium transition-colors ${
-                  activeCategory === cat.id
-                    ? 'bg-primary-container text-on-primary'
-                    : 'bg-surface-container-high text-on-surface-variant'
-                }`}
+                onClick={() => setDrawerOpen(true)}
+                className={`shrink-0 text-on-surface-variant hover:text-on-surface bg-surface-container-highest rounded-sm flex items-center justify-center shadow-sm transition-opacity duration-300 ${chipsStuck && products.length >= 6 ? 'opacity-100 py-1 px-2' : 'opacity-0 pointer-events-none w-0 overflow-hidden'}`}
               >
-                {cat.name}
+                <Icon name="tune" size={16} />
               </button>
-            ))}
+            </div>
           </div>
 
           {/* Model grid */}

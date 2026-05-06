@@ -56,10 +56,13 @@ export default function MobileNavDrawer({ open, onClose }: MobileNavDrawerProps)
                 willChange: 'transform',
               }}
             >
-              <div className="px-6 py-4 border-b border-surface">
-                <span className="text-xs font-bold text-on-surface-variant uppercase tracking-widest font-headline">
+              <div className="flex items-center justify-between p-4 border-b border-outline-variant/20">
+                <span className="text-sm font-bold text-on-surface-variant tracking-wider uppercase font-headline">
                   导航
                 </span>
+                <button onClick={onClose} className="p-1 text-on-surface-variant">
+                  <Icon name="close" size={24} />
+                </button>
               </div>
               <nav className="flex-1 py-2">
                 {navItems.map((item) => {
