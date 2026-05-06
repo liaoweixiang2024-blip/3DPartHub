@@ -10,6 +10,7 @@ import { checkProtectedAccess } from './components/shared/ProtectedLink';
 // Static import for the landing page — eliminates flash on first visit
 import HomePage from './pages/HomePage';
 import { useAuthStore } from './stores/useAuthStore';
+import { AdminContentSkeleton, LoginSkeleton, PublicContentSkeleton } from './components/shared/SuspenseFallbacks';
 
 // Lazy-loaded pages — Vite generates separate chunks automatically
 const ModelDetailPage = lazy(() => import('./pages/ModelDetailPage'));
@@ -42,15 +43,9 @@ const InquiryDetailPage = lazy(() => import('./pages/InquiryDetailPage'));
 const InquiryAdminPage = lazy(() => import('./pages/InquiryAdminPage'));
 const SelectionSharePage = lazy(() => import('./pages/SelectionSharePage'));
 
-function PageWrap({ children }: { children: React.ReactNode }) {
+function PageWrap({ children, layout }: { children: React.ReactNode; layout?: 'admin' | 'public' }) {
   return (
-    <Suspense
-      fallback={
-        <div className="flex items-center justify-center h-full">
-          <div className="animate-spin rounded-full h-8 w-8 border-2 border-on-surface/20 border-t-primary" />
-        </div>
-      }
-    >
+    <Suspense fallback={layout === 'public' ? <PublicContentSkeleton /> : <AdminContentSkeleton />}>
       {children}
     </Suspense>
   );
@@ -107,32 +102,12 @@ function ProtectedPage({ children, requiredRole }: { children: React.ReactNode; 
     return <Navigate to="/" replace />;
   }
 
-  return (
-    <Suspense
-      fallback={
-        <div className="flex items-center justify-center h-full">
-          <div className="animate-spin rounded-full h-8 w-8 border-2 border-on-surface/20 border-t-primary" />
-        </div>
-      }
-    >
-      {children}
-    </Suspense>
-  );
+  return <Suspense fallback={<AdminContentSkeleton />}>{children}</Suspense>;
 }
 
 // No wrapper — let the page handle its own height/scrolling
 function ScrollPage({ children }: { children: React.ReactNode }) {
-  return (
-    <Suspense
-      fallback={
-        <div className="flex items-center justify-center h-full">
-          <div className="animate-spin rounded-full h-8 w-8 border-2 border-on-surface/20 border-t-primary" />
-        </div>
-      }
-    >
-      {children}
-    </Suspense>
-  );
+  return <Suspense fallback={<LoginSkeleton />}>{children}</Suspense>;
 }
 
 function NotFoundPage() {
@@ -211,7 +186,7 @@ export default function Router() {
           <Route
             path="/"
             element={
-              <PageWrap>
+              <PageWrap layout="public">
                 <HomePage />
               </PageWrap>
             }
@@ -219,15 +194,15 @@ export default function Router() {
           <Route
             path="/model/:id"
             element={
-              <PageWrap>
+              <Suspense fallback={null}>
                 <ModelDetailPage />
-              </PageWrap>
+              </Suspense>
             }
           />
           <Route
             path="/legal/:type"
             element={
-              <PageWrap>
+              <PageWrap layout="public">
                 <LegalPage />
               </PageWrap>
             }
@@ -235,7 +210,7 @@ export default function Router() {
           <Route
             path="/share/:token"
             element={
-              <PageWrap>
+              <PageWrap layout="public">
                 <SharePage />
               </PageWrap>
             }
@@ -243,7 +218,7 @@ export default function Router() {
           <Route
             path="/selection/s/:token"
             element={
-              <PageWrap>
+              <PageWrap layout="public">
                 <SelectionSharePage />
               </PageWrap>
             }

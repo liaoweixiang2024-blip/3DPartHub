@@ -285,8 +285,58 @@ export default function SelectionSharePage() {
   if (!data) {
     return (
       <PublicPageShell>
-        <div className="flex flex-1 items-center justify-center bg-surface">
-          <Icon name="hourglass_empty" size={32} className="text-on-surface-variant/30 animate-spin" />
+        {/* Top bar */}
+        <div className="border-b border-outline-variant/10 bg-surface-container-low px-4 md:px-8 py-3 animate-pulse">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex items-center gap-2">
+              <div className="h-4 w-4 bg-surface-container rounded" />
+              <div className="h-4 bg-surface-container rounded w-16" />
+            </div>
+            <div className="flex items-center gap-3">
+              <div className="h-3 bg-surface-container rounded w-16" />
+              <div className="h-3 bg-surface-container rounded w-10" />
+            </div>
+          </div>
+        </div>
+        {/* Content */}
+        <div className="max-w-3xl mx-auto px-4 md:px-8 py-6 space-y-6 animate-pulse">
+          {/* Category title + spec tags */}
+          <div className="space-y-2">
+            <div className="h-6 bg-surface-container rounded w-1/3" />
+            <div className="flex flex-wrap gap-2">
+              <div className="h-7 bg-surface-container-high rounded-full w-20" />
+              <div className="h-7 bg-surface-container-high rounded-full w-24" />
+              <div className="h-7 bg-surface-container-high rounded-full w-16" />
+            </div>
+          </div>
+          {/* Product count */}
+          <div className="h-4 bg-surface-container rounded w-28" />
+          {/* Product cards */}
+          <div className="space-y-3">
+            {Array.from({ length: 3 }).map((_, i) => (
+              <div
+                key={i}
+                className="rounded-xl border border-outline-variant/15 bg-surface-container-low overflow-hidden"
+              >
+                {/* Header: image + name */}
+                <div className="flex items-start gap-3 px-4 py-3">
+                  <div className="w-16 h-16 bg-surface-container rounded-lg shrink-0" />
+                  <div className="flex-1 min-w-0 space-y-1.5">
+                    <div className="h-4 bg-surface-container rounded w-24" />
+                    <div className="h-3 bg-surface-container rounded w-36" />
+                  </div>
+                </div>
+                {/* Specs grid */}
+                <div className="px-4 pb-2.5">
+                  <div className="grid grid-cols-2 md:grid-cols-3 gap-x-4 gap-y-1">
+                    {Array.from({ length: 6 }).map((_, j) => (
+                      <div key={j} className="h-3 bg-surface-container rounded w-full" />
+                    ))}
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
       </PublicPageShell>
     );

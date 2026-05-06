@@ -14,7 +14,6 @@ import { AdminDetailHeader } from '../components/shared/AdminManagementPage';
 import { AdminPageShell } from '../components/shared/AdminPageShell';
 import Icon from '../components/shared/Icon';
 import SafeImage from '../components/shared/SafeImage';
-import { SkeletonList } from '../components/shared/Skeleton';
 import { useToast } from '../components/shared/Toast';
 import { useDocumentTitle } from '../hooks/useDocumentTitle';
 import { useMediaQuery } from '../layouts/hooks/useMediaQuery';
@@ -241,7 +240,57 @@ function ChatContent({ ticketId }: { ticketId: string }) {
   );
 
   if (!ticket) {
-    return <SkeletonList rows={4} />;
+    return (
+      <div className="flex h-full min-h-0 flex-col animate-pulse">
+        {/* Header: AdminDetailHeader shrink-0 border-b px-4 py-3 */}
+        <div className="shrink-0 border-b border-outline-variant/10 bg-surface-container px-4 py-3">
+          <div className="flex min-h-9 items-center gap-3">
+            <div className="h-9 w-9 bg-surface-container rounded-lg shrink-0" />
+            <div className="h-6 bg-surface-container rounded w-20" />
+            <div className="h-5 bg-surface-container rounded-sm w-10 ml-auto" />
+          </div>
+          <div className="mt-0.5 flex items-center gap-4">
+            <div className="h-3 bg-surface-container rounded w-16" />
+            <div className="h-3 bg-surface-container rounded w-28" />
+          </div>
+        </div>
+        {/* Chat messages */}
+        <div className="min-h-0 flex-1 p-4 space-y-3">
+          {/* Left bubble (user) */}
+          <div className="flex justify-start">
+            <div className="max-w-[80%]">
+              <div className="mb-1 h-3 bg-surface-container rounded w-14" />
+              <div className="rounded-lg bg-surface-container-high px-3.5 py-2.5 space-y-1.5">
+                <div className="h-3 bg-surface-container rounded w-full" />
+                <div className="h-3 bg-surface-container rounded w-3/4" />
+              </div>
+            </div>
+          </div>
+          {/* Right bubble (admin) */}
+          <div className="flex justify-end">
+            <div className="max-w-[80%]">
+              <div className="mb-1 h-3 bg-surface-container rounded w-14 ml-auto" />
+              <div className="rounded-lg bg-surface-container px-3.5 py-2.5 space-y-1.5">
+                <div className="h-3 bg-surface-container-low rounded w-full" />
+              </div>
+            </div>
+          </div>
+          {/* Left bubble */}
+          <div className="flex justify-start">
+            <div className="max-w-[80%]">
+              <div className="mb-1 h-3 bg-surface-container rounded w-14" />
+              <div className="rounded-lg bg-surface-container-high px-3.5 py-2.5">
+                <div className="h-3 bg-surface-container rounded w-2/3" />
+              </div>
+            </div>
+          </div>
+        </div>
+        {/* Input area */}
+        <div className="shrink-0 border-t border-outline-variant/10 bg-surface-container p-3">
+          <div className="h-9 bg-surface-container rounded-lg" />
+        </div>
+      </div>
+    );
   }
 
   const info = statusInfo(business.ticketStatuses, ticket.status);

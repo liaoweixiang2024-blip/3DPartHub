@@ -363,8 +363,39 @@ export default function AuditLogPage() {
               </table>
             </div>
             {isLoading && logs.length === 0 && (
-              <div className="flex min-h-[360px] items-center justify-center text-sm text-on-surface-variant">
-                加载中...
+              <div className="h-full overflow-auto custom-scrollbar">
+                <table className="w-full">
+                  <thead className="sticky top-0 z-10">
+                    <tr className="bg-surface-container-low text-xs uppercase tracking-wider text-on-surface-variant font-bold">
+                      <th className="py-3 px-4 text-left">操作</th>
+                      <th className="py-3 px-4 text-left">资源</th>
+                      <th className="py-3 px-4 text-left">资源ID</th>
+                      <th className="py-3 px-4 text-left">用户</th>
+                      <th className="py-3 px-4 text-left">时间</th>
+                    </tr>
+                  </thead>
+                  <tbody className="animate-pulse">
+                    {Array.from({ length: 8 }).map((_, i) => (
+                      <tr key={i} className="border-b border-outline-variant/5">
+                        <td className="py-2 px-4">
+                          <div className="h-3 bg-surface-container rounded w-12" />
+                        </td>
+                        <td className="py-2 px-4">
+                          <div className="h-3 bg-surface-container rounded w-10" />
+                        </td>
+                        <td className="py-2 px-4">
+                          <div className="h-3 bg-surface-container rounded w-24" />
+                        </td>
+                        <td className="py-2 px-4">
+                          <div className="h-3 bg-surface-container rounded w-14" />
+                        </td>
+                        <td className="py-2 px-4">
+                          <div className="h-3 bg-surface-container rounded w-28" />
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
             )}
             {visibleLogs.length === 0 && !isLoading && (
@@ -402,8 +433,17 @@ export default function AuditLogPage() {
               <InfiniteLoadTrigger hasMore={hasMore} isLoading={isLoadingMore} onLoadMore={loadMore} />
             )}
             {isLoading && logs.length === 0 && (
-              <div className="flex min-h-[320px] items-center justify-center text-sm text-on-surface-variant">
-                加载中...
+              <div className="flex flex-col gap-2 animate-pulse">
+                {Array.from({ length: 6 }).map((_, i) => (
+                  <div key={i} className="rounded-lg border border-outline-variant/10 bg-surface-container-low p-3">
+                    <div className="flex flex-wrap items-center gap-2 mb-1.5">
+                      <div className="h-4 bg-surface-container rounded-sm w-12" />
+                      <div className="h-4 bg-surface-container-highest rounded-sm w-10" />
+                      <div className="h-3 bg-surface-container rounded ml-auto w-20" />
+                    </div>
+                    <div className="h-3 bg-surface-container rounded w-2/3" />
+                  </div>
+                ))}
               </div>
             )}
             {visibleLogs.length === 0 && !isLoading && (

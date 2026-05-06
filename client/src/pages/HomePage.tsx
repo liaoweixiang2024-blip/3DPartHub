@@ -242,11 +242,20 @@ function CategorySidebar({
 
 function SkeletonCard() {
   return (
-    <div className="bg-surface-container-high rounded-sm overflow-hidden animate-pulse">
-      <div className="aspect-square bg-surface-container-lowest" />
-      <div className="p-2.5 space-y-2">
-        <div className="h-3 bg-surface-container-lowest rounded w-3/4" />
-        <div className="h-3 bg-surface-container-lowest rounded w-1/2" />
+    <div className="bg-surface-container-high rounded-sm overflow-hidden flex flex-col relative animate-pulse">
+      <div className="aspect-square bg-surface-container-lowest relative overflow-hidden">
+        <div className="absolute top-2 left-2 h-4 w-8 bg-surface-container rounded-sm" />
+        <div className="absolute top-2 right-2 h-3.5 w-10 bg-surface-container rounded-sm" />
+      </div>
+      <div className="flex-1 flex flex-col p-2.5">
+        <div className="space-y-1">
+          <div className="h-3 bg-surface-container-lowest rounded w-full" />
+          <div className="h-3 bg-surface-container-lowest rounded w-3/4" />
+        </div>
+        <div className="flex items-center gap-2 mt-auto pt-2">
+          <div className="flex-1 h-7 bg-surface-container-lowest rounded-sm" />
+          <div className="flex-1 h-7 bg-surface-container-lowest rounded-sm" />
+        </div>
       </div>
     </div>
   );
@@ -254,10 +263,17 @@ function SkeletonCard() {
 
 function SkeletonCardMobile() {
   return (
-    <div className="bg-surface-container-high rounded-sm overflow-hidden animate-pulse">
-      <div className="aspect-square bg-surface-container-lowest" />
-      <div className="p-2 space-y-1.5">
-        <div className="h-2.5 bg-surface-container-lowest rounded w-3/4" />
+    <div className="bg-surface-container-high rounded-sm overflow-hidden flex flex-col animate-pulse">
+      <div className="h-[140px] bg-surface-container-lowest relative overflow-hidden">
+        <div className="absolute top-1.5 left-1.5 h-3.5 w-7 bg-surface-container rounded-sm" />
+        <div className="absolute top-1.5 right-1.5 h-3 w-8 bg-surface-container rounded-sm" />
+      </div>
+      <div className="p-2.5 flex flex-col flex-1">
+        <div className="space-y-1 mb-1.5">
+          <div className="h-3 bg-surface-container-lowest rounded w-full" />
+          <div className="h-3 bg-surface-container-lowest rounded w-3/4" />
+        </div>
+        <div className="mt-auto h-7 bg-surface-container-lowest rounded-sm" />
       </div>
     </div>
   );

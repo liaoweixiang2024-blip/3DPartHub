@@ -326,7 +326,9 @@ export default function MySharesPage() {
   if (isLoading) {
     return (
       <AdminPageShell>
-        <SkeletonList rows={6} />
+        <AdminManagementPage title="我的分享" meta="加载中..." description="管理自己创建的模型分享和选型分享链接">
+          <SkeletonList rows={6} />
+        </AdminManagementPage>
       </AdminPageShell>
     );
   }

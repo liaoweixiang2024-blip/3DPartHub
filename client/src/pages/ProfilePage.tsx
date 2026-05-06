@@ -9,7 +9,6 @@ import { AdminPageHero } from '../components/shared/AdminManagementPage';
 import Icon from '../components/shared/Icon';
 import { PageBody, PageHeader } from '../components/shared/PagePrimitives';
 import SafeImage from '../components/shared/SafeImage';
-import { SkeletonList } from '../components/shared/Skeleton';
 import { useToast } from '../components/shared/Toast';
 import { useDocumentTitle } from '../hooks/useDocumentTitle';
 import { useMediaQuery } from '../layouts/hooks/useMediaQuery';
@@ -407,7 +406,59 @@ function DesktopContent() {
   );
 
   if (isLoading) {
-    return <SkeletonList rows={4} />;
+    return (
+      <PageBody className="mx-auto max-w-6xl pb-12">
+        <div className="mb-6 space-y-2 animate-pulse">
+          <div className="h-7 bg-surface-container rounded w-32" />
+          <div className="h-4 bg-surface-container rounded w-56" />
+        </div>
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+          {/* Left: user info (col-span-4) */}
+          <section className="lg:col-span-4 bg-surface-container-low rounded-lg p-6 space-y-6 animate-pulse">
+            <div className="flex items-center gap-2 border-b border-outline-variant/20 pb-4">
+              <div className="w-7 h-7 bg-surface-container rounded" />
+              <div className="h-5 bg-surface-container rounded w-20" />
+            </div>
+            <div className="flex flex-col items-center">
+              <div className="w-24 h-24 rounded-full bg-surface-container mb-4" />
+            </div>
+            <div className="space-y-4">
+              <div className="space-y-1.5">
+                <div className="h-3 bg-surface-container rounded w-10" />
+                <div className="h-8 bg-surface-container rounded w-full" />
+              </div>
+              <div className="space-y-1.5">
+                <div className="h-3 bg-surface-container rounded w-10" />
+                <div className="h-8 bg-surface-container rounded w-full" />
+              </div>
+            </div>
+          </section>
+          {/* Right: settings (col-span-8) */}
+          <section className="lg:col-span-8 space-y-6 animate-pulse">
+            <div className="bg-surface-container-low rounded-lg p-6 space-y-4">
+              <div className="h-5 bg-surface-container rounded w-24" />
+              <div className="space-y-4">
+                <div className="space-y-1.5">
+                  <div className="h-3 bg-surface-container rounded w-16" />
+                  <div className="h-8 bg-surface-container rounded w-full" />
+                </div>
+                <div className="space-y-1.5">
+                  <div className="h-3 bg-surface-container rounded w-16" />
+                  <div className="h-8 bg-surface-container rounded w-full" />
+                </div>
+              </div>
+            </div>
+            <div className="bg-surface-container-low rounded-lg p-6 space-y-4">
+              <div className="h-5 bg-surface-container rounded w-28" />
+              <div className="space-y-3">
+                <div className="h-10 bg-surface-container rounded w-full" />
+                <div className="h-10 bg-surface-container rounded w-full" />
+              </div>
+            </div>
+          </section>
+        </div>
+      </PageBody>
+    );
   }
 
   return (

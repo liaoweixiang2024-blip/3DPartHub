@@ -358,7 +358,11 @@ function DesktopContent() {
   const models = useMemo(() => (data ? mapFavorites(data) : []), [data]);
 
   if (isLoading) {
-    return <SkeletonGrid count={8} />;
+    return (
+      <AdminManagementPage title="我的收藏" meta="加载中..." description="管理你收藏的模型">
+        <SkeletonGrid count={8} />
+      </AdminManagementPage>
+    );
   }
 
   if (error) {

@@ -165,7 +165,11 @@ function DesktopContent() {
   }, [mutate, toast]);
 
   if (isLoading) {
-    return <SkeletonList rows={6} />;
+    return (
+      <AdminManagementPage title="下载历史" meta="加载中..." description="查看和管理你下载过的模型文件">
+        <SkeletonList rows={6} />
+      </AdminManagementPage>
+    );
   }
 
   if (error) {

@@ -139,8 +139,91 @@ function DetailContent({ id }: { id: string }) {
 
   if (!inquiry) {
     return (
-      <div className="flex items-center justify-center py-20">
-        <Icon name="hourglass_empty" size={32} className="text-on-surface-variant/30 animate-spin" />
+      <div className="flex h-full min-h-0 flex-col animate-pulse">
+        {/* AdminDetailHeader: shrink-0 border-b px-4 py-3 */}
+        <div className="shrink-0 border-b border-outline-variant/10 bg-surface-container px-4 py-3">
+          <div className="flex min-h-9 items-center gap-3">
+            <div className="h-9 w-9 bg-surface-container rounded-lg shrink-0" />
+            <div className="h-6 bg-surface-container rounded w-24" />
+            <div className="h-5 bg-surface-container rounded-sm w-12 ml-auto" />
+          </div>
+          <div className="mt-0.5 flex items-center gap-4">
+            <div className="h-3 bg-surface-container rounded w-28" />
+            <div className="h-3 bg-surface-container rounded w-16" />
+          </div>
+        </div>
+        <div className="min-h-0 flex-1 overflow-hidden p-4 space-y-4">
+          {/* Contact info card */}
+          <div className="rounded-lg border border-outline-variant/15 bg-surface-container-low p-4 space-y-2">
+            <div className="h-4 bg-surface-container rounded w-16" />
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3 sm:gap-4">
+              <div className="h-4 bg-surface-container rounded w-full" />
+              <div className="h-4 bg-surface-container rounded w-3/4" />
+              <div className="h-4 bg-surface-container rounded w-1/2" />
+            </div>
+          </div>
+          {/* Items */}
+          <div>
+            <div className="h-4 bg-surface-container rounded w-16 mb-2" />
+            {/* Mobile cards */}
+            <div className="space-y-2 md:hidden">
+              {Array.from({ length: 3 }).map((_, i) => (
+                <div key={i} className="rounded-lg border border-outline-variant/12 bg-surface-container-low p-3">
+                  <div className="mb-2 flex items-start justify-between gap-3">
+                    <div className="min-w-0 space-y-1">
+                      <div className="h-4 bg-surface-container rounded w-24" />
+                      <div className="h-3 bg-surface-container rounded w-36" />
+                    </div>
+                    <div className="h-5 bg-surface-container-high rounded-md w-10 shrink-0" />
+                  </div>
+                  <div className="flex items-center justify-between gap-3 border-t border-outline-variant/8 pt-2">
+                    <div className="h-3 bg-surface-container rounded w-10" />
+                    <div className="h-3 bg-surface-container rounded w-16" />
+                  </div>
+                </div>
+              ))}
+            </div>
+            {/* Desktop table */}
+            <div className="hidden overflow-auto rounded-lg border border-outline-variant/15 md:block">
+              <table className="w-full">
+                <thead className="sticky top-0 z-10 bg-surface-container-low">
+                  <tr>
+                    <th className="px-4 py-2.5 text-left">
+                      <div className="h-3 w-8" />
+                    </th>
+                    <th className="px-4 py-2.5 text-left">
+                      <div className="h-3 w-12" />
+                    </th>
+                    <th className="px-4 py-2.5 text-left">
+                      <div className="h-3 w-8" />
+                    </th>
+                    <th className="px-4 py-2.5 text-left">
+                      <div className="h-3 w-10" />
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {Array.from({ length: 4 }).map((_, i) => (
+                    <tr key={i} className="border-t border-outline-variant/5">
+                      <td className="px-4 py-2.5">
+                        <div className="h-3 bg-surface-container rounded w-6" />
+                      </td>
+                      <td className="px-4 py-2.5">
+                        <div className="h-3 bg-surface-container rounded w-24" />
+                      </td>
+                      <td className="px-4 py-2.5">
+                        <div className="h-3 bg-surface-container rounded w-6" />
+                      </td>
+                      <td className="px-4 py-2.5">
+                        <div className="h-3 bg-surface-container rounded w-20" />
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
       </div>
     );
   }

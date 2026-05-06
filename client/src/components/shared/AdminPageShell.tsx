@@ -154,7 +154,9 @@ export function AdminPageShell({
   // Inside layout route — layout already renders TopNav/Sidebar/BottomNav
   if (inLayout) {
     if (isDesktop) {
-      return <div className={mergeClassName('flex flex-1 flex-col p-8', desktopContentClassName)}>{children}</div>;
+      return (
+        <div className={mergeClassName('flex flex-1 flex-col min-h-0 p-8', desktopContentClassName)}>{children}</div>
+      );
     }
     return (
       <div
