@@ -5,15 +5,17 @@ import useSWR from 'swr';
 import { downloadsApi } from '../api/downloads';
 import { AdminEmptyState, AdminManagementPage } from '../components/shared/AdminManagementPage';
 import { AdminPageShell } from '../components/shared/AdminPageShell';
+import ConfirmDialog from '../components/shared/ConfirmDialog';
 import Icon from '../components/shared/Icon';
 import InfiniteLoadTrigger from '../components/shared/InfiniteLoadTrigger';
 import ModelThumbnail from '../components/shared/ModelThumbnail';
-import { SkeletonList } from '../components/shared/Skeleton';
+
 import { useToast } from '../components/shared/Toast';
 import { useDocumentTitle } from '../hooks/useDocumentTitle';
 import { useVisibleItems } from '../hooks/useVisibleItems';
 import { useMediaQuery } from '../layouts/hooks/useMediaQuery';
 import { getErrorMessage } from '../lib/errorNotifications';
+import LoadingSpinner from '../components/shared/LoadingSpinner';
 
 function formatFileSize(bytes: number): string {
   if (!bytes) return '-';
@@ -54,28 +56,37 @@ function EmptyState() {
 // Desktop batch toolbar
 function BatchToolbar({
   selectedCount,
+  onDownload,
   onDelete,
   onCancel,
 }: {
   selectedCount: number;
+  onDownload: () => void;
   onDelete: () => void;
   onCancel: () => void;
 }) {
   return (
     <motion.div
-      initial={{ opacity: 0, y: 10 }}
+      initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0, y: 10 }}
+      exit={{ opacity: 0, y: 20 }}
       className="bg-surface-container-high border border-outline-variant/20 rounded-lg px-4 py-3 flex items-center gap-3 shadow-lg"
     >
-      <span className="text-sm text-on-surface font-medium">已选 {selectedCount} 条</span>
+      <span className="text-sm text-on-surface font-medium">已选 {selectedCount} 个</span>
       <div className="flex-1" />
+      <button
+        onClick={onDownload}
+        className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-on-primary bg-primary-container rounded-sm hover:opacity-90 transition-opacity"
+      >
+        <Icon name="download" size={14} />
+        下载 STEP
+      </button>
       <button
         onClick={onDelete}
         className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-error bg-error/10 rounded-sm border border-error/20 hover:bg-error/20 transition-colors"
       >
         <Icon name="delete" size={14} />
-        删除所选
+        删除
       </button>
       <button
         onClick={onCancel}
@@ -92,6 +103,7 @@ function DesktopContent() {
   const { toast } = useToast();
   const [selectMode, setSelectMode] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [confirmOpen, setConfirmOpen] = useState(false);
 
   const downloads = useMemo(() => data || [], [data]);
   const {
@@ -138,8 +150,13 @@ function DesktopContent() {
     [mutate, toast],
   );
 
-  const handleBatchDelete = useCallback(async () => {
+  const handleBatchDelete = useCallback(() => {
     if (selected.size === 0) return;
+    setConfirmOpen(true);
+  }, [selected]);
+
+  const confirmBatchDelete = useCallback(async () => {
+    setConfirmOpen(false);
     try {
       await downloadsApi.batchDelete(Array.from(selected));
       setSelected(new Set());
@@ -151,24 +168,26 @@ function DesktopContent() {
     }
   }, [selected, mutate, toast]);
 
-  const handleClearAll = useCallback(async () => {
-    if (!window.confirm('确定要清空所有下载记录吗？')) return;
-    try {
-      await downloadsApi.clearAll();
-      setSelected(new Set());
-      setSelectMode(false);
-      mutate();
-      toast('已清空下载记录', 'success');
-    } catch {
-      toast('清空失败', 'error');
+  const handleBatchDownload = useCallback(async () => {
+    if (selected.size === 0) return;
+    const selectedItems = downloads.filter((d) => selected.has(d.id));
+    let success = 0;
+    for (const item of selectedItems) {
+      try {
+        await downloadsApi.downloadFile(item.modelId, 'original');
+        success++;
+      } catch {
+        // skip failed
+      }
     }
-  }, [mutate, toast]);
+    toast(`已开始下载 ${success} 个文件`, 'success');
+  }, [selected, downloads, toast]);
 
   if (isLoading) {
     return (
-      <AdminManagementPage title="下载历史" meta="加载中..." description="查看和管理你下载过的模型文件">
-        <SkeletonList rows={6} />
-      </AdminManagementPage>
+      <AdminPageShell>
+        <LoadingSpinner />
+      </AdminPageShell>
     );
   }
 
@@ -206,15 +225,6 @@ function DesktopContent() {
           <Icon name={selectMode ? 'close' : 'checklist'} size={16} />
           {selectMode ? '取消选择' : '批量操作'}
         </button>
-        {!selectMode && (
-          <button
-            onClick={handleClearAll}
-            className="flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-sm border border-error/20 text-error/70 hover:text-error hover:border-error/40 transition-colors"
-          >
-            <Icon name="delete" size={14} />
-            清空
-          </button>
-        )}
       </>
     ) : null;
 
@@ -228,9 +238,10 @@ function DesktopContent() {
       {/* Batch toolbar */}
       <AnimatePresence>
         {selectMode && selected.size > 0 && (
-          <div className="flex items-center gap-2">
+          <div className="mb-4">
             <BatchToolbar
               selectedCount={selected.size}
+              onDownload={handleBatchDownload}
               onDelete={handleBatchDelete}
               onCancel={() => {
                 setSelectMode(false);
@@ -249,7 +260,7 @@ function DesktopContent() {
             <div
               key={item.id}
               className={`flex items-center gap-0 border-b border-outline-variant/10 last:border-b-0 ${
-                selectMode && selected.has(item.id) ? 'bg-primary-container/5' : ''
+                selectMode && selected.has(item.id) ? 'bg-primary-container/8 ring-1 ring-primary/20' : ''
               }`}
             >
               {selectMode && (
@@ -302,6 +313,14 @@ function DesktopContent() {
           <InfiniteLoadTrigger hasMore={hasMore} isLoading={false} onLoadMore={loadMore} />
         </div>
       )}
+      <ConfirmDialog
+        open={confirmOpen}
+        onClose={() => setConfirmOpen(false)}
+        onConfirm={confirmBatchDelete}
+        title="确认删除"
+        description={`确定要删除选中的 ${selected.size} 条下载记录吗？`}
+        confirmLabel="删除"
+      />
     </AdminManagementPage>
   );
 }
@@ -309,12 +328,28 @@ function DesktopContent() {
 function MobileContent() {
   const { data, error, isLoading, mutate } = useSWR('/downloads', () => downloadsApi.list());
   const { toast } = useToast();
+  const [selectMode, setSelectMode] = useState(false);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [confirmOpen, setConfirmOpen] = useState(false);
   const downloads = data || [];
   const {
     visibleItems: visibleDownloads,
     hasMore,
     loadMore,
   } = useVisibleItems(downloads, 40, String(downloads.length));
+
+  const toggleSelect = useCallback((id: string) => {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }, []);
+
+  const selectAll = useCallback(() => {
+    setSelected(new Set(downloads.map((d) => d.id)));
+  }, [downloads]);
 
   const handleDownload = useCallback(
     async (modelId: string) => {
@@ -341,16 +376,38 @@ function MobileContent() {
     [mutate, toast],
   );
 
-  const handleClearAll = useCallback(async () => {
-    if (!window.confirm('确定要清空所有下载记录吗？')) return;
+  const handleBatchDelete = useCallback(() => {
+    if (selected.size === 0) return;
+    setConfirmOpen(true);
+  }, [selected]);
+
+  const confirmBatchDelete = useCallback(async () => {
+    setConfirmOpen(false);
     try {
-      await downloadsApi.clearAll();
+      await downloadsApi.batchDelete(Array.from(selected));
+      setSelected(new Set());
+      setSelectMode(false);
       mutate();
-      toast('已清空', 'success');
+      toast(`已删除 ${selected.size} 条记录`, 'success');
     } catch {
-      toast('清空失败', 'error');
+      toast('删除失败', 'error');
     }
-  }, [mutate, toast]);
+  }, [selected, mutate, toast]);
+
+  const handleBatchDownload = useCallback(async () => {
+    if (selected.size === 0) return;
+    const selectedItems = downloads.filter((d) => selected.has(d.id));
+    let success = 0;
+    for (const item of selectedItems) {
+      try {
+        await downloadsApi.downloadFile(item.modelId, 'original');
+        success++;
+      } catch {
+        // skip failed
+      }
+    }
+    toast(`已开始下载 ${success} 个文件`, 'success');
+  }, [selected, downloads, toast]);
 
   return (
     <AdminManagementPage
@@ -360,16 +417,48 @@ function MobileContent() {
       actions={
         downloads.length > 0 ? (
           <button
-            onClick={handleClearAll}
-            className="text-xs text-error/70 hover:text-error px-2.5 py-1 border border-error/20 rounded-sm transition-colors"
+            onClick={() => {
+              setSelectMode(!selectMode);
+              setSelected(new Set());
+            }}
+            className={`text-xs px-2.5 py-1 rounded-sm border transition-colors ${
+              selectMode ? 'text-primary border-primary/30' : 'text-on-surface-variant border-outline-variant/20'
+            }`}
           >
-            清空
+            {selectMode ? '取消' : '批量操作'}
           </button>
         ) : null
       }
     >
+      {/* Mobile batch toolbar */}
+      <AnimatePresence>
+        {selectMode && (
+          <motion.div
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 10 }}
+            className="mb-3 flex items-center gap-2 bg-surface-container-high rounded-lg px-3 py-2.5 border border-outline-variant/10"
+          >
+            <button onClick={selectAll} className="text-xs text-primary">
+              全选
+            </button>
+            <div className="flex-1" />
+            <span className="text-xs text-on-surface-variant">{selected.size} 已选</span>
+            <button
+              onClick={handleBatchDownload}
+              className="text-xs text-on-surface-variant hover:text-on-surface px-2 py-1"
+            >
+              下载 STEP
+            </button>
+            <button onClick={handleBatchDelete} className="text-xs text-error px-2 py-1">
+              删除
+            </button>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {isLoading ? (
-        <SkeletonList rows={6} />
+        <LoadingSpinner />
       ) : error ? (
         <div className="flex flex-col items-center gap-3 py-16">
           <Icon name="error" size={40} className="text-error" />
@@ -382,8 +471,22 @@ function MobileContent() {
           {visibleDownloads.map((item) => (
             <div
               key={item.id}
-              className="bg-surface-container-high rounded-xl border border-outline-variant/10 overflow-hidden"
+              className={`bg-surface-container-high rounded-xl border overflow-hidden ${
+                selectMode && selected.has(item.id)
+                  ? 'border-primary ring-2 ring-primary/30'
+                  : 'border-outline-variant/10'
+              }`}
             >
+              {selectMode && (
+                <button
+                  onClick={() => toggleSelect(item.id)}
+                  className={`absolute top-2 left-2 z-10 w-5 h-5 rounded-full border-2 flex items-center justify-center transition-all ${
+                    selected.has(item.id) ? 'bg-primary border-primary' : 'bg-surface/80 border-outline-variant/40'
+                  }`}
+                >
+                  {selected.has(item.id) && <Icon name="check" size={12} className="text-on-primary" />}
+                </button>
+              )}
               <Link to={`/model/${item.modelId}`} className="flex h-20">
                 <div className="w-20 h-20 bg-surface-container-lowest shrink-0 overflow-hidden">
                   <ModelThumbnail src={item.model?.thumbnail_url} alt="" className="w-full h-full object-cover" />
@@ -396,28 +499,30 @@ function MobileContent() {
                     <span className="text-[10px] text-on-surface-variant/50">
                       {formatFileSize(item.fileSize)} · {formatDate(item.createdAt)}
                     </span>
-                    <div className="flex items-center gap-1">
-                      <button
-                        onClick={(e) => {
-                          e.preventDefault();
-                          e.stopPropagation();
-                          handleDownload(item.modelId);
-                        }}
-                        className="flex items-center justify-center w-7 h-7 rounded-lg text-on-surface-variant active:scale-[0.95] transition-transform"
-                      >
-                        <Icon name="download" size={16} />
-                      </button>
-                      <button
-                        onClick={(e) => {
-                          e.preventDefault();
-                          e.stopPropagation();
-                          handleDelete(item.id);
-                        }}
-                        className="flex items-center justify-center w-7 h-7 rounded-lg text-on-surface-variant hover:text-error transition-colors"
-                      >
-                        <Icon name="delete" size={16} />
-                      </button>
-                    </div>
+                    {!selectMode && (
+                      <div className="flex items-center gap-1">
+                        <button
+                          onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            handleDownload(item.modelId);
+                          }}
+                          className="flex items-center justify-center w-7 h-7 rounded-lg text-on-surface-variant active:scale-[0.95] transition-transform"
+                        >
+                          <Icon name="download" size={16} />
+                        </button>
+                        <button
+                          onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            handleDelete(item.id);
+                          }}
+                          className="flex items-center justify-center w-7 h-7 rounded-lg text-on-surface-variant hover:text-error transition-colors"
+                        >
+                          <Icon name="delete" size={16} />
+                        </button>
+                      </div>
+                    )}
                   </div>
                 </div>
               </Link>
@@ -426,6 +531,14 @@ function MobileContent() {
           <InfiniteLoadTrigger hasMore={hasMore} isLoading={false} onLoadMore={loadMore} />
         </div>
       )}
+      <ConfirmDialog
+        open={confirmOpen}
+        onClose={() => setConfirmOpen(false)}
+        onConfirm={confirmBatchDelete}
+        title="确认删除"
+        description={`确定要删除选中的 ${selected.size} 条下载记录吗？`}
+        confirmLabel="删除"
+      />
     </AdminManagementPage>
   );
 }

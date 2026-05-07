@@ -13,6 +13,7 @@ import { useDocumentTitle } from '../hooks/useDocumentTitle';
 import { useImeSafeSearchInput } from '../hooks/useImeSafeSearchInput';
 import { copyText } from '../lib/clipboard';
 import type { ApiResponse } from '../types/api';
+import LoadingSpinner from '../components/shared/LoadingSpinner';
 
 interface ShareItem {
   id: string;
@@ -215,7 +216,9 @@ function Content() {
           </div>
         ))}
         {statItems.length === 0 && (
-          <div className="col-span-full h-12 animate-pulse rounded-lg bg-surface-container-low" />
+          <div className="col-span-full flex items-center justify-center py-4">
+            <LoadingSpinner size="sm" />
+          </div>
         )}
       </div>
       <div className="ml-auto flex h-9 w-full shrink-0 items-center px-1 sm:w-72">
@@ -277,13 +280,7 @@ function Content() {
     <AdminManagementPage title="分享管理" description="管理模型分享链接、访问权限和下载记录" toolbar={toolbar}>
       {/* List */}
       <div className="space-y-2">
-        {isLoading && items.length === 0 && (
-          <div className="space-y-2">
-            {[1, 2, 3].map((item) => (
-              <div key={item} className="h-20 animate-pulse rounded-md bg-surface-container-low" />
-            ))}
-          </div>
-        )}
+        {isLoading && items.length === 0 && <LoadingSpinner />}
         {items.length === 0 && !isLoading && (
           <div className="text-center py-12 text-on-surface-variant">
             <Icon name="share" size={40} className="mx-auto mb-2 opacity-30" />

@@ -7,13 +7,14 @@ import { AdminPageShell } from '../components/shared/AdminPageShell';
 import Icon from '../components/shared/Icon';
 import InfiniteLoadTrigger from '../components/shared/InfiniteLoadTrigger';
 import ResponsiveSectionTabs from '../components/shared/ResponsiveSectionTabs';
-import { SkeletonList } from '../components/shared/Skeleton';
+
 import { useDocumentTitle } from '../hooks/useDocumentTitle';
 import { useVisibleItems } from '../hooks/useVisibleItems';
 import { useMediaQuery } from '../layouts/hooks/useMediaQuery';
 import { getBusinessConfig, statusInfo } from '../lib/businessConfig';
 import { getCachedPublicSettings } from '../lib/publicSettings';
 import { useAuthStore } from '../stores/useAuthStore';
+import LoadingSpinner from '../components/shared/LoadingSpinner';
 
 function useTicketAdminData() {
   const { user } = useAuthStore();
@@ -157,7 +158,7 @@ function DesktopContent() {
     >
       <div key={filter} className="admin-tab-panel">
         {loading ? (
-          <SkeletonList rows={5} />
+          <LoadingSpinner />
         ) : filtered.length === 0 ? (
           <EmptyTickets />
         ) : (
@@ -280,11 +281,7 @@ function MobileContent() {
     >
       <div key={filter} className="admin-tab-panel">
         {loading ? (
-          <div className="space-y-3">
-            {[1, 2, 3].map((i) => (
-              <div key={i} className="h-24 bg-surface-container-high rounded-xl animate-pulse" />
-            ))}
-          </div>
+          <LoadingSpinner />
         ) : filtered.length === 0 ? (
           <EmptyTickets />
         ) : (

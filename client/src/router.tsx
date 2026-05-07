@@ -10,7 +10,7 @@ import { checkProtectedAccess } from './components/shared/ProtectedLink';
 // Static import for the landing page — eliminates flash on first visit
 import HomePage from './pages/HomePage';
 import { useAuthStore } from './stores/useAuthStore';
-import { AdminContentSkeleton, LoginSkeleton, PublicContentSkeleton } from './components/shared/SuspenseFallbacks';
+import LoadingSpinner from './components/shared/LoadingSpinner';
 
 // Lazy-loaded pages — Vite generates separate chunks automatically
 const ModelDetailPage = lazy(() => import('./pages/ModelDetailPage'));
@@ -43,12 +43,8 @@ const InquiryDetailPage = lazy(() => import('./pages/InquiryDetailPage'));
 const InquiryAdminPage = lazy(() => import('./pages/InquiryAdminPage'));
 const SelectionSharePage = lazy(() => import('./pages/SelectionSharePage'));
 
-function PageWrap({ children, layout }: { children: React.ReactNode; layout?: 'admin' | 'public' }) {
-  return (
-    <Suspense fallback={layout === 'public' ? <PublicContentSkeleton /> : <AdminContentSkeleton />}>
-      {children}
-    </Suspense>
-  );
+function PageWrap({ children }: { children: React.ReactNode }) {
+  return <Suspense fallback={null}>{children}</Suspense>;
 }
 
 // Protected pages — check auth BEFORE rendering
@@ -78,7 +74,7 @@ function ProtectedPage({ children, requiredRole }: { children: React.ReactNode; 
   }, [hasHydrated, authRetrying, authRetryDone, isAuthenticated]);
 
   if (!hasHydrated || authRetrying || (!isAuthenticated && !authRetryDone)) {
-    return null;
+    return <LoadingSpinner />;
   }
 
   if (!isAuthenticated) {
@@ -102,12 +98,12 @@ function ProtectedPage({ children, requiredRole }: { children: React.ReactNode; 
     return <Navigate to="/" replace />;
   }
 
-  return <Suspense fallback={<AdminContentSkeleton />}>{children}</Suspense>;
+  return <Suspense fallback={null}>{children}</Suspense>;
 }
 
 // No wrapper — let the page handle its own height/scrolling
 function ScrollPage({ children }: { children: React.ReactNode }) {
-  return <Suspense fallback={<LoginSkeleton />}>{children}</Suspense>;
+  return <Suspense fallback={null}>{children}</Suspense>;
 }
 
 function NotFoundPage() {
@@ -186,7 +182,7 @@ export default function Router() {
           <Route
             path="/"
             element={
-              <PageWrap layout="public">
+              <PageWrap>
                 <HomePage />
               </PageWrap>
             }
@@ -202,7 +198,7 @@ export default function Router() {
           <Route
             path="/legal/:type"
             element={
-              <PageWrap layout="public">
+              <PageWrap>
                 <LegalPage />
               </PageWrap>
             }
@@ -210,7 +206,7 @@ export default function Router() {
           <Route
             path="/share/:token"
             element={
-              <PageWrap layout="public">
+              <PageWrap>
                 <SharePage />
               </PageWrap>
             }
@@ -218,7 +214,7 @@ export default function Router() {
           <Route
             path="/selection/s/:token"
             element={
-              <PageWrap layout="public">
+              <PageWrap>
                 <SelectionSharePage />
               </PageWrap>
             }

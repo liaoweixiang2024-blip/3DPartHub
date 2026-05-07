@@ -11,6 +11,7 @@ import { useDocumentTitle } from '../hooks/useDocumentTitle';
 import { useMediaQuery } from '../layouts/hooks/useMediaQuery';
 import { getBusinessConfig, statusInfo } from '../lib/businessConfig';
 import { getCachedPublicSettings } from '../lib/publicSettings';
+import LoadingSpinner from '../components/shared/LoadingSpinner';
 
 const INQUIRY_PAGE_SIZE = 20;
 type InquiryStatusTab = { value: string; label: string };
@@ -104,11 +105,7 @@ function DesktopContent() {
     >
       <div key={statusFilter} className="admin-tab-panel">
         {isLoading ? (
-          <div className="space-y-3">
-            {[1, 2, 3].map((i) => (
-              <div key={i} className="h-16 bg-surface-container-low rounded-lg animate-pulse" />
-            ))}
-          </div>
+          <LoadingSpinner />
         ) : inquiries.length === 0 ? (
           <AdminEmptyState icon="request_quote" title="暂无询价单" description="切换状态或等待用户提交新的选型询价。" />
         ) : (
@@ -184,11 +181,7 @@ function MobileContent() {
     >
       <div key={statusFilter} className="admin-tab-panel">
         {isLoading ? (
-          <div className="space-y-3">
-            {[1, 2, 3].map((i) => (
-              <div key={i} className="h-20 bg-surface-container-high rounded-lg animate-pulse" />
-            ))}
-          </div>
+          <LoadingSpinner />
         ) : inquiries.length === 0 ? (
           <AdminEmptyState icon="request_quote" title="暂无询价单" description="切换状态或等待用户提交新的选型询价。" />
         ) : (

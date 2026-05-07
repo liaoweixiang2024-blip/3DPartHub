@@ -4,6 +4,7 @@ import { getShareInfo, verifySharePassword, getShareDownloadUrl, type ShareInfo 
 import { MATERIAL_PRESETS, type MaterialPresetKey } from '../components/3d/viewerControls';
 import BrandMark from '../components/shared/BrandMark';
 import Icon from '../components/shared/Icon';
+import LoadingSpinner from '../components/shared/LoadingSpinner';
 import { PageTitle } from '../components/shared/PagePrimitives';
 import { PublicPageShell } from '../components/shared/PublicPageShell';
 import { useDocumentTitle } from '../hooks/useDocumentTitle';
@@ -118,12 +119,7 @@ export default function SharePage() {
   if (loading) {
     return (
       <PublicPageShell>
-        <div className="flex flex-1 items-center justify-center bg-surface">
-          <div className="flex items-center gap-3 text-on-surface-variant">
-            <Icon name="progress_activity" size={24} className="animate-spin" />
-            <span className="text-sm">加载中...</span>
-          </div>
-        </div>
+        <LoadingSpinner />
       </PublicPageShell>
     );
   }

@@ -22,7 +22,7 @@ import Icon from '../components/shared/Icon';
 import InfiniteLoadTrigger from '../components/shared/InfiniteLoadTrigger';
 import ModelThumbnail from '../components/shared/ModelThumbnail';
 import ResponsiveSectionTabs, { type ResponsiveSectionTab } from '../components/shared/ResponsiveSectionTabs';
-import { SkeletonList } from '../components/shared/Skeleton';
+
 import { useToast } from '../components/shared/Toast';
 import { useDocumentTitle } from '../hooks/useDocumentTitle';
 import { useImeSafeSearchInput } from '../hooks/useImeSafeSearchInput';
@@ -30,6 +30,7 @@ import { useVisibleItems } from '../hooks/useVisibleItems';
 import { useMediaQuery } from '../layouts/hooks/useMediaQuery';
 import { getBusinessConfig } from '../lib/businessConfig';
 import { getCachedPublicSettings } from '../lib/publicSettings';
+import LoadingSpinner from '../components/shared/LoadingSpinner';
 
 function formatSize(bytes: number) {
   if (bytes < 1024) return `${bytes} B`;
@@ -503,9 +504,7 @@ function PreviewDiagnosticsPanel({ compact = false, embedded = false }: { compac
           <div
             className={`grid flex-1 gap-2 overflow-y-auto pr-1 ${compact ? 'min-h-[224px] max-h-[224px]' : 'min-h-[280px] max-h-[280px]'}`}
           >
-            {[0, 1, 2].slice(0, compact ? 2 : 3).map((item) => (
-              <div key={item} className="h-14 animate-pulse rounded-sm bg-surface-container-high" />
-            ))}
+            <LoadingSpinner size="sm" />
           </div>
         ) : visibleItems.length > 0 ? (
           <div
@@ -876,12 +875,8 @@ function ConversionQueuePanel({ compact = false, embedded = false }: { compact?:
             </div>
           </div>
           {isLoading ? (
-            <div
-              className={`grid flex-1 gap-2 overflow-y-auto pr-1 ${compact ? 'min-h-[224px] max-h-[224px]' : 'min-h-[280px] max-h-[280px]'}`}
-            >
-              {[0, 1, 2].slice(0, compact ? 2 : 3).map((item) => (
-                <div key={item} className="h-14 animate-pulse rounded-sm bg-surface-container-high" />
-              ))}
+            <div className="flex flex-1 items-center justify-center">
+              <LoadingSpinner size="sm" />
             </div>
           ) : visibleQueueItems.length > 0 ? (
             <div
@@ -921,10 +916,7 @@ function ConversionQueuePanel({ compact = false, embedded = false }: { compact?:
             </div>
             <div className="max-h-[calc(88vh-72px)] overflow-y-auto p-5">
               {detailLoading ? (
-                <div className="space-y-3">
-                  <div className="h-16 animate-pulse rounded-sm bg-surface-container-high" />
-                  <div className="h-36 animate-pulse rounded-sm bg-surface-container-high" />
-                </div>
+                <LoadingSpinner size="sm" />
               ) : detail ? (
                 <div className="space-y-4">
                   <div className="grid gap-2 text-xs sm:grid-cols-2">
@@ -2172,7 +2164,7 @@ function DesktopContent() {
         <div className="admin-tab-panel min-h-0">
           {activeTab === 'suggestions' ? (
             sugLoading ? (
-              <SkeletonList rows={5} />
+              <LoadingSpinner />
             ) : (
               <div className={`${MODEL_ADMIN_PANEL_CLASS} p-3`}>
                 {filteredSuggestions.length > 0 && (
@@ -2267,7 +2259,7 @@ function DesktopContent() {
             )
           ) : activeTab === 'groups' ? (
             groupsLoading ? (
-              <SkeletonList rows={5} />
+              <LoadingSpinner />
             ) : (
               <div className={`${MODEL_ADMIN_PANEL_CLASS} p-3`}>
                 <div className="space-y-2">
@@ -2435,7 +2427,7 @@ function DesktopContent() {
               </div>
             )
           ) : isLoadingInitial ? (
-            <SkeletonList rows={5} />
+            <LoadingSpinner />
           ) : (
             <>
               {models.length > 0 && (
@@ -3247,7 +3239,7 @@ function MobileContent() {
 
         {activeTab === 'suggestions' ? (
           sugLoading ? (
-            <SkeletonList rows={5} />
+            <LoadingSpinner />
           ) : (
             <div className="admin-tab-panel space-y-3">
               {filteredSuggestions.length > 0 && (
@@ -3336,7 +3328,7 @@ function MobileContent() {
           )
         ) : activeTab === 'groups' ? (
           groupsLoading ? (
-            <SkeletonList rows={5} />
+            <LoadingSpinner />
           ) : (
             <div className="admin-tab-panel space-y-2">
               {filteredGroups?.map((group) => {
@@ -3493,7 +3485,7 @@ function MobileContent() {
             </div>
           )
         ) : isLoadingInitial ? (
-          <SkeletonList rows={5} />
+          <LoadingSpinner />
         ) : (
           <div className="admin-tab-panel flex flex-col gap-3">
             {visibleModels.map((m) => (

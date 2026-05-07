@@ -1,15 +1,19 @@
+import { AnimatePresence, motion } from 'framer-motion';
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import useSWR from 'swr';
 import { deleteShare, listShares, type ShareLink } from '../api/shares';
 import { AdminEmptyState, AdminManagementPage } from '../components/shared/AdminManagementPage';
 import { AdminPageShell } from '../components/shared/AdminPageShell';
+import ConfirmDialog from '../components/shared/ConfirmDialog';
 import Icon from '../components/shared/Icon';
-import { SkeletonList } from '../components/shared/Skeleton';
+
 import { useToast } from '../components/shared/Toast';
 import { useDocumentTitle } from '../hooks/useDocumentTitle';
 import { useImeSafeSearchInput } from '../hooks/useImeSafeSearchInput';
 import { copyText } from '../lib/clipboard';
+import LoadingSpinner from '../components/shared/LoadingSpinner';
+import { useMediaQuery } from '../layouts/hooks/useMediaQuery';
 
 function getShareUrl(share: ShareLink) {
   const path = share.type === 'selection' ? `/selection/s/${share.token}` : `/share/${share.token}`;
@@ -39,6 +43,41 @@ function ShareTypeBadge({ type }: { type?: ShareLink['type'] }) {
   );
 }
 
+function BatchToolbar({
+  selectedCount,
+  onDelete,
+  onCancel,
+}: {
+  selectedCount: number;
+  onDelete: () => void;
+  onCancel: () => void;
+}) {
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, y: 20 }}
+      className="bg-surface-container-high border border-outline-variant/20 rounded-lg px-4 py-3 flex items-center gap-3 shadow-lg"
+    >
+      <span className="text-sm text-on-surface font-medium">已选 {selectedCount} 个</span>
+      <div className="flex-1" />
+      <button
+        onClick={onDelete}
+        className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-error bg-error/10 rounded-sm border border-error/20 hover:bg-error/20 transition-colors"
+      >
+        <Icon name="delete" size={14} />
+        删除
+      </button>
+      <button
+        onClick={onCancel}
+        className="flex items-center justify-center w-7 h-7 text-on-surface-variant hover:text-on-surface rounded-sm hover:bg-surface-container-high transition-colors"
+      >
+        <Icon name="close" size={16} />
+      </button>
+    </motion.div>
+  );
+}
+
 function ShareRow({
   item,
   deleting,
@@ -65,20 +104,18 @@ function ShareRow({
 
   return (
     <div
-      className={`group flex min-w-0 items-start gap-2 border-b border-outline-variant/10 px-3 py-2.5 transition-colors last:border-b-0 md:items-center md:px-4 md:py-3 ${selected ? 'bg-primary-container/5' : ''}`}
+      className={`group flex min-w-0 items-start gap-2 border-b border-outline-variant/10 px-3 py-2.5 transition-colors last:border-b-0 md:items-center md:px-4 md:py-3 ${selected ? 'bg-primary-container/8 ring-1 ring-primary/20' : ''}`}
     >
       {selectMode ? (
         <button
           type="button"
           onClick={() => onToggleSelect(item.id)}
-          className={`mt-1 flex h-6 w-6 shrink-0 items-center justify-center rounded-md border transition-colors md:mt-0 md:self-center ${
-            selected
-              ? 'border-primary-container bg-primary-container text-on-primary'
-              : 'border-outline-variant/35 text-transparent hover:border-primary-container/60'
+          className={`shrink-0 w-5 h-5 rounded-sm border-2 flex items-center justify-center transition-all ${
+            selected ? 'bg-primary border-primary' : 'bg-surface/80 border-outline-variant/40 hover:border-primary'
           }`}
           aria-label={selected ? '取消选择' : '选择分享'}
         >
-          <Icon name="check" size={15} />
+          {selected && <Icon name="check" size={14} className="text-on-primary" />}
         </button>
       ) : null}
       <Link
@@ -179,6 +216,7 @@ export default function MySharesPage() {
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [selectMode, setSelectMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [confirmOpen, setConfirmOpen] = useState(false);
   const { data, error, isLoading, mutate } = useSWR<ShareLink[]>('/shares/mine', listShares);
   const shares = useMemo(() => data || [], [data]);
   const keyword = search.trim().toLowerCase();
@@ -242,10 +280,14 @@ export default function MySharesPage() {
     });
   }
 
-  async function handleBatchDelete() {
+  function handleBatchDelete() {
+    if (!selectedIds.size) return;
+    setConfirmOpen(true);
+  }
+
+  async function confirmBatchDelete() {
+    setConfirmOpen(false);
     const ids = Array.from(selectedIds);
-    if (!ids.length) return;
-    if (!window.confirm(`确定删除选中的 ${ids.length} 条分享链接吗？`)) return;
     try {
       await Promise.all(ids.map((id) => deleteShare(id)));
       setSelectedIds(new Set());
@@ -256,6 +298,51 @@ export default function MySharesPage() {
       toast(err.response?.data?.message || err.response?.data?.detail || '批量删除失败', 'error');
     }
   }
+
+  const allVisibleSelected = filtered.length > 0 && filtered.every((item) => selectedIds.has(item.id));
+  const isDesktop = useMediaQuery('(min-width: 768px)');
+
+  const headerActions =
+    shares.length > 0 ? (
+      isDesktop ? (
+        <>
+          {selectMode && (
+            <button onClick={toggleSelectAllVisible} className="text-sm text-primary hover:underline">
+              {allVisibleSelected ? '取消全选' : '全选当前'}
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={() => {
+              setSelectMode((value) => !value);
+              setDeleteId(null);
+              if (selectMode) setSelectedIds(new Set());
+            }}
+            className={`flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-sm border transition-colors ${
+              selectMode
+                ? 'text-primary border-primary/30 bg-primary-container/10'
+                : 'text-on-surface-variant border-outline-variant/20 hover:text-on-surface hover:border-outline-variant/40'
+            }`}
+          >
+            <Icon name={selectMode ? 'close' : 'checklist'} size={16} />
+            {selectMode ? '取消选择' : '批量操作'}
+          </button>
+        </>
+      ) : (
+        <button
+          onClick={() => {
+            setSelectMode((value) => !value);
+            setDeleteId(null);
+            if (selectMode) setSelectedIds(new Set());
+          }}
+          className={`text-xs px-2.5 py-1 rounded-sm border transition-colors ${
+            selectMode ? 'text-primary border-primary/30' : 'text-on-surface-variant border-outline-variant/20'
+          }`}
+        >
+          {selectMode ? '取消' : '批量操作'}
+        </button>
+      )
+    ) : null;
 
   const toolbar = shares.length ? (
     <div className="flex min-w-0 flex-col gap-2 md:flex-row md:items-center">
@@ -281,54 +368,13 @@ export default function MySharesPage() {
           </button>
         ) : null}
       </div>
-      <div className="flex shrink-0 items-center gap-2">
-        {selectMode ? (
-          <>
-            <button
-              type="button"
-              onClick={toggleSelectAllVisible}
-              className="inline-flex h-9 items-center gap-1.5 rounded-md border border-outline-variant/20 px-3 text-xs font-medium text-on-surface-variant hover:border-primary-container/35 hover:text-on-surface"
-            >
-              <Icon name="done_all" size={15} />
-              {filtered.length > 0 && filtered.every((item) => selectedIds.has(item.id)) ? '取消全选' : '全选当前'}
-            </button>
-            <button
-              type="button"
-              onClick={handleBatchDelete}
-              disabled={selectedCount === 0}
-              className="inline-flex h-9 items-center gap-1.5 rounded-md bg-error px-3 text-xs font-medium text-on-error-container disabled:cursor-not-allowed disabled:opacity-45"
-            >
-              <Icon name="delete" size={15} />
-              删除{selectedCount ? ` ${selectedCount}` : ''}
-            </button>
-          </>
-        ) : null}
-        <button
-          type="button"
-          onClick={() => {
-            setSelectMode((value) => !value);
-            setDeleteId(null);
-            if (selectMode) setSelectedIds(new Set());
-          }}
-          className={`inline-flex h-9 items-center gap-1.5 rounded-md px-3 text-xs font-medium transition-colors ${
-            selectMode
-              ? 'bg-surface-container-high text-on-surface'
-              : 'border border-outline-variant/20 text-on-surface-variant hover:border-primary-container/35 hover:text-on-surface'
-          }`}
-        >
-          <Icon name={selectMode ? 'close' : 'checklist'} size={15} />
-          {selectMode ? '完成' : '批量管理'}
-        </button>
-      </div>
     </div>
   ) : null;
 
   if (isLoading) {
     return (
       <AdminPageShell>
-        <AdminManagementPage title="我的分享" meta="加载中..." description="管理自己创建的模型分享和选型分享链接">
-          <SkeletonList rows={6} />
-        </AdminManagementPage>
+        <LoadingSpinner />
       </AdminPageShell>
     );
   }
@@ -345,10 +391,44 @@ export default function MySharesPage() {
     <AdminPageShell>
       <AdminManagementPage
         title="我的分享"
-        meta={`${shares.length} 条`}
+        meta={`${shares.length} 条记录`}
         description="管理自己创建的模型分享和选型分享链接"
+        actions={headerActions}
         toolbar={toolbar}
       >
+        {/* Batch toolbar */}
+        <AnimatePresence>
+          {isDesktop && selectMode && selectedCount > 0 && (
+            <div className="mb-4">
+              <BatchToolbar
+                selectedCount={selectedCount}
+                onDelete={handleBatchDelete}
+                onCancel={() => {
+                  setSelectMode(false);
+                  setSelectedIds(new Set());
+                }}
+              />
+            </div>
+          )}
+          {!isDesktop && selectMode && (
+            <motion.div
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: 10 }}
+              className="mb-3 flex items-center gap-2 bg-surface-container-high rounded-lg px-3 py-2.5 border border-outline-variant/10"
+            >
+              <button onClick={toggleSelectAllVisible} className="text-xs text-primary">
+                {allVisibleSelected ? '取消全选' : '全选'}
+              </button>
+              <div className="flex-1" />
+              <span className="text-xs text-on-surface-variant">{selectedCount} 已选</span>
+              <button onClick={handleBatchDelete} className="text-xs text-error px-2 py-1">
+                删除
+              </button>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
         {shares.length === 0 ? (
           <AdminEmptyState
             icon="share"
@@ -391,6 +471,14 @@ export default function MySharesPage() {
           </section>
         )}
       </AdminManagementPage>
+      <ConfirmDialog
+        open={confirmOpen}
+        onClose={() => setConfirmOpen(false)}
+        onConfirm={confirmBatchDelete}
+        title="确认删除"
+        description={`确定要删除选中的 ${selectedIds.size} 条分享链接吗？`}
+        confirmLabel="删除"
+      />
     </AdminPageShell>
   );
 }

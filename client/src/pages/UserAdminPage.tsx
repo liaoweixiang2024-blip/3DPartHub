@@ -12,6 +12,7 @@ import { useDocumentTitle } from '../hooks/useDocumentTitle';
 import { useImeSafeSearchInput } from '../hooks/useImeSafeSearchInput';
 import { copyText } from '../lib/clipboard';
 import { getErrorMessage } from '../lib/errorNotifications';
+import LoadingSpinner from '../components/shared/LoadingSpinner';
 
 interface UserItem {
   id: string;
@@ -170,7 +171,9 @@ export default function UserAdminPage() {
           </div>
         ))}
         {statItems.length === 0 && (
-          <div className="col-span-full h-12 animate-pulse rounded-lg bg-surface-container-low" />
+          <div className="col-span-full flex items-center justify-center py-4">
+            <LoadingSpinner size="sm" />
+          </div>
         )}
       </div>
       <div className="flex w-full flex-wrap items-center justify-end gap-3 xl:w-auto">
@@ -214,13 +217,7 @@ export default function UserAdminPage() {
     <AdminManagementPage title="用户管理" description="管理用户角色、账号信息和使用数据" toolbar={toolbar}>
       {/* User list */}
       <div className="space-y-2">
-        {isLoading && users.length === 0 && (
-          <div className="space-y-2">
-            {[1, 2, 3].map((item) => (
-              <div key={item} className="h-20 animate-pulse rounded-md bg-surface-container-low" />
-            ))}
-          </div>
-        )}
+        {isLoading && users.length === 0 && <LoadingSpinner />}
         {users.map((u) => (
           <div key={u.id} className="bg-surface-container-low rounded-md border border-outline-variant/10 p-3">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">

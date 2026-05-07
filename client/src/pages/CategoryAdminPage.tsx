@@ -5,11 +5,12 @@ import { categoriesApi, type CategoryItem } from '../api/categories';
 import { AdminContentPanel, AdminManagementPage } from '../components/shared/AdminManagementPage';
 import { AdminPageShell } from '../components/shared/AdminPageShell';
 import Icon from '../components/shared/Icon';
-import { SkeletonList } from '../components/shared/Skeleton';
+
 import { useToast } from '../components/shared/Toast';
 import { useDocumentTitle } from '../hooks/useDocumentTitle';
 import { useImeSafeSearchInput } from '../hooks/useImeSafeSearchInput';
 import { getErrorMessage } from '../lib/errorNotifications';
+import LoadingSpinner from '../components/shared/LoadingSpinner';
 
 function CategoryRow({
   cat,
@@ -619,7 +620,7 @@ function Content() {
     >
       <div className="h-full min-h-0 overflow-hidden">
         {!tree ? (
-          <SkeletonList rows={5} />
+          <LoadingSpinner />
         ) : (
           <AdminContentPanel scroll className="flex h-full min-h-0 flex-col">
             <div className="hidden shrink-0 grid-cols-[28px_34px_44px_minmax(0,1fr)_104px_68px_120px] items-center gap-2 border-b border-outline-variant/10 bg-surface-container-high px-4 py-3 text-[10px] font-bold uppercase tracking-wide text-on-surface-variant sm:grid">

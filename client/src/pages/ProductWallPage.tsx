@@ -48,6 +48,7 @@ import { useImeSafeSearchInput } from '../hooks/useImeSafeSearchInput';
 import { getBusinessConfig } from '../lib/businessConfig';
 import { copyText } from '../lib/clipboard';
 import { useAuthStore } from '../stores/useAuthStore';
+import LoadingSpinner from '../components/shared/LoadingSpinner';
 
 type WallItem = ProductWallItem;
 
@@ -74,7 +75,6 @@ type DataTransferItemWithEntry = DataTransferItem & {
 
 const PRODUCT_WALL_UPLOAD_BATCH_SIZE = 20;
 const PRODUCT_WALL_RENDER_BATCH_SIZE = 24;
-const PRODUCT_WALL_SKELETON_COUNT = 15;
 const PRODUCT_WALL_CANVAS_MODE_KEY = 'product-wall-canvas-mode';
 const PRODUCT_WALL_DEFAULT_KIND_KEY = 'product-wall-default-kind';
 const PRODUCT_WALL_FAVORITES_FILTER = '我的收藏';
@@ -173,30 +173,6 @@ function getProductWallColumnCount() {
   if (width >= 1280) return 4;
   if (width >= 860) return 3;
   return 2;
-}
-
-function ProductWallSkeletonGrid({ columns }: { columns: number }) {
-  const items = Array.from({ length: PRODUCT_WALL_SKELETON_COUNT }, (_, index) => ({
-    id: index,
-    ratio: index % 5 === 0 ? '3 / 4' : index % 3 === 0 ? '4 / 3' : '4 / 5',
-  }));
-  const grouped = items.reduce<Array<typeof items>>((acc, item, index) => {
-    const columnIndex = index % columns;
-    if (!acc[columnIndex]) acc[columnIndex] = [];
-    acc[columnIndex].push(item);
-    return acc;
-  }, []);
-  return (
-    <section className="product-wall-masonry product-wall-skeleton-grid w-full" aria-hidden="true">
-      {grouped.map((column, columnIndex) => (
-        <div key={columnIndex} className="product-wall-masonry-column">
-          {column.map((item) => (
-            <div key={item.id} className="product-wall-skeleton-card rounded-xl" style={{ aspectRatio: item.ratio }} />
-          ))}
-        </div>
-      ))}
-    </section>
-  );
 }
 
 function errorMessage(error: unknown, fallback = '操作失败，请稍后重试') {
@@ -1184,7 +1160,7 @@ export default function ProductWallPage() {
           )}
 
           {initialLoading || (visibleItems.length > 0 && !wallReady) ? (
-            <ProductWallSkeletonGrid columns={columnCount} />
+            <LoadingSpinner />
           ) : visibleItems.length ? (
             <>
               <section className="product-wall-masonry w-full">

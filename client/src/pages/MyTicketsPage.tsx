@@ -1,16 +1,18 @@
 import { Link, useNavigate } from 'react-router-dom';
+import { useState } from 'react';
 import useSWR from 'swr';
 import client from '../api/client';
 import { AdminEmptyState, AdminManagementPage } from '../components/shared/AdminManagementPage';
 import { AdminPageShell } from '../components/shared/AdminPageShell';
 import Icon from '../components/shared/Icon';
 import InfiniteLoadTrigger from '../components/shared/InfiniteLoadTrigger';
-import { SkeletonList } from '../components/shared/Skeleton';
+
 import { useDocumentTitle } from '../hooks/useDocumentTitle';
 import { useVisibleItems } from '../hooks/useVisibleItems';
 import { useMediaQuery } from '../layouts/hooks/useMediaQuery';
 import { getBusinessConfig, statusInfo } from '../lib/businessConfig';
 import { getCachedPublicSettings } from '../lib/publicSettings';
+import LoadingSpinner from '../components/shared/LoadingSpinner';
 
 interface MyTicket {
   id: string;
@@ -42,6 +44,7 @@ function Content() {
   const business = getBusinessConfig(settings);
   const classificationMap = new Map(business.ticketClassifications.map((item) => [item.value, item.label]));
   const navigate = useNavigate();
+  const [refreshing, setRefreshing] = useState(false);
 
   const list = tickets || [];
   const { visibleItems: visibleTickets, hasMore, loadMore } = useVisibleItems(list, 60, String(list.length));
@@ -55,11 +58,15 @@ function Content() {
         list.length > 0 ? (
           <>
             <button
-              onClick={() => mutate()}
-              className="flex items-center gap-2 rounded-lg border border-outline-variant/20 px-4 py-2.5 text-sm text-on-surface-variant transition-colors hover:text-on-surface"
+              onClick={() => {
+                setRefreshing(true);
+                mutate().finally(() => setRefreshing(false));
+              }}
+              disabled={refreshing}
+              className="flex items-center gap-2 rounded-lg border border-outline-variant/20 px-4 py-2.5 text-sm text-on-surface-variant transition-colors hover:text-on-surface disabled:opacity-50"
             >
-              <Icon name="refresh" size={16} />
-              刷新
+              <Icon name="refresh" size={16} className={refreshing ? 'animate-spin' : ''} />
+              {refreshing ? '刷新中...' : '刷新'}
             </button>
             <Link
               to="/support"
@@ -73,7 +80,7 @@ function Content() {
       }
     >
       {isLoading ? (
-        <SkeletonList rows={4} />
+        <LoadingSpinner />
       ) : list.length === 0 ? (
         <AdminEmptyState
           icon="inbox"
@@ -144,11 +151,12 @@ function Content() {
 }
 
 function MobileContent() {
-  const { data: tickets, isLoading } = useMyTickets();
+  const { data: tickets, isLoading, mutate } = useMyTickets();
   const { data: settings } = useSWR('publicSettings', () => getCachedPublicSettings());
   const business = getBusinessConfig(settings);
   const classificationMap = new Map(business.ticketClassifications.map((item) => [item.value, item.label]));
   const navigate = useNavigate();
+  const [refreshing, setRefreshing] = useState(false);
 
   const list = tickets || [];
   const { visibleItems: visibleTickets, hasMore, loadMore } = useVisibleItems(list, 40, String(list.length));
@@ -159,18 +167,30 @@ function MobileContent() {
       description="查看你提交的技术支持工单和处理状态"
       actions={
         list.length > 0 ? (
-          <Link
-            to="/support"
-            className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-lg bg-primary-container px-3 text-xs font-medium text-on-primary"
-          >
-            <Icon name="add" size={14} />
-            新建
-          </Link>
+          <>
+            <button
+              onClick={() => {
+                setRefreshing(true);
+                mutate().finally(() => setRefreshing(false));
+              }}
+              disabled={refreshing}
+              className="inline-flex h-9 items-center gap-1 rounded-lg border border-outline-variant/20 px-3 text-xs text-on-surface-variant disabled:opacity-50"
+            >
+              <Icon name="refresh" size={14} className={refreshing ? 'animate-spin' : ''} />
+            </button>
+            <Link
+              to="/support"
+              className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-lg bg-primary-container px-3 text-xs font-medium text-on-primary"
+            >
+              <Icon name="add" size={14} />
+              新建
+            </Link>
+          </>
         ) : null
       }
     >
       {isLoading ? (
-        <SkeletonList rows={4} />
+        <LoadingSpinner />
       ) : list.length === 0 ? (
         <AdminEmptyState
           icon="inbox"

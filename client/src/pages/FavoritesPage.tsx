@@ -8,15 +8,17 @@ import { favoriteApi } from '../api/favorites';
 import type { FavoriteItem } from '../api/favorites';
 import { AdminEmptyState, AdminManagementPage } from '../components/shared/AdminManagementPage';
 import { AdminPageShell } from '../components/shared/AdminPageShell';
+import ConfirmDialog from '../components/shared/ConfirmDialog';
 import Icon from '../components/shared/Icon';
 import LoginConfirmDialog from '../components/shared/LoginConfirmDialog';
 import { isLoginDialogEnabled } from '../components/shared/ProtectedLink';
 import ModelThumbnail from '../components/shared/ModelThumbnail';
-import { SkeletonGrid } from '../components/shared/Skeleton';
+
 import { useToast } from '../components/shared/Toast';
 import { useDocumentTitle } from '../hooks/useDocumentTitle';
 import { useMediaQuery } from '../layouts/hooks/useMediaQuery';
 import { useFavoriteStore } from '../stores/useFavoriteStore';
+import LoadingSpinner from '../components/shared/LoadingSpinner';
 
 interface FavoriteModel {
   id: string;
@@ -271,6 +273,7 @@ function DesktopContent() {
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [downloading, setDownloading] = useState(false);
   const [loginDialogOpen, setLoginDialogOpen] = useState(false);
+  const [confirmOpen, setConfirmOpen] = useState(false);
 
   const handleRemove = useCallback(
     async (modelId: string) => {
@@ -303,8 +306,13 @@ function DesktopContent() {
     setSelected(new Set(mapFavorites(data).map((m) => m.id)));
   }, [data]);
 
-  const handleBatchRemove = useCallback(async () => {
+  const handleBatchRemove = useCallback(() => {
     if (selected.size === 0) return;
+    setConfirmOpen(true);
+  }, [selected]);
+
+  const confirmBatchRemove = useCallback(async () => {
+    setConfirmOpen(false);
     try {
       await favoriteApi.batchRemove(Array.from(selected));
       const store = useFavoriteStore.getState();
@@ -359,9 +367,9 @@ function DesktopContent() {
 
   if (isLoading) {
     return (
-      <AdminManagementPage title="我的收藏" meta="加载中..." description="管理你收藏的模型">
-        <SkeletonGrid count={8} />
-      </AdminManagementPage>
+      <AdminPageShell>
+        <LoadingSpinner />
+      </AdminPageShell>
     );
   }
 
@@ -461,6 +469,18 @@ function DesktopContent() {
         </div>
       )}
       <LoginConfirmDialog open={loginDialogOpen} onClose={() => setLoginDialogOpen(false)} reason="下载模型" />
+      <ConfirmDialog
+        open={confirmOpen}
+        onClose={() => setConfirmOpen(false)}
+        onConfirm={confirmBatchRemove}
+        icon="star_off"
+        iconColor="text-warning"
+        iconBg="bg-warning/15"
+        title="确认取消收藏"
+        description={`确定要取消收藏选中的 ${selected.size} 个模型吗？`}
+        confirmLabel="取消收藏"
+        confirmClassName="flex-1 py-2.5 text-sm font-medium text-on-primary bg-primary-container rounded-lg hover:opacity-90 transition-opacity"
+      />
     </AdminManagementPage>
   );
 }
@@ -475,6 +495,7 @@ function MobileContent() {
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [downloading, setDownloading] = useState(false);
   const [loginDialogOpen, setLoginDialogOpen] = useState(false);
+  const [confirmOpen, setConfirmOpen] = useState(false);
 
   const handleRemove = useCallback(
     async (modelId: string) => {
@@ -508,8 +529,13 @@ function MobileContent() {
     setSelected(new Set(models.map((m) => m.id)));
   }, [models]);
 
-  const handleBatchRemove = useCallback(async () => {
+  const handleBatchRemove = useCallback(() => {
     if (selected.size === 0) return;
+    setConfirmOpen(true);
+  }, [selected]);
+
+  const confirmBatchRemove = useCallback(async () => {
+    setConfirmOpen(false);
     try {
       await favoriteApi.batchRemove(Array.from(selected));
       const store = useFavoriteStore.getState();
@@ -616,7 +642,7 @@ function MobileContent() {
       )}
 
       {isLoading ? (
-        <SkeletonGrid compact count={6} />
+        <LoadingSpinner />
       ) : error ? (
         <div className="flex flex-col items-center gap-3 py-16">
           <Icon name="error" size={40} className="text-error" />
@@ -640,6 +666,18 @@ function MobileContent() {
         </div>
       )}
       <LoginConfirmDialog open={loginDialogOpen} onClose={() => setLoginDialogOpen(false)} reason="下载模型" />
+      <ConfirmDialog
+        open={confirmOpen}
+        onClose={() => setConfirmOpen(false)}
+        onConfirm={confirmBatchRemove}
+        icon="star_off"
+        iconColor="text-warning"
+        iconBg="bg-warning/15"
+        title="确认取消收藏"
+        description={`确定要取消收藏选中的 ${selected.size} 个模型吗？`}
+        confirmLabel="取消收藏"
+        confirmClassName="flex-1 py-2.5 text-sm font-medium text-on-primary bg-primary-container rounded-lg hover:opacity-90 transition-opacity"
+      />
     </AdminManagementPage>
   );
 }

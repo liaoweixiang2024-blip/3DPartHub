@@ -126,3 +126,131 @@ git status  # 检查 prisma/migrations/ 下有没有未提交的文件
 - 选型分享：`server/src/routes/selection-shares.ts`
 - 前端选型页：`client/src/pages/SelectionPage.tsx`
 - 产品数据种子：`server/prisma/seeds/products/batch*.ts`
+
+## 前端页面开发规范
+
+### 页面类型与组件模板
+
+所有页面分为三类，新建页面必须按对应模板编写：
+
+#### 类型一：列表管理页
+用于：下载历史、我的收藏、我的分享、我的工单、我的询价、各类后台管理页
+
+```tsx
+import { AdminPageShell } from '../components/shared/AdminPageShell';
+import { AdminManagementPage, AdminEmptyState } from '../components/shared/AdminManagementPage';
+import LoadingSpinner from '../components/shared/LoadingSpinner';
+
+export default function XxxPage() {
+  useDocumentTitle('页面标题');
+  const { data, error, isLoading } = useSWR('/api/xxx', fetchXxx);
+
+  if (isLoading) {
+    return (
+      <AdminPageShell>
+        <AdminManagementPage title="页面标题" meta="加载中..." description="页面描述">
+          <LoadingSpinner />
+        </AdminManagementPage>
+      </AdminPageShell>
+    );
+  }
+
+  if (error) {
+    return (
+      <AdminPageShell>
+        <AdminEmptyState icon="error" title="加载失败" description="请稍后重试。" />
+      </AdminPageShell>
+    );
+  }
+
+  return (
+    <AdminPageShell>
+      <AdminManagementPage
+        title="页面标题"
+        meta={`${items.length} 条`}
+        description="页面描述"
+        toolbar={toolbar}
+        actions={headerActions}
+      >
+        {items.length === 0 ? (
+          <AdminEmptyState icon="xxx" title="暂无数据" description="说明文字" />
+        ) : (
+          /* 列表内容 */
+        )}
+      </AdminManagementPage>
+    </AdminPageShell>
+  );
+}
+```
+
+#### 类型二：详情页
+用于：工单详情、询价详情
+
+```tsx
+import { AdminPageShell } from '../components/shared/AdminPageShell';
+import { AdminDetailHeader } from '../components/shared/AdminManagementPage';
+import LoadingSpinner from '../components/shared/LoadingSpinner';
+
+function DetailContent({ id }: { id: string }) {
+  const { data, isLoading } = useSWR(`/api/xxx/${id}`, fetchDetail);
+
+  if (isLoading) return <LoadingSpinner />;
+
+  return (
+    <div className="flex h-full min-h-0 flex-col">
+      <AdminDetailHeader title={data.title} description="描述" onBack={() => navigate(-1)} actions={actions} />
+      {/* 详情内容 */}
+    </div>
+  );
+}
+
+export default function XxxDetailPage() {
+  useDocumentTitle('详情');
+  const { id } = useParams();
+  return (
+    <AdminPageShell>
+      <DetailContent id={id!} />
+    </AdminPageShell>
+  );
+}
+```
+
+#### 类型三：公开页/特殊页
+用于：首页、模型详情、登录页、分享页、选型分享
+
+公开页用 `PublicPageShell`，登录页用路由级 `ScrollPage` 包裹，模型详情页自行管理全屏布局。
+
+### 共享组件索引
+
+| 组件 | 文件 | 用途 |
+|------|------|------|
+| `AdminPageShell` | `components/shared/AdminPageShell.tsx` | 管理页外壳（上下文感知，Layout 内只渲染内容层） |
+| `PublicPageShell` | `components/shared/PublicPageShell.tsx` | 公开页外壳 |
+| `AdminManagementPage` | `components/shared/AdminManagementPage.tsx` | 列表页结构（页头+工具栏+内容区） |
+| `AdminDetailHeader` | `components/shared/AdminManagementPage.tsx` | 详情页头部（标题+返回+操作） |
+| `AdminStatsGrid` | `components/shared/AdminManagementPage.tsx` | 统计卡片网格 |
+| `AdminContentPanel` | `components/shared/AdminManagementPage.tsx` | 可滚动内容面板 |
+| `AdminEmptyState` | `components/shared/AdminManagementPage.tsx` | 空状态/错误状态占位 |
+| `LoadingSpinner` | `components/shared/LoadingSpinner.tsx` | 统一加载转圈（`sm`/`md`/`lg` 三种尺寸） |
+| `Icon` | `components/shared/Icon.tsx` | Material Icons 图标 |
+
+### 加载状态规范
+
+- **页面级加载**：统一使用 `<LoadingSpinner />`（默认 `md` 尺寸，28px）
+- **紧凑内联加载**：使用 `<LoadingSpinner size="sm" />`（20px，用于统计区域、小面板）
+- **全屏加载**：使用 `<LoadingSpinner size="lg" />`（40px，用于 ModelDetailPage 等全屏场景）
+- **禁止**在页面级使用 `animate-pulse` 骨架屏或 Icon 旋转做加载动画
+- **禁止**使用"加载中..."纯文字做加载状态
+- 按钮内操作图标（刷新、保存等）的 `animate-spin` 不受此限制
+
+### 路由级 Suspense 规范
+
+- `PageWrap` / `ScrollPage`：`fallback={null}`（避免和页面级 LoadingSpinner 冲突导致跳动）
+- `ProtectedPage` auth 等待态：`<LoadingSpinner />`（此时无 Layout，不会跳动）
+- `ModelDetailPage` 路由 fallback：`<LoadingSpinner size="lg" />`（全屏场景）
+
+### PC/移动端适配
+
+- 列表页如需不同布局，使用 `useMediaQuery('(min-width: 768px)')` 拆分 `DesktopContent` / `MobileContent`
+- 两者的加载状态必须统一使用 `<LoadingSpinner />`
+- `AdminManagementPage` 已自适应移动端（自动隐藏部分工具栏元素）

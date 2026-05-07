@@ -6,6 +6,7 @@ import { projectApi, type Project, type ProjectModel } from '../api/projects';
 import { AdminPageShell } from '../components/shared/AdminPageShell';
 import FormatTag from '../components/shared/FormatTag';
 import Icon from '../components/shared/Icon';
+import LoadingSpinner from '../components/shared/LoadingSpinner';
 import ModelThumbnail from '../components/shared/ModelThumbnail';
 import { PageHeader, PageTitle } from '../components/shared/PagePrimitives';
 import { useToast } from '../components/shared/Toast';
@@ -163,69 +164,7 @@ export default function ProjectDetailPage() {
   }
 
   if (!project) {
-    return (
-      <AdminPageShell mobileContentClassName="p-4 pb-20">
-        <div className="max-w-6xl mx-auto">
-          {/* Breadcrumb */}
-          <div className="flex items-center gap-2 text-sm mb-4 animate-pulse">
-            <div className="h-4 bg-surface-container rounded w-8" />
-            <div className="h-3 w-3" />
-            <div className="h-4 bg-surface-container rounded w-8" />
-            <div className="h-3 w-3" />
-            <div className="h-4 bg-surface-container rounded w-20" />
-          </div>
-          {/* Header */}
-          <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between mb-6 border-b border-surface-container-low pb-4 animate-pulse">
-            <div className="space-y-2">
-              <div className="h-7 bg-surface-container rounded w-1/3" />
-              <div className="h-4 bg-surface-container rounded w-2/3" />
-            </div>
-            <div className="flex items-center gap-3">
-              <div className="space-y-1 text-right">
-                <div className="h-3 bg-surface-container rounded w-16 ml-auto" />
-                <div className="h-3 bg-surface-container rounded w-16 ml-auto" />
-              </div>
-            </div>
-          </div>
-          {/* Members */}
-          <div className="mb-6 animate-pulse">
-            <div className="h-3 bg-surface-container rounded w-10 mb-3" />
-            <div className="flex flex-wrap gap-2">
-              {Array.from({ length: 3 }).map((_, i) => (
-                <div
-                  key={i}
-                  className="flex items-center gap-2 bg-surface-container-high px-3 py-1.5 rounded-sm border border-outline-variant/10"
-                >
-                  <div className="w-6 h-6 rounded-full bg-surface-container" />
-                  <div className="h-3 bg-surface-container rounded w-12" />
-                </div>
-              ))}
-            </div>
-          </div>
-          {/* Model list */}
-          <div className="animate-pulse">
-            <div className="h-3 bg-surface-container rounded w-14 mb-3" />
-            <div className="flex flex-col gap-2">
-              {Array.from({ length: 4 }).map((_, i) => (
-                <div
-                  key={i}
-                  className="flex items-center gap-3 sm:gap-4 p-3 sm:p-4 bg-surface-container-high rounded-sm border border-outline-variant/10"
-                >
-                  <div className="w-16 h-16 bg-surface-container rounded-sm shrink-0" />
-                  <div className="flex-1 min-w-0 space-y-2">
-                    <div className="h-4 bg-surface-container rounded w-2/3" />
-                    <div className="flex items-center gap-2">
-                      <div className="h-4 bg-surface-container rounded-sm w-8" />
-                      <div className="h-3 bg-surface-container rounded w-12" />
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-      </AdminPageShell>
-    );
+    return <LoadingSpinner />;
   }
 
   return (

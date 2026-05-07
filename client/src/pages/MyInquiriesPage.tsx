@@ -1,4 +1,5 @@
 import { Link, useNavigate } from 'react-router-dom';
+import { useState } from 'react';
 import useSWR from 'swr';
 import { getMyInquiries } from '../api/inquiries';
 import { AdminEmptyState, AdminManagementPage } from '../components/shared/AdminManagementPage';
@@ -10,6 +11,7 @@ import { useVisibleItems } from '../hooks/useVisibleItems';
 import { useMediaQuery } from '../layouts/hooks/useMediaQuery';
 import { getBusinessConfig, statusInfo, type StatusConfig } from '../lib/businessConfig';
 import { getCachedPublicSettings } from '../lib/publicSettings';
+import LoadingSpinner from '../components/shared/LoadingSpinner';
 
 function StatusBadge({ status, statuses }: { status: string; statuses: StatusConfig[] }) {
   const info = statusInfo(statuses, status);
@@ -23,10 +25,11 @@ function StatusBadge({ status, statuses }: { status: string; statuses: StatusCon
 }
 
 function DesktopContent() {
-  const { data: inquiries = [], isLoading } = useSWR('my-inquiries', getMyInquiries);
+  const { data: inquiries = [], isLoading, mutate } = useSWR('my-inquiries', getMyInquiries);
   const { data: settings } = useSWR('publicSettings', () => getCachedPublicSettings());
   const statuses = getBusinessConfig(settings).inquiryStatuses;
   const navigate = useNavigate();
+  const [refreshing, setRefreshing] = useState(false);
   const {
     visibleItems: visibleInquiries,
     hasMore,
@@ -36,25 +39,35 @@ function DesktopContent() {
   return (
     <AdminManagementPage
       title="我的询价"
+      meta={`${inquiries.length} 条记录`}
       description="查看你提交过的选型询价和处理进度"
       actions={
         inquiries.length > 0 ? (
-          <Link
-            to="/selection"
-            className="flex items-center gap-2 rounded-lg bg-primary-container px-5 py-2.5 text-sm font-medium text-on-primary hover:opacity-90"
-          >
-            <Icon name="add" size={16} />
-            新建询价
-          </Link>
+          <>
+            <button
+              onClick={() => {
+                setRefreshing(true);
+                mutate().finally(() => setRefreshing(false));
+              }}
+              disabled={refreshing}
+              className="flex items-center gap-2 rounded-lg border border-outline-variant/20 px-4 py-2.5 text-sm text-on-surface-variant transition-colors hover:text-on-surface disabled:opacity-50"
+            >
+              <Icon name="refresh" size={16} className={refreshing ? 'animate-spin' : ''} />
+              {refreshing ? '刷新中...' : '刷新'}
+            </button>
+            <Link
+              to="/selection"
+              className="flex items-center gap-2 rounded-lg bg-primary-container px-5 py-2.5 text-sm font-medium text-on-primary hover:opacity-90"
+            >
+              <Icon name="add" size={16} />
+              新建询价
+            </Link>
+          </>
         ) : null
       }
     >
       {isLoading ? (
-        <div className="space-y-3">
-          {[1, 2, 3].map((i) => (
-            <div key={i} className="h-16 bg-surface-container-low rounded-lg animate-pulse" />
-          ))}
-        </div>
+        <LoadingSpinner />
       ) : inquiries.length === 0 ? (
         <AdminEmptyState
           icon="request_quote"
@@ -108,10 +121,11 @@ function DesktopContent() {
 }
 
 function MobileContent() {
-  const { data: inquiries = [], isLoading } = useSWR('my-inquiries', getMyInquiries);
+  const { data: inquiries = [], isLoading, mutate } = useSWR('my-inquiries', getMyInquiries);
   const { data: settings } = useSWR('publicSettings', () => getCachedPublicSettings());
   const statuses = getBusinessConfig(settings).inquiryStatuses;
   const navigate = useNavigate();
+  const [refreshing, setRefreshing] = useState(false);
   const {
     visibleItems: visibleInquiries,
     hasMore,
@@ -121,25 +135,34 @@ function MobileContent() {
   return (
     <AdminManagementPage
       title="我的询价"
+      meta={`${inquiries.length} 条记录`}
       description="查看你提交过的选型询价和处理进度"
       actions={
         inquiries.length > 0 ? (
-          <Link
-            to="/selection"
-            className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-lg bg-primary-container px-3 text-xs font-medium text-on-primary"
-          >
-            <Icon name="add" size={14} />
-            新建
-          </Link>
+          <>
+            <button
+              onClick={() => {
+                setRefreshing(true);
+                mutate().finally(() => setRefreshing(false));
+              }}
+              disabled={refreshing}
+              className="inline-flex h-9 items-center gap-1 rounded-lg border border-outline-variant/20 px-3 text-xs text-on-surface-variant disabled:opacity-50"
+            >
+              <Icon name="refresh" size={14} className={refreshing ? 'animate-spin' : ''} />
+            </button>
+            <Link
+              to="/selection"
+              className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-lg bg-primary-container px-3 text-xs font-medium text-on-primary"
+            >
+              <Icon name="add" size={14} />
+              新建
+            </Link>
+          </>
         ) : null
       }
     >
       {isLoading ? (
-        <div className="space-y-3">
-          {[1, 2, 3].map((i) => (
-            <div key={i} className="h-20 bg-surface-container-high rounded-lg animate-pulse" />
-          ))}
-        </div>
+        <LoadingSpinner />
       ) : inquiries.length === 0 ? (
         <AdminEmptyState
           icon="request_quote"

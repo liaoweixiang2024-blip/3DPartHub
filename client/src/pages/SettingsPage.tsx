@@ -44,7 +44,7 @@ import { AdminPageShell } from '../components/shared/AdminPageShell';
 import Icon from '../components/shared/Icon';
 import ResponsiveSectionTabs from '../components/shared/ResponsiveSectionTabs';
 import SafeImage from '../components/shared/SafeImage';
-import { SkeletonList } from '../components/shared/Skeleton';
+
 import { useToast } from '../components/shared/Toast';
 import { useDocumentTitle } from '../hooks/useDocumentTitle';
 import {
@@ -67,6 +67,7 @@ import {
 import { applyColorScheme, generatePaletteFromPrimary } from '../lib/colorScheme';
 import { COLOR_PRESETS, COLOR_KEYS } from '../lib/colorSchemes';
 import { DEFAULT_PRIVACY_SECTIONS, DEFAULT_TERMS_SECTIONS, type LegalSection } from '../lib/legalContent';
+import LoadingSpinner from '../components/shared/LoadingSpinner';
 // Note: pollBackupProgress is used by handleExport
 
 const RESTORE_JOB_SOURCE_KEY = 'restoreJobSource';
@@ -3798,7 +3799,7 @@ function Content() {
     return (
       <AdminManagementPage title="系统设置" description="配置平台的全局行为和访问策略">
         <AdminContentPanel scroll className="p-4">
-          <SkeletonList rows={6} />
+          <LoadingSpinner />
         </AdminContentPanel>
       </AdminManagementPage>
     );
@@ -3841,7 +3842,7 @@ function Content() {
     </div>
   );
   const desktopSettingsSidebar = (
-    <aside className="hidden min-h-0 rounded-xl border border-outline-variant/15 bg-surface-container-low p-2 md:block">
+    <aside className="hidden min-h-0 overflow-hidden rounded-xl border border-outline-variant/15 bg-surface-container-low p-2 md:block">
       <div className="h-full overflow-y-auto pr-1 custom-scrollbar">
         <div className="space-y-1">
           {tabItems.map((tab) => {

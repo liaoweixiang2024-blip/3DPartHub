@@ -15,6 +15,7 @@ import {
 import { AdminContentPanel, AdminManagementPage } from '../components/shared/AdminManagementPage';
 import { AdminPageShell } from '../components/shared/AdminPageShell';
 import Icon from '../components/shared/Icon';
+import LoadingSpinner from '../components/shared/LoadingSpinner';
 import LoginConfirmDialog from '../components/shared/LoginConfirmDialog';
 import { isLoginDialogEnabled } from '../components/shared/ProtectedLink';
 import SafeImage from '../components/shared/SafeImage';
@@ -1444,10 +1445,7 @@ export default function SelectionPage() {
   );
   const categoryStatusContent =
     categoriesLoading && cats.length === 0 ? (
-      <div className="flex items-center justify-center py-12">
-        <Icon name="progress_activity" size={24} className="animate-spin text-on-surface-variant/30" />
-        <span className="ml-3 text-sm text-on-surface-variant">正在加载分类...</span>
-      </div>
+      <LoadingSpinner />
     ) : categoriesError && cats.length === 0 ? (
       <div className="text-center py-12">
         <Icon name="error" size={36} className="mx-auto mb-2 text-error/45" />

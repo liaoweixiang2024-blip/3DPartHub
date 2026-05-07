@@ -32,6 +32,7 @@ import {
 } from '../lib/publicSettings';
 import { useFavoriteStore, useAuthStore } from '../stores';
 import type { ModelSpec, ModelDownload } from '../types';
+import LoadingSpinner from '../components/shared/LoadingSpinner';
 
 interface ModelVariant {
   model_id: string;
@@ -1279,50 +1280,7 @@ export default function ModelDetailPage() {
   }
 
   if (isLoading) {
-    if (isDesktop) {
-      return (
-        <PublicPageShell className="fixed inset-0 flex flex-col overflow-hidden">
-          <main className="flex-1 min-h-0 overflow-hidden flex flex-row">
-            {/* Viewer skeleton (left) */}
-            <div className="flex-1 bg-surface-dim animate-pulse" />
-            {/* Detail panel skeleton (right) — matches DesktopDetail w-[40%] min-w-[400px] max-w-[500px] */}
-            <section className="flex w-[40%] min-w-[400px] max-w-[500px] flex-col bg-surface-container-low overflow-y-auto shrink-0 min-h-0">
-              {/* Header: breadcrumb + title + buttons */}
-              <div className="p-8 border-b border-outline-variant/10 space-y-4 animate-pulse">
-                <div className="h-3 bg-surface-container rounded w-1/2" />
-                <div className="flex justify-between items-start">
-                  <div className="h-8 bg-surface-container rounded w-3/4" />
-                  <div className="w-9 h-9 bg-surface-container rounded shrink-0" />
-                </div>
-                <div className="flex gap-3 mt-6">
-                  <div className="h-9 bg-surface-container rounded flex-1" />
-                  <div className="w-9 h-9 bg-surface-container rounded shrink-0" />
-                  <div className="w-9 h-9 bg-surface-container rounded shrink-0" />
-                </div>
-              </div>
-              {/* Specs: grid-cols-2 */}
-              <div className="p-8 pb-4 animate-pulse">
-                <div className="h-3 bg-surface-container rounded w-16 mb-4 border-b border-outline-variant/20 pb-2" />
-                <div className="grid grid-cols-2 gap-x-4 gap-y-2">
-                  {Array.from({ length: 6 }).map((_, i) => (
-                    <div key={i} className="flex flex-col py-2 border-b border-outline-variant/10 space-y-1">
-                      <div className="h-2.5 bg-surface-container rounded w-10" />
-                      <div className="h-3.5 bg-surface-container rounded w-14" />
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </section>
-          </main>
-        </PublicPageShell>
-      );
-    }
-    // Mobile: viewer area + bottom sheet peek
-    return (
-      <PublicPageShell mobileClassName="flex flex-col h-dvh bg-surface">
-        <div className="flex-1 min-h-0 relative bg-surface-dim animate-pulse" />
-      </PublicPageShell>
-    );
+    return null;
   }
 
   if (!modelData) {

@@ -7,6 +7,7 @@ import { AdminPageShell } from '../components/shared/AdminPageShell';
 import Icon from '../components/shared/Icon';
 import ModelThumbnail from '../components/shared/ModelThumbnail';
 import { useDocumentTitle } from '../hooks/useDocumentTitle';
+import LoadingSpinner from '../components/shared/LoadingSpinner';
 
 const numberFormatter = new Intl.NumberFormat('zh-CN');
 
@@ -232,16 +233,10 @@ function LoadingState() {
     <AdminManagementPage
       title="下载统计"
       description="统计模型下载量、用户下载历史、热门模型和格式分布"
-      toolbar={<div className="h-9 animate-pulse rounded-lg bg-surface-container" />}
       contentClassName="min-h-0"
     >
       <AdminContentPanel scroll className="p-4">
-        <div className="grid gap-4 xl:grid-cols-2">
-          <div className="h-80 animate-pulse rounded-xl bg-surface-container" />
-          <div className="h-80 animate-pulse rounded-xl bg-surface-container" />
-          <div className="h-80 animate-pulse rounded-xl bg-surface-container" />
-          <div className="h-80 animate-pulse rounded-xl bg-surface-container" />
-        </div>
+        <LoadingSpinner />
       </AdminContentPanel>
     </AdminManagementPage>
   );
