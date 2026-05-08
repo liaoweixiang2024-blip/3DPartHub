@@ -1,5 +1,5 @@
-import { createContext, lazy, useContext, useEffect, Suspense, useState, type ReactNode, type Ref } from 'react';
 import { motion } from 'framer-motion';
+import { createContext, lazy, useContext, useEffect, Suspense, useState, type ReactNode, type Ref } from 'react';
 import { Outlet, useLocation } from 'react-router-dom';
 import useSWR from 'swr';
 import { useMediaQuery } from '../../layouts/hooks/useMediaQuery';
@@ -142,6 +142,8 @@ export function AdminPageShell({
   const inLayout = useContext(ShellLayoutContext);
   const isDesktop = useMediaQuery('(min-width: 768px)');
   const bottomNavCtx = useContext(HideBottomNavContext);
+  const [navOpen, setNavOpen] = useState(false);
+  const location = useLocation();
 
   // Communicate hideMobileBottomNav to the layout
   useEffect(() => {
@@ -169,9 +171,6 @@ export function AdminPageShell({
   }
 
   // Standalone (fallback) — render full shell
-  const [navOpen, setNavOpen] = useState(false);
-  const location = useLocation();
-
   if (isDesktop) {
     return (
       <div className="flex h-dvh flex-col overflow-hidden">

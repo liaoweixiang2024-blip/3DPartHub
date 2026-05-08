@@ -2,6 +2,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { createContext, useContext, useState, useCallback, useEffect, useRef, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { notifyGlobalError, setGlobalErrorNotifier } from '../../lib/errorNotifications';
+import { toastMotion } from '../../lib/motion';
 import Icon from './Icon';
 
 type ToastType = 'success' | 'error' | 'info';
@@ -71,10 +72,10 @@ export function ToastProvider({ children }: { children: ReactNode }) {
               return (
                 <motion.div
                   key={t.id}
-                  initial={{ opacity: 0, x: 40, scale: 0.95 }}
-                  animate={{ opacity: 1, x: 0, scale: 1 }}
-                  exit={{ opacity: 0, x: 40, scale: 0.95 }}
-                  transition={{ duration: 0.2 }}
+                  variants={toastMotion}
+                  initial="initial"
+                  animate="animate"
+                  exit="exit"
                   className="pointer-events-auto flex items-center gap-2 bg-surface-container-high border border-outline-variant/20 shadow-lg rounded-sm px-4 py-2.5 text-sm text-on-surface min-w-[200px] max-w-[360px]"
                 >
                   <Icon name={ic.name} size={18} className={ic.color} />

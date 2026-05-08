@@ -92,6 +92,7 @@ export const DEFAULT_MOBILE_NAV_FOR_SETTINGS: NavItemConfig[] = [
 export const DEFAULT_UPLOAD_POLICY_FOR_SETTINGS: UploadPolicy = {
   modelFormats: ['step', 'stp', 'iges', 'igs', 'x_t', 'xt'],
   modelMaxSizeMb: Math.max(1, Math.round(config.maxFileSize / 1024 / 1024)),
+  batchArchiveMaxSizeMb: 500,
   chunkSizeMb: 5,
   chunkThresholdMb: 20,
   optionImageMaxSizeMb: 5,

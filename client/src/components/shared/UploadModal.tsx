@@ -5,24 +5,67 @@ import { mutate as swrMutate } from 'swr';
 import { converterApi, modelApi, type ConversionResponse } from '../../api';
 import { categoriesApi } from '../../api/categories';
 import client from '../../api/client';
+import { useMediaQuery } from '../../layouts/hooks/useMediaQuery';
 import { getBusinessConfig } from '../../lib/businessConfig';
+import { bottomSheetMotion, dialogPanelMotion, overlayMotion } from '../../lib/motion';
 import Icon from '../shared/Icon';
 import CategorySelect from './CategorySelect';
 
 interface UploadModalProps {
   open: boolean;
   onClose: () => void;
-  onConverted?: (result: ConversionResponse) => void;
+  onConverted?: (result?: ConversionResponse) => void;
 }
 
 type UploadResult =
   | { type: 'single'; data: ConversionResponse }
-  | { type: 'batch'; ok: number; fail: number; total: number }
-  | { type: 'archive'; ok: number; fail: number; total: number; archiveType: 'ZIP' | 'RAR' };
+  | { type: 'batch'; ok: number; fail: number; total: number; drawings?: number; drawingFail?: number }
+  | {
+      type: 'archive';
+      ok: number;
+      fail: number;
+      total: number;
+      archiveType: 'ZIP' | 'RAR';
+      drawings?: number;
+      drawingFail?: number;
+    };
 
 const CONCURRENCY = 3;
 
+function uploadPairKey(fileName: string): string {
+  const baseName = fileName.replace(/\.[^/.]+$/, '').trim();
+  const indices = [baseName.indexOf('_'), baseName.indexOf('＿')].filter((index) => index >= 0).sort((a, b) => a - b);
+  const separatorIndex = indices.find((index) => {
+    const prefix = baseName.slice(0, index).trim();
+    const suffix = baseName.slice(index + 1).trim();
+    return prefix && suffix && /[\u3400-\u9fff\uf900-\ufaff]/.test(prefix);
+  });
+  return (separatorIndex === undefined ? baseName : baseName.slice(separatorIndex + 1)).trim().toLowerCase();
+}
+
+function unmatchedDrawingNames(
+  files: File[],
+  isArchiveFile: (file: File) => boolean,
+  isDrawingFile: (file: File) => boolean,
+) {
+  const modelKeys = new Set(
+    files.filter((file) => !isArchiveFile(file) && !isDrawingFile(file)).map((file) => uploadPairKey(file.name)),
+  );
+  return files
+    .filter(isDrawingFile)
+    .filter((file) => !modelKeys.has(uploadPairKey(file.name)))
+    .map((file) => file.name);
+}
+
+function drawingMatchError(names: string[]) {
+  if (names.length === 0) return null;
+  const preview = names.slice(0, 3).join('、');
+  const more = names.length > 3 ? ` 等 ${names.length} 个 PDF` : '';
+  return `PDF 图纸未找到同名模型：${preview}${more}。请同时选择同名模型文件，或移除这些 PDF 后再上传`;
+}
+
 export default function UploadModal({ open, onClose, onConverted }: UploadModalProps) {
+  const isMobile = useMediaQuery('(max-width: 639px)');
   const [dragActive, setDragActive] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [progress, setProgress] = useState(0);
@@ -35,15 +78,21 @@ export default function UploadModal({ open, onClose, onConverted }: UploadModalP
   const { uploadPolicy } = getBusinessConfig();
   const modelFormats = uploadPolicy.modelFormats;
   const acceptedFormats = useMemo(
-    () => [...modelFormats.map((f) => `.${f}`), '.zip', '.rar'].join(','),
+    () => [...modelFormats.map((f) => `.${f}`), '.pdf', '.zip', '.rar'].join(','),
     [modelFormats],
   );
   const chunkSize = Math.max(1, uploadPolicy.chunkSizeMb) * 1024 * 1024;
   const chunkThreshold = Math.max(1, uploadPolicy.chunkThresholdMb) * 1024 * 1024;
+  const configuredArchiveMaxSizeMb = Number(uploadPolicy.batchArchiveMaxSizeMb);
+  const archiveMaxSizeMb = Math.max(
+    1,
+    Math.floor(Number.isFinite(configuredArchiveMaxSizeMb) ? configuredArchiveMaxSizeMb : 500),
+  );
+  const archiveMaxBytes = archiveMaxSizeMb * 1024 * 1024;
   const formats = useMemo(() => modelFormats.map((f) => f.toLowerCase()), [modelFormats]);
   const formatLabel = useMemo(() => modelFormats.map((f) => f.toUpperCase()).join(' / '), [modelFormats]);
   const unsupportedFormatMessage = useMemo(
-    () => `不支持的格式，请上传 ${modelFormats.map((f) => `.${f}`).join(' / ')} 或 .zip / .rar 文件`,
+    () => `不支持的格式，请上传 ${modelFormats.map((f) => `.${f}`).join(' / ')}、同名 .pdf 或 .zip / .rar 文件`,
     [modelFormats],
   );
 
@@ -65,8 +114,9 @@ export default function UploadModal({ open, onClose, onConverted }: UploadModalP
   }, [reset, onClose]);
 
   const uploadChunked = useCallback(
-    async (file: File) => {
+    async (file: File, onChunkProgress?: (ratio: number) => void) => {
       const totalChunks = Math.ceil(file.size / chunkSize);
+      const reportChunkProgress = onChunkProgress || ((ratio: number) => setProgress(5 + Math.round(ratio * 60)));
 
       const { data: initResp } = await client.post('/upload/init', {
         fileName: file.name,
@@ -84,7 +134,7 @@ export default function UploadModal({ open, onClose, onConverted }: UploadModalP
           headers: { 'Content-Type': 'application/octet-stream' },
         });
 
-        setProgress(5 + Math.round(((i + 1) / totalChunks) * 60));
+        reportChunkProgress((i + 1) / totalChunks);
       }
 
       const { data: completeResp } = await client.post('/upload/complete', { uploadId });
@@ -137,45 +187,135 @@ export default function UploadModal({ open, onClose, onConverted }: UploadModalP
     [categoryId, chunkThreshold, onConverted, uploadChunked],
   );
 
+  const isArchiveFile = useCallback((file: File) => /\.(zip|rar)$/i.test(file.name), []);
+  const isDrawingFile = useCallback((file: File) => /\.pdf$/i.test(file.name), []);
+  const getDrawingMatchError = useCallback(
+    (files: File[]) => drawingMatchError(unmatchedDrawingNames(files, isArchiveFile, isDrawingFile)),
+    [isArchiveFile, isDrawingFile],
+  );
+  const getArchiveSizeError = useCallback(
+    (files: File[]) => {
+      const oversized = files.find((file) => isArchiveFile(file) && file.size > archiveMaxBytes);
+      return oversized ? `${oversized.name} 超过 ZIP/RAR 上限 ${archiveMaxSizeMb}MB` : null;
+    },
+    [archiveMaxBytes, archiveMaxSizeMb, isArchiveFile],
+  );
+
+  const uploadQueuedModelFile = useCallback(
+    async (file: File) => {
+      if (file.size > chunkThreshold) {
+        const uploadResult = await uploadChunked(file, () => {});
+        return converterApi.uploadLocal(
+          uploadResult.filePath,
+          uploadResult.fileName || file.name,
+          categoryId || undefined,
+        );
+      }
+      return modelApi.upload(file, { categoryId: categoryId || undefined });
+    },
+    [categoryId, chunkThreshold, uploadChunked],
+  );
+
+  const uploadMatchedDrawing = useCallback(async (modelId: string, drawing?: File) => {
+    if (!drawing) return false;
+    await modelApi.uploadDrawing(modelId, drawing);
+    return true;
+  }, []);
+
   const handleMultiFile = useCallback(
     async (files: File[]) => {
       setUploading(true);
       setError(null);
       let ok = 0;
       let fail = 0;
-      const total = files.length;
-      let done = 0;
+      let total = 0;
+      let drawings = 0;
+      let drawingFail = 0;
+      const modelFiles = files.filter((file) => !isArchiveFile(file) && !isDrawingFile(file));
+      const archiveFiles = files.filter(isArchiveFile);
+      const drawingFiles = files.filter(isDrawingFile);
+      const modelKeys = new Set(modelFiles.map((file) => uploadPairKey(file.name)));
+      const drawingByKey = new Map(drawingFiles.map((file) => [uploadPairKey(file.name), file]));
+      drawingFail += drawingFiles.filter((file) => !modelKeys.has(uploadPairKey(file.name))).length;
+      const inputTotal = Math.max(1, modelFiles.length + archiveFiles.length);
+      let doneInputs = 0;
 
-      for (let i = 0; i < total; i += CONCURRENCY) {
-        const batch = files.slice(i, i + CONCURRENCY);
-        const batchBase = done;
+      const markInputDone = () => {
+        doneInputs += 1;
+        setProgress(Math.round((doneInputs / inputTotal) * 100));
+        setProgressLabel(`上传中 ${doneInputs}/${inputTotal}`);
+      };
+
+      for (let i = 0; i < modelFiles.length; i += CONCURRENCY) {
+        const batch = modelFiles.slice(i, i + CONCURRENCY);
         const results = await Promise.allSettled(
-          batch.map((f, bi) =>
-            modelApi.upload(f, { categoryId: categoryId || undefined }).then((r) => {
-              done = batchBase + bi + 1;
-              setProgress(Math.round((done / total) * 100));
-              setProgressLabel(`上传中 ${done}/${total}`);
-              return r;
-            }),
-          ),
+          batch.map(async (f) => {
+            try {
+              const uploadResult = await uploadQueuedModelFile(f);
+              const drawing = drawingByKey.get(uploadPairKey(f.name));
+              try {
+                if (await uploadMatchedDrawing(uploadResult.model_id, drawing)) drawings += 1;
+              } catch {
+                drawingFail += 1;
+              }
+              return uploadResult;
+            } finally {
+              markInputDone();
+            }
+          }),
         );
+        total += batch.length;
         for (const r of results) {
           if (r.status === 'fulfilled') ok++;
           else fail++;
         }
       }
 
-      setResult({ type: 'batch', ok, fail, total });
+      for (const archive of archiveFiles) {
+        setProgressLabel(`正在处理 ${archive.name}...`);
+        try {
+          const resp = await modelApi.batchUploadFromArchive(archive, {
+            categoryId: categoryId || undefined,
+            onUploadProgress: (e) => {
+              if (!e.total) return;
+              const base = doneInputs / inputTotal;
+              const span = 1 / inputTotal;
+              setProgress(Math.round((base + span * 0.5 * (e.loaded / e.total)) * 100));
+              if (e.loaded >= e.total) {
+                setProgressLabel(`服务器处理中 ${archive.name}...`);
+              }
+            },
+          });
+          const archiveOk = resp.results.filter((r: any) => r.status === 'queued' || r.status === 'completed').length;
+          drawings += resp.results.filter((r) => r.drawing_attached).length;
+          drawingFail += resp.results.filter((r) => r.drawing_error).length;
+          ok += archiveOk;
+          fail += resp.results.length - archiveOk;
+          total += resp.total;
+        } catch {
+          fail += 1;
+          total += 1;
+        } finally {
+          markInputDone();
+        }
+      }
+
+      setResult({ type: 'batch', ok, fail, total, drawings, drawingFail });
       swrMutate('/models/count');
+      onConverted?.();
       setUploading(false);
     },
-    [categoryId],
+    [categoryId, isArchiveFile, isDrawingFile, onConverted, uploadMatchedDrawing, uploadQueuedModelFile],
   );
-
-  const isArchiveFile = useCallback((file: File) => /\.(zip|rar)$/i.test(file.name), []);
 
   const handleArchiveFile = useCallback(
     async (file: File) => {
+      const archiveSizeError = getArchiveSizeError([file]);
+      if (archiveSizeError) {
+        setError(archiveSizeError);
+        return;
+      }
+
       setUploading(true);
       setError(null);
       setProgress(5);
@@ -188,6 +328,9 @@ export default function UploadModal({ open, onClose, onConverted }: UploadModalP
             if (e.total) {
               const pct = Math.round((e.loaded / e.total) * 50);
               setProgress(5 + pct);
+              if (e.loaded >= e.total) {
+                setProgressLabel('服务器处理中...');
+              }
             }
           },
         });
@@ -195,6 +338,8 @@ export default function UploadModal({ open, onClose, onConverted }: UploadModalP
         setProgressLabel('解压处理中...');
         const ok = resp.results.filter((r: any) => r.status === 'queued' || r.status === 'completed').length;
         const fail = resp.results.length - ok;
+        const drawings = resp.results.filter((r) => r.drawing_attached).length;
+        const drawingFail = resp.results.filter((r) => r.drawing_error).length;
         setProgress(100);
         setResult({
           type: 'archive',
@@ -202,8 +347,11 @@ export default function UploadModal({ open, onClose, onConverted }: UploadModalP
           ok,
           fail,
           total: resp.total,
+          drawings,
+          drawingFail,
         });
         swrMutate('/models/count');
+        onConverted?.();
       } catch (err: unknown) {
         const message = err instanceof Error ? err.message : '压缩包上传失败';
         setError(message);
@@ -211,11 +359,30 @@ export default function UploadModal({ open, onClose, onConverted }: UploadModalP
         setUploading(false);
       }
     },
-    [categoryId],
+    [categoryId, getArchiveSizeError, onConverted],
+  );
+
+  const hasUploadableModelInput = useCallback(
+    (files: File[]) => files.some((file) => !isArchiveFile(file) && !isDrawingFile(file)) || files.some(isArchiveFile),
+    [isArchiveFile, isDrawingFile],
   );
 
   const startUpload = useCallback(() => {
     if (pendingFiles.length === 0) return;
+    const unmatchedPdfError = getDrawingMatchError(pendingFiles);
+    if (unmatchedPdfError) {
+      setError(unmatchedPdfError);
+      return;
+    }
+    if (!hasUploadableModelInput(pendingFiles)) {
+      setError('PDF 图纸需要和同名模型文件一起上传');
+      return;
+    }
+    const archiveSizeError = getArchiveSizeError(pendingFiles);
+    if (archiveSizeError) {
+      setError(archiveSizeError);
+      return;
+    }
     if (pendingFiles.length === 1 && !isArchiveFile(pendingFiles[0])) {
       handleSingleFile(pendingFiles[0]);
     } else if (pendingFiles.length === 1 && isArchiveFile(pendingFiles[0])) {
@@ -223,13 +390,22 @@ export default function UploadModal({ open, onClose, onConverted }: UploadModalP
     } else {
       handleMultiFile(pendingFiles);
     }
-  }, [pendingFiles, handleSingleFile, handleMultiFile, handleArchiveFile, isArchiveFile]);
+  }, [
+    pendingFiles,
+    getArchiveSizeError,
+    getDrawingMatchError,
+    handleSingleFile,
+    handleMultiFile,
+    handleArchiveFile,
+    hasUploadableModelInput,
+    isArchiveFile,
+  ]);
 
   const filterFiles = useCallback(
     (fileList: FileList | File[]): File[] => {
       return Array.from(fileList).filter((f) => {
         const ext = f.name.split('.').pop()?.toLowerCase() || '';
-        return formats.includes(ext) || ext === 'zip' || ext === 'rar';
+        return formats.includes(ext) || ext === 'pdf' || ext === 'zip' || ext === 'rar';
       });
     },
     [formats],
@@ -245,15 +421,38 @@ export default function UploadModal({ open, onClose, onConverted }: UploadModalP
         setError(unsupportedFormatMessage);
         return;
       }
+      const unmatchedPdfError = getDrawingMatchError(filtered);
+      if (unmatchedPdfError) {
+        setError(unmatchedPdfError);
+        return;
+      }
+      if (!hasUploadableModelInput(filtered)) {
+        setError('PDF 图纸需要和同名模型文件一起上传');
+        return;
+      }
+      const archiveSizeError = getArchiveSizeError(filtered);
+      if (archiveSizeError) {
+        setError(archiveSizeError);
+        return;
+      }
       setError(null);
 
-      if (filtered.length === 1 && !isArchiveFile(filtered[0])) {
+      if (filtered.length === 1 && !isArchiveFile(filtered[0]) && !isDrawingFile(filtered[0])) {
         handleSingleFile(filtered[0]);
       } else {
         setPendingFiles(filtered);
       }
     },
-    [filterFiles, handleSingleFile, isArchiveFile, unsupportedFormatMessage],
+    [
+      filterFiles,
+      getArchiveSizeError,
+      getDrawingMatchError,
+      handleSingleFile,
+      hasUploadableModelInput,
+      isArchiveFile,
+      isDrawingFile,
+      unsupportedFormatMessage,
+    ],
   );
 
   const handleChange = useCallback(
@@ -265,19 +464,46 @@ export default function UploadModal({ open, onClose, onConverted }: UploadModalP
         setError(unsupportedFormatMessage);
         return;
       }
+      const unmatchedPdfError = getDrawingMatchError(filtered);
+      if (unmatchedPdfError) {
+        setError(unmatchedPdfError);
+        e.target.value = '';
+        return;
+      }
+      if (!hasUploadableModelInput(filtered)) {
+        setError('PDF 图纸需要和同名模型文件一起上传');
+        e.target.value = '';
+        return;
+      }
+      const archiveSizeError = getArchiveSizeError(filtered);
+      if (archiveSizeError) {
+        setError(archiveSizeError);
+        e.target.value = '';
+        return;
+      }
       setError(null);
 
-      if (filtered.length === 1 && !isArchiveFile(filtered[0])) {
+      if (filtered.length === 1 && !isArchiveFile(filtered[0]) && !isDrawingFile(filtered[0])) {
         handleSingleFile(filtered[0]);
       } else {
         setPendingFiles(filtered);
       }
       e.target.value = '';
     },
-    [filterFiles, handleSingleFile, isArchiveFile, unsupportedFormatMessage],
+    [
+      filterFiles,
+      getArchiveSizeError,
+      getDrawingMatchError,
+      handleSingleFile,
+      hasUploadableModelInput,
+      isArchiveFile,
+      isDrawingFile,
+      unsupportedFormatMessage,
+    ],
   );
 
   const removePendingFile = useCallback((index: number) => {
+    setError(null);
     setPendingFiles((prev) => prev.filter((_, i) => i !== index));
   }, []);
 
@@ -285,19 +511,20 @@ export default function UploadModal({ open, onClose, onConverted }: UploadModalP
     <AnimatePresence>
       {open && (
         <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          exit={{ opacity: 0 }}
+          variants={overlayMotion}
+          initial="initial"
+          animate="animate"
+          exit="exit"
           className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/60 backdrop-blur-sm sm:p-4"
           onClick={handleClose}
           role="dialog"
           aria-modal="true"
         >
           <motion.div
-            initial={{ opacity: 0, scale: 0.95, y: 20 }}
-            animate={{ opacity: 1, scale: 1, y: 0 }}
-            exit={{ opacity: 0, scale: 0.95, y: 20 }}
-            transition={{ type: 'spring', damping: 25, stiffness: 300 }}
+            variants={isMobile ? bottomSheetMotion : dialogPanelMotion}
+            initial="initial"
+            animate="animate"
+            exit="exit"
             className="bg-surface-container-low rounded-t-2xl sm:rounded-lg w-full max-w-lg shadow-2xl border border-outline-variant/20 overflow-hidden max-h-[calc(100dvh-1rem)] sm:max-h-[90vh] flex flex-col"
             onClick={(e) => e.stopPropagation()}
           >
@@ -341,6 +568,12 @@ export default function UploadModal({ open, onClose, onConverted }: UploadModalP
                         <p className="text-sm text-on-surface-variant mt-1">
                           共 {result.total} 个文件：{result.ok} 成功{result.fail > 0 ? `，${result.fail} 失败` : ''}
                         </p>
+                        {(result.drawings || result.drawingFail) && (
+                          <p className="text-sm text-on-surface-variant mt-1">
+                            PDF 图纸：{result.drawings || 0} 已绑定
+                            {result.drawingFail ? `，${result.drawingFail} 未绑定` : ''}
+                          </p>
+                        )}
                       </>
                     )}
                   </div>
@@ -389,6 +622,16 @@ export default function UploadModal({ open, onClose, onConverted }: UploadModalP
                       </div>
                     ))}
                   </div>
+                  {error && (
+                    <motion.div
+                      initial={{ opacity: 0, y: -10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      className="mb-4 p-3 rounded-sm bg-error/10 border border-error/20 text-sm text-error flex items-start gap-2"
+                    >
+                      <Icon name="error" size={20} className="mt-0.5" />
+                      <span className="min-w-0 break-words">{error}</span>
+                    </motion.div>
+                  )}
                   {uploading ? (
                     <div className="flex flex-col items-center gap-2">
                       <p className="text-sm text-on-surface-variant">{progressLabel || `上传中... ${progress}%`}</p>
@@ -478,7 +721,7 @@ export default function UploadModal({ open, onClose, onConverted }: UploadModalP
                       <>
                         <p className="text-sm text-on-surface mb-1">拖放文件到此处，或点击选择</p>
                         <p className="text-xs text-on-surface-variant">
-                          支持 {formatLabel} 格式，可多选或上传 ZIP/RAR 压缩包
+                          支持 {formatLabel} 模型和同名 PDF，可多选或上传 ZIP/RAR 压缩包（上限 {archiveMaxSizeMb}MB）
                         </p>
                       </>
                     )}

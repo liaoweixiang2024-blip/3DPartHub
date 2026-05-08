@@ -1,12 +1,8 @@
 import { existsSync } from 'node:fs';
 import { join, resolve, sep } from 'node:path';
 import { config } from '../lib/config.js';
-import {
-  findPreviewAssetPath,
-  getPreviewAssetExtension,
-  previewAssetFileName,
-  resolveFileUrlPath,
-} from './gltfAsset.js';
+import { modelDownloadFileName, modelDownloadSourceName } from '../lib/modelDownloadName.js';
+import { findPreviewAssetPath, getPreviewAssetExtension, resolveFileUrlPath } from './gltfAsset.js';
 import { findOriginalModelPath, resolveStoredPath, type ModelFileRef } from './modelFiles.js';
 
 export type ModelDownloadRecord = {
@@ -46,7 +42,7 @@ export function resolveDbModelDownloadTarget(
   },
   requestedFormat?: string,
 ): ModelDownloadTarget | null {
-  const displayName = model.name || model.originalName || model.id;
+  const sourceName = modelDownloadSourceName(model.name, model.originalName, model.id);
   const originalFormat = model.originalFormat || model.format || 'step';
 
   if (requestedFormat === 'original') {
@@ -54,7 +50,7 @@ export function resolveDbModelDownloadTarget(
     if (originalPath) {
       return {
         filePath: originalPath,
-        fileName: `${displayName}.${originalFormat}`,
+        fileName: modelDownloadFileName(sourceName, originalFormat, model.id),
         contentType: 'application/octet-stream',
         record: {
           modelId: model.id,
@@ -70,7 +66,7 @@ export function resolveDbModelDownloadTarget(
 
   return {
     filePath: previewPath,
-    fileName: previewAssetFileName(displayName, previewPath),
+    fileName: modelDownloadFileName(sourceName, getPreviewAssetExtension(previewPath), model.id),
     contentType: 'application/octet-stream',
     record: {
       modelId: model.id,
@@ -85,12 +81,14 @@ export function resolveMetadataModelDownloadTarget(
   meta: Record<string, unknown>,
   requestedFormat?: string,
 ): ModelDownloadTarget | null {
+  const sourceName = (meta.original_name as string | undefined) || id;
+
   if (requestedFormat === 'original' && meta.upload_path) {
     const originalPath = resolveStoredPath(meta.upload_path as string);
     if (originalPath && existsSync(originalPath)) {
       return {
         filePath: originalPath,
-        fileName: (meta.original_name as string) || `${id}.${meta.format || 'step'}`,
+        fileName: modelDownloadFileName(sourceName, String(meta.format || 'step'), id),
         contentType: 'application/octet-stream',
       };
     }
@@ -103,9 +101,7 @@ export function resolveMetadataModelDownloadTarget(
   if (!filePath) return null;
   return {
     filePath,
-    fileName: (meta.original_name as string)
-      ? (meta.original_name as string).replace(/\.[^.]+$/, `.${getPreviewAssetExtension(gltfUrl)}`)
-      : previewAssetFileName(id, gltfUrl),
+    fileName: modelDownloadFileName(sourceName, getPreviewAssetExtension(gltfUrl), id),
     contentType: 'application/octet-stream',
   };
 }

@@ -10,15 +10,15 @@ import { AdminEmptyState, AdminManagementPage } from '../components/shared/Admin
 import { AdminPageShell } from '../components/shared/AdminPageShell';
 import ConfirmDialog from '../components/shared/ConfirmDialog';
 import Icon from '../components/shared/Icon';
+import LoadingSpinner from '../components/shared/LoadingSpinner';
 import LoginConfirmDialog from '../components/shared/LoginConfirmDialog';
-import { isLoginDialogEnabled } from '../components/shared/ProtectedLink';
 import ModelThumbnail from '../components/shared/ModelThumbnail';
-
+import { isLoginDialogEnabled } from '../components/shared/ProtectedLink';
 import { useToast } from '../components/shared/Toast';
 import { useDocumentTitle } from '../hooks/useDocumentTitle';
 import { useMediaQuery } from '../layouts/hooks/useMediaQuery';
+import { toolbarMotion } from '../lib/motion';
 import { useFavoriteStore } from '../stores/useFavoriteStore';
-import LoadingSpinner from '../components/shared/LoadingSpinner';
 
 interface FavoriteModel {
   id: string;
@@ -78,9 +78,10 @@ function BatchToolbar({
 }) {
   return (
     <motion.div
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0, y: 20 }}
+      variants={toolbarMotion}
+      initial="initial"
+      animate="animate"
+      exit="exit"
       className="bg-surface-container-high border border-outline-variant/20 rounded-lg px-4 py-3 flex items-center gap-3 shadow-lg"
     >
       <span className="text-sm text-on-surface font-medium">已选 {selectedCount} 个</span>
@@ -126,7 +127,7 @@ const ModelCard = memo(function ModelCard({
 }) {
   return (
     <div
-      className={`bg-surface-container-high rounded-sm group relative transition-all flex flex-col ${selected ? 'ring-2 ring-primary shadow-[0_0_0_1px_var(--color-primary)]' : 'hover:shadow-[0_12px_24px_rgba(0,0,0,0.4)]'}`}
+      className={`bg-surface-container-high rounded-sm group relative transition-[box-shadow] duration-200 ease-out flex flex-col ${selected ? 'ring-2 ring-primary shadow-[0_0_0_1px_var(--color-primary)]' : 'hover:shadow-[0_12px_24px_rgba(0,0,0,0.4)]'}`}
     >
       <div className="aspect-[4/3] bg-surface-container-lowest w-full relative overflow-hidden flex items-center justify-center">
         <Link to={`/model/${model.id}`} className="absolute inset-0 z-0">
@@ -143,7 +144,7 @@ const ModelCard = memo(function ModelCard({
               e.stopPropagation();
               onSelect(model.id);
             }}
-            className={`absolute top-2 left-2 z-10 w-6 h-6 rounded-sm border-2 flex items-center justify-center transition-all ${
+            className={`absolute top-2 left-2 z-10 w-6 h-6 rounded-sm border-2 flex items-center justify-center transition-[background-color,border-color,opacity] duration-150 ease-out ${
               selected ? 'bg-primary border-primary' : 'bg-surface/80 border-outline-variant/40 hover:border-primary'
             }`}
           >
@@ -210,12 +211,12 @@ const MobileModelCard = memo(function MobileModelCard({
 }) {
   return (
     <div
-      className={`bg-surface-container-high rounded-xl border relative transition-all overflow-hidden ${selected ? 'border-primary ring-2 ring-primary/30' : 'border-outline-variant/10'}`}
+      className={`bg-surface-container-high rounded-xl border relative transition-[border-color,box-shadow] duration-200 ease-out overflow-hidden ${selected ? 'border-primary ring-2 ring-primary/30' : 'border-outline-variant/10'}`}
     >
       {showCheckbox && (
         <button
           onClick={() => onSelect(model.id)}
-          className={`absolute top-2 left-2 z-10 w-5 h-5 rounded-full border-2 flex items-center justify-center transition-all ${
+          className={`absolute top-2 left-2 z-10 w-5 h-5 rounded-full border-2 flex items-center justify-center transition-[background-color,border-color,opacity] duration-150 ease-out ${
             selected ? 'bg-primary border-primary' : 'bg-surface/80 border-outline-variant/40'
           }`}
         >
@@ -360,7 +361,7 @@ function DesktopContent() {
         }
       }
     },
-    [toast],
+    [navigate, toast],
   );
 
   const models = useMemo(() => (data ? mapFavorites(data) : []), [data]);
@@ -458,7 +459,7 @@ function DesktopContent() {
           ))}
           <Link
             to="/"
-            className="bg-surface-container-lowest border border-outline-variant/20 border-dashed rounded-sm group cursor-pointer hover:border-primary/50 hover:bg-surface-container-low transition-all flex flex-col items-center justify-center min-h-[200px]"
+            className="bg-surface-container-lowest border border-outline-variant/20 border-dashed rounded-sm group cursor-pointer hover:border-primary/50 hover:bg-surface-container-low transition-[background-color,border-color] duration-150 ease-out flex flex-col items-center justify-center min-h-[200px]"
           >
             <div className="w-12 h-12 rounded-sm bg-surface-container-high flex items-center justify-center mb-3 group-hover:text-primary transition-colors text-on-surface-variant">
               <Icon name="search" size={32} />
@@ -583,7 +584,7 @@ function MobileContent() {
         }
       }
     },
-    [toast],
+    [navigate, toast],
   );
 
   return (

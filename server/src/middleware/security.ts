@@ -1,8 +1,10 @@
+import type { Request } from 'express';
 import rateLimit, { type Options, type Store } from 'express-rate-limit';
 import helmet from 'helmet';
 import Redis from 'ioredis';
 import { config } from '../lib/config.js';
 import { logger } from '../lib/logger.js';
+import { getVerifiedRequestUser, verifyRequestToken, type AuthRequest } from './auth.js';
 
 class RedisRateLimitStore implements Store {
   prefix: string;
@@ -90,13 +92,40 @@ class RedisRateLimitStore implements Store {
   }
 }
 
-function createLimiter(prefix: string, options: Partial<Options>) {
+type LimiterOptions = Partial<Options> & {
+  skipAuthenticatedAdmin?: boolean;
+};
+
+async function shouldSkipForAuthenticatedAdmin(req: Request) {
+  if ((req as AuthRequest).user?.role === 'ADMIN') return true;
+
+  const tokenPayload = verifyRequestToken(req);
+  if (tokenPayload?.role !== 'ADMIN') return false;
+
+  try {
+    const verified = await getVerifiedRequestUser(req);
+    if (verified?.payload.role !== 'ADMIN' || verified.mustChangePassword) return false;
+    (req as AuthRequest).user = verified.payload;
+    return true;
+  } catch (err) {
+    logger.error({ err }, '[rate-limit] Failed to verify admin bypass');
+    return false;
+  }
+}
+
+function createLimiter(prefix: string, options: LimiterOptions) {
+  const { skipAuthenticatedAdmin = false, skip, ...rateLimitOptions } = options;
+
   return rateLimit({
     standardHeaders: true,
     legacyHeaders: false,
     passOnStoreError: false,
     store: new RedisRateLimitStore(prefix),
-    ...options,
+    ...rateLimitOptions,
+    skip: async (req, res) => {
+      if (skipAuthenticatedAdmin && (await shouldSkipForAuthenticatedAdmin(req))) return true;
+      return skip ? Boolean(await skip(req, res)) : false;
+    },
   });
 }
 
@@ -105,6 +134,7 @@ export const apiLimiter = createLimiter('api', {
   windowMs: 15 * 60 * 1000, // 15 minutes
   limit: 5000,
   max: 5000,
+  skipAuthenticatedAdmin: true,
   message: { success: false, message: '请求过于频繁，请稍后再试' },
 });
 
@@ -112,6 +142,7 @@ export const uploadLimiter = createLimiter('upload', {
   windowMs: 60 * 60 * 1000,
   limit: 200,
   max: 200,
+  skipAuthenticatedAdmin: true,
   message: { success: false, message: '上传次数超出限制' },
 });
 
@@ -126,6 +157,7 @@ export const searchLimiter = createLimiter('search', {
   windowMs: 5 * 60 * 1000, // 5 minutes
   limit: 600,
   max: 600,
+  skipAuthenticatedAdmin: true,
   message: { success: false, message: '搜索请求过于频繁，请稍后再试' },
 });
 
@@ -140,6 +172,7 @@ export const tokenGenLimiter = createLimiter('token-gen', {
   windowMs: 5 * 60 * 1000,
   limit: 100,
   max: 100,
+  skipAuthenticatedAdmin: true,
   message: { success: false, message: '下载请求过于频繁，请稍后再试' },
 });
 
@@ -147,6 +180,7 @@ export const mutationLimiter = createLimiter('mutation', {
   windowMs: 15 * 60 * 1000,
   limit: 500,
   max: 500,
+  skipAuthenticatedAdmin: true,
   message: { success: false, message: '操作过于频繁，请稍后再试' },
 });
 

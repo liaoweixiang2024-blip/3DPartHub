@@ -40,6 +40,69 @@ test('resolves original DB model download target', () => {
   assert.deepEqual(target?.record, { modelId: 'pump', format: 'step', fileSize: 123 });
 });
 
+test('uses model number suffix after underscore for DB download filenames', () => {
+  const uploadPath = join(root, 'uploads', 'elbow.step');
+  mkdirSync(join(root, 'uploads'), { recursive: true });
+  writeFileSync(uploadPath, 'step');
+
+  const target = resolveDbModelDownloadTarget(
+    {
+      id: 'elbow',
+      name: '不锈钢弯宝塔_SLH-1寸x19',
+      originalName: '不锈钢弯宝塔_SLH-1寸x19.step',
+      format: 'step',
+      originalFormat: 'step',
+      uploadPath,
+      originalSize: 123,
+    },
+    'original',
+  );
+
+  assert.equal(target?.fileName, 'SLH-1寸x19.step');
+});
+
+test('uses model folder title while downloading actual model file name for structured archive uploads', () => {
+  const uploadPath = join(root, 'uploads', 'structured.step');
+  mkdirSync(join(root, 'uploads'), { recursive: true });
+  writeFileSync(uploadPath, 'step');
+
+  const target = resolveDbModelDownloadTarget(
+    {
+      id: 'structured',
+      name: '不锈钢弯宝塔_SLH-1寸x19',
+      originalName: 'SLH-1寸x19.STEP',
+      format: 'step',
+      originalFormat: 'step',
+      uploadPath,
+      originalSize: 123,
+    },
+    'original',
+  );
+
+  assert.equal(target?.fileName, 'SLH-1寸x19.step');
+});
+
+test('keeps underscores inside model numbers when deriving download filenames', () => {
+  const uploadPath = join(root, 'uploads', 'structured-sbu.step');
+  mkdirSync(join(root, 'uploads'), { recursive: true });
+  writeFileSync(uploadPath, 'step');
+
+  const target = resolveDbModelDownloadTarget(
+    {
+      id: 'structured-sbu',
+      name: '不锈钢补心_SBU-3_4x1_4',
+      originalName: 'SBU-3_4x1_4.STEP',
+      format: 'step',
+      originalFormat: 'step',
+      uploadPath,
+      originalSize: 123,
+    },
+    'original',
+  );
+
+  assert.equal(target?.fileName, 'SBU-3_4x1_4.step');
+});
+
 test('resolves preview DB model download target when original is not requested', () => {
   const previewPath = join(process.env.STATIC_DIR!, 'models', 'pump.glb');
   mkdirSync(join(process.env.STATIC_DIR!, 'models'), { recursive: true });

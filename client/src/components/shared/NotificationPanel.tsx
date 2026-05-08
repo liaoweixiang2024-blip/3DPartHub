@@ -11,6 +11,7 @@ import {
   type Notification,
 } from '../../api/notifications';
 import { useMediaQuery } from '../../layouts/hooks/useMediaQuery';
+import { bottomSheetMotion, overlayMotion, popoverMotion } from '../../lib/motion';
 import { useAuthStore } from '../../stores/useAuthStore';
 import Icon from './Icon';
 
@@ -360,18 +361,19 @@ export default function NotificationPanel({ compact = false }: { compact?: boole
         <AnimatePresence>
           <motion.div
             key="notification-backdrop"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
+            variants={overlayMotion}
+            initial="initial"
+            animate="animate"
+            exit="exit"
             className="fixed inset-0 z-[200] bg-black/50"
             onClick={() => setOpen(false)}
           />
           <motion.div
             key="notification-panel"
-            initial={{ y: 24, opacity: 0 }}
-            animate={{ y: 0, opacity: 1 }}
-            exit={{ y: 24, opacity: 0 }}
-            transition={{ type: 'spring', damping: 26, stiffness: 320 }}
+            variants={bottomSheetMotion}
+            initial="initial"
+            animate="animate"
+            exit="exit"
             style={mobilePanelStyle}
             className="fixed left-3 right-3 z-[201] flex min-h-0 flex-col overflow-hidden rounded-2xl border border-outline-variant/20 bg-surface-container-high shadow-2xl"
             onClick={(e) => e.stopPropagation()}
@@ -404,10 +406,10 @@ export default function NotificationPanel({ compact = false }: { compact?: boole
       <AnimatePresence>
         {open && (
           <motion.div
-            initial={{ opacity: 0, y: -4, scale: 0.96 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: -4, scale: 0.96 }}
-            transition={{ duration: 0.15 }}
+            variants={popoverMotion}
+            initial="initial"
+            animate="animate"
+            exit="exit"
             className="absolute right-0 top-full mt-2 w-80 bg-surface-container-high border border-outline-variant/20 rounded-lg shadow-lg z-[100] overflow-hidden"
           >
             {panelContent}

@@ -6,7 +6,9 @@ import { sendAcceleratedFile } from '../lib/acceleratedDownload.js';
 import { cacheDelByPrefix } from '../lib/cache.js';
 import { config } from '../lib/config.js';
 import { consumeProtectedResourceToken } from '../lib/downloadTokenStore.js';
+import { normalizeUploadFilename } from '../lib/filenameEncoding.js';
 import { createLogger } from '../lib/logger.js';
+import { modelDownloadFileName, modelDownloadSourceName } from '../lib/modelDownloadName.js';
 import { prisma } from '../lib/prisma.js';
 import { optionalString, requiredString } from '../lib/requestValidation.js';
 import { authMiddleware, verifyRequestToken, type AuthRequest } from '../middleware/auth.js';
@@ -91,8 +93,9 @@ router.post(
 
       const drawingUrl = `/static/drawings/${id}.pdf`;
       const { size: drawingSize } = statSync(drawingPath);
+      const drawingName = normalizeUploadFilename(file.originalname, 'drawing.pdf');
 
-      await prisma.model.update({ where: { id }, data: { drawingUrl, drawingName: file.originalname, drawingSize } });
+      await prisma.model.update({ where: { id }, data: { drawingUrl, drawingName, drawingSize } });
       await cacheDelByPrefix('cache:models:');
 
       res.json({ success: true, data: { model_id: id, drawing_url: drawingDownloadUrl(id, drawingUrl) } });
@@ -128,7 +131,7 @@ router.get('/api/models/:id/drawing/download', async (req: Request, res: Respons
   try {
     const m = await prisma.model.findUnique({
       where: { id },
-      select: { id: true, name: true, drawingUrl: true, drawingName: true },
+      select: { id: true, name: true, originalName: true, drawingUrl: true, drawingName: true },
     });
     if (!m?.drawingUrl) {
       res.status(404).json({ detail: '图纸不存在' });
@@ -141,7 +144,8 @@ router.get('/api/models/:id/drawing/download', async (req: Request, res: Respons
       return;
     }
 
-    const fileName = m.drawingName || `${m.name || id}.pdf`;
+    const sourceName = modelDownloadSourceName(m.name || m.drawingName, m.originalName, id);
+    const fileName = modelDownloadFileName(sourceName, 'pdf', id);
     sendAcceleratedFile(req, res, {
       filePath: drawingPath,
       fileName,

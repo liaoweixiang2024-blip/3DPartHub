@@ -1,5 +1,5 @@
 import axios from 'axios';
-import { notifyGlobalError } from '../lib/errorNotifications';
+import { getErrorMessage, getRateLimitRetrySeconds, notifyGlobalError } from '../lib/errorNotifications';
 import { getAccessToken, useAuthStore } from '../stores/useAuthStore';
 
 const client = axios.create({
@@ -16,6 +16,8 @@ let consecutiveServerErrors = 0;
 let circuitOpenUntil = 0;
 const CIRCUIT_THRESHOLD = 5;
 const CIRCUIT_COOLDOWN_MS = 15000;
+const DEFAULT_RATE_LIMIT_COOLDOWN_SECONDS = 60;
+const rateLimitNoticeUntil = new Map<string, number>();
 
 function isCircuitOpen(): boolean {
   if (Date.now() < circuitOpenUntil) return true;
@@ -81,6 +83,26 @@ function isSilentBackgroundRequest(config: { method?: unknown; url?: unknown } |
   return method === 'get' && (url.startsWith('/notifications/unread-count') || url.startsWith('/notifications?'));
 }
 
+function getRateLimitNoticeKey(config: { method?: unknown; url?: unknown } | undefined) {
+  const method = String(config?.method || 'get').toLowerCase();
+  const url = String(config?.url || 'unknown');
+  return `${method}:${url}`;
+}
+
+function shouldNotifyRateLimit(config: { method?: unknown; url?: unknown } | undefined, retrySeconds: number) {
+  const now = Date.now();
+  for (const [key, until] of rateLimitNoticeUntil) {
+    if (until <= now) rateLimitNoticeUntil.delete(key);
+  }
+
+  const key = getRateLimitNoticeKey(config);
+  const existingUntil = rateLimitNoticeUntil.get(key) || 0;
+  const nextUntil = now + Math.max(1, retrySeconds) * 1000;
+  rateLimitNoticeUntil.set(key, Math.max(existingUntil, nextUntil));
+
+  return now >= existingUntil;
+}
+
 client.interceptors.response.use(
   (response) => {
     resetCircuit();
@@ -103,13 +125,10 @@ client.interceptors.response.use(
 
     // Show rate limit notification
     if (error.response?.status === 429) {
-      const retryAfter = error.response.headers['retry-after'] || error.response.headers['ratelimit-reset'];
-      const seconds = retryAfter ? Math.ceil(Number(retryAfter)) : 60;
-      const msg =
-        seconds > 60
-          ? `请求过于频繁，请 ${Math.ceil(seconds / 60)} 分钟后再试`
-          : `请求过于频繁，请 ${seconds} 秒后再试`;
-      if (!silentBackgroundRequest) notifyGlobalError(msg);
+      const seconds = getRateLimitRetrySeconds(error) || DEFAULT_RATE_LIMIT_COOLDOWN_SECONDS;
+      if (!silentBackgroundRequest && shouldNotifyRateLimit(originalRequest, seconds)) {
+        notifyGlobalError(getErrorMessage(error));
+      }
       return Promise.reject(error);
     }
 

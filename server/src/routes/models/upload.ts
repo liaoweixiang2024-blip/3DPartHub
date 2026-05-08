@@ -14,6 +14,7 @@ import { authMiddleware, type AuthRequest } from '../../middleware/auth.js';
 import { requireRole } from '../../middleware/rbac.js';
 import { parseStepFileDate } from '../../services/modelFileDates.js';
 import { MODEL_STATUS } from '../../services/modelStatus.js';
+import { scrubStepMetadata, isStepFormat } from '../../services/stepMetadataScrub.js';
 import { modelUpload, pathInside, validateModelUpload } from './uploadHelpers.js';
 
 type ModelUploadContext = {
@@ -269,6 +270,15 @@ export function createModelUploadRouter({ prisma, saveMeta }: ModelUploadContext
         } catch {
           res.status(500).json({ detail: '保存模型文件失败' });
           return;
+        }
+      }
+
+      // Scrub sensitive metadata from STEP headers
+      if (isStepFormat(ext)) {
+        try {
+          scrubStepMetadata(storedUploadPath);
+        } catch {
+          /* non-critical */
         }
       }
 

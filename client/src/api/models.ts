@@ -493,14 +493,21 @@ export const modelApi = {
     options?: { categoryId?: string; onUploadProgress?: (progressEvent: { loaded: number; total: number }) => void },
   ): Promise<{
     total: number;
-    results: Array<{ name: string; model_id?: string; status: string; error?: string }>;
+    results: Array<{
+      name: string;
+      model_id?: string;
+      status: string;
+      error?: string;
+      drawing_attached?: boolean;
+      drawing_error?: string;
+    }>;
   }> => {
     const form = new FormData();
     form.append('file', file);
     if (options?.categoryId) form.append('categoryId', options.categoryId);
     const res = await client.post('/batch/upload', form, {
       headers: { 'Content-Type': 'multipart/form-data' },
-      timeout: 300000,
+      timeout: 900000,
       onUploadProgress: options?.onUploadProgress as any,
     });
     return unwrapResponse(res);
@@ -511,7 +518,14 @@ export const modelApi = {
     options?: { categoryId?: string },
   ): Promise<{
     total: number;
-    results: Array<{ name: string; model_id?: string; status: string; error?: string }>;
+    results: Array<{
+      name: string;
+      model_id?: string;
+      status: string;
+      error?: string;
+      drawing_attached?: boolean;
+      drawing_error?: string;
+    }>;
   }> => {
     return modelApi.batchUploadFromArchive(file, options);
   },

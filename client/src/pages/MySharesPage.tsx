@@ -7,13 +7,13 @@ import { AdminEmptyState, AdminManagementPage } from '../components/shared/Admin
 import { AdminPageShell } from '../components/shared/AdminPageShell';
 import ConfirmDialog from '../components/shared/ConfirmDialog';
 import Icon from '../components/shared/Icon';
-
+import LoadingSpinner from '../components/shared/LoadingSpinner';
 import { useToast } from '../components/shared/Toast';
 import { useDocumentTitle } from '../hooks/useDocumentTitle';
 import { useImeSafeSearchInput } from '../hooks/useImeSafeSearchInput';
-import { copyText } from '../lib/clipboard';
-import LoadingSpinner from '../components/shared/LoadingSpinner';
 import { useMediaQuery } from '../layouts/hooks/useMediaQuery';
+import { copyText } from '../lib/clipboard';
+import { toolbarMotion } from '../lib/motion';
 
 function getShareUrl(share: ShareLink) {
   const path = share.type === 'selection' ? `/selection/s/${share.token}` : `/share/${share.token}`;
@@ -54,9 +54,10 @@ function BatchToolbar({
 }) {
   return (
     <motion.div
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0, y: 20 }}
+      variants={toolbarMotion}
+      initial="initial"
+      animate="animate"
+      exit="exit"
       className="bg-surface-container-high border border-outline-variant/20 rounded-lg px-4 py-3 flex items-center gap-3 shadow-lg"
     >
       <span className="text-sm text-on-surface font-medium">已选 {selectedCount} 个</span>
@@ -110,7 +111,7 @@ function ShareRow({
         <button
           type="button"
           onClick={() => onToggleSelect(item.id)}
-          className={`shrink-0 w-5 h-5 rounded-sm border-2 flex items-center justify-center transition-all ${
+          className={`shrink-0 w-5 h-5 rounded-sm border-2 flex items-center justify-center transition-[background-color,border-color,opacity] duration-150 ease-out ${
             selected ? 'bg-primary border-primary' : 'bg-surface/80 border-outline-variant/40 hover:border-primary'
           }`}
           aria-label={selected ? '取消选择' : '选择分享'}
@@ -412,9 +413,10 @@ export default function MySharesPage() {
           )}
           {!isDesktop && selectMode && (
             <motion.div
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: 10 }}
+              variants={toolbarMotion}
+              initial="initial"
+              animate="animate"
+              exit="exit"
               className="mb-3 flex items-center gap-2 bg-surface-container-high rounded-lg px-3 py-2.5 border border-outline-variant/10"
             >
               <button onClick={toggleSelectAllVisible} className="text-xs text-primary">

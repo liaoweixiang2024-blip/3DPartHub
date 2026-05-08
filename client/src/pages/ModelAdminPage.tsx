@@ -20,17 +20,15 @@ import { AdminPageShell } from '../components/shared/AdminPageShell';
 import CategorySelect from '../components/shared/CategorySelect';
 import Icon from '../components/shared/Icon';
 import InfiniteLoadTrigger from '../components/shared/InfiniteLoadTrigger';
+import LoadingSpinner from '../components/shared/LoadingSpinner';
 import ModelThumbnail from '../components/shared/ModelThumbnail';
 import ResponsiveSectionTabs, { type ResponsiveSectionTab } from '../components/shared/ResponsiveSectionTabs';
-
 import { useToast } from '../components/shared/Toast';
+import UploadModal from '../components/shared/UploadModal';
 import { useDocumentTitle } from '../hooks/useDocumentTitle';
 import { useImeSafeSearchInput } from '../hooks/useImeSafeSearchInput';
 import { useVisibleItems } from '../hooks/useVisibleItems';
 import { useMediaQuery } from '../layouts/hooks/useMediaQuery';
-import { getBusinessConfig } from '../lib/businessConfig';
-import { getCachedPublicSettings } from '../lib/publicSettings';
-import LoadingSpinner from '../components/shared/LoadingSpinner';
 
 function formatSize(bytes: number) {
   if (bytes < 1024) return `${bytes} B`;
@@ -1728,8 +1726,6 @@ function ModelCategoryFilter({
 
 function DesktopContent() {
   const { toast } = useToast();
-  const { data: settings } = useSWR('publicSettings', () => getCachedPublicSettings());
-  const { uploadPolicy } = getBusinessConfig(settings);
   const { value: search, inputProps: searchInputProps } = useImeSafeSearchInput();
   const [categoryFilter, setCategoryFilter] = useState(CATEGORY_FILTER_ALL);
   const [editModel, setEditModel] = useState<ServerModelListItem | null>(null);
@@ -1739,7 +1735,7 @@ function DesktopContent() {
   const [selectedAllMatching, setSelectedAllMatching] = useState(false);
   const [batchDeleteOpen, setBatchDeleteOpen] = useState(false);
   const [batchDeleting, setBatchDeleting] = useState(false);
-  const [uploading, setUploading] = useState(false);
+  const [uploadOpen, setUploadOpen] = useState(false);
   const [previewOpsOpen, setPreviewOpsOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<ModelAdminTab>('models');
 
@@ -1934,49 +1930,6 @@ function DesktopContent() {
     }
   };
 
-  const handleUpload = async (files: FileList) => {
-    const formats = uploadPolicy.modelFormats.map((f) => f.toLowerCase());
-    const maxModelBytes = uploadPolicy.modelMaxSizeMb * 1024 * 1024;
-    const picked = Array.from(files);
-    const acceptedModels = picked.filter((f) => {
-      const ext = f.name.split('.').pop()?.toLowerCase() || '';
-      return formats.includes(ext) && f.size <= maxModelBytes;
-    });
-    const acceptedArchives = picked.filter((f) => /\.(zip|rar)$/i.test(f.name));
-    if (acceptedModels.length === 0 && acceptedArchives.length === 0) {
-      toast(
-        `请选择 ${uploadPolicy.modelFormats.map((f) => f.toUpperCase()).join('/')} 或 ZIP/RAR 压缩包，单个模型小于 ${uploadPolicy.modelMaxSizeMb}MB`,
-        'error',
-      );
-      return;
-    }
-    setUploading(true);
-    let ok = 0,
-      fail = 0;
-    // Upload with limited concurrency (3 at a time)
-    const CONCURRENCY = 3;
-    for (let i = 0; i < acceptedModels.length; i += CONCURRENCY) {
-      const batch = acceptedModels.slice(i, i + CONCURRENCY);
-      const results = await Promise.allSettled(batch.map((f) => modelApi.upload(f)));
-      for (const r of results) {
-        if (r.status === 'fulfilled') ok++;
-        else fail++;
-      }
-    }
-    for (const archive of acceptedArchives) {
-      try {
-        const result = await modelApi.batchUploadFromArchive(archive);
-        ok += result.results.filter((item) => item.status === 'queued' || item.status === 'completed').length;
-        fail += result.results.filter((item) => item.status !== 'queued' && item.status !== 'completed').length;
-      } catch {
-        fail++;
-      }
-    }
-    setUploading(false);
-    toast(`上传完成: ${ok} 成功${fail > 0 ? `, ${fail} 失败` : ''}`, fail > 0 ? 'error' : 'success');
-    mutate();
-  };
-
   const handleTabChange = (tab: ModelAdminTab) => {
     startTransition(() => setActiveTab(tab));
   };
@@ -2102,17 +2055,7 @@ function DesktopContent() {
 
   return (
     <>
-      <input
-        type="file"
-        multiple
-        accept={[...uploadPolicy.modelFormats.map((f) => `.${f}`), '.zip', '.rar'].join(',')}
-        className="hidden"
-        id="admin-file-upload"
-        onChange={(e) => {
-          if (e.target.files?.length) handleUpload(e.target.files);
-          e.target.value = '';
-        }}
-      />
+      <UploadModal open={uploadOpen} onClose={() => setUploadOpen(false)} onConverted={refreshModelAdminData} />
       <AdminManagementPage
         title="模型管理"
         description="统一维护模型文件、分类归属、预览重建和同名模型合并关系。"
@@ -2126,12 +2069,11 @@ function DesktopContent() {
               预览运维
             </button>
             <button
-              onClick={() => document.getElementById('admin-file-upload')?.click()}
-              disabled={uploading}
-              className={`${headerButtonBase} bg-primary-container text-on-primary hover:opacity-90 active:scale-95 disabled:opacity-50`}
+              onClick={() => setUploadOpen(true)}
+              className={`${headerButtonBase} bg-primary-container text-on-primary hover:opacity-90 active:scale-95`}
             >
               <Icon name="cloud_upload" size={18} />
-              {uploading ? '上传中...' : '上传模型'}
+              上传模型
             </button>
           </div>
         }
@@ -2717,8 +2659,6 @@ function DesktopContent() {
 
 function MobileContent() {
   const { toast } = useToast();
-  const { data: settings } = useSWR('publicSettings', () => getCachedPublicSettings());
-  const { uploadPolicy } = getBusinessConfig(settings);
   const { value: search, inputProps: searchInputProps } = useImeSafeSearchInput();
   const [categoryFilter, setCategoryFilter] = useState(CATEGORY_FILTER_ALL);
   const [editModel, setEditModel] = useState<ServerModelListItem | null>(null);
@@ -2728,7 +2668,7 @@ function MobileContent() {
   const [selectedAllMatching, setSelectedAllMatching] = useState(false);
   const [batchDeleteOpen, setBatchDeleteOpen] = useState(false);
   const [batchDeleting, setBatchDeleting] = useState(false);
-  const [uploading, setUploading] = useState(false);
+  const [uploadOpen, setUploadOpen] = useState(false);
   const [previewOpsOpen, setPreviewOpsOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<ModelAdminTab>('models');
 
@@ -2921,49 +2861,6 @@ function MobileContent() {
     }
   };
 
-  const handleUpload = async (files: FileList) => {
-    const formats = uploadPolicy.modelFormats.map((f) => f.toLowerCase());
-    const maxModelBytes = uploadPolicy.modelMaxSizeMb * 1024 * 1024;
-    const picked = Array.from(files);
-    const acceptedModels = picked.filter((f) => {
-      const ext = f.name.split('.').pop()?.toLowerCase() || '';
-      return formats.includes(ext) && f.size <= maxModelBytes;
-    });
-    const acceptedArchives = picked.filter((f) => /\.(zip|rar)$/i.test(f.name));
-    if (acceptedModels.length === 0 && acceptedArchives.length === 0) {
-      toast(
-        `请选择 ${uploadPolicy.modelFormats.map((f) => f.toUpperCase()).join('/')} 或 ZIP/RAR 压缩包，单个模型小于 ${uploadPolicy.modelMaxSizeMb}MB`,
-        'error',
-      );
-      return;
-    }
-    setUploading(true);
-    let ok = 0,
-      fail = 0;
-    // Upload with limited concurrency (3 at a time)
-    const CONCURRENCY = 3;
-    for (let i = 0; i < acceptedModels.length; i += CONCURRENCY) {
-      const batch = acceptedModels.slice(i, i + CONCURRENCY);
-      const results = await Promise.allSettled(batch.map((f) => modelApi.upload(f)));
-      for (const r of results) {
-        if (r.status === 'fulfilled') ok++;
-        else fail++;
-      }
-    }
-    for (const archive of acceptedArchives) {
-      try {
-        const result = await modelApi.batchUploadFromArchive(archive);
-        ok += result.results.filter((item) => item.status === 'queued' || item.status === 'completed').length;
-        fail += result.results.filter((item) => item.status !== 'queued' && item.status !== 'completed').length;
-      } catch {
-        fail++;
-      }
-    }
-    setUploading(false);
-    toast(`上传完成: ${ok} 成功${fail > 0 ? `, ${fail} 失败` : ''}`, fail > 0 ? 'error' : 'success');
-    mutate();
-  };
-
   const toggleSelect = (name: string) => {
     setSelectedNames((prev) => {
       const next = new Set(prev);
@@ -3107,17 +3004,7 @@ function MobileContent() {
 
   return (
     <>
-      <input
-        type="file"
-        multiple
-        accept={[...uploadPolicy.modelFormats.map((f) => `.${f}`), '.zip', '.rar'].join(',')}
-        className="hidden"
-        id="mobile-admin-upload"
-        onChange={(e) => {
-          if (e.target.files?.length) handleUpload(e.target.files);
-          e.target.value = '';
-        }}
-      />
+      <UploadModal open={uploadOpen} onClose={() => setUploadOpen(false)} onConverted={refreshModelAdminData} />
       <AdminManagementPage
         title="模型管理"
         description="维护模型库文件、合并建议和预览运维"
@@ -3133,12 +3020,11 @@ function MobileContent() {
               运维
             </button>
             <button
-              onClick={() => document.getElementById('mobile-admin-upload')?.click()}
-              disabled={uploading}
-              className="flex items-center gap-1 px-3 py-1.5 text-xs font-medium text-on-primary bg-primary-container rounded-sm active:scale-95 disabled:opacity-50"
+              onClick={() => setUploadOpen(true)}
+              className="flex items-center gap-1 px-3 py-1.5 text-xs font-medium text-on-primary bg-primary-container rounded-sm active:scale-95"
             >
               <Icon name="cloud_upload" size={14} />
-              {uploading ? '上传中...' : '上传'}
+              上传
             </button>
           </div>
         }

@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: 'Version tag (e.g. V2.8.6)'
+        description: 'Version tag (e.g. v2.9.4)'
         required: true
 
 env:
@@ -64,6 +64,8 @@ jobs:
           context: ./client
           file: ./client/Dockerfile
           push: true
+          build-args: |
+            VITE_APP_VERSION=${{ steps.version.outputs.version }}
           tags: |
             ghcr.io/${{ github.repository_owner }}/3dparthub-web:${{ steps.version.outputs.version }}
             ghcr.io/${{ github.repository_owner }}/3dparthub-web:latest
@@ -74,23 +76,39 @@ jobs:
         if: github.event_name == 'push'
         uses: softprops/action-gh-release@v3
         with:
+          name: 3DPartHub ${{ steps.version.outputs.version }}
           generate_release_notes: true
           body: |
-            ## Tag
+            ## 更新标题
 
-            `${{ steps.version.outputs.version }}`
+            3DPartHub ${{ steps.version.outputs.version }} - 首页滚动与更新体验优化版
 
-            Tag description: 3DPartHub ${{ steps.version.outputs.version }} production release with mobile selection stability, 3D edge rendering fixes, share/settings policy typing, and Docker image refresh.
+            ## 标签描述
+
+            3DPartHub ${{ steps.version.outputs.version }} production release with smoother desktop home scrolling, stable return positioning, restored classic infinite loading, matching skeleton/card sizing, upload and admin interaction refinements, backend batch/archive hardening, and Docker image refresh.
+
+            ## 更新描述
+
+            - 首页 PC 端滚动继续优化，减少滚动末端停顿、闪烁和回弹抖动，保留卡片悬停阴影。
+            - 模型详情返回首页时保持精准定位，减少白屏和页面跳动。
+            - 首页底部自动加载恢复为经典自动提示体验，骨架屏与真实卡片尺寸对齐，并补齐预览/下载按钮占位。
+            - 全站弹窗、按钮、移动抽屉、通知和错误提示的过渡手感统一收敛，降低突兀跳动。
+            - 批量上传、模型图纸、下载命名、STEP 元数据清理和归档上传链路增强，后台处理更稳。
+            - 镜像已同步更新：api/web 均发布 ${{ steps.version.outputs.version }} 与 latest 标签。
 
             ## Docker Images
+
+            API image title: `3dparthub-api:${{ steps.version.outputs.version }}`
 
             API image: `ghcr.io/${{ github.repository_owner }}/3dparthub-api:${{ steps.version.outputs.version }}`
 
             API image description: Express/Prisma API service with migrations, model conversion workers, backup/restore, audit logs, admin settings, queues, and background jobs.
 
+            Web image title: `3dparthub-web:${{ steps.version.outputs.version }}`
+
             Web image: `ghcr.io/${{ github.repository_owner }}/3dparthub-web:${{ steps.version.outputs.version }}`
 
-            Web image description: React/Vite frontend for 3D preview, product selection, inquiry/quote workflows, sharing, profile management, and admin pages.
+            Web image description: React/Vite frontend for 3D preview, product selection, inquiry/quote workflows, sharing, profile management, admin pages, and smoother home browsing.
 
             ```bash
             # Default deployment follows latest and uses Watchtower for api/web auto-updates.

@@ -8,7 +8,7 @@ import { modelApi, type ModelPreviewMeta } from '../api/models';
 import { updateSettings } from '../api/settings';
 import type { ViewMode, CameraPreset } from '../components/3d';
 import CadViewerPanel from '../components/3d/CadViewerPanel';
-import { CAMERA_ANGLES, MATERIAL_PRESETS, VIEW_MODES, type MaterialPresetKey } from '../components/3d/viewerControls';
+import { MATERIAL_PRESETS, VIEW_MODES, type MaterialPresetKey } from '../components/3d/viewerControls';
 import { dispatchFitModel } from '../components/3d/viewerEvents';
 import { DEFAULT_VIEWER_TUNING, viewerTuningFromSettings, type ViewerTuning } from '../components/3d/viewerTuning';
 import CategorySelect from '../components/shared/CategorySelect';
@@ -32,7 +32,6 @@ import {
 } from '../lib/publicSettings';
 import { useFavoriteStore, useAuthStore } from '../stores';
 import type { ModelSpec, ModelDownload } from '../types';
-import LoadingSpinner from '../components/shared/LoadingSpinner';
 
 interface ModelVariant {
   model_id: string;
@@ -127,17 +126,12 @@ function getViewerDisplayPrefs(): ViewerDisplayPrefs {
       ? parsed.activeView
       : DEFAULT_VIEWER_DISPLAY_PREFS.activeView;
     const view = rawView === 'solid' ? rawView : DEFAULT_VIEWER_DISPLAY_PREFS.activeView;
-    const storedCamera = parsed.activeCamera as CameraPreset | 'side' | undefined;
-    const parsedCamera = storedCamera === 'side' ? 'right' : storedCamera;
-    const camera = CAMERA_ANGLES.some((angle) => angle.key === parsedCamera)
-      ? parsedCamera
-      : DEFAULT_VIEWER_DISPLAY_PREFS.activeCamera;
     const material = MATERIAL_PRESETS.some((preset) => preset.key === parsed.materialPreset)
       ? parsed.materialPreset
       : DEFAULT_VIEWER_DISPLAY_PREFS.materialPreset;
     return {
       activeView: view as ViewMode,
-      activeCamera: camera as CameraPreset,
+      activeCamera: DEFAULT_VIEWER_DISPLAY_PREFS.activeCamera,
       showDimensions:
         typeof parsed.showDimensions === 'boolean'
           ? parsed.showDimensions
@@ -991,13 +985,13 @@ export default function ModelDetailPage() {
   useEffect(() => {
     saveViewerDisplayPrefs({
       activeView,
-      activeCamera,
+      activeCamera: DEFAULT_VIEWER_DISPLAY_PREFS.activeCamera,
       showDimensions,
       materialPreset,
       showEdges,
       showAxis,
     });
-  }, [activeView, activeCamera, showDimensions, materialPreset, showEdges, showAxis]);
+  }, [activeView, showDimensions, materialPreset, showEdges, showAxis]);
 
   const handleResetViewerDisplay = useCallback(() => {
     setActiveView(DEFAULT_VIEWER_DISPLAY_PREFS.activeView);

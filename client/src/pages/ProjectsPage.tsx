@@ -5,15 +5,16 @@ import useSWR from 'swr';
 import { projectApi, type Project } from '../api/projects';
 import { AdminPageShell } from '../components/shared/AdminPageShell';
 import Icon from '../components/shared/Icon';
+import InfiniteLoadTrigger from '../components/shared/InfiniteLoadTrigger';
 import LoadingSpinner from '../components/shared/LoadingSpinner';
 import LoginConfirmDialog from '../components/shared/LoginConfirmDialog';
-import { isLoginDialogEnabled } from '../components/shared/ProtectedLink';
-import InfiniteLoadTrigger from '../components/shared/InfiniteLoadTrigger';
 import { PageHeader } from '../components/shared/PagePrimitives';
+import { isLoginDialogEnabled } from '../components/shared/ProtectedLink';
 import { useToast } from '../components/shared/Toast';
 import { useDocumentTitle } from '../hooks/useDocumentTitle';
 import { useVisibleItems } from '../hooks/useVisibleItems';
 import { useMediaQuery } from '../layouts/hooks/useMediaQuery';
+import { bottomSheetMotion, dialogPanelMotion, listItemMotion, overlayMotion } from '../lib/motion';
 import { useAuthStore } from '../stores';
 
 function ProjectCard({ project, onDelete }: { project: Project; onDelete: (id: string) => void }) {
@@ -34,7 +35,7 @@ function ProjectCard({ project, onDelete }: { project: Project; onDelete: (id: s
     <div className="relative group">
       <Link
         to={`/projects/${project.id}`}
-        className="block bg-surface-container-high rounded-lg overflow-hidden hover:shadow-[0_12px_24px_rgba(0,0,0,0.4)] transition-all duration-300 border border-outline-variant/10 hover:border-primary/30"
+        className="block bg-surface-container-high rounded-lg overflow-hidden border border-outline-variant/10 transition-[border-color,box-shadow] duration-200 ease-out hover:border-primary/30 hover:shadow-[0_12px_24px_rgba(0,0,0,0.4)]"
       >
         <div className="h-32 bg-surface-container-lowest flex items-center justify-center relative">
           <Icon name="folder" size={48} className="text-on-surface-variant/20" />
@@ -58,7 +59,7 @@ function ProjectCard({ project, onDelete }: { project: Project; onDelete: (id: s
       </Link>
       <button
         onClick={handleDelete}
-        className={`absolute top-2 left-2 p-1.5 rounded-sm transition-all z-10 ${
+        className={`absolute top-2 left-2 p-1.5 rounded-sm transition-[background-color,color,opacity] duration-150 ease-out z-10 ${
           confirming
             ? 'bg-error text-on-error'
             : 'bg-surface-container-high/80 text-on-surface-variant opacity-0 group-hover:opacity-100 hover:text-error'
@@ -169,12 +170,7 @@ export default function ProjectsPage() {
           <>
             <div className={`grid gap-4 ${isDesktop ? 'grid-cols-3' : 'grid-cols-1 sm:grid-cols-2'}`}>
               {visibleProjects.map((p) => (
-                <motion.div
-                  key={p.id}
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.3 }}
-                >
+                <motion.div key={p.id} variants={listItemMotion} initial="initial" animate="animate">
                   <ProjectCard project={p} onDelete={handleDelete} />
                 </motion.div>
               ))}
@@ -188,18 +184,20 @@ export default function ProjectsPage() {
       <AnimatePresence>
         {showCreate && (
           <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
+            variants={overlayMotion}
+            initial="initial"
+            animate="animate"
+            exit="exit"
             className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/60 backdrop-blur-sm p-3 sm:p-4"
             role="dialog"
             aria-modal="true"
             onClick={() => setShowCreate(false)}
           >
             <motion.div
-              initial={{ opacity: 0, scale: 0.95, y: 20 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.95, y: 20 }}
+              variants={isDesktop ? dialogPanelMotion : bottomSheetMotion}
+              initial="initial"
+              animate="animate"
+              exit="exit"
               className="bg-surface-container-low rounded-t-lg sm:rounded-lg w-full max-w-md p-4 sm:p-6 shadow-2xl border border-outline-variant/20 max-h-[calc(100dvh-1.5rem)] overflow-y-auto"
               onClick={(e) => e.stopPropagation()}
             >

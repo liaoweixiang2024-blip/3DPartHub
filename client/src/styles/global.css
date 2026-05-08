@@ -280,6 +280,30 @@ body {
   overscroll-behavior-y: contain;
 }
 
+.home-scroll-container {
+  -webkit-overflow-scrolling: touch;
+  overflow-anchor: none;
+  overscroll-behavior-y: contain;
+  scroll-behavior: auto;
+}
+
+@media (max-width: 767px) {
+  @supports (content-visibility: auto) {
+    [data-home-model-id] {
+      content-visibility: auto;
+      contain-intrinsic-size: auto 260px;
+    }
+
+    [data-home-model-layout='list'] {
+      contain-intrinsic-size: auto 128px;
+    }
+
+    [data-home-model-layout='mobile'] {
+      contain-intrinsic-size: auto 225px;
+    }
+  }
+}
+
 .custom-scrollbar::-webkit-scrollbar,
 .selection-scrollbarless::-webkit-scrollbar {
   display: none;
@@ -310,6 +334,33 @@ body {
   animation: fade-in 0.3s ease-out;
 }
 
+@keyframes app-page-section-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.app-page-section-in {
+  animation: app-page-section-in 180ms cubic-bezier(0.2, 0, 0, 1) both;
+}
+
+.app-page-section-in-delayed {
+  animation: app-page-section-in 220ms cubic-bezier(0.2, 0, 0, 1) 40ms both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-fade-in,
+  .app-page-section-in,
+  .app-page-section-in-delayed {
+    animation: none;
+  }
+}
+
 @keyframes selection-tab-panel-in {
   from {
     opacity: 0;
@@ -323,12 +374,4 @@ body {
 .selection-tab-panel {
   animation: selection-tab-panel-in 0.12s ease-out;
   will-change: opacity;
-}
-
-/* Skip rendering off-screen model cards for scroll perf */
-@media (prefers-reduced-motion: no-preference) {
-  [data-home-model-id] {
-    content-visibility: auto;
-    contain-intrinsic-size: 0 280px;
-  }
 }

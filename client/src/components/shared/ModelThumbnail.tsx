@@ -9,6 +9,7 @@ interface ModelThumbnailProps {
   src?: string | null;
   alt?: string;
   className?: string;
+  loading?: 'eager' | 'lazy';
   /** Extra className applied to the placeholder wrapper */
   placeholderClassName?: string;
 }
@@ -48,7 +49,13 @@ function PlaceholderSVG() {
   );
 }
 
-export default function ModelThumbnail({ src, alt, className, placeholderClassName }: ModelThumbnailProps) {
+export default function ModelThumbnail({
+  src,
+  alt,
+  className,
+  loading = 'lazy',
+  placeholderClassName,
+}: ModelThumbnailProps) {
   const [failed, setFailed] = useState(false);
 
   useEffect(() => {
@@ -56,7 +63,17 @@ export default function ModelThumbnail({ src, alt, className, placeholderClassNa
   }, [src]);
 
   if (src && !failed) {
-    return <img src={src} alt={alt || ''} className={className} loading="lazy" onError={() => setFailed(true)} />;
+    return (
+      <img
+        src={src}
+        alt={alt || ''}
+        className={className}
+        loading={loading}
+        decoding="async"
+        draggable={false}
+        onError={() => setFailed(true)}
+      />
+    );
   }
 
   return (

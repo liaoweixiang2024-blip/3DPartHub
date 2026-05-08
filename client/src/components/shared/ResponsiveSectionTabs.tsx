@@ -216,7 +216,7 @@ export default function ResponsiveSectionTabs({
                       event.stopPropagation();
                       selectTab(tab.value);
                     }}
-                    className={`flex min-h-11 items-center gap-2.5 rounded-lg border px-2.5 py-2 text-left transition-all ${
+                    className={`flex min-h-11 items-center gap-2.5 rounded-lg border px-2.5 py-2 text-left transition-[background-color,border-color,box-shadow,color] duration-150 ease-out ${
                       active
                         ? 'border-primary-container/35 bg-primary-container text-on-primary shadow-sm'
                         : 'border-outline-variant/10 bg-surface-container-low text-on-surface active:bg-surface-container-high'
@@ -287,7 +287,7 @@ export default function ResponsiveSectionTabs({
                       event.stopPropagation();
                       selectTab(tab.value);
                     }}
-                    className={`flex min-h-12 w-full items-center gap-2.5 rounded-xl border px-2.5 py-2 text-left transition-all ${
+                    className={`flex min-h-12 w-full items-center gap-2.5 rounded-xl border px-2.5 py-2 text-left transition-[background-color,border-color,box-shadow,color] duration-150 ease-out ${
                       active
                         ? 'border-primary-container/35 bg-primary-container text-on-primary shadow-sm'
                         : 'border-outline-variant/10 bg-surface-container-low text-on-surface hover:border-outline-variant/20 hover:bg-surface-container'

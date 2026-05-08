@@ -8,14 +8,14 @@ import { AdminPageShell } from '../components/shared/AdminPageShell';
 import ConfirmDialog from '../components/shared/ConfirmDialog';
 import Icon from '../components/shared/Icon';
 import InfiniteLoadTrigger from '../components/shared/InfiniteLoadTrigger';
+import LoadingSpinner from '../components/shared/LoadingSpinner';
 import ModelThumbnail from '../components/shared/ModelThumbnail';
-
 import { useToast } from '../components/shared/Toast';
 import { useDocumentTitle } from '../hooks/useDocumentTitle';
 import { useVisibleItems } from '../hooks/useVisibleItems';
 import { useMediaQuery } from '../layouts/hooks/useMediaQuery';
 import { getErrorMessage } from '../lib/errorNotifications';
-import LoadingSpinner from '../components/shared/LoadingSpinner';
+import { toolbarMotion } from '../lib/motion';
 
 function formatFileSize(bytes: number): string {
   if (!bytes) return '-';
@@ -67,9 +67,10 @@ function BatchToolbar({
 }) {
   return (
     <motion.div
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0, y: 20 }}
+      variants={toolbarMotion}
+      initial="initial"
+      animate="animate"
+      exit="exit"
       className="bg-surface-container-high border border-outline-variant/20 rounded-lg px-4 py-3 flex items-center gap-3 shadow-lg"
     >
       <span className="text-sm text-on-surface font-medium">已选 {selectedCount} 个</span>
@@ -266,7 +267,7 @@ function DesktopContent() {
               {selectMode && (
                 <button
                   onClick={() => toggleSelect(item.id)}
-                  className={`ml-3 shrink-0 w-5 h-5 rounded-sm border-2 flex items-center justify-center transition-all ${
+                  className={`ml-3 shrink-0 w-5 h-5 rounded-sm border-2 flex items-center justify-center transition-[background-color,border-color,opacity] duration-150 ease-out ${
                     selected.has(item.id)
                       ? 'bg-primary border-primary'
                       : 'bg-surface/80 border-outline-variant/40 hover:border-primary'
@@ -331,7 +332,7 @@ function MobileContent() {
   const [selectMode, setSelectMode] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [confirmOpen, setConfirmOpen] = useState(false);
-  const downloads = data || [];
+  const downloads = useMemo(() => data || [], [data]);
   const {
     visibleItems: visibleDownloads,
     hasMore,
@@ -434,9 +435,10 @@ function MobileContent() {
       <AnimatePresence>
         {selectMode && (
           <motion.div
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: 10 }}
+            variants={toolbarMotion}
+            initial="initial"
+            animate="animate"
+            exit="exit"
             className="mb-3 flex items-center gap-2 bg-surface-container-high rounded-lg px-3 py-2.5 border border-outline-variant/10"
           >
             <button onClick={selectAll} className="text-xs text-primary">
@@ -480,7 +482,7 @@ function MobileContent() {
               {selectMode && (
                 <button
                   onClick={() => toggleSelect(item.id)}
-                  className={`absolute top-2 left-2 z-10 w-5 h-5 rounded-full border-2 flex items-center justify-center transition-all ${
+                  className={`absolute top-2 left-2 z-10 w-5 h-5 rounded-full border-2 flex items-center justify-center transition-[background-color,border-color,opacity] duration-150 ease-out ${
                     selected.has(item.id) ? 'bg-primary border-primary' : 'bg-surface/80 border-outline-variant/40'
                   }`}
                 >

@@ -1,4 +1,5 @@
 import { AnimatePresence, motion } from 'framer-motion';
+import { dialogPanelMotion, overlayMotion } from '../../lib/motion';
 import Icon from './Icon';
 
 interface ConfirmDialogProps {
@@ -30,16 +31,18 @@ export default function ConfirmDialog({
     <AnimatePresence>
       {open && (
         <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          exit={{ opacity: 0 }}
+          variants={overlayMotion}
+          initial="initial"
+          animate="animate"
+          exit="exit"
           className="fixed inset-0 z-[10000] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4"
           onClick={onClose}
         >
           <motion.div
-            initial={{ scale: 0.9, opacity: 0 }}
-            animate={{ scale: 1, opacity: 1 }}
-            exit={{ scale: 0.9, opacity: 0 }}
+            variants={dialogPanelMotion}
+            initial="initial"
+            animate="animate"
+            exit="exit"
             className="bg-surface-container-high rounded-xl shadow-2xl p-6 w-full max-w-xs border border-outline-variant/20"
             onClick={(e) => e.stopPropagation()}
           >

@@ -1,14 +1,5 @@
 import { motion, AnimatePresence } from 'framer-motion';
-import {
-  useState,
-  useEffect,
-  useLayoutEffect,
-  useMemo,
-  useCallback,
-  useRef,
-  type MouseEvent,
-  type UIEvent,
-} from 'react';
+import { useState, useEffect, useLayoutEffect, useMemo, useCallback, useRef, memo, type MouseEvent } from 'react';
 import { createPortal } from 'react-dom';
 import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import useSWR from 'swr';
@@ -39,6 +30,7 @@ import {
   saveHomeSearchQuery,
   type HomeSearchEventDetail,
 } from '../lib/homeSearchState';
+import { overlayMotion, popoverMotion, sideSheetMotion } from '../lib/motion';
 import {
   getCachedPublicSettings,
   getAnnouncement,
@@ -242,11 +234,14 @@ function CategorySidebar({
 
 function SkeletonCard() {
   return (
-    <div className="bg-surface-container-high rounded-sm overflow-hidden animate-pulse">
+    <div className="bg-surface-container-high rounded-sm overflow-hidden flex flex-col animate-pulse">
       <div className="aspect-square bg-surface-container-lowest" />
-      <div className="p-2.5 space-y-2">
+      <div className="p-2.5 flex flex-col">
         <div className="h-3 bg-surface-container-lowest rounded w-3/4" />
-        <div className="h-3 bg-surface-container-lowest rounded w-1/2" />
+        <div className="flex items-center gap-2 mt-auto pt-2">
+          <div className="h-8 bg-surface-container-lowest rounded-sm flex-1" />
+          <div className="h-8 bg-surface-container-lowest rounded-sm flex-1" />
+        </div>
       </div>
     </div>
   );
@@ -268,6 +263,36 @@ const HOME_SCROLL_TARGET_PREFIX = 'home_model_scroll_target:';
 const HOME_SCROLL_OFFSET_PREFIX = 'home_model_scroll_offset:';
 const HOME_BROWSE_STATE_PREFIX = 'home_model_browse_state:';
 const HOME_SCROLL_RESTORE_PENDING_KEY = 'home_model_scroll_restore_pending_v1';
+const HOME_DESKTOP_GRID_GAP_PX = 12;
+const HOME_DESKTOP_GRID_FALLBACK_ROW_HEIGHT = 322;
+const HOME_DESKTOP_GRID_OVERSCAN_ROWS = 18;
+const HOME_DESKTOP_GRID_WINDOW_STEP_ROWS = 4;
+const HOME_DESKTOP_VIRTUAL_MIN_ITEMS = 260;
+const HOME_DESKTOP_SMOOTH_WHEEL_MIN_DELTA = 24;
+const HOME_DESKTOP_SMOOTH_WHEEL_LINE_PX = 40;
+const HOME_DESKTOP_SMOOTH_WHEEL_MAX_STEP = 980;
+const HOME_DESKTOP_SMOOTH_WHEEL_MULTIPLIER = 1.24;
+const HOME_DESKTOP_SMOOTH_WHEEL_EASE = 0.086;
+const HOME_DESKTOP_SMOOTH_WHEEL_STOP_DISTANCE = 0.16;
+const HOME_DESKTOP_SMOOTH_WHEEL_SYNC_DISTANCE = 120;
+const HOME_DESKTOP_SMOOTH_WHEEL_REBOUND_DELTA = 180;
+const HOME_DESKTOP_SMOOTH_WHEEL_REBOUND_MS = 220;
+
+type DesktopVirtualMetrics = {
+  scrollTop: number;
+  viewportHeight: number;
+  gridTop: number;
+  rowHeight: number;
+  columnCount: number;
+};
+
+type DesktopSmoothWheelState = {
+  current: number;
+  target: number;
+  frame: number | null;
+  lastSign: number;
+  lastWheelAt: number;
+};
 
 type HomeBrowseState = {
   categoryId: string;
@@ -296,6 +321,35 @@ function normalizeHomePageSizeOptions(policy: Record<string, number>) {
     .map((value) => Math.floor(Number(value) || 0))
     .filter((value) => value > 0);
   return Array.from(new Set(options)).sort((a, b) => a - b);
+}
+
+function getHomeDesktopGridColumnCount() {
+  if (typeof window === 'undefined') return 5;
+  const width = window.innerWidth;
+  if (width >= 1280) return 5;
+  if (width >= 1024) return 4;
+  if (width >= 768) return 3;
+  return 2;
+}
+
+function areDesktopVirtualMetricsEqual(a: DesktopVirtualMetrics, b: DesktopVirtualMetrics) {
+  return (
+    a.scrollTop === b.scrollTop &&
+    a.viewportHeight === b.viewportHeight &&
+    a.gridTop === b.gridTop &&
+    a.rowHeight === b.rowHeight &&
+    a.columnCount === b.columnCount
+  );
+}
+
+function clampHomeScrollTop(value: number, max: number) {
+  return Math.min(max, Math.max(0, value));
+}
+
+function normalizeHomeWheelDelta(event: globalThis.WheelEvent, container: HTMLElement) {
+  if (event.deltaMode === 1) return event.deltaY * HOME_DESKTOP_SMOOTH_WHEEL_LINE_PX;
+  if (event.deltaMode === 2) return event.deltaY * container.clientHeight;
+  return event.deltaY;
 }
 
 function buildHomeReturnPath() {
@@ -448,6 +502,22 @@ function getHomeModelElement(container: HTMLElement, modelId: string) {
   );
 }
 
+function jumpHomeScrollTo(container: HTMLElement, top: number) {
+  container.scrollTop = Math.max(0, top);
+}
+
+function restoreHomeScrollToModel(container: HTMLElement, modelId: string, savedOffset: number | null) {
+  const target = getHomeModelElement(container, modelId);
+  if (!target) return false;
+
+  const containerRect = container.getBoundingClientRect();
+  const targetRect = target.getBoundingClientRect();
+  const offset = savedOffset ?? 0;
+  const top = container.scrollTop + targetRect.top - containerRect.top - offset;
+  jumpHomeScrollTo(container, top);
+  return true;
+}
+
 function getPendingHomeRestoreKey() {
   if (typeof window === 'undefined') return null;
   try {
@@ -468,9 +538,10 @@ function clearPendingHomeRestore(restoreKey: string) {
   }
 }
 
-function ProductCard({
+function ProductCardInner({
   product,
   onDownload,
+  imageLoading = 'lazy',
   returnPath,
   homeBrowseState,
   onBeforeOpen,
@@ -485,6 +556,7 @@ function ProductCard({
 }: {
   product: Product;
   onDownload: (id: string) => void;
+  imageLoading?: 'eager' | 'lazy';
   returnPath: string;
   homeBrowseState: HomeBrowseState;
   onBeforeOpen?: (modelId: string) => void;
@@ -587,10 +659,10 @@ function ProductCard({
 
   const manageOverlay = manageOpen ? (
     <motion.div
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      exit={{ opacity: 0 }}
-      transition={{ duration: 0.12 }}
+      variants={popoverMotion}
+      initial="initial"
+      animate="animate"
+      exit="exit"
       className="absolute inset-0 z-20 bg-surface-container-high text-on-surface"
       draggable={false}
       onDragStartCapture={(event) => event.preventDefault()}
@@ -742,7 +814,8 @@ function ProductCard({
           <ModelThumbnail
             src={product.thumbnailUrl}
             alt={product.name}
-            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+            loading={imageLoading}
+            className="w-full h-full object-cover"
           />
           <div className="absolute top-1.5 left-1.5 flex gap-1">
             {product.formats.map((f, index) => (
@@ -785,16 +858,17 @@ function ProductCard({
             </button>
           </div>
         </div>
-        <AnimatePresence>{manageOverlay}</AnimatePresence>
+        {manageOverlay && <AnimatePresence>{manageOverlay}</AnimatePresence>}
       </>
     );
     const className =
-      'relative flex group bg-surface-container-high rounded-sm overflow-hidden hover:shadow-[0_8px_20px_rgba(0,0,0,0.35)] transition-all duration-300';
+      'relative flex group bg-surface-container-high rounded-sm overflow-hidden transition-[box-shadow] duration-200 ease-out hover:shadow-[0_8px_20px_rgba(0,0,0,0.35)]';
     if (manageOpen) {
       return (
         <div
           onContextMenu={(event) => onContextMenu?.(event, product)}
           data-home-model-id={product.id}
+          data-home-model-layout="list"
           draggable={false}
           className={className}
         >
@@ -809,6 +883,7 @@ function ProductCard({
         onClick={handleCardClick}
         onContextMenu={(event) => onContextMenu?.(event, product)}
         data-home-model-id={product.id}
+        data-home-model-layout="list"
         draggable={false}
         className={className}
       >
@@ -822,22 +897,23 @@ function ProductCard({
         <ModelThumbnail
           src={product.thumbnailUrl}
           alt={product.name}
-          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+          loading={imageLoading}
+          className="w-full h-full object-cover"
         />
         <div className="absolute top-2 left-2 flex gap-1">
           {product.formats.map((f, index) => (
             <FormatTag key={`${f || 'format'}-${index}`} format={f} />
           ))}
         </div>
-        <span className="absolute top-2 right-2 bg-surface-container-highest/80 backdrop-blur-md px-1.5 py-0.5 text-[9px] text-on-surface-variant font-mono rounded-sm border border-outline-variant/30">
+        <span className="absolute top-2 right-2 bg-surface-container-highest/90 px-1.5 py-0.5 text-[9px] text-on-surface-variant font-mono rounded-sm border border-outline-variant/30">
           {product.fileSize}
         </span>
-        <div className="absolute right-2 bottom-2 z-20 flex items-center gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity delay-[240ms]">
+        <div className="home-card-hover-actions absolute right-2 bottom-2 z-20 flex items-center gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity delay-[240ms]">
           {isAuthenticated && (
             <button
               onClick={toggleFavorite}
               disabled={favLoading}
-              className={`inline-flex h-7 w-7 items-center justify-center rounded-full border border-outline-variant/20 bg-surface-container-lowest/40 backdrop-blur-sm transition-colors ${isFavorited ? 'text-primary-container border-primary-container/30' : 'text-on-surface-variant/60 hover:text-on-surface-variant'}`}
+              className={`inline-flex h-7 w-7 items-center justify-center rounded-full border border-outline-variant/20 bg-surface-container-lowest/85 transition-colors ${isFavorited ? 'text-primary-container border-primary-container/30' : 'text-on-surface-variant/60 hover:text-on-surface-variant'}`}
               aria-label={isFavorited ? '取消收藏' : '收藏'}
               data-tooltip-ignore
             >
@@ -878,16 +954,17 @@ function ProductCard({
           </button>
         </div>
       </div>
-      <AnimatePresence>{manageOverlay}</AnimatePresence>
+      {manageOverlay && <AnimatePresence>{manageOverlay}</AnimatePresence>}
     </>
   );
   const className =
-    'block group bg-surface-container-high rounded-sm overflow-hidden hover:shadow-[0_12px_24px_rgba(0,0,0,0.4)] transition-all duration-300 flex flex-col relative';
+    'block group bg-surface-container-high rounded-sm overflow-hidden transition-[box-shadow] duration-200 ease-out hover:shadow-[0_12px_24px_rgba(0,0,0,0.4)] flex flex-col relative';
   if (manageOpen) {
     return (
       <div
         onContextMenu={(event) => onContextMenu?.(event, product)}
         data-home-model-id={product.id}
+        data-home-model-layout="grid"
         draggable={false}
         className={className}
       >
@@ -902,6 +979,7 @@ function ProductCard({
       onClick={handleCardClick}
       onContextMenu={(event) => onContextMenu?.(event, product)}
       data-home-model-id={product.id}
+      data-home-model-layout="grid"
       draggable={false}
       className={className}
     >
@@ -909,6 +987,22 @@ function ProductCard({
     </Link>
   );
 }
+
+const ProductCard = memo(ProductCardInner, (prev, next) => {
+  if (prev.product.id !== next.product.id) return false;
+  if (prev.product.name !== next.product.name) return false;
+  if (prev.product.thumbnailUrl !== next.product.thumbnailUrl) return false;
+  if (prev.imageLoading !== next.imageLoading) return false;
+  if (prev.product.fileSize !== next.product.fileSize) return false;
+  if (prev.product.variantCount !== next.product.variantCount) return false;
+  if (prev.product.formats !== next.product.formats) return false;
+  if (prev.manageOpen !== next.manageOpen) return false;
+  if (prev.variant !== next.variant) return false;
+  if (prev.onDownload !== next.onDownload) return false;
+  if (prev.onBeforeOpen !== next.onBeforeOpen) return false;
+  if (prev.onContextMenu !== next.onContextMenu) return false;
+  return true;
+});
 
 function MobileDrawer({
   open,
@@ -939,18 +1033,18 @@ function MobileDrawer({
       {open && (
         <>
           <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.25, ease: [0.4, 0, 0.2, 1] }}
+            variants={overlayMotion}
+            initial="initial"
+            animate="animate"
+            exit="exit"
             className="fixed inset-0 bg-black/50 z-[260]"
             onClick={onClose}
           />
           <motion.aside
-            initial={{ x: '-100%', opacity: 0.6 }}
-            animate={{ x: 0, opacity: 1 }}
-            exit={{ x: '-100%', opacity: 0.6 }}
-            transition={{ duration: 0.28, ease: [0.32, 0.72, 0, 1] }}
+            variants={sideSheetMotion}
+            initial="initial"
+            animate="animate"
+            exit="exit"
             className="fixed left-0 top-0 w-[min(82vw,280px)] h-dvh bg-surface-container-low z-[270] flex flex-col overflow-y-auto scrollbar-hidden shadow-2xl"
             style={{
               paddingTop: 'env(safe-area-inset-top, 0px)',
@@ -1083,12 +1177,15 @@ function ProductCardMobile({
 }) {
   const detailPath = `/model/${product.id}`;
   return (
-    <div className="bg-surface-container-high rounded-sm overflow-hidden flex flex-col">
+    <div
+      data-home-model-id={product.id}
+      data-home-model-layout="mobile"
+      className="home-model-card bg-surface-container-high rounded-sm overflow-hidden flex flex-col"
+    >
       <Link
         to={detailPath}
         state={{ from: returnPath, homeBrowseState }}
         onClick={() => onBeforeOpen?.(product.id)}
-        data-home-model-id={product.id}
         className="block"
       >
         <div className="h-[140px] bg-surface-container-lowest relative overflow-hidden flex items-center justify-center">
@@ -1098,7 +1195,7 @@ function ProductCardMobile({
               <FormatTag key={`${f || 'format'}-${index}`} format={f} size="xs" />
             ))}
           </div>
-          <span className="absolute top-1.5 right-1.5 text-[7px] text-on-surface-variant/50 bg-black/25 backdrop-blur-sm px-1 py-px rounded-sm">
+          <span className="absolute top-1.5 right-1.5 text-[7px] text-on-surface-variant/50 bg-black/35 px-1 py-px rounded-sm">
             {product.fileSize}
           </span>
         </div>
@@ -1162,7 +1259,11 @@ export default function HomePage() {
   const { isAuthenticated, user } = useAuthStore();
   const isAdmin = user?.role === 'ADMIN';
   const [browseBlocked, setBrowseBlocked] = useState(false);
+  const [restoreVisualLocked, setRestoreVisualLocked] = useState(() =>
+    Boolean(initialHomeState?.restoreKey && getPendingHomeRestoreKey() === initialHomeState.restoreKey),
+  );
   const [contextMenu, setContextMenu] = useState<{ product: Product } | null>(null);
+  const contextMenuOpenRef = useRef(false);
   const [deleteTarget, setDeleteTarget] = useState<Product | null>(null);
   const [deletingModel, setDeletingModel] = useState(false);
 
@@ -1200,6 +1301,23 @@ export default function HomePage() {
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const [sortBy, setSortBy] = useState(() => initialHomeState?.sort || normalizeSortParam(searchParams.get('sort')));
   const scrollContainerRef = useRef<HTMLElement | null>(null);
+  const desktopVirtualOuterRef = useRef<HTMLDivElement | null>(null);
+  const desktopGridMeasureRef = useRef<HTMLDivElement | null>(null);
+  const desktopVirtualFrameRef = useRef<number | null>(null);
+  const desktopSmoothWheelRef = useRef<DesktopSmoothWheelState>({
+    current: 0,
+    target: 0,
+    frame: null,
+    lastSign: 0,
+    lastWheelAt: 0,
+  });
+  const [desktopVirtualMetrics, setDesktopVirtualMetrics] = useState<DesktopVirtualMetrics>(() => ({
+    scrollTop: 0,
+    viewportHeight: 900,
+    gridTop: 0,
+    rowHeight: HOME_DESKTOP_GRID_FALLBACK_ROW_HEIGHT,
+    columnCount: getHomeDesktopGridColumnCount(),
+  }));
   const restoreFrameRef = useRef<number | null>(null);
   const consumedHomeStateKeyRef = useRef<string | null>(null);
   const isRestoringScrollRef = useRef(false);
@@ -1207,6 +1325,14 @@ export default function HomePage() {
   // Pull-to-refresh (mobile only)
   const pullStateRef = useRef<'idle' | 'pulling' | 'ready' | 'refreshing'>('idle');
   const pullStartY = useRef(0);
+  const pullVisualRef = useRef<{ state: 'idle' | 'pulling' | 'ready' | 'refreshing'; offset: number }>({
+    state: 'idle',
+    offset: 0,
+  });
+  const pendingPullVisualRef = useRef<{ state: 'idle' | 'pulling' | 'ready' | 'refreshing'; offset: number } | null>(
+    null,
+  );
+  const pullMoveFrameRef = useRef<number | null>(null);
   const [pullOffset, setPullOffset] = useState(0);
   const [pullState, setPullState] = useState<'idle' | 'pulling' | 'ready' | 'refreshing'>('idle');
   const pullThreshold = typeof window !== 'undefined' ? Math.round(window.innerHeight / 3) : 200;
@@ -1358,6 +1484,242 @@ export default function HomePage() {
   }, [serverData]);
   const productIdsKey = useMemo(() => products.map((product) => product.id).join('|'), [products]);
 
+  useEffect(() => {
+    if (!isDesktop || restoreVisualLocked) return;
+    const container = scrollContainerRef.current;
+    if (!container) return;
+    if (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) return;
+
+    const state = desktopSmoothWheelRef.current;
+    const getMaxScrollTop = () => Math.max(0, container.scrollHeight - container.clientHeight);
+    const cancelSmoothWheel = () => {
+      if (state.frame != null) {
+        window.cancelAnimationFrame(state.frame);
+        state.frame = null;
+      }
+      state.current = container.scrollTop;
+      state.target = container.scrollTop;
+      state.lastSign = 0;
+      state.lastWheelAt = 0;
+    };
+
+    const animateSmoothWheel = () => {
+      const maxScrollTop = getMaxScrollTop();
+      state.target = clampHomeScrollTop(state.target, maxScrollTop);
+      const distance = state.target - state.current;
+
+      if (Math.abs(distance) <= HOME_DESKTOP_SMOOTH_WHEEL_STOP_DISTANCE) {
+        state.current = state.target;
+        container.scrollTop = state.target;
+        state.frame = null;
+        state.lastSign = 0;
+        state.lastWheelAt = 0;
+        return;
+      }
+
+      state.current += distance * HOME_DESKTOP_SMOOTH_WHEEL_EASE;
+      container.scrollTop = state.current;
+      state.frame = window.requestAnimationFrame(animateSmoothWheel);
+    };
+
+    const handleWheel = (event: globalThis.WheelEvent) => {
+      if (event.defaultPrevented || event.ctrlKey || event.metaKey || event.altKey) return;
+      if (event.shiftKey && Math.abs(event.deltaX) > Math.abs(event.deltaY)) return;
+
+      const targetElement = event.target instanceof Element ? event.target : null;
+      const containerRect = container.getBoundingClientRect();
+      const isInsideContainer =
+        container.contains(targetElement) ||
+        (event.clientX >= containerRect.left &&
+          event.clientX <= containerRect.right &&
+          event.clientY >= containerRect.top &&
+          event.clientY <= containerRect.bottom);
+      if (!isInsideContainer) return;
+
+      if (
+        targetElement?.closest(
+          'input, textarea, select, [contenteditable="true"], [role="listbox"], [data-home-smooth-wheel-ignore]',
+        )
+      ) {
+        cancelSmoothWheel();
+        return;
+      }
+
+      const rawDelta = normalizeHomeWheelDelta(event, container);
+      if (!Number.isFinite(rawDelta) || rawDelta === 0) return;
+
+      // Small high-frequency pixel deltas are usually trackpad gestures and already feel native.
+      if (event.deltaMode === 0 && Math.abs(rawDelta) < HOME_DESKTOP_SMOOTH_WHEEL_MIN_DELTA) {
+        cancelSmoothWheel();
+        return;
+      }
+
+      const maxScrollTop = getMaxScrollTop();
+      if (maxScrollTop <= 0) return;
+
+      const currentScrollTop = container.scrollTop;
+      const sign = Math.sign(rawDelta);
+      if ((sign < 0 && currentScrollTop <= 0) || (sign > 0 && currentScrollTop >= maxScrollTop)) {
+        cancelSmoothWheel();
+        return;
+      }
+
+      const now = performance.now();
+      const isReboundDelta =
+        state.frame != null &&
+        state.lastSign !== 0 &&
+        sign !== state.lastSign &&
+        Math.abs(rawDelta) < HOME_DESKTOP_SMOOTH_WHEEL_REBOUND_DELTA &&
+        now - state.lastWheelAt < HOME_DESKTOP_SMOOTH_WHEEL_REBOUND_MS;
+      if (isReboundDelta) {
+        event.preventDefault();
+        return;
+      }
+
+      event.preventDefault();
+
+      if (
+        state.frame == null ||
+        state.lastSign !== sign ||
+        Math.abs(currentScrollTop - state.current) > HOME_DESKTOP_SMOOTH_WHEEL_SYNC_DISTANCE
+      ) {
+        state.current = currentScrollTop;
+        state.target = currentScrollTop;
+      }
+
+      state.lastSign = sign;
+      state.lastWheelAt = now;
+      const step = Math.max(
+        -HOME_DESKTOP_SMOOTH_WHEEL_MAX_STEP,
+        Math.min(HOME_DESKTOP_SMOOTH_WHEEL_MAX_STEP, rawDelta * HOME_DESKTOP_SMOOTH_WHEEL_MULTIPLIER),
+      );
+      state.target = clampHomeScrollTop(state.target + step, maxScrollTop);
+
+      if (state.frame == null) {
+        state.frame = window.requestAnimationFrame(animateSmoothWheel);
+      }
+    };
+
+    window.addEventListener('wheel', handleWheel, { passive: false, capture: true });
+    return () => {
+      window.removeEventListener('wheel', handleWheel, { capture: true });
+      cancelSmoothWheel();
+    };
+  }, [isDesktop, restoreVisualLocked]);
+
+  useEffect(() => {
+    if (!isDesktop || viewMode !== 'grid' || products.length <= HOME_DESKTOP_VIRTUAL_MIN_ITEMS) return;
+    const container = scrollContainerRef.current;
+    if (!container) return;
+
+    const readMetrics = () => {
+      desktopVirtualFrameRef.current = null;
+      const scrollTop = Math.round(container.scrollTop);
+      const viewportHeight = Math.round(container.clientHeight);
+      const gridTop = Math.round(desktopVirtualOuterRef.current?.offsetTop ?? 0);
+      const columnCount = getHomeDesktopGridColumnCount();
+      setDesktopVirtualMetrics((current) => {
+        const rowHeight = Math.max(1, current.rowHeight);
+        const relativeScrollTop = Math.max(0, scrollTop - gridTop);
+        // Quantize to rows so React updates only when the rendered window actually changes.
+        const virtualScrollTop = gridTop + Math.floor(relativeScrollTop / rowHeight) * rowHeight;
+        const nextBase = {
+          scrollTop: virtualScrollTop,
+          viewportHeight,
+          gridTop,
+          columnCount,
+        };
+        const next = { ...current, ...nextBase };
+        return areDesktopVirtualMetricsEqual(current, next) ? current : next;
+      });
+    };
+
+    const scheduleMetrics = () => {
+      if (desktopVirtualFrameRef.current != null) return;
+      desktopVirtualFrameRef.current = window.requestAnimationFrame(readMetrics);
+    };
+
+    readMetrics();
+    container.addEventListener('scroll', scheduleMetrics, { passive: true });
+    window.addEventListener('resize', scheduleMetrics);
+    return () => {
+      container.removeEventListener('scroll', scheduleMetrics);
+      window.removeEventListener('resize', scheduleMetrics);
+      if (desktopVirtualFrameRef.current != null) {
+        window.cancelAnimationFrame(desktopVirtualFrameRef.current);
+        desktopVirtualFrameRef.current = null;
+      }
+    };
+  }, [isDesktop, productIdsKey, products.length, viewMode]);
+
+  useLayoutEffect(() => {
+    if (!isDesktop || viewMode !== 'grid' || products.length <= HOME_DESKTOP_VIRTUAL_MIN_ITEMS) return;
+    const grid = desktopGridMeasureRef.current;
+    if (!grid) return;
+
+    let measureFrame: number | null = null;
+    const measureRowHeight = () => {
+      measureFrame = null;
+      const firstCard = grid.querySelector<HTMLElement>('[data-home-model-id]');
+      if (!firstCard) return;
+      const nextRowHeight = Math.max(1, Math.ceil(firstCard.getBoundingClientRect().height + HOME_DESKTOP_GRID_GAP_PX));
+      setDesktopVirtualMetrics((current) => {
+        if (current.rowHeight === nextRowHeight) return current;
+        return { ...current, rowHeight: nextRowHeight };
+      });
+    };
+    const scheduleMeasure = () => {
+      if (measureFrame != null) return;
+      measureFrame = window.requestAnimationFrame(measureRowHeight);
+    };
+
+    scheduleMeasure();
+    const observer = new ResizeObserver(scheduleMeasure);
+    observer.observe(grid);
+    window.addEventListener('resize', scheduleMeasure);
+    return () => {
+      observer.disconnect();
+      window.removeEventListener('resize', scheduleMeasure);
+      if (measureFrame != null) window.cancelAnimationFrame(measureFrame);
+    };
+  }, [isDesktop, productIdsKey, products.length, restoreVisualLocked, viewMode]);
+
+  const shouldVirtualizeDesktopGrid =
+    isDesktop && viewMode === 'grid' && !restoreVisualLocked && products.length > HOME_DESKTOP_VIRTUAL_MIN_ITEMS;
+
+  const desktopVirtualWindow = useMemo(() => {
+    if (!shouldVirtualizeDesktopGrid) {
+      return {
+        products,
+        topOffset: 0,
+        totalHeight: 0,
+      };
+    }
+
+    const columnCount = Math.max(1, desktopVirtualMetrics.columnCount);
+    const rowHeight = Math.max(1, desktopVirtualMetrics.rowHeight);
+    const totalRows = Math.max(1, Math.ceil(products.length / columnCount));
+    const relativeScrollTop = Math.max(0, desktopVirtualMetrics.scrollTop - desktopVirtualMetrics.gridTop);
+    const rawStartRow = Math.max(0, Math.floor(relativeScrollTop / rowHeight) - HOME_DESKTOP_GRID_OVERSCAN_ROWS);
+    const startRow = Math.floor(rawStartRow / HOME_DESKTOP_GRID_WINDOW_STEP_ROWS) * HOME_DESKTOP_GRID_WINDOW_STEP_ROWS;
+    const endRow = Math.min(
+      totalRows,
+      Math.ceil(
+        (Math.ceil((relativeScrollTop + desktopVirtualMetrics.viewportHeight) / rowHeight) +
+          HOME_DESKTOP_GRID_OVERSCAN_ROWS) /
+          HOME_DESKTOP_GRID_WINDOW_STEP_ROWS,
+      ) * HOME_DESKTOP_GRID_WINDOW_STEP_ROWS,
+    );
+    const startIndex = Math.min(products.length, startRow * columnCount);
+    const endIndex = Math.min(products.length, Math.max(startIndex + columnCount, endRow * columnCount));
+
+    return {
+      products: products.slice(startIndex, endIndex),
+      topOffset: startRow * rowHeight,
+      totalHeight: Math.max(0, totalRows * rowHeight - HOME_DESKTOP_GRID_GAP_PX),
+    };
+  }, [desktopVirtualMetrics, products, shouldVirtualizeDesktopGrid]);
+
   const totalItems = serverData?.total || 0;
   const displayTotalItems =
     activeCategory === 'all' && !searchQuery.trim() ? totalModelCount || totalItems : totalItems;
@@ -1439,66 +1801,52 @@ export default function HomePage() {
     writeHomeBrowseStateToCurrentHistory(homeBrowseState);
   }, [homeBrowseState, homeRestoreKey]);
 
-  const handleHomeScroll = useCallback(
-    (event: UIEvent<HTMLElement>) => {
+  useEffect(() => {
+    if (!restoreVisualLocked) return;
+    const pendingRestoreKey = getPendingHomeRestoreKey();
+    if (!pendingRestoreKey || (!isLoading && pendingRestoreKey !== homeRestoreKey)) {
+      setRestoreVisualLocked(false);
+    }
+  }, [homeRestoreKey, isLoading, restoreVisualLocked]);
+
+  useEffect(() => {
+    if (!contextMenu) return;
+    const container = scrollContainerRef.current;
+    if (!container) return;
+    const handleScroll = () => {
       if (isRestoringScrollRef.current) return;
-      saveHomeScrollPosition(homeRestoreKey, event.currentTarget.scrollTop);
-      setContextMenu((current) => (current ? null : current));
-    },
-    [homeRestoreKey],
-  );
+      contextMenuOpenRef.current = false;
+      setContextMenu(null);
+    };
+    container.addEventListener('scroll', handleScroll, { passive: true });
+    return () => {
+      container.removeEventListener('scroll', handleScroll);
+    };
+  }, [contextMenu, isDesktop]);
 
-  // ─── Pull-to-refresh touch handlers (mobile) ───
-  const handlePullTouchStart = useCallback(
-    (e: React.TouchEvent) => {
-      if (isDesktop || pullStateRef.current === 'refreshing') return;
-      const container = scrollContainerRef.current;
-      if (!container || container.scrollTop > 0) return;
-      pullStartY.current = e.touches[0].clientY;
-    },
-    [isDesktop],
-  );
+  // ─── Pull-to-refresh touch handling (mobile) ───
+  const commitPullVisual = useCallback((state: 'idle' | 'pulling' | 'ready' | 'refreshing', offset: number) => {
+    const next = { state, offset: Math.max(0, Math.round(offset)) };
+    pullStateRef.current = state;
+    pendingPullVisualRef.current = next;
+    if (pullMoveFrameRef.current != null) return;
+    pullMoveFrameRef.current = window.requestAnimationFrame(() => {
+      pullMoveFrameRef.current = null;
+      const pending = pendingPullVisualRef.current;
+      pendingPullVisualRef.current = null;
+      if (!pending) return;
+      const current = pullVisualRef.current;
+      if (current.state !== pending.state) setPullState(pending.state);
+      if (current.offset !== pending.offset) setPullOffset(pending.offset);
+      pullVisualRef.current = pending;
+    });
+  }, []);
 
-  const handlePullTouchMove = useCallback(
-    (e: React.TouchEvent) => {
-      if (isDesktop || pullStateRef.current === 'refreshing') return;
-      const container = scrollContainerRef.current;
-      if (!container) return;
-      if (container.scrollTop > 0 && pullStateRef.current === 'idle') return;
-
-      const delta = e.touches[0].clientY - pullStartY.current;
-      if (delta <= 0) {
-        if (pullStateRef.current !== 'idle') {
-          pullStateRef.current = 'idle';
-          setPullState('idle');
-          setPullOffset(0);
-        }
-        return;
-      }
-
-      // Prevent native pull-to-refresh / overscroll
-      if (container.scrollTop <= 0 && pullStateRef.current !== 'idle') {
-        e.preventDefault();
-      }
-
-      // Rubber-band: ease out as user pulls further
-      const resisted = Math.round(pullMaxVisual * (1 - Math.exp(-delta / pullThreshold)));
-      const state = delta >= pullThreshold ? 'ready' : 'pulling';
-      pullStateRef.current = state;
-      setPullState(state);
-      setPullOffset(resisted);
-    },
-    [isDesktop, pullThreshold],
-  );
-
-  const handlePullTouchEnd = useCallback(async () => {
-    if (isDesktop) return;
-    if (pullStateRef.current === 'refreshing') return;
+  const finishPullGesture = useCallback(async () => {
+    if (isDesktop || pullStateRef.current === 'refreshing') return;
 
     if (pullStateRef.current === 'ready') {
-      pullStateRef.current = 'refreshing';
-      setPullState('refreshing');
-      setPullOffset(pullMaxVisual);
+      commitPullVisual('refreshing', pullMaxVisual);
       const started = Date.now();
       try {
         setPage(1);
@@ -1506,18 +1854,75 @@ export default function HomePage() {
       } catch {
         // SWR handles error reporting
       }
-      // Keep the spinner visible at least 800ms so the user sees the animation
+      // Keep the spinner visible at least 800ms so the user sees the animation.
       const elapsed = Date.now() - started;
       if (elapsed < 800) {
         await new Promise((r) => setTimeout(r, 800 - elapsed));
       }
     }
 
-    // Animate back
-    pullStateRef.current = 'idle';
-    setPullState('idle');
-    setPullOffset(0);
-  }, [isDesktop, mutateModels, mutateCategories]);
+    commitPullVisual('idle', 0);
+  }, [commitPullVisual, isDesktop, mutateCategories, mutateModels, pullMaxVisual]);
+
+  useEffect(() => {
+    if (isDesktop) return;
+    const container = scrollContainerRef.current;
+    if (!container) return;
+
+    let trackingPull = false;
+
+    const handleTouchStart = (event: TouchEvent) => {
+      if (pullStateRef.current === 'refreshing' || container.scrollTop > 0) {
+        trackingPull = false;
+        return;
+      }
+      const touch = event.touches[0];
+      if (!touch) return;
+      trackingPull = true;
+      pullStartY.current = touch.clientY;
+    };
+
+    const handleTouchMove = (event: TouchEvent) => {
+      if (!trackingPull || pullStateRef.current === 'refreshing') return;
+      const touch = event.touches[0];
+      if (!touch) return;
+      if (container.scrollTop > 0 && pullStateRef.current === 'idle') {
+        trackingPull = false;
+        return;
+      }
+
+      const delta = touch.clientY - pullStartY.current;
+      if (delta <= 0) {
+        if (pullStateRef.current !== 'idle') commitPullVisual('idle', 0);
+        return;
+      }
+
+      const resisted = pullMaxVisual * (1 - Math.exp(-delta / pullThreshold));
+      commitPullVisual(delta >= pullThreshold ? 'ready' : 'pulling', resisted);
+    };
+
+    const handleTouchEnd = () => {
+      if (!trackingPull && pullStateRef.current === 'idle') return;
+      trackingPull = false;
+      void finishPullGesture();
+    };
+
+    container.addEventListener('touchstart', handleTouchStart, { passive: true });
+    container.addEventListener('touchmove', handleTouchMove, { passive: true });
+    container.addEventListener('touchend', handleTouchEnd, { passive: true });
+    container.addEventListener('touchcancel', handleTouchEnd, { passive: true });
+    return () => {
+      container.removeEventListener('touchstart', handleTouchStart);
+      container.removeEventListener('touchmove', handleTouchMove);
+      container.removeEventListener('touchend', handleTouchEnd);
+      container.removeEventListener('touchcancel', handleTouchEnd);
+      if (pullMoveFrameRef.current != null) {
+        window.cancelAnimationFrame(pullMoveFrameRef.current);
+        pullMoveFrameRef.current = null;
+      }
+      pendingPullVisualRef.current = null;
+    };
+  }, [commitPullVisual, finishPullGesture, isDesktop, pullMaxVisual, pullThreshold]);
 
   const handlePullTransitionEnd = useCallback(() => {
     // Reset after collapse animation
@@ -1531,16 +1936,21 @@ export default function HomePage() {
       if (!isDesktop || !isAdmin) return;
       event.preventDefault();
       event.stopPropagation();
+      contextMenuOpenRef.current = true;
       setContextMenu({ product });
     },
     [isAdmin, isDesktop],
   );
 
   useEffect(() => {
+    contextMenuOpenRef.current = Boolean(contextMenu);
     if (!contextMenu) return;
-    const close = () => setContextMenu(null);
+    const close = () => {
+      contextMenuOpenRef.current = false;
+      setContextMenu(null);
+    };
     const closeWithEscape = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') setContextMenu(null);
+      if (event.key === 'Escape') close();
     };
     window.addEventListener('click', close);
     window.addEventListener('contextmenu', close);
@@ -1618,26 +2028,85 @@ export default function HomePage() {
     setContextMenu(null);
   }, []);
 
+  const closeManagedModelOverlay = useCallback(() => {
+    setContextMenu(null);
+  }, []);
+
+  const handleBeforeOpenModel = useCallback(
+    (modelId: string) => {
+      saveCurrentHomeScroll(true, modelId);
+    },
+    [saveCurrentHomeScroll],
+  );
+
+  const renderDesktopProductCard = useCallback(
+    (product: Product) => (
+      <ProductCard
+        key={product.id}
+        product={product}
+        imageLoading="lazy"
+        onDownload={handleDownload}
+        onContextMenu={handleModelContextMenu}
+        manageOpen={contextMenu?.product.id === product.id}
+        onCloseManage={closeManagedModelOverlay}
+        onOpenManageDetail={openManagedModelDetail}
+        onShareModel={shareManagedModel}
+        onRenameModel={renameManagedModel}
+        onRequestDelete={requestManagedModelDelete}
+        returnPath={modelReturnPath}
+        homeBrowseState={homeBrowseState}
+        onBeforeOpen={handleBeforeOpenModel}
+        variant={viewMode}
+      />
+    ),
+    [
+      closeManagedModelOverlay,
+      contextMenu?.product.id,
+      handleBeforeOpenModel,
+      handleDownload,
+      handleModelContextMenu,
+      homeBrowseState,
+      modelReturnPath,
+      openManagedModelDetail,
+      renameManagedModel,
+      requestManagedModelDelete,
+      shareManagedModel,
+      viewMode,
+    ],
+  );
+
   // Sync layout: restore scrollTop + set chipsStuck before first paint to avoid flash.
   // Must run after data vars (isLoading, homeRestoreKey, products) are declared.
   useLayoutEffect(() => {
-    if (isDesktop) return;
-    // 1. Restore simple scrollTop synchronously
-    if (!isLoading && getPendingHomeRestoreKey() === homeRestoreKey && !readHomeScrollTarget(homeRestoreKey)) {
-      const targetTop = readHomeScrollPosition(homeRestoreKey);
-      if (targetTop != null) {
-        const container = scrollContainerRef.current;
-        if (container) {
+    if (!isLoading && getPendingHomeRestoreKey() === homeRestoreKey) {
+      setRestoreVisualLocked((locked) => (locked ? locked : true));
+      const container = scrollContainerRef.current;
+      const targetModelId = readHomeScrollTarget(homeRestoreKey);
+      if (container && targetModelId) {
+        isRestoringScrollRef.current = true;
+        const savedOffset = readHomeScrollOffset(homeRestoreKey);
+        if (!restoreHomeScrollToModel(container, targetModelId, savedOffset)) {
+          isRestoringScrollRef.current = false;
+        }
+      } else if (container) {
+        // Some paths may restore a plain scrollTop without a model target.
+        const targetTop = readHomeScrollPosition(homeRestoreKey);
+        if (targetTop != null) {
           isRestoringScrollRef.current = true;
-          container.scrollTo({ top: targetTop, behavior: 'auto' });
+          jumpHomeScrollTo(container, targetTop);
           clearPendingHomeRestore(homeRestoreKey);
           requestAnimationFrame(() => {
             isRestoringScrollRef.current = false;
+            setRestoreVisualLocked(false);
           });
+        } else if (!targetModelId) {
+          clearPendingHomeRestore(homeRestoreKey);
+          setRestoreVisualLocked(false);
         }
       }
     }
-    // 2. Set chipsStuck based on actual (possibly restored) position
+    if (isDesktop) return;
+    // Set chipsStuck based on actual (possibly restored) position
     const el = titleRowRef.current;
     if (!el) return;
     const rect = el.getBoundingClientRect();
@@ -1667,18 +2136,18 @@ export default function HomePage() {
 
     isRestoringScrollRef.current = true;
 
+    const unlockVisualAfterNextFrame = () => {
+      window.requestAnimationFrame(() => {
+        if (!cancelled) setRestoreVisualLocked(false);
+      });
+    };
+
     const doRestore = () => {
       if (cancelled) return;
       const container = scrollContainerRef.current;
       if (!container) return;
 
-      const target = getHomeModelElement(container, targetModelId);
-      if (target) {
-        const containerRect = container.getBoundingClientRect();
-        const targetRect = target.getBoundingClientRect();
-        const offset = savedOffset ?? 0;
-        const top = container.scrollTop + targetRect.top - containerRect.top - offset;
-        container.scrollTo({ top: Math.max(0, top), behavior: 'auto' });
+      if (restoreHomeScrollToModel(container, targetModelId, savedOffset)) {
         if (Math.abs(container.scrollTop - lastScrollTop) < 1) {
           stableCount++;
         } else {
@@ -1688,8 +2157,16 @@ export default function HomePage() {
         if (stableCount >= 3 || Date.now() - startTime > DEADLINE_MS) {
           clearPendingHomeRestore(homeRestoreKey);
           isRestoringScrollRef.current = false;
+          unlockVisualAfterNextFrame();
           return;
         }
+      }
+
+      if (Date.now() - startTime > DEADLINE_MS) {
+        clearPendingHomeRestore(homeRestoreKey);
+        isRestoringScrollRef.current = false;
+        unlockVisualAfterNextFrame();
+        return;
       }
 
       restoreFrameRef.current = window.requestAnimationFrame(doRestore);
@@ -1749,8 +2226,7 @@ export default function HomePage() {
           />
           <main
             ref={scrollContainerRef}
-            onScroll={handleHomeScroll}
-            className="flex-1 overflow-y-auto model-list-scrollbar bg-surface-dim p-6 relative"
+            className="home-scroll-container flex-1 overflow-y-auto model-list-scrollbar bg-surface-dim p-6 relative"
           >
             <AnnouncementBanner />
             <div className="flex justify-between items-end mb-6 border-b border-surface-container-low pb-3 flex-wrap gap-3">
@@ -1825,35 +2301,40 @@ export default function HomePage() {
             </div>
 
             {isLoading && products.length === 0 ? (
-              <div className="grid gap-3 grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
-                {Array.from({ length: 12 }).map((_, i) => (
+              <div
+                className={`grid gap-3 ${viewMode === 'grid' ? 'grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5' : 'grid-cols-1 gap-2'}`}
+              >
+                {Array.from({ length: viewMode === 'grid' ? 12 : 8 }).map((_, i) => (
                   <SkeletonCard key={i} />
                 ))}
               </div>
             ) : (
               <>
-                <div
-                  className={`grid gap-3 ${viewMode === 'grid' ? 'grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5' : 'grid-cols-1 gap-2'}`}
-                >
-                  {products.map((product) => (
-                    <ProductCard
-                      key={product.id}
-                      product={product}
-                      onDownload={handleDownload}
-                      onContextMenu={handleModelContextMenu}
-                      manageOpen={contextMenu?.product.id === product.id}
-                      onCloseManage={() => setContextMenu(null)}
-                      onOpenManageDetail={openManagedModelDetail}
-                      onShareModel={shareManagedModel}
-                      onRenameModel={renameManagedModel}
-                      onRequestDelete={requestManagedModelDelete}
-                      returnPath={modelReturnPath}
-                      homeBrowseState={homeBrowseState}
-                      onBeforeOpen={(modelId) => saveCurrentHomeScroll(true, modelId)}
-                      variant={viewMode}
-                    />
-                  ))}
-                </div>
+                {shouldVirtualizeDesktopGrid ? (
+                  <div
+                    ref={desktopVirtualOuterRef}
+                    className="relative"
+                    style={{ height: desktopVirtualWindow.totalHeight, contain: 'layout style' }}
+                  >
+                    <div
+                      ref={desktopGridMeasureRef}
+                      className="grid gap-3 grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 absolute inset-x-0 top-0"
+                      style={{
+                        transform: `translate3d(0, ${desktopVirtualWindow.topOffset}px, 0)`,
+                        willChange: 'transform',
+                      }}
+                    >
+                      {desktopVirtualWindow.products.map(renderDesktopProductCard)}
+                    </div>
+                  </div>
+                ) : (
+                  <div
+                    ref={viewMode === 'grid' ? desktopGridMeasureRef : undefined}
+                    className={`grid gap-3 ${viewMode === 'grid' ? 'grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5' : 'grid-cols-1 gap-2'}`}
+                  >
+                    {products.map(renderDesktopProductCard)}
+                  </div>
+                )}
 
                 {products.length === 0 && (
                   <div className="flex flex-col items-center justify-center py-20 gap-4">
@@ -2033,11 +2514,7 @@ export default function HomePage() {
       {createPortal(mobileFilterDrawer, document.body)}
       <main
         ref={scrollContainerRef}
-        onScroll={handleHomeScroll}
-        onTouchStart={!isDesktop ? handlePullTouchStart : undefined}
-        onTouchMove={!isDesktop ? handlePullTouchMove : undefined}
-        onTouchEnd={!isDesktop ? handlePullTouchEnd : undefined}
-        className="flex-1 overflow-y-auto overflow-x-hidden scrollbar-hidden bg-surface-dim"
+        className="home-scroll-container flex-1 overflow-y-auto overflow-x-hidden scrollbar-hidden bg-surface-dim"
       >
         {/* Pull-to-refresh indicator (mobile only) */}
         {!isDesktop && pullOffset > 0 && (

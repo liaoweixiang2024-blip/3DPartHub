@@ -10,6 +10,7 @@ import { createWorker, conversionQueueConfig, normalizeConversionWorkerConcurren
 import { createNotification } from '../routes/notifications.js';
 import type { GltfAsset } from '../services/converter.js';
 import { MODEL_STATUS } from '../services/modelStatus.js';
+import { scrubStepMetadata, isStepFormat } from '../services/stepMetadataScrub.js';
 
 type ConversionPipelineResult = {
   result: GltfAsset;
@@ -181,6 +182,17 @@ export const conversionWorker = createWorker(
         await logStep('源文件已在 originals 目录');
         activeSourcePath = initialSourcePath;
         shouldCleanupInitialSource = false;
+      }
+
+      // Scrub sensitive metadata from STEP headers (vendor, username, etc.)
+      if (isStepFormat(ext)) {
+        try {
+          if (scrubStepMetadata(activeSourcePath)) {
+            await logStep('已清除 STEP 文件头部敏感元数据');
+          }
+        } catch (err) {
+          await logStep(`STEP 元数据清除失败（不影响转换）: ${err instanceof Error ? err.message : err}`);
+        }
       }
 
       if (prisma) {

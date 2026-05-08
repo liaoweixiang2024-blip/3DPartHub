@@ -13,6 +13,7 @@ import LoadingSpinner from '../components/shared/LoadingSpinner';
 import { PageHeader } from '../components/shared/PagePrimitives';
 import { PublicPageShell } from '../components/shared/PublicPageShell';
 import SafeImage from '../components/shared/SafeImage';
+import { useDocumentTitle } from '../hooks/useDocumentTitle';
 import { copyText } from '../lib/clipboard';
 import { downloadKitList, formatKitList, getKitListTitle } from '../lib/kitList';
 import { getSiteTitle } from '../lib/publicSettings';

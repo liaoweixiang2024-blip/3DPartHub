@@ -2,6 +2,7 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { useState, useRef, useEffect, useMemo } from 'react';
 import type { CategoryItem } from '../../api/categories';
 import { useImeSafeSearchInput } from '../../hooks/useImeSafeSearchInput';
+import { popoverMotion } from '../../lib/motion';
 import Icon from './Icon';
 
 interface CategorySelectProps {
@@ -85,10 +86,10 @@ export default function CategorySelect({ categories, value, onChange, placeholde
       <AnimatePresence>
         {open && (
           <motion.div
-            initial={{ opacity: 0, y: -4 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -4 }}
-            transition={{ duration: 0.12 }}
+            variants={popoverMotion}
+            initial="initial"
+            animate="animate"
+            exit="exit"
             className="absolute z-50 top-full mt-1 left-0 right-0 bg-surface-container-low border border-outline-variant/20 rounded-sm shadow-lg overflow-hidden"
           >
             {/* Search input */}

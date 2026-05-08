@@ -39,7 +39,7 @@ export function PageHeader({ title, description, meta, actions, className }: Pag
   return (
     <header
       className={mergeClassName(
-        'flex min-h-[56px] flex-col justify-center gap-3 sm:min-h-[64px] sm:flex-row sm:items-center sm:justify-between',
+        'app-page-section-in flex min-h-[56px] flex-col justify-center gap-3 sm:min-h-[64px] sm:flex-row sm:items-center sm:justify-between',
         className,
       )}
     >
@@ -56,5 +56,5 @@ export function PageHeader({ title, description, meta, actions, className }: Pag
 }
 
 export function PageBody({ children, className }: PageBodyProps) {
-  return <div className={mergeClassName('space-y-4', className)}>{children}</div>;
+  return <div className={mergeClassName('app-page-section-in-delayed space-y-4', className)}>{children}</div>;
 }
