@@ -6,9 +6,9 @@ import { projectApi, type Project } from '../api/projects';
 import { AdminPageShell } from '../components/shared/AdminPageShell';
 import Icon from '../components/shared/Icon';
 import InfiniteLoadTrigger from '../components/shared/InfiniteLoadTrigger';
-import LoadingSpinner from '../components/shared/LoadingSpinner';
 import LoginConfirmDialog from '../components/shared/LoginConfirmDialog';
 import { PageHeader } from '../components/shared/PagePrimitives';
+import { PageRefreshIndicator } from '../components/shared/PageRefreshFallback';
 import { isLoginDialogEnabled } from '../components/shared/ProtectedLink';
 import { useToast } from '../components/shared/Toast';
 import { useDocumentTitle } from '../hooks/useDocumentTitle';
@@ -16,6 +16,14 @@ import { useVisibleItems } from '../hooks/useVisibleItems';
 import { useMediaQuery } from '../layouts/hooks/useMediaQuery';
 import { bottomSheetMotion, dialogPanelMotion, listItemMotion, overlayMotion } from '../lib/motion';
 import { useAuthStore } from '../stores';
+
+function ProjectsLoadingGrid() {
+  return (
+    <div className="flex min-h-[320px]">
+      <PageRefreshIndicator label="项目刷新中" />
+    </div>
+  );
+}
 
 function ProjectCard({ project, onDelete }: { project: Project; onDelete: (id: string) => void }) {
   const [confirming, setConfirming] = useState(false);
@@ -157,7 +165,7 @@ export default function ProjectsPage() {
         </div>
 
         {!projects ? (
-          <LoadingSpinner size="lg" />
+          <ProjectsLoadingGrid />
         ) : projectList.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-20 gap-4">
             <Icon name="folder_off" size={56} className="text-on-surface-variant/30" />

@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import useSWR from 'swr';
 import useSWRInfinite from 'swr/infinite';
 import { getAllInquiries } from '../api/inquiries';
-import { AdminEmptyState, AdminManagementPage } from '../components/shared/AdminManagementPage';
+import { AdminEmptyState, AdminLoadingState, AdminManagementPage } from '../components/shared/AdminManagementPage';
 import { AdminPageShell } from '../components/shared/AdminPageShell';
 import InfiniteLoadTrigger from '../components/shared/InfiniteLoadTrigger';
 import ResponsiveSectionTabs from '../components/shared/ResponsiveSectionTabs';
@@ -11,7 +11,6 @@ import { useDocumentTitle } from '../hooks/useDocumentTitle';
 import { useMediaQuery } from '../layouts/hooks/useMediaQuery';
 import { getBusinessConfig, statusInfo } from '../lib/businessConfig';
 import { getCachedPublicSettings } from '../lib/publicSettings';
-import LoadingSpinner from '../components/shared/LoadingSpinner';
 
 const INQUIRY_PAGE_SIZE = 20;
 type InquiryStatusTab = { value: string; label: string };
@@ -105,7 +104,12 @@ function DesktopContent() {
     >
       <div key={statusFilter} className="admin-tab-panel">
         {isLoading ? (
-          <LoadingSpinner />
+          <AdminLoadingState
+            variant="table"
+            label="询价单加载中"
+            tableColumns="80px minmax(0,1fr) 150px 120px 80px"
+            tableCells={['chip', 'title', 'text', 'text', 'action']}
+          />
         ) : inquiries.length === 0 ? (
           <AdminEmptyState icon="request_quote" title="暂无询价单" description="切换状态或等待用户提交新的选型询价。" />
         ) : (
@@ -181,7 +185,7 @@ function MobileContent() {
     >
       <div key={statusFilter} className="admin-tab-panel">
         {isLoading ? (
-          <LoadingSpinner />
+          <AdminLoadingState variant="list" rows={5} label="询价单加载中" />
         ) : inquiries.length === 0 ? (
           <AdminEmptyState icon="request_quote" title="暂无询价单" description="切换状态或等待用户提交新的选型询价。" />
         ) : (

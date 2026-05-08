@@ -41,7 +41,7 @@ export function createModelListRouter({ prisma, metadataDir, drawingDownloadUrl 
 
     // Compute page size — needed to build cache key
     const { pageSizePolicy } = await getBusinessConfig();
-    const defaultPageSize = Math.max(1, Math.floor(Number(pageSizePolicy.homeDefault) || 60));
+    const defaultPageSize = Math.max(1, Math.floor(Number(pageSizePolicy.homeDefault) || 20));
     const maxPageSize = Math.max(1, Math.floor(Number(pageSizePolicy.homeMax) || 10000));
     const pageSize = numericQuery(req.query.page_size, defaultPageSize, 1, maxPageSize);
 

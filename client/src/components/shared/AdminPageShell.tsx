@@ -7,12 +7,13 @@ import { getCachedPublicSettings, getFooterCopyright, getSiteTitle } from '../..
 import BottomNav from './BottomNav';
 import HomeFooter from './HomeFooter';
 import { mergeClassName } from './PagePrimitives';
+import { loadMobileNavDrawer, scheduleMobileNavDrawerPreload } from './preloadMobileNavDrawer';
 import AppSidebar from './Sidebar';
 import TopNav from './TopNav';
 
-const MobileNavDrawer = lazy(() => import('./MobileNavDrawer'));
-// Preload drawer so first open has no delay
-import('./MobileNavDrawer');
+const MobileNavDrawer = lazy(loadMobileNavDrawer);
+// Preload drawer after the page gets breathing room so it does not compete with first paint.
+scheduleMobileNavDrawerPreload();
 
 /** Context: when true, AdminPageShell/PublicPageShell skip rendering TopNav/Sidebar */
 export const ShellLayoutContext = createContext(false);

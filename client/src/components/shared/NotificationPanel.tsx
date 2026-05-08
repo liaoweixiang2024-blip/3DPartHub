@@ -27,6 +27,8 @@ const TYPE_META: Record<string, { icon: string; color: string }> = {
   inquiry: { icon: 'request_quote', color: 'text-amber-500 bg-amber-500/10' },
 };
 
+const NOTIFICATION_LIST_STALE_MS = 30_000;
+
 function getTypeMeta(type: string) {
   return TYPE_META[type] || TYPE_META.info;
 }
@@ -123,6 +125,8 @@ export default function NotificationPanel({ compact = false }: { compact?: boole
   const [loading, setLoading] = useState(false);
   const [loadError, setLoadError] = useState('');
   const ref = useRef<HTMLDivElement>(null);
+  const listFetchedAtRef = useRef(0);
+  const listInflightRef = useRef<Promise<void> | null>(null);
 
   const iconSize = 20;
   const safeNotifications = Array.isArray(notifications) ? notifications : [];
@@ -155,27 +159,51 @@ export default function NotificationPanel({ compact = false }: { compact?: boole
     };
   }, [isAuthenticated]);
 
+  const fetchNotifications = useCallback(
+    async ({ preload = false, force = false }: { preload?: boolean; force?: boolean } = {}) => {
+      if (!isAuthenticated) return;
+
+      const now = Date.now();
+      if (!force && listFetchedAtRef.current && now - listFetchedAtRef.current < NOTIFICATION_LIST_STALE_MS) {
+        return;
+      }
+
+      if (!preload) {
+        setLoading(true);
+        setLoadError('');
+      }
+
+      if (!listInflightRef.current) {
+        listInflightRef.current = getNotifications(1, 30)
+          .then((res) => {
+            setNotifications(Array.isArray(res.data) ? res.data : []);
+            listFetchedAtRef.current = Date.now();
+          })
+          .finally(() => {
+            listInflightRef.current = null;
+          });
+      }
+
+      try {
+        await listInflightRef.current;
+      } catch {
+        if (!preload) setLoadError('通知加载失败，请稍后重试');
+      } finally {
+        if (!preload) setLoading(false);
+      }
+    },
+    [isAuthenticated],
+  );
+
+  const handleNotificationIntent = useCallback(() => {
+    void fetchNotifications({ preload: true });
+  }, [fetchNotifications]);
+
   // Fetch notifications when panel opens
   useEffect(() => {
     if (!open || !isAuthenticated) return;
-    let cancelled = false;
-    async function fetchList() {
-      setLoading(true);
-      setLoadError('');
-      try {
-        const res = await getNotifications(1, 30);
-        if (!cancelled) setNotifications(Array.isArray(res.data) ? res.data : []);
-      } catch {
-        if (!cancelled) setLoadError('通知加载失败，请稍后重试');
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    }
-    fetchList();
-    return () => {
-      cancelled = true;
-    };
-  }, [open, isAuthenticated]);
+    void fetchNotifications();
+  }, [fetchNotifications, isAuthenticated, open]);
 
   // Close on outside click (desktop only — mobile uses backdrop overlay)
   useEffect(() => {
@@ -345,6 +373,9 @@ export default function NotificationPanel({ compact = false }: { compact?: boole
         <div className="relative" ref={ref}>
           <button
             onClick={() => setOpen(!open)}
+            onPointerEnter={handleNotificationIntent}
+            onPointerDown={handleNotificationIntent}
+            onFocus={handleNotificationIntent}
             className="p-2 text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high rounded-lg transition-colors relative"
             aria-label="通知"
             data-tooltip="通知"
@@ -390,6 +421,9 @@ export default function NotificationPanel({ compact = false }: { compact?: boole
     <div className="relative" ref={ref}>
       <button
         onClick={() => setOpen(!open)}
+        onPointerEnter={handleNotificationIntent}
+        onPointerDown={handleNotificationIntent}
+        onFocus={handleNotificationIntent}
         className="p-2 text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high rounded-lg transition-colors relative"
         aria-label="通知"
         data-tooltip="通知"

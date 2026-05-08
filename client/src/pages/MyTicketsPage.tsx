@@ -1,18 +1,16 @@
-import { Link, useNavigate } from 'react-router-dom';
 import { useState } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
 import useSWR from 'swr';
 import client from '../api/client';
-import { AdminEmptyState, AdminManagementPage } from '../components/shared/AdminManagementPage';
+import { AdminEmptyState, AdminLoadingState, AdminManagementPage } from '../components/shared/AdminManagementPage';
 import { AdminPageShell } from '../components/shared/AdminPageShell';
 import Icon from '../components/shared/Icon';
 import InfiniteLoadTrigger from '../components/shared/InfiniteLoadTrigger';
-
 import { useDocumentTitle } from '../hooks/useDocumentTitle';
 import { useVisibleItems } from '../hooks/useVisibleItems';
 import { useMediaQuery } from '../layouts/hooks/useMediaQuery';
 import { getBusinessConfig, statusInfo } from '../lib/businessConfig';
 import { getCachedPublicSettings } from '../lib/publicSettings';
-import LoadingSpinner from '../components/shared/LoadingSpinner';
 
 interface MyTicket {
   id: string;
@@ -80,7 +78,12 @@ function Content() {
       }
     >
       {isLoading ? (
-        <LoadingSpinner />
+        <AdminLoadingState
+          variant="table"
+          label="工单记录加载中"
+          tableColumns="120px 120px minmax(0,1fr) 140px 160px"
+          tableCells={['chip', 'chip', 'title', 'text', 'text']}
+        />
       ) : list.length === 0 ? (
         <AdminEmptyState
           icon="inbox"
@@ -190,7 +193,7 @@ function MobileContent() {
       }
     >
       {isLoading ? (
-        <LoadingSpinner />
+        <AdminLoadingState variant="list" rows={5} label="工单记录加载中" />
       ) : list.length === 0 ? (
         <AdminEmptyState
           icon="inbox"

@@ -1,7 +1,7 @@
 import Icon from './Icon';
 
-export const DEFAULT_PAGE_SIZE = 60;
-export const PAGE_SIZE_OPTIONS = [30, 60, 120, 180] as const;
+export const DEFAULT_PAGE_SIZE = 20;
+export const PAGE_SIZE_OPTIONS = [20, 40, 60, 120] as const;
 
 export function normalizePageSize(
   value: string | number | null | undefined,

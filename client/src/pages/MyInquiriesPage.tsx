@@ -1,8 +1,8 @@
-import { Link, useNavigate } from 'react-router-dom';
 import { useState } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
 import useSWR from 'swr';
 import { getMyInquiries } from '../api/inquiries';
-import { AdminEmptyState, AdminManagementPage } from '../components/shared/AdminManagementPage';
+import { AdminEmptyState, AdminLoadingState, AdminManagementPage } from '../components/shared/AdminManagementPage';
 import { AdminPageShell } from '../components/shared/AdminPageShell';
 import Icon from '../components/shared/Icon';
 import InfiniteLoadTrigger from '../components/shared/InfiniteLoadTrigger';
@@ -11,7 +11,6 @@ import { useVisibleItems } from '../hooks/useVisibleItems';
 import { useMediaQuery } from '../layouts/hooks/useMediaQuery';
 import { getBusinessConfig, statusInfo, type StatusConfig } from '../lib/businessConfig';
 import { getCachedPublicSettings } from '../lib/publicSettings';
-import LoadingSpinner from '../components/shared/LoadingSpinner';
 
 function StatusBadge({ status, statuses }: { status: string; statuses: StatusConfig[] }) {
   const info = statusInfo(statuses, status);
@@ -67,7 +66,12 @@ function DesktopContent() {
       }
     >
       {isLoading ? (
-        <LoadingSpinner />
+        <AdminLoadingState
+          variant="table"
+          label="询价记录加载中"
+          tableColumns="80px minmax(0,1fr) 120px 140px"
+          tableCells={['chip', 'title', 'text', 'action']}
+        />
       ) : inquiries.length === 0 ? (
         <AdminEmptyState
           icon="request_quote"
@@ -162,7 +166,7 @@ function MobileContent() {
       }
     >
       {isLoading ? (
-        <LoadingSpinner />
+        <AdminLoadingState variant="list" rows={5} label="询价记录加载中" />
       ) : inquiries.length === 0 ? (
         <AdminEmptyState
           icon="request_quote"

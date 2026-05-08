@@ -12,7 +12,7 @@ import {
 import { AdminDetailHeader } from '../components/shared/AdminManagementPage';
 import { AdminPageShell } from '../components/shared/AdminPageShell';
 import Icon from '../components/shared/Icon';
-import LoadingSpinner from '../components/shared/LoadingSpinner';
+import { PageRefreshIndicator } from '../components/shared/PageRefreshFallback';
 import { useToast } from '../components/shared/Toast';
 import { useDocumentTitle } from '../hooks/useDocumentTitle';
 import { getBusinessConfig, statusInfo, type StatusConfig } from '../lib/businessConfig';
@@ -27,6 +27,14 @@ function StatusBadge({ status, statuses }: { status: string; statuses: StatusCon
     >
       {info.label}
     </span>
+  );
+}
+
+function InquiryDetailLoadingState() {
+  return (
+    <div className="flex h-full min-h-[320px]">
+      <PageRefreshIndicator label="询价单详情刷新中" />
+    </div>
   );
 }
 
@@ -139,7 +147,7 @@ function DetailContent({ id }: { id: string }) {
   }, [inquiry?.messages?.length]);
 
   if (!inquiry) {
-    return <LoadingSpinner />;
+    return <InquiryDetailLoadingState />;
   }
 
   async function handleSendMsg() {

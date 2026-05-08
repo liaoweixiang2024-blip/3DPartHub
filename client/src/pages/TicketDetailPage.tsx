@@ -13,14 +13,13 @@ import {
 import { AdminDetailHeader } from '../components/shared/AdminManagementPage';
 import { AdminPageShell } from '../components/shared/AdminPageShell';
 import Icon from '../components/shared/Icon';
+import { PageRefreshIndicator } from '../components/shared/PageRefreshFallback';
 import SafeImage from '../components/shared/SafeImage';
-
 import { useToast } from '../components/shared/Toast';
 import { useDocumentTitle } from '../hooks/useDocumentTitle';
 import { useMediaQuery } from '../layouts/hooks/useMediaQuery';
 import { getBusinessConfig, statusInfo } from '../lib/businessConfig';
 import { getCachedPublicSettings } from '../lib/publicSettings';
-import LoadingSpinner from '../components/shared/LoadingSpinner';
 
 interface TicketInfo {
   id: string;
@@ -163,6 +162,14 @@ function StatusActions({ status, onUpdate }: { ticketId: string; status: string;
   );
 }
 
+function TicketChatLoadingState() {
+  return (
+    <div className="flex h-full min-h-[320px]">
+      <PageRefreshIndicator label="工单详情刷新中" />
+    </div>
+  );
+}
+
 function ChatContent({ ticketId }: { ticketId: string }) {
   const navigate = useNavigate();
   const { toast } = useToast();
@@ -242,7 +249,7 @@ function ChatContent({ ticketId }: { ticketId: string }) {
   );
 
   if (!ticket) {
-    return <LoadingSpinner />;
+    return <TicketChatLoadingState />;
   }
 
   const info = statusInfo(business.ticketStatuses, ticket.status);

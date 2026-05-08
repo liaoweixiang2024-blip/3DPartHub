@@ -1,5 +1,15 @@
 import { motion, AnimatePresence } from 'framer-motion';
-import { useState, useEffect, useLayoutEffect, useMemo, useCallback, useRef, memo, type MouseEvent } from 'react';
+import {
+  useState,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useCallback,
+  useRef,
+  memo,
+  type MouseEvent,
+  type ReactNode,
+} from 'react';
 import { createPortal } from 'react-dom';
 import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import useSWR from 'swr';
@@ -39,6 +49,7 @@ import {
   getContactAddress,
   getSiteTitle,
 } from '../lib/publicSettings';
+import { preloadModelDetailPage } from '../lib/routeLoaders';
 import { sanitizeHtml } from '../lib/sanitizeHtml';
 import { useAuthStore } from '../stores';
 
@@ -232,28 +243,137 @@ function CategorySidebar({
   );
 }
 
+const HOME_GRID_CARD_CLASS =
+  'block group bg-surface-container-high rounded-sm overflow-hidden transition-[box-shadow] duration-200 ease-out hover:shadow-[0_12px_24px_rgba(0,0,0,0.4)] flex flex-col relative';
+const HOME_GRID_MEDIA_CLASS =
+  'aspect-square bg-surface-container-lowest relative overflow-hidden flex items-center justify-center';
+const HOME_GRID_BODY_CLASS = 'flex-1 flex flex-col p-2.5';
+const HOME_GRID_ACTIONS_CLASS = 'flex items-center gap-2 mt-auto pt-2';
+const HOME_GRID_ACTION_BUTTON_CLASS = 'flex h-7 flex-1 items-center justify-center gap-1 rounded-sm px-3 text-xs';
+const HOME_LIST_CARD_CLASS =
+  'relative flex group bg-surface-container-high rounded-sm overflow-hidden transition-[box-shadow] duration-200 ease-out hover:shadow-[0_8px_20px_rgba(0,0,0,0.35)]';
+const HOME_LIST_MEDIA_CLASS =
+  'w-32 shrink-0 bg-surface-container-lowest relative overflow-hidden flex items-center justify-center';
+const HOME_LIST_BODY_CLASS = 'flex-1 flex flex-col justify-center p-3 min-w-0';
+const HOME_LIST_ACTIONS_CLASS = 'flex items-center gap-2';
+const HOME_LIST_ACTION_BUTTON_CLASS = 'flex items-center gap-1 rounded-sm px-3 py-1 text-xs';
+const HOME_MOBILE_CARD_CLASS = 'home-model-card bg-surface-container-high rounded-sm overflow-hidden flex flex-col';
+const HOME_MOBILE_MEDIA_CLASS =
+  'h-[140px] bg-surface-container-lowest relative overflow-hidden flex items-center justify-center';
+const HOME_MOBILE_BODY_CLASS = 'flex flex-1 flex-col p-2.5';
+const HOME_MOBILE_ACTION_BUTTON_CLASS =
+  'mt-auto flex h-7 w-full items-center justify-center gap-1.5 rounded-sm bg-primary-container text-xs font-medium text-on-primary';
+
+function HomeGridCardContent({ media, title, actions }: { media: ReactNode; title: ReactNode; actions: ReactNode }) {
+  return (
+    <>
+      <div className={HOME_GRID_MEDIA_CLASS}>{media}</div>
+      <div className={HOME_GRID_BODY_CLASS}>
+        {title}
+        <div className={HOME_GRID_ACTIONS_CLASS}>{actions}</div>
+      </div>
+    </>
+  );
+}
+
+function HomeListCardContent({
+  media,
+  title,
+  meta,
+  actions,
+}: {
+  media: ReactNode;
+  title: ReactNode;
+  meta: ReactNode;
+  actions: ReactNode;
+}) {
+  return (
+    <>
+      <div className={HOME_LIST_MEDIA_CLASS}>{media}</div>
+      <div className={HOME_LIST_BODY_CLASS}>
+        {title}
+        <div className="mb-2 flex items-center gap-3 text-xs text-on-surface-variant">{meta}</div>
+        <div className={HOME_LIST_ACTIONS_CLASS}>{actions}</div>
+      </div>
+    </>
+  );
+}
+
+function HomeMobileCardContent({ media, title, action }: { media: ReactNode; title: ReactNode; action: ReactNode }) {
+  return (
+    <>
+      <div className={HOME_MOBILE_MEDIA_CLASS}>{media}</div>
+      <div className={HOME_MOBILE_BODY_CLASS}>
+        {title}
+        {action}
+      </div>
+    </>
+  );
+}
+
 function SkeletonCard() {
   return (
-    <div className="bg-surface-container-high rounded-sm overflow-hidden flex flex-col animate-pulse">
-      <div className="aspect-square bg-surface-container-lowest" />
-      <div className="p-2.5 flex flex-col">
-        <div className="h-3 bg-surface-container-lowest rounded w-3/4" />
-        <div className="flex items-center gap-2 mt-auto pt-2">
-          <div className="h-8 bg-surface-container-lowest rounded-sm flex-1" />
-          <div className="h-8 bg-surface-container-lowest rounded-sm flex-1" />
-        </div>
-      </div>
+    <div className={`${HOME_GRID_CARD_CLASS} animate-pulse`} data-home-skeleton-card>
+      <HomeGridCardContent
+        media={
+          <>
+            <div className="absolute left-2 top-2 h-5 w-10 rounded-sm bg-surface-container-high" />
+            <div className="absolute right-2 top-2 h-5 w-14 rounded-sm bg-surface-container-high" />
+          </>
+        }
+        title={<div className="h-4 w-5/6 rounded bg-surface-container-lowest" />}
+        actions={
+          <>
+            <div className={`${HOME_GRID_ACTION_BUTTON_CLASS} bg-surface-container-lowest`} />
+            <div className={`${HOME_GRID_ACTION_BUTTON_CLASS} bg-surface-container-lowest`} />
+          </>
+        }
+      />
+    </div>
+  );
+}
+
+function SkeletonListCard() {
+  return (
+    <div className={`${HOME_LIST_CARD_CLASS} min-h-[128px] animate-pulse`} data-home-skeleton-card>
+      <HomeListCardContent
+        media={<div className="absolute left-1.5 top-1.5 h-5 w-10 rounded-sm bg-surface-container-high" />}
+        title={<div className="mb-1 h-5 w-4/5 rounded bg-surface-container-lowest" />}
+        meta={
+          <>
+            <div className="h-4 w-16 rounded bg-surface-container-lowest" />
+            <div className="h-4 w-20 rounded bg-surface-container-lowest" />
+          </>
+        }
+        actions={
+          <>
+            <div className={`${HOME_LIST_ACTION_BUTTON_CLASS} h-6 w-20 bg-surface-container-lowest`} />
+            <div className={`${HOME_LIST_ACTION_BUTTON_CLASS} h-6 w-20 bg-surface-container-lowest`} />
+          </>
+        }
+      />
     </div>
   );
 }
 
 function SkeletonCardMobile() {
   return (
-    <div className="bg-surface-container-high rounded-sm overflow-hidden animate-pulse">
-      <div className="aspect-square bg-surface-container-lowest" />
-      <div className="p-2 space-y-1.5">
-        <div className="h-2.5 bg-surface-container-lowest rounded w-3/4" />
-      </div>
+    <div className={`${HOME_MOBILE_CARD_CLASS} animate-pulse`} data-home-skeleton-card>
+      <HomeMobileCardContent
+        media={
+          <>
+            <div className="absolute left-1.5 top-1.5 h-3.5 w-8 rounded-sm bg-surface-container-high" />
+            <div className="absolute right-1.5 top-1.5 h-3.5 w-10 rounded-sm bg-surface-container-high" />
+          </>
+        }
+        title={
+          <div className="mb-1.5 space-y-1.5">
+            <div className="h-2.5 w-5/6 rounded bg-surface-container-lowest" />
+            <div className="h-2.5 w-2/3 rounded bg-surface-container-lowest" />
+          </div>
+        }
+        action={<div className="mt-auto h-7 w-full rounded-sm bg-surface-container-lowest" />}
+      />
     </div>
   );
 }
@@ -263,36 +383,10 @@ const HOME_SCROLL_TARGET_PREFIX = 'home_model_scroll_target:';
 const HOME_SCROLL_OFFSET_PREFIX = 'home_model_scroll_offset:';
 const HOME_BROWSE_STATE_PREFIX = 'home_model_browse_state:';
 const HOME_SCROLL_RESTORE_PENDING_KEY = 'home_model_scroll_restore_pending_v1';
-const HOME_DESKTOP_GRID_GAP_PX = 12;
-const HOME_DESKTOP_GRID_FALLBACK_ROW_HEIGHT = 322;
-const HOME_DESKTOP_GRID_OVERSCAN_ROWS = 18;
-const HOME_DESKTOP_GRID_WINDOW_STEP_ROWS = 4;
-const HOME_DESKTOP_VIRTUAL_MIN_ITEMS = 260;
-const HOME_DESKTOP_SMOOTH_WHEEL_MIN_DELTA = 24;
-const HOME_DESKTOP_SMOOTH_WHEEL_LINE_PX = 40;
-const HOME_DESKTOP_SMOOTH_WHEEL_MAX_STEP = 980;
-const HOME_DESKTOP_SMOOTH_WHEEL_MULTIPLIER = 1.24;
-const HOME_DESKTOP_SMOOTH_WHEEL_EASE = 0.086;
-const HOME_DESKTOP_SMOOTH_WHEEL_STOP_DISTANCE = 0.16;
-const HOME_DESKTOP_SMOOTH_WHEEL_SYNC_DISTANCE = 120;
-const HOME_DESKTOP_SMOOTH_WHEEL_REBOUND_DELTA = 180;
-const HOME_DESKTOP_SMOOTH_WHEEL_REBOUND_MS = 220;
-
-type DesktopVirtualMetrics = {
-  scrollTop: number;
-  viewportHeight: number;
-  gridTop: number;
-  rowHeight: number;
-  columnCount: number;
-};
-
-type DesktopSmoothWheelState = {
-  current: number;
-  target: number;
-  frame: number | null;
-  lastSign: number;
-  lastWheelAt: number;
-};
+const HOME_LEGACY_DEFAULT_PAGE_SIZE = 60;
+const HOME_DESKTOP_GRID_EAGER_IMAGES = 10;
+const HOME_DESKTOP_LIST_EAGER_IMAGES = 6;
+const HOME_MOBILE_EAGER_IMAGES = 4;
 
 type HomeBrowseState = {
   categoryId: string;
@@ -323,35 +417,6 @@ function normalizeHomePageSizeOptions(policy: Record<string, number>) {
   return Array.from(new Set(options)).sort((a, b) => a - b);
 }
 
-function getHomeDesktopGridColumnCount() {
-  if (typeof window === 'undefined') return 5;
-  const width = window.innerWidth;
-  if (width >= 1280) return 5;
-  if (width >= 1024) return 4;
-  if (width >= 768) return 3;
-  return 2;
-}
-
-function areDesktopVirtualMetricsEqual(a: DesktopVirtualMetrics, b: DesktopVirtualMetrics) {
-  return (
-    a.scrollTop === b.scrollTop &&
-    a.viewportHeight === b.viewportHeight &&
-    a.gridTop === b.gridTop &&
-    a.rowHeight === b.rowHeight &&
-    a.columnCount === b.columnCount
-  );
-}
-
-function clampHomeScrollTop(value: number, max: number) {
-  return Math.min(max, Math.max(0, value));
-}
-
-function normalizeHomeWheelDelta(event: globalThis.WheelEvent, container: HTMLElement) {
-  if (event.deltaMode === 1) return event.deltaY * HOME_DESKTOP_SMOOTH_WHEEL_LINE_PX;
-  if (event.deltaMode === 2) return event.deltaY * container.clientHeight;
-  return event.deltaY;
-}
-
 function buildHomeReturnPath() {
   return '/';
 }
@@ -377,12 +442,24 @@ function readHomeBrowseStateFromLocation(state: unknown) {
   return homeState && typeof homeState === 'object' ? homeState : null;
 }
 
-function normalizeHomeBrowseState(value: Partial<HomeBrowseState> | null | undefined) {
+function normalizeStoredHomePageSize(value: unknown, defaultPageSize = DEFAULT_PAGE_SIZE) {
+  const parsed = Number(value);
+  if (Number.isFinite(parsed) && Math.floor(parsed) === HOME_LEGACY_DEFAULT_PAGE_SIZE) {
+    return defaultPageSize;
+  }
+  return normalizePageSize(parsed, undefined, defaultPageSize);
+}
+
+function normalizeHomeBrowseState(
+  value: Partial<HomeBrowseState> | null | undefined,
+  defaultPageSize = DEFAULT_PAGE_SIZE,
+) {
   if (!value) return null;
   const categoryId = typeof value.categoryId === 'string' && value.categoryId ? value.categoryId : 'all';
   const query = typeof value.query === 'string' ? normalizeHomeSearchQuery(value.query) : '';
   const page = typeof value.page === 'number' ? parsePageParam(String(value.page)) : 1;
-  const pageSize = typeof value.pageSize === 'number' ? normalizePageSize(value.pageSize) : DEFAULT_PAGE_SIZE;
+  const pageSize =
+    typeof value.pageSize === 'number' ? normalizeStoredHomePageSize(value.pageSize, defaultPageSize) : defaultPageSize;
   const sort = normalizeSortParam(typeof value.sort === 'string' ? value.sort : null);
   return {
     categoryId,
@@ -419,20 +496,20 @@ function writeHomeBrowseStateToCurrentHistory(state: HomeBrowseState) {
   }
 }
 
-function readHomeBrowseState(restoreKey: string | null) {
+function readHomeBrowseState(restoreKey: string | null, defaultPageSize = DEFAULT_PAGE_SIZE) {
   if (typeof window === 'undefined' || !restoreKey) return null;
   try {
     const raw = window.sessionStorage.getItem(`${HOME_BROWSE_STATE_PREFIX}${restoreKey}`);
-    return normalizeHomeBrowseState(raw ? JSON.parse(raw) : null);
+    return normalizeHomeBrowseState(raw ? JSON.parse(raw) : null, defaultPageSize);
   } catch {
     return null;
   }
 }
 
-function readPendingHomeBrowseState() {
+function readPendingHomeBrowseState(defaultPageSize = DEFAULT_PAGE_SIZE) {
   if (typeof window === 'undefined') return null;
   try {
-    return readHomeBrowseState(window.sessionStorage.getItem(HOME_SCROLL_RESTORE_PENDING_KEY));
+    return readHomeBrowseState(window.sessionStorage.getItem(HOME_SCROLL_RESTORE_PENDING_KEY), defaultPageSize);
   } catch {
     return null;
   }
@@ -542,6 +619,7 @@ function ProductCardInner({
   product,
   onDownload,
   imageLoading = 'lazy',
+  imageFetchPriority = 'auto',
   returnPath,
   homeBrowseState,
   onBeforeOpen,
@@ -557,6 +635,7 @@ function ProductCardInner({
   product: Product;
   onDownload: (id: string) => void;
   imageLoading?: 'eager' | 'lazy';
+  imageFetchPriority?: 'high' | 'low' | 'auto';
   returnPath: string;
   homeBrowseState: HomeBrowseState;
   onBeforeOpen?: (modelId: string) => void;
@@ -810,59 +889,67 @@ function ProductCardInner({
   if (variant === 'list') {
     const content = (
       <>
-        <div className="w-32 shrink-0 bg-surface-container-lowest relative overflow-hidden flex items-center justify-center">
-          <ModelThumbnail
-            src={product.thumbnailUrl}
-            alt={product.name}
-            loading={imageLoading}
-            className="w-full h-full object-cover"
-          />
-          <div className="absolute top-1.5 left-1.5 flex gap-1">
-            {product.formats.map((f, index) => (
-              <FormatTag key={`${f || 'format'}-${index}`} format={f} />
-            ))}
-          </div>
-        </div>
-        <div className="flex-1 flex flex-col justify-center p-3 min-w-0">
-          <h3 className="text-sm font-headline text-on-surface leading-tight line-clamp-1 mb-1">{product.name}</h3>
-          <div className="flex items-center gap-3 text-xs text-on-surface-variant mb-2">
-            <span>{product.fileSize}</span>
-            {product.variantCount && product.variantCount > 1 && (
-              <span className="bg-primary/20 text-primary px-1.5 py-0.5 rounded-sm text-[10px] font-medium">
-                ×{product.variantCount} 变体
-              </span>
-            )}
-          </div>
-          <div className="flex items-center gap-2">
-            <button
-              onClick={(e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                onDownload(product.id);
-              }}
-              className="bg-primary-container text-on-primary rounded-sm py-1 px-3 text-xs font-medium hover:opacity-90 flex items-center gap-1"
-            >
-              <Icon name="download" size={14} fill />
-              下载
-            </button>
-            <button
-              onClick={(e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                onOpenManageDetail?.(product);
-              }}
-              className="border border-outline-variant/40 text-on-surface-variant hover:text-on-surface rounded-sm py-1 px-3 text-xs flex items-center gap-1"
-            >
-              <Icon name="visibility" size={14} />
-              预览
-            </button>
-          </div>
-        </div>
+        <HomeListCardContent
+          media={
+            <>
+              <ModelThumbnail
+                src={product.thumbnailUrl}
+                alt={product.name}
+                loading={imageLoading}
+                fetchPriority={imageFetchPriority}
+                className="w-full h-full object-cover"
+              />
+              <div className="absolute top-1.5 left-1.5 flex gap-1">
+                {product.formats.map((f, index) => (
+                  <FormatTag key={`${f || 'format'}-${index}`} format={f} />
+                ))}
+              </div>
+            </>
+          }
+          title={
+            <h3 className="mb-1 text-sm font-headline text-on-surface leading-tight line-clamp-1">{product.name}</h3>
+          }
+          meta={
+            <>
+              <span>{product.fileSize}</span>
+              {product.variantCount && product.variantCount > 1 && (
+                <span className="bg-primary/20 text-primary px-1.5 py-0.5 rounded-sm text-[10px] font-medium">
+                  ×{product.variantCount} 变体
+                </span>
+              )}
+            </>
+          }
+          actions={
+            <>
+              <button
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  onDownload(product.id);
+                }}
+                className={`${HOME_LIST_ACTION_BUTTON_CLASS} bg-primary-container font-medium text-on-primary hover:opacity-90`}
+              >
+                <Icon name="download" size={14} fill />
+                下载
+              </button>
+              <button
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  onOpenManageDetail?.(product);
+                }}
+                className={`${HOME_LIST_ACTION_BUTTON_CLASS} border border-outline-variant/40 text-on-surface-variant hover:text-on-surface`}
+              >
+                <Icon name="visibility" size={14} />
+                预览
+              </button>
+            </>
+          }
+        />
         {manageOverlay && <AnimatePresence>{manageOverlay}</AnimatePresence>}
       </>
     );
-    const className =
-      'relative flex group bg-surface-container-high rounded-sm overflow-hidden transition-[box-shadow] duration-200 ease-out hover:shadow-[0_8px_20px_rgba(0,0,0,0.35)]';
+    const className = HOME_LIST_CARD_CLASS;
     if (manageOpen) {
       return (
         <div
@@ -893,72 +980,76 @@ function ProductCardInner({
   }
   const content = (
     <>
-      <div className="aspect-square bg-surface-container-lowest relative overflow-hidden flex items-center justify-center">
-        <ModelThumbnail
-          src={product.thumbnailUrl}
-          alt={product.name}
-          loading={imageLoading}
-          className="w-full h-full object-cover"
-        />
-        <div className="absolute top-2 left-2 flex gap-1">
-          {product.formats.map((f, index) => (
-            <FormatTag key={`${f || 'format'}-${index}`} format={f} />
-          ))}
-        </div>
-        <span className="absolute top-2 right-2 bg-surface-container-highest/90 px-1.5 py-0.5 text-[9px] text-on-surface-variant font-mono rounded-sm border border-outline-variant/30">
-          {product.fileSize}
-        </span>
-        <div className="home-card-hover-actions absolute right-2 bottom-2 z-20 flex items-center gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity delay-[240ms]">
-          {isAuthenticated && (
-            <button
-              onClick={toggleFavorite}
-              disabled={favLoading}
-              className={`inline-flex h-7 w-7 items-center justify-center rounded-full border border-outline-variant/20 bg-surface-container-lowest/85 transition-colors ${isFavorited ? 'text-primary-container border-primary-container/30' : 'text-on-surface-variant/60 hover:text-on-surface-variant'}`}
-              aria-label={isFavorited ? '取消收藏' : '收藏'}
-              data-tooltip-ignore
-            >
-              <Icon name={isFavorited ? 'favorite' : 'star'} size={14} />
-            </button>
-          )}
-          {product.variantCount && product.variantCount > 1 && (
-            <span className="bg-primary/90 text-on-primary text-[9px] font-bold px-1.5 py-0.5 rounded-sm">
-              ×{product.variantCount}
+      <HomeGridCardContent
+        media={
+          <>
+            <ModelThumbnail
+              src={product.thumbnailUrl}
+              alt={product.name}
+              loading={imageLoading}
+              fetchPriority={imageFetchPriority}
+              className="w-full h-full object-cover"
+            />
+            <div className="absolute top-2 left-2 flex gap-1">
+              {product.formats.map((f, index) => (
+                <FormatTag key={`${f || 'format'}-${index}`} format={f} />
+              ))}
+            </div>
+            <span className="absolute top-2 right-2 bg-surface-container-highest/90 px-1.5 py-0.5 text-[9px] text-on-surface-variant font-mono rounded-sm border border-outline-variant/30">
+              {product.fileSize}
             </span>
-          )}
-        </div>
-      </div>
-      <div className="flex-1 flex flex-col p-2.5">
-        <h3 className="text-xs font-headline text-on-surface leading-tight line-clamp-2">{product.name}</h3>
-        <div className="flex items-center gap-2 mt-auto pt-2">
-          <button
-            onClick={(e) => {
-              e.preventDefault();
-              e.stopPropagation();
-              onDownload(product.id);
-            }}
-            className="flex-1 bg-primary-container text-on-primary rounded-sm py-1.5 px-3 text-xs font-medium hover:opacity-90 flex items-center justify-center gap-1"
-          >
-            <Icon name="download" size={14} fill />
-            下载
-          </button>
-          <button
-            onClick={(e) => {
-              e.preventDefault();
-              e.stopPropagation();
-              onOpenManageDetail?.(product);
-            }}
-            className="flex-1 border border-outline-variant/40 text-on-surface-variant hover:text-on-surface rounded-sm py-1.5 px-3 text-xs text-center flex items-center justify-center gap-1"
-          >
-            <Icon name="visibility" size={14} />
-            预览
-          </button>
-        </div>
-      </div>
+            <div className="home-card-hover-actions absolute right-2 bottom-2 z-20 flex items-center gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity delay-[240ms]">
+              {isAuthenticated && (
+                <button
+                  onClick={toggleFavorite}
+                  disabled={favLoading}
+                  className={`inline-flex h-7 w-7 items-center justify-center rounded-full border border-outline-variant/20 bg-surface-container-lowest/85 transition-colors ${isFavorited ? 'text-primary-container border-primary-container/30' : 'text-on-surface-variant/60 hover:text-on-surface-variant'}`}
+                  aria-label={isFavorited ? '取消收藏' : '收藏'}
+                  data-tooltip-ignore
+                >
+                  <Icon name={isFavorited ? 'favorite' : 'star'} size={14} />
+                </button>
+              )}
+              {product.variantCount && product.variantCount > 1 && (
+                <span className="bg-primary/90 text-on-primary text-[9px] font-bold px-1.5 py-0.5 rounded-sm">
+                  ×{product.variantCount}
+                </span>
+              )}
+            </div>
+          </>
+        }
+        title={<h3 className="text-xs font-headline text-on-surface leading-tight line-clamp-2">{product.name}</h3>}
+        actions={
+          <>
+            <button
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                onDownload(product.id);
+              }}
+              className={`${HOME_GRID_ACTION_BUTTON_CLASS} bg-primary-container font-medium text-on-primary hover:opacity-90`}
+            >
+              <Icon name="download" size={14} fill />
+              下载
+            </button>
+            <button
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                onOpenManageDetail?.(product);
+              }}
+              className={`${HOME_GRID_ACTION_BUTTON_CLASS} border border-outline-variant/40 text-center text-on-surface-variant hover:text-on-surface`}
+            >
+              <Icon name="visibility" size={14} />
+              预览
+            </button>
+          </>
+        }
+      />
       {manageOverlay && <AnimatePresence>{manageOverlay}</AnimatePresence>}
     </>
   );
-  const className =
-    'block group bg-surface-container-high rounded-sm overflow-hidden transition-[box-shadow] duration-200 ease-out hover:shadow-[0_12px_24px_rgba(0,0,0,0.4)] flex flex-col relative';
+  const className = HOME_GRID_CARD_CLASS;
   if (manageOpen) {
     return (
       <div
@@ -977,6 +1068,8 @@ function ProductCardInner({
       to={detailPath}
       state={{ from: returnPath, homeBrowseState }}
       onClick={handleCardClick}
+      onPointerDown={preloadModelDetailPage}
+      onFocus={preloadModelDetailPage}
       onContextMenu={(event) => onContextMenu?.(event, product)}
       data-home-model-id={product.id}
       data-home-model-layout="grid"
@@ -993,6 +1086,7 @@ const ProductCard = memo(ProductCardInner, (prev, next) => {
   if (prev.product.name !== next.product.name) return false;
   if (prev.product.thumbnailUrl !== next.product.thumbnailUrl) return false;
   if (prev.imageLoading !== next.imageLoading) return false;
+  if (prev.imageFetchPriority !== next.imageFetchPriority) return false;
   if (prev.product.fileSize !== next.product.fileSize) return false;
   if (prev.product.variantCount !== next.product.variantCount) return false;
   if (prev.product.formats !== next.product.formats) return false;
@@ -1168,48 +1262,57 @@ function ProductCardMobile({
   returnPath,
   homeBrowseState,
   onBeforeOpen,
+  imageLoading = 'lazy',
+  imageFetchPriority = 'auto',
 }: {
   product: Product;
   onDownload: (id: string) => void;
   returnPath: string;
   homeBrowseState: HomeBrowseState;
   onBeforeOpen?: (modelId: string) => void;
+  imageLoading?: 'eager' | 'lazy';
+  imageFetchPriority?: 'high' | 'low' | 'auto';
 }) {
   const detailPath = `/model/${product.id}`;
   return (
-    <div
-      data-home-model-id={product.id}
-      data-home-model-layout="mobile"
-      className="home-model-card bg-surface-container-high rounded-sm overflow-hidden flex flex-col"
-    >
-      <Link
-        to={detailPath}
-        state={{ from: returnPath, homeBrowseState }}
-        onClick={() => onBeforeOpen?.(product.id)}
-        className="block"
-      >
-        <div className="h-[140px] bg-surface-container-lowest relative overflow-hidden flex items-center justify-center">
-          <ModelThumbnail src={product.thumbnailUrl} alt={product.name} className="w-full h-full object-cover" />
-          <div className="absolute top-1.5 left-1.5 flex flex-col gap-0.5 opacity-70">
-            {product.formats.map((f, index) => (
-              <FormatTag key={`${f || 'format'}-${index}`} format={f} size="xs" />
-            ))}
-          </div>
-          <span className="absolute top-1.5 right-1.5 text-[7px] text-on-surface-variant/50 bg-black/35 px-1 py-px rounded-sm">
-            {product.fileSize}
-          </span>
-        </div>
-      </Link>
-      <div className="p-2.5 flex flex-col flex-1">
-        <h3 className="text-xs font-headline text-on-surface mb-1.5 leading-tight line-clamp-2">{product.name}</h3>
-        <button
-          onClick={() => onDownload(product.id)}
-          className="mt-auto w-full text-xs py-1.5 bg-primary-container text-on-primary rounded-sm font-medium flex items-center justify-center gap-1.5"
-        >
-          <Icon name="download" size={14} fill />
-          下载
-        </button>
-      </div>
+    <div data-home-model-id={product.id} data-home-model-layout="mobile" className={HOME_MOBILE_CARD_CLASS}>
+      <HomeMobileCardContent
+        media={
+          <Link
+            to={detailPath}
+            state={{ from: returnPath, homeBrowseState }}
+            onPointerDown={preloadModelDetailPage}
+            onFocus={preloadModelDetailPage}
+            onClick={() => onBeforeOpen?.(product.id)}
+            className="block h-full w-full"
+          >
+            <ModelThumbnail
+              src={product.thumbnailUrl}
+              alt={product.name}
+              className="w-full h-full object-cover"
+              loading={imageLoading}
+              fetchPriority={imageFetchPriority}
+            />
+            <div className="absolute top-1.5 left-1.5 flex flex-col gap-0.5 opacity-70">
+              {product.formats.map((f, index) => (
+                <FormatTag key={`${f || 'format'}-${index}`} format={f} size="xs" />
+              ))}
+            </div>
+            <span className="absolute top-1.5 right-1.5 text-[7px] text-on-surface-variant/50 bg-black/35 px-1 py-px rounded-sm">
+              {product.fileSize}
+            </span>
+          </Link>
+        }
+        title={
+          <h3 className="text-xs font-headline text-on-surface mb-1.5 leading-tight line-clamp-2">{product.name}</h3>
+        }
+        action={
+          <button onClick={() => onDownload(product.id)} className={HOME_MOBILE_ACTION_BUTTON_CLASS}>
+            <Icon name="download" size={14} fill />
+            下载
+          </button>
+        }
+      />
     </div>
   );
 }
@@ -1251,7 +1354,9 @@ export default function HomePage() {
     : homePageSizeOptions[0] || DEFAULT_PAGE_SIZE;
   const legacySearchQuery = normalizeHomeSearchQuery(searchParams.get('q') || '');
   const initialHomeState = useMemo(
-    () => normalizeHomeBrowseState(readHomeBrowseStateFromLocation(location.state)) || readPendingHomeBrowseState(),
+    () =>
+      normalizeHomeBrowseState(readHomeBrowseStateFromLocation(location.state), homeDefaultPageSize) ||
+      readPendingHomeBrowseState(homeDefaultPageSize),
     // Only seed the initial local browse state once when the page mounts.
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [],
@@ -1266,6 +1371,7 @@ export default function HomePage() {
   const contextMenuOpenRef = useRef(false);
   const [deleteTarget, setDeleteTarget] = useState<Product | null>(null);
   const [deletingModel, setDeletingModel] = useState(false);
+  const [listRefreshPending, setListRefreshPending] = useState(false);
 
   useEffect(() => {
     if (!isAuthenticated) {
@@ -1293,32 +1399,17 @@ export default function HomePage() {
     () => initialHomeState?.categoryId || searchParams.get('category') || 'all',
   );
   const [page, setPage] = useState(() => initialHomeState?.page || parsePageParam(searchParams.get('page')));
-  const [pageSize, setPageSize] = useState(
-    () =>
-      initialHomeState?.pageSize ||
-      normalizePageSize(searchParams.get('page_size'), homePageSizeOptions, homeDefaultPageSize),
+  const [pageSize, setPageSize] = useState(() =>
+    searchParams.has('page_size')
+      ? normalizePageSize(searchParams.get('page_size'), homePageSizeOptions, homeDefaultPageSize)
+      : initialHomeState?.pageSize || homeDefaultPageSize,
   );
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const [sortBy, setSortBy] = useState(() => initialHomeState?.sort || normalizeSortParam(searchParams.get('sort')));
   const scrollContainerRef = useRef<HTMLElement | null>(null);
-  const desktopVirtualOuterRef = useRef<HTMLDivElement | null>(null);
-  const desktopGridMeasureRef = useRef<HTMLDivElement | null>(null);
-  const desktopVirtualFrameRef = useRef<number | null>(null);
-  const desktopSmoothWheelRef = useRef<DesktopSmoothWheelState>({
-    current: 0,
-    target: 0,
-    frame: null,
-    lastSign: 0,
-    lastWheelAt: 0,
-  });
-  const [desktopVirtualMetrics, setDesktopVirtualMetrics] = useState<DesktopVirtualMetrics>(() => ({
-    scrollTop: 0,
-    viewportHeight: 900,
-    gridTop: 0,
-    rowHeight: HOME_DESKTOP_GRID_FALLBACK_ROW_HEIGHT,
-    columnCount: getHomeDesktopGridColumnCount(),
-  }));
   const restoreFrameRef = useRef<number | null>(null);
+  const scrollTopResetFrameRef = useRef<number | null>(null);
+  const pendingHomeListRefreshResetRef = useRef(false);
   const consumedHomeStateKeyRef = useRef<string | null>(null);
   const isRestoringScrollRef = useRef(false);
 
@@ -1342,9 +1433,58 @@ export default function HomePage() {
   const titleRowRef = useRef<HTMLDivElement | null>(null);
   const [chipsStuck, setChipsStuck] = useState(false);
 
+  const resetHomeListViewportForRefresh = useCallback(() => {
+    pendingHomeListRefreshResetRef.current = true;
+
+    if (restoreFrameRef.current != null) {
+      window.cancelAnimationFrame(restoreFrameRef.current);
+      restoreFrameRef.current = null;
+    }
+    if (scrollTopResetFrameRef.current != null) {
+      window.cancelAnimationFrame(scrollTopResetFrameRef.current);
+      scrollTopResetFrameRef.current = null;
+    }
+
+    const pendingRestoreKey = getPendingHomeRestoreKey();
+    if (pendingRestoreKey) clearPendingHomeRestore(pendingRestoreKey);
+    isRestoringScrollRef.current = false;
+    setRestoreVisualLocked(false);
+    setChipsStuck(false);
+  }, []);
+
+  useLayoutEffect(() => {
+    if (!listRefreshPending || !pendingHomeListRefreshResetRef.current) return;
+    pendingHomeListRefreshResetRef.current = false;
+
+    const reset = () => {
+      const container = scrollContainerRef.current;
+      if (!container) return;
+      jumpHomeScrollTo(container, 0);
+    };
+
+    reset();
+    scrollTopResetFrameRef.current = window.requestAnimationFrame(() => {
+      reset();
+      scrollTopResetFrameRef.current = window.requestAnimationFrame(() => {
+        reset();
+        scrollTopResetFrameRef.current = null;
+      });
+    });
+  }, [listRefreshPending]);
+
+  useEffect(
+    () => () => {
+      if (scrollTopResetFrameRef.current != null) {
+        window.cancelAnimationFrame(scrollTopResetFrameRef.current);
+        scrollTopResetFrameRef.current = null;
+      }
+    },
+    [],
+  );
+
   // Keep browsing controls in React/navigation state. Legacy query links still work, then get cleaned from the URL.
   useEffect(() => {
-    const stateBrowse = normalizeHomeBrowseState(readHomeBrowseStateFromLocation(location.state));
+    const stateBrowse = normalizeHomeBrowseState(readHomeBrowseStateFromLocation(location.state), homeDefaultPageSize);
     if (stateBrowse && consumedHomeStateKeyRef.current !== location.key) {
       consumedHomeStateKeyRef.current = location.key;
       if (stateBrowse.query !== searchQuery) {
@@ -1426,9 +1566,13 @@ export default function HomePage() {
       setSearchQuery(query);
       saveHomeSearchQuery(query);
       if (!detail.preservePage) {
+        const shouldRefreshList = query !== searchQuery || (query && activeCategory !== 'all') || page !== 1;
+        if (shouldRefreshList) {
+          setListRefreshPending(true);
+          resetHomeListViewportForRefresh();
+        }
         if (query && activeCategory !== 'all') setActiveCategory('all');
         setPage(1);
-        if (!isRestoringScrollRef.current) scrollContainerRef.current?.scrollTo({ top: 0, behavior: 'smooth' });
       }
       if (searchParams.has('q')) {
         const nextParams = new URLSearchParams(searchParams);
@@ -1438,7 +1582,7 @@ export default function HomePage() {
     };
     window.addEventListener(HOME_SEARCH_EVENT, handleSearchEvent);
     return () => window.removeEventListener(HOME_SEARCH_EVENT, handleSearchEvent);
-  }, [activeCategory, searchParams, setSearchParams]);
+  }, [activeCategory, page, resetHomeListViewportForRefresh, searchParams, searchQuery, setSearchParams]);
 
   const handleDownload = useCallback(
     async (modelId: string) => {
@@ -1459,6 +1603,7 @@ export default function HomePage() {
   const {
     data: serverData,
     isLoading,
+    isValidating,
     mutate: mutateModels,
     hasMore,
     isLoadingMore,
@@ -1483,246 +1628,30 @@ export default function HomePage() {
     return serverData.items.map(serverItemToProduct);
   }, [serverData]);
   const productIdsKey = useMemo(() => products.map((product) => product.id).join('|'), [products]);
+  const showHomeListSkeleton = isLoading || listRefreshPending;
 
   useEffect(() => {
-    if (!isDesktop || restoreVisualLocked) return;
-    const container = scrollContainerRef.current;
-    if (!container) return;
-    if (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) return;
-
-    const state = desktopSmoothWheelRef.current;
-    const getMaxScrollTop = () => Math.max(0, container.scrollHeight - container.clientHeight);
-    const cancelSmoothWheel = () => {
-      if (state.frame != null) {
-        window.cancelAnimationFrame(state.frame);
-        state.frame = null;
-      }
-      state.current = container.scrollTop;
-      state.target = container.scrollTop;
-      state.lastSign = 0;
-      state.lastWheelAt = 0;
-    };
-
-    const animateSmoothWheel = () => {
-      const maxScrollTop = getMaxScrollTop();
-      state.target = clampHomeScrollTop(state.target, maxScrollTop);
-      const distance = state.target - state.current;
-
-      if (Math.abs(distance) <= HOME_DESKTOP_SMOOTH_WHEEL_STOP_DISTANCE) {
-        state.current = state.target;
-        container.scrollTop = state.target;
-        state.frame = null;
-        state.lastSign = 0;
-        state.lastWheelAt = 0;
-        return;
-      }
-
-      state.current += distance * HOME_DESKTOP_SMOOTH_WHEEL_EASE;
-      container.scrollTop = state.current;
-      state.frame = window.requestAnimationFrame(animateSmoothWheel);
-    };
-
-    const handleWheel = (event: globalThis.WheelEvent) => {
-      if (event.defaultPrevented || event.ctrlKey || event.metaKey || event.altKey) return;
-      if (event.shiftKey && Math.abs(event.deltaX) > Math.abs(event.deltaY)) return;
-
-      const targetElement = event.target instanceof Element ? event.target : null;
-      const containerRect = container.getBoundingClientRect();
-      const isInsideContainer =
-        container.contains(targetElement) ||
-        (event.clientX >= containerRect.left &&
-          event.clientX <= containerRect.right &&
-          event.clientY >= containerRect.top &&
-          event.clientY <= containerRect.bottom);
-      if (!isInsideContainer) return;
-
-      if (
-        targetElement?.closest(
-          'input, textarea, select, [contenteditable="true"], [role="listbox"], [data-home-smooth-wheel-ignore]',
-        )
-      ) {
-        cancelSmoothWheel();
-        return;
-      }
-
-      const rawDelta = normalizeHomeWheelDelta(event, container);
-      if (!Number.isFinite(rawDelta) || rawDelta === 0) return;
-
-      // Small high-frequency pixel deltas are usually trackpad gestures and already feel native.
-      if (event.deltaMode === 0 && Math.abs(rawDelta) < HOME_DESKTOP_SMOOTH_WHEEL_MIN_DELTA) {
-        cancelSmoothWheel();
-        return;
-      }
-
-      const maxScrollTop = getMaxScrollTop();
-      if (maxScrollTop <= 0) return;
-
-      const currentScrollTop = container.scrollTop;
-      const sign = Math.sign(rawDelta);
-      if ((sign < 0 && currentScrollTop <= 0) || (sign > 0 && currentScrollTop >= maxScrollTop)) {
-        cancelSmoothWheel();
-        return;
-      }
-
-      const now = performance.now();
-      const isReboundDelta =
-        state.frame != null &&
-        state.lastSign !== 0 &&
-        sign !== state.lastSign &&
-        Math.abs(rawDelta) < HOME_DESKTOP_SMOOTH_WHEEL_REBOUND_DELTA &&
-        now - state.lastWheelAt < HOME_DESKTOP_SMOOTH_WHEEL_REBOUND_MS;
-      if (isReboundDelta) {
-        event.preventDefault();
-        return;
-      }
-
-      event.preventDefault();
-
-      if (
-        state.frame == null ||
-        state.lastSign !== sign ||
-        Math.abs(currentScrollTop - state.current) > HOME_DESKTOP_SMOOTH_WHEEL_SYNC_DISTANCE
-      ) {
-        state.current = currentScrollTop;
-        state.target = currentScrollTop;
-      }
-
-      state.lastSign = sign;
-      state.lastWheelAt = now;
-      const step = Math.max(
-        -HOME_DESKTOP_SMOOTH_WHEEL_MAX_STEP,
-        Math.min(HOME_DESKTOP_SMOOTH_WHEEL_MAX_STEP, rawDelta * HOME_DESKTOP_SMOOTH_WHEEL_MULTIPLIER),
-      );
-      state.target = clampHomeScrollTop(state.target + step, maxScrollTop);
-
-      if (state.frame == null) {
-        state.frame = window.requestAnimationFrame(animateSmoothWheel);
-      }
-    };
-
-    window.addEventListener('wheel', handleWheel, { passive: false, capture: true });
-    return () => {
-      window.removeEventListener('wheel', handleWheel, { capture: true });
-      cancelSmoothWheel();
-    };
-  }, [isDesktop, restoreVisualLocked]);
-
-  useEffect(() => {
-    if (!isDesktop || viewMode !== 'grid' || products.length <= HOME_DESKTOP_VIRTUAL_MIN_ITEMS) return;
-    const container = scrollContainerRef.current;
-    if (!container) return;
-
-    const readMetrics = () => {
-      desktopVirtualFrameRef.current = null;
-      const scrollTop = Math.round(container.scrollTop);
-      const viewportHeight = Math.round(container.clientHeight);
-      const gridTop = Math.round(desktopVirtualOuterRef.current?.offsetTop ?? 0);
-      const columnCount = getHomeDesktopGridColumnCount();
-      setDesktopVirtualMetrics((current) => {
-        const rowHeight = Math.max(1, current.rowHeight);
-        const relativeScrollTop = Math.max(0, scrollTop - gridTop);
-        // Quantize to rows so React updates only when the rendered window actually changes.
-        const virtualScrollTop = gridTop + Math.floor(relativeScrollTop / rowHeight) * rowHeight;
-        const nextBase = {
-          scrollTop: virtualScrollTop,
-          viewportHeight,
-          gridTop,
-          columnCount,
-        };
-        const next = { ...current, ...nextBase };
-        return areDesktopVirtualMetricsEqual(current, next) ? current : next;
-      });
-    };
-
-    const scheduleMetrics = () => {
-      if (desktopVirtualFrameRef.current != null) return;
-      desktopVirtualFrameRef.current = window.requestAnimationFrame(readMetrics);
-    };
-
-    readMetrics();
-    container.addEventListener('scroll', scheduleMetrics, { passive: true });
-    window.addEventListener('resize', scheduleMetrics);
-    return () => {
-      container.removeEventListener('scroll', scheduleMetrics);
-      window.removeEventListener('resize', scheduleMetrics);
-      if (desktopVirtualFrameRef.current != null) {
-        window.cancelAnimationFrame(desktopVirtualFrameRef.current);
-        desktopVirtualFrameRef.current = null;
-      }
-    };
-  }, [isDesktop, productIdsKey, products.length, viewMode]);
-
-  useLayoutEffect(() => {
-    if (!isDesktop || viewMode !== 'grid' || products.length <= HOME_DESKTOP_VIRTUAL_MIN_ITEMS) return;
-    const grid = desktopGridMeasureRef.current;
-    if (!grid) return;
-
-    let measureFrame: number | null = null;
-    const measureRowHeight = () => {
-      measureFrame = null;
-      const firstCard = grid.querySelector<HTMLElement>('[data-home-model-id]');
-      if (!firstCard) return;
-      const nextRowHeight = Math.max(1, Math.ceil(firstCard.getBoundingClientRect().height + HOME_DESKTOP_GRID_GAP_PX));
-      setDesktopVirtualMetrics((current) => {
-        if (current.rowHeight === nextRowHeight) return current;
-        return { ...current, rowHeight: nextRowHeight };
-      });
-    };
-    const scheduleMeasure = () => {
-      if (measureFrame != null) return;
-      measureFrame = window.requestAnimationFrame(measureRowHeight);
-    };
-
-    scheduleMeasure();
-    const observer = new ResizeObserver(scheduleMeasure);
-    observer.observe(grid);
-    window.addEventListener('resize', scheduleMeasure);
-    return () => {
-      observer.disconnect();
-      window.removeEventListener('resize', scheduleMeasure);
-      if (measureFrame != null) window.cancelAnimationFrame(measureFrame);
-    };
-  }, [isDesktop, productIdsKey, products.length, restoreVisualLocked, viewMode]);
-
-  const shouldVirtualizeDesktopGrid =
-    isDesktop && viewMode === 'grid' && !restoreVisualLocked && products.length > HOME_DESKTOP_VIRTUAL_MIN_ITEMS;
-
-  const desktopVirtualWindow = useMemo(() => {
-    if (!shouldVirtualizeDesktopGrid) {
-      return {
-        products,
-        topOffset: 0,
-        totalHeight: 0,
-      };
-    }
-
-    const columnCount = Math.max(1, desktopVirtualMetrics.columnCount);
-    const rowHeight = Math.max(1, desktopVirtualMetrics.rowHeight);
-    const totalRows = Math.max(1, Math.ceil(products.length / columnCount));
-    const relativeScrollTop = Math.max(0, desktopVirtualMetrics.scrollTop - desktopVirtualMetrics.gridTop);
-    const rawStartRow = Math.max(0, Math.floor(relativeScrollTop / rowHeight) - HOME_DESKTOP_GRID_OVERSCAN_ROWS);
-    const startRow = Math.floor(rawStartRow / HOME_DESKTOP_GRID_WINDOW_STEP_ROWS) * HOME_DESKTOP_GRID_WINDOW_STEP_ROWS;
-    const endRow = Math.min(
-      totalRows,
-      Math.ceil(
-        (Math.ceil((relativeScrollTop + desktopVirtualMetrics.viewportHeight) / rowHeight) +
-          HOME_DESKTOP_GRID_OVERSCAN_ROWS) /
-          HOME_DESKTOP_GRID_WINDOW_STEP_ROWS,
-      ) * HOME_DESKTOP_GRID_WINDOW_STEP_ROWS,
-    );
-    const startIndex = Math.min(products.length, startRow * columnCount);
-    const endIndex = Math.min(products.length, Math.max(startIndex + columnCount, endRow * columnCount));
-
-    return {
-      products: products.slice(startIndex, endIndex),
-      topOffset: startRow * rowHeight,
-      totalHeight: Math.max(0, totalRows * rowHeight - HOME_DESKTOP_GRID_GAP_PX),
-    };
-  }, [desktopVirtualMetrics, products, shouldVirtualizeDesktopGrid]);
+    if (!listRefreshPending) return;
+    if (!isLoading && !isValidating) setListRefreshPending(false);
+  }, [isLoading, isValidating, listRefreshPending]);
 
   const totalItems = serverData?.total || 0;
+  const activeCategoryCount = useMemo(() => {
+    if (activeCategory === 'all') return totalModelCount || totalItems;
+    const parent = categories.find((category) => category.id === activeCategory);
+    if (parent) return parent.count;
+    for (const category of categories) {
+      const child = category.children?.find((item) => item.id === activeCategory);
+      if (child) return child.count;
+    }
+    return null;
+  }, [activeCategory, categories, totalItems, totalModelCount]);
   const displayTotalItems =
-    activeCategory === 'all' && !searchQuery.trim() ? totalModelCount || totalItems : totalItems;
+    showHomeListSkeleton && activeCategoryCount != null
+      ? activeCategoryCount
+      : activeCategory === 'all' && !searchQuery.trim()
+        ? totalModelCount || totalItems
+        : totalItems;
 
   const toggleCategory = (id: string) => {
     setExpandedCategories((prev) => {
@@ -1736,11 +1665,17 @@ export default function HomePage() {
   };
 
   const handleSelectCategory = (id: string) => {
+    const nextCategoryChanged = id !== activeCategory || Boolean(searchQuery.trim()) || page !== 1;
+    if (nextCategoryChanged) {
+      setListRefreshPending(true);
+      resetHomeListViewportForRefresh();
+    }
     setActiveCategory(id);
     setSearchQuery('');
     saveHomeSearchQuery('');
     dispatchHomeSearchQuery('');
     setPage(1);
+    void setModelPageSize(1);
     // Clear search when selecting a category; category itself stays in local navigation state.
     if (searchParams.toString()) setSearchParams(new URLSearchParams(), { replace: true });
   };
@@ -1750,12 +1685,20 @@ export default function HomePage() {
     setPage((current) => current + 1);
   }, [hasMore, isLoadingMore]);
 
-  const handleSortChange = useCallback((nextSort: string) => {
-    const normalizedSort = normalizeSortParam(nextSort);
-    setSortBy(normalizedSort);
-    setPage(1);
-    if (!isRestoringScrollRef.current) scrollContainerRef.current?.scrollTo({ top: 0, behavior: 'smooth' });
-  }, []);
+  const handleSortChange = useCallback(
+    (nextSort: string) => {
+      const normalizedSort = normalizeSortParam(nextSort);
+      const shouldRefreshList = normalizedSort !== sortBy || page !== 1;
+      if (shouldRefreshList) {
+        setListRefreshPending(true);
+        resetHomeListViewportForRefresh();
+      }
+      setSortBy(normalizedSort);
+      setPage(1);
+      void setModelPageSize(1);
+    },
+    [page, resetHomeListViewportForRefresh, setModelPageSize, sortBy],
+  );
 
   const modelReturnPath = useMemo(() => buildHomeReturnPath(), []);
 
@@ -2040,25 +1983,31 @@ export default function HomePage() {
   );
 
   const renderDesktopProductCard = useCallback(
-    (product: Product) => (
-      <ProductCard
-        key={product.id}
-        product={product}
-        imageLoading="lazy"
-        onDownload={handleDownload}
-        onContextMenu={handleModelContextMenu}
-        manageOpen={contextMenu?.product.id === product.id}
-        onCloseManage={closeManagedModelOverlay}
-        onOpenManageDetail={openManagedModelDetail}
-        onShareModel={shareManagedModel}
-        onRenameModel={renameManagedModel}
-        onRequestDelete={requestManagedModelDelete}
-        returnPath={modelReturnPath}
-        homeBrowseState={homeBrowseState}
-        onBeforeOpen={handleBeforeOpenModel}
-        variant={viewMode}
-      />
-    ),
+    (product: Product, index = 0) => {
+      const eagerImageCount = viewMode === 'grid' ? HOME_DESKTOP_GRID_EAGER_IMAGES : HOME_DESKTOP_LIST_EAGER_IMAGES;
+      const shouldPrioritizeImage = index < eagerImageCount;
+
+      return (
+        <ProductCard
+          key={product.id}
+          product={product}
+          imageLoading={shouldPrioritizeImage ? 'eager' : 'lazy'}
+          imageFetchPriority={shouldPrioritizeImage ? 'high' : 'auto'}
+          onDownload={handleDownload}
+          onContextMenu={handleModelContextMenu}
+          manageOpen={contextMenu?.product.id === product.id}
+          onCloseManage={closeManagedModelOverlay}
+          onOpenManageDetail={openManagedModelDetail}
+          onShareModel={shareManagedModel}
+          onRenameModel={renameManagedModel}
+          onRequestDelete={requestManagedModelDelete}
+          returnPath={modelReturnPath}
+          homeBrowseState={homeBrowseState}
+          onBeforeOpen={handleBeforeOpenModel}
+          variant={viewMode}
+        />
+      );
+    },
     [
       closeManagedModelOverlay,
       contextMenu?.product.id,
@@ -2286,12 +2235,16 @@ export default function HomePage() {
                 <div className="flex rounded-sm border border-outline-variant/30 overflow-hidden">
                   <button
                     onClick={() => setViewMode('grid')}
+                    aria-label="网格视图"
+                    title="网格视图"
                     className={`px-2.5 py-1.5 transition-colors ${viewMode === 'grid' ? 'bg-surface-container-high text-on-surface' : 'text-on-surface-variant hover:text-on-surface'}`}
                   >
                     <Icon name="grid_view" size={18} />
                   </button>
                   <button
                     onClick={() => setViewMode('list')}
+                    aria-label="列表视图"
+                    title="列表视图"
                     className={`px-2.5 py-1.5 transition-colors ${viewMode === 'list' ? 'bg-surface-container-high text-on-surface' : 'text-on-surface-variant hover:text-on-surface'}`}
                   >
                     <Icon name="view_list" size={18} />
@@ -2300,43 +2253,23 @@ export default function HomePage() {
               </div>
             </div>
 
-            {isLoading && products.length === 0 ? (
+            {showHomeListSkeleton ? (
               <div
                 className={`grid gap-3 ${viewMode === 'grid' ? 'grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5' : 'grid-cols-1 gap-2'}`}
               >
-                {Array.from({ length: viewMode === 'grid' ? 12 : 8 }).map((_, i) => (
-                  <SkeletonCard key={i} />
-                ))}
+                {Array.from({ length: viewMode === 'grid' ? 12 : 8 }).map((_, i) =>
+                  viewMode === 'grid' ? <SkeletonCard key={i} /> : <SkeletonListCard key={i} />,
+                )}
               </div>
             ) : (
               <>
-                {shouldVirtualizeDesktopGrid ? (
-                  <div
-                    ref={desktopVirtualOuterRef}
-                    className="relative"
-                    style={{ height: desktopVirtualWindow.totalHeight, contain: 'layout style' }}
-                  >
-                    <div
-                      ref={desktopGridMeasureRef}
-                      className="grid gap-3 grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 absolute inset-x-0 top-0"
-                      style={{
-                        transform: `translate3d(0, ${desktopVirtualWindow.topOffset}px, 0)`,
-                        willChange: 'transform',
-                      }}
-                    >
-                      {desktopVirtualWindow.products.map(renderDesktopProductCard)}
-                    </div>
-                  </div>
-                ) : (
-                  <div
-                    ref={viewMode === 'grid' ? desktopGridMeasureRef : undefined}
-                    className={`grid gap-3 ${viewMode === 'grid' ? 'grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5' : 'grid-cols-1 gap-2'}`}
-                  >
-                    {products.map(renderDesktopProductCard)}
-                  </div>
-                )}
+                <div
+                  className={`grid gap-3 ${viewMode === 'grid' ? 'grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5' : 'grid-cols-1 gap-2'}`}
+                >
+                  {products.map(renderDesktopProductCard)}
+                </div>
 
-                {products.length === 0 && (
+                {products.length === 0 && !showHomeListSkeleton && (
                   <div className="flex flex-col items-center justify-center py-20 gap-4">
                     <Icon name="search_off" size={48} className="text-on-surface-variant/30" />
                     <div className="text-center">
@@ -2365,7 +2298,13 @@ export default function HomePage() {
                   </div>
                 )}
 
-                <InfiniteLoadTrigger hasMore={hasMore} isLoading={isLoadingMore} onLoadMore={handleLoadMore} />
+                <InfiniteLoadTrigger
+                  hasMore={hasMore}
+                  isLoading={isLoadingMore}
+                  onLoadMore={handleLoadMore}
+                  buttonless
+                  idleLabel={null}
+                />
               </>
             )}
           </main>
@@ -2596,7 +2535,7 @@ export default function HomePage() {
           </div>
 
           {/* Model grid */}
-          {isLoading && products.length === 0 ? (
+          {showHomeListSkeleton ? (
             <div className="grid grid-cols-2 gap-2">
               {Array.from({ length: 6 }).map((_, i) => (
                 <SkeletonCardMobile key={i} />
@@ -2604,20 +2543,25 @@ export default function HomePage() {
             </div>
           ) : (
             <div className="grid grid-cols-2 gap-2">
-              {products.map((product) => (
-                <ProductCardMobile
-                  key={product.id}
-                  product={product}
-                  onDownload={handleDownload}
-                  returnPath={modelReturnPath}
-                  homeBrowseState={homeBrowseState}
-                  onBeforeOpen={(modelId) => saveCurrentHomeScroll(true, modelId)}
-                />
-              ))}
+              {products.map((product, index) => {
+                const shouldPrioritizeImage = index < HOME_MOBILE_EAGER_IMAGES;
+                return (
+                  <ProductCardMobile
+                    key={product.id}
+                    product={product}
+                    onDownload={handleDownload}
+                    returnPath={modelReturnPath}
+                    homeBrowseState={homeBrowseState}
+                    imageLoading={shouldPrioritizeImage ? 'eager' : 'lazy'}
+                    imageFetchPriority={shouldPrioritizeImage ? 'high' : 'auto'}
+                    onBeforeOpen={(modelId) => saveCurrentHomeScroll(true, modelId)}
+                  />
+                );
+              })}
             </div>
           )}
 
-          {products.length === 0 && !isLoading && (
+          {products.length === 0 && !showHomeListSkeleton && (
             <div className="flex flex-col items-center justify-center py-16 gap-3">
               <Icon name="search_off" size={40} className="text-on-surface-variant/30" />
               <div className="text-center">
@@ -2644,7 +2588,13 @@ export default function HomePage() {
             </div>
           )}
 
-          <InfiniteLoadTrigger hasMore={hasMore} isLoading={isLoadingMore} onLoadMore={handleLoadMore} />
+          <InfiniteLoadTrigger
+            hasMore={hasMore}
+            isLoading={isLoadingMore}
+            onLoadMore={handleLoadMore}
+            buttonless
+            idleLabel={null}
+          />
 
           {/* Footer */}
           <footer className="mt-auto pt-4 border-t border-outline-variant/10 text-center pb-2">

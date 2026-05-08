@@ -14,13 +14,26 @@ export default defineConfig({
         manualChunks(id: string) {
           const normalizedId = id.replace(/\\/g, '/');
 
+          if (normalizedId.includes('/src/components/shared/UploadModal.tsx')) {
+            return 'upload-modal';
+          }
+          if (normalizedId.includes('/src/components/shared/NotificationPanel.tsx')) {
+            return 'notification-panel';
+          }
+          if (normalizedId.includes('/src/components/shared/MobileNavDrawer.tsx')) {
+            return 'mobile-nav-drawer';
+          }
+
           if (normalizedId.includes('/node_modules/')) {
             // Keep heavy, route-only toolchains out of the initial vendor chunk.
             if (
               normalizedId.includes('/three/') ||
               normalizedId.includes('/@react-three/') ||
               normalizedId.includes('/@pmndrs/') ||
-              normalizedId.includes('/xlsx/')
+              normalizedId.includes('/xlsx/') ||
+              normalizedId.includes('/@sentry/') ||
+              normalizedId.includes('/read-excel-file/') ||
+              normalizedId.includes('/write-excel-file/')
             ) {
               return;
             }

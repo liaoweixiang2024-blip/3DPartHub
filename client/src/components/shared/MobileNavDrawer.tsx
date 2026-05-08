@@ -5,6 +5,7 @@ import useSWR from 'swr';
 import { getBusinessConfig } from '../../lib/businessConfig';
 import { overlayMotion, sideSheetMotion } from '../../lib/motion';
 import { getCachedPublicSettings } from '../../lib/publicSettings';
+import { preloadRouteForPath } from '../../lib/routeLoaders';
 import { useAuthStore } from '../../stores/useAuthStore';
 import Icon from '../shared/Icon';
 import LoginConfirmDialog from '../shared/LoginConfirmDialog';
@@ -73,6 +74,9 @@ export default function MobileNavDrawer({ open, onClose }: MobileNavDrawerProps)
                     <Link
                       key={item.path}
                       to={item.path}
+                      onPointerEnter={() => preloadRouteForPath(item.path)}
+                      onPointerDown={() => preloadRouteForPath(item.path)}
+                      onFocus={() => preloadRouteForPath(item.path)}
                       onClick={(e) => {
                         const result = checkProtectedAccess(item.path);
                         if (result.action === 'dialog') {
@@ -104,6 +108,9 @@ export default function MobileNavDrawer({ open, onClose }: MobileNavDrawerProps)
                 <div className="border-t border-surface-container-high px-6 py-4 space-y-1">
                   <Link
                     to="/profile"
+                    onPointerEnter={() => preloadRouteForPath('/profile')}
+                    onPointerDown={() => preloadRouteForPath('/profile')}
+                    onFocus={() => preloadRouteForPath('/profile')}
                     onClick={(e) => {
                       const result = checkProtectedAccess('/profile');
                       if (result.action === 'dialog') {

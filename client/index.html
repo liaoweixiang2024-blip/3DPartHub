@@ -12,14 +12,13 @@
     <meta name="description" content="" />
     <meta name="theme-color" content="#1a1a1a" />
     <link rel="preload" href="/fonts/space-grotesk-latin-400-normal.woff2" as="font" type="font/woff2" crossorigin />
-    <link rel="preload" href="/fonts/space-grotesk-latin-600-normal.woff2" as="font" type="font/woff2" crossorigin />
     <link rel="preload" href="/fonts/space-grotesk-latin-700-normal.woff2" as="font" type="font/woff2" crossorigin />
     <meta property="og:title" content="" />
     <meta property="og:description" content="" />
     <meta property="og:type" content="website" />
     <script>
       // Apply site config from localStorage before React hydrates to prevent flash
-      (function() {
+      (function () {
         try {
           var raw = localStorage.getItem('site_config_cache');
           if (!raw) return;
@@ -43,12 +42,12 @@
             var link = document.querySelector('link[rel="icon"]');
             if (link) link.href = cfg.site_favicon;
           }
-        } catch(e) {}
+        } catch (e) {}
       })();
     </script>
   </head>
   <body>
-    <div id="root" style="opacity:0"></div>
+    <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

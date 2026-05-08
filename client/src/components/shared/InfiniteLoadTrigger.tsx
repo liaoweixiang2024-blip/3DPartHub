@@ -7,6 +7,7 @@ interface InfiniteLoadTriggerProps {
   onLoadMore: () => void;
   className?: string;
   label?: string;
+  idleLabel?: string | null;
   loadingLabel?: string;
   buttonless?: boolean;
 }
@@ -17,6 +18,7 @@ export default function InfiniteLoadTrigger({
   onLoadMore,
   className = '',
   label = '加载更多',
+  idleLabel = '继续滚动自动加载',
   loadingLabel = '加载中...',
   buttonless = false,
 }: InfiniteLoadTriggerProps) {
@@ -40,18 +42,35 @@ export default function InfiniteLoadTrigger({
   if (!hasMore && !isLoading) return null;
 
   if (buttonless) {
+    const showIdleLabel = idleLabel !== null;
+    const showStatus = isLoading || showIdleLabel;
+
     return (
-      <div ref={ref} className={`flex justify-center py-3 ${className}`}>
-        <span className="inline-flex items-center gap-2 rounded-full bg-surface-container-low px-3 py-1 text-[11px] text-on-surface-variant">
-          {isLoading ? <Icon name="autorenew" size={13} className="animate-spin" /> : <Icon name="south" size={13} />}
-          {isLoading ? loadingLabel : '继续滚动自动加载'}
-        </span>
+      <div
+        ref={ref}
+        className={`flex justify-center ${showStatus ? 'py-3' : 'h-px py-0'} ${className}`}
+        data-infinite-load-trigger
+        data-infinite-load-mode="buttonless"
+        data-infinite-load-state={isLoading ? 'loading' : 'idle'}
+      >
+        {showStatus ? (
+          <span className="inline-flex items-center gap-2 rounded-full bg-surface-container-low px-3 py-1 text-[11px] text-on-surface-variant">
+            {isLoading ? <Icon name="autorenew" size={13} className="animate-spin" /> : <Icon name="south" size={13} />}
+            {isLoading ? loadingLabel : idleLabel}
+          </span>
+        ) : null}
       </div>
     );
   }
 
   return (
-    <div ref={ref} className={`flex justify-center py-4 ${className}`}>
+    <div
+      ref={ref}
+      className={`flex justify-center py-4 ${className}`}
+      data-infinite-load-trigger
+      data-infinite-load-mode="button"
+      data-infinite-load-state={isLoading ? 'loading' : 'idle'}
+    >
       <button
         type="button"
         onClick={onLoadMore}

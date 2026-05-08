@@ -10,13 +10,38 @@ import type {
   ModelPartItem,
 } from './viewerEvents';
 
-const Canvas = lazy(() => import('@react-three/fiber').then((m) => ({ default: m.Canvas })));
+const loadCanvas = () => import('@react-three/fiber').then((m) => ({ default: m.Canvas }));
+const loadScene = () => import('./Scene');
+const loadCameraController = () => import('./CameraController');
+const loadMultiFormatLoader = () => import('./MultiFormatLoader');
+const loadRendererExposure = () => import('./RendererExposure');
+const loadOrbitControls = () => import('@react-three/drei').then((m) => ({ default: m.OrbitControls }));
 
-const Scene = lazy(() => import('./Scene'));
-const CameraController = lazy(() => import('./CameraController'));
-const MultiFormatLoader = lazy(() => import('./MultiFormatLoader'));
-const RendererExposure = lazy(() => import('./RendererExposure'));
-const OrbitControls = lazy(() => import('@react-three/drei').then((m) => ({ default: m.OrbitControls })));
+const Canvas = lazy(loadCanvas);
+const Scene = lazy(loadScene);
+const CameraController = lazy(loadCameraController);
+const MultiFormatLoader = lazy(loadMultiFormatLoader);
+const RendererExposure = lazy(loadRendererExposure);
+const OrbitControls = lazy(loadOrbitControls);
+
+let viewerRuntimePreloaded = false;
+
+export function preloadModelViewerRuntime() {
+  if (viewerRuntimePreloaded) return;
+  viewerRuntimePreloaded = true;
+  void Promise.all([
+    loadCanvas(),
+    loadScene(),
+    loadCameraController(),
+    loadMultiFormatLoader(),
+    loadRendererExposure(),
+    loadOrbitControls(),
+  ]).catch(() => {
+    viewerRuntimePreloaded = false;
+  });
+}
+
+preloadModelViewerRuntime();
 
 export type ViewMode = 'solid' | 'wireframe' | 'transparent' | 'explode';
 export type CameraPreset = 'front' | 'back' | 'left' | 'right' | 'top' | 'bottom' | 'iso';

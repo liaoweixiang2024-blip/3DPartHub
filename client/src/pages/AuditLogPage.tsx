@@ -2,10 +2,14 @@ import { useCallback, useEffect, useState } from 'react';
 import useSWRInfinite from 'swr/infinite';
 import client from '../api/client';
 import { unwrapResponse } from '../api/response';
-import { AdminManagementPage, AdminContentPanel, AdminEmptyState } from '../components/shared/AdminManagementPage';
+import {
+  AdminManagementPage,
+  AdminContentPanel,
+  AdminEmptyState,
+  AdminLoadingState,
+} from '../components/shared/AdminManagementPage';
 import { AdminPageShell } from '../components/shared/AdminPageShell';
 import Icon from '../components/shared/Icon';
-import LoadingSpinner from '../components/shared/LoadingSpinner';
 import InfiniteLoadTrigger from '../components/shared/InfiniteLoadTrigger';
 import { useDocumentTitle } from '../hooks/useDocumentTitle';
 import { useImeSafeSearchInput } from '../hooks/useImeSafeSearchInput';
@@ -338,34 +342,40 @@ export default function AuditLogPage() {
           contentClassName="min-h-0 overflow-hidden"
         >
           <AdminContentPanel scroll className="h-full overflow-hidden">
-            <div className="h-full overflow-auto custom-scrollbar">
-              <table className="w-full">
-                <thead className="sticky top-0 z-10">
-                  <tr className="bg-surface-container-low text-xs uppercase tracking-wider text-on-surface-variant font-bold">
-                    <th className="py-3 px-4 text-left">操作</th>
-                    <th className="py-3 px-4 text-left">资源</th>
-                    <th className="py-3 px-4 text-left">资源ID</th>
-                    <th className="py-3 px-4 text-left">用户</th>
-                    <th className="py-3 px-4 text-left">时间</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {visibleLogs.map((log) => (
-                    <LogRow key={log.id} log={log} isDesktop />
-                  ))}
-                  {logs.length > 0 && !searchText && (
-                    <tr>
-                      <td colSpan={5}>
-                        <InfiniteLoadTrigger hasMore={hasMore} isLoading={isLoadingMore} onLoadMore={loadMore} />
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
             {isLoading && logs.length === 0 && (
-              <div className="flex min-h-[360px] items-center justify-center">
-                <LoadingSpinner />
+              <AdminLoadingState
+                rows={10}
+                tableColumns="96px 120px minmax(0,1fr) 160px 180px"
+                tableCells={['chip', 'chip', 'text', 'text', 'text']}
+                className="h-full rounded-none border-0"
+                label="操作日志加载中"
+              />
+            )}
+            {logs.length > 0 && (
+              <div className="h-full overflow-auto custom-scrollbar">
+                <table className="w-full">
+                  <thead className="sticky top-0 z-10">
+                    <tr className="bg-surface-container-low text-xs uppercase tracking-wider text-on-surface-variant font-bold">
+                      <th className="py-3 px-4 text-left">操作</th>
+                      <th className="py-3 px-4 text-left">资源</th>
+                      <th className="py-3 px-4 text-left">资源ID</th>
+                      <th className="py-3 px-4 text-left">用户</th>
+                      <th className="py-3 px-4 text-left">时间</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {visibleLogs.map((log) => (
+                      <LogRow key={log.id} log={log} isDesktop />
+                    ))}
+                    {!searchText && (
+                      <tr>
+                        <td colSpan={5}>
+                          <InfiniteLoadTrigger hasMore={hasMore} isLoading={isLoadingMore} onLoadMore={loadMore} />
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
               </div>
             )}
             {visibleLogs.length === 0 && !isLoading && (
@@ -396,16 +406,18 @@ export default function AuditLogPage() {
       >
         <AdminContentPanel scroll>
           <div className="min-h-0 flex-1 overflow-y-auto scrollbar-hidden flex flex-col gap-2 p-3">
-            {visibleLogs.map((log) => (
-              <LogRow key={log.id} log={log} isDesktop={false} />
-            ))}
-            {logs.length > 0 && !searchText && (
-              <InfiniteLoadTrigger hasMore={hasMore} isLoading={isLoadingMore} onLoadMore={loadMore} />
-            )}
             {isLoading && logs.length === 0 && (
-              <div className="flex min-h-[320px] items-center justify-center">
-                <LoadingSpinner />
-              </div>
+              <AdminLoadingState variant="list" rows={8} className="min-h-[320px]" label="操作日志加载中" />
+            )}
+            {logs.length > 0 && (
+              <>
+                {visibleLogs.map((log) => (
+                  <LogRow key={log.id} log={log} isDesktop={false} />
+                ))}
+                {!searchText && (
+                  <InfiniteLoadTrigger hasMore={hasMore} isLoading={isLoadingMore} onLoadMore={loadMore} />
+                )}
+              </>
             )}
             {visibleLogs.length === 0 && !isLoading && (
               <AdminEmptyState

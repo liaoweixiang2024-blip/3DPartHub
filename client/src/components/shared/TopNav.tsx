@@ -26,16 +26,21 @@ import {
   type HomeSearchEventDetail,
 } from '../../lib/homeSearchState';
 import { onSiteConfigChange, getCachedPublicSettings } from '../../lib/publicSettings';
+import { preloadRouteForPath } from '../../lib/routeLoaders';
 import { useAuthStore } from '../../stores/useAuthStore';
 import { useThemeStore } from '../../stores/useThemeStore';
 import BrandMark from './BrandMark';
 import Icon from './Icon';
 import LoginConfirmDialog from './LoginConfirmDialog';
-import Tooltip from './Tooltip';
-import NotificationPanel from './NotificationPanel';
+import { loadNotificationPanel, scheduleNotificationPanelPreload } from './preloadNotificationPanel';
 import { checkProtectedAccess } from './ProtectedLink';
+import Tooltip from './Tooltip';
 
-const UploadModal = lazy(() => import('./UploadModal'));
+const preloadUploadModal = () => import('./UploadModal');
+const UploadModal = lazy(preloadUploadModal);
+const NotificationPanel = lazy(loadNotificationPanel);
+scheduleNotificationPanelPreload();
+const TOP_NAV_SEARCH_DEBOUNCE_MS = 280;
 
 interface TopNavProps {
   compact?: boolean;
@@ -51,7 +56,49 @@ function isComposingNativeEvent(event: Event) {
 }
 
 function NotificationPanelLoader({ compact = false }: { compact?: boolean }) {
-  return <NotificationPanel compact={compact} />;
+  return (
+    <Suspense fallback={<NotificationPanelFallback compact={compact} />}>
+      <NotificationPanel compact={compact} />
+    </Suspense>
+  );
+}
+
+function NotificationPanelFallback({ compact = false }: { compact?: boolean }) {
+  if (!useAuthStore.getState().isAuthenticated) {
+    if (compact) {
+      return (
+        <button
+          onPointerEnter={loadNotificationPanel}
+          onPointerDown={loadNotificationPanel}
+          onFocus={loadNotificationPanel}
+          onClick={() => {
+            window.location.href = '/login';
+          }}
+          className="p-2 rounded-lg text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high transition-colors"
+          aria-label="通知"
+          title="登录后查看通知"
+        >
+          <Icon name="notifications" size={20} />
+        </button>
+      );
+    }
+    return null;
+  }
+
+  return (
+    <button
+      onPointerEnter={loadNotificationPanel}
+      onPointerDown={loadNotificationPanel}
+      onFocus={loadNotificationPanel}
+      onClick={loadNotificationPanel}
+      className="p-2 text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high rounded-lg transition-colors relative"
+      aria-label="通知"
+      data-tooltip="通知"
+      data-tooltip-side="bottom"
+    >
+      <Icon name="notifications" size={20} />
+    </button>
+  );
 }
 
 function UploadModalLoader({
@@ -188,6 +235,9 @@ function UserMenu({
                       navigate(item.path);
                     }
                   }}
+                  onPointerEnter={() => preloadRouteForPath(item.path)}
+                  onPointerDown={() => preloadRouteForPath(item.path)}
+                  onFocus={() => preloadRouteForPath(item.path)}
                   className="w-full flex items-center gap-3 px-4 py-2.5 text-sm transition-colors text-on-surface hover:bg-surface-container-highest"
                 >
                   <Icon name={item.icon} size={18} />
@@ -198,8 +248,12 @@ function UserMenu({
                 <button
                   onClick={() => {
                     setOpen(false);
+                    preloadRouteForPath('/admin/models');
                     navigate('/admin/models');
                   }}
+                  onPointerEnter={() => preloadRouteForPath('/admin/models')}
+                  onPointerDown={() => preloadRouteForPath('/admin/models')}
+                  onFocus={() => preloadRouteForPath('/admin/models')}
                   className="w-full flex items-center gap-3 px-4 py-2.5 text-sm transition-colors text-on-surface hover:bg-surface-container-highest"
                 >
                   <Icon name="admin_panel_settings" size={18} />
@@ -321,7 +375,7 @@ export default function TopNav({ compact = false, onMenuToggle }: TopNavProps) {
       debounceRef.current = setTimeout(() => {
         debounceRef.current = null;
         doSearch(nextValue);
-      }, 500);
+      }, TOP_NAV_SEARCH_DEBOUNCE_MS);
     },
     [clearSearchDebounce, doSearch],
   );
@@ -425,10 +479,15 @@ export default function TopNav({ compact = false, onMenuToggle }: TopNavProps) {
               onClick={(e) => {
                 if (location.pathname === '/') {
                   e.preventDefault();
-                  const scroller = document.querySelector<HTMLElement>('main.overflow-y-auto');
-                  if (scroller && scroller.scrollTop > 0) {
-                    scroller.scrollTo({ top: 0, behavior: 'smooth' });
-                  }
+                  handleClearSearch();
+                  requestAnimationFrame(() => {
+                    const scroller =
+                      document.querySelector<HTMLElement>('.home-scroll-container') ||
+                      document.querySelector<HTMLElement>('main.overflow-y-auto');
+                    if (scroller && scroller.scrollTop > 0) {
+                      scroller.scrollTo({ top: 0, behavior: 'smooth' });
+                    }
+                  });
                 }
               }}
               className="flex h-9 min-w-0 flex-1 items-center rounded-sm active:opacity-60 transition-opacity duration-100"
@@ -501,7 +560,15 @@ export default function TopNav({ compact = false, onMenuToggle }: TopNavProps) {
           onClick={(e) => {
             if (location.pathname === '/') {
               e.preventDefault();
-              window.location.reload();
+              handleClearSearch();
+              requestAnimationFrame(() => {
+                const scroller =
+                  document.querySelector<HTMLElement>('.home-scroll-container') ||
+                  document.querySelector<HTMLElement>('main.overflow-y-auto');
+                if (scroller && scroller.scrollTop > 0) {
+                  scroller.scrollTo({ top: 0, behavior: 'smooth' });
+                }
+              });
             }
           }}
           className="flex w-56 shrink-0 cursor-pointer items-center px-5 transition-[opacity,transform] hover:opacity-80 active:scale-95"
@@ -547,6 +614,9 @@ export default function TopNav({ compact = false, onMenuToggle }: TopNavProps) {
               <Link
                 to={item.path}
                 className={desktopIconClass}
+                onPointerEnter={() => preloadRouteForPath(item.path)}
+                onPointerDown={() => preloadRouteForPath(item.path)}
+                onFocus={() => preloadRouteForPath(item.path)}
                 onClick={(e) => {
                   const result = checkProtectedAccess(item.path);
                   if (result.action === 'dialog') {
@@ -568,6 +638,9 @@ export default function TopNav({ compact = false, onMenuToggle }: TopNavProps) {
             <Tooltip text="上传模型" side="bottom">
               <button
                 onClick={() => setUploadOpen(true)}
+                onPointerEnter={preloadUploadModal}
+                onPointerDown={preloadUploadModal}
+                onFocus={preloadUploadModal}
                 className="p-2 text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high rounded-lg transition-colors"
               >
                 <Icon name="cloud_upload" size={20} />

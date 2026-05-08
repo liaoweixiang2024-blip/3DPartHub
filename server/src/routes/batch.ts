@@ -10,7 +10,6 @@ import { getBusinessConfig } from '../lib/businessConfig.js';
 import { cacheDelByPrefix } from '../lib/cache.js';
 import { config } from '../lib/config.js';
 import { consumeProtectedResourceToken, createProtectedResourceToken } from '../lib/downloadTokenStore.js';
-import { modelDownloadFileName, modelDownloadSourceName } from '../lib/modelDownloadName.js';
 import { optionalString } from '../lib/requestValidation.js';
 import { authMiddleware, verifyRequestToken, type AuthRequest } from '../middleware/auth.js';
 import { requireRole } from '../middleware/rbac.js';
@@ -20,7 +19,8 @@ import {
   isSupportedBatchArchive,
   processBatchArchiveUpload,
 } from '../services/batchArchiveUpload.js';
-import { findOriginalModelPath, normalizeModelFormat } from '../services/modelFiles.js';
+import { resolveDbModelDownloadTarget } from '../services/modelDownloadTarget.js';
+import { normalizeModelFormat } from '../services/modelFiles.js';
 import { MODEL_STATUS } from '../services/modelStatus.js';
 import { clearCategoryCache } from './categories/common.js';
 
@@ -110,18 +110,16 @@ router.post('/api/batch/download', authMiddleware, requireRole('ADMIN'), async (
     const downloadItems: Array<{ filePath: string; fileName: string }> = [];
 
     for (const model of models) {
-      const originalPath = findOriginalModelPath(model);
-      if (!originalPath || !existsSync(originalPath)) continue;
+      const target = resolveDbModelDownloadTarget(model, 'original');
+      if (!target || !existsSync(target.filePath)) continue;
 
       const format =
-        normalizeModelFormat(model.originalFormat || model.format) ||
+        normalizeModelFormat(target.record?.format) ||
         normalizeModelFormat(model.originalName?.split('.').pop()) ||
-        normalizeModelFormat(basename(originalPath).split('.').pop()) ||
+        normalizeModelFormat(basename(target.filePath).split('.').pop()) ||
         'model';
-      const sourceName = modelDownloadSourceName(model.name, model.originalName, model.id);
-      const fileName = modelDownloadFileName(sourceName, format, model.id);
-      const fileSize = statSync(originalPath).size;
-      downloadItems.push({ filePath: originalPath, fileName });
+      const fileSize = statSync(target.filePath).size;
+      downloadItems.push({ filePath: target.filePath, fileName: target.fileName });
       archivedModels.set(model.id, { format, fileSize });
     }
 

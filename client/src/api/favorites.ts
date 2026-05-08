@@ -32,7 +32,7 @@ export const favoriteApi = {
 
   batchDownloadUrl: `${import.meta.env.VITE_API_BASE_URL || '/api'}/favorites/batch-download`,
 
-  batchDownload: async (modelIds: string[], format: string = 'gltf'): Promise<void> => {
+  batchDownload: async (modelIds: string[], format: string = 'original'): Promise<void> => {
     const token = getAccessToken();
     const resp = await fetch(favoriteApi.batchDownloadUrl, {
       method: 'POST',

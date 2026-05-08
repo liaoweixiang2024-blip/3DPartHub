@@ -1,5 +1,5 @@
 import { AnimatePresence, motion } from 'framer-motion';
-import { startTransition, useCallback, useEffect, useRef, useState } from 'react';
+import { lazy, startTransition, Suspense, useCallback, useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import useSWR, { mutate as swrMutate } from 'swr';
 import useSWRInfinite from 'swr/infinite';
@@ -15,16 +15,15 @@ import {
   type ServerModelListItem,
 } from '../api/models';
 import { getSettings, updateSettings } from '../api/settings';
-import { AdminManagementPage } from '../components/shared/AdminManagementPage';
+import { AdminLoadingState, AdminManagementPage } from '../components/shared/AdminManagementPage';
 import { AdminPageShell } from '../components/shared/AdminPageShell';
 import CategorySelect from '../components/shared/CategorySelect';
 import Icon from '../components/shared/Icon';
 import InfiniteLoadTrigger from '../components/shared/InfiniteLoadTrigger';
-import LoadingSpinner from '../components/shared/LoadingSpinner';
 import ModelThumbnail from '../components/shared/ModelThumbnail';
+import { PageRefreshIndicator } from '../components/shared/PageRefreshFallback';
 import ResponsiveSectionTabs, { type ResponsiveSectionTab } from '../components/shared/ResponsiveSectionTabs';
 import { useToast } from '../components/shared/Toast';
-import UploadModal from '../components/shared/UploadModal';
 import { useDocumentTitle } from '../hooks/useDocumentTitle';
 import { useImeSafeSearchInput } from '../hooks/useImeSafeSearchInput';
 import { useVisibleItems } from '../hooks/useVisibleItems';
@@ -61,6 +60,9 @@ const MODEL_ADMIN_PANEL_CLASS =
   'rounded-lg border border-outline-variant/10 bg-surface-container-low overflow-auto min-h-[calc(100vh-220px)] max-h-[calc(100vh-220px)]';
 type ModelAdminTab = 'models' | 'suggestions' | 'groups';
 
+const preloadUploadModal = () => import('../components/shared/UploadModal');
+const UploadModal = lazy(preloadUploadModal);
+
 const DIAGNOSTIC_FILTERS: Array<{ key: PreviewDiagnosticFilter; label: string; icon: string }> = [
   { key: 'all', label: '全部', icon: 'inventory_2' },
   { key: 'problem', label: '待处理', icon: 'warning' },
@@ -91,6 +93,76 @@ function useDebouncedValue<T>(value: T, delay = 300) {
   }, [delay, value]);
 
   return debouncedValue;
+}
+
+function UploadModalFallback({ onClose }: { onClose: () => void }) {
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 backdrop-blur-sm sm:items-center sm:p-4"
+      role="dialog"
+      aria-modal="true"
+      aria-busy="true"
+    >
+      <div className="flex w-full max-w-lg items-center gap-3 rounded-t-2xl border border-outline-variant/20 bg-surface-container-low px-5 py-4 shadow-2xl sm:rounded-lg">
+        <span className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-primary-container/12 text-primary-container">
+          <Icon name="progress_activity" size={20} className="animate-spin" />
+        </span>
+        <div className="min-w-0 flex-1">
+          <p className="text-sm font-semibold text-on-surface">上传面板加载中</p>
+          <p className="mt-0.5 text-xs text-on-surface-variant">正在准备文件选择和转换队列。</p>
+        </div>
+        <button
+          type="button"
+          onClick={onClose}
+          className="grid h-9 w-9 shrink-0 place-items-center rounded-sm text-on-surface-variant transition-colors hover:bg-surface-container-high hover:text-on-surface"
+          aria-label="关闭上传面板"
+        >
+          <Icon name="close" size={18} />
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function UploadModalLoader({
+  open,
+  onClose,
+  onConverted,
+}: {
+  open: boolean;
+  onClose: () => void;
+  onConverted: () => void;
+}) {
+  if (!open) return null;
+  return (
+    <Suspense fallback={<UploadModalFallback onClose={onClose} />}>
+      <UploadModal open={open} onClose={onClose} onConverted={onConverted} />
+    </Suspense>
+  );
+}
+
+function PreviewDiagnosticsListLoadingState({ compact }: { compact: boolean }) {
+  return (
+    <div className={`flex flex-1 ${compact ? 'min-h-[224px]' : 'min-h-[280px]'}`}>
+      <PageRefreshIndicator label="预览诊断刷新中" />
+    </div>
+  );
+}
+
+function ConversionQueueListLoadingState({ compact }: { compact: boolean }) {
+  return (
+    <div className={`flex flex-1 ${compact ? 'min-h-[224px]' : 'min-h-[280px]'}`}>
+      <PageRefreshIndicator label="转换队列刷新中" />
+    </div>
+  );
+}
+
+function ConversionQueueDetailLoadingState() {
+  return (
+    <div className="flex min-h-[220px]">
+      <PageRefreshIndicator label="转换任务详情刷新中" />
+    </div>
+  );
 }
 
 function flattenCategoryOptions(categories: CategoryItem[]) {
@@ -499,11 +571,7 @@ function PreviewDiagnosticsPanel({ compact = false, embedded = false }: { compac
           )}
         </div>
         {isLoading ? (
-          <div
-            className={`grid flex-1 gap-2 overflow-y-auto pr-1 ${compact ? 'min-h-[224px] max-h-[224px]' : 'min-h-[280px] max-h-[280px]'}`}
-          >
-            <LoadingSpinner size="sm" />
-          </div>
+          <PreviewDiagnosticsListLoadingState compact={compact} />
         ) : visibleItems.length > 0 ? (
           <div
             className={`grid flex-1 content-start gap-2 overflow-y-auto pr-1 ${compact ? 'min-h-[224px] max-h-[224px]' : 'min-h-[280px] max-h-[280px]'}`}
@@ -873,9 +941,7 @@ function ConversionQueuePanel({ compact = false, embedded = false }: { compact?:
             </div>
           </div>
           {isLoading ? (
-            <div className="flex flex-1 items-center justify-center">
-              <LoadingSpinner size="sm" />
-            </div>
+            <ConversionQueueListLoadingState compact={compact} />
           ) : visibleQueueItems.length > 0 ? (
             <div
               className={`grid flex-1 content-start gap-2 overflow-y-auto pr-1 ${compact ? 'min-h-[224px] max-h-[224px]' : 'min-h-[280px] max-h-[280px]'}`}
@@ -914,7 +980,7 @@ function ConversionQueuePanel({ compact = false, embedded = false }: { compact?:
             </div>
             <div className="max-h-[calc(88vh-72px)] overflow-y-auto p-5">
               {detailLoading ? (
-                <LoadingSpinner size="sm" />
+                <ConversionQueueDetailLoadingState />
               ) : detail ? (
                 <div className="space-y-4">
                   <div className="grid gap-2 text-xs sm:grid-cols-2">
@@ -2055,7 +2121,7 @@ function DesktopContent() {
 
   return (
     <>
-      <UploadModal open={uploadOpen} onClose={() => setUploadOpen(false)} onConverted={refreshModelAdminData} />
+      <UploadModalLoader open={uploadOpen} onClose={() => setUploadOpen(false)} onConverted={refreshModelAdminData} />
       <AdminManagementPage
         title="模型管理"
         description="统一维护模型文件、分类归属、预览重建和同名模型合并关系。"
@@ -2070,6 +2136,9 @@ function DesktopContent() {
             </button>
             <button
               onClick={() => setUploadOpen(true)}
+              onPointerEnter={preloadUploadModal}
+              onPointerDown={preloadUploadModal}
+              onFocus={preloadUploadModal}
               className={`${headerButtonBase} bg-primary-container text-on-primary hover:opacity-90 active:scale-95`}
             >
               <Icon name="cloud_upload" size={18} />
@@ -2106,7 +2175,7 @@ function DesktopContent() {
         <div className="admin-tab-panel min-h-0">
           {activeTab === 'suggestions' ? (
             sugLoading ? (
-              <LoadingSpinner />
+              <AdminLoadingState variant="list" label="同名合并建议加载中" />
             ) : (
               <div className={`${MODEL_ADMIN_PANEL_CLASS} p-3`}>
                 {filteredSuggestions.length > 0 && (
@@ -2201,7 +2270,7 @@ function DesktopContent() {
             )
           ) : activeTab === 'groups' ? (
             groupsLoading ? (
-              <LoadingSpinner />
+              <AdminLoadingState variant="list" label="模型分组加载中" />
             ) : (
               <div className={`${MODEL_ADMIN_PANEL_CLASS} p-3`}>
                 <div className="space-y-2">
@@ -2369,7 +2438,12 @@ function DesktopContent() {
               </div>
             )
           ) : isLoadingInitial ? (
-            <LoadingSpinner />
+            <AdminLoadingState
+              variant="table"
+              label="模型列表加载中"
+              tableColumns="48px minmax(260px,1fr) 140px 80px 96px 80px 180px"
+              tableCells={['checkbox', 'mediaTitle', 'text', 'chip', 'text', 'chip', 'actions']}
+            />
           ) : (
             <>
               {models.length > 0 && (
@@ -3004,7 +3078,7 @@ function MobileContent() {
 
   return (
     <>
-      <UploadModal open={uploadOpen} onClose={() => setUploadOpen(false)} onConverted={refreshModelAdminData} />
+      <UploadModalLoader open={uploadOpen} onClose={() => setUploadOpen(false)} onConverted={refreshModelAdminData} />
       <AdminManagementPage
         title="模型管理"
         description="维护模型库文件、合并建议和预览运维"
@@ -3021,6 +3095,9 @@ function MobileContent() {
             </button>
             <button
               onClick={() => setUploadOpen(true)}
+              onPointerEnter={preloadUploadModal}
+              onPointerDown={preloadUploadModal}
+              onFocus={preloadUploadModal}
               className="flex items-center gap-1 px-3 py-1.5 text-xs font-medium text-on-primary bg-primary-container rounded-sm active:scale-95"
             >
               <Icon name="cloud_upload" size={14} />
@@ -3125,7 +3202,7 @@ function MobileContent() {
 
         {activeTab === 'suggestions' ? (
           sugLoading ? (
-            <LoadingSpinner />
+            <AdminLoadingState variant="list" rows={5} label="同名合并建议加载中" />
           ) : (
             <div className="admin-tab-panel space-y-3">
               {filteredSuggestions.length > 0 && (
@@ -3214,7 +3291,7 @@ function MobileContent() {
           )
         ) : activeTab === 'groups' ? (
           groupsLoading ? (
-            <LoadingSpinner />
+            <AdminLoadingState variant="list" rows={5} label="模型分组加载中" />
           ) : (
             <div className="admin-tab-panel space-y-2">
               {filteredGroups?.map((group) => {
@@ -3371,7 +3448,7 @@ function MobileContent() {
             </div>
           )
         ) : isLoadingInitial ? (
-          <LoadingSpinner />
+          <AdminLoadingState variant="list" rows={5} label="模型列表加载中" />
         ) : (
           <div className="admin-tab-panel flex flex-col gap-3">
             {visibleModels.map((m) => (

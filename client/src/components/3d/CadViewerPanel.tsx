@@ -14,6 +14,7 @@ import {
 import { modelApi, type ModelPreviewMeta } from '../../api/models';
 import { getCachedPublicSettings } from '../../lib/publicSettings';
 import Icon from '../shared/Icon';
+import { MODEL_DETAIL_VIEWER_CLASS } from '../shared/ModelDetailFrame';
 import SafeImage from '../shared/SafeImage';
 import { useToast } from '../shared/Toast';
 import CadViewerToolbar from './CadViewerToolbar';
@@ -491,7 +492,7 @@ export default function CadViewerPanel({
   const isMobile = variant === 'mobile';
   const baseClassName = isMobile
     ? 'absolute inset-0 bg-surface-container overflow-hidden rounded-b-2xl'
-    : 'relative bg-surface-container flex-1 md:w-[60%] overflow-hidden border-r border-outline-variant/20 shrink-0';
+    : MODEL_DETAIL_VIEWER_CLASS;
   const panelStyle = isMobile ? style : ({ contain: 'strict', ...style } as CSSProperties);
 
   return (
@@ -500,6 +501,7 @@ export default function CadViewerPanel({
       className={`${baseClassName} ${className} ${pseudoFullscreen ? (isMobile ? 'fixed top-0 right-0 left-0 z-[9999] rounded-none' : 'fixed inset-0 z-[9999] rounded-none') : ''}`}
       style={panelStyle}
       onClick={onClick}
+      data-model-detail-viewer={isMobile ? undefined : ''}
     >
       <LoadingOverlay progress={loadProgress} />
       <div className={isMobile ? 'absolute inset-0' : 'absolute inset-0'}>

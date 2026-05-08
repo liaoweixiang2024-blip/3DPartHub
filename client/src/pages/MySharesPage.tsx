@@ -3,11 +3,15 @@ import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import useSWR from 'swr';
 import { deleteShare, listShares, type ShareLink } from '../api/shares';
-import { AdminEmptyState, AdminManagementPage } from '../components/shared/AdminManagementPage';
+import {
+  AdminEmptyState,
+  AdminErrorState,
+  AdminLoadingState,
+  AdminManagementPage,
+} from '../components/shared/AdminManagementPage';
 import { AdminPageShell } from '../components/shared/AdminPageShell';
 import ConfirmDialog from '../components/shared/ConfirmDialog';
 import Icon from '../components/shared/Icon';
-import LoadingSpinner from '../components/shared/LoadingSpinner';
 import { useToast } from '../components/shared/Toast';
 import { useDocumentTitle } from '../hooks/useDocumentTitle';
 import { useImeSafeSearchInput } from '../hooks/useImeSafeSearchInput';
@@ -375,7 +379,9 @@ export default function MySharesPage() {
   if (isLoading) {
     return (
       <AdminPageShell>
-        <LoadingSpinner />
+        <AdminManagementPage title="我的分享" description="管理自己创建的模型分享和选型分享链接">
+          <AdminLoadingState variant="list" label="分享记录加载中" />
+        </AdminManagementPage>
       </AdminPageShell>
     );
   }
@@ -383,7 +389,13 @@ export default function MySharesPage() {
   if (error) {
     return (
       <AdminPageShell>
-        <AdminEmptyState icon="error" title="分享记录加载失败" description="请稍后重试，或检查当前登录状态。" />
+        <AdminManagementPage title="我的分享" description="管理自己创建的模型分享和选型分享链接">
+          <AdminErrorState
+            title="分享记录加载失败"
+            description="请稍后重试，或检查当前登录状态。"
+            onRetry={() => mutate()}
+          />
+        </AdminManagementPage>
       </AdminPageShell>
     );
   }

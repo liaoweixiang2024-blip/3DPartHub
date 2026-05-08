@@ -1,50 +1,134 @@
 import { lazy, Suspense, useEffect, useRef, useState } from 'react';
-import { Routes, Route, Link, useLocation, useNavigate, Navigate } from 'react-router-dom';
-import { AdminLayout, PublicLayout } from './components/shared/AdminPageShell';
+import { Routes, Route, Link, useLocation, Navigate } from 'react-router-dom';
+import { AdminLayout, AdminPageShell, PublicLayout } from './components/shared/AdminPageShell';
 import BrandMark from './components/shared/BrandMark';
 import Icon from './components/shared/Icon';
-import LoginConfirmDialog from './components/shared/LoginConfirmDialog';
 import MaintenanceGate from './components/shared/MaintenanceGate';
-import { isModelDetailPath, saveModelReturnPath } from './lib/modelReturnPath';
+import ModelDetailPageSkeleton from './components/shared/ModelDetailPageSkeleton';
+import PageRefreshFallback from './components/shared/PageRefreshFallback';
 import { checkProtectedAccess } from './components/shared/ProtectedLink';
+import { isModelDetailPath, saveModelReturnPath } from './lib/modelReturnPath';
+import {
+  loadAuditLogPage,
+  loadCategoryAdminPage,
+  loadDownloadAdminPage,
+  loadDownloadsPage,
+  loadFavoritesPage,
+  loadInquiryAdminPage,
+  loadInquiryDetailPage,
+  loadLegalPage,
+  loadLoginPage,
+  loadModelAdminPage,
+  loadModelDetailPage,
+  loadMyInquiriesPage,
+  loadMySharesPage,
+  loadMyTicketsPage,
+  loadProductWallPage,
+  loadProfilePage,
+  loadProjectDetailPage,
+  loadProjectsPage,
+  loadSelectionAdminPage,
+  loadSelectionPage,
+  loadSelectionSharePage,
+  loadSettingsPage,
+  loadShareAdminPage,
+  loadSharePage,
+  loadSupportPage,
+  loadThreadSizeToolPage,
+  loadTicketAdminPage,
+  loadTicketDetailPage,
+  loadUserAdminPage,
+  preloadRouteForPath,
+  warmRouteModules,
+} from './lib/routeLoaders';
 // Static import for the landing page — eliminates flash on first visit
 import HomePage from './pages/HomePage';
 import { useAuthStore } from './stores/useAuthStore';
-import LoadingSpinner from './components/shared/LoadingSpinner';
 
 // Lazy-loaded pages — Vite generates separate chunks automatically
-const ModelDetailPage = lazy(() => import('./pages/ModelDetailPage'));
-const DownloadsPage = lazy(() => import('./pages/DownloadsPage'));
-const FavoritesPage = lazy(() => import('./pages/FavoritesPage'));
-const MySharesPage = lazy(() => import('./pages/MySharesPage'));
-const ProfilePage = lazy(() => import('./pages/ProfilePage'));
-const SupportPage = lazy(() => import('./pages/SupportPage'));
-const MyTicketsPage = lazy(() => import('./pages/MyTicketsPage'));
-const LoginPage = lazy(() => import('./pages/LoginPage'));
-const LegalPage = lazy(() => import('./pages/LegalPage'));
-const SharePage = lazy(() => import('./pages/SharePage'));
-const ProjectsPage = lazy(() => import('./pages/ProjectsPage'));
-const ProjectDetailPage = lazy(() => import('./pages/ProjectDetailPage'));
-const CategoryAdminPage = lazy(() => import('./pages/CategoryAdminPage'));
-const ModelAdminPage = lazy(() => import('./pages/ModelAdminPage'));
-const TicketAdminPage = lazy(() => import('./pages/TicketAdminPage'));
-const TicketDetailPage = lazy(() => import('./pages/TicketDetailPage'));
-const SettingsPage = lazy(() => import('./pages/SettingsPage'));
-const UserAdminPage = lazy(() => import('./pages/UserAdminPage'));
-const AuditLogPage = lazy(() => import('./pages/AuditLogPage'));
-const ShareAdminPage = lazy(() => import('./pages/ShareAdminPage'));
-const DownloadAdminPage = lazy(() => import('./pages/DownloadAdminPage'));
-const SelectionPage = lazy(() => import('./pages/SelectionPage'));
-const ThreadSizeToolPage = lazy(() => import('./pages/ThreadSizeToolPage'));
-const ProductWallPage = lazy(() => import('./pages/ProductWallPage'));
-const SelectionAdminPage = lazy(() => import('./pages/SelectionAdminPage'));
-const MyInquiriesPage = lazy(() => import('./pages/MyInquiriesPage'));
-const InquiryDetailPage = lazy(() => import('./pages/InquiryDetailPage'));
-const InquiryAdminPage = lazy(() => import('./pages/InquiryAdminPage'));
-const SelectionSharePage = lazy(() => import('./pages/SelectionSharePage'));
+const ModelDetailPage = lazy(loadModelDetailPage);
+const DownloadsPage = lazy(loadDownloadsPage);
+const FavoritesPage = lazy(loadFavoritesPage);
+const MySharesPage = lazy(loadMySharesPage);
+const ProfilePage = lazy(loadProfilePage);
+const SupportPage = lazy(loadSupportPage);
+const MyTicketsPage = lazy(loadMyTicketsPage);
+const LoginPage = lazy(loadLoginPage);
+const LegalPage = lazy(loadLegalPage);
+const SharePage = lazy(loadSharePage);
+const ProjectsPage = lazy(loadProjectsPage);
+const ProjectDetailPage = lazy(loadProjectDetailPage);
+const CategoryAdminPage = lazy(loadCategoryAdminPage);
+const ModelAdminPage = lazy(loadModelAdminPage);
+const TicketAdminPage = lazy(loadTicketAdminPage);
+const TicketDetailPage = lazy(loadTicketDetailPage);
+const SettingsPage = lazy(loadSettingsPage);
+const UserAdminPage = lazy(loadUserAdminPage);
+const AuditLogPage = lazy(loadAuditLogPage);
+const ShareAdminPage = lazy(loadShareAdminPage);
+const DownloadAdminPage = lazy(loadDownloadAdminPage);
+const SelectionPage = lazy(loadSelectionPage);
+const ThreadSizeToolPage = lazy(loadThreadSizeToolPage);
+const ProductWallPage = lazy(loadProductWallPage);
+const SelectionAdminPage = lazy(loadSelectionAdminPage);
+const MyInquiriesPage = lazy(loadMyInquiriesPage);
+const InquiryDetailPage = lazy(loadInquiryDetailPage);
+const InquiryAdminPage = lazy(loadInquiryAdminPage);
+const SelectionSharePage = lazy(loadSelectionSharePage);
+
+function RouteFallback({ standalone = false }: { standalone?: boolean }) {
+  const location = useLocation();
+
+  if (isModelDetailPath(location.pathname)) {
+    return <ModelDetailPageSkeleton />;
+  }
+
+  return <PageRefreshFallback standalone={standalone} />;
+}
 
 function PageWrap({ children }: { children: React.ReactNode }) {
-  return <Suspense fallback={null}>{children}</Suspense>;
+  return <Suspense fallback={<RouteFallback />}>{children}</Suspense>;
+}
+
+function ProtectedAccessState({
+  icon,
+  title,
+  description,
+  primary,
+  secondary,
+}: {
+  icon: string;
+  title: string;
+  description: string;
+  primary: React.ReactNode;
+  secondary?: React.ReactNode;
+}) {
+  return (
+    <AdminPageShell
+      desktopContentClassName="items-center justify-center"
+      mobileContentClassName="min-h-full justify-center"
+    >
+      <section
+        className="flex min-h-[340px] min-w-0 flex-col items-center justify-center rounded-xl border border-outline-variant/15 bg-surface-container-low px-6 py-12 text-center shadow-sm"
+        style={{ width: 'min(36rem, calc(100vw - 2rem))' }}
+      >
+        <span className="grid h-16 w-16 place-items-center rounded-2xl border border-outline-variant/15 bg-surface-container text-on-surface-variant/55">
+          <Icon name={icon} size={34} />
+        </span>
+        <h1 className="mt-4 text-base font-bold text-on-surface">{title}</h1>
+        <p
+          className="mt-1 max-w-full text-xs leading-relaxed text-on-surface-variant sm:max-w-sm"
+          style={{ overflowWrap: 'anywhere' }}
+        >
+          {description}
+        </p>
+        <div className="mt-5 flex flex-wrap items-center justify-center gap-2">
+          {secondary}
+          {primary}
+        </div>
+      </section>
+    </AdminPageShell>
+  );
 }
 
 // Protected pages — check auth BEFORE rendering
@@ -52,10 +136,8 @@ function PageWrap({ children }: { children: React.ReactNode }) {
 function ProtectedPage({ children, requiredRole }: { children: React.ReactNode; requiredRole?: string }) {
   const { isAuthenticated, user, hasHydrated, restoreSessionFromCookie } = useAuthStore();
   const location = useLocation();
-  const navigate = useNavigate();
   const [authRetryDone, setAuthRetryDone] = useState(false);
   const [authRetrying, setAuthRetrying] = useState(false);
-  const [loginDialogOpen, setLoginDialogOpen] = useState(false);
 
   useEffect(() => {
     if (!hasHydrated || isAuthenticated || authRetryDone || authRetrying) return;
@@ -67,43 +149,65 @@ function ProtectedPage({ children, requiredRole }: { children: React.ReactNode; 
     });
   }, [authRetryDone, authRetrying, hasHydrated, isAuthenticated, restoreSessionFromCookie]);
 
-  useEffect(() => {
-    if (hasHydrated && !authRetrying && authRetryDone && !isAuthenticated) {
-      setLoginDialogOpen(true);
-    }
-  }, [hasHydrated, authRetrying, authRetryDone, isAuthenticated]);
-
   if (!hasHydrated || authRetrying || (!isAuthenticated && !authRetryDone)) {
-    return <LoadingSpinner />;
+    return <RouteFallback />;
   }
 
   if (!isAuthenticated) {
     const access = checkProtectedAccess(location.pathname);
+    const returnUrl = `${location.pathname}${location.search}${location.hash}`;
     if (access.action === 'dialog') {
       return (
-        <LoginConfirmDialog
-          open={loginDialogOpen}
-          onClose={() => {
-            setLoginDialogOpen(false);
-            navigate('/', { replace: true });
-          }}
-          reason={access.reason}
-          returnUrl={access.returnUrl}
+        <ProtectedAccessState
+          icon="lock"
+          title="需要登录"
+          description={`${access.reason}需要先登录账号。登录后会回到当前页面继续操作。`}
+          secondary={
+            <Link
+              to="/"
+              className="inline-flex h-9 items-center justify-center rounded-sm border border-outline-variant/30 px-4 text-sm font-medium text-on-surface-variant transition-colors hover:bg-surface-container-high hover:text-on-surface"
+            >
+              返回模型库
+            </Link>
+          }
+          primary={
+            <Link
+              to="/login"
+              state={{ from: returnUrl }}
+              className="inline-flex h-9 items-center justify-center rounded-sm bg-primary-container px-4 text-sm font-bold text-on-primary transition-opacity hover:opacity-90 active:scale-[0.98]"
+            >
+              前往登录
+            </Link>
+          }
         />
       );
     }
     return <Navigate to="/login" state={{ from: location.pathname }} replace />;
   }
   if (requiredRole && user?.role !== requiredRole) {
-    return <Navigate to="/" replace />;
+    return (
+      <ProtectedAccessState
+        icon="admin_panel_settings"
+        title="权限不足"
+        description="当前账号没有访问这个管理页面的权限。请切换管理员账号，或返回模型库继续浏览。"
+        primary={
+          <Link
+            to="/"
+            className="inline-flex h-9 items-center justify-center rounded-sm bg-primary-container px-4 text-sm font-bold text-on-primary transition-opacity hover:opacity-90 active:scale-[0.98]"
+          >
+            返回模型库
+          </Link>
+        }
+      />
+    );
   }
 
-  return <Suspense fallback={null}>{children}</Suspense>;
+  return <Suspense fallback={<RouteFallback />}>{children}</Suspense>;
 }
 
 // No wrapper — let the page handle its own height/scrolling
 function ScrollPage({ children }: { children: React.ReactNode }) {
-  return <Suspense fallback={null}>{children}</Suspense>;
+  return <Suspense fallback={<RouteFallback standalone />}>{children}</Suspense>;
 }
 
 function NotFoundPage() {
@@ -127,6 +231,38 @@ function ModelReturnPathTracker() {
     if (isModelDetailPath(location.pathname) || location.pathname === '/login') return;
     saveModelReturnPath(`${location.pathname}${location.search}${location.hash}`);
   }, [location.hash, location.pathname, location.search]);
+
+  return null;
+}
+
+function RoutePreloadTracker() {
+  useEffect(() => {
+    const preloadFromEvent = (event: Event) => {
+      if (!(event.target instanceof Element)) return;
+
+      const anchor = event.target.closest<HTMLAnchorElement>('a[href]');
+      if (!anchor || anchor.hasAttribute('download') || (anchor.target && anchor.target !== '_self')) return;
+
+      const rawHref = anchor.getAttribute('href');
+      if (!rawHref || rawHref.startsWith('#')) return;
+
+      const url = new URL(anchor.href, window.location.href);
+      if (url.origin !== window.location.origin) return;
+      if (event.type === 'pointerover' && isModelDetailPath(url.pathname)) return;
+
+      preloadRouteForPath(`${url.pathname}${url.search}${url.hash}`);
+    };
+
+    window.addEventListener('pointerover', preloadFromEvent, { passive: true });
+    window.addEventListener('pointerdown', preloadFromEvent, { passive: true });
+    window.addEventListener('focusin', preloadFromEvent);
+
+    return () => {
+      window.removeEventListener('pointerover', preloadFromEvent);
+      window.removeEventListener('pointerdown', preloadFromEvent);
+      window.removeEventListener('focusin', preloadFromEvent);
+    };
+  }, []);
 
   return null;
 }
@@ -161,11 +297,19 @@ function useTokenWatcher() {
 
 export default function Router() {
   const location = useLocation();
+  const hasHydrated = useAuthStore((s) => s.hasHydrated);
+  const role = useAuthStore((s) => s.user?.role);
   useTokenWatcher();
+
+  useEffect(() => {
+    if (!hasHydrated) return;
+    return warmRouteModules(role);
+  }, [hasHydrated, role]);
 
   return (
     <MaintenanceGate>
       <ModelReturnPathTracker />
+      <RoutePreloadTracker />
       <Routes location={location}>
         {/* ── No shell ── */}
         <Route
@@ -190,7 +334,7 @@ export default function Router() {
           <Route
             path="/model/:id"
             element={
-              <Suspense fallback={null}>
+              <Suspense fallback={<RouteFallback />}>
                 <ModelDetailPage />
               </Suspense>
             }

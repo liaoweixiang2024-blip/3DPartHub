@@ -4,6 +4,7 @@ import { threadSizeApi, type ThreadSizeEntry } from '../api/threadSize';
 import { AdminContentPanel, AdminManagementPage } from '../components/shared/AdminManagementPage';
 import { AdminPageShell } from '../components/shared/AdminPageShell';
 import Icon from '../components/shared/Icon';
+import { PageRefreshIndicator } from '../components/shared/PageRefreshFallback';
 import ResponsiveSectionTabs from '../components/shared/ResponsiveSectionTabs';
 import { useToast } from '../components/shared/Toast';
 import { useDocumentTitle } from '../hooks/useDocumentTitle';
@@ -217,6 +218,14 @@ const TABLE_TD = 'px-4 py-3';
 const TABLE_LONG_TH = `${TABLE_TH} min-w-72`;
 const TABLE_LONG_TD = `${TABLE_TD} min-w-72 max-w-[420px] leading-6 text-on-surface-variant [white-space:normal]`;
 const TABLE_HEADER = 'flex items-center justify-between gap-3 bg-transparent px-1 pb-3 pt-1 md:px-0';
+
+function ThreadSizeLoadingState() {
+  return (
+    <section className="flex h-full min-h-[320px]">
+      <PageRefreshIndicator label="规格数据刷新中" />
+    </section>
+  );
+}
 
 const PRIORITY_TERMS: Record<ToolTab, string[]> = {
   thread: ['G1/4', 'G1/2', 'R1/4', 'R1/2', 'NPT1/4', 'JIC-06', 'JIC-08', 'M16', 'M20', 'M12'],
@@ -941,6 +950,7 @@ export default function ThreadSizeToolPage() {
     hasTechnicalData &&
     query.trim().length >= 2 &&
     visibleTechnicalCount === 0;
+  const showInitialDataLoading = publicLoading && !publicData && !publicError;
   const fillMainSearch = (value: string) => {
     setQuery(value);
     setShowGuide(false);
@@ -1062,10 +1072,12 @@ export default function ThreadSizeToolPage() {
         >
           {/* ── Results ── */}
           <div
-            key={`${showGuide ? 'guide' : visibleTab}:${showMeasurementResults ? 'measurement' : showDataError ? 'error' : showDatabaseEmpty ? 'database-empty' : showNoResults ? 'empty' : 'results'}`}
+            key={`${showInitialDataLoading ? 'loading' : showGuide ? 'guide' : visibleTab}:${showMeasurementResults ? 'measurement' : showDataError ? 'error' : showDatabaseEmpty ? 'database-empty' : showNoResults ? 'empty' : 'results'}`}
             className="admin-tab-panel min-h-0 flex-1 overflow-hidden"
           >
-            {showGuide && (
+            {showInitialDataLoading && <ThreadSizeLoadingState />}
+
+            {!showInitialDataLoading && showGuide && (
               <section className="h-full overflow-y-auto overflow-x-hidden md:overflow-hidden">
                 <div className="grid min-h-full gap-2 md:h-full md:min-h-0 md:grid-rows-[auto_minmax(0,1fr)] md:gap-3">
                   <div className="rounded-xl border border-outline-variant/12 bg-surface-container-low p-3 md:p-4">
@@ -1155,7 +1167,7 @@ export default function ThreadSizeToolPage() {
             )}
 
             {/* ── Measurement Results ── */}
-            {showMeasurementResults && (
+            {!showInitialDataLoading && showMeasurementResults && (
               <section className="h-full">
                 <div className={TABLE_CARD}>
                   <div className={TABLE_HEADER}>
@@ -1246,7 +1258,7 @@ export default function ThreadSizeToolPage() {
             )}
 
             {/* ── Thread Results ── */}
-            {showTechnicalResults && visibleTab === 'thread' && (
+            {!showInitialDataLoading && showTechnicalResults && visibleTab === 'thread' && (
               <section className="h-full">
                 <div className={TABLE_CARD}>
                   <div className={TABLE_SCROLL}>
@@ -1290,7 +1302,7 @@ export default function ThreadSizeToolPage() {
             )}
 
             {/* ── Pipe Results ── */}
-            {showTechnicalResults && visibleTab === 'pipe' && (
+            {!showInitialDataLoading && showTechnicalResults && visibleTab === 'pipe' && (
               <section className="h-full">
                 <div className={TABLE_CARD}>
                   <div className={TABLE_SCROLL}>
@@ -1324,7 +1336,7 @@ export default function ThreadSizeToolPage() {
             )}
 
             {/* ── Hose Results ── */}
-            {showTechnicalResults && visibleTab === 'hose' && (
+            {!showInitialDataLoading && showTechnicalResults && visibleTab === 'hose' && (
               <section className="h-full">
                 <div className={TABLE_CARD}>
                   <div className={TABLE_SCROLL}>
@@ -1375,7 +1387,7 @@ export default function ThreadSizeToolPage() {
             )}
 
             {/* ── Fitting Results ── */}
-            {showTechnicalResults && visibleTab === 'fitting' && (
+            {!showInitialDataLoading && showTechnicalResults && visibleTab === 'fitting' && (
               <section className="h-full">
                 <div className={TABLE_CARD}>
                   <div className={TABLE_SCROLL}>
@@ -1423,7 +1435,7 @@ export default function ThreadSizeToolPage() {
             )}
 
             {/* ── Database Status ── */}
-            {(showDataError || showDatabaseEmpty) && (
+            {!showInitialDataLoading && (showDataError || showDatabaseEmpty) && (
               <section className="flex h-full items-center justify-center overflow-y-auto px-4 py-10 text-center">
                 <div className="max-w-sm">
                   <span className="mx-auto mb-4 flex h-14 w-14 items-center justify-center text-on-surface-variant/35">
@@ -1442,7 +1454,7 @@ export default function ThreadSizeToolPage() {
             )}
 
             {/* ── No Results ── */}
-            {showNoResults && (
+            {!showInitialDataLoading && showNoResults && (
               <section className="flex h-full items-center justify-center overflow-y-auto px-4 py-10 text-center">
                 <div className="max-w-sm">
                   <span className="mx-auto mb-4 flex h-14 w-14 items-center justify-center text-on-surface-variant/35">

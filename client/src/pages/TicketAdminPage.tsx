@@ -2,19 +2,17 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import useSWR from 'swr';
 import { getTickets, updateTicketStatus, type Ticket } from '../api/tickets';
-import { AdminEmptyState, AdminManagementPage } from '../components/shared/AdminManagementPage';
+import { AdminEmptyState, AdminLoadingState, AdminManagementPage } from '../components/shared/AdminManagementPage';
 import { AdminPageShell } from '../components/shared/AdminPageShell';
 import Icon from '../components/shared/Icon';
 import InfiniteLoadTrigger from '../components/shared/InfiniteLoadTrigger';
 import ResponsiveSectionTabs from '../components/shared/ResponsiveSectionTabs';
-
 import { useDocumentTitle } from '../hooks/useDocumentTitle';
 import { useVisibleItems } from '../hooks/useVisibleItems';
 import { useMediaQuery } from '../layouts/hooks/useMediaQuery';
 import { getBusinessConfig, statusInfo } from '../lib/businessConfig';
 import { getCachedPublicSettings } from '../lib/publicSettings';
 import { useAuthStore } from '../stores/useAuthStore';
-import LoadingSpinner from '../components/shared/LoadingSpinner';
 
 function useTicketAdminData() {
   const { user } = useAuthStore();
@@ -158,7 +156,7 @@ function DesktopContent() {
     >
       <div key={filter} className="admin-tab-panel">
         {loading ? (
-          <LoadingSpinner />
+          <AdminLoadingState variant="list" label="工单加载中" />
         ) : filtered.length === 0 ? (
           <EmptyTickets />
         ) : (
@@ -281,7 +279,7 @@ function MobileContent() {
     >
       <div key={filter} className="admin-tab-panel">
         {loading ? (
-          <LoadingSpinner />
+          <AdminLoadingState variant="list" rows={5} label="工单加载中" />
         ) : filtered.length === 0 ? (
           <EmptyTickets />
         ) : (

@@ -2,15 +2,13 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import useSWR from 'swr';
 import { categoriesApi, type CategoryItem } from '../api/categories';
-import { AdminContentPanel, AdminManagementPage } from '../components/shared/AdminManagementPage';
+import { AdminContentPanel, AdminLoadingState, AdminManagementPage } from '../components/shared/AdminManagementPage';
 import { AdminPageShell } from '../components/shared/AdminPageShell';
 import Icon from '../components/shared/Icon';
-
 import { useToast } from '../components/shared/Toast';
 import { useDocumentTitle } from '../hooks/useDocumentTitle';
 import { useImeSafeSearchInput } from '../hooks/useImeSafeSearchInput';
 import { getErrorMessage } from '../lib/errorNotifications';
-import LoadingSpinner from '../components/shared/LoadingSpinner';
 
 function CategoryRow({
   cat,
@@ -620,7 +618,15 @@ function Content() {
     >
       <div className="h-full min-h-0 overflow-hidden">
         {!tree ? (
-          <LoadingSpinner />
+          <AdminContentPanel scroll className="flex h-full min-h-0 flex-col">
+            <AdminLoadingState
+              rows={9}
+              tableColumns="28px 34px 44px minmax(0,1fr) 104px 68px 120px"
+              tableCells={['checkbox', 'text', 'chip', 'title', 'chip', 'text', 'actions']}
+              className="h-full rounded-none border-0"
+              label="分类加载中"
+            />
+          </AdminContentPanel>
         ) : (
           <AdminContentPanel scroll className="flex h-full min-h-0 flex-col">
             <div className="hidden shrink-0 grid-cols-[28px_34px_44px_minmax(0,1fr)_104px_68px_120px] items-center gap-2 border-b border-outline-variant/10 bg-surface-container-high px-4 py-3 text-[10px] font-bold uppercase tracking-wide text-on-surface-variant sm:grid">

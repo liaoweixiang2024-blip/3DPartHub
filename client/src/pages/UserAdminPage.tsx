@@ -3,16 +3,16 @@ import useSWR from 'swr';
 import useSWRInfinite from 'swr/infinite';
 import client from '../api/client';
 import { unwrapResponse } from '../api/response';
-import { AdminManagementPage } from '../components/shared/AdminManagementPage';
+import { AdminLoadingState, AdminManagementPage } from '../components/shared/AdminManagementPage';
 import { AdminPageShell } from '../components/shared/AdminPageShell';
 import Icon from '../components/shared/Icon';
 import InfiniteLoadTrigger from '../components/shared/InfiniteLoadTrigger';
+import { PageRefreshIndicator } from '../components/shared/PageRefreshFallback';
 import { useToast } from '../components/shared/Toast';
 import { useDocumentTitle } from '../hooks/useDocumentTitle';
 import { useImeSafeSearchInput } from '../hooks/useImeSafeSearchInput';
 import { copyText } from '../lib/clipboard';
 import { getErrorMessage } from '../lib/errorNotifications';
-import LoadingSpinner from '../components/shared/LoadingSpinner';
 
 interface UserItem {
   id: string;
@@ -73,7 +73,7 @@ export default function UserAdminPage() {
   } = useImeSafeSearchInput();
   const [roleFilter, setRoleFilter] = useState('');
   const { toast } = useToast();
-  const { data: stats, mutate: mutateStats } = useSWR('/admin/users/stats', fetchUserStats);
+  const { data: stats, mutate: mutateStats, isLoading: statsLoading } = useSWR('/admin/users/stats', fetchUserStats);
 
   const { data, mutate, setSize, size, isLoading } = useSWRInfinite(
     (pageIndex, previousPageData: { total: number; items: UserItem[]; page: number; pageSize: number } | null) => {
@@ -170,9 +170,14 @@ export default function UserAdminPage() {
             </strong>
           </div>
         ))}
-        {statItems.length === 0 && (
-          <div className="col-span-full flex items-center justify-center py-4">
-            <LoadingSpinner size="sm" />
+        {statsLoading && statItems.length === 0 && (
+          <div className="col-span-full flex min-h-12">
+            <PageRefreshIndicator label="用户统计刷新中" />
+          </div>
+        )}
+        {!statsLoading && statItems.length === 0 && (
+          <div className="col-span-full flex min-h-12 items-center justify-center text-xs text-on-surface-variant">
+            统计暂不可用
           </div>
         )}
       </div>
@@ -217,7 +222,7 @@ export default function UserAdminPage() {
     <AdminManagementPage title="用户管理" description="管理用户角色、账号信息和使用数据" toolbar={toolbar}>
       {/* User list */}
       <div className="space-y-2">
-        {isLoading && users.length === 0 && <LoadingSpinner />}
+        {isLoading && users.length === 0 && <AdminLoadingState variant="list" label="用户列表加载中" />}
         {users.map((u) => (
           <div key={u.id} className="bg-surface-container-low rounded-md border border-outline-variant/10 p-3">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">

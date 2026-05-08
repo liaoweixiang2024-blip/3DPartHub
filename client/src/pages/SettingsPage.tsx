@@ -42,9 +42,9 @@ import {
 import { AdminContentPanel, AdminManagementPage } from '../components/shared/AdminManagementPage';
 import { AdminPageShell } from '../components/shared/AdminPageShell';
 import Icon from '../components/shared/Icon';
+import { PageRefreshIndicator } from '../components/shared/PageRefreshFallback';
 import ResponsiveSectionTabs from '../components/shared/ResponsiveSectionTabs';
 import SafeImage from '../components/shared/SafeImage';
-
 import { useToast } from '../components/shared/Toast';
 import { useDocumentTitle } from '../hooks/useDocumentTitle';
 import {
@@ -67,7 +67,6 @@ import {
 import { applyColorScheme, generatePaletteFromPrimary } from '../lib/colorScheme';
 import { COLOR_PRESETS, COLOR_KEYS } from '../lib/colorSchemes';
 import { DEFAULT_PRIVACY_SECTIONS, DEFAULT_TERMS_SECTIONS, type LegalSection } from '../lib/legalContent';
-import LoadingSpinner from '../components/shared/LoadingSpinner';
 // Note: pollBackupProgress is used by handleExport
 
 const RESTORE_JOB_SOURCE_KEY = 'restoreJobSource';
@@ -191,12 +190,12 @@ const DEFAULT_SETTINGS: SystemSettings = {
     {
       selectionDefault: 50,
       selectionMax: 50000,
-      homeDefault: 60,
+      homeDefault: 20,
       homeMax: 10000,
-      homeOption1: 30,
-      homeOption2: 60,
-      homeOption3: 120,
-      homeOption4: 180,
+      homeOption1: 20,
+      homeOption2: 40,
+      homeOption3: 60,
+      homeOption4: 120,
       selectionAdminRenderBatch: 120,
       selectionGeneratePreviewPageSize: 50,
       inquiryAdminDefault: 20,
@@ -1129,6 +1128,16 @@ function TaskProgressCard({
   );
 }
 
+function SettingsLoadingState() {
+  return (
+    <AdminManagementPage title="系统设置" description="配置平台的全局行为和访问策略">
+      <div className="flex min-h-[360px] flex-1">
+        <PageRefreshIndicator label="系统设置刷新中" />
+      </div>
+    </AdminManagementPage>
+  );
+}
+
 function Switch({
   checked,
   onChange,
@@ -1483,12 +1492,12 @@ ${emailShellEnd}`,
 const DEFAULT_PAGE_SIZE_POLICY: PageSizePolicy = {
   selectionDefault: 50,
   selectionMax: 50000,
-  homeDefault: 60,
+  homeDefault: 20,
   homeMax: 10000,
-  homeOption1: 30,
-  homeOption2: 60,
-  homeOption3: 120,
-  homeOption4: 180,
+  homeOption1: 20,
+  homeOption2: 40,
+  homeOption3: 60,
+  homeOption4: 120,
   selectionAdminRenderBatch: 120,
   selectionGeneratePreviewPageSize: 50,
   inquiryAdminDefault: 20,
@@ -3796,13 +3805,7 @@ function Content() {
   }
 
   if (loading) {
-    return (
-      <AdminManagementPage title="系统设置" description="配置平台的全局行为和访问策略">
-        <AdminContentPanel scroll className="p-4">
-          <LoadingSpinner />
-        </AdminContentPanel>
-      </AdminManagementPage>
-    );
+    return <SettingsLoadingState />;
   }
 
   const tabs = [

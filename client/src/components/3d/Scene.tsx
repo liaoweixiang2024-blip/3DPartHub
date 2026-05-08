@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react';
 import { Grid } from '@react-three/drei';
+import { useEffect, useState } from 'react';
 import { get3DMaterialConfig, type ViewerSettingsOverride } from '../../lib/publicSettings';
 import { MODEL_BOUNDS_EVENT, type ModelBoundsDetail } from './viewerEvents';
 

@@ -15,10 +15,15 @@ import {
 import { AdminContentPanel, AdminManagementPage } from '../components/shared/AdminManagementPage';
 import { AdminPageShell } from '../components/shared/AdminPageShell';
 import Icon from '../components/shared/Icon';
-import LoadingSpinner from '../components/shared/LoadingSpinner';
 import LoginConfirmDialog from '../components/shared/LoginConfirmDialog';
+import { PageRefreshIndicator } from '../components/shared/PageRefreshFallback';
 import { isLoginDialogEnabled } from '../components/shared/ProtectedLink';
 import SafeImage from '../components/shared/SafeImage';
+import {
+  selectionCategoryCardClass,
+  selectionCategoryGridClass,
+  selectionCategoryPanelClass,
+} from '../components/shared/SelectionPageLayout';
 import { useToast } from '../components/shared/Toast';
 import { useDocumentTitle } from '../hooks/useDocumentTitle';
 import { useImeSafeSearchInput } from '../hooks/useImeSafeSearchInput';
@@ -1371,15 +1376,6 @@ export default function SelectionPage() {
       .sort((a, b) => a.sortOrder - b.sortOrder);
   }, [catBySlug, group, pickSub, pressedCategoryKey]);
   const categoryColumns = isCategoryUltraWide ? 4 : isCategoryWide ? 3 : isCategoryTablet ? 2 : 1;
-  const categoryPanelClass = 'p-3 md:p-4';
-  const categoryGridClass =
-    'mx-auto grid w-full max-w-[1800px] grid-cols-1 gap-2.5 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4';
-  const categoryCardClass = (active: boolean) =>
-    `group flex w-full items-stretch rounded-lg border text-left ${selectionMotion} active:opacity-80 focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary-container/60 overflow-hidden ${
-      active
-        ? 'border-primary-container/45 bg-primary-container/8 shadow-[0_8px_20px_rgba(249,115,22,0.12)]'
-        : 'border-outline-variant/12 bg-surface-container/50 shadow-[0_1px_2px_rgba(15,23,42,0.04)] group-hover:border-primary-container/28 group-hover:bg-surface-container/80'
-    }`;
   const categoryTitleClass = 'block truncate text-sm font-semibold leading-5 text-on-surface md:text-base';
   const categoryDescriptionClass = 'mt-0.5 block truncate text-xs leading-4 text-on-surface-variant';
   type CategoryRenderItem = (typeof topCategoryItems)[number];
@@ -1421,7 +1417,8 @@ export default function SelectionPage() {
     <motion.button
       key={key}
       onClick={onClick}
-      className={categoryCardClass(active)}
+      data-selection-category-card
+      className={selectionCategoryCardClass(active)}
       whileHover={prefersReducedMotion ? undefined : { y: -1 }}
       whileTap={prefersReducedMotion ? undefined : { scale: 0.985 }}
       {...categoryItemMotionProps(index)}
@@ -1441,11 +1438,13 @@ export default function SelectionPage() {
     </motion.button>
   );
   const renderCategoryGrid = (items: CategoryRenderItem[]) => (
-    <div className={categoryGridClass}>{items.map((item, index) => renderCategoryItem(item, index))}</div>
+    <div className={selectionCategoryGridClass}>{items.map((item, index) => renderCategoryItem(item, index))}</div>
   );
   const categoryStatusContent =
     categoriesLoading && cats.length === 0 ? (
-      <LoadingSpinner />
+      <div className="flex min-h-[260px]">
+        <PageRefreshIndicator label="分类刷新中" />
+      </div>
     ) : categoriesError && cats.length === 0 ? (
       <div className="text-center py-12">
         <Icon name="error" size={36} className="mx-auto mb-2 text-error/45" />
@@ -1458,7 +1457,7 @@ export default function SelectionPage() {
     ) : null;
 
   const groupContent = (
-    <div className={categoryPanelClass}>
+    <div className={selectionCategoryPanelClass}>
       {categoryStatusContent}
       {!categoryStatusContent && topCategoryItems.length > 0 && renderCategoryGrid(topCategoryItems)}
       {!categoryStatusContent && groups.length === 0 && standaloneCats.length === 0 && (
@@ -1488,7 +1487,7 @@ export default function SelectionPage() {
     }
   }
 
-  const subContent = group && <div className={categoryPanelClass}>{renderCategoryGrid(subCategoryItems)}</div>;
+  const subContent = group && <div className={selectionCategoryPanelClass}>{renderCategoryGrid(subCategoryItems)}</div>;
 
   /* ── wizard steps rendering (shared between desktop split and mobile combined) ── */
   const stepsJSX = fields.map((field, i) => {

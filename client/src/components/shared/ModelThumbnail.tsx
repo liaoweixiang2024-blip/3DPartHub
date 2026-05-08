@@ -10,6 +10,7 @@ interface ModelThumbnailProps {
   alt?: string;
   className?: string;
   loading?: 'eager' | 'lazy';
+  fetchPriority?: 'high' | 'low' | 'auto';
   /** Extra className applied to the placeholder wrapper */
   placeholderClassName?: string;
 }
@@ -54,6 +55,7 @@ export default function ModelThumbnail({
   alt,
   className,
   loading = 'lazy',
+  fetchPriority = 'auto',
   placeholderClassName,
 }: ModelThumbnailProps) {
   const [failed, setFailed] = useState(false);
@@ -69,6 +71,7 @@ export default function ModelThumbnail({
         alt={alt || ''}
         className={className}
         loading={loading}
+        fetchPriority={fetchPriority}
         decoding="async"
         draggable={false}
         onError={() => setFailed(true)}

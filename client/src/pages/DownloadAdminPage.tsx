@@ -2,12 +2,17 @@ import type { ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import useSWR from 'swr';
 import { downloadsApi, type DownloadAdminStats } from '../api/downloads';
-import { AdminContentPanel, AdminEmptyState, AdminManagementPage } from '../components/shared/AdminManagementPage';
+import {
+  AdminContentPanel,
+  AdminEmptyState,
+  AdminErrorState,
+  AdminLoadingState,
+  AdminManagementPage,
+} from '../components/shared/AdminManagementPage';
 import { AdminPageShell } from '../components/shared/AdminPageShell';
 import Icon from '../components/shared/Icon';
 import ModelThumbnail from '../components/shared/ModelThumbnail';
 import { useDocumentTitle } from '../hooks/useDocumentTitle';
-import LoadingSpinner from '../components/shared/LoadingSpinner';
 
 const numberFormatter = new Intl.NumberFormat('zh-CN');
 
@@ -236,7 +241,7 @@ function LoadingState() {
       contentClassName="min-h-0"
     >
       <AdminContentPanel scroll className="p-4">
-        <LoadingSpinner />
+        <AdminLoadingState variant="dashboard" label="下载统计加载中" />
       </AdminContentPanel>
     </AdminManagementPage>
   );
@@ -265,18 +270,10 @@ function Content() {
         contentClassName="min-h-0"
       >
         <AdminContentPanel scroll>
-          <AdminEmptyState
-            icon="error"
+          <AdminErrorState
             title="下载统计加载失败"
             description="请检查服务状态，或稍后重新加载。"
-            action={
-              <button
-                onClick={() => mutate()}
-                className="rounded-sm bg-primary-container px-4 py-2 text-sm font-bold text-on-primary transition-opacity hover:opacity-90"
-              >
-                重新加载
-              </button>
-            }
+            onRetry={() => mutate()}
           />
         </AdminContentPanel>
       </AdminManagementPage>

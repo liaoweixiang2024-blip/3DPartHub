@@ -1,11 +1,14 @@
 import { lazy, Suspense, useState, useContext, type ReactNode } from 'react';
-import { ShellLayoutContext } from './AdminPageShell';
 import { useMediaQuery } from '../../layouts/hooks/useMediaQuery';
+import { ShellLayoutContext } from './AdminPageShell';
 import BottomNav from './BottomNav';
 import { mergeClassName } from './PagePrimitives';
+import { loadMobileNavDrawer, scheduleMobileNavDrawerPreload } from './preloadMobileNavDrawer';
 import TopNav from './TopNav';
 
-const MobileNavDrawer = lazy(() => import('./MobileNavDrawer'));
+const MobileNavDrawer = lazy(loadMobileNavDrawer);
+// Keep first mobile menu open responsive without competing with the first paint.
+scheduleMobileNavDrawerPreload();
 
 interface PublicPageShellProps {
   children: ReactNode;

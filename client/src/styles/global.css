@@ -1,23 +1,22 @@
 @import 'tailwindcss';
 
-/* Headline font: block + preloaded in index.html to prevent any FOUT jitter */
 @font-face {
   font-family: 'Space Grotesk';
-  font-display: block;
+  font-display: optional;
   font-style: normal;
   font-weight: 400;
   src: url('/fonts/space-grotesk-latin-400-normal.woff2') format('woff2');
 }
 @font-face {
   font-family: 'Space Grotesk';
-  font-display: block;
+  font-display: optional;
   font-style: normal;
   font-weight: 600;
   src: url('/fonts/space-grotesk-latin-600-normal.woff2') format('woff2');
 }
 @font-face {
   font-family: 'Space Grotesk';
-  font-display: block;
+  font-display: optional;
   font-style: normal;
   font-weight: 700;
   src: url('/fonts/space-grotesk-latin-700-normal.woff2') format('woff2');
@@ -139,6 +138,7 @@ html {
   overflow: hidden;
   width: 100%;
   overscroll-behavior: none;
+  text-rendering: optimizeLegibility;
 }
 
 body {
@@ -166,7 +166,20 @@ body {
   inset: 0;
   width: 100%;
   isolation: isolate;
-  opacity: 0;
+}
+
+button,
+a,
+input,
+select,
+textarea {
+  -webkit-tap-highlight-color: transparent;
+}
+
+button,
+a,
+[role='button'] {
+  touch-action: manipulation;
 }
 
 .overflow-y-auto,
@@ -287,20 +300,9 @@ body {
   scroll-behavior: auto;
 }
 
-@media (max-width: 767px) {
-  @supports (content-visibility: auto) {
-    [data-home-model-id] {
-      content-visibility: auto;
-      contain-intrinsic-size: auto 260px;
-    }
-
-    [data-home-model-layout='list'] {
-      contain-intrinsic-size: auto 128px;
-    }
-
-    [data-home-model-layout='mobile'] {
-      contain-intrinsic-size: auto 225px;
-    }
+@media (min-width: 768px) {
+  .home-scroll-container [data-home-model-id] {
+    contain: layout paint style;
   }
 }
 

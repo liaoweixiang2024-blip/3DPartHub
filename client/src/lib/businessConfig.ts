@@ -239,12 +239,12 @@ function migrateLegacyNav(settings: Partial<SystemSettings>): NavItemConfig[] | 
 
 export function getBusinessConfig(settings: Partial<SystemSettings> = getPublicSettingsSnapshot()) {
   const pageSizePolicy = {
-    homeDefault: 60,
+    homeDefault: 20,
     homeMax: 10000,
-    homeOption1: 30,
-    homeOption2: 60,
-    homeOption3: 120,
-    homeOption4: 180,
+    homeOption1: 20,
+    homeOption2: 40,
+    homeOption3: 60,
+    homeOption4: 120,
     selectionDefault: 50,
     selectionMax: 50000,
     selectionAdminRenderBatch: 120,

@@ -4,16 +4,16 @@ import useSWR, { useSWRConfig } from 'swr';
 import useSWRInfinite from 'swr/infinite';
 import client from '../api/client';
 import { unwrapResponse } from '../api/response';
-import { AdminManagementPage } from '../components/shared/AdminManagementPage';
+import { AdminLoadingState, AdminManagementPage } from '../components/shared/AdminManagementPage';
 import { AdminPageShell } from '../components/shared/AdminPageShell';
 import Icon from '../components/shared/Icon';
 import InfiniteLoadTrigger from '../components/shared/InfiniteLoadTrigger';
+import { PageRefreshIndicator } from '../components/shared/PageRefreshFallback';
 import { useToast } from '../components/shared/Toast';
 import { useDocumentTitle } from '../hooks/useDocumentTitle';
 import { useImeSafeSearchInput } from '../hooks/useImeSafeSearchInput';
 import { copyText } from '../lib/clipboard';
 import type { ApiResponse } from '../types/api';
-import LoadingSpinner from '../components/shared/LoadingSpinner';
 
 interface ShareItem {
   id: string;
@@ -94,7 +94,7 @@ function Content() {
     setSelectedIds(new Set());
   }, [search, setSize]);
 
-  const { data: stats } = useSWR('/admin/shares/stats', fetchShareStats);
+  const { data: stats, isLoading: statsLoading } = useSWR('/admin/shares/stats', fetchShareStats);
 
   const pages = data || [];
   const items = pages.flatMap((pageData) => pageData.items);
@@ -215,9 +215,14 @@ function Content() {
             </strong>
           </div>
         ))}
-        {statItems.length === 0 && (
-          <div className="col-span-full flex items-center justify-center py-4">
-            <LoadingSpinner size="sm" />
+        {statsLoading && statItems.length === 0 && (
+          <div className="col-span-full flex min-h-12">
+            <PageRefreshIndicator label="分享统计刷新中" />
+          </div>
+        )}
+        {!statsLoading && statItems.length === 0 && (
+          <div className="col-span-full flex min-h-12 items-center justify-center text-xs text-on-surface-variant">
+            统计暂不可用
           </div>
         )}
       </div>
@@ -280,7 +285,7 @@ function Content() {
     <AdminManagementPage title="分享管理" description="管理模型分享链接、访问权限和下载记录" toolbar={toolbar}>
       {/* List */}
       <div className="space-y-2">
-        {isLoading && items.length === 0 && <LoadingSpinner />}
+        {isLoading && items.length === 0 && <AdminLoadingState variant="list" label="分享列表加载中" />}
         {items.length === 0 && !isLoading && (
           <div className="text-center py-12 text-on-surface-variant">
             <Icon name="share" size={40} className="mx-auto mb-2 opacity-30" />

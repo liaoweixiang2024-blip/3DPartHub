@@ -6,11 +6,15 @@ import client from '../api/client';
 import { downloadModelFile, isDownloadAuthRequiredError } from '../api/downloads';
 import { favoriteApi } from '../api/favorites';
 import type { FavoriteItem } from '../api/favorites';
-import { AdminEmptyState, AdminManagementPage } from '../components/shared/AdminManagementPage';
+import {
+  AdminEmptyState,
+  AdminErrorState,
+  AdminLoadingState,
+  AdminManagementPage,
+} from '../components/shared/AdminManagementPage';
 import { AdminPageShell } from '../components/shared/AdminPageShell';
 import ConfirmDialog from '../components/shared/ConfirmDialog';
 import Icon from '../components/shared/Icon';
-import LoadingSpinner from '../components/shared/LoadingSpinner';
 import LoginConfirmDialog from '../components/shared/LoginConfirmDialog';
 import ModelThumbnail from '../components/shared/ModelThumbnail';
 import { isLoginDialogEnabled } from '../components/shared/ProtectedLink';
@@ -368,21 +372,17 @@ function DesktopContent() {
 
   if (isLoading) {
     return (
-      <AdminPageShell>
-        <LoadingSpinner />
-      </AdminPageShell>
+      <AdminManagementPage title="我的收藏" description="管理你收藏的模型">
+        <AdminLoadingState variant="cards" label="收藏模型加载中" />
+      </AdminManagementPage>
     );
   }
 
   if (error) {
     return (
-      <div className="flex flex-col items-center justify-center py-24 gap-4">
-        <Icon name="error" size={48} className="text-error" />
-        <p className="text-on-surface-variant text-sm">加载收藏失败</p>
-        <button onClick={() => location.reload()} className="text-primary text-sm hover:underline">
-          重试
-        </button>
-      </div>
+      <AdminManagementPage title="我的收藏" description="管理你收藏的模型">
+        <AdminErrorState title="收藏加载失败" description="请稍后重试，或检查当前登录状态。" onRetry={() => mutate()} />
+      </AdminManagementPage>
     );
   }
 
@@ -643,12 +643,9 @@ function MobileContent() {
       )}
 
       {isLoading ? (
-        <LoadingSpinner />
+        <AdminLoadingState variant="list" rows={5} media label="收藏模型加载中" />
       ) : error ? (
-        <div className="flex flex-col items-center gap-3 py-16">
-          <Icon name="error" size={40} className="text-error" />
-          <p className="text-on-surface-variant text-sm">加载失败</p>
-        </div>
+        <AdminErrorState title="收藏加载失败" description="请稍后重试，或检查当前登录状态。" onRetry={() => mutate()} />
       ) : models.length === 0 ? (
         <EmptyState message="尚未收藏任何模型" actionLabel="浏览模型库" actionHref="/" />
       ) : (

@@ -118,12 +118,12 @@ export const DEFAULT_SELECTION_THREAD_PRIORITY_FOR_SETTINGS: Record<string, numb
 };
 
 export const DEFAULT_PAGE_SIZE_POLICY_FOR_SETTINGS = {
-  homeDefault: 60,
+  homeDefault: 20,
   homeMax: 10000,
-  homeOption1: 30,
-  homeOption2: 60,
-  homeOption3: 120,
-  homeOption4: 180,
+  homeOption1: 20,
+  homeOption2: 40,
+  homeOption3: 60,
+  homeOption4: 120,
   selectionDefault: 50,
   selectionMax: 50000,
   selectionAdminRenderBatch: 120,

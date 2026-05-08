@@ -6,8 +6,22 @@ import { applyColorScheme } from './colorScheme';
 let cache: Partial<SystemSettings> | null = null;
 let fetchedAt = 0;
 let inflight: Promise<Partial<SystemSettings>> | null = null;
+let scheduledRefreshHandle = 0;
 const STORAGE_KEY = 'site_config_cache';
 const TTL = 2 * 60 * 1000; // 2 minutes — config changes propagate faster
+
+type IdleDeadlineLike = {
+  didTimeout: boolean;
+  timeRemaining: () => number;
+};
+
+type WindowWithIdleCallback = Window & {
+  requestIdleCallback?: (callback: (deadline: IdleDeadlineLike) => void, options?: { timeout?: number }) => number;
+};
+
+// Sync listeners for site title/logo changes
+type Listener = () => void;
+const listeners = new Set<Listener>();
 
 // Eagerly hydrate cache from localStorage so synchronous getters
 // (getSiteTitle, getSiteLogo, etc.) always return the last-known values,
@@ -38,9 +52,47 @@ function saveToStorage(data: Partial<SystemSettings>) {
   }
 }
 
-// Sync listeners for site title/logo changes
-type Listener = () => void;
-const listeners = new Set<Listener>();
+function fetchAndApplyPublicSettings() {
+  if (inflight) return inflight;
+
+  inflight = (async () => {
+    try {
+      const data = await getPublicSettings();
+      cache = data;
+      fetchedAt = Date.now();
+      saveToStorage(cache);
+      applyMetaTags();
+      applyFavicon();
+      applyAppearanceSettings(cache);
+      listeners.forEach((fn) => fn());
+      void mutate('publicSettings', cache, { revalidate: false });
+      return cache;
+    } catch {
+      return cache || { show_watermark: false, watermark_image: '', site_title: '', site_logo: '' };
+    } finally {
+      inflight = null;
+    }
+  })();
+
+  return inflight;
+}
+
+function schedulePublicSettingsRefresh() {
+  if (scheduledRefreshHandle || inflight || typeof window === 'undefined') return;
+
+  const refresh = () => {
+    scheduledRefreshHandle = 0;
+    void fetchAndApplyPublicSettings();
+  };
+
+  const idleWindow = window as WindowWithIdleCallback;
+  if (idleWindow.requestIdleCallback) {
+    scheduledRefreshHandle = idleWindow.requestIdleCallback(refresh, { timeout: 2500 });
+    return;
+  }
+
+  scheduledRefreshHandle = window.setTimeout(refresh, 1200);
+}
 
 export function onSiteConfigChange(fn: Listener) {
   listeners.add(fn);
@@ -91,28 +143,13 @@ export async function getCachedPublicSettings(): Promise<Partial<SystemSettings>
     }
   }
 
-  // Deduplicate concurrent calls
-  if (inflight) return inflight;
+  if (cache) {
+    schedulePublicSettingsRefresh();
+    return cache;
+  }
 
-  inflight = (async () => {
-    try {
-      const data = await getPublicSettings();
-      cache = data;
-      fetchedAt = Date.now();
-      saveToStorage(cache);
-      applyMetaTags();
-      applyFavicon();
-      applyAppearanceSettings(cache);
-      listeners.forEach((fn) => fn());
-      return cache;
-    } catch {
-      return cache || { show_watermark: false, watermark_image: '', site_title: '', site_logo: '' };
-    } finally {
-      inflight = null;
-    }
-  })();
-
-  return inflight;
+  // No cached config exists yet, so fetch immediately to avoid rendering defaults forever.
+  return fetchAndApplyPublicSettings();
 }
 
 // Synchronous getter for already-fetched settings

@@ -3,7 +3,7 @@ import { Link, useLocation, useNavigate } from 'react-router-dom';
 import useSWR from 'swr';
 import { DEFAULT_MOBILE_NAV, getBusinessConfig } from '../../lib/businessConfig';
 import { getCachedPublicSettings } from '../../lib/publicSettings';
-
+import { preloadRouteForPath } from '../../lib/routeLoaders';
 import Icon from './Icon';
 import LoginConfirmDialog from './LoginConfirmDialog';
 import { checkProtectedAccess } from './ProtectedLink';
@@ -62,6 +62,9 @@ export default function BottomNav() {
           <Link
             key={tab.path}
             to={tab.path}
+            onPointerEnter={() => preloadRouteForPath(tab.path)}
+            onPointerDown={() => preloadRouteForPath(tab.path)}
+            onFocus={() => preloadRouteForPath(tab.path)}
             onClick={(e) => {
               const result = checkProtectedAccess(tab.path);
               if (result.action === 'dialog') {

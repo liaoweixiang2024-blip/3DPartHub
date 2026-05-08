@@ -156,6 +156,31 @@ export const downloadsApi = {
     await client.post('/downloads/batch-delete', { ids });
   },
 
+  batchDownload: async (ids: string[]): Promise<void> => {
+    const token = getAccessToken();
+    const resp = await fetch(`${import.meta.env.VITE_API_BASE_URL || '/api'}/downloads/batch-download`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      body: JSON.stringify({ ids }),
+    });
+    if (!resp.ok) {
+      const err = await resp.json().catch(() => ({ detail: '打包下载失败' }));
+      throw new Error(err.detail || '打包下载失败');
+    }
+    const blob = await resp.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    const disposition = resp.headers.get('Content-Disposition') || '';
+    const match = disposition.match(/filename="?([^";\n]+)"?/);
+    a.download = match ? match[1] : `downloads_${Date.now()}.zip`;
+    a.click();
+    URL.revokeObjectURL(url);
+  },
+
   clearAll: async () => {
     await client.delete('/downloads/clear');
   },

@@ -3,12 +3,16 @@ import { useState, useCallback, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import useSWR from 'swr';
 import { downloadsApi } from '../api/downloads';
-import { AdminEmptyState, AdminManagementPage } from '../components/shared/AdminManagementPage';
+import {
+  AdminEmptyState,
+  AdminErrorState,
+  AdminLoadingState,
+  AdminManagementPage,
+} from '../components/shared/AdminManagementPage';
 import { AdminPageShell } from '../components/shared/AdminPageShell';
 import ConfirmDialog from '../components/shared/ConfirmDialog';
 import Icon from '../components/shared/Icon';
 import InfiniteLoadTrigger from '../components/shared/InfiniteLoadTrigger';
-import LoadingSpinner from '../components/shared/LoadingSpinner';
 import ModelThumbnail from '../components/shared/ModelThumbnail';
 import { useToast } from '../components/shared/Toast';
 import { useDocumentTitle } from '../hooks/useDocumentTitle';
@@ -80,7 +84,7 @@ function BatchToolbar({
         className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-on-primary bg-primary-container rounded-sm hover:opacity-90 transition-opacity"
       >
         <Icon name="download" size={14} />
-        下载 STEP
+        打包下载
       </button>
       <button
         onClick={onDelete}
@@ -171,36 +175,31 @@ function DesktopContent() {
 
   const handleBatchDownload = useCallback(async () => {
     if (selected.size === 0) return;
-    const selectedItems = downloads.filter((d) => selected.has(d.id));
-    let success = 0;
-    for (const item of selectedItems) {
-      try {
-        await downloadsApi.downloadFile(item.modelId, 'original');
-        success++;
-      } catch {
-        // skip failed
-      }
+    try {
+      await downloadsApi.batchDownload(Array.from(selected));
+      toast(`已开始打包下载 ${selected.size} 条记录`, 'success');
+    } catch (err: unknown) {
+      toast(getErrorMessage(err, '打包下载失败'), 'error');
     }
-    toast(`已开始下载 ${success} 个文件`, 'success');
-  }, [selected, downloads, toast]);
+  }, [selected, toast]);
 
   if (isLoading) {
     return (
-      <AdminPageShell>
-        <LoadingSpinner />
-      </AdminPageShell>
+      <AdminManagementPage title="下载历史" description="查看和管理你下载过的模型文件">
+        <AdminLoadingState variant="list" media label="下载历史加载中" />
+      </AdminManagementPage>
     );
   }
 
   if (error) {
     return (
-      <div className="flex flex-col items-center justify-center py-24 gap-4">
-        <Icon name="error" size={48} className="text-error" />
-        <p className="text-on-surface-variant text-sm">加载下载历史失败</p>
-        <button onClick={() => location.reload()} className="text-primary text-sm hover:underline">
-          重试
-        </button>
-      </div>
+      <AdminManagementPage title="下载历史" description="查看和管理你下载过的模型文件">
+        <AdminErrorState
+          title="下载历史加载失败"
+          description="请稍后重试，或检查当前登录状态。"
+          onRetry={() => mutate()}
+        />
+      </AdminManagementPage>
     );
   }
 
@@ -397,18 +396,13 @@ function MobileContent() {
 
   const handleBatchDownload = useCallback(async () => {
     if (selected.size === 0) return;
-    const selectedItems = downloads.filter((d) => selected.has(d.id));
-    let success = 0;
-    for (const item of selectedItems) {
-      try {
-        await downloadsApi.downloadFile(item.modelId, 'original');
-        success++;
-      } catch {
-        // skip failed
-      }
+    try {
+      await downloadsApi.batchDownload(Array.from(selected));
+      toast(`已开始打包下载 ${selected.size} 条记录`, 'success');
+    } catch (err: unknown) {
+      toast(getErrorMessage(err, '打包下载失败'), 'error');
     }
-    toast(`已开始下载 ${success} 个文件`, 'success');
-  }, [selected, downloads, toast]);
+  }, [selected, toast]);
 
   return (
     <AdminManagementPage
@@ -450,7 +444,7 @@ function MobileContent() {
               onClick={handleBatchDownload}
               className="text-xs text-on-surface-variant hover:text-on-surface px-2 py-1"
             >
-              下载 STEP
+              打包下载
             </button>
             <button onClick={handleBatchDelete} className="text-xs text-error px-2 py-1">
               删除
@@ -460,12 +454,13 @@ function MobileContent() {
       </AnimatePresence>
 
       {isLoading ? (
-        <LoadingSpinner />
+        <AdminLoadingState variant="list" rows={5} media label="下载历史加载中" />
       ) : error ? (
-        <div className="flex flex-col items-center gap-3 py-16">
-          <Icon name="error" size={40} className="text-error" />
-          <p className="text-on-surface-variant text-sm">加载失败</p>
-        </div>
+        <AdminErrorState
+          title="下载历史加载失败"
+          description="请稍后重试，或检查当前登录状态。"
+          onRetry={() => mutate()}
+        />
       ) : downloads.length === 0 ? (
         <EmptyState />
       ) : (

@@ -6,9 +6,9 @@ import { projectApi, type Project, type ProjectModel } from '../api/projects';
 import { AdminPageShell } from '../components/shared/AdminPageShell';
 import FormatTag from '../components/shared/FormatTag';
 import Icon from '../components/shared/Icon';
-import LoadingSpinner from '../components/shared/LoadingSpinner';
 import ModelThumbnail from '../components/shared/ModelThumbnail';
 import { PageHeader, PageTitle } from '../components/shared/PagePrimitives';
+import { PageRefreshIndicator } from '../components/shared/PageRefreshFallback';
 import { useToast } from '../components/shared/Toast';
 import { useDocumentTitle } from '../hooks/useDocumentTitle';
 import { useAuthStore } from '../stores';
@@ -41,6 +41,16 @@ const ModelRow = memo(function ModelRow({ model }: { model: ProjectModel }) {
     </Link>
   );
 });
+
+function ProjectDetailLoadingState() {
+  return (
+    <AdminPageShell mobileContentClassName="p-4 pb-20">
+      <div className="mx-auto flex min-h-[360px] w-full max-w-6xl">
+        <PageRefreshIndicator label="项目详情刷新中" />
+      </div>
+    </AdminPageShell>
+  );
+}
 
 function EditModal({ project, onClose, onSaved }: { project: Project; onClose: () => void; onSaved: () => void }) {
   const [name, setName] = useState(project.name);
@@ -164,7 +174,7 @@ export default function ProjectDetailPage() {
   }
 
   if (!project) {
-    return <LoadingSpinner />;
+    return <ProjectDetailLoadingState />;
   }
 
   return (

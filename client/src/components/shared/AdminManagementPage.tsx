@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
 import Icon from './Icon';
 import { mergeClassName } from './PagePrimitives';
+import { PageRefreshIndicator } from './PageRefreshFallback';
 
 export interface AdminStatItem {
   label: ReactNode;
@@ -39,6 +40,24 @@ interface AdminEmptyStateProps {
   description?: ReactNode;
   action?: ReactNode;
   className?: string;
+}
+
+interface AdminErrorStateProps {
+  title?: ReactNode;
+  description?: ReactNode;
+  retryLabel?: ReactNode;
+  onRetry?: () => void;
+  className?: string;
+}
+
+interface AdminLoadingStateProps {
+  variant?: 'table' | 'list' | 'cards' | 'dashboard';
+  rows?: number;
+  media?: boolean;
+  className?: string;
+  label?: string;
+  tableColumns?: string;
+  tableCells?: Array<'checkbox' | 'chip' | 'title' | 'mediaTitle' | 'text' | 'action' | 'actions'>;
 }
 
 interface AdminDetailHeaderProps {
@@ -187,6 +206,43 @@ export function AdminEmptyState({ icon, title, description, action, className }:
         <p className="mt-1 max-w-sm text-xs leading-relaxed text-on-surface-variant">{description}</p>
       ) : null}
       {action ? <div className="mt-5 flex items-center justify-center">{action}</div> : null}
+    </div>
+  );
+}
+
+export function AdminErrorState({
+  title = '数据加载失败',
+  description = '请检查网络或服务状态，稍后重试。',
+  retryLabel = '重新加载',
+  onRetry,
+  className,
+}: AdminErrorStateProps) {
+  return (
+    <AdminEmptyState
+      icon="error"
+      title={title}
+      description={description}
+      className={className}
+      action={
+        onRetry ? (
+          <button
+            type="button"
+            onClick={onRetry}
+            className="inline-flex h-9 items-center justify-center gap-1.5 rounded-sm bg-primary-container px-4 text-sm font-bold text-on-primary transition-opacity hover:opacity-90 active:scale-[0.98]"
+          >
+            <Icon name="refresh" size={15} />
+            {retryLabel}
+          </button>
+        ) : null
+      }
+    />
+  );
+}
+
+export function AdminLoadingState({ className, label = '内容加载中' }: AdminLoadingStateProps) {
+  return (
+    <div className={mergeClassName('flex min-h-[320px] flex-1', className)}>
+      <PageRefreshIndicator label={label} />
     </div>
   );
 }

@@ -183,27 +183,6 @@
     content-visibility: visible;
   }
 }
-@keyframes productWallSkeletonPulse {
-  0%,
-  100% {
-    opacity: 0.68;
-  }
-  50% {
-    opacity: 1;
-  }
-}
-.product-wall-skeleton-grid {
-  min-height: 520px;
-}
-.product-wall-skeleton-card {
-  background:
-    linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.45), transparent),
-    color-mix(in srgb, var(--color-surface-container-high) 62%, transparent);
-  background-size:
-    220% 100%,
-    100% 100%;
-  animation: productWallSkeletonPulse 1.35s ease-in-out infinite;
-}
 @keyframes productWallLoadMore {
   0%,
   100% {

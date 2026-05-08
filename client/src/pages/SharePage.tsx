@@ -4,8 +4,8 @@ import { getShareInfo, verifySharePassword, getShareDownloadUrl, type ShareInfo 
 import { MATERIAL_PRESETS, type MaterialPresetKey } from '../components/3d/viewerControls';
 import BrandMark from '../components/shared/BrandMark';
 import Icon from '../components/shared/Icon';
-import LoadingSpinner from '../components/shared/LoadingSpinner';
 import { PageTitle } from '../components/shared/PagePrimitives';
+import PageRefreshFallback from '../components/shared/PageRefreshFallback';
 import { PublicPageShell } from '../components/shared/PublicPageShell';
 import { useDocumentTitle } from '../hooks/useDocumentTitle';
 import { getErrorMessage } from '../lib/errorNotifications';
@@ -13,7 +13,8 @@ import { getDefaultPreset, getPublicSettingsSnapshot, getSiteTitle } from '../li
 
 const isWechat = /MicroMessenger/i.test(navigator.userAgent);
 
-const ModelViewer = lazy(() => import('../components/3d/ModelViewer'));
+const loadModelViewer = () => import('../components/3d/ModelViewer');
+const ModelViewer = lazy(loadModelViewer);
 
 const VIEWER_PREFS_KEY = 'model_viewer_display_prefs_v1';
 
@@ -56,6 +57,7 @@ export default function SharePage() {
     if (!token) return;
     try {
       const data = await getShareInfo(token);
+      if (data.allowPreview && data.gltfUrl) void loadModelViewer();
       setInfo(data);
       setNeedPassword(data.hasPassword);
     } catch (err: unknown) {
@@ -86,6 +88,7 @@ export default function SharePage() {
       setShareAccessToken(verified.accessToken);
       setPassword('');
       const data = await getShareInfo(token, verified.accessToken);
+      if (data.allowPreview && data.gltfUrl) void loadModelViewer();
       setInfo(data);
       setNeedPassword(false);
     } catch (err: unknown) {
@@ -117,11 +120,7 @@ export default function SharePage() {
 
   // Loading
   if (loading) {
-    return (
-      <PublicPageShell>
-        <LoadingSpinner />
-      </PublicPageShell>
-    );
+    return <PageRefreshFallback standalone label="分享预览刷新中" />;
   }
 
   // Expired

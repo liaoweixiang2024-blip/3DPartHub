@@ -1,8 +1,10 @@
 import type { ReactNode } from 'react';
-import { useAuthStore } from '../../stores/useAuthStore';
 import { getPublicSettingsSnapshot } from '../../lib/publicSettings';
+import { preloadRouteForPath } from '../../lib/routeLoaders';
+import { useAuthStore } from '../../stores/useAuthStore';
 
 const PROTECTED_PREFIXES = [
+  '/admin',
   '/favorites',
   '/my-shares',
   '/profile',
@@ -14,6 +16,7 @@ const PROTECTED_PREFIXES = [
 ];
 
 const PATH_LABELS: Record<string, string> = {
+  '/admin': '访问管理后台',
   '/favorites': '查看收藏',
   '/my-shares': '查看分享',
   '/profile': '个人设置',
@@ -105,7 +108,15 @@ export default function ProtectedNavLink({ to, children, className, onClick, onL
   }
 
   return (
-    <a href={to} className={className} onClick={handleClick} style={{ cursor: 'pointer' }}>
+    <a
+      href={to}
+      className={className}
+      onPointerEnter={() => preloadRouteForPath(to)}
+      onPointerDown={() => preloadRouteForPath(to)}
+      onFocus={() => preloadRouteForPath(to)}
+      onClick={handleClick}
+      style={{ cursor: 'pointer' }}
+    >
       {children}
     </a>
   );

@@ -1,30 +1,17 @@
 import { MotionConfig } from 'framer-motion';
-import { useEffect } from 'react';
 import { BrowserRouter } from 'react-router-dom';
 import { SWRConfig } from 'swr';
 import ErrorBoundary from './components/shared/ErrorBoundary';
 import ForceChangePassword from './components/shared/ForceChangePassword';
 import GlobalTooltip from './components/shared/GlobalTooltip';
+import { GlobalPageRefreshIndicator } from './components/shared/PageRefreshFallback';
+import RouteProgress from './components/shared/RouteProgress';
 import { ToastProvider } from './components/shared/Toast';
 import { isRateLimitError, notifyGlobalError } from './lib/errorNotifications';
 import { motionDuration, motionEase } from './lib/motion';
 import Router from './router';
 
 export default function App() {
-  useEffect(() => {
-    // Wait for the headline font, then reveal the page in the next frame
-    // Using rAF ensures the browser has painted the hidden state first
-    document.fonts
-      .load('bold 1px "Space Grotesk"')
-      .catch(() => {})
-      .finally(() => {
-        requestAnimationFrame(() => {
-          const root = document.getElementById('root');
-          if (root) root.style.opacity = '1';
-        });
-      });
-  }, []);
-
   return (
     <SWRConfig
       value={{
@@ -42,6 +29,8 @@ export default function App() {
         <MotionConfig reducedMotion="user" transition={{ duration: motionDuration.base, ease: motionEase.standard }}>
           <ToastProvider>
             <ErrorBoundary>
+              <RouteProgress />
+              <GlobalPageRefreshIndicator />
               <Router />
               <ForceChangePassword />
               <GlobalTooltip />

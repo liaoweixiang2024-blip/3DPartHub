@@ -103,6 +103,28 @@ test('keeps underscores inside model numbers when deriving download filenames', 
   assert.equal(target?.fileName, 'SBU-3_4x1_4.step');
 });
 
+test('uses original filename extension instead of generic binary format', () => {
+  const uploadPath = join(root, 'uploads', 'multer-random-source');
+  mkdirSync(join(root, 'uploads'), { recursive: true });
+  writeFileSync(uploadPath, 'step');
+
+  const target = resolveDbModelDownloadTarget(
+    {
+      id: 'binary-format',
+      name: 'Binary Format',
+      originalName: 'Binary Format.STEP',
+      format: 'binary',
+      originalFormat: 'binary',
+      uploadPath,
+      originalSize: 123,
+    },
+    'original',
+  );
+
+  assert.equal(target?.fileName, 'Binary Format.step');
+  assert.equal(target?.record?.format, 'step');
+});
+
 test('resolves preview DB model download target when original is not requested', () => {
   const previewPath = join(process.env.STATIC_DIR!, 'models', 'pump.glb');
   mkdirSync(join(process.env.STATIC_DIR!, 'models'), { recursive: true });
@@ -164,4 +186,23 @@ test('resolves metadata original and preview targets', () => {
   assert.equal(original?.fileName, 'meta.step');
   assert.equal(preview?.filePath, previewPath);
   assert.equal(preview?.fileName, 'meta.glb');
+});
+
+test('metadata original target ignores generic binary format when original name has an extension', () => {
+  const originalPath = join(root, 'uploads', 'legacy-binary-upload');
+  mkdirSync(join(root, 'uploads'), { recursive: true });
+  writeFileSync(originalPath, 'step');
+
+  const target = resolveMetadataModelDownloadTarget(
+    'legacy-binary-upload',
+    {
+      upload_path: originalPath,
+      original_name: 'Legacy Binary.stp',
+      format: 'binary',
+    },
+    'original',
+  );
+
+  assert.equal(target?.filePath, originalPath);
+  assert.equal(target?.fileName, 'Legacy Binary.stp');
 });

@@ -9,8 +9,8 @@ import {
   type ColumnDef,
 } from '../api/selections';
 import Icon from '../components/shared/Icon';
-import LoadingSpinner from '../components/shared/LoadingSpinner';
 import { PageHeader } from '../components/shared/PagePrimitives';
+import { PageRefreshIndicator } from '../components/shared/PageRefreshFallback';
 import { PublicPageShell } from '../components/shared/PublicPageShell';
 import SafeImage from '../components/shared/SafeImage';
 import { useDocumentTitle } from '../hooks/useDocumentTitle';
@@ -55,6 +55,14 @@ function replaceManualPlaceholders(
     if (col?.legacyPlaceholder) next = next.replaceAll(col.legacyPlaceholder, value);
   }
   return next;
+}
+
+function SelectionShareLoadingState() {
+  return (
+    <div className="flex min-h-dvh">
+      <PageRefreshIndicator label="选型分享刷新中" />
+    </div>
+  );
 }
 
 function applyManualSpecs(
@@ -288,7 +296,7 @@ export default function SelectionSharePage() {
   if (!data) {
     return (
       <PublicPageShell>
-        <LoadingSpinner />
+        <SelectionShareLoadingState />
       </PublicPageShell>
     );
   }
@@ -299,7 +307,7 @@ export default function SelectionSharePage() {
   if (data.products.length === 0) {
     return (
       <PublicPageShell>
-        <LoadingSpinner />
+        <SelectionShareLoadingState />
       </PublicPageShell>
     );
   }

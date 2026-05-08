@@ -19,6 +19,17 @@ function param(req: { params: Record<string, string | string[]> }, key: string):
   return Array.isArray(v) ? v[0] : v;
 }
 
+function uniqueArchiveFileName(fileName: string, usedNames: Map<string, number>): string {
+  const safeFileName = (fileName || 'model.step').replace(/[<>:"/\\|?*]/g, '_');
+  const match = safeFileName.match(/^(.*?)(\.[^.]+)?$/);
+  const stem = (match?.[1] || 'model').trim() || 'model';
+  const ext = match?.[2] || '.step';
+  const baseName = `${stem}${ext}`;
+  const count = usedNames.get(baseName) || 0;
+  usedNames.set(baseName, count + 1);
+  return count > 0 ? `${stem}_${count}${ext}` : baseName;
+}
+
 // List user's favorites
 router.get('/api/favorites', authMiddleware, async (req: AuthRequest, res: Response) => {
   try {
@@ -263,15 +274,10 @@ router.post('/api/favorites/batch-download', authMiddleware, async (req: AuthReq
 
     const usedNames = new Map<string, number>();
     for (const entry of fileEntries) {
-      const safeName = (entry.fileName.replace(/\.[^.]+$/, '') || 'file').replace(/[<>:"/\\|?*]/g, '_');
-      const ext = entry.filePath.split('.').pop()?.toLowerCase() || 'bin';
-      const baseName = `${safeName}.${ext}`;
-      const count = usedNames.get(baseName) || 0;
-      usedNames.set(baseName, count + 1);
-      const finalName = count > 0 ? `${safeName}_${count}.${ext}` : baseName;
+      const finalName = uniqueArchiveFileName(entry.fileName, usedNames);
       archive.file(entry.filePath, { name: finalName });
       if (entry.binPath) {
-        const binName = count > 0 ? `${safeName}_${count}.bin` : `${safeName}.bin`;
+        const binName = finalName.replace(/\.[^.]+$/, '.bin');
         archive.file(entry.binPath, { name: binName });
       }
     }

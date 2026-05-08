@@ -1,10 +1,15 @@
+import { existsSync } from 'node:fs';
+import archiver from 'archiver';
 import { Router, Request, Response } from 'express';
+import { getBusinessConfig } from '../lib/businessConfig.js';
 import { createModelDownloadToken, createProtectedResourceToken } from '../lib/downloadTokenStore.js';
 import { createLogger } from '../lib/logger.js';
 import { prisma } from '../lib/prisma.js';
 import { optionalString } from '../lib/requestValidation.js';
 import { getSetting } from '../lib/settings.js';
 import { authMiddleware, optionalAuthMiddleware, type AuthRequest } from '../middleware/auth.js';
+import { resolveDbModelDownloadTarget } from '../services/modelDownloadTarget.js';
+import { MODEL_STATUS } from '../services/modelStatus.js';
 
 const log = createLogger({ component: 'downloads' });
 
@@ -26,6 +31,17 @@ function startOfDay(date: Date) {
 
 function dateKey(date: Date) {
   return date.toISOString().slice(0, 10);
+}
+
+function uniqueArchiveFileName(fileName: string, usedNames: Map<string, number>): string {
+  const safeFileName = (fileName || 'model.step').replace(/[<>:"/\\|?*]/g, '_');
+  const match = safeFileName.match(/^(.*?)(\.[^.]+)?$/);
+  const stem = (match?.[1] || 'model').trim() || 'model';
+  const ext = match?.[2] || '.step';
+  const baseName = `${stem}${ext}`;
+  const count = usedNames.get(baseName) || 0;
+  usedNames.set(baseName, count + 1);
+  return count > 0 ? `${stem}_${count}${ext}` : baseName;
 }
 
 // Download history for the current user.
@@ -273,6 +289,94 @@ router.post('/api/downloads/drawing-token', authMiddleware, async (req: AuthRequ
   } catch (err) {
     log.error({ err }, 'Failed to create drawing token');
     res.status(500).json({ detail: '创建图纸访问令牌失败' });
+  }
+});
+
+// Batch download selected history records as a single ZIP of original model files.
+router.post('/api/downloads/batch-download', authMiddleware, async (req: AuthRequest, res: Response) => {
+  try {
+    if (!prisma) {
+      res.status(503).json({ detail: 'DB unavailable' });
+      return;
+    }
+
+    const { ids } = req.body as { ids?: string[] };
+    const uniqueIds = Array.from(new Set((Array.isArray(ids) ? ids : []).filter((id) => typeof id === 'string')));
+    if (uniqueIds.length === 0) {
+      res.status(400).json({ detail: '请选择要下载的记录' });
+      return;
+    }
+
+    const { pageSizePolicy } = await getBusinessConfig();
+    const batchMax = Math.max(1, Math.floor(Number(pageSizePolicy.userBatchDownloadMax) || 100));
+    if (uniqueIds.length > batchMax) {
+      res.status(400).json({ detail: `单次最多打包 ${batchMax} 条下载记录` });
+      return;
+    }
+
+    const downloads = await prisma.download.findMany({
+      where: { id: { in: uniqueIds }, userId: req.user!.userId },
+      include: {
+        model: {
+          select: {
+            id: true,
+            name: true,
+            originalName: true,
+            format: true,
+            originalFormat: true,
+            originalSize: true,
+            gltfUrl: true,
+            gltfSize: true,
+            uploadPath: true,
+            status: true,
+          },
+        },
+      },
+    });
+    const downloadById = new Map(downloads.map((download) => [download.id, download]));
+    const addedModelIds = new Set<string>();
+    const fileEntries: Array<{ filePath: string; fileName: string }> = [];
+
+    for (const id of uniqueIds) {
+      const download = downloadById.get(id);
+      const model = download?.model;
+      if (!model || model.status !== MODEL_STATUS.COMPLETED || addedModelIds.has(model.id)) continue;
+
+      const target = resolveDbModelDownloadTarget(model, 'original');
+      if (!target || !existsSync(target.filePath)) continue;
+
+      fileEntries.push({ filePath: target.filePath, fileName: target.fileName });
+      addedModelIds.add(model.id);
+    }
+
+    if (fileEntries.length === 0) {
+      res.status(404).json({ detail: '没有找到可打包下载的原始模型文件' });
+      return;
+    }
+
+    res.setHeader('Content-Type', 'application/zip');
+    res.setHeader('Content-Disposition', `attachment; filename="downloads_${Date.now()}.zip"`);
+
+    const archive = archiver('zip', { zlib: { level: 5 } });
+    archive.on('error', (err) => {
+      log.error({ err }, 'Download history batch archive error');
+      if (!res.headersSent) {
+        res.status(500).json({ detail: '打包下载失败' });
+      } else {
+        res.destroy(err);
+      }
+    });
+    archive.pipe(res);
+
+    const usedNames = new Map<string, number>();
+    for (const entry of fileEntries) {
+      archive.file(entry.filePath, { name: uniqueArchiveFileName(entry.fileName, usedNames) });
+    }
+
+    await archive.finalize();
+  } catch (err) {
+    log.error({ err }, 'Download history batch download failed');
+    if (!res.headersSent) res.status(500).json({ detail: '打包下载失败' });
   }
 });
 

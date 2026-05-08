@@ -39,6 +39,7 @@ import { AdminManagementPage } from '../components/shared/AdminManagementPage';
 import { AdminPageShell } from '../components/shared/AdminPageShell';
 import Icon from '../components/shared/Icon';
 import LoginConfirmDialog from '../components/shared/LoginConfirmDialog';
+import { PageRefreshIndicator } from '../components/shared/PageRefreshFallback';
 import { isLoginDialogEnabled } from '../components/shared/ProtectedLink';
 import ResponsiveSectionTabs from '../components/shared/ResponsiveSectionTabs';
 import SafeImage from '../components/shared/SafeImage';
@@ -48,7 +49,6 @@ import { useImeSafeSearchInput } from '../hooks/useImeSafeSearchInput';
 import { getBusinessConfig } from '../lib/businessConfig';
 import { copyText } from '../lib/clipboard';
 import { useAuthStore } from '../stores/useAuthStore';
-import LoadingSpinner from '../components/shared/LoadingSpinner';
 
 type WallItem = ProductWallItem;
 
@@ -78,6 +78,14 @@ const PRODUCT_WALL_RENDER_BATCH_SIZE = 24;
 const PRODUCT_WALL_CANVAS_MODE_KEY = 'product-wall-canvas-mode';
 const PRODUCT_WALL_DEFAULT_KIND_KEY = 'product-wall-default-kind';
 const PRODUCT_WALL_FAVORITES_FILTER = '我的收藏';
+
+function ProductWallLoadingState() {
+  return (
+    <section className="flex min-h-[320px] w-full">
+      <PageRefreshIndicator label="产品图库刷新中" />
+    </section>
+  );
+}
 
 function isZipFile(file: File) {
   return (
@@ -532,7 +540,17 @@ export default function ProductWallPage() {
         if (folderInputRef.current) folderInputRef.current.value = '';
       }
     },
-    [canUpload, isAdmin, mutate, productWallMaxImageBytes, toast, uploadKind, uploadPolicy.productWallImageMaxSizeMb],
+    [
+      canUpload,
+      isAdmin,
+      location.pathname,
+      mutate,
+      navigate,
+      productWallMaxImageBytes,
+      toast,
+      uploadKind,
+      uploadPolicy.productWallImageMaxSizeMb,
+    ],
   );
   const handleUploadSource = useCallback(
     (fileList: FileList | File[]) => {
@@ -1160,7 +1178,7 @@ export default function ProductWallPage() {
           )}
 
           {initialLoading || (visibleItems.length > 0 && !wallReady) ? (
-            <LoadingSpinner />
+            <ProductWallLoadingState />
           ) : visibleItems.length ? (
             <>
               <section className="product-wall-masonry w-full">

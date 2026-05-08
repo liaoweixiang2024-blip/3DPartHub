@@ -3,6 +3,7 @@ import { Link, useLocation, useNavigate } from 'react-router-dom';
 import useSWR from 'swr';
 import { getBusinessConfig } from '../../lib/businessConfig';
 import { getCachedPublicSettings } from '../../lib/publicSettings';
+import { preloadRouteForPath } from '../../lib/routeLoaders';
 import { useAuthStore } from '../../stores/useAuthStore';
 import Icon from './Icon';
 import LoginConfirmDialog from './LoginConfirmDialog';
@@ -95,6 +96,9 @@ export default function AppSidebar() {
                 to={item.path}
                 ref={isActive ? activeRef : undefined}
                 className={navCls(isActive)}
+                onPointerEnter={() => preloadRouteForPath(item.path)}
+                onPointerDown={() => preloadRouteForPath(item.path)}
+                onFocus={() => preloadRouteForPath(item.path)}
                 onClick={(e) => {
                   const result = checkProtectedAccess(item.path);
                   if (result.action === 'dialog') {
@@ -149,6 +153,9 @@ export default function AppSidebar() {
                   key={item.path}
                   to={item.path}
                   className={navCls(isActive)}
+                  onPointerEnter={() => preloadRouteForPath(item.path)}
+                  onPointerDown={() => preloadRouteForPath(item.path)}
+                  onFocus={() => preloadRouteForPath(item.path)}
                   onClick={(e) => {
                     const result = checkProtectedAccess(item.path);
                     if (result.action === 'dialog') {

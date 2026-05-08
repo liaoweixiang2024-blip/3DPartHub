@@ -4,17 +4,16 @@ import { Link, useNavigate } from 'react-router-dom';
 import useSWR from 'swr';
 import { authApi } from '../api/auth';
 import { listShares, type ShareLink } from '../api/shares';
-import { AdminPageShell } from '../components/shared/AdminPageShell';
 import { AdminPageHero } from '../components/shared/AdminManagementPage';
+import { AdminPageShell } from '../components/shared/AdminPageShell';
 import Icon from '../components/shared/Icon';
 import { PageBody, PageHeader } from '../components/shared/PagePrimitives';
+import { PageRefreshIndicator } from '../components/shared/PageRefreshFallback';
 import SafeImage from '../components/shared/SafeImage';
-
 import { useToast } from '../components/shared/Toast';
 import { useDocumentTitle } from '../hooks/useDocumentTitle';
 import { useMediaQuery } from '../layouts/hooks/useMediaQuery';
 import { useAuthStore } from '../stores/useAuthStore';
-import LoadingSpinner from '../components/shared/LoadingSpinner';
 
 const ROLE_LABELS: Record<string, string> = {
   ADMIN: '管理员',
@@ -40,6 +39,14 @@ function Toggle({ checked, onChange }: { checked: boolean; onChange: (v: boolean
         className={`absolute top-0.5 h-4 w-4 rounded-full bg-on-surface transition-transform ${checked ? 'left-[18px]' : 'left-0.5'}`}
       />
     </button>
+  );
+}
+
+function NotificationPrefsLoadingState({ compact = false }: { compact?: boolean }) {
+  return (
+    <div className={`flex ${compact ? 'min-h-12' : 'min-h-24'}`}>
+      <PageRefreshIndicator label="通知设置刷新中" />
+    </div>
   );
 }
 
@@ -81,7 +88,7 @@ function NotificationPrefs({ compact = false }: { compact?: boolean }) {
   };
 
   if (loading) {
-    return <LoadingSpinner size="sm" />;
+    return <NotificationPrefsLoadingState compact={compact} />;
   }
 
   if (compact) {
@@ -164,6 +171,17 @@ function NotificationPrefs({ compact = false }: { compact?: boolean }) {
         </div>
       )}
     </div>
+  );
+}
+
+function ProfileDesktopLoadingState() {
+  return (
+    <PageBody className="mx-auto max-w-6xl pb-12" data-profile-loading>
+      <PageHeader title="个人设置" />
+      <div className="flex min-h-[360px]">
+        <PageRefreshIndicator label="个人设置刷新中" />
+      </div>
+    </PageBody>
   );
 }
 
@@ -404,7 +422,7 @@ function DesktopContent() {
   );
 
   if (isLoading) {
-    return <LoadingSpinner />;
+    return <ProfileDesktopLoadingState />;
   }
 
   return (
