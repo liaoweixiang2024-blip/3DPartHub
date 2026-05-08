@@ -1,5 +1,6 @@
 import { getPublicSettingsSnapshot } from '../lib/publicSettings';
 import { getAccessToken, useAuthStore } from '../stores/useAuthStore';
+import { downloadBatchZip } from './batchZipDownload';
 import client from './client';
 import { unwrapApiData } from './response';
 
@@ -25,6 +26,7 @@ export interface DownloadAdminStats {
     todayDownloads: number;
     weekDownloads: number;
     activeDownloaders: number;
+    downloadedBytes?: number;
   };
   topModels: Array<{
     model_id: string;
@@ -59,6 +61,12 @@ export interface DownloadAdminStats {
 }
 
 type DownloadHistoryResponse = DownloadHistoryItem[] | { data?: DownloadHistoryItem[] };
+
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '/api';
+
+function apiUrl(path: string): string {
+  return `${API_BASE_URL.replace(/\/$/, '')}${path}`;
+}
 
 export class DownloadAuthRequiredError extends Error {
   constructor() {
@@ -156,37 +164,25 @@ export const downloadsApi = {
     await client.post('/downloads/batch-delete', { ids });
   },
 
-  batchDownload: async (ids: string[]): Promise<void> => {
-    const token = getAccessToken();
-    const resp = await fetch(`${import.meta.env.VITE_API_BASE_URL || '/api'}/downloads/batch-download`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      },
-      body: JSON.stringify({ ids }),
+  batchDownload: async (ids: string[]): Promise<{ fileCount: number }> => {
+    return downloadBatchZip({
+      url: apiUrl('/batch-download'),
+      fields: { source: 'downloads', ids },
+      legacyUrl: apiUrl('/downloads/batch-download'),
+      legacyFields: { ids },
+      fallbackFileCount: ids.length,
+      fallbackFileName: `downloads_${Date.now()}.zip`,
     });
-    if (!resp.ok) {
-      const err = await resp.json().catch(() => ({ detail: '打包下载失败' }));
-      throw new Error(err.detail || '打包下载失败');
-    }
-    const blob = await resp.blob();
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    const disposition = resp.headers.get('Content-Disposition') || '';
-    const match = disposition.match(/filename="?([^";\n]+)"?/);
-    a.download = match ? match[1] : `downloads_${Date.now()}.zip`;
-    a.click();
-    URL.revokeObjectURL(url);
   },
 
   clearAll: async () => {
     await client.delete('/downloads/clear');
   },
 
-  adminStats: async (): Promise<DownloadAdminStats> => {
-    const { data: resp } = await client.get('/admin/downloads/stats');
+  adminStats: async (search = ''): Promise<DownloadAdminStats> => {
+    const { data: resp } = await client.get('/admin/downloads/stats', {
+      params: { search: search || undefined },
+    });
     return unwrapApiData<DownloadAdminStats>(resp);
   },
 

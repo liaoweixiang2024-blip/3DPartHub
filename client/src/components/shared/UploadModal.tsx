@@ -538,7 +538,7 @@ export default function UploadModal({ open, onClose, onConverted }: UploadModalP
               </button>
             </div>
 
-            <div className="p-4 sm:p-6 overflow-y-auto">
+            <div className="overflow-y-auto p-4 [overflow-anchor:none] sm:p-6">
               {result ? (
                 <div className="flex flex-col items-center gap-4 py-4">
                   <div
@@ -596,6 +596,8 @@ export default function UploadModal({ open, onClose, onConverted }: UploadModalP
                         value={categoryId}
                         onChange={setCategoryId}
                         placeholder="选择分类（可选）"
+                        autoFocusSearch={false}
+                        portalDropdown
                       />
                     </div>
                   )}
@@ -673,6 +675,8 @@ export default function UploadModal({ open, onClose, onConverted }: UploadModalP
                         value={categoryId}
                         onChange={setCategoryId}
                         placeholder="选择分类（可选）"
+                        autoFocusSearch={false}
+                        portalDropdown
                       />
                     </div>
                   )}
@@ -684,7 +688,7 @@ export default function UploadModal({ open, onClose, onConverted }: UploadModalP
                     onDragLeave={() => setDragActive(false)}
                     onDrop={handleDrop}
                     onClick={() => inputRef.current?.click()}
-                    className={`border-2 border-dashed rounded-lg p-5 sm:p-8 text-center cursor-pointer transition-all ${
+                    className={`border-2 border-dashed rounded-lg p-5 sm:p-8 text-center cursor-pointer transition-colors ${
                       dragActive
                         ? 'border-primary bg-primary-container/5'
                         : 'border-outline-variant/30 hover:border-primary/50 hover:bg-surface-container/50'

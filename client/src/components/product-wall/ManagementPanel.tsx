@@ -2,6 +2,7 @@ import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { ProductWallItem, ProductWallCategory, ProductWallKind, ProductWallStatus } from '../../api/productWall';
 import { useImeSafeSearchInput } from '../../hooks/useImeSafeSearchInput';
 import Icon from '../shared/Icon';
+import SearchField from '../shared/SearchField';
 
 type ReviewFilter = 'all' | 'approved' | 'pending' | 'rejected';
 type ManagementKindFilter = '全部' | ProductWallKind;
@@ -278,28 +279,13 @@ export default memo(function ProductWallManagementPanel({
                   </option>
                 ))}
               </select>
-              <div className="relative flex-1 min-w-[140px] max-w-xs">
-                <Icon
-                  name="search"
-                  size={14}
-                  className="absolute left-2.5 top-1/2 -translate-y-1/2 text-on-surface-variant/50"
-                />
-                <input
-                  type="text"
-                  placeholder="搜索标题、分类..."
-                  {...managementQueryInputProps}
-                  className="w-full rounded-md border border-outline-variant/18 bg-surface py-1.5 pl-8 pr-3 text-xs text-on-surface placeholder:text-on-surface-variant/40 focus:outline-none focus:ring-1 focus:ring-primary-container/35"
-                />
-              </div>
-              {managementQueryInputValue && (
-                <button
-                  type="button"
-                  onClick={() => setManagementQueryInternal('')}
-                  className="text-xs text-primary-container hover:underline"
-                >
-                  清空搜索
-                </button>
-              )}
+              <SearchField
+                inputProps={managementQueryInputProps}
+                value={managementQueryInputValue}
+                onClear={() => setManagementQueryInternal('')}
+                placeholder="搜索标题、分类..."
+                className="min-w-[140px] flex-1 md:max-w-xs"
+              />
             </div>
 
             {/* Image grid */}

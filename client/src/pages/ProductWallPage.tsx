@@ -1,4 +1,5 @@
 import {
+  startTransition,
   useCallback,
   useEffect,
   useDeferredValue,
@@ -8,6 +9,7 @@ import {
   type ClipboardEvent,
   type FormEvent,
   type PointerEvent,
+  type ReactNode,
 } from 'react';
 import { createPortal } from 'react-dom';
 import { useLocation, useNavigate } from 'react-router-dom';
@@ -43,6 +45,7 @@ import { PageRefreshIndicator } from '../components/shared/PageRefreshFallback';
 import { isLoginDialogEnabled } from '../components/shared/ProtectedLink';
 import ResponsiveSectionTabs from '../components/shared/ResponsiveSectionTabs';
 import SafeImage from '../components/shared/SafeImage';
+import SearchField from '../components/shared/SearchField';
 import { useToast } from '../components/shared/Toast';
 import { useDocumentTitle } from '../hooks/useDocumentTitle';
 import { useImeSafeSearchInput } from '../hooks/useImeSafeSearchInput';
@@ -74,7 +77,7 @@ type DataTransferItemWithEntry = DataTransferItem & {
 };
 
 const PRODUCT_WALL_UPLOAD_BATCH_SIZE = 20;
-const PRODUCT_WALL_RENDER_BATCH_SIZE = 24;
+const PRODUCT_WALL_RENDER_BATCH_SIZE = 16;
 const PRODUCT_WALL_CANVAS_MODE_KEY = 'product-wall-canvas-mode';
 const PRODUCT_WALL_DEFAULT_KIND_KEY = 'product-wall-default-kind';
 const PRODUCT_WALL_FAVORITES_FILTER = '我的收藏';
@@ -172,6 +175,65 @@ function productWallRatioValue(ratio: string) {
   const [width, height] = ratio.split('/').map((part) => Number(part.trim()));
   if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) return 4 / 5;
   return width / height;
+}
+
+function ProductWallThumbnail({
+  item,
+  canvasMode,
+  imageIndex,
+  children,
+}: {
+  item: WallItem;
+  canvasMode: ProductWallCanvasMode;
+  imageIndex: number;
+  children?: ReactNode;
+}) {
+  const previewSrc = productWallPreviewImage(item);
+  const [src, setSrc] = useState(previewSrc);
+  const [loaded, setLoaded] = useState(false);
+  const [failed, setFailed] = useState(false);
+
+  useEffect(() => {
+    setSrc(previewSrc);
+    setLoaded(false);
+    setFailed(false);
+  }, [previewSrc, item.id]);
+
+  return (
+    <div
+      className={`product-wall-image-surface product-wall-canvas-${canvasMode} relative overflow-hidden rounded-xl`}
+      style={{ aspectRatio: productWallRatioValue(item.ratio) }}
+    >
+      {!loaded && !failed && <div className="product-wall-image-placeholder" aria-hidden />}
+      {failed ? (
+        <div className="flex h-full w-full items-center justify-center text-on-surface-variant/35">
+          <Icon name="image" size={22} />
+        </div>
+      ) : (
+        <img
+          src={src}
+          alt={item.title}
+          loading={imageIndex < 2 ? 'eager' : 'lazy'}
+          decoding="async"
+          className={`product-wall-thumb relative z-10 block h-full w-full object-contain align-middle transition duration-200 group-hover:brightness-[0.96] ${
+            loaded ? 'opacity-100' : 'opacity-0'
+          }`}
+          onLoad={() => {
+            window.requestAnimationFrame(() => setLoaded(true));
+          }}
+          onError={() => {
+            if (src !== item.image) {
+              setLoaded(false);
+              setSrc(item.image);
+              return;
+            }
+            setFailed(true);
+          }}
+        />
+      )}
+      {children}
+    </div>
+  );
 }
 
 function getProductWallColumnCount() {
@@ -682,12 +744,25 @@ export default function ProductWallPage() {
   }, [favoriteData]);
   const visibleItemsLengthRef = useRef(0);
   const renderCountRef = useRef(renderCount);
+  const loadMoreFrameRef = useRef<number | null>(null);
   renderCountRef.current = renderCount;
   const previewCanvasRef = useRef<HTMLDivElement | null>(null);
   visibleItemsLengthRef.current = visibleItems.length;
   const loadMoreVisibleItems = useCallback(() => {
-    setRenderCount((count) => Math.min(count + PRODUCT_WALL_RENDER_BATCH_SIZE, visibleItemsLengthRef.current));
+    if (loadMoreFrameRef.current != null) return;
+    loadMoreFrameRef.current = window.requestAnimationFrame(() => {
+      loadMoreFrameRef.current = null;
+      startTransition(() => {
+        setRenderCount((count) => Math.min(count + PRODUCT_WALL_RENDER_BATCH_SIZE, visibleItemsLengthRef.current));
+      });
+    });
   }, []);
+  useEffect(
+    () => () => {
+      if (loadMoreFrameRef.current != null) window.cancelAnimationFrame(loadMoreFrameRef.current);
+    },
+    [],
+  );
   useEffect(() => {
     const target = loadMoreRef.current;
     if (!target || !hasMoreVisibleItems || !wallReady) return;
@@ -696,7 +771,7 @@ export default function ProductWallPage() {
         if (!entries.some((entry) => entry.isIntersecting)) return;
         loadMoreVisibleItems();
       },
-      { rootMargin: '600px 0px' },
+      { rootMargin: '360px 0px' },
     );
     observer.observe(target);
     return () => observer.disconnect();
@@ -1148,25 +1223,13 @@ export default function ProductWallPage() {
                 mobileTitle="当前分类"
                 countUnit="张"
               />
-              <label className="product-wall-search flex h-9 w-full min-w-0 items-center rounded-sm border border-outline-variant/30 bg-surface-container-lowest px-3 md:ml-auto md:w-72">
-                <Icon name="search" size={15} className="mr-2 shrink-0 text-on-surface-variant" />
-                <input
-                  {...queryInputProps}
-                  placeholder="搜索标题或标签..."
-                  className="h-full min-w-0 flex-1 border-none bg-transparent p-0 text-sm leading-none text-on-surface outline-none placeholder:text-on-surface-variant/50"
-                />
-                {queryInputValue && (
-                  <button
-                    type="button"
-                    onClick={() => setQuery('')}
-                    className="p-0.5 text-on-surface-variant hover:text-on-surface"
-                    aria-label="清空搜索"
-                    data-tooltip-ignore
-                  >
-                    <Icon name="close" size={14} />
-                  </button>
-                )}
-              </label>
+              <SearchField
+                inputProps={queryInputProps}
+                value={queryInputValue}
+                onClear={() => setQuery('')}
+                placeholder="搜索标题或标签..."
+                className="product-wall-search md:ml-auto md:w-72"
+              />
             </div>
           }
           contentClassName="overflow-visible"
@@ -1209,19 +1272,10 @@ export default function ProductWallPage() {
                               selectionMode && !selectable ? 'cursor-not-allowed opacity-55' : ''
                             }`}
                           >
-                            <div
-                              className={`product-wall-image-surface product-wall-canvas-${canvasMode} relative overflow-hidden rounded-xl`}
-                            >
-                              <SafeImage
-                                src={productWallPreviewImage(item)}
-                                alt={item.title}
-                                loading={index < 2 ? 'eager' : 'lazy'}
-                                className="relative z-10 block h-auto w-full align-middle transition duration-300 group-hover:brightness-[0.96]"
-                                fallbackClassName="min-h-40 w-full"
-                              />
+                            <ProductWallThumbnail item={item} canvasMode={canvasMode} imageIndex={index}>
                               {selectionMode && selectable && (
                                 <span
-                                  className={`absolute right-2 top-2 inline-flex h-8 w-8 items-center justify-center rounded-full border shadow-sm backdrop-blur ${
+                                  className={`absolute right-2 top-2 z-20 inline-flex h-8 w-8 items-center justify-center rounded-full border shadow-sm backdrop-blur ${
                                     selected
                                       ? 'border-primary-container bg-primary-container text-on-primary-container'
                                       : 'border-white/50 bg-black/24 text-white'
@@ -1230,7 +1284,7 @@ export default function ProductWallPage() {
                                   <Icon name={selected ? 'check' : 'add'} size={16} />
                                 </span>
                               )}
-                            </div>
+                            </ProductWallThumbnail>
                           </button>
                           {!wallEditMode && !selectionMode && (
                             <div className="product-wall-card-actions absolute right-2 top-2 z-20 flex items-center gap-1.5">

@@ -1941,8 +1941,15 @@ export default function HomePage() {
           allowDownload: true,
           downloadLimit: 0,
         });
-        await copyText(`${window.location.origin}/share/${result.token}`);
-        toast('分享链接已复制', 'success');
+        const shareUrl = `${window.location.origin}/share/${result.token}`;
+        toast('模型分享已创建', 'success');
+        try {
+          await copyText(shareUrl);
+          toast('分享链接已复制到剪贴板', 'success');
+        } catch (copyError: unknown) {
+          if (import.meta.env.DEV) console.warn('[Share] Copy failed:', copyError);
+          toast('模型分享已创建，请到我的分享复制链接', 'info');
+        }
       } catch (error: unknown) {
         toast(getErrorMessage(error, '创建分享失败'), 'error');
       }

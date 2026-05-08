@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import useSWR, { useSWRConfig } from 'swr';
+import useSWR from 'swr';
 import useSWRInfinite from 'swr/infinite';
 import client from '../api/client';
 import { unwrapResponse } from '../api/response';
@@ -8,11 +8,14 @@ import { AdminLoadingState, AdminManagementPage } from '../components/shared/Adm
 import { AdminPageShell } from '../components/shared/AdminPageShell';
 import Icon from '../components/shared/Icon';
 import InfiniteLoadTrigger from '../components/shared/InfiniteLoadTrigger';
-import { PageRefreshIndicator } from '../components/shared/PageRefreshFallback';
+import ResponsiveSectionTabs from '../components/shared/ResponsiveSectionTabs';
+import SearchField from '../components/shared/SearchField';
 import { useToast } from '../components/shared/Toast';
 import { useDocumentTitle } from '../hooks/useDocumentTitle';
 import { useImeSafeSearchInput } from '../hooks/useImeSafeSearchInput';
+import { useMediaQuery } from '../layouts/hooks/useMediaQuery';
 import { copyText } from '../lib/clipboard';
+import { getErrorMessage } from '../lib/errorNotifications';
 import type { ApiResponse } from '../types/api';
 
 interface ShareItem {
@@ -47,10 +50,11 @@ interface ShareStats {
 const PAGE_SIZE = 20;
 
 type AdminSharesResponse = { total: number; items: ShareItem[]; page: number; pageSize: number };
+type ShareFilter = 'all' | 'model' | 'selection' | 'active' | 'expired';
 
-async function fetchAdminShares(page: number, search: string): Promise<AdminSharesResponse> {
+async function fetchAdminShares(page: number, search: string, filter: ShareFilter): Promise<AdminSharesResponse> {
   const res = await client.get<ApiResponse<AdminSharesResponse>>('/admin/shares', {
-    params: { page, page_size: PAGE_SIZE, search: search || undefined },
+    params: { page, page_size: PAGE_SIZE, search: search || undefined, filter: filter === 'all' ? undefined : filter },
   });
   return unwrapResponse<AdminSharesResponse>(res);
 }
@@ -64,44 +68,71 @@ function getSharePath(item: ShareItem) {
   return item.type === 'selection' ? `/selection/s/${item.token}` : `/share/${item.token}`;
 }
 
+function ShareFilterTabs({
+  active,
+  counts,
+  onChange,
+}: {
+  active: ShareFilter;
+  counts: Record<ShareFilter, number>;
+  onChange: (value: ShareFilter) => void;
+}) {
+  return (
+    <ResponsiveSectionTabs
+      tabs={[
+        { value: 'all', label: '全部', count: counts.all, icon: 'share' },
+        { value: 'model', label: '模型', count: counts.model, icon: 'deployed_code' },
+        { value: 'selection', label: '选型', count: counts.selection, icon: 'checklist' },
+        { value: 'active', label: '活跃', count: counts.active, icon: 'check_circle' },
+        { value: 'expired', label: '已过期', count: counts.expired, icon: 'schedule' },
+      ]}
+      value={active}
+      onChange={(value) => onChange(value as ShareFilter)}
+      mobileTitle="分享类型"
+      countUnit="条"
+    />
+  );
+}
+
 function Content() {
   const { toast } = useToast();
-  const { mutate: mutateGlobal } = useSWRConfig();
+  const isDesktop = useMediaQuery('(min-width: 768px)');
   const {
     value: search,
     draftValue: searchInputValue,
     setValue: setSearch,
     inputProps: searchInputProps,
   } = useImeSafeSearchInput();
+  const [filter, setFilter] = useState<ShareFilter>('all');
   const [deleteId, setDeleteId] = useState<string | null>(null);
+  const [selectMode, setSelectMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [batchDeleteOpen, setBatchDeleteOpen] = useState(false);
   const [batchDeleting, setBatchDeleting] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
 
   const { data, mutate, setSize, size, isLoading } = useSWRInfinite(
     (pageIndex, previousPageData: AdminSharesResponse | null) => {
       if (previousPageData && previousPageData.page * previousPageData.pageSize >= previousPageData.total) return null;
-      return `/admin/shares?p=${pageIndex + 1}&s=${encodeURIComponent(search)}`;
+      return `/admin/shares?p=${pageIndex + 1}&s=${encodeURIComponent(search)}&f=${filter}`;
     },
     (key: string) => {
       const url = new URL(key, window.location.origin);
-      return fetchAdminShares(Number(url.searchParams.get('p') || '1'), search);
+      return fetchAdminShares(Number(url.searchParams.get('p') || '1'), search, filter);
     },
   );
 
   useEffect(() => {
     setSize(1);
     setSelectedIds(new Set());
-  }, [search, setSize]);
+    setDeleteId(null);
+  }, [filter, search, setSize]);
 
-  const { data: stats, isLoading: statsLoading } = useSWR('/admin/shares/stats', fetchShareStats);
+  const { data: stats, mutate: mutateStats } = useSWR('/admin/shares/stats', fetchShareStats);
 
   const pages = data || [];
   const items = pages.flatMap((pageData) => pageData.items);
   const total = pages[0]?.total || 0;
-  const visibleIds = items.map((item) => item.id);
-  const selectedVisibleCount = visibleIds.filter((id) => selectedIds.has(id)).length;
-  const allVisibleSelected = visibleIds.length > 0 && selectedVisibleCount === visibleIds.length;
   const selectedCount = selectedIds.size;
   const hasMore = items.length < total;
   const isLoadingMore = Boolean(size > 0 && !data?.[size - 1]);
@@ -109,6 +140,19 @@ function Content() {
     if (!hasMore || isLoadingMore) return;
     setSize((current) => current + 1);
   }, [hasMore, isLoadingMore, setSize]);
+
+  async function handleRefresh() {
+    setRefreshing(true);
+    try {
+      await setSize(1);
+      await Promise.all([mutate(undefined, { revalidate: true }), mutateStats(undefined, { revalidate: true })]);
+      toast('分享数据已刷新', 'success');
+    } catch (err: unknown) {
+      toast(getErrorMessage(err, '刷新分享数据失败'), 'error');
+    } finally {
+      setRefreshing(false);
+    }
+  }
 
   async function handleDelete(id: string) {
     try {
@@ -120,8 +164,7 @@ function Content() {
         next.delete(id);
         return next;
       });
-      mutate();
-      mutateGlobal('/admin/shares/stats');
+      await Promise.all([mutate(), mutateStats()]);
     } catch (err: any) {
       toast(err.response?.data?.detail || '删除失败', 'error');
     }
@@ -138,9 +181,9 @@ function Content() {
       const result = unwrapResponse<{ ok: boolean; deleted: number }>(res);
       toast(`已删除 ${result.deleted} 条分享`, 'success');
       setSelectedIds(new Set());
+      setSelectMode(false);
       setBatchDeleteOpen(false);
-      await mutate();
-      mutateGlobal('/admin/shares/stats');
+      await Promise.all([mutate(), mutateStats()]);
     } catch (err: any) {
       toast(err.response?.data?.detail || '批量删除失败', 'error');
     } finally {
@@ -157,14 +200,11 @@ function Content() {
     });
   }
 
-  function toggleSelectVisible() {
-    setSelectedIds((prev) => {
-      const next = new Set(prev);
-      if (allVisibleSelected) {
-        visibleIds.forEach((id) => next.delete(id));
-      } else {
-        visibleIds.forEach((id) => next.add(id));
-      }
+  function toggleSelectMode() {
+    setSelectMode((value) => {
+      const next = !value;
+      setDeleteId(null);
+      if (!next) setSelectedIds(new Set());
       return next;
     });
   }
@@ -184,105 +224,95 @@ function Content() {
     return new Date(expiresAt) < new Date();
   }
 
-  const statItems = stats
-    ? [
-        { label: '总数', value: stats.total, icon: 'share', accent: 'text-primary-container' },
-        { label: '模型', value: stats.modelShares ?? 0, icon: 'deployed_code', accent: 'text-cyan-500' },
-        { label: '选型', value: stats.selectionShares ?? 0, icon: 'checklist', accent: 'text-purple-500' },
-        { label: '活跃', value: stats.active, icon: 'check_circle', accent: 'text-emerald-500' },
-        { label: '已过期', value: stats.expired, icon: 'schedule', accent: 'text-on-surface-variant' },
-        { label: '总浏览', value: stats.totalViews, icon: 'visibility', accent: 'text-blue-500' },
-        { label: '总下载', value: stats.totalDownloads, icon: 'download', accent: 'text-amber-500' },
-      ]
-    : [];
+  const filterCounts: Record<ShareFilter, number> = {
+    all: stats?.total ?? 0,
+    model: stats?.modelShares ?? 0,
+    selection: stats?.selectionShares ?? 0,
+    active: stats?.active ?? 0,
+    expired: stats?.expired ?? 0,
+  };
+  const hasAnyShare = (stats?.total ?? total) > 0;
 
   const toolbar = (
-    <div className="flex min-h-12 flex-wrap items-center justify-between gap-3">
-      <div className="grid min-w-0 flex-1 grid-cols-2 sm:grid-cols-3 xl:grid-cols-7">
-        {statItems.map((item, index) => (
-          <div
-            key={item.label}
-            className="flex min-h-12 flex-col items-center justify-center gap-1 border-b border-r border-outline-variant/12 px-3 py-2 text-center even:border-r-0 sm:even:border-r sm:[&:nth-child(3n)]:border-r-0 xl:border-b-0 xl:even:border-r xl:[&:nth-child(3n)]:border-r xl:[&:nth-child(7n)]:border-r-0"
-          >
-            <span className="flex min-w-0 items-center justify-center gap-1.5">
-              <Icon name={item.icon} size={14} className={item.accent} />
-              <span className="truncate text-[10px] text-on-surface-variant">{item.label}</span>
-            </span>
-            <strong
-              className={`block max-w-full truncate tabular-nums leading-tight text-on-surface ${index === 0 ? 'text-lg' : 'text-base'}`}
-            >
-              {item.value}
-            </strong>
-          </div>
-        ))}
-        {statsLoading && statItems.length === 0 && (
-          <div className="col-span-full flex min-h-12">
-            <PageRefreshIndicator label="分享统计刷新中" />
-          </div>
-        )}
-        {!statsLoading && statItems.length === 0 && (
-          <div className="col-span-full flex min-h-12 items-center justify-center text-xs text-on-surface-variant">
-            统计暂不可用
-          </div>
-        )}
+    <div className="flex min-h-10 min-w-0 flex-col gap-3 md:flex-row md:items-center md:justify-between">
+      <div className="min-w-0 flex-1">
+        <ShareFilterTabs active={filter} counts={filterCounts} onChange={setFilter} />
       </div>
-      <div className="ml-auto flex h-9 w-full shrink-0 items-center px-1 sm:w-72">
-        <Icon name="search" size={16} className="mr-2 shrink-0 text-on-surface-variant" />
-        <input
-          type="text"
-          {...searchInputProps}
-          placeholder="搜索模型、选型、用户名..."
-          className="h-full min-w-0 flex-1 border-none bg-transparent p-0 text-sm leading-none text-on-surface outline-none placeholder:text-on-surface-variant/50"
-        />
-        {searchInputValue && (
-          <button onClick={() => setSearch('')} className="p-0.5 text-on-surface-variant hover:text-on-surface">
-            <Icon name="close" size={14} />
-          </button>
-        )}
-      </div>
-      {items.length > 0 && (
-        <div className="flex w-full flex-wrap items-center justify-between gap-2 border-t border-outline-variant/10 pt-2">
-          <button
-            type="button"
-            onClick={toggleSelectVisible}
-            className="inline-flex h-8 items-center gap-2 rounded-lg px-2 text-xs font-medium text-on-surface-variant transition-colors hover:bg-surface-container-high hover:text-on-surface"
-          >
-            <span
-              className={`grid h-4 w-4 place-items-center rounded border ${allVisibleSelected ? 'border-primary-container bg-primary-container text-on-primary' : 'border-outline-variant/40'}`}
-            >
-              {allVisibleSelected ? <Icon name="check" size={12} /> : null}
-            </span>
-            {allVisibleSelected ? '取消全选已加载' : '全选已加载'}
-          </button>
-          {selectedCount > 0 && (
-            <div className="flex items-center gap-2">
-              <span className="text-xs text-on-surface-variant">
-                已选 <strong className="text-on-surface">{selectedCount}</strong> 条
-              </span>
-              <button
-                type="button"
-                onClick={() => setSelectedIds(new Set())}
-                className="rounded-lg px-2.5 py-1.5 text-xs text-on-surface-variant transition-colors hover:bg-surface-container-high hover:text-on-surface"
-              >
-                取消选择
-              </button>
-              <button
-                type="button"
-                onClick={() => setBatchDeleteOpen(true)}
-                className="inline-flex items-center gap-1.5 rounded-lg bg-error-container px-3 py-1.5 text-xs font-bold text-error transition-opacity hover:opacity-90"
-              >
-                <Icon name="delete" size={14} />
-                批量删除
-              </button>
-            </div>
-          )}
-        </div>
-      )}
+      <SearchField
+        inputProps={searchInputProps}
+        value={searchInputValue}
+        onClear={() => setSearch('')}
+        placeholder="搜索模型、选型、用户名..."
+        className="md:w-72 md:shrink-0"
+      />
+    </div>
+  );
+
+  const actions = (
+    <div className="flex items-center gap-2">
+      <button
+        type="button"
+        onClick={handleRefresh}
+        disabled={refreshing}
+        className={
+          isDesktop
+            ? 'flex items-center gap-2 rounded-lg border border-outline-variant/20 px-4 py-2.5 text-sm text-on-surface-variant transition-colors hover:text-on-surface disabled:opacity-50'
+            : 'inline-flex h-9 items-center gap-1 rounded-lg border border-outline-variant/20 px-3 text-xs text-on-surface-variant disabled:opacity-50'
+        }
+        aria-label="刷新"
+      >
+        <Icon name="refresh" size={isDesktop ? 16 : 14} className={refreshing ? 'animate-spin' : ''} />
+        {isDesktop ? (refreshing ? '刷新中...' : '刷新') : null}
+      </button>
+      {hasAnyShare ? (
+        <button
+          type="button"
+          onClick={toggleSelectMode}
+          className={`flex items-center gap-1.5 rounded-sm border px-3 py-1.5 text-sm transition-colors ${
+            selectMode
+              ? 'border-primary/30 bg-primary-container/10 text-primary'
+              : 'border-outline-variant/20 text-on-surface-variant hover:border-outline-variant/40 hover:text-on-surface'
+          }`}
+        >
+          <Icon name={selectMode ? 'close' : 'checklist'} size={16} />
+          {isDesktop ? (selectMode ? '取消选择' : '批量管理') : selectMode ? '取消' : '批量'}
+        </button>
+      ) : null}
     </div>
   );
 
   return (
-    <AdminManagementPage title="分享管理" description="管理模型分享链接、访问权限和下载记录" toolbar={toolbar}>
+    <AdminManagementPage
+      title="分享管理"
+      description="管理模型分享链接、访问权限和下载记录"
+      actions={actions}
+      toolbar={toolbar}
+    >
+      {selectMode && selectedCount > 0 ? (
+        <div className="mb-4 flex items-center gap-3 rounded-lg border border-outline-variant/20 bg-surface-container-high px-4 py-3 shadow-lg">
+          <span className="text-sm font-medium text-on-surface">已选 {selectedCount} 个</span>
+          <div className="flex-1" />
+          <button
+            type="button"
+            onClick={() => setBatchDeleteOpen(true)}
+            className="flex items-center gap-1.5 rounded-sm border border-error/20 bg-error/10 px-3 py-1.5 text-xs font-medium text-error transition-colors hover:bg-error/20"
+          >
+            <Icon name="delete" size={14} />
+            删除分享
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setSelectMode(false);
+              setSelectedIds(new Set());
+            }}
+            className="flex h-7 w-7 items-center justify-center rounded-sm text-on-surface-variant transition-colors hover:bg-surface-container-high hover:text-on-surface"
+            aria-label="取消选择"
+          >
+            <Icon name="close" size={16} />
+          </button>
+        </div>
+      ) : null}
       {/* List */}
       <div className="space-y-2">
         {isLoading && items.length === 0 && <AdminLoadingState variant="list" label="分享列表加载中" />}
@@ -302,14 +332,16 @@ function Content() {
             >
               <div className="flex min-w-0 items-center gap-2 sm:flex-row sm:items-start sm:justify-between sm:gap-3">
                 <div className="flex min-w-0 flex-1 items-center gap-2 sm:items-start sm:gap-3">
-                  <button
-                    type="button"
-                    onClick={() => toggleSelected(s.id)}
-                    className={`grid h-5 w-5 shrink-0 place-items-center rounded border transition-colors sm:mt-0.5 ${checked ? 'border-primary-container bg-primary-container text-on-primary' : 'border-outline-variant/35 text-transparent hover:border-primary-container/50'}`}
-                    aria-label={checked ? '取消选择分享' : '选择分享'}
-                  >
-                    <Icon name="check" size={13} />
-                  </button>
+                  {selectMode ? (
+                    <button
+                      type="button"
+                      onClick={() => toggleSelected(s.id)}
+                      className={`grid h-5 w-5 shrink-0 place-items-center rounded border transition-colors sm:mt-0.5 ${checked ? 'border-primary-container bg-primary-container text-on-primary' : 'border-outline-variant/35 text-transparent hover:border-primary-container/50'}`}
+                      aria-label={checked ? '取消选择分享' : '选择分享'}
+                    >
+                      <Icon name="check" size={13} />
+                    </button>
+                  ) : null}
                   <Link
                     to={getSharePath(s)}
                     className="min-w-0 flex-1 rounded-md outline-none transition-colors hover:bg-surface-container/45 focus-visible:ring-2 focus-visible:ring-primary-container/45 sm:-mx-2 sm:px-2 sm:py-1"
@@ -386,7 +418,7 @@ function Content() {
                   >
                     <Icon name="link" size={14} />
                   </button>
-                  {deleteId === s.id ? (
+                  {selectMode ? null : deleteId === s.id ? (
                     <>
                       <button
                         onClick={() => handleDelete(s.id)}

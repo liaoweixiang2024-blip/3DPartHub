@@ -74,11 +74,13 @@ function BatchToolbar({
   onDownload,
   onRemove,
   onCancel,
+  downloading,
 }: {
   selectedCount: number;
   onDownload: () => void;
   onRemove: () => void;
   onCancel: () => void;
+  downloading?: boolean;
 }) {
   return (
     <motion.div
@@ -92,21 +94,28 @@ function BatchToolbar({
       <div className="flex-1" />
       <button
         onClick={onDownload}
-        className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-on-primary bg-primary-container rounded-sm hover:opacity-90 transition-opacity"
+        disabled={downloading}
+        className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-on-primary bg-primary-container rounded-sm hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-70 transition-opacity"
       >
-        <Icon name="download" size={14} />
-        下载 STEP
+        <Icon
+          name={downloading ? 'progress_activity' : 'download'}
+          size={14}
+          className={downloading ? 'animate-spin' : ''}
+        />
+        {downloading ? '打包中...' : '打包下载'}
       </button>
       <button
         onClick={onRemove}
-        className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-error bg-error/10 rounded-sm border border-error/20 hover:bg-error/20 transition-colors"
+        disabled={downloading}
+        className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-error bg-error/10 rounded-sm border border-error/20 hover:bg-error/20 disabled:cursor-not-allowed disabled:opacity-60 transition-colors"
       >
         <Icon name="star_off" size={14} />
         取消收藏
       </button>
       <button
         onClick={onCancel}
-        className="flex items-center justify-center w-7 h-7 text-on-surface-variant hover:text-on-surface rounded-sm hover:bg-surface-container-high transition-colors"
+        disabled={downloading}
+        className="flex items-center justify-center w-7 h-7 text-on-surface-variant hover:text-on-surface rounded-sm hover:bg-surface-container-high disabled:cursor-not-allowed disabled:opacity-60 transition-colors"
       >
         <Icon name="close" size={16} />
       </button>
@@ -306,10 +315,15 @@ function DesktopContent() {
     });
   }, []);
 
-  const selectAll = useCallback(() => {
-    if (!data) return;
-    setSelected(new Set(mapFavorites(data).map((m) => m.id)));
-  }, [data]);
+  const models = useMemo(() => (data ? mapFavorites(data) : []), [data]);
+  const allSelected = models.length > 0 && models.every((model) => selected.has(model.id));
+
+  const toggleSelectAll = useCallback(() => {
+    setSelected((prev) => {
+      const everySelected = models.length > 0 && models.every((model) => prev.has(model.id));
+      return everySelected ? new Set() : new Set(models.map((model) => model.id));
+    });
+  }, [models]);
 
   const handleBatchRemove = useCallback(() => {
     if (selected.size === 0) return;
@@ -335,18 +349,21 @@ function DesktopContent() {
 
   const handleBatchDownload = useCallback(
     async (format: string = 'original') => {
-      if (selected.size === 0) return;
+      if (selected.size === 0 || downloading) return;
+      const modelIds = Array.from(selected);
+      const count = modelIds.length;
       setDownloading(true);
+      toast(`正在打包 ${count} 个收藏模型，请稍候...`, 'info');
       try {
-        await favoriteApi.batchDownload(Array.from(selected), format);
-        toast('下载已开始', 'success');
+        const result = await favoriteApi.batchDownload(modelIds, format);
+        toast(`下载已提交，浏览器正在接收 ${result.fileCount} 个文件`, 'success');
       } catch (err: any) {
         toast(err.message || '下载失败', 'error');
       } finally {
         setDownloading(false);
       }
     },
-    [selected, toast],
+    [downloading, selected, toast],
   );
 
   const handleSingleDownload = useCallback(
@@ -368,8 +385,6 @@ function DesktopContent() {
     [navigate, toast],
   );
 
-  const models = useMemo(() => (data ? mapFavorites(data) : []), [data]);
-
   if (isLoading) {
     return (
       <AdminManagementPage title="我的收藏" description="管理你收藏的模型">
@@ -390,8 +405,8 @@ function DesktopContent() {
     models.length > 0 ? (
       <>
         {selectMode ? (
-          <button onClick={selectAll} className="text-sm text-primary hover:underline">
-            {selected.size === models.length ? '取消全选' : '全选'}
+          <button onClick={toggleSelectAll} className="text-sm text-primary hover:underline">
+            {allSelected ? '取消全选' : '全选'}
           </button>
         ) : null}
         <button
@@ -415,17 +430,18 @@ function DesktopContent() {
     <AdminManagementPage
       title="我的收藏"
       meta={`${models.length} 个模型`}
-      description={models.length > 1 ? '点击「批量操作」可多选后一键下载 STEP 文件' : '管理你收藏的模型'}
+      description={models.length > 1 ? '点击「批量操作」可多选后打包下载 STEP 文件' : '管理你收藏的模型'}
       actions={headerActions}
     >
       {/* Batch toolbar */}
       <AnimatePresence>
-        {selectMode && selected.size > 0 && !downloading && (
+        {selectMode && selected.size > 0 && (
           <div className="mb-4">
             <BatchToolbar
               selectedCount={selected.size}
               onDownload={() => handleBatchDownload('original')}
               onRemove={handleBatchRemove}
+              downloading={downloading}
               onCancel={() => {
                 setSelectMode(false);
                 setSelected(new Set());
@@ -436,9 +452,13 @@ function DesktopContent() {
       </AnimatePresence>
 
       {downloading && (
-        <div className="mb-4 flex items-center gap-2 px-4 py-3 bg-primary-container/10 rounded-lg border border-primary/20">
+        <div
+          role="status"
+          aria-live="polite"
+          className="mb-4 flex items-center gap-2 px-4 py-3 bg-primary-container/10 rounded-lg border border-primary/20"
+        >
           <Icon name="progress_activity" size={18} className="text-primary animate-spin" />
-          <span className="text-sm text-primary">正在打包下载...</span>
+          <span className="text-sm text-primary">正在打包下载，请稍候...</span>
         </div>
       )}
 
@@ -525,9 +545,13 @@ function MobileContent() {
   }, []);
 
   const models = useMemo(() => (data ? mapFavorites(data) : []), [data]);
+  const allSelected = models.length > 0 && models.every((model) => selected.has(model.id));
 
-  const selectAll = useCallback(() => {
-    setSelected(new Set(models.map((m) => m.id)));
+  const toggleSelectAll = useCallback(() => {
+    setSelected((prev) => {
+      const everySelected = models.length > 0 && models.every((model) => prev.has(model.id));
+      return everySelected ? new Set() : new Set(models.map((model) => model.id));
+    });
   }, [models]);
 
   const handleBatchRemove = useCallback(() => {
@@ -554,18 +578,21 @@ function MobileContent() {
 
   const handleBatchDownload = useCallback(
     async (format: string = 'original') => {
-      if (selected.size === 0) return;
+      if (selected.size === 0 || downloading) return;
+      const modelIds = Array.from(selected);
+      const count = modelIds.length;
       setDownloading(true);
+      toast(`正在打包 ${count} 个收藏模型，请稍候...`, 'info');
       try {
-        await favoriteApi.batchDownload(Array.from(selected), format);
-        toast('下载已开始', 'success');
+        const result = await favoriteApi.batchDownload(modelIds, format);
+        toast(`下载已提交，浏览器正在接收 ${result.fileCount} 个文件`, 'success');
       } catch (err: any) {
         toast(err.message || '下载失败', 'error');
       } finally {
         setDownloading(false);
       }
     },
-    [selected, toast],
+    [downloading, selected, toast],
   );
 
   const handleSingleDownload = useCallback(
@@ -610,25 +637,31 @@ function MobileContent() {
     >
       {/* Mobile batch toolbar */}
       <AnimatePresence>
-        {selectMode && !downloading && (
+        {selectMode && (
           <motion.div
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: 10 }}
             className="mb-3 flex items-center gap-2 bg-surface-container-high rounded-lg px-3 py-2.5 border border-outline-variant/10"
           >
-            <button onClick={selectAll} className="text-xs text-primary">
-              全选
+            <button onClick={toggleSelectAll} className="text-xs text-primary">
+              {allSelected ? '取消全选' : '全选'}
             </button>
             <div className="flex-1" />
             <span className="text-xs text-on-surface-variant">{selected.size} 已选</span>
             <button
               onClick={() => handleBatchDownload('original')}
-              className="text-xs text-on-surface-variant hover:text-on-surface px-2 py-1"
+              disabled={selected.size === 0 || downloading}
+              className="flex items-center gap-1 text-xs text-on-surface-variant hover:text-on-surface disabled:cursor-not-allowed disabled:opacity-60 px-2 py-1"
             >
-              下载 STEP
+              {downloading && <Icon name="progress_activity" size={12} className="animate-spin" />}
+              {downloading ? '打包中...' : '打包下载'}
             </button>
-            <button onClick={handleBatchRemove} className="text-xs text-error px-2 py-1">
+            <button
+              disabled={selected.size === 0 || downloading}
+              onClick={handleBatchRemove}
+              className="text-xs text-error disabled:cursor-not-allowed disabled:opacity-60 px-2 py-1"
+            >
               取消收藏
             </button>
           </motion.div>
@@ -636,9 +669,13 @@ function MobileContent() {
       </AnimatePresence>
 
       {downloading && (
-        <div className="mb-3 flex items-center gap-2 px-3 py-2 bg-primary-container/10 rounded-lg border border-primary/20">
+        <div
+          role="status"
+          aria-live="polite"
+          className="mb-3 flex items-center gap-2 px-3 py-2 bg-primary-container/10 rounded-lg border border-primary/20"
+        >
           <Icon name="progress_activity" size={14} className="text-primary animate-spin" />
-          <span className="text-xs text-primary">正在打包下载...</span>
+          <span className="text-xs text-primary">正在打包下载，请稍候...</span>
         </div>
       )}
 

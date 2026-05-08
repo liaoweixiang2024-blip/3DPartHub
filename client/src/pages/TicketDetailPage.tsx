@@ -19,6 +19,7 @@ import { useToast } from '../components/shared/Toast';
 import { useDocumentTitle } from '../hooks/useDocumentTitle';
 import { useMediaQuery } from '../layouts/hooks/useMediaQuery';
 import { getBusinessConfig, statusInfo } from '../lib/businessConfig';
+import { notifyGlobalError } from '../lib/errorNotifications';
 import { getCachedPublicSettings } from '../lib/publicSettings';
 
 interface TicketInfo {
@@ -49,6 +50,40 @@ function useMessages(ticketId: string) {
   return useSWR<TicketMessage[]>(`/ticket-messages-${ticketId}`, () => getTicketMessages(ticketId).catch(() => []), {
     refreshInterval: 5000,
   });
+}
+
+function useVisualViewportBottomOffset(enabled: boolean) {
+  const [bottomOffset, setBottomOffset] = useState(0);
+
+  useEffect(() => {
+    if (!enabled) {
+      setBottomOffset(0);
+      return;
+    }
+
+    const viewport = window.visualViewport;
+    if (!viewport) {
+      setBottomOffset(0);
+      return;
+    }
+
+    const updateOffset = () => {
+      setBottomOffset(Math.max(0, window.innerHeight - viewport.height - viewport.offsetTop));
+    };
+
+    updateOffset();
+    viewport.addEventListener('resize', updateOffset);
+    viewport.addEventListener('scroll', updateOffset);
+    window.addEventListener('orientationchange', updateOffset);
+
+    return () => {
+      viewport.removeEventListener('resize', updateOffset);
+      viewport.removeEventListener('scroll', updateOffset);
+      window.removeEventListener('orientationchange', updateOffset);
+    };
+  }, [enabled]);
+
+  return bottomOffset;
 }
 
 // Chat bubble for a message
@@ -183,9 +218,11 @@ function ChatContent({ ticketId }: { ticketId: string }) {
   const [sending, setSending] = useState(false);
   const [pendingImage, setPendingImage] = useState<string | null>(null);
   const [pendingImageUrl, setPendingImageUrl] = useState<string | null>(null);
+  const [composerFocused, setComposerFocused] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const isAdmin = ticket?.user?.role !== undefined;
+  const visualViewportBottomOffset = useVisualViewportBottomOffset(!isDesktop);
 
   const scrollToBottom = useCallback(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -204,12 +241,12 @@ function ChatContent({ ticketId }: { ticketId: string }) {
       setPendingImage(null);
       setPendingImageUrl(null);
       mutateMessages();
-    } catch {
-      toast('发送失败', 'error');
+    } catch (err) {
+      notifyGlobalError(err, '发送失败');
     } finally {
       setSending(false);
     }
-  }, [input, sending, ticketId, pendingImage, mutateMessages, toast]);
+  }, [input, sending, ticketId, pendingImage, mutateMessages]);
 
   const handleImageSelect = useCallback(
     async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -227,8 +264,8 @@ function ChatContent({ ticketId }: { ticketId: string }) {
         setPendingImageUrl(URL.createObjectURL(file));
         const { url } = await uploadTicketAttachment(ticketId, file);
         setPendingImage(url);
-      } catch {
-        toast('图片上传失败', 'error');
+      } catch (err) {
+        notifyGlobalError(err, '图片上传失败');
         setPendingImageUrl(null);
       }
       e.target.value = '';
@@ -241,8 +278,8 @@ function ChatContent({ ticketId }: { ticketId: string }) {
       try {
         await updateTicketStatus(ticketId, status);
         toast('状态已更新', 'success');
-      } catch {
-        toast('更新状态失败', 'error');
+      } catch (err) {
+        notifyGlobalError(err, '更新状态失败');
       }
     },
     [ticketId, toast],
@@ -254,6 +291,8 @@ function ChatContent({ ticketId }: { ticketId: string }) {
 
   const info = statusInfo(business.ticketStatuses, ticket.status);
   const msgList = messages || [];
+  const mobileComposerSafeSpace = pendingImageUrl ? '9.5rem' : '5.75rem';
+  const composerBottomOffset = composerFocused ? visualViewportBottomOffset : 0;
 
   return (
     <div className="flex h-full min-h-0 flex-col">
@@ -284,7 +323,16 @@ function ChatContent({ ticketId }: { ticketId: string }) {
       </AdminDetailHeader>
 
       {/* Messages */}
-      <div className="min-h-0 flex-1 overflow-y-auto p-4 scrollbar-hidden">
+      <div
+        className="min-h-0 flex-1 overflow-y-auto p-4 scrollbar-hidden"
+        style={
+          isDesktop
+            ? undefined
+            : {
+                paddingBottom: `calc(${mobileComposerSafeSpace} + env(safe-area-inset-bottom, 0px) + ${composerBottomOffset}px)`,
+              }
+        }
+      >
         <OriginalMessage ticket={ticket} />
         {msgList.map((msg) => (
           <MessageBubble key={msg.id} msg={msg} />
@@ -294,7 +342,12 @@ function ChatContent({ ticketId }: { ticketId: string }) {
 
       {/* Input area */}
       <div
-        className={`shrink-0 border-t border-outline-variant/10 bg-surface-container ${isDesktop ? 'p-3' : 'p-2 pb-[calc(0.75rem+env(safe-area-inset-bottom,0px))]'}`}
+        className={`border-t border-outline-variant/10 bg-surface-container ${
+          isDesktop
+            ? 'shrink-0 p-3'
+            : 'fixed inset-x-0 z-40 p-2 pb-[calc(0.75rem+env(safe-area-inset-bottom,0px))] shadow-[0_-10px_24px_rgba(15,23,42,0.08)]'
+        }`}
+        style={isDesktop ? undefined : { bottom: `${composerBottomOffset}px` }}
       >
         {pendingImageUrl && (
           <div className="mb-2 relative inline-block">
@@ -319,6 +372,8 @@ function ChatContent({ ticketId }: { ticketId: string }) {
           <textarea
             value={input}
             onChange={(e) => setInput(e.target.value)}
+            onFocus={() => setComposerFocused(true)}
+            onBlur={() => setComposerFocused(false)}
             onKeyDown={(e) => {
               if (e.key === 'Enter' && !e.shiftKey) {
                 e.preventDefault();

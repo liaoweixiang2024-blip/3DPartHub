@@ -1,6 +1,7 @@
 import { useMemo } from 'react';
 import { useImeSafeSearchInput } from '../../hooks/useImeSafeSearchInput';
 import Icon from '../shared/Icon';
+import SearchField from '../shared/SearchField';
 import type { ModelPartItem } from './viewerEvents';
 
 interface ModelStructurePanelProps {
@@ -34,7 +35,12 @@ export default function ModelStructurePanel({
   onShowAll,
   onClose,
 }: ModelStructurePanelProps) {
-  const { value: query, inputProps: queryInputProps } = useImeSafeSearchInput();
+  const {
+    value: query,
+    draftValue: queryInputValue,
+    setValue: setQuery,
+    inputProps: queryInputProps,
+  } = useImeSafeSearchInput();
   const hiddenSet = useMemo(() => new Set(hiddenPartIds), [hiddenPartIds]);
   const filteredParts = useMemo(() => {
     const text = query.trim().toLowerCase();
@@ -78,14 +84,12 @@ export default function ModelStructurePanel({
       </div>
 
       <div className="space-y-2 border-b border-outline-variant/15 p-3">
-        <div className="flex items-center gap-2 rounded-sm border border-outline-variant/20 bg-surface-container-low px-2 py-1.5">
-          <Icon name="search" size={14} className="text-on-surface-variant" />
-          <input
-            {...queryInputProps}
-            placeholder="搜索零件"
-            className="min-w-0 flex-1 bg-transparent text-xs text-on-surface outline-none placeholder:text-on-surface-variant/50"
-          />
-        </div>
+        <SearchField
+          inputProps={queryInputProps}
+          value={queryInputValue}
+          onClear={() => setQuery('')}
+          placeholder="搜索零件"
+        />
         <div className="grid grid-cols-2 gap-2">
           <button
             type="button"

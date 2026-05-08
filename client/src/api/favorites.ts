@@ -1,5 +1,5 @@
-import { getAccessToken } from '../stores';
 import type { ApiResponse } from '../types/api';
+import { downloadBatchZip, type BatchZipDownloadResult } from './batchZipDownload';
 import client from './client';
 import type { ServerModelListItem } from './models';
 import { unwrapResponse } from './response';
@@ -9,6 +9,12 @@ export interface FavoriteItem {
   modelId: string;
   createdAt: string;
   model: ServerModelListItem;
+}
+
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '/api';
+
+function apiUrl(path: string): string {
+  return `${API_BASE_URL.replace(/\/$/, '')}${path}`;
 }
 
 export const favoriteApi = {
@@ -32,28 +38,14 @@ export const favoriteApi = {
 
   batchDownloadUrl: `${import.meta.env.VITE_API_BASE_URL || '/api'}/favorites/batch-download`,
 
-  batchDownload: async (modelIds: string[], format: string = 'original'): Promise<void> => {
-    const token = getAccessToken();
-    const resp = await fetch(favoriteApi.batchDownloadUrl, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      },
-      body: JSON.stringify({ modelIds, format }),
+  batchDownload: async (modelIds: string[], format: string = 'original'): Promise<BatchZipDownloadResult> => {
+    return downloadBatchZip({
+      url: apiUrl('/batch-download'),
+      fields: { source: 'favorites', ids: modelIds, format },
+      legacyUrl: favoriteApi.batchDownloadUrl,
+      legacyFields: { modelIds, format },
+      fallbackFileCount: modelIds.length,
+      fallbackFileName: `favorites_${Date.now()}.zip`,
     });
-    if (!resp.ok) {
-      const err = await resp.json().catch(() => ({ detail: '下载失败' }));
-      throw new Error(err.detail || '下载失败');
-    }
-    const blob = await resp.blob();
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    const disposition = resp.headers.get('Content-Disposition') || '';
-    const match = disposition.match(/filename="?([^";\n]+)"?/);
-    a.download = match ? match[1] : `favorites_${Date.now()}.zip`;
-    a.click();
-    URL.revokeObjectURL(url);
   },
 };

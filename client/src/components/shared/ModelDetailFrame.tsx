@@ -3,7 +3,7 @@ import { PublicPageShell } from './PublicPageShell';
 
 export const MODEL_DETAIL_SHELL_CLASS = 'fixed inset-0 flex flex-col overflow-hidden';
 export const MODEL_DETAIL_MAIN_CLASS = 'flex-1 min-h-0 overflow-hidden flex flex-col md:flex-row';
-export const MODEL_DETAIL_DESKTOP_MAIN_CLASS = 'hidden flex-1 min-h-0 overflow-hidden md:flex md:flex-row';
+export const MODEL_DETAIL_DESKTOP_MAIN_CLASS = 'flex flex-1 min-h-0 overflow-hidden flex-col md:flex-row';
 export const MODEL_DETAIL_VIEWER_CLASS =
   'relative bg-surface-container flex-1 md:w-[60%] overflow-hidden border-r border-outline-variant/20 shrink-0';
 export const MODEL_DETAIL_ASIDE_CLASS =

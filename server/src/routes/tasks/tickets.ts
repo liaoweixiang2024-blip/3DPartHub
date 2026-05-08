@@ -220,6 +220,53 @@ export function createSupportTicketRouter() {
     }
   });
 
+  // Admin: delete ticket and its messages
+  router.delete('/api/tickets/:id', authMiddleware, requireRole('ADMIN'), async (req: AuthRequest, res: Response) => {
+    const ticketId = param(req, 'id');
+    try {
+      if (!prisma) {
+        res.status(500).json({ detail: 'DB unavailable' });
+        return;
+      }
+      const ticket = await prisma.supportTicket.findUnique({
+        where: { id: ticketId },
+        include: { messages: { select: { attachment: true } } },
+      });
+      if (!ticket) {
+        res.status(404).json({ detail: '工单不存在' });
+        return;
+      }
+
+      const attachmentNames = Array.from(
+        new Set(
+          ticket.messages
+            .map((message: { attachment: string | null }) => ticketAttachmentFileName(message.attachment))
+            .filter((fileName): fileName is string => Boolean(fileName)),
+        ),
+      );
+
+      await prisma.$transaction([
+        prisma.notification.deleteMany({ where: { type: 'ticket', relatedId: ticketId } }),
+        prisma.supportTicket.delete({ where: { id: ticketId } }),
+      ]);
+
+      for (const fileName of attachmentNames) {
+        const filePath = join(process.cwd(), config.staticDir, 'ticket-attachments', fileName);
+        try {
+          rmSync(filePath, { force: true });
+        } catch {}
+      }
+
+      res.json({ ok: true });
+    } catch (err: any) {
+      if (err.code === 'P2025') {
+        res.status(404).json({ detail: '工单不存在' });
+        return;
+      }
+      res.status(500).json({ detail: '删除工单失败' });
+    }
+  });
+
   // Get ticket messages (ticket owner or admin)
   router.get('/api/tickets/:id/messages', authMiddleware, async (req: AuthRequest, res: Response) => {
     const ticketId = param(req, 'id');

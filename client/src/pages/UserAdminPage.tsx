@@ -7,10 +7,12 @@ import { AdminLoadingState, AdminManagementPage } from '../components/shared/Adm
 import { AdminPageShell } from '../components/shared/AdminPageShell';
 import Icon from '../components/shared/Icon';
 import InfiniteLoadTrigger from '../components/shared/InfiniteLoadTrigger';
-import { PageRefreshIndicator } from '../components/shared/PageRefreshFallback';
+import ResponsiveSectionTabs from '../components/shared/ResponsiveSectionTabs';
+import SearchField from '../components/shared/SearchField';
 import { useToast } from '../components/shared/Toast';
 import { useDocumentTitle } from '../hooks/useDocumentTitle';
 import { useImeSafeSearchInput } from '../hooks/useImeSafeSearchInput';
+import { useMediaQuery } from '../layouts/hooks/useMediaQuery';
 import { copyText } from '../lib/clipboard';
 import { getErrorMessage } from '../lib/errorNotifications';
 
@@ -45,26 +47,39 @@ const ROLE_COLORS: Record<string, string> = {
   VIEWER: 'bg-surface-container-highest text-on-surface-variant',
 };
 
-const ROLE_OPTIONS = [
-  { value: '', label: '全部角色' },
-  { value: 'ADMIN', label: '管理员' },
-  { value: 'EDITOR', label: '编辑者' },
-  { value: 'VIEWER', label: '访客' },
-];
-
-const numberFormatter = new Intl.NumberFormat('zh-CN');
-
-function formatNumber(value: number | null | undefined) {
-  return numberFormatter.format(value || 0);
-}
-
 async function fetchUserStats() {
   const res = await client.get('/admin/users/stats');
   return unwrapResponse<UserStats>(res);
 }
 
+function UserRoleTabs({
+  active,
+  counts,
+  onChange,
+}: {
+  active: string;
+  counts: Record<string, number>;
+  onChange: (value: string) => void;
+}) {
+  return (
+    <ResponsiveSectionTabs
+      tabs={[
+        { value: '', label: '全部', count: counts.all ?? 0, icon: 'group' },
+        { value: 'ADMIN', label: '管理员', count: counts.ADMIN ?? 0, icon: 'shield' },
+        { value: 'EDITOR', label: '编辑者', count: counts.EDITOR ?? 0, icon: 'edit' },
+        { value: 'VIEWER', label: '访客', count: counts.VIEWER ?? 0, icon: 'person' },
+      ]}
+      value={active}
+      onChange={onChange}
+      mobileTitle="用户角色"
+      countUnit="人"
+    />
+  );
+}
+
 export default function UserAdminPage() {
   useDocumentTitle('用户管理');
+  const isDesktop = useMediaQuery('(min-width: 768px)');
   const {
     value: search,
     draftValue: searchInputValue,
@@ -72,8 +87,9 @@ export default function UserAdminPage() {
     inputProps: searchInputProps,
   } = useImeSafeSearchInput();
   const [roleFilter, setRoleFilter] = useState('');
+  const [refreshing, setRefreshing] = useState(false);
   const { toast } = useToast();
-  const { data: stats, mutate: mutateStats, isLoading: statsLoading } = useSWR('/admin/users/stats', fetchUserStats);
+  const { data: stats, mutate: mutateStats } = useSWR('/admin/users/stats', fetchUserStats);
 
   const { data, mutate, setSize, size, isLoading } = useSWRInfinite(
     (pageIndex, previousPageData: { total: number; items: UserItem[]; page: number; pageSize: number } | null) => {
@@ -108,6 +124,19 @@ export default function UserAdminPage() {
     setSize((current) => current + 1);
   }, [hasMore, isLoadingMore, setSize]);
 
+  async function handleRefresh() {
+    setRefreshing(true);
+    try {
+      await setSize(1);
+      await Promise.all([mutate(undefined, { revalidate: true }), mutateStats(undefined, { revalidate: true })]);
+      toast('用户数据已刷新', 'success');
+    } catch (err: unknown) {
+      toast(getErrorMessage(err, '刷新用户数据失败'), 'error');
+    } finally {
+      setRefreshing(false);
+    }
+  }
+
   async function handleRoleChange(userId: string, role: string) {
     try {
       await client.put(`/admin/users/${userId}/role`, { role });
@@ -141,85 +170,52 @@ export default function UserAdminPage() {
     }
   }
 
-  const statItems = stats
-    ? [
-        { label: '总用户', value: stats.total, icon: 'group', accent: 'text-primary-container' },
-        { label: '管理员', value: stats.admin, icon: 'shield', accent: 'text-amber-500' },
-        { label: '编辑者', value: stats.editor, icon: 'edit', accent: 'text-blue-500' },
-        { label: '访客', value: stats.viewer, icon: 'person', accent: 'text-on-surface-variant' },
-        { label: '活跃用户', value: stats.active, icon: 'check_circle', accent: 'text-emerald-500' },
-      ]
-    : [];
+  const roleCounts = {
+    all: stats?.total ?? 0,
+    ADMIN: stats?.admin ?? 0,
+    EDITOR: stats?.editor ?? 0,
+    VIEWER: stats?.viewer ?? 0,
+  };
 
   const toolbar = (
-    <div className="flex min-h-12 flex-wrap items-center justify-between gap-3">
-      <div className="grid min-w-0 flex-1 grid-cols-2 sm:grid-cols-3 xl:grid-cols-5">
-        {statItems.map((item, index) => (
-          <div
-            key={item.label}
-            className="flex min-h-12 flex-col items-center justify-center gap-1 border-b border-r border-outline-variant/12 px-3 py-2 text-center even:border-r-0 sm:even:border-r sm:[&:nth-child(3n)]:border-r-0 xl:border-b-0 xl:even:border-r xl:[&:nth-child(3n)]:border-r xl:[&:nth-child(5n)]:border-r-0"
-          >
-            <span className="flex min-w-0 items-center justify-center gap-1.5">
-              <Icon name={item.icon} size={14} className={item.accent} />
-              <span className="truncate text-[10px] text-on-surface-variant">{item.label}</span>
-            </span>
-            <strong
-              className={`block max-w-full truncate tabular-nums leading-tight text-on-surface ${index === 0 ? 'text-lg' : 'text-base'}`}
-            >
-              {formatNumber(item.value)}
-            </strong>
-          </div>
-        ))}
-        {statsLoading && statItems.length === 0 && (
-          <div className="col-span-full flex min-h-12">
-            <PageRefreshIndicator label="用户统计刷新中" />
-          </div>
-        )}
-        {!statsLoading && statItems.length === 0 && (
-          <div className="col-span-full flex min-h-12 items-center justify-center text-xs text-on-surface-variant">
-            统计暂不可用
-          </div>
-        )}
+    <div className="flex min-h-10 min-w-0 flex-col gap-3 md:flex-row md:items-center md:justify-between">
+      <div className="min-w-0 flex-1">
+        <UserRoleTabs active={roleFilter} counts={roleCounts} onChange={setRoleFilter} />
       </div>
-      <div className="flex w-full flex-wrap items-center justify-end gap-3 xl:w-auto">
-        <div className="relative h-9 w-full sm:w-36">
-          <select
-            value={roleFilter}
-            onChange={(event) => setRoleFilter(event.target.value)}
-            className="h-full w-full appearance-none border-0 border-b border-outline-variant/30 bg-transparent px-1 pr-7 text-center text-xs font-medium text-on-surface outline-none transition-colors hover:border-primary-container focus:border-primary-container"
-          >
-            {ROLE_OPTIONS.map((option) => (
-              <option key={option.value || 'all'} value={option.value}>
-                {option.label}
-              </option>
-            ))}
-          </select>
-          <Icon
-            name="expand_more"
-            size={14}
-            className="pointer-events-none absolute right-1 top-1/2 -translate-y-1/2 text-on-surface-variant"
-          />
-        </div>
-        <div className="ml-auto flex h-9 w-full shrink-0 items-center px-1 sm:w-72">
-          <Icon name="search" size={16} className="mr-2 shrink-0 text-on-surface-variant" />
-          <input
-            type="text"
-            {...searchInputProps}
-            placeholder="搜索用户名、邮箱、公司..."
-            className="h-full min-w-0 flex-1 border-none bg-transparent p-0 text-sm leading-none text-on-surface outline-none placeholder:text-on-surface-variant/50"
-          />
-          {searchInputValue && (
-            <button onClick={() => setSearch('')} className="p-0.5 text-on-surface-variant hover:text-on-surface">
-              <Icon name="close" size={14} />
-            </button>
-          )}
-        </div>
-      </div>
+      <SearchField
+        inputProps={searchInputProps}
+        value={searchInputValue}
+        onClear={() => setSearch('')}
+        placeholder="搜索用户名、邮箱、公司..."
+        className="md:w-72 md:shrink-0"
+      />
     </div>
   );
 
+  const actions = (
+    <button
+      type="button"
+      onClick={handleRefresh}
+      disabled={refreshing}
+      className={
+        isDesktop
+          ? 'flex items-center gap-2 rounded-lg border border-outline-variant/20 px-4 py-2.5 text-sm text-on-surface-variant transition-colors hover:text-on-surface disabled:opacity-50'
+          : 'inline-flex h-9 items-center gap-1 rounded-lg border border-outline-variant/20 px-3 text-xs text-on-surface-variant disabled:opacity-50'
+      }
+      aria-label="刷新"
+    >
+      <Icon name="refresh" size={isDesktop ? 16 : 14} className={refreshing ? 'animate-spin' : ''} />
+      {isDesktop ? (refreshing ? '刷新中...' : '刷新') : null}
+    </button>
+  );
+
   const content = (
-    <AdminManagementPage title="用户管理" description="管理用户角色、账号信息和使用数据" toolbar={toolbar}>
+    <AdminManagementPage
+      title="用户管理"
+      description="管理用户角色、账号信息和使用数据"
+      actions={actions}
+      toolbar={toolbar}
+    >
       {/* User list */}
       <div className="space-y-2">
         {isLoading && users.length === 0 && <AdminLoadingState variant="list" label="用户列表加载中" />}

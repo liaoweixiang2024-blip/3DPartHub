@@ -23,6 +23,7 @@ import InfiniteLoadTrigger from '../components/shared/InfiniteLoadTrigger';
 import ModelThumbnail from '../components/shared/ModelThumbnail';
 import { PageRefreshIndicator } from '../components/shared/PageRefreshFallback';
 import ResponsiveSectionTabs, { type ResponsiveSectionTab } from '../components/shared/ResponsiveSectionTabs';
+import SearchField from '../components/shared/SearchField';
 import { useToast } from '../components/shared/Toast';
 import { useDocumentTitle } from '../hooks/useDocumentTitle';
 import { useImeSafeSearchInput } from '../hooks/useImeSafeSearchInput';
@@ -59,6 +60,31 @@ const CATEGORY_FILTER_ALL = '__all__';
 const MODEL_ADMIN_PANEL_CLASS =
   'rounded-lg border border-outline-variant/10 bg-surface-container-low overflow-auto min-h-[calc(100vh-220px)] max-h-[calc(100vh-220px)]';
 type ModelAdminTab = 'models' | 'suggestions' | 'groups';
+type SearchInputProps = ReturnType<typeof useImeSafeSearchInput>['inputProps'];
+
+function AdminSearchField({
+  inputProps,
+  value,
+  onClear,
+  placeholder,
+  className = '',
+}: {
+  inputProps: SearchInputProps;
+  value: string;
+  onClear: () => void;
+  placeholder: string;
+  className?: string;
+}) {
+  return (
+    <SearchField
+      inputProps={inputProps}
+      value={value}
+      onClear={onClear}
+      placeholder={placeholder}
+      className={`md:w-72 md:shrink-0 ${className}`}
+    />
+  );
+}
 
 const preloadUploadModal = () => import('../components/shared/UploadModal');
 const UploadModal = lazy(preloadUploadModal);
@@ -1792,7 +1818,12 @@ function ModelCategoryFilter({
 
 function DesktopContent() {
   const { toast } = useToast();
-  const { value: search, inputProps: searchInputProps } = useImeSafeSearchInput();
+  const {
+    value: search,
+    draftValue: searchInputValue,
+    setValue: setSearch,
+    inputProps: searchInputProps,
+  } = useImeSafeSearchInput();
   const [categoryFilter, setCategoryFilter] = useState(CATEGORY_FILTER_ALL);
   const [editModel, setEditModel] = useState<ServerModelListItem | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<ServerModelListItem | null>(null);
@@ -1843,8 +1874,18 @@ function DesktopContent() {
   const [editingGroupId, setEditingGroupId] = useState<string | null>(null);
   const [groupNameDraft, setGroupNameDraft] = useState('');
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
-  const { value: groupSearch, inputProps: groupSearchInputProps } = useImeSafeSearchInput();
-  const { value: suggestionSearch, inputProps: suggestionSearchInputProps } = useImeSafeSearchInput();
+  const {
+    value: groupSearch,
+    draftValue: groupSearchInputValue,
+    setValue: setGroupSearch,
+    inputProps: groupSearchInputProps,
+  } = useImeSafeSearchInput();
+  const {
+    value: suggestionSearch,
+    draftValue: suggestionSearchInputValue,
+    setValue: setSuggestionSearch,
+    inputProps: suggestionSearchInputProps,
+  } = useImeSafeSearchInput();
   const [groupAction, setGroupAction] = useState<string | null>(null);
   const {
     groups: suggestionGroups,
@@ -2155,20 +2196,31 @@ function DesktopContent() {
               mobileTitle="模型管理分类"
               className="min-w-[280px] flex-1"
             />
-            <div className="ml-auto flex h-9 w-[252px] shrink-0 items-center rounded-sm border border-outline-variant/30 bg-surface-container-lowest px-3">
-              <Icon name="search" size={16} className="text-on-surface-variant mr-2 shrink-0" />
-              <input
-                {...(activeTab === 'models'
+            <AdminSearchField
+              className="md:ml-auto"
+              inputProps={
+                activeTab === 'models'
                   ? searchInputProps
                   : activeTab === 'suggestions'
                     ? suggestionSearchInputProps
-                    : groupSearchInputProps)}
-                placeholder={
-                  activeTab === 'models' ? '搜索模型...' : activeTab === 'suggestions' ? '搜索建议...' : '搜索分组...'
-                }
-                className="h-full min-w-0 flex-1 border-none bg-transparent p-0 text-sm leading-none text-on-surface outline-none placeholder:text-on-surface-variant/50"
-              />
-            </div>
+                    : groupSearchInputProps
+              }
+              value={
+                activeTab === 'models'
+                  ? searchInputValue
+                  : activeTab === 'suggestions'
+                    ? suggestionSearchInputValue
+                    : groupSearchInputValue
+              }
+              onClear={() => {
+                if (activeTab === 'models') setSearch('');
+                else if (activeTab === 'suggestions') setSuggestionSearch('');
+                else setGroupSearch('');
+              }}
+              placeholder={
+                activeTab === 'models' ? '搜索模型...' : activeTab === 'suggestions' ? '搜索建议...' : '搜索分组...'
+              }
+            />
           </div>
         }
       >
@@ -2733,7 +2785,12 @@ function DesktopContent() {
 
 function MobileContent() {
   const { toast } = useToast();
-  const { value: search, inputProps: searchInputProps } = useImeSafeSearchInput();
+  const {
+    value: search,
+    draftValue: searchInputValue,
+    setValue: setSearch,
+    inputProps: searchInputProps,
+  } = useImeSafeSearchInput();
   const [categoryFilter, setCategoryFilter] = useState(CATEGORY_FILTER_ALL);
   const [editModel, setEditModel] = useState<ServerModelListItem | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<ServerModelListItem | null>(null);
@@ -2783,8 +2840,18 @@ function MobileContent() {
   const [groupNameDraft, setGroupNameDraft] = useState('');
   const [groupAction, setGroupAction] = useState<string | null>(null);
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
-  const { value: groupSearch, inputProps: groupSearchInputProps } = useImeSafeSearchInput();
-  const { value: suggestionSearch, inputProps: suggestionSearchInputProps } = useImeSafeSearchInput();
+  const {
+    value: groupSearch,
+    draftValue: groupSearchInputValue,
+    setValue: setGroupSearch,
+    inputProps: groupSearchInputProps,
+  } = useImeSafeSearchInput();
+  const {
+    value: suggestionSearch,
+    draftValue: suggestionSearchInputValue,
+    setValue: setSuggestionSearch,
+    inputProps: suggestionSearchInputProps,
+  } = useImeSafeSearchInput();
   const {
     groups: suggestionGroups,
     total: activeSuggestionCount,
@@ -3120,36 +3187,33 @@ function MobileContent() {
                 </option>
               ))}
             </select>
-            <div className="flex h-10 items-center bg-surface-container-high rounded-sm px-3 border border-outline-variant/30">
-              <Icon name="search" size={16} className="text-on-surface-variant mr-2" />
-              <input
-                {...searchInputProps}
-                placeholder="搜索模型..."
-                className="h-full min-w-0 flex-1 border-none bg-transparent p-0 text-base leading-none text-on-surface outline-none placeholder:text-on-surface-variant/50"
-              />
-            </div>
+            <AdminSearchField
+              inputProps={searchInputProps}
+              value={searchInputValue}
+              onClear={() => setSearch('')}
+              placeholder="搜索模型..."
+              className="md:w-full"
+            />
           </div>
         )}
         {activeTab === 'groups' && (
-          <div className="flex h-10 items-center bg-surface-container-high rounded-sm px-3 border border-outline-variant/30">
-            <Icon name="search" size={16} className="text-on-surface-variant mr-2" />
-            <input
-              {...groupSearchInputProps}
-              placeholder="搜索分组..."
-              className="h-full min-w-0 flex-1 border-none bg-transparent p-0 text-base leading-none text-on-surface outline-none placeholder:text-on-surface-variant/50"
-            />
-          </div>
+          <AdminSearchField
+            inputProps={groupSearchInputProps}
+            value={groupSearchInputValue}
+            onClear={() => setGroupSearch('')}
+            placeholder="搜索分组..."
+            className="md:w-full"
+          />
         )}
 
         {activeTab === 'suggestions' && (
-          <div className="flex h-10 items-center bg-surface-container-high rounded-sm px-3 border border-outline-variant/30">
-            <Icon name="search" size={16} className="text-on-surface-variant mr-2" />
-            <input
-              {...suggestionSearchInputProps}
-              placeholder="搜索建议..."
-              className="h-full min-w-0 flex-1 border-none bg-transparent p-0 text-base leading-none text-on-surface outline-none placeholder:text-on-surface-variant/50"
-            />
-          </div>
+          <AdminSearchField
+            inputProps={suggestionSearchInputProps}
+            value={suggestionSearchInputValue}
+            onClear={() => setSuggestionSearch('')}
+            placeholder="搜索建议..."
+            className="md:w-full"
+          />
         )}
         <ResponsiveSectionTabs
           tabs={modelAdminTabs}

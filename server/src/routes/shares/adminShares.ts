@@ -1,3 +1,4 @@
+import type { Prisma } from '@prisma/client';
 import { Router, Response } from 'express';
 import { getBusinessConfig } from '../../lib/businessConfig.js';
 import { logger } from '../../lib/logger.js';
@@ -24,10 +25,18 @@ type AdminShareItem = {
   createdAt: Date;
 };
 
+type AdminShareFilter = 'all' | 'model' | 'selection' | 'active' | 'expired';
+
 function parseAdminShareId(value: string): { type: 'model' | 'selection'; id: string } {
   if (value.startsWith('model:')) return { type: 'model', id: value.slice('model:'.length) };
   if (value.startsWith('selection:')) return { type: 'selection', id: value.slice('selection:'.length) };
   return { type: 'model', id: value };
+}
+
+function parseAdminShareFilter(value: unknown): AdminShareFilter {
+  const filter = String(value || 'all');
+  if (filter === 'model' || filter === 'selection' || filter === 'active' || filter === 'expired') return filter;
+  return 'all';
 }
 
 export function createAdminSharesRouter() {
@@ -44,34 +53,47 @@ export function createAdminSharesRouter() {
       const pageSize = Math.min(maxPageSize, Math.max(1, Number(req.query.page_size) || defaultPageSize));
       const search = String(req.query.search || '').trim();
       const searchText = search.toLowerCase();
+      const filter = parseAdminShareFilter(req.query.filter);
+      const now = new Date();
 
-      const where = search
-        ? {
-            OR: [
-              { model: { name: { contains: search, mode: 'insensitive' as const } } },
-              { model: { originalName: { contains: search, mode: 'insensitive' as const } } },
-              { createdBy: { username: { contains: search, mode: 'insensitive' as const } } },
-              { token: { contains: search, mode: 'insensitive' as const } },
-              { id: { contains: search, mode: 'insensitive' as const } },
-            ],
-          }
-        : {};
+      const modelFilters: Prisma.ShareLinkWhereInput[] = [];
+      if (search) {
+        modelFilters.push({
+          OR: [
+            { model: { name: { contains: search, mode: 'insensitive' as const } } },
+            { model: { originalName: { contains: search, mode: 'insensitive' as const } } },
+            { createdBy: { username: { contains: search, mode: 'insensitive' as const } } },
+            { token: { contains: search, mode: 'insensitive' as const } },
+            { id: { contains: search, mode: 'insensitive' as const } },
+          ],
+        });
+      }
+      if (filter === 'active') {
+        modelFilters.push({ OR: [{ expiresAt: null }, { expiresAt: { gte: now } }] });
+      } else if (filter === 'expired') {
+        modelFilters.push({ expiresAt: { not: null, lt: now } });
+      }
+      const modelWhere: Prisma.ShareLinkWhereInput = modelFilters.length ? { AND: modelFilters } : {};
 
       const [modelRows, selectionRows] = await Promise.all([
-        prisma.shareLink.findMany({
-          where,
-          include: {
-            model: { select: { id: true, name: true, originalName: true } },
-            createdBy: { select: { id: true, username: true } },
-          },
-          orderBy: { createdAt: 'desc' },
-        }),
-        prisma.selectionShare.findMany({
-          include: {
-            createdBy: { select: { id: true, username: true } },
-          },
-          orderBy: { createdAt: 'desc' },
-        }),
+        filter === 'selection'
+          ? Promise.resolve([])
+          : prisma.shareLink.findMany({
+              where: modelWhere,
+              include: {
+                model: { select: { id: true, name: true, originalName: true } },
+                createdBy: { select: { id: true, username: true } },
+              },
+              orderBy: { createdAt: 'desc' },
+            }),
+        filter === 'model' || filter === 'expired'
+          ? Promise.resolve([])
+          : prisma.selectionShare.findMany({
+              include: {
+                createdBy: { select: { id: true, username: true } },
+              },
+              orderBy: { createdAt: 'desc' },
+            }),
       ]);
 
       const selectionSlugs = Array.from(new Set(selectionRows.map((row) => row.categorySlug).filter(Boolean)));

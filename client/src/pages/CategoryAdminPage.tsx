@@ -5,6 +5,7 @@ import { categoriesApi, type CategoryItem } from '../api/categories';
 import { AdminContentPanel, AdminLoadingState, AdminManagementPage } from '../components/shared/AdminManagementPage';
 import { AdminPageShell } from '../components/shared/AdminPageShell';
 import Icon from '../components/shared/Icon';
+import SearchField from '../components/shared/SearchField';
 import { useToast } from '../components/shared/Toast';
 import { useDocumentTitle } from '../hooks/useDocumentTitle';
 import { useImeSafeSearchInput } from '../hooks/useImeSafeSearchInput';
@@ -55,7 +56,7 @@ function CategoryRow({
           e.preventDefault();
           onDropOn(cat);
         }}
-        className={`grid min-h-[68px] grid-cols-[minmax(0,1fr)_72px] items-center gap-2 border-b border-outline-variant/8 px-3 py-3 transition-colors hover:bg-surface-container-high/45 sm:min-h-[74px] sm:grid-cols-[28px_34px_44px_minmax(0,1fr)_104px_68px_120px] sm:px-4 ${
+        className={`grid min-h-[68px] grid-cols-[minmax(0,1fr)_96px] items-center gap-2 border-b border-outline-variant/8 px-3 py-3 transition-colors hover:bg-surface-container-high/45 sm:min-h-[74px] sm:grid-cols-[28px_34px_44px_minmax(0,1fr)_104px_68px_152px] sm:px-4 ${
           isChild ? 'bg-surface-container-lowest/45' : 'bg-surface-container-low'
         } ${isDragging ? 'opacity-45' : ''} ${isSameDragLevel ? 'ring-1 ring-inset ring-primary-container/15' : ''}`}
       >
@@ -177,15 +178,18 @@ function CategoryRow({
         <div className="hidden text-xs text-on-surface-variant sm:block">
           <span className="font-mono">排序 {cat.sortOrder}</span>
         </div>
-        <div className="flex items-center justify-end gap-1">
+        <div className="flex min-w-0 items-center justify-end gap-1 sm:gap-1.5">
           {!isChild && (
             <button
+              type="button"
               onClick={() => onAddChild(cat.id)}
-              className="inline-flex items-center gap-1 rounded-lg px-2.5 py-2 text-xs font-medium text-primary-container hover:bg-primary-container/10"
+              className="inline-flex h-8 shrink-0 items-center justify-center gap-1 rounded-lg px-2 text-xs font-medium whitespace-nowrap text-primary-container hover:bg-primary-container/10 sm:px-2.5"
               data-tooltip-ignore
               aria-label="添加子分类"
+              title="添加子分类"
             >
-              <Icon name="add" size={14} /> 子类
+              <Icon name="add" size={14} />
+              <span className="hidden sm:inline">子类</span>
             </button>
           )}
           <button
@@ -512,8 +516,6 @@ function Content() {
 
   const displayCollapsedIds = query.trim() ? new Set<string>() : collapsedIds;
   const dragDisabled = Boolean(query.trim()) || sorting;
-  const allRootChildrenCollapsed =
-    rootIdsWithChildren.length > 0 && rootIdsWithChildren.every((id) => collapsedIds.has(id));
   const toolbarStatus = query
     ? `搜索结果 ${visibleTree.length} 个一级分组，已自动展开匹配项`
     : sorting
@@ -559,6 +561,15 @@ function Content() {
     <AdminManagementPage
       title="分类管理"
       description="维护模型库分类、子分类和图标展示"
+      actions={
+        <button
+          onClick={handleAdd}
+          className="inline-flex h-9 shrink-0 items-center justify-center gap-1.5 rounded-sm bg-primary-container px-3 text-xs font-bold text-on-primary transition-opacity hover:opacity-90"
+        >
+          <Icon name="add" size={15} />
+          添加分类
+        </button>
+      }
       toolbar={
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between sm:gap-3">
           <div className="flex items-center divide-x divide-outline-variant/20 overflow-x-auto">
@@ -582,35 +593,13 @@ function Content() {
             )}
           </div>
           <div className="flex min-h-9 flex-wrap items-center justify-end gap-2">
-            <div className="flex h-9 w-full items-center rounded-sm border border-outline-variant/30 bg-surface-container-lowest px-3 sm:w-56">
-              <Icon name="search" size={16} className="mr-2 shrink-0 text-on-surface-variant" />
-              <input
-                {...queryInputProps}
-                placeholder="搜索分类..."
-                className="h-full min-w-0 flex-1 border-none bg-transparent p-0 text-sm leading-none text-on-surface outline-none placeholder:text-on-surface-variant/50"
-              />
-              {queryInputValue && (
-                <button onClick={() => setQuery('')} className="p-0.5 text-on-surface-variant hover:text-on-surface">
-                  <Icon name="close" size={14} />
-                </button>
-              )}
-            </div>
-            <button
-              type="button"
-              onClick={() => setCollapsedIds(allRootChildrenCollapsed ? new Set() : new Set(rootIdsWithChildren))}
-              disabled={!rootIdsWithChildren.length}
-              className="inline-flex h-9 items-center justify-center gap-1.5 rounded-sm border border-outline-variant/20 bg-surface-container px-3 text-xs font-bold text-on-surface-variant transition-colors hover:border-outline-variant/35 hover:text-on-surface disabled:opacity-40"
-            >
-              <Icon name={allRootChildrenCollapsed ? 'expand_less' : 'expand_more'} size={14} />
-              {allRootChildrenCollapsed ? '全部展开' : '全部收起'}
-            </button>
-            <button
-              onClick={handleAdd}
-              className="inline-flex h-9 shrink-0 items-center justify-center gap-1.5 rounded-sm bg-primary-container px-3 text-xs font-bold text-on-primary transition-opacity hover:opacity-90"
-            >
-              <Icon name="add" size={15} />
-              添加分类
-            </button>
+            <SearchField
+              inputProps={queryInputProps}
+              value={queryInputValue}
+              onClear={() => setQuery('')}
+              placeholder="搜索分类..."
+              className="md:w-72 md:shrink-0"
+            />
           </div>
         </div>
       }
@@ -621,7 +610,7 @@ function Content() {
           <AdminContentPanel scroll className="flex h-full min-h-0 flex-col">
             <AdminLoadingState
               rows={9}
-              tableColumns="28px 34px 44px minmax(0,1fr) 104px 68px 120px"
+              tableColumns="28px 34px 44px minmax(0,1fr) 104px 68px 152px"
               tableCells={['checkbox', 'text', 'chip', 'title', 'chip', 'text', 'actions']}
               className="h-full rounded-none border-0"
               label="分类加载中"
@@ -629,7 +618,7 @@ function Content() {
           </AdminContentPanel>
         ) : (
           <AdminContentPanel scroll className="flex h-full min-h-0 flex-col">
-            <div className="hidden shrink-0 grid-cols-[28px_34px_44px_minmax(0,1fr)_104px_68px_120px] items-center gap-2 border-b border-outline-variant/10 bg-surface-container-high px-4 py-3 text-[10px] font-bold uppercase tracking-wide text-on-surface-variant sm:grid">
+            <div className="hidden shrink-0 grid-cols-[28px_34px_44px_minmax(0,1fr)_104px_68px_152px] items-center gap-2 border-b border-outline-variant/10 bg-surface-container-high px-4 py-3 text-[10px] font-bold uppercase tracking-wide text-on-surface-variant sm:grid">
               <span />
               <span />
               <span />

@@ -34,6 +34,11 @@ export async function updateTicketStatus(id: string, status: string) {
   return unwrapResponse<Ticket>(res);
 }
 
+export async function deleteTicket(id: string) {
+  const res = await client.delete(`/tickets/${id}`);
+  return unwrapResponse<{ ok: boolean }>(res);
+}
+
 export async function getTicketMessages(ticketId: string) {
   const res = await client.get(`/tickets/${ticketId}/messages`);
   return unwrapResponse<TicketMessage[]>(res);

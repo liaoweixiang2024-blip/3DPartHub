@@ -1,18 +1,22 @@
 import { existsSync } from 'fs';
+import { extname } from 'node:path';
 import archiver from 'archiver';
-import { Router, Response } from 'express';
+import { Router, Response, urlencoded } from 'express';
 import { getBusinessConfig } from '../lib/businessConfig.js';
 import { logger } from '../lib/logger.js';
 import { prisma } from '../lib/prisma.js';
 import { getSetting } from '../lib/settings.js';
 import { authMiddleware, type AuthRequest } from '../middleware/auth.js';
-import { getPreviewAssetExtension, withAssetVersion } from '../services/gltfAsset.js';
+import { shouldAttachExternalGltfBin, shouldDownloadOriginalBatchFormat } from '../services/batchArchive.js';
+import { withAssetVersion } from '../services/gltfAsset.js';
 import { DailyDownloadLimitError, recordModelDownload } from '../services/modelDownloadRecorder.js';
 import { resolveDbModelDownloadTarget } from '../services/modelDownloadTarget.js';
+import { findOriginalModelPath } from '../services/modelFiles.js';
 import { MODEL_STATUS } from '../services/modelStatus.js';
 import { createNotification } from './notifications.js';
 
 const router = Router();
+const parseBatchDownloadForm = urlencoded({ extended: false, limit: '1mb' });
 
 function param(req: { params: Record<string, string | string[]> }, key: string): string {
   const v = req.params[key];
@@ -28,6 +32,46 @@ function uniqueArchiveFileName(fileName: string, usedNames: Map<string, number>)
   const count = usedNames.get(baseName) || 0;
   usedNames.set(baseName, count + 1);
   return count > 0 ? `${stem}_${count}${ext}` : baseName;
+}
+
+function uniqueStringList(value: unknown): string[] {
+  let values: unknown[] = [];
+  if (Array.isArray(value)) {
+    values = value;
+  } else if (typeof value === 'string') {
+    const trimmed = value.trim();
+    if (trimmed.startsWith('[')) {
+      try {
+        const parsed = JSON.parse(trimmed);
+        values = Array.isArray(parsed) ? parsed : [parsed];
+      } catch {
+        values = [trimmed];
+      }
+    } else if (trimmed) {
+      values = [trimmed];
+    }
+  }
+
+  return Array.from(
+    new Set(
+      values
+        .filter((item): item is string => typeof item === 'string' && Boolean(item.trim()))
+        .map((item) => item.trim()),
+    ),
+  );
+}
+
+function bodyString(body: unknown, key: string): string | undefined {
+  if (!body || typeof body !== 'object') return undefined;
+  const value = (body as Record<string, unknown>)[key];
+  if (Array.isArray(value)) return typeof value[0] === 'string' ? value[0] : undefined;
+  return typeof value === 'string' ? value : undefined;
+}
+
+function readBatchModelIds(body: unknown): string[] {
+  if (!body || typeof body !== 'object') return [];
+  const data = body as { modelIds?: unknown; 'modelIds[]'?: unknown };
+  return uniqueStringList(data.modelIds ?? data['modelIds[]']);
 }
 
 // List user's favorites
@@ -165,134 +209,148 @@ router.post('/api/favorites/batch-remove', authMiddleware, async (req: AuthReque
 });
 
 // Batch download favorites as ZIP
-router.post('/api/favorites/batch-download', authMiddleware, async (req: AuthRequest, res: Response) => {
-  const { modelIds, format } = req.body as { modelIds: string[]; format?: string };
-  if (!Array.isArray(modelIds) || modelIds.length === 0) {
-    res.status(400).json({ detail: '请选择要下载的模型' });
-    return;
-  }
-  const uniqueModelIds = Array.from(
-    new Set(modelIds.filter((id) => typeof id === 'string' && id.trim()).map((id) => id.trim())),
-  );
-  if (uniqueModelIds.length === 0) {
-    res.status(400).json({ detail: '请选择要下载的模型' });
-    return;
-  }
-  const { pageSizePolicy } = await getBusinessConfig();
-  const batchMax = Math.max(1, Math.floor(Number(pageSizePolicy.userBatchDownloadMax) || 100));
-  if (uniqueModelIds.length > batchMax) {
-    res.status(400).json({ detail: `单次最多下载 ${batchMax} 个模型` });
-    return;
-  }
+router.post(
+  '/api/favorites/batch-download',
+  parseBatchDownloadForm,
+  authMiddleware,
+  async (req: AuthRequest, res: Response) => {
+    const modelIds = readBatchModelIds(req.body);
+    const format = bodyString(req.body, 'format');
+    if (!Array.isArray(modelIds) || modelIds.length === 0) {
+      res.status(400).json({ detail: '请选择要下载的模型' });
+      return;
+    }
+    const uniqueModelIds = uniqueStringList(modelIds);
+    if (uniqueModelIds.length === 0) {
+      res.status(400).json({ detail: '请选择要下载的模型' });
+      return;
+    }
+    const { pageSizePolicy } = await getBusinessConfig();
+    const batchMax = Math.max(1, Math.floor(Number(pageSizePolicy.userBatchDownloadMax) || 100));
+    if (uniqueModelIds.length > batchMax) {
+      res.status(400).json({ detail: `单次最多下载 ${batchMax} 个模型` });
+      return;
+    }
 
-  try {
-    const favorites = await prisma.favorite.findMany({
-      where: { userId: req.user!.userId, modelId: { in: uniqueModelIds } },
-      include: {
-        model: {
-          select: {
-            id: true,
-            name: true,
-            originalName: true,
-            format: true,
-            originalFormat: true,
-            originalSize: true,
-            gltfUrl: true,
-            gltfSize: true,
-            uploadPath: true,
-            status: true,
+    try {
+      const favorites = await prisma.favorite.findMany({
+        where: { userId: req.user!.userId, modelId: { in: uniqueModelIds } },
+        include: {
+          model: {
+            select: {
+              id: true,
+              name: true,
+              originalName: true,
+              format: true,
+              originalFormat: true,
+              originalSize: true,
+              gltfUrl: true,
+              gltfSize: true,
+              uploadPath: true,
+              status: true,
+            },
           },
         },
-      },
-    });
-    const modelById = new Map(
-      favorites
-        .map((favorite: any) => favorite.model)
-        .filter((model: any) => model?.status === MODEL_STATUS.COMPLETED)
-        .map((model: any) => [model.id, model]),
-    );
-    const models = uniqueModelIds.map((id) => modelById.get(id)).filter(Boolean);
+      });
+      const modelById = new Map(
+        favorites
+          .map((favorite: any) => favorite.model)
+          .filter((model: any) => model?.status === MODEL_STATUS.COMPLETED)
+          .map((model: any) => [model.id, model]),
+      );
+      const models = uniqueModelIds.map((id) => modelById.get(id)).filter(Boolean);
 
-    if (models.length === 0) {
-      res.status(404).json({ detail: '没有可下载的模型' });
-      return;
-    }
-
-    const downloadOriginal = format === 'original';
-
-    // Pre-scan files before committing response headers
-    const fileEntries: Array<{
-      filePath: string;
-      fileName: string;
-      binPath?: string;
-      record?: { modelId: string; format: string; fileSize: number };
-    }> = [];
-    for (const m of models) {
-      const target = resolveDbModelDownloadTarget(m, downloadOriginal ? 'original' : undefined);
-      if (target && existsSync(target.filePath)) {
-        const ext = getPreviewAssetExtension(target.filePath);
-        const binPath = ext === 'gltf' ? target.filePath.replace(/\.gltf$/, '.bin') : undefined;
-        fileEntries.push({
-          filePath: target.filePath,
-          fileName: target.fileName,
-          binPath: binPath && existsSync(binPath) ? binPath : undefined,
-          record: target.record,
-        });
+      if (models.length === 0) {
+        res.status(404).json({ detail: '没有可下载的模型' });
+        return;
       }
-    }
 
-    if (fileEntries.length === 0) {
-      res.status(404).json({ detail: '没有找到可下载的文件' });
-      return;
-    }
+      const downloadOriginal = shouldDownloadOriginalBatchFormat(format);
 
-    const dailyLimit = Number(await getSetting<number>('daily_download_limit')) || 0;
+      // Pre-scan files before committing response headers
+      const fileEntries: Array<{
+        filePath: string;
+        fileName: string;
+        binPath?: string;
+        record?: { modelId: string; format: string; fileSize: number };
+      }> = [];
+      for (const m of models) {
+        if (downloadOriginal && !findOriginalModelPath(m)) continue;
 
-    for (const entry of fileEntries) {
-      if (!entry.record) continue;
-      try {
-        await recordModelDownload(prisma, {
-          userId: req.user!.userId,
-          ...entry.record,
-          dailyLimit,
-          noRecord: false,
-        });
-      } catch (err: any) {
+        const target = resolveDbModelDownloadTarget(m, downloadOriginal ? 'original' : undefined);
+        if (target && existsSync(target.filePath)) {
+          const binPath =
+            !downloadOriginal && extname(target.filePath).toLowerCase() === '.gltf'
+              ? target.filePath.replace(/\.gltf$/i, '.bin')
+              : undefined;
+          fileEntries.push({
+            filePath: target.filePath,
+            fileName: target.fileName,
+            binPath: binPath && existsSync(binPath) ? binPath : undefined,
+            record: target.record,
+          });
+        }
+      }
+
+      if (fileEntries.length === 0) {
+        res.status(404).json({ detail: downloadOriginal ? '没有找到可下载的原始模型文件' : '没有找到可下载的文件' });
+        return;
+      }
+
+      if (req.get('x-download-preflight') === '1') {
+        res.json({ fileCount: fileEntries.length });
+        return;
+      }
+
+      const dailyLimit = Number(await getSetting<number>('daily_download_limit')) || 0;
+
+      for (const entry of fileEntries) {
+        if (!entry.record) continue;
+        try {
+          await recordModelDownload(prisma, {
+            userId: req.user!.userId,
+            ...entry.record,
+            dailyLimit,
+            noRecord: false,
+          });
+        } catch (err: any) {
+          if (err instanceof DailyDownloadLimitError) {
+            res.status(429).json({ detail: err.message });
+            return;
+          }
+        }
+      }
+
+      // Now safe to commit headers and stream
+      res.setHeader('Content-Type', 'application/zip');
+      res.setHeader('Content-Disposition', `attachment; filename="favorites_${Date.now()}.zip"`);
+
+      const archive = archiver('zip', { zlib: { level: 5 } });
+      archive.pipe(res);
+
+      const usedNames = new Map<string, number>();
+      for (const entry of fileEntries) {
+        const finalName = uniqueArchiveFileName(entry.fileName, usedNames);
+        archive.file(entry.filePath, { name: finalName });
+        const binEntry = { ...entry, fileName: finalName };
+        if (shouldAttachExternalGltfBin(binEntry)) {
+          const binName = finalName.replace(/\.[^.]+$/, '.bin');
+          archive.file(binEntry.binPath, { name: binName });
+        }
+      }
+
+      await archive.finalize();
+    } catch (err: any) {
+      logger.error({ err_message: err.message }, '[favorites] Batch download error');
+      if (!res.headersSent) {
         if (err instanceof DailyDownloadLimitError) {
           res.status(429).json({ detail: err.message });
           return;
         }
+        res.status(500).json({ detail: '打包下载失败' });
       }
     }
-
-    // Now safe to commit headers and stream
-    res.setHeader('Content-Type', 'application/zip');
-    res.setHeader('Content-Disposition', `attachment; filename="favorites_${Date.now()}.zip"`);
-
-    const archive = archiver('zip', { zlib: { level: 5 } });
-    archive.pipe(res);
-
-    const usedNames = new Map<string, number>();
-    for (const entry of fileEntries) {
-      const finalName = uniqueArchiveFileName(entry.fileName, usedNames);
-      archive.file(entry.filePath, { name: finalName });
-      if (entry.binPath) {
-        const binName = finalName.replace(/\.[^.]+$/, '.bin');
-        archive.file(entry.binPath, { name: binName });
-      }
-    }
-
-    await archive.finalize();
-  } catch (err: any) {
-    logger.error({ err_message: err.message }, '[favorites] Batch download error');
-    if (!res.headersSent) {
-      if (err instanceof DailyDownloadLimitError) {
-        res.status(429).json({ detail: err.message });
-        return;
-      }
-      res.status(500).json({ detail: '打包下载失败' });
-    }
-  }
-});
+  },
+);
 
 export default router;

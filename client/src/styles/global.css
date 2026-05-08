@@ -204,6 +204,17 @@ a,
   color: var(--color-on-primary-container);
 }
 
+.app-search-field {
+  box-shadow: none;
+  outline: none;
+}
+
+.app-search-field:focus-within {
+  border-color: var(--color-primary-container);
+  box-shadow: none;
+  outline: none;
+}
+
 ::-webkit-scrollbar {
   width: 6px;
   height: 6px;

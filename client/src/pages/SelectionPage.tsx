@@ -19,6 +19,7 @@ import LoginConfirmDialog from '../components/shared/LoginConfirmDialog';
 import { PageRefreshIndicator } from '../components/shared/PageRefreshFallback';
 import { isLoginDialogEnabled } from '../components/shared/ProtectedLink';
 import SafeImage from '../components/shared/SafeImage';
+import SearchField from '../components/shared/SearchField';
 import {
   selectionCategoryCardClass,
   selectionCategoryGridClass,
@@ -160,6 +161,88 @@ function useDebouncedValue<T>(value: T, delayMs: number) {
 const selectionMotion =
   'transition-[transform,border-color,background-color,box-shadow,color,opacity] duration-150 ease-out motion-reduce:transition-none motion-reduce:transform-none';
 const selectionPress = `${selectionMotion} active:scale-[0.985]`;
+
+type ShareLinkDialogState = {
+  title: string;
+  description: string;
+  url: string;
+};
+type ShareTarget = 'entry' | 'category' | 'result' | 'sub';
+
+function SelectionShareLinkDialog({
+  state,
+  onClose,
+  onCopy,
+  onNativeShare,
+}: {
+  state: ShareLinkDialogState | null;
+  onClose: () => void;
+  onCopy: () => void;
+  onNativeShare: () => void;
+}) {
+  if (!state) return null;
+
+  const canNativeShare = typeof navigator !== 'undefined' && typeof navigator.share === 'function';
+
+  return (
+    <div
+      className="fixed inset-0 z-[10000] flex items-end justify-center bg-black/50 p-3 pb-[calc(0.75rem+env(safe-area-inset-bottom,0px))] backdrop-blur-sm sm:items-center sm:p-4"
+      onClick={onClose}
+    >
+      <div
+        className="w-full max-w-sm rounded-2xl border border-outline-variant/20 bg-surface-container-high p-5 shadow-2xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-start gap-3">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary-container/15 text-primary">
+            <Icon name="share" size={20} />
+          </div>
+          <div className="min-w-0 flex-1">
+            <h3 className="text-base font-bold text-on-surface">{state.title}</h3>
+            <p className="mt-1 text-sm leading-5 text-on-surface-variant">{state.description}</p>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-on-surface-variant hover:bg-surface-container-highest hover:text-on-surface"
+            aria-label="关闭"
+            data-tooltip-ignore
+          >
+            <Icon name="close" size={18} />
+          </button>
+        </div>
+        <input
+          readOnly
+          value={state.url}
+          onFocus={(event) => event.currentTarget.select()}
+          className="mt-4 h-10 w-full rounded-lg border border-outline-variant/20 bg-surface-container-low px-3 text-sm text-on-surface outline-none focus:border-primary-container"
+        />
+        <div className="mt-4 flex gap-2">
+          {canNativeShare ? (
+            <button
+              type="button"
+              onClick={onNativeShare}
+              className="inline-flex h-10 flex-1 items-center justify-center gap-1.5 rounded-lg border border-outline-variant/25 px-3 text-sm font-medium text-on-surface-variant transition-colors hover:bg-surface-container-high hover:text-on-surface"
+              data-tooltip-ignore
+            >
+              <Icon name="share" size={16} />
+              系统分享
+            </button>
+          ) : null}
+          <button
+            type="button"
+            onClick={onCopy}
+            className="inline-flex h-10 flex-1 items-center justify-center gap-1.5 rounded-lg bg-primary-container px-3 text-sm font-bold text-on-primary transition-opacity hover:opacity-90 active:scale-[0.98]"
+            data-tooltip-ignore
+          >
+            <Icon name="content_copy" size={16} />
+            复制链接
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 /* ── Inquiry Dialog ── */
 
@@ -685,10 +768,12 @@ export default function SelectionPage() {
   } = useSWR('selections/categories', getSelectionCategories);
 
   /* pre-fill from share link state or URL params */
-  const shareStateRef = useRef<{ shareSlug?: string; shareSpecs?: Record<string, string> } | null>(null);
-  if (!shareStateRef.current) {
+  const shareStateRef = useRef<{ shareSlug?: string; shareSpecs?: Record<string, string> } | null | undefined>(
+    undefined,
+  );
+  if (shareStateRef.current === undefined) {
     const state = location.state as { shareSlug?: string; shareSpecs?: Record<string, string> } | null;
-    if (state?.shareSlug) shareStateRef.current = state;
+    shareStateRef.current = state?.shareSlug ? state : null;
   }
 
   useEffect(() => {
@@ -711,8 +796,8 @@ export default function SelectionPage() {
     const match = cats.find((c) => c.slug === share.shareSlug);
     if (match?.groupId) setGroupId(match.groupId);
     shareStateRef.current = null;
-    window.history.replaceState({}, '');
-  }, [cats, slug]);
+    navigate(`${location.pathname}${location.search}${location.hash}`, { replace: true, state: null });
+  }, [cats, location.hash, location.pathname, location.search, navigate, slug]);
 
   /* derive groups and standalone categories from API categories */
   interface DerivedGroup {
@@ -1143,6 +1228,25 @@ export default function SelectionPage() {
     },
     [setSearchDraft],
   );
+  const goToGroupCategories = useCallback(() => {
+    setSlug(null);
+    setSpecs({});
+    setManualDrafts({});
+    setSkipped(new Set());
+    setAutoSelectedFields(new Set());
+    setSearchDraft('');
+    setSelectedIds(new Set());
+    setExpandedKits(new Set());
+  }, [setSearchDraft]);
+  const resetCurrentCategory = useCallback(() => {
+    setSpecs({});
+    setManualDrafts({});
+    setSkipped(new Set());
+    setAutoSelectedFields(new Set());
+    setSearchDraft('');
+    setSelectedIds(new Set());
+    setExpandedKits(new Set());
+  }, [setSearchDraft]);
   const pickVal = useCallback((key: string, val: string) => {
     setAutoSelectedFields((prev) => {
       if (!prev.has(key)) return prev;
@@ -1222,7 +1326,8 @@ export default function SelectionPage() {
   );
 
   /* ── share handler ── */
-  const [sharing, setSharing] = useState(false);
+  const [sharingTarget, setSharingTarget] = useState<ShareTarget | null>(null);
+  const [shareLinkDialog, setShareLinkDialog] = useState<ShareLinkDialogState | null>(null);
 
   const [loginDialogOpen, setLoginDialogOpen] = useState(false);
   const [loginDialogReason, setLoginDialogReason] = useState('');
@@ -1236,13 +1341,75 @@ export default function SelectionPage() {
     }
   }
 
+  const copyShareLink = useCallback(
+    async (
+      url: string,
+      {
+        title,
+        description,
+        copiedMessage = '分享链接已复制到剪贴板',
+        showDialogFirst = false,
+      }: {
+        title: string;
+        description: string;
+        copiedMessage?: string;
+        showDialogFirst?: boolean;
+      },
+    ) => {
+      if (showDialogFirst) {
+        setShareLinkDialog({ title, description, url });
+        toast('分享链接已创建', 'success');
+        return true;
+      }
+      try {
+        await copyText(url);
+        toast(copiedMessage, 'success');
+        return true;
+      } catch (error) {
+        if (import.meta.env.DEV) console.warn('[Share] Copy failed:', error);
+        setShareLinkDialog({ title, description, url });
+        toast('分享链接已创建，请点击复制链接', 'info');
+        return false;
+      }
+    },
+    [toast],
+  );
+
+  const handleCopyShareDialogLink = useCallback(async () => {
+    if (!shareLinkDialog) return;
+    try {
+      await copyText(shareLinkDialog.url);
+      toast('分享链接已复制到剪贴板', 'success');
+      setShareLinkDialog(null);
+    } catch (error) {
+      if (import.meta.env.DEV) console.warn('[Share] Manual copy failed:', error);
+      toast('复制仍失败，请长按链接手动复制', 'error');
+    }
+  }, [shareLinkDialog, toast]);
+
+  const handleNativeShareDialogLink = useCallback(async () => {
+    if (!shareLinkDialog || typeof navigator === 'undefined' || typeof navigator.share !== 'function') return;
+    try {
+      await navigator.share({
+        title: shareLinkDialog.title,
+        url: shareLinkDialog.url,
+      });
+      setShareLinkDialog(null);
+    } catch (error) {
+      if ((error as { name?: string })?.name === 'AbortError') return;
+      if (import.meta.env.DEV) console.warn('[Share] Native share failed:', error);
+      toast('系统分享未完成，请长按链接手动复制', 'error');
+    }
+  }, [shareLinkDialog, toast]);
+
   async function handleShare(withResults = false) {
     if (!slug) return;
+    if (sharingTarget) return;
     if (!user) {
       requireLogin('分享选型');
       return;
     }
-    setSharing(true);
+    setSharingTarget(withResults ? 'result' : 'category');
     try {
       const productIds =
         withResults && filteredTotal > 0
@@ -1264,14 +1431,17 @@ export default function SelectionPage() {
       };
       const result = await createSelectionShare(payload);
       const url = `${window.location.origin}/selection/s/${result.token}`;
-      await copyText(url);
-      toast('分享链接已复制到剪贴板', 'success');
+      await copyShareLink(url, {
+        title: withResults ? '结果分享链接已创建' : '分类分享链接已创建',
+        description: '链接已经生成，点击下面的复制链接即可复制；也可以使用系统分享。',
+        showDialogFirst: !isDesktop,
+      });
     } catch (err: any) {
       if (import.meta.env.DEV)
         console.error('[Share] Error:', err?.response?.status, err?.response?.data, err?.message);
       toast(`分享失败: ${err?.response?.data?.message || err?.message || '未知错误'}`, 'error');
     } finally {
-      setSharing(false);
+      setSharingTarget(null);
     }
   }
 
@@ -1471,21 +1641,30 @@ export default function SelectionPage() {
 
   /* ── subcategory selection ── */
   async function handleShareSub(chSlug: string) {
+    if (sharingTarget) return;
     if (!user) {
       requireLogin('分享选型');
       return;
     }
-    setSharing(true);
+    setSharingTarget('sub');
     try {
       const url = `${window.location.origin}/selection?g=${encodeURIComponent(chSlug)}`;
-      await copyText(url);
-      toast('分享链接已复制到剪贴板', 'success');
-    } catch {
-      toast('分享失败', 'error');
+      await copyShareLink(url, {
+        title: '分类链接已生成',
+        description: '链接已经生成，点击下面的复制链接即可复制；也可以使用系统分享。',
+      });
+    } catch (error) {
+      if (import.meta.env.DEV) console.warn('[Share] Subcategory link failed:', error);
+      toast('生成分享链接失败', 'error');
     } finally {
-      setSharing(false);
+      setSharingTarget(null);
     }
   }
+
+  const isEntrySharePending = sharingTarget === 'entry';
+  const isCategorySharePending = sharingTarget === 'category';
+  const isResultSharePending = sharingTarget === 'result';
+  const isSubSharePending = sharingTarget === 'sub';
 
   const subContent = group && <div className={selectionCategoryPanelClass}>{renderCategoryGrid(subCategoryItems)}</div>;
 
@@ -1758,11 +1937,11 @@ export default function SelectionPage() {
           {filteredTotal > 0 && (
             <button
               onClick={() => handleShare(true)}
-              disabled={sharing}
+              disabled={isResultSharePending}
               className={`text-sm text-primary-container hover:underline shrink-0 inline-flex items-center gap-1 disabled:opacity-50 ${selectionPress}`}
             >
               <Icon name="share" size={14} />
-              {sharing ? '生成中...' : '生成结果链接'}
+              {isResultSharePending ? '生成中...' : '生成结果链接'}
             </button>
           )}
           {specKeys.length > 0 && (
@@ -1962,14 +2141,7 @@ export default function SelectionPage() {
                 <span className="truncate">{group.name}</span>
               ) : (
                 <button
-                  onClick={() => {
-                    setSlug(null);
-                    setSpecs({});
-                    setManualDrafts({});
-                    setSkipped(new Set());
-                    setAutoSelectedFields(new Set());
-                    setSearchDraft('');
-                  }}
+                  onClick={goToGroupCategories}
                   className={`truncate hover:text-primary-container ${selectionPress}`}
                 >
                   {group.name}
@@ -1980,7 +2152,13 @@ export default function SelectionPage() {
           {liveCat && (
             <>
               <Icon name="chevron_right" size={16} className="shrink-0 text-on-surface-variant/35" />
-              <span className="truncate text-primary-container">{liveCat.name}</span>
+              <button
+                type="button"
+                onClick={resetCurrentCategory}
+                className={`truncate text-primary-container hover:text-primary-container ${selectionPress}`}
+              >
+                {liveCat.name}
+              </button>
             </>
           )}
         </>
@@ -1990,25 +2168,36 @@ export default function SelectionPage() {
             <>
               <span className="shrink-0 text-on-surface">选择</span>
               <button
-                onClick={() => {
-                  setSlug(null);
-                  setSpecs({});
-                  setManualDrafts({});
-                  setSkipped(new Set());
-                  setAutoSelectedFields(new Set());
-                  setSearchDraft('');
-                }}
+                onClick={goToGroupCategories}
                 className={`max-w-[6.25rem] truncate text-on-surface-variant hover:text-primary-container ${selectionPress}`}
               >
                 {group.name}
               </button>
               <Icon name="chevron_right" size={14} className="shrink-0 text-on-surface-variant/35" />
-              <span className="min-w-0 flex-1 truncate text-primary-container">{liveCat.name}</span>
+              <button
+                type="button"
+                onClick={resetCurrentCategory}
+                className={`min-w-0 flex-1 truncate text-left text-primary-container ${selectionPress}`}
+              >
+                {liveCat.name}
+              </button>
             </>
           ) : liveCat ? (
             <>
-              <span className="shrink-0 text-on-surface">选择</span>
-              <span className="min-w-0 flex-1 truncate text-primary-container">{liveCat.name}</span>
+              <button
+                onClick={goHome}
+                className={`max-w-[5.25rem] truncate text-on-surface-variant hover:text-primary-container ${selectionPress}`}
+              >
+                {pageTitle}
+              </button>
+              <Icon name="chevron_right" size={14} className="shrink-0 text-on-surface-variant/35" />
+              <button
+                type="button"
+                onClick={resetCurrentCategory}
+                className={`min-w-0 flex-1 truncate text-left text-primary-container ${selectionPress}`}
+              >
+                {liveCat.name}
+              </button>
             </>
           ) : group ? (
             <>
@@ -2156,25 +2345,33 @@ export default function SelectionPage() {
       </div>
     ) : null;
 
-  const handleToolbarShare = () => {
+  const handleToolbarShare = async () => {
+    if (sharingTarget) return;
     if (!user) {
       requireLogin('分享选型');
       return;
     }
     if (phase === 'wizard' && liveCat) {
-      void handleShare(false);
+      await handleShare(false);
       return;
     }
     if (phase === 'sub' && group) {
-      void handleShareSub(group.id);
+      await handleShareSub(group.id);
       return;
     }
-    void copyText(`${window.location.origin}/selection`).then(
-      () => toast('分享链接已复制到剪贴板', 'success'),
-      () => toast('分享失败', 'error'),
-    );
+    setSharingTarget('entry');
+    try {
+      await copyShareLink(`${window.location.origin}/selection`, {
+        title: '选型入口链接',
+        description: '链接已经生成，点击下面的复制链接即可复制；也可以使用系统分享。',
+      });
+    } finally {
+      setSharingTarget(null);
+    }
   };
   const toolbarShareLabel = phase === 'group' ? '生成大类链接' : '生成分类链接';
+  const isToolbarSharePending =
+    phase === 'wizard' ? isCategorySharePending : phase === 'sub' ? isSubSharePending : isEntrySharePending;
 
   const selectionToolbarCore = (
     <div className="flex min-h-0 items-center gap-2 md:min-h-11 md:flex-wrap md:justify-between md:gap-3">
@@ -2185,38 +2382,24 @@ export default function SelectionPage() {
         className={`flex min-h-8 flex-nowrap items-center justify-end gap-1.5 md:ml-auto md:min-h-9 md:flex-wrap md:gap-2 ${phase === 'wizard' ? 'min-w-0 flex-1' : 'ml-auto'}`}
       >
         {phase === 'wizard' && liveCat ? (
-          <div className="relative min-w-[9.5rem] flex-1 sm:w-64 sm:flex-none">
-            <Icon
-              name="search"
-              size={14}
-              className="absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant"
-            />
-            <input
-              type="text"
-              {...searchDraftInputProps}
-              placeholder="输入型号或名称"
-              className={`h-8 w-full rounded-lg border border-outline-variant/15 bg-surface-container pl-8 pr-7 text-xs text-on-surface outline-none focus:border-primary-container md:h-9 md:pr-8 md:text-sm ${selectionMotion}`}
-            />
-            {searchDraftInputValue && (
-              <button
-                onClick={() => setSearchDraft('')}
-                className={`absolute right-2.5 top-1/2 -translate-y-1/2 text-on-surface-variant hover:text-on-surface ${selectionPress}`}
-              >
-                <Icon name="close" size={14} />
-              </button>
-            )}
-          </div>
+          <SearchField
+            inputProps={searchDraftInputProps}
+            value={searchDraftInputValue}
+            onClear={() => setSearchDraft('')}
+            placeholder="输入型号或名称"
+            className={`min-w-[9.5rem] flex-1 sm:w-64 sm:flex-none ${selectionMotion}`}
+          />
         ) : null}
         {isDesktop ? (
           <button
-            onClick={handleToolbarShare}
-            disabled={sharing}
+            onClick={() => void handleToolbarShare()}
+            disabled={isToolbarSharePending}
             data-tooltip-ignore
-            className={`inline-flex h-9 items-center justify-center gap-1.5 px-3 text-xs font-bold text-on-surface-variant hover:text-on-surface disabled:opacity-50 ${selectionPress}`}
-            aria-label={sharing ? '生成中' : toolbarShareLabel}
+            className={`inline-flex h-9 w-[7.25rem] shrink-0 items-center justify-center gap-1.5 px-3 text-xs font-bold text-on-surface-variant hover:text-on-surface disabled:opacity-50 ${selectionPress}`}
+            aria-label={isToolbarSharePending ? '生成中' : toolbarShareLabel}
           >
             <Icon name="share" size={14} />
-            <span>{sharing ? '生成中' : toolbarShareLabel}</span>
+            <span className="whitespace-nowrap">{isToolbarSharePending ? '生成中' : toolbarShareLabel}</span>
           </button>
         ) : null}
         {isDesktop && phase !== 'group' ? (
@@ -2257,10 +2440,10 @@ export default function SelectionPage() {
       <div className="flex items-center gap-1">
         <button
           onClick={() => handleShare(false)}
-          disabled={sharing}
+          disabled={isCategorySharePending}
           data-tooltip-ignore
           className={`inline-flex h-8 w-8 items-center justify-center rounded-lg text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface disabled:opacity-50 ${selectionPress}`}
-          aria-label={sharing ? '生成中' : '生成分类链接'}
+          aria-label={isCategorySharePending ? '生成中' : '生成分类链接'}
         >
           <Icon name="share" size={15} />
         </button>
@@ -2327,6 +2510,15 @@ export default function SelectionPage() {
     </AnimatePresence>
   );
 
+  const shareLinkDialogNode = (
+    <SelectionShareLinkDialog
+      state={shareLinkDialog}
+      onClose={() => setShareLinkDialog(null)}
+      onCopy={handleCopyShareDialogLink}
+      onNativeShare={handleNativeShareDialogLink}
+    />
+  );
+
   /* ══════════ Desktop Layout ══════════ */
   if (isDesktop) {
     return (
@@ -2353,6 +2545,7 @@ export default function SelectionPage() {
           reason={loginDialogReason}
           returnUrl={location.pathname + location.search}
         />
+        {shareLinkDialogNode}
       </>
     );
   }
@@ -2387,6 +2580,7 @@ export default function SelectionPage() {
         reason={loginDialogReason}
         returnUrl={location.pathname + location.search}
       />
+      {shareLinkDialogNode}
     </>
   );
 }

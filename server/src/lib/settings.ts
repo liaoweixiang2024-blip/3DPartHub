@@ -164,6 +164,7 @@ const SETTINGS_SCHEMA: SettingDef[] = [
   { key: 'nav_mobile_items', defaultValue: JSON.stringify(DEFAULT_MOBILE_NAV_FOR_SETTINGS, null, 2) },
   { key: 'upload_policy', defaultValue: JSON.stringify(DEFAULT_UPLOAD_POLICY_FOR_SETTINGS, null, 2) },
   { key: 'page_size_policy', defaultValue: JSON.stringify(DEFAULT_PAGE_SIZE_POLICY_FOR_SETTINGS, null, 2) },
+  { key: 'audit_log_retention_days', defaultValue: 365 },
 
   // Anti-reverse-proxy & hotlink protection
   { key: 'anti_proxy_enabled', defaultValue: false },
@@ -330,6 +331,7 @@ const NUMERIC_KEYS = new Set([
   'ticket_attachment_max_mb',
   'api_rate_limit',
   'backup_retention_count',
+  'audit_log_retention_days',
 ]);
 
 const BOOLEAN_KEYS = new Set([

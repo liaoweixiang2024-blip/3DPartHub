@@ -8,6 +8,7 @@ import { bottomSheetMotion, dialogPanelMotion, overlayMotion } from '../../lib/m
 import { getPublicSettingsSnapshot } from '../../lib/publicSettings';
 import { useAuthStore } from '../../stores/useAuthStore';
 import Icon from './Icon';
+import { useToast } from './Toast';
 
 interface ShareDialogProps {
   open: boolean;
@@ -18,6 +19,7 @@ interface ShareDialogProps {
 
 export default function ShareDialog({ open, onClose, modelId, modelName }: ShareDialogProps) {
   const isMobile = useMediaQuery('(max-width: 639px)');
+  const { toast } = useToast();
   const policy = getPublicSettingsSnapshot();
   const role = useAuthStore((s) => s.user?.role);
   const shareEnabled = policy.share_enabled !== false;
@@ -69,6 +71,7 @@ export default function ShareDialog({ open, onClose, modelId, modelName }: Share
       };
       const result = await createShare(params);
       setShareUrl(`${window.location.origin}/share/${result.token}`);
+      toast('模型分享已创建', 'success');
     } catch (err: unknown) {
       setError(getErrorMessage(err, '创建失败'));
     } finally {
@@ -77,9 +80,14 @@ export default function ShareDialog({ open, onClose, modelId, modelName }: Share
   }
 
   async function handleCopy() {
-    await copyText(shareUrl);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+    try {
+      await copyText(shareUrl);
+      setCopied(true);
+      toast('分享链接已复制到剪贴板', 'success');
+      setTimeout(() => setCopied(false), 2000);
+    } catch (err: unknown) {
+      toast(getErrorMessage(err, '复制失败，请长按链接手动复制'), 'error');
+    }
   }
 
   function handleReset() {

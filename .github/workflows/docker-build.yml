@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: 'Version tag (e.g. v2.9.5)'
+        description: 'Version tag (e.g. v2.9.6)'
         required: true
 
 env:
@@ -81,19 +81,23 @@ jobs:
           body: |
             ## 更新标题
 
-            3DPartHub ${{ steps.version.outputs.version }} - 加载体验、下载命名与备份更新优化版
+            3DPartHub ${{ steps.version.outputs.version }} - 批量下载、后台运维与移动端体验优化版
 
             ## 标签描述
 
-            3DPartHub ${{ steps.version.outputs.version }} production release with route-level loading refinements, smoother model/detail navigation, safer download/favorite handling, backup/update visibility improvements, backend batch/archive hardening, and refreshed Docker images.
+            3DPartHub ${{ steps.version.outputs.version }} production release with unified batch-download archives, refreshed admin operation flows, smoother mobile navigation/share behavior, safer audit retention controls, and refreshed Docker images.
 
             ## 更新描述
 
-            - 路由级加载与刷新体验优化，系统设置、详情页、导航抽屉和通知面板过渡更稳定。
-            - 模型详情页结构拆分，返回列表/首页时减少白屏、错位和重复渲染。
-            - 首页、选型、产品图库和管理页列表加载策略收敛，分页/无限加载状态更一致。
-            - 下载、收藏、分享与模型文件命名链路增强，批量下载和归档目标识别更稳。
-            - 后端批量上传、模型列表、收藏、下载记录和归档下载处理继续加固。
+            - 收藏、下载历史、分享管理的批量下载链路统一为 ZIP 打包下载，STEP 文件归档时不再混入多余 `.bin` 文件。
+            - 下载历史、我的收藏、我的分享、工单、询价、用户管理、分享管理、下载统计和操作日志的批量操作、删除文案与刷新反馈统一。
+            - 工单管理、询价管理、用户管理、分享管理、下载统计、操作日志补齐 tab、搜索、刷新、批量操作和统计展示体验。
+            - 操作日志新增资源筛选、批量删除、导出和日志保留策略，后端补齐审计保留接口和清理服务。
+            - 全站搜索框样式统一，焦点边框跟随后台主题配色；后台非必要图标 tooltip 已清理。
+            - 产品图库图片加载与滚动性能优化，减少半图闪烁和下滑卡顿。
+            - 移动端模型详情、我的分享、我的工单、选型分享和工单回复框布局稳定性增强，降低页头缺失、双页头和按钮错位概率。
+            - 顶部加载条、选型页分享按钮、上传模型分类下拉、批量下载按钮等交互反馈优化，减少卡住、抖动和误判。
+            - 后端下载、收藏、分享、工单、询价、审计和批量归档接口同步加固，并补充批量归档测试。
             - 镜像已同步更新：api/web 均发布 ${{ steps.version.outputs.version }} 与 latest 标签。
 
             ## Docker Images

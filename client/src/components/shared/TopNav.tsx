@@ -5,8 +5,10 @@ import {
   useState,
   useCallback,
   useEffect,
+  useLayoutEffect,
   useRef,
   useMemo,
+  useSyncExternalStore,
   type ChangeEvent,
   type CompositionEvent,
   type FormEvent,
@@ -34,6 +36,7 @@ import Icon from './Icon';
 import LoginConfirmDialog from './LoginConfirmDialog';
 import { loadNotificationPanel, scheduleNotificationPanelPreload } from './preloadNotificationPanel';
 import { checkProtectedAccess } from './ProtectedLink';
+import SearchField from './SearchField';
 import Tooltip from './Tooltip';
 
 const preloadUploadModal = () => import('./UploadModal');
@@ -45,6 +48,30 @@ const TOP_NAV_SEARCH_DEBOUNCE_MS = 280;
 interface TopNavProps {
   compact?: boolean;
   onMenuToggle?: () => void;
+  source?: 'layout' | 'standalone';
+}
+
+let layoutTopNavCount = 0;
+let layoutTopNavVersion = 0;
+const layoutTopNavListeners = new Set<() => void>();
+
+function notifyLayoutTopNavListeners() {
+  layoutTopNavVersion += 1;
+  layoutTopNavListeners.forEach((listener) => listener());
+}
+
+function subscribeLayoutTopNav(listener: () => void) {
+  layoutTopNavListeners.add(listener);
+  return () => layoutTopNavListeners.delete(listener);
+}
+
+function getLayoutTopNavSnapshot() {
+  return layoutTopNavVersion;
+}
+
+function useLayoutTopNavCount() {
+  useSyncExternalStore(subscribeLayoutTopNav, getLayoutTopNavSnapshot, getLayoutTopNavSnapshot);
+  return layoutTopNavCount;
 }
 
 function clampSearchInput(value: string) {
@@ -302,7 +329,27 @@ function ThemeToggle() {
   );
 }
 
-export default function TopNav({ compact = false, onMenuToggle }: TopNavProps) {
+export default function TopNav({ source = 'standalone', ...props }: TopNavProps) {
+  const activeLayoutTopNavCount = useLayoutTopNavCount();
+
+  useLayoutEffect(() => {
+    if (source !== 'layout') return;
+    layoutTopNavCount += 1;
+    notifyLayoutTopNavListeners();
+    return () => {
+      layoutTopNavCount = Math.max(0, layoutTopNavCount - 1);
+      notifyLayoutTopNavListeners();
+    };
+  }, [source]);
+
+  if (source === 'standalone' && activeLayoutTopNavCount > 0) {
+    return null;
+  }
+
+  return <TopNavContent {...props} source={source} />;
+}
+
+function TopNavContent({ compact = false, onMenuToggle, source = 'standalone' }: TopNavProps) {
   const [uploadOpen, setUploadOpen] = useState(false);
   const [loginDialogOpen, setLoginDialogOpen] = useState(false);
   const [loginReturnUrl, setLoginReturnUrl] = useState('');
@@ -462,7 +509,10 @@ export default function TopNav({ compact = false, onMenuToggle }: TopNavProps) {
   if (compact) {
     return (
       <>
-        <header className="bg-surface-container-low border-b border-surface-container-highest shrink-0 z-[250]">
+        <header
+          className="bg-surface-container-low border-b border-surface-container-highest shrink-0 z-[250]"
+          data-app-top-nav={source}
+        >
           {/* Safe area spacer — keeps Logo and icons clickable */}
           <div style={{ height: 'env(safe-area-inset-top, 0px)' }} />
           <div className="flex h-12 items-center gap-1 px-3">
@@ -508,37 +558,25 @@ export default function TopNav({ compact = false, onMenuToggle }: TopNavProps) {
             </div>
           </div>
           <div className="px-3 pb-2">
-            <form
-              onSubmit={handleSearchSubmit}
-              className="flex h-10 items-center overflow-hidden bg-surface-container-lowest rounded-sm px-2.5 border border-outline-variant/30 focus-within:ring-1 focus-within:ring-primary-container transition-colors"
-            >
-              <Icon name="search" size={16} className="text-on-surface-variant mr-2 shrink-0" />
-              <input
-                type="text"
-                value={localQuery}
-                onChange={handleSearchChange}
-                onInput={handleSearchInput}
-                onCompositionStart={handleSearchCompositionStart}
-                onCompositionUpdate={handleSearchCompositionUpdate}
-                onCompositionEnd={handleSearchCompositionEnd}
-                onKeyDown={handleSearchKeyDown}
-                maxLength={HOME_SEARCH_MAX_LENGTH}
-                enterKeyHint="search"
-                autoComplete="off"
-                spellCheck={false}
-                placeholder="搜索模型..."
-                className="h-full min-w-0 flex-1 appearance-none border-none bg-transparent p-0 text-base leading-none text-on-surface outline-none placeholder:text-on-surface-variant/50"
-              />
-              {localQuery && (
-                <button
-                  type="button"
-                  onClick={handleClearSearch}
-                  className="p-0.5 text-on-surface-variant hover:text-on-surface shrink-0"
-                >
-                  <Icon name="close" size={14} />
-                </button>
-              )}
-            </form>
+            <SearchField
+              formProps={{ onSubmit: handleSearchSubmit }}
+              inputProps={{
+                value: localQuery,
+                onChange: handleSearchChange,
+                onInput: handleSearchInput,
+                onCompositionStart: handleSearchCompositionStart,
+                onCompositionUpdate: handleSearchCompositionUpdate,
+                onCompositionEnd: handleSearchCompositionEnd,
+                onKeyDown: handleSearchKeyDown,
+                maxLength: HOME_SEARCH_MAX_LENGTH,
+                enterKeyHint: 'search',
+                autoComplete: 'off',
+                spellCheck: false,
+              }}
+              value={localQuery}
+              onClear={handleClearSearch}
+              placeholder="搜索模型..."
+            />
           </div>
         </header>
         <UploadModalLoader open={uploadOpen} onClose={() => setUploadOpen(false)} onConverted={handleUploaded} />
@@ -554,7 +592,10 @@ export default function TopNav({ compact = false, onMenuToggle }: TopNavProps) {
 
   return (
     <>
-      <header className="h-14 flex items-center bg-surface-container-low border-b border-outline-variant/10 shrink-0 z-50">
+      <header
+        className="h-14 flex items-center bg-surface-container-low border-b border-outline-variant/10 shrink-0 z-50"
+        data-app-top-nav={source}
+      >
         <Link
           to="/"
           onClick={(e) => {
@@ -576,37 +617,26 @@ export default function TopNav({ compact = false, onMenuToggle }: TopNavProps) {
           <BrandMark size="nav" className="w-full" eagerLoad />
         </Link>
 
-        <form
-          onSubmit={handleSearchSubmit}
-          className="hidden h-9 md:flex items-center flex-1 max-w-lg bg-surface-container-lowest rounded-lg px-3 border border-outline-variant/20 focus-within:ring-1 focus-within:ring-primary-container transition-colors"
-        >
-          <Icon name="search" size={16} className="text-on-surface-variant mr-2 shrink-0" />
-          <input
-            type="text"
-            value={localQuery}
-            onChange={handleSearchChange}
-            onInput={handleSearchInput}
-            onCompositionStart={handleSearchCompositionStart}
-            onCompositionUpdate={handleSearchCompositionUpdate}
-            onCompositionEnd={handleSearchCompositionEnd}
-            onKeyDown={handleSearchKeyDown}
-            maxLength={HOME_SEARCH_MAX_LENGTH}
-            enterKeyHint="search"
-            autoComplete="off"
-            spellCheck={false}
-            placeholder="搜索模型、规格..."
-            className="h-full min-w-0 flex-1 appearance-none border-none bg-transparent p-0 text-sm leading-none text-on-surface outline-none placeholder:text-on-surface-variant/50"
-          />
-          {localQuery && (
-            <button
-              type="button"
-              onClick={handleClearSearch}
-              className="p-0.5 text-on-surface-variant hover:text-on-surface shrink-0"
-            >
-              <Icon name="close" size={14} />
-            </button>
-          )}
-        </form>
+        <SearchField
+          formProps={{ onSubmit: handleSearchSubmit }}
+          inputProps={{
+            value: localQuery,
+            onChange: handleSearchChange,
+            onInput: handleSearchInput,
+            onCompositionStart: handleSearchCompositionStart,
+            onCompositionUpdate: handleSearchCompositionUpdate,
+            onCompositionEnd: handleSearchCompositionEnd,
+            onKeyDown: handleSearchKeyDown,
+            maxLength: HOME_SEARCH_MAX_LENGTH,
+            enterKeyHint: 'search',
+            autoComplete: 'off',
+            spellCheck: false,
+          }}
+          value={localQuery}
+          onClear={handleClearSearch}
+          placeholder="搜索模型、规格..."
+          className="hidden flex-1 max-w-lg md:mt-px md:flex"
+        />
 
         <div className="flex items-center gap-0.5 shrink-0 ml-auto pr-6">
           {topNavItems.map((item) => (

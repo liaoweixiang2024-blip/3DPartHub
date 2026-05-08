@@ -28,6 +28,7 @@ import {
 } from './middleware/security.js';
 import auditRouter from './routes/audit.js';
 import authRouter from './routes/auth.js';
+import batchDownloadsRouter from './routes/batch-downloads.js';
 import batchRouter from './routes/batch.js';
 import categoriesRouter from './routes/categories.js';
 import downloadsRouter from './routes/downloads.js';
@@ -49,6 +50,7 @@ import sharesRouter from './routes/shares.js';
 import tasksRouter from './routes/tasks.js';
 import threadSizeRouter from './routes/thread-size.js';
 import uploadRouter from './routes/upload.js';
+import { startAuditRetentionScheduler } from './services/auditRetention.js';
 import { scheduleStartupCacheWarmup } from './services/cacheWarmup.js';
 
 const app = express();
@@ -306,6 +308,7 @@ app.use(autoAudit);
 app.use(healthRouter);
 app.use(modelCompareRouter);
 app.use(modelDrawingsRouter);
+app.use(batchDownloadsRouter);
 // Model count — must be registered before modelsRouter to avoid /api/models/:id catching "count"
 app.get('/api/models/count', async (req, res) => {
   try {
@@ -431,6 +434,7 @@ app.listen(PORT, async () => {
   // Backup scheduler should only run in one process (primary handles background jobs)
   if (!cluster.isWorker) {
     startBackupScheduler();
+    startAuditRetentionScheduler();
   }
   // Seed admin account on first run
   try {

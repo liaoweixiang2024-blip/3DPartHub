@@ -27,6 +27,7 @@ import Icon from '../components/shared/Icon';
 import InfiniteLoadTrigger from '../components/shared/InfiniteLoadTrigger';
 import ResponsiveSectionTabs from '../components/shared/ResponsiveSectionTabs';
 import SafeImage from '../components/shared/SafeImage';
+import SearchField from '../components/shared/SearchField';
 import { useToast } from '../components/shared/Toast';
 import { useDocumentTitle } from '../hooks/useDocumentTitle';
 import { useImeSafeSearchInput } from '../hooks/useImeSafeSearchInput';
@@ -1885,22 +1886,13 @@ function Content() {
               <SelectionToolbarButtonContent icon="view_list">排序</SelectionToolbarButtonContent>
             </button>
           </div>
-          <div className="flex h-9 w-full min-w-0 items-center rounded-sm border border-outline-variant/30 bg-surface-container-lowest px-3 md:ml-auto md:w-56 md:shrink-0 lg:w-72">
-            <Icon name="search" size={15} className="mr-2 shrink-0 text-on-surface-variant" />
-            <input
-              {...(tab === 'categories' ? catSearchInputProps : prodSearchInputProps)}
-              placeholder={tab === 'categories' ? '搜索分类名称、slug 或分组' : '搜索产品名称、型号、参数值'}
-              className="h-full min-w-0 flex-1 border-none bg-transparent p-0 text-sm leading-none text-on-surface outline-none placeholder:text-on-surface-variant/50"
-            />
-            {(tab === 'categories' ? catSearchInputValue : prodSearchInputValue) && (
-              <button
-                onClick={() => (tab === 'categories' ? setCatSearch('') : setProdSearch(''))}
-                className="p-0.5 text-on-surface-variant hover:text-on-surface"
-              >
-                <Icon name="close" size={14} />
-              </button>
-            )}
-          </div>
+          <SearchField
+            inputProps={tab === 'categories' ? catSearchInputProps : prodSearchInputProps}
+            value={tab === 'categories' ? catSearchInputValue : prodSearchInputValue}
+            onClear={() => (tab === 'categories' ? setCatSearch('') : setProdSearch(''))}
+            placeholder={tab === 'categories' ? '搜索分类名称、slug 或分组' : '搜索产品名称、型号、参数值'}
+            className="md:ml-auto md:w-72 md:shrink-0"
+          />
         </div>
       }
     >
@@ -2066,19 +2058,12 @@ function Content() {
                   {productCatOpen && (
                     <div className="absolute left-0 right-0 top-[calc(100%+0.5rem)] z-[40] overflow-hidden rounded-xl border border-outline-variant/15 bg-surface-container-lowest shadow-2xl">
                       <div className="border-b border-outline-variant/10 p-2">
-                        <div className="relative">
-                          <Icon
-                            name="search"
-                            size={14}
-                            className="absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant"
-                          />
-                          <input
-                            autoFocus
-                            {...productCatQueryInputProps}
-                            placeholder="搜索分类名称、slug 或分组"
-                            className="w-full rounded-lg border border-outline-variant/15 bg-surface-container-low px-3 py-2 pl-9 text-sm text-on-surface outline-none focus:border-primary-container"
-                          />
-                        </div>
+                        <SearchField
+                          inputProps={{ ...productCatQueryInputProps, autoFocus: true }}
+                          value={productCatQuery}
+                          onClear={() => setProductCatQuery('')}
+                          placeholder="搜索分类名称、slug 或分组"
+                        />
                       </div>
                       <div className="max-h-72 overflow-y-auto p-1.5">
                         {productCategoryOptions.length > 0 ? (
@@ -2915,28 +2900,13 @@ function Content() {
                 ))}
               </select>
               {optImgField && (
-                <div className="relative w-full sm:flex-1">
-                  <Icon
-                    name="search"
-                    size={14}
-                    className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-on-surface-variant/60"
-                  />
-                  <input
-                    {...optSettingsSearchInputProps}
-                    placeholder="搜索选项、型号或产品名..."
-                    className="w-full rounded bg-surface-container-lowest py-2 pl-8 pr-8 text-sm text-on-surface outline-none border border-outline-variant/20 focus:border-primary-container"
-                  />
-                  {optSettingsSearchInputValue && (
-                    <button
-                      onClick={() => setOptSettingsSearch('')}
-                      className="absolute right-2 top-1/2 -translate-y-1/2 text-on-surface-variant hover:text-on-surface"
-                      data-tooltip-ignore
-                      aria-label="清空搜索"
-                    >
-                      <Icon name="close" size={14} />
-                    </button>
-                  )}
-                </div>
+                <SearchField
+                  inputProps={optSettingsSearchInputProps}
+                  value={optSettingsSearchInputValue}
+                  onClear={() => setOptSettingsSearch('')}
+                  placeholder="搜索选项、型号或产品名..."
+                  className="sm:flex-1"
+                />
               )}
               {optSettingsSearch && (
                 <span className="text-[11px] text-on-surface-variant sm:mr-auto">
@@ -3618,30 +3588,16 @@ function Content() {
                 {generatePreview.length > 0 && (
                   <div className="space-y-2">
                     <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                      <div className="relative sm:w-72">
-                        <Icon
-                          name="search"
-                          size={14}
-                          className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-on-surface-variant/60"
-                        />
-                        <input
-                          {...generatePreviewSearchInputProps}
-                          placeholder="搜索名称、型号或参数"
-                          className="w-full rounded-md border border-outline-variant/20 bg-surface-container-low px-8 py-2 text-xs text-on-surface outline-none focus:border-primary-container"
-                        />
-                        {generatePreviewSearchInputValue && (
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setGeneratePreviewSearch('');
-                              setGeneratePreviewPage(1);
-                            }}
-                            className="absolute right-2 top-1/2 -translate-y-1/2 text-on-surface-variant hover:text-on-surface"
-                          >
-                            <Icon name="close" size={14} />
-                          </button>
-                        )}
-                      </div>
+                      <SearchField
+                        inputProps={generatePreviewSearchInputProps}
+                        value={generatePreviewSearchInputValue}
+                        onClear={() => {
+                          setGeneratePreviewSearch('');
+                          setGeneratePreviewPage(1);
+                        }}
+                        placeholder="搜索名称、型号或参数"
+                        className="sm:w-72"
+                      />
                       <div className="flex items-center gap-2 text-xs text-on-surface-variant">
                         <span>每页</span>
                         <select

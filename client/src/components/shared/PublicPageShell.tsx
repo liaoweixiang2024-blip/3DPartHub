@@ -46,7 +46,7 @@ export function PublicPageShell({
   if (isDesktop) {
     return (
       <div className={mergeClassName('flex h-dvh flex-col overflow-hidden bg-surface', className)}>
-        <TopNav />
+        <TopNav source="standalone" />
         {children}
       </div>
     );
@@ -56,7 +56,7 @@ export function PublicPageShell({
 
   return (
     <div className={mergeClassName('flex h-dvh flex-col overflow-hidden bg-surface', mobileClassName || className)}>
-      <TopNav compact onMenuToggle={handleMenuToggle} />
+      <TopNav source="standalone" compact onMenuToggle={handleMenuToggle} />
       {mobileDrawer ||
         (keepMobileDrawerMounted || navOpen ? (
           <Suspense fallback={null}>

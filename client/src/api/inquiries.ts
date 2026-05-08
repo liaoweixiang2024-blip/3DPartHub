@@ -93,14 +93,20 @@ export async function getAllInquiries(
   page = 1,
   pageSize = 20,
   status?: string,
+  search?: string,
 ): Promise<{ total: number; page: number; pageSize: number; items: Inquiry[] }> {
   const res = await client.get('/admin/inquiries', {
-    params: { page, page_size: pageSize, status },
+    params: { page, page_size: pageSize, status, search: search || undefined },
   });
   return unwrapResponse(res);
 }
 
 export async function updateInquiryStatus(id: string, status: string): Promise<Inquiry> {
   const res = await client.put(`/admin/inquiries/${id}/status`, { status });
+  return unwrapResponse(res);
+}
+
+export async function deleteInquiry(id: string): Promise<{ ok: boolean }> {
+  const res = await client.delete(`/admin/inquiries/${id}`);
   return unwrapResponse(res);
 }

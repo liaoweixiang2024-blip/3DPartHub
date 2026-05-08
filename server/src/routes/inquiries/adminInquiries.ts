@@ -1,3 +1,4 @@
+import type { Prisma } from '@prisma/client';
 import { Router, Response } from 'express';
 import { getBusinessConfig, labelFor } from '../../lib/businessConfig.js';
 import { logger } from '../../lib/logger.js';
@@ -20,8 +21,43 @@ export function createAdminInquiriesRouter() {
         Math.max(1, Number(req.query.page_size) || pageSizePolicy.inquiryAdminDefault),
       );
       const status = req.query.status as string | undefined;
+      const search = typeof req.query.search === 'string' ? req.query.search.trim() : '';
 
-      const where = status && status !== 'all' ? { status } : {};
+      const where: Prisma.InquiryWhereInput = {};
+      if (status && status !== 'all') where.status = status;
+      if (search) {
+        where.OR = [
+          { id: { contains: search, mode: 'insensitive' } },
+          { company: { contains: search, mode: 'insensitive' } },
+          { contactName: { contains: search, mode: 'insensitive' } },
+          { contactPhone: { contains: search, mode: 'insensitive' } },
+          { remark: { contains: search, mode: 'insensitive' } },
+          { adminRemark: { contains: search, mode: 'insensitive' } },
+          {
+            user: {
+              is: {
+                OR: [
+                  { username: { contains: search, mode: 'insensitive' } },
+                  { email: { contains: search, mode: 'insensitive' } },
+                  { company: { contains: search, mode: 'insensitive' } },
+                  { phone: { contains: search, mode: 'insensitive' } },
+                ],
+              },
+            },
+          },
+          {
+            items: {
+              some: {
+                OR: [
+                  { productName: { contains: search, mode: 'insensitive' } },
+                  { modelNo: { contains: search, mode: 'insensitive' } },
+                  { remark: { contains: search, mode: 'insensitive' } },
+                ],
+              },
+            },
+          },
+        ];
+      }
       const [total, items] = await Promise.all([
         prisma.inquiry.count({ where }),
         prisma.inquiry.findMany({
@@ -100,6 +136,31 @@ export function createAdminInquiriesRouter() {
       }
       logger.error({ err }, '[Inquiries] Status update error');
       res.status(500).json({ detail: '更新状态失败' });
+    }
+  });
+
+  // Delete inquiry
+  router.delete('/api/admin/inquiries/:id', authMiddleware, async (req: AuthRequest, res: Response) => {
+    if (!adminOnly(req, res)) return;
+    try {
+      const id = param(req, 'id');
+      const inquiry = await prisma.inquiry.findUnique({ where: { id }, select: { id: true } });
+      if (!inquiry) {
+        res.status(404).json({ detail: '询价单不存在' });
+        return;
+      }
+      await prisma.$transaction([
+        prisma.notification.deleteMany({ where: { type: 'inquiry', relatedId: id } }),
+        prisma.inquiry.delete({ where: { id } }),
+      ]);
+      res.json({ ok: true });
+    } catch (err: any) {
+      if (err.code === 'P2025') {
+        res.status(404).json({ detail: '询价单不存在' });
+        return;
+      }
+      logger.error({ err }, '[Inquiries] Delete error');
+      res.status(500).json({ detail: '删除询价单失败' });
     }
   });
 

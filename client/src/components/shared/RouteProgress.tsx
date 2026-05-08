@@ -8,6 +8,7 @@ const ENTER_DELAY_MS = 40;
 const SETTLE_DELAY_MS = 460;
 const EXIT_DELAY_MS = 180;
 const MAX_WAIT_MS = 8000;
+const HARD_RESET_MS = 12000;
 
 export default function RouteProgress() {
   const location = useLocation();
@@ -15,12 +16,15 @@ export default function RouteProgress() {
   const firstRunRef = useRef(true);
   const routeStartedAtRef = useRef(0);
   const routePendingRef = useRef(false);
+  const activeTransitionRef = useRef(0);
   const timersRef = useRef<Array<ReturnType<typeof window.setTimeout>>>([]);
+  const hardResetTimerRef = useRef<ReturnType<typeof window.setTimeout> | null>(null);
   const frameRef = useRef<number | null>(null);
   const progressRef = useRef(0);
   const [phase, setPhase] = useState<ProgressPhase>('idle');
   const [progress, setProgress] = useState(0);
   const [transitionId, setTransitionId] = useState(0);
+  const routeSignature = location.pathname;
 
   const setRouteProgress = useCallback((nextProgress: number | ((current: number) => number)) => {
     setProgress((current) => {
@@ -47,23 +51,36 @@ export default function RouteProgress() {
     }
   }, []);
 
-  const completeRouteProgress = useCallback(() => {
-    if (!routePendingRef.current) return;
+  const resetRouteProgress = useCallback(() => {
     routePendingRef.current = false;
-    setPhase('settling');
-    setRouteProgress(100);
+    clearRouteTimers();
+    setPhase('idle');
+    setRouteProgress(0);
+  }, [clearRouteTimers, setRouteProgress]);
 
-    timersRef.current.push(
-      window.setTimeout(() => {
-        setPhase('exiting');
-        setRouteProgress(100);
-      }, EXIT_DELAY_MS),
-      window.setTimeout(() => {
-        setPhase('idle');
-        setRouteProgress(0);
-      }, EXIT_DELAY_MS + 160),
-    );
-  }, [setRouteProgress]);
+  const completeRouteProgress = useCallback(
+    (transitionIdToComplete = activeTransitionRef.current) => {
+      if (transitionIdToComplete !== activeTransitionRef.current) return;
+      if (!routePendingRef.current) return;
+      routePendingRef.current = false;
+      setPhase('settling');
+      setRouteProgress(100);
+
+      timersRef.current.push(
+        window.setTimeout(() => {
+          if (transitionIdToComplete !== activeTransitionRef.current) return;
+          setPhase('exiting');
+          setRouteProgress(100);
+        }, EXIT_DELAY_MS),
+        window.setTimeout(() => {
+          if (transitionIdToComplete !== activeTransitionRef.current) return;
+          setPhase('idle');
+          setRouteProgress(0);
+        }, EXIT_DELAY_MS + 160),
+      );
+    },
+    [setRouteProgress],
+  );
 
   useEffect(() => clearRouteTimers, [clearRouteTimers]);
 
@@ -74,6 +91,8 @@ export default function RouteProgress() {
     }
 
     clearRouteTimers();
+    const nextTransitionId = activeTransitionRef.current + 1;
+    activeTransitionRef.current = nextTransitionId;
     routeStartedAtRef.current = typeof performance !== 'undefined' ? performance.now() : Date.now();
     routePendingRef.current = true;
 
@@ -94,14 +113,15 @@ export default function RouteProgress() {
       }, ENTER_DELAY_MS),
       window.setTimeout(completeRouteProgress, MAX_WAIT_MS),
     );
-  }, [clearRouteTimers, completeRouteProgress, location.pathname, setRouteProgress, setRouteProgressAtLeast]);
+  }, [clearRouteTimers, completeRouteProgress, routeSignature, setRouteProgress, setRouteProgressAtLeast]);
 
   useEffect(() => {
     if (!routePendingRef.current || phase === 'idle' || phase === 'exiting' || pageRefreshActive) return;
 
     const now = typeof performance !== 'undefined' ? performance.now() : Date.now();
     const remaining = Math.max(0, SETTLE_DELAY_MS - (now - routeStartedAtRef.current));
-    const timer = window.setTimeout(completeRouteProgress, remaining);
+    const transitionIdToComplete = activeTransitionRef.current;
+    const timer = window.setTimeout(() => completeRouteProgress(transitionIdToComplete), remaining);
     timersRef.current.push(timer);
 
     return () => {
@@ -109,6 +129,29 @@ export default function RouteProgress() {
       timersRef.current = timersRef.current.filter((item) => item !== timer);
     };
   }, [completeRouteProgress, pageRefreshActive, phase]);
+
+  useEffect(() => {
+    if (hardResetTimerRef.current !== null) {
+      window.clearTimeout(hardResetTimerRef.current);
+      hardResetTimerRef.current = null;
+    }
+
+    if (phase === 'idle') return;
+
+    const transitionIdToReset = activeTransitionRef.current;
+    hardResetTimerRef.current = window.setTimeout(() => {
+      if (transitionIdToReset !== activeTransitionRef.current) return;
+      resetRouteProgress();
+      hardResetTimerRef.current = null;
+    }, HARD_RESET_MS);
+
+    return () => {
+      if (hardResetTimerRef.current !== null) {
+        window.clearTimeout(hardResetTimerRef.current);
+        hardResetTimerRef.current = null;
+      }
+    };
+  }, [phase, resetRouteProgress]);
 
   const mounted = phase !== 'idle';
   const visible = phase !== 'idle' && phase !== 'exiting';

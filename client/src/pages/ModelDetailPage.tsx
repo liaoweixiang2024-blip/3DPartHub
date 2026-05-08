@@ -1282,7 +1282,7 @@ export default function ModelDetailPage() {
   }
 
   if (isLoading) {
-    return isDesktop ? <ModelDetailPageSkeleton /> : null;
+    return <ModelDetailPageSkeleton />;
   }
 
   if (!modelData) {

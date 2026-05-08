@@ -219,10 +219,10 @@ export default function SharePage() {
       </header>
 
       {/* Content — desktop: side-by-side, mobile: stacked scrollable */}
-      <div className="flex-1 flex flex-col md:flex-row md:overflow-hidden">
+      <div className="flex min-h-0 flex-1 flex-col overflow-y-auto md:flex-row md:overflow-hidden">
         {/* 3D Preview — fixed height on mobile, flex-fill on desktop */}
         {info.allowPreview && info.gltfUrl && (
-          <div className="h-[55vh] md:h-auto md:flex-1 bg-surface-container relative shrink-0">
+          <div className="relative h-[52svh] min-h-[240px] shrink-0 bg-surface-container md:h-auto md:min-h-0 md:flex-1">
             <Suspense
               fallback={
                 <div className="w-full h-full flex items-center justify-center">

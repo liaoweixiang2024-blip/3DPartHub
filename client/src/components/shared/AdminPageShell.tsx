@@ -53,7 +53,7 @@ export function AdminLayout() {
       <ShellLayoutContext.Provider value>
         <HideBottomNavContext.Provider value={bottomNavCtx}>
           <div className="flex h-dvh flex-col overflow-hidden">
-            <TopNav />
+            <TopNav source="layout" />
             <div className="flex flex-1 overflow-hidden">
               <AppSidebar />
               <main className="flex flex-1 flex-col overflow-y-auto bg-surface-dim custom-scrollbar">
@@ -71,7 +71,7 @@ export function AdminLayout() {
     <ShellLayoutContext.Provider value>
       <HideBottomNavContext.Provider value={bottomNavCtx}>
         <div className="flex h-dvh flex-col overflow-hidden bg-surface">
-          <TopNav compact onMenuToggle={() => setNavOpen((prev) => !prev)} />
+          <TopNav source="layout" compact onMenuToggle={() => setNavOpen((prev) => !prev)} />
           <Suspense fallback={null}>
             <MobileNavDrawer open={navOpen} onClose={() => setNavOpen(false)} />
           </Suspense>
@@ -95,7 +95,7 @@ export function PublicLayout() {
     return (
       <ShellLayoutContext.Provider value>
         <div className="flex h-dvh flex-col overflow-hidden bg-surface">
-          <TopNav />
+          <TopNav source="layout" />
           <div className="flex flex-1 flex-col overflow-hidden">
             <Outlet />
           </div>
@@ -108,7 +108,7 @@ export function PublicLayout() {
   return (
     <ShellLayoutContext.Provider value>
       <div className="flex h-dvh flex-col overflow-hidden bg-surface">
-        <TopNav compact onMenuToggle={() => setNavOpen((prev) => !prev)} />
+        <TopNav source="layout" compact onMenuToggle={() => setNavOpen((prev) => !prev)} />
         <Suspense fallback={null}>
           <MobileNavDrawer open={navOpen} onClose={() => setNavOpen(false)} />
         </Suspense>
@@ -175,7 +175,7 @@ export function AdminPageShell({
   if (isDesktop) {
     return (
       <div className="flex h-dvh flex-col overflow-hidden">
-        <TopNav />
+        <TopNav source="standalone" />
         <div className="flex flex-1 overflow-hidden">
           <AppSidebar />
           <motion.main
@@ -198,7 +198,7 @@ export function AdminPageShell({
 
   return (
     <div className="flex h-dvh flex-col overflow-hidden bg-surface">
-      <TopNav compact onMenuToggle={() => setNavOpen((prev) => !prev)} />
+      <TopNav source="standalone" compact onMenuToggle={() => setNavOpen((prev) => !prev)} />
       <Suspense fallback={null}>
         <MobileNavDrawer open={navOpen} onClose={() => setNavOpen(false)} />
       </Suspense>

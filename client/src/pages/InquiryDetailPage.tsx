@@ -16,6 +16,7 @@ import { PageRefreshIndicator } from '../components/shared/PageRefreshFallback';
 import { useToast } from '../components/shared/Toast';
 import { useDocumentTitle } from '../hooks/useDocumentTitle';
 import { getBusinessConfig, statusInfo, type StatusConfig } from '../lib/businessConfig';
+import { notifyGlobalError } from '../lib/errorNotifications';
 import { getCachedPublicSettings } from '../lib/publicSettings';
 import { useAuthStore } from '../stores/useAuthStore';
 
@@ -157,8 +158,8 @@ function DetailContent({ id }: { id: string }) {
       await sendInquiryMessage(id, msgInput.trim());
       setMsgInput('');
       mutate();
-    } catch {
-      toast('发送失败', 'error');
+    } catch (err) {
+      notifyGlobalError(err, '发送失败');
     } finally {
       setSending(false);
     }
@@ -169,8 +170,8 @@ function DetailContent({ id }: { id: string }) {
       await cancelInquiry(id);
       mutate();
       toast('已取消', 'success');
-    } catch {
-      toast('取消失败', 'error');
+    } catch (err) {
+      notifyGlobalError(err, '取消失败');
     }
   }
 
@@ -179,8 +180,8 @@ function DetailContent({ id }: { id: string }) {
       await updateInquiryStatus(id, status);
       mutate();
       toast(`状态已更新`, 'success');
-    } catch {
-      toast('操作失败', 'error');
+    } catch (err) {
+      notifyGlobalError(err, '操作失败');
     }
   }
 

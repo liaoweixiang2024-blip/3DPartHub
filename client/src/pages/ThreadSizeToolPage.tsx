@@ -6,6 +6,7 @@ import { AdminPageShell } from '../components/shared/AdminPageShell';
 import Icon from '../components/shared/Icon';
 import { PageRefreshIndicator } from '../components/shared/PageRefreshFallback';
 import ResponsiveSectionTabs from '../components/shared/ResponsiveSectionTabs';
+import SearchField from '../components/shared/SearchField';
 import { useToast } from '../components/shared/Toast';
 import { useDocumentTitle } from '../hooks/useDocumentTitle';
 import { useImeSafeSearchInput } from '../hooks/useImeSafeSearchInput';
@@ -667,7 +668,12 @@ export default function ThreadSizeToolPage() {
   } = useImeSafeSearchInput({ onDraftChange: () => setShowGuide(false) });
   const [managementOpen, setManagementOpen] = useState(false);
   const [managementCategory, setManagementCategory] = useState('thread:all');
-  const { value: managementQuery, inputProps: managementQueryInputProps } = useImeSafeSearchInput();
+  const {
+    value: managementQuery,
+    draftValue: managementQueryInputValue,
+    setValue: setManagementQueryInput,
+    inputProps: managementQueryInputProps,
+  } = useImeSafeSearchInput();
   const [editingEntry, setEditingEntry] = useState<ThreadSizeEntry | 'new' | null>(null);
   const [entryDraft, setEntryDraft] = useState({
     kind: 'thread' as DataTab,
@@ -1015,32 +1021,20 @@ export default function ThreadSizeToolPage() {
         }
         toolbar={
           <div className="grid min-w-0 items-center gap-3 md:grid-cols-[15rem_minmax(0,1fr)] lg:grid-cols-[16rem_minmax(0,1fr)]">
-            <label className="relative block w-full">
-              <Icon
-                name="search"
-                size={16}
-                className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant/50"
-              />
-              <input
-                {...queryInputProps}
-                onKeyDown={(e) => {
+            <SearchField
+              inputProps={{
+                ...queryInputProps,
+                onKeyDown: (e) => {
                   queryInputProps.onKeyDown?.(e);
                   if (e.defaultPrevented) return;
                   if (e.key === 'Escape') clearSearch();
                   if (e.key === 'Enter') e.currentTarget.blur();
-                }}
-                placeholder="搜索规格、俗称、测量值..."
-                className="h-10 w-full rounded-lg border border-outline-variant/25 bg-surface-container-lowest pl-9 pr-14 text-sm text-on-surface outline-none placeholder:text-on-surface-variant/50 focus:border-primary-container/60"
-              />
-              {queryInputValue && (
-                <button
-                  onClick={clearSearch}
-                  className="absolute right-1.5 top-1/2 -translate-y-1/2 rounded-md px-2 py-1 text-xs font-medium text-on-surface-variant transition-colors hover:bg-surface-container-high hover:text-on-surface"
-                >
-                  清空
-                </button>
-              )}
-            </label>
+                },
+              }}
+              value={queryInputValue}
+              onClear={clearSearch}
+              placeholder="搜索规格、俗称、测量值..."
+            />
             <div className="min-w-0">
               <ResponsiveSectionTabs
                 tabs={[{ key: 'guide', label: '使用指南' }, ...CATEGORY_FILTERS].map((item) => ({
@@ -1514,18 +1508,12 @@ export default function ThreadSizeToolPage() {
                 onChange={setManagementCategory}
                 mobileTitle="数据分类"
               />
-              <label className="relative block w-full">
-                <Icon
-                  name="search"
-                  size={16}
-                  className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant/50"
-                />
-                <input
-                  {...managementQueryInputProps}
-                  placeholder="搜索规格、型号、说明..."
-                  className="h-9 w-full rounded-lg border border-outline-variant/25 bg-surface-container-lowest pl-9 pr-3 text-sm text-on-surface outline-none placeholder:text-on-surface-variant/50 focus:border-primary-container/60"
-                />
-              </label>
+              <SearchField
+                inputProps={managementQueryInputProps}
+                value={managementQueryInputValue}
+                onClear={() => setManagementQueryInput('')}
+                placeholder="搜索规格、型号、说明..."
+              />
             </div>
 
             <div className="flex min-h-0 flex-1 flex-col overflow-hidden">

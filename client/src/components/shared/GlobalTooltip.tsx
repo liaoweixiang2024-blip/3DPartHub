@@ -32,6 +32,16 @@ function isTooltipTarget(element: Element | null): element is HTMLElement {
   return Boolean(element instanceof HTMLElement && element.matches(TOOLTIP_SELECTOR));
 }
 
+function isModelDetailPath(pathname: string) {
+  return /^\/model\/[^/]+/.test(pathname);
+}
+
+function canShowTooltip(element: HTMLElement) {
+  if (element.closest('[data-tooltip-ignore]')) return false;
+  if (element.closest('header')) return true;
+  return isModelDetailPath(window.location.pathname);
+}
+
 function isPlacement(value: string | undefined): value is TooltipPlacement {
   return value === 'top' || value === 'bottom' || value === 'left' || value === 'right';
 }
@@ -129,6 +139,7 @@ export default function GlobalTooltip() {
   const measureRef = useRef<HTMLDivElement>(null);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const activeRef = useRef<HTMLElement | null>(null);
+  const suppressedTitleRef = useRef<HTMLElement | null>(null);
 
   useEffect(() => {
     const mq = window.matchMedia('(max-width: 767px)');
@@ -172,22 +183,43 @@ export default function GlobalTooltip() {
       }
     };
 
+    const suppressNativeTitle = (element: HTMLElement) => {
+      if (suppressedTitleRef.current && suppressedTitleRef.current !== element) {
+        restoreNativeTitle(suppressedTitleRef.current);
+      }
+      const title = element.getAttribute('title');
+      if (title && element.dataset.nativeTitle === undefined) {
+        element.dataset.nativeTitle = title;
+        element.removeAttribute('title');
+      }
+      suppressedTitleRef.current = element;
+    };
+
     const hide = () => {
       clearTimer();
       restoreNativeTitle(activeRef.current);
+      restoreNativeTitle(suppressedTitleRef.current);
       activeRef.current = null;
+      suppressedTitleRef.current = null;
       setTooltip(null);
       setMeasured(null);
     };
 
     const showFor = (element: HTMLElement) => {
-      if (element.closest('[data-tooltip-ignore]')) return;
+      if (!canShowTooltip(element)) {
+        hide();
+        suppressNativeTitle(element);
+        return;
+      }
+
       const text = getTooltipText(element);
       if (!text) return;
 
       clearTimer();
       restoreNativeTitle(activeRef.current);
+      restoreNativeTitle(suppressedTitleRef.current);
       activeRef.current = element;
+      suppressedTitleRef.current = null;
 
       const title = element.getAttribute('title');
       if (title) {
@@ -218,7 +250,7 @@ export default function GlobalTooltip() {
     };
 
     const handleMouseOut = (event: MouseEvent) => {
-      const active = activeRef.current;
+      const active = activeRef.current || suppressedTitleRef.current;
       if (!active) return;
       const next = event.relatedTarget instanceof Node ? event.relatedTarget : null;
       if (next && active.contains(next)) return;

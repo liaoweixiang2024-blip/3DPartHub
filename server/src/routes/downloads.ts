@@ -1,6 +1,7 @@
 import { existsSync } from 'node:fs';
+import type { Prisma } from '@prisma/client';
 import archiver from 'archiver';
-import { Router, Request, Response } from 'express';
+import { Router, Request, Response, urlencoded } from 'express';
 import { getBusinessConfig } from '../lib/businessConfig.js';
 import { createModelDownloadToken, createProtectedResourceToken } from '../lib/downloadTokenStore.js';
 import { createLogger } from '../lib/logger.js';
@@ -9,11 +10,18 @@ import { optionalString } from '../lib/requestValidation.js';
 import { getSetting } from '../lib/settings.js';
 import { authMiddleware, optionalAuthMiddleware, type AuthRequest } from '../middleware/auth.js';
 import { resolveDbModelDownloadTarget } from '../services/modelDownloadTarget.js';
+import { findOriginalModelPath } from '../services/modelFiles.js';
 import { MODEL_STATUS } from '../services/modelStatus.js';
 
 const log = createLogger({ component: 'downloads' });
 
 const router = Router();
+const parseBatchDownloadForm = urlencoded({ extended: false, limit: '1mb' });
+
+type DownloadArchiveEntry = { filePath: string; fileName: string };
+type DownloadArchiveLookup =
+  | { ok: true; fileEntries: DownloadArchiveEntry[] }
+  | { ok: false; status: number; detail: string };
 
 function adminOnly(req: AuthRequest, res: Response): boolean {
   if (req.user?.role !== 'ADMIN') {
@@ -33,6 +41,51 @@ function dateKey(date: Date) {
   return date.toISOString().slice(0, 10);
 }
 
+function containsText(value: string): Prisma.StringFilter {
+  return { contains: value, mode: 'insensitive' };
+}
+
+function buildAdminDownloadSearchWhere(search: string): Prisma.DownloadWhereInput {
+  if (!search) return {};
+  const contains = containsText(search);
+  return {
+    OR: [
+      { id: contains },
+      { modelId: contains },
+      { format: contains },
+      { user: { username: contains } },
+      { user: { email: contains } },
+      { model: { name: contains } },
+      { model: { originalName: contains } },
+      { model: { format: contains } },
+      { model: { category: contains } },
+      { model: { categoryRef: { is: { name: contains } } } },
+    ],
+  };
+}
+
+function buildAdminDownloadModelSearchWhere(search: string): Prisma.ModelWhereInput {
+  if (!search) return {};
+  const contains = containsText(search);
+  return {
+    OR: [
+      { id: contains },
+      { name: contains },
+      { originalName: contains },
+      { format: contains },
+      { category: contains },
+      { categoryRef: { is: { name: contains } } },
+    ],
+  };
+}
+
+function combineDownloadWhere(...items: Prisma.DownloadWhereInput[]): Prisma.DownloadWhereInput {
+  const filters = items.filter((item) => Object.keys(item).length > 0);
+  if (filters.length === 0) return {};
+  if (filters.length === 1) return filters[0];
+  return { AND: filters };
+}
+
 function uniqueArchiveFileName(fileName: string, usedNames: Map<string, number>): string {
   const safeFileName = (fileName || 'model.step').replace(/[<>:"/\\|?*]/g, '_');
   const match = safeFileName.match(/^(.*?)(\.[^.]+)?$/);
@@ -42,6 +95,90 @@ function uniqueArchiveFileName(fileName: string, usedNames: Map<string, number>)
   const count = usedNames.get(baseName) || 0;
   usedNames.set(baseName, count + 1);
   return count > 0 ? `${stem}_${count}${ext}` : baseName;
+}
+
+function uniqueDownloadIds(ids: unknown): string[] {
+  let values: unknown[] = [];
+  if (Array.isArray(ids)) {
+    values = ids;
+  } else if (typeof ids === 'string') {
+    const trimmed = ids.trim();
+    if (trimmed.startsWith('[')) {
+      try {
+        const parsed = JSON.parse(trimmed);
+        values = Array.isArray(parsed) ? parsed : [parsed];
+      } catch {
+        values = [trimmed];
+      }
+    } else if (trimmed) {
+      values = [trimmed];
+    }
+  }
+
+  return Array.from(new Set(values.filter((id): id is string => typeof id === 'string' && id.length > 0)));
+}
+
+function readBatchDownloadIds(body: unknown): string[] {
+  if (!body || typeof body !== 'object') return [];
+  const data = body as { ids?: unknown; 'ids[]'?: unknown };
+  return uniqueDownloadIds(data.ids ?? data['ids[]']);
+}
+
+async function lookupDownloadArchiveEntries(ids: string[], userId: string): Promise<DownloadArchiveLookup> {
+  if (!prisma) return { ok: false, status: 503, detail: 'DB unavailable' };
+
+  const uniqueIds = uniqueDownloadIds(ids);
+  if (uniqueIds.length === 0) {
+    return { ok: false, status: 400, detail: '请选择要下载的记录' };
+  }
+
+  const { pageSizePolicy } = await getBusinessConfig();
+  const batchMax = Math.max(1, Math.floor(Number(pageSizePolicy.userBatchDownloadMax) || 100));
+  if (uniqueIds.length > batchMax) {
+    return { ok: false, status: 400, detail: `单次最多打包 ${batchMax} 条下载记录` };
+  }
+
+  const downloads = await prisma.download.findMany({
+    where: { id: { in: uniqueIds }, userId },
+    include: {
+      model: {
+        select: {
+          id: true,
+          name: true,
+          originalName: true,
+          format: true,
+          originalFormat: true,
+          originalSize: true,
+          gltfUrl: true,
+          gltfSize: true,
+          uploadPath: true,
+          status: true,
+        },
+      },
+    },
+  });
+  const downloadById = new Map(downloads.map((download) => [download.id, download]));
+  const addedModelIds = new Set<string>();
+  const fileEntries: DownloadArchiveEntry[] = [];
+
+  for (const id of uniqueIds) {
+    const download = downloadById.get(id);
+    const model = download?.model;
+    if (!model || model.status !== MODEL_STATUS.COMPLETED || addedModelIds.has(model.id)) continue;
+    if (!findOriginalModelPath(model)) continue;
+
+    const target = resolveDbModelDownloadTarget(model, 'original');
+    if (!target || !existsSync(target.filePath)) continue;
+
+    fileEntries.push({ filePath: target.filePath, fileName: target.fileName });
+    addedModelIds.add(model.id);
+  }
+
+  if (fileEntries.length === 0) {
+    return { ok: false, status: 404, detail: '没有找到可打包下载的原始模型文件' };
+  }
+
+  return { ok: true, fileEntries };
 }
 
 // Download history for the current user.
@@ -108,6 +245,9 @@ router.get('/api/admin/downloads/stats', authMiddleware, async (req: AuthRequest
     weekStart.setDate(weekStart.getDate() - 6);
     const chartStart = new Date(todayStart);
     chartStart.setDate(chartStart.getDate() - 13);
+    const search = String(req.query.search || '').trim();
+    const downloadWhere = buildAdminDownloadSearchWhere(search);
+    const modelWhere = buildAdminDownloadModelSearchWhere(search);
 
     const [
       modelDownloads,
@@ -115,21 +255,24 @@ router.get('/api/admin/downloads/stats', authMiddleware, async (req: AuthRequest
       todayDownloads,
       weekDownloads,
       activeDownloaders,
+      downloadBytes,
       topModels,
       recentDownloads,
       formatGroups,
       chartRows,
     ] = await Promise.all([
-      prisma.model.aggregate({ _sum: { downloadCount: true } }),
-      prisma.download.count(),
-      prisma.download.count({ where: { createdAt: { gte: todayStart } } }),
-      prisma.download.count({ where: { createdAt: { gte: weekStart } } }),
+      prisma.model.aggregate({ where: modelWhere, _sum: { downloadCount: true } }),
+      prisma.download.count({ where: downloadWhere }),
+      prisma.download.count({ where: combineDownloadWhere(downloadWhere, { createdAt: { gte: todayStart } }) }),
+      prisma.download.count({ where: combineDownloadWhere(downloadWhere, { createdAt: { gte: weekStart } }) }),
       prisma.download.findMany({
-        where: { createdAt: { gte: weekStart } },
+        where: combineDownloadWhere(downloadWhere, { createdAt: { gte: weekStart } }),
         distinct: ['userId'],
         select: { userId: true },
       }),
+      prisma.download.aggregate({ where: downloadWhere, _sum: { fileSize: true } }),
       prisma.model.findMany({
+        where: modelWhere,
         orderBy: [{ downloadCount: 'desc' }, { createdAt: 'desc' }],
         take: 12,
         select: {
@@ -144,6 +287,7 @@ router.get('/api/admin/downloads/stats', authMiddleware, async (req: AuthRequest
         },
       }),
       prisma.download.findMany({
+        where: downloadWhere,
         orderBy: { createdAt: 'desc' },
         take: 20,
         include: {
@@ -161,11 +305,12 @@ router.get('/api/admin/downloads/stats', authMiddleware, async (req: AuthRequest
       }),
       prisma.download.groupBy({
         by: ['format'],
+        where: downloadWhere,
         _count: { _all: true },
         _sum: { fileSize: true },
       }),
       prisma.download.findMany({
-        where: { createdAt: { gte: chartStart } },
+        where: combineDownloadWhere(downloadWhere, { createdAt: { gte: chartStart } }),
         select: { createdAt: true, fileSize: true },
       }),
     ]);
@@ -192,6 +337,7 @@ router.get('/api/admin/downloads/stats', authMiddleware, async (req: AuthRequest
         todayDownloads,
         weekDownloads,
         activeDownloaders: activeDownloaders.length,
+        downloadedBytes: downloadBytes._sum.fileSize || 0,
       },
       topModels: topModels.map((model) => ({
         model_id: model.id,
@@ -293,92 +439,49 @@ router.post('/api/downloads/drawing-token', authMiddleware, async (req: AuthRequ
 });
 
 // Batch download selected history records as a single ZIP of original model files.
-router.post('/api/downloads/batch-download', authMiddleware, async (req: AuthRequest, res: Response) => {
-  try {
-    if (!prisma) {
-      res.status(503).json({ detail: 'DB unavailable' });
-      return;
-    }
-
-    const { ids } = req.body as { ids?: string[] };
-    const uniqueIds = Array.from(new Set((Array.isArray(ids) ? ids : []).filter((id) => typeof id === 'string')));
-    if (uniqueIds.length === 0) {
-      res.status(400).json({ detail: '请选择要下载的记录' });
-      return;
-    }
-
-    const { pageSizePolicy } = await getBusinessConfig();
-    const batchMax = Math.max(1, Math.floor(Number(pageSizePolicy.userBatchDownloadMax) || 100));
-    if (uniqueIds.length > batchMax) {
-      res.status(400).json({ detail: `单次最多打包 ${batchMax} 条下载记录` });
-      return;
-    }
-
-    const downloads = await prisma.download.findMany({
-      where: { id: { in: uniqueIds }, userId: req.user!.userId },
-      include: {
-        model: {
-          select: {
-            id: true,
-            name: true,
-            originalName: true,
-            format: true,
-            originalFormat: true,
-            originalSize: true,
-            gltfUrl: true,
-            gltfSize: true,
-            uploadPath: true,
-            status: true,
-          },
-        },
-      },
-    });
-    const downloadById = new Map(downloads.map((download) => [download.id, download]));
-    const addedModelIds = new Set<string>();
-    const fileEntries: Array<{ filePath: string; fileName: string }> = [];
-
-    for (const id of uniqueIds) {
-      const download = downloadById.get(id);
-      const model = download?.model;
-      if (!model || model.status !== MODEL_STATUS.COMPLETED || addedModelIds.has(model.id)) continue;
-
-      const target = resolveDbModelDownloadTarget(model, 'original');
-      if (!target || !existsSync(target.filePath)) continue;
-
-      fileEntries.push({ filePath: target.filePath, fileName: target.fileName });
-      addedModelIds.add(model.id);
-    }
-
-    if (fileEntries.length === 0) {
-      res.status(404).json({ detail: '没有找到可打包下载的原始模型文件' });
-      return;
-    }
-
-    res.setHeader('Content-Type', 'application/zip');
-    res.setHeader('Content-Disposition', `attachment; filename="downloads_${Date.now()}.zip"`);
-
-    const archive = archiver('zip', { zlib: { level: 5 } });
-    archive.on('error', (err) => {
-      log.error({ err }, 'Download history batch archive error');
-      if (!res.headersSent) {
-        res.status(500).json({ detail: '打包下载失败' });
-      } else {
-        res.destroy(err);
+router.post(
+  '/api/downloads/batch-download',
+  parseBatchDownloadForm,
+  authMiddleware,
+  async (req: AuthRequest, res: Response) => {
+    try {
+      const lookup = await lookupDownloadArchiveEntries(readBatchDownloadIds(req.body), req.user!.userId);
+      if (!lookup.ok) {
+        res.status(lookup.status).json({ detail: lookup.detail });
+        return;
       }
-    });
-    archive.pipe(res);
 
-    const usedNames = new Map<string, number>();
-    for (const entry of fileEntries) {
-      archive.file(entry.filePath, { name: uniqueArchiveFileName(entry.fileName, usedNames) });
+      if (req.get('x-download-preflight') === '1') {
+        res.json({ fileCount: lookup.fileEntries.length });
+        return;
+      }
+
+      res.setHeader('Content-Type', 'application/zip');
+      res.setHeader('Content-Disposition', `attachment; filename="downloads_${Date.now()}.zip"`);
+
+      const archive = archiver('zip', { zlib: { level: 5 } });
+      archive.on('error', (err) => {
+        log.error({ err }, 'Download history batch archive error');
+        if (!res.headersSent) {
+          res.status(500).json({ detail: '打包下载失败' });
+        } else {
+          res.destroy(err);
+        }
+      });
+      archive.pipe(res);
+
+      const usedNames = new Map<string, number>();
+      for (const entry of lookup.fileEntries) {
+        archive.file(entry.filePath, { name: uniqueArchiveFileName(entry.fileName, usedNames) });
+      }
+
+      await archive.finalize();
+    } catch (err) {
+      log.error({ err }, 'Download history batch download failed');
+      if (!res.headersSent) res.status(500).json({ detail: '打包下载失败' });
     }
-
-    await archive.finalize();
-  } catch (err) {
-    log.error({ err }, 'Download history batch download failed');
-    if (!res.headersSent) res.status(500).json({ detail: '打包下载失败' });
-  }
-});
+  },
+);
 
 // Batch delete download records.
 router.post('/api/downloads/batch-delete', authMiddleware, async (req: AuthRequest, res: Response) => {

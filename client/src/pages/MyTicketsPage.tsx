@@ -167,6 +167,7 @@ function MobileContent() {
   return (
     <AdminManagementPage
       title="我的工单"
+      meta={`${list.length} 条记录`}
       description="查看你提交的技术支持工单和处理状态"
       actions={
         list.length > 0 ? (

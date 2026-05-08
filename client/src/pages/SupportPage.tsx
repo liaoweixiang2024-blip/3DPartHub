@@ -10,6 +10,7 @@ import { useToast } from '../components/shared/Toast';
 import { useDocumentTitle } from '../hooks/useDocumentTitle';
 import { useMediaQuery } from '../layouts/hooks/useMediaQuery';
 import { getBusinessConfig } from '../lib/businessConfig';
+import { notifyGlobalError } from '../lib/errorNotifications';
 import { getCachedPublicSettings } from '../lib/publicSettings';
 
 /* ── Context passed via navigate(state) ── */
@@ -123,8 +124,8 @@ function DesktopContent() {
       toast('工单已提交，我们将尽快处理', 'success');
       setFormData({ basePart: '', classification: '', description: '' });
       setTimeout(() => setSubmitted(false), 5000);
-    } catch {
-      toast('提交失败，请稍后重试', 'error');
+    } catch (err) {
+      notifyGlobalError(err, '提交失败，请稍后重试');
     } finally {
       setSubmitting(false);
     }
@@ -400,8 +401,8 @@ function MobileContent() {
       toast('工单已提交，我们将尽快处理', 'success');
       setFormData({ basePart: '', classification: '', description: '' });
       setTimeout(() => setSubmitted(false), 5000);
-    } catch {
-      toast('提交失败，请稍后重试', 'error');
+    } catch (err) {
+      notifyGlobalError(err, '提交失败，请稍后重试');
     } finally {
       setSubmitting(false);
     }

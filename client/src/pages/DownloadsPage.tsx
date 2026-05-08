@@ -63,11 +63,13 @@ function BatchToolbar({
   onDownload,
   onDelete,
   onCancel,
+  downloading,
 }: {
   selectedCount: number;
   onDownload: () => void;
   onDelete: () => void;
   onCancel: () => void;
+  downloading?: boolean;
 }) {
   return (
     <motion.div
@@ -81,21 +83,28 @@ function BatchToolbar({
       <div className="flex-1" />
       <button
         onClick={onDownload}
-        className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-on-primary bg-primary-container rounded-sm hover:opacity-90 transition-opacity"
+        disabled={downloading}
+        className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-on-primary bg-primary-container rounded-sm hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-70 transition-opacity"
       >
-        <Icon name="download" size={14} />
-        打包下载
+        <Icon
+          name={downloading ? 'progress_activity' : 'download'}
+          size={14}
+          className={downloading ? 'animate-spin' : ''}
+        />
+        {downloading ? '打包中...' : '打包下载'}
       </button>
       <button
         onClick={onDelete}
-        className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-error bg-error/10 rounded-sm border border-error/20 hover:bg-error/20 transition-colors"
+        disabled={downloading}
+        className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-error bg-error/10 rounded-sm border border-error/20 hover:bg-error/20 disabled:cursor-not-allowed disabled:opacity-60 transition-colors"
       >
         <Icon name="delete" size={14} />
-        删除
+        删除历史
       </button>
       <button
         onClick={onCancel}
-        className="flex items-center justify-center w-7 h-7 text-on-surface-variant hover:text-on-surface rounded-sm hover:bg-surface-container-high transition-colors"
+        disabled={downloading}
+        className="flex items-center justify-center w-7 h-7 text-on-surface-variant hover:text-on-surface rounded-sm hover:bg-surface-container-high disabled:cursor-not-allowed disabled:opacity-60 transition-colors"
       >
         <Icon name="close" size={16} />
       </button>
@@ -108,6 +117,7 @@ function DesktopContent() {
   const { toast } = useToast();
   const [selectMode, setSelectMode] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [batchDownloading, setBatchDownloading] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
 
   const downloads = useMemo(() => data || [], [data]);
@@ -126,8 +136,13 @@ function DesktopContent() {
     });
   }, []);
 
-  const selectAll = useCallback(() => {
-    setSelected(new Set(downloads.map((d) => d.id)));
+  const allSelected = downloads.length > 0 && downloads.every((download) => selected.has(download.id));
+
+  const toggleSelectAll = useCallback(() => {
+    setSelected((prev) => {
+      const everySelected = downloads.length > 0 && downloads.every((download) => prev.has(download.id));
+      return everySelected ? new Set() : new Set(downloads.map((download) => download.id));
+    });
   }, [downloads]);
 
   const handleDownload = useCallback(
@@ -174,14 +189,20 @@ function DesktopContent() {
   }, [selected, mutate, toast]);
 
   const handleBatchDownload = useCallback(async () => {
-    if (selected.size === 0) return;
+    if (selected.size === 0 || batchDownloading) return;
+    const ids = Array.from(selected);
+    const count = ids.length;
+    setBatchDownloading(true);
+    toast(`正在打包 ${count} 条下载记录，请稍候...`, 'info');
     try {
-      await downloadsApi.batchDownload(Array.from(selected));
-      toast(`已开始打包下载 ${selected.size} 条记录`, 'success');
+      const result = await downloadsApi.batchDownload(ids);
+      toast(`下载已提交，浏览器正在接收 ${result.fileCount} 个文件`, 'success');
     } catch (err: unknown) {
       toast(getErrorMessage(err, '打包下载失败'), 'error');
+    } finally {
+      setBatchDownloading(false);
     }
-  }, [selected, toast]);
+  }, [batchDownloading, selected, toast]);
 
   if (isLoading) {
     return (
@@ -207,8 +228,8 @@ function DesktopContent() {
     downloads.length > 0 ? (
       <>
         {selectMode && (
-          <button onClick={selectAll} className="text-sm text-primary hover:underline">
-            {selected.size === downloads.length ? '取消全选' : '全选'}
+          <button onClick={toggleSelectAll} className="text-sm text-primary hover:underline">
+            {allSelected ? '取消全选' : '全选'}
           </button>
         )}
         <button
@@ -243,6 +264,7 @@ function DesktopContent() {
               selectedCount={selected.size}
               onDownload={handleBatchDownload}
               onDelete={handleBatchDelete}
+              downloading={batchDownloading}
               onCancel={() => {
                 setSelectMode(false);
                 setSelected(new Set());
@@ -251,6 +273,17 @@ function DesktopContent() {
           </div>
         )}
       </AnimatePresence>
+
+      {batchDownloading && (
+        <div
+          role="status"
+          aria-live="polite"
+          className="mb-4 flex items-center gap-2 px-4 py-3 bg-primary-container/10 rounded-lg border border-primary/20"
+        >
+          <Icon name="progress_activity" size={18} className="text-primary animate-spin" />
+          <span className="text-sm text-primary">正在打包下载，请稍候...</span>
+        </div>
+      )}
 
       {downloads.length === 0 ? (
         <EmptyState />
@@ -317,9 +350,9 @@ function DesktopContent() {
         open={confirmOpen}
         onClose={() => setConfirmOpen(false)}
         onConfirm={confirmBatchDelete}
-        title="确认删除"
-        description={`确定要删除选中的 ${selected.size} 条下载记录吗？`}
-        confirmLabel="删除"
+        title="确认删除历史"
+        description={`确定要删除选中的 ${selected.size} 条下载历史吗？`}
+        confirmLabel="删除历史"
       />
     </AdminManagementPage>
   );
@@ -330,6 +363,7 @@ function MobileContent() {
   const { toast } = useToast();
   const [selectMode, setSelectMode] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [batchDownloading, setBatchDownloading] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const downloads = useMemo(() => data || [], [data]);
   const {
@@ -347,8 +381,13 @@ function MobileContent() {
     });
   }, []);
 
-  const selectAll = useCallback(() => {
-    setSelected(new Set(downloads.map((d) => d.id)));
+  const allSelected = downloads.length > 0 && downloads.every((download) => selected.has(download.id));
+
+  const toggleSelectAll = useCallback(() => {
+    setSelected((prev) => {
+      const everySelected = downloads.length > 0 && downloads.every((download) => prev.has(download.id));
+      return everySelected ? new Set() : new Set(downloads.map((download) => download.id));
+    });
   }, [downloads]);
 
   const handleDownload = useCallback(
@@ -395,14 +434,20 @@ function MobileContent() {
   }, [selected, mutate, toast]);
 
   const handleBatchDownload = useCallback(async () => {
-    if (selected.size === 0) return;
+    if (selected.size === 0 || batchDownloading) return;
+    const ids = Array.from(selected);
+    const count = ids.length;
+    setBatchDownloading(true);
+    toast(`正在打包 ${count} 条下载记录，请稍候...`, 'info');
     try {
-      await downloadsApi.batchDownload(Array.from(selected));
-      toast(`已开始打包下载 ${selected.size} 条记录`, 'success');
+      const result = await downloadsApi.batchDownload(ids);
+      toast(`下载已提交，浏览器正在接收 ${result.fileCount} 个文件`, 'success');
     } catch (err: unknown) {
       toast(getErrorMessage(err, '打包下载失败'), 'error');
+    } finally {
+      setBatchDownloading(false);
     }
-  }, [selected, toast]);
+  }, [batchDownloading, selected, toast]);
 
   return (
     <AdminManagementPage
@@ -435,23 +480,40 @@ function MobileContent() {
             exit="exit"
             className="mb-3 flex items-center gap-2 bg-surface-container-high rounded-lg px-3 py-2.5 border border-outline-variant/10"
           >
-            <button onClick={selectAll} className="text-xs text-primary">
-              全选
+            <button onClick={toggleSelectAll} className="text-xs text-primary">
+              {allSelected ? '取消全选' : '全选'}
             </button>
             <div className="flex-1" />
             <span className="text-xs text-on-surface-variant">{selected.size} 已选</span>
             <button
               onClick={handleBatchDownload}
-              className="text-xs text-on-surface-variant hover:text-on-surface px-2 py-1"
+              disabled={selected.size === 0 || batchDownloading}
+              className="flex items-center gap-1 text-xs text-on-surface-variant hover:text-on-surface disabled:cursor-not-allowed disabled:opacity-60 px-2 py-1"
             >
-              打包下载
+              {batchDownloading && <Icon name="progress_activity" size={12} className="animate-spin" />}
+              {batchDownloading ? '打包中...' : '打包下载'}
             </button>
-            <button onClick={handleBatchDelete} className="text-xs text-error px-2 py-1">
-              删除
+            <button
+              disabled={selected.size === 0 || batchDownloading}
+              onClick={handleBatchDelete}
+              className="text-xs text-error disabled:cursor-not-allowed disabled:opacity-60 px-2 py-1"
+            >
+              删除历史
             </button>
           </motion.div>
         )}
       </AnimatePresence>
+
+      {batchDownloading && (
+        <div
+          role="status"
+          aria-live="polite"
+          className="mb-3 flex items-center gap-2 px-3 py-2 bg-primary-container/10 rounded-lg border border-primary/20"
+        >
+          <Icon name="progress_activity" size={14} className="text-primary animate-spin" />
+          <span className="text-xs text-primary">正在打包下载，请稍候...</span>
+        </div>
+      )}
 
       {isLoading ? (
         <AdminLoadingState variant="list" rows={5} media label="下载历史加载中" />
@@ -532,9 +594,9 @@ function MobileContent() {
         open={confirmOpen}
         onClose={() => setConfirmOpen(false)}
         onConfirm={confirmBatchDelete}
-        title="确认删除"
-        description={`确定要删除选中的 ${selected.size} 条下载记录吗？`}
-        confirmLabel="删除"
+        title="确认删除历史"
+        description={`确定要删除选中的 ${selected.size} 条下载历史吗？`}
+        confirmLabel="删除历史"
       />
     </AdminManagementPage>
   );

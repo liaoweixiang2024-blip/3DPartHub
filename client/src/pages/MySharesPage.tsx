@@ -12,6 +12,7 @@ import {
 import { AdminPageShell } from '../components/shared/AdminPageShell';
 import ConfirmDialog from '../components/shared/ConfirmDialog';
 import Icon from '../components/shared/Icon';
+import SearchField from '../components/shared/SearchField';
 import { useToast } from '../components/shared/Toast';
 import { useDocumentTitle } from '../hooks/useDocumentTitle';
 import { useImeSafeSearchInput } from '../hooks/useImeSafeSearchInput';
@@ -71,7 +72,7 @@ function BatchToolbar({
         className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-error bg-error/10 rounded-sm border border-error/20 hover:bg-error/20 transition-colors"
       >
         <Icon name="delete" size={14} />
-        删除
+        删除分享
       </button>
       <button
         onClick={onCancel}
@@ -351,28 +352,13 @@ export default function MySharesPage() {
 
   const toolbar = shares.length ? (
     <div className="flex min-w-0 flex-col gap-2 md:flex-row md:items-center">
-      <div className="relative min-w-0 flex-1 md:max-w-sm">
-        <Icon
-          name="search"
-          size={16}
-          className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant/60"
-        />
-        <input
-          {...searchInputProps}
-          placeholder="搜索名称、链接或类型"
-          className="h-9 w-full rounded-lg border border-outline-variant/15 bg-surface-container px-9 text-sm text-on-surface outline-none transition-colors placeholder:text-on-surface-variant/50 focus:border-primary-container/50"
-        />
-        {searchInputValue ? (
-          <button
-            type="button"
-            onClick={() => setSearch('')}
-            className="absolute right-2 top-1/2 grid h-6 w-6 -translate-y-1/2 place-items-center rounded-full text-on-surface-variant hover:bg-surface-container-high"
-            aria-label="清空搜索"
-          >
-            <Icon name="close" size={14} />
-          </button>
-        ) : null}
-      </div>
+      <SearchField
+        inputProps={searchInputProps}
+        value={searchInputValue}
+        onClear={() => setSearch('')}
+        placeholder="搜索名称、链接或类型"
+        className="flex-1 md:max-w-sm"
+      />
     </div>
   ) : null;
 
@@ -437,7 +423,7 @@ export default function MySharesPage() {
               <div className="flex-1" />
               <span className="text-xs text-on-surface-variant">{selectedCount} 已选</span>
               <button onClick={handleBatchDelete} className="text-xs text-error px-2 py-1">
-                删除
+                删除分享
               </button>
             </motion.div>
           )}
@@ -489,9 +475,9 @@ export default function MySharesPage() {
         open={confirmOpen}
         onClose={() => setConfirmOpen(false)}
         onConfirm={confirmBatchDelete}
-        title="确认删除"
+        title="确认删除分享"
         description={`确定要删除选中的 ${selectedIds.size} 条分享链接吗？`}
-        confirmLabel="删除"
+        confirmLabel="删除分享"
       />
     </AdminPageShell>
   );
