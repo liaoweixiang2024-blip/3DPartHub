@@ -1,16 +1,27 @@
 import { useEffect, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import useSWR from 'swr';
-import { DEFAULT_MOBILE_NAV, getBusinessConfig } from '../../lib/businessConfig';
-import { getCachedPublicSettings } from '../../lib/publicSettings';
-import { preloadRouteForPath } from '../../lib/routeLoaders';
-import Icon from './Icon';
-import LoginConfirmDialog from './LoginConfirmDialog';
-import { checkProtectedAccess } from './ProtectedLink';
+import Icon from '../../../components/shared/Icon';
+import LoginConfirmDialog from '../../../components/shared/LoginConfirmDialog';
+import { checkProtectedAccess } from '../../../components/shared/ProtectedLink';
+import { DEFAULT_MOBILE_NAV, getBusinessConfig } from '../../../lib/businessConfig';
+import { getCachedPublicSettings } from '../../../lib/publicSettings';
+import { preloadRouteForPath } from '../../../lib/routeLoaders';
 
-const tabs = DEFAULT_MOBILE_NAV;
+const fallbackTabs = DEFAULT_MOBILE_NAV;
 
-export default function BottomNav() {
+export interface BottomNavAppearance {
+  rootClassName: string;
+  linkClassName: (active: boolean) => string;
+  labelClassName: (active: boolean) => string;
+  iconSize: number;
+}
+
+interface BottomNavRendererProps {
+  appearance: BottomNavAppearance;
+}
+
+export default function BottomNavRenderer({ appearance }: BottomNavRendererProps) {
   const location = useLocation();
   const navigate = useNavigate();
   const { data: settings } = useSWR('publicSettings', () => getCachedPublicSettings());
@@ -50,13 +61,14 @@ export default function BottomNav() {
 
   return (
     <nav
-      className="bottom-nav fixed inset-x-0 z-[60] min-h-14 bg-surface-container-low border-t border-outline-variant/10 flex items-center justify-around px-3"
+      className={appearance.rootClassName}
       style={{
         paddingBottom: 'env(safe-area-inset-bottom, 0px)',
         bottom: 'var(--bottom-nav-offset, 0px)',
       }}
+      data-mobile-theme-nav
     >
-      {(visibleTabs.length ? visibleTabs : tabs).map((tab) => {
+      {(visibleTabs.length ? visibleTabs : fallbackTabs).map((tab) => {
         const active = isActive(tab.path);
         return (
           <Link
@@ -77,12 +89,10 @@ export default function BottomNav() {
                 navigate('/login', { state: { from: result.returnUrl } });
               }
             }}
-            className={`flex flex-col items-center gap-0.5 py-1 min-w-[48px] min-h-[44px] justify-center cursor-pointer active:scale-95 transition-transform ${
-              active ? 'text-primary-container border-t-2 border-primary-container -mt-px' : 'text-on-surface-variant'
-            }`}
+            className={appearance.linkClassName(active)}
           >
-            <Icon name={tab.icon} size={22} />
-            <span className={active ? 'text-[10px] font-bold' : 'text-[10px]'}>{tab.label}</span>
+            <Icon name={tab.icon} size={appearance.iconSize} />
+            <span className={appearance.labelClassName(active)}>{tab.label}</span>
           </Link>
         );
       })}

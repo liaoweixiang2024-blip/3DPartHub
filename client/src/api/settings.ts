@@ -23,6 +23,10 @@ export interface SystemSettings {
   contact_address: string;
   footer_links: string;
   footer_copyright: string;
+  footer_copyright_follow_site_title: boolean;
+  model_detail_disclaimer: string;
+  model_detail_copyright: string;
+  model_detail_copyright_follow_site_title: boolean;
   legal_privacy_updated_at: string;
   legal_terms_updated_at: string;
   legal_privacy_sections: string;
@@ -44,6 +48,8 @@ export interface SystemSettings {
   smtp_from: string;
   smtp_secure: boolean;
   email_templates: string;
+  interface_theme: string;
+  mobile_interface_theme: string;
   color_scheme: string;
   color_custom_dark: string;
   color_custom_light: string;
@@ -151,6 +157,52 @@ export interface SystemSettings {
   product_wall_max_image_mb: number;
   product_wall_max_batch_count: number;
   product_wall_max_zip_extract: number;
+  // Cache and object storage
+  cache_driver: string;
+  cache_enabled: boolean;
+  redis_url: string;
+  redis_password: string;
+  redis_db: number;
+  redis_key_prefix: string;
+  redis_tls_enabled: boolean;
+  cache_public_settings_ttl_seconds: number;
+  cache_model_list_ttl_seconds: number;
+  cache_model_detail_ttl_seconds: number;
+  cache_search_ttl_seconds: number;
+  cache_selection_ttl_seconds: number;
+  cache_static_asset_max_age_days: number;
+  storage_provider: string;
+  storage_endpoint: string;
+  storage_region: string;
+  storage_bucket: string;
+  storage_access_key_id: string;
+  storage_access_key_secret: string;
+  storage_use_ssl: boolean;
+  storage_force_path_style: boolean;
+  storage_public_base_url: string;
+  storage_cdn_base_url: string;
+  storage_image_prefix: string;
+  storage_thumbnail_prefix: string;
+  storage_model_prefix: string;
+  storage_original_prefix: string;
+  storage_drawing_prefix: string;
+  storage_product_wall_prefix: string;
+  storage_attachment_prefix: string;
+  storage_backup_prefix: string;
+  storage_temp_prefix: string;
+  storage_signed_url_enabled: boolean;
+  storage_signed_url_ttl_seconds: number;
+  storage_upload_multipart_mb: number;
+  storage_upload_concurrency: number;
+  image_cdn_enabled: boolean;
+  image_optimize_enabled: boolean;
+  image_webp_enabled: boolean;
+  image_thumbnail_quality: number;
+  image_large_max_width: number;
+  image_cache_max_age_days: number;
+  resource_cdn_enabled: boolean;
+  resource_cache_max_age_days: number;
+  resource_download_acceleration_enabled: boolean;
   // Download token TTL
   download_token_ttl_minutes: number;
   // Ticket attachment limits
@@ -184,6 +236,15 @@ export interface MaintenanceStatus {
   threshold: number;
   title: string;
   message: string;
+}
+
+export interface SettingsConnectivityResult {
+  ok: boolean;
+  status: 'success' | 'warning' | 'error';
+  message: string;
+  details: string[];
+  provider?: string;
+  latencyMs?: number;
 }
 
 export interface BackupRecord {
@@ -326,6 +387,28 @@ export async function getSettingDefaults(keys: string[]): Promise<Record<string,
 export async function sendTestEmail(to: string): Promise<{ message: string }> {
   const res = await client.post('/settings/email/test', { to }, { timeout: 30000 });
   return unwrapResponse<{ message: string }>(res);
+}
+
+export async function testCacheSettings(): Promise<SettingsConnectivityResult> {
+  try {
+    const res = await client.post('/settings/cache/test', {}, { timeout: 15000 });
+    return unwrapResponse<SettingsConnectivityResult>(res);
+  } catch (err: any) {
+    const payload = err?.response?.data;
+    if (payload && typeof payload === 'object' && 'ok' in payload) return payload as SettingsConnectivityResult;
+    throw err;
+  }
+}
+
+export async function testStorageSettings(): Promise<SettingsConnectivityResult> {
+  try {
+    const res = await client.post('/settings/storage/test', {}, { timeout: 30000 });
+    return unwrapResponse<SettingsConnectivityResult>(res);
+  } catch (err: any) {
+    const payload = err?.response?.data;
+    if (payload && typeof payload === 'object' && 'ok' in payload) return payload as SettingsConnectivityResult;
+    throw err;
+  }
 }
 
 export async function getPublicSettings(): Promise<Partial<SystemSettings>> {

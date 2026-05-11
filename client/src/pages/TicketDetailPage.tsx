@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import useSWR from 'swr';
 import client from '../api/client';
 import { unwrapResponse } from '../api/response';
@@ -10,10 +10,11 @@ import {
   uploadTicketAttachment,
   type TicketMessage,
 } from '../api/tickets';
-import { AdminDetailHeader } from '../components/shared/AdminManagementPage';
+import { AdminPageHero } from '../components/shared/AdminManagementPage';
 import { AdminPageShell } from '../components/shared/AdminPageShell';
 import Icon from '../components/shared/Icon';
 import { PageRefreshIndicator } from '../components/shared/PageRefreshFallback';
+import QuickReplyChips from '../components/shared/QuickReplyChips';
 import SafeImage from '../components/shared/SafeImage';
 import { useToast } from '../components/shared/Toast';
 import { useDocumentTitle } from '../hooks/useDocumentTitle';
@@ -21,6 +22,7 @@ import { useMediaQuery } from '../layouts/hooks/useMediaQuery';
 import { getBusinessConfig, statusInfo } from '../lib/businessConfig';
 import { notifyGlobalError } from '../lib/errorNotifications';
 import { getCachedPublicSettings } from '../lib/publicSettings';
+import { useAuthStore } from '../stores/useAuthStore';
 
 interface TicketInfo {
   id: string;
@@ -32,6 +34,41 @@ interface TicketInfo {
   createdAt: string;
   updatedAt: string;
   user: { username: string; email: string; role?: string } | null;
+}
+
+const TICKET_ADMIN_QUICK_REPLIES = [
+  '已收到问题，我们先核对复现条件。',
+  '请补充截图、操作步骤或报错信息，方便定位。',
+  '已安排技术处理，进展会在这里同步。',
+  '问题已修复，请刷新后再确认一次。',
+  '确认无其他问题后，我们会关闭该工单。',
+];
+
+const TICKET_USER_QUICK_REPLIES = [
+  '我补充一下操作步骤和现象。',
+  '我已上传截图或附件，请查收。',
+  '这个问题仍然存在，请继续帮我确认。',
+  '请问目前处理到哪一步了？',
+  '我这边已经重新测试，问题已解决。',
+  '如果还需要补充资料，请告诉我。',
+];
+
+function isImageAttachment(url?: string | null) {
+  return Boolean(url?.split(/[?#]/)[0].match(/\.(png|jpe?g|gif|webp|svg)$/i));
+}
+
+function formatDateTime(value: string) {
+  return new Date(value).toLocaleString('zh-CN', {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+}
+
+function getTicketCode(id: string) {
+  return `#${id.slice(0, 8).toUpperCase()}`;
 }
 
 function useTicket(id: string) {
@@ -91,6 +128,7 @@ function MessageBubble({ msg }: { msg: TicketMessage }) {
   const isRight = msg.isAdmin;
   const [previewImg, setPreviewImg] = useState<string | null>(null);
   const attachmentSrc = msg.attachment || '';
+  const attachmentIsImage = isImageAttachment(attachmentSrc);
   return (
     <div className={`flex ${isRight ? 'justify-end' : 'justify-start'} mb-3`}>
       <div className={`max-w-[88%] sm:max-w-[80%] min-w-0 ${isRight ? 'order-2' : 'order-1'}`}>
@@ -111,7 +149,7 @@ function MessageBubble({ msg }: { msg: TicketMessage }) {
           }`}
         >
           {msg.content}
-          {msg.attachment && (
+          {msg.attachment && attachmentIsImage ? (
             <SafeImage
               src={attachmentSrc}
               alt="附件"
@@ -119,7 +157,17 @@ function MessageBubble({ msg }: { msg: TicketMessage }) {
               fallbackClassName="min-h-24"
               onClick={() => setPreviewImg(attachmentSrc)}
             />
-          )}
+          ) : msg.attachment ? (
+            <a
+              href={attachmentSrc}
+              target="_blank"
+              rel="noopener"
+              className="mt-2 inline-flex items-center gap-1 rounded-md border border-outline-variant/15 px-2 py-1 text-xs text-primary-container"
+            >
+              <Icon name="attach_file" size={12} />
+              查看附件
+            </a>
+          ) : null}
         </div>
       </div>
       {/* Image preview overlay */}
@@ -207,7 +255,9 @@ function TicketChatLoadingState() {
 
 function ChatContent({ ticketId }: { ticketId: string }) {
   const navigate = useNavigate();
+  const location = useLocation();
   const { toast } = useToast();
+  const currentUser = useAuthStore((state) => state.user);
   const isDesktop = useMediaQuery('(min-width: 768px)');
   const { data: ticket } = useTicket(ticketId);
   const { data: settings } = useSWR('publicSettings', () => getCachedPublicSettings());
@@ -218,10 +268,12 @@ function ChatContent({ ticketId }: { ticketId: string }) {
   const [sending, setSending] = useState(false);
   const [pendingImage, setPendingImage] = useState<string | null>(null);
   const [pendingImageUrl, setPendingImageUrl] = useState<string | null>(null);
+  const [pendingAttachmentName, setPendingAttachmentName] = useState<string | null>(null);
+  const [uploadingAttachment, setUploadingAttachment] = useState(false);
   const [composerFocused, setComposerFocused] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const isAdmin = ticket?.user?.role !== undefined;
+  const isAdmin = currentUser?.role === 'ADMIN' && location.pathname.startsWith('/admin/tickets');
   const visualViewportBottomOffset = useVisualViewportBottomOffset(!isDesktop);
 
   const scrollToBottom = useCallback(() => {
@@ -232,43 +284,60 @@ function ChatContent({ ticketId }: { ticketId: string }) {
     scrollToBottom();
   }, [messages, scrollToBottom]);
 
+  useEffect(() => {
+    return () => {
+      if (pendingImageUrl) URL.revokeObjectURL(pendingImageUrl);
+    };
+  }, [pendingImageUrl]);
+
   const handleSend = useCallback(async () => {
-    if ((!input.trim() && !pendingImage) || sending) return;
+    if ((!input.trim() && !pendingImage) || sending || uploadingAttachment) return;
     setSending(true);
     try {
       await sendTicketMessage(ticketId, input.trim(), pendingImage || undefined);
       setInput('');
       setPendingImage(null);
       setPendingImageUrl(null);
+      setPendingAttachmentName(null);
       mutateMessages();
     } catch (err) {
       notifyGlobalError(err, '发送失败');
     } finally {
       setSending(false);
     }
-  }, [input, sending, ticketId, pendingImage, mutateMessages]);
+  }, [input, sending, uploadingAttachment, ticketId, pendingImage, mutateMessages]);
+
+  const handleQuickReply = useCallback((phrase: string) => {
+    setInput((prev) => (prev.trim() ? `${prev.trimEnd()}\n${phrase}` : phrase));
+  }, []);
 
   const handleImageSelect = useCallback(
     async (e: React.ChangeEvent<HTMLInputElement>) => {
       const file = e.target.files?.[0];
       if (!file) return;
-      if (!file.type.startsWith('image/')) {
-        toast('请选择图片文件', 'error');
-        return;
-      }
       if (file.size > business.uploadPolicy.ticketAttachmentMaxSizeMb * 1024 * 1024) {
         toast(`附件不能超过 ${business.uploadPolicy.ticketAttachmentMaxSizeMb}MB`, 'error');
+        e.target.value = '';
         return;
       }
+      const isImage = file.type.startsWith('image/');
+      const previewUrl = isImage ? URL.createObjectURL(file) : null;
       try {
-        setPendingImageUrl(URL.createObjectURL(file));
+        setPendingImageUrl(previewUrl);
+        setPendingAttachmentName(file.name);
+        setUploadingAttachment(true);
         const { url } = await uploadTicketAttachment(ticketId, file);
         setPendingImage(url);
       } catch (err) {
-        notifyGlobalError(err, '图片上传失败');
+        notifyGlobalError(err, '附件上传失败');
+        if (previewUrl) URL.revokeObjectURL(previewUrl);
         setPendingImageUrl(null);
+        setPendingAttachmentName(null);
+        setPendingImage(null);
+      } finally {
+        setUploadingAttachment(false);
+        e.target.value = '';
       }
-      e.target.value = '';
     },
     [ticketId, toast, business.uploadPolicy.ticketAttachmentMaxSizeMb],
   );
@@ -290,37 +359,41 @@ function ChatContent({ ticketId }: { ticketId: string }) {
   }
 
   const info = statusInfo(business.ticketStatuses, ticket.status);
+  const classificationLabel = classificationMap.get(ticket.classification) || ticket.classification;
+  const ticketDescription = `${formatDateTime(ticket.createdAt)} · ${classificationLabel}${
+    isAdmin ? ` · ${ticket.user?.username || '未知用户'}` : ticket.basePart ? ` · 基准零件 ${ticket.basePart}` : ''
+  }`;
   const msgList = messages || [];
-  const mobileComposerSafeSpace = pendingImageUrl ? '9.5rem' : '5.75rem';
+  const mobileComposerSafeSpace = pendingImageUrl || pendingAttachmentName ? '8.5rem' : '4.75rem';
   const composerBottomOffset = composerFocused ? visualViewportBottomOffset : 0;
 
   return (
     <div className="flex h-full min-h-0 flex-col">
-      <AdminDetailHeader
-        title={classificationMap.get(ticket.classification) || ticket.classification}
-        onBack={() => navigate(-1)}
+      <AdminPageHero
+        title={isAdmin ? '工单处理详情' : '我的工单详情'}
+        meta={getTicketCode(ticket.id)}
+        description={`提交于 ${ticketDescription}`}
         actions={
-          <span
-            className={`shrink-0 rounded-sm px-2 py-0.5 text-[10px] font-bold ${info.color || ''} ${info.bg || ''}`}
-          >
-            {info.label}
-          </span>
-        }
-        description={
-          <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
-            <span className="flex items-center gap-1 min-w-0">
-              <Icon name="person" size={12} className="shrink-0" />
-              <span className="truncate">{ticket.user?.username || '未知'}</span>
+          <>
+            <button
+              type="button"
+              onClick={() => navigate(-1)}
+              className="inline-flex h-9 items-center justify-center gap-1.5 rounded-lg border border-outline-variant/20 bg-surface-container px-3.5 text-sm font-medium text-on-surface-variant transition-colors hover:bg-surface-container-high hover:text-on-surface"
+            >
+              <Icon name="arrow_back" size={16} />
+              返回
+            </button>
+            <span
+              className={`inline-flex h-9 shrink-0 items-center rounded-lg px-3 text-xs font-bold ${info.color || ''} ${info.bg || ''}`}
+            >
+              {info.label}
             </span>
-            <span className="flex items-center gap-1">
-              <Icon name="schedule" size={12} className="shrink-0" />
-              {new Date(ticket.createdAt).toLocaleString('zh-CN')}
-            </span>
-          </div>
+            {isAdmin ? (
+              <StatusActions ticketId={ticketId} status={ticket.status} onUpdate={handleStatusUpdate} />
+            ) : null}
+          </>
         }
-      >
-        {isAdmin && <StatusActions ticketId={ticketId} status={ticket.status} onUpdate={handleStatusUpdate} />}
-      </AdminDetailHeader>
+      />
 
       {/* Messages */}
       <div
@@ -349,26 +422,46 @@ function ChatContent({ ticketId }: { ticketId: string }) {
         }`}
         style={isDesktop ? undefined : { bottom: `${composerBottomOffset}px` }}
       >
-        {pendingImageUrl && (
+        {pendingImageUrl || pendingAttachmentName ? (
           <div className="mb-2 relative inline-block">
-            <SafeImage
-              src={pendingImageUrl}
-              alt="待发送"
-              className={`${isDesktop ? 'h-20' : 'h-16'} rounded border border-outline-variant/20`}
-            />
+            {pendingImageUrl ? (
+              <SafeImage
+                src={pendingImageUrl}
+                alt="待发送"
+                className={`${isDesktop ? 'h-20' : 'h-16'} rounded border border-outline-variant/20`}
+              />
+            ) : (
+              <div className="flex max-w-xs items-center gap-2 rounded-lg border border-outline-variant/20 bg-surface-container-high px-3 py-2 text-xs text-on-surface-variant">
+                <Icon name="attach_file" size={14} />
+                <span className="truncate">{pendingAttachmentName}</span>
+              </div>
+            )}
+            {uploadingAttachment ? (
+              <span className="absolute bottom-1 left-1 rounded bg-black/55 px-1.5 py-0.5 text-[10px] text-white">
+                上传中
+              </span>
+            ) : null}
             <button
               onClick={() => {
+                if (pendingImageUrl) URL.revokeObjectURL(pendingImageUrl);
                 setPendingImage(null);
                 setPendingImageUrl(null);
+                setPendingAttachmentName(null);
+                setUploadingAttachment(false);
               }}
               className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-error text-on-primary rounded-full flex items-center justify-center text-xs"
             >
               <Icon name="close" size={10} />
             </button>
           </div>
-        )}
+        ) : null}
         <div className="flex items-end gap-1.5">
-          <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handleImageSelect} />
+          <input ref={fileInputRef} type="file" className="hidden" onChange={handleImageSelect} />
+          <QuickReplyChips
+            phrases={isAdmin ? TICKET_ADMIN_QUICK_REPLIES : TICKET_USER_QUICK_REPLIES}
+            onPick={handleQuickReply}
+            title={isAdmin ? '工单处理快捷词' : '我的工单快捷词'}
+          />
           <textarea
             value={input}
             onChange={(e) => setInput(e.target.value)}
@@ -387,19 +480,21 @@ function ChatContent({ ticketId }: { ticketId: string }) {
           />
           <button
             onClick={() => fileInputRef.current?.click()}
+            disabled={uploadingAttachment}
             className={`shrink-0 flex items-center justify-center rounded-lg text-on-surface-variant hover:bg-surface-container-high active:bg-surface-container-highest transition-colors ${isDesktop ? 'w-10 h-10' : 'w-9 h-9'}`}
           >
             <Icon name="image" size={isDesktop ? 18 : 16} />
           </button>
           <button
             onClick={() => fileInputRef.current?.click()}
+            disabled={uploadingAttachment}
             className={`shrink-0 flex items-center justify-center rounded-lg text-on-surface-variant hover:bg-surface-container-high active:bg-surface-container-highest transition-colors ${isDesktop ? 'w-10 h-10' : 'w-9 h-9'}`}
           >
             <Icon name="attachment" size={isDesktop ? 18 : 16} />
           </button>
           <button
             onClick={handleSend}
-            disabled={(!input.trim() && !pendingImage) || sending}
+            disabled={(!input.trim() && !pendingImage) || sending || uploadingAttachment}
             className={`shrink-0 flex items-center justify-center text-on-primary bg-primary-container rounded-lg hover:opacity-90 active:opacity-80 transition-opacity disabled:opacity-40 disabled:cursor-not-allowed ${isDesktop ? 'gap-1.5 px-4 py-2.5 text-sm font-medium' : 'w-9 h-9'}`}
           >
             <Icon name="send" size={isDesktop ? 14 : 16} />
@@ -413,15 +508,31 @@ function ChatContent({ ticketId }: { ticketId: string }) {
 
 export default function TicketDetailPage() {
   const { id } = useParams<{ id: string }>();
+  const location = useLocation();
   useDocumentTitle('工单详情');
 
   if (!id) return null;
+
+  const isAdminRoute = location.pathname.startsWith('/admin/tickets');
+
+  if (!isAdminRoute) {
+    return (
+      <AdminPageShell
+        desktopContentClassName="overflow-hidden"
+        mobileMainClassName="overflow-hidden"
+        mobileContentClassName="h-full !p-0"
+        hideMobileBottomNav
+      >
+        <ChatContent ticketId={id} />
+      </AdminPageShell>
+    );
+  }
 
   return (
     <AdminPageShell
       desktopContentClassName="overflow-hidden p-0"
       mobileMainClassName="overflow-hidden"
-      mobileContentClassName="h-full p-0"
+      mobileContentClassName="h-full !p-0"
       hideMobileBottomNav
     >
       <ChatContent ticketId={id} />

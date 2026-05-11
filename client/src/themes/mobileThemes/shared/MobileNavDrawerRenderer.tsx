@@ -1,22 +1,35 @@
-import { motion, AnimatePresence } from 'framer-motion';
+import { AnimatePresence, motion } from 'framer-motion';
 import { useEffect, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import useSWR from 'swr';
-import { getBusinessConfig } from '../../lib/businessConfig';
-import { overlayMotion, sideSheetMotion } from '../../lib/motion';
-import { getCachedPublicSettings } from '../../lib/publicSettings';
-import { preloadRouteForPath } from '../../lib/routeLoaders';
-import { useAuthStore } from '../../stores/useAuthStore';
-import Icon from '../shared/Icon';
-import LoginConfirmDialog from '../shared/LoginConfirmDialog';
-import { checkProtectedAccess } from '../shared/ProtectedLink';
+import Icon from '../../../components/shared/Icon';
+import LoginConfirmDialog from '../../../components/shared/LoginConfirmDialog';
+import { checkProtectedAccess } from '../../../components/shared/ProtectedLink';
+import { getBusinessConfig } from '../../../lib/businessConfig';
+import { overlayMotion, sideSheetMotion } from '../../../lib/motion';
+import { getCachedPublicSettings } from '../../../lib/publicSettings';
+import { preloadRouteForPath } from '../../../lib/routeLoaders';
+import { useAuthStore } from '../../../stores/useAuthStore';
+import type { MobileNavDrawerThemeProps } from '../types';
 
-interface MobileNavDrawerProps {
-  open: boolean;
-  onClose: () => void;
+export interface MobileNavDrawerAppearance {
+  overlayClassName: string;
+  sheetClassName: string;
+  headerClassName: string;
+  titleClassName: string;
+  closeButtonClassName: string;
+  navClassName: string;
+  itemClassName: (active: boolean) => string;
+  footerClassName: string;
+  footerLinkClassName: string;
+  iconSize: number;
 }
 
-export default function MobileNavDrawer({ open, onClose }: MobileNavDrawerProps) {
+interface MobileNavDrawerRendererProps extends MobileNavDrawerThemeProps {
+  appearance: MobileNavDrawerAppearance;
+}
+
+export default function MobileNavDrawerRenderer({ open, onClose, appearance }: MobileNavDrawerRendererProps) {
   const location = useLocation();
   const navigate = useNavigate();
   const { logout, user } = useAuthStore();
@@ -43,7 +56,7 @@ export default function MobileNavDrawer({ open, onClose }: MobileNavDrawerProps)
               initial="initial"
               animate="animate"
               exit="exit"
-              className="fixed inset-0 bg-black/50 z-[260]"
+              className={appearance.overlayClassName}
               onClick={onClose}
             />
             <motion.aside
@@ -51,22 +64,21 @@ export default function MobileNavDrawer({ open, onClose }: MobileNavDrawerProps)
               initial="initial"
               animate="animate"
               exit="exit"
-              className="fixed left-0 top-0 w-[min(82vw,280px)] h-dvh bg-surface-container-low z-[270] flex flex-col overflow-y-auto shadow-2xl"
+              className={appearance.sheetClassName}
               style={{
                 paddingTop: 'env(safe-area-inset-top, 0px)',
                 paddingBottom: 'env(safe-area-inset-bottom, 0px)',
                 willChange: 'transform',
               }}
+              data-mobile-theme-drawer
             >
-              <div className="flex items-center justify-between p-4 border-b border-outline-variant/20">
-                <span className="text-sm font-bold text-on-surface-variant tracking-wider uppercase font-headline">
-                  导航
-                </span>
-                <button onClick={onClose} className="p-1 text-on-surface-variant">
+              <div className={appearance.headerClassName}>
+                <span className={appearance.titleClassName}>导航</span>
+                <button onClick={onClose} className={appearance.closeButtonClassName}>
                   <Icon name="close" size={24} />
                 </button>
               </div>
-              <nav className="flex-1 py-2">
+              <nav className={appearance.navClassName}>
                 {navItems.map((item) => {
                   const isActive =
                     location.pathname === item.path || (item.path !== '/' && location.pathname.startsWith(item.path));
@@ -92,20 +104,16 @@ export default function MobileNavDrawer({ open, onClose }: MobileNavDrawerProps)
                           onClose();
                         }
                       }}
-                      className={`flex items-center gap-3 px-6 py-3 text-sm transition-colors ${
-                        isActive
-                          ? 'border-l-4 border-primary-container bg-surface-container-high text-primary-container font-bold'
-                          : 'text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high/50'
-                      }`}
+                      className={appearance.itemClassName(isActive)}
                     >
-                      <Icon name={item.icon} size={24} />
+                      <Icon name={item.icon} size={appearance.iconSize} />
                       {item.label}
                     </Link>
                   );
                 })}
               </nav>
               {user && (
-                <div className="border-t border-surface-container-high px-6 py-4 space-y-1">
+                <div className={appearance.footerClassName}>
                   <Link
                     to="/profile"
                     onPointerEnter={() => preloadRouteForPath('/profile')}
@@ -126,9 +134,9 @@ export default function MobileNavDrawer({ open, onClose }: MobileNavDrawerProps)
                         onClose();
                       }
                     }}
-                    className="flex items-center gap-3 px-0 py-2 text-sm text-on-surface-variant hover:text-on-surface transition-colors"
+                    className={appearance.footerLinkClassName}
                   >
-                    <Icon name="settings" size={24} />
+                    <Icon name="settings" size={appearance.iconSize} />
                     个人设置
                   </Link>
                   <button
@@ -137,9 +145,9 @@ export default function MobileNavDrawer({ open, onClose }: MobileNavDrawerProps)
                       onClose();
                       navigate('/login');
                     }}
-                    className="flex items-center gap-3 px-0 py-2 text-sm text-on-surface-variant hover:text-on-surface transition-colors"
+                    className={appearance.footerLinkClassName}
                   >
-                    <Icon name="logout" size={24} />
+                    <Icon name="logout" size={appearance.iconSize} />
                     退出
                   </button>
                 </div>

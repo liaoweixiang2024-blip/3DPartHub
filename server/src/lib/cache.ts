@@ -61,6 +61,7 @@ export async function cacheGet<T>(key: string): Promise<T | null> {
 }
 
 export async function cacheSet(key: string, value: unknown, ttlSeconds: number): Promise<void> {
+  if (ttlSeconds <= 0) return;
   if (!available) return;
   try {
     await redis.set(pk(key), JSON.stringify(value), 'EX', ttlSeconds);
@@ -121,6 +122,10 @@ export async function cacheGetOrSet<T>(
   load: () => Promise<T>,
   options: { lockTtlMs?: number; waitTimeoutMs?: number; pollMs?: number } = {},
 ): Promise<CacheLoadResult<T>> {
+  if (ttlSeconds <= 0) {
+    return { value: await loadOnce(key, load), hit: false };
+  }
+
   const cached = await cacheGet<T>(key);
   if (cached !== null) return { value: cached, hit: true };
 

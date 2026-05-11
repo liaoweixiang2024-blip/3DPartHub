@@ -26,6 +26,8 @@ const [
   appSource,
   globalCssSource,
   homePageSource,
+  classicHomeTemplateSource,
+  workbenchHomeTemplateSource,
   modelDetailPageSource,
   publicSettingsSource,
   sentryLazySource,
@@ -33,12 +35,11 @@ const [
   routerSource,
   adminPageShellSource,
   publicPageShellSource,
-  preloadMobileNavDrawerSource,
   preloadNotificationPanelSource,
   topNavSource,
-  bottomNavSource,
-  mobileNavDrawerSource,
-  sidebarSource,
+  bottomNavRendererSource,
+  mobileNavDrawerRendererSource,
+  sidebarRendererSource,
   protectedLinkSource,
   modelAdminSource,
   notificationPanelSource,
@@ -64,6 +65,8 @@ const [
   readSource('App.tsx'),
   readSource('styles/global.css'),
   readSource('pages/HomePage.tsx'),
+  readSource('themes/interfaceThemes/classic/templates/HomeDesktop.tsx'),
+  readSource('themes/interfaceThemes/workbench/templates/HomeDesktop.tsx'),
   readSource('pages/ModelDetailPage.tsx'),
   readSource('lib/publicSettings.ts'),
   readSource('lib/sentryLazy.ts'),
@@ -71,12 +74,11 @@ const [
   readSource('router.tsx'),
   readSource('components/shared/AdminPageShell.tsx'),
   readSource('components/shared/PublicPageShell.tsx'),
-  readSource('components/shared/preloadMobileNavDrawer.ts'),
   readSource('components/shared/preloadNotificationPanel.ts'),
   readSource('components/shared/TopNav.tsx'),
-  readSource('components/shared/BottomNav.tsx'),
-  readSource('components/shared/MobileNavDrawer.tsx'),
-  readSource('components/shared/Sidebar.tsx'),
+  readSource('themes/mobileThemes/shared/BottomNavRenderer.tsx'),
+  readSource('themes/mobileThemes/shared/MobileNavDrawerRenderer.tsx'),
+  readSource('themes/interfaceThemes/shared/SidebarRenderer.tsx'),
   readSource('components/shared/ProtectedLink.tsx'),
   readSource('pages/ModelAdminPage.tsx'),
   readSource('components/shared/NotificationPanel.tsx'),
@@ -96,6 +98,9 @@ const [
   readFile(path.join(repoRoot, 'server/src/lib/businessDefaults.ts'), 'utf8'),
   readFile(path.join(repoRoot, 'server/src/routes/models/list.ts'), 'utf8'),
 ]);
+
+const desktopHomeTemplatesSource = `${classicHomeTemplateSource}\n${workbenchHomeTemplateSource}`;
+const homeListSources = `${homePageSource}\n${desktopHomeTemplatesSource}`;
 
 requireIncludes('index.html font preload', indexHtmlSource, [
   'space-grotesk-latin-400-normal.woff2',
@@ -148,11 +153,22 @@ requireIncludes('HomePage.tsx native home list', homePageSource, [
   'const HOME_DESKTOP_GRID_EAGER_IMAGES = 10;',
   'const HOME_DESKTOP_LIST_EAGER_IMAGES = 6;',
   'const HOME_MOBILE_EAGER_IMAGES = 4;',
-  'products.map(renderDesktopProductCard)',
+  'const DesktopHome = ThemePackage.templates.DesktopHome;',
+  'renderDesktopProductCard',
   'products.map((product, index) => {',
-  'aria-label="网格视图"',
-  'aria-label="列表视图"',
 ]);
+
+for (const [label, source] of [
+  ['classic HomeDesktop.tsx native home list', classicHomeTemplateSource],
+  ['workbench HomeDesktop.tsx native home list', workbenchHomeTemplateSource],
+]) {
+  requireIncludes(label, source, [
+    'products.map(renderProductCard)',
+    'aria-label="网格视图"',
+    'aria-label="列表视图"',
+    '{showHomeListSkeleton ? (',
+  ]);
+}
 
 requireIncludes('global.css', globalCssSource, ['contain: layout paint style;']);
 for (const snippet of [
@@ -186,7 +202,7 @@ for (const snippet of [
   'desktopListVirtualWindow.totalHeight',
   'mobileVirtualWindow.totalHeight',
 ]) {
-  if (homePageSource.includes(snippet)) {
+  if (homeListSources.includes(snippet)) {
     errors.push(`Home page model list must stay fully native and must not include virtual-list code: ${snippet}`);
   }
 }
@@ -233,18 +249,21 @@ if (homePageSource.includes('HOME_PULL_REFRESH_MIN_VISIBLE_MS')) {
 requireIncludes('HomePage.tsx category refresh', homePageSource, [
   'const [listRefreshPending, setListRefreshPending] = useState(false);',
   'const pendingHomeListRefreshResetRef = useRef(false);',
-  'const showHomeListSkeleton = isLoading || listRefreshPending;',
-  'const resetHomeListViewportForRefresh = useCallback(() => {',
-  'pendingHomeListRefreshResetRef.current = true;',
+  'const showHomeListSkeleton = isLoading || (!usesManualHomePagination && listRefreshPending);',
+  "const resetHomeListViewportForRefresh = useCallback((target: HomeRefreshScrollTarget = 'top', immediate = false) => {",
+  "const HOME_REFRESH_SCROLL_TARGET: HomeRefreshScrollTarget = 'results';",
+  'pendingHomeListRefreshTargetRef.current = target;',
   'if (!listRefreshPending || !pendingHomeListRefreshResetRef.current) return;',
+  "pendingHomeListRefreshTargetRef.current === 'results'",
   'const shouldRefreshList = query !== searchQuery || (query && activeCategory !==',
   'const shouldRefreshList = normalizedSort !== sortBy || page !== 1;',
   'setListRefreshPending(true);',
-  'void setModelPageSize(1);',
-  'resetHomeListViewportForRefresh();',
+  'resetHomeListViewportForRefresh(HOME_REFRESH_SCROLL_TARGET, usesManualHomePagination);',
+  'const handlePageChange = useCallback(',
+  'const handlePageSizeChange = useCallback(',
+  'setPageSize(nextPageSize);',
   'const activeCategoryCount = useMemo(() => {',
-  'showHomeListSkeleton && activeCategoryCount != null',
-  '{showHomeListSkeleton ? (',
+  '(showHomeListSkeleton || listRefreshPending) && activeCategoryCount != null',
 ]);
 if (homePageSource.includes("scrollTo({ top: 0, behavior: 'smooth' })")) {
   errors.push(
@@ -269,9 +288,30 @@ requireIncludes('InfiniteLoadTrigger.tsx observability', infiniteLoadTriggerSour
   "data-infinite-load-state={isLoading ? 'loading' : 'idle'}",
 ]);
 
-requireIncludes('HomePage.tsx auto-load sentinel', homePageSource, ['buttonless', 'idleLabel={null}']);
-if ((homePageSource.match(/idleLabel=\{null\}/g) || []).length < 2) {
-  errors.push('HomePage.tsx must hide idle infinite-load text on both desktop and mobile home lists.');
+requireIncludes('HomePage.tsx theme-controlled list loading', homePageSource, [
+  'const MobileThemePackage = getMobileThemePackage(publicSettings?.mobile_interface_theme);',
+  'const mobileHomeBehavior = MobileThemePackage.home;',
+  "(isDesktop ? desktopHomeBehavior.listLoadingMode : mobileHomeBehavior.listLoadingMode) === 'pagination';",
+  'useInfiniteModels(',
+  '{ manual: usesManualHomePagination }',
+  'setModelPageSize(usesManualHomePagination ? 1 : page);',
+]);
+requireIncludes('classic HomeDesktop.tsx infinite loading', classicHomeTemplateSource, [
+  '<InfiniteLoadTrigger',
+  'buttonless',
+  'idleLabel={null}',
+]);
+requireIncludes('workbench HomeDesktop.tsx pagination loading', workbenchHomeTemplateSource, [
+  '<Pagination',
+  'pageSizeOptions={homePageSizeOptions}',
+  'onPageChange=',
+  'onPageSizeChange=',
+]);
+if (classicHomeTemplateSource.includes('<Pagination')) {
+  errors.push('classic HomeDesktop.tsx must keep the legacy automatic infinite loading interaction.');
+}
+if (workbenchHomeTemplateSource.includes('<InfiniteLoadTrigger')) {
+  errors.push('workbench HomeDesktop.tsx must use pagination, not the classic infinite loading interaction.');
 }
 
 requireIncludes('HomePage.tsx legacy page-size migration', homePageSource, [
@@ -335,25 +375,21 @@ requireIncludes('router.tsx', routerSource, [
   '<RoutePreloadTracker />',
 ]);
 
-requireIncludes('preloadMobileNavDrawer.ts', preloadMobileNavDrawerSource, [
-  "import('./MobileNavDrawer')",
-  'requestIdleCallback(preload, { timeout: 1800 })',
-  'window.setTimeout(preload, 650)',
+requireIncludes('AdminPageShell.tsx theme shell', adminPageShellSource, [
+  'const ThemePackage = useInterfaceThemeShellComponents();',
+  'const MobileThemePackage = useMobileThemeShellComponents();',
+  'const BottomNav = MobileThemePackage.components.BottomNav;',
+  'const MobileNavDrawer = MobileThemePackage.components.MobileNavDrawer;',
+  '<MobileNavDrawer open={navOpen} onClose={() => setNavOpen(false)} />',
 ]);
 
-for (const [label, source] of [
-  ['AdminPageShell.tsx', adminPageShellSource],
-  ['PublicPageShell.tsx', publicPageShellSource],
-]) {
-  requireIncludes(label, source, [
-    "import { loadMobileNavDrawer, scheduleMobileNavDrawerPreload } from './preloadMobileNavDrawer';",
-    'const MobileNavDrawer = lazy(loadMobileNavDrawer);',
-    'scheduleMobileNavDrawerPreload();',
-  ]);
-  if (source.includes("import('./MobileNavDrawer');") || source.includes('import("./MobileNavDrawer");')) {
-    errors.push(`${label} must idle-preload MobileNavDrawer instead of importing it immediately.`);
-  }
-}
+requireIncludes('PublicPageShell.tsx theme shell', publicPageShellSource, [
+  'const ThemePackage = getInterfaceThemePackage(settings?.interface_theme);',
+  'const MobileThemePackage = getMobileThemePackage(settings?.mobile_interface_theme);',
+  'const BottomNav = MobileThemePackage.components.BottomNav;',
+  'const MobileNavDrawer = MobileThemePackage.components.MobileNavDrawer;',
+  '<MobileNavDrawer open={navOpen} onClose={() => setNavOpen(false)} />',
+]);
 
 requireIncludes('TopNav.tsx', topNavSource, [
   "import { preloadRouteForPath } from '../../lib/routeLoaders';",
@@ -380,18 +416,24 @@ requireIncludes('preloadNotificationPanel.ts', preloadNotificationPanelSource, [
 ]);
 
 for (const [label, source] of [
-  ['BottomNav.tsx', bottomNavSource],
-  ['MobileNavDrawer.tsx', mobileNavDrawerSource],
-  ['Sidebar.tsx', sidebarSource],
-  ['ProtectedLink.tsx', protectedLinkSource],
+  ['BottomNavRenderer.tsx', bottomNavRendererSource],
+  ['MobileNavDrawerRenderer.tsx', mobileNavDrawerRendererSource],
+  ['SidebarRenderer.tsx', sidebarRendererSource],
 ]) {
   requireIncludes(label, source, [
-    "import { preloadRouteForPath } from '../../lib/routeLoaders';",
+    "import { preloadRouteForPath } from '../../../lib/routeLoaders';",
     'onPointerEnter={() => preloadRouteForPath(',
     'onPointerDown={() => preloadRouteForPath(',
     'onFocus={() => preloadRouteForPath(',
   ]);
 }
+
+requireIncludes('ProtectedLink.tsx', protectedLinkSource, [
+  "import { preloadRouteForPath } from '../../lib/routeLoaders';",
+  'onPointerEnter={() => preloadRouteForPath(',
+  'onPointerDown={() => preloadRouteForPath(',
+  'onFocus={() => preloadRouteForPath(',
+]);
 
 requireIncludes('ModelAdminPage.tsx', modelAdminSource, [
   "const preloadUploadModal = () => import('../components/shared/UploadModal');",

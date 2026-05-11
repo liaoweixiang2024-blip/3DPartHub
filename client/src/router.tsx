@@ -1,13 +1,16 @@
 import { lazy, Suspense, useEffect, useRef, useState } from 'react';
 import { Routes, Route, Link, useLocation, Navigate } from 'react-router-dom';
+import useSWR from 'swr';
 import { AdminLayout, AdminPageShell, PublicLayout } from './components/shared/AdminPageShell';
 import BrandMark from './components/shared/BrandMark';
+import ErrorBoundary from './components/shared/ErrorBoundary';
 import Icon from './components/shared/Icon';
 import MaintenanceGate from './components/shared/MaintenanceGate';
 import ModelDetailPageSkeleton from './components/shared/ModelDetailPageSkeleton';
 import PageRefreshFallback from './components/shared/PageRefreshFallback';
 import { checkProtectedAccess } from './components/shared/ProtectedLink';
 import { isModelDetailPath, saveModelReturnPath } from './lib/modelReturnPath';
+import { getCachedPublicSettings } from './lib/publicSettings';
 import {
   loadAuditLogPage,
   loadCategoryAdminPage,
@@ -44,6 +47,7 @@ import {
 // Static import for the landing page — eliminates flash on first visit
 import HomePage from './pages/HomePage';
 import { useAuthStore } from './stores/useAuthStore';
+import { getInterfaceThemePackage } from './themes/interfaceThemes/registry';
 
 // Lazy-loaded pages — Vite generates separate chunks automatically
 const ModelDetailPage = lazy(loadModelDetailPage);
@@ -87,7 +91,13 @@ function RouteFallback({ standalone = false }: { standalone?: boolean }) {
 }
 
 function PageWrap({ children }: { children: React.ReactNode }) {
-  return <Suspense fallback={<RouteFallback />}>{children}</Suspense>;
+  const location = useLocation();
+
+  return (
+    <ErrorBoundary key={location.pathname}>
+      <Suspense fallback={<RouteFallback />}>{children}</Suspense>
+    </ErrorBoundary>
+  );
 }
 
 function ProtectedAccessState({
@@ -202,26 +212,64 @@ function ProtectedPage({ children, requiredRole }: { children: React.ReactNode; 
     );
   }
 
-  return <Suspense fallback={<RouteFallback />}>{children}</Suspense>;
+  return (
+    <ErrorBoundary key={location.pathname}>
+      <Suspense fallback={<RouteFallback />}>{children}</Suspense>
+    </ErrorBoundary>
+  );
 }
 
 // No wrapper — let the page handle its own height/scrolling
 function ScrollPage({ children }: { children: React.ReactNode }) {
-  return <Suspense fallback={<RouteFallback standalone />}>{children}</Suspense>;
+  const location = useLocation();
+
+  return (
+    <ErrorBoundary key={location.pathname}>
+      <Suspense fallback={<RouteFallback standalone />}>{children}</Suspense>
+    </ErrorBoundary>
+  );
 }
 
 function NotFoundPage() {
+  const { data: settings } = useSWR('publicSettings', () => getCachedPublicSettings());
+  const ThemePackage = getInterfaceThemePackage(settings?.interface_theme);
+  const NotFound = ThemePackage.templates.NotFound;
+
   return (
-    <div className="flex flex-col items-center justify-center h-screen bg-surface gap-4">
-      <BrandMark size="nav" centered className="mb-2" />
-      <Icon name="search_off" size={56} className="text-on-surface-variant/50" />
-      <h1 className="text-2xl font-headline font-bold text-on-surface">页面不存在</h1>
-      <p className="text-sm text-on-surface-variant">您访问的页面可能已被移除或暂时不可用</p>
-      <Link to="/" className="text-primary-container hover:underline mt-2">
-        返回首页
-      </Link>
-    </div>
+    <NotFound
+      brand={<BrandMark size="nav" centered />}
+      title={
+        <>
+          <Icon name="search_off" size={56} className="mx-auto text-on-surface-variant/50" />
+          <h1 className="mt-4 text-2xl font-headline font-bold text-on-surface">页面不存在</h1>
+        </>
+      }
+      description={<p className="text-sm text-on-surface-variant">您访问的页面可能已被移除或暂时不可用</p>}
+      homeLink={
+        <Link to="/" className="text-primary-container hover:underline">
+          返回首页
+        </Link>
+      }
+    />
   );
+}
+
+function AdminDefaultRedirect() {
+  const location = useLocation();
+  const { data: settings, isLoading } = useSWR('publicSettings', () => getCachedPublicSettings());
+
+  if (isLoading && !settings) {
+    return <RouteFallback />;
+  }
+
+  const ThemePackage = getInterfaceThemePackage(settings?.interface_theme);
+  const defaultPath =
+    ThemePackage.chrome.adminLayout.defaultPath?.({
+      pathname: location.pathname,
+      isAdminRoute: true,
+    }) || '/admin/models';
+
+  return <Navigate to={defaultPath} replace />;
 }
 
 function ModelReturnPathTracker() {
@@ -334,9 +382,9 @@ export default function Router() {
           <Route
             path="/model/:id"
             element={
-              <Suspense fallback={<RouteFallback />}>
+              <PageWrap>
                 <ModelDetailPage />
-              </Suspense>
+              </PageWrap>
             }
           />
           <Route
@@ -367,6 +415,14 @@ export default function Router() {
 
         {/* ── Admin layout (TopNav + Sidebar) ── */}
         <Route element={<AdminLayout />}>
+          <Route
+            path="/admin"
+            element={
+              <ProtectedPage requiredRole="ADMIN">
+                <AdminDefaultRedirect />
+              </ProtectedPage>
+            }
+          />
           <Route
             path="/selection"
             element={

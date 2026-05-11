@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import useSWR from 'swr';
 import useSWRInfinite from 'swr/infinite';
 import { deleteInquiry, getAllInquiries, type Inquiry } from '../api/inquiries';
+import InquirySalesAssignmentDialog from '../components/inquiry/InquirySalesAssignmentDialog';
 import { AdminEmptyState, AdminLoadingState, AdminManagementPage } from '../components/shared/AdminManagementPage';
 import { AdminPageShell } from '../components/shared/AdminPageShell';
 import ConfirmDialog from '../components/shared/ConfirmDialog';
@@ -16,6 +17,7 @@ import { useImeSafeSearchInput } from '../hooks/useImeSafeSearchInput';
 import { useMediaQuery } from '../layouts/hooks/useMediaQuery';
 import { getBusinessConfig, statusInfo } from '../lib/businessConfig';
 import { getErrorMessage } from '../lib/errorNotifications';
+import { exportInquiriesEditableXlsx } from '../lib/inquiryExport';
 import { getCachedPublicSettings } from '../lib/publicSettings';
 
 const INQUIRY_PAGE_SIZE = 20;
@@ -29,6 +31,26 @@ const INQUIRY_TAB_ICONS: Record<string, string> = {
   accepted: 'check_circle',
   rejected: 'close',
 };
+
+async function fetchAllFilteredInquiries(statusFilter: string, search: string) {
+  const pageSize = 100;
+  let page = 1;
+  let total = 0;
+  const items: Inquiry[] = [];
+  do {
+    const result = await getAllInquiries(
+      page,
+      pageSize,
+      statusFilter === 'all' ? undefined : statusFilter,
+      search || undefined,
+    );
+    total = result.total;
+    items.push(...result.items);
+    if (result.items.length === 0) break;
+    page += 1;
+  } while (items.length < total);
+  return items;
+}
 
 function AdminSearchField({
   inputProps,
@@ -166,8 +188,10 @@ function DesktopContent() {
   } = useImeSafeSearchInput();
   const [statusFilter, setStatusFilter] = useState('all');
   const [deleteTarget, setDeleteTarget] = useState<Inquiry | null>(null);
+  const [assignmentTarget, setAssignmentTarget] = useState<Inquiry | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
+  const [exporting, setExporting] = useState(false);
   const { data: settings } = useSWR('publicSettings', () => getCachedPublicSettings());
   const statuses = getBusinessConfig(settings).inquiryStatuses;
   const statusTabs = [
@@ -218,20 +242,52 @@ function DesktopContent() {
     }
   }
 
+  async function handleExport() {
+    setExporting(true);
+    try {
+      const exportItems = await fetchAllFilteredInquiries(statusFilter, search);
+      if (exportItems.length === 0) {
+        toast('当前条件下没有可导出的询价单', 'error');
+        return;
+      }
+      const suffix = [statusFilter === 'all' ? 'all' : statusFilter, search ? 'search' : ''].filter(Boolean).join('_');
+      await exportInquiriesEditableXlsx({
+        inquiries: exportItems,
+        statuses,
+        filenamePrefix: `inquiries_${suffix}`,
+      });
+      toast(`已导出 ${exportItems.length} 条询价单，已按产品明细展开`, 'success');
+    } catch (err) {
+      toast(getErrorMessage(err, '导出询价单失败'), 'error');
+    } finally {
+      setExporting(false);
+    }
+  }
+
   return (
     <>
       <AdminManagementPage
-        title="询价管理"
-        description="跟进客户提交的选型询价和产品需求"
+        title="询价处理工作台"
+        description="管理员入口：处理客户询价、分配销售、导出业务明细"
         actions={
-          <button
-            onClick={handleRefresh}
-            disabled={refreshing}
-            className="flex items-center gap-2 rounded-lg border border-outline-variant/20 px-4 py-2.5 text-sm text-on-surface-variant transition-colors hover:text-on-surface disabled:opacity-50"
-          >
-            <Icon name="refresh" size={16} className={refreshing ? 'animate-spin' : ''} />
-            {refreshing ? '刷新中...' : '刷新'}
-          </button>
+          <>
+            <button
+              onClick={handleExport}
+              disabled={exporting || isLoading}
+              className="flex items-center gap-2 rounded-lg border border-outline-variant/20 px-4 py-2.5 text-sm text-on-surface-variant transition-colors hover:text-on-surface disabled:opacity-50"
+            >
+              <Icon name="download" size={16} />
+              {exporting ? '导出中...' : '导出明细'}
+            </button>
+            <button
+              onClick={handleRefresh}
+              disabled={refreshing}
+              className="flex items-center gap-2 rounded-lg border border-outline-variant/20 px-4 py-2.5 text-sm text-on-surface-variant transition-colors hover:text-on-surface disabled:opacity-50"
+            >
+              <Icon name="refresh" size={16} className={refreshing ? 'animate-spin' : ''} />
+              {refreshing ? '刷新中...' : '刷新'}
+            </button>
+          </>
         }
         toolbar={
           <InquiryAdminToolbar
@@ -250,30 +306,30 @@ function DesktopContent() {
             <AdminLoadingState
               variant="table"
               label="询价单加载中"
-              tableColumns="80px minmax(0,1fr) 150px 120px 120px"
+              tableColumns="88px minmax(0,1fr) 170px 120px 150px"
               tableCells={['chip', 'title', 'text', 'text', 'action']}
             />
           ) : inquiries.length === 0 ? (
             <AdminEmptyState
               icon="request_quote"
-              title="暂无询价单"
-              description="切换状态或等待用户提交新的选型询价。"
+              title="暂无待处理询价"
+              description="切换状态、搜索客户/产品，或等待客户提交新的选型询价。"
             />
           ) : (
             <div className="bg-surface-container-low rounded-lg border border-outline-variant/10 overflow-auto max-h-[calc(100vh-260px)]">
-              <div className="grid grid-cols-[80px_minmax(0,1fr)_150px_120px_120px] gap-4 px-6 py-3 bg-surface-container-low text-xs uppercase tracking-wider text-on-surface-variant font-bold border-b border-outline-variant/10 sticky top-0 z-10">
+              <div className="grid grid-cols-[88px_minmax(0,1fr)_170px_120px_150px] gap-4 px-6 py-3 bg-surface-container-low text-xs uppercase tracking-wider text-on-surface-variant font-bold border-b border-outline-variant/10 sticky top-0 z-10">
                 <span>状态</span>
-                <span>用户 / 产品</span>
-                <span>公司</span>
-                <span>时间</span>
-                <span>操作</span>
+                <span>客户 / 询价内容</span>
+                <span>联系方式</span>
+                <span>提交时间</span>
+                <span>处理</span>
               </div>
               {inquiries.map((inq) => {
                 const info = statusInfo(statuses, inq.status);
                 return (
                   <div
                     key={inq.id}
-                    className="grid grid-cols-[80px_minmax(0,1fr)_150px_120px_120px] gap-4 px-6 py-4 border-b border-outline-variant/5 hover:bg-surface-container-high/50 transition-colors items-center"
+                    className="grid grid-cols-[88px_minmax(0,1fr)_170px_120px_150px] gap-4 px-6 py-4 border-b border-outline-variant/5 hover:bg-surface-container-high/50 transition-colors items-center"
                   >
                     <span
                       className={`inline-flex items-center text-xs px-2 py-0.5 rounded-md font-bold ${info.color || ''} ${info.bg || ''}`}
@@ -285,12 +341,14 @@ function DesktopContent() {
                         {inq.items.map((it) => it.modelNo || it.productName).join('、')}
                       </p>
                       <p className="text-xs text-on-surface-variant">
-                        {inq.user?.username || '—'} · {inq.items.length} 项
+                        客户：{inq.contactName || inq.user?.username || '—'} · {inq.items.length} 项
+                        {inq.salesAssignee ? ` · 对接：${inq.salesAssignee.username}` : ''}
                       </p>
                     </div>
-                    <span className="text-xs text-on-surface-variant truncate">
-                      {inq.user?.company || inq.company || '—'}
-                    </span>
+                    <div className="min-w-0 text-xs text-on-surface-variant">
+                      <p className="truncate">{inq.contactPhone || inq.user?.phone || '未留电话'}</p>
+                      <p className="mt-0.5 truncate">{inq.company || inq.user?.company || '未留公司'}</p>
+                    </div>
                     <span className="text-xs text-on-surface-variant">
                       {new Date(inq.createdAt).toLocaleDateString('zh-CN')}
                     </span>
@@ -299,15 +357,24 @@ function DesktopContent() {
                         onClick={() => navigate(`/admin/inquiries/${inq.id}`)}
                         className="text-xs text-primary-container hover:underline"
                       >
-                        详情
+                        处理
                       </button>
+                      {inq.status !== 'cancelled' && inq.status !== 'rejected' ? (
+                        <button
+                          type="button"
+                          onClick={() => setAssignmentTarget(inq)}
+                          className="text-xs text-green-600 hover:underline"
+                        >
+                          {inq.salesAssignee ? '改派' : '分配销售'}
+                        </button>
+                      ) : null}
                       <button
                         type="button"
                         onClick={() => setDeleteTarget(inq)}
                         disabled={deletingId === inq.id}
                         className="text-xs text-error hover:underline disabled:cursor-not-allowed disabled:opacity-60"
                       >
-                        {deletingId === inq.id ? '删除中' : '删除'}
+                        {deletingId === inq.id ? '删除中' : '删除记录'}
                       </button>
                     </div>
                   </div>
@@ -326,6 +393,17 @@ function DesktopContent() {
         description="删除后询价单、产品明细和沟通记录将不可恢复。"
         confirmLabel="删除询价单"
       />
+      <InquirySalesAssignmentDialog
+        open={Boolean(assignmentTarget)}
+        inquiry={assignmentTarget}
+        onClose={() => setAssignmentTarget(null)}
+        onAssigned={async () => {
+          await Promise.all([
+            refreshInquiries(undefined, { revalidate: true }),
+            refreshCounts(undefined, { revalidate: true }),
+          ]);
+        }}
+      />
     </>
   );
 }
@@ -341,8 +419,10 @@ function MobileContent() {
   } = useImeSafeSearchInput();
   const [statusFilter, setStatusFilter] = useState('all');
   const [deleteTarget, setDeleteTarget] = useState<Inquiry | null>(null);
+  const [assignmentTarget, setAssignmentTarget] = useState<Inquiry | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
+  const [exporting, setExporting] = useState(false);
   const { data: settings } = useSWR('publicSettings', () => getCachedPublicSettings());
   const statuses = getBusinessConfig(settings).inquiryStatuses;
   const statusTabs = [
@@ -393,20 +473,53 @@ function MobileContent() {
     }
   }
 
+  async function handleExport() {
+    setExporting(true);
+    try {
+      const exportItems = await fetchAllFilteredInquiries(statusFilter, search);
+      if (exportItems.length === 0) {
+        toast('当前条件下没有可导出的询价单', 'error');
+        return;
+      }
+      const suffix = [statusFilter === 'all' ? 'all' : statusFilter, search ? 'search' : ''].filter(Boolean).join('_');
+      await exportInquiriesEditableXlsx({
+        inquiries: exportItems,
+        statuses,
+        filenamePrefix: `inquiries_${suffix}`,
+      });
+      toast(`已导出 ${exportItems.length} 条询价单，已按产品明细展开`, 'success');
+    } catch (err) {
+      toast(getErrorMessage(err, '导出询价单失败'), 'error');
+    } finally {
+      setExporting(false);
+    }
+  }
+
   return (
     <>
       <AdminManagementPage
-        title="询价管理"
-        description="跟进客户提交的选型询价和产品需求"
+        title="询价处理工作台"
+        description="管理员入口：处理客户询价、分配销售、导出业务明细"
         actions={
-          <button
-            onClick={handleRefresh}
-            disabled={refreshing}
-            className="inline-flex h-9 items-center gap-1 rounded-lg border border-outline-variant/20 px-3 text-xs text-on-surface-variant disabled:opacity-50"
-            aria-label="刷新"
-          >
-            <Icon name="refresh" size={14} className={refreshing ? 'animate-spin' : ''} />
-          </button>
+          <>
+            <button
+              onClick={handleExport}
+              disabled={exporting || isLoading}
+              className="inline-flex h-9 items-center gap-1 rounded-lg border border-outline-variant/20 px-3 text-xs text-on-surface-variant disabled:opacity-50"
+              aria-label="导出询价单"
+            >
+              <Icon name="download" size={14} />
+              <span className="hidden sm:inline">{exporting ? '导出中' : '导出明细'}</span>
+            </button>
+            <button
+              onClick={handleRefresh}
+              disabled={refreshing}
+              className="inline-flex h-9 items-center gap-1 rounded-lg border border-outline-variant/20 px-3 text-xs text-on-surface-variant disabled:opacity-50"
+              aria-label="刷新"
+            >
+              <Icon name="refresh" size={14} className={refreshing ? 'animate-spin' : ''} />
+            </button>
+          </>
         }
         toolbar={
           <InquiryAdminToolbar
@@ -426,8 +539,8 @@ function MobileContent() {
           ) : inquiries.length === 0 ? (
             <AdminEmptyState
               icon="request_quote"
-              title="暂无询价单"
-              description="切换状态或等待用户提交新的选型询价。"
+              title="暂无待处理询价"
+              description="切换状态、搜索客户/产品，或等待客户提交新的选型询价。"
             />
           ) : (
             <div className="flex flex-col gap-2.5">
@@ -454,10 +567,23 @@ function MobileContent() {
                     </p>
                     <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-on-surface-variant">
                       <span className="min-w-0 break-words">
-                        {inq.user?.username || '—'} · {inq.items.length} 项
+                        客户：{inq.contactName || inq.user?.username || '—'} · {inq.items.length} 项
+                        {inq.salesAssignee ? ` · ${inq.salesAssignee.username}跟进` : ''}
                       </span>
                       <div className="flex items-center gap-3">
-                        <span>查看详情</span>
+                        <span>处理</span>
+                        {inq.status !== 'cancelled' && inq.status !== 'rejected' ? (
+                          <button
+                            type="button"
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              setAssignmentTarget(inq);
+                            }}
+                            className="font-medium text-green-600"
+                          >
+                            {inq.salesAssignee ? '改派' : '分配销售'}
+                          </button>
+                        ) : null}
                         <button
                           type="button"
                           onClick={(event) => {
@@ -467,7 +593,7 @@ function MobileContent() {
                           disabled={deletingId === inq.id}
                           className="font-medium text-error disabled:opacity-60"
                         >
-                          {deletingId === inq.id ? '删除中' : '删除'}
+                          {deletingId === inq.id ? '删除中' : '删除记录'}
                         </button>
                       </div>
                     </div>
@@ -487,12 +613,23 @@ function MobileContent() {
         description="删除后询价单、产品明细和沟通记录将不可恢复。"
         confirmLabel="删除询价单"
       />
+      <InquirySalesAssignmentDialog
+        open={Boolean(assignmentTarget)}
+        inquiry={assignmentTarget}
+        onClose={() => setAssignmentTarget(null)}
+        onAssigned={async () => {
+          await Promise.all([
+            refreshInquiries(undefined, { revalidate: true }),
+            refreshCounts(undefined, { revalidate: true }),
+          ]);
+        }}
+      />
     </>
   );
 }
 
 export default function InquiryAdminPage() {
-  useDocumentTitle('询价管理');
+  useDocumentTitle('询价处理工作台');
   const isDesktop = useMediaQuery('(min-width: 768px)');
 
   return <AdminPageShell>{isDesktop ? <DesktopContent /> : <MobileContent />}</AdminPageShell>;

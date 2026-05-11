@@ -1,6 +1,7 @@
 import { Grid } from '@react-three/drei';
 import { useEffect, useState } from 'react';
 import { get3DMaterialConfig, type ViewerSettingsOverride } from '../../lib/publicSettings';
+import { THREE_THEME } from '../../themes/threeTheme';
 import { MODEL_BOUNDS_EVENT, type ModelBoundsDetail } from './viewerEvents';
 
 interface SceneProps {
@@ -27,20 +28,26 @@ export default function Scene({ showGrid, viewerSettings }: SceneProps) {
     <>
       <ambientLight intensity={config.ambientIntensity} />
       <directionalLight position={[10, 10, 5]} intensity={config.mainLightIntensity} />
-      <directionalLight position={[-10, 8, -5]} intensity={config.fillLightIntensity} color="#c8d8e8" />
-      <directionalLight position={[0, -5, 10]} intensity={0.5} color="#e0e8f0" />
+      <directionalLight
+        position={[-10, 8, -5]}
+        intensity={config.fillLightIntensity}
+        color={THREE_THEME.scene.fillLight}
+      />
+      <directionalLight position={[0, -5, 10]} intensity={0.5} color={THREE_THEME.scene.lowerLight} />
       <pointLight position={[0, 15, 0]} intensity={0.6} />
-      <hemisphereLight args={['#ffffff', '#e8dcc8', config.hemisphereIntensity]} />
+      <hemisphereLight
+        args={[THREE_THEME.scene.hemisphereSky, THREE_THEME.scene.hemisphereGround, config.hemisphereIntensity]}
+      />
 
       {showGrid && (
         <Grid
           args={[100, 100]}
           cellSize={2}
           cellThickness={0.5}
-          cellColor="#3a4a5a"
+          cellColor={THREE_THEME.scene.gridCell}
           sectionSize={10}
           sectionThickness={1}
-          sectionColor="#4a5a6a"
+          sectionColor={THREE_THEME.scene.gridSection}
           fadeDistance={80}
           fadeStrength={1}
           followCamera={false}

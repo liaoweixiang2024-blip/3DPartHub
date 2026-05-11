@@ -22,6 +22,65 @@ const DEFAULT_MAINTENANCE_TITLE = '系统维护中';
 const DEFAULT_MAINTENANCE_MESSAGE = '系统正在进行维护、数据恢复或资源重建，部分页面可能暂时不可用。请稍后再访问。';
 const LEGACY_MAINTENANCE_TITLE = '模型库维护中';
 const LEGACY_MAINTENANCE_MESSAGE = '模型预览资源正在重建，部分模型数量和缩略图可能暂时不完整。请稍后再访问。';
+const DEFAULT_COPYRIGHT_PROJECT_NAME = '3DPartHub';
+const DEFAULT_INTERFACE_THEME_KEYS = ['workbench', 'classic'] as const;
+const DEFAULT_MOBILE_THEME_KEYS = ['classic'] as const;
+const COLOR_SCHEME_KEYS = ['orange', 'blue', 'green', 'purple', 'red', 'teal', 'custom'] as const;
+const CACHE_DRIVER_KEYS = ['redis', 'memory', 'off'] as const;
+const STORAGE_PROVIDER_KEYS = ['local', 'minio', 'tencent_cos', 'aliyun_oss', 'qiniu_kodo', 's3_compatible'] as const;
+const MASKED_SECRET_VALUE = '********';
+const MAX_CUSTOM_COLOR_JSON_LENGTH = 20_000;
+const DEFAULT_USER_NAV_FOR_SETTINGS = DEFAULT_NAV_FOR_SETTINGS.filter(
+  (item) => !item.roles?.includes('ADMIN') && !item.path.startsWith('/admin/'),
+);
+const DEFAULT_ADMIN_NAV_FOR_SETTINGS = DEFAULT_NAV_FOR_SETTINGS;
+const SENSITIVE_SETTING_KEYS = new Set(['smtp_pass', 'redis_password', 'storage_access_key_secret']);
+
+function getCopyrightYear(): string {
+  return String(new Date().getFullYear());
+}
+
+function normalizeCopyrightProjectName(siteTitle: unknown): string {
+  return String(siteTitle || '').trim() || DEFAULT_COPYRIGHT_PROJECT_NAME;
+}
+
+export function buildFooterCopyright(siteTitle?: unknown): string {
+  return `© ${getCopyrightYear()} ${normalizeCopyrightProjectName(siteTitle)}. All rights reserved.`;
+}
+
+export function buildModelDetailCopyright(siteTitle?: unknown): string {
+  return `© ${getCopyrightYear()} ${normalizeCopyrightProjectName(siteTitle)}`;
+}
+
+export const DEFAULT_FOOTER_COPYRIGHT = buildFooterCopyright(DEFAULT_COPYRIGHT_PROJECT_NAME);
+export const DEFAULT_MODEL_DETAIL_DISCLAIMER =
+  '本平台所有 3D 模型仅供参考与模拟验证，不作为生产加工依据。产品持续迭代更新，请以实物为准。';
+export const DEFAULT_MODEL_DETAIL_COPYRIGHT = buildModelDetailCopyright(DEFAULT_COPYRIGHT_PROJECT_NAME);
+
+type FooterLink = { label: string; url: string };
+
+export function normalizeFooterLinksSetting(value: unknown): string {
+  let parsed = value;
+  if (typeof value === 'string') {
+    if (!value.trim()) return '[]';
+    try {
+      parsed = JSON.parse(value);
+    } catch {
+      return '[]';
+    }
+  }
+  if (!Array.isArray(parsed)) return '[]';
+  const links = parsed
+    .map((item) => {
+      const row = item && typeof item === 'object' ? (item as Partial<FooterLink>) : {};
+      return {
+        label: typeof row.label === 'string' ? row.label.trim() : '',
+        url: typeof row.url === 'string' ? row.url.trim() : '',
+      };
+    })
+    .filter((link) => link.label && link.url);
+  return JSON.stringify(links, null, 2);
+}
 
 const SETTINGS_SCHEMA: SettingDef[] = [
   { key: 'require_login_download', defaultValue: false },
@@ -69,11 +128,17 @@ const SETTINGS_SCHEMA: SettingDef[] = [
   { key: 'contact_phone', defaultValue: '' },
   { key: 'contact_address', defaultValue: '' },
   { key: 'footer_links', defaultValue: '' },
-  { key: 'footer_copyright', defaultValue: '' },
+  { key: 'footer_copyright', defaultValue: DEFAULT_FOOTER_COPYRIGHT },
+  { key: 'footer_copyright_follow_site_title', defaultValue: true },
+  { key: 'model_detail_disclaimer', defaultValue: DEFAULT_MODEL_DETAIL_DISCLAIMER },
+  { key: 'model_detail_copyright', defaultValue: DEFAULT_MODEL_DETAIL_COPYRIGHT },
+  { key: 'model_detail_copyright_follow_site_title', defaultValue: true },
   { key: 'legal_privacy_updated_at', defaultValue: '2026 年 4 月' },
   { key: 'legal_terms_updated_at', defaultValue: '2026 年 4 月' },
   { key: 'legal_privacy_sections', defaultValue: '' },
   { key: 'legal_terms_sections', defaultValue: '' },
+  { key: 'interface_theme', defaultValue: 'workbench' },
+  { key: 'mobile_interface_theme', defaultValue: 'classic' },
   { key: 'color_scheme', defaultValue: 'orange' },
   { key: 'color_custom_dark', defaultValue: '{}' },
   { key: 'color_custom_light', defaultValue: '{}' },
@@ -161,6 +226,8 @@ const SETTINGS_SCHEMA: SettingDef[] = [
   { key: 'ticket_classifications', defaultValue: JSON.stringify(DEFAULT_TICKET_CLASSIFICATIONS_FOR_SETTINGS, null, 2) },
   { key: 'support_process_steps', defaultValue: JSON.stringify(DEFAULT_SUPPORT_STEPS_FOR_SETTINGS, null, 2) },
   { key: 'nav_items', defaultValue: JSON.stringify(DEFAULT_NAV_FOR_SETTINGS, null, 2) },
+  { key: 'nav_user_items', defaultValue: JSON.stringify(DEFAULT_USER_NAV_FOR_SETTINGS, null, 2) },
+  { key: 'nav_admin_items', defaultValue: JSON.stringify(DEFAULT_ADMIN_NAV_FOR_SETTINGS, null, 2) },
   { key: 'nav_mobile_items', defaultValue: JSON.stringify(DEFAULT_MOBILE_NAV_FOR_SETTINGS, null, 2) },
   { key: 'upload_policy', defaultValue: JSON.stringify(DEFAULT_UPLOAD_POLICY_FOR_SETTINGS, null, 2) },
   { key: 'page_size_policy', defaultValue: JSON.stringify(DEFAULT_PAGE_SIZE_POLICY_FOR_SETTINGS, null, 2) },
@@ -176,6 +243,53 @@ const SETTINGS_SCHEMA: SettingDef[] = [
   { key: 'product_wall_max_image_mb', defaultValue: 50 },
   { key: 'product_wall_max_batch_count', defaultValue: 50 },
   { key: 'product_wall_max_zip_extract', defaultValue: 100 },
+
+  // Cache and object storage
+  { key: 'cache_driver', defaultValue: 'redis' },
+  { key: 'cache_enabled', defaultValue: true },
+  { key: 'redis_url', defaultValue: 'redis://localhost:6379' },
+  { key: 'redis_password', defaultValue: '' },
+  { key: 'redis_db', defaultValue: 0 },
+  { key: 'redis_key_prefix', defaultValue: '3dparthub' },
+  { key: 'redis_tls_enabled', defaultValue: false },
+  { key: 'cache_public_settings_ttl_seconds', defaultValue: 60 },
+  { key: 'cache_model_list_ttl_seconds', defaultValue: 300 },
+  { key: 'cache_model_detail_ttl_seconds', defaultValue: 300 },
+  { key: 'cache_search_ttl_seconds', defaultValue: 60 },
+  { key: 'cache_selection_ttl_seconds', defaultValue: 600 },
+  { key: 'cache_static_asset_max_age_days', defaultValue: 30 },
+  { key: 'storage_provider', defaultValue: 'local' },
+  { key: 'storage_endpoint', defaultValue: '' },
+  { key: 'storage_region', defaultValue: '' },
+  { key: 'storage_bucket', defaultValue: '' },
+  { key: 'storage_access_key_id', defaultValue: '' },
+  { key: 'storage_access_key_secret', defaultValue: '' },
+  { key: 'storage_use_ssl', defaultValue: true },
+  { key: 'storage_force_path_style', defaultValue: false },
+  { key: 'storage_public_base_url', defaultValue: '' },
+  { key: 'storage_cdn_base_url', defaultValue: '' },
+  { key: 'storage_image_prefix', defaultValue: 'images' },
+  { key: 'storage_thumbnail_prefix', defaultValue: 'thumbnails' },
+  { key: 'storage_model_prefix', defaultValue: 'models' },
+  { key: 'storage_original_prefix', defaultValue: 'originals' },
+  { key: 'storage_drawing_prefix', defaultValue: 'drawings' },
+  { key: 'storage_product_wall_prefix', defaultValue: 'product-wall' },
+  { key: 'storage_attachment_prefix', defaultValue: 'attachments' },
+  { key: 'storage_backup_prefix', defaultValue: 'backups' },
+  { key: 'storage_temp_prefix', defaultValue: 'temp' },
+  { key: 'storage_signed_url_enabled', defaultValue: false },
+  { key: 'storage_signed_url_ttl_seconds', defaultValue: 3600 },
+  { key: 'storage_upload_multipart_mb', defaultValue: 16 },
+  { key: 'storage_upload_concurrency', defaultValue: 4 },
+  { key: 'image_cdn_enabled', defaultValue: false },
+  { key: 'image_optimize_enabled', defaultValue: true },
+  { key: 'image_webp_enabled', defaultValue: true },
+  { key: 'image_thumbnail_quality', defaultValue: 82 },
+  { key: 'image_large_max_width', defaultValue: 2560 },
+  { key: 'image_cache_max_age_days', defaultValue: 30 },
+  { key: 'resource_cdn_enabled', defaultValue: false },
+  { key: 'resource_cache_max_age_days', defaultValue: 30 },
+  { key: 'resource_download_acceleration_enabled', defaultValue: false },
 
   // Download token TTL
   { key: 'download_token_ttl_minutes', defaultValue: 5 },
@@ -327,6 +441,20 @@ const NUMERIC_KEYS = new Set([
   'product_wall_max_image_mb',
   'product_wall_max_batch_count',
   'product_wall_max_zip_extract',
+  'redis_db',
+  'cache_public_settings_ttl_seconds',
+  'cache_model_list_ttl_seconds',
+  'cache_model_detail_ttl_seconds',
+  'cache_search_ttl_seconds',
+  'cache_selection_ttl_seconds',
+  'cache_static_asset_max_age_days',
+  'storage_signed_url_ttl_seconds',
+  'storage_upload_multipart_mb',
+  'storage_upload_concurrency',
+  'image_thumbnail_quality',
+  'image_large_max_width',
+  'image_cache_max_age_days',
+  'resource_cache_max_age_days',
   'download_token_ttl_minutes',
   'ticket_attachment_max_mb',
   'api_rate_limit',
@@ -347,6 +475,8 @@ const BOOLEAN_KEYS = new Set([
   'login_dialog_my_tickets',
   'login_dialog_my_inquiries',
   'login_dialog_projects',
+  'footer_copyright_follow_site_title',
+  'model_detail_copyright_follow_site_title',
   'show_watermark',
   'announcement_enabled',
   'maintenance_enabled',
@@ -359,13 +489,147 @@ const BOOLEAN_KEYS = new Set([
   'share_allow_password',
   'share_allow_custom_expiry',
   'share_allow_preview',
+  'cache_enabled',
+  'redis_tls_enabled',
+  'storage_use_ssl',
+  'storage_force_path_style',
+  'storage_signed_url_enabled',
+  'image_cdn_enabled',
+  'image_optimize_enabled',
+  'image_webp_enabled',
+  'resource_cdn_enabled',
+  'resource_download_acceleration_enabled',
   'anti_proxy_enabled',
   'hotlink_protection_enabled',
   'backup_auto_enabled',
   'backup_mirror_enabled',
 ]);
 
+function getSupportedInterfaceThemes(): Set<string> {
+  const configured = process.env.INTERFACE_THEME_KEYS;
+  if (!configured) return new Set(DEFAULT_INTERFACE_THEME_KEYS);
+  const keys = configured
+    .split(',')
+    .map((item) => item.trim())
+    .filter((item) => /^[a-z][a-z0-9-]{0,48}$/.test(item));
+  return new Set(keys.length ? keys : DEFAULT_INTERFACE_THEME_KEYS);
+}
+
+function getSupportedMobileThemes(): Set<string> {
+  const configured = process.env.MOBILE_THEME_KEYS;
+  if (!configured) return new Set(DEFAULT_MOBILE_THEME_KEYS);
+  const keys = configured
+    .split(',')
+    .map((item) => item.trim())
+    .filter((item) => /^[a-z][a-z0-9-]{0,48}$/.test(item));
+  return new Set(keys.length ? keys : DEFAULT_MOBILE_THEME_KEYS);
+}
+
+function normalizeJsonObjectSetting(key: string, value: unknown, maxLength = MAX_CUSTOM_COLOR_JSON_LENGTH): unknown {
+  if (typeof value === 'string' && value.length > maxLength) return DEFAULTS[key];
+
+  let parsed = value;
+  if (typeof value === 'string') {
+    if (!value.trim()) return DEFAULTS[key];
+    try {
+      parsed = JSON.parse(value);
+    } catch {
+      return DEFAULTS[key];
+    }
+  }
+
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return DEFAULTS[key];
+
+  const serialized = JSON.stringify(parsed);
+  if (serialized.length > maxLength) return DEFAULTS[key];
+  return JSON.stringify(parsed, null, 2);
+}
+
+function normalizeTrimmedStringSetting(value: unknown, fallback = ''): string {
+  const normalized = String(value ?? '').trim();
+  return normalized || fallback;
+}
+
+function normalizeStoragePrefixSetting(key: string, value: unknown): string {
+  const fallback = String(DEFAULTS[key] ?? '').trim();
+  const normalized = String(value ?? fallback)
+    .trim()
+    .replace(/^\/+|\/+$/g, '')
+    .replace(/\/{2,}/g, '/');
+  return normalized || fallback;
+}
+
+function clampNumericSetting(key: string, value: unknown, min: number, max: number): number {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return Number(DEFAULTS[key]);
+  return Math.min(max, Math.max(min, n));
+}
+
 function validateSettingValue(key: string, value: unknown): unknown {
+  if (key === 'footer_links') return normalizeFooterLinksSetting(value);
+  if (key === 'cache_driver') {
+    const driver = String(value || '').trim();
+    return (CACHE_DRIVER_KEYS as readonly string[]).includes(driver) ? driver : DEFAULTS[key];
+  }
+  if (key === 'storage_provider') {
+    const provider = String(value || '').trim();
+    return (STORAGE_PROVIDER_KEYS as readonly string[]).includes(provider) ? provider : DEFAULTS[key];
+  }
+  if (key === 'interface_theme') {
+    const theme = String(value || '').trim();
+    return getSupportedInterfaceThemes().has(theme) ? theme : DEFAULTS[key];
+  }
+  if (key === 'mobile_interface_theme') {
+    const theme = String(value || '').trim();
+    return getSupportedMobileThemes().has(theme) ? theme : DEFAULTS[key];
+  }
+  if (key === 'color_scheme') {
+    const scheme = String(value || '').trim();
+    return (COLOR_SCHEME_KEYS as readonly string[]).includes(scheme) ? scheme : DEFAULTS[key];
+  }
+  if (key === 'color_custom_dark' || key === 'color_custom_light') {
+    return normalizeJsonObjectSetting(key, value);
+  }
+  if (key === 'auto_theme_dark_hour' || key === 'auto_theme_light_hour') {
+    const n = Number(value);
+    if (!Number.isFinite(n)) return DEFAULTS[key];
+    return Math.min(23, Math.max(0, Math.round(n)));
+  }
+  if (key === 'redis_db') return clampNumericSetting(key, value, 0, 15);
+  if (
+    key === 'cache_public_settings_ttl_seconds' ||
+    key === 'cache_model_list_ttl_seconds' ||
+    key === 'cache_model_detail_ttl_seconds' ||
+    key === 'cache_search_ttl_seconds' ||
+    key === 'cache_selection_ttl_seconds'
+  ) {
+    return clampNumericSetting(key, value, 0, 86400);
+  }
+  if (
+    key === 'cache_static_asset_max_age_days' ||
+    key === 'image_cache_max_age_days' ||
+    key === 'resource_cache_max_age_days'
+  ) {
+    return clampNumericSetting(key, value, 0, 365);
+  }
+  if (key === 'storage_signed_url_ttl_seconds') return clampNumericSetting(key, value, 60, 86400);
+  if (key === 'storage_upload_multipart_mb') return clampNumericSetting(key, value, 5, 512);
+  if (key === 'storage_upload_concurrency') return clampNumericSetting(key, value, 1, 16);
+  if (key === 'image_thumbnail_quality') return clampNumericSetting(key, value, 1, 100);
+  if (key === 'image_large_max_width') return clampNumericSetting(key, value, 320, 12000);
+  if (key.startsWith('storage_') && key.endsWith('_prefix')) return normalizeStoragePrefixSetting(key, value);
+  if (
+    key === 'redis_url' ||
+    key === 'redis_key_prefix' ||
+    key === 'storage_endpoint' ||
+    key === 'storage_region' ||
+    key === 'storage_bucket' ||
+    key === 'storage_access_key_id' ||
+    key === 'storage_public_base_url' ||
+    key === 'storage_cdn_base_url'
+  ) {
+    return normalizeTrimmedStringSetting(value, String(DEFAULTS[key] ?? ''));
+  }
   if (NUMERIC_KEYS.has(key)) {
     const n = Number(value);
     if (!Number.isFinite(n)) return DEFAULTS[key];
@@ -382,9 +646,19 @@ function validateSettingValue(key: string, value: unknown): unknown {
 
 export async function setSettings(settings: Record<string, unknown>): Promise<void> {
   if (!prisma) return;
+  const shouldPreserveSecrets = Object.entries(settings).some(
+    ([key, value]) => SENSITIVE_SETTING_KEYS.has(key) && value === MASKED_SECRET_VALUE,
+  );
+  const existingSettings = shouldPreserveSecrets ? await getAllSettings() : {};
   const filtered = Object.entries(settings)
     .filter(([key]) => SETTINGS_KEYS.has(key))
-    .map(([key, value]) => [key, validateSettingValue(key, value)] as [string, unknown]);
+    .map(([key, value]) => {
+      const nextValue =
+        SENSITIVE_SETTING_KEYS.has(key) && value === MASKED_SECRET_VALUE
+          ? (existingSettings[key] ?? DEFAULTS[key])
+          : value;
+      return [key, validateSettingValue(key, nextValue)] as [string, unknown];
+    });
   if (filtered.length === 0) return;
   const ops = filtered.map(([key, value]) =>
     prisma.setting.upsert({

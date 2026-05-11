@@ -31,6 +31,7 @@ interface CreatedStoredToken {
 export type ProtectedResourceType =
   | 'model-drawing'
   | 'ticket-attachment'
+  | 'inquiry-attachment'
   | 'batch-download'
   | 'backup-download'
   | 'share-access';
@@ -73,6 +74,7 @@ function isResourcePayload(value: unknown): value is ProtectedResourceTokenPaylo
     payload &&
     (payload.type === 'model-drawing' ||
       payload.type === 'ticket-attachment' ||
+      payload.type === 'inquiry-attachment' ||
       payload.type === 'batch-download' ||
       payload.type === 'backup-download' ||
       payload.type === 'share-access') &&

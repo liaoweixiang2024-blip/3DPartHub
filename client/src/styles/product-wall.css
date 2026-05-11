@@ -1,16 +1,16 @@
 .product-wall-image-surface,
 .product-wall-preview-canvas,
 .product-wall-mode-swatch {
-  background-color: #ffffff;
+  background-color: var(--color-surface-container-lowest);
 }
 .product-wall-canvas-checker,
 .product-wall-mode-swatch {
-  background-color: #f6f3ed;
+  background-color: color-mix(in srgb, var(--color-surface-container-lowest) 72%, var(--color-surface-container-low));
   background-image:
-    linear-gradient(45deg, rgba(25, 23, 20, 0.045) 25%, transparent 25%),
-    linear-gradient(-45deg, rgba(25, 23, 20, 0.045) 25%, transparent 25%),
-    linear-gradient(45deg, transparent 75%, rgba(25, 23, 20, 0.045) 75%),
-    linear-gradient(-45deg, transparent 75%, rgba(25, 23, 20, 0.045) 75%);
+    linear-gradient(45deg, color-mix(in srgb, var(--color-on-surface) 4.5%, transparent) 25%, transparent 25%),
+    linear-gradient(-45deg, color-mix(in srgb, var(--color-on-surface) 4.5%, transparent) 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, color-mix(in srgb, var(--color-on-surface) 4.5%, transparent) 75%),
+    linear-gradient(-45deg, transparent 75%, color-mix(in srgb, var(--color-on-surface) 4.5%, transparent) 75%);
   background-position:
     0 0,
     0 6px,
@@ -19,7 +19,7 @@
   background-size: 12px 12px;
 }
 .product-wall-canvas-white {
-  background-color: #ffffff;
+  background-color: var(--color-surface-container-lowest);
   background-image: none;
 }
 .product-wall-image-surface::after {
@@ -28,15 +28,34 @@
   z-index: 11;
   pointer-events: none;
   content: '';
-  box-shadow: inset 0 0 0 1px rgba(30, 27, 23, 0.08);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--color-on-surface) 8%, transparent);
 }
 .product-wall-image-placeholder {
   position: absolute;
   inset: 0;
   z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   background:
-    linear-gradient(135deg, rgba(255, 255, 255, 0.58), rgba(255, 255, 255, 0.16)),
-    color-mix(in srgb, var(--color-surface-container-high, #eee8df) 70%, white);
+    linear-gradient(
+      135deg,
+      color-mix(in srgb, var(--color-surface-container-lowest) 62%, transparent),
+      color-mix(in srgb, var(--color-surface-container-lowest) 18%, transparent)
+    ),
+    color-mix(in srgb, var(--color-surface-container-high) 64%, var(--color-surface-container-lowest));
+  transition: opacity 180ms ease;
+}
+.product-wall-image-placeholder::before {
+  width: 28px;
+  height: 2px;
+  border-radius: 999px;
+  content: '';
+  background: color-mix(in srgb, var(--color-primary-container) 34%, transparent);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--color-primary-container) 8%, transparent);
+  opacity: 0.38;
+  transform-origin: center;
+  animation: productWallImageLoading 1.45s ease-in-out infinite;
 }
 .product-wall-thumb {
   backface-visibility: hidden;
@@ -58,11 +77,11 @@
   height: 32px;
   align-items: center;
   justify-content: center;
-  border: 1px solid rgba(20, 18, 15, 0.08);
+  border: 1px solid color-mix(in srgb, var(--color-outline-variant) 24%, transparent);
   border-radius: 999px;
-  color: rgba(35, 31, 27, 0.72);
-  background: rgba(255, 255, 255, 0.78);
-  box-shadow: 0 10px 28px rgba(15, 23, 42, 0.12);
+  color: color-mix(in srgb, var(--color-on-surface) 72%, transparent);
+  background: color-mix(in srgb, var(--color-surface-container-lowest) 78%, transparent);
+  box-shadow: 0 10px 28px color-mix(in srgb, var(--color-shadow) 12%, transparent);
   backdrop-filter: blur(14px);
   transition:
     color 160ms ease,
@@ -73,26 +92,26 @@
 }
 .product-wall-card-action:hover,
 .product-wall-card-action:focus-visible {
-  color: rgba(25, 22, 18, 0.95);
-  background: rgba(255, 255, 255, 0.96);
-  border-color: rgba(20, 18, 15, 0.14);
-  box-shadow: 0 14px 32px rgba(15, 23, 42, 0.16);
+  color: color-mix(in srgb, var(--color-on-surface) 95%, transparent);
+  background: color-mix(in srgb, var(--color-surface-container-lowest) 96%, transparent);
+  border-color: color-mix(in srgb, var(--color-outline-variant) 38%, transparent);
+  box-shadow: 0 14px 32px color-mix(in srgb, var(--color-shadow) 16%, transparent);
   transform: translateY(-1px);
   outline: none;
 }
 .product-wall-card-action.is-active {
   color: var(--color-primary-container);
-  background: color-mix(in srgb, var(--color-primary-container) 14%, white);
+  background: color-mix(in srgb, var(--color-primary-container) 14%, var(--color-surface-container-lowest));
   border-color: color-mix(in srgb, var(--color-primary-container) 22%, transparent);
 }
 .product-wall-card-action.is-danger {
-  color: #dc2626;
+  color: var(--color-destructive);
 }
 .product-wall-card-action.is-danger:hover,
 .product-wall-card-action.is-danger:focus-visible {
-  color: #b91c1c;
-  background: rgba(255, 255, 255, 0.96);
-  border-color: rgba(220, 38, 38, 0.16);
+  color: color-mix(in srgb, var(--color-destructive) 84%, var(--color-on-surface));
+  background: color-mix(in srgb, var(--color-surface-container-lowest) 96%, transparent);
+  border-color: color-mix(in srgb, var(--color-destructive) 16%, transparent);
 }
 @media (hover: hover) and (pointer: fine) {
   .product-wall-card:hover > .product-wall-card-actions,
@@ -195,6 +214,11 @@
   .product-wall-card {
     content-visibility: visible;
   }
+  .product-wall-image-placeholder::before {
+    opacity: 0.32;
+    transform: none;
+    animation: none;
+  }
 }
 @keyframes productWallLoadMore {
   0%,
@@ -203,6 +227,17 @@
   }
   50% {
     opacity: 1;
+  }
+}
+@keyframes productWallImageLoading {
+  0%,
+  100% {
+    opacity: 0.24;
+    transform: scaleX(0.54);
+  }
+  50% {
+    opacity: 0.48;
+    transform: scaleX(1);
   }
 }
 .product-wall-load-more {
@@ -232,7 +267,7 @@
 }
 @media (max-width: 767px) {
   .product-wall-preview-panel {
-    background: var(--color-surface-container-low, #f8f6f2);
+    background: var(--color-surface-container-low);
     animation: none;
   }
   .product-wall-preview-canvas {
@@ -254,7 +289,7 @@
     display: grid !important;
     grid-template-columns: minmax(0, 1fr);
     gap: 10px;
-    box-shadow: 0 -14px 36px rgba(15, 23, 42, 0.08);
+    box-shadow: 0 -14px 36px color-mix(in srgb, var(--color-shadow) 8%, transparent);
   }
   .product-wall-preview-actions {
     display: grid !important;

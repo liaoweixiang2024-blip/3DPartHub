@@ -9,12 +9,16 @@ import RouteProgress from './components/shared/RouteProgress';
 import { ToastProvider } from './components/shared/Toast';
 import { isRateLimitError, notifyGlobalError } from './lib/errorNotifications';
 import { motionDuration, motionEase } from './lib/motion';
+import { getPublicSettingsSnapshot } from './lib/publicSettings';
 import Router from './router';
 
 export default function App() {
   return (
     <SWRConfig
       value={{
+        fallback: {
+          publicSettings: getPublicSettingsSnapshot(),
+        },
         dedupingInterval: 5000,
         focusThrottleInterval: 10000,
         revalidateOnFocus: false,

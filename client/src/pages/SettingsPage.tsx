@@ -1,9 +1,12 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef } from 'react';
+import { mutate as mutateSWR } from 'swr';
 import {
   getSettings,
   updateSettings,
   uploadImage,
   sendTestEmail,
+  testCacheSettings,
+  testStorageSettings,
   getBackupStats,
   getBackupHealth,
   checkBackupPolicy,
@@ -34,11 +37,13 @@ import {
   type BackupRecord,
   type BackupHealth,
   type BackupPolicyCheck,
+  type SettingsConnectivityResult,
   scanCleanup,
   executeCleanup,
   type CleanupScanResult,
   type CleanupCategory,
 } from '../api/settings';
+import ColorSchemeEditor from '../components/settings/ColorSchemeSettings';
 import { AdminContentPanel, AdminManagementPage } from '../components/shared/AdminManagementPage';
 import { AdminPageShell } from '../components/shared/AdminPageShell';
 import Icon from '../components/shared/Icon';
@@ -49,6 +54,7 @@ import { useToast } from '../components/shared/Toast';
 import { useDocumentTitle } from '../hooks/useDocumentTitle';
 import {
   DEFAULT_INQUIRY_STATUSES,
+  DEFAULT_ADMIN_NAV,
   DEFAULT_MOBILE_NAV,
   DEFAULT_NAV,
   DEFAULT_SUPPORT_STEPS,
@@ -56,6 +62,7 @@ import {
   DEFAULT_TICKET_CLASSIFICATIONS,
   DEFAULT_TICKET_STATUSES,
   DEFAULT_UPLOAD_POLICY,
+  DEFAULT_USER_NAV,
   isAdminOnly,
   parseSetting,
   type NavItemConfig,
@@ -64,9 +71,20 @@ import {
   type TicketClassificationConfig,
   type UploadPolicy,
 } from '../lib/businessConfig';
-import { applyColorScheme, generatePaletteFromPrimary } from '../lib/colorScheme';
-import { COLOR_PRESETS, COLOR_KEYS } from '../lib/colorSchemes';
 import { DEFAULT_PRIVACY_SECTIONS, DEFAULT_TERMS_SECTIONS, type LegalSection } from '../lib/legalContent';
+import {
+  buildFooterCopyright,
+  buildModelDetailCopyright,
+  DEFAULT_FOOTER_COPYRIGHT,
+  DEFAULT_MODEL_DETAIL_COPYRIGHT,
+  DEFAULT_MODEL_DETAIL_DISCLAIMER,
+} from '../lib/publicSettings';
+import {
+  DEFAULT_INTERFACE_THEME,
+  INTERFACE_THEME_CATALOG,
+  INTERFACE_THEME_OPTIONS,
+} from '../themes/interfaceThemes/catalog';
+import { DEFAULT_MOBILE_THEME, MOBILE_THEME_OPTIONS } from '../themes/mobileThemes/catalog';
 // Note: pollBackupProgress is used by handleExport
 
 const RESTORE_JOB_SOURCE_KEY = 'restoreJobSource';
@@ -91,7 +109,11 @@ const DEFAULT_SETTINGS: SystemSettings = {
   contact_phone: '',
   contact_address: '',
   footer_links: '',
-  footer_copyright: '',
+  footer_copyright: DEFAULT_FOOTER_COPYRIGHT,
+  footer_copyright_follow_site_title: true,
+  model_detail_disclaimer: DEFAULT_MODEL_DETAIL_DISCLAIMER,
+  model_detail_copyright: DEFAULT_MODEL_DETAIL_COPYRIGHT,
+  model_detail_copyright_follow_site_title: true,
   legal_privacy_updated_at: '2026 年 4 月',
   legal_terms_updated_at: '2026 年 4 月',
   legal_privacy_sections: JSON.stringify(DEFAULT_PRIVACY_SECTIONS, null, 2),
@@ -113,6 +135,8 @@ const DEFAULT_SETTINGS: SystemSettings = {
   smtp_from: '',
   smtp_secure: true,
   email_templates: '',
+  interface_theme: DEFAULT_INTERFACE_THEME,
+  mobile_interface_theme: DEFAULT_MOBILE_THEME,
   color_scheme: 'orange',
   color_custom_dark: '{}',
   color_custom_light: '{}',
@@ -182,8 +206,8 @@ const DEFAULT_SETTINGS: SystemSettings = {
   ticket_classifications: JSON.stringify(DEFAULT_TICKET_CLASSIFICATIONS, null, 2),
   support_process_steps: JSON.stringify(DEFAULT_SUPPORT_STEPS, null, 2),
   nav_items: JSON.stringify(DEFAULT_NAV, null, 2),
-  nav_user_items: '',
-  nav_admin_items: '',
+  nav_user_items: JSON.stringify(DEFAULT_USER_NAV, null, 2),
+  nav_admin_items: JSON.stringify(DEFAULT_ADMIN_NAV, null, 2),
   nav_mobile_items: JSON.stringify(DEFAULT_MOBILE_NAV, null, 2),
   upload_policy: JSON.stringify(DEFAULT_UPLOAD_POLICY, null, 2),
   page_size_policy: JSON.stringify(
@@ -235,6 +259,51 @@ const DEFAULT_SETTINGS: SystemSettings = {
   product_wall_max_image_mb: 50,
   product_wall_max_batch_count: 50,
   product_wall_max_zip_extract: 100,
+  cache_driver: 'redis',
+  cache_enabled: true,
+  redis_url: 'redis://localhost:6379',
+  redis_password: '',
+  redis_db: 0,
+  redis_key_prefix: '3dparthub',
+  redis_tls_enabled: false,
+  cache_public_settings_ttl_seconds: 60,
+  cache_model_list_ttl_seconds: 300,
+  cache_model_detail_ttl_seconds: 300,
+  cache_search_ttl_seconds: 60,
+  cache_selection_ttl_seconds: 600,
+  cache_static_asset_max_age_days: 30,
+  storage_provider: 'local',
+  storage_endpoint: '',
+  storage_region: '',
+  storage_bucket: '',
+  storage_access_key_id: '',
+  storage_access_key_secret: '',
+  storage_use_ssl: true,
+  storage_force_path_style: false,
+  storage_public_base_url: '',
+  storage_cdn_base_url: '',
+  storage_image_prefix: 'images',
+  storage_thumbnail_prefix: 'thumbnails',
+  storage_model_prefix: 'models',
+  storage_original_prefix: 'originals',
+  storage_drawing_prefix: 'drawings',
+  storage_product_wall_prefix: 'product-wall',
+  storage_attachment_prefix: 'attachments',
+  storage_backup_prefix: 'backups',
+  storage_temp_prefix: 'temp',
+  storage_signed_url_enabled: false,
+  storage_signed_url_ttl_seconds: 3600,
+  storage_upload_multipart_mb: 16,
+  storage_upload_concurrency: 4,
+  image_cdn_enabled: false,
+  image_optimize_enabled: true,
+  image_webp_enabled: true,
+  image_thumbnail_quality: 82,
+  image_large_max_width: 2560,
+  image_cache_max_age_days: 30,
+  resource_cdn_enabled: false,
+  resource_cache_max_age_days: 30,
+  resource_download_acceleration_enabled: false,
   download_token_ttl_minutes: 5,
   ticket_attachment_max_mb: 100,
   ticket_attachment_types:
@@ -261,6 +330,8 @@ type SettingItemType =
   | 'color'
   | 'range'
   | 'email-test'
+  | 'cache-test'
+  | 'storage-test'
   | 'color-scheme';
 
 interface SettingItemBase {
@@ -274,13 +345,22 @@ interface SettingItemBase {
 
 type SystemSettingItem = SettingItemBase & {
   key: keyof SystemSettings;
-  type: Exclude<SettingItemType, 'email-test'>;
+  type: Exclude<SettingItemType, 'email-test' | 'cache-test' | 'storage-test'>;
 };
 
-type ActionSettingItem = SettingItemBase & {
-  key: 'smtp_test';
-  type: 'email-test';
-};
+type ActionSettingItem =
+  | (SettingItemBase & {
+      key: 'smtp_test';
+      type: 'email-test';
+    })
+  | (SettingItemBase & {
+      key: 'cache_test';
+      type: 'cache-test';
+    })
+  | (SettingItemBase & {
+      key: 'storage_test';
+      type: 'storage-test';
+    });
 
 type SettingItem = SystemSettingItem | ActionSettingItem;
 
@@ -291,12 +371,36 @@ interface SettingGroup {
 }
 
 function isSystemSettingKey(key: SettingItem['key']): key is keyof SystemSettings {
-  return key !== 'smtp_test';
+  return !['smtp_test', 'cache_test', 'storage_test'].includes(String(key));
 }
 
 function isSection(item: SettingItem | { _section: string }): item is { _section: string } {
   return '_section' in item;
 }
+
+const CACHE_DRIVER_OPTIONS = [
+  { value: 'redis', label: 'Redis 缓存' },
+  { value: 'memory', label: '内存缓存' },
+  { value: 'off', label: '关闭缓存' },
+];
+
+const STORAGE_PROVIDER_OPTIONS = [
+  { value: 'local', label: '本地存储' },
+  { value: 'minio', label: 'MinIO / 私有 S3' },
+  { value: 'tencent_cos', label: '腾讯云 COS' },
+  { value: 'aliyun_oss', label: '阿里云 OSS' },
+  { value: 'qiniu_kodo', label: '七牛云 Kodo' },
+  { value: 's3_compatible', label: 'S3 兼容存储' },
+];
+
+const CACHE_STORAGE_GROUP_TITLE = '缓存与云存储';
+const CACHE_STORAGE_DEFAULT_SECTION = 'Redis 与页面缓存';
+const SETTING_SECTION_ICONS: Record<string, string> = {
+  'Redis 与页面缓存': 'memory',
+  对象存储服务商: 'cloud',
+  资源目录与访问策略: 'folder_open',
+  图片与资源优化: 'image',
+};
 
 const GROUPS: SettingGroup[] = [
   {
@@ -341,22 +445,73 @@ const GROUPS: SettingGroup[] = [
       },
       { key: 'site_description', label: '网站描述', desc: '用于 SEO 和分享链接的站点描述', type: 'text' },
       { key: 'site_keywords', label: '关键词', desc: 'SEO 关键词，多个用逗号分隔', type: 'text' },
-      { key: 'contact_email', label: '联系邮箱', desc: '显示在页脚的联系邮箱，用户可直接点击发送邮件', type: 'text' },
-      { key: 'contact_phone', label: '联系电话', desc: '显示在页脚的联系电话', type: 'text' },
-      { key: 'contact_address', label: '联系地址', desc: '显示在页脚的公司/办公地址', type: 'text' },
+      { _section: '页脚联系信息' },
       {
-        key: 'footer_copyright',
-        label: '版权信息',
-        desc: '页脚左侧显示的版权文字，如：© 2024 公司名称 版权所有',
+        key: 'contact_email',
+        label: '联系邮箱',
+        desc: '显示在前台页脚的联系信息区，用户可直接点击发送邮件',
         type: 'text',
       },
-      { key: 'footer_links', label: '页脚链接', desc: '管理页脚链接的显示文字和跳转地址', type: 'textarea' },
+      { key: 'contact_phone', label: '联系电话', desc: '显示在前台页脚的联系信息区', type: 'text' },
+      { key: 'contact_address', label: '联系地址', desc: '显示在前台页脚底部的公司/办公地址', type: 'text' },
+      { _section: '模型详情页页脚' },
+      {
+        key: 'model_detail_disclaimer',
+        label: '模型详情说明',
+        desc: '显示在模型详情页底部，用于说明模型用途、生产依据等注意事项',
+        type: 'textarea',
+      },
+      {
+        key: 'model_detail_copyright_follow_site_title',
+        label: '模型详情版权跟随网站名称',
+        desc: '开启后根据站点标题自动生成：© 2026 网站名称',
+        type: 'switch',
+      },
+      {
+        key: 'model_detail_copyright',
+        label: '模型详情版权',
+        desc: '关闭跟随网站名称后可手动编辑，例如：© 2026 3DPartHub',
+        type: 'text',
+      },
+      { _section: '友情链接与版权' },
+      {
+        key: 'footer_links',
+        label: '友情链接',
+        desc: '显示在前台页脚的相关链接区；保存时会自动过滤空行',
+        type: 'textarea',
+      },
+      {
+        key: 'footer_copyright_follow_site_title',
+        label: '页脚版权跟随网站名称',
+        desc: '开启后根据站点标题自动生成：© 2026 网站名称. All rights reserved.',
+        type: 'switch',
+      },
+      {
+        key: 'footer_copyright',
+        label: '页脚版权',
+        desc: '关闭跟随网站名称后可手动编辑，例如：© 2026 3DPartHub. All rights reserved.',
+        type: 'text',
+      },
     ],
   },
   {
     title: '外观与主题',
     icon: 'palette',
     items: [
+      {
+        key: 'interface_theme',
+        label: '界面主题',
+        desc: '选择前台界面风格，会影响导航、首页、登录页和部分页面模板的展示效果。',
+        type: 'select',
+        options: INTERFACE_THEME_OPTIONS,
+      },
+      {
+        key: 'mobile_interface_theme',
+        label: '移动端主题',
+        desc: '移动端独立主题入口；当前默认沿用旧版移动端样式，后续可单独开发和切换移动端主题。',
+        type: 'select',
+        options: MOBILE_THEME_OPTIONS,
+      },
       {
         key: 'color_scheme',
         label: '配色方案',
@@ -702,6 +857,328 @@ const GROUPS: SettingGroup[] = [
     ],
   },
   {
+    title: CACHE_STORAGE_GROUP_TITLE,
+    icon: 'storage',
+    items: [
+      { _section: 'Redis 与页面缓存' },
+      {
+        key: 'cache_enabled',
+        label: '启用缓存',
+        desc: '控制公共设置、模型列表、搜索、选型等高频数据的缓存策略',
+        type: 'switch',
+      },
+      {
+        key: 'cache_driver',
+        label: '缓存驱动',
+        desc: 'Redis 适合生产环境；内存缓存适合单机测试；关闭缓存便于调试',
+        type: 'select',
+        options: CACHE_DRIVER_OPTIONS,
+      },
+      {
+        key: 'redis_url',
+        label: 'Redis 地址',
+        desc: '例如 redis://127.0.0.1:6379 或 rediss://host:6379；生产环境建议使用独立 Redis',
+        type: 'text',
+      },
+      {
+        key: 'redis_password',
+        label: 'Redis 密码',
+        desc: 'Redis 认证密码；留空表示无密码，保存后会自动隐藏',
+        type: 'text',
+      },
+      {
+        key: 'redis_db',
+        label: 'Redis 数据库',
+        desc: 'Redis DB 编号，默认 0；多项目共用 Redis 时建议单独分配',
+        type: 'number',
+        min: 0,
+        max: 15,
+      },
+      {
+        key: 'redis_key_prefix',
+        label: '缓存键前缀',
+        desc: '用于隔离不同部署环境，如 3dparthub:prod；修改后建议清理旧缓存',
+        type: 'text',
+      },
+      {
+        key: 'redis_tls_enabled',
+        label: 'Redis TLS',
+        desc: '云厂商 Redis 开启 TLS/SSL 时启用；也可直接使用 rediss:// 地址',
+        type: 'switch',
+      },
+      {
+        key: 'cache_test',
+        label: 'Redis 连接测试',
+        desc: '保存当前缓存配置后，执行 PING、写入、读取和删除测试键',
+        type: 'cache-test',
+      },
+      {
+        key: 'cache_public_settings_ttl_seconds',
+        label: '公共设置缓存',
+        desc: '站点名称、主题、导航等公共设置缓存时间；越短越快生效',
+        type: 'number',
+        min: 0,
+        max: 86400,
+      },
+      {
+        key: 'cache_model_list_ttl_seconds',
+        label: '模型列表缓存',
+        desc: '首页、模型列表和分类结果的缓存时间；模型频繁更新时建议缩短',
+        type: 'number',
+        min: 0,
+        max: 86400,
+      },
+      {
+        key: 'cache_model_detail_ttl_seconds',
+        label: '模型详情缓存',
+        desc: '模型详情、规格、下载项等数据缓存时间',
+        type: 'number',
+        min: 0,
+        max: 86400,
+      },
+      {
+        key: 'cache_search_ttl_seconds',
+        label: '搜索缓存',
+        desc: '顶部搜索、后台搜索、模型搜索的结果缓存时间',
+        type: 'number',
+        min: 0,
+        max: 86400,
+      },
+      {
+        key: 'cache_selection_ttl_seconds',
+        label: '选型数据缓存',
+        desc: '选型分类、参数和产品数据缓存时间；批量导入后可清理缓存',
+        type: 'number',
+        min: 0,
+        max: 86400,
+      },
+      {
+        key: 'cache_static_asset_max_age_days',
+        label: '静态资源缓存',
+        desc: '图片、缩略图、模型资源等浏览器缓存天数；配合 CDN 使用效果更好',
+        type: 'number',
+        min: 0,
+        max: 365,
+      },
+      { _section: '对象存储服务商' },
+      {
+        key: 'storage_provider',
+        label: '存储类型',
+        desc: '选择图片、模型文件、附件、备份等资源的存储后端；切换到云存储后需配置访问参数',
+        type: 'select',
+        options: STORAGE_PROVIDER_OPTIONS,
+      },
+      {
+        key: 'storage_endpoint',
+        label: 'Endpoint',
+        desc: 'COS/OSS/S3/MinIO 服务地址，例如 cos.ap-guangzhou.myqcloud.com 或 oss-cn-hangzhou.aliyuncs.com',
+        type: 'text',
+      },
+      {
+        key: 'storage_region',
+        label: '地域 Region',
+        desc: '云存储地域，如 ap-guangzhou、oss-cn-hangzhou；本地存储可留空',
+        type: 'text',
+      },
+      {
+        key: 'storage_bucket',
+        label: 'Bucket',
+        desc: '用于保存图片、模型、附件和备份文件的 Bucket 名称',
+        type: 'text',
+      },
+      {
+        key: 'storage_access_key_id',
+        label: 'Access Key ID',
+        desc: '云存储访问密钥 ID；建议使用最小权限账号',
+        type: 'text',
+      },
+      {
+        key: 'storage_access_key_secret',
+        label: 'Access Key Secret',
+        desc: '云存储访问密钥 Secret；保存后会自动隐藏',
+        type: 'text',
+      },
+      {
+        key: 'storage_use_ssl',
+        label: 'HTTPS 访问',
+        desc: '生产环境建议开启；本地 MinIO 调试可按实际情况关闭',
+        type: 'switch',
+      },
+      {
+        key: 'storage_force_path_style',
+        label: '路径风格访问',
+        desc: 'MinIO 或部分 S3 兼容服务需要开启；腾讯云 COS、阿里云 OSS 通常关闭',
+        type: 'switch',
+      },
+      {
+        key: 'storage_public_base_url',
+        label: '公开访问域名',
+        desc: '资源公开访问基础地址，例如对象存储外网域名；留空则由后端生成默认地址',
+        type: 'text',
+      },
+      {
+        key: 'storage_cdn_base_url',
+        label: 'CDN 加速域名',
+        desc: '图片和资源使用的 CDN 域名；开启下方 CDN 开关后优先使用',
+        type: 'text',
+      },
+      {
+        key: 'storage_test',
+        label: '存储读写测试',
+        desc: '保存当前存储配置后，向临时目录写入、读取并删除一个测试对象',
+        type: 'storage-test',
+      },
+      { _section: '资源目录与访问策略' },
+      {
+        key: 'storage_image_prefix',
+        label: '图片目录',
+        desc: '模型图片、站点图片等原图目录前缀',
+        type: 'text',
+      },
+      {
+        key: 'storage_thumbnail_prefix',
+        label: '缩略图目录',
+        desc: '首页列表、模型卡片、产品图库缩略图目录前缀',
+        type: 'text',
+      },
+      {
+        key: 'storage_model_prefix',
+        label: '模型文件目录',
+        desc: 'STEP/STP/IGES/XT 等可下载模型文件目录前缀',
+        type: 'text',
+      },
+      {
+        key: 'storage_original_prefix',
+        label: '原始文件目录',
+        desc: '上传后的原始资源、未转换源文件目录前缀',
+        type: 'text',
+      },
+      {
+        key: 'storage_drawing_prefix',
+        label: '图纸目录',
+        desc: 'PDF、工程图、说明文档等图纸资源目录前缀',
+        type: 'text',
+      },
+      {
+        key: 'storage_product_wall_prefix',
+        label: '产品图库目录',
+        desc: '产品图库批量上传、压缩包提取后的图片目录前缀',
+        type: 'text',
+      },
+      {
+        key: 'storage_attachment_prefix',
+        label: '附件目录',
+        desc: '工单、询价沟通、用户上传附件目录前缀',
+        type: 'text',
+      },
+      {
+        key: 'storage_backup_prefix',
+        label: '备份目录',
+        desc: '数据库备份、资源备份、镜像更新包目录前缀',
+        type: 'text',
+      },
+      {
+        key: 'storage_temp_prefix',
+        label: '临时目录',
+        desc: '分片上传、转换过程和临时导入文件目录前缀',
+        type: 'text',
+      },
+      {
+        key: 'storage_signed_url_enabled',
+        label: '私有签名访问',
+        desc: '模型文件、原始文件和附件通过临时签名 URL 访问，适合私有 Bucket',
+        type: 'switch',
+      },
+      {
+        key: 'storage_signed_url_ttl_seconds',
+        label: '签名链接有效期',
+        desc: '下载模型、图纸、附件时生成临时 URL 的有效时间',
+        type: 'number',
+        min: 60,
+        max: 86400,
+      },
+      {
+        key: 'storage_upload_multipart_mb',
+        label: '分片大小',
+        desc: '大模型和压缩包上传的分片大小，云存储建议 8-64 MB',
+        type: 'number',
+        min: 5,
+        max: 512,
+      },
+      {
+        key: 'storage_upload_concurrency',
+        label: '上传并发',
+        desc: '大文件分片上传并发数；带宽较小时建议 2-4',
+        type: 'number',
+        min: 1,
+        max: 16,
+      },
+      { _section: '图片与资源优化' },
+      {
+        key: 'image_cdn_enabled',
+        label: '图片走 CDN',
+        desc: '首页缩略图、模型图片、产品图库图片优先使用 CDN 域名',
+        type: 'switch',
+      },
+      {
+        key: 'image_optimize_enabled',
+        label: '图片压缩优化',
+        desc: '上传后生成轻量缩略图，减少产品墙和模型列表首屏加载压力',
+        type: 'switch',
+      },
+      {
+        key: 'image_webp_enabled',
+        label: '生成 WebP',
+        desc: '支持浏览器优先返回 WebP 缩略图；原图仍保留',
+        type: 'switch',
+      },
+      {
+        key: 'image_thumbnail_quality',
+        label: '缩略图质量',
+        desc: '图片缩略图压缩质量，建议 75-88；数值越高体积越大',
+        type: 'number',
+        min: 1,
+        max: 100,
+      },
+      {
+        key: 'image_large_max_width',
+        label: '大图最大宽度',
+        desc: '图片预览大图的最大宽度，超出后按比例压缩',
+        type: 'number',
+        min: 320,
+        max: 12000,
+      },
+      {
+        key: 'image_cache_max_age_days',
+        label: '图片缓存天数',
+        desc: '图片、缩略图、WebP 等资源的浏览器/CDN 缓存天数',
+        type: 'number',
+        min: 0,
+        max: 365,
+      },
+      {
+        key: 'resource_cdn_enabled',
+        label: '模型资源走 CDN',
+        desc: 'STEP、图纸、附件等静态资源优先使用 CDN 域名；私有下载仍会走签名策略',
+        type: 'switch',
+      },
+      {
+        key: 'resource_cache_max_age_days',
+        label: '资源缓存天数',
+        desc: '模型文件、图纸、附件等资源的浏览器/CDN 缓存天数',
+        type: 'number',
+        min: 0,
+        max: 365,
+      },
+      {
+        key: 'resource_download_acceleration_enabled',
+        label: '下载加速',
+        desc: '批量下载、模型下载优先使用加速域名；需要 CDN 或对象存储加速服务配合',
+        type: 'switch',
+      },
+    ],
+  },
+  {
     title: '邮件服务',
     icon: 'mail',
     items: [
@@ -827,6 +1304,26 @@ const GROUPS: SettingGroup[] = [
     ],
   },
 ];
+
+type SettingItemSection = {
+  title: string;
+  items: SettingItem[];
+};
+
+function splitSettingGroupSections(group: SettingGroup): SettingItemSection[] {
+  const sections: SettingItemSection[] = [];
+  let current: SettingItemSection = { title: '基础设置', items: [] };
+  for (const item of group.items) {
+    if (isSection(item)) {
+      if (current.items.length > 0) sections.push(current);
+      current = { title: item._section, items: [] };
+      continue;
+    }
+    current.items.push(item);
+  }
+  if (current.items.length > 0) sections.push(current);
+  return sections;
+}
 
 // ── 3D Preview sub-tabs & material preset definitions ──
 type PreviewSubtab = 'general' | 'edge' | 'measure' | 'light' | 'material';
@@ -1160,204 +1657,49 @@ function Switch({
   );
 }
 
-function ColorSchemeEditor({
-  settings,
-  updateSetting,
-}: {
-  settings: SystemSettings;
-  updateSetting: (key: keyof SystemSettings, value: boolean | number | string) => void;
-}) {
-  const [customMode, setCustomMode] = useState<'generate' | 'advanced'>('generate');
-  const [customPrimary, setCustomPrimary] = useState('#3b82f6');
-  const [showAdvanced, setShowAdvanced] = useState(false);
-
-  const currentScheme = (settings.color_scheme as string) || 'orange';
-  const isCustom = currentScheme === 'custom';
-
-  // Parse custom colors from JSON strings
-  let customDark: Record<string, string> = {};
-  let customLight: Record<string, string> = {};
-  try {
-    customDark = JSON.parse((settings.color_custom_dark as string) || '{}');
-  } catch {
-    // Invalid custom color JSON falls back to an empty dark palette.
-  }
-  try {
-    customLight = JSON.parse((settings.color_custom_light as string) || '{}');
-  } catch {
-    // Invalid custom color JSON falls back to an empty light palette.
-  }
-
-  // Live preview
-  const preview = useCallback(() => {
-    applyColorScheme(currentScheme, settings.color_custom_dark as string, settings.color_custom_light as string);
-  }, [currentScheme, settings.color_custom_dark, settings.color_custom_light]);
-
-  useEffect(() => {
-    preview();
-  }, [preview]);
-
-  function selectPreset(key: string) {
-    updateSetting('color_scheme', key);
-  }
-
-  function handleGenerate() {
-    const palette = generatePaletteFromPrimary(customPrimary);
-    const darkJson = JSON.stringify(palette.dark);
-    const lightJson = JSON.stringify(palette.light);
-    updateSetting('color_scheme', 'custom');
-    updateSetting('color_custom_dark', darkJson);
-    updateSetting('color_custom_light', lightJson);
-  }
-
-  function updateCustomColor(mode: 'dark' | 'light', key: string, value: string) {
-    const current = mode === 'dark' ? { ...customDark } : { ...customLight };
-    current[key] = value;
-    updateSetting(mode === 'dark' ? 'color_custom_dark' : 'color_custom_light', JSON.stringify(current));
-    if (currentScheme !== 'custom') {
-      updateSetting('color_scheme', 'custom');
-    }
-  }
-
+function InterfaceThemePicker({ value, onChange }: { value: string; onChange: (value: string) => void }) {
+  const themes = Object.values(INTERFACE_THEME_CATALOG);
   return (
-    <>
-      <div>
-        <p className="text-sm font-medium text-on-surface mb-1">配色方案</p>
-        <p className="text-xs text-on-surface-variant mb-3">选择预设配色或自定义主题色，实时预览效果</p>
-
-        {/* Preset swatches */}
-        <div className="flex flex-wrap gap-3">
-          {Object.entries(COLOR_PRESETS).map(([key, preset]) => (
-            <button
-              key={key}
-              onClick={() => selectPreset(key)}
-              className={`flex flex-col items-center gap-1.5 p-2.5 rounded-lg border-2 transition-all ${
-                currentScheme === key
-                  ? 'border-primary-container bg-primary-container/10 shadow-sm'
-                  : 'border-outline-variant/20 hover:border-outline-variant/40 hover:bg-surface-container-high/30'
-              }`}
-            >
-              <span
-                className="w-8 h-8 rounded-full shadow-inner border border-white/10"
-                style={{ backgroundColor: preset.primary }}
-              />
-              <span className="text-[10px] text-on-surface-variant font-medium">{preset.label}</span>
-            </button>
-          ))}
-          {/* Custom option */}
+    <div className="grid w-full gap-3 lg:grid-cols-2">
+      {themes.map((theme) => {
+        const selected = value === theme.key;
+        return (
           <button
-            onClick={() => selectPreset('custom')}
-            className={`flex flex-col items-center gap-1.5 p-2.5 rounded-lg border-2 transition-all ${
-              isCustom
-                ? 'border-primary-container bg-primary-container/10 shadow-sm'
-                : 'border-outline-variant/20 hover:border-outline-variant/40 hover:bg-surface-container-high/30'
+            key={theme.key}
+            type="button"
+            aria-pressed={selected}
+            onClick={() => onChange(theme.key)}
+            className={`group overflow-hidden rounded-lg border text-left transition-colors ${
+              selected
+                ? 'border-primary bg-primary-container/10 shadow-sm'
+                : 'border-outline-variant/20 bg-surface-container-lowest hover:border-primary/50'
             }`}
           >
-            <span className="w-8 h-8 rounded-full border-2 border-dashed border-on-surface-variant/40 flex items-center justify-center">
-              <Icon name="colorize" size={14} className="text-on-surface-variant/60" />
-            </span>
-            <span className="text-[10px] text-on-surface-variant font-medium">自定义</span>
-          </button>
-        </div>
-      </div>
-
-      {/* Custom color section */}
-      {isCustom && (
-        <div className="bg-surface-container-high/30 rounded-lg border border-outline-variant/10 p-4 space-y-4">
-          {/* Tabs */}
-          <div className="flex gap-2">
-            <button
-              onClick={() => setCustomMode('generate')}
-              className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
-                customMode === 'generate'
-                  ? 'bg-primary-container text-on-primary'
-                  : 'bg-surface-container-highest/50 text-on-surface-variant'
-              }`}
-            >
-              从主色生成
-            </button>
-            <button
-              onClick={() => setCustomMode('advanced')}
-              className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
-                customMode === 'advanced'
-                  ? 'bg-primary-container text-on-primary'
-                  : 'bg-surface-container-highest/50 text-on-surface-variant'
-              }`}
-            >
-              高级自定义
-            </button>
-          </div>
-
-          {customMode === 'generate' ? (
-            <div className="flex items-center gap-4">
-              <div className="flex items-center gap-2">
-                <span className="text-xs text-on-surface-variant">主色调：</span>
-                <input
-                  type="color"
-                  value={customPrimary}
-                  onChange={(e) => setCustomPrimary(e.target.value)}
-                  className="w-10 h-8 rounded cursor-pointer border border-outline-variant/30 p-0"
+            <div className="aspect-[16/10] overflow-hidden bg-surface-container">
+              {theme.screenshot ? (
+                <SafeImage
+                  src={theme.screenshot}
+                  alt={`${theme.label} 预览`}
+                  className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-[1.02]"
+                  fallbackIcon="palette"
                 />
-                <span className="text-xs text-on-surface-variant font-mono">{customPrimary}</span>
-              </div>
-              <button
-                onClick={handleGenerate}
-                className="px-4 py-1.5 text-xs font-medium bg-primary-container/20 text-primary-container rounded-md hover:bg-primary-container/30 transition-colors"
-              >
-                生成色板
-              </button>
-            </div>
-          ) : (
-            <>
-              <button
-                onClick={() => setShowAdvanced(!showAdvanced)}
-                className="flex items-center gap-1.5 text-xs text-primary-container hover:underline"
-              >
-                <Icon name={showAdvanced ? 'expand_less' : 'expand_more'} size={14} />
-                {showAdvanced ? '收起颜色编辑器' : '展开颜色编辑器'}
-              </button>
-              {showAdvanced && (
-                <div className="space-y-3">
-                  <p className="text-xs text-on-surface-variant">
-                    分别设置暗色和亮色模式下的各颜色变量。留空则使用全局默认值。
-                  </p>
-                  {(['dark', 'light'] as const).map((mode) => (
-                    <div key={mode}>
-                      <p className="text-xs font-medium text-on-surface mb-2">
-                        {mode === 'dark' ? '暗色模式' : '亮色模式'}
-                      </p>
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-1.5">
-                        {COLOR_KEYS.map((ck) => {
-                          const val = (mode === 'dark' ? customDark : customLight)[ck] || '';
-                          return (
-                            <div key={ck} className="flex items-center gap-1.5 min-w-0">
-                              <input
-                                type="color"
-                                value={val || '#888888'}
-                                onChange={(e) => updateCustomColor(mode, ck, e.target.value)}
-                                className="w-5 h-5 rounded cursor-pointer border-0 p-0 shrink-0"
-                              />
-                              <span className="text-[10px] text-on-surface-variant w-24 truncate shrink-0">{ck}</span>
-                              <input
-                                type="text"
-                                value={val}
-                                onChange={(e) => updateCustomColor(mode, ck, e.target.value)}
-                                placeholder="默认"
-                                className="flex-1 min-w-0 bg-surface-container-lowest text-on-surface text-[10px] rounded px-1.5 py-0.5 border border-outline-variant/15 outline-none focus:border-primary font-mono"
-                              />
-                            </div>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  ))}
+              ) : (
+                <div className="flex h-full items-center justify-center text-on-surface-variant">
+                  <Icon name="palette" size={28} />
                 </div>
               )}
-            </>
-          )}
-        </div>
-      )}
-    </>
+            </div>
+            <div className="space-y-1 px-3 py-3">
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-sm font-semibold text-on-surface">{theme.label}</span>
+                {selected ? <Icon name="check_circle" size={18} className="text-primary" /> : null}
+              </div>
+              <p className="line-clamp-2 text-xs leading-5 text-on-surface-variant">{theme.description}</p>
+            </div>
+          </button>
+        );
+      })}
+    </div>
   );
 }
 
@@ -1531,11 +1873,68 @@ const STRUCTURED_SETTING_KEYS = new Set<keyof SystemSettings>([
   'email_templates',
 ]);
 
+const SENSITIVE_TEXT_SETTING_KEYS = new Set<keyof SystemSettings>([
+  'smtp_pass',
+  'redis_password',
+  'storage_access_key_secret',
+]);
+
+function isSensitiveTextSettingKey(key: SettingItem['key']): key is keyof SystemSettings {
+  return isSystemSettingKey(key) && SENSITIVE_TEXT_SETTING_KEYS.has(key);
+}
+
 const inputClass =
   'w-full min-w-0 bg-surface-container-lowest text-on-surface text-xs rounded-md px-2.5 py-1.5 border border-outline-variant/20 outline-none focus:border-primary placeholder:text-on-surface-variant/30';
 const numberInputClass = `${inputClass} text-center`;
 const compactListClass = 'space-y-2 w-full max-w-5xl';
 const compactPanelClass = 'p-2.5 rounded-lg bg-surface-container-high/30 border border-outline-variant/10';
+
+function normalizeFooterLinks(value: unknown, clean = false): FooterLinkConfig[] {
+  const parsed = parseSetting<unknown>(value, []);
+  if (!Array.isArray(parsed)) return [];
+  const links = parsed.map((item) => {
+    const row = item && typeof item === 'object' ? (item as Partial<FooterLinkConfig>) : {};
+    return {
+      label: typeof row.label === 'string' ? row.label : '',
+      url: typeof row.url === 'string' ? row.url : '',
+    };
+  });
+  if (!clean) return links;
+  return links
+    .map((link) => ({ label: link.label.trim(), url: link.url.trim() }))
+    .filter((link) => link.label && link.url);
+}
+
+function serializeFooterLinks(value: unknown, clean = false): string {
+  return JSON.stringify(normalizeFooterLinks(value, clean), null, 2);
+}
+
+function getSettingsSiteTitle(settings: Partial<SystemSettings>): string {
+  return String(settings.site_title || '3DPartHub').trim() || '3DPartHub';
+}
+
+function resolveFooterCopyright(settings: Partial<SystemSettings>): string {
+  return buildFooterCopyright(getSettingsSiteTitle(settings));
+}
+
+function resolveModelDetailCopyright(settings: Partial<SystemSettings>): string {
+  return buildModelDetailCopyright(getSettingsSiteTitle(settings));
+}
+
+function normalizeSettingsForClient(settings: Partial<SystemSettings>): SystemSettings {
+  const merged = { ...DEFAULT_SETTINGS, ...settings } as SystemSettings;
+  const footerFollowsSiteTitle = merged.footer_copyright_follow_site_title !== false;
+  const modelDetailFollowsSiteTitle = merged.model_detail_copyright_follow_site_title !== false;
+  return {
+    ...merged,
+    footer_links: serializeFooterLinks(merged.footer_links),
+    footer_copyright: String(merged.footer_copyright || DEFAULT_FOOTER_COPYRIGHT),
+    footer_copyright_follow_site_title: footerFollowsSiteTitle,
+    model_detail_disclaimer: String(merged.model_detail_disclaimer || DEFAULT_MODEL_DETAIL_DISCLAIMER),
+    model_detail_copyright: String(merged.model_detail_copyright || DEFAULT_MODEL_DETAIL_COPYRIGHT),
+    model_detail_copyright_follow_site_title: modelDetailFollowsSiteTitle,
+  };
+}
 
 function setJsonSetting<T>(updateSetting: SettingUpdater, key: keyof SystemSettings, value: T) {
   updateSetting(key, JSON.stringify(value, null, 2));
@@ -1568,6 +1967,11 @@ function clampNumber(value: unknown, fallback: number, min: number, max = Number
 }
 
 function numberSettingUnit(key: keyof SystemSettings) {
+  if (key === 'redis_db') return 'DB';
+  if (key === 'storage_upload_multipart_mb' || key.includes('_mb')) return 'MB';
+  if (key === 'storage_upload_concurrency') return '并发';
+  if (key === 'image_thumbnail_quality') return '%';
+  if (key === 'image_large_max_width') return 'px';
   if (key.includes('_seconds')) return '秒';
   if (key.includes('_days')) return '天';
   if (key.includes('_hour')) return '点';
@@ -1737,9 +2141,30 @@ function dedupNavItems(json: string): string {
   }
 }
 
+function normalizeStringSetting(value: unknown, fallback = '') {
+  const normalized = String(value ?? '').trim();
+  return normalized || fallback;
+}
+
+function normalizeStoragePrefix(value: unknown, fallback: string) {
+  const normalized = String(value ?? fallback)
+    .trim()
+    .replace(/^\/+|\/+$/g, '')
+    .replace(/\/{2,}/g, '/');
+  return normalized || fallback;
+}
+
 function normalizeSettingsForSave(settings: SystemSettings): SystemSettings {
   const usernameMin = clampNumber(settings.security_username_min_length, 2, 1, 64);
   const usernameMax = Math.max(usernameMin, clampNumber(settings.security_username_max_length, 32, 1, 64));
+  const footerFollowsSiteTitle = settings.footer_copyright_follow_site_title !== false;
+  const modelDetailFollowsSiteTitle = settings.model_detail_copyright_follow_site_title !== false;
+  const cacheDriver = CACHE_DRIVER_OPTIONS.some((option) => option.value === settings.cache_driver)
+    ? settings.cache_driver
+    : DEFAULT_SETTINGS.cache_driver;
+  const storageProvider = STORAGE_PROVIDER_OPTIONS.some((option) => option.value === settings.storage_provider)
+    ? settings.storage_provider
+    : DEFAULT_SETTINGS.storage_provider;
   return {
     ...settings,
     viewer_edge_threshold_angle: clampNumber(settings.viewer_edge_threshold_angle, 28, 1, 89),
@@ -1754,6 +2179,15 @@ function normalizeSettingsForSave(settings: SystemSettings): SystemSettings {
     security_password_min_length: clampNumber(settings.security_password_min_length, 8, 6, 64),
     security_username_min_length: usernameMin,
     security_username_max_length: usernameMax,
+    footer_links: serializeFooterLinks(settings.footer_links, true),
+    footer_copyright: footerFollowsSiteTitle
+      ? resolveFooterCopyright(settings)
+      : String(settings.footer_copyright || DEFAULT_FOOTER_COPYRIGHT).trim(),
+    footer_copyright_follow_site_title: footerFollowsSiteTitle,
+    model_detail_copyright: modelDetailFollowsSiteTitle
+      ? resolveModelDetailCopyright(settings)
+      : String(settings.model_detail_copyright || DEFAULT_MODEL_DETAIL_COPYRIGHT).trim(),
+    model_detail_copyright_follow_site_title: modelDetailFollowsSiteTitle,
     nav_items: dedupNavItems(settings.nav_items),
     nav_mobile_items: dedupNavItems(settings.nav_mobile_items),
     legal_privacy_sections: JSON.stringify(
@@ -1768,6 +2202,57 @@ function normalizeSettingsForSave(settings: SystemSettings): SystemSettings {
     ),
     upload_policy: JSON.stringify(normalizeUploadPolicyForSave(settings.upload_policy), null, 2),
     page_size_policy: JSON.stringify(normalizePageSizePolicyForSave(settings.page_size_policy), null, 2),
+    cache_driver: cacheDriver,
+    redis_url: normalizeStringSetting(settings.redis_url, DEFAULT_SETTINGS.redis_url),
+    redis_db: clampNumber(settings.redis_db, DEFAULT_SETTINGS.redis_db, 0, 15),
+    redis_key_prefix: normalizeStringSetting(settings.redis_key_prefix, DEFAULT_SETTINGS.redis_key_prefix),
+    cache_public_settings_ttl_seconds: clampNumber(settings.cache_public_settings_ttl_seconds, 60, 0, 86400),
+    cache_model_list_ttl_seconds: clampNumber(settings.cache_model_list_ttl_seconds, 300, 0, 86400),
+    cache_model_detail_ttl_seconds: clampNumber(settings.cache_model_detail_ttl_seconds, 300, 0, 86400),
+    cache_search_ttl_seconds: clampNumber(settings.cache_search_ttl_seconds, 60, 0, 86400),
+    cache_selection_ttl_seconds: clampNumber(settings.cache_selection_ttl_seconds, 600, 0, 86400),
+    cache_static_asset_max_age_days: clampNumber(settings.cache_static_asset_max_age_days, 30, 0, 365),
+    storage_provider: storageProvider,
+    storage_endpoint: normalizeStringSetting(settings.storage_endpoint),
+    storage_region: normalizeStringSetting(settings.storage_region),
+    storage_bucket: normalizeStringSetting(settings.storage_bucket),
+    storage_access_key_id: normalizeStringSetting(settings.storage_access_key_id),
+    storage_public_base_url: normalizeStringSetting(settings.storage_public_base_url),
+    storage_cdn_base_url: normalizeStringSetting(settings.storage_cdn_base_url),
+    storage_image_prefix: normalizeStoragePrefix(settings.storage_image_prefix, DEFAULT_SETTINGS.storage_image_prefix),
+    storage_thumbnail_prefix: normalizeStoragePrefix(
+      settings.storage_thumbnail_prefix,
+      DEFAULT_SETTINGS.storage_thumbnail_prefix,
+    ),
+    storage_model_prefix: normalizeStoragePrefix(settings.storage_model_prefix, DEFAULT_SETTINGS.storage_model_prefix),
+    storage_original_prefix: normalizeStoragePrefix(
+      settings.storage_original_prefix,
+      DEFAULT_SETTINGS.storage_original_prefix,
+    ),
+    storage_drawing_prefix: normalizeStoragePrefix(
+      settings.storage_drawing_prefix,
+      DEFAULT_SETTINGS.storage_drawing_prefix,
+    ),
+    storage_product_wall_prefix: normalizeStoragePrefix(
+      settings.storage_product_wall_prefix,
+      DEFAULT_SETTINGS.storage_product_wall_prefix,
+    ),
+    storage_attachment_prefix: normalizeStoragePrefix(
+      settings.storage_attachment_prefix,
+      DEFAULT_SETTINGS.storage_attachment_prefix,
+    ),
+    storage_backup_prefix: normalizeStoragePrefix(
+      settings.storage_backup_prefix,
+      DEFAULT_SETTINGS.storage_backup_prefix,
+    ),
+    storage_temp_prefix: normalizeStoragePrefix(settings.storage_temp_prefix, DEFAULT_SETTINGS.storage_temp_prefix),
+    storage_signed_url_ttl_seconds: clampNumber(settings.storage_signed_url_ttl_seconds, 3600, 60, 86400),
+    storage_upload_multipart_mb: clampNumber(settings.storage_upload_multipart_mb, 16, 5, 512),
+    storage_upload_concurrency: clampNumber(settings.storage_upload_concurrency, 4, 1, 16),
+    image_thumbnail_quality: clampNumber(settings.image_thumbnail_quality, 82, 1, 100),
+    image_large_max_width: clampNumber(settings.image_large_max_width, 2560, 320, 12000),
+    image_cache_max_age_days: clampNumber(settings.image_cache_max_age_days, 30, 0, 365),
+    resource_cache_max_age_days: clampNumber(settings.resource_cache_max_age_days, 30, 0, 365),
   };
 }
 
@@ -2602,39 +3087,66 @@ function ThreadPriorityEditor({
 }
 
 function FooterLinksEditor({ settings, updateSetting }: { settings: SystemSettings; updateSetting: SettingUpdater }) {
-  const links = parseSetting<FooterLinkConfig[]>(settings.footer_links, []);
-  const update = (next: FooterLinkConfig[]) => setJsonSetting(updateSetting, 'footer_links', next);
+  const links = normalizeFooterLinks(settings.footer_links);
+  const update = (next: FooterLinkConfig[]) =>
+    setJsonSetting(updateSetting, 'footer_links', normalizeFooterLinks(next));
   const patch = (index: number, changes: Partial<FooterLinkConfig>) =>
     update(links.map((link, i) => (i === index ? { ...link, ...changes } : link)));
 
   return (
-    <div className="space-y-2 w-full max-w-4xl">
-      {links.map((link, index) => (
-        <div
-          key={`${link.url}-${index}`}
-          className={`grid grid-cols-1 xl:grid-cols-[1fr_2fr_auto] gap-2 ${compactPanelClass}`}
-        >
-          <input
-            value={link.label}
-            onChange={(e) => patch(index, { label: e.target.value })}
-            placeholder="链接文字"
-            className={inputClass}
-          />
-          <input
-            value={link.url}
-            onChange={(e) => patch(index, { url: e.target.value })}
-            placeholder="/about 或 https://example.com"
-            className={inputClass}
-          />
-          <ListActions
-            index={index}
-            total={links.length}
-            onMove={(direction) => update(moveListItem(links, index, direction))}
-            onDelete={() => update(links.filter((_, i) => i !== index))}
-          />
+    <div className="w-full max-w-5xl space-y-3">
+      <div className="grid gap-3 lg:grid-cols-[minmax(0,1.4fr)_minmax(260px,0.8fr)]">
+        <div className={`${compactPanelClass} space-y-1.5`}>
+          <p className="text-xs font-semibold text-on-surface">友情链接区块</p>
+          <p className="text-[11px] leading-5 text-on-surface-variant">
+            添加后会在前台页脚归入“相关链接”。保存时会自动过滤空行，避免无效链接出现在页面上。
+          </p>
         </div>
-      ))}
-      <AddRowButton label="添加页脚链接" onClick={() => update([...links, { label: '', url: '' }])} />
+        <div className={`${compactPanelClass} space-y-1.5`}>
+          <p className="text-xs font-semibold text-on-surface">页脚版权</p>
+          <p className="text-[11px] font-medium text-on-surface">
+            {settings.footer_copyright_follow_site_title
+              ? resolveFooterCopyright(settings)
+              : settings.footer_copyright || DEFAULT_FOOTER_COPYRIGHT}
+          </p>
+          <p className="text-[11px] leading-5 text-on-surface-variant">
+            可选择跟随网站名称自动生成，也可以关闭开关后手动编辑。
+          </p>
+        </div>
+      </div>
+      <div className="space-y-2">
+        {links.length === 0 ? (
+          <div className={`${compactPanelClass} text-xs text-on-surface-variant`}>暂无友情链接，可以从下方添加。</div>
+        ) : (
+          links.map((link, index) => (
+            <div
+              key={`footer-link-${index}`}
+              className={`grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_minmax(0,2fr)_auto] gap-2 ${compactPanelClass}`}
+            >
+              <input
+                value={link.label}
+                onChange={(e) => patch(index, { label: e.target.value })}
+                placeholder="链接文字"
+                className={inputClass}
+              />
+              <input
+                value={link.url}
+                onChange={(e) => patch(index, { url: e.target.value })}
+                placeholder="/about 或 https://example.com"
+                inputMode="url"
+                className={inputClass}
+              />
+              <ListActions
+                index={index}
+                total={links.length}
+                onMove={(direction) => update(moveListItem(links, index, direction))}
+                onDelete={() => update(links.filter((_, i) => i !== index))}
+              />
+            </div>
+          ))
+        )}
+      </div>
+      <AddRowButton label="添加友情链接" onClick={() => update([...links, { label: '', url: '' }])} />
     </div>
   );
 }
@@ -2838,6 +3350,91 @@ function EmailTestPanel({
             {testing ? '发送中...' : changed ? '保存并测试' : '发送测试'}
           </button>
         </div>
+      </div>
+    </div>
+  );
+}
+
+function isConnectivityResult(value: unknown): value is SettingsConnectivityResult {
+  return Boolean(
+    value &&
+    typeof value === 'object' &&
+    'message' in value &&
+    'details' in value &&
+    Array.isArray((value as SettingsConnectivityResult).details),
+  );
+}
+
+function connectivityTone(result: SettingsConnectivityResult | null) {
+  if (!result) return 'border-outline-variant/10 bg-surface-container-high/25 text-on-surface-variant';
+  if (result.status === 'success') return 'border-emerald-500/20 bg-emerald-500/8 text-emerald-600';
+  if (result.status === 'warning') return 'border-amber-500/25 bg-amber-500/8 text-amber-600';
+  return 'border-error/25 bg-error-container/10 text-error';
+}
+
+function SettingsConnectivityTestPanel({
+  icon,
+  title,
+  summary,
+  buttonLabel,
+  testingLabel,
+  testing,
+  changed,
+  saving,
+  result,
+  onRun,
+}: {
+  icon: string;
+  title: string;
+  summary: string;
+  buttonLabel: string;
+  testingLabel: string;
+  testing: boolean;
+  changed: boolean;
+  saving: boolean;
+  result: SettingsConnectivityResult | null;
+  onRun: () => void;
+}) {
+  const tone = connectivityTone(result);
+  return (
+    <div className="w-full max-w-6xl">
+      <div className={`rounded-lg border p-3 ${tone}`}>
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
+          <div className="flex min-w-0 flex-1 items-center gap-3">
+            <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-surface-container-lowest/70 text-current">
+              <Icon
+                name={result?.status === 'success' ? 'check_circle' : result?.status === 'error' ? 'error' : icon}
+                size={18}
+              />
+            </span>
+            <div className="min-w-0">
+              <p className="text-sm font-semibold text-on-surface">{result?.message || title}</p>
+              <p className="mt-0.5 text-xs text-on-surface-variant">
+                {result
+                  ? [result.provider, result.latencyMs ? `${result.latencyMs}ms` : ''].filter(Boolean).join(' · ')
+                  : summary}
+              </p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={onRun}
+            disabled={testing || saving}
+            className="inline-flex h-10 shrink-0 items-center justify-center gap-1.5 rounded-md bg-primary-container px-4 text-xs font-semibold text-on-primary transition-opacity hover:opacity-90 disabled:opacity-50"
+          >
+            <Icon name={testing ? 'progress_activity' : icon} size={14} />
+            {testing ? testingLabel : changed ? '保存并测试' : buttonLabel}
+          </button>
+        </div>
+        {result?.details?.length ? (
+          <div className="mt-3 space-y-1 rounded-md border border-outline-variant/10 bg-surface-container-lowest/60 p-2.5">
+            {result.details.map((detail, index) => (
+              <p key={`${detail}-${index}`} className="break-all text-xs leading-5 text-on-surface-variant">
+                {detail}
+              </p>
+            ))}
+          </div>
+        ) : null}
       </div>
     </div>
   );
@@ -3114,7 +3711,12 @@ function Content() {
   const [uploading, setUploading] = useState(false);
   const [testEmailTo, setTestEmailTo] = useState('');
   const [testingEmail, setTestingEmail] = useState(false);
+  const [testingCache, setTestingCache] = useState(false);
+  const [testingStorage, setTestingStorage] = useState(false);
+  const [cacheTestResult, setCacheTestResult] = useState<SettingsConnectivityResult | null>(null);
+  const [storageTestResult, setStorageTestResult] = useState<SettingsConnectivityResult | null>(null);
   const [activeTab, setActiveTab] = useState(GROUPS[0]?.title || '访问控制');
+  const [cacheStorageSubtab, setCacheStorageSubtab] = useState(CACHE_STORAGE_DEFAULT_SECTION);
   const [previewSubtab, setPreviewSubtab] = useState<PreviewSubtab>('general');
   const [matPresetEdit, setMatPresetEdit] = useState<MaterialPresetKey>('default');
   const imageInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
@@ -3406,7 +4008,7 @@ function Content() {
   async function loadSettings() {
     try {
       const data = await getSettings();
-      setSettings({ ...DEFAULT_SETTINGS, ...data });
+      setSettings(normalizeSettingsForClient(data));
     } catch {
       toast('加载设置失败', 'error');
     } finally {
@@ -3481,7 +4083,7 @@ function Content() {
         setSettings(normalizedSettings);
       }
       const data = await updateSettings(normalizedSettings);
-      setSettings(data);
+      setSettings(normalizeSettingsForClient({ ...normalizedSettings, ...data }));
       setChanged(false);
       // Refresh site config: re-fetch settings, apply title/logo/favicon, notify components
       const { refreshSiteConfig } = await import('../lib/publicSettings');
@@ -3495,8 +4097,43 @@ function Content() {
     }
   }
 
+  async function saveCurrentSettingsSilently() {
+    const normalizedSettings = normalizeSettingsForSave(settings);
+    if (JSON.stringify(normalizedSettings) !== JSON.stringify(settings)) {
+      setSettings(normalizedSettings);
+    }
+    const data = await updateSettings(normalizedSettings);
+    setSettings(normalizeSettingsForClient({ ...normalizedSettings, ...data }));
+    setChanged(false);
+    const { refreshSiteConfig } = await import('../lib/publicSettings');
+    await refreshSiteConfig();
+  }
+
   function updateSetting(key: keyof SystemSettings, value: boolean | number | string) {
-    setSettings((prev) => ({ ...prev, [key]: value }));
+    setSettings((prev) => {
+      let next: SystemSettings;
+      if (key === 'footer_copyright_follow_site_title') {
+        next = {
+          ...prev,
+          footer_copyright_follow_site_title: value as boolean,
+          footer_copyright: value ? resolveFooterCopyright(prev) : DEFAULT_FOOTER_COPYRIGHT,
+        };
+        return next;
+      }
+      if (key === 'model_detail_copyright_follow_site_title') {
+        next = {
+          ...prev,
+          model_detail_copyright_follow_site_title: value as boolean,
+          model_detail_copyright: value ? resolveModelDetailCopyright(prev) : DEFAULT_MODEL_DETAIL_COPYRIGHT,
+        };
+        return next;
+      }
+      next = { ...prev, [key]: value };
+      if (key === 'interface_theme') {
+        void mutateSWR('publicSettings', next, { revalidate: false });
+      }
+      return next;
+    });
     setChanged(true);
   }
 
@@ -3517,8 +4154,9 @@ function Content() {
     setTestingEmail(true);
     try {
       if (changed) {
-        const nextSettings = await updateSettings(settings);
-        setSettings(nextSettings);
+        const normalizedSettings = normalizeSettingsForSave(settings);
+        const nextSettings = await updateSettings(normalizedSettings);
+        setSettings(normalizeSettingsForClient({ ...normalizedSettings, ...nextSettings }));
         setChanged(false);
       }
       await sendTestEmail(testEmailTo.trim());
@@ -3527,6 +4165,55 @@ function Content() {
       toast(err.response?.data?.detail || err.message || '测试邮件发送失败', 'error');
     } finally {
       setTestingEmail(false);
+    }
+  }
+
+  function readConnectivityError(err: any, fallback: string): SettingsConnectivityResult {
+    const payload = err?.response?.data;
+    if (isConnectivityResult(payload)) return payload;
+    return {
+      ok: false,
+      status: 'error',
+      message: err?.response?.data?.message || err?.response?.data?.detail || err?.message || fallback,
+      details: [],
+    };
+  }
+
+  async function handleTestCacheSettings() {
+    setTestingCache(true);
+    setCacheTestResult(null);
+    try {
+      if (changed) {
+        await saveCurrentSettingsSilently();
+      }
+      const result = await testCacheSettings();
+      setCacheTestResult(result);
+      toast(result.message, result.status === 'success' ? 'success' : 'info');
+    } catch (err: any) {
+      const result = readConnectivityError(err, '缓存测试失败');
+      setCacheTestResult(result);
+      toast(result.message, 'error');
+    } finally {
+      setTestingCache(false);
+    }
+  }
+
+  async function handleTestStorageSettings() {
+    setTestingStorage(true);
+    setStorageTestResult(null);
+    try {
+      if (changed) {
+        await saveCurrentSettingsSilently();
+      }
+      const result = await testStorageSettings();
+      setStorageTestResult(result);
+      toast(result.message, result.status === 'success' ? 'success' : 'info');
+    } catch (err: any) {
+      const result = readConnectivityError(err, '存储测试失败');
+      setStorageTestResult(result);
+      toast(result.message, 'error');
+    } finally {
+      setTestingStorage(false);
     }
   }
 
@@ -4237,6 +4924,11 @@ function Content() {
                                                   className="w-full bg-surface-container-lowest text-on-surface text-sm rounded-md px-3 py-2 border border-outline-variant/20 outline-none focus:border-primary placeholder:text-on-surface-variant/30 resize-y font-mono"
                                                 />
                                               </div>
+                                            ) : item.key === 'interface_theme' ? (
+                                              <InterfaceThemePicker
+                                                value={settings.interface_theme}
+                                                onChange={(nextTheme) => updateSetting('interface_theme', nextTheme)}
+                                              />
                                             ) : item.type === 'select' ? (
                                               <select
                                                 value={settings[item.key] as string}
@@ -4273,7 +4965,7 @@ function Content() {
                                               </div>
                                             ) : (
                                               <input
-                                                type="text"
+                                                type={isSensitiveTextSettingKey(item.key) ? 'password' : 'text'}
                                                 value={settings[item.key] as string}
                                                 onChange={(e) => updateSetting(item.key, e.target.value)}
                                                 placeholder={item.desc}
@@ -4294,224 +4986,302 @@ function Content() {
                     }
 
                     // ── Standard group rendering ──
+                    const useSectionTabs = group.title === CACHE_STORAGE_GROUP_TITLE;
+                    const settingSections = useSectionTabs ? splitSettingGroupSections(group) : [];
+                    const activeSettingSection =
+                      settingSections.find((section) => section.title === cacheStorageSubtab) ?? settingSections[0];
+                    const visibleGroupItems: (SettingItem | { _section: string })[] =
+                      useSectionTabs && activeSettingSection ? activeSettingSection.items : group.items;
+
                     return (
-                      <div key={group.title} className="divide-y divide-outline-variant/5">
-                        {group.items.map((item, itemIndex) => {
-                          if (isSection(item)) {
+                      <div key={group.title}>
+                        {useSectionTabs && settingSections.length > 1 ? (
+                          <div className="border-b border-outline-variant/10 px-4 py-2 sm:px-6">
+                            <ResponsiveSectionTabs
+                              tabs={settingSections.map((section) => ({
+                                value: section.title,
+                                label: section.title,
+                                icon: SETTING_SECTION_ICONS[section.title] || 'tune',
+                              }))}
+                              value={activeSettingSection?.title ?? cacheStorageSubtab}
+                              onChange={setCacheStorageSubtab}
+                              mobileTitle="配置分组"
+                              mobileTriggerVariant="surface"
+                            />
+                          </div>
+                        ) : null}
+                        <div className="divide-y divide-outline-variant/5">
+                          {visibleGroupItems.map((item, itemIndex) => {
+                            if (isSection(item)) {
+                              return (
+                                <div key={`section-${itemIndex}`} className="px-4 sm:px-6 pt-5 pb-1">
+                                  <p className="text-xs font-bold uppercase tracking-wider text-primary/70">
+                                    {item._section}
+                                  </p>
+                                  <div className="mt-1 h-px bg-outline-variant/10" />
+                                </div>
+                              );
+                            }
+                            const structuredEditor =
+                              isSystemSettingKey(item.key) && STRUCTURED_SETTING_KEYS.has(item.key) ? (
+                                <StructuredSettingEditor
+                                  itemKey={item.key}
+                                  settings={settings}
+                                  updateSetting={updateSetting}
+                                />
+                              ) : null;
+                            const isWideControl =
+                              Boolean(structuredEditor) ||
+                              item.type === 'textarea' ||
+                              item.type === 'email-test' ||
+                              item.type === 'cache-test' ||
+                              item.type === 'storage-test';
+                            const rowClass =
+                              item.type === 'color-scheme'
+                                ? 'px-4 sm:px-6 py-4 flex flex-col gap-4'
+                                : isWideControl
+                                  ? 'px-4 sm:px-6 py-4 flex flex-col gap-3'
+                                  : 'px-4 sm:px-6 py-4 grid grid-cols-1 lg:grid-cols-[minmax(180px,260px)_minmax(0,1fr)] gap-3 lg:gap-6 lg:items-center';
+                            const loginDialogDisabled =
+                              item.key.startsWith('login_dialog_') &&
+                              item.key !== 'login_dialog_enabled' &&
+                              !settings.login_dialog_enabled;
+                            const generatedCopyrightValue =
+                              item.key === 'footer_copyright' && settings.footer_copyright_follow_site_title
+                                ? resolveFooterCopyright(settings)
+                                : item.key === 'model_detail_copyright' &&
+                                    settings.model_detail_copyright_follow_site_title
+                                  ? resolveModelDetailCopyright(settings)
+                                  : '';
+                            const copyrightInputLocked = Boolean(generatedCopyrightValue);
                             return (
-                              <div key={`section-${itemIndex}`} className="px-4 sm:px-6 pt-5 pb-1">
-                                <p className="text-xs font-bold uppercase tracking-wider text-primary/70">
-                                  {item._section}
-                                </p>
-                                <div className="mt-1 h-px bg-outline-variant/10" />
-                              </div>
-                            );
-                          }
-                          const structuredEditor =
-                            isSystemSettingKey(item.key) && STRUCTURED_SETTING_KEYS.has(item.key) ? (
-                              <StructuredSettingEditor
-                                itemKey={item.key}
-                                settings={settings}
-                                updateSetting={updateSetting}
-                              />
-                            ) : null;
-                          const isWideControl =
-                            Boolean(structuredEditor) || item.type === 'textarea' || item.type === 'email-test';
-                          const rowClass =
-                            item.type === 'color-scheme'
-                              ? 'px-4 sm:px-6 py-4 flex flex-col gap-4'
-                              : isWideControl
-                                ? 'px-4 sm:px-6 py-4 flex flex-col gap-3'
-                                : 'px-4 sm:px-6 py-4 grid grid-cols-1 lg:grid-cols-[minmax(180px,260px)_minmax(0,1fr)] gap-3 lg:gap-6 lg:items-center';
-                          const loginDialogDisabled =
-                            item.key.startsWith('login_dialog_') &&
-                            item.key !== 'login_dialog_enabled' &&
-                            !settings.login_dialog_enabled;
-                          return (
-                            <div
-                              key={`${group.title}-${item.key}-${itemIndex}`}
-                              className={`${rowClass} ${loginDialogDisabled ? 'opacity-40 pointer-events-none' : 'hover:bg-surface-container-high/30'} transition-colors`}
-                            >
-                              {item.type === 'color-scheme' ? (
-                                <ColorSchemeEditor settings={settings} updateSetting={updateSetting} />
-                              ) : (
-                                <>
-                                  <div className="min-w-0 max-w-2xl">
-                                    <p className="text-sm font-medium text-on-surface">{item.label}</p>
-                                    <p className="text-xs text-on-surface-variant mt-0.5">{item.desc}</p>
-                                  </div>
-                                  {structuredEditor ||
-                                    (item.type === 'email-test' ? (
-                                      <EmailTestPanel
-                                        value={testEmailTo}
-                                        onChange={setTestEmailTo}
-                                        onSend={handleSendTestEmail}
-                                        testing={testingEmail}
-                                        changed={changed}
-                                        saving={saving}
-                                        settings={settings}
-                                      />
-                                    ) : item.type === 'switch' ? (
-                                      <Switch
-                                        checked={settings[item.key] as boolean}
-                                        onChange={(v) => updateSetting(item.key, v)}
-                                        disabled={loginDialogDisabled}
-                                      />
-                                    ) : item.type === 'image' ? (
-                                      <div className="flex flex-wrap items-center gap-3 min-w-0 lg:justify-self-start">
-                                        {settings[item.key] && (
-                                          <SafeImage
-                                            src={settings[item.key] as string}
-                                            alt="预览"
-                                            className={`${item.key === 'site_icon' || item.key === 'site_favicon' ? 'h-12 w-12' : 'h-12 w-32'} object-contain bg-surface-container-lowest rounded border border-outline-variant/20`}
-                                            fallbackIcon="image"
-                                          />
-                                        )}
-                                        <div className="flex items-center gap-2">
-                                          <input
-                                            ref={(el) => {
-                                              imageInputRefs.current[item.key] = el;
-                                            }}
-                                            type="file"
-                                            accept="image/png,image/jpeg,image/svg+xml,image/webp,image/x-icon,image/vnd.microsoft.icon,.ico"
-                                            onChange={(e) => handleImageUpload(item.key, e)}
-                                            className="hidden"
-                                          />
-                                          <button
-                                            onClick={() => imageInputRefs.current[item.key]?.click()}
-                                            disabled={uploading}
-                                            className="px-3 py-1.5 text-xs font-medium bg-primary-container/20 text-primary-container rounded-md hover:bg-primary-container/30 disabled:opacity-50 transition-colors"
-                                          >
-                                            {uploading ? '上传中...' : settings[item.key] ? '更换图片' : '上传图片'}
-                                          </button>
+                              <div
+                                key={`${group.title}-${item.key}-${itemIndex}`}
+                                className={`${rowClass} ${loginDialogDisabled ? 'opacity-40 pointer-events-none' : 'hover:bg-surface-container-high/30'} transition-colors`}
+                              >
+                                {item.type === 'color-scheme' ? (
+                                  <ColorSchemeEditor settings={settings} updateSetting={updateSetting} />
+                                ) : (
+                                  <>
+                                    <div className="min-w-0 max-w-2xl">
+                                      <p className="text-sm font-medium text-on-surface">{item.label}</p>
+                                      <p className="text-xs text-on-surface-variant mt-0.5">{item.desc}</p>
+                                    </div>
+                                    {structuredEditor ||
+                                      (item.type === 'email-test' ? (
+                                        <EmailTestPanel
+                                          value={testEmailTo}
+                                          onChange={setTestEmailTo}
+                                          onSend={handleSendTestEmail}
+                                          testing={testingEmail}
+                                          changed={changed}
+                                          saving={saving}
+                                          settings={settings}
+                                        />
+                                      ) : item.type === 'cache-test' ? (
+                                        <SettingsConnectivityTestPanel
+                                          icon="memory"
+                                          title="执行 Redis 真实读写测试"
+                                          summary="会先保存当前设置，再执行 PING、写入、读取和删除测试键"
+                                          buttonLabel="测试 Redis"
+                                          testingLabel="测试中..."
+                                          testing={testingCache}
+                                          changed={changed}
+                                          saving={saving}
+                                          result={cacheTestResult}
+                                          onRun={handleTestCacheSettings}
+                                        />
+                                      ) : item.type === 'storage-test' ? (
+                                        <SettingsConnectivityTestPanel
+                                          icon="storage"
+                                          title="执行存储真实读写测试"
+                                          summary="会先保存当前设置，再写入、读取并删除一个临时对象"
+                                          buttonLabel="测试存储"
+                                          testingLabel="测试中..."
+                                          testing={testingStorage}
+                                          changed={changed}
+                                          saving={saving}
+                                          result={storageTestResult}
+                                          onRun={handleTestStorageSettings}
+                                        />
+                                      ) : item.type === 'switch' ? (
+                                        <Switch
+                                          checked={settings[item.key] as boolean}
+                                          onChange={(v) => updateSetting(item.key, v)}
+                                          disabled={loginDialogDisabled}
+                                        />
+                                      ) : item.type === 'image' ? (
+                                        <div className="flex flex-wrap items-center gap-3 min-w-0 lg:justify-self-start">
                                           {settings[item.key] && (
-                                            <button
-                                              onClick={() => {
-                                                updateSetting(item.key, '');
+                                            <SafeImage
+                                              src={settings[item.key] as string}
+                                              alt="预览"
+                                              className={`${item.key === 'site_icon' || item.key === 'site_favicon' ? 'h-12 w-12' : 'h-12 w-32'} object-contain bg-surface-container-lowest rounded border border-outline-variant/20`}
+                                              fallbackIcon="image"
+                                            />
+                                          )}
+                                          <div className="flex items-center gap-2">
+                                            <input
+                                              ref={(el) => {
+                                                imageInputRefs.current[item.key] = el;
                                               }}
-                                              className="px-2 py-1.5 text-xs text-error hover:bg-error-container/10 rounded-md transition-colors"
+                                              type="file"
+                                              accept="image/png,image/jpeg,image/svg+xml,image/webp,image/x-icon,image/vnd.microsoft.icon,.ico"
+                                              onChange={(e) => handleImageUpload(item.key, e)}
+                                              className="hidden"
+                                            />
+                                            <button
+                                              onClick={() => imageInputRefs.current[item.key]?.click()}
+                                              disabled={uploading}
+                                              className="px-3 py-1.5 text-xs font-medium bg-primary-container/20 text-primary-container rounded-md hover:bg-primary-container/30 disabled:opacity-50 transition-colors"
                                             >
-                                              移除
+                                              {uploading ? '上传中...' : settings[item.key] ? '更换图片' : '上传图片'}
                                             </button>
+                                            {settings[item.key] && (
+                                              <button
+                                                onClick={() => {
+                                                  updateSetting(item.key, '');
+                                                }}
+                                                className="px-2 py-1.5 text-xs text-error hover:bg-error-container/10 rounded-md transition-colors"
+                                              >
+                                                移除
+                                              </button>
+                                            )}
+                                          </div>
+                                        </div>
+                                      ) : item.type === 'number' ? (
+                                        <div className="flex items-center gap-2 min-w-0 lg:justify-self-start">
+                                          <input
+                                            type="number"
+                                            min={item.min ?? 0}
+                                            max={item.max}
+                                            value={settings[item.key] as number}
+                                            onChange={(e) => {
+                                              const raw = parseFloat(e.target.value) || 0;
+                                              const min = item.min ?? 0;
+                                              const max = item.max ?? Number.MAX_SAFE_INTEGER;
+                                              updateSetting(item.key, Math.min(max, Math.max(min, raw)));
+                                            }}
+                                            className="w-28 bg-surface-container-lowest text-on-surface text-sm text-center rounded-md px-3 py-2 border border-outline-variant/20 outline-none focus:border-primary"
+                                          />
+                                          {numberSettingUnit(item.key) && (
+                                            <span className="text-xs text-on-surface-variant">
+                                              {numberSettingUnit(item.key)}
+                                            </span>
                                           )}
                                         </div>
-                                      </div>
-                                    ) : item.type === 'number' ? (
-                                      <div className="flex items-center gap-2 min-w-0 lg:justify-self-start">
-                                        <input
-                                          type="number"
-                                          min={item.min ?? 0}
-                                          max={item.max}
-                                          value={settings[item.key] as number}
-                                          onChange={(e) => {
-                                            const raw = parseFloat(e.target.value) || 0;
-                                            const min = item.min ?? 0;
-                                            const max = item.max ?? Number.MAX_SAFE_INTEGER;
-                                            updateSetting(item.key, Math.min(max, Math.max(min, raw)));
-                                          }}
-                                          className="w-28 bg-surface-container-lowest text-on-surface text-sm text-center rounded-md px-3 py-2 border border-outline-variant/20 outline-none focus:border-primary"
-                                        />
-                                        {numberSettingUnit(item.key) && (
-                                          <span className="text-xs text-on-surface-variant">
-                                            {numberSettingUnit(item.key)}
-                                          </span>
-                                        )}
-                                      </div>
-                                    ) : item.type === 'range' ? (
-                                      <div className="flex items-center gap-3 w-full lg:max-w-sm lg:justify-self-start">
-                                        <input
-                                          type="range"
-                                          min={item.min ?? 0}
-                                          max={item.max ?? 1}
-                                          step={item.step ?? 0.01}
-                                          value={Number(settings[item.key]) || 0}
-                                          onChange={(e) => updateSetting(item.key, parseFloat(e.target.value))}
-                                          className="w-full accent-[var(--color-primary-container)]"
-                                        />
-                                        <span className="text-xs font-mono text-on-surface w-10 text-right">
-                                          {(Number(settings[item.key]) || 0).toFixed(
-                                            item.step && item.step < 0.1 ? 2 : item.step && item.step < 1 ? 1 : 0,
-                                          )}
-                                        </span>
-                                      </div>
-                                    ) : item.type === 'textarea' ? (
-                                      <div className="w-full">
-                                        <textarea
-                                          value={settings[item.key] as string}
-                                          onChange={(e) => updateSetting(item.key, e.target.value)}
-                                          placeholder={item.desc}
-                                          rows={3}
-                                          className="w-full bg-surface-container-lowest text-on-surface text-sm rounded-md px-3 py-2 border border-outline-variant/20 outline-none focus:border-primary placeholder:text-on-surface-variant/30 resize-y font-mono"
-                                        />
-                                        {item.key === 'allowed_hosts' && typeof window !== 'undefined' && (
-                                          <div className="flex flex-wrap items-center gap-2 mt-1.5">
-                                            <span className="text-xs text-on-surface-variant">当前访问域名：</span>
-                                            <code className="text-xs font-mono text-primary-container bg-primary-container/10 px-2 py-0.5 rounded break-all">
-                                              {window.location.host}
-                                            </code>
-                                            <button
-                                              type="button"
-                                              onClick={() => {
-                                                const current = ((settings.allowed_hosts as string) || '').trim();
-                                                const host = window.location.host;
-                                                const updated = current ? `${current}, ${host}` : host;
-                                                updateSetting('allowed_hosts', updated);
-                                              }}
-                                              className="text-xs text-primary-container hover:underline"
-                                            >
-                                              加入授权
-                                            </button>
-                                          </div>
-                                        )}
-                                      </div>
-                                    ) : item.type === 'select' ? (
-                                      <select
-                                        value={settings[item.key] as string}
-                                        onChange={(e) => updateSetting(item.key, e.target.value)}
-                                        className="w-full lg:max-w-sm bg-surface-container-lowest text-on-surface text-sm rounded-md px-3 py-2 border border-outline-variant/20 outline-none focus:border-primary"
-                                      >
-                                        {item.options?.map((opt) => (
-                                          <option key={opt.value} value={opt.value}>
-                                            {opt.label}
-                                          </option>
-                                        ))}
-                                      </select>
-                                    ) : item.type === 'color' ? (
-                                      <div className="flex items-center gap-2 w-full lg:max-w-sm lg:justify-self-start">
-                                        {settings[item.key] && (
-                                          <span
-                                            className="w-6 h-6 rounded-md border border-outline-variant/30 shrink-0"
-                                            style={{ backgroundColor: settings[item.key] as string }}
+                                      ) : item.type === 'range' ? (
+                                        <div className="flex items-center gap-3 w-full lg:max-w-sm lg:justify-self-start">
+                                          <input
+                                            type="range"
+                                            min={item.min ?? 0}
+                                            max={item.max ?? 1}
+                                            step={item.step ?? 0.01}
+                                            value={Number(settings[item.key]) || 0}
+                                            onChange={(e) => updateSetting(item.key, parseFloat(e.target.value))}
+                                            className="w-full accent-[var(--color-primary-container)]"
                                           />
-                                        )}
-                                        <input
-                                          type="text"
+                                          <span className="text-xs font-mono text-on-surface w-10 text-right">
+                                            {(Number(settings[item.key]) || 0).toFixed(
+                                              item.step && item.step < 0.1 ? 2 : item.step && item.step < 1 ? 1 : 0,
+                                            )}
+                                          </span>
+                                        </div>
+                                      ) : item.type === 'textarea' ? (
+                                        <div className="w-full">
+                                          <textarea
+                                            value={settings[item.key] as string}
+                                            onChange={(e) => updateSetting(item.key, e.target.value)}
+                                            placeholder={item.desc}
+                                            rows={3}
+                                            className="w-full bg-surface-container-lowest text-on-surface text-sm rounded-md px-3 py-2 border border-outline-variant/20 outline-none focus:border-primary placeholder:text-on-surface-variant/30 resize-y font-mono"
+                                          />
+                                          {item.key === 'allowed_hosts' && typeof window !== 'undefined' && (
+                                            <div className="flex flex-wrap items-center gap-2 mt-1.5">
+                                              <span className="text-xs text-on-surface-variant">当前访问域名：</span>
+                                              <code className="text-xs font-mono text-primary-container bg-primary-container/10 px-2 py-0.5 rounded break-all">
+                                                {window.location.host}
+                                              </code>
+                                              <button
+                                                type="button"
+                                                onClick={() => {
+                                                  const current = ((settings.allowed_hosts as string) || '').trim();
+                                                  const host = window.location.host;
+                                                  const updated = current ? `${current}, ${host}` : host;
+                                                  updateSetting('allowed_hosts', updated);
+                                                }}
+                                                className="text-xs text-primary-container hover:underline"
+                                              >
+                                                加入授权
+                                              </button>
+                                            </div>
+                                          )}
+                                        </div>
+                                      ) : item.key === 'interface_theme' ? (
+                                        <InterfaceThemePicker
+                                          value={settings.interface_theme}
+                                          onChange={(nextTheme) => updateSetting('interface_theme', nextTheme)}
+                                        />
+                                      ) : item.type === 'select' ? (
+                                        <select
                                           value={settings[item.key] as string}
                                           onChange={(e) => updateSetting(item.key, e.target.value)}
-                                          placeholder="#FF6600"
-                                          className="w-full bg-surface-container-lowest text-on-surface text-sm rounded-md px-3 py-2 border border-outline-variant/20 outline-none focus:border-primary placeholder:text-on-surface-variant/30 font-mono"
-                                        />
+                                          className="w-full lg:max-w-sm bg-surface-container-lowest text-on-surface text-sm rounded-md px-3 py-2 border border-outline-variant/20 outline-none focus:border-primary"
+                                        >
+                                          {item.options?.map((opt) => (
+                                            <option key={opt.value} value={opt.value}>
+                                              {opt.label}
+                                            </option>
+                                          ))}
+                                        </select>
+                                      ) : item.type === 'color' ? (
+                                        <div className="flex items-center gap-2 w-full lg:max-w-sm lg:justify-self-start">
+                                          {settings[item.key] && (
+                                            <span
+                                              className="w-6 h-6 rounded-md border border-outline-variant/30 shrink-0"
+                                              style={{ backgroundColor: settings[item.key] as string }}
+                                            />
+                                          )}
+                                          <input
+                                            type="text"
+                                            value={settings[item.key] as string}
+                                            onChange={(e) => updateSetting(item.key, e.target.value)}
+                                            placeholder="#FF6600"
+                                            className="w-full bg-surface-container-lowest text-on-surface text-sm rounded-md px-3 py-2 border border-outline-variant/20 outline-none focus:border-primary placeholder:text-on-surface-variant/30 font-mono"
+                                          />
+                                          <input
+                                            type="color"
+                                            value={(settings[item.key] as string) || '#000000'}
+                                            onChange={(e) => updateSetting(item.key, e.target.value)}
+                                            className="w-8 h-8 rounded cursor-pointer border-0 p-0"
+                                          />
+                                        </div>
+                                      ) : (
                                         <input
-                                          type="color"
-                                          value={(settings[item.key] as string) || '#000000'}
-                                          onChange={(e) => updateSetting(item.key, e.target.value)}
-                                          className="w-8 h-8 rounded cursor-pointer border-0 p-0"
+                                          type={isSensitiveTextSettingKey(item.key) ? 'password' : 'text'}
+                                          value={
+                                            copyrightInputLocked
+                                              ? generatedCopyrightValue
+                                              : (settings[item.key] as string)
+                                          }
+                                          onChange={(e) => {
+                                            if (!copyrightInputLocked) updateSetting(item.key, e.target.value);
+                                          }}
+                                          placeholder={item.desc}
+                                          disabled={copyrightInputLocked}
+                                          className={`w-full lg:max-w-md bg-surface-container-lowest text-on-surface text-sm rounded-md px-3 py-2 border border-outline-variant/20 outline-none focus:border-primary placeholder:text-on-surface-variant/30 ${
+                                            copyrightInputLocked
+                                              ? 'cursor-not-allowed text-on-surface-variant/70 border-outline-variant/10 bg-surface-container-high/40'
+                                              : ''
+                                          }`}
                                         />
-                                      </div>
-                                    ) : (
-                                      <input
-                                        type="text"
-                                        value={settings[item.key] as string}
-                                        onChange={(e) => updateSetting(item.key, e.target.value)}
-                                        placeholder={item.desc}
-                                        className="w-full lg:max-w-md bg-surface-container-lowest text-on-surface text-sm rounded-md px-3 py-2 border border-outline-variant/20 outline-none focus:border-primary placeholder:text-on-surface-variant/30"
-                                      />
-                                    ))}
-                                </>
-                              )}
-                            </div>
-                          );
-                        })}
+                                      ))}
+                                  </>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
                       </div>
                     );
                   })

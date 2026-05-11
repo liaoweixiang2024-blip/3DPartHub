@@ -1,3 +1,5 @@
+import { resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import type { PrismaClient } from '@prisma/client';
 
 const categories = [
@@ -124,7 +126,11 @@ async function main() {
   }
 }
 
-main().catch((error) => {
-  console.error(error);
-  process.exitCode = 1;
-});
+const isDirectRun = process.argv[1] ? resolve(process.argv[1]) === fileURLToPath(import.meta.url) : false;
+
+if (isDirectRun) {
+  main().catch((error) => {
+    console.error(error);
+    process.exitCode = 1;
+  });
+}

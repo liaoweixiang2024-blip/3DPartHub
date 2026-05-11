@@ -2,7 +2,6 @@ import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
 import { startTransition, useState, useCallback, useMemo, useEffect, useRef } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import useSWR from 'swr';
-import { createInquiry } from '../api/inquiries';
 import {
   type ColumnDef,
   filterSelectionProducts,
@@ -12,6 +11,7 @@ import {
   type SelectionComponent,
   createSelectionShare,
 } from '../api/selections';
+import InquirySubmitDialog from '../components/inquiry/InquirySubmitDialog';
 import { AdminContentPanel, AdminManagementPage } from '../components/shared/AdminManagementPage';
 import { AdminPageShell } from '../components/shared/AdminPageShell';
 import Icon from '../components/shared/Icon';
@@ -28,9 +28,11 @@ import {
 import { useToast } from '../components/shared/Toast';
 import { useDocumentTitle } from '../hooks/useDocumentTitle';
 import { useImeSafeSearchInput } from '../hooks/useImeSafeSearchInput';
+import { useInquiryCart } from '../hooks/useInquiryCart';
 import { useMediaQuery } from '../layouts/hooks/useMediaQuery';
 import { getBusinessConfig } from '../lib/businessConfig';
 import { copyText } from '../lib/clipboard';
+import type { InquiryCartItem } from '../lib/inquiryCart';
 import { downloadKitList, formatKitList, getKitListTitle } from '../lib/kitList';
 import { getCachedPublicSettings } from '../lib/publicSettings';
 import { compareOptionValues } from '../lib/selectionSort';
@@ -88,6 +90,23 @@ function displayProductName(product: SelectionProduct) {
       .replace(/^[\s\-—_]+/g, '')
       .trim() || rawName
   );
+}
+
+function getInquiryCartItemTitle(item: InquiryCartItem) {
+  if (item.modelNo && item.productName && item.productName !== item.modelNo) {
+    return `${item.modelNo} · ${item.productName}`;
+  }
+  return item.modelNo || item.productName;
+}
+
+function getInquiryCartItemSummary(item: InquiryCartItem) {
+  const specs = Object.entries(item.specs || {})
+    .filter(([, value]) => value && value !== '—')
+    .slice(0, 2)
+    .map(([key, value]) => `${key}:${value}`)
+    .join(' ');
+  const remark = item.remark ? `备注:${item.remark}` : '';
+  return [specs, remark].filter(Boolean).join(' · ');
 }
 
 function applyManualSpecs(
@@ -161,6 +180,16 @@ function useDebouncedValue<T>(value: T, delayMs: number) {
 const selectionMotion =
   'transition-[transform,border-color,background-color,box-shadow,color,opacity] duration-150 ease-out motion-reduce:transition-none motion-reduce:transform-none';
 const selectionPress = `${selectionMotion} active:scale-[0.985]`;
+const mobileCategoryListClass = 'mx-auto flex w-full flex-col';
+const mobileCategoryPanelClass = 'p-0';
+
+function mobileCategoryCardClass(active: boolean) {
+  return `group relative flex w-full items-stretch overflow-hidden border-0 border-t border-outline-variant/12 text-left first:border-t-0 first:rounded-t-xl last:rounded-b-xl ${selectionMotion} active:opacity-80 focus-visible:z-10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary-container/60 ${
+    active
+      ? 'z-[1] bg-primary-container/8 shadow-[inset_3px_0_0_var(--color-primary-container),0_6px_16px_rgba(249,115,22,0.10)]'
+      : 'bg-surface-container-low/45 shadow-[0_1px_3px_rgba(15,23,42,0.06)] hover:z-[1] hover:bg-surface-container hover:shadow-[0_6px_16px_rgba(15,23,42,0.10)]'
+  }`;
+}
 
 type ShareLinkDialogState = {
   title: string;
@@ -244,204 +273,6 @@ function SelectionShareLinkDialog({
   );
 }
 
-/* ── Inquiry Dialog ── */
-
-interface ItemState {
-  qty: number;
-  remark: string;
-}
-
-function InquiryDialog({
-  open,
-  onClose,
-  products,
-}: {
-  open: boolean;
-  onClose: () => void;
-  products: SelectionProduct[];
-}) {
-  const navigate = useNavigate();
-  const { user } = useAuthStore();
-  const [itemStates, setItemStates] = useState<Record<string, ItemState>>({});
-  const [remark, setRemark] = useState('');
-  const [company, setCompany] = useState(user?.company || '');
-  const [contactName, setContactName] = useState(user?.username || '');
-  const [contactPhone, setContactPhone] = useState(user?.phone || '');
-  const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState('');
-
-  /* init item states when products change */
-  useEffect(() => {
-    setItemStates((prev) => {
-      const missing: Record<string, ItemState> = {};
-      products.forEach((p) => {
-        if (!prev[p.id]) missing[p.id] = { qty: 1, remark: '' };
-      });
-      return Object.keys(missing).length ? { ...missing, ...prev } : prev;
-    });
-  }, [products]);
-
-  if (!open) return null;
-
-  const getItem = (id: string): ItemState => itemStates[id] || { qty: 1, remark: '' };
-  const updateItem = (id: string, patch: Partial<ItemState>) =>
-    setItemStates((prev) => ({ ...prev, [id]: { ...(prev[id] || { qty: 1, remark: '' }), ...patch } }));
-
-  const submit = async () => {
-    if (!products.length) return;
-    setSubmitting(true);
-    setError('');
-    try {
-      const r = await createInquiry({
-        items: products.map((p) => ({
-          productId: p.id,
-          productName: p.name,
-          modelNo: p.modelNo || undefined,
-          qty: getItem(p.id).qty,
-          remark: getItem(p.id).remark || undefined,
-        })),
-        remark: remark || undefined,
-        company: company || undefined,
-        contactName: contactName || undefined,
-        contactPhone: contactPhone || undefined,
-      });
-      navigate(`/my-inquiries/${r.id}`);
-    } catch (e: any) {
-      setError(e.response?.data?.detail || '提交失败');
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
-  const specSummary = (specs: Record<string, string>) => {
-    const entries = Object.entries(specs)
-      .filter(([, v]) => v && v !== '—')
-      .slice(0, 3);
-    return entries.map(([k, v]) => `${k}:${v}`).join(' ');
-  };
-
-  return (
-    <div
-      className="fixed inset-0 z-[120] bg-black/40 backdrop-blur-sm p-0 md:flex md:items-center md:justify-center md:p-4"
-      onClick={onClose}
-    >
-      <div
-        className="fixed left-3 right-3 top-[max(1rem,env(safe-area-inset-top))] bottom-[max(1rem,env(safe-area-inset-bottom))] bg-surface-container-low rounded-2xl border border-outline-variant/20 shadow-2xl flex min-h-0 flex-col md:relative md:inset-auto md:w-full md:max-w-xl md:max-h-[85vh]"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="flex items-center justify-between px-5 py-4 border-b border-outline-variant/10 shrink-0">
-          <h3 className="text-base font-bold text-on-surface">提交询价单</h3>
-          <button onClick={onClose} className="text-on-surface-variant hover:text-on-surface">
-            <Icon name="close" size={20} />
-          </button>
-        </div>
-        <div className="px-5 py-4 space-y-4 overflow-y-auto flex-1">
-          {/* Product list with qty + remark */}
-          <div>
-            <p className="text-sm font-medium text-on-surface mb-2">询价产品（{products.length} 项）</p>
-            <div className="space-y-2">
-              {products.map((p) => {
-                const st = getItem(p.id);
-                const displayName = displayProductName(p);
-                return (
-                  <div
-                    key={p.id}
-                    className="rounded-lg border border-outline-variant/15 bg-surface-container-lowest px-3 py-2.5 space-y-2"
-                  >
-                    <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:gap-2">
-                      <p className="text-sm text-on-surface font-medium truncate flex-1">{displayName || p.modelNo}</p>
-                      {p.modelNo && p.name !== p.modelNo && (
-                        <p className="text-xs text-on-surface-variant truncate max-w-[50%]">型号编号：{p.modelNo}</p>
-                      )}
-                    </div>
-                    {p.specs && (
-                      <p className="text-[11px] text-on-surface-variant/60 truncate">
-                        {specSummary(p.specs as Record<string, string>)}
-                      </p>
-                    )}
-                    <div className="flex items-center gap-2">
-                      <div className="flex items-center gap-1.5">
-                        <span className="text-[11px] text-on-surface-variant">数量</span>
-                        <input
-                          type="number"
-                          min={1}
-                          value={st.qty}
-                          onChange={(e) => updateItem(p.id, { qty: Math.max(1, parseInt(e.target.value) || 1) })}
-                          className="w-14 bg-surface-container text-on-surface text-xs rounded px-2 py-1 border border-outline-variant/15 outline-none focus:border-primary-container text-center"
-                        />
-                      </div>
-                      <input
-                        value={st.remark}
-                        onChange={(e) => updateItem(p.id, { remark: e.target.value })}
-                        placeholder="备注（选填）"
-                        className="flex-1 bg-surface-container text-on-surface text-xs rounded px-2 py-1 border border-outline-variant/15 outline-none focus:border-primary-container"
-                      />
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-
-          {/* Contact info */}
-          <div className="grid gap-3 grid-cols-1 sm:grid-cols-2">
-            <div>
-              <label className="block text-xs text-on-surface-variant mb-1">公司名称</label>
-              <input
-                value={company}
-                onChange={(e) => setCompany(e.target.value)}
-                className="w-full bg-surface-container-lowest text-on-surface text-sm rounded-lg px-3 py-2 border border-outline-variant/20 outline-none focus:border-primary-container transition-colors"
-              />
-            </div>
-            <div>
-              <label className="block text-xs text-on-surface-variant mb-1">联系人</label>
-              <input
-                value={contactName}
-                onChange={(e) => setContactName(e.target.value)}
-                className="w-full bg-surface-container-lowest text-on-surface text-sm rounded-lg px-3 py-2 border border-outline-variant/20 outline-none focus:border-primary-container transition-colors"
-              />
-            </div>
-            <div className="sm:col-span-2">
-              <label className="block text-xs text-on-surface-variant mb-1">联系电话</label>
-              <input
-                value={contactPhone}
-                onChange={(e) => setContactPhone(e.target.value)}
-                className="w-full bg-surface-container-lowest text-on-surface text-sm rounded-lg px-3 py-2 border border-outline-variant/20 outline-none focus:border-primary-container transition-colors"
-              />
-            </div>
-          </div>
-          <div>
-            <label className="block text-xs text-on-surface-variant mb-1">整体备注</label>
-            <textarea
-              value={remark}
-              onChange={(e) => setRemark(e.target.value)}
-              rows={2}
-              placeholder="选填：交期要求、包装要求等"
-              className="w-full bg-surface-container-lowest text-on-surface text-sm rounded-lg px-3 py-2 border border-outline-variant/20 outline-none focus:border-primary-container resize-none transition-colors"
-            />
-          </div>
-          {error && <p className="text-xs text-error">{error}</p>}
-        </div>
-        <div className="px-5 py-3 border-t border-outline-variant/10 flex gap-2 shrink-0">
-          <button
-            onClick={onClose}
-            className="flex-1 py-2.5 text-sm font-medium border border-outline-variant/40 text-on-surface-variant rounded-xl hover:bg-surface-container-high/50 transition-colors"
-          >
-            取消
-          </button>
-          <button
-            onClick={submit}
-            disabled={submitting}
-            className="flex-1 py-2.5 text-sm font-bold bg-primary-container text-on-primary rounded-xl hover:opacity-90 disabled:opacity-50 transition-opacity"
-          >
-            {submitting ? '提交中...' : '提交询价'}
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
 /* ── Result Card ── */
 
 function ResultCard({
@@ -450,7 +281,7 @@ function ResultCard({
   kitListTitle,
   selected,
   onToggleSelect,
-  onInquiry,
+  onToggleInquiry,
   expandedKits,
   onToggleKit,
   navigate,
@@ -461,7 +292,7 @@ function ResultCard({
   kitListTitle: string;
   selected: boolean;
   onToggleSelect: () => void;
-  onInquiry: () => void;
+  onToggleInquiry: () => void;
   expandedKits: Set<string>;
   onToggleKit: (id: string) => void;
   navigate: ReturnType<typeof useNavigate>;
@@ -643,10 +474,15 @@ function ResultCard({
 
       <div className="border-t border-outline-variant/10 px-3 md:px-4 py-2 md:py-2.5 flex items-center gap-1.5 md:gap-2 flex-wrap">
         <button
-          onClick={onInquiry}
-          className={`px-2.5 md:px-3 py-1 md:py-1.5 text-xs md:text-sm font-bold bg-primary-container text-on-primary rounded-lg hover:opacity-90 ${selectionPress}`}
+          onClick={onToggleInquiry}
+          className={`inline-flex items-center gap-1 px-2.5 md:px-3 py-1 md:py-1.5 text-xs md:text-sm font-bold rounded-lg transition-colors ${
+            selected
+              ? 'border border-primary-container/35 bg-primary-container/10 text-primary-container hover:bg-primary-container/15'
+              : 'bg-primary-container text-on-primary hover:opacity-90'
+          } ${selectionPress}`}
         >
-          询价
+          <Icon name={selected ? 'check' : 'add'} size={14} />
+          <span>{selected ? '已加入询价' : '加入询价'}</span>
         </button>
         {product.categoryCatalogPdf && (
           <a
@@ -719,8 +555,29 @@ export default function SelectionPage() {
   const { user } = useAuthStore();
   const { toast } = useToast();
   const [inquiryOpen, setInquiryOpen] = useState(false);
-  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [cartPreviewOpen, setCartPreviewOpen] = useState(false);
+  const cartActionBarRef = useRef<HTMLDivElement>(null);
+  const inquiryCart = useInquiryCart();
+  const hideMobileBottomNav = !isDesktop && (cartPreviewOpen || inquiryOpen);
+  const selectedIds = inquiryCart.productIds;
   const [expandedKits, setExpandedKits] = useState<Set<string>>(new Set());
+
+  useEffect(() => {
+    if (inquiryCart.items.length === 0) setCartPreviewOpen(false);
+  }, [inquiryCart.items.length]);
+
+  useEffect(() => {
+    if (!cartPreviewOpen) return;
+    const handlePointerDown = (event: PointerEvent) => {
+      const target = event.target;
+      if (!(target instanceof Node)) return;
+      if (cartActionBarRef.current?.contains(target)) return;
+      setCartPreviewOpen(false);
+    };
+
+    document.addEventListener('pointerdown', handlePointerDown, true);
+    return () => document.removeEventListener('pointerdown', handlePointerDown, true);
+  }, [cartPreviewOpen]);
 
   /* wizard state */
   const [groupId, setGroupId] = useState<string | null>(null);
@@ -1007,8 +864,6 @@ export default function SelectionPage() {
     },
     [modelMatchMap],
   );
-  const selectedProds = filtered.filter((p) => selectedIds.has(p.id)).map((p) => applyManualSpecs(p, columns, specs));
-
   /* auto-scroll ref */
   const curStepRef = useRef<HTMLDivElement>(null);
   const wizardWrapRef = useRef<HTMLDivElement>(null);
@@ -1099,9 +954,8 @@ export default function SelectionPage() {
     scrollTimerRef.current = setTimeout(() => {
       const el = curStepRef.current;
       if (!el) return;
-      if (isDesktop) {
-        const container = scrollContainerRef.current;
-        if (!container) return;
+      const container = scrollContainerRef.current || mobileMainRef.current;
+      if (container) {
         const cRect = container.getBoundingClientRect();
         const eRect = el.getBoundingClientRect();
         const target = eRect.top - cRect.top + container.scrollTop - cRect.height / 2 + eRect.height / 2;
@@ -1138,9 +992,8 @@ export default function SelectionPage() {
       const el = curStepRef.current;
       if (!el) return;
 
-      if (isDesktop) {
-        const container = scrollContainerRef.current;
-        if (!container) return;
+      const container = scrollContainerRef.current || mobileMainRef.current;
+      if (container) {
         const cRect = container.getBoundingClientRect();
         const eRect = el.getBoundingClientRect();
         const target = eRect.top - cRect.top + container.scrollTop - cRect.height / 2 + eRect.height / 2;
@@ -1176,9 +1029,8 @@ export default function SelectionPage() {
       const el = resultRef.current;
       if (!el) return;
 
-      if (isDesktop) {
-        const container = scrollContainerRef.current;
-        if (!container) return;
+      const container = scrollContainerRef.current || mobileMainRef.current;
+      if (container) {
         const cRect = container.getBoundingClientRect();
         const eRect = el.getBoundingClientRect();
         const target = eRect.top - cRect.top + container.scrollTop - 18;
@@ -1204,7 +1056,6 @@ export default function SelectionPage() {
       setSkipped(new Set());
       setAutoSelectedFields(new Set());
       setSearchDraft('');
-      setSelectedIds(new Set());
       setExpandedKits(new Set());
       window.setTimeout(() => setPressedCategoryKey(null), 260);
     },
@@ -1222,7 +1073,6 @@ export default function SelectionPage() {
       setSkipped(new Set());
       setAutoSelectedFields(new Set());
       setSearchDraft('');
-      setSelectedIds(new Set());
       setExpandedKits(new Set());
       window.setTimeout(() => setPressedCategoryKey(null), 260);
     },
@@ -1235,7 +1085,6 @@ export default function SelectionPage() {
     setSkipped(new Set());
     setAutoSelectedFields(new Set());
     setSearchDraft('');
-    setSelectedIds(new Set());
     setExpandedKits(new Set());
   }, [setSearchDraft]);
   const resetCurrentCategory = useCallback(() => {
@@ -1244,7 +1093,6 @@ export default function SelectionPage() {
     setSkipped(new Set());
     setAutoSelectedFields(new Set());
     setSearchDraft('');
-    setSelectedIds(new Set());
     setExpandedKits(new Set());
   }, [setSearchDraft]);
   const pickVal = useCallback((key: string, val: string) => {
@@ -1289,7 +1137,6 @@ export default function SelectionPage() {
       setSkipped(new Set());
       setAutoSelectedFields(new Set());
       setSearchDraft('');
-      setSelectedIds(new Set());
       setExpandedKits(new Set());
     });
   }, [setSearchDraft]);
@@ -1300,19 +1147,19 @@ export default function SelectionPage() {
       setSkipped(new Set());
       setAutoSelectedFields(new Set());
       setSearchDraft('');
-      setSelectedIds(new Set());
       setExpandedKits(new Set());
     });
   }, [setSearchDraft]);
-  const toggleSel = useCallback(
-    (id: string) =>
-      setSelectedIds((p) => {
-        const n = new Set(p);
-        if (n.has(id)) n.delete(id);
-        else n.add(id);
-        return n;
-      }),
-    [],
+  const toggleInquiryProduct = useCallback(
+    (product: SelectionProduct) => {
+      const result = inquiryCart.toggleProduct(product);
+      if (result.limitReached) {
+        toast(`单个询价单最多包含 ${inquiryCart.limit} 个产品`, 'error');
+      } else if (result.added) {
+        toast('已加入询价清单', 'success');
+      }
+    },
+    [inquiryCart, toast],
   );
   const toggleKit = useCallback(
     (id: string) =>
@@ -1464,14 +1311,26 @@ export default function SelectionPage() {
 
     if (!mediaImage) {
       return (
-        <span className="flex aspect-[2/1] w-28 shrink-0 items-center justify-center bg-surface-container-low text-primary-container/40 md:w-44">
-          <Icon name={fallbackIcon} size={32} />
+        <span
+          className={
+            isDesktop
+              ? 'flex aspect-[2/1] w-44 shrink-0 items-center justify-center bg-surface-container-low text-primary-container/40'
+              : 'm-2 flex h-14 w-20 shrink-0 items-center justify-center rounded-lg bg-surface-container-high/45 text-primary-container/45'
+          }
+        >
+          <Icon name={fallbackIcon} size={isDesktop ? 32 : 28} />
         </span>
       );
     }
 
     return (
-      <span className="aspect-[2/1] w-28 shrink-0 overflow-hidden md:w-44">
+      <span
+        className={
+          isDesktop
+            ? 'aspect-[2/1] w-44 shrink-0 overflow-hidden'
+            : 'm-2 h-14 w-20 shrink-0 overflow-hidden rounded-lg bg-surface-container-high/45'
+        }
+      >
         <SafeImage
           src={mediaImage}
           alt=""
@@ -1545,7 +1404,7 @@ export default function SelectionPage() {
       })
       .sort((a, b) => a.sortOrder - b.sortOrder);
   }, [catBySlug, group, pickSub, pressedCategoryKey]);
-  const categoryColumns = isCategoryUltraWide ? 4 : isCategoryWide ? 3 : isCategoryTablet ? 2 : 1;
+  const categoryColumns = isDesktop ? (isCategoryUltraWide ? 4 : isCategoryWide ? 3 : isCategoryTablet ? 2 : 1) : 1;
   const categoryTitleClass = 'block truncate text-sm font-semibold leading-5 text-on-surface md:text-base';
   const categoryDescriptionClass = 'mt-0.5 block truncate text-xs leading-4 text-on-surface-variant';
   type CategoryRenderItem = (typeof topCategoryItems)[number];
@@ -1588,7 +1447,7 @@ export default function SelectionPage() {
       key={key}
       onClick={onClick}
       data-selection-category-card
-      className={selectionCategoryCardClass(active)}
+      className={isDesktop ? selectionCategoryCardClass(active) : mobileCategoryCardClass(active)}
       whileHover={prefersReducedMotion ? undefined : { y: -1 }}
       whileTap={prefersReducedMotion ? undefined : { scale: 0.985 }}
       {...categoryItemMotionProps(index)}
@@ -1608,7 +1467,9 @@ export default function SelectionPage() {
     </motion.button>
   );
   const renderCategoryGrid = (items: CategoryRenderItem[]) => (
-    <div className={selectionCategoryGridClass}>{items.map((item, index) => renderCategoryItem(item, index))}</div>
+    <div className={isDesktop ? selectionCategoryGridClass : mobileCategoryListClass}>
+      {items.map((item, index) => renderCategoryItem(item, index))}
+    </div>
   );
   const categoryStatusContent =
     categoriesLoading && cats.length === 0 ? (
@@ -1627,7 +1488,7 @@ export default function SelectionPage() {
     ) : null;
 
   const groupContent = (
-    <div className={selectionCategoryPanelClass}>
+    <div className={isDesktop ? selectionCategoryPanelClass : mobileCategoryPanelClass}>
       {categoryStatusContent}
       {!categoryStatusContent && topCategoryItems.length > 0 && renderCategoryGrid(topCategoryItems)}
       {!categoryStatusContent && groups.length === 0 && standaloneCats.length === 0 && (
@@ -1666,7 +1527,11 @@ export default function SelectionPage() {
   const isResultSharePending = sharingTarget === 'result';
   const isSubSharePending = sharingTarget === 'sub';
 
-  const subContent = group && <div className={selectionCategoryPanelClass}>{renderCategoryGrid(subCategoryItems)}</div>;
+  const subContent = group && (
+    <div className={isDesktop ? selectionCategoryPanelClass : mobileCategoryPanelClass}>
+      {renderCategoryGrid(subCategoryItems)}
+    </div>
+  );
 
   /* ── wizard steps rendering (shared between desktop split and mobile combined) ── */
   const stepsJSX = fields.map((field, i) => {
@@ -1967,11 +1832,8 @@ export default function SelectionPage() {
               columns={columns}
               kitListTitle={getKitListTitle((liveCat?.optionOrder || null) as Record<string, unknown> | null, p)}
               selected={selectedIds.has(p.id)}
-              onToggleSelect={() => toggleSel(p.id)}
-              onInquiry={() => {
-                toggleSel(p.id);
-                setInquiryOpen(true);
-              }}
+              onToggleSelect={() => toggleInquiryProduct(applyManualSpecs(withVisibleMatch(p), columns, specs))}
+              onToggleInquiry={() => toggleInquiryProduct(applyManualSpecs(withVisibleMatch(p), columns, specs))}
               expandedKits={expandedKits}
               onToggleKit={toggleKit}
               navigate={navigate}
@@ -2064,11 +1926,8 @@ export default function SelectionPage() {
               columns={columns}
               kitListTitle={getKitListTitle((liveCat?.optionOrder || null) as Record<string, unknown> | null, p)}
               selected={selectedIds.has(p.id)}
-              onToggleSelect={() => toggleSel(p.id)}
-              onInquiry={() => {
-                toggleSel(p.id);
-                setInquiryOpen(true);
-              }}
+              onToggleSelect={() => toggleInquiryProduct(applyManualSpecs(withVisibleMatch(p), columns, specs))}
+              onToggleInquiry={() => toggleInquiryProduct(applyManualSpecs(withVisibleMatch(p), columns, specs))}
               expandedKits={expandedKits}
               onToggleKit={toggleKit}
               navigate={navigate}
@@ -2094,38 +1953,177 @@ export default function SelectionPage() {
   ) : null; /* wizard steps + results rendered separately via stepsJSX / resultsJSX */
 
   /* ── batch action bar ── */
-  const actionBar = selectedIds.size > 0 && (
+  const actionBar = inquiryCart.items.length > 0 && (
     <div
-      className={`border-t border-outline-variant/15 bg-surface/95 px-3 py-2 backdrop-blur-sm flex items-center justify-between ${
+      ref={cartActionBarRef}
+      className={
         isDesktop
-          ? 'shrink-0 z-10 md:px-4'
-          : 'fixed inset-x-3 z-40 rounded-xl border shadow-[0_16px_36px_rgba(15,23,42,0.18)]'
-      }`}
+          ? 'relative z-10 flex shrink-0 items-center justify-between border-t border-outline-variant/15 bg-surface/95 px-3 py-2 backdrop-blur-sm md:px-4'
+          : `fixed inset-x-0 z-[70] grid grid-cols-[minmax(0,1fr)_3.75rem_4.25rem] items-center gap-1.5 border-t bg-surface-container-high px-3 py-1 ${
+              cartPreviewOpen
+                ? 'border-outline-variant/14 shadow-[0_-10px_24px_rgba(15,23,42,0.14)]'
+                : 'border-outline-variant/12 shadow-[0_-6px_18px_rgba(15,23,42,0.12)]'
+            }`
+      }
       style={
         !isDesktop
-          ? { bottom: 'calc(3.9rem + env(safe-area-inset-bottom, 0px) + var(--visual-viewport-bottom, 0px))' }
+          ? {
+              bottom: `calc(${hideMobileBottomNav ? '0px' : '3.5rem'} + env(safe-area-inset-bottom, 0px) + var(--visual-viewport-bottom, 0px))`,
+            }
           : undefined
       }
     >
-      <span className="text-xs text-on-surface-variant md:text-sm">
-        已选 <strong className="text-on-surface">{selectedIds.size}</strong> 项
-      </span>
-      <div className="flex gap-2">
-        <button
-          onClick={() => setSelectedIds(new Set())}
-          className={`px-2.5 py-1.5 text-xs text-on-surface-variant hover:bg-surface-container-high rounded-lg ${selectionPress}`}
+      <AnimatePresence initial={false}>
+        {cartPreviewOpen ? (
+          <motion.div
+            key="inquiry-cart-preview"
+            initial={prefersReducedMotion ? false : { opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={prefersReducedMotion ? undefined : { opacity: 0, y: 8 }}
+            transition={{ duration: 0.16, ease: 'easeOut' }}
+            className={`absolute bottom-full left-0 right-0 overflow-hidden bg-surface-container-low ${
+              isDesktop
+                ? 'rounded-xl border border-outline-variant/15 shadow-2xl md:max-h-[360px]'
+                : 'rounded-t-xl border-t border-outline-variant/12 bg-surface-container-high shadow-none'
+            }`}
+          >
+            <div className="flex items-center justify-between gap-3 border-b border-outline-variant/10 px-3 py-2.5 md:py-2">
+              <div className="min-w-0">
+                <p className="text-sm font-bold text-on-surface">询价清单</p>
+                <p className="text-xs text-on-surface-variant">已加入 {inquiryCart.items.length} 项</p>
+              </div>
+              <div className="flex shrink-0 items-center gap-1.5">
+                {!isDesktop ? (
+                  <button
+                    onClick={inquiryCart.clear}
+                    className={`px-2 py-1.5 text-xs font-medium text-on-surface-variant hover:text-on-surface ${selectionPress}`}
+                  >
+                    清空
+                  </button>
+                ) : null}
+                <Link
+                  to="/my-inquiries"
+                  className={`shrink-0 px-2 py-1.5 text-xs font-medium text-on-surface-variant hover:text-on-surface ${selectionPress}`}
+                >
+                  {isDesktop ? '编辑清单' : '编辑'}
+                </Link>
+              </div>
+            </div>
+            <div className="max-h-[calc(58dvh-56px)] divide-y divide-outline-variant/10 overflow-y-auto px-2 py-1 md:max-h-[300px]">
+              {inquiryCart.items.map((item) => {
+                const summary = getInquiryCartItemSummary(item);
+                return (
+                  <div
+                    key={item.id}
+                    className="flex min-w-0 items-start gap-2 px-2 py-2.5 hover:bg-surface-container md:rounded-lg md:py-2"
+                  >
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-sm font-medium text-on-surface">{getInquiryCartItemTitle(item)}</p>
+                      <p className="mt-0.5 truncate text-xs text-on-surface-variant">
+                        数量 {item.qty}
+                        {item.unit || '个'}
+                        {summary ? ` · ${summary}` : ''}
+                      </p>
+                    </div>
+                    <button
+                      onClick={() => inquiryCart.removeItem(item.id)}
+                      className={`inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface ${selectionPress}`}
+                      aria-label="移出询价清单"
+                    >
+                      <Icon name="close" size={16} />
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          </motion.div>
+        ) : null}
+      </AnimatePresence>
+
+      <button
+        onClick={() => setCartPreviewOpen((value) => !value)}
+        className={
+          isDesktop
+            ? `inline-flex min-h-8 min-w-0 flex-none items-center justify-start gap-1.5 rounded-lg px-2 py-1 text-sm text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface ${selectionPress}`
+            : `inline-flex h-9 min-w-0 items-center justify-between gap-2 rounded-lg text-sm font-semibold text-on-surface hover:text-on-surface ${selectionPress}`
+        }
+        aria-expanded={cartPreviewOpen}
+      >
+        {!isDesktop ? (
+          <span className="inline-flex min-w-0 items-center gap-2">
+            <span
+              className={`grid h-6 w-6 shrink-0 place-items-center rounded-md ${
+                cartPreviewOpen
+                  ? 'bg-primary-container text-on-primary'
+                  : 'bg-primary-container/10 text-primary-container'
+              }`}
+            >
+              <Icon name="request_quote" size={16} />
+            </span>
+            <span className="min-w-0 truncate leading-none">待询价</span>
+            <span className="shrink-0 text-xs font-semibold leading-none text-primary-container tabular-nums">
+              {inquiryCart.items.length > 99 ? '99+' : `${inquiryCart.items.length}项`}
+            </span>
+            <Icon
+              name={cartPreviewOpen ? 'chevrons_down' : 'chevrons_up'}
+              size={15}
+              className="shrink-0 text-on-surface-variant/70"
+            />
+          </span>
+        ) : (
+          <span className="inline-flex min-w-0 items-center gap-1.5">
+            待询价 <strong className="text-on-surface">{inquiryCart.items.length}</strong> 项
+          </span>
+        )}
+        {isDesktop ? (
+          <Icon
+            name={cartPreviewOpen ? 'chevrons_down' : 'chevrons_up'}
+            size={17}
+            className="shrink-0 text-on-surface-variant/70"
+          />
+        ) : null}
+      </button>
+      <div className={isDesktop ? 'flex shrink-0 items-center gap-2' : 'contents'}>
+        {isDesktop ? (
+          <button
+            onClick={inquiryCart.clear}
+            className={`rounded-lg px-2.5 py-1.5 text-xs text-on-surface-variant hover:bg-surface-container-high ${selectionPress}`}
+            aria-label="清空询价清单"
+          >
+            清空
+          </button>
+        ) : null}
+        <Link
+          to="/my-inquiries"
+          className={
+            isDesktop
+              ? `rounded-lg px-2.5 py-1.5 text-center text-xs font-medium text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface ${selectionPress}`
+              : `inline-flex h-9 items-center justify-center rounded-lg px-2 text-center text-sm font-medium text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface ${selectionPress}`
+          }
         >
-          取消
-        </button>
+          {isDesktop ? '我的询价' : '清单'}
+        </Link>
         <button
-          onClick={() => setInquiryOpen(true)}
-          className={`px-3 py-1.5 text-xs font-bold bg-primary-container text-on-primary rounded-lg hover:opacity-90 md:px-4 md:text-sm ${selectionPress}`}
+          onClick={() => {
+            if (!user) {
+              requireLogin('登录后可以提交询价清单');
+              return;
+            }
+            setInquiryOpen(true);
+          }}
+          className={
+            isDesktop
+              ? `rounded-lg bg-primary-container px-4 py-1.5 text-sm font-bold text-on-primary hover:opacity-90 ${selectionPress}`
+              : `inline-flex h-9 items-center justify-center rounded-lg bg-primary-container px-2 text-sm font-bold text-on-primary hover:opacity-90 ${selectionPress}`
+          }
         >
-          一键询价
+          {isDesktop ? '提交询价' : '提交'}
         </button>
       </div>
     </div>
   );
+  const mobileActionBarSpacer =
+    !isDesktop && inquiryCart.items.length > 0 ? <div aria-hidden className="h-14 shrink-0" /> : null;
 
   const shellTitle = (
     <span className="inline-flex min-w-0 max-w-full items-center gap-1 md:gap-1.5">
@@ -2464,11 +2462,12 @@ export default function SelectionPage() {
       : phase === 'sub'
         ? `selection-sub-${groupId || 'none'}`
         : `selection-wizard-${slug || 'none'}`;
-  const desktopScrollContainerClass = 'h-full min-h-0 overflow-y-auto overflow-x-hidden custom-scrollbar';
+  const desktopScrollContainerClass = 'min-h-0 flex-1 overflow-y-auto overflow-x-hidden custom-scrollbar';
 
   useEffect(() => {
     if (isDesktop) return;
     const frame = window.requestAnimationFrame(() => {
+      scrollContainerRef.current?.scrollTo({ top: 0, left: 0, behavior: 'auto' });
       mobileMainRef.current?.scrollTo({ top: 0, left: 0, behavior: 'auto' });
     });
     return () => window.cancelAnimationFrame(frame);
@@ -2530,14 +2529,19 @@ export default function SelectionPage() {
             toolbar={selectionToolbar}
             contentClassName="min-h-0"
           >
-            <AdminContentPanel scroll>
+            <AdminContentPanel scroll className="flex flex-col">
               <div ref={scrollContainerRef} className={desktopScrollContainerClass}>
                 {contentBody}
               </div>
               {actionBar}
             </AdminContentPanel>
           </AdminManagementPage>
-          <InquiryDialog open={inquiryOpen} onClose={() => setInquiryOpen(false)} products={selectedProds} />
+          <InquirySubmitDialog
+            open={inquiryOpen}
+            onClose={() => setInquiryOpen(false)}
+            items={inquiryCart.items}
+            onSubmitted={inquiryCart.clear}
+          />
         </AdminPageShell>
         <LoginConfirmDialog
           open={loginDialogOpen}
@@ -2555,24 +2559,35 @@ export default function SelectionPage() {
     <>
       <AdminPageShell
         mobileMainRef={mobileMainRef}
-        mobileContentClassName="flex flex-col gap-3 px-3 py-3 pb-4 min-h-full"
+        mobileMainClassName="min-h-0"
+        mobileContentClassName={`flex min-h-full flex-col gap-3 px-3 py-3 ${hideMobileBottomNav ? 'pb-3' : 'pb-20'}`}
+        hideMobileBottomNav={hideMobileBottomNav}
       >
         <AdminManagementPage
           title={shellTitle}
           description={shellDescription}
           actions={shellActions}
           toolbar={selectionToolbar}
-          className="flex-1 h-auto min-h-[auto] flex flex-col gap-3"
-          contentClassName="flex-1 min-h-[auto] flex flex-col"
+          className="!h-auto min-h-full flex flex-col gap-3"
+          contentClassName="flex flex-col"
         >
-          <AdminContentPanel className="flex-1">
+          <AdminContentPanel
+            className={`flex flex-col overflow-visible ${
+              phase === 'group' || phase === 'sub' ? 'rounded-none border-0 bg-transparent' : ''
+            }`}
+          >
             {contentBody}
-            {selectedIds.size > 0 && <div className="h-28" />}
+            {mobileActionBarSpacer}
             {actionBar}
           </AdminContentPanel>
         </AdminManagementPage>
 
-        <InquiryDialog open={inquiryOpen} onClose={() => setInquiryOpen(false)} products={selectedProds} />
+        <InquirySubmitDialog
+          open={inquiryOpen}
+          onClose={() => setInquiryOpen(false)}
+          items={inquiryCart.items}
+          onSubmitted={inquiryCart.clear}
+        />
       </AdminPageShell>
       <LoginConfirmDialog
         open={loginDialogOpen}

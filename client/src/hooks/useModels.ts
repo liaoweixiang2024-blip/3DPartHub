@@ -50,7 +50,10 @@ export function useInfiniteModels(
     sort?: string;
   },
   initialSize = 1,
+  options?: { manual?: boolean },
 ) {
+  const manual = options?.manual === true;
+  const requestedPage = params?.page || 1;
   const pageSize = params?.pageSize || 50;
   const search = params?.search || '';
   const format = params?.format || '';
@@ -59,8 +62,9 @@ export function useInfiniteModels(
   const sort = params?.sort || '';
 
   const getKey = (pageIndex: number, previousPageData: PaginatedResponse<ServerModelListItem> | null) => {
+    if (manual && pageIndex > 0) return null;
     if (previousPageData && previousPageData.page >= previousPageData.totalPages) return null;
-    const page = pageIndex + 1;
+    const page = manual ? requestedPage : pageIndex + 1;
     return `/models/infinite?page=${page}&pageSize=${pageSize}&search=${search}&format=${format}&category=${category}&categoryId=${categoryId}&sort=${sort}`;
   };
 
@@ -81,19 +85,19 @@ export function useInfiniteModels(
         sort: sort || undefined,
       });
     },
-    { initialSize, revalidateFirstPage: false },
+    { initialSize: manual ? 1 : initialSize, keepPreviousData: true, revalidateFirstPage: false },
   );
 
   const pages = data || [];
   const firstPage = pages[0];
   const lastPage = pages[pages.length - 1];
-  const items = pages.flatMap((page) => page.items);
+  const items = manual ? firstPage?.items || [] : pages.flatMap((page) => page.items);
   const totalPages = firstPage?.totalPages || 1;
   const hasMore = Boolean(lastPage && lastPage.page < lastPage.totalPages);
-  const isLoadingMore = Boolean(size > 0 && !data?.[size - 1] && !error);
+  const isLoadingMore = !manual && Boolean(size > 0 && !data?.[size - 1] && !error);
 
   return {
-    data: firstPage ? { ...firstPage, items, page: pages.length, totalPages } : undefined,
+    data: firstPage ? { ...firstPage, items, page: manual ? firstPage.page : pages.length, totalPages } : undefined,
     error,
     isLoading: isLoading && pages.length === 0,
     isValidating,

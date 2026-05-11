@@ -112,6 +112,10 @@ function hslToHex(h: number, s: number, l: number): string {
   return `#${f(0)}${f(8)}${f(4)}`;
 }
 
+function clamp(value: number, min: number, max: number): number {
+  return Math.min(max, Math.max(min, value));
+}
+
 // --- Palette generation from a single primary color ---
 
 /**
@@ -119,15 +123,64 @@ function hslToHex(h: number, s: number, l: number): string {
  * Uses tonal palette approach inspired by Material Design 3.
  */
 export function generatePaletteFromPrimary(primaryHex: string): {
-  dark: Record<string, string>;
-  light: Record<string, string>;
+  dark: Record<ColorKey, string>;
+  light: Record<ColorKey, string>;
 } {
   const { h, s } = hexToHsl(primaryHex);
 
   // Helper: create a color at a specific tone (lightness)
-  const tone = (l: number, satMul = 1, hueShift = 0) => hslToHex((h + hueShift + 360) % 360, Math.round(s * satMul), l);
+  const tone = (l: number, satMul = 1, hueShift = 0) =>
+    hslToHex((h + hueShift + 360) % 360, clamp(Math.round(s * satMul), 0, 100), l);
 
-  const dark: Record<string, string> = {
+  const darkSurface = {
+    'surface-tint': tone(72, 0.82),
+    surface: tone(8, 0.14),
+    'surface-dim': tone(7, 0.14),
+    'surface-container-lowest': tone(5, 0.12),
+    'surface-container-low': tone(11, 0.14),
+    'surface-container': tone(13, 0.14),
+    'surface-container-high': tone(17, 0.14),
+    'surface-container-highest': tone(21, 0.14),
+    'surface-bright': tone(24, 0.14),
+    'surface-variant': tone(21, 0.24),
+    'on-surface': tone(90, 0.08),
+    'on-background': tone(90, 0.08),
+    'on-surface-variant': tone(79, 0.28),
+  } satisfies Pick<
+    Record<ColorKey, string>,
+    | 'surface-tint'
+    | 'surface'
+    | 'surface-dim'
+    | 'surface-container-lowest'
+    | 'surface-container-low'
+    | 'surface-container'
+    | 'surface-container-high'
+    | 'surface-container-highest'
+    | 'surface-bright'
+    | 'surface-variant'
+    | 'on-surface'
+    | 'on-background'
+    | 'on-surface-variant'
+  >;
+
+  const lightSurface = {
+    'surface-tint': tone(42, 0.82),
+    surface: tone(98, 0.12),
+    'surface-dim': tone(92, 0.12),
+    'surface-container-lowest': '#ffffff',
+    'surface-container-low': tone(96, 0.12),
+    'surface-container': tone(94, 0.12),
+    'surface-container-high': tone(91, 0.12),
+    'surface-container-highest': tone(88, 0.12),
+    'surface-bright': tone(98, 0.12),
+    'surface-variant': tone(88, 0.2),
+    'on-surface': tone(12, 0.16),
+    'on-background': tone(12, 0.16),
+    'on-surface-variant': tone(28, 0.24),
+  } satisfies typeof darkSurface;
+
+  const dark: Record<ColorKey, string> = {
+    ...darkSurface,
     primary: tone(75, 0.7), // lighter for dark bg
     'primary-container': primaryHex,
     'on-primary': tone(15, 0.8), // dark text on primary
@@ -144,10 +197,10 @@ export function generatePaletteFromPrimary(primaryHex: string): {
     'error-container': '#93000a',
     outline: tone(55, 0.3), // desaturated primary
     'outline-variant': tone(30, 0.2),
-    'on-surface-variant': tone(70, 0.35),
   };
 
-  const light: Record<string, string> = {
+  const light: Record<ColorKey, string> = {
+    ...lightSurface,
     primary: tone(35, 0.8), // darker for light bg
     'primary-container': primaryHex,
     'on-primary': '#ffffff',
@@ -164,7 +217,6 @@ export function generatePaletteFromPrimary(primaryHex: string): {
     'error-container': '#ffdad6',
     outline: tone(42, 0.25),
     'outline-variant': tone(75, 0.2),
-    'on-surface-variant': tone(32, 0.25),
   };
 
   return { dark, light };

@@ -1,8 +1,22 @@
 import { Router, Response } from 'express';
 import { cacheGetOrSet, TTL } from '../../lib/cache.js';
 import { getMaintenanceStatus } from '../../lib/maintenance.js';
-import { getAllSettings } from '../../lib/settings.js';
+import {
+  buildFooterCopyright,
+  buildModelDetailCopyright,
+  DEFAULT_FOOTER_COPYRIGHT,
+  DEFAULT_MODEL_DETAIL_COPYRIGHT,
+  DEFAULT_MODEL_DETAIL_DISCLAIMER,
+  getAllSettings,
+  normalizeFooterLinksSetting,
+} from '../../lib/settings.js';
 import { getLocalVersion } from '../../lib/update.js';
+
+function readTtlSeconds(value: unknown, fallback: number): number {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) return fallback;
+  return Math.min(86400, Math.max(0, parsed));
+}
 
 export function createSettingsPublicRouter() {
   const router = Router();
@@ -23,11 +37,16 @@ export function createSettingsPublicRouter() {
     res.set('Cache-Control', 'no-store, no-cache, must-revalidate');
     res.set('Pragma', 'no-cache');
     try {
+      const settingsSnapshot = await getAllSettings();
+      const ttlSeconds = readTtlSeconds(settingsSnapshot.cache_public_settings_ttl_seconds, TTL.SETTINGS_PUBLIC);
       const { value: result, hit } = await cacheGetOrSet<Record<string, unknown>>(
         'cache:settings:public',
-        TTL.SETTINGS_PUBLIC,
+        ttlSeconds,
         async () => {
-          const all = await getAllSettings();
+          const all = settingsSnapshot;
+          const siteTitle = all.site_title ?? '3DPartHub';
+          const footerCopyrightFollowsSiteTitle = all.footer_copyright_follow_site_title !== false;
+          const modelDetailCopyrightFollowsSiteTitle = all.model_detail_copyright_follow_site_title !== false;
           return {
             allow_register: all.allow_register ?? true,
             require_login_download: all.require_login_download ?? false,
@@ -55,12 +74,22 @@ export function createSettingsPublicRouter() {
             contact_email: all.contact_email ?? '',
             contact_phone: all.contact_phone ?? '',
             contact_address: all.contact_address ?? '',
-            footer_links: all.footer_links ?? '',
-            footer_copyright: all.footer_copyright ?? '',
+            footer_links: normalizeFooterLinksSetting(all.footer_links ?? ''),
+            footer_copyright_follow_site_title: footerCopyrightFollowsSiteTitle,
+            footer_copyright: footerCopyrightFollowsSiteTitle
+              ? buildFooterCopyright(siteTitle)
+              : all.footer_copyright || DEFAULT_FOOTER_COPYRIGHT,
+            model_detail_disclaimer: all.model_detail_disclaimer ?? DEFAULT_MODEL_DETAIL_DISCLAIMER,
+            model_detail_copyright_follow_site_title: modelDetailCopyrightFollowsSiteTitle,
+            model_detail_copyright: modelDetailCopyrightFollowsSiteTitle
+              ? buildModelDetailCopyright(siteTitle)
+              : all.model_detail_copyright || DEFAULT_MODEL_DETAIL_COPYRIGHT,
             legal_privacy_updated_at: all.legal_privacy_updated_at ?? '2026 年 4 月',
             legal_terms_updated_at: all.legal_terms_updated_at ?? '2026 年 4 月',
             legal_privacy_sections: all.legal_privacy_sections ?? '',
             legal_terms_sections: all.legal_terms_sections ?? '',
+            interface_theme: all.interface_theme ?? 'workbench',
+            mobile_interface_theme: all.mobile_interface_theme ?? 'classic',
             announcement_enabled: all.announcement_enabled ?? false,
             announcement_text: all.announcement_text ?? '',
             announcement_type: all.announcement_type ?? 'info',

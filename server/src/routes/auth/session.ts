@@ -115,7 +115,7 @@ export function createAuthSessionRouter() {
       return;
     }
 
-    const { username, email, password, emailCode, phone, company } = req.body;
+    const { username, email, password, emailCode, phone, company, address } = req.body;
 
     if (!username || !email || !password || !emailCode) {
       res.status(400).json({ detail: '所有字段不能为空' });
@@ -179,8 +179,28 @@ export function createAuthSessionRouter() {
       const passwordHash = await hashPassword(password);
       const normalizedEmail = email.toLowerCase();
       const user = await prisma.user.create({
-        data: { username, email: normalizedEmail, passwordHash, phone: phone || null, company: company || null },
-        select: { id: true, username: true, email: true, role: true, mustChangePassword: true, createdAt: true },
+        data: {
+          username,
+          email: normalizedEmail,
+          passwordHash,
+          phone: phone || null,
+          company: company || null,
+          address: address || null,
+        },
+        select: {
+          id: true,
+          username: true,
+          email: true,
+          role: true,
+          mustChangePassword: true,
+          company: true,
+          phone: true,
+          department: true,
+          address: true,
+          bio: true,
+          avatar: true,
+          createdAt: true,
+        },
       });
 
       const payload = { userId: user.id, role: user.role };
@@ -242,6 +262,12 @@ export function createAuthSessionRouter() {
           email: user.email,
           role: user.role,
           mustChangePassword: user.mustChangePassword,
+          company: user.company,
+          phone: user.phone,
+          department: user.department,
+          address: user.address,
+          bio: user.bio,
+          avatar: user.avatar,
           createdAt: user.createdAt,
         },
         tokens: { accessToken },

@@ -1,19 +1,15 @@
 import { motion } from 'framer-motion';
-import { createContext, lazy, useContext, useEffect, Suspense, useState, type ReactNode, type Ref } from 'react';
+import { createContext, useContext, useLayoutEffect, useState, type ReactNode, type Ref } from 'react';
 import { Outlet, useLocation } from 'react-router-dom';
 import useSWR from 'swr';
 import { useMediaQuery } from '../../layouts/hooks/useMediaQuery';
-import { getCachedPublicSettings, getFooterCopyright, getSiteTitle } from '../../lib/publicSettings';
-import BottomNav from './BottomNav';
+import { getCachedPublicSettings, getFooterCopyright } from '../../lib/publicSettings';
+import { getInterfaceThemePackage } from '../../themes/interfaceThemes/registry';
+import type { FloatingMenuThemeProps } from '../../themes/interfaceThemes/types';
+import { getMobileThemePackage } from '../../themes/mobileThemes/registry';
 import HomeFooter from './HomeFooter';
 import { mergeClassName } from './PagePrimitives';
-import { loadMobileNavDrawer, scheduleMobileNavDrawerPreload } from './preloadMobileNavDrawer';
-import AppSidebar from './Sidebar';
 import TopNav from './TopNav';
-
-const MobileNavDrawer = lazy(loadMobileNavDrawer);
-// Preload drawer after the page gets breathing room so it does not compete with first paint.
-scheduleMobileNavDrawerPreload();
 
 /** Context: when true, AdminPageShell/PublicPageShell skip rendering TopNav/Sidebar */
 export const ShellLayoutContext = createContext(false);
@@ -24,20 +20,33 @@ const HideBottomNavContext = createContext<{ hide: boolean; setHide: (v: boolean
 });
 
 function AdminCopyrightBadge() {
-  const { data: settings } = useSWR('publicSettings', () => getCachedPublicSettings());
-  const text =
-    (settings?.footer_copyright as string | undefined)?.trim() ||
-    getFooterCopyright() ||
-    `© ${new Date().getFullYear()} ${getSiteTitle()}. All rights reserved.`;
-  const year = new Date().getFullYear();
+  const text = getFooterCopyright();
 
   return (
     <div className="pointer-events-none fixed bottom-3 right-5 z-20 hidden max-w-[min(46vw,560px)] items-center gap-2 text-[11px] font-medium text-on-surface-variant/45 md:flex">
       <span className="h-px w-8 bg-gradient-to-r from-transparent to-outline-variant/35" />
       <span className="max-w-[min(38vw,480px)] truncate">{text}</span>
-      {!text.includes(String(year)) ? <span className="tabular-nums text-on-surface-variant/35">{year}</span> : null}
     </div>
   );
+}
+
+function useInterfaceThemeShellComponents() {
+  const { data: settings } = useSWR('publicSettings', () => getCachedPublicSettings());
+  return getInterfaceThemePackage(settings?.interface_theme);
+}
+
+function useMobileThemeShellComponents() {
+  const { data: settings } = useSWR('publicSettings', () => getCachedPublicSettings());
+  return getMobileThemePackage(settings?.mobile_interface_theme);
+}
+
+function useFloatingMenuThemeProps(): FloatingMenuThemeProps {
+  const { data: settings } = useSWR('publicSettings', () => getCachedPublicSettings());
+  return {
+    contactAddress: settings?.contact_address || '',
+    contactEmail: settings?.contact_email || '',
+    contactPhone: settings?.contact_phone || '',
+  };
 }
 
 // ─── Layout route: admin pages (TopNav + Sidebar) ───
@@ -45,6 +54,20 @@ export function AdminLayout() {
   const isDesktop = useMediaQuery('(min-width: 768px)');
   const [navOpen, setNavOpen] = useState(false);
   const [hideBottomNav, setHideBottomNav] = useState(false);
+  const location = useLocation();
+  const ThemePackage = useInterfaceThemeShellComponents();
+  const MobileThemePackage = useMobileThemeShellComponents();
+  const Sidebar = ThemePackage.components.Sidebar;
+  const BottomNav = MobileThemePackage.components.BottomNav;
+  const MobileNavDrawer = MobileThemePackage.components.MobileNavDrawer;
+  const FloatingMenu = ThemePackage.components.FloatingMenu;
+  const floatingMenuProps = useFloatingMenuThemeProps();
+  const interfaceTheme = ThemePackage.manifest.key;
+  const mobileTheme = MobileThemePackage.manifest.key;
+  const isAdminRoute = location.pathname === '/admin' || location.pathname.startsWith('/admin/');
+  const chromeContext = { pathname: location.pathname, isAdminRoute };
+  const showDesktopSidebar = ThemePackage.chrome.adminLayout.showDesktopSidebar(chromeContext);
+  const showDesktopFloatingMenu = ThemePackage.chrome.adminLayout.showDesktopFloatingMenu?.(chromeContext) ?? false;
 
   const bottomNavCtx = { hide: hideBottomNav, setHide: setHideBottomNav };
 
@@ -52,13 +75,14 @@ export function AdminLayout() {
     return (
       <ShellLayoutContext.Provider value>
         <HideBottomNavContext.Provider value={bottomNavCtx}>
-          <div className="flex h-dvh flex-col overflow-hidden">
+          <div className="flex h-dvh flex-col overflow-hidden" data-interface-theme={interfaceTheme}>
             <TopNav source="layout" />
-            <div className="flex flex-1 overflow-hidden">
-              <AppSidebar />
-              <main className="flex flex-1 flex-col overflow-y-auto bg-surface-dim custom-scrollbar">
+            <div className="flex min-h-0 flex-1 overflow-hidden">
+              {showDesktopSidebar ? <Sidebar /> : null}
+              <main className="flex min-h-0 flex-1 flex-col overflow-y-auto bg-surface-dim custom-scrollbar">
                 <Outlet />
               </main>
+              {showDesktopFloatingMenu && FloatingMenu ? <FloatingMenu {...floatingMenuProps} /> : null}
               <AdminCopyrightBadge />
             </div>
           </div>
@@ -70,12 +94,14 @@ export function AdminLayout() {
   return (
     <ShellLayoutContext.Provider value>
       <HideBottomNavContext.Provider value={bottomNavCtx}>
-        <div className="flex h-dvh flex-col overflow-hidden bg-surface">
+        <div
+          className="flex h-dvh flex-col overflow-hidden bg-surface"
+          data-interface-theme={interfaceTheme}
+          data-mobile-theme={mobileTheme}
+        >
           <TopNav source="layout" compact onMenuToggle={() => setNavOpen((prev) => !prev)} />
-          <Suspense fallback={null}>
-            <MobileNavDrawer open={navOpen} onClose={() => setNavOpen(false)} />
-          </Suspense>
-          <div className="flex flex-1 flex-col overflow-hidden">
+          <MobileNavDrawer open={navOpen} onClose={() => setNavOpen(false)} />
+          <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
             <Outlet />
           </div>
           {hideBottomNav ? null : <BottomNav />}
@@ -90,16 +116,29 @@ export function PublicLayout() {
   const isDesktop = useMediaQuery('(min-width: 768px)');
   const [navOpen, setNavOpen] = useState(false);
   const location = useLocation();
+  const ThemePackage = useInterfaceThemeShellComponents();
+  const MobileThemePackage = useMobileThemeShellComponents();
+  const BottomNav = MobileThemePackage.components.BottomNav;
+  const MobileNavDrawer = MobileThemePackage.components.MobileNavDrawer;
+  const FloatingMenu = ThemePackage.components.FloatingMenu;
+  const floatingMenuProps = useFloatingMenuThemeProps();
+  const interfaceTheme = ThemePackage.manifest.key;
+  const mobileTheme = MobileThemePackage.manifest.key;
+  const isAdminRoute = location.pathname === '/admin' || location.pathname.startsWith('/admin/');
+  const chromeContext = { pathname: location.pathname, isAdminRoute };
+  const showDesktopHomeFooter = ThemePackage.chrome.publicLayout.showDesktopHomeFooter?.(chromeContext) ?? false;
+  const showDesktopFloatingMenu = ThemePackage.chrome.publicLayout.showDesktopFloatingMenu?.(chromeContext) ?? false;
 
   if (isDesktop) {
     return (
       <ShellLayoutContext.Provider value>
-        <div className="flex h-dvh flex-col overflow-hidden bg-surface">
+        <div className="flex h-dvh flex-col overflow-hidden bg-surface" data-interface-theme={interfaceTheme}>
           <TopNav source="layout" />
-          <div className="flex flex-1 flex-col overflow-hidden">
+          <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
             <Outlet />
           </div>
-          {location.pathname === '/' && <HomeFooter />}
+          {showDesktopHomeFooter ? <HomeFooter /> : null}
+          {showDesktopFloatingMenu && FloatingMenu ? <FloatingMenu {...floatingMenuProps} /> : null}
         </div>
       </ShellLayoutContext.Provider>
     );
@@ -107,12 +146,14 @@ export function PublicLayout() {
 
   return (
     <ShellLayoutContext.Provider value>
-      <div className="flex h-dvh flex-col overflow-hidden bg-surface">
+      <div
+        className="flex h-dvh flex-col overflow-hidden bg-surface"
+        data-interface-theme={interfaceTheme}
+        data-mobile-theme={mobileTheme}
+      >
         <TopNav source="layout" compact onMenuToggle={() => setNavOpen((prev) => !prev)} />
-        <Suspense fallback={null}>
-          <MobileNavDrawer open={navOpen} onClose={() => setNavOpen(false)} />
-        </Suspense>
-        <div className="flex flex-1 flex-col overflow-hidden">
+        <MobileNavDrawer open={navOpen} onClose={() => setNavOpen(false)} />
+        <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
           <Outlet />
         </div>
         <BottomNav />
@@ -145,20 +186,44 @@ export function AdminPageShell({
   const bottomNavCtx = useContext(HideBottomNavContext);
   const [navOpen, setNavOpen] = useState(false);
   const location = useLocation();
+  const ThemePackage = useInterfaceThemeShellComponents();
+  const MobileThemePackage = useMobileThemeShellComponents();
+  const Sidebar = ThemePackage.components.Sidebar;
+  const BottomNav = MobileThemePackage.components.BottomNav;
+  const MobileNavDrawer = MobileThemePackage.components.MobileNavDrawer;
+  const interfaceTheme = ThemePackage.manifest.key;
+  const mobileTheme = MobileThemePackage.manifest.key;
+  const isAdminRoute = location.pathname === '/admin' || location.pathname.startsWith('/admin/');
+  const chromeContext = { pathname: location.pathname, isAdminRoute };
+  const showDesktopSidebar = ThemePackage.chrome.adminLayout.showDesktopSidebar(chromeContext);
+  const themeDesktopContentClassName = ThemePackage.chrome.adminLayout.desktopContentClassName?.(chromeContext);
+  const defaultDesktopContentPadding = isAdminRoute ? 'p-8' : 'p-6';
 
-  // Communicate hideMobileBottomNav to the layout
-  useEffect(() => {
+  const setHideBottomNav = bottomNavCtx.setHide;
+
+  // Communicate hideMobileBottomNav before paint to avoid one-frame bottom-nav jumps.
+  useLayoutEffect(() => {
     if (inLayout && !isDesktop) {
-      bottomNavCtx.setHide(hideMobileBottomNav);
-      return () => bottomNavCtx.setHide(false);
+      setHideBottomNav(hideMobileBottomNav);
+      return () => setHideBottomNav(false);
     }
-  }, [inLayout, isDesktop, hideMobileBottomNav, bottomNavCtx]);
+  }, [inLayout, isDesktop, hideMobileBottomNav, setHideBottomNav]);
 
   // Inside layout route — layout already renders TopNav/Sidebar/BottomNav
   if (inLayout) {
     if (isDesktop) {
       return (
-        <div className={mergeClassName('flex flex-1 flex-col min-h-0 p-8', desktopContentClassName)}>{children}</div>
+        <div
+          className={mergeClassName(
+            mergeClassName(
+              `flex flex-1 flex-col min-h-0 ${defaultDesktopContentPadding}`,
+              themeDesktopContentClassName,
+            ),
+            desktopContentClassName,
+          )}
+        >
+          {children}
+        </div>
       );
     }
     return (
@@ -166,7 +231,14 @@ export function AdminPageShell({
         ref={mobileMainRef as React.Ref<HTMLDivElement>}
         className={mergeClassName('flex-1 overflow-y-auto scrollbar-hidden', mobileMainClassName)}
       >
-        <div className={mergeClassName('flex flex-col px-4 py-4 pb-20', mobileContentClassName)}>{children}</div>
+        <div
+          className={mergeClassName(
+            `flex flex-col px-4 py-4 ${hideMobileBottomNav ? '' : 'pb-20'}`,
+            mobileContentClassName,
+          )}
+        >
+          {children}
+        </div>
       </div>
     );
   }
@@ -174,14 +246,17 @@ export function AdminPageShell({
   // Standalone (fallback) — render full shell
   if (isDesktop) {
     return (
-      <div className="flex h-dvh flex-col overflow-hidden">
+      <div className="flex h-dvh flex-col overflow-hidden" data-interface-theme={interfaceTheme}>
         <TopNav source="standalone" />
-        <div className="flex flex-1 overflow-hidden">
-          <AppSidebar />
+        <div className="flex min-h-0 flex-1 overflow-hidden">
+          {showDesktopSidebar ? <Sidebar /> : null}
           <motion.main
             key={location.pathname}
             className={mergeClassName(
-              'flex flex-1 flex-col overflow-y-auto bg-surface-dim p-8 custom-scrollbar',
+              mergeClassName(
+                `flex min-h-0 flex-1 flex-col overflow-y-auto bg-surface-dim ${defaultDesktopContentPadding} custom-scrollbar`,
+                themeDesktopContentClassName,
+              ),
               desktopContentClassName,
             )}
             initial={{ opacity: 0 }}
@@ -197,11 +272,13 @@ export function AdminPageShell({
   }
 
   return (
-    <div className="flex h-dvh flex-col overflow-hidden bg-surface">
+    <div
+      className="flex h-dvh flex-col overflow-hidden bg-surface"
+      data-interface-theme={interfaceTheme}
+      data-mobile-theme={mobileTheme}
+    >
       <TopNav source="standalone" compact onMenuToggle={() => setNavOpen((prev) => !prev)} />
-      <Suspense fallback={null}>
-        <MobileNavDrawer open={navOpen} onClose={() => setNavOpen(false)} />
-      </Suspense>
+      <MobileNavDrawer open={navOpen} onClose={() => setNavOpen(false)} />
       <motion.main
         key={location.pathname}
         ref={mobileMainRef}

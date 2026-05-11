@@ -4,15 +4,25 @@
  * Variables follow the Material Design 3 tonal palette approach.
  */
 
-export interface ColorPreset {
-  label: string;
-  primary: string; // main accent color for display in UI picker
-  dark: Record<string, string>;
-  light: Record<string, string>;
-}
+export const SURFACE_COLOR_KEYS = [
+  'surface-tint',
+  'surface',
+  'surface-dim',
+  'surface-container-lowest',
+  'surface-container-low',
+  'surface-container',
+  'surface-container-high',
+  'surface-container-highest',
+  'surface-bright',
+  'surface-variant',
+  'on-surface',
+  'on-background',
+  'on-surface-variant',
+] as const;
 
 // The CSS variable keys we override (without --color- prefix)
 export const COLOR_KEYS = [
+  ...SURFACE_COLOR_KEYS,
   'primary',
   'primary-container',
   'on-primary',
@@ -29,16 +39,94 @@ export const COLOR_KEYS = [
   'error-container',
   'outline',
   'outline-variant',
-  'on-surface-variant',
 ] as const;
 
 export type ColorKey = (typeof COLOR_KEYS)[number];
+export type SurfaceColorKey = (typeof SURFACE_COLOR_KEYS)[number];
+
+export interface ColorPreset {
+  label: string;
+  primary: string; // main accent color for display in UI picker
+  dark: Record<ColorKey, string>;
+  light: Record<ColorKey, string>;
+}
+
+type SurfacePalette = Record<SurfaceColorKey, string>;
+
+function clamp(value: number, min: number, max: number): number {
+  return Math.min(max, Math.max(min, value));
+}
+
+function hslToHex(hue: number, saturation: number, lightness: number): string {
+  const h = (((hue % 360) + 360) % 360) / 30;
+  const s = clamp(saturation, 0, 100) / 100;
+  const l = clamp(lightness, 0, 100) / 100;
+  const chroma = s * Math.min(l, 1 - l);
+
+  const channel = (offset: number) => {
+    const k = (offset + h) % 12;
+    const color = l - chroma * Math.max(Math.min(k - 3, 9 - k, 1), -1);
+    return Math.round(255 * clamp(color, 0, 1))
+      .toString(16)
+      .padStart(2, '0');
+  };
+
+  return `#${channel(0)}${channel(8)}${channel(4)}`;
+}
+
+function createSurfacePalette(hue: number, saturation: number): { dark: SurfacePalette; light: SurfacePalette } {
+  const darkSat = Math.max(7, Math.round(saturation * 0.52));
+  const darkVariantSat = Math.max(14, Math.round(saturation * 0.78));
+  const lightSat = Math.max(10, Math.round(saturation * 0.45));
+  const lightVariantSat = Math.max(18, Math.round(saturation * 0.66));
+
+  return {
+    dark: {
+      'surface-tint': hslToHex(hue, Math.max(42, saturation), 72),
+      surface: hslToHex(hue, darkSat, 8),
+      'surface-dim': hslToHex(hue, darkSat, 7),
+      'surface-container-lowest': hslToHex(hue, darkSat, 5),
+      'surface-container-low': hslToHex(hue, darkSat, 11),
+      'surface-container': hslToHex(hue, darkSat, 13),
+      'surface-container-high': hslToHex(hue, darkSat, 17),
+      'surface-container-highest': hslToHex(hue, darkSat, 21),
+      'surface-bright': hslToHex(hue, darkSat, 24),
+      'surface-variant': hslToHex(hue, darkVariantSat, 21),
+      'on-surface': hslToHex(hue, 8, 90),
+      'on-background': hslToHex(hue, 8, 90),
+      'on-surface-variant': hslToHex(hue, darkVariantSat, 79),
+    },
+    light: {
+      'surface-tint': hslToHex(hue, Math.max(42, saturation), 42),
+      surface: hslToHex(hue, lightSat, 98),
+      'surface-dim': hslToHex(hue, lightSat, 92),
+      'surface-container-lowest': '#ffffff',
+      'surface-container-low': hslToHex(hue, lightSat, 96),
+      'surface-container': hslToHex(hue, lightSat, 94),
+      'surface-container-high': hslToHex(hue, lightSat, 91),
+      'surface-container-highest': hslToHex(hue, lightSat, 88),
+      'surface-bright': hslToHex(hue, lightSat, 98),
+      'surface-variant': hslToHex(hue, lightVariantSat, 88),
+      'on-surface': hslToHex(hue, 12, 12),
+      'on-background': hslToHex(hue, 12, 12),
+      'on-surface-variant': hslToHex(hue, lightVariantSat, 28),
+    },
+  };
+}
+
+const orangeSurface = createSurfacePalette(28, 34);
+const blueSurface = createSurfacePalette(218, 30);
+const greenSurface = createSurfacePalette(154, 29);
+const purpleSurface = createSurfacePalette(266, 28);
+const redSurface = createSurfacePalette(4, 34);
+const tealSurface = createSurfacePalette(176, 28);
 
 export const COLOR_PRESETS: Record<string, ColorPreset> = {
   orange: {
     label: '橙色',
     primary: '#f97316',
     dark: {
+      ...orangeSurface.dark,
       primary: '#ffb690',
       'primary-container': '#f97316',
       'on-primary': '#552100',
@@ -55,9 +143,9 @@ export const COLOR_PRESETS: Record<string, ColorPreset> = {
       'error-container': '#93000a',
       outline: '#a78b7d',
       'outline-variant': '#584237',
-      'on-surface-variant': '#e0c0b1',
     },
     light: {
+      ...orangeSurface.light,
       primary: '#8f5a30',
       'primary-container': '#f97316',
       'on-primary': '#ffffff',
@@ -74,13 +162,13 @@ export const COLOR_PRESETS: Record<string, ColorPreset> = {
       'error-container': '#ffdad6',
       outline: '#7e756b',
       'outline-variant': '#d4c4b7',
-      'on-surface-variant': '#4e4539',
     },
   },
   blue: {
     label: '蓝色',
     primary: '#3b82f6',
     dark: {
+      ...blueSurface.dark,
       primary: '#aac7ff',
       'primary-container': '#3b82f6',
       'on-primary': '#002e5c',
@@ -97,9 +185,9 @@ export const COLOR_PRESETS: Record<string, ColorPreset> = {
       'error-container': '#93000a',
       outline: '#8e9099',
       'outline-variant': '#44474f',
-      'on-surface-variant': '#c4c6d0',
     },
     light: {
+      ...blueSurface.light,
       primary: '#2b5ea7',
       'primary-container': '#3b82f6',
       'on-primary': '#ffffff',
@@ -116,13 +204,13 @@ export const COLOR_PRESETS: Record<string, ColorPreset> = {
       'error-container': '#ffdad6',
       outline: '#757780',
       'outline-variant': '#c5c6d0',
-      'on-surface-variant': '#434750',
     },
   },
   green: {
     label: '绿色',
     primary: '#10b981',
     dark: {
+      ...greenSurface.dark,
       primary: '#6ee7b7',
       'primary-container': '#10b981',
       'on-primary': '#003823',
@@ -139,9 +227,9 @@ export const COLOR_PRESETS: Record<string, ColorPreset> = {
       'error-container': '#93000a',
       outline: '#859389',
       'outline-variant': '#3b4b40',
-      'on-surface-variant': '#bfc9c1',
     },
     light: {
+      ...greenSurface.light,
       primary: '#1a6b47',
       'primary-container': '#10b981',
       'on-primary': '#ffffff',
@@ -158,13 +246,13 @@ export const COLOR_PRESETS: Record<string, ColorPreset> = {
       'error-container': '#ffdad6',
       outline: '#6f7d73',
       'outline-variant': '#bfc9c1',
-      'on-surface-variant': '#3d4b42',
     },
   },
   purple: {
     label: '紫色',
     primary: '#8b5cf6',
     dark: {
+      ...purpleSurface.dark,
       primary: '#cfbcff',
       'primary-container': '#8b5cf6',
       'on-primary': '#381e72',
@@ -181,9 +269,9 @@ export const COLOR_PRESETS: Record<string, ColorPreset> = {
       'error-container': '#93000a',
       outline: '#938f99',
       'outline-variant': '#49454f',
-      'on-surface-variant': '#cac4d0',
     },
     light: {
+      ...purpleSurface.light,
       primary: '#6750a4',
       'primary-container': '#8b5cf6',
       'on-primary': '#ffffff',
@@ -200,13 +288,13 @@ export const COLOR_PRESETS: Record<string, ColorPreset> = {
       'error-container': '#ffdad6',
       outline: '#79747e',
       'outline-variant': '#cac4d0',
-      'on-surface-variant': '#49454f',
     },
   },
   red: {
     label: '红色',
     primary: '#ef4444',
     dark: {
+      ...redSurface.dark,
       primary: '#ffb4ab',
       'primary-container': '#ef4444',
       'on-primary': '#690005',
@@ -223,9 +311,9 @@ export const COLOR_PRESETS: Record<string, ColorPreset> = {
       'error-container': '#93000a',
       outline: '#a08580',
       'outline-variant': '#5c3f3c',
-      'on-surface-variant': '#e8bdb8',
     },
     light: {
+      ...redSurface.light,
       primary: '#a33b3b',
       'primary-container': '#ef4444',
       'on-primary': '#ffffff',
@@ -242,13 +330,13 @@ export const COLOR_PRESETS: Record<string, ColorPreset> = {
       'error-container': '#ffdad6',
       outline: '#856366',
       'outline-variant': '#d8c0bc',
-      'on-surface-variant': '#534341',
     },
   },
   teal: {
     label: '青色',
     primary: '#14b8a6',
     dark: {
+      ...tealSurface.dark,
       primary: '#5eead4',
       'primary-container': '#14b8a6',
       'on-primary': '#003731',
@@ -265,9 +353,9 @@ export const COLOR_PRESETS: Record<string, ColorPreset> = {
       'error-container': '#93000a',
       outline: '#7e9994',
       'outline-variant': '#3e524e',
-      'on-surface-variant': '#b8ceca',
     },
     light: {
+      ...tealSurface.light,
       primary: '#1a6b5e',
       'primary-container': '#14b8a6',
       'on-primary': '#ffffff',
@@ -284,7 +372,6 @@ export const COLOR_PRESETS: Record<string, ColorPreset> = {
       'error-container': '#ffdad6',
       outline: '#6f807c',
       'outline-variant': '#b8ceca',
-      'on-surface-variant': '#3f524e',
     },
   },
 };

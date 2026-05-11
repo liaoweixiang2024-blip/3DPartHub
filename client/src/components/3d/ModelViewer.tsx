@@ -1,6 +1,7 @@
 import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react';
 import * as THREE from 'three';
 import { get3DMaterialConfig, type ViewerSettingsOverride } from '../../lib/publicSettings';
+import { THREE_THEME } from '../../themes/threeTheme';
 import type { MaterialPresetKey } from './viewerControls';
 import type {
   MeasureMode,
@@ -163,8 +164,8 @@ export default function ModelViewer({
         flexDirection: 'column',
         alignItems: 'center',
         justifyContent: 'center',
-        background: '#1a1a2e',
-        color: '#94a3b8',
+        background: THREE_THEME.contextLost.background,
+        color: THREE_THEME.contextLost.text,
         gap: 12,
       }}
     >
@@ -174,8 +175,8 @@ export default function ModelViewer({
         style={{
           padding: '8px 20px',
           borderRadius: 6,
-          background: '#3b82f6',
-          color: '#fff',
+          background: THREE_THEME.contextLost.action,
+          color: THREE_THEME.contextLost.actionText,
           border: 'none',
           cursor: 'pointer',
           fontSize: 14,

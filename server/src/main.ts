@@ -178,6 +178,7 @@ mkdirSync(`${config.staticDir}/thumbnails`, { recursive: true });
 mkdirSync(`${config.staticDir}/originals`, { recursive: true });
 mkdirSync(`${config.staticDir}/batch`, { recursive: true });
 mkdirSync(`${config.staticDir}/ticket-attachments`, { recursive: true });
+mkdirSync(`${config.staticDir}/inquiry-attachments`, { recursive: true });
 
 function backupRestoreLockIsActive(): boolean {
   const lockFile = join(process.cwd(), config.uploadDir, '.backup_restore.lock');
@@ -238,6 +239,7 @@ const blockedStaticDirs = new Set([
   'html-previews',
   'originals',
   'ticket-attachments',
+  'inquiry-attachments',
   'drawings',
   'batch',
 ]);
@@ -386,8 +388,12 @@ app.listen(PORT, async () => {
 
   await initDefaultSettings();
 
-  // Auto-seed categories on startup (primary process only, disable with AUTO_SEED=0)
-  if (!cluster.isWorker && process.env.AUTO_SEED !== '0') {
+  // Business categories are project-specific, so bundled demo seeds are opt-in.
+  const shouldAutoSeedCategories = process.env.AUTO_SEED === '1' || process.env.AUTO_SEED_CATEGORIES === '1';
+  const shouldAutoSeedSelectionCategories =
+    process.env.AUTO_SEED === '1' || process.env.AUTO_SEED_SELECTION_CATEGORIES === '1';
+
+  if (!cluster.isWorker && (shouldAutoSeedCategories || shouldAutoSeedSelectionCategories)) {
     // Try compiled dist/prisma/ (Docker: ./prisma/seed-xxx.js from dist/main.js)
     // then prisma/ with tsx (local dev: ../prisma/seed-xxx.js from src/main.js)
     const trySeed = async <T>(paths: string[]) => {
@@ -398,35 +404,40 @@ app.listen(PORT, async () => {
       }
       return null;
     };
-    const seedCategoriesMod = await trySeed<{ seedCategories: (p: any) => Promise<{ upserted: number }> }>([
-      './prisma/seed-categories.js',
-      '../prisma/seed-categories.js',
-    ]);
-    const seedBeizeMod = await trySeed<{ seedBeizeCategories: (p: any) => Promise<{ upserted: number }> }>([
-      './prisma/seed-beize.js',
-      '../prisma/seed-beize.js',
-    ]);
     const { PrismaClient } = await import('@prisma/client');
     const seedPrisma = new PrismaClient();
-    try {
-      if (seedCategoriesMod) {
-        const result = await seedCategoriesMod.seedCategories(seedPrisma);
-        logger.info({ upserted: result.upserted }, 'Auto-seed categories completed');
-      } else {
-        logger.warn('Auto-seed categories skipped: compiled seed module not found');
+    if (shouldAutoSeedCategories) {
+      const seedCategoriesMod = await trySeed<{ seedCategories: (p: any) => Promise<{ upserted: number }> }>([
+        './prisma/seed-categories.js',
+        '../prisma/seed-categories.js',
+      ]);
+      try {
+        if (seedCategoriesMod) {
+          const result = await seedCategoriesMod.seedCategories(seedPrisma);
+          logger.info({ upserted: result.upserted }, 'Auto-seed categories completed');
+        } else {
+          logger.warn('Auto-seed categories skipped: compiled seed module not found');
+        }
+      } catch (err) {
+        logger.warn({ err }, 'Auto-seed categories failed');
       }
-    } catch (err) {
-      logger.warn({ err }, 'Auto-seed categories failed');
     }
-    try {
-      if (seedBeizeMod) {
-        const result = await seedBeizeMod.seedBeizeCategories(seedPrisma);
-        logger.info({ upserted: result.upserted }, 'Auto-seed selection-categories completed');
-      } else {
-        logger.warn('Auto-seed selection-categories skipped: compiled seed module not found');
+
+    if (shouldAutoSeedSelectionCategories) {
+      const seedBeizeMod = await trySeed<{ seedBeizeCategories: (p: any) => Promise<{ upserted: number }> }>([
+        './prisma/seed-beize.js',
+        '../prisma/seed-beize.js',
+      ]);
+      try {
+        if (seedBeizeMod) {
+          const result = await seedBeizeMod.seedBeizeCategories(seedPrisma);
+          logger.info({ upserted: result.upserted }, 'Auto-seed selection-categories completed');
+        } else {
+          logger.warn('Auto-seed selection-categories skipped: compiled seed module not found');
+        }
+      } catch (err) {
+        logger.warn({ err }, 'Auto-seed selection-categories failed');
       }
-    } catch (err) {
-      logger.warn({ err }, 'Auto-seed selection-categories failed');
     }
     await seedPrisma.$disconnect();
   }

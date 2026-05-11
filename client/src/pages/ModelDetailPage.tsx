@@ -39,8 +39,9 @@ import { getModelReturnPath, normalizeModelReturnPath } from '../lib/modelReturn
 import {
   getCachedPublicSettings,
   getDefaultPreset,
+  getModelDetailCopyright,
+  getModelDetailDisclaimer,
   getPublicSettingsSnapshot,
-  getSiteTitle,
   refreshSiteConfig,
 } from '../lib/publicSettings';
 import { useFavoriteStore, useAuthStore } from '../stores';
@@ -812,12 +813,8 @@ function DesktopDetail({
           </Link>
 
           <div className="pt-2 space-y-1.5">
-            <p className="text-xs text-on-surface-variant/50 leading-relaxed">
-              本平台所有 3D 模型仅供参考与模拟验证，不作为生产加工依据。产品持续迭代更新，请以实物为准。
-            </p>
-            <p className="text-xs text-on-surface-variant/30">
-              © {new Date().getFullYear()} {getSiteTitle()}
-            </p>
+            <p className="text-xs text-on-surface-variant/50 leading-relaxed">{getModelDetailDisclaimer()}</p>
+            <p className="text-xs text-on-surface-variant/30">{getModelDetailCopyright()}</p>
           </div>
         </>
       }
@@ -1719,12 +1716,8 @@ export default function ModelDetailPage() {
                   <Icon name="chevron_right" size={16} className="text-on-surface-variant/40" />
                 </Link>
                 <div className="pt-3 space-y-1">
-                  <p className="text-[11px] text-on-surface-variant/50 leading-relaxed">
-                    本平台所有 3D 模型仅供参考与模拟验证，不作为生产加工依据。产品持续迭代更新，请以实物为准。
-                  </p>
-                  <p className="text-[11px] text-on-surface-variant/30">
-                    © {new Date().getFullYear()} {getSiteTitle()}
-                  </p>
+                  <p className="text-[11px] text-on-surface-variant/50 leading-relaxed">{getModelDetailDisclaimer()}</p>
+                  <p className="text-[11px] text-on-surface-variant/30">{getModelDetailCopyright()}</p>
                 </div>
               </div>
             </div>

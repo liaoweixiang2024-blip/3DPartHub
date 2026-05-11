@@ -5,6 +5,7 @@ export const HOME_SEARCH_MAX_LENGTH = 200;
 export type HomeSearchEventDetail = {
   query: string;
   preservePage?: boolean;
+  preserveViewport?: boolean;
 };
 
 export function readHomeSearchQuery() {
@@ -36,12 +37,19 @@ export function saveHomeSearchQuery(query: string) {
   }
 }
 
-export function dispatchHomeSearchQuery(query: string, options: { preservePage?: boolean } = {}) {
+export function dispatchHomeSearchQuery(
+  query: string,
+  options: { preservePage?: boolean; preserveViewport?: boolean } = {},
+) {
   if (typeof window === 'undefined') return;
   const normalizedQuery = normalizeHomeSearchQuery(query);
   window.dispatchEvent(
     new CustomEvent<HomeSearchEventDetail>(HOME_SEARCH_EVENT, {
-      detail: { query: normalizedQuery, preservePage: options.preservePage },
+      detail: {
+        query: normalizedQuery,
+        preservePage: options.preservePage,
+        preserveViewport: options.preserveViewport,
+      },
     }),
   );
 }

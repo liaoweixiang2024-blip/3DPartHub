@@ -8,65 +8,67 @@ datasource db {
 }
 
 model User {
-  id                String   @id @default(uuid())
-  username          String   @unique
-  email             String   @unique
-  passwordHash      String   @map("password_hash")
-  avatar            String?
-  role              Role     @default(VIEWER)
-  company           String?
-  phone             String?
-  department        String?
-  address           String?
-  bio               String?  @db.Text
-  metadata          Json?
-  mustChangePassword Boolean @default(false) @map("must_change_password")
-  createdAt         DateTime @default(now()) @map("created_at")
-  updatedAt         DateTime @updatedAt @map("updated_at")
+  id                 String   @id @default(uuid())
+  username           String   @unique
+  email              String   @unique
+  passwordHash       String   @map("password_hash")
+  avatar             String?
+  role               Role     @default(VIEWER)
+  company            String?
+  phone              String?
+  department         String?
+  address            String?
+  bio                String?  @db.Text
+  metadata           Json?
+  mustChangePassword Boolean  @default(false) @map("must_change_password")
+  createdAt          DateTime @default(now()) @map("created_at")
+  updatedAt          DateTime @updatedAt @map("updated_at")
 
-  models          Model[]
-  modelVersions   ModelVersion[]
-  favorites       Favorite[]
-  downloads       Download[]
-  comments        Comment[]
-  ownedProjects   Project[]              @relation("ProjectOwner")
-  projectMembers  ProjectMember[]
-  shareLinks      ShareLink[]
-  selectionShares SelectionShare[]
-  supportTickets  SupportTicket[]
-  ticketMessages  TicketMessage[]
-  notifications   Notification[]
-  inquiries       Inquiry[]
-  inquiryMessages InquiryMessage[]
-  uploadedProductWallImages ProductWallImage[] @relation("ProductWallUploads")
-  reviewedProductWallImages ProductWallImage[] @relation("ProductWallReviews")
-  productWallFavorites     ProductWallImageFavorite[]
+  models                    Model[]
+  modelVersions             ModelVersion[]
+  favorites                 Favorite[]
+  downloads                 Download[]
+  comments                  Comment[]
+  ownedProjects             Project[]                  @relation("ProjectOwner")
+  projectMembers            ProjectMember[]
+  shareLinks                ShareLink[]
+  selectionShares           SelectionShare[]
+  supportTickets            SupportTicket[]
+  ticketMessages            TicketMessage[]
+  notifications             Notification[]
+  inquiries                 Inquiry[]
+  inquiryMessages           InquiryMessage[]
+  assignedInquiries         Inquiry[]                  @relation("InquirySalesAssignee")
+  salesAssignedInquiries    Inquiry[]                  @relation("InquirySalesAssignedBy")
+  uploadedProductWallImages ProductWallImage[]         @relation("ProductWallUploads")
+  reviewedProductWallImages ProductWallImage[]         @relation("ProductWallReviews")
+  productWallFavorites      ProductWallImageFavorite[]
 
   @@map("users")
 }
 
 model ProductWallImage {
-  id              String   @id @default(uuid())
+  id              String  @id @default(uuid())
   title           String
-  description     String?  @db.Text
-  kind            String   @default("公司产品") @db.VarChar(50)
-  imageUrl        String   @map("image_url")
-  previewImageUrl String?  @map("preview_image_url")
-  ratio           String   @default("4 / 5") @db.VarChar(20)
+  description     String? @db.Text
+  kind            String  @default("公司产品") @db.VarChar(50)
+  imageUrl        String  @map("image_url")
+  previewImageUrl String? @map("preview_image_url")
+  ratio           String  @default("4 / 5") @db.VarChar(20)
   tags            Json?
-  sortOrder       Int      @default(0) @map("sort_order")
-  status          String   @default("pending") @db.VarChar(20)
-  uploaderId      String?  @map("uploader_id")
-  uploader        User?    @relation("ProductWallUploads", fields: [uploaderId], references: [id], onDelete: SetNull)
+  sortOrder       Int     @default(0) @map("sort_order")
+  status          String  @default("pending") @db.VarChar(20)
+  uploaderId      String? @map("uploader_id")
+  uploader        User?   @relation("ProductWallUploads", fields: [uploaderId], references: [id], onDelete: SetNull)
 
-  reviewedAt      DateTime? @map("reviewed_at")
-  reviewedById    String?  @map("reviewed_by_id")
-  reviewer        User?    @relation("ProductWallReviews", fields: [reviewedById], references: [id], onDelete: SetNull)
-  rejectReason    String?  @map("reject_reason")
-  createdAt       DateTime @default(now()) @map("created_at")
-  updatedAt       DateTime @updatedAt @map("updated_at")
+  reviewedAt   DateTime? @map("reviewed_at")
+  reviewedById String?   @map("reviewed_by_id")
+  reviewer     User?     @relation("ProductWallReviews", fields: [reviewedById], references: [id], onDelete: SetNull)
+  rejectReason String?   @map("reject_reason")
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @updatedAt @map("updated_at")
 
-  favorites       ProductWallImageFavorite[]
+  favorites ProductWallImageFavorite[]
 
   @@index([status])
   @@index([kind])
@@ -78,12 +80,12 @@ model ProductWallImage {
 }
 
 model ProductWallImageFavorite {
-  id        String            @id @default(uuid())
-  userId    String            @map("user_id")
-  user      User              @relation(fields: [userId], references: [id], onDelete: Cascade)
-  imageId   String            @map("image_id")
-  image     ProductWallImage  @relation(fields: [imageId], references: [id], onDelete: Cascade)
-  createdAt DateTime          @default(now()) @map("created_at")
+  id        String           @id @default(uuid())
+  userId    String           @map("user_id")
+  user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  imageId   String           @map("image_id")
+  image     ProductWallImage @relation(fields: [imageId], references: [id], onDelete: Cascade)
+  createdAt DateTime         @default(now()) @map("created_at")
 
   @@unique([userId, imageId])
   @@index([userId])
@@ -137,47 +139,47 @@ model ProjectMember {
 }
 
 model Model {
-  id              String   @id @default(uuid())
-  name            String
-  description     String?
-  partNumber      String?   @map("part_number")
-  category        String?
-  categoryId      String?  @map("category_id")
-  categoryRef     Category? @relation(fields: [categoryId], references: [id])
-  originalName    String   @map("original_name")
-  originalFormat  String   @map("original_format")
-  originalSize    Int      @map("original_size")
-  gltfUrl         String   @map("gltf_url")
-  gltfSize        Int      @map("gltf_size")
-  thumbnailUrl    String?  @map("thumbnail_url")
-  dimensions      String?
-  format          String
-  fileModifiedAt  DateTime? @map("file_modified_at")
-  status          String   @default("processing")
-  currentVersion  Int      @default(1) @map("current_version")
-  downloadCount   Int      @default(0) @map("download_count")
-  uploadPath      String?  @map("upload_path")
-  metadata        Json?
-  previewMeta     Json?    @map("preview_meta")
-  projectId       String?  @map("project_id")
-  project         Project? @relation(fields: [projectId], references: [id])
+  id             String    @id @default(uuid())
+  name           String
+  description    String?
+  partNumber     String?   @map("part_number")
+  category       String?
+  categoryId     String?   @map("category_id")
+  categoryRef    Category? @relation(fields: [categoryId], references: [id])
+  originalName   String    @map("original_name")
+  originalFormat String    @map("original_format")
+  originalSize   Int       @map("original_size")
+  gltfUrl        String    @map("gltf_url")
+  gltfSize       Int       @map("gltf_size")
+  thumbnailUrl   String?   @map("thumbnail_url")
+  dimensions     String?
+  format         String
+  fileModifiedAt DateTime? @map("file_modified_at")
+  status         String    @default("processing")
+  currentVersion Int       @default(1) @map("current_version")
+  downloadCount  Int       @default(0) @map("download_count")
+  uploadPath     String?   @map("upload_path")
+  metadata       Json?
+  previewMeta    Json?     @map("preview_meta")
+  projectId      String?   @map("project_id")
+  project        Project?  @relation(fields: [projectId], references: [id])
 
-  createdById String   @map("created_by_id")
-  createdBy   User     @relation(fields: [createdById], references: [id])
+  createdById String @map("created_by_id")
+  createdBy   User   @relation(fields: [createdById], references: [id])
 
-  versions  ModelVersion[]
-  favorites Favorite[]
-  downloads Download[]
-  comments  Comment[]
+  versions   ModelVersion[]
+  favorites  Favorite[]
+  downloads  Download[]
+  comments   Comment[]
   shareLinks ShareLink[]
 
-  groupId    String?     @map("group_id")
-  group      ModelGroup? @relation(fields: [groupId], references: [id], onDelete: SetNull)
+  groupId      String?     @map("group_id")
+  group        ModelGroup? @relation(fields: [groupId], references: [id], onDelete: SetNull)
   groupPrimary ModelGroup? @relation("GroupPrimary")
 
-  drawingUrl   String?  @map("drawing_url")
-  drawingName  String?  @map("drawing_name")
-  drawingSize  Int?     @map("drawing_size")
+  drawingUrl  String? @map("drawing_url")
+  drawingName String? @map("drawing_name")
+  drawingSize Int?    @map("drawing_size")
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
@@ -196,20 +198,20 @@ model Model {
 }
 
 model ModelVersion {
-  id             String   @id @default(uuid())
-  modelId        String   @map("model_id")
-  model          Model    @relation(fields: [modelId], references: [id], onDelete: Cascade)
-  versionNumber  Int      @map("version_number")
-  fileKey        String   @map("file_key")
-  format         String
-  fileSize       Int      @map("file_size")
-  previewMeta    Json?    @map("preview_meta")
-  vertexCount    Int?     @map("vertex_count")
-  faceCount      Int?     @map("face_count")
-  changeLog      String?  @map("change_log")
-  createdById    String   @map("created_by_id")
-  createdBy      User     @relation(fields: [createdById], references: [id])
-  createdAt      DateTime @default(now()) @map("created_at")
+  id            String   @id @default(uuid())
+  modelId       String   @map("model_id")
+  model         Model    @relation(fields: [modelId], references: [id], onDelete: Cascade)
+  versionNumber Int      @map("version_number")
+  fileKey       String   @map("file_key")
+  format        String
+  fileSize      Int      @map("file_size")
+  previewMeta   Json?    @map("preview_meta")
+  vertexCount   Int?     @map("vertex_count")
+  faceCount     Int?     @map("face_count")
+  changeLog     String?  @map("change_log")
+  createdById   String   @map("created_by_id")
+  createdBy     User     @relation(fields: [createdById], references: [id])
+  createdAt     DateTime @default(now()) @map("created_at")
 
   @@index([modelId])
   @@map("model_versions")
@@ -244,14 +246,14 @@ model Download {
 }
 
 model Comment {
-  id        String   @id @default(uuid())
-  modelId   String   @map("model_id")
-  model     Model    @relation(fields: [modelId], references: [id], onDelete: Cascade)
-  userId    String   @map("user_id")
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  content   String
-  position3d Json?   @map("position_3d")
-  createdAt DateTime @default(now()) @map("created_at")
+  id         String   @id @default(uuid())
+  modelId    String   @map("model_id")
+  model      Model    @relation(fields: [modelId], references: [id], onDelete: Cascade)
+  userId     String   @map("user_id")
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  content    String
+  position3d Json?    @map("position_3d")
+  createdAt  DateTime @default(now()) @map("created_at")
 
   @@index([modelId])
   @@index([modelId, createdAt])
@@ -259,21 +261,21 @@ model Comment {
 }
 
 model ShareLink {
-  id              String    @id @default(uuid())
-  modelId         String    @map("model_id")
-  model           Model     @relation(fields: [modelId], references: [id], onDelete: Cascade)
-  token           String    @unique
-  password        String?
-  allowPreview    Boolean   @default(true) @map("allow_preview")
-  allowDownload   Boolean   @default(true) @map("allow_download")
-  allowDrawing    Boolean   @default(true) @map("allow_drawing")
-  downloadLimit   Int       @default(0) @map("download_limit")
-  downloadCount   Int       @default(0) @map("download_count")
-  viewCount       Int       @default(0) @map("view_count")
-  expiresAt       DateTime? @map("expires_at")
-  createdById     String    @map("created_by_id")
-  createdBy       User      @relation(fields: [createdById], references: [id])
-  createdAt       DateTime  @default(now()) @map("created_at")
+  id            String    @id @default(uuid())
+  modelId       String    @map("model_id")
+  model         Model     @relation(fields: [modelId], references: [id], onDelete: Cascade)
+  token         String    @unique
+  password      String?
+  allowPreview  Boolean   @default(true) @map("allow_preview")
+  allowDownload Boolean   @default(true) @map("allow_download")
+  allowDrawing  Boolean   @default(true) @map("allow_drawing")
+  downloadLimit Int       @default(0) @map("download_limit")
+  downloadCount Int       @default(0) @map("download_count")
+  viewCount     Int       @default(0) @map("view_count")
+  expiresAt     DateTime? @map("expires_at")
+  createdById   String    @map("created_by_id")
+  createdBy     User      @relation(fields: [createdById], references: [id])
+  createdAt     DateTime  @default(now()) @map("created_at")
 
   @@map("share_links")
 }
@@ -308,15 +310,15 @@ model AuditLog {
 }
 
 model Category {
-  id        String    @id @default(uuid())
+  id        String     @id @default(uuid())
   name      String
-  icon      String    @default("folder")
-  parentId  String?   @map("parent_id")
-  parent    Category? @relation("CategoryTree", fields: [parentId], references: [id], onDelete: Cascade)
+  icon      String     @default("folder")
+  parentId  String?    @map("parent_id")
+  parent    Category?  @relation("CategoryTree", fields: [parentId], references: [id], onDelete: Cascade)
   children  Category[] @relation("CategoryTree")
-  sortOrder Int       @default(0) @map("sort_order")
-  createdAt DateTime  @default(now()) @map("created_at")
-  updatedAt DateTime  @updatedAt @map("updated_at")
+  sortOrder Int        @default(0) @map("sort_order")
+  createdAt DateTime   @default(now()) @map("created_at")
+  updatedAt DateTime   @updatedAt @map("updated_at")
 
   models Model[]
 
@@ -343,15 +345,15 @@ model SupportTicket {
 }
 
 model TicketMessage {
-  id        String         @id @default(uuid())
-  ticketId  String         @map("ticket_id")
-  ticket    SupportTicket  @relation(fields: [ticketId], references: [id], onDelete: Cascade)
-  userId    String         @map("user_id")
-  user      User           @relation(fields: [userId], references: [id])
-  content   String
-  attachment String? @map("attachment")
-  isAdmin   Boolean        @default(false) @map("is_admin")
-  createdAt DateTime       @default(now()) @map("created_at")
+  id         String        @id @default(uuid())
+  ticketId   String        @map("ticket_id")
+  ticket     SupportTicket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  userId     String        @map("user_id")
+  user       User          @relation(fields: [userId], references: [id])
+  content    String
+  attachment String?       @map("attachment")
+  isAdmin    Boolean       @default(false) @map("is_admin")
+  createdAt  DateTime      @default(now()) @map("created_at")
 
   @@index([ticketId])
   @@index([ticketId, createdAt])
@@ -410,57 +412,57 @@ model ModelGroup {
   id          String   @id @default(uuid())
   name        String
   description String?
-  primaryId   String?   @unique @map("primary_id")
-  primary     Model?    @relation("GroupPrimary", fields: [primaryId], references: [id], onDelete: SetNull)
+  primaryId   String?  @unique @map("primary_id")
+  primary     Model?   @relation("GroupPrimary", fields: [primaryId], references: [id], onDelete: SetNull)
   models      Model[]
-  createdAt   DateTime  @default(now()) @map("created_at")
-  updatedAt   DateTime  @updatedAt @map("updated_at")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
 
   @@map("model_groups")
 }
 
 model SelectionCategory {
-  id           String   @id @default(uuid())
-  name         String
-  slug         String   @unique
-  description  String?
-  icon         String?
-  sortOrder    Int      @default(0) @map("sort_order")
-  columns      Json
-  image        String?
-  optionImages Json?    @map("option_images")
-  optionOrder  Json?    @map("option_order")
-  groupId      String?  @map("group_id")
-  groupName    String?  @map("group_name")
-  groupIcon    String?  @map("group_icon")
-  groupImage   String?  @map("group_image")
-  groupImageFit String? @map("group_image_fit")
-  kind         String?  @default("product")
-  catalogPdf    String?  @map("catalog_pdf")
-  catalogShared Boolean  @default(false) @map("catalog_shared")
-  optionCatalogs Json?   @map("option_catalogs")
-  createdAt    DateTime @default(now()) @map("created_at")
-  updatedAt    DateTime @updatedAt @map("updated_at")
-  products     SelectionProduct[]
+  id             String             @id @default(uuid())
+  name           String
+  slug           String             @unique
+  description    String?
+  icon           String?
+  sortOrder      Int                @default(0) @map("sort_order")
+  columns        Json
+  image          String?
+  optionImages   Json?              @map("option_images")
+  optionOrder    Json?              @map("option_order")
+  groupId        String?            @map("group_id")
+  groupName      String?            @map("group_name")
+  groupIcon      String?            @map("group_icon")
+  groupImage     String?            @map("group_image")
+  groupImageFit  String?            @map("group_image_fit")
+  kind           String?            @default("product")
+  catalogPdf     String?            @map("catalog_pdf")
+  catalogShared  Boolean            @default(false) @map("catalog_shared")
+  optionCatalogs Json?              @map("option_catalogs")
+  createdAt      DateTime           @default(now()) @map("created_at")
+  updatedAt      DateTime           @updatedAt @map("updated_at")
+  products       SelectionProduct[]
 
   @@map("selection_categories")
 }
 
 model SelectionProduct {
-  id         String   @id @default(uuid())
-  categoryId String   @map("category_id")
+  id         String            @id @default(uuid())
+  categoryId String            @map("category_id")
   name       String
-  modelNo    String?  @map("model_no")
+  modelNo    String?           @map("model_no")
   specs      Json
   image      String?
-  pdfUrl     String?  @map("pdf_url")
-  unit       String?  @default("个")
-  sortOrder  Int      @default(0) @map("sort_order")
-  createdAt  DateTime @default(now()) @map("created_at")
-  updatedAt  DateTime @updatedAt @map("updated_at")
+  pdfUrl     String?           @map("pdf_url")
+  unit       String?           @default("个")
+  sortOrder  Int               @default(0) @map("sort_order")
+  createdAt  DateTime          @default(now()) @map("created_at")
+  updatedAt  DateTime          @updatedAt @map("updated_at")
   category   SelectionCategory @relation(fields: [categoryId], references: [id], onDelete: Cascade)
 
-  isKit      Boolean  @default(false) @map("is_kit")
+  isKit      Boolean @default(false) @map("is_kit")
   components Json?
 
   @@index([categoryId])
@@ -469,24 +471,36 @@ model SelectionProduct {
 }
 
 model Inquiry {
-  id           String    @id @default(uuid())
-  userId       String    @map("user_id")
-  user         User      @relation(fields: [userId], references: [id])
-  status       String    @default("submitted")
-  remark       String?
-  company      String?
-  contactName  String?   @map("contact_name")
-  contactPhone String?   @map("contact_phone")
-  totalAmount  Decimal?  @map("total_amount") @db.Decimal(12, 2)
-  adminRemark  String?   @map("admin_remark")
-  createdAt    DateTime  @default(now()) @map("created_at")
-  updatedAt    DateTime  @updatedAt @map("updated_at")
+  id                String    @id @default(uuid())
+  userId            String    @map("user_id")
+  user              User      @relation(fields: [userId], references: [id])
+  status            String    @default("submitted")
+  remark            String?
+  company           String?
+  contactName       String?   @map("contact_name")
+  contactPhone      String?   @map("contact_phone")
+  contactAddress    String?   @map("contact_address")
+  totalAmount       Decimal?  @map("total_amount") @db.Decimal(12, 2)
+  adminRemark       String?   @map("admin_remark")
+  salesAssigneeId   String?   @map("sales_assignee_id")
+  salesAssignee     User?     @relation("InquirySalesAssignee", fields: [salesAssigneeId], references: [id], onDelete: SetNull)
+  salesAssignedById String?   @map("sales_assigned_by_id")
+  salesAssignedBy   User?     @relation("InquirySalesAssignedBy", fields: [salesAssignedById], references: [id], onDelete: SetNull)
+  salesAssignedAt   DateTime? @map("sales_assigned_at")
+  salesMode         String?   @map("sales_mode")
+  salesChannel      String?   @map("sales_channel")
+  salesRegion       String?   @map("sales_region")
+  salesHandoffNote  String?   @map("sales_handoff_note") @db.Text
+  createdAt         DateTime  @default(now()) @map("created_at")
+  updatedAt         DateTime  @updatedAt @map("updated_at")
 
   items    InquiryItem[]
   messages InquiryMessage[]
 
   @@index([userId])
   @@index([status])
+  @@index([salesAssigneeId])
+  @@index([salesAssignedAt])
   @@map("inquiries")
 }
 

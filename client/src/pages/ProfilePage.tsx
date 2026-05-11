@@ -215,8 +215,9 @@ function PasswordChangeDialog({ open, onClose }: { open: boolean; onClose: () =>
         useAuthStore.getState().logout();
         window.location.replace('/login');
       }, 1000);
-    } catch (err: any) {
-      const msg = err?.response?.data?.message || err?.response?.data?.detail || '密码修改失败，请重试';
+    } catch (err: unknown) {
+      const data = (err as { response?: { data?: { message?: string; detail?: string } } }).response?.data;
+      const msg = data?.message || data?.detail || '密码修改失败，请重试';
       setError(msg);
     } finally {
       setLoading(false);
@@ -356,9 +357,9 @@ function DesktopContent() {
         email: src.email || '',
         company: src.company || '',
         phone: src.phone || '',
-        department: (src as any).department || '',
-        address: (src as any).address || '',
-        bio: (src as any).bio || '',
+        department: src.department || '',
+        address: src.address || '',
+        bio: src.bio || '',
       });
     }
   }, [profile, user]);
@@ -375,9 +376,9 @@ function DesktopContent() {
         email: src.email || '',
         company: src.company || '',
         phone: src.phone || '',
-        department: (src as any).department || '',
-        address: (src as any).address || '',
-        bio: (src as any).bio || '',
+        department: src.department || '',
+        address: src.address || '',
+        bio: src.bio || '',
       });
     }
   };
@@ -658,9 +659,9 @@ function MobileContent() {
         email: user.email || '',
         company: user.company || '',
         phone: user.phone || '',
-        department: (user as any).department || '',
-        address: (user as any).address || '',
-        bio: (user as any).bio || '',
+        department: user.department || '',
+        address: user.address || '',
+        bio: user.bio || '',
       });
     }
   }, [user]);
@@ -690,9 +691,9 @@ function MobileContent() {
         email: user.email || '',
         company: user.company || '',
         phone: user.phone || '',
-        department: (user as any).department || '',
-        address: (user as any).address || '',
-        bio: (user as any).bio || '',
+        department: user.department || '',
+        address: user.address || '',
+        bio: user.bio || '',
       });
     }
     setEditing(false);
@@ -888,7 +889,7 @@ function MobileContent() {
               <span className="text-sm text-on-surface">部门/职位</span>
             </div>
             <span className="text-sm text-on-surface-variant text-right truncate min-w-0">
-              {(user as any)?.department || '-'}
+              {user?.department || '-'}
             </span>
           </div>
           <div className="flex items-center justify-between gap-3 rounded-lg bg-surface-container-high px-4 py-3">
@@ -896,17 +897,15 @@ function MobileContent() {
               <Icon name="link" size={20} className="text-on-surface/50" />
               <span className="text-sm text-on-surface">地址</span>
             </div>
-            <span className="text-sm text-on-surface-variant text-right truncate min-w-0">
-              {(user as any)?.address || '-'}
-            </span>
+            <span className="text-sm text-on-surface-variant text-right truncate min-w-0">{user?.address || '-'}</span>
           </div>
-          {(user as any)?.bio && (
+          {user?.bio && (
             <div className="rounded-lg bg-surface-container-high px-4 py-3">
               <div className="flex items-center gap-3 mb-1">
                 <Icon name="description" size={20} className="text-on-surface/50" />
                 <span className="text-sm text-on-surface">个人简介</span>
               </div>
-              <p className="text-sm text-on-surface-variant pl-8">{(user as any).bio}</p>
+              <p className="text-sm text-on-surface-variant pl-8">{user.bio}</p>
             </div>
           )}
         </div>

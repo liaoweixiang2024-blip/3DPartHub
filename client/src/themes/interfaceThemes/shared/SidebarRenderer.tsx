@@ -1,39 +1,67 @@
-import React, { useRef, useEffect, useState, useCallback, useMemo } from 'react';
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import useSWR from 'swr';
-import { getBusinessConfig } from '../../lib/businessConfig';
-import { getCachedPublicSettings } from '../../lib/publicSettings';
-import { preloadRouteForPath } from '../../lib/routeLoaders';
-import { useAuthStore } from '../../stores/useAuthStore';
-import Icon from './Icon';
-import LoginConfirmDialog from './LoginConfirmDialog';
-import { checkProtectedAccess } from './ProtectedLink';
+import Icon from '../../../components/shared/Icon';
+import LoginConfirmDialog from '../../../components/shared/LoginConfirmDialog';
+import { checkProtectedAccess } from '../../../components/shared/ProtectedLink';
+import { getBusinessConfig } from '../../../lib/businessConfig';
+import { getCachedPublicSettings } from '../../../lib/publicSettings';
+import { preloadRouteForPath } from '../../../lib/routeLoaders';
+import { useAuthStore } from '../../../stores/useAuthStore';
 
 const footerNav = [
   { label: '个人设置', icon: 'settings', path: '/profile' },
   { label: '退出登录', icon: 'logout', path: '' },
 ];
 
-const navCls = (active: boolean) =>
-  `flex items-center gap-4 px-6 py-3 text-sm transition-colors duration-150 cursor-pointer rounded-sm border-l-4 ${
-    active
-      ? 'text-primary-container border-primary-container bg-surface-container-high font-bold'
-      : 'text-on-surface-variant border-transparent hover:bg-surface-container-high hover:text-on-surface'
-  }`;
+export interface SidebarAppearance {
+  rootClassName: string;
+  navClassName: string;
+  navIntroWrapperClassName?: string;
+  navIntroLabelClassName?: string;
+  navIntroLineClassName?: string;
+  navIntroLabel?: string;
+  topFadeWrapperClassName: (visible: boolean) => string;
+  topFadeClassName: string;
+  bottomFadeWrapperClassName: (visible: boolean) => string;
+  bottomFadeClassName: string;
+  sectionWrapperClassName: string;
+  sectionLabelClassName: string;
+  sectionLineClassName: string;
+  itemClassName: (active: boolean) => string;
+  itemLabelClassName: string;
+  footerWrapperClassName: string;
+  footerButtonClassName: string;
+  iconSize: number;
+}
 
-export default function AppSidebar() {
+interface SidebarRendererProps {
+  appearance: SidebarAppearance;
+  adminRouteMode?: 'all' | 'admin-only';
+}
+
+function isAdminRoutePath(path: string) {
+  return path === '/admin' || path.startsWith('/admin/');
+}
+
+export default function SidebarRenderer({ appearance, adminRouteMode = 'all' }: SidebarRendererProps) {
   const location = useLocation();
   const navigate = useNavigate();
   const { logout, user } = useAuthStore();
   const { data: settings } = useSWR('publicSettings', () => getCachedPublicSettings());
   const isAdmin = user?.role === 'ADMIN';
+  const isAdminRoute = isAdminRoutePath(location.pathname);
   const [loginDialogOpen, setLoginDialogOpen] = useState(false);
   const [loginReturnUrl, setLoginReturnUrl] = useState('');
   const [loginDialogReason, setLoginDialogReason] = useState('');
   const navItems = useMemo(() => {
     const business = getBusinessConfig(settings);
-    return isAdmin ? business.adminNav : business.userNav;
-  }, [settings, isAdmin]);
+    if (!isAdmin) return business.userNav;
+    if (adminRouteMode === 'admin-only' && isAdminRoute) {
+      return business.adminNav.filter((item) => isAdminRoutePath(item.path));
+    }
+    return business.adminNav;
+  }, [adminRouteMode, isAdmin, isAdminRoute, settings]);
   const activeRef = useRef<HTMLAnchorElement>(null);
   const navRef = useRef<HTMLElement>(null);
   const [overflow, setOverflow] = useState({ top: false, bottom: false });
@@ -67,35 +95,35 @@ export default function AppSidebar() {
   }, [location.pathname]);
 
   return (
-    <aside className="hidden md:flex w-56 h-full flex-col py-4 bg-surface-container-low border-r border-outline-variant/20 shrink-0">
-      {/* Top fade */}
-      <div
-        className={`relative shrink-0 px-3 transition-opacity duration-200 ${overflow.top ? 'opacity-100' : 'opacity-0'}`}
-      >
-        <div className="h-4 bg-gradient-to-b from-surface-container-low to-transparent pointer-events-none" />
+    <aside className={appearance.rootClassName}>
+      <div className={appearance.topFadeWrapperClassName(overflow.top)}>
+        <div className={appearance.topFadeClassName} />
       </div>
 
-      <nav ref={navRef} className="flex-1 px-3 flex flex-col gap-1 overflow-y-auto scrollbar-hidden -mt-4">
+      <nav ref={navRef} className={appearance.navClassName}>
+        {appearance.navIntroLabel && (
+          <div className={appearance.navIntroWrapperClassName}>
+            <span className={appearance.navIntroLabelClassName}>{appearance.navIntroLabel}</span>
+            <div className={appearance.navIntroLineClassName} />
+          </div>
+        )}
         {navItems.map((item, idx) => {
           const isActive =
             location.pathname === item.path || (item.path !== '/' && location.pathname.startsWith(item.path));
-          const isAdminPath = item.path.startsWith('/admin/');
-          const showDivider =
-            isAdmin && isAdminPath && !navItems.slice(0, idx).some((p) => p.path.startsWith('/admin/'));
+          const isAdminPath = isAdminRoutePath(item.path);
+          const showDivider = isAdmin && isAdminPath && !navItems.slice(0, idx).some((p) => isAdminRoutePath(p.path));
           return (
-            <React.Fragment key={item.path}>
+            <Fragment key={item.path}>
               {showDivider && (
-                <div className="flex items-center gap-3 px-4 pt-4 pb-1">
-                  <span className="text-[10px] font-bold uppercase tracking-wider text-on-surface-variant/40">
-                    后台管理
-                  </span>
-                  <div className="flex-1 border-t border-outline-variant/15" />
+                <div className={appearance.sectionWrapperClassName}>
+                  <span className={appearance.sectionLabelClassName}>后台管理</span>
+                  <div className={appearance.sectionLineClassName} />
                 </div>
               )}
               <Link
                 to={item.path}
                 ref={isActive ? activeRef : undefined}
-                className={navCls(isActive)}
+                className={appearance.itemClassName(isActive)}
                 onPointerEnter={() => preloadRouteForPath(item.path)}
                 onPointerDown={() => preloadRouteForPath(item.path)}
                 onFocus={() => preloadRouteForPath(item.path)}
@@ -112,24 +140,21 @@ export default function AppSidebar() {
                   }
                 }}
               >
-                <Icon name={item.icon} size={24} />
-                <span className="font-headline uppercase tracking-widest">{item.label}</span>
+                <Icon name={item.icon} size={appearance.iconSize} />
+                <span className={appearance.itemLabelClassName}>{item.label}</span>
               </Link>
-            </React.Fragment>
+            </Fragment>
           );
         })}
       </nav>
 
-      {/* Bottom fade */}
-      <div
-        className={`relative shrink-0 px-3 transition-opacity duration-200 ${overflow.bottom ? 'opacity-100' : 'opacity-0'}`}
-      >
-        <div className="h-4 bg-gradient-to-t from-surface-container-low to-transparent pointer-events-none" />
+      <div className={appearance.bottomFadeWrapperClassName(overflow.bottom)}>
+        <div className={appearance.bottomFadeClassName} />
       </div>
 
       <div className="px-3 mt-auto">
         {user && (
-          <div className="border-t border-outline-variant/20 my-3 pt-4 flex flex-col gap-1">
+          <div className={appearance.footerWrapperClassName}>
             {footerNav.map((item) => {
               if (item.path === '') {
                 return (
@@ -139,10 +164,10 @@ export default function AppSidebar() {
                       logout();
                       navigate('/login');
                     }}
-                    className="flex items-center gap-4 px-6 py-3 text-sm transition-colors duration-150 cursor-pointer rounded-sm text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface w-full border-l-4 border-transparent"
+                    className={appearance.footerButtonClassName}
                   >
-                    <Icon name={item.icon} size={24} />
-                    <span className="font-headline uppercase tracking-widest">{item.label}</span>
+                    <Icon name={item.icon} size={appearance.iconSize} />
+                    <span className={appearance.itemLabelClassName}>{item.label}</span>
                   </button>
                 );
               }
@@ -152,7 +177,7 @@ export default function AppSidebar() {
                 <Link
                   key={item.path}
                   to={item.path}
-                  className={navCls(isActive)}
+                  className={appearance.itemClassName(isActive)}
                   onPointerEnter={() => preloadRouteForPath(item.path)}
                   onPointerDown={() => preloadRouteForPath(item.path)}
                   onFocus={() => preloadRouteForPath(item.path)}
@@ -169,8 +194,8 @@ export default function AppSidebar() {
                     }
                   }}
                 >
-                  <Icon name={item.icon} size={24} />
-                  <span className="font-headline uppercase tracking-widest">{item.label}</span>
+                  <Icon name={item.icon} size={appearance.iconSize} />
+                  <span className={appearance.itemLabelClassName}>{item.label}</span>
                 </Link>
               );
             })}

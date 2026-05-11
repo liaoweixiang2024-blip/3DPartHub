@@ -31,4 +31,5 @@ export interface RegisterRequest {
   emailCode: string;
   phone?: string;
   company?: string;
+  address?: string;
 }

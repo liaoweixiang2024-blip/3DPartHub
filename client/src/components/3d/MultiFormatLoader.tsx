@@ -16,6 +16,7 @@ import {
   type ViewerSettingsOverride,
 } from '../../lib/publicSettings';
 import { normalizeCadLabel } from '../../lib/textEncoding';
+import { THREE_THEME } from '../../themes/threeTheme';
 import type { ViewMode } from './ModelViewer';
 import { loadCadFromUrl } from './StepLoader';
 import type { MaterialPresetKey } from './viewerControls';
@@ -1230,7 +1231,8 @@ function ClipPlaneOverlay({
   }, []);
 
   const labelValue = formatMeasureDistance(position);
-  const color = direction === 'x' ? '#ff6b6b' : direction === 'y' ? '#3ddc97' : '#4dabf7';
+  const color =
+    direction === 'x' ? THREE_THEME.axisPlane.x : direction === 'y' ? THREE_THEME.axisPlane.y : THREE_THEME.axisPlane.z;
   const maxDim = Math.max(size.x, size.y, size.z, 0.01);
   const planeRaycast = onPositionChange ? undefined : noopRaycast;
 
@@ -1323,35 +1325,39 @@ function DimensionLine({ start, end, label }: { start: THREE.Vector3; end: THREE
         <bufferGeometry>
           <bufferAttribute attach="attributes-position" args={[mainLine, 3]} count={2} />
         </bufferGeometry>
-        <lineBasicMaterial color="#00e5ff" linewidth={2} />
+        <lineBasicMaterial color={THREE_THEME.measurement.dimension} linewidth={2} />
       </line>
       {/* Connector lines */}
       <line>
         <bufferGeometry>
           <bufferAttribute attach="attributes-position" args={[connA, 3]} count={2} />
         </bufferGeometry>
-        <lineBasicMaterial color="#00e5ff" linewidth={1} transparent opacity={0.4} />
+        <lineBasicMaterial color={THREE_THEME.measurement.dimension} linewidth={1} transparent opacity={0.4} />
       </line>
       <line>
         <bufferGeometry>
           <bufferAttribute attach="attributes-position" args={[connB, 3]} count={2} />
         </bufferGeometry>
-        <lineBasicMaterial color="#00e5ff" linewidth={1} transparent opacity={0.4} />
+        <lineBasicMaterial color={THREE_THEME.measurement.dimension} linewidth={1} transparent opacity={0.4} />
       </line>
       {/* End markers */}
       <mesh position={oStart}>
         <sphereGeometry args={[dotR, 6, 6]} />
-        <meshBasicMaterial color="#00e5ff" />
+        <meshBasicMaterial color={THREE_THEME.measurement.dimension} />
       </mesh>
       <mesh position={oEnd}>
         <sphereGeometry args={[dotR, 6, 6]} />
-        <meshBasicMaterial color="#00e5ff" />
+        <meshBasicMaterial color={THREE_THEME.measurement.dimension} />
       </mesh>
       {/* Label — fixed screen size */}
       <Html position={[oMid.x, oMid.y, oMid.z]} center>
         <div
-          className="bg-black/70 text-[#00e5ff] text-[11px] px-2 py-0.5 rounded font-mono whitespace-nowrap border border-[#00e5ff]/40 pointer-events-none select-none"
-          style={{ transform: 'translateY(-8px)' }}
+          className="pointer-events-none select-none whitespace-nowrap rounded border bg-black/70 px-2 py-0.5 font-mono text-[11px]"
+          style={{
+            borderColor: `${THREE_THEME.measurement.dimension}66`,
+            color: THREE_THEME.measurement.dimension,
+            transform: 'translateY(-8px)',
+          }}
         >
           {label}
         </div>
@@ -1441,9 +1447,9 @@ function SingleMeasurementOverlay({
 
   if (vectors.length === 0) return null;
 
-  const lineColor = muted ? '#8d99a6' : '#00c8ff';
-  const startColor = muted ? '#9aa4ad' : '#00c8ff';
-  const endColor = muted ? '#c1a24a' : '#ffb020';
+  const lineColor = muted ? THREE_THEME.measurement.mutedLine : THREE_THEME.measurement.activeLine;
+  const startColor = muted ? THREE_THEME.measurement.mutedStart : THREE_THEME.measurement.activeLine;
+  const endColor = muted ? THREE_THEME.measurement.mutedEnd : THREE_THEME.measurement.activeEnd;
   const lineOpacity = muted ? 0.38 : 0.95;
 
   return (

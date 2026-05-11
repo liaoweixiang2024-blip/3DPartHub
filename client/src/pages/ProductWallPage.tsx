@@ -77,10 +77,16 @@ type DataTransferItemWithEntry = DataTransferItem & {
 };
 
 const PRODUCT_WALL_UPLOAD_BATCH_SIZE = 20;
-const PRODUCT_WALL_RENDER_BATCH_SIZE = 16;
+const PRODUCT_WALL_RENDER_BATCH_SIZE = 24;
+const PRODUCT_WALL_EAGER_IMAGE_COUNT = 3;
 const PRODUCT_WALL_CANVAS_MODE_KEY = 'product-wall-canvas-mode';
 const PRODUCT_WALL_DEFAULT_KIND_KEY = 'product-wall-default-kind';
 const PRODUCT_WALL_FAVORITES_FILTER = '我的收藏';
+
+type ProductWallMasonryEntry = {
+  imageIndex: number;
+  item: WallItem;
+};
 
 function ProductWallLoadingState() {
   return (
@@ -189,18 +195,42 @@ function ProductWallThumbnail({
   children?: ReactNode;
 }) {
   const previewSrc = productWallPreviewImage(item);
+  const surfaceRef = useRef<HTMLDivElement | null>(null);
+  const eager = imageIndex < PRODUCT_WALL_EAGER_IMAGE_COUNT;
   const [src, setSrc] = useState(previewSrc);
+  const [shouldLoad, setShouldLoad] = useState(eager);
   const [loaded, setLoaded] = useState(false);
   const [failed, setFailed] = useState(false);
 
   useEffect(() => {
     setSrc(previewSrc);
+    setShouldLoad(eager);
     setLoaded(false);
     setFailed(false);
-  }, [previewSrc, item.id]);
+  }, [eager, previewSrc, item.id]);
+
+  useEffect(() => {
+    if (shouldLoad) return;
+    const node = surfaceRef.current;
+    if (!node || typeof IntersectionObserver === 'undefined') {
+      setShouldLoad(true);
+      return;
+    }
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (!entries.some((entry) => entry.isIntersecting)) return;
+        setShouldLoad(true);
+        observer.disconnect();
+      },
+      { rootMargin: '420px 0px' },
+    );
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [item.id, shouldLoad]);
 
   return (
     <div
+      ref={surfaceRef}
       className={`product-wall-image-surface product-wall-canvas-${canvasMode} relative overflow-hidden rounded-xl`}
       style={{ aspectRatio: productWallRatioValue(item.ratio) }}
     >
@@ -209,12 +239,13 @@ function ProductWallThumbnail({
         <div className="flex h-full w-full items-center justify-center text-on-surface-variant/35">
           <Icon name="image" size={22} />
         </div>
-      ) : (
+      ) : shouldLoad ? (
         <img
           src={src}
           alt={item.title}
-          loading={imageIndex < 2 ? 'eager' : 'lazy'}
+          loading={eager ? 'eager' : 'lazy'}
           decoding="async"
+          fetchPriority={eager ? 'high' : 'low'}
           className={`product-wall-thumb relative z-10 block h-full w-full object-contain align-middle transition duration-200 group-hover:brightness-[0.96] ${
             loaded ? 'opacity-100' : 'opacity-0'
           }`}
@@ -230,7 +261,7 @@ function ProductWallThumbnail({
             setFailed(true);
           }}
         />
-      )}
+      ) : null}
       {children}
     </div>
   );
@@ -335,6 +366,8 @@ export default function ProductWallPage() {
   const [editTags, setEditTags] = useState('');
   const [favoriteIds, setFavoriteIds] = useState<Set<string>>(() => new Set());
   const [shareState, setShareState] = useState<'idle' | 'copied'>('idle');
+  const [detailOriginalReady, setDetailOriginalReady] = useState(false);
+  const [detailOriginalFailed, setDetailOriginalFailed] = useState(false);
   const [previewZoom, setPreviewZoom] = useState(1);
   const [previewPan, setPreviewPan] = useState({ x: 0, y: 0 });
   const [previewDragging, setPreviewDragging] = useState(false);
@@ -382,14 +415,14 @@ export default function ProductWallPage() {
   const renderedItems = visibleItems.slice(0, renderCount);
   const hasMoreVisibleItems = renderedItems.length < visibleItems.length;
   const masonryColumns = useMemo(() => {
-    const columns = Array.from({ length: columnCount }, () => [] as WallItem[]);
+    const columns = Array.from({ length: columnCount }, () => [] as ProductWallMasonryEntry[]);
     const heights = Array.from({ length: columnCount }, () => 0);
-    renderedItems.forEach((item) => {
+    renderedItems.forEach((item, imageIndex) => {
       let shortestColumnIndex = 0;
       for (let index = 1; index < columns.length; index += 1) {
         if (heights[index] < heights[shortestColumnIndex]) shortestColumnIndex = index;
       }
-      columns[shortestColumnIndex].push(item);
+      columns[shortestColumnIndex].push({ imageIndex, item });
       heights[shortestColumnIndex] += 1 / productWallRatioValue(item.ratio);
     });
     return columns;
@@ -424,6 +457,10 @@ export default function ProductWallPage() {
   const selectableVisibleItems = useMemo(() => visibleItems.filter(canManageItem), [visibleItems, canManageItem]);
   const activeFavorited = active ? favoriteIds.has(active.id) : false;
   const activeId = active?.id;
+  const activeImage = active?.image || '';
+  const activePreviewImage = active ? productWallPreviewImage(active) : '';
+  const activeDetailImage =
+    activeImage && detailOriginalReady && !detailOriginalFailed ? activeImage : activePreviewImage;
   const selectedCount = selectedIds.size;
   const editForm = useMemo(
     () => ({ title: editTitle, description: editDescription, kind: editKind, tags: editTags }),
@@ -738,6 +775,33 @@ export default function ProductWallPage() {
     momentumRef.current = { vx: 0, vy: 0, raf: 0, lastTime: 0, lastX: 0, lastY: 0 };
     if (activeId) requestAnimationFrame(() => previewCloseRef.current?.focus());
   }, [activeId]);
+  useEffect(() => {
+    setDetailOriginalReady(false);
+    setDetailOriginalFailed(false);
+    if (!activeImage || typeof window === 'undefined') return;
+
+    if (activeImage === activePreviewImage) {
+      setDetailOriginalReady(true);
+      return;
+    }
+
+    let cancelled = false;
+    const image = new window.Image();
+    image.decoding = 'async';
+    image.onload = () => {
+      if (!cancelled) setDetailOriginalReady(true);
+    };
+    image.onerror = () => {
+      if (!cancelled) setDetailOriginalFailed(true);
+    };
+    image.src = activeImage;
+
+    return () => {
+      cancelled = true;
+      image.onload = null;
+      image.onerror = null;
+    };
+  }, [activeId, activeImage, activePreviewImage]);
   const { data: favoriteData } = useSWR(isLoggedIn ? 'product-wall-favorites' : null, listProductWallFavorites);
   useEffect(() => {
     setFavoriteIds(new Set(favoriteData || []));
@@ -775,7 +839,7 @@ export default function ProductWallPage() {
     );
     observer.observe(target);
     return () => observer.disconnect();
-  }, [visibleItems.length, hasMoreVisibleItems, renderedItems.length, wallReady, loadMoreVisibleItems]);
+  }, [hasMoreVisibleItems, wallReady, loadMoreVisibleItems]);
   const previewZoomRef = useRef(previewZoom);
   previewZoomRef.current = previewZoom;
   const setPreviewZoomLevel = (value: number) => {
@@ -1202,7 +1266,7 @@ export default function ProductWallPage() {
   ) : null;
 
   return (
-    <AdminPageShell desktopContentClassName="p-8" mobileContentClassName="px-4 py-4 pb-20">
+    <AdminPageShell desktopContentClassName="p-6" mobileContentClassName="px-4 py-4 pb-20">
       <div className="relative" onPaste={handlePaste}>
         <AdminManagementPage
           title="产品图库"
@@ -1247,13 +1311,13 @@ export default function ProductWallPage() {
               <section className="product-wall-masonry w-full">
                 {masonryColumns.map((column, columnIndex) => (
                   <div key={columnIndex} className="product-wall-masonry-column">
-                    {column.map((item, index) => {
+                    {column.map(({ imageIndex, item }) => {
                       const selected = selectedIds.has(item.id);
                       const selectable = canManageItem(item);
                       const itemFavorited = favoriteIds.has(item.id);
                       return (
                         <article
-                          key={item.id || `${item.title}-${index}`}
+                          key={item.id || `${item.title}-${imageIndex}`}
                           className={`product-wall-card group relative break-inside-avoid overflow-hidden rounded-xl bg-transparent ${
                             selected ? 'outline outline-2 outline-offset-2 outline-primary-container' : ''
                           }`}
@@ -1272,7 +1336,7 @@ export default function ProductWallPage() {
                               selectionMode && !selectable ? 'cursor-not-allowed opacity-55' : ''
                             }`}
                           >
-                            <ProductWallThumbnail item={item} canvasMode={canvasMode} imageIndex={index}>
+                            <ProductWallThumbnail item={item} canvasMode={canvasMode} imageIndex={imageIndex}>
                               {selectionMode && selectable && (
                                 <span
                                   className={`absolute right-2 top-2 z-20 inline-flex h-8 w-8 items-center justify-center rounded-full border shadow-sm backdrop-blur ${
@@ -1733,7 +1797,7 @@ export default function ProductWallPage() {
               >
                 <div
                   className="pointer-events-none absolute inset-0 scale-125 bg-cover bg-center opacity-10 blur-3xl"
-                  style={{ backgroundImage: `url(${productWallPreviewImage(active)})` }}
+                  style={{ backgroundImage: `url(${activePreviewImage})` }}
                 />
                 <button
                   type="button"
@@ -1748,7 +1812,7 @@ export default function ProductWallPage() {
                   aria-label={previewZoomed ? '还原图片' : '放大图片'}
                 >
                   <SafeImage
-                    src={productWallPreviewImage(active)}
+                    src={activeDetailImage}
                     alt={active.title}
                     loading="eager"
                     className={`h-full w-full object-contain drop-shadow-[0_16px_42px_rgba(0,0,0,0.18)] ${previewDragging ? '' : 'transition-transform duration-300 ease-out'}`}

@@ -21,6 +21,17 @@ interface AuthState {
   setHasHydrated: (hasHydrated: boolean) => void;
 }
 
+type PersistedAuthState = {
+  user: User | null;
+  tokens: null;
+  isAuthenticated: false;
+  rememberMe: boolean;
+};
+
+function createPersistedAuthState(user: User | null = null, rememberMe = false): PersistedAuthState {
+  return { user, tokens: null, isAuthenticated: false, rememberMe };
+}
+
 // In-memory accessToken. Refresh is restored through an HttpOnly cookie.
 let _accessToken: string | null = null;
 
@@ -187,15 +198,13 @@ export const useAuthStore = create<AuthState>()(
       migrate: (persisted, version) => {
         if (version === 0) {
           // Old format had accessToken as "" — force re-login
-          return { user: null, tokens: null, isAuthenticated: false, rememberMe: false } as any;
+          return createPersistedAuthState();
         }
         const state = (persisted || {}) as Partial<AuthState>;
-        return {
-          ...state,
-          tokens: null,
-          rememberMe: version < 3 ? Boolean(state.isAuthenticated && state.user) : Boolean(state.rememberMe),
-          hasHydrated: false,
-        } as any;
+        return createPersistedAuthState(
+          state.user ?? null,
+          version < 3 ? Boolean(state.isAuthenticated && state.user) : Boolean(state.rememberMe),
+        );
       },
     },
   ),

@@ -1,7 +1,7 @@
 {
   "name": "3dparthub-client",
   "private": true,
-  "version": "2.9.6",
+  "version": "2.9.7",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -9,11 +9,13 @@
     "build": "vite build",
     "typecheck": "tsc --noEmit -p tsconfig.app.json",
     "lint": "eslint .",
+    "verify:themes": "node scripts/verify-theme-contract.mjs",
+    "create-theme": "node scripts/create-interface-theme.mjs",
     "verify:loading": "node scripts/verify-loading-contract.mjs",
     "verify:ux": "node scripts/verify-frontend-ux-contract.mjs",
     "format": "prettier --write \"src/**/*.{ts,tsx,css,json}\"",
     "format:check": "prettier --check \"src/**/*.{ts,tsx,css,json}\"",
-    "verify": "npm run verify:loading && npm run verify:ux && npm run typecheck && npm run lint && npm run format:check && npm run build",
+    "verify": "npm run verify:themes && npm run verify:loading && npm run verify:ux && npm run typecheck && npm run lint && npm run format:check && npm run build",
     "preview": "vite preview"
   },
   "dependencies": {

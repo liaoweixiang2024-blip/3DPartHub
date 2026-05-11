@@ -58,6 +58,7 @@
   --color-surface-container-highest: #343538;
   --color-surface-bright: #38393c;
   --color-surface-variant: #343538;
+  --color-surface-tint: #ffb690;
 
   --color-primary: #ffb690;
   --color-primary-container: #f97316;
@@ -83,6 +84,13 @@
   --color-on-surface: #e3e2e6;
   --color-on-surface-variant: #e0c0b1;
   --color-on-background: #e3e2e6;
+
+  --color-cta: var(--color-primary-container);
+  --color-destructive: var(--color-error);
+  --color-muted-text: var(--color-on-surface-variant);
+  --color-card-bg: var(--color-surface-container-low);
+  --color-card-bg-raised: var(--color-surface-container);
+  --color-shadow: #000000;
 }
 
 .theme-light {
@@ -95,6 +103,7 @@
   --color-surface-container-highest: #e3e2dd;
   --color-surface-bright: #faf9f7;
   --color-surface-variant: #e3e2dd;
+  --color-surface-tint: #8f5a30;
 
   --color-primary: #8f5a30;
   --color-primary-container: #f97316;
@@ -120,6 +129,7 @@
   --color-on-surface: #1c1b1a;
   --color-on-surface-variant: #4e4539;
   --color-on-background: #1c1b1a;
+  --color-shadow: #0f172a;
 }
 
 *,
@@ -205,14 +215,28 @@ a,
 }
 
 .app-search-field {
+  background-image: none;
+  background-clip: padding-box;
   box-shadow: none;
   outline: none;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
 }
 
 .app-search-field:focus-within {
   border-color: var(--color-primary-container);
   box-shadow: none;
   outline: none;
+}
+
+.app-search-field input {
+  appearance: none;
+  -webkit-appearance: none;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  outline: none;
+  -webkit-tap-highlight-color: transparent;
 }
 
 ::-webkit-scrollbar {
@@ -299,6 +323,7 @@ a,
 }
 .model-list-scrollbar {
   -webkit-overflow-scrolling: touch;
+  scrollbar-gutter: stable;
   scrollbar-width: thin;
   scrollbar-color: var(--color-primary-container) color-mix(in srgb, var(--color-primary-container) 8%, transparent);
   overscroll-behavior-y: contain;
@@ -309,6 +334,11 @@ a,
   overflow-anchor: none;
   overscroll-behavior-y: contain;
   scroll-behavior: auto;
+}
+
+.home-page-desktop .home-model-empty-state {
+  min-height: max(22rem, calc(100dvh - 16rem));
+  overflow-anchor: none;
 }
 
 @media (min-width: 768px) {
@@ -330,6 +360,29 @@ a,
   -ms-overflow-style: none;
   scrollbar-width: none;
   overscroll-behavior: contain;
+}
+
+.model-detail-sidebar-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in srgb, var(--color-on-surface) 22%, transparent) transparent;
+  overscroll-behavior: contain;
+}
+
+.model-detail-sidebar-scroll::-webkit-scrollbar {
+  width: 6px;
+}
+
+.model-detail-sidebar-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.model-detail-sidebar-scroll::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--color-on-surface) 18%, transparent);
+}
+
+.model-detail-sidebar-scroll:hover::-webkit-scrollbar-thumb {
+  background: color-mix(in srgb, var(--color-on-surface) 28%, transparent);
 }
 
 @keyframes fade-in {

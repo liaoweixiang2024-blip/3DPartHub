@@ -1,6 +1,15 @@
 import { randomUUID } from 'node:crypto';
 import { lookup } from 'node:dns/promises';
-import { mkdirSync, renameSync, rmSync, createWriteStream, writeFileSync, readFileSync } from 'node:fs';
+import {
+  existsSync,
+  mkdirSync,
+  renameSync,
+  rmSync,
+  createWriteStream,
+  writeFileSync,
+  readFileSync,
+  statSync,
+} from 'node:fs';
 import { isIP } from 'node:net';
 import { basename, join, resolve, sep } from 'node:path';
 import { Transform, type TransformCallback } from 'node:stream';
@@ -51,8 +60,13 @@ type ProductWallItem = {
 };
 
 const PRODUCT_WALL_DIR = join(process.cwd(), config.staticDir, 'product-wall');
+const PRODUCT_WALL_PREVIEW_DIR = join(PRODUCT_WALL_DIR, 'previews');
 const FALLBACK_MAX_IMAGE_BYTES = 8 * 1024 * 1024;
 const MULTER_MAX_IMAGE_FILES = 200;
+const PRODUCT_WALL_PREVIEW_MAX_WIDTH = 640;
+const PRODUCT_WALL_PREVIEW_JPEG_QUALITY = 0.76;
+const PRODUCT_WALL_PREVIEW_BACKFILL_LIMIT = 80;
+const PRODUCT_WALL_PREVIEW_MIN_SOURCE_BYTES = 768 * 1024;
 const DEFAULT_PRODUCT_WALL_CATEGORIES: ProductWallKind[] = ['公司产品', '使用案例', '客户案例', '海报'];
 const IMAGE_EXTENSIONS: Record<string, string> = {
   'image/png': 'png',
@@ -71,6 +85,7 @@ const IMAGE_FILE_EXTENSIONS: Record<string, string> = {
 };
 
 mkdirSync(PRODUCT_WALL_DIR, { recursive: true });
+mkdirSync(PRODUCT_WALL_PREVIEW_DIR, { recursive: true });
 
 class MaxBytesExceededError extends Error {
   constructor(readonly maxBytes: number) {
@@ -222,13 +237,14 @@ function tagsFromJson(value: unknown, fallbackTitle: string) {
 }
 
 function toProductWallItem(row: ProductWallImageRow): ProductWallItem {
+  const previewImage = resolveProductWallPreviewImageUrl(row);
   return {
     id: row.id,
     title: row.title,
     description: row.description || undefined,
     kind: normalizeKind(row.kind),
     image: row.imageUrl,
-    previewImage: row.previewImageUrl || row.imageUrl,
+    previewImage,
     ratio: row.ratio,
     tags: tagsFromJson(row.tags, row.title),
     sortOrder: row.sortOrder,
@@ -317,13 +333,56 @@ async function assertAllowedRemoteImageUrl(parsedUrl: URL) {
   }
 }
 
-function removeManagedImage(url?: string | null) {
-  if (!url?.startsWith('/static/product-wall/')) return;
-  const filePath = resolve(process.cwd(), config.staticDir, 'product-wall', basename(url));
+function productWallRelativePathFromUrl(url?: string | null) {
+  if (!url?.startsWith('/static/product-wall/')) return null;
+  const cleanUrl = url.split(/[?#]/)[0] || '';
+  const rawRelativePath = cleanUrl.slice('/static/product-wall/'.length).replace(/\\/g, '/');
+  if (!rawRelativePath) return null;
+  try {
+    const relativePath = rawRelativePath
+      .split('/')
+      .map((part) => decodeURIComponent(part))
+      .join('/');
+    const parts = relativePath.split('/');
+    if (parts.some((part) => !part || part === '.' || part === '..')) return null;
+    return relativePath;
+  } catch {
+    return null;
+  }
+}
+
+function productWallLocalPathFromUrl(url?: string | null) {
+  const relativePath = productWallRelativePathFromUrl(url);
+  if (!relativePath) return null;
+  const filePath = resolve(PRODUCT_WALL_DIR, relativePath);
   const root = resolve(process.cwd(), config.staticDir, 'product-wall');
-  if (filePath === root || !filePath.startsWith(`${root}${sep}`)) return;
+  if (filePath === root || !filePath.startsWith(`${root}${sep}`)) return null;
+  return filePath;
+}
+
+function removeManagedImage(url?: string | null) {
+  const filePath = productWallLocalPathFromUrl(url);
+  if (!filePath) return;
   rmSync(filePath, { force: true });
 }
+
+function productWallPreviewUrlFromImageUrl(url?: string | null) {
+  const relativePath = productWallRelativePathFromUrl(url);
+  if (!relativePath || relativePath.startsWith('previews/')) return null;
+  const leaf = basename(relativePath).replace(/\.[^.]+$/, '') || randomUUID();
+  const safeLeaf = leaf.replace(/[^a-zA-Z0-9_-]+/g, '_').slice(0, 80) || randomUUID();
+  return `/static/product-wall/previews/${safeLeaf}.jpg`;
+}
+
+function resolveProductWallPreviewImageUrl(row: ProductWallImageRow) {
+  if (row.previewImageUrl && row.previewImageUrl !== row.imageUrl) return row.previewImageUrl;
+  const deterministicPreviewUrl = productWallPreviewUrlFromImageUrl(row.imageUrl);
+  const deterministicPreviewPath = productWallLocalPathFromUrl(deterministicPreviewUrl);
+  if (deterministicPreviewPath && existsSync(deterministicPreviewPath)) return deterministicPreviewUrl || row.imageUrl;
+  return row.previewImageUrl || row.imageUrl;
+}
+
+const previewBackfillInFlight = new Set<string>();
 
 const ALLOWED_IMAGE_MIMES = new Set(['image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/svg+xml']);
 
@@ -394,22 +453,93 @@ function imageRatioFromPath(path: string) {
   return imageRatioFromBuffer(readFileSync(path));
 }
 
-async function generatePreviewImage(sourcePath: string, maxWidth = 400): Promise<string | null> {
+async function generatePreviewImage(
+  sourcePath: string,
+  sourceImageUrl?: string,
+  maxWidth = PRODUCT_WALL_PREVIEW_MAX_WIDTH,
+): Promise<string | null> {
   try {
+    const previewUrl =
+      productWallPreviewUrlFromImageUrl(sourceImageUrl) || `/static/product-wall/previews/${randomUUID()}.jpg`;
+    const previewPath = productWallLocalPathFromUrl(previewUrl);
+    if (!previewPath) return null;
+    if (existsSync(previewPath)) return previewUrl;
+
     const image = await loadImage(sourcePath);
-    if (image.width <= maxWidth) return null;
-    const scale = maxWidth / image.width;
+    const sourceSize = statSync(sourcePath).size;
+    if (image.width <= maxWidth && sourceSize < PRODUCT_WALL_PREVIEW_MIN_SOURCE_BYTES) return null;
+
+    const width = Math.min(maxWidth, Math.max(1, Math.round(image.width)));
+    const scale = width / image.width;
     const height = Math.max(1, Math.round(image.height * scale));
-    const canvas = createCanvas(maxWidth, height);
+    const canvas = createCanvas(width, height);
     const ctx = canvas.getContext('2d');
-    ctx.drawImage(image, 0, 0, maxWidth, height);
-    const previewFilename = `preview_${randomUUID()}.jpg`;
-    const previewPath = join(PRODUCT_WALL_DIR, previewFilename);
-    writeFileSync(previewPath, canvas.toBuffer('image/jpeg', { quality: 0.75 }));
-    return `/static/product-wall/${previewFilename}`;
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, width, height);
+    ctx.drawImage(image, 0, 0, width, height);
+    writeFileSync(previewPath, canvas.toBuffer('image/jpeg', { quality: PRODUCT_WALL_PREVIEW_JPEG_QUALITY }));
+    return previewUrl;
   } catch {
     return null;
   }
+}
+
+function shouldBackfillProductWallPreview(row: ProductWallImageRow) {
+  return (
+    row.imageUrl.startsWith('/static/product-wall/') && (!row.previewImageUrl || row.previewImageUrl === row.imageUrl)
+  );
+}
+
+async function ensureProductWallPreview(row: ProductWallImageRow): Promise<ProductWallImageRow> {
+  if (!shouldBackfillProductWallPreview(row)) return row;
+  if (previewBackfillInFlight.has(row.id)) return row;
+  const sourcePath = productWallLocalPathFromUrl(row.imageUrl);
+  if (!sourcePath) return row;
+
+  let sourceSize = 0;
+  try {
+    sourceSize = statSync(sourcePath).size;
+  } catch {
+    return row;
+  }
+  if (sourceSize < PRODUCT_WALL_PREVIEW_MIN_SOURCE_BYTES) return row;
+
+  previewBackfillInFlight.add(row.id);
+  try {
+    const previewUrl = await generatePreviewImage(sourcePath, row.imageUrl);
+    if (!previewUrl || previewUrl === row.imageUrl) return row;
+    try {
+      return await prisma.productWallImage.update({
+        where: { id: row.id },
+        data: { previewImageUrl: previewUrl },
+      });
+    } catch {
+      return { ...row, previewImageUrl: previewUrl } as ProductWallImageRow;
+    }
+  } catch {
+    return row;
+  } finally {
+    previewBackfillInFlight.delete(row.id);
+  }
+}
+
+async function backfillProductWallPreviews(rows: ProductWallImageRow[]) {
+  const candidates = rows.filter(shouldBackfillProductWallPreview).slice(0, PRODUCT_WALL_PREVIEW_BACKFILL_LIMIT);
+  if (!candidates.length) return rows;
+  const updatedById = new Map<string, ProductWallImageRow>();
+  let cursor = 0;
+  const workerCount = Math.min(2, candidates.length);
+  await Promise.all(
+    Array.from({ length: workerCount }, async () => {
+      while (cursor < candidates.length) {
+        const row = candidates[cursor];
+        cursor += 1;
+        const updated = await ensureProductWallPreview(row);
+        updatedById.set(updated.id, updated);
+      }
+    }),
+  );
+  return rows.map((row) => updatedById.get(row.id) || row);
 }
 
 async function collectProductWallUploadImages(files: Express.Multer.File[]) {
@@ -530,7 +660,7 @@ async function createItemsFromUploadedFiles(req: AuthRequest, files: Express.Mul
     if (image.sourcePath) renameSync(image.sourcePath, targetPath);
     else if (image.buffer) writeFileSync(targetPath, image.buffer);
     const imageUrl = `/static/product-wall/${filename}`;
-    const previewUrl = (await generatePreviewImage(targetPath)) || imageUrl;
+    const previewUrl = (await generatePreviewImage(targetPath, imageUrl)) || imageUrl;
     const title = safeTitle(req.body?.title, image.title || '产品图片');
     const description = safeDescription(req.body?.description);
     const row: ProductWallImageRow = await prisma.productWallImage.create({
@@ -588,7 +718,7 @@ async function createItemFromRemoteUrl(req: AuthRequest, res: Response, status: 
         createWriteStream(filePath),
       );
       const imageUrl = `/static/product-wall/${filename}`;
-      const previewUrl = (await generatePreviewImage(filePath)) || imageUrl;
+      const previewUrl = (await generatePreviewImage(filePath, imageUrl)) || imageUrl;
       const title = safeTitle(req.body?.title || parsedUrl.pathname.split('/').pop(), '链接图片');
       const description = safeDescription(req.body?.description);
       const item = await prisma.productWallImage.create({
@@ -653,7 +783,8 @@ export default function productWallRouter() {
         }),
         prisma.productWallImage.count({ where }),
       ]);
-      res.json({ items: rows.map(toProductWallItem), total, page, page_size: pageSize });
+      const rowsWithPreviews = await backfillProductWallPreviews(rows);
+      res.json({ items: rowsWithPreviews.map(toProductWallItem), total, page, page_size: pageSize });
     } catch (err) {
       next(err);
     }
@@ -665,7 +796,8 @@ export default function productWallRouter() {
       const rows = await prisma.productWallImage.findMany({
         orderBy: [{ sortOrder: 'asc' }, { createdAt: 'asc' }],
       });
-      res.json(rows.map(toProductWallItem));
+      const rowsWithPreviews = await backfillProductWallPreviews(rows);
+      res.json(rowsWithPreviews.map(toProductWallItem));
     } catch (err) {
       next(err);
     }

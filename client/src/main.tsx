@@ -7,11 +7,16 @@ import { scheduleSentryInit } from './lib/sentryLazy';
 
 scheduleSentryInit();
 
-// Pre-fetch site config so TopNav renders with correct title/logo immediately
-getCachedPublicSettings();
+async function bootstrap() {
+  // Load site config before the first React render so the selected interface
+  // theme is known immediately and does not flash to the default theme.
+  await getCachedPublicSettings();
 
-createRoot(document.getElementById('root')!).render(
-  <StrictMode>
-    <App />
-  </StrictMode>,
-);
+  createRoot(document.getElementById('root')!).render(
+    <StrictMode>
+      <App />
+    </StrictMode>,
+  );
+}
+
+void bootstrap();

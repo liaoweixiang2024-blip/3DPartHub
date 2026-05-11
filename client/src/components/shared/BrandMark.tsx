@@ -61,7 +61,10 @@ const BrandMark = memo(function BrandMark({
   const cfg = sizeClass[size];
 
   const title = (
-    <span className={`${cfg.title} min-w-0 truncate font-bold leading-none tracking-tight text-on-surface`}>
+    <span
+      className={`${cfg.title} min-w-0 truncate font-bold leading-none tracking-tight text-on-surface`}
+      data-brand-part="title"
+    >
       {siteTitle}
     </span>
   );
@@ -69,6 +72,7 @@ const BrandMark = memo(function BrandMark({
   const image = (src: string, kind: 'icon' | 'logo') => (
     <span
       className={`inline-flex shrink-0 items-center justify-center ${kind === 'logo' ? cfg.logo : cfg.iconBox}`}
+      data-brand-part={kind}
       aria-hidden="true"
     >
       <SafeImage

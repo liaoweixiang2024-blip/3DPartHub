@@ -5,7 +5,6 @@ import {
   useState,
   useCallback,
   useEffect,
-  useLayoutEffect,
   useRef,
   useMemo,
   useSyncExternalStore,
@@ -13,10 +12,13 @@ import {
   type CompositionEvent,
   type FormEvent,
   type KeyboardEvent as ReactKeyboardEvent,
+  type MouseEvent as ReactMouseEvent,
+  type Ref,
 } from 'react';
 import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import useSWR from 'swr';
 import { mutate } from 'swr';
+import { useMediaQuery } from '../../layouts/hooks/useMediaQuery';
 import { getBusinessConfig } from '../../lib/businessConfig';
 import {
   HOME_SEARCH_EVENT,
@@ -31,6 +33,7 @@ import { onSiteConfigChange, getCachedPublicSettings } from '../../lib/publicSet
 import { preloadRouteForPath } from '../../lib/routeLoaders';
 import { useAuthStore } from '../../stores/useAuthStore';
 import { useThemeStore } from '../../stores/useThemeStore';
+import { getInterfaceThemePackage } from '../../themes/interfaceThemes/registry';
 import BrandMark from './BrandMark';
 import Icon from './Icon';
 import LoginConfirmDialog from './LoginConfirmDialog';
@@ -332,7 +335,7 @@ function ThemeToggle() {
 export default function TopNav({ source = 'standalone', ...props }: TopNavProps) {
   const activeLayoutTopNavCount = useLayoutTopNavCount();
 
-  useLayoutEffect(() => {
+  useEffect(() => {
     if (source !== 'layout') return;
     layoutTopNavCount += 1;
     notifyLayoutTopNavListeners();
@@ -351,6 +354,7 @@ export default function TopNav({ source = 'standalone', ...props }: TopNavProps)
 
 function TopNavContent({ compact = false, onMenuToggle, source = 'standalone' }: TopNavProps) {
   const [uploadOpen, setUploadOpen] = useState(false);
+  const [desktopSearchOpen, setDesktopSearchOpen] = useState(false);
   const [loginDialogOpen, setLoginDialogOpen] = useState(false);
   const [loginReturnUrl, setLoginReturnUrl] = useState('');
   const [loginDialogReason, setLoginDialogReason] = useState('');
@@ -362,16 +366,46 @@ function TopNavContent({ compact = false, onMenuToggle, source = 'standalone' }:
   const location = useLocation();
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const searchCompositionRef = useRef(false);
+  const desktopSearchRef = useRef<HTMLDivElement>(null);
+  const desktopSearchInputRef = useRef<HTMLInputElement>(null);
+  const isWideDesktop = useMediaQuery('(min-width: 1280px)');
+  const isVeryWideDesktop = useMediaQuery('(min-width: 1536px)');
   // Force re-render when site config changes
   const [, forceUpdate] = useState(0);
   useEffect(() => {
     return onSiteConfigChange(() => forceUpdate((n) => n + 1));
   }, []);
   const { data: settings } = useSWR('publicSettings', () => getCachedPublicSettings());
-  const topNavItems = useMemo(() => {
+  const { userNavItems, adminNavItems } = useMemo(() => {
     const business = getBusinessConfig(settings);
-    return business.userNav.filter((item) => item.path !== '/');
+    return {
+      userNavItems: business.userNav,
+      adminNavItems: business.adminNav.filter((item) => item.path.startsWith('/admin/')),
+    };
   }, [settings]);
+  const topNavItems = useMemo(() => userNavItems.filter((item) => item.path !== '/'), [userNavItems]);
+  const ThemePackage = getInterfaceThemePackage(settings?.interface_theme);
+  const ThemeTopNav = ThemePackage.components.DesktopTopNav;
+
+  useEffect(() => {
+    if (!desktopSearchOpen) return;
+    const handlePointerDown = (event: MouseEvent) => {
+      if (!desktopSearchRef.current?.contains(event.target as Node)) {
+        setDesktopSearchOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handlePointerDown);
+    return () => document.removeEventListener('mousedown', handlePointerDown);
+  }, [desktopSearchOpen]);
+
+  useEffect(() => {
+    if (!desktopSearchOpen) return;
+    requestAnimationFrame(() => desktopSearchInputRef.current?.focus());
+  }, [desktopSearchOpen]);
+
+  useEffect(() => {
+    setDesktopSearchOpen(false);
+  }, [location.pathname]);
 
   useEffect(() => {
     const stored = readHomeSearchQuery();
@@ -495,6 +529,7 @@ function TopNavContent({ compact = false, onMenuToggle, source = 'standalone' }:
       if (searchCompositionRef.current || isComposingNativeEvent(e.nativeEvent)) return;
       clearSearchDebounce();
       doSearch(localQuery);
+      setDesktopSearchOpen(false);
     },
     [clearSearchDebounce, localQuery, doSearch],
   );
@@ -503,8 +538,140 @@ function TopNavContent({ compact = false, onMenuToggle, source = 'standalone' }:
     mutate((key) => typeof key === 'string' && key.startsWith('/models'));
   }, []);
 
-  const desktopIconClass =
-    'p-2 text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high rounded-lg transition-colors';
+  const handleProtectedNavClick = useCallback(
+    (event: ReactMouseEvent, path: string) => {
+      const result = checkProtectedAccess(path);
+      if (result.action === 'dialog') {
+        event.preventDefault();
+        setLoginReturnUrl(result.returnUrl);
+        setLoginDialogReason(result.reason);
+        setLoginDialogOpen(true);
+      } else if (result.action === 'redirect') {
+        event.preventDefault();
+        navigate('/login', { state: { from: result.returnUrl } });
+      }
+    },
+    [navigate],
+  );
+
+  const isNavActive = useCallback(
+    (path: string) => {
+      if (path === '/') return location.pathname === '/';
+      return location.pathname === path || location.pathname.startsWith(`${path}/`);
+    },
+    [location.pathname],
+  );
+
+  const renderBrand = (className: string) => (
+    <Link
+      to="/"
+      onClick={(e) => {
+        if (location.pathname === '/') {
+          e.preventDefault();
+          handleClearSearch();
+          requestAnimationFrame(() => {
+            const scroller =
+              document.querySelector<HTMLElement>('.home-scroll-container') ||
+              document.querySelector<HTMLElement>('main.overflow-y-auto');
+            if (scroller && scroller.scrollTop > 0) {
+              scroller.scrollTo({ top: 0, behavior: 'smooth' });
+            }
+          });
+        }
+      }}
+      className={className}
+    >
+      <BrandMark size="nav" className="w-full" eagerLoad />
+    </Link>
+  );
+
+  const renderSearch = (className: string, inputRef?: Ref<HTMLInputElement>, placeholder = '搜索模型、规格...') => (
+    <SearchField
+      formProps={{ onSubmit: handleSearchSubmit }}
+      inputProps={{
+        value: localQuery,
+        onChange: handleSearchChange,
+        onInput: handleSearchInput,
+        onCompositionStart: handleSearchCompositionStart,
+        onCompositionUpdate: handleSearchCompositionUpdate,
+        onCompositionEnd: handleSearchCompositionEnd,
+        onKeyDown: handleSearchKeyDown,
+        maxLength: HOME_SEARCH_MAX_LENGTH,
+        enterKeyHint: 'search',
+        autoComplete: 'off',
+        spellCheck: false,
+      }}
+      inputRef={inputRef}
+      value={localQuery}
+      onClear={handleClearSearch}
+      placeholder={placeholder}
+      className={className}
+    />
+  );
+
+  const desktopSearchTool =
+    ThemePackage.chrome.desktopSearch.placement === 'toolbar' ? (
+      <div ref={desktopSearchRef} className="relative">
+        <Tooltip text="搜索" side="bottom">
+          <button
+            type="button"
+            onClick={() => setDesktopSearchOpen((value) => !value)}
+            className="p-2 text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high rounded-lg transition-colors"
+            aria-label="搜索"
+            aria-haspopup="dialog"
+            aria-expanded={desktopSearchOpen}
+          >
+            <Icon name="search" size={20} />
+          </button>
+        </Tooltip>
+        <AnimatePresence>
+          {desktopSearchOpen && (
+            <motion.div
+              initial={{ opacity: 0, y: -4, scale: 0.98 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: -4, scale: 0.98 }}
+              transition={{ duration: 0.16 }}
+              className="absolute right-0 top-full z-[110] pt-2"
+            >
+              <div className="w-[min(24rem,calc(100vw-2rem))] rounded-xl border border-outline-variant/16 bg-surface p-2 shadow-lg">
+                {renderSearch(
+                  '!h-10 !rounded-lg !border-outline-variant/25 !bg-surface-container-lowest',
+                  desktopSearchInputRef,
+                )}
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </div>
+    ) : null;
+
+  const desktopTools = (
+    <>
+      {isAdmin && (
+        <Tooltip text="上传模型" side="bottom">
+          <button
+            onClick={() => setUploadOpen(true)}
+            onPointerEnter={preloadUploadModal}
+            onPointerDown={preloadUploadModal}
+            onFocus={preloadUploadModal}
+            className="p-2 text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high rounded-lg transition-colors"
+          >
+            <Icon name="cloud_upload" size={20} />
+          </button>
+        </Tooltip>
+      )}
+      {desktopSearchTool}
+      <NotificationPanelLoader />
+      <ThemeToggle />
+      <UserMenu
+        onLoginRequired={(reason, returnUrl) => {
+          setLoginReturnUrl(returnUrl);
+          setLoginDialogReason(reason);
+          setLoginDialogOpen(true);
+        }}
+      />
+    </>
+  );
 
   if (compact) {
     return (
@@ -576,6 +743,8 @@ function TopNavContent({ compact = false, onMenuToggle, source = 'standalone' }:
               value={localQuery}
               onClear={handleClearSearch}
               placeholder="搜索模型..."
+              className="!h-10 !rounded-sm !px-2.5"
+              inputClassName="!text-base"
             />
           </div>
         </header>
@@ -592,102 +761,20 @@ function TopNavContent({ compact = false, onMenuToggle, source = 'standalone' }:
 
   return (
     <>
-      <header
-        className="h-14 flex items-center bg-surface-container-low border-b border-outline-variant/10 shrink-0 z-50"
-        data-app-top-nav={source}
-      >
-        <Link
-          to="/"
-          onClick={(e) => {
-            if (location.pathname === '/') {
-              e.preventDefault();
-              handleClearSearch();
-              requestAnimationFrame(() => {
-                const scroller =
-                  document.querySelector<HTMLElement>('.home-scroll-container') ||
-                  document.querySelector<HTMLElement>('main.overflow-y-auto');
-                if (scroller && scroller.scrollTop > 0) {
-                  scroller.scrollTo({ top: 0, behavior: 'smooth' });
-                }
-              });
-            }
-          }}
-          className="flex w-56 shrink-0 cursor-pointer items-center px-5 transition-[opacity,transform] hover:opacity-80 active:scale-95"
-        >
-          <BrandMark size="nav" className="w-full" eagerLoad />
-        </Link>
-
-        <SearchField
-          formProps={{ onSubmit: handleSearchSubmit }}
-          inputProps={{
-            value: localQuery,
-            onChange: handleSearchChange,
-            onInput: handleSearchInput,
-            onCompositionStart: handleSearchCompositionStart,
-            onCompositionUpdate: handleSearchCompositionUpdate,
-            onCompositionEnd: handleSearchCompositionEnd,
-            onKeyDown: handleSearchKeyDown,
-            maxLength: HOME_SEARCH_MAX_LENGTH,
-            enterKeyHint: 'search',
-            autoComplete: 'off',
-            spellCheck: false,
-          }}
-          value={localQuery}
-          onClear={handleClearSearch}
-          placeholder="搜索模型、规格..."
-          className="hidden flex-1 max-w-lg md:mt-px md:flex"
-        />
-
-        <div className="flex items-center gap-0.5 shrink-0 ml-auto pr-6">
-          {topNavItems.map((item) => (
-            <Tooltip key={item.path} text={item.label} side="bottom">
-              <Link
-                to={item.path}
-                className={desktopIconClass}
-                onPointerEnter={() => preloadRouteForPath(item.path)}
-                onPointerDown={() => preloadRouteForPath(item.path)}
-                onFocus={() => preloadRouteForPath(item.path)}
-                onClick={(e) => {
-                  const result = checkProtectedAccess(item.path);
-                  if (result.action === 'dialog') {
-                    e.preventDefault();
-                    setLoginReturnUrl(result.returnUrl);
-                    setLoginDialogReason(result.reason);
-                    setLoginDialogOpen(true);
-                  } else if (result.action === 'redirect') {
-                    e.preventDefault();
-                    navigate('/login', { state: { from: result.returnUrl } });
-                  }
-                }}
-              >
-                <Icon name={item.icon} size={20} />
-              </Link>
-            </Tooltip>
-          ))}
-          {isAdmin && (
-            <Tooltip text="上传模型" side="bottom">
-              <button
-                onClick={() => setUploadOpen(true)}
-                onPointerEnter={preloadUploadModal}
-                onPointerDown={preloadUploadModal}
-                onFocus={preloadUploadModal}
-                className="p-2 text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high rounded-lg transition-colors"
-              >
-                <Icon name="cloud_upload" size={20} />
-              </button>
-            </Tooltip>
-          )}
-          <NotificationPanelLoader />
-          <ThemeToggle />
-          <UserMenu
-            onLoginRequired={(reason, returnUrl) => {
-              setLoginReturnUrl(returnUrl);
-              setLoginDialogReason(reason);
-              setLoginDialogOpen(true);
-            }}
-          />
-        </div>
-      </header>
+      <ThemeTopNav
+        source={source}
+        userNavItems={userNavItems}
+        adminNavItems={adminNavItems}
+        topNavItems={topNavItems}
+        isAdmin={isAdmin}
+        isWideDesktop={isWideDesktop}
+        isVeryWideDesktop={isVeryWideDesktop}
+        renderBrand={renderBrand}
+        renderSearch={renderSearch}
+        tools={desktopTools}
+        isNavActive={isNavActive}
+        onNavClick={handleProtectedNavClick}
+      />
       <UploadModalLoader open={uploadOpen} onClose={() => setUploadOpen(false)} onConverted={handleUploaded} />
       <LoginConfirmDialog
         open={loginDialogOpen}

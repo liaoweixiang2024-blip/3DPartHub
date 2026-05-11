@@ -12,6 +12,7 @@ import {
   type ReactNode,
 } from 'react';
 import { modelApi, type ModelPreviewMeta } from '../../api/models';
+import { useFullscreen } from '../../hooks/useFullscreen';
 import { getCachedPublicSettings } from '../../lib/publicSettings';
 import Icon from '../shared/Icon';
 import { MODEL_DETAIL_VIEWER_CLASS } from '../shared/ModelDetailFrame';
@@ -204,7 +205,8 @@ export default function CadViewerPanel({
   const [structureOpen, setStructureOpen] = useState(false);
   const [measurementOpen, setMeasurementOpen] = useState(false);
   const [propertiesOpen, setPropertiesOpen] = useState(false);
-  const [isFullscreen, setIsFullscreen] = useState(false);
+  const [pseudoFullscreen, setPseudoFullscreen] = useState(false);
+  const { exitFullscreen, isFullscreen, isNativeFullscreenActive, requestFullscreen } = useFullscreen(pseudoFullscreen);
   const [explodeAmount, setExplodeAmount] = useState(1);
   const [measureMode, setMeasureMode] = useState<MeasureMode>('distance');
   const [measurementSnapMode, setMeasurementSnapMode] = useState<MeasurementSnapMode>('surface');
@@ -324,8 +326,6 @@ export default function CadViewerPanel({
     if (ok) onThumbnailUpdated?.();
   }, [modelId, onThumbnailUpdated, toast]);
 
-  const [pseudoFullscreen, setPseudoFullscreen] = useState(false);
-
   const handleFullscreen = useCallback(() => {
     const el = containerRef.current;
     if (!el) return;
@@ -333,17 +333,14 @@ export default function CadViewerPanel({
       setPseudoFullscreen(false);
       return;
     }
-    if (document.fullscreenElement || (document as any).webkitFullscreenElement) {
-      void (document.exitFullscreen || (document as any).webkitExitFullscreen).call(document).catch(() => {});
+    if (isNativeFullscreenActive()) {
+      void exitFullscreen();
     } else {
-      const fn = el.requestFullscreen || (el as any).webkitRequestFullscreen;
-      if (fn) {
-        void fn.call(el).catch(() => setPseudoFullscreen(true));
-      } else {
-        setPseudoFullscreen(true);
-      }
+      void requestFullscreen(el).then((ok) => {
+        if (!ok) setPseudoFullscreen(true);
+      });
     }
-  }, [pseudoFullscreen]);
+  }, [exitFullscreen, isNativeFullscreenActive, pseudoFullscreen, requestFullscreen]);
 
   const handleBackClick = useCallback<MouseEventHandler<HTMLButtonElement>>(
     (event) => {
@@ -352,13 +349,13 @@ export default function CadViewerPanel({
         setPseudoFullscreen(false);
         return;
       }
-      if (document.fullscreenElement || (document as any).webkitFullscreenElement) {
-        void (document.exitFullscreen || (document as any).webkitExitFullscreen).call(document).catch(() => {});
+      if (isNativeFullscreenActive()) {
+        void exitFullscreen();
         return;
       }
       onBack?.();
     },
-    [onBack, pseudoFullscreen],
+    [exitFullscreen, isNativeFullscreenActive, onBack, pseudoFullscreen],
   );
 
   const handleViewerProgress = useCallback((progress: number) => {
@@ -369,20 +366,6 @@ export default function CadViewerPanel({
     setLoaded(true);
     setLoadProgress(null);
   }, []);
-
-  useEffect(() => {
-    const getFullscreenEl = () => document.fullscreenElement || (document as any).webkitFullscreenElement;
-    const updateFullscreenState = () => {
-      setIsFullscreen(Boolean(getFullscreenEl()) || pseudoFullscreen);
-    };
-    updateFullscreenState();
-    document.addEventListener('fullscreenchange', updateFullscreenState);
-    document.addEventListener('webkitfullscreenchange', updateFullscreenState);
-    return () => {
-      document.removeEventListener('fullscreenchange', updateFullscreenState);
-      document.removeEventListener('webkitfullscreenchange', updateFullscreenState);
-    };
-  }, [pseudoFullscreen]);
 
   useEffect(() => {
     onPseudoFullscreenChange?.(pseudoFullscreen);

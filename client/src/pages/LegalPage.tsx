@@ -61,7 +61,7 @@ export default function LegalPage() {
   );
 
   return (
-    <AdminPageShell desktopContentClassName="p-8" mobileContentClassName="px-4 py-4 pb-20">
+    <AdminPageShell desktopContentClassName="p-6" mobileContentClassName="px-4 py-4 pb-20">
       <AdminManagementPage
         title={isPrivacy ? '隐私声明' : '用户协议'}
         description="平台服务条款与数据处理说明"

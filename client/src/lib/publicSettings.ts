@@ -9,6 +9,30 @@ let inflight: Promise<Partial<SystemSettings>> | null = null;
 let scheduledRefreshHandle = 0;
 const STORAGE_KEY = 'site_config_cache';
 const TTL = 2 * 60 * 1000; // 2 minutes — config changes propagate faster
+const DEFAULT_COPYRIGHT_PROJECT_NAME = '3DPartHub';
+
+function getCopyrightYear(): string {
+  return String(new Date().getFullYear());
+}
+
+function normalizeCopyrightProjectName(siteTitle: string | undefined): string {
+  return String(siteTitle || '').trim() || DEFAULT_COPYRIGHT_PROJECT_NAME;
+}
+
+export function buildFooterCopyright(siteTitle?: string): string {
+  return `© ${getCopyrightYear()} ${normalizeCopyrightProjectName(siteTitle)}. All rights reserved.`;
+}
+
+export function buildModelDetailCopyright(siteTitle?: string): string {
+  return `© ${getCopyrightYear()} ${normalizeCopyrightProjectName(siteTitle)}`;
+}
+
+export const DEFAULT_FOOTER_COPYRIGHT = buildFooterCopyright(DEFAULT_COPYRIGHT_PROJECT_NAME);
+export const DEFAULT_MODEL_DETAIL_DISCLAIMER =
+  '本平台所有 3D 模型仅供参考与模拟验证，不作为生产加工依据。产品持续迭代更新，请以实物为准。';
+export const DEFAULT_MODEL_DETAIL_COPYRIGHT = buildModelDetailCopyright(DEFAULT_COPYRIGHT_PROJECT_NAME);
+
+type FooterLink = { label: string; url: string };
 
 type IdleDeadlineLike = {
   didTimeout: boolean;
@@ -213,11 +237,20 @@ export function getContactAddress(): string {
 }
 
 // Get footer links (sync) — JSON string or empty
-export function getFooterLinks(): { label: string; url: string }[] {
+export function getFooterLinks(): FooterLink[] {
   try {
-    const raw = (cache?.footer_links as string) || '';
-    if (!raw) return [];
-    return JSON.parse(raw);
+    const value = cache?.footer_links;
+    const parsed = typeof value === 'string' ? (value.trim() ? JSON.parse(value) : []) : value;
+    if (!Array.isArray(parsed)) return [];
+    return parsed
+      .map((item) => {
+        const row = item && typeof item === 'object' ? (item as Partial<FooterLink>) : {};
+        return {
+          label: typeof row.label === 'string' ? row.label.trim() : '',
+          url: typeof row.url === 'string' ? row.url.trim() : '',
+        };
+      })
+      .filter((link) => link.label && link.url);
   } catch {
     return [];
   }
@@ -225,7 +258,17 @@ export function getFooterLinks(): { label: string; url: string }[] {
 
 // Get footer copyright text (sync)
 export function getFooterCopyright(): string {
-  return (cache?.footer_copyright as string) || '';
+  if (cache?.footer_copyright_follow_site_title !== false) return buildFooterCopyright(getSiteTitle());
+  return (cache?.footer_copyright as string)?.trim() || DEFAULT_FOOTER_COPYRIGHT;
+}
+
+export function getModelDetailDisclaimer(): string {
+  return (cache?.model_detail_disclaimer as string)?.trim() || DEFAULT_MODEL_DETAIL_DISCLAIMER;
+}
+
+export function getModelDetailCopyright(): string {
+  if (cache?.model_detail_copyright_follow_site_title !== false) return buildModelDetailCopyright(getSiteTitle());
+  return (cache?.model_detail_copyright as string)?.trim() || DEFAULT_MODEL_DETAIL_COPYRIGHT;
 }
 
 // Apply dynamic meta tags (description, keywords, og:title, og:description)

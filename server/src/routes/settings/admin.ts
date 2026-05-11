@@ -1,9 +1,20 @@
 import { Router, Response } from 'express';
 import { sendTestEmail } from '../../lib/email.js';
 import { getAllSettings, getSettingDefaults, setSettings } from '../../lib/settings.js';
+import { testCacheConnectivity, testStorageConnectivity } from '../../lib/settingsConnectivity.js';
 import { checkUpdateAvailable } from '../../lib/update.js';
 import { authMiddleware, type AuthRequest } from '../../middleware/auth.js';
 import { adminOnly } from './common.js';
+
+const SENSITIVE_SETTING_KEYS = ['smtp_pass', 'redis_password', 'storage_access_key_secret'] as const;
+
+function maskSensitiveSettings(settings: Record<string, unknown>): Record<string, unknown> {
+  const masked = { ...settings };
+  for (const key of SENSITIVE_SETTING_KEYS) {
+    if (masked[key]) masked[key] = '********';
+  }
+  return masked;
+}
 
 export function createSettingsAdminRouter() {
   const router = Router();
@@ -24,8 +35,7 @@ export function createSettingsAdminRouter() {
     if (!adminOnly(req, res)) return;
     try {
       const settings = await getAllSettings();
-      if (settings.smtp_pass) settings.smtp_pass = '********';
-      res.json(settings);
+      res.json(maskSensitiveSettings(settings));
     } catch {
       res.status(500).json({ detail: '获取设置失败' });
     }
@@ -37,8 +47,7 @@ export function createSettingsAdminRouter() {
     try {
       await setSettings(req.body);
       const settings = await getAllSettings();
-      if (settings.smtp_pass) settings.smtp_pass = '********';
-      res.json(settings);
+      res.json(maskSensitiveSettings(settings));
     } catch {
       res.status(500).json({ detail: '更新设置失败' });
     }
@@ -57,6 +66,34 @@ export function createSettingsAdminRouter() {
       res.json({ message: '测试邮件已发送' });
     } catch {
       res.status(500).json({ detail: '测试邮件发送失败' });
+    }
+  });
+
+  // Admin: test Redis/cache connectivity using the saved settings.
+  router.post('/api/settings/cache/test', authMiddleware, async (req: AuthRequest, res: Response) => {
+    if (!adminOnly(req, res)) return;
+    try {
+      const settings = await getAllSettings();
+      const result = await testCacheConnectivity(settings);
+      res.json(result);
+    } catch {
+      res
+        .status(500)
+        .json({ ok: false, status: 'error', message: '缓存测试失败', details: ['服务器执行测试时发生异常'] });
+    }
+  });
+
+  // Admin: test local/cloud object storage by writing, reading and deleting a temporary object.
+  router.post('/api/settings/storage/test', authMiddleware, async (req: AuthRequest, res: Response) => {
+    if (!adminOnly(req, res)) return;
+    try {
+      const settings = await getAllSettings();
+      const result = await testStorageConnectivity(settings);
+      res.json(result);
+    } catch {
+      res
+        .status(500)
+        .json({ ok: false, status: 'error', message: '存储测试失败', details: ['服务器执行测试时发生异常'] });
     }
   });
 

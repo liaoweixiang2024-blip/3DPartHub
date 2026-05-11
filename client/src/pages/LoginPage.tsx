@@ -1,17 +1,19 @@
 import { motion } from 'framer-motion';
 import { useState, useEffect, useCallback } from 'react';
 import { useNavigate, useLocation, Link } from 'react-router-dom';
+import useSWR from 'swr';
 import client from '../api/client';
 import { unwrapResponse } from '../api/response';
-import { getPublicSettings } from '../api/settings';
 import BrandMark from '../components/shared/BrandMark';
 import Icon from '../components/shared/Icon';
 import { PageTitle } from '../components/shared/PagePrimitives';
 import { PublicPageShell } from '../components/shared/PublicPageShell';
 import { useDocumentTitle } from '../hooks/useDocumentTitle';
 import { getErrorMessage } from '../lib/errorNotifications';
+import { getCachedPublicSettings } from '../lib/publicSettings';
 import { sanitizeHtml } from '../lib/sanitizeHtml';
 import { useAuthStore } from '../stores/useAuthStore';
+import { getInterfaceThemePackage } from '../themes/interfaceThemes/registry';
 
 type AuthMode = 'login' | 'register';
 
@@ -49,6 +51,9 @@ export default function LoginPage() {
   const from = (location.state as LoginLocationState | null)?.from || '/';
   const { login } = useAuthStore();
   const [allowRegister, setAllowRegister] = useState(true);
+  const { data: publicSettings } = useSWR('publicSettings', () => getCachedPublicSettings());
+  const ThemePackage = getInterfaceThemePackage(publicSettings?.interface_theme);
+  const LoginTemplate = ThemePackage.templates.Login;
 
   // Captcha state
   const [captchaSvg, setCaptchaSvg] = useState('');
@@ -61,12 +66,11 @@ export default function LoginPage() {
   const [sendingCode, setSendingCode] = useState(false);
   const [phone, setPhone] = useState('');
   const [company, setCompany] = useState('');
+  const [address, setAddress] = useState('');
 
   useEffect(() => {
-    getPublicSettings()
-      .then((s) => setAllowRegister(s.allow_register ?? true))
-      .catch(() => {});
-  }, []);
+    if (publicSettings) setAllowRegister(publicSettings.allow_register ?? true);
+  }, [publicSettings]);
 
   // Fetch captcha on mount and when switching to register
   const refreshCaptcha = useCallback(async () => {
@@ -151,6 +155,7 @@ export default function LoginPage() {
           emailCode,
           phone: phone || undefined,
           company: company || undefined,
+          address: address || undefined,
         });
         login(result.user, result.tokens, true);
         navigate(from, { replace: true });
@@ -171,288 +176,295 @@ export default function LoginPage() {
     setCaptchaText('');
     setPhone('');
     setCompany('');
+    setAddress('');
   };
 
   return (
     <PublicPageShell showMobileBottomNav={false}>
-      <div className="flex-1 overflow-y-auto overflow-x-hidden bg-surface p-4">
-        <div className="my-4 w-full max-w-md mx-auto">
-          <motion.div
-            initial={{ opacity: 0, scale: 0.95 }}
-            animate={{ opacity: 1, scale: 1 }}
-            transition={{ duration: 0.4, ease: 'easeOut' }}
-          >
-            <div className="bg-surface-container-low rounded-lg border border-outline-variant/20 overflow-hidden">
-              <div className="p-6 sm:p-8 border-b border-outline-variant/10 text-center">
-                <BrandMark size="hero" centered className="mx-auto mb-3 max-w-full" />
-                <PageTitle>{mode === 'login' ? '欢迎回来' : '创建账户'}</PageTitle>
-                <p className="text-sm text-on-surface-variant mt-2">
-                  {mode === 'login' ? '登录您的账户继续' : '注册以开始使用平台'}
-                </p>
+      <LoginTemplate
+        mode={mode}
+        brand={<BrandMark size="hero" centered className="mx-auto mb-3 max-w-full" />}
+        title={<PageTitle>{mode === 'login' ? '欢迎回来' : '创建账户'}</PageTitle>}
+        subtitle={
+          <p className="text-sm text-on-surface-variant mt-2">
+            {mode === 'login' ? '登录您的账户继续' : '注册以开始使用平台'}
+          </p>
+        }
+        form={
+          <form onSubmit={handleSubmit} className="p-6 sm:p-8 space-y-5">
+            {apiError && (
+              <motion.div
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: 'auto' }}
+                className="bg-error-container/20 border border-error/30 rounded-sm px-4 py-3 text-sm text-error flex items-start gap-2"
+              >
+                <Icon name="error" size={20} className="shrink-0 mt-0.5" />
+                <span className="min-w-0 break-words">{apiError}</span>
+              </motion.div>
+            )}
+
+            {mode === 'register' && (
+              <div>
+                <label className="block text-xs text-on-surface-variant uppercase tracking-wider mb-1.5">
+                  联系人 / 用户名
+                </label>
+                <input
+                  type="text"
+                  value={username}
+                  onChange={(e) => setUsername(e.target.value)}
+                  className={`w-full bg-surface-container-lowest text-on-surface text-base rounded-sm px-4 py-2.5 border outline-none transition-colors ${
+                    errors.username ? 'border-error' : 'border-outline-variant/30 focus:border-primary-container'
+                  }`}
+                  placeholder="例如 张工"
+                />
+                {errors.username && <span className="text-xs text-error mt-1 block">{errors.username}</span>}
               </div>
+            )}
 
-              <form onSubmit={handleSubmit} className="p-6 sm:p-8 space-y-5">
-                {apiError && (
-                  <motion.div
-                    initial={{ opacity: 0, height: 0 }}
-                    animate={{ opacity: 1, height: 'auto' }}
-                    className="bg-error-container/20 border border-error/30 rounded-sm px-4 py-3 text-sm text-error flex items-start gap-2"
-                  >
-                    <Icon name="error" size={20} className="shrink-0 mt-0.5" />
-                    <span className="min-w-0 break-words">{apiError}</span>
-                  </motion.div>
-                )}
-
-                {mode === 'register' && (
-                  <div>
-                    <label className="block text-xs text-on-surface-variant uppercase tracking-wider mb-1.5">
-                      用户名
-                    </label>
-                    <input
-                      type="text"
-                      value={username}
-                      onChange={(e) => setUsername(e.target.value)}
-                      className={`w-full bg-surface-container-lowest text-on-surface text-base rounded-sm px-4 py-2.5 border outline-none transition-colors ${
-                        errors.username ? 'border-error' : 'border-outline-variant/30 focus:border-primary-container'
-                      }`}
-                      placeholder="请输入用户名"
-                    />
-                    {errors.username && <span className="text-xs text-error mt-1 block">{errors.username}</span>}
-                  </div>
-                )}
-
-                {mode === 'register' && (
-                  <div>
-                    <label className="block text-xs text-on-surface-variant uppercase tracking-wider mb-1.5">
-                      手机号
-                    </label>
-                    <input
-                      type="tel"
-                      value={phone}
-                      onChange={(e) => setPhone(e.target.value)}
-                      className="w-full bg-surface-container-lowest text-on-surface text-base rounded-sm px-4 py-2.5 border border-outline-variant/30 outline-none transition-colors focus:border-primary-container"
-                      placeholder="方便工单和技术沟通（选填）"
-                    />
-                  </div>
-                )}
-
-                {mode === 'register' && (
-                  <div>
-                    <label className="block text-xs text-on-surface-variant uppercase tracking-wider mb-1.5">
-                      公司名称
-                    </label>
-                    <input
-                      type="text"
-                      value={company}
-                      onChange={(e) => setCompany(e.target.value)}
-                      className="w-full bg-surface-container-lowest text-on-surface text-base rounded-sm px-4 py-2.5 border border-outline-variant/30 outline-none transition-colors focus:border-primary-container"
-                      placeholder="方便工单和技术沟通（选填）"
-                    />
-                  </div>
-                )}
-
-                <div>
-                  <label className="block text-xs text-on-surface-variant uppercase tracking-wider mb-1.5">邮箱</label>
-                  <input
-                    type="email"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    className={`w-full bg-surface-container-lowest text-on-surface text-base rounded-sm px-4 py-2.5 border outline-none transition-colors ${
-                      errors.email ? 'border-error' : 'border-outline-variant/30 focus:border-primary-container'
-                    }`}
-                    placeholder="例如 name@company.com"
-                  />
-                  {errors.email && <span className="text-xs text-error mt-1 block">{errors.email}</span>}
-                </div>
-
-                {mode === 'register' && (
-                  <div>
-                    <label className="block text-xs text-on-surface-variant uppercase tracking-wider mb-1.5">
-                      图形验证码
-                    </label>
-                    <div className="flex gap-2 items-center">
-                      <input
-                        type="text"
-                        value={captchaText}
-                        onChange={(e) => setCaptchaText(e.target.value)}
-                        className={`flex-1 min-w-0 bg-surface-container-lowest text-on-surface text-base rounded-sm px-3 py-2.5 border outline-none transition-colors ${
-                          errors.captchaText
-                            ? 'border-error'
-                            : 'border-outline-variant/30 focus:border-primary-container'
-                        }`}
-                        placeholder="验证码"
-                        maxLength={4}
-                      />
-                      {captchaSvg && (
-                        <button
-                          type="button"
-                          onClick={refreshCaptcha}
-                          className="shrink-0 cursor-pointer rounded-sm overflow-hidden border border-outline-variant/30 hover:opacity-80 transition-opacity"
-                          title="点击刷新验证码"
-                          dangerouslySetInnerHTML={{ __html: sanitizeHtml(captchaSvg) }}
-                          style={{ width: 100, height: 40 }}
-                        />
-                      )}
-                    </div>
-                    {errors.captchaText && <span className="text-xs text-error mt-1 block">{errors.captchaText}</span>}
-                  </div>
-                )}
-
-                {mode === 'register' && (
-                  <div>
-                    <label className="block text-xs text-on-surface-variant uppercase tracking-wider mb-1.5">
-                      邮箱验证码
-                    </label>
-                    <div className="flex gap-2">
-                      <input
-                        type="text"
-                        value={emailCode}
-                        onChange={(e) => setEmailCode(e.target.value)}
-                        className={`flex-1 min-w-0 bg-surface-container-lowest text-on-surface text-base rounded-sm px-3 py-2.5 border outline-none transition-colors ${
-                          errors.emailCode ? 'border-error' : 'border-outline-variant/30 focus:border-primary-container'
-                        }`}
-                        placeholder="6位验证码"
-                        maxLength={6}
-                      />
-                      <button
-                        type="button"
-                        onClick={handleSendEmailCode}
-                        disabled={emailCountdown > 0 || sendingCode}
-                        className="shrink-0 px-3 py-2.5 text-sm rounded-sm border border-primary-container/50 text-primary-container hover:bg-primary-container/10 transition-colors disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
-                      >
-                        {sendingCode ? '发送中...' : emailCountdown > 0 ? `${emailCountdown}s` : '发送验证码'}
-                      </button>
-                    </div>
-                    {errors.emailCode && <span className="text-xs text-error mt-1 block">{errors.emailCode}</span>}
-                  </div>
-                )}
-
-                <div>
-                  <label className="block text-xs text-on-surface-variant uppercase tracking-wider mb-1.5">密码</label>
-                  <div className="relative">
-                    <input
-                      type={showPassword ? 'text' : 'password'}
-                      value={password}
-                      onChange={(e) => setPassword(e.target.value)}
-                      className={`w-full bg-surface-container-lowest text-on-surface text-base rounded-sm px-4 py-2.5 pr-10 border outline-none transition-colors ${
-                        errors.password ? 'border-error' : 'border-outline-variant/30 focus:border-primary-container'
-                      }`}
-                      placeholder="至少8位"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setShowPassword(!showPassword)}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 text-on-surface-variant hover:text-on-surface transition-colors"
-                    >
-                      <Icon name={showPassword ? 'visibility_off' : 'visibility'} size={18} />
-                    </button>
-                  </div>
-                  {errors.password && <span className="text-xs text-error mt-1 block">{errors.password}</span>}
-                </div>
-
-                {mode === 'register' && (
-                  <div>
-                    <label className="block text-xs text-on-surface-variant uppercase tracking-wider mb-1.5">
-                      确认密码
-                    </label>
-                    <div className="relative">
-                      <input
-                        type={showPassword ? 'text' : 'password'}
-                        value={confirmPassword}
-                        onChange={(e) => setConfirmPassword(e.target.value)}
-                        className={`w-full bg-surface-container-lowest text-on-surface text-base rounded-sm px-4 py-2.5 pr-10 border outline-none transition-colors ${
-                          errors.confirmPassword
-                            ? 'border-error'
-                            : 'border-outline-variant/30 focus:border-primary-container'
-                        }`}
-                        placeholder="再次输入密码"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => setShowPassword(!showPassword)}
-                        className="absolute right-3 top-1/2 -translate-y-1/2 text-on-surface-variant hover:text-on-surface transition-colors"
-                      >
-                        <Icon name={showPassword ? 'visibility_off' : 'visibility'} size={18} />
-                      </button>
-                    </div>
-                    {errors.confirmPassword && (
-                      <span className="text-xs text-error mt-1 block">{errors.confirmPassword}</span>
-                    )}
-                  </div>
-                )}
-
-                {mode === 'login' && (
-                  <label className="flex items-center gap-2 cursor-pointer select-none">
-                    <input
-                      type="checkbox"
-                      checked={rememberMe}
-                      onChange={(e) => setRememberMe(e.target.checked)}
-                      className="w-4 h-4 rounded border-outline-variant/30 text-primary-container accent-primary-container"
-                    />
-                    <span className="text-sm text-on-surface-variant">记住登录</span>
-                  </label>
-                )}
-
-                <button
-                  type="submit"
-                  disabled={loading}
-                  className="w-full bg-primary-container text-on-primary rounded-sm py-3 text-sm font-bold uppercase tracking-wider hover:opacity-90 transition-opacity disabled:opacity-50 active:scale-[0.98]"
-                >
-                  {loading ? (
-                    <span className="flex items-center justify-center gap-2">
-                      <Icon name="progress_activity" size={16} className="animate-spin" />
-                      处理中...
-                    </span>
-                  ) : mode === 'login' ? (
-                    '登录'
-                  ) : (
-                    '注册'
-                  )}
-                </button>
-              </form>
-
-              {allowRegister && (
-                <div className="px-6 sm:px-8 pb-6 text-center">
-                  <button
-                    onClick={() => switchMode(mode === 'login' ? 'register' : 'login')}
-                    className="text-sm text-primary hover:underline underline-offset-4"
-                  >
-                    {mode === 'login' ? '没有账户？立即注册' : '已有账户？立即登录'}
-                  </button>
-                </div>
-              )}
-
-              <div className="px-6 sm:px-8 pb-6 sm:pb-8 text-center space-y-2">
-                <div className="flex items-center justify-center gap-3 text-xs text-on-surface-variant/60">
-                  <a
-                    href="/legal/terms"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="hover:text-on-surface-variant transition-colors"
-                  >
-                    用户协议
-                  </a>
-                  <span>·</span>
-                  <a
-                    href="/legal/privacy"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="hover:text-on-surface-variant transition-colors"
-                  >
-                    隐私声明
-                  </a>
-                </div>
+            {mode === 'register' && (
+              <div>
+                <label className="block text-xs text-on-surface-variant uppercase tracking-wider mb-1.5">手机号</label>
+                <input
+                  type="tel"
+                  value={phone}
+                  onChange={(e) => setPhone(e.target.value)}
+                  className="w-full bg-surface-container-lowest text-on-surface text-base rounded-sm px-4 py-2.5 border border-outline-variant/30 outline-none transition-colors focus:border-primary-container"
+                  placeholder="用于询价、工单联系（选填）"
+                />
               </div>
+            )}
+
+            {mode === 'register' && (
+              <div>
+                <label className="block text-xs text-on-surface-variant uppercase tracking-wider mb-1.5">
+                  公司名称
+                </label>
+                <input
+                  type="text"
+                  value={company}
+                  onChange={(e) => setCompany(e.target.value)}
+                  className="w-full bg-surface-container-lowest text-on-surface text-base rounded-sm px-4 py-2.5 border border-outline-variant/30 outline-none transition-colors focus:border-primary-container"
+                  placeholder="提交询价时自动带入（选填）"
+                />
+              </div>
+            )}
+
+            {mode === 'register' && (
+              <div>
+                <label className="block text-xs text-on-surface-variant uppercase tracking-wider mb-1.5">
+                  联系地址
+                </label>
+                <input
+                  type="text"
+                  value={address}
+                  onChange={(e) => setAddress(e.target.value)}
+                  className="w-full bg-surface-container-lowest text-on-surface text-base rounded-sm px-4 py-2.5 border border-outline-variant/30 outline-none transition-colors focus:border-primary-container"
+                  placeholder="用于询价对接和交付确认（选填）"
+                />
+              </div>
+            )}
+
+            <div>
+              <label className="block text-xs text-on-surface-variant uppercase tracking-wider mb-1.5">邮箱</label>
+              <input
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                className={`w-full bg-surface-container-lowest text-on-surface text-base rounded-sm px-4 py-2.5 border outline-none transition-colors ${
+                  errors.email ? 'border-error' : 'border-outline-variant/30 focus:border-primary-container'
+                }`}
+                placeholder="例如 name@company.com"
+              />
+              {errors.email && <span className="text-xs text-error mt-1 block">{errors.email}</span>}
             </div>
 
-            <p className="text-center text-xs text-on-surface-variant mt-6">
-              <Link to="/" className="hover:text-primary transition-colors">
-                ← 返回首页
-              </Link>
-            </p>
-          </motion.div>
-        </div>
-      </div>
+            {mode === 'register' && (
+              <div>
+                <label className="block text-xs text-on-surface-variant uppercase tracking-wider mb-1.5">
+                  图形验证码
+                </label>
+                <div className="flex gap-2 items-center">
+                  <input
+                    type="text"
+                    value={captchaText}
+                    onChange={(e) => setCaptchaText(e.target.value)}
+                    className={`flex-1 min-w-0 bg-surface-container-lowest text-on-surface text-base rounded-sm px-3 py-2.5 border outline-none transition-colors ${
+                      errors.captchaText ? 'border-error' : 'border-outline-variant/30 focus:border-primary-container'
+                    }`}
+                    placeholder="验证码"
+                    maxLength={4}
+                  />
+                  {captchaSvg && (
+                    <button
+                      type="button"
+                      onClick={refreshCaptcha}
+                      className="shrink-0 cursor-pointer rounded-sm overflow-hidden border border-outline-variant/30 hover:opacity-80 transition-opacity"
+                      title="点击刷新验证码"
+                      dangerouslySetInnerHTML={{ __html: sanitizeHtml(captchaSvg) }}
+                      style={{ width: 100, height: 40 }}
+                    />
+                  )}
+                </div>
+                {errors.captchaText && <span className="text-xs text-error mt-1 block">{errors.captchaText}</span>}
+              </div>
+            )}
+
+            {mode === 'register' && (
+              <div>
+                <label className="block text-xs text-on-surface-variant uppercase tracking-wider mb-1.5">
+                  邮箱验证码
+                </label>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={emailCode}
+                    onChange={(e) => setEmailCode(e.target.value)}
+                    className={`flex-1 min-w-0 bg-surface-container-lowest text-on-surface text-base rounded-sm px-3 py-2.5 border outline-none transition-colors ${
+                      errors.emailCode ? 'border-error' : 'border-outline-variant/30 focus:border-primary-container'
+                    }`}
+                    placeholder="6位验证码"
+                    maxLength={6}
+                  />
+                  <button
+                    type="button"
+                    onClick={handleSendEmailCode}
+                    disabled={emailCountdown > 0 || sendingCode}
+                    className="shrink-0 px-3 py-2.5 text-sm rounded-sm border border-primary-container/50 text-primary-container hover:bg-primary-container/10 transition-colors disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
+                  >
+                    {sendingCode ? '发送中...' : emailCountdown > 0 ? `${emailCountdown}s` : '发送验证码'}
+                  </button>
+                </div>
+                {errors.emailCode && <span className="text-xs text-error mt-1 block">{errors.emailCode}</span>}
+              </div>
+            )}
+
+            <div>
+              <label className="block text-xs text-on-surface-variant uppercase tracking-wider mb-1.5">密码</label>
+              <div className="relative">
+                <input
+                  type={showPassword ? 'text' : 'password'}
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  className={`w-full bg-surface-container-lowest text-on-surface text-base rounded-sm px-4 py-2.5 pr-10 border outline-none transition-colors ${
+                    errors.password ? 'border-error' : 'border-outline-variant/30 focus:border-primary-container'
+                  }`}
+                  placeholder="至少8位"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-on-surface-variant hover:text-on-surface transition-colors"
+                >
+                  <Icon name={showPassword ? 'visibility_off' : 'visibility'} size={18} />
+                </button>
+              </div>
+              {errors.password && <span className="text-xs text-error mt-1 block">{errors.password}</span>}
+            </div>
+
+            {mode === 'register' && (
+              <div>
+                <label className="block text-xs text-on-surface-variant uppercase tracking-wider mb-1.5">
+                  确认密码
+                </label>
+                <div className="relative">
+                  <input
+                    type={showPassword ? 'text' : 'password'}
+                    value={confirmPassword}
+                    onChange={(e) => setConfirmPassword(e.target.value)}
+                    className={`w-full bg-surface-container-lowest text-on-surface text-base rounded-sm px-4 py-2.5 pr-10 border outline-none transition-colors ${
+                      errors.confirmPassword
+                        ? 'border-error'
+                        : 'border-outline-variant/30 focus:border-primary-container'
+                    }`}
+                    placeholder="再次输入密码"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-on-surface-variant hover:text-on-surface transition-colors"
+                  >
+                    <Icon name={showPassword ? 'visibility_off' : 'visibility'} size={18} />
+                  </button>
+                </div>
+                {errors.confirmPassword && (
+                  <span className="text-xs text-error mt-1 block">{errors.confirmPassword}</span>
+                )}
+              </div>
+            )}
+
+            {mode === 'login' && (
+              <label className="flex items-center gap-2 cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={rememberMe}
+                  onChange={(e) => setRememberMe(e.target.checked)}
+                  className="w-4 h-4 rounded border-outline-variant/30 text-primary-container accent-primary-container"
+                />
+                <span className="text-sm text-on-surface-variant">记住登录</span>
+              </label>
+            )}
+
+            <button
+              type="submit"
+              disabled={loading}
+              className="w-full bg-primary-container text-on-primary rounded-sm py-3 text-sm font-bold uppercase tracking-wider hover:opacity-90 transition-opacity disabled:opacity-50 active:scale-[0.98]"
+            >
+              {loading ? (
+                <span className="flex items-center justify-center gap-2">
+                  <Icon name="progress_activity" size={16} className="animate-spin" />
+                  处理中...
+                </span>
+              ) : mode === 'login' ? (
+                '登录'
+              ) : (
+                '注册'
+              )}
+            </button>
+          </form>
+        }
+        modeSwitch={
+          allowRegister ? (
+            <div className="px-6 sm:px-8 pb-6 text-center">
+              <button
+                onClick={() => switchMode(mode === 'login' ? 'register' : 'login')}
+                className="text-sm text-primary hover:underline underline-offset-4"
+              >
+                {mode === 'login' ? '没有账户？立即注册' : '已有账户？立即登录'}
+              </button>
+            </div>
+          ) : null
+        }
+        legalLinks={
+          <div className="px-6 sm:px-8 pb-6 sm:pb-8 text-center space-y-2">
+            <div className="flex items-center justify-center gap-3 text-xs text-on-surface-variant/60">
+              <a
+                href="/legal/terms"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="hover:text-on-surface-variant transition-colors"
+              >
+                用户协议
+              </a>
+              <span>·</span>
+              <a
+                href="/legal/privacy"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="hover:text-on-surface-variant transition-colors"
+              >
+                隐私声明
+              </a>
+            </div>
+          </div>
+        }
+        backLink={
+          <p className="text-center text-xs text-on-surface-variant mt-6">
+            <Link to="/" className="hover:text-primary transition-colors">
+              ← 返回首页
+            </Link>
+          </p>
+        }
+      />
     </PublicPageShell>
   );
 }

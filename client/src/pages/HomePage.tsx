@@ -15,7 +15,6 @@ import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-do
 import useSWR from 'swr';
 import { categoriesApi, type CategoryItem } from '../api/categories';
 import { downloadModelFile, isDownloadAuthRequiredError } from '../api/downloads';
-import { favoriteApi } from '../api/favorites';
 import { modelApi, type ServerModelListItem } from '../api/models';
 import { createShare } from '../api/shares';
 import FormatTag from '../components/shared/FormatTag';
@@ -23,7 +22,7 @@ import Icon from '../components/shared/Icon';
 import InfiniteLoadTrigger from '../components/shared/InfiniteLoadTrigger';
 import ModelThumbnail from '../components/shared/ModelThumbnail';
 import { PageTitle } from '../components/shared/PagePrimitives';
-import { DEFAULT_PAGE_SIZE, normalizePageSize } from '../components/shared/Pagination';
+import Pagination, { DEFAULT_PAGE_SIZE, normalizePageSize } from '../components/shared/Pagination';
 import { PublicPageShell } from '../components/shared/PublicPageShell';
 import { useToast } from '../components/shared/Toast';
 import { useDocumentTitle } from '../hooks/useDocumentTitle';
@@ -34,6 +33,7 @@ import { copyText } from '../lib/clipboard';
 import { getErrorMessage } from '../lib/errorNotifications';
 import {
   HOME_SEARCH_EVENT,
+  HOME_SEARCH_MAX_LENGTH,
   dispatchHomeSearchQuery,
   normalizeHomeSearchQuery,
   readHomeSearchQuery,
@@ -43,23 +43,26 @@ import {
 import { overlayMotion, popoverMotion, sideSheetMotion } from '../lib/motion';
 import {
   getCachedPublicSettings,
-  getAnnouncement,
   getContactEmail,
   getContactPhone,
   getContactAddress,
-  getSiteTitle,
+  getFooterCopyright,
+  getFooterLinks,
 } from '../lib/publicSettings';
 import { preloadModelDetailPage } from '../lib/routeLoaders';
-import { sanitizeHtml } from '../lib/sanitizeHtml';
-import { useAuthStore } from '../stores';
-
-interface Category {
-  id: string;
-  name: string;
-  icon: string;
-  count: number;
-  children: { id: string; name: string; count: number }[];
-}
+import { useAuthStore, useFavoriteStore } from '../stores';
+import { getInterfaceThemePackage } from '../themes/interfaceThemes/registry';
+import {
+  AnnouncementBanner,
+  HomeGridCardContent,
+  HomeListCardContent,
+  HOME_GRID_ACTION_BUTTON_CLASS,
+  HOME_GRID_CARD_CLASS,
+  HOME_LIST_ACTION_BUTTON_CLASS,
+  HOME_LIST_CARD_CLASS,
+} from '../themes/interfaceThemes/shared/HomeDesktopShared';
+import type { Category, HomeBrowseState, HomeViewMode, Product } from '../themes/interfaceThemes/shared/homeTypes';
+import { getMobileThemePackage } from '../themes/mobileThemes/registry';
 
 function buildCategories(tree: CategoryItem[]): Category[] {
   return tree.map((node) => ({
@@ -75,229 +78,12 @@ function buildCategories(tree: CategoryItem[]): Category[] {
   }));
 }
 
-interface Product {
-  id: string;
-  name: string;
-  description: string;
-  formats: string[];
-  fileSize: string;
-  category: string;
-  thumbnailUrl?: string;
-  createdAt?: string;
-  fileSizeBytes?: number;
-  variantCount?: number;
-}
-
-function AnnouncementBanner() {
-  const [ann, setAnn] = useState({ enabled: false, text: '', type: 'info', color: '' });
-  const [dismissed, setDismissed] = useState(false);
-  const safeAnnouncementHtml = useMemo(() => sanitizeHtml(ann.text), [ann.text]);
-
-  useEffect(() => {
-    getCachedPublicSettings().then(() => {
-      setAnn(getAnnouncement());
-    });
-  }, []);
-
-  if (!ann.enabled || !ann.text || dismissed) return null;
-
-  const presetColors: Record<string, string> = {
-    info: 'bg-blue-500/10 border-blue-500/20 text-blue-400',
-    warning: 'bg-amber-500/10 border-amber-500/20 text-amber-400',
-    error: 'bg-red-500/10 border-red-500/20 text-red-400',
-  };
-
-  // Custom color overrides preset
-  const style = ann.color
-    ? { backgroundColor: `${ann.color}18`, borderColor: `${ann.color}40`, color: ann.color }
-    : undefined;
-  const className = ann.color
-    ? 'flex items-center gap-2 px-4 py-2 rounded-md border text-sm mb-4'
-    : `flex items-center gap-2 px-4 py-2 rounded-md border text-sm mb-4 ${presetColors[ann.type] || presetColors.info}`;
-
-  return (
-    <div className={className} style={style}>
-      <Icon name="campaign" size={18} className="shrink-0" />
-      <span
-        className="flex-1 [&_a]:underline [&_a]:font-medium hover:[&_a]:opacity-80"
-        dangerouslySetInnerHTML={{ __html: safeAnnouncementHtml }}
-      />
-      <button onClick={() => setDismissed(true)} className="shrink-0 opacity-60 hover:opacity-100">
-        <Icon name="close" size={16} />
-      </button>
-    </div>
-  );
-}
-
-function CategorySidebar({
-  expandedCategories,
-  activeCategory,
-  categories: categoriesData,
-  totalCount,
-  onToggle,
-  onSelect,
-}: {
-  expandedCategories: Set<string>;
-  activeCategory: string;
-  categories: Category[];
-  totalCount: number;
-  onToggle: (id: string) => void;
-  onSelect: (id: string) => void;
-}) {
-  return (
-    <aside className="hidden md:flex w-56 bg-surface-container-low flex-col border-r border-primary-container/10 shrink-0 py-4 gap-2">
-      <div className="px-5 py-3 border-b border-surface">
-        <h2 className="text-sm font-bold text-on-surface tracking-wider uppercase font-headline">产品目录</h2>
-      </div>
-      <div className="flex-1 px-3 py-2 flex flex-col gap-0.5 overflow-y-auto scrollbar-hidden">
-        <button
-          onClick={() => onSelect('all')}
-          className={`w-full flex items-center justify-between px-4 py-2 text-sm transition-colors rounded-sm ${
-            activeCategory === 'all'
-              ? 'border-l-2 border-primary-container text-primary-container bg-gradient-to-r from-primary-container/15 to-transparent'
-              : 'text-on-surface-variant hover:text-on-surface hover:bg-surface-container/50'
-          }`}
-        >
-          <span className="flex items-center gap-2">
-            <Icon name="category_all" size={18} />
-            全部模型
-          </span>
-          <span className="text-[10px] bg-primary/20 px-1.5 py-0.5 rounded-sm text-primary font-medium">
-            {totalCount || categoriesData.reduce((s, c) => s + c.count, 0)}
-          </span>
-        </button>
-        {categoriesData.map((cat) => {
-          const isExpanded = expandedCategories.has(cat.id);
-          const hasChildren = cat.children && cat.children.length > 0;
-          const isActive = cat.id === activeCategory || (cat.children?.some((c) => c.id === activeCategory) ?? false);
-          return (
-            <div key={cat.id}>
-              <button
-                onClick={() => {
-                  if (hasChildren) {
-                    onSelect(cat.id);
-                    onToggle(cat.id);
-                  } else {
-                    onSelect(cat.id);
-                  }
-                }}
-                className={`w-full flex items-center justify-between px-4 py-2 text-sm transition-colors rounded-sm ${
-                  isActive
-                    ? 'border-l-2 border-primary-container text-primary-container bg-gradient-to-r from-primary-container/15 to-transparent'
-                    : 'text-on-surface-variant hover:text-on-surface hover:bg-surface-container/50'
-                }`}
-              >
-                <span className="flex items-center gap-2">
-                  <Icon name={cat.icon} size={18} />
-                  {cat.name}
-                </span>
-                <span className="flex items-center gap-1.5">
-                  {hasChildren && (
-                    <motion.span
-                      animate={{ rotate: isExpanded ? 180 : 0 }}
-                      transition={{ duration: 0.2 }}
-                      className="text-on-surface-variant/60"
-                    >
-                      <Icon name="expand_more" size={14} />
-                    </motion.span>
-                  )}
-                  <span className="text-[10px] bg-primary/20 px-1.5 py-0.5 rounded-sm text-primary font-medium">
-                    {cat.count}
-                  </span>
-                </span>
-              </button>
-              <AnimatePresence>
-                {hasChildren && isExpanded && (
-                  <motion.div
-                    initial={{ height: 0, opacity: 0 }}
-                    animate={{ height: 'auto', opacity: 1 }}
-                    exit={{ height: 0, opacity: 0 }}
-                    transition={{ duration: 0.15 }}
-                    className="overflow-hidden"
-                  >
-                    {cat.children.map((child) => (
-                      <button
-                        key={child.id}
-                        onClick={() => onSelect(child.id)}
-                        className={`w-full text-left ml-8 pr-4 py-1.5 text-[12px] transition-colors flex items-center gap-2 ${
-                          activeCategory === child.id
-                            ? 'text-primary-container'
-                            : 'text-slate-500 hover:text-on-surface'
-                        }`}
-                      >
-                        <span
-                          className={`w-1 h-1 rounded-full shrink-0 ${activeCategory === child.id ? 'bg-primary-container' : 'bg-slate-600'}`}
-                        />
-                        {child.name}
-                        <span className="text-[10px] text-on-surface-variant/60 ml-auto">{child.count}</span>
-                      </button>
-                    ))}
-                  </motion.div>
-                )}
-              </AnimatePresence>
-            </div>
-          );
-        })}
-      </div>
-    </aside>
-  );
-}
-
-const HOME_GRID_CARD_CLASS =
-  'block group bg-surface-container-high rounded-sm overflow-hidden transition-[box-shadow] duration-200 ease-out hover:shadow-[0_12px_24px_rgba(0,0,0,0.4)] flex flex-col relative';
-const HOME_GRID_MEDIA_CLASS =
-  'aspect-square bg-surface-container-lowest relative overflow-hidden flex items-center justify-center';
-const HOME_GRID_BODY_CLASS = 'flex-1 flex flex-col p-2.5';
-const HOME_GRID_ACTIONS_CLASS = 'flex items-center gap-2 mt-auto pt-2';
-const HOME_GRID_ACTION_BUTTON_CLASS = 'flex h-7 flex-1 items-center justify-center gap-1 rounded-sm px-3 text-xs';
-const HOME_LIST_CARD_CLASS =
-  'relative flex group bg-surface-container-high rounded-sm overflow-hidden transition-[box-shadow] duration-200 ease-out hover:shadow-[0_8px_20px_rgba(0,0,0,0.35)]';
-const HOME_LIST_MEDIA_CLASS =
-  'w-32 shrink-0 bg-surface-container-lowest relative overflow-hidden flex items-center justify-center';
-const HOME_LIST_BODY_CLASS = 'flex-1 flex flex-col justify-center p-3 min-w-0';
-const HOME_LIST_ACTIONS_CLASS = 'flex items-center gap-2';
-const HOME_LIST_ACTION_BUTTON_CLASS = 'flex items-center gap-1 rounded-sm px-3 py-1 text-xs';
 const HOME_MOBILE_CARD_CLASS = 'home-model-card bg-surface-container-high rounded-sm overflow-hidden flex flex-col';
 const HOME_MOBILE_MEDIA_CLASS =
   'h-[140px] bg-surface-container-lowest relative overflow-hidden flex items-center justify-center';
 const HOME_MOBILE_BODY_CLASS = 'flex flex-1 flex-col p-2.5';
 const HOME_MOBILE_ACTION_BUTTON_CLASS =
   'mt-auto flex h-7 w-full items-center justify-center gap-1.5 rounded-sm bg-primary-container text-xs font-medium text-on-primary';
-
-function HomeGridCardContent({ media, title, actions }: { media: ReactNode; title: ReactNode; actions: ReactNode }) {
-  return (
-    <>
-      <div className={HOME_GRID_MEDIA_CLASS}>{media}</div>
-      <div className={HOME_GRID_BODY_CLASS}>
-        {title}
-        <div className={HOME_GRID_ACTIONS_CLASS}>{actions}</div>
-      </div>
-    </>
-  );
-}
-
-function HomeListCardContent({
-  media,
-  title,
-  meta,
-  actions,
-}: {
-  media: ReactNode;
-  title: ReactNode;
-  meta: ReactNode;
-  actions: ReactNode;
-}) {
-  return (
-    <>
-      <div className={HOME_LIST_MEDIA_CLASS}>{media}</div>
-      <div className={HOME_LIST_BODY_CLASS}>
-        {title}
-        <div className="mb-2 flex items-center gap-3 text-xs text-on-surface-variant">{meta}</div>
-        <div className={HOME_LIST_ACTIONS_CLASS}>{actions}</div>
-      </div>
-    </>
-  );
-}
 
 function HomeMobileCardContent({ media, title, action }: { media: ReactNode; title: ReactNode; action: ReactNode }) {
   return (
@@ -308,51 +94,6 @@ function HomeMobileCardContent({ media, title, action }: { media: ReactNode; tit
         {action}
       </div>
     </>
-  );
-}
-
-function SkeletonCard() {
-  return (
-    <div className={`${HOME_GRID_CARD_CLASS} animate-pulse`} data-home-skeleton-card>
-      <HomeGridCardContent
-        media={
-          <>
-            <div className="absolute left-2 top-2 h-5 w-10 rounded-sm bg-surface-container-high" />
-            <div className="absolute right-2 top-2 h-5 w-14 rounded-sm bg-surface-container-high" />
-          </>
-        }
-        title={<div className="h-4 w-5/6 rounded bg-surface-container-lowest" />}
-        actions={
-          <>
-            <div className={`${HOME_GRID_ACTION_BUTTON_CLASS} bg-surface-container-lowest`} />
-            <div className={`${HOME_GRID_ACTION_BUTTON_CLASS} bg-surface-container-lowest`} />
-          </>
-        }
-      />
-    </div>
-  );
-}
-
-function SkeletonListCard() {
-  return (
-    <div className={`${HOME_LIST_CARD_CLASS} min-h-[128px] animate-pulse`} data-home-skeleton-card>
-      <HomeListCardContent
-        media={<div className="absolute left-1.5 top-1.5 h-5 w-10 rounded-sm bg-surface-container-high" />}
-        title={<div className="mb-1 h-5 w-4/5 rounded bg-surface-container-lowest" />}
-        meta={
-          <>
-            <div className="h-4 w-16 rounded bg-surface-container-lowest" />
-            <div className="h-4 w-20 rounded bg-surface-container-lowest" />
-          </>
-        }
-        actions={
-          <>
-            <div className={`${HOME_LIST_ACTION_BUTTON_CLASS} h-6 w-20 bg-surface-container-lowest`} />
-            <div className={`${HOME_LIST_ACTION_BUTTON_CLASS} h-6 w-20 bg-surface-container-lowest`} />
-          </>
-        }
-      />
-    </div>
   );
 }
 
@@ -387,19 +128,13 @@ const HOME_LEGACY_DEFAULT_PAGE_SIZE = 60;
 const HOME_DESKTOP_GRID_EAGER_IMAGES = 10;
 const HOME_DESKTOP_LIST_EAGER_IMAGES = 6;
 const HOME_MOBILE_EAGER_IMAGES = 4;
-
-type HomeBrowseState = {
-  categoryId: string;
-  query: string;
-  page: number;
-  pageSize: number;
-  sort: string;
-  restoreKey: string;
-};
+const HOME_REFRESH_SCROLL_TARGET: HomeRefreshScrollTarget = 'results';
 
 type HomeLocationState = {
   homeBrowseState?: Partial<HomeBrowseState> | null;
 } | null;
+
+type HomeRefreshScrollTarget = 'top' | 'results';
 
 function parsePageParam(value: string | null) {
   const parsed = Number(value);
@@ -630,6 +365,8 @@ function ProductCardInner({
   onShareModel,
   onRenameModel,
   onRequestDelete,
+  showCategory = false,
+  showVariantMeta = false,
   variant = 'grid',
 }: {
   product: Product;
@@ -646,16 +383,19 @@ function ProductCardInner({
   onShareModel?: (product: Product) => void;
   onRenameModel?: (product: Product, name: string) => Promise<void>;
   onRequestDelete?: (product: Product) => void;
+  showCategory?: boolean;
+  showVariantMeta?: boolean;
   variant?: 'grid' | 'list';
 }) {
   const detailPath = `/model/${product.id}`;
   const [renaming, setRenaming] = useState(false);
   const [renameValue, setRenameValue] = useState(product.name);
   const [renameSaving, setRenameSaving] = useState(false);
-  const [isFavorited, setIsFavorited] = useState(false);
   const [favLoading, setFavLoading] = useState(false);
   const ignoreNextOverlayClickRef = useRef(false);
   const { isAuthenticated } = useAuthStore();
+  const isFavorited = useFavoriteStore((state) => state.favoriteIds.has(product.id));
+  const toggleFavoriteInStore = useFavoriteStore((state) => state.toggleFavorite);
 
   useEffect(() => {
     if (manageOpen) {
@@ -672,20 +412,14 @@ function ProductCardInner({
       if (favLoading || !isAuthenticated) return;
       setFavLoading(true);
       try {
-        if (isFavorited) {
-          await favoriteApi.remove(product.id);
-          setIsFavorited(false);
-        } else {
-          await favoriteApi.add(product.id);
-          setIsFavorited(true);
-        }
+        await toggleFavoriteInStore({ id: product.id });
       } catch {
         // 收藏失败时保持当前状态，避免一次网络波动打断浏览。
       } finally {
         setFavLoading(false);
       }
     },
-    [favLoading, isFavorited, product.id, isAuthenticated],
+    [favLoading, isAuthenticated, product.id, toggleFavoriteInStore],
   );
 
   const cancelRename = useCallback(() => {
@@ -886,6 +620,24 @@ function ProductCardInner({
     </motion.div>
   ) : null;
 
+  const listFavoriteAction = isAuthenticated ? (
+    <button
+      onClick={toggleFavorite}
+      disabled={favLoading}
+      className={`${HOME_LIST_ACTION_BUTTON_CLASS} home-model-list-favorite-button border transition-colors ${
+        isFavorited
+          ? 'border-primary-container/45 bg-primary-container/10 text-primary-container'
+          : 'border-outline-variant/40 text-on-surface-variant hover:text-on-surface'
+      } ${favLoading ? 'opacity-60' : ''}`}
+      aria-label={isFavorited ? '取消收藏' : '收藏'}
+      aria-pressed={isFavorited}
+      data-tooltip-ignore
+    >
+      <Icon name={isFavorited ? 'favorite' : 'star'} size={14} />
+      收藏
+    </button>
+  ) : null;
+
   if (variant === 'list') {
     const content = (
       <>
@@ -907,12 +659,15 @@ function ProductCardInner({
             </>
           }
           title={
-            <h3 className="mb-1 text-sm font-headline text-on-surface leading-tight line-clamp-1">{product.name}</h3>
+            <h3 className="home-model-title mb-1 text-sm font-headline text-on-surface leading-tight line-clamp-1">
+              {product.name}
+            </h3>
           }
           meta={
             <>
+              {showCategory ? <span>{product.category}</span> : null}
               <span>{product.fileSize}</span>
-              {product.variantCount && product.variantCount > 1 && (
+              {showVariantMeta && product.variantCount && product.variantCount > 1 && (
                 <span className="bg-primary/20 text-primary px-1.5 py-0.5 rounded-sm text-[10px] font-medium">
                   ×{product.variantCount} 变体
                 </span>
@@ -927,18 +682,19 @@ function ProductCardInner({
                   e.stopPropagation();
                   onDownload(product.id);
                 }}
-                className={`${HOME_LIST_ACTION_BUTTON_CLASS} bg-primary-container font-medium text-on-primary hover:opacity-90`}
+                className={`${HOME_LIST_ACTION_BUTTON_CLASS} home-model-download-button bg-primary-container font-medium text-on-primary hover:opacity-90`}
               >
                 <Icon name="download" size={14} fill />
                 下载
               </button>
+              {listFavoriteAction}
               <button
                 onClick={(e) => {
                   e.preventDefault();
                   e.stopPropagation();
                   onOpenManageDetail?.(product);
                 }}
-                className={`${HOME_LIST_ACTION_BUTTON_CLASS} border border-outline-variant/40 text-on-surface-variant hover:text-on-surface`}
+                className={`${HOME_LIST_ACTION_BUTTON_CLASS} home-model-preview-button border border-outline-variant/40 text-on-surface-variant hover:text-on-surface`}
               >
                 <Icon name="visibility" size={14} />
                 预览
@@ -998,27 +754,48 @@ function ProductCardInner({
             <span className="absolute top-2 right-2 bg-surface-container-highest/90 px-1.5 py-0.5 text-[9px] text-on-surface-variant font-mono rounded-sm border border-outline-variant/30">
               {product.fileSize}
             </span>
-            <div className="home-card-hover-actions absolute right-2 bottom-2 z-20 flex items-center gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity delay-[240ms]">
-              {isAuthenticated && (
-                <button
-                  onClick={toggleFavorite}
-                  disabled={favLoading}
-                  className={`inline-flex h-7 w-7 items-center justify-center rounded-full border border-outline-variant/20 bg-surface-container-lowest/85 transition-colors ${isFavorited ? 'text-primary-container border-primary-container/30' : 'text-on-surface-variant/60 hover:text-on-surface-variant'}`}
-                  aria-label={isFavorited ? '取消收藏' : '收藏'}
-                  data-tooltip-ignore
-                >
-                  <Icon name={isFavorited ? 'favorite' : 'star'} size={14} />
-                </button>
-              )}
-              {product.variantCount && product.variantCount > 1 && (
-                <span className="bg-primary/90 text-on-primary text-[9px] font-bold px-1.5 py-0.5 rounded-sm">
-                  ×{product.variantCount}
-                </span>
-              )}
-            </div>
+            {(isAuthenticated || (showVariantMeta && product.variantCount && product.variantCount > 1)) && (
+              <div className="home-card-hover-actions absolute right-2 bottom-2 z-20 flex translate-y-1 scale-95 items-center gap-1.5 opacity-0 transition-all duration-150 ease-out group-hover:translate-y-0 group-hover:scale-100 group-hover:opacity-100">
+                {isAuthenticated && (
+                  <button
+                    onClick={toggleFavorite}
+                    disabled={favLoading}
+                    className={`inline-flex h-7 w-7 items-center justify-center rounded-full border border-outline-variant/20 bg-surface-container-lowest/90 transition-colors ${
+                      isFavorited
+                        ? 'border-primary-container/35 text-primary-container'
+                        : 'text-on-surface-variant/70 hover:text-on-surface-variant'
+                    } ${favLoading ? 'opacity-60' : ''}`}
+                    aria-label={isFavorited ? '取消收藏' : '收藏'}
+                    aria-pressed={isFavorited}
+                    data-tooltip-ignore
+                  >
+                    <Icon name={isFavorited ? 'favorite' : 'star'} size={14} />
+                  </button>
+                )}
+                {showVariantMeta && product.variantCount && product.variantCount > 1 && (
+                  <span className="rounded-sm bg-primary/90 px-1.5 py-0.5 text-[9px] font-bold text-on-primary">
+                    ×{product.variantCount}
+                  </span>
+                )}
+              </div>
+            )}
           </>
         }
-        title={<h3 className="text-xs font-headline text-on-surface leading-tight line-clamp-2">{product.name}</h3>}
+        title={
+          <h3 className="home-model-title text-xs font-headline text-on-surface leading-tight line-clamp-2">
+            {product.name}
+          </h3>
+        }
+        meta={
+          showCategory || (showVariantMeta && product.variantCount && product.variantCount > 1) ? (
+            <>
+              {showCategory ? <span>{product.category}</span> : null}
+              {showVariantMeta && product.variantCount && product.variantCount > 1 ? (
+                <span>{product.variantCount} 个变体</span>
+              ) : null}
+            </>
+          ) : null
+        }
         actions={
           <>
             <button
@@ -1027,7 +804,7 @@ function ProductCardInner({
                 e.stopPropagation();
                 onDownload(product.id);
               }}
-              className={`${HOME_GRID_ACTION_BUTTON_CLASS} bg-primary-container font-medium text-on-primary hover:opacity-90`}
+              className={`${HOME_GRID_ACTION_BUTTON_CLASS} home-model-download-button bg-primary-container font-medium text-on-primary hover:opacity-90`}
             >
               <Icon name="download" size={14} fill />
               下载
@@ -1038,7 +815,7 @@ function ProductCardInner({
                 e.stopPropagation();
                 onOpenManageDetail?.(product);
               }}
-              className={`${HOME_GRID_ACTION_BUTTON_CLASS} border border-outline-variant/40 text-center text-on-surface-variant hover:text-on-surface`}
+              className={`${HOME_GRID_ACTION_BUTTON_CLASS} home-model-preview-button border border-outline-variant/40 text-center text-on-surface-variant hover:text-on-surface`}
             >
               <Icon name="visibility" size={14} />
               预览
@@ -1091,6 +868,8 @@ const ProductCard = memo(ProductCardInner, (prev, next) => {
   if (prev.product.variantCount !== next.product.variantCount) return false;
   if (prev.product.formats !== next.product.formats) return false;
   if (prev.manageOpen !== next.manageOpen) return false;
+  if (prev.showCategory !== next.showCategory) return false;
+  if (prev.showVariantMeta !== next.showVariantMeta) return false;
   if (prev.variant !== next.variant) return false;
   if (prev.onDownload !== next.onDownload) return false;
   if (prev.onBeforeOpen !== next.onBeforeOpen) return false;
@@ -1347,6 +1126,21 @@ export default function HomePage() {
   const { toast } = useToast();
   const [searchParams, setSearchParams] = useSearchParams();
   const { data: publicSettings } = useSWR('publicSettings', () => getCachedPublicSettings());
+  const ThemePackage = getInterfaceThemePackage(publicSettings?.interface_theme);
+  const MobileThemePackage = getMobileThemePackage(publicSettings?.mobile_interface_theme);
+  const DesktopHome = ThemePackage.templates.DesktopHome;
+  const mobileHomeTheme = MobileThemePackage.home.dataHomeTheme;
+  const desktopHomeBehavior = ThemePackage.home;
+  const mobileHomeBehavior = MobileThemePackage.home;
+  const usesManualHomePagination =
+    (isDesktop ? desktopHomeBehavior.listLoadingMode : mobileHomeBehavior.listLoadingMode) === 'pagination';
+  const showModelCardCategory = desktopHomeBehavior.showModelCardCategory;
+  const showModelCardVariantMeta = desktopHomeBehavior.showModelCardVariantMeta;
+  const footerLinks = getFooterLinks();
+  const footerCopyright = getFooterCopyright();
+  const contactEmail = getContactEmail();
+  const contactPhone = getContactPhone();
+  const contactAddress = getContactAddress();
   const homePageSizePolicy = getBusinessConfig(publicSettings || undefined).pageSizePolicy;
   const homePageSizeOptions = normalizeHomePageSizeOptions(homePageSizePolicy);
   const homeDefaultPageSize = homePageSizeOptions.includes(homePageSizePolicy.homeDefault)
@@ -1404,12 +1198,13 @@ export default function HomePage() {
       ? normalizePageSize(searchParams.get('page_size'), homePageSizeOptions, homeDefaultPageSize)
       : initialHomeState?.pageSize || homeDefaultPageSize,
   );
-  const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
+  const [viewMode, setViewMode] = useState<HomeViewMode>('grid');
   const [sortBy, setSortBy] = useState(() => initialHomeState?.sort || normalizeSortParam(searchParams.get('sort')));
   const scrollContainerRef = useRef<HTMLElement | null>(null);
   const restoreFrameRef = useRef<number | null>(null);
   const scrollTopResetFrameRef = useRef<number | null>(null);
   const pendingHomeListRefreshResetRef = useRef(false);
+  const pendingHomeListRefreshTargetRef = useRef<HomeRefreshScrollTarget>('top');
   const consumedHomeStateKeyRef = useRef<string | null>(null);
   const isRestoringScrollRef = useRef(false);
 
@@ -1431,10 +1226,11 @@ export default function HomePage() {
 
   // Detect when title row scrolls out of view (for sticky filter button swap)
   const titleRowRef = useRef<HTMLDivElement | null>(null);
+  const resultsAnchorRef = useRef<HTMLDivElement | null>(null);
   const [chipsStuck, setChipsStuck] = useState(false);
 
-  const resetHomeListViewportForRefresh = useCallback(() => {
-    pendingHomeListRefreshResetRef.current = true;
+  const resetHomeListViewportForRefresh = useCallback((target: HomeRefreshScrollTarget = 'top', immediate = false) => {
+    pendingHomeListRefreshTargetRef.current = target;
 
     if (restoreFrameRef.current != null) {
       window.cancelAnimationFrame(restoreFrameRef.current);
@@ -1450,6 +1246,21 @@ export default function HomePage() {
     isRestoringScrollRef.current = false;
     setRestoreVisualLocked(false);
     setChipsStuck(false);
+
+    if (immediate) {
+      pendingHomeListRefreshResetRef.current = false;
+      const container = scrollContainerRef.current;
+      if (container) {
+        const targetTop =
+          target === 'results' && resultsAnchorRef.current ? Math.max(0, resultsAnchorRef.current.offsetTop - 12) : 0;
+        if (Math.abs(container.scrollTop - targetTop) > 1) {
+          jumpHomeScrollTo(container, targetTop);
+        }
+      }
+      return;
+    }
+
+    pendingHomeListRefreshResetRef.current = true;
   }, []);
 
   useLayoutEffect(() => {
@@ -1459,7 +1270,11 @@ export default function HomePage() {
     const reset = () => {
       const container = scrollContainerRef.current;
       if (!container) return;
-      jumpHomeScrollTo(container, 0);
+      const targetTop =
+        pendingHomeListRefreshTargetRef.current === 'results' && resultsAnchorRef.current
+          ? Math.max(0, resultsAnchorRef.current.offsetTop - 12)
+          : 0;
+      jumpHomeScrollTo(container, targetTop);
     };
 
     reset();
@@ -1558,32 +1373,6 @@ export default function HomePage() {
     saveHomeSearchQuery(searchQuery);
   }, [searchQuery]);
 
-  useEffect(() => {
-    const handleSearchEvent = (event: Event) => {
-      const detail = (event as CustomEvent<HomeSearchEventDetail>).detail;
-      if (!detail || typeof detail.query !== 'string') return;
-      const query = normalizeHomeSearchQuery(detail.query);
-      setSearchQuery(query);
-      saveHomeSearchQuery(query);
-      if (!detail.preservePage) {
-        const shouldRefreshList = query !== searchQuery || (query && activeCategory !== 'all') || page !== 1;
-        if (shouldRefreshList) {
-          setListRefreshPending(true);
-          resetHomeListViewportForRefresh();
-        }
-        if (query && activeCategory !== 'all') setActiveCategory('all');
-        setPage(1);
-      }
-      if (searchParams.has('q')) {
-        const nextParams = new URLSearchParams(searchParams);
-        nextParams.delete('q');
-        setSearchParams(nextParams, { replace: true });
-      }
-    };
-    window.addEventListener(HOME_SEARCH_EVENT, handleSearchEvent);
-    return () => window.removeEventListener(HOME_SEARCH_EVENT, handleSearchEvent);
-  }, [activeCategory, page, resetHomeListViewportForRefresh, searchParams, searchQuery, setSearchParams]);
-
   const handleDownload = useCallback(
     async (modelId: string) => {
       try {
@@ -1616,19 +1405,58 @@ export default function HomePage() {
       categoryId: activeCategory !== 'all' ? activeCategory : undefined,
       sort: sortBy,
     },
-    page,
+    usesManualHomePagination ? 1 : page,
+    { manual: usesManualHomePagination },
   );
 
   useEffect(() => {
-    setModelPageSize(page);
-  }, [page, setModelPageSize]);
+    void setModelPageSize(usesManualHomePagination ? 1 : page);
+  }, [page, setModelPageSize, usesManualHomePagination]);
+
+  useEffect(() => {
+    const handleSearchEvent = (event: Event) => {
+      const detail = (event as CustomEvent<HomeSearchEventDetail>).detail;
+      if (!detail || typeof detail.query !== 'string') return;
+      const query = normalizeHomeSearchQuery(detail.query);
+      setSearchQuery(query);
+      saveHomeSearchQuery(query);
+      if (!detail.preservePage) {
+        const shouldRefreshList = query !== searchQuery || (query && activeCategory !== 'all') || page !== 1;
+        if (shouldRefreshList) {
+          setListRefreshPending(true);
+          if (!detail.preserveViewport) {
+            resetHomeListViewportForRefresh(HOME_REFRESH_SCROLL_TARGET, usesManualHomePagination);
+          }
+        }
+        if (query && activeCategory !== 'all') setActiveCategory('all');
+        setPage(1);
+        void setModelPageSize(1);
+      }
+      if (searchParams.has('q')) {
+        const nextParams = new URLSearchParams(searchParams);
+        nextParams.delete('q');
+        setSearchParams(nextParams, { replace: true });
+      }
+    };
+    window.addEventListener(HOME_SEARCH_EVENT, handleSearchEvent);
+    return () => window.removeEventListener(HOME_SEARCH_EVENT, handleSearchEvent);
+  }, [
+    activeCategory,
+    page,
+    resetHomeListViewportForRefresh,
+    searchParams,
+    searchQuery,
+    setModelPageSize,
+    setSearchParams,
+    usesManualHomePagination,
+  ]);
 
   const products = useMemo(() => {
     if (!serverData?.items) return [];
     return serverData.items.map(serverItemToProduct);
   }, [serverData]);
   const productIdsKey = useMemo(() => products.map((product) => product.id).join('|'), [products]);
-  const showHomeListSkeleton = isLoading || listRefreshPending;
+  const showHomeListSkeleton = isLoading || (!usesManualHomePagination && listRefreshPending);
 
   useEffect(() => {
     if (!listRefreshPending) return;
@@ -1647,11 +1475,12 @@ export default function HomePage() {
     return null;
   }, [activeCategory, categories, totalItems, totalModelCount]);
   const displayTotalItems =
-    showHomeListSkeleton && activeCategoryCount != null
+    (showHomeListSkeleton || listRefreshPending) && activeCategoryCount != null
       ? activeCategoryCount
       : activeCategory === 'all' && !searchQuery.trim()
         ? totalModelCount || totalItems
         : totalItems;
+  const totalPages = Math.max(1, serverData?.totalPages || 1);
 
   const toggleCategory = (id: string) => {
     setExpandedCategories((prev) => {
@@ -1668,12 +1497,14 @@ export default function HomePage() {
     const nextCategoryChanged = id !== activeCategory || Boolean(searchQuery.trim()) || page !== 1;
     if (nextCategoryChanged) {
       setListRefreshPending(true);
-      resetHomeListViewportForRefresh();
+      if (!usesManualHomePagination) {
+        resetHomeListViewportForRefresh(HOME_REFRESH_SCROLL_TARGET);
+      }
     }
     setActiveCategory(id);
     setSearchQuery('');
     saveHomeSearchQuery('');
-    dispatchHomeSearchQuery('');
+    dispatchHomeSearchQuery('', { preservePage: true });
     setPage(1);
     void setModelPageSize(1);
     // Clear search when selecting a category; category itself stays in local navigation state.
@@ -1681,9 +1512,31 @@ export default function HomePage() {
   };
 
   const handleLoadMore = useCallback(() => {
-    if (!hasMore || isLoadingMore) return;
+    if (usesManualHomePagination || !hasMore || isLoadingMore) return;
     setPage((current) => current + 1);
-  }, [hasMore, isLoadingMore]);
+  }, [hasMore, isLoadingMore, usesManualHomePagination]);
+
+  const handlePageChange = useCallback(
+    (nextPage: number) => {
+      if (nextPage === page) return;
+      setListRefreshPending(true);
+      resetHomeListViewportForRefresh(HOME_REFRESH_SCROLL_TARGET, usesManualHomePagination);
+      setPage(nextPage);
+    },
+    [page, resetHomeListViewportForRefresh, usesManualHomePagination],
+  );
+
+  const handlePageSizeChange = useCallback(
+    (nextPageSize: number) => {
+      if (nextPageSize === pageSize) return;
+      setListRefreshPending(true);
+      resetHomeListViewportForRefresh(HOME_REFRESH_SCROLL_TARGET, usesManualHomePagination);
+      setPageSize(nextPageSize);
+      setPage(1);
+      void setModelPageSize(1);
+    },
+    [pageSize, resetHomeListViewportForRefresh, setModelPageSize, usesManualHomePagination],
+  );
 
   const handleSortChange = useCallback(
     (nextSort: string) => {
@@ -1691,14 +1544,24 @@ export default function HomePage() {
       const shouldRefreshList = normalizedSort !== sortBy || page !== 1;
       if (shouldRefreshList) {
         setListRefreshPending(true);
-        resetHomeListViewportForRefresh();
+        resetHomeListViewportForRefresh(HOME_REFRESH_SCROLL_TARGET, usesManualHomePagination);
       }
       setSortBy(normalizedSort);
       setPage(1);
       void setModelPageSize(1);
     },
-    [page, resetHomeListViewportForRefresh, setModelPageSize, sortBy],
+    [page, resetHomeListViewportForRefresh, setModelPageSize, sortBy, usesManualHomePagination],
   );
+
+  const scrollDesktopResultsIntoView = useCallback(() => {
+    window.requestAnimationFrame(() => {
+      resultsAnchorRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
+  }, []);
+
+  const handleDesktopHeroSearch = useCallback((query: string) => {
+    dispatchHomeSearchQuery(query, { preserveViewport: true });
+  }, []);
 
   const modelReturnPath = useMemo(() => buildHomeReturnPath(), []);
 
@@ -2008,6 +1871,8 @@ export default function HomePage() {
           onShareModel={shareManagedModel}
           onRenameModel={renameManagedModel}
           onRequestDelete={requestManagedModelDelete}
+          showCategory={showModelCardCategory}
+          showVariantMeta={showModelCardVariantMeta}
           returnPath={modelReturnPath}
           homeBrowseState={homeBrowseState}
           onBeforeOpen={handleBeforeOpenModel}
@@ -2027,6 +1892,8 @@ export default function HomePage() {
       renameManagedModel,
       requestManagedModelDelete,
       shareManagedModel,
+      showModelCardCategory,
+      showModelCardVariantMeta,
       viewMode,
     ],
   );
@@ -2171,151 +2038,45 @@ export default function HomePage() {
   if (isDesktop) {
     return (
       <PublicPageShell>
-        <div className="flex flex-1 overflow-hidden">
-          <CategorySidebar
-            expandedCategories={expandedCategories}
-            activeCategory={activeCategory}
-            categories={categories}
-            totalCount={totalModelCount}
-            onToggle={toggleCategory}
-            onSelect={handleSelectCategory}
-          />
-          <main
-            ref={scrollContainerRef}
-            className="home-scroll-container flex-1 overflow-y-auto model-list-scrollbar bg-surface-dim p-6 relative"
-          >
-            <AnnouncementBanner />
-            <div className="flex justify-between items-end mb-6 border-b border-surface-container-low pb-3 flex-wrap gap-3">
-              <div>
-                <div className="flex items-center gap-2 text-sm mb-1.5">
-                  <button
-                    type="button"
-                    onClick={() => handleSelectCategory('all')}
-                    className="text-on-surface-variant hover:text-on-surface cursor-pointer transition-colors"
-                  >
-                    首页
-                  </button>
-                  <Icon name="chevron_right" size={12} className="text-on-surface-variant/40" />
-                  {breadcrumb.parent && !breadcrumb.child ? (
-                    <span className="text-primary font-medium">{breadcrumb.label}</span>
-                  ) : breadcrumb.parent && breadcrumb.child ? (
-                    <>
-                      <span
-                        className="text-on-surface-variant hover:text-on-surface cursor-pointer transition-colors"
-                        onClick={() => {
-                          const parent = categories.find((c) => c.name === breadcrumb.parent);
-                          if (parent) handleSelectCategory(parent.id);
-                        }}
-                      >
-                        {breadcrumb.parent}
-                      </span>
-                      <Icon name="chevron_right" size={12} className="text-on-surface-variant/40" />
-                      <span className="text-primary font-medium">{breadcrumb.child}</span>
-                    </>
-                  ) : (
-                    <span className="text-primary font-medium">{breadcrumb.label}</span>
-                  )}
-                </div>
-                <div className="flex items-center gap-3">
-                  <PageTitle>零件模型库</PageTitle>
-                  <span className="bg-surface-container-high px-2 py-0.5 text-xs text-on-surface-variant rounded-sm border border-outline-variant/20">
-                    {displayTotalItems} 个模型
-                  </span>
-                </div>
-              </div>
-              <div className="flex items-center gap-3">
-                <div className="relative">
-                  <select
-                    value={sortBy}
-                    onChange={(e) => handleSortChange(e.target.value)}
-                    className="bg-surface-container-lowest text-sm text-on-surface rounded-sm pl-3 pr-8 py-1 border border-outline-variant/30 outline-none appearance-none cursor-pointer"
-                  >
-                    <option value="created_at">最新上传</option>
-                    <option value="name">名称排序</option>
-                  </select>
-                  <Icon
-                    name="expand_more"
-                    size={12}
-                    className="absolute right-2 top-1/2 -translate-y-1/2 text-on-surface-variant pointer-events-none"
-                  />
-                </div>
-                <div className="flex rounded-sm border border-outline-variant/30 overflow-hidden">
-                  <button
-                    onClick={() => setViewMode('grid')}
-                    aria-label="网格视图"
-                    title="网格视图"
-                    className={`px-2.5 py-1.5 transition-colors ${viewMode === 'grid' ? 'bg-surface-container-high text-on-surface' : 'text-on-surface-variant hover:text-on-surface'}`}
-                  >
-                    <Icon name="grid_view" size={18} />
-                  </button>
-                  <button
-                    onClick={() => setViewMode('list')}
-                    aria-label="列表视图"
-                    title="列表视图"
-                    className={`px-2.5 py-1.5 transition-colors ${viewMode === 'list' ? 'bg-surface-container-high text-on-surface' : 'text-on-surface-variant hover:text-on-surface'}`}
-                  >
-                    <Icon name="view_list" size={18} />
-                  </button>
-                </div>
-              </div>
-            </div>
-
-            {showHomeListSkeleton ? (
-              <div
-                className={`grid gap-3 ${viewMode === 'grid' ? 'grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5' : 'grid-cols-1 gap-2'}`}
-              >
-                {Array.from({ length: viewMode === 'grid' ? 12 : 8 }).map((_, i) =>
-                  viewMode === 'grid' ? <SkeletonCard key={i} /> : <SkeletonListCard key={i} />,
-                )}
-              </div>
-            ) : (
-              <>
-                <div
-                  className={`grid gap-3 ${viewMode === 'grid' ? 'grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5' : 'grid-cols-1 gap-2'}`}
-                >
-                  {products.map(renderDesktopProductCard)}
-                </div>
-
-                {products.length === 0 && !showHomeListSkeleton && (
-                  <div className="flex flex-col items-center justify-center py-20 gap-4">
-                    <Icon name="search_off" size={48} className="text-on-surface-variant/30" />
-                    <div className="text-center">
-                      <p className="text-on-surface-variant">没有找到匹配的模型</p>
-                      {searchQuery.trim() && (
-                        <p className="mt-1 text-xs text-on-surface-variant/60">
-                          可以提交需求，请管理员补充或完善模型库。
-                        </p>
-                      )}
-                    </div>
-                    {searchQuery.trim() && (
-                      <Link
-                        to="/support"
-                        state={{
-                          source: 'model_search',
-                          searchQuery: searchQuery.trim(),
-                          classification: 'novel',
-                          description: `模型库未搜索到：${searchQuery.trim()}\n请协助补充或完善该模型。`,
-                        }}
-                        className="inline-flex items-center gap-2 rounded-lg bg-primary-container px-4 py-2 text-sm font-bold text-on-primary transition-opacity hover:opacity-90"
-                      >
-                        <Icon name="assignment_add" size={16} />
-                        申请完善模型
-                      </Link>
-                    )}
-                  </div>
-                )}
-
-                <InfiniteLoadTrigger
-                  hasMore={hasMore}
-                  isLoading={isLoadingMore}
-                  onLoadMore={handleLoadMore}
-                  buttonless
-                  idleLabel={null}
-                />
-              </>
-            )}
-          </main>
-        </div>
+        <DesktopHome
+          activeCategory={activeCategory}
+          breadcrumb={breadcrumb}
+          categories={categories}
+          contactAddress={contactAddress}
+          contactEmail={contactEmail}
+          contactPhone={contactPhone}
+          displayTotalItems={displayTotalItems}
+          expandedCategories={expandedCategories}
+          footerCopyright={footerCopyright}
+          footerLinks={footerLinks}
+          hasMore={hasMore}
+          homePageSizeOptions={homePageSizeOptions}
+          homeSearchMaxLength={HOME_SEARCH_MAX_LENGTH}
+          isLoadingMore={isLoadingMore}
+          normalizeSearchQuery={normalizeHomeSearchQuery}
+          page={page}
+          pageSize={pageSize}
+          products={products}
+          renderProductCard={renderDesktopProductCard}
+          resultsAnchorRef={resultsAnchorRef}
+          scrollContainerRef={scrollContainerRef}
+          searchQuery={searchQuery}
+          showHomeListSkeleton={showHomeListSkeleton}
+          sortBy={sortBy}
+          totalItems={totalItems}
+          totalModelCount={totalModelCount}
+          totalPages={totalPages}
+          viewMode={viewMode}
+          onHeroExplore={scrollDesktopResultsIntoView}
+          onHeroSearch={handleDesktopHeroSearch}
+          onLoadMore={handleLoadMore}
+          onPageChange={handlePageChange}
+          onPageSizeChange={handlePageSizeChange}
+          onSelectCategory={handleSelectCategory}
+          onSortChange={handleSortChange}
+          onToggleCategory={toggleCategory}
+          onViewModeChange={setViewMode}
+        />
         <AnimatePresence>
           {deleteTarget && (
             <motion.div
@@ -2460,6 +2221,7 @@ export default function HomePage() {
       {createPortal(mobileFilterDrawer, document.body)}
       <main
         ref={scrollContainerRef}
+        data-home-theme={mobileHomeTheme}
         className="home-scroll-container flex-1 overflow-y-auto overflow-x-hidden scrollbar-hidden bg-surface-dim"
       >
         {/* Pull-to-refresh indicator (mobile only) */}
@@ -2595,17 +2357,49 @@ export default function HomePage() {
             </div>
           )}
 
-          <InfiniteLoadTrigger
-            hasMore={hasMore}
-            isLoading={isLoadingMore}
-            onLoadMore={handleLoadMore}
-            buttonless
-            idleLabel={null}
-          />
+          {usesManualHomePagination ? (
+            <Pagination
+              page={page}
+              totalPages={totalPages}
+              totalItems={totalItems}
+              compact
+              pageSize={pageSize}
+              pageSizeOptions={homePageSizeOptions}
+              onPageChange={handlePageChange}
+              onPageSizeChange={handlePageSizeChange}
+            />
+          ) : (
+            <InfiniteLoadTrigger
+              hasMore={hasMore}
+              isLoading={isLoadingMore}
+              onLoadMore={handleLoadMore}
+              buttonless
+              idleLabel={null}
+            />
+          )}
 
           {/* Footer */}
           <footer className="mt-auto pt-4 border-t border-outline-variant/10 text-center pb-2">
             <div className="flex flex-col items-center gap-2">
+              {footerLinks.length > 0 && (
+                <nav
+                  aria-label="相关链接"
+                  className="flex max-w-full flex-wrap items-center justify-center gap-x-3 gap-y-1"
+                >
+                  <span className="text-[10px] font-medium text-on-surface-variant/35">相关链接</span>
+                  {footerLinks.map((link, index) => (
+                    <a
+                      key={`${link.label}-${index}`}
+                      href={link.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-[11px] leading-5 text-on-surface-variant/50 underline-offset-4 transition-colors hover:text-primary hover:underline"
+                    >
+                      {link.label}
+                    </a>
+                  ))}
+                </nav>
+              )}
               {getContactEmail() && (
                 <a
                   href={`mailto:${getContactEmail()}`}
@@ -2630,9 +2424,7 @@ export default function HomePage() {
                   {getContactAddress()}
                 </span>
               )}
-              <p className="text-[10px] text-on-surface-variant/40">
-                © {new Date().getFullYear()} {getSiteTitle()}
-              </p>
+              <p className="text-[10px] text-on-surface-variant/40">{getFooterCopyright()}</p>
             </div>
           </footer>
         </div>
