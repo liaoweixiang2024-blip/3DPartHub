@@ -9,6 +9,8 @@ interface SafeImageProps {
   fallbackClassName?: string;
   fallbackIcon?: string;
   loading?: 'lazy' | 'eager';
+  decoding?: 'async' | 'auto' | 'sync';
+  draggable?: boolean;
   onClick?: () => void;
   title?: string;
   style?: CSSProperties;
@@ -21,6 +23,8 @@ export default function SafeImage({
   fallbackClassName = '',
   fallbackIcon = 'image',
   loading = 'lazy',
+  decoding = 'async',
+  draggable = false,
   onClick,
   title,
   style,
@@ -62,6 +66,9 @@ export default function SafeImage({
       alt={alt}
       className={className}
       loading={loading}
+      decoding={decoding}
+      draggable={draggable}
+      onDragStart={(event) => event.preventDefault()}
       onError={() => setFailed(true)}
       onClick={onClick}
       title={title}

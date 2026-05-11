@@ -99,12 +99,12 @@ export default function CategorySidebar({
                         className={`home-category-child w-full text-left ml-8 pr-4 py-1.5 text-[12px] transition-colors flex items-center gap-2 ${
                           activeCategory === child.id
                             ? 'home-category-child-active text-primary-container'
-                            : 'text-slate-500 hover:text-on-surface'
+                            : 'text-on-surface-variant hover:text-on-surface'
                         }`}
                       >
                         <span
                           className={`w-1 h-1 rounded-full shrink-0 ${
-                            activeCategory === child.id ? 'bg-primary-container' : 'bg-slate-600'
+                            activeCategory === child.id ? 'bg-primary-container' : 'bg-on-surface-variant'
                           }`}
                         />
                         {child.name}

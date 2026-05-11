@@ -1,5 +1,5 @@
 import { motion, AnimatePresence } from 'framer-motion';
-import { useState, useRef, useCallback, useEffect, useMemo } from 'react';
+import { useState, useRef, useCallback, useEffect, useLayoutEffect, useMemo } from 'react';
 import { useParams, useNavigate, Link, useLocation } from 'react-router-dom';
 import useSWR, { mutate as globalMutate } from 'swr';
 import { categoriesApi, type CategoryItem } from '../api/categories';
@@ -89,6 +89,7 @@ type ViewerDisplayPrefs = {
 };
 
 const VIEWER_DISPLAY_PREFS_KEY = 'model_viewer_display_prefs_v1';
+const MOBILE_DETAIL_PEEK_HEIGHT = 128;
 
 const DEFAULT_VIEWER_DISPLAY_PREFS: ViewerDisplayPrefs = {
   activeView: 'solid',
@@ -849,12 +850,16 @@ export default function ModelDetailPage() {
   const peekContentRef = useRef<HTMLDivElement>(null);
   const sheetRef = useRef<HTMLDivElement>(null);
   const sheetContentRef = useRef<HTMLDivElement>(null);
-  const [peekHeight, setPeekHeight] = useState(120);
+  const [peekHeight, setPeekHeight] = useState(MOBILE_DETAIL_PEEK_HEIGHT);
+  const [sheetPeekMeasured, setSheetPeekMeasured] = useState(false);
+  const sheetPeekMeasuredRef = useRef(false);
   const dragStartY = useRef(0);
   const dragStartScrollTop = useRef(0);
   const dragStartExpanded = useRef(false);
   const isMouseDraggingSheet = useRef(false);
   const [sheetDragOffset, setSheetDragOffset] = useState(0);
+  const sheetDragOffsetFrameRef = useRef<number | null>(null);
+  const pendingSheetDragOffsetRef = useRef<number | null>(null);
   const [loginPromptOpen, setLoginPromptOpen] = useState(false);
   const [loginPromptReason, setLoginPromptReason] = useState('');
   const [editOpen, setEditOpen] = useState(false);
@@ -1076,18 +1081,59 @@ export default function ModelDetailPage() {
 
   const fav = modelData ? isFavorite(modelData.id) : false;
 
-  // Measure peek content height after model data and fonts/layout settle.
+  const setSheetDragOffsetImmediate = useCallback((offset: number) => {
+    if (sheetDragOffsetFrameRef.current != null) {
+      window.cancelAnimationFrame(sheetDragOffsetFrameRef.current);
+      sheetDragOffsetFrameRef.current = null;
+    }
+    pendingSheetDragOffsetRef.current = null;
+    setSheetDragOffset(offset);
+  }, []);
+
+  const scheduleSheetDragOffset = useCallback((offset: number) => {
+    pendingSheetDragOffsetRef.current = offset;
+    if (sheetDragOffsetFrameRef.current != null) return;
+    sheetDragOffsetFrameRef.current = window.requestAnimationFrame(() => {
+      sheetDragOffsetFrameRef.current = null;
+      const nextOffset = pendingSheetDragOffsetRef.current;
+      pendingSheetDragOffsetRef.current = null;
+      if (nextOffset == null) return;
+      setSheetDragOffset(nextOffset);
+    });
+  }, []);
+
   useEffect(() => {
+    return () => {
+      if (sheetDragOffsetFrameRef.current != null) window.cancelAnimationFrame(sheetDragOffsetFrameRef.current);
+    };
+  }, []);
+
+  useLayoutEffect(() => {
+    sheetPeekMeasuredRef.current = false;
+    setSheetPeekMeasured(false);
+    setPeekHeight(MOBILE_DETAIL_PEEK_HEIGHT);
+  }, [id]);
+
+  // Measure peek content height after model data and fonts/layout settle.
+  useLayoutEffect(() => {
     const content = peekContentRef.current;
     if (!content) return;
 
     let rafId = 0;
+    let settledFrameId = 0;
     const measure = () => {
       window.cancelAnimationFrame(rafId);
       rafId = window.requestAnimationFrame(() => {
         const h = content.getBoundingClientRect().height;
         if (h > 0) {
-          setPeekHeight(Math.max(128, Math.ceil(h) + 16));
+          setPeekHeight(Math.max(MOBILE_DETAIL_PEEK_HEIGHT, Math.ceil(h) + 16));
+          if (!sheetPeekMeasuredRef.current) {
+            window.cancelAnimationFrame(settledFrameId);
+            settledFrameId = window.requestAnimationFrame(() => {
+              sheetPeekMeasuredRef.current = true;
+              setSheetPeekMeasured(true);
+            });
+          }
         }
       });
     };
@@ -1101,6 +1147,7 @@ export default function ModelDetailPage() {
 
     return () => {
       window.cancelAnimationFrame(rafId);
+      window.cancelAnimationFrame(settledFrameId);
       window.clearTimeout(timeoutId);
       observer?.disconnect();
       window.removeEventListener('resize', measure);
@@ -1113,43 +1160,49 @@ export default function ModelDetailPage() {
       dragStartY.current = clientY;
       dragStartScrollTop.current = sheetContentRef.current?.scrollTop || 0;
       dragStartExpanded.current = sheetExpanded;
-      setSheetDragOffset(0);
+      setSheetDragOffsetImmediate(0);
     },
-    [sheetExpanded],
+    [sheetExpanded, setSheetDragOffsetImmediate],
   );
 
-  const moveSheetDrag = useCallback((clientY: number) => {
-    const dy = clientY - dragStartY.current;
+  const moveSheetDrag = useCallback(
+    (clientY: number) => {
+      const dy = clientY - dragStartY.current;
 
-    if (dragStartExpanded.current) {
-      const canCloseFromTop = dragStartScrollTop.current <= 4 && (sheetContentRef.current?.scrollTop || 0) <= 4;
-      if (dy > 0 && canCloseFromTop) {
-        setSheetDragOffset(Math.min(dy, 180));
+      if (dragStartExpanded.current) {
+        const canCloseFromTop = dragStartScrollTop.current <= 4 && (sheetContentRef.current?.scrollTop || 0) <= 4;
+        if (dy > 0 && canCloseFromTop) {
+          scheduleSheetDragOffset(Math.min(dy, 180));
+          return true;
+        }
+        return false;
+      }
+
+      if (dy < 0) {
+        scheduleSheetDragOffset(Math.max(dy, -90));
         return true;
       }
+
       return false;
-    }
+    },
+    [scheduleSheetDragOffset],
+  );
 
-    if (dy < 0) {
-      setSheetDragOffset(Math.max(dy, -90));
-      return true;
-    }
+  const endSheetDrag = useCallback(
+    (clientY: number) => {
+      const dy = clientY - dragStartY.current;
+      const closeFromTop = dragStartScrollTop.current <= 4;
 
-    return false;
-  }, []);
+      if (dragStartExpanded.current && dy > 80 && closeFromTop) {
+        setSheetExpanded(false);
+      } else if (!dragStartExpanded.current && dy < -50) {
+        setSheetExpanded(true);
+      }
 
-  const endSheetDrag = useCallback((clientY: number) => {
-    const dy = clientY - dragStartY.current;
-    const closeFromTop = dragStartScrollTop.current <= 4;
-
-    if (dragStartExpanded.current && dy > 80 && closeFromTop) {
-      setSheetExpanded(false);
-    } else if (!dragStartExpanded.current && dy < -50) {
-      setSheetExpanded(true);
-    }
-
-    setSheetDragOffset(0);
-  }, []);
+      setSheetDragOffsetImmediate(0);
+    },
+    [setSheetDragOffsetImmediate],
+  );
 
   const handleSheetTouchStart = useCallback(
     (e: React.TouchEvent<HTMLDivElement>) => {
@@ -1441,9 +1494,13 @@ export default function ModelDetailPage() {
           onMouseDown={handleSheetMouseDown}
           style={{
             height: sheetExpanded ? '94%' : peekHeight,
-            transform: `translateY(${sheetDragOffset}px)`,
+            transform: `translate3d(0, ${sheetDragOffset}px, 0)`,
             transition:
-              sheetDragOffset === 0 ? 'height 0.35s cubic-bezier(0.32, 0.72, 0, 1), transform 0.2s ease-out' : 'none',
+              sheetPeekMeasured && sheetDragOffset === 0
+                ? 'height 0.32s cubic-bezier(0.22, 1, 0.36, 1), transform 0.2s cubic-bezier(0.22, 1, 0.36, 1)'
+                : 'none',
+            willChange: 'height, transform',
+            backfaceVisibility: 'hidden',
           }}
         >
           {/* Drag handle + back button (when expanded) */}

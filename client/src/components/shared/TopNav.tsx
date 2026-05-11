@@ -29,6 +29,7 @@ import {
   saveHomeSearchQuery,
   type HomeSearchEventDetail,
 } from '../../lib/homeSearchState';
+import { isModelDetailPath } from '../../lib/modelReturnPath';
 import { onSiteConfigChange, getCachedPublicSettings } from '../../lib/publicSettings';
 import { preloadRouteForPath } from '../../lib/routeLoaders';
 import { useAuthStore } from '../../stores/useAuthStore';
@@ -151,9 +152,11 @@ function UploadModalLoader({
 function UserMenu({
   size = 'default',
   onLoginRequired,
+  adminDefaultPath = '/admin/models',
 }: {
   size?: 'compact' | 'default';
   onLoginRequired: (reason: string, returnUrl: string) => void;
+  adminDefaultPath?: string;
 }) {
   const [open, setOpen] = useState(false);
   const { user, logout } = useAuthStore();
@@ -278,12 +281,12 @@ function UserMenu({
                 <button
                   onClick={() => {
                     setOpen(false);
-                    preloadRouteForPath('/admin/models');
-                    navigate('/admin/models');
+                    preloadRouteForPath(adminDefaultPath);
+                    navigate(adminDefaultPath);
                   }}
-                  onPointerEnter={() => preloadRouteForPath('/admin/models')}
-                  onPointerDown={() => preloadRouteForPath('/admin/models')}
-                  onFocus={() => preloadRouteForPath('/admin/models')}
+                  onPointerEnter={() => preloadRouteForPath(adminDefaultPath)}
+                  onPointerDown={() => preloadRouteForPath(adminDefaultPath)}
+                  onFocus={() => preloadRouteForPath(adminDefaultPath)}
                   className="w-full flex items-center gap-3 px-4 py-2.5 text-sm transition-colors text-on-surface hover:bg-surface-container-highest"
                 >
                   <Icon name="admin_panel_settings" size={18} />
@@ -386,6 +389,11 @@ function TopNavContent({ compact = false, onMenuToggle, source = 'standalone' }:
   const topNavItems = useMemo(() => userNavItems.filter((item) => item.path !== '/'), [userNavItems]);
   const ThemePackage = getInterfaceThemePackage(settings?.interface_theme);
   const ThemeTopNav = ThemePackage.components.DesktopTopNav;
+  const adminDefaultPath =
+    ThemePackage.chrome.adminLayout.defaultPath?.({
+      pathname: location.pathname,
+      isAdminRoute: location.pathname === '/admin' || location.pathname.startsWith('/admin/'),
+    }) || '/admin/models';
 
   useEffect(() => {
     if (!desktopSearchOpen) return;
@@ -664,6 +672,7 @@ function TopNavContent({ compact = false, onMenuToggle, source = 'standalone' }:
       <NotificationPanelLoader />
       <ThemeToggle />
       <UserMenu
+        adminDefaultPath={adminDefaultPath}
         onLoginRequired={(reason, returnUrl) => {
           setLoginReturnUrl(returnUrl);
           setLoginDialogReason(reason);
@@ -672,6 +681,8 @@ function TopNavContent({ compact = false, onMenuToggle, source = 'standalone' }:
       />
     </>
   );
+
+  const showMobileModelSearch = location.pathname === '/' || isModelDetailPath(location.pathname);
 
   if (compact) {
     return (
@@ -716,6 +727,7 @@ function TopNavContent({ compact = false, onMenuToggle, source = 'standalone' }:
               <ThemeToggle />
               <UserMenu
                 size="compact"
+                adminDefaultPath={adminDefaultPath}
                 onLoginRequired={(reason, returnUrl) => {
                   setLoginReturnUrl(returnUrl);
                   setLoginDialogReason(reason);
@@ -724,29 +736,31 @@ function TopNavContent({ compact = false, onMenuToggle, source = 'standalone' }:
               />
             </div>
           </div>
-          <div className="px-3 pb-2">
-            <SearchField
-              formProps={{ onSubmit: handleSearchSubmit }}
-              inputProps={{
-                value: localQuery,
-                onChange: handleSearchChange,
-                onInput: handleSearchInput,
-                onCompositionStart: handleSearchCompositionStart,
-                onCompositionUpdate: handleSearchCompositionUpdate,
-                onCompositionEnd: handleSearchCompositionEnd,
-                onKeyDown: handleSearchKeyDown,
-                maxLength: HOME_SEARCH_MAX_LENGTH,
-                enterKeyHint: 'search',
-                autoComplete: 'off',
-                spellCheck: false,
-              }}
-              value={localQuery}
-              onClear={handleClearSearch}
-              placeholder="搜索模型..."
-              className="!h-10 !rounded-sm !px-2.5"
-              inputClassName="!text-base"
-            />
-          </div>
+          {showMobileModelSearch && (
+            <div className="px-3 pb-2">
+              <SearchField
+                formProps={{ onSubmit: handleSearchSubmit }}
+                inputProps={{
+                  value: localQuery,
+                  onChange: handleSearchChange,
+                  onInput: handleSearchInput,
+                  onCompositionStart: handleSearchCompositionStart,
+                  onCompositionUpdate: handleSearchCompositionUpdate,
+                  onCompositionEnd: handleSearchCompositionEnd,
+                  onKeyDown: handleSearchKeyDown,
+                  maxLength: HOME_SEARCH_MAX_LENGTH,
+                  enterKeyHint: 'search',
+                  autoComplete: 'off',
+                  spellCheck: false,
+                }}
+                value={localQuery}
+                onClear={handleClearSearch}
+                placeholder="搜索模型..."
+                className="!h-10 !rounded-sm !px-2.5"
+                inputClassName="!text-base"
+              />
+            </div>
+          )}
         </header>
         <UploadModalLoader open={uploadOpen} onClose={() => setUploadOpen(false)} onConverted={handleUploaded} />
         <LoginConfirmDialog

@@ -1,3 +1,4 @@
+import { useMediaQuery } from '../../layouts/hooks/useMediaQuery';
 import {
   ModelDetailAsideFrame,
   ModelDetailDesktopFrame,
@@ -10,8 +11,10 @@ import {
   MODEL_DETAIL_SPEC_ITEM_CLASS,
   MODEL_DETAIL_VIEWER_CLASS,
 } from './ModelDetailFrame';
+import { PublicPageShell } from './PublicPageShell';
 
 const shimmer = 'animate-pulse rounded-sm bg-surface-container-high';
+const mobilePeekHeight = 128;
 
 function SectionTitleSkeleton({ widthClassName }: { widthClassName: string }) {
   return (
@@ -41,7 +44,7 @@ function DownloadRowSkeleton() {
   );
 }
 
-export default function ModelDetailPageSkeleton() {
+function ModelDetailDesktopSkeleton() {
   return (
     <ModelDetailDesktopFrame layout="skeleton" busy>
       <section className={MODEL_DETAIL_VIEWER_CLASS} data-model-detail-viewer />
@@ -102,4 +105,57 @@ export default function ModelDetailPageSkeleton() {
       />
     </ModelDetailDesktopFrame>
   );
+}
+
+function ModelDetailMobileSkeleton() {
+  return (
+    <PublicPageShell mobileClassName="flex h-dvh flex-col bg-surface" keepMobileDrawerMounted>
+      <main
+        className="relative min-h-0 flex-1"
+        style={{ marginBottom: 'calc(3.5rem + env(safe-area-inset-bottom, 0px))' }}
+        aria-busy
+        aria-live="polite"
+      >
+        <span className="sr-only">模型详情加载中</span>
+        <section
+          className="absolute inset-x-0 top-0 overflow-hidden bg-surface-container"
+          style={{ bottom: mobilePeekHeight }}
+          data-model-detail-viewer
+        >
+          <div className="absolute left-2 top-2 h-8 w-8 rounded-full bg-surface-container-high/80" />
+        </section>
+
+        <section
+          className="absolute bottom-0 left-0 right-0 z-30 flex flex-col overflow-hidden rounded-t-2xl border-t border-outline-variant/10 bg-surface-container-low shadow-[0_-2px_20px_rgba(0,0,0,0.25)]"
+          style={{ height: mobilePeekHeight }}
+          data-model-detail-sidebar
+        >
+          <div className="flex shrink-0 items-center gap-2 px-3 pb-1.5 pt-2.5">
+            <div className="flex flex-1 justify-center">
+              <div className="h-1 w-9 rounded-full bg-on-surface-variant/25" />
+            </div>
+          </div>
+          <div className="shrink-0 px-4 pb-4">
+            <div className="flex items-center gap-2">
+              <div className="min-w-0 flex-1">
+                <div className={`${shimmer} mb-2 h-4 w-3/4`} />
+                <div className={`${shimmer} h-3 w-1/2 bg-surface-container-highest/70`} />
+              </div>
+              <div className="flex shrink-0 items-center gap-1">
+                <div className={`${shimmer} h-8 w-8 rounded-full`} />
+                <div className={`${shimmer} h-8 w-8 rounded-full`} />
+              </div>
+            </div>
+            <div className={`${shimmer} mt-2.5 h-9 w-full rounded-lg bg-primary-container/20`} />
+          </div>
+        </section>
+      </main>
+    </PublicPageShell>
+  );
+}
+
+export default function ModelDetailPageSkeleton() {
+  const isDesktop = useMediaQuery('(min-width: 768px)');
+
+  return isDesktop ? <ModelDetailDesktopSkeleton /> : <ModelDetailMobileSkeleton />;
 }

@@ -393,8 +393,8 @@ export async function testCacheSettings(): Promise<SettingsConnectivityResult> {
   try {
     const res = await client.post('/settings/cache/test', {}, { timeout: 15000 });
     return unwrapResponse<SettingsConnectivityResult>(res);
-  } catch (err: any) {
-    const payload = err?.response?.data;
+  } catch (err: unknown) {
+    const payload = (err as { response?: { data?: unknown } })?.response?.data;
     if (payload && typeof payload === 'object' && 'ok' in payload) return payload as SettingsConnectivityResult;
     throw err;
   }
@@ -404,8 +404,8 @@ export async function testStorageSettings(): Promise<SettingsConnectivityResult>
   try {
     const res = await client.post('/settings/storage/test', {}, { timeout: 30000 });
     return unwrapResponse<SettingsConnectivityResult>(res);
-  } catch (err: any) {
-    const payload = err?.response?.data;
+  } catch (err: unknown) {
+    const payload = (err as { response?: { data?: unknown } })?.response?.data;
     if (payload && typeof payload === 'object' && 'ok' in payload) return payload as SettingsConnectivityResult;
     throw err;
   }

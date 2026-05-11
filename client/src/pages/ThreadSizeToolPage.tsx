@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import useSWR from 'swr';
 import { threadSizeApi, type ThreadSizeEntry } from '../api/threadSize';
 import { AdminContentPanel, AdminManagementPage } from '../components/shared/AdminManagementPage';
@@ -205,20 +205,109 @@ function entryToFittingSpec(entry: ThreadSizeEntry): FittingSpec {
 }
 
 const TABLE_SCROLL =
-  'min-h-0 flex-1 max-w-full overflow-auto border-y border-outline-variant/10 overscroll-contain [-webkit-overflow-scrolling:touch] md:border-x';
+  'min-h-0 flex-1 max-w-full overflow-auto border-y border-outline-variant/10 overscroll-contain [touch-action:none] md:border-x';
 const TABLE_BASE =
   'min-w-full border-separate border-spacing-0 text-left text-[13px] md:text-sm [&_td]:whitespace-nowrap [&_th]:whitespace-nowrap [&_td:not(:last-child)]:border-r [&_td:not(:last-child)]:border-outline-variant/8 [&_th:not(:last-child)]:border-r [&_th:not(:last-child)]:border-outline-variant/10';
 const TABLE_HEAD = 'text-on-surface';
 const TABLE_CARD = 'flex h-full min-h-0 flex-col overflow-hidden bg-transparent';
 const TABLE_TH =
-  'sticky top-0 z-20 bg-surface-container-low px-4 py-3 text-xs font-bold tracking-wide text-on-surface shadow-[0_1px_0_rgba(0,0,0,0.08)] md:text-[13px]';
+  'sticky top-0 z-20 select-none bg-surface-container-low px-4 py-3 text-xs font-bold tracking-wide text-on-surface shadow-[0_1px_0_rgba(0,0,0,0.08)] [touch-action:pan-y] md:text-[13px]';
 const TABLE_FIRST_TH =
-  'sticky left-0 top-0 z-30 bg-surface-container-low px-4 py-3 text-xs font-bold tracking-wide text-on-surface shadow-[1px_0_0_rgba(0,0,0,0.08),0_1px_0_rgba(0,0,0,0.08)] md:text-[13px]';
-const TABLE_FIRST_TD = 'sticky left-0 z-10 bg-surface px-4 py-3 font-semibold shadow-[1px_0_0_rgba(0,0,0,0.05)]';
+  'sticky left-0 top-0 z-30 select-none bg-surface-container-low px-4 py-3 text-xs font-bold tracking-wide text-on-surface shadow-[1px_0_0_rgba(0,0,0,0.08),0_1px_0_rgba(0,0,0,0.08)] [touch-action:pan-y] md:text-[13px]';
+const TABLE_FIRST_TD =
+  'sticky left-0 z-10 select-none bg-surface px-4 py-3 font-semibold shadow-[1px_0_0_rgba(0,0,0,0.05)] [touch-action:pan-y]';
+const TABLE_FIRST_WIDTH = 'w-28 min-w-28 max-w-28 md:w-36 md:min-w-36 md:max-w-36';
+const TABLE_FIRST_TEXT = 'block max-w-full truncate';
+const TABLE_FIRST_BADGE = 'inline-block max-w-full truncate align-middle';
 const TABLE_TD = 'px-4 py-3';
 const TABLE_LONG_TH = `${TABLE_TH} min-w-72`;
 const TABLE_LONG_TD = `${TABLE_TD} min-w-72 max-w-[420px] leading-6 text-on-surface-variant [white-space:normal]`;
 const TABLE_HEADER = 'flex items-center justify-between gap-3 bg-transparent px-1 pb-3 pt-1 md:px-0';
+const TABLE_TOUCH_LOCK_THRESHOLD = 6;
+
+function clampScroll(value: number, max: number) {
+  if (value < 0) return 0;
+  if (value > max) return max;
+  return value;
+}
+
+function ThreadTableScroll({ children }: { children: ReactNode }) {
+  const scrollRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const node = scrollRef.current;
+    if (!node) return;
+
+    let startX = 0;
+    let startY = 0;
+    let startScrollLeft = 0;
+    let startScrollTop = 0;
+    let verticalOnlyTarget = false;
+    let lockedAxis: 'vertical' | 'horizontal' | null = null;
+
+    const handleTouchStart = (event: TouchEvent) => {
+      const touch = event.touches[0];
+      if (!touch) return;
+      startX = touch.clientX;
+      startY = touch.clientY;
+      startScrollLeft = node.scrollLeft;
+      startScrollTop = node.scrollTop;
+      lockedAxis = null;
+      const target = event.target instanceof Element ? event.target : null;
+      const cell = target?.closest('td, th') as HTMLTableCellElement | null;
+      verticalOnlyTarget = Boolean(cell?.closest('thead') || cell?.cellIndex === 0);
+    };
+
+    const handleTouchMove = (event: TouchEvent) => {
+      if (event.touches.length !== 1) return;
+      const touch = event.touches[0];
+      if (!touch) return;
+
+      const dx = touch.clientX - startX;
+      const dy = touch.clientY - startY;
+      const absX = Math.abs(dx);
+      const absY = Math.abs(dy);
+      if (event.cancelable) event.preventDefault();
+
+      if (!lockedAxis) {
+        if (absX < TABLE_TOUCH_LOCK_THRESHOLD && absY < TABLE_TOUCH_LOCK_THRESHOLD) return;
+        lockedAxis = verticalOnlyTarget || absY >= absX - 2 ? 'vertical' : 'horizontal';
+      }
+
+      if (lockedAxis === 'vertical') {
+        const maxScrollTop = Math.max(0, node.scrollHeight - node.clientHeight);
+        node.scrollLeft = startScrollLeft;
+        node.scrollTop = clampScroll(startScrollTop - dy, maxScrollTop);
+        return;
+      }
+
+      const maxScrollLeft = Math.max(0, node.scrollWidth - node.clientWidth);
+      node.scrollTop = startScrollTop;
+      node.scrollLeft = clampScroll(startScrollLeft - dx, maxScrollLeft);
+    };
+
+    const handleTouchEnd = () => {
+      lockedAxis = null;
+    };
+
+    node.addEventListener('touchstart', handleTouchStart, { passive: true });
+    node.addEventListener('touchmove', handleTouchMove, { passive: false });
+    node.addEventListener('touchend', handleTouchEnd, { passive: true });
+    node.addEventListener('touchcancel', handleTouchEnd, { passive: true });
+    return () => {
+      node.removeEventListener('touchstart', handleTouchStart);
+      node.removeEventListener('touchmove', handleTouchMove);
+      node.removeEventListener('touchend', handleTouchEnd);
+      node.removeEventListener('touchcancel', handleTouchEnd);
+    };
+  }, []);
+
+  return (
+    <div ref={scrollRef} className={TABLE_SCROLL}>
+      {children}
+    </div>
+  );
+}
 
 function ThreadSizeLoadingState() {
   return (
@@ -1195,11 +1284,11 @@ export default function ThreadSizeToolPage() {
                   </div>
                   {matchedThreads.length ? (
                     <div>
-                      <div className={TABLE_SCROLL}>
+                      <ThreadTableScroll>
                         <table className={`${TABLE_BASE} min-w-[860px]`}>
                           <thead className={TABLE_HEAD}>
                             <tr>
-                              <th className={`${TABLE_FIRST_TH} min-w-28`}>结果</th>
+                              <th className={`${TABLE_FIRST_TH} ${TABLE_FIRST_WIDTH}`}>结果</th>
                               <th className={`${TABLE_TH} min-w-40`}>规格</th>
                               <th className={`${TABLE_TH} min-w-32`}>类型</th>
                               <th className={`${TABLE_TH} min-w-28`}>外径差</th>
@@ -1215,9 +1304,9 @@ export default function ThreadSizeToolPage() {
                                 onClick={() => applyResultAsSearch(item.size)}
                                 className="cursor-pointer text-on-surface transition-colors hover:bg-surface-container-high/30 active:bg-primary-container/10"
                               >
-                                <td className={TABLE_FIRST_TD}>
+                                <td className={`${TABLE_FIRST_TD} ${TABLE_FIRST_WIDTH}`}>
                                   <span
-                                    className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${index === 0 ? 'bg-green-500/10 text-green-600' : 'bg-surface-container-high text-on-surface-variant'}`}
+                                    className={`${TABLE_FIRST_BADGE} rounded-full px-2 py-0.5 text-[11px] font-medium ${index === 0 ? 'bg-green-500/10 text-green-600' : 'bg-surface-container-high text-on-surface-variant'}`}
                                   >
                                     {index === 0 ? '最接近' : `第 ${index + 1}`}
                                   </span>
@@ -1240,7 +1329,7 @@ export default function ThreadSizeToolPage() {
                             ))}
                           </tbody>
                         </table>
-                      </div>
+                      </ThreadTableScroll>
                     </div>
                   ) : (
                     <div className="px-3 py-8 text-center text-xs text-on-surface-variant">
@@ -1255,11 +1344,11 @@ export default function ThreadSizeToolPage() {
             {!showInitialDataLoading && showTechnicalResults && visibleTab === 'thread' && (
               <section className="h-full">
                 <div className={TABLE_CARD}>
-                  <div className={TABLE_SCROLL}>
+                  <ThreadTableScroll>
                     <table className={`${TABLE_BASE} min-w-[1260px]`}>
                       <thead className={TABLE_HEAD}>
                         <tr>
-                          <th className={`${TABLE_FIRST_TH} min-w-36`}>规格</th>
+                          <th className={`${TABLE_FIRST_TH} ${TABLE_FIRST_WIDTH}`}>规格</th>
                           <th className={`${TABLE_TH} min-w-32`}>类型</th>
                           <th className={`${TABLE_TH} min-w-32`}>外径参考</th>
                           <th className={`${TABLE_TH} min-w-40`}>底孔/小径参考</th>
@@ -1277,7 +1366,11 @@ export default function ThreadSizeToolPage() {
                             onClick={() => applyResultAsSearch(item.size)}
                             className="cursor-pointer text-on-surface transition-colors hover:bg-surface-container-high/30 active:bg-primary-container/10"
                           >
-                            <td className={`${TABLE_FIRST_TD} min-w-36`}>{item.size}</td>
+                            <td className={`${TABLE_FIRST_TD} ${TABLE_FIRST_WIDTH}`}>
+                              <span className={TABLE_FIRST_TEXT} title={item.size}>
+                                {item.size}
+                              </span>
+                            </td>
                             <td className={`${TABLE_TD} text-on-surface-variant`}>{item.familyLabel}</td>
                             <td className={`${TABLE_TD} tabular-nums`}>{item.majorMm.toFixed(3)} mm</td>
                             <td className={TABLE_TD}>{threadInnerReference(item)}</td>
@@ -1290,7 +1383,7 @@ export default function ThreadSizeToolPage() {
                         ))}
                       </tbody>
                     </table>
-                  </div>
+                  </ThreadTableScroll>
                 </div>
               </section>
             )}
@@ -1299,11 +1392,11 @@ export default function ThreadSizeToolPage() {
             {!showInitialDataLoading && showTechnicalResults && visibleTab === 'pipe' && (
               <section className="h-full">
                 <div className={TABLE_CARD}>
-                  <div className={TABLE_SCROLL}>
+                  <ThreadTableScroll>
                     <table className={`${TABLE_BASE} min-w-[760px]`}>
                       <thead className={TABLE_HEAD}>
                         <tr>
-                          <th className={`${TABLE_FIRST_TH} min-w-24`}>DN</th>
+                          <th className={`${TABLE_FIRST_TH} ${TABLE_FIRST_WIDTH}`}>DN</th>
                           <th className={`${TABLE_TH} min-w-28`}>英寸</th>
                           <th className={`${TABLE_TH} min-w-36`}>外径参考</th>
                           <th className={TABLE_LONG_TH}>常见用途</th>
@@ -1316,7 +1409,11 @@ export default function ThreadSizeToolPage() {
                             onClick={() => applyResultAsSearch(item.dn)}
                             className="cursor-pointer text-on-surface transition-colors hover:bg-surface-container-high/30 active:bg-primary-container/10"
                           >
-                            <td className={`${TABLE_FIRST_TD} min-w-24`}>{item.dn}</td>
+                            <td className={`${TABLE_FIRST_TD} ${TABLE_FIRST_WIDTH}`}>
+                              <span className={TABLE_FIRST_TEXT} title={item.dn}>
+                                {item.dn}
+                              </span>
+                            </td>
                             <td className={TABLE_TD}>{item.inch}"</td>
                             <td className={`${TABLE_TD} tabular-nums`}>Ø {item.odMm.toFixed(1)} mm</td>
                             <td className={TABLE_LONG_TD}>{item.commonUse}</td>
@@ -1324,7 +1421,7 @@ export default function ThreadSizeToolPage() {
                         ))}
                       </tbody>
                     </table>
-                  </div>
+                  </ThreadTableScroll>
                 </div>
               </section>
             )}
@@ -1333,11 +1430,11 @@ export default function ThreadSizeToolPage() {
             {!showInitialDataLoading && showTechnicalResults && visibleTab === 'hose' && (
               <section className="h-full">
                 <div className={TABLE_CARD}>
-                  <div className={TABLE_SCROLL}>
+                  <ThreadTableScroll>
                     <table className={`${TABLE_BASE} min-w-[1180px]`}>
                       <thead className={TABLE_HEAD}>
                         <tr>
-                          <th className={`${TABLE_FIRST_TH} min-w-32`}>规格</th>
+                          <th className={`${TABLE_FIRST_TH} ${TABLE_FIRST_WIDTH}`}>规格</th>
                           <th className={`${TABLE_TH} min-w-28`}>类型</th>
                           <th className={`${TABLE_TH} min-w-32`}>公称/外径</th>
                           <th className={`${TABLE_TH} min-w-28`}>内径</th>
@@ -1354,8 +1451,11 @@ export default function ThreadSizeToolPage() {
                             onClick={() => applyResultAsSearch(item.dash)}
                             className="cursor-pointer text-on-surface transition-colors hover:bg-surface-container-high/30 active:bg-primary-container/10"
                           >
-                            <td className={`${TABLE_FIRST_TD} min-w-32`}>
-                              <span className="rounded-md bg-primary-container/10 px-2 py-1 font-semibold text-primary-container">
+                            <td className={`${TABLE_FIRST_TD} ${TABLE_FIRST_WIDTH}`}>
+                              <span
+                                className={`${TABLE_FIRST_BADGE} rounded-md bg-primary-container/10 px-2 py-1 font-semibold text-primary-container`}
+                                title={item.dash}
+                              >
                                 {item.dash}
                               </span>
                             </td>
@@ -1372,7 +1472,7 @@ export default function ThreadSizeToolPage() {
                         ))}
                       </tbody>
                     </table>
-                  </div>
+                  </ThreadTableScroll>
                   <div className="border-t border-outline-variant/10 px-4 py-3 text-xs leading-5 text-on-surface-variant/60">
                     油管压力会随层数、结构和品牌变化；气管压力会随 PU/PA 材质、温度和厂家规格变化，最终按具体样本确认。
                   </div>
@@ -1384,11 +1484,11 @@ export default function ThreadSizeToolPage() {
             {!showInitialDataLoading && showTechnicalResults && visibleTab === 'fitting' && (
               <section className="h-full">
                 <div className={TABLE_CARD}>
-                  <div className={TABLE_SCROLL}>
+                  <ThreadTableScroll>
                     <table className={`${TABLE_BASE} min-w-[1320px]`}>
                       <thead className={TABLE_HEAD}>
                         <tr>
-                          <th className={`${TABLE_FIRST_TH} min-w-36`}>接头编号</th>
+                          <th className={`${TABLE_FIRST_TH} ${TABLE_FIRST_WIDTH}`}>接头编号</th>
                           <th className={`${TABLE_TH} min-w-44`}>分类</th>
                           <th className={`${TABLE_TH} min-w-24`}>形态</th>
                           <th className={`${TABLE_TH} min-w-44`}>接头类型</th>
@@ -1405,8 +1505,11 @@ export default function ThreadSizeToolPage() {
                             onClick={() => applyResultAsSearch(item.code)}
                             className="cursor-pointer text-on-surface transition-colors hover:bg-surface-container-high/30 active:bg-primary-container/10"
                           >
-                            <td className={`${TABLE_FIRST_TD} min-w-36`}>
-                              <span className="rounded-md bg-primary-container/10 px-2 py-1 font-semibold text-primary-container">
+                            <td className={`${TABLE_FIRST_TD} ${TABLE_FIRST_WIDTH}`}>
+                              <span
+                                className={`${TABLE_FIRST_BADGE} rounded-md bg-primary-container/10 px-2 py-1 font-semibold text-primary-container`}
+                                title={item.code}
+                              >
                                 {item.code}
                               </span>
                             </td>
@@ -1423,7 +1526,7 @@ export default function ThreadSizeToolPage() {
                         ))}
                       </tbody>
                     </table>
-                  </div>
+                  </ThreadTableScroll>
                 </div>
               </section>
             )}

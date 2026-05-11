@@ -1393,26 +1393,31 @@ function DetailContent({ id }: { id: string }) {
                   <button
                     type="button"
                     onClick={() => navigate(-1)}
-                    className="inline-flex h-9 items-center justify-center gap-1.5 rounded-lg border border-outline-variant/20 bg-surface-container px-3.5 text-sm font-medium text-on-surface-variant transition-colors hover:bg-surface-container-high hover:text-on-surface"
+                    className="inline-flex h-9 w-9 shrink-0 items-center justify-center gap-1.5 rounded-lg border border-outline-variant/20 bg-surface-container text-sm font-medium text-on-surface-variant transition-colors hover:bg-surface-container-high hover:text-on-surface md:w-auto md:px-3.5"
+                    aria-label="返回询价管理"
                   >
                     <Icon name="arrow_back" size={16} />
-                    返回
+                    <span className="hidden md:inline">返回</span>
                   </button>
                   <button
                     type="button"
                     onClick={handleExportQuote}
-                    className="inline-flex h-9 items-center justify-center gap-1.5 rounded-lg border border-outline-variant/20 bg-surface-container px-3.5 text-sm font-medium text-on-surface-variant transition-colors hover:bg-surface-container-high hover:text-on-surface"
+                    className="inline-flex h-9 w-9 shrink-0 flex-col items-center justify-center gap-0.5 rounded-lg border border-outline-variant/20 bg-surface-container text-sm font-medium text-on-surface-variant transition-colors hover:bg-surface-container-high hover:text-on-surface md:w-auto md:flex-row md:gap-1.5 md:px-3.5"
+                    aria-label="导出PDF"
                   >
-                    <Icon name="download" size={16} />
-                    导出PDF
+                    <Icon name="description" size={14} />
+                    <span className="text-[8px] font-black leading-none md:hidden">PDF</span>
+                    <span className="hidden md:inline">导出PDF</span>
                   </button>
                   <button
                     type="button"
                     onClick={handleExportExcel}
-                    className="inline-flex h-9 items-center justify-center gap-1.5 rounded-lg border border-outline-variant/20 bg-surface-container px-3.5 text-sm font-medium text-on-surface-variant transition-colors hover:bg-surface-container-high hover:text-on-surface"
+                    className="inline-flex h-9 w-9 shrink-0 flex-col items-center justify-center gap-0.5 rounded-lg border border-outline-variant/20 bg-surface-container text-sm font-medium text-on-surface-variant transition-colors hover:bg-surface-container-high hover:text-on-surface md:w-auto md:flex-row md:gap-1.5 md:px-3.5"
+                    aria-label="导出Excel"
                   >
-                    <Icon name="table_view" size={16} />
-                    导出Excel
+                    <Icon name="spreadsheet" size={14} />
+                    <span className="text-[8px] font-black leading-none md:hidden">XLS</span>
+                    <span className="hidden md:inline">导出Excel</span>
                   </button>
                 </>
               }

@@ -505,19 +505,18 @@ function MobileContent() {
             <button
               onClick={handleExport}
               disabled={exporting || isLoading}
-              className="inline-flex h-9 items-center gap-1 rounded-lg border border-outline-variant/20 px-3 text-xs text-on-surface-variant disabled:opacity-50"
-              aria-label="导出询价单"
+              className="inline-grid h-9 w-9 shrink-0 place-items-center rounded-lg border border-outline-variant/20 text-on-surface-variant transition-colors active:bg-surface-container-high disabled:opacity-50"
+              aria-label={exporting ? '正在导出询价单' : '导出询价单'}
             >
-              <Icon name="download" size={14} />
-              <span className="hidden sm:inline">{exporting ? '导出中' : '导出明细'}</span>
+              <Icon name="download" size={17} className={exporting ? 'animate-pulse' : ''} />
             </button>
             <button
               onClick={handleRefresh}
               disabled={refreshing}
-              className="inline-flex h-9 items-center gap-1 rounded-lg border border-outline-variant/20 px-3 text-xs text-on-surface-variant disabled:opacity-50"
-              aria-label="刷新"
+              className="inline-grid h-9 w-9 shrink-0 place-items-center rounded-lg border border-outline-variant/20 text-on-surface-variant transition-colors active:bg-surface-container-high disabled:opacity-50"
+              aria-label={refreshing ? '正在刷新询价数据' : '刷新询价数据'}
             >
-              <Icon name="refresh" size={14} className={refreshing ? 'animate-spin' : ''} />
+              <Icon name="refresh" size={17} className={refreshing ? 'animate-spin' : ''} />
             </button>
           </>
         }

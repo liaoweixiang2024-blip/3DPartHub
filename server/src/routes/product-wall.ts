@@ -66,6 +66,8 @@ const MULTER_MAX_IMAGE_FILES = 200;
 const PRODUCT_WALL_PREVIEW_MAX_WIDTH = 640;
 const PRODUCT_WALL_PREVIEW_JPEG_QUALITY = 0.76;
 const PRODUCT_WALL_PREVIEW_BACKFILL_LIMIT = 80;
+const PRODUCT_WALL_PREVIEW_BACKFILL_BATCH_SIZE = 12;
+const PRODUCT_WALL_PREVIEW_BACKFILL_DELAY_MS = 300;
 const PRODUCT_WALL_PREVIEW_MIN_SOURCE_BYTES = 768 * 1024;
 const DEFAULT_PRODUCT_WALL_CATEGORIES: ProductWallKind[] = ['公司产品', '使用案例', '客户案例', '海报'];
 const IMAGE_EXTENSIONS: Record<string, string> = {
@@ -375,14 +377,16 @@ function productWallPreviewUrlFromImageUrl(url?: string | null) {
 }
 
 function resolveProductWallPreviewImageUrl(row: ProductWallImageRow) {
-  if (row.previewImageUrl && row.previewImageUrl !== row.imageUrl) return row.previewImageUrl;
+  if (row.previewImageUrl) return row.previewImageUrl;
   const deterministicPreviewUrl = productWallPreviewUrlFromImageUrl(row.imageUrl);
   const deterministicPreviewPath = productWallLocalPathFromUrl(deterministicPreviewUrl);
   if (deterministicPreviewPath && existsSync(deterministicPreviewPath)) return deterministicPreviewUrl || row.imageUrl;
-  return row.previewImageUrl || row.imageUrl;
+  return row.imageUrl;
 }
 
 const previewBackfillInFlight = new Set<string>();
+const previewBackfillQueue = new Map<string, ProductWallImageRow>();
+let previewBackfillScheduled = false;
 
 const ALLOWED_IMAGE_MIMES = new Set(['image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/svg+xml']);
 
@@ -485,9 +489,18 @@ async function generatePreviewImage(
 }
 
 function shouldBackfillProductWallPreview(row: ProductWallImageRow) {
-  return (
-    row.imageUrl.startsWith('/static/product-wall/') && (!row.previewImageUrl || row.previewImageUrl === row.imageUrl)
-  );
+  return row.imageUrl.startsWith('/static/product-wall/') && !row.previewImageUrl;
+}
+
+async function markProductWallPreviewAsOriginal(row: ProductWallImageRow): Promise<ProductWallImageRow> {
+  try {
+    return await prisma.productWallImage.update({
+      where: { id: row.id },
+      data: { previewImageUrl: row.imageUrl },
+    });
+  } catch {
+    return { ...row, previewImageUrl: row.imageUrl } as ProductWallImageRow;
+  }
 }
 
 async function ensureProductWallPreview(row: ProductWallImageRow): Promise<ProductWallImageRow> {
@@ -502,12 +515,14 @@ async function ensureProductWallPreview(row: ProductWallImageRow): Promise<Produ
   } catch {
     return row;
   }
-  if (sourceSize < PRODUCT_WALL_PREVIEW_MIN_SOURCE_BYTES) return row;
+  if (sourceSize < PRODUCT_WALL_PREVIEW_MIN_SOURCE_BYTES) return markProductWallPreviewAsOriginal(row);
 
   previewBackfillInFlight.add(row.id);
   try {
     const previewUrl = await generatePreviewImage(sourcePath, row.imageUrl);
-    if (!previewUrl || previewUrl === row.imageUrl) return row;
+    if (!previewUrl || previewUrl === row.imageUrl) {
+      return markProductWallPreviewAsOriginal(row);
+    }
     try {
       return await prisma.productWallImage.update({
         where: { id: row.id },
@@ -523,23 +538,32 @@ async function ensureProductWallPreview(row: ProductWallImageRow): Promise<Produ
   }
 }
 
-async function backfillProductWallPreviews(rows: ProductWallImageRow[]) {
+function queueProductWallPreviewBackfill(rows: ProductWallImageRow[]) {
   const candidates = rows.filter(shouldBackfillProductWallPreview).slice(0, PRODUCT_WALL_PREVIEW_BACKFILL_LIMIT);
-  if (!candidates.length) return rows;
-  const updatedById = new Map<string, ProductWallImageRow>();
-  let cursor = 0;
-  const workerCount = Math.min(2, candidates.length);
-  await Promise.all(
-    Array.from({ length: workerCount }, async () => {
-      while (cursor < candidates.length) {
-        const row = candidates[cursor];
-        cursor += 1;
-        const updated = await ensureProductWallPreview(row);
-        updatedById.set(updated.id, updated);
-      }
-    }),
-  );
-  return rows.map((row) => updatedById.get(row.id) || row);
+  if (!candidates.length) return;
+
+  for (const row of candidates) {
+    if (previewBackfillInFlight.has(row.id) || previewBackfillQueue.has(row.id)) continue;
+    previewBackfillQueue.set(row.id, row);
+  }
+  scheduleProductWallPreviewBackfill();
+}
+
+function scheduleProductWallPreviewBackfill() {
+  if (previewBackfillScheduled || !previewBackfillQueue.size) return;
+  previewBackfillScheduled = true;
+  const timer = setTimeout(() => {
+    previewBackfillScheduled = false;
+    void flushProductWallPreviewBackfillQueue();
+  }, PRODUCT_WALL_PREVIEW_BACKFILL_DELAY_MS);
+  timer.unref?.();
+}
+
+async function flushProductWallPreviewBackfillQueue() {
+  const batch = Array.from(previewBackfillQueue.values()).slice(0, PRODUCT_WALL_PREVIEW_BACKFILL_BATCH_SIZE);
+  for (const row of batch) previewBackfillQueue.delete(row.id);
+  for (const row of batch) await ensureProductWallPreview(row);
+  scheduleProductWallPreviewBackfill();
 }
 
 async function collectProductWallUploadImages(files: Express.Multer.File[]) {
@@ -783,8 +807,8 @@ export default function productWallRouter() {
         }),
         prisma.productWallImage.count({ where }),
       ]);
-      const rowsWithPreviews = await backfillProductWallPreviews(rows);
-      res.json({ items: rowsWithPreviews.map(toProductWallItem), total, page, page_size: pageSize });
+      queueProductWallPreviewBackfill(rows);
+      res.json({ items: rows.map(toProductWallItem), total, page, page_size: pageSize });
     } catch (err) {
       next(err);
     }
@@ -796,8 +820,8 @@ export default function productWallRouter() {
       const rows = await prisma.productWallImage.findMany({
         orderBy: [{ sortOrder: 'asc' }, { createdAt: 'asc' }],
       });
-      const rowsWithPreviews = await backfillProductWallPreviews(rows);
-      res.json(rowsWithPreviews.map(toProductWallItem));
+      queueProductWallPreviewBackfill(rows);
+      res.json(rows.map(toProductWallItem));
     } catch (err) {
       next(err);
     }

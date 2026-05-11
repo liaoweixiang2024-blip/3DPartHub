@@ -960,7 +960,15 @@ function Content() {
   const [productAssetUploading, setProductAssetUploading] = useState(false);
   const productAssetInputRef = useRef<HTMLInputElement | null>(null);
   const [showBatchModal, setShowBatchModal] = useState(false);
-  const [batchParsed, setBatchParsed] = useState<any[] | null>(null);
+  const [batchParsed, setBatchParsed] = useState<Array<{
+    name: string;
+    modelNo?: string;
+    specs?: Record<string, string>;
+    image?: string;
+    pdfUrl?: string;
+    isKit?: boolean;
+    components?: import('../api/selections').SelectionComponent[];
+  }> | null>(null);
   const [batchErrors, setBatchErrors] = useState<string[]>([]);
   const [batchImporting, setBatchImporting] = useState(false);
   const [showGenerateModal, setShowGenerateModal] = useState(false);
@@ -1430,7 +1438,7 @@ function Content() {
           }
           if (modelNo) seenModelNos.add(modelNo);
 
-          const product: any = {
+          const product: NonNullable<typeof batchParsed>[number] = {
             name,
             modelNo,
             specs,

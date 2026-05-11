@@ -1,5 +1,5 @@
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
-import { startTransition, useState, useCallback, useMemo, useEffect, useRef } from 'react';
+import { startTransition, useState, useCallback, useMemo, useEffect, useLayoutEffect, useRef } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import useSWR from 'swr';
 import {
@@ -157,6 +157,10 @@ function formatModelCount(count: number) {
   return `${count} 个型号`;
 }
 
+function formatOptionCount(count: number) {
+  return `${count} 个选项`;
+}
+
 function stableJson(value: unknown): string {
   if (!value || typeof value !== 'object') return JSON.stringify(value);
   if (Array.isArray(value)) return `[${value.map(stableJson).join(',')}]`;
@@ -178,13 +182,13 @@ function useDebouncedValue<T>(value: T, delayMs: number) {
 }
 
 const selectionMotion =
-  'transition-[transform,border-color,background-color,box-shadow,color,opacity] duration-150 ease-out motion-reduce:transition-none motion-reduce:transform-none';
+  'transition-[transform,border-color,background-color,box-shadow,color,opacity] duration-200 ease-[cubic-bezier(0.16,1,0.3,1)] motion-reduce:transition-none motion-reduce:transform-none';
 const selectionPress = `${selectionMotion} active:scale-[0.985]`;
 const mobileCategoryListClass = 'mx-auto flex w-full flex-col';
 const mobileCategoryPanelClass = 'p-0';
 
 function mobileCategoryCardClass(active: boolean) {
-  return `group relative flex w-full items-stretch overflow-hidden border-0 border-t border-outline-variant/12 text-left first:border-t-0 first:rounded-t-xl last:rounded-b-xl ${selectionMotion} active:opacity-80 focus-visible:z-10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary-container/60 ${
+  return `group relative flex w-full transform-gpu items-stretch overflow-hidden border-0 border-t border-outline-variant/12 text-left will-change-transform first:border-t-0 first:rounded-t-xl last:rounded-b-xl ${selectionMotion} active:bg-surface-container-high/70 focus-visible:z-10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary-container/60 ${
     active
       ? 'z-[1] bg-primary-container/8 shadow-[inset_3px_0_0_var(--color-primary-container),0_6px_16px_rgba(249,115,22,0.10)]'
       : 'bg-surface-container-low/45 shadow-[0_1px_3px_rgba(15,23,42,0.06)] hover:z-[1] hover:bg-surface-container hover:shadow-[0_6px_16px_rgba(15,23,42,0.10)]'
@@ -839,6 +843,19 @@ export default function SelectionPage() {
     }
     return entries.map(([val, count]) => ({ val, count }));
   }, [filterData?.options, curField, liveCat?.optionOrder, columns, manualFields, business.threadPriority]);
+  const currentStepOptionCount = useMemo(() => {
+    if (!curField) return null;
+    const colDef = columns.find((c) => c.key === curField);
+    if (isManualColumn(colDef)) return null;
+    if (isPresetColumn(colDef)) return colDef?.presetOptions?.length ?? 0;
+    return options.length;
+  }, [columns, curField, options.length]);
+  const currentStepOptionCountText =
+    currentStepOptionCount === null
+      ? '手动输入'
+      : shouldShowFilterLoading && !isPresetColumn(columns.find((c) => c.key === curField))
+        ? '匹配中'
+        : formatOptionCount(currentStepOptionCount);
 
   const visibleFiltered = filtered;
   const remainingResultCount = Math.max(filteredTotal - visibleFiltered.length, 0);
@@ -872,6 +889,8 @@ export default function SelectionPage() {
   const mobileMainRef = useRef<HTMLElement>(null);
   const lastUserScrollAtRef = useRef(0);
   const resultRevealTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const categoryNavigationTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const stepScrollIntentRef = useRef<'top' | null>(null);
 
   /* track user-initiated undo to suppress immediate auto-skip */
   const userUndoRef = useRef(false);
@@ -947,23 +966,45 @@ export default function SelectionPage() {
     if (search) return;
     if (!curField) return;
     if (scrollTimerRef.current) clearTimeout(scrollTimerRef.current);
+    const shouldScrollStepToTop = !isDesktop && stepScrollIntentRef.current === 'top';
+    if (shouldScrollStepToTop) {
+      stepScrollIntentRef.current = null;
+      suppressAutoAdvanceScrollRef.current = false;
+      scrollTimerRef.current = setTimeout(() => {
+        const container = mobileMainRef.current;
+        const el = curStepRef.current || wizardWrapRef.current;
+        if (!container || !el) return;
+        const cRect = container.getBoundingClientRect();
+        const eRect = el.getBoundingClientRect();
+        const target = eRect.top - cRect.top + container.scrollTop - 8;
+        container.scrollTo({ top: Math.max(0, target), behavior: 'auto' });
+      }, 0);
+      return () => {
+        if (scrollTimerRef.current) clearTimeout(scrollTimerRef.current);
+      };
+    }
     if (suppressAutoAdvanceScrollRef.current) {
       suppressAutoAdvanceScrollRef.current = false;
       return;
     }
-    scrollTimerRef.current = setTimeout(() => {
-      const el = curStepRef.current;
-      if (!el) return;
-      const container = scrollContainerRef.current || mobileMainRef.current;
-      if (container) {
-        const cRect = container.getBoundingClientRect();
-        const eRect = el.getBoundingClientRect();
-        const target = eRect.top - cRect.top + container.scrollTop - cRect.height / 2 + eRect.height / 2;
-        container.scrollTo({ top: target, behavior: 'smooth' });
-      } else {
-        wizardWrapRef.current?.scrollIntoView({ behavior: 'auto', block: 'start' });
-      }
-    }, 200);
+    scrollTimerRef.current = setTimeout(
+      () => {
+        const el = curStepRef.current;
+        if (!el) return;
+        const container = scrollContainerRef.current || mobileMainRef.current;
+        if (container) {
+          const cRect = container.getBoundingClientRect();
+          const eRect = el.getBoundingClientRect();
+          const target = isDesktop
+            ? eRect.top - cRect.top + container.scrollTop - cRect.height / 2 + eRect.height / 2
+            : eRect.top - cRect.top + container.scrollTop - 8;
+          container.scrollTo({ top: Math.max(0, target), behavior: isDesktop ? 'smooth' : 'auto' });
+        } else {
+          wizardWrapRef.current?.scrollIntoView({ behavior: 'auto', block: 'start' });
+        }
+      },
+      isDesktop ? 200 : 60,
+    );
     return () => {
       if (scrollTimerRef.current) clearTimeout(scrollTimerRef.current);
     };
@@ -988,21 +1029,26 @@ export default function SelectionPage() {
     if (willAutoConfirm || willAutoSkip) return;
 
     if (autoAdvanceScrollTimerRef.current) clearTimeout(autoAdvanceScrollTimerRef.current);
-    autoAdvanceScrollTimerRef.current = setTimeout(() => {
-      const el = curStepRef.current;
-      if (!el) return;
+    autoAdvanceScrollTimerRef.current = setTimeout(
+      () => {
+        const el = curStepRef.current;
+        if (!el) return;
 
-      const container = scrollContainerRef.current || mobileMainRef.current;
-      if (container) {
-        const cRect = container.getBoundingClientRect();
-        const eRect = el.getBoundingClientRect();
-        const target = eRect.top - cRect.top + container.scrollTop - cRect.height / 2 + eRect.height / 2;
-        container.scrollTo({ top: Math.max(0, target), behavior: 'smooth' });
-      } else {
-        wizardWrapRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-      }
-      pendingAutoAdvanceScrollRef.current = false;
-    }, 140);
+        const container = scrollContainerRef.current || mobileMainRef.current;
+        if (container) {
+          const cRect = container.getBoundingClientRect();
+          const eRect = el.getBoundingClientRect();
+          const target = isDesktop
+            ? eRect.top - cRect.top + container.scrollTop - cRect.height / 2 + eRect.height / 2
+            : eRect.top - cRect.top + container.scrollTop - 8;
+          container.scrollTo({ top: Math.max(0, target), behavior: isDesktop ? 'smooth' : 'auto' });
+        } else {
+          wizardWrapRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+        pendingAutoAdvanceScrollRef.current = false;
+      },
+      isDesktop ? 140 : 60,
+    );
 
     return () => {
       if (autoAdvanceScrollTimerRef.current) clearTimeout(autoAdvanceScrollTimerRef.current);
@@ -1046,37 +1092,61 @@ export default function SelectionPage() {
   }, [curField, filteredTotal, filterSpecKey, isDesktop, isLoading, phase, search, skippedKey]);
 
   /* handlers */
+  const scheduleCategoryNavigation = useCallback((applyChange: () => void, delayMs = 0) => {
+    if (categoryNavigationTimerRef.current) window.clearTimeout(categoryNavigationTimerRef.current);
+    categoryNavigationTimerRef.current = window.setTimeout(() => {
+      categoryNavigationTimerRef.current = null;
+      startTransition(applyChange);
+    }, delayMs);
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (categoryNavigationTimerRef.current) window.clearTimeout(categoryNavigationTimerRef.current);
+    };
+  }, []);
+
   const pickGroup = useCallback(
     (id: string) => {
-      setPressedCategoryKey(`group:${id}`);
-      setGroupId(id);
-      setSlug(null);
-      setSpecs({});
-      setManualDrafts({});
-      setSkipped(new Set());
-      setAutoSelectedFields(new Set());
-      setSearchDraft('');
-      setExpandedKits(new Set());
-      window.setTimeout(() => setPressedCategoryKey(null), 260);
+      if (isDesktop) setPressedCategoryKey(`group:${id}`);
+      scheduleCategoryNavigation(
+        () => {
+          setGroupId(id);
+          setSlug(null);
+          setSpecs({});
+          setManualDrafts({});
+          setSkipped(new Set());
+          setAutoSelectedFields(new Set());
+          setSearchDraft('');
+          setExpandedKits(new Set());
+        },
+        isDesktop ? 0 : 32,
+      );
+      if (isDesktop) window.setTimeout(() => setPressedCategoryKey(null), 220);
     },
-    [setSearchDraft],
+    [isDesktop, scheduleCategoryNavigation, setSearchDraft],
   );
   const pickSub = useCallback(
     (s: string) => {
-      setPressedCategoryKey(`sub:${s}`);
+      if (isDesktop) setPressedCategoryKey(`sub:${s}`);
       suppressAutoAdvanceScrollRef.current = true;
       pendingAutoAdvanceScrollRef.current = false;
-      pushRecent(s);
-      setSlug(s);
-      setSpecs({});
-      setManualDrafts({});
-      setSkipped(new Set());
-      setAutoSelectedFields(new Set());
-      setSearchDraft('');
-      setExpandedKits(new Set());
-      window.setTimeout(() => setPressedCategoryKey(null), 260);
+      scheduleCategoryNavigation(
+        () => {
+          pushRecent(s);
+          setSlug(s);
+          setSpecs({});
+          setManualDrafts({});
+          setSkipped(new Set());
+          setAutoSelectedFields(new Set());
+          setSearchDraft('');
+          setExpandedKits(new Set());
+        },
+        isDesktop ? 0 : 32,
+      );
+      if (isDesktop) window.setTimeout(() => setPressedCategoryKey(null), 220);
     },
-    [setSearchDraft],
+    [isDesktop, scheduleCategoryNavigation, setSearchDraft],
   );
   const goToGroupCategories = useCallback(() => {
     setSlug(null);
@@ -1107,6 +1177,10 @@ export default function SelectionPage() {
   const dropVal = useCallback(
     (key: string) => {
       userUndoRef.current = true;
+      if (!isDesktop) {
+        stepScrollIntentRef.current = 'top';
+        pendingAutoAdvanceScrollRef.current = false;
+      }
       setSpecs((prev) => {
         const keys = Object.keys(prev);
         const i = keys.indexOf(key);
@@ -1126,7 +1200,7 @@ export default function SelectionPage() {
       setSkipped(new Set());
       setSearchDraft('');
     },
-    [specs, setSearchDraft],
+    [isDesktop, specs, setSearchDraft],
   );
   const goHome = useCallback(() => {
     startTransition(() => {
@@ -1421,6 +1495,16 @@ export default function SelectionPage() {
             ease: 'easeOut' as const,
           },
         };
+  const mobileCategoryItemMotionProps = prefersReducedMotion
+    ? { initial: false as const }
+    : {
+        initial: { opacity: 0.96, y: 2 },
+        animate: { opacity: 1, y: 0 },
+        transition: {
+          opacity: { duration: 0.16, ease: 'easeOut' as const },
+          y: { type: 'spring' as const, stiffness: 420, damping: 34, mass: 0.65 },
+        },
+      };
   const renderCategoryItem = (
     {
       key,
@@ -1448,9 +1532,9 @@ export default function SelectionPage() {
       onClick={onClick}
       data-selection-category-card
       className={isDesktop ? selectionCategoryCardClass(active) : mobileCategoryCardClass(active)}
-      whileHover={prefersReducedMotion ? undefined : { y: -1 }}
-      whileTap={prefersReducedMotion ? undefined : { scale: 0.985 }}
-      {...categoryItemMotionProps(index)}
+      whileHover={!isDesktop || prefersReducedMotion ? undefined : { y: -1 }}
+      whileTap={prefersReducedMotion ? undefined : isDesktop ? { scale: 0.985 } : { scale: 0.996, opacity: 0.9 }}
+      {...(isDesktop ? categoryItemMotionProps(index) : mobileCategoryItemMotionProps)}
     >
       {categoryMedia(image, icon, previewSeed)}
       <div className="flex min-w-0 flex-1 items-center gap-2 px-3 py-2.5 md:px-3.5">
@@ -1543,22 +1627,59 @@ export default function SelectionPage() {
     const fieldLabel = colDef?.label || field;
     const isManual = isManualColumn(colDef);
     const isPreset = isPresetColumn(colDef);
+    const isAutoSelected = autoSelectedFields.has(field);
 
     if (isCompleted) {
       return (
         <div key={field}>
           <button
-            onClick={() => dropVal(field)}
-            className={`w-full flex items-center gap-2.5 rounded-xl bg-primary-container/8 border border-primary-container/12 px-3 md:px-4 py-2.5 text-left hover:bg-primary-container/15 ${selectionPress}`}
+            type="button"
+            onClick={isAutoSelected ? undefined : () => dropVal(field)}
+            disabled={isAutoSelected}
+            className={`flex w-full items-center gap-2.5 rounded-xl border px-3 py-2.5 text-left md:px-4 ${
+              isAutoSelected
+                ? 'cursor-default border-outline-variant/10 bg-surface-container-low/55 text-on-surface-variant/55'
+                : `border-primary-container/12 bg-primary-container/8 hover:bg-primary-container/15 ${selectionPress}`
+            }`}
           >
-            <div className="w-5 h-5 md:w-6 md:h-6 rounded-full bg-primary-container/25 flex items-center justify-center shrink-0">
-              <Icon name="check" size={12} className="text-primary-container" />
+            <div
+              className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full md:h-6 md:w-6 ${
+                isAutoSelected ? 'bg-on-surface-variant/10' : 'bg-primary-container/25'
+              }`}
+            >
+              <Icon
+                name="check"
+                size={12}
+                className={isAutoSelected ? 'text-on-surface-variant/35' : 'text-primary-container'}
+              />
             </div>
-            <span className="text-xs sm:text-sm text-on-surface-variant shrink-0">{fieldLabel}:</span>
-            <span className="text-xs sm:text-sm font-bold text-on-surface truncate">{specs[field]}</span>
-            <Icon name="close" size={12} className="text-on-surface-variant/30 ml-auto shrink-0" />
+            <span
+              className={`shrink-0 text-xs sm:text-sm ${
+                isAutoSelected ? 'text-on-surface-variant/45' : 'text-on-surface-variant'
+              }`}
+            >
+              {fieldLabel}:
+            </span>
+            <span
+              className={`truncate text-xs font-bold sm:text-sm ${
+                isAutoSelected ? 'text-on-surface-variant/55' : 'text-on-surface'
+              }`}
+            >
+              {specs[field]}
+            </span>
+            {isAutoSelected ? (
+              <span className="ml-auto shrink-0 rounded-full bg-surface-container-high px-2 py-0.5 text-[10px] font-medium text-on-surface-variant/45">
+                自动
+              </span>
+            ) : (
+              <Icon name="close" size={12} className="ml-auto shrink-0 text-on-surface-variant/30" />
+            )}
           </button>
-          {hasMore && <div className="w-px h-3 bg-primary-container/20 ml-5 md:ml-6" />}
+          {hasMore && (
+            <div
+              className={`ml-5 h-3 w-px md:ml-6 ${isAutoSelected ? 'bg-outline-variant/8' : 'bg-primary-container/20'}`}
+            />
+          )}
         </div>
       );
     }
@@ -1591,7 +1712,7 @@ export default function SelectionPage() {
                   <h3 className="text-sm sm:text-base font-bold text-on-surface">选择{fieldLabel}</h3>
                 </div>
                 <span className="text-xs text-on-surface-variant bg-surface-container-high px-2.5 py-1 rounded-full shrink-0">
-                  {formatModelCount(filteredTotal)}
+                  {currentStepOptionCountText}
                 </span>
               </div>
               {isManual ? (
@@ -1702,16 +1823,13 @@ export default function SelectionPage() {
                   </div>
                 ) : (
                   <div className="flex flex-wrap gap-2">
-                    {options.map(({ val, count }) => (
+                    {options.map(({ val }) => (
                       <button
                         key={val}
                         onClick={() => pickVal(field, val)}
                         className="rounded-lg border border-outline-variant/20 bg-surface-container px-3 sm:px-4 py-2 sm:py-2.5 text-sm text-on-surface hover:border-primary-container/50 hover:bg-primary-container/5 active:scale-95 transition-all min-h-[40px]"
                       >
                         <span className="font-medium">{val}</span>
-                        {colDef?.showCount !== false && (
-                          <span className="text-on-surface-variant/40 ml-1.5 text-xs">({count})</span>
-                        )}
                       </button>
                     ))}
                   </div>
@@ -2222,7 +2340,7 @@ export default function SelectionPage() {
       : phase === 'sub'
         ? '先选择产品分类，再按参数逐步缩小范围'
         : curField
-          ? `按参数列定义顺序筛选，当前匹配 ${formatModelCount(filteredTotal)}`
+          ? `按参数列定义顺序筛选，当前可选 ${currentStepOptionCountText}`
           : `已完成筛选，共匹配 ${formatModelCount(filteredTotal)}`;
 
   const mobileSelectedSummary =
@@ -2464,49 +2582,64 @@ export default function SelectionPage() {
         : `selection-wizard-${slug || 'none'}`;
   const desktopScrollContainerClass = 'min-h-0 flex-1 overflow-y-auto overflow-x-hidden custom-scrollbar';
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (isDesktop) return;
-    const frame = window.requestAnimationFrame(() => {
-      scrollContainerRef.current?.scrollTo({ top: 0, left: 0, behavior: 'auto' });
-      mobileMainRef.current?.scrollTo({ top: 0, left: 0, behavior: 'auto' });
-    });
-    return () => window.cancelAnimationFrame(frame);
+    scrollContainerRef.current?.scrollTo({ top: 0, left: 0, behavior: 'auto' });
+    mobileMainRef.current?.scrollTo({ top: 0, left: 0, behavior: 'auto' });
   }, [isDesktop, selectionPhaseKey]);
 
-  const contentBody = (
-    <AnimatePresence mode="wait" initial={false}>
-      <motion.div
-        key={selectionPhaseKey}
-        initial={{ opacity: 0.9 }}
-        animate={{ opacity: 1 }}
-        exit={{ opacity: 0.96 }}
-        transition={{ duration: 0.12, ease: 'easeOut' }}
-        className="min-w-0"
-      >
-        {phase === 'group' && groupContent}
-        {phase === 'sub' && subContent}
-        {phase === 'wizard' &&
-          (wizardContent || (
-            <div ref={wizardWrapRef} className="px-4 py-4 md:px-5 md:py-5">
-              {pageHeader}
-              <div className="space-y-0">
-                <AnimatePresence mode="wait" initial={false}>
-                  <motion.div key={wizardTransitionKey} {...wizardTransition} className="min-w-0">
-                    {isMobileResultView ? (
-                      resultsJSX
-                    ) : (
-                      <>
-                        {stepsJSX}
-                        {resultsJSX}
-                      </>
-                    )}
-                  </motion.div>
-                </AnimatePresence>
-              </div>
+  const phaseMotionProps = prefersReducedMotion
+    ? { initial: false as const }
+    : isDesktop
+      ? {
+          initial: { opacity: 0.9 },
+          animate: { opacity: 1 },
+          exit: { opacity: 0.96 },
+          transition: { duration: 0.12, ease: 'easeOut' as const },
+        }
+      : {
+          initial: { opacity: 0.86, y: 8, scale: 0.996 },
+          animate: { opacity: 1, y: 0, scale: 1 },
+          transition: {
+            opacity: { duration: 0.16, ease: 'easeOut' as const },
+            y: { type: 'spring' as const, stiffness: 380, damping: 34, mass: 0.75 },
+            scale: { duration: 0.18, ease: [0.16, 1, 0.3, 1] as const },
+          },
+        };
+
+  const phaseContent = (
+    <motion.div key={selectionPhaseKey} {...phaseMotionProps} className="min-w-0 transform-gpu">
+      {phase === 'group' && groupContent}
+      {phase === 'sub' && subContent}
+      {phase === 'wizard' &&
+        (wizardContent || (
+          <div ref={wizardWrapRef} className="px-4 py-4 md:px-5 md:py-5">
+            {pageHeader}
+            <div className="space-y-0">
+              <AnimatePresence mode="wait" initial={false}>
+                <motion.div key={wizardTransitionKey} {...wizardTransition} className="min-w-0">
+                  {isMobileResultView ? (
+                    resultsJSX
+                  ) : (
+                    <>
+                      {stepsJSX}
+                      {resultsJSX}
+                    </>
+                  )}
+                </motion.div>
+              </AnimatePresence>
             </div>
-          ))}
-      </motion.div>
+          </div>
+        ))}
+    </motion.div>
+  );
+
+  const contentBody = isDesktop ? (
+    <AnimatePresence mode={isDesktop ? 'wait' : 'sync'} initial={false}>
+      {phaseContent}
     </AnimatePresence>
+  ) : (
+    phaseContent
   );
 
   const shareLinkDialogNode = (

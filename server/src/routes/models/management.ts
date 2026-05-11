@@ -7,6 +7,7 @@ import { logger } from '../../lib/logger.js';
 import { modelTextSearchWhere, normalizeSearchParam } from '../../lib/searchQuery.js';
 import { authMiddleware, type AuthRequest } from '../../middleware/auth.js';
 import { requireRole } from '../../middleware/rbac.js';
+import { mutationLimiter } from '../../middleware/security.js';
 import { removeExistingFiles, removeModelFiles } from '../../services/modelFiles.js';
 import { MODEL_STATUS } from '../../services/modelStatus.js';
 import { clearCategoryCache } from '../categories/common.js';
@@ -116,14 +117,11 @@ export function createModelManagementRouter({ prisma, metadataDir, getMeta, save
 
     if (prisma) {
       try {
-        await prisma.favorite.deleteMany({ where: { modelId: id } }).catch(() => {});
-        await prisma.download.deleteMany({ where: { modelId: id } }).catch(() => {});
-        await prisma.shareLink.deleteMany({ where: { modelId: id } }).catch(() => {});
-        await prisma.comment.deleteMany({ where: { modelId: id } }).catch(() => {});
-        await prisma.modelVersion.deleteMany({ where: { modelId: id } }).catch(() => {});
+        // All related tables (Favorite, Download, ShareLink, Comment, ModelVersion)
+        // have onDelete: Cascade — a single model.delete handles them all.
         await prisma.model.delete({ where: { id } }).catch(() => {});
       } catch (err) {
-        logger.warn({ err, modelId: id }, '[models] Failed to delete related database rows');
+        logger.warn({ err, modelId: id }, '[models] Failed to delete model row');
       }
     }
 
@@ -255,6 +253,7 @@ export function createModelManagementRouter({ prisma, metadataDir, getMeta, save
   // Batch delete models requires auth
   router.post(
     '/api/models/batch-delete',
+    mutationLimiter,
     authMiddleware,
     requireRole('ADMIN'),
     async (req: AuthRequest, res: Response) => {

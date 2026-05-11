@@ -295,10 +295,15 @@ export default function ProductWallPage() {
   const loadMoreRef = useRef<HTMLButtonElement | null>(null);
   const previewCloseRef = useRef<HTMLButtonElement | null>(null);
   const previewDragRef = useRef({ active: false, moved: false, startX: 0, startY: 0, panX: 0, panY: 0 });
+  const previewPanRef = useRef({ x: 0, y: 0 });
+  const pendingPreviewPanRef = useRef<{ x: number; y: number } | null>(null);
+  const previewPanFrameRef = useRef<number | null>(null);
   const pinchRef = useRef({ active: false, startDist: 0, startZoom: 1, cx: 0, cy: 0 });
   const momentumRef = useRef({ vx: 0, vy: 0, raf: 0, lastTime: 0, lastX: 0, lastY: 0 });
   const doubleTapRef = useRef({ lastTap: 0, x: 0, y: 0 });
   const pinchJustEndedRef = useRef(false);
+  const previewMenuBlockUntilRef = useRef(0);
+  const activePreviewRef = useRef<WallItem | null>(null);
   const { user, isAuthenticated, hasHydrated } = useAuthStore();
   const { toast } = useToast();
   const { uploadPolicy } = getBusinessConfig();
@@ -342,6 +347,13 @@ export default function ProductWallPage() {
   const [uploadTitle, setUploadTitle] = useState('');
   const [uploadDescription, setUploadDescription] = useState('');
   const [manageMenuOpen, setManageMenuOpen] = useState(false);
+  const setManageMenuOpenGuarded = useCallback((value: boolean | ((prev: boolean) => boolean)) => {
+    if (performance.now() < previewMenuBlockUntilRef.current) {
+      setManageMenuOpen(false);
+      return;
+    }
+    setManageMenuOpen(value);
+  }, []);
   const [canvasMode] = useState<ProductWallCanvasMode>(() => {
     if (typeof window === 'undefined') return 'white';
     const saved = window.localStorage.getItem(PRODUCT_WALL_CANVAS_MODE_KEY);
@@ -414,6 +426,27 @@ export default function ProductWallPage() {
   }, [approvedItems, filter, isLoggedIn, favoriteIds, normalizedQuery]);
   const renderedItems = visibleItems.slice(0, renderCount);
   const hasMoreVisibleItems = renderedItems.length < visibleItems.length;
+  const schedulePreviewPan = useCallback((nextPan: { x: number; y: number }) => {
+    previewPanRef.current = nextPan;
+    pendingPreviewPanRef.current = nextPan;
+    if (previewPanFrameRef.current != null) return;
+    previewPanFrameRef.current = window.requestAnimationFrame(() => {
+      previewPanFrameRef.current = null;
+      const pendingPan = pendingPreviewPanRef.current;
+      if (!pendingPan) return;
+      pendingPreviewPanRef.current = null;
+      setPreviewPan(pendingPan);
+    });
+  }, []);
+  const setPreviewPanImmediate = useCallback((nextPan: { x: number; y: number }) => {
+    if (previewPanFrameRef.current != null) {
+      window.cancelAnimationFrame(previewPanFrameRef.current);
+      previewPanFrameRef.current = null;
+    }
+    pendingPreviewPanRef.current = null;
+    previewPanRef.current = nextPan;
+    setPreviewPan(nextPan);
+  }, []);
   const masonryColumns = useMemo(() => {
     const columns = Array.from({ length: columnCount }, () => [] as ProductWallMasonryEntry[]);
     const heights = Array.from({ length: columnCount }, () => 0);
@@ -477,6 +510,7 @@ export default function ProductWallPage() {
   );
   const resolvedFilters = categoryNames;
   const previewZoomed = previewZoom > 1.01;
+  activePreviewRef.current = active;
   const syncUpdatedWallItem = (updated: WallItem) => {
     setActive((current) => (current?.id === updated.id ? updated : current));
     setEditingItem((current) => (current?.id === updated.id ? updated : current));
@@ -767,14 +801,13 @@ export default function ProductWallPage() {
   }, [reviewFilter, managementKindFilter, normalizedManagementQuery]);
   useEffect(() => {
     setPreviewZoom(1);
-    setPreviewPan({ x: 0, y: 0 });
+    setPreviewPanImmediate({ x: 0, y: 0 });
     setPreviewDragging(false);
     previewDragRef.current = { active: false, moved: false, startX: 0, startY: 0, panX: 0, panY: 0 };
     pinchRef.current = { active: false, startDist: 0, startZoom: 1, cx: 0, cy: 0 };
     cancelAnimationFrame(momentumRef.current.raf);
     momentumRef.current = { vx: 0, vy: 0, raf: 0, lastTime: 0, lastX: 0, lastY: 0 };
-    if (activeId) requestAnimationFrame(() => previewCloseRef.current?.focus());
-  }, [activeId]);
+  }, [activeId, setPreviewPanImmediate]);
   useEffect(() => {
     setDetailOriginalReady(false);
     setDetailOriginalFailed(false);
@@ -786,20 +819,36 @@ export default function ProductWallPage() {
     }
 
     let cancelled = false;
-    const image = new window.Image();
-    image.decoding = 'async';
-    image.onload = () => {
-      if (!cancelled) setDetailOriginalReady(true);
-    };
-    image.onerror = () => {
-      if (!cancelled) setDetailOriginalFailed(true);
-    };
-    image.src = activeImage;
+    let image: HTMLImageElement | null = null;
+    const timer = window.setTimeout(() => {
+      if (cancelled) return;
+      image = new window.Image();
+      image.decoding = 'async';
+      image.onload = () => {
+        if (!cancelled) setDetailOriginalReady(true);
+      };
+      image.onerror = () => {
+        if (!cancelled) setDetailOriginalFailed(true);
+      };
+      image.src = activeImage;
+      const decodePromise = image.decode?.();
+      void decodePromise?.then(
+        () => {
+          if (!cancelled) setDetailOriginalReady(true);
+        },
+        () => {
+          if (!cancelled) setDetailOriginalFailed(true);
+        },
+      );
+    }, 120);
 
     return () => {
       cancelled = true;
-      image.onload = null;
-      image.onerror = null;
+      window.clearTimeout(timer);
+      if (image) {
+        image.onload = null;
+        image.onerror = null;
+      }
     };
   }, [activeId, activeImage, activePreviewImage]);
   const { data: favoriteData } = useSWR(isLoggedIn ? 'product-wall-favorites' : null, listProductWallFavorites);
@@ -828,6 +877,12 @@ export default function ProductWallPage() {
     [],
   );
   useEffect(() => {
+    return () => {
+      if (previewPanFrameRef.current != null) window.cancelAnimationFrame(previewPanFrameRef.current);
+      cancelAnimationFrame(momentumRef.current.raf);
+    };
+  }, []);
+  useEffect(() => {
     const target = loadMoreRef.current;
     if (!target || !hasMoreVisibleItems || !wallReady) return;
     const observer = new IntersectionObserver(
@@ -842,11 +897,41 @@ export default function ProductWallPage() {
   }, [hasMoreVisibleItems, wallReady, loadMoreVisibleItems]);
   const previewZoomRef = useRef(previewZoom);
   previewZoomRef.current = previewZoom;
-  const setPreviewZoomLevel = (value: number) => {
-    const nextZoom = Math.min(5, Math.max(1, value));
-    setPreviewZoom(nextZoom);
-    if (nextZoom <= 1.01) setPreviewPan({ x: 0, y: 0 });
-  };
+  useEffect(() => {
+    if (!pendingPreviewPanRef.current) previewPanRef.current = previewPan;
+  }, [previewPan]);
+  const setPreviewZoomLevel = useCallback(
+    (value: number) => {
+      const nextZoom = Math.min(5, Math.max(1, value));
+      setPreviewZoom(nextZoom);
+      if (nextZoom <= 1.01) setPreviewPanImmediate({ x: 0, y: 0 });
+    },
+    [setPreviewPanImmediate],
+  );
+  const closeActivePreview = useCallback(() => {
+    cancelAnimationFrame(momentumRef.current.raf);
+    previewMenuBlockUntilRef.current = performance.now() + 520;
+    setPreviewZoomLevel(1);
+    setPreviewDragging(false);
+    setActive(null);
+    setManageMenuOpen(false);
+  }, [setPreviewZoomLevel]);
+  useEffect(() => {
+    const blockPreviewClickThrough = (event: Event) => {
+      if (performance.now() >= previewMenuBlockUntilRef.current || activePreviewRef.current) return;
+      event.preventDefault();
+      event.stopPropagation();
+      if ('stopImmediatePropagation' in event) event.stopImmediatePropagation();
+    };
+    window.addEventListener('click', blockPreviewClickThrough, true);
+    window.addEventListener('pointerup', blockPreviewClickThrough, true);
+    window.addEventListener('touchend', blockPreviewClickThrough, true);
+    return () => {
+      window.removeEventListener('click', blockPreviewClickThrough, true);
+      window.removeEventListener('pointerup', blockPreviewClickThrough, true);
+      window.removeEventListener('touchend', blockPreviewClickThrough, true);
+    };
+  }, []);
   useEffect(() => {
     const el = previewCanvasRef.current;
     if (!el) return;
@@ -857,6 +942,31 @@ export default function ProductWallPage() {
     };
     el.addEventListener('wheel', handler, { passive: false });
     return () => el.removeEventListener('wheel', handler);
+  }, [active, setPreviewZoomLevel]);
+  useEffect(() => {
+    if (!active) return;
+    const el = previewCanvasRef.current;
+    if (!el) return;
+    const preventNativeTouch = (event: TouchEvent) => {
+      if (event.touches.length > 1 || previewZoomRef.current > 1.01 || pinchRef.current.active) {
+        event.preventDefault();
+      }
+    };
+    const preventNativeGesture = (event: Event) => {
+      event.preventDefault();
+    };
+    el.addEventListener('touchstart', preventNativeTouch, { passive: false });
+    el.addEventListener('touchmove', preventNativeTouch, { passive: false });
+    el.addEventListener('gesturestart', preventNativeGesture, { passive: false });
+    el.addEventListener('gesturechange', preventNativeGesture, { passive: false });
+    el.addEventListener('gestureend', preventNativeGesture, { passive: false });
+    return () => {
+      el.removeEventListener('touchstart', preventNativeTouch);
+      el.removeEventListener('touchmove', preventNativeTouch);
+      el.removeEventListener('gesturestart', preventNativeGesture);
+      el.removeEventListener('gesturechange', preventNativeGesture);
+      el.removeEventListener('gestureend', preventNativeGesture);
+    };
   }, [active]);
   useEffect(() => {
     if (!manageMenuOpen) return;
@@ -870,21 +980,27 @@ export default function ProductWallPage() {
     if (!active || editingItem || deleteDialog) return;
     const closePreview = (event: KeyboardEvent) => {
       if (event.key !== 'Escape') return;
-      setActive(null);
+      closeActivePreview();
     };
     window.addEventListener('keydown', closePreview);
     return () => window.removeEventListener('keydown', closePreview);
-  }, [active, editingItem, deleteDialog]);
+  }, [active, editingItem, deleteDialog, closeActivePreview]);
   const runMomentum = (vx: number, vy: number) => {
     cancelAnimationFrame(momentumRef.current.raf);
+    setPreviewDragging(true);
     let velX = vx;
     let velY = vy;
     const friction = 0.92;
     const tick = () => {
       velX *= friction;
       velY *= friction;
-      if (Math.abs(velX) < 0.3 && Math.abs(velY) < 0.3) return;
-      setPreviewPan((prev) => ({ x: prev.x + velX, y: prev.y + velY }));
+      if (Math.abs(velX) < 0.3 && Math.abs(velY) < 0.3) {
+        momentumRef.current.raf = 0;
+        setPreviewDragging(false);
+        return;
+      }
+      const currentPan = previewPanRef.current;
+      schedulePreviewPan({ x: currentPan.x + velX, y: currentPan.y + velY });
       momentumRef.current.raf = requestAnimationFrame(tick);
     };
     momentumRef.current.raf = requestAnimationFrame(tick);
@@ -903,8 +1019,8 @@ export default function ProductWallPage() {
       moved: false,
       startX: event.clientX,
       startY: event.clientY,
-      panX: previewPan.x,
-      panY: previewPan.y,
+      panX: previewPanRef.current.x,
+      panY: previewPanRef.current.y,
     };
     momentumRef.current.lastTime = now;
     momentumRef.current.lastX = event.clientX;
@@ -928,15 +1044,17 @@ export default function ProductWallPage() {
       momentumRef.current.lastX = event.clientX;
       momentumRef.current.lastY = event.clientY;
     }
-    setPreviewPan({ x: dragState.panX + dx, y: dragState.panY + dy });
+    schedulePreviewPan({ x: dragState.panX + dx, y: dragState.panY + dy });
   };
   const handlePreviewPointerUp = (event: PointerEvent<HTMLButtonElement>) => {
     if (!previewDragRef.current.active) return;
     event.currentTarget.releasePointerCapture(event.pointerId);
+    const shouldRunMomentum = previewDragRef.current.moved && previewZoomRef.current > 1.01;
     previewDragRef.current.active = false;
-    setPreviewDragging(false);
-    if (previewDragRef.current.moved && previewZoomRef.current > 1.01) {
+    if (shouldRunMomentum) {
       runMomentum(momentumRef.current.vx, momentumRef.current.vy);
+    } else {
+      setPreviewDragging(false);
     }
   };
   const handlePreviewImageClick = () => {
@@ -996,7 +1114,8 @@ export default function ProductWallPage() {
     const panDx = cx - pinchRef.current.cx;
     const panDy = cy - pinchRef.current.cy;
     if (Math.abs(panDx) > 1 || Math.abs(panDy) > 1) {
-      setPreviewPan((prev) => ({ x: prev.x + panDx * 0.5, y: prev.y + panDy * 0.5 }));
+      const currentPan = previewPanRef.current;
+      schedulePreviewPan({ x: currentPan.x + panDx * 0.5, y: currentPan.y + panDy * 0.5 });
       pinchRef.current.cx = cx;
       pinchRef.current.cy = cy;
     }
@@ -1191,7 +1310,7 @@ export default function ProductWallPage() {
         selectedCount={selectedCount}
         selectableVisibleItems={selectableVisibleItems}
         manageMenuOpen={manageMenuOpen}
-        setManageMenuOpen={setManageMenuOpen}
+        setManageMenuOpen={setManageMenuOpenGuarded}
         fileInputRef={fileInputRef}
         folderInputRef={folderInputRef}
         onToggleEditMode={() => {
@@ -1233,7 +1352,7 @@ export default function ProductWallPage() {
         selectedCount={selectedCount}
         selectableVisibleItems={selectableVisibleItems}
         manageMenuOpen={manageMenuOpen}
-        setManageMenuOpen={setManageMenuOpen}
+        setManageMenuOpen={setManageMenuOpenGuarded}
         fileInputRef={fileInputRef}
         folderInputRef={folderInputRef}
         onToggleEditMode={() => {
@@ -1747,29 +1866,45 @@ export default function ProductWallPage() {
         createPortal(
           <div
             className="fixed inset-0 z-[10002] flex items-center justify-center p-0 md:p-6"
-            onClick={() => setActive(null)}
+            onPointerDown={(event) => {
+              event.preventDefault();
+              event.stopPropagation();
+              closeActivePreview();
+            }}
+            onClick={(event) => {
+              event.preventDefault();
+              event.stopPropagation();
+            }}
           >
             {/* backdrop */}
             <div className="fixed inset-0 bg-black/68" aria-hidden="true" />
             <div
-              className="relative flex h-dvh w-full flex-col bg-surface shadow-none md:h-[94dvh] md:max-w-[1500px] md:rounded-xl md:border md:border-outline-variant/18 md:shadow-[0_34px_120px_rgba(0,0,0,0.34)]"
+              className="product-wall-preview-panel relative flex h-dvh w-full flex-col overflow-hidden bg-surface shadow-none md:h-[94dvh] md:max-w-[1500px] md:rounded-xl md:border md:border-outline-variant/18 md:shadow-[0_34px_120px_rgba(0,0,0,0.34)]"
+              onPointerDown={(event) => event.stopPropagation()}
               onClick={(event) => event.stopPropagation()}
             >
               {/* Close button — uses inline style for safe-area on iOS */}
               <button
                 ref={previewCloseRef}
                 type="button"
-                onClick={() => {
-                  setPreviewZoomLevel(1);
-                  setActive(null);
+                onPointerDown={(event) => {
+                  event.preventDefault();
+                  event.stopPropagation();
+                  closeActivePreview();
+                }}
+                onClick={(event) => {
+                  event.preventDefault();
+                  event.stopPropagation();
+                  if (event.detail === 0) closeActivePreview();
                 }}
                 style={{
                   position: 'absolute',
                   right: 12,
                   top: 'max(12px, env(safe-area-inset-top))',
                   zIndex: 50,
+                  touchAction: 'manipulation',
                 }}
-                className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-black/50 text-white shadow-lg transition-colors active:bg-black/70 md:h-9 md:w-9 md:bg-white/78 md:text-neutral-800 md:shadow-[0_8px_24px_rgba(0,0,0,0.14)]"
+                className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-black/50 text-white shadow-lg transition-colors focus:outline-none focus-visible:outline-none active:bg-black/70 md:h-9 md:w-9 md:bg-white/78 md:text-neutral-800 md:shadow-[0_8px_24px_rgba(0,0,0,0.14)]"
                 aria-label="关闭"
               >
                 <svg
@@ -1790,13 +1925,14 @@ export default function ProductWallPage() {
               <div
                 className={`product-wall-canvas-${canvasMode} product-wall-preview-canvas relative flex min-h-0 flex-1 items-center justify-center overflow-hidden`}
                 ref={previewCanvasRef}
+                style={{ touchAction: 'none' }}
                 onTouchStart={handleCanvasTouchStart}
                 onTouchMove={handleCanvasTouchMove}
                 onTouchEnd={handleCanvasTouchEnd}
                 onTouchCancel={handleCanvasTouchEnd}
               >
                 <div
-                  className="pointer-events-none absolute inset-0 scale-125 bg-cover bg-center opacity-10 blur-3xl"
+                  className="pointer-events-none absolute inset-0 hidden scale-125 bg-cover bg-center opacity-10 blur-3xl md:block"
                   style={{ backgroundImage: `url(${activePreviewImage})` }}
                 />
                 <button
@@ -1806,7 +1942,7 @@ export default function ProductWallPage() {
                   onPointerMove={handlePreviewPointerMove}
                   onPointerUp={handlePreviewPointerUp}
                   onPointerCancel={handlePreviewPointerUp}
-                  className={`relative z-10 flex h-full w-full shrink-0 touch-none items-center justify-center border-none bg-transparent p-0 focus:outline-none ${
+                  className={`product-wall-preview-gesture-layer relative z-10 flex h-full w-full shrink-0 touch-none items-center justify-center border-none bg-transparent p-0 focus:outline-none ${
                     previewZoomed ? (previewDragging ? 'cursor-grabbing' : 'cursor-grab') : 'cursor-zoom-in'
                   }`}
                   aria-label={previewZoomed ? '还原图片' : '放大图片'}
@@ -1815,7 +1951,8 @@ export default function ProductWallPage() {
                     src={activeDetailImage}
                     alt={active.title}
                     loading="eager"
-                    className={`h-full w-full object-contain drop-shadow-[0_16px_42px_rgba(0,0,0,0.18)] ${previewDragging ? '' : 'transition-transform duration-300 ease-out'}`}
+                    decoding="async"
+                    className={`product-wall-preview-image h-full w-full object-contain md:drop-shadow-[0_16px_42px_rgba(0,0,0,0.18)] ${previewDragging ? '' : 'transition-transform duration-200 ease-out md:duration-300'}`}
                     fallbackClassName="h-full w-full"
                     style={{
                       transform: `translate3d(${previewPan.x}px, ${previewPan.y}px, 0) scale(${previewZoom})`,
@@ -1827,8 +1964,14 @@ export default function ProductWallPage() {
 
               {/* Bottom info bar with action buttons */}
               <div
-                className="relative z-20 shrink-0 border-t border-outline-variant/12 bg-surface px-4 pt-3 text-on-surface md:flex md:items-center md:justify-between md:px-5 md:py-3"
-                style={{ paddingBottom: 'max(1rem, env(safe-area-inset-bottom))' }}
+                className="product-wall-preview-info-bar relative z-20 shrink-0 border-t border-outline-variant/12 bg-surface px-4 pt-3 text-on-surface md:flex md:items-center md:justify-between md:px-5 md:py-3"
+                style={{
+                  paddingBottom: 'max(1rem, env(safe-area-inset-bottom))',
+                  touchAction: 'manipulation',
+                  transform: 'translateZ(0)',
+                }}
+                onPointerDown={(event) => event.stopPropagation()}
+                onTouchStart={(event) => event.stopPropagation()}
               >
                 <div className="min-w-0">
                   <p className="text-[11px] font-semibold tracking-[0.18em] text-primary-container">{active.kind}</p>
@@ -1838,7 +1981,7 @@ export default function ProductWallPage() {
                   ) : null}
                 </div>
                 {/* Action buttons: grid on mobile, flex row on desktop */}
-                <div className="mt-3 grid grid-cols-4 gap-2 md:mt-0 md:flex md:shrink-0 md:items-center md:gap-1.5">
+                <div className="product-wall-preview-actions mt-3 grid grid-cols-4 gap-2 md:mt-0 md:flex md:shrink-0 md:items-center md:gap-1.5">
                   <button
                     type="button"
                     onClick={togglePreviewZoom}
