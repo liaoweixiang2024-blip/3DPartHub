@@ -2,6 +2,7 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { useState } from 'react';
 import { authApi } from '../../api/auth';
 import { useAuthStore } from '../../stores/useAuthStore';
+import DialogOverlay from './DialogOverlay';
 import { useToast } from './Toast';
 
 /**
@@ -49,11 +50,7 @@ export default function ForceChangePassword() {
 
   return (
     <AnimatePresence>
-      <motion.div
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center bg-black/60 backdrop-blur-sm sm:p-4"
-      >
+      <DialogOverlay onClose={undefined} zIndex={100} backdropClassName="bg-black/60 backdrop-blur-sm" bottomOnMobile>
         <motion.div
           initial={{ scale: 0.95, opacity: 0 }}
           animate={{ scale: 1, opacity: 1 }}
@@ -121,7 +118,7 @@ export default function ForceChangePassword() {
             </button>
           </form>
         </motion.div>
-      </motion.div>
+      </DialogOverlay>
     </AnimatePresence>
   );
 }

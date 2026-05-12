@@ -2,6 +2,7 @@ import { motion } from 'framer-motion';
 import { useState, useEffect, useCallback } from 'react';
 import { useNavigate, useLocation, Link } from 'react-router-dom';
 import useSWR from 'swr';
+import { authApi } from '../api/auth';
 import client from '../api/client';
 import { unwrapResponse } from '../api/response';
 import BrandMark from '../components/shared/BrandMark';
@@ -142,7 +143,6 @@ export default function LoginPage() {
     setApiError('');
 
     try {
-      const { authApi } = await import('../api');
       if (mode === 'login') {
         const result = await authApi.login({ email, password, rememberMe });
         login(result.user, result.tokens, rememberMe);

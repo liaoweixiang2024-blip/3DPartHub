@@ -2,6 +2,7 @@ import { lazy, Suspense, useEffect, useRef, useState } from 'react';
 import { Routes, Route, Link, useLocation, Navigate } from 'react-router-dom';
 import useSWR from 'swr';
 import { AdminLayout, AdminPageShell, PublicLayout } from './components/shared/AdminPageShell';
+import AuthModal from './components/shared/AuthModal';
 import BrandMark from './components/shared/BrandMark';
 import ErrorBoundary from './components/shared/ErrorBoundary';
 import Icon from './components/shared/Icon';
@@ -9,6 +10,7 @@ import MaintenanceGate from './components/shared/MaintenanceGate';
 import ModelDetailPageSkeleton from './components/shared/ModelDetailPageSkeleton';
 import PageRefreshFallback from './components/shared/PageRefreshFallback';
 import { checkProtectedAccess } from './components/shared/ProtectedLink';
+import { getCachedModelDetailTitle } from './lib/modelDetailTitleCache';
 import { isModelDetailPath, saveModelReturnPath } from './lib/modelReturnPath';
 import { getCachedPublicSettings } from './lib/publicSettings';
 import {
@@ -82,9 +84,13 @@ const SelectionSharePage = lazy(loadSelectionSharePage);
 
 function RouteFallback({ standalone = false }: { standalone?: boolean }) {
   const location = useLocation();
+  const isAdmin = useAuthStore((state) => state.user?.role === 'ADMIN');
 
   if (isModelDetailPath(location.pathname)) {
-    return <ModelDetailPageSkeleton />;
+    const routeState = location.state as { modelName?: string | null } | null;
+    const modelId = decodeURIComponent(location.pathname.replace(/^\/model\//, '').replace(/\/$/, ''));
+    const modelTitle = routeState?.modelName?.trim() || getCachedModelDetailTitle(modelId);
+    return <ModelDetailPageSkeleton modelTitle={modelTitle} isAdmin={isAdmin} />;
   }
 
   return <PageRefreshFallback standalone={standalone} />;
@@ -148,6 +154,7 @@ function ProtectedPage({ children, requiredRole }: { children: React.ReactNode; 
   const location = useLocation();
   const [authRetryDone, setAuthRetryDone] = useState(false);
   const [authRetrying, setAuthRetrying] = useState(false);
+  const [authDialogOpen, setAuthDialogOpen] = useState(false);
 
   useEffect(() => {
     if (!hasHydrated || isAuthenticated || authRetryDone || authRetrying) return;
@@ -181,13 +188,16 @@ function ProtectedPage({ children, requiredRole }: { children: React.ReactNode; 
             </Link>
           }
           primary={
-            <Link
-              to="/login"
-              state={{ from: returnUrl }}
-              className="inline-flex h-9 items-center justify-center rounded-sm bg-primary-container px-4 text-sm font-bold text-on-primary transition-opacity hover:opacity-90 active:scale-[0.98]"
-            >
-              前往登录
-            </Link>
+            <>
+              <button
+                type="button"
+                onClick={() => setAuthDialogOpen(true)}
+                className="inline-flex h-9 items-center justify-center rounded-sm bg-primary-container px-4 text-sm font-bold text-on-primary transition-opacity hover:opacity-90 active:scale-[0.98]"
+              >
+                前往登录
+              </button>
+              <AuthModal open={authDialogOpen} onClose={() => setAuthDialogOpen(false)} returnUrl={returnUrl} />
+            </>
           }
         />
       );

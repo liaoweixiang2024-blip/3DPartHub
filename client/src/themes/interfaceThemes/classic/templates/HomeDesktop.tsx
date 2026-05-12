@@ -2,9 +2,13 @@ import { Link } from 'react-router-dom';
 import Icon from '../../../../components/shared/Icon';
 import InfiniteLoadTrigger from '../../../../components/shared/InfiniteLoadTrigger';
 import { PageTitle } from '../../../../components/shared/PagePrimitives';
+import VirtualProductGrid, { useGridColumnCount } from '../../../../components/shared/VirtualProductGrid';
 import { AnnouncementBanner, SkeletonCard, SkeletonListCard } from '../../shared/HomeDesktopShared';
 import type { DesktopHomeThemeProps } from '../../types';
 import CategorySidebar from '../components/CategorySidebar';
+
+const GRID_CARD_HEIGHT = 260;
+const LIST_CARD_HEIGHT = 80;
 
 export default function ClassicHomeDesktop({
   activeCategory,
@@ -28,6 +32,13 @@ export default function ClassicHomeDesktop({
   onToggleCategory,
   onViewModeChange,
 }: DesktopHomeThemeProps) {
+  const gridCols = useGridColumnCount();
+  const gridClasses = `home-model-grid grid gap-3 ${
+    viewMode === 'grid'
+      ? 'home-model-grid-grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5'
+      : 'home-model-grid-list grid-cols-1 gap-2'
+  }`;
+
   return (
     <div className="home-page-desktop flex flex-1 overflow-hidden" data-home-theme="classic">
       <CategorySidebar
@@ -132,15 +143,15 @@ export default function ClassicHomeDesktop({
           </div>
         ) : (
           <>
-            <div
-              className={`home-model-grid grid gap-3 ${
-                viewMode === 'grid'
-                  ? 'home-model-grid-grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5'
-                  : 'home-model-grid-list grid-cols-1 gap-2'
-              }`}
-            >
-              {products.map(renderProductCard)}
-            </div>
+            <VirtualProductGrid
+              products={products}
+              columns={viewMode === 'grid' ? gridCols : 1}
+              rowHeight={viewMode === 'grid' ? GRID_CARD_HEIGHT : LIST_CARD_HEIGHT}
+              gap={viewMode === 'grid' ? 12 : 8}
+              renderCard={renderProductCard}
+              scrollRef={scrollContainerRef}
+              gridClassName={gridClasses}
+            />
 
             {products.length === 0 && !showHomeListSkeleton && (
               <div className="home-model-empty-state flex flex-col items-center justify-center gap-4 py-20">

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type CSSProperties } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { authApi } from '../../api/auth';
 import { createInquiry } from '../../api/inquiries';
@@ -77,6 +77,40 @@ function specSummary(specs?: Record<string, string> | null) {
     .join(' ');
 }
 
+function useVisualViewportBottomOffset(enabled: boolean) {
+  const [bottomOffset, setBottomOffset] = useState(0);
+
+  useEffect(() => {
+    if (!enabled) {
+      setBottomOffset(0);
+      return;
+    }
+
+    const viewport = window.visualViewport;
+    if (!viewport) {
+      setBottomOffset(0);
+      return;
+    }
+
+    const updateOffset = () => {
+      setBottomOffset(Math.max(0, window.innerHeight - viewport.height - viewport.offsetTop));
+    };
+
+    updateOffset();
+    viewport.addEventListener('resize', updateOffset);
+    viewport.addEventListener('scroll', updateOffset);
+    window.addEventListener('orientationchange', updateOffset);
+
+    return () => {
+      viewport.removeEventListener('resize', updateOffset);
+      viewport.removeEventListener('scroll', updateOffset);
+      window.removeEventListener('orientationchange', updateOffset);
+    };
+  }, [enabled]);
+
+  return bottomOffset;
+}
+
 export default function InquirySubmitDialog({
   open,
   onClose,
@@ -100,6 +134,7 @@ export default function InquirySubmitDialog({
   const [savingContact, setSavingContact] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
+  const visualViewportBottomOffset = useVisualViewportBottomOffset(open);
 
   useEffect(() => {
     if (!open) return;
@@ -221,24 +256,38 @@ export default function InquirySubmitDialog({
 
   return (
     <div
-      className="fixed inset-0 z-[120] bg-black/40 p-0 backdrop-blur-sm md:flex md:items-center md:justify-center md:p-4"
+      className="fixed inset-0 z-[120] overflow-hidden bg-surface-container-low p-0 md:flex md:items-center md:justify-center md:bg-black/40 md:p-4 md:backdrop-blur-sm"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="inquiry-submit-dialog-title"
       onClick={onClose}
     >
       <div
-        className="fixed bottom-[max(1rem,env(safe-area-inset-bottom))] left-3 right-3 top-[max(1rem,env(safe-area-inset-top))] flex min-h-0 flex-col rounded-2xl border border-outline-variant/20 bg-surface-container-low shadow-2xl md:relative md:inset-auto md:max-h-[85vh] md:w-full md:max-w-xl"
+        className="fixed inset-x-0 top-0 bottom-[var(--inquiry-dialog-viewport-bottom,0px)] flex min-h-0 w-full flex-col bg-surface-container-low shadow-none md:relative md:inset-auto md:max-h-[85vh] md:w-full md:max-w-xl md:overflow-hidden md:rounded-2xl md:border md:border-outline-variant/20 md:shadow-2xl"
+        style={
+          {
+            '--inquiry-dialog-viewport-bottom': `${visualViewportBottomOffset}px`,
+          } as CSSProperties
+        }
         onClick={(event) => event.stopPropagation()}
       >
-        <div className="flex shrink-0 items-center justify-between border-b border-outline-variant/10 px-5 py-4">
+        <div className="flex shrink-0 items-center justify-between border-b border-outline-variant/10 px-4 pb-3 pt-[max(0.875rem,env(safe-area-inset-top,0px))] md:px-5 md:py-4">
           <div>
-            <h3 className="text-base font-bold text-on-surface">提交询价单</h3>
+            <h3 id="inquiry-submit-dialog-title" className="text-base font-bold text-on-surface">
+              提交询价单
+            </h3>
             <p className="mt-0.5 text-xs text-on-surface-variant">共 {items.length} 个待询价产品</p>
           </div>
-          <button onClick={onClose} className="text-on-surface-variant hover:text-on-surface">
+          <button
+            onClick={onClose}
+            className="inline-flex h-9 w-9 items-center justify-center rounded-full text-on-surface-variant transition-colors hover:bg-surface-container-high hover:text-on-surface"
+            aria-label="关闭提交询价弹窗"
+          >
             <Icon name="close" size={20} />
           </button>
         </div>
 
-        <div className="flex-1 space-y-4 overflow-y-auto px-5 py-4">
+        <div className="min-h-0 flex-1 space-y-3 overflow-y-auto overscroll-contain px-4 py-3 md:space-y-4 md:px-5 md:py-4">
           <div className="overflow-hidden rounded-lg border border-outline-variant/12 bg-surface-container-lowest">
             <div className="flex items-center justify-between gap-3 border-b border-outline-variant/10 px-3 py-2.5">
               <div className="flex min-w-0 items-center gap-2">
@@ -419,7 +468,7 @@ export default function InquirySubmitDialog({
           {error ? <p className="text-xs text-error">{error}</p> : null}
         </div>
 
-        <div className="flex shrink-0 gap-2 border-t border-outline-variant/10 px-5 py-3">
+        <div className="flex shrink-0 gap-2 border-t border-outline-variant/10 bg-surface-container-low px-4 pb-[calc(0.875rem+env(safe-area-inset-bottom,0px))] pt-3 md:px-5 md:py-3">
           <button
             onClick={onClose}
             className="flex-1 rounded-xl border border-outline-variant/40 py-2.5 text-sm font-medium text-on-surface-variant transition-colors hover:bg-surface-container-high/50"

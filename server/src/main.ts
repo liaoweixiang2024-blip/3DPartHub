@@ -40,7 +40,7 @@ import modelDrawingsRouter from './routes/model-drawings.js';
 import modelGroupsRouter from './routes/model-groups.js';
 import modelsRouter from './routes/models.js';
 import notificationsRouter from './routes/notifications.js';
-import productWallRouter from './routes/product-wall.js';
+import productWallRouter from './routes/product-wall/index.js';
 import projectsRouter from './routes/projects.js';
 import searchRouter from './routes/search.js';
 import selectionSharesRouter from './routes/selection-shares.js';
@@ -286,7 +286,8 @@ app.use('/static', async (req, res, next) => {
 app.use(
   '/static/thumbnails',
   express.static(join(process.cwd(), config.staticDir, 'thumbnails'), {
-    maxAge: '1h',
+    maxAge: '365d',
+    etag: true,
     setHeaders: setStaticSecurityHeaders,
   }),
 );
@@ -294,8 +295,8 @@ app.use(
 app.use(
   '/static',
   express.static(join(process.cwd(), config.staticDir), {
-    maxAge: '30d',
-    immutable: true,
+    maxAge: '1d',
+    etag: true,
     setHeaders: setStaticSecurityHeaders,
   }),
 );

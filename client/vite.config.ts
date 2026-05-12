@@ -14,6 +14,10 @@ export default defineConfig({
         manualChunks(id: string) {
           const normalizedId = id.replace(/\\/g, '/');
 
+          if (normalizedId.includes('/node_modules/framer-motion/')) {
+            return 'framer-motion';
+          }
+
           if (normalizedId.includes('/src/components/shared/UploadModal.tsx')) {
             return 'upload-modal';
           }

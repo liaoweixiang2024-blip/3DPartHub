@@ -224,17 +224,20 @@ function readIndexAccessor(accessor: any, bufferView: any, binData: Buffer): num
   return out;
 }
 
+const THUMB_JPEG_QUALITY = 0.88;
+const THUMB_SMALL_JPEG_QUALITY = 0.82;
+
 export function generateThumbnail(
   gltfPath: string,
   outputDir: string,
   modelId: string,
   width = 512,
   height = 512,
-): { thumbnailPath: string; thumbnailUrl: string } {
+): { thumbnailPath: string; thumbnailUrl: string; thumbnailSmallUrl: string } {
   width = Math.min(width || 512, 1024);
   height = Math.min(height || 512, 1024);
   mkdirSync(outputDir, { recursive: true });
-  const pngPath = join(outputDir, `${modelId}.png`);
+  const jpgPath = join(outputDir, `${modelId}.jpg`);
 
   try {
     const { json: gltf, binData } = readGltfAsset(gltfPath);
@@ -439,8 +442,19 @@ export function generateThumbnail(
     const ctx = canvas.getContext('2d');
     ctx.drawImage(hiCanvas, 0, 0, hiW, hiH, 0, 0, width, height);
 
-    writeFileSync(pngPath, canvas.toBuffer('image/png'));
-    return { thumbnailPath: pngPath, thumbnailUrl: `/static/thumbnails/${modelId}.png` };
+    writeFileSync(jpgPath, canvas.toBuffer('image/jpeg', { quality: THUMB_JPEG_QUALITY }));
+
+    const smallCanvas = createCanvas(256, 256);
+    const smallCtx = smallCanvas.getContext('2d');
+    smallCtx.drawImage(canvas, 0, 0, width, height, 0, 0, 256, 256);
+    const smallPath = join(outputDir, `${modelId}_sm.jpg`);
+    writeFileSync(smallPath, smallCanvas.toBuffer('image/jpeg', { quality: THUMB_SMALL_JPEG_QUALITY }));
+
+    return {
+      thumbnailPath: jpgPath,
+      thumbnailUrl: `/static/thumbnails/${modelId}.jpg`,
+      thumbnailSmallUrl: `/static/thumbnails/${modelId}_sm.jpg`,
+    };
   } catch {
     return generatePlaceholder(outputDir, modelId, width, height);
   }
@@ -569,8 +583,8 @@ function generatePlaceholder(
   modelId: string,
   width: number,
   height: number,
-): { thumbnailPath: string; thumbnailUrl: string } {
-  const pngPath = join(outputDir, `${modelId}.png`);
+): { thumbnailPath: string; thumbnailUrl: string; thumbnailSmallUrl: string } {
+  const jpgPath = join(outputDir, `${modelId}.jpg`);
   const canvas = createCanvas(width, height);
   const ctx = canvas.getContext('2d');
 
@@ -598,6 +612,16 @@ function generatePlaceholder(
   ctx.textAlign = 'center';
   ctx.fillText('3D 模型', cx, cy + size + 30);
 
-  writeFileSync(pngPath, canvas.toBuffer('image/png'));
-  return { thumbnailPath: pngPath, thumbnailUrl: `/static/thumbnails/${modelId}.png` };
+  const smallCanvas = createCanvas(Math.round(width / 2), Math.round(height / 2));
+  const smallCtx = smallCanvas.getContext('2d');
+  smallCtx.drawImage(canvas, 0, 0, width, height, 0, 0, Math.round(width / 2), Math.round(height / 2));
+  const smallPath = join(outputDir, `${modelId}_sm.jpg`);
+  writeFileSync(smallPath, smallCanvas.toBuffer('image/jpeg', { quality: THUMB_SMALL_JPEG_QUALITY }));
+
+  writeFileSync(jpgPath, canvas.toBuffer('image/jpeg', { quality: THUMB_JPEG_QUALITY }));
+  return {
+    thumbnailPath: jpgPath,
+    thumbnailUrl: `/static/thumbnails/${modelId}.jpg`,
+    thumbnailSmallUrl: `/static/thumbnails/${modelId}_sm.jpg`,
+  };
 }

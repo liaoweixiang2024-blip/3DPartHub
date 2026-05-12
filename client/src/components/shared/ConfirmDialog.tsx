@@ -1,5 +1,6 @@
 import { AnimatePresence, motion } from 'framer-motion';
-import { dialogPanelMotion, overlayMotion } from '../../lib/motion';
+import { dialogPanelMotion } from '../../lib/motion';
+import DialogOverlay from './DialogOverlay';
 import Icon from './Icon';
 
 interface ConfirmDialogProps {
@@ -30,14 +31,7 @@ export default function ConfirmDialog({
   return (
     <AnimatePresence>
       {open && (
-        <motion.div
-          variants={overlayMotion}
-          initial="initial"
-          animate="animate"
-          exit="exit"
-          className="fixed inset-0 z-[10000] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4"
-          onClick={onClose}
-        >
+        <DialogOverlay onClose={onClose} zIndex={10000}>
           <motion.div
             variants={dialogPanelMotion}
             initial="initial"
@@ -65,7 +59,7 @@ export default function ConfirmDialog({
               </button>
             </div>
           </motion.div>
-        </motion.div>
+        </DialogOverlay>
       )}
     </AnimatePresence>
   );

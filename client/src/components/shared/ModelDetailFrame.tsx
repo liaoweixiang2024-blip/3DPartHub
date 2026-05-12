@@ -4,6 +4,9 @@ import { PublicPageShell } from './PublicPageShell';
 export const MODEL_DETAIL_SHELL_CLASS = 'flex h-full min-h-0 flex-1 flex-col overflow-hidden bg-surface';
 export const MODEL_DETAIL_MAIN_CLASS = 'flex-1 min-h-0 overflow-hidden flex flex-col md:flex-row';
 export const MODEL_DETAIL_DESKTOP_MAIN_CLASS = 'flex flex-1 min-h-0 overflow-hidden flex-col md:flex-row';
+export type ModelDetailMobilePeekVariant = 'compact' | 'tall';
+export const MODEL_DETAIL_MOBILE_COMPACT_PEEK_HEIGHT = 118;
+export const MODEL_DETAIL_MOBILE_TALL_PEEK_HEIGHT = 134;
 export const MODEL_DETAIL_VIEWER_CLASS =
   'relative bg-surface-container min-w-0 flex-1 md:w-[60%] overflow-hidden border-r border-outline-variant/20 shrink-0';
 export const MODEL_DETAIL_ASIDE_CLASS =
@@ -24,6 +27,36 @@ export const MODEL_DETAIL_DOWNLOAD_ROW_BASE_CLASS =
 export const MODEL_DETAIL_DOWNLOAD_ROW_INTERACTIVE_CLASS = `${MODEL_DETAIL_DOWNLOAD_ROW_BASE_CLASS} hover:border-primary/50`;
 export const MODEL_DETAIL_SUPPORT_CLASS =
   'mt-auto space-y-3 border-t border-outline-variant/20 bg-surface-container p-5 lg:p-6';
+
+function estimateTitleUnits(title: string) {
+  return Array.from(title).reduce((total, char) => {
+    if (/\s/.test(char)) return total + 0.35;
+    if (/[\u2e80-\u9fff\uff00-\uffef]/u.test(char)) return total + 1;
+    if (/[A-Z0-9]/.test(char)) return total + 0.62;
+    return total + 0.55;
+  }, 0);
+}
+
+export function getModelDetailMobilePeekVariant(
+  title?: string | null,
+  options: { isAdmin?: boolean; fallback?: ModelDetailMobilePeekVariant } = {},
+): ModelDetailMobilePeekVariant {
+  const normalized = title?.trim();
+  if (!normalized) return options.fallback || 'compact';
+  if (normalized.includes('\n')) return 'tall';
+
+  const viewportWidth = typeof window === 'undefined' ? 375 : window.innerWidth || 375;
+  const sidePadding = 32;
+  const actionWidth = options.isAdmin ? 104 : 70;
+  const availableTitleWidth = Math.max(160, viewportWidth - sidePadding - actionWidth);
+  const titleBudget = availableTitleWidth / 14;
+
+  return estimateTitleUnits(normalized) > titleBudget ? 'tall' : 'compact';
+}
+
+export function getModelDetailMobilePeekHeight(variant: ModelDetailMobilePeekVariant) {
+  return variant === 'tall' ? MODEL_DETAIL_MOBILE_TALL_PEEK_HEIGHT : MODEL_DETAIL_MOBILE_COMPACT_PEEK_HEIGHT;
+}
 
 export function ModelDetailDesktopFrame({
   layout,

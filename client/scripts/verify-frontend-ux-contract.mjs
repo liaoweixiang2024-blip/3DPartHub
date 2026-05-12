@@ -26,6 +26,8 @@ const [
   appSource,
   globalCssSource,
   homePageSource,
+  homeUtilsSource,
+  productCardSource,
   classicHomeTemplateSource,
   workbenchHomeTemplateSource,
   modelDetailPageSource,
@@ -55,6 +57,7 @@ const [
   infiniteLoadTriggerSource,
   clientBusinessConfigSource,
   settingsPageSource,
+  settingsUtilsSource,
   serverBusinessConfigSource,
   serverBusinessDefaultsSource,
   serverModelListSource,
@@ -65,6 +68,8 @@ const [
   readSource('App.tsx'),
   readSource('styles/global.css'),
   readSource('pages/HomePage.tsx'),
+  readSource('components/home/homeUtils.ts'),
+  readSource('components/home/ProductCard.tsx'),
   readSource('themes/interfaceThemes/classic/templates/HomeDesktop.tsx'),
   readSource('themes/interfaceThemes/workbench/templates/HomeDesktop.tsx'),
   readSource('pages/ModelDetailPage.tsx'),
@@ -94,6 +99,7 @@ const [
   readSource('components/shared/InfiniteLoadTrigger.tsx'),
   readSource('lib/businessConfig.ts'),
   readSource('pages/SettingsPage.tsx'),
+  readSource('lib/settingsUtils.ts'),
   readFile(path.join(repoRoot, 'server/src/lib/businessConfig.ts'), 'utf8'),
   readFile(path.join(repoRoot, 'server/src/lib/businessDefaults.ts'), 'utf8'),
   readFile(path.join(repoRoot, 'server/src/routes/models/list.ts'), 'utf8'),
@@ -101,6 +107,7 @@ const [
 
 const desktopHomeTemplatesSource = `${classicHomeTemplateSource}\n${workbenchHomeTemplateSource}`;
 const homeListSources = `${homePageSource}\n${desktopHomeTemplatesSource}`;
+const homePageWithUtils = `${homePageSource}\n${homeUtilsSource}\n${productCardSource}`;
 
 requireIncludes('index.html font preload', indexHtmlSource, [
   'space-grotesk-latin-400-normal.woff2',
@@ -149,7 +156,7 @@ requireIncludes('App.tsx', appSource, [
   '<GlobalPageRefreshIndicator />',
 ]);
 
-requireIncludes('HomePage.tsx native home list', homePageSource, [
+requireIncludes('HomePage.tsx native home list', homePageWithUtils, [
   'const HOME_DESKTOP_GRID_EAGER_IMAGES = 10;',
   'const HOME_DESKTOP_LIST_EAGER_IMAGES = 6;',
   'const HOME_MOBILE_EAGER_IMAGES = 4;',
@@ -163,7 +170,7 @@ for (const [label, source] of [
   ['workbench HomeDesktop.tsx native home list', workbenchHomeTemplateSource],
 ]) {
   requireIncludes(label, source, [
-    'products.map(renderProductCard)',
+    'renderProductCard',
     'aria-label="网格视图"',
     'aria-label="列表视图"',
     '{showHomeListSkeleton ? (',
@@ -246,7 +253,7 @@ if (homePageSource.includes('HOME_PULL_REFRESH_MIN_VISIBLE_MS')) {
   errors.push('HomePage.tsx mobile pull-to-refresh timing must stay aligned with the v2.9.4 800ms behavior.');
 }
 
-requireIncludes('HomePage.tsx category refresh', homePageSource, [
+requireIncludes('HomePage.tsx category refresh', homePageWithUtils, [
   'const [listRefreshPending, setListRefreshPending] = useState(false);',
   'const pendingHomeListRefreshResetRef = useRef(false);',
   'const showHomeListSkeleton = isLoading || (!usesManualHomePagination && listRefreshPending);',
@@ -314,7 +321,7 @@ if (workbenchHomeTemplateSource.includes('<InfiniteLoadTrigger')) {
   errors.push('workbench HomeDesktop.tsx must use pagination, not the classic infinite loading interaction.');
 }
 
-requireIncludes('HomePage.tsx legacy page-size migration', homePageSource, [
+requireIncludes('HomePage.tsx legacy page-size migration', homePageWithUtils, [
   'const HOME_LEGACY_DEFAULT_PAGE_SIZE = 60;',
   'function normalizeStoredHomePageSize',
   'Math.floor(parsed) === HOME_LEGACY_DEFAULT_PAGE_SIZE',
@@ -324,7 +331,7 @@ requireIncludes('HomePage.tsx legacy page-size migration', homePageSource, [
 
 for (const [label, source] of [
   ['client businessConfig.ts home page size policy', clientBusinessConfigSource],
-  ['SettingsPage.tsx home page size defaults', settingsPageSource],
+  ['SettingsPage.tsx / settingsUtils.ts home page size defaults', settingsPageSource + settingsUtilsSource],
   ['server businessConfig.ts home page size policy', serverBusinessConfigSource],
   ['server businessDefaults.ts home page size defaults', serverBusinessDefaultsSource],
 ]) {
@@ -339,7 +346,7 @@ for (const [label, source] of [
 requireIncludes('server models list page-size fallback', serverModelListSource, [
   'const defaultPageSize = Math.max(1, Math.floor(Number(pageSizePolicy.homeDefault) || 20));',
 ]);
-requireIncludes('HomePage.tsx model detail intent preload', homePageSource, [
+requireIncludes('HomePage.tsx model detail intent preload', homePageWithUtils, [
   'onPointerDown={preloadModelDetailPage}',
   'onFocus={preloadModelDetailPage}',
 ]);

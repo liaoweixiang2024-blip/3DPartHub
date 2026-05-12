@@ -7,9 +7,10 @@ import { categoriesApi } from '../../api/categories';
 import client from '../../api/client';
 import { useMediaQuery } from '../../layouts/hooks/useMediaQuery';
 import { getBusinessConfig } from '../../lib/businessConfig';
-import { bottomSheetMotion, dialogPanelMotion, overlayMotion } from '../../lib/motion';
+import { bottomSheetMotion, dialogPanelMotion } from '../../lib/motion';
 import Icon from '../shared/Icon';
 import CategorySelect from './CategorySelect';
+import DialogOverlay from './DialogOverlay';
 
 interface UploadModalProps {
   open: boolean;
@@ -510,15 +511,11 @@ export default function UploadModal({ open, onClose, onConverted }: UploadModalP
   return (
     <AnimatePresence>
       {open && (
-        <motion.div
-          variants={overlayMotion}
-          initial="initial"
-          animate="animate"
-          exit="exit"
-          className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/60 backdrop-blur-sm sm:p-4"
-          onClick={handleClose}
-          role="dialog"
-          aria-modal="true"
+        <DialogOverlay
+          onClose={handleClose}
+          zIndex={50}
+          backdropClassName="bg-black/60 backdrop-blur-sm"
+          bottomOnMobile
         >
           <motion.div
             variants={isMobile ? bottomSheetMotion : dialogPanelMotion}
@@ -745,7 +742,7 @@ export default function UploadModal({ open, onClose, onConverted }: UploadModalP
               )}
             </div>
           </motion.div>
-        </motion.div>
+        </DialogOverlay>
       )}
     </AnimatePresence>
   );

@@ -3,15 +3,39 @@ import { startTransition, useState, useCallback, useMemo, useEffect, useLayoutEf
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import useSWR from 'swr';
 import {
-  type ColumnDef,
   filterSelectionProducts,
   getSelectionCategories,
   getSelectionModelMatches,
   type SelectionProduct,
-  type SelectionComponent,
   createSelectionShare,
 } from '../api/selections';
 import InquirySubmitDialog from '../components/inquiry/InquirySubmitDialog';
+import {
+  ResultCard,
+  SelectionInlineLoading,
+  SelectionLoadingOverlay,
+  SelectionShareLinkDialog,
+} from '../components/selection';
+import {
+  isManualColumn,
+  isPresetColumn,
+  normalizeManualValue,
+  columnLabel,
+  getInquiryCartItemTitle,
+  getInquiryCartItemSummary,
+  applyManualSpecs,
+  formatModelCount,
+  formatOptionCount,
+  stableJson,
+  useDebouncedValue,
+  selectionMotion,
+  selectionPress,
+  mobileCategoryListClass,
+  mobileCategoryPanelClass,
+  mobileCategoryCardClass,
+  type ShareLinkDialogState,
+  type ShareTarget,
+} from '../components/selection/selectionUtils';
 import { AdminContentPanel, AdminManagementPage } from '../components/shared/AdminManagementPage';
 import { AdminPageShell } from '../components/shared/AdminPageShell';
 import Icon from '../components/shared/Icon';
@@ -32,510 +56,10 @@ import { useInquiryCart } from '../hooks/useInquiryCart';
 import { useMediaQuery } from '../layouts/hooks/useMediaQuery';
 import { getBusinessConfig } from '../lib/businessConfig';
 import { copyText } from '../lib/clipboard';
-import type { InquiryCartItem } from '../lib/inquiryCart';
-import { downloadKitList, formatKitList, getKitListTitle } from '../lib/kitList';
+import { getKitListTitle } from '../lib/kitList';
 import { getCachedPublicSettings } from '../lib/publicSettings';
 import { compareOptionValues } from '../lib/selectionSort';
 import { useAuthStore } from '../stores/useAuthStore';
-
-function sv(specs: Record<string, string>, key: string): string {
-  if (specs[key]) return specs[key];
-  return '—';
-}
-
-function isManualColumn(col?: ColumnDef) {
-  return col?.inputType === 'manual';
-}
-
-function isPresetColumn(col?: ColumnDef) {
-  return col?.inputType === 'preset';
-}
-
-function normalizeManualValue(col: ColumnDef | undefined, value: string) {
-  const trimmed = value.trim();
-  if (!trimmed) return '';
-  if (!col?.suffix) return trimmed;
-  return trimmed.toUpperCase().endsWith(col.suffix.toUpperCase()) ? trimmed : `${trimmed}${col.suffix}`;
-}
-
-function columnLabel(columns: ColumnDef[], key: string) {
-  const col = columns.find((item) => item.key === key);
-  return col?.label || key;
-}
-
-function replaceManualPlaceholders(
-  text: string | null | undefined,
-  entries: Array<readonly [string, string]>,
-  columns: ColumnDef[],
-) {
-  if (!text) return text;
-  let next = text;
-  for (const [key, value] of entries) {
-    const col = columns.find((item) => item.key === key);
-    next = next.replaceAll(`[${key}]`, value);
-    if (col?.legacyPlaceholder) next = next.replaceAll(col.legacyPlaceholder, value);
-  }
-  return next;
-}
-
-function displayProductName(product: SelectionProduct) {
-  const rawName = product.name?.trim();
-  const modelNo = product.modelNo?.trim();
-  if (!rawName) return modelNo || '';
-  if (!modelNo) return rawName;
-  return (
-    rawName
-      .replace(modelNo, '')
-      .replace(/[\s\-—_]+$/g, '')
-      .replace(/^[\s\-—_]+/g, '')
-      .trim() || rawName
-  );
-}
-
-function getInquiryCartItemTitle(item: InquiryCartItem) {
-  if (item.modelNo && item.productName && item.productName !== item.modelNo) {
-    return `${item.modelNo} · ${item.productName}`;
-  }
-  return item.modelNo || item.productName;
-}
-
-function getInquiryCartItemSummary(item: InquiryCartItem) {
-  const specs = Object.entries(item.specs || {})
-    .filter(([, value]) => value && value !== '—')
-    .slice(0, 2)
-    .map(([key, value]) => `${key}:${value}`)
-    .join(' ');
-  const remark = item.remark ? `备注:${item.remark}` : '';
-  return [specs, remark].filter(Boolean).join(' · ');
-}
-
-function applyManualSpecs(
-  product: SelectionProduct,
-  columns: ColumnDef[],
-  specs: Record<string, string>,
-): SelectionProduct {
-  const userEntries = columns
-    .filter((col) => (isManualColumn(col) || isPresetColumn(col)) && specs[col.key])
-    .map((col) => {
-      const raw = specs[col.key];
-      const value = isManualColumn(col) ? normalizeManualValue(col, raw) : raw;
-      return [col.key, value] as const;
-    });
-
-  if (!userEntries.length) return product;
-
-  const nextSpecs = { ...(product.specs as Record<string, string>) };
-  for (const [key, value] of userEntries) nextSpecs[key] = value;
-  if (typeof nextSpecs['型号'] === 'string') {
-    nextSpecs['型号'] = replaceManualPlaceholders(nextSpecs['型号'], userEntries, columns) || nextSpecs['型号'];
-  }
-
-  const modelNo = replaceManualPlaceholders(product.modelNo, userEntries, columns);
-  const name = replaceManualPlaceholders(product.name, userEntries, columns) || product.name;
-
-  let nextComponents = product.components;
-  const outletComponents: SelectionComponent[] = [];
-  for (const col of columns) {
-    if (!isPresetColumn(col) || !col.dependsOn || !specs[col.key]) continue;
-    const routeIndex = col.dependsOn.minIndex;
-    outletComponents.push({
-      name: `第${routeIndex}路出口接头`,
-      modelNo: `PL${specs[col.key]}-02`,
-      qty: 1,
-    });
-  }
-  if (outletComponents.length > 0) {
-    const existing = (nextComponents || []) as SelectionComponent[];
-    nextComponents = [...existing, ...outletComponents];
-    nextSpecs['BOM条数'] = String(nextComponents.length);
-  }
-
-  return { ...product, name, modelNo, specs: nextSpecs, components: nextComponents };
-}
-
-function formatModelCount(count: number) {
-  return `${count} 个型号`;
-}
-
-function formatOptionCount(count: number) {
-  return `${count} 个选项`;
-}
-
-function stableJson(value: unknown): string {
-  if (!value || typeof value !== 'object') return JSON.stringify(value);
-  if (Array.isArray(value)) return `[${value.map(stableJson).join(',')}]`;
-  return `{${Object.entries(value as Record<string, unknown>)
-    .sort(([a], [b]) => a.localeCompare(b))
-    .map(([key, item]) => `${JSON.stringify(key)}:${stableJson(item)}`)
-    .join(',')}}`;
-}
-
-function useDebouncedValue<T>(value: T, delayMs: number) {
-  const [debouncedValue, setDebouncedValue] = useState(value);
-
-  useEffect(() => {
-    const timer = setTimeout(() => setDebouncedValue(value), delayMs);
-    return () => clearTimeout(timer);
-  }, [value, delayMs]);
-
-  return debouncedValue;
-}
-
-const selectionMotion =
-  'transition-[transform,border-color,background-color,box-shadow,color,opacity] duration-200 ease-[cubic-bezier(0.16,1,0.3,1)] motion-reduce:transition-none motion-reduce:transform-none';
-const selectionPress = `${selectionMotion} active:scale-[0.985]`;
-const mobileCategoryListClass = 'mx-auto flex w-full flex-col';
-const mobileCategoryPanelClass = 'p-0';
-
-function mobileCategoryCardClass(active: boolean) {
-  return `group relative flex w-full transform-gpu items-stretch overflow-hidden border-0 border-t border-outline-variant/12 text-left will-change-transform first:border-t-0 first:rounded-t-xl last:rounded-b-xl ${selectionMotion} active:bg-surface-container-high/70 focus-visible:z-10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary-container/60 ${
-    active
-      ? 'z-[1] bg-primary-container/8 shadow-[inset_3px_0_0_var(--color-primary-container),0_6px_16px_rgba(249,115,22,0.10)]'
-      : 'bg-surface-container-low/45 shadow-[0_1px_3px_rgba(15,23,42,0.06)] hover:z-[1] hover:bg-surface-container hover:shadow-[0_6px_16px_rgba(15,23,42,0.10)]'
-  }`;
-}
-
-type ShareLinkDialogState = {
-  title: string;
-  description: string;
-  url: string;
-};
-type ShareTarget = 'entry' | 'category' | 'result' | 'sub';
-
-function SelectionShareLinkDialog({
-  state,
-  onClose,
-  onCopy,
-  onNativeShare,
-}: {
-  state: ShareLinkDialogState | null;
-  onClose: () => void;
-  onCopy: () => void;
-  onNativeShare: () => void;
-}) {
-  if (!state) return null;
-
-  const canNativeShare = typeof navigator !== 'undefined' && typeof navigator.share === 'function';
-
-  return (
-    <div
-      className="fixed inset-0 z-[10000] flex items-end justify-center bg-black/50 p-3 pb-[calc(0.75rem+env(safe-area-inset-bottom,0px))] backdrop-blur-sm sm:items-center sm:p-4"
-      onClick={onClose}
-    >
-      <div
-        className="w-full max-w-sm rounded-2xl border border-outline-variant/20 bg-surface-container-high p-5 shadow-2xl"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="flex items-start gap-3">
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary-container/15 text-primary">
-            <Icon name="share" size={20} />
-          </div>
-          <div className="min-w-0 flex-1">
-            <h3 className="text-base font-bold text-on-surface">{state.title}</h3>
-            <p className="mt-1 text-sm leading-5 text-on-surface-variant">{state.description}</p>
-          </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-on-surface-variant hover:bg-surface-container-highest hover:text-on-surface"
-            aria-label="关闭"
-            data-tooltip-ignore
-          >
-            <Icon name="close" size={18} />
-          </button>
-        </div>
-        <input
-          readOnly
-          value={state.url}
-          onFocus={(event) => event.currentTarget.select()}
-          className="mt-4 h-10 w-full rounded-lg border border-outline-variant/20 bg-surface-container-low px-3 text-sm text-on-surface outline-none focus:border-primary-container"
-        />
-        <div className="mt-4 flex gap-2">
-          {canNativeShare ? (
-            <button
-              type="button"
-              onClick={onNativeShare}
-              className="inline-flex h-10 flex-1 items-center justify-center gap-1.5 rounded-lg border border-outline-variant/25 px-3 text-sm font-medium text-on-surface-variant transition-colors hover:bg-surface-container-high hover:text-on-surface"
-              data-tooltip-ignore
-            >
-              <Icon name="share" size={16} />
-              系统分享
-            </button>
-          ) : null}
-          <button
-            type="button"
-            onClick={onCopy}
-            className="inline-flex h-10 flex-1 items-center justify-center gap-1.5 rounded-lg bg-primary-container px-3 text-sm font-bold text-on-primary transition-opacity hover:opacity-90 active:scale-[0.98]"
-            data-tooltip-ignore
-          >
-            <Icon name="content_copy" size={16} />
-            复制链接
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-/* ── Result Card ── */
-
-function ResultCard({
-  product,
-  columns,
-  kitListTitle,
-  selected,
-  onToggleSelect,
-  onToggleInquiry,
-  expandedKits,
-  onToggleKit,
-  navigate,
-  isMobile,
-}: {
-  product: SelectionProduct;
-  columns: ColumnDef[];
-  kitListTitle: string;
-  selected: boolean;
-  onToggleSelect: () => void;
-  onToggleInquiry: () => void;
-  expandedKits: Set<string>;
-  onToggleKit: (id: string) => void;
-  navigate: ReturnType<typeof useNavigate>;
-  isMobile: boolean;
-}) {
-  const expanded = expandedKits.has(product.id);
-  const comps = (product.isKit && product.components ? product.components : []) as SelectionComponent[];
-  const specCols = columns.filter((c) => !c.hideInResults);
-  const catalogPdf = product.categoryCatalogPdf;
-  const isCatalogImage = catalogPdf && /\.(jpe?g|png|gif|webp|svg)(\?.*)?$/i.test(catalogPdf);
-  const [showCatalog, setShowCatalog] = useState(true);
-  const { toast } = useToast();
-  const displayName = displayProductName(product);
-  const primaryTitle = product.modelNo || displayName || product.name;
-
-  const handleCopy = async () => {
-    const parts = [product.modelNo || displayName].filter(Boolean) as string[];
-    if (displayName && displayName !== product.modelNo) parts.push(displayName);
-    await copyText(parts.join(' '));
-    toast('已复制型号和名称', 'success');
-  };
-  const handleCopyKitList = async () => {
-    await copyText(formatKitList(product, comps, kitListTitle));
-    toast(`已复制${kitListTitle}`, 'success');
-  };
-  const handleDownloadKitList = () => {
-    downloadKitList(product, comps, kitListTitle);
-    toast(`已下载${kitListTitle}`, 'success');
-  };
-
-  return (
-    <div
-      className={`rounded-xl md:rounded-2xl border overflow-hidden ${selectionMotion} ${selected ? 'border-primary-container/40 bg-primary-container/5 shadow-sm' : 'border-outline-variant/15 bg-surface-container-low hover:border-outline-variant/25'}`}
-    >
-      <div className="flex items-start gap-3 px-3 md:px-4 py-3 md:py-3.5">
-        {product.image && (
-          <SafeImage
-            src={product.image}
-            alt=""
-            className="w-16 h-16 md:w-20 md:h-20 rounded-lg object-cover shrink-0 border border-outline-variant/10"
-            fallbackIcon="image"
-          />
-        )}
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2 flex-wrap">
-            <input
-              type="checkbox"
-              checked={selected}
-              onChange={onToggleSelect}
-              className="h-4 w-4 rounded accent-primary-container shrink-0"
-            />
-            <span className="font-mono text-sm md:text-base font-bold text-on-surface break-all">{primaryTitle}</span>
-            <button
-              onClick={handleCopy}
-              aria-label="复制型号和名称"
-              className={`text-on-surface-variant/50 hover:text-on-surface-variant ${selectionPress}`}
-            >
-              <Icon name="content_copy" size={14} />
-            </button>
-            {product.isKit && (
-              <span className="text-[10px] md:text-xs font-medium text-primary-container bg-primary-container/10 px-1.5 md:px-2 py-0.5 rounded-full">
-                套件
-              </span>
-            )}
-          </div>
-          {displayName && displayName !== primaryTitle && (
-            <p className="text-xs md:text-sm text-on-surface-variant mt-0.5 truncate">{displayName}</p>
-          )}
-        </div>
-      </div>
-
-      <div className="px-3 md:px-4 pb-2.5 md:pb-3">
-        <div
-          className={`grid gap-x-3 md:gap-x-4 gap-y-0.5 md:gap-y-1 ${isMobile ? 'grid-cols-2' : 'grid-cols-2 md:grid-cols-3'}`}
-        >
-          {specCols.map((col) => {
-            const v = sv(product.specs as Record<string, string>, col.key);
-            if (v === '—') return null;
-            return (
-              <div key={col.key} className="text-xs md:text-sm min-w-0">
-                <span className="text-on-surface-variant">{col.label}: </span>
-                <span className="text-on-surface font-medium break-words">{v}</span>
-              </div>
-            );
-          })}
-        </div>
-      </div>
-
-      {product.isKit && comps.length > 0 && (
-        <div className="border-t border-outline-variant/10">
-          <div className="flex flex-wrap items-center justify-between gap-2 px-3 md:px-4 py-2 md:py-2.5 text-xs md:text-sm text-on-surface-variant">
-            <span>
-              {kitListTitle}（{comps.length}）
-            </span>
-            <div className="flex flex-wrap items-center gap-1.5">
-              <button
-                onClick={() => onToggleKit(product.id)}
-                className={`inline-flex items-center gap-1 rounded-md border border-outline-variant/20 px-2 py-1 hover:bg-surface-container-high/40 ${selectionPress}`}
-              >
-                <Icon name={expanded ? 'visibility_off' : 'visibility'} size={14} />
-                <span>{expanded ? '收起清单' : '查看清单'}</span>
-              </button>
-              <button
-                onClick={handleCopyKitList}
-                className={`inline-flex items-center gap-1 rounded-md border border-outline-variant/20 px-2 py-1 hover:bg-surface-container-high/40 ${selectionPress}`}
-              >
-                <Icon name="content_copy" size={14} />
-                <span>复制清单</span>
-              </button>
-              <button
-                onClick={handleDownloadKitList}
-                className={`inline-flex items-center gap-1 rounded-md border border-outline-variant/20 px-2 py-1 hover:bg-surface-container-high/40 ${selectionPress}`}
-              >
-                <Icon name="download" size={14} />
-                <span>下载清单</span>
-              </button>
-            </div>
-          </div>
-          {expanded && (
-            <div className="px-3 md:px-4 pb-3">
-              <div className="overflow-x-auto rounded-lg border border-outline-variant/10">
-                <table className="min-w-full text-xs md:text-sm">
-                  <thead className="bg-surface-container-high text-on-surface-variant">
-                    <tr>
-                      <th className="px-2 py-1.5 text-left font-medium whitespace-nowrap">#</th>
-                      <th className="px-2 py-1.5 text-left font-medium whitespace-nowrap">名称</th>
-                      <th className="px-2 py-1.5 text-left font-medium whitespace-nowrap">型号</th>
-                      <th className="px-2 py-1.5 text-right font-medium whitespace-nowrap">数量</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {comps.map((c, i) => (
-                      <tr key={i} className="border-t border-outline-variant/10">
-                        <td className="px-2 py-1.5 text-on-surface-variant whitespace-nowrap">{i + 1}</td>
-                        <td className="px-2 py-1.5 text-on-surface whitespace-nowrap">{c.name}</td>
-                        <td className="px-2 py-1.5 text-on-surface-variant whitespace-nowrap">{c.modelNo || '—'}</td>
-                        <td className="px-2 py-1.5 text-right text-on-surface whitespace-nowrap">{c.qty}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          )}
-        </div>
-      )}
-
-      {catalogPdf && (
-        <div className="border-t border-outline-variant/10">
-          <button
-            onClick={() => setShowCatalog((v) => !v)}
-            className={`w-full px-3 md:px-4 py-1.5 flex items-center justify-between text-xs text-on-surface-variant hover:bg-surface-container-high/30 ${selectionPress}`}
-          >
-            <span className="flex items-center gap-1">
-              <Icon name="menu_book" size={14} />
-              画册资料
-            </span>
-            <Icon name={showCatalog ? 'expand_less' : 'expand_more'} size={16} />
-          </button>
-          {showCatalog && (
-            <div className="px-3 md:px-4 pb-3">
-              {isCatalogImage ? (
-                <img
-                  src={catalogPdf}
-                  alt="画册"
-                  className="max-h-80 rounded border border-outline-variant/10 object-contain"
-                />
-              ) : (
-                <iframe
-                  src={catalogPdf}
-                  className="w-full h-80 rounded border border-outline-variant/10"
-                  title="画册 PDF"
-                />
-              )}
-            </div>
-          )}
-        </div>
-      )}
-
-      <div className="border-t border-outline-variant/10 px-3 md:px-4 py-2 md:py-2.5 flex items-center gap-1.5 md:gap-2 flex-wrap">
-        <button
-          onClick={onToggleInquiry}
-          className={`inline-flex items-center gap-1 px-2.5 md:px-3 py-1 md:py-1.5 text-xs md:text-sm font-bold rounded-lg transition-colors ${
-            selected
-              ? 'border border-primary-container/35 bg-primary-container/10 text-primary-container hover:bg-primary-container/15'
-              : 'bg-primary-container text-on-primary hover:opacity-90'
-          } ${selectionPress}`}
-        >
-          <Icon name={selected ? 'check' : 'add'} size={14} />
-          <span>{selected ? '已加入询价' : '加入询价'}</span>
-        </button>
-        {product.categoryCatalogPdf && (
-          <a
-            href={product.categoryCatalogPdf}
-            target="_blank"
-            rel="noopener"
-            className={`px-2.5 md:px-3 py-1 md:py-1.5 text-xs md:text-sm font-medium border border-outline-variant/30 text-on-surface-variant rounded-lg hover:bg-surface-container-high/50 inline-flex items-center gap-1 ${selectionPress}`}
-          >
-            <Icon name="menu_book" size={14} />
-            <span>画册</span>
-          </a>
-        )}
-        {product.pdfUrl && (
-          <a
-            href={product.pdfUrl}
-            target="_blank"
-            rel="noopener"
-            className={`px-2.5 md:px-3 py-1 md:py-1.5 text-xs md:text-sm font-medium border border-outline-variant/30 text-on-surface-variant rounded-lg hover:bg-surface-container-high/50 inline-flex items-center gap-1 ${selectionPress}`}
-          >
-            <Icon name="library_books" size={14} />
-            <span>规格书</span>
-          </a>
-        )}
-        {product.matchedModelId ? (
-          <a
-            href={`/model/${product.matchedModelId}`}
-            target="_blank"
-            rel="noopener"
-            className={`px-2.5 md:px-3 py-1 md:py-1.5 text-xs md:text-sm font-medium border border-outline-variant/30 text-on-surface-variant rounded-lg hover:bg-surface-container-high/50 inline-flex items-center gap-1 ${selectionPress}`}
-          >
-            <Icon name="view_in_ar" size={14} />
-            <span>模型</span>
-          </a>
-        ) : null}
-        <button
-          onClick={() =>
-            navigate(`/support`, {
-              state: { modelNo: product.modelNo || product.name, specs: product.specs, source: 'selection' as const },
-            })
-          }
-          className={`px-2.5 md:px-3 py-1 md:py-1.5 text-xs md:text-sm font-medium border border-outline-variant/30 text-on-surface-variant rounded-lg hover:bg-surface-container-high/50 inline-flex items-center gap-1 ${selectionPress}`}
-        >
-          <Icon name="support_agent" size={14} />
-          <span>技术支持</span>
-        </button>
-      </div>
-    </div>
-  );
-}
 
 /* ══════════════ Main Page ══════════════ */
 
@@ -598,6 +122,7 @@ export default function SelectionPage() {
   } = useImeSafeSearchInput();
   const search = useDebouncedValue(searchDraft.trim(), 250);
   const [pressedCategoryKey, setPressedCategoryKey] = useState<string | null>(null);
+  const [pendingOptionKey, setPendingOptionKey] = useState<string | null>(null);
 
   /* recently viewed subcategories (localStorage) */
   const RECENT_KEY = 'selection:recent';
@@ -751,6 +276,7 @@ export default function SelectionPage() {
   const {
     data: filterData,
     isLoading,
+    isValidating,
     error: filterError,
     mutate: retryFilter,
   } = useSWR(
@@ -778,18 +304,25 @@ export default function SelectionPage() {
         pageSize: resultPageSize,
         includeItems: includeFilterItems,
       }),
-    { revalidateOnFocus: false },
+    { revalidateOnFocus: false, keepPreviousData: true },
   );
+  const filterBusy = Boolean(liveCat && (isLoading || isValidating));
   const [showFilterLoading, setShowFilterLoading] = useState(false);
-  const shouldShowFilterLoading = Boolean(showFilterLoading || (isLoading && !filterData));
+  const shouldShowFilterLoading = Boolean(filterBusy && (showFilterLoading || !filterData));
+  const shouldOverlayFilterLoading = Boolean(filterBusy && showFilterLoading && filterData);
   useEffect(() => {
-    if (!isLoading) {
+    if (!filterBusy) {
       setShowFilterLoading(false);
       return;
     }
-    const timer = setTimeout(() => setShowFilterLoading(true), 180);
-    return () => clearTimeout(timer);
-  }, [isLoading]);
+    setShowFilterLoading(false);
+    const timer = window.setTimeout(() => setShowFilterLoading(true), 180);
+    return () => window.clearTimeout(timer);
+  }, [filterBusy, filterResetKey]);
+
+  useEffect(() => {
+    if (!filterBusy) setPendingOptionKey(null);
+  }, [filterBusy, filterResetKey]);
 
   useEffect(() => {
     if (!filterData?.autoAdvanced?.length) return;
@@ -853,7 +386,7 @@ export default function SelectionPage() {
   const currentStepOptionCountText =
     currentStepOptionCount === null
       ? '手动输入'
-      : shouldShowFilterLoading && !isPresetColumn(columns.find((c) => c.key === curField))
+      : filterBusy && !isPresetColumn(columns.find((c) => c.key === curField))
         ? '匹配中'
         : formatOptionCount(currentStepOptionCount);
 
@@ -1108,7 +641,7 @@ export default function SelectionPage() {
 
   const pickGroup = useCallback(
     (id: string) => {
-      if (isDesktop) setPressedCategoryKey(`group:${id}`);
+      setPressedCategoryKey(`group:${id}`);
       scheduleCategoryNavigation(
         () => {
           setGroupId(id);
@@ -1122,13 +655,13 @@ export default function SelectionPage() {
         },
         isDesktop ? 0 : 32,
       );
-      if (isDesktop) window.setTimeout(() => setPressedCategoryKey(null), 220);
+      window.setTimeout(() => setPressedCategoryKey(null), isDesktop ? 220 : 360);
     },
     [isDesktop, scheduleCategoryNavigation, setSearchDraft],
   );
   const pickSub = useCallback(
     (s: string) => {
-      if (isDesktop) setPressedCategoryKey(`sub:${s}`);
+      setPressedCategoryKey(`sub:${s}`);
       suppressAutoAdvanceScrollRef.current = true;
       pendingAutoAdvanceScrollRef.current = false;
       scheduleCategoryNavigation(
@@ -1144,7 +677,7 @@ export default function SelectionPage() {
         },
         isDesktop ? 0 : 32,
       );
-      if (isDesktop) window.setTimeout(() => setPressedCategoryKey(null), 220);
+      window.setTimeout(() => setPressedCategoryKey(null), isDesktop ? 220 : 360);
     },
     [isDesktop, scheduleCategoryNavigation, setSearchDraft],
   );
@@ -1166,13 +699,16 @@ export default function SelectionPage() {
     setExpandedKits(new Set());
   }, [setSearchDraft]);
   const pickVal = useCallback((key: string, val: string) => {
+    setPendingOptionKey(`${key}:${val}`);
     setAutoSelectedFields((prev) => {
       if (!prev.has(key)) return prev;
       const next = new Set(prev);
       next.delete(key);
       return next;
     });
-    setSpecs((p) => ({ ...p, [key]: val }));
+    startTransition(() => {
+      setSpecs((p) => ({ ...p, [key]: val }));
+    });
   }, []);
   const dropVal = useCallback(
     (key: string) => {
@@ -1752,20 +1288,28 @@ export default function SelectionPage() {
                 </form>
               ) : isPreset ? (
                 <div className="flex flex-wrap gap-2">
-                  {(colDef?.presetOptions || []).map((opt) => (
-                    <button
-                      key={opt}
-                      onClick={() => pickVal(field, opt)}
-                      className="rounded-xl border border-outline-variant/20 bg-surface-container-low hover:border-primary-container/40 px-4 py-2.5 text-sm font-medium text-on-surface transition-all active:scale-[0.97]"
-                    >
-                      {opt}
-                    </button>
-                  ))}
+                  {(colDef?.presetOptions || []).map((opt) => {
+                    const optionKey = `${field}:${opt}`;
+                    const pending = pendingOptionKey === optionKey;
+                    return (
+                      <button
+                        key={opt}
+                        onClick={() => pickVal(field, opt)}
+                        disabled={pendingOptionKey !== null}
+                        className={`inline-flex items-center gap-1.5 rounded-xl border px-4 py-2.5 text-sm font-medium transition-all active:scale-[0.97] disabled:cursor-wait disabled:opacity-80 ${
+                          pending
+                            ? 'border-primary-container/45 bg-primary-container/10 text-primary-container shadow-sm'
+                            : 'border-outline-variant/20 bg-surface-container-low text-on-surface hover:border-primary-container/40'
+                        }`}
+                      >
+                        {pending ? <Icon name="refresh" size={13} className="animate-spin" /> : null}
+                        {opt}
+                      </button>
+                    );
+                  })}
                 </div>
               ) : shouldShowFilterLoading ? (
-                <div className="py-6 text-center">
-                  <p className="text-sm text-on-surface-variant">正在匹配可选项...</p>
-                </div>
+                <SelectionInlineLoading label="正在匹配可选项" />
               ) : options.length > 0 ? (
                 (() => {
                   const fieldImages = liveCat?.optionImages?.[field];
@@ -1780,15 +1324,18 @@ export default function SelectionPage() {
                     {options.map(({ val }) => {
                       const uploadedImg = liveCat?.optionImages?.[field]?.[val];
                       const selected = specs[field] === val;
+                      const optionKey = `${field}:${val}`;
+                      const pending = pendingOptionKey === optionKey;
                       return (
                         <button
                           key={val}
                           onClick={() => pickVal(field, val)}
+                          disabled={pendingOptionKey !== null}
                           className={`group relative flex flex-col items-stretch rounded-xl border transition-all duration-150 active:scale-[0.97] ${
-                            selected
+                            pending || selected
                               ? 'border-primary-container shadow-sm scale-[1.02]'
                               : 'border-outline-variant/20 bg-surface-container-low hover:border-primary-container/40'
-                          }`}
+                          } disabled:cursor-wait disabled:opacity-80`}
                         >
                           {/* Image area */}
                           <div
@@ -1805,9 +1352,13 @@ export default function SelectionPage() {
                               <Icon name="inventory_2" size={28} className="text-on-surface-variant/20" />
                             )}
                             {/* Selected check */}
-                            {selected && (
+                            {(selected || pending) && (
                               <div className="absolute top-1.5 right-1.5 w-5 h-5 rounded-full bg-primary-container flex items-center justify-center">
-                                <Icon name="check" size={14} className="text-on-primary" />
+                                <Icon
+                                  name={pending ? 'refresh' : 'check'}
+                                  size={14}
+                                  className={`text-on-primary ${pending ? 'animate-spin' : ''}`}
+                                />
                               </div>
                             )}
                           </div>
@@ -1823,15 +1374,25 @@ export default function SelectionPage() {
                   </div>
                 ) : (
                   <div className="flex flex-wrap gap-2">
-                    {options.map(({ val }) => (
-                      <button
-                        key={val}
-                        onClick={() => pickVal(field, val)}
-                        className="rounded-lg border border-outline-variant/20 bg-surface-container px-3 sm:px-4 py-2 sm:py-2.5 text-sm text-on-surface hover:border-primary-container/50 hover:bg-primary-container/5 active:scale-95 transition-all min-h-[40px]"
-                      >
-                        <span className="font-medium">{val}</span>
-                      </button>
-                    ))}
+                    {options.map(({ val }) => {
+                      const optionKey = `${field}:${val}`;
+                      const pending = pendingOptionKey === optionKey;
+                      return (
+                        <button
+                          key={val}
+                          onClick={() => pickVal(field, val)}
+                          disabled={pendingOptionKey !== null}
+                          className={`inline-flex min-h-[40px] items-center gap-1.5 rounded-lg border px-3 py-2 text-sm transition-all active:scale-95 disabled:cursor-wait disabled:opacity-80 sm:px-4 sm:py-2.5 ${
+                            pending
+                              ? 'border-primary-container/45 bg-primary-container/10 text-primary-container shadow-sm'
+                              : 'border-outline-variant/20 bg-surface-container text-on-surface hover:border-primary-container/50 hover:bg-primary-container/5'
+                          }`}
+                        >
+                          {pending ? <Icon name="refresh" size={13} className="animate-spin" /> : null}
+                          <span className="font-medium">{val}</span>
+                        </button>
+                      );
+                    })}
                   </div>
                 )
               ) : (
@@ -1897,12 +1458,14 @@ export default function SelectionPage() {
 
   const isMobileResultView = !isDesktop && phase === 'wizard' && !search && !curField;
   const wizardTransitionKey = search ? `search-${search}` : curField ? `field-${curField}` : 'selection-results';
-  const wizardTransition = {
-    initial: { opacity: 0, y: 6 },
-    animate: { opacity: 1, y: 0 },
-    exit: { opacity: 0, y: -4 },
-    transition: { duration: 0.16, ease: 'easeOut' },
-  } as const;
+  const wizardTransition = prefersReducedMotion
+    ? ({ initial: false as const } as const)
+    : ({
+        initial: { opacity: 0, y: isDesktop ? 4 : 3 },
+        animate: { opacity: 1, y: 0 },
+        exit: { opacity: 0, y: isDesktop ? -3 : -2 },
+        transition: { duration: isDesktop ? 0.14 : 0.13, ease: [0.16, 1, 0.3, 1] as const },
+      } as const);
 
   /* ── results block (only rendered when !curField) ── */
   const resultsJSX = !curField && (
@@ -1937,36 +1500,41 @@ export default function SelectionPage() {
           )}
         </div>
       </div>
-      {shouldShowFilterLoading ? (
-        <div className="py-8 text-center">
-          <p className="text-sm text-on-surface-variant">正在整理选型结果...</p>
+      {filteredTotal > 0 ? (
+        <div className="relative mt-3 min-h-[220px]">
+          <div
+            className={`space-y-3 pb-6 transition-opacity duration-150 ${
+              shouldOverlayFilterLoading ? 'pointer-events-none select-none opacity-45' : ''
+            }`}
+          >
+            {visibleFiltered.map((p) => (
+              <ResultCard
+                key={p.id}
+                product={applyManualSpecs(withVisibleMatch(p), columns, specs)}
+                columns={columns}
+                kitListTitle={getKitListTitle((liveCat?.optionOrder || null) as Record<string, unknown> | null, p)}
+                selected={selectedIds.has(p.id)}
+                onToggleSelect={() => toggleInquiryProduct(applyManualSpecs(withVisibleMatch(p), columns, specs))}
+                onToggleInquiry={() => toggleInquiryProduct(applyManualSpecs(withVisibleMatch(p), columns, specs))}
+                expandedKits={expandedKits}
+                onToggleKit={toggleKit}
+                navigate={navigate}
+                isMobile={!isDesktop}
+              />
+            ))}
+            {hasMoreResults && (
+              <button
+                onClick={loadMoreResults}
+                className={`w-full rounded-xl border border-outline-variant/20 bg-surface-container px-4 py-2.5 text-sm font-medium text-on-surface-variant hover:border-primary-container/40 hover:text-primary-container ${selectionPress}`}
+              >
+                继续加载（还剩 {remainingResultCount} 个）
+              </button>
+            )}
+          </div>
+          {shouldOverlayFilterLoading ? <SelectionLoadingOverlay label="正在整理选型结果" /> : null}
         </div>
-      ) : filteredTotal > 0 ? (
-        <div className="space-y-3 mt-3 pb-6">
-          {visibleFiltered.map((p) => (
-            <ResultCard
-              key={p.id}
-              product={applyManualSpecs(withVisibleMatch(p), columns, specs)}
-              columns={columns}
-              kitListTitle={getKitListTitle((liveCat?.optionOrder || null) as Record<string, unknown> | null, p)}
-              selected={selectedIds.has(p.id)}
-              onToggleSelect={() => toggleInquiryProduct(applyManualSpecs(withVisibleMatch(p), columns, specs))}
-              onToggleInquiry={() => toggleInquiryProduct(applyManualSpecs(withVisibleMatch(p), columns, specs))}
-              expandedKits={expandedKits}
-              onToggleKit={toggleKit}
-              navigate={navigate}
-              isMobile={!isDesktop}
-            />
-          ))}
-          {hasMoreResults && (
-            <button
-              onClick={loadMoreResults}
-              className={`w-full rounded-xl border border-outline-variant/20 bg-surface-container px-4 py-2.5 text-sm font-medium text-on-surface-variant hover:border-primary-container/40 hover:text-primary-container ${selectionPress}`}
-            >
-              继续加载（还剩 {remainingResultCount} 个）
-            </button>
-          )}
-        </div>
+      ) : shouldShowFilterLoading ? (
+        <SelectionInlineLoading label="正在整理选型结果" />
       ) : (
         <div className="text-center py-10">
           <Icon name="search_off" size={36} className="mx-auto mb-2 text-on-surface-variant/20" />
@@ -2036,31 +1604,40 @@ export default function SelectionPage() {
     <div className="px-4 md:px-6 py-4 md:py-6">
       {pageHeader}
       {filteredTotal > 0 ? (
-        <div className="space-y-3 pb-4">
-          {visibleFiltered.map((p) => (
-            <ResultCard
-              key={p.id}
-              product={applyManualSpecs(withVisibleMatch(p), columns, specs)}
-              columns={columns}
-              kitListTitle={getKitListTitle((liveCat?.optionOrder || null) as Record<string, unknown> | null, p)}
-              selected={selectedIds.has(p.id)}
-              onToggleSelect={() => toggleInquiryProduct(applyManualSpecs(withVisibleMatch(p), columns, specs))}
-              onToggleInquiry={() => toggleInquiryProduct(applyManualSpecs(withVisibleMatch(p), columns, specs))}
-              expandedKits={expandedKits}
-              onToggleKit={toggleKit}
-              navigate={navigate}
-              isMobile={!isDesktop}
-            />
-          ))}
-          {hasMoreResults && (
-            <button
-              onClick={loadMoreResults}
-              className={`w-full rounded-xl border border-outline-variant/20 bg-surface-container px-4 py-2.5 text-sm font-medium text-on-surface-variant hover:border-primary-container/40 hover:text-primary-container ${selectionPress}`}
-            >
-              继续加载（还剩 {remainingResultCount} 个）
-            </button>
-          )}
+        <div className="relative min-h-[220px]">
+          <div
+            className={`space-y-3 pb-4 transition-opacity duration-150 ${
+              shouldOverlayFilterLoading ? 'pointer-events-none select-none opacity-45' : ''
+            }`}
+          >
+            {visibleFiltered.map((p) => (
+              <ResultCard
+                key={p.id}
+                product={applyManualSpecs(withVisibleMatch(p), columns, specs)}
+                columns={columns}
+                kitListTitle={getKitListTitle((liveCat?.optionOrder || null) as Record<string, unknown> | null, p)}
+                selected={selectedIds.has(p.id)}
+                onToggleSelect={() => toggleInquiryProduct(applyManualSpecs(withVisibleMatch(p), columns, specs))}
+                onToggleInquiry={() => toggleInquiryProduct(applyManualSpecs(withVisibleMatch(p), columns, specs))}
+                expandedKits={expandedKits}
+                onToggleKit={toggleKit}
+                navigate={navigate}
+                isMobile={!isDesktop}
+              />
+            ))}
+            {hasMoreResults && (
+              <button
+                onClick={loadMoreResults}
+                className={`w-full rounded-xl border border-outline-variant/20 bg-surface-container px-4 py-2.5 text-sm font-medium text-on-surface-variant hover:border-primary-container/40 hover:text-primary-container ${selectionPress}`}
+              >
+                继续加载（还剩 {remainingResultCount} 个）
+              </button>
+            )}
+          </div>
+          {shouldOverlayFilterLoading ? <SelectionLoadingOverlay label="正在匹配搜索结果" /> : null}
         </div>
+      ) : shouldShowFilterLoading ? (
+        <SelectionInlineLoading label="正在匹配搜索结果" />
       ) : (
         <div className="text-center py-12">
           <Icon name="search_off" size={36} className="mx-auto mb-2 text-on-surface-variant/20" />

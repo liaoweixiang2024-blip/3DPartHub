@@ -5,13 +5,26 @@ import { config } from './config.js';
 
 type Disposition = 'attachment' | 'inline';
 
+function safeHeaderFileName(fileName: string) {
+  const sanitized = Array.from(String(fileName || 'download').replace(/[<>:"/\\|?*]/g, '_'))
+    .filter((char) => {
+      const code = char.charCodeAt(0);
+      return code > 31 && code !== 127;
+    })
+    .join('');
+  return sanitized.trim() || 'download';
+}
+
 function asciiFileName(fileName: string) {
-  return fileName.replace(/[^\x20-\x7E]/g, '_').replace(/"/g, "'");
+  return safeHeaderFileName(fileName)
+    .replace(/[^\x20-\x7E]/g, '_')
+    .replace(/"/g, "'");
 }
 
 function contentDisposition(disposition: Disposition, fileName: string) {
+  const headerName = safeHeaderFileName(fileName);
   const safeName = asciiFileName(fileName);
-  return `${disposition}; filename="${safeName}"; filename*=UTF-8''${encodeURIComponent(fileName)}`;
+  return `${disposition}; filename="${safeName}"; filename*=UTF-8''${encodeURIComponent(headerName)}`;
 }
 
 function contentTypeForFile(fileName: string) {

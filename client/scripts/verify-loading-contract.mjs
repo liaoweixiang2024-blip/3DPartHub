@@ -114,7 +114,7 @@ const globalCssSource = await readFile(path.join(srcRoot, 'styles/global.css'), 
 if (!routerSource.includes('return <PageRefreshFallback standalone={standalone} />;')) {
   errors.push('RouteFallback must use PageRefreshFallback for non-model-detail routes.');
 }
-if (!routerSource.includes('return <ModelDetailPageSkeleton />;')) {
+if (!routerSource.includes('<ModelDetailPageSkeleton')) {
   errors.push('RouteFallback must keep ModelDetailPageSkeleton for model detail routes.');
 }
 if (!appSource.includes('GlobalPageRefreshIndicator') || !appSource.includes('<GlobalPageRefreshIndicator />')) {

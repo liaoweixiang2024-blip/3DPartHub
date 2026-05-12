@@ -23,6 +23,7 @@ import { useToast } from '../components/shared/Toast';
 import { useDocumentTitle } from '../hooks/useDocumentTitle';
 import { useMediaQuery } from '../layouts/hooks/useMediaQuery';
 import { getBusinessConfig, statusInfo, type StatusConfig } from '../lib/businessConfig';
+import { getClipboardImageFile } from '../lib/clipboardImages';
 import { getErrorMessage, notifyGlobalError } from '../lib/errorNotifications';
 import { getCustomerInquiryFlow, getCustomerInquiryStatusView } from '../lib/inquiryCustomerStatus';
 import { exportInquiryEditableXlsx } from '../lib/inquiryExport';
@@ -900,47 +901,54 @@ function CustomerItemsList({
   );
 }
 
-function CustomerInquiryDetailHeader({
-  inquiry,
-  onBack,
-  onCancel,
-  canCancel,
+const INQUIRY_DETAIL_HEADER_ACTION_TONE = {
+  danger:
+    'border-error/25 bg-error-container/15 text-error hover:border-error/35 hover:bg-error-container/25 hover:text-error',
+  neutral:
+    'border-outline-variant/20 bg-surface-container text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface',
+};
+
+function InquiryDetailHeaderAction({
+  icon,
+  label,
+  shortLabel,
+  onClick,
+  tone = 'neutral',
 }: {
-  inquiry: Inquiry;
-  onBack: () => void;
-  onCancel: () => void;
-  canCancel: boolean;
+  icon: string;
+  label: string;
+  shortLabel?: string;
+  onClick: () => void;
+  tone?: keyof typeof INQUIRY_DETAIL_HEADER_ACTION_TONE;
 }) {
-  const description = `提交于 ${formatDateTime(inquiry.createdAt)} · ${inquiry.items.length} 项产品`;
   return (
-    <AdminPageHero
-      title="我的询价详情"
-      meta={getInquiryCode(inquiry.id)}
-      description={description}
-      actions={
-        <>
-          <button
-            type="button"
-            onClick={onBack}
-            className="inline-flex h-9 items-center justify-center gap-1.5 rounded-lg border border-outline-variant/20 bg-surface-container px-3.5 text-sm font-medium text-on-surface-variant transition-colors hover:bg-surface-container-high hover:text-on-surface"
-          >
-            <Icon name="arrow_back" size={16} />
-            返回
-          </button>
-          {canCancel ? (
-            <button
-              type="button"
-              onClick={onCancel}
-              className="inline-flex h-9 items-center justify-center gap-1.5 rounded-lg border border-red-500/20 bg-red-500/10 px-3.5 text-sm font-medium text-red-500 transition-colors hover:bg-red-500/15"
-            >
-              <Icon name="close" size={16} />
-              取消询价
-            </button>
-          ) : null}
-        </>
-      }
-    />
+    <button
+      type="button"
+      onClick={onClick}
+      className={`inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border text-sm font-medium transition-colors md:w-auto md:px-3.5 ${
+        shortLabel ? 'flex-col gap-0.5 md:flex-row md:gap-1.5' : 'gap-1.5'
+      } ${INQUIRY_DETAIL_HEADER_ACTION_TONE[tone]}`}
+      aria-label={label}
+    >
+      <Icon name={icon} size={shortLabel ? 14 : 16} />
+      {shortLabel ? <span className="text-[8px] font-black leading-none md:hidden">{shortLabel}</span> : null}
+      <span className="hidden md:inline">{label}</span>
+    </button>
   );
+}
+
+function InquiryDetailHeader({
+  title,
+  inquiry,
+  description,
+  actions,
+}: {
+  title: string;
+  inquiry: Inquiry;
+  description: ReactNode;
+  actions: ReactNode;
+}) {
+  return <AdminPageHero title={title} meta={getInquiryCode(inquiry.id)} description={description} actions={actions} />;
 }
 
 function CustomerInquiryDetailSkeleton({ inquiryId, onBack }: { inquiryId: string; onBack: () => void }) {
@@ -954,14 +962,7 @@ function CustomerInquiryDetailSkeleton({ inquiryId, onBack }: { inquiryId: strin
             description="提交于 -- · -- 项产品"
             actions={
               <>
-                <button
-                  type="button"
-                  onClick={onBack}
-                  className="flex items-center gap-2 rounded-lg border border-outline-variant/20 px-4 py-2.5 text-sm text-on-surface-variant transition-colors hover:text-on-surface"
-                >
-                  <Icon name="arrow_back" size={16} />
-                  返回
-                </button>
+                <InquiryDetailHeaderAction icon="arrow_back" label="返回" onClick={onBack} />
                 <span className="hidden h-10 w-[102px] rounded-lg border border-transparent sm:block" aria-hidden />
               </>
             }
@@ -1195,13 +1196,23 @@ function DetailContent({ id }: { id: string }) {
     setMsgInput((prev) => (prev.trim() ? `${prev.trimEnd()}\n${phrase}` : phrase));
   }
 
-  async function handleAttachmentSelect(event: React.ChangeEvent<HTMLInputElement>) {
-    const file = event.target.files?.[0];
+  async function uploadComposerAttachment(file: File | null | undefined, source: 'picker' | 'paste') {
     if (!file) return;
+    if (uploadingAttachment) {
+      toast('附件正在上传，请稍后再试', 'info');
+      return;
+    }
+    if (pendingAttachment || pendingAttachmentPreviewUrl || pendingAttachmentName) {
+      toast(
+        source === 'paste' ? '已有待发送附件，请先发送或移除后再粘贴截图' : '已有待发送附件，请先发送或移除后再上传',
+        'info',
+      );
+      return;
+    }
+
     const maxMb = Math.max(1, Number(business.uploadPolicy.ticketAttachmentMaxSizeMb) || 100);
     if (file.size > maxMb * 1024 * 1024) {
       toast(`附件不能超过 ${maxMb}MB`, 'error');
-      event.target.value = '';
       return;
     }
 
@@ -1221,8 +1232,22 @@ function DetailContent({ id }: { id: string }) {
       setPendingAttachment(null);
     } finally {
       setUploadingAttachment(false);
-      event.target.value = '';
     }
+  }
+
+  async function handleAttachmentSelect(event: React.ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    await uploadComposerAttachment(file, 'picker');
+    event.target.value = '';
+  }
+
+  function handleComposerPaste(event: React.ClipboardEvent<HTMLTextAreaElement>) {
+    const file = getClipboardImageFile(event.clipboardData);
+    if (!file) return;
+    if (!event.clipboardData.getData('text/plain')) {
+      event.preventDefault();
+    }
+    void uploadComposerAttachment(file, 'paste');
   }
 
   function clearPendingAttachment() {
@@ -1375,50 +1400,30 @@ function DetailContent({ id }: { id: string }) {
 
   return (
     <div className="flex h-full min-h-0 flex-col">
-      <div
-        className={`min-h-0 flex-1 overflow-y-auto scrollbar-hidden ${
-          isAdmin ? '' : 'px-4 pb-4 pt-4 md:px-0 md:pb-0 md:pt-0'
-        }`}
-      >
+      <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-4 pt-4 scrollbar-hidden md:px-0 md:pb-0 md:pt-0">
         {isAdmin ? (
           <main className="flex w-full min-w-0 flex-col gap-3 md:gap-4">
-            <AdminPageHero
+            <InquiryDetailHeader
               title="询价处理详情"
-              meta={getInquiryCode(inquiry.id)}
+              inquiry={inquiry}
               description={`提交于 ${formatDateTime(inquiry.createdAt)} · ${inquiry.items.length} 项产品 · ${
                 inquiry.company || inquiry.contactName || inquiry.user?.username || '客户'
               }`}
               actions={
                 <>
-                  <button
-                    type="button"
-                    onClick={() => navigate(-1)}
-                    className="inline-flex h-9 w-9 shrink-0 items-center justify-center gap-1.5 rounded-lg border border-outline-variant/20 bg-surface-container text-sm font-medium text-on-surface-variant transition-colors hover:bg-surface-container-high hover:text-on-surface md:w-auto md:px-3.5"
-                    aria-label="返回询价管理"
-                  >
-                    <Icon name="arrow_back" size={16} />
-                    <span className="hidden md:inline">返回</span>
-                  </button>
-                  <button
-                    type="button"
+                  <InquiryDetailHeaderAction icon="arrow_back" label="返回" onClick={() => navigate(-1)} />
+                  <InquiryDetailHeaderAction
+                    icon="description"
+                    label="导出PDF"
+                    shortLabel="PDF"
                     onClick={handleExportQuote}
-                    className="inline-flex h-9 w-9 shrink-0 flex-col items-center justify-center gap-0.5 rounded-lg border border-outline-variant/20 bg-surface-container text-sm font-medium text-on-surface-variant transition-colors hover:bg-surface-container-high hover:text-on-surface md:w-auto md:flex-row md:gap-1.5 md:px-3.5"
-                    aria-label="导出PDF"
-                  >
-                    <Icon name="description" size={14} />
-                    <span className="text-[8px] font-black leading-none md:hidden">PDF</span>
-                    <span className="hidden md:inline">导出PDF</span>
-                  </button>
-                  <button
-                    type="button"
+                  />
+                  <InquiryDetailHeaderAction
+                    icon="spreadsheet"
+                    label="导出Excel"
+                    shortLabel="XLS"
                     onClick={handleExportExcel}
-                    className="inline-flex h-9 w-9 shrink-0 flex-col items-center justify-center gap-0.5 rounded-lg border border-outline-variant/20 bg-surface-container text-sm font-medium text-on-surface-variant transition-colors hover:bg-surface-container-high hover:text-on-surface md:w-auto md:flex-row md:gap-1.5 md:px-3.5"
-                    aria-label="导出Excel"
-                  >
-                    <Icon name="spreadsheet" size={14} />
-                    <span className="text-[8px] font-black leading-none md:hidden">XLS</span>
-                    <span className="hidden md:inline">导出Excel</span>
-                  </button>
+                  />
                 </>
               }
             />
@@ -1472,11 +1477,18 @@ function DetailContent({ id }: { id: string }) {
           </main>
         ) : (
           <main className="flex w-full min-w-0 flex-col gap-3 md:gap-4">
-            <CustomerInquiryDetailHeader
+            <InquiryDetailHeader
+              title="我的询价详情"
               inquiry={inquiry}
-              onBack={() => navigate(-1)}
-              onCancel={handleCancel}
-              canCancel={inquiry.status === 'submitted'}
+              description={`提交于 ${formatDateTime(inquiry.createdAt)} · ${inquiry.items.length} 项产品`}
+              actions={
+                <>
+                  <InquiryDetailHeaderAction icon="arrow_back" label="返回" onClick={() => navigate(-1)} />
+                  {inquiry.status === 'submitted' ? (
+                    <InquiryDetailHeaderAction icon="close" label="取消询价" onClick={handleCancel} tone="danger" />
+                  ) : null}
+                </>
+              }
             />
             <CustomerStatusPanel
               inquiry={inquiry}
@@ -1563,13 +1575,16 @@ function DetailContent({ id }: { id: string }) {
             <textarea
               value={msgInput}
               onChange={(e) => setMsgInput(e.target.value)}
+              onPaste={handleComposerPaste}
               onKeyDown={(e) => {
                 if (e.key === 'Enter' && !e.shiftKey) {
                   e.preventDefault();
                   handleSendMsg();
                 }
               }}
-              placeholder={isDesktop ? '输入回复内容... (Enter 发送, Shift+Enter 换行)' : '输入回复...'}
+              placeholder={
+                isDesktop ? '输入回复内容... (Enter 发送, Shift+Enter 换行，可粘贴截图)' : '输入回复 / 粘贴截图'
+              }
               rows={1}
               className="max-h-28 min-h-9 min-w-0 flex-1 resize-none rounded-lg border border-outline-variant/20 bg-surface-container-high px-2.5 py-2 text-xs text-on-surface outline-none transition-colors placeholder:text-on-surface-variant/40 focus:border-primary-container focus:ring-1 focus:ring-primary-container/20 md:min-h-10 md:px-3 md:py-2.5 md:text-sm"
             />

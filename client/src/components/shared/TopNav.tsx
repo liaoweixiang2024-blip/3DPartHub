@@ -35,6 +35,7 @@ import { preloadRouteForPath } from '../../lib/routeLoaders';
 import { useAuthStore } from '../../stores/useAuthStore';
 import { useThemeStore } from '../../stores/useThemeStore';
 import { getInterfaceThemePackage } from '../../themes/interfaceThemes/registry';
+import AuthModal from './AuthModal';
 import BrandMark from './BrandMark';
 import Icon from './Icon';
 import LoginConfirmDialog from './LoginConfirmDialog';
@@ -152,10 +153,12 @@ function UploadModalLoader({
 function UserMenu({
   size = 'default',
   onLoginRequired,
+  onLoginClick,
   adminDefaultPath = '/admin/models',
 }: {
   size?: 'compact' | 'default';
   onLoginRequired: (reason: string, returnUrl: string) => void;
+  onLoginClick?: () => void;
   adminDefaultPath?: string;
 }) {
   const [open, setOpen] = useState(false);
@@ -182,6 +185,9 @@ function UserMenu({
   const avatarSize = isCompact ? 'w-7 h-7' : 'w-8 h-8';
   const iconSize = isCompact ? 16 : 18;
   const compactButtonClass = isCompact ? 'h-9 w-9 justify-center' : '';
+  const userMenuButtonClass = `top-nav-user-menu-button flex items-center gap-2 cursor-pointer ${compactButtonClass} ${
+    isCompact ? '' : 'ml-2'
+  }`;
 
   const menuItems = [
     {
@@ -210,10 +216,7 @@ function UserMenu({
 
   if (!user) {
     return (
-      <button
-        onClick={() => navigate('/login')}
-        className={`flex items-center gap-2 cursor-pointer ${compactButtonClass} ${isCompact ? '' : 'ml-2'}`}
-      >
+      <button onClick={onLoginClick || (() => navigate('/login'))} className={userMenuButtonClass}>
         <div className={`${avatarSize} rounded-full bg-surface-container-highest flex items-center justify-center`}>
           <Icon name="person" size={iconSize} className="text-on-surface-variant" />
         </div>
@@ -223,13 +226,13 @@ function UserMenu({
   }
 
   return (
-    <div className="relative" ref={ref} onMouseEnter={() => setOpen(true)} onMouseLeave={() => setOpen(false)}>
-      <button
-        onClick={() => setOpen(!open)}
-        className={`flex items-center gap-2 cursor-pointer ${compactButtonClass} ${isCompact ? '' : 'ml-2'}`}
-        aria-label="用户菜单"
-        data-tooltip-ignore
-      >
+    <div
+      className="top-nav-user-menu relative"
+      ref={ref}
+      onMouseEnter={() => setOpen(true)}
+      onMouseLeave={() => setOpen(false)}
+    >
+      <button onClick={() => setOpen(!open)} className={userMenuButtonClass} aria-label="用户菜单" data-tooltip-ignore>
         <div className={`${avatarSize} rounded-full bg-surface-container-highest flex items-center justify-center`}>
           <Icon name="person" size={iconSize} className="text-on-surface-variant" />
         </div>
@@ -309,7 +312,8 @@ function UserMenu({
 }
 
 function ThemeToggle() {
-  const { theme, toggleTheme } = useThemeStore();
+  const theme = useThemeStore((state) => state.theme);
+  const toggleTheme = useThemeStore((state) => state.toggleTheme);
   return (
     <button
       onClick={toggleTheme}
@@ -361,7 +365,9 @@ function TopNavContent({ compact = false, onMenuToggle, source = 'standalone' }:
   const [loginDialogOpen, setLoginDialogOpen] = useState(false);
   const [loginReturnUrl, setLoginReturnUrl] = useState('');
   const [loginDialogReason, setLoginDialogReason] = useState('');
-  const { user } = useAuthStore();
+  const [authDialogOpen, setAuthDialogOpen] = useState(false);
+  const [authDialogReturnUrl, setAuthDialogReturnUrl] = useState('');
+  const user = useAuthStore((state) => state.user);
   const isAdmin = user?.role === 'ADMIN';
   const [searchParams] = useSearchParams();
   const [localQuery, setLocalQuery] = useState(() => readHomeSearchQuery() ?? searchParams.get('q') ?? '');
@@ -394,6 +400,19 @@ function TopNavContent({ compact = false, onMenuToggle, source = 'standalone' }:
       pathname: location.pathname,
       isAdminRoute: location.pathname === '/admin' || location.pathname.startsWith('/admin/'),
     }) || '/admin/models';
+
+  const getReturnPath = useCallback(
+    () => `${location.pathname}${location.search}${location.hash}`,
+    [location.hash, location.pathname, location.search],
+  );
+
+  const openAuthDialog = useCallback(
+    (nextReturnUrl?: string) => {
+      setAuthDialogReturnUrl(nextReturnUrl || getReturnPath());
+      setAuthDialogOpen(true);
+    },
+    [getReturnPath],
+  );
 
   useEffect(() => {
     if (!desktopSearchOpen) return;
@@ -556,10 +575,10 @@ function TopNavContent({ compact = false, onMenuToggle, source = 'standalone' }:
         setLoginDialogOpen(true);
       } else if (result.action === 'redirect') {
         event.preventDefault();
-        navigate('/login', { state: { from: result.returnUrl } });
+        openAuthDialog(result.returnUrl);
       }
     },
-    [navigate],
+    [openAuthDialog],
   );
 
   const isNavActive = useCallback(
@@ -673,6 +692,7 @@ function TopNavContent({ compact = false, onMenuToggle, source = 'standalone' }:
       <ThemeToggle />
       <UserMenu
         adminDefaultPath={adminDefaultPath}
+        onLoginClick={() => openAuthDialog(getReturnPath())}
         onLoginRequired={(reason, returnUrl) => {
           setLoginReturnUrl(returnUrl);
           setLoginDialogReason(reason);
@@ -728,6 +748,7 @@ function TopNavContent({ compact = false, onMenuToggle, source = 'standalone' }:
               <UserMenu
                 size="compact"
                 adminDefaultPath={adminDefaultPath}
+                onLoginClick={() => openAuthDialog(getReturnPath())}
                 onLoginRequired={(reason, returnUrl) => {
                   setLoginReturnUrl(returnUrl);
                   setLoginDialogReason(reason);
@@ -768,7 +789,9 @@ function TopNavContent({ compact = false, onMenuToggle, source = 'standalone' }:
           onClose={() => setLoginDialogOpen(false)}
           reason={loginDialogReason}
           returnUrl={loginReturnUrl}
+          onLogin={() => openAuthDialog(loginReturnUrl || getReturnPath())}
         />
+        <AuthModal open={authDialogOpen} onClose={() => setAuthDialogOpen(false)} returnUrl={authDialogReturnUrl} />
       </>
     );
   }
@@ -795,7 +818,9 @@ function TopNavContent({ compact = false, onMenuToggle, source = 'standalone' }:
         onClose={() => setLoginDialogOpen(false)}
         reason={loginDialogReason}
         returnUrl={loginReturnUrl}
+        onLogin={() => openAuthDialog(loginReturnUrl || getReturnPath())}
       />
+      <AuthModal open={authDialogOpen} onClose={() => setAuthDialogOpen(false)} returnUrl={authDialogReturnUrl} />
     </>
   );
 }

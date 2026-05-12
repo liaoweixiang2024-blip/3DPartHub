@@ -19,6 +19,7 @@ import { useDocumentTitle } from '../hooks/useDocumentTitle';
 import { useVisibleItems } from '../hooks/useVisibleItems';
 import { useMediaQuery } from '../layouts/hooks/useMediaQuery';
 import { getErrorMessage } from '../lib/errorNotifications';
+import { cacheModelDetailTitle } from '../lib/modelDetailTitleCache';
 import { toolbarMotion } from '../lib/motion';
 
 function formatFileSize(bytes: number): string {
@@ -310,6 +311,9 @@ function DesktopContent() {
               )}
               <Link
                 to={`/model/${item.modelId}`}
+                state={{ modelName: item.model?.name || '未知模型' }}
+                onPointerDown={() => cacheModelDetailTitle(item.modelId, item.model?.name || '未知模型')}
+                onFocus={() => cacheModelDetailTitle(item.modelId, item.model?.name || '未知模型')}
                 className="min-w-0 flex-1 flex items-center gap-3 rounded-md px-3 py-2.5 transition-colors hover:bg-surface-container/45 md:px-4 md:py-3 md:gap-4"
               >
                 <div className="w-14 h-14 bg-surface-container-lowest shrink-0 flex items-center justify-center p-1 rounded-md overflow-hidden">
@@ -546,7 +550,13 @@ function MobileContent() {
                   {selected.has(item.id) && <Icon name="check" size={12} className="text-on-primary" />}
                 </button>
               )}
-              <Link to={`/model/${item.modelId}`} className="flex h-20">
+              <Link
+                to={`/model/${item.modelId}`}
+                state={{ modelName: item.model?.name || '未知模型' }}
+                onPointerDown={() => cacheModelDetailTitle(item.modelId, item.model?.name || '未知模型')}
+                onFocus={() => cacheModelDetailTitle(item.modelId, item.model?.name || '未知模型')}
+                className="flex h-20"
+              >
                 <div className="w-20 h-20 bg-surface-container-lowest shrink-0 overflow-hidden">
                   <ModelThumbnail src={item.model?.thumbnail_url} alt="" className="w-full h-full object-cover" />
                 </div>

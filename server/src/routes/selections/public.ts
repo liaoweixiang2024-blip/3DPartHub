@@ -162,6 +162,7 @@ export function createSelectionPublicRouter() {
         };
       });
 
+      res.set('Cache-Control', 'public, max-age=30');
       res.json(result || { items: [], total: 0, page: 1, pageSize, query: search });
     } catch (err) {
       logger.error({ err }, '[Selections] Global search error');
@@ -207,6 +208,7 @@ export function createSelectionPublicRouter() {
         { lockTtlMs: 10_000, waitTimeoutMs: 5_000, pollMs: 50 },
       );
       res.set('X-Cache', hit ? 'HIT' : 'MISS');
+      res.set('Cache-Control', 'public, max-age=120');
       res.json(categories);
     } catch (err) {
       logger.error({ err }, '[Selections] List categories error');
@@ -347,14 +349,21 @@ export function createSelectionPublicRouter() {
             if (!ownPdf) {
               const sharedCategories = await prisma.selectionCategory.findMany({
                 where: { catalogShared: true, catalogPdf: { not: null } },
-                select: { id: true, catalogPdf: true, products: { select: { specs: true } } },
+                select: { id: true, catalogPdf: true },
               });
-              sharedPdfMap = {};
-              for (const cat of sharedCategories) {
-                for (const p of cat.products) {
+              if (sharedCategories.length > 0) {
+                const catIds = sharedCategories.map((c) => c.id);
+                const catPdfById = new Map(sharedCategories.map((c) => [c.id, c.catalogPdf!]));
+                const products = await prisma.selectionProduct.findMany({
+                  where: { categoryId: { in: catIds } },
+                  select: { categoryId: true, specs: true },
+                });
+                sharedPdfMap = {};
+                for (const p of products) {
                   const specs = p.specs as Record<string, unknown>;
                   const jt = typeof specs['接头形态'] === 'string' ? specs['接头形态'] : null;
-                  if (jt && cat.catalogPdf) sharedPdfMap[jt] = cat.catalogPdf;
+                  const pdf = catPdfById.get(p.categoryId);
+                  if (jt && pdf) sharedPdfMap[jt] = pdf;
                 }
               }
             }

@@ -65,9 +65,15 @@ export default function ModelThumbnail({
   }, [src]);
 
   if (src && !failed) {
+    // Only use srcSet when the URL looks like a generated thumbnail with _sm variant.
+    // PNG URLs haven't been migrated yet — skip srcSet to avoid 404s on _sm files.
+    const hasSmallVariant = /\.(jpg|webp)$/.test(src);
+    const smallSrc = hasSmallVariant ? src.replace(/\.(jpg|webp)$/, '_sm.$1') : undefined;
     return (
       <img
         src={src}
+        srcSet={smallSrc ? `${smallSrc} 256w, ${src} 512w` : undefined}
+        sizes={smallSrc ? '(max-width: 640px) 128px, (max-width: 1024px) 200px, 256px' : undefined}
         alt={alt || ''}
         className={className}
         loading={loading}

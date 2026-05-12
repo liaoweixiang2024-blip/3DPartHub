@@ -141,6 +141,7 @@ export function createModelListRouter({ prisma, metadataDir, drawingDownloadUrl 
           return { total, items, page, page_size: pageSize };
         });
         res.set('X-Cache', hit ? 'HIT' : 'MISS');
+        res.set('Cache-Control', 'public, max-age=30');
         res.json(responseData);
         return;
       } catch {

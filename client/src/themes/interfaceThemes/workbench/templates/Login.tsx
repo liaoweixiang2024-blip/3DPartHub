@@ -1,60 +1,30 @@
 import { motion } from 'framer-motion';
 import type { LoginThemeProps } from '../../types';
 
-export default function WorkbenchLogin({
-  mode,
-  brand,
-  title,
-  subtitle,
-  form,
-  modeSwitch,
-  legalLinks,
-  backLink,
-}: LoginThemeProps) {
+export default function WorkbenchLogin({ mode, brand, form, modeSwitch, legalLinks, backLink }: LoginThemeProps) {
+  const heading = mode === 'login' ? '登录您的账户' : '注册新账户';
+
   return (
-    <div className="flex-1 overflow-y-auto overflow-x-hidden bg-surface px-4 py-5 md:px-8 md:py-8">
-      <motion.div
-        className="mx-auto grid min-h-full w-full max-w-6xl items-center gap-6 md:grid-cols-[minmax(0,0.92fr)_minmax(380px,460px)]"
-        initial={{ opacity: 0, y: 12 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.36, ease: 'easeOut' }}
-      >
-        <section className="hidden min-h-[520px] flex-col justify-between rounded-xl border border-outline-variant/10 bg-surface-container-low px-8 py-8 shadow-sm md:flex">
-          <div>
+    <div className="workbench-auth-page flex-1 overflow-hidden bg-surface">
+      <div className="flex h-full min-h-0 flex-col items-center justify-center overflow-y-auto px-4 py-6 sm:px-6">
+        <motion.section
+          className={`workbench-auth-dialog workbench-auth-dialog-${mode} w-full max-w-[27rem] overflow-hidden rounded-2xl border border-outline-variant/14 bg-surface-container-low shadow-[0_28px_80px_rgba(15,23,42,0.12)]`}
+          initial={{ opacity: 0, y: 10, scale: 0.98 }}
+          animate={{ opacity: 1, y: 0, scale: 1 }}
+          transition={{ duration: 0.24, ease: 'easeOut' }}
+        >
+          <div className="workbench-auth-header border-b border-outline-variant/10 px-6 pb-5 pt-6 text-center sm:px-7">
             {brand}
-            <p className="mt-8 max-w-md text-3xl font-headline font-bold leading-tight text-on-surface">
-              {mode === 'login' ? '回到你的模型工作台。' : '创建一个可持续协作的模型账户。'}
-            </p>
-            <p className="mt-4 max-w-md text-sm leading-7 text-on-surface-variant">
-              登录后可以继续管理收藏、下载历史、询价清单与工单沟通，所有操作都会跟随当前界面主题保持一致。
-            </p>
+            <h1 className="text-lg font-bold text-on-surface">{heading}</h1>
           </div>
-          <div className="grid grid-cols-3 gap-3 text-xs text-on-surface-variant">
-            {['模型', '询价', '工单'].map((item) => (
-              <span key={item} className="rounded-lg border border-outline-variant/10 bg-surface-container px-3 py-2">
-                {item}
-              </span>
-            ))}
+          <div className="workbench-auth-body max-h-[calc(100dvh-13rem)] overflow-y-auto overscroll-contain">
+            {form}
+            {modeSwitch}
+            {legalLinks}
           </div>
-        </section>
-
-        <section className="w-full max-w-md justify-self-center overflow-hidden rounded-xl border border-outline-variant/15 bg-surface-container-low shadow-xl md:max-w-none">
-          <div className="border-b border-outline-variant/10 px-6 py-6 text-center md:hidden">
-            {brand}
-            {title}
-            {subtitle}
-          </div>
-          <div className="hidden border-b border-outline-variant/10 px-8 py-7 md:block">
-            {title}
-            {subtitle}
-          </div>
-          {form}
-          {modeSwitch}
-          {legalLinks}
-        </section>
-
-        <div className="md:col-start-2">{backLink}</div>
-      </motion.div>
+        </motion.section>
+        <div className="workbench-auth-back">{backLink}</div>
+      </div>
     </div>
   );
 }

@@ -61,6 +61,27 @@ test('uses model number suffix after underscore for DB download filenames', () =
   assert.equal(target?.fileName, 'SLH-1寸x19.step');
 });
 
+test('keeps slash fractions inside model numbers when deriving download filenames', () => {
+  const uploadPath = join(root, 'uploads', 'fraction.step');
+  mkdirSync(join(root, 'uploads'), { recursive: true });
+  writeFileSync(uploadPath, 'step');
+
+  const target = resolveDbModelDownloadTarget(
+    {
+      id: 'fraction',
+      name: '不锈钢内外牙直通_SCFM-1/2',
+      originalName: '2.step',
+      format: 'step',
+      originalFormat: 'step',
+      uploadPath,
+      originalSize: 123,
+    },
+    'original',
+  );
+
+  assert.equal(target?.fileName, 'SCFM-1_2.step');
+});
+
 test('uses model folder title while downloading actual model file name for structured archive uploads', () => {
   const uploadPath = join(root, 'uploads', 'structured.step');
   mkdirSync(join(root, 'uploads'), { recursive: true });

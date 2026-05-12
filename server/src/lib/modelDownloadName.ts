@@ -1,4 +1,4 @@
-import { normalizeUploadFilename } from './filenameEncoding.js';
+import { fixMojibakeFilename } from './filenameEncoding.js';
 
 function cleanDownloadBaseName(value: string, fallback: string) {
   const sanitized = Array.from(value.replace(/[<>:"/\\|?*]/g, '_'))
@@ -8,6 +8,22 @@ function cleanDownloadBaseName(value: string, fallback: string) {
     })
     .join('');
   return sanitized.trim().slice(0, 180) || fallback;
+}
+
+function normalizeDownloadSourceName(value: string | null | undefined, fallback: string) {
+  const raw = String(value || '');
+  let decoded = raw;
+  try {
+    decoded = decodeURIComponent(raw);
+  } catch {
+    decoded = raw;
+  }
+  return (
+    fixMojibakeFilename(decoded)
+      .replace(/[\u0000-\u001f\u007f-\u009f]/g, '')
+      .trim()
+      .slice(0, 255) || fallback
+  );
 }
 
 function normalizeExtension(extension: string | null | undefined, fallback = 'step') {
@@ -29,7 +45,7 @@ function modelNameSeparatorIndex(baseName: string) {
 }
 
 export function modelDownloadBaseName(sourceName: string | null | undefined, fallback = 'model') {
-  const normalized = normalizeUploadFilename(String(sourceName || ''), fallback);
+  const normalized = normalizeDownloadSourceName(sourceName, fallback);
   const baseName = normalized.replace(/\.[^.]+$/, '').trim();
   const separatorIndex = modelNameSeparatorIndex(baseName);
   const preferredName = separatorIndex >= 0 ? baseName.slice(separatorIndex + 1).trim() : baseName;
@@ -37,7 +53,7 @@ export function modelDownloadBaseName(sourceName: string | null | undefined, fal
 }
 
 export function hasModelDownloadSuffix(sourceName: string | null | undefined) {
-  const normalized = normalizeUploadFilename(String(sourceName || ''), 'model');
+  const normalized = normalizeDownloadSourceName(sourceName, 'model');
   const baseName = normalized.replace(/\.[^.]+$/, '').trim();
   return modelNameSeparatorIndex(baseName) >= 0;
 }

@@ -14,6 +14,7 @@ type ConversionPayload = {
 type ThumbnailResult = {
   thumbnailPath: string;
   thumbnailUrl: string;
+  thumbnailSmallUrl?: string;
 };
 
 function send(message: Record<string, unknown>) {

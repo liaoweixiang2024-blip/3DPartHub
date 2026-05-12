@@ -3,9 +3,9 @@ import { useState, useRef } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import useSWR from 'swr';
 import client from '../api/client';
+import { AdminPageHero } from '../components/shared/AdminManagementPage';
 import { AdminPageShell } from '../components/shared/AdminPageShell';
 import Icon from '../components/shared/Icon';
-import { PageHeader } from '../components/shared/PagePrimitives';
 import { useToast } from '../components/shared/Toast';
 import { useDocumentTitle } from '../hooks/useDocumentTitle';
 import { useMediaQuery } from '../layouts/hooks/useMediaQuery';
@@ -47,6 +47,21 @@ function buildContextSuffix(ctx: SupportContext): string {
     if (lines.length) suffix += `【产品规格】\n${lines.join('\n')}\n`;
   }
   return suffix;
+}
+
+function SupportHeaderAction({ compact = false }: { compact?: boolean }) {
+  return (
+    <Link
+      to="/my-tickets"
+      className={`inline-flex h-9 shrink-0 items-center justify-center rounded-lg border border-outline-variant/20 bg-surface-container text-sm font-medium text-on-surface-variant transition-colors hover:bg-surface-container-high hover:text-on-surface ${
+        compact ? 'w-9' : 'gap-1.5 px-3.5'
+      }`}
+      aria-label="查看我的工单"
+    >
+      <Icon name="schedule" size={16} />
+      {compact ? null : <span>我的工单</span>}
+    </Link>
+  );
 }
 
 /** Read-only context card shown above the form */
@@ -134,7 +149,14 @@ function DesktopContent() {
   return (
     <div className="max-w-6xl mx-auto">
       {/* Header */}
-      <PageHeader title="技术支持" description="提交定制需求或技术问题，我们的工程师团队将为您处理" className="mb-10" />
+      <div className="mb-8">
+        <AdminPageHero
+          title="技术支持"
+          meta="提交工单"
+          description="提交定制需求或技术问题，我们的工程师团队将为您处理"
+          actions={<SupportHeaderAction />}
+        />
+      </div>
 
       {/* Process Steps */}
       <div className="grid grid-cols-4 gap-4 mb-10">
@@ -410,7 +432,12 @@ function MobileContent() {
 
   return (
     <div className="px-4 py-4 pb-20 space-y-5">
-      <PageHeader title="技术支持" description="提交定制需求，工程师团队为您处理" />
+      <AdminPageHero
+        title="技术支持"
+        meta="提交工单"
+        description="提交需求，工程师团队为您处理"
+        actions={<SupportHeaderAction compact />}
+      />
 
       {ctx && <ContextCard ctx={ctx} />}
 

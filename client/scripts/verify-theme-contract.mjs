@@ -86,6 +86,7 @@ const allowedThemeAppImports = new Set([
   '../../../../components/shared/Pagination',
   '../../../../components/shared/SearchField',
   '../../../../components/shared/Tooltip',
+  '../../../../components/shared/VirtualProductGrid',
   '../../../../lib/businessConfig',
   '../../../../lib/routeLoaders',
 ]);

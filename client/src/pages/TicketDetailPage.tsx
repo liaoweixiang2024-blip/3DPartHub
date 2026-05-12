@@ -20,6 +20,7 @@ import { useToast } from '../components/shared/Toast';
 import { useDocumentTitle } from '../hooks/useDocumentTitle';
 import { useMediaQuery } from '../layouts/hooks/useMediaQuery';
 import { getBusinessConfig, statusInfo } from '../lib/businessConfig';
+import { getClipboardImageFile } from '../lib/clipboardImages';
 import { notifyGlobalError } from '../lib/errorNotifications';
 import { getCachedPublicSettings } from '../lib/publicSettings';
 import { useAuthStore } from '../stores/useAuthStore';
@@ -205,41 +206,63 @@ function OriginalMessage({ ticket }: { ticket: TicketInfo }) {
   );
 }
 
-// Status action buttons for admin
-function StatusActions({ status, onUpdate }: { ticketId: string; status: string; onUpdate: (s: string) => void }) {
+const TICKET_DETAIL_HEADER_ACTION_TONE = {
+  info: 'border-blue-500/20 bg-blue-500/10 text-blue-500 hover:border-blue-500/30 hover:bg-blue-500/20 hover:text-blue-500',
+  success:
+    'border-emerald-500/20 bg-emerald-500/10 text-emerald-500 hover:border-emerald-500/30 hover:bg-emerald-500/20 hover:text-emerald-500',
+  neutral:
+    'border-outline-variant/20 bg-surface-container text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface',
+};
+
+function TicketDetailHeaderAction({
+  icon,
+  label,
+  onClick,
+  tone = 'neutral',
+}: {
+  icon: string;
+  label: string;
+  onClick: () => void;
+  tone?: keyof typeof TICKET_DETAIL_HEADER_ACTION_TONE;
+}) {
   return (
-    <div className="flex items-center gap-1.5 flex-wrap">
+    <button
+      type="button"
+      onClick={onClick}
+      className={`inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border text-sm font-medium transition-colors md:w-auto md:px-3.5 md:gap-1.5 ${TICKET_DETAIL_HEADER_ACTION_TONE[tone]}`}
+      aria-label={label}
+    >
+      <Icon name={icon} size={16} />
+      <span className="hidden md:inline">{label}</span>
+    </button>
+  );
+}
+
+// Status action buttons for admin
+function StatusActions({ status, onUpdate }: { status: string; onUpdate: (s: string) => void }) {
+  return (
+    <div className="flex items-center gap-1.5 md:flex-wrap">
       {status === 'open' && (
-        <button
+        <TicketDetailHeaderAction
+          icon="progress_activity"
+          label="开始处理"
+          tone="info"
           onClick={() => onUpdate('in_progress')}
-          className="whitespace-nowrap rounded-full px-3 py-1 text-[11px] font-medium text-blue-600 bg-blue-500/10 hover:bg-blue-500/20 active:scale-[0.96] transition-all"
-        >
-          开始处理
-        </button>
+        />
       )}
       {status === 'in_progress' && (
-        <button
+        <TicketDetailHeaderAction
+          icon="check_circle"
+          label="标记解决"
+          tone="success"
           onClick={() => onUpdate('resolved')}
-          className="whitespace-nowrap rounded-full px-3 py-1 text-[11px] font-medium text-emerald-600 bg-emerald-500/10 hover:bg-emerald-500/20 active:scale-[0.96] transition-all"
-        >
-          标记解决
-        </button>
+        />
       )}
       {status !== 'closed' && (
-        <button
-          onClick={() => onUpdate('closed')}
-          className="whitespace-nowrap rounded-full px-3 py-1 text-[11px] font-medium text-on-surface-variant bg-surface-container-highest/70 hover:bg-surface-container-highest active:scale-[0.96] transition-all"
-        >
-          关闭工单
-        </button>
+        <TicketDetailHeaderAction icon="close" label="关闭工单" onClick={() => onUpdate('closed')} />
       )}
       {status === 'closed' && (
-        <button
-          onClick={() => onUpdate('open')}
-          className="whitespace-nowrap rounded-full px-3 py-1 text-[11px] font-medium text-primary-container bg-primary-container/10 hover:bg-primary-container/20 active:scale-[0.96] transition-all"
-        >
-          重新打开
-        </button>
+        <TicketDetailHeaderAction icon="restore" label="重新打开" onClick={() => onUpdate('open')} />
       )}
     </div>
   );
@@ -311,13 +334,22 @@ function ChatContent({ ticketId }: { ticketId: string }) {
     setInput((prev) => (prev.trim() ? `${prev.trimEnd()}\n${phrase}` : phrase));
   }, []);
 
-  const handleImageSelect = useCallback(
-    async (e: React.ChangeEvent<HTMLInputElement>) => {
-      const file = e.target.files?.[0];
+  const uploadComposerAttachment = useCallback(
+    async (file: File | null | undefined, source: 'picker' | 'paste') => {
       if (!file) return;
+      if (uploadingAttachment) {
+        toast('附件正在上传，请稍后再试', 'info');
+        return;
+      }
+      if (pendingImage || pendingImageUrl || pendingAttachmentName) {
+        toast(
+          source === 'paste' ? '已有待发送附件，请先发送或移除后再粘贴截图' : '已有待发送附件，请先发送或移除后再上传',
+          'info',
+        );
+        return;
+      }
       if (file.size > business.uploadPolicy.ticketAttachmentMaxSizeMb * 1024 * 1024) {
         toast(`附件不能超过 ${business.uploadPolicy.ticketAttachmentMaxSizeMb}MB`, 'error');
-        e.target.value = '';
         return;
       }
       const isImage = file.type.startsWith('image/');
@@ -336,10 +368,38 @@ function ChatContent({ ticketId }: { ticketId: string }) {
         setPendingImage(null);
       } finally {
         setUploadingAttachment(false);
-        e.target.value = '';
       }
     },
-    [ticketId, toast, business.uploadPolicy.ticketAttachmentMaxSizeMb],
+    [
+      business.uploadPolicy.ticketAttachmentMaxSizeMb,
+      pendingAttachmentName,
+      pendingImage,
+      pendingImageUrl,
+      ticketId,
+      toast,
+      uploadingAttachment,
+    ],
+  );
+
+  const handleImageSelect = useCallback(
+    async (e: React.ChangeEvent<HTMLInputElement>) => {
+      const file = e.target.files?.[0];
+      await uploadComposerAttachment(file, 'picker');
+      e.target.value = '';
+    },
+    [uploadComposerAttachment],
+  );
+
+  const handleComposerPaste = useCallback(
+    (event: React.ClipboardEvent<HTMLTextAreaElement>) => {
+      const file = getClipboardImageFile(event.clipboardData);
+      if (!file) return;
+      if (!event.clipboardData.getData('text/plain')) {
+        event.preventDefault();
+      }
+      void uploadComposerAttachment(file, 'paste');
+    },
+    [uploadComposerAttachment],
   );
 
   const handleStatusUpdate = useCallback(
@@ -369,31 +429,24 @@ function ChatContent({ ticketId }: { ticketId: string }) {
 
   return (
     <div className="flex h-full min-h-0 flex-col">
-      <AdminPageHero
-        title={isAdmin ? '工单处理详情' : '我的工单详情'}
-        meta={getTicketCode(ticket.id)}
-        description={`提交于 ${ticketDescription}`}
-        actions={
-          <>
-            <button
-              type="button"
-              onClick={() => navigate(-1)}
-              className="inline-flex h-9 items-center justify-center gap-1.5 rounded-lg border border-outline-variant/20 bg-surface-container px-3.5 text-sm font-medium text-on-surface-variant transition-colors hover:bg-surface-container-high hover:text-on-surface"
-            >
-              <Icon name="arrow_back" size={16} />
-              返回
-            </button>
-            <span
-              className={`inline-flex h-9 shrink-0 items-center rounded-lg px-3 text-xs font-bold ${info.color || ''} ${info.bg || ''}`}
-            >
-              {info.label}
-            </span>
-            {isAdmin ? (
-              <StatusActions ticketId={ticketId} status={ticket.status} onUpdate={handleStatusUpdate} />
-            ) : null}
-          </>
-        }
-      />
+      <div className="shrink-0 px-4 pt-4 md:px-0 md:pt-0">
+        <AdminPageHero
+          title={isAdmin ? '工单处理详情' : '我的工单详情'}
+          meta={getTicketCode(ticket.id)}
+          description={`提交于 ${ticketDescription}`}
+          actions={
+            <>
+              <TicketDetailHeaderAction icon="arrow_back" label="返回" onClick={() => navigate(-1)} />
+              <span
+                className={`inline-flex h-9 shrink-0 items-center rounded-lg px-2.5 text-xs font-bold md:px-3 ${info.color || ''} ${info.bg || ''}`}
+              >
+                {info.label}
+              </span>
+              {isAdmin ? <StatusActions status={ticket.status} onUpdate={handleStatusUpdate} /> : null}
+            </>
+          }
+        />
+      </div>
 
       {/* Messages */}
       <div
@@ -465,6 +518,7 @@ function ChatContent({ ticketId }: { ticketId: string }) {
           <textarea
             value={input}
             onChange={(e) => setInput(e.target.value)}
+            onPaste={handleComposerPaste}
             onFocus={() => setComposerFocused(true)}
             onBlur={() => setComposerFocused(false)}
             onKeyDown={(e) => {
@@ -473,7 +527,9 @@ function ChatContent({ ticketId }: { ticketId: string }) {
                 handleSend();
               }
             }}
-            placeholder={isDesktop ? '输入回复内容... (Enter 发送, Shift+Enter 换行)' : '输入回复...'}
+            placeholder={
+              isDesktop ? '输入回复内容... (Enter 发送, Shift+Enter 换行，可粘贴截图)' : '输入回复 / 粘贴截图'
+            }
             rows={1}
             className={`flex-1 resize-none bg-surface-container-high border border-outline-variant/20 rounded-lg text-on-surface placeholder:text-on-surface-variant/40 focus:outline-none focus:border-primary/50 focus:ring-1 focus:ring-primary/20 transition-colors max-h-28 ${isDesktop ? 'px-3 py-2.5 text-sm' : 'px-2.5 py-2 text-xs'}`}
             style={{ minHeight: isDesktop ? '40px' : '34px' }}

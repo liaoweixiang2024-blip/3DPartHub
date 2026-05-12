@@ -1,4 +1,11 @@
-import type { Transition, Variants } from 'framer-motion';
+import type { Variants } from 'framer-motion';
+
+const motionSpring = {
+  type: 'spring' as const,
+  stiffness: 420,
+  damping: 34,
+  mass: 0.9,
+};
 
 export const motionDuration = {
   instant: 0.08,
@@ -13,13 +20,6 @@ export const motionEase = {
   emphasized: [0.16, 1, 0.3, 1],
   exit: [0.4, 0, 1, 1],
 } as const;
-
-export const motionSpring = {
-  type: 'spring',
-  stiffness: 420,
-  damping: 34,
-  mass: 0.9,
-} satisfies Transition;
 
 export const overlayMotion = {
   initial: { opacity: 0 },
@@ -66,10 +66,6 @@ export const toastMotion = {
   initial: { opacity: 0, x: 32, scale: 0.98 },
   animate: { opacity: 1, x: 0, scale: 1, transition: { duration: motionDuration.base, ease: motionEase.standard } },
   exit: { opacity: 0, x: 24, scale: 0.98, transition: { duration: motionDuration.fast, ease: motionEase.exit } },
-} satisfies Variants;
-
-export const listContainerMotion = {
-  animate: { transition: { staggerChildren: 0.025, delayChildren: 0.02 } },
 } satisfies Variants;
 
 export const listItemMotion = {

@@ -6,6 +6,8 @@ import {
   MODEL_DETAIL_DOWNLOAD_LIST_CLASS,
   MODEL_DETAIL_DOWNLOAD_ROW_BASE_CLASS,
   MODEL_DETAIL_HEADER_TOP_CLASS,
+  getModelDetailMobilePeekHeight,
+  getModelDetailMobilePeekVariant,
   MODEL_DETAIL_SECTION_TITLE_CLASS,
   MODEL_DETAIL_SPEC_GRID_CLASS,
   MODEL_DETAIL_SPEC_ITEM_CLASS,
@@ -14,7 +16,6 @@ import {
 import { PublicPageShell } from './PublicPageShell';
 
 const shimmer = 'animate-pulse rounded-sm bg-surface-container-high';
-const mobilePeekHeight = 128;
 
 function SectionTitleSkeleton({ widthClassName }: { widthClassName: string }) {
   return (
@@ -107,7 +108,10 @@ function ModelDetailDesktopSkeleton() {
   );
 }
 
-function ModelDetailMobileSkeleton() {
+function ModelDetailMobileSkeleton({ modelTitle, isAdmin }: { modelTitle?: string | null; isAdmin?: boolean }) {
+  const peekVariant = getModelDetailMobilePeekVariant(modelTitle, { isAdmin });
+  const mobilePeekHeight = getModelDetailMobilePeekHeight(peekVariant);
+
   return (
     <PublicPageShell mobileClassName="flex h-dvh flex-col bg-surface" keepMobileDrawerMounted>
       <main
@@ -135,10 +139,13 @@ function ModelDetailMobileSkeleton() {
               <div className="h-1 w-9 rounded-full bg-on-surface-variant/25" />
             </div>
           </div>
-          <div className="shrink-0 px-4 pb-4">
+          <div className="mt-auto shrink-0 px-4 pb-2.5">
             <div className="flex items-center gap-2">
               <div className="min-w-0 flex-1">
-                <div className={`${shimmer} mb-2 h-4 w-3/4`} />
+                <div className={peekVariant === 'tall' ? 'mb-2 min-h-[2.3rem] space-y-1.5' : 'mb-2 min-h-[1.15rem]'}>
+                  <div className={`${shimmer} h-4 w-3/4`} />
+                  {peekVariant === 'tall' ? <div className={`${shimmer} h-4 w-1/2`} /> : null}
+                </div>
                 <div className={`${shimmer} h-3 w-1/2 bg-surface-container-highest/70`} />
               </div>
               <div className="flex shrink-0 items-center gap-1">
@@ -154,8 +161,18 @@ function ModelDetailMobileSkeleton() {
   );
 }
 
-export default function ModelDetailPageSkeleton() {
+export default function ModelDetailPageSkeleton({
+  modelTitle,
+  isAdmin,
+}: {
+  modelTitle?: string | null;
+  isAdmin?: boolean;
+}) {
   const isDesktop = useMediaQuery('(min-width: 768px)');
 
-  return isDesktop ? <ModelDetailDesktopSkeleton /> : <ModelDetailMobileSkeleton />;
+  return isDesktop ? (
+    <ModelDetailDesktopSkeleton />
+  ) : (
+    <ModelDetailMobileSkeleton modelTitle={modelTitle} isAdmin={isAdmin} />
+  );
 }

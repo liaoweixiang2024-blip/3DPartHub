@@ -4,9 +4,10 @@ import { createShare, type CreateShareParams } from '../../api/shares';
 import { useMediaQuery } from '../../layouts/hooks/useMediaQuery';
 import { copyText } from '../../lib/clipboard';
 import { getErrorMessage } from '../../lib/errorNotifications';
-import { bottomSheetMotion, dialogPanelMotion, overlayMotion } from '../../lib/motion';
+import { bottomSheetMotion, dialogPanelMotion } from '../../lib/motion';
 import { getPublicSettingsSnapshot } from '../../lib/publicSettings';
 import { useAuthStore } from '../../stores/useAuthStore';
+import DialogOverlay from './DialogOverlay';
 import Icon from './Icon';
 import { useToast } from './Toast';
 
@@ -123,14 +124,7 @@ export default function ShareDialog({ open, onClose, modelId, modelName }: Share
   return (
     <AnimatePresence>
       {open && (
-        <motion.div
-          variants={overlayMotion}
-          initial="initial"
-          animate="animate"
-          exit="exit"
-          className="fixed inset-0 z-[120] flex items-end sm:items-center justify-center bg-black/50 backdrop-blur-sm p-3 pb-[calc(0.75rem+env(safe-area-inset-bottom,0px))] sm:p-4"
-          onClick={onClose}
-        >
+        <DialogOverlay onClose={onClose} zIndex={120} bottomOnMobile safeArea>
           <motion.div
             variants={isMobile ? bottomSheetMotion : dialogPanelMotion}
             initial="initial"
@@ -328,7 +322,7 @@ export default function ShareDialog({ open, onClose, modelId, modelName }: Share
               )}
             </div>
           </motion.div>
-        </motion.div>
+        </DialogOverlay>
       )}
     </AnimatePresence>
   );

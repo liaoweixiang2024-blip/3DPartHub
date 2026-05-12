@@ -21,6 +21,7 @@ import { isLoginDialogEnabled } from '../components/shared/ProtectedLink';
 import { useToast } from '../components/shared/Toast';
 import { useDocumentTitle } from '../hooks/useDocumentTitle';
 import { useMediaQuery } from '../layouts/hooks/useMediaQuery';
+import { cacheModelDetailTitle } from '../lib/modelDetailTitleCache';
 import { toolbarMotion } from '../lib/motion';
 import { useFavoriteStore } from '../stores/useFavoriteStore';
 
@@ -138,12 +139,22 @@ const ModelCard = memo(function ModelCard({
   onDownload: (id: string) => void;
   showCheckbox: boolean;
 }) {
+  const rememberDetailTitle = useCallback(() => {
+    cacheModelDetailTitle(model.id, model.name);
+  }, [model.id, model.name]);
+
   return (
     <div
       className={`bg-surface-container-high rounded-sm group relative transition-[box-shadow] duration-200 ease-out flex flex-col ${selected ? 'ring-2 ring-primary shadow-[0_0_0_1px_var(--color-primary)]' : 'hover:shadow-[0_12px_24px_rgba(0,0,0,0.4)]'}`}
     >
       <div className="aspect-[4/3] bg-surface-container-lowest w-full relative overflow-hidden flex items-center justify-center">
-        <Link to={`/model/${model.id}`} className="absolute inset-0 z-0">
+        <Link
+          to={`/model/${model.id}`}
+          state={{ modelName: model.name }}
+          onPointerDown={rememberDetailTitle}
+          onFocus={rememberDetailTitle}
+          className="absolute inset-0 z-0"
+        >
           <ModelThumbnail
             src={model.thumbnailUrl}
             alt={model.name}
@@ -179,7 +190,12 @@ const ModelCard = memo(function ModelCard({
         </button>
       </div>
       <div className="flex-1 flex flex-col p-2.5">
-        <Link to={`/model/${model.id}`}>
+        <Link
+          to={`/model/${model.id}`}
+          state={{ modelName: model.name }}
+          onPointerDown={rememberDetailTitle}
+          onFocus={rememberDetailTitle}
+        >
           <h4 className="text-xs font-headline text-on-surface leading-tight line-clamp-2">{model.name}</h4>
         </Link>
         <div className="flex items-center gap-2 mt-auto pt-2">
@@ -196,6 +212,9 @@ const ModelCard = memo(function ModelCard({
           </button>
           <Link
             to={`/model/${model.id}`}
+            state={{ modelName: model.name }}
+            onPointerDown={rememberDetailTitle}
+            onFocus={rememberDetailTitle}
             className="flex-1 border border-outline-variant/40 text-on-surface-variant hover:text-on-surface rounded-sm py-1.5 px-3 text-xs text-center flex items-center justify-center gap-1"
           >
             <Icon name="visibility" size={14} />
@@ -222,6 +241,10 @@ const MobileModelCard = memo(function MobileModelCard({
   onDownload: (id: string) => void;
   showCheckbox: boolean;
 }) {
+  const rememberDetailTitle = useCallback(() => {
+    cacheModelDetailTitle(model.id, model.name);
+  }, [model.id, model.name]);
+
   return (
     <div
       className={`bg-surface-container-high rounded-xl border relative transition-[border-color,box-shadow] duration-200 ease-out overflow-hidden ${selected ? 'border-primary ring-2 ring-primary/30' : 'border-outline-variant/10'}`}
@@ -236,7 +259,13 @@ const MobileModelCard = memo(function MobileModelCard({
           {selected && <Icon name="check" size={12} className="text-on-primary" />}
         </button>
       )}
-      <Link to={`/model/${model.id}`} className="flex h-20">
+      <Link
+        to={`/model/${model.id}`}
+        state={{ modelName: model.name }}
+        onPointerDown={rememberDetailTitle}
+        onFocus={rememberDetailTitle}
+        className="flex h-20"
+      >
         <div className="w-20 h-20 bg-surface-container-lowest flex-shrink-0 overflow-hidden">
           <ModelThumbnail src={model.thumbnailUrl} alt={model.name} className="w-full h-full object-cover" />
         </div>

@@ -1,0 +1,90 @@
+@media (max-width: 767px) {
+  [data-interface-theme] .auth-modal-overlay {
+    background: color-mix(in srgb, var(--color-shadow) 50%, transparent);
+  }
+
+  [data-interface-theme] .auth-modal.auth-modal {
+    max-width: 27rem;
+    border-color: color-mix(in srgb, var(--color-outline-variant) 20%, transparent);
+    border-radius: 0.75rem;
+    background: var(--color-surface-container-low);
+    box-shadow: 0 24px 72px color-mix(in srgb, var(--color-shadow) 22%, transparent);
+  }
+
+  [data-interface-theme] .auth-modal.auth-modal-register {
+    max-width: min(44rem, calc(100vw - 2rem));
+  }
+
+  [data-interface-theme] .auth-modal .auth-modal-header {
+    padding-top: 1.5rem;
+    padding-bottom: 1.25rem;
+  }
+
+  [data-interface-theme] .auth-modal .auth-modal-header [data-brand-part='icon'],
+  [data-interface-theme] .auth-modal .auth-modal-header svg {
+    width: 2rem;
+    height: 2rem;
+  }
+
+  [data-interface-theme] .auth-modal .auth-modal-header [data-brand-part='logo'] {
+    height: 2.375rem;
+    max-width: 12rem;
+  }
+
+  [data-interface-theme] .auth-modal .auth-modal-header [data-brand-part='title'] {
+    font-size: 1.125rem;
+  }
+
+  [data-interface-theme] .auth-modal .auth-modal-body {
+    max-height: calc(100dvh - 12rem);
+  }
+
+  [data-interface-theme] .auth-modal.auth-modal-register .auth-modal-body {
+    background: transparent;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+
+  [data-interface-theme] .auth-modal.auth-modal-register .auth-modal-body::-webkit-scrollbar {
+    display: none;
+  }
+
+  [data-interface-theme] .auth-modal.auth-modal form {
+    padding: 1.5rem;
+  }
+
+  [data-interface-theme] .auth-modal.auth-modal form > :not([hidden]) ~ :not([hidden]) {
+    --tw-space-y-reverse: 0;
+    margin-top: calc(0.875rem * calc(1 - var(--tw-space-y-reverse)));
+    margin-bottom: calc(0.875rem * var(--tw-space-y-reverse));
+  }
+
+  [data-interface-theme] .auth-modal.auth-modal input {
+    border-radius: 0.375rem;
+    font-size: 1rem;
+  }
+
+  [data-interface-theme] .auth-modal.auth-modal form > button[type='submit'] {
+    border-radius: 0.375rem;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+  }
+
+  [data-interface-theme] .auth-modal .auth-modal-switch {
+    padding-right: 2rem;
+    padding-bottom: 1rem;
+    padding-left: 2rem;
+  }
+
+  [data-interface-theme] .auth-modal .auth-modal-legal {
+    padding-top: 0.25rem;
+    padding-right: 2rem;
+    padding-bottom: calc(2.25rem + env(safe-area-inset-bottom));
+    padding-left: 2rem;
+  }
+
+  [data-interface-theme] .auth-modal.auth-modal-register .auth-modal-legal {
+    padding-top: 0.5rem;
+    padding-bottom: calc(3.5rem + env(safe-area-inset-bottom));
+  }
+}

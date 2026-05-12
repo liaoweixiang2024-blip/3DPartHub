@@ -4,11 +4,20 @@ import Icon from '../../../../components/shared/Icon';
 import { PageTitle } from '../../../../components/shared/PagePrimitives';
 import Pagination from '../../../../components/shared/Pagination';
 import SearchField from '../../../../components/shared/SearchField';
+import VirtualProductGrid, { useGridColumnCount } from '../../../../components/shared/VirtualProductGrid';
 import { AnnouncementBanner, SkeletonCard, SkeletonListCard } from '../../shared/HomeDesktopShared';
 import type { Category } from '../../shared/homeTypes';
 import type { DesktopHomeThemeProps } from '../../types';
 
+const GRID_CARD_HEIGHT = 260;
+const LIST_CARD_HEIGHT = 80;
+
 const WORKBENCH_TITLE_SEARCH_DEBOUNCE_MS = 280;
+
+const WORKBENCH_SORT_OPTIONS = [
+  { value: 'created_at', label: '最新上传' },
+  { value: 'name', label: '名称排序' },
+] as const;
 
 function clampTitleSearchInput(value: string, maxLength: number) {
   return Array.from(value).slice(0, maxLength).join('');
@@ -25,23 +34,38 @@ function WorkbenchCategorySidebar({
   totalCount: number;
   onSelect: (id: string) => void;
 }) {
-  const activeParent = categoriesData.find(
-    (category) =>
-      category.id === activeCategory || (category.children?.some((child) => child.id === activeCategory) ?? false),
-  );
+  const [expandedCategoryId, setExpandedCategoryId] = useState<string | null>(null);
   const allCount = totalCount || categoriesData.reduce((sum, category) => sum + category.count, 0);
+  const categorySummary = `${categoriesData.length} 类 / ${allCount} 个`;
+
+  useEffect(() => {
+    if (activeCategory === 'all') {
+      setExpandedCategoryId(null);
+      return;
+    }
+
+    const parentWithActiveChild = categoriesData.find((category) =>
+      category.children?.some((child) => child.id === activeCategory),
+    );
+    if (parentWithActiveChild) {
+      setExpandedCategoryId(parentWithActiveChild.id);
+    }
+  }, [activeCategory, categoriesData]);
 
   return (
     <aside className="home-workbench-category-sidebar" aria-label="分类筛选">
       <div className="home-workbench-category-sidebar-header">
         <span className="home-workbench-category-title">模型分类</span>
-        <span className="home-workbench-category-current">当前：{activeParent ? activeParent.name : '全部模型'}</span>
+        <span className="home-workbench-category-current">{categorySummary}</span>
       </div>
       <div className="home-workbench-sidebar-list scrollbar-hidden">
         <button
           type="button"
           onMouseDown={(event) => event.preventDefault()}
-          onClick={() => onSelect('all')}
+          onClick={() => {
+            setExpandedCategoryId(null);
+            onSelect('all');
+          }}
           className={`home-workbench-sidebar-item ${
             activeCategory === 'all' ? 'home-workbench-sidebar-item-active' : ''
           }`}
@@ -54,13 +78,19 @@ function WorkbenchCategorySidebar({
           const active =
             activeCategory === category.id ||
             (category.children?.some((child) => child.id === activeCategory) ?? false);
-          const visibleChildren = active ? category.children || [] : [];
+          const hasChildren = (category.children?.length ?? 0) > 0;
+          const expanded = expandedCategoryId === category.id;
+          const visibleChildren = expanded ? category.children || [] : [];
           return (
             <Fragment key={category.id}>
               <button
                 type="button"
                 onMouseDown={(event) => event.preventDefault()}
-                onClick={() => onSelect(category.id)}
+                aria-expanded={hasChildren ? expanded : undefined}
+                onClick={() => {
+                  setExpandedCategoryId((current) => (hasChildren && current !== category.id ? category.id : null));
+                  onSelect(category.id);
+                }}
                 className={`home-workbench-sidebar-item ${active ? 'home-workbench-sidebar-item-active' : ''}`}
               >
                 <Icon name={category.icon} size={16} />
@@ -74,7 +104,10 @@ function WorkbenchCategorySidebar({
                       key={child.id}
                       type="button"
                       onMouseDown={(event) => event.preventDefault()}
-                      onClick={() => onSelect(child.id)}
+                      onClick={() => {
+                        setExpandedCategoryId(category.id);
+                        onSelect(child.id);
+                      }}
                       className={`home-workbench-sidebar-child ${
                         activeCategory === child.id ? 'home-workbench-sidebar-child-active' : ''
                       }`}
@@ -90,6 +123,71 @@ function WorkbenchCategorySidebar({
         })}
       </div>
     </aside>
+  );
+}
+
+function WorkbenchSortControl({ value, onChange }: { value: string; onChange: (value: string) => void }) {
+  const [open, setOpen] = useState(false);
+  const rootRef = useRef<HTMLDivElement | null>(null);
+  const selectedOption = WORKBENCH_SORT_OPTIONS.find((option) => option.value === value) || WORKBENCH_SORT_OPTIONS[0];
+
+  useEffect(() => {
+    if (!open) return;
+
+    const handlePointerDown = (event: MouseEvent) => {
+      if (!rootRef.current?.contains(event.target as Node)) {
+        setOpen(false);
+      }
+    };
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setOpen(false);
+    };
+
+    document.addEventListener('mousedown', handlePointerDown);
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('mousedown', handlePointerDown);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [open]);
+
+  return (
+    <div ref={rootRef} className="home-sort-control relative">
+      <button
+        type="button"
+        className="home-sort-button"
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        onClick={() => setOpen((current) => !current)}
+      >
+        <Icon name="filter_list" size={14} className="home-sort-icon" />
+        <span>{selectedOption.label}</span>
+        <Icon name="expand_more" size={12} className="home-sort-chevron" />
+      </button>
+      {open && (
+        <div className="home-sort-menu" role="listbox" aria-label="排序方式">
+          {WORKBENCH_SORT_OPTIONS.map((option) => {
+            const selected = option.value === value;
+            return (
+              <button
+                key={option.value}
+                type="button"
+                role="option"
+                aria-selected={selected}
+                className={`home-sort-option ${selected ? 'home-sort-option-active' : ''}`}
+                onClick={() => {
+                  onChange(option.value);
+                  setOpen(false);
+                }}
+              >
+                <span>{option.label}</span>
+                {selected && <Icon name="check" size={14} />}
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -266,7 +364,6 @@ function WorkbenchHomeFooter({
 
 export default function WorkbenchHomeDesktop({
   activeCategory,
-  breadcrumb,
   categories,
   contactAddress,
   contactEmail,
@@ -297,6 +394,8 @@ export default function WorkbenchHomeDesktop({
   onSortChange,
   onViewModeChange,
 }: DesktopHomeThemeProps) {
+  const gridCols = useGridColumnCount();
+
   return (
     <div className="home-page-desktop flex flex-1 overflow-hidden" data-home-theme="workbench">
       <main
@@ -317,83 +416,42 @@ export default function WorkbenchHomeDesktop({
             <div ref={resultsAnchorRef} className="home-workbench-results-anchor" />
             <div className="home-title-toolbar flex flex-col gap-2.5 mb-6 border-b border-surface-container-low pb-3">
               <div>
-                <div className="home-breadcrumb flex items-center gap-2 text-sm mb-1.5">
-                  <button
-                    type="button"
-                    onClick={() => onSelectCategory('all')}
-                    className="text-on-surface-variant hover:text-on-surface cursor-pointer transition-colors"
-                  >
-                    首页
-                  </button>
-                  <Icon name="chevron_right" size={12} className="text-on-surface-variant/40" />
-                  {breadcrumb.parent && !breadcrumb.child ? (
-                    <span className="text-primary font-medium">{breadcrumb.label}</span>
-                  ) : breadcrumb.parent && breadcrumb.child ? (
-                    <>
-                      <span
-                        className="text-on-surface-variant hover:text-on-surface cursor-pointer transition-colors"
-                        onClick={() => {
-                          const parent = categories.find((category) => category.name === breadcrumb.parent);
-                          if (parent) onSelectCategory(parent.id);
-                        }}
-                      >
-                        {breadcrumb.parent}
-                      </span>
-                      <Icon name="chevron_right" size={12} className="text-on-surface-variant/40" />
-                      <span className="text-primary font-medium">{breadcrumb.child}</span>
-                    </>
-                  ) : (
-                    <span className="text-primary font-medium">{breadcrumb.label}</span>
-                  )}
-                </div>
                 <div className="home-title-mainbar flex items-center gap-3">
                   <div className="home-title-mainline flex items-center gap-3">
-                    <PageTitle>零件模型库</PageTitle>
+                    <PageTitle className="home-title-heading">零件模型库</PageTitle>
                     <span className="home-title-count-badge rounded-sm border border-outline-variant/20 bg-surface-container-high px-2 py-0.5 text-xs text-on-surface-variant">
                       {displayTotalItems} 个模型
                     </span>
                   </div>
-                  <div className="home-title-search-wrap">
-                    <WorkbenchTitleSearch
-                      query={searchQuery}
-                      maxLength={homeSearchMaxLength}
-                      normalizeQuery={normalizeSearchQuery}
-                      onSearch={onHeroSearch}
-                    />
-                  </div>
-                  <div className="home-toolbar-actions ml-auto flex items-center gap-3">
-                    <div className="relative">
-                      <select
-                        value={sortBy}
-                        onChange={(event) => onSortChange(event.target.value)}
-                        className="bg-surface-container-lowest text-sm text-on-surface rounded-sm pl-3 pr-8 py-1 border border-outline-variant/30 outline-none appearance-none cursor-pointer"
-                      >
-                        <option value="created_at">最新上传</option>
-                        <option value="name">名称排序</option>
-                      </select>
-                      <Icon
-                        name="expand_more"
-                        size={12}
-                        className="absolute right-2 top-1/2 -translate-y-1/2 text-on-surface-variant pointer-events-none"
+                  <div className="home-title-controls">
+                    <div className="home-title-search-wrap">
+                      <WorkbenchTitleSearch
+                        query={searchQuery}
+                        maxLength={homeSearchMaxLength}
+                        normalizeQuery={normalizeSearchQuery}
+                        onSearch={onHeroSearch}
                       />
                     </div>
-                    <div className="flex rounded-sm border border-outline-variant/30 overflow-hidden">
-                      <button
-                        onClick={() => onViewModeChange('grid')}
-                        aria-label="网格视图"
-                        title="网格视图"
-                        className={`px-2.5 py-1.5 transition-colors ${viewMode === 'grid' ? 'bg-surface-container-high text-on-surface' : 'text-on-surface-variant hover:text-on-surface'}`}
-                      >
-                        <Icon name="grid_view" size={18} />
-                      </button>
-                      <button
-                        onClick={() => onViewModeChange('list')}
-                        aria-label="列表视图"
-                        title="列表视图"
-                        className={`px-2.5 py-1.5 transition-colors ${viewMode === 'list' ? 'bg-surface-container-high text-on-surface' : 'text-on-surface-variant hover:text-on-surface'}`}
-                      >
-                        <Icon name="view_list" size={18} />
-                      </button>
+                    <div className="home-toolbar-actions ml-auto flex items-center gap-3">
+                      <WorkbenchSortControl value={sortBy} onChange={onSortChange} />
+                      <div className="flex rounded-sm border border-outline-variant/30 overflow-hidden">
+                        <button
+                          onClick={() => onViewModeChange('grid')}
+                          aria-label="网格视图"
+                          title="网格视图"
+                          className={`px-2.5 py-1.5 transition-colors ${viewMode === 'grid' ? 'bg-surface-container-high text-on-surface' : 'text-on-surface-variant hover:text-on-surface'}`}
+                        >
+                          <Icon name="grid_view" size={18} />
+                        </button>
+                        <button
+                          onClick={() => onViewModeChange('list')}
+                          aria-label="列表视图"
+                          title="列表视图"
+                          className={`px-2.5 py-1.5 transition-colors ${viewMode === 'list' ? 'bg-surface-container-high text-on-surface' : 'text-on-surface-variant hover:text-on-surface'}`}
+                        >
+                          <Icon name="view_list" size={18} />
+                        </button>
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -413,15 +471,19 @@ export default function WorkbenchHomeDesktop({
               </div>
             ) : (
               <div className="home-workbench-list-body">
-                <div
-                  className={`home-model-grid grid gap-3 ${
+                <VirtualProductGrid
+                  products={products}
+                  columns={viewMode === 'grid' ? gridCols : 1}
+                  rowHeight={viewMode === 'grid' ? GRID_CARD_HEIGHT : LIST_CARD_HEIGHT}
+                  gap={viewMode === 'grid' ? 12 : 8}
+                  renderCard={renderProductCard}
+                  scrollRef={scrollContainerRef}
+                  gridClassName={`home-model-grid grid gap-3 ${
                     viewMode === 'grid'
                       ? 'home-model-grid-grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5'
                       : 'home-model-grid-list grid-cols-1 gap-2'
                   }`}
-                >
-                  {products.map(renderProductCard)}
-                </div>
+                />
 
                 {products.length === 0 && !showHomeListSkeleton && (
                   <div className="home-model-empty-state flex flex-col items-center justify-center gap-4 py-20">

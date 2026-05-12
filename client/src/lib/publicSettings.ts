@@ -7,6 +7,15 @@ let cache: Partial<SystemSettings> | null = null;
 let fetchedAt = 0;
 let inflight: Promise<Partial<SystemSettings>> | null = null;
 let scheduledRefreshHandle = 0;
+let scheduledNotifyHandle = 0;
+let scheduledThemeDefaultsHandle = 0;
+let pendingNotifySyncSWR = false;
+let pendingThemeDefaults: {
+  defaultTheme: string;
+  autoEnabled: boolean;
+  autoDarkHour: number;
+  autoLightHour: number;
+} | null = null;
 const STORAGE_KEY = 'site_config_cache';
 const TTL = 2 * 60 * 1000; // 2 minutes — config changes propagate faster
 const DEFAULT_COPYRIGHT_PROJECT_NAME = '3DPartHub';
@@ -76,6 +85,51 @@ function saveToStorage(data: Partial<SystemSettings>) {
   }
 }
 
+function notifySiteConfigChange(syncSWR = true) {
+  if (typeof window === 'undefined') {
+    listeners.forEach((fn) => fn());
+    if (syncSWR) void mutate('publicSettings', cache, { revalidate: false });
+    return;
+  }
+
+  pendingNotifySyncSWR ||= syncSWR;
+
+  if (scheduledNotifyHandle) return;
+
+  scheduledNotifyHandle = window.setTimeout(() => {
+    scheduledNotifyHandle = 0;
+    const shouldSyncSWR = pendingNotifySyncSWR;
+    pendingNotifySyncSWR = false;
+    listeners.forEach((fn) => fn());
+    if (shouldSyncSWR) void mutate('publicSettings', cache, { revalidate: false });
+  }, 0);
+}
+
+function scheduleServerThemeDefaults(
+  defaultTheme: string,
+  autoEnabled: boolean,
+  autoDarkHour: number,
+  autoLightHour: number,
+) {
+  pendingThemeDefaults = { defaultTheme, autoEnabled, autoDarkHour, autoLightHour };
+
+  if (typeof window === 'undefined') {
+    applyServerThemeDefaults(defaultTheme, autoEnabled, autoDarkHour, autoLightHour);
+    pendingThemeDefaults = null;
+    return;
+  }
+
+  if (scheduledThemeDefaultsHandle) return;
+
+  scheduledThemeDefaultsHandle = window.setTimeout(() => {
+    scheduledThemeDefaultsHandle = 0;
+    const next = pendingThemeDefaults;
+    pendingThemeDefaults = null;
+    if (!next) return;
+    applyServerThemeDefaults(next.defaultTheme, next.autoEnabled, next.autoDarkHour, next.autoLightHour);
+  }, 0);
+}
+
 function fetchAndApplyPublicSettings() {
   if (inflight) return inflight;
 
@@ -88,8 +142,7 @@ function fetchAndApplyPublicSettings() {
       applyMetaTags();
       applyFavicon();
       applyAppearanceSettings(cache);
-      listeners.forEach((fn) => fn());
-      void mutate('publicSettings', cache, { revalidate: false });
+      notifySiteConfigChange();
       return cache;
     } catch {
       return cache || { show_watermark: false, watermark_image: '', site_title: '', site_logo: '' };
@@ -129,7 +182,7 @@ export function clearCache() {
   cache = null;
   fetchedAt = 0;
   // Notify all listeners so React components re-render
-  listeners.forEach((fn) => fn());
+  notifySiteConfigChange();
 }
 
 // Refresh config: clear all caches, re-fetch, apply, then notify listeners
@@ -148,9 +201,7 @@ export async function refreshSiteConfig() {
     // Keep stale/default config if the public settings endpoint is unavailable.
   }
   // Notify all listeners with fresh cache populated
-  listeners.forEach((fn) => fn());
-  // Invalidate SWR cache so components using useSWR('publicSettings') re-render
-  void mutate('publicSettings', cache, { revalidate: false });
+  notifySiteConfigChange();
 }
 
 export async function getCachedPublicSettings(): Promise<Partial<SystemSettings>> {
@@ -163,7 +214,7 @@ export async function getCachedPublicSettings(): Promise<Partial<SystemSettings>
     if (stored && now - stored.ts < TTL) {
       cache = stored.data;
       fetchedAt = stored.ts;
-      listeners.forEach((fn) => fn());
+      notifySiteConfigChange(false);
     }
   }
 
@@ -326,7 +377,7 @@ export function applyAppearanceSettings(settings: Partial<SystemSettings>) {
     (settings.color_custom_dark as string) || '{}',
     (settings.color_custom_light as string) || '{}',
   );
-  applyServerThemeDefaults(
+  scheduleServerThemeDefaults(
     (settings.default_theme as string) || 'dark',
     (settings.auto_theme_enabled as boolean) || false,
     (settings.auto_theme_dark_hour as number) ?? 20,
