@@ -19,6 +19,7 @@ import {
   createWriteStream,
   copyFileSync,
   cpSync,
+  symlinkSync,
 } from 'fs';
 import { basename, dirname, isAbsolute, join, resolve, sep } from 'path';
 import { createInterface } from 'readline';
@@ -1010,9 +1011,17 @@ async function runBackup(job: BackupJob) {
       `备份清单已生成: ${manifest.directories.length} 个目录，数据库校验 ${manifest.database.sha256.slice(0, 12)}...`,
     );
 
+    const archiveEntries = [BACKUP_DB_ENTRY_DIR];
+    for (const dir of existingBackupDirs) {
+      const archiveLink = join(archiveRoot, dir);
+      rmSync(archiveLink, { recursive: true, force: true });
+      symlinkSync(join(staticDir, dir), archiveLink, 'dir');
+      archiveEntries.push(dir);
+    }
+
     await new Promise<void>((resolve, reject) => {
       const tmpArchive = join(tmpDir, `${job.id}.tar.gz.tmp`);
-      const args: string[] = ['czf', tmpArchive];
+      const args: string[] = ['czhf', tmpArchive];
       args.push(
         '--exclude=__MACOSX',
         '--exclude=*/__MACOSX',
@@ -1023,8 +1032,7 @@ async function runBackup(job: BackupJob) {
         '--exclude=backups',
         '--exclude=.restore_*',
       );
-      args.push('-C', archiveRoot, BACKUP_DB_ENTRY_DIR);
-      for (const d of existingBackupDirs) args.push('-C', staticDir, d);
+      args.push('-C', archiveRoot, ...archiveEntries);
 
       const proc = spawn('tar', args, { timeout: ARCHIVE_EXTRACT_TIMEOUT_MS });
       let stderr = '';
@@ -1160,8 +1168,8 @@ export function listBackups(): BackupRecord[] {
 
   for (const dir of BACKUP_DIRS) {
     if (!existsSync(dir)) continue;
-    const files = readdirSync(dir).filter((file) => file.endsWith('.json'));
-    for (const file of files) {
+    const files = readdirSync(dir);
+    for (const file of files.filter((entry) => entry.endsWith('.json'))) {
       try {
         const raw = readFileSync(join(dir, file), 'utf-8');
         const record = JSON.parse(raw) as BackupRecord;
@@ -1170,6 +1178,27 @@ export function listBackups(): BackupRecord[] {
         if (!existsSync(archive)) continue;
         records.push(normalizeBackupRecord(record, archive, join(dir, file)));
         seen.add(record.id);
+      } catch {}
+    }
+    for (const file of files.filter((entry) => entry.endsWith('.tar.gz'))) {
+      const id = file.slice(0, -'.tar.gz'.length);
+      if (!SAFE_BACKUP_ID_RE.test(id) || seen.has(id)) continue;
+      const archive = buildArchivePath(dir, id);
+      if (!existsSync(archive)) continue;
+      try {
+        const stats = statSync(archive);
+        records.push({
+          id,
+          filename: file,
+          name: `未登记备份 ${formatDate(stats.mtime)}`,
+          createdAt: stats.mtime.toISOString(),
+          fileSize: stats.size,
+          fileSizeText: formatSize(stats.size),
+          modelCount: 0,
+          thumbnailCount: 0,
+          dbSize: '未知',
+        });
+        seen.add(id);
       } catch {}
     }
   }
