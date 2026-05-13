@@ -12,12 +12,12 @@ ENV VITE_SENTRY_DSN=$VITE_SENTRY_DSN
 ENV VITE_APP_VERSION=$VITE_APP_VERSION
 RUN npm run build
 
-# Pre-compress static assets for gzip_static and brotli_static
+# Pre-compress static assets for gzip_static. Keep the runtime image on the
+# official nginx base so release builds do not depend on third-party tags.
 RUN find /app/dist -type f \( -name "*.js" -o -name "*.css" -o -name "*.html" -o -name "*.svg" -o -name "*.json" \) \
-    -exec gzip -k -9 {} \; \
-    -exec brotli -k -9 {} \;
+    -exec gzip -k -9 {} \;
 
-FROM fholzer/nginx-brotli:alpine
+FROM nginx:1.29-alpine
 
 COPY --from=build /app/dist /usr/share/nginx/html
 COPY nginx-main.conf /etc/nginx/nginx.conf
@@ -29,7 +29,5 @@ RUN chown -R nginx:nginx /usr/share/nginx/html && \
     touch /var/run/nginx.pid && chown nginx:nginx /var/run/nginx.pid
 
 EXPOSE 80
-
-USER nginx
 
 CMD ["nginx", "-g", "daemon off;"]
