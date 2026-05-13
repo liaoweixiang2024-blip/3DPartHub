@@ -124,6 +124,13 @@ function readBatchDownloadIds(body: unknown): string[] {
   return uniqueDownloadIds(data.ids ?? data['ids[]']);
 }
 
+function readBatchDownloadCheckIds(req: Request): string[] {
+  const bodyIds = readBatchDownloadIds(req.body);
+  if (bodyIds.length > 0) return bodyIds;
+  const query = req.query as { ids?: unknown; 'ids[]'?: unknown };
+  return uniqueDownloadIds(query.ids ?? query['ids[]']);
+}
+
 async function lookupDownloadArchiveEntries(ids: string[], userId: string): Promise<DownloadArchiveLookup> {
   if (!prisma) return { ok: false, status: 503, detail: 'DB unavailable' };
 
@@ -439,6 +446,25 @@ router.post('/api/downloads/drawing-token', authMiddleware, async (req: AuthRequ
 });
 
 // Batch download selected history records as a single ZIP of original model files.
+router.all(
+  '/api/downloads/batch-download/check',
+  parseBatchDownloadForm,
+  authMiddleware,
+  async (req: AuthRequest, res: Response) => {
+    try {
+      const lookup = await lookupDownloadArchiveEntries(readBatchDownloadCheckIds(req), req.user!.userId);
+      if (!lookup.ok) {
+        res.status(lookup.status).json({ detail: lookup.detail });
+        return;
+      }
+      res.json({ fileCount: lookup.fileEntries.length });
+    } catch (err) {
+      log.error({ err }, 'Download history batch check failed');
+      res.status(500).json({ detail: '检查打包下载失败' });
+    }
+  },
+);
+
 router.post(
   '/api/downloads/batch-download',
   parseBatchDownloadForm,

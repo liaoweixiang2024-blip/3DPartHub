@@ -1,7 +1,6 @@
 import { motion } from 'framer-motion';
 import { useState, useEffect, useCallback } from 'react';
 import { useNavigate, useLocation, Link } from 'react-router-dom';
-import useSWR from 'swr';
 import { authApi } from '../api/auth';
 import client from '../api/client';
 import { unwrapResponse } from '../api/response';
@@ -11,7 +10,7 @@ import { PageTitle } from '../components/shared/PagePrimitives';
 import { PublicPageShell } from '../components/shared/PublicPageShell';
 import { useDocumentTitle } from '../hooks/useDocumentTitle';
 import { getErrorMessage } from '../lib/errorNotifications';
-import { getCachedPublicSettings } from '../lib/publicSettings';
+import { usePublicSettings } from '../lib/publicSettings';
 import { sanitizeHtml } from '../lib/sanitizeHtml';
 import { useAuthStore } from '../stores/useAuthStore';
 import { getInterfaceThemePackage } from '../themes/interfaceThemes/registry';
@@ -50,9 +49,9 @@ export default function LoginPage() {
   const navigate = useNavigate();
   const location = useLocation();
   const from = (location.state as LoginLocationState | null)?.from || '/';
-  const { login } = useAuthStore();
+  const login = useAuthStore((s) => s.login);
   const [allowRegister, setAllowRegister] = useState(true);
-  const { data: publicSettings } = useSWR('publicSettings', () => getCachedPublicSettings());
+  const { settings: publicSettings } = usePublicSettings();
   const ThemePackage = getInterfaceThemePackage(publicSettings?.interface_theme);
   const LoginTemplate = ThemePackage.templates.Login;
 

@@ -1,9 +1,8 @@
 import { motion } from 'framer-motion';
 import { createContext, useContext, useLayoutEffect, useState, type ReactNode, type Ref } from 'react';
 import { Outlet, useLocation } from 'react-router-dom';
-import useSWR from 'swr';
 import { useMediaQuery } from '../../layouts/hooks/useMediaQuery';
-import { getCachedPublicSettings, getFooterCopyright } from '../../lib/publicSettings';
+import { getFooterCopyright, usePublicSettings } from '../../lib/publicSettings';
 import { getInterfaceThemePackage } from '../../themes/interfaceThemes/registry';
 import type { FloatingMenuThemeProps } from '../../themes/interfaceThemes/types';
 import { getMobileThemePackage } from '../../themes/mobileThemes/registry';
@@ -31,17 +30,17 @@ function AdminCopyrightBadge() {
 }
 
 function useInterfaceThemeShellComponents() {
-  const { data: settings } = useSWR('publicSettings', () => getCachedPublicSettings());
+  const { settings } = usePublicSettings();
   return getInterfaceThemePackage(settings?.interface_theme);
 }
 
 function useMobileThemeShellComponents() {
-  const { data: settings } = useSWR('publicSettings', () => getCachedPublicSettings());
+  const { settings } = usePublicSettings();
   return getMobileThemePackage(settings?.mobile_interface_theme);
 }
 
 function useFloatingMenuThemeProps(): FloatingMenuThemeProps {
-  const { data: settings } = useSWR('publicSettings', () => getCachedPublicSettings());
+  const { settings } = usePublicSettings();
   return {
     contactAddress: settings?.contact_address || '',
     contactEmail: settings?.contact_email || '',

@@ -9,7 +9,63 @@ on:
   workflow_dispatch:
 
 jobs:
-  verify:
+  install:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Set up Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: |
+            client/package-lock.json
+            server/package-lock.json
+
+      - name: Install client dependencies
+        working-directory: client
+        run: npm ci
+
+      - name: Install server dependencies
+        working-directory: server
+        run: npm ci
+
+      - name: Generate Prisma client
+        working-directory: server
+        run: npx prisma generate
+
+  client-verify:
+    needs: install
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Set up Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: |
+            client/package-lock.json
+            server/package-lock.json
+
+      - name: Install client dependencies
+        working-directory: client
+        run: npm ci
+
+      - name: Client verify
+        working-directory: client
+        run: npm run verify
+
+      - name: Client format check
+        working-directory: client
+        run: npx prettier --check "src/**/*.{ts,tsx,css,json}"
+
+  server-verify:
+    needs: install
     runs-on: ubuntu-latest
     services:
       postgres:
@@ -39,10 +95,6 @@ jobs:
             client/package-lock.json
             server/package-lock.json
 
-      - name: Install client dependencies
-        working-directory: client
-        run: npm ci
-
       - name: Install server dependencies
         working-directory: server
         run: npm ci
@@ -51,16 +103,6 @@ jobs:
         working-directory: server
         run: npx prisma generate
 
-      - name: Install scan tools
-        run: sudo apt-get update && sudo apt-get install -y ripgrep
-
-      - name: Maintenance scans
-        run: bash scripts/scan-maintenance.sh
-
-      - name: Client verify
-        working-directory: client
-        run: npm run verify
-
       - name: Server verify
         working-directory: server
         run: npm run verify
@@ -68,10 +110,6 @@ jobs:
       - name: Server test coverage
         working-directory: server
         run: npm run test:coverage
-
-      - name: Client format check
-        working-directory: client
-        run: npx prettier --check "src/**/*.{ts,tsx,css,json}"
 
       - name: Server format check
         working-directory: server
@@ -84,3 +122,15 @@ jobs:
         run: |
           docker exec ${{ job.services.postgres.id }} createdb -U test prisma_shadow
           npx prisma migrate diff --from-migrations prisma/migrations --to-schema-datamodel prisma/schema.prisma --shadow-database-url "$SHADOW_DATABASE_URL" --exit-code
+
+  maintenance-scan:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Install scan tools
+        run: sudo apt-get update && sudo apt-get install -y ripgrep
+
+      - name: Maintenance scans
+        run: bash scripts/scan-maintenance.sh

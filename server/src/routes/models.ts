@@ -82,7 +82,7 @@ async function optionalVerifiedUser(req: Request) {
 }
 
 router.use(createPreviewDiagnosticsRouter({ prisma, metadataDir: METADATA_DIR, getPreviewMeta }));
-router.use(createModelListRouter({ prisma, metadataDir: METADATA_DIR, drawingDownloadUrl }));
+router.use(createModelListRouter({ prisma, drawingDownloadUrl }));
 router.use(createModelDetailRouter({ prisma, getMeta, getPreviewMeta, optionalVerifiedUser, drawingDownloadUrl }));
 router.use(createModelUploadRouter({ prisma, saveMeta }));
 router.use(createModelDownloadRouter({ prisma, getMeta }));

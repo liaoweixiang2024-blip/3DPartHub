@@ -24,7 +24,7 @@
 # 【更新】
 #   默认使用 latest 镜像
 #   手动更新: docker compose pull && docker compose up -d --force-recreate
-#   如需锁定版本: 在 .env 中写入 IMAGE_TAG=v2.9.9
+#   如需锁定版本: 在 .env 中写入 IMAGE_TAG=v3.0.0
 #   检查日志: docker compose logs -f api
 #
 # 【数据安全】
@@ -90,7 +90,7 @@ services:
       CONVERSION_WORKER_CONCURRENCY: ${CONVERSION_WORKER_CONCURRENCY:-1}
       SLOW_REQUEST_LOG_BURST: ${SLOW_REQUEST_LOG_BURST:-5}
       SLOW_REQUEST_LOG_SAMPLE_RATE: ${SLOW_REQUEST_LOG_SAMPLE_RATE:-0.01}
-      MAX_FILE_SIZE: 104857600
+      MAX_FILE_SIZE: 524288000
       REDIS_URL: redis://:${REDIS_PASSWORD:-changeme-set-in-env}@redis:6379
       ADMIN_USER: ${ADMIN_USER:-admin}
       ADMIN_EMAIL: ${ADMIN_EMAIL:-admin@model.local}
@@ -171,6 +171,20 @@ services:
     container_name: 3dparthub-postgres
     mem_limit: ${POSTGRES_MEMORY_LIMIT:-512M}
     cpus: '${POSTGRES_CPU_LIMIT:-1}'
+    command:
+      - postgres
+      - -c
+      - shared_buffers=128MB
+      - -c
+      - effective_cache_size=384MB
+      - -c
+      - work_mem=4MB
+      - -c
+      - maintenance_work_mem=64MB
+      - -c
+      - random_page_cost=1.1
+      - -c
+      - log_min_duration_statement=500
     deploy:
       resources:
         limits:

@@ -1,8 +1,10 @@
 import { Request, Response, NextFunction } from 'express';
-import { cacheGet } from '../lib/cache.js';
+import { cacheGet, cacheSet } from '../lib/cache.js';
 import { verifyAccessToken, isTokenRevoked, type TokenPayload, type VerifiedTokenPayload } from '../lib/jwt.js';
 import { logger } from '../lib/logger.js';
 import { prisma } from '../lib/prisma.js';
+
+const USER_CACHE_TTL = 60;
 
 export interface AuthRequest extends Request {
   user?: TokenPayload;
@@ -63,11 +65,26 @@ export async function getVerifiedRequestUser(
   const revokeBefore = await cacheGet<number>(`token_revoke_before:${payload.userId}`);
   if (revokeBefore && payload.iat && payload.iat < revokeBefore) return null;
 
+  const cacheKey = `auth:user:${payload.userId}`;
+  const cached = await cacheGet<{ id: string; role: string; mustChangePassword: boolean }>(cacheKey);
+  if (cached) {
+    return {
+      payload: {
+        userId: cached.id,
+        role: cached.role,
+        tokenType: payload.tokenType,
+      },
+      mustChangePassword: cached.mustChangePassword,
+    };
+  }
+
   const user = await prisma.user.findUnique({
     where: { id: payload.userId },
     select: { id: true, role: true, mustChangePassword: true },
   });
   if (!user) return null;
+
+  await cacheSet(cacheKey, user, USER_CACHE_TTL).catch(() => {});
 
   return {
     payload: {

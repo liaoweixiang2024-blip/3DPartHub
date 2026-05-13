@@ -480,3 +480,10 @@ export function getEdgeStyleConfig() {
 export function getDefaultPreset(): string {
   return (cache?.viewer_default_preset as string) || 'default';
 }
+
+import useSWR from 'swr';
+
+export function usePublicSettings() {
+  const { data, isLoading } = useSWR('publicSettings', () => getCachedPublicSettings());
+  return { settings: data ?? undefined, isLoading };
+}

@@ -57,14 +57,14 @@ import { useMediaQuery } from '../layouts/hooks/useMediaQuery';
 import { getBusinessConfig } from '../lib/businessConfig';
 import { copyText } from '../lib/clipboard';
 import { getKitListTitle } from '../lib/kitList';
-import { getCachedPublicSettings } from '../lib/publicSettings';
+import { usePublicSettings } from '../lib/publicSettings';
 import { compareOptionValues } from '../lib/selectionSort';
 import { useAuthStore } from '../stores/useAuthStore';
 
 /* ══════════════ Main Page ══════════════ */
 
 export default function SelectionPage() {
-  const { data: settingsData } = useSWR('publicSettings', () => getCachedPublicSettings());
+  const { settings: settingsData } = usePublicSettings();
   const business = getBusinessConfig(settingsData);
   const pageTitle = (settingsData?.selection_page_title as string) || '产品选型';
   const pageDesc = (settingsData?.selection_page_desc as string) || '先选产品大类，再按参数逐步缩小范围';
@@ -80,7 +80,7 @@ export default function SelectionPage() {
     () => new URLSearchParams(location.search).get('previewImages') === '1',
     [location.search],
   );
-  const { user } = useAuthStore();
+  const user = useAuthStore((s) => s.user);
   const { toast } = useToast();
   const [inquiryOpen, setInquiryOpen] = useState(false);
   const [cartPreviewOpen, setCartPreviewOpen] = useState(false);

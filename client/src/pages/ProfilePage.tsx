@@ -332,7 +332,8 @@ function MobileSharesMenu() {
 }
 
 function DesktopContent() {
-  const { user, updateUser } = useAuthStore();
+  const user = useAuthStore((s) => s.user);
+  const updateUser = useAuthStore((s) => s.updateUser);
   const { toast } = useToast();
   const [pwdOpen, setPwdOpen] = useState(false);
   const [formData, setFormData] = useState({
@@ -635,7 +636,8 @@ function DesktopContent() {
 }
 
 function MobileContent() {
-  const { user, updateUser } = useAuthStore();
+  const user = useAuthStore((s) => s.user);
+  const updateUser = useAuthStore((s) => s.updateUser);
   const { toast } = useToast();
   const navigate = useNavigate();
   const [pwdOpen, setPwdOpen] = useState(false);

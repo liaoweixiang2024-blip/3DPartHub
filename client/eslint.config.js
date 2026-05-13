@@ -23,7 +23,7 @@ export default defineConfig([
     },
     rules: {
       'no-use-before-define': ['error', { variables: true, functions: false }],
-      '@typescript-eslint/no-explicit-any': 'off',
+      '@typescript-eslint/no-explicit-any': 'warn',
       'import/order': [
         'warn',
         {

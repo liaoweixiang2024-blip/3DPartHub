@@ -60,7 +60,7 @@ function ProductCardInner({
   const [renameSaving, setRenameSaving] = useState(false);
   const [favLoading, setFavLoading] = useState(false);
   const ignoreNextOverlayClickRef = useRef(false);
-  const { isAuthenticated } = useAuthStore();
+  const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
   const isFavorited = useFavoriteStore((state) => state.favoriteIds.has(product.id));
   const toggleFavoriteInStore = useFavoriteStore((state) => state.toggleFavorite);
 

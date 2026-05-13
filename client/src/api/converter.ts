@@ -26,6 +26,7 @@ export const converterApi = {
     if (options?.categoryId) formData.append('categoryId', options.categoryId);
     const res = await client.post<ApiResponse<ConversionResponse>>('/models/upload', formData, {
       headers: { 'Content-Type': 'multipart/form-data' },
+      timeout: 7200000,
       onUploadProgress: options?.onUploadProgress,
     });
     return unwrapResponse<ConversionResponse>(res);

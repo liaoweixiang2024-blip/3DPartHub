@@ -23,23 +23,27 @@ export function createAdminUsersRouter() {
     requireRole('ADMIN'),
     async (req: AuthRequest, res: Response) => {
       try {
-        const [total, roleGroups, active] = await Promise.all([
-          prisma.user.count(),
-          prisma.user.groupBy({ by: ['role'], _count: { _all: true } }),
-          prisma.user.count({
-            where: {
-              OR: [{ downloads: { some: {} } }, { favorites: { some: {} } }],
-            },
-          }),
-        ]);
-        const roleCounts = Object.fromEntries(roleGroups.map((item) => [item.role, item._count._all]));
-        res.json({
-          total,
-          admin: roleCounts.ADMIN || 0,
-          editor: roleCounts.EDITOR || 0,
-          viewer: roleCounts.VIEWER || 0,
-          active,
+        const { cacheGetOrSet, TTL } = await import('../../lib/cache.js');
+        const { value } = await cacheGetOrSet('cache:admin:users:stats', 60, async () => {
+          const [total, roleGroups, active] = await Promise.all([
+            prisma.user.count(),
+            prisma.user.groupBy({ by: ['role'], _count: { _all: true } }),
+            prisma.user.count({
+              where: {
+                OR: [{ downloads: { some: {} } }, { favorites: { some: {} } }],
+              },
+            }),
+          ]);
+          const roleCounts = Object.fromEntries(roleGroups.map((item) => [item.role, item._count._all]));
+          return {
+            total,
+            admin: roleCounts.ADMIN || 0,
+            editor: roleCounts.EDITOR || 0,
+            viewer: roleCounts.VIEWER || 0,
+            active,
+          };
         });
+        res.json(value);
       } catch {
         res.status(500).json({ detail: '获取用户统计失败' });
       }

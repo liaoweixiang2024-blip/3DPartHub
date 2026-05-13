@@ -52,7 +52,7 @@ function ThreadSizeLoadingState() {
 
 export default function ThreadSizeToolPage() {
   useDocumentTitle('规格速查');
-  const { user } = useAuthStore();
+  const user = useAuthStore((s) => s.user);
   const isAdmin = user?.role === 'ADMIN';
   const [activeTab, setActiveTab] = useState<ToolTab>('thread');
   const [family, setFamily] = useState<'all' | ThreadFamily>('all');

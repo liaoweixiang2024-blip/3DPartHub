@@ -9,7 +9,7 @@ import {
   DEFAULT_TICKET_STATUSES_FOR_SETTINGS,
   DEFAULT_UPLOAD_POLICY_FOR_SETTINGS,
 } from './businessDefaults.js';
-import { cacheDel } from './cache.js';
+import { cacheDel, redis } from './cache.js';
 import { DEFAULT_EMAIL_TEMPLATES } from './emailTemplates.js';
 import { prisma } from './prisma.js';
 
@@ -346,6 +346,22 @@ let cache: Record<string, unknown> | null = null;
 let cacheAt = 0;
 const CACHE_TTL = 30_000; // 30 seconds — fast propagation across workers
 
+const SETTINGS_INVALIDATE_CHANNEL = 'cache:settings:invalidate';
+const settingsSubscriber = redis.duplicate();
+
+settingsSubscriber.on('error', () => {});
+settingsSubscriber.subscribe(SETTINGS_INVALIDATE_CHANNEL).catch(() => {});
+settingsSubscriber.on('message', (channel: string) => {
+  if (channel === SETTINGS_INVALIDATE_CHANNEL) {
+    cache = null;
+    cacheAt = 0;
+  }
+});
+
+function broadcastSettingsInvalidate(): void {
+  redis.publish(SETTINGS_INVALIDATE_CHANNEL, '1').catch(() => {});
+}
+
 /** Clear the in-memory settings cache (used after restore) */
 export function clearSettingsCache(): void {
   cache = null;
@@ -392,6 +408,7 @@ export async function setSetting(key: string, value: unknown): Promise<void> {
   // Invalidate cache
   cache = null;
   await cacheDel('cache:settings:public');
+  broadcastSettingsInvalidate();
 }
 
 const SETTINGS_KEYS = new Set(SETTINGS_SCHEMA.map((s) => s.key));
@@ -565,7 +582,7 @@ function clampNumericSetting(key: string, value: unknown, min: number, max: numb
   return Math.min(max, Math.max(min, n));
 }
 
-function validateSettingValue(key: string, value: unknown): unknown {
+export function validateSettingValue(key: string, value: unknown): unknown {
   if (key === 'footer_links') return normalizeFooterLinksSetting(value);
   if (key === 'cache_driver') {
     const driver = String(value || '').trim();
@@ -671,6 +688,7 @@ export async function setSettings(settings: Record<string, unknown>): Promise<vo
   // Invalidate cache
   cache = null;
   await cacheDel('cache:settings:public');
+  broadcastSettingsInvalidate();
 }
 
 export async function initDefaultSettings(): Promise<void> {

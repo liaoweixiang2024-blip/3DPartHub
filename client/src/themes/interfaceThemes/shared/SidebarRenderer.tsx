@@ -1,11 +1,10 @@
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import useSWR from 'swr';
 import Icon from '../../../components/shared/Icon';
 import LoginConfirmDialog from '../../../components/shared/LoginConfirmDialog';
 import { checkProtectedAccess } from '../../../components/shared/ProtectedLink';
 import { getBusinessConfig } from '../../../lib/businessConfig';
-import { getCachedPublicSettings } from '../../../lib/publicSettings';
+import { usePublicSettings } from '../../../lib/publicSettings';
 import { preloadRouteForPath } from '../../../lib/routeLoaders';
 import { useAuthStore } from '../../../stores/useAuthStore';
 
@@ -47,8 +46,9 @@ function isAdminRoutePath(path: string) {
 export default function SidebarRenderer({ appearance, adminRouteMode = 'all' }: SidebarRendererProps) {
   const location = useLocation();
   const navigate = useNavigate();
-  const { logout, user } = useAuthStore();
-  const { data: settings } = useSWR('publicSettings', () => getCachedPublicSettings());
+  const logout = useAuthStore((s) => s.logout);
+  const user = useAuthStore((s) => s.user);
+  const { settings } = usePublicSettings();
   const isAdmin = user?.role === 'ADMIN';
   const isAdminRoute = isAdminRoutePath(location.pathname);
   const [loginDialogOpen, setLoginDialogOpen] = useState(false);

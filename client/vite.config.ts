@@ -29,7 +29,6 @@ export default defineConfig({
           }
 
           if (normalizedId.includes('/node_modules/')) {
-            // Keep heavy, route-only toolchains out of the initial vendor chunk.
             if (
               normalizedId.includes('/three/') ||
               normalizedId.includes('/@react-three/') ||
@@ -41,15 +40,28 @@ export default defineConfig({
             ) {
               return;
             }
+
+            if (normalizedId.includes('/lucide-react/')) {
+              return 'vendor-lucide';
+            }
+            if (normalizedId.includes('/@tanstack/react-virtual/')) {
+              return 'vendor-virtual';
+            }
+
             return 'vendor-app';
           }
 
           if (
             normalizedId.includes('/src/api/') ||
+            normalizedId.includes('/src/stores/')
+          ) {
+            return 'app-api';
+          }
+
+          if (
             normalizedId.includes('/src/components/shared/') ||
             normalizedId.includes('/src/hooks/') ||
-            normalizedId.includes('/src/lib/') ||
-            normalizedId.includes('/src/stores/')
+            normalizedId.includes('/src/lib/')
           ) {
             return 'app-shared';
           }

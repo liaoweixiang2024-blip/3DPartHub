@@ -1,13 +1,12 @@
 import { useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import useSWR from 'swr';
 import { AdminContentPanel, AdminManagementPage } from '../components/shared/AdminManagementPage';
 import { AdminPageShell } from '../components/shared/AdminPageShell';
 import AuthModal from '../components/shared/AuthModal';
 import Icon from '../components/shared/Icon';
 import { useDocumentTitle } from '../hooks/useDocumentTitle';
 import { DEFAULT_PRIVACY_SECTIONS, DEFAULT_TERMS_SECTIONS, parseLegalSections } from '../lib/legalContent';
-import { getCachedPublicSettings } from '../lib/publicSettings';
+import { usePublicSettings } from '../lib/publicSettings';
 import { useAuthStore } from '../stores/useAuthStore';
 
 function splitParagraphs(content: string) {
@@ -24,7 +23,7 @@ function sectionId(index: number) {
 export default function LegalPage() {
   const { type } = useParams<{ type: string }>();
   const isPrivacy = type === 'privacy';
-  const { data: settings } = useSWR('publicSettings', () => getCachedPublicSettings());
+  const { settings } = usePublicSettings();
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
   const [authOpen, setAuthOpen] = useState(false);
   const [tocOpen, setTocOpen] = useState(false);

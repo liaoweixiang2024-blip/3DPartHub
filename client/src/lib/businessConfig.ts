@@ -150,7 +150,7 @@ export const DEFAULT_MOBILE_NAV: NavItemConfig[] = [
 
 export const DEFAULT_UPLOAD_POLICY: UploadPolicy = {
   modelFormats: ['step', 'stp', 'iges', 'igs', 'x_t', 'xt'],
-  modelMaxSizeMb: 100,
+  modelMaxSizeMb: 500,
   batchArchiveMaxSizeMb: 500,
   chunkSizeMb: 5,
   chunkThresholdMb: 20,

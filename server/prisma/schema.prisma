@@ -242,6 +242,7 @@ model Download {
 
   @@index([userId])
   @@index([userId, createdAt])
+  @@index([modelId])
   @@map("downloads")
 }
 
@@ -257,6 +258,7 @@ model Comment {
 
   @@index([modelId])
   @@index([modelId, createdAt])
+  @@index([userId])
   @@map("comments")
 }
 
@@ -277,6 +279,7 @@ model ShareLink {
   createdBy     User      @relation(fields: [createdById], references: [id])
   createdAt     DateTime  @default(now()) @map("created_at")
 
+  @@index([modelId])
   @@map("share_links")
 }
 

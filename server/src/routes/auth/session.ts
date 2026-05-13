@@ -1,14 +1,7 @@
 import { randomInt } from 'node:crypto';
 import { Router, Request, Response } from 'express';
-import { cacheGet } from '../../lib/cache.js';
-import {
-  generateCaptcha,
-  verifyCaptcha,
-  checkRateLimit,
-  storeEmailCode,
-  verifyEmailCode,
-  redis,
-} from '../../lib/captcha.js';
+import { cacheGet, redis } from '../../lib/cache.js';
+import { generateCaptcha, verifyCaptcha, checkRateLimit, storeEmailCode, verifyEmailCode } from '../../lib/captcha.js';
 import { sendVerifyCode } from '../../lib/email.js';
 import {
   signAccessToken,

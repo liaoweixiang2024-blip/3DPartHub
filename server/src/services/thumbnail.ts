@@ -28,6 +28,31 @@ const THUMBNAIL_VIEW_DIRECTION: Vec3 = { x: 0.62, y: 0.42, z: 0.62 };
 const THUMBNAIL_KEY_LIGHT: Vec3 = { x: 0.35, y: 0.72, z: 0.52 };
 const THUMBNAIL_FILL_LIGHT: Vec3 = { x: -0.5, y: 0.28, z: -0.25 };
 const THUMBNAIL_BASE_COLOR = { r: 174, g: 177, b: 181 };
+const THUMB_JPEG_QUALITY = 0.88;
+const THUMB_SMALL_JPEG_QUALITY = 0.82;
+const THUMBNAIL_ENCODING: Array<{ ext: 'jpg' | 'png'; mime: 'image/jpeg' | 'image/png'; quality?: number }> = [
+  { ext: 'jpg', mime: 'image/jpeg', quality: THUMB_JPEG_QUALITY },
+  { ext: 'png', mime: 'image/png' },
+];
+const THUMBNAIL_SMALL_ENCODING: Array<{ ext: 'jpg' | 'png'; mime: 'image/jpeg' | 'image/png'; quality?: number }> = [
+  { ext: 'jpg', mime: 'image/jpeg', quality: THUMB_SMALL_JPEG_QUALITY },
+  { ext: 'png', mime: 'image/png' },
+];
+
+function encodeCanvas(canvas: ReturnType<typeof createCanvas>, encodings = THUMBNAIL_ENCODING) {
+  for (const encoding of encodings) {
+    const buffer =
+      encoding.mime === 'image/jpeg'
+        ? canvas.toBuffer('image/jpeg', { quality: encoding.quality ?? THUMB_JPEG_QUALITY })
+        : canvas.toBuffer('image/png');
+    if (Buffer.isBuffer(buffer) && buffer.length > 0) return { buffer, ext: encoding.ext };
+  }
+  throw new Error('缩略图编码失败：当前运行环境不支持 JPEG/PNG 输出');
+}
+
+function thumbnailPath(outputDir: string, modelId: string, ext: string, small = false) {
+  return join(outputDir, `${modelId}${small ? '_sm' : ''}.${ext}`);
+}
 
 function computeBounds(triangles: Tri[]) {
   let minX = Infinity,
@@ -224,9 +249,6 @@ function readIndexAccessor(accessor: any, bufferView: any, binData: Buffer): num
   return out;
 }
 
-const THUMB_JPEG_QUALITY = 0.88;
-const THUMB_SMALL_JPEG_QUALITY = 0.82;
-
 export function generateThumbnail(
   gltfPath: string,
   outputDir: string,
@@ -237,7 +259,6 @@ export function generateThumbnail(
   width = Math.min(width || 512, 1024);
   height = Math.min(height || 512, 1024);
   mkdirSync(outputDir, { recursive: true });
-  const jpgPath = join(outputDir, `${modelId}.jpg`);
 
   try {
     const { json: gltf, binData } = readGltfAsset(gltfPath);
@@ -442,18 +463,21 @@ export function generateThumbnail(
     const ctx = canvas.getContext('2d');
     ctx.drawImage(hiCanvas, 0, 0, hiW, hiH, 0, 0, width, height);
 
-    writeFileSync(jpgPath, canvas.toBuffer('image/jpeg', { quality: THUMB_JPEG_QUALITY }));
+    const thumbnail = encodeCanvas(canvas);
+    const thumbnailFilePath = thumbnailPath(outputDir, modelId, thumbnail.ext);
+    writeFileSync(thumbnailFilePath, thumbnail.buffer);
 
     const smallCanvas = createCanvas(256, 256);
     const smallCtx = smallCanvas.getContext('2d');
     smallCtx.drawImage(canvas, 0, 0, width, height, 0, 0, 256, 256);
-    const smallPath = join(outputDir, `${modelId}_sm.jpg`);
-    writeFileSync(smallPath, smallCanvas.toBuffer('image/jpeg', { quality: THUMB_SMALL_JPEG_QUALITY }));
+    const smallThumbnail = encodeCanvas(smallCanvas, THUMBNAIL_SMALL_ENCODING);
+    const smallPath = thumbnailPath(outputDir, modelId, smallThumbnail.ext, true);
+    writeFileSync(smallPath, smallThumbnail.buffer);
 
     return {
-      thumbnailPath: jpgPath,
-      thumbnailUrl: `/static/thumbnails/${modelId}.jpg`,
-      thumbnailSmallUrl: `/static/thumbnails/${modelId}_sm.jpg`,
+      thumbnailPath: thumbnailFilePath,
+      thumbnailUrl: `/static/thumbnails/${modelId}.${thumbnail.ext}`,
+      thumbnailSmallUrl: `/static/thumbnails/${modelId}_sm.${smallThumbnail.ext}`,
     };
   } catch {
     return generatePlaceholder(outputDir, modelId, width, height);
@@ -584,7 +608,6 @@ function generatePlaceholder(
   width: number,
   height: number,
 ): { thumbnailPath: string; thumbnailUrl: string; thumbnailSmallUrl: string } {
-  const jpgPath = join(outputDir, `${modelId}.jpg`);
   const canvas = createCanvas(width, height);
   const ctx = canvas.getContext('2d');
 
@@ -615,13 +638,16 @@ function generatePlaceholder(
   const smallCanvas = createCanvas(Math.round(width / 2), Math.round(height / 2));
   const smallCtx = smallCanvas.getContext('2d');
   smallCtx.drawImage(canvas, 0, 0, width, height, 0, 0, Math.round(width / 2), Math.round(height / 2));
-  const smallPath = join(outputDir, `${modelId}_sm.jpg`);
-  writeFileSync(smallPath, smallCanvas.toBuffer('image/jpeg', { quality: THUMB_SMALL_JPEG_QUALITY }));
+  const smallThumbnail = encodeCanvas(smallCanvas, THUMBNAIL_SMALL_ENCODING);
+  const smallPath = thumbnailPath(outputDir, modelId, smallThumbnail.ext, true);
+  writeFileSync(smallPath, smallThumbnail.buffer);
 
-  writeFileSync(jpgPath, canvas.toBuffer('image/jpeg', { quality: THUMB_JPEG_QUALITY }));
+  const thumbnail = encodeCanvas(canvas);
+  const thumbnailFilePath = thumbnailPath(outputDir, modelId, thumbnail.ext);
+  writeFileSync(thumbnailFilePath, thumbnail.buffer);
   return {
-    thumbnailPath: jpgPath,
-    thumbnailUrl: `/static/thumbnails/${modelId}.jpg`,
-    thumbnailSmallUrl: `/static/thumbnails/${modelId}_sm.jpg`,
+    thumbnailPath: thumbnailFilePath,
+    thumbnailUrl: `/static/thumbnails/${modelId}.${thumbnail.ext}`,
+    thumbnailSmallUrl: `/static/thumbnails/${modelId}_sm.${smallThumbnail.ext}`,
   };
 }

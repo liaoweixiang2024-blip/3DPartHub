@@ -1,13 +1,12 @@
 import { AnimatePresence, motion } from 'framer-motion';
 import { useEffect, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import useSWR from 'swr';
 import Icon from '../../../components/shared/Icon';
 import LoginConfirmDialog from '../../../components/shared/LoginConfirmDialog';
 import { checkProtectedAccess } from '../../../components/shared/ProtectedLink';
 import { getBusinessConfig } from '../../../lib/businessConfig';
 import { overlayMotion, sideSheetMotion } from '../../../lib/motion';
-import { getCachedPublicSettings } from '../../../lib/publicSettings';
+import { usePublicSettings } from '../../../lib/publicSettings';
 import { preloadRouteForPath } from '../../../lib/routeLoaders';
 import { useAuthStore } from '../../../stores/useAuthStore';
 import type { MobileNavDrawerThemeProps } from '../types';
@@ -32,8 +31,9 @@ interface MobileNavDrawerRendererProps extends MobileNavDrawerThemeProps {
 export default function MobileNavDrawerRenderer({ open, onClose, appearance }: MobileNavDrawerRendererProps) {
   const location = useLocation();
   const navigate = useNavigate();
-  const { logout, user } = useAuthStore();
-  const { data: settings } = useSWR('publicSettings', () => getCachedPublicSettings());
+  const logout = useAuthStore((s) => s.logout);
+  const user = useAuthStore((s) => s.user);
+  const { settings } = usePublicSettings();
   const isAdmin = user?.role === 'ADMIN';
   const business = getBusinessConfig(settings);
   const navItems = isAdmin ? business.adminNav : business.userNav;

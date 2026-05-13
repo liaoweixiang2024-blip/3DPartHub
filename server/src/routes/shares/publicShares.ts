@@ -2,8 +2,7 @@ import { existsSync } from 'node:fs';
 import bcrypt from 'bcryptjs';
 import { Router, Request, Response } from 'express';
 import { sendAcceleratedFile } from '../../lib/acceleratedDownload.js';
-import { cacheGetOrSet, TTL } from '../../lib/cache.js';
-import { redis } from '../../lib/captcha.js';
+import { cacheGetOrSet, TTL, redis } from '../../lib/cache.js';
 import { createProtectedResourceToken } from '../../lib/downloadTokenStore.js';
 import { prisma } from '../../lib/prisma.js';
 import { getSetting } from '../../lib/settings.js';
@@ -22,8 +21,8 @@ export function createPublicSharesRouter() {
       return;
     }
 
-    const { value: share } = (await cacheGetOrSet(`cache:share:info:${token}`, TTL.MODEL_DETAIL, async () => {
-      return prisma.shareLink.findUnique({
+    const { value: shareRaw } = (await cacheGetOrSet(`cache:share:info:${token}`, TTL.MODEL_DETAIL, async () => {
+      const result = await prisma.shareLink.findUnique({
         where: { token },
         include: {
           model: {
@@ -45,7 +44,18 @@ export function createPublicSharesRouter() {
           },
         },
       });
+      if (result) {
+        const { password: _p, ...safe } = result as any;
+        return safe;
+      }
+      return result;
     })) as any;
+
+    const sharePassword: string | null = shareRaw?.id
+      ? ((await prisma.shareLink.findUnique({ where: { id: shareRaw.id }, select: { password: true } }))?.password ??
+        null)
+      : null;
+    const share = shareRaw;
 
     if (!share) {
       res.status(404).json({ detail: '分享链接不存在' });
@@ -69,7 +79,7 @@ export function createPublicSharesRouter() {
 
     const model = share.model;
     const siteTitle = await getSetting<string>('site_title').catch(() => '3DPartHub');
-    const accessVerified = hasShareAccess(share.id, share.password, req.query.share_access_token);
+    const accessVerified = hasShareAccess(share.id, sharePassword, req.query.share_access_token);
 
     res.json({
       id: share.id,
@@ -176,11 +186,6 @@ export function createPublicSharesRouter() {
 
     if (!hasShareAccess(share.id, share.password, req.query.share_access_token)) {
       res.status(403).json({ detail: '请输入正确的分享密码' });
-      return;
-    }
-
-    if (share.downloadLimit > 0 && share.downloadCount >= share.downloadLimit) {
-      res.status(429).json({ detail: '下载次数已达上限' });
       return;
     }
 

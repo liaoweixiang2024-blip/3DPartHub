@@ -13,6 +13,7 @@ import {
   closeSync,
 } from 'node:fs';
 import { join, resolve, sep } from 'node:path';
+import { Transform } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 import { Router, Response } from 'express';
 import { getBusinessConfig } from '../lib/businessConfig.js';
@@ -84,6 +85,15 @@ const MAX_UPLOAD_CHUNKS = 20_000;
 const MAX_BACKUP_UPLOAD_BYTES = 100 * 1024 * 1024 * 1024;
 const COMPLETED_BACKUP_UPLOAD_TTL_MS = 24 * 60 * 60 * 1000;
 mkdirSync(CHUNKS_DIR, { recursive: true });
+
+function createByteCounter(onBytes: (bytes: number) => void) {
+  return new Transform({
+    transform(chunk, _encoding, callback) {
+      onBytes(Buffer.byteLength(chunk));
+      callback(null, chunk);
+    },
+  });
+}
 
 function normalizeUploadFileName(fileName: unknown): string | null {
   if (typeof fileName !== 'string') return null;
@@ -256,10 +266,13 @@ router.put('/api/upload/chunk', authMiddleware, requireRole('ADMIN'), async (req
   // Stream chunk data directly to disk — avoid buffering entire body in memory
   const ws = createWriteStream(chunkPath);
   let receivedBytes = 0;
-  req.on('data', (chunk: Buffer) => {
-    receivedBytes += chunk.length;
-  });
-  await pipeline(req, ws);
+  await pipeline(
+    req,
+    createByteCounter((bytes) => {
+      receivedBytes += bytes;
+    }),
+    ws,
+  );
 
   // Validate chunk size doesn't exceed expected (with 20% tolerance for last chunk)
   const expectedMax = Math.ceil(session.chunkSize * 1.2);

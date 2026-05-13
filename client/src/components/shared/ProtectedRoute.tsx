@@ -8,7 +8,9 @@ export default function ProtectedRoute({
   children: React.ReactNode;
   requiredRole?: string;
 }) {
-  const { isAuthenticated, user, hasHydrated } = useAuthStore();
+  const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
+  const user = useAuthStore((s) => s.user);
+  const hasHydrated = useAuthStore((s) => s.hasHydrated);
   const location = useLocation();
 
   if (!hasHydrated) {

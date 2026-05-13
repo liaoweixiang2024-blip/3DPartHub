@@ -69,7 +69,10 @@ export function modelManagedFilePaths(model: ModelFileRef): string[] {
     paths.add(join(config.staticDir, 'models', `${model.id}.${ext}`));
   }
   paths.add(join(config.staticDir, 'models', `${model.id}.meta.json`));
-  paths.add(join(config.staticDir, 'thumbnails', `${model.id}.png`));
+  for (const ext of ['png', 'jpg', 'jpeg', 'webp']) {
+    paths.add(join(config.staticDir, 'thumbnails', `${model.id}.${ext}`));
+    paths.add(join(config.staticDir, 'thumbnails', `${model.id}_sm.${ext}`));
+  }
   paths.add(join(config.staticDir, 'html-previews', `${model.id}.html`));
   paths.add(join(config.staticDir, 'html-previews', `${model.id}.htm`));
 

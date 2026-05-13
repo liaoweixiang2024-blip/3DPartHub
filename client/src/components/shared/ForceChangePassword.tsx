@@ -10,7 +10,7 @@ import { useToast } from './Toast';
  * Shown only for admins with user.mustChangePassword === true.
  */
 export default function ForceChangePassword() {
-  const { user } = useAuthStore();
+  const user = useAuthStore((s) => s.user);
   const { toast } = useToast();
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');

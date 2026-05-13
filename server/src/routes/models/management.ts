@@ -295,8 +295,11 @@ export function createModelManagementRouter({ prisma, metadataDir, getMeta, save
       }
 
       const items = [];
-      for (const id of modelIds) {
-        items.push(await deleteModelById(id, { clearCaches: false }));
+      const BATCH_SIZE = 50;
+      for (let i = 0; i < modelIds.length; i += BATCH_SIZE) {
+        const batch = modelIds.slice(i, i + BATCH_SIZE);
+        const results = await Promise.all(batch.map((id) => deleteModelById(id, { clearCaches: false })));
+        items.push(...results);
       }
       await clearModelManagementCaches();
 

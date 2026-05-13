@@ -1,5 +1,4 @@
-import Redis from 'ioredis';
-import { config } from '../lib/config.js';
+import { redis as getSharedRedis } from '../lib/cache.js';
 import { logger } from '../lib/logger.js';
 import type { QueuedModelDownloadRecord } from './modelDownloadRecorder.js';
 
@@ -15,24 +14,8 @@ type ClaimedDownloadRecord = {
   };
 };
 
-let redis: Redis | null = null;
-
 function getRedis() {
-  if (!redis) {
-    redis = new Redis(config.redisUrl, {
-      connectTimeout: 1000,
-      commandTimeout: 1000,
-      maxRetriesPerRequest: 1,
-      retryStrategy(times) {
-        if (times > 3) return null;
-        return Math.min(times * 200, 1000);
-      },
-    });
-    redis.on('error', (err) => {
-      logger.error({ err: err }, '[download-record-queue] Redis error');
-    });
-  }
-  return redis;
+  return getSharedRedis;
 }
 
 function encode(record: QueuedModelDownloadRecord & { attempts?: number; queuedAt?: string }) {

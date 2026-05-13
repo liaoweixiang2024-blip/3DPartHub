@@ -1,4 +1,3 @@
-import { motion, AnimatePresence } from 'framer-motion';
 import { useState, useEffect, useLayoutEffect, useMemo, useCallback, useRef, type MouseEvent } from 'react';
 import { createPortal } from 'react-dom';
 import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
@@ -7,7 +6,7 @@ import { categoriesApi } from '../api/categories';
 import { downloadModelFile, isDownloadAuthRequiredError } from '../api/downloads';
 import { modelApi } from '../api/models';
 import { createShare } from '../api/shares';
-import { SkeletonCardMobile } from '../components/home/HomeMobileCardContent';
+import DeleteModelDialog from '../components/home/DeleteModelDialog';
 import {
   buildCategories,
   serverItemToProduct,
@@ -36,19 +35,21 @@ import {
   HOME_REFRESH_SCROLL_TARGET,
   type HomeRefreshScrollTarget,
 } from '../components/home/homeUtils';
+import LoginPromptDialog from '../components/home/LoginPromptDialog';
 import { MobileDrawer } from '../components/home/MobileDrawer';
 import { ProductCard } from '../components/home/ProductCard';
 import { ProductCardMobile } from '../components/home/ProductCardMobile';
+import { SkeletonCardMobile } from '../components/home/HomeMobileCardContent';
 import AuthModal from '../components/shared/AuthModal';
 import Icon from '../components/shared/Icon';
 import InfiniteLoadTrigger from '../components/shared/InfiniteLoadTrigger';
-import ModelThumbnail from '../components/shared/ModelThumbnail';
 import { PageTitle } from '../components/shared/PagePrimitives';
 import Pagination, { DEFAULT_PAGE_SIZE, normalizePageSize } from '../components/shared/Pagination';
 import { PublicPageShell } from '../components/shared/PublicPageShell';
 import { useToast } from '../components/shared/Toast';
 import { useDocumentTitle } from '../hooks/useDocumentTitle';
 import { useInfiniteModels } from '../hooks/useModels';
+import { usePullToRefresh } from '../hooks/usePullToRefresh';
 import { useMediaQuery } from '../layouts/hooks/useMediaQuery';
 import { getBusinessConfig } from '../lib/businessConfig';
 import { copyText } from '../lib/clipboard';
@@ -64,6 +65,7 @@ import {
 } from '../lib/homeSearchState';
 import { cacheModelDetailTitle } from '../lib/modelDetailTitleCache';
 import {
+  usePublicSettings,
   getCachedPublicSettings,
   getContactEmail,
   getContactPhone,
@@ -84,7 +86,7 @@ export default function HomePage() {
   const location = useLocation();
   const { toast } = useToast();
   const [searchParams, setSearchParams] = useSearchParams();
-  const { data: publicSettings } = useSWR('publicSettings', () => getCachedPublicSettings());
+  const { settings: publicSettings } = usePublicSettings();
   const ThemePackage = getInterfaceThemePackage(publicSettings?.interface_theme);
   const MobileThemePackage = getMobileThemePackage(publicSettings?.mobile_interface_theme);
   const DesktopHome = ThemePackage.templates.DesktopHome;
@@ -114,7 +116,8 @@ export default function HomePage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [],
   );
-  const { isAuthenticated, user } = useAuthStore();
+  const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
+  const user = useAuthStore((s) => s.user);
   const isAdmin = user?.role === 'ADMIN';
   const [browseBlocked, setBrowseBlocked] = useState(false);
   const [restoreVisualLocked, setRestoreVisualLocked] = useState(() =>
@@ -167,22 +170,6 @@ export default function HomePage() {
   const pendingHomeListRefreshTargetRef = useRef<HomeRefreshScrollTarget>('top');
   const consumedHomeStateKeyRef = useRef<string | null>(null);
   const isRestoringScrollRef = useRef(false);
-
-  // Pull-to-refresh (mobile only)
-  const pullStateRef = useRef<'idle' | 'pulling' | 'ready' | 'refreshing'>('idle');
-  const pullStartY = useRef(0);
-  const pullVisualRef = useRef<{ state: 'idle' | 'pulling' | 'ready' | 'refreshing'; offset: number }>({
-    state: 'idle',
-    offset: 0,
-  });
-  const pendingPullVisualRef = useRef<{ state: 'idle' | 'pulling' | 'ready' | 'refreshing'; offset: number } | null>(
-    null,
-  );
-  const pullMoveFrameRef = useRef<number | null>(null);
-  const [pullOffset, setPullOffset] = useState(0);
-  const [pullState, setPullState] = useState<'idle' | 'pulling' | 'ready' | 'refreshing'>('idle');
-  const pullThreshold = typeof window !== 'undefined' ? Math.round(window.innerHeight / 3) : 200;
-  const pullMaxVisual = 80;
 
   // Detect when title row scrolls out of view (for sticky filter button swap)
   const titleRowRef = useRef<HTMLDivElement | null>(null);
@@ -368,6 +355,16 @@ export default function HomePage() {
     usesManualHomePagination ? 1 : page,
     { manual: usesManualHomePagination },
   );
+
+  const handlePullRefresh = useCallback(async () => {
+    setPage(1);
+    await Promise.all([mutateModels(), mutateCategories()]);
+  }, [mutateModels, mutateCategories]);
+
+  const { pullOffset, pullState, handlePullTransitionEnd } = usePullToRefresh(scrollContainerRef, {
+    isDesktop,
+    onRefresh: handlePullRefresh,
+  });
 
   useEffect(() => {
     void setModelPageSize(usesManualHomePagination ? 1 : page);
@@ -605,113 +602,6 @@ export default function HomePage() {
       container.removeEventListener('scroll', handleScroll);
     };
   }, [contextMenu, isDesktop]);
-
-  // ─── Pull-to-refresh touch handling (mobile) ───
-  const commitPullVisual = useCallback((state: 'idle' | 'pulling' | 'ready' | 'refreshing', offset: number) => {
-    const next = { state, offset: Math.max(0, Math.round(offset)) };
-    pullStateRef.current = state;
-    pendingPullVisualRef.current = next;
-    if (pullMoveFrameRef.current != null) return;
-    pullMoveFrameRef.current = window.requestAnimationFrame(() => {
-      pullMoveFrameRef.current = null;
-      const pending = pendingPullVisualRef.current;
-      pendingPullVisualRef.current = null;
-      if (!pending) return;
-      const current = pullVisualRef.current;
-      if (current.state !== pending.state) setPullState(pending.state);
-      if (current.offset !== pending.offset) setPullOffset(pending.offset);
-      pullVisualRef.current = pending;
-    });
-  }, []);
-
-  const finishPullGesture = useCallback(async () => {
-    if (isDesktop || pullStateRef.current === 'refreshing') return;
-
-    if (pullStateRef.current === 'ready') {
-      commitPullVisual('refreshing', pullMaxVisual);
-      const started = Date.now();
-      try {
-        setPage(1);
-        await Promise.all([mutateModels(), mutateCategories()]);
-      } catch {
-        // SWR handles error reporting
-      }
-      // Keep the spinner visible at least 800ms so the user sees the animation.
-      const elapsed = Date.now() - started;
-      if (elapsed < 800) {
-        await new Promise((r) => setTimeout(r, 800 - elapsed));
-      }
-    }
-
-    commitPullVisual('idle', 0);
-  }, [commitPullVisual, isDesktop, mutateCategories, mutateModels, pullMaxVisual]);
-
-  useEffect(() => {
-    if (isDesktop) return;
-    const container = scrollContainerRef.current;
-    if (!container) return;
-
-    let trackingPull = false;
-
-    const handleTouchStart = (event: TouchEvent) => {
-      if (pullStateRef.current === 'refreshing' || container.scrollTop > 0) {
-        trackingPull = false;
-        return;
-      }
-      const touch = event.touches[0];
-      if (!touch) return;
-      trackingPull = true;
-      pullStartY.current = touch.clientY;
-    };
-
-    const handleTouchMove = (event: TouchEvent) => {
-      if (!trackingPull || pullStateRef.current === 'refreshing') return;
-      const touch = event.touches[0];
-      if (!touch) return;
-      if (container.scrollTop > 0 && pullStateRef.current === 'idle') {
-        trackingPull = false;
-        return;
-      }
-
-      const delta = touch.clientY - pullStartY.current;
-      if (delta <= 0) {
-        if (pullStateRef.current !== 'idle') commitPullVisual('idle', 0);
-        return;
-      }
-
-      const resisted = pullMaxVisual * (1 - Math.exp(-delta / pullThreshold));
-      commitPullVisual(delta >= pullThreshold ? 'ready' : 'pulling', resisted);
-    };
-
-    const handleTouchEnd = () => {
-      if (!trackingPull && pullStateRef.current === 'idle') return;
-      trackingPull = false;
-      void finishPullGesture();
-    };
-
-    container.addEventListener('touchstart', handleTouchStart, { passive: true });
-    container.addEventListener('touchmove', handleTouchMove, { passive: true });
-    container.addEventListener('touchend', handleTouchEnd, { passive: true });
-    container.addEventListener('touchcancel', handleTouchEnd, { passive: true });
-    return () => {
-      container.removeEventListener('touchstart', handleTouchStart);
-      container.removeEventListener('touchmove', handleTouchMove);
-      container.removeEventListener('touchend', handleTouchEnd);
-      container.removeEventListener('touchcancel', handleTouchEnd);
-      if (pullMoveFrameRef.current != null) {
-        window.cancelAnimationFrame(pullMoveFrameRef.current);
-        pullMoveFrameRef.current = null;
-      }
-      pendingPullVisualRef.current = null;
-    };
-  }, [commitPullVisual, finishPullGesture, isDesktop, pullMaxVisual, pullThreshold]);
-
-  const handlePullTransitionEnd = useCallback(() => {
-    // Reset after collapse animation
-    if (pullStateRef.current === 'idle') {
-      setPullOffset(0);
-    }
-  }, []);
 
   const handleModelContextMenu = useCallback(
     (event: MouseEvent, product: Product) => {
@@ -1059,127 +949,20 @@ export default function HomePage() {
           onToggleCategory={toggleCategory}
           onViewModeChange={setViewMode}
         />
-        <AnimatePresence>
-          {deleteTarget && (
-            <motion.div
-              key="model-delete-dialog"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              className="fixed inset-0 z-[250] flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm"
-              onClick={() => !deletingModel && setDeleteTarget(null)}
-            >
-              <motion.div
-                initial={{ opacity: 0, scale: 0.96, y: 8 }}
-                animate={{ opacity: 1, scale: 1, y: 0 }}
-                exit={{ opacity: 0, scale: 0.96, y: 8 }}
-                transition={{ duration: 0.16 }}
-                className="w-full max-w-lg overflow-hidden rounded-lg border border-outline-variant/20 bg-surface-container-high shadow-2xl"
-                onClick={(event) => event.stopPropagation()}
-              >
-                <div className="flex gap-4 border-b border-outline-variant/10 bg-error-container/10 p-5">
-                  <div className="h-16 w-16 shrink-0 overflow-hidden rounded-md border border-error/20 bg-surface-container-lowest">
-                    <ModelThumbnail
-                      src={deleteTarget.thumbnailUrl}
-                      alt={deleteTarget.name}
-                      className="h-full w-full object-cover"
-                    />
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <div className="mb-1 flex items-center gap-2 text-error">
-                      <Icon name="warning" size={18} />
-                      <h3 className="font-headline text-base font-bold">确认删除模型</h3>
-                    </div>
-                    <p className="line-clamp-2 text-sm font-medium text-on-surface">{deleteTarget.name}</p>
-                    <p className="mt-1 text-xs text-on-surface-variant">这个操作会立即删除模型资产与数据库关联记录。</p>
-                  </div>
-                </div>
-                <div className="space-y-4 p-5">
-                  <div className="rounded-md border border-error/20 bg-error-container/10 px-3 py-2.5 text-sm leading-relaxed text-on-surface">
-                    删除后无法恢复，请确认当前模型不再需要展示、下载或作为变体使用。
-                  </div>
-                  <div className="grid grid-cols-2 gap-2 text-xs text-on-surface-variant">
-                    {[
-                      'STEP/原始文件',
-                      '生成预览文件',
-                      '缩略图与图纸',
-                      '版本文件',
-                      '收藏/下载等关联',
-                      '数据库模型记录',
-                    ].map((item) => (
-                      <div
-                        key={item}
-                        className="flex items-center gap-2 rounded-md bg-surface-container-low px-2.5 py-2"
-                      >
-                        <Icon name="check" size={13} className="text-error" />
-                        <span className="min-w-0 truncate">{item}</span>
-                      </div>
-                    ))}
-                  </div>
-                  <div className="flex justify-end gap-3 pt-1">
-                    <button
-                      onClick={() => setDeleteTarget(null)}
-                      disabled={deletingModel}
-                      className="rounded-md border border-outline-variant/30 px-4 py-2 text-sm text-on-surface-variant transition-colors hover:bg-surface-container-highest disabled:opacity-50"
-                    >
-                      先不删除
-                    </button>
-                    <button
-                      onClick={handleDeleteModel}
-                      disabled={deletingModel}
-                      className="flex items-center gap-2 rounded-md bg-error px-4 py-2 text-sm font-medium text-on-error transition-opacity hover:opacity-90 disabled:opacity-50"
-                    >
-                      {deletingModel && <Icon name="progress_activity" size={15} className="animate-spin" />}
-                      {deletingModel ? '正在删除...' : '确认永久删除'}
-                    </button>
-                  </div>
-                </div>
-              </motion.div>
-            </motion.div>
-          )}
-        </AnimatePresence>
-        {loginPromptOpen && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 z-[200] flex items-center justify-center bg-black/50 backdrop-blur-sm"
-            onClick={() => setLoginPromptOpen(false)}
-          >
-            <motion.div
-              initial={{ scale: 0.9, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              exit={{ scale: 0.9, opacity: 0 }}
-              className="bg-surface-container-high rounded-lg shadow-2xl p-6 w-80 border border-outline-variant/20"
-              onClick={(e) => e.stopPropagation()}
-            >
-              <div className="flex items-center gap-3 mb-3">
-                <div className="w-10 h-10 rounded-full bg-primary-container/20 flex items-center justify-center">
-                  <Icon name="lock" size={20} className="text-primary-container" />
-                </div>
-                <h3 className="text-lg font-headline font-bold text-on-surface">需要登录</h3>
-              </div>
-              <p className="text-sm text-on-surface-variant mb-5">下载模型需要先登录账号，是否前往登录？</p>
-              <div className="flex gap-3">
-                <button
-                  onClick={() => setLoginPromptOpen(false)}
-                  className="flex-1 py-2.5 text-sm text-on-surface-variant border border-outline-variant/30 rounded-lg hover:bg-surface-container-highest transition-colors"
-                >
-                  取消
-                </button>
-                <button
-                  onClick={() => {
-                    setLoginPromptOpen(false);
-                    setAuthDialogOpen(true);
-                  }}
-                  className="flex-1 py-2.5 text-sm font-medium text-on-primary bg-primary-container rounded-lg hover:opacity-90 transition-opacity"
-                >
-                  前往登录
-                </button>
-              </div>
-            </motion.div>
-          </motion.div>
-        )}
+        <DeleteModelDialog
+          target={deleteTarget}
+          deleting={deletingModel}
+          onCancel={() => setDeleteTarget(null)}
+          onConfirm={handleDeleteModel}
+        />
+        <LoginPromptDialog
+          open={loginPromptOpen}
+          onCancel={() => setLoginPromptOpen(false)}
+          onLogin={() => {
+            setLoginPromptOpen(false);
+            setAuthDialogOpen(true);
+          }}
+        />
         <AuthModal open={authDialogOpen} onClose={() => setAuthDialogOpen(false)} returnUrl={location.pathname} />
       </PublicPageShell>
     );
@@ -1412,48 +1195,14 @@ export default function HomePage() {
           </footer>
         </div>
       </main>
-      {loginPromptOpen && (
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          exit={{ opacity: 0 }}
-          className="fixed inset-0 z-[200] flex items-center justify-center bg-black/50 backdrop-blur-sm"
-          onClick={() => setLoginPromptOpen(false)}
-        >
-          <motion.div
-            initial={{ scale: 0.9, opacity: 0 }}
-            animate={{ scale: 1, opacity: 1 }}
-            exit={{ scale: 0.9, opacity: 0 }}
-            className="bg-surface-container-high rounded-lg shadow-2xl p-6 w-80 border border-outline-variant/20"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="flex items-center gap-3 mb-3">
-              <div className="w-10 h-10 rounded-full bg-primary-container/20 flex items-center justify-center">
-                <Icon name="lock" size={20} className="text-primary-container" />
-              </div>
-              <h3 className="text-lg font-headline font-bold text-on-surface">需要登录</h3>
-            </div>
-            <p className="text-sm text-on-surface-variant mb-5">下载模型需要先登录账号，是否前往登录？</p>
-            <div className="flex gap-3">
-              <button
-                onClick={() => setLoginPromptOpen(false)}
-                className="flex-1 py-2.5 text-sm text-on-surface-variant border border-outline-variant/30 rounded-lg hover:bg-surface-container-highest transition-colors"
-              >
-                取消
-              </button>
-              <button
-                onClick={() => {
-                  setLoginPromptOpen(false);
-                  setAuthDialogOpen(true);
-                }}
-                className="flex-1 py-2.5 text-sm font-medium text-on-primary bg-primary-container rounded-lg hover:opacity-90 transition-opacity"
-              >
-                前往登录
-              </button>
-            </div>
-          </motion.div>
-        </motion.div>
-      )}
+      <LoginPromptDialog
+        open={loginPromptOpen}
+        onCancel={() => setLoginPromptOpen(false)}
+        onLogin={() => {
+          setLoginPromptOpen(false);
+          setAuthDialogOpen(true);
+        }}
+      />
       <AuthModal open={authDialogOpen} onClose={() => setAuthDialogOpen(false)} returnUrl={location.pathname} />
     </PublicPageShell>
   );

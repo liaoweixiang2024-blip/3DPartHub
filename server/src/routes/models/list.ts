@@ -1,12 +1,10 @@
-import { readdirSync, readFileSync } from 'node:fs';
-import { join } from 'node:path';
 import { Router, Request, Response } from 'express';
 import { getBusinessConfig } from '../../lib/businessConfig.js';
 import { cacheGetOrSet, TTL } from '../../lib/cache.js';
+import { logger } from '../../lib/logger.js';
 import {
   MAX_MODEL_PAGE,
   enumQuery,
-  getSearchTerms,
   modelTextSearchWhere,
   normalizeSearchParam,
   numericQuery,
@@ -19,11 +17,10 @@ import { groupedVisibleModelWhere } from '../../services/modelVisibility.js';
 
 type ModelListContext = {
   prisma: any;
-  metadataDir: string;
   drawingDownloadUrl: (modelId: string, drawingUrl?: string | null) => string | null;
 };
 
-export function createModelListRouter({ prisma, metadataDir, drawingDownloadUrl }: ModelListContext) {
+export function createModelListRouter({ prisma, drawingDownloadUrl }: ModelListContext) {
   const router = Router();
 
   // List models (public, with optional pagination/search/category)
@@ -58,34 +55,36 @@ export function createModelListRouter({ prisma, metadataDir, drawingDownloadUrl 
             where.format = format;
           }
           if (categoryId) {
-            const catIdsRaw = await prisma.$queryRaw<Array<{ id: string }>>`
-              WITH RECURSIVE cat_tree AS (
-                SELECT id FROM categories WHERE id = ${categoryId}
-                UNION ALL
-                SELECT c.id FROM categories c JOIN cat_tree ct ON c.parent_id = ct.id
-              ) SELECT id FROM cat_tree
-            `;
-            const catIds = catIdsRaw.map((c: any) => c.id);
+            const catIds = await cacheGetOrSet<string[]>(`cat-tree:${categoryId}`, TTL.CATEGORIES, async () => {
+              const catIdsRaw = await prisma.$queryRaw<Array<{ id: string }>>`
+                  WITH RECURSIVE cat_tree AS (
+                    SELECT id FROM categories WHERE id = ${categoryId}
+                    UNION ALL
+                    SELECT c.id FROM categories c JOIN cat_tree ct ON c.parent_id = ct.id
+                  ) SELECT id FROM cat_tree
+                `;
+              return catIdsRaw.map((c: any) => c.id);
+            }).then((r) => r.value);
             if (catIds.length > 0) {
               where.categoryId = { in: catIds };
             } else {
               where.categoryId = categoryId;
             }
           } else if (category) {
-            // Find category and its children to include all subcategory models
             const cat = await prisma.category.findFirst({ where: { name: category } });
             if (cat) {
-              const catIdsRaw = await prisma.$queryRaw<Array<{ id: string }>>`
-                WITH RECURSIVE cat_tree AS (
-                  SELECT id FROM categories WHERE id = ${cat.id}
-                  UNION ALL
-                  SELECT c.id FROM categories c JOIN cat_tree ct ON c.parent_id = ct.id
-                ) SELECT id FROM cat_tree
-              `;
-              const catIds = catIdsRaw.map((c: { id: string }) => c.id);
+              const catIds = await cacheGetOrSet<string[]>(`cat-tree:${cat.id}`, TTL.CATEGORIES, async () => {
+                const catIdsRaw = await prisma.$queryRaw<Array<{ id: string }>>`
+                    WITH RECURSIVE cat_tree AS (
+                      SELECT id FROM categories WHERE id = ${cat.id}
+                      UNION ALL
+                      SELECT c.id FROM categories c JOIN cat_tree ct ON c.parent_id = ct.id
+                    ) SELECT id FROM cat_tree
+                  `;
+                return catIdsRaw.map((c: { id: string }) => c.id);
+              }).then((r) => r.value);
               where.categoryId = { in: catIds };
             } else {
-              // Fallback: match by category string field
               where.category = category;
             }
           }
@@ -144,56 +143,14 @@ export function createModelListRouter({ prisma, metadataDir, drawingDownloadUrl 
         res.set('Cache-Control', 'public, max-age=30');
         res.json(responseData);
         return;
-      } catch {
-        // Fallback to filesystem
+      } catch (err) {
+        logger.error({ err }, '[models/list] Failed to list models');
+        res.status(500).json({ detail: 'Failed to list models' });
+        return;
       }
     }
 
-    // Filesystem fallback
-    let items: any[] = [];
-    const files = readdirSync(metadataDir)
-      .filter((f) => f.endsWith('.json'))
-      .sort()
-      .reverse();
-    for (const f of files) {
-      const m = JSON.parse(readFileSync(join(metadataDir, f), 'utf-8'));
-      if (m.status !== MODEL_STATUS.COMPLETED) continue;
-      if (category && m.category !== category) continue;
-      if (format && m.format !== format) continue;
-      if (search) {
-        const terms = getSearchTerms(search).map((term) => term.toLowerCase());
-        const searchable = [
-          m.name,
-          m.original_name,
-          m.description,
-          m.part_number,
-          m.category,
-          m.dimensions,
-          m.format,
-          m.original_format,
-          m.drawing_name,
-        ]
-          .map((value) => (value || '').toString().toLowerCase())
-          .join(' ');
-        if (!terms.every((term) => searchable.includes(term))) continue;
-      }
-      items.push({
-        model_id: m.model_id,
-        name: m.original_name,
-        format: m.format,
-        thumbnail_url: m.thumbnail_url,
-        gltf_url: m.gltf_url,
-        file_size: m.gltf_size,
-        original_size: m.original_size,
-        created_at: m.created_at,
-      });
-    }
-
-    const total = items.length;
-    const start = (page - 1) * pageSize;
-    items = items.slice(start, start + pageSize);
-
-    res.json({ total, items, page, page_size: pageSize });
+    res.status(503).json({ detail: 'Database not available' });
   });
 
   return router;

@@ -72,8 +72,11 @@ function cleanDisplayText(value: string, fallback: string) {
 }
 
 export function normalizeUploadFilename(value: string, fallback = 'unknown.step') {
-  const normalized = String(value || '').replace(/\\/g, '/');
-  const leaf = normalized.split('/').filter(Boolean).pop() || normalized || fallback;
+  const normalized = String(value || '');
+  // Browsers normally send File.name without a path. Some legacy clients may
+  // still include Windows-style fake paths; strip those while keeping "/" in
+  // model numbers such as SCFM-1/2.
+  const leaf = normalized.split('\\').filter(Boolean).pop() || normalized || fallback;
   let decoded = leaf;
   try {
     decoded = decodeURIComponent(leaf);

@@ -32,6 +32,37 @@ type UploadResult =
     };
 
 const CONCURRENCY = 3;
+const UPLOAD_PROGRESS_PAINT_INTERVAL_MS = 180;
+const UPLOAD_STATS_PAINT_INTERVAL_MS = 220;
+
+type UploadStats = {
+  loaded: number;
+  total: number;
+  speedBps: number;
+};
+
+function formatUploadBytes(bytes: number) {
+  if (!Number.isFinite(bytes) || bytes <= 0) return '0 B';
+  const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+  let value = bytes;
+  let unitIndex = 0;
+  while (value >= 1024 && unitIndex < units.length - 1) {
+    value /= 1024;
+    unitIndex += 1;
+  }
+  const digits = value >= 100 || unitIndex === 0 ? 0 : value >= 10 ? 1 : 2;
+  return `${value.toFixed(digits)} ${units[unitIndex]}`;
+}
+
+function formatUploadSpeed(bytesPerSecond: number) {
+  if (!Number.isFinite(bytesPerSecond) || bytesPerSecond <= 0) return '计算中';
+  return `${formatUploadBytes(bytesPerSecond)}/s`;
+}
+
+function progressLoadedFromEvent(loaded: number, total: number | undefined, fileSize: number) {
+  if (total && total > 0) return Math.min(fileSize, Math.round((loaded / total) * fileSize));
+  return Math.min(fileSize, loaded);
+}
 
 function uploadPairKey(fileName: string): string {
   const baseName = fileName.replace(/\.[^/.]+$/, '').trim();
@@ -71,11 +102,15 @@ export default function UploadModal({ open, onClose, onConverted }: UploadModalP
   const [uploading, setUploading] = useState(false);
   const [progress, setProgress] = useState(0);
   const [progressLabel, setProgressLabel] = useState('');
+  const [uploadStats, setUploadStats] = useState<UploadStats | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<UploadResult | null>(null);
   const [categoryId, setCategoryId] = useState('');
   const [pendingFiles, setPendingFiles] = useState<File[]>([]);
   const inputRef = useRef<HTMLInputElement>(null);
+  const uploadSpeedRef = useRef({ loaded: 0, at: 0, speedBps: 0, total: 0 });
+  const uploadStatsPaintRef = useRef(0);
+  const progressPaintRef = useRef(0);
   const { uploadPolicy } = getBusinessConfig();
   const modelFormats = uploadPolicy.modelFormats;
   const acceptedFormats = useMemo(
@@ -99,9 +134,63 @@ export default function UploadModal({ open, onClose, onConverted }: UploadModalP
 
   const { data: categoryData } = useSWR(open ? '/categories' : null, () => categoriesApi.tree());
 
+  const paintProgress = useCallback((value: number, force = false) => {
+    const nextProgress = Math.max(0, Math.min(100, Math.round(value)));
+    const now = Date.now();
+    if (force || nextProgress >= 100 || now - progressPaintRef.current >= UPLOAD_PROGRESS_PAINT_INTERVAL_MS) {
+      progressPaintRef.current = now;
+      setProgress(nextProgress);
+    }
+  }, []);
+
+  const beginUploadStats = useCallback((total: number) => {
+    const safeTotal = Math.max(0, total);
+    uploadSpeedRef.current = { loaded: 0, at: Date.now(), speedBps: 0, total: safeTotal };
+    uploadStatsPaintRef.current = Date.now();
+    setUploadStats(safeTotal > 0 ? { loaded: 0, total: safeTotal, speedBps: 0 } : null);
+  }, []);
+
+  const reportUploadStats = useCallback((loaded: number, total?: number) => {
+    const prev = uploadSpeedRef.current;
+    const safeTotal = Math.max(prev.total, total || 0, loaded);
+    const safeLoaded = Math.max(0, Math.min(loaded, safeTotal || loaded));
+    const now = Date.now();
+    const elapsed = now - prev.at;
+    let speedBps = prev.speedBps;
+
+    if (elapsed >= 180 && safeLoaded >= prev.loaded) {
+      const instantSpeed = ((safeLoaded - prev.loaded) * 1000) / elapsed;
+      speedBps = prev.speedBps > 0 ? prev.speedBps * 0.65 + instantSpeed * 0.35 : instantSpeed;
+      uploadSpeedRef.current = { loaded: safeLoaded, at: now, speedBps, total: safeTotal };
+    } else {
+      uploadSpeedRef.current = { ...prev, total: safeTotal };
+    }
+
+    const isComplete = safeTotal > 0 && safeLoaded >= safeTotal;
+    if (safeTotal > 0 && (isComplete || now - uploadStatsPaintRef.current >= UPLOAD_STATS_PAINT_INTERVAL_MS)) {
+      uploadStatsPaintRef.current = now;
+      setUploadStats({ loaded: safeLoaded, total: safeTotal, speedBps });
+    }
+  }, []);
+
+  const finishUploadStats = useCallback(() => {
+    const { total, speedBps } = uploadSpeedRef.current;
+    uploadStatsPaintRef.current = Date.now();
+    if (total > 0) setUploadStats({ loaded: total, total, speedBps });
+  }, []);
+
+  const uploadStatsLine = useMemo(() => {
+    if (!uploadStats || uploadStats.total <= 0) return null;
+    return `已上传 ${formatUploadBytes(uploadStats.loaded)} / ${formatUploadBytes(uploadStats.total)} · 速度 ${formatUploadSpeed(uploadStats.speedBps)}`;
+  }, [uploadStats]);
+
   const reset = useCallback(() => {
     setProgress(0);
     setProgressLabel('');
+    setUploadStats(null);
+    uploadSpeedRef.current = { loaded: 0, at: 0, speedBps: 0, total: 0 };
+    uploadStatsPaintRef.current = 0;
+    progressPaintRef.current = 0;
     setError(null);
     setResult(null);
     setUploading(false);
@@ -115,9 +204,17 @@ export default function UploadModal({ open, onClose, onConverted }: UploadModalP
   }, [reset, onClose]);
 
   const uploadChunked = useCallback(
-    async (file: File, onChunkProgress?: (ratio: number) => void) => {
+    async (
+      file: File,
+      options?: {
+        onChunkProgress?: (ratio: number) => void;
+        onUploadProgress?: (loaded: number, total: number) => void;
+      },
+    ) => {
       const totalChunks = Math.ceil(file.size / chunkSize);
-      const reportChunkProgress = onChunkProgress || ((ratio: number) => setProgress(5 + Math.round(ratio * 60)));
+      const reportChunkProgress =
+        options?.onChunkProgress || ((ratio: number) => paintProgress(5 + Math.round(ratio * 60)));
+      let uploadedBytes = 0;
 
       const { data: initResp } = await client.post('/upload/init', {
         fileName: file.name,
@@ -133,15 +230,21 @@ export default function UploadModal({ open, onClose, onConverted }: UploadModalP
 
         await client.put(`/upload/chunk?uploadId=${uploadId}&chunkIndex=${i}`, chunk, {
           headers: { 'Content-Type': 'application/octet-stream' },
+          onUploadProgress: (e) => {
+            const currentChunkLoaded = progressLoadedFromEvent(e.loaded, e.total, chunk.size);
+            options?.onUploadProgress?.(uploadedBytes + currentChunkLoaded, file.size);
+          },
         });
 
+        uploadedBytes = end;
+        options?.onUploadProgress?.(uploadedBytes, file.size);
         reportChunkProgress((i + 1) / totalChunks);
       }
 
       const { data: completeResp } = await client.post('/upload/complete', { uploadId });
       return completeResp?.data || completeResp;
     },
-    [chunkSize],
+    [chunkSize, paintProgress],
   );
 
   const handleSingleFile = useCallback(
@@ -150,13 +253,18 @@ export default function UploadModal({ open, onClose, onConverted }: UploadModalP
       setError(null);
       setProgress(5);
       setProgressLabel(file.name);
+      beginUploadStats(file.size);
 
       try {
         let res: ConversionResponse;
 
         if (file.size > chunkThreshold) {
-          const uploadResult = await uploadChunked(file);
+          const uploadResult = await uploadChunked(file, {
+            onUploadProgress: reportUploadStats,
+          });
           setProgress(75);
+          finishUploadStats();
+          setProgressLabel('上传完成，正在转换中...');
           res = await converterApi.uploadLocal(
             uploadResult.filePath,
             uploadResult.fileName || file.name,
@@ -166,15 +274,17 @@ export default function UploadModal({ open, onClose, onConverted }: UploadModalP
           res = await converterApi.uploadAndConvert(file, {
             categoryId: categoryId || undefined,
             onUploadProgress: (e) => {
-              if (e.total) {
-                const pct = Math.round((e.loaded / e.total) * 80);
-                setProgress(5 + pct);
-              }
+              const loaded = progressLoadedFromEvent(e.loaded, e.total, file.size);
+              reportUploadStats(loaded, file.size);
+              const pct = Math.round((loaded / Math.max(1, file.size)) * 80);
+              paintProgress(5 + pct);
+              if (loaded >= file.size) setProgressLabel('上传完成，正在转换中...');
             },
           });
         }
 
-        setProgress(100);
+        paintProgress(100, true);
+        finishUploadStats();
         const uploadRes: UploadResult = { type: 'single', data: res };
         setResult(uploadRes);
         onConverted?.(res);
@@ -185,7 +295,16 @@ export default function UploadModal({ open, onClose, onConverted }: UploadModalP
         setUploading(false);
       }
     },
-    [categoryId, chunkThreshold, onConverted, uploadChunked],
+    [
+      beginUploadStats,
+      categoryId,
+      chunkThreshold,
+      finishUploadStats,
+      onConverted,
+      paintProgress,
+      reportUploadStats,
+      uploadChunked,
+    ],
   );
 
   const isArchiveFile = useCallback((file: File) => /\.(zip|rar)$/i.test(file.name), []);
@@ -203,25 +322,40 @@ export default function UploadModal({ open, onClose, onConverted }: UploadModalP
   );
 
   const uploadQueuedModelFile = useCallback(
-    async (file: File) => {
+    async (file: File, onUploadProgress?: (loaded: number, total: number) => void) => {
       if (file.size > chunkThreshold) {
-        const uploadResult = await uploadChunked(file, () => {});
+        const uploadResult = await uploadChunked(file, {
+          onChunkProgress: () => {},
+          onUploadProgress,
+        });
         return converterApi.uploadLocal(
           uploadResult.filePath,
           uploadResult.fileName || file.name,
           categoryId || undefined,
         );
       }
-      return modelApi.upload(file, { categoryId: categoryId || undefined });
+      return modelApi.upload(file, {
+        categoryId: categoryId || undefined,
+        onUploadProgress: (e) => {
+          onUploadProgress?.(progressLoadedFromEvent(e.loaded, e.total, file.size), file.size);
+        },
+      });
     },
     [categoryId, chunkThreshold, uploadChunked],
   );
 
-  const uploadMatchedDrawing = useCallback(async (modelId: string, drawing?: File) => {
-    if (!drawing) return false;
-    await modelApi.uploadDrawing(modelId, drawing);
-    return true;
-  }, []);
+  const uploadMatchedDrawing = useCallback(
+    async (modelId: string, drawing?: File, onUploadProgress?: (loaded: number, total: number) => void) => {
+      if (!drawing) return false;
+      await modelApi.uploadDrawing(modelId, drawing, {
+        onUploadProgress: (e) => {
+          onUploadProgress?.(progressLoadedFromEvent(e.loaded, e.total, drawing.size), drawing.size);
+        },
+      });
+      return true;
+    },
+    [],
+  );
 
   const handleMultiFile = useCallback(
     async (files: File[]) => {
@@ -239,11 +373,29 @@ export default function UploadModal({ open, onClose, onConverted }: UploadModalP
       const drawingByKey = new Map(drawingFiles.map((file) => [uploadPairKey(file.name), file]));
       drawingFail += drawingFiles.filter((file) => !modelKeys.has(uploadPairKey(file.name))).length;
       const inputTotal = Math.max(1, modelFiles.length + archiveFiles.length);
+      const totalUploadBytes = Math.max(
+        1,
+        files.reduce((sum, file) => sum + file.size, 0),
+      );
+      const fileIndexes = new Map(files.map((file, index) => [file, index]));
+      const uploadedBytesByFile = new Map<string, number>();
       let doneInputs = 0;
+
+      beginUploadStats(totalUploadBytes);
+
+      const fileProgressKey = (file: File) => `${fileIndexes.get(file) ?? 0}:${file.name}:${file.size}`;
+      const reportFileUpload = (file: File, loaded: number) => {
+        uploadedBytesByFile.set(fileProgressKey(file), Math.min(file.size, Math.max(0, loaded)));
+        const loadedBytes = Array.from(uploadedBytesByFile.values()).reduce((sum, item) => sum + item, 0);
+        reportUploadStats(loadedBytes, totalUploadBytes);
+      };
+      const completeFileUpload = (file: File | undefined) => {
+        if (file) reportFileUpload(file, file.size);
+      };
 
       const markInputDone = () => {
         doneInputs += 1;
-        setProgress(Math.round((doneInputs / inputTotal) * 100));
+        paintProgress(Math.round((doneInputs / inputTotal) * 100), true);
         setProgressLabel(`上传中 ${doneInputs}/${inputTotal}`);
       };
 
@@ -252,10 +404,20 @@ export default function UploadModal({ open, onClose, onConverted }: UploadModalP
         const results = await Promise.allSettled(
           batch.map(async (f) => {
             try {
-              const uploadResult = await uploadQueuedModelFile(f);
+              const uploadResult = await uploadQueuedModelFile(f, (loaded) => reportFileUpload(f, loaded));
+              completeFileUpload(f);
               const drawing = drawingByKey.get(uploadPairKey(f.name));
               try {
-                if (await uploadMatchedDrawing(uploadResult.model_id, drawing)) drawings += 1;
+                if (
+                  await uploadMatchedDrawing(
+                    uploadResult.model_id,
+                    drawing,
+                    (loaded) => drawing && reportFileUpload(drawing, loaded),
+                  )
+                ) {
+                  drawings += 1;
+                  completeFileUpload(drawing);
+                }
               } catch {
                 drawingFail += 1;
               }
@@ -278,16 +440,18 @@ export default function UploadModal({ open, onClose, onConverted }: UploadModalP
           const resp = await modelApi.batchUploadFromArchive(archive, {
             categoryId: categoryId || undefined,
             onUploadProgress: (e) => {
-              if (!e.total) return;
+              const loaded = progressLoadedFromEvent(e.loaded, e.total, archive.size);
+              reportFileUpload(archive, loaded);
               const base = doneInputs / inputTotal;
               const span = 1 / inputTotal;
-              setProgress(Math.round((base + span * 0.5 * (e.loaded / e.total)) * 100));
-              if (e.loaded >= e.total) {
+              const uploadRatio = loaded / Math.max(1, archive.size);
+              paintProgress(Math.round((base + span * 0.5 * uploadRatio) * 100));
+              if (loaded >= archive.size) {
                 setProgressLabel(`服务器处理中 ${archive.name}...`);
               }
             },
           });
-          const archiveOk = resp.results.filter((r: any) => r.status === 'queued' || r.status === 'completed').length;
+          const archiveOk = resp.results.filter((r) => r.status === 'queued' || r.status === 'completed').length;
           drawings += resp.results.filter((r) => r.drawing_attached).length;
           drawingFail += resp.results.filter((r) => r.drawing_error).length;
           ok += archiveOk;
@@ -297,16 +461,30 @@ export default function UploadModal({ open, onClose, onConverted }: UploadModalP
           fail += 1;
           total += 1;
         } finally {
+          completeFileUpload(archive);
           markInputDone();
         }
       }
 
+      paintProgress(100, true);
+      finishUploadStats();
       setResult({ type: 'batch', ok, fail, total, drawings, drawingFail });
       swrMutate('/models/count');
       onConverted?.();
       setUploading(false);
     },
-    [categoryId, isArchiveFile, isDrawingFile, onConverted, uploadMatchedDrawing, uploadQueuedModelFile],
+    [
+      beginUploadStats,
+      categoryId,
+      finishUploadStats,
+      isArchiveFile,
+      isDrawingFile,
+      onConverted,
+      paintProgress,
+      reportUploadStats,
+      uploadMatchedDrawing,
+      uploadQueuedModelFile,
+    ],
   );
 
   const handleArchiveFile = useCallback(
@@ -321,27 +499,31 @@ export default function UploadModal({ open, onClose, onConverted }: UploadModalP
       setError(null);
       setProgress(5);
       setProgressLabel(`正在上传 ${file.name}...`);
+      beginUploadStats(file.size);
 
       try {
         const resp = await modelApi.batchUploadFromArchive(file, {
           categoryId: categoryId || undefined,
           onUploadProgress: (e) => {
-            if (e.total) {
-              const pct = Math.round((e.loaded / e.total) * 50);
-              setProgress(5 + pct);
-              if (e.loaded >= e.total) {
+            const loaded = progressLoadedFromEvent(e.loaded, e.total, file.size);
+            reportUploadStats(loaded, file.size);
+            if (file.size > 0) {
+              const pct = Math.round((loaded / file.size) * 50);
+              paintProgress(5 + pct);
+              if (loaded >= file.size) {
                 setProgressLabel('服务器处理中...');
               }
             }
           },
         });
+        finishUploadStats();
         setProgress(55);
         setProgressLabel('解压处理中...');
-        const ok = resp.results.filter((r: any) => r.status === 'queued' || r.status === 'completed').length;
+        const ok = resp.results.filter((r) => r.status === 'queued' || r.status === 'completed').length;
         const fail = resp.results.length - ok;
         const drawings = resp.results.filter((r) => r.drawing_attached).length;
         const drawingFail = resp.results.filter((r) => r.drawing_error).length;
-        setProgress(100);
+        paintProgress(100, true);
         setResult({
           type: 'archive',
           archiveType: file.name.toLowerCase().endsWith('.rar') ? 'RAR' : 'ZIP',
@@ -360,7 +542,15 @@ export default function UploadModal({ open, onClose, onConverted }: UploadModalP
         setUploading(false);
       }
     },
-    [categoryId, getArchiveSizeError, onConverted],
+    [
+      beginUploadStats,
+      categoryId,
+      finishUploadStats,
+      getArchiveSizeError,
+      onConverted,
+      paintProgress,
+      reportUploadStats,
+    ],
   );
 
   const hasUploadableModelInput = useCallback(
@@ -634,6 +824,9 @@ export default function UploadModal({ open, onClose, onConverted }: UploadModalP
                   {uploading ? (
                     <div className="flex flex-col items-center gap-2">
                       <p className="text-sm text-on-surface-variant">{progressLabel || `上传中... ${progress}%`}</p>
+                      {uploadStatsLine && (
+                        <p className="text-xs tabular-nums text-on-surface-variant/80">{uploadStatsLine}</p>
+                      )}
                       <div className="w-full max-w-xs h-1.5 bg-surface-container-high rounded-full overflow-hidden">
                         <motion.div
                           className="h-full bg-primary rounded-full"
@@ -709,6 +902,9 @@ export default function UploadModal({ open, onClose, onConverted }: UploadModalP
                         <p className="text-sm text-on-surface-variant">
                           {progressLabel || (progress < 80 ? `上传中... ${progress}%` : '正在转换中...')}
                         </p>
+                        {uploadStatsLine && (
+                          <p className="text-xs tabular-nums text-on-surface-variant/80">{uploadStatsLine}</p>
+                        )}
                         <div className="w-full max-w-xs h-1.5 bg-surface-container-high rounded-full overflow-hidden">
                           <motion.div
                             className="h-full bg-primary rounded-full"

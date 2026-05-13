@@ -26,6 +26,7 @@ const [
   appSource,
   globalCssSource,
   homePageSource,
+  pullToRefreshSource,
   homeUtilsSource,
   productCardSource,
   classicHomeTemplateSource,
@@ -68,6 +69,7 @@ const [
   readSource('App.tsx'),
   readSource('styles/global.css'),
   readSource('pages/HomePage.tsx'),
+  readSource('hooks/usePullToRefresh.ts'),
   readSource('components/home/homeUtils.ts'),
   readSource('components/home/ProductCard.tsx'),
   readSource('themes/interfaceThemes/classic/templates/HomeDesktop.tsx'),
@@ -108,6 +110,7 @@ const [
 const desktopHomeTemplatesSource = `${classicHomeTemplateSource}\n${workbenchHomeTemplateSource}`;
 const homeListSources = `${homePageSource}\n${desktopHomeTemplatesSource}`;
 const homePageWithUtils = `${homePageSource}\n${homeUtilsSource}\n${productCardSource}`;
+const homePullRefreshSource = `${homePageSource}\n${pullToRefreshSource}`;
 
 requireIncludes('index.html font preload', indexHtmlSource, [
   'space-grotesk-latin-400-normal.woff2',
@@ -237,7 +240,7 @@ requireIncludes('HomePage.tsx image priority', homePageSource, [
   "imageFetchPriority={shouldPrioritizeImage ? 'high' : 'auto'}",
 ]);
 
-requireIncludes('HomePage.tsx mobile pull refresh', homePageSource, [
+requireIncludes('HomePage.tsx mobile pull refresh', homePullRefreshSource, [
   'className="flex items-center justify-center gap-2 text-xs text-on-surface-variant select-none overflow-hidden"',
   "transition: pullState === 'idle' ? 'height 0.3s cubic-bezier(0.25, 0.1, 0.25, 1)' : 'none'",
   '<Icon name="autorenew" size={18} className="text-primary-container animate-spin" />',

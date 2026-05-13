@@ -1,7 +1,6 @@
 import { motion, AnimatePresence } from 'framer-motion';
 import { useState, useRef } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import useSWR from 'swr';
 import client from '../api/client';
 import { AdminPageHero } from '../components/shared/AdminManagementPage';
 import { AdminPageShell } from '../components/shared/AdminPageShell';
@@ -11,7 +10,7 @@ import { useDocumentTitle } from '../hooks/useDocumentTitle';
 import { useMediaQuery } from '../layouts/hooks/useMediaQuery';
 import { getBusinessConfig } from '../lib/businessConfig';
 import { notifyGlobalError } from '../lib/errorNotifications';
-import { getCachedPublicSettings } from '../lib/publicSettings';
+import { usePublicSettings } from '../lib/publicSettings';
 
 /* ── Context passed via navigate(state) ── */
 interface SupportContext {
@@ -111,7 +110,7 @@ function DesktopContent() {
   const [submitting, setSubmitting] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
-  const { data: settings } = useSWR('publicSettings', () => getCachedPublicSettings());
+  const { settings } = usePublicSettings();
   const business = getBusinessConfig(settings);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
@@ -395,7 +394,7 @@ function MobileContent() {
   const [submitting, setSubmitting] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
-  const { data: settings } = useSWR('publicSettings', () => getCachedPublicSettings());
+  const { settings } = usePublicSettings();
   const business = getBusinessConfig(settings);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {

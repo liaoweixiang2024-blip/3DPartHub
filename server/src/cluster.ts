@@ -29,9 +29,11 @@ if (cluster.isPrimary) {
   const MAX_RESTARTS = 10;
   const restartingWorkerIds = new Set<number>();
   const workerRestartCounts = new Map<number, number>();
+  let shuttingDown = false;
 
   cluster.on('exit', (worker, code, signal) => {
-    if (code === 0 || signal === 'SIGTERM') return;
+    if (code === 0) return;
+    if (signal === 'SIGTERM' && shuttingDown) return;
     const prevCount = workerRestartCounts.get(worker.id) || 0;
     if (prevCount >= MAX_RESTARTS) {
       logger.error({ workerId: worker.id, restarts: MAX_RESTARTS }, 'Worker restart limit reached, exiting');
@@ -62,7 +64,6 @@ if (cluster.isPrimary) {
   });
 
   // Graceful shutdown — stop accepting new connections, wait for workers to finish
-  let shuttingDown = false;
   async function gracefulShutdown(signal: string) {
     if (shuttingDown) return;
     shuttingDown = true;

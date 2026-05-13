@@ -123,7 +123,8 @@ export default function InquirySubmitDialog({
   onSubmitted?: () => void;
 }) {
   const navigate = useNavigate();
-  const { user, updateUser } = useAuthStore();
+  const user = useAuthStore((s) => s.user);
+  const updateUser = useAuthStore((s) => s.updateUser);
   const [itemStates, setItemStates] = useState<Record<string, ItemState>>({});
   const [remark, setRemark] = useState('');
   const [company, setCompany] = useState(user?.company || '');

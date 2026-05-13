@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: 'Version tag (e.g. v2.9.9)'
+        description: 'Version tag (e.g. v3.0.0)'
         required: true
 
 env:
@@ -72,6 +72,21 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
+      - name: Run Trivy vulnerability scanner
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: ghcr.io/${{ github.repository_owner }}/3dparthub-api:${{ steps.version.outputs.version }}
+          format: sarif
+          output: trivy-results.sarif
+          severity: 'CRITICAL,HIGH'
+          exit-code: '0'
+
+      - name: Upload Trivy scan results
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: trivy-results.sarif
+
       - name: Create GitHub Release
         if: github.event_name == 'push'
         uses: softprops/action-gh-release@v3
@@ -81,23 +96,24 @@ jobs:
           body: |
             ## 更新标题
 
-            3DPartHub ${{ steps.version.outputs.version }} - 移动端细节、主题隔离与法务阅读体验优化版
+            3DPartHub ${{ steps.version.outputs.version }} - 稳定性、上传下载与备份恢复增强版
 
             ## 标签描述
 
-            3DPartHub ${{ steps.version.outputs.version }} production release with refined mobile model details, unified auth dialogs, legal document reading navigation, stronger theme isolation, optimized gallery thumbnails, and refreshed Docker images.
+            3DPartHub ${{ steps.version.outputs.version }} production release with hardened model upload/download flows, safer backup and restore handling, reduced 502 risk under pressure, stronger release checks, and refreshed Docker images.
 
             ## 更新描述
 
-            - 移动端模型详情页优化下载按钮与底部菜单距离，统一单行/双行标题骨架高度，减少抽屉加载和标题变化时的抖动。
-            - 用户协议与隐私声明页面重新排版：日期并入阅读说明，PC 阅读目录支持自然吸顶，移动端目录改为侧边展开、独立滚动并避开底部菜单栏。
-            - 登录/注册弹窗继续统一新旧主题移动端样式，注册弹窗底部用户协议与隐私声明留白更舒适。
-            - 新旧主题隔离继续完善：主题模板、共享渲染器、登录注册弹窗、首页模型库和页面宽度细节持续收拢，避免主题样式互相污染。
-            - 新主题首页模型库、侧边栏、页头、搜索框、排序筛选和模型列表间距继续优化，减少分类切换、搜索和排序时的抖动。
-            - 产品图库缩略图策略继续加固：列表优先使用轻量缩略图，图片详情再加载大图，降低移动端浏览和瀑布流滚动卡顿。
-            - 批量下载、收藏下载和下载文件命名继续修复，避免 STEP 压缩包混入多余 `.bin` 文件，并保留带斜杠型号的正确文件名。
-            - 工单、询价和选型页面继续统一标题、输入框、快捷词、附件上传和移动端底部输入体验。
-            - 后台系统设置的缓存、云存储、资源目录、版本检测和备份恢复相关交互继续完善。
+            - 模型上传增加已上传/总大小与实时速度显示，并节流进度渲染，减少大文件上传时的前端卡顿。
+            - 分片上传改为流式计数字节，避免请求体被重复监听；默认模型上传上限提升到 500MB，与 Nginx 和业务设置保持一致。
+            - 模型转换缩略图生成增加 JPEG/PNG 双格式兜底，修复 canvas 编码返回空数据导致转换任务失败的问题。
+            - 下载文件名保留型号里的斜杠分数，上传记录不再把 `SCFM-1/2.step` 截断成 `2.step`，下载时会安全保存为 `SCFM-1_2.step`。
+            - 批量下载继续统一历史与收藏接口，补齐旧版 `/api/downloads/batch-download/check` 兼容入口，并确保 STEP 打包不混入多余 `.bin` 文件。
+            - 备份下载改用 Nginx X-Accel 接管大文件传输，减少 API 长连接占用和大备份下载引发的 502 风险。
+            - 备份导入保存优先移动归档文件，跨磁盘才复制，避免大备份在同一磁盘上重复占用一倍空间。
+            - 备份恢复前磁盘空间保护继续生效，空间不足时会中止并给出所需容量，避免破坏现有数据。
+            - API worker 内存回收后会自动重启，不再因为 SIGTERM 回收导致 worker 数量减少、服务变 502。
+            - 发布前验证补齐主题、加载、UX、维护扫描、类型检查、单测和构建检查。
             - 镜像已同步更新：api/web 均发布 ${{ steps.version.outputs.version }} 与 latest 标签。
 
             ## Docker Images
@@ -106,13 +122,13 @@ jobs:
 
             API image: `ghcr.io/${{ github.repository_owner }}/3dparthub-api:${{ steps.version.outputs.version }}`
 
-            API image description: Express/Prisma API service with migrations, model conversion workers, backup/restore, audit logs, admin settings, queues, product gallery thumbnail processing, cache/storage checks, and background jobs.
+            API image description: Express/Prisma API service with migrations, model conversion workers, upload/download hardening, X-Accel protected downloads, backup/restore safety checks, audit logs, admin settings, queues, cache/storage checks, and background jobs.
 
             Web image title: `3dparthub-web:${{ steps.version.outputs.version }}`
 
             Web image: `ghcr.io/${{ github.repository_owner }}/3dparthub-web:${{ steps.version.outputs.version }}`
 
-            Web image description: React/Vite frontend for 3D preview, theme-driven model library, mobile model details, product selection, product gallery browsing, inquiry/quote workflows, sharing, profile management, admin pages, legal pages, and unified auth dialogs.
+            Web image description: React/Vite frontend for 3D preview, theme-driven model library, model upload progress, batch download feedback, product selection, product gallery browsing, inquiry/quote workflows, sharing, profile management, admin pages, legal pages, and unified auth dialogs.
 
             ```bash
             # Default deployment follows latest and uses Watchtower for api/web auto-updates.

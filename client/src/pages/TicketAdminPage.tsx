@@ -1,6 +1,5 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import useSWR from 'swr';
 import { deleteTicket, getTickets, updateTicketStatus, type Ticket } from '../api/tickets';
 import { AdminEmptyState, AdminLoadingState, AdminManagementPage } from '../components/shared/AdminManagementPage';
 import { AdminPageShell } from '../components/shared/AdminPageShell';
@@ -16,7 +15,7 @@ import { useVisibleItems } from '../hooks/useVisibleItems';
 import { useMediaQuery } from '../layouts/hooks/useMediaQuery';
 import { getBusinessConfig, statusInfo } from '../lib/businessConfig';
 import { getErrorMessage } from '../lib/errorNotifications';
-import { getCachedPublicSettings } from '../lib/publicSettings';
+import { usePublicSettings } from '../lib/publicSettings';
 import { useAuthStore } from '../stores/useAuthStore';
 
 type SearchInputProps = ReturnType<typeof useImeSafeSearchInput>['inputProps'];
@@ -82,7 +81,7 @@ function ticketMatchesSearch(
 }
 
 function useTicketAdminData() {
-  const { user } = useAuthStore();
+  const user = useAuthStore((s) => s.user);
   const { toast } = useToast();
   const {
     value: search,
@@ -95,7 +94,7 @@ function useTicketAdminData() {
   const [refreshing, setRefreshing] = useState(false);
   const [filter, setFilter] = useState<string>('all');
   const [deletingId, setDeletingId] = useState<string | null>(null);
-  const { data: settings } = useSWR('publicSettings', () => getCachedPublicSettings());
+  const { settings } = usePublicSettings();
   const business = getBusinessConfig(settings);
   const statuses = business.ticketStatuses;
   const statusTabs = [

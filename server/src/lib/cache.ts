@@ -76,6 +76,7 @@ type CacheLoadResult<T> = {
 };
 
 const inFlightLoads = new Map<string, Promise<unknown>>();
+const IN_FLIGHT_TIMEOUT_MS = 30_000;
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -85,7 +86,14 @@ function loadOnce<T>(key: string, load: () => Promise<T>): Promise<T> {
   const existing = inFlightLoads.get(key);
   if (existing) return existing as Promise<T>;
 
-  const pending = load().finally(() => {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const pending = Promise.race([
+    load(),
+    new Promise<never>((_, reject) => {
+      timer = setTimeout(() => reject(new Error(`cache load timeout: ${key}`)), IN_FLIGHT_TIMEOUT_MS);
+    }),
+  ]).finally(() => {
+    clearTimeout(timer);
     if (inFlightLoads.get(key) === pending) inFlightLoads.delete(key);
   });
   inFlightLoads.set(key, pending);

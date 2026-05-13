@@ -1,11 +1,10 @@
 import { useEffect, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import useSWR from 'swr';
 import Icon from '../../../components/shared/Icon';
 import LoginConfirmDialog from '../../../components/shared/LoginConfirmDialog';
 import { checkProtectedAccess } from '../../../components/shared/ProtectedLink';
 import { DEFAULT_MOBILE_NAV, getBusinessConfig } from '../../../lib/businessConfig';
-import { getCachedPublicSettings } from '../../../lib/publicSettings';
+import { usePublicSettings } from '../../../lib/publicSettings';
 import { preloadRouteForPath } from '../../../lib/routeLoaders';
 
 const fallbackTabs = DEFAULT_MOBILE_NAV;
@@ -24,7 +23,7 @@ interface BottomNavRendererProps {
 export default function BottomNavRenderer({ appearance }: BottomNavRendererProps) {
   const location = useLocation();
   const navigate = useNavigate();
-  const { data: settings } = useSWR('publicSettings', () => getCachedPublicSettings());
+  const { settings } = usePublicSettings();
   const visibleTabs = getBusinessConfig(settings).mobileNav.slice(0, 5);
   const [loginDialogOpen, setLoginDialogOpen] = useState(false);
   const [loginReturnUrl, setLoginReturnUrl] = useState('');

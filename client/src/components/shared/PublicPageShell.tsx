@@ -1,8 +1,7 @@
 import { useContext, useState, type ReactNode } from 'react';
 import { useLocation } from 'react-router-dom';
-import useSWR from 'swr';
 import { useMediaQuery } from '../../layouts/hooks/useMediaQuery';
-import { getCachedPublicSettings } from '../../lib/publicSettings';
+import { usePublicSettings } from '../../lib/publicSettings';
 import { getInterfaceThemePackage } from '../../themes/interfaceThemes/registry';
 import { getMobileThemePackage } from '../../themes/mobileThemes/registry';
 import { ShellLayoutContext } from './AdminPageShell';
@@ -32,7 +31,7 @@ export function PublicPageShell({
   const isDesktop = useMediaQuery('(min-width: 768px)');
   const location = useLocation();
   const [navOpen, setNavOpen] = useState(false);
-  const { data: settings } = useSWR('publicSettings', () => getCachedPublicSettings());
+  const { settings } = usePublicSettings();
   const ThemePackage = getInterfaceThemePackage(settings?.interface_theme);
   const MobileThemePackage = getMobileThemePackage(settings?.mobile_interface_theme);
   const BottomNav = MobileThemePackage.components.BottomNav;

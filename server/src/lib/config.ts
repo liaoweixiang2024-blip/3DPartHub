@@ -58,7 +58,7 @@ export const config = {
   jwtExpiresIn: optional('JWT_EXPIRES_IN', '7d'),
   uploadDir: optional('UPLOAD_DIR', 'uploads'),
   staticDir: optional('STATIC_DIR', 'static'),
-  maxFileSize: Number(optional('MAX_FILE_SIZE', String(100 * 1024 * 1024))) || 100 * 1024 * 1024,
+  maxFileSize: Number(optional('MAX_FILE_SIZE', String(500 * 1024 * 1024))) || 500 * 1024 * 1024,
   redisUrl: optional('REDIS_URL', 'redis://localhost:6379'),
   storageType: optional('STORAGE_TYPE', 'local'),
   allowedOrigins: validateAllowedOrigins(optional('ALLOWED_ORIGINS', 'http://localhost:5173')),

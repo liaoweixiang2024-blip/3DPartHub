@@ -57,8 +57,7 @@ const app = express();
 const PORT = config.port;
 
 process.on('unhandledRejection', (reason) => {
-  logger.fatal({ err: reason, worker: cluster.isWorker }, 'Unhandled promise rejection');
-  process.exit(1);
+  logger.error({ err: reason, worker: cluster.isWorker }, 'Unhandled promise rejection — continuing');
 });
 
 if (!cluster.isWorker) {
@@ -147,8 +146,9 @@ function shouldLogSlowRequest(now: number): boolean {
 const reqLogger = createLogger({ component: 'request' });
 app.use((req, _res, next) => {
   // Attach a request ID for log correlation
-  req.headers['x-request-id'] = req.headers['x-request-id'] || randomUUID();
-  _res.setHeader('X-Request-Id', req.headers['x-request-id']);
+  const requestId = randomUUID();
+  req.headers['x-request-id'] = requestId;
+  _res.setHeader('X-Request-Id', requestId);
 
   if (req.originalUrl.startsWith('/static/') || req.originalUrl.startsWith('/api/health')) {
     next();
@@ -251,8 +251,19 @@ function setStaticSecurityHeaders(res: express.Response, filePath: string) {
   }
 }
 
+let _requireLoginBrowseCached: boolean | null = null;
+let _requireLoginBrowseAt = 0;
+const REQUIRE_LOGIN_BROWSE_TTL = 30_000;
+
 async function staticModelAssetsRequireAuth(): Promise<boolean> {
-  return Boolean(await getSetting<boolean>('require_login_browse'));
+  const now = Date.now();
+  if (_requireLoginBrowseCached !== null && now - _requireLoginBrowseAt < REQUIRE_LOGIN_BROWSE_TTL) {
+    return _requireLoginBrowseCached;
+  }
+  const value = Boolean(await getSetting<boolean>('require_login_browse'));
+  _requireLoginBrowseCached = value;
+  _requireLoginBrowseAt = now;
+  return value;
 }
 
 app.use('/static', async (req, res, next) => {
@@ -480,6 +491,20 @@ app.listen(PORT, async () => {
       }
     }
   } catch {}
+
+  if (process.env.NODE_ENV === 'production') {
+    const insecureDefaults: string[] = [];
+    if (process.env.JWT_SECRET && process.env.JWT_SECRET.includes('change-me')) insecureDefaults.push('JWT_SECRET');
+    if (process.env.DB_PASSWORD && process.env.DB_PASSWORD.includes('change-me')) insecureDefaults.push('DB_PASSWORD');
+    if (process.env.REDIS_URL && /changeme/i.test(process.env.REDIS_URL)) insecureDefaults.push('REDIS_PASSWORD');
+    if (insecureDefaults.length > 0) {
+      logger.warn(
+        { insecure: insecureDefaults },
+        'Insecure default credentials detected — set strong passwords in .env before exposing to the internet',
+      );
+    }
+  }
+
   logger.info(
     {
       port: PORT,

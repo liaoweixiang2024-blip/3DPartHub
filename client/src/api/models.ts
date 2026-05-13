@@ -2,6 +2,11 @@ import type { PaginatedResponse, PaginationParams } from '../types';
 import client from './client';
 import { unwrapApiData, unwrapResponse } from './response';
 
+export type UploadProgressEvent = {
+  loaded: number;
+  total?: number;
+};
+
 export interface ServerModelListItem {
   model_id: string;
   name: string;
@@ -477,20 +482,24 @@ export const modelApi = {
     return unwrapResponse<ServerModelDetail>(res);
   },
 
-  upload: async (file: File, options?: { categoryId?: string }): Promise<{ model_id: string; status: string }> => {
+  upload: async (
+    file: File,
+    options?: { categoryId?: string; onUploadProgress?: (progressEvent: UploadProgressEvent) => void },
+  ): Promise<{ model_id: string; status: string }> => {
     const form = new FormData();
     form.append('file', file);
     if (options?.categoryId) form.append('categoryId', options.categoryId);
     if (file.lastModified) form.append('lastModified', String(file.lastModified));
     const res = await client.post('/models/upload', form, {
       headers: { 'Content-Type': 'multipart/form-data' },
+      onUploadProgress: options?.onUploadProgress,
     });
     return unwrapResponse<{ model_id: string; status: string }>(res);
   },
 
   batchUploadFromArchive: async (
     file: File,
-    options?: { categoryId?: string; onUploadProgress?: (progressEvent: { loaded: number; total: number }) => void },
+    options?: { categoryId?: string; onUploadProgress?: (progressEvent: UploadProgressEvent) => void },
   ): Promise<{
     total: number;
     results: Array<{
@@ -508,7 +517,7 @@ export const modelApi = {
     const res = await client.post('/batch/upload', form, {
       headers: { 'Content-Type': 'multipart/form-data' },
       timeout: 900000,
-      onUploadProgress: options?.onUploadProgress as any,
+      onUploadProgress: options?.onUploadProgress,
     });
     return unwrapResponse(res);
   },
@@ -571,11 +580,16 @@ export const modelApi = {
     return unwrapResponse<{ model_id: string; thumbnail_url: string }>(res);
   },
 
-  uploadDrawing: async (id: string, file: File): Promise<{ model_id: string; drawing_url: string }> => {
+  uploadDrawing: async (
+    id: string,
+    file: File,
+    options?: { onUploadProgress?: (progressEvent: UploadProgressEvent) => void },
+  ): Promise<{ model_id: string; drawing_url: string }> => {
     const form = new FormData();
     form.append('file', file);
     const res = await client.post(`/models/${id}/drawing`, form, {
       headers: { 'Content-Type': 'multipart/form-data' },
+      onUploadProgress: options?.onUploadProgress,
     });
     return unwrapResponse<{ model_id: string; drawing_url: string }>(res);
   },
@@ -619,6 +633,18 @@ export const modelApi = {
               createdAt: string;
             }[];
           }[];
+          data?: {
+            name: string;
+            count: number;
+            models: {
+              id: string;
+              name: string;
+              thumbnailUrl: string | null;
+              originalName: string;
+              originalSize: number;
+              createdAt: string;
+            }[];
+          }[];
           total?: number;
         }
       | {
@@ -635,8 +661,8 @@ export const modelApi = {
         }[]
     >(res);
     if (Array.isArray(inner)) return { data: inner, total: 0 };
-    const items = (inner as any).items || (inner as any).data || [];
-    return { data: items, total: (inner as any).total ?? 0 };
+    const items = inner.items || inner.data || [];
+    return { data: items, total: inner.total ?? 0 };
   },
 
   batchMerge: async (items: { name: string; modelIds: string[] }[]): Promise<{ merged: number }> => {

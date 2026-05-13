@@ -28,7 +28,7 @@ import { getErrorMessage, notifyGlobalError } from '../lib/errorNotifications';
 import { getCustomerInquiryFlow, getCustomerInquiryStatusView } from '../lib/inquiryCustomerStatus';
 import { exportInquiryEditableXlsx } from '../lib/inquiryExport';
 import { buildInquiryPrintCss } from '../lib/printTheme';
-import { getCachedPublicSettings } from '../lib/publicSettings';
+import { usePublicSettings } from '../lib/publicSettings';
 import { useAuthStore } from '../stores/useAuthStore';
 
 function CustomerStatusBadge({ status }: { status: string }) {
@@ -1113,10 +1113,10 @@ function DetailContent({ id }: { id: string }) {
   const navigate = useNavigate();
   const location = useLocation();
   const { toast } = useToast();
-  const { user } = useAuthStore();
+  const user = useAuthStore((s) => s.user);
   const isDesktop = useMediaQuery('(min-width: 768px)');
   const isAdmin = user?.role === 'ADMIN' && location.pathname.startsWith('/admin/inquiries');
-  const { data: settings } = useSWR('publicSettings', () => getCachedPublicSettings());
+  const { settings } = usePublicSettings();
   const business = getBusinessConfig(settings);
   const statuses = business.inquiryStatuses;
   const messagesEndRef = useRef<HTMLDivElement>(null);

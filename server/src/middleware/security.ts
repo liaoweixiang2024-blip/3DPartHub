@@ -1,8 +1,7 @@
 import type { Request } from 'express';
 import rateLimit, { type Options, type Store } from 'express-rate-limit';
 import helmet from 'helmet';
-import Redis from 'ioredis';
-import { config } from '../lib/config.js';
+import { redis } from '../lib/cache.js';
 import { logger } from '../lib/logger.js';
 import { getVerifiedRequestUser, verifyRequestToken, type AuthRequest } from './auth.js';
 
@@ -10,22 +9,9 @@ class RedisRateLimitStore implements Store {
   prefix: string;
   localKeys = false;
   private windowMs = 60_000;
-  private redis: Redis;
 
   constructor(prefix: string) {
     this.prefix = `rate-limit:${prefix}:`;
-    this.redis = new Redis(config.redisUrl, {
-      connectTimeout: 2000,
-      commandTimeout: 1000,
-      maxRetriesPerRequest: 1,
-      retryStrategy(times) {
-        if (times > 3) return null;
-        return Math.min(times * 200, 2000);
-      },
-    });
-    this.redis.on('error', (err) => {
-      logger.error({ err, prefix }, 'Rate limit Redis error');
-    });
   }
 
   init(options: Options) {
@@ -38,7 +24,7 @@ class RedisRateLimitStore implements Store {
 
   async increment(key: string) {
     const redisKey = this.key(key);
-    const [hitsRaw, ttlRaw] = (await this.redis.eval(
+    const [hitsRaw, ttlRaw] = (await redis.eval(
       `
       local hits = redis.call("INCR", KEYS[1])
       local ttl = redis.call("PTTL", KEYS[1])
@@ -63,32 +49,35 @@ class RedisRateLimitStore implements Store {
 
   async decrement(key: string) {
     const redisKey = this.key(key);
-    const exists = await this.redis.exists(redisKey);
-    if (exists) await this.redis.decr(redisKey);
+    const exists = await redis.exists(redisKey);
+    if (exists) await redis.decr(redisKey);
   }
 
   async resetKey(key: string) {
-    await this.redis.del(this.key(key));
+    await redis.del(this.key(key));
   }
 
   async resetAll() {
-    const stream = this.redis.scanStream({ match: `${this.prefix}*`, count: 100 });
-    await new Promise<void>((resolve, reject) => {
-      stream.on('data', (keys: string[]) => {
-        if (keys.length === 0) return;
-        stream.pause();
-        this.redis
-          .del(...keys)
-          .then(() => stream.resume())
-          .catch(reject);
-      });
-      stream.on('end', resolve);
-      stream.on('error', reject);
-    });
+    const pattern = `${this.prefix}*`;
+    await redis.eval(
+      `
+      local cursor = '0'
+      repeat
+        local result = redis.call('SCAN', cursor, 'MATCH', ARGV[1], 'COUNT', 200)
+        cursor = result[1]
+        local keys = result[2]
+        if #keys > 0 then
+          redis.call('DEL', unpack(keys))
+        end
+      until cursor == '0'
+      `,
+      0,
+      pattern,
+    );
   }
 
   async shutdown() {
-    this.redis.disconnect();
+    // shared connection — do not disconnect
   }
 }
 

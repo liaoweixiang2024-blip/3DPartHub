@@ -422,6 +422,17 @@ const restoreJobs = new Map<string, RestoreJob>();
 const verifyJobs = new Map<string, VerifyJob>();
 const pendingRecordNormalizations = new Set<string>();
 
+const JOB_EVICTION_MS = 60 * 60 * 1000;
+
+export function evictCompleted<K, V extends { stage: string; updatedAt?: number }>(map: Map<K, V>): void {
+  const now = Date.now();
+  for (const [key, job] of map) {
+    if ((job.stage === 'done' || job.stage === 'error') && (!job.updatedAt || now - job.updatedAt > JOB_EVICTION_MS)) {
+      map.delete(key);
+    }
+  }
+}
+
 // File-based lock to prevent concurrent backup/restore across cluster workers
 const LOCK_FILE = join(process.cwd(), config.uploadDir, '.backup_restore.lock');
 function lockOwnerIsAlive(): boolean {
@@ -566,6 +577,7 @@ export function getJob(id: string): BackupJob | undefined {
 }
 
 export function getActiveBackupJob(): BackupJob | undefined {
+  evictCompleted(jobs);
   for (const current of jobs.values()) {
     const job = latestPersistedJob(current);
     jobs.set(job.id, job);
@@ -606,6 +618,7 @@ export function getVerifyJob(id: string): VerifyJob | undefined {
 }
 
 export function getActiveVerifyJob(): VerifyJob | undefined {
+  evictCompleted(verifyJobs);
   for (const current of verifyJobs.values()) {
     const job = latestPersistedJob(current);
     verifyJobs.set(job.id, job);
@@ -620,6 +633,7 @@ export function getActiveVerifyJob(): VerifyJob | undefined {
 }
 
 export function getActiveRestoreJob(): RestoreJob | undefined {
+  evictCompleted(restoreJobs);
   for (const current of restoreJobs.values()) {
     const job = latestPersistedJob(current);
     restoreJobs.set(job.id, job);
@@ -640,8 +654,13 @@ export async function saveAsBackupRecord(archPath: string, originalName: string)
   const dest = activeArchivePath(id);
 
   try {
-    copyFileSync(archPath, dest);
-    if (existsSync(archPath)) rmSync(archPath, { force: true });
+    try {
+      renameSync(archPath, dest);
+    } catch (err: any) {
+      if (err?.code !== 'EXDEV') throw err;
+      copyFileSync(archPath, dest);
+      if (existsSync(archPath)) rmSync(archPath, { force: true });
+    }
 
     const record = await inspectBackupArchive(id, dest, originalName);
     writeFileSync(activeMetaPath(id), JSON.stringify(record, null, 2));

@@ -10,7 +10,7 @@ import { useDocumentTitle } from '../hooks/useDocumentTitle';
 import { useVisibleItems } from '../hooks/useVisibleItems';
 import { useMediaQuery } from '../layouts/hooks/useMediaQuery';
 import { getBusinessConfig, statusInfo } from '../lib/businessConfig';
-import { getCachedPublicSettings } from '../lib/publicSettings';
+import { usePublicSettings } from '../lib/publicSettings';
 
 interface MyTicket {
   id: string;
@@ -38,7 +38,7 @@ function useMyTickets() {
 
 function Content() {
   const { data: tickets, isLoading, mutate } = useMyTickets();
-  const { data: settings } = useSWR('publicSettings', () => getCachedPublicSettings());
+  const { settings } = usePublicSettings();
   const business = getBusinessConfig(settings);
   const classificationMap = new Map(business.ticketClassifications.map((item) => [item.value, item.label]));
   const navigate = useNavigate();
@@ -155,7 +155,7 @@ function Content() {
 
 function MobileContent() {
   const { data: tickets, isLoading, mutate } = useMyTickets();
-  const { data: settings } = useSWR('publicSettings', () => getCachedPublicSettings());
+  const { settings } = usePublicSettings();
   const business = getBusinessConfig(settings);
   const classificationMap = new Map(business.ticketClassifications.map((item) => [item.value, item.label]));
   const navigate = useNavigate();

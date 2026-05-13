@@ -174,23 +174,27 @@ export function createAdminSharesRouter() {
   router.get('/api/admin/shares/stats', authMiddleware, async (req: AuthRequest, res: Response) => {
     if (!adminOnly(req, res)) return;
     try {
-      const [modelTotal, selectionTotal, expired, modelAgg, selectionAgg] = await Promise.all([
-        prisma.shareLink.count(),
-        prisma.selectionShare.count(),
-        prisma.shareLink.count({ where: { expiresAt: { not: null, lt: new Date() } } }),
-        prisma.shareLink.aggregate({ _sum: { downloadCount: true, viewCount: true } }),
-        prisma.selectionShare.aggregate({ _sum: { viewCount: true } }),
-      ]);
-      const total = modelTotal + selectionTotal;
-      res.json({
-        total,
-        active: total - expired,
-        expired,
-        totalDownloads: modelAgg._sum.downloadCount || 0,
-        totalViews: (modelAgg._sum.viewCount || 0) + (selectionAgg._sum.viewCount || 0),
-        modelShares: modelTotal,
-        selectionShares: selectionTotal,
+      const { cacheGetOrSet } = await import('../../lib/cache.js');
+      const { value } = await cacheGetOrSet('cache:admin:shares:stats', 60, async () => {
+        const [modelTotal, selectionTotal, expired, modelAgg, selectionAgg] = await Promise.all([
+          prisma.shareLink.count(),
+          prisma.selectionShare.count(),
+          prisma.shareLink.count({ where: { expiresAt: { not: null, lt: new Date() } } }),
+          prisma.shareLink.aggregate({ _sum: { downloadCount: true, viewCount: true } }),
+          prisma.selectionShare.aggregate({ _sum: { viewCount: true } }),
+        ]);
+        const total = modelTotal + selectionTotal;
+        return {
+          total,
+          active: total - expired,
+          expired,
+          totalDownloads: modelAgg._sum.downloadCount || 0,
+          totalViews: (modelAgg._sum.viewCount || 0) + (selectionAgg._sum.viewCount || 0),
+          modelShares: modelTotal,
+          selectionShares: selectionTotal,
+        };
       });
+      res.json(value);
     } catch (err) {
       logger.error({ err }, '[Shares] Admin stats error');
       res.status(500).json({ detail: '获取分享统计失败' });

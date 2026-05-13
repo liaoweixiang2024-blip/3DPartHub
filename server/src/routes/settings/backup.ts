@@ -1,7 +1,8 @@
 import { existsSync, readdirSync, rmSync, statSync } from 'node:fs';
-import { join, resolve, sep } from 'node:path';
+import { basename, join, resolve, sep } from 'node:path';
 import { Router, Response } from 'express';
 import multer from 'multer';
+import { sendAcceleratedFile } from '../../lib/acceleratedDownload.js';
 import {
   deleteBackup,
   getActiveImportSaveJob,
@@ -346,7 +347,13 @@ export function createSettingsBackupRouter() {
       res.status(404).json({ detail: '备份文件不存在' });
       return;
     }
-    res.download(filePath);
+    sendAcceleratedFile(req, res, {
+      filePath,
+      fileName: basename(filePath),
+      contentType: 'application/gzip',
+      disposition: 'attachment',
+      cacheControl: 'private, no-store',
+    });
   });
 
   // Admin: rename a backup

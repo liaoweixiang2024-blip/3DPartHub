@@ -22,7 +22,7 @@ import { useMediaQuery } from '../layouts/hooks/useMediaQuery';
 import { getBusinessConfig, statusInfo } from '../lib/businessConfig';
 import { getClipboardImageFile } from '../lib/clipboardImages';
 import { notifyGlobalError } from '../lib/errorNotifications';
-import { getCachedPublicSettings } from '../lib/publicSettings';
+import { usePublicSettings } from '../lib/publicSettings';
 import { useAuthStore } from '../stores/useAuthStore';
 
 interface TicketInfo {
@@ -283,7 +283,7 @@ function ChatContent({ ticketId }: { ticketId: string }) {
   const currentUser = useAuthStore((state) => state.user);
   const isDesktop = useMediaQuery('(min-width: 768px)');
   const { data: ticket } = useTicket(ticketId);
-  const { data: settings } = useSWR('publicSettings', () => getCachedPublicSettings());
+  const { settings } = usePublicSettings();
   const business = getBusinessConfig(settings);
   const classificationMap = new Map(business.ticketClassifications.map((item) => [item.value, item.label]));
   const { data: messages, mutate: mutateMessages } = useMessages(ticketId);

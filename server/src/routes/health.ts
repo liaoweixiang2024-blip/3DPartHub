@@ -1,9 +1,10 @@
 import { randomUUID } from 'node:crypto';
 import { mkdir, unlink, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { Router, Response } from 'express';
+import express, { Router, Response } from 'express';
 import { cacheIsAvailable, cachePing } from '../lib/cache.js';
 import { config } from '../lib/config.js';
+import { logger } from '../lib/logger.js';
 import { prisma } from '../lib/prisma.js';
 import { conversionQueue } from '../lib/queue.js';
 import { authMiddleware } from '../middleware/auth.js';
@@ -112,6 +113,22 @@ router.get('/api/health/deep', authMiddleware, requireRole('ADMIN'), async (_req
     timestamp: new Date().toISOString(),
     checks,
   });
+});
+
+router.post('/api/health/web-vitals', express.json(), (req, res) => {
+  const metric = req.body;
+  if (metric?.name && typeof metric.value === 'number') {
+    logger.info(
+      {
+        webVital: metric.name,
+        value: metric.value,
+        rating: metric.rating,
+        url: metric.url,
+      },
+      'Web Vitals metric received',
+    );
+  }
+  res.status(204).end();
 });
 
 export default router;

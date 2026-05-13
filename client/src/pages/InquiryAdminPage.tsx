@@ -18,7 +18,7 @@ import { useMediaQuery } from '../layouts/hooks/useMediaQuery';
 import { getBusinessConfig, statusInfo } from '../lib/businessConfig';
 import { getErrorMessage } from '../lib/errorNotifications';
 import { exportInquiriesEditableXlsx } from '../lib/inquiryExport';
-import { getCachedPublicSettings } from '../lib/publicSettings';
+import { usePublicSettings } from '../lib/publicSettings';
 
 const INQUIRY_PAGE_SIZE = 20;
 type InquiryStatusTab = { value: string; label: string };
@@ -192,7 +192,7 @@ function DesktopContent() {
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [exporting, setExporting] = useState(false);
-  const { data: settings } = useSWR('publicSettings', () => getCachedPublicSettings());
+  const { settings } = usePublicSettings();
   const statuses = getBusinessConfig(settings).inquiryStatuses;
   const statusTabs = [
     { value: 'all', label: '全部' },
@@ -423,7 +423,7 @@ function MobileContent() {
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [exporting, setExporting] = useState(false);
-  const { data: settings } = useSWR('publicSettings', () => getCachedPublicSettings());
+  const { settings } = usePublicSettings();
   const statuses = getBusinessConfig(settings).inquiryStatuses;
   const statusTabs = [
     { value: 'all', label: '全部' },

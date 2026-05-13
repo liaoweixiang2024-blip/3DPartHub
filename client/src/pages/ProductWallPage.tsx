@@ -102,7 +102,9 @@ export default function ProductWallPage() {
   const loadMoreRef = useRef<HTMLButtonElement | null>(null);
   const previewMenuBlockUntilRef = useRef(0);
   const activePreviewRef = useRef<WallItem | null>(null);
-  const { user, isAuthenticated, hasHydrated } = useAuthStore();
+  const user = useAuthStore((s) => s.user);
+  const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
+  const hasHydrated = useAuthStore((s) => s.hasHydrated);
   const { toast } = useToast();
   const { uploadPolicy } = getBusinessConfig();
   const productWallMaxImageBytes = Math.max(1, uploadPolicy.productWallImageMaxSizeMb) * 1024 * 1024;

@@ -6,6 +6,14 @@ test('normalizes mojibake upload filenames', () => {
   assert.equal(normalizeUploadFilename('æµè¯é¶ä»¶.step'), '测试零件.step');
 });
 
+test('preserves slash fractions in uploaded model names', () => {
+  assert.equal(normalizeUploadFilename('不锈钢内外牙直通_SCFM-1/2.step'), '不锈钢内外牙直通_SCFM-1/2.step');
+});
+
+test('strips legacy Windows fake paths from uploaded names', () => {
+  assert.equal(normalizeUploadFilename('C:\\fakepath\\pump.step'), 'pump.step');
+});
+
 test('repairs common GBK text read as latin1', () => {
   assert.equal(fixMojibakeText('ÖÐÎÄÃû³Æ'), '中文名称');
 });

@@ -83,7 +83,7 @@ function ProjectCard({ project, onDelete }: { project: Project; onDelete: (id: s
 export default function ProjectsPage() {
   useDocumentTitle('项目');
   const isDesktop = useMediaQuery('(min-width: 768px)');
-  const { isAuthenticated } = useAuthStore();
+  const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
   const [showCreate, setShowCreate] = useState(false);
   const [newName, setNewName] = useState('');
   const [loginDialogOpen, setLoginDialogOpen] = useState(!isAuthenticated);

@@ -13,6 +13,8 @@ interface DownloadItem {
   project?: string;
 }
 
+const MAX_DOWNLOADS = 100;
+
 interface DownloadState {
   downloads: DownloadItem[];
   addDownload: (item: Omit<DownloadItem, 'id' | 'downloadedAt'>) => void;
@@ -32,7 +34,7 @@ export const useDownloadStore = create<DownloadState>()(
               id: `dl-${Date.now()}`,
               downloadedAt: new Date().toISOString(),
             },
-            ...state.downloads,
+            ...state.downloads.slice(0, MAX_DOWNLOADS - 1),
           ],
         })),
       removeDownload: (id) =>

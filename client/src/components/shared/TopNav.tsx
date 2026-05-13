@@ -16,7 +16,6 @@ import {
   type Ref,
 } from 'react';
 import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
-import useSWR from 'swr';
 import { mutate } from 'swr';
 import { useMediaQuery } from '../../layouts/hooks/useMediaQuery';
 import { getBusinessConfig } from '../../lib/businessConfig';
@@ -30,7 +29,7 @@ import {
   type HomeSearchEventDetail,
 } from '../../lib/homeSearchState';
 import { isModelDetailPath } from '../../lib/modelReturnPath';
-import { onSiteConfigChange, getCachedPublicSettings } from '../../lib/publicSettings';
+import { onSiteConfigChange, usePublicSettings } from '../../lib/publicSettings';
 import { preloadRouteForPath } from '../../lib/routeLoaders';
 import { useAuthStore } from '../../stores/useAuthStore';
 import { useThemeStore } from '../../stores/useThemeStore';
@@ -162,7 +161,8 @@ function UserMenu({
   adminDefaultPath?: string;
 }) {
   const [open, setOpen] = useState(false);
-  const { user, logout } = useAuthStore();
+  const user = useAuthStore((s) => s.user);
+  const logout = useAuthStore((s) => s.logout);
   const navigate = useNavigate();
   const ref = useRef<HTMLDivElement>(null);
 
@@ -384,7 +384,7 @@ function TopNavContent({ compact = false, onMenuToggle, source = 'standalone' }:
   useEffect(() => {
     return onSiteConfigChange(() => forceUpdate((n) => n + 1));
   }, []);
-  const { data: settings } = useSWR('publicSettings', () => getCachedPublicSettings());
+  const { settings } = usePublicSettings();
   const { userNavItems, adminNavItems } = useMemo(() => {
     const business = getBusinessConfig(settings);
     return {

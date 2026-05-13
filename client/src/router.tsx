@@ -1,6 +1,5 @@
 import { lazy, Suspense, useEffect, useRef, useState } from 'react';
 import { Routes, Route, Link, useLocation, Navigate } from 'react-router-dom';
-import useSWR from 'swr';
 import { AdminLayout, AdminPageShell, PublicLayout } from './components/shared/AdminPageShell';
 import AuthModal from './components/shared/AuthModal';
 import BrandMark from './components/shared/BrandMark';
@@ -12,7 +11,7 @@ import PageRefreshFallback from './components/shared/PageRefreshFallback';
 import { checkProtectedAccess } from './components/shared/ProtectedLink';
 import { getCachedModelDetailTitle } from './lib/modelDetailTitleCache';
 import { isModelDetailPath, saveModelReturnPath } from './lib/modelReturnPath';
-import { getCachedPublicSettings } from './lib/publicSettings';
+import { usePublicSettings } from './lib/publicSettings';
 import {
   loadAuditLogPage,
   loadCategoryAdminPage,
@@ -150,7 +149,10 @@ function ProtectedAccessState({
 // Protected pages — check auth BEFORE rendering
 // so redirect to login is instant (no exit animation delay)
 function ProtectedPage({ children, requiredRole }: { children: React.ReactNode; requiredRole?: string }) {
-  const { isAuthenticated, user, hasHydrated, restoreSessionFromCookie } = useAuthStore();
+  const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
+  const user = useAuthStore((s) => s.user);
+  const hasHydrated = useAuthStore((s) => s.hasHydrated);
+  const restoreSessionFromCookie = useAuthStore((s) => s.restoreSessionFromCookie);
   const location = useLocation();
   const [authRetryDone, setAuthRetryDone] = useState(false);
   const [authRetrying, setAuthRetrying] = useState(false);
@@ -241,7 +243,7 @@ function ScrollPage({ children }: { children: React.ReactNode }) {
 }
 
 function NotFoundPage() {
-  const { data: settings } = useSWR('publicSettings', () => getCachedPublicSettings());
+  const { settings } = usePublicSettings();
   const ThemePackage = getInterfaceThemePackage(settings?.interface_theme);
   const NotFound = ThemePackage.templates.NotFound;
 
@@ -266,7 +268,7 @@ function NotFoundPage() {
 
 function AdminDefaultRedirect() {
   const location = useLocation();
-  const { data: settings, isLoading } = useSWR('publicSettings', () => getCachedPublicSettings());
+  const { settings, isLoading } = usePublicSettings();
 
   if (isLoading && !settings) {
     return <RouteFallback />;

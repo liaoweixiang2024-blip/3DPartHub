@@ -130,7 +130,7 @@ export default function ProjectDetailPage() {
   const { id } = useParams();
   useDocumentTitle('项目详情');
   const navigate = useNavigate();
-  const { user } = useAuthStore();
+  const user = useAuthStore((s) => s.user);
   const [showEdit, setShowEdit] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState(false);
   const { toast } = useToast();

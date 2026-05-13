@@ -115,7 +115,8 @@ function NotificationItem({
 }
 
 export default function NotificationPanel({ compact = false }: { compact?: boolean }) {
-  const { isAuthenticated, user } = useAuthStore();
+  const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
+  const user = useAuthStore((s) => s.user);
   const isAdmin = user?.role === 'ADMIN';
   const isMobile = useMediaQuery('(max-width: 767px)');
   const navigate = useNavigate();
