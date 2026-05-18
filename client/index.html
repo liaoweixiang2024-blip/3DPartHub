@@ -10,7 +10,9 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <title>3DPartHub</title>
     <meta name="description" content="" />
-    <meta name="theme-color" content="#1a1a1a" />
+    <meta name="theme-color" content="#faf9f7" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
     <link rel="preload" href="/fonts/space-grotesk-latin-400-normal.woff2" as="font" type="font/woff2" crossorigin />
     <link rel="preload" href="/fonts/space-grotesk-latin-700-normal.woff2" as="font" type="font/woff2" crossorigin />
     <meta property="og:title" content="" />
@@ -42,6 +44,13 @@
             var link = document.querySelector('link[rel="icon"]');
             if (link) link.href = cfg.site_favicon;
           }
+          var themeRaw = localStorage.getItem('theme-storage');
+          var themeState = themeRaw && JSON.parse(themeRaw).state;
+          var isLight = !themeState || themeState.theme !== 'dark';
+          var themeColor = document.querySelector('meta[name="theme-color"]');
+          if (themeColor) themeColor.setAttribute('content', isLight ? '#faf9f7' : '#121316');
+          var statusBar = document.querySelector('meta[name="apple-mobile-web-app-status-bar-style"]');
+          if (statusBar) statusBar.setAttribute('content', isLight ? 'default' : 'black-translucent');
         } catch (e) {}
       })();
     </script>

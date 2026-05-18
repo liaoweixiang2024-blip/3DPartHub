@@ -514,7 +514,7 @@ export default function WorkbenchHomeDesktop({
                   </div>
                 )}
 
-                <div className="home-workbench-list-spacer" aria-hidden="true" />
+                {products.length > 0 ? <div className="home-workbench-list-spacer" aria-hidden="true" /> : null}
                 <Pagination
                   page={page}
                   totalPages={totalPages}

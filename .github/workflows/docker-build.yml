@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: 'Version tag (e.g. v3.1.1)'
+        description: 'Version tag (e.g. v3.1.2)'
         required: true
 
 env:
@@ -97,21 +97,21 @@ jobs:
           body: |
             ## 更新标题
 
-            3DPartHub ${{ steps.version.outputs.version }} - 移动端分享预览与登录弹窗统一修复版
+            3DPartHub ${{ steps.version.outputs.version }} - 首页滚动与移动端浏览器外观优化版
 
             ## 标签描述
 
-            3DPartHub ${{ steps.version.outputs.version }} production release with unified auth dialogs across themes, corrected auth prompt routing, smoother mobile model/share previews, safer native sharing, and refreshed Docker images.
+            3DPartHub ${{ steps.version.outputs.version }} production release with smoother home model-list scrolling, tighter desktop theme scroll alignment, cleaner empty-list behavior, synced mobile browser chrome colors, and refreshed Docker images.
 
             ## 更新描述
 
-            - 统一 PartHub 经典版与 PartHub 工作台的登录/注册弹窗外壳，注册表单在两个主题下保持一致。
-            - 修复登录提示弹窗总开关与页面内下载、收藏、申请等登录动作的判断分流，关闭/开启逻辑更稳定。
-            - 优化移动端模型详情和模型分享预览的底部下载区域、模型居中与安全区间距，减少抽屉与底部菜单割裂感。
-            - 修复选型分享连续触发原生分享时的 InvalidStateError，增加分享中状态避免重复调用。
-            - 优化系统设置标题菜单右对齐与保存状态宽度，减少保存后菜单轻微抖动。
-            - 微调后台管理通用标题、表格和主题弹窗样式，让新旧主题交互保持一致。
-            - 发布前验证通过前端类型检查、构建和格式检查。
+            - 优化 PartHub 工作台与经典版首页模型列表滚动，移除影响滚轮手感的自定义插值，恢复浏览器原生滚动。
+            - 滚动模型列表时临时暂停悬浮按钮过渡，降低鼠标经过卡片时的重绘开销。
+            - 修复首页选择分类、切换排序和返回顶部时标题区块没有完全对齐的问题，减少顶部补位抖动。
+            - 优化无模型结果页的高度和加载触发器显示，避免空列表仍可继续滚动。
+            - 修复移动端 Safari/PWA 顶部浏览器区域颜色，跟随亮色/暗色主题与动态配色同步。
+            - 保持新旧主题首页列表底层数据和滚动逻辑一致，减少主题切换后的体验差异。
+            - 发布前验证通过前端类型检查、构建、格式检查与全量前端验证。
             - 镜像已同步更新：api/web 均发布 ${{ steps.version.outputs.version }} 与 latest 标签。
 
             ## Docker Images
@@ -126,7 +126,7 @@ jobs:
 
             Web image: `ghcr.io/${{ github.repository_owner }}/3dparthub-web:${{ steps.version.outputs.version }}`
 
-            Web image description: React/Vite frontend for theme-driven model libraries, unified auth/register dialogs, mobile model/share previews, 3D viewing, product selection sharing, upload progress, batch downloads, product gallery browsing, inquiry/quote workflows, profile management, admin pages, legal pages, and responsive mobile flows.
+            Web image description: React/Vite frontend for theme-driven model libraries, smoother desktop model-list scrolling, synchronized mobile browser chrome colors, unified theme shells, 3D viewing, product selection sharing, upload progress, batch downloads, product gallery browsing, inquiry/quote workflows, profile management, admin pages, legal pages, and responsive mobile flows.
 
             ```bash
             # Default deployment follows latest and uses Watchtower for api/web auto-updates.

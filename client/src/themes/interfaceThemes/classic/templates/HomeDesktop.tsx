@@ -33,6 +33,7 @@ export default function ClassicHomeDesktop({
   onViewModeChange,
 }: DesktopHomeThemeProps) {
   const gridCols = useGridColumnCount();
+  const isEmpty = products.length === 0 && !showHomeListSkeleton;
   const gridClasses = `home-model-grid grid gap-3 ${
     viewMode === 'grid'
       ? 'home-model-grid-grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5'
@@ -40,7 +41,7 @@ export default function ClassicHomeDesktop({
   }`;
 
   return (
-    <div className="home-page-desktop flex flex-1 overflow-hidden" data-home-theme="classic">
+    <div className="home-page-desktop flex flex-1 overflow-hidden bg-surface-dim" data-home-theme="classic">
       <CategorySidebar
         expandedCategories={expandedCategories}
         activeCategory={activeCategory}
@@ -51,10 +52,10 @@ export default function ClassicHomeDesktop({
       />
       <main
         ref={scrollContainerRef}
-        className="home-scroll-container home-desktop-content flex-1 overflow-y-auto model-list-scrollbar bg-surface-dim p-6 relative"
+        className={`home-scroll-container home-desktop-content relative flex-1 overflow-y-auto bg-surface-dim p-6 model-list-scrollbar ${isEmpty ? 'home-desktop-content-empty flex flex-col' : ''}`}
       >
         <AnnouncementBanner />
-        <div className="home-title-toolbar flex justify-between items-end mb-6 border-b border-surface-container-low pb-3 flex-wrap gap-3">
+        <div className="home-title-toolbar mb-6 flex shrink-0 flex-wrap items-end justify-between gap-3 border-b border-surface-container-low pb-3">
           <div>
             <div className="home-breadcrumb flex items-center gap-2 text-sm mb-1.5">
               <button
@@ -153,8 +154,8 @@ export default function ClassicHomeDesktop({
               gridClassName={gridClasses}
             />
 
-            {products.length === 0 && !showHomeListSkeleton && (
-              <div className="home-model-empty-state flex flex-col items-center justify-center gap-4 py-20">
+            {isEmpty && (
+              <div className="home-model-empty-state home-model-empty-state-classic flex flex-1 flex-col items-center justify-center gap-4 py-12">
                 <Icon name="search_off" size={48} className="text-on-surface-variant/30" />
                 <div className="text-center">
                   <p className="text-on-surface-variant">没有找到匹配的模型</p>
@@ -180,13 +181,15 @@ export default function ClassicHomeDesktop({
               </div>
             )}
 
-            <InfiniteLoadTrigger
-              hasMore={hasMore}
-              isLoading={isLoadingMore}
-              onLoadMore={onLoadMore}
-              buttonless
-              idleLabel={null}
-            />
+            {products.length > 0 ? (
+              <InfiniteLoadTrigger
+                hasMore={hasMore}
+                isLoading={isLoadingMore}
+                onLoadMore={onLoadMore}
+                buttonless
+                idleLabel={null}
+              />
+            ) : null}
           </>
         )}
       </main>

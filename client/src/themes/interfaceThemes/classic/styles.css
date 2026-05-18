@@ -1,1 +1,3 @@
-/* Classic intentionally keeps the shared base style untouched. */
+.home-page-desktop[data-home-theme='classic'] .home-model-empty-state-classic {
+  min-height: 0;
+}

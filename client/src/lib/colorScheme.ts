@@ -3,6 +3,7 @@
  */
 import { COLOR_PRESETS, COLOR_KEYS, type ColorKey } from './colorSchemes';
 import { clamp, hslToHex } from './colorUtils';
+import { syncBrowserChromeColor } from './browserThemeColor';
 
 const STYLE_ID = 'dynamic-theme';
 
@@ -60,6 +61,7 @@ export function applyColorScheme(scheme: string, customDark: string, customLight
     document.head.appendChild(tag);
   }
   tag.textContent = css;
+  syncBrowserChromeColor();
 }
 
 /**
@@ -68,6 +70,7 @@ export function applyColorScheme(scheme: string, customDark: string, customLight
 export function removeColorScheme(): void {
   const tag = document.getElementById(STYLE_ID);
   if (tag) tag.remove();
+  syncBrowserChromeColor();
 }
 
 // --- HSL utilities ---

@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
+import { syncBrowserChromeColor } from '../lib/browserThemeColor';
 
 type Theme = 'dark' | 'light';
 type ThemeMode = 'dark' | 'light' | 'system';
@@ -23,6 +24,7 @@ function applyThemeClass(theme: Theme) {
   } else {
     document.documentElement.classList.remove('theme-light');
   }
+  syncBrowserChromeColor();
 }
 
 function resolveTheme(mode: ThemeMode): Theme {
@@ -111,6 +113,7 @@ export const useThemeStore = create<ThemeState>()(
         } else {
           document.documentElement.classList.remove('theme-light');
         }
+        syncBrowserChromeColor();
         // Restore auto-switch timer if enabled
         if (state.autoSwitchEnabled) {
           state.autoSwitchEnabled = false;

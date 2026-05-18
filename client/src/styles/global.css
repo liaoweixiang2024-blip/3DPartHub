@@ -357,8 +357,20 @@ a,
 }
 
 @media (min-width: 768px) {
+  .home-page-desktop .home-scroll-container,
+  .home-page-desktop .model-list-scrollbar {
+    overscroll-behavior-y: none;
+  }
+
   .home-scroll-container [data-home-model-id] {
     contain: layout paint style;
+  }
+
+  .home-scroll-container.home-is-scrolling .home-card-hover-actions {
+    pointer-events: none;
+    opacity: 0 !important;
+    transform: translate3d(0, 0.25rem, 0) scale(0.96) !important;
+    transition: none !important;
   }
 }
 

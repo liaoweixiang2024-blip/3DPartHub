@@ -385,6 +385,120 @@ export default function HomePage() {
   });
 
   useEffect(() => {
+    if (!isDesktop) return;
+    const container = scrollContainerRef.current;
+    if (!container) return;
+    let lastScrollTop = container.scrollTop;
+    let snapFrame: number | null = null;
+    let measureFrame: number | null = null;
+    let scrollIdleTimer: number | null = null;
+    let titleSnapDistance = 0;
+
+    const clearSnapFrame = () => {
+      if (snapFrame == null) return;
+      window.cancelAnimationFrame(snapFrame);
+      snapFrame = null;
+    };
+
+    const measureTitleSnapDistance = () => {
+      const title = container.querySelector<HTMLElement>('.home-title-toolbar');
+      if (!title) {
+        titleSnapDistance = 0;
+        return titleSnapDistance;
+      }
+      const titleStyles = window.getComputedStyle(title);
+      const titleMarginBottom = Number.parseFloat(titleStyles.marginBottom) || 0;
+      const titleEnd = title.offsetTop + title.offsetHeight + titleMarginBottom;
+      const firstListBlock = container.querySelector<HTMLElement>('.home-model-grid, .home-model-empty-state');
+      const listStart = firstListBlock?.offsetTop || titleEnd;
+      titleSnapDistance = Math.max(220, titleEnd + 120, listStart + 120);
+      return titleSnapDistance;
+    };
+
+    const scheduleMeasureTitleSnapDistance = () => {
+      if (measureFrame != null) return;
+      measureFrame = window.requestAnimationFrame(() => {
+        measureFrame = null;
+        measureTitleSnapDistance();
+      });
+    };
+
+    const getTitleSnapDistance = () => titleSnapDistance || measureTitleSnapDistance();
+
+    const clearScrollIdleTimer = () => {
+      if (scrollIdleTimer == null) return;
+      window.clearTimeout(scrollIdleTimer);
+      scrollIdleTimer = null;
+    };
+
+    const markScrolling = () => {
+      container.classList.add('home-is-scrolling');
+      clearScrollIdleTimer();
+      scrollIdleTimer = window.setTimeout(() => {
+        container.classList.remove('home-is-scrolling');
+        scrollIdleTimer = null;
+      }, 140);
+    };
+
+    const snapTitleToTop = () => {
+      clearSnapFrame();
+      if (container.scrollTop <= getTitleSnapDistance()) {
+        container.scrollTop = 0;
+        lastScrollTop = 0;
+      }
+    };
+
+    const scheduleTitleSnap = () => {
+      clearSnapFrame();
+      snapFrame = window.requestAnimationFrame(() => {
+        snapFrame = null;
+        snapTitleToTop();
+      });
+    };
+
+    const handleScroll = () => {
+      const currentTop = container.scrollTop;
+      const scrollingUp = currentTop < lastScrollTop;
+      lastScrollTop = currentTop;
+      markScrolling();
+
+      if (currentTop <= 360) {
+        scheduleMeasureTitleSnapDistance();
+      }
+
+      if (!scrollingUp || currentTop <= 0) {
+        clearSnapFrame();
+        return;
+      }
+
+      const titleSnapDistance = getTitleSnapDistance();
+      if (titleSnapDistance <= 0 || currentTop > titleSnapDistance) {
+        clearSnapFrame();
+        return;
+      }
+
+      scheduleTitleSnap();
+    };
+
+    container.addEventListener('scroll', handleScroll, { passive: true });
+    const resizeObserver =
+      typeof ResizeObserver !== 'undefined' ? new ResizeObserver(scheduleMeasureTitleSnapDistance) : null;
+    resizeObserver?.observe(container);
+    scheduleMeasureTitleSnapDistance();
+    return () => {
+      container.removeEventListener('scroll', handleScroll);
+      resizeObserver?.disconnect();
+      container.classList.remove('home-is-scrolling');
+      clearSnapFrame();
+      clearScrollIdleTimer();
+      if (measureFrame != null) {
+        window.cancelAnimationFrame(measureFrame);
+        measureFrame = null;
+      }
+    };
+  }, [isDesktop]);
+
+  useEffect(() => {
     void setModelPageSize(usesManualHomePagination ? 1 : page);
   }, [page, setModelPageSize, usesManualHomePagination]);
 
@@ -492,9 +606,7 @@ export default function HomePage() {
     const nextCategoryChanged = id !== activeCategory || Boolean(searchQuery.trim()) || page !== 1;
     if (nextCategoryChanged) {
       setListRefreshPending(true);
-      if (!usesManualHomePagination) {
-        resetHomeListViewportForRefresh(HOME_REFRESH_SCROLL_TARGET);
-      }
+      resetHomeListViewportForRefresh('top', usesManualHomePagination);
     }
     setActiveCategory(id);
     setSearchQuery('');
@@ -539,9 +651,7 @@ export default function HomePage() {
       const shouldRefreshList = normalizedSort !== sortBy || page !== 1;
       if (shouldRefreshList) {
         setListRefreshPending(true);
-        if (!usesManualHomePagination) {
-          resetHomeListViewportForRefresh(HOME_REFRESH_SCROLL_TARGET);
-        }
+        resetHomeListViewportForRefresh('top', usesManualHomePagination);
       }
       setSortBy(normalizedSort);
       setPage(1);
