@@ -150,6 +150,7 @@ router.get('/api/search', async (req, res: Response) => {
     });
 
     res.set('X-Cache', hit ? 'HIT' : 'MISS');
+    res.set('Cache-Control', 'no-cache, must-revalidate');
     res.json(responseData);
   } catch {
     res.status(500).json({ detail: '搜索失败' });

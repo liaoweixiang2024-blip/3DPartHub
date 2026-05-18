@@ -3,8 +3,11 @@ import { useState, useEffect } from 'react';
 import { type CategoryItem } from '../../api/categories';
 import { openModelDrawing } from '../../api/downloads';
 import { modelApi } from '../../api/models';
+import { getBusinessConfig } from '../../lib/businessConfig';
+import { AdminButton, AdminIconButton } from '../shared/AdminControls';
 import CategorySelect from '../shared/CategorySelect';
 import DialogOverlay from '../shared/DialogOverlay';
+import { AppFormLabel, AppTextInput } from '../shared/FormControls';
 import Icon from '../shared/Icon';
 import ModelThumbnail from '../shared/ModelThumbnail';
 import { useToast } from '../shared/Toast';
@@ -43,6 +46,9 @@ export function DetailEditDialog({
   const [thumbUrl, setThumbUrl] = useState(initialThumb);
   const [drawingUploading, setDrawingUploading] = useState(false);
   const [drawingUrl, setDrawingUrl] = useState(initialDrawing);
+  const { uploadPolicy } = getBusinessConfig();
+  const imageMaxBytes = Math.max(1, Number(uploadPolicy.productWallImageMaxSizeMb) || 8) * 1024 * 1024;
+  const drawingMaxBytes = Math.max(1, Number(uploadPolicy.modelDrawingMaxSizeMb) || 500) * 1024 * 1024;
   const [fileReplacing, setFileReplacing] = useState(false);
 
   useEffect(() => {
@@ -97,13 +103,13 @@ export function DetailEditDialog({
           >
             <div className="flex items-center justify-between px-4 py-4 sm:px-6 border-b border-outline-variant/10 shrink-0">
               <h3 className="font-headline text-lg font-semibold text-on-surface">编辑模型</h3>
-              <button onClick={onClose} className="p-1 text-on-surface-variant hover:text-on-surface transition-colors">
-                <Icon name="close" size={20} />
-              </button>
+              <AdminIconButton icon="close" onClick={onClose} variant="ghost" aria-label="关闭" />
             </div>
             <div className="px-4 py-4 sm:px-6 space-y-4 overflow-y-auto scrollbar-hidden sm:custom-scrollbar">
               <div className="flex flex-col gap-1.5">
-                <label className="text-xs uppercase tracking-wider text-on-surface-variant">预览图</label>
+                <AppFormLabel uppercase className="mb-0">
+                  预览图
+                </AppFormLabel>
                 <div className="flex flex-wrap items-center gap-3">
                   <div className="w-16 h-16 rounded-sm bg-surface-container-highest shrink-0 overflow-hidden">
                     <ModelThumbnail src={thumbUrl} alt="" className="w-full h-full object-cover" />
@@ -117,6 +123,16 @@ export function DetailEditDialog({
                       onChange={async (e) => {
                         const f = e.target.files?.[0];
                         if (f) {
+                          if (!['image/png', 'image/jpeg', 'image/webp'].includes(f.type)) {
+                            toast('仅支持 PNG/JPEG/WebP 图片', 'error');
+                            e.target.value = '';
+                            return;
+                          }
+                          if (f.size > imageMaxBytes) {
+                            toast(`图片不能超过 ${uploadPolicy.productWallImageMaxSizeMb}MB`, 'error');
+                            e.target.value = '';
+                            return;
+                          }
                           setThumbUploading(true);
                           let ok = false;
                           try {
@@ -134,15 +150,16 @@ export function DetailEditDialog({
                         }
                       }}
                     />
-                    <button
+                    <AdminButton
                       onClick={() => document.getElementById('detail-thumb-upload')?.click()}
                       disabled={thumbUploading}
-                      className="flex items-center gap-1.5 px-3 py-1.5 text-xs text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high rounded-sm transition-colors border border-outline-variant/20 disabled:opacity-50"
+                      icon="upload"
+                      size="sm"
+                      variant="secondary"
                     >
-                      <Icon name="upload" size={14} />
                       {thumbUploading ? '上传中...' : '上传图片'}
-                    </button>
-                    <button
+                    </AdminButton>
+                    <AdminButton
                       onClick={async () => {
                         setRegenerating(true);
                         let ok = false;
@@ -159,28 +176,31 @@ export function DetailEditDialog({
                         if (ok) onSaved();
                       }}
                       disabled={regenerating}
-                      className="flex items-center gap-1.5 px-3 py-1.5 text-xs text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high rounded-sm transition-colors border border-outline-variant/20 disabled:opacity-50"
+                      icon="refresh"
+                      size="sm"
+                      variant="secondary"
                     >
-                      <Icon name="refresh" size={14} />
                       {regenerating ? '生成中...' : '从模型重新生成'}
-                    </button>
+                    </AdminButton>
                   </div>
                 </div>
               </div>
               <div className="flex flex-col gap-1.5">
-                <label className="text-xs uppercase tracking-wider text-on-surface-variant">名称</label>
-                <input
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  className="w-full bg-surface-container-lowest text-on-surface border border-outline-variant/30 focus:border-primary px-3 py-2 text-sm rounded-sm outline-none"
-                />
+                <AppFormLabel uppercase className="mb-0">
+                  名称
+                </AppFormLabel>
+                <AppTextInput value={name} onChange={(e) => setName(e.target.value)} />
               </div>
               <div className="flex flex-col gap-1.5">
-                <label className="text-xs uppercase tracking-wider text-on-surface-variant">分类</label>
+                <AppFormLabel uppercase className="mb-0">
+                  分类
+                </AppFormLabel>
                 <CategorySelect categories={categories} value={catId} onChange={setCatId} placeholder="选择分类" />
               </div>
               <div className="flex flex-col gap-1.5">
-                <label className="text-xs uppercase tracking-wider text-on-surface-variant">产品图纸 (PDF)</label>
+                <AppFormLabel uppercase className="mb-0">
+                  产品图纸 (PDF)
+                </AppFormLabel>
                 <div className="flex items-center gap-3">
                   {drawingUrl ? (
                     <div className="flex items-center gap-2 flex-1">
@@ -225,6 +245,10 @@ export function DetailEditDialog({
                             toast('仅支持 PDF 格式', 'error');
                             return;
                           }
+                          if (f.size > drawingMaxBytes) {
+                            toast(`PDF 图纸不能超过 ${uploadPolicy.modelDrawingMaxSizeMb}MB`, 'error');
+                            return;
+                          }
                           setDrawingUploading(true);
                           let ok = false;
                           try {
@@ -241,20 +265,22 @@ export function DetailEditDialog({
                           e.target.value = '';
                         }}
                       />
-                      <button
+                      <AdminButton
                         onClick={() => document.getElementById('detail-drawing-upload')?.click()}
                         disabled={drawingUploading}
-                        className="flex items-center gap-1.5 px-3 py-1.5 text-xs text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high rounded-sm transition-colors border border-outline-variant/20 disabled:opacity-50 w-full justify-center"
+                        icon="upload_file"
+                        size="sm"
+                        variant="secondary"
+                        className="w-full justify-center"
                       >
-                        <Icon name="upload_file" size={14} />
                         {drawingUploading ? '上传中...' : '上传 PDF 图纸'}
-                      </button>
+                      </AdminButton>
                     </>
                   )}
                 </div>
               </div>
               <div className="border-t border-outline-variant/20 pt-4 mt-1">
-                <label className="text-xs uppercase tracking-wider text-on-surface-variant">替换模型文件</label>
+                <AppFormLabel uppercase>替换模型文件</AppFormLabel>
                 <p className="text-[10px] text-on-surface-variant/60 mt-1 mb-2">替换后将重新转换，预计耗时 30 秒</p>
                 <input
                   type="file"
@@ -287,14 +313,16 @@ export function DetailEditDialog({
                     e.target.value = '';
                   }}
                 />
-                <button
+                <AdminButton
                   onClick={() => document.getElementById('detail-replace-file')?.click()}
                   disabled={fileReplacing}
-                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high rounded-sm transition-colors border border-outline-variant/20 disabled:opacity-50 w-full justify-center"
+                  icon="swap_horiz"
+                  size="sm"
+                  variant="secondary"
+                  className="w-full justify-center"
                 >
-                  <Icon name="swap_horiz" size={14} />
                   {fileReplacing ? '上传中...' : '选择新模型文件'}
-                </button>
+                </AdminButton>
               </div>
             </div>
             <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3 sm:px-6 border-t border-outline-variant/10 shrink-0">
@@ -302,7 +330,7 @@ export function DetailEditDialog({
                 (confirmDelete ? (
                   <div className="flex flex-wrap items-center gap-2">
                     <span className="text-xs text-error">确认删除？</span>
-                    <button
+                    <AdminButton
                       onClick={async () => {
                         setDeleting(true);
                         let ok = false;
@@ -319,40 +347,27 @@ export function DetailEditDialog({
                         if (ok) onClose();
                       }}
                       disabled={deleting}
-                      className="px-3 py-1.5 text-xs bg-error text-white rounded-sm hover:bg-error/90 disabled:opacity-50"
+                      size="sm"
+                      variant="danger"
                     >
                       {deleting ? '删除中...' : '确认'}
-                    </button>
-                    <button
-                      onClick={() => setConfirmDelete(false)}
-                      className="px-3 py-1.5 text-xs text-on-surface-variant hover:text-on-surface"
-                    >
+                    </AdminButton>
+                    <AdminButton onClick={() => setConfirmDelete(false)} size="sm" variant="ghost">
                       取消
-                    </button>
+                    </AdminButton>
                   </div>
                 ) : (
-                  <button
-                    onClick={() => setConfirmDelete(true)}
-                    className="flex items-center gap-1 px-3 py-1.5 text-xs text-on-surface-variant hover:text-error hover:bg-error/10 rounded-sm transition-colors"
-                  >
-                    <Icon name="delete" size={14} />
+                  <AdminButton onClick={() => setConfirmDelete(true)} icon="delete" size="sm" variant="danger">
                     删除模型
-                  </button>
+                  </AdminButton>
                 ))}
               <div className="flex gap-3 ml-auto">
-                <button
-                  onClick={onClose}
-                  className="px-4 py-2 text-sm text-on-surface-variant hover:text-on-surface transition-colors"
-                >
+                <AdminButton onClick={onClose} variant="secondary">
                   取消
-                </button>
-                <button
-                  onClick={handleSave}
-                  disabled={saving}
-                  className="px-6 py-2 bg-primary-container text-on-primary rounded-sm text-sm hover:bg-primary transition-colors disabled:opacity-50"
-                >
+                </AdminButton>
+                <AdminButton onClick={handleSave} disabled={saving} variant="primary">
                   {saving ? '保存中...' : '保存'}
-                </button>
+                </AdminButton>
               </div>
             </div>
           </motion.div>

@@ -65,7 +65,9 @@ export function createModelConversionRouter({ prisma, getMeta, saveMeta, getPrev
         if (m.status === MODEL_STATUS.QUEUED || m.status === MODEL_STATUS.PROCESSING) {
           try {
             rmSync(file.path, { force: true });
-          } catch {}
+          } catch {
+            /* best-effort temp file cleanup */
+          }
           res.status(409).json({ detail: '模型正在转换中，请稍后重试' });
           return;
         }
@@ -77,7 +79,9 @@ export function createModelConversionRouter({ prisma, getMeta, saveMeta, getPrev
         if (statusUpdate.count === 0) {
           try {
             rmSync(file.path, { force: true });
-          } catch {}
+          } catch {
+            /* best-effort temp file cleanup */
+          }
           res.status(409).json({ detail: '模型正在转换中，请稍后重试' });
           return;
         }
@@ -169,7 +173,7 @@ export function createModelConversionRouter({ prisma, getMeta, saveMeta, getPrev
 
         await cacheDelByPrefix('cache:models:');
         res.json({ success: true, data: { model_id: id, status: MODEL_STATUS.PROCESSING } });
-      } catch (err: any) {
+      } catch (err: unknown) {
         if (prisma) {
           await prisma.model
             .update({
@@ -298,7 +302,7 @@ export function createModelConversionRouter({ prisma, getMeta, saveMeta, getPrev
             preview_meta: previewMeta,
           },
         });
-      } catch (err: any) {
+      } catch (err: unknown) {
         await prisma.model
           .update({
             where: { id },
@@ -407,7 +411,7 @@ export function createModelConversionRouter({ prisma, getMeta, saveMeta, getPrev
 
         await cacheDelByPrefix('cache:models:');
         res.json({ success: true, data: { total: totalProcessed, success, failed } });
-      } catch (err: any) {
+      } catch (err: unknown) {
         logger.error({ err }, '[conversion] Batch reconvert failed');
         res.status(500).json({ detail: '批量重新转换失败' });
       }

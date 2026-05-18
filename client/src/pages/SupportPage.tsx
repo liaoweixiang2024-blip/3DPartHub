@@ -2,7 +2,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useState, useRef } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import client from '../api/client';
-import { AdminPageHero } from '../components/shared/AdminManagementPage';
+import { AdminManagementPage } from '../components/shared/AdminManagementPage';
 import { AdminPageShell } from '../components/shared/AdminPageShell';
 import Icon from '../components/shared/Icon';
 import { useToast } from '../components/shared/Toast';
@@ -146,19 +146,16 @@ function DesktopContent() {
   };
 
   return (
-    <div className="max-w-6xl mx-auto">
-      {/* Header */}
-      <div className="mb-8">
-        <AdminPageHero
-          title="技术支持"
-          meta="提交工单"
-          description="提交定制需求或技术问题，我们的工程师团队将为您处理"
-          actions={<SupportHeaderAction />}
-        />
-      </div>
-
+    <AdminManagementPage
+      title="技术支持"
+      meta="提交工单"
+      description="提交定制需求或技术问题，我们的工程师团队将为您处理"
+      actions={<SupportHeaderAction />}
+      className="app-public-tool-page app-public-tool-page-support mx-auto w-full max-w-6xl"
+      contentClassName="gap-8"
+    >
       {/* Process Steps */}
-      <div className="grid grid-cols-4 gap-4 mb-10">
+      <div className="grid grid-cols-4 gap-4">
         {business.supportProcessSteps.map((step, i) => (
           <div
             key={step.title}
@@ -379,7 +376,7 @@ function DesktopContent() {
           </motion.div>
         )}
       </AnimatePresence>
-    </div>
+    </AdminManagementPage>
   );
 }
 
@@ -430,14 +427,14 @@ function MobileContent() {
   };
 
   return (
-    <div className="px-4 py-4 pb-20 space-y-5">
-      <AdminPageHero
-        title="技术支持"
-        meta="提交工单"
-        description="提交需求，工程师团队为您处理"
-        actions={<SupportHeaderAction compact />}
-      />
-
+    <AdminManagementPage
+      title="技术支持"
+      meta="提交工单"
+      description="提交需求，工程师团队为您处理"
+      actions={<SupportHeaderAction compact />}
+      className="app-public-tool-page app-public-tool-page-support px-4 py-4 pb-20"
+      contentClassName="space-y-5"
+    >
       {ctx && <ContextCard ctx={ctx} />}
 
       {submitted ? (
@@ -525,7 +522,7 @@ function MobileContent() {
           </Link>
         </>
       )}
-    </div>
+    </AdminManagementPage>
   );
 }
 

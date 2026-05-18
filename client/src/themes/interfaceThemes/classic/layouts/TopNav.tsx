@@ -1,6 +1,5 @@
 import { Link } from 'react-router-dom';
 import Icon from '../../../../components/shared/Icon';
-import Tooltip from '../../../../components/shared/Tooltip';
 import { preloadRouteForPath } from '../../../../lib/routeLoaders';
 import type { DesktopTopNavThemeProps } from '../../types';
 
@@ -26,18 +25,18 @@ export default function ClassicTopNav({
       {renderSearch('hidden flex-1 max-w-lg md:mt-px md:flex')}
       <div className="ml-auto flex shrink-0 items-center gap-0.5 pr-6">
         {topNavItems.map((item) => (
-          <Tooltip key={item.path} text={item.label} side="bottom">
-            <Link
-              to={item.path}
-              className={desktopIconClass}
-              onPointerEnter={() => preloadRouteForPath(item.path)}
-              onPointerDown={() => preloadRouteForPath(item.path)}
-              onFocus={() => preloadRouteForPath(item.path)}
-              onClick={(event) => onNavClick(event, item.path)}
-            >
-              <Icon name={item.icon} size={20} />
-            </Link>
-          </Tooltip>
+          <Link
+            key={item.path}
+            to={item.path}
+            className={desktopIconClass}
+            aria-label={item.label}
+            onPointerEnter={() => preloadRouteForPath(item.path)}
+            onPointerDown={() => preloadRouteForPath(item.path)}
+            onFocus={() => preloadRouteForPath(item.path)}
+            onClick={(event) => onNavClick(event, item.path)}
+          >
+            <Icon name={item.icon} size={20} />
+          </Link>
         ))}
         {tools}
       </div>

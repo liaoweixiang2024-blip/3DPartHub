@@ -1,4 +1,5 @@
 import { Router, Request, Response } from 'express';
+import { getErrorMessage } from '../lib/http.js';
 import { logger } from '../lib/logger.js';
 import { prisma } from '../lib/prisma.js';
 import { optionalString } from '../lib/requestValidation.js';
@@ -30,8 +31,8 @@ router.get('/api/models/compare', async (req: Request, res: Response) => {
     }
     const result = await compareModels(id1, id2);
     res.json(result);
-  } catch (err: any) {
-    logger.error({ err_message: err.message }, '[model-compare] Error');
+  } catch (err: unknown) {
+    logger.error({ err_message: getErrorMessage(err) }, '[model-compare] Error');
     res.status(400).json({ detail: '对比失败' });
   }
 });

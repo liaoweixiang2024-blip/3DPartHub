@@ -1,8 +1,8 @@
 import { motion, AnimatePresence } from 'framer-motion';
 import { useEffect } from 'react';
 import { overlayMotion, sideSheetMotion } from '../../lib/motion';
-import type { Category } from '../../themes/interfaceThemes/shared/homeTypes';
 import Icon from '../shared/Icon';
+import type { Category } from './homeTypes';
 
 export function MobileDrawer({
   open,

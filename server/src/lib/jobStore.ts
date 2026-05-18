@@ -22,7 +22,9 @@ export function syncJob<T extends PersistedJobState>(job: T) {
     const tmp = join(JOB_DIR, `${job.id}.${process.pid}.tmp`);
     writeFileSync(tmp, JSON.stringify(job));
     renameSync(tmp, target);
-  } catch {}
+  } catch {
+    /* best-effort file write */
+  }
 }
 
 export function loadJob<T>(id: string): T | undefined {
@@ -54,5 +56,7 @@ export function listJobs<T extends PersistedJobState>(prefix?: string): T[] {
 export function removeJobFile(id: string) {
   try {
     rmSync(join(JOB_DIR, `${id}.json`), { force: true });
-  } catch {}
+  } catch {
+    /* best-effort file cleanup */
+  }
 }

@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { shouldAttachExternalGltfBin, shouldDownloadOriginalBatchFormat } from './batchArchive.js';
+import { normalizeBatchArchiveEntryName } from './archivePath.js';
 
 test('batch favorites treats step/original/unknown formats as original downloads', () => {
   assert.equal(shouldDownloadOriginalBatchFormat(), true);
@@ -44,4 +45,23 @@ test('batch archive adds gltf bin only for a gltf archive entry', () => {
     }),
     false,
   );
+});
+
+test('batch archive entry names reject traversal and absolute paths', () => {
+  assert.equal(normalizeBatchArchiveEntryName('../evil.step'), null);
+  assert.equal(normalizeBatchArchiveEntryName('safe/../evil.step'), null);
+  assert.equal(normalizeBatchArchiveEntryName('safe/../../evil.step'), null);
+  assert.equal(normalizeBatchArchiveEntryName('/absolute/evil.step'), null);
+  assert.equal(normalizeBatchArchiveEntryName('C:/absolute/evil.step'), null);
+  assert.equal(normalizeBatchArchiveEntryName('C:relative/evil.step'), null);
+  assert.equal(normalizeBatchArchiveEntryName('C:\\absolute\\evil.step'), null);
+  assert.equal(normalizeBatchArchiveEntryName('safe/\0/evil.step'), null);
+});
+
+test('batch archive entry names normalize safe folder paths', () => {
+  assert.equal(
+    normalizeBatchArchiveEntryName('不锈钢接头\\304焊直通\\SCFH-1.2寸-45x40L.STEP'),
+    '不锈钢接头/304焊直通/SCFH-1.2寸-45x40L.STEP',
+  );
+  assert.equal(normalizeBatchArchiveEntryName('./钢管/镀锌钢管.STEP'), '钢管/镀锌钢管.STEP');
 });

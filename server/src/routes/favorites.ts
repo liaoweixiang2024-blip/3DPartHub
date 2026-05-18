@@ -13,6 +13,7 @@ import { DailyDownloadLimitError, recordModelDownload } from '../services/modelD
 import { resolveDbModelDownloadTarget } from '../services/modelDownloadTarget.js';
 import { findOriginalModelPath } from '../services/modelFiles.js';
 import { MODEL_STATUS } from '../services/modelStatus.js';
+import { getErrorMessage } from '../lib/http.js';
 import { createNotification } from './notifications.js';
 
 const router = Router();
@@ -80,11 +81,20 @@ router.get('/api/favorites', authMiddleware, async (req: AuthRequest, res: Respo
     const cacheKey = `cache:favorites:${req.user!.userId}`;
     const { cacheGetOrSet, TTL } = await import('../lib/cache.js');
     const { value: favorites } = await cacheGetOrSet(cacheKey, TTL.MODELS_LIST, async () => {
-      return prisma.favorite.findMany({
-        where: { userId: req.user!.userId, modelId: { not: '' }, model: { is: {} } },
+      const rows = await prisma.favorite.findMany({
+        where: { userId: req.user!.userId, modelId: { not: '' } },
         take: 200,
-        include: {
-          model: {
+        select: {
+          id: true,
+          modelId: true,
+          createdAt: true,
+        },
+        orderBy: { createdAt: 'desc' },
+      });
+      const modelIds = Array.from(new Set(rows.map((favorite) => favorite.modelId).filter(Boolean)));
+      const models = modelIds.length
+        ? await prisma.model.findMany({
+            where: { id: { in: modelIds } },
             select: {
               id: true,
               name: true,
@@ -98,10 +108,13 @@ router.get('/api/favorites', authMiddleware, async (req: AuthRequest, res: Respo
               createdAt: true,
               updatedAt: true,
             },
-          },
-        },
-        orderBy: { createdAt: 'desc' },
-      });
+          })
+        : [];
+      const modelById = new Map(models.map((model) => [model.id, model]));
+      return rows.map((favorite) => ({
+        ...favorite,
+        model: modelById.get(favorite.modelId) || null,
+      }));
     });
     res.json(
       favorites
@@ -125,7 +138,8 @@ router.get('/api/favorites', authMiddleware, async (req: AuthRequest, res: Respo
             : null,
         })),
     );
-  } catch {
+  } catch (err) {
+    logger.error({ err }, '[favorites] Failed to list favorites');
     res.status(500).json({ detail: '获取收藏列表失败' });
   }
 });
@@ -155,11 +169,13 @@ router.post('/api/models/:id/favorite', authMiddleware, async (req: AuthRequest,
             relatedId: modelId,
           });
         }
-      } catch {}
+      } catch {
+        logger.warn('Failed to notify model owner about new favorite');
+      }
     }
     res.json(favorite);
-  } catch (err: any) {
-    if (err.code === 'P2002') {
+  } catch (err: unknown) {
+    if (err instanceof Error && 'code' in err && (err as NodeJS.ErrnoException).code === 'P2002') {
       res.json({ message: '已收藏' });
       return;
     }
@@ -235,8 +251,14 @@ router.post(
     try {
       const favorites = await prisma.favorite.findMany({
         where: { userId: req.user!.userId, modelId: { in: uniqueModelIds } },
-        include: {
-          model: {
+        select: {
+          modelId: true,
+        },
+      });
+      const favoriteModelIds = Array.from(new Set(favorites.map((favorite) => favorite.modelId).filter(Boolean)));
+      const favoriteModels = favoriteModelIds.length
+        ? await prisma.model.findMany({
+            where: { id: { in: favoriteModelIds } },
             select: {
               id: true,
               name: true,
@@ -249,16 +271,14 @@ router.post(
               uploadPath: true,
               status: true,
             },
-          },
-        },
-      });
+          })
+        : [];
       const modelById = new Map(
-        favorites
-          .map((favorite: any) => favorite.model)
-          .filter((model: any) => model?.status === MODEL_STATUS.COMPLETED)
-          .map((model: any) => [model.id, model]),
+        favoriteModels.filter((model) => model.status === MODEL_STATUS.COMPLETED).map((model) => [model.id, model]),
       );
-      const models = uniqueModelIds.map((id) => modelById.get(id)).filter(Boolean);
+      const models = uniqueModelIds
+        .map((id) => modelById.get(id))
+        .filter((model): model is (typeof favoriteModels)[number] => Boolean(model));
 
       if (models.length === 0) {
         res.status(404).json({ detail: '没有可下载的模型' });
@@ -313,7 +333,7 @@ router.post(
             dailyLimit,
             noRecord: false,
           });
-        } catch (err: any) {
+        } catch (err: unknown) {
           if (err instanceof DailyDownloadLimitError) {
             res.status(429).json({ detail: err.message });
             return;
@@ -340,8 +360,8 @@ router.post(
       }
 
       await archive.finalize();
-    } catch (err: any) {
-      logger.error({ err_message: err.message }, '[favorites] Batch download error');
+    } catch (err: unknown) {
+      logger.error({ err_message: getErrorMessage(err) }, '[favorites] Batch download error');
       if (!res.headersSent) {
         if (err instanceof DailyDownloadLimitError) {
           res.status(429).json({ detail: err.message });

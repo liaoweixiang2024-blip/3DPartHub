@@ -2,6 +2,7 @@ import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { Router, Response } from 'express';
 import { cacheDelByPrefix } from '../../lib/cache.js';
+import { getErrorMessage } from '../../lib/http.js';
 import { logger } from '../../lib/logger.js';
 import { conversionQueue } from '../../lib/queue.js';
 import { numericValue, stringArray } from '../../lib/requestValidation.js';
@@ -158,7 +159,7 @@ export function createPreviewDiagnosticsRouter({
           page_size: pageSize,
           status: filter,
         });
-      } catch (err: any) {
+      } catch (err: unknown) {
         logger.error({ err }, '[previewDiagnostics] Scan failed');
         res.status(500).json({ detail: '预览诊断扫描失败' });
       }
@@ -289,7 +290,9 @@ export function createPreviewDiagnosticsRouter({
             });
             await prisma.model
               .update({ where: { id: model.id }, data: { status: MODEL_STATUS.QUEUED } })
-              .catch(() => {});
+              .catch((err: unknown) => {
+                logger.warn({ err, modelId: model.id }, '[preview-diagnostics] Failed to mark model queued');
+              });
             queued++;
             items.push({
               model_id: model.id,
@@ -297,13 +300,13 @@ export function createPreviewDiagnosticsRouter({
               status: MODEL_STATUS.QUEUED,
               job_id: job.id,
             });
-          } catch (err: any) {
+          } catch (err: unknown) {
             failed++;
             items.push({
               model_id: model.id,
               name: model.name || model.originalName,
               status: MODEL_STATUS.FAILED,
-              reason: err?.message || '队列投递失败',
+              reason: getErrorMessage(err) || '队列投递失败',
             });
           }
         }
@@ -320,7 +323,7 @@ export function createPreviewDiagnosticsRouter({
             items,
           },
         });
-      } catch (err: any) {
+      } catch (err: unknown) {
         logger.error({ err }, '[previewDiagnostics] Batch rebuild failed');
         res.status(500).json({ detail: '批量重建预览失败' });
       }

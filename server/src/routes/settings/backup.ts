@@ -1,4 +1,4 @@
-import { existsSync, readdirSync, rmSync, statSync } from 'node:fs';
+import { closeSync, existsSync, openSync, readSync, readdirSync, rmSync, statSync } from 'node:fs';
 import { basename, join, resolve, sep } from 'node:path';
 import { Router, Response } from 'express';
 import multer from 'multer';
@@ -10,6 +10,7 @@ import {
   getActiveRestoreJob,
   getActiveVerifyJob,
   getBackupArchivePath,
+  getBackupEncryptionStatus,
   getBackupHealth,
   getBackupPolicyCheck,
   getBackupStats,
@@ -19,6 +20,7 @@ import {
   getVerifyJob,
   listBackups,
   renameBackup,
+  isEncryptedBackupArchiveFile,
   startBackupJob,
   startImportSaveJob,
   startRestoreJob,
@@ -27,7 +29,9 @@ import {
 } from '../../lib/backup.js';
 import { config } from '../../lib/config.js';
 import { createProtectedResourceToken, consumeProtectedResourceToken } from '../../lib/downloadTokenStore.js';
+import { getErrorMessage } from '../../lib/http.js';
 import { createLogger } from '../../lib/logger.js';
+import { BACKUP_DIRECT_UPLOAD_MAX_BYTES } from '../../lib/uploadLimits.js';
 import { authMiddleware, type AuthRequest } from '../../middleware/auth.js';
 import { adminOnly, asSingleString } from './common.js';
 
@@ -68,12 +72,46 @@ function cleanupTempBackupUpload(path: string | undefined) {
   if (!path) return;
   try {
     rmSync(path, { force: true });
-  } catch {}
+  } catch (err) {
+    log.warn({ err, path }, 'Failed to clean up temporary backup upload');
+  }
+}
+
+function hasGzipMagic(path: string): boolean {
+  const fd = openSync(path, 'r');
+  try {
+    const buffer = Buffer.alloc(2);
+    const bytesRead = readSync(fd, buffer, 0, buffer.length, 0);
+    return bytesRead === 2 && buffer[0] === 0x1f && buffer[1] === 0x8b;
+  } finally {
+    closeSync(fd);
+  }
+}
+
+function validateBackupArchiveUpload(path: string, res: Response, options: { cleanup?: boolean } = {}): boolean {
+  try {
+    const st = statSync(path);
+    if (st.size <= 0) {
+      if (options.cleanup) cleanupTempBackupUpload(path);
+      res.status(400).json({ detail: '备份文件为空，请重新选择有效的备份文件' });
+      return false;
+    }
+    if (!hasGzipMagic(path) && !isEncryptedBackupArchiveFile(path)) {
+      if (options.cleanup) cleanupTempBackupUpload(path);
+      res.status(400).json({ detail: '备份文件内容无效，请上传有效的 .tar.gz / .tgz 文件' });
+      return false;
+    }
+    return true;
+  } catch {
+    if (options.cleanup) cleanupTempBackupUpload(path);
+    res.status(400).json({ detail: '备份文件无法读取，请重新上传' });
+    return false;
+  }
 }
 
 const backupUpload = multer({
   dest: '/tmp',
-  limits: { fileSize: 500 * 1024 * 1024 }, // 500MB max for direct upload - larger files must use chunked upload
+  limits: { fileSize: BACKUP_DIRECT_UPLOAD_MAX_BYTES }, // Larger backups use the chunked restore/import flow.
   fileFilter: (_req, file, cb) => {
     if (
       file.originalname.endsWith('.tar.gz') ||
@@ -123,6 +161,12 @@ export function createSettingsBackupRouter() {
     }
   });
 
+  // Admin: backup encryption status. Secrets stay in server environment variables.
+  router.get('/api/settings/backup/encryption', authMiddleware, async (req: AuthRequest, res: Response) => {
+    if (!adminOnly(req, res)) return;
+    res.json(getBackupEncryptionStatus());
+  });
+
   // Admin: backup policy health and scheduler status
   router.get('/api/settings/backup/health', authMiddleware, async (req: AuthRequest, res: Response) => {
     if (!adminOnly(req, res)) return;
@@ -140,7 +184,7 @@ export function createSettingsBackupRouter() {
     try {
       const result = await getBackupPolicyCheck();
       res.json(result);
-    } catch (err: any) {
+    } catch (err: unknown) {
       log.error({ err }, 'Policy check failed');
       res.status(500).json({ detail: '备份策略体检失败' });
     }
@@ -157,12 +201,13 @@ export function createSettingsBackupRouter() {
     try {
       const jobId = startVerifyBackupJob(backupId);
       res.json({ jobId });
-    } catch (err: any) {
-      const isBusy = err?.message?.includes('正在进行中') || err?.message?.includes('locked');
+    } catch (err: unknown) {
+      const msg = getErrorMessage(err);
+      const isBusy = msg.includes('正在进行中') || msg.includes('locked');
       log.error({ err }, 'Verify failed');
       res.status(isBusy ? 409 : 400).json({
         detail: isBusy ? '任务正在进行中' : '备份校验失败',
-        jobId: err.jobId,
+        jobId: err instanceof Error && 'jobId' in err ? (err as Error & { jobId?: string }).jobId : undefined,
       });
     }
   });
@@ -194,7 +239,12 @@ export function createSettingsBackupRouter() {
   // Admin: list all saved backups
   router.get('/api/settings/backup/list', authMiddleware, async (req: AuthRequest, res: Response) => {
     if (!adminOnly(req, res)) return;
-    res.json(listBackups());
+    try {
+      res.json(listBackups());
+    } catch (err) {
+      log.error({ err }, 'Failed to list backups');
+      res.status(500).json({ detail: '获取备份列表失败' });
+    }
   });
 
   // Admin: get the currently running backup job, used to recover progress after refresh
@@ -277,12 +327,15 @@ export function createSettingsBackupRouter() {
     try {
       const jobId = startBackupJob();
       res.json({ jobId });
-    } catch (err: any) {
-      const isBusy = err?.message?.includes('正在进行中') || err?.message?.includes('locked');
+    } catch (err: unknown) {
+      const msg = getErrorMessage(err);
+      const isBusy = msg.includes('正在进行中') || msg.includes('locked');
       log.error({ err }, 'Backup create failed');
       res.status(isBusy ? 409 : 500).json({
         detail: isBusy ? '任务正在进行中' : '启动备份失败',
-        jobId: err.jobId || getActiveBackupJob()?.id,
+        jobId:
+          (err instanceof Error && 'jobId' in err ? (err as Error & { jobId?: string }).jobId : undefined) ||
+          getActiveBackupJob()?.id,
       });
     }
   });
@@ -406,8 +459,9 @@ export function createSettingsBackupRouter() {
       }
       const jobId = startRestoreJob(backupId);
       res.json({ jobId });
-    } catch (err: any) {
-      const isBusy = err?.message?.includes('正在进行中') || err?.message?.includes('locked');
+    } catch (err: unknown) {
+      const msg = getErrorMessage(err);
+      const isBusy = msg.includes('正在进行中') || msg.includes('locked');
       log.error({ err }, 'Restore failed');
       res.status(isBusy ? 409 : 500).json({ detail: isBusy ? '任务正在进行中' : '启动恢复失败' });
     }
@@ -456,11 +510,13 @@ export function createSettingsBackupRouter() {
         return;
       }
       try {
+        if (!validateBackupArchiveUpload(file.path, res, { cleanup: true })) return;
         const jobId = startRestoreJobFromFile(file.path);
         res.json({ jobId });
-      } catch (err: any) {
+      } catch (err: unknown) {
         cleanupTempBackupUpload(file.path);
-        const isBusy = err?.message?.includes('正在进行中') || err?.message?.includes('locked');
+        const msg = getErrorMessage(err);
+        const isBusy = msg.includes('正在进行中') || msg.includes('locked');
         log.error({ err }, 'Import failed');
         res.status(isBusy ? 409 : 500).json({ detail: isBusy ? '任务正在进行中' : '启动恢复失败' });
       }
@@ -503,11 +559,13 @@ export function createSettingsBackupRouter() {
       return;
     }
     try {
+      if (!validateBackupArchiveUpload(managedPath, res, { cleanup: true })) return;
       const jobId = startRestoreJobFromFile(managedPath);
       res.json({ jobId });
-    } catch (err: any) {
+    } catch (err: unknown) {
       cleanupTempBackupUpload(managedPath);
-      const isBusy = err?.message?.includes('正在进行中') || err?.message?.includes('locked');
+      const msg = getErrorMessage(err);
+      const isBusy = msg.includes('正在进行中') || msg.includes('locked');
       log.error({ err }, 'Chunked import failed');
       res.status(isBusy ? 409 : 500).json({ detail: isBusy ? '任务正在进行中' : '启动恢复失败' });
     }
@@ -523,10 +581,12 @@ export function createSettingsBackupRouter() {
       return;
     }
     try {
+      if (!validateBackupArchiveUpload(resolved, res)) return;
       const jobId = startRestoreJobFromFile(resolved, false); // Don't delete server-local files
       res.json({ jobId });
-    } catch (err: any) {
-      const isBusy = err?.message?.includes('正在进行中') || err?.message?.includes('locked');
+    } catch (err: unknown) {
+      const msg = getErrorMessage(err);
+      const isBusy = msg.includes('正在进行中') || msg.includes('locked');
       log.error({ err }, 'Path import failed');
       res.status(isBusy ? 409 : 500).json({ detail: isBusy ? '任务正在进行中' : '启动恢复失败' });
     }
@@ -549,7 +609,8 @@ export function createSettingsBackupRouter() {
       }
       files.sort((a, b) => new Date(b.modifiedAt).getTime() - new Date(a.modifiedAt).getTime());
       res.json(files);
-    } catch {
+    } catch (err) {
+      log.warn({ err }, 'Failed to list server-local backup files');
       res.json([]);
     }
   });
@@ -571,11 +632,13 @@ export function createSettingsBackupRouter() {
       }
       try {
         // Return async job - inspection of large archives can be slow
+        if (!validateBackupArchiveUpload(file.path, res, { cleanup: true })) return;
         const jobId = startImportSaveJob(file.path, file.originalname);
         res.json({ jobId });
-      } catch (err: any) {
+      } catch (err: unknown) {
         cleanupTempBackupUpload(file.path);
-        const isBusy = err?.message?.includes('正在进行中') || err?.message?.includes('locked');
+        const msg = getErrorMessage(err);
+        const isBusy = msg.includes('正在进行中') || msg.includes('locked');
         log.error({ err }, 'Import-save failed');
         res.status(isBusy ? 409 : 500).json({ detail: isBusy ? '任务正在进行中' : '启动保存任务失败' });
       }
@@ -592,11 +655,13 @@ export function createSettingsBackupRouter() {
       return;
     }
     try {
+      if (!validateBackupArchiveUpload(managedPath, res, { cleanup: true })) return;
       const jobId = startImportSaveJob(managedPath, fileName || '备份文件');
       res.json({ jobId });
-    } catch (err: any) {
+    } catch (err: unknown) {
       cleanupTempBackupUpload(managedPath);
-      const isBusy = err?.message?.includes('正在进行中') || err?.message?.includes('locked');
+      const msg = getErrorMessage(err);
+      const isBusy = msg.includes('正在进行中') || msg.includes('locked');
       log.error({ err }, 'Chunked import-save failed');
       res.status(isBusy ? 409 : 500).json({ detail: isBusy ? '任务正在进行中' : '启动保存任务失败' });
     }

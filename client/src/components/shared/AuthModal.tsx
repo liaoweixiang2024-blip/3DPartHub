@@ -5,13 +5,14 @@ import { authApi } from '../../api/auth';
 import client from '../../api/client';
 import { unwrapResponse } from '../../api/response';
 import { getErrorMessage } from '../../lib/errorNotifications';
-import { getCachedPublicSettings, getPublicSettingsSnapshot } from '../../lib/publicSettings';
+import { useResolvedPublicInterfaceTheme } from '../../lib/interfaceThemePreference';
+import { usePublicSettings } from '../../lib/publicSettings';
 import { sanitizeHtml } from '../../lib/sanitizeHtml';
 import { useAuthStore } from '../../stores/useAuthStore';
 import { getInterfaceThemePackage } from '../../themes/interfaceThemes/registry';
 import BrandMark from './BrandMark';
+import { APP_FIELD_ERROR_CLASS, AppFormLabel, AppTextInput } from './FormControls';
 import Icon from './Icon';
-import '../../themes/interfaceThemes/shared/authModal.css';
 
 type AuthMode = 'login' | 'register';
 
@@ -50,7 +51,6 @@ export default function AuthModal({ initialMode = 'login', open, returnUrl, onCl
   const [apiError, setApiError] = useState('');
   const [rememberMe, setRememberMe] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
-  const [allowRegister, setAllowRegister] = useState(true);
   const [captchaSvg, setCaptchaSvg] = useState('');
   const [captchaId, setCaptchaId] = useState('');
   const [captchaText, setCaptchaText] = useState('');
@@ -63,9 +63,10 @@ export default function AuthModal({ initialMode = 'login', open, returnUrl, onCl
   const login = useAuthStore((state) => state.login);
   const navigate = useNavigate();
   const location = useLocation();
-  const [interfaceTheme, setInterfaceTheme] = useState(
-    () => getInterfaceThemePackage(getPublicSettingsSnapshot().interface_theme).manifest.key,
-  );
+  const { settings } = usePublicSettings();
+  const resolvedTheme = useResolvedPublicInterfaceTheme(settings);
+  const interfaceTheme = getInterfaceThemePackage(resolvedTheme).manifest.key;
+  const allowRegister = settings?.allow_register ?? true;
 
   const resetTransient = useCallback((nextMode: AuthMode) => {
     setMode(nextMode);
@@ -82,15 +83,6 @@ export default function AuthModal({ initialMode = 'login', open, returnUrl, onCl
   useEffect(() => {
     if (!open) return;
     resetTransient(initialMode);
-    getCachedPublicSettings()
-      .then((settings) => {
-        setAllowRegister(settings.allow_register ?? true);
-        setInterfaceTheme(getInterfaceThemePackage(settings.interface_theme).manifest.key);
-      })
-      .catch(() => {
-        setAllowRegister(true);
-        setInterfaceTheme(getInterfaceThemePackage().manifest.key);
-      });
   }, [initialMode, open, resetTransient]);
 
   const refreshCaptcha = useCallback(async () => {
@@ -191,6 +183,7 @@ export default function AuthModal({ initialMode = 'login', open, returnUrl, onCl
   };
 
   const heading = mode === 'login' ? '登录您的账户' : '注册新账户';
+  const AuthDialog = getInterfaceThemePackage(interfaceTheme).templates.AuthDialog;
 
   return (
     <AnimatePresence>
@@ -203,195 +196,188 @@ export default function AuthModal({ initialMode = 'login', open, returnUrl, onCl
           exit={{ opacity: 0 }}
           onClick={onClose}
         >
-          <motion.section
-            className={`auth-modal auth-modal-${mode} workbench-auth-dialog workbench-auth-dialog-${mode} relative w-full max-w-[27rem] overflow-hidden rounded-2xl border border-outline-variant/14 bg-surface-container-low shadow-[0_28px_80px_rgba(15,23,42,0.18)]`}
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="auth-modal-title"
-            initial={{ opacity: 0, y: 12, scale: 0.98 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: 10, scale: 0.98 }}
-            transition={{ duration: 0.22, ease: 'easeOut' }}
-            onClick={(event) => event.stopPropagation()}
-          >
-            <button
-              type="button"
-              onClick={onClose}
-              className="absolute right-4 top-4 z-10 flex h-8 w-8 items-center justify-center rounded-lg text-on-surface-variant transition-colors hover:bg-surface-container-high hover:text-on-surface"
-              aria-label="关闭登录弹窗"
-            >
-              <Icon name="close" size={18} />
-            </button>
-
-            <div className="auth-modal-header workbench-auth-header border-b border-outline-variant/10 px-6 pb-5 pt-6 text-center sm:px-7">
-              <BrandMark size="hero" centered className="mx-auto mb-3 max-w-full" eagerLoad />
+          <AuthDialog
+            mode={mode}
+            brand={<BrandMark size="hero" centered className="mx-auto mb-3 max-w-full" eagerLoad />}
+            title={
               <h1 id="auth-modal-title" className="text-lg font-bold text-on-surface">
                 {heading}
               </h1>
-            </div>
+            }
+            subtitle={null}
+            closeLabel="关闭登录弹窗"
+            onClose={onClose}
+          >
+            <form onSubmit={handleSubmit} className="space-y-5 p-6 sm:p-8">
+              {apiError && (
+                <motion.div
+                  initial={{ opacity: 0, height: 0 }}
+                  animate={{ opacity: 1, height: 'auto' }}
+                  className="flex items-start gap-2 rounded-sm border border-error/30 bg-error-container/20 px-4 py-3 text-sm text-error"
+                >
+                  <Icon name="error" size={20} className="mt-0.5 shrink-0" />
+                  <span className="min-w-0 break-words">{apiError}</span>
+                </motion.div>
+              )}
 
-            <div className="auth-modal-body workbench-auth-body max-h-[calc(100dvh-13rem)] overflow-y-auto overscroll-contain">
-              <form onSubmit={handleSubmit} className="space-y-5 p-6 sm:p-8">
-                {apiError && (
-                  <motion.div
-                    initial={{ opacity: 0, height: 0 }}
-                    animate={{ opacity: 1, height: 'auto' }}
-                    className="flex items-start gap-2 rounded-sm border border-error/30 bg-error-container/20 px-4 py-3 text-sm text-error"
-                  >
-                    <Icon name="error" size={20} className="mt-0.5 shrink-0" />
-                    <span className="min-w-0 break-words">{apiError}</span>
-                  </motion.div>
-                )}
-
-                {mode === 'register' && (
-                  <div>
-                    <label className="mb-1.5 block text-xs uppercase tracking-wider text-on-surface-variant">
-                      联系人 / 用户名
-                    </label>
-                    <input
-                      type="text"
-                      value={username}
-                      onChange={(event) => setUsername(event.target.value)}
-                      className={`w-full rounded-sm border bg-surface-container-lowest px-4 py-2.5 text-base text-on-surface outline-none transition-colors ${
-                        errors.username ? 'border-error' : 'border-outline-variant/30 focus:border-primary-container'
-                      }`}
-                      placeholder="例如 张工"
-                    />
-                    {errors.username && <span className="mt-1 block text-xs text-error">{errors.username}</span>}
-                  </div>
-                )}
-
-                {mode === 'register' && (
-                  <div>
-                    <label className="mb-1.5 block text-xs uppercase tracking-wider text-on-surface-variant">
-                      手机号
-                    </label>
-                    <input
-                      type="tel"
-                      value={phone}
-                      onChange={(event) => setPhone(event.target.value)}
-                      className="w-full rounded-sm border border-outline-variant/30 bg-surface-container-lowest px-4 py-2.5 text-base text-on-surface outline-none transition-colors focus:border-primary-container"
-                      placeholder="用于询价、工单联系（选填）"
-                    />
-                  </div>
-                )}
-
-                {mode === 'register' && (
-                  <div>
-                    <label className="mb-1.5 block text-xs uppercase tracking-wider text-on-surface-variant">
-                      公司名称
-                    </label>
-                    <input
-                      type="text"
-                      value={company}
-                      onChange={(event) => setCompany(event.target.value)}
-                      className="w-full rounded-sm border border-outline-variant/30 bg-surface-container-lowest px-4 py-2.5 text-base text-on-surface outline-none transition-colors focus:border-primary-container"
-                      placeholder="提交询价时自动带入（选填）"
-                    />
-                  </div>
-                )}
-
-                {mode === 'register' && (
-                  <div>
-                    <label className="mb-1.5 block text-xs uppercase tracking-wider text-on-surface-variant">
-                      联系地址
-                    </label>
-                    <input
-                      type="text"
-                      value={address}
-                      onChange={(event) => setAddress(event.target.value)}
-                      className="w-full rounded-sm border border-outline-variant/30 bg-surface-container-lowest px-4 py-2.5 text-base text-on-surface outline-none transition-colors focus:border-primary-container"
-                      placeholder="用于询价对接和交付确认（选填）"
-                    />
-                  </div>
-                )}
-
+              {mode === 'register' && (
                 <div>
-                  <label className="mb-1.5 block text-xs uppercase tracking-wider text-on-surface-variant">邮箱</label>
-                  <input
-                    type="email"
-                    value={email}
-                    onChange={(event) => setEmail(event.target.value)}
-                    className={`w-full rounded-sm border bg-surface-container-lowest px-4 py-2.5 text-base text-on-surface outline-none transition-colors ${
-                      errors.email ? 'border-error' : 'border-outline-variant/30 focus:border-primary-container'
-                    }`}
-                    placeholder="例如 name@company.com"
+                  <AppFormLabel uppercase>联系人 / 用户名</AppFormLabel>
+                  <AppTextInput
+                    type="text"
+                    value={username}
+                    onChange={(event) => setUsername(event.target.value)}
+                    error={Boolean(errors.username)}
+                    fieldSize="lg"
+                    placeholder="例如 张工"
                   />
-                  {errors.email && <span className="mt-1 block text-xs text-error">{errors.email}</span>}
+                  {errors.username && <span className={APP_FIELD_ERROR_CLASS}>{errors.username}</span>}
                 </div>
+              )}
 
-                {mode === 'register' && (
-                  <div>
-                    <label className="mb-1.5 block text-xs uppercase tracking-wider text-on-surface-variant">
-                      图形验证码
-                    </label>
-                    <div className="flex items-center gap-2">
-                      <input
-                        type="text"
-                        value={captchaText}
-                        onChange={(event) => setCaptchaText(event.target.value)}
-                        className={`min-w-0 flex-1 rounded-sm border bg-surface-container-lowest px-3 py-2.5 text-base text-on-surface outline-none transition-colors ${
-                          errors.captchaText
-                            ? 'border-error'
-                            : 'border-outline-variant/30 focus:border-primary-container'
-                        }`}
-                        placeholder="验证码"
-                        maxLength={4}
-                      />
-                      {captchaSvg && (
-                        <button
-                          type="button"
-                          onClick={refreshCaptcha}
-                          className="shrink-0 cursor-pointer overflow-hidden rounded-sm border border-outline-variant/30 transition-opacity hover:opacity-80"
-                          dangerouslySetInnerHTML={{ __html: sanitizeHtml(captchaSvg) }}
-                          style={{ width: 100, height: 40 }}
-                        />
-                      )}
-                    </div>
-                    {errors.captchaText && <span className="mt-1 block text-xs text-error">{errors.captchaText}</span>}
-                  </div>
-                )}
+              {mode === 'register' && (
+                <div>
+                  <AppFormLabel uppercase>手机号</AppFormLabel>
+                  <AppTextInput
+                    type="tel"
+                    value={phone}
+                    onChange={(event) => setPhone(event.target.value)}
+                    fieldSize="lg"
+                    placeholder="用于询价、工单联系（选填）"
+                  />
+                </div>
+              )}
 
-                {mode === 'register' && (
-                  <div>
-                    <label className="mb-1.5 block text-xs uppercase tracking-wider text-on-surface-variant">
-                      邮箱验证码
-                    </label>
-                    <div className="flex gap-2">
-                      <input
-                        type="text"
-                        value={emailCode}
-                        onChange={(event) => setEmailCode(event.target.value)}
-                        className={`min-w-0 flex-1 rounded-sm border bg-surface-container-lowest px-3 py-2.5 text-base text-on-surface outline-none transition-colors ${
-                          errors.emailCode ? 'border-error' : 'border-outline-variant/30 focus:border-primary-container'
-                        }`}
-                        placeholder="6位验证码"
-                        maxLength={6}
-                      />
+              {mode === 'register' && (
+                <div>
+                  <AppFormLabel uppercase>公司名称</AppFormLabel>
+                  <AppTextInput
+                    type="text"
+                    value={company}
+                    onChange={(event) => setCompany(event.target.value)}
+                    fieldSize="lg"
+                    placeholder="提交询价时自动带入（选填）"
+                  />
+                </div>
+              )}
+
+              {mode === 'register' && (
+                <div>
+                  <AppFormLabel uppercase>联系地址</AppFormLabel>
+                  <AppTextInput
+                    type="text"
+                    value={address}
+                    onChange={(event) => setAddress(event.target.value)}
+                    fieldSize="lg"
+                    placeholder="用于询价对接和交付确认（选填）"
+                  />
+                </div>
+              )}
+
+              <div>
+                <AppFormLabel uppercase>邮箱</AppFormLabel>
+                <AppTextInput
+                  type="email"
+                  value={email}
+                  onChange={(event) => setEmail(event.target.value)}
+                  error={Boolean(errors.email)}
+                  fieldSize="lg"
+                  placeholder="例如 name@company.com"
+                />
+                {errors.email && <span className={APP_FIELD_ERROR_CLASS}>{errors.email}</span>}
+              </div>
+
+              {mode === 'register' && (
+                <div>
+                  <AppFormLabel uppercase>图形验证码</AppFormLabel>
+                  <div className="flex items-center gap-2">
+                    <AppTextInput
+                      type="text"
+                      value={captchaText}
+                      onChange={(event) => setCaptchaText(event.target.value)}
+                      className="min-w-0 flex-1 px-3"
+                      error={Boolean(errors.captchaText)}
+                      fieldSize="lg"
+                      placeholder="验证码"
+                      maxLength={4}
+                    />
+                    {captchaSvg && (
                       <button
                         type="button"
-                        onClick={handleSendEmailCode}
-                        disabled={emailCountdown > 0 || sendingCode}
-                        className="shrink-0 whitespace-nowrap rounded-sm border border-primary-container/50 px-3 py-2.5 text-sm text-primary-container transition-colors hover:bg-primary-container/10 disabled:cursor-not-allowed disabled:opacity-50"
-                      >
-                        {sendingCode ? '发送中...' : emailCountdown > 0 ? `${emailCountdown}s` : '发送验证码'}
-                      </button>
-                    </div>
-                    {errors.emailCode && <span className="mt-1 block text-xs text-error">{errors.emailCode}</span>}
+                        onClick={refreshCaptcha}
+                        className="shrink-0 cursor-pointer overflow-hidden rounded-sm border border-outline-variant/30 transition-opacity hover:opacity-80"
+                        dangerouslySetInnerHTML={{ __html: sanitizeHtml(captchaSvg) }}
+                        style={{ width: 100, height: 40 }}
+                      />
+                    )}
                   </div>
-                )}
+                  {errors.captchaText && <span className={APP_FIELD_ERROR_CLASS}>{errors.captchaText}</span>}
+                </div>
+              )}
 
+              {mode === 'register' && (
                 <div>
-                  <label className="mb-1.5 block text-xs uppercase tracking-wider text-on-surface-variant">密码</label>
+                  <AppFormLabel uppercase>邮箱验证码</AppFormLabel>
+                  <div className="flex gap-2">
+                    <AppTextInput
+                      type="text"
+                      value={emailCode}
+                      onChange={(event) => setEmailCode(event.target.value)}
+                      className="min-w-0 flex-1 px-3"
+                      error={Boolean(errors.emailCode)}
+                      fieldSize="lg"
+                      placeholder="6位验证码"
+                      maxLength={6}
+                    />
+                    <button
+                      type="button"
+                      onClick={handleSendEmailCode}
+                      disabled={emailCountdown > 0 || sendingCode}
+                      className="shrink-0 whitespace-nowrap rounded-sm border border-primary-container/50 px-3 py-2.5 text-sm text-primary-container transition-colors hover:bg-primary-container/10 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      {sendingCode ? '发送中...' : emailCountdown > 0 ? `${emailCountdown}s` : '发送验证码'}
+                    </button>
+                  </div>
+                  {errors.emailCode && <span className={APP_FIELD_ERROR_CLASS}>{errors.emailCode}</span>}
+                </div>
+              )}
+
+              <div>
+                <AppFormLabel uppercase>密码</AppFormLabel>
+                <div className="relative">
+                  <AppTextInput
+                    type={showPassword ? 'text' : 'password'}
+                    value={password}
+                    onChange={(event) => setPassword(event.target.value)}
+                    className="pr-10"
+                    error={Boolean(errors.password)}
+                    fieldSize="lg"
+                    placeholder="至少8位"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword((value) => !value)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-on-surface-variant transition-colors hover:text-on-surface"
+                    aria-label={showPassword ? '隐藏密码' : '显示密码'}
+                  >
+                    <Icon name={showPassword ? 'visibility_off' : 'visibility'} size={18} />
+                  </button>
+                </div>
+                {errors.password && <span className={APP_FIELD_ERROR_CLASS}>{errors.password}</span>}
+              </div>
+
+              {mode === 'register' && (
+                <div>
+                  <AppFormLabel uppercase>确认密码</AppFormLabel>
                   <div className="relative">
-                    <input
+                    <AppTextInput
                       type={showPassword ? 'text' : 'password'}
-                      value={password}
-                      onChange={(event) => setPassword(event.target.value)}
-                      className={`w-full rounded-sm border bg-surface-container-lowest px-4 py-2.5 pr-10 text-base text-on-surface outline-none transition-colors ${
-                        errors.password ? 'border-error' : 'border-outline-variant/30 focus:border-primary-container'
-                      }`}
-                      placeholder="至少8位"
+                      value={confirmPassword}
+                      onChange={(event) => setConfirmPassword(event.target.value)}
+                      className="pr-10"
+                      error={Boolean(errors.confirmPassword)}
+                      fieldSize="lg"
+                      placeholder="再次输入密码"
                     />
                     <button
                       type="button"
@@ -402,106 +388,74 @@ export default function AuthModal({ initialMode = 'login', open, returnUrl, onCl
                       <Icon name={showPassword ? 'visibility_off' : 'visibility'} size={18} />
                     </button>
                   </div>
-                  {errors.password && <span className="mt-1 block text-xs text-error">{errors.password}</span>}
-                </div>
-
-                {mode === 'register' && (
-                  <div>
-                    <label className="mb-1.5 block text-xs uppercase tracking-wider text-on-surface-variant">
-                      确认密码
-                    </label>
-                    <div className="relative">
-                      <input
-                        type={showPassword ? 'text' : 'password'}
-                        value={confirmPassword}
-                        onChange={(event) => setConfirmPassword(event.target.value)}
-                        className={`w-full rounded-sm border bg-surface-container-lowest px-4 py-2.5 pr-10 text-base text-on-surface outline-none transition-colors ${
-                          errors.confirmPassword
-                            ? 'border-error'
-                            : 'border-outline-variant/30 focus:border-primary-container'
-                        }`}
-                        placeholder="再次输入密码"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => setShowPassword((value) => !value)}
-                        className="absolute right-3 top-1/2 -translate-y-1/2 text-on-surface-variant transition-colors hover:text-on-surface"
-                        aria-label={showPassword ? '隐藏密码' : '显示密码'}
-                      >
-                        <Icon name={showPassword ? 'visibility_off' : 'visibility'} size={18} />
-                      </button>
-                    </div>
-                    {errors.confirmPassword && (
-                      <span className="mt-1 block text-xs text-error">{errors.confirmPassword}</span>
-                    )}
-                  </div>
-                )}
-
-                {mode === 'login' && (
-                  <label className="flex cursor-pointer select-none items-center gap-2">
-                    <input
-                      type="checkbox"
-                      checked={rememberMe}
-                      onChange={(event) => setRememberMe(event.target.checked)}
-                      className="h-4 w-4 rounded border-outline-variant/30 text-primary-container accent-primary-container"
-                    />
-                    <span className="text-sm text-on-surface-variant">记住登录</span>
-                  </label>
-                )}
-
-                <button
-                  type="submit"
-                  disabled={loading}
-                  className="w-full rounded-sm bg-primary-container py-3 text-sm font-bold uppercase tracking-wider text-on-primary transition-opacity hover:opacity-90 active:scale-[0.98] disabled:opacity-50"
-                >
-                  {loading ? (
-                    <span className="flex items-center justify-center gap-2">
-                      <Icon name="progress_activity" size={16} className="animate-spin" />
-                      处理中...
-                    </span>
-                  ) : mode === 'login' ? (
-                    '登录'
-                  ) : (
-                    '注册'
-                  )}
-                </button>
-              </form>
-
-              {allowRegister && (
-                <div className="auth-modal-switch px-7 pb-4 text-center sm:px-8">
-                  <button
-                    type="button"
-                    onClick={() => resetTransient(mode === 'login' ? 'register' : 'login')}
-                    className="text-sm text-primary underline-offset-4 hover:underline"
-                  >
-                    {mode === 'login' ? '没有账户？立即注册' : '已有账户？立即登录'}
-                  </button>
+                  {errors.confirmPassword && <span className={APP_FIELD_ERROR_CLASS}>{errors.confirmPassword}</span>}
                 </div>
               )}
 
-              <div className="auth-modal-legal px-8 pb-8 pt-1 text-center sm:px-8">
-                <div className="flex items-center justify-center gap-3 text-xs text-on-surface-variant/60">
-                  <a
-                    href="/legal/terms"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="transition-colors hover:text-on-surface-variant"
-                  >
-                    用户协议
-                  </a>
-                  <span>·</span>
-                  <a
-                    href="/legal/privacy"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="transition-colors hover:text-on-surface-variant"
-                  >
-                    隐私声明
-                  </a>
-                </div>
+              {mode === 'login' && (
+                <label className="flex cursor-pointer select-none items-center gap-2">
+                  <input
+                    type="checkbox"
+                    checked={rememberMe}
+                    onChange={(event) => setRememberMe(event.target.checked)}
+                    className="h-4 w-4 rounded border-outline-variant/30 text-primary-container accent-primary-container"
+                  />
+                  <span className="text-sm text-on-surface-variant">记住登录</span>
+                </label>
+              )}
+
+              <button
+                type="submit"
+                disabled={loading}
+                className="w-full rounded-sm bg-primary-container py-3 text-sm font-bold uppercase tracking-wider text-on-primary transition-opacity hover:opacity-90 active:scale-[0.98] disabled:opacity-50"
+              >
+                {loading ? (
+                  <span className="flex items-center justify-center gap-2">
+                    <Icon name="progress_activity" size={16} className="animate-spin" />
+                    处理中...
+                  </span>
+                ) : mode === 'login' ? (
+                  '登录'
+                ) : (
+                  '注册'
+                )}
+              </button>
+            </form>
+
+            {allowRegister && (
+              <div className="auth-modal-switch px-7 pb-4 text-center sm:px-8">
+                <button
+                  type="button"
+                  onClick={() => resetTransient(mode === 'login' ? 'register' : 'login')}
+                  className="text-sm text-primary underline-offset-4 hover:underline"
+                >
+                  {mode === 'login' ? '没有账户？立即注册' : '已有账户？立即登录'}
+                </button>
+              </div>
+            )}
+
+            <div className="auth-modal-legal px-8 pb-8 pt-1 text-center sm:px-8">
+              <div className="flex items-center justify-center gap-3 text-xs text-on-surface-variant/60">
+                <a
+                  href="/legal/terms"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="transition-colors hover:text-on-surface-variant"
+                >
+                  用户协议
+                </a>
+                <span>·</span>
+                <a
+                  href="/legal/privacy"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="transition-colors hover:text-on-surface-variant"
+                >
+                  隐私声明
+                </a>
               </div>
             </div>
-          </motion.section>
+          </AuthDialog>
         </motion.div>
       )}
     </AnimatePresence>

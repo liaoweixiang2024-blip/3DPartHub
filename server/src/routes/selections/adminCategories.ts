@@ -68,8 +68,8 @@ export function createSelectionAdminCategoriesRouter() {
       });
       await invalidateSelectionCache();
       res.status(201).json(category);
-    } catch (err: any) {
-      if (err.code === 'P2002') {
+    } catch (err: unknown) {
+      if (err instanceof Error && 'code' in err && (err as NodeJS.ErrnoException).code === 'P2002') {
         res.status(409).json({ detail: 'slug 已存在' });
         return;
       }
@@ -141,13 +141,13 @@ export function createSelectionAdminCategoriesRouter() {
       });
       await invalidateSelectionCache();
       res.json(category);
-    } catch (err: any) {
-      if (err.code === 'P2025') {
+    } catch (err: unknown) {
+      if (err instanceof Error && 'code' in err && (err as NodeJS.ErrnoException).code === 'P2025') {
         res.status(404).json({ detail: '分类不存在' });
         return;
       }
       logger.error({ err }, '[Selections] Update category error');
-      if (err.code === 'P2022') {
+      if (err instanceof Error && 'code' in err && (err as NodeJS.ErrnoException).code === 'P2022') {
         res.status(500).json({ detail: '数据库字段缺失，请执行迁移并重启服务后再试' });
         return;
       }
@@ -170,8 +170,8 @@ export function createSelectionAdminCategoriesRouter() {
       await prisma.selectionCategory.delete({ where: { id } });
       await invalidateSelectionCache();
       res.json({ ok: true });
-    } catch (err: any) {
-      if (err.code === 'P2025') {
+    } catch (err: unknown) {
+      if (err instanceof Error && 'code' in err && (err as NodeJS.ErrnoException).code === 'P2025') {
         res.status(404).json({ detail: '分类不存在' });
         return;
       }

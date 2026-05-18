@@ -1,5 +1,6 @@
 import { AnimatePresence, motion } from 'framer-motion';
 import { dialogPanelMotion } from '../../lib/motion';
+import { AdminButton } from './AdminControls';
 import DialogOverlay from './DialogOverlay';
 import Icon from './Icon';
 
@@ -14,6 +15,7 @@ interface ConfirmDialogProps {
   description: string;
   confirmLabel?: string;
   confirmClassName?: string;
+  confirmDisabled?: boolean;
 }
 
 export default function ConfirmDialog({
@@ -26,7 +28,8 @@ export default function ConfirmDialog({
   title,
   description,
   confirmLabel = '确认',
-  confirmClassName = 'flex-1 py-2.5 text-sm font-medium text-on-primary bg-error rounded-lg hover:opacity-90 transition-opacity',
+  confirmClassName,
+  confirmDisabled = false,
 }: ConfirmDialogProps) {
   return (
     <AnimatePresence>
@@ -48,15 +51,22 @@ export default function ConfirmDialog({
             </div>
             <p className="text-sm text-on-surface-variant mb-5">{description}</p>
             <div className="flex gap-3">
-              <button
-                onClick={onClose}
-                className="flex-1 py-2.5 text-sm text-on-surface-variant border border-outline-variant/30 rounded-lg hover:bg-surface-container-highest transition-colors"
-              >
+              <AdminButton onClick={onClose} variant="secondary" className="flex-1">
                 取消
-              </button>
-              <button onClick={onConfirm} className={confirmClassName}>
-                {confirmLabel}
-              </button>
+              </AdminButton>
+              {confirmClassName ? (
+                <button
+                  onClick={onConfirm}
+                  disabled={confirmDisabled}
+                  className={`${confirmClassName} disabled:cursor-not-allowed disabled:opacity-50`}
+                >
+                  {confirmLabel}
+                </button>
+              ) : (
+                <AdminButton onClick={onConfirm} disabled={confirmDisabled} variant="danger" className="flex-1">
+                  {confirmLabel}
+                </AdminButton>
+              )}
             </div>
           </motion.div>
         </DialogOverlay>

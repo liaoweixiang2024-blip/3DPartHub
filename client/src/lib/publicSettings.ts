@@ -186,7 +186,7 @@ export function clearCache() {
 }
 
 // Refresh config: clear all caches, re-fetch, apply, then notify listeners
-export async function refreshSiteConfig() {
+export async function refreshSiteConfig(): Promise<Partial<SystemSettings>> {
   cache = null;
   fetchedAt = 0;
   localStorage.removeItem(STORAGE_KEY);
@@ -202,6 +202,7 @@ export async function refreshSiteConfig() {
   }
   // Notify all listeners with fresh cache populated
   notifySiteConfigChange();
+  return cache || { show_watermark: false, watermark_image: '', site_title: '', site_logo: '' };
 }
 
 export async function getCachedPublicSettings(): Promise<Partial<SystemSettings>> {
@@ -230,7 +231,15 @@ export async function getCachedPublicSettings(): Promise<Partial<SystemSettings>
 // Synchronous getter for already-fetched settings
 export function getPublicSettingsSnapshot(): Partial<SystemSettings> {
   return (
-    cache || { show_watermark: false, watermark_image: '', site_title: '', site_logo: '', login_dialog_enabled: true }
+    cache || {
+      show_watermark: false,
+      watermark_image: '',
+      site_title: '',
+      site_logo: '',
+      auth_modal_enabled: true,
+      login_dialog_enabled: true,
+      user_interface_theme_enabled: true,
+    }
   );
 }
 

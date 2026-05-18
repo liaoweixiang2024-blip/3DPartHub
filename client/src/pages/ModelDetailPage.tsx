@@ -31,7 +31,7 @@ import {
 } from '../components/shared/ModelDetailFrame';
 import ModelDetailPageSkeleton from '../components/shared/ModelDetailPageSkeleton';
 import ModelThumbnail from '../components/shared/ModelThumbnail';
-import { checkProtectedAccess, isLoginDialogEnabled } from '../components/shared/ProtectedLink';
+import { checkProtectedAccess } from '../components/shared/ProtectedLink';
 import { PublicPageShell } from '../components/shared/PublicPageShell';
 import ShareDialog from '../components/shared/ShareDialog';
 import { useToast } from '../components/shared/Toast';
@@ -92,16 +92,12 @@ export default function ModelDetailPage() {
 
   const handleShare = useCallback(() => {
     if (!useAuthStore.getState().isAuthenticated) {
-      if (isLoginDialogEnabled()) {
-        setLoginPromptReason('分享模型');
-        setLoginPromptOpen(true);
-      } else {
-        navigate('/login', { state: { from: location.pathname } });
-      }
+      setLoginPromptReason('分享模型');
+      setLoginPromptOpen(true);
       return;
     }
     setShareOpen(true);
-  }, [location.pathname, navigate]);
+  }, []);
   const detailLocationState = location.state as ModelDetailLocationState;
   const cachedModelTitle = useMemo(() => getCachedModelDetailTitle(id), [id]);
   const initialModelTitle = detailLocationState?.modelName?.trim() || cachedModelTitle;
@@ -170,18 +166,14 @@ export default function ModelDetailPage() {
         await downloadModelFile(modelId, format || 'original');
       } catch (error) {
         if (isDownloadAuthRequiredError(error)) {
-          if (isLoginDialogEnabled()) {
-            setLoginPromptReason('下载模型');
-            setLoginPromptOpen(true);
-          } else {
-            navigate('/login', { state: { from: location.pathname } });
-          }
+          setLoginPromptReason('下载模型');
+          setLoginPromptOpen(true);
           return;
         }
         toast('下载失败，请稍后重试', 'error');
       }
     },
-    [location.pathname, navigate, toast],
+    [toast],
   );
 
   useEffect(() => {
@@ -453,12 +445,8 @@ export default function ModelDetailPage() {
     if (!modelData) return;
     const { isAuthenticated } = useAuthStore.getState();
     if (!isAuthenticated) {
-      if (isLoginDialogEnabled()) {
-        setLoginPromptReason('收藏模型');
-        setLoginPromptOpen(true);
-      } else {
-        navigate('/login', { state: { from: location.pathname } });
-      }
+      setLoginPromptReason('收藏模型');
+      setLoginPromptOpen(true);
       return;
     }
     const wasFav = isFavorite(modelData.id);
@@ -644,7 +632,6 @@ export default function ModelDetailPage() {
             setLoginPromptReason(reason);
             setLoginPromptOpen(true);
           }}
-          onNavigateToLogin={(from) => navigate('/login', { state: { from } })}
         />
       </ModelDetailDesktopFrame>
     );
@@ -676,7 +663,7 @@ export default function ModelDetailPage() {
         {/* Bottom sheet */}
         <div
           ref={sheetRef}
-          className={`absolute bottom-0 left-0 right-0 ${viewerFullscreen ? 'z-[10000]' : 'z-30'} bg-surface-container-low rounded-t-2xl shadow-[0_-2px_20px_rgba(0,0,0,0.25)] border-t border-outline-variant/10 flex flex-col overflow-hidden`}
+          className={`absolute bottom-0 left-0 right-0 ${viewerFullscreen ? 'z-[10000]' : 'z-30'} bg-surface-container-low rounded-t-2xl shadow-bottom-panel border-t border-outline-variant/10 flex flex-col overflow-hidden`}
           onTouchStart={handleSheetTouchStart}
           onTouchEnd={handleSheetTouchEnd}
           onTouchCancel={cancelSheetDrag}
@@ -945,13 +932,10 @@ export default function ModelDetailPage() {
                   }}
                   onClick={(e) => {
                     const result = checkProtectedAccess('/support');
-                    if (result.action === 'dialog') {
+                    if (result.action === 'dialog' || result.action === 'redirect') {
                       e.preventDefault();
-                      setLoginPromptReason(result.reason);
+                      setLoginPromptReason(result.action === 'dialog' ? result.reason : '技术支持');
                       setLoginPromptOpen(true);
-                    } else if (result.action === 'redirect') {
-                      e.preventDefault();
-                      navigate('/login', { state: { from: '/support' } });
                     }
                   }}
                   className="flex items-center gap-3 p-3 rounded-sm bg-surface-container-high hover:bg-surface-container-highest transition-colors group"

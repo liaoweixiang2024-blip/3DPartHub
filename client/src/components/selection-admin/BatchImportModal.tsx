@@ -1,4 +1,5 @@
 import type { SelectionComponent } from '../../api/selections';
+import { AdminTableHeadCell, AdminTableHeadRow, ADMIN_TABLE_HEAD_CLASS } from '../shared/AdminDataTable';
 import Icon from '../shared/Icon';
 import type { SelectionImportPolicy } from './selectionAdminUtils';
 
@@ -138,13 +139,13 @@ export function BatchImportModal({
                 重新选择文件
               </button>
               <div className="max-h-48 overflow-y-auto scrollbar-hidden rounded-lg border border-outline-variant/10">
-                <table className="w-full text-xs">
-                  <thead className="sticky top-0 z-10">
-                    <tr className="bg-surface-container-low text-on-surface-variant">
-                      <th className="px-2 py-1.5 text-left">#</th>
-                      <th className="px-2 py-1.5 text-left">名称</th>
-                      <th className="px-2 py-1.5 text-left">型号</th>
-                    </tr>
+                <table className="w-full border-separate border-spacing-0 text-xs">
+                  <thead className={ADMIN_TABLE_HEAD_CLASS}>
+                    <AdminTableHeadRow>
+                      <AdminTableHeadCell className="h-8 px-2 py-1.5">#</AdminTableHeadCell>
+                      <AdminTableHeadCell className="h-8 px-2 py-1.5">名称</AdminTableHeadCell>
+                      <AdminTableHeadCell className="h-8 px-2 py-1.5">型号</AdminTableHeadCell>
+                    </AdminTableHeadRow>
                   </thead>
                   <tbody>
                     {batchParsed.slice(0, 20).map((p, i) => (

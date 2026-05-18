@@ -1,4 +1,5 @@
 import { normalizeInterfaceTheme } from './catalog';
+import './shared/base.css';
 import classicTheme from './classic';
 import type { InterfaceThemeKey, InterfaceThemePackage } from './types';
 import workbenchTheme from './workbench';

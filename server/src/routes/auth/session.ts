@@ -93,7 +93,7 @@ export function createAuthSessionRouter() {
     try {
       await sendVerifyCode(email, code);
       res.json({ message: '验证码已发送' });
-    } catch (err: any) {
+    } catch (err: unknown) {
       await redis.del(`email_code:${email}`);
       logger.error({ err: err }, '[auth] Email send failed');
       res.status(500).json({ detail: '邮件发送失败' });
@@ -205,8 +205,8 @@ export function createAuthSessionRouter() {
         user,
         tokens: { accessToken },
       });
-    } catch (err: any) {
-      if (err?.code === 'P2002') {
+    } catch (err: unknown) {
+      if (err instanceof Error && 'code' in err && (err as NodeJS.ErrnoException).code === 'P2002') {
         res.status(409).json({ detail: '用户名或邮箱已存在' });
         return;
       }
@@ -323,7 +323,9 @@ export function createAuthSessionRouter() {
           await revokeToken(payload.userId, payload.iat, 24 * 3600);
         }
       }
-    } catch {}
+    } catch {
+      /* best-effort access token revocation on logout */
+    }
     try {
       const refreshCookie = readCookie(req, REFRESH_COOKIE);
       if (refreshCookie) {
@@ -332,7 +334,9 @@ export function createAuthSessionRouter() {
           await revokeRefreshFamily(refreshPayload.userId, refreshPayload.familyId);
         }
       }
-    } catch {}
+    } catch {
+      /* best-effort refresh token revocation on logout */
+    }
     clearAuthCookies(req, res);
     res.json({ success: true });
   });

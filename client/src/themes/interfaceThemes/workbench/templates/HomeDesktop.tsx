@@ -1,12 +1,12 @@
 import { Fragment, useEffect, useRef, useState, type ChangeEvent, type CompositionEvent } from 'react';
 import { Link } from 'react-router-dom';
+import { AnnouncementBanner, SkeletonCard, SkeletonListCard } from '../../../../components/home/HomeDesktopShared';
+import type { Category } from '../../../../components/home/homeTypes';
 import Icon from '../../../../components/shared/Icon';
 import { PageTitle } from '../../../../components/shared/PagePrimitives';
 import Pagination from '../../../../components/shared/Pagination';
 import SearchField from '../../../../components/shared/SearchField';
 import VirtualProductGrid, { useGridColumnCount } from '../../../../components/shared/VirtualProductGrid';
-import { AnnouncementBanner, SkeletonCard, SkeletonListCard } from '../../shared/HomeDesktopShared';
-import type { Category } from '../../shared/homeTypes';
 import type { DesktopHomeThemeProps } from '../../types';
 
 const GRID_CARD_HEIGHT = 260;
@@ -400,7 +400,7 @@ export default function WorkbenchHomeDesktop({
     <div className="home-page-desktop flex flex-1 overflow-hidden" data-home-theme="workbench">
       <main
         ref={scrollContainerRef}
-        className="home-scroll-container home-desktop-content model-list-scrollbar flex-1 bg-surface-dim p-6 relative"
+        className="home-scroll-container home-desktop-content model-list-scrollbar flex-1 bg-surface p-6 relative"
       >
         <AnnouncementBanner />
 

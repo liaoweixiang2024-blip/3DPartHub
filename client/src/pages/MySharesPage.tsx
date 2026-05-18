@@ -261,8 +261,16 @@ export default function MySharesPage() {
       setDeleteId(null);
       mutate();
       toast('分享已删除', 'success');
-    } catch (err: any) {
-      toast(err.response?.data?.message || err.response?.data?.detail || '删除失败', 'error');
+    } catch (err: unknown) {
+      const detail = typeof err === 'object' && err !== null ? (err as Record<string, unknown>).response : undefined;
+      const data = typeof detail === 'object' && detail !== null ? (detail as Record<string, unknown>).data : undefined;
+      const msg =
+        typeof data === 'object' && data !== null
+          ? ((data as Record<string, unknown>).message as string) ||
+            ((data as Record<string, unknown>).detail as string) ||
+            '删除失败'
+          : '删除失败';
+      toast(msg, 'error');
     }
   }
 
@@ -300,8 +308,16 @@ export default function MySharesPage() {
       setSelectMode(false);
       mutate();
       toast(`已删除 ${ids.length} 条分享`, 'success');
-    } catch (err: any) {
-      toast(err.response?.data?.message || err.response?.data?.detail || '批量删除失败', 'error');
+    } catch (err: unknown) {
+      const detail = typeof err === 'object' && err !== null ? (err as Record<string, unknown>).response : undefined;
+      const data = typeof detail === 'object' && detail !== null ? (detail as Record<string, unknown>).data : undefined;
+      const msg =
+        typeof data === 'object' && data !== null
+          ? ((data as Record<string, unknown>).message as string) ||
+            ((data as Record<string, unknown>).detail as string) ||
+            '批量删除失败'
+          : '批量删除失败';
+      toast(msg, 'error');
     }
   }
 

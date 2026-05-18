@@ -15,6 +15,7 @@ import {
 import InquirySalesAssignmentDialog from '../components/inquiry/InquirySalesAssignmentDialog';
 import { AdminPageHero } from '../components/shared/AdminManagementPage';
 import { AdminPageShell } from '../components/shared/AdminPageShell';
+import ConfirmDialog from '../components/shared/ConfirmDialog';
 import Icon from '../components/shared/Icon';
 import { PageRefreshIndicator } from '../components/shared/PageRefreshFallback';
 import QuickReplyChips from '../components/shared/QuickReplyChips';
@@ -1136,6 +1137,8 @@ function DetailContent({ id }: { id: string }) {
   const [itemsEditing, setItemsEditing] = useState(false);
   const [itemDrafts, setItemDrafts] = useState<InquiryItemDraft[]>([]);
   const [savingItems, setSavingItems] = useState(false);
+  const [cancelConfirmOpen, setCancelConfirmOpen] = useState(false);
+  const [cancellingInquiry, setCancellingInquiry] = useState(false);
   const [mobileSections, setMobileSections] = useState<Record<CustomerMobileSection, boolean>>(
     DEFAULT_CUSTOMER_MOBILE_SECTIONS,
   );
@@ -1258,13 +1261,22 @@ function DetailContent({ id }: { id: string }) {
     setUploadingAttachment(false);
   }
 
-  async function handleCancel() {
+  function requestCancelInquiry() {
+    setCancelConfirmOpen(true);
+  }
+
+  async function confirmCancelInquiry() {
+    if (cancellingInquiry) return;
+    setCancellingInquiry(true);
     try {
       await cancelInquiry(id);
-      mutate();
+      await mutate();
+      setCancelConfirmOpen(false);
       toast('已取消', 'success');
     } catch (err) {
       notifyGlobalError(err, '取消失败');
+    } finally {
+      setCancellingInquiry(false);
     }
   }
 
@@ -1485,7 +1497,12 @@ function DetailContent({ id }: { id: string }) {
                 <>
                   <InquiryDetailHeaderAction icon="arrow_back" label="返回" onClick={() => navigate(-1)} />
                   {inquiry.status === 'submitted' ? (
-                    <InquiryDetailHeaderAction icon="close" label="取消询价" onClick={handleCancel} tone="danger" />
+                    <InquiryDetailHeaderAction
+                      icon="close"
+                      label="取消询价"
+                      onClick={requestCancelInquiry}
+                      tone="danger"
+                    />
                   ) : null}
                 </>
               }
@@ -1627,6 +1644,18 @@ function DetailContent({ id }: { id: string }) {
         inquiry={inquiry}
         onClose={() => setSalesAssignOpen(false)}
         onAssigned={(updated) => mutate(updated, { revalidate: false })}
+      />
+      <ConfirmDialog
+        open={cancelConfirmOpen}
+        onClose={() => {
+          if (!cancellingInquiry) setCancelConfirmOpen(false);
+        }}
+        onConfirm={confirmCancelInquiry}
+        icon="close"
+        title="确认取消询价？"
+        description="取消后该询价单将结束处理，业务人员不会继续按这份询价单报价。沟通记录仍会保留用于查看。"
+        confirmLabel={cancellingInquiry ? '取消中...' : '确认取消'}
+        confirmDisabled={cancellingInquiry}
       />
     </div>
   );

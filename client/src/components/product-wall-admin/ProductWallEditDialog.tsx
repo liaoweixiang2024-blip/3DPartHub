@@ -39,7 +39,7 @@ export function ProductWallEditDialog({
       className="px-4 py-6"
     >
       <form
-        className="w-full max-w-lg rounded-sm border border-outline-variant/18 bg-surface p-5 shadow-[0_24px_80px_rgba(0,0,0,0.22)]"
+        className="w-full max-w-lg rounded-sm border border-outline-variant/18 bg-surface p-5 shadow-modal"
         onClick={(event) => event.stopPropagation()}
         onSubmit={(event) => {
           event.preventDefault();

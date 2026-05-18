@@ -4,11 +4,13 @@ import { createSettingsAssetsRouter } from './settings/assets.js';
 import { createSettingsBackupRouter } from './settings/backup.js';
 import { createSettingsCleanupRouter } from './settings/cleanup.js';
 import { createSettingsPublicRouter } from './settings/public.js';
+import { createSettingsStorageSyncRouter } from './settings/storageSync.js';
 
 const router = Router();
 
 router.use(createSettingsBackupRouter());
 router.use(createSettingsAdminRouter());
+router.use(createSettingsStorageSyncRouter());
 router.use(createSettingsAssetsRouter());
 router.use(createSettingsCleanupRouter());
 router.use(createSettingsPublicRouter());

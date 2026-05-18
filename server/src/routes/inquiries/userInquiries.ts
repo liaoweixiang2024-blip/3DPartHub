@@ -4,13 +4,26 @@ import { basename, extname, join } from 'node:path';
 import { Router, Response } from 'express';
 import multer from 'multer';
 import { sendAcceleratedFile } from '../../lib/acceleratedDownload.js';
+import { getBusinessConfig } from '../../lib/businessConfig.js';
 import { config } from '../../lib/config.js';
 import { createProtectedResourceToken, verifyProtectedResourceToken } from '../../lib/downloadTokenStore.js';
 import { logger } from '../../lib/logger.js';
 import { prisma } from '../../lib/prisma.js';
 import { optionalString } from '../../lib/requestValidation.js';
-import { getSetting } from '../../lib/settings.js';
+import {
+  DEMAND_DUPLICATE_WINDOW_MS,
+  MESSAGE_DUPLICATE_WINDOW_MS,
+  cleanUserText,
+  duplicateSince,
+  stableStringify,
+} from '../../lib/submissionGuards.js';
+import { ticketAttachmentExts, ticketAttachmentMaxBytes, ticketAttachmentMaxSizeMb } from '../../lib/uploadLimits.js';
 import { authMiddleware, verifyRequestToken, type AuthRequest } from '../../middleware/auth.js';
+import {
+  conversationAttachmentLimiter,
+  conversationMessageLimiter,
+  demandSubmissionLimiter,
+} from '../../middleware/security.js';
 import { createNotification } from '../notifications.js';
 import { param } from './common.js';
 
@@ -33,6 +46,41 @@ const inquiryAttachmentUpload = multer({
     else cb(new Error('文件必须包含扩展名'));
   },
 });
+
+type NormalizedCreateInquiryItem = {
+  productId: string | null;
+  productName: string;
+  modelNo: string | null;
+  specs: Record<string, string> | null;
+  unit: string;
+  qty: number;
+  remark: string | null;
+};
+
+function normalizeSpecs(value: unknown): Record<string, string> | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  const entries = Object.entries(value as Record<string, unknown>)
+    .map(([key, item]) => [cleanUserText(key, 80), cleanUserText(item, 300)] as const)
+    .filter(([key, item]) => key && item)
+    .slice(0, 80);
+  return entries.length ? Object.fromEntries(entries) : null;
+}
+
+function inquiryItemSignature(items: NormalizedCreateInquiryItem[]) {
+  return stableStringify(
+    items
+      .map((item) => ({
+        productId: item.productId || '',
+        productName: item.productName,
+        modelNo: item.modelNo || '',
+        specs: item.specs || {},
+        unit: item.unit,
+        qty: item.qty,
+        remark: item.remark || '',
+      }))
+      .sort((a, b) => stableStringify(a).localeCompare(stableStringify(b))),
+  );
+}
 
 function inquiryAttachmentFileName(attachment: string | null | undefined): string | null {
   if (!attachment) return null;
@@ -136,7 +184,7 @@ export function createUserInquiriesRouter() {
   const router = Router();
 
   // Create inquiry
-  router.post('/api/inquiries', authMiddleware, async (req: AuthRequest, res: Response) => {
+  router.post('/api/inquiries', authMiddleware, demandSubmissionLimiter, async (req: AuthRequest, res: Response) => {
     try {
       const { items, remark, company, contactName, contactPhone, contactAddress } = req.body;
       if (!Array.isArray(items) || items.length === 0) {
@@ -147,16 +195,16 @@ export function createUserInquiriesRouter() {
         res.status(400).json({ detail: '单个询价单最多包含 100 个项目' });
         return;
       }
+      const requestItems = items as Array<Record<string, unknown>>;
 
       const currentUser = await prisma.user.findUnique({
         where: { id: req.user!.userId },
         select: { username: true, company: true, phone: true, address: true },
       });
-      const cleanText = (value: unknown) => (typeof value === 'string' ? value.trim() : '');
-      const finalContactName = cleanText(contactName) || currentUser?.username || '';
-      const finalContactPhone = cleanText(contactPhone) || currentUser?.phone || '';
-      const finalContactAddress = cleanText(contactAddress) || currentUser?.address || '';
-      const finalCompany = cleanText(company) || currentUser?.company || '';
+      const finalContactName = cleanUserText(contactName, 80) || currentUser?.username || '';
+      const finalContactPhone = cleanUserText(contactPhone, 80) || currentUser?.phone || '';
+      const finalContactAddress = cleanUserText(contactAddress, 300) || currentUser?.address || '';
+      const finalCompany = cleanUserText(company, 120) || currentUser?.company || '';
 
       if (!finalContactName || !finalContactPhone || !finalContactAddress) {
         res.status(400).json({ detail: '请先完善联系人、联系电话和联系地址，便于业务人员对接询价' });
@@ -164,7 +212,9 @@ export function createUserInquiriesRouter() {
       }
 
       // Resolve product names/specs from productId
-      const productIds = items.map((i: any) => i.productId).filter(Boolean) as string[];
+      const productIds = requestItems
+        .map((item) => (typeof item.productId === 'string' ? item.productId : ''))
+        .filter(Boolean);
       const products =
         productIds.length > 0
           ? await prisma.selectionProduct.findMany({
@@ -173,31 +223,79 @@ export function createUserInquiriesRouter() {
             })
           : [];
       const productMap = new Map(products.map((p) => [p.id, p]));
+      const normalizedItems: NormalizedCreateInquiryItem[] = requestItems.map((item) => {
+        const productId = typeof item.productId === 'string' ? item.productId : '';
+        const product = productId ? productMap.get(productId) : null;
+        const specs = normalizeSpecs(item.specs) || normalizeSpecs(product?.specs);
+        return {
+          productId: productId || null,
+          productName: cleanUserText(item.productName, 200) || product?.name || '未知产品',
+          modelNo: cleanUserText(item.modelNo, 200) || product?.modelNo || null,
+          specs,
+          unit: cleanUserText(item.unit, 20) || product?.unit || '个',
+          qty: Math.max(1, Math.min(999999, Math.floor(Number(item.qty) || 1))),
+          remark: cleanUserText(item.remark, 500) || null,
+        };
+      });
+      const createItems = normalizedItems.map((item) => ({
+        ...item,
+        specs: item.specs ?? undefined,
+      }));
+      const incomingSignature = inquiryItemSignature(normalizedItems);
+      const recentInquiries = await prisma.inquiry.findMany({
+        where: {
+          userId: req.user!.userId,
+          status: { not: 'cancelled' },
+          createdAt: { gte: duplicateSince(DEMAND_DUPLICATE_WINDOW_MS) },
+        },
+        select: {
+          remark: true,
+          items: {
+            select: {
+              productId: true,
+              productName: true,
+              modelNo: true,
+              specs: true,
+              unit: true,
+              qty: true,
+              remark: true,
+            },
+          },
+        },
+        orderBy: { createdAt: 'desc' },
+        take: 10,
+      });
+      const incomingRemark = cleanUserText(remark, 1000) || null;
+      const duplicate = recentInquiries.some((recent) => {
+        const recentSignature = inquiryItemSignature(
+          recent.items.map((item) => ({
+            productId: item.productId || null,
+            productName: item.productName,
+            modelNo: item.modelNo || null,
+            specs: normalizeSpecs(item.specs),
+            unit: item.unit || '个',
+            qty: item.qty,
+            remark: item.remark || null,
+          })),
+        );
+        return (recent.remark || null) === incomingRemark && recentSignature === incomingSignature;
+      });
+      if (duplicate) {
+        res.status(409).json({ detail: '类似询价单已提交，请在原询价单中补充说明' });
+        return;
+      }
 
       const inquiry = await prisma.inquiry.create({
         data: {
           userId: req.user!.userId,
           status: 'submitted',
-          remark: cleanText(remark) || null,
+          remark: incomingRemark,
           company: finalCompany || null,
           contactName: finalContactName,
           contactPhone: finalContactPhone,
           contactAddress: finalContactAddress,
           items: {
-            create: items.map((item: any) => {
-              const product = item.productId ? productMap.get(item.productId) : null;
-              const submittedSpecs =
-                item.specs && typeof item.specs === 'object' && !Array.isArray(item.specs) ? item.specs : null;
-              return {
-                productId: item.productId || null,
-                productName: item.productName || product?.name || '未知产品',
-                modelNo: item.modelNo || product?.modelNo || null,
-                specs: submittedSpecs || product?.specs || null,
-                unit: item.unit || product?.unit || '个',
-                qty: item.qty ?? 1,
-                remark: item.remark || null,
-              };
-            }),
+            create: createItems,
           },
         },
         include: { items: true },
@@ -207,7 +305,7 @@ export function createUserInquiriesRouter() {
       try {
         const admins = await prisma.user.findMany({ where: { role: 'ADMIN' }, select: { id: true } });
         await Promise.all(
-          admins.map((admin: any) =>
+          admins.map((admin) =>
             createNotification({
               userId: admin.id,
               title: '新询价单',
@@ -217,7 +315,9 @@ export function createUserInquiriesRouter() {
             }).catch(() => {}),
           ),
         );
-      } catch {}
+      } catch {
+        /* best-effort admin notification */
+      }
 
       res.status(201).json(inquiry);
     } catch (err) {
@@ -438,76 +538,104 @@ export function createUserInquiriesRouter() {
   });
 
   // Send message
-  router.post('/api/inquiries/:id/messages', authMiddleware, async (req: AuthRequest, res: Response) => {
-    try {
-      const id = param(req, 'id');
-      const { content, attachment } = req.body;
-      const normalizedAttachment = normalizeInquiryAttachmentInput(id, attachment);
-      if ((!content || !content.trim()) && !normalizedAttachment) {
-        res.status(400).json({ detail: '消息内容不能为空' });
-        return;
-      }
-
-      const inquiry = await prisma.inquiry.findUnique({ where: { id } });
-      if (!inquiry) {
-        res.status(404).json({ detail: '询价单不存在' });
-        return;
-      }
-      if (inquiry.userId !== req.user!.userId && req.user!.role !== 'ADMIN') {
-        res.status(403).json({ detail: '无权操作' });
-        return;
-      }
-
-      const isAdmin = req.user!.role === 'ADMIN';
-      const message = await prisma.inquiryMessage.create({
-        data: {
-          inquiryId: id,
-          userId: req.user!.userId,
-          content: content?.trim() || '',
-          attachment: normalizedAttachment,
-          isAdmin,
-        },
-        include: { user: { select: { id: true, username: true, avatar: true } } },
-      });
-
-      // Notify the other party
+  router.post(
+    '/api/inquiries/:id/messages',
+    authMiddleware,
+    conversationMessageLimiter,
+    async (req: AuthRequest, res: Response) => {
       try {
-        const targetUserId = isAdmin ? inquiry.userId : null;
-        if (isAdmin) {
-          await createNotification({
-            userId: targetUserId!,
-            title: '询价单回复',
-            message: `管理员回复了您的询价单`,
-            type: 'inquiry',
-            relatedId: id,
+        const id = param(req, 'id');
+        const { content, attachment } = req.body;
+        const normalizedAttachment = normalizeInquiryAttachmentInput(id, attachment);
+        const cleanContent = cleanUserText(content);
+        if (!cleanContent && !normalizedAttachment) {
+          res.status(400).json({ detail: '消息内容不能为空' });
+          return;
+        }
+
+        const inquiry = await prisma.inquiry.findUnique({ where: { id } });
+        if (!inquiry) {
+          res.status(404).json({ detail: '询价单不存在' });
+          return;
+        }
+        if (inquiry.userId !== req.user!.userId && req.user!.role !== 'ADMIN') {
+          res.status(403).json({ detail: '无权操作' });
+          return;
+        }
+        if (['cancelled', 'draft', 'rejected'].includes(inquiry.status)) {
+          res.status(400).json({ detail: '当前询价已结束，无法发送消息' });
+          return;
+        }
+
+        const isAdmin = req.user!.role === 'ADMIN';
+        if (cleanContent && !normalizedAttachment) {
+          const duplicateMessage = await prisma.inquiryMessage.findFirst({
+            where: {
+              inquiryId: id,
+              userId: req.user!.userId,
+              content: cleanContent,
+              createdAt: { gte: duplicateSince(MESSAGE_DUPLICATE_WINDOW_MS) },
+            },
+            select: { id: true },
           });
-        } else {
-          const admins = await prisma.user.findMany({ where: { role: 'ADMIN' }, select: { id: true } });
-          for (const admin of admins) {
+          if (duplicateMessage) {
+            res.status(409).json({ detail: '相同内容刚刚已发送，请勿重复提交' });
+            return;
+          }
+        }
+        const message = await prisma.inquiryMessage.create({
+          data: {
+            inquiryId: id,
+            userId: req.user!.userId,
+            content: cleanContent,
+            attachment: normalizedAttachment,
+            isAdmin,
+          },
+          include: { user: { select: { id: true, username: true, avatar: true } } },
+        });
+
+        // Notify the other party
+        try {
+          const targetUserId = isAdmin ? inquiry.userId : null;
+          if (isAdmin) {
             await createNotification({
-              userId: admin.id,
-              title: '询价单新回复',
-              message: `用户回复了询价单`,
+              userId: targetUserId!,
+              title: '询价单回复',
+              message: `管理员回复了您的询价单`,
               type: 'inquiry',
               relatedId: id,
             });
+          } else {
+            const admins = await prisma.user.findMany({ where: { role: 'ADMIN' }, select: { id: true } });
+            for (const admin of admins) {
+              await createNotification({
+                userId: admin.id,
+                title: '询价单新回复',
+                message: `用户回复了询价单`,
+                type: 'inquiry',
+                relatedId: id,
+              });
+            }
           }
+        } catch {
+          /* best-effort inquiry notification */
         }
-      } catch {}
 
-      res.json({
-        ...message,
-        attachment: createInquiryAttachmentUrl(id, message.attachment, req.user!),
-      });
-    } catch (err) {
-      logger.error({ err }, '[Inquiries] Message error');
-      res.status(500).json({ detail: '发送消息失败' });
-    }
-  });
+        res.json({
+          ...message,
+          attachment: createInquiryAttachmentUrl(id, message.attachment, req.user!),
+        });
+      } catch (err) {
+        logger.error({ err }, '[Inquiries] Message error');
+        res.status(500).json({ detail: '发送消息失败' });
+      }
+    },
+  );
 
   router.post(
     '/api/inquiries/:id/messages/upload',
     authMiddleware,
+    conversationAttachmentLimiter,
     inquiryAttachmentUpload.single('file'),
     async (req: AuthRequest, res: Response) => {
       const id = param(req, 'id');
@@ -516,18 +644,14 @@ export function createUserInquiriesRouter() {
           res.status(400).json({ detail: '请选择文件' });
           return;
         }
-        const maxMb = Math.max(1, (await getSetting<number>('ticket_attachment_max_mb')) || 100);
-        const maxBytes = maxMb * 1024 * 1024;
-        const typesStr =
-          (await getSetting<string>('ticket_attachment_types')) ||
-          'jpg,jpeg,png,gif,webp,svg,pdf,doc,docx,xls,xlsx,ppt,pptx,zip,rar,7z,step,stp,iges,igs,xt,binary';
-        const allowed = typesStr.split(',').map((s: string) => `.${s.trim().toLowerCase()}`);
+        const { uploadPolicy } = await getBusinessConfig();
+        const maxMb = ticketAttachmentMaxSizeMb(uploadPolicy);
+        const maxBytes = ticketAttachmentMaxBytes(uploadPolicy);
+        const allowed = ticketAttachmentExts(uploadPolicy);
         const ext = extname(req.file.originalname).toLowerCase();
         if (req.file.size > maxBytes || !allowed.includes(ext)) {
           rmSync(req.file.path, { force: true });
-          res
-            .status(400)
-            .json({ detail: `附件仅支持 ${allowed.join('/')}，最大 ${Math.round(maxBytes / 1024 / 1024)}MB` });
+          res.status(400).json({ detail: `附件仅支持 ${allowed.join('/')}，最大 ${maxMb}MB` });
           return;
         }
 
@@ -540,6 +664,11 @@ export function createUserInquiriesRouter() {
         if (inquiry.userId !== req.user!.userId && req.user!.role !== 'ADMIN') {
           rmSync(req.file.path, { force: true });
           res.status(403).json({ detail: '无权操作' });
+          return;
+        }
+        if (['cancelled', 'draft', 'rejected'].includes(inquiry.status)) {
+          rmSync(req.file.path, { force: true });
+          res.status(400).json({ detail: '当前询价已结束，无法上传附件' });
           return;
         }
 

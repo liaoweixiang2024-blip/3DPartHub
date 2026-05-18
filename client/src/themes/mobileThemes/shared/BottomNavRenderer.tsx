@@ -1,8 +1,7 @@
-import { useEffect, useState } from 'react';
-import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { useEffect } from 'react';
+import { Link, useLocation } from 'react-router-dom';
 import Icon from '../../../components/shared/Icon';
-import LoginConfirmDialog from '../../../components/shared/LoginConfirmDialog';
-import { checkProtectedAccess } from '../../../components/shared/ProtectedLink';
+import { useAuthEntry } from '../../../components/shared/useAuthEntry';
 import { DEFAULT_MOBILE_NAV, getBusinessConfig } from '../../../lib/businessConfig';
 import { usePublicSettings } from '../../../lib/publicSettings';
 import { preloadRouteForPath } from '../../../lib/routeLoaders';
@@ -22,12 +21,9 @@ interface BottomNavRendererProps {
 
 export default function BottomNavRenderer({ appearance }: BottomNavRendererProps) {
   const location = useLocation();
-  const navigate = useNavigate();
   const { settings } = usePublicSettings();
+  const { authNodes, handleProtectedLinkClick } = useAuthEntry(settings);
   const visibleTabs = getBusinessConfig(settings).mobileNav.slice(0, 5);
-  const [loginDialogOpen, setLoginDialogOpen] = useState(false);
-  const [loginReturnUrl, setLoginReturnUrl] = useState('');
-  const [loginDialogReason, setLoginDialogReason] = useState('');
 
   useEffect(() => {
     const viewport = window.visualViewport;
@@ -76,18 +72,7 @@ export default function BottomNavRenderer({ appearance }: BottomNavRendererProps
             onPointerEnter={() => preloadRouteForPath(tab.path)}
             onPointerDown={() => preloadRouteForPath(tab.path)}
             onFocus={() => preloadRouteForPath(tab.path)}
-            onClick={(e) => {
-              const result = checkProtectedAccess(tab.path);
-              if (result.action === 'dialog') {
-                e.preventDefault();
-                setLoginReturnUrl(result.returnUrl);
-                setLoginDialogReason(result.reason);
-                setLoginDialogOpen(true);
-              } else if (result.action === 'redirect') {
-                e.preventDefault();
-                navigate('/login', { state: { from: result.returnUrl } });
-              }
-            }}
+            onClick={(e) => handleProtectedLinkClick(e, tab.path)}
             className={appearance.linkClassName(active)}
           >
             <Icon name={tab.icon} size={appearance.iconSize} />
@@ -95,12 +80,7 @@ export default function BottomNavRenderer({ appearance }: BottomNavRendererProps
           </Link>
         );
       })}
-      <LoginConfirmDialog
-        open={loginDialogOpen}
-        onClose={() => setLoginDialogOpen(false)}
-        reason={loginDialogReason}
-        returnUrl={loginReturnUrl}
-      />
+      {authNodes}
     </nav>
   );
 }

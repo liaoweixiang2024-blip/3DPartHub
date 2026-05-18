@@ -4,6 +4,7 @@ export const classicThemeManifest: InterfaceThemeMeta = {
   key: 'classic',
   label: 'PartHub 经典版',
   settingsLabel: 'PartHub Classic（PartHub 经典版）',
+  shortLabel: '经典版',
   description: '保留旧版图标导航和原有页面体验，作为稳定基线主题独立维护。',
   author: '3DPartHub',
   version: '1.0.0',

@@ -42,6 +42,12 @@ export const notFound = (message = '资源不存在', options?: { code?: string;
 export const conflict = (message = '数据冲突', options?: { code?: string; details?: unknown }) =>
   httpError(409, message, options);
 
+export function getErrorMessage(err: unknown): string {
+  if (err instanceof Error) return err.message;
+  if (typeof err === 'string') return err;
+  return String(err);
+}
+
 export function asyncHandler<Req extends Request = Request, Res extends Response = Response>(
   handler: AsyncRouteHandler<Req, Res>,
 ): RequestHandler {

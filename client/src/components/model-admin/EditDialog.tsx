@@ -3,11 +3,14 @@ import { useEffect, useState } from 'react';
 import { type CategoryItem } from '../../api/categories';
 import { openModelDrawing } from '../../api/downloads';
 import { modelApi, type ServerModelListItem } from '../../api/models';
+import { AdminButton, AdminIconButton } from '../../components/shared/AdminControls';
 import CategorySelect from '../../components/shared/CategorySelect';
 import DialogOverlay from '../../components/shared/DialogOverlay';
+import { AppFormLabel, AppTextArea, AppTextInput } from '../../components/shared/FormControls';
 import Icon from '../../components/shared/Icon';
 import ModelThumbnail from '../../components/shared/ModelThumbnail';
 import { useToast } from '../../components/shared/Toast';
+import { getBusinessConfig } from '../../lib/businessConfig';
 import { MODEL_SOURCE_ACCEPT, MODEL_SOURCE_FORMATS, MODEL_SOURCE_LABEL } from './shared';
 
 export default function EditDialog({
@@ -34,6 +37,9 @@ export default function EditDialog({
   const [drawingUploading, setDrawingUploading] = useState(false);
   const [drawingUrl, setDrawingUrl] = useState<string | null>(null);
   const [fileReplacing, setFileReplacing] = useState(false);
+  const { uploadPolicy } = getBusinessConfig();
+  const imageMaxBytes = Math.max(1, Number(uploadPolicy.productWallImageMaxSizeMb) || 8) * 1024 * 1024;
+  const drawingMaxBytes = Math.max(1, Number(uploadPolicy.modelDrawingMaxSizeMb) || 500) * 1024 * 1024;
 
   useEffect(() => {
     if (model) {
@@ -74,6 +80,14 @@ export default function EditDialog({
   };
 
   const handleThumbnailUpload = async (file: File) => {
+    if (!['image/png', 'image/jpeg', 'image/webp'].includes(file.type)) {
+      toast('仅支持 PNG/JPEG/WebP 图片', 'error');
+      return;
+    }
+    if (file.size > imageMaxBytes) {
+      toast(`图片不能超过 ${uploadPolicy.productWallImageMaxSizeMb}MB`, 'error');
+      return;
+    }
     setThumbnailUploading(true);
     let ok = false;
     try {
@@ -123,13 +137,13 @@ export default function EditDialog({
           >
             <div className="flex items-center justify-between mb-6">
               <h3 className="font-headline text-lg font-semibold text-on-surface">编辑模型</h3>
-              <button onClick={onClose} className="p-1 text-on-surface-variant hover:text-on-surface transition-colors">
-                <Icon name="close" size={20} />
-              </button>
+              <AdminIconButton icon="close" onClick={onClose} variant="ghost" aria-label="关闭" />
             </div>
             <div className="space-y-4">
               <div className="flex flex-col gap-1.5">
-                <label className="text-xs uppercase tracking-wider text-on-surface-variant">预览图</label>
+                <AppFormLabel uppercase className="mb-0">
+                  预览图
+                </AppFormLabel>
                 <div className="flex flex-col sm:flex-row sm:items-center gap-3">
                   <div className="w-16 h-16 rounded-sm bg-surface-container-highest shrink-0 overflow-hidden">
                     <ModelThumbnail src={thumbnailUrl} alt="" className="w-full h-full object-cover" />
@@ -146,44 +160,45 @@ export default function EditDialog({
                         e.target.value = '';
                       }}
                     />
-                    <button
+                    <AdminButton
                       onClick={() => document.getElementById('thumb-upload')?.click()}
                       disabled={thumbnailUploading}
-                      className="flex items-center justify-center gap-1.5 px-3 py-1.5 text-xs text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high rounded-sm transition-colors border border-outline-variant/20 disabled:opacity-50"
+                      icon="upload"
+                      size="sm"
+                      variant="secondary"
+                      className="w-full sm:w-auto"
                     >
-                      <Icon name="upload" size={14} />
                       {thumbnailUploading ? '上传中...' : '上传图片'}
-                    </button>
-                    <button
+                    </AdminButton>
+                    <AdminButton
                       onClick={handleRegenerate}
                       disabled={regenerating}
-                      className="flex items-center justify-center gap-1.5 px-3 py-1.5 text-xs text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high rounded-sm transition-colors border border-outline-variant/20 disabled:opacity-50"
+                      icon="refresh"
+                      size="sm"
+                      variant="secondary"
+                      className="w-full sm:w-auto"
                     >
-                      <Icon name="refresh" size={14} />
                       {regenerating ? '生成中...' : '从模型重新生成'}
-                    </button>
+                    </AdminButton>
                   </div>
                 </div>
               </div>
               <div className="flex flex-col gap-1.5">
-                <label className="text-xs uppercase tracking-wider text-on-surface-variant">名称</label>
-                <input
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  className="w-full bg-surface-container-lowest text-on-surface border border-outline-variant/30 focus:border-primary px-3 py-2 text-sm rounded-sm outline-none"
-                />
+                <AppFormLabel uppercase className="mb-0">
+                  名称
+                </AppFormLabel>
+                <AppTextInput value={name} onChange={(e) => setName(e.target.value)} />
               </div>
               <div className="flex flex-col gap-1.5">
-                <label className="text-xs uppercase tracking-wider text-on-surface-variant">描述</label>
-                <textarea
-                  value={description}
-                  onChange={(e) => setDescription(e.target.value)}
-                  rows={3}
-                  className="w-full bg-surface-container-lowest text-on-surface border border-outline-variant/30 focus:border-primary px-3 py-2 text-sm rounded-sm outline-none resize-none"
-                />
+                <AppFormLabel uppercase className="mb-0">
+                  描述
+                </AppFormLabel>
+                <AppTextArea value={description} onChange={(e) => setDescription(e.target.value)} rows={3} />
               </div>
               <div className="flex flex-col gap-1.5">
-                <label className="text-xs uppercase tracking-wider text-on-surface-variant">分类</label>
+                <AppFormLabel uppercase className="mb-0">
+                  分类
+                </AppFormLabel>
                 <CategorySelect
                   categories={categories}
                   value={categoryId}
@@ -192,7 +207,9 @@ export default function EditDialog({
                 />
               </div>
               <div className="flex flex-col gap-1.5">
-                <label className="text-xs uppercase tracking-wider text-on-surface-variant">产品图纸 (PDF)</label>
+                <AppFormLabel uppercase className="mb-0">
+                  产品图纸 (PDF)
+                </AppFormLabel>
                 <div className="flex items-center gap-3 min-w-0">
                   {drawingUrl ? (
                     <div className="flex flex-wrap items-center gap-2 flex-1 min-w-0">
@@ -239,6 +256,10 @@ export default function EditDialog({
                             toast('仅支持 PDF 格式', 'error');
                             return;
                           }
+                          if (f.size > drawingMaxBytes) {
+                            toast(`PDF 图纸不能超过 ${uploadPolicy.modelDrawingMaxSizeMb}MB`, 'error');
+                            return;
+                          }
                           setDrawingUploading(true);
                           let ok = false;
                           try {
@@ -255,20 +276,22 @@ export default function EditDialog({
                           e.target.value = '';
                         }}
                       />
-                      <button
+                      <AdminButton
                         onClick={() => document.getElementById('drawing-upload')?.click()}
                         disabled={drawingUploading}
-                        className="flex items-center gap-1.5 px-3 py-1.5 text-xs text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high rounded-sm transition-colors border border-outline-variant/20 disabled:opacity-50 w-full justify-center"
+                        icon="upload_file"
+                        size="sm"
+                        variant="secondary"
+                        className="w-full justify-center"
                       >
-                        <Icon name="upload_file" size={14} />
                         {drawingUploading ? '上传中...' : '上传 PDF 图纸'}
-                      </button>
+                      </AdminButton>
                     </>
                   )}
                 </div>
               </div>
               <div className="border-t border-outline-variant/20 pt-4 mt-1">
-                <label className="text-xs uppercase tracking-wider text-on-surface-variant">替换模型文件</label>
+                <AppFormLabel uppercase>替换模型文件</AppFormLabel>
                 <p className="text-[10px] text-on-surface-variant/60 mt-1 mb-2">替换后将重新转换，预计耗时 30 秒</p>
                 <input
                   type="file"
@@ -301,29 +324,24 @@ export default function EditDialog({
                     e.target.value = '';
                   }}
                 />
-                <button
+                <AdminButton
                   onClick={() => document.getElementById('replace-file-upload')?.click()}
                   disabled={fileReplacing}
-                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high rounded-sm transition-colors border border-outline-variant/20 disabled:opacity-50 w-full justify-center"
+                  icon="swap_horiz"
+                  size="sm"
+                  variant="secondary"
+                  className="w-full"
                 >
-                  <Icon name="swap_horiz" size={14} />
                   {fileReplacing ? '上传中...' : '选择新模型文件'}
-                </button>
+                </AdminButton>
               </div>
               <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-2 sm:gap-3 pt-2">
-                <button
-                  onClick={onClose}
-                  className="px-4 py-2 text-sm text-on-surface-variant hover:text-on-surface transition-colors"
-                >
+                <AdminButton onClick={onClose} variant="secondary">
                   取消
-                </button>
-                <button
-                  onClick={handleSave}
-                  disabled={saving}
-                  className="px-6 py-2 bg-primary-container text-on-primary rounded-sm text-sm hover:bg-primary transition-colors disabled:opacity-50"
-                >
+                </AdminButton>
+                <AdminButton onClick={handleSave} disabled={saving} variant="primary">
                   {saving ? '保存中...' : '保存'}
-                </button>
+                </AdminButton>
               </div>
             </div>
           </motion.div>

@@ -3,6 +3,8 @@ export const MODEL_STATUS = {
   PROCESSING: 'processing',
   COMPLETED: 'completed',
   FAILED: 'failed',
+  DELETED: 'deleted',
+  PURGING: 'purging',
 } as const;
 
 export type ModelStatus = (typeof MODEL_STATUS)[keyof typeof MODEL_STATUS];

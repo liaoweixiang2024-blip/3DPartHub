@@ -2,6 +2,11 @@
   --workbench-page-gutter: clamp(1.25rem, 3vw, 3.25rem);
   --workbench-layout-gap: clamp(0.75rem, 1.2vw, 1rem);
   --workbench-home-gap: clamp(1.25rem, 1.8vw, 1.75rem);
+  --workbench-chrome-spring: cubic-bezier(0.22, 1.12, 0.36, 1);
+  --workbench-clean-page-bg: var(--color-surface-dim);
+  --workbench-chrome-bg: color-mix(in srgb, var(--color-surface-container-low) 88%, var(--color-surface-dim) 12%);
+  --workbench-chrome-border: color-mix(in srgb, var(--color-outline-variant) 18%, transparent);
+  --workbench-panel-bg: var(--color-surface-container-low);
   --workbench-sidebar-width: clamp(13.25rem, 15.5vw, 14.75rem);
   --workbench-content-column: calc(
     100vw - (var(--workbench-page-gutter) * 2) - var(--workbench-sidebar-width) - var(--workbench-layout-gap)
@@ -9,6 +14,160 @@
   --workbench-content-max: calc(
     var(--workbench-sidebar-width) + var(--workbench-layout-gap) + var(--workbench-content-column)
   );
+  background: var(--workbench-clean-page-bg);
+  background-color: var(--workbench-clean-page-bg);
+}
+
+[data-interface-theme='workbench'].bg-surface,
+[data-interface-theme='workbench'] .bg-surface,
+[data-interface-theme='workbench'].bg-surface-dim,
+[data-interface-theme='workbench'] .bg-surface-dim {
+  background: var(--workbench-clean-page-bg) !important;
+  background-color: var(--workbench-clean-page-bg) !important;
+}
+
+[data-interface-theme='workbench'] .app-page {
+  --app-page-radius: 0.875rem;
+  --app-page-border: color-mix(in srgb, var(--color-outline-variant) 11%, transparent);
+  --app-page-surface: var(--workbench-panel-bg);
+  --app-page-hero-surface: var(--workbench-panel-bg);
+  --app-page-surface-soft: color-mix(in srgb, var(--workbench-panel-bg) 72%, transparent);
+}
+
+[data-interface-theme='workbench'] .app-page-hero,
+[data-interface-theme='workbench'] .app-page-toolbar,
+[data-interface-theme='workbench'] .app-content-panel,
+[data-interface-theme='workbench'] .app-stat-card {
+  border-color: var(--app-page-border);
+  border-radius: var(--app-page-radius);
+  background: var(--app-page-surface);
+  box-shadow: 0 1px 2px color-mix(in srgb, var(--color-shadow) 4%, transparent);
+}
+
+[data-interface-theme='workbench'] .app-page-hero {
+  background: var(--app-page-hero-surface);
+  padding-block: 0.875rem;
+  box-shadow: 0 1px 2px color-mix(in srgb, var(--color-shadow) 4%, transparent);
+}
+
+[data-interface-theme='workbench'] .app-page-hero-inner {
+  min-height: 3rem;
+}
+
+[data-interface-theme='workbench'] .app-page-title {
+  font-size: 1.0625rem;
+  font-weight: 650;
+  letter-spacing: 0;
+  line-height: 1.5rem;
+  text-transform: none;
+}
+
+[data-interface-theme='workbench'] .app-page-description {
+  margin-top: 0.25rem;
+  color: color-mix(in srgb, var(--color-on-surface-variant) 72%, transparent);
+}
+
+[data-interface-theme='workbench'] .app-page-meta {
+  border-color: color-mix(in srgb, var(--color-outline-variant) 12%, transparent);
+  background: var(--color-surface-container);
+  color: color-mix(in srgb, var(--color-on-surface-variant) 78%, transparent);
+}
+
+[data-interface-theme='workbench'] .app-page-toolbar {
+  padding: 0.625rem;
+}
+
+[data-interface-theme='workbench'] .app-content-panel {
+  background: var(--workbench-panel-bg);
+}
+
+[data-interface-theme='workbench'] .app-public-tool-page {
+  gap: 1.125rem;
+}
+
+[data-interface-theme='workbench'] .app-public-tool-page .app-page-description {
+  font-size: 0.8125rem;
+}
+
+[data-interface-theme='workbench'] .app-public-tool-page .app-page-toolbar {
+  border-color: var(--app-page-border);
+  background: var(--workbench-panel-bg);
+}
+
+[data-interface-theme='workbench'] .app-public-tool-page-selection .app-content-panel,
+[data-interface-theme='workbench'] .app-public-tool-page-thread-size .app-content-panel {
+  border-color: transparent;
+  background: transparent;
+  box-shadow: none;
+}
+
+[data-interface-theme='workbench'] .app-public-tool-page-selection [data-selection-category-card] {
+  min-height: 5.625rem;
+  border-color: color-mix(in srgb, var(--color-outline-variant) 9%, transparent);
+  background: var(--workbench-panel-bg);
+  box-shadow: 0 1px 2px color-mix(in srgb, var(--color-shadow) 4%, transparent);
+}
+
+[data-interface-theme='workbench'] .app-public-tool-page-selection [data-selection-category-card]:hover {
+  border-color: color-mix(in srgb, var(--color-primary-container) 24%, var(--color-outline-variant));
+  background: var(--color-surface-container-lowest);
+}
+
+[data-interface-theme='workbench'] .app-public-tool-page-selection [data-selection-category-card] > span:first-child,
+[data-interface-theme='workbench'] .app-public-tool-page-selection [data-selection-category-card] > div:first-child {
+  background: color-mix(in srgb, var(--color-primary-container) 4%, transparent);
+}
+
+[data-interface-theme='workbench'] .app-public-tool-page-product-wall .app-page-toolbar {
+  padding: 0.625rem 0.75rem;
+}
+
+[data-interface-theme='workbench'] .app-public-tool-page-product-wall .product-wall-toolbar {
+  min-height: 2.75rem;
+}
+
+[data-interface-theme='workbench'] .app-public-tool-page-product-wall .product-wall-search {
+  height: 2.25rem;
+}
+
+[data-interface-theme='workbench'] .app-public-tool-page-product-wall .product-wall-masonry {
+  gap: clamp(0.875rem, 1.2vw, 1.125rem);
+}
+
+[data-interface-theme='workbench'] .app-public-tool-page-product-wall .product-wall-masonry-column {
+  gap: clamp(0.875rem, 1.2vw, 1.125rem);
+}
+
+[data-interface-theme='workbench'] .app-public-tool-page-product-wall .product-wall-card {
+  border-radius: 0.75rem;
+}
+
+[data-interface-theme='workbench'] .app-public-tool-page-thread-size .app-page-toolbar {
+  padding: 0.5rem 0.75rem;
+}
+
+[data-interface-theme='workbench'] .app-public-tool-page-thread-size [data-thread-size-scroll='primary'] {
+  border: 1px solid color-mix(in srgb, var(--color-outline-variant) 9%, transparent);
+  border-radius: 0.75rem;
+  background: var(--workbench-panel-bg);
+}
+
+[data-interface-theme='workbench'] .app-public-tool-page-thread-size table thead {
+  background: color-mix(in srgb, var(--color-surface-container-high) 44%, transparent);
+}
+
+[data-interface-theme='workbench'] .app-public-tool-page-thread-size table th {
+  color: color-mix(in srgb, var(--color-on-surface) 82%, transparent);
+  font-size: 0.75rem;
+  font-weight: 650;
+}
+
+[data-interface-theme='workbench'] .app-public-tool-page-thread-size table td {
+  font-size: 0.875rem;
+}
+
+[data-interface-theme='workbench'] .admin-copyright-badge {
+  display: none;
 }
 
 [data-interface-theme='workbench'] .workbench-page-content {
@@ -16,7 +175,23 @@
   max-width: none;
   margin-right: 0;
   margin-left: 0;
+  background: var(--workbench-clean-page-bg);
   padding: 1.25rem var(--workbench-page-gutter) 1.875rem;
+}
+
+[data-interface-theme='workbench'] main.bg-surface-dim,
+[data-interface-theme='workbench'] .bg-surface-dim {
+  background: var(--workbench-clean-page-bg) !important;
+}
+
+[data-interface-theme='workbench'] .workbench-top-nav {
+  border-bottom-color: var(--workbench-chrome-border) !important;
+  background: var(--workbench-chrome-bg) !important;
+  background-color: var(--workbench-chrome-bg) !important;
+  box-shadow:
+    0 1px 0 color-mix(in srgb, var(--color-surface-container-highest) 32%, transparent),
+    0 8px 20px color-mix(in srgb, var(--color-shadow) 3%, transparent);
+  backdrop-filter: none;
 }
 
 [data-interface-theme='workbench'] .workbench-page-content > * {
@@ -41,8 +216,20 @@
 
 [data-interface-theme='workbench'] .workbench-brand-link {
   position: relative;
-  width: var(--workbench-sidebar-width);
+  width: auto;
+  max-width: min(17rem, 28vw);
   padding-right: 0.875rem;
+  transition:
+    max-width 420ms var(--workbench-chrome-spring),
+    padding-right 420ms var(--workbench-chrome-spring),
+    opacity 240ms ease,
+    transform 420ms var(--workbench-chrome-spring);
+  will-change: max-width, transform;
+}
+
+[data-interface-theme='workbench'] .workbench-top-nav-inner-aligned .workbench-brand-link {
+  width: var(--workbench-sidebar-width);
+  max-width: var(--workbench-sidebar-width);
 }
 
 [data-interface-theme='workbench'] .workbench-brand-link::after {
@@ -61,7 +248,19 @@
   overflow-x: auto;
   overflow-y: hidden;
   scrollbar-width: none;
+  transition:
+    transform 420ms var(--workbench-chrome-spring),
+    opacity 240ms ease;
+  will-change: transform, opacity;
   -webkit-overflow-scrolling: touch;
+}
+
+[data-interface-theme='workbench'] .workbench-top-nav-inner-compact .workbench-top-nav-menu {
+  transform: translateX(-0.0625rem);
+}
+
+[data-interface-theme='workbench'] .workbench-top-nav-inner-aligned .workbench-top-nav-menu {
+  transform: translateX(0);
 }
 
 [data-interface-theme='workbench'] .workbench-top-nav-menu::-webkit-scrollbar {
@@ -121,7 +320,13 @@
 }
 
 [data-interface-theme='workbench'] .workbench-brand-link > span {
+  width: auto;
+  max-width: 100%;
   gap: 0.5rem;
+}
+
+[data-interface-theme='workbench'] .workbench-top-nav-inner-aligned .workbench-brand-link > span {
+  width: 100%;
 }
 
 [data-interface-theme='workbench'] .workbench-brand-link [data-brand-part='icon'],
@@ -141,13 +346,7 @@
 }
 
 [data-interface-theme='workbench'] .workbench-auth-page {
-  background:
-    linear-gradient(
-      180deg,
-      color-mix(in srgb, var(--color-surface-container-low) 44%, transparent) 0,
-      transparent 18rem
-    ),
-    var(--color-surface);
+  background: var(--workbench-clean-page-bg);
 }
 
 [data-interface-theme='workbench'] .workbench-auth-dialog {
@@ -184,7 +383,7 @@
 }
 
 [data-interface-theme='workbench'] .workbench-auth-dialog-register .workbench-auth-body {
-  background: color-mix(in srgb, var(--color-surface-container-low) 72%, var(--color-surface));
+  background: var(--workbench-panel-bg);
 }
 
 [data-interface-theme='workbench'] .workbench-auth-dialog form > :not([hidden]) ~ :not([hidden]) {
@@ -449,13 +648,7 @@
 }
 
 .home-page-desktop[data-home-theme='workbench'] .home-desktop-content {
-  background:
-    linear-gradient(
-      180deg,
-      color-mix(in srgb, var(--color-surface-container-low) 40%, transparent) 0,
-      transparent 15rem
-    ),
-    color-mix(in srgb, var(--color-surface-dim) 72%, var(--color-surface) 28%);
+  background: var(--workbench-clean-page-bg);
   min-height: 0;
   overflow-x: hidden;
   overflow-y: auto;
@@ -473,16 +666,34 @@
 }
 
 .home-page-desktop[data-home-theme='workbench'] .home-title-toolbar {
+  position: relative;
   width: 100%;
   margin-top: 0;
-  margin-bottom: 0.75rem;
-  border-bottom: 1px solid color-mix(in srgb, var(--color-outline-variant) 9%, transparent);
-  padding-bottom: 0.625rem;
+  margin-bottom: 1rem;
+  border: 1px solid color-mix(in srgb, var(--color-outline-variant) 12%, transparent);
+  border-radius: 0.875rem;
+  background: var(--workbench-panel-bg);
+  padding: 0.75rem 0.875rem;
+  box-shadow: 0 1px 2px color-mix(in srgb, var(--color-shadow) 4%, transparent);
+}
+
+.home-page-desktop[data-home-theme='workbench'] .home-title-toolbar::before {
+  position: absolute;
+  top: 0.75rem;
+  bottom: 0.75rem;
+  left: 0;
+  width: 2px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--color-primary-container) 74%, var(--color-primary));
+  content: '';
+  opacity: 0.8;
 }
 
 .home-page-desktop[data-home-theme='workbench'] .home-title-mainline h1 {
-  font-size: 1.375rem;
+  font-size: 1.0625rem;
+  font-weight: 650;
   letter-spacing: 0;
+  line-height: 1.5rem;
 }
 
 .home-page-desktop[data-home-theme='workbench'] .home-title-mainbar {
@@ -502,13 +713,14 @@
 
 .home-page-desktop[data-home-theme='workbench'] .home-title-count-badge {
   display: inline-flex;
-  min-width: 4.75rem;
+  min-width: 0;
   flex: 0 0 auto;
-  justify-content: flex-start;
-  border: 0;
-  background: transparent;
-  padding: 0;
-  color: color-mix(in srgb, var(--color-on-surface-variant) 66%, transparent);
+  justify-content: center;
+  border: 1px solid color-mix(in srgb, var(--color-outline-variant) 14%, transparent);
+  border-radius: 999px;
+  background: var(--color-surface-container);
+  padding: 0.1875rem 0.5625rem;
+  color: color-mix(in srgb, var(--color-on-surface-variant) 78%, transparent);
   font-variant-numeric: tabular-nums;
   font-weight: 650;
 }
@@ -546,15 +758,17 @@
   flex: none;
   border-radius: 0.625rem;
   border-color: color-mix(in srgb, var(--color-outline-variant) 24%, transparent);
-  background-color: color-mix(in srgb, var(--color-surface-container-lowest) 58%, transparent);
+  background-color: var(--color-surface-container-lowest);
   transition:
     background-color 150ms ease,
-    border-color 150ms ease;
+    border-color 150ms ease,
+    box-shadow 150ms ease;
 }
 
 .home-page-desktop[data-home-theme='workbench'] .home-workbench-title-search:focus-within {
   border-color: color-mix(in srgb, var(--color-primary-container) 48%, var(--color-outline-variant));
-  background-color: color-mix(in srgb, var(--color-surface-container-lowest) 82%, transparent);
+  background-color: var(--color-surface-container-lowest);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--color-primary-container) 7%, transparent);
 }
 
 .home-page-desktop[data-home-theme='workbench'] .home-sort-control {
@@ -576,7 +790,7 @@
   border: 1px solid;
   border-radius: 0.625rem;
   border-color: color-mix(in srgb, var(--color-outline-variant) 28%, transparent);
-  background-color: color-mix(in srgb, var(--color-surface-container-lowest) 58%, transparent);
+  background-color: var(--color-surface-container-lowest);
   color: var(--color-on-surface);
   padding: 0 0.6875rem 0 0.75rem;
   font-size: 0.875rem;
@@ -598,12 +812,12 @@
 
 .home-page-desktop[data-home-theme='workbench'] .home-sort-control:hover .home-sort-button {
   border-color: color-mix(in srgb, var(--color-primary-container) 26%, var(--color-outline-variant));
-  background-color: color-mix(in srgb, var(--color-surface-container-lowest) 76%, transparent);
+  background-color: var(--color-surface-container-lowest);
 }
 
 .home-page-desktop[data-home-theme='workbench'] .home-sort-button:focus-visible {
   border-color: color-mix(in srgb, var(--color-primary-container) 48%, var(--color-outline-variant));
-  background-color: color-mix(in srgb, var(--color-surface-container-lowest) 86%, transparent);
+  background-color: var(--color-surface-container-lowest);
 }
 
 .home-page-desktop[data-home-theme='workbench'] .home-sort-icon,
@@ -631,7 +845,7 @@
   gap: 0.1875rem;
   border: 1px solid color-mix(in srgb, var(--color-outline-variant) 16%, transparent);
   border-radius: 0.75rem;
-  background: color-mix(in srgb, var(--color-surface-container-lowest) 96%, var(--color-surface));
+  background: var(--color-surface-container-lowest);
   padding: 0.3125rem;
   box-shadow:
     0 1px 0 color-mix(in srgb, var(--color-surface-bright) 60%, transparent) inset,
@@ -679,7 +893,7 @@
 .home-page-desktop[data-home-theme='workbench'] .home-toolbar-actions > .flex {
   border-color: color-mix(in srgb, var(--color-outline-variant) 28%, transparent);
   border-radius: 0.625rem;
-  background-color: color-mix(in srgb, var(--color-surface-container-lowest) 50%, transparent);
+  background-color: var(--color-surface-container-lowest);
 }
 
 .home-page-desktop[data-home-theme='workbench'] .home-workbench-layout {
@@ -728,11 +942,11 @@
   align-self: start;
   contain: layout paint;
   overflow: hidden;
-  border: 0;
-  border-radius: 0;
-  background: transparent;
-  padding: 0.125rem 0.25rem 0.125rem 0;
-  box-shadow: none;
+  border: 1px solid color-mix(in srgb, var(--color-outline-variant) 9%, transparent);
+  border-radius: 0.875rem;
+  background: var(--workbench-panel-bg);
+  padding: 0.625rem 0.5rem;
+  box-shadow: 0 1px 2px color-mix(in srgb, var(--color-shadow) 3%, transparent);
 }
 
 .home-page-desktop[data-home-theme='workbench'] .home-workbench-category-sidebar-header {
@@ -760,7 +974,7 @@
   max-width: 7.5rem;
   overflow: hidden;
   border-radius: 999px;
-  background: color-mix(in srgb, var(--color-surface-container-high) 34%, transparent);
+  background: var(--color-surface-container);
   padding: 0.125rem 0.4375rem;
   color: color-mix(in srgb, var(--color-on-surface-variant) 70%, transparent);
   font-size: 0.6875rem;
@@ -821,7 +1035,7 @@
 .home-page-desktop[data-home-theme='workbench'] .home-workbench-sidebar-item svg {
   box-sizing: content-box;
   border-radius: 0.5625rem;
-  background: color-mix(in srgb, var(--color-surface-container-high) 38%, transparent);
+  background: var(--color-surface-container-lowest);
   color: color-mix(in srgb, var(--color-on-surface-variant) 68%, transparent);
   padding: 0.25rem;
 }
@@ -900,7 +1114,7 @@
 .home-page-desktop[data-home-theme='workbench'] .home-workbench-sidebar-child span:last-child {
   justify-self: end;
   border-radius: 999px;
-  background: color-mix(in srgb, var(--color-surface-container-high) 34%, transparent);
+  background: var(--color-surface-container);
   padding: 0.0625rem 0.3125rem;
   color: color-mix(in srgb, var(--color-on-surface-variant) 70%, transparent);
   font-size: 0.6875rem;
@@ -976,15 +1190,9 @@
   }
 
   [data-interface-theme='workbench'] .workbench-nav-link {
-    gap: 0.3125rem;
     padding-right: 0.4375rem;
     padding-left: 0.4375rem;
     font-size: 0.78125rem;
-  }
-
-  [data-interface-theme='workbench'] .workbench-nav-link svg {
-    width: 0.875rem;
-    height: 0.875rem;
   }
 
   [data-interface-theme='workbench'] .workbench-top-nav-tools {

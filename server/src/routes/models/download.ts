@@ -6,6 +6,7 @@ import { logger } from '../../lib/logger.js';
 import { optionalString, booleanFlag } from '../../lib/requestValidation.js';
 import { getSetting } from '../../lib/settings.js';
 import { getVerifiedRequestUser, verifyRequestToken } from '../../middleware/auth.js';
+import { trackActiveModelDownload } from '../../services/activeModelDownloads.js';
 import { enqueueModelDownloadRecord } from '../../services/modelDownloadQueue.js';
 import {
   DailyDownloadLimitError,
@@ -144,12 +145,28 @@ export function createModelDownloadRouter({ prisma, getMeta }: ModelDownloadCont
       }
     }
 
-    sendAcceleratedFile(req, res, {
-      filePath: target.filePath,
-      fileName: target.fileName,
-      contentType: target.contentType,
-      disposition: 'attachment',
-    });
+    let releaseActiveDownload: (() => void) | null = null;
+    if (target.record?.modelId) {
+      releaseActiveDownload = trackActiveModelDownload(target.record.modelId);
+      const releaseOnce = () => {
+        releaseActiveDownload?.();
+        releaseActiveDownload = null;
+      };
+      res.once('close', releaseOnce);
+      res.once('finish', releaseOnce);
+    }
+
+    try {
+      sendAcceleratedFile(req, res, {
+        filePath: target.filePath,
+        fileName: target.fileName,
+        contentType: target.contentType,
+        disposition: 'attachment',
+      });
+    } catch (err) {
+      releaseActiveDownload?.();
+      throw err;
+    }
   });
 
   return router;

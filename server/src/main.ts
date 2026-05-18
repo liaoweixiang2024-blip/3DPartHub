@@ -188,8 +188,8 @@ function backupRestoreLockIsActive(): boolean {
     if (!pid) return false;
     process.kill(pid, 0);
     return true;
-  } catch (err: any) {
-    return err?.code === 'EPERM';
+  } catch (err: unknown) {
+    return (err as NodeJS.ErrnoException)?.code === 'EPERM';
   }
 }
 
@@ -206,7 +206,9 @@ try {
       }
     }
   }
-} catch {}
+} catch (err) {
+  logger.warn({ err }, 'Failed to clean up internal work directories on startup');
+}
 
 // Rate limiting
 app.use('/api/auth/login', authLimiter);
@@ -342,7 +344,8 @@ app.get('/api/models/count', async (req, res) => {
       return { total };
     });
     res.set('X-Cache', hit ? 'HIT' : 'MISS').json(value);
-  } catch {
+  } catch (err) {
+    logger.warn({ err }, 'Failed to compute model count, returning fallback');
     res.json({ total: 0 });
   }
 });
@@ -395,7 +398,7 @@ app.listen(PORT, async () => {
       );
     }
   } catch {
-    // _prisma_migrations might not exist yet — ignore
+    logger.debug('Pending migrations check skipped — _prisma_migrations table may not exist yet');
   }
 
   await initDefaultSettings();
@@ -412,7 +415,9 @@ app.listen(PORT, async () => {
       for (const p of paths) {
         try {
           return (await import(p)) as T;
-        } catch {}
+        } catch {
+          logger.debug({ path: p }, 'Seed module not found at path, trying next');
+        }
       }
       return null;
     };
@@ -487,10 +492,12 @@ app.listen(PORT, async () => {
           'Admin account created (first run only)',
         );
       } catch {
-        // Another worker created admin first — safe to ignore
+        logger.debug('Admin account creation skipped — another worker created it first');
       }
     }
-  } catch {}
+  } catch (err) {
+    logger.warn({ err }, 'Admin account seeding failed');
+  }
 
   if (process.env.NODE_ENV === 'production') {
     const insecureDefaults: string[] = [];
@@ -532,7 +539,7 @@ app.listen(PORT, async () => {
       }
     }
   } catch {
-    // _prisma_migrations might not exist yet — ignore
+    logger.debug('Startup migration safety check skipped — _prisma_migrations table may not exist yet');
   }
 
   if (process.env.CACHE_WARMUP_ENABLED !== '0') {
@@ -545,7 +552,9 @@ app.listen(PORT, async () => {
       try {
         const mem = process.memoryUsage();
         process.send?.({ type: 'memory', rss: mem.rss });
-      } catch {}
+      } catch (err) {
+        logger.debug({ err }, 'Failed to report memory usage to primary process');
+      }
     }, 60000);
   }
 });

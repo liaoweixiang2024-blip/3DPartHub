@@ -2,7 +2,7 @@ import type { CategoryItem } from '../../api/categories';
 import type { ServerModelListItem } from '../../api/models';
 import { DEFAULT_PAGE_SIZE, normalizePageSize } from '../../components/shared/Pagination';
 import { normalizeHomeSearchQuery } from '../../lib/homeSearchState';
-import type { Category, HomeBrowseState, Product } from '../../themes/interfaceThemes/shared/homeTypes';
+import type { Category, HomeBrowseState, Product } from './homeTypes';
 
 export function buildCategories(tree: CategoryItem[]): Category[] {
   return tree.map((node) => ({

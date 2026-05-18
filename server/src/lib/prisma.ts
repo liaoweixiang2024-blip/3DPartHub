@@ -19,7 +19,9 @@ try {
     url.searchParams.set('pool_timeout', '10');
   }
   dbUrl = url.toString();
-} catch {}
+} catch {
+  log.warn('Failed to parse DATABASE_URL, using raw value');
+}
 
 export const prisma =
   globalForPrisma.prisma ||
@@ -36,7 +38,9 @@ async function shutdown(signal: string) {
   log.info({ signal }, 'Received shutdown signal, disconnecting Prisma');
   try {
     await prisma.$disconnect();
-  } catch {}
+  } catch {
+    log.warn('Failed to disconnect Prisma on shutdown');
+  }
   process.exit(0);
 }
 process.on('SIGINT', () => shutdown('SIGINT'));

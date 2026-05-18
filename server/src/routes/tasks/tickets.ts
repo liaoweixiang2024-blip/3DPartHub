@@ -9,9 +9,21 @@ import { config } from '../../lib/config.js';
 import { createProtectedResourceToken, verifyProtectedResourceToken } from '../../lib/downloadTokenStore.js';
 import { prisma } from '../../lib/prisma.js';
 import { optionalString } from '../../lib/requestValidation.js';
-import { getSetting } from '../../lib/settings.js';
+import {
+  DEMAND_DUPLICATE_WINDOW_MS,
+  MESSAGE_DUPLICATE_WINDOW_MS,
+  cleanUserText,
+  duplicateSince,
+  lowQualitySubmissionReason,
+} from '../../lib/submissionGuards.js';
+import { ticketAttachmentExts, ticketAttachmentMaxBytes, ticketAttachmentMaxSizeMb } from '../../lib/uploadLimits.js';
 import { authMiddleware, verifyRequestToken, type AuthRequest } from '../../middleware/auth.js';
 import { requireRole } from '../../middleware/rbac.js';
+import {
+  conversationAttachmentLimiter,
+  conversationMessageLimiter,
+  demandSubmissionLimiter,
+} from '../../middleware/security.js';
 import { createNotification } from '../notifications.js';
 
 const attachmentUpload = multer({
@@ -89,11 +101,18 @@ export function createSupportTicketRouter() {
   const router = Router();
 
   // Create support ticket
-  router.post('/api/tasks', authMiddleware, async (req: AuthRequest, res: Response) => {
+  router.post('/api/tasks', authMiddleware, demandSubmissionLimiter, async (req: AuthRequest, res: Response) => {
     const { basePart, classification, description } = req.body;
+    const cleanDescription = cleanUserText(description);
+    const cleanBasePart = cleanUserText(basePart, 120);
 
-    if (!description || !description.trim()) {
+    if (!cleanDescription) {
       res.status(400).json({ detail: '问题描述不能为空' });
+      return;
+    }
+    const qualityReason = lowQualitySubmissionReason(cleanDescription, '问题描述');
+    if (qualityReason) {
+      res.status(400).json({ detail: qualityReason });
       return;
     }
 
@@ -105,12 +124,26 @@ export function createSupportTicketRouter() {
       const normalizedClassification = enabledClassifications.includes(classification)
         ? classification
         : enabledClassifications[0] || 'dimension';
+      const duplicate = await prisma.supportTicket.findFirst({
+        where: {
+          userId: req.user!.userId,
+          basePart: cleanBasePart || null,
+          classification: normalizedClassification,
+          description: cleanDescription,
+          createdAt: { gte: duplicateSince(DEMAND_DUPLICATE_WINDOW_MS) },
+        },
+        select: { id: true },
+      });
+      if (duplicate) {
+        res.status(409).json({ detail: '类似需求已提交，请在原工单中补充说明' });
+        return;
+      }
       const ticket = await prisma.supportTicket.create({
         data: {
           userId: req.user!.userId,
-          basePart: basePart || null,
+          basePart: cleanBasePart || null,
           classification: normalizedClassification,
-          description: description.trim(),
+          description: cleanDescription,
         },
       });
       res.json({ id: ticket.id, status: ticket.status });
@@ -254,12 +287,14 @@ export function createSupportTicketRouter() {
         const filePath = join(process.cwd(), config.staticDir, 'ticket-attachments', fileName);
         try {
           rmSync(filePath, { force: true });
-        } catch {}
+        } catch {
+          /* best-effort attachment cleanup */
+        }
       }
 
       res.json({ ok: true });
-    } catch (err: any) {
-      if (err.code === 'P2025') {
+    } catch (err: unknown) {
+      if (err instanceof Error && 'code' in err && (err as NodeJS.ErrnoException).code === 'P2025') {
         res.status(404).json({ detail: '工单不存在' });
         return;
       }
@@ -352,122 +387,22 @@ export function createSupportTicketRouter() {
   });
 
   // Send ticket message (ticket owner or admin)
-  router.post('/api/tickets/:id/messages', authMiddleware, async (req: AuthRequest, res: Response) => {
-    const ticketId = param(req, 'id');
-    const { content, attachment } = req.body;
-    const normalizedAttachment = normalizeTicketAttachmentInput(ticketId, attachment);
-    if ((!content || !content.trim()) && !normalizedAttachment) {
-      res.status(400).json({ detail: '消息内容不能为空' });
-      return;
-    }
-    try {
-      if (!prisma) {
-        res.status(500).json({ detail: 'DB unavailable' });
-        return;
-      }
-      const ticket = await prisma.supportTicket.findUnique({ where: { id: ticketId } });
-      if (!ticket) {
-        res.status(404).json({ detail: '工单不存在' });
-        return;
-      }
-      if (ticket.userId !== req.user!.userId && req.user!.role !== 'ADMIN') {
-        res.status(403).json({ detail: '无权操作' });
-        return;
-      }
-      const isAdmin = req.user!.role === 'ADMIN';
-      const { ticketStatuses, ticketClassifications } = await getBusinessConfig();
-      const terminalStatuses = new Set(['closed', 'resolved']);
-      if (terminalStatuses.has(ticket.status)) {
-        res.status(400).json({ detail: '该工单已关闭，无法发送消息' });
-        return;
-      }
-      let newStatus: string | null = null;
-      if (isAdmin) {
-        newStatus = 'waiting_user';
-      } else {
-        newStatus = 'in_progress';
-      }
-      if (newStatus && !ticketStatuses.some((item) => item.value === newStatus)) newStatus = null;
-      if (newStatus && ticket.status !== newStatus) {
-        const updated = await prisma.supportTicket.updateMany({
-          where: { id: ticketId, status: { notIn: [...terminalStatuses] } },
-          data: { status: newStatus },
-        });
-        if (updated.count === 0) {
-          res.status(400).json({ detail: '该工单已关闭，无法发送消息' });
-          return;
-        }
-      }
-      const message = await prisma.ticketMessage.create({
-        data: {
-          ticketId,
-          userId: req.user!.userId,
-          content: content?.trim() || '',
-          attachment: normalizedAttachment,
-          isAdmin,
-        },
-        include: { user: { select: { id: true, username: true, avatar: true } } },
-      });
-      // Send notification to user when admin replies
-      if (isAdmin) {
-        await createNotification({
-          userId: ticket.userId,
-          title: '工单回复',
-          message: `管理员回复了您的工单「${labelFor(ticketClassifications, ticket.classification)}」`,
-          type: 'ticket',
-          relatedId: ticketId,
-        }).catch(() => {});
-      }
-      // Notify admins when user replies
-      if (!isAdmin) {
-        try {
-          const admins = await prisma.user.findMany({ where: { role: 'ADMIN' }, select: { id: true } });
-          await Promise.all(
-            admins.map((admin: any) =>
-              createNotification({
-                userId: admin.id,
-                title: '工单新回复',
-                message: `用户回复了工单「${labelFor(ticketClassifications, ticket.classification)}」`,
-                type: 'ticket',
-                relatedId: ticketId,
-              }).catch(() => {}),
-            ),
-          );
-        } catch {}
-      }
-      res.json({
-        ...message,
-        attachment: createTicketAttachmentUrl(ticketId, message.attachment, req.user!),
-      });
-    } catch {
-      res.status(500).json({ detail: '发送消息失败' });
-    }
-  });
-
-  // Upload attachment for ticket message
   router.post(
-    '/api/tickets/:id/messages/upload',
+    '/api/tickets/:id/messages',
     authMiddleware,
-    attachmentUpload.single('file'),
+    conversationMessageLimiter,
     async (req: AuthRequest, res: Response) => {
       const ticketId = param(req, 'id');
+      const { content, attachment } = req.body;
+      const normalizedAttachment = normalizeTicketAttachmentInput(ticketId, attachment);
+      const cleanContent = cleanUserText(content);
+      if (!cleanContent && !normalizedAttachment) {
+        res.status(400).json({ detail: '消息内容不能为空' });
+        return;
+      }
       try {
-        if (!req.file) {
-          res.status(400).json({ detail: '请选择文件' });
-          return;
-        }
-        const maxMb = Math.max(1, (await getSetting<number>('ticket_attachment_max_mb')) || 100);
-        const maxBytes = maxMb * 1024 * 1024;
-        const typesStr =
-          (await getSetting<string>('ticket_attachment_types')) ||
-          'jpg,jpeg,png,gif,webp,svg,pdf,doc,docx,xls,xlsx,ppt,pptx,zip,rar,7z,step,stp,iges,igs,xt,binary';
-        const allowed = typesStr.split(',').map((s: string) => `.${s.trim().toLowerCase()}`);
-        const ext = extname(req.file.originalname).toLowerCase();
-        if (req.file.size > maxBytes || !allowed.includes(ext)) {
-          rmSync(req.file.path, { force: true });
-          res
-            .status(400)
-            .json({ detail: `附件仅支持 ${allowed.join('/')}，最大 ${Math.round(maxBytes / 1024 / 1024)}MB` });
+        if (!prisma) {
+          res.status(500).json({ detail: 'DB unavailable' });
           return;
         }
         const ticket = await prisma.supportTicket.findUnique({ where: { id: ticketId } });
@@ -479,9 +414,137 @@ export function createSupportTicketRouter() {
           res.status(403).json({ detail: '无权操作' });
           return;
         }
+        const isAdmin = req.user!.role === 'ADMIN';
+        const { ticketStatuses, ticketClassifications } = await getBusinessConfig();
+        const terminalStatuses = new Set(['closed', 'resolved']);
+        if (terminalStatuses.has(ticket.status)) {
+          res.status(400).json({ detail: '该工单已关闭，无法发送消息' });
+          return;
+        }
+        if (cleanContent && !normalizedAttachment) {
+          const duplicateMessage = await prisma.ticketMessage.findFirst({
+            where: {
+              ticketId,
+              userId: req.user!.userId,
+              content: cleanContent,
+              createdAt: { gte: duplicateSince(MESSAGE_DUPLICATE_WINDOW_MS) },
+            },
+            select: { id: true },
+          });
+          if (duplicateMessage) {
+            res.status(409).json({ detail: '相同内容刚刚已发送，请勿重复提交' });
+            return;
+          }
+        }
+        let newStatus: string | null = null;
+        if (isAdmin) {
+          newStatus = 'waiting_user';
+        } else {
+          newStatus = 'in_progress';
+        }
+        if (newStatus && !ticketStatuses.some((item) => item.value === newStatus)) newStatus = null;
+        if (newStatus && ticket.status !== newStatus) {
+          const updated = await prisma.supportTicket.updateMany({
+            where: { id: ticketId, status: { notIn: [...terminalStatuses] } },
+            data: { status: newStatus },
+          });
+          if (updated.count === 0) {
+            res.status(400).json({ detail: '该工单已关闭，无法发送消息' });
+            return;
+          }
+        }
+        const message = await prisma.ticketMessage.create({
+          data: {
+            ticketId,
+            userId: req.user!.userId,
+            content: cleanContent,
+            attachment: normalizedAttachment,
+            isAdmin,
+          },
+          include: { user: { select: { id: true, username: true, avatar: true } } },
+        });
+        // Send notification to user when admin replies
+        if (isAdmin) {
+          await createNotification({
+            userId: ticket.userId,
+            title: '工单回复',
+            message: `管理员回复了您的工单「${labelFor(ticketClassifications, ticket.classification)}」`,
+            type: 'ticket',
+            relatedId: ticketId,
+          }).catch(() => {});
+        }
+        // Notify admins when user replies
+        if (!isAdmin) {
+          try {
+            const admins = await prisma.user.findMany({ where: { role: 'ADMIN' }, select: { id: true } });
+            await Promise.all(
+              admins.map((admin) =>
+                createNotification({
+                  userId: admin.id,
+                  title: '工单新回复',
+                  message: `用户回复了工单「${labelFor(ticketClassifications, ticket.classification)}」`,
+                  type: 'ticket',
+                  relatedId: ticketId,
+                }).catch(() => {}),
+              ),
+            );
+          } catch {
+            /* best-effort admin notification */
+          }
+        }
+        res.json({
+          ...message,
+          attachment: createTicketAttachmentUrl(ticketId, message.attachment, req.user!),
+        });
+      } catch {
+        res.status(500).json({ detail: '发送消息失败' });
+      }
+    },
+  );
+
+  // Upload attachment for ticket message
+  router.post(
+    '/api/tickets/:id/messages/upload',
+    authMiddleware,
+    conversationAttachmentLimiter,
+    attachmentUpload.single('file'),
+    async (req: AuthRequest, res: Response) => {
+      const ticketId = param(req, 'id');
+      try {
+        if (!req.file) {
+          res.status(400).json({ detail: '请选择文件' });
+          return;
+        }
+        const { uploadPolicy } = await getBusinessConfig();
+        const maxMb = ticketAttachmentMaxSizeMb(uploadPolicy);
+        const maxBytes = ticketAttachmentMaxBytes(uploadPolicy);
+        const allowed = ticketAttachmentExts(uploadPolicy);
+        const ext = extname(req.file.originalname).toLowerCase();
+        if (req.file.size > maxBytes || !allowed.includes(ext)) {
+          rmSync(req.file.path, { force: true });
+          res.status(400).json({ detail: `附件仅支持 ${allowed.join('/')}，最大 ${maxMb}MB` });
+          return;
+        }
+        const ticket = await prisma.supportTicket.findUnique({ where: { id: ticketId } });
+        if (!ticket) {
+          rmSync(req.file.path, { force: true });
+          res.status(404).json({ detail: '工单不存在' });
+          return;
+        }
+        if (ticket.userId !== req.user!.userId && req.user!.role !== 'ADMIN') {
+          rmSync(req.file.path, { force: true });
+          res.status(403).json({ detail: '无权操作' });
+          return;
+        }
+        if (['closed', 'resolved'].includes(ticket.status)) {
+          rmSync(req.file.path, { force: true });
+          res.status(400).json({ detail: '该工单已关闭，无法上传附件' });
+          return;
+        }
         const attachmentUrl = createTicketAttachmentUrl(ticketId, req.file.filename, req.user!);
         res.json({ url: attachmentUrl });
       } catch {
+        if (req.file?.path) rmSync(req.file.path, { force: true });
         res.status(500).json({ detail: '上传失败' });
       }
     },

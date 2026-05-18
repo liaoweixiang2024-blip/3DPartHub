@@ -1,4 +1,5 @@
 import { Router, Response } from 'express';
+import { getErrorMessage } from '../lib/http.js';
 import { prisma } from '../lib/prisma.js';
 import { authMiddleware, type AuthRequest } from '../middleware/auth.js';
 
@@ -91,7 +92,9 @@ async function invalidateThreadSizeCache() {
     const { cacheDel } = await import('../lib/cache.js');
     await cacheDel('cache:thread-size:list');
     await cacheDel('cache:thread-size:public');
-  } catch {}
+  } catch {
+    /* best-effort cache invalidation */
+  }
 }
 
 router.get('/api/admin/thread-size', authMiddleware, async (req: AuthRequest, res: Response) => {
@@ -172,8 +175,8 @@ router.post('/api/admin/thread-size/import', authMiddleware, async (req: AuthReq
     await invalidateThreadSizeCache();
     const total = await table.count();
     res.json({ imported, total });
-  } catch (err: any) {
-    res.status(400).json({ detail: err?.message || '导入失败' });
+  } catch (err: unknown) {
+    res.status(400).json({ detail: getErrorMessage(err) || '导入失败' });
   }
 });
 

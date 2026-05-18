@@ -211,7 +211,7 @@ export function createConversionQueueRouter() {
 
         if (retried > 0) await cacheDelByPrefix('cache:models:');
         res.json({ retried, skipped, failed, items });
-      } catch (err: any) {
+      } catch (err: unknown) {
         logger.error({ err }, '[queue] Retry-failed error');
         res.status(500).json({ detail: '重试失败任务失败' });
       }
@@ -288,7 +288,7 @@ export function createConversionQueueRouter() {
         }
 
         res.json({ cancelled, skipped, failed, active, items });
-      } catch (err: any) {
+      } catch (err: unknown) {
         logger.error({ err }, '[queue] Cancel-rebuilds error');
         res.status(500).json({ detail: '取消预览重建任务失败' });
       }
@@ -307,7 +307,7 @@ export function createConversionQueueRouter() {
         const limit = numericQuery(req.body?.limit, 100, 1, 1000);
         const jobIds = await conversionQueue.clean(graceMs, limit, type);
         res.json({ type, cleaned: jobIds.length, job_ids: jobIds });
-      } catch (err: any) {
+      } catch (err: unknown) {
         logger.error({ err }, '[queue] Clean error');
         res.status(500).json({ detail: '清理转换队列失败' });
       }
@@ -383,7 +383,7 @@ export function createConversionQueueRouter() {
           logs: logResult.logs,
           log_count: logResult.count,
         });
-      } catch (err: any) {
+      } catch (err: unknown) {
         logger.error({ err }, '[queue] Get-job error');
         res.status(500).json({ detail: '获取转换任务详情失败' });
       }

@@ -1,3 +1,4 @@
+import type { Prisma } from '@prisma/client';
 import { Response, NextFunction } from 'express';
 import { prisma } from '../lib/prisma.js';
 import type { AuthRequest } from './auth.js';
@@ -18,19 +19,24 @@ export function auditLog(action: string, resource: string) {
           const userId = req.user?.userId || null;
           const resourceId = req.params?.id || req.params?.projectId || req.body?.id || null;
 
+          const details: Record<string, Prisma.InputJsonValue> = {
+            method: req.method,
+            path: req.path,
+            statusCode: res.statusCode,
+            timestamp: new Date().toISOString(),
+          };
+          const body = sanitizeBody(req.body);
+          if (body) {
+            details.body = body;
+          }
+
           await prisma.auditLog.create({
             data: {
               userId,
               action,
               resource,
               resourceId: resourceId as string | null,
-              details: {
-                method: req.method,
-                path: req.path,
-                body: sanitizeBody(req.body),
-                statusCode: res.statusCode,
-                timestamp: new Date().toISOString(),
-              },
+              details: details as Prisma.InputJsonObject,
             },
           });
         } catch {
@@ -67,13 +73,37 @@ const SENSITIVE_KEYS = new Set([
   'cookie',
 ]);
 
-function sanitizeBody(body: any): any {
-  if (!body || typeof body !== 'object') return body;
-  const sanitized = { ...body };
-  for (const key of Object.keys(sanitized)) {
+function sanitizeBody(body: unknown): Prisma.InputJsonObject | undefined {
+  if (!body || typeof body !== 'object') return undefined;
+  const sanitized: Record<string, Prisma.InputJsonValue> = {};
+  for (const [key, value] of Object.entries(body as Record<string, unknown>)) {
     if (SENSITIVE_KEYS.has(key) || /pass|secret|token|key|credential/i.test(key)) {
       sanitized[key] = '[REDACTED]';
+    } else {
+      sanitized[key] = toJsonValue(value);
     }
   }
-  return sanitized;
+  return sanitized as Prisma.InputJsonObject;
+}
+
+function toJsonValue(value: unknown, depth = 0): Prisma.InputJsonValue {
+  if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
+    return value;
+  }
+  if (value === null) return 'null';
+  if (typeof value === 'bigint') return value.toString();
+  if (value instanceof Date) return value.toISOString();
+  if (Array.isArray(value)) {
+    if (depth >= 5) return '[array]';
+    return value.map((item) => toJsonValue(item, depth + 1)) as Prisma.InputJsonArray;
+  }
+  if (value && typeof value === 'object') {
+    if (depth >= 5) return '[object]';
+    const output: Record<string, Prisma.InputJsonValue> = {};
+    for (const [key, nestedValue] of Object.entries(value as Record<string, unknown>)) {
+      output[key] = toJsonValue(nestedValue, depth + 1);
+    }
+    return output as Prisma.InputJsonObject;
+  }
+  return '[unsupported]';
 }

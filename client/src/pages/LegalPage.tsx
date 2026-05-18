@@ -1,12 +1,13 @@
 import { useState } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import { useParams, Link, useNavigate } from 'react-router-dom';
 import { AdminContentPanel, AdminManagementPage } from '../components/shared/AdminManagementPage';
 import { AdminPageShell } from '../components/shared/AdminPageShell';
 import AuthModal from '../components/shared/AuthModal';
 import Icon from '../components/shared/Icon';
+import { isAuthModalEnabled } from '../components/shared/ProtectedLink';
 import { useDocumentTitle } from '../hooks/useDocumentTitle';
 import { DEFAULT_PRIVACY_SECTIONS, DEFAULT_TERMS_SECTIONS, parseLegalSections } from '../lib/legalContent';
-import { usePublicSettings } from '../lib/publicSettings';
+import { refreshSiteConfig, usePublicSettings } from '../lib/publicSettings';
 import { useAuthStore } from '../stores/useAuthStore';
 
 function splitParagraphs(content: string) {
@@ -25,6 +26,7 @@ export default function LegalPage() {
   const isPrivacy = type === 'privacy';
   const { settings } = usePublicSettings();
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
+  const navigate = useNavigate();
   const [authOpen, setAuthOpen] = useState(false);
   const [tocOpen, setTocOpen] = useState(false);
   useDocumentTitle(isPrivacy ? '隐私声明' : '用户协议');
@@ -75,7 +77,24 @@ export default function LegalPage() {
           <span className="hidden sm:inline">个人中心</span>
         </Link>
       ) : (
-        <button type="button" onClick={() => setAuthOpen(true)} aria-label="登录或注册" className={actionLinkClass}>
+        <button
+          type="button"
+          onClick={async () => {
+            let latestSettings = settings;
+            try {
+              latestSettings = await refreshSiteConfig();
+            } catch {
+              latestSettings = settings;
+            }
+            if (isAuthModalEnabled(latestSettings)) {
+              setAuthOpen(true);
+            } else {
+              navigate('/login', { state: { from: returnUrl } });
+            }
+          }}
+          aria-label="登录或注册"
+          className={actionLinkClass}
+        >
           <Icon name="person" size={16} className="sm:hidden" />
           <span className="hidden sm:inline">登录 / 注册</span>
         </button>
@@ -116,7 +135,7 @@ export default function LegalPage() {
               type="button"
               onClick={() => setTocOpen(true)}
               aria-label="打开目录"
-              className="fixed right-0 top-[42dvh] z-40 flex h-11 w-9 items-center justify-center rounded-l-lg border border-r-0 border-outline-variant/20 bg-surface-container-lowest text-primary-container shadow-[0_8px_24px_rgba(0,0,0,0.14)] lg:hidden"
+              className="fixed right-0 top-[42dvh] z-40 flex h-11 w-9 items-center justify-center rounded-l-lg border border-r-0 border-outline-variant/20 bg-surface-container-lowest text-primary-container shadow-float-dark lg:hidden"
             >
               <Icon name="format_list_bulleted" size={18} />
             </button>

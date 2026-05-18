@@ -104,8 +104,15 @@ async function lookupHistoryArchiveEntries(ids: string[], userId: string): Promi
 
   const downloads = await prisma.download.findMany({
     where: { id: { in: ids }, userId },
-    include: {
-      model: {
+    select: {
+      id: true,
+      modelId: true,
+    },
+  });
+  const modelIds = Array.from(new Set(downloads.map((download) => download.modelId).filter(Boolean)));
+  const models = modelIds.length
+    ? await prisma.model.findMany({
+        where: { id: { in: modelIds } },
         select: {
           id: true,
           name: true,
@@ -118,16 +125,16 @@ async function lookupHistoryArchiveEntries(ids: string[], userId: string): Promi
           uploadPath: true,
           status: true,
         },
-      },
-    },
-  });
+      })
+    : [];
   const downloadById = new Map(downloads.map((download) => [download.id, download]));
+  const modelById = new Map(models.map((model) => [model.id, model]));
   const addedModelIds = new Set<string>();
   const fileEntries: ArchiveEntry[] = [];
 
   for (const id of ids) {
     const download = downloadById.get(id);
-    const model = download?.model;
+    const model = download ? modelById.get(download.modelId) : null;
     if (!model || model.status !== MODEL_STATUS.COMPLETED || addedModelIds.has(model.id)) continue;
     if (!findOriginalModelPath(model)) continue;
 
@@ -157,8 +164,14 @@ async function lookupFavoriteArchiveEntries(
 
   const favorites = await prisma.favorite.findMany({
     where: { userId, modelId: { in: ids } },
-    include: {
-      model: {
+    select: {
+      modelId: true,
+    },
+  });
+  const favoriteModelIds = Array.from(new Set(favorites.map((favorite) => favorite.modelId).filter(Boolean)));
+  const favoriteModels = favoriteModelIds.length
+    ? await prisma.model.findMany({
+        where: { id: { in: favoriteModelIds } },
         select: {
           id: true,
           name: true,
@@ -171,16 +184,12 @@ async function lookupFavoriteArchiveEntries(
           uploadPath: true,
           status: true,
         },
-      },
-    },
-  });
+      })
+    : [];
   const modelById = new Map(
-    favorites
-      .map((favorite) => favorite.model)
-      .filter((model): model is NonNullable<typeof model> => model?.status === MODEL_STATUS.COMPLETED)
-      .map((model) => [model.id, model]),
+    favoriteModels.filter((model) => model.status === MODEL_STATUS.COMPLETED).map((model) => [model.id, model]),
   );
-  const models: Array<NonNullable<(typeof favorites)[number]['model']>> = [];
+  const models: typeof favoriteModels = [];
   for (const id of ids) {
     const model = modelById.get(id);
     if (model) models.push(model);

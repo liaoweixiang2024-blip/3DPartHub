@@ -1,6 +1,6 @@
 import { AnimatePresence, motion } from 'framer-motion';
+import type { Category } from '../../../../components/home/homeTypes';
 import Icon from '../../../../components/shared/Icon';
-import type { Category } from '../../shared/homeTypes';
 
 export default function CategorySidebar({
   expandedCategories,

@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
-import FormatTag from '../../../components/shared/FormatTag';
-import Icon from '../../../components/shared/Icon';
-import ModelThumbnail from '../../../components/shared/ModelThumbnail';
-import { getAnnouncement, getCachedPublicSettings } from '../../../lib/publicSettings';
-import { sanitizeHtml } from '../../../lib/sanitizeHtml';
+import { getAnnouncement, getCachedPublicSettings } from '../../lib/publicSettings';
+import { sanitizeHtml } from '../../lib/sanitizeHtml';
+import FormatTag from '../shared/FormatTag';
+import Icon from '../shared/Icon';
+import ModelThumbnail from '../shared/ModelThumbnail';
 import type { Product } from './homeTypes';
 
 export function AnnouncementBanner() {
@@ -47,17 +47,17 @@ export function AnnouncementBanner() {
 }
 
 export const HOME_GRID_CARD_CLASS =
-  'block group bg-surface-container-high rounded-sm overflow-hidden transition-[box-shadow] duration-200 ease-out hover:shadow-xl flex flex-col relative';
+  'home-model-card block group bg-surface-container-high rounded-sm overflow-hidden transition-[box-shadow] duration-200 ease-out hover:shadow-xl flex flex-col relative';
 export const HOME_GRID_MEDIA_CLASS =
-  'aspect-square bg-surface-container-lowest relative overflow-hidden flex items-center justify-center';
+  'home-model-card-media aspect-square bg-surface-container-lowest relative overflow-hidden flex items-center justify-center';
 export const HOME_GRID_BODY_CLASS = 'flex-1 flex flex-col p-2.5';
 export const HOME_GRID_ACTIONS_CLASS = 'flex items-center gap-2 mt-auto pt-2';
 export const HOME_GRID_ACTION_BUTTON_CLASS =
   'flex h-7 flex-1 items-center justify-center gap-1 rounded-sm px-3 text-xs';
 export const HOME_LIST_CARD_CLASS =
-  'relative flex group bg-surface-container-high rounded-sm overflow-hidden transition-[box-shadow] duration-200 ease-out hover:shadow-lg';
+  'home-model-card relative flex group bg-surface-container-high rounded-sm overflow-hidden transition-[box-shadow] duration-200 ease-out hover:shadow-lg';
 export const HOME_LIST_MEDIA_CLASS =
-  'w-32 shrink-0 bg-surface-container-lowest relative overflow-hidden flex items-center justify-center';
+  'home-model-card-media w-32 shrink-0 bg-surface-container-lowest relative overflow-hidden flex items-center justify-center';
 export const HOME_LIST_BODY_CLASS = 'flex-1 flex flex-col justify-center p-3 min-w-0';
 export const HOME_LIST_ACTIONS_CLASS = 'flex items-center gap-2';
 export const HOME_LIST_ACTION_BUTTON_CLASS = 'flex items-center gap-1 rounded-sm px-3 py-1 text-xs';

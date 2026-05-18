@@ -38,6 +38,7 @@ function isModelDetailPath(pathname: string) {
 
 function canShowTooltip(element: HTMLElement) {
   if (element.closest('[data-tooltip-ignore]')) return false;
+  if (element.closest('[data-app-top-nav]')) return false;
   if (element.closest('header')) return true;
   return isModelDetailPath(window.location.pathname);
 }

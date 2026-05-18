@@ -18,6 +18,7 @@ const requiredThemeFiles = [
   'layouts/Sidebar.tsx',
   'layouts/BottomNav.tsx',
   'layouts/MobileNavDrawer.tsx',
+  'templates/AuthDialog.tsx',
   'templates/HomeDesktop.tsx',
   'templates/Login.tsx',
   'templates/NotFound.tsx',
@@ -79,6 +80,9 @@ const hardcodedColorAllowedPaths = [
 const hardcodedColorPattern = /#[0-9a-fA-F]{3,8}\b|\b(?:rgb|rgba|hsl|hsla)\(/g;
 const allowedThemePackageImports = new Set(['react', 'react-router-dom', 'framer-motion']);
 const allowedThemeAppImports = new Set([
+  '../../components/home/homeTypes',
+  '../../../../components/home/HomeDesktopShared',
+  '../../../../components/home/homeTypes',
   '../../../../components/shared/Icon',
   '../../../../components/shared/InfiniteLoadTrigger',
   '../../../../components/shared/ModelThumbnail',
@@ -211,7 +215,16 @@ for (const themeKey of themeKeys) {
   assertIncludes(`${themeKey}/theme.ts`, themeSource, 'showModelCardCategory:');
   assertIncludes(`${themeKey}/theme.ts`, themeSource, 'showModelCardVariantMeta:');
   assertIncludes(`${themeKey}/theme.ts`, themeSource, 'defaultPath:');
-  for (const slot of ['DesktopHome', 'Login', 'NotFound', 'DesktopTopNav', 'Sidebar', 'BottomNav', 'MobileNavDrawer']) {
+  for (const slot of [
+    'DesktopHome',
+    'AuthDialog',
+    'Login',
+    'NotFound',
+    'DesktopTopNav',
+    'Sidebar',
+    'BottomNav',
+    'MobileNavDrawer',
+  ]) {
     assertIncludes(`${themeKey}/theme.ts`, themeSource, slot);
   }
 
@@ -236,7 +249,7 @@ for (const themeKey of themeKeys) {
     }
     assert(
       !/from\s+['"][^'"]*\/pages\//.test(source),
-      `${relativeThemeFile} must not import pages/ layer files. Move shared contracts into themes/interfaceThemes/shared.`,
+      `${relativeThemeFile} must not import pages/ layer files. Move shared contracts into components/home or themes/interfaceThemes/shared.`,
     );
     if (relativeThemeFile.includes('/templates/')) {
       assert(
@@ -276,11 +289,54 @@ assert(
 );
 
 const registrySource = await readSrc('themes/interfaceThemes/registry.ts');
+assert(existsSync(srcPath('themes/interfaceThemes/shared/base.css')), 'Shared interface theme base.css is missing.');
+assertIncludes('registry.ts shared base style', registrySource, "import './shared/base.css';");
 assertIncludes('registry.ts', registrySource, 'INTERFACE_THEME_PACKAGES');
 assert(
   !registrySource.includes('INTERFACE_THEME_COMPONENTS'),
   'registry.ts must expose packages as the primary API. Do not add a parallel component-only registry.',
 );
+
+const sharedThemeFiles = await listFiles(path.join(themesRoot, 'shared'));
+for (const filePath of sharedThemeFiles) {
+  const source = await readFile(filePath, 'utf8');
+  assert(
+    !/\b(?:classic|workbench|Classic|Workbench)\b/.test(source),
+    `${rel(filePath)} must stay theme-neutral. Move theme-specific code into the owning theme directory.`,
+  );
+}
+
+const authModalSource = await readSrc('components/shared/AuthModal.tsx');
+const formControlsSource = await readSrc('components/shared/FormControls.tsx');
+const loginPageSource = await readSrc('pages/LoginPage.tsx');
+const forceChangePasswordSource = await readSrc('components/shared/ForceChangePassword.tsx');
+assertIncludes('AuthModal.tsx theme template', authModalSource, 'templates.AuthDialog');
+assert(
+  !/workbench-|classic-|themes\/interfaceThemes\/shared\/authModal\.css/.test(authModalSource),
+  'AuthModal.tsx must not contain theme-specific classes or import theme-scoped CSS; use ThemePackage.templates.AuthDialog.',
+);
+for (const snippet of [
+  'APP_FIELD_BASE_CLASS',
+  'APP_FIELD_LABEL_CLASS',
+  'APP_FIELD_ERROR_CLASS',
+  'AppTextInput',
+  'AppTextArea',
+  'AppSelect',
+  'AppFormLabel',
+]) {
+  assertIncludes('FormControls.tsx shared input primitives', formControlsSource, snippet);
+}
+for (const [label, source] of [
+  ['AuthModal.tsx shared input primitives', authModalSource],
+  ['LoginPage.tsx shared input primitives', loginPageSource],
+  ['ForceChangePassword.tsx shared input primitives', forceChangePasswordSource],
+]) {
+  assertIncludes(label, source, 'AppTextInput');
+  assert(
+    !/bg-surface-container-lowest[^"'\n]*focus:border-primary-container/.test(source),
+    `${label} must use FormControls instead of duplicating shared input styling.`,
+  );
+}
 
 const floatingMenuRendererSource = await readSrc('themes/interfaceThemes/shared/FloatingMenuRenderer.tsx');
 assertIncludes('FloatingMenuRenderer.tsx contact props', floatingMenuRendererSource, 'contactEmail =');
@@ -311,6 +367,24 @@ for (const file of coreFiles) {
   }
 }
 
+for (const filePath of await listFiles(srcRoot)) {
+  const relativeSrcPath = path.relative(srcRoot, filePath).split(path.sep).join('/');
+  if (!/\.(ts|tsx)$/.test(relativeSrcPath)) continue;
+  if (relativeSrcPath.startsWith('themes/interfaceThemes/')) continue;
+
+  const source = await readFile(filePath, 'utf8');
+  for (const specifier of extractImportSpecifiers(source)) {
+    if (
+      /themes\/interfaceThemes\/(?:classic|workbench|shared)\b/.test(specifier) ||
+      /themes\/interfaceThemes\/(?:classic|workbench|shared)\b/.test(path.posix.normalize(specifier))
+    ) {
+      errors.push(
+        `${relativeSrcPath} imports interface theme internals "${specifier}". Use registry/types or move neutral contracts outside the theme directory.`,
+      );
+    }
+  }
+}
+
 const globalCssSource = await readSrc('styles/global.css');
 const colorSchemesSource = await readSrc('lib/colorSchemes.ts');
 const colorSchemeSource = await readSrc('lib/colorScheme.ts');
@@ -323,7 +397,7 @@ for (const key of requiredColorVariableKeys) {
 
 assertIncludes('colorSchemes.ts ColorPreset completeness', colorSchemesSource, 'dark: Record<ColorKey, string>;');
 assertIncludes('colorSchemes.ts ColorPreset completeness', colorSchemesSource, 'light: Record<ColorKey, string>;');
-assertIncludes('colorSchemes.ts surface hex generation', colorSchemesSource, 'function hslToHex');
+assertIncludes('colorSchemes.ts surface hex generation', colorSchemesSource, 'hslToHex');
 assert(
   !/[`'"]hsl\(/.test(colorSchemesSource),
   'colorSchemes.ts must not emit hsl() strings because SettingsPage color inputs require #hex values.',

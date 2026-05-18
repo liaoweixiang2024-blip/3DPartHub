@@ -5,6 +5,7 @@ import { config } from '../../lib/config.js';
 import { createLogger } from '../../lib/logger.js';
 import { prisma } from '../../lib/prisma.js';
 import { authMiddleware, type AuthRequest } from '../../middleware/auth.js';
+import { getErrorMessage } from '../../lib/http.js';
 import { adminOnly } from './common.js';
 
 const log = createLogger({ component: 'cleanup' });
@@ -32,7 +33,9 @@ export function createSettingsCleanupRouter() {
           files.push(full);
         }
       }
-    } catch {}
+    } catch {
+      log.warn({ dir }, 'Failed to collect files from directory');
+    }
     return files;
   }
 
@@ -180,7 +183,7 @@ export function createSettingsCleanupRouter() {
         totalSize,
         totalSizeText: formatBytes(totalSize),
       });
-    } catch (err: any) {
+    } catch (err: unknown) {
       log.error({ err }, 'Scan failed');
       res.status(500).json({ detail: '扫描失败' });
     }
@@ -256,9 +259,9 @@ export function createSettingsCleanupRouter() {
             rmSync(f, { force: true });
             deletedCount++;
             freedBytes += size;
-          } catch (err: any) {
+          } catch (err: unknown) {
             failedCount++;
-            if (errors.length < 5) errors.push(`${f}: ${err.message}`);
+            if (errors.length < 5) errors.push(`${f}: ${getErrorMessage(err)}`);
           }
         }
       }
@@ -323,7 +326,7 @@ export function createSettingsCleanupRouter() {
         failedCount,
         errors: errors.length > 0 ? errors : undefined,
       });
-    } catch (err: any) {
+    } catch (err: unknown) {
       log.error({ err }, 'Execute failed');
       res.status(500).json({ detail: '清理执行失败' });
     }

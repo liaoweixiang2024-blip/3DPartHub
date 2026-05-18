@@ -363,7 +363,7 @@ export function ProductWallPreview({
       {/* backdrop */}
       <div className="fixed inset-0 bg-black/68" aria-hidden="true" />
       <div
-        className="product-wall-preview-panel relative flex h-dvh w-full flex-col overflow-hidden bg-surface shadow-none md:h-[94dvh] md:max-w-[1500px] md:rounded-xl md:border md:border-outline-variant/18 md:shadow-[0_34px_120px_rgba(0,0,0,0.34)]"
+        className="product-wall-preview-panel relative flex h-dvh w-full flex-col overflow-hidden bg-surface shadow-none md:h-[94dvh] md:max-w-[1500px] md:rounded-xl md:border md:border-outline-variant/18 md:shadow-heavy-lg"
         onPointerDown={(event) => event.stopPropagation()}
         onClick={(event) => event.stopPropagation()}
       >
@@ -388,7 +388,7 @@ export function ProductWallPreview({
             zIndex: 50,
             touchAction: 'manipulation',
           }}
-          className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-black/50 text-white shadow-lg transition-colors focus:outline-none focus-visible:outline-none active:bg-black/70 md:h-9 md:w-9 md:bg-white/78 md:text-neutral-800 md:shadow-[0_8px_24px_rgba(0,0,0,0.14)]"
+          className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-black/50 text-white shadow-lg transition-colors focus:outline-none focus-visible:outline-none active:bg-black/70 md:h-9 md:w-9 md:bg-white/78 md:text-neutral-800 md:shadow-float-dark"
           aria-label="关闭"
         >
           <svg

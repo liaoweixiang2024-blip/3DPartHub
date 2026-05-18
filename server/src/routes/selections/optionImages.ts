@@ -365,8 +365,8 @@ export function createSelectionOptionImagesRouter() {
             rmSync(filePath, { force: true });
           }
         }
-      } catch (err: any) {
-        if (err.name === 'AbortError') {
+      } catch (err: unknown) {
+        if (err instanceof Error && err.name === 'AbortError') {
           res.status(400).json({ detail: '下载图片超时' });
           return;
         }

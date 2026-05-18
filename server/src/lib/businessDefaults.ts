@@ -92,7 +92,8 @@ export const DEFAULT_MOBILE_NAV_FOR_SETTINGS: NavItemConfig[] = [
 export const DEFAULT_UPLOAD_POLICY_FOR_SETTINGS: UploadPolicy = {
   modelFormats: ['step', 'stp', 'iges', 'igs', 'x_t', 'xt'],
   modelMaxSizeMb: Math.max(1, Math.round(config.maxFileSize / 1024 / 1024)),
-  batchArchiveMaxSizeMb: 500,
+  modelDrawingMaxSizeMb: Math.max(1, Math.round(config.maxFileSize / 1024 / 1024)),
+  batchArchiveMaxSizeMb: 51200,
   chunkSizeMb: 5,
   chunkThresholdMb: 20,
   optionImageMaxSizeMb: 5,
@@ -102,6 +103,7 @@ export const DEFAULT_UPLOAD_POLICY_FOR_SETTINGS: UploadPolicy = {
   selectionImportMaxColumns: 200,
   productWallImageMaxSizeMb: 8,
   productWallUploadMaxFiles: 20,
+  productWallArchiveExtractMaxFiles: 100,
   ticketAttachmentMaxSizeMb: 5,
   ticketAttachmentExts: ['.jpg', '.jpeg', '.png', '.gif', '.webp'],
 };

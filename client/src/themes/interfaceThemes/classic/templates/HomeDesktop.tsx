@@ -1,9 +1,9 @@
 import { Link } from 'react-router-dom';
+import { AnnouncementBanner, SkeletonCard, SkeletonListCard } from '../../../../components/home/HomeDesktopShared';
 import Icon from '../../../../components/shared/Icon';
 import InfiniteLoadTrigger from '../../../../components/shared/InfiniteLoadTrigger';
 import { PageTitle } from '../../../../components/shared/PagePrimitives';
 import VirtualProductGrid, { useGridColumnCount } from '../../../../components/shared/VirtualProductGrid';
-import { AnnouncementBanner, SkeletonCard, SkeletonListCard } from '../../shared/HomeDesktopShared';
 import type { DesktopHomeThemeProps } from '../../types';
 import CategorySidebar from '../components/CategorySidebar';
 

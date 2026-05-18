@@ -1,11 +1,13 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import useSWR from 'swr';
 import useSWRInfinite from 'swr/infinite';
 import client from '../api/client';
 import { unwrapResponse } from '../api/response';
+import { AdminButton, AdminIconButton } from '../components/shared/AdminControls';
 import { AdminLoadingState, AdminManagementPage } from '../components/shared/AdminManagementPage';
 import { AdminPageShell } from '../components/shared/AdminPageShell';
+import AdminRefreshButton from '../components/shared/AdminRefreshButton';
 import Icon from '../components/shared/Icon';
 import InfiniteLoadTrigger from '../components/shared/InfiniteLoadTrigger';
 import ResponsiveSectionTabs from '../components/shared/ResponsiveSectionTabs';
@@ -109,7 +111,6 @@ function Content() {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [batchDeleteOpen, setBatchDeleteOpen] = useState(false);
   const [batchDeleting, setBatchDeleting] = useState(false);
-  const [refreshing, setRefreshing] = useState(false);
 
   const { data, mutate, setSize, size, isLoading } = useSWRInfinite(
     (pageIndex, previousPageData: AdminSharesResponse | null) => {
@@ -130,8 +131,8 @@ function Content() {
 
   const { data: stats, mutate: mutateStats } = useSWR('/admin/shares/stats', fetchShareStats);
 
-  const pages = data || [];
-  const items = pages.flatMap((pageData) => pageData.items);
+  const pages = useMemo(() => data || [], [data]);
+  const items = useMemo(() => pages.flatMap((pageData) => pageData.items), [pages]);
   const total = pages[0]?.total || 0;
   const selectedCount = selectedIds.size;
   const hasMore = items.length < total;
@@ -142,15 +143,12 @@ function Content() {
   }, [hasMore, isLoadingMore, setSize]);
 
   async function handleRefresh() {
-    setRefreshing(true);
     try {
       await setSize(1);
       await Promise.all([mutate(undefined, { revalidate: true }), mutateStats(undefined, { revalidate: true })]);
       toast('分享数据已刷新', 'success');
     } catch (err: unknown) {
       toast(getErrorMessage(err, '刷新分享数据失败'), 'error');
-    } finally {
-      setRefreshing(false);
     }
   }
 
@@ -165,8 +163,14 @@ function Content() {
         return next;
       });
       await Promise.all([mutate(), mutateStats()]);
-    } catch (err: any) {
-      toast(err.response?.data?.detail || '删除失败', 'error');
+    } catch (err: unknown) {
+      const detail = typeof err === 'object' && err !== null ? (err as Record<string, unknown>).response : undefined;
+      const data = typeof detail === 'object' && detail !== null ? (detail as Record<string, unknown>).data : undefined;
+      const msg =
+        typeof data === 'object' && data !== null
+          ? String((data as Record<string, unknown>).detail) || '删除失败'
+          : '删除失败';
+      toast(msg, 'error');
     }
   }
 
@@ -184,8 +188,14 @@ function Content() {
       setSelectMode(false);
       setBatchDeleteOpen(false);
       await Promise.all([mutate(), mutateStats()]);
-    } catch (err: any) {
-      toast(err.response?.data?.detail || '批量删除失败', 'error');
+    } catch (err: unknown) {
+      const detail = typeof err === 'object' && err !== null ? (err as Record<string, unknown>).response : undefined;
+      const data = typeof detail === 'object' && detail !== null ? (detail as Record<string, unknown>).data : undefined;
+      const msg =
+        typeof data === 'object' && data !== null
+          ? String((data as Record<string, unknown>).detail) || '批量删除失败'
+          : '批量删除失败';
+      toast(msg, 'error');
     } finally {
       setBatchDeleting(false);
     }
@@ -250,33 +260,17 @@ function Content() {
 
   const actions = (
     <div className="flex items-center gap-2">
-      <button
-        type="button"
-        onClick={handleRefresh}
-        disabled={refreshing}
-        className={
-          isDesktop
-            ? 'flex items-center gap-2 rounded-lg border border-outline-variant/20 px-4 py-2.5 text-sm text-on-surface-variant transition-colors hover:text-on-surface disabled:opacity-50'
-            : 'inline-flex h-9 items-center gap-1 rounded-lg border border-outline-variant/20 px-3 text-xs text-on-surface-variant disabled:opacity-50'
-        }
-        aria-label="刷新"
-      >
-        <Icon name="refresh" size={isDesktop ? 16 : 14} className={refreshing ? 'animate-spin' : ''} />
-        {isDesktop ? (refreshing ? '刷新中...' : '刷新') : null}
-      </button>
+      <AdminRefreshButton onRefresh={handleRefresh} mobileIconOnly />
       {hasAnyShare ? (
-        <button
-          type="button"
+        <AdminButton
           onClick={toggleSelectMode}
-          className={`flex items-center gap-1.5 rounded-sm border px-3 py-1.5 text-sm transition-colors ${
-            selectMode
-              ? 'border-primary/30 bg-primary-container/10 text-primary'
-              : 'border-outline-variant/20 text-on-surface-variant hover:border-outline-variant/40 hover:text-on-surface'
-          }`}
+          active={selectMode}
+          icon={selectMode ? 'close' : 'checklist'}
+          size={isDesktop ? 'md' : 'sm'}
+          variant="secondary"
         >
-          <Icon name={selectMode ? 'close' : 'checklist'} size={16} />
           {isDesktop ? (selectMode ? '取消选择' : '批量管理') : selectMode ? '取消' : '批量'}
-        </button>
+        </AdminButton>
       ) : null}
     </div>
   );
@@ -292,25 +286,19 @@ function Content() {
         <div className="mb-4 flex items-center gap-3 rounded-lg border border-outline-variant/20 bg-surface-container-high px-4 py-3 shadow-lg">
           <span className="text-sm font-medium text-on-surface">已选 {selectedCount} 个</span>
           <div className="flex-1" />
-          <button
-            type="button"
-            onClick={() => setBatchDeleteOpen(true)}
-            className="flex items-center gap-1.5 rounded-sm border border-error/20 bg-error/10 px-3 py-1.5 text-xs font-medium text-error transition-colors hover:bg-error/20"
-          >
-            <Icon name="delete" size={14} />
+          <AdminButton onClick={() => setBatchDeleteOpen(true)} icon="delete" size="sm" variant="danger">
             删除分享
-          </button>
-          <button
-            type="button"
+          </AdminButton>
+          <AdminIconButton
             onClick={() => {
               setSelectMode(false);
               setSelectedIds(new Set());
             }}
-            className="flex h-7 w-7 items-center justify-center rounded-sm text-on-surface-variant transition-colors hover:bg-surface-container-high hover:text-on-surface"
+            icon="close"
+            size="icon-sm"
+            variant="ghost"
             aria-label="取消选择"
-          >
-            <Icon name="close" size={16} />
-          </button>
+          />
         </div>
       ) : null}
       {/* List */}

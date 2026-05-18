@@ -132,7 +132,9 @@ export async function ipGuard(req: Request, res: Response, next: NextFunction) {
               next();
               return;
             }
-          } catch {}
+          } catch (err) {
+            // Invalid referer URL — proceed with hotlink check
+          }
 
           const blockedExts = [
             '.png',

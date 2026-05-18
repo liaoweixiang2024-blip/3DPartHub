@@ -8,7 +8,7 @@ export default function WorkbenchLogin({ mode, brand, form, modeSwitch, legalLin
     <div className="workbench-auth-page flex-1 overflow-hidden bg-surface">
       <div className="flex h-full min-h-0 flex-col items-center justify-center overflow-y-auto px-4 py-6 sm:px-6">
         <motion.section
-          className={`workbench-auth-dialog workbench-auth-dialog-${mode} w-full max-w-[27rem] overflow-hidden rounded-2xl border border-outline-variant/14 bg-surface-container-low shadow-[0_28px_80px_rgba(15,23,42,0.12)]`}
+          className={`workbench-auth-dialog workbench-auth-dialog-${mode} w-full max-w-[27rem] overflow-hidden rounded-2xl border border-outline-variant/14 bg-surface-container-low shadow-modal-soft`}
           initial={{ opacity: 0, y: 10, scale: 0.98 }}
           animate={{ opacity: 1, y: 0, scale: 1 }}
           transition={{ duration: 0.24, ease: 'easeOut' }}

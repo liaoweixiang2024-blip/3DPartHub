@@ -6,6 +6,8 @@ import {
   type Inquiry,
   type InquirySalesAssignmentParams,
 } from '../../api/inquiries';
+import { AdminButton, AdminIconButton } from '../shared/AdminControls';
+import { APP_FIELD_LABEL_CLASS, AppSelect, AppTextArea, AppTextInput } from '../shared/FormControls';
 import Icon from '../shared/Icon';
 import { useToast } from '../shared/Toast';
 
@@ -95,8 +97,12 @@ export default function InquirySalesAssignmentDialog({
       toast('已转交销售跟进', 'success');
       onAssigned(updated);
       onClose();
-    } catch (err: any) {
-      toast(err?.response?.data?.detail || err?.message || '转交销售失败', 'error');
+    } catch (err: unknown) {
+      const resp = typeof err === 'object' && err !== null ? (err as Record<string, unknown>).response : undefined;
+      const data = typeof resp === 'object' && resp !== null ? (resp as Record<string, unknown>).data : undefined;
+      const detail = typeof data === 'object' && data !== null ? (data as Record<string, unknown>).detail : undefined;
+      const errMsg = err instanceof Error ? err.message : '转交销售失败';
+      toast(String(detail) || errMsg, 'error');
     } finally {
       setSubmitting(false);
     }
@@ -112,14 +118,7 @@ export default function InquirySalesAssignmentDialog({
               选择分配模式和对接人，客户将在询价详情里看到跟进进度与业务联系方式。
             </p>
           </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="grid h-8 w-8 shrink-0 place-items-center rounded-lg text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface"
-            aria-label="关闭"
-          >
-            <Icon name="close" size={18} />
-          </button>
+          <AdminIconButton icon="close" onClick={onClose} variant="ghost" aria-label="关闭" />
         </div>
 
         <div className="min-h-0 overflow-y-auto px-4 py-4 md:px-5">
@@ -153,12 +152,11 @@ export default function InquirySalesAssignmentDialog({
           <div className="mt-4 grid gap-4 md:grid-cols-[minmax(0,1fr)_240px]">
             <div className="space-y-3">
               <label className="block">
-                <span className="mb-1.5 block text-xs font-semibold text-on-surface-variant">业务对接人</span>
-                <select
+                <span className={APP_FIELD_LABEL_CLASS}>业务对接人</span>
+                <AppSelect
                   value={assigneeId}
                   onChange={(event) => setAssigneeId(event.target.value)}
                   disabled={isLoading}
-                  className="h-10 w-full rounded-lg border border-outline-variant/20 bg-surface-container-low px-3 text-sm text-on-surface outline-none focus:border-primary-container"
                 >
                   <option value="">{mode === 'manual' ? '请选择对接人' : '由系统选择或手动指定'}</option>
                   {candidates.map((candidate) => (
@@ -168,46 +166,44 @@ export default function InquirySalesAssignmentDialog({
                       {candidate.role ? ` / ${candidate.role}` : ''}
                     </option>
                   ))}
-                </select>
+                </AppSelect>
               </label>
 
               <div className="grid gap-3 md:grid-cols-2">
                 <label className="block">
-                  <span className="mb-1.5 block text-xs font-semibold text-on-surface-variant">客户区域</span>
-                  <input
+                  <span className={APP_FIELD_LABEL_CLASS}>客户区域</span>
+                  <AppTextInput
                     value={region}
                     onChange={(event) => {
                       setRegion(event.target.value);
                       if (mode === 'region') setHandoffNote(modeTemplate(mode, channel, event.target.value));
                     }}
                     placeholder="例如：华东 / 上海 / 广东"
-                    className="h-10 w-full rounded-lg border border-outline-variant/20 bg-surface-container-low px-3 text-sm text-on-surface outline-none focus:border-primary-container"
                   />
                 </label>
                 <label className="block">
-                  <span className="mb-1.5 block text-xs font-semibold text-on-surface-variant">交易方式</span>
-                  <select
+                  <span className={APP_FIELD_LABEL_CLASS}>交易方式</span>
+                  <AppSelect
                     value={channel}
                     onChange={(event) => {
                       const next = event.target.value as 'online' | 'offline';
                       setChannel(next);
                       if (mode === 'channel') setHandoffNote(modeTemplate(mode, next, region));
                     }}
-                    className="h-10 w-full rounded-lg border border-outline-variant/20 bg-surface-container-low px-3 text-sm text-on-surface outline-none focus:border-primary-container"
                   >
                     <option value="offline">线下交易</option>
                     <option value="online">线上交易</option>
-                  </select>
+                  </AppSelect>
                 </label>
               </div>
 
               <label className="block">
-                <span className="mb-1.5 block text-xs font-semibold text-on-surface-variant">交接说明模板</span>
-                <textarea
+                <span className={APP_FIELD_LABEL_CLASS}>交接说明模板</span>
+                <AppTextArea
                   value={handoffNote}
                   onChange={(event) => setHandoffNote(event.target.value)}
                   rows={4}
-                  className="w-full resize-none rounded-lg border border-outline-variant/20 bg-surface-container-low px-3 py-2 text-sm leading-relaxed text-on-surface outline-none focus:border-primary-container"
+                  className="resize-none leading-relaxed"
                 />
               </label>
             </div>
@@ -239,22 +235,12 @@ export default function InquirySalesAssignmentDialog({
         </div>
 
         <div className="flex shrink-0 items-center justify-end gap-2 border-t border-outline-variant/12 px-4 py-3 md:px-5">
-          <button
-            type="button"
-            onClick={onClose}
-            className="h-9 rounded-lg border border-outline-variant/20 px-4 text-sm text-on-surface-variant hover:bg-surface-container-high"
-          >
+          <AdminButton onClick={onClose} variant="secondary">
             取消
-          </button>
-          <button
-            type="button"
-            onClick={handleSubmit}
-            disabled={submitting}
-            className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-primary-container px-4 text-sm font-bold text-on-primary transition-opacity hover:opacity-90 disabled:opacity-50"
-          >
-            <Icon name="send" size={14} />
+          </AdminButton>
+          <AdminButton onClick={handleSubmit} disabled={submitting} icon="send" variant="primary">
             {submitting ? '转交中...' : '确认转交'}
-          </button>
+          </AdminButton>
         </div>
       </div>
     </div>

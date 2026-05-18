@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
+import { AdminButton } from './AdminControls';
 import Icon from './Icon';
-import { mergeClassName } from './PagePrimitives';
+import { APP_PAGE_DESCRIPTION_CLASS, APP_PAGE_TITLE_TRUNCATE_CLASS, mergeClassName } from './PagePrimitives';
 import { PageRefreshIndicator } from './PageRefreshFallback';
 
 export interface AdminStatItem {
@@ -16,6 +17,7 @@ interface AdminManagementPageProps {
   meta?: ReactNode;
   description?: ReactNode;
   actions?: ReactNode;
+  headerNavigation?: ReactNode;
   stats?: AdminStatItem[];
   toolbar?: ReactNode;
   children: ReactNode;
@@ -82,22 +84,40 @@ export function AdminPageHero({
   meta,
   description,
   actions,
+  headerNavigation,
 }: Omit<AdminManagementPageProps, 'toolbar' | 'children' | 'className' | 'contentClassName'>) {
   return (
-    <section className="shrink-0 rounded-xl border border-outline-variant/15 bg-surface-container-low px-4 py-3 md:px-5">
-      <div className="flex min-h-[58px] items-center justify-between gap-3">
-        <div className="min-w-0 flex-1">
-          <div className="flex min-h-7 flex-wrap items-center gap-x-2.5 gap-y-1">
-            <h1 className="truncate text-lg font-bold leading-7 tracking-tight text-on-surface md:text-xl">{title}</h1>
+    <section className="app-page-hero shrink-0 rounded-xl border border-outline-variant/15 bg-surface-container-low px-4 py-2.5 md:px-5">
+      <div className="app-page-hero-inner flex min-h-[54px] items-center justify-between gap-3">
+        <div className="app-page-heading min-w-0 flex-1">
+          <div className="app-page-title-row flex min-h-6 min-w-0 flex-wrap items-center gap-x-2.5 gap-y-1">
+            <h1 className={APP_PAGE_TITLE_TRUNCATE_CLASS}>{title}</h1>
             {meta ? (
-              <span className="rounded-md border border-outline-variant/15 bg-surface-container px-2 py-0.5 text-[11px] font-medium text-on-surface-variant">
+              <span className="app-page-meta shrink-0 rounded-md border border-outline-variant/15 bg-surface-container px-2 py-0.5 text-[11px] font-medium text-on-surface-variant">
                 {meta}
               </span>
             ) : null}
           </div>
-          {description ? <p className="mt-0.5 line-clamp-1 text-xs text-on-surface-variant">{description}</p> : null}
+          {description ? (
+            <p className={mergeClassName(APP_PAGE_DESCRIPTION_CLASS, 'mt-0.5 line-clamp-1')}>{description}</p>
+          ) : null}
         </div>
-        {actions ? <div className="flex shrink-0 items-center justify-end gap-2 md:flex-wrap">{actions}</div> : null}
+        {headerNavigation || actions ? (
+          <div
+            className={`app-page-actions flex min-w-0 items-center justify-end gap-2 ${
+              headerNavigation ? 'flex-1' : 'shrink-0 md:flex-wrap'
+            }`}
+          >
+            {headerNavigation ? (
+              <div className="app-page-header-nav hidden min-w-0 flex-1 justify-end md:flex">{headerNavigation}</div>
+            ) : null}
+            {actions ? (
+              <div className="app-page-action-list flex shrink-0 items-center justify-end gap-2 md:flex-wrap">
+                {actions}
+              </div>
+            ) : null}
+          </div>
+        ) : null}
       </div>
     </section>
   );
@@ -105,7 +125,7 @@ export function AdminPageHero({
 
 export function AdminDetailHeader({ title, description, actions, onBack, children }: AdminDetailHeaderProps) {
   return (
-    <section className="shrink-0 border-b border-outline-variant/10 bg-surface-container px-4 py-3">
+    <section className="shrink-0 border-b border-outline-variant/10 bg-surface-container px-4 py-2.5">
       <div className="flex min-h-9 min-w-0 items-center gap-3">
         {onBack ? (
           <button
@@ -118,8 +138,10 @@ export function AdminDetailHeader({ title, description, actions, onBack, childre
           </button>
         ) : null}
         <div className="min-w-0 flex-1">
-          <h1 className="truncate text-lg font-bold leading-7 tracking-tight text-on-surface md:text-xl">{title}</h1>
-          {description ? <div className="mt-0.5 min-w-0 text-xs text-on-surface-variant">{description}</div> : null}
+          <h1 className={APP_PAGE_TITLE_TRUNCATE_CLASS}>{title}</h1>
+          {description ? (
+            <div className={mergeClassName(APP_PAGE_DESCRIPTION_CLASS, 'mt-0.5 min-w-0')}>{description}</div>
+          ) : null}
         </div>
         {actions ? <div className="flex shrink-0 items-center justify-end gap-2">{actions}</div> : null}
       </div>
@@ -130,24 +152,24 @@ export function AdminDetailHeader({ title, description, actions, onBack, childre
 
 export function AdminStatsGrid({ stats }: { stats: AdminStatItem[] }) {
   return (
-    <div className="grid shrink-0 grid-cols-2 gap-2 md:grid-cols-4 xl:grid-cols-[repeat(auto-fit,minmax(150px,1fr))]">
+    <div className="app-stats-grid grid shrink-0 grid-cols-2 gap-2 md:grid-cols-4 xl:grid-cols-[repeat(auto-fit,minmax(150px,1fr))]">
       {stats.map((item, index) => {
         const content = (
           <>
             {item.icon ? (
               <span
-                className={`grid h-8 w-8 shrink-0 place-items-center rounded-lg ${toneClasses[item.tone || 'primary']}`}
+                className={`grid h-7 w-7 shrink-0 place-items-center rounded-md ${toneClasses[item.tone || 'primary']}`}
               >
-                <Icon name={item.icon} size={16} />
+                <Icon name={item.icon} size={15} />
               </span>
             ) : null}
             <span className="min-w-0">
-              <span className="block truncate text-base font-bold leading-tight text-on-surface">{item.value}</span>
+              <span className="block truncate text-sm font-semibold leading-tight text-on-surface">{item.value}</span>
               <span className="block truncate text-[10px] text-on-surface-variant">{item.label}</span>
             </span>
           </>
         );
-        const className = `flex min-h-[58px] items-center gap-2.5 rounded-xl border border-outline-variant/15 bg-surface-container-low px-3 py-2.5 text-left ${
+        const className = `app-stat-card flex min-h-[54px] items-center gap-2.5 rounded-xl border border-outline-variant/15 bg-surface-container-low px-3 py-2.5 text-left ${
           item.onClick ? 'transition-colors hover:border-outline-variant/25 hover:bg-surface-container' : ''
         }`;
         return item.onClick ? (
@@ -168,7 +190,7 @@ export function AdminToolbar({ children, className }: AdminToolbarProps) {
   return (
     <div
       className={mergeClassName(
-        'shrink-0 rounded-xl border border-outline-variant/15 bg-surface-container-low px-3 py-2',
+        'app-page-toolbar shrink-0 rounded-xl border border-outline-variant/15 bg-surface-container-low px-3 py-2',
         className,
       )}
     >
@@ -181,7 +203,7 @@ export function AdminContentPanel({ children, className, scroll = false }: Admin
   return (
     <section
       className={mergeClassName(
-        `rounded-xl border border-outline-variant/15 bg-surface-container-low ${scroll ? 'min-h-0 flex-1 overflow-hidden' : ''}`,
+        `app-content-panel rounded-xl border border-outline-variant/15 bg-surface-container-low ${scroll ? 'min-h-0 flex-1 overflow-hidden' : ''}`,
         className,
       )}
     >
@@ -225,14 +247,9 @@ export function AdminErrorState({
       className={className}
       action={
         onRetry ? (
-          <button
-            type="button"
-            onClick={onRetry}
-            className="inline-flex h-9 items-center justify-center gap-1.5 rounded-sm bg-primary-container px-4 text-sm font-bold text-on-primary transition-opacity hover:opacity-90 active:scale-[0.98]"
-          >
-            <Icon name="refresh" size={15} />
+          <AdminButton onClick={onRetry} icon="refresh" variant="primary">
             {retryLabel}
-          </button>
+          </AdminButton>
         ) : null
       }
     />
@@ -252,6 +269,7 @@ export function AdminManagementPage({
   meta,
   description,
   actions,
+  headerNavigation,
   stats,
   toolbar,
   children,
@@ -259,11 +277,20 @@ export function AdminManagementPage({
   contentClassName,
 }: AdminManagementPageProps) {
   return (
-    <div className={mergeClassName('flex h-full min-h-0 flex-col gap-3 md:gap-4', className)}>
-      <AdminPageHero title={title} meta={meta} description={description} actions={actions} stats={stats} />
+    <div className={mergeClassName('app-page flex h-full min-h-0 flex-col gap-3 md:gap-4', className)}>
+      <AdminPageHero
+        title={title}
+        meta={meta}
+        description={description}
+        actions={actions}
+        headerNavigation={headerNavigation}
+        stats={stats}
+      />
       {stats?.length ? <AdminStatsGrid stats={stats} /> : null}
       {toolbar ? <AdminToolbar>{toolbar}</AdminToolbar> : null}
-      <div className={mergeClassName('flex min-h-0 flex-1 flex-col', contentClassName)}>{children}</div>
+      <div className={mergeClassName('app-page-content flex min-h-0 flex-1 flex-col', contentClassName)}>
+        {children}
+      </div>
     </div>
   );
 }

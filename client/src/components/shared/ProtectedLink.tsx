@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react';
+import type { SystemSettings } from '../../api/settings';
 import { getPublicSettingsSnapshot } from '../../lib/publicSettings';
 import { preloadRouteForPath } from '../../lib/routeLoaders';
 import { useAuthStore } from '../../stores/useAuthStore';
@@ -38,17 +39,25 @@ export function getLoginReason(path: string): string {
   return '访问此页面';
 }
 
-export function isLoginDialogEnabled(path?: string): boolean {
-  const settings = getPublicSettingsSnapshot();
-  const master = settings.login_dialog_enabled;
+function readSettings(settings?: Partial<SystemSettings>) {
+  return settings || getPublicSettingsSnapshot();
+}
+
+export function isAuthModalEnabled(settings?: Partial<SystemSettings>): boolean {
+  return readSettings(settings).auth_modal_enabled !== false;
+}
+
+export function isLoginDialogEnabled(path?: string, settings?: Partial<SystemSettings>): boolean {
+  const resolvedSettings = readSettings(settings);
+  const master = resolvedSettings.login_dialog_enabled;
   if (master === false) return false;
-  if (!path) return true;
+  if (!path) return false;
   const perPageKey = getPerPageDialogKey(path);
   if (perPageKey) {
-    const v = settings[perPageKey as keyof typeof settings];
+    const v = resolvedSettings[perPageKey as keyof typeof resolvedSettings];
     return v !== false;
   }
-  return true;
+  return false;
 }
 
 const PATH_TO_DIALOG_KEY: Record<string, string> = {
@@ -77,6 +86,7 @@ function getPerPageDialogKey(path: string): string | undefined {
  */
 export function checkProtectedAccess(
   path: string,
+  settings?: Partial<SystemSettings>,
 ):
   | { action: 'dialog'; reason: string; returnUrl: string }
   | { action: 'redirect'; returnUrl: string }
@@ -84,7 +94,7 @@ export function checkProtectedAccess(
   if (useAuthStore.getState().isAuthenticated) return { action: 'allow' };
   if (!isProtectedPath(path)) return { action: 'allow' };
   const returnUrl = path;
-  if (isLoginDialogEnabled(path)) {
+  if (isLoginDialogEnabled(path, settings)) {
     return { action: 'dialog', reason: getLoginReason(path), returnUrl };
   }
   return { action: 'redirect', returnUrl };

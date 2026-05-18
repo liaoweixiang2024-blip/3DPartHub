@@ -2,6 +2,13 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import useSWR from 'swr';
 import { categoriesApi, type CategoryItem } from '../api/categories';
+import { AdminButton } from '../components/shared/AdminControls';
+import {
+  ADMIN_GRID_ROW_CLASS,
+  ADMIN_ROW_META_CLASS,
+  ADMIN_ROW_TITLE_CLASS,
+  AdminGridHeader,
+} from '../components/shared/AdminDataTable';
 import { AdminContentPanel, AdminLoadingState, AdminManagementPage } from '../components/shared/AdminManagementPage';
 import { AdminPageShell } from '../components/shared/AdminPageShell';
 import Icon from '../components/shared/Icon';
@@ -10,6 +17,8 @@ import { useToast } from '../components/shared/Toast';
 import { useDocumentTitle } from '../hooks/useDocumentTitle';
 import { useImeSafeSearchInput } from '../hooks/useImeSafeSearchInput';
 import { getErrorMessage } from '../lib/errorNotifications';
+
+const CATEGORY_ADMIN_GRID_COLUMNS = '28px 34px 44px minmax(0,1fr) 104px 68px 152px';
 
 function CategoryRow({
   cat,
@@ -56,7 +65,7 @@ function CategoryRow({
           e.preventDefault();
           onDropOn(cat);
         }}
-        className={`grid min-h-[68px] grid-cols-[minmax(0,1fr)_96px] items-center gap-2 border-b border-outline-variant/8 px-3 py-3 transition-colors hover:bg-surface-container-high/45 sm:min-h-[74px] sm:grid-cols-[28px_34px_44px_minmax(0,1fr)_104px_68px_152px] sm:px-4 ${
+        className={`${ADMIN_GRID_ROW_CLASS} min-h-[68px] grid-cols-[minmax(0,1fr)_96px] gap-2 px-3 py-3 sm:min-h-[68px] sm:grid-cols-[28px_34px_44px_minmax(0,1fr)_104px_68px_152px] sm:px-4 ${
           isChild ? 'bg-surface-container-lowest/45' : 'bg-surface-container-low'
         } ${isDragging ? 'opacity-45' : ''} ${isSameDragLevel ? 'ring-1 ring-inset ring-primary-container/15' : ''}`}
       >
@@ -147,14 +156,14 @@ function CategoryRow({
           </span>
           <div className="min-w-0">
             <div className="flex min-w-0 items-center gap-2">
-              <span className="truncate text-sm font-semibold text-on-surface sm:text-[15px]">{cat.name}</span>
+              <span className={ADMIN_ROW_TITLE_CLASS}>{cat.name}</span>
               {isChild && (
                 <span className="hidden rounded-full bg-surface-container-high px-2 py-1 text-[10px] text-on-surface-variant sm:inline">
                   子分类
                 </span>
               )}
             </div>
-            <div className="mt-1 hidden flex-wrap items-center gap-2 text-[11px] text-on-surface-variant/70 sm:flex">
+            <div className={`${ADMIN_ROW_META_CLASS} mt-1 hidden flex-wrap items-center gap-2 text-[11px] sm:flex`}>
               <span>ID: {cat.id.slice(0, 8)}</span>
               <span>图标: {cat.icon || 'folder'}</span>
             </div>
@@ -317,7 +326,7 @@ function CategoryModal({
       >
         <div className="flex items-start justify-between gap-3 border-b border-outline-variant/10 px-5 py-4">
           <div>
-            <h2 className="text-base font-bold text-on-surface">
+            <h2 className="text-base font-semibold text-on-surface">
               {isEdit ? '编辑模型分类' : parentId ? '添加子分类' : '添加模型分类'}
             </h2>
             <p className="mt-1 text-xs text-on-surface-variant">分类会用于模型库筛选、上传归类和模型详情页展示。</p>
@@ -384,19 +393,17 @@ function CategoryModal({
         </div>
 
         <div className="grid grid-cols-2 gap-2 border-t border-outline-variant/10 bg-surface-container-low px-5 py-4 sm:flex sm:justify-end">
-          <button
-            onClick={onClose}
-            className="rounded-xl bg-surface-container-high/50 px-4 py-2.5 text-sm text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface sm:rounded-lg"
-          >
+          <AdminButton onClick={onClose} className="w-full sm:w-auto" variant="secondary">
             取消
-          </button>
-          <button
+          </AdminButton>
+          <AdminButton
             onClick={handleSave}
             disabled={saving || !name.trim()}
-            className="rounded-xl bg-primary-container px-4 py-2.5 text-sm font-bold text-on-primary hover:opacity-90 disabled:opacity-50 sm:rounded-lg"
+            className="w-full sm:w-auto"
+            variant="primary"
           >
             {saving ? '保存中...' : '保存分类'}
-          </button>
+          </AdminButton>
         </div>
       </motion.div>
     </motion.div>
@@ -562,31 +569,29 @@ function Content() {
       title="分类管理"
       description="维护模型库分类、子分类和图标展示"
       actions={
-        <button
-          onClick={handleAdd}
-          className="inline-flex h-9 shrink-0 items-center justify-center gap-1.5 rounded-sm bg-primary-container px-3 text-xs font-bold text-on-primary transition-opacity hover:opacity-90"
-        >
-          <Icon name="add" size={15} />
+        <AdminButton onClick={handleAdd} icon="add" variant="primary">
           添加分类
-        </button>
+        </AdminButton>
       }
       toolbar={
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between sm:gap-3">
-          <div className="flex items-center divide-x divide-outline-variant/20 overflow-x-auto">
-            <div className="flex items-center gap-1.5 px-3 text-xs font-medium text-primary-container first:pl-0">
+          <div className="flex min-h-9 items-center divide-x divide-outline-variant/20 overflow-x-auto">
+            <div className="flex h-8 items-center gap-1.5 px-2.5 text-xs font-medium text-primary-container first:pl-0">
               <Icon name="folder" size={14} />
               <span>大类</span>
-              <strong className="tabular-nums text-sm">{stats.roots}</strong>
+              <strong className="tabular-nums text-[11px] font-medium">{stats.roots}</strong>
             </div>
-            <div className="flex items-center gap-1.5 px-3 text-xs font-medium text-on-surface-variant">
+            <div className="flex h-8 items-center gap-1.5 px-2.5 text-xs font-medium text-on-surface-variant">
               <Icon name="folder_open" size={14} />
               <span>子类</span>
-              <strong className="tabular-nums text-sm text-on-surface">{stats.children}</strong>
+              <strong className="tabular-nums text-[11px] font-medium text-on-surface">{stats.children}</strong>
             </div>
-            <div className="flex items-center gap-1.5 px-3 text-xs font-medium text-on-surface-variant">
+            <div className="flex h-8 items-center gap-1.5 px-2.5 text-xs font-medium text-on-surface-variant">
               <Icon name="view_in_ar" size={14} />
               <span>型号</span>
-              <strong className="tabular-nums text-sm text-on-surface">{stats.modelCount.toLocaleString()}</strong>
+              <strong className="tabular-nums text-[11px] font-medium text-on-surface">
+                {stats.modelCount.toLocaleString()}
+              </strong>
             </div>
             {toolbarStatus && (
               <span className="min-w-0 truncate px-1 text-xs text-on-surface-variant/75">{toolbarStatus}</span>
@@ -618,7 +623,7 @@ function Content() {
           </AdminContentPanel>
         ) : (
           <AdminContentPanel scroll className="flex h-full min-h-0 flex-col">
-            <div className="hidden shrink-0 grid-cols-[28px_34px_44px_minmax(0,1fr)_104px_68px_152px] items-center gap-2 border-b border-outline-variant/10 bg-surface-container-high px-4 py-3 text-[10px] font-bold uppercase tracking-wide text-on-surface-variant sm:grid">
+            <AdminGridHeader columns={CATEGORY_ADMIN_GRID_COLUMNS} className="hidden shrink-0 gap-2 px-4 sm:grid">
               <span />
               <span />
               <span />
@@ -626,7 +631,7 @@ function Content() {
               <span>层级</span>
               <span>排序</span>
               <span className="text-right">操作</span>
-            </div>
+            </AdminGridHeader>
 
             <div className="min-h-0 flex-1 overflow-y-auto custom-scrollbar">
               {visibleTree.map((cat) => (
@@ -655,12 +660,9 @@ function Content() {
                       添加第一个分类后，上传和模型库就可以按分类筛选。
                     </p>
                   </div>
-                  <button
-                    onClick={handleAdd}
-                    className="rounded-xl bg-primary-container px-4 py-2 text-sm font-bold text-on-primary hover:opacity-90"
-                  >
+                  <AdminButton onClick={handleAdd} icon="add" variant="primary">
                     添加分类
-                  </button>
+                  </AdminButton>
                 </div>
               ) : (
                 visibleTree.length === 0 && (
@@ -713,25 +715,19 @@ function Content() {
                   <Icon name="warning" size={20} />
                 </span>
                 <div>
-                  <h3 className="text-base font-bold text-on-surface">确认删除分类</h3>
+                  <h3 className="text-base font-semibold text-on-surface">确认删除分类</h3>
                   <p className="mt-1 text-sm leading-relaxed text-on-surface-variant">
                     删除后不可恢复，如果分类下有关联模型，可能会影响模型筛选展示。
                   </p>
                 </div>
               </div>
               <div className="grid grid-cols-2 gap-2">
-                <button
-                  onClick={() => setDeleteConfirm(null)}
-                  className="rounded-xl bg-surface-container-high/50 px-4 py-2.5 text-sm text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface"
-                >
+                <AdminButton onClick={() => setDeleteConfirm(null)} className="w-full" variant="secondary">
                   取消
-                </button>
-                <button
-                  onClick={() => handleDelete(deleteConfirm)}
-                  className="rounded-xl bg-error px-4 py-2.5 text-sm font-bold text-on-error hover:opacity-90"
-                >
+                </AdminButton>
+                <AdminButton onClick={() => handleDelete(deleteConfirm)} className="w-full" variant="danger">
                   确认删除
-                </button>
+                </AdminButton>
               </div>
             </motion.div>
           </motion.div>

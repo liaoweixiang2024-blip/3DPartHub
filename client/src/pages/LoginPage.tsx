@@ -5,11 +5,14 @@ import { authApi } from '../api/auth';
 import client from '../api/client';
 import { unwrapResponse } from '../api/response';
 import BrandMark from '../components/shared/BrandMark';
+import { APP_FIELD_ERROR_CLASS, AppFormLabel, AppTextInput } from '../components/shared/FormControls';
 import Icon from '../components/shared/Icon';
 import { PageTitle } from '../components/shared/PagePrimitives';
 import { PublicPageShell } from '../components/shared/PublicPageShell';
 import { useDocumentTitle } from '../hooks/useDocumentTitle';
+import { useMediaQuery } from '../layouts/hooks/useMediaQuery';
 import { getErrorMessage } from '../lib/errorNotifications';
+import { useResolvedPublicInterfaceTheme } from '../lib/interfaceThemePreference';
 import { usePublicSettings } from '../lib/publicSettings';
 import { sanitizeHtml } from '../lib/sanitizeHtml';
 import { useAuthStore } from '../stores/useAuthStore';
@@ -35,8 +38,14 @@ function validateEmail(email: string): boolean {
 }
 
 export default function LoginPage() {
-  useDocumentTitle('登录');
-  const [mode, setMode] = useState<AuthMode>('login');
+  const navigate = useNavigate();
+  const location = useLocation();
+  const initialMode =
+    location.pathname === '/register' || new URLSearchParams(location.search).get('mode') === 'register'
+      ? 'register'
+      : 'login';
+  const [mode, setMode] = useState<AuthMode>(initialMode);
+  useDocumentTitle(mode === 'register' ? '注册' : '登录');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [username, setUsername] = useState('');
@@ -46,13 +55,13 @@ export default function LoginPage() {
   const [apiError, setApiError] = useState('');
   const [rememberMe, setRememberMe] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
-  const navigate = useNavigate();
-  const location = useLocation();
   const from = (location.state as LoginLocationState | null)?.from || '/';
   const login = useAuthStore((s) => s.login);
   const [allowRegister, setAllowRegister] = useState(true);
+  const isDesktop = useMediaQuery('(min-width: 768px)');
   const { settings: publicSettings } = usePublicSettings();
-  const ThemePackage = getInterfaceThemePackage(publicSettings?.interface_theme);
+  const resolvedPublicTheme = useResolvedPublicInterfaceTheme(publicSettings, isDesktop);
+  const ThemePackage = getInterfaceThemePackage(resolvedPublicTheme);
   const LoginTemplate = ThemePackage.templates.Login;
 
   // Captcha state
@@ -71,6 +80,14 @@ export default function LoginPage() {
   useEffect(() => {
     if (publicSettings) setAllowRegister(publicSettings.allow_register ?? true);
   }, [publicSettings]);
+
+  useEffect(() => {
+    const requestedMode =
+      location.pathname === '/register' || new URLSearchParams(location.search).get('mode') === 'register'
+        ? 'register'
+        : 'login';
+    setMode(requestedMode);
+  }, [location.pathname, location.search]);
 
   // Fetch captcha on mount and when switching to register
   const refreshCaptcha = useCallback(async () => {
@@ -204,30 +221,27 @@ export default function LoginPage() {
 
             {mode === 'register' && (
               <div>
-                <label className="block text-xs text-on-surface-variant uppercase tracking-wider mb-1.5">
-                  联系人 / 用户名
-                </label>
-                <input
+                <AppFormLabel uppercase>联系人 / 用户名</AppFormLabel>
+                <AppTextInput
                   type="text"
                   value={username}
                   onChange={(e) => setUsername(e.target.value)}
-                  className={`w-full bg-surface-container-lowest text-on-surface text-base rounded-sm px-4 py-2.5 border outline-none transition-colors ${
-                    errors.username ? 'border-error' : 'border-outline-variant/30 focus:border-primary-container'
-                  }`}
+                  error={Boolean(errors.username)}
+                  fieldSize="lg"
                   placeholder="例如 张工"
                 />
-                {errors.username && <span className="text-xs text-error mt-1 block">{errors.username}</span>}
+                {errors.username && <span className={APP_FIELD_ERROR_CLASS}>{errors.username}</span>}
               </div>
             )}
 
             {mode === 'register' && (
               <div>
-                <label className="block text-xs text-on-surface-variant uppercase tracking-wider mb-1.5">手机号</label>
-                <input
+                <AppFormLabel uppercase>手机号</AppFormLabel>
+                <AppTextInput
                   type="tel"
                   value={phone}
                   onChange={(e) => setPhone(e.target.value)}
-                  className="w-full bg-surface-container-lowest text-on-surface text-base rounded-sm px-4 py-2.5 border border-outline-variant/30 outline-none transition-colors focus:border-primary-container"
+                  fieldSize="lg"
                   placeholder="用于询价、工单联系（选填）"
                 />
               </div>
@@ -235,14 +249,12 @@ export default function LoginPage() {
 
             {mode === 'register' && (
               <div>
-                <label className="block text-xs text-on-surface-variant uppercase tracking-wider mb-1.5">
-                  公司名称
-                </label>
-                <input
+                <AppFormLabel uppercase>公司名称</AppFormLabel>
+                <AppTextInput
                   type="text"
                   value={company}
                   onChange={(e) => setCompany(e.target.value)}
-                  className="w-full bg-surface-container-lowest text-on-surface text-base rounded-sm px-4 py-2.5 border border-outline-variant/30 outline-none transition-colors focus:border-primary-container"
+                  fieldSize="lg"
                   placeholder="提交询价时自动带入（选填）"
                 />
               </div>
@@ -250,46 +262,41 @@ export default function LoginPage() {
 
             {mode === 'register' && (
               <div>
-                <label className="block text-xs text-on-surface-variant uppercase tracking-wider mb-1.5">
-                  联系地址
-                </label>
-                <input
+                <AppFormLabel uppercase>联系地址</AppFormLabel>
+                <AppTextInput
                   type="text"
                   value={address}
                   onChange={(e) => setAddress(e.target.value)}
-                  className="w-full bg-surface-container-lowest text-on-surface text-base rounded-sm px-4 py-2.5 border border-outline-variant/30 outline-none transition-colors focus:border-primary-container"
+                  fieldSize="lg"
                   placeholder="用于询价对接和交付确认（选填）"
                 />
               </div>
             )}
 
             <div>
-              <label className="block text-xs text-on-surface-variant uppercase tracking-wider mb-1.5">邮箱</label>
-              <input
+              <AppFormLabel uppercase>邮箱</AppFormLabel>
+              <AppTextInput
                 type="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                className={`w-full bg-surface-container-lowest text-on-surface text-base rounded-sm px-4 py-2.5 border outline-none transition-colors ${
-                  errors.email ? 'border-error' : 'border-outline-variant/30 focus:border-primary-container'
-                }`}
+                error={Boolean(errors.email)}
+                fieldSize="lg"
                 placeholder="例如 name@company.com"
               />
-              {errors.email && <span className="text-xs text-error mt-1 block">{errors.email}</span>}
+              {errors.email && <span className={APP_FIELD_ERROR_CLASS}>{errors.email}</span>}
             </div>
 
             {mode === 'register' && (
               <div>
-                <label className="block text-xs text-on-surface-variant uppercase tracking-wider mb-1.5">
-                  图形验证码
-                </label>
+                <AppFormLabel uppercase>图形验证码</AppFormLabel>
                 <div className="flex gap-2 items-center">
-                  <input
+                  <AppTextInput
                     type="text"
                     value={captchaText}
                     onChange={(e) => setCaptchaText(e.target.value)}
-                    className={`flex-1 min-w-0 bg-surface-container-lowest text-on-surface text-base rounded-sm px-3 py-2.5 border outline-none transition-colors ${
-                      errors.captchaText ? 'border-error' : 'border-outline-variant/30 focus:border-primary-container'
-                    }`}
+                    className="min-w-0 flex-1 px-3"
+                    error={Boolean(errors.captchaText)}
+                    fieldSize="lg"
                     placeholder="验证码"
                     maxLength={4}
                   />
@@ -298,29 +305,26 @@ export default function LoginPage() {
                       type="button"
                       onClick={refreshCaptcha}
                       className="shrink-0 cursor-pointer rounded-sm overflow-hidden border border-outline-variant/30 hover:opacity-80 transition-opacity"
-                      title="点击刷新验证码"
                       dangerouslySetInnerHTML={{ __html: sanitizeHtml(captchaSvg) }}
                       style={{ width: 100, height: 40 }}
                     />
                   )}
                 </div>
-                {errors.captchaText && <span className="text-xs text-error mt-1 block">{errors.captchaText}</span>}
+                {errors.captchaText && <span className={APP_FIELD_ERROR_CLASS}>{errors.captchaText}</span>}
               </div>
             )}
 
             {mode === 'register' && (
               <div>
-                <label className="block text-xs text-on-surface-variant uppercase tracking-wider mb-1.5">
-                  邮箱验证码
-                </label>
+                <AppFormLabel uppercase>邮箱验证码</AppFormLabel>
                 <div className="flex gap-2">
-                  <input
+                  <AppTextInput
                     type="text"
                     value={emailCode}
                     onChange={(e) => setEmailCode(e.target.value)}
-                    className={`flex-1 min-w-0 bg-surface-container-lowest text-on-surface text-base rounded-sm px-3 py-2.5 border outline-none transition-colors ${
-                      errors.emailCode ? 'border-error' : 'border-outline-variant/30 focus:border-primary-container'
-                    }`}
+                    className="min-w-0 flex-1 px-3"
+                    error={Boolean(errors.emailCode)}
+                    fieldSize="lg"
                     placeholder="6位验证码"
                     maxLength={6}
                   />
@@ -333,20 +337,20 @@ export default function LoginPage() {
                     {sendingCode ? '发送中...' : emailCountdown > 0 ? `${emailCountdown}s` : '发送验证码'}
                   </button>
                 </div>
-                {errors.emailCode && <span className="text-xs text-error mt-1 block">{errors.emailCode}</span>}
+                {errors.emailCode && <span className={APP_FIELD_ERROR_CLASS}>{errors.emailCode}</span>}
               </div>
             )}
 
             <div>
-              <label className="block text-xs text-on-surface-variant uppercase tracking-wider mb-1.5">密码</label>
+              <AppFormLabel uppercase>密码</AppFormLabel>
               <div className="relative">
-                <input
+                <AppTextInput
                   type={showPassword ? 'text' : 'password'}
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  className={`w-full bg-surface-container-lowest text-on-surface text-base rounded-sm px-4 py-2.5 pr-10 border outline-none transition-colors ${
-                    errors.password ? 'border-error' : 'border-outline-variant/30 focus:border-primary-container'
-                  }`}
+                  className="pr-10"
+                  error={Boolean(errors.password)}
+                  fieldSize="lg"
                   placeholder="至少8位"
                 />
                 <button
@@ -357,24 +361,20 @@ export default function LoginPage() {
                   <Icon name={showPassword ? 'visibility_off' : 'visibility'} size={18} />
                 </button>
               </div>
-              {errors.password && <span className="text-xs text-error mt-1 block">{errors.password}</span>}
+              {errors.password && <span className={APP_FIELD_ERROR_CLASS}>{errors.password}</span>}
             </div>
 
             {mode === 'register' && (
               <div>
-                <label className="block text-xs text-on-surface-variant uppercase tracking-wider mb-1.5">
-                  确认密码
-                </label>
+                <AppFormLabel uppercase>确认密码</AppFormLabel>
                 <div className="relative">
-                  <input
+                  <AppTextInput
                     type={showPassword ? 'text' : 'password'}
                     value={confirmPassword}
                     onChange={(e) => setConfirmPassword(e.target.value)}
-                    className={`w-full bg-surface-container-lowest text-on-surface text-base rounded-sm px-4 py-2.5 pr-10 border outline-none transition-colors ${
-                      errors.confirmPassword
-                        ? 'border-error'
-                        : 'border-outline-variant/30 focus:border-primary-container'
-                    }`}
+                    className="pr-10"
+                    error={Boolean(errors.confirmPassword)}
+                    fieldSize="lg"
                     placeholder="再次输入密码"
                   />
                   <button
@@ -385,9 +385,7 @@ export default function LoginPage() {
                     <Icon name={showPassword ? 'visibility_off' : 'visibility'} size={18} />
                   </button>
                 </div>
-                {errors.confirmPassword && (
-                  <span className="text-xs text-error mt-1 block">{errors.confirmPassword}</span>
-                )}
+                {errors.confirmPassword && <span className={APP_FIELD_ERROR_CLASS}>{errors.confirmPassword}</span>}
               </div>
             )}
 

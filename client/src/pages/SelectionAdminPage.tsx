@@ -45,6 +45,18 @@ import {
   buildGeneratedProductDrafts,
   type GeneratedProductDraft,
 } from '../components/selection-admin/selectionAdminUtils';
+import {
+  ADMIN_GRID_ROW_CLASS,
+  ADMIN_ROW_META_CLASS,
+  ADMIN_ROW_TITLE_CLASS,
+  AdminGridHeader,
+  AdminTable,
+  AdminTableBodyRow,
+  AdminTableCell,
+  AdminTableHeadCell,
+  AdminTableHeadRow,
+  ADMIN_TABLE_HEAD_CLASS,
+} from '../components/shared/AdminDataTable';
 import { AdminManagementPage } from '../components/shared/AdminManagementPage';
 import { AdminPageShell } from '../components/shared/AdminPageShell';
 import Icon from '../components/shared/Icon';
@@ -63,6 +75,7 @@ import { smartSortOptions } from '../lib/selectionSort';
 type Tab = 'categories' | 'products';
 const PRODUCT_MODEL_HEADERS = ['型号编号', '型号', 'modelNo', 'modelno', 'ModelNo'];
 const PRODUCT_NAME_HEADERS = ['名称', '产品名称', 'name', 'Name'];
+const SELECTION_CATEGORY_GRID_COLUMNS = 'minmax(220px,1.4fr) minmax(120px,0.8fr) 92px 92px 80px 104px';
 
 // ========== Content ==========
 function Content() {
@@ -353,8 +366,8 @@ function Content() {
       }
       setShowCatModal(false);
       mutateCats();
-    } catch (err: any) {
-      toast(err.response?.data?.detail || '操作失败', 'error');
+    } catch (err: unknown) {
+      toast(getApiErrorMessage(err, '操作失败'), 'error');
     }
   }
   async function handleDeleteCat(id: string) {
@@ -364,8 +377,8 @@ function Content() {
       setDeleteCatId(null);
       if (selectedCatId === id) setSelectedCatId('');
       mutateCats();
-    } catch (err: any) {
-      toast(err.response?.data?.detail || '删除失败', 'error');
+    } catch (err: unknown) {
+      toast(getApiErrorMessage(err, '删除失败'), 'error');
     }
   }
 
@@ -459,8 +472,8 @@ function Content() {
       }
       setShowProdModal(false);
       mutateProds();
-    } catch (err: any) {
-      toast(err.response?.data?.detail || '操作失败', 'error');
+    } catch (err: unknown) {
+      toast(getApiErrorMessage(err, '操作失败'), 'error');
     }
   }
   async function handleDeleteProd(id: string) {
@@ -469,8 +482,8 @@ function Content() {
       toast('产品已删除', 'success');
       setDeleteProdId(null);
       mutateProds();
-    } catch (err: any) {
-      toast(err.response?.data?.detail || '删除失败', 'error');
+    } catch (err: unknown) {
+      toast(getApiErrorMessage(err, '删除失败'), 'error');
     }
   }
   async function handleProductAssetFiles(fileList: FileList | File[]) {
@@ -553,8 +566,8 @@ function Content() {
       setBatchErrors([]);
       mutateProds();
       mutateCats();
-    } catch (err: any) {
-      toast(err.message || '导入失败', 'error');
+    } catch (err: unknown) {
+      toast(getApiErrorMessage(err, '导入失败'), 'error');
     } finally {
       setBatchImporting(false);
     }
@@ -999,8 +1012,8 @@ function Content() {
         </div>
       }
       toolbar={
-        <div className="grid items-start gap-3 md:flex md:flex-nowrap md:items-center md:gap-3 md:min-h-11">
-          <div className="min-w-0 md:shrink-0">
+        <div className="flex min-h-10 min-w-0 flex-col gap-3 md:flex-row md:items-center md:justify-between">
+          <div className="min-w-0 flex-1">
             <ResponsiveSectionTabs
               tabs={[
                 { value: 'categories', label: '分类管理', count: totalCats, icon: 'category' },
@@ -1076,7 +1089,7 @@ function Content() {
             value={tab === 'categories' ? catSearchInputValue : prodSearchInputValue}
             onClear={() => (tab === 'categories' ? setCatSearch('') : setProdSearch(''))}
             placeholder={tab === 'categories' ? '搜索分类名称、slug 或分组' : '搜索产品名称、型号、参数值'}
-            className="md:ml-auto md:w-72 md:shrink-0"
+            className="md:w-72 md:shrink-0"
           />
         </div>
       }
@@ -1108,20 +1121,20 @@ function Content() {
                 </div>
               );
             return (
-              <div className="overflow-hidden rounded-xl border border-outline-variant/12 bg-surface-container-low">
-                <div className="sticky top-0 z-10 hidden grid-cols-[minmax(220px,1.4fr)_minmax(120px,0.8fr)_92px_92px_80px_104px] items-center gap-3 border-b border-outline-variant/10 bg-surface-container-low px-4 py-2 text-xs font-bold text-on-surface-variant md:grid">
+              <div className="overflow-hidden rounded-xl border border-outline-variant/15 bg-surface-container-low">
+                <AdminGridHeader columns={SELECTION_CATEGORY_GRID_COLUMNS} className="gap-3 px-4">
                   <span>分类名称</span>
                   <span>分组</span>
                   <span className="text-center">参数列</span>
                   <span className="text-center">产品数</span>
                   <span>排序</span>
                   <span className="text-right">操作</span>
-                </div>
+                </AdminGridHeader>
                 <div className="max-h-[calc(100vh-280px)] overflow-y-auto selection-scrollbarless">
                   {filtered.map((cat) => (
                     <div
                       key={cat.id}
-                      className="group grid grid-cols-[minmax(0,1fr)_auto] items-start gap-2.5 border-t border-outline-variant/[0.08] px-4 py-4 first:border-t-0 transition-colors hover:bg-surface-container-high/35 md:grid-cols-[minmax(220px,1.4fr)_minmax(120px,0.8fr)_92px_92px_80px_104px] md:items-center md:gap-3 md:py-3"
+                      className={`${ADMIN_GRID_ROW_CLASS} group grid-cols-[minmax(0,1fr)_auto] items-start gap-2.5 px-4 py-4 first:border-t-0 md:grid-cols-[minmax(220px,1.4fr)_minmax(120px,0.8fr)_92px_92px_80px_104px] md:items-center md:gap-3 md:py-3`}
                     >
                       <div className="min-w-0">
                         <div className="flex items-start gap-2.5 md:items-center md:gap-2">
@@ -1129,9 +1142,7 @@ function Content() {
                             <Icon name={cat.icon || 'inventory_2'} size={15} />
                           </span>
                           <span className="min-w-0 flex-1">
-                            <span className="block truncate text-[15px] font-bold leading-snug text-on-surface md:text-sm">
-                              {cat.name}
-                            </span>
+                            <span className={`block ${ADMIN_ROW_TITLE_CLASS}`}>{cat.name}</span>
                             <span className="mt-0.5 block truncate text-[10px] text-on-surface-variant sm:hidden">
                               /{cat.slug}
                             </span>
@@ -1145,7 +1156,7 @@ function Content() {
                           <span>排序 {cat.sortOrder}</span>
                         </div>
                       </div>
-                      <span className="hidden min-w-0 truncate text-xs text-on-surface-variant md:block">
+                      <span className={`hidden min-w-0 md:block ${ADMIN_ROW_META_CLASS}`}>
                         {cat.groupName || '未分组'}
                       </span>
                       <span className="hidden text-center text-xs tabular-nums text-on-surface md:block">
@@ -1316,12 +1327,12 @@ function Content() {
             <>
               {/* Products table */}
               {productsLoading ? (
-                <div className="min-h-[320px] overflow-hidden rounded-lg border border-outline-variant/10 bg-surface-container-low">
-                  <div className="hidden grid-cols-[repeat(5,minmax(120px,1fr))_96px] gap-3 border-b border-outline-variant/10 bg-surface-container-high px-4 py-3 md:grid">
+                <div className="min-h-[320px] overflow-hidden rounded-xl border border-outline-variant/15 bg-surface-container-low">
+                  <AdminGridHeader columns="repeat(5,minmax(120px,1fr)) 96px" className="gap-3 px-4">
                     {Array.from({ length: 6 }).map((_, i) => (
                       <span key={i} className="h-3 rounded-full bg-outline-variant/15" />
                     ))}
-                  </div>
+                  </AdminGridHeader>
                   <div className="space-y-3 p-3 md:p-4">
                     {Array.from({ length: 6 }).map((_, row) => (
                       <div
@@ -1446,35 +1457,29 @@ function Content() {
                       <div
                         ref={productTableScrollRef}
                         onScroll={handleProductTableScroll}
-                        className="hidden md:block overflow-auto selection-scrollbarless rounded-lg border border-outline-variant/10 max-h-[calc(100vh-280px)]"
+                        className="hidden max-h-[calc(100vh-280px)] overflow-auto rounded-xl border border-outline-variant/15 selection-scrollbarless md:block"
                       >
-                        <table className="w-full text-sm">
-                          <thead className="sticky top-0 z-10">
-                            <tr className="bg-surface-container-low">
+                        <AdminTable>
+                          <thead className={ADMIN_TABLE_HEAD_CLASS}>
+                            <AdminTableHeadRow>
                               {productColumns.map((col) => (
-                                <th
-                                  key={col.key}
-                                  className="px-3 py-2 text-left font-bold text-on-surface-variant whitespace-nowrap text-xs"
-                                >
+                                <AdminTableHeadCell key={col.key} className="whitespace-nowrap px-3">
                                   {col.label}
                                   {col.unit ? ` (${col.unit})` : ''}
-                                </th>
+                                </AdminTableHeadCell>
                               ))}
-                              <th className="px-3 py-2 text-right text-xs">操作</th>
-                            </tr>
+                              <AdminTableHeadCell className="px-3 text-right">操作</AdminTableHeadCell>
+                            </AdminTableHeadRow>
                           </thead>
                           <tbody>
                             {visibleProducts.map((p) => (
-                              <tr
-                                key={p.id}
-                                className="border-t border-outline-variant/5 hover:bg-surface-container/50"
-                              >
+                              <AdminTableBodyRow key={p.id}>
                                 {productColumns.map((col) => (
-                                  <td key={col.key} className="px-3 py-2 text-on-surface whitespace-nowrap">
+                                  <AdminTableCell key={col.key} className="whitespace-nowrap px-3 py-2.5">
                                     {(p.specs as Record<string, string>)[col.key] ?? '—'}
-                                  </td>
+                                  </AdminTableCell>
                                 ))}
-                                <td className="px-3 py-2 text-right">
+                                <AdminTableCell className="px-3 py-2.5 text-right">
                                   <div className="flex items-center justify-end gap-1">
                                     <button
                                       onClick={() => openEditProd(p)}
@@ -1510,11 +1515,11 @@ function Content() {
                                       </button>
                                     )}
                                   </div>
-                                </td>
-                              </tr>
+                                </AdminTableCell>
+                              </AdminTableBodyRow>
                             ))}
                           </tbody>
-                        </table>
+                        </AdminTable>
                       </div>
                       <InfiniteLoadTrigger
                         hasMore={hasMoreProducts}
@@ -3274,8 +3279,8 @@ function Content() {
                     toast('排序已保存', 'success');
                     setShowCatSortModal(false);
                     mutateCats();
-                  } catch (err: any) {
-                    toast(err.response?.data?.detail || '排序保存失败', 'error');
+                  } catch (err: unknown) {
+                    toast(getApiErrorMessage(err, '排序保存失败'), 'error');
                   }
                 }}
                 className="px-3 py-1.5 text-xs font-bold bg-primary-container text-on-primary rounded hover:opacity-90"

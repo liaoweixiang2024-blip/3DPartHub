@@ -2,6 +2,7 @@
  * Color scheme engine — applies CSS custom properties dynamically.
  */
 import { COLOR_PRESETS, COLOR_KEYS, type ColorKey } from './colorSchemes';
+import { clamp, hslToHex } from './colorUtils';
 
 const STYLE_ID = 'dynamic-theme';
 
@@ -96,24 +97,6 @@ function hexToHsl(hex: string): { h: number; s: number; l: number } {
     }
   }
   return { h: Math.round(h * 360), s: Math.round(s * 100), l: Math.round(l * 100) };
-}
-
-function hslToHex(h: number, s: number, l: number): string {
-  s /= 100;
-  l /= 100;
-  const a = s * Math.min(l, 1 - l);
-  const f = (n: number) => {
-    const k = (n + h / 30) % 12;
-    const color = l - a * Math.max(Math.min(k - 3, 9 - k, 1), -1);
-    return Math.round(255 * Math.max(0, Math.min(1, color)))
-      .toString(16)
-      .padStart(2, '0');
-  };
-  return `#${f(0)}${f(8)}${f(4)}`;
-}
-
-function clamp(value: number, min: number, max: number): number {
-  return Math.min(max, Math.max(min, value));
 }
 
 // --- Palette generation from a single primary color ---

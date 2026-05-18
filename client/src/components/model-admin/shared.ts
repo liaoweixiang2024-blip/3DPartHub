@@ -142,13 +142,13 @@ export function formatQueueFailureReason(reason?: string | null) {
 // ── Preview operations CSS helpers ─────────────────────────────────────────
 
 const PREVIEW_OPS_BUTTON_BASE =
-  'inline-flex h-8 w-[92px] shrink-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-sm px-2 text-[11px] font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50';
+  'inline-flex h-8 w-[92px] shrink-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-md px-2 text-xs font-medium transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-container/60 disabled:cursor-not-allowed disabled:opacity-50';
 const PREVIEW_OPS_ACTION_ROW =
   'flex w-full max-w-full min-w-0 items-center gap-1.5 overflow-x-auto pb-1 sm:w-auto sm:shrink-0 sm:justify-end scrollbar-hidden';
 
 export function previewOpsButtonClass(compact: boolean) {
   return compact
-    ? 'inline-flex h-7 min-w-0 items-center justify-center gap-1 rounded-sm px-1 text-[10px] font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50'
+    ? 'inline-flex h-8 min-w-0 items-center justify-center gap-1 rounded-md px-1 text-[10px] font-medium transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-container/60 disabled:cursor-not-allowed disabled:opacity-50'
     : PREVIEW_OPS_BUTTON_BASE;
 }
 

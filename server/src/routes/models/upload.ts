@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { copyFileSync, existsSync, mkdirSync, realpathSync, rmSync } from 'node:fs';
 import { stat as statAsync } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
-import { Router, Response } from 'express';
+import { Router, Response, type NextFunction } from 'express';
 import { getBusinessConfig } from '../../lib/businessConfig.js';
 import { cacheDelByPrefix } from '../../lib/cache.js';
 import { config } from '../../lib/config.js';
@@ -10,6 +10,7 @@ import { normalizeUploadFilename } from '../../lib/filenameEncoding.js';
 import { logger } from '../../lib/logger.js';
 import { conversionQueue } from '../../lib/queue.js';
 import { optionalString, requiredString, RequestValidationError } from '../../lib/requestValidation.js';
+import { modelMaxBytes, modelMaxSizeMb, UPLOAD_REQUEST_TIMEOUT_MS } from '../../lib/uploadLimits.js';
 import { authMiddleware, type AuthRequest } from '../../middleware/auth.js';
 import { requireRole } from '../../middleware/rbac.js';
 import { parseStepFileDate } from '../../services/modelFileDates.js';
@@ -20,23 +21,38 @@ import { modelUpload, pathInside, validateModelUpload } from './uploadHelpers.js
 type ModelUploadContext = {
   prisma: any;
   saveMeta: (id: string, data: Record<string, unknown>) => void;
+  deleteMeta: (id: string) => void;
 };
 
-export function createModelUploadRouter({ prisma, saveMeta }: ModelUploadContext) {
+export function createModelUploadRouter({ prisma, saveMeta, deleteMeta }: ModelUploadContext) {
   const router = Router();
 
-  async function markQueueUnavailable(modelId: string, meta: Record<string, unknown>, res: Response) {
-    meta.status = MODEL_STATUS.FAILED;
-    meta.error = 'conversion_queue_unavailable';
-    saveMeta(modelId, meta);
+  async function cleanupQueuedModelUpload(modelId: string, uploadPath: string | null | undefined) {
+    if (uploadPath) {
+      rmSync(uploadPath, { force: true });
+    }
+    deleteMeta(modelId);
     if (prisma) {
-      await prisma.model
-        .update({
-          where: { id: modelId },
-          data: { status: MODEL_STATUS.FAILED },
-        })
-        .catch(() => {});
+      await prisma.model.delete({ where: { id: modelId } }).catch((err: unknown) => {
+        logger.warn({ err, modelId }, 'Failed to clean model row after queue failure');
+      });
       await cacheDelByPrefix('cache:models:');
+    }
+  }
+
+  async function markQueueUnavailable(
+    modelId: string,
+    uploadPath: string | null | undefined,
+    meta: Record<string, unknown>,
+    res: Response,
+  ) {
+    try {
+      await cleanupQueuedModelUpload(modelId, uploadPath);
+    } catch (cleanupErr) {
+      logger.warn({ cleanupErr, modelId }, 'Queue failure cleanup failed');
+      meta.status = MODEL_STATUS.FAILED;
+      meta.error = 'conversion_queue_unavailable';
+      saveMeta(modelId, meta);
     }
     res.status(503).json({ detail: '转换队列暂不可用，请稍后重试' });
   }
@@ -46,6 +62,11 @@ export function createModelUploadRouter({ prisma, saveMeta }: ModelUploadContext
     '/api/models/upload',
     authMiddleware,
     requireRole('ADMIN'),
+    (req: AuthRequest, res: Response, next: NextFunction) => {
+      req.setTimeout(UPLOAD_REQUEST_TIMEOUT_MS);
+      res.setTimeout(UPLOAD_REQUEST_TIMEOUT_MS);
+      next();
+    },
     modelUpload.single('file'),
     async (req: AuthRequest, res: Response) => {
       const file = req.file;
@@ -85,7 +106,7 @@ export function createModelUploadRouter({ prisma, saveMeta }: ModelUploadContext
       saveMeta(modelId, meta);
 
       // Save initial DB record
-      let dbSaved = false;
+      let dbSaved = !prisma;
       if (prisma) {
         try {
           await prisma.model.upsert({
@@ -112,6 +133,17 @@ export function createModelUploadRouter({ prisma, saveMeta }: ModelUploadContext
         } catch (dbErr) {
           logger.error({ dbErr }, 'Database save failed');
         }
+      }
+
+      if (!dbSaved) {
+        try {
+          rmSync(file.path, { force: true });
+        } catch (cleanupErr) {
+          logger.warn({ cleanupErr, path: file.path, modelId }, 'Failed to remove uploaded file after DB save failure');
+        }
+        deleteMeta(modelId);
+        res.status(500).json({ detail: '保存模型记录失败' });
+        return;
       }
 
       // Auto-merge: check if models with same name exist, auto-group them
@@ -162,14 +194,6 @@ export function createModelUploadRouter({ prisma, saveMeta }: ModelUploadContext
         }
       }
 
-      if (!dbSaved) {
-        try {
-          rmSync(file.path, { force: true });
-        } catch {}
-        res.status(500).json({ detail: '保存模型记录失败' });
-        return;
-      }
-
       try {
         await conversionQueue.add('convert', {
           modelId,
@@ -180,7 +204,7 @@ export function createModelUploadRouter({ prisma, saveMeta }: ModelUploadContext
         });
       } catch (queueErr) {
         logger.error({ queueErr }, 'Queue add failed');
-        await markQueueUnavailable(modelId, meta, res);
+        await markQueueUnavailable(modelId, file.path, meta, res);
         return;
       }
 
@@ -207,6 +231,8 @@ export function createModelUploadRouter({ prisma, saveMeta }: ModelUploadContext
     authMiddleware,
     requireRole('ADMIN'),
     async (req: AuthRequest, res: Response) => {
+      req.setTimeout(UPLOAD_REQUEST_TIMEOUT_MS);
+      res.setTimeout(UPLOAD_REQUEST_TIMEOUT_MS);
       let filePath: string;
       let fileName: string;
       try {
@@ -248,13 +274,18 @@ export function createModelUploadRouter({ prisma, saveMeta }: ModelUploadContext
       const { uploadPolicy } = await getBusinessConfig();
       const formats = uploadPolicy.modelFormats.map((item) => item.toLowerCase());
       const fileSize = (await statAsync(resolvedPath)).size;
-      const maxBytes = Math.max(1, uploadPolicy.modelMaxSizeMb) * 1024 * 1024;
+      const maxBytes = modelMaxBytes(uploadPolicy);
+      const maxMb = modelMaxSizeMb(uploadPolicy);
       if (!formats.includes(ext)) {
         res.status(400).json({ detail: `不支持的格式，请上传 ${formats.map((item) => `.${item}`).join(' / ')} 文件` });
         return;
       }
+      if (fileSize <= 0) {
+        res.status(400).json({ detail: '文件内容为空，请重新选择有效的模型文件' });
+        return;
+      }
       if (fileSize > maxBytes) {
-        res.status(400).json({ detail: `文件过大，最大支持 ${uploadPolicy.modelMaxSizeMb}MB` });
+        res.status(400).json({ detail: `文件过大，最大支持 ${maxMb}MB` });
         return;
       }
       const modelId = randomUUID().slice(0, 12);
@@ -294,7 +325,7 @@ export function createModelUploadRouter({ prisma, saveMeta }: ModelUploadContext
       };
       saveMeta(modelId, meta);
 
-      let dbSaved = false;
+      let dbSaved = !prisma;
       if (prisma) {
         try {
           await prisma.model.upsert({
@@ -324,7 +355,13 @@ export function createModelUploadRouter({ prisma, saveMeta }: ModelUploadContext
       if (!dbSaved) {
         try {
           rmSync(storedUploadPath, { force: true });
-        } catch {}
+        } catch (cleanupErr) {
+          logger.warn(
+            { cleanupErr, path: storedUploadPath, modelId },
+            'Failed to remove local uploaded file after DB save failure',
+          );
+        }
+        deleteMeta(modelId);
         res.status(500).json({ detail: '保存模型记录失败' });
         return;
       }
@@ -340,7 +377,7 @@ export function createModelUploadRouter({ prisma, saveMeta }: ModelUploadContext
         });
       } catch (err) {
         logger.error({ err }, 'Failed to queue conversion');
-        await markQueueUnavailable(modelId, meta, res);
+        await markQueueUnavailable(modelId, storedUploadPath, meta, res);
         return;
       }
 

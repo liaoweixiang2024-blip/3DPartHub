@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { Router, Request } from 'express';
 import { config } from '../lib/config.js';
@@ -38,6 +38,10 @@ function getMeta(id: string): Record<string, unknown> | null {
 function saveMeta(id: string, data: Record<string, unknown>) {
   if (prisma) return;
   writeFileSync(join(METADATA_DIR, `${id}.json`), JSON.stringify(data, null, 2));
+}
+
+function deleteMeta(id: string) {
+  rmSync(join(METADATA_DIR, `${id}.json`), { force: true });
 }
 
 async function getPreviewMeta(
@@ -83,10 +87,10 @@ async function optionalVerifiedUser(req: Request) {
 
 router.use(createPreviewDiagnosticsRouter({ prisma, metadataDir: METADATA_DIR, getPreviewMeta }));
 router.use(createModelListRouter({ prisma, drawingDownloadUrl }));
-router.use(createModelDetailRouter({ prisma, getMeta, getPreviewMeta, optionalVerifiedUser, drawingDownloadUrl }));
-router.use(createModelUploadRouter({ prisma, saveMeta }));
-router.use(createModelDownloadRouter({ prisma, getMeta }));
 router.use(createModelManagementRouter({ prisma, metadataDir: METADATA_DIR, getMeta, saveMeta }));
+router.use(createModelDetailRouter({ prisma, getMeta, getPreviewMeta, optionalVerifiedUser, drawingDownloadUrl }));
+router.use(createModelUploadRouter({ prisma, saveMeta, deleteMeta }));
+router.use(createModelDownloadRouter({ prisma, getMeta }));
 router.use(createModelConversionRouter({ prisma, getMeta, saveMeta, getPreviewMeta }));
 router.use(createModelVersionsRouter({ prisma, optionalVerifiedUser }));
 

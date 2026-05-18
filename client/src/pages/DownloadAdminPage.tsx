@@ -10,6 +10,7 @@ import {
   AdminManagementPage,
 } from '../components/shared/AdminManagementPage';
 import { AdminPageShell } from '../components/shared/AdminPageShell';
+import AdminRefreshButton from '../components/shared/AdminRefreshButton';
 import Icon from '../components/shared/Icon';
 import ModelThumbnail from '../components/shared/ModelThumbnail';
 import ResponsiveSectionTabs from '../components/shared/ResponsiveSectionTabs';
@@ -17,7 +18,6 @@ import SearchField from '../components/shared/SearchField';
 import { useToast } from '../components/shared/Toast';
 import { useDocumentTitle } from '../hooks/useDocumentTitle';
 import { useImeSafeSearchInput } from '../hooks/useImeSafeSearchInput';
-import { useMediaQuery } from '../layouts/hooks/useMediaQuery';
 import { getErrorMessage } from '../lib/errorNotifications';
 
 type DownloadStatsTab = 'trend' | 'formats' | 'models' | 'recent';
@@ -495,9 +495,7 @@ function LoadingState({ actions, toolbar }: { actions: ReactNode; toolbar: React
 
 function Content() {
   const { toast } = useToast();
-  const isDesktop = useMediaQuery('(min-width: 768px)');
   const [activeTab, setActiveTab] = useState<DownloadStatsTab>('trend');
-  const [refreshing, setRefreshing] = useState(false);
   const {
     value: search,
     draftValue: searchInputValue,
@@ -508,33 +506,15 @@ function Content() {
   const { data, error, isLoading, mutate } = useSWR(statsKey, () => downloadsApi.adminStats(search));
 
   async function handleRefresh() {
-    setRefreshing(true);
     try {
       await mutate(undefined, { revalidate: true });
       toast('下载统计已刷新', 'success');
     } catch (err: unknown) {
       toast(getErrorMessage(err, '刷新下载统计失败'), 'error');
-    } finally {
-      setRefreshing(false);
     }
   }
 
-  const actions = (
-    <button
-      type="button"
-      onClick={handleRefresh}
-      disabled={refreshing}
-      className={
-        isDesktop
-          ? 'flex items-center gap-2 rounded-lg border border-outline-variant/20 px-4 py-2.5 text-sm text-on-surface-variant transition-colors hover:text-on-surface disabled:opacity-50'
-          : 'inline-flex h-9 items-center gap-1 rounded-lg border border-outline-variant/20 px-3 text-xs text-on-surface-variant disabled:opacity-50'
-      }
-      aria-label="刷新"
-    >
-      <Icon name="refresh" size={isDesktop ? 16 : 14} className={refreshing ? 'animate-spin' : ''} />
-      {isDesktop ? (refreshing ? '刷新中...' : '刷新') : null}
-    </button>
-  );
+  const actions = <AdminRefreshButton onRefresh={handleRefresh} mobileIconOnly />;
   const toolbar = (
     <DownloadAdminToolbar
       active={activeTab}

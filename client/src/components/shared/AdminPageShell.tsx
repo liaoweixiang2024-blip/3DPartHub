@@ -2,6 +2,7 @@ import { motion } from 'framer-motion';
 import { createContext, useContext, useLayoutEffect, useState, type ReactNode, type Ref } from 'react';
 import { Outlet, useLocation } from 'react-router-dom';
 import { useMediaQuery } from '../../layouts/hooks/useMediaQuery';
+import { useResolvedAdminInterfaceTheme, useResolvedPublicInterfaceTheme } from '../../lib/interfaceThemePreference';
 import { getFooterCopyright, usePublicSettings } from '../../lib/publicSettings';
 import { getInterfaceThemePackage } from '../../themes/interfaceThemes/registry';
 import type { FloatingMenuThemeProps } from '../../themes/interfaceThemes/types';
@@ -22,21 +23,21 @@ function AdminCopyrightBadge() {
   const text = getFooterCopyright();
 
   return (
-    <div className="pointer-events-none fixed bottom-3 right-5 z-20 hidden max-w-[min(46vw,560px)] items-center gap-2 text-[11px] font-medium text-on-surface-variant/45 md:flex">
+    <div className="admin-copyright-badge pointer-events-none fixed bottom-3 right-5 z-20 hidden max-w-[min(46vw,560px)] items-center gap-2 text-[11px] font-medium text-on-surface-variant/45 md:flex">
       <span className="h-px w-8 bg-gradient-to-r from-transparent to-outline-variant/35" />
       <span className="max-w-[min(38vw,480px)] truncate">{text}</span>
     </div>
   );
 }
 
-function useInterfaceThemeShellComponents() {
+function useShellThemePackages(isAdminRoute: boolean, isDesktop: boolean) {
   const { settings } = usePublicSettings();
-  return getInterfaceThemePackage(settings?.interface_theme);
-}
-
-function useMobileThemeShellComponents() {
-  const { settings } = usePublicSettings();
-  return getMobileThemePackage(settings?.mobile_interface_theme);
+  const systemPkg = getInterfaceThemePackage(settings?.interface_theme);
+  const publicPkg = getInterfaceThemePackage(useResolvedPublicInterfaceTheme(settings));
+  const adminPkg = getInterfaceThemePackage(useResolvedAdminInterfaceTheme(settings));
+  const mobilePkg = getMobileThemePackage(settings?.mobile_interface_theme);
+  const themePackage = isDesktop ? (isAdminRoute ? adminPkg : publicPkg) : systemPkg;
+  return { themePackage, mobilePkg, systemPkg };
 }
 
 function useFloatingMenuThemeProps(): FloatingMenuThemeProps {
@@ -54,8 +55,8 @@ export function AdminLayout() {
   const [navOpen, setNavOpen] = useState(false);
   const [hideBottomNav, setHideBottomNav] = useState(false);
   const location = useLocation();
-  const ThemePackage = useInterfaceThemeShellComponents();
-  const MobileThemePackage = useMobileThemeShellComponents();
+  const isAdminRoute = location.pathname === '/admin' || location.pathname.startsWith('/admin/');
+  const { themePackage: ThemePackage, mobilePkg: MobileThemePackage } = useShellThemePackages(isAdminRoute, isDesktop);
   const Sidebar = ThemePackage.components.Sidebar;
   const BottomNav = MobileThemePackage.components.BottomNav;
   const MobileNavDrawer = MobileThemePackage.components.MobileNavDrawer;
@@ -63,7 +64,6 @@ export function AdminLayout() {
   const floatingMenuProps = useFloatingMenuThemeProps();
   const interfaceTheme = ThemePackage.manifest.key;
   const mobileTheme = MobileThemePackage.manifest.key;
-  const isAdminRoute = location.pathname === '/admin' || location.pathname.startsWith('/admin/');
   const chromeContext = { pathname: location.pathname, isAdminRoute };
   const showDesktopSidebar = ThemePackage.chrome.adminLayout.showDesktopSidebar(chromeContext);
   const showDesktopFloatingMenu = ThemePackage.chrome.adminLayout.showDesktopFloatingMenu?.(chromeContext) ?? false;
@@ -115,15 +115,20 @@ export function PublicLayout() {
   const isDesktop = useMediaQuery('(min-width: 768px)');
   const [navOpen, setNavOpen] = useState(false);
   const location = useLocation();
-  const ThemePackage = useInterfaceThemeShellComponents();
-  const MobileThemePackage = useMobileThemeShellComponents();
+  const isAdminRoute = location.pathname === '/admin' || location.pathname.startsWith('/admin/');
+  const {
+    themePackage: ThemePackage,
+    mobilePkg: MobileThemePackage,
+    systemPkg: SystemThemePackage,
+  } = useShellThemePackages(isAdminRoute, isDesktop);
+  // Public layout on desktop uses the public-resolved theme (not admin); on mobile uses system default
+  const resolvedThemePackage = isDesktop ? ThemePackage : SystemThemePackage;
   const BottomNav = MobileThemePackage.components.BottomNav;
   const MobileNavDrawer = MobileThemePackage.components.MobileNavDrawer;
-  const FloatingMenu = ThemePackage.components.FloatingMenu;
+  const FloatingMenu = resolvedThemePackage.components.FloatingMenu;
   const floatingMenuProps = useFloatingMenuThemeProps();
-  const interfaceTheme = ThemePackage.manifest.key;
+  const interfaceTheme = resolvedThemePackage.manifest.key;
   const mobileTheme = MobileThemePackage.manifest.key;
-  const isAdminRoute = location.pathname === '/admin' || location.pathname.startsWith('/admin/');
   const chromeContext = { pathname: location.pathname, isAdminRoute };
   const showDesktopHomeFooter = ThemePackage.chrome.publicLayout.showDesktopHomeFooter?.(chromeContext) ?? false;
   const showDesktopFloatingMenu = ThemePackage.chrome.publicLayout.showDesktopFloatingMenu?.(chromeContext) ?? false;
@@ -185,14 +190,13 @@ export function AdminPageShell({
   const bottomNavCtx = useContext(HideBottomNavContext);
   const [navOpen, setNavOpen] = useState(false);
   const location = useLocation();
-  const ThemePackage = useInterfaceThemeShellComponents();
-  const MobileThemePackage = useMobileThemeShellComponents();
+  const isAdminRoute = location.pathname === '/admin' || location.pathname.startsWith('/admin/');
+  const { themePackage: ThemePackage, mobilePkg: MobileThemePackage } = useShellThemePackages(isAdminRoute, isDesktop);
   const Sidebar = ThemePackage.components.Sidebar;
   const BottomNav = MobileThemePackage.components.BottomNav;
   const MobileNavDrawer = MobileThemePackage.components.MobileNavDrawer;
   const interfaceTheme = ThemePackage.manifest.key;
   const mobileTheme = MobileThemePackage.manifest.key;
-  const isAdminRoute = location.pathname === '/admin' || location.pathname.startsWith('/admin/');
   const chromeContext = { pathname: location.pathname, isAdminRoute };
   const showDesktopSidebar = ThemePackage.chrome.adminLayout.showDesktopSidebar(chromeContext);
   const themeDesktopContentClassName = ThemePackage.chrome.adminLayout.desktopContentClassName?.(chromeContext);

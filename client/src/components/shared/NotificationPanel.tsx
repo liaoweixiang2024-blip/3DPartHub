@@ -114,7 +114,15 @@ function NotificationItem({
   );
 }
 
-export default function NotificationPanel({ compact = false }: { compact?: boolean }) {
+export default function NotificationPanel({
+  compact = false,
+  onLoginClick,
+  showTooltip = true,
+}: {
+  compact?: boolean;
+  onLoginClick?: () => void;
+  showTooltip?: boolean;
+}) {
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
   const user = useAuthStore((s) => s.user);
   const isAdmin = user?.role === 'ADMIN';
@@ -275,12 +283,15 @@ export default function NotificationPanel({ compact = false }: { compact?: boole
       return (
         <button
           onClick={() => {
-            // Redirect to login when not authenticated
-            window.location.href = '/login';
+            if (onLoginClick) {
+              onLoginClick();
+            } else {
+              window.location.href = '/login';
+            }
           }}
           className="p-2 rounded-lg text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high transition-colors"
           aria-label="通知"
-          title="登录后查看通知"
+          title={showTooltip ? '登录后查看通知' : undefined}
         >
           <Icon name="notifications" size={20} />
         </button>
@@ -379,8 +390,8 @@ export default function NotificationPanel({ compact = false }: { compact?: boole
             onFocus={handleNotificationIntent}
             className="p-2 text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high rounded-lg transition-colors relative"
             aria-label="通知"
-            data-tooltip="通知"
-            data-tooltip-side="bottom"
+            data-tooltip={showTooltip ? '通知' : undefined}
+            data-tooltip-side={showTooltip ? 'bottom' : undefined}
           >
             <Icon name="notifications" size={iconSize} />
             {unreadCount > 0 && (
@@ -427,8 +438,8 @@ export default function NotificationPanel({ compact = false }: { compact?: boole
         onFocus={handleNotificationIntent}
         className="p-2 text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high rounded-lg transition-colors relative"
         aria-label="通知"
-        data-tooltip="通知"
-        data-tooltip-side="bottom"
+        data-tooltip={showTooltip ? '通知' : undefined}
+        data-tooltip-side={showTooltip ? 'bottom' : undefined}
       >
         <Icon name="notifications" size={iconSize} />
         {unreadCount > 0 && (

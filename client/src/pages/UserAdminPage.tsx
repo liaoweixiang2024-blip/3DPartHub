@@ -1,18 +1,19 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import useSWR from 'swr';
 import useSWRInfinite from 'swr/infinite';
 import client from '../api/client';
 import { unwrapResponse } from '../api/response';
+import { AdminIconButton } from '../components/shared/AdminControls';
 import { AdminLoadingState, AdminManagementPage } from '../components/shared/AdminManagementPage';
 import { AdminPageShell } from '../components/shared/AdminPageShell';
-import Icon from '../components/shared/Icon';
+import ConfirmDialog from '../components/shared/ConfirmDialog';
+import AdminRefreshButton from '../components/shared/AdminRefreshButton';
 import InfiniteLoadTrigger from '../components/shared/InfiniteLoadTrigger';
 import ResponsiveSectionTabs from '../components/shared/ResponsiveSectionTabs';
 import SearchField from '../components/shared/SearchField';
 import { useToast } from '../components/shared/Toast';
 import { useDocumentTitle } from '../hooks/useDocumentTitle';
 import { useImeSafeSearchInput } from '../hooks/useImeSafeSearchInput';
-import { useMediaQuery } from '../layouts/hooks/useMediaQuery';
 import { copyText } from '../lib/clipboard';
 import { getErrorMessage } from '../lib/errorNotifications';
 
@@ -79,7 +80,6 @@ function UserRoleTabs({
 
 export default function UserAdminPage() {
   useDocumentTitle('用户管理');
-  const isDesktop = useMediaQuery('(min-width: 768px)');
   const {
     value: search,
     draftValue: searchInputValue,
@@ -87,7 +87,7 @@ export default function UserAdminPage() {
     inputProps: searchInputProps,
   } = useImeSafeSearchInput();
   const [roleFilter, setRoleFilter] = useState('');
-  const [refreshing, setRefreshing] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<{ id: string; username: string } | null>(null);
   const { toast } = useToast();
   const { data: stats, mutate: mutateStats } = useSWR('/admin/users/stats', fetchUserStats);
 
@@ -113,8 +113,8 @@ export default function UserAdminPage() {
     return unwrapResponse<{ total: number; items: UserItem[]; page: number; pageSize: number }>(res);
   }
 
-  const pages = data || [];
-  const users = pages.flatMap((pageData) => pageData.items);
+  const pages = useMemo(() => data || [], [data]);
+  const users = useMemo(() => pages.flatMap((pageData) => pageData.items), [pages]);
   const total = pages[0]?.total || 0;
   const loadedCount = users.length;
   const hasMore = loadedCount < total;
@@ -125,15 +125,12 @@ export default function UserAdminPage() {
   }, [hasMore, isLoadingMore, setSize]);
 
   async function handleRefresh() {
-    setRefreshing(true);
     try {
       await setSize(1);
       await Promise.all([mutate(undefined, { revalidate: true }), mutateStats(undefined, { revalidate: true })]);
       toast('用户数据已刷新', 'success');
     } catch (err: unknown) {
       toast(getErrorMessage(err, '刷新用户数据失败'), 'error');
-    } finally {
-      setRefreshing(false);
     }
   }
 
@@ -148,11 +145,11 @@ export default function UserAdminPage() {
     }
   }
 
-  async function handleDelete(userId: string, username: string) {
-    if (!window.confirm(`确定删除用户「${username}」？此操作不可撤销。`)) return;
+  async function handleDelete(userId: string) {
     try {
       await client.delete(`/admin/users/${userId}`);
       toast('用户已删除', 'success');
+      setDeleteTarget(null);
       mutate();
       mutateStats();
     } catch (err: unknown) {
@@ -192,22 +189,7 @@ export default function UserAdminPage() {
     </div>
   );
 
-  const actions = (
-    <button
-      type="button"
-      onClick={handleRefresh}
-      disabled={refreshing}
-      className={
-        isDesktop
-          ? 'flex items-center gap-2 rounded-lg border border-outline-variant/20 px-4 py-2.5 text-sm text-on-surface-variant transition-colors hover:text-on-surface disabled:opacity-50'
-          : 'inline-flex h-9 items-center gap-1 rounded-lg border border-outline-variant/20 px-3 text-xs text-on-surface-variant disabled:opacity-50'
-      }
-      aria-label="刷新"
-    >
-      <Icon name="refresh" size={isDesktop ? 16 : 14} className={refreshing ? 'animate-spin' : ''} />
-      {isDesktop ? (refreshing ? '刷新中...' : '刷新') : null}
-    </button>
-  );
+  const actions = <AdminRefreshButton onRefresh={handleRefresh} mobileIconOnly />;
 
   const content = (
     <AdminManagementPage
@@ -266,13 +248,13 @@ export default function UserAdminPage() {
                   <option value="EDITOR">编辑者</option>
                   <option value="VIEWER">访客</option>
                 </select>
-                <button
-                  onClick={() => handleDelete(u.id, u.username)}
-                  className="p-1.5 text-on-surface-variant hover:text-error rounded transition-colors"
-                  title="删除用户"
-                >
-                  <Icon name="delete" size={16} />
-                </button>
+                <AdminIconButton
+                  icon="delete"
+                  onClick={() => setDeleteTarget({ id: u.id, username: u.username })}
+                  size="icon-sm"
+                  variant="danger"
+                  aria-label="删除用户"
+                />
               </div>
             </div>
           </div>
@@ -285,5 +267,19 @@ export default function UserAdminPage() {
     </AdminManagementPage>
   );
 
-  return <AdminPageShell>{content}</AdminPageShell>;
+  return (
+    <AdminPageShell>
+      {content}
+      <ConfirmDialog
+        open={Boolean(deleteTarget)}
+        onClose={() => setDeleteTarget(null)}
+        onConfirm={() => {
+          if (deleteTarget) void handleDelete(deleteTarget.id);
+        }}
+        title="确认删除用户"
+        description={`确定删除用户「${deleteTarget?.username || ''}」？此操作不可撤销。`}
+        confirmLabel="确认删除"
+      />
+    </AdminPageShell>
+  );
 }

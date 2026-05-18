@@ -66,7 +66,7 @@ publicSettings.ts (缓存 2 分钟)
                                     ├─ manifest (元数据)
                                     ├─ chrome (布局行为)
                                     ├─ home (首页行为)
-                                    ├─ templates.{DesktopHome, Login, NotFound}
+                                    ├─ templates.{DesktopHome, AuthDialog, Login, NotFound}
                                     └─ components.{DesktopTopNav, Sidebar, FloatingMenu?}
   └─→ getMobileThemePackage() ─→ 返回 MobileThemePackage
                                 ├─ manifest
@@ -92,6 +92,7 @@ publicSettings.ts (缓存 2 分钟)
   │   └── MobileNavDrawer.tsx # 【兼容】旧合约保留，不作为移动端消费入口
   ├── templates/
   │   ├── HomeDesktop.tsx   # 【必须】桌面首页模板
+  │   ├── AuthDialog.tsx    # 【必须】登录/注册弹窗模板
   │   ├── Login.tsx         # 【必须】登录/注册页模板
   │   └── NotFound.tsx      # 【必须】404 页面模板
   ├── components/           # 【可选】主题私有组件
@@ -114,7 +115,15 @@ publicSettings.ts (缓存 2 分钟)
 | `tokens/appearance.ts` | Appearance 对象                    | 布局外观 className 配置                                | shared renderer 类型                  |
 | `styles.css`           | 无 (副作用导入)                    | 主题私有 CSS                                           | 无                                    |
 
-主题目录禁止反向 import `pages/` 层。主题私有文件也不能任意 import 业务实现，只能使用契约脚本白名单中的 `components/shared/*`、`lib/routeLoaders`、`lib/businessConfig` 类型以及 `themes/interfaceThemes/shared/*`。页面模板需要的首页类型、骨架屏、公告条、海报图等共享契约放在 `themes/interfaceThemes/shared/`，由页面控制器传入数据和动作。
+主题目录禁止反向 import `pages/` 层。主题私有文件也不能任意 import 业务实现，只能使用契约脚本白名单中的 `components/shared/*`、`components/home/*` 中的基础契约、`lib/routeLoaders`、`lib/businessConfig` 类型以及 `themes/interfaceThemes/shared/*`。页面模板需要的首页类型、骨架屏、公告条、海报图等基础契约放在 `components/home/`，由页面控制器传入数据和动作。
+
+`themes/interfaceThemes/shared/` 只能放真正跨主题的基础层、契约和渲染器，文件内容不得出现 `classic/workbench` 等具体主题名。某个主题专用的模板、样式、布局必须放回该主题目录，例如登录弹窗统一通过 `templates/AuthDialog.tsx` 分别由 classic/workbench 实现，通用 `AuthModal` 只负责表单状态和提交逻辑。
+
+`themes/interfaceThemes/shared/base.css` 是所有 PC 主题共同继承的基础视觉层，它来自经典版稳定样式：页面抬头、工具条、内容面板、指标卡、登录弹窗等默认形态都在这里定义。classic 主题默认不再复制这些样式；workbench 和后续新主题只在自己的 `styles.css` 中覆盖需要增强的部分。
+
+输入框、下拉框、文本域等基础表单控件不属于任何主题包，统一放在 `components/shared/FormControls.tsx`。主题可以通过外层模板和作用域 CSS 调整整体观感，但不要在页面或主题里重复拼 `bg-surface-container-lowest ... focus:border-primary-container` 这类基础输入框 class。
+
+业务层、页面层、通用组件层不得 import `themes/interfaceThemes/shared`、`themes/interfaceThemes/classic`、`themes/interfaceThemes/workbench` 等主题内部路径。允许的主题入口只有 `registry.ts`、`catalog.ts`、`types.ts` 这类公开契约。
 
 ### 移动端主题包
 
@@ -147,6 +156,7 @@ export const xxxThemeManifest: InterfaceThemeMeta = {
   key: 'xxx', // 必须等于目录名
   label: '主题中文名',
   settingsLabel: '主题中文名（设置页显示）',
+  shortLabel: '短名称', // 可选，用于紧凑菜单
   description: '一句话描述主题特点',
   author: '作者名',
   version: '1.0.0',
@@ -179,6 +189,7 @@ import XxxSidebar from './layouts/Sidebar';
 import XxxBottomNav from './layouts/BottomNav';
 import XxxMobileNavDrawer from './layouts/MobileNavDrawer';
 import XxxHomeDesktop from './templates/HomeDesktop';
+import XxxAuthDialog from './templates/AuthDialog';
 import XxxLogin from './templates/Login';
 import XxxNotFound from './templates/NotFound';
 // import './styles.css';  // 如果有主题私有 CSS
@@ -210,6 +221,7 @@ export const xxxTheme: InterfaceThemePackage = {
 
   templates: {
     DesktopHome: XxxHomeDesktop,
+    AuthDialog: XxxAuthDialog,
     Login: XxxLogin,
     NotFound: XxxNotFound,
   },
@@ -329,6 +341,7 @@ InterfaceThemeComponents {
 // 主题必须提供的模板集
 InterfaceThemeTemplates {
   DesktopHome: ComponentType<DesktopHomeThemeProps>
+  AuthDialog: ComponentType<AuthDialogThemeProps>
   Login: ComponentType<LoginThemeProps>
   NotFound: ComponentType<NotFoundThemeProps>
 }
@@ -364,7 +377,7 @@ InterfaceThemePackage {
 }
 ```
 
-### 4.2 首页模板 Props（`pages/home/themeTypes.ts`）
+### 4.2 首页模板 Props（`themes/interfaceThemes/types.ts`）
 
 ```typescript
 DesktopHomeThemeProps {
@@ -404,6 +417,8 @@ HomeThemeBehavior {
   showModelCardVariantMeta: boolean
 }
 ```
+
+`DesktopHomeThemeProps` 由 `themes/interfaceThemes/types.ts` 维护；`Category`、`Product`、`HomeBrowseState` 等业务数据类型由 `components/home/homeTypes.ts` 维护。`pages/home/themeTypes.ts`、`pages/home/types.ts` 只作为页面层兼容重导出，不允许主题模板反向 import `pages/`。
 
 **模板组件不应自行发起数据请求，也不应决定筛选/排序的数据逻辑**。所有数据、分页状态和业务回调由 HomePage 控制器层统一传入；主题可以通过 `listLoadingMode` 决定是分页控件还是自动加载，但不能自己请求另一套数据。
 
@@ -580,6 +595,7 @@ const Sidebar = ThemePackage.components.Sidebar;
 
 // ✅ 使用主题提供的模板
 const DesktopHome = ThemePackage.templates.DesktopHome;
+const AuthDialog = ThemePackage.templates.AuthDialog;
 
 // ✅ 使用主题的 home 行为配置
 ThemePackage.home.listLoadingMode === 'pagination';
@@ -613,6 +629,9 @@ import { SkeletonCard } from '../../../../pages/home/DesktopShared';
 
 // ❌ 主题模板直接读取业务设置
 import { getFooterCopyright } from '../../../../lib/publicSettings';
+
+// ❌ 通用组件写主题私有 class
+className = "workbench-auth-dialog";
 ```
 
 ### 8.3 如何正确处理主题差异
@@ -624,6 +643,39 @@ import { getFooterCopyright } from '../../../../lib/publicSettings';
 3. 消费方通过 `ThemePackage.chrome.xxx` 读取
 
 **绝对不要在消费方写 `if (theme === 'workbench')` 分支。**
+
+### 8.4 基础语义页面层
+
+公共页面、后台页面和工具页面应先落到一套无主题倾向的基础语义层，再由主题包按作用域美化。这个层级对应 CMS 里的基础模板骨架：业务逻辑稳定，主题只改视觉。
+
+| 语义 class                   | 说明                                 | 首选来源                                 |
+| ---------------------------- | ------------------------------------ | ---------------------------------------- |
+| `app-page`                   | 页面根容器，承载页面级变量           | `PageBody` / `AdminManagementPage`       |
+| `app-page-hero`              | 标题、描述、操作按钮所在的页面抬头   | `PageHeader` / `AdminPageHero`           |
+| `app-page-title`             | 页面主标题                           | `PageTitle` / `AdminPageHero`            |
+| `app-page-description`       | 页面副标题或说明                     | `PageHeader` / `AdminPageHero`           |
+| `app-page-meta`              | 记录数、状态、版本号等弱信息         | `PageHeader` / `AdminPageHero`           |
+| `app-page-toolbar`           | 搜索、筛选、批量操作等工具条         | `AdminToolbar`                           |
+| `app-content-panel`          | 主要内容面板                         | `AdminContentPanel`                      |
+| `app-stats-grid`             | 数据指标网格                         | `AdminStatsGrid`                         |
+| `app-stat-card`              | 单个指标卡                           | `AdminStatsGrid`                         |
+| `app-public-tool-page`       | 选型、产品图库、规格查询等前台工具页 | 页面传入 `AdminManagementPage.className` |
+| `app-public-tool-page-<key>` | 某个工具页的轻量扩展钩子             | 页面传入 `AdminManagementPage.className` |
+
+规则：
+
+- `global.css` 只定义中性变量和基础可访问性样式，例如 `--app-page-border`、`--app-page-surface`。
+- 主题私有视觉只能写在 `themes/interfaceThemes/<key>/styles.css`，选择器必须以 `[data-interface-theme='<key>']` 开头。
+- 页面可以加语义 class，不能根据主题 key 改 class 或业务结构。
+- 如果某个页面的结构差异已经不是“皮肤”能表达，应新增 `templates/<Page>.tsx` 模板合约，而不是在页面里写主题分支。
+
+当前已接入基础语义层的页面骨架：
+
+| 页面类型    | 入口                                                     |
+| ----------- | -------------------------------------------------------- |
+| 后台/管理页 | `AdminManagementPage`                                    |
+| 普通内容页  | `PagePrimitives`                                         |
+| 前台工具页  | `SelectionPage`、`ProductWallPage`、`ThreadSizeToolPage` |
 
 ---
 
@@ -781,9 +833,9 @@ className = 'bg-[#1a1a2e] text-[#94a3b8]';
 □ 7.  编写 layouts/ 四个文件
        → TopNav.tsx, Sidebar.tsx, BottomNav.tsx, MobileNavDrawer.tsx
 
-□ 8.  编写 templates/HomeDesktop.tsx、Login.tsx、NotFound.tsx
+□ 8.  编写 templates/HomeDesktop.tsx、AuthDialog.tsx、Login.tsx、NotFound.tsx
        → HomeDesktop 必须包含 data-home-theme="magazine"
-       → Login / NotFound 通过 props 接收页面内容，不直接处理业务状态
+       → AuthDialog / Login / NotFound 通过 props 接收页面内容，不直接处理业务状态
 
 □ 9.  编写 theme.ts
        → 组装所有部件，导出 InterfaceThemePackage
@@ -830,25 +882,29 @@ className = 'bg-[#1a1a2e] text-[#94a3b8]';
 
 当前验证内容：
 
-| 检查项                   | 说明                                                                               |
-| ------------------------ | ---------------------------------------------------------------------------------- |
-| 目录结构                 | 每个主题目录存在，且有全部必需文件                                                 |
-| 目录洁癖                 | 主题根目录不含非标准文件                                                           |
-| index.ts                 | 只 re-export ./theme                                                               |
-| manifest.ts              | 包含正确的 key 和 capabilities                                                     |
-| theme.ts                 | 包含 manifest/home/chrome/templates/components 全部字段                            |
-| HomeDesktop.tsx          | 包含 `data-home-theme="<key>"`                                                     |
-| Login.tsx / NotFound.tsx | 每个主题都必须提供登录页和 404 页面模板                                            |
-| 模板依赖方向             | 主题文件不能 import `pages/`，模板不能直接 import `publicSettings/homeSearchState` |
-| 无跨主题引用             | 主题文件不能 import 另一个主题                                                     |
-| styles.css 导入          | 如有 styles.css，theme.ts 必须导入                                                 |
-| catalog.ts               | 包含所有主题的 manifest 引用                                                       |
-| registry.ts              | 不包含已废弃的 INTERFACE_THEME_COMPONENTS                                          |
-| 核心文件规则             | 核心文件不包含硬编码主题 key 比较                                                  |
-| 颜色变量完整性           | global.css / colorSchemes.ts / colorScheme.ts 包含所有 30 个 COLOR_KEYS            |
-| 颜色类型完整性           | ColorPreset.dark/light 必须是 Record<ColorKey, string>                             |
-| 硬编码颜色扫描           | 新文件不允许硬编码颜色（豁免清单除外）                                             |
-| global.css 主题隔离      | global.css 不含主题特有选择器                                                      |
+| 检查项                                    | 说明                                                                                |
+| ----------------------------------------- | ----------------------------------------------------------------------------------- |
+| 目录结构                                  | 每个主题目录存在，且有全部必需文件                                                  |
+| 目录洁癖                                  | 主题根目录不含非标准文件                                                            |
+| index.ts                                  | 只 re-export ./theme                                                                |
+| manifest.ts                               | 包含正确的 key 和 capabilities                                                      |
+| theme.ts                                  | 包含 manifest/home/chrome/templates/components 全部字段                             |
+| HomeDesktop.tsx                           | 包含 `data-home-theme="<key>"`                                                      |
+| AuthDialog.tsx / Login.tsx / NotFound.tsx | 每个主题都必须提供登录弹窗、登录页和 404 页面模板                                   |
+| 模板依赖方向                              | 主题文件不能 import `pages/`，模板不能直接 import `publicSettings/homeSearchState`  |
+| 无跨主题引用                              | 主题文件不能 import 另一个主题                                                      |
+| shared 中立性                             | `themes/interfaceThemes/shared/` 不允许出现具体主题名或主题私有实现                 |
+| 基础样式层                                | `registry.ts` 必须加载 `themes/interfaceThemes/shared/base.css`                     |
+| AuthModal 模板化                          | 通用 AuthModal 必须消费 `ThemePackage.templates.AuthDialog`，不允许写主题私有 class |
+| 业务层隔离                                | 非主题文件不得 import 主题内部目录，只能使用 registry/catalog/types 公开入口        |
+| styles.css 导入                           | 如有 styles.css，theme.ts 必须导入                                                  |
+| catalog.ts                                | 包含所有主题的 manifest 引用                                                        |
+| registry.ts                               | 不包含已废弃的 INTERFACE_THEME_COMPONENTS                                           |
+| 核心文件规则                              | 核心文件不包含硬编码主题 key 比较                                                   |
+| 颜色变量完整性                            | global.css / colorSchemes.ts / colorScheme.ts 包含所有 30 个 COLOR_KEYS             |
+| 颜色类型完整性                            | ColorPreset.dark/light 必须是 Record<ColorKey, string>                              |
+| 硬编码颜色扫描                            | 新文件不允许硬编码颜色（豁免清单除外）                                              |
+| global.css 主题隔离                       | global.css 不含主题特有选择器                                                       |
 
 ### 13.2 CI 集成
 

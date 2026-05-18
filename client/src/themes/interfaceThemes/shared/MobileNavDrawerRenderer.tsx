@@ -1,9 +1,9 @@
 import { AnimatePresence, motion } from 'framer-motion';
-import { useEffect, useState } from 'react';
+import { useEffect } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import Icon from '../../../components/shared/Icon';
-import LoginConfirmDialog from '../../../components/shared/LoginConfirmDialog';
 import { checkProtectedAccess } from '../../../components/shared/ProtectedLink';
+import { useAuthEntry } from '../../../components/shared/useAuthEntry';
 import { getBusinessConfig } from '../../../lib/businessConfig';
 import { overlayMotion, sideSheetMotion } from '../../../lib/motion';
 import { usePublicSettings } from '../../../lib/publicSettings';
@@ -37,9 +37,7 @@ export default function MobileNavDrawerRenderer({ open, onClose, appearance }: M
   const isAdmin = user?.role === 'ADMIN';
   const business = getBusinessConfig(settings);
   const navItems = isAdmin ? business.adminNav : business.userNav;
-  const [loginDialogOpen, setLoginDialogOpen] = useState(false);
-  const [loginReturnUrl, setLoginReturnUrl] = useState('');
-  const [loginDialogReason, setLoginDialogReason] = useState('');
+  const { authNodes, handleProtectedLinkClick } = useAuthEntry(settings, { onBeforeAuth: onClose });
 
   useEffect(() => {
     document.documentElement.classList.toggle('mobile-nav-drawer-open', open);
@@ -89,19 +87,12 @@ export default function MobileNavDrawerRenderer({ open, onClose, appearance }: M
                       onPointerDown={() => preloadRouteForPath(item.path)}
                       onFocus={() => preloadRouteForPath(item.path)}
                       onClick={(e) => {
-                        const result = checkProtectedAccess(item.path);
-                        if (result.action === 'dialog') {
-                          e.preventDefault();
-                          setLoginReturnUrl(result.returnUrl);
-                          setLoginDialogReason(result.reason);
-                          setLoginDialogOpen(true);
-                        } else if (result.action === 'redirect') {
-                          e.preventDefault();
+                        const result = checkProtectedAccess(item.path, settings);
+                        if (result.action === 'allow') {
                           onClose();
-                          navigate('/login', { state: { from: result.returnUrl } });
-                        } else {
-                          onClose();
+                          return;
                         }
+                        handleProtectedLinkClick(e, item.path);
                       }}
                       className={appearance.itemClassName(isActive)}
                     >
@@ -119,19 +110,12 @@ export default function MobileNavDrawerRenderer({ open, onClose, appearance }: M
                     onPointerDown={() => preloadRouteForPath('/profile')}
                     onFocus={() => preloadRouteForPath('/profile')}
                     onClick={(e) => {
-                      const result = checkProtectedAccess('/profile');
-                      if (result.action === 'dialog') {
-                        e.preventDefault();
-                        setLoginReturnUrl(result.returnUrl);
-                        setLoginDialogReason(result.reason);
-                        setLoginDialogOpen(true);
-                      } else if (result.action === 'redirect') {
-                        e.preventDefault();
+                      const result = checkProtectedAccess('/profile', settings);
+                      if (result.action === 'allow') {
                         onClose();
-                        navigate('/login', { state: { from: '/profile' } });
-                      } else {
-                        onClose();
+                        return;
                       }
+                      handleProtectedLinkClick(e, '/profile');
                     }}
                     className={appearance.footerLinkClassName}
                   >
@@ -155,12 +139,7 @@ export default function MobileNavDrawerRenderer({ open, onClose, appearance }: M
           </>
         )}
       </AnimatePresence>
-      <LoginConfirmDialog
-        open={loginDialogOpen}
-        onClose={() => setLoginDialogOpen(false)}
-        reason={loginDialogReason}
-        returnUrl={loginReturnUrl}
-      />
+      {authNodes}
     </>
   );
 }

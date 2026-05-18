@@ -228,8 +228,8 @@ export function createAdminInquiriesRouter() {
       }).catch(() => {});
 
       res.json(updated);
-    } catch (err: any) {
-      if (err.code === 'P2025') {
+    } catch (err: unknown) {
+      if (err instanceof Error && 'code' in err && (err as NodeJS.ErrnoException).code === 'P2025') {
         res.status(404).json({ detail: '询价单不存在' });
         return;
       }
@@ -361,8 +361,8 @@ export function createAdminInquiriesRouter() {
         prisma.inquiry.delete({ where: { id } }),
       ]);
       res.json({ ok: true });
-    } catch (err: any) {
-      if (err.code === 'P2025') {
+    } catch (err: unknown) {
+      if (err instanceof Error && 'code' in err && (err as NodeJS.ErrnoException).code === 'P2025') {
         res.status(404).json({ detail: '询价单不存在' });
         return;
       }

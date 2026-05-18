@@ -1,9 +1,13 @@
 import { AnimatePresence, motion } from 'framer-motion';
-import { useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
+import type { SystemSettings } from '../../api/settings';
 import { dialogPanelMotion } from '../../lib/motion';
+import { getPublicSettingsSnapshot, refreshSiteConfig, usePublicSettings } from '../../lib/publicSettings';
 import AuthModal from './AuthModal';
 import DialogOverlay from './DialogOverlay';
 import Icon from './Icon';
+import { isAuthModalEnabled, isLoginDialogEnabled } from './ProtectedLink';
 
 interface LoginConfirmDialogProps {
   open: boolean;
@@ -15,11 +19,97 @@ interface LoginConfirmDialogProps {
 
 export default function LoginConfirmDialog({ open, onClose, reason, returnUrl, onLogin }: LoginConfirmDialogProps) {
   const [authOpen, setAuthOpen] = useState(false);
+  const [shouldShowPrompt, setShouldShowPrompt] = useState(false);
+  const autoEntryHandledRef = useRef(false);
+  const onCloseRef = useRef(onClose);
+  const onLoginRef = useRef(onLogin);
+  const settingsRef = useRef<Partial<SystemSettings> | undefined>(undefined);
+  const promptRequestRef = useRef(0);
+  const navigate = useNavigate();
+  const location = useLocation();
+  const { settings } = usePublicSettings();
+  const resolvedReturnUrl = returnUrl || `${location.pathname}${location.search}${location.hash}`;
+
+  useEffect(() => {
+    onCloseRef.current = onClose;
+  }, [onClose]);
+
+  useEffect(() => {
+    onLoginRef.current = onLogin;
+  }, [onLogin]);
+
+  useEffect(() => {
+    settingsRef.current = settings || getPublicSettingsSnapshot();
+  }, [settings]);
+
+  const getResolvedSettings = useCallback((): Partial<SystemSettings> => {
+    return settingsRef.current || getPublicSettingsSnapshot();
+  }, []);
+
+  const handleLogin = useCallback(
+    async (knownSettings?: Partial<SystemSettings>) => {
+      onCloseRef.current();
+      if (onLoginRef.current) {
+        onLoginRef.current();
+        return;
+      }
+      let latestSettings = knownSettings || getResolvedSettings();
+      try {
+        latestSettings = knownSettings || (await refreshSiteConfig());
+      } catch {
+        latestSettings = knownSettings || getResolvedSettings();
+      }
+      if (isAuthModalEnabled(latestSettings)) {
+        setAuthOpen(true);
+        return;
+      }
+      navigate('/login', { state: { from: resolvedReturnUrl } });
+    },
+    [getResolvedSettings, navigate, resolvedReturnUrl],
+  );
+
+  useEffect(() => {
+    if (!open) {
+      autoEntryHandledRef.current = false;
+      promptRequestRef.current += 1;
+      setShouldShowPrompt(false);
+      return;
+    }
+
+    let cancelled = false;
+    const requestId = promptRequestRef.current + 1;
+    promptRequestRef.current = requestId;
+    const initialSettings = getResolvedSettings();
+    setShouldShowPrompt(isLoginDialogEnabled(resolvedReturnUrl, initialSettings));
+
+    const resolvePromptState = async () => {
+      let latestSettings = initialSettings;
+      try {
+        latestSettings = await refreshSiteConfig();
+      } catch {
+        latestSettings = getResolvedSettings();
+      }
+      if (cancelled || promptRequestRef.current !== requestId) return;
+      if (isLoginDialogEnabled(resolvedReturnUrl, latestSettings)) {
+        setShouldShowPrompt(true);
+        return;
+      }
+      if (autoEntryHandledRef.current) return;
+      autoEntryHandledRef.current = true;
+      void handleLogin(latestSettings);
+    };
+
+    void resolvePromptState();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [getResolvedSettings, handleLogin, open, resolvedReturnUrl]);
 
   return (
     <>
       <AnimatePresence>
-        {open && (
+        {open && shouldShowPrompt && (
           <DialogOverlay onClose={onClose} zIndex={10000}>
             <motion.div
               variants={dialogPanelMotion}
@@ -44,14 +134,7 @@ export default function LoginConfirmDialog({ open, onClose, reason, returnUrl, o
                   取消
                 </button>
                 <button
-                  onClick={() => {
-                    onClose();
-                    if (onLogin) {
-                      onLogin();
-                    } else {
-                      setAuthOpen(true);
-                    }
-                  }}
+                  onClick={() => void handleLogin()}
                   className="flex-1 py-2.5 text-sm font-medium text-on-primary bg-primary-container rounded-lg hover:opacity-90 transition-opacity"
                 >
                   前往登录
@@ -61,7 +144,7 @@ export default function LoginConfirmDialog({ open, onClose, reason, returnUrl, o
           </DialogOverlay>
         )}
       </AnimatePresence>
-      <AuthModal open={authOpen} onClose={() => setAuthOpen(false)} returnUrl={returnUrl} />
+      <AuthModal open={authOpen} onClose={() => setAuthOpen(false)} returnUrl={resolvedReturnUrl} />
     </>
   );
 }

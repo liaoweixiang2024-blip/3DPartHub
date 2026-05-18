@@ -1,5 +1,5 @@
 import type { Request } from 'express';
-import rateLimit, { type Options, type Store } from 'express-rate-limit';
+import rateLimit, { ipKeyGenerator, type Options, type Store } from 'express-rate-limit';
 import helmet from 'helmet';
 import { redis } from '../lib/cache.js';
 import { logger } from '../lib/logger.js';
@@ -118,6 +118,12 @@ function createLimiter(prefix: string, options: LimiterOptions) {
   });
 }
 
+function userOrIpKey(req: Request) {
+  const userId = (req as AuthRequest).user?.userId;
+  if (userId) return `user:${userId}`;
+  return req.ip ? `ip:${ipKeyGenerator(req.ip)}` : 'ip:unknown';
+}
+
 // Rate limiting configurations
 export const apiLimiter = createLimiter('api', {
   windowMs: 15 * 60 * 1000, // 15 minutes
@@ -171,6 +177,33 @@ export const mutationLimiter = createLimiter('mutation', {
   max: 500,
   skipAuthenticatedAdmin: true,
   message: { success: false, message: '操作过于频繁，请稍后再试' },
+});
+
+export const demandSubmissionLimiter = createLimiter('demand-submission', {
+  windowMs: 10 * 60 * 1000,
+  limit: 8,
+  max: 8,
+  keyGenerator: userOrIpKey,
+  skipAuthenticatedAdmin: true,
+  message: { success: false, message: '提交过于频繁，请稍后再试' },
+});
+
+export const conversationMessageLimiter = createLimiter('conversation-message', {
+  windowMs: 60 * 1000,
+  limit: 30,
+  max: 30,
+  keyGenerator: userOrIpKey,
+  skipAuthenticatedAdmin: true,
+  message: { success: false, message: '发送过于频繁，请稍后再试' },
+});
+
+export const conversationAttachmentLimiter = createLimiter('conversation-attachment', {
+  windowMs: 60 * 60 * 1000,
+  limit: 60,
+  max: 60,
+  keyGenerator: userOrIpKey,
+  skipAuthenticatedAdmin: true,
+  message: { success: false, message: '附件上传过于频繁，请稍后再试' },
 });
 
 // Helmet security configuration

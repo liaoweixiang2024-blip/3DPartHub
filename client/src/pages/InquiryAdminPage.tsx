@@ -1,13 +1,20 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import useSWR from 'swr';
 import useSWRInfinite from 'swr/infinite';
 import { deleteInquiry, getAllInquiries, type Inquiry } from '../api/inquiries';
 import InquirySalesAssignmentDialog from '../components/inquiry/InquirySalesAssignmentDialog';
+import {
+  ADMIN_ROW_META_CLASS,
+  ADMIN_ROW_TITLE_CLASS,
+  AdminGridHeader,
+  AdminGridRow,
+} from '../components/shared/AdminDataTable';
+import { AdminButton, AdminIconButton } from '../components/shared/AdminControls';
 import { AdminEmptyState, AdminLoadingState, AdminManagementPage } from '../components/shared/AdminManagementPage';
 import { AdminPageShell } from '../components/shared/AdminPageShell';
+import AdminRefreshButton from '../components/shared/AdminRefreshButton';
 import ConfirmDialog from '../components/shared/ConfirmDialog';
-import Icon from '../components/shared/Icon';
 import InfiniteLoadTrigger from '../components/shared/InfiniteLoadTrigger';
 import ResponsiveSectionTabs from '../components/shared/ResponsiveSectionTabs';
 import SearchField from '../components/shared/SearchField';
@@ -21,6 +28,7 @@ import { exportInquiriesEditableXlsx } from '../lib/inquiryExport';
 import { usePublicSettings } from '../lib/publicSettings';
 
 const INQUIRY_PAGE_SIZE = 20;
+const INQUIRY_ADMIN_GRID_COLUMNS = '76px minmax(220px,1fr) 150px 104px minmax(224px,max-content)';
 type InquiryStatusTab = { value: string; label: string };
 type SearchInputProps = ReturnType<typeof useImeSafeSearchInput>['inputProps'];
 
@@ -86,8 +94,8 @@ function useInfiniteInquiries(statusFilter: string, search: string) {
     setSize(1);
   }, [search, statusFilter, setSize]);
 
-  const pages = data || [];
-  const inquiries = pages.flatMap((page) => page.items);
+  const pages = useMemo(() => data || [], [data]);
+  const inquiries = useMemo(() => pages.flatMap((page) => page.items), [pages]);
   const total = pages[0]?.total ?? 0;
   const hasMore = inquiries.length < total;
   const isLoadingMore = Boolean(size > 0 && !data?.[size - 1]);
@@ -190,14 +198,17 @@ function DesktopContent() {
   const [deleteTarget, setDeleteTarget] = useState<Inquiry | null>(null);
   const [assignmentTarget, setAssignmentTarget] = useState<Inquiry | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
-  const [refreshing, setRefreshing] = useState(false);
   const [exporting, setExporting] = useState(false);
   const { settings } = usePublicSettings();
-  const statuses = getBusinessConfig(settings).inquiryStatuses;
-  const statusTabs = [
-    { value: 'all', label: '全部' },
-    ...statuses.filter((s) => s.tab).map((s) => ({ value: s.value, label: s.label })),
-  ];
+  const business = useMemo(() => getBusinessConfig(settings), [settings]);
+  const statuses = business.inquiryStatuses;
+  const statusTabs = useMemo(
+    () => [
+      { value: 'all', label: '全部' },
+      ...statuses.filter((s) => s.tab).map((s) => ({ value: s.value, label: s.label })),
+    ],
+    [statuses],
+  );
   const { counts, refreshCounts } = useInquiryStatusCounts(statusTabs, search);
 
   const {
@@ -227,7 +238,6 @@ function DesktopContent() {
   }
 
   async function handleRefresh() {
-    setRefreshing(true);
     try {
       await setSize(1);
       await Promise.all([
@@ -237,8 +247,6 @@ function DesktopContent() {
       toast('询价数据已刷新', 'success');
     } catch (err) {
       toast(getErrorMessage(err, '刷新询价失败'), 'error');
-    } finally {
-      setRefreshing(false);
     }
   }
 
@@ -271,22 +279,16 @@ function DesktopContent() {
         description="管理员入口：处理客户询价、分配销售、导出业务明细"
         actions={
           <>
-            <button
+            <AdminButton
               onClick={handleExport}
               disabled={exporting || isLoading}
-              className="flex items-center gap-2 rounded-lg border border-outline-variant/20 px-4 py-2.5 text-sm text-on-surface-variant transition-colors hover:text-on-surface disabled:opacity-50"
+              icon="download"
+              iconClassName={exporting ? 'animate-pulse' : ''}
+              variant="secondary"
             >
-              <Icon name="download" size={16} />
               {exporting ? '导出中...' : '导出明细'}
-            </button>
-            <button
-              onClick={handleRefresh}
-              disabled={refreshing}
-              className="flex items-center gap-2 rounded-lg border border-outline-variant/20 px-4 py-2.5 text-sm text-on-surface-variant transition-colors hover:text-on-surface disabled:opacity-50"
-            >
-              <Icon name="refresh" size={16} className={refreshing ? 'animate-spin' : ''} />
-              {refreshing ? '刷新中...' : '刷新'}
-            </button>
+            </AdminButton>
+            <AdminRefreshButton onRefresh={handleRefresh} />
           </>
         }
         toolbar={
@@ -316,31 +318,28 @@ function DesktopContent() {
               description="切换状态、搜索客户/产品，或等待客户提交新的选型询价。"
             />
           ) : (
-            <div className="bg-surface-container-low rounded-lg border border-outline-variant/10 overflow-auto max-h-[calc(100vh-260px)]">
-              <div className="grid grid-cols-[88px_minmax(0,1fr)_170px_120px_150px] gap-4 px-6 py-3 bg-surface-container-low text-xs uppercase tracking-wider text-on-surface-variant font-bold border-b border-outline-variant/10 sticky top-0 z-10">
+            <div className="max-h-[calc(100vh-260px)] overflow-auto rounded-xl border border-outline-variant/15 bg-surface-container-low">
+              <AdminGridHeader columns={INQUIRY_ADMIN_GRID_COLUMNS} className="gap-4 px-6">
                 <span>状态</span>
                 <span>客户 / 询价内容</span>
                 <span>联系方式</span>
                 <span>提交时间</span>
-                <span>处理</span>
-              </div>
+                <span className="text-right">处理</span>
+              </AdminGridHeader>
               {inquiries.map((inq) => {
                 const info = statusInfo(statuses, inq.status);
                 return (
-                  <div
-                    key={inq.id}
-                    className="grid grid-cols-[88px_minmax(0,1fr)_170px_120px_150px] gap-4 px-6 py-4 border-b border-outline-variant/5 hover:bg-surface-container-high/50 transition-colors items-center"
-                  >
+                  <AdminGridRow key={inq.id} columns={INQUIRY_ADMIN_GRID_COLUMNS} className="gap-4 px-6 py-4">
                     <span
-                      className={`inline-flex items-center text-xs px-2 py-0.5 rounded-md font-bold ${info.color || ''} ${info.bg || ''}`}
+                      className={`inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium ${info.color || ''} ${info.bg || ''}`}
                     >
                       {info.label}
                     </span>
                     <div className="min-w-0">
-                      <p className="text-sm text-on-surface truncate">
+                      <p className={ADMIN_ROW_TITLE_CLASS}>
                         {inq.items.map((it) => it.modelNo || it.productName).join('、')}
                       </p>
-                      <p className="text-xs text-on-surface-variant">
+                      <p className={ADMIN_ROW_META_CLASS}>
                         客户：{inq.contactName || inq.user?.username || '—'} · {inq.items.length} 项
                         {inq.salesAssignee ? ` · 对接：${inq.salesAssignee.username}` : ''}
                       </p>
@@ -352,32 +351,25 @@ function DesktopContent() {
                     <span className="text-xs text-on-surface-variant">
                       {new Date(inq.createdAt).toLocaleDateString('zh-CN')}
                     </span>
-                    <div className="flex items-center gap-2">
-                      <button
-                        onClick={() => navigate(`/admin/inquiries/${inq.id}`)}
-                        className="text-xs text-primary-container hover:underline"
-                      >
+                    <div className="flex min-w-0 flex-wrap items-center justify-end gap-1.5">
+                      <AdminButton onClick={() => navigate(`/admin/inquiries/${inq.id}`)} size="sm" variant="tonal">
                         处理
-                      </button>
+                      </AdminButton>
                       {inq.status !== 'cancelled' && inq.status !== 'rejected' ? (
-                        <button
-                          type="button"
-                          onClick={() => setAssignmentTarget(inq)}
-                          className="text-xs text-green-600 hover:underline"
-                        >
+                        <AdminButton onClick={() => setAssignmentTarget(inq)} size="sm" variant="success">
                           {inq.salesAssignee ? '改派' : '分配销售'}
-                        </button>
+                        </AdminButton>
                       ) : null}
-                      <button
-                        type="button"
+                      <AdminButton
                         onClick={() => setDeleteTarget(inq)}
                         disabled={deletingId === inq.id}
-                        className="text-xs text-error hover:underline disabled:cursor-not-allowed disabled:opacity-60"
+                        size="sm"
+                        variant="danger"
                       >
                         {deletingId === inq.id ? '删除中' : '删除记录'}
-                      </button>
+                      </AdminButton>
                     </div>
-                  </div>
+                  </AdminGridRow>
                 );
               })}
               <InfiniteLoadTrigger hasMore={hasMore} isLoading={isLoadingMore} onLoadMore={loadMore} />
@@ -421,14 +413,17 @@ function MobileContent() {
   const [deleteTarget, setDeleteTarget] = useState<Inquiry | null>(null);
   const [assignmentTarget, setAssignmentTarget] = useState<Inquiry | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
-  const [refreshing, setRefreshing] = useState(false);
   const [exporting, setExporting] = useState(false);
   const { settings } = usePublicSettings();
-  const statuses = getBusinessConfig(settings).inquiryStatuses;
-  const statusTabs = [
-    { value: 'all', label: '全部' },
-    ...statuses.filter((s) => s.tab).map((s) => ({ value: s.value, label: s.label })),
-  ];
+  const business = useMemo(() => getBusinessConfig(settings), [settings]);
+  const statuses = business.inquiryStatuses;
+  const statusTabs = useMemo(
+    () => [
+      { value: 'all', label: '全部' },
+      ...statuses.filter((s) => s.tab).map((s) => ({ value: s.value, label: s.label })),
+    ],
+    [statuses],
+  );
   const { counts, refreshCounts } = useInquiryStatusCounts(statusTabs, search);
 
   const {
@@ -458,7 +453,6 @@ function MobileContent() {
   }
 
   async function handleRefresh() {
-    setRefreshing(true);
     try {
       await setSize(1);
       await Promise.all([
@@ -468,8 +462,6 @@ function MobileContent() {
       toast('询价数据已刷新', 'success');
     } catch (err) {
       toast(getErrorMessage(err, '刷新询价失败'), 'error');
-    } finally {
-      setRefreshing(false);
     }
   }
 
@@ -502,22 +494,14 @@ function MobileContent() {
         description="管理员入口：处理客户询价、分配销售、导出业务明细"
         actions={
           <>
-            <button
+            <AdminIconButton
               onClick={handleExport}
               disabled={exporting || isLoading}
-              className="inline-grid h-9 w-9 shrink-0 place-items-center rounded-lg border border-outline-variant/20 text-on-surface-variant transition-colors active:bg-surface-container-high disabled:opacity-50"
+              icon="download"
+              iconClassName={exporting ? 'animate-pulse' : ''}
               aria-label={exporting ? '正在导出询价单' : '导出询价单'}
-            >
-              <Icon name="download" size={17} className={exporting ? 'animate-pulse' : ''} />
-            </button>
-            <button
-              onClick={handleRefresh}
-              disabled={refreshing}
-              className="inline-grid h-9 w-9 shrink-0 place-items-center rounded-lg border border-outline-variant/20 text-on-surface-variant transition-colors active:bg-surface-container-high disabled:opacity-50"
-              aria-label={refreshing ? '正在刷新询价数据' : '刷新询价数据'}
-            >
-              <Icon name="refresh" size={17} className={refreshing ? 'animate-spin' : ''} />
-            </button>
+            />
+            <AdminRefreshButton onRefresh={handleRefresh} ariaLabel="刷新询价数据" mobileIconOnly />
           </>
         }
         toolbar={
@@ -564,36 +548,45 @@ function MobileContent() {
                     <p className="text-sm text-on-surface mb-1 line-clamp-2 break-words">
                       {inq.items.map((it) => it.modelNo || it.productName).join('、')}
                     </p>
-                    <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-on-surface-variant">
-                      <span className="min-w-0 break-words">
+                    <div className="text-xs text-on-surface-variant">
+                      <span className="block min-w-0 break-words">
                         客户：{inq.contactName || inq.user?.username || '—'} · {inq.items.length} 项
                         {inq.salesAssignee ? ` · ${inq.salesAssignee.username}跟进` : ''}
                       </span>
-                      <div className="flex items-center gap-3">
-                        <span>处理</span>
+                      <div className="mt-3 flex flex-wrap items-center justify-end gap-1.5 border-t border-outline-variant/10 pt-3">
+                        <AdminButton
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            navigate(`/admin/inquiries/${inq.id}`);
+                          }}
+                          size="sm"
+                          variant="tonal"
+                        >
+                          处理
+                        </AdminButton>
                         {inq.status !== 'cancelled' && inq.status !== 'rejected' ? (
-                          <button
-                            type="button"
+                          <AdminButton
                             onClick={(event) => {
                               event.stopPropagation();
                               setAssignmentTarget(inq);
                             }}
-                            className="font-medium text-green-600"
+                            size="sm"
+                            variant="success"
                           >
                             {inq.salesAssignee ? '改派' : '分配销售'}
-                          </button>
+                          </AdminButton>
                         ) : null}
-                        <button
-                          type="button"
+                        <AdminButton
                           onClick={(event) => {
                             event.stopPropagation();
                             setDeleteTarget(inq);
                           }}
                           disabled={deletingId === inq.id}
-                          className="font-medium text-error disabled:opacity-60"
+                          size="sm"
+                          variant="danger"
                         >
                           {deletingId === inq.id ? '删除中' : '删除记录'}
-                        </button>
+                        </AdminButton>
                       </div>
                     </div>
                   </div>

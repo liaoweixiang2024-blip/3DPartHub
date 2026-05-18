@@ -1,6 +1,6 @@
 import { motion, AnimatePresence } from 'framer-motion';
 import { useState, useCallback, memo, useMemo } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import useSWR from 'swr';
 import client from '../api/client';
 import { downloadModelFile, isDownloadAuthRequiredError } from '../api/downloads';
@@ -17,7 +17,6 @@ import ConfirmDialog from '../components/shared/ConfirmDialog';
 import Icon from '../components/shared/Icon';
 import LoginConfirmDialog from '../components/shared/LoginConfirmDialog';
 import ModelThumbnail from '../components/shared/ModelThumbnail';
-import { isLoginDialogEnabled } from '../components/shared/ProtectedLink';
 import { useToast } from '../components/shared/Toast';
 import { useDocumentTitle } from '../hooks/useDocumentTitle';
 import { useMediaQuery } from '../layouts/hooks/useMediaQuery';
@@ -145,7 +144,7 @@ const ModelCard = memo(function ModelCard({
 
   return (
     <div
-      className={`bg-surface-container-high rounded-sm group relative transition-[box-shadow] duration-200 ease-out flex flex-col ${selected ? 'ring-2 ring-primary shadow-[0_0_0_1px_var(--color-primary)]' : 'hover:shadow-[0_12px_24px_rgba(0,0,0,0.4)]'}`}
+      className={`bg-surface-container-high rounded-sm group relative transition-[box-shadow] duration-200 ease-out flex flex-col ${selected ? 'ring-2 ring-primary shadow-[0_0_0_1px_var(--color-primary)]' : 'hover:shadow-card'}`}
     >
       <div className="aspect-[4/3] bg-surface-container-lowest w-full relative overflow-hidden flex items-center justify-center">
         <Link
@@ -307,7 +306,6 @@ const MobileModelCard = memo(function MobileModelCard({
 });
 
 function DesktopContent() {
-  const navigate = useNavigate();
   const { data, error, isLoading, mutate } = useSWR<FavoriteItem[]>('/favorites', () =>
     client.get('/favorites').then((r) => r.data?.data || r.data),
   );
@@ -386,8 +384,9 @@ function DesktopContent() {
       try {
         const result = await favoriteApi.batchDownload(modelIds, format);
         toast(`下载已提交，浏览器正在接收 ${result.fileCount} 个文件`, 'success');
-      } catch (err: any) {
-        toast(err.message || '下载失败', 'error');
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : '下载失败';
+        toast(msg || '下载失败', 'error');
       } finally {
         setDownloading(false);
       }
@@ -401,17 +400,13 @@ function DesktopContent() {
         await downloadModelFile(modelId, 'original');
       } catch (error) {
         if (isDownloadAuthRequiredError(error)) {
-          if (isLoginDialogEnabled()) {
-            setLoginDialogOpen(true);
-          } else {
-            navigate('/login', { state: { from: '/favorites' } });
-          }
+          setLoginDialogOpen(true);
         } else {
           toast('下载失败', 'error');
         }
       }
     },
-    [navigate, toast],
+    [toast],
   );
 
   if (isLoading) {
@@ -536,7 +531,6 @@ function DesktopContent() {
 }
 
 function MobileContent() {
-  const navigate = useNavigate();
   const { data, error, isLoading, mutate } = useSWR<FavoriteItem[]>('/favorites', () =>
     client.get('/favorites').then((r) => r.data?.data || r.data),
   );
@@ -615,8 +609,9 @@ function MobileContent() {
       try {
         const result = await favoriteApi.batchDownload(modelIds, format);
         toast(`下载已提交，浏览器正在接收 ${result.fileCount} 个文件`, 'success');
-      } catch (err: any) {
-        toast(err.message || '下载失败', 'error');
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : '下载失败';
+        toast(msg || '下载失败', 'error');
       } finally {
         setDownloading(false);
       }
@@ -630,17 +625,13 @@ function MobileContent() {
         await downloadModelFile(modelId, 'original');
       } catch (error) {
         if (isDownloadAuthRequiredError(error)) {
-          if (isLoginDialogEnabled()) {
-            setLoginDialogOpen(true);
-          } else {
-            navigate('/login', { state: { from: '/favorites' } });
-          }
+          setLoginDialogOpen(true);
         } else {
           toast('下载失败', 'error');
         }
       }
     },
-    [navigate, toast],
+    [toast],
   );
 
   return (

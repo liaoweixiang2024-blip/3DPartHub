@@ -4,12 +4,15 @@ import { Link } from 'react-router-dom';
 import useSWR, { mutate as swrMutate } from 'swr';
 import useSWRInfinite from 'swr/infinite';
 import { categoriesApi, type CategoryItem } from '../api/categories';
-import { modelApi, type ModelGroupItem, type ServerModelListItem } from '../api/models';
+import { modelApi, type DeletedModelListItem, type ModelGroupItem, type ServerModelListItem } from '../api/models';
 import EditDialog from '../components/model-admin/EditDialog';
 import PreviewOperationsModal from '../components/model-admin/PreviewOperationsModal';
 import { formatModelDateTime, formatSize } from '../components/model-admin/shared';
 import { AdminLoadingState, AdminManagementPage } from '../components/shared/AdminManagementPage';
+import { AdminButton } from '../components/shared/AdminControls';
+import { AdminTableHeadCell, AdminTableHeadRow, ADMIN_TABLE_HEAD_CLASS } from '../components/shared/AdminDataTable';
 import { AdminPageShell } from '../components/shared/AdminPageShell';
+import ConfirmDialog from '../components/shared/ConfirmDialog';
 import Icon from '../components/shared/Icon';
 import InfiniteLoadTrigger from '../components/shared/InfiniteLoadTrigger';
 import ModelThumbnail from '../components/shared/ModelThumbnail';
@@ -26,11 +29,16 @@ import { useMediaQuery } from '../layouts/hooks/useMediaQuery';
 const MODEL_ADMIN_PAGE_SIZE = 60;
 const MODEL_ADMIN_VISIBLE_BATCH_SIZE = 80;
 const MOBILE_MODEL_VISIBLE_BATCH_SIZE = 40;
+const DELETED_MODEL_PAGE_SIZE = 50;
 const MERGE_SUGGESTION_PAGE_SIZE = 40;
 const CATEGORY_FILTER_ALL = '__all__';
 const MODEL_ADMIN_PANEL_CLASS =
   'rounded-lg border border-outline-variant/10 bg-surface-container-low overflow-auto min-h-[calc(100vh-220px)] max-h-[calc(100vh-220px)]';
-type ModelAdminTab = 'models' | 'suggestions' | 'groups';
+type ModelAdminTab = 'models' | 'suggestions' | 'groups' | 'deleted';
+type DeletedPurgeMode = 'selected' | 'all';
+type ModelGroupConfirm =
+  | { type: 'remove'; group: ModelGroupItem; modelId: string }
+  | { type: 'delete'; group: ModelGroupItem };
 type SearchInputProps = ReturnType<typeof useImeSafeSearchInput>['inputProps'];
 
 function AdminSearchField({
@@ -216,6 +224,345 @@ function useMergeSuggestionPages(enabled: boolean) {
   };
 }
 
+function useDeletedModelPages(search: string, enabled: boolean, refreshVersion: number) {
+  const debouncedSearch = useDebouncedValue(search.trim(), 300);
+  const getKey = useCallback(
+    (pageIndex: number, previousPageData: Awaited<ReturnType<typeof modelApi.listDeleted>> | null) => {
+      if (!enabled) return null;
+      if (previousPageData && previousPageData.page >= previousPageData.totalPages) return null;
+      return ['/models/deleted', debouncedSearch, refreshVersion, pageIndex + 1] as const;
+    },
+    [debouncedSearch, enabled, refreshVersion],
+  );
+
+  const { data, error, isLoading, mutate, setSize, size } = useSWRInfinite(
+    getKey,
+    ([, query, , page]) =>
+      modelApi.listDeleted({
+        search: query || undefined,
+        page,
+        pageSize: DELETED_MODEL_PAGE_SIZE,
+      }),
+    { keepPreviousData: true, revalidateFirstPage: false },
+  );
+
+  useEffect(() => {
+    if (enabled) setSize(1);
+  }, [debouncedSearch, enabled, refreshVersion, setSize]);
+
+  const pages = data || [];
+  const items = pages.flatMap((page) => page.items);
+  const firstPage = pages[0];
+  const lastPage = pages[pages.length - 1];
+  const hasMore = Boolean(lastPage && lastPage.page < lastPage.totalPages);
+  const isLoadingMore = Boolean(size > 0 && !data?.[size - 1] && !error);
+
+  const loadMore = useCallback(() => {
+    if (!hasMore || isLoadingMore) return;
+    setSize((current) => current + 1);
+  }, [hasMore, isLoadingMore, setSize]);
+
+  return {
+    items,
+    total: firstPage?.total || 0,
+    isLoading: isLoading && pages.length === 0,
+    isLoadingMore,
+    hasMore,
+    loadMore,
+    mutate,
+  };
+}
+
+function DeletedModelsPanel({
+  items,
+  total,
+  isLoadingMore,
+  hasMore,
+  onLoadMore,
+  onRestore,
+  onRestoreSelected,
+  onToggleSelect,
+  onToggleSelectLoaded,
+  onClearSelection,
+  onPurgeSelected,
+  onClearAll,
+  restoringId,
+  restoringSelected,
+  selectedIds,
+  selectedCount,
+  selectedRestorableCount,
+  allLoadedSelected,
+  purging,
+  compact = false,
+}: {
+  items: DeletedModelListItem[];
+  total: number;
+  isLoadingMore: boolean;
+  hasMore: boolean;
+  onLoadMore: () => void;
+  onRestore: (model: DeletedModelListItem) => void;
+  onRestoreSelected: () => void;
+  onToggleSelect: (id: string) => void;
+  onToggleSelectLoaded: () => void;
+  onClearSelection: () => void;
+  onPurgeSelected: () => void;
+  onClearAll: () => void;
+  restoringId: string | null;
+  restoringSelected: boolean;
+  selectedIds: Set<string>;
+  selectedCount: number;
+  selectedRestorableCount: number;
+  allLoadedSelected: boolean;
+  purging: boolean;
+  compact?: boolean;
+}) {
+  const hasItems = items.length > 0;
+  const actionBusy = purging || restoringSelected;
+
+  if (compact) {
+    return (
+      <div className="admin-tab-panel flex flex-col gap-3">
+        {hasItems && (
+          <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-outline-variant/10 bg-surface-container-high px-3 py-2">
+            <span className="text-xs text-on-surface-variant">
+              已加载 <span className="font-bold text-primary-container">{items.length}</span> / {total}
+              {selectedCount > 0 && <span>，已选 {selectedCount}</span>}
+            </span>
+            <div className="flex flex-wrap items-center gap-2">
+              <AdminButton onClick={onToggleSelectLoaded} disabled={actionBusy} size="sm" variant="secondary">
+                {allLoadedSelected ? '取消' : '全选'}
+              </AdminButton>
+              {selectedCount > 0 && (
+                <>
+                  <AdminButton onClick={onClearSelection} disabled={actionBusy} size="sm" variant="secondary">
+                    取消选择
+                  </AdminButton>
+                  <AdminButton
+                    onClick={onRestoreSelected}
+                    disabled={actionBusy || selectedRestorableCount === 0}
+                    size="sm"
+                    variant="tonal"
+                  >
+                    {restoringSelected ? '恢复中' : '恢复选中'}
+                  </AdminButton>
+                  <AdminButton onClick={onPurgeSelected} disabled={actionBusy} size="sm" variant="danger">
+                    彻底删除
+                  </AdminButton>
+                </>
+              )}
+              <AdminButton onClick={onClearAll} disabled={actionBusy || total === 0} size="sm" variant="danger">
+                清空回收站
+              </AdminButton>
+            </div>
+          </div>
+        )}
+        {items.map((model) => (
+          <div
+            key={model.model_id}
+            className="rounded-lg border border-outline-variant/10 bg-surface-container-high p-3 shadow-sm"
+          >
+            <div className="flex items-start gap-3">
+              <input
+                type="checkbox"
+                checked={selectedIds.has(model.model_id)}
+                onChange={() => onToggleSelect(model.model_id)}
+                className="mt-3 h-4 w-4 shrink-0 accent-primary-container"
+                aria-label={`选择 ${model.name}`}
+              />
+              <span className="grid h-10 w-10 shrink-0 place-items-center rounded-sm bg-surface-container-highest text-on-surface-variant">
+                <Icon name="delete_sweep" size={18} />
+              </span>
+              <div className="min-w-0 flex-1">
+                <p className="line-clamp-2 break-words text-sm font-semibold leading-snug text-on-surface">
+                  {model.name}
+                </p>
+                <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-[10px] text-on-surface-variant">
+                  <span>{model.category || '未分类'}</span>
+                  <span className="font-mono">{model.format?.toUpperCase()}</span>
+                  <span className="font-mono">{formatSize(model.original_size)}</span>
+                </div>
+                <p className="mt-1 text-[10px] text-on-surface-variant">
+                  删除时间：{formatModelDateTime(model.deleted_at)}
+                </p>
+              </div>
+              <button
+                onClick={() => onRestore(model)}
+                disabled={actionBusy || !model.can_restore || restoringId === model.model_id}
+                className="shrink-0 rounded-sm border border-primary/25 px-2.5 py-1.5 text-xs font-medium text-primary disabled:cursor-not-allowed disabled:border-outline-variant/15 disabled:text-on-surface-variant/45"
+              >
+                {restoringId === model.model_id ? '恢复中' : '恢复'}
+              </button>
+            </div>
+            {!model.can_restore && (
+              <p className="mt-2 rounded-sm bg-error/10 px-2 py-1 text-[11px] text-error">
+                原始文件不存在，不能直接恢复。
+              </p>
+            )}
+          </div>
+        ))}
+        {items.length > 0 && (
+          <InfiniteLoadTrigger hasMore={hasMore} isLoading={isLoadingMore} onLoadMore={onLoadMore} />
+        )}
+        {items.length === 0 && (
+          <div className="flex min-h-[260px] flex-col items-center justify-center text-center">
+            <Icon name="delete_sweep" size={38} className="mb-3 text-on-surface-variant/25" />
+            <p className="text-sm font-medium text-on-surface">回收站是空的</p>
+            <p className="mt-1 text-xs text-on-surface-variant">已删除模型会暂存在这里，确认无误后可恢复。</p>
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  return (
+    <div className={MODEL_ADMIN_PANEL_CLASS}>
+      {items.length > 0 && (
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-outline-variant/10 bg-surface-container-low px-4 py-3">
+          <div className="text-sm text-on-surface-variant">
+            已加载 <strong className="text-primary">{items.length}</strong> / 共{' '}
+            <strong className="text-primary">{total}</strong> 个已删除模型
+            {selectedCount > 0 && (
+              <>
+                ，已选择 <strong className="text-primary">{selectedCount}</strong> 个
+              </>
+            )}
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <AdminButton
+              onClick={onToggleSelectLoaded}
+              disabled={actionBusy}
+              icon="select_all"
+              size="sm"
+              variant="secondary"
+            >
+              {allLoadedSelected ? '取消全选' : '全选已加载'}
+            </AdminButton>
+            {selectedCount > 0 && (
+              <>
+                <AdminButton
+                  onClick={onClearSelection}
+                  disabled={actionBusy}
+                  icon="close"
+                  size="sm"
+                  variant="secondary"
+                >
+                  取消选择
+                </AdminButton>
+                <AdminButton
+                  onClick={onRestoreSelected}
+                  disabled={actionBusy || selectedRestorableCount === 0}
+                  icon="restore"
+                  size="sm"
+                  variant="tonal"
+                >
+                  {restoringSelected ? '恢复中...' : '恢复选中'}
+                </AdminButton>
+                <AdminButton onClick={onPurgeSelected} disabled={actionBusy} icon="delete" size="sm" variant="danger">
+                  彻底删除
+                </AdminButton>
+              </>
+            )}
+            <AdminButton
+              onClick={onClearAll}
+              disabled={actionBusy || total === 0}
+              icon="delete_sweep"
+              size="sm"
+              variant="danger"
+            >
+              清空回收站
+            </AdminButton>
+          </div>
+        </div>
+      )}
+      <table className="w-full border-separate border-spacing-0 text-sm">
+        <thead className={ADMIN_TABLE_HEAD_CLASS}>
+          <AdminTableHeadRow>
+            <AdminTableHeadCell className="w-12">
+              <input
+                type="checkbox"
+                checked={allLoadedSelected}
+                disabled={items.length === 0 || actionBusy}
+                onChange={onToggleSelectLoaded}
+                className="h-4 w-4 accent-primary-container"
+                aria-label={allLoadedSelected ? '取消选择已显示模型' : '选择已显示模型'}
+              />
+            </AdminTableHeadCell>
+            <AdminTableHeadCell>模型</AdminTableHeadCell>
+            <AdminTableHeadCell>分类</AdminTableHeadCell>
+            <AdminTableHeadCell>格式</AdminTableHeadCell>
+            <AdminTableHeadCell>大小</AdminTableHeadCell>
+            <AdminTableHeadCell>删除时间</AdminTableHeadCell>
+            <AdminTableHeadCell className="text-right">操作</AdminTableHeadCell>
+          </AdminTableHeadRow>
+        </thead>
+        <tbody>
+          {items.map((model) => (
+            <tr
+              key={model.model_id}
+              className="border-b border-outline-variant/10 transition-colors hover:bg-surface-container-high/50"
+            >
+              <td className="px-4 py-3 align-middle">
+                <input
+                  type="checkbox"
+                  checked={selectedIds.has(model.model_id)}
+                  onChange={() => onToggleSelect(model.model_id)}
+                  className="h-4 w-4 accent-primary-container"
+                  aria-label={`选择 ${model.name}`}
+                />
+              </td>
+              <td className="px-4 py-3">
+                <div className="flex min-w-0 items-center gap-3">
+                  <span className="grid h-10 w-10 shrink-0 place-items-center rounded-sm bg-surface-container-highest text-on-surface-variant">
+                    <Icon name="delete_sweep" size={18} />
+                  </span>
+                  <div className="min-w-0">
+                    <p className="block max-w-[360px] truncate font-medium text-on-surface">{model.name}</p>
+                    <p className="mt-0.5 max-w-[360px] truncate text-xs text-on-surface-variant">
+                      原文件：{model.original_name || '—'}
+                    </p>
+                  </div>
+                </div>
+              </td>
+              <td className="px-4 py-3 text-on-surface-variant">{model.category || '未分类'}</td>
+              <td className="px-4 py-3">
+                <span className="rounded-sm bg-surface-container-highest px-1.5 py-0.5 font-mono text-xs">
+                  {model.format?.toUpperCase() || '—'}
+                </span>
+              </td>
+              <td className="px-4 py-3 font-mono text-on-surface-variant">{formatSize(model.original_size)}</td>
+              <td className="px-4 py-3 text-on-surface-variant">{formatModelDateTime(model.deleted_at)}</td>
+              <td className="px-4 py-3 text-right">
+                <button
+                  onClick={() => onRestore(model)}
+                  disabled={actionBusy || !model.can_restore || restoringId === model.model_id}
+                  className="inline-flex items-center gap-1.5 rounded-sm border border-primary/25 px-3 py-1.5 text-xs font-medium text-primary transition-colors hover:bg-primary/10 disabled:cursor-not-allowed disabled:border-outline-variant/15 disabled:text-on-surface-variant/45 disabled:hover:bg-transparent"
+                >
+                  <Icon name="restore" size={14} />
+                  {restoringId === model.model_id ? '恢复中...' : model.can_restore ? '恢复' : '文件缺失'}
+                </button>
+              </td>
+            </tr>
+          ))}
+          {items.length > 0 && (
+            <tr>
+              <td colSpan={7}>
+                <InfiniteLoadTrigger hasMore={hasMore} isLoading={isLoadingMore} onLoadMore={onLoadMore} />
+              </td>
+            </tr>
+          )}
+          {items.length === 0 && (
+            <tr>
+              <td colSpan={7} className="px-4 py-12 text-center text-on-surface-variant">
+                回收站是空的
+              </td>
+            </tr>
+          )}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
 function ModelCategoryFilter({
   value,
   onChange,
@@ -246,7 +593,7 @@ function ModelCategoryFilter({
     <div className="relative" ref={ref}>
       <button
         onClick={() => setOpen(!open)}
-        className="flex h-9 items-center gap-2 rounded-sm border border-outline-variant/20 bg-surface-container-high px-3 text-sm font-medium text-on-surface-variant transition-colors hover:bg-surface-container-highest hover:text-on-surface"
+        className="flex h-8 items-center gap-1.5 rounded-md border border-outline-variant/20 bg-surface-container-lowest/30 px-2.5 text-xs font-medium text-on-surface-variant transition-colors hover:border-outline-variant/35 hover:bg-surface-container-high/65 hover:text-on-surface"
       >
         <Icon name="filter_list" size={14} />
         <span className="max-w-[8rem] truncate">{label}</span>
@@ -353,7 +700,20 @@ function DesktopContent() {
     setValue: setSuggestionSearch,
     inputProps: suggestionSearchInputProps,
   } = useImeSafeSearchInput();
+  const {
+    value: deletedSearch,
+    draftValue: deletedSearchInputValue,
+    setValue: setDeletedSearch,
+    inputProps: deletedSearchInputProps,
+  } = useImeSafeSearchInput();
+  const [restoringModelId, setRestoringModelId] = useState<string | null>(null);
+  const [restoringDeletedBatch, setRestoringDeletedBatch] = useState(false);
+  const [selectedDeletedModelIds, setSelectedDeletedModelIds] = useState<Set<string>>(new Set());
+  const [purgingDeleted, setPurgingDeleted] = useState(false);
+  const [purgeConfirmMode, setPurgeConfirmMode] = useState<DeletedPurgeMode | null>(null);
+  const [deletedRefreshVersion, setDeletedRefreshVersion] = useState(0);
   const [groupAction, setGroupAction] = useState<string | null>(null);
+  const [groupConfirm, setGroupConfirm] = useState<ModelGroupConfirm | null>(null);
   const {
     groups: suggestionGroups,
     total: activeSuggestionCount,
@@ -372,6 +732,25 @@ function DesktopContent() {
     mutate: groupMutate,
   } = useSWR(activeTab === 'groups' ? '/model-groups' : null, () => modelApi.listModelGroups());
   const { data: groupCountData } = useSWR('/model-groups/count', () => modelApi.getModelGroupCount());
+  const {
+    items: deletedModels,
+    total: deletedTotal,
+    isLoading: deletedLoading,
+    isLoadingMore: deletedLoadingMore,
+    hasMore: deletedHasMore,
+    loadMore: loadMoreDeleted,
+    mutate: deletedMutate,
+  } = useDeletedModelPages(deletedSearch, activeTab === 'deleted', deletedRefreshVersion);
+  const { data: deletedCountData, mutate: deletedCountMutate } = useSWR('/models/deleted/count', () =>
+    modelApi.listDeleted({ page: 1, pageSize: 1 }),
+  );
+  const deletedModelIds = deletedModels.map((model) => model.model_id);
+  const selectedDeletedCount = selectedDeletedModelIds.size;
+  const selectedRestorableDeletedCount = deletedModels.filter(
+    (model) => selectedDeletedModelIds.has(model.model_id) && model.can_restore,
+  ).length;
+  const allDeletedLoadedSelected =
+    deletedModelIds.length > 0 && deletedModelIds.every((modelId) => selectedDeletedModelIds.has(modelId));
   const filteredSuggestions = suggestionSearch
     ? suggestionGroups.filter((g) => g.name.toLowerCase().includes(suggestionSearch.toLowerCase()))
     : suggestionGroups;
@@ -380,6 +759,13 @@ function DesktopContent() {
   const allSuggestionsSelected = suggestionNames.length > 0 && selectedSuggestionCount === suggestionNames.length;
   const suggestionCount = activeTab === 'suggestions' ? activeSuggestionCount : (suggestionCountData?.total ?? 0);
   const mergedGroupCount = groupCountData?.total ?? groupData?.length;
+  const deletedGlobalCount = deletedCountData?.total ?? 0;
+  const deletedModelCount =
+    activeTab === 'deleted'
+      ? deletedSearch.trim()
+        ? deletedTotal
+        : Math.max(deletedTotal, deletedGlobalCount)
+      : deletedGlobalCount;
   const groups = Array.isArray(groupData) ? groupData : [];
   const filteredGroups = groupSearch
     ? groups.filter(
@@ -392,12 +778,11 @@ function DesktopContent() {
           ),
       )
     : groups;
-  const headerButtonBase =
-    'inline-flex h-9 w-[122px] items-center justify-center gap-1.5 rounded-sm px-3 text-sm font-medium transition-colors';
   const modelAdminTabs: ResponsiveSectionTab[] = [
     { value: 'models', label: '全部模型', count: displayModelTotal, icon: 'inventory_2' },
     { value: 'suggestions', label: '合并建议', count: suggestionCount, icon: 'merge_type' },
     { value: 'groups', label: '已合并', count: mergedGroupCount, icon: 'category' },
+    { value: 'deleted', label: '回收站', count: deletedModelCount, icon: 'delete_sweep' },
   ];
 
   useEffect(() => {
@@ -409,6 +794,23 @@ function DesktopContent() {
     setSelectedAllMatching(false);
   }, [activeTab, search, categoryFilter]);
 
+  useEffect(() => {
+    setSelectedDeletedModelIds(new Set());
+  }, [activeTab, deletedSearch]);
+
+  useEffect(() => {
+    if (activeTab !== 'deleted') return;
+    deletedMutate();
+    deletedCountMutate();
+  }, [activeTab, deletedMutate, deletedCountMutate]);
+
+  useEffect(() => {
+    if (activeTab !== 'deleted' || deletedSearch.trim() || deletedLoading) return;
+    if (deletedModelCount > 0 && deletedModels.length === 0) {
+      deletedMutate();
+    }
+  }, [activeTab, deletedSearch, deletedLoading, deletedModelCount, deletedModels.length, deletedMutate]);
+
   const refreshModelAdminData = () => {
     mutate();
     swrMutate('/models/count');
@@ -416,6 +818,9 @@ function DesktopContent() {
     sugMutate();
     suggestionCountMutate();
     groupMutate();
+    setDeletedRefreshVersion((version) => version + 1);
+    deletedMutate();
+    deletedCountMutate();
   };
 
   const handleDelete = async () => {
@@ -504,9 +909,150 @@ function DesktopContent() {
     }
   };
 
+  const handleRestoreModel = async (model: DeletedModelListItem) => {
+    setRestoringModelId(model.model_id);
+    try {
+      await modelApi.restore(model.model_id);
+      toast('模型已恢复', 'success');
+      refreshModelAdminData();
+    } catch {
+      toast('恢复失败', 'error');
+    } finally {
+      setRestoringModelId(null);
+    }
+  };
+
+  const restoreSelectedDeletedModels = async () => {
+    const targets = deletedModels.filter((model) => selectedDeletedModelIds.has(model.model_id) && model.can_restore);
+    if (targets.length === 0) {
+      toast('选中的模型文件缺失，无法批量恢复', 'error');
+      return;
+    }
+    setRestoringDeletedBatch(true);
+    try {
+      const results = await Promise.allSettled(targets.map((model) => modelApi.restore(model.model_id)));
+      const restoredIds = new Set(
+        targets.filter((_, index) => results[index]?.status === 'fulfilled').map((model) => model.model_id),
+      );
+      const failed = targets.length - restoredIds.size;
+      setSelectedDeletedModelIds((prev) => {
+        const next = new Set(prev);
+        restoredIds.forEach((modelId) => next.delete(modelId));
+        return next;
+      });
+      toast(
+        failed > 0 ? `已恢复 ${restoredIds.size} 个模型，${failed} 个恢复失败` : `已恢复 ${restoredIds.size} 个模型`,
+        failed > 0 ? 'error' : 'success',
+      );
+      refreshModelAdminData();
+    } finally {
+      setRestoringDeletedBatch(false);
+    }
+  };
+
+  const toggleSelectDeletedModel = (modelId: string) => {
+    setSelectedDeletedModelIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(modelId)) next.delete(modelId);
+      else next.add(modelId);
+      return next;
+    });
+  };
+
+  const toggleSelectLoadedDeletedModels = () => {
+    setSelectedDeletedModelIds((prev) => {
+      const next = new Set(prev);
+      if (allDeletedLoadedSelected) {
+        deletedModelIds.forEach((modelId) => next.delete(modelId));
+      } else {
+        deletedModelIds.forEach((modelId) => next.add(modelId));
+      }
+      return next;
+    });
+  };
+
+  const clearSelectedDeletedModels = () => {
+    setSelectedDeletedModelIds(new Set());
+  };
+
+  const purgeDeletedModels = async (mode: 'selected' | 'all') => {
+    const modelIds = Array.from(selectedDeletedModelIds);
+    if (mode === 'selected' && modelIds.length === 0) return;
+    setPurgingDeleted(true);
+    try {
+      const result = await modelApi.purgeDeleted(mode === 'all' ? { all: true } : { modelIds });
+      const warningText = result.warnings > 0 ? `，${result.warnings} 个文件清理警告` : '';
+      toast(`已彻底删除 ${result.deleted} 个模型${warningText}`, result.warnings > 0 ? 'error' : 'success');
+      clearSelectedDeletedModels();
+      setPurgeConfirmMode(null);
+      refreshModelAdminData();
+    } catch {
+      toast('彻底删除失败', 'error');
+    } finally {
+      setPurgingDeleted(false);
+    }
+  };
+
   const handleTabChange = (tab: ModelAdminTab) => {
     startTransition(() => setActiveTab(tab));
   };
+  const modelToolbarControls =
+    activeTab === 'models' && models.length > 0 ? (
+      <div className="flex min-w-0 shrink-0 flex-wrap items-center gap-2">
+        <span className="shrink-0 whitespace-nowrap text-xs text-on-surface-variant">
+          已加载 <strong className="text-primary">{visibleModels.length}</strong> / 共{' '}
+          <strong className="text-primary">{displayModelTotal}</strong> 个模型
+          {selectedAllMatching ? (
+            <>
+              ，已选择 <strong className="text-primary">全部匹配的 {selectedModelCount}</strong> 个
+            </>
+          ) : selectedModelCount > 0 ? (
+            <>
+              ，已选择 <strong className="text-primary">{selectedModelCount}</strong> 个
+            </>
+          ) : null}
+        </span>
+        <ModelCategoryFilter
+          value={categoryFilter}
+          onChange={setCategoryFilter}
+          options={categoryOptions}
+          allValue={CATEGORY_FILTER_ALL}
+        />
+        {!selectedAllMatching && displayModelTotal > visibleModels.length ? (
+          <AdminButton
+            onClick={selectAllMatchingModels}
+            disabled={displayModelTotal === 0}
+            icon="select_all"
+            size="sm"
+            variant="tonal"
+          >
+            选择全部
+          </AdminButton>
+        ) : null}
+        {selectedModelCount > 0 ? (
+          <>
+            <AdminButton onClick={clearSelectedModels} icon="close" size="sm" variant="secondary">
+              取消选择
+            </AdminButton>
+            <AdminButton
+              onClick={() => setBatchDeleteOpen(true)}
+              disabled={batchDeleting}
+              icon="delete"
+              size="sm"
+              variant="danger"
+            >
+              批量删除
+            </AdminButton>
+          </>
+        ) : null}
+      </div>
+    ) : null;
+  const purgeConfirmSelectedCount = purgeConfirmMode === 'all' ? deletedModelCount : selectedDeletedCount;
+  const purgeConfirmTitle = purgeConfirmMode === 'all' ? '确认清空回收站' : '确认彻底删除';
+  const purgeConfirmDescription =
+    purgeConfirmMode === 'all'
+      ? `将彻底删除回收站中的 ${purgeConfirmSelectedCount} 个模型及相关文件，此操作不可恢复。`
+      : `将彻底删除选中的 ${purgeConfirmSelectedCount} 个模型及相关文件，此操作不可恢复。`;
 
   const toggleSelect = (name: string) => {
     setSelectedNames((prev) => {
@@ -592,8 +1138,7 @@ function DesktopContent() {
   };
 
   const handleRemoveFromGroup = async (group: ModelGroupItem, modelId: string) => {
-    const ok = window.confirm('确定将该模型移出当前合并分组吗？模型不会被删除。');
-    if (!ok) return;
+    setGroupConfirm(null);
     setGroupAction(`remove:${group.id}:${modelId}`);
     try {
       await modelApi.removeModelFromGroup(group.id, modelId);
@@ -610,8 +1155,7 @@ function DesktopContent() {
   };
 
   const handleDeleteGroup = async (group: ModelGroupItem) => {
-    const ok = window.confirm(`确定解散「${group.name}」吗？模型文件不会删除，只会取消合并关系。`);
-    if (!ok) return;
+    setGroupConfirm(null);
     setGroupAction(`delete:${group.id}`);
     try {
       await modelApi.deleteModelGroup(group.id);
@@ -635,57 +1179,73 @@ function DesktopContent() {
         description="统一维护模型文件、分类归属、预览重建和同名模型合并关系。"
         actions={
           <div className="flex items-center gap-2">
-            <button
+            <AdminButton
               onClick={() => setPreviewOpsOpen(true)}
-              className={`${headerButtonBase} border border-outline-variant/25 bg-surface-container-low text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface`}
+              icon="view_in_ar"
+              className="w-[122px]"
+              variant="secondary"
             >
-              <Icon name="view_in_ar" size={18} />
               预览运维
-            </button>
-            <button
+            </AdminButton>
+            <AdminButton
               onClick={() => setUploadOpen(true)}
               onPointerEnter={preloadUploadModal}
               onPointerDown={preloadUploadModal}
               onFocus={preloadUploadModal}
-              className={`${headerButtonBase} bg-primary-container text-on-primary hover:opacity-90 active:scale-95`}
+              icon="cloud_upload"
+              className="w-[122px]"
+              variant="primary"
             >
-              <Icon name="cloud_upload" size={18} />
               上传模型
-            </button>
+            </AdminButton>
           </div>
         }
         toolbar={
-          <div className="flex min-h-11 flex-wrap items-center gap-3">
-            <ResponsiveSectionTabs
-              tabs={modelAdminTabs}
-              value={activeTab}
-              onChange={(value) => handleTabChange(value as ModelAdminTab)}
-              mobileTitle="模型管理分类"
-              className="min-w-[280px] flex-1"
-            />
+          <div className="flex min-h-10 min-w-0 flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+            <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
+              <div className="min-w-[280px] flex-1">
+                <ResponsiveSectionTabs
+                  tabs={modelAdminTabs}
+                  value={activeTab}
+                  onChange={(value) => handleTabChange(value as ModelAdminTab)}
+                  mobileTitle="模型管理分类"
+                />
+              </div>
+              {modelToolbarControls}
+            </div>
             <AdminSearchField
-              className="md:ml-auto"
               inputProps={
                 activeTab === 'models'
                   ? searchInputProps
                   : activeTab === 'suggestions'
                     ? suggestionSearchInputProps
-                    : groupSearchInputProps
+                    : activeTab === 'groups'
+                      ? groupSearchInputProps
+                      : deletedSearchInputProps
               }
               value={
                 activeTab === 'models'
                   ? searchInputValue
                   : activeTab === 'suggestions'
                     ? suggestionSearchInputValue
-                    : groupSearchInputValue
+                    : activeTab === 'groups'
+                      ? groupSearchInputValue
+                      : deletedSearchInputValue
               }
               onClear={() => {
                 if (activeTab === 'models') setSearch('');
                 else if (activeTab === 'suggestions') setSuggestionSearch('');
-                else setGroupSearch('');
+                else if (activeTab === 'groups') setGroupSearch('');
+                else setDeletedSearch('');
               }}
               placeholder={
-                activeTab === 'models' ? '搜索模型...' : activeTab === 'suggestions' ? '搜索建议...' : '搜索分组...'
+                activeTab === 'models'
+                  ? '搜索模型...'
+                  : activeTab === 'suggestions'
+                    ? '搜索建议...'
+                    : activeTab === 'groups'
+                      ? '搜索分组...'
+                      : '搜索已删除模型...'
               }
             />
           </div>
@@ -722,7 +1282,7 @@ function DesktopContent() {
                           className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-on-surface-variant bg-surface-container-high rounded-sm hover:text-on-surface hover:bg-surface-container-highest transition-colors"
                         >
                           <Icon name="close" size={16} />
-                          清空
+                          取消选择
                         </button>
                       )}
                       <button
@@ -786,6 +1346,32 @@ function DesktopContent() {
                   </div>
                 )}
               </div>
+            )
+          ) : activeTab === 'deleted' ? (
+            deletedLoading ? (
+              <AdminLoadingState variant="table" label="回收站加载中" />
+            ) : (
+              <DeletedModelsPanel
+                items={deletedModels}
+                total={deletedTotal}
+                isLoadingMore={deletedLoadingMore}
+                hasMore={deletedHasMore}
+                onLoadMore={loadMoreDeleted}
+                onRestore={handleRestoreModel}
+                onRestoreSelected={restoreSelectedDeletedModels}
+                onToggleSelect={toggleSelectDeletedModel}
+                onToggleSelectLoaded={toggleSelectLoadedDeletedModels}
+                onClearSelection={clearSelectedDeletedModels}
+                onPurgeSelected={() => setPurgeConfirmMode('selected')}
+                onClearAll={() => setPurgeConfirmMode('all')}
+                restoringId={restoringModelId}
+                restoringSelected={restoringDeletedBatch}
+                selectedIds={selectedDeletedModelIds}
+                selectedCount={selectedDeletedCount}
+                selectedRestorableCount={selectedRestorableDeletedCount}
+                allLoadedSelected={allDeletedLoadedSelected}
+                purging={purgingDeleted}
+              />
             )
           ) : activeTab === 'groups' ? (
             groupsLoading ? (
@@ -867,7 +1453,7 @@ function DesktopContent() {
                               </button>
                             )}
                             <button
-                              onClick={() => handleDeleteGroup(group)}
+                              onClick={() => setGroupConfirm({ type: 'delete', group })}
                               disabled={groupAction === `delete:${group.id}`}
                               className="flex items-center gap-1.5 rounded-sm border border-error/20 px-3 py-2 text-xs text-error hover:bg-error/10 disabled:opacity-50"
                             >
@@ -924,7 +1510,7 @@ function DesktopContent() {
                                       </button>
                                     )}
                                     <button
-                                      onClick={() => handleRemoveFromGroup(group, model.id)}
+                                      onClick={() => setGroupConfirm({ type: 'remove', group, modelId: model.id })}
                                       disabled={
                                         group.model_count <= 2 || groupAction === `remove:${group.id}:${model.id}`
                                       }
@@ -965,65 +1551,11 @@ function DesktopContent() {
             />
           ) : (
             <>
-              {models.length > 0 && (
-                <div className="mb-2 flex flex-wrap items-center justify-between gap-3 rounded-sm border border-outline-variant/10 bg-surface-container-low px-4 py-3">
-                  <div className="text-sm text-on-surface-variant">
-                    已加载 <strong className="text-primary">{visibleModels.length}</strong> / 共{' '}
-                    <strong className="text-primary">{displayModelTotal}</strong> 个模型
-                    {selectedAllMatching ? (
-                      <>
-                        ，已选择 <strong className="text-primary">全部匹配的 {selectedModelCount}</strong> 个
-                      </>
-                    ) : selectedModelCount > 0 ? (
-                      <>
-                        ，已选择 <strong className="text-primary">{selectedModelCount}</strong> 个
-                      </>
-                    ) : null}
-                  </div>
-                  <div className="flex flex-wrap items-center gap-2">
-                    <ModelCategoryFilter
-                      value={categoryFilter}
-                      onChange={setCategoryFilter}
-                      options={categoryOptions}
-                      allValue={CATEGORY_FILTER_ALL}
-                    />
-                    {displayModelTotal > visibleModels.length && (
-                      <button
-                        onClick={selectAllMatchingModels}
-                        disabled={displayModelTotal === 0}
-                        className="flex items-center gap-2 rounded-sm border border-primary/20 bg-primary/10 px-3 py-2 text-sm font-medium text-primary transition-colors hover:bg-primary/15 disabled:opacity-40"
-                      >
-                        <Icon name="select_all" size={16} />
-                        选择全部
-                      </button>
-                    )}
-                    {selectedModelCount > 0 && (
-                      <>
-                        <button
-                          onClick={clearSelectedModels}
-                          className="flex items-center gap-2 rounded-sm border border-outline-variant/20 bg-surface-container-high px-3 py-2 text-sm font-medium text-on-surface-variant transition-colors hover:bg-surface-container-highest hover:text-on-surface"
-                        >
-                          <Icon name="close" size={16} />
-                          清空
-                        </button>
-                        <button
-                          onClick={() => setBatchDeleteOpen(true)}
-                          disabled={batchDeleting}
-                          className="flex items-center gap-2 rounded-sm border border-error/20 bg-error/10 px-3 py-2 text-sm font-medium text-error transition-colors hover:bg-error/15 disabled:opacity-50"
-                        >
-                          <Icon name="delete" size={16} />
-                          批量删除
-                        </button>
-                      </>
-                    )}
-                  </div>
-                </div>
-              )}
               <div className={MODEL_ADMIN_PANEL_CLASS}>
-                <table className="w-full text-sm">
-                  <thead className="sticky top-0 z-10">
-                    <tr className="border-b border-outline-variant/20 bg-surface-container-low">
-                      <th className="w-12 px-4 py-3">
+                <table className="w-full border-separate border-spacing-0 text-sm">
+                  <thead className={ADMIN_TABLE_HEAD_CLASS}>
+                    <AdminTableHeadRow>
+                      <AdminTableHeadCell className="w-12">
                         <input
                           type="checkbox"
                           checked={allVisibleModelsSelected}
@@ -1032,26 +1564,14 @@ function DesktopContent() {
                           className="h-4 w-4 accent-primary-container"
                           aria-label={allVisibleModelsSelected ? '取消选择已显示模型' : '选择已显示模型'}
                         />
-                      </th>
-                      <th className="text-left px-4 py-3 text-xs uppercase tracking-wider text-on-surface-variant font-medium">
-                        模型
-                      </th>
-                      <th className="text-left px-4 py-3 text-xs uppercase tracking-wider text-on-surface-variant font-medium">
-                        分类
-                      </th>
-                      <th className="text-left px-4 py-3 text-xs uppercase tracking-wider text-on-surface-variant font-medium">
-                        格式
-                      </th>
-                      <th className="text-left px-4 py-3 text-xs uppercase tracking-wider text-on-surface-variant font-medium">
-                        大小
-                      </th>
-                      <th className="text-left px-4 py-3 text-xs uppercase tracking-wider text-on-surface-variant font-medium">
-                        图纸
-                      </th>
-                      <th className="text-right px-4 py-3 text-xs uppercase tracking-wider text-on-surface-variant font-medium">
-                        操作
-                      </th>
-                    </tr>
+                      </AdminTableHeadCell>
+                      <AdminTableHeadCell>模型</AdminTableHeadCell>
+                      <AdminTableHeadCell>分类</AdminTableHeadCell>
+                      <AdminTableHeadCell>格式</AdminTableHeadCell>
+                      <AdminTableHeadCell>大小</AdminTableHeadCell>
+                      <AdminTableHeadCell>图纸</AdminTableHeadCell>
+                      <AdminTableHeadCell className="text-right">操作</AdminTableHeadCell>
+                    </AdminTableHeadRow>
                   </thead>
                   <tbody>
                     {visibleModels.map((m) => (
@@ -1157,6 +1677,41 @@ function DesktopContent() {
         </div>
 
         <PreviewOperationsModal open={previewOpsOpen} onClose={() => setPreviewOpsOpen(false)} />
+        <ConfirmDialog
+          open={Boolean(groupConfirm)}
+          onClose={() => {
+            if (!groupAction) setGroupConfirm(null);
+          }}
+          onConfirm={() => {
+            if (!groupConfirm) return;
+            if (groupConfirm.type === 'remove') void handleRemoveFromGroup(groupConfirm.group, groupConfirm.modelId);
+            else void handleDeleteGroup(groupConfirm.group);
+          }}
+          icon={groupConfirm?.type === 'delete' ? 'close' : 'logout'}
+          title={groupConfirm?.type === 'delete' ? '确认解散分组' : '确认移出分组'}
+          description={
+            groupConfirm?.type === 'delete'
+              ? `确定解散「${groupConfirm.group.name}」吗？模型文件不会删除，只会取消合并关系。`
+              : '确定将该模型移出当前合并分组吗？模型不会被删除。'
+          }
+          confirmLabel={groupAction ? '处理中...' : groupConfirm?.type === 'delete' ? '确认解散' : '确认移出'}
+          confirmDisabled={Boolean(groupAction)}
+        />
+        <ConfirmDialog
+          open={Boolean(purgeConfirmMode)}
+          onClose={() => {
+            if (!purgingDeleted) setPurgeConfirmMode(null);
+          }}
+          onConfirm={() => {
+            if (!purgeConfirmMode) return;
+            void purgeDeletedModels(purgeConfirmMode);
+          }}
+          icon="delete_sweep"
+          title={purgeConfirmTitle}
+          description={purgeConfirmDescription}
+          confirmLabel={purgingDeleted ? '删除中...' : purgeConfirmMode === 'all' ? '清空回收站' : '彻底删除'}
+          confirmDisabled={purgingDeleted || purgeConfirmSelectedCount <= 0}
+        />
         <EditDialog
           open={!!editModel}
           model={editModel}
@@ -1182,7 +1737,7 @@ function DesktopContent() {
               >
                 <h3 className="font-headline text-lg font-semibold text-on-surface mb-2">确认删除</h3>
                 <p className="text-sm text-on-surface-variant mb-6">
-                  确定要删除「{deleteTarget.name}」吗？此操作不可撤销。
+                  确定要删除「{deleteTarget.name}」吗？删除后会从前台隐藏，保留恢复能力。
                 </p>
                 <div className="flex justify-end gap-3">
                   <button
@@ -1223,7 +1778,7 @@ function DesktopContent() {
                 <p className="text-sm text-on-surface-variant mb-6">
                   {selectedAllMatching && ' 本次会按当前分类和搜索条件删除全部匹配模型。'}
                   确定要删除已选择的 {selectedModelCount}{' '}
-                  个模型吗？模型文件、图纸、版本记录、收藏和分享记录都会一并清理，此操作不可撤销。
+                  个模型吗？删除后会从前台隐藏并进入回收站，可在文件仍存在时恢复。
                 </p>
                 <div className="flex justify-end gap-3">
                   <button
@@ -1306,6 +1861,7 @@ function MobileContent() {
   const [editingGroupId, setEditingGroupId] = useState<string | null>(null);
   const [groupNameDraft, setGroupNameDraft] = useState('');
   const [groupAction, setGroupAction] = useState<string | null>(null);
+  const [groupConfirm, setGroupConfirm] = useState<ModelGroupConfirm | null>(null);
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
   const {
     value: groupSearch,
@@ -1319,6 +1875,18 @@ function MobileContent() {
     setValue: setSuggestionSearch,
     inputProps: suggestionSearchInputProps,
   } = useImeSafeSearchInput();
+  const {
+    value: deletedSearch,
+    draftValue: deletedSearchInputValue,
+    setValue: setDeletedSearch,
+    inputProps: deletedSearchInputProps,
+  } = useImeSafeSearchInput();
+  const [restoringModelId, setRestoringModelId] = useState<string | null>(null);
+  const [restoringDeletedBatch, setRestoringDeletedBatch] = useState(false);
+  const [selectedDeletedModelIds, setSelectedDeletedModelIds] = useState<Set<string>>(new Set());
+  const [purgingDeleted, setPurgingDeleted] = useState(false);
+  const [purgeConfirmMode, setPurgeConfirmMode] = useState<DeletedPurgeMode | null>(null);
+  const [deletedRefreshVersion, setDeletedRefreshVersion] = useState(0);
   const {
     groups: suggestionGroups,
     total: activeSuggestionCount,
@@ -1338,6 +1906,25 @@ function MobileContent() {
     mutate: groupMutate,
   } = useSWR(activeTab === 'groups' ? '/model-groups-mobile' : null, () => modelApi.listModelGroups());
   const { data: groupCountData } = useSWR('/model-groups/count', () => modelApi.getModelGroupCount());
+  const {
+    items: deletedModels,
+    total: deletedTotal,
+    isLoading: deletedLoading,
+    isLoadingMore: deletedLoadingMore,
+    hasMore: deletedHasMore,
+    loadMore: loadMoreDeleted,
+    mutate: deletedMutate,
+  } = useDeletedModelPages(deletedSearch, activeTab === 'deleted', deletedRefreshVersion);
+  const { data: deletedCountData, mutate: deletedCountMutate } = useSWR('/models/deleted/count-mobile', () =>
+    modelApi.listDeleted({ page: 1, pageSize: 1 }),
+  );
+  const deletedModelIds = deletedModels.map((model) => model.model_id);
+  const selectedDeletedCount = selectedDeletedModelIds.size;
+  const selectedRestorableDeletedCount = deletedModels.filter(
+    (model) => selectedDeletedModelIds.has(model.model_id) && model.can_restore,
+  ).length;
+  const allDeletedLoadedSelected =
+    deletedModelIds.length > 0 && deletedModelIds.every((modelId) => selectedDeletedModelIds.has(modelId));
   const groups = Array.isArray(groupData) ? groupData : [];
   const filteredGroups = groupSearch
     ? groups.filter(
@@ -1359,10 +1946,18 @@ function MobileContent() {
   const allSuggestionsSelected = suggestionNames.length > 0 && selectedSuggestionCount === suggestionNames.length;
   const suggestionCount = activeTab === 'suggestions' ? activeSuggestionCount : (suggestionCountData?.total ?? 0);
   const mergedGroupCount = groupCountData?.total ?? groupData?.length;
+  const deletedGlobalCount = deletedCountData?.total ?? 0;
+  const deletedModelCount =
+    activeTab === 'deleted'
+      ? deletedSearch.trim()
+        ? deletedTotal
+        : Math.max(deletedTotal, deletedGlobalCount)
+      : deletedGlobalCount;
   const modelAdminTabs: ResponsiveSectionTab[] = [
     { value: 'models', label: '全部模型', count: displayModelTotalM, icon: 'inventory_2' },
     { value: 'suggestions', label: '合并建议', count: suggestionCount, icon: 'merge_type' },
     { value: 'groups', label: '已合并', count: mergedGroupCount, icon: 'category' },
+    { value: 'deleted', label: '回收站', count: deletedModelCount, icon: 'delete_sweep' },
   ];
 
   useEffect(() => {
@@ -1374,6 +1969,23 @@ function MobileContent() {
     setSelectedAllMatching(false);
   }, [activeTab, search, categoryFilter]);
 
+  useEffect(() => {
+    setSelectedDeletedModelIds(new Set());
+  }, [activeTab, deletedSearch]);
+
+  useEffect(() => {
+    if (activeTab !== 'deleted') return;
+    deletedMutate();
+    deletedCountMutate();
+  }, [activeTab, deletedMutate, deletedCountMutate]);
+
+  useEffect(() => {
+    if (activeTab !== 'deleted' || deletedSearch.trim() || deletedLoading) return;
+    if (deletedModelCount > 0 && deletedModels.length === 0) {
+      deletedMutate();
+    }
+  }, [activeTab, deletedSearch, deletedLoading, deletedModelCount, deletedModels.length, deletedMutate]);
+
   const refreshModelAdminData = () => {
     mutate();
     swrMutate('/models/count');
@@ -1381,6 +1993,9 @@ function MobileContent() {
     sugMutate();
     suggestionCountMutate();
     groupMutate();
+    setDeletedRefreshVersion((version) => version + 1);
+    deletedMutate();
+    deletedCountMutate();
   };
 
   const handleDelete = async () => {
@@ -1468,6 +2083,96 @@ function MobileContent() {
       setBatchDeleting(false);
     }
   };
+
+  const handleRestoreModel = async (model: DeletedModelListItem) => {
+    setRestoringModelId(model.model_id);
+    try {
+      await modelApi.restore(model.model_id);
+      toast('模型已恢复', 'success');
+      refreshModelAdminData();
+    } catch {
+      toast('恢复失败', 'error');
+    } finally {
+      setRestoringModelId(null);
+    }
+  };
+
+  const restoreSelectedDeletedModels = async () => {
+    const targets = deletedModels.filter((model) => selectedDeletedModelIds.has(model.model_id) && model.can_restore);
+    if (targets.length === 0) {
+      toast('选中的模型文件缺失，无法批量恢复', 'error');
+      return;
+    }
+    setRestoringDeletedBatch(true);
+    try {
+      const results = await Promise.allSettled(targets.map((model) => modelApi.restore(model.model_id)));
+      const restoredIds = new Set(
+        targets.filter((_, index) => results[index]?.status === 'fulfilled').map((model) => model.model_id),
+      );
+      const failed = targets.length - restoredIds.size;
+      setSelectedDeletedModelIds((prev) => {
+        const next = new Set(prev);
+        restoredIds.forEach((modelId) => next.delete(modelId));
+        return next;
+      });
+      toast(
+        failed > 0 ? `已恢复 ${restoredIds.size} 个模型，${failed} 个恢复失败` : `已恢复 ${restoredIds.size} 个模型`,
+        failed > 0 ? 'error' : 'success',
+      );
+      refreshModelAdminData();
+    } finally {
+      setRestoringDeletedBatch(false);
+    }
+  };
+
+  const toggleSelectDeletedModel = (modelId: string) => {
+    setSelectedDeletedModelIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(modelId)) next.delete(modelId);
+      else next.add(modelId);
+      return next;
+    });
+  };
+
+  const toggleSelectLoadedDeletedModels = () => {
+    setSelectedDeletedModelIds((prev) => {
+      const next = new Set(prev);
+      if (allDeletedLoadedSelected) {
+        deletedModelIds.forEach((modelId) => next.delete(modelId));
+      } else {
+        deletedModelIds.forEach((modelId) => next.add(modelId));
+      }
+      return next;
+    });
+  };
+
+  const clearSelectedDeletedModels = () => {
+    setSelectedDeletedModelIds(new Set());
+  };
+
+  const purgeDeletedModels = async (mode: 'selected' | 'all') => {
+    const modelIds = Array.from(selectedDeletedModelIds);
+    if (mode === 'selected' && modelIds.length === 0) return;
+    setPurgingDeleted(true);
+    try {
+      const result = await modelApi.purgeDeleted(mode === 'all' ? { all: true } : { modelIds });
+      const warningText = result.warnings > 0 ? `，${result.warnings} 个文件清理警告` : '';
+      toast(`已彻底删除 ${result.deleted} 个模型${warningText}`, result.warnings > 0 ? 'error' : 'success');
+      clearSelectedDeletedModels();
+      setPurgeConfirmMode(null);
+      refreshModelAdminData();
+    } catch {
+      toast('彻底删除失败', 'error');
+    } finally {
+      setPurgingDeleted(false);
+    }
+  };
+  const purgeConfirmSelectedCount = purgeConfirmMode === 'all' ? deletedModelCount : selectedDeletedCount;
+  const purgeConfirmTitle = purgeConfirmMode === 'all' ? '确认清空回收站' : '确认彻底删除';
+  const purgeConfirmDescription =
+    purgeConfirmMode === 'all'
+      ? `将彻底删除回收站中的 ${purgeConfirmSelectedCount} 个模型及相关文件，此操作不可恢复。`
+      : `将彻底删除选中的 ${purgeConfirmSelectedCount} 个模型及相关文件，此操作不可恢复。`;
 
   const toggleSelect = (name: string) => {
     setSelectedNames((prev) => {
@@ -1575,8 +2280,7 @@ function MobileContent() {
   };
 
   const handleRemoveFromGroup = async (group: ModelGroupItem, modelId: string) => {
-    const ok = window.confirm('确定将该模型移出当前合并分组吗？模型不会被删除。');
-    if (!ok) return;
+    setGroupConfirm(null);
     setGroupAction(`remove:${group.id}:${modelId}`);
     try {
       await modelApi.removeModelFromGroup(group.id, modelId);
@@ -1593,8 +2297,7 @@ function MobileContent() {
   };
 
   const handleDeleteGroup = async (group: ModelGroupItem) => {
-    const ok = window.confirm(`确定解散「${group.name}」吗？模型文件不会删除，只会取消合并关系。`);
-    if (!ok) return;
+    setGroupConfirm(null);
     setGroupAction(`delete:${group.id}`);
     try {
       await modelApi.deleteModelGroup(group.id);
@@ -1619,24 +2322,26 @@ function MobileContent() {
         contentClassName="gap-3"
         actions={
           <div className="flex items-center gap-2">
-            <button
+            <AdminButton
               onClick={() => setPreviewOpsOpen(true)}
-              className="flex items-center gap-1 rounded-sm border border-outline-variant/25 bg-surface-container-high px-2.5 py-1.5 text-xs font-medium text-on-surface-variant active:scale-95"
+              icon="view_in_ar"
+              size="sm"
+              variant="secondary"
               aria-label="打开预览运维工作台"
             >
-              <Icon name="view_in_ar" size={14} />
               运维
-            </button>
-            <button
+            </AdminButton>
+            <AdminButton
               onClick={() => setUploadOpen(true)}
               onPointerEnter={preloadUploadModal}
               onPointerDown={preloadUploadModal}
               onFocus={preloadUploadModal}
-              className="flex items-center gap-1 px-3 py-1.5 text-xs font-medium text-on-primary bg-primary-container rounded-sm active:scale-95"
+              icon="cloud_upload"
+              size="sm"
+              variant="primary"
             >
-              <Icon name="cloud_upload" size={14} />
               上传
-            </button>
+            </AdminButton>
           </div>
         }
       >
@@ -1682,12 +2387,20 @@ function MobileContent() {
             className="md:w-full"
           />
         )}
+        {activeTab === 'deleted' && (
+          <AdminSearchField
+            inputProps={deletedSearchInputProps}
+            value={deletedSearchInputValue}
+            onClear={() => setDeletedSearch('')}
+            placeholder="搜索已删除模型..."
+            className="md:w-full"
+          />
+        )}
         <ResponsiveSectionTabs
           tabs={modelAdminTabs}
           value={activeTab}
           onChange={(value) => startTransition(() => setActiveTab(value as ModelAdminTab))}
           mobileTitle="模型管理分类"
-          mobileTriggerVariant="surface"
         />
 
         {activeTab === 'models' && models.length > 0 && (
@@ -1708,7 +2421,7 @@ function MobileContent() {
                   disabled={displayModelTotalM === 0}
                   className="rounded-sm border border-primary/20 bg-primary/10 px-2.5 py-1.5 text-xs font-bold text-primary disabled:opacity-40"
                 >
-                  全选全部
+                  选择全部
                 </button>
               )}
               <button
@@ -1820,6 +2533,33 @@ function MobileContent() {
               )}
             </div>
           )
+        ) : activeTab === 'deleted' ? (
+          deletedLoading ? (
+            <AdminLoadingState variant="list" rows={5} label="回收站加载中" />
+          ) : (
+            <DeletedModelsPanel
+              compact
+              items={deletedModels}
+              total={deletedTotal}
+              isLoadingMore={deletedLoadingMore}
+              hasMore={deletedHasMore}
+              onLoadMore={loadMoreDeleted}
+              onRestore={handleRestoreModel}
+              onRestoreSelected={restoreSelectedDeletedModels}
+              onToggleSelect={toggleSelectDeletedModel}
+              onToggleSelectLoaded={toggleSelectLoadedDeletedModels}
+              onClearSelection={clearSelectedDeletedModels}
+              onPurgeSelected={() => setPurgeConfirmMode('selected')}
+              onClearAll={() => setPurgeConfirmMode('all')}
+              restoringId={restoringModelId}
+              restoringSelected={restoringDeletedBatch}
+              selectedIds={selectedDeletedModelIds}
+              selectedCount={selectedDeletedCount}
+              selectedRestorableCount={selectedRestorableDeletedCount}
+              allLoadedSelected={allDeletedLoadedSelected}
+              purging={purgingDeleted}
+            />
+          )
         ) : activeTab === 'groups' ? (
           groupsLoading ? (
             <AdminLoadingState variant="list" rows={5} label="模型分组加载中" />
@@ -1897,7 +2637,7 @@ function MobileContent() {
                         </button>
                       )}
                       <button
-                        onClick={() => handleDeleteGroup(group)}
+                        onClick={() => setGroupConfirm({ type: 'delete', group })}
                         disabled={groupAction === `delete:${group.id}`}
                         className="rounded-sm border border-error/20 px-3 py-1.5 text-xs text-error disabled:opacity-40"
                       >
@@ -1956,7 +2696,7 @@ function MobileContent() {
                                   </button>
                                 )}
                                 <button
-                                  onClick={() => handleRemoveFromGroup(group, model.id)}
+                                  onClick={() => setGroupConfirm({ type: 'remove', group, modelId: model.id })}
                                   disabled={group.model_count <= 2 || groupAction === `remove:${group.id}:${model.id}`}
                                   className="rounded-sm border border-outline-variant/20 px-2.5 py-1.5 text-xs text-on-surface-variant disabled:opacity-40"
                                 >
@@ -2049,12 +2789,47 @@ function MobileContent() {
         )}
       </AdminManagementPage>
       <PreviewOperationsModal open={previewOpsOpen} onClose={() => setPreviewOpsOpen(false)} compact />
+      <ConfirmDialog
+        open={Boolean(groupConfirm)}
+        onClose={() => {
+          if (!groupAction) setGroupConfirm(null);
+        }}
+        onConfirm={() => {
+          if (!groupConfirm) return;
+          if (groupConfirm.type === 'remove') void handleRemoveFromGroup(groupConfirm.group, groupConfirm.modelId);
+          else void handleDeleteGroup(groupConfirm.group);
+        }}
+        icon={groupConfirm?.type === 'delete' ? 'close' : 'logout'}
+        title={groupConfirm?.type === 'delete' ? '确认解散分组' : '确认移出分组'}
+        description={
+          groupConfirm?.type === 'delete'
+            ? `确定解散「${groupConfirm.group.name}」吗？模型文件不会删除，只会取消合并关系。`
+            : '确定将该模型移出当前合并分组吗？模型不会被删除。'
+        }
+        confirmLabel={groupAction ? '处理中...' : groupConfirm?.type === 'delete' ? '确认解散' : '确认移出'}
+        confirmDisabled={Boolean(groupAction)}
+      />
       <EditDialog
         open={!!editModel}
         model={editModel}
         categories={categories || []}
         onClose={() => setEditModel(null)}
         onSaved={() => mutate()}
+      />
+      <ConfirmDialog
+        open={Boolean(purgeConfirmMode)}
+        onClose={() => {
+          if (!purgingDeleted) setPurgeConfirmMode(null);
+        }}
+        onConfirm={() => {
+          if (!purgeConfirmMode) return;
+          void purgeDeletedModels(purgeConfirmMode);
+        }}
+        icon="delete_sweep"
+        title={purgeConfirmTitle}
+        description={purgeConfirmDescription}
+        confirmLabel={purgingDeleted ? '删除中...' : purgeConfirmMode === 'all' ? '清空回收站' : '彻底删除'}
+        confirmDisabled={purgingDeleted || purgeConfirmSelectedCount <= 0}
       />
       <AnimatePresence>
         {deleteTarget && (
@@ -2073,7 +2848,9 @@ function MobileContent() {
               className="bg-surface-container-low rounded-lg shadow-xl border border-outline-variant/20 w-full max-w-sm mx-4 p-5 sm:p-6"
             >
               <h3 className="font-headline text-base font-semibold text-on-surface mb-2">确认删除</h3>
-              <p className="text-sm text-on-surface-variant mb-5 break-words">确定要删除「{deleteTarget.name}」吗？</p>
+              <p className="text-sm text-on-surface-variant mb-5 break-words">
+                确定要删除「{deleteTarget.name}」吗？删除后会从前台隐藏，保留恢复能力。
+              </p>
               <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-2 sm:gap-3">
                 <button onClick={() => setDeleteTarget(null)} className="px-4 py-2 text-sm text-on-surface-variant">
                   取消
@@ -2108,8 +2885,7 @@ function MobileContent() {
             >
               <h3 className="font-headline text-base font-semibold text-on-surface mb-2">确认批量删除</h3>
               <p className="text-sm text-on-surface-variant mb-5 break-words">
-                确定要删除已选择的 {selectedModelCount}{' '}
-                个模型吗？相关模型文件、图纸、版本记录、收藏和分享记录都会一并清理。
+                确定要删除已选择的 {selectedModelCount} 个模型吗？删除后会从前台隐藏并进入回收站，可在文件仍存在时恢复。
                 {selectedAllMatching && ' 本次会按当前分类和搜索条件删除全部匹配模型。'}
               </p>
               <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-2 sm:gap-3">

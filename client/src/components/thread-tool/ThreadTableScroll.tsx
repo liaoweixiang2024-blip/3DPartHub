@@ -15,7 +15,7 @@ export const TABLE_BASE =
 export const TABLE_HEAD = 'text-on-surface';
 export const TABLE_CARD = 'flex h-full min-h-0 flex-col overflow-hidden bg-transparent';
 export const TABLE_TH =
-  'sticky top-0 z-20 select-none bg-surface-container-low px-4 py-3 text-xs font-bold tracking-wide text-on-surface shadow-[0_1px_0_rgba(0,0,0,0.08)] [touch-action:pan-y] md:text-[13px]';
+  'sticky top-0 z-20 select-none bg-surface-container-low px-4 py-3 text-xs font-bold tracking-wide text-on-surface shadow-sticky [touch-action:pan-y] md:text-[13px]';
 export const TABLE_FIRST_TH =
   'sticky left-0 top-0 z-30 select-none bg-surface-container-low px-4 py-3 text-xs font-bold tracking-wide text-on-surface shadow-[1px_0_0_rgba(0,0,0,0.08),0_1px_0_rgba(0,0,0,0.08)] [touch-action:pan-y] md:text-[13px]';
 export const TABLE_FIRST_TD =

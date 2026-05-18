@@ -176,13 +176,13 @@ curl http://localhost:3780/api/health
 如需锁定特定版本，修改 `.env` 中的 `IMAGE_TAG`：
 
 ```bash
-sed -i 's/IMAGE_TAG=.*/IMAGE_TAG=v2.9.9/' .env
+sed -i 's/IMAGE_TAG=.*/IMAGE_TAG=v3.1.0/' .env
 docker compose pull && docker compose up -d --force-recreate
 ```
 
 升级前建议在后台 **设置 -> 数据备份** 创建并校验一次备份。
 
-要锁定到指定版本，在 `.env` 中设置 `IMAGE_TAG=v2.9.9` 等固定标签即可。
+要锁定到指定版本，在 `.env` 中设置 `IMAGE_TAG=v3.1.0` 等固定标签即可。
 
 ---
 
@@ -235,15 +235,25 @@ API 容器启动时会自动修复该目录的 UID/GID 权限，避免因无法�
 - `static` 下自动发现的业务目录，例如 `models`、`thumbnails`、`originals`、`drawings`、`option-images`、`logo`、`favicon`、`watermark` 等。
 - `uploads` 下的业务上传目录与 `.metadata` 上传元数据。
 - manifest 清单、数据库 SHA256、目录文件数量和体积信息。
+- 备份记录会保存归档 SHA256 与 HMAC 签名，用于恢复前发现备份包或记录被替换、篡改的情况。
+- 配置 `BACKUP_ENCRYPTION_SECRET` 后，新创建或导入保存的备份会使用 AES-256-GCM 加密存储，校验和恢复时由服务器透明解密。
 
 恢复保护机制：
 
-- 恢复前校验备份包结构、manifest、数据库 SHA256、目录文件数。
+- 恢复前校验备份包结构、路径安全、manifest、数据库 SHA256、目录文件数和备份签名。
 - 恢复前检查磁盘可用空间，不满足安全回滚空间时会中止。
 - 恢复前创建当前数据库安全快照。
 - 数据库恢复失败会自动回滚到安全快照。
+- 默认遇到外键一致性错误会回滚并中止，避免恢复成关系不完整的数据。
 - 文件目录按目录逐个恢复，保留旧目录回滚副本；文件恢复失败会回滚已替换目录。
 - 恢复完成后清理缓存，使后台立即读取恢复后的数据。
+
+可选环境变量：
+
+- `BACKUP_SIGNING_SECRET`：备份 HMAC 签名密钥。未设置时使用 `JWT_SECRET`，生产环境建议单独配置并妥善保存。
+- `BACKUP_ENCRYPTION_SECRET`：备份归档加密密钥。设置后新备份会加密存储；请妥善保存，丢失后无法恢复加密备份。
+- `BACKUP_LOCK_STALE_MINUTES`：备份/恢复锁超时时间，默认 720 分钟，适合大体积备份任务。
+- `BACKUP_RESTORE_ALLOW_FK_SKIP=true`：仅用于确认旧备份存在历史孤儿外键且必须恢复时，允许跳过外键约束兜底导入。默认关闭。
 
 ### 迁移到新服务器
 

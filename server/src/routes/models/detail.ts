@@ -130,7 +130,9 @@ export function createModelDetailRouter({
                       return stat.mtime.toISOString();
                     }
                   }
-                } catch {}
+                } catch {
+                  /* best-effort variant date resolution */
+                }
                 return v.createdAt ? v.createdAt.toISOString() : null;
               }),
             ),

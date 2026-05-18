@@ -34,7 +34,7 @@ export function ProductWallUploadDialog({
       }}
     >
       <form
-        className="w-full max-w-md overflow-hidden rounded-xl border border-outline-variant/16 bg-surface shadow-[0_28px_100px_rgba(0,0,0,0.32)]"
+        className="w-full max-w-md overflow-hidden rounded-xl border border-outline-variant/16 bg-surface shadow-heavy"
         onClick={(event) => event.stopPropagation()}
         onSubmit={onSubmit}
       >

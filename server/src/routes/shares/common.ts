@@ -1,5 +1,6 @@
 import { Response } from 'express';
 import { verifyProtectedResourceToken } from '../../lib/downloadTokenStore.js';
+import { logger } from '../../lib/logger.js';
 import { prisma } from '../../lib/prisma.js';
 import type { AuthRequest } from '../../middleware/auth.js';
 
@@ -24,6 +25,50 @@ export function hasShareAccess(shareId: string, hashedPassword: string | null, a
   const token = asSingleString(accessToken);
   if (!token) return false;
   return Boolean(verifyProtectedResourceToken(token, 'share-access', shareId));
+}
+
+let shareAllowDrawingColumnPromise: Promise<boolean> | null = null;
+let selectionSharesTablePromise: Promise<boolean> | null = null;
+
+async function publicTableExists(tableName: string): Promise<boolean> {
+  const rows = await prisma.$queryRaw<Array<{ exists: boolean }>>`
+    SELECT EXISTS (
+      SELECT 1
+      FROM information_schema.tables
+      WHERE table_schema = 'public'
+        AND table_name = ${tableName}
+    ) AS "exists"
+  `;
+  return Boolean(rows[0]?.exists);
+}
+
+async function publicColumnExists(tableName: string, columnName: string): Promise<boolean> {
+  const rows = await prisma.$queryRaw<Array<{ exists: boolean }>>`
+    SELECT EXISTS (
+      SELECT 1
+      FROM information_schema.columns
+      WHERE table_schema = 'public'
+        AND table_name = ${tableName}
+        AND column_name = ${columnName}
+    ) AS "exists"
+  `;
+  return Boolean(rows[0]?.exists);
+}
+
+export async function hasShareAllowDrawingColumn(): Promise<boolean> {
+  shareAllowDrawingColumnPromise ??= publicColumnExists('share_links', 'allow_drawing').catch((err) => {
+    logger.warn({ err }, '[Shares] Failed to inspect share_links.allow_drawing column');
+    return true;
+  });
+  return shareAllowDrawingColumnPromise;
+}
+
+export async function hasSelectionSharesTable(): Promise<boolean> {
+  selectionSharesTablePromise ??= publicTableExists('selection_shares').catch((err) => {
+    logger.warn({ err }, '[Shares] Failed to inspect selection_shares table');
+    return true;
+  });
+  return selectionSharesTablePromise;
 }
 
 type SelectionShareNameRow = {

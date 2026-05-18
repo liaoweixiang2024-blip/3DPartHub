@@ -1,3 +1,4 @@
+import { BACKUP_CHUNK_SIZE_BYTES, BACKUP_DIRECT_UPLOAD_THRESHOLD_BYTES } from '../lib/uploadLimits';
 import { getAccessToken } from '../stores';
 import client from './client';
 import { unwrapApiData, unwrapResponse } from './response';
@@ -50,6 +51,7 @@ export interface SystemSettings {
   email_templates: string;
   interface_theme: string;
   mobile_interface_theme: string;
+  user_interface_theme_enabled: boolean;
   color_scheme: string;
   color_custom_dark: string;
   color_custom_light: string;
@@ -194,6 +196,8 @@ export interface SystemSettings {
   storage_signed_url_ttl_seconds: number;
   storage_upload_multipart_mb: number;
   storage_upload_concurrency: number;
+  storage_sync_enabled: boolean;
+  storage_sync_delete_extra_enabled: boolean;
   image_cdn_enabled: boolean;
   image_optimize_enabled: boolean;
   image_webp_enabled: boolean;
@@ -211,6 +215,7 @@ export interface SystemSettings {
   // API rate limiting
   api_rate_limit: number;
   // Login dialog
+  auth_modal_enabled: boolean;
   login_dialog_enabled: boolean;
   login_dialog_favorites: boolean;
   login_dialog_downloads: boolean;
@@ -247,6 +252,50 @@ export interface SettingsConnectivityResult {
   latencyMs?: number;
 }
 
+export type StorageSyncDirection = 'local_to_cloud' | 'cloud_to_local';
+export type StorageSyncStatus = 'queued' | 'running' | 'done' | 'cancelled' | 'error';
+
+export interface StorageSyncScope {
+  key: string;
+  label: string;
+  settingKey: string;
+  prefix: string;
+}
+
+export interface StorageSyncJob {
+  id: string;
+  direction: StorageSyncDirection;
+  status: StorageSyncStatus;
+  stage: string;
+  percent: number;
+  message: string;
+  logs: string[];
+  startedAt: string;
+  finishedAt?: string;
+  currentKey?: string;
+  totalFiles: number;
+  processedFiles: number;
+  copiedFiles: number;
+  skippedFiles: number;
+  failedFiles: number;
+  deletedFiles: number;
+  totalBytes: number;
+  processedBytes: number;
+  totalBytesText: string;
+  processedBytesText: string;
+  scopes: StorageSyncScope[];
+  overwrite: boolean;
+  deleteExtraneous: boolean;
+  error?: string;
+}
+
+export interface StorageSyncStatusPayload {
+  active: StorageSyncJob | null;
+  latest: StorageSyncJob | null;
+  jobs: StorageSyncJob[];
+  scopes: StorageSyncScope[];
+}
+
 export interface BackupRecord {
   id: string;
   filename: string;
@@ -258,8 +307,19 @@ export interface BackupRecord {
   thumbnailCount: number;
   dbSize: string;
   archiveSha256?: string;
+  archiveSignature?: string;
+  encrypted?: boolean;
+  encryptionAlgorithm?: string;
   manifestVersion?: string;
   verifiedAt?: string;
+}
+
+export interface BackupEncryptionStatus {
+  enabled: boolean;
+  algorithm: string;
+  configuredBy: 'BACKUP_ENCRYPTION_SECRET' | 'BACKUP_ENCRYPTION_KEY' | null;
+  recommendedEnvName: 'BACKUP_ENCRYPTION_SECRET';
+  legacyEnvName: 'BACKUP_ENCRYPTION_KEY';
 }
 
 export interface BackupHealth {
@@ -282,6 +342,7 @@ export interface BackupHealth {
   lastMirrorStatus?: string;
   lastMirrorMessage?: string;
   lastMirrorAt?: string;
+  encryption?: BackupEncryptionStatus;
 }
 
 export interface BackupPolicyCheckItem {
@@ -307,6 +368,9 @@ export interface BackupVerificationResult {
   fileSizeText: string;
   manifestVersion?: string;
   archiveSha256?: string;
+  archiveSignature?: string;
+  encrypted?: boolean;
+  encryptionAlgorithm?: string;
   message: string;
 }
 
@@ -409,6 +473,35 @@ export async function testStorageSettings(): Promise<SettingsConnectivityResult>
     if (payload && typeof payload === 'object' && 'ok' in payload) return payload as SettingsConnectivityResult;
     throw err;
   }
+}
+
+export async function getStorageSyncStatus(): Promise<StorageSyncStatusPayload> {
+  const res = await client.get('/settings/storage/sync');
+  return unwrapResponse<StorageSyncStatusPayload>(res);
+}
+
+export async function getStorageSyncJob(id: string): Promise<StorageSyncJob> {
+  const res = await client.get(`/settings/storage/sync/${id}`);
+  return unwrapResponse<StorageSyncJob>(res);
+}
+
+export async function startStorageSyncJob(data: {
+  direction: StorageSyncDirection;
+  scopes?: string[];
+  overwrite?: boolean;
+  deleteExtraneous?: boolean;
+}): Promise<StorageSyncJob> {
+  const res = await client.post('/settings/storage/sync', data, { timeout: 30000 });
+  return unwrapResponse<StorageSyncJob>(res);
+}
+
+export async function cancelStorageSyncJob(id: string): Promise<StorageSyncJob> {
+  const res = await client.post(`/settings/storage/sync/${id}/cancel`);
+  return unwrapResponse<StorageSyncJob>(res);
+}
+
+export async function deleteStorageSyncJob(id: string): Promise<void> {
+  await client.delete(`/settings/storage/sync/${id}`);
 }
 
 export async function getPublicSettings(): Promise<Partial<SystemSettings>> {
@@ -770,7 +863,7 @@ export async function importBackupAsRecord(
   onJobId?: (jobId: string) => void,
 ): Promise<BackupRecord> {
   let jobId: string;
-  if (mode === 'chunked' && file.size >= 100 * 1024 * 1024) {
+  if (mode === 'chunked' && file.size >= BACKUP_DIRECT_UPLOAD_THRESHOLD_BYTES) {
     jobId = await chunkedSaveAsRecordJob(file, onUploadProgress);
   } else {
     jobId = await directSaveAsRecordJob(file, onUploadProgress);
@@ -897,10 +990,8 @@ export async function pollImportSaveProgress(
   });
 }
 
-const BACKUP_CHUNK_SIZE = 10 * 1024 * 1024;
-
 async function initChunkedUpload(file: File): Promise<string> {
-  const totalChunks = Math.ceil(file.size / BACKUP_CHUNK_SIZE);
+  const totalChunks = Math.ceil(file.size / BACKUP_CHUNK_SIZE_BYTES);
   const { data: initResp } = await client.post('/upload/init', {
     fileName: file.name,
     fileSize: file.size,
@@ -914,11 +1005,11 @@ async function initChunkedUpload(file: File): Promise<string> {
 }
 
 async function uploadFileInChunks(file: File, uploadId: string, onProgress?: (percent: number) => void) {
-  const totalChunks = Math.ceil(file.size / BACKUP_CHUNK_SIZE);
+  const totalChunks = Math.ceil(file.size / BACKUP_CHUNK_SIZE_BYTES);
 
   for (let i = 0; i < totalChunks; i++) {
-    const start = i * BACKUP_CHUNK_SIZE;
-    const end = Math.min(start + BACKUP_CHUNK_SIZE, file.size);
+    const start = i * BACKUP_CHUNK_SIZE_BYTES;
+    const end = Math.min(start + BACKUP_CHUNK_SIZE_BYTES, file.size);
     const chunk = file.slice(start, end);
 
     let retries = 3;
@@ -968,8 +1059,8 @@ async function chunkedSaveAsRecordJob(file: File, onProgress?: (percent: number)
 export async function importBackup(file: File, onUploadProgress?: (percent: number) => void): Promise<string> {
   const fileSize = file.size;
 
-  // Small files (< 100MB): direct upload
-  if (fileSize < 100 * 1024 * 1024) {
+  // Small files: direct upload. Larger backups use the chunked flow.
+  if (fileSize < BACKUP_DIRECT_UPLOAD_THRESHOLD_BYTES) {
     return directUpload(file, onUploadProgress);
   }
 

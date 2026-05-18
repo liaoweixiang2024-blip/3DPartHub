@@ -140,7 +140,10 @@ export function createModelListRouter({ prisma, drawingDownloadUrl }: ModelListC
           return { total, items, page, page_size: pageSize };
         });
         res.set('X-Cache', hit ? 'HIT' : 'MISS');
-        res.set('Cache-Control', 'public, max-age=30');
+        // Keep Redis/server-side caching, but force browsers to revalidate.
+        // Admin mutations can happen from the public home list; browser max-age
+        // would otherwise keep deleted models visible until the local HTTP cache expires.
+        res.set('Cache-Control', 'no-cache, must-revalidate');
         res.json(responseData);
         return;
       } catch (err) {

@@ -44,6 +44,8 @@ model User {
   reviewedProductWallImages ProductWallImage[]         @relation("ProductWallReviews")
   productWallFavorites      ProductWallImageFavorite[]
 
+  @@index([role, createdAt], map: "users_role_created_at_idx")
+  @@index([createdAt], map: "users_created_at_idx")
   @@map("users")
 }
 
@@ -75,7 +77,11 @@ model ProductWallImage {
   @@index([sortOrder])
   @@index([createdAt])
   @@index([uploaderId])
+  @@index([reviewedById], map: "product_wall_images_reviewed_by_id_idx")
+  @@index([reviewedAt], map: "product_wall_images_reviewed_at_idx")
   @@index([status, kind, sortOrder])
+  @@index([status, sortOrder, createdAt], map: "product_wall_images_status_sort_order_created_at_idx")
+  @@index([kind, sortOrder], map: "product_wall_images_kind_sort_order_idx")
   @@map("product_wall_images")
 }
 
@@ -89,6 +95,8 @@ model ProductWallImageFavorite {
 
   @@unique([userId, imageId])
   @@index([userId])
+  @@index([imageId], map: "product_wall_image_favorites_image_id_idx")
+  @@index([userId, createdAt], map: "product_wall_image_favorites_user_id_created_at_idx")
   @@map("product_wall_image_favorites")
 }
 
@@ -192,6 +200,11 @@ model Model {
   @@index([groupId])
   @@index([status, createdAt])
   @@index([status, categoryId, createdAt])
+  @@index([status, updatedAt], map: "models_status_updated_at_idx")
+  @@index([status, format, createdAt], map: "models_status_format_created_at_idx")
+  @@index([status, gltfSize], map: "models_status_gltf_size_idx")
+  @@index([status, categoryId, name], map: "models_status_category_id_name_idx")
+  @@index([status, downloadCount, createdAt], map: "models_status_download_count_created_at_idx")
   @@index([name])
   @@index([name, status])
   @@map("models")
@@ -227,6 +240,8 @@ model Favorite {
 
   @@unique([userId, modelId])
   @@index([userId])
+  @@index([userId, createdAt], map: "favorites_user_id_created_at_idx")
+  @@index([modelId], map: "favorites_model_id_idx")
   @@map("favorites")
 }
 
@@ -243,6 +258,10 @@ model Download {
   @@index([userId])
   @@index([userId, createdAt])
   @@index([modelId])
+  @@index([modelId, createdAt], map: "downloads_model_id_created_at_idx")
+  @@index([createdAt], map: "downloads_created_at_idx")
+  @@index([format], map: "downloads_format_idx")
+  @@index([format, createdAt], map: "downloads_format_created_at_idx")
   @@map("downloads")
 }
 
@@ -280,6 +299,10 @@ model ShareLink {
   createdAt     DateTime  @default(now()) @map("created_at")
 
   @@index([modelId])
+  @@index([createdById], map: "share_links_created_by_id_idx")
+  @@index([createdById, createdAt], map: "share_links_created_by_id_created_at_idx")
+  @@index([createdAt], map: "share_links_created_at_idx")
+  @@index([expiresAt], map: "share_links_expires_at_idx")
   @@map("share_links")
 }
 
@@ -294,6 +317,9 @@ model SelectionShare {
   createdBy    User     @relation(fields: [createdById], references: [id])
   createdAt    DateTime @default(now()) @map("created_at")
 
+  @@index([createdById, createdAt], map: "selection_shares_created_by_id_created_at_idx")
+  @@index([categorySlug], map: "selection_shares_category_slug_idx")
+  @@index([createdAt], map: "selection_shares_created_at_idx")
   @@map("selection_shares")
 }
 
@@ -309,6 +335,10 @@ model AuditLog {
   @@index([userId])
   @@index([createdAt])
   @@index([userId, createdAt])
+  @@index([resource, createdAt], map: "audit_logs_resource_created_at_idx")
+  @@index([action, createdAt], map: "audit_logs_action_created_at_idx")
+  @@index([resource, action, createdAt], map: "audit_logs_resource_action_created_at_idx")
+  @@index([resourceId], map: "audit_logs_resource_id_idx")
   @@map("audit_logs")
 }
 
@@ -326,6 +356,8 @@ model Category {
   models Model[]
 
   @@index([parentId])
+  @@index([parentId, sortOrder], map: "categories_parent_id_sort_order_idx")
+  @@index([sortOrder], map: "categories_sort_order_idx")
   @@map("categories")
 }
 
@@ -344,6 +376,9 @@ model SupportTicket {
 
   @@index([userId])
   @@index([status])
+  @@index([userId, createdAt], map: "support_tickets_user_id_created_at_idx")
+  @@index([status, createdAt], map: "support_tickets_status_created_at_idx")
+  @@index([createdAt], map: "support_tickets_created_at_idx")
   @@map("support_tickets")
 }
 
@@ -408,6 +443,8 @@ model ThreadSizeEntry {
   @@index([family])
   @@index([hoseKind])
   @@index([sortOrder])
+  @@index([kind, family, sortOrder], map: "thread_size_entries_kind_family_sort_order_idx")
+  @@index([kind, hoseKind, sortOrder], map: "thread_size_entries_kind_hose_kind_sort_order_idx")
   @@map("thread_size_entries")
 }
 
@@ -448,6 +485,10 @@ model SelectionCategory {
   updatedAt      DateTime           @updatedAt @map("updated_at")
   products       SelectionProduct[]
 
+  @@index([sortOrder], map: "selection_categories_sort_order_idx")
+  @@index([groupId, sortOrder], map: "selection_categories_group_id_sort_order_idx")
+  @@index([kind, sortOrder], map: "selection_categories_kind_sort_order_idx")
+  @@index([catalogShared], map: "selection_categories_catalog_shared_idx")
   @@map("selection_categories")
 }
 
@@ -470,6 +511,9 @@ model SelectionProduct {
 
   @@index([categoryId])
   @@index([modelNo])
+  @@index([categoryId, sortOrder], map: "selection_products_category_id_sort_order_idx")
+  @@index([categoryId, modelNo], map: "selection_products_category_id_model_no_idx")
+  @@index([sortOrder], map: "selection_products_sort_order_idx")
   @@map("selection_products")
 }
 
@@ -504,6 +548,10 @@ model Inquiry {
   @@index([status])
   @@index([salesAssigneeId])
   @@index([salesAssignedAt])
+  @@index([userId, createdAt], map: "inquiries_user_id_created_at_idx")
+  @@index([status, createdAt], map: "inquiries_status_created_at_idx")
+  @@index([salesAssigneeId, status, createdAt], map: "inquiries_sales_assignee_id_status_created_at_idx")
+  @@index([createdAt], map: "inquiries_created_at_idx")
   @@map("inquiries")
 }
 
@@ -521,6 +569,8 @@ model InquiryItem {
   remark      String?
 
   @@index([inquiryId])
+  @@index([productId], map: "inquiry_items_product_id_idx")
+  @@index([modelNo], map: "inquiry_items_model_no_idx")
   @@map("inquiry_items")
 }
 
@@ -537,5 +587,6 @@ model InquiryMessage {
 
   @@index([inquiryId])
   @@index([inquiryId, createdAt])
+  @@index([userId], map: "inquiry_messages_user_id_idx")
   @@map("inquiry_messages")
 }

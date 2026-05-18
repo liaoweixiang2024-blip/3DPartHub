@@ -77,8 +77,8 @@ export function createSelectionAdminProductsRouter() {
       });
       await invalidateSelectionCache();
       res.json(product);
-    } catch (err: any) {
-      if (err.code === 'P2025') {
+    } catch (err: unknown) {
+      if (err instanceof Error && 'code' in err && (err as NodeJS.ErrnoException).code === 'P2025') {
         res.status(404).json({ detail: '产品不存在' });
         return;
       }
@@ -95,8 +95,8 @@ export function createSelectionAdminProductsRouter() {
       await prisma.selectionProduct.delete({ where: { id } });
       await invalidateSelectionCache();
       res.json({ ok: true });
-    } catch (err: any) {
-      if (err.code === 'P2025') {
+    } catch (err: unknown) {
+      if (err instanceof Error && 'code' in err && (err as NodeJS.ErrnoException).code === 'P2025') {
         res.status(404).json({ detail: '产品不存在' });
         return;
       }

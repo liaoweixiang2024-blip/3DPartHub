@@ -1,3 +1,4 @@
+import { UPLOAD_REQUEST_TIMEOUT_MS } from '../lib/uploadLimits';
 import type { PaginatedResponse, PaginationParams } from '../types';
 import client from './client';
 import { unwrapApiData, unwrapResponse } from './response';
@@ -6,6 +7,31 @@ export type UploadProgressEvent = {
   loaded: number;
   total?: number;
 };
+
+export type BatchArchiveUploadResult = {
+  total: number;
+  results: Array<{
+    name: string;
+    model_id?: string;
+    status: string;
+    error?: string;
+    drawing_attached?: boolean;
+    drawing_error?: string;
+  }>;
+};
+
+export type BatchArchiveUploadProgress = {
+  id: string;
+  stage: 'queued' | 'processing' | 'done' | 'error';
+  percent: number;
+  message: string;
+  processed?: number;
+  total?: number;
+  error?: string;
+  result?: BatchArchiveUploadResult;
+};
+
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 export interface ServerModelListItem {
   model_id: string;
@@ -165,6 +191,27 @@ export interface ServerModelListResponse {
   page_size: number;
 }
 
+export interface DeletedModelListItem {
+  model_id: string;
+  name: string;
+  original_name: string;
+  format: string;
+  original_size: number;
+  category?: string | null;
+  category_id?: string | null;
+  deleted_at: string;
+  deleted_by_id?: string | null;
+  can_restore: boolean;
+  created_at: string;
+}
+
+export interface DeletedModelListResponse {
+  total: number;
+  items: DeletedModelListItem[];
+  page: number;
+  page_size: number;
+}
+
 export interface BatchDeleteModelsResponse {
   allMatching?: boolean;
   requested: number;
@@ -176,6 +223,8 @@ export interface BatchDeleteModelsResponse {
     warnings: number;
   }>;
 }
+
+export type PurgeDeletedModelsResponse = BatchDeleteModelsResponse;
 
 export type PreviewDiagnosticStatus = 'ok' | 'warning' | 'invalid' | 'missing';
 export type PreviewDiagnosticFilter = PreviewDiagnosticStatus | 'problem' | 'all';
@@ -372,6 +421,10 @@ export const modelApi = {
         grouped: params?.grouped ?? true,
         sort: params?.sort || undefined,
       },
+      headers: {
+        'Cache-Control': 'no-cache',
+        Pragma: 'no-cache',
+      },
     });
     const inner = unwrapResponse<ServerModelListResponse>(res);
     return mapListResponse(inner);
@@ -380,6 +433,30 @@ export const modelApi = {
   getById: async (id: string): Promise<ServerModelDetail> => {
     const res = await client.get(`/models/${id}`);
     return unwrapResponse<ServerModelDetail>(res);
+  },
+
+  listDeleted: async (
+    params?: PaginationParams & { search?: string },
+  ): Promise<PaginatedResponse<DeletedModelListItem>> => {
+    const res = await client.get('/models/deleted', {
+      params: {
+        page: params?.page || 1,
+        page_size: params?.pageSize || 20,
+        search: params?.search || undefined,
+      },
+      headers: {
+        'Cache-Control': 'no-cache',
+        Pragma: 'no-cache',
+      },
+    });
+    const inner = unwrapResponse<DeletedModelListResponse>(res);
+    return {
+      items: inner.items,
+      total: inner.total,
+      page: inner.page,
+      pageSize: inner.page_size,
+      totalPages: Math.ceil(inner.total / (inner.page_size || 20)),
+    };
   },
 
   previewDiagnostics: async (params?: {
@@ -465,6 +542,19 @@ export const modelApi = {
     await client.delete(`/models/${id}`);
   },
 
+  restore: async (id: string): Promise<void> => {
+    await client.post(`/models/${id}/restore`);
+  },
+
+  purgeDeleted: async (data: {
+    modelIds?: string[];
+    all?: boolean;
+    search?: string;
+  }): Promise<PurgeDeletedModelsResponse> => {
+    const res = await client.post('/models/deleted/purge', data);
+    return unwrapResponse<PurgeDeletedModelsResponse>(res);
+  },
+
   batchDelete: async (data: {
     modelIds?: string[];
     allMatching?: boolean;
@@ -499,27 +589,34 @@ export const modelApi = {
 
   batchUploadFromArchive: async (
     file: File,
-    options?: { categoryId?: string; onUploadProgress?: (progressEvent: UploadProgressEvent) => void },
-  ): Promise<{
-    total: number;
-    results: Array<{
-      name: string;
-      model_id?: string;
-      status: string;
-      error?: string;
-      drawing_attached?: boolean;
-      drawing_error?: string;
-    }>;
-  }> => {
+    options?: {
+      categoryId?: string;
+      onUploadProgress?: (progressEvent: UploadProgressEvent) => void;
+      onProcessingProgress?: (progress: BatchArchiveUploadProgress) => void;
+    },
+  ): Promise<BatchArchiveUploadResult> => {
     const form = new FormData();
     form.append('file', file);
     if (options?.categoryId) form.append('categoryId', options.categoryId);
-    const res = await client.post('/batch/upload', form, {
+    const res = await client.post('/batch/upload-async', form, {
       headers: { 'Content-Type': 'multipart/form-data' },
-      timeout: 900000,
+      timeout: UPLOAD_REQUEST_TIMEOUT_MS,
       onUploadProgress: options?.onUploadProgress,
     });
-    return unwrapResponse(res);
+    const { jobId } = unwrapResponse<{ jobId: string }>(res);
+
+    for (;;) {
+      await sleep(800);
+      const progressRes = await client.get(`/batch/upload-progress/${jobId}`, { timeout: UPLOAD_REQUEST_TIMEOUT_MS });
+      const progress = unwrapResponse<BatchArchiveUploadProgress>(progressRes);
+      options?.onProcessingProgress?.(progress);
+      if (progress.stage === 'done') {
+        return progress.result || { total: 0, results: [] };
+      }
+      if (progress.stage === 'error') {
+        throw new Error(progress.error || progress.message || '批量上传处理失败');
+      }
+    }
   },
 
   batchUploadFromZip: async (

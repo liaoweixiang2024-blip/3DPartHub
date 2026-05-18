@@ -18,6 +18,7 @@ Every theme must live at `src/themes/interfaceThemes/<theme-key>/` and include:
     MobileNavDrawer.tsx
   templates/
     HomeDesktop.tsx
+    AuthDialog.tsx
     Login.tsx
     NotFound.tsx
   components/
@@ -51,9 +52,11 @@ Every theme must live at `src/themes/interfaceThemes/<theme-key>/` and include:
 
 `templates/`
 
-- Owns page-level theme templates. Required templates are `DesktopHome`, `Login`, and `NotFound`.
+- Owns page-level theme templates. Required templates are `DesktopHome`, `AuthDialog`, `Login`, and `NotFound`.
 - Templates receive data and actions from the page/controller layer; they should not refetch page data unless it is purely presentational site config.
-- Templates must not import from `pages/`. Shared home contracts live in `shared/homeTypes.ts` and shared home renderers live in `shared/HomeDesktopShared.tsx`.
+- Templates must not import from `pages/`. Home contracts and base render helpers live in `components/home/`; theme-private files only consume them through the contract whitelist.
+
+Base form controls such as inputs, selects, textareas, labels, help text, and error text live outside theme packages in `components/shared/FormControls.tsx`. Themes own the surrounding template shell and scoped CSS only; they should not duplicate core input class strings.
 
 `components/`
 

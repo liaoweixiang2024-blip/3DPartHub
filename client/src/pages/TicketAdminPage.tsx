@@ -1,8 +1,10 @@
-import { useState, useEffect } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { deleteTicket, getTickets, updateTicketStatus, type Ticket } from '../api/tickets';
+import { AdminButton } from '../components/shared/AdminControls';
 import { AdminEmptyState, AdminLoadingState, AdminManagementPage } from '../components/shared/AdminManagementPage';
 import { AdminPageShell } from '../components/shared/AdminPageShell';
+import AdminRefreshButton from '../components/shared/AdminRefreshButton';
 import ConfirmDialog from '../components/shared/ConfirmDialog';
 import Icon from '../components/shared/Icon';
 import InfiniteLoadTrigger from '../components/shared/InfiniteLoadTrigger';
@@ -91,17 +93,22 @@ function useTicketAdminData() {
   } = useImeSafeSearchInput();
   const [tickets, setTickets] = useState<Ticket[]>([]);
   const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
   const [filter, setFilter] = useState<string>('all');
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const { settings } = usePublicSettings();
-  const business = getBusinessConfig(settings);
+  const business = useMemo(() => getBusinessConfig(settings), [settings]);
   const statuses = business.ticketStatuses;
-  const statusTabs = [
-    { value: 'all', label: '全部' },
-    ...statuses.filter((s) => s.tab).map((s) => ({ value: s.value, label: s.label })),
-  ];
-  const classificationMap = new Map(business.ticketClassifications.map((item) => [item.value, item.label]));
+  const statusTabs = useMemo(
+    () => [
+      { value: 'all', label: '全部' },
+      ...statuses.filter((s) => s.tab).map((s) => ({ value: s.value, label: s.label })),
+    ],
+    [statuses],
+  );
+  const classificationMap = useMemo(
+    () => new Map(business.ticketClassifications.map((item) => [item.value, item.label])),
+    [business.ticketClassifications],
+  );
 
   useEffect(() => {
     loadTickets();
@@ -120,15 +127,12 @@ function useTicketAdminData() {
   }
 
   async function refreshTickets() {
-    setRefreshing(true);
     try {
       const data = await getTickets();
       setTickets(data);
       toast('工单数据已刷新', 'success');
     } catch (err) {
       toast(getErrorMessage(err, '刷新工单失败'), 'error');
-    } finally {
-      setRefreshing(false);
     }
   }
 
@@ -155,23 +159,29 @@ function useTicketAdminData() {
   }
 
   const searchText = normalizeSearchValue(search);
-  const searchedTickets = tickets.filter((ticket) =>
-    ticketMatchesSearch(ticket, searchText, classificationMap, statuses),
+  const searchedTickets = useMemo(
+    () => tickets.filter((ticket) => ticketMatchesSearch(ticket, searchText, classificationMap, statuses)),
+    [classificationMap, searchText, statuses, tickets],
   );
-  const filtered = filter === 'all' ? searchedTickets : searchedTickets.filter((t) => t.status === filter);
+  const filtered = useMemo(
+    () => (filter === 'all' ? searchedTickets : searchedTickets.filter((t) => t.status === filter)),
+    [filter, searchedTickets],
+  );
   const {
     visibleItems: visibleTickets,
     hasMore,
     loadMore,
   } = useVisibleItems(filtered, 60, `${filter}:${searchText}:${tickets.length}`);
-  const counts: Record<string, number> = { all: searchedTickets.length };
-  for (const status of statuses.filter((s) => s.tab))
-    counts[status.value] = searchedTickets.filter((t) => t.status === status.value).length;
+  const counts: Record<string, number> = useMemo(() => {
+    const next: Record<string, number> = { all: searchedTickets.length };
+    for (const status of statuses.filter((s) => s.tab))
+      next[status.value] = searchedTickets.filter((t) => t.status === status.value).length;
+    return next;
+  }, [searchedTickets, statuses]);
 
   return {
     user,
     loading,
-    refreshing,
     filter,
     setFilter,
     searchInputValue,
@@ -262,7 +272,6 @@ function DesktopContent() {
   const {
     user,
     loading,
-    refreshing,
     filter,
     setFilter,
     searchInputValue,
@@ -295,16 +304,7 @@ function DesktopContent() {
       <AdminManagementPage
         title="工单处理"
         description="管理用户提交的模型需求工单"
-        actions={
-          <button
-            onClick={refreshTickets}
-            disabled={refreshing}
-            className="flex items-center gap-2 rounded-lg border border-outline-variant/20 px-4 py-2.5 text-sm text-on-surface-variant transition-colors hover:text-on-surface disabled:opacity-50"
-          >
-            <Icon name="refresh" size={16} className={refreshing ? 'animate-spin' : ''} />
-            {refreshing ? '刷新中...' : '刷新'}
-          </button>
-        }
+        actions={<AdminRefreshButton onRefresh={refreshTickets} />}
         toolbar={
           <TicketAdminToolbar
             tabs={statusTabs}
@@ -352,45 +352,45 @@ function DesktopContent() {
                     </span>
                     <div className="flex shrink-0 items-center gap-1" onClick={(e) => e.stopPropagation()}>
                       {ticket.status !== 'in_progress' && ticket.status !== 'resolved' && (
-                        <button
+                        <AdminButton
                           onClick={() => handleStatusChange(ticket.id, 'in_progress')}
-                          className="whitespace-nowrap rounded-full px-3 py-1 text-[11px] font-medium text-blue-600 bg-blue-500/10 hover:bg-blue-500/20 active:scale-[0.96] transition-all"
+                          size="sm"
+                          variant="warning"
                         >
                           处理
-                        </button>
+                        </AdminButton>
                       )}
                       {ticket.status === 'in_progress' && (
-                        <button
+                        <AdminButton
                           onClick={() => handleStatusChange(ticket.id, 'resolved')}
-                          className="whitespace-nowrap rounded-full px-3 py-1 text-[11px] font-medium text-emerald-600 bg-emerald-500/10 hover:bg-emerald-500/20 active:scale-[0.96] transition-all"
+                          size="sm"
+                          variant="success"
                         >
                           解决
-                        </button>
+                        </AdminButton>
                       )}
                       {ticket.status !== 'closed' && (
-                        <button
+                        <AdminButton
                           onClick={() => handleStatusChange(ticket.id, 'closed')}
-                          className="whitespace-nowrap rounded-full px-3 py-1 text-[11px] font-medium text-on-surface-variant bg-surface-container-highest/70 hover:bg-surface-container-highest active:scale-[0.96] transition-all"
+                          size="sm"
+                          variant="secondary"
                         >
                           关闭
-                        </button>
+                        </AdminButton>
                       )}
                       {ticket.status === 'closed' && (
-                        <button
-                          onClick={() => handleStatusChange(ticket.id, 'open')}
-                          className="whitespace-nowrap rounded-full px-3 py-1 text-[11px] font-medium text-primary-container bg-primary-container/10 hover:bg-primary-container/20 active:scale-[0.96] transition-all"
-                        >
+                        <AdminButton onClick={() => handleStatusChange(ticket.id, 'open')} size="sm" variant="tonal">
                           重开
-                        </button>
+                        </AdminButton>
                       )}
-                      <button
-                        type="button"
+                      <AdminButton
                         onClick={() => setDeleteTarget(ticket)}
                         disabled={deletingId === ticket.id}
-                        className="whitespace-nowrap rounded-full px-3 py-1 text-[11px] font-medium text-error bg-error/10 hover:bg-error/15 active:scale-[0.96] transition-all disabled:cursor-not-allowed disabled:opacity-60"
+                        size="sm"
+                        variant="danger"
                       >
                         {deletingId === ticket.id ? '删除中' : '删除工单'}
-                      </button>
+                      </AdminButton>
                       <span className="ml-0.5 text-on-surface-variant/30 group-hover:text-on-surface-variant/60 transition-colors">
                         <Icon name="chevron_right" size={16} />
                       </span>
@@ -426,7 +426,6 @@ function MobileContent() {
   const {
     user,
     loading,
-    refreshing,
     filter,
     setFilter,
     searchInputValue,
@@ -459,16 +458,7 @@ function MobileContent() {
       <AdminManagementPage
         title="工单处理"
         description="管理用户提交的模型需求工单"
-        actions={
-          <button
-            onClick={refreshTickets}
-            disabled={refreshing}
-            className="inline-flex h-9 items-center gap-1 rounded-lg border border-outline-variant/20 px-3 text-xs text-on-surface-variant disabled:opacity-50"
-            aria-label="刷新"
-          >
-            <Icon name="refresh" size={14} className={refreshing ? 'animate-spin' : ''} />
-          </button>
-        }
+        actions={<AdminRefreshButton onRefresh={refreshTickets} mobileIconOnly />}
         toolbar={
           <TicketAdminToolbar
             tabs={statusTabs}
@@ -522,44 +512,44 @@ function MobileContent() {
                     </div>
                     <div className="flex flex-wrap items-center gap-1.5 border-t border-outline-variant/8 px-3.5 py-2">
                       {ticket.status !== 'in_progress' && ticket.status !== 'resolved' && (
-                        <button
+                        <AdminButton
                           onClick={() => handleStatusChange(ticket.id, 'in_progress')}
-                          className="whitespace-nowrap rounded-full px-3 py-1 text-[11px] font-medium text-blue-600 bg-blue-500/10 active:scale-[0.96] transition-all"
+                          size="sm"
+                          variant="warning"
                         >
                           开始处理
-                        </button>
+                        </AdminButton>
                       )}
                       {ticket.status === 'in_progress' && (
-                        <button
+                        <AdminButton
                           onClick={() => handleStatusChange(ticket.id, 'resolved')}
-                          className="whitespace-nowrap rounded-full px-3 py-1 text-[11px] font-medium text-emerald-600 bg-emerald-500/10 active:scale-[0.96] transition-all"
+                          size="sm"
+                          variant="success"
                         >
                           标记解决
-                        </button>
+                        </AdminButton>
                       )}
                       {ticket.status !== 'closed' ? (
-                        <button
+                        <AdminButton
                           onClick={() => handleStatusChange(ticket.id, 'closed')}
-                          className="whitespace-nowrap rounded-full px-3 py-1 text-[11px] font-medium text-on-surface-variant bg-surface-container-highest/70 active:scale-[0.96] transition-all"
+                          size="sm"
+                          variant="secondary"
                         >
                           关闭
-                        </button>
+                        </AdminButton>
                       ) : (
-                        <button
-                          onClick={() => handleStatusChange(ticket.id, 'open')}
-                          className="whitespace-nowrap rounded-full px-3 py-1 text-[11px] font-medium text-primary-container bg-primary-container/10 active:scale-[0.96] transition-all"
-                        >
+                        <AdminButton onClick={() => handleStatusChange(ticket.id, 'open')} size="sm" variant="tonal">
                           重新打开
-                        </button>
+                        </AdminButton>
                       )}
-                      <button
-                        type="button"
+                      <AdminButton
                         onClick={() => setDeleteTarget(ticket)}
                         disabled={deletingId === ticket.id}
-                        className="whitespace-nowrap rounded-full px-3 py-1 text-[11px] font-medium text-error bg-error/10 active:scale-[0.96] transition-all disabled:cursor-not-allowed disabled:opacity-60"
+                        size="sm"
+                        variant="danger"
                       >
                         {deletingId === ticket.id ? '删除中' : '删除工单'}
-                      </button>
+                      </AdminButton>
                     </div>
                   </div>
                 );

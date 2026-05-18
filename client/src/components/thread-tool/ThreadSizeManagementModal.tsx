@@ -6,6 +6,8 @@
 import { useMemo, useState } from 'react';
 import { threadSizeApi, type ThreadSizeEntry } from '../../api/threadSize';
 import { useImeSafeSearchInput } from '../../hooks/useImeSafeSearchInput';
+import { AdminTableHeadCell, AdminTableHeadRow, ADMIN_TABLE_HEAD_CLASS } from '../shared/AdminDataTable';
+import ConfirmDialog from '../shared/ConfirmDialog';
 import Icon from '../shared/Icon';
 import ResponsiveSectionTabs from '../shared/ResponsiveSectionTabs';
 import SearchField from '../shared/SearchField';
@@ -41,6 +43,7 @@ export default function ThreadSizeManagementModal({ adminEntries, onRefresh, onC
   } = useImeSafeSearchInput();
 
   const [editingEntry, setEditingEntry] = useState<ThreadSizeEntry | 'new' | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<ThreadSizeEntry | null>(null);
   const [entryDraft, setEntryDraft] = useState({
     kind: 'thread' as DataTab,
     family: '',
@@ -136,10 +139,10 @@ export default function ThreadSizeManagementModal({ adminEntries, onRefresh, onC
   };
 
   const deleteEntry = async (entry: ThreadSizeEntry) => {
-    if (!window.confirm(`确定删除「${entry.primary}」吗？`)) return;
     try {
       await threadSizeApi.remove(entry.id);
       toast('规格数据已删除', 'success');
+      setDeleteTarget(null);
       await refreshThreadSizeData();
     } catch {
       toast('删除失败', 'error');
@@ -147,148 +150,160 @@ export default function ThreadSizeManagementModal({ adminEntries, onRefresh, onC
   };
 
   return (
-    <div
-      className="fixed inset-0 z-[320] bg-black/50 p-0 sm:flex sm:items-center sm:justify-center sm:p-4"
-      onClick={onClose}
-    >
+    <>
       <div
-        className="fixed inset-0 flex min-h-0 flex-col bg-surface-container-low shadow-2xl sm:relative sm:inset-auto sm:h-[88dvh] sm:w-[min(96vw,1180px)] sm:overflow-hidden sm:rounded-xl sm:border sm:border-outline-variant/20"
-        role="dialog"
-        aria-modal="true"
-        aria-label="规格数据管理"
-        onClick={(event) => event.stopPropagation()}
+        className="fixed inset-0 z-[320] bg-black/50 p-0 sm:flex sm:items-center sm:justify-center sm:p-4"
+        onClick={onClose}
       >
-        <div className="flex shrink-0 items-center justify-between gap-3 border-b border-outline-variant/10 px-4 py-3">
-          <div className="min-w-0">
-            <h2 className="truncate text-base font-bold text-on-surface">规格数据管理</h2>
-            <p className="mt-0.5 line-clamp-1 text-xs text-on-surface-variant">
-              数据已接入数据库，可人工新增、编辑、删除；前台表格只读取数据库记录。
-            </p>
-          </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="grid h-9 w-9 shrink-0 place-items-center rounded-full text-on-surface-variant transition-colors hover:bg-surface-container-high hover:text-on-surface"
-            aria-label="关闭"
-          >
-            <Icon name="close" size={18} />
-          </button>
-        </div>
-
-        <div className="grid shrink-0 gap-3 border-b border-outline-variant/10 px-4 py-3 md:grid-cols-[minmax(0,1fr)_18rem]">
-          <ResponsiveSectionTabs
-            tabs={CATEGORY_FILTERS.map((tab) => ({
-              value: tab.key,
-              label: tab.label,
-              icon: categoryIcon(tab.key),
-              count: adminCounts[tab.key] || 0,
-            }))}
-            value={managementCategory}
-            onChange={setManagementCategory}
-            mobileTitle="数据分类"
-          />
-          <SearchField
-            inputProps={managementQueryInputProps}
-            value={managementQueryInputValue}
-            onClear={() => setManagementQueryInput('')}
-            placeholder="搜索规格、型号、说明..."
-          />
-        </div>
-
-        <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-          <div className="flex shrink-0 items-center justify-between gap-3 px-4 py-3">
+        <div
+          className="fixed inset-0 flex min-h-0 flex-col bg-surface-container-low shadow-2xl sm:relative sm:inset-auto sm:h-[88dvh] sm:w-[min(96vw,1180px)] sm:overflow-hidden sm:rounded-xl sm:border sm:border-outline-variant/20"
+          role="dialog"
+          aria-modal="true"
+          aria-label="规格数据管理"
+          onClick={(event) => event.stopPropagation()}
+        >
+          <div className="flex shrink-0 items-center justify-between gap-3 border-b border-outline-variant/10 px-4 py-3">
             <div className="min-w-0">
-              <p className="text-sm font-bold text-on-surface">
-                {CATEGORY_FILTERS.find((tab) => tab.key === managementCategory)?.label}
-              </p>
-              <p className="mt-0.5 text-xs text-on-surface-variant">
-                {adminRows.length
-                  ? '当前读取数据库数据，修改后前台立即生效。'
-                  : '数据库暂无规格数据，请新增记录或通过数据库导入。'}
+              <h2 className="truncate text-base font-bold text-on-surface">规格数据管理</h2>
+              <p className="mt-0.5 line-clamp-1 text-xs text-on-surface-variant">
+                数据已接入数据库，可人工新增、编辑、删除；前台表格只读取数据库记录。
               </p>
             </div>
-            <div className="flex shrink-0 items-center gap-2">
-              <span className="rounded-full bg-primary-container/10 px-2.5 py-1 text-xs font-bold text-primary-container">
-                {visibleAdminRows.length} 项
-              </span>
-              <button
-                type="button"
-                onClick={() => openEntryEditor()}
-                className="inline-flex h-8 items-center justify-center gap-1.5 rounded-lg bg-primary-container px-2.5 text-xs font-bold text-on-primary transition-opacity hover:opacity-90"
-              >
-                <Icon name="add" size={13} />
-                新增
-              </button>
-            </div>
+            <button
+              type="button"
+              onClick={onClose}
+              className="grid h-9 w-9 shrink-0 place-items-center rounded-full text-on-surface-variant transition-colors hover:bg-surface-container-high hover:text-on-surface"
+              aria-label="关闭"
+            >
+              <Icon name="close" size={18} />
+            </button>
           </div>
 
-          {visibleAdminRows.length === 0 ? (
-            <div className="flex min-h-0 flex-1 items-center justify-center px-4 py-10 text-center">
-              <div>
-                <Icon name="search_off" size={32} className="mx-auto text-on-surface-variant/30" />
-                <p className="mt-3 text-sm font-bold text-on-surface">没有匹配数据</p>
-                <p className="mt-1 text-xs text-on-surface-variant">换一个规格、型号或说明关键词试试。</p>
+          <div className="grid shrink-0 gap-3 border-b border-outline-variant/10 px-4 py-3 md:grid-cols-[minmax(0,1fr)_18rem]">
+            <ResponsiveSectionTabs
+              tabs={CATEGORY_FILTERS.map((tab) => ({
+                value: tab.key,
+                label: tab.label,
+                icon: categoryIcon(tab.key),
+                count: adminCounts[tab.key] || 0,
+              }))}
+              value={managementCategory}
+              onChange={setManagementCategory}
+              mobileTitle="数据分类"
+            />
+            <SearchField
+              inputProps={managementQueryInputProps}
+              value={managementQueryInputValue}
+              onClear={() => setManagementQueryInput('')}
+              placeholder="搜索规格、型号、说明..."
+            />
+          </div>
+
+          <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+            <div className="flex shrink-0 items-center justify-between gap-3 px-4 py-3">
+              <div className="min-w-0">
+                <p className="text-sm font-bold text-on-surface">
+                  {CATEGORY_FILTERS.find((tab) => tab.key === managementCategory)?.label}
+                </p>
+                <p className="mt-0.5 text-xs text-on-surface-variant">
+                  {adminRows.length
+                    ? '当前读取数据库数据，修改后前台立即生效。'
+                    : '数据库暂无规格数据，请新增记录或通过数据库导入。'}
+                </p>
+              </div>
+              <div className="flex shrink-0 items-center gap-2">
+                <span className="rounded-full bg-primary-container/10 px-2.5 py-1 text-xs font-bold text-primary-container">
+                  {visibleAdminRows.length} 项
+                </span>
+                <button
+                  type="button"
+                  onClick={() => openEntryEditor()}
+                  className="inline-flex h-8 items-center justify-center gap-1.5 rounded-lg bg-primary-container px-2.5 text-xs font-bold text-on-primary transition-opacity hover:opacity-90"
+                >
+                  <Icon name="add" size={13} />
+                  新增
+                </button>
               </div>
             </div>
-          ) : (
-            <div className="min-h-0 flex-1 overflow-auto custom-scrollbar">
-              <table className="w-full min-w-[760px] border-separate border-spacing-0 text-left text-sm">
-                <thead className="sticky top-0 z-10 bg-surface-container-low text-xs text-on-surface">
-                  <tr>
-                    <th className="border-b border-outline-variant/10 px-4 py-3 font-bold">规格 / 型号</th>
-                    <th className="border-b border-outline-variant/10 px-4 py-3 font-bold">分类</th>
-                    <th className="border-b border-outline-variant/10 px-4 py-3 font-bold">关键参数</th>
-                    <th className="border-b border-outline-variant/10 px-4 py-3 font-bold">说明</th>
-                    <th className="border-b border-outline-variant/10 px-4 py-3 text-right font-bold">操作</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-outline-variant/8">
-                  {visibleAdminRows.map((row) => (
-                    <tr key={row.id} className="text-on-surface transition-colors hover:bg-surface-container-high/30">
-                      <td className="px-4 py-3 font-semibold">{row.primary}</td>
-                      <td className="px-4 py-3 text-on-surface-variant">{row.secondary}</td>
-                      <td className="px-4 py-3 text-on-surface-variant">{row.meta}</td>
-                      <td className="max-w-[420px] px-4 py-3 leading-6 text-on-surface-variant">{row.note}</td>
-                      <td className="px-4 py-3 text-right">
-                        <div className="inline-flex items-center gap-1.5">
-                          <button
-                            type="button"
-                            onClick={() => row.dbEntry && openEntryEditor(row.dbEntry)}
-                            className="inline-flex h-8 items-center justify-center gap-1.5 rounded-lg border border-outline-variant/12 px-2.5 text-xs font-medium text-on-surface-variant transition-colors hover:bg-surface-container-high hover:text-on-surface"
-                          >
-                            <Icon name="edit" size={13} />
-                            编辑
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => row.dbEntry && void deleteEntry(row.dbEntry)}
-                            className="inline-flex h-8 items-center justify-center gap-1.5 rounded-lg border border-error/15 px-2.5 text-xs font-medium text-error transition-colors hover:bg-error/8"
-                          >
-                            <Icon name="delete" size={13} />
-                            删除
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </div>
-      </div>
 
-      {/* ── Entry Editor Dialog ── */}
-      {editingEntry && (
-        <EntryEditorDialog
-          editingEntry={editingEntry}
-          entryDraft={entryDraft}
-          setEntryDraft={setEntryDraft}
-          onSave={saveEntryDraft}
-          onClose={() => setEditingEntry(null)}
-        />
-      )}
-    </div>
+            {visibleAdminRows.length === 0 ? (
+              <div className="flex min-h-0 flex-1 items-center justify-center px-4 py-10 text-center">
+                <div>
+                  <Icon name="search_off" size={32} className="mx-auto text-on-surface-variant/30" />
+                  <p className="mt-3 text-sm font-bold text-on-surface">没有匹配数据</p>
+                  <p className="mt-1 text-xs text-on-surface-variant">换一个规格、型号或说明关键词试试。</p>
+                </div>
+              </div>
+            ) : (
+              <div className="min-h-0 flex-1 overflow-auto custom-scrollbar">
+                <table className="w-full min-w-[760px] border-separate border-spacing-0 text-left text-sm">
+                  <thead className={ADMIN_TABLE_HEAD_CLASS}>
+                    <AdminTableHeadRow>
+                      <AdminTableHeadCell>规格 / 型号</AdminTableHeadCell>
+                      <AdminTableHeadCell>分类</AdminTableHeadCell>
+                      <AdminTableHeadCell>关键参数</AdminTableHeadCell>
+                      <AdminTableHeadCell>说明</AdminTableHeadCell>
+                      <AdminTableHeadCell className="text-right">操作</AdminTableHeadCell>
+                    </AdminTableHeadRow>
+                  </thead>
+                  <tbody className="divide-y divide-outline-variant/8">
+                    {visibleAdminRows.map((row) => (
+                      <tr key={row.id} className="text-on-surface transition-colors hover:bg-surface-container-high/30">
+                        <td className="px-4 py-3 font-semibold">{row.primary}</td>
+                        <td className="px-4 py-3 text-on-surface-variant">{row.secondary}</td>
+                        <td className="px-4 py-3 text-on-surface-variant">{row.meta}</td>
+                        <td className="max-w-[420px] px-4 py-3 leading-6 text-on-surface-variant">{row.note}</td>
+                        <td className="px-4 py-3 text-right">
+                          <div className="inline-flex items-center gap-1.5">
+                            <button
+                              type="button"
+                              onClick={() => row.dbEntry && openEntryEditor(row.dbEntry)}
+                              className="inline-flex h-8 items-center justify-center gap-1.5 rounded-lg border border-outline-variant/12 px-2.5 text-xs font-medium text-on-surface-variant transition-colors hover:bg-surface-container-high hover:text-on-surface"
+                            >
+                              <Icon name="edit" size={13} />
+                              编辑
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => row.dbEntry && setDeleteTarget(row.dbEntry)}
+                              className="inline-flex h-8 items-center justify-center gap-1.5 rounded-lg border border-error/15 px-2.5 text-xs font-medium text-error transition-colors hover:bg-error/8"
+                            >
+                              <Icon name="delete" size={13} />
+                              删除
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* ── Entry Editor Dialog ── */}
+        {editingEntry && (
+          <EntryEditorDialog
+            editingEntry={editingEntry}
+            entryDraft={entryDraft}
+            setEntryDraft={setEntryDraft}
+            onSave={saveEntryDraft}
+            onClose={() => setEditingEntry(null)}
+          />
+        )}
+      </div>
+      <ConfirmDialog
+        open={Boolean(deleteTarget)}
+        onClose={() => setDeleteTarget(null)}
+        onConfirm={() => {
+          if (deleteTarget) void deleteEntry(deleteTarget);
+        }}
+        title="确认删除规格"
+        description={`确定删除「${deleteTarget?.primary || ''}」吗？`}
+        confirmLabel="确认删除"
+      />
+    </>
   );
 }
 

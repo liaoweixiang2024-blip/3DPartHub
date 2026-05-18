@@ -147,8 +147,15 @@ async function lookupDownloadArchiveEntries(ids: string[], userId: string): Prom
 
   const downloads = await prisma.download.findMany({
     where: { id: { in: uniqueIds }, userId },
-    include: {
-      model: {
+    select: {
+      id: true,
+      modelId: true,
+    },
+  });
+  const modelIds = Array.from(new Set(downloads.map((download) => download.modelId).filter(Boolean)));
+  const models = modelIds.length
+    ? await prisma.model.findMany({
+        where: { id: { in: modelIds } },
         select: {
           id: true,
           name: true,
@@ -161,16 +168,16 @@ async function lookupDownloadArchiveEntries(ids: string[], userId: string): Prom
           uploadPath: true,
           status: true,
         },
-      },
-    },
-  });
+      })
+    : [];
   const downloadById = new Map(downloads.map((download) => [download.id, download]));
+  const modelById = new Map(models.map((model) => [model.id, model]));
   const addedModelIds = new Set<string>();
   const fileEntries: DownloadArchiveEntry[] = [];
 
   for (const id of uniqueIds) {
     const download = downloadById.get(id);
-    const model = download?.model;
+    const model = download ? modelById.get(download.modelId) : null;
     if (!model || model.status !== MODEL_STATUS.COMPLETED || addedModelIds.has(model.id)) continue;
     if (!findOriginalModelPath(model)) continue;
 
@@ -198,8 +205,20 @@ router.get('/api/downloads', authMiddleware, async (req: Request, res: Response)
     const userId = (req as AuthRequest).user!.userId;
     const downloads = await prisma.download.findMany({
       where: { userId },
-      include: {
-        model: {
+      select: {
+        id: true,
+        modelId: true,
+        format: true,
+        fileSize: true,
+        createdAt: true,
+      },
+      orderBy: { createdAt: 'desc' },
+      take: 100,
+    });
+    const modelIds = Array.from(new Set(downloads.map((download) => download.modelId).filter(Boolean)));
+    const models = modelIds.length
+      ? await prisma.model.findMany({
+          where: { id: { in: modelIds } },
           select: {
             id: true,
             name: true,
@@ -208,27 +227,28 @@ router.get('/api/downloads', authMiddleware, async (req: Request, res: Response)
             thumbnailUrl: true,
             gltfSize: true,
           },
-        },
-      },
-      orderBy: { createdAt: 'desc' },
-      take: 100,
+        })
+      : [];
+    const modelById = new Map(models.map((model) => [model.id, model]));
+    const items = downloads.map((d) => {
+      const model = modelById.get(d.modelId);
+      return {
+        id: d.id,
+        modelId: d.modelId,
+        format: d.format,
+        fileSize: d.fileSize,
+        createdAt: d.createdAt,
+        model: model
+          ? {
+              model_id: model.id,
+              name: model.name || model.originalName,
+              format: model.format,
+              thumbnail_url: model.thumbnailUrl,
+              gltf_size: model.gltfSize,
+            }
+          : null,
+      };
     });
-    const items = downloads.map((d: any) => ({
-      id: d.id,
-      modelId: d.modelId,
-      format: d.format,
-      fileSize: d.fileSize,
-      createdAt: d.createdAt,
-      model: d.model
-        ? {
-            model_id: d.model.id,
-            name: d.model.name || d.model.originalName,
-            format: d.model.format,
-            thumbnail_url: d.model.thumbnailUrl,
-            gltf_size: d.model.gltfSize,
-          }
-        : null,
-    }));
     res.json({ data: items });
   } catch (err) {
     log.error({ err }, 'Failed to fetch downloads');
@@ -264,7 +284,7 @@ router.get('/api/admin/downloads/stats', authMiddleware, async (req: AuthRequest
       activeDownloaders,
       downloadBytes,
       topModels,
-      recentDownloads,
+      recentDownloadRows,
       formatGroups,
       chartRows,
     ] = await Promise.all([
@@ -297,17 +317,13 @@ router.get('/api/admin/downloads/stats', authMiddleware, async (req: AuthRequest
         where: downloadWhere,
         orderBy: { createdAt: 'desc' },
         take: 20,
-        include: {
-          user: { select: { id: true, username: true, email: true } },
-          model: {
-            select: {
-              id: true,
-              name: true,
-              originalName: true,
-              format: true,
-              thumbnailUrl: true,
-            },
-          },
+        select: {
+          id: true,
+          modelId: true,
+          userId: true,
+          format: true,
+          fileSize: true,
+          createdAt: true,
         },
       }),
       prisma.download.groupBy({
@@ -321,6 +337,31 @@ router.get('/api/admin/downloads/stats', authMiddleware, async (req: AuthRequest
         select: { createdAt: true, fileSize: true },
       }),
     ]);
+
+    const recentUserIds = Array.from(new Set(recentDownloadRows.map((download) => download.userId).filter(Boolean)));
+    const recentModelIds = Array.from(new Set(recentDownloadRows.map((download) => download.modelId).filter(Boolean)));
+    const [recentUsers, recentModels] = await Promise.all([
+      recentUserIds.length > 0
+        ? prisma.user.findMany({
+            where: { id: { in: recentUserIds } },
+            select: { id: true, username: true, email: true },
+          })
+        : Promise.resolve([]),
+      recentModelIds.length > 0
+        ? prisma.model.findMany({
+            where: { id: { in: recentModelIds } },
+            select: {
+              id: true,
+              name: true,
+              originalName: true,
+              format: true,
+              thumbnailUrl: true,
+            },
+          })
+        : Promise.resolve([]),
+    ]);
+    const recentUserMap = new Map(recentUsers.map((user) => [user.id, user]));
+    const recentModelMap = new Map(recentModels.map((model) => [model.id, model]));
 
     const dailyMap = new Map<string, { downloads: number; bytes: number }>();
     for (let offset = 13; offset >= 0; offset -= 1) {
@@ -354,18 +395,22 @@ router.get('/api/admin/downloads/stats', authMiddleware, async (req: AuthRequest
         category: model.categoryRef?.name || model.category || null,
         download_count: model.downloadCount || 0,
       })),
-      recentDownloads: recentDownloads.map((download) => ({
-        id: download.id,
-        model_id: download.modelId,
-        model_name: download.model?.name || download.model?.originalName || '已删除模型',
-        model_format: download.model?.format || download.format,
-        thumbnail_url: download.model?.thumbnailUrl || null,
-        user_id: download.userId,
-        username: download.user?.username || download.user?.email || '未知用户',
-        format: download.format,
-        file_size: download.fileSize,
-        created_at: download.createdAt,
-      })),
+      recentDownloads: recentDownloadRows.map((download) => {
+        const model = recentModelMap.get(download.modelId);
+        const user = recentUserMap.get(download.userId);
+        return {
+          id: download.id,
+          model_id: download.modelId,
+          model_name: model?.name || model?.originalName || '已删除模型',
+          model_format: model?.format || download.format,
+          thumbnail_url: model?.thumbnailUrl || null,
+          user_id: download.userId,
+          username: user?.username || user?.email || '未知用户',
+          format: download.format,
+          file_size: download.fileSize,
+          created_at: download.createdAt,
+        };
+      }),
       formatStats: formatGroups
         .map((group) => ({
           format: group.format || 'unknown',
@@ -434,7 +479,7 @@ router.post('/api/downloads/drawing-token', authMiddleware, async (req: AuthRequ
       resourceId: modelId,
       userId: req.user!.userId,
       role: req.user!.role,
-      singleUse: true,
+      singleUse: false,
     });
 
     const url = `/api/models/${encodeURIComponent(modelId)}/drawing/download?download_token=${encodeURIComponent(created.token)}`;

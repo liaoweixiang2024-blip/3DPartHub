@@ -130,7 +130,7 @@ function ModelDetailMobileSkeleton({ modelTitle, isAdmin }: { modelTitle?: strin
         </section>
 
         <section
-          className="absolute bottom-0 left-0 right-0 z-30 flex flex-col overflow-hidden rounded-t-2xl border-t border-outline-variant/10 bg-surface-container-low shadow-[0_-2px_20px_rgba(0,0,0,0.25)]"
+          className="absolute bottom-0 left-0 right-0 z-30 flex flex-col overflow-hidden rounded-t-2xl border-t border-outline-variant/10 bg-surface-container-low shadow-bottom-panel"
           style={{ height: mobilePeekHeight }}
           data-model-detail-sidebar
         >

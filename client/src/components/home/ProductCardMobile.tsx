@@ -2,11 +2,11 @@ import { useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { cacheModelDetailTitle } from '../../lib/modelDetailTitleCache';
 import { preloadModelDetailPage } from '../../lib/routeLoaders';
-import type { HomeBrowseState, Product } from '../../themes/interfaceThemes/shared/homeTypes';
 import FormatTag from '../shared/FormatTag';
 import Icon from '../shared/Icon';
 import ModelThumbnail from '../shared/ModelThumbnail';
 import { HomeMobileCardContent } from './HomeMobileCardContent';
+import type { HomeBrowseState, Product } from './homeTypes';
 import { HOME_MOBILE_CARD_CLASS, HOME_MOBILE_ACTION_BUTTON_CLASS } from './homeUtils';
 
 export function ProductCardMobile({

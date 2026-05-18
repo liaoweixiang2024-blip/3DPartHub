@@ -119,8 +119,8 @@ export function createAuthProfileRouter() {
       });
 
       res.json(user);
-    } catch (err: any) {
-      if (err?.code === 'P2002') {
+    } catch (err: unknown) {
+      if (err instanceof Error && 'code' in err && (err as NodeJS.ErrnoException).code === 'P2002') {
         res.status(409).json({ detail: '用户名已被使用' });
         return;
       }

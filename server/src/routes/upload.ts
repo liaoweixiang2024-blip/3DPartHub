@@ -12,13 +12,20 @@ import {
   readSync,
   closeSync,
 } from 'node:fs';
-import { join, resolve, sep } from 'node:path';
+import { join, resolve } from 'node:path';
 import { Transform } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 import { Router, Response } from 'express';
 import { getBusinessConfig } from '../lib/businessConfig.js';
 import { config } from '../lib/config.js';
 import { logger } from '../lib/logger.js';
+import {
+  BACKUP_UPLOAD_MAX_BYTES,
+  modelMaxBytes,
+  modelMaxSizeMb,
+  UPLOAD_REQUEST_TIMEOUT_MS,
+} from '../lib/uploadLimits.js';
+import { normalizeUploadFileName, resolveUploadPathInsideRoot } from '../lib/uploadPath.js';
 import {
   deleteUploadSession,
   loadUploadSession,
@@ -82,7 +89,6 @@ function validateFileMagic(filePath: string, ext: string): boolean {
 const CHUNKS_DIR = join(config.uploadDir, 'chunks');
 const UPLOAD_ROOT = resolve(process.cwd(), config.uploadDir);
 const MAX_UPLOAD_CHUNKS = 20_000;
-const MAX_BACKUP_UPLOAD_BYTES = 100 * 1024 * 1024 * 1024;
 const COMPLETED_BACKUP_UPLOAD_TTL_MS = 24 * 60 * 60 * 1000;
 mkdirSync(CHUNKS_DIR, { recursive: true });
 
@@ -95,18 +101,13 @@ function createByteCounter(onBytes: (bytes: number) => void) {
   });
 }
 
-function normalizeUploadFileName(fileName: unknown): string | null {
-  if (typeof fileName !== 'string') return null;
-  const trimmed = fileName.trim();
-  if (!trimmed || trimmed.length > 255) return null;
-  if (/[/\\\0]/.test(trimmed) || trimmed === '.' || trimmed === '..') return null;
-  return trimmed;
+function resolveUploadPath(fileName: string): string | null {
+  return resolveUploadPathInsideRoot(UPLOAD_ROOT, fileName);
 }
 
-function resolveUploadPath(fileName: string): string | null {
-  const resolved = resolve(UPLOAD_ROOT, fileName);
-  if (resolved !== UPLOAD_ROOT && resolved.startsWith(`${UPLOAD_ROOT}${sep}`)) return resolved;
-  return null;
+function cleanupUploadSessionFiles(uploadId: string, chunksDir: string) {
+  rmSync(chunksDir, { recursive: true, force: true });
+  deleteUploadSession(uploadId);
 }
 
 function isBackupArchiveName(fileName: string): boolean {
@@ -130,7 +131,7 @@ function cleanupCompletedBackupUploads() {
       rmSync(fullPath, { force: true });
       logger.info({ file: entry.name }, 'Cleaned unclaimed backup upload');
     }
-  } catch (err: any) {
+  } catch (err: unknown) {
     logger.warn({ err }, 'Failed to clean completed backup uploads');
   }
 }
@@ -148,6 +149,8 @@ setInterval(
 
 // Initialize chunked upload
 router.post('/api/upload/init', authMiddleware, requireRole('ADMIN'), async (req: AuthRequest, res: Response) => {
+  req.setTimeout(UPLOAD_REQUEST_TIMEOUT_MS);
+  res.setTimeout(UPLOAD_REQUEST_TIMEOUT_MS);
   const { fileName, fileSize, totalChunks, purpose } = req.body;
 
   const normalizedFileSize = Number(fileSize);
@@ -167,7 +170,7 @@ router.post('/api/upload/init', authMiddleware, requireRole('ADMIN'), async (req
       res.status(400).json({ detail: '备份文件只支持 .tar.gz / .tgz 格式' });
       return;
     }
-    if (normalizedFileSize > MAX_BACKUP_UPLOAD_BYTES) {
+    if (normalizedFileSize > BACKUP_UPLOAD_MAX_BYTES) {
       res.status(400).json({ detail: '备份文件过大，最大支持 100GB' });
       return;
     }
@@ -193,10 +196,11 @@ router.post('/api/upload/init', authMiddleware, requireRole('ADMIN'), async (req
     return;
   }
   const { uploadPolicy } = await getBusinessConfig();
-  const maxBytes = Math.max(1, uploadPolicy.modelMaxSizeMb) * 1024 * 1024;
+  const maxBytes = modelMaxBytes(uploadPolicy);
+  const maxMb = modelMaxSizeMb(uploadPolicy);
   const ext = safeFileName.split('.').pop()?.toLowerCase() || '';
   if (normalizedFileSize > maxBytes) {
-    res.status(400).json({ detail: `文件过大，最大支持 ${uploadPolicy.modelMaxSizeMb}MB` });
+    res.status(400).json({ detail: `文件过大，最大支持 ${maxMb}MB` });
     return;
   }
   if (!uploadPolicy.modelFormats.map((item) => item.toLowerCase()).includes(ext)) {
@@ -229,6 +233,8 @@ router.post('/api/upload/init', authMiddleware, requireRole('ADMIN'), async (req
 
 // Upload a chunk
 router.put('/api/upload/chunk', authMiddleware, requireRole('ADMIN'), async (req: AuthRequest, res: Response) => {
+  req.setTimeout(UPLOAD_REQUEST_TIMEOUT_MS);
+  res.setTimeout(UPLOAD_REQUEST_TIMEOUT_MS);
   const uploadId = req.query.uploadId as string | undefined;
   const chunkIndex = req.query.chunkIndex as string | undefined;
 
@@ -266,13 +272,21 @@ router.put('/api/upload/chunk', authMiddleware, requireRole('ADMIN'), async (req
   // Stream chunk data directly to disk — avoid buffering entire body in memory
   const ws = createWriteStream(chunkPath);
   let receivedBytes = 0;
-  await pipeline(
-    req,
-    createByteCounter((bytes) => {
-      receivedBytes += bytes;
-    }),
-    ws,
-  );
+  try {
+    await pipeline(
+      req,
+      createByteCounter((bytes) => {
+        receivedBytes += bytes;
+      }),
+      ws,
+    );
+  } catch (err) {
+    ws.destroy();
+    rmSync(chunkPath, { force: true });
+    logger.warn({ err, uploadId, chunkIndex: ci }, 'Failed to write upload chunk');
+    res.status(500).json({ detail: '分片写入失败，请重新上传该分片' });
+    return;
+  }
 
   // Validate chunk size doesn't exceed expected (with 20% tolerance for last chunk)
   const expectedMax = Math.ceil(session.chunkSize * 1.2);
@@ -306,6 +320,8 @@ router.put('/api/upload/chunk', authMiddleware, requireRole('ADMIN'), async (req
 
 // Complete chunked upload and start conversion
 router.post('/api/upload/complete', authMiddleware, requireRole('ADMIN'), async (req: AuthRequest, res: Response) => {
+  req.setTimeout(UPLOAD_REQUEST_TIMEOUT_MS);
+  res.setTimeout(UPLOAD_REQUEST_TIMEOUT_MS);
   const { uploadId } = req.body;
 
   if (!uploadId) {
@@ -365,6 +381,7 @@ router.post('/api/upload/complete', authMiddleware, requireRole('ADMIN'), async 
   } catch {
     ws.destroy();
     rmSync(mergedPath, { force: true });
+    cleanupUploadSessionFiles(uploadId, chunksDir);
     res.status(500).json({ detail: '合并上传文件失败' });
     return;
   }
@@ -372,6 +389,7 @@ router.post('/api/upload/complete', authMiddleware, requireRole('ADMIN'), async 
   const mergedSize = statSync(mergedPath).size;
   if (mergedSize !== session.fileSize) {
     rmSync(mergedPath, { force: true });
+    cleanupUploadSessionFiles(uploadId, chunksDir);
     res.status(400).json({ detail: '合并后的文件大小异常，请重新上传' });
     return;
   }
@@ -384,12 +402,12 @@ router.post('/api/upload/complete', authMiddleware, requireRole('ADMIN'), async 
       "Upload rejected: file magic bytes don't match extension",
     );
     rmSync(mergedPath, { force: true });
+    cleanupUploadSessionFiles(uploadId, chunksDir);
     res.status(400).json({ detail: '文件内容与扩展名不匹配，请上传正确的文件' });
     return;
   }
 
-  rmSync(chunksDir, { recursive: true, force: true });
-  deleteUploadSession(uploadId);
+  cleanupUploadSessionFiles(uploadId, chunksDir);
 
   // Return merged file info (caller should use this to create model + start conversion)
   res.json({

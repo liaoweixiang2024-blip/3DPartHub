@@ -15,6 +15,7 @@ interface ResponsiveSectionTabsProps {
   onChange: (value: string) => void;
   mobileTitle?: string;
   mobileTriggerVariant?: 'plain' | 'surface';
+  desktopVariant?: 'default' | 'subtle' | 'prominent';
   countUnit?: string;
   className?: string;
 }
@@ -25,6 +26,7 @@ export default function ResponsiveSectionTabs({
   onChange,
   mobileTitle = '选择分类',
   mobileTriggerVariant = 'plain',
+  desktopVariant = 'default',
   countUnit = '',
   className = '',
 }: ResponsiveSectionTabsProps) {
@@ -68,6 +70,8 @@ export default function ResponsiveSectionTabs({
     setOpen(false);
     onChange(nextValue);
   };
+  const subtleDesktop = desktopVariant === 'subtle';
+  const prominentDesktop = desktopVariant === 'prominent';
 
   const scrollDesktopTabs = (direction: -1 | 1) => {
     const scroller = desktopScrollerRef.current;
@@ -77,22 +81,28 @@ export default function ResponsiveSectionTabs({
 
   return (
     <div className={`relative ${className}`}>
-      <div className="hidden min-h-10 min-w-0 items-center gap-1.5 md:flex">
+      <div
+        className={`hidden min-w-0 items-center gap-1.5 md:flex ${
+          subtleDesktop ? 'min-h-8' : prominentDesktop ? 'min-h-10' : 'min-h-9'
+        }`}
+      >
         {canScrollDesktop ? (
           <button
             type="button"
             onClick={() => scrollDesktopTabs(-1)}
-            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-on-surface-variant transition-colors hover:bg-surface-container-high hover:text-on-surface"
+            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-on-surface-variant transition-colors hover:bg-surface-container-high hover:text-on-surface"
             aria-label="向左查看更多分类"
             data-tooltip-ignore
           >
-            <Icon name="chevron_left" size={18} />
+            <Icon name="chevron_left" size={16} />
           </button>
         ) : null}
         <div className="relative min-w-0 flex-1">
           <div
             ref={desktopScrollerRef}
-            className="flex min-h-10 min-w-0 items-center overflow-x-auto scroll-smooth pr-1 scrollbar-none"
+            className={`flex min-w-0 items-center overflow-x-auto scroll-smooth pr-1 scrollbar-none ${
+              subtleDesktop ? 'min-h-8' : prominentDesktop ? 'min-h-10' : 'min-h-9'
+            }`}
           >
             {tabs.map((tab, index) => {
               const active = tab.value === value;
@@ -102,28 +112,68 @@ export default function ResponsiveSectionTabs({
                   type="button"
                   data-tab-active={active ? 'true' : undefined}
                   onClick={() => onChange(tab.value)}
-                  className={`relative inline-flex h-9 shrink-0 items-center justify-center gap-1.5 px-3 text-sm font-medium leading-none transition-colors ${
-                    active ? 'text-primary-container' : 'text-on-surface-variant hover:text-on-surface'
+                  className={`relative inline-flex shrink-0 items-center justify-center gap-1.5 font-medium leading-none transition-colors ${
+                    subtleDesktop
+                      ? 'h-8 px-2 text-xs'
+                      : prominentDesktop
+                        ? 'h-9 px-3 text-[13px]'
+                        : 'h-8 px-2.5 text-xs'
+                  } ${
+                    active
+                      ? subtleDesktop
+                        ? 'text-on-surface'
+                        : 'text-primary-container'
+                      : subtleDesktop
+                        ? 'text-on-surface-variant/60 hover:text-on-surface-variant'
+                        : 'text-on-surface-variant hover:text-on-surface'
                   }`}
                 >
                   {index > 0 ? (
-                    <span className="absolute left-0 top-1/2 h-3.5 w-px -translate-y-1/2 bg-outline-variant/20" />
+                    <span
+                      className={`absolute left-0 top-1/2 w-px -translate-y-1/2 ${
+                        subtleDesktop ? 'h-3 bg-outline-variant/12' : 'h-3.5 bg-outline-variant/20'
+                      }`}
+                    />
                   ) : null}
-                  {tab.icon ? <Icon name={tab.icon} size={15} /> : null}
+                  {tab.icon ? (
+                    <span
+                      className={`inline-grid shrink-0 place-items-center ${
+                        prominentDesktop ? 'h-4 w-4' : 'h-3.5 w-3.5'
+                      }`}
+                    >
+                      <Icon
+                        name={tab.icon}
+                        size={prominentDesktop ? 16 : 14}
+                        className={
+                          subtleDesktop
+                            ? active
+                              ? 'text-primary-container/75'
+                              : 'text-on-surface-variant/45'
+                            : 'h-3.5 w-3.5'
+                        }
+                      />
+                    </span>
+                  ) : null}
                   <span className="whitespace-nowrap">{tab.label}</span>
                   {typeof tab.count === 'number' ? (
                     <span
-                      className={`ml-0.5 inline-flex items-baseline gap-0.5 text-[11px] font-medium leading-none ${
+                      className={`ml-0.5 inline-flex items-baseline gap-0.5 text-[10px] font-medium leading-none ${
                         active ? 'text-primary-container/70' : 'text-on-surface-variant/70'
                       }`}
                     >
                       <span>共</span>
-                      <span className="text-xs font-semibold tabular-nums">{tab.count}</span>
+                      <span className="text-[11px] font-medium tabular-nums">{tab.count}</span>
                       {countUnit ? <span>{countUnit}</span> : null}
                     </span>
                   ) : null}
                   {active ? (
-                    <span className="absolute inset-x-3 bottom-0 h-0.5 rounded-full bg-primary-container" />
+                    <span
+                      className={`absolute rounded-full ${
+                        subtleDesktop
+                          ? 'inset-x-2 bottom-0 h-px bg-primary-container/45'
+                          : 'inset-x-2.5 bottom-0 h-px bg-primary-container'
+                      }`}
+                    />
                   ) : null}
                 </button>
               );
@@ -140,11 +190,11 @@ export default function ResponsiveSectionTabs({
           <button
             type="button"
             onClick={() => scrollDesktopTabs(1)}
-            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-on-surface-variant transition-colors hover:bg-surface-container-high hover:text-on-surface"
+            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-on-surface-variant transition-colors hover:bg-surface-container-high hover:text-on-surface"
             aria-label="向右查看更多分类"
             data-tooltip-ignore
           >
-            <Icon name="chevron_right" size={18} />
+            <Icon name="chevron_right" size={16} />
           </button>
         ) : null}
       </div>
@@ -171,7 +221,7 @@ export default function ResponsiveSectionTabs({
             {activeTab?.icon ? <Icon name={activeTab.icon} size={17} /> : <Icon name="tune" size={17} />}
           </span>
           <span className="flex min-w-0 items-center gap-2">
-            <span className="truncate text-sm font-bold leading-tight text-on-surface">
+            <span className="truncate text-sm font-semibold leading-tight text-on-surface">
               {activeTab?.label ?? '请选择'}
             </span>
           </span>
@@ -180,7 +230,7 @@ export default function ResponsiveSectionTabs({
           {typeof activeTab?.count === 'number' ? (
             <span className="inline-flex items-baseline gap-0.5 text-xs font-medium leading-none text-on-surface-variant/75">
               <span>共</span>
-              <span className="text-sm font-bold tabular-nums text-primary-container">{activeTab.count}</span>
+              <span className="text-sm font-semibold tabular-nums text-primary-container">{activeTab.count}</span>
               {countUnit ? <span>{countUnit}</span> : null}
             </span>
           ) : null}
@@ -203,7 +253,7 @@ export default function ResponsiveSectionTabs({
             className="fixed inset-0 z-[70] h-full w-full bg-transparent"
             onClick={() => setOpen(false)}
           />
-          <div className="absolute inset-x-0 top-full z-[80] mt-2 overflow-hidden rounded-xl border border-outline-variant/12 bg-surface p-2 shadow-[0_16px_42px_rgba(0,0,0,0.16)] animate-[sectionPickerDrop_160ms_ease-out]">
+          <div className="absolute inset-x-0 top-full z-[80] mt-2 overflow-hidden rounded-xl border border-outline-variant/12 bg-surface p-2 shadow-panel animate-[sectionPickerDrop_160ms_ease-out]">
             <div className="grid gap-1.5">
               {tabs.map((tab, index) => {
                 const active = tab.value === value;
@@ -228,7 +278,7 @@ export default function ResponsiveSectionTabs({
                     >
                       {tab.icon ? <Icon name={tab.icon} size={16} /> : <Icon name="tune" size={16} />}
                     </span>
-                    <span className="min-w-0 flex-1 truncate text-sm font-bold leading-tight">{tab.label}</span>
+                    <span className="min-w-0 flex-1 truncate text-sm font-semibold leading-tight">{tab.label}</span>
                     {typeof tab.count === 'number' ? (
                       <span
                         className={`inline-flex shrink-0 items-baseline gap-0.5 text-[11px] font-medium leading-none ${
@@ -262,7 +312,7 @@ export default function ResponsiveSectionTabs({
             </div>
             <div className="flex items-center justify-between px-4 pb-2.5 pt-3">
               <div>
-                <p className="text-base font-bold leading-tight text-on-surface">{mobileTitle}</p>
+                <p className="text-base font-semibold leading-tight text-on-surface">{mobileTitle}</p>
                 <p className="mt-0.5 text-xs text-on-surface-variant">选择要编辑的设置分类</p>
               </div>
               <button
@@ -299,7 +349,7 @@ export default function ResponsiveSectionTabs({
                       {tab.icon ? <Icon name={tab.icon} size={17} /> : <Icon name="tune" size={17} />}
                     </span>
                     <span className="min-w-0 flex-1">
-                      <span className="block truncate text-sm font-bold leading-tight">{tab.label}</span>
+                      <span className="block truncate text-sm font-semibold leading-tight">{tab.label}</span>
                       {tab.description ? (
                         <span
                           className={`mt-0.5 block truncate text-xs ${active ? 'text-on-primary/75' : 'text-on-surface-variant'}`}

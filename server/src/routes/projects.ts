@@ -229,8 +229,8 @@ router.post(
         include: { user: { select: { id: true, username: true, avatar: true } } },
       });
       res.json(member);
-    } catch (err: any) {
-      if (err.code === 'P2002') {
+    } catch (err: unknown) {
+      if (err instanceof Error && 'code' in err && (err as NodeJS.ErrnoException).code === 'P2002') {
         res.status(409).json({ detail: '用户已是项目成员' });
         return;
       }

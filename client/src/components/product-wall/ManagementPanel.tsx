@@ -139,7 +139,7 @@ export default memo(function ProductWallManagementPanel({
       onClick={close}
     >
       <section
-        className="flex h-[92dvh] w-full max-w-7xl flex-col overflow-hidden rounded-lg border border-outline-variant/16 bg-surface shadow-[0_28px_100px_rgba(0,0,0,0.28)]"
+        className="flex h-[92dvh] w-full max-w-7xl flex-col overflow-hidden rounded-lg border border-outline-variant/16 bg-surface shadow-heavy"
         onClick={(event) => event.stopPropagation()}
       >
         <header className="border-b border-outline-variant/14 px-4 py-4 md:px-6">
@@ -229,9 +229,7 @@ export default memo(function ProductWallManagementPanel({
                       </button>
                       <button
                         type="button"
-                        onClick={() => {
-                          if (confirm(`确定删除分类「${category.name}」？`)) onDeleteCategory(category.id);
-                        }}
+                        onClick={() => onDeleteCategory(category.id)}
                         className="h-6 w-6 rounded text-on-surface-variant/55 hover:bg-red-50 hover:text-red-500"
                       >
                         <Icon name="close" size={12} />

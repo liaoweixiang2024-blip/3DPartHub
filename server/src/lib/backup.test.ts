@@ -1,7 +1,17 @@
 import assert from 'node:assert/strict';
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import test from 'node:test';
 
-const { evictCompleted } = await import('./backup.js');
+const {
+  encryptBackupArchiveInPlace,
+  evictCompleted,
+  isEncryptedBackupArchiveFile,
+  isUnsafeBackupArchiveEntry,
+  materializeReadableBackupArchive,
+  normalizeBackupArchiveEntryList,
+} = await import('./backup.js');
 
 function makeJob(stage: string, updatedAt?: number) {
   return { stage, updatedAt };
@@ -58,4 +68,60 @@ test('evictCompleted handles map with only active jobs', () => {
   evictCompleted(map);
 
   assert.equal(map.size, 2);
+});
+
+test('backup archive entries reject unsafe paths before restore', () => {
+  assert.equal(isUnsafeBackupArchiveEntry('../database.sql'), true);
+  assert.equal(isUnsafeBackupArchiveEntry('_backup_db/../../database.sql'), true);
+  assert.equal(isUnsafeBackupArchiveEntry('/tmp/database.sql'), true);
+  assert.equal(isUnsafeBackupArchiveEntry('C:/tmp/database.sql'), true);
+  assert.equal(isUnsafeBackupArchiveEntry('C:\\tmp\\database.sql'), true);
+  assert.equal(isUnsafeBackupArchiveEntry('_backup_db/\0/database.sql'), true);
+  assert.equal(isUnsafeBackupArchiveEntry('_backup_db/database.sql'), false);
+  assert.equal(isUnsafeBackupArchiveEntry('./originals/model.step'), false);
+});
+
+test('backup archive entry list normalizes lines and removes blank entries', () => {
+  assert.deepEqual(
+    normalizeBackupArchiveEntryList(
+      [
+        './_backup_db/database.sql',
+        '',
+        './originals/model.step',
+        './_backup_db/manifest.json',
+        './_backup_db/meta.json',
+        '   ./uploads/files/model.pdf   ',
+      ].join('\n'),
+    ),
+    [
+      '_backup_db/database.sql',
+      'originals/model.step',
+      '_backup_db/manifest.json',
+      '_backup_db/meta.json',
+      'uploads/files/model.pdf',
+    ],
+  );
+});
+
+test('backup encryption stores archive bytes encrypted and materializes readable copy', async () => {
+  const previousSecret = process.env.BACKUP_ENCRYPTION_SECRET;
+  const dir = mkdtempSync(join(tmpdir(), '3dparthub-backup-enc-'));
+  try {
+    process.env.BACKUP_ENCRYPTION_SECRET = 'unit-test-backup-encryption-secret';
+    const archive = join(dir, 'sample.tar.gz');
+    const readableCopyDir = join(dir, 'readable');
+    const plainText = 'plain backup archive payload';
+    writeFileSync(archive, plainText);
+
+    assert.equal(await encryptBackupArchiveInPlace(archive), true);
+    assert.equal(isEncryptedBackupArchiveFile(archive), true);
+    assert.equal(readFileSync(archive, 'utf-8').includes(plainText), false);
+
+    const readableArchive = await materializeReadableBackupArchive(archive, readableCopyDir);
+    assert.equal(readFileSync(readableArchive, 'utf-8'), plainText);
+  } finally {
+    if (previousSecret === undefined) delete process.env.BACKUP_ENCRYPTION_SECRET;
+    else process.env.BACKUP_ENCRYPTION_SECRET = previousSecret;
+    rmSync(dir, { recursive: true, force: true });
+  }
 });

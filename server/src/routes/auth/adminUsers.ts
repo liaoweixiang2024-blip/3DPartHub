@@ -135,12 +135,13 @@ export function createAdminUsersRouter() {
         });
         await revokeAllTokensBefore(userId, Math.floor(Date.now() / 1000));
         res.json({ data: user });
-      } catch (err: any) {
-        if (err.code === 'P2025') {
+      } catch (err: unknown) {
+        const prismaCode = err instanceof Error && 'code' in err ? (err as NodeJS.ErrnoException).code : undefined;
+        if (prismaCode === 'P2025') {
           res.status(404).json({ detail: '用户不存在' });
           return;
         }
-        if (err.code === 'LAST_ADMIN') {
+        if (prismaCode === 'LAST_ADMIN') {
           res.status(400).json({ detail: '不能移除最后一个管理员' });
           return;
         }
@@ -169,8 +170,8 @@ export function createAdminUsersRouter() {
         await revokeAllTokensBefore(userId, Math.floor(Date.now() / 1000)).catch(() => {});
         await prisma.user.delete({ where: { id: userId } });
         res.json({ message: '用户已删除' });
-      } catch (err: any) {
-        if (err.code === 'P2025') {
+      } catch (err: unknown) {
+        if (err instanceof Error && 'code' in err && (err as NodeJS.ErrnoException).code === 'P2025') {
           res.status(404).json({ detail: '用户不存在' });
           return;
         }

@@ -4,7 +4,7 @@ import { getBusinessConfig } from '../../lib/businessConfig.js';
 import { logger } from '../../lib/logger.js';
 import { prisma } from '../../lib/prisma.js';
 import { authMiddleware, type AuthRequest } from '../../middleware/auth.js';
-import { adminOnly, asSingleString, buildSelectionShareNameMap } from './common.js';
+import { adminOnly, asSingleString, buildSelectionShareNameMap, hasSelectionSharesTable } from './common.js';
 
 type AdminShareItem = {
   id: string;
@@ -38,6 +38,21 @@ function parseAdminShareFilter(value: unknown): AdminShareFilter {
   if (filter === 'model' || filter === 'selection' || filter === 'active' || filter === 'expired') return filter;
   return 'all';
 }
+
+const ADMIN_SHARE_LINK_SELECT = {
+  id: true,
+  modelId: true,
+  token: true,
+  allowPreview: true,
+  allowDownload: true,
+  downloadLimit: true,
+  downloadCount: true,
+  viewCount: true,
+  password: true,
+  expiresAt: true,
+  createdAt: true,
+  createdById: true,
+} satisfies Prisma.ShareLinkSelect;
 
 export function createAdminSharesRouter() {
   const router = Router();
@@ -74,27 +89,45 @@ export function createAdminSharesRouter() {
         modelFilters.push({ expiresAt: { not: null, lt: now } });
       }
       const modelWhere: Prisma.ShareLinkWhereInput = modelFilters.length ? { AND: modelFilters } : {};
+      const hasSelectionShares = await hasSelectionSharesTable();
 
       const [modelRows, selectionRows] = await Promise.all([
         filter === 'selection'
           ? Promise.resolve([])
           : prisma.shareLink.findMany({
               where: modelWhere,
-              include: {
-                model: { select: { id: true, name: true, originalName: true } },
-                createdBy: { select: { id: true, username: true } },
-              },
+              select: ADMIN_SHARE_LINK_SELECT,
               orderBy: { createdAt: 'desc' },
             }),
-        filter === 'model' || filter === 'expired'
+        filter === 'model' || filter === 'expired' || !hasSelectionShares
           ? Promise.resolve([])
           : prisma.selectionShare.findMany({
-              include: {
-                createdBy: { select: { id: true, username: true } },
-              },
               orderBy: { createdAt: 'desc' },
             }),
       ]);
+
+      const modelIds = Array.from(new Set(modelRows.map((row) => row.modelId).filter(Boolean)));
+      const userIds = Array.from(
+        new Set(
+          [...modelRows.map((row) => row.createdById), ...selectionRows.map((row) => row.createdById)].filter(Boolean),
+        ),
+      );
+      const [models, users] = await Promise.all([
+        modelIds.length
+          ? prisma.model.findMany({
+              where: { id: { in: modelIds } },
+              select: { id: true, name: true, originalName: true },
+            })
+          : Promise.resolve([]),
+        userIds.length
+          ? prisma.user.findMany({
+              where: { id: { in: userIds } },
+              select: { id: true, username: true },
+            })
+          : Promise.resolve([]),
+      ]);
+      const modelMap = new Map(models.map((model) => [model.id, model]));
+      const userMap = new Map(users.map((user) => [user.id, user]));
 
       const selectionSlugs = Array.from(new Set(selectionRows.map((row) => row.categorySlug).filter(Boolean)));
       const selectionCategories = selectionSlugs.length
@@ -112,9 +145,9 @@ export function createAdminSharesRouter() {
         type: 'model',
         token: s.token,
         modelId: s.modelId,
-        modelName: s.model.name || s.model.originalName,
+        modelName: modelMap.get(s.modelId)?.name || modelMap.get(s.modelId)?.originalName || '模型已删除',
         createdById: s.createdById,
-        createdByUsername: s.createdBy.username,
+        createdByUsername: userMap.get(s.createdById)?.username || '未知用户',
         allowPreview: s.allowPreview,
         allowDownload: s.allowDownload,
         downloadLimit: s.downloadLimit,
@@ -136,7 +169,7 @@ export function createAdminSharesRouter() {
             modelId: null,
             modelName: selectionName,
             createdById: s.createdById,
-            createdByUsername: s.createdBy.username,
+            createdByUsername: userMap.get(s.createdById)?.username || '未知用户',
             allowPreview: true,
             allowDownload: false,
             downloadLimit: 0,

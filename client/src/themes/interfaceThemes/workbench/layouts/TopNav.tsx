@@ -1,6 +1,6 @@
+import { motion, useReducedMotion } from 'framer-motion';
 import { useMemo } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import Icon from '../../../../components/shared/Icon';
 import type { NavItemConfig } from '../../../../lib/businessConfig';
 import { preloadRouteForPath } from '../../../../lib/routeLoaders';
 import type { DesktopTopNavThemeProps } from '../../types';
@@ -52,14 +52,9 @@ function getWorkbenchNavItems(items: NavItemConfig[]) {
 }
 
 const desktopTextClass = (active: boolean) =>
-  `workbench-nav-link relative inline-flex h-10 shrink-0 items-center gap-1.5 rounded-lg px-2.5 text-sm font-semibold transition-colors 2xl:px-3 ${
-    active
-      ? 'text-primary-container after:absolute after:inset-x-2 after:bottom-0 after:h-0.5 after:rounded-full after:bg-primary-container'
-      : 'text-on-surface-variant hover:bg-surface-container-high/45 hover:text-on-surface'
+  `workbench-nav-link relative inline-flex h-10 shrink-0 items-center justify-center overflow-hidden px-2.5 text-sm font-semibold transition-[color,transform] duration-200 active:scale-[0.985] 2xl:px-3 ${
+    active ? 'text-primary-container' : 'text-on-surface-variant hover:text-on-surface'
   }`;
-
-const desktopIconClass = (active: boolean) =>
-  `shrink-0 text-on-surface-variant transition-opacity ${active ? 'opacity-75' : 'opacity-60'}`;
 
 function getWorkbenchNavLabel(item: NavItemConfig) {
   return WORKBENCH_NAV_LABELS[item.path] || item.label.replace(/^我的/, '').replace(/^产品/, '').replace(/历史$/, '');
@@ -74,8 +69,18 @@ export default function WorkbenchTopNav({
   onNavClick,
 }: DesktopTopNavThemeProps) {
   const navItems = useMemo(() => getWorkbenchNavItems(userNavItems), [userNavItems]);
+  const reduceMotion = useReducedMotion();
   const location = useLocation();
   const isAdminRoute = location.pathname === '/admin' || location.pathname.startsWith('/admin/');
+  const hasAlignedSidebarChrome = location.pathname === '/' || isAdminRoute;
+  const navSpring = reduceMotion
+    ? { duration: 0.14 }
+    : {
+        type: 'spring' as const,
+        stiffness: 420,
+        damping: 31,
+        mass: 0.6,
+      };
 
   return (
     <header
@@ -85,7 +90,7 @@ export default function WorkbenchTopNav({
       <div
         className={`workbench-top-nav-inner flex h-full items-center gap-3 ${
           isAdminRoute ? 'workbench-top-nav-inner-admin' : ''
-        }`}
+        } ${hasAlignedSidebarChrome ? 'workbench-top-nav-inner-aligned' : 'workbench-top-nav-inner-compact'}`}
       >
         {renderBrand(
           'workbench-brand-link flex h-full min-w-0 shrink-0 cursor-pointer items-center transition-[opacity,transform] hover:opacity-80 active:scale-[0.98]',
@@ -106,8 +111,14 @@ export default function WorkbenchTopNav({
                   onClick={(event) => onNavClick(event, item.path)}
                   aria-current={active ? 'page' : undefined}
                 >
-                  <Icon name={item.icon} size={15} className={desktopIconClass(active)} />
-                  <span className="whitespace-nowrap">{getWorkbenchNavLabel(item)}</span>
+                  {active ? (
+                    <motion.span
+                      layoutId={`workbench-nav-active-line-${source}`}
+                      className="absolute inset-x-2.5 bottom-0 h-0.5 rounded-full bg-primary-container"
+                      transition={navSpring}
+                    />
+                  ) : null}
+                  <span className="relative z-10 whitespace-nowrap">{getWorkbenchNavLabel(item)}</span>
                 </Link>
               );
             })}

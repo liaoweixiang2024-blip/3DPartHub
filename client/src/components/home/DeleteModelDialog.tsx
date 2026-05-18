@@ -1,7 +1,7 @@
 import { motion, AnimatePresence } from 'framer-motion';
 import Icon from '../shared/Icon';
 import ModelThumbnail from '../shared/ModelThumbnail';
-import type { Product } from '../../themes/interfaceThemes/shared/homeTypes';
+import type { Product } from './homeTypes';
 
 export default function DeleteModelDialog({
   target,

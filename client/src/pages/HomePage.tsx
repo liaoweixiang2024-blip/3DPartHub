@@ -1,12 +1,15 @@
 import { useState, useEffect, useLayoutEffect, useMemo, useCallback, useRef, type MouseEvent } from 'react';
 import { createPortal } from 'react-dom';
 import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
-import useSWR, { preload } from 'swr';
+import useSWR, { mutate as globalMutate, preload } from 'swr';
 import { categoriesApi } from '../api/categories';
 import { downloadModelFile, isDownloadAuthRequiredError } from '../api/downloads';
 import { modelApi } from '../api/models';
 import { createShare } from '../api/shares';
 import DeleteModelDialog from '../components/home/DeleteModelDialog';
+import { AnnouncementBanner } from '../components/home/HomeDesktopShared';
+import { SkeletonCardMobile } from '../components/home/HomeMobileCardContent';
+import type { HomeBrowseState, HomeViewMode, Product } from '../components/home/homeTypes';
 import {
   buildCategories,
   serverItemToProduct,
@@ -35,16 +38,16 @@ import {
   HOME_REFRESH_SCROLL_TARGET,
   type HomeRefreshScrollTarget,
 } from '../components/home/homeUtils';
-import LoginPromptDialog from '../components/home/LoginPromptDialog';
 import { MobileDrawer } from '../components/home/MobileDrawer';
 import { ProductCard } from '../components/home/ProductCard';
 import { ProductCardMobile } from '../components/home/ProductCardMobile';
-import { SkeletonCardMobile } from '../components/home/HomeMobileCardContent';
 import AuthModal from '../components/shared/AuthModal';
 import Icon from '../components/shared/Icon';
 import InfiniteLoadTrigger from '../components/shared/InfiniteLoadTrigger';
+import LoginConfirmDialog from '../components/shared/LoginConfirmDialog';
 import { PageTitle } from '../components/shared/PagePrimitives';
 import Pagination, { DEFAULT_PAGE_SIZE, normalizePageSize } from '../components/shared/Pagination';
+import { isAuthModalEnabled } from '../components/shared/ProtectedLink';
 import { PublicPageShell } from '../components/shared/PublicPageShell';
 import { useToast } from '../components/shared/Toast';
 import { useDocumentTitle } from '../hooks/useDocumentTitle';
@@ -63,10 +66,12 @@ import {
   saveHomeSearchQuery,
   type HomeSearchEventDetail,
 } from '../lib/homeSearchState';
+import { useResolvedPublicInterfaceTheme } from '../lib/interfaceThemePreference';
 import { cacheModelDetailTitle } from '../lib/modelDetailTitleCache';
 import {
   usePublicSettings,
   getCachedPublicSettings,
+  refreshSiteConfig,
   getContactEmail,
   getContactPhone,
   getContactAddress,
@@ -75,8 +80,6 @@ import {
 } from '../lib/publicSettings';
 import { useAuthStore } from '../stores';
 import { getInterfaceThemePackage } from '../themes/interfaceThemes/registry';
-import { AnnouncementBanner } from '../themes/interfaceThemes/shared/HomeDesktopShared';
-import type { HomeBrowseState, HomeViewMode, Product } from '../themes/interfaceThemes/shared/homeTypes';
 import { getMobileThemePackage } from '../themes/mobileThemes/registry';
 
 export default function HomePage() {
@@ -87,7 +90,8 @@ export default function HomePage() {
   const { toast } = useToast();
   const [searchParams, setSearchParams] = useSearchParams();
   const { settings: publicSettings } = usePublicSettings();
-  const ThemePackage = getInterfaceThemePackage(publicSettings?.interface_theme);
+  const resolvedPublicTheme = useResolvedPublicInterfaceTheme(publicSettings);
+  const ThemePackage = getInterfaceThemePackage(isDesktop ? resolvedPublicTheme : publicSettings?.interface_theme);
   const MobileThemePackage = getMobileThemePackage(publicSettings?.mobile_interface_theme);
   const DesktopHome = ThemePackage.templates.DesktopHome;
   const mobileHomeTheme = MobileThemePackage.home.dataHomeTheme;
@@ -316,6 +320,20 @@ export default function HomePage() {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [loginPromptOpen, setLoginPromptOpen] = useState(false);
 
+  const openLoginEntry = useCallback(async () => {
+    let latestSettings = publicSettings;
+    try {
+      latestSettings = await refreshSiteConfig();
+    } catch {
+      latestSettings = publicSettings;
+    }
+    if (isAuthModalEnabled(latestSettings)) {
+      setAuthDialogOpen(true);
+      return;
+    }
+    navigate('/login', { state: { from: location.pathname } });
+  }, [location.pathname, navigate, publicSettings]);
+
   useEffect(() => {
     saveHomeSearchQuery(searchQuery);
   }, [searchQuery]);
@@ -419,7 +437,13 @@ export default function HomePage() {
     if (products.length === 0 || isLoading) return;
     const prefetch = () => {
       for (const p of products.slice(0, 6)) {
-        preload(`/api/models/${p.id}`, () => modelApi.getById(p.id));
+        preload(`/api/models/${p.id}`, () =>
+          modelApi.getById(p.id).catch((error: unknown) => {
+            const status = (error as { response?: { status?: number } })?.response?.status;
+            if (status === 404) return null;
+            throw error;
+          }),
+        );
       }
     };
     if ('requestIdleCallback' in window) {
@@ -638,19 +662,48 @@ export default function HomePage() {
 
   const handleDeleteModel = useCallback(async () => {
     if (!deleteTarget) return;
+    const deletedId = deleteTarget.id;
     setDeletingModel(true);
     try {
-      await modelApi.delete(deleteTarget.id);
+      await modelApi.delete(deletedId);
+      await mutateModels(
+        (pages) => {
+          if (!pages) return pages;
+          let removed = false;
+          const nextPages = pages.map((page) => {
+            const nextItems = page.items.filter((item) => item.model_id !== deletedId);
+            if (nextItems.length === page.items.length) return page;
+            removed = true;
+            const nextTotal = Math.max(0, page.total - 1);
+            return {
+              ...page,
+              items: nextItems,
+              total: nextTotal,
+              totalPages: Math.max(1, Math.ceil(nextTotal / Math.max(1, page.pageSize || pageSize))),
+            };
+          });
+          return removed ? nextPages : pages;
+        },
+        { revalidate: false },
+      );
       toast('模型已删除', 'success');
       setDeleteTarget(null);
       setContextMenu(null);
-      await Promise.all([mutateModels(), mutateCategories()]);
+      await Promise.all([
+        mutateModels(),
+        mutateCategories(),
+        globalMutate(
+          (key) =>
+            typeof key === 'string' &&
+            (key.startsWith('/models/infinite') || key.startsWith('/models?page') || key === '/models/count'),
+        ),
+      ]);
     } catch {
       toast('删除失败，请稍后重试', 'error');
     } finally {
       setDeletingModel(false);
     }
-  }, [deleteTarget, mutateCategories, mutateModels, toast]);
+  }, [deleteTarget, mutateCategories, mutateModels, pageSize, toast]);
 
   const openManagedModelDetail = useCallback(
     (product: Product) => {
@@ -897,7 +950,7 @@ export default function HomePage() {
         <p className="text-sm text-on-surface-variant">浏览模型库需要先登录账号</p>
         <button
           type="button"
-          onClick={() => setAuthDialogOpen(true)}
+          onClick={openLoginEntry}
           className="px-6 py-2.5 bg-primary-container text-on-primary rounded-lg text-sm font-medium hover:opacity-90"
         >
           前往登录
@@ -955,13 +1008,11 @@ export default function HomePage() {
           onCancel={() => setDeleteTarget(null)}
           onConfirm={handleDeleteModel}
         />
-        <LoginPromptDialog
+        <LoginConfirmDialog
           open={loginPromptOpen}
-          onCancel={() => setLoginPromptOpen(false)}
-          onLogin={() => {
-            setLoginPromptOpen(false);
-            setAuthDialogOpen(true);
-          }}
+          onClose={() => setLoginPromptOpen(false)}
+          reason="下载模型"
+          returnUrl={location.pathname}
         />
         <AuthModal open={authDialogOpen} onClose={() => setAuthDialogOpen(false)} returnUrl={location.pathname} />
       </PublicPageShell>
@@ -1195,13 +1246,11 @@ export default function HomePage() {
           </footer>
         </div>
       </main>
-      <LoginPromptDialog
+      <LoginConfirmDialog
         open={loginPromptOpen}
-        onCancel={() => setLoginPromptOpen(false)}
-        onLogin={() => {
-          setLoginPromptOpen(false);
-          setAuthDialogOpen(true);
-        }}
+        onClose={() => setLoginPromptOpen(false)}
+        reason="下载模型"
+        returnUrl={location.pathname}
       />
       <AuthModal open={authDialogOpen} onClose={() => setAuthDialogOpen(false)} returnUrl={location.pathname} />
     </PublicPageShell>

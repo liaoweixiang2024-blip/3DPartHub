@@ -1,5 +1,5 @@
 import { lazy, Suspense, useEffect, useRef, useState } from 'react';
-import { Routes, Route, Link, useLocation, Navigate } from 'react-router-dom';
+import { Routes, Route, Link, useLocation, Navigate, useNavigate } from 'react-router-dom';
 import { AdminLayout, AdminPageShell, PublicLayout } from './components/shared/AdminPageShell';
 import AuthModal from './components/shared/AuthModal';
 import BrandMark from './components/shared/BrandMark';
@@ -8,10 +8,12 @@ import Icon from './components/shared/Icon';
 import MaintenanceGate from './components/shared/MaintenanceGate';
 import ModelDetailPageSkeleton from './components/shared/ModelDetailPageSkeleton';
 import PageRefreshFallback from './components/shared/PageRefreshFallback';
-import { checkProtectedAccess } from './components/shared/ProtectedLink';
+import { checkProtectedAccess, isAuthModalEnabled } from './components/shared/ProtectedLink';
+import { useMediaQuery } from './layouts/hooks/useMediaQuery';
+import { useResolvedAdminInterfaceTheme, useResolvedPublicInterfaceTheme } from './lib/interfaceThemePreference';
 import { getCachedModelDetailTitle } from './lib/modelDetailTitleCache';
 import { isModelDetailPath, saveModelReturnPath } from './lib/modelReturnPath';
-import { usePublicSettings } from './lib/publicSettings';
+import { refreshSiteConfig, usePublicSettings } from './lib/publicSettings';
 import {
   loadAuditLogPage,
   loadCategoryAdminPage,
@@ -154,9 +156,11 @@ function ProtectedPage({ children, requiredRole }: { children: React.ReactNode; 
   const hasHydrated = useAuthStore((s) => s.hasHydrated);
   const restoreSessionFromCookie = useAuthStore((s) => s.restoreSessionFromCookie);
   const location = useLocation();
+  const navigate = useNavigate();
   const [authRetryDone, setAuthRetryDone] = useState(false);
   const [authRetrying, setAuthRetrying] = useState(false);
   const [authDialogOpen, setAuthDialogOpen] = useState(false);
+  const { settings, isLoading: settingsLoading } = usePublicSettings();
 
   useEffect(() => {
     if (!hasHydrated || isAuthenticated || authRetryDone || authRetrying) return;
@@ -168,13 +172,14 @@ function ProtectedPage({ children, requiredRole }: { children: React.ReactNode; 
     });
   }, [authRetryDone, authRetrying, hasHydrated, isAuthenticated, restoreSessionFromCookie]);
 
-  if (!hasHydrated || authRetrying || (!isAuthenticated && !authRetryDone)) {
+  if (!hasHydrated || authRetrying || (!isAuthenticated && !authRetryDone) || (settingsLoading && !settings)) {
     return <RouteFallback />;
   }
 
   if (!isAuthenticated) {
-    const access = checkProtectedAccess(location.pathname);
+    const access = checkProtectedAccess(location.pathname, settings);
     const returnUrl = `${location.pathname}${location.search}${location.hash}`;
+    const authModalEnabled = isAuthModalEnabled(settings);
     if (access.action === 'dialog') {
       return (
         <ProtectedAccessState
@@ -193,18 +198,35 @@ function ProtectedPage({ children, requiredRole }: { children: React.ReactNode; 
             <>
               <button
                 type="button"
-                onClick={() => setAuthDialogOpen(true)}
+                onClick={async () => {
+                  let latestSettings = settings;
+                  try {
+                    latestSettings = await refreshSiteConfig();
+                  } catch {
+                    latestSettings = settings;
+                  }
+                  if (isAuthModalEnabled(latestSettings)) {
+                    setAuthDialogOpen(true);
+                    return;
+                  }
+                  navigate('/login', { state: { from: returnUrl } });
+                }}
                 className="inline-flex h-9 items-center justify-center rounded-sm bg-primary-container px-4 text-sm font-bold text-on-primary transition-opacity hover:opacity-90 active:scale-[0.98]"
               >
                 前往登录
               </button>
-              <AuthModal open={authDialogOpen} onClose={() => setAuthDialogOpen(false)} returnUrl={returnUrl} />
+              {authDialogOpen ? (
+                <AuthModal open={authDialogOpen} onClose={() => setAuthDialogOpen(false)} returnUrl={returnUrl} />
+              ) : null}
             </>
           }
         />
       );
     }
-    return <Navigate to="/login" state={{ from: location.pathname }} replace />;
+    if (authModalEnabled) {
+      return <AuthModal open onClose={() => navigate('/')} returnUrl={returnUrl} />;
+    }
+    return <Navigate to="/login" state={{ from: returnUrl }} replace />;
   }
   if (requiredRole && user?.role !== requiredRole) {
     return (
@@ -244,7 +266,9 @@ function ScrollPage({ children }: { children: React.ReactNode }) {
 
 function NotFoundPage() {
   const { settings } = usePublicSettings();
-  const ThemePackage = getInterfaceThemePackage(settings?.interface_theme);
+  const isDesktop = useMediaQuery('(min-width: 768px)');
+  const resolvedPublicTheme = useResolvedPublicInterfaceTheme(settings, isDesktop);
+  const ThemePackage = getInterfaceThemePackage(resolvedPublicTheme);
   const NotFound = ThemePackage.templates.NotFound;
 
   return (
@@ -269,12 +293,13 @@ function NotFoundPage() {
 function AdminDefaultRedirect() {
   const location = useLocation();
   const { settings, isLoading } = usePublicSettings();
+  const resolvedAdminTheme = useResolvedAdminInterfaceTheme(settings);
 
   if (isLoading && !settings) {
     return <RouteFallback />;
   }
 
-  const ThemePackage = getInterfaceThemePackage(settings?.interface_theme);
+  const ThemePackage = getInterfaceThemePackage(resolvedAdminTheme);
   const defaultPath =
     ThemePackage.chrome.adminLayout.defaultPath?.({
       pathname: location.pathname,
@@ -374,6 +399,14 @@ export default function Router() {
         {/* ── No shell ── */}
         <Route
           path="/login"
+          element={
+            <ScrollPage>
+              <LoginPage />
+            </ScrollPage>
+          }
+        />
+        <Route
+          path="/register"
           element={
             <ScrollPage>
               <LoginPage />
@@ -564,7 +597,7 @@ export default function Router() {
             }
           />
           <Route
-            path="/admin/settings"
+            path="/admin/settings/*"
             element={
               <ProtectedPage requiredRole="ADMIN">
                 <SettingsPage />

@@ -27,7 +27,11 @@ import { getBusinessConfig } from '../../lib/businessConfig.js';
 import { config } from '../../lib/config.js';
 import { badRequest } from '../../lib/http.js';
 import { prisma } from '../../lib/prisma.js';
-import { getSetting } from '../../lib/settings.js';
+import {
+  productArchiveExtractMaxFiles,
+  productImageMaxSizeMb,
+  productImageUploadMaxFiles,
+} from '../../lib/uploadLimits.js';
 import { type AuthRequest } from '../../middleware/auth.js';
 
 // ── Types ───────────────────────────────────────────────────
@@ -498,20 +502,18 @@ export const imageUpload = multer({
   dest: PRODUCT_WALL_DIR,
   limits: { fileSize: 200 * 1024 * 1024, files: MULTER_MAX_IMAGE_FILES },
   fileFilter(_req, file, cb) {
-    if (ALLOWED_IMAGE_MIMES.has(file.mimetype)) {
+    if (ALLOWED_IMAGE_MIMES.has(normalizeMimeType(file.mimetype)) || isZipUpload(file) || isRarUpload(file)) {
       cb(null, true);
     } else {
-      cb(new Error(`不支持的图片格式: ${file.mimetype}`));
+      cb(new Error(`不支持的图片或压缩包格式: ${file.mimetype}`));
     }
   },
 });
 
 export async function getProductWallUploadPolicy() {
   const { uploadPolicy } = await getBusinessConfig();
-  const maxImageMb = Math.max(1, Number(await getSetting<number>('product_wall_max_image_mb')) || 50);
-  const maxBatch = Math.max(1, Number(await getSetting<number>('product_wall_max_batch_count')) || 50);
-  const maxSizeMb = Math.max(1, Math.min(maxImageMb, Math.floor(Number(uploadPolicy.productWallImageMaxSizeMb) || 8)));
-  const maxFiles = Math.max(1, Math.min(maxBatch, Math.floor(Number(uploadPolicy.productWallUploadMaxFiles) || 20)));
+  const maxSizeMb = productImageMaxSizeMb(uploadPolicy);
+  const maxFiles = productImageUploadMaxFiles(uploadPolicy);
   return { maxSizeMb, maxBytes: maxSizeMb * 1024 * 1024, maxFiles };
 }
 
@@ -600,6 +602,8 @@ async function generatePreviewImage(
 
 async function collectProductWallUploadImages(files: Express.Multer.File[]) {
   const policy = await getProductWallUploadPolicy();
+  const { uploadPolicy } = await getBusinessConfig();
+  const maxArchiveExtract = productArchiveExtractMaxFiles(uploadPolicy);
   const images: PendingProductWallImage[] = [];
   const canAddImage = (size: number) => {
     if (images.length >= policy.maxFiles) {
@@ -622,10 +626,9 @@ async function collectProductWallUploadImages(files: Express.Multer.File[]) {
         throw badRequest('压缩包读取失败，请上传 zip 格式文件');
       }
       try {
-        const maxZipExtract = Math.max(1, Number(await getSetting<number>('product_wall_max_zip_extract')) || 100);
         const MAX_SINGLE_IMAGE_BYTES = 50 * 1024 * 1024;
         for (const entry of zip.getEntries()) {
-          if (images.length >= maxZipExtract) break;
+          if (images.length >= maxArchiveExtract) break;
           if (entry.isDirectory || entry.entryName.startsWith('__MACOSX/')) continue;
           const ext = imageExtFromFilename(entry.entryName);
           if (!ext) continue;
@@ -660,9 +663,8 @@ async function collectProductWallUploadImages(files: Express.Multer.File[]) {
         const extracted = extractor.extract({
           files: (header) => !header.flags.directory && Boolean(imageExtFromFilename(header.name)),
         });
-        const maxRarExtract = Math.max(1, Number(await getSetting<number>('product_wall_max_zip_extract')) || 100);
         for (const item of extracted.files) {
-          if (images.length >= maxRarExtract) break;
+          if (images.length >= maxArchiveExtract) break;
           const ext = imageExtFromFilename(item.fileHeader.name);
           const content = item.extraction;
           if (!ext || !content?.length) continue;
@@ -803,9 +805,9 @@ export async function createItemFromRemoteUrl(req: AuthRequest, res: Response, s
     } finally {
       clearTimeout(timeout);
     }
-  } catch (err: any) {
+  } catch (err: unknown) {
     if (filePath) rmSync(filePath, { force: true });
-    if (err.name === 'AbortError') {
+    if (err instanceof Error && err.name === 'AbortError') {
       res.status(400).json({ detail: '下载图片超时' });
       return;
     }

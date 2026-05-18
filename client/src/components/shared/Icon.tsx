@@ -224,6 +224,7 @@ const iconMap: Record<string, LucideIcon> = {
   tune: SlidersHorizontal,
   update: RefreshCw,
   sync: RefreshCw,
+  sync_alt: RefreshCw,
   weight: Weight,
   '3d_rotation': RotateCcw,
   '360': RotateCcw,

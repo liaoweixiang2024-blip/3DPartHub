@@ -35,7 +35,8 @@ export function loadUploadSession(uploadId: string): UploadSession | undefined {
   try {
     const raw = readFileSync(sessionPath(uploadId), 'utf-8');
     return JSON.parse(raw) as UploadSession;
-  } catch {
+  } catch (err) {
+    logger.warn({ err, uploadId }, 'Failed to load upload session');
     return undefined;
   }
 }
@@ -43,7 +44,9 @@ export function loadUploadSession(uploadId: string): UploadSession | undefined {
 export function deleteUploadSession(uploadId: string) {
   try {
     rmSync(sessionPath(uploadId), { force: true });
-  } catch {}
+  } catch (err) {
+    logger.warn({ err, uploadId }, 'Failed to delete upload session file');
+  }
 }
 
 // Clean up expired upload sessions and orphan chunk directories
@@ -64,15 +67,21 @@ export function cleanupExpiredSessions(chunksDir: string) {
           // Delete chunk directory
           try {
             rmSync(join(chunksDir, uploadId), { recursive: true, force: true });
-          } catch {}
+          } catch (err) {
+            logger.warn({ err, uploadId }, 'Failed to clean expired chunk directory');
+          }
           logger.info(`[Upload] Cleaned expired session: ${uploadId}`);
         } else {
           activeUploadIds.add(uploadId);
         }
-      } catch {}
+      } catch (err) {
+        logger.warn({ err, file }, 'Failed to process upload session during cleanup');
+      }
     }
     cleanupOrphanChunkDirs(chunksDir, activeUploadIds, now);
-  } catch {}
+  } catch (err) {
+    logger.warn({ err }, 'Failed to clean up expired upload sessions');
+  }
 }
 
 function cleanupOrphanChunkDirs(chunksDir: string, activeUploadIds: Set<string>, now: number) {
@@ -87,6 +96,8 @@ function cleanupOrphanChunkDirs(chunksDir: string, activeUploadIds: Set<string>,
         rmSync(dir, { recursive: true, force: true });
         logger.info(`[Upload] Cleaned orphan chunk directory: ${entry.name}`);
       }
-    } catch {}
+    } catch (err) {
+      logger.warn({ err, dir: entry.name }, 'Failed to clean orphan chunk directory');
+    }
   }
 }

@@ -380,10 +380,15 @@ export default function ThreadSizeToolPage() {
   };
 
   return (
-    <AdminPageShell mobileMainClassName="overflow-hidden" mobileContentClassName="h-full min-h-0 !pb-[4.5rem]">
+    <AdminPageShell
+      desktopContentClassName="app-public-tool-shell app-thread-size-shell"
+      mobileMainClassName="overflow-hidden"
+      mobileContentClassName="h-full min-h-0 !pb-[4.5rem]"
+    >
       <AdminManagementPage
         title="螺纹与管路速查"
         description="规格、俗称、测量值直接搜索"
+        className="app-public-tool-page app-public-tool-page-thread-size"
         actions={
           isAdmin ? (
             <button

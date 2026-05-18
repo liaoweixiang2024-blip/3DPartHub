@@ -24,29 +24,37 @@ export function createPublicSharesRouter() {
     const { value: shareRaw } = (await cacheGetOrSet(`cache:share:info:${token}`, TTL.MODEL_DETAIL, async () => {
       const result = await prisma.shareLink.findUnique({
         where: { token },
-        include: {
-          model: {
-            select: {
-              id: true,
-              name: true,
-              originalName: true,
-              format: true,
-              originalSize: true,
-              gltfUrl: true,
-              gltfSize: true,
-              originalFormat: true,
-              uploadPath: true,
-              thumbnailUrl: true,
-              description: true,
-              drawingUrl: true,
-              updatedAt: true,
-            },
-          },
+        select: {
+          id: true,
+          modelId: true,
+          allowPreview: true,
+          allowDownload: true,
+          allowDrawing: true,
+          downloadLimit: true,
+          downloadCount: true,
+          expiresAt: true,
         },
       });
       if (result) {
-        const { password: _p, ...safe } = result as any;
-        return safe;
+        const model = await prisma.model.findUnique({
+          where: { id: result.modelId },
+          select: {
+            id: true,
+            name: true,
+            originalName: true,
+            format: true,
+            originalSize: true,
+            gltfUrl: true,
+            gltfSize: true,
+            originalFormat: true,
+            uploadPath: true,
+            thumbnailUrl: true,
+            description: true,
+            drawingUrl: true,
+            updatedAt: true,
+          },
+        });
+        return { ...result, model };
       }
       return result;
     })) as any;
@@ -93,7 +101,7 @@ export function createPublicSharesRouter() {
       downloadLimit: share.downloadLimit,
       downloadCount: share.downloadCount,
       remainingDownloads: share.downloadLimit > 0 ? Math.max(0, share.downloadLimit - share.downloadCount) : -1,
-      hasPassword: !!share.password,
+      hasPassword: !!sharePassword,
       expiresAt: share.expiresAt,
       siteTitle,
       gltfUrl: share.allowPreview && accessVerified ? withAssetVersion(model.gltfUrl, model.updatedAt) : undefined,
@@ -164,10 +172,17 @@ export function createPublicSharesRouter() {
       return;
     }
 
-    const share = (await prisma.shareLink.findUnique({
+    const share = await prisma.shareLink.findUnique({
       where: { token },
-      include: { model: true },
-    })) as any;
+      select: {
+        id: true,
+        modelId: true,
+        expiresAt: true,
+        allowDownload: true,
+        password: true,
+        downloadLimit: true,
+      },
+    });
 
     if (!share) {
       res.status(404).json({ detail: '分享链接不存在' });
@@ -189,7 +204,12 @@ export function createPublicSharesRouter() {
       return;
     }
 
-    const model = share.model;
+    const model = await prisma.model.findUnique({ where: { id: share.modelId } });
+    if (!model) {
+      res.status(404).json({ detail: '分享的模型已被删除' });
+      return;
+    }
+
     const target = resolveDbModelDownloadTarget(model, 'original') || resolveDbModelDownloadTarget(model);
     if (!target || !existsSync(target.filePath)) {
       res.status(404).json({ detail: '文件不存在' });

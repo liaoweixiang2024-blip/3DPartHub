@@ -1,6 +1,6 @@
 import { motion, AnimatePresence } from 'framer-motion';
 import { useState, useCallback } from 'react';
-import { Link, Navigate } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import useSWR from 'swr';
 import { projectApi, type Project } from '../api/projects';
 import { AdminPageShell } from '../components/shared/AdminPageShell';
@@ -9,7 +9,6 @@ import InfiniteLoadTrigger from '../components/shared/InfiniteLoadTrigger';
 import LoginConfirmDialog from '../components/shared/LoginConfirmDialog';
 import { PageHeader } from '../components/shared/PagePrimitives';
 import { PageRefreshIndicator } from '../components/shared/PageRefreshFallback';
-import { isLoginDialogEnabled } from '../components/shared/ProtectedLink';
 import { useToast } from '../components/shared/Toast';
 import { useDocumentTitle } from '../hooks/useDocumentTitle';
 import { useVisibleItems } from '../hooks/useVisibleItems';
@@ -43,7 +42,7 @@ function ProjectCard({ project, onDelete }: { project: Project; onDelete: (id: s
     <div className="relative group">
       <Link
         to={`/projects/${project.id}`}
-        className="block bg-surface-container-high rounded-lg overflow-hidden border border-outline-variant/10 transition-[border-color,box-shadow] duration-200 ease-out hover:border-primary/30 hover:shadow-[0_12px_24px_rgba(0,0,0,0.4)]"
+        className="block bg-surface-container-high rounded-lg overflow-hidden border border-outline-variant/10 transition-[border-color,box-shadow] duration-200 ease-out hover:border-primary/30 hover:shadow-card"
       >
         <div className="h-32 bg-surface-container-lowest flex items-center justify-center relative">
           <Icon name="folder" size={48} className="text-on-surface-variant/20" />
@@ -126,9 +125,6 @@ export default function ProjectsPage() {
   );
 
   if (!isAuthenticated) {
-    if (!isLoginDialogEnabled()) {
-      return <Navigate to="/login" state={{ from: '/projects' }} replace />;
-    }
     return (
       <div className="flex flex-col items-center justify-center h-dvh bg-surface gap-4">
         <Icon name="lock" size={64} className="text-on-surface-variant/30" />

@@ -1,6 +1,6 @@
 import { fork } from 'node:child_process';
 import { rmSync, existsSync, mkdirSync, copyFileSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { Job } from 'bullmq';
 import { cacheDelByPrefix } from '../lib/cache.js';
@@ -25,6 +25,12 @@ const conversionRunnerPath = fileURLToPath(new URL('./conversionRunner.js', impo
 function formatDuration(ms: number) {
   const minutes = Math.round(ms / 60000);
   return minutes >= 1 ? `${minutes} 分钟` : `${Math.round(ms / 1000)} 秒`;
+}
+
+function pathInside(parent: string, child: string): boolean {
+  const root = resolve(parent);
+  const target = resolve(child);
+  return target === root || target.startsWith(`${root}${sep}`);
 }
 
 function runConversionPipeline(job: Job): Promise<ConversionPipelineResult> {
@@ -135,6 +141,9 @@ const initialWorkerConcurrency = await readConfiguredConcurrency();
 export const conversionWorker = createWorker(
   async (job) => {
     const { modelId, filePath, originalName, ext, userId, preserveSource = false } = job.data;
+    if (!modelId || !filePath || !originalName || !ext) {
+      throw new Error('转换任务数据不完整，请重新上传模型');
+    }
     const logStep = async (message: string) => {
       await job.log(`[${new Date().toISOString()}] ${message}`).catch(() => {});
     };
@@ -150,12 +159,15 @@ export const conversionWorker = createWorker(
       // Update status to processing
       await logStep('更新模型状态为 processing');
       if (prisma) {
-        await prisma.model
-          .update({
+        try {
+          await prisma.model.update({
             where: { id: modelId },
             data: { status: MODEL_STATUS.PROCESSING },
-          })
-          .catch(() => {});
+          });
+        } catch (statusErr) {
+          logger.warn({ statusErr, modelId }, 'Failed to mark model conversion as processing');
+          await logStep(`processing 状态写入数据库失败: ${statusErr instanceof Error ? statusErr.message : statusErr}`);
+        }
       }
 
       await job.updateProgress(20);
@@ -196,12 +208,15 @@ export const conversionWorker = createWorker(
       }
 
       if (prisma) {
-        await prisma.model
-          .update({
+        try {
+          await prisma.model.update({
             where: { id: modelId },
             data: { uploadPath: activeSourcePath },
-          })
-          .catch(() => {});
+          });
+        } catch (pathErr) {
+          logger.warn({ pathErr, modelId, activeSourcePath }, 'Failed to persist active conversion source path');
+          await logStep(`原始文件路径写入数据库失败: ${pathErr instanceof Error ? pathErr.message : pathErr}`);
+        }
       }
 
       await logStep(`启动隔离转换子进程，超时 ${formatDuration(conversionQueueConfig.jobTimeoutMs)}`);
@@ -255,7 +270,10 @@ export const conversionWorker = createWorker(
       if (shouldCleanupInitialSource && initialSourcePath !== activeSourcePath && existsSync(initialSourcePath)) {
         try {
           rmSync(initialSourcePath, { force: true });
-        } catch {}
+        } catch (cleanupErr) {
+          logger.warn({ cleanupErr, modelId, initialSourcePath }, 'Failed to clean initial conversion source');
+          await logStep(`临时上传文件清理失败: ${cleanupErr instanceof Error ? cleanupErr.message : cleanupErr}`);
+        }
       } else if (!shouldCleanupInitialSource) {
         await logStep('保留原始源文件，跳过失败清理');
       }
@@ -263,13 +281,29 @@ export const conversionWorker = createWorker(
       const maxAttempts = job.opts?.attempts || 1;
       const isFinalAttempt = job.attemptsMade >= maxAttempts - 1;
 
+      if (
+        isFinalAttempt &&
+        existsSync(activeSourcePath) &&
+        pathInside(resolve(config.staticDir, 'originals'), activeSourcePath)
+      ) {
+        try {
+          rmSync(activeSourcePath, { force: true });
+          await logStep('已清理最终失败的原始文件');
+        } catch (cleanupErr) {
+          await logStep(`原始文件清理失败: ${cleanupErr instanceof Error ? cleanupErr.message : cleanupErr}`);
+        }
+      }
+
       if (isFinalAttempt && prisma) {
-        await prisma.model
-          .update({
+        try {
+          await prisma.model.update({
             where: { id: modelId },
-            data: { status: MODEL_STATUS.FAILED },
-          })
-          .catch(() => {});
+            data: { status: MODEL_STATUS.FAILED, uploadPath: null },
+          });
+        } catch (statusErr) {
+          logger.error({ statusErr, modelId }, 'Failed to mark model conversion as failed');
+          await logStep(`转换失败状态写入数据库失败: ${statusErr instanceof Error ? statusErr.message : statusErr}`);
+        }
         await cacheDelByPrefix('cache:models:');
       }
 

@@ -37,6 +37,21 @@ export function errorHandler(err: Error, _req: Request, res: Response, _next: Ne
     return;
   }
 
+  const uploadError = err as Error & { code?: string };
+  if (uploadError.name === 'MulterError' || uploadError.code?.startsWith('LIMIT_')) {
+    if (uploadError.code === 'LIMIT_FILE_SIZE' || err.message?.includes('File too large')) {
+      res.status(413).json(formatError(413, '文件大小超过限制'));
+      return;
+    }
+    res.status(400).json(formatError(400, err.message || '上传参数无效'));
+    return;
+  }
+
+  if (/不支持的|文件必须包含扩展名/.test(err.message || '')) {
+    res.status(400).json(formatError(400, err.message));
+    return;
+  }
+
   logger.error({ err }, 'Unhandled error');
 
   // Prisma known errors
@@ -50,12 +65,6 @@ export function errorHandler(err: Error, _req: Request, res: Response, _next: Ne
       return;
     }
     res.status(400).json(formatError(400, '数据库操作失败'));
-    return;
-  }
-
-  // Multer errors
-  if (err.message?.includes('File too large')) {
-    res.status(413).json(formatError(413, '文件大小超过限制'));
     return;
   }
 

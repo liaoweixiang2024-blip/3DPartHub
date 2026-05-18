@@ -1,17 +1,18 @@
-import { copyFileSync, mkdirSync, rmSync } from 'node:fs';
+import { copyFileSync, existsSync, mkdirSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { Router, Response } from 'express';
 import { cacheDelByPrefix, cacheDel } from '../../lib/cache.js';
 import { config } from '../../lib/config.js';
 import { logger } from '../../lib/logger.js';
-import { modelTextSearchWhere, normalizeSearchParam } from '../../lib/searchQuery.js';
+import { MAX_MODEL_PAGE, modelTextSearchWhere, normalizeSearchParam, numericQuery } from '../../lib/searchQuery.js';
 import { authMiddleware, type AuthRequest } from '../../middleware/auth.js';
 import { requireRole } from '../../middleware/rbac.js';
 import { mutationLimiter } from '../../middleware/security.js';
+import { hasActiveModelDownload } from '../../services/activeModelDownloads.js';
 import { removeExistingFiles, removeModelFiles } from '../../services/modelFiles.js';
 import { MODEL_STATUS } from '../../services/modelStatus.js';
 import { clearCategoryCache } from '../categories/common.js';
-import { modelUpload } from './uploadHelpers.js';
+import { modelImageUpload } from './uploadHelpers.js';
 
 type ModelManagementContext = {
   prisma: any;
@@ -20,8 +21,26 @@ type ModelManagementContext = {
   saveMeta: (id: string, data: Record<string, unknown>) => void;
 };
 
+class ModelDeleteBlockedError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'ModelDeleteBlockedError';
+  }
+}
+
 export function createModelManagementRouter({ prisma, metadataDir, getMeta, saveMeta }: ModelManagementContext) {
   const router = Router();
+  const modelFileCleanupSelect = {
+    format: true,
+    originalFormat: true,
+    uploadPath: true,
+    drawingUrl: true,
+    status: true,
+    metadata: true,
+    groupId: true,
+    group: { select: { id: true, primaryId: true } },
+    versions: { select: { fileKey: true } },
+  };
 
   async function clearModelManagementCaches() {
     await cacheDelByPrefix('cache:models:');
@@ -33,58 +52,109 @@ export function createModelManagementRouter({ prisma, metadataDir, getMeta, save
     await clearCategoryCache();
   }
 
-  async function deleteModelById(id: string, options: { clearCaches?: boolean } = {}) {
-    let dbFileInfo: { format?: string | null; originalFormat?: string | null; uploadPath?: string | null } | null =
-      null;
-    let relatedStaticUrls: string[] = [];
-    let dbModelFound = false;
+  function metadataObject(metadata: unknown): Record<string, unknown> {
+    if (!metadata || typeof metadata !== 'object' || Array.isArray(metadata)) return {};
+    return { ...(metadata as Record<string, unknown>) };
+  }
 
-    if (prisma) {
-      try {
-        const dbModel = await prisma.model.findUnique({
-          where: { id },
-          select: {
-            format: true,
-            originalFormat: true,
-            uploadPath: true,
-            drawingUrl: true,
-            groupId: true,
-            group: { select: { id: true, primaryId: true } },
-            versions: { select: { fileKey: true } },
-          },
+  async function deleteModelRecord(tx: any, id: string, deletedById?: string | null) {
+    const model = await tx.model.findUnique({
+      where: { id },
+      select: modelFileCleanupSelect,
+    });
+
+    if (!model) return null;
+    if (model.status === MODEL_STATUS.DELETED) return null;
+    if (
+      model.status === MODEL_STATUS.QUEUED ||
+      model.status === MODEL_STATUS.PROCESSING ||
+      model.status === MODEL_STATUS.PURGING
+    ) {
+      throw new ModelDeleteBlockedError('模型正在上传、转换或清理中，请完成后再删除');
+    }
+    if (hasActiveModelDownload(id)) {
+      throw new ModelDeleteBlockedError('模型正在下载中，请稍后再删除');
+    }
+
+    const recentDownload = await tx.download.findFirst({
+      where: {
+        modelId: id,
+        createdAt: { gte: new Date(Date.now() - 5 * 60_000) },
+      },
+      select: { id: true },
+    });
+    if (recentDownload) {
+      throw new ModelDeleteBlockedError('模型最近正在下载或刚开始下载，请稍后再删除');
+    }
+
+    // If this model is the primary of its group, transfer primary to the newest remaining variant.
+    if (model.group && model.group.primaryId === id) {
+      const remaining = await tx.model.findMany({
+        where: { groupId: model.groupId, id: { not: id }, status: MODEL_STATUS.COMPLETED },
+        orderBy: { createdAt: 'desc' },
+        take: 1,
+        select: { id: true },
+      });
+      if (remaining.length > 0) {
+        await tx.modelGroup.update({
+          where: { id: model.groupId },
+          data: { primaryId: remaining[0].id },
         });
-        dbModelFound = Boolean(dbModel);
-        dbFileInfo = dbModel
-          ? { format: dbModel.format, originalFormat: dbModel.originalFormat, uploadPath: dbModel.uploadPath }
-          : null;
-        relatedStaticUrls = [
-          dbModel?.drawingUrl,
-          ...(dbModel?.versions.map((version: { fileKey: string | null }) => version.fileKey) || []),
-        ].filter(Boolean) as string[];
-
-        // If this model is the primary of its group, transfer primary to the newest remaining variant.
-        if (dbModel?.group && dbModel.group.primaryId === id) {
-          const remaining = await prisma.model.findMany({
-            where: { groupId: dbModel.groupId, id: { not: id } },
-            orderBy: { createdAt: 'desc' },
-            take: 1,
-            select: { id: true },
-          });
-          if (remaining.length > 0) {
-            await prisma.modelGroup.update({
-              where: { id: dbModel.groupId },
-              data: { primaryId: remaining[0].id },
-            });
-          } else {
-            await prisma.modelGroup.delete({ where: { id: dbModel.groupId } }).catch(() => {});
-          }
-        }
-      } catch (err) {
-        logger.warn({ err, modelId: id }, '[models] Failed to read model before deletion');
+      } else {
+        await tx.modelGroup.update({
+          where: { id: model.groupId },
+          data: { primaryId: null },
+        });
       }
     }
 
+    // Soft delete keeps files and related records recoverable while hiding the model from normal lists.
+    await tx.model.update({
+      where: { id },
+      data: {
+        status: MODEL_STATUS.DELETED,
+        groupId: null,
+        metadata: {
+          ...metadataObject(model.metadata),
+          deletedAt: new Date().toISOString(),
+          ...(deletedById && { deletedById }),
+          ...(model.groupId && { deletedFromGroupId: model.groupId }),
+          deletedWasGroupPrimary: Boolean(model.group && model.group.primaryId === id),
+        },
+      },
+    });
+
+    if (model.groupId) {
+      const remainingCount = await tx.model.count({
+        where: { groupId: model.groupId, status: { not: MODEL_STATUS.DELETED } },
+      });
+      if (remainingCount === 0) {
+        await tx.modelGroup.delete({ where: { id: model.groupId } });
+      }
+    }
+
+    return model;
+  }
+
+  async function cleanupDeletedModelFiles(
+    id: string,
+    dbModel: Awaited<ReturnType<typeof deleteModelRecord>> | null,
+    options: { clearCaches?: boolean; dbModelFound?: boolean } = {},
+  ) {
+    const dbModelFound = options.dbModelFound ?? Boolean(dbModel);
+    const dbFileInfo = dbModel
+      ? { format: dbModel.format, originalFormat: dbModel.originalFormat, uploadPath: dbModel.uploadPath }
+      : null;
+    const relatedStaticUrls = [
+      dbModel?.drawingUrl,
+      ...(dbModel?.versions.map((version: { fileKey: string | null }) => version.fileKey) || []),
+    ].filter(Boolean) as string[];
+
     const meta = getMeta(id);
+    if (!dbModelFound && prisma && !meta) {
+      return { id, deleted: false, warnings: [] };
+    }
+
     const cleanup = removeModelFiles(
       meta
         ? {
@@ -115,16 +185,6 @@ export function createModelManagementRouter({ prisma, metadataDir, getMeta, save
     const metaCleanup = removeExistingFiles([metaPath]);
     allFailed.push(...metaCleanup.failed);
 
-    if (prisma) {
-      try {
-        // All related tables (Favorite, Download, ShareLink, Comment, ModelVersion)
-        // have onDelete: Cascade — a single model.delete handles them all.
-        await prisma.model.delete({ where: { id } }).catch(() => {});
-      } catch (err) {
-        logger.warn({ err, modelId: id }, '[models] Failed to delete model row');
-      }
-    }
-
     if (options.clearCaches !== false) {
       await clearModelManagementCaches();
     }
@@ -135,6 +195,82 @@ export function createModelManagementRouter({ prisma, metadataDir, getMeta, save
       deleted: dbModelFound || Boolean(meta) || removedFileCount > 0,
       warnings: allFailed,
     };
+  }
+
+  async function deleteModelById(id: string, options: { clearCaches?: boolean; deletedById?: string | null } = {}) {
+    let dbModel: Awaited<ReturnType<typeof deleteModelRecord>> | null = null;
+
+    if (prisma) {
+      try {
+        dbModel = await prisma.$transaction((tx: any) => deleteModelRecord(tx, id, options.deletedById));
+      } catch (err) {
+        if (err instanceof ModelDeleteBlockedError) throw err;
+        logger.error({ err, modelId: id }, '[models] Failed to delete model row');
+        throw err;
+      }
+    }
+
+    if (dbModel) {
+      if (options.clearCaches !== false) {
+        await clearModelManagementCaches();
+      }
+      return { id, deleted: true, warnings: [] };
+    }
+
+    return cleanupDeletedModelFiles(id, dbModel, { ...options, dbModelFound: Boolean(dbModel) });
+  }
+
+  async function purgeDeletedModelById(id: string) {
+    if (!prisma) {
+      return cleanupDeletedModelFiles(id, null, { clearCaches: false });
+    }
+
+    const dbModel = await prisma.model.findUnique({
+      where: { id },
+      select: modelFileCleanupSelect,
+    });
+    if (!dbModel || dbModel.status !== MODEL_STATUS.DELETED) {
+      return { id, deleted: false, warnings: [] };
+    }
+
+    const locked = await prisma.model.updateMany({
+      where: { id, status: MODEL_STATUS.DELETED },
+      data: { status: MODEL_STATUS.PURGING },
+    });
+    if (locked.count === 0) {
+      return { id, deleted: false, warnings: [] };
+    }
+
+    try {
+      const cleanup = await cleanupDeletedModelFiles(id, dbModel, { clearCaches: false, dbModelFound: true });
+      if (cleanup.warnings.length > 0) {
+        await prisma.model.updateMany({
+          where: { id, status: MODEL_STATUS.PURGING },
+          data: { status: MODEL_STATUS.DELETED },
+        });
+        return { id, deleted: false, warnings: cleanup.warnings };
+      }
+
+      const deleted = await prisma.model.deleteMany({ where: { id, status: MODEL_STATUS.PURGING } });
+      if (deleted.count === 0) {
+        await prisma.model.updateMany({
+          where: { id, status: MODEL_STATUS.PURGING },
+          data: { status: MODEL_STATUS.DELETED },
+        });
+        return { id, deleted: false, warnings: ['模型状态已变化，已取消彻底删除'] };
+      }
+      return { id, deleted: true, warnings: [] };
+    } catch (err) {
+      await prisma.model
+        .updateMany({ where: { id, status: MODEL_STATUS.PURGING }, data: { status: MODEL_STATUS.DELETED } })
+        .catch((restoreErr: unknown) => {
+          logger.error(
+            { restoreErr, modelId: id },
+            '[models] Failed to restore recycle-bin status after purge failure',
+          );
+        });
+      throw err;
+    }
   }
 
   async function buildBatchDeleteFilterWhere(rawFilters: unknown) {
@@ -231,7 +367,8 @@ export function createModelManagementRouter({ prisma, metadataDir, getMeta, save
           group: (updated as any).group || null,
         });
         return;
-      } catch {
+      } catch (err) {
+        logger.error({ err, modelId: id }, '[models] Update failed');
         res.status(500).json({ detail: '更新失败' });
         return;
       }
@@ -294,39 +431,290 @@ export function createModelManagementRouter({ prisma, metadataDir, getMeta, save
         return;
       }
 
-      const items = [];
-      const BATCH_SIZE = 50;
-      for (let i = 0; i < modelIds.length; i += BATCH_SIZE) {
-        const batch = modelIds.slice(i, i + BATCH_SIZE);
-        const results = await Promise.all(batch.map((id) => deleteModelById(id, { clearCaches: false })));
-        items.push(...results);
-      }
-      await clearModelManagementCaches();
+      try {
+        let items: Awaited<ReturnType<typeof cleanupDeletedModelFiles>>[];
+        if (prisma) {
+          const dbModels = await prisma.$transaction(
+            async (tx: any) => {
+              await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext('model-batch-delete'))`;
+              const deletedRows: { id: string; dbModel: Awaited<ReturnType<typeof deleteModelRecord>> | null }[] = [];
+              for (const id of modelIds) {
+                deletedRows.push({ id, dbModel: await deleteModelRecord(tx, id, req.user!.userId) });
+              }
+              return deletedRows;
+            },
+            { maxWait: 10_000, timeout: 120_000 },
+          );
+          items = [];
+          for (const item of dbModels) {
+            if (item.dbModel) {
+              items.push({ id: item.id, deleted: true, warnings: [] });
+            } else {
+              items.push(
+                await cleanupDeletedModelFiles(item.id, item.dbModel, {
+                  clearCaches: false,
+                  dbModelFound: false,
+                }),
+              );
+            }
+          }
+        } else {
+          const results = [];
+          for (const id of modelIds) {
+            results.push(await deleteModelById(id, { clearCaches: false }));
+          }
+          items = results;
+        }
+        await clearModelManagementCaches();
 
-      const deleted = items.filter((item) => item.deleted).length;
-      const warningCount = items.reduce((sum, item) => sum + item.warnings.length, 0);
-      if (warningCount > 0) {
-        logger.warn({ detail: items.filter((item) => item.warnings.length > 0) }, '[models] Batch delete warnings');
+        const deleted = items.filter((item) => item.deleted).length;
+        const warningCount = items.reduce((sum, item) => sum + item.warnings.length, 0);
+        if (warningCount > 0) {
+          logger.warn({ detail: items.filter((item) => item.warnings.length > 0) }, '[models] Batch delete warnings');
+        }
+
+        res.json({
+          message: warningCount > 0 ? '批量删除完成，但部分文件清理失败' : '批量删除完成',
+          allMatching,
+          requested: modelIds.length,
+          deleted,
+          warnings: warningCount,
+          items: items.map((item) => ({
+            id: item.id,
+            deleted: item.deleted,
+            warnings: item.warnings.length,
+          })),
+        });
+      } catch (err) {
+        if (err instanceof ModelDeleteBlockedError) {
+          res.status(409).json({ detail: err.message });
+          return;
+        }
+        logger.error({ err, modelIds }, '[models] Batch delete failed');
+        res.status(500).json({ detail: '批量删除失败，模型记录未完整删除，请稍后重试' });
       }
+    },
+  );
+
+  // Deleted model listing and restore endpoints for recycle-bin workflows.
+  router.get('/api/models/deleted', authMiddleware, requireRole('ADMIN'), async (req: AuthRequest, res: Response) => {
+    res.setHeader('Cache-Control', 'no-store');
+    if (!prisma) {
+      res.status(503).json({ detail: '数据库未连接，无法读取已删除模型' });
+      return;
+    }
+
+    const page = numericQuery(req.query.page, 1, 1, MAX_MODEL_PAGE);
+    const pageSize = numericQuery(req.query.page_size, 20, 1, 100);
+    const search = normalizeSearchParam(req.query.search);
+    const where: Record<string, unknown> = { status: MODEL_STATUS.DELETED };
+    const searchCond = modelTextSearchWhere(search);
+    if (searchCond) where.AND = [searchCond];
+
+    try {
+      const [total, models] = await prisma.$transaction([
+        prisma.model.count({ where }),
+        prisma.model.findMany({
+          where,
+          orderBy: { updatedAt: 'desc' },
+          skip: (page - 1) * pageSize,
+          take: pageSize,
+          select: {
+            id: true,
+            name: true,
+            originalName: true,
+            originalFormat: true,
+            originalSize: true,
+            uploadPath: true,
+            metadata: true,
+            updatedAt: true,
+            createdAt: true,
+            categoryRef: { select: { id: true, name: true } },
+          },
+        }),
+      ]);
 
       res.json({
-        message: warningCount > 0 ? '批量删除完成，但部分文件清理失败' : '批量删除完成',
-        allMatching,
-        requested: modelIds.length,
-        deleted,
-        warnings: warningCount,
-        items: items.map((item) => ({
-          id: item.id,
-          deleted: item.deleted,
-          warnings: item.warnings.length,
-        })),
+        total,
+        page,
+        page_size: pageSize,
+        items: models.map((model: any) => {
+          const metadata = metadataObject(model.metadata);
+          const updatedAt =
+            model.updatedAt instanceof Date ? model.updatedAt.toISOString() : String(model.updatedAt || '');
+          return {
+            model_id: model.id,
+            name: model.name || model.originalName,
+            original_name: model.originalName,
+            format: model.originalFormat,
+            original_size: model.originalSize,
+            category_id: model.categoryRef?.id || null,
+            category: model.categoryRef?.name || null,
+            deleted_at: typeof metadata.deletedAt === 'string' ? metadata.deletedAt : updatedAt,
+            deleted_by_id: typeof metadata.deletedById === 'string' ? metadata.deletedById : null,
+            can_restore: model.uploadPath ? existsSync(model.uploadPath) : true,
+            created_at: model.createdAt,
+          };
+        }),
       });
+    } catch (err) {
+      logger.error({ err }, '[models] Failed to list deleted models');
+      res.status(500).json({ detail: '读取已删除模型失败' });
+    }
+  });
+
+  router.post(
+    '/api/models/:id/restore',
+    authMiddleware,
+    requireRole('ADMIN'),
+    async (req: AuthRequest, res: Response) => {
+      if (!prisma) {
+        res.status(503).json({ detail: '数据库未连接，无法恢复模型' });
+        return;
+      }
+
+      const id = req.params.id as string;
+      try {
+        const model = await prisma.model.findUnique({
+          where: { id },
+          select: { id: true, status: true, uploadPath: true, metadata: true },
+        });
+        if (!model) {
+          res.status(404).json({ detail: '模型不存在' });
+          return;
+        }
+        if (model.status !== MODEL_STATUS.DELETED) {
+          res.status(400).json({ detail: '模型未处于删除状态' });
+          return;
+        }
+        if (model.uploadPath && !existsSync(model.uploadPath)) {
+          res.status(409).json({ detail: '原始模型文件不存在，无法恢复' });
+          return;
+        }
+
+        await prisma.$transaction(async (tx: any) => {
+          const metadata = metadataObject(model.metadata);
+          const previousGroupId = typeof metadata.deletedFromGroupId === 'string' ? metadata.deletedFromGroupId : null;
+          const wasPrimary = metadata.deletedWasGroupPrimary === true;
+          delete metadata.deletedAt;
+          delete metadata.deletedById;
+          delete metadata.deletedFromGroupId;
+          delete metadata.deletedWasGroupPrimary;
+
+          const previousGroup = previousGroupId
+            ? await tx.modelGroup.findUnique({ where: { id: previousGroupId }, select: { id: true, primaryId: true } })
+            : null;
+
+          await tx.model.update({
+            where: { id },
+            data: {
+              status: MODEL_STATUS.COMPLETED,
+              groupId: previousGroup?.id || null,
+              metadata,
+            },
+          });
+
+          if (previousGroup && (wasPrimary || !previousGroup.primaryId)) {
+            await tx.modelGroup.update({ where: { id: previousGroup.id }, data: { primaryId: id } });
+          }
+        });
+        await clearModelManagementCaches();
+        res.json({ message: '模型已恢复', model_id: id });
+      } catch (err) {
+        logger.error({ err, modelId: id }, '[models] Restore failed');
+        res.status(500).json({ detail: '恢复失败，请稍后重试' });
+      }
+    },
+  );
+
+  router.post(
+    '/api/models/deleted/purge',
+    authMiddleware,
+    requireRole('ADMIN'),
+    async (req: AuthRequest, res: Response) => {
+      const all = req.body?.all === true;
+      let modelIds: string[] = [];
+
+      if (all) {
+        if (!prisma) {
+          res.status(503).json({ detail: '数据库未连接，无法清空回收站' });
+          return;
+        }
+        const search = normalizeSearchParam(req.body?.search);
+        const where: Record<string, unknown> = { status: MODEL_STATUS.DELETED };
+        const searchCond = modelTextSearchWhere(search);
+        if (searchCond) where.AND = [searchCond];
+        const matched = await prisma.model.findMany({
+          where,
+          orderBy: { updatedAt: 'desc' },
+          take: 5001,
+          select: { id: true },
+        });
+        if (matched.length > 5000) {
+          res.status(400).json({ detail: '单次最多彻底删除 5000 个模型，请先缩小范围' });
+          return;
+        }
+        modelIds = matched.map((model: { id: string }) => model.id);
+      } else {
+        const rawIds = req.body?.modelIds;
+        if (!Array.isArray(rawIds)) {
+          res.status(400).json({ detail: 'modelIds 必须是数组' });
+          return;
+        }
+        modelIds = Array.from(new Set(rawIds.map((id) => (typeof id === 'string' ? id.trim() : '')).filter(Boolean)));
+      }
+
+      if (modelIds.length === 0) {
+        res.status(400).json({ detail: all ? '回收站为空' : '请选择要彻底删除的模型' });
+        return;
+      }
+      if (!all && modelIds.length > 500) {
+        res.status(400).json({ detail: '单次最多彻底删除 500 个模型' });
+        return;
+      }
+
+      try {
+        const items = [];
+        for (const id of modelIds) {
+          items.push(await purgeDeletedModelById(id));
+        }
+        await clearModelManagementCaches();
+        const deleted = items.filter((item) => item.deleted).length;
+        const warningCount = items.reduce((sum, item) => sum + item.warnings.length, 0);
+        if (warningCount > 0) {
+          logger.warn(
+            { detail: items.filter((item) => item.warnings.length > 0) },
+            '[models] Recycle bin purge warnings',
+          );
+        }
+        res.json({
+          message: warningCount > 0 ? '回收站清理完成，但部分文件清理失败' : '回收站清理完成',
+          requested: modelIds.length,
+          deleted,
+          warnings: warningCount,
+          items: items.map((item) => ({ id: item.id, deleted: item.deleted, warnings: item.warnings.length })),
+        });
+      } catch (err) {
+        logger.error({ err, modelIds }, '[models] Failed to purge deleted models');
+        res.status(500).json({ detail: '彻底删除失败，请稍后重试' });
+      }
     },
   );
 
   // Delete model requires auth
   router.delete('/api/models/:id', authMiddleware, requireRole('ADMIN'), async (req: AuthRequest, res: Response) => {
-    const result = await deleteModelById(req.params.id as string);
+    let result: Awaited<ReturnType<typeof deleteModelById>>;
+    try {
+      result = await deleteModelById(req.params.id as string, { deletedById: req.user!.userId });
+    } catch (err) {
+      if (err instanceof ModelDeleteBlockedError) {
+        res.status(409).json({ detail: err.message });
+        return;
+      }
+      logger.error({ err, modelId: req.params.id }, '[models] Delete failed');
+      res.status(500).json({ detail: '删除失败，模型记录未删除' });
+      return;
+    }
 
     if (result.warnings.length > 0) {
       logger.warn({ detail: result.warnings }, '[models] Some files could not be deleted');
@@ -341,7 +729,7 @@ export function createModelManagementRouter({ prisma, metadataDir, getMeta, save
     '/api/models/:id/thumbnail',
     authMiddleware,
     requireRole('ADMIN'),
-    modelUpload.single('file'),
+    modelImageUpload.single('file'),
     async (req: AuthRequest, res: Response) => {
       const id = req.params.id as string;
       const file = req.file;
@@ -395,7 +783,7 @@ export function createModelManagementRouter({ prisma, metadataDir, getMeta, save
         await clearCategoryCache();
 
         res.json({ success: true, data: { model_id: id, thumbnail_url: thumbnailUrl } });
-      } catch (err: any) {
+      } catch (err: unknown) {
         logger.error({ err }, '[management] Thumbnail upload failed');
         rmSync(file.path, { force: true });
         res.status(500).json({ detail: '上传预览图失败' });

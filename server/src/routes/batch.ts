@@ -10,12 +10,16 @@ import { getBusinessConfig } from '../lib/businessConfig.js';
 import { cacheDelByPrefix } from '../lib/cache.js';
 import { config } from '../lib/config.js';
 import { consumeProtectedResourceToken, createProtectedResourceToken } from '../lib/downloadTokenStore.js';
+import { syncJob, loadJob } from '../lib/jobStore.js';
+import { createLogger } from '../lib/logger.js';
 import { optionalString } from '../lib/requestValidation.js';
+import { batchArchiveMaxSizeMb, UPLOAD_REQUEST_TIMEOUT_MS } from '../lib/uploadLimits.js';
 import { authMiddleware, verifyRequestToken, type AuthRequest } from '../middleware/auth.js';
 import { requireRole } from '../middleware/rbac.js';
 import {
   BatchArchiveUploadError,
-  batchArchiveMaxSizeMb,
+  type BatchArchiveUploadOutput,
+  type BatchArchiveUploadProgress,
   isSupportedBatchArchive,
   processBatchArchiveUpload,
 } from '../services/batchArchiveUpload.js';
@@ -25,6 +29,37 @@ import { MODEL_STATUS } from '../services/modelStatus.js';
 import { clearCategoryCache } from './categories/common.js';
 
 const router = Router();
+const log = createLogger({ component: 'batch-routes' });
+
+type BatchArchiveUploadJob = {
+  id: string;
+  stage: 'queued' | 'processing' | 'done' | 'error';
+  percent: number;
+  message: string;
+  processed?: number;
+  total?: number;
+  error?: string;
+  result?: Pick<BatchArchiveUploadOutput, 'total' | 'results'>;
+  createdAt: string;
+  updatedAt: string;
+};
+
+const batchArchiveUploadJobs = new Map<string, BatchArchiveUploadJob>();
+
+function updateBatchArchiveUploadJob(job: BatchArchiveUploadJob, patch: Partial<BatchArchiveUploadJob>) {
+  Object.assign(job, patch, { updatedAt: new Date().toISOString() });
+  batchArchiveUploadJobs.set(job.id, job);
+  syncJob(job);
+}
+
+function getBatchArchiveUploadJob(id: string): BatchArchiveUploadJob | undefined {
+  const persisted = loadJob<BatchArchiveUploadJob>(id);
+  if (persisted) {
+    batchArchiveUploadJobs.set(id, persisted);
+    return persisted;
+  }
+  return batchArchiveUploadJobs.get(id);
+}
 
 const ALLOWED_ARCHIVE_MIMES = new Set([
   'application/zip',
@@ -35,6 +70,8 @@ const ALLOWED_ARCHIVE_MIMES = new Set([
 ]);
 
 function batchArchiveUpload(req: AuthRequest, res: Response, next: NextFunction) {
+  req.setTimeout(UPLOAD_REQUEST_TIMEOUT_MS);
+  res.setTimeout(UPLOAD_REQUEST_TIMEOUT_MS);
   getBusinessConfig()
     .then(({ uploadPolicy }) => {
       const maxMb = batchArchiveMaxSizeMb(uploadPolicy);
@@ -164,8 +201,8 @@ router.post('/api/batch/download', authMiddleware, requireRole('ADMIN'), async (
             data: { downloadCount: { increment: 1 } },
           }),
         ]);
-      } catch {
-        /* ignore */
+      } catch (err) {
+        log.warn({ err, modelId: model.id }, 'Failed to record batch download for model');
       }
     }
 
@@ -181,10 +218,13 @@ router.post('/api/batch/download', authMiddleware, requireRole('ADMIN'), async (
       url: `/api/batch/downloads/${zipName}?download_token=${encodeURIComponent(token.token)}`,
       count: archivedModels.size,
     });
-  } catch {
+  } catch (err) {
     try {
       if (typeof zipPath !== 'undefined') rmSync(zipPath, { force: true });
-    } catch {}
+    } catch (cleanupErr) {
+      log.warn({ cleanupErr, zipPath }, 'Failed to clean up batch zip after error');
+    }
+    log.warn({ err }, 'Batch download failed');
     res.status(500).json({ detail: '批量下载失败' });
   }
 });
@@ -228,10 +268,116 @@ router.get('/api/batch/downloads/:file', async (req, res: Response) => {
     cleanupDone = true;
     try {
       rmSync(filePath, { force: true });
-    } catch {}
+    } catch (err) {
+      log.warn({ err, filePath }, 'Failed to clean up batch download file');
+    }
   };
   res.on('close', cleanup);
   setTimeout(cleanup, 600_000);
+});
+
+// Async batch upload from ZIP/RAR with polling progress.
+router.post(
+  '/api/batch/upload-async',
+  authMiddleware,
+  requireRole('ADMIN'),
+  batchArchiveUpload,
+  async (req: AuthRequest, res: Response) => {
+    const file = req.file;
+    if (!file) {
+      res.status(400).json({ detail: '没有文件' });
+      return;
+    }
+
+    if (!isSupportedBatchArchive(file.originalname || '')) {
+      rmSync(file.path, { force: true });
+      res.status(400).json({ detail: '请上传 ZIP 或 RAR 压缩包' });
+      return;
+    }
+
+    const job: BatchArchiveUploadJob = {
+      id: `batch_upload_${Date.now()}_${randomUUID().slice(0, 8)}`,
+      stage: 'queued',
+      percent: 0,
+      message: '已上传，等待服务器处理...',
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+    batchArchiveUploadJobs.set(job.id, job);
+    syncJob(job);
+
+    const filePath = file.path;
+    const originalName = file.originalname;
+    const userId = req.user!.userId;
+    const categoryId = optionalString(req.body?.categoryId, { maxLength: 80 }) || null;
+
+    res.json({ jobId: job.id });
+
+    setImmediate(async () => {
+      try {
+        updateBatchArchiveUploadJob(job, { stage: 'processing', percent: 3, message: '正在读取压缩包...' });
+        const uploadResult = await processBatchArchiveUpload({
+          filePath,
+          originalName,
+          categoryId,
+          userId,
+          onProgress: (progress: BatchArchiveUploadProgress) => {
+            updateBatchArchiveUploadJob(job, {
+              stage: 'processing',
+              percent: Math.min(98, progress.percent),
+              message: progress.message,
+              processed: progress.processed,
+              total: progress.total,
+            });
+          },
+        });
+
+        if (uploadResult.hasQueuedModels) {
+          await cacheDelByPrefix('cache:models:');
+          await clearCategoryCache();
+        } else if (uploadResult.categoryTreeChanged) {
+          await clearCategoryCache();
+        }
+
+        updateBatchArchiveUploadJob(job, {
+          stage: 'done',
+          percent: 100,
+          message: '批量上传完成',
+          result: { total: uploadResult.total, results: uploadResult.results },
+        });
+      } catch (error) {
+        const detail =
+          error instanceof BatchArchiveUploadError
+            ? error.message
+            : error instanceof Error
+              ? error.message || '批量上传处理失败'
+              : '批量上传处理失败';
+        log.error({ error, jobId: job.id }, 'Async batch upload failed');
+        updateBatchArchiveUploadJob(job, {
+          stage: 'error',
+          percent: 100,
+          message: detail,
+          error: detail,
+        });
+      }
+    });
+  },
+);
+
+router.get('/api/batch/upload-progress/:jobId', authMiddleware, requireRole('ADMIN'), async (req, res: Response) => {
+  const jobId = optionalString(req.params.jobId, { maxLength: 80 });
+  if (!jobId || !jobId.startsWith('batch_upload_')) {
+    res.status(400).json({ detail: '任务参数无效' });
+    return;
+  }
+
+  const job = getBatchArchiveUploadJob(jobId);
+  if (!job) {
+    res.status(404).json({ detail: '批量上传任务不存在，服务器可能已重启' });
+    return;
+  }
+
+  res.json(job);
 });
 
 // Batch upload from ZIP/RAR

@@ -128,7 +128,7 @@ export function GlobalPageRefreshIndicator() {
     <div className="contents" aria-busy="true" aria-live="polite">
       <span className="sr-only">{visibleEntry.label}</span>
       <div
-        className="pointer-events-none fixed left-1/2 top-1/2 z-[10040] flex h-11 w-11 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border border-outline-variant/20 bg-surface-container-low shadow-[0_8px_24px_rgba(15,23,42,0.12)]"
+        className="pointer-events-none fixed left-1/2 top-1/2 z-[10040] flex h-11 w-11 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border border-outline-variant/20 bg-surface-container-low shadow-float"
         data-page-refresh-indicator
       >
         <Icon name="refresh" size={24} className={REFRESH_ICON_CLASS} />

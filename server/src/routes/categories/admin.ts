@@ -99,8 +99,8 @@ export function createAdminCategoriesRouter() {
       });
       await clearCategoryCache();
       res.json({ data: category });
-    } catch (err: any) {
-      if (err.code === 'P2025') {
+    } catch (err: unknown) {
+      if (err instanceof Error && 'code' in err && (err as NodeJS.ErrnoException).code === 'P2025') {
         res.status(404).json({ detail: '分类不存在' });
         return;
       }
@@ -129,16 +129,16 @@ export function createAdminCategoriesRouter() {
         });
         await clearCategoryCache();
         res.json({ message: '分类已删除' });
-      } catch (err: any) {
-        if (err.code === 'P2025') {
+      } catch (err: unknown) {
+        if (err instanceof Error && 'code' in err && (err as NodeJS.ErrnoException).code === 'P2025') {
           res.status(404).json({ detail: '分类不存在' });
           return;
         }
-        if (err.code === 'HAS_CHILDREN') {
+        if (err instanceof Error && 'code' in err && (err as NodeJS.ErrnoException).code === 'HAS_CHILDREN') {
           res.status(400).json({ detail: '请先删除子分类' });
           return;
         }
-        if (err.code === 'HAS_MODELS') {
+        if (err instanceof Error && 'code' in err && (err as NodeJS.ErrnoException).code === 'HAS_MODELS') {
           res.status(400).json({ detail: '该分类下还有模型，请先移动或删除' });
           return;
         }

@@ -76,6 +76,7 @@ export const DEFAULT_SETTINGS: SystemSettings = {
   email_templates: '',
   interface_theme: DEFAULT_INTERFACE_THEME,
   mobile_interface_theme: DEFAULT_MOBILE_THEME,
+  user_interface_theme_enabled: true,
   color_scheme: 'orange',
   color_custom_dark: '{}',
   color_custom_light: '{}',
@@ -234,6 +235,8 @@ export const DEFAULT_SETTINGS: SystemSettings = {
   storage_signed_url_ttl_seconds: 3600,
   storage_upload_multipart_mb: 16,
   storage_upload_concurrency: 4,
+  storage_sync_enabled: false,
+  storage_sync_delete_extra_enabled: false,
   image_cdn_enabled: false,
   image_optimize_enabled: true,
   image_webp_enabled: true,
@@ -248,6 +251,7 @@ export const DEFAULT_SETTINGS: SystemSettings = {
   ticket_attachment_types:
     'jpg,jpeg,png,gif,webp,svg,pdf,doc,docx,xls,xlsx,ppt,pptx,zip,rar,7z,step,stp,iges,igs,xt,binary',
   api_rate_limit: 5000,
+  auth_modal_enabled: true,
   login_dialog_enabled: true,
   login_dialog_favorites: true,
   login_dialog_downloads: true,
@@ -273,6 +277,8 @@ export type SettingItemType =
   | 'email-test'
   | 'cache-test'
   | 'storage-test'
+  | 'storage-policy-info'
+  | 'storage-sync'
   | 'color-scheme';
 
 export interface SettingItemBase {
@@ -286,7 +292,7 @@ export interface SettingItemBase {
 
 export type SystemSettingItem = SettingItemBase & {
   key: keyof SystemSettings;
-  type: Exclude<SettingItemType, 'email-test' | 'cache-test' | 'storage-test'>;
+  type: Exclude<SettingItemType, 'email-test' | 'cache-test' | 'storage-test' | 'storage-policy-info' | 'storage-sync'>;
 };
 
 export type ActionSettingItem =
@@ -301,6 +307,14 @@ export type ActionSettingItem =
   | (SettingItemBase & {
       key: 'storage_test';
       type: 'storage-test';
+    })
+  | (SettingItemBase & {
+      key: 'storage_policy_info';
+      type: 'storage-policy-info';
+    })
+  | (SettingItemBase & {
+      key: 'storage_sync';
+      type: 'storage-sync';
     });
 
 export type SettingItem = SystemSettingItem | ActionSettingItem;
@@ -312,7 +326,7 @@ export interface SettingGroup {
 }
 
 export function isSystemSettingKey(key: SettingItem['key']): key is keyof SystemSettings {
-  return !['smtp_test', 'cache_test', 'storage_test'].includes(String(key));
+  return !['smtp_test', 'cache_test', 'storage_test', 'storage_policy_info', 'storage_sync'].includes(String(key));
 }
 
 export function isSection(item: SettingItem | { _section: string }): item is { _section: string } {
@@ -342,6 +356,7 @@ export const SETTING_SECTION_ICONS: Record<string, string> = {
   'Redis 与页面缓存': 'memory',
   对象存储服务商: 'cloud',
   资源目录与访问策略: 'folder_open',
+  本地与云同步: 'sync_alt',
   图片与资源优化: 'image',
 };
 
@@ -458,6 +473,12 @@ export const GROUPS: SettingGroup[] = [
         options: MOBILE_THEME_OPTIONS,
       },
       {
+        key: 'user_interface_theme_enabled',
+        label: '允许用户自定义前台界面风格',
+        desc: '开启后用户可在前台用户菜单里选择“跟随网站默认 / 经典主题 / 工作台主题”，仅影响公开前台桌面页面。',
+        type: 'switch',
+      },
+      {
         key: 'color_scheme',
         label: '配色方案',
         desc: '预设:orange/blue/green/purple/red/teal 或 custom',
@@ -530,12 +551,18 @@ export const GROUPS: SettingGroup[] = [
       { key: 'require_login_download', label: '登录下载', desc: '用户必须登录后才能下载模型文件', type: 'switch' },
       { key: 'allow_register', label: '开放注册', desc: '允许新用户自行注册账号', type: 'switch' },
       {
-        key: 'login_dialog_enabled',
-        label: '登录弹窗提示',
-        desc: '未登录用户访问受限页面时弹出确认弹窗，关闭后将直接跳转到登录页',
+        key: 'auth_modal_enabled',
+        label: '登录/注册表单弹窗',
+        desc: '开启后登录和注册在当前页面弹窗完成；关闭后跳转到独立登录/注册页面',
         type: 'switch',
       },
-      { _section: '按页面控制（仅主开关开启时生效）' },
+      {
+        key: 'login_dialog_enabled',
+        label: '登录提示弹窗',
+        desc: '开启后访问受保护页面时先显示“需要登录”的提示弹窗；关闭后按登录/注册表单设置直接登录或跳转',
+        type: 'switch',
+      },
+      { _section: '按页面控制登录提示（仅“登录提示弹窗”开启时生效）' },
       { key: 'login_dialog_favorites', label: '查看收藏', desc: '访问收藏页面时弹出登录确认', type: 'switch' },
       { key: 'login_dialog_downloads', label: '下载历史', desc: '访问下载历史页面时弹出登录确认', type: 'switch' },
       { key: 'login_dialog_my_shares', label: '我的分享', desc: '访问我的分享页面时弹出登录确认', type: 'switch' },
@@ -751,47 +778,9 @@ export const GROUPS: SettingGroup[] = [
     items: [
       {
         key: 'upload_policy',
-        label: '文件上传与导入限制',
-        desc: '配置模型上传、选型图片、选型 Excel 导入、产品图库上传和工单附件限制',
+        label: '统一上传策略',
+        desc: '模型、批量压缩包、PDF 图纸、选型导入、产品图库、工单和询价附件都在这里调整',
         type: 'textarea',
-      },
-      {
-        key: 'product_wall_max_image_mb',
-        label: '产品图库单张上限 (MB)',
-        desc: '单张图片文件的最大体积，超出会被拒绝',
-        type: 'number',
-        min: 1,
-        max: 200,
-      },
-      {
-        key: 'product_wall_max_batch_count',
-        label: '产品图库批量上限',
-        desc: '单次上传（含压缩包内图片）的最大数量',
-        type: 'number',
-        min: 1,
-        max: 200,
-      },
-      {
-        key: 'product_wall_max_zip_extract',
-        label: '压缩包提取上限',
-        desc: '从单个 zip/rar 压缩包中最多提取的图片数量',
-        type: 'number',
-        min: 1,
-        max: 500,
-      },
-      {
-        key: 'ticket_attachment_max_mb',
-        label: '工单附件上限 (MB)',
-        desc: '工单消息中单个附件的最大体积',
-        type: 'number',
-        min: 1,
-        max: 200,
-      },
-      {
-        key: 'ticket_attachment_types',
-        label: '工单附件类型',
-        desc: '用逗号分隔的文件扩展名，如：jpg,png,pdf,step,zip',
-        type: 'text',
       },
       {
         key: 'page_size_policy',
@@ -975,57 +964,63 @@ export const GROUPS: SettingGroup[] = [
       },
       { _section: '资源目录与访问策略' },
       {
+        key: 'storage_policy_info',
+        label: '目录说明',
+        desc: '按资源类型说明本地目录、云端对象前缀和访问策略',
+        type: 'storage-policy-info',
+      },
+      {
         key: 'storage_image_prefix',
         label: '图片目录',
-        desc: '模型图片、站点图片等原图目录前缀',
+        desc: '模型图片、站点图片等原图目录前缀；本地对应 static/{前缀}，云端对象也使用同一前缀',
         type: 'text',
       },
       {
         key: 'storage_thumbnail_prefix',
         label: '缩略图目录',
-        desc: '首页列表、模型卡片、产品图库缩略图目录前缀',
+        desc: '首页列表、模型卡片、产品图库缩略图目录前缀；建议公开缓存，适合 CDN 加速',
         type: 'text',
       },
       {
         key: 'storage_model_prefix',
         label: '模型文件目录',
-        desc: 'STEP/STP/IGES/XT 等可下载模型文件目录前缀',
+        desc: 'STEP/STP/IGES/XT 等可下载模型文件目录前缀；私有下载时会走签名链接策略',
         type: 'text',
       },
       {
         key: 'storage_original_prefix',
         label: '原始文件目录',
-        desc: '上传后的原始资源、未转换源文件目录前缀',
+        desc: '上传后的原始资源、未转换源文件目录前缀；通常不直接公开访问',
         type: 'text',
       },
       {
         key: 'storage_drawing_prefix',
         label: '图纸目录',
-        desc: 'PDF、工程图、说明文档等图纸资源目录前缀',
+        desc: 'PDF、工程图、说明文档等图纸资源目录前缀；模型详情下载图纸时优先读取这里',
         type: 'text',
       },
       {
         key: 'storage_product_wall_prefix',
         label: '产品图库目录',
-        desc: '产品图库批量上传、压缩包提取后的图片目录前缀',
+        desc: '产品图库批量上传、压缩包提取后的图片目录前缀；会配合缩略图优化降低列表卡顿',
         type: 'text',
       },
       {
         key: 'storage_attachment_prefix',
         label: '附件目录',
-        desc: '工单、询价沟通、用户上传附件目录前缀',
+        desc: '工单、询价沟通、用户上传附件目录前缀；建议开启私有签名访问',
         type: 'text',
       },
       {
         key: 'storage_backup_prefix',
         label: '备份目录',
-        desc: '数据库备份、资源备份、镜像更新包目录前缀',
+        desc: '数据库备份、资源备份、镜像更新包目录前缀；可参与本地与云存储同步',
         type: 'text',
       },
       {
         key: 'storage_temp_prefix',
         label: '临时目录',
-        desc: '分片上传、转换过程和临时导入文件目录前缀',
+        desc: '分片上传、转换过程和临时导入文件目录前缀；不会参与同步，避免未完成文件被发布',
         type: 'text',
       },
       {
@@ -1057,6 +1052,25 @@ export const GROUPS: SettingGroup[] = [
         type: 'number',
         min: 1,
         max: 16,
+      },
+      { _section: '本地与云同步' },
+      {
+        key: 'storage_sync_enabled',
+        label: '启用同步工具',
+        desc: '开启后允许管理员手动执行本地 static 资源与云存储 Bucket 的同步任务',
+        type: 'switch',
+      },
+      {
+        key: 'storage_sync_delete_extra_enabled',
+        label: '允许删除目标端多余文件',
+        desc: '开启后同步面板才允许选择“删除目标端多余文件”；默认关闭，避免误删',
+        type: 'switch',
+      },
+      {
+        key: 'storage_sync',
+        label: '同步任务',
+        desc: '按资源目录执行本地到云端或云端到本地同步，支持进度、停止和记录删除',
+        type: 'storage-sync',
       },
       { _section: '图片与资源优化' },
       {
@@ -1895,6 +1909,18 @@ export function normalizeUploadPolicyForSave(value: unknown) {
     ...policy,
     modelFormats: Array.from(new Set(parseCsv(policy.modelFormats).map((item) => item.toLowerCase()))),
     modelMaxSizeMb: clampNumber(policy.modelMaxSizeMb, DEFAULT_UPLOAD_POLICY.modelMaxSizeMb, 1, 102400),
+    modelDrawingMaxSizeMb: clampNumber(
+      policy.modelDrawingMaxSizeMb,
+      DEFAULT_UPLOAD_POLICY.modelDrawingMaxSizeMb,
+      1,
+      102400,
+    ),
+    batchArchiveMaxSizeMb: clampNumber(
+      policy.batchArchiveMaxSizeMb,
+      DEFAULT_UPLOAD_POLICY.batchArchiveMaxSizeMb,
+      1,
+      102400,
+    ),
     chunkSizeMb: clampNumber(policy.chunkSizeMb, DEFAULT_UPLOAD_POLICY.chunkSizeMb, 1, 1024),
     chunkThresholdMb: clampNumber(policy.chunkThresholdMb, DEFAULT_UPLOAD_POLICY.chunkThresholdMb, 1, 102400),
     optionImageMaxSizeMb: clampNumber(policy.optionImageMaxSizeMb, DEFAULT_UPLOAD_POLICY.optionImageMaxSizeMb, 1, 100),
@@ -1927,6 +1953,12 @@ export function normalizeUploadPolicyForSave(value: unknown) {
       DEFAULT_UPLOAD_POLICY.productWallUploadMaxFiles,
       1,
       50,
+    ),
+    productWallArchiveExtractMaxFiles: clampNumber(
+      policy.productWallArchiveExtractMaxFiles,
+      DEFAULT_UPLOAD_POLICY.productWallArchiveExtractMaxFiles,
+      1,
+      500,
     ),
     ticketAttachmentMaxSizeMb: clampNumber(
       policy.ticketAttachmentMaxSizeMb,

@@ -1,27 +1,50 @@
 import { copyFileSync, existsSync, mkdirSync, openSync, readSync, closeSync, rmSync, statSync } from 'node:fs';
 import { join, resolve, sep } from 'node:path';
-import { Router, Request, Response } from 'express';
+import { Router, Request, Response, type NextFunction } from 'express';
 import multer from 'multer';
 import { sendAcceleratedFile } from '../lib/acceleratedDownload.js';
 import { cacheDelByPrefix } from '../lib/cache.js';
 import { config } from '../lib/config.js';
-import { consumeProtectedResourceToken } from '../lib/downloadTokenStore.js';
+import { getBusinessConfig } from '../lib/businessConfig.js';
+import { verifyProtectedResourceToken } from '../lib/downloadTokenStore.js';
 import { normalizeUploadFilename } from '../lib/filenameEncoding.js';
 import { createLogger } from '../lib/logger.js';
 import { modelDownloadFileName, modelDownloadSourceName } from '../lib/modelDownloadName.js';
 import { prisma } from '../lib/prisma.js';
 import { optionalString, requiredString } from '../lib/requestValidation.js';
+import { modelDrawingMaxBytes, modelDrawingMaxSizeMb } from '../lib/uploadLimits.js';
 import { authMiddleware, verifyRequestToken, type AuthRequest } from '../middleware/auth.js';
 import { requireRole } from '../middleware/rbac.js';
 
 const log = createLogger({ component: 'model-drawings' });
 
-const upload = multer({
-  dest: config.uploadDir,
-  limits: { fileSize: config.maxFileSize },
-});
-
 const router = Router();
+
+function drawingUpload(req: Request, res: Response, next: NextFunction) {
+  getBusinessConfig()
+    .then(({ uploadPolicy }) => {
+      const maxMb = modelDrawingMaxSizeMb(uploadPolicy);
+      const upload = multer({
+        dest: config.uploadDir,
+        limits: { fileSize: modelDrawingMaxBytes(uploadPolicy) },
+      }).single('file');
+
+      upload(req, res, (err) => {
+        if (!err) {
+          next();
+          return;
+        }
+
+        const uploadError = err as { code?: string; message?: string };
+        if (uploadError.code === 'LIMIT_FILE_SIZE') {
+          res.status(400).json({ detail: `PDF 图纸过大，最大支持 ${maxMb}MB` });
+          return;
+        }
+        res.status(400).json({ detail: uploadError.message || '图纸上传失败' });
+      });
+    })
+    .catch(next);
+}
 
 function drawingDownloadUrl(modelId: string, drawingUrl?: string | null): string | null {
   return drawingUrl ? `/api/models/${encodeURIComponent(modelId)}/drawing/download` : null;
@@ -45,7 +68,7 @@ router.post(
   '/api/models/:id/drawing',
   authMiddleware,
   requireRole('ADMIN'),
-  upload.single('file'),
+  drawingUpload,
   async (req: AuthRequest, res: Response) => {
     const id = requiredString(req.params.id, 'id');
     const file = req.file;
@@ -99,14 +122,18 @@ router.post(
       await cacheDelByPrefix('cache:models:');
 
       res.json({ success: true, data: { model_id: id, drawing_url: drawingDownloadUrl(id, drawingUrl) } });
-    } catch (err: any) {
+    } catch (err: unknown) {
       try {
         rmSync(file.path, { force: true });
-      } catch {}
+      } catch {
+        log.warn('Failed to clean up temp upload file');
+      }
       try {
         const orphanPath = join(config.staticDir, 'drawings', `${id}.pdf`);
         if (existsSync(orphanPath)) rmSync(orphanPath, { force: true });
-      } catch {}
+      } catch {
+        log.warn('Failed to clean up orphan drawing file');
+      }
       log.error({ err, modelId: id }, 'Upload error');
       res.status(500).json({ detail: '上传图纸失败' });
     }
@@ -117,7 +144,7 @@ router.post(
 router.get('/api/models/:id/drawing/download', async (req: Request, res: Response) => {
   const id = requiredString(req.params.id, 'id');
   const queryToken = optionalString(req.query.download_token, { maxLength: 160 });
-  const tokenPayload = queryToken ? consumeProtectedResourceToken(queryToken, 'model-drawing', id) : null;
+  const tokenPayload = queryToken ? verifyProtectedResourceToken(queryToken, 'model-drawing', id) : null;
   if (queryToken && !tokenPayload) {
     res.status(401).json({ detail: '图纸访问令牌无效或已过期' });
     return;
@@ -152,7 +179,7 @@ router.get('/api/models/:id/drawing/download', async (req: Request, res: Respons
       contentType: 'application/pdf',
       disposition: 'inline',
     });
-  } catch (err: any) {
+  } catch (err: unknown) {
     log.error({ err, modelId: id }, 'Download error');
     res.status(500).json({ detail: '读取图纸失败' });
   }
@@ -181,7 +208,7 @@ router.delete(
       if (drawingPath && existsSync(drawingPath)) rmSync(drawingPath, { force: true });
 
       res.json({ success: true, data: { model_id: id, drawing_url: null } });
-    } catch (err: any) {
+    } catch (err: unknown) {
       log.error({ err, modelId: id }, 'Delete error');
       res.status(500).json({ detail: '删除图纸失败' });
     }

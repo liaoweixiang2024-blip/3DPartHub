@@ -1,4 +1,5 @@
 import { Router, Response } from 'express';
+import { getErrorMessage } from '../../lib/http.js';
 import { prisma } from '../../lib/prisma.js';
 import { authMiddleware, type AuthRequest } from '../../middleware/auth.js';
 import {
@@ -186,9 +187,10 @@ export function createCategoryRouter() {
         });
         res.json({ ok: true });
         void invalidateProductWallCache();
-      } catch (err: any) {
-        if (err?.statusCode) {
-          res.status(err.statusCode).json({ detail: err.message.replace(/^Error:\s*/, '') });
+      } catch (err: unknown) {
+        const statusCode = err instanceof Error && 'statusCode' in err ? (err as any).statusCode : undefined;
+        if (statusCode) {
+          res.status(statusCode).json({ detail: getErrorMessage(err).replace(/^Error:\s*/, '') });
           return;
         }
         next(err);

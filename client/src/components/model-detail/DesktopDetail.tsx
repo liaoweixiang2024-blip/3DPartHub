@@ -48,7 +48,6 @@ export function DesktopDetail({
   categoryBreadcrumb,
   onDownload,
   onLoginDialog,
-  onNavigateToLogin,
 }: {
   modelData: ModelInfo;
   isFav: boolean;
@@ -59,7 +58,6 @@ export function DesktopDetail({
   categoryBreadcrumb: { id: string; name: string }[];
   onDownload: (id: string, format?: string) => void;
   onLoginDialog: (reason: string) => void;
-  onNavigateToLogin: (from: string) => void;
 }) {
   const { toast } = useToast();
 
@@ -277,12 +275,9 @@ export function DesktopDetail({
             }}
             onClick={(e) => {
               const result = checkProtectedAccess('/support');
-              if (result.action === 'dialog') {
+              if (result.action === 'dialog' || result.action === 'redirect') {
                 e.preventDefault();
-                onLoginDialog(result.reason);
-              } else if (result.action === 'redirect') {
-                e.preventDefault();
-                onNavigateToLogin('/support');
+                onLoginDialog(result.action === 'dialog' ? result.reason : '技术支持');
               }
             }}
             className="flex items-center gap-3 p-3 rounded-sm bg-surface-container-high hover:bg-surface-container-highest transition-colors group"

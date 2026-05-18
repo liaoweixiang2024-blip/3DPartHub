@@ -1,8 +1,7 @@
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import Icon from '../../../components/shared/Icon';
-import LoginConfirmDialog from '../../../components/shared/LoginConfirmDialog';
-import { checkProtectedAccess } from '../../../components/shared/ProtectedLink';
+import { useAuthEntry } from '../../../components/shared/useAuthEntry';
 import { getBusinessConfig } from '../../../lib/businessConfig';
 import { usePublicSettings } from '../../../lib/publicSettings';
 import { preloadRouteForPath } from '../../../lib/routeLoaders';
@@ -43,6 +42,10 @@ function isAdminRoutePath(path: string) {
   return path === '/admin' || path.startsWith('/admin/');
 }
 
+function isRouteActive(pathname: string, path: string) {
+  return pathname === path || (path !== '/' && pathname.startsWith(`${path}/`));
+}
+
 export default function SidebarRenderer({ appearance, adminRouteMode = 'all' }: SidebarRendererProps) {
   const location = useLocation();
   const navigate = useNavigate();
@@ -51,9 +54,7 @@ export default function SidebarRenderer({ appearance, adminRouteMode = 'all' }: 
   const { settings } = usePublicSettings();
   const isAdmin = user?.role === 'ADMIN';
   const isAdminRoute = isAdminRoutePath(location.pathname);
-  const [loginDialogOpen, setLoginDialogOpen] = useState(false);
-  const [loginReturnUrl, setLoginReturnUrl] = useState('');
-  const [loginDialogReason, setLoginDialogReason] = useState('');
+  const { authNodes, handleProtectedLinkClick } = useAuthEntry(settings);
   const navItems = useMemo(() => {
     const business = getBusinessConfig(settings);
     if (!isAdmin) return business.userNav;
@@ -65,13 +66,18 @@ export default function SidebarRenderer({ appearance, adminRouteMode = 'all' }: 
   const activeRef = useRef<HTMLAnchorElement>(null);
   const navRef = useRef<HTMLElement>(null);
   const [overflow, setOverflow] = useState({ top: false, bottom: false });
+  const showNavIntro = Boolean(appearance.navIntroLabel && !(adminRouteMode === 'admin-only' && isAdminRoute));
 
   const checkOverflow = useCallback(() => {
     const el = navRef.current;
     if (!el) return;
-    setOverflow({
+    const next = {
       top: el.scrollTop > 4,
       bottom: el.scrollTop + el.clientHeight < el.scrollHeight - 4,
+    };
+    setOverflow((prev) => {
+      if (prev.top === next.top && prev.bottom === next.bottom) return prev;
+      return next;
     });
   }, []);
 
@@ -90,7 +96,7 @@ export default function SidebarRenderer({ appearance, adminRouteMode = 'all' }: 
     const cRect = container.getBoundingClientRect();
     const eRect = el.getBoundingClientRect();
     if (eRect.top < cRect.top || eRect.bottom > cRect.bottom) {
-      el.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+      el.scrollIntoView({ block: 'nearest', behavior: 'auto' });
     }
   }, [location.pathname]);
 
@@ -101,15 +107,14 @@ export default function SidebarRenderer({ appearance, adminRouteMode = 'all' }: 
       </div>
 
       <nav ref={navRef} className={appearance.navClassName}>
-        {appearance.navIntroLabel && (
+        {showNavIntro && (
           <div className={appearance.navIntroWrapperClassName}>
             <span className={appearance.navIntroLabelClassName}>{appearance.navIntroLabel}</span>
             <div className={appearance.navIntroLineClassName} />
           </div>
         )}
         {navItems.map((item, idx) => {
-          const isActive =
-            location.pathname === item.path || (item.path !== '/' && location.pathname.startsWith(item.path));
+          const isActive = isRouteActive(location.pathname, item.path);
           const isAdminPath = isAdminRoutePath(item.path);
           const showDivider = isAdmin && isAdminPath && !navItems.slice(0, idx).some((p) => isAdminRoutePath(p.path));
           return (
@@ -127,18 +132,7 @@ export default function SidebarRenderer({ appearance, adminRouteMode = 'all' }: 
                 onPointerEnter={() => preloadRouteForPath(item.path)}
                 onPointerDown={() => preloadRouteForPath(item.path)}
                 onFocus={() => preloadRouteForPath(item.path)}
-                onClick={(e) => {
-                  const result = checkProtectedAccess(item.path);
-                  if (result.action === 'dialog') {
-                    e.preventDefault();
-                    setLoginReturnUrl(result.returnUrl);
-                    setLoginDialogReason(result.reason);
-                    setLoginDialogOpen(true);
-                  } else if (result.action === 'redirect') {
-                    e.preventDefault();
-                    navigate('/login', { state: { from: result.returnUrl } });
-                  }
-                }}
+                onClick={(e) => handleProtectedLinkClick(e, item.path)}
               >
                 <Icon name={item.icon} size={appearance.iconSize} />
                 <span className={appearance.itemLabelClassName}>{item.label}</span>
@@ -181,18 +175,7 @@ export default function SidebarRenderer({ appearance, adminRouteMode = 'all' }: 
                   onPointerEnter={() => preloadRouteForPath(item.path)}
                   onPointerDown={() => preloadRouteForPath(item.path)}
                   onFocus={() => preloadRouteForPath(item.path)}
-                  onClick={(e) => {
-                    const result = checkProtectedAccess(item.path);
-                    if (result.action === 'dialog') {
-                      e.preventDefault();
-                      setLoginReturnUrl(result.returnUrl);
-                      setLoginDialogReason(result.reason);
-                      setLoginDialogOpen(true);
-                    } else if (result.action === 'redirect') {
-                      e.preventDefault();
-                      navigate('/login', { state: { from: result.returnUrl } });
-                    }
-                  }}
+                  onClick={(e) => handleProtectedLinkClick(e, item.path)}
                 >
                   <Icon name={item.icon} size={appearance.iconSize} />
                   <span className={appearance.itemLabelClassName}>{item.label}</span>
@@ -202,12 +185,7 @@ export default function SidebarRenderer({ appearance, adminRouteMode = 'all' }: 
           </div>
         )}
       </div>
-      <LoginConfirmDialog
-        open={loginDialogOpen}
-        onClose={() => setLoginDialogOpen(false)}
-        reason={loginDialogReason}
-        returnUrl={loginReturnUrl}
-      />
+      {authNodes}
     </aside>
   );
 }

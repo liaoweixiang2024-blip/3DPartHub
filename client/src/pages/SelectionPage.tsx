@@ -41,7 +41,6 @@ import { AdminPageShell } from '../components/shared/AdminPageShell';
 import Icon from '../components/shared/Icon';
 import LoginConfirmDialog from '../components/shared/LoginConfirmDialog';
 import { PageRefreshIndicator } from '../components/shared/PageRefreshFallback';
-import { isLoginDialogEnabled } from '../components/shared/ProtectedLink';
 import SafeImage from '../components/shared/SafeImage';
 import SearchField from '../components/shared/SearchField';
 import {
@@ -790,12 +789,8 @@ export default function SelectionPage() {
   const [loginDialogReason, setLoginDialogReason] = useState('');
 
   function requireLogin(reason: string) {
-    if (isLoginDialogEnabled()) {
-      setLoginDialogReason(reason);
-      setLoginDialogOpen(true);
-    } else {
-      navigate('/login', { state: { from: location.pathname } });
-    }
+    setLoginDialogReason(reason);
+    setLoginDialogOpen(true);
   }
 
   const copyShareLink = useCallback(
@@ -893,10 +888,13 @@ export default function SelectionPage() {
         description: '链接已经生成，点击下面的复制链接即可复制；也可以使用系统分享。',
         showDialogFirst: !isDesktop,
       });
-    } catch (err: any) {
-      if (import.meta.env.DEV)
-        console.error('[Share] Error:', err?.response?.status, err?.response?.data, err?.message);
-      toast(`分享失败: ${err?.response?.data?.message || err?.message || '未知错误'}`, 'error');
+    } catch (err: unknown) {
+      if (import.meta.env.DEV) console.error('[Share] Error:', err instanceof Error ? err.message : String(err));
+      const resp = typeof err === 'object' && err !== null ? (err as Record<string, unknown>).response : undefined;
+      const data = typeof resp === 'object' && resp !== null ? (resp as Record<string, unknown>).data : undefined;
+      const apiMsg = typeof data === 'object' && data !== null ? (data as Record<string, unknown>).message : undefined;
+      const errMsg = err instanceof Error ? err.message : '未知错误';
+      toast(`分享失败: ${apiMsg || errMsg}`, 'error');
     } finally {
       setSharingTarget(null);
     }
@@ -2237,6 +2235,7 @@ export default function SelectionPage() {
             title={shellTitle}
             description={shellDescription}
             toolbar={selectionToolbar}
+            className="app-public-tool-page app-public-tool-page-selection"
             contentClassName="min-h-0"
           >
             <AdminContentPanel scroll className="flex flex-col">
@@ -2278,7 +2277,7 @@ export default function SelectionPage() {
           description={shellDescription}
           actions={shellActions}
           toolbar={selectionToolbar}
-          className="!h-auto min-h-full flex flex-col gap-3"
+          className="app-public-tool-page app-public-tool-page-selection !h-auto min-h-full flex flex-col gap-3"
           contentClassName="flex flex-col"
         >
           <AdminContentPanel

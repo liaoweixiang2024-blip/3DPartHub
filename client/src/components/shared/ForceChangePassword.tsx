@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { authApi } from '../../api/auth';
 import { useAuthStore } from '../../stores/useAuthStore';
 import DialogOverlay from './DialogOverlay';
+import { AppFormLabel, AppTextInput } from './FormControls';
 import { useToast } from './Toast';
 
 /**
@@ -40,8 +41,15 @@ export default function ForceChangePassword() {
         useAuthStore.getState().logout();
         window.location.replace('/login');
       }, 800);
-    } catch (err: any) {
-      const msg = err?.response?.data?.message || err?.response?.data?.detail || '密码修改失败，请重试';
+    } catch (err: unknown) {
+      const resp = typeof err === 'object' && err !== null ? (err as Record<string, unknown>).response : undefined;
+      const data = typeof resp === 'object' && resp !== null ? (resp as Record<string, unknown>).data : undefined;
+      const msg =
+        typeof data === 'object' && data !== null
+          ? ((data as Record<string, unknown>).message as string) ||
+            ((data as Record<string, unknown>).detail as string) ||
+            '密码修改失败，请重试'
+          : '密码修改失败，请重试';
       setError(msg);
     } finally {
       setLoading(false);
@@ -78,8 +86,10 @@ export default function ForceChangePassword() {
 
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="flex flex-col gap-1.5">
-              <label className="text-xs uppercase tracking-wider text-on-surface-variant">新密码</label>
-              <input
+              <AppFormLabel uppercase className="mb-0">
+                新密码
+              </AppFormLabel>
+              <AppTextInput
                 type="password"
                 value={newPassword}
                 onChange={(e) => {
@@ -88,14 +98,15 @@ export default function ForceChangePassword() {
                 }}
                 required
                 minLength={8}
-                className="w-full bg-surface-container-lowest text-on-surface border border-outline-variant/30 focus:border-primary px-3 py-2 text-sm rounded-sm outline-none"
                 placeholder="至少8位"
                 autoFocus
               />
             </div>
             <div className="flex flex-col gap-1.5">
-              <label className="text-xs uppercase tracking-wider text-on-surface-variant">确认新密码</label>
-              <input
+              <AppFormLabel uppercase className="mb-0">
+                确认新密码
+              </AppFormLabel>
+              <AppTextInput
                 type="password"
                 value={confirmPassword}
                 onChange={(e) => {
@@ -104,7 +115,6 @@ export default function ForceChangePassword() {
                 }}
                 required
                 minLength={8}
-                className="w-full bg-surface-container-lowest text-on-surface border border-outline-variant/30 focus:border-primary px-3 py-2 text-sm rounded-sm outline-none"
                 placeholder="再次输入新密码"
               />
             </div>

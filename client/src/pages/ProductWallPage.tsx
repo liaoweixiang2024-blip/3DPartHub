@@ -9,7 +9,7 @@ import {
   type ClipboardEvent,
   type FormEvent,
 } from 'react';
-import { useLocation, useNavigate } from 'react-router-dom';
+import { useLocation } from 'react-router-dom';
 import useSWR from 'swr';
 import '../styles/product-wall.css';
 import {
@@ -61,10 +61,10 @@ import { ProductWallThumbnail } from '../components/product-wall-admin/ProductWa
 import { ProductWallUploadDialog } from '../components/product-wall-admin/ProductWallUploadDialog';
 import { AdminManagementPage } from '../components/shared/AdminManagementPage';
 import { AdminPageShell } from '../components/shared/AdminPageShell';
+import ConfirmDialog from '../components/shared/ConfirmDialog';
 import Icon from '../components/shared/Icon';
 import LoginConfirmDialog from '../components/shared/LoginConfirmDialog';
 import { PageRefreshIndicator } from '../components/shared/PageRefreshFallback';
-import { isLoginDialogEnabled } from '../components/shared/ProtectedLink';
 import ResponsiveSectionTabs from '../components/shared/ResponsiveSectionTabs';
 import SearchField from '../components/shared/SearchField';
 import { useToast } from '../components/shared/Toast';
@@ -95,7 +95,6 @@ function ProductWallLoadingState() {
 
 export default function ProductWallPage() {
   useDocumentTitle('产品图库');
-  const navigate = useNavigate();
   const location = useLocation();
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const folderInputRef = useRef<HTMLInputElement | null>(null);
@@ -108,6 +107,10 @@ export default function ProductWallPage() {
   const { toast } = useToast();
   const { uploadPolicy } = getBusinessConfig();
   const productWallMaxImageBytes = Math.max(1, uploadPolicy.productWallImageMaxSizeMb) * 1024 * 1024;
+  const productWallUploadBatchSize = Math.max(
+    1,
+    Math.min(50, Number(uploadPolicy.productWallUploadMaxFiles) || PRODUCT_WALL_UPLOAD_BATCH_SIZE),
+  );
   const isLoggedIn = hasHydrated && isAuthenticated;
   const isAdmin = isLoggedIn && user?.role === 'ADMIN';
   const canUpload = isLoggedIn;
@@ -168,6 +171,7 @@ export default function ProductWallPage() {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
   const [renderCount, setRenderCount] = useState(PRODUCT_WALL_RENDER_BATCH_SIZE);
   const [editingItem, setEditingItem] = useState<WallItem | null>(null);
+  const [deleteCategoryTarget, setDeleteCategoryTarget] = useState<{ id: string; name: string } | null>(null);
   const [deleteDialog, setDeleteDialog] = useState<DeleteDialogState>(null);
   const [deleting, setDeleting] = useState(false);
   const [editTitle, setEditTitle] = useState('');
@@ -286,12 +290,8 @@ export default function ProductWallPage() {
   const [loginDialogReason, setLoginDialogReason] = useState('');
   const toggleFavoriteItem = async (item: WallItem) => {
     if (!isLoggedIn) {
-      if (isLoginDialogEnabled()) {
-        setLoginDialogReason('收藏图片');
-        setLoginDialogOpen(true);
-      } else {
-        navigate('/login', { state: { from: location.pathname } });
-      }
+      setLoginDialogReason('收藏图片');
+      setLoginDialogOpen(true);
       return;
     }
     const wasFavorite = favoriteIds.has(item.id);
@@ -346,12 +346,8 @@ export default function ProductWallPage() {
   const uploadFiles = useCallback(
     async (fileList: FileList | File[], meta?: { title?: string; description?: string }) => {
       if (!canUpload) {
-        if (isLoginDialogEnabled()) {
-          setLoginDialogReason('上传图片');
-          setLoginDialogOpen(true);
-        } else {
-          navigate('/login', { state: { from: location.pathname } });
-        }
+        setLoginDialogReason('上传图片');
+        setLoginDialogOpen(true);
         return;
       }
       if (!uploadKind) {
@@ -392,8 +388,8 @@ export default function ProductWallPage() {
       try {
         let uploadedCount = 0;
         const failedMessages: string[] = [];
-        for (let index = 0; index < files.length; index += PRODUCT_WALL_UPLOAD_BATCH_SIZE) {
-          const batch = files.slice(index, index + PRODUCT_WALL_UPLOAD_BATCH_SIZE);
+        for (let index = 0; index < files.length; index += productWallUploadBatchSize) {
+          const batch = files.slice(index, index + productWallUploadBatchSize);
           try {
             const firstTitle = batch[0]?.name.replace(/\.[^.]+$/, '') || undefined;
             const result = await uploadProductWallImages(batch, {
@@ -444,8 +440,8 @@ export default function ProductWallPage() {
       isAdmin,
       location.pathname,
       mutate,
-      navigate,
       productWallMaxImageBytes,
+      productWallUploadBatchSize,
       toast,
       uploadKind,
       uploadPolicy.productWallImageMaxSizeMb,
@@ -782,9 +778,9 @@ export default function ProductWallPage() {
     }
   };
   const removeCategory = async (id: string, name: string) => {
-    if (!window.confirm(`确定删除分类「${name}」吗？仅空分类可以删除。`)) return;
     try {
       await deleteProductWallCategory(id);
+      setDeleteCategoryTarget(null);
       if (filter === name) setFilter('全部');
       if (managementKindFilter === name) setManagementKindFilter('全部');
       await mutateCategories();
@@ -895,13 +891,17 @@ export default function ProductWallPage() {
   ) : null;
 
   return (
-    <AdminPageShell desktopContentClassName="p-6" mobileContentClassName="px-4 py-4 pb-20">
+    <AdminPageShell
+      desktopContentClassName="app-public-tool-shell app-product-wall-shell p-6"
+      mobileContentClassName="px-4 py-4 pb-20"
+    >
       <div className="relative" onPaste={handlePaste}>
         <AdminManagementPage
           title="产品图库"
           meta={initialLoading ? '加载中' : undefined}
           description="公司产品、使用现场和客户案例实拍图统一归档，按图库方式浏览。"
           actions={headerActions}
+          className="app-public-tool-page app-public-tool-page-product-wall"
           toolbar={
             <div className="product-wall-toolbar grid min-h-11 items-center gap-3 md:grid-cols-[minmax(0,1fr)_18rem]">
               <ResponsiveSectionTabs
@@ -1127,7 +1127,7 @@ export default function ProductWallPage() {
           onRenameCategory={(id, name) => void renameCategory(id, name)}
           onDeleteCategory={(id) => {
             const category = categoryList.find((item) => item.id === id);
-            if (category) void removeCategory(id, category.name);
+            if (category) setDeleteCategoryTarget({ id, name: category.name });
           }}
           editingItem={editingItem}
           setEditingItem={setEditingItem}
@@ -1143,6 +1143,16 @@ export default function ProductWallPage() {
         deleting={deleting}
         onCancel={() => setDeleteDialog(null)}
         onConfirm={confirmDelete}
+      />
+      <ConfirmDialog
+        open={Boolean(deleteCategoryTarget)}
+        onClose={() => setDeleteCategoryTarget(null)}
+        onConfirm={() => {
+          if (deleteCategoryTarget) void removeCategory(deleteCategoryTarget.id, deleteCategoryTarget.name);
+        }}
+        title="确认删除分类"
+        description={`确定删除分类「${deleteCategoryTarget?.name || ''}」吗？仅空分类可以删除。`}
+        confirmLabel="确认删除"
       />
 
       {editingItem && (

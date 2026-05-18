@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import useSWR from 'swr';
 import { modelApi, type ConversionQueueJob, type ConversionQueueState } from '../../api/models';
+import ConfirmDialog from '../../components/shared/ConfirmDialog';
 import Icon from '../../components/shared/Icon';
 import { PageRefreshIndicator } from '../../components/shared/PageRefreshFallback';
 import { useToast } from '../../components/shared/Toast';
@@ -60,6 +61,9 @@ export default function ConversionQueuePanel({
 }) {
   const { toast } = useToast();
   const [queueAction, setQueueAction] = useState<string | null>(null);
+  const [confirmAction, setConfirmAction] = useState<
+    'retry' | 'cancel-rebuilds' | 'clean-completed' | 'clean-failed' | null
+  >(null);
   const [detailJobId, setDetailJobId] = useState<string | null>(null);
   const [selectedQueueState, setSelectedQueueState] = useState<ConversionQueueState | 'all'>('all');
   const queueListLimit = selectedQueueState === 'all' ? (compact ? 4 : 6) : compact ? 8 : 12;
@@ -112,10 +116,12 @@ export default function ConversionQueuePanel({
 
   const handleRetryFailed = async () => {
     if (failedCount <= 0) return;
-    const ok = window.confirm(
-      `将重试最多 ${Math.min(failedCount, 25)} 个失败的转换任务，并把关联模型重新标记为排队中。是否继续？`,
-    );
-    if (!ok) return;
+    setConfirmAction('retry');
+  };
+
+  const confirmRetryFailed = async () => {
+    if (failedCount <= 0) return;
+    setConfirmAction(null);
     setQueueAction('retry');
     try {
       const result = await modelApi.retryFailedConversionJobs({ limit: 25 });
@@ -133,10 +139,12 @@ export default function ConversionQueuePanel({
 
   const handleCancelPreviewRebuilds = async () => {
     if (running <= 0) return;
-    const ok = window.confirm(
-      '将停止预览重建：取消等待中/延迟中的重建任务。正在处理的当前模型不会强制中断，会完成后停止继续执行后续重建。是否继续？',
-    );
-    if (!ok) return;
+    setConfirmAction('cancel-rebuilds');
+  };
+
+  const confirmCancelPreviewRebuilds = async () => {
+    if (running <= 0) return;
+    setConfirmAction(null);
     setQueueAction('cancel-rebuilds');
     try {
       const result = await modelApi.cancelPreviewRebuildJobs({ limit: 10000 });
@@ -153,9 +161,14 @@ export default function ConversionQueuePanel({
   const handleCleanQueue = async (type: 'completed' | 'failed') => {
     const count = type === 'completed' ? completedQueueCount : failedCount;
     if (count <= 0) return;
+    setConfirmAction(type === 'completed' ? 'clean-completed' : 'clean-failed');
+  };
+
+  const confirmCleanQueue = async (type: 'completed' | 'failed') => {
+    const count = type === 'completed' ? completedQueueCount : failedCount;
+    if (count <= 0) return;
+    setConfirmAction(null);
     const label = type === 'completed' ? '已完成' : '失败';
-    const ok = window.confirm(`将清理最多 100 条${label}转换任务记录。只删除队列记录，不会删除模型文件。是否继续？`);
-    if (!ok) return;
     setQueueAction(`clean-${type}`);
     try {
       const result = await modelApi.cleanConversionQueue({ type, limit: 100, graceMs: 0 });
@@ -167,6 +180,43 @@ export default function ConversionQueuePanel({
       setQueueAction(null);
     }
   };
+
+  const confirmDialogCopy = (() => {
+    if (confirmAction === 'retry') {
+      return {
+        title: '确认重试失败任务',
+        description: `将重试最多 ${Math.min(failedCount, 25)} 个失败的转换任务，并把关联模型重新标记为排队中。`,
+        confirmLabel: '确认重试',
+        onConfirm: () => void confirmRetryFailed(),
+      };
+    }
+    if (confirmAction === 'cancel-rebuilds') {
+      return {
+        title: '确认停止重建',
+        description:
+          '将取消等待中/延迟中的预览重建任务。正在处理的当前模型不会强制中断，会完成后停止继续执行后续重建。',
+        confirmLabel: '停止重建',
+        onConfirm: () => void confirmCancelPreviewRebuilds(),
+      };
+    }
+    if (confirmAction === 'clean-completed') {
+      return {
+        title: '确认清理完成任务',
+        description: '将清理最多 100 条已完成转换任务记录。只删除队列记录，不会删除模型文件。',
+        confirmLabel: '确认清理',
+        onConfirm: () => void confirmCleanQueue('completed'),
+      };
+    }
+    if (confirmAction === 'clean-failed') {
+      return {
+        title: '确认清理失败任务',
+        description: '将清理最多 100 条失败转换任务记录。只删除队列记录，不会删除模型文件。',
+        confirmLabel: '确认清理',
+        onConfirm: () => void confirmCleanQueue('failed'),
+      };
+    }
+    return null;
+  })();
 
   const renderJob = (job: ConversionQueueJob) => {
     const content = (
@@ -390,6 +440,16 @@ export default function ConversionQueuePanel({
           )}
         </div>
       </section>
+      <ConfirmDialog
+        open={Boolean(confirmDialogCopy)}
+        onClose={() => setConfirmAction(null)}
+        onConfirm={() => confirmDialogCopy?.onConfirm()}
+        icon={confirmAction === 'retry' ? 'replay' : confirmAction === 'cancel-rebuilds' ? 'close' : 'delete_sweep'}
+        title={confirmDialogCopy?.title || ''}
+        description={confirmDialogCopy?.description || ''}
+        confirmLabel={confirmDialogCopy?.confirmLabel || '确认'}
+        confirmDisabled={Boolean(queueAction)}
+      />
       {detailJobId && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-surface-dim/70 px-4 py-6 backdrop-blur-sm"

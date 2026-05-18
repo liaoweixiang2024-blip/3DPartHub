@@ -1,15 +1,28 @@
-import { Fragment, useCallback, useEffect, useState, type MouseEvent } from 'react';
+import { Fragment, useCallback, useEffect, useMemo, useState, type MouseEvent, type ReactNode } from 'react';
 import useSWR from 'swr';
 import useSWRInfinite from 'swr/infinite';
 import client from '../api/client';
 import { unwrapResponse } from '../api/response';
+import {
+  ADMIN_ROW_META_CLASS,
+  ADMIN_ROW_TITLE_CLASS,
+  AdminTable,
+  AdminTableBodyRow,
+  AdminTableCell,
+  AdminTableHeadCell,
+  AdminTableHeadRow,
+  ADMIN_TABLE_HEAD_CLASS,
+} from '../components/shared/AdminDataTable';
 import {
   AdminContentPanel,
   AdminEmptyState,
   AdminLoadingState,
   AdminManagementPage,
 } from '../components/shared/AdminManagementPage';
+import { AdminButton, AdminIconButton } from '../components/shared/AdminControls';
 import { AdminPageShell } from '../components/shared/AdminPageShell';
+import AdminRefreshButton from '../components/shared/AdminRefreshButton';
+import ConfirmDialog from '../components/shared/ConfirmDialog';
 import Icon from '../components/shared/Icon';
 import InfiniteLoadTrigger from '../components/shared/InfiniteLoadTrigger';
 import ResponsiveSectionTabs from '../components/shared/ResponsiveSectionTabs';
@@ -311,14 +324,12 @@ function LogRow({
   if (isDesktop) {
     return (
       <>
-        <tr
-          className={`cursor-pointer border-b border-outline-variant/5 transition-colors hover:bg-surface-container-high/30 ${
-            selected ? 'bg-primary-container/8' : ''
-          }`}
+        <AdminTableBodyRow
+          className={`cursor-pointer ${selected ? 'bg-primary-container/8' : ''}`}
           onClick={() => setExpanded(!expanded)}
         >
           {selectMode ? (
-            <td className="w-10 px-4 py-3">
+            <AdminTableCell className="w-10">
               <LogSelectBox
                 checked={selected}
                 onToggle={(event) => {
@@ -326,37 +337,37 @@ function LogRow({
                   onToggleSelect(log.id);
                 }}
               />
-            </td>
+            </AdminTableCell>
           ) : null}
-          <td className="px-4 py-3">
-            <span className={`rounded-sm px-2 py-0.5 text-[10px] font-bold ${act.color}`}>{act.label}</span>
-          </td>
-          <td className="px-4 py-3">
+          <AdminTableCell>
+            <span className={`rounded-sm px-2 py-0.5 text-[10px] font-medium ${act.color}`}>{act.label}</span>
+          </AdminTableCell>
+          <AdminTableCell>
             <span className="rounded-sm bg-surface-container-highest px-2 py-0.5 text-[11px] font-medium text-on-surface-variant">
               {resLabel}
             </span>
-          </td>
-          <td className="min-w-0 px-4 py-3">
-            <p className="max-w-[520px] truncate text-xs font-medium text-on-surface">{summary}</p>
-            <p className="mt-0.5 max-w-[520px] truncate font-mono text-[10px] text-on-surface-variant/45">
+          </AdminTableCell>
+          <AdminTableCell className="min-w-0">
+            <p className={`max-w-[520px] ${ADMIN_ROW_TITLE_CLASS}`}>{summary}</p>
+            <p className={`mt-0.5 max-w-[520px] font-mono text-[10px] ${ADMIN_ROW_META_CLASS}`}>
               {log.resourceId || log.details?.path || log.id}
             </p>
-          </td>
-          <td className="px-4 py-3 text-xs text-on-surface-variant/70">{actor}</td>
-          <td className="whitespace-nowrap px-4 py-3 text-xs text-on-surface-variant/45">
+          </AdminTableCell>
+          <AdminTableCell muted>{actor}</AdminTableCell>
+          <AdminTableCell muted className="whitespace-nowrap">
             {formatDateTime(log.createdAt)}
-          </td>
-        </tr>
+          </AdminTableCell>
+        </AdminTableBodyRow>
         {expanded && detailLines.length > 0 ? (
-          <tr className="border-b border-outline-variant/5 bg-surface-container-high/20">
-            <td colSpan={selectMode ? 6 : 5} className="px-4 py-3">
+          <AdminTableBodyRow className="bg-surface-container-high/20 hover:bg-surface-container-high/20">
+            <AdminTableCell colSpan={selectMode ? 6 : 5}>
               <div className="grid grid-cols-2 gap-x-5 gap-y-1.5">
                 {detailLines.map((detail, index) => (
                   <DetailRow key={`${detail.label}-${index}`} label={detail.label} value={detail.value} compact />
                 ))}
               </div>
-            </td>
-          </tr>
+            </AdminTableCell>
+          </AdminTableBodyRow>
         ) : null}
       </>
     );
@@ -415,11 +426,17 @@ function LogRow({
 
 function AuditActionTabs({
   active,
+  className,
   counts,
+  desktopVariant = 'default',
+  mobileTriggerVariant = 'surface',
   onChange,
 }: {
   active: AuditActionTabValue;
+  className?: string;
   counts: Record<AuditActionTabValue, number>;
+  desktopVariant?: 'default' | 'subtle';
+  mobileTriggerVariant?: 'plain' | 'surface';
   onChange: (value: AuditActionTabValue) => void;
 }) {
   return (
@@ -431,33 +448,82 @@ function AuditActionTabs({
       value={active}
       onChange={(value) => onChange(value as AuditActionTabValue)}
       mobileTitle="日志类型"
+      mobileTriggerVariant={mobileTriggerVariant}
+      desktopVariant={desktopVariant}
       countUnit="条"
+      className={className}
     />
+  );
+}
+
+function AuditHeaderActionTabs({
+  active,
+  onChange,
+}: {
+  active: AuditActionTabValue;
+  onChange: (value: AuditActionTabValue) => void;
+}) {
+  return (
+    <nav className="hidden min-w-0 flex-wrap items-center justify-end gap-x-2 gap-y-1 md:flex">
+      {ACTION_TABS.map((tab) => {
+        const isActive = active === tab.value;
+        return (
+          <button
+            key={tab.value}
+            type="button"
+            onClick={() => onChange(tab.value)}
+            className={`group relative inline-flex h-9 shrink-0 items-center gap-2 rounded-md px-2 text-sm font-semibold transition-colors after:absolute after:bottom-0 after:left-2 after:right-2 after:h-px after:rounded-full after:transition-opacity ${
+              isActive
+                ? 'text-primary-container after:bg-primary-container after:opacity-90'
+                : 'text-on-surface-variant/78 after:bg-transparent after:opacity-0 hover:text-on-surface'
+            }`}
+          >
+            <Icon
+              name={tab.icon}
+              size={15}
+              className={isActive ? 'text-primary-container' : 'text-on-surface-variant/62 group-hover:text-on-surface'}
+            />
+            <span>{tab.label}</span>
+          </button>
+        );
+      })}
+    </nav>
   );
 }
 
 function ResourceFilterChips({ value, onChange }: { value: string; onChange: (value: string) => void }) {
   return (
-    <div className="flex min-w-0 items-center overflow-x-auto pb-0.5 scrollbar-none">
-      {RESOURCE_FILTERS.map((item, index) => {
-        const active = value === item.value;
-        return (
-          <Fragment key={item.value || 'all'}>
-            {index > 0 ? <span className="mx-2 h-3 w-px shrink-0 bg-outline-variant/25" /> : null}
-            <button
-              type="button"
-              onClick={() => onChange(item.value)}
-              className={`relative inline-flex h-8 shrink-0 items-center gap-1.5 px-1 text-xs font-medium transition-colors ${
-                active ? 'text-primary-container' : 'text-on-surface-variant hover:text-on-surface'
-              }`}
-            >
-              <Icon name={item.icon} size={13} />
-              <span>{item.label}</span>
-              {active ? <span className="absolute inset-x-0 bottom-0 h-0.5 rounded-full bg-primary-container" /> : null}
-            </button>
-          </Fragment>
-        );
-      })}
+    <div className="flex min-w-0 items-center gap-2 overflow-hidden border-t border-outline-variant/10 pt-2">
+      <span className="hidden shrink-0 text-[11px] font-medium text-on-surface-variant/60 md:inline">资源范围</span>
+      <div className="flex min-w-0 flex-1 items-center overflow-x-auto scrollbar-none">
+        {RESOURCE_FILTERS.map((item, index) => {
+          const active = value === item.value;
+          return (
+            <Fragment key={item.value || 'all'}>
+              {index > 0 ? <span className="mx-2 h-3 w-px shrink-0 bg-outline-variant/16" /> : null}
+              <button
+                type="button"
+                onClick={() => onChange(item.value)}
+                className={`group relative inline-flex h-8 shrink-0 items-center gap-1.5 px-1.5 text-xs font-medium transition-colors ${
+                  active ? 'text-primary-container' : 'text-on-surface-variant/70 hover:text-on-surface'
+                }`}
+              >
+                <Icon
+                  name={item.icon}
+                  size={13}
+                  className={
+                    active ? 'text-primary-container/80' : 'text-on-surface-variant/45 group-hover:text-on-surface'
+                  }
+                />
+                <span>{item.label}</span>
+                {active ? (
+                  <span className="absolute inset-x-1.5 bottom-0 h-px rounded-full bg-primary-container/70" />
+                ) : null}
+              </button>
+            </Fragment>
+          );
+        })}
+      </div>
     </div>
   );
 }
@@ -485,6 +551,7 @@ function AdminSearchField({
 function AuditToolbar({
   activeAction,
   actionCounts,
+  actions,
   onActionChange,
   resource,
   onResourceChange,
@@ -495,6 +562,7 @@ function AuditToolbar({
 }: {
   activeAction: AuditActionTabValue;
   actionCounts: Record<AuditActionTabValue, number>;
+  actions: ReactNode;
   onActionChange: (value: AuditActionTabValue) => void;
   resource: string;
   onResourceChange: (value: string) => void;
@@ -504,19 +572,25 @@ function AuditToolbar({
   total: number;
 }) {
   return (
-    <div className="flex min-h-10 min-w-0 flex-col gap-3">
-      <div className="flex min-w-0 flex-col gap-3 md:flex-row md:items-center md:justify-between">
-        <div className="min-w-0 flex-1">
-          <AuditActionTabs active={activeAction} counts={actionCounts} onChange={onActionChange} />
+    <div className="flex min-h-10 min-w-0 flex-col gap-2.5">
+      <div className="md:hidden">
+        <AuditActionTabs
+          active={activeAction}
+          counts={actionCounts}
+          onChange={onActionChange}
+          mobileTriggerVariant="surface"
+        />
+      </div>
+      <div className="flex min-w-0 flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
+        <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:items-center">
+          <AdminSearchField inputProps={searchInputProps} value={searchInputValue} onClear={onClearSearch} />
+          <span className="shrink-0 whitespace-nowrap text-xs text-on-surface-variant">
+            当前结果 <strong className="text-on-surface tabular-nums">{total}</strong> 条
+          </span>
         </div>
-        <AdminSearchField inputProps={searchInputProps} value={searchInputValue} onClear={onClearSearch} />
+        <div className="flex shrink-0 flex-wrap items-center gap-2">{actions}</div>
       </div>
-      <div className="flex min-w-0 flex-col gap-2 md:flex-row md:items-center md:justify-between">
-        <ResourceFilterChips value={resource} onChange={onResourceChange} />
-        <span className="shrink-0 whitespace-nowrap text-xs text-on-surface-variant">
-          当前结果 <strong className="text-on-surface tabular-nums">{total}</strong> 条
-        </span>
-      </div>
+      <ResourceFilterChips value={resource} onChange={onResourceChange} />
     </div>
   );
 }
@@ -618,25 +692,18 @@ function AuditRetentionDialog({
         </div>
 
         <div className="flex flex-col-reverse gap-2 border-t border-outline-variant/10 px-5 py-4 sm:flex-row sm:justify-end">
-          <button
-            type="button"
+          <AdminButton
             onClick={onCleanup}
             disabled={cleanupDisabled}
-            className="inline-flex items-center justify-center gap-1.5 rounded-sm border border-red-500/20 px-3 py-2 text-sm font-medium text-red-500 transition-colors hover:bg-red-500/10 disabled:cursor-not-allowed disabled:opacity-50"
+            icon="delete_sweep"
+            variant="danger"
             title={changed ? '请先保存保留策略' : undefined}
           >
-            <Icon name="delete_sweep" size={16} />
             {cleaning ? '清理中...' : '立即清理'}
-          </button>
-          <button
-            type="button"
-            onClick={onSave}
-            disabled={!changed || saving || cleaning}
-            className="inline-flex items-center justify-center gap-1.5 rounded-sm bg-primary-container px-4 py-2 text-sm font-medium text-on-primary transition-colors hover:bg-primary disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            <Icon name="save" size={16} />
+          </AdminButton>
+          <AdminButton onClick={onSave} disabled={!changed || saving || cleaning} icon="save" variant="primary">
             {saving ? '保存中...' : '保存策略'}
-          </button>
+          </AdminButton>
         </div>
       </div>
     </div>
@@ -656,11 +723,11 @@ function AuditLogContent() {
     setValue: setSearch,
     inputProps: searchInputProps,
   } = useImeSafeSearchInput();
-  const [refreshing, setRefreshing] = useState(false);
   const [retentionOpen, setRetentionOpen] = useState(false);
   const [retentionDaysDraft, setRetentionDaysDraft] = useState(DEFAULT_AUDIT_RETENTION_DAYS);
   const [retentionSaving, setRetentionSaving] = useState(false);
   const [retentionCleaning, setRetentionCleaning] = useState(false);
+  const [retentionCleanupConfirmOpen, setRetentionCleanupConfirmOpen] = useState(false);
   const { counts, refreshCounts } = useAuditActionCounts(resource, search);
   const {
     data: retentionPolicy,
@@ -687,11 +754,11 @@ function AuditLogContent() {
     setSelectedIds(new Set());
   }, [actionGroup, resource, search, setSize]);
 
-  const pages = data || [];
-  const logs = pages.flatMap((pageData) => pageData.items);
-  const loadedIdsKey = logs.map((log) => log.id).join('|');
+  const pages = useMemo(() => data || [], [data]);
+  const logs = useMemo(() => pages.flatMap((pageData) => pageData.items), [pages]);
+  const loadedIdsKey = useMemo(() => logs.map((log) => log.id).join('|'), [logs]);
   const total = pages[0]?.total ?? counts?.[actionGroup] ?? 0;
-  const selectedLogs = logs.filter((log) => selectedIds.has(log.id));
+  const selectedLogs = useMemo(() => logs.filter((log) => selectedIds.has(log.id)), [logs, selectedIds]);
   const selectedCount = selectedLogs.length;
   const hasMore = logs.length < total;
   const isLoadingMore = Boolean(size > 0 && !data?.[size - 1]);
@@ -765,7 +832,6 @@ function AuditLogContent() {
   }
 
   async function handleRefresh() {
-    setRefreshing(true);
     try {
       await setSize(1);
       await Promise.all([
@@ -776,8 +842,6 @@ function AuditLogContent() {
       toast('操作日志已刷新', 'success');
     } catch (err: unknown) {
       toast(getErrorMessage(err, '刷新操作日志失败'), 'error');
-    } finally {
-      setRefreshing(false);
     }
   }
 
@@ -809,10 +873,11 @@ function AuditLogContent() {
       toast('当前没有需要清理的日志', 'info');
       return;
     }
-    const cutoffLabel = retentionPolicy?.cutoffAt ? formatDateTime(retentionPolicy.cutoffAt) : '';
-    const confirmed = window.confirm(`确认清理 ${deleteCount} 条早于 ${cutoffLabel} 的操作日志吗？清理后不可恢复。`);
-    if (!confirmed) return;
+    setRetentionCleanupConfirmOpen(true);
+  }
 
+  async function handleConfirmCleanupByRetention() {
+    setRetentionCleanupConfirmOpen(false);
     setRetentionCleaning(true);
     try {
       const result = await cleanupAuditLogsByRetention(retentionDaysDraft);
@@ -827,45 +892,20 @@ function AuditLogContent() {
 
   const actions = (
     <div className="flex items-center gap-2">
-      <button
-        type="button"
-        onClick={handleRefresh}
-        disabled={refreshing}
-        className={
-          isDesktop
-            ? 'flex items-center gap-2 rounded-lg border border-outline-variant/20 px-4 py-2.5 text-sm text-on-surface-variant transition-colors hover:text-on-surface disabled:opacity-50'
-            : 'inline-flex h-9 items-center gap-1 rounded-lg border border-outline-variant/20 px-3 text-xs text-on-surface-variant disabled:opacity-50'
-        }
-        aria-label="刷新"
-      >
-        <Icon name="refresh" size={isDesktop ? 16 : 14} className={refreshing ? 'animate-spin' : ''} />
-        {isDesktop ? (refreshing ? '刷新中...' : '刷新') : null}
-      </button>
-      <button
-        type="button"
-        onClick={openRetentionPolicy}
-        className={
-          isDesktop
-            ? 'flex items-center gap-2 rounded-lg border border-outline-variant/20 px-4 py-2.5 text-sm text-on-surface-variant transition-colors hover:text-on-surface'
-            : 'inline-flex h-9 items-center gap-1 rounded-lg border border-outline-variant/20 px-3 text-xs text-on-surface-variant'
-        }
-      >
-        <Icon name="auto_delete" size={isDesktop ? 16 : 14} />
+      <AdminRefreshButton onRefresh={handleRefresh} mobileIconOnly />
+      <AdminButton onClick={openRetentionPolicy} icon="auto_delete" size={isDesktop ? 'md' : 'sm'} variant="secondary">
         {isDesktop ? '保留策略' : '策略'}
-      </button>
+      </AdminButton>
       {total > 0 ? (
-        <button
-          type="button"
+        <AdminButton
           onClick={toggleSelectMode}
-          className={`flex items-center gap-1.5 rounded-sm border px-3 py-1.5 text-sm transition-colors ${
-            selectMode
-              ? 'border-primary/30 bg-primary-container/10 text-primary'
-              : 'border-outline-variant/20 text-on-surface-variant hover:border-outline-variant/40 hover:text-on-surface'
-          }`}
+          active={selectMode}
+          icon={selectMode ? 'close' : 'checklist'}
+          size={isDesktop ? 'md' : 'sm'}
+          variant="secondary"
         >
-          <Icon name={selectMode ? 'close' : 'checklist'} size={16} />
           {isDesktop ? (selectMode ? '取消选择' : '批量操作') : selectMode ? '取消' : '批量'}
-        </button>
+        </AdminButton>
       ) : null}
     </div>
   );
@@ -873,6 +913,7 @@ function AuditLogContent() {
     <AuditToolbar
       activeAction={actionGroup}
       actionCounts={actionCounts}
+      actions={actions}
       onActionChange={setActionGroup}
       resource={resource}
       onResourceChange={setResource}
@@ -882,6 +923,7 @@ function AuditLogContent() {
       total={total}
     />
   );
+  const headerNavigation = <AuditHeaderActionTabs active={actionGroup} onChange={setActionGroup} />;
 
   const body = (
     <AdminContentPanel scroll className={isDesktop ? 'h-full overflow-hidden' : undefined}>
@@ -897,16 +939,16 @@ function AuditLogContent() {
       ) : null}
       {logs.length > 0 && isDesktop ? (
         <div className="h-full overflow-auto custom-scrollbar">
-          <table className="w-full">
-            <thead className="sticky top-0 z-10">
-              <tr className="bg-surface-container-low text-xs font-bold uppercase tracking-wider text-on-surface-variant">
-                {selectMode ? <th className="w-10 px-4 py-3 text-left" /> : null}
-                <th className="px-4 py-3 text-left">操作</th>
-                <th className="px-4 py-3 text-left">资源</th>
-                <th className="px-4 py-3 text-left">详情</th>
-                <th className="px-4 py-3 text-left">用户</th>
-                <th className="px-4 py-3 text-left">时间</th>
-              </tr>
+          <AdminTable>
+            <thead className={ADMIN_TABLE_HEAD_CLASS}>
+              <AdminTableHeadRow>
+                {selectMode ? <AdminTableHeadCell className="w-10" /> : null}
+                <AdminTableHeadCell>操作</AdminTableHeadCell>
+                <AdminTableHeadCell>资源</AdminTableHeadCell>
+                <AdminTableHeadCell>详情</AdminTableHeadCell>
+                <AdminTableHeadCell>用户</AdminTableHeadCell>
+                <AdminTableHeadCell>时间</AdminTableHeadCell>
+              </AdminTableHeadRow>
             </thead>
             <tbody>
               {logs.map((log) => (
@@ -919,13 +961,13 @@ function AuditLogContent() {
                   onToggleSelect={toggleSelected}
                 />
               ))}
-              <tr>
-                <td colSpan={selectMode ? 6 : 5}>
+              <AdminTableBodyRow className="hover:bg-transparent">
+                <AdminTableCell colSpan={selectMode ? 6 : 5}>
                   <InfiniteLoadTrigger hasMore={hasMore} isLoading={isLoadingMore} onLoadMore={loadMore} />
-                </td>
-              </tr>
+                </AdminTableCell>
+              </AdminTableBodyRow>
             </tbody>
-          </table>
+          </AdminTable>
         </div>
       ) : null}
       {logs.length > 0 && !isDesktop ? (
@@ -962,7 +1004,7 @@ function AuditLogContent() {
     <AdminManagementPage
       title="操作日志"
       description="查看后台操作、登录、下载和数据变更记录"
-      actions={actions}
+      headerNavigation={headerNavigation}
       toolbar={toolbar}
       contentClassName="min-h-0 overflow-hidden"
     >
@@ -979,37 +1021,38 @@ function AuditLogContent() {
           onClose={() => setRetentionOpen(false)}
         />
       ) : null}
+      <ConfirmDialog
+        open={retentionCleanupConfirmOpen}
+        onClose={() => setRetentionCleanupConfirmOpen(false)}
+        onConfirm={() => void handleConfirmCleanupByRetention()}
+        icon="auto_delete"
+        title="确认清理日志"
+        description={`确认清理 ${retentionPolicy?.deleteCount ?? 0} 条早于 ${
+          retentionPolicy?.cutoffAt ? formatDateTime(retentionPolicy.cutoffAt) : '保留截止时间'
+        } 的操作日志吗？清理后不可恢复。`}
+        confirmLabel={retentionCleaning ? '清理中...' : '确认清理'}
+        confirmDisabled={retentionCleaning}
+      />
       {selectMode && selectedCount > 0 ? (
         <div className="mb-4 flex items-center gap-3 rounded-lg border border-outline-variant/20 bg-surface-container-high px-4 py-3 shadow-lg">
           <span className="text-sm font-medium text-on-surface">已选 {selectedCount} 条</span>
           <div className="flex-1" />
-          <button
-            type="button"
-            onClick={exportSelectedLogs}
-            className="flex items-center gap-1.5 rounded-sm border border-primary-container/20 bg-primary-container/10 px-3 py-1.5 text-xs font-medium text-primary-container transition-colors hover:bg-primary-container/20"
-          >
-            <Icon name="download" size={14} />
+          <AdminButton onClick={exportSelectedLogs} icon="download" size="sm" variant="tonal">
             导出所选
-          </button>
-          <button
-            type="button"
-            onClick={copySelectedIds}
-            className="flex items-center gap-1.5 rounded-sm border border-outline-variant/20 px-3 py-1.5 text-xs font-medium text-on-surface-variant transition-colors hover:bg-surface-container-high hover:text-on-surface"
-          >
-            <Icon name="content_copy" size={14} />
+          </AdminButton>
+          <AdminButton onClick={copySelectedIds} icon="content_copy" size="sm" variant="secondary">
             复制ID
-          </button>
-          <button
-            type="button"
+          </AdminButton>
+          <AdminIconButton
             onClick={() => {
               setSelectMode(false);
               setSelectedIds(new Set());
             }}
-            className="flex h-7 w-7 items-center justify-center rounded-sm text-on-surface-variant transition-colors hover:bg-surface-container-high hover:text-on-surface"
+            icon="close"
+            size="icon-sm"
+            variant="ghost"
             aria-label="取消选择"
-          >
-            <Icon name="close" size={16} />
-          </button>
+          />
         </div>
       ) : null}
       {body}

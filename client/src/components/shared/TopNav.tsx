@@ -13,10 +13,12 @@ import {
   type FormEvent,
   type KeyboardEvent as ReactKeyboardEvent,
   type MouseEvent as ReactMouseEvent,
+  type ReactNode,
   type Ref,
 } from 'react';
 import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { mutate } from 'swr';
+import type { SystemSettings } from '../../api/settings';
 import { useMediaQuery } from '../../layouts/hooks/useMediaQuery';
 import { getBusinessConfig } from '../../lib/businessConfig';
 import {
@@ -30,18 +32,27 @@ import {
 } from '../../lib/homeSearchState';
 import { isModelDetailPath } from '../../lib/modelReturnPath';
 import { onSiteConfigChange, usePublicSettings } from '../../lib/publicSettings';
+import {
+  INTERFACE_THEME_PREFERENCE_OPTIONS,
+  type InterfaceThemePreferenceScope,
+  isUserInterfaceThemeEnabled,
+  setInterfaceThemePreference,
+  useInterfaceThemePreference,
+  useResolvedAdminInterfaceTheme,
+  useResolvedPublicInterfaceTheme,
+} from '../../lib/interfaceThemePreference';
 import { preloadRouteForPath } from '../../lib/routeLoaders';
 import { useAuthStore } from '../../stores/useAuthStore';
 import { useThemeStore } from '../../stores/useThemeStore';
 import { getInterfaceThemePackage } from '../../themes/interfaceThemes/registry';
-import AuthModal from './AuthModal';
 import BrandMark from './BrandMark';
 import Icon from './Icon';
-import LoginConfirmDialog from './LoginConfirmDialog';
 import { loadNotificationPanel, scheduleNotificationPanelPreload } from './preloadNotificationPanel';
 import { checkProtectedAccess } from './ProtectedLink';
 import SearchField from './SearchField';
 import Tooltip from './Tooltip';
+import { useToast } from './Toast';
+import { useAuthEntry } from './useAuthEntry';
 
 const preloadUploadModal = () => import('./UploadModal');
 const UploadModal = lazy(preloadUploadModal);
@@ -86,15 +97,33 @@ function isComposingNativeEvent(event: Event) {
   return Boolean((event as Event & { isComposing?: boolean }).isComposing);
 }
 
-function NotificationPanelLoader({ compact = false }: { compact?: boolean }) {
+function NotificationPanelLoader({
+  compact = false,
+  onLoginClick,
+  showTooltip = true,
+}: {
+  compact?: boolean;
+  onLoginClick?: () => void;
+  showTooltip?: boolean;
+}) {
   return (
-    <Suspense fallback={<NotificationPanelFallback compact={compact} />}>
-      <NotificationPanel compact={compact} />
+    <Suspense
+      fallback={<NotificationPanelFallback compact={compact} onLoginClick={onLoginClick} showTooltip={showTooltip} />}
+    >
+      <NotificationPanel compact={compact} onLoginClick={onLoginClick} showTooltip={showTooltip} />
     </Suspense>
   );
 }
 
-function NotificationPanelFallback({ compact = false }: { compact?: boolean }) {
+function NotificationPanelFallback({
+  compact = false,
+  onLoginClick,
+  showTooltip = true,
+}: {
+  compact?: boolean;
+  onLoginClick?: () => void;
+  showTooltip?: boolean;
+}) {
   if (!useAuthStore.getState().isAuthenticated) {
     if (compact) {
       return (
@@ -103,11 +132,15 @@ function NotificationPanelFallback({ compact = false }: { compact?: boolean }) {
           onPointerDown={loadNotificationPanel}
           onFocus={loadNotificationPanel}
           onClick={() => {
-            window.location.href = '/login';
+            if (onLoginClick) {
+              onLoginClick();
+            } else {
+              window.location.href = '/login';
+            }
           }}
           className="p-2 rounded-lg text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high transition-colors"
           aria-label="通知"
-          title="登录后查看通知"
+          title={showTooltip ? '登录后查看通知' : undefined}
         >
           <Icon name="notifications" size={20} />
         </button>
@@ -124,8 +157,8 @@ function NotificationPanelFallback({ compact = false }: { compact?: boolean }) {
       onClick={loadNotificationPanel}
       className="p-2 text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high rounded-lg transition-colors relative"
       aria-label="通知"
-      data-tooltip="通知"
-      data-tooltip-side="bottom"
+      data-tooltip={showTooltip ? '通知' : undefined}
+      data-tooltip-side={showTooltip ? 'bottom' : undefined}
     >
       <Icon name="notifications" size={20} />
     </button>
@@ -154,11 +187,13 @@ function UserMenu({
   onLoginRequired,
   onLoginClick,
   adminDefaultPath = '/admin/models',
+  settings,
 }: {
   size?: 'compact' | 'default';
   onLoginRequired: (reason: string, returnUrl: string) => void;
   onLoginClick?: () => void;
   adminDefaultPath?: string;
+  settings?: Partial<SystemSettings>;
 }) {
   const [open, setOpen] = useState(false);
   const user = useAuthStore((s) => s.user);
@@ -250,7 +285,7 @@ function UserMenu({
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: -4, scale: 0.96 }}
             transition={{ duration: 0.15 }}
-            className={`absolute ${isCompact ? 'right-0' : 'right-0'} top-full pt-2 w-48 z-[100]`}
+            className={`absolute ${isCompact ? 'right-0' : 'right-0'} top-full z-[100] w-48 pt-2`}
           >
             <div className="bg-surface-container-high border border-outline-variant/20 rounded-sm shadow-lg py-1">
               <div className="px-4 py-2.5 border-b border-outline-variant/15">
@@ -262,7 +297,7 @@ function UserMenu({
                   key={item.label}
                   onClick={() => {
                     setOpen(false);
-                    const result = checkProtectedAccess(item.path);
+                    const result = checkProtectedAccess(item.path, settings);
                     if (result.action === 'dialog') {
                       onLoginRequired(result.reason, result.returnUrl);
                     } else if (result.action === 'redirect') {
@@ -311,31 +346,176 @@ function UserMenu({
   );
 }
 
-function ThemeToggle() {
+function InterfaceThemeSegment({
+  onSelect,
+  compact = false,
+  scope = 'public',
+}: {
+  onSelect?: (label: string) => void;
+  compact?: boolean;
+  scope?: InterfaceThemePreferenceScope;
+}) {
+  const preference = useInterfaceThemePreference(scope);
+
+  return (
+    <div className="space-y-0.5">
+      {INTERFACE_THEME_PREFERENCE_OPTIONS.map((option) => {
+        const active = preference === option.value;
+        const label = option.shortLabel || option.label;
+        return (
+          <button
+            key={option.value}
+            type="button"
+            aria-pressed={active}
+            onClick={() => {
+              if (active) return;
+              setInterfaceThemePreference(option.value, scope);
+              onSelect?.(label);
+            }}
+            className={`flex h-8 w-full items-center justify-between rounded-lg px-2.5 text-xs font-medium transition-colors ${
+              active
+                ? 'bg-surface-container-highest/45 text-on-surface'
+                : 'text-on-surface-variant hover:bg-surface-container-highest/25 hover:text-on-surface'
+            } ${compact ? 'h-6 text-[11px]' : ''}`}
+          >
+            <span>{label}</span>
+            <span
+              className={`flex h-4 w-4 items-center justify-center text-primary-container transition-opacity ${
+                active ? 'opacity-100' : 'opacity-0'
+              }`}
+              aria-hidden="true"
+            >
+              <Icon name="check" size={13} />
+            </span>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+function ThemeToggle({
+  showTooltip = true,
+  showInterfaceThemePreference = false,
+  interfaceThemeScope = 'public',
+}: {
+  showTooltip?: boolean;
+  showInterfaceThemePreference?: boolean;
+  interfaceThemeScope?: InterfaceThemePreferenceScope;
+}) {
+  const [open, setOpen] = useState(false);
   const theme = useThemeStore((state) => state.theme);
   const toggleTheme = useThemeStore((state) => state.toggleTheme);
+  const { toast } = useToast();
+  const ref = useRef<HTMLDivElement>(null);
+  const label = '显示设置';
+
+  useEffect(() => {
+    if (!open) return;
+    const handler = (event: MouseEvent) => {
+      if (ref.current && !ref.current.contains(event.target as Node)) setOpen(false);
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [open]);
+
+  const setDisplayMode = (mode: 'light' | 'dark') => {
+    if (theme === mode) return;
+    if (theme !== mode) toggleTheme();
+    toast(mode === 'dark' ? '已切换为深色模式' : '已切换为浅色模式', 'success');
+  };
+
+  const displayModes = [
+    { value: 'light' as const, label: '浅色', icon: 'light_mode' },
+    { value: 'dark' as const, label: '深色', icon: 'dark_mode' },
+  ];
+
   return (
-    <button
-      onClick={toggleTheme}
-      className="p-2 text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high rounded-lg transition-colors"
-      title={theme === 'dark' ? '切换亮色模式' : '切换暗色模式'}
-      aria-label={theme === 'dark' ? '切换亮色模式' : '切换暗色模式'}
-      data-tooltip={theme === 'dark' ? '切换亮色模式' : '切换暗色模式'}
-      data-tooltip-side="bottom"
-    >
-      <AnimatePresence mode="wait">
-        <motion.span
-          key={theme}
-          initial={{ rotate: -90, opacity: 0 }}
-          animate={{ rotate: 0, opacity: 1 }}
-          exit={{ rotate: 90, opacity: 0 }}
-          transition={{ duration: 0.2 }}
-          style={{ display: 'block' }}
-        >
-          <Icon name={theme === 'dark' ? 'light_mode' : 'dark_mode'} size={20} />
-        </motion.span>
+    <div ref={ref} className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen((value) => !value)}
+        className="p-2 text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high rounded-lg transition-colors"
+        title={showTooltip ? label : undefined}
+        aria-label={label}
+        aria-haspopup="dialog"
+        aria-expanded={open}
+        data-tooltip={showTooltip ? label : undefined}
+        data-tooltip-side={showTooltip ? 'bottom' : undefined}
+      >
+        <AnimatePresence mode="wait">
+          <motion.span
+            key={theme}
+            initial={{ rotate: -90, opacity: 0 }}
+            animate={{ rotate: 0, opacity: 1 }}
+            exit={{ rotate: 90, opacity: 0 }}
+            transition={{ duration: 0.2 }}
+            style={{ display: 'block' }}
+          >
+            <Icon name={theme === 'dark' ? 'light_mode' : 'dark_mode'} size={20} />
+          </motion.span>
+        </AnimatePresence>
+      </button>
+
+      <AnimatePresence>
+        {open && (
+          <motion.div
+            initial={{ opacity: 0, y: -4, scale: 0.98 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: -4, scale: 0.98 }}
+            transition={{ duration: 0.14 }}
+            className="absolute right-0 top-full z-[120] pt-2"
+          >
+            <div className="w-52 overflow-hidden rounded-xl border border-outline-variant/12 bg-surface/95 p-1.5 shadow-dropdown backdrop-blur-xl">
+              <div className="px-2 pb-1 pt-1 text-[11px] font-medium text-on-surface-variant/55">显示</div>
+              <div className="space-y-0.5">
+                {displayModes.map((mode) => {
+                  const active = theme === mode.value;
+                  return (
+                    <button
+                      key={mode.value}
+                      type="button"
+                      aria-pressed={active}
+                      onClick={() => setDisplayMode(mode.value)}
+                      className={`flex h-8 w-full items-center justify-between rounded-lg px-2.5 text-xs font-medium transition-colors ${
+                        active
+                          ? 'bg-surface-container-highest/45 text-on-surface'
+                          : 'text-on-surface-variant hover:bg-surface-container-highest/25 hover:text-on-surface'
+                      }`}
+                    >
+                      <span className="flex min-w-0 items-center gap-2">
+                        <Icon name={mode.icon} size={14} className="shrink-0 opacity-70" />
+                        <span>{mode.label}</span>
+                      </span>
+                      <span
+                        className={`flex h-4 w-4 items-center justify-center text-primary-container transition-opacity ${
+                          active ? 'opacity-100' : 'opacity-0'
+                        }`}
+                        aria-hidden="true"
+                      >
+                        <Icon name="check" size={13} />
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+
+              {showInterfaceThemePreference ? (
+                <div className="mt-1.5 border-t border-outline-variant/10 pt-1.5">
+                  <div className="px-2 pb-1 text-[11px] font-medium text-on-surface-variant/55">界面</div>
+                  <InterfaceThemeSegment
+                    scope={interfaceThemeScope}
+                    onSelect={(nextLabel) => {
+                      toast(`界面风格已切换为${nextLabel}`, 'success');
+                    }}
+                  />
+                </div>
+              ) : null}
+            </div>
+          </motion.div>
+        )}
       </AnimatePresence>
-    </button>
+    </div>
   );
 }
 
@@ -362,11 +542,6 @@ export default function TopNav({ source = 'standalone', ...props }: TopNavProps)
 function TopNavContent({ compact = false, onMenuToggle, source = 'standalone' }: TopNavProps) {
   const [uploadOpen, setUploadOpen] = useState(false);
   const [desktopSearchOpen, setDesktopSearchOpen] = useState(false);
-  const [loginDialogOpen, setLoginDialogOpen] = useState(false);
-  const [loginReturnUrl, setLoginReturnUrl] = useState('');
-  const [loginDialogReason, setLoginDialogReason] = useState('');
-  const [authDialogOpen, setAuthDialogOpen] = useState(false);
-  const [authDialogReturnUrl, setAuthDialogReturnUrl] = useState('');
   const user = useAuthStore((state) => state.user);
   const isAdmin = user?.role === 'ADMIN';
   const [searchParams] = useSearchParams();
@@ -385,6 +560,9 @@ function TopNavContent({ compact = false, onMenuToggle, source = 'standalone' }:
     return onSiteConfigChange(() => forceUpdate((n) => n + 1));
   }, []);
   const { settings } = usePublicSettings();
+  const { authNodes, handleProtectedLinkClick, openAuthEntry, openLoginPrompt } = useAuthEntry(settings);
+  const resolvedPublicTheme = useResolvedPublicInterfaceTheme(settings);
+  const resolvedAdminTheme = useResolvedAdminInterfaceTheme(settings);
   const { userNavItems, adminNavItems } = useMemo(() => {
     const business = getBusinessConfig(settings);
     return {
@@ -393,8 +571,10 @@ function TopNavContent({ compact = false, onMenuToggle, source = 'standalone' }:
     };
   }, [settings]);
   const topNavItems = useMemo(() => userNavItems.filter((item) => item.path !== '/'), [userNavItems]);
-  const ThemePackage = getInterfaceThemePackage(settings?.interface_theme);
+  const isAdminRoute = location.pathname === '/admin' || location.pathname.startsWith('/admin/');
+  const ThemePackage = getInterfaceThemePackage(isAdminRoute ? resolvedAdminTheme : resolvedPublicTheme);
   const ThemeTopNav = ThemePackage.components.DesktopTopNav;
+  const showDesktopTooltips = ThemePackage.chrome.desktopToolbar?.showTooltips ?? true;
   const adminDefaultPath =
     ThemePackage.chrome.adminLayout.defaultPath?.({
       pathname: location.pathname,
@@ -404,14 +584,6 @@ function TopNavContent({ compact = false, onMenuToggle, source = 'standalone' }:
   const getReturnPath = useCallback(
     () => `${location.pathname}${location.search}${location.hash}`,
     [location.hash, location.pathname, location.search],
-  );
-
-  const openAuthDialog = useCallback(
-    (nextReturnUrl?: string) => {
-      setAuthDialogReturnUrl(nextReturnUrl || getReturnPath());
-      setAuthDialogOpen(true);
-    },
-    [getReturnPath],
   );
 
   useEffect(() => {
@@ -567,18 +739,9 @@ function TopNavContent({ compact = false, onMenuToggle, source = 'standalone' }:
 
   const handleProtectedNavClick = useCallback(
     (event: ReactMouseEvent, path: string) => {
-      const result = checkProtectedAccess(path);
-      if (result.action === 'dialog') {
-        event.preventDefault();
-        setLoginReturnUrl(result.returnUrl);
-        setLoginDialogReason(result.reason);
-        setLoginDialogOpen(true);
-      } else if (result.action === 'redirect') {
-        event.preventDefault();
-        openAuthDialog(result.returnUrl);
-      }
+      handleProtectedLinkClick(event, path);
     },
-    [openAuthDialog],
+    [handleProtectedLinkClick],
   );
 
   const isNavActive = useCallback(
@@ -635,11 +798,19 @@ function TopNavContent({ compact = false, onMenuToggle, source = 'standalone' }:
       className={className}
     />
   );
+  const renderToolbarTooltip = (children: ReactNode, text: string) =>
+    showDesktopTooltips ? (
+      <Tooltip text={text} side="bottom">
+        {children}
+      </Tooltip>
+    ) : (
+      <>{children}</>
+    );
 
   const desktopSearchTool =
     ThemePackage.chrome.desktopSearch.placement === 'toolbar' ? (
       <div ref={desktopSearchRef} className="relative">
-        <Tooltip text="搜索" side="bottom">
+        {renderToolbarTooltip(
           <button
             type="button"
             onClick={() => setDesktopSearchOpen((value) => !value)}
@@ -649,8 +820,9 @@ function TopNavContent({ compact = false, onMenuToggle, source = 'standalone' }:
             aria-expanded={desktopSearchOpen}
           >
             <Icon name="search" size={20} />
-          </button>
-        </Tooltip>
+          </button>,
+          '搜索',
+        )}
         <AnimatePresence>
           {desktopSearchOpen && (
             <motion.div
@@ -674,29 +846,33 @@ function TopNavContent({ compact = false, onMenuToggle, source = 'standalone' }:
 
   const desktopTools = (
     <>
-      {isAdmin && (
-        <Tooltip text="上传模型" side="bottom">
+      {isAdmin &&
+        renderToolbarTooltip(
           <button
             onClick={() => setUploadOpen(true)}
             onPointerEnter={preloadUploadModal}
             onPointerDown={preloadUploadModal}
             onFocus={preloadUploadModal}
             className="p-2 text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high rounded-lg transition-colors"
+            aria-label="上传模型"
           >
             <Icon name="cloud_upload" size={20} />
-          </button>
-        </Tooltip>
-      )}
+          </button>,
+          '上传模型',
+        )}
       {desktopSearchTool}
-      <NotificationPanelLoader />
-      <ThemeToggle />
+      <NotificationPanelLoader onLoginClick={() => openAuthEntry(getReturnPath())} showTooltip={showDesktopTooltips} />
+      <ThemeToggle
+        showTooltip={showDesktopTooltips}
+        showInterfaceThemePreference={isAdminRoute || isUserInterfaceThemeEnabled(settings)}
+        interfaceThemeScope={isAdminRoute ? 'admin' : 'public'}
+      />
       <UserMenu
         adminDefaultPath={adminDefaultPath}
-        onLoginClick={() => openAuthDialog(getReturnPath())}
+        settings={settings}
+        onLoginClick={() => openAuthEntry(getReturnPath())}
         onLoginRequired={(reason, returnUrl) => {
-          setLoginReturnUrl(returnUrl);
-          setLoginDialogReason(reason);
-          setLoginDialogOpen(true);
+          openLoginPrompt(reason, returnUrl);
         }}
       />
     </>
@@ -743,16 +919,15 @@ function TopNavContent({ compact = false, onMenuToggle, source = 'standalone' }:
               <BrandMark size="compact" eagerLoad />
             </Link>
             <div className="ml-auto flex h-9 shrink-0 items-center gap-0.5">
-              <NotificationPanelLoader compact />
+              <NotificationPanelLoader compact onLoginClick={() => openAuthEntry(getReturnPath())} />
               <ThemeToggle />
               <UserMenu
                 size="compact"
                 adminDefaultPath={adminDefaultPath}
-                onLoginClick={() => openAuthDialog(getReturnPath())}
+                settings={settings}
+                onLoginClick={() => openAuthEntry(getReturnPath())}
                 onLoginRequired={(reason, returnUrl) => {
-                  setLoginReturnUrl(returnUrl);
-                  setLoginDialogReason(reason);
-                  setLoginDialogOpen(true);
+                  openLoginPrompt(reason, returnUrl);
                 }}
               />
             </div>
@@ -784,14 +959,7 @@ function TopNavContent({ compact = false, onMenuToggle, source = 'standalone' }:
           )}
         </header>
         <UploadModalLoader open={uploadOpen} onClose={() => setUploadOpen(false)} onConverted={handleUploaded} />
-        <LoginConfirmDialog
-          open={loginDialogOpen}
-          onClose={() => setLoginDialogOpen(false)}
-          reason={loginDialogReason}
-          returnUrl={loginReturnUrl}
-          onLogin={() => openAuthDialog(loginReturnUrl || getReturnPath())}
-        />
-        <AuthModal open={authDialogOpen} onClose={() => setAuthDialogOpen(false)} returnUrl={authDialogReturnUrl} />
+        {authNodes}
       </>
     );
   }
@@ -813,14 +981,7 @@ function TopNavContent({ compact = false, onMenuToggle, source = 'standalone' }:
         onNavClick={handleProtectedNavClick}
       />
       <UploadModalLoader open={uploadOpen} onClose={() => setUploadOpen(false)} onConverted={handleUploaded} />
-      <LoginConfirmDialog
-        open={loginDialogOpen}
-        onClose={() => setLoginDialogOpen(false)}
-        reason={loginDialogReason}
-        returnUrl={loginReturnUrl}
-        onLogin={() => openAuthDialog(loginReturnUrl || getReturnPath())}
-      />
-      <AuthModal open={authDialogOpen} onClose={() => setAuthDialogOpen(false)} returnUrl={authDialogReturnUrl} />
+      {authNodes}
     </>
   );
 }

@@ -35,6 +35,7 @@ export interface NavItemConfig {
 export interface UploadPolicy {
   modelFormats: string[];
   modelMaxSizeMb: number;
+  modelDrawingMaxSizeMb: number;
   batchArchiveMaxSizeMb: number;
   chunkSizeMb: number;
   chunkThresholdMb: number;
@@ -45,6 +46,7 @@ export interface UploadPolicy {
   selectionImportMaxColumns: number;
   productWallImageMaxSizeMb: number;
   productWallUploadMaxFiles: number;
+  productWallArchiveExtractMaxFiles: number;
   ticketAttachmentMaxSizeMb: number;
   ticketAttachmentExts: string[];
 }
@@ -151,7 +153,8 @@ export const DEFAULT_MOBILE_NAV: NavItemConfig[] = [
 export const DEFAULT_UPLOAD_POLICY: UploadPolicy = {
   modelFormats: ['step', 'stp', 'iges', 'igs', 'x_t', 'xt'],
   modelMaxSizeMb: 500,
-  batchArchiveMaxSizeMb: 500,
+  modelDrawingMaxSizeMb: 500,
+  batchArchiveMaxSizeMb: 51200,
   chunkSizeMb: 5,
   chunkThresholdMb: 20,
   optionImageMaxSizeMb: 5,
@@ -161,21 +164,97 @@ export const DEFAULT_UPLOAD_POLICY: UploadPolicy = {
   selectionImportMaxColumns: 200,
   productWallImageMaxSizeMb: 8,
   productWallUploadMaxFiles: 20,
+  productWallArchiveExtractMaxFiles: 100,
   ticketAttachmentMaxSizeMb: 5,
   ticketAttachmentExts: ['.jpg', '.jpeg', '.png', '.gif', '.webp'],
 };
 
 const DISABLED_MODEL_UPLOAD_FORMATS = new Set(['html', 'htm']);
 
+function stringList(value: unknown, fallback: string[] = []): string[] {
+  if (Array.isArray(value)) return value.map((item) => String(item));
+  if (typeof value === 'string') {
+    return value
+      .split(',')
+      .map((item) => item.trim())
+      .filter(Boolean);
+  }
+  return fallback;
+}
+
 export function normalizeUploadPolicy(policy: UploadPolicy): UploadPolicy {
   const modelFormats = Array.from(
     new Set(
-      (policy.modelFormats || [])
+      stringList(policy.modelFormats)
         .map((item) => item.toLowerCase())
         .filter((item) => item && !DISABLED_MODEL_UPLOAD_FORMATS.has(item)),
     ),
   );
-  return { ...policy, modelFormats: modelFormats.length ? modelFormats : DEFAULT_UPLOAD_POLICY.modelFormats };
+  const clamp = (value: unknown, fallback: number, min: number, max: number) => {
+    const n = Number(value);
+    if (!Number.isFinite(n)) return fallback;
+    return Math.min(max, Math.max(min, Math.round(n)));
+  };
+  return {
+    ...policy,
+    modelFormats: modelFormats.length ? modelFormats : DEFAULT_UPLOAD_POLICY.modelFormats,
+    modelMaxSizeMb: clamp(policy.modelMaxSizeMb, DEFAULT_UPLOAD_POLICY.modelMaxSizeMb, 1, 102400),
+    modelDrawingMaxSizeMb: clamp(policy.modelDrawingMaxSizeMb, DEFAULT_UPLOAD_POLICY.modelDrawingMaxSizeMb, 1, 102400),
+    batchArchiveMaxSizeMb: clamp(policy.batchArchiveMaxSizeMb, DEFAULT_UPLOAD_POLICY.batchArchiveMaxSizeMb, 1, 102400),
+    chunkSizeMb: clamp(policy.chunkSizeMb, DEFAULT_UPLOAD_POLICY.chunkSizeMb, 1, 1024),
+    chunkThresholdMb: clamp(policy.chunkThresholdMb, DEFAULT_UPLOAD_POLICY.chunkThresholdMb, 1, 102400),
+    optionImageMaxSizeMb: clamp(policy.optionImageMaxSizeMb, DEFAULT_UPLOAD_POLICY.optionImageMaxSizeMb, 1, 100),
+    selectionImportMaxSizeMb: clamp(
+      policy.selectionImportMaxSizeMb,
+      DEFAULT_UPLOAD_POLICY.selectionImportMaxSizeMb,
+      1,
+      100,
+    ),
+    selectionImportMaxRows: clamp(
+      policy.selectionImportMaxRows,
+      DEFAULT_UPLOAD_POLICY.selectionImportMaxRows,
+      1,
+      200000,
+    ),
+    selectionImportMaxColumns: clamp(
+      policy.selectionImportMaxColumns,
+      DEFAULT_UPLOAD_POLICY.selectionImportMaxColumns,
+      1,
+      1000,
+    ),
+    productWallImageMaxSizeMb: clamp(
+      policy.productWallImageMaxSizeMb,
+      DEFAULT_UPLOAD_POLICY.productWallImageMaxSizeMb,
+      1,
+      50,
+    ),
+    productWallUploadMaxFiles: clamp(
+      policy.productWallUploadMaxFiles,
+      DEFAULT_UPLOAD_POLICY.productWallUploadMaxFiles,
+      1,
+      50,
+    ),
+    productWallArchiveExtractMaxFiles: clamp(
+      policy.productWallArchiveExtractMaxFiles,
+      DEFAULT_UPLOAD_POLICY.productWallArchiveExtractMaxFiles,
+      1,
+      500,
+    ),
+    ticketAttachmentMaxSizeMb: clamp(
+      policy.ticketAttachmentMaxSizeMb,
+      DEFAULT_UPLOAD_POLICY.ticketAttachmentMaxSizeMb,
+      1,
+      100,
+    ),
+    ticketAttachmentExts: Array.from(
+      new Set(
+        stringList(policy.ticketAttachmentExts, DEFAULT_UPLOAD_POLICY.ticketAttachmentExts)
+          .map((item) => String(item).trim().toLowerCase())
+          .filter(Boolean)
+          .map((item) => (item.startsWith('.') ? item : `.${item}`)),
+      ),
+    ),
+  };
 }
 
 export const DEFAULT_THREAD_PRIORITY: Record<string, number> = {

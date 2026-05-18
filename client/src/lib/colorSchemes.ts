@@ -4,6 +4,8 @@
  * Variables follow the Material Design 3 tonal palette approach.
  */
 
+import * as colorUtils from './colorUtils';
+
 export const SURFACE_COLOR_KEYS = [
   'surface-tint',
   'surface',
@@ -53,27 +55,6 @@ export interface ColorPreset {
 
 type SurfacePalette = Record<SurfaceColorKey, string>;
 
-function clamp(value: number, min: number, max: number): number {
-  return Math.min(max, Math.max(min, value));
-}
-
-function hslToHex(hue: number, saturation: number, lightness: number): string {
-  const h = (((hue % 360) + 360) % 360) / 30;
-  const s = clamp(saturation, 0, 100) / 100;
-  const l = clamp(lightness, 0, 100) / 100;
-  const chroma = s * Math.min(l, 1 - l);
-
-  const channel = (offset: number) => {
-    const k = (offset + h) % 12;
-    const color = l - chroma * Math.max(Math.min(k - 3, 9 - k, 1), -1);
-    return Math.round(255 * clamp(color, 0, 1))
-      .toString(16)
-      .padStart(2, '0');
-  };
-
-  return `#${channel(0)}${channel(8)}${channel(4)}`;
-}
-
 function createSurfacePalette(hue: number, saturation: number): { dark: SurfacePalette; light: SurfacePalette } {
   const darkSat = Math.max(7, Math.round(saturation * 0.52));
   const darkVariantSat = Math.max(14, Math.round(saturation * 0.78));
@@ -82,34 +63,34 @@ function createSurfacePalette(hue: number, saturation: number): { dark: SurfaceP
 
   return {
     dark: {
-      'surface-tint': hslToHex(hue, Math.max(42, saturation), 72),
-      surface: hslToHex(hue, darkSat, 8),
-      'surface-dim': hslToHex(hue, darkSat, 7),
-      'surface-container-lowest': hslToHex(hue, darkSat, 5),
-      'surface-container-low': hslToHex(hue, darkSat, 11),
-      'surface-container': hslToHex(hue, darkSat, 13),
-      'surface-container-high': hslToHex(hue, darkSat, 17),
-      'surface-container-highest': hslToHex(hue, darkSat, 21),
-      'surface-bright': hslToHex(hue, darkSat, 24),
-      'surface-variant': hslToHex(hue, darkVariantSat, 21),
-      'on-surface': hslToHex(hue, 8, 90),
-      'on-background': hslToHex(hue, 8, 90),
-      'on-surface-variant': hslToHex(hue, darkVariantSat, 79),
+      'surface-tint': colorUtils.hslToHex(hue, Math.max(42, saturation), 72),
+      surface: colorUtils.hslToHex(hue, darkSat, 8),
+      'surface-dim': colorUtils.hslToHex(hue, darkSat, 7),
+      'surface-container-lowest': colorUtils.hslToHex(hue, darkSat, 5),
+      'surface-container-low': colorUtils.hslToHex(hue, darkSat, 11),
+      'surface-container': colorUtils.hslToHex(hue, darkSat, 13),
+      'surface-container-high': colorUtils.hslToHex(hue, darkSat, 17),
+      'surface-container-highest': colorUtils.hslToHex(hue, darkSat, 21),
+      'surface-bright': colorUtils.hslToHex(hue, darkSat, 24),
+      'surface-variant': colorUtils.hslToHex(hue, darkVariantSat, 21),
+      'on-surface': colorUtils.hslToHex(hue, 8, 90),
+      'on-background': colorUtils.hslToHex(hue, 8, 90),
+      'on-surface-variant': colorUtils.hslToHex(hue, darkVariantSat, 79),
     },
     light: {
-      'surface-tint': hslToHex(hue, Math.max(42, saturation), 42),
-      surface: hslToHex(hue, lightSat, 98),
-      'surface-dim': hslToHex(hue, lightSat, 92),
+      'surface-tint': colorUtils.hslToHex(hue, Math.max(42, saturation), 42),
+      surface: colorUtils.hslToHex(hue, lightSat, 98),
+      'surface-dim': colorUtils.hslToHex(hue, lightSat, 92),
       'surface-container-lowest': '#ffffff',
-      'surface-container-low': hslToHex(hue, lightSat, 96),
-      'surface-container': hslToHex(hue, lightSat, 94),
-      'surface-container-high': hslToHex(hue, lightSat, 91),
-      'surface-container-highest': hslToHex(hue, lightSat, 88),
-      'surface-bright': hslToHex(hue, lightSat, 98),
-      'surface-variant': hslToHex(hue, lightVariantSat, 88),
-      'on-surface': hslToHex(hue, 12, 12),
-      'on-background': hslToHex(hue, 12, 12),
-      'on-surface-variant': hslToHex(hue, lightVariantSat, 28),
+      'surface-container-low': colorUtils.hslToHex(hue, lightSat, 96),
+      'surface-container': colorUtils.hslToHex(hue, lightSat, 94),
+      'surface-container-high': colorUtils.hslToHex(hue, lightSat, 91),
+      'surface-container-highest': colorUtils.hslToHex(hue, lightSat, 88),
+      'surface-bright': colorUtils.hslToHex(hue, lightSat, 98),
+      'surface-variant': colorUtils.hslToHex(hue, lightVariantSat, 88),
+      'on-surface': colorUtils.hslToHex(hue, 12, 12),
+      'on-background': colorUtils.hslToHex(hue, 12, 12),
+      'on-surface-variant': colorUtils.hslToHex(hue, lightVariantSat, 28),
     },
   };
 }

@@ -151,7 +151,7 @@ export default function ProductWallActionMenu({
               后台
             </button>
             {manageMenuOpen && (
-              <div className="fixed inset-x-4 bottom-[calc(5rem+env(safe-area-inset-bottom))] z-[10001] overflow-hidden rounded-xl border border-outline-variant/14 bg-surface shadow-[0_22px_70px_rgba(0,0,0,0.22)]">
+              <div className="fixed inset-x-4 bottom-[calc(5rem+env(safe-area-inset-bottom))] z-[10001] overflow-hidden rounded-xl border border-outline-variant/14 bg-surface shadow-elevated">
                 {adminItems}
               </div>
             )}
@@ -191,7 +191,7 @@ export default function ProductWallActionMenu({
               后台
             </button>
             {manageMenuOpen && (
-              <div className="absolute right-0 top-11 z-30 w-44 overflow-hidden rounded-md border border-outline-variant/18 bg-surface shadow-[0_16px_46px_rgba(0,0,0,0.16)]">
+              <div className="absolute right-0 top-11 z-30 w-44 overflow-hidden rounded-md border border-outline-variant/18 bg-surface shadow-dialog">
                 {adminItems}
               </div>
             )}

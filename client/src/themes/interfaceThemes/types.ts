@@ -1,6 +1,6 @@
 import type { ComponentType, MouseEvent, ReactElement, ReactNode, RefObject } from 'react';
+import type { Category, HomeBreadcrumb, HomeViewMode, Product } from '../../components/home/homeTypes';
 import type { NavItemConfig } from '../../lib/businessConfig';
-import type { Category, HomeBreadcrumb, HomeViewMode, Product } from './shared/homeTypes';
 
 export type InterfaceThemeKey = 'workbench' | 'classic';
 export type TopNavSource = 'layout' | 'standalone';
@@ -22,6 +22,7 @@ export interface InterfaceThemeMeta {
   key: InterfaceThemeKey;
   label: string;
   settingsLabel: string;
+  shortLabel?: string;
   description: string;
   author: string;
   version: string;
@@ -67,6 +68,7 @@ export interface InterfaceThemeComponents {
 
 export interface InterfaceThemeTemplates {
   DesktopHome: ComponentType<DesktopHomeThemeProps>;
+  AuthDialog: ComponentType<AuthDialogThemeProps>;
   Login: ComponentType<LoginThemeProps>;
   NotFound: ComponentType<NotFoundThemeProps>;
 }
@@ -128,6 +130,16 @@ export interface LoginThemeProps {
   backLink: ReactNode;
 }
 
+export interface AuthDialogThemeProps {
+  mode: 'login' | 'register';
+  brand: ReactNode;
+  title: ReactNode;
+  subtitle: ReactNode;
+  children: ReactNode;
+  closeLabel: string;
+  onClose: () => void;
+}
+
 export interface NotFoundThemeProps {
   brand: ReactNode;
   title: ReactNode;
@@ -141,6 +153,23 @@ export interface InterfaceThemeChromeContext {
 }
 
 export interface InterfaceThemeChrome {
+  desktopToolbar?: {
+    showTooltips?: boolean;
+  };
+  adminSettings?: {
+    moduleNavigation?: {
+      enabled: boolean;
+      basePath?: string;
+    };
+    groupNavigation?: {
+      placement: 'sidebar' | 'top';
+      variant?: 'panel' | 'line';
+      sticky?: boolean;
+    };
+    sectionNavigation?: {
+      variant?: 'line' | 'surface';
+    };
+  };
   desktopSearch: {
     placement: 'inline' | 'toolbar' | 'none';
   };

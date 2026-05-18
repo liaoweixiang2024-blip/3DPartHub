@@ -1,5 +1,5 @@
 import { motion, AnimatePresence } from 'framer-motion';
-import { useState, useCallback, useMemo, useRef } from 'react';
+import { useState, useCallback, useEffect, useId, useMemo, useRef } from 'react';
 import useSWR from 'swr';
 import { mutate as swrMutate } from 'swr';
 import { converterApi, modelApi, type ConversionResponse } from '../../api';
@@ -34,6 +34,8 @@ type UploadResult =
 const CONCURRENCY = 3;
 const UPLOAD_PROGRESS_PAINT_INTERVAL_MS = 180;
 const UPLOAD_STATS_PAINT_INTERVAL_MS = 220;
+let activeUploadOwner: string | null = null;
+let uploadRunCounter = 0;
 
 type UploadStats = {
   loaded: number;
@@ -108,6 +110,10 @@ export default function UploadModal({ open, onClose, onConverted }: UploadModalP
   const [categoryId, setCategoryId] = useState('');
   const [pendingFiles, setPendingFiles] = useState<File[]>([]);
   const inputRef = useRef<HTMLInputElement>(null);
+  const ownerId = useId();
+  const uploadInFlightRef = useRef(false);
+  const activeRunRef = useRef(0);
+  const resultCloseLockedRef = useRef(false);
   const uploadSpeedRef = useRef({ loaded: 0, at: 0, speedBps: 0, total: 0 });
   const uploadStatsPaintRef = useRef(0);
   const progressPaintRef = useRef(0);
@@ -125,6 +131,10 @@ export default function UploadModal({ open, onClose, onConverted }: UploadModalP
     Math.floor(Number.isFinite(configuredArchiveMaxSizeMb) ? configuredArchiveMaxSizeMb : 500),
   );
   const archiveMaxBytes = archiveMaxSizeMb * 1024 * 1024;
+  const modelMaxSizeMb = Math.max(1, Math.floor(Number(uploadPolicy.modelMaxSizeMb) || 500));
+  const modelMaxBytes = modelMaxSizeMb * 1024 * 1024;
+  const drawingMaxSizeMb = Math.max(1, Math.floor(Number(uploadPolicy.modelDrawingMaxSizeMb) || 500));
+  const drawingMaxBytes = drawingMaxSizeMb * 1024 * 1024;
   const formats = useMemo(() => modelFormats.map((f) => f.toLowerCase()), [modelFormats]);
   const formatLabel = useMemo(() => modelFormats.map((f) => f.toUpperCase()).join(' / '), [modelFormats]);
   const unsupportedFormatMessage = useMemo(
@@ -184,7 +194,21 @@ export default function UploadModal({ open, onClose, onConverted }: UploadModalP
     return `已上传 ${formatUploadBytes(uploadStats.loaded)} / ${formatUploadBytes(uploadStats.total)} · 速度 ${formatUploadSpeed(uploadStats.speedBps)}`;
   }, [uploadStats]);
 
+  useEffect(() => {
+    return () => {
+      if (activeUploadOwner === ownerId) {
+        activeUploadOwner = null;
+      }
+    };
+  }, [ownerId]);
+
   const reset = useCallback(() => {
+    if (activeUploadOwner === ownerId) {
+      activeUploadOwner = null;
+    }
+    activeRunRef.current = 0;
+    uploadInFlightRef.current = false;
+    resultCloseLockedRef.current = false;
     setProgress(0);
     setProgressLabel('');
     setUploadStats(null);
@@ -196,12 +220,48 @@ export default function UploadModal({ open, onClose, onConverted }: UploadModalP
     setUploading(false);
     setCategoryId('');
     setPendingFiles([]);
-  }, []);
+  }, [ownerId]);
 
   const handleClose = useCallback(() => {
     reset();
     onClose();
   }, [reset, onClose]);
+
+  const beginUploadRun = useCallback(() => {
+    if (uploadInFlightRef.current || (activeUploadOwner && activeUploadOwner !== ownerId)) return 0;
+    activeUploadOwner = ownerId;
+    const runId = ++uploadRunCounter;
+    activeRunRef.current = runId;
+    resultCloseLockedRef.current = false;
+    uploadInFlightRef.current = true;
+    setUploading(true);
+    return runId;
+  }, [ownerId]);
+
+  const isCurrentUploadRun = useCallback(
+    (runId: number) => {
+      return activeRunRef.current === runId && activeUploadOwner === ownerId;
+    },
+    [ownerId],
+  );
+
+  const finishUploadRun = useCallback(
+    (runId: number) => {
+      if (!isCurrentUploadRun(runId)) return;
+      if (activeUploadOwner === ownerId) {
+        activeUploadOwner = null;
+      }
+      uploadInFlightRef.current = false;
+      setUploading(false);
+    },
+    [isCurrentUploadRun, ownerId],
+  );
+
+  const handleResultClose = useCallback(() => {
+    if (resultCloseLockedRef.current) return;
+    resultCloseLockedRef.current = true;
+    handleClose();
+  }, [handleClose]);
 
   const uploadChunked = useCallback(
     async (
@@ -249,7 +309,8 @@ export default function UploadModal({ open, onClose, onConverted }: UploadModalP
 
   const handleSingleFile = useCallback(
     async (file: File) => {
-      setUploading(true);
+      const runId = beginUploadRun();
+      if (!runId) return;
       setError(null);
       setProgress(5);
       setProgressLabel(file.name);
@@ -283,23 +344,28 @@ export default function UploadModal({ open, onClose, onConverted }: UploadModalP
           });
         }
 
+        if (!isCurrentUploadRun(runId)) return;
         paintProgress(100, true);
         finishUploadStats();
+        setPendingFiles([]);
         const uploadRes: UploadResult = { type: 'single', data: res };
         setResult(uploadRes);
         onConverted?.(res);
       } catch (err: unknown) {
         const message = err instanceof Error ? err.message : '上传失败';
-        setError(message);
+        if (isCurrentUploadRun(runId)) setError(message);
       } finally {
-        setUploading(false);
+        finishUploadRun(runId);
       }
     },
     [
       beginUploadStats,
+      beginUploadRun,
       categoryId,
       chunkThreshold,
       finishUploadStats,
+      finishUploadRun,
+      isCurrentUploadRun,
       onConverted,
       paintProgress,
       reportUploadStats,
@@ -319,6 +385,20 @@ export default function UploadModal({ open, onClose, onConverted }: UploadModalP
       return oversized ? `${oversized.name} 超过 ZIP/RAR 上限 ${archiveMaxSizeMb}MB` : null;
     },
     [archiveMaxBytes, archiveMaxSizeMb, isArchiveFile],
+  );
+  const getFileSizeError = useCallback(
+    (files: File[]) => {
+      const oversizedModel = files.find(
+        (file) => !isArchiveFile(file) && !isDrawingFile(file) && file.size > modelMaxBytes,
+      );
+      if (oversizedModel) return `${oversizedModel.name} 超过模型上限 ${modelMaxSizeMb}MB`;
+
+      const oversizedDrawing = files.find((file) => isDrawingFile(file) && file.size > drawingMaxBytes);
+      if (oversizedDrawing) return `${oversizedDrawing.name} 超过 PDF 图纸上限 ${drawingMaxSizeMb}MB`;
+
+      return null;
+    },
+    [drawingMaxBytes, drawingMaxSizeMb, isArchiveFile, isDrawingFile, modelMaxBytes, modelMaxSizeMb],
   );
 
   const uploadQueuedModelFile = useCallback(
@@ -359,7 +439,8 @@ export default function UploadModal({ open, onClose, onConverted }: UploadModalP
 
   const handleMultiFile = useCallback(
     async (files: File[]) => {
-      setUploading(true);
+      const runId = beginUploadRun();
+      if (!runId) return;
       setError(null);
       let ok = 0;
       let fail = 0;
@@ -450,6 +531,14 @@ export default function UploadModal({ open, onClose, onConverted }: UploadModalP
                 setProgressLabel(`服务器处理中 ${archive.name}...`);
               }
             },
+            onProcessingProgress: (serverProgress) => {
+              if (!isCurrentUploadRun(runId)) return;
+              const base = doneInputs / inputTotal;
+              const span = 1 / inputTotal;
+              const processingRatio = Math.max(0, Math.min(100, serverProgress.percent)) / 100;
+              paintProgress(Math.round((base + span * (0.5 + 0.48 * processingRatio)) * 100));
+              setProgressLabel(serverProgress.message || `服务器处理中 ${archive.name}...`);
+            },
           });
           const archiveOk = resp.results.filter((r) => r.status === 'queued' || r.status === 'completed').length;
           drawings += resp.results.filter((r) => r.drawing_attached).length;
@@ -466,17 +555,22 @@ export default function UploadModal({ open, onClose, onConverted }: UploadModalP
         }
       }
 
+      if (!isCurrentUploadRun(runId)) return;
       paintProgress(100, true);
       finishUploadStats();
+      setPendingFiles([]);
       setResult({ type: 'batch', ok, fail, total, drawings, drawingFail });
       swrMutate('/models/count');
       onConverted?.();
-      setUploading(false);
+      finishUploadRun(runId);
     },
     [
       beginUploadStats,
+      beginUploadRun,
       categoryId,
       finishUploadStats,
+      finishUploadRun,
+      isCurrentUploadRun,
       isArchiveFile,
       isDrawingFile,
       onConverted,
@@ -495,11 +589,28 @@ export default function UploadModal({ open, onClose, onConverted }: UploadModalP
         return;
       }
 
-      setUploading(true);
+      const runId = beginUploadRun();
+      if (!runId) return;
       setError(null);
       setProgress(5);
       setProgressLabel(`正在上传 ${file.name}...`);
       beginUploadStats(file.size);
+      let processingProgress = 55;
+      let processingTimer: ReturnType<typeof setInterval> | null = null;
+      const startProcessingFeedback = () => {
+        if (processingTimer) return;
+        setProgressLabel('服务器处理中...');
+        processingTimer = setInterval(() => {
+          if (!isCurrentUploadRun(runId)) return;
+          processingProgress = Math.min(92, processingProgress + (processingProgress < 75 ? 1.4 : 0.5));
+          paintProgress(processingProgress);
+          if (processingProgress > 84) {
+            setProgressLabel('正在绑定分类和图纸...');
+          } else if (processingProgress > 68) {
+            setProgressLabel('正在解压并识别模型...');
+          }
+        }, 900);
+      };
 
       try {
         const resp = await modelApi.batchUploadFromArchive(file, {
@@ -511,19 +622,35 @@ export default function UploadModal({ open, onClose, onConverted }: UploadModalP
               const pct = Math.round((loaded / file.size) * 50);
               paintProgress(5 + pct);
               if (loaded >= file.size) {
-                setProgressLabel('服务器处理中...');
+                startProcessingFeedback();
               }
             }
           },
+          onProcessingProgress: (serverProgress) => {
+            if (!isCurrentUploadRun(runId)) return;
+            if (processingTimer) {
+              clearInterval(processingTimer);
+              processingTimer = null;
+            }
+            const mappedProgress = 55 + (Math.max(0, Math.min(100, serverProgress.percent)) / 100) * 42;
+            paintProgress(mappedProgress, serverProgress.stage === 'done' || serverProgress.stage === 'error');
+            setProgressLabel(serverProgress.message || '服务器处理中...');
+          },
         });
+        if (processingTimer) {
+          clearInterval(processingTimer);
+          processingTimer = null;
+        }
         finishUploadStats();
-        setProgress(55);
-        setProgressLabel('解压处理中...');
+        paintProgress(Math.max(processingProgress, 94), true);
+        setProgressLabel('正在整理结果...');
         const ok = resp.results.filter((r) => r.status === 'queued' || r.status === 'completed').length;
         const fail = resp.results.length - ok;
         const drawings = resp.results.filter((r) => r.drawing_attached).length;
         const drawingFail = resp.results.filter((r) => r.drawing_error).length;
+        if (!isCurrentUploadRun(runId)) return;
         paintProgress(100, true);
+        setPendingFiles([]);
         setResult({
           type: 'archive',
           archiveType: file.name.toLowerCase().endsWith('.rar') ? 'RAR' : 'ZIP',
@@ -537,16 +664,20 @@ export default function UploadModal({ open, onClose, onConverted }: UploadModalP
         onConverted?.();
       } catch (err: unknown) {
         const message = err instanceof Error ? err.message : '压缩包上传失败';
-        setError(message);
+        if (isCurrentUploadRun(runId)) setError(message);
       } finally {
-        setUploading(false);
+        if (processingTimer) clearInterval(processingTimer);
+        finishUploadRun(runId);
       }
     },
     [
       beginUploadStats,
+      beginUploadRun,
       categoryId,
       finishUploadStats,
+      finishUploadRun,
       getArchiveSizeError,
+      isCurrentUploadRun,
       onConverted,
       paintProgress,
       reportUploadStats,
@@ -569,6 +700,11 @@ export default function UploadModal({ open, onClose, onConverted }: UploadModalP
       setError('PDF 图纸需要和同名模型文件一起上传');
       return;
     }
+    const fileSizeError = getFileSizeError(pendingFiles);
+    if (fileSizeError) {
+      setError(fileSizeError);
+      return;
+    }
     const archiveSizeError = getArchiveSizeError(pendingFiles);
     if (archiveSizeError) {
       setError(archiveSizeError);
@@ -585,6 +721,7 @@ export default function UploadModal({ open, onClose, onConverted }: UploadModalP
     pendingFiles,
     getArchiveSizeError,
     getDrawingMatchError,
+    getFileSizeError,
     handleSingleFile,
     handleMultiFile,
     handleArchiveFile,
@@ -621,6 +758,11 @@ export default function UploadModal({ open, onClose, onConverted }: UploadModalP
         setError('PDF 图纸需要和同名模型文件一起上传');
         return;
       }
+      const fileSizeError = getFileSizeError(filtered);
+      if (fileSizeError) {
+        setError(fileSizeError);
+        return;
+      }
       const archiveSizeError = getArchiveSizeError(filtered);
       if (archiveSizeError) {
         setError(archiveSizeError);
@@ -638,6 +780,7 @@ export default function UploadModal({ open, onClose, onConverted }: UploadModalP
       filterFiles,
       getArchiveSizeError,
       getDrawingMatchError,
+      getFileSizeError,
       handleSingleFile,
       hasUploadableModelInput,
       isArchiveFile,
@@ -666,6 +809,12 @@ export default function UploadModal({ open, onClose, onConverted }: UploadModalP
         e.target.value = '';
         return;
       }
+      const fileSizeError = getFileSizeError(filtered);
+      if (fileSizeError) {
+        setError(fileSizeError);
+        e.target.value = '';
+        return;
+      }
       const archiveSizeError = getArchiveSizeError(filtered);
       if (archiveSizeError) {
         setError(archiveSizeError);
@@ -685,6 +834,7 @@ export default function UploadModal({ open, onClose, onConverted }: UploadModalP
       filterFiles,
       getArchiveSizeError,
       getDrawingMatchError,
+      getFileSizeError,
       handleSingleFile,
       hasUploadableModelInput,
       isArchiveFile,
@@ -718,6 +868,7 @@ export default function UploadModal({ open, onClose, onConverted }: UploadModalP
             <div className="flex items-center justify-between px-4 sm:px-6 py-4 border-b border-outline-variant/10 shrink-0">
               <h2 className="font-headline text-lg font-bold text-on-surface">上传模型文件</h2>
               <button
+                type="button"
                 onClick={handleClose}
                 className="p-1 text-on-surface-variant hover:text-on-surface transition-colors rounded-sm"
               >
@@ -765,7 +916,8 @@ export default function UploadModal({ open, onClose, onConverted }: UploadModalP
                     )}
                   </div>
                   <button
-                    onClick={handleClose}
+                    type="button"
+                    onClick={handleResultClose}
                     className="mt-2 bg-primary-container text-on-primary rounded-sm px-6 py-2 text-sm font-medium hover:opacity-90"
                   >
                     完成
@@ -802,6 +954,7 @@ export default function UploadModal({ open, onClose, onConverted }: UploadModalP
                         </span>
                         {!uploading && (
                           <button
+                            type="button"
                             onClick={() => removePendingFile(i)}
                             className="text-on-surface-variant hover:text-error shrink-0"
                           >
@@ -839,12 +992,14 @@ export default function UploadModal({ open, onClose, onConverted }: UploadModalP
                   ) : (
                     <div className="flex gap-2">
                       <button
+                        type="button"
                         onClick={() => setPendingFiles([])}
                         className="flex-1 border border-outline-variant/30 text-on-surface-variant rounded-sm px-4 py-2 text-sm font-medium hover:bg-surface-container-high"
                       >
                         取消
                       </button>
                       <button
+                        type="button"
                         onClick={startUpload}
                         className="flex-1 bg-primary-container text-on-primary rounded-sm px-4 py-2 text-sm font-medium hover:opacity-90"
                       >
@@ -919,6 +1074,9 @@ export default function UploadModal({ open, onClose, onConverted }: UploadModalP
                         <p className="text-sm text-on-surface mb-1">拖放文件到此处，或点击选择</p>
                         <p className="text-xs text-on-surface-variant">
                           支持 {formatLabel} 模型和同名 PDF，可多选或上传 ZIP/RAR 压缩包（上限 {archiveMaxSizeMb}MB）
+                        </p>
+                        <p className="mt-1 text-[11px] text-on-surface-variant/80">
+                          单模型文件夹可先压缩上传，文件夹名会作为产品名称
                         </p>
                       </>
                     )}

@@ -7,6 +7,11 @@ import {
   sendTestEmail,
   testCacheSettings,
   testStorageSettings,
+  getStorageSyncStatus,
+  getStorageSyncJob,
+  startStorageSyncJob,
+  cancelStorageSyncJob,
+  deleteStorageSyncJob,
   getBackupStats,
   getBackupHealth,
   checkBackupPolicy,
@@ -38,6 +43,10 @@ import {
   type BackupHealth,
   type BackupPolicyCheck,
   type SettingsConnectivityResult,
+  type StorageSyncDirection,
+  type StorageSyncJob,
+  type StorageSyncScope,
+  type StorageSyncStatusPayload,
   scanCleanup,
   executeCleanup,
   type CleanupScanResult,
@@ -50,6 +59,7 @@ import Icon from '../components/shared/Icon';
 import { PageRefreshIndicator } from '../components/shared/PageRefreshFallback';
 import ResponsiveSectionTabs from '../components/shared/ResponsiveSectionTabs';
 import SafeImage from '../components/shared/SafeImage';
+import ConfirmDialog from '../components/shared/ConfirmDialog';
 import { useToast } from '../components/shared/Toast';
 import { useDocumentTitle } from '../hooks/useDocumentTitle';
 import {
@@ -137,6 +147,7 @@ const DEFAULT_SETTINGS: SystemSettings = {
   email_templates: '',
   interface_theme: DEFAULT_INTERFACE_THEME,
   mobile_interface_theme: DEFAULT_MOBILE_THEME,
+  user_interface_theme_enabled: true,
   color_scheme: 'orange',
   color_custom_dark: '{}',
   color_custom_light: '{}',
@@ -318,6 +329,9 @@ const DEFAULT_SETTINGS: SystemSettings = {
   login_dialog_my_tickets: true,
   login_dialog_my_inquiries: true,
   login_dialog_projects: true,
+  auth_modal_enabled: true,
+  storage_sync_enabled: false,
+  storage_sync_delete_extra_enabled: false,
 };
 
 type SettingItemType =
@@ -332,6 +346,8 @@ type SettingItemType =
   | 'email-test'
   | 'cache-test'
   | 'storage-test'
+  | 'storage-policy-info'
+  | 'storage-sync'
   | 'color-scheme';
 
 interface SettingItemBase {
@@ -345,7 +361,7 @@ interface SettingItemBase {
 
 type SystemSettingItem = SettingItemBase & {
   key: keyof SystemSettings;
-  type: Exclude<SettingItemType, 'email-test' | 'cache-test' | 'storage-test'>;
+  type: Exclude<SettingItemType, 'email-test' | 'cache-test' | 'storage-test' | 'storage-policy-info' | 'storage-sync'>;
 };
 
 type ActionSettingItem =
@@ -360,6 +376,14 @@ type ActionSettingItem =
   | (SettingItemBase & {
       key: 'storage_test';
       type: 'storage-test';
+    })
+  | (SettingItemBase & {
+      key: 'storage_policy_info';
+      type: 'storage-policy-info';
+    })
+  | (SettingItemBase & {
+      key: 'storage_sync';
+      type: 'storage-sync';
     });
 
 type SettingItem = SystemSettingItem | ActionSettingItem;
@@ -371,7 +395,7 @@ interface SettingGroup {
 }
 
 function isSystemSettingKey(key: SettingItem['key']): key is keyof SystemSettings {
-  return !['smtp_test', 'cache_test', 'storage_test'].includes(String(key));
+  return !['smtp_test', 'cache_test', 'storage_test', 'storage_policy_info', 'storage_sync'].includes(String(key));
 }
 
 function isSection(item: SettingItem | { _section: string }): item is { _section: string } {
@@ -394,11 +418,18 @@ const STORAGE_PROVIDER_OPTIONS = [
 ];
 
 const CACHE_STORAGE_GROUP_TITLE = '缓存与云存储';
-const CACHE_STORAGE_DEFAULT_SECTION = 'Redis 与页面缓存';
+const CACHE_STORAGE_SECTION_TITLES = [
+  'Redis 与页面缓存',
+  '对象存储服务商',
+  '资源目录与访问策略',
+  '本地与云同步',
+  '图片与资源优化',
+] as const;
 const SETTING_SECTION_ICONS: Record<string, string> = {
   'Redis 与页面缓存': 'memory',
   对象存储服务商: 'cloud',
   资源目录与访问策略: 'folder_open',
+  本地与云同步: 'sync_alt',
   图片与资源优化: 'image',
 };
 
@@ -513,6 +544,12 @@ const GROUPS: SettingGroup[] = [
         options: MOBILE_THEME_OPTIONS,
       },
       {
+        key: 'user_interface_theme_enabled',
+        label: '允许用户自定义前台界面风格',
+        desc: '开启后用户可在前台用户菜单里选择“跟随网站默认 / 经典主题 / 工作台主题”，仅影响公开前台桌面页面。',
+        type: 'switch',
+      },
+      {
         key: 'color_scheme',
         label: '配色方案',
         desc: '预设:orange/blue/green/purple/red/teal 或 custom',
@@ -585,12 +622,18 @@ const GROUPS: SettingGroup[] = [
       { key: 'require_login_download', label: '登录下载', desc: '用户必须登录后才能下载模型文件', type: 'switch' },
       { key: 'allow_register', label: '开放注册', desc: '允许新用户自行注册账号', type: 'switch' },
       {
-        key: 'login_dialog_enabled',
-        label: '登录弹窗提示',
-        desc: '未登录用户访问受限页面时弹出确认弹窗，关闭后将直接跳转到登录页',
+        key: 'auth_modal_enabled',
+        label: '登录/注册表单弹窗',
+        desc: '开启后登录和注册在当前页面弹窗完成；关闭后跳转到独立登录/注册页面',
         type: 'switch',
       },
-      { _section: '按页面控制（仅主开关开启时生效）' },
+      {
+        key: 'login_dialog_enabled',
+        label: '登录提示弹窗',
+        desc: '开启后访问受保护页面时先显示“需要登录”的提示弹窗；关闭后按登录/注册表单设置直接登录或跳转',
+        type: 'switch',
+      },
+      { _section: '按页面控制登录提示（仅“登录提示弹窗”开启时生效）' },
       { key: 'login_dialog_favorites', label: '查看收藏', desc: '访问收藏页面时弹出登录确认', type: 'switch' },
       { key: 'login_dialog_downloads', label: '下载历史', desc: '访问下载历史页面时弹出登录确认', type: 'switch' },
       { key: 'login_dialog_my_shares', label: '我的分享', desc: '访问我的分享页面时弹出登录确认', type: 'switch' },
@@ -1030,57 +1073,63 @@ const GROUPS: SettingGroup[] = [
       },
       { _section: '资源目录与访问策略' },
       {
+        key: 'storage_policy_info',
+        label: '目录说明',
+        desc: '按资源类型说明本地目录、云端对象前缀和访问策略',
+        type: 'storage-policy-info',
+      },
+      {
         key: 'storage_image_prefix',
         label: '图片目录',
-        desc: '模型图片、站点图片等原图目录前缀',
+        desc: '模型图片、站点图片等原图目录前缀；本地对应 static/{前缀}，云端对象也使用同一前缀',
         type: 'text',
       },
       {
         key: 'storage_thumbnail_prefix',
         label: '缩略图目录',
-        desc: '首页列表、模型卡片、产品图库缩略图目录前缀',
+        desc: '首页列表、模型卡片、产品图库缩略图目录前缀；建议公开缓存，适合 CDN 加速',
         type: 'text',
       },
       {
         key: 'storage_model_prefix',
         label: '模型文件目录',
-        desc: 'STEP/STP/IGES/XT 等可下载模型文件目录前缀',
+        desc: 'STEP/STP/IGES/XT 等可下载模型文件目录前缀；私有下载时会走签名链接策略',
         type: 'text',
       },
       {
         key: 'storage_original_prefix',
         label: '原始文件目录',
-        desc: '上传后的原始资源、未转换源文件目录前缀',
+        desc: '上传后的原始资源、未转换源文件目录前缀；通常不直接公开访问',
         type: 'text',
       },
       {
         key: 'storage_drawing_prefix',
         label: '图纸目录',
-        desc: 'PDF、工程图、说明文档等图纸资源目录前缀',
+        desc: 'PDF、工程图、说明文档等图纸资源目录前缀；模型详情下载图纸时优先读取这里',
         type: 'text',
       },
       {
         key: 'storage_product_wall_prefix',
         label: '产品图库目录',
-        desc: '产品图库批量上传、压缩包提取后的图片目录前缀',
+        desc: '产品图库批量上传、压缩包提取后的图片目录前缀；会配合缩略图优化降低列表卡顿',
         type: 'text',
       },
       {
         key: 'storage_attachment_prefix',
         label: '附件目录',
-        desc: '工单、询价沟通、用户上传附件目录前缀',
+        desc: '工单、询价沟通、用户上传附件目录前缀；建议开启私有签名访问',
         type: 'text',
       },
       {
         key: 'storage_backup_prefix',
         label: '备份目录',
-        desc: '数据库备份、资源备份、镜像更新包目录前缀',
+        desc: '数据库备份、资源备份、镜像更新包目录前缀；可参与本地与云存储同步',
         type: 'text',
       },
       {
         key: 'storage_temp_prefix',
         label: '临时目录',
-        desc: '分片上传、转换过程和临时导入文件目录前缀',
+        desc: '分片上传、转换过程和临时导入文件目录前缀；不会参与同步，避免未完成文件被发布',
         type: 'text',
       },
       {
@@ -1112,6 +1161,25 @@ const GROUPS: SettingGroup[] = [
         type: 'number',
         min: 1,
         max: 16,
+      },
+      { _section: '本地与云同步' },
+      {
+        key: 'storage_sync_enabled',
+        label: '启用同步工具',
+        desc: '开启后允许管理员手动执行本地 static 资源与云存储 Bucket 的同步任务',
+        type: 'switch',
+      },
+      {
+        key: 'storage_sync_delete_extra_enabled',
+        label: '允许删除目标端多余文件',
+        desc: '开启后同步面板才允许选择“删除目标端多余文件”；默认关闭，避免误删',
+        type: 'switch',
+      },
+      {
+        key: 'storage_sync',
+        label: '同步任务',
+        desc: '按资源目录执行本地到云端或云端到本地同步，支持进度、停止和记录删除',
+        type: 'storage-sync',
       },
       { _section: '图片与资源优化' },
       {
@@ -1304,6 +1372,34 @@ const GROUPS: SettingGroup[] = [
     ],
   },
 ];
+
+const SETTINGS_NAV_GROUPS = [
+  {
+    title: '基础设置',
+    icon: 'tune',
+    sections: ['站点与品牌', '外观与主题', '系统公告', '菜单配置', '法律条款'],
+  },
+  {
+    title: '访问与安全',
+    icon: 'shield',
+    sections: ['访问控制', '安全防护'],
+  },
+  {
+    title: '业务内容',
+    icon: 'inventory_2',
+    sections: ['下载与分享', '3D 预览', '选型设置', '业务字典', '上传与限制', '邮件服务'],
+  },
+  {
+    title: '缓存与云存储',
+    icon: 'database',
+    sections: [...CACHE_STORAGE_SECTION_TITLES, '缓存清理'],
+  },
+  {
+    title: '运维维护',
+    icon: 'build',
+    sections: ['系统运维', '数据备份'],
+  },
+] as const;
 
 type SettingItemSection = {
   title: string;
@@ -1660,7 +1756,7 @@ function Switch({
 function InterfaceThemePicker({ value, onChange }: { value: string; onChange: (value: string) => void }) {
   const themes = Object.values(INTERFACE_THEME_CATALOG);
   return (
-    <div className="grid w-full gap-3 lg:grid-cols-2">
+    <div className="grid w-full max-w-3xl gap-2 md:grid-cols-2">
       {themes.map((theme) => {
         const selected = value === theme.key;
         return (
@@ -1669,13 +1765,13 @@ function InterfaceThemePicker({ value, onChange }: { value: string; onChange: (v
             type="button"
             aria-pressed={selected}
             onClick={() => onChange(theme.key)}
-            className={`group overflow-hidden rounded-lg border text-left transition-colors ${
+            className={`group flex min-h-[76px] items-center gap-3 overflow-hidden rounded-lg border p-2 text-left transition-colors ${
               selected
                 ? 'border-primary bg-primary-container/10 shadow-sm'
                 : 'border-outline-variant/20 bg-surface-container-lowest hover:border-primary/50'
             }`}
           >
-            <div className="aspect-[16/10] overflow-hidden bg-surface-container">
+            <div className="h-14 w-20 shrink-0 overflow-hidden rounded-md bg-surface-container sm:h-16 sm:w-24">
               {theme.screenshot ? (
                 <SafeImage
                   src={theme.screenshot}
@@ -1685,13 +1781,13 @@ function InterfaceThemePicker({ value, onChange }: { value: string; onChange: (v
                 />
               ) : (
                 <div className="flex h-full items-center justify-center text-on-surface-variant">
-                  <Icon name="palette" size={28} />
+                  <Icon name="palette" size={22} />
                 </div>
               )}
             </div>
-            <div className="space-y-1 px-3 py-3">
+            <div className="min-w-0 flex-1 space-y-0.5">
               <div className="flex items-center justify-between gap-2">
-                <span className="text-sm font-semibold text-on-surface">{theme.label}</span>
+                <span className="truncate text-sm font-semibold text-on-surface">{theme.label}</span>
                 {selected ? <Icon name="check_circle" size={18} className="text-primary" /> : null}
               </div>
               <p className="line-clamp-2 text-xs leading-5 text-on-surface-variant">{theme.description}</p>
@@ -3440,6 +3536,485 @@ function SettingsConnectivityTestPanel({
   );
 }
 
+function StoragePolicyInfoPanel({ settings }: { settings: SystemSettings }) {
+  const rows: { label: string; key: keyof SystemSettings; policy: string; note: string }[] = [
+    {
+      label: '图片原图',
+      key: 'storage_image_prefix',
+      policy: settings.image_cdn_enabled ? '公开缓存 / CDN' : '公开访问',
+      note: '站点图片、模型原图',
+    },
+    {
+      label: '缩略图',
+      key: 'storage_thumbnail_prefix',
+      policy: settings.image_cdn_enabled ? '公开缓存 / CDN' : '公开访问',
+      note: '首页、模型卡片、产品图库列表',
+    },
+    {
+      label: '模型文件',
+      key: 'storage_model_prefix',
+      policy: settings.storage_signed_url_enabled ? '私有签名下载' : '后端鉴权下载',
+      note: 'STEP/STP/IGES/XT 等模型资源',
+    },
+    {
+      label: '原始文件',
+      key: 'storage_original_prefix',
+      policy: settings.storage_signed_url_enabled ? '私有签名访问' : '不建议公开',
+      note: '上传源文件和转换源',
+    },
+    {
+      label: '图纸文件',
+      key: 'storage_drawing_prefix',
+      policy: settings.storage_signed_url_enabled ? '私有签名下载' : '后端鉴权下载',
+      note: 'PDF、工程图、说明文档',
+    },
+    {
+      label: '产品图库',
+      key: 'storage_product_wall_prefix',
+      policy: settings.image_cdn_enabled ? '公开缓存 / CDN' : '公开访问',
+      note: '图库原图、批量导入图片',
+    },
+    {
+      label: '沟通附件',
+      key: 'storage_attachment_prefix',
+      policy: settings.storage_signed_url_enabled ? '私有签名访问' : '后端鉴权访问',
+      note: '工单、询价、用户附件',
+    },
+    {
+      label: '备份文件',
+      key: 'storage_backup_prefix',
+      policy: '管理员访问',
+      note: '数据库备份、资源备份、更新包',
+    },
+    {
+      label: '临时目录',
+      key: 'storage_temp_prefix',
+      policy: '不参与同步',
+      note: '分片上传、转换中间文件',
+    },
+  ];
+
+  return (
+    <div className="w-full max-w-6xl rounded-lg border border-outline-variant/10 bg-surface-container-high/20 p-3">
+      <div className="mb-3 flex items-start gap-3">
+        <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-surface-container-lowest text-primary">
+          <Icon name="folder_open" size={18} />
+        </span>
+        <div className="min-w-0">
+          <p className="text-sm font-semibold text-on-surface">目录与访问策略说明</p>
+          <p className="mt-0.5 text-xs leading-5 text-on-surface-variant">
+            本地存储对应 server/static 下的目录；云存储使用相同对象前缀，方便迁移、同步和 CDN 配置。
+          </p>
+        </div>
+      </div>
+      <div className="overflow-hidden rounded-lg border border-outline-variant/10">
+        <div className="grid grid-cols-[88px_minmax(0,1fr)_112px] gap-0 bg-surface-container text-xs font-semibold text-on-surface-variant sm:grid-cols-[120px_minmax(0,1fr)_140px_minmax(0,1fr)]">
+          <div className="px-3 py-2">资源</div>
+          <div className="px-3 py-2">目录 / 前缀</div>
+          <div className="px-3 py-2">策略</div>
+          <div className="hidden px-3 py-2 sm:block">说明</div>
+        </div>
+        {rows.map((row) => {
+          const prefix = String(settings[row.key] || '').replace(/^\/+|\/+$/g, '') || '-';
+          return (
+            <div
+              key={row.key}
+              className="grid grid-cols-[88px_minmax(0,1fr)_112px] border-t border-outline-variant/5 text-xs sm:grid-cols-[120px_minmax(0,1fr)_140px_minmax(0,1fr)]"
+            >
+              <div className="px-3 py-2 font-medium text-on-surface">{row.label}</div>
+              <div className="min-w-0 px-3 py-2 font-mono text-on-surface-variant">
+                <span className="break-all">{prefix === '-' ? '-' : `static/${prefix}`}</span>
+              </div>
+              <div className="px-3 py-2 text-on-surface-variant">{row.policy}</div>
+              <div className="hidden px-3 py-2 text-on-surface-variant sm:block">{row.note}</div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function storageSyncStatusLabel(status?: StorageSyncJob['status']) {
+  switch (status) {
+    case 'queued':
+      return '排队中';
+    case 'running':
+      return '同步中';
+    case 'done':
+      return '已完成';
+    case 'cancelled':
+      return '已停止';
+    case 'error':
+      return '失败';
+    default:
+      return '未开始';
+  }
+}
+
+function storageSyncStatusClass(status?: StorageSyncJob['status']) {
+  if (status === 'done') return 'border-emerald-500/20 bg-emerald-500/10 text-emerald-600';
+  if (status === 'error') return 'border-error/20 bg-error-container/10 text-error';
+  if (status === 'running' || status === 'queued') return 'border-primary/20 bg-primary-container/10 text-primary';
+  return 'border-outline-variant/10 bg-surface-container-high/30 text-on-surface-variant';
+}
+
+function formatStorageSyncTime(value?: string) {
+  if (!value) return '-';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '-';
+  return date.toLocaleString();
+}
+
+function StorageSyncPanel({ settings }: { settings: SystemSettings }) {
+  const { toast } = useToast();
+  const [payload, setPayload] = useState<StorageSyncStatusPayload | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [working, setWorking] = useState(false);
+  const [direction, setDirection] = useState<StorageSyncDirection>('local_to_cloud');
+  const [selectedScopeKeys, setSelectedScopeKeys] = useState<string[]>([]);
+  const [overwrite, setOverwrite] = useState(true);
+  const [deleteExtraneous, setDeleteExtraneous] = useState(false);
+
+  async function refreshStatus(silent = false) {
+    if (!silent) setLoading(true);
+    try {
+      const next = await getStorageSyncStatus();
+      setPayload(next);
+      setSelectedScopeKeys((current) => {
+        if (current.length > 0) return current;
+        return next.scopes.map((scope) => scope.key);
+      });
+    } catch (err: any) {
+      if (!silent) toast(err.message || '同步状态加载失败', 'error');
+    } finally {
+      if (!silent) setLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    refreshStatus();
+    // The storage-sync panel owns this request lifecycle.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    const active = payload?.active;
+    if (!active || (active.status !== 'running' && active.status !== 'queued')) return undefined;
+    const timer = window.setInterval(async () => {
+      try {
+        const next = await getStorageSyncJob(active.id);
+        setPayload((current) =>
+          current
+            ? {
+                ...current,
+                active: next.status === 'running' || next.status === 'queued' ? next : null,
+                latest: next,
+                jobs: current.jobs.map((job) => (job.id === next.id ? next : job)),
+              }
+            : current,
+        );
+        if (next.status !== 'running' && next.status !== 'queued') {
+          refreshStatus(true);
+        }
+      } catch {
+        refreshStatus(true);
+      }
+    }, 1500);
+    return () => window.clearInterval(timer);
+    // Polling is tied to the current active job identity/status.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [payload?.active?.id, payload?.active?.status]);
+
+  const scopes = payload?.scopes || [];
+  const activeJob = payload?.active;
+  const latestJob = payload?.latest;
+  const canDeleteExtra = Boolean(settings.storage_sync_delete_extra_enabled);
+  const disabled = !settings.storage_sync_enabled || working || Boolean(activeJob);
+
+  async function handleStart() {
+    if (!settings.storage_sync_enabled) {
+      toast('请先开启“启用同步工具”并保存设置', 'error');
+      return;
+    }
+    if (selectedScopeKeys.length === 0) {
+      toast('请选择至少一个同步目录', 'error');
+      return;
+    }
+    setWorking(true);
+    try {
+      const job = await startStorageSyncJob({
+        direction,
+        scopes: selectedScopeKeys,
+        overwrite,
+        deleteExtraneous: canDeleteExtra ? deleteExtraneous : false,
+      });
+      setPayload((current) =>
+        current
+          ? { ...current, active: job, latest: job, jobs: [job, ...current.jobs.filter((item) => item.id !== job.id)] }
+          : current,
+      );
+      toast('同步任务已开始');
+    } catch (err: any) {
+      toast(err.message || '同步任务启动失败', 'error');
+    } finally {
+      setWorking(false);
+    }
+  }
+
+  async function handleCancel() {
+    if (!activeJob) return;
+    setWorking(true);
+    try {
+      const job = await cancelStorageSyncJob(activeJob.id);
+      setPayload((current) =>
+        current
+          ? {
+              ...current,
+              active: null,
+              latest: job,
+              jobs: current.jobs.map((item) => (item.id === job.id ? job : item)),
+            }
+          : current,
+      );
+      toast('同步任务已停止');
+    } catch (err: any) {
+      toast(err.message || '停止同步失败', 'error');
+    } finally {
+      setWorking(false);
+    }
+  }
+
+  async function handleDelete(job: StorageSyncJob) {
+    setWorking(true);
+    try {
+      await deleteStorageSyncJob(job.id);
+      setPayload((current) =>
+        current
+          ? {
+              ...current,
+              active: current.active?.id === job.id ? null : current.active,
+              latest: current.latest?.id === job.id ? null : current.latest,
+              jobs: current.jobs.filter((item) => item.id !== job.id),
+            }
+          : current,
+      );
+      toast('同步记录已删除');
+    } catch (err: any) {
+      toast(err.message || '删除同步记录失败', 'error');
+    } finally {
+      setWorking(false);
+    }
+  }
+
+  function toggleScope(scope: StorageSyncScope) {
+    setSelectedScopeKeys((current) =>
+      current.includes(scope.key) ? current.filter((item) => item !== scope.key) : [...current, scope.key],
+    );
+  }
+
+  return (
+    <div className="w-full max-w-6xl space-y-3">
+      <div className={`rounded-lg border p-3 ${storageSyncStatusClass(activeJob?.status || latestJob?.status)}`}>
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
+          <div className="flex min-w-0 flex-1 items-center gap-3">
+            <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-surface-container-lowest/70 text-current">
+              <Icon name={activeJob ? 'sync' : latestJob?.status === 'done' ? 'check_circle' : 'sync_alt'} size={18} />
+            </span>
+            <div className="min-w-0">
+              <p className="text-sm font-semibold text-on-surface">
+                {activeJob ? activeJob.message || '正在同步资源' : latestJob?.message || '暂无正在运行的同步任务'}
+              </p>
+              <p className="mt-0.5 text-xs text-on-surface-variant">
+                {activeJob || latestJob
+                  ? `${storageSyncStatusLabel((activeJob || latestJob)?.status)} · ${formatStorageSyncTime((activeJob || latestJob)?.startedAt)}`
+                  : '可按资源目录执行本地与云端同步'}
+              </p>
+            </div>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={() => refreshStatus()}
+              disabled={loading || working}
+              className="inline-flex h-10 items-center justify-center gap-1.5 rounded-md border border-outline-variant/15 bg-surface-container-lowest px-3 text-xs font-semibold text-on-surface transition-colors hover:border-primary/40 disabled:opacity-50"
+            >
+              <Icon name={loading ? 'progress_activity' : 'refresh'} size={14} />
+              刷新
+            </button>
+            {activeJob ? (
+              <button
+                type="button"
+                onClick={handleCancel}
+                disabled={working}
+                className="inline-flex h-10 items-center justify-center gap-1.5 rounded-md bg-error-container px-3 text-xs font-semibold text-error transition-opacity hover:opacity-90 disabled:opacity-50"
+              >
+                <Icon name="stop_circle" size={14} />
+                停止
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={handleStart}
+                disabled={disabled || selectedScopeKeys.length === 0}
+                className="inline-flex h-10 items-center justify-center gap-1.5 rounded-md bg-primary-container px-4 text-xs font-semibold text-on-primary transition-opacity hover:opacity-90 disabled:opacity-50"
+              >
+                <Icon name={working ? 'progress_activity' : 'play_arrow'} size={14} />
+                开始同步
+              </button>
+            )}
+          </div>
+        </div>
+
+        {(activeJob || latestJob) && (
+          <div className="mt-3">
+            <div className="h-2 overflow-hidden rounded-full bg-surface-container-lowest/70">
+              <div
+                className="h-full rounded-full bg-current transition-all duration-300"
+                style={{ width: `${Math.max(0, Math.min(100, (activeJob || latestJob)?.percent || 0))}%` }}
+              />
+            </div>
+            <div className="mt-2 grid gap-2 text-xs text-on-surface-variant sm:grid-cols-4">
+              <span>进度 {Math.round((activeJob || latestJob)?.percent || 0)}%</span>
+              <span>
+                文件 {(activeJob || latestJob)?.processedFiles || 0}/{(activeJob || latestJob)?.totalFiles || 0}
+              </span>
+              <span>
+                体积 {(activeJob || latestJob)?.processedBytesText || '0 B'}/
+                {(activeJob || latestJob)?.totalBytesText || '0 B'}
+              </span>
+              <span>失败 {(activeJob || latestJob)?.failedFiles || 0}</span>
+            </div>
+          </div>
+        )}
+      </div>
+
+      <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_280px]">
+        <div className="rounded-lg border border-outline-variant/10 bg-surface-container-high/20 p-3">
+          <div className="mb-2 flex items-center justify-between gap-2">
+            <p className="text-sm font-semibold text-on-surface">同步目录</p>
+            <button
+              type="button"
+              onClick={() =>
+                setSelectedScopeKeys((current) =>
+                  current.length === scopes.length ? [] : scopes.map((scope) => scope.key),
+                )
+              }
+              className="text-xs font-medium text-primary hover:underline"
+            >
+              {selectedScopeKeys.length === scopes.length ? '取消全选' : '全选'}
+            </button>
+          </div>
+          <div className="grid gap-2 sm:grid-cols-2">
+            {scopes.map((scope) => {
+              const checked = selectedScopeKeys.includes(scope.key);
+              return (
+                <button
+                  key={scope.key}
+                  type="button"
+                  onClick={() => toggleScope(scope)}
+                  className={`flex min-w-0 items-center gap-2 rounded-md border px-3 py-2 text-left transition-colors ${
+                    checked
+                      ? 'border-primary/30 bg-primary-container/10 text-on-surface'
+                      : 'border-outline-variant/10 bg-surface-container-lowest/70 text-on-surface-variant hover:border-primary/30'
+                  }`}
+                >
+                  <Icon name={checked ? 'check_circle' : 'radio_button_unchecked'} size={16} />
+                  <span className="min-w-0">
+                    <span className="block truncate text-xs font-semibold">{scope.label}</span>
+                    <span className="block truncate text-[11px] font-mono opacity-70">{scope.prefix || '-'}</span>
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        <div className="space-y-3 rounded-lg border border-outline-variant/10 bg-surface-container-high/20 p-3">
+          <div>
+            <p className="mb-2 text-sm font-semibold text-on-surface">方向</p>
+            <div className="grid gap-2">
+              {[
+                { value: 'local_to_cloud', label: '本地 → 云端', icon: 'cloud_upload' },
+                { value: 'cloud_to_local', label: '云端 → 本地', icon: 'cloud_download' },
+              ].map((option) => (
+                <button
+                  key={option.value}
+                  type="button"
+                  onClick={() => setDirection(option.value as StorageSyncDirection)}
+                  className={`inline-flex h-9 items-center gap-2 rounded-md border px-3 text-xs font-semibold transition-colors ${
+                    direction === option.value
+                      ? 'border-primary/30 bg-primary-container/10 text-primary'
+                      : 'border-outline-variant/10 bg-surface-container-lowest/70 text-on-surface-variant'
+                  }`}
+                >
+                  <Icon name={option.icon} size={15} />
+                  {option.label}
+                </button>
+              ))}
+            </div>
+          </div>
+          <label className="flex items-center justify-between gap-3 text-xs text-on-surface">
+            覆盖同名文件
+            <Switch checked={overwrite} onChange={setOverwrite} />
+          </label>
+          <label
+            className={`flex items-center justify-between gap-3 text-xs ${
+              canDeleteExtra ? 'text-on-surface' : 'text-on-surface-variant/50'
+            }`}
+          >
+            删除目标端多余文件
+            <Switch
+              checked={canDeleteExtra && deleteExtraneous}
+              onChange={setDeleteExtraneous}
+              disabled={!canDeleteExtra}
+            />
+          </label>
+          {!settings.storage_sync_enabled ? (
+            <p className="rounded-md bg-yellow-500/10 px-3 py-2 text-xs leading-5 text-yellow-600">
+              需要先开启“启用同步工具”并保存设置。
+            </p>
+          ) : null}
+        </div>
+      </div>
+
+      {payload?.jobs?.length ? (
+        <div className="rounded-lg border border-outline-variant/10 bg-surface-container-high/20">
+          <div className="flex items-center justify-between gap-2 border-b border-outline-variant/10 px-3 py-2">
+            <p className="text-sm font-semibold text-on-surface">最近同步记录</p>
+            <span className="text-xs text-on-surface-variant">{payload.jobs.length} 条</span>
+          </div>
+          <div className="divide-y divide-outline-variant/5">
+            {payload.jobs.slice(0, 5).map((job) => (
+              <div key={job.id} className="flex flex-col gap-2 px-3 py-2 sm:flex-row sm:items-center">
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-xs font-semibold text-on-surface">
+                    {job.direction === 'local_to_cloud' ? '本地到云端' : '云端到本地'} ·{' '}
+                    {storageSyncStatusLabel(job.status)}
+                  </p>
+                  <p className="mt-0.5 truncate text-[11px] text-on-surface-variant">
+                    {formatStorageSyncTime(job.startedAt)} · 复制 {job.copiedFiles} · 跳过 {job.skippedFiles} · 删除{' '}
+                    {job.deletedFiles} · 失败 {job.failedFiles}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => handleDelete(job)}
+                  disabled={working || activeJob?.id === job.id}
+                  className="inline-flex h-8 items-center justify-center gap-1.5 rounded-md px-2 text-xs font-medium text-on-surface-variant transition-colors hover:bg-error-container/10 hover:text-error disabled:opacity-40"
+                >
+                  <Icon name="delete" size={14} />
+                  删除记录
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 function renderEmailSample(source: string, settings: SystemSettings) {
   const vars: Record<string, string> = {
     siteTitle: settings.site_title || '3DPartHub',
@@ -3716,7 +4291,6 @@ function Content() {
   const [cacheTestResult, setCacheTestResult] = useState<SettingsConnectivityResult | null>(null);
   const [storageTestResult, setStorageTestResult] = useState<SettingsConnectivityResult | null>(null);
   const [activeTab, setActiveTab] = useState(GROUPS[0]?.title || '访问控制');
-  const [cacheStorageSubtab, setCacheStorageSubtab] = useState(CACHE_STORAGE_DEFAULT_SECTION);
   const [previewSubtab, setPreviewSubtab] = useState<PreviewSubtab>('general');
   const [matPresetEdit, setMatPresetEdit] = useState<MaterialPresetKey>('default');
   const imageInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
@@ -3750,6 +4324,7 @@ function Content() {
   } | null>(null);
   const [checkingUpdate, setCheckingUpdate] = useState(false);
   const [restoreConfirmId, setRestoreConfirmId] = useState<string | null>(null);
+  const [backupDeleteConfirm, setBackupDeleteConfirm] = useState<{ id: string; name: string } | null>(null);
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState('');
   const [restoring, setRestoring] = useState(false);
@@ -3767,6 +4342,7 @@ function Content() {
   const [cleanupScanning, setCleanupScanning] = useState(false);
   const [cleanupSelectedKeys, setCleanupSelectedKeys] = useState<Set<string>>(new Set());
   const [cleanupRunning, setCleanupRunning] = useState(false);
+  const [cleanupConfirmOpen, setCleanupConfirmOpen] = useState(false);
 
   // Global busy state — prevent concurrent admin operations
   const adminBusy = exporting || importing || restoring || !!verifyingBackupId;
@@ -4444,9 +5020,9 @@ function Content() {
   }
 
   async function handleDelete(id: string) {
-    if (!window.confirm('确定要删除这个备份吗？')) return;
     try {
       await deleteBackup(id);
+      setBackupDeleteConfirm(null);
       loadBackupList();
       loadBackupStats();
       loadBackupHealth();
@@ -4491,16 +5067,78 @@ function Content() {
     }
   }
 
+  async function handleCleanupSelectedConfirm() {
+    if (cleanupSelectedKeys.size === 0 || cleanupRunning) return;
+    setCleanupConfirmOpen(false);
+    setCleanupRunning(true);
+    try {
+      const result = await executeCleanup(Array.from(cleanupSelectedKeys));
+      toast(
+        `清理完成：删除 ${result.deletedCount} 个文件，释放 ${result.freedSizeText}${
+          result.failedCount > 0 ? `，${result.failedCount} 个文件删除失败` : ''
+        }`,
+        result.failedCount > 0 ? 'info' : 'success',
+      );
+      setCleanupSelectedKeys(new Set());
+      const newScan = await scanCleanup();
+      setCleanupScan(newScan);
+    } catch (err: any) {
+      toast(err.message || '清理失败', 'error');
+    } finally {
+      setCleanupRunning(false);
+    }
+  }
+
   if (loading) {
     return <SettingsLoadingState />;
   }
 
+  const cacheStorageGroup = GROUPS.find((group) => group.title === CACHE_STORAGE_GROUP_TITLE);
+  const cacheStorageSections = cacheStorageGroup ? splitSettingGroupSections(cacheStorageGroup) : [];
+  const cacheStorageSectionTabs = cacheStorageSections.map((section) => ({
+    title: section.title,
+    icon: SETTING_SECTION_ICONS[section.title] || 'storage',
+  }));
   const tabs = [
-    ...GROUPS.map((group) => ({ title: group.title, icon: group.icon })),
+    ...GROUPS.filter((group) => group.title !== CACHE_STORAGE_GROUP_TITLE).map((group) => ({
+      title: group.title,
+      icon: group.icon,
+    })),
+    ...cacheStorageSectionTabs,
     { title: '数据备份', icon: 'cloud_upload' },
     { title: '缓存清理', icon: 'cleaning_services' },
   ];
-  const activeGroup = GROUPS.find((group) => group.title === activeTab);
+  const resolvedActiveTab = activeTab === CACHE_STORAGE_GROUP_TITLE ? CACHE_STORAGE_SECTION_TITLES[0] : activeTab;
+  const activeGroup = GROUPS.find((group) => group.title === resolvedActiveTab);
+  const activeCacheStorageSection = cacheStorageSections.find((section) => section.title === resolvedActiveTab);
+  const activeContentGroup =
+    activeGroup ||
+    (activeCacheStorageSection
+      ? {
+          title: activeCacheStorageSection.title,
+          icon: SETTING_SECTION_ICONS[activeCacheStorageSection.title] || 'storage',
+          items: activeCacheStorageSection.items,
+        }
+      : undefined);
+  const tabItems = tabs.map((tab) => ({ value: tab.title, label: tab.title, icon: tab.icon }));
+  const tabItemMap = new Map(tabItems.map((tab) => [tab.value, tab]));
+  const navGroups = SETTINGS_NAV_GROUPS.map((group) => ({
+    ...group,
+    sections: group.sections
+      .map((section) => tabItemMap.get(section))
+      .filter((section): section is (typeof tabItems)[number] => Boolean(section)),
+  })).filter((group) => group.sections.length > 0);
+  const activeNavGroup =
+    navGroups.find((group) => group.sections.some((section) => section.value === resolvedActiveTab)) || navGroups[0];
+  const primaryTabItems = navGroups.map((group) => ({ value: group.title, label: group.title, icon: group.icon }));
+  const secondaryTabItems = activeNavGroup?.sections || tabItems;
+  const handlePrimaryTabChange = (value: string) => {
+    const nextGroup = navGroups.find((group) => group.title === value);
+    const nextTab = nextGroup?.sections[0]?.value;
+    if (nextTab) {
+      setActiveTab(nextTab);
+    }
+  };
   const headerActions = (
     <div className="flex min-h-10 shrink-0 items-center justify-end gap-2">
       <span
@@ -4519,1551 +5157,1538 @@ function Content() {
       </button>
     </div>
   );
-  const tabItems = tabs.map((tab) => ({ value: tab.title, label: tab.title, icon: tab.icon }));
+  const settingsHeaderNavigation = (
+    <ResponsiveSectionTabs
+      tabs={primaryTabItems}
+      value={activeNavGroup?.title || primaryTabItems[0]?.value || ''}
+      onChange={handlePrimaryTabChange}
+      mobileTitle="设置分组"
+      mobileTriggerVariant="surface"
+      desktopVariant="prominent"
+      className="w-full min-w-0"
+    />
+  );
+  const secondarySettingsNavigation =
+    secondaryTabItems.length > 1 ? (
+      <div className="rounded-xl border border-outline-variant/10 bg-surface-container-lowest/80 px-2 py-2 shadow-sm shadow-black/5">
+        <ResponsiveSectionTabs
+          tabs={secondaryTabItems}
+          value={resolvedActiveTab}
+          onChange={setActiveTab}
+          mobileTitle="设置项"
+          mobileTriggerVariant="surface"
+          desktopVariant="subtle"
+          className="w-full min-w-0"
+        />
+      </div>
+    ) : null;
   const mobileSettingsPicker = (
-    <div className="md:hidden">
+    <div className="grid gap-2 md:hidden">
       <ResponsiveSectionTabs
-        tabs={tabItems}
-        value={activeTab}
-        onChange={setActiveTab}
-        mobileTitle="当前分类"
+        tabs={primaryTabItems}
+        value={activeNavGroup?.title || primaryTabItems[0]?.value || ''}
+        onChange={handlePrimaryTabChange}
+        mobileTitle="设置分组"
         mobileTriggerVariant="surface"
       />
+      {secondarySettingsNavigation}
     </div>
-  );
-  const desktopSettingsSidebar = (
-    <aside className="hidden min-h-0 overflow-hidden rounded-xl border border-outline-variant/15 bg-surface-container-low p-2 md:block">
-      <div className="h-full overflow-y-auto pr-1 custom-scrollbar">
-        <div className="space-y-1">
-          {tabItems.map((tab) => {
-            const active = tab.value === activeTab;
-            return (
-              <button
-                key={tab.value}
-                type="button"
-                onClick={() => setActiveTab(tab.value)}
-                className={`group flex min-h-11 w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left transition-colors ${
-                  active
-                    ? 'bg-primary-container text-on-primary shadow-sm'
-                    : 'text-on-surface-variant hover:bg-surface-container hover:text-on-surface'
-                }`}
-              >
-                <span
-                  className={`grid h-7 w-7 shrink-0 place-items-center rounded-lg ${
-                    active
-                      ? 'bg-on-primary/15 text-on-primary'
-                      : 'bg-surface-container-high text-on-surface-variant group-hover:text-on-surface'
-                  }`}
-                >
-                  <Icon name={tab.icon || 'tune'} size={15} />
-                </span>
-                <span className="min-w-0 flex-1">
-                  <span className="block truncate text-sm font-semibold leading-tight">{tab.label}</span>
-                </span>
-              </button>
-            );
-          })}
-        </div>
-      </div>
-    </aside>
   );
 
   return (
-    <AdminManagementPage
-      title="系统设置"
-      description="配置平台的全局行为和访问策略"
-      actions={headerActions}
-      contentClassName="min-h-0 overflow-hidden"
-    >
-      <div className="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)] gap-3 md:grid-cols-[220px_minmax(0,1fr)] md:grid-rows-1 md:gap-4">
-        {mobileSettingsPicker}
-        {desktopSettingsSidebar}
-        <AdminContentPanel scroll className="h-full overflow-hidden">
-          <div className="h-full overflow-y-auto overflow-x-hidden p-4 custom-scrollbar">
-            <div key={activeTab} className="admin-tab-panel flex flex-col gap-4">
-              {activeGroup
-                ? [activeGroup].map((group) => {
-                    const is3DPreview = group.title === '3D 预览';
+    <>
+      <AdminManagementPage
+        title="系统设置"
+        description="配置平台的全局行为和访问策略"
+        actions={headerActions}
+        headerNavigation={settingsHeaderNavigation}
+        contentClassName="min-h-0 overflow-hidden"
+      >
+        <div className="grid h-full min-h-0 grid-rows-[auto_auto_minmax(0,1fr)] gap-3 md:grid-rows-[auto_minmax(0,1fr)]">
+          {mobileSettingsPicker}
+          <div className="hidden min-w-0 md:block">{secondarySettingsNavigation}</div>
+          <AdminContentPanel scroll className="h-full overflow-hidden">
+            <div className="h-full overflow-y-auto overflow-x-hidden p-4 custom-scrollbar">
+              <div key={resolvedActiveTab} className="admin-tab-panel flex flex-col gap-4">
+                {activeContentGroup
+                  ? [activeContentGroup].map((group) => {
+                      const is3DPreview = group.title === '3D 预览';
 
-                    // ── 3D Preview: custom tabbed layout ──
-                    if (is3DPreview) {
-                      return (
-                        <div key={group.title}>
-                          <div className="flex items-center justify-between px-4 py-2">
-                            <div className="flex gap-1 overflow-x-auto">
-                              {PREVIEW_SUBTABS.map((tab) => (
-                                <button
-                                  key={tab.key}
-                                  onClick={() => setPreviewSubtab(tab.key)}
-                                  className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap transition-colors ${
-                                    previewSubtab === tab.key
-                                      ? 'bg-primary-container/20 text-primary-container'
-                                      : 'text-on-surface-variant hover:bg-surface-container-high'
-                                  }`}
-                                >
-                                  <Icon name={tab.icon} size={14} />
-                                  {tab.label}
-                                </button>
-                              ))}
-                            </div>
-                            <button
-                              onClick={handleReset3DPreview}
-                              className="inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium text-on-surface-variant transition-colors hover:bg-surface-container-high hover:text-on-surface shrink-0 ml-2"
-                            >
-                              <Icon name="restart_alt" size={14} />
-                              恢复默认
-                            </button>
-                          </div>
-
-                          <div className="divide-y divide-outline-variant/5">
-                            {/* Material tab: dropdown + dynamic fields */}
-                            {previewSubtab === 'material' ? (
-                              <>
-                                <div className="px-4 sm:px-6 py-4 grid grid-cols-1 lg:grid-cols-[minmax(180px,260px)_minmax(0,1fr)] gap-3 lg:gap-6 lg:items-center">
-                                  <div className="min-w-0 max-w-2xl">
-                                    <p className="text-sm font-medium text-on-surface">选择预设</p>
-                                    <p className="text-xs text-on-surface-variant mt-0.5">选择要编辑的材质预设方案</p>
-                                  </div>
-                                  <select
-                                    value={matPresetEdit}
-                                    onChange={(e) => setMatPresetEdit(e.target.value as MaterialPresetKey)}
-                                    className="w-full lg:max-w-sm bg-surface-container-lowest text-on-surface text-sm rounded-md px-3 py-2 border border-outline-variant/20 outline-none focus:border-primary"
+                      // ── 3D Preview: custom tabbed layout ──
+                      if (is3DPreview) {
+                        return (
+                          <div key={group.title}>
+                            <div className="flex items-center justify-between px-4 py-2">
+                              <div className="flex gap-1 overflow-x-auto">
+                                {PREVIEW_SUBTABS.map((tab) => (
+                                  <button
+                                    key={tab.key}
+                                    onClick={() => setPreviewSubtab(tab.key)}
+                                    className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap transition-colors ${
+                                      previewSubtab === tab.key
+                                        ? 'bg-primary-container/20 text-primary-container'
+                                        : 'text-on-surface-variant hover:bg-surface-container-high'
+                                    }`}
                                   >
-                                    {MAT_PRESET_OPTIONS.map((opt) => (
-                                      <option key={opt.value} value={opt.value}>
-                                        {opt.label}
-                                      </option>
-                                    ))}
-                                  </select>
-                                </div>
-                                {MAT_PRESET_FIELDS[matPresetEdit].map((field) => {
-                                  const val = settings[field.key];
-                                  const isEmpty = val === '' || val === undefined;
-                                  return (
-                                    <div
-                                      key={field.key}
-                                      className="px-4 sm:px-6 py-4 grid grid-cols-1 lg:grid-cols-[minmax(180px,260px)_minmax(0,1fr)] gap-3 lg:gap-6 lg:items-center hover:bg-surface-container-high/30 transition-colors"
+                                    <Icon name={tab.icon} size={14} />
+                                    {tab.label}
+                                  </button>
+                                ))}
+                              </div>
+                              <button
+                                onClick={handleReset3DPreview}
+                                className="inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium text-on-surface-variant transition-colors hover:bg-surface-container-high hover:text-on-surface shrink-0 ml-2"
+                              >
+                                <Icon name="restart_alt" size={14} />
+                                恢复默认
+                              </button>
+                            </div>
+
+                            <div className="divide-y divide-outline-variant/5">
+                              {/* Material tab: dropdown + dynamic fields */}
+                              {previewSubtab === 'material' ? (
+                                <>
+                                  <div className="px-4 sm:px-6 py-4 grid grid-cols-1 lg:grid-cols-[minmax(180px,260px)_minmax(0,1fr)] gap-3 lg:gap-6 lg:items-center">
+                                    <div className="min-w-0 max-w-2xl">
+                                      <p className="text-sm font-medium text-on-surface">选择预设</p>
+                                      <p className="text-xs text-on-surface-variant mt-0.5">选择要编辑的材质预设方案</p>
+                                    </div>
+                                    <select
+                                      value={matPresetEdit}
+                                      onChange={(e) => setMatPresetEdit(e.target.value as MaterialPresetKey)}
+                                      className="w-full lg:max-w-sm bg-surface-container-lowest text-on-surface text-sm rounded-md px-3 py-2 border border-outline-variant/20 outline-none focus:border-primary"
                                     >
-                                      <div className="min-w-0 max-w-2xl">
-                                        <p className="text-sm font-medium text-on-surface">
-                                          {field.label}
-                                          {field.canEmpty && !isEmpty && (
-                                            <button
-                                              onClick={() => updateSetting(field.key, '')}
-                                              className="ml-2 text-[10px] text-error hover:underline"
-                                            >
-                                              重置
-                                            </button>
-                                          )}
-                                        </p>
-                                        <p className="text-xs text-on-surface-variant mt-0.5">{field.desc}</p>
-                                      </div>
-                                      {field.type === 'color' ? (
-                                        <div className="flex items-center gap-2 w-full lg:max-w-sm lg:justify-self-start">
-                                          {!isEmpty && (
-                                            <span
-                                              className="w-6 h-6 rounded-md border border-outline-variant/30 shrink-0"
-                                              style={{ backgroundColor: val as string }}
-                                            />
-                                          )}
-                                          <input
-                                            type="text"
-                                            value={(val as string) || ''}
-                                            onChange={(e) => updateSetting(field.key, e.target.value)}
-                                            placeholder={field.canEmpty ? '留空 = 使用模型原色' : '#FF6600'}
-                                            className="w-full bg-surface-container-lowest text-on-surface text-sm rounded-md px-3 py-2 border border-outline-variant/20 outline-none focus:border-primary placeholder:text-on-surface-variant/30 font-mono"
-                                          />
-                                          <input
-                                            type="color"
-                                            value={(val as string) || '#000000'}
-                                            onChange={(e) => updateSetting(field.key, e.target.value)}
-                                            className="w-8 h-8 rounded cursor-pointer border-0 p-0"
-                                          />
+                                      {MAT_PRESET_OPTIONS.map((opt) => (
+                                        <option key={opt.value} value={opt.value}>
+                                          {opt.label}
+                                        </option>
+                                      ))}
+                                    </select>
+                                  </div>
+                                  {MAT_PRESET_FIELDS[matPresetEdit].map((field) => {
+                                    const val = settings[field.key];
+                                    const isEmpty = val === '' || val === undefined;
+                                    return (
+                                      <div
+                                        key={field.key}
+                                        className="px-4 sm:px-6 py-4 grid grid-cols-1 lg:grid-cols-[minmax(180px,260px)_minmax(0,1fr)] gap-3 lg:gap-6 lg:items-center hover:bg-surface-container-high/30 transition-colors"
+                                      >
+                                        <div className="min-w-0 max-w-2xl">
+                                          <p className="text-sm font-medium text-on-surface">
+                                            {field.label}
+                                            {field.canEmpty && !isEmpty && (
+                                              <button
+                                                onClick={() => updateSetting(field.key, '')}
+                                                className="ml-2 text-[10px] text-error hover:underline"
+                                              >
+                                                重置
+                                              </button>
+                                            )}
+                                          </p>
+                                          <p className="text-xs text-on-surface-variant mt-0.5">{field.desc}</p>
                                         </div>
-                                      ) : field.canEmpty ? (
-                                        <div className="space-y-2 w-full lg:max-w-sm">
-                                          <div className="flex items-center gap-2">
-                                            <Switch
-                                              checked={!isEmpty}
-                                              onChange={(on) => {
-                                                if (on) {
-                                                  updateSetting(field.key, field.min ?? 0);
-                                                } else {
-                                                  updateSetting(field.key, '');
-                                                }
-                                              }}
-                                            />
-                                            <span className="text-xs text-on-surface-variant">
-                                              {isEmpty ? '使用模型原色' : '自定义覆盖'}
-                                            </span>
-                                          </div>
-                                          {!isEmpty && (
-                                            <div className="flex items-center gap-3">
-                                              <input
-                                                type="range"
-                                                min={field.min ?? 0}
-                                                max={field.max ?? 1}
-                                                step={field.step ?? 0.01}
-                                                value={Number(val) || (field.min ?? 0)}
-                                                onChange={(e) => updateSetting(field.key, parseFloat(e.target.value))}
-                                                className="w-full accent-[var(--color-primary-container)]"
+                                        {field.type === 'color' ? (
+                                          <div className="flex items-center gap-2 w-full lg:max-w-sm lg:justify-self-start">
+                                            {!isEmpty && (
+                                              <span
+                                                className="w-6 h-6 rounded-md border border-outline-variant/30 shrink-0"
+                                                style={{ backgroundColor: val as string }}
                                               />
-                                              <span className="text-xs font-mono text-on-surface w-10 text-right">
-                                                {(Number(val) || 0).toFixed(
-                                                  field.step && field.step < 0.1
-                                                    ? 2
-                                                    : field.step && field.step < 1
-                                                      ? 1
-                                                      : 0,
-                                                )}
+                                            )}
+                                            <input
+                                              type="text"
+                                              value={(val as string) || ''}
+                                              onChange={(e) => updateSetting(field.key, e.target.value)}
+                                              placeholder={field.canEmpty ? '留空 = 使用模型原色' : '#FF6600'}
+                                              className="w-full bg-surface-container-lowest text-on-surface text-sm rounded-md px-3 py-2 border border-outline-variant/20 outline-none focus:border-primary placeholder:text-on-surface-variant/30 font-mono"
+                                            />
+                                            <input
+                                              type="color"
+                                              value={(val as string) || '#000000'}
+                                              onChange={(e) => updateSetting(field.key, e.target.value)}
+                                              className="w-8 h-8 rounded cursor-pointer border-0 p-0"
+                                            />
+                                          </div>
+                                        ) : field.canEmpty ? (
+                                          <div className="space-y-2 w-full lg:max-w-sm">
+                                            <div className="flex items-center gap-2">
+                                              <Switch
+                                                checked={!isEmpty}
+                                                onChange={(on) => {
+                                                  if (on) {
+                                                    updateSetting(field.key, field.min ?? 0);
+                                                  } else {
+                                                    updateSetting(field.key, '');
+                                                  }
+                                                }}
+                                              />
+                                              <span className="text-xs text-on-surface-variant">
+                                                {isEmpty ? '使用模型原色' : '自定义覆盖'}
                                               </span>
                                             </div>
-                                          )}
-                                        </div>
-                                      ) : (
-                                        <div className="flex items-center gap-3 w-full lg:max-w-sm lg:justify-self-start">
-                                          <input
-                                            type="range"
-                                            min={field.min ?? 0}
-                                            max={field.max ?? 1}
-                                            step={field.step ?? 0.01}
-                                            value={Number(val) || 0}
-                                            onChange={(e) => updateSetting(field.key, parseFloat(e.target.value))}
-                                            className="w-full accent-[var(--color-primary-container)]"
-                                          />
-                                          <span className="text-xs font-mono text-on-surface w-10 text-right">
-                                            {(Number(val) || 0).toFixed(
-                                              field.step && field.step < 0.1 ? 2 : field.step && field.step < 1 ? 1 : 0,
-                                            )}
-                                          </span>
-                                        </div>
-                                      )}
-                                    </div>
-                                  );
-                                })}
-                              </>
-                            ) : (
-                              /* Non-material tabs: standard rendering */
-                              PREVIEW_TAB_ITEMS[previewSubtab as Exclude<PreviewSubtab, 'material'>].map(
-                                (item, itemIndex) => {
-                                  const structuredEditor =
-                                    isSystemSettingKey(item.key) && STRUCTURED_SETTING_KEYS.has(item.key) ? (
-                                      <StructuredSettingEditor
-                                        itemKey={item.key}
-                                        settings={settings}
-                                        updateSetting={updateSetting}
-                                      />
-                                    ) : null;
-                                  const isWideControl = Boolean(structuredEditor) || item.type === 'textarea';
-                                  const rowClass =
-                                    item.type === 'color-scheme'
-                                      ? 'px-4 sm:px-6 py-4 flex flex-col gap-4'
-                                      : isWideControl
-                                        ? 'px-4 sm:px-6 py-4 flex flex-col gap-3'
-                                        : 'px-4 sm:px-6 py-4 grid grid-cols-1 lg:grid-cols-[minmax(180px,260px)_minmax(0,1fr)] gap-3 lg:gap-6 lg:items-center';
-                                  const loginDialogDisabled =
-                                    item.key.startsWith('login_dialog_') &&
-                                    item.key !== 'login_dialog_enabled' &&
-                                    !settings.login_dialog_enabled;
-                                  return (
-                                    <div
-                                      key={`preview-${item.key}-${itemIndex}`}
-                                      className={`${rowClass} ${loginDialogDisabled ? 'opacity-40 pointer-events-none' : 'hover:bg-surface-container-high/30'} transition-colors`}
-                                    >
-                                      {item.type === 'color-scheme' ? (
-                                        <ColorSchemeEditor settings={settings} updateSetting={updateSetting} />
-                                      ) : (
-                                        <>
-                                          <div className="min-w-0 max-w-2xl">
-                                            <p className="text-sm font-medium text-on-surface">
-                                              {item.label === '__preset_checkboxes__' ? '可见预设' : item.label}
-                                            </p>
-                                            <p className="text-xs text-on-surface-variant mt-0.5">
-                                              {item.label === '__preset_checkboxes__'
-                                                ? '勾选要在模型查看器工具栏中显示的材质预设'
-                                                : item.desc}
-                                            </p>
-                                          </div>
-                                          {item.key === 'viewer_visible_presets' ? (
-                                            <div className="flex flex-wrap gap-2">
-                                              {MAT_PRESET_OPTIONS.map((opt) => {
-                                                const current = String(settings.viewer_visible_presets ?? '');
-                                                const selected =
-                                                  current.trim() === ''
-                                                    ? MAT_PRESET_OPTIONS.map((o) => o.value)
-                                                    : current
-                                                        .split(',')
-                                                        .map((s) => s.trim())
-                                                        .filter(Boolean);
-                                                const enabled = selected.includes(opt.value);
-                                                return (
-                                                  <button
-                                                    key={opt.value}
-                                                    onClick={() => {
-                                                      let next: string[];
-                                                      if (enabled && selected.length <= 1) return;
-                                                      if (enabled) {
-                                                        next = selected.filter((k) => k !== opt.value);
-                                                      } else {
-                                                        next = [...selected, opt.value];
-                                                      }
-                                                      updateSetting('viewer_visible_presets', next.join(','));
-                                                    }}
-                                                    className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors border ${
-                                                      enabled
-                                                        ? 'bg-primary-container/20 text-primary-container border-primary-container/30'
-                                                        : 'bg-surface-container-highest/20 text-on-surface-variant/50 border-outline-variant/10'
-                                                    }`}
-                                                  >
-                                                    <Icon name={enabled ? 'check_circle' : 'circle'} size={14} />
-                                                    {opt.label}
-                                                  </button>
-                                                );
-                                              })}
-                                            </div>
-                                          ) : (
-                                            structuredEditor ||
-                                            (item.type === 'switch' ? (
-                                              <Switch
-                                                checked={settings[item.key] as boolean}
-                                                onChange={(v) => updateSetting(item.key, v)}
-                                                disabled={loginDialogDisabled}
-                                              />
-                                            ) : item.type === 'image' ? (
-                                              <div className="flex flex-wrap items-center gap-3 min-w-0 lg:justify-self-start">
-                                                {settings[item.key] && (
-                                                  <SafeImage
-                                                    src={settings[item.key] as string}
-                                                    alt="预览"
-                                                    className={`${item.key === 'site_icon' || item.key === 'site_favicon' ? 'h-12 w-12' : 'h-12 w-32'} object-contain bg-surface-container-lowest rounded border border-outline-variant/20`}
-                                                    fallbackIcon="image"
-                                                  />
-                                                )}
-                                                <div className="flex items-center gap-2">
-                                                  <input
-                                                    ref={(el) => {
-                                                      imageInputRefs.current[item.key] = el;
-                                                    }}
-                                                    type="file"
-                                                    accept="image/png,image/jpeg,image/svg+xml,image/webp,image/x-icon,image/vnd.microsoft.icon,.ico"
-                                                    onChange={(e) => handleImageUpload(item.key, e)}
-                                                    className="hidden"
-                                                  />
-                                                  <button
-                                                    onClick={() => imageInputRefs.current[item.key]?.click()}
-                                                    disabled={uploading}
-                                                    className="px-3 py-1.5 text-xs font-medium bg-primary-container/20 text-primary-container rounded-md hover:bg-primary-container/30 disabled:opacity-50 transition-colors"
-                                                  >
-                                                    {uploading
-                                                      ? '上传中...'
-                                                      : settings[item.key]
-                                                        ? '更换图片'
-                                                        : '上传图片'}
-                                                  </button>
-                                                  {settings[item.key] && (
-                                                    <button
-                                                      onClick={() => {
-                                                        updateSetting(item.key, '');
-                                                      }}
-                                                      className="px-2 py-1.5 text-xs text-error hover:bg-error-container/10 rounded-md transition-colors"
-                                                    >
-                                                      移除
-                                                    </button>
-                                                  )}
-                                                </div>
-                                              </div>
-                                            ) : item.type === 'number' ? (
-                                              <div className="flex items-center gap-2 min-w-0 lg:justify-self-start">
-                                                <input
-                                                  type="number"
-                                                  min={item.min ?? 0}
-                                                  max={item.max}
-                                                  value={settings[item.key] as number}
-                                                  onChange={(e) => {
-                                                    const raw = parseFloat(e.target.value) || 0;
-                                                    const min = item.min ?? 0;
-                                                    const max = item.max ?? Number.MAX_SAFE_INTEGER;
-                                                    updateSetting(item.key, Math.min(max, Math.max(min, raw)));
-                                                  }}
-                                                  className="w-28 bg-surface-container-lowest text-on-surface text-sm text-center rounded-md px-3 py-2 border border-outline-variant/20 outline-none focus:border-primary"
-                                                />
-                                                {numberSettingUnit(item.key) && (
-                                                  <span className="text-xs text-on-surface-variant">
-                                                    {numberSettingUnit(item.key)}
-                                                  </span>
-                                                )}
-                                              </div>
-                                            ) : item.type === 'range' ? (
-                                              <div className="flex items-center gap-3 w-full lg:max-w-sm lg:justify-self-start">
+                                            {!isEmpty && (
+                                              <div className="flex items-center gap-3">
                                                 <input
                                                   type="range"
-                                                  min={item.min ?? 0}
-                                                  max={item.max ?? 1}
-                                                  step={item.step ?? 0.01}
-                                                  value={Number(settings[item.key]) || 0}
-                                                  onChange={(e) => updateSetting(item.key, parseFloat(e.target.value))}
+                                                  min={field.min ?? 0}
+                                                  max={field.max ?? 1}
+                                                  step={field.step ?? 0.01}
+                                                  value={Number(val) || (field.min ?? 0)}
+                                                  onChange={(e) => updateSetting(field.key, parseFloat(e.target.value))}
                                                   className="w-full accent-[var(--color-primary-container)]"
                                                 />
                                                 <span className="text-xs font-mono text-on-surface w-10 text-right">
-                                                  {(Number(settings[item.key]) || 0).toFixed(
-                                                    item.step && item.step < 0.1
+                                                  {(Number(val) || 0).toFixed(
+                                                    field.step && field.step < 0.1
                                                       ? 2
-                                                      : item.step && item.step < 1
+                                                      : field.step && field.step < 1
                                                         ? 1
                                                         : 0,
                                                   )}
                                                 </span>
                                               </div>
-                                            ) : item.type === 'textarea' ? (
-                                              <div className="w-full">
-                                                <textarea
+                                            )}
+                                          </div>
+                                        ) : (
+                                          <div className="flex items-center gap-3 w-full lg:max-w-sm lg:justify-self-start">
+                                            <input
+                                              type="range"
+                                              min={field.min ?? 0}
+                                              max={field.max ?? 1}
+                                              step={field.step ?? 0.01}
+                                              value={Number(val) || 0}
+                                              onChange={(e) => updateSetting(field.key, parseFloat(e.target.value))}
+                                              className="w-full accent-[var(--color-primary-container)]"
+                                            />
+                                            <span className="text-xs font-mono text-on-surface w-10 text-right">
+                                              {(Number(val) || 0).toFixed(
+                                                field.step && field.step < 0.1
+                                                  ? 2
+                                                  : field.step && field.step < 1
+                                                    ? 1
+                                                    : 0,
+                                              )}
+                                            </span>
+                                          </div>
+                                        )}
+                                      </div>
+                                    );
+                                  })}
+                                </>
+                              ) : (
+                                /* Non-material tabs: standard rendering */
+                                PREVIEW_TAB_ITEMS[previewSubtab as Exclude<PreviewSubtab, 'material'>].map(
+                                  (item, itemIndex) => {
+                                    const structuredEditor =
+                                      isSystemSettingKey(item.key) && STRUCTURED_SETTING_KEYS.has(item.key) ? (
+                                        <StructuredSettingEditor
+                                          itemKey={item.key}
+                                          settings={settings}
+                                          updateSetting={updateSetting}
+                                        />
+                                      ) : null;
+                                    const isWideControl =
+                                      Boolean(structuredEditor) ||
+                                      item.key === 'interface_theme' ||
+                                      item.type === 'textarea';
+                                    const rowClass =
+                                      item.type === 'color-scheme'
+                                        ? 'px-4 sm:px-6 py-4 flex flex-col gap-4'
+                                        : isWideControl
+                                          ? 'px-4 sm:px-6 py-4 flex flex-col gap-3'
+                                          : 'px-4 sm:px-6 py-4 grid grid-cols-1 lg:grid-cols-[minmax(180px,260px)_minmax(0,1fr)] gap-3 lg:gap-6 lg:items-center';
+                                    const loginDialogDisabled =
+                                      item.key.startsWith('login_dialog_') &&
+                                      item.key !== 'login_dialog_enabled' &&
+                                      !settings.login_dialog_enabled;
+                                    return (
+                                      <div
+                                        key={`preview-${item.key}-${itemIndex}`}
+                                        className={`${rowClass} ${loginDialogDisabled ? 'opacity-40 pointer-events-none' : 'hover:bg-surface-container-high/30'} transition-colors`}
+                                      >
+                                        {item.key === 'interface_theme' ? (
+                                          <InterfaceThemePicker
+                                            value={settings.interface_theme}
+                                            onChange={(nextTheme) => updateSetting('interface_theme', nextTheme)}
+                                          />
+                                        ) : item.type === 'color-scheme' ? (
+                                          <ColorSchemeEditor settings={settings} updateSetting={updateSetting} />
+                                        ) : (
+                                          <>
+                                            <div className="min-w-0 max-w-2xl">
+                                              <p className="text-sm font-medium text-on-surface">
+                                                {item.label === '__preset_checkboxes__' ? '可见预设' : item.label}
+                                              </p>
+                                              <p className="text-xs text-on-surface-variant mt-0.5">
+                                                {item.label === '__preset_checkboxes__'
+                                                  ? '勾选要在模型查看器工具栏中显示的材质预设'
+                                                  : item.desc}
+                                              </p>
+                                            </div>
+                                            {item.key === 'viewer_visible_presets' ? (
+                                              <div className="flex flex-wrap gap-2">
+                                                {MAT_PRESET_OPTIONS.map((opt) => {
+                                                  const current = String(settings.viewer_visible_presets ?? '');
+                                                  const selected =
+                                                    current.trim() === ''
+                                                      ? MAT_PRESET_OPTIONS.map((o) => o.value)
+                                                      : current
+                                                          .split(',')
+                                                          .map((s) => s.trim())
+                                                          .filter(Boolean);
+                                                  const enabled = selected.includes(opt.value);
+                                                  return (
+                                                    <button
+                                                      key={opt.value}
+                                                      onClick={() => {
+                                                        let next: string[];
+                                                        if (enabled && selected.length <= 1) return;
+                                                        if (enabled) {
+                                                          next = selected.filter((k) => k !== opt.value);
+                                                        } else {
+                                                          next = [...selected, opt.value];
+                                                        }
+                                                        updateSetting('viewer_visible_presets', next.join(','));
+                                                      }}
+                                                      className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors border ${
+                                                        enabled
+                                                          ? 'bg-primary-container/20 text-primary-container border-primary-container/30'
+                                                          : 'bg-surface-container-highest/20 text-on-surface-variant/50 border-outline-variant/10'
+                                                      }`}
+                                                    >
+                                                      <Icon name={enabled ? 'check_circle' : 'circle'} size={14} />
+                                                      {opt.label}
+                                                    </button>
+                                                  );
+                                                })}
+                                              </div>
+                                            ) : (
+                                              structuredEditor ||
+                                              (item.type === 'switch' ? (
+                                                <Switch
+                                                  checked={settings[item.key] as boolean}
+                                                  onChange={(v) => updateSetting(item.key, v)}
+                                                  disabled={loginDialogDisabled}
+                                                />
+                                              ) : item.type === 'image' ? (
+                                                <div className="flex flex-wrap items-center gap-3 min-w-0 lg:justify-self-start">
+                                                  {settings[item.key] && (
+                                                    <SafeImage
+                                                      src={settings[item.key] as string}
+                                                      alt="预览"
+                                                      className={`${item.key === 'site_icon' || item.key === 'site_favicon' ? 'h-12 w-12' : 'h-12 w-32'} object-contain bg-surface-container-lowest rounded border border-outline-variant/20`}
+                                                      fallbackIcon="image"
+                                                    />
+                                                  )}
+                                                  <div className="flex items-center gap-2">
+                                                    <input
+                                                      ref={(el) => {
+                                                        imageInputRefs.current[item.key] = el;
+                                                      }}
+                                                      type="file"
+                                                      accept="image/png,image/jpeg,image/svg+xml,image/webp,image/x-icon,image/vnd.microsoft.icon,.ico"
+                                                      onChange={(e) => handleImageUpload(item.key, e)}
+                                                      className="hidden"
+                                                    />
+                                                    <button
+                                                      onClick={() => imageInputRefs.current[item.key]?.click()}
+                                                      disabled={uploading}
+                                                      className="px-3 py-1.5 text-xs font-medium bg-primary-container/20 text-primary-container rounded-md hover:bg-primary-container/30 disabled:opacity-50 transition-colors"
+                                                    >
+                                                      {uploading
+                                                        ? '上传中...'
+                                                        : settings[item.key]
+                                                          ? '更换图片'
+                                                          : '上传图片'}
+                                                    </button>
+                                                    {settings[item.key] && (
+                                                      <button
+                                                        onClick={() => {
+                                                          updateSetting(item.key, '');
+                                                        }}
+                                                        className="px-2 py-1.5 text-xs text-error hover:bg-error-container/10 rounded-md transition-colors"
+                                                      >
+                                                        移除
+                                                      </button>
+                                                    )}
+                                                  </div>
+                                                </div>
+                                              ) : item.type === 'number' ? (
+                                                <div className="flex items-center gap-2 min-w-0 lg:justify-self-start">
+                                                  <input
+                                                    type="number"
+                                                    min={item.min ?? 0}
+                                                    max={item.max}
+                                                    value={settings[item.key] as number}
+                                                    onChange={(e) => {
+                                                      const raw = parseFloat(e.target.value) || 0;
+                                                      const min = item.min ?? 0;
+                                                      const max = item.max ?? Number.MAX_SAFE_INTEGER;
+                                                      updateSetting(item.key, Math.min(max, Math.max(min, raw)));
+                                                    }}
+                                                    className="w-28 bg-surface-container-lowest text-on-surface text-sm text-center rounded-md px-3 py-2 border border-outline-variant/20 outline-none focus:border-primary"
+                                                  />
+                                                  {numberSettingUnit(item.key) && (
+                                                    <span className="text-xs text-on-surface-variant">
+                                                      {numberSettingUnit(item.key)}
+                                                    </span>
+                                                  )}
+                                                </div>
+                                              ) : item.type === 'range' ? (
+                                                <div className="flex items-center gap-3 w-full lg:max-w-sm lg:justify-self-start">
+                                                  <input
+                                                    type="range"
+                                                    min={item.min ?? 0}
+                                                    max={item.max ?? 1}
+                                                    step={item.step ?? 0.01}
+                                                    value={Number(settings[item.key]) || 0}
+                                                    onChange={(e) =>
+                                                      updateSetting(item.key, parseFloat(e.target.value))
+                                                    }
+                                                    className="w-full accent-[var(--color-primary-container)]"
+                                                  />
+                                                  <span className="text-xs font-mono text-on-surface w-10 text-right">
+                                                    {(Number(settings[item.key]) || 0).toFixed(
+                                                      item.step && item.step < 0.1
+                                                        ? 2
+                                                        : item.step && item.step < 1
+                                                          ? 1
+                                                          : 0,
+                                                    )}
+                                                  </span>
+                                                </div>
+                                              ) : item.type === 'textarea' ? (
+                                                <div className="w-full">
+                                                  <textarea
+                                                    value={settings[item.key] as string}
+                                                    onChange={(e) => updateSetting(item.key, e.target.value)}
+                                                    placeholder={item.desc}
+                                                    rows={3}
+                                                    className="w-full bg-surface-container-lowest text-on-surface text-sm rounded-md px-3 py-2 border border-outline-variant/20 outline-none focus:border-primary placeholder:text-on-surface-variant/30 resize-y font-mono"
+                                                  />
+                                                </div>
+                                              ) : item.type === 'select' ? (
+                                                <select
+                                                  value={settings[item.key] as string}
+                                                  onChange={(e) => updateSetting(item.key, e.target.value)}
+                                                  className="w-full lg:max-w-sm bg-surface-container-lowest text-on-surface text-sm rounded-md px-3 py-2 border border-outline-variant/20 outline-none focus:border-primary"
+                                                >
+                                                  {item.options?.map((opt) => (
+                                                    <option key={opt.value} value={opt.value}>
+                                                      {opt.label}
+                                                    </option>
+                                                  ))}
+                                                </select>
+                                              ) : item.type === 'color' ? (
+                                                <div className="flex items-center gap-2 w-full lg:max-w-sm lg:justify-self-start">
+                                                  {settings[item.key] && (
+                                                    <span
+                                                      className="w-6 h-6 rounded-md border border-outline-variant/30 shrink-0"
+                                                      style={{ backgroundColor: settings[item.key] as string }}
+                                                    />
+                                                  )}
+                                                  <input
+                                                    type="text"
+                                                    value={settings[item.key] as string}
+                                                    onChange={(e) => updateSetting(item.key, e.target.value)}
+                                                    placeholder="#FF6600"
+                                                    className="w-full bg-surface-container-lowest text-on-surface text-sm rounded-md px-3 py-2 border border-outline-variant/20 outline-none focus:border-primary placeholder:text-on-surface-variant/30 font-mono"
+                                                  />
+                                                  <input
+                                                    type="color"
+                                                    value={(settings[item.key] as string) || '#000000'}
+                                                    onChange={(e) => updateSetting(item.key, e.target.value)}
+                                                    className="w-8 h-8 rounded cursor-pointer border-0 p-0"
+                                                  />
+                                                </div>
+                                              ) : (
+                                                <input
+                                                  type={isSensitiveTextSettingKey(item.key) ? 'password' : 'text'}
                                                   value={settings[item.key] as string}
                                                   onChange={(e) => updateSetting(item.key, e.target.value)}
                                                   placeholder={item.desc}
-                                                  rows={3}
-                                                  className="w-full bg-surface-container-lowest text-on-surface text-sm rounded-md px-3 py-2 border border-outline-variant/20 outline-none focus:border-primary placeholder:text-on-surface-variant/30 resize-y font-mono"
+                                                  className="w-full lg:max-w-md bg-surface-container-lowest text-on-surface text-sm rounded-md px-3 py-2 border border-outline-variant/20 outline-none focus:border-primary placeholder:text-on-surface-variant/30"
                                                 />
-                                              </div>
-                                            ) : item.key === 'interface_theme' ? (
-                                              <InterfaceThemePicker
-                                                value={settings.interface_theme}
-                                                onChange={(nextTheme) => updateSetting('interface_theme', nextTheme)}
+                                              ))
+                                            )}
+                                          </>
+                                        )}
+                                      </div>
+                                    );
+                                  },
+                                )
+                              )}
+                            </div>
+                          </div>
+                        );
+                      }
+
+                      // ── Standard group rendering ──
+                      return (
+                        <div key={group.title}>
+                          <div className="divide-y divide-outline-variant/5">
+                            {group.items.map((item, itemIndex) => {
+                              if (isSection(item)) {
+                                return (
+                                  <div key={`section-${itemIndex}`} className="px-4 sm:px-6 pt-5 pb-1">
+                                    <p className="text-xs font-bold uppercase tracking-wider text-primary/70">
+                                      {item._section}
+                                    </p>
+                                    <div className="mt-1 h-px bg-outline-variant/10" />
+                                  </div>
+                                );
+                              }
+                              const structuredEditor =
+                                isSystemSettingKey(item.key) && STRUCTURED_SETTING_KEYS.has(item.key) ? (
+                                  <StructuredSettingEditor
+                                    itemKey={item.key}
+                                    settings={settings}
+                                    updateSetting={updateSetting}
+                                  />
+                                ) : null;
+                              const isWideControl =
+                                Boolean(structuredEditor) ||
+                                item.key === 'interface_theme' ||
+                                item.type === 'textarea' ||
+                                item.type === 'email-test' ||
+                                item.type === 'cache-test' ||
+                                item.type === 'storage-test' ||
+                                item.type === 'storage-policy-info' ||
+                                item.type === 'storage-sync';
+                              const rowClass =
+                                item.type === 'color-scheme'
+                                  ? 'px-4 sm:px-6 py-4 flex flex-col gap-4'
+                                  : isWideControl
+                                    ? 'px-4 sm:px-6 py-4 flex flex-col gap-3'
+                                    : 'px-4 sm:px-6 py-4 grid grid-cols-1 lg:grid-cols-[minmax(180px,260px)_minmax(0,1fr)] gap-3 lg:gap-6 lg:items-center';
+                              const loginDialogDisabled =
+                                item.key.startsWith('login_dialog_') &&
+                                item.key !== 'login_dialog_enabled' &&
+                                !settings.login_dialog_enabled;
+                              const generatedCopyrightValue =
+                                item.key === 'footer_copyright' && settings.footer_copyright_follow_site_title
+                                  ? resolveFooterCopyright(settings)
+                                  : item.key === 'model_detail_copyright' &&
+                                      settings.model_detail_copyright_follow_site_title
+                                    ? resolveModelDetailCopyright(settings)
+                                    : '';
+                              const copyrightInputLocked = Boolean(generatedCopyrightValue);
+                              return (
+                                <div
+                                  key={`${group.title}-${item.key}-${itemIndex}`}
+                                  className={`${rowClass} ${loginDialogDisabled ? 'opacity-40 pointer-events-none' : 'hover:bg-surface-container-high/30'} transition-colors`}
+                                >
+                                  {item.key === 'interface_theme' ? (
+                                    <InterfaceThemePicker
+                                      value={settings.interface_theme}
+                                      onChange={(nextTheme) => updateSetting('interface_theme', nextTheme)}
+                                    />
+                                  ) : item.type === 'color-scheme' ? (
+                                    <ColorSchemeEditor settings={settings} updateSetting={updateSetting} />
+                                  ) : (
+                                    <>
+                                      <div className="min-w-0 max-w-2xl">
+                                        <p className="text-sm font-medium text-on-surface">{item.label}</p>
+                                        <p className="text-xs text-on-surface-variant mt-0.5">{item.desc}</p>
+                                      </div>
+                                      {structuredEditor ||
+                                        (item.type === 'email-test' ? (
+                                          <EmailTestPanel
+                                            value={testEmailTo}
+                                            onChange={setTestEmailTo}
+                                            onSend={handleSendTestEmail}
+                                            testing={testingEmail}
+                                            changed={changed}
+                                            saving={saving}
+                                            settings={settings}
+                                          />
+                                        ) : item.type === 'cache-test' ? (
+                                          <SettingsConnectivityTestPanel
+                                            icon="memory"
+                                            title="执行 Redis 真实读写测试"
+                                            summary="会先保存当前设置，再执行 PING、写入、读取和删除测试键"
+                                            buttonLabel="测试 Redis"
+                                            testingLabel="测试中..."
+                                            testing={testingCache}
+                                            changed={changed}
+                                            saving={saving}
+                                            result={cacheTestResult}
+                                            onRun={handleTestCacheSettings}
+                                          />
+                                        ) : item.type === 'storage-test' ? (
+                                          <SettingsConnectivityTestPanel
+                                            icon="storage"
+                                            title="执行存储真实读写测试"
+                                            summary="会先保存当前设置，再写入、读取并删除一个临时对象"
+                                            buttonLabel="测试存储"
+                                            testingLabel="测试中..."
+                                            testing={testingStorage}
+                                            changed={changed}
+                                            saving={saving}
+                                            result={storageTestResult}
+                                            onRun={handleTestStorageSettings}
+                                          />
+                                        ) : item.type === 'storage-policy-info' ? (
+                                          <StoragePolicyInfoPanel settings={settings} />
+                                        ) : item.type === 'storage-sync' ? (
+                                          <StorageSyncPanel settings={settings} />
+                                        ) : item.type === 'switch' ? (
+                                          <Switch
+                                            checked={settings[item.key] as boolean}
+                                            onChange={(v) => updateSetting(item.key, v)}
+                                            disabled={loginDialogDisabled}
+                                          />
+                                        ) : item.type === 'image' ? (
+                                          <div className="flex flex-wrap items-center gap-3 min-w-0 lg:justify-self-start">
+                                            {settings[item.key] && (
+                                              <SafeImage
+                                                src={settings[item.key] as string}
+                                                alt="预览"
+                                                className={`${item.key === 'site_icon' || item.key === 'site_favicon' ? 'h-12 w-12' : 'h-12 w-32'} object-contain bg-surface-container-lowest rounded border border-outline-variant/20`}
+                                                fallbackIcon="image"
                                               />
-                                            ) : item.type === 'select' ? (
-                                              <select
-                                                value={settings[item.key] as string}
-                                                onChange={(e) => updateSetting(item.key, e.target.value)}
-                                                className="w-full lg:max-w-sm bg-surface-container-lowest text-on-surface text-sm rounded-md px-3 py-2 border border-outline-variant/20 outline-none focus:border-primary"
-                                              >
-                                                {item.options?.map((opt) => (
-                                                  <option key={opt.value} value={opt.value}>
-                                                    {opt.label}
-                                                  </option>
-                                                ))}
-                                              </select>
-                                            ) : item.type === 'color' ? (
-                                              <div className="flex items-center gap-2 w-full lg:max-w-sm lg:justify-self-start">
-                                                {settings[item.key] && (
-                                                  <span
-                                                    className="w-6 h-6 rounded-md border border-outline-variant/30 shrink-0"
-                                                    style={{ backgroundColor: settings[item.key] as string }}
-                                                  />
-                                                )}
-                                                <input
-                                                  type="text"
-                                                  value={settings[item.key] as string}
-                                                  onChange={(e) => updateSetting(item.key, e.target.value)}
-                                                  placeholder="#FF6600"
-                                                  className="w-full bg-surface-container-lowest text-on-surface text-sm rounded-md px-3 py-2 border border-outline-variant/20 outline-none focus:border-primary placeholder:text-on-surface-variant/30 font-mono"
-                                                />
-                                                <input
-                                                  type="color"
-                                                  value={(settings[item.key] as string) || '#000000'}
-                                                  onChange={(e) => updateSetting(item.key, e.target.value)}
-                                                  className="w-8 h-8 rounded cursor-pointer border-0 p-0"
-                                                />
-                                              </div>
-                                            ) : (
+                                            )}
+                                            <div className="flex items-center gap-2">
                                               <input
-                                                type={isSensitiveTextSettingKey(item.key) ? 'password' : 'text'}
-                                                value={settings[item.key] as string}
-                                                onChange={(e) => updateSetting(item.key, e.target.value)}
-                                                placeholder={item.desc}
-                                                className="w-full lg:max-w-md bg-surface-container-lowest text-on-surface text-sm rounded-md px-3 py-2 border border-outline-variant/20 outline-none focus:border-primary placeholder:text-on-surface-variant/30"
+                                                ref={(el) => {
+                                                  imageInputRefs.current[item.key] = el;
+                                                }}
+                                                type="file"
+                                                accept="image/png,image/jpeg,image/svg+xml,image/webp,image/x-icon,image/vnd.microsoft.icon,.ico"
+                                                onChange={(e) => handleImageUpload(item.key, e)}
+                                                className="hidden"
                                               />
-                                            ))
-                                          )}
-                                        </>
-                                      )}
-                                    </div>
-                                  );
-                                },
-                              )
-                            )}
+                                              <button
+                                                onClick={() => imageInputRefs.current[item.key]?.click()}
+                                                disabled={uploading}
+                                                className="px-3 py-1.5 text-xs font-medium bg-primary-container/20 text-primary-container rounded-md hover:bg-primary-container/30 disabled:opacity-50 transition-colors"
+                                              >
+                                                {uploading ? '上传中...' : settings[item.key] ? '更换图片' : '上传图片'}
+                                              </button>
+                                              {settings[item.key] && (
+                                                <button
+                                                  onClick={() => {
+                                                    updateSetting(item.key, '');
+                                                  }}
+                                                  className="px-2 py-1.5 text-xs text-error hover:bg-error-container/10 rounded-md transition-colors"
+                                                >
+                                                  移除
+                                                </button>
+                                              )}
+                                            </div>
+                                          </div>
+                                        ) : item.type === 'number' ? (
+                                          <div className="flex items-center gap-2 min-w-0 lg:justify-self-start">
+                                            <input
+                                              type="number"
+                                              min={item.min ?? 0}
+                                              max={item.max}
+                                              value={settings[item.key] as number}
+                                              onChange={(e) => {
+                                                const raw = parseFloat(e.target.value) || 0;
+                                                const min = item.min ?? 0;
+                                                const max = item.max ?? Number.MAX_SAFE_INTEGER;
+                                                updateSetting(item.key, Math.min(max, Math.max(min, raw)));
+                                              }}
+                                              className="w-28 bg-surface-container-lowest text-on-surface text-sm text-center rounded-md px-3 py-2 border border-outline-variant/20 outline-none focus:border-primary"
+                                            />
+                                            {numberSettingUnit(item.key) && (
+                                              <span className="text-xs text-on-surface-variant">
+                                                {numberSettingUnit(item.key)}
+                                              </span>
+                                            )}
+                                          </div>
+                                        ) : item.type === 'range' ? (
+                                          <div className="flex items-center gap-3 w-full lg:max-w-sm lg:justify-self-start">
+                                            <input
+                                              type="range"
+                                              min={item.min ?? 0}
+                                              max={item.max ?? 1}
+                                              step={item.step ?? 0.01}
+                                              value={Number(settings[item.key]) || 0}
+                                              onChange={(e) => updateSetting(item.key, parseFloat(e.target.value))}
+                                              className="w-full accent-[var(--color-primary-container)]"
+                                            />
+                                            <span className="text-xs font-mono text-on-surface w-10 text-right">
+                                              {(Number(settings[item.key]) || 0).toFixed(
+                                                item.step && item.step < 0.1 ? 2 : item.step && item.step < 1 ? 1 : 0,
+                                              )}
+                                            </span>
+                                          </div>
+                                        ) : item.type === 'textarea' ? (
+                                          <div className="w-full">
+                                            <textarea
+                                              value={settings[item.key] as string}
+                                              onChange={(e) => updateSetting(item.key, e.target.value)}
+                                              placeholder={item.desc}
+                                              rows={3}
+                                              className="w-full bg-surface-container-lowest text-on-surface text-sm rounded-md px-3 py-2 border border-outline-variant/20 outline-none focus:border-primary placeholder:text-on-surface-variant/30 resize-y font-mono"
+                                            />
+                                            {item.key === 'allowed_hosts' && typeof window !== 'undefined' && (
+                                              <div className="flex flex-wrap items-center gap-2 mt-1.5">
+                                                <span className="text-xs text-on-surface-variant">当前访问域名：</span>
+                                                <code className="text-xs font-mono text-primary-container bg-primary-container/10 px-2 py-0.5 rounded break-all">
+                                                  {window.location.host}
+                                                </code>
+                                                <button
+                                                  type="button"
+                                                  onClick={() => {
+                                                    const current = ((settings.allowed_hosts as string) || '').trim();
+                                                    const host = window.location.host;
+                                                    const updated = current ? `${current}, ${host}` : host;
+                                                    updateSetting('allowed_hosts', updated);
+                                                  }}
+                                                  className="text-xs text-primary-container hover:underline"
+                                                >
+                                                  加入授权
+                                                </button>
+                                              </div>
+                                            )}
+                                          </div>
+                                        ) : item.type === 'select' ? (
+                                          <select
+                                            value={settings[item.key] as string}
+                                            onChange={(e) => updateSetting(item.key, e.target.value)}
+                                            className="w-full lg:max-w-sm bg-surface-container-lowest text-on-surface text-sm rounded-md px-3 py-2 border border-outline-variant/20 outline-none focus:border-primary"
+                                          >
+                                            {item.options?.map((opt) => (
+                                              <option key={opt.value} value={opt.value}>
+                                                {opt.label}
+                                              </option>
+                                            ))}
+                                          </select>
+                                        ) : item.type === 'color' ? (
+                                          <div className="flex items-center gap-2 w-full lg:max-w-sm lg:justify-self-start">
+                                            {settings[item.key] && (
+                                              <span
+                                                className="w-6 h-6 rounded-md border border-outline-variant/30 shrink-0"
+                                                style={{ backgroundColor: settings[item.key] as string }}
+                                              />
+                                            )}
+                                            <input
+                                              type="text"
+                                              value={settings[item.key] as string}
+                                              onChange={(e) => updateSetting(item.key, e.target.value)}
+                                              placeholder="#FF6600"
+                                              className="w-full bg-surface-container-lowest text-on-surface text-sm rounded-md px-3 py-2 border border-outline-variant/20 outline-none focus:border-primary placeholder:text-on-surface-variant/30 font-mono"
+                                            />
+                                            <input
+                                              type="color"
+                                              value={(settings[item.key] as string) || '#000000'}
+                                              onChange={(e) => updateSetting(item.key, e.target.value)}
+                                              className="w-8 h-8 rounded cursor-pointer border-0 p-0"
+                                            />
+                                          </div>
+                                        ) : (
+                                          <input
+                                            type={isSensitiveTextSettingKey(item.key) ? 'password' : 'text'}
+                                            value={
+                                              copyrightInputLocked
+                                                ? generatedCopyrightValue
+                                                : (settings[item.key] as string)
+                                            }
+                                            onChange={(e) => {
+                                              if (!copyrightInputLocked) updateSetting(item.key, e.target.value);
+                                            }}
+                                            placeholder={item.desc}
+                                            disabled={copyrightInputLocked}
+                                            className={`w-full lg:max-w-md bg-surface-container-lowest text-on-surface text-sm rounded-md px-3 py-2 border border-outline-variant/20 outline-none focus:border-primary placeholder:text-on-surface-variant/30 ${
+                                              copyrightInputLocked
+                                                ? 'cursor-not-allowed text-on-surface-variant/70 border-outline-variant/10 bg-surface-container-high/40'
+                                                : ''
+                                            }`}
+                                          />
+                                        ))}
+                                    </>
+                                  )}
+                                </div>
+                              );
+                            })}
                           </div>
                         </div>
                       );
-                    }
+                    })
+                  : null}
 
-                    // ── Standard group rendering ──
-                    const useSectionTabs = group.title === CACHE_STORAGE_GROUP_TITLE;
-                    const settingSections = useSectionTabs ? splitSettingGroupSections(group) : [];
-                    const activeSettingSection =
-                      settingSections.find((section) => section.title === cacheStorageSubtab) ?? settingSections[0];
-                    const visibleGroupItems: (SettingItem | { _section: string })[] =
-                      useSectionTabs && activeSettingSection ? activeSettingSection.items : group.items;
-
-                    return (
-                      <div key={group.title}>
-                        {useSectionTabs && settingSections.length > 1 ? (
-                          <div className="border-b border-outline-variant/10 px-4 py-2 sm:px-6">
-                            <ResponsiveSectionTabs
-                              tabs={settingSections.map((section) => ({
-                                value: section.title,
-                                label: section.title,
-                                icon: SETTING_SECTION_ICONS[section.title] || 'tune',
-                              }))}
-                              value={activeSettingSection?.title ?? cacheStorageSubtab}
-                              onChange={setCacheStorageSubtab}
-                              mobileTitle="配置分组"
-                              mobileTriggerVariant="surface"
-                            />
-                          </div>
-                        ) : null}
-                        <div className="divide-y divide-outline-variant/5">
-                          {visibleGroupItems.map((item, itemIndex) => {
-                            if (isSection(item)) {
-                              return (
-                                <div key={`section-${itemIndex}`} className="px-4 sm:px-6 pt-5 pb-1">
-                                  <p className="text-xs font-bold uppercase tracking-wider text-primary/70">
-                                    {item._section}
-                                  </p>
-                                  <div className="mt-1 h-px bg-outline-variant/10" />
-                                </div>
-                              );
-                            }
-                            const structuredEditor =
-                              isSystemSettingKey(item.key) && STRUCTURED_SETTING_KEYS.has(item.key) ? (
-                                <StructuredSettingEditor
-                                  itemKey={item.key}
-                                  settings={settings}
-                                  updateSetting={updateSetting}
-                                />
-                              ) : null;
-                            const isWideControl =
-                              Boolean(structuredEditor) ||
-                              item.type === 'textarea' ||
-                              item.type === 'email-test' ||
-                              item.type === 'cache-test' ||
-                              item.type === 'storage-test';
-                            const rowClass =
-                              item.type === 'color-scheme'
-                                ? 'px-4 sm:px-6 py-4 flex flex-col gap-4'
-                                : isWideControl
-                                  ? 'px-4 sm:px-6 py-4 flex flex-col gap-3'
-                                  : 'px-4 sm:px-6 py-4 grid grid-cols-1 lg:grid-cols-[minmax(180px,260px)_minmax(0,1fr)] gap-3 lg:gap-6 lg:items-center';
-                            const loginDialogDisabled =
-                              item.key.startsWith('login_dialog_') &&
-                              item.key !== 'login_dialog_enabled' &&
-                              !settings.login_dialog_enabled;
-                            const generatedCopyrightValue =
-                              item.key === 'footer_copyright' && settings.footer_copyright_follow_site_title
-                                ? resolveFooterCopyright(settings)
-                                : item.key === 'model_detail_copyright' &&
-                                    settings.model_detail_copyright_follow_site_title
-                                  ? resolveModelDetailCopyright(settings)
-                                  : '';
-                            const copyrightInputLocked = Boolean(generatedCopyrightValue);
-                            return (
-                              <div
-                                key={`${group.title}-${item.key}-${itemIndex}`}
-                                className={`${rowClass} ${loginDialogDisabled ? 'opacity-40 pointer-events-none' : 'hover:bg-surface-container-high/30'} transition-colors`}
-                              >
-                                {item.type === 'color-scheme' ? (
-                                  <ColorSchemeEditor settings={settings} updateSetting={updateSetting} />
-                                ) : (
-                                  <>
-                                    <div className="min-w-0 max-w-2xl">
-                                      <p className="text-sm font-medium text-on-surface">{item.label}</p>
-                                      <p className="text-xs text-on-surface-variant mt-0.5">{item.desc}</p>
-                                    </div>
-                                    {structuredEditor ||
-                                      (item.type === 'email-test' ? (
-                                        <EmailTestPanel
-                                          value={testEmailTo}
-                                          onChange={setTestEmailTo}
-                                          onSend={handleSendTestEmail}
-                                          testing={testingEmail}
-                                          changed={changed}
-                                          saving={saving}
-                                          settings={settings}
-                                        />
-                                      ) : item.type === 'cache-test' ? (
-                                        <SettingsConnectivityTestPanel
-                                          icon="memory"
-                                          title="执行 Redis 真实读写测试"
-                                          summary="会先保存当前设置，再执行 PING、写入、读取和删除测试键"
-                                          buttonLabel="测试 Redis"
-                                          testingLabel="测试中..."
-                                          testing={testingCache}
-                                          changed={changed}
-                                          saving={saving}
-                                          result={cacheTestResult}
-                                          onRun={handleTestCacheSettings}
-                                        />
-                                      ) : item.type === 'storage-test' ? (
-                                        <SettingsConnectivityTestPanel
-                                          icon="storage"
-                                          title="执行存储真实读写测试"
-                                          summary="会先保存当前设置，再写入、读取并删除一个临时对象"
-                                          buttonLabel="测试存储"
-                                          testingLabel="测试中..."
-                                          testing={testingStorage}
-                                          changed={changed}
-                                          saving={saving}
-                                          result={storageTestResult}
-                                          onRun={handleTestStorageSettings}
-                                        />
-                                      ) : item.type === 'switch' ? (
-                                        <Switch
-                                          checked={settings[item.key] as boolean}
-                                          onChange={(v) => updateSetting(item.key, v)}
-                                          disabled={loginDialogDisabled}
-                                        />
-                                      ) : item.type === 'image' ? (
-                                        <div className="flex flex-wrap items-center gap-3 min-w-0 lg:justify-self-start">
-                                          {settings[item.key] && (
-                                            <SafeImage
-                                              src={settings[item.key] as string}
-                                              alt="预览"
-                                              className={`${item.key === 'site_icon' || item.key === 'site_favicon' ? 'h-12 w-12' : 'h-12 w-32'} object-contain bg-surface-container-lowest rounded border border-outline-variant/20`}
-                                              fallbackIcon="image"
-                                            />
-                                          )}
-                                          <div className="flex items-center gap-2">
-                                            <input
-                                              ref={(el) => {
-                                                imageInputRefs.current[item.key] = el;
-                                              }}
-                                              type="file"
-                                              accept="image/png,image/jpeg,image/svg+xml,image/webp,image/x-icon,image/vnd.microsoft.icon,.ico"
-                                              onChange={(e) => handleImageUpload(item.key, e)}
-                                              className="hidden"
-                                            />
-                                            <button
-                                              onClick={() => imageInputRefs.current[item.key]?.click()}
-                                              disabled={uploading}
-                                              className="px-3 py-1.5 text-xs font-medium bg-primary-container/20 text-primary-container rounded-md hover:bg-primary-container/30 disabled:opacity-50 transition-colors"
-                                            >
-                                              {uploading ? '上传中...' : settings[item.key] ? '更换图片' : '上传图片'}
-                                            </button>
-                                            {settings[item.key] && (
-                                              <button
-                                                onClick={() => {
-                                                  updateSetting(item.key, '');
-                                                }}
-                                                className="px-2 py-1.5 text-xs text-error hover:bg-error-container/10 rounded-md transition-colors"
-                                              >
-                                                移除
-                                              </button>
-                                            )}
-                                          </div>
-                                        </div>
-                                      ) : item.type === 'number' ? (
-                                        <div className="flex items-center gap-2 min-w-0 lg:justify-self-start">
-                                          <input
-                                            type="number"
-                                            min={item.min ?? 0}
-                                            max={item.max}
-                                            value={settings[item.key] as number}
-                                            onChange={(e) => {
-                                              const raw = parseFloat(e.target.value) || 0;
-                                              const min = item.min ?? 0;
-                                              const max = item.max ?? Number.MAX_SAFE_INTEGER;
-                                              updateSetting(item.key, Math.min(max, Math.max(min, raw)));
-                                            }}
-                                            className="w-28 bg-surface-container-lowest text-on-surface text-sm text-center rounded-md px-3 py-2 border border-outline-variant/20 outline-none focus:border-primary"
-                                          />
-                                          {numberSettingUnit(item.key) && (
-                                            <span className="text-xs text-on-surface-variant">
-                                              {numberSettingUnit(item.key)}
-                                            </span>
-                                          )}
-                                        </div>
-                                      ) : item.type === 'range' ? (
-                                        <div className="flex items-center gap-3 w-full lg:max-w-sm lg:justify-self-start">
-                                          <input
-                                            type="range"
-                                            min={item.min ?? 0}
-                                            max={item.max ?? 1}
-                                            step={item.step ?? 0.01}
-                                            value={Number(settings[item.key]) || 0}
-                                            onChange={(e) => updateSetting(item.key, parseFloat(e.target.value))}
-                                            className="w-full accent-[var(--color-primary-container)]"
-                                          />
-                                          <span className="text-xs font-mono text-on-surface w-10 text-right">
-                                            {(Number(settings[item.key]) || 0).toFixed(
-                                              item.step && item.step < 0.1 ? 2 : item.step && item.step < 1 ? 1 : 0,
-                                            )}
-                                          </span>
-                                        </div>
-                                      ) : item.type === 'textarea' ? (
-                                        <div className="w-full">
-                                          <textarea
-                                            value={settings[item.key] as string}
-                                            onChange={(e) => updateSetting(item.key, e.target.value)}
-                                            placeholder={item.desc}
-                                            rows={3}
-                                            className="w-full bg-surface-container-lowest text-on-surface text-sm rounded-md px-3 py-2 border border-outline-variant/20 outline-none focus:border-primary placeholder:text-on-surface-variant/30 resize-y font-mono"
-                                          />
-                                          {item.key === 'allowed_hosts' && typeof window !== 'undefined' && (
-                                            <div className="flex flex-wrap items-center gap-2 mt-1.5">
-                                              <span className="text-xs text-on-surface-variant">当前访问域名：</span>
-                                              <code className="text-xs font-mono text-primary-container bg-primary-container/10 px-2 py-0.5 rounded break-all">
-                                                {window.location.host}
-                                              </code>
-                                              <button
-                                                type="button"
-                                                onClick={() => {
-                                                  const current = ((settings.allowed_hosts as string) || '').trim();
-                                                  const host = window.location.host;
-                                                  const updated = current ? `${current}, ${host}` : host;
-                                                  updateSetting('allowed_hosts', updated);
-                                                }}
-                                                className="text-xs text-primary-container hover:underline"
-                                              >
-                                                加入授权
-                                              </button>
-                                            </div>
-                                          )}
-                                        </div>
-                                      ) : item.key === 'interface_theme' ? (
-                                        <InterfaceThemePicker
-                                          value={settings.interface_theme}
-                                          onChange={(nextTheme) => updateSetting('interface_theme', nextTheme)}
-                                        />
-                                      ) : item.type === 'select' ? (
-                                        <select
-                                          value={settings[item.key] as string}
-                                          onChange={(e) => updateSetting(item.key, e.target.value)}
-                                          className="w-full lg:max-w-sm bg-surface-container-lowest text-on-surface text-sm rounded-md px-3 py-2 border border-outline-variant/20 outline-none focus:border-primary"
-                                        >
-                                          {item.options?.map((opt) => (
-                                            <option key={opt.value} value={opt.value}>
-                                              {opt.label}
-                                            </option>
-                                          ))}
-                                        </select>
-                                      ) : item.type === 'color' ? (
-                                        <div className="flex items-center gap-2 w-full lg:max-w-sm lg:justify-self-start">
-                                          {settings[item.key] && (
-                                            <span
-                                              className="w-6 h-6 rounded-md border border-outline-variant/30 shrink-0"
-                                              style={{ backgroundColor: settings[item.key] as string }}
-                                            />
-                                          )}
-                                          <input
-                                            type="text"
-                                            value={settings[item.key] as string}
-                                            onChange={(e) => updateSetting(item.key, e.target.value)}
-                                            placeholder="#FF6600"
-                                            className="w-full bg-surface-container-lowest text-on-surface text-sm rounded-md px-3 py-2 border border-outline-variant/20 outline-none focus:border-primary placeholder:text-on-surface-variant/30 font-mono"
-                                          />
-                                          <input
-                                            type="color"
-                                            value={(settings[item.key] as string) || '#000000'}
-                                            onChange={(e) => updateSetting(item.key, e.target.value)}
-                                            className="w-8 h-8 rounded cursor-pointer border-0 p-0"
-                                          />
-                                        </div>
-                                      ) : (
-                                        <input
-                                          type={isSensitiveTextSettingKey(item.key) ? 'password' : 'text'}
-                                          value={
-                                            copyrightInputLocked
-                                              ? generatedCopyrightValue
-                                              : (settings[item.key] as string)
-                                          }
-                                          onChange={(e) => {
-                                            if (!copyrightInputLocked) updateSetting(item.key, e.target.value);
-                                          }}
-                                          placeholder={item.desc}
-                                          disabled={copyrightInputLocked}
-                                          className={`w-full lg:max-w-md bg-surface-container-lowest text-on-surface text-sm rounded-md px-3 py-2 border border-outline-variant/20 outline-none focus:border-primary placeholder:text-on-surface-variant/30 ${
-                                            copyrightInputLocked
-                                              ? 'cursor-not-allowed text-on-surface-variant/70 border-outline-variant/10 bg-surface-container-high/40'
-                                              : ''
-                                          }`}
-                                        />
-                                      ))}
-                                  </>
-                                )}
-                              </div>
-                            );
-                          })}
-                        </div>
-                      </div>
-                    );
-                  })
-                : null}
-
-              {activeTab === '数据备份' && (
-                <>
-                  {/* Data Backup Section */}
-                  <div className="bg-surface-container-low rounded-lg border border-outline-variant/10 overflow-hidden">
-                    <div className="divide-y divide-outline-variant/5">
-                      {/* Backup health */}
-                      {backupHealth && (
-                        <div className="px-4 py-4 sm:px-6">
-                          <div
-                            className={`rounded-lg border p-4 ${
-                              backupHealth.status === 'ok'
-                                ? 'bg-green-500/10 border-green-500/20'
-                                : backupHealth.status === 'warning'
-                                  ? 'bg-yellow-500/10 border-yellow-500/20'
-                                  : 'bg-surface-container-high/40 border-outline-variant/10'
-                            }`}
-                          >
-                            <div className="space-y-3">
-                              <div className="min-w-0">
-                                <div className="flex items-center gap-2">
-                                  <Icon
-                                    name={
-                                      backupHealth.status === 'ok'
-                                        ? 'verified_user'
-                                        : backupHealth.status === 'warning'
-                                          ? 'warning'
-                                          : 'info'
-                                    }
-                                    size={18}
-                                    className={
-                                      backupHealth.status === 'ok'
-                                        ? 'text-green-500'
-                                        : backupHealth.status === 'warning'
-                                          ? 'text-yellow-500'
-                                          : 'text-on-surface-variant'
-                                    }
-                                  />
-                                  <p className="text-sm font-medium text-on-surface">企业级备份状态</p>
-                                </div>
-                                <p className="text-xs text-on-surface-variant mt-1">{backupHealth.message}</p>
-                              </div>
-                              <div className="grid grid-cols-2 gap-2 text-xs sm:flex sm:flex-wrap">
-                                <span className="px-2 py-1 rounded bg-surface-container-lowest/70 text-on-surface-variant">
-                                  自动备份 {backupHealth.enabled ? `每日 ${backupHealth.scheduleTime}` : '未开启'}
-                                </span>
-                                <span className="px-2 py-1 rounded bg-surface-container-lowest/70 text-on-surface-variant">
-                                  保留 {backupHealth.retentionCount} 份
-                                </span>
-                                <span className="px-2 py-1 rounded bg-surface-container-lowest/70 text-on-surface-variant">
-                                  共 {backupHealth.backupCount} 份 / {backupHealth.totalSizeText}
-                                </span>
-                                <span className="px-2 py-1 rounded bg-surface-container-lowest/70 text-on-surface-variant">
-                                  外部镜像 {backupHealth.mirrorEnabled ? '已开启' : '未开启'}
-                                </span>
-                              </div>
-                              <button
-                                onClick={handleBackupPolicyCheck}
-                                disabled={checkingBackupPolicy || adminBusy}
-                                className="w-full sm:w-auto px-3 py-2 text-xs font-medium bg-primary-container/15 text-primary-container rounded-md hover:bg-primary-container/25 disabled:opacity-50 transition-colors flex items-center justify-center gap-1.5"
-                              >
-                                <Icon name="fact_check" size={14} />
-                                {checkingBackupPolicy ? '体检中...' : '策略体检'}
-                              </button>
-                            </div>
-                            <div className="mt-3 grid gap-1 text-xs text-on-surface-variant sm:flex sm:flex-wrap sm:gap-x-4">
-                              {backupHealth.latestBackup && (
-                                <span>
-                                  最近备份：{new Date(backupHealth.latestBackup.createdAt).toLocaleString('zh-CN')}
-                                </span>
-                              )}
-                              {backupHealth.nextRunAt && (
-                                <span>下次自动：{new Date(backupHealth.nextRunAt).toLocaleString('zh-CN')}</span>
-                              )}
-                              {backupHealth.lastAutoMessage && <span>自动任务：{backupHealth.lastAutoMessage}</span>}
-                              {backupHealth.mirrorDir && <span>镜像目录：{backupHealth.mirrorDir}</span>}
-                              {backupHealth.lastMirrorMessage && (
-                                <span>镜像状态：{backupHealth.lastMirrorMessage}</span>
-                              )}
-                            </div>
-                            {backupPolicyCheck && (
-                              <div className="mt-3 rounded-md bg-surface-container-lowest/70 border border-outline-variant/10 p-3">
-                                <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-on-surface-variant mb-2">
-                                  <span>体检时间：{new Date(backupPolicyCheck.checkedAt).toLocaleString('zh-CN')}</span>
-                                  <span>预计备份大小：{backupPolicyCheck.estimatedBackupSizeText}</span>
-                                </div>
-                                <div className="space-y-1.5">
-                                  {backupPolicyCheck.checks.map((check) => (
-                                    <div key={check.key} className="flex items-start gap-2 text-xs">
-                                      <Icon
-                                        name={
-                                          check.status === 'ok'
-                                            ? 'check_circle'
-                                            : check.status === 'warning'
-                                              ? 'warning'
-                                              : 'error'
-                                        }
-                                        size={14}
-                                        className={
-                                          check.status === 'ok'
-                                            ? 'text-green-500'
-                                            : check.status === 'warning'
-                                              ? 'text-yellow-500'
-                                              : 'text-error'
-                                        }
-                                      />
-                                      <span className="font-medium text-on-surface shrink-0">{check.label}</span>
-                                      <span className="text-on-surface-variant break-all">{check.message}</span>
-                                    </div>
-                                  ))}
-                                </div>
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                      )}
-
-                      {/* Stats */}
-                      <div className="px-4 py-4 sm:px-6">
-                        <div className="grid grid-cols-1 gap-2 text-sm sm:flex sm:flex-wrap sm:gap-4">
-                          {backupStats && (
-                            <>
-                              <div className="flex items-center justify-between gap-2 bg-surface-container-high/50 px-3 py-2 sm:py-1.5 rounded-md">
-                                <Icon name="view_in_ar" size={14} className="text-primary-container" />
-                                <span className="text-on-surface-variant">STEP 模型</span>
-                                <span className="font-medium text-on-surface">{backupStats.modelCount} 个</span>
-                              </div>
-                              <div className="flex items-center justify-between gap-2 bg-surface-container-high/50 px-3 py-2 sm:py-1.5 rounded-md">
-                                <Icon name="wallpaper" size={14} className="text-primary-container" />
-                                <span className="text-on-surface-variant">预览图</span>
-                                <span className="font-medium text-on-surface">{backupStats.thumbnailCount} 张</span>
-                              </div>
-                              <div className="flex items-center justify-between gap-2 bg-surface-container-high/50 px-3 py-2 sm:py-1.5 rounded-md">
-                                <Icon name="data_usage" size={14} className="text-primary-container" />
-                                <span className="text-on-surface-variant">数据库</span>
-                                <span className="font-medium text-on-surface">{backupStats.dbSize}</span>
-                              </div>
-                            </>
-                          )}
-                        </div>
-                      </div>
-
-                      {/* Export */}
-                      <div className="px-4 py-4 sm:px-6">
-                        <div className="flex flex-col gap-3 mb-2 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
-                          <div>
-                            <p className="text-sm font-medium text-on-surface">创建备份</p>
-                            <p className="text-xs text-on-surface-variant mt-0.5">
-                              打包数据库、模型文件和缩略图到服务器
-                            </p>
-                          </div>
-                          <button
-                            onClick={handleExport}
-                            disabled={adminBusy}
-                            className="w-full sm:w-auto px-4 py-2.5 sm:py-2 text-xs font-medium bg-primary-container/20 text-primary-container rounded-md hover:bg-primary-container/30 disabled:opacity-50 transition-colors flex items-center justify-center gap-1.5 shrink-0"
-                          >
-                            <Icon name="add" size={14} />
-                            {exporting ? `${exportProgress.percent}%` : '创建备份'}
-                          </button>
-                        </div>
-                        {exporting && <TaskProgressCard progress={exportProgress} />}
-                      </div>
-
-                      {/* Backup List */}
-                      {backupList.length > 0 && (
-                        <div className="px-4 py-4 sm:px-6">
-                          <p className="text-sm font-medium text-on-surface mb-3">备份记录</p>
-                          <div className="space-y-2">
-                            {backupList.map((b) => (
-                              <div
-                                key={b.id}
-                                className="bg-surface-container-high/30 rounded-lg border border-outline-variant/10 p-3 sm:p-4"
-                              >
-                                <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-                                  <div className="min-w-0 flex-1">
-                                    {renamingId === b.id ? (
-                                      <div className="flex flex-col gap-2 mb-2 sm:flex-row sm:items-center">
-                                        <input
-                                          type="text"
-                                          value={renameValue}
-                                          onChange={(e) => setRenameValue(e.target.value)}
-                                          onKeyDown={(e) => {
-                                            if (e.key === 'Enter') handleRename(b.id);
-                                            if (e.key === 'Escape') {
-                                              setRenamingId(null);
-                                              setRenameValue('');
-                                            }
-                                          }}
-                                          className="flex-1 bg-surface-container-lowest text-on-surface text-sm rounded-md px-3 py-1.5 border border-outline-variant/30 outline-none focus:border-primary"
-                                          autoFocus
-                                        />
-                                        <div className="grid grid-cols-2 gap-2 sm:flex">
-                                          <button
-                                            onClick={() => handleRename(b.id)}
-                                            className="px-2 py-1.5 text-xs text-primary-container hover:bg-primary-container/10 rounded-md"
-                                          >
-                                            保存
-                                          </button>
-                                          <button
-                                            onClick={() => {
-                                              setRenamingId(null);
-                                              setRenameValue('');
-                                            }}
-                                            className="px-2 py-1.5 text-xs text-on-surface-variant hover:bg-surface-container-high/50 rounded-md"
-                                          >
-                                            取消
-                                          </button>
-                                        </div>
-                                      </div>
-                                    ) : (
-                                      <p className="text-sm font-medium text-on-surface truncate">{b.name}</p>
-                                    )}
-                                    <div className="grid grid-cols-2 gap-x-3 gap-y-1 mt-1.5 text-xs text-on-surface-variant sm:flex sm:flex-wrap sm:gap-x-4">
-                                      <span>{new Date(b.createdAt).toLocaleString('zh-CN')}</span>
-                                      <span>{b.fileSizeText}</span>
-                                      <span>{b.modelCount ?? 0} 个 STEP 模型</span>
-                                      <span>{b.thumbnailCount ?? 0} 张预览图</span>
-                                      <span>数据库 {b.dbSize}</span>
-                                      {b.manifestVersion && <span>清单 v{b.manifestVersion}</span>}
-                                      {b.verifiedAt && <span>已校验</span>}
-                                    </div>
-                                  </div>
-                                  <div className="grid grid-cols-2 gap-2 sm:grid-cols-5 lg:flex lg:flex-wrap lg:items-center lg:gap-1.5 lg:shrink-0">
-                                    <button
-                                      onClick={() => handleRestoreRequest(b.id)}
-                                      disabled={adminBusy}
-                                      className="px-2.5 py-2 lg:py-1.5 text-xs font-medium bg-primary-container/15 text-primary-container rounded-md hover:bg-primary-container/25 disabled:opacity-50 transition-colors flex items-center justify-center gap-1"
-                                    >
-                                      <Icon name="restore" size={13} />
-                                      恢复
-                                    </button>
-                                    <button
-                                      onClick={() => handleDownloadBackup(b.id)}
-                                      disabled={adminBusy}
-                                      className="px-2.5 py-2 lg:py-1.5 text-xs font-medium bg-surface-container-high/60 text-on-surface-variant rounded-md hover:bg-surface-container-highest/50 disabled:opacity-50 transition-colors flex items-center justify-center gap-1"
-                                    >
-                                      <Icon name="download" size={13} />
-                                      下载
-                                    </button>
-                                    <button
-                                      onClick={() => handleVerifyBackup(b.id)}
-                                      disabled={adminBusy || verifyingBackupId === b.id}
-                                      className="px-2.5 py-2 lg:py-1.5 text-xs font-medium bg-surface-container-high/60 text-on-surface-variant rounded-md hover:bg-surface-container-highest/50 disabled:opacity-50 transition-colors flex items-center justify-center gap-1"
-                                    >
-                                      <Icon name="verified" size={13} />
-                                      {verifyingBackupId === b.id ? `${verifyProgress.percent}%` : '校验'}
-                                    </button>
-                                    <button
-                                      onClick={() => {
-                                        setRenamingId(b.id);
-                                        setRenameValue(b.name);
-                                      }}
-                                      disabled={adminBusy}
-                                      className="px-2.5 py-2 lg:py-1.5 text-xs font-medium bg-surface-container-high/60 text-on-surface-variant rounded-md hover:bg-surface-container-highest/50 disabled:opacity-50 transition-colors flex items-center justify-center gap-1"
-                                    >
-                                      <Icon name="edit" size={13} />
-                                      重命名
-                                    </button>
-                                    <button
-                                      onClick={() => handleDelete(b.id)}
-                                      disabled={adminBusy}
-                                      className="px-2.5 py-2 lg:py-1.5 text-xs font-medium bg-error-container/10 text-error rounded-md hover:bg-error-container/20 disabled:opacity-50 transition-colors flex items-center justify-center gap-1"
-                                    >
-                                      <Icon name="delete" size={13} />
-                                      删除
-                                    </button>
-                                  </div>
-                                </div>
-
-                                {verifyingBackupId === b.id && (
-                                  <div className="mt-3">
-                                    <TaskProgressCard progress={verifyProgress} color="primary" />
-                                  </div>
-                                )}
-
-                                {restoreConfirmId === b.id && (
-                                  <div className="mt-3 bg-error-container/10 border border-error/20 rounded-md p-3">
-                                    <div className="flex items-start gap-2">
-                                      <Icon name="warning" size={18} className="text-error shrink-0 mt-0.5" />
-                                      <div className="flex-1">
-                                        {!restoring ? (
-                                          <>
-                                            <p className="text-xs font-medium text-on-surface">确认恢复到此备份？</p>
-                                            <p className="text-xs text-error/80 mt-1">
-                                              此操作将覆盖当前数据库和模型文件，不可撤销！
-                                            </p>
-                                            <div className="grid grid-cols-1 gap-2 mt-2 sm:flex">
-                                              <button
-                                                onClick={handleRestoreConfirm}
-                                                className="px-3 py-1 text-xs font-medium bg-error text-on-error-container rounded-md hover:opacity-90 transition-opacity"
-                                              >
-                                                确认恢复
-                                              </button>
-                                              <button
-                                                onClick={() => setRestoreConfirmId(null)}
-                                                className="px-3 py-1 text-xs text-on-surface-variant border border-outline-variant/30 rounded-md hover:bg-surface-container-high/50 transition-colors"
-                                              >
-                                                取消
-                                              </button>
-                                            </div>
-                                          </>
-                                        ) : (
-                                          <TaskProgressCard progress={restoreProgress} color="primary" />
-                                        )}
-                                      </div>
-                                    </div>
-                                  </div>
-                                )}
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-
-                      {/* Import from file */}
-                      <div className="px-4 py-4 sm:px-6">
-                        <div className="flex flex-col gap-3 mb-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
-                          <div>
-                            <p className="text-sm font-medium text-on-surface">导入恢复</p>
-                            <p className="text-xs text-on-surface-variant mt-0.5">
-                              上传备份文件恢复数据（将覆盖当前数据）
-                            </p>
-                          </div>
-                          <div className="grid grid-cols-2 gap-2 sm:flex">
-                            <input
-                              ref={backupInputRef}
-                              type="file"
-                              onChange={handleBackupFileSelect}
-                              className="hidden"
-                            />
-                            <button
-                              onClick={() => backupInputRef.current?.click()}
-                              disabled={adminBusy}
-                              className="px-4 py-2.5 sm:py-2 text-xs font-medium border border-outline-variant/40 text-on-surface-variant rounded-md hover:text-on-surface hover:bg-surface-container-high/50 disabled:opacity-50 transition-colors flex items-center justify-center gap-1.5"
+                {activeTab === '数据备份' && (
+                  <>
+                    {/* Data Backup Section */}
+                    <div className="bg-surface-container-low rounded-lg border border-outline-variant/10 overflow-hidden">
+                      <div className="divide-y divide-outline-variant/5">
+                        {/* Backup health */}
+                        {backupHealth && (
+                          <div className="px-4 py-4 sm:px-6">
+                            <div
+                              className={`rounded-lg border p-4 ${
+                                backupHealth.status === 'ok'
+                                  ? 'bg-green-500/10 border-green-500/20'
+                                  : backupHealth.status === 'warning'
+                                    ? 'bg-yellow-500/10 border-yellow-500/20'
+                                    : 'bg-surface-container-high/40 border-outline-variant/10'
+                              }`}
                             >
-                              <Icon name="upload" size={14} />
-                              本地上传
-                            </button>
-                            <button
-                              onClick={() => {
-                                setServerFileConfirm(null);
-                                handleLoadServerFiles();
-                              }}
-                              disabled={adminBusy}
-                              className="px-4 py-2.5 sm:py-2 text-xs font-medium border border-outline-variant/40 text-on-surface-variant rounded-md hover:text-on-surface hover:bg-surface-container-high/50 disabled:opacity-50 transition-colors flex items-center justify-center gap-1.5"
-                            >
-                              <Icon name="folder" size={14} />
-                              服务器文件
-                            </button>
-                          </div>
-                        </div>
-
-                        {importing && (
-                          <div className="mt-3">
-                            {/* Phase 1: Upload */}
-                            {!restoreProgress.message && uploadProgress < 100 && (
-                              <TaskProgressCard progress={{ message: '上传中...', percent: uploadProgress }} />
-                            )}
-                            {/* Phase 2: Server processing */}
-                            {(restoreProgress.message || uploadProgress >= 100) && (
-                              <TaskProgressCard
-                                progress={{
-                                  message: restoreProgress.message || '上传完成，正在处理...',
-                                  percent: restoreProgress.message ? restoreProgress.percent : 100,
-                                  logs: restoreProgress.logs,
-                                }}
-                              />
-                            )}
-                          </div>
-                        )}
-
-                        {/* Server file list */}
-                        {loadingServerFiles && (
-                          <div className="mt-3 text-xs text-on-surface-variant animate-pulse">
-                            正在扫描服务器文件...
-                          </div>
-                        )}
-                        {!loadingServerFiles && serverFiles.length > 0 && !importing && (
-                          <div className="mt-3 border border-outline-variant/20 rounded-md divide-y divide-outline-variant/10">
-                            {serverFiles.map((f) => (
-                              <div
-                                key={f.path}
-                                className="flex flex-col gap-2 px-3 py-3 hover:bg-surface-container-high/30 sm:flex-row sm:items-center sm:justify-between"
-                              >
-                                <div className="flex-1 min-w-0">
-                                  <p className="text-xs font-medium text-on-surface truncate">{f.name}</p>
-                                  <p className="text-xs text-on-surface-variant">
-                                    {(f.size / 1024 / 1024).toFixed(1)} MB ·{' '}
-                                    {new Date(f.modifiedAt).toLocaleString('zh-CN')}
-                                  </p>
+                              <div className="space-y-3">
+                                <div className="min-w-0">
+                                  <div className="flex items-center gap-2">
+                                    <Icon
+                                      name={
+                                        backupHealth.status === 'ok'
+                                          ? 'verified_user'
+                                          : backupHealth.status === 'warning'
+                                            ? 'warning'
+                                            : 'info'
+                                      }
+                                      size={18}
+                                      className={
+                                        backupHealth.status === 'ok'
+                                          ? 'text-green-500'
+                                          : backupHealth.status === 'warning'
+                                            ? 'text-yellow-500'
+                                            : 'text-on-surface-variant'
+                                      }
+                                    />
+                                    <p className="text-sm font-medium text-on-surface">企业级备份状态</p>
+                                  </div>
+                                  <p className="text-xs text-on-surface-variant mt-1">{backupHealth.message}</p>
+                                </div>
+                                <div className="grid grid-cols-2 gap-2 text-xs sm:flex sm:flex-wrap">
+                                  <span className="px-2 py-1 rounded bg-surface-container-lowest/70 text-on-surface-variant">
+                                    自动备份 {backupHealth.enabled ? `每日 ${backupHealth.scheduleTime}` : '未开启'}
+                                  </span>
+                                  <span className="px-2 py-1 rounded bg-surface-container-lowest/70 text-on-surface-variant">
+                                    保留 {backupHealth.retentionCount} 份
+                                  </span>
+                                  <span className="px-2 py-1 rounded bg-surface-container-lowest/70 text-on-surface-variant">
+                                    共 {backupHealth.backupCount} 份 / {backupHealth.totalSizeText}
+                                  </span>
+                                  <span className="px-2 py-1 rounded bg-surface-container-lowest/70 text-on-surface-variant">
+                                    外部镜像 {backupHealth.mirrorEnabled ? '已开启' : '未开启'}
+                                  </span>
                                 </div>
                                 <button
-                                  onClick={() => setServerFileConfirm(f)}
-                                  disabled={adminBusy}
-                                  className="w-full sm:w-auto sm:ml-2 px-3 py-1.5 text-xs font-medium text-primary border border-primary/30 rounded hover:bg-primary/10 disabled:opacity-50 transition-colors shrink-0"
+                                  onClick={handleBackupPolicyCheck}
+                                  disabled={checkingBackupPolicy || adminBusy}
+                                  className="w-full sm:w-auto px-3 py-2 text-xs font-medium bg-primary-container/15 text-primary-container rounded-md hover:bg-primary-container/25 disabled:opacity-50 transition-colors flex items-center justify-center gap-1.5"
                                 >
-                                  恢复
+                                  <Icon name="fact_check" size={14} />
+                                  {checkingBackupPolicy ? '体检中...' : '策略体检'}
                                 </button>
                               </div>
-                            ))}
+                              <div className="mt-3 grid gap-1 text-xs text-on-surface-variant sm:flex sm:flex-wrap sm:gap-x-4">
+                                {backupHealth.latestBackup && (
+                                  <span>
+                                    最近备份：{new Date(backupHealth.latestBackup.createdAt).toLocaleString('zh-CN')}
+                                  </span>
+                                )}
+                                {backupHealth.nextRunAt && (
+                                  <span>下次自动：{new Date(backupHealth.nextRunAt).toLocaleString('zh-CN')}</span>
+                                )}
+                                {backupHealth.lastAutoMessage && <span>自动任务：{backupHealth.lastAutoMessage}</span>}
+                                {backupHealth.mirrorDir && <span>镜像目录：{backupHealth.mirrorDir}</span>}
+                                {backupHealth.lastMirrorMessage && (
+                                  <span>镜像状态：{backupHealth.lastMirrorMessage}</span>
+                                )}
+                              </div>
+                              {backupPolicyCheck && (
+                                <div className="mt-3 rounded-md bg-surface-container-lowest/70 border border-outline-variant/10 p-3">
+                                  <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-on-surface-variant mb-2">
+                                    <span>
+                                      体检时间：{new Date(backupPolicyCheck.checkedAt).toLocaleString('zh-CN')}
+                                    </span>
+                                    <span>预计备份大小：{backupPolicyCheck.estimatedBackupSizeText}</span>
+                                  </div>
+                                  <div className="space-y-1.5">
+                                    {backupPolicyCheck.checks.map((check) => (
+                                      <div key={check.key} className="flex items-start gap-2 text-xs">
+                                        <Icon
+                                          name={
+                                            check.status === 'ok'
+                                              ? 'check_circle'
+                                              : check.status === 'warning'
+                                                ? 'warning'
+                                                : 'error'
+                                          }
+                                          size={14}
+                                          className={
+                                            check.status === 'ok'
+                                              ? 'text-green-500'
+                                              : check.status === 'warning'
+                                                ? 'text-yellow-500'
+                                                : 'text-error'
+                                          }
+                                        />
+                                        <span className="font-medium text-on-surface shrink-0">{check.label}</span>
+                                        <span className="text-on-surface-variant break-all">{check.message}</span>
+                                      </div>
+                                    ))}
+                                  </div>
+                                </div>
+                              )}
+                            </div>
                           </div>
                         )}
-                        {!loadingServerFiles && serverFilesScanned && serverFiles.length === 0 && (
-                          <div className="mt-3 text-xs text-on-surface-variant">未找到服务器上的备份文件</div>
+
+                        {/* Stats */}
+                        <div className="px-4 py-4 sm:px-6">
+                          <div className="grid grid-cols-1 gap-2 text-sm sm:flex sm:flex-wrap sm:gap-4">
+                            {backupStats && (
+                              <>
+                                <div className="flex items-center justify-between gap-2 bg-surface-container-high/50 px-3 py-2 sm:py-1.5 rounded-md">
+                                  <Icon name="view_in_ar" size={14} className="text-primary-container" />
+                                  <span className="text-on-surface-variant">STEP 模型</span>
+                                  <span className="font-medium text-on-surface">{backupStats.modelCount} 个</span>
+                                </div>
+                                <div className="flex items-center justify-between gap-2 bg-surface-container-high/50 px-3 py-2 sm:py-1.5 rounded-md">
+                                  <Icon name="wallpaper" size={14} className="text-primary-container" />
+                                  <span className="text-on-surface-variant">预览图</span>
+                                  <span className="font-medium text-on-surface">{backupStats.thumbnailCount} 张</span>
+                                </div>
+                                <div className="flex items-center justify-between gap-2 bg-surface-container-high/50 px-3 py-2 sm:py-1.5 rounded-md">
+                                  <Icon name="data_usage" size={14} className="text-primary-container" />
+                                  <span className="text-on-surface-variant">数据库</span>
+                                  <span className="font-medium text-on-surface">{backupStats.dbSize}</span>
+                                </div>
+                              </>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Export */}
+                        <div className="px-4 py-4 sm:px-6">
+                          <div className="flex flex-col gap-3 mb-2 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
+                            <div>
+                              <p className="text-sm font-medium text-on-surface">创建备份</p>
+                              <p className="text-xs text-on-surface-variant mt-0.5">
+                                打包数据库、模型文件和缩略图到服务器
+                              </p>
+                            </div>
+                            <button
+                              onClick={handleExport}
+                              disabled={adminBusy}
+                              className="w-full sm:w-auto px-4 py-2.5 sm:py-2 text-xs font-medium bg-primary-container/20 text-primary-container rounded-md hover:bg-primary-container/30 disabled:opacity-50 transition-colors flex items-center justify-center gap-1.5 shrink-0"
+                            >
+                              <Icon name="add" size={14} />
+                              {exporting ? `${exportProgress.percent}%` : '创建备份'}
+                            </button>
+                          </div>
+                          {exporting && <TaskProgressCard progress={exportProgress} />}
+                        </div>
+
+                        {/* Backup List */}
+                        {backupList.length > 0 && (
+                          <div className="px-4 py-4 sm:px-6">
+                            <p className="text-sm font-medium text-on-surface mb-3">备份记录</p>
+                            <div className="space-y-2">
+                              {backupList.map((b) => (
+                                <div
+                                  key={b.id}
+                                  className="bg-surface-container-high/30 rounded-lg border border-outline-variant/10 p-3 sm:p-4"
+                                >
+                                  <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                                    <div className="min-w-0 flex-1">
+                                      {renamingId === b.id ? (
+                                        <div className="flex flex-col gap-2 mb-2 sm:flex-row sm:items-center">
+                                          <input
+                                            type="text"
+                                            value={renameValue}
+                                            onChange={(e) => setRenameValue(e.target.value)}
+                                            onKeyDown={(e) => {
+                                              if (e.key === 'Enter') handleRename(b.id);
+                                              if (e.key === 'Escape') {
+                                                setRenamingId(null);
+                                                setRenameValue('');
+                                              }
+                                            }}
+                                            className="flex-1 bg-surface-container-lowest text-on-surface text-sm rounded-md px-3 py-1.5 border border-outline-variant/30 outline-none focus:border-primary"
+                                            autoFocus
+                                          />
+                                          <div className="grid grid-cols-2 gap-2 sm:flex">
+                                            <button
+                                              onClick={() => handleRename(b.id)}
+                                              className="px-2 py-1.5 text-xs text-primary-container hover:bg-primary-container/10 rounded-md"
+                                            >
+                                              保存
+                                            </button>
+                                            <button
+                                              onClick={() => {
+                                                setRenamingId(null);
+                                                setRenameValue('');
+                                              }}
+                                              className="px-2 py-1.5 text-xs text-on-surface-variant hover:bg-surface-container-high/50 rounded-md"
+                                            >
+                                              取消
+                                            </button>
+                                          </div>
+                                        </div>
+                                      ) : (
+                                        <p className="text-sm font-medium text-on-surface truncate">{b.name}</p>
+                                      )}
+                                      <div className="grid grid-cols-2 gap-x-3 gap-y-1 mt-1.5 text-xs text-on-surface-variant sm:flex sm:flex-wrap sm:gap-x-4">
+                                        <span>{new Date(b.createdAt).toLocaleString('zh-CN')}</span>
+                                        <span>{b.fileSizeText}</span>
+                                        <span>{b.modelCount ?? 0} 个 STEP 模型</span>
+                                        <span>{b.thumbnailCount ?? 0} 张预览图</span>
+                                        <span>数据库 {b.dbSize}</span>
+                                        {b.manifestVersion && <span>清单 v{b.manifestVersion}</span>}
+                                        {b.verifiedAt && <span>已校验</span>}
+                                      </div>
+                                    </div>
+                                    <div className="grid grid-cols-2 gap-2 sm:grid-cols-5 lg:flex lg:flex-wrap lg:items-center lg:gap-1.5 lg:shrink-0">
+                                      <button
+                                        onClick={() => handleRestoreRequest(b.id)}
+                                        disabled={adminBusy}
+                                        className="px-2.5 py-2 lg:py-1.5 text-xs font-medium bg-primary-container/15 text-primary-container rounded-md hover:bg-primary-container/25 disabled:opacity-50 transition-colors flex items-center justify-center gap-1"
+                                      >
+                                        <Icon name="restore" size={13} />
+                                        恢复
+                                      </button>
+                                      <button
+                                        onClick={() => handleDownloadBackup(b.id)}
+                                        disabled={adminBusy}
+                                        className="px-2.5 py-2 lg:py-1.5 text-xs font-medium bg-surface-container-high/60 text-on-surface-variant rounded-md hover:bg-surface-container-highest/50 disabled:opacity-50 transition-colors flex items-center justify-center gap-1"
+                                      >
+                                        <Icon name="download" size={13} />
+                                        下载
+                                      </button>
+                                      <button
+                                        onClick={() => handleVerifyBackup(b.id)}
+                                        disabled={adminBusy || verifyingBackupId === b.id}
+                                        className="px-2.5 py-2 lg:py-1.5 text-xs font-medium bg-surface-container-high/60 text-on-surface-variant rounded-md hover:bg-surface-container-highest/50 disabled:opacity-50 transition-colors flex items-center justify-center gap-1"
+                                      >
+                                        <Icon name="verified" size={13} />
+                                        {verifyingBackupId === b.id ? `${verifyProgress.percent}%` : '校验'}
+                                      </button>
+                                      <button
+                                        onClick={() => {
+                                          setRenamingId(b.id);
+                                          setRenameValue(b.name);
+                                        }}
+                                        disabled={adminBusy}
+                                        className="px-2.5 py-2 lg:py-1.5 text-xs font-medium bg-surface-container-high/60 text-on-surface-variant rounded-md hover:bg-surface-container-highest/50 disabled:opacity-50 transition-colors flex items-center justify-center gap-1"
+                                      >
+                                        <Icon name="edit" size={13} />
+                                        重命名
+                                      </button>
+                                      <button
+                                        onClick={() => setBackupDeleteConfirm({ id: b.id, name: b.name })}
+                                        disabled={adminBusy}
+                                        className="px-2.5 py-2 lg:py-1.5 text-xs font-medium bg-error-container/10 text-error rounded-md hover:bg-error-container/20 disabled:opacity-50 transition-colors flex items-center justify-center gap-1"
+                                      >
+                                        <Icon name="delete" size={13} />
+                                        删除
+                                      </button>
+                                    </div>
+                                  </div>
+
+                                  {verifyingBackupId === b.id && (
+                                    <div className="mt-3">
+                                      <TaskProgressCard progress={verifyProgress} color="primary" />
+                                    </div>
+                                  )}
+
+                                  {restoreConfirmId === b.id && (
+                                    <div className="mt-3 bg-error-container/10 border border-error/20 rounded-md p-3">
+                                      <div className="flex items-start gap-2">
+                                        <Icon name="warning" size={18} className="text-error shrink-0 mt-0.5" />
+                                        <div className="flex-1">
+                                          {!restoring ? (
+                                            <>
+                                              <p className="text-xs font-medium text-on-surface">确认恢复到此备份？</p>
+                                              <p className="text-xs text-error/80 mt-1">
+                                                此操作将覆盖当前数据库和模型文件，不可撤销！
+                                              </p>
+                                              <div className="grid grid-cols-1 gap-2 mt-2 sm:flex">
+                                                <button
+                                                  onClick={handleRestoreConfirm}
+                                                  className="px-3 py-1 text-xs font-medium bg-error text-on-error-container rounded-md hover:opacity-90 transition-opacity"
+                                                >
+                                                  确认恢复
+                                                </button>
+                                                <button
+                                                  onClick={() => setRestoreConfirmId(null)}
+                                                  className="px-3 py-1 text-xs text-on-surface-variant border border-outline-variant/30 rounded-md hover:bg-surface-container-high/50 transition-colors"
+                                                >
+                                                  取消
+                                                </button>
+                                              </div>
+                                            </>
+                                          ) : (
+                                            <TaskProgressCard progress={restoreProgress} color="primary" />
+                                          )}
+                                        </div>
+                                      </div>
+                                    </div>
+                                  )}
+                                </div>
+                              ))}
+                            </div>
+                          </div>
                         )}
 
-                        {/* Server file confirm dialog */}
-                        {serverFileConfirm && !importing && (
-                          <div className="mt-3 bg-error-container/10 border border-error/20 rounded-md p-4">
-                            <div className="flex items-start gap-3">
-                              <Icon name="warning" size={20} className="text-error shrink-0 mt-0.5" />
-                              <div className="flex-1">
-                                <p className="text-sm font-medium text-on-surface">确认从服务器文件恢复</p>
-                                <p className="text-xs text-on-surface-variant mt-1">
-                                  文件：{serverFileConfirm.name}（{(serverFileConfirm.size / 1024 / 1024).toFixed(1)}{' '}
-                                  MB）
-                                </p>
-                                <p className="text-xs text-on-surface-variant mt-0.5 break-all">
-                                  路径：{serverFileConfirm.path}
-                                </p>
-                                <div className="mt-3 grid grid-cols-1 gap-2 sm:flex">
+                        {/* Import from file */}
+                        <div className="px-4 py-4 sm:px-6">
+                          <div className="flex flex-col gap-3 mb-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
+                            <div>
+                              <p className="text-sm font-medium text-on-surface">导入恢复</p>
+                              <p className="text-xs text-on-surface-variant mt-0.5">
+                                上传备份文件恢复数据（将覆盖当前数据）
+                              </p>
+                            </div>
+                            <div className="grid grid-cols-2 gap-2 sm:flex">
+                              <input
+                                ref={backupInputRef}
+                                type="file"
+                                onChange={handleBackupFileSelect}
+                                className="hidden"
+                              />
+                              <button
+                                onClick={() => backupInputRef.current?.click()}
+                                disabled={adminBusy}
+                                className="px-4 py-2.5 sm:py-2 text-xs font-medium border border-outline-variant/40 text-on-surface-variant rounded-md hover:text-on-surface hover:bg-surface-container-high/50 disabled:opacity-50 transition-colors flex items-center justify-center gap-1.5"
+                              >
+                                <Icon name="upload" size={14} />
+                                本地上传
+                              </button>
+                              <button
+                                onClick={() => {
+                                  setServerFileConfirm(null);
+                                  handleLoadServerFiles();
+                                }}
+                                disabled={adminBusy}
+                                className="px-4 py-2.5 sm:py-2 text-xs font-medium border border-outline-variant/40 text-on-surface-variant rounded-md hover:text-on-surface hover:bg-surface-container-high/50 disabled:opacity-50 transition-colors flex items-center justify-center gap-1.5"
+                              >
+                                <Icon name="folder" size={14} />
+                                服务器文件
+                              </button>
+                            </div>
+                          </div>
+
+                          {importing && (
+                            <div className="mt-3">
+                              {/* Phase 1: Upload */}
+                              {!restoreProgress.message && uploadProgress < 100 && (
+                                <TaskProgressCard progress={{ message: '上传中...', percent: uploadProgress }} />
+                              )}
+                              {/* Phase 2: Server processing */}
+                              {(restoreProgress.message || uploadProgress >= 100) && (
+                                <TaskProgressCard
+                                  progress={{
+                                    message: restoreProgress.message || '上传完成，正在处理...',
+                                    percent: restoreProgress.message ? restoreProgress.percent : 100,
+                                    logs: restoreProgress.logs,
+                                  }}
+                                />
+                              )}
+                            </div>
+                          )}
+
+                          {/* Server file list */}
+                          {loadingServerFiles && (
+                            <div className="mt-3 text-xs text-on-surface-variant animate-pulse">
+                              正在扫描服务器文件...
+                            </div>
+                          )}
+                          {!loadingServerFiles && serverFiles.length > 0 && !importing && (
+                            <div className="mt-3 border border-outline-variant/20 rounded-md divide-y divide-outline-variant/10">
+                              {serverFiles.map((f) => (
+                                <div
+                                  key={f.path}
+                                  className="flex flex-col gap-2 px-3 py-3 hover:bg-surface-container-high/30 sm:flex-row sm:items-center sm:justify-between"
+                                >
+                                  <div className="flex-1 min-w-0">
+                                    <p className="text-xs font-medium text-on-surface truncate">{f.name}</p>
+                                    <p className="text-xs text-on-surface-variant">
+                                      {(f.size / 1024 / 1024).toFixed(1)} MB ·{' '}
+                                      {new Date(f.modifiedAt).toLocaleString('zh-CN')}
+                                    </p>
+                                  </div>
                                   <button
-                                    onClick={() => handleServerFileImport(serverFileConfirm)}
-                                    className="px-4 py-1.5 text-xs font-medium text-on-error bg-error rounded-md hover:bg-error/90 transition-colors"
+                                    onClick={() => setServerFileConfirm(f)}
+                                    disabled={adminBusy}
+                                    className="w-full sm:w-auto sm:ml-2 px-3 py-1.5 text-xs font-medium text-primary border border-primary/30 rounded hover:bg-primary/10 disabled:opacity-50 transition-colors shrink-0"
                                   >
-                                    确认恢复（将覆盖当前数据）
+                                    恢复
                                   </button>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                          {!loadingServerFiles && serverFilesScanned && serverFiles.length === 0 && (
+                            <div className="mt-3 text-xs text-on-surface-variant">未找到服务器上的备份文件</div>
+                          )}
+
+                          {/* Server file confirm dialog */}
+                          {serverFileConfirm && !importing && (
+                            <div className="mt-3 bg-error-container/10 border border-error/20 rounded-md p-4">
+                              <div className="flex items-start gap-3">
+                                <Icon name="warning" size={20} className="text-error shrink-0 mt-0.5" />
+                                <div className="flex-1">
+                                  <p className="text-sm font-medium text-on-surface">确认从服务器文件恢复</p>
+                                  <p className="text-xs text-on-surface-variant mt-1">
+                                    文件：{serverFileConfirm.name}（{(serverFileConfirm.size / 1024 / 1024).toFixed(1)}{' '}
+                                    MB）
+                                  </p>
+                                  <p className="text-xs text-on-surface-variant mt-0.5 break-all">
+                                    路径：{serverFileConfirm.path}
+                                  </p>
+                                  <div className="mt-3 grid grid-cols-1 gap-2 sm:flex">
+                                    <button
+                                      onClick={() => handleServerFileImport(serverFileConfirm)}
+                                      className="px-4 py-1.5 text-xs font-medium text-on-error bg-error rounded-md hover:bg-error/90 transition-colors"
+                                    >
+                                      确认恢复（将覆盖当前数据）
+                                    </button>
+                                    <button
+                                      onClick={() => setServerFileConfirm(null)}
+                                      className="px-4 py-1.5 text-xs text-on-surface-variant border border-outline-variant/30 rounded-md hover:bg-surface-container-high/50 transition-colors"
+                                    >
+                                      取消
+                                    </button>
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                          )}
+
+                          {restoreConfirmFile && !importing && (
+                            <div className="mt-3 bg-error-container/10 border border-error/20 rounded-md p-4">
+                              <div className="flex items-start gap-3">
+                                <Icon name="warning" size={20} className="text-error shrink-0 mt-0.5" />
+                                <div className="flex-1">
+                                  <p className="text-sm font-medium text-on-surface">选择导入方式</p>
+                                  <p className="text-xs text-on-surface-variant mt-1">
+                                    文件：{restoreConfirmFile.name}（
+                                    {(restoreConfirmFile.size / 1024 / 1024).toFixed(1)} MB）
+                                  </p>
+                                  <div className="mt-3 space-y-2">
+                                    <button
+                                      onClick={() => handleImport('restore')}
+                                      className="w-full text-left px-3 py-2 bg-error/10 border border-error/20 rounded-md hover:bg-error/15 transition-colors"
+                                    >
+                                      <p className="text-xs font-medium text-error">直接恢复</p>
+                                      <p className="text-xs text-on-surface-variant mt-0.5">
+                                        立即覆盖当前数据库和模型文件（不可撤销）
+                                      </p>
+                                    </button>
+                                    <button
+                                      onClick={() => handleImport('save')}
+                                      className="w-full text-left px-3 py-2 bg-primary/10 border border-primary/20 rounded-md hover:bg-primary/15 transition-colors"
+                                    >
+                                      <p className="text-xs font-medium text-primary">保存到备份列表</p>
+                                      <p className="text-xs text-on-surface-variant mt-0.5">
+                                        保存后可随时通过「恢复备份」按需恢复
+                                      </p>
+                                    </button>
+                                  </div>
                                   <button
-                                    onClick={() => setServerFileConfirm(null)}
-                                    className="px-4 py-1.5 text-xs text-on-surface-variant border border-outline-variant/30 rounded-md hover:bg-surface-container-high/50 transition-colors"
+                                    onClick={() => setRestoreConfirmFile(null)}
+                                    className="mt-2 px-4 py-1 text-xs text-on-surface-variant border border-outline-variant/30 rounded-md hover:bg-surface-container-high/50 transition-colors"
                                   >
                                     取消
                                   </button>
                                 </div>
                               </div>
                             </div>
-                          </div>
-                        )}
-
-                        {restoreConfirmFile && !importing && (
-                          <div className="mt-3 bg-error-container/10 border border-error/20 rounded-md p-4">
-                            <div className="flex items-start gap-3">
-                              <Icon name="warning" size={20} className="text-error shrink-0 mt-0.5" />
-                              <div className="flex-1">
-                                <p className="text-sm font-medium text-on-surface">选择导入方式</p>
-                                <p className="text-xs text-on-surface-variant mt-1">
-                                  文件：{restoreConfirmFile.name}（{(restoreConfirmFile.size / 1024 / 1024).toFixed(1)}{' '}
-                                  MB）
-                                </p>
-                                <div className="mt-3 space-y-2">
-                                  <button
-                                    onClick={() => handleImport('restore')}
-                                    className="w-full text-left px-3 py-2 bg-error/10 border border-error/20 rounded-md hover:bg-error/15 transition-colors"
-                                  >
-                                    <p className="text-xs font-medium text-error">直接恢复</p>
-                                    <p className="text-xs text-on-surface-variant mt-0.5">
-                                      立即覆盖当前数据库和模型文件（不可撤销）
-                                    </p>
-                                  </button>
-                                  <button
-                                    onClick={() => handleImport('save')}
-                                    className="w-full text-left px-3 py-2 bg-primary/10 border border-primary/20 rounded-md hover:bg-primary/15 transition-colors"
-                                  >
-                                    <p className="text-xs font-medium text-primary">保存到备份列表</p>
-                                    <p className="text-xs text-on-surface-variant mt-0.5">
-                                      保存后可随时通过「恢复备份」按需恢复
-                                    </p>
-                                  </button>
-                                </div>
-                                <button
-                                  onClick={() => setRestoreConfirmFile(null)}
-                                  className="mt-2 px-4 py-1 text-xs text-on-surface-variant border border-outline-variant/30 rounded-md hover:bg-surface-container-high/50 transition-colors"
-                                >
-                                  取消
-                                </button>
-                              </div>
-                            </div>
-                          </div>
-                        )}
-                      </div>
-
-                      {/* System Update — version detection only */}
-                      <div className="px-6 py-4 border-t border-outline-variant/10">
-                        <div className="flex items-center justify-between gap-4 mb-3">
-                          <div>
-                            <p className="text-sm font-medium text-on-surface">版本检测</p>
-                            <p className="text-xs text-on-surface-variant mt-0.5">
-                              当前版本:{' '}
-                              <span className="font-mono text-primary-container">
-                                {currentVersion || updateInfo?.current || '—'}
-                              </span>
-                              {updateInfo &&
-                                !updateInfo.updateAvailable &&
-                                (updateInfo.current || currentVersion) !== 'unknown' && (
-                                  <span className="ml-1.5 text-emerald-400">· 已是最新</span>
-                                )}
-                              {updateInfo?.updateAvailable && (
-                                <>
-                                  {' '}
-                                  · 最新版本: <span className="font-mono text-emerald-400">{updateInfo.remote}</span>
-                                </>
-                              )}
-                            </p>
-                          </div>
-                          <button
-                            onClick={handleCheckUpdate}
-                            disabled={checkingUpdate || adminBusy}
-                            className="px-4 py-2 text-xs font-medium border border-outline-variant/40 text-on-surface-variant rounded-md hover:text-on-surface hover:bg-surface-container-high/50 disabled:opacity-50 transition-colors flex items-center gap-1.5"
-                          >
-                            <Icon name="search" size={14} className={checkingUpdate ? 'animate-spin' : ''} />
-                            {checkingUpdate ? '检查中...' : '检查更新'}
-                          </button>
+                          )}
                         </div>
 
-                        {updateInfo?.updateAvailable && (
-                          <div className="mt-2 rounded-md bg-primary/10 border border-primary/20 overflow-hidden">
-                            {/* Version comparison header */}
-                            <div className="px-4 py-3 bg-primary/5 border-b border-primary/10">
-                              <div className="flex items-center gap-3">
-                                <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-surface-container-lowest text-on-surface-variant border border-outline-variant/20 font-mono">
-                                  {updateInfo.current}
+                        {/* System Update — version detection only */}
+                        <div className="px-6 py-4 border-t border-outline-variant/10">
+                          <div className="flex items-center justify-between gap-4 mb-3">
+                            <div>
+                              <p className="text-sm font-medium text-on-surface">版本检测</p>
+                              <p className="text-xs text-on-surface-variant mt-0.5">
+                                当前版本:{' '}
+                                <span className="font-mono text-primary-container">
+                                  {currentVersion || updateInfo?.current || '—'}
                                 </span>
-                                <Icon name="arrow_forward" size={16} className="text-primary" />
-                                <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 font-mono">
-                                  {updateInfo.remote}
-                                </span>
-                                <span className="text-xs font-medium text-primary">发现新版本</span>
+                                {updateInfo &&
+                                  !updateInfo.updateAvailable &&
+                                  (updateInfo.current || currentVersion) !== 'unknown' && (
+                                    <span className="ml-1.5 text-emerald-400">· 已是最新</span>
+                                  )}
+                                {updateInfo?.updateAvailable && (
+                                  <>
+                                    {' '}
+                                    · 最新版本: <span className="font-mono text-emerald-400">{updateInfo.remote}</span>
+                                  </>
+                                )}
+                              </p>
+                            </div>
+                            <button
+                              onClick={handleCheckUpdate}
+                              disabled={checkingUpdate || adminBusy}
+                              className="px-4 py-2 text-xs font-medium border border-outline-variant/40 text-on-surface-variant rounded-md hover:text-on-surface hover:bg-surface-container-high/50 disabled:opacity-50 transition-colors flex items-center gap-1.5"
+                            >
+                              <Icon name="search" size={14} className={checkingUpdate ? 'animate-spin' : ''} />
+                              {checkingUpdate ? '检查中...' : '检查更新'}
+                            </button>
+                          </div>
+
+                          {updateInfo?.updateAvailable && (
+                            <div className="mt-2 rounded-md bg-primary/10 border border-primary/20 overflow-hidden">
+                              {/* Version comparison header */}
+                              <div className="px-4 py-3 bg-primary/5 border-b border-primary/10">
+                                <div className="flex items-center gap-3">
+                                  <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-surface-container-lowest text-on-surface-variant border border-outline-variant/20 font-mono">
+                                    {updateInfo.current}
+                                  </span>
+                                  <Icon name="arrow_forward" size={16} className="text-primary" />
+                                  <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 font-mono">
+                                    {updateInfo.remote}
+                                  </span>
+                                  <span className="text-xs font-medium text-primary">发现新版本</span>
+                                </div>
+                              </div>
+
+                              {/* Release notes */}
+                              {updateInfo.releaseNotes && (
+                                <div className="px-4 py-3">
+                                  <p className="text-xs font-medium text-on-surface mb-2">更新内容</p>
+                                  <div className="max-h-48 overflow-y-auto text-xs text-on-surface-variant/80 space-y-0.5 whitespace-pre-line bg-surface-container/50 rounded p-3">
+                                    {updateInfo.releaseNotes}
+                                  </div>
+                                </div>
+                              )}
+
+                              {/* Upgrade command */}
+                              <div className="px-4 py-3 border-t border-primary/10">
+                                <p className="text-xs text-on-surface-variant mb-2">
+                                  服务器默认启用自动更新；如需立即更新，执行：
+                                </p>
+                                <div className="bg-surface-container rounded p-3 font-mono text-xs text-on-surface select-all space-y-1">
+                                  <div>cd /opt/3dparthub</div>
+                                  <div>
+                                    curl -L -o docker-compose.yml
+                                    https://raw.githubusercontent.com/liaoweixiang2024-blip/3DPartHub/main/docker-compose.yml
+                                  </div>
+                                  <div>touch .env</div>
+                                  <div>
+                                    grep -q '^IMAGE_TAG=' .env && sed -i 's/^IMAGE_TAG=.*/IMAGE_TAG=latest/' .env ||
+                                    echo 'IMAGE_TAG=latest' &gt;&gt; .env
+                                  </div>
+                                  <div>docker compose pull</div>
+                                  <div>docker compose up -d --force-recreate</div>
+                                </div>
+                                <p className="text-[10px] text-on-surface-variant/50 mt-2">
+                                  不要复制 shell 提示符；升级后数据库会自动迁移，请查看日志确认: docker compose logs -f
+                                  api
+                                </p>
+                                {updateInfo.releaseUrl && (
+                                  <a
+                                    href={updateInfo.releaseUrl}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="inline-block mt-2 text-xs text-primary hover:underline"
+                                  >
+                                    查看 GitHub Release 详情 →
+                                  </a>
+                                )}
                               </div>
                             </div>
+                          )}
 
-                            {/* Release notes */}
-                            {updateInfo.releaseNotes && (
+                          {updateInfo?.releaseNotes && !updateInfo.updateAvailable && (
+                            <div className="mt-2 rounded-md bg-surface-container/60 border border-outline-variant/20 overflow-hidden">
+                              <div className="px-4 py-3 border-b border-outline-variant/10">
+                                <div className="flex items-center justify-between gap-3">
+                                  <p className="text-xs font-medium text-on-surface">最新版本更新内容</p>
+                                  <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-surface-container-lowest text-on-surface-variant border border-outline-variant/20 font-mono">
+                                    {updateInfo.remote}
+                                  </span>
+                                </div>
+                              </div>
                               <div className="px-4 py-3">
-                                <p className="text-xs font-medium text-on-surface mb-2">更新内容</p>
                                 <div className="max-h-48 overflow-y-auto text-xs text-on-surface-variant/80 space-y-0.5 whitespace-pre-line bg-surface-container/50 rounded p-3">
                                   {updateInfo.releaseNotes}
                                 </div>
+                                {updateInfo.releaseUrl && (
+                                  <a
+                                    href={updateInfo.releaseUrl}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="inline-block mt-2 text-xs text-primary hover:underline"
+                                  >
+                                    查看 GitHub Release 详情 →
+                                  </a>
+                                )}
                               </div>
-                            )}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  </>
+                )}
 
-                            {/* Upgrade command */}
-                            <div className="px-4 py-3 border-t border-primary/10">
-                              <p className="text-xs text-on-surface-variant mb-2">
-                                服务器默认启用自动更新；如需立即更新，执行：
-                              </p>
-                              <div className="bg-surface-container rounded p-3 font-mono text-xs text-on-surface select-all space-y-1">
-                                <div>cd /opt/3dparthub</div>
-                                <div>
-                                  curl -L -o docker-compose.yml
-                                  https://raw.githubusercontent.com/liaoweixiang2024-blip/3DPartHub/main/docker-compose.yml
-                                </div>
-                                <div>touch .env</div>
-                                <div>
-                                  grep -q '^IMAGE_TAG=' .env && sed -i 's/^IMAGE_TAG=.*/IMAGE_TAG=latest/' .env || echo
-                                  'IMAGE_TAG=latest' &gt;&gt; .env
-                                </div>
-                                <div>docker compose pull</div>
-                                <div>docker compose up -d --force-recreate</div>
-                              </div>
-                              <p className="text-[10px] text-on-surface-variant/50 mt-2">
-                                不要复制 shell 提示符；升级后数据库会自动迁移，请查看日志确认: docker compose logs -f
-                                api
-                              </p>
-                              {updateInfo.releaseUrl && (
-                                <a
-                                  href={updateInfo.releaseUrl}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  className="inline-block mt-2 text-xs text-primary hover:underline"
-                                >
-                                  查看 GitHub Release 详情 →
-                                </a>
-                              )}
+                {activeTab === '缓存清理' && (
+                  <div className="space-y-4">
+                    {/* Scan header */}
+                    <div className="bg-surface-container-low rounded-lg border border-outline-variant/10 p-4">
+                      <div className="flex items-center justify-between gap-4 flex-wrap">
+                        <div>
+                          <h3 className="text-sm font-semibold text-on-surface">缓存垃圾清理</h3>
+                          <p className="text-xs text-on-surface-variant mt-1">
+                            扫描磁盘上与数据库记录不匹配的孤立文件、过期临时文件等，释放磁盘空间
+                          </p>
+                        </div>
+                        <button
+                          onClick={async () => {
+                            if (cleanupScanning) return;
+                            setCleanupScanning(true);
+                            setCleanupScan(null);
+                            setCleanupSelectedKeys(new Set());
+                            try {
+                              const result = await scanCleanup();
+                              setCleanupScan(result);
+                            } catch (err: any) {
+                              toast(err.message || '扫描失败', 'error');
+                            } finally {
+                              setCleanupScanning(false);
+                            }
+                          }}
+                          disabled={cleanupScanning || cleanupRunning}
+                          className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-primary-container px-4 text-xs font-bold text-on-primary shadow-sm transition-all hover:-translate-y-px hover:opacity-95 disabled:translate-y-0 disabled:cursor-not-allowed disabled:bg-surface-container-high disabled:text-on-surface-variant disabled:shadow-none"
+                        >
+                          <Icon name={cleanupScanning ? 'hourglass_empty' : 'search'} size={14} />
+                          {cleanupScanning ? '扫描中...' : '开始扫描'}
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Scan results */}
+                    {cleanupScan && (
+                      <>
+                        {cleanupScan.totalFiles === 0 ? (
+                          <div className="bg-emerald-500/10 border border-emerald-500/20 rounded-lg p-4 flex items-center gap-3">
+                            <Icon name="verified" size={20} className="text-emerald-500 shrink-0" />
+                            <div>
+                              <p className="text-sm font-medium text-on-surface">系统很干净</p>
+                              <p className="text-xs text-on-surface-variant mt-0.5">未发现缓存垃圾文件</p>
                             </div>
                           </div>
-                        )}
-
-                        {updateInfo?.releaseNotes && !updateInfo.updateAvailable && (
-                          <div className="mt-2 rounded-md bg-surface-container/60 border border-outline-variant/20 overflow-hidden">
-                            <div className="px-4 py-3 border-b border-outline-variant/10">
-                              <div className="flex items-center justify-between gap-3">
-                                <p className="text-xs font-medium text-on-surface">最新版本更新内容</p>
-                                <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-surface-container-lowest text-on-surface-variant border border-outline-variant/20 font-mono">
-                                  {updateInfo.remote}
+                        ) : (
+                          <>
+                            {/* Summary */}
+                            <div className="bg-surface-container-low rounded-lg border border-outline-variant/10 p-4">
+                              <div className="flex items-center gap-2 mb-3">
+                                <Icon name="info" size={16} className="text-on-surface-variant" />
+                                <span className="text-sm text-on-surface">
+                                  发现 <strong>{cleanupScan.totalFiles}</strong> 个垃圾文件，共{' '}
+                                  <strong>{cleanupScan.totalSizeText}</strong>
                                 </span>
                               </div>
-                            </div>
-                            <div className="px-4 py-3">
-                              <div className="max-h-48 overflow-y-auto text-xs text-on-surface-variant/80 space-y-0.5 whitespace-pre-line bg-surface-container/50 rounded p-3">
-                                {updateInfo.releaseNotes}
-                              </div>
-                              {updateInfo.releaseUrl && (
-                                <a
-                                  href={updateInfo.releaseUrl}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  className="inline-block mt-2 text-xs text-primary hover:underline"
-                                >
-                                  查看 GitHub Release 详情 →
-                                </a>
-                              )}
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                </>
-              )}
 
-              {activeTab === '缓存清理' && (
-                <div className="space-y-4">
-                  {/* Scan header */}
-                  <div className="bg-surface-container-low rounded-lg border border-outline-variant/10 p-4">
-                    <div className="flex items-center justify-between gap-4 flex-wrap">
-                      <div>
-                        <h3 className="text-sm font-semibold text-on-surface">缓存垃圾清理</h3>
-                        <p className="text-xs text-on-surface-variant mt-1">
-                          扫描磁盘上与数据库记录不匹配的孤立文件、过期临时文件等，释放磁盘空间
-                        </p>
-                      </div>
-                      <button
-                        onClick={async () => {
-                          if (cleanupScanning) return;
-                          setCleanupScanning(true);
-                          setCleanupScan(null);
-                          setCleanupSelectedKeys(new Set());
-                          try {
-                            const result = await scanCleanup();
-                            setCleanupScan(result);
-                          } catch (err: any) {
-                            toast(err.message || '扫描失败', 'error');
-                          } finally {
-                            setCleanupScanning(false);
-                          }
-                        }}
-                        disabled={cleanupScanning || cleanupRunning}
-                        className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-primary-container px-4 text-xs font-bold text-on-primary shadow-sm transition-all hover:-translate-y-px hover:opacity-95 disabled:translate-y-0 disabled:cursor-not-allowed disabled:bg-surface-container-high disabled:text-on-surface-variant disabled:shadow-none"
-                      >
-                        <Icon name={cleanupScanning ? 'hourglass_empty' : 'search'} size={14} />
-                        {cleanupScanning ? '扫描中...' : '开始扫描'}
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* Scan results */}
-                  {cleanupScan && (
-                    <>
-                      {cleanupScan.totalFiles === 0 ? (
-                        <div className="bg-emerald-500/10 border border-emerald-500/20 rounded-lg p-4 flex items-center gap-3">
-                          <Icon name="verified" size={20} className="text-emerald-500 shrink-0" />
-                          <div>
-                            <p className="text-sm font-medium text-on-surface">系统很干净</p>
-                            <p className="text-xs text-on-surface-variant mt-0.5">未发现缓存垃圾文件</p>
-                          </div>
-                        </div>
-                      ) : (
-                        <>
-                          {/* Summary */}
-                          <div className="bg-surface-container-low rounded-lg border border-outline-variant/10 p-4">
-                            <div className="flex items-center gap-2 mb-3">
-                              <Icon name="info" size={16} className="text-on-surface-variant" />
-                              <span className="text-sm text-on-surface">
-                                发现 <strong>{cleanupScan.totalFiles}</strong> 个垃圾文件，共{' '}
-                                <strong>{cleanupScan.totalSizeText}</strong>
-                              </span>
-                            </div>
-
-                            {/* Category list */}
-                            <div className="space-y-2">
-                              {cleanupScan.categories.map((cat: CleanupCategory) => {
-                                const selected = cleanupSelectedKeys.has(cat.key);
-                                return (
-                                  <label
-                                    key={cat.key}
-                                    className={`flex items-center gap-3 rounded-lg border p-3 cursor-pointer transition-colors ${
-                                      selected
-                                        ? 'bg-primary-container/20 border-primary/30'
-                                        : 'bg-surface-container-high/40 border-outline-variant/10 hover:bg-surface-container-high/60'
-                                    }`}
-                                  >
-                                    <input
-                                      type="checkbox"
-                                      checked={selected}
-                                      onChange={() => {
-                                        setCleanupSelectedKeys((prev) => {
-                                          const next = new Set(prev);
-                                          if (next.has(cat.key)) next.delete(cat.key);
-                                          else next.add(cat.key);
-                                          return next;
-                                        });
-                                      }}
-                                      disabled={cleanupRunning}
-                                      className="h-4 w-4 rounded border-outline-variant text-primary accent-primary"
-                                    />
-                                    <div className="flex-1 min-w-0">
-                                      <div className="flex items-center gap-2 text-sm text-on-surface">
-                                        <span className="font-medium">{cat.label}</span>
-                                        <span className="text-xs px-1.5 py-0.5 rounded bg-surface-container-high text-on-surface-variant">
-                                          {cat.count} 个文件
-                                        </span>
-                                        <span className="text-xs px-1.5 py-0.5 rounded bg-surface-container-high text-on-surface-variant">
-                                          {cat.totalSizeText}
-                                        </span>
+                              {/* Category list */}
+                              <div className="space-y-2">
+                                {cleanupScan.categories.map((cat: CleanupCategory) => {
+                                  const selected = cleanupSelectedKeys.has(cat.key);
+                                  return (
+                                    <label
+                                      key={cat.key}
+                                      className={`flex items-center gap-3 rounded-lg border p-3 cursor-pointer transition-colors ${
+                                        selected
+                                          ? 'bg-primary-container/20 border-primary/30'
+                                          : 'bg-surface-container-high/40 border-outline-variant/10 hover:bg-surface-container-high/60'
+                                      }`}
+                                    >
+                                      <input
+                                        type="checkbox"
+                                        checked={selected}
+                                        onChange={() => {
+                                          setCleanupSelectedKeys((prev) => {
+                                            const next = new Set(prev);
+                                            if (next.has(cat.key)) next.delete(cat.key);
+                                            else next.add(cat.key);
+                                            return next;
+                                          });
+                                        }}
+                                        disabled={cleanupRunning}
+                                        className="h-4 w-4 rounded border-outline-variant text-primary accent-primary"
+                                      />
+                                      <div className="flex-1 min-w-0">
+                                        <div className="flex items-center gap-2 text-sm text-on-surface">
+                                          <span className="font-medium">{cat.label}</span>
+                                          <span className="text-xs px-1.5 py-0.5 rounded bg-surface-container-high text-on-surface-variant">
+                                            {cat.count} 个文件
+                                          </span>
+                                          <span className="text-xs px-1.5 py-0.5 rounded bg-surface-container-high text-on-surface-variant">
+                                            {cat.totalSizeText}
+                                          </span>
+                                        </div>
+                                        {cat.samplePaths.length > 0 && (
+                                          <p className="text-xs text-on-surface-variant mt-1 truncate">
+                                            示例: {cat.samplePaths.join(', ')}
+                                          </p>
+                                        )}
                                       </div>
-                                      {cat.samplePaths.length > 0 && (
-                                        <p className="text-xs text-on-surface-variant mt-1 truncate">
-                                          示例: {cat.samplePaths.join(', ')}
-                                        </p>
-                                      )}
-                                    </div>
-                                  </label>
-                                );
-                              })}
-                            </div>
+                                    </label>
+                                  );
+                                })}
+                              </div>
 
-                            {/* Select all + Clean button */}
-                            <div className="flex items-center justify-between gap-3 mt-4 pt-3 border-t border-outline-variant/10">
-                              <button
-                                onClick={() => {
-                                  if (cleanupSelectedKeys.size === cleanupScan.categories.length) {
-                                    setCleanupSelectedKeys(new Set());
-                                  } else {
-                                    setCleanupSelectedKeys(
-                                      new Set(cleanupScan.categories.map((c: CleanupCategory) => c.key)),
-                                    );
-                                  }
-                                }}
-                                disabled={cleanupRunning}
-                                className="text-xs text-primary hover:underline disabled:text-on-surface-variant"
-                              >
-                                {cleanupSelectedKeys.size === cleanupScan.categories.length ? '取消全选' : '全选'}
-                              </button>
-                              <button
-                                onClick={async () => {
-                                  if (cleanupSelectedKeys.size === 0 || cleanupRunning) return;
-                                  if (
-                                    !window.confirm(
-                                      `确认清理 ${cleanupSelectedKeys.size} 个分类的缓存文件？此操作不可撤销。`,
-                                    )
-                                  )
-                                    return;
-                                  setCleanupRunning(true);
-                                  try {
-                                    const result = await executeCleanup(Array.from(cleanupSelectedKeys));
-                                    toast(
-                                      `清理完成：删除 ${result.deletedCount} 个文件，释放 ${result.freedSizeText}${result.failedCount > 0 ? `，${result.failedCount} 个文件删除失败` : ''}`,
-                                      result.failedCount > 0 ? 'info' : 'success',
-                                    );
-                                    // Re-scan after cleanup
-                                    setCleanupSelectedKeys(new Set());
-                                    const newScan = await scanCleanup();
-                                    setCleanupScan(newScan);
-                                  } catch (err: any) {
-                                    toast(err.message || '清理失败', 'error');
-                                  } finally {
-                                    setCleanupRunning(false);
-                                  }
-                                }}
-                                disabled={cleanupSelectedKeys.size === 0 || cleanupRunning}
-                                className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-error/90 px-4 text-xs font-bold text-white shadow-sm transition-all hover:-translate-y-px hover:opacity-95 disabled:translate-y-0 disabled:cursor-not-allowed disabled:bg-surface-container-high disabled:text-on-surface-variant disabled:shadow-none"
-                              >
-                                <Icon name={cleanupRunning ? 'hourglass_empty' : 'delete'} size={14} />
-                                {cleanupRunning ? '清理中...' : `清理选中 (${cleanupSelectedKeys.size})`}
-                              </button>
+                              {/* Select all + Clean button */}
+                              <div className="flex items-center justify-between gap-3 mt-4 pt-3 border-t border-outline-variant/10">
+                                <button
+                                  onClick={() => {
+                                    if (cleanupSelectedKeys.size === cleanupScan.categories.length) {
+                                      setCleanupSelectedKeys(new Set());
+                                    } else {
+                                      setCleanupSelectedKeys(
+                                        new Set(cleanupScan.categories.map((c: CleanupCategory) => c.key)),
+                                      );
+                                    }
+                                  }}
+                                  disabled={cleanupRunning}
+                                  className="text-xs text-primary hover:underline disabled:text-on-surface-variant"
+                                >
+                                  {cleanupSelectedKeys.size === cleanupScan.categories.length ? '取消全选' : '全选'}
+                                </button>
+                                <button
+                                  onClick={() => {
+                                    if (cleanupSelectedKeys.size === 0 || cleanupRunning) return;
+                                    setCleanupConfirmOpen(true);
+                                  }}
+                                  disabled={cleanupSelectedKeys.size === 0 || cleanupRunning}
+                                  className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-error/90 px-4 text-xs font-bold text-white shadow-sm transition-all hover:-translate-y-px hover:opacity-95 disabled:translate-y-0 disabled:cursor-not-allowed disabled:bg-surface-container-high disabled:text-on-surface-variant disabled:shadow-none"
+                                >
+                                  <Icon name={cleanupRunning ? 'hourglass_empty' : 'delete'} size={14} />
+                                  {cleanupRunning ? '清理中...' : `清理选中 (${cleanupSelectedKeys.size})`}
+                                </button>
+                              </div>
                             </div>
-                          </div>
-                        </>
-                      )}
-                    </>
-                  )}
-                </div>
-              )}
+                          </>
+                        )}
+                      </>
+                    )}
+                  </div>
+                )}
+              </div>
             </div>
-          </div>
-        </AdminContentPanel>
-      </div>
-    </AdminManagementPage>
+          </AdminContentPanel>
+        </div>
+      </AdminManagementPage>
+      <ConfirmDialog
+        open={Boolean(backupDeleteConfirm)}
+        onClose={() => setBackupDeleteConfirm(null)}
+        onConfirm={() => {
+          if (backupDeleteConfirm) void handleDelete(backupDeleteConfirm.id);
+        }}
+        title="确认删除备份"
+        description={`确定要删除备份「${backupDeleteConfirm?.name || ''}」吗？`}
+        confirmLabel="确认删除"
+      />
+      <ConfirmDialog
+        open={cleanupConfirmOpen}
+        onClose={() => setCleanupConfirmOpen(false)}
+        onConfirm={() => void handleCleanupSelectedConfirm()}
+        icon="delete_sweep"
+        title="确认清理缓存"
+        description={`将清理选中的 ${cleanupSelectedKeys.size} 个分类缓存文件，此操作不可撤销。`}
+        confirmLabel={cleanupRunning ? '清理中...' : '清理选中'}
+        confirmDisabled={cleanupSelectedKeys.size === 0 || cleanupRunning}
+      />
+    </>
   );
 }
 

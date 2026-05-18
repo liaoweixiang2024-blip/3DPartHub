@@ -4,6 +4,9 @@ import { Link } from 'react-router-dom';
 import { popoverMotion } from '../../lib/motion';
 import { preloadModelDetailPage } from '../../lib/routeLoaders';
 import { useAuthStore, useFavoriteStore } from '../../stores';
+import FormatTag from '../shared/FormatTag';
+import Icon from '../shared/Icon';
+import ModelThumbnail from '../shared/ModelThumbnail';
 import {
   HomeGridCardContent,
   HomeListCardContent,
@@ -11,11 +14,8 @@ import {
   HOME_GRID_CARD_CLASS,
   HOME_LIST_ACTION_BUTTON_CLASS,
   HOME_LIST_CARD_CLASS,
-} from '../../themes/interfaceThemes/shared/HomeDesktopShared';
-import type { HomeBrowseState, Product } from '../../themes/interfaceThemes/shared/homeTypes';
-import FormatTag from '../shared/FormatTag';
-import Icon from '../shared/Icon';
-import ModelThumbnail from '../shared/ModelThumbnail';
+} from './HomeDesktopShared';
+import type { HomeBrowseState, Product } from './homeTypes';
 
 function ProductCardInner({
   product,

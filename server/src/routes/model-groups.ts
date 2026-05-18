@@ -1,5 +1,6 @@
 import { Router, Response } from 'express';
 import { createLogger } from '../lib/logger.js';
+import { getErrorMessage } from '../lib/http.js';
 import { authMiddleware, type AuthRequest } from '../middleware/auth.js';
 import { requireRole } from '../middleware/rbac.js';
 import { MODEL_STATUS } from '../services/modelStatus.js';
@@ -11,7 +12,9 @@ let prisma: any = null;
 try {
   const mod = await import('../lib/prisma.js');
   prisma = mod.prisma;
-} catch {}
+} catch {
+  log.warn('Failed to import prisma module');
+}
 
 const router = Router();
 const MAX_GROUP_MODEL_IDS = 200;
@@ -58,7 +61,7 @@ router.post('/api/model-groups', authMiddleware, requireRole('ADMIN'), async (re
     await cacheDel('cache:model-groups:list');
     await clearCategoryCache();
     res.json({ success: true, data: group });
-  } catch (err: any) {
+  } catch (err: unknown) {
     log.error({ err }, 'Operation failed');
     res.status(500).json({ detail: '操作失败' });
   }
@@ -111,7 +114,7 @@ router.get('/api/model-groups', authMiddleware, requireRole('ADMIN'), async (_re
       }));
     });
     res.json({ success: true, data: result.value });
-  } catch (err: any) {
+  } catch (err: unknown) {
     log.error({ err }, 'Operation failed');
     res.status(500).json({ detail: '操作失败' });
   }
@@ -181,7 +184,7 @@ router.get(
       }
 
       res.json({ success: true, data: { items, total, page, page_size: pageSize } });
-    } catch (err: any) {
+    } catch (err: unknown) {
       log.error({ err }, 'Operation failed');
       res.status(500).json({ detail: '操作失败' });
     }
@@ -200,7 +203,7 @@ router.get(
     try {
       const total = await prisma.modelGroup.count();
       res.json({ success: true, data: { total } });
-    } catch (err: any) {
+    } catch (err: unknown) {
       log.error({ err }, 'Operation failed');
       res.status(500).json({ detail: '操作失败' });
     }
@@ -252,7 +255,7 @@ router.post(
       await cacheDel('cache:model-groups:list');
       await clearCategoryCache();
       res.json({ success: true, data: { merged: results.length, groups: results } });
-    } catch (err: any) {
+    } catch (err: unknown) {
       log.error({ err }, 'Operation failed');
       res.status(500).json({ detail: '操作失败' });
     }
@@ -344,7 +347,7 @@ router.put('/api/model-groups/:id', authMiddleware, requireRole('ADMIN'), async 
         created_at: group.createdAt,
       },
     });
-  } catch (err: any) {
+  } catch (err: unknown) {
     log.error({ err }, 'Operation failed');
     res.status(500).json({ detail: '操作失败' });
   }
@@ -370,7 +373,7 @@ router.delete(
       await cacheDel('cache:model-groups:list');
       await clearCategoryCache();
       res.json({ success: true });
-    } catch (err: any) {
+    } catch (err: unknown) {
       log.error({ err }, 'Operation failed');
       res.status(500).json({ detail: '操作失败' });
     }
@@ -435,9 +438,10 @@ router.post(
       await cacheDel('cache:model-groups:list');
       await clearCategoryCache();
       res.json({ success: true });
-    } catch (err: any) {
-      if (err.message?.startsWith('EXCEEDS_LIMIT:')) {
-        const current = err.message.split(':')[1];
+    } catch (err: unknown) {
+      const msg = getErrorMessage(err);
+      if (msg.startsWith('EXCEEDS_LIMIT:')) {
+        const current = msg.split(':')[1];
         res.status(400).json({ detail: `分组最多支持 ${MAX_GROUP_MODEL_IDS} 个模型，当前已有 ${current} 个` });
         return;
       }
@@ -497,12 +501,13 @@ router.delete(
       await cacheDel('cache:model-groups:list');
       await clearCategoryCache();
       res.json({ success: true });
-    } catch (err: any) {
-      if (err.message === 'NOT_FOUND') {
+    } catch (err: unknown) {
+      const msg = getErrorMessage(err);
+      if (msg === 'NOT_FOUND') {
         res.status(404).json({ detail: '分组不存在' });
         return;
       }
-      if (err.message === 'NOT_IN_GROUP') {
+      if (msg === 'NOT_IN_GROUP') {
         res.status(404).json({ detail: '模型不在当前分组中' });
         return;
       }

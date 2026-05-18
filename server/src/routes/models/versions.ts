@@ -79,7 +79,9 @@ export function createModelVersionsRouter({ prisma, optionalVerifiedUser }: Mode
         if (model.status === MODEL_STATUS.QUEUED || model.status === MODEL_STATUS.PROCESSING) {
           try {
             rmSync(file.path, { force: true });
-          } catch {}
+          } catch {
+            /* best-effort temp file cleanup */
+          }
           res.status(409).json({ detail: '模型正在转换中，请稍后重试' });
           return;
         }
@@ -115,7 +117,9 @@ export function createModelVersionsRouter({ prisma, optionalVerifiedUser }: Mode
         } finally {
           try {
             rmSync(file.path, { force: true });
-          } catch {}
+          } catch {
+            /* best-effort temp file cleanup */
+          }
         }
 
         const version = await prisma.modelVersion.create({

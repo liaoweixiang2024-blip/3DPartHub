@@ -64,7 +64,7 @@ router.post('/api/selection-shares', authMiddleware, async (req: AuthRequest, re
       success: true,
       data: { id: share.id, token: share.token },
     });
-  } catch (err: any) {
+  } catch (err: unknown) {
     log.error({ err }, 'Create selection share error');
     res.status(500).json({ detail: '创建分享失败' });
   }
@@ -143,7 +143,7 @@ router.get('/api/selection-shares/:token', async (req: Request, res: Response) =
         products: productsWithMatch,
       },
     });
-  } catch (err: any) {
+  } catch (err: unknown) {
     log.error({ err }, 'Get selection share error');
     res.status(500).json({ detail: '获取分享失败' });
   }
