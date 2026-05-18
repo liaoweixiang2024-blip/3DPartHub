@@ -82,6 +82,14 @@ import { useAuthStore } from '../stores';
 import { getInterfaceThemePackage } from '../themes/interfaceThemes/registry';
 import { getMobileThemePackage } from '../themes/mobileThemes/registry';
 
+const HOME_SCROLLING_IDLE_MS = 140;
+
+const getHomeRefreshScrollTop = (target: HomeRefreshScrollTarget, resultsAnchor: HTMLDivElement | null) => {
+  if (target !== 'results' || !resultsAnchor) return 0;
+  const anchorTop = resultsAnchor.offsetTop;
+  return anchorTop <= 24 ? 0 : Math.max(0, anchorTop - 12);
+};
+
 export default function HomePage() {
   useDocumentTitle();
   const isDesktop = useMediaQuery('(min-width: 768px)');
@@ -202,8 +210,7 @@ export default function HomePage() {
       pendingHomeListRefreshResetRef.current = false;
       const container = scrollContainerRef.current;
       if (container) {
-        const targetTop =
-          target === 'results' && resultsAnchorRef.current ? Math.max(0, resultsAnchorRef.current.offsetTop - 12) : 0;
+        const targetTop = getHomeRefreshScrollTop(target, resultsAnchorRef.current);
         if (Math.abs(container.scrollTop - targetTop) > 1) {
           jumpHomeScrollTo(container, targetTop);
         }
@@ -222,8 +229,8 @@ export default function HomePage() {
       const container = scrollContainerRef.current;
       if (!container) return;
       const targetTop =
-        pendingHomeListRefreshTargetRef.current === 'results' && resultsAnchorRef.current
-          ? Math.max(0, resultsAnchorRef.current.offsetTop - 12)
+        pendingHomeListRefreshTargetRef.current === 'results'
+          ? getHomeRefreshScrollTop(pendingHomeListRefreshTargetRef.current, resultsAnchorRef.current)
           : 0;
       jumpHomeScrollTo(container, targetTop);
     };
@@ -388,42 +395,7 @@ export default function HomePage() {
     if (!isDesktop) return;
     const container = scrollContainerRef.current;
     if (!container) return;
-    let lastScrollTop = container.scrollTop;
-    let snapFrame: number | null = null;
-    let measureFrame: number | null = null;
     let scrollIdleTimer: number | null = null;
-    let titleSnapDistance = 0;
-
-    const clearSnapFrame = () => {
-      if (snapFrame == null) return;
-      window.cancelAnimationFrame(snapFrame);
-      snapFrame = null;
-    };
-
-    const measureTitleSnapDistance = () => {
-      const title = container.querySelector<HTMLElement>('.home-title-toolbar');
-      if (!title) {
-        titleSnapDistance = 0;
-        return titleSnapDistance;
-      }
-      const titleStyles = window.getComputedStyle(title);
-      const titleMarginBottom = Number.parseFloat(titleStyles.marginBottom) || 0;
-      const titleEnd = title.offsetTop + title.offsetHeight + titleMarginBottom;
-      const firstListBlock = container.querySelector<HTMLElement>('.home-model-grid, .home-model-empty-state');
-      const listStart = firstListBlock?.offsetTop || titleEnd;
-      titleSnapDistance = Math.max(220, titleEnd + 120, listStart + 120);
-      return titleSnapDistance;
-    };
-
-    const scheduleMeasureTitleSnapDistance = () => {
-      if (measureFrame != null) return;
-      measureFrame = window.requestAnimationFrame(() => {
-        measureFrame = null;
-        measureTitleSnapDistance();
-      });
-    };
-
-    const getTitleSnapDistance = () => titleSnapDistance || measureTitleSnapDistance();
 
     const clearScrollIdleTimer = () => {
       if (scrollIdleTimer == null) return;
@@ -437,64 +409,16 @@ export default function HomePage() {
       scrollIdleTimer = window.setTimeout(() => {
         container.classList.remove('home-is-scrolling');
         scrollIdleTimer = null;
-      }, 140);
+      }, HOME_SCROLLING_IDLE_MS);
     };
 
-    const snapTitleToTop = () => {
-      clearSnapFrame();
-      if (container.scrollTop <= getTitleSnapDistance()) {
-        container.scrollTop = 0;
-        lastScrollTop = 0;
-      }
-    };
-
-    const scheduleTitleSnap = () => {
-      clearSnapFrame();
-      snapFrame = window.requestAnimationFrame(() => {
-        snapFrame = null;
-        snapTitleToTop();
-      });
-    };
-
-    const handleScroll = () => {
-      const currentTop = container.scrollTop;
-      const scrollingUp = currentTop < lastScrollTop;
-      lastScrollTop = currentTop;
-      markScrolling();
-
-      if (currentTop <= 360) {
-        scheduleMeasureTitleSnapDistance();
-      }
-
-      if (!scrollingUp || currentTop <= 0) {
-        clearSnapFrame();
-        return;
-      }
-
-      const titleSnapDistance = getTitleSnapDistance();
-      if (titleSnapDistance <= 0 || currentTop > titleSnapDistance) {
-        clearSnapFrame();
-        return;
-      }
-
-      scheduleTitleSnap();
-    };
+    const handleScroll = () => markScrolling();
 
     container.addEventListener('scroll', handleScroll, { passive: true });
-    const resizeObserver =
-      typeof ResizeObserver !== 'undefined' ? new ResizeObserver(scheduleMeasureTitleSnapDistance) : null;
-    resizeObserver?.observe(container);
-    scheduleMeasureTitleSnapDistance();
     return () => {
       container.removeEventListener('scroll', handleScroll);
-      resizeObserver?.disconnect();
       container.classList.remove('home-is-scrolling');
-      clearSnapFrame();
       clearScrollIdleTimer();
-      if (measureFrame != null) {
-        window.cancelAnimationFrame(measureFrame);
-        measureFrame = null;
-      }
     };
   }, [isDesktop]);
 
