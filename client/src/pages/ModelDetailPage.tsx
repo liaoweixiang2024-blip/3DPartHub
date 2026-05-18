@@ -26,6 +26,7 @@ import Icon from '../components/shared/Icon';
 import LoginConfirmDialog from '../components/shared/LoginConfirmDialog';
 import {
   ModelDetailDesktopFrame,
+  MODEL_DETAIL_MOBILE_BOTTOM_NAV_OFFSET,
   getModelDetailMobilePeekHeight,
   getModelDetailMobilePeekVariant,
 } from '../components/shared/ModelDetailFrame';
@@ -321,6 +322,10 @@ export default function ModelDetailPage() {
     });
   }, []);
 
+  const updateSheetExpanded = useCallback((expanded: boolean) => {
+    setSheetExpanded(expanded);
+  }, []);
+
   useEffect(() => {
     return () => {
       if (sheetDragOffsetFrameRef.current != null) window.cancelAnimationFrame(sheetDragOffsetFrameRef.current);
@@ -366,14 +371,14 @@ export default function ModelDetailPage() {
       const closeFromTop = dragStartScrollTop.current <= 4;
 
       if (dragStartExpanded.current && dy > 80 && closeFromTop) {
-        setSheetExpanded(false);
+        updateSheetExpanded(false);
       } else if (!dragStartExpanded.current && dy < -50) {
-        setSheetExpanded(true);
+        updateSheetExpanded(true);
       }
 
       setSheetDragOffsetImmediate(0);
     },
-    [setSheetDragOffsetImmediate],
+    [setSheetDragOffsetImmediate, updateSheetExpanded],
   );
 
   const handleSheetTouchStart = useCallback(
@@ -640,16 +645,13 @@ export default function ModelDetailPage() {
   return (
     <PublicPageShell mobileClassName="flex flex-col h-dvh bg-surface" keepMobileDrawerMounted>
       {/* Main area: 3D viewer + bottom sheet */}
-      <div
-        className="flex-1 min-h-0 relative"
-        style={{ marginBottom: 'calc(3.5rem + env(safe-area-inset-bottom, 0px))' }}
-      >
+      <div className="flex-1 min-h-0 relative" style={{ marginBottom: MODEL_DETAIL_MOBILE_BOTTOM_NAV_OFFSET }}>
         <CadViewerPanel
           variant="mobile"
           {...viewerProps}
           style={{ bottom: peekHeight }}
           onClick={() => {
-            if (sheetExpanded) setSheetExpanded(false);
+            if (sheetExpanded) updateSheetExpanded(false);
           }}
           showBackButton={!sheetExpanded}
           onBack={handleBack}
@@ -689,14 +691,17 @@ export default function ModelDetailPage() {
                 <Icon name="arrow_back" size={18} />
               </button>
             )}
-            <div onClick={() => setSheetExpanded(!sheetExpanded)} className="flex-1 flex justify-center cursor-pointer">
+            <div
+              onClick={() => updateSheetExpanded(!sheetExpanded)}
+              className="flex-1 flex justify-center cursor-pointer"
+            >
               <div className="w-9 h-1 rounded-full bg-on-surface-variant/25" />
             </div>
             {sheetExpanded && <div className="w-7 shrink-0" />}
           </div>
 
           {/* Peek bar — always visible */}
-          <div className={`${sheetExpanded ? 'px-4 pb-4' : 'mt-auto px-4 pb-2.5'} shrink-0`}>
+          <div className="shrink-0 px-4 pb-2.5">
             <div className="flex items-center gap-2">
               <div className="min-w-0 flex-1">
                 <h2
@@ -746,6 +751,7 @@ export default function ModelDetailPage() {
           <div
             ref={sheetContentRef}
             className={`flex-1 min-h-0 overflow-y-auto scrollbar-hidden ${!sheetExpanded ? 'hidden' : ''}`}
+            aria-hidden={!sheetExpanded}
           >
             <div className="px-4 pb-8 space-y-5">
               {/* Category breadcrumb */}

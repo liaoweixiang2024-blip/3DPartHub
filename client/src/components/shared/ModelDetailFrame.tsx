@@ -7,6 +7,7 @@ export const MODEL_DETAIL_DESKTOP_MAIN_CLASS = 'flex flex-1 min-h-0 overflow-hid
 export type ModelDetailMobilePeekVariant = 'compact' | 'tall';
 export const MODEL_DETAIL_MOBILE_COMPACT_PEEK_HEIGHT = 118;
 export const MODEL_DETAIL_MOBILE_TALL_PEEK_HEIGHT = 134;
+export const MODEL_DETAIL_MOBILE_BOTTOM_NAV_OFFSET = 'max(3.5rem, calc(2.75rem + env(safe-area-inset-bottom, 0px)))';
 export const MODEL_DETAIL_VIEWER_CLASS =
   'relative bg-surface-container min-w-0 flex-1 md:w-[60%] overflow-hidden border-r border-outline-variant/20 shrink-0';
 export const MODEL_DETAIL_ASIDE_CLASS =

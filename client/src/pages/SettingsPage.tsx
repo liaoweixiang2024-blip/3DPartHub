@@ -5142,7 +5142,7 @@ function Content() {
   const headerActions = (
     <div className="flex min-h-10 shrink-0 items-center justify-end gap-2">
       <span
-        className={`hidden items-center gap-1.5 whitespace-nowrap rounded-full px-2 text-xs md:inline-flex ${changed ? 'text-amber-500' : 'text-on-surface-variant'}`}
+        className={`hidden w-[6.75rem] items-center justify-center gap-1.5 whitespace-nowrap rounded-full px-2 text-xs md:inline-flex ${changed ? 'text-amber-500' : 'text-on-surface-variant'}`}
       >
         <span className={`h-1.5 w-1.5 rounded-full ${changed ? 'bg-amber-500' : 'bg-emerald-500'}`} />
         {changed ? '有未保存修改' : '当前配置已保存'}
@@ -5150,7 +5150,7 @@ function Content() {
       <button
         onClick={handleSave}
         disabled={!changed || saving}
-        className="inline-flex h-9 shrink-0 items-center justify-center gap-1.5 rounded-lg bg-primary-container px-3.5 text-xs font-bold text-on-primary shadow-sm transition-all hover:-translate-y-px hover:opacity-95 disabled:translate-y-0 disabled:cursor-not-allowed disabled:bg-surface-container-high disabled:text-on-surface-variant disabled:shadow-none md:h-8"
+        className="inline-flex h-9 w-[6.25rem] shrink-0 items-center justify-center gap-1.5 rounded-lg bg-primary-container px-3.5 text-xs font-bold text-on-primary shadow-sm transition-all hover:-translate-y-px hover:opacity-95 disabled:translate-y-0 disabled:cursor-not-allowed disabled:bg-surface-container-high disabled:text-on-surface-variant disabled:shadow-none md:h-8"
       >
         <Icon name="save" size={14} />
         {saving ? '保存中...' : '保存设置'}
@@ -5165,6 +5165,7 @@ function Content() {
       mobileTitle="设置分组"
       mobileTriggerVariant="surface"
       desktopVariant="prominent"
+      desktopAlign="end"
       className="w-full min-w-0"
     />
   );

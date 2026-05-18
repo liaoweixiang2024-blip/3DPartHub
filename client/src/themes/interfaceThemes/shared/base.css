@@ -47,6 +47,122 @@
   background: color-mix(in srgb, var(--color-shadow) 50%, transparent);
 }
 
+[data-interface-theme] .app-auth-dialog {
+  max-height: min(45rem, calc(100dvh - 7rem));
+}
+
+[data-interface-theme] .app-auth-header [data-brand-part='icon'],
+[data-interface-theme] .app-auth-header svg {
+  width: 2rem;
+  height: 2rem;
+}
+
+[data-interface-theme] .app-auth-header [data-brand-part='logo'] {
+  height: 2.375rem;
+  max-width: 12rem;
+}
+
+[data-interface-theme] .app-auth-header [data-brand-part='title'] {
+  font-size: 1.125rem;
+}
+
+[data-interface-theme] .app-auth-dialog form {
+  padding: 1.25rem 1.5rem;
+}
+
+[data-interface-theme] .app-auth-dialog-register form {
+  padding-top: 1rem;
+  padding-bottom: 1rem;
+}
+
+[data-interface-theme] .app-auth-dialog-register .app-auth-header {
+  padding-top: 1.125rem;
+  padding-bottom: 0.875rem;
+}
+
+[data-interface-theme] .app-auth-dialog-register .app-auth-body {
+  background: var(--color-surface-container-low);
+}
+
+[data-interface-theme] .app-auth-dialog form > :not([hidden]) ~ :not([hidden]) {
+  --tw-space-y-reverse: 0;
+  margin-top: calc(0.875rem * calc(1 - var(--tw-space-y-reverse)));
+  margin-bottom: calc(0.875rem * var(--tw-space-y-reverse));
+}
+
+[data-interface-theme] .app-auth-dialog-register form > :not([hidden]) ~ :not([hidden]) {
+  --tw-space-y-reverse: 0;
+  margin-top: calc(0.625rem * calc(1 - var(--tw-space-y-reverse)));
+  margin-bottom: calc(0.625rem * var(--tw-space-y-reverse));
+}
+
+[data-interface-theme] .app-auth-dialog-register label:not(.flex) {
+  margin-bottom: 0.25rem;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+[data-interface-theme] .app-auth-dialog input {
+  border-radius: 0.625rem;
+}
+
+[data-interface-theme] .app-auth-dialog-register input {
+  padding-top: 0.625rem;
+  padding-bottom: 0.625rem;
+  font-size: 0.9375rem;
+}
+
+[data-interface-theme] .app-auth-dialog-register form > button[type='submit'] {
+  padding-top: 0.6875rem;
+  padding-bottom: 0.6875rem;
+}
+
+[data-interface-theme] .app-auth-dialog form > button[type='submit'] {
+  border-radius: 0.75rem;
+  padding-top: 0.75rem;
+  padding-bottom: 0.75rem;
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+[data-interface-theme] .app-auth-dialog .auth-modal-switch {
+  padding-bottom: 1rem;
+}
+
+[data-interface-theme] .app-auth-dialog .auth-modal-legal {
+  padding-right: 2rem;
+  padding-bottom: 1.75rem;
+  padding-left: 2rem;
+}
+
+@media (min-width: 760px) {
+  [data-interface-theme] .app-auth-dialog-register {
+    max-width: min(29rem, calc(100vw - 3rem));
+    max-height: calc(100dvh - 3rem);
+  }
+
+  [data-interface-theme] .app-auth-dialog-register .app-auth-body {
+    max-height: calc(100dvh - 10rem);
+  }
+
+  [data-interface-theme] .app-auth-dialog-register form {
+    padding-top: 1.125rem;
+    padding-right: 1.625rem;
+    padding-left: 1.625rem;
+  }
+
+  [data-interface-theme] .app-auth-dialog-register form > :not([hidden]) ~ :not([hidden]) {
+    margin-top: 0.6875rem;
+    margin-bottom: 0;
+  }
+
+  [data-interface-theme] .app-auth-dialog-register form > button[type='submit'],
+  [data-interface-theme] .app-auth-dialog-register form > label,
+  [data-interface-theme] .app-auth-dialog-register form > [class*='bg-error-container'] {
+    width: 100%;
+  }
+}
+
 [data-interface-theme] .auth-modal {
   max-width: 27rem;
   border-color: color-mix(in srgb, var(--color-outline-variant) 20%, transparent);

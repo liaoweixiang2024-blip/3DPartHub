@@ -784,6 +784,8 @@ export default function SelectionPage() {
   /* ── share handler ── */
   const [sharingTarget, setSharingTarget] = useState<ShareTarget | null>(null);
   const [shareLinkDialog, setShareLinkDialog] = useState<ShareLinkDialogState | null>(null);
+  const nativeSharePendingRef = useRef(false);
+  const [nativeSharePending, setNativeSharePending] = useState(false);
 
   const [loginDialogOpen, setLoginDialogOpen] = useState(false);
   const [loginDialogReason, setLoginDialogReason] = useState('');
@@ -841,6 +843,10 @@ export default function SelectionPage() {
 
   const handleNativeShareDialogLink = useCallback(async () => {
     if (!shareLinkDialog || typeof navigator === 'undefined' || typeof navigator.share !== 'function') return;
+    if (nativeSharePendingRef.current) return;
+
+    nativeSharePendingRef.current = true;
+    setNativeSharePending(true);
     try {
       await navigator.share({
         title: shareLinkDialog.title,
@@ -848,9 +854,13 @@ export default function SelectionPage() {
       });
       setShareLinkDialog(null);
     } catch (error) {
-      if ((error as { name?: string })?.name === 'AbortError') return;
+      const errorName = (error as { name?: string })?.name;
+      if (errorName === 'AbortError' || errorName === 'InvalidStateError') return;
       if (import.meta.env.DEV) console.warn('[Share] Native share failed:', error);
       toast('系统分享未完成，请长按链接手动复制', 'error');
+    } finally {
+      nativeSharePendingRef.current = false;
+      setNativeSharePending(false);
     }
   }, [shareLinkDialog, toast]);
 
@@ -2223,6 +2233,7 @@ export default function SelectionPage() {
       onClose={() => setShareLinkDialog(null)}
       onCopy={handleCopyShareDialogLink}
       onNativeShare={handleNativeShareDialogLink}
+      nativeSharePending={nativeSharePending}
     />
   );
 

@@ -89,7 +89,11 @@ export function AdminPageHero({
   return (
     <section className="app-page-hero shrink-0 rounded-xl border border-outline-variant/15 bg-surface-container-low px-4 py-2.5 md:px-5">
       <div className="app-page-hero-inner flex min-h-[54px] items-center justify-between gap-3">
-        <div className="app-page-heading min-w-0 flex-1">
+        <div
+          className={`app-page-heading min-w-0 ${
+            headerNavigation ? 'md:max-w-[min(22rem,34%)] md:flex-none md:pr-2' : 'flex-1'
+          }`}
+        >
           <div className="app-page-title-row flex min-h-6 min-w-0 flex-wrap items-center gap-x-2.5 gap-y-1">
             <h1 className={APP_PAGE_TITLE_TRUNCATE_CLASS}>{title}</h1>
             {meta ? (

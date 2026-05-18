@@ -1,13 +1,16 @@
-import { useState, useEffect, lazy, Suspense, useCallback } from 'react';
+import { useState, useEffect, lazy, Suspense, useCallback, useRef, type CSSProperties } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { getShareInfo, verifySharePassword, getShareDownloadUrl, type ShareInfo } from '../api/shares';
 import { MATERIAL_PRESETS, type MaterialPresetKey } from '../components/3d/viewerControls';
+import { dispatchFitModel } from '../components/3d/viewerEvents';
 import BrandMark from '../components/shared/BrandMark';
 import Icon from '../components/shared/Icon';
+import { MODEL_DETAIL_MOBILE_BOTTOM_NAV_OFFSET } from '../components/shared/ModelDetailFrame';
 import { PageTitle } from '../components/shared/PagePrimitives';
 import PageRefreshFallback from '../components/shared/PageRefreshFallback';
 import { PublicPageShell } from '../components/shared/PublicPageShell';
 import { useDocumentTitle } from '../hooks/useDocumentTitle';
+import { useMediaQuery } from '../layouts/hooks/useMediaQuery';
 import { getErrorMessage } from '../lib/errorNotifications';
 import { getDefaultPreset, getPublicSettingsSnapshot, getSiteTitle } from '../lib/publicSettings';
 
@@ -40,6 +43,7 @@ function getShareViewerPrefs() {
 
 export default function SharePage() {
   const { token } = useParams<{ token: string }>();
+  const isDesktop = useMediaQuery('(min-width: 768px)');
 
   const [info, setInfo] = useState<ShareInfo | null>(null);
   const [loading, setLoading] = useState(true);
@@ -50,6 +54,8 @@ export default function SharePage() {
   const [shareAccessToken, setShareAccessToken] = useState('');
   const [passwordError, setPasswordError] = useState('');
   const [downloading, setDownloading] = useState(false);
+  const mobileDownloadBarRef = useRef<HTMLDivElement>(null);
+  const [mobileDownloadBarHeight, setMobileDownloadBarHeight] = useState(0);
 
   useDocumentTitle(info ? `${info.modelName} - 分享预览` : '分享预览');
 
@@ -78,6 +84,45 @@ export default function SharePage() {
   useEffect(() => {
     loadInfo();
   }, [loadInfo]);
+
+  useEffect(() => {
+    const bar = mobileDownloadBarRef.current;
+    if (!info?.allowDownload || !bar) {
+      setMobileDownloadBarHeight(0);
+      return;
+    }
+
+    const updateHeight = () => {
+      const nextHeight = Math.ceil(bar.getBoundingClientRect().height);
+      setMobileDownloadBarHeight((prev) => (prev === nextHeight ? prev : nextHeight));
+    };
+
+    updateHeight();
+    const observer = new ResizeObserver(updateHeight);
+    observer.observe(bar);
+    window.addEventListener('resize', updateHeight);
+
+    return () => {
+      observer.disconnect();
+      window.removeEventListener('resize', updateHeight);
+    };
+  }, [downloading, info?.allowDownload, info?.modelName, info?.remainingDownloads]);
+
+  const mobilePreviewCtaHeight = !isDesktop && info?.allowDownload ? mobileDownloadBarHeight || 96 : 0;
+
+  useEffect(() => {
+    if (isDesktop || !info?.allowPreview || !info.gltfUrl || mobilePreviewCtaHeight <= 0) return;
+
+    let secondFrame = 0;
+    const firstFrame = window.requestAnimationFrame(() => {
+      secondFrame = window.requestAnimationFrame(dispatchFitModel);
+    });
+
+    return () => {
+      window.cancelAnimationFrame(firstFrame);
+      if (secondFrame) window.cancelAnimationFrame(secondFrame);
+    };
+  }, [info?.allowPreview, info?.gltfUrl, isDesktop, mobilePreviewCtaHeight]);
 
   async function handleVerifyPassword() {
     if (!token || !password.trim()) return;
@@ -117,6 +162,10 @@ export default function SharePage() {
   }
 
   const siteTitle = getSiteTitle();
+  const shareContentStyle = {
+    '--share-mobile-bottom-offset': MODEL_DETAIL_MOBILE_BOTTOM_NAV_OFFSET,
+    '--share-mobile-cta-height': `${mobilePreviewCtaHeight}px`,
+  } as CSSProperties;
 
   // Loading
   if (loading) {
@@ -203,9 +252,34 @@ export default function SharePage() {
 
   if (!info) return null;
 
+  const downloadDisabled = downloading || (info.downloadLimit > 0 && info.remainingDownloads <= 0);
+  const downloadLabel = downloading
+    ? '下载中...'
+    : info.downloadLimit > 0
+      ? `下载（剩余 ${info.remainingDownloads} 次）`
+      : '下载模型';
+  const renderDownloadButton = (showLimitText = true) =>
+    info.allowDownload ? (
+      <div className="space-y-2">
+        <button
+          onClick={handleDownload}
+          disabled={downloadDisabled}
+          className="flex h-9 w-full items-center justify-center gap-2 rounded-lg bg-primary-container text-sm font-medium text-on-primary transition-transform hover:opacity-90 disabled:opacity-50 active:scale-[0.98]"
+        >
+          <Icon name="download" size={18} />
+          {downloadLabel}
+        </button>
+        {showLimitText && info.downloadLimit > 0 && (
+          <p className="text-center text-xs text-on-surface-variant">
+            下载次数：{info.downloadCount} / {info.downloadLimit}
+          </p>
+        )}
+      </div>
+    ) : null;
+
   // Main share page
   return (
-    <PublicPageShell>
+    <PublicPageShell mobileClassName="flex h-dvh flex-col bg-surface" keepMobileDrawerMounted>
       {/* WeChat open-in-browser guide */}
       {isWechat && (
         <div className="bg-primary-container/90 text-on-primary px-4 py-3 text-center text-sm font-bold relative shrink-0">
@@ -218,37 +292,51 @@ export default function SharePage() {
         <span className="text-xs text-on-surface-variant/50 shrink-0">分享预览</span>
       </header>
 
-      {/* Content — desktop: side-by-side, mobile: stacked scrollable */}
-      <div className="flex min-h-0 flex-1 flex-col overflow-y-auto md:flex-row md:overflow-hidden">
-        {/* 3D Preview — fixed height on mobile, flex-fill on desktop */}
-        {info.allowPreview && info.gltfUrl && (
-          <div className="relative h-[52svh] min-h-[240px] shrink-0 bg-surface-container md:h-auto md:min-h-0 md:flex-1">
-            <Suspense
-              fallback={
-                <div className="w-full h-full flex items-center justify-center">
-                  <Icon name="view_in_ar" size={48} className="text-on-surface-variant/20 animate-pulse" />
-                </div>
-              }
-            >
-              <ModelViewer
-                modelUrl={info.gltfUrl}
-                viewMode="solid"
-                cameraPreset="iso"
-                showDimensions={false}
-                showGrid={true}
-                clipEnabled={false}
-                clipDirection="x"
-                clipPosition={0}
-                materialPreset={getShareViewerPrefs().materialPreset}
-                showEdges={getShareViewerPrefs().showEdges}
-                showAxis={false}
-              />
-            </Suspense>
+      {/* Content — desktop: side-by-side, mobile: centered preview with a lightweight bottom CTA */}
+      <div
+        className="relative mb-[var(--share-mobile-bottom-offset)] flex min-h-0 flex-1 flex-col overflow-hidden md:mb-0 md:flex-row"
+        style={shareContentStyle}
+      >
+        {/* 3D Preview */}
+        {info.allowPreview && info.gltfUrl ? (
+          <div className="relative min-h-0 flex-1 bg-surface-container">
+            <div className="absolute inset-x-0 top-0 bottom-[var(--share-mobile-cta-height)] md:bottom-0">
+              <Suspense
+                fallback={
+                  <div className="w-full h-full flex items-center justify-center">
+                    <Icon name="view_in_ar" size={48} className="text-on-surface-variant/20 animate-pulse" />
+                  </div>
+                }
+              >
+                <ModelViewer
+                  modelUrl={info.gltfUrl}
+                  viewMode="solid"
+                  cameraPreset="iso"
+                  showDimensions={false}
+                  showGrid={true}
+                  clipEnabled={false}
+                  clipDirection="x"
+                  clipPosition={0}
+                  materialPreset={getShareViewerPrefs().materialPreset}
+                  showEdges={getShareViewerPrefs().showEdges}
+                  showAxis={false}
+                />
+              </Suspense>
+            </div>
+          </div>
+        ) : (
+          <div className="relative flex min-h-0 flex-1 items-center justify-center bg-surface-container">
+            <div className="absolute inset-x-0 top-0 bottom-[var(--share-mobile-cta-height)] flex items-center justify-center md:bottom-0">
+              <div className="text-center">
+                <Icon name="view_in_ar" size={48} className="mx-auto text-on-surface-variant/20" />
+                <p className="mt-3 text-xs text-on-surface-variant">此分享未开启模型预览</p>
+              </div>
+            </div>
           </div>
         )}
 
         {/* Info panel */}
-        <div className="w-full md:w-80 bg-surface-container-low border-t md:border-t-0 md:border-l border-outline-variant/10 p-5 space-y-4 shrink-0">
+        <div className="hidden w-full shrink-0 space-y-4 border-t border-outline-variant/10 bg-surface-container-low p-5 md:block md:w-80 md:border-l md:border-t-0">
           <div>
             <PageTitle className="break-words text-lg md:text-lg md:normal-case">{info.modelName}</PageTitle>
             <div className="flex flex-wrap gap-3 mt-2 text-xs text-on-surface-variant">
@@ -284,27 +372,7 @@ export default function SharePage() {
           )}
 
           {/* Download button */}
-          {info.allowDownload && (
-            <div className="space-y-2">
-              <button
-                onClick={handleDownload}
-                disabled={downloading || (info.downloadLimit > 0 && info.remainingDownloads <= 0)}
-                className="w-full py-2.5 text-sm font-bold bg-primary-container text-on-primary rounded-lg hover:opacity-90 disabled:opacity-50 active:scale-[0.98] transition-all flex items-center justify-center gap-2"
-              >
-                <Icon name="download" size={16} />
-                {downloading
-                  ? '下载中...'
-                  : info.downloadLimit > 0
-                    ? `下载（剩余 ${info.remainingDownloads} 次）`
-                    : '下载模型'}
-              </button>
-              {info.downloadLimit > 0 && (
-                <p className="text-xs text-on-surface-variant text-center">
-                  下载次数：{info.downloadCount} / {info.downloadLimit}
-                </p>
-              )}
-            </div>
-          )}
+          <div className="hidden md:block">{renderDownloadButton()}</div>
 
           {!info.allowPreview && !info.allowDownload && (
             <div className="bg-surface-container-high/50 rounded-lg p-3 text-center">
@@ -319,10 +387,24 @@ export default function SharePage() {
             </p>
           )}
         </div>
+
+        {info.allowDownload ? (
+          <div className="pointer-events-none absolute inset-x-0 bottom-0 z-30 md:hidden">
+            <div
+              ref={mobileDownloadBarRef}
+              className="pointer-events-auto rounded-t-xl border-t border-outline-variant/10 bg-surface-container-low/95 px-2.5 pb-2.5 pt-3 backdrop-blur-md"
+            >
+              <h2 className="mb-2 line-clamp-2 break-words px-0.5 text-sm font-bold leading-[1.15rem] text-on-surface">
+                {info.modelName}
+              </h2>
+              {renderDownloadButton(false)}
+            </div>
+          </div>
+        ) : null}
       </div>
 
       {/* Footer */}
-      <footer className="h-10 flex items-center justify-center border-t border-outline-variant/10 shrink-0">
+      <footer className="hidden h-10 shrink-0 items-center justify-center border-t border-outline-variant/10 md:flex">
         <span className="text-xs text-on-surface-variant/40">由 {siteTitle} 驱动</span>
       </footer>
     </PublicPageShell>

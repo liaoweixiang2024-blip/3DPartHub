@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: 'Version tag (e.g. v3.1.0)'
+        description: 'Version tag (e.g. v3.1.1)'
         required: true
 
 env:
@@ -97,22 +97,21 @@ jobs:
           body: |
             ## 更新标题
 
-            3DPartHub ${{ steps.version.outputs.version }} - 主题架构、后台设置与弹窗统一增强版
+            3DPartHub ${{ steps.version.outputs.version }} - 移动端分享预览与登录弹窗统一修复版
 
             ## 标签描述
 
-            3DPartHub ${{ steps.version.outputs.version }} production release with hardened theme isolation, unified admin dialogs, refined auth prompt controls, cache/storage sync settings, upload/download reliability fixes, and refreshed Docker images.
+            3DPartHub ${{ steps.version.outputs.version }} production release with unified auth dialogs across themes, corrected auth prompt routing, smoother mobile model/share previews, safer native sharing, and refreshed Docker images.
 
             ## 更新描述
 
-            - 完善 PartHub 经典版与 PartHub 工作台主题隔离，统一前后台主题切换偏好、移动端主题兜底和主题开发规范。
-            - 优化后台系统设置，将缓存与云存储拆成 Redis、对象存储、资源目录、本地云同步、图片优化和缓存清理等同级配置页。
-            - 修复登录提示弹窗按页面控制、未登录下载提示闪烁和登录/注册表单弹窗跳转逻辑，前台入口体验更一致。
-            - 统一后台危险操作确认弹窗，覆盖缓存清理、用户删除、审计日志清理、模型分组、转换队列、预览诊断和规格数据管理。
-            - 强化模型上传、压缩包批量识别、路径安全、上传上限、下载文件名、STEP/PDF 绑定、回收站和批量下载稳定性。
-            - 优化产品图库缩略图、图片预览手势、移动端交互和大图加载，降低图库浏览和图片详情卡顿。
-            - 增强备份恢复、存储同步、审计日志保留策略、清理工具、数据库索引和 502 压力场景下的可靠性。
-            - 发布前验证通过前后端类型检查、构建、主题/加载/UX 合约检查和关键服务端单元测试。
+            - 统一 PartHub 经典版与 PartHub 工作台的登录/注册弹窗外壳，注册表单在两个主题下保持一致。
+            - 修复登录提示弹窗总开关与页面内下载、收藏、申请等登录动作的判断分流，关闭/开启逻辑更稳定。
+            - 优化移动端模型详情和模型分享预览的底部下载区域、模型居中与安全区间距，减少抽屉与底部菜单割裂感。
+            - 修复选型分享连续触发原生分享时的 InvalidStateError，增加分享中状态避免重复调用。
+            - 优化系统设置标题菜单右对齐与保存状态宽度，减少保存后菜单轻微抖动。
+            - 微调后台管理通用标题、表格和主题弹窗样式，让新旧主题交互保持一致。
+            - 发布前验证通过前端类型检查、构建和格式检查。
             - 镜像已同步更新：api/web 均发布 ${{ steps.version.outputs.version }} 与 latest 标签。
 
             ## Docker Images
@@ -121,13 +120,13 @@ jobs:
 
             API image: `ghcr.io/${{ github.repository_owner }}/3dparthub-api:${{ steps.version.outputs.version }}`
 
-            API image description: Express/Prisma API service with migrations, model conversion workers, upload/download hardening, X-Accel protected downloads, BusyBox-compatible backup creation, backup/restore safety checks, audit logs, admin settings, queues, cache/storage checks, and background jobs.
+            API image description: Express/Prisma API service with migrations, model conversion workers, upload/download hardening, X-Accel protected downloads, backup/restore safety checks, audit logs, admin settings, queues, cache/storage checks, and background jobs.
 
             Web image title: `3dparthub-web:${{ steps.version.outputs.version }}`
 
             Web image: `ghcr.io/${{ github.repository_owner }}/3dparthub-web:${{ steps.version.outputs.version }}`
 
-            Web image description: React/Vite frontend for 3D preview, theme-driven model library, model upload progress, batch download feedback, product selection, product gallery browsing, inquiry/quote workflows, sharing, profile management, admin pages, legal pages, and unified auth dialogs.
+            Web image description: React/Vite frontend for theme-driven model libraries, unified auth/register dialogs, mobile model/share previews, 3D viewing, product selection sharing, upload progress, batch downloads, product gallery browsing, inquiry/quote workflows, profile management, admin pages, legal pages, and responsive mobile flows.
 
             ```bash
             # Default deployment follows latest and uses Watchtower for api/web auto-updates.

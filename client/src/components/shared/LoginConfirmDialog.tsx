@@ -7,7 +7,7 @@ import { getPublicSettingsSnapshot, refreshSiteConfig, usePublicSettings } from 
 import AuthModal from './AuthModal';
 import DialogOverlay from './DialogOverlay';
 import Icon from './Icon';
-import { isAuthModalEnabled, isLoginDialogEnabled } from './ProtectedLink';
+import { isAuthModalEnabled, shouldShowLoginPromptForRequest } from './ProtectedLink';
 
 interface LoginConfirmDialogProps {
   open: boolean;
@@ -80,7 +80,7 @@ export default function LoginConfirmDialog({ open, onClose, reason, returnUrl, o
     const requestId = promptRequestRef.current + 1;
     promptRequestRef.current = requestId;
     const initialSettings = getResolvedSettings();
-    setShouldShowPrompt(isLoginDialogEnabled(resolvedReturnUrl, initialSettings));
+    setShouldShowPrompt(shouldShowLoginPromptForRequest(resolvedReturnUrl, initialSettings));
 
     const resolvePromptState = async () => {
       let latestSettings = initialSettings;
@@ -90,7 +90,7 @@ export default function LoginConfirmDialog({ open, onClose, reason, returnUrl, o
         latestSettings = getResolvedSettings();
       }
       if (cancelled || promptRequestRef.current !== requestId) return;
-      if (isLoginDialogEnabled(resolvedReturnUrl, latestSettings)) {
+      if (shouldShowLoginPromptForRequest(resolvedReturnUrl, latestSettings)) {
         setShouldShowPrompt(true);
         return;
       }

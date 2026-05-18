@@ -16,6 +16,7 @@ interface ResponsiveSectionTabsProps {
   mobileTitle?: string;
   mobileTriggerVariant?: 'plain' | 'surface';
   desktopVariant?: 'default' | 'subtle' | 'prominent';
+  desktopAlign?: 'start' | 'end';
   countUnit?: string;
   className?: string;
 }
@@ -27,6 +28,7 @@ export default function ResponsiveSectionTabs({
   mobileTitle = '选择分类',
   mobileTriggerVariant = 'plain',
   desktopVariant = 'default',
+  desktopAlign = 'start',
   countUnit = '',
   className = '',
 }: ResponsiveSectionTabsProps) {
@@ -72,6 +74,7 @@ export default function ResponsiveSectionTabs({
   };
   const subtleDesktop = desktopVariant === 'subtle';
   const prominentDesktop = desktopVariant === 'prominent';
+  const alignDesktopEnd = desktopAlign === 'end';
 
   const scrollDesktopTabs = (direction: -1 | 1) => {
     const scroller = desktopScrollerRef.current;
@@ -82,7 +85,7 @@ export default function ResponsiveSectionTabs({
   return (
     <div className={`relative ${className}`}>
       <div
-        className={`hidden min-w-0 items-center gap-1.5 md:flex ${
+        className={`hidden min-w-0 items-center gap-1.5 md:flex ${alignDesktopEnd ? 'justify-end' : ''} ${
           subtleDesktop ? 'min-h-8' : prominentDesktop ? 'min-h-10' : 'min-h-9'
         }`}
       >
@@ -97,12 +100,12 @@ export default function ResponsiveSectionTabs({
             <Icon name="chevron_left" size={16} />
           </button>
         ) : null}
-        <div className="relative min-w-0 flex-1">
+        <div className={`relative min-w-0 ${alignDesktopEnd && !canScrollDesktop ? 'max-w-full' : 'flex-1'}`}>
           <div
             ref={desktopScrollerRef}
             className={`flex min-w-0 items-center overflow-x-auto scroll-smooth pr-1 scrollbar-none ${
-              subtleDesktop ? 'min-h-8' : prominentDesktop ? 'min-h-10' : 'min-h-9'
-            }`}
+              alignDesktopEnd && !canScrollDesktop ? 'justify-end' : ''
+            } ${subtleDesktop ? 'min-h-8' : prominentDesktop ? 'min-h-10' : 'min-h-9'}`}
           >
             {tabs.map((tab, index) => {
               const active = tab.value === value;

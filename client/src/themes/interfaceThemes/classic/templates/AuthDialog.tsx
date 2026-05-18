@@ -13,7 +13,7 @@ export default function ClassicAuthDialog({
 }: AuthDialogThemeProps) {
   return (
     <motion.section
-      className={`auth-modal auth-modal-${mode} relative w-full max-w-[27rem] overflow-hidden rounded-2xl border border-outline-variant/14 bg-surface-container-low shadow-modal`}
+      className={`app-auth-dialog app-auth-dialog-${mode} relative w-full max-w-[27rem] overflow-hidden rounded-2xl border border-outline-variant/14 bg-surface-container-low shadow-modal`}
       role="dialog"
       aria-modal="true"
       aria-labelledby="auth-modal-title"
@@ -32,13 +32,13 @@ export default function ClassicAuthDialog({
         <Icon name="close" size={18} />
       </button>
 
-      <div className="auth-modal-header border-b border-outline-variant/10 px-6 pb-5 pt-6 text-center sm:px-7">
+      <div className="app-auth-header border-b border-outline-variant/10 px-6 pb-5 pt-6 text-center sm:px-7">
         {brand}
         {title}
         {subtitle}
       </div>
 
-      <div className="auth-modal-body max-h-[calc(100dvh-13rem)] overflow-y-auto overscroll-contain">{children}</div>
+      <div className="app-auth-body max-h-[calc(100dvh-13rem)] overflow-y-auto overscroll-contain">{children}</div>
     </motion.section>
   );
 }

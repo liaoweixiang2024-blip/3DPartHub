@@ -6,11 +6,13 @@ export function SelectionShareLinkDialog({
   onClose,
   onCopy,
   onNativeShare,
+  nativeSharePending = false,
 }: {
   state: ShareLinkDialogState | null;
   onClose: () => void;
   onCopy: () => void;
   onNativeShare: () => void;
+  nativeSharePending?: boolean;
 }) {
   if (!state) return null;
 
@@ -54,11 +56,12 @@ export function SelectionShareLinkDialog({
             <button
               type="button"
               onClick={onNativeShare}
-              className="inline-flex h-10 flex-1 items-center justify-center gap-1.5 rounded-lg border border-outline-variant/25 px-3 text-sm font-medium text-on-surface-variant transition-colors hover:bg-surface-container-high hover:text-on-surface"
+              disabled={nativeSharePending}
+              className="inline-flex h-10 flex-1 items-center justify-center gap-1.5 rounded-lg border border-outline-variant/25 px-3 text-sm font-medium text-on-surface-variant transition-colors hover:bg-surface-container-high hover:text-on-surface disabled:cursor-not-allowed disabled:opacity-55"
               data-tooltip-ignore
             >
               <Icon name="share" size={16} />
-              系统分享
+              {nativeSharePending ? '分享中...' : '系统分享'}
             </button>
           ) : null}
           <button

@@ -6,6 +6,7 @@ import {
   MODEL_DETAIL_DOWNLOAD_LIST_CLASS,
   MODEL_DETAIL_DOWNLOAD_ROW_BASE_CLASS,
   MODEL_DETAIL_HEADER_TOP_CLASS,
+  MODEL_DETAIL_MOBILE_BOTTOM_NAV_OFFSET,
   getModelDetailMobilePeekHeight,
   getModelDetailMobilePeekVariant,
   MODEL_DETAIL_SECTION_TITLE_CLASS,
@@ -116,7 +117,7 @@ function ModelDetailMobileSkeleton({ modelTitle, isAdmin }: { modelTitle?: strin
     <PublicPageShell mobileClassName="flex h-dvh flex-col bg-surface" keepMobileDrawerMounted>
       <main
         className="relative min-h-0 flex-1"
-        style={{ marginBottom: 'calc(3.5rem + env(safe-area-inset-bottom, 0px))' }}
+        style={{ marginBottom: MODEL_DETAIL_MOBILE_BOTTOM_NAV_OFFSET }}
         aria-busy
         aria-live="polite"
       >

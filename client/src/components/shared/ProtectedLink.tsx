@@ -60,6 +60,16 @@ export function isLoginDialogEnabled(path?: string, settings?: Partial<SystemSet
   return false;
 }
 
+export function shouldShowLoginPromptForRequest(path?: string, settings?: Partial<SystemSettings>): boolean {
+  const resolvedSettings = readSettings(settings);
+  if (resolvedSettings.login_dialog_enabled === false) return false;
+  if (!path) return true;
+  const perPageKey = getPerPageDialogKey(path);
+  if (!perPageKey) return true;
+  const v = resolvedSettings[perPageKey as keyof typeof resolvedSettings];
+  return v !== false;
+}
+
 const PATH_TO_DIALOG_KEY: Record<string, string> = {
   '/favorites': 'login_dialog_favorites',
   '/downloads': 'login_dialog_downloads',
