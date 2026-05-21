@@ -123,6 +123,20 @@ function BatchToolbar({
   );
 }
 
+function RemoveFavoriteIcon({ bumpKey, size }: { bumpKey: number; size: number }) {
+  return (
+    <motion.span
+      key={bumpKey}
+      className="inline-flex"
+      initial={bumpKey > 0 ? { y: 0, scale: 1 } : false}
+      animate={bumpKey > 0 ? { y: [0, -3, 0], scale: [1, 1.14, 1] } : { y: 0, scale: 1 }}
+      transition={{ duration: 0.22, ease: 'easeOut' }}
+    >
+      <Icon name="star_off" size={size} />
+    </motion.span>
+  );
+}
+
 const ModelCard = memo(function ModelCard({
   model,
   selected,
@@ -138,6 +152,7 @@ const ModelCard = memo(function ModelCard({
   onDownload: (id: string) => void;
   showCheckbox: boolean;
 }) {
+  const [removeBumpKey, setRemoveBumpKey] = useState(0);
   const rememberDetailTitle = useCallback(() => {
     cacheModelDetailTitle(model.id, model.name);
   }, [model.id, model.name]);
@@ -181,11 +196,13 @@ const ModelCard = memo(function ModelCard({
           onClick={(e) => {
             e.preventDefault();
             e.stopPropagation();
+            setRemoveBumpKey((key) => key + 1);
             onRemove(model.id);
           }}
-          className="absolute top-2 right-2 z-10 opacity-0 group-hover:opacity-100 transition-opacity w-7 h-7 flex items-center justify-center rounded-full bg-surface/80 backdrop-blur-sm text-on-surface-variant hover:text-error hover:bg-error/20"
+          aria-label="取消收藏"
+          className="absolute top-2 right-2 z-10 flex h-7 w-7 items-center justify-center rounded-full bg-surface/80 text-on-surface-variant opacity-0 backdrop-blur-sm transition-[background-color,color,opacity,transform] duration-150 hover:bg-error/20 hover:text-error group-hover:opacity-100"
         >
-          <Icon name="star_off" size={14} />
+          <RemoveFavoriteIcon bumpKey={removeBumpKey} size={14} />
         </button>
       </div>
       <div className="flex-1 flex flex-col p-2.5">
@@ -240,6 +257,7 @@ const MobileModelCard = memo(function MobileModelCard({
   onDownload: (id: string) => void;
   showCheckbox: boolean;
 }) {
+  const [removeBumpKey, setRemoveBumpKey] = useState(0);
   const rememberDetailTitle = useCallback(() => {
     cacheModelDetailTitle(model.id, model.name);
   }, [model.id, model.name]);
@@ -290,12 +308,13 @@ const MobileModelCard = memo(function MobileModelCard({
                 onClick={(e) => {
                   e.preventDefault();
                   e.stopPropagation();
+                  setRemoveBumpKey((key) => key + 1);
                   onRemove(model.id);
                 }}
-                className="flex items-center justify-center w-7 h-7 rounded-lg text-on-surface-variant hover:text-error transition-colors"
+                className="flex h-7 w-7 items-center justify-center rounded-lg text-on-surface-variant transition-colors hover:text-error"
                 aria-label="取消收藏"
               >
-                <Icon name="star_off" size={16} />
+                <RemoveFavoriteIcon bumpKey={removeBumpKey} size={16} />
               </button>
             </div>
           </div>

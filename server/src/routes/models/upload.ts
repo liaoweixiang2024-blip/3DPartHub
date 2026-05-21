@@ -373,7 +373,6 @@ export function createModelUploadRouter({ prisma, saveMeta, deleteMeta }: ModelU
           originalName: fileName,
           ext,
           userId,
-          preserveSource: true,
         });
       } catch (err) {
         logger.error({ err }, 'Failed to queue conversion');

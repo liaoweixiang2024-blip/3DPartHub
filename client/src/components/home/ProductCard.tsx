@@ -7,6 +7,7 @@ import { useAuthStore, useFavoriteStore } from '../../stores';
 import FormatTag from '../shared/FormatTag';
 import Icon from '../shared/Icon';
 import ModelThumbnail from '../shared/ModelThumbnail';
+import { useToast } from '../shared/Toast';
 import {
   HomeGridCardContent,
   HomeListCardContent,
@@ -16,6 +17,49 @@ import {
   HOME_LIST_CARD_CLASS,
 } from './HomeDesktopShared';
 import type { HomeBrowseState, Product } from './homeTypes';
+
+const FAVORITE_BURST_PARTICLES = [
+  { x: -18, y: -7, size: 3, className: 'bg-primary-container' },
+  { x: -12, y: -18, size: 2.5, className: 'bg-primary' },
+  { x: 0, y: -22, size: 3, className: 'bg-warning' },
+  { x: 13, y: -16, size: 2.5, className: 'bg-primary-container' },
+  { x: 18, y: -2, size: 3, className: 'bg-primary' },
+  { x: 7, y: 12, size: 2.5, className: 'bg-warning' },
+] as const;
+
+function FavoriteBurst({ burstKey }: { burstKey: number }) {
+  return (
+    <AnimatePresence>
+      {burstKey > 0 && (
+        <span key={burstKey} className="pointer-events-none absolute inset-0 z-20">
+          <motion.span
+            className="absolute inset-[-2px] rounded-full border border-primary-container/35"
+            initial={{ opacity: 0.34, scale: 0.45 }}
+            animate={{ opacity: 0, scale: 1.8 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.5, ease: 'easeOut' }}
+          />
+          {FAVORITE_BURST_PARTICLES.map((particle, index) => (
+            <motion.span
+              key={`${particle.x}-${particle.y}-${index}`}
+              className={`absolute left-1/2 top-1/2 rounded-full ${particle.className}`}
+              style={{ width: particle.size, height: particle.size }}
+              initial={{ x: -particle.size / 2, y: -particle.size / 2, opacity: 0, scale: 0.5 }}
+              animate={{
+                x: particle.x,
+                y: particle.y,
+                opacity: [0, 1, 0],
+                scale: [0.5, 1, 0.85],
+              }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.62, ease: 'easeOut', delay: index * 0.015 }}
+            />
+          ))}
+        </span>
+      )}
+    </AnimatePresence>
+  );
+}
 
 function ProductCardInner({
   product,
@@ -59,7 +103,9 @@ function ProductCardInner({
   const [renameValue, setRenameValue] = useState(product.name);
   const [renameSaving, setRenameSaving] = useState(false);
   const [favLoading, setFavLoading] = useState(false);
+  const [favoriteBurstKey, setFavoriteBurstKey] = useState(0);
   const ignoreNextOverlayClickRef = useRef(false);
+  const { toast } = useToast();
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
   const isFavorited = useFavoriteStore((state) => state.favoriteIds.has(product.id));
   const toggleFavoriteInStore = useFavoriteStore((state) => state.toggleFavorite);
@@ -77,16 +123,26 @@ function ProductCardInner({
       e.preventDefault();
       e.stopPropagation();
       if (favLoading || !isAuthenticated) return;
+      const shouldCelebrate = !isFavorited;
       setFavLoading(true);
       try {
         await toggleFavoriteInStore({ id: product.id });
+        const nextIsFavorited = useFavoriteStore.getState().favoriteIds.has(product.id);
+        if (nextIsFavorited === isFavorited) {
+          toast(shouldCelebrate ? '收藏失败，请重试' : '取消收藏失败，请重试', 'error');
+          return;
+        }
+        if (shouldCelebrate && nextIsFavorited) {
+          setFavoriteBurstKey((key) => key + 1);
+        }
+        toast(nextIsFavorited ? '已收藏，可在「我的收藏」中批量下载' : '已取消收藏', 'success');
       } catch {
-        // 收藏失败时保持当前状态，避免一次网络波动打断浏览。
+        toast(shouldCelebrate ? '收藏失败，请重试' : '取消收藏失败，请重试', 'error');
       } finally {
         setFavLoading(false);
       }
     },
-    [favLoading, isAuthenticated, product.id, toggleFavoriteInStore],
+    [favLoading, isAuthenticated, isFavorited, product.id, toast, toggleFavoriteInStore],
   );
 
   const cancelRename = useCallback(() => {
@@ -295,11 +351,12 @@ function ProductCardInner({
         isFavorited
           ? 'border-primary-container/45 bg-primary-container/10 text-primary-container'
           : 'border-outline-variant/40 text-on-surface-variant hover:text-on-surface'
-      } ${favLoading ? 'opacity-60' : ''}`}
+      } relative overflow-visible ${favLoading ? 'opacity-60' : ''}`}
       aria-label={isFavorited ? '取消收藏' : '收藏'}
       aria-pressed={isFavorited}
       data-tooltip-ignore
     >
+      <FavoriteBurst burstKey={favoriteBurstKey} />
       <Icon name={isFavorited ? 'favorite' : 'star'} size={14} />
       收藏
     </button>
@@ -429,7 +486,7 @@ function ProductCardInner({
                   <button
                     onClick={toggleFavorite}
                     disabled={favLoading}
-                    className={`inline-flex h-7 w-7 items-center justify-center rounded-full border border-outline-variant/20 bg-surface-container-lowest/90 transition-colors ${
+                    className={`relative inline-flex h-7 w-7 items-center justify-center overflow-visible rounded-full border border-outline-variant/20 bg-surface-container-lowest/90 transition-colors ${
                       isFavorited
                         ? 'border-primary-container/35 text-primary-container'
                         : 'text-on-surface-variant/70 hover:text-on-surface-variant'
@@ -438,6 +495,7 @@ function ProductCardInner({
                     aria-pressed={isFavorited}
                     data-tooltip-ignore
                   >
+                    <FavoriteBurst burstKey={favoriteBurstKey} />
                     <Icon name={isFavorited ? 'favorite' : 'star'} size={14} />
                   </button>
                 )}

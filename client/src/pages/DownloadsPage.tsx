@@ -289,12 +289,14 @@ function DesktopContent() {
       {downloads.length === 0 ? (
         <EmptyState />
       ) : (
-        <div className="flex flex-col">
+        <div className="flex flex-col gap-2.5">
           {visibleDownloads.map((item) => (
             <div
               key={item.id}
-              className={`flex items-center gap-0 border-b border-outline-variant/10 last:border-b-0 ${
-                selectMode && selected.has(item.id) ? 'bg-primary-container/8 ring-1 ring-primary/20' : ''
+              className={`flex items-center gap-0 rounded-lg border bg-surface-container-low shadow-[0_6px_18px_rgba(15,23,42,0.025)] transition-[background-color,border-color,box-shadow] duration-150 ${
+                selectMode && selected.has(item.id)
+                  ? 'border-primary/35 bg-primary-container/8 ring-1 ring-primary/20'
+                  : 'border-outline-variant/16 hover:border-primary/22 hover:bg-surface-container hover:shadow-[0_8px_22px_rgba(15,23,42,0.04)]'
               }`}
             >
               {selectMode && (
@@ -314,7 +316,7 @@ function DesktopContent() {
                 state={{ modelName: item.model?.name || '未知模型' }}
                 onPointerDown={() => cacheModelDetailTitle(item.modelId, item.model?.name || '未知模型')}
                 onFocus={() => cacheModelDetailTitle(item.modelId, item.model?.name || '未知模型')}
-                className="min-w-0 flex-1 flex items-center gap-3 rounded-md px-3 py-2.5 transition-colors hover:bg-surface-container/45 md:px-4 md:py-3 md:gap-4"
+                className="min-w-0 flex-1 flex items-center gap-3 rounded-md px-3 py-2.5 transition-colors md:px-4 md:py-3 md:gap-4"
               >
                 <div className="w-14 h-14 bg-surface-container-lowest shrink-0 flex items-center justify-center p-1 rounded-md overflow-hidden">
                   <ModelThumbnail src={item.model?.thumbnail_url} alt="" className="w-full h-full object-contain" />
@@ -530,14 +532,14 @@ function MobileContent() {
       ) : downloads.length === 0 ? (
         <EmptyState />
       ) : (
-        <div className="flex flex-col gap-2.5">
+        <div className="flex flex-col gap-3">
           {visibleDownloads.map((item) => (
             <div
               key={item.id}
-              className={`bg-surface-container-high rounded-xl border overflow-hidden ${
+              className={`relative overflow-hidden rounded-xl border bg-surface-container-low shadow-[0_6px_18px_rgba(15,23,42,0.03)] transition-[background-color,border-color,box-shadow] ${
                 selectMode && selected.has(item.id)
-                  ? 'border-primary ring-2 ring-primary/30'
-                  : 'border-outline-variant/10'
+                  ? 'border-primary/45 ring-2 ring-primary/25'
+                  : 'border-outline-variant/16'
               }`}
             >
               {selectMode && (

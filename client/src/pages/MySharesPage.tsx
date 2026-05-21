@@ -110,7 +110,11 @@ function ShareRow({
 
   return (
     <div
-      className={`group flex min-w-0 items-start gap-2 border-b border-outline-variant/10 px-3 py-2.5 transition-colors last:border-b-0 md:items-center md:px-4 md:py-3 ${selected ? 'bg-primary-container/8 ring-1 ring-primary/20' : ''}`}
+      className={`group flex min-w-0 items-start gap-2 rounded-lg border bg-surface-container-low px-3 py-2.5 shadow-[0_6px_18px_rgba(15,23,42,0.025)] transition-[background-color,border-color,box-shadow] duration-150 md:items-center md:px-4 md:py-3 ${
+        selected
+          ? 'border-primary/35 bg-primary-container/8 ring-1 ring-primary/20'
+          : 'border-outline-variant/16 hover:border-primary/22 hover:bg-surface-container hover:shadow-[0_8px_22px_rgba(15,23,42,0.04)]'
+      }`}
     >
       {selectMode ? (
         <button
@@ -126,7 +130,7 @@ function ShareRow({
       ) : null}
       <Link
         to={getSharePath(item)}
-        className="min-w-0 flex-1 rounded-md outline-none transition-colors hover:bg-surface-container/45 focus-visible:ring-2 focus-visible:ring-primary-container/45 md:-mx-2 md:px-2 md:py-1"
+        className="min-w-0 flex-1 rounded-md outline-none focus-visible:ring-2 focus-visible:ring-primary-container/45 md:-mx-2 md:px-2 md:py-1"
       >
         <div className="flex min-w-0 items-center gap-1.5 md:gap-2">
           <ShareTypeBadge type={item.type} />
@@ -467,8 +471,8 @@ export default function MySharesPage() {
             className="min-h-[300px]"
           />
         ) : (
-          <section className="min-h-0 overflow-hidden rounded-xl border border-outline-variant/15 bg-surface-container-low">
-            <div className="max-h-full overflow-y-auto">
+          <section className="min-h-0">
+            <div className="flex max-h-full flex-col gap-2.5 overflow-y-auto">
               {filtered.map((item) => (
                 <ShareRow
                   key={item.id}

@@ -100,6 +100,8 @@ const BACKUP_DB_ENTRY_DIR = '_backup_db';
 const BACKUP_DATABASE_ENTRY = `${BACKUP_DB_ENTRY_DIR}/database.sql`;
 const BACKUP_META_ENTRY = `${BACKUP_DB_ENTRY_DIR}/meta.json`;
 const BACKUP_MANIFEST_ENTRY = `${BACKUP_DB_ENTRY_DIR}/manifest.json`;
+const MODULE_BACKUP_DATA_ENTRY = `${BACKUP_DB_ENTRY_DIR}/module-data.json`;
+const MODULE_BACKUP_SCHEMA_VERSION = 'module-1.0';
 const BACKUP_UPLOAD_METADATA_ENTRY = `${BACKUP_DB_ENTRY_DIR}/metadata`;
 const BACKUP_UPLOADS_ENTRY = `${BACKUP_DB_ENTRY_DIR}/uploads`;
 const STATIC_BACKUP_EXCLUDE_DIRS = new Set(['backups', BACKUP_DB_ENTRY_DIR, '_safety_snapshots']);
@@ -261,6 +263,34 @@ const STEP_EXTENSIONS = new Set(['.step', '.stp', '.iges', '.igs', '.xt', '.x_t'
 const BACKUP_ENCRYPTION_MAGIC = '3DPHBAKENC1';
 const BACKUP_ENCRYPTION_ALGORITHM = 'aes-256-gcm';
 
+export type BackupScope = 'full' | 'models' | 'selection' | 'product_wall';
+
+const BACKUP_SCOPE_LABELS: Record<BackupScope, string> = {
+  full: '整站备份',
+  models: '模型库',
+  selection: '选型',
+  product_wall: '产品图库',
+};
+
+const MODULE_BACKUP_STATIC_DIRS: Record<Exclude<BackupScope, 'full'>, string[]> = {
+  models: ['models', 'thumbnails', 'originals', 'drawings'],
+  selection: ['option-images', 'selection-assets', 'selection-categories-ai'],
+  product_wall: ['product-wall'],
+};
+
+export function normalizeBackupScope(value: unknown): BackupScope {
+  if (value === 'models' || value === 'selection' || value === 'product_wall') return value;
+  return 'full';
+}
+
+function backupScopeLabel(scope: BackupScope): string {
+  return BACKUP_SCOPE_LABELS[scope] || BACKUP_SCOPE_LABELS.full;
+}
+
+function isModuleBackupScope(scope: BackupScope): scope is Exclude<BackupScope, 'full'> {
+  return scope !== 'full';
+}
+
 type BackupEncryptionHeader = {
   algorithm: typeof BACKUP_ENCRYPTION_ALGORITHM;
   iv: string;
@@ -414,6 +444,8 @@ export interface BackupRecord {
   id: string;
   filename: string;
   name: string;
+  scope?: BackupScope;
+  scopeLabel?: string;
   createdAt: string;
   fileSize: number;
   fileSizeText: string;
@@ -452,6 +484,29 @@ interface BackupManifest {
   };
   directories: BackupManifestDirectory[];
   requiredEntries: string[];
+}
+
+interface ModuleBackupManifest {
+  schemaVersion: typeof MODULE_BACKUP_SCHEMA_VERSION;
+  backupId: string;
+  generatedAt: string;
+  appVersion: string;
+  scope: Exclude<BackupScope, 'full'>;
+  data: {
+    path: typeof MODULE_BACKUP_DATA_ENTRY;
+    size: number;
+    sha256: string;
+  };
+  directories: BackupManifestDirectory[];
+  requiredEntries: string[];
+}
+
+interface ModuleBackupPayload {
+  schemaVersion: typeof MODULE_BACKUP_SCHEMA_VERSION;
+  scope: Exclude<BackupScope, 'full'>;
+  generatedAt: string;
+  appVersion: string;
+  tables: Record<string, unknown[]>;
 }
 
 const SAFE_BACKUP_ID_RE = /^[a-zA-Z0-9_\-.:]+$/;
@@ -506,6 +561,7 @@ interface BackupJob {
   error?: string;
   logs: string[];
   source?: 'manual' | 'scheduled';
+  scope?: BackupScope;
 }
 
 export interface BackupHealth {
@@ -546,6 +602,40 @@ export interface BackupPolicyCheck {
   checks: BackupPolicyCheckItem[];
 }
 
+export interface BackupStats {
+  modelCount: number;
+  thumbnailCount: number;
+  dbSize: string;
+  dbSizeBytes: number;
+  totalModelCount: number;
+  modelGroupCount: number;
+  categoryCount: number;
+  originalFileCount: number;
+  drawingFileCount: number;
+  modelResourceFileCount: number;
+  modelResourceSize: number;
+  modelResourceSizeText: string;
+  selectionCategoryCount: number;
+  selectionProductCount: number;
+  threadSizeCount: number;
+  selectionResourceFileCount: number;
+  selectionResourceSize: number;
+  selectionResourceSizeText: string;
+  productWallCategoryCount: number;
+  productWallImageCount: number;
+  productWallResourceFileCount: number;
+  productWallResourceSize: number;
+  productWallResourceSizeText: string;
+  uploadResourceFileCount: number;
+  uploadResourceSize: number;
+  uploadResourceSizeText: string;
+  resourceFileCount: number;
+  resourceSize: number;
+  resourceSizeText: string;
+  totalDataSize: number;
+  totalDataSizeText: string;
+}
+
 export interface BackupVerificationResult {
   id: string;
   ok: boolean;
@@ -577,7 +667,15 @@ interface RestoreJob {
   percent: number;
   message: string;
   error?: string;
-  result?: { dbRestored: boolean; modelCount: number; thumbnailCount: number };
+  result?: {
+    dbRestored: boolean;
+    modelCount: number;
+    thumbnailCount: number;
+    scope?: BackupScope;
+    scopeLabel?: string;
+    itemCount?: number;
+    fileCount?: number;
+  };
   logs: string[];
 }
 
@@ -1046,15 +1144,15 @@ export function getActiveImportSaveJob(): ImportSaveJob | undefined {
 
 // ---- Create backup ----
 
-export function startBackupJob(): string {
-  return startBackupProcess('manual');
+export function startBackupJob(scope: BackupScope = 'full'): string {
+  return startBackupProcess('manual', normalizeBackupScope(scope));
 }
 
 function startScheduledBackupJob(): string {
-  return startBackupProcess('scheduled');
+  return startBackupProcess('scheduled', 'full');
 }
 
-function startBackupProcess(source: 'manual' | 'scheduled'): string {
+function startBackupProcess(source: 'manual' | 'scheduled', scope: BackupScope): string {
   if (!acquireLock()) {
     const err = new Error('有备份、恢复或校验任务正在进行中，请等待完成后再试');
     (err as Error & { jobId?: string }).jobId = getActiveBackupJob()?.id;
@@ -1065,16 +1163,22 @@ function startBackupProcess(source: 'manual' | 'scheduled'): string {
     id,
     stage: 'dumping',
     percent: 0,
-    message: source === 'scheduled' ? '正在执行自动备份...' : '正在导出数据库...',
+    message:
+      source === 'scheduled'
+        ? '正在执行自动备份...'
+        : isModuleBackupScope(scope)
+          ? `正在导出${backupScopeLabel(scope)}数据...`
+          : '正在导出数据库...',
     logs: [],
     source,
+    scope,
   };
   jobs.set(id, job);
   syncJob(job);
 
   try {
     const workerScript = fileURLToPath(new URL(`../scripts/backupWorker${MODULE_EXT}`, import.meta.url));
-    const child = spawn(process.execPath, [...process.execArgv, workerScript, id, source], {
+    const child = spawn(process.execPath, [...process.execArgv, workerScript, id, source, scope], {
       cwd: process.cwd(),
       env: workerEnv,
       detached: true,
@@ -1097,17 +1201,29 @@ function startBackupProcess(source: 'manual' | 'scheduled'): string {
   return id;
 }
 
-export async function runBackupWorker(jobId: string, source: 'manual' | 'scheduled' = 'manual') {
+export async function runBackupWorker(
+  jobId: string,
+  source: 'manual' | 'scheduled' = 'manual',
+  rawScope: BackupScope = 'full',
+) {
+  const scope = normalizeBackupScope(rawScope);
   const stopLockKeepAlive = startLockKeepAlive(jobId, source);
   const job = loadJob<BackupJob>(jobId) || {
     id: jobId,
     stage: 'dumping',
     percent: 0,
-    message: source === 'scheduled' ? '正在执行自动备份...' : '正在导出数据库...',
+    message:
+      source === 'scheduled'
+        ? '正在执行自动备份...'
+        : isModuleBackupScope(scope)
+          ? `正在导出${backupScopeLabel(scope)}数据...`
+          : '正在导出数据库...',
     logs: [],
     source,
+    scope,
   };
   job.source = source;
+  job.scope = scope;
   jobs.set(job.id, job);
   syncJob(job);
   try {
@@ -1119,6 +1235,12 @@ export async function runBackupWorker(jobId: string, source: 'manual' | 'schedul
 }
 
 async function runBackup(job: BackupJob) {
+  const scope = normalizeBackupScope(job.scope);
+  if (isModuleBackupScope(scope)) {
+    await runModuleBackup(job, scope);
+    return;
+  }
+
   const tmpDir = prepareWorkDir(job.id);
   const finalArchive = activeArchivePath(job.id);
 
@@ -1310,6 +1432,8 @@ async function runBackup(job: BackupJob) {
       id: job.id,
       filename: `${job.id}.tar.gz`,
       name: `备份 ${formatDate(new Date())}`,
+      scope: 'full',
+      scopeLabel: backupScopeLabel('full'),
       createdAt: new Date().toISOString(),
       fileSize,
       fileSizeText: formatSize(fileSize),
@@ -1363,6 +1487,306 @@ async function runBackup(job: BackupJob) {
   } finally {
     if (existsSync(tmpDir)) rmSync(tmpDir, { recursive: true, force: true });
   }
+}
+
+async function runModuleBackup(job: BackupJob, scope: Exclude<BackupScope, 'full'>) {
+  const tmpDir = prepareWorkDir(job.id);
+  const finalArchive = activeArchivePath(job.id);
+  const label = backupScopeLabel(scope);
+
+  try {
+    let t: number;
+    addLog(job, `开始${label}模块备份...`);
+
+    job.stage = 'dumping';
+    job.percent = 10;
+    job.message = `正在导出${label}数据...`;
+    syncJob(job);
+
+    const payload = await buildModuleBackupPayload(scope);
+    const dataPath = join(tmpDir, 'module-data.json');
+    writeJsonAtomic(dataPath, payload);
+    const dataSize = statSync(dataPath).size;
+    const dataSha256 = await sha256File(dataPath);
+    const itemCount = countModulePayloadItems(payload);
+    addLog(job, `${label}数据导出完成，共 ${itemCount} 条记录`);
+
+    job.stage = 'packing';
+    job.percent = 35;
+    job.message = `正在打包${label}资源文件...`;
+    syncJob(job);
+
+    const staticDir = join(process.cwd(), config.staticDir);
+    const archiveRoot = join(tmpDir, 'archive');
+    const dbMarker = join(archiveRoot, BACKUP_DB_ENTRY_DIR);
+    rmSync(archiveRoot, { recursive: true, force: true });
+    mkdirSync(dbMarker, { recursive: true });
+    copyFileSync(dataPath, join(dbMarker, 'module-data.json'));
+    writeFileSync(
+      join(dbMarker, 'meta.json'),
+      JSON.stringify(
+        {
+          timestamp: new Date().toISOString(),
+          version: MODULE_BACKUP_SCHEMA_VERSION,
+          appVersion: getAppVersion(),
+          scope,
+          scopeLabel: label,
+        },
+        null,
+        2,
+      ),
+    );
+
+    const moduleDirs = moduleStaticDirs(scope);
+    for (const dir of moduleDirs) {
+      mkdirSync(join(staticDir, dir), { recursive: true });
+    }
+    const manifestDirs: ArchiveDirectorySpec[] = moduleDirs.map((dir) => ({ path: dir, source: join(staticDir, dir) }));
+    const manifest = await createModuleBackupManifest(job.id, scope, dataSize, dataSha256, manifestDirs);
+    writeJsonAtomic(join(dbMarker, 'manifest.json'), manifest);
+    addLog(job, `模块备份清单已生成: ${manifest.directories.length} 个目录，数据 ${formatSize(dataSize)}`);
+
+    await packBackupArchive({
+      tmpDir,
+      finalArchive,
+      archiveRoot,
+      staticDir,
+      staticDirs: moduleDirs,
+      job,
+    });
+
+    job.stage = 'saving';
+    job.percent = 96;
+    job.message = '正在校验模块备份包...';
+    syncJob(job);
+    t = addLogStart(job, '正在校验模块备份包...');
+    await validateModuleBackupArchive(finalArchive, { expectedManifest: manifest });
+    addLogEnd(job, t, '模块备份包校验通过');
+
+    const encrypted = await encryptBackupArchiveInPlace(finalArchive);
+    if (encrypted) addLog(job, '模块备份包已加密存储');
+
+    job.percent = 97;
+    job.message = '正在计算备份包 SHA256... 0%';
+    syncJob(job);
+    t = addLogStart(job, '正在计算备份包 SHA256...');
+    const archiveSha256 = await sha256FileWithProgress(finalArchive, (percent) => {
+      job.percent = Math.max(97, Math.min(99, 97 + Math.floor(percent / 50)));
+      job.message = `正在计算备份包 SHA256... ${percent}%`;
+      syncJob(job);
+    });
+    addLogEnd(job, t, 'SHA256 计算完成');
+
+    const fileSize = statSync(finalArchive).size;
+    const record: BackupRecord = {
+      id: job.id,
+      filename: `${job.id}.tar.gz`,
+      name: `${label}备份 ${formatDate(new Date())}`,
+      scope,
+      scopeLabel: label,
+      createdAt: new Date().toISOString(),
+      fileSize,
+      fileSizeText: formatSize(fileSize),
+      modelCount: scope === 'models' ? Number(payload.tables.models?.length || 0) : itemCount,
+      thumbnailCount: countModuleBackupFiles(scope),
+      dbSize: `${itemCount} 条记录`,
+      countMode: scope === 'models' ? 'step_models' : undefined,
+      archiveSha256,
+      archiveSignature: signBackupArchiveSha256(archiveSha256),
+      encrypted: encrypted || isEncryptedBackupArchiveFile(finalArchive),
+      encryptionAlgorithm:
+        encrypted || isEncryptedBackupArchiveFile(finalArchive) ? BACKUP_ENCRYPTION_ALGORITHM : undefined,
+      manifestVersion: manifest.schemaVersion,
+      verifiedAt: new Date().toISOString(),
+    };
+    writeJsonAtomic(activeMetaPath(job.id), record);
+    await mirrorBackupIfEnabled(record, job);
+
+    job.stage = 'done';
+    job.percent = 100;
+    job.message = `${label}备份完成`;
+    addLog(job, `${label}备份完成: ${record.dbSize}, ${record.thumbnailCount} 个资源文件`);
+    await applyBackupRetentionPolicy(job);
+    log.info({ jobId: job.id, scope, fileSize: formatSize(fileSize) }, 'Module backup completed');
+  } catch (err: unknown) {
+    const message = getErrorMessage(err);
+    job.stage = 'error';
+    job.error = message;
+    syncJob(job);
+    if (existsSync(finalArchive)) rmSync(finalArchive, { force: true });
+    if (existsSync(activeMetaPath(job.id))) rmSync(activeMetaPath(job.id), { force: true });
+    log.error({ err, jobId: job.id, scope }, 'Module backup failed');
+  } finally {
+    if (existsSync(tmpDir)) rmSync(tmpDir, { recursive: true, force: true });
+  }
+}
+
+async function packBackupArchive({
+  tmpDir,
+  finalArchive,
+  archiveRoot,
+  staticDir,
+  staticDirs,
+  job,
+}: {
+  tmpDir: string;
+  finalArchive: string;
+  archiveRoot: string;
+  staticDir: string;
+  staticDirs: string[];
+  job: BackupJob;
+}) {
+  await new Promise<void>((resolve, reject) => {
+    const tmpArchive = join(tmpDir, `${job.id}.tar.gz.tmp`);
+    const args: string[] = ['czhf', tmpArchive];
+    args.push(
+      '--exclude=__MACOSX',
+      '--exclude=*/__MACOSX',
+      '--exclude=.DS_Store',
+      '--exclude=*/.DS_Store',
+      '--exclude=._*',
+      '--exclude=*/._*',
+      '--exclude=backups',
+      '--exclude=.restore_*',
+    );
+    args.push('-C', archiveRoot, BACKUP_DB_ENTRY_DIR);
+    if (staticDirs.length > 0) {
+      args.push('-C', staticDir, ...staticDirs);
+    }
+
+    const proc = spawn('tar', args, { timeout: ARCHIVE_EXTRACT_TIMEOUT_MS });
+    let stderr = '';
+    proc.stderr?.on('data', (d: Buffer) => {
+      stderr += d.toString();
+    });
+    proc.on('error', (err) => {
+      if (existsSync(tmpArchive)) rmSync(tmpArchive, { force: true });
+      reject(err);
+    });
+    proc.on('close', (code) => {
+      clearInterval(progressInterval);
+      if (code === 0) {
+        renameSync(tmpArchive, finalArchive);
+        resolve();
+      } else {
+        if (existsSync(tmpArchive)) rmSync(tmpArchive, { force: true });
+        reject(new Error(`tar failed (code ${code}): ${stderr}`));
+      }
+    });
+
+    let p = 35;
+    const progressInterval = setInterval(() => {
+      if (p < 95) {
+        const step = p < 70 ? 1.5 : 0.5;
+        p = Math.min(95, p + step);
+        job.percent = Math.round(p);
+        if (p < 55) job.message = '正在打包资源文件...';
+        else if (p < 75) job.message = '正在压缩归档...';
+        else job.message = '即将完成...';
+      } else if (existsSync(tmpArchive)) {
+        job.message = `正在压缩归档... 已生成 ${formatSize(statSync(tmpArchive).size)}`;
+      }
+      syncJob(job);
+    }, 3000);
+  });
+}
+
+function moduleStaticDirs(scope: Exclude<BackupScope, 'full'>): string[] {
+  return MODULE_BACKUP_STATIC_DIRS[scope] || [];
+}
+
+async function buildModuleBackupPayload(scope: Exclude<BackupScope, 'full'>): Promise<ModuleBackupPayload> {
+  const prisma = await getBackupPrisma();
+  const generatedAt = new Date().toISOString();
+  const base: Omit<ModuleBackupPayload, 'tables'> = {
+    schemaVersion: MODULE_BACKUP_SCHEMA_VERSION,
+    scope,
+    generatedAt,
+    appVersion: getAppVersion(),
+  };
+
+  if (scope === 'models') {
+    return {
+      ...base,
+      tables: {
+        categories: await prisma.category.findMany({ orderBy: [{ sortOrder: 'asc' }, { createdAt: 'asc' }] }),
+        modelGroups: await prisma.modelGroup.findMany({ orderBy: [{ createdAt: 'asc' }] }),
+        models: await prisma.model.findMany({ orderBy: [{ createdAt: 'asc' }] }),
+        modelVersions: await prisma.modelVersion.findMany({ orderBy: [{ createdAt: 'asc' }] }),
+      },
+    };
+  }
+
+  if (scope === 'selection') {
+    return {
+      ...base,
+      tables: {
+        selectionCategories: await prisma.selectionCategory.findMany({
+          orderBy: [{ sortOrder: 'asc' }, { createdAt: 'asc' }],
+        }),
+        selectionProducts: await prisma.selectionProduct.findMany({
+          orderBy: [{ categoryId: 'asc' }, { sortOrder: 'asc' }, { createdAt: 'asc' }],
+        }),
+        threadSizeEntries: await prisma.threadSizeEntry.findMany({
+          orderBy: [{ kind: 'asc' }, { sortOrder: 'asc' }, { createdAt: 'asc' }],
+        }),
+      },
+    };
+  }
+
+  return {
+    ...base,
+    tables: {
+      productWallCategories: await prisma.productWallCategory.findMany({
+        orderBy: [{ sortOrder: 'asc' }, { createdAt: 'asc' }],
+      }),
+      productWallImages: await prisma.productWallImage.findMany({
+        orderBy: [{ sortOrder: 'asc' }, { createdAt: 'asc' }],
+      }),
+    },
+  };
+}
+
+function countModulePayloadItems(payload: ModuleBackupPayload): number {
+  return Object.values(payload.tables).reduce((sum, rows) => sum + (Array.isArray(rows) ? rows.length : 0), 0);
+}
+
+function countModuleBackupFiles(scope: Exclude<BackupScope, 'full'>): number {
+  const staticDir = join(process.cwd(), config.staticDir);
+  return moduleStaticDirs(scope).reduce((sum, dir) => sum + countFilesRecursive(join(staticDir, dir)), 0);
+}
+
+async function createModuleBackupManifest(
+  backupId: string,
+  scope: Exclude<BackupScope, 'full'>,
+  dataSize: number,
+  dataSha256: string,
+  directoriesToCheck: readonly ArchiveDirectorySpec[],
+): Promise<ModuleBackupManifest> {
+  const directories: BackupManifestDirectory[] = directoriesToCheck.map((dir) => {
+    const stats = countFilesAndBytesRecursive(dir.source);
+    return { path: dir.path, fileCount: stats.fileCount, totalBytes: stats.totalBytes };
+  });
+
+  return {
+    schemaVersion: MODULE_BACKUP_SCHEMA_VERSION,
+    backupId,
+    generatedAt: new Date().toISOString(),
+    appVersion: getAppVersion(),
+    scope,
+    data: {
+      path: MODULE_BACKUP_DATA_ENTRY,
+      size: dataSize,
+      sha256: dataSha256,
+    },
+    directories,
+    requiredEntries: [
+      BACKUP_META_ENTRY,
+      BACKUP_MANIFEST_ENTRY,
+      MODULE_BACKUP_DATA_ENTRY,
+      ...directoriesToCheck.map((dir) => dir.path),
+    ],
+  };
 }
 
 // ---- List backups ----
@@ -1538,6 +1962,16 @@ export async function getBackupPolicyCheck(): Promise<BackupPolicyCheck> {
     message: `当前保留 ${settings.backup_retention_count} 份${settings.backup_retention_count < 3 ? '，建议至少 3 份' : ''}`,
   });
 
+  const encryption = getBackupEncryptionStatus();
+  checks.push({
+    key: 'encryption',
+    label: '备份加密',
+    status: encryption.enabled ? 'ok' : 'warning',
+    message: encryption.enabled
+      ? `已启用 ${encryption.algorithm} 加密`
+      : `未启用备份加密，建议配置 ${encryption.recommendedEnvName}`,
+  });
+
   if (settings.backup_mirror_enabled) {
     const mirrorDir = resolveMirrorBackupDir(settings.backup_mirror_dir);
     if (!mirrorDir) {
@@ -1608,7 +2042,11 @@ export async function verifyBackupArchive(id: string): Promise<BackupVerificatio
   if (!existsSync(archive)) throw new Error('备份文件不存在');
   const meta = metaPath(id);
   const record = existsSync(meta) ? (JSON.parse(readFileSync(meta, 'utf-8')) as BackupRecord) : null;
-  const manifest = await validateBackupArchive(archive, { requireManifest: true });
+  const rawManifest = await readBackupManifestForKind(archive);
+  const moduleManifest = isModuleBackupManifest(rawManifest) ? rawManifest : null;
+  const manifest = moduleManifest
+    ? await validateModuleBackupArchive(archive)
+    : await validateBackupArchive(archive, { requireManifest: true });
   const archiveSha256 = await sha256File(archive);
   if (record?.archiveSha256 && record.archiveSha256 !== archiveSha256) {
     throw new Error('备份归档 SHA256 与记录不一致');
@@ -1624,6 +2062,10 @@ export async function verifyBackupArchive(id: string): Promise<BackupVerificatio
       archiveSignature,
       encrypted,
       encryptionAlgorithm: encrypted ? BACKUP_ENCRYPTION_ALGORITHM : undefined,
+      scope: moduleManifest ? moduleManifest.scope : record.scope || 'full',
+      scopeLabel: moduleManifest
+        ? backupScopeLabel(moduleManifest.scope)
+        : record.scopeLabel || backupScopeLabel('full'),
       manifestVersion: manifest?.schemaVersion,
       verifiedAt: checkedAt,
     });
@@ -1640,7 +2082,9 @@ export async function verifyBackupArchive(id: string): Promise<BackupVerificatio
     archiveSignature,
     encrypted,
     encryptionAlgorithm: encrypted ? BACKUP_ENCRYPTION_ALGORITHM : undefined,
-    message: '备份包 manifest、数据库 SHA256、目录文件数校验通过',
+    message: moduleManifest
+      ? `${backupScopeLabel(moduleManifest.scope)}备份包 manifest、数据 SHA256、目录文件数校验通过`
+      : '备份包 manifest、数据库 SHA256、目录文件数校验通过',
   };
 }
 
@@ -1715,15 +2159,26 @@ async function runVerifyBackup(job: VerifyJob, backupId: string) {
     job.percent = 10;
     job.message = '正在校验备份清单、数据库和目录文件数...';
     syncJob(job);
-    const manifest = await validateBackupArchive(archive, {
-      requireManifest: true,
-      onEntryProgress: ({ elapsedMs, entryCount }) => {
-        const elapsedSec = Math.max(1, Math.round(elapsedMs / 1000));
-        job.percent = Math.min(65, 10 + Math.floor(elapsedSec / 4));
-        job.message = `正在校验备份清单、数据库和目录文件数... 已扫描 ${entryCount} 项，用时 ${elapsedSec}s`;
-        syncJob(job);
-      },
-    });
+    const rawManifest = await readBackupManifestForKind(archive);
+    const moduleManifest = isModuleBackupManifest(rawManifest) ? rawManifest : null;
+    const manifest = moduleManifest
+      ? await validateModuleBackupArchive(archive, {
+          onEntryProgress: ({ elapsedMs, entryCount }) => {
+            const elapsedSec = Math.max(1, Math.round(elapsedMs / 1000));
+            job.percent = Math.min(65, 10 + Math.floor(elapsedSec / 4));
+            job.message = `正在校验模块备份清单、数据和目录文件数... 已扫描 ${entryCount} 项，用时 ${elapsedSec}s`;
+            syncJob(job);
+          },
+        })
+      : await validateBackupArchive(archive, {
+          requireManifest: true,
+          onEntryProgress: ({ elapsedMs, entryCount }) => {
+            const elapsedSec = Math.max(1, Math.round(elapsedMs / 1000));
+            job.percent = Math.min(65, 10 + Math.floor(elapsedSec / 4));
+            job.message = `正在校验备份清单、数据库和目录文件数... 已扫描 ${entryCount} 项，用时 ${elapsedSec}s`;
+            syncJob(job);
+          },
+        });
     addLog(job, '备份清单、数据库和目录文件数校验通过');
 
     job.stage = 'hashing_archive';
@@ -1754,6 +2209,10 @@ async function runVerifyBackup(job: VerifyJob, backupId: string) {
         archiveSignature,
         encrypted,
         encryptionAlgorithm: encrypted ? BACKUP_ENCRYPTION_ALGORITHM : undefined,
+        scope: moduleManifest ? moduleManifest.scope : record.scope || 'full',
+        scopeLabel: moduleManifest
+          ? backupScopeLabel(moduleManifest.scope)
+          : record.scopeLabel || backupScopeLabel('full'),
         manifestVersion: manifest?.schemaVersion,
         verifiedAt: checkedAt,
       });
@@ -1771,7 +2230,9 @@ async function runVerifyBackup(job: VerifyJob, backupId: string) {
       archiveSignature,
       encrypted,
       encryptionAlgorithm: encrypted ? BACKUP_ENCRYPTION_ALGORITHM : undefined,
-      message: '备份包 manifest、数据库 SHA256、目录文件数校验通过',
+      message: moduleManifest
+        ? `${backupScopeLabel(moduleManifest.scope)}备份包 manifest、数据 SHA256、目录文件数校验通过`
+        : '备份包 manifest、数据库 SHA256、目录文件数校验通过',
     };
     job.stage = 'done';
     job.percent = 100;
@@ -1859,7 +2320,7 @@ async function runRestore(job: RestoreJob, backupId: string) {
       addLog(job, '备份文件 SHA256 校验通过');
     }
   }
-  await runRestoreFromArchive(job, arch, false);
+  await runRestoreAutoFromArchive(job, arch, false);
 }
 
 // ---- Restore from uploaded file (import) ----
@@ -1888,7 +2349,143 @@ export function startRestoreJobFromFile(archPath: string, removeAfter = true): s
 }
 
 async function runRestoreFromFile(job: RestoreJob, archPath: string, removeAfter: boolean) {
+  await runRestoreAutoFromArchive(job, archPath, removeAfter);
+}
+
+async function runRestoreAutoFromArchive(job: RestoreJob, archPath: string, removeAfter: boolean) {
+  const rawManifest = await readBackupManifestForKind(archPath);
+  if (isModuleBackupManifest(rawManifest)) {
+    await runModuleRestoreFromArchive(job, archPath, removeAfter, rawManifest.scope);
+    return;
+  }
   await runRestoreFromArchive(job, archPath, removeAfter);
+}
+
+async function runModuleRestoreFromArchive(
+  job: RestoreJob,
+  archPath: string,
+  removeArchiveAfterExtract: boolean,
+  expectedScope: Exclude<BackupScope, 'full'>,
+) {
+  const tmpDir = prepareWorkDir(job.id);
+  const label = backupScopeLabel(expectedScope);
+  const result = {
+    dbRestored: false,
+    modelCount: 0,
+    thumbnailCount: 0,
+    scope: expectedScope as BackupScope,
+    scopeLabel: label,
+    itemCount: 0,
+    fileCount: 0,
+  };
+  let readableArchivePath = archPath;
+  let safetySnapshot: string | null = null;
+
+  try {
+    const archiveSize = statSync(archPath).size;
+    addLog(job, `开始恢复${label}模块（备份文件 ${formatSize(archiveSize)}）...`);
+
+    job.stage = 'extracting';
+    job.percent = 5;
+    job.message = '正在读取模块备份包...';
+    syncJob(job);
+    readableArchivePath = await materializeReadableBackupArchive(archPath, tmpDir);
+    if (readableArchivePath !== archPath) addLog(job, '模块备份包已解密到临时恢复目录');
+
+    job.percent = 10;
+    job.message = '正在校验模块备份完整性...';
+    syncJob(job);
+    let t = addLogStart(job, '正在校验模块备份清单、数据 SHA256 和目录文件数...');
+    const manifest = await validateModuleBackupArchive(readableArchivePath, {
+      onEntryProgress: ({ elapsedMs, entryCount }) => {
+        const elapsedSec = Math.max(1, Math.round(elapsedMs / 1000));
+        job.message = `正在校验模块备份完整性... 已扫描 ${entryCount} 项，用时 ${elapsedSec}s`;
+        syncJob(job);
+      },
+    });
+    if (manifest.scope !== expectedScope) {
+      throw new Error(`模块备份类型不匹配: 期望 ${label}, 实际 ${backupScopeLabel(manifest.scope)}`);
+    }
+    addLogEnd(job, t, '模块备份完整性校验通过');
+
+    job.percent = 20;
+    job.message = '正在读取模块数据...';
+    syncJob(job);
+    const dataPath = extractModuleDataToTmp(readableArchivePath, tmpDir, manifest);
+    const payload = readModulePayload(dataPath, manifest.scope);
+    result.itemCount = countModulePayloadItems(payload);
+    result.fileCount = manifest.directories.reduce((sum, dir) => sum + dir.fileCount, 0);
+    addLog(job, `模块数据读取完成: ${result.itemCount} 条记录，${result.fileCount} 个资源文件`);
+
+    job.percent = 28;
+    job.message = '正在准备模块文件恢复计划...';
+    syncJob(job);
+    const filePlan = buildModuleFilePlanFromManifest(readableArchivePath, tmpDir, manifest);
+    assertRestoreHasDiskSpace(filePlan);
+    addLog(job, `文件目录预检通过: ${filePlan.staticDirs.length} 个 ${label}资源目录`);
+
+    job.stage = 'restoring_db';
+    job.percent = 35;
+    job.message = '正在创建恢复前安全快照...';
+    syncJob(job);
+    t = addLogStart(job, '正在导出当前数据库安全快照（模块恢复失败时自动回滚）...');
+    try {
+      safetySnapshot = join(tmpDir, 'safety_snapshot.sql');
+      pgDumpToFile(DB_URL_CLEAN, safetySnapshot, ['--no-owner', '--no-privileges'], DB_DUMP_TIMEOUT_MS);
+      const snapSize = statSync(safetySnapshot).size;
+      if (snapSize === 0) throw new Error('安全快照为空');
+      addLogEnd(job, t, `安全快照已创建（${formatSize(snapSize)}）`);
+    } catch (snapErr: unknown) {
+      throw new Error(`无法创建恢复前安全快照，已中止恢复以保护数据安全: ${getErrorMessage(snapErr)}`);
+    }
+
+    job.percent = 50;
+    job.message = `正在恢复${label}数据...`;
+    syncJob(job);
+    t = addLogStart(job, `正在重建${label}相关数据表...`);
+    const restoredItemCount = await restoreModulePayload(payload, job);
+    result.dbRestored = true;
+    result.itemCount = restoredItemCount;
+    result.modelCount = manifest.scope === 'models' ? await countStepModelsInDatabase() : restoredItemCount;
+    addLogEnd(job, t, `${label}数据恢复完成（${restoredItemCount} 条记录）`);
+
+    job.stage = 'restoring_files';
+    job.percent = 75;
+    job.message = `正在恢复${label}资源文件...`;
+    syncJob(job);
+
+    try {
+      t = addLogStart(job, `正在恢复${label}资源目录...`);
+      const fileResult = await commitRestoreFilePlan(filePlan, job);
+      result.thumbnailCount = fileResult.thumbnailCount || result.fileCount;
+      addLogEnd(job, t, `${label}资源目录恢复完成`);
+    } catch (err: unknown) {
+      addLog(job, '模块文件恢复失败，正在回滚数据库到恢复前安全快照...');
+      await rollbackToSafetySnapshot(safetySnapshot, job);
+      throw err;
+    }
+
+    await clearCachesAfterRestore(job);
+
+    job.stage = 'done';
+    job.percent = 100;
+    job.message = `${label}恢复完成`;
+    job.result = result;
+    addLog(job, `${label}恢复完成: ${result.itemCount} 条记录，${result.fileCount} 个资源文件`);
+    syncJob(job);
+
+    log.info({ jobId: job.id, scope: manifest.scope, itemCount: result.itemCount }, 'Module restore completed');
+  } catch (err: unknown) {
+    const message = getErrorMessage(err);
+    job.stage = 'error';
+    job.error = message;
+    addLog(job, `${label}恢复失败: ${message}`);
+    syncJob(job);
+    log.error({ err, jobId: job.id, scope: expectedScope }, 'Module restore failed');
+  } finally {
+    if (removeArchiveAfterExtract && existsSync(archPath)) rmSync(archPath, { force: true });
+    if (existsSync(tmpDir)) rmSync(tmpDir, { recursive: true, force: true });
+  }
 }
 
 function startRestoreWorkerProcess(job: RestoreJob, args: string[]) {
@@ -2208,19 +2805,7 @@ async function runRestoreFromArchive(job: RestoreJob, archPath: string, removeAr
 
     addLog(job, `恢复完成: ${result.modelCount} 个 STEP 模型, ${result.thumbnailCount} 张缩略图`);
 
-    try {
-      const { cacheDelByPrefix } = await import('./cache.js');
-      await cacheDelByPrefix('cache:');
-      addLog(job, '缓存已清理');
-    } catch {
-      log.warn({ err: {} }, 'Failed to clear cache after restore');
-    }
-    try {
-      const { clearSettingsCache } = await import('./settings.js');
-      clearSettingsCache();
-    } catch {
-      log.warn({ err: {} }, 'Failed to clear settings cache after restore');
-    }
+    await clearCachesAfterRestore(job);
 
     job.stage = 'done';
     job.percent = 100;
@@ -2245,6 +2830,22 @@ async function runRestoreFromArchive(job: RestoreJob, archPath: string, removeAr
   }
 }
 
+async function clearCachesAfterRestore(job: { logs?: string[] }) {
+  try {
+    const { cacheDelByPrefix } = await import('./cache.js');
+    await cacheDelByPrefix('cache:');
+    addLog(job, '缓存已清理');
+  } catch {
+    log.warn({ err: {} }, 'Failed to clear cache after restore');
+  }
+  try {
+    const { clearSettingsCache } = await import('./settings.js');
+    clearSettingsCache();
+  } catch {
+    log.warn({ err: {} }, 'Failed to clear settings cache after restore');
+  }
+}
+
 // ---- Download path ----
 
 export function getBackupArchivePath(id: string): string | null {
@@ -2254,28 +2855,101 @@ export function getBackupArchivePath(id: string): string | null {
 
 // ---- Stats ----
 
-export async function getBackupStats(): Promise<{
-  modelCount: number;
-  thumbnailCount: number;
-  dbSize: string;
-}> {
+export async function getBackupStats(): Promise<BackupStats> {
   const staticDir = join(process.cwd(), config.staticDir);
+  const uploadDir = join(process.cwd(), config.uploadDir);
+  const modelsDirStats = countDirs(staticDir, moduleStaticDirs('models'));
+  const selectionDirStats = countDirs(staticDir, moduleStaticDirs('selection'));
+  const productWallDirStats = countDirs(staticDir, moduleStaticDirs('product_wall'));
+  const uploadDirStats = countDirs(uploadDir, discoverUploadBackupDirs(uploadDir));
   const thumbnailCount = countFilesRecursive(join(staticDir, 'thumbnails'), (name) => name.endsWith('.png'));
+  const originalFileCount = countFilesRecursive(join(staticDir, 'originals'), isStepFileName);
+  const drawingFileCount = countFilesRecursive(join(staticDir, 'drawings'));
   let modelCount = 0;
+  let totalModelCount = 0;
+  let modelGroupCount = 0;
+  let categoryCount = 0;
+  let selectionCategoryCount = 0;
+  let selectionProductCount = 0;
+  let threadSizeCount = 0;
+  let productWallCategoryCount = 0;
+  let productWallImageCount = 0;
+  let dbSizeBytes = 0;
   let dbSize = 'unknown';
 
   try {
     const prisma = await getBackupPrisma();
-    modelCount = await prisma.model.count({ where: completedStepWhere });
+    [
+      modelCount,
+      totalModelCount,
+      modelGroupCount,
+      categoryCount,
+      selectionCategoryCount,
+      selectionProductCount,
+      threadSizeCount,
+      productWallCategoryCount,
+      productWallImageCount,
+    ] = await Promise.all([
+      prisma.model.count({ where: completedStepWhere }),
+      prisma.model.count(),
+      prisma.modelGroup.count(),
+      prisma.category.count(),
+      prisma.selectionCategory.count(),
+      prisma.selectionProduct.count(),
+      prisma.threadSizeEntry.count(),
+      prisma.productWallCategory.count(),
+      prisma.productWallImage.count(),
+    ]);
     const r = await prisma.$queryRaw<
-      Array<{ pg_size_pretty: string }>
-    >`SELECT pg_size_pretty(pg_database_size(current_database())) as pg_size_pretty`;
+      Array<{ bytes: bigint | number; pg_size_pretty: string }>
+    >`SELECT pg_database_size(current_database()) as bytes, pg_size_pretty(pg_database_size(current_database())) as pg_size_pretty`;
+    dbSizeBytes = Number(r[0]?.bytes || 0);
     if (r[0]?.pg_size_pretty) dbSize = r[0].pg_size_pretty;
   } catch {
     log.warn({ err: {} }, 'Failed to query database stats for backup overview');
   }
 
-  return { modelCount, thumbnailCount, dbSize };
+  const resourceFileCount =
+    modelsDirStats.fileCount + selectionDirStats.fileCount + productWallDirStats.fileCount + uploadDirStats.fileCount;
+  const resourceSize =
+    modelsDirStats.totalBytes +
+    selectionDirStats.totalBytes +
+    productWallDirStats.totalBytes +
+    uploadDirStats.totalBytes;
+
+  return {
+    modelCount,
+    thumbnailCount,
+    dbSize,
+    dbSizeBytes,
+    totalModelCount,
+    modelGroupCount,
+    categoryCount,
+    originalFileCount,
+    drawingFileCount,
+    modelResourceFileCount: modelsDirStats.fileCount,
+    modelResourceSize: modelsDirStats.totalBytes,
+    modelResourceSizeText: formatSize(modelsDirStats.totalBytes),
+    selectionCategoryCount,
+    selectionProductCount,
+    threadSizeCount,
+    selectionResourceFileCount: selectionDirStats.fileCount,
+    selectionResourceSize: selectionDirStats.totalBytes,
+    selectionResourceSizeText: formatSize(selectionDirStats.totalBytes),
+    productWallCategoryCount,
+    productWallImageCount,
+    productWallResourceFileCount: productWallDirStats.fileCount,
+    productWallResourceSize: productWallDirStats.totalBytes,
+    productWallResourceSizeText: formatSize(productWallDirStats.totalBytes),
+    uploadResourceFileCount: uploadDirStats.fileCount,
+    uploadResourceSize: uploadDirStats.totalBytes,
+    uploadResourceSizeText: formatSize(uploadDirStats.totalBytes),
+    resourceFileCount,
+    resourceSize,
+    resourceSizeText: formatSize(resourceSize),
+    totalDataSize: dbSizeBytes + resourceSize,
+    totalDataSizeText: formatSize(dbSizeBytes + resourceSize),
+  };
 }
 
 // ---- Helpers ----
@@ -2289,11 +2963,16 @@ async function inspectBackupArchive(id: string, archive: string, originalName: s
   const tmpDir = prepareWorkDir(`peek_${id}`);
   try {
     const readableArchive = await materializeReadableBackupArchive(archive, tmpDir);
-    const manifest = await validateBackupArchive(readableArchive);
     const entries = listArchiveEntries(readableArchive);
     if (entries.length === 0) {
       throw new Error('备份归档内容为空');
     }
+    const rawManifest = readArchiveManifest(readableArchive) as unknown;
+    if (isModuleBackupManifest(rawManifest)) {
+      return await inspectModuleBackupArchive(id, archive, readableArchive, originalName, rawManifest);
+    }
+
+    const manifest = await validatePlainBackupArchive(readableArchive);
     const hasDbFile = entries.includes('_backup_db/database.sql') || entries.includes('database.sql');
     if (!hasDbFile) {
       throw new Error('备份包缺少数据库文件');
@@ -2363,6 +3042,316 @@ async function inspectBackupArchive(id: string, archive: string, originalName: s
   } finally {
     if (existsSync(tmpDir)) rmSync(tmpDir, { recursive: true, force: true });
   }
+}
+
+async function inspectModuleBackupArchive(
+  id: string,
+  archive: string,
+  readableArchive: string,
+  originalName: string,
+  manifest: ModuleBackupManifest,
+): Promise<BackupRecord> {
+  await validateModuleBackupArchive(readableArchive, { expectedManifest: manifest });
+  const tmpDir = prepareWorkDir(`peek_module_${id}`);
+  try {
+    const dataPath = extractModuleDataToTmp(readableArchive, tmpDir, manifest);
+    const payload = readModulePayload(dataPath, manifest.scope);
+    const itemCount = countModulePayloadItems(payload);
+    const fileSize = statSync(archive).size;
+    const encrypted = isEncryptedBackupArchiveFile(archive);
+    return {
+      id,
+      filename: `${id}.tar.gz`,
+      name: `导入${backupScopeLabel(manifest.scope)} ${originalName.replace(/\.tar\.gz$/, '').replace(/\.tgz$/, '')}`,
+      scope: manifest.scope,
+      scopeLabel: backupScopeLabel(manifest.scope),
+      createdAt: manifest.generatedAt || new Date().toISOString(),
+      fileSize,
+      fileSizeText: formatSize(fileSize),
+      modelCount: manifest.scope === 'models' ? Number(payload.tables.models?.length || 0) : itemCount,
+      thumbnailCount: manifest.directories.reduce((sum, dir) => sum + dir.fileCount, 0),
+      dbSize: `${itemCount} 条记录`,
+      countMode: manifest.scope === 'models' ? 'step_models' : undefined,
+      encrypted,
+      encryptionAlgorithm: encrypted ? BACKUP_ENCRYPTION_ALGORITHM : undefined,
+      manifestVersion: manifest.schemaVersion,
+      verifiedAt: new Date().toISOString(),
+    };
+  } finally {
+    if (existsSync(tmpDir)) rmSync(tmpDir, { recursive: true, force: true });
+  }
+}
+
+function extractModuleDataToTmp(archive: string, tmpDir: string, manifest: ModuleBackupManifest): string {
+  if (!extractArchiveEntry(archive, tmpDir, manifest.data.path)) {
+    throw new Error(`模块备份包缺少数据文件: ${manifest.data.path}`);
+  }
+  return join(tmpDir, manifest.data.path);
+}
+
+function readModulePayload(dataPath: string, expectedScope: Exclude<BackupScope, 'full'>): ModuleBackupPayload {
+  const raw = JSON.parse(readFileSync(dataPath, 'utf-8')) as unknown;
+  if (!isPlainRecord(raw)) throw new Error('模块备份数据格式无效');
+  if (raw.schemaVersion !== MODULE_BACKUP_SCHEMA_VERSION) {
+    throw new Error(`不支持的模块备份数据版本: ${String(raw.schemaVersion || '')}`);
+  }
+  if (raw.scope !== expectedScope) {
+    throw new Error(`模块备份数据类型不匹配: 期望 ${backupScopeLabel(expectedScope)}`);
+  }
+  if (!isPlainRecord(raw.tables)) throw new Error('模块备份数据缺少表数据');
+  return raw as unknown as ModuleBackupPayload;
+}
+
+function buildModuleFilePlanFromManifest(
+  archive: string,
+  tmpDir: string,
+  manifest: ModuleBackupManifest,
+): RestoreFilePlan {
+  const staticDir = join(process.cwd(), config.staticDir);
+  const allowedDirs = new Set(moduleStaticDirs(manifest.scope));
+  const plan: RestoreFilePlan = { archive, stagingRoot: join(tmpDir, 'restore_files'), staticDirs: [], uploadDirs: [] };
+
+  for (const dir of manifest.directories) {
+    if (!allowedDirs.has(dir.path)) continue;
+    plan.staticDirs.push({
+      dir: dir.path,
+      destination: join(staticDir, dir.path),
+      archiveEntry: dir.path,
+    });
+  }
+
+  return plan;
+}
+
+async function restoreModulePayload(payload: ModuleBackupPayload, job: RestoreJob): Promise<number> {
+  const prisma = await getBackupPrisma();
+  return prisma.$transaction(
+    async (tx: any) => {
+      if (payload.scope === 'models') return restoreModelsModule(tx, payload, job);
+      if (payload.scope === 'selection') return restoreSelectionModule(tx, payload);
+      return restoreProductWallModule(tx, payload);
+    },
+    { maxWait: 60_000, timeout: DB_RESTORE_TIMEOUT_MS },
+  );
+}
+
+async function restoreModelsModule(tx: any, payload: ModuleBackupPayload, job: RestoreJob): Promise<number> {
+  await tx.$executeRawUnsafe(
+    'TRUNCATE TABLE "model_versions", "favorites", "downloads", "comments", "share_links", "models", "model_groups", "categories" RESTART IDENTITY CASCADE',
+  );
+
+  const categories = tableRows(payload, 'categories');
+  const modelGroups = tableRows(payload, 'modelGroups');
+  const models = tableRows(payload, 'models');
+  const modelVersions = tableRows(payload, 'modelVersions');
+  const userContext = await getRestoreUserContext(tx, models.length > 0 || modelVersions.length > 0);
+  const projectIds = new Set<string>(
+    (await tx.project.findMany({ select: { id: true } })).map((item: { id: string }) => item.id),
+  );
+
+  await restoreCategoryRows(tx, categories);
+
+  const groupIds = new Set<string>();
+  const groupPrimaryById = new Map<string, string>();
+  const groupUpdatedAtById = new Map<string, Date>();
+  const groupData = modelGroups
+    .map((row) => {
+      const data = reviveDateFields(row, ['createdAt', 'updatedAt']);
+      const id = stringValue(data.id);
+      if (!id) return null;
+      const primaryId = stringValue(data.primaryId);
+      if (primaryId) groupPrimaryById.set(id, primaryId);
+      if (data.updatedAt instanceof Date) groupUpdatedAtById.set(id, data.updatedAt);
+      data.primaryId = null;
+      groupIds.add(id);
+      return data;
+    })
+    .filter((row): row is Record<string, unknown> => Boolean(row));
+  await createManyInChunks(tx.modelGroup, groupData);
+
+  const categoryIds = new Set(categories.map((row) => stringValue(row.id)).filter((id): id is string => Boolean(id)));
+  const modelIds = new Set<string>();
+  const modelData = models
+    .map((row) => {
+      const data = reviveDateFields(row, ['createdAt', 'updatedAt', 'fileModifiedAt']);
+      const id = stringValue(data.id);
+      if (!id) return null;
+      data.categoryId = keepIdIfPresent(data.categoryId, categoryIds);
+      data.groupId = keepIdIfPresent(data.groupId, groupIds);
+      data.projectId = keepIdIfPresent(data.projectId, projectIds);
+      data.createdById = pickRestoreUserId(data.createdById, userContext);
+      modelIds.add(id);
+      return data;
+    })
+    .filter((row): row is Record<string, unknown> => Boolean(row));
+  await createManyInChunks(tx.model, modelData);
+
+  const versionData = modelVersions
+    .map((row) => {
+      const data = reviveDateFields(row, ['createdAt']);
+      data.modelId = keepIdIfPresent(data.modelId, modelIds);
+      if (!data.modelId) return null;
+      data.createdById = pickRestoreUserId(data.createdById, userContext);
+      return data;
+    })
+    .filter((row): row is Record<string, unknown> => Boolean(row));
+  await createManyInChunks(tx.modelVersion, versionData);
+
+  for (const [id, primaryId] of groupPrimaryById.entries()) {
+    if (!modelIds.has(primaryId)) continue;
+    await tx.modelGroup.update({
+      where: { id },
+      data: { primaryId, ...(groupUpdatedAtById.has(id) ? { updatedAt: groupUpdatedAtById.get(id) } : {}) },
+    });
+  }
+
+  addLog(job, `模型库表已重建: ${modelData.length} 个模型，${versionData.length} 个版本`);
+  return modelData.length;
+}
+
+async function restoreSelectionModule(tx: any, payload: ModuleBackupPayload): Promise<number> {
+  await tx.$executeRawUnsafe(
+    'TRUNCATE TABLE "selection_shares", "selection_products", "selection_categories", "thread_size_entries" RESTART IDENTITY CASCADE',
+  );
+
+  const categories = tableRows(payload, 'selectionCategories').map((row) =>
+    reviveDateFields(row, ['createdAt', 'updatedAt']),
+  );
+  await createManyInChunks(tx.selectionCategory, categories);
+  const categoryIds = new Set(categories.map((row) => stringValue(row.id)).filter((id): id is string => Boolean(id)));
+
+  const products = tableRows(payload, 'selectionProducts')
+    .map((row) => {
+      const data = reviveDateFields(row, ['createdAt', 'updatedAt']);
+      data.categoryId = keepIdIfPresent(data.categoryId, categoryIds);
+      return data.categoryId ? data : null;
+    })
+    .filter((row): row is Record<string, unknown> => Boolean(row));
+  await createManyInChunks(tx.selectionProduct, products);
+
+  const threadSizes = tableRows(payload, 'threadSizeEntries').map((row) =>
+    reviveDateFields(row, ['createdAt', 'updatedAt']),
+  );
+  await createManyInChunks(tx.threadSizeEntry, threadSizes);
+
+  return categories.length + products.length + threadSizes.length;
+}
+
+async function restoreProductWallModule(tx: any, payload: ModuleBackupPayload): Promise<number> {
+  await tx.$executeRawUnsafe(
+    'TRUNCATE TABLE "product_wall_image_favorites", "product_wall_images", "product_wall_categories" RESTART IDENTITY CASCADE',
+  );
+
+  const categories = tableRows(payload, 'productWallCategories').map((row) =>
+    reviveDateFields(row, ['createdAt', 'updatedAt']),
+  );
+  await createManyInChunks(tx.productWallCategory, categories);
+
+  const userContext = await getRestoreUserContext(tx, false);
+  const images = tableRows(payload, 'productWallImages').map((row) => {
+    const data = reviveDateFields(row, ['createdAt', 'updatedAt', 'reviewedAt']);
+    data.uploaderId = keepIdIfPresent(data.uploaderId, userContext.ids);
+    data.reviewedById = keepIdIfPresent(data.reviewedById, userContext.ids);
+    return data;
+  });
+  await createManyInChunks(tx.productWallImage, images);
+
+  return categories.length + images.length;
+}
+
+async function restoreCategoryRows(tx: any, rows: Record<string, unknown>[]) {
+  const knownIds = new Set(rows.map((row) => stringValue(row.id)).filter((id): id is string => Boolean(id)));
+  const pending = rows.map((row) => reviveDateFields(row, ['createdAt', 'updatedAt']));
+  const created = new Set<string>();
+
+  while (pending.length > 0) {
+    let progressed = false;
+    for (let index = pending.length - 1; index >= 0; index -= 1) {
+      const row = pending[index];
+      const id = stringValue(row.id);
+      if (!id) {
+        pending.splice(index, 1);
+        progressed = true;
+        continue;
+      }
+      const parentId = stringValue(row.parentId);
+      if (parentId && knownIds.has(parentId) && !created.has(parentId)) continue;
+      row.parentId = parentId && created.has(parentId) ? parentId : null;
+      await tx.category.create({ data: row });
+      created.add(id);
+      pending.splice(index, 1);
+      progressed = true;
+    }
+    if (!progressed) {
+      for (const row of pending) {
+        const id = stringValue(row.id);
+        if (!id) continue;
+        row.parentId = null;
+        await tx.category.create({ data: row });
+        created.add(id);
+      }
+      pending.length = 0;
+    }
+  }
+}
+
+async function createManyInChunks(model: any, data: Record<string, unknown>[], size = 500) {
+  for (let index = 0; index < data.length; index += size) {
+    const chunk = data.slice(index, index + size);
+    if (chunk.length > 0) await model.createMany({ data: chunk });
+  }
+}
+
+async function getRestoreUserContext(
+  tx: any,
+  requireFallback: boolean,
+): Promise<{ ids: Set<string>; fallbackId: string | null }> {
+  const users = (await tx.user.findMany({
+    select: { id: true, role: true },
+    orderBy: { createdAt: 'asc' },
+  })) as Array<{ id: string; role?: string | null }>;
+  const ids = new Set(users.map((user) => user.id));
+  const fallbackId = users.find((user) => user.role === 'ADMIN')?.id || users[0]?.id || null;
+  if (requireFallback && !fallbackId) {
+    throw new Error('当前系统没有可用用户，无法恢复模型创建人信息');
+  }
+  return { ids, fallbackId };
+}
+
+function pickRestoreUserId(value: unknown, context: { ids: Set<string>; fallbackId: string | null }): string {
+  const id = stringValue(value);
+  if (id && context.ids.has(id)) return id;
+  if (!context.fallbackId) throw new Error('当前系统没有可用用户，无法恢复用户关联数据');
+  return context.fallbackId;
+}
+
+function tableRows(payload: ModuleBackupPayload, key: string): Record<string, unknown>[] {
+  const value = payload.tables[key];
+  if (!Array.isArray(value)) return [];
+  return value.filter(isPlainRecord).map((row) => ({ ...row }));
+}
+
+function reviveDateFields(row: Record<string, unknown>, fields: string[]): Record<string, unknown> {
+  const next = { ...row };
+  for (const field of fields) {
+    if (next[field] == null) continue;
+    const date = new Date(String(next[field]));
+    if (!Number.isNaN(date.getTime())) next[field] = date;
+  }
+  return next;
+}
+
+function stringValue(value: unknown): string | null {
+  return typeof value === 'string' && value.trim() ? value : null;
+}
+
+function keepIdIfPresent(value: unknown, ids: Set<string>): string | null {
+  const id = stringValue(value);
+  return id && ids.has(id) ? id : null;
+}
+
+function isPlainRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value && typeof value === 'object' && !Array.isArray(value));
 }
 
 export function normalizeBackupArchiveEntryList(raw: string): string[] {
@@ -2590,6 +3579,80 @@ async function validateBackupArchive(
   return withReadableBackupArchive(archive, (readableArchive) => validatePlainBackupArchive(readableArchive, options));
 }
 
+function isModuleBackupManifest(value: unknown): value is ModuleBackupManifest {
+  const manifest = value as Partial<ModuleBackupManifest> | null | undefined;
+  return (
+    manifest?.schemaVersion === MODULE_BACKUP_SCHEMA_VERSION &&
+    (manifest.scope === 'models' || manifest.scope === 'selection' || manifest.scope === 'product_wall') &&
+    manifest.data?.path === MODULE_BACKUP_DATA_ENTRY
+  );
+}
+
+async function readBackupManifestForKind(archive: string): Promise<BackupManifest | ModuleBackupManifest | null> {
+  return withReadableBackupArchive(
+    archive,
+    async (readableArchive) => readArchiveManifest(readableArchive) as BackupManifest | ModuleBackupManifest | null,
+  );
+}
+
+async function validateModuleBackupArchive(
+  archive: string,
+  options: {
+    expectedManifest?: ModuleBackupManifest;
+    onEntryProgress?: (info: { elapsedMs: number; entryCount: number }) => void;
+  } = {},
+): Promise<ModuleBackupManifest> {
+  return withReadableBackupArchive(archive, async (readableArchive) => {
+    if (!existsSync(readableArchive)) throw new Error('备份文件不存在');
+    if (statSync(readableArchive).size <= 0) throw new Error('备份文件为空');
+    const entries = await listArchiveEntriesWithProgress(readableArchive, options.onEntryProgress);
+    if (entries.length === 0) throw new Error('备份归档内容为空');
+    const unsafeEntry = entries.find(isUnsafeBackupArchiveEntry);
+    if (unsafeEntry) throw new Error(`备份包包含不安全路径: ${unsafeEntry}`);
+
+    const archiveManifest = readArchiveManifest(readableArchive) as unknown;
+    if (!isModuleBackupManifest(archiveManifest)) {
+      throw new Error('备份包不是有效的模块备份');
+    }
+    const manifest = options.expectedManifest || archiveManifest;
+    if (options.expectedManifest && JSON.stringify(options.expectedManifest) !== JSON.stringify(archiveManifest)) {
+      throw new Error('模块备份清单内容与打包前清单不一致');
+    }
+
+    const allowedDirs = new Set(moduleStaticDirs(manifest.scope));
+    const unexpectedDir = manifest.directories.find((dir) => !allowedDirs.has(dir.path));
+    if (unexpectedDir) {
+      throw new Error(`模块备份包含不属于${backupScopeLabel(manifest.scope)}的目录: ${unexpectedDir.path}`);
+    }
+
+    for (const entry of manifest.requiredEntries) {
+      if (!archiveHasEntry(entries, entry)) {
+        throw new Error(`备份包缺少必要条目: ${entry}`);
+      }
+    }
+
+    const dataStats = await inspectArchiveDatabase(readableArchive, manifest.data.path);
+    if (dataStats.size !== manifest.data.size) {
+      throw new Error(`模块数据大小不一致: manifest=${manifest.data.size}, archive=${dataStats.size}`);
+    }
+    if (dataStats.sha256 !== manifest.data.sha256) {
+      throw new Error('模块数据 SHA256 校验失败');
+    }
+
+    for (const dir of manifest.directories) {
+      if (!archiveHasEntry(entries, dir.path)) {
+        throw new Error(`备份包缺少业务目录: ${dir.path}`);
+      }
+      const archivedCount = countArchiveFiles(entries, dir.path);
+      if (archivedCount !== dir.fileCount) {
+        throw new Error(`备份目录文件数不一致: ${dir.path} manifest=${dir.fileCount}, archive=${archivedCount}`);
+      }
+    }
+
+    return manifest;
+  });
+}
+
 async function validatePlainBackupArchive(
   archive: string,
   options: {
@@ -2770,6 +3833,19 @@ function countFilesAndBytesRecursive(dir: string): { fileCount: number; totalByt
   }
 
   return { fileCount, totalBytes };
+}
+
+function countDirs(root: string, dirs: string[]): { fileCount: number; totalBytes: number } {
+  return dirs.reduce(
+    (sum, dir) => {
+      const stats = countFilesAndBytesRecursive(join(root, dir));
+      return {
+        fileCount: sum.fileCount + stats.fileCount,
+        totalBytes: sum.totalBytes + stats.totalBytes,
+      };
+    },
+    { fileCount: 0, totalBytes: 0 },
+  );
 }
 
 function isIgnoredArchiveEntry(entry: string): boolean {
@@ -3385,6 +4461,8 @@ async function _restoreArchiveDirectory(
 }
 
 async function extractMultipleArchiveEntries(archive: string, destination: string, entries: string[]): Promise<void> {
+  if (entries.length === 0) return;
+
   return new Promise((resolve, reject) => {
     const args = ['xzf', archive, '-C', destination, ...entries];
     const proc = spawn('tar', args, { timeout: ARCHIVE_EXTRACT_TIMEOUT_MS });

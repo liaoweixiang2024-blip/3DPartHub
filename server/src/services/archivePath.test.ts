@@ -135,3 +135,14 @@ test('keeps UTF-8 encoded zip entry names unchanged', () => {
   });
   assert.equal(decoded, entryName);
 });
+
+test('repairs mojibake archive paths such as legacy RAR header names', async () => {
+  const { normalizeBatchArchiveEntryName } = await import('./archivePath.js');
+  assert.equal(normalizeBatchArchiveEntryName('ÖÐÎÄ\\²âÊÔ.STEP'), '中文/测试.STEP');
+  assert.deepEqual(structuredArchivePath('ÖÐÎÄ/²âÊÔ.STEP'), {
+    categoryName: '中文',
+    subcategoryName: null,
+    modelName: '测试',
+    modelDirKey: '中文/测试',
+  });
+});

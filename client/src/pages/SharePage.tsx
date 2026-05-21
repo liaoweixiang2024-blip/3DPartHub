@@ -11,6 +11,7 @@ import PageRefreshFallback from '../components/shared/PageRefreshFallback';
 import { PublicPageShell } from '../components/shared/PublicPageShell';
 import { useDocumentTitle } from '../hooks/useDocumentTitle';
 import { useMediaQuery } from '../layouts/hooks/useMediaQuery';
+import { triggerBrowserDownload } from '../lib/browserDownload';
 import { getErrorMessage } from '../lib/errorNotifications';
 import { getDefaultPreset, getPublicSettingsSnapshot, getSiteTitle } from '../lib/publicSettings';
 
@@ -148,10 +149,7 @@ export default function SharePage() {
       return;
     }
     setDownloading(true);
-    const a = document.createElement('a');
-    a.href = getShareDownloadUrl(token, info?.hasPassword ? shareAccessToken : undefined);
-    a.download = '';
-    a.click();
+    triggerBrowserDownload(getShareDownloadUrl(token, info?.hasPassword ? shareAccessToken : undefined));
     setTimeout(() => setDownloading(false), 2000);
   }
 

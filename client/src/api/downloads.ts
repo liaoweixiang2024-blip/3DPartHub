@@ -1,4 +1,5 @@
 import { getPublicSettingsSnapshot } from '../lib/publicSettings';
+import { triggerBrowserDownload } from '../lib/browserDownload';
 import { getAccessToken, useAuthStore } from '../stores/useAuthStore';
 import { downloadBatchZip } from './batchZipDownload';
 import client from './client';
@@ -114,10 +115,7 @@ export async function downloadModelFile(
   options: { noRecord?: boolean } = {},
 ): Promise<void> {
   const href = await createModelDownloadUrl(modelId, format, options);
-  const a = document.createElement('a');
-  a.href = href;
-  a.download = '';
-  a.click();
+  triggerBrowserDownload(href);
 }
 
 export async function createModelDrawingUrl(modelId: string): Promise<string> {

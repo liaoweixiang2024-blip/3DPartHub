@@ -1,4 +1,4 @@
-import { normalizeUploadFilename } from '../lib/filenameEncoding.js';
+import { fixMojibakeText, normalizeUploadFilename } from '../lib/filenameEncoding.js';
 
 export type StructuredArchivePath = {
   categoryName: string;
@@ -45,7 +45,11 @@ export function decodeZipEntryNameForUpload(entry: { entryName: string; rawEntry
 }
 
 export function normalizeBatchArchiveEntryName(entryName: string): string | null {
-  const normalized = entryName.replace(/\\/g, '/');
+  const normalized = entryName
+    .replace(/\\/g, '/')
+    .split('/')
+    .map((segment) => fixMojibakeText(segment))
+    .join('/');
   if (!normalized || normalized.startsWith('/') || /^[a-zA-Z]:/.test(normalized) || normalized.includes('\0')) {
     return null;
   }

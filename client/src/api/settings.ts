@@ -231,6 +231,34 @@ export interface BackupStats {
   modelCount: number;
   thumbnailCount: number;
   dbSize: string;
+  dbSizeBytes?: number;
+  totalModelCount?: number;
+  modelGroupCount?: number;
+  categoryCount?: number;
+  originalFileCount?: number;
+  drawingFileCount?: number;
+  modelResourceFileCount?: number;
+  modelResourceSize?: number;
+  modelResourceSizeText?: string;
+  selectionCategoryCount?: number;
+  selectionProductCount?: number;
+  threadSizeCount?: number;
+  selectionResourceFileCount?: number;
+  selectionResourceSize?: number;
+  selectionResourceSizeText?: string;
+  productWallCategoryCount?: number;
+  productWallImageCount?: number;
+  productWallResourceFileCount?: number;
+  productWallResourceSize?: number;
+  productWallResourceSizeText?: string;
+  uploadResourceFileCount?: number;
+  uploadResourceSize?: number;
+  uploadResourceSizeText?: string;
+  resourceFileCount?: number;
+  resourceSize?: number;
+  resourceSizeText?: string;
+  totalDataSize?: number;
+  totalDataSizeText?: string;
 }
 
 export interface MaintenanceStatus {
@@ -300,6 +328,8 @@ export interface BackupRecord {
   id: string;
   filename: string;
   name: string;
+  scope?: BackupScope;
+  scopeLabel?: string;
   createdAt: string;
   fileSize: number;
   fileSizeText: string;
@@ -378,7 +408,13 @@ export interface RestoreResult {
   dbRestored: boolean;
   modelCount: number;
   thumbnailCount: number;
+  scope?: BackupScope;
+  scopeLabel?: string;
+  itemCount?: number;
+  fileCount?: number;
 }
+
+export type BackupScope = 'full' | 'models' | 'selection' | 'product_wall';
 
 type HttpError = Error & {
   response?: {
@@ -397,6 +433,7 @@ interface ProgressPayload<T = unknown> {
   message?: string;
   logs?: string[];
   error?: string;
+  scope?: BackupScope;
   result?: T;
 }
 
@@ -648,9 +685,9 @@ export async function getActiveVerifyBackupJob(): Promise<ActiveVerifyBackupJob 
   return unwrapResponse<ActiveVerifyBackupJob | null>(res);
 }
 
-export async function startBackupJob(): Promise<string> {
+export async function startBackupJob(scope: BackupScope = 'full'): Promise<string> {
   try {
-    const res = await client.post('/settings/backup/create', {}, { timeout: 30000 });
+    const res = await client.post('/settings/backup/create', { scope }, { timeout: 30000 });
     const data = unwrapResponse<JobStartResult>(res);
     const jobId = data.jobId;
     if (!jobId) throw new Error('启动备份失败');

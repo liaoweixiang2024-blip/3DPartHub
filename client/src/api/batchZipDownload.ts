@@ -1,4 +1,5 @@
 import { getAccessToken } from '../stores/useAuthStore';
+import { triggerBrowserDownload } from '../lib/browserDownload';
 import { unwrapApiData } from './response';
 
 type BatchFieldValue = string | number | boolean | string[] | undefined;
@@ -87,12 +88,9 @@ async function saveBatchBlobResponse(
 ): Promise<BatchZipDownloadResult> {
   const blob = await resp.blob();
   const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
   const disposition = resp.headers.get('Content-Disposition') || '';
   const match = disposition.match(/filename="?([^";\n]+)"?/);
-  a.download = match ? match[1] : fallbackFileName;
-  a.click();
+  triggerBrowserDownload(url, match ? match[1] : fallbackFileName);
   window.setTimeout(() => URL.revokeObjectURL(url), 30_000);
   return { fileCount };
 }

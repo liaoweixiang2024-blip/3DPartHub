@@ -177,6 +177,22 @@ export default function ModelDetailPage() {
     [toast],
   );
 
+  const handleOpenDrawing = useCallback(
+    async (modelId: string) => {
+      try {
+        await openModelDrawing(modelId);
+      } catch (error) {
+        if (isDownloadAuthRequiredError(error)) {
+          setLoginPromptReason('查看图纸');
+          setLoginPromptOpen(true);
+          return;
+        }
+        toast('打开图纸失败，请稍后重试', 'error');
+      }
+    },
+    [toast],
+  );
+
   useEffect(() => {
     getCachedPublicSettings()
       .then((s) => {
@@ -633,6 +649,7 @@ export default function ModelDetailPage() {
           onShare={handleShare}
           categoryBreadcrumb={categoryBreadcrumb}
           onDownload={handleDownload}
+          onOpenDrawing={handleOpenDrawing}
           onLoginDialog={(reason) => {
             setLoginPromptReason(reason);
             setLoginPromptOpen(true);
@@ -875,24 +892,21 @@ export default function ModelDetailPage() {
                       <button
                         key={downloadKey}
                         type="button"
-                        onClick={() => void openModelDrawing(modelData.id).catch(() => toast('打开图纸失败', 'error'))}
-                        className="flex items-center gap-2.5 px-3 py-2 rounded-sm bg-surface-container-low border border-outline-variant/10 hover:bg-surface-container transition-colors text-left"
+                        onClick={() => void handleOpenDrawing(modelData.id)}
+                        className="flex w-full items-center justify-between gap-2.5 rounded-sm border border-outline-variant/10 bg-surface-container-low px-3 py-2 text-left transition-colors hover:bg-surface-container"
                       >
                         <div className="w-7 h-7 rounded bg-error/10 flex items-center justify-center shrink-0">
                           <span className="text-[8px] font-bold text-error">PDF</span>
                         </div>
                         <div className="flex-1 min-w-0">
-                          <span
-                            className="text-xs font-medium text-on-surface line-clamp-2 break-words"
-                            title={file.fileName}
-                          >
+                          <span className="block truncate text-xs font-medium text-on-surface" title={file.fileName}>
                             {file.fileName}
                           </span>
                           <span className="text-[10px] text-on-surface-variant">
                             {file.format} · {file.size}
                           </span>
                         </div>
-                        <div className="shrink-0 w-7 h-7 flex items-center justify-center rounded-full bg-primary/10 text-primary">
+                        <div className="ml-auto flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
                           <Icon name="open_in_new" size={14} />
                         </div>
                       </button>

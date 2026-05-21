@@ -19,6 +19,7 @@ import {
   getRestoreJob,
   getVerifyJob,
   listBackups,
+  normalizeBackupScope,
   renameBackup,
   isEncryptedBackupArchiveFile,
   startBackupJob,
@@ -261,6 +262,7 @@ export function createSettingsBackupRouter() {
       percent: job.percent,
       message: job.message,
       error: job.error,
+      scope: job.scope,
       logs: job.logs,
     });
   });
@@ -325,7 +327,7 @@ export function createSettingsBackupRouter() {
   router.post('/api/settings/backup/create', authMiddleware, async (req: AuthRequest, res: Response) => {
     if (!adminOnly(req, res)) return;
     try {
-      const jobId = startBackupJob();
+      const jobId = startBackupJob(normalizeBackupScope(req.body?.scope));
       res.json({ jobId });
     } catch (err: unknown) {
       const msg = getErrorMessage(err);
@@ -353,7 +355,14 @@ export function createSettingsBackupRouter() {
       res.status(404).json({ detail: '备份任务不存在' });
       return;
     }
-    res.json({ stage: job.stage, percent: job.percent, message: job.message, error: job.error, logs: job.logs });
+    res.json({
+      stage: job.stage,
+      percent: job.percent,
+      message: job.message,
+      error: job.error,
+      scope: job.scope,
+      logs: job.logs,
+    });
   });
 
   // Admin: generate a short-lived download token

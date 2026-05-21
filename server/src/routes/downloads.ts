@@ -456,9 +456,15 @@ router.post('/api/downloads/model-token', optionalAuthMiddleware, async (req: Au
   }
 });
 
-// Generate a short-lived one-time token for protected PDF drawings.
-router.post('/api/downloads/drawing-token', authMiddleware, async (req: AuthRequest, res: Response) => {
+// Generate a short-lived token for PDF drawings. It follows the same login-download policy as model downloads.
+router.post('/api/downloads/drawing-token', optionalAuthMiddleware, async (req: AuthRequest, res: Response) => {
   try {
+    const requireLogin = await getSetting<boolean>('require_login_download');
+    if (requireLogin && !req.user) {
+      res.status(401).json({ detail: '需要登录后才能查看图纸' });
+      return;
+    }
+
     const modelId = optionalString((req.body as Record<string, unknown>)?.modelId, { maxLength: 128 });
     if (!modelId) {
       res.status(400).json({ detail: '缺少模型 ID' });
@@ -477,8 +483,8 @@ router.post('/api/downloads/drawing-token', authMiddleware, async (req: AuthRequ
     const created = createProtectedResourceToken({
       type: 'model-drawing',
       resourceId: modelId,
-      userId: req.user!.userId,
-      role: req.user!.role,
+      userId: req.user?.userId || 'anonymous',
+      role: req.user?.role,
       singleUse: false,
     });
 

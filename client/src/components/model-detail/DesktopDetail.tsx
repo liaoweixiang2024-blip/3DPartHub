@@ -1,6 +1,5 @@
 import { motion } from 'framer-motion';
 import { Link } from 'react-router-dom';
-import { openModelDrawing } from '../../api/downloads';
 import { getModelDetailCopyright, getModelDetailDisclaimer } from '../../lib/publicSettings';
 import type { ModelSpec } from '../../types';
 import Icon from '../shared/Icon';
@@ -17,7 +16,6 @@ import {
 } from '../shared/ModelDetailFrame';
 import ModelThumbnail from '../shared/ModelThumbnail';
 import { checkProtectedAccess } from '../shared/ProtectedLink';
-import { useToast } from '../shared/Toast';
 import type { ModelInfo } from './modelDetailUtils';
 
 export function SpecTable({ specs }: { specs: ModelSpec[] }) {
@@ -47,6 +45,7 @@ export function DesktopDetail({
   onShare,
   categoryBreadcrumb,
   onDownload,
+  onOpenDrawing,
   onLoginDialog,
 }: {
   modelData: ModelInfo;
@@ -57,10 +56,9 @@ export function DesktopDetail({
   onShare: () => void;
   categoryBreadcrumb: { id: string; name: string }[];
   onDownload: (id: string, format?: string) => void;
+  onOpenDrawing: (id: string) => void;
   onLoginDialog: (reason: string) => void;
 }) {
-  const { toast } = useToast();
-
   return (
     <ModelDetailAsideFrame
       header={
@@ -215,7 +213,7 @@ export function DesktopDetail({
                 <button
                   key={downloadKey}
                   type="button"
-                  onClick={() => void openModelDrawing(modelData.id).catch(() => toast('打开图纸失败', 'error'))}
+                  onClick={() => onOpenDrawing(modelData.id)}
                   className={`${MODEL_DETAIL_DOWNLOAD_ROW_INTERACTIVE_CLASS} cursor-pointer text-left`}
                 >
                   <div className="flex items-center gap-3 min-w-0 flex-1">

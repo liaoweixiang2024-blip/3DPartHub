@@ -1,6 +1,6 @@
-import { runBackupWorker } from '../lib/backup.js';
+import { runBackupWorker, type BackupScope } from '../lib/backup.js';
 
-const [jobId, rawSource] = process.argv.slice(2);
+const [jobId, rawSource, rawScope] = process.argv.slice(2);
 const source = rawSource === 'scheduled' ? 'scheduled' : 'manual';
 
 if (!jobId) {
@@ -8,7 +8,7 @@ if (!jobId) {
   process.exit(1);
 }
 
-runBackupWorker(jobId, source)
+runBackupWorker(jobId, source, rawScope as BackupScope)
   .then(() => process.exit(0))
   .catch((err) => {
     console.error(`[BackupWorker #${jobId}] ${err?.message || err}`);
