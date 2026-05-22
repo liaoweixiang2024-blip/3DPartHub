@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: 'Version tag (e.g. v3.1.4)'
+        description: 'Version tag (e.g. v3.1.5)'
         required: true
 
 env:
@@ -104,30 +104,24 @@ jobs:
         if: github.event_name == 'push'
         uses: softprops/action-gh-release@v3
         with:
-          name: 3DPartHub ${{ steps.version.outputs.version }} - 临时看图与备份安全增强版
+          name: 3DPartHub ${{ steps.version.outputs.version }} - Docker 部署兼容修复版
           generate_release_notes: true
           body: |
             ## 更新标题
 
-            3DPartHub ${{ steps.version.outputs.version }} - 临时看图与备份安全增强版
+            3DPartHub ${{ steps.version.outputs.version }} - Docker 部署兼容修复版
 
             ## 标签描述
 
-            3DPartHub ${{ steps.version.outputs.version }} production release with STEP temporary viewer, safer Safari/mobile downloads, complete modular backup restore coverage, hardened Docker secrets, accurate update version reporting, and refreshed Docker images.
+            3DPartHub ${{ steps.version.outputs.version }} hotfix release for Docker deployment compatibility, restoring legacy one-click compose defaults while keeping production security warnings visible.
 
             ## 更新描述
 
-            - 新增临时看图页面，支持 STEP/STP 临时上传预览，不加入模型库、不生成产品记录。
-            - 临时看图加入 50 MB 单文件限制、最多 5 条有效记录、上传限流、自动清理、删除同步清理源文件与预览文件。
-            - 临时看图支持最近有效模型自动打开、拖拽上传、复制分享链接、移动端底部导航和贴近模型详情页的全屏预览布局。
-            - 移除 XT/X_T 临时预览与转换入口，避免服务器缺少商业内核时误导用户。
-            - 优化 Safari/PWA/移动端下载流程，避免下载模型时进入系统打开方式页面造成卡死。
-            - 分模块备份补齐关联数据：模型收藏、下载、评论、分享链接，选型分享，产品图库收藏；`/thread-size` 规格数据随选型模块与整站备份。
-            - 备份页显示真实资源统计，策略体检展示目录权限、磁盘空间、自动化、异地副本、加密和最近备份可用性。
-            - 生产 Docker 部署强制配置 DB/Redis/JWT/Admin 初始密码，服务端拒绝生产弱密钥。
-            - 检查更新版本识别改进，源码/本地部署不再显示 unknown，当前版本统一为 ${{ steps.version.outputs.version }}。
-            - 批量归档上传保持中文文件名修复、ZIP/RAR 路径编码兼容与安全路径检查。
-            - 发布前验证通过前后端类型检查、构建、核心单元测试、更新检测测试和页面路由抽检。
+            - 修复 v3.1.4 升级后旧 Docker 一键部署环境可能导致 `3dparthub-api` unhealthy 的问题。
+            - 旧版默认 DB/JWT/Redis 密钥不再直接阻止 API 启动，改为启动日志安全提醒，避免升级时站点被打挂。
+            - `docker-compose.yml` 恢复一键部署兼容默认值；新部署仍建议通过 `.env` 设置随机 `DB_PASSWORD`、`REDIS_PASSWORD`、`JWT_SECRET` 和 `ADMIN_PASS`。
+            - README 增加 API unhealthy 排查说明，提醒已有 PostgreSQL volume 不会因修改 `.env` 自动变更数据库用户密码。
+            - 临时看图、备份统计、移动端下载和批量归档上传修复继续包含在本版本镜像内。
             - 镜像已同步更新：api/web 均发布 ${{ steps.version.outputs.version }} 与 latest 标签。
 
             ## Docker Images
@@ -136,7 +130,7 @@ jobs:
 
             API image: `ghcr.io/${{ github.repository_owner }}/3dparthub-api:${{ steps.version.outputs.version }}`
 
-            API image description: Express/Prisma API service with STEP temporary preview uploads, hardened modular backup/restore/import, protected downloads, secure Docker defaults, audit logs, rate-limited temporary files, admin settings, queues, cache/storage checks, and background jobs.
+            API image description: Express/Prisma API service with Docker deployment compatibility hotfix, STEP temporary preview uploads, modular backup/restore/import, protected downloads, security warnings, audit logs, rate-limited temporary files, admin settings, queues, cache/storage checks, and background jobs.
 
             Web image title: `3dparthub-web:${{ steps.version.outputs.version }}`
 

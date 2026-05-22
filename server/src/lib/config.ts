@@ -38,9 +38,13 @@ const failConfig = (message: string): never => {
   process.exit(1);
 };
 
+const warnLegacySecret = (message: string) => {
+  console.warn(`Security warning: ${message}`);
+};
+
 const validateJwtSecret = (value: string): string => {
   if (isProduction && (WEAK_JWT_SECRETS.has(value) || value.length < 32)) {
-    failConfig('JWT_SECRET is insecure for production; set a random secret of at least 32 characters.');
+    warnLegacySecret('JWT_SECRET is insecure for production; set a random secret of at least 32 characters.');
   }
   return value;
 };
@@ -50,7 +54,9 @@ const validateDatabaseUrl = (value: string): string => {
     try {
       const url = new URL(value);
       if (WEAK_DATABASE_PASSWORDS.includes(decodeURIComponent(url.password))) {
-        failConfig('DATABASE_URL uses an insecure default password; set DB_PASSWORD to a strong value for production.');
+        warnLegacySecret(
+          'DATABASE_URL uses an insecure default password; set DB_PASSWORD to a strong value for production.',
+        );
       }
     } catch {
       failConfig('DATABASE_URL is invalid.');
@@ -64,7 +70,7 @@ const validateRedisUrl = (value: string): string => {
     try {
       const url = new URL(value);
       if (WEAK_REDIS_PASSWORDS.includes(decodeURIComponent(url.password))) {
-        failConfig(
+        warnLegacySecret(
           'REDIS_URL uses an insecure or empty password; set REDIS_PASSWORD to a strong value for production.',
         );
       }

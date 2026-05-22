@@ -176,13 +176,21 @@ curl http://localhost:3780/api/health
 如需锁定特定版本，修改 `.env` 中的 `IMAGE_TAG`：
 
 ```bash
-sed -i 's/IMAGE_TAG=.*/IMAGE_TAG=v3.1.4/' .env
+sed -i 's/IMAGE_TAG=.*/IMAGE_TAG=v3.1.5/' .env
 docker compose pull && docker compose up -d --force-recreate
 ```
 
 升级前建议在后台 **设置 -> 数据备份** 创建并校验一次备份。
 
-要锁定到指定版本，在 `.env` 中设置 `IMAGE_TAG=v3.1.4` 等固定标签即可。
+要锁定到指定版本，在 `.env` 中设置 `IMAGE_TAG=v3.1.5` 等固定标签即可。
+
+如果从早期一键部署升级后 `api` 显示 unhealthy，先查看日志：
+
+```bash
+docker compose logs --tail=200 api
+```
+
+旧版默认 DB/JWT/Redis 密钥会继续允许启动并在日志中给出安全提醒。若你已经创建过 Docker volume，后续修改 `DB_PASSWORD` 不会自动修改已有 PostgreSQL 用户密码；请保持 `.env` 中的 `DB_PASSWORD` 与旧数据库一致，或先在数据库内修改密码后再同步 `.env`。
 
 ---
 
