@@ -1,3 +1,4 @@
+import { cancelPreparedBrowserDownload, downloadBrowserFile, prepareBrowserDownload } from '../lib/browserDownload';
 import { BACKUP_CHUNK_SIZE_BYTES, BACKUP_DIRECT_UPLOAD_THRESHOLD_BYTES } from '../lib/uploadLimits';
 import { getAccessToken } from '../stores';
 import client from './client';
@@ -788,15 +789,21 @@ export async function pollBackupProgress(
 
 export async function downloadBackup(id: string): Promise<void> {
   // Get a short-lived one-time download token, then open download
-  const { data: resp } = await client.post(`/settings/backup/download-token/${id}`);
-  const created = unwrapApiData<{ token?: string; url?: string }>(resp);
-  const url =
-    created.url ||
-    (created.token
-      ? `/api/settings/backup/download/${encodeURIComponent(id)}/${encodeURIComponent(created.token)}`
-      : '');
-  if (!url) throw new Error('获取下载令牌失败');
-  window.open(url, '_blank', 'noopener,noreferrer');
+  const preparedWindow = prepareBrowserDownload();
+  try {
+    const { data: resp } = await client.post(`/settings/backup/download-token/${id}`);
+    const created = unwrapApiData<{ token?: string; url?: string }>(resp);
+    const url =
+      created.url ||
+      (created.token
+        ? `/api/settings/backup/download/${encodeURIComponent(id)}/${encodeURIComponent(created.token)}`
+        : '');
+    if (!url) throw new Error('获取下载令牌失败');
+    await downloadBrowserFile(url, { preparedWindow });
+  } catch (error) {
+    cancelPreparedBrowserDownload(preparedWindow);
+    throw error;
+  }
 }
 
 export async function renameBackup(id: string, name: string): Promise<BackupRecord> {

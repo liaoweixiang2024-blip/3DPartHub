@@ -249,7 +249,7 @@ export const DEFAULT_SETTINGS: SystemSettings = {
   download_token_ttl_minutes: 5,
   ticket_attachment_max_mb: 100,
   ticket_attachment_types:
-    'jpg,jpeg,png,gif,webp,svg,pdf,doc,docx,xls,xlsx,ppt,pptx,zip,rar,7z,step,stp,iges,igs,xt,binary',
+    'jpg,jpeg,png,gif,webp,svg,pdf,doc,docx,xls,xlsx,ppt,pptx,zip,rar,7z,step,stp,iges,igs,binary',
   api_rate_limit: 5000,
   auth_modal_enabled: true,
   login_dialog_enabled: true,
@@ -984,7 +984,7 @@ export const GROUPS: SettingGroup[] = [
       {
         key: 'storage_model_prefix',
         label: '模型文件目录',
-        desc: 'STEP/STP/IGES/XT 等可下载模型文件目录前缀；私有下载时会走签名链接策略',
+        desc: 'STEP/STP/IGES 等可下载模型文件目录前缀；私有下载时会走签名链接策略',
         type: 'text',
       },
       {
@@ -1905,9 +1905,16 @@ export function normalizePageSizePolicyForSave(value: unknown) {
 
 export function normalizeUploadPolicyForSave(value: unknown) {
   const policy = { ...DEFAULT_UPLOAD_POLICY, ...parseSetting<Partial<UploadPolicy>>(value, {}) };
+  const supportedFormats = new Set(DEFAULT_UPLOAD_POLICY.modelFormats);
   return {
     ...policy,
-    modelFormats: Array.from(new Set(parseCsv(policy.modelFormats).map((item) => item.toLowerCase()))),
+    modelFormats: Array.from(
+      new Set(
+        parseCsv(policy.modelFormats)
+          .map((item) => item.toLowerCase())
+          .filter((item) => supportedFormats.has(item)),
+      ),
+    ),
     modelMaxSizeMb: clampNumber(policy.modelMaxSizeMb, DEFAULT_UPLOAD_POLICY.modelMaxSizeMb, 1, 102400),
     modelDrawingMaxSizeMb: clampNumber(
       policy.modelDrawingMaxSizeMb,

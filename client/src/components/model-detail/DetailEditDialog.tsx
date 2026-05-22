@@ -284,15 +284,15 @@ export function DetailEditDialog({
                 <p className="text-[10px] text-on-surface-variant/60 mt-1 mb-2">替换后将重新转换，预计耗时 30 秒</p>
                 <input
                   type="file"
-                  accept=".step,.stp,.iges,.igs,.xt,.x_t"
+                  accept=".step,.stp,.iges,.igs"
                   className="hidden"
                   id="detail-replace-file"
                   onChange={async (e) => {
                     const f = e.target.files?.[0];
                     if (!f) return;
                     const ext = f.name.split('.').pop()?.toLowerCase() || '';
-                    if (!['step', 'stp', 'iges', 'igs', 'xt', 'x_t'].includes(ext)) {
-                      toast('仅支持 STEP/IGES/XT 格式', 'error');
+                    if (!['step', 'stp', 'iges', 'igs'].includes(ext)) {
+                      toast('仅支持 STEP/IGES 格式', 'error');
                       return;
                     }
                     setFileReplacing(true);

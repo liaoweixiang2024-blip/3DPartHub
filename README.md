@@ -13,7 +13,7 @@
 
 ---
 
-3DPartHub 专为制造企业团队管理 3D 零件模型与产品选型数据而设计。系统支持 STEP / IGES / Parasolid 文件自动转换为 glTF，在浏览器内实时 3D 预览，并提供分类管理、选型筛选、询价报价、分享、审计、备份恢复和完整后台设置。
+3DPartHub 专为制造企业团队管理 3D 零件模型与产品选型数据而设计。系统支持 STEP / IGES 文件自动转换为 glTF，在浏览器内实时 3D 预览，并提供分类管理、选型筛选、询价报价、分享、审计、备份恢复和完整后台设置。
 
 > 发行版只包含通用源码、数据库结构、迁移、Docker/CI 配置和文档。数据库、模型文件、缩略图、Logo、Favicon、产品图片、企业资料、业务批次脚本、Excel/PDF 私有资料等运行时或定制内容不会随 Git 仓库和镜像发布。
 
@@ -23,7 +23,7 @@
 
 ### 3D 模型管理
 
-- **多格式支持**：STEP (`.step` / `.stp`)、IGES (`.iges` / `.igs`)、Parasolid (`.xt` / `.x_t`) 自动转换为 glTF。
+- **多格式支持**：STEP (`.step` / `.stp`)、IGES (`.iges` / `.igs`) 自动转换为 glTF。
 - **浏览器 CAD 预览**：基于 Three.js 的实时渲染，支持线框、实体、透明、爆炸视图、边线、裁切、测量、结构树、属性面板和缩略图。
 - **批量导入**：扫描服务器目录批量导入，按文件夹结构自动归类。
 - **无限级分类**：树形分类体系，支持拖拽排序。
@@ -176,13 +176,13 @@ curl http://localhost:3780/api/health
 如需锁定特定版本，修改 `.env` 中的 `IMAGE_TAG`：
 
 ```bash
-sed -i 's/IMAGE_TAG=.*/IMAGE_TAG=v3.1.3/' .env
+sed -i 's/IMAGE_TAG=.*/IMAGE_TAG=v3.1.4/' .env
 docker compose pull && docker compose up -d --force-recreate
 ```
 
 升级前建议在后台 **设置 -> 数据备份** 创建并校验一次备份。
 
-要锁定到指定版本，在 `.env` 中设置 `IMAGE_TAG=v3.1.3` 等固定标签即可。
+要锁定到指定版本，在 `.env` 中设置 `IMAGE_TAG=v3.1.4` 等固定标签即可。
 
 ---
 
@@ -192,7 +192,7 @@ docker compose pull && docker compose up -d --force-recreate
 
 - `.env`、数据库密码、JWT 密钥、SMTP 密码等环境配置。
 - PostgreSQL 数据库、SQL dump、后台备份包、安全快照。
-- STEP/IGES/XT 原始模型、glTF 转换模型、缩略图、图纸、上传附件。
+- STEP/IGES 原始模型、glTF 转换模型、缩略图、图纸、上传附件。
 - Logo、Favicon、水印、产品选型图片、企业定制图片。
 - 企业产品批次脚本、业务 Excel/PDF、私有资料和本地导入数据。
 

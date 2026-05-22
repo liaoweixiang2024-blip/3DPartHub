@@ -124,6 +124,14 @@ function userOrIpKey(req: Request) {
   return req.ip ? `ip:${ipKeyGenerator(req.ip)}` : 'ip:unknown';
 }
 
+function intEnv(name: string, fallback: number, min: number, max: number): number {
+  const parsed = Number(process.env[name]);
+  if (!Number.isFinite(parsed)) return fallback;
+  return Math.min(max, Math.max(min, Math.floor(parsed)));
+}
+
+const TEMP_PREVIEW_UPLOAD_LIMIT_PER_HOUR = intEnv('TEMP_PREVIEW_UPLOAD_LIMIT_PER_HOUR', 20, 1, 200);
+
 // Rate limiting configurations
 export const apiLimiter = createLimiter('api', {
   windowMs: 15 * 60 * 1000, // 15 minutes
@@ -139,6 +147,14 @@ export const uploadLimiter = createLimiter('upload', {
   max: 200,
   skipAuthenticatedAdmin: true,
   message: { success: false, message: '上传次数超出限制' },
+});
+
+export const tempPreviewUploadLimiter = createLimiter('temp-preview-upload', {
+  windowMs: 60 * 60 * 1000,
+  limit: TEMP_PREVIEW_UPLOAD_LIMIT_PER_HOUR,
+  max: TEMP_PREVIEW_UPLOAD_LIMIT_PER_HOUR,
+  keyGenerator: userOrIpKey,
+  message: { detail: '临时看图上传过于频繁，请稍后再试' },
 });
 
 export const authLimiter = createLimiter('auth', {

@@ -10,6 +10,7 @@ const {
   isEncryptedBackupArchiveFile,
   isUnsafeBackupArchiveEntry,
   materializeReadableBackupArchive,
+  MODULE_BACKUP_TABLE_KEYS,
   normalizeBackupArchiveEntryList,
 } = await import('./backup.js');
 
@@ -101,6 +102,30 @@ test('backup archive entry list normalizes lines and removes blank entries', () 
       'uploads/files/model.pdf',
     ],
   );
+});
+
+test('module backups include user-facing dependent records', () => {
+  assert.deepEqual(MODULE_BACKUP_TABLE_KEYS.models, [
+    'categories',
+    'modelGroups',
+    'models',
+    'modelVersions',
+    'favorites',
+    'downloads',
+    'comments',
+    'shareLinks',
+  ]);
+  assert.deepEqual(MODULE_BACKUP_TABLE_KEYS.selection, [
+    'selectionCategories',
+    'selectionProducts',
+    'threadSizeEntries',
+    'selectionShares',
+  ]);
+  assert.deepEqual(MODULE_BACKUP_TABLE_KEYS.product_wall, [
+    'productWallCategories',
+    'productWallImages',
+    'productWallImageFavorites',
+  ]);
 });
 
 test('backup encryption stores archive bytes encrypted and materializes readable copy', async () => {

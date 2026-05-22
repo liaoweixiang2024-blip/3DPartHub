@@ -48,6 +48,7 @@ const workbenchTheme: InterfaceThemePackage = {
       desktopContentClassName: ({ pathname }) =>
         pathname === '/' ||
         pathname.startsWith('/model/') ||
+        pathname === '/temp-viewer' ||
         pathname.startsWith('/share/') ||
         pathname.startsWith('/selection/s/')
           ? undefined

@@ -2,13 +2,16 @@ import { join } from 'node:path';
 import { config } from '../lib/config.js';
 import { convertStepToGltf, type GltfAsset } from '../services/converter.js';
 import { generateThumbnail } from '../services/thumbnail.js';
-import { convertXtToGltf } from '../services/xt-converter.js';
 
 type ConversionPayload = {
   modelId: string;
   filePath: string;
   originalName: string;
   ext: string;
+  modelDir?: string;
+  gltfUrlBase?: string;
+  thumbnailDir?: string;
+  skipThumbnail?: boolean;
 };
 
 type ThumbnailResult = {
@@ -24,24 +27,23 @@ function send(message: Record<string, unknown>) {
 }
 
 async function run(payload: ConversionPayload) {
-  const ext = String(payload.ext || '').toLowerCase();
-  const modelDir = join(config.staticDir, 'models');
-  const thumbDir = join(config.staticDir, 'thumbnails');
+  const modelDir = payload.modelDir || join(config.staticDir, 'models');
+  const thumbDir = payload.thumbnailDir || join(config.staticDir, 'thumbnails');
+  const gltfOptions = payload.gltfUrlBase ? { urlBase: payload.gltfUrlBase } : undefined;
 
   send({ type: 'log', message: '隔离转换子进程已启动' });
   send({ type: 'progress', progress: 30 });
 
   let result: GltfAsset;
-  if (ext === 'xt' || ext === 'x_t') {
-    send({ type: 'log', message: '调用 XT 转换器' });
-    result = await convertXtToGltf(payload.filePath, modelDir, payload.modelId, payload.originalName);
-  } else {
-    send({ type: 'log', message: '调用 STEP/IGES 转换器' });
-    result = await convertStepToGltf(payload.filePath, modelDir, payload.modelId, payload.originalName);
-  }
+  send({ type: 'log', message: '调用 STEP/IGES 转换器' });
+  result = await convertStepToGltf(payload.filePath, modelDir, payload.modelId, payload.originalName, gltfOptions);
 
   send({ type: 'log', message: `转换完成: ${result.gltfUrl} (${result.gltfSize} bytes)` });
   send({ type: 'progress', progress: 70 });
+  if (payload.skipThumbnail) {
+    send({ type: 'result', result, thumbnail: null });
+    return;
+  }
   send({ type: 'log', message: '开始生成缩略图' });
   const thumbnail: ThumbnailResult = generateThumbnail(result.gltfPath, thumbDir, payload.modelId);
   send({ type: 'log', message: `缩略图生成完成: ${thumbnail.thumbnailUrl}` });

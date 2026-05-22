@@ -7,9 +7,9 @@ import type { ConversionQueueState, PreviewDiagnosticFilter } from '../../api/mo
 
 // ── Constants ──────────────────────────────────────────────────────────────
 
-export const MODEL_SOURCE_FORMATS = ['step', 'stp', 'iges', 'igs', 'xt', 'x_t'];
+export const MODEL_SOURCE_FORMATS = ['step', 'stp', 'iges', 'igs'];
 export const MODEL_SOURCE_ACCEPT = MODEL_SOURCE_FORMATS.map((item) => `.${item}`).join(',');
-export const MODEL_SOURCE_LABEL = 'STEP/IGES/XT';
+export const MODEL_SOURCE_LABEL = 'STEP/IGES';
 
 export const DIAGNOSTIC_FILTERS: Array<{ key: PreviewDiagnosticFilter; label: string; icon: string }> = [
   { key: 'all', label: '全部', icon: 'inventory_2' },

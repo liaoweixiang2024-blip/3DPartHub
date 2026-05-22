@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: 'Version tag (e.g. v3.1.3)'
+        description: 'Version tag (e.g. v3.1.4)'
         required: true
 
 env:
@@ -58,7 +58,7 @@ jobs:
             ghcr.io/${{ github.repository_owner }}/3dparthub-api:latest
           labels: |
             org.opencontainers.image.title=3DPartHub API ${{ steps.version.outputs.version }}
-            org.opencontainers.image.description=3DPartHub API service with modular backup/restore/import, backup health checks, batch archive upload hardening, model conversion workers, protected downloads, audit logs, admin settings, queues, cache/storage checks, and background jobs.
+            org.opencontainers.image.description=Express/Prisma API service with STEP temporary preview uploads, hardened modular backup/restore/import, protected downloads, secure Docker defaults, audit logs, rate-limited temporary files, admin settings, queues, cache/storage checks, and background jobs.
             org.opencontainers.image.version=${{ steps.version.outputs.version }}
             org.opencontainers.image.source=https://github.com/${{ github.repository }}
             org.opencontainers.image.revision=${{ github.sha }}
@@ -78,7 +78,7 @@ jobs:
             ghcr.io/${{ github.repository_owner }}/3dparthub-web:latest
           labels: |
             org.opencontainers.image.title=3DPartHub Web ${{ steps.version.outputs.version }}
-            org.opencontainers.image.description=React/Vite frontend for 3D model libraries with clearer backup scope selection, backup asset statistics, enterprise backup health guidance, update checks, batch downloads, product gallery, selection sharing, inquiry workflows, admin pages, and responsive mobile flows.
+            org.opencontainers.image.description=React/Vite frontend for 3D model libraries with temporary STEP viewer workspace, mobile/Safari download hardening, refined backup scope UI/statistics/health checks, product gallery, selection sharing, inquiry workflows, admin pages, and responsive mobile flows.
             org.opencontainers.image.version=${{ steps.version.outputs.version }}
             org.opencontainers.image.source=https://github.com/${{ github.repository }}
             org.opencontainers.image.revision=${{ github.sha }}
@@ -104,28 +104,30 @@ jobs:
         if: github.event_name == 'push'
         uses: softprops/action-gh-release@v3
         with:
-          name: 3DPartHub ${{ steps.version.outputs.version }}
+          name: 3DPartHub ${{ steps.version.outputs.version }} - 临时看图与备份安全增强版
           generate_release_notes: true
           body: |
             ## 更新标题
 
-            3DPartHub ${{ steps.version.outputs.version }} - 备份与批量上传增强版
+            3DPartHub ${{ steps.version.outputs.version }} - 临时看图与备份安全增强版
 
             ## 标签描述
 
-            3DPartHub ${{ steps.version.outputs.version }} production release with modular backups, safer restore/import flows, clearer backup health checks, richer backup asset statistics, batch archive upload filename fixes, and refreshed Docker images.
+            3DPartHub ${{ steps.version.outputs.version }} production release with STEP temporary viewer, safer Safari/mobile downloads, complete modular backup restore coverage, hardened Docker secrets, accurate update version reporting, and refreshed Docker images.
 
             ## 更新描述
 
-            - 新增整站、模型库、选型、产品图库四种备份范围，可按模块创建、导入和恢复备份。
-            - 增强恢复安全：模块恢复前创建安全快照，恢复后保留表数据、资源目录和备份清单校验。
-            - 修复并完善备份统计，展示数据库、模型原始文件、预览图、图纸、选型资源和产品图库资源的真实容量与数量。
-            - 优化数据备份页：备份范围下拉框改为卡片式选择，企业级备份状态改为恢复点、自动化、异地副本、加密四项保障概览。
-            - 策略体检新增备份加密检查，并在页面中给出可执行的处理建议。
-            - 修复批量上传归档中的中文文件名乱码识别，兼容常见 ZIP/RAR 路径编码异常。
-            - 修复批量上传空匹配归档时可能误解压整个归档的问题，并清理转换完成后的临时源文件。
-            - 统一大文件导入阈值配置，避免前后端阈值不一致。
-            - 发布前验证通过前后端类型检查、构建、备份单元测试和备份模块恢复端到端校验。
+            - 新增临时看图页面，支持 STEP/STP 临时上传预览，不加入模型库、不生成产品记录。
+            - 临时看图加入 50 MB 单文件限制、最多 5 条有效记录、上传限流、自动清理、删除同步清理源文件与预览文件。
+            - 临时看图支持最近有效模型自动打开、拖拽上传、复制分享链接、移动端底部导航和贴近模型详情页的全屏预览布局。
+            - 移除 XT/X_T 临时预览与转换入口，避免服务器缺少商业内核时误导用户。
+            - 优化 Safari/PWA/移动端下载流程，避免下载模型时进入系统打开方式页面造成卡死。
+            - 分模块备份补齐关联数据：模型收藏、下载、评论、分享链接，选型分享，产品图库收藏；`/thread-size` 规格数据随选型模块与整站备份。
+            - 备份页显示真实资源统计，策略体检展示目录权限、磁盘空间、自动化、异地副本、加密和最近备份可用性。
+            - 生产 Docker 部署强制配置 DB/Redis/JWT/Admin 初始密码，服务端拒绝生产弱密钥。
+            - 检查更新版本识别改进，源码/本地部署不再显示 unknown，当前版本统一为 ${{ steps.version.outputs.version }}。
+            - 批量归档上传保持中文文件名修复、ZIP/RAR 路径编码兼容与安全路径检查。
+            - 发布前验证通过前后端类型检查、构建、核心单元测试、更新检测测试和页面路由抽检。
             - 镜像已同步更新：api/web 均发布 ${{ steps.version.outputs.version }} 与 latest 标签。
 
             ## Docker Images
@@ -134,13 +136,13 @@ jobs:
 
             API image: `ghcr.io/${{ github.repository_owner }}/3dparthub-api:${{ steps.version.outputs.version }}`
 
-            API image description: Express/Prisma API service with modular backup/restore/import, backup health checks, batch archive upload hardening, model conversion workers, protected downloads, audit logs, admin settings, queues, cache/storage checks, and background jobs.
+            API image description: Express/Prisma API service with STEP temporary preview uploads, hardened modular backup/restore/import, protected downloads, secure Docker defaults, audit logs, rate-limited temporary files, admin settings, queues, cache/storage checks, and background jobs.
 
             Web image title: `3dparthub-web:${{ steps.version.outputs.version }}`
 
             Web image: `ghcr.io/${{ github.repository_owner }}/3dparthub-web:${{ steps.version.outputs.version }}`
 
-            Web image description: React/Vite frontend for 3D model libraries with clearer backup scope selection, backup asset statistics, enterprise backup health guidance, update checks, batch downloads, product gallery, selection sharing, inquiry workflows, admin pages, and responsive mobile flows.
+            Web image description: React/Vite frontend for 3D model libraries with temporary STEP viewer workspace, mobile/Safari download hardening, refined backup scope UI/statistics/health checks, product gallery, selection sharing, inquiry workflows, admin pages, and responsive mobile flows.
 
             ```bash
             # Default deployment follows latest and uses Watchtower for api/web auto-updates.

@@ -1,5 +1,11 @@
+import {
+  cancelPreparedBrowserDownload,
+  downloadBrowserBlob,
+  downloadBrowserPostFile,
+  prepareBrowserDownload,
+  shouldUseIsolatedBrowserDownload,
+} from '../lib/browserDownload';
 import { getAccessToken } from '../stores/useAuthStore';
-import { triggerBrowserDownload } from '../lib/browserDownload';
 import { unwrapApiData } from './response';
 
 type BatchFieldValue = string | number | boolean | string[] | undefined;
@@ -85,13 +91,12 @@ async function saveBatchBlobResponse(
   resp: Response,
   fileCount: number,
   fallbackFileName: string,
+  preparedWindow?: ReturnType<typeof prepareBrowserDownload>,
 ): Promise<BatchZipDownloadResult> {
   const blob = await resp.blob();
-  const url = URL.createObjectURL(blob);
   const disposition = resp.headers.get('Content-Disposition') || '';
   const match = disposition.match(/filename="?([^";\n]+)"?/);
-  triggerBrowserDownload(url, match ? match[1] : fallbackFileName);
-  window.setTimeout(() => URL.revokeObjectURL(url), 30_000);
+  await downloadBrowserBlob(blob, match ? match[1] : fallbackFileName, { preparedWindow });
   return { fileCount };
 }
 
@@ -103,48 +108,62 @@ export async function downloadBatchZip({
   fallbackFileCount,
   fallbackFileName,
 }: BatchZipDownloadOptions): Promise<BatchZipDownloadResult> {
+  const preparedWindow = prepareBrowserDownload();
   await waitForBrowserPaint();
   const token = getAccessToken();
   let activeUrl = url;
   let activeFields = fields;
-  let resp = await fetch(activeUrl, {
-    method: 'POST',
-    credentials: 'include',
-    headers: {
-      'Content-Type': 'application/json',
-      'X-Download-Preflight': '1',
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-    },
-    body: JSON.stringify(activeFields),
+  const buildHeaders = (extra?: Record<string, string>) => ({
+    'Content-Type': 'application/json',
+    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    ...extra,
   });
+  let resp: Response;
 
-  if (resp.status === 404 && legacyUrl) {
-    activeUrl = legacyUrl;
-    activeFields = legacyFields ?? fields;
+  try {
     resp = await fetch(activeUrl, {
       method: 'POST',
       credentials: 'include',
-      headers: {
-        'Content-Type': 'application/json',
-        'X-Download-Preflight': '1',
-        ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      },
+      headers: buildHeaders({ 'X-Download-Preflight': '1' }),
       body: JSON.stringify(activeFields),
     });
+
+    if (resp.status === 404 && legacyUrl) {
+      activeUrl = legacyUrl;
+      activeFields = legacyFields ?? fields;
+      resp = await fetch(activeUrl, {
+        method: 'POST',
+        credentials: 'include',
+        headers: buildHeaders({ 'X-Download-Preflight': '1' }),
+        body: JSON.stringify(activeFields),
+      });
+    }
+
+    if (!resp.ok) throw new Error(await readDownloadError(resp, '打包下载失败'));
+
+    const contentType = resp.headers.get('Content-Type') || '';
+    if (!contentType.includes('application/json')) {
+      return saveBatchBlobResponse(resp, fallbackFileCount, fallbackFileName, preparedWindow);
+    }
+
+    const checked = unwrapApiData<BatchZipPreflightResponse>(await resp.json().catch(() => ({})));
+    const fileCount = Math.max(1, Math.floor(Number(checked?.fileCount) || fallbackFileCount));
+
+    await waitForBrowserPaint();
+    if (shouldUseIsolatedBrowserDownload()) {
+      await downloadBrowserPostFile(activeUrl, JSON.stringify(activeFields), {
+        preparedWindow,
+        headers: buildHeaders(),
+        credentials: 'include',
+        fileName: fallbackFileName,
+      });
+    } else {
+      submitPostDownload(activeUrl, activeFields);
+    }
+    await delay(700);
+    return { fileCount };
+  } catch (error) {
+    cancelPreparedBrowserDownload(preparedWindow);
+    throw error;
   }
-
-  if (!resp.ok) throw new Error(await readDownloadError(resp, '打包下载失败'));
-
-  const contentType = resp.headers.get('Content-Type') || '';
-  if (!contentType.includes('application/json')) {
-    return saveBatchBlobResponse(resp, fallbackFileCount, fallbackFileName);
-  }
-
-  const checked = unwrapApiData<BatchZipPreflightResponse>(await resp.json().catch(() => ({})));
-  const fileCount = Math.max(1, Math.floor(Number(checked?.fileCount) || fallbackFileCount));
-
-  await waitForBrowserPaint();
-  submitPostDownload(activeUrl, activeFields);
-  await delay(700);
-  return { fileCount };
 }

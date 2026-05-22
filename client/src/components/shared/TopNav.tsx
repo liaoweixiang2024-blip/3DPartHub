@@ -231,6 +231,11 @@ function UserMenu({
       path: '/profile',
     },
     {
+      label: '临时看图',
+      icon: 'view_in_ar',
+      path: '/temp-viewer',
+    },
+    {
       label: '修改密码',
       icon: 'lock',
       path: '/profile?tab=security',

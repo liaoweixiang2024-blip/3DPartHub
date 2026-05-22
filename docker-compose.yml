@@ -5,16 +5,28 @@
 # 【快速开始】
 #   mkdir -p /opt/3dparthub && cd /opt/3dparthub
 #   curl -O https://raw.githubusercontent.com/liaoweixiang2024-blip/3DPartHub/main/docker-compose.yml
-#   docker compose up -d
-#   默认后台账号: admin （密码见下方 ADMIN_PASS，首次登录后会强制修改密码）
-#
-# 【更安全的方式】
-#   如需自定义密码，在同目录创建 .env 覆盖默认值：
 #   DB_PASSWORD="$(openssl rand -hex 24)"
+#   REDIS_PASSWORD="$(openssl rand -hex 24)"
 #   JWT_SECRET="$(openssl rand -hex 32)"
 #   ADMIN_PASS="$(openssl rand -base64 24)"
 #   cat > .env <<EOF
 #   DB_PASSWORD=${DB_PASSWORD}
+#   REDIS_PASSWORD=${REDIS_PASSWORD}
+#   JWT_SECRET=${JWT_SECRET}
+#   ADMIN_PASS=${ADMIN_PASS}
+#   EOF
+#   docker compose up -d
+#   默认后台账号: admin （密码见下方 ADMIN_PASS，首次登录后会强制修改密码）
+#
+# 【更安全的方式】
+#   如需自定义密码，在同目录创建 .env：
+#   DB_PASSWORD="$(openssl rand -hex 24)"
+#   REDIS_PASSWORD="$(openssl rand -hex 24)"
+#   JWT_SECRET="$(openssl rand -hex 32)"
+#   ADMIN_PASS="$(openssl rand -base64 24)"
+#   cat > .env <<EOF
+#   DB_PASSWORD=${DB_PASSWORD}
+#   REDIS_PASSWORD=${REDIS_PASSWORD}
 #   JWT_SECRET=${JWT_SECRET}
 #   ADMIN_PASS=${ADMIN_PASS}
 #   EOF
@@ -24,7 +36,7 @@
 # 【更新】
 #   默认使用 latest 镜像
 #   手动更新: docker compose pull && docker compose up -d --force-recreate
-#   如需锁定版本: 在 .env 中写入 IMAGE_TAG=v3.1.3
+#   如需锁定版本: 在 .env 中写入 IMAGE_TAG=v3.1.4
 #   检查日志: docker compose logs -f api
 #
 # 【数据安全】
@@ -80,9 +92,9 @@ services:
       TZ: Asia/Shanghai
       NODE_ENV: production
       PORT: 8000
-      DATABASE_URL: 'postgresql://modeluser:${DB_PASSWORD:-3dparthub-default-db-password-change-me-2026}@postgres:5432/3dparthub?connection_limit=${DB_CONNECTION_LIMIT:-5}&pool_timeout=10'
-      # <<< 建议在 .env 中覆盖为随机字符串 (openssl rand -hex 32)
-      JWT_SECRET: '${JWT_SECRET:-3dparthub-default-jwt-secret-change-me-2026-04-30}'
+      DATABASE_URL: 'postgresql://modeluser:${DB_PASSWORD:?set DB_PASSWORD in .env}@postgres:5432/3dparthub?connection_limit=${DB_CONNECTION_LIMIT:-5}&pool_timeout=10'
+      # <<< 必须在 .env 中设置随机字符串 (openssl rand -hex 32)
+      JWT_SECRET: '${JWT_SECRET:?set JWT_SECRET in .env}'
       JWT_EXPIRES_IN: 7d
       UPLOAD_DIR: uploads
       STATIC_DIR: static
@@ -91,10 +103,10 @@ services:
       SLOW_REQUEST_LOG_BURST: ${SLOW_REQUEST_LOG_BURST:-5}
       SLOW_REQUEST_LOG_SAMPLE_RATE: ${SLOW_REQUEST_LOG_SAMPLE_RATE:-0.01}
       MAX_FILE_SIZE: 524288000
-      REDIS_URL: redis://:${REDIS_PASSWORD:-changeme-set-in-env}@redis:6379
+      REDIS_URL: redis://:${REDIS_PASSWORD:?set REDIS_PASSWORD in .env}@redis:6379
       ADMIN_USER: ${ADMIN_USER:-admin}
       ADMIN_EMAIL: ${ADMIN_EMAIL:-admin@model.local}
-      ADMIN_PASS: '${ADMIN_PASS:-3DPartHub@2026}'
+      ADMIN_PASS: '${ADMIN_PASS:?set ADMIN_PASS in .env}'
       # <<< 可选: 允许的来源域名 (多个用逗号分隔，留空则仅同源)
       ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-}
       STORAGE_TYPE: ${STORAGE_TYPE:-local}
@@ -194,7 +206,7 @@ services:
       POSTGRES_DB: 3dparthub
       POSTGRES_USER: modeluser
       # <<< 建议在 .env 中覆盖为强密码，与 API 的 DB_PASSWORD 一致
-      POSTGRES_PASSWORD: '${DB_PASSWORD:-3dparthub-default-db-password-change-me-2026}'
+      POSTGRES_PASSWORD: '${DB_PASSWORD:?set DB_PASSWORD in .env}'
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
@@ -216,7 +228,7 @@ services:
     command:
       - redis-server
       - --requirepass
-      - '${REDIS_PASSWORD:-changeme-set-in-env}'
+      - '${REDIS_PASSWORD:?set REDIS_PASSWORD in .env}'
       - --save
       - ''
       - --appendonly
@@ -235,7 +247,7 @@ services:
     volumes:
       - redis-data:/data
     healthcheck:
-      test: ['CMD', 'sh', '-c', 'REDISCLI_AUTH=${REDIS_PASSWORD:-changeme-set-in-env} redis-cli ping']
+      test: ['CMD', 'sh', '-c', 'REDISCLI_AUTH=${REDIS_PASSWORD:?set REDIS_PASSWORD in .env} redis-cli ping']
       interval: 10s
       timeout: 5s
       retries: 5

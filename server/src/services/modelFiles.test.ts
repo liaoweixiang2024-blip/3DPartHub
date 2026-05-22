@@ -27,7 +27,7 @@ test.after(() => {
 
 test('normalizes model formats consistently', () => {
   assert.equal(normalizeModelFormat('.STEP'), 'step');
-  assert.equal(normalizeModelFormat(' x_t '), 'x_t');
+  assert.equal(normalizeModelFormat(' IGES '), 'iges');
   assert.equal(normalizeModelFormat(null), '');
   assert.equal(isDeprecatedHtmlPreviewFormat('HTML'), true);
   assert.equal(isDeprecatedHtmlPreviewFormat('step'), false);
@@ -53,11 +53,11 @@ test('finds upload path before static original fallback', () => {
 });
 
 test('falls back to static original by normalized format', () => {
-  const fallbackPath = join(process.env.STATIC_DIR!, 'originals', 'fallback.x_t');
+  const fallbackPath = join(process.env.STATIC_DIR!, 'originals', 'fallback.iges');
   mkdirSync(join(process.env.STATIC_DIR!, 'originals'), { recursive: true });
   writeFileSync(fallbackPath, 'fallback');
 
-  assert.equal(findOriginalModelPath({ id: 'fallback', format: '.X_T' }), fallbackPath);
+  assert.equal(findOriginalModelPath({ id: 'fallback', format: '.IGES' }), fallbackPath);
 });
 
 test('builds managed model paths from one source of truth', () => {

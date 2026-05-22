@@ -163,8 +163,7 @@ function modelExtensionPriority(ext: string) {
   const normalized = ext.toLowerCase();
   if (normalized === 'step') return 0;
   if (normalized === 'stp') return 1;
-  if (normalized === 'x_t' || normalized === 'xt') return 2;
-  if (normalized === 'iges' || normalized === 'igs') return 3;
+  if (normalized === 'iges' || normalized === 'igs') return 2;
   return 10;
 }
 

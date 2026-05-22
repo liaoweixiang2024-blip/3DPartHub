@@ -1522,29 +1522,8 @@ function MeasurementOverlay({
   );
 }
 
-function XtPendingPreview() {
-  return (
-    <Html center>
-      <div className="flex max-w-sm flex-col items-center gap-3 rounded-lg border border-outline-variant/20 bg-surface/95 px-5 py-4 text-center shadow-xl">
-        <Icon name="hourglass_empty" size={48} className="text-primary-container/70" />
-        <div>
-          <p className="text-sm font-semibold text-on-surface">XT 文件正在等待后台预览转换</p>
-          <p className="mt-1 text-xs leading-5 text-on-surface-variant">
-            这里不会再调用不存在的即时转换接口。请在后台模型管理等待转换队列完成，或使用「从模型重新生成」生成 GLB
-            预览后再打开。
-          </p>
-        </div>
-      </div>
-    </Html>
-  );
-}
-
 export default function MultiFormatLoader(props: MultiFormatLoaderProps) {
   const format = getModelFormat(props.url);
-
-  if (format === 'xt' || format === 'x_t' || format === 'xmt_txt') {
-    return <XtPendingPreview />;
-  }
 
   if (format === 'glb' || format === 'gltf') {
     return <GltfModel {...props} />;

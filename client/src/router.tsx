@@ -40,6 +40,7 @@ import {
   loadShareAdminPage,
   loadSharePage,
   loadSupportPage,
+  loadTempViewerPage,
   loadThreadSizeToolPage,
   loadTicketAdminPage,
   loadTicketDetailPage,
@@ -75,6 +76,7 @@ const AuditLogPage = lazy(loadAuditLogPage);
 const ShareAdminPage = lazy(loadShareAdminPage);
 const DownloadAdminPage = lazy(loadDownloadAdminPage);
 const SelectionPage = lazy(loadSelectionPage);
+const TempViewerPage = lazy(loadTempViewerPage);
 const ThreadSizeToolPage = lazy(loadThreadSizeToolPage);
 const ProductWallPage = lazy(loadProductWallPage);
 const SelectionAdminPage = lazy(loadSelectionAdminPage);
@@ -430,6 +432,14 @@ export default function Router() {
               <PageWrap>
                 <ModelDetailPage />
               </PageWrap>
+            }
+          />
+          <Route
+            path="/temp-viewer"
+            element={
+              <ProtectedPage>
+                <TempViewerPage />
+              </ProtectedPage>
             }
           />
           <Route

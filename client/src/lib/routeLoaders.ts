@@ -32,6 +32,7 @@ export const loadAuditLogPage = () => import('../pages/AuditLogPage');
 export const loadShareAdminPage = () => import('../pages/ShareAdminPage');
 export const loadDownloadAdminPage = () => import('../pages/DownloadAdminPage');
 export const loadSelectionPage = () => import('../pages/SelectionPage');
+export const loadTempViewerPage = () => import('../pages/TempViewerPage');
 export const loadThreadSizeToolPage = () => import('../pages/ThreadSizeToolPage');
 export const loadProductWallPage = () => import('../pages/ProductWallPage');
 export const loadSelectionAdminPage = () => import('../pages/SelectionAdminPage');
@@ -57,6 +58,7 @@ export function preloadModelDetailPage() {
 const exactRouteLoaders = new Map<string, RouteModuleLoader>([
   ['/login', loadLoginPage],
   ['/selection', loadSelectionPage],
+  ['/temp-viewer', loadTempViewerPage],
   ['/thread-size', loadThreadSizeToolPage],
   ['/product-wall', loadProductWallPage],
   ['/projects', loadProjectsPage],
@@ -135,6 +137,7 @@ export function warmRouteModules(role?: string) {
 
   const commonLoaders: RouteModuleLoader[] = [
     loadSelectionPage,
+    loadTempViewerPage,
     loadProductWallPage,
     loadProjectsPage,
     loadDownloadsPage,

@@ -188,7 +188,7 @@ export function createSettingsPublicRouter() {
             ticket_attachment_max_mb: all.ticket_attachment_max_mb ?? 100,
             ticket_attachment_types:
               all.ticket_attachment_types ??
-              'jpg,jpeg,png,gif,webp,svg,pdf,doc,docx,xls,xlsx,ppt,pptx,zip,rar,7z,step,stp,iges,igs,xt,binary',
+              'jpg,jpeg,png,gif,webp,svg,pdf,doc,docx,xls,xlsx,ppt,pptx,zip,rar,7z,step,stp,iges,igs,binary',
             // API rate limiting
             api_rate_limit: all.api_rate_limit ?? 5000,
           };

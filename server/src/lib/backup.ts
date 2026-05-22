@@ -259,7 +259,7 @@ const BACKUP_LOCK_STALE_MS = (() => {
 })();
 const BACKUP_LOCK_KEEPALIVE_MS = Math.min(60_000, Math.max(10_000, Math.floor(BACKUP_LOCK_STALE_MS / 6)));
 const ALLOW_FOREIGN_KEY_SKIP_RESTORE = /^(1|true|yes)$/i.test(process.env.BACKUP_RESTORE_ALLOW_FK_SKIP || '');
-const STEP_EXTENSIONS = new Set(['.step', '.stp', '.iges', '.igs', '.xt', '.x_t']);
+const STEP_EXTENSIONS = new Set(['.step', '.stp', '.iges', '.igs']);
 const BACKUP_ENCRYPTION_MAGIC = '3DPHBAKENC1';
 const BACKUP_ENCRYPTION_ALGORITHM = 'aes-256-gcm';
 
@@ -276,6 +276,12 @@ const MODULE_BACKUP_STATIC_DIRS: Record<Exclude<BackupScope, 'full'>, string[]> 
   models: ['models', 'thumbnails', 'originals', 'drawings'],
   selection: ['option-images', 'selection-assets', 'selection-categories-ai'],
   product_wall: ['product-wall'],
+};
+
+export const MODULE_BACKUP_TABLE_KEYS: Record<Exclude<BackupScope, 'full'>, readonly string[]> = {
+  models: ['categories', 'modelGroups', 'models', 'modelVersions', 'favorites', 'downloads', 'comments', 'shareLinks'],
+  selection: ['selectionCategories', 'selectionProducts', 'threadSizeEntries', 'selectionShares'],
+  product_wall: ['productWallCategories', 'productWallImages', 'productWallImageFavorites'],
 };
 
 export function normalizeBackupScope(value: unknown): BackupScope {
@@ -1335,7 +1341,10 @@ async function runBackup(job: BackupJob) {
 
     await new Promise<void>((resolve, reject) => {
       const tmpArchive = join(tmpDir, `${job.id}.tar.gz.tmp`);
-      const args: string[] = ['czhf', tmpArchive];
+      assertTarEntrySource(archiveRoot, BACKUP_DB_ENTRY_DIR);
+      for (const dir of existingBackupDirs) assertTarEntrySource(staticDir, dir);
+
+      const args: string[] = ['-czhf', tmpArchive];
       args.push(
         '--exclude=__MACOSX',
         '--exclude=*/__MACOSX',
@@ -1638,7 +1647,10 @@ async function packBackupArchive({
 }) {
   await new Promise<void>((resolve, reject) => {
     const tmpArchive = join(tmpDir, `${job.id}.tar.gz.tmp`);
-    const args: string[] = ['czhf', tmpArchive];
+    assertTarEntrySource(archiveRoot, BACKUP_DB_ENTRY_DIR);
+    for (const dir of staticDirs) assertTarEntrySource(staticDir, dir);
+
+    const args: string[] = ['-czhf', tmpArchive];
     args.push(
       '--exclude=__MACOSX',
       '--exclude=*/__MACOSX',
@@ -1691,6 +1703,13 @@ async function packBackupArchive({
   });
 }
 
+function assertTarEntrySource(root: string, entry: string) {
+  const target = join(root, entry);
+  if (!existsSync(target)) {
+    throw new Error(`备份打包源不存在: ${target}`);
+  }
+}
+
 function moduleStaticDirs(scope: Exclude<BackupScope, 'full'>): string[] {
   return MODULE_BACKUP_STATIC_DIRS[scope] || [];
 }
@@ -1713,6 +1732,10 @@ async function buildModuleBackupPayload(scope: Exclude<BackupScope, 'full'>): Pr
         modelGroups: await prisma.modelGroup.findMany({ orderBy: [{ createdAt: 'asc' }] }),
         models: await prisma.model.findMany({ orderBy: [{ createdAt: 'asc' }] }),
         modelVersions: await prisma.modelVersion.findMany({ orderBy: [{ createdAt: 'asc' }] }),
+        favorites: await prisma.favorite.findMany({ orderBy: [{ userId: 'asc' }, { createdAt: 'asc' }] }),
+        downloads: await prisma.download.findMany({ orderBy: [{ userId: 'asc' }, { createdAt: 'asc' }] }),
+        comments: await prisma.comment.findMany({ orderBy: [{ modelId: 'asc' }, { createdAt: 'asc' }] }),
+        shareLinks: await prisma.shareLink.findMany({ orderBy: [{ createdById: 'asc' }, { createdAt: 'asc' }] }),
       },
     };
   }
@@ -1730,6 +1753,9 @@ async function buildModuleBackupPayload(scope: Exclude<BackupScope, 'full'>): Pr
         threadSizeEntries: await prisma.threadSizeEntry.findMany({
           orderBy: [{ kind: 'asc' }, { sortOrder: 'asc' }, { createdAt: 'asc' }],
         }),
+        selectionShares: await prisma.selectionShare.findMany({
+          orderBy: [{ createdById: 'asc' }, { createdAt: 'asc' }],
+        }),
       },
     };
   }
@@ -1742,6 +1768,9 @@ async function buildModuleBackupPayload(scope: Exclude<BackupScope, 'full'>): Pr
       }),
       productWallImages: await prisma.productWallImage.findMany({
         orderBy: [{ sortOrder: 'asc' }, { createdAt: 'asc' }],
+      }),
+      productWallImageFavorites: await prisma.productWallImageFavorite.findMany({
+        orderBy: [{ userId: 'asc' }, { createdAt: 'asc' }],
       }),
     },
   };
@@ -3144,7 +3173,19 @@ async function restoreModelsModule(tx: any, payload: ModuleBackupPayload, job: R
   const modelGroups = tableRows(payload, 'modelGroups');
   const models = tableRows(payload, 'models');
   const modelVersions = tableRows(payload, 'modelVersions');
-  const userContext = await getRestoreUserContext(tx, models.length > 0 || modelVersions.length > 0);
+  const favorites = tableRows(payload, 'favorites');
+  const downloads = tableRows(payload, 'downloads');
+  const comments = tableRows(payload, 'comments');
+  const shareLinks = tableRows(payload, 'shareLinks');
+  const userContext = await getRestoreUserContext(
+    tx,
+    models.length > 0 ||
+      modelVersions.length > 0 ||
+      favorites.length > 0 ||
+      downloads.length > 0 ||
+      comments.length > 0 ||
+      shareLinks.length > 0,
+  );
   const projectIds = new Set<string>(
     (await tx.project.findMany({ select: { id: true } })).map((item: { id: string }) => item.id),
   );
@@ -3197,6 +3238,49 @@ async function restoreModelsModule(tx: any, payload: ModuleBackupPayload, job: R
     .filter((row): row is Record<string, unknown> => Boolean(row));
   await createManyInChunks(tx.modelVersion, versionData);
 
+  const favoriteData = dedupeRowsByKeys(
+    favorites
+      .map((row) => {
+        const data = reviveDateFields(row, ['createdAt']);
+        data.userId = pickRestoreUserId(data.userId, userContext);
+        data.modelId = keepIdIfPresent(data.modelId, modelIds);
+        return data.modelId ? data : null;
+      })
+      .filter((row): row is Record<string, unknown> => Boolean(row)),
+    ['userId', 'modelId'],
+  );
+  await createManyInChunks(tx.favorite, favoriteData);
+
+  const downloadData = downloads
+    .map((row) => {
+      const data = reviveDateFields(row, ['createdAt']);
+      data.userId = pickRestoreUserId(data.userId, userContext);
+      data.modelId = keepIdIfPresent(data.modelId, modelIds);
+      return data.modelId ? data : null;
+    })
+    .filter((row): row is Record<string, unknown> => Boolean(row));
+  await createManyInChunks(tx.download, downloadData);
+
+  const commentData = comments
+    .map((row) => {
+      const data = reviveDateFields(row, ['createdAt']);
+      data.userId = pickRestoreUserId(data.userId, userContext);
+      data.modelId = keepIdIfPresent(data.modelId, modelIds);
+      return data.modelId ? data : null;
+    })
+    .filter((row): row is Record<string, unknown> => Boolean(row));
+  await createManyInChunks(tx.comment, commentData);
+
+  const shareLinkData = shareLinks
+    .map((row) => {
+      const data = reviveDateFields(row, ['createdAt', 'expiresAt']);
+      data.createdById = pickRestoreUserId(data.createdById, userContext);
+      data.modelId = keepIdIfPresent(data.modelId, modelIds);
+      return data.modelId ? data : null;
+    })
+    .filter((row): row is Record<string, unknown> => Boolean(row));
+  await createManyInChunks(tx.shareLink, shareLinkData);
+
   for (const [id, primaryId] of groupPrimaryById.entries()) {
     if (!modelIds.has(primaryId)) continue;
     await tx.modelGroup.update({
@@ -3205,8 +3289,18 @@ async function restoreModelsModule(tx: any, payload: ModuleBackupPayload, job: R
     });
   }
 
-  addLog(job, `模型库表已重建: ${modelData.length} 个模型，${versionData.length} 个版本`);
-  return modelData.length;
+  addLog(
+    job,
+    `模型库表已重建: ${modelData.length} 个模型，${versionData.length} 个版本，${favoriteData.length} 条收藏，${downloadData.length} 条下载，${commentData.length} 条评论，${shareLinkData.length} 条分享`,
+  );
+  return (
+    modelData.length +
+    versionData.length +
+    favoriteData.length +
+    downloadData.length +
+    commentData.length +
+    shareLinkData.length
+  );
 }
 
 async function restoreSelectionModule(tx: any, payload: ModuleBackupPayload): Promise<number> {
@@ -3234,7 +3328,18 @@ async function restoreSelectionModule(tx: any, payload: ModuleBackupPayload): Pr
   );
   await createManyInChunks(tx.threadSizeEntry, threadSizes);
 
-  return categories.length + products.length + threadSizes.length;
+  const selectionShares = tableRows(payload, 'selectionShares');
+  const userContext = await getRestoreUserContext(tx, selectionShares.length > 0);
+  const shareData = selectionShares
+    .map((row) => {
+      const data = reviveDateFields(row, ['createdAt']);
+      data.createdById = pickRestoreUserId(data.createdById, userContext);
+      return data;
+    })
+    .filter((row): row is Record<string, unknown> => Boolean(row));
+  await createManyInChunks(tx.selectionShare, shareData);
+
+  return categories.length + products.length + threadSizes.length + shareData.length;
 }
 
 async function restoreProductWallModule(tx: any, payload: ModuleBackupPayload): Promise<number> {
@@ -3247,7 +3352,8 @@ async function restoreProductWallModule(tx: any, payload: ModuleBackupPayload): 
   );
   await createManyInChunks(tx.productWallCategory, categories);
 
-  const userContext = await getRestoreUserContext(tx, false);
+  const imageFavorites = tableRows(payload, 'productWallImageFavorites');
+  const userContext = await getRestoreUserContext(tx, imageFavorites.length > 0);
   const images = tableRows(payload, 'productWallImages').map((row) => {
     const data = reviveDateFields(row, ['createdAt', 'updatedAt', 'reviewedAt']);
     data.uploaderId = keepIdIfPresent(data.uploaderId, userContext.ids);
@@ -3256,7 +3362,21 @@ async function restoreProductWallModule(tx: any, payload: ModuleBackupPayload): 
   });
   await createManyInChunks(tx.productWallImage, images);
 
-  return categories.length + images.length;
+  const imageIds = new Set(images.map((row) => stringValue(row.id)).filter((id): id is string => Boolean(id)));
+  const favoriteData = dedupeRowsByKeys(
+    imageFavorites
+      .map((row) => {
+        const data = reviveDateFields(row, ['createdAt']);
+        data.userId = pickRestoreUserId(data.userId, userContext);
+        data.imageId = keepIdIfPresent(data.imageId, imageIds);
+        return data.imageId ? data : null;
+      })
+      .filter((row): row is Record<string, unknown> => Boolean(row)),
+    ['userId', 'imageId'],
+  );
+  await createManyInChunks(tx.productWallImageFavorite, favoriteData);
+
+  return categories.length + images.length + favoriteData.length;
 }
 
 async function restoreCategoryRows(tx: any, rows: Record<string, unknown>[]) {
@@ -3300,6 +3420,16 @@ async function createManyInChunks(model: any, data: Record<string, unknown>[], s
     const chunk = data.slice(index, index + size);
     if (chunk.length > 0) await model.createMany({ data: chunk });
   }
+}
+
+function dedupeRowsByKeys(rows: Record<string, unknown>[], keys: string[]): Record<string, unknown>[] {
+  const seen = new Set<string>();
+  return rows.filter((row) => {
+    const fingerprint = keys.map((key) => String(row[key] ?? '')).join('\u0000');
+    if (seen.has(fingerprint)) return false;
+    seen.add(fingerprint);
+    return true;
+  });
 }
 
 async function getRestoreUserContext(
@@ -5134,8 +5264,6 @@ const completedStepWhere = {
     { format: { equals: 'stp', mode: 'insensitive' as const } },
     { format: { equals: 'iges', mode: 'insensitive' as const } },
     { format: { equals: 'igs', mode: 'insensitive' as const } },
-    { format: { equals: 'xt', mode: 'insensitive' as const } },
-    { format: { equals: 'x_t', mode: 'insensitive' as const } },
   ],
 };
 

@@ -13,7 +13,25 @@ const optional = (key: string, fallback: string): string => process.env[key] || 
 
 const isProduction = process.env.NODE_ENV === 'production';
 
-const WEAK_JWT_SECRETS = new Set(['change-me-to-a-random-secret-string', 'local-dev-secret-do-not-use-in-production']);
+const WEAK_JWT_SECRETS = new Set([
+  'change-me-in-production',
+  'change-me-to-a-random-secret-string',
+  'local-dev-secret-do-not-use-in-production',
+  '3dparthub-default-jwt-secret-change-me-2026-04-30',
+  'ChangeToARandomSecretKey',
+]);
+const WEAK_DATABASE_PASSWORDS = [
+  'modelpass',
+  'change-me-before-docker-start',
+  '3dparthub-default-db-password-change-me-2026',
+  'ChangeToAStrongPassword',
+];
+const WEAK_REDIS_PASSWORDS = [
+  '',
+  'changeme-set-in-env',
+  'change-me-before-docker-start',
+  'ChangeToAStrongRedisPassword',
+];
 
 const failConfig = (message: string): never => {
   console.error(message);
@@ -28,8 +46,31 @@ const validateJwtSecret = (value: string): string => {
 };
 
 const validateDatabaseUrl = (value: string): string => {
-  if (isProduction && /:\/\/[^:]+:modelpass@/.test(value)) {
-    console.warn('Warning: DATABASE_URL uses the default local dev password; set DB_PASSWORD for production.');
+  if (isProduction) {
+    try {
+      const url = new URL(value);
+      if (WEAK_DATABASE_PASSWORDS.includes(decodeURIComponent(url.password))) {
+        failConfig('DATABASE_URL uses an insecure default password; set DB_PASSWORD to a strong value for production.');
+      }
+    } catch {
+      failConfig('DATABASE_URL is invalid.');
+    }
+  }
+  return value;
+};
+
+const validateRedisUrl = (value: string): string => {
+  if (isProduction) {
+    try {
+      const url = new URL(value);
+      if (WEAK_REDIS_PASSWORDS.includes(decodeURIComponent(url.password))) {
+        failConfig(
+          'REDIS_URL uses an insecure or empty password; set REDIS_PASSWORD to a strong value for production.',
+        );
+      }
+    } catch {
+      failConfig('REDIS_URL is invalid.');
+    }
   }
   return value;
 };
@@ -59,7 +100,7 @@ export const config = {
   uploadDir: optional('UPLOAD_DIR', 'uploads'),
   staticDir: optional('STATIC_DIR', 'static'),
   maxFileSize: Number(optional('MAX_FILE_SIZE', String(500 * 1024 * 1024))) || 500 * 1024 * 1024,
-  redisUrl: optional('REDIS_URL', 'redis://localhost:6379'),
+  redisUrl: validateRedisUrl(optional('REDIS_URL', 'redis://localhost:6379')),
   storageType: optional('STORAGE_TYPE', 'local'),
   allowedOrigins: validateAllowedOrigins(optional('ALLOWED_ORIGINS', 'http://localhost:5173')),
   // MinIO (used when STORAGE_TYPE=minio)

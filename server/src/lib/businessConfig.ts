@@ -119,6 +119,7 @@ export const DEFAULT_NAV: NavItemConfig[] = [
   { label: '模型库', icon: 'dashboard', path: '/', enabled: true },
   { label: '产品选型', icon: 'tune', path: '/selection', enabled: true },
   { label: '产品图库', icon: 'image', path: '/product-wall', enabled: true },
+  { label: '临时看图', icon: 'view_in_ar', path: '/temp-viewer', enabled: true },
   { label: '规格查询', icon: 'straighten', path: '/thread-size', enabled: true },
   { label: '我的收藏', icon: 'star', path: '/favorites', enabled: true },
   { label: '我的分享', icon: 'share', path: '/my-shares', enabled: true },
@@ -150,7 +151,7 @@ export const DEFAULT_MOBILE_NAV: NavItemConfig[] = [
 ];
 
 export const DEFAULT_UPLOAD_POLICY: UploadPolicy = {
-  modelFormats: ['step', 'stp', 'iges', 'igs', 'x_t', 'xt'],
+  modelFormats: ['step', 'stp', 'iges', 'igs'],
   modelMaxSizeMb: Math.max(1, Math.round(config.maxFileSize / 1024 / 1024)),
   modelDrawingMaxSizeMb: Math.max(1, Math.round(config.maxFileSize / 1024 / 1024)),
   batchArchiveMaxSizeMb: 51200,
@@ -168,7 +169,7 @@ export const DEFAULT_UPLOAD_POLICY: UploadPolicy = {
   ticketAttachmentExts: ['.jpg', '.jpeg', '.png', '.gif', '.webp'],
 };
 
-const DISABLED_MODEL_UPLOAD_FORMATS = new Set(['html', 'htm']);
+const SUPPORTED_MODEL_UPLOAD_FORMATS = new Set(DEFAULT_UPLOAD_POLICY.modelFormats);
 
 function stringList(value: unknown, fallback: string[] = []): string[] {
   if (Array.isArray(value)) return value.map((item) => String(item));
@@ -186,7 +187,7 @@ export function normalizeUploadPolicy(policy: UploadPolicy): UploadPolicy {
     new Set(
       stringList(policy.modelFormats)
         .map((item) => item.toLowerCase())
-        .filter((item) => item && !DISABLED_MODEL_UPLOAD_FORMATS.has(item)),
+        .filter((item) => SUPPORTED_MODEL_UPLOAD_FORMATS.has(item)),
     ),
   );
   const clamp = (value: unknown, fallback: number, min: number, max: number) => {

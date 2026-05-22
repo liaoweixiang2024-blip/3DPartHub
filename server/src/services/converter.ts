@@ -43,6 +43,10 @@ export interface GltfAsset {
   previewMeta: PreviewMeta;
 }
 
+export interface ConvertStepToGltfOptions {
+  urlBase?: string;
+}
+
 interface PreviewPartMeta {
   id: string;
   name: string;
@@ -550,6 +554,7 @@ export async function convertStepToGltf(
   outputDir: string,
   modelId?: string,
   originalName?: string,
+  options: ConvertStepToGltfOptions = {},
 ): Promise<GltfAsset> {
   const startedAt = Date.now();
   modelId = modelId || randomUUID().slice(0, 12);
@@ -614,7 +619,7 @@ export async function convertStepToGltf(
   return {
     modelId,
     gltfPath,
-    gltfUrl: versionedAssetUrl(`/static/models/${modelId}.glb`, cacheVersion),
+    gltfUrl: versionedAssetUrl(`${options.urlBase || '/static/models'}/${modelId}.glb`, cacheVersion),
     originalName: originalName || basename(inputPath),
     gltfSize,
     originalSize,

@@ -1,5 +1,5 @@
+import { cancelPreparedBrowserDownload, downloadBrowserFile, prepareBrowserDownload } from '../lib/browserDownload';
 import { getPublicSettingsSnapshot } from '../lib/publicSettings';
-import { triggerBrowserDownload } from '../lib/browserDownload';
 import { getAccessToken, useAuthStore } from '../stores/useAuthStore';
 import { downloadBatchZip } from './batchZipDownload';
 import client from './client';
@@ -114,8 +114,14 @@ export async function downloadModelFile(
   format = 'original',
   options: { noRecord?: boolean } = {},
 ): Promise<void> {
-  const href = await createModelDownloadUrl(modelId, format, options);
-  triggerBrowserDownload(href);
+  const preparedWindow = prepareBrowserDownload();
+  try {
+    const href = await createModelDownloadUrl(modelId, format, options);
+    await downloadBrowserFile(href, { preparedWindow });
+  } catch (error) {
+    cancelPreparedBrowserDownload(preparedWindow);
+    throw error;
+  }
 }
 
 export async function createModelDrawingUrl(modelId: string): Promise<string> {

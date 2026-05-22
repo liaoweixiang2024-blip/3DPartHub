@@ -48,6 +48,7 @@ import selectionsRouter from './routes/selections.js';
 import settingsRouter from './routes/settings.js';
 import sharesRouter from './routes/shares.js';
 import tasksRouter from './routes/tasks.js';
+import tempPreviewRouter from './routes/temp-preview.js';
 import threadSizeRouter from './routes/thread-size.js';
 import uploadRouter from './routes/upload.js';
 import { startAuditRetentionScheduler } from './services/auditRetention.js';
@@ -177,6 +178,7 @@ mkdirSync(`${config.staticDir}/models`, { recursive: true });
 mkdirSync(`${config.staticDir}/thumbnails`, { recursive: true });
 mkdirSync(`${config.staticDir}/originals`, { recursive: true });
 mkdirSync(`${config.staticDir}/batch`, { recursive: true });
+mkdirSync(`${config.staticDir}/temp-previews`, { recursive: true });
 mkdirSync(`${config.staticDir}/ticket-attachments`, { recursive: true });
 mkdirSync(`${config.staticDir}/inquiry-attachments`, { recursive: true });
 
@@ -215,6 +217,7 @@ app.use('/api/auth/login', authLimiter);
 app.use('/api/auth/register', authLimiter);
 app.use('/api/auth/refresh', refreshLimiter);
 app.use('/api/models/upload', uploadLimiter);
+app.use('/api/temp-preview/upload', uploadLimiter);
 app.use('/api/upload', uploadLimiter);
 app.use('/api/batch', uploadLimiter);
 app.get('/api/models', searchLimiter);
@@ -251,6 +254,11 @@ function setStaticSecurityHeaders(res: express.Response, filePath: string) {
   if (extname(filePath).toLowerCase() === '.svg') {
     res.setHeader('Content-Security-Policy', "default-src 'none'; img-src data:; style-src 'unsafe-inline'; sandbox");
   }
+}
+
+function setTempPreviewStaticHeaders(res: express.Response, filePath: string) {
+  setStaticSecurityHeaders(res, filePath);
+  res.setHeader('Cache-Control', 'private, no-store');
 }
 
 let _requireLoginBrowseCached: boolean | null = null;
@@ -306,6 +314,15 @@ app.use(
 );
 
 app.use(
+  '/static/temp-previews',
+  express.static(join(process.cwd(), config.staticDir, 'temp-previews'), {
+    maxAge: 0,
+    etag: true,
+    setHeaders: setTempPreviewStaticHeaders,
+  }),
+);
+
+app.use(
   '/static',
   express.static(join(process.cwd(), config.staticDir), {
     maxAge: '1d',
@@ -356,6 +373,7 @@ app.use(projectsRouter);
 app.use(favoritesRouter);
 app.use(sharesRouter);
 app.use(tasksRouter);
+app.use(tempPreviewRouter);
 app.use(uploadRouter);
 app.use(searchRouter);
 app.use(auditRouter);

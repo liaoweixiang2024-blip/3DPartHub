@@ -14,7 +14,6 @@ import { parseStepFileDate } from '../../services/modelFileDates.js';
 import { findOriginalModelPath, isDeprecatedHtmlPreviewFormat, removeModelFiles } from '../../services/modelFiles.js';
 import { MODEL_STATUS } from '../../services/modelStatus.js';
 import { generateThumbnail } from '../../services/thumbnail.js';
-import { convertXtToGltf } from '../../services/xt-converter.js';
 import { modelUpload, validateModelUpload } from './uploadHelpers.js';
 
 type ModelConversionContext = {
@@ -217,7 +216,7 @@ export function createModelConversionRouter({ prisma, getMeta, saveMeta, getPrev
         const origPath = findOriginalModelPath(m);
 
         if (isDeprecatedHtmlPreviewFormat(m.format)) {
-          res.status(400).json({ detail: 'HTML 预览已停用，请上传 STEP/IGES/XT 文件' });
+          res.status(400).json({ detail: 'HTML 预览已停用，请上传 STEP/IGES 文件' });
           return;
         }
 
@@ -246,10 +245,7 @@ export function createModelConversionRouter({ prisma, getMeta, saveMeta, getPrev
 
         // Re-convert from original if available, otherwise just regenerate thumbnail from existing glTF
         if (origPath) {
-          const result =
-            m.format === 'xt' || m.format === 'x_t'
-              ? await convertXtToGltf(origPath, modelDir, m.id, m.originalName || `${m.id}.${m.format}`)
-              : await convertStepToGltf(origPath, modelDir, m.id, m.originalName || `${m.id}.${m.format}`);
+          const result = await convertStepToGltf(origPath, modelDir, m.id, m.originalName || `${m.id}.${m.format}`);
           gltfSize = result.gltfSize;
           gltfUrl = result.gltfUrl;
           previewPath = result.gltfPath;
@@ -370,10 +366,7 @@ export function createModelConversionRouter({ prisma, getMeta, saveMeta, getPrev
                 data: { status: MODEL_STATUS.PROCESSING },
               });
 
-              const result =
-                m.format === 'xt' || m.format === 'x_t'
-                  ? await convertXtToGltf(origPath, modelDir, m.id, m.originalName || `${m.id}.${m.format}`)
-                  : await convertStepToGltf(origPath, modelDir, m.id, m.originalName || `${m.id}.${m.format}`);
+              const result = await convertStepToGltf(origPath, modelDir, m.id, m.originalName || `${m.id}.${m.format}`);
 
               let thumbnailUrl: string | null = null;
               if (existsSync(result.gltfPath)) {

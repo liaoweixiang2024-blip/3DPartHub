@@ -10,7 +10,6 @@ import { requireRole } from '../../middleware/rbac.js';
 import { convertStepToGltf } from '../../services/converter.js';
 import { MODEL_STATUS } from '../../services/modelStatus.js';
 import { generateThumbnail } from '../../services/thumbnail.js';
-import { convertXtToGltf } from '../../services/xt-converter.js';
 import { modelUpload, validateModelUpload } from './uploadHelpers.js';
 
 type ModelVersionsContext = {
@@ -99,21 +98,12 @@ export function createModelVersionsRouter({ prisma, optionalVerifiedUser }: Mode
         const modelDir = join(config.staticDir, 'models');
         let result: Awaited<ReturnType<typeof convertStepToGltf>>;
         try {
-          if (ext === 'xt' || ext === 'x_t') {
-            result = await convertXtToGltf(
-              file.path,
-              modelDir,
-              `${modelId}_v${versionNumber}`,
-              file.originalname || 'model.xt',
-            );
-          } else {
-            result = await convertStepToGltf(
-              file.path,
-              modelDir,
-              `${modelId}_v${versionNumber}`,
-              file.originalname || 'model.step',
-            );
-          }
+          result = await convertStepToGltf(
+            file.path,
+            modelDir,
+            `${modelId}_v${versionNumber}`,
+            file.originalname || 'model.step',
+          );
         } finally {
           try {
             rmSync(file.path, { force: true });

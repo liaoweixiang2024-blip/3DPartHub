@@ -11,7 +11,7 @@ import PageRefreshFallback from '../components/shared/PageRefreshFallback';
 import { PublicPageShell } from '../components/shared/PublicPageShell';
 import { useDocumentTitle } from '../hooks/useDocumentTitle';
 import { useMediaQuery } from '../layouts/hooks/useMediaQuery';
-import { triggerBrowserDownload } from '../lib/browserDownload';
+import { cancelPreparedBrowserDownload, downloadBrowserFile, prepareBrowserDownload } from '../lib/browserDownload';
 import { getErrorMessage } from '../lib/errorNotifications';
 import { getDefaultPreset, getPublicSettingsSnapshot, getSiteTitle } from '../lib/publicSettings';
 
@@ -142,15 +142,24 @@ export default function SharePage() {
     }
   }
 
-  function handleDownload() {
+  async function handleDownload() {
     if (!token) return;
     if (info?.hasPassword && !shareAccessToken) {
       setNeedPassword(true);
       return;
     }
+    const preparedWindow = prepareBrowserDownload();
     setDownloading(true);
-    triggerBrowserDownload(getShareDownloadUrl(token, info?.hasPassword ? shareAccessToken : undefined));
-    setTimeout(() => setDownloading(false), 2000);
+    try {
+      await downloadBrowserFile(getShareDownloadUrl(token, info?.hasPassword ? shareAccessToken : undefined), {
+        preparedWindow,
+      });
+    } catch (err) {
+      cancelPreparedBrowserDownload(preparedWindow);
+      setError(getErrorMessage(err, '下载失败'));
+    } finally {
+      setDownloading(false);
+    }
   }
 
   function formatSize(bytes: number) {

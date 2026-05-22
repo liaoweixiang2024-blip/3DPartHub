@@ -1,17 +1,47 @@
 import { readFileSync } from 'node:fs';
 import https from 'node:https';
+import { join } from 'node:path';
+
+export function normalizeVersionTag(value: string): string {
+  const version = value.trim();
+  if (!version) return '';
+  if (version.startsWith('v')) return version;
+  return /^\d+\.\d+\.\d+/.test(version) ? `v${version}` : version;
+}
+
+function readPackageVersion(path: string): string {
+  try {
+    const pkg = JSON.parse(readFileSync(path, 'utf-8')) as { version?: unknown };
+    return typeof pkg.version === 'string' ? normalizeVersionTag(pkg.version) : '';
+  } catch {
+    return '';
+  }
+}
 
 /**
- * Get local version from the VERSION file injected at Docker build time.
+ * Get local version from the VERSION file injected at Docker build time,
+ * falling back to package.json for source/local deployments.
  * Safe for public endpoints — no network or git operations.
  */
 export function getLocalVersion(): string {
   try {
     const version = readFileSync('/app/VERSION', 'utf-8').trim();
-    if (version) return version;
+    if (version) return normalizeVersionTag(version);
   } catch {
     /* no VERSION file */
   }
+  try {
+    const version = readFileSync(join(process.cwd(), 'VERSION'), 'utf-8').trim();
+    if (version) return normalizeVersionTag(version);
+  } catch {
+    /* no local VERSION file */
+  }
+
+  const packageVersion =
+    readPackageVersion(join(process.cwd(), 'package.json')) ||
+    readPackageVersion(join(process.cwd(), 'server/package.json'));
+  if (packageVersion) return packageVersion;
+
   return 'unknown';
 }
 
@@ -76,7 +106,9 @@ export async function checkUpdateAvailable(): Promise<UpdateCheckResult> {
   }
 
   const remote = release.tag_name;
-  const updateAvailable = current !== remote && current !== 'unknown';
+  const updateAvailable =
+    current !== 'unknown' &&
+    normalizeVersionTag(current).replace(/^v/, '') !== normalizeVersionTag(remote).replace(/^v/, '');
 
   return {
     current,

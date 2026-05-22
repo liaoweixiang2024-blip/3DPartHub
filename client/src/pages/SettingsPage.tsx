@@ -250,7 +250,7 @@ function buildBackupProtectionCards(
     },
     {
       key: 'mirror',
-      icon: 'dns',
+      icon: 'cloud',
       label: '异地副本',
       value: health.mirrorEnabled ? '已开启' : '未开启',
       detail:
@@ -525,7 +525,7 @@ const DEFAULT_SETTINGS: SystemSettings = {
   download_token_ttl_minutes: 5,
   ticket_attachment_max_mb: 100,
   ticket_attachment_types:
-    'jpg,jpeg,png,gif,webp,svg,pdf,doc,docx,xls,xlsx,ppt,pptx,zip,rar,7z,step,stp,iges,igs,xt,binary',
+    'jpg,jpeg,png,gif,webp,svg,pdf,doc,docx,xls,xlsx,ppt,pptx,zip,rar,7z,step,stp,iges,igs,binary',
   api_rate_limit: 5000,
   login_dialog_enabled: true,
   login_dialog_favorites: true,
@@ -1300,7 +1300,7 @@ const GROUPS: SettingGroup[] = [
       {
         key: 'storage_model_prefix',
         label: '模型文件目录',
-        desc: 'STEP/STP/IGES/XT 等可下载模型文件目录前缀；私有下载时会走签名链接策略',
+        desc: 'STEP/STP/IGES 等可下载模型文件目录前缀；私有下载时会走签名链接策略',
         type: 'text',
       },
       {
@@ -2349,9 +2349,16 @@ function normalizePageSizePolicyForSave(value: unknown) {
 
 function normalizeUploadPolicyForSave(value: unknown) {
   const policy = { ...DEFAULT_UPLOAD_POLICY, ...parseSetting<Partial<UploadPolicy>>(value, {}) };
+  const supportedFormats = new Set(DEFAULT_UPLOAD_POLICY.modelFormats);
   return {
     ...policy,
-    modelFormats: Array.from(new Set(parseCsv(policy.modelFormats).map((item) => item.toLowerCase()))),
+    modelFormats: Array.from(
+      new Set(
+        parseCsv(policy.modelFormats)
+          .map((item) => item.toLowerCase())
+          .filter((item) => supportedFormats.has(item)),
+      ),
+    ),
     modelMaxSizeMb: clampNumber(policy.modelMaxSizeMb, DEFAULT_UPLOAD_POLICY.modelMaxSizeMb, 1, 102400),
     chunkSizeMb: clampNumber(policy.chunkSizeMb, DEFAULT_UPLOAD_POLICY.chunkSizeMb, 1, 1024),
     chunkThresholdMb: clampNumber(policy.chunkThresholdMb, DEFAULT_UPLOAD_POLICY.chunkThresholdMb, 1, 102400),
@@ -3150,7 +3157,7 @@ function UploadPolicyEditor({ settings, updateSetting }: { settings: SystemSetti
           <input
             value={policy.modelFormats.join(', ')}
             onChange={(e) => update({ modelFormats: parseCsv(e.target.value) })}
-            placeholder="step, stp, x_t, xt"
+            placeholder="step, stp, iges, igs"
             className={inputClass}
           />
         </label>
@@ -3761,7 +3768,7 @@ function StoragePolicyInfoPanel({ settings }: { settings: SystemSettings }) {
       label: '模型文件',
       key: 'storage_model_prefix',
       policy: settings.storage_signed_url_enabled ? '私有签名下载' : '后端鉴权下载',
-      note: 'STEP/STP/IGES/XT 等模型资源',
+      note: 'STEP/STP/IGES 等模型资源',
     },
     {
       label: '原始文件',
