@@ -55,7 +55,13 @@ compose_cmd() {
   elif docker compose version >/dev/null 2>&1; then
     docker compose "$@"
   elif command_exists docker-compose; then
-    docker-compose "$@"
+    local compose_version
+    compose_version="$(docker-compose version 2>/dev/null | head -n 1 || true)"
+    if echo "$compose_version" | grep -Eq 'version v?2\.'; then
+      docker-compose "$@"
+    else
+      return 127
+    fi
   else
     return 127
   fi
@@ -75,8 +81,12 @@ detect_compose() {
     return 0
   fi
   if command_exists docker-compose; then
-    COMPOSE_KIND="standalone"
-    return 0
+    local compose_version
+    compose_version="$(docker-compose version 2>/dev/null | head -n 1 || true)"
+    if echo "$compose_version" | grep -Eq 'version v?2\.'; then
+      COMPOSE_KIND="standalone"
+      return 0
+    fi
   fi
   return 1
 }
@@ -84,6 +94,28 @@ detect_compose() {
 require_root() {
   if [ "$(id -u)" -ne 0 ]; then
     echo -e "${RED}错误: 请使用 root 用户执行，或用 sudo bash deploy.sh。${NC}"
+    exit 1
+  fi
+}
+
+ensure_install_dir_access() {
+  if [ "$(id -u)" -eq 0 ]; then
+    return
+  fi
+
+  local target="$INSTALL_DIR"
+  local parent="$target"
+  while [ ! -e "$parent" ] && [ "$parent" != "/" ]; do
+    parent="$(dirname "$parent")"
+  done
+
+  if [ -e "$target" ]; then
+    parent="$target"
+  fi
+
+  if [ ! -w "$parent" ]; then
+    echo -e "${RED}错误: 当前用户没有写入 ${INSTALL_DIR} 的权限。${NC}"
+    echo "请使用 root 执行，或指定有权限的目录，例如: INSTALL_DIR=\$HOME/3dparthub bash deploy.sh"
     exit 1
   fi
 }
@@ -101,7 +133,7 @@ random_password() {
   if command_exists openssl; then
     openssl rand -base64 24 | tr -d '\n'
   else
-    tr -dc 'A-Za-z0-9_@#%-' < /dev/urandom | head -c 32
+    tr -dc 'A-Za-z0-9' < /dev/urandom | head -c 32
   fi
 }
 
@@ -156,6 +188,11 @@ env_value() {
   grep -E "^${key}=" .env 2>/dev/null | tail -n 1 | cut -d '=' -f 2- || true
 }
 
+env_has_key() {
+  local key="$1"
+  [ -f .env ] && grep -Eq "^${key}=" .env 2>/dev/null
+}
+
 ensure_env() {
   local key="$1"
   local value="$2"
@@ -187,7 +224,11 @@ configure_docker_apt_repo() {
   apt-get install -y ca-certificates curl gnupg lsb-release openssl
 
   install -m 0755 -d /etc/apt/keyrings
-  curl -fsSL "https://download.docker.com/linux/${ID}/gpg" | gpg --dearmor -o /etc/apt/keyrings/docker.gpg
+  local docker_gpg_tmp
+  docker_gpg_tmp="$(mktemp)"
+  curl -fsSL -o "$docker_gpg_tmp" "https://download.docker.com/linux/${ID}/gpg"
+  gpg --dearmor -o /etc/apt/keyrings/docker.gpg "$docker_gpg_tmp"
+  rm -f "$docker_gpg_tmp"
   chmod a+r /etc/apt/keyrings/docker.gpg
 
   local codename
@@ -375,21 +416,41 @@ apply_runtime_limits() {
   fi
 }
 
+stop_nginx_service() {
+  if command_exists systemctl; then
+    systemctl stop nginx >/dev/null 2>&1 || true
+    systemctl disable nginx >/dev/null 2>&1 || true
+  fi
+  if command_exists service; then
+    service nginx stop >/dev/null 2>&1 || true
+  fi
+}
+
+port_listeners() {
+  local port="$1"
+  if command_exists ss; then
+    ss -ltnp 2>/dev/null | grep ":${port} " || true
+  elif command_exists lsof; then
+    lsof -i ":${port}" 2>/dev/null || true
+  fi
+}
+
 release_nginx_port() {
   local port="$1"
   local listeners=""
 
-  if command_exists ss; then
-    listeners="$(ss -ltnp 2>/dev/null | grep ":${port} " || true)"
-  elif command_exists lsof; then
-    listeners="$(lsof -i ":${port}" 2>/dev/null || true)"
-  fi
+  listeners="$(port_listeners "$port")"
 
   if echo "$listeners" | grep -qi 'nginx'; then
     if [ "${AUTO_STOP_NGINX:-0}" = "1" ]; then
       echo -e "${YELLOW}检测到宿主机 nginx 占用 ${port}，AUTO_STOP_NGINX=1，正在停止 nginx...${NC}"
-      systemctl stop nginx >/dev/null 2>&1 || true
-      systemctl disable nginx >/dev/null 2>&1 || true
+      stop_nginx_service
+      listeners="$(port_listeners "$port")"
+      if echo "$listeners" | grep -qi 'nginx'; then
+        echo -e "${RED}nginx 仍在占用 ${port}，请先在面板或系统里手动释放端口。${NC}"
+        echo "$listeners"
+        return 1
+      fi
       return 0
     fi
     echo -e "${RED}端口 ${port} 已被 nginx 占用。为避免影响宝塔或现有网站，脚本不会自动停止 nginx。${NC}"
@@ -429,6 +490,7 @@ echo ""
 ensure_docker
 
 echo -e "${YELLOW}[1/4] 创建项目目录...${NC}"
+ensure_install_dir_access
 mkdir -p "$INSTALL_DIR"
 mkdir -p "$BACKUP_DIR"
 cd "$INSTALL_DIR"
@@ -446,12 +508,17 @@ echo -e "${YELLOW}[3/4] 配置运行参数...${NC}"
 touch .env
 chmod 600 .env 2>/dev/null || true
 
-PORT_VALUE="${PORT:-$(env_value PORT)}"
+PORT_FROM_ENV="${PORT:-}"
+PORT_VALUE="${PORT_FROM_ENV:-$(env_value PORT)}"
 PORT_VALUE="${PORT_VALUE:-3780}"
 SERVER_IP="$(detect_server_ip)"
 
 ensure_env IMAGE_TAG "latest"
-ensure_env PORT "$PORT_VALUE"
+if [ -n "$PORT_FROM_ENV" ]; then
+  upsert_env PORT "$PORT_VALUE"
+else
+  ensure_env PORT "$PORT_VALUE"
+fi
 ensure_env DB_PASSWORD "$(random_hex 24)"
 ensure_env REDIS_PASSWORD "$(random_hex 24)"
 ensure_env JWT_SECRET "$(random_hex 32)"
@@ -459,9 +526,20 @@ ensure_env ADMIN_USER "admin"
 ensure_env ADMIN_EMAIL "admin@model.com"
 ensure_env ADMIN_PASS "$(random_password)"
 
+DEFAULT_ALLOWED_ORIGIN="http://${SERVER_IP}:${PORT_VALUE}"
 ALLOWED_VALUE="$(env_value ALLOWED_ORIGINS)"
-if [ -z "$ALLOWED_VALUE" ] || echo "$ALLOWED_VALUE" | grep -Eq 'localhost|^\*$'; then
-  upsert_env ALLOWED_ORIGINS "http://${SERVER_IP}:${PORT_VALUE}"
+if [ "${ALLOWED_ORIGINS+x}" = "x" ]; then
+  upsert_env ALLOWED_ORIGINS "$ALLOWED_ORIGINS"
+elif ! env_has_key ALLOWED_ORIGINS; then
+  upsert_env ALLOWED_ORIGINS "$DEFAULT_ALLOWED_ORIGIN"
+elif echo "$ALLOWED_VALUE" | grep -Eq 'localhost|^\*$'; then
+  upsert_env ALLOWED_ORIGINS "$DEFAULT_ALLOWED_ORIGIN"
+elif [ -n "$PORT_FROM_ENV" ]; then
+  case "$ALLOWED_VALUE" in
+    "http://${SERVER_IP}:"*|"https://${SERVER_IP}:"*)
+      upsert_env ALLOWED_ORIGINS "$DEFAULT_ALLOWED_ORIGIN"
+      ;;
+  esac
 fi
 
 apply_resource_profile

@@ -4,6 +4,7 @@
 #   curl -fsSL https://raw.githubusercontent.com/liaoweixiang2024-blip/3DPartHub/main/install.sh | bash
 
 set -e
+set -o pipefail
 
 DEPLOY_URL="${DEPLOY_URL:-https://raw.githubusercontent.com/liaoweixiang2024-blip/3DPartHub/main/deploy.sh}"
 
