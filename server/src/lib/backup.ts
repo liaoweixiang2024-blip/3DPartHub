@@ -19,6 +19,7 @@ import {
   createWriteStream,
   copyFileSync,
   cpSync,
+  symlinkSync,
 } from 'fs';
 import { basename, dirname, isAbsolute, join, resolve, sep } from 'path';
 import { createInterface } from 'readline';
@@ -73,6 +74,21 @@ function copyDirectoryContents(source: string, destination: string) {
       recursive: true,
       force: true,
     });
+  }
+}
+
+function stageStaticDirsForArchiveRoot(archiveRoot: string, staticDir: string, dirs: string[]) {
+  for (const dir of dirs) {
+    const source = join(staticDir, dir);
+    const destination = join(archiveRoot, dir);
+    assertTarEntrySource(staticDir, dir);
+    rmSync(destination, { recursive: true, force: true });
+    try {
+      symlinkSync(source, destination, 'dir');
+    } catch (err) {
+      log.warn({ err, source, destination }, 'Failed to symlink backup source directory, copying instead');
+      cpSync(source, destination, { recursive: true, force: true, dereference: true });
+    }
   }
 }
 
@@ -1307,6 +1323,7 @@ async function runBackup(job: BackupJob) {
     mkdirSync(dbMarker, { recursive: true });
     copyFileSync(join(tmpDir, 'database.sql'), join(dbMarker, 'database.sql'));
     copyFileSync(join(tmpDir, 'meta.json'), join(dbMarker, 'meta.json'));
+    stageStaticDirsForArchiveRoot(archiveRoot, staticDir, existingBackupDirs);
 
     // Copy uploads data into staging for inclusion in backup. Keep the legacy metadata path too.
     const uploadMetadataDir = join(process.cwd(), config.uploadDir, '.metadata');
@@ -1342,7 +1359,7 @@ async function runBackup(job: BackupJob) {
     await new Promise<void>((resolve, reject) => {
       const tmpArchive = join(tmpDir, `${job.id}.tar.gz.tmp`);
       assertTarEntrySource(archiveRoot, BACKUP_DB_ENTRY_DIR);
-      for (const dir of existingBackupDirs) assertTarEntrySource(staticDir, dir);
+      for (const dir of existingBackupDirs) assertTarEntrySource(archiveRoot, dir);
 
       const args: string[] = ['-czhf', tmpArchive];
       args.push(
@@ -1355,12 +1372,9 @@ async function runBackup(job: BackupJob) {
         '--exclude=backups',
         '--exclude=.restore_*',
       );
-      args.push('-C', archiveRoot, BACKUP_DB_ENTRY_DIR);
-      if (existingBackupDirs.length > 0) {
-        args.push('-C', staticDir, ...existingBackupDirs);
-      }
+      args.push(BACKUP_DB_ENTRY_DIR, ...existingBackupDirs);
 
-      const proc = spawn('tar', args, { timeout: ARCHIVE_EXTRACT_TIMEOUT_MS });
+      const proc = spawn('tar', args, { cwd: archiveRoot, timeout: ARCHIVE_EXTRACT_TIMEOUT_MS });
       let stderr = '';
 
       proc.stderr?.on('data', (d: Buffer) => {
@@ -1465,15 +1479,26 @@ async function runBackup(job: BackupJob) {
     job.percent = 100;
     job.message = '备份完成';
     addLog(job, `备份完成！共 ${record.modelCount} 个 STEP 模型，${record.thumbnailCount} 张预览图`);
-    await applyBackupRetentionPolicy(job);
+    try {
+      await applyBackupRetentionPolicy(job);
+    } catch (err: unknown) {
+      const message = `备份已完成，但保留策略清理失败: ${getErrorMessage(err)}`;
+      addLog(job, message);
+      log.warn({ err, jobId: job.id }, 'Backup retention cleanup failed after backup completed');
+    }
     if (job.source === 'scheduled') {
-      await updateBackupPolicySettings({
-        backup_last_auto_date: localDateKey(),
-        backup_last_auto_status: 'success',
-        backup_last_auto_message: `自动备份完成: ${record.fileSizeText}`,
-        backup_last_auto_job_id: job.id,
-        backup_last_auto_at: new Date().toISOString(),
-      });
+      try {
+        await updateBackupPolicySettings({
+          backup_last_auto_date: localDateKey(),
+          backup_last_auto_status: 'success',
+          backup_last_auto_message: `自动备份完成: ${record.fileSizeText}`,
+          backup_last_auto_job_id: job.id,
+          backup_last_auto_at: new Date().toISOString(),
+        });
+      } catch (err: unknown) {
+        addLog(job, `备份已完成，但自动备份状态更新失败: ${getErrorMessage(err)}`);
+        log.warn({ err, jobId: job.id }, 'Scheduled backup status update failed after backup completed');
+      }
     }
 
     log.info({ jobId: job.id, fileSize: formatSize(fileSize) }, 'Backup completed');
@@ -1615,7 +1640,12 @@ async function runModuleBackup(job: BackupJob, scope: Exclude<BackupScope, 'full
     job.percent = 100;
     job.message = `${label}备份完成`;
     addLog(job, `${label}备份完成: ${record.dbSize}, ${record.thumbnailCount} 个资源文件`);
-    await applyBackupRetentionPolicy(job);
+    try {
+      await applyBackupRetentionPolicy(job);
+    } catch (err: unknown) {
+      addLog(job, `${label}备份已完成，但保留策略清理失败: ${getErrorMessage(err)}`);
+      log.warn({ err, jobId: job.id, scope }, 'Backup retention cleanup failed after module backup completed');
+    }
     log.info({ jobId: job.id, scope, fileSize: formatSize(fileSize) }, 'Module backup completed');
   } catch (err: unknown) {
     const message = getErrorMessage(err);
@@ -1647,8 +1677,9 @@ async function packBackupArchive({
 }) {
   await new Promise<void>((resolve, reject) => {
     const tmpArchive = join(tmpDir, `${job.id}.tar.gz.tmp`);
+    stageStaticDirsForArchiveRoot(archiveRoot, staticDir, staticDirs);
     assertTarEntrySource(archiveRoot, BACKUP_DB_ENTRY_DIR);
-    for (const dir of staticDirs) assertTarEntrySource(staticDir, dir);
+    for (const dir of staticDirs) assertTarEntrySource(archiveRoot, dir);
 
     const args: string[] = ['-czhf', tmpArchive];
     args.push(
@@ -1661,12 +1692,9 @@ async function packBackupArchive({
       '--exclude=backups',
       '--exclude=.restore_*',
     );
-    args.push('-C', archiveRoot, BACKUP_DB_ENTRY_DIR);
-    if (staticDirs.length > 0) {
-      args.push('-C', staticDir, ...staticDirs);
-    }
+    args.push(BACKUP_DB_ENTRY_DIR, ...staticDirs);
 
-    const proc = spawn('tar', args, { timeout: ARCHIVE_EXTRACT_TIMEOUT_MS });
+    const proc = spawn('tar', args, { cwd: archiveRoot, timeout: ARCHIVE_EXTRACT_TIMEOUT_MS });
     let stderr = '';
     proc.stderr?.on('data', (d: Buffer) => {
       stderr += d.toString();
