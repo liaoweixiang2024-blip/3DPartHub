@@ -8,6 +8,7 @@ const {
   encryptBackupArchiveInPlace,
   evictCompleted,
   isEncryptedBackupArchiveFile,
+  isUnsafeBackupArchiveVerboseEntry,
   isUnsafeBackupArchiveEntry,
   materializeReadableBackupArchive,
   MODULE_BACKUP_TABLE_KEYS,
@@ -80,6 +81,18 @@ test('backup archive entries reject unsafe paths before restore', () => {
   assert.equal(isUnsafeBackupArchiveEntry('_backup_db/\0/database.sql'), true);
   assert.equal(isUnsafeBackupArchiveEntry('_backup_db/database.sql'), false);
   assert.equal(isUnsafeBackupArchiveEntry('./originals/model.step'), false);
+});
+
+test('backup archive verbose entries reject links and special files before extraction', () => {
+  assert.equal(isUnsafeBackupArchiveVerboseEntry('-rw-r--r-- root/root 12 2026-05-23 _backup_db/database.sql'), false);
+  assert.equal(isUnsafeBackupArchiveVerboseEntry('drwxr-xr-x root/root 0 2026-05-23 originals/'), false);
+  assert.equal(isUnsafeBackupArchiveVerboseEntry('lrwxrwxrwx root/root 0 2026-05-23 originals/link -> /etc'), true);
+  assert.equal(
+    isUnsafeBackupArchiveVerboseEntry('hrw-r--r-- root/root 0 2026-05-23 originals/hard link to file'),
+    true,
+  );
+  assert.equal(isUnsafeBackupArchiveVerboseEntry('crw-r--r-- root/root 0 2026-05-23 originals/device'), true);
+  assert.equal(isUnsafeBackupArchiveVerboseEntry(''), false);
 });
 
 test('backup archive entry list normalizes lines and removes blank entries', () => {

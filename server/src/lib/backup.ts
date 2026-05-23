@@ -77,6 +77,21 @@ function copyDirectoryContents(source: string, destination: string) {
   }
 }
 
+function assertDirectoryContainsNoSymlinks(root: string, label = root) {
+  if (!existsSync(root)) return;
+  const stack = [root];
+  while (stack.length > 0) {
+    const current = stack.pop()!;
+    for (const entry of readdirSync(current, { withFileTypes: true })) {
+      const fullPath = join(current, entry.name);
+      if (entry.isSymbolicLink()) {
+        throw new Error(`备份源目录包含符号链接，已中止以避免越界打包: ${label} -> ${fullPath}`);
+      }
+      if (entry.isDirectory()) stack.push(fullPath);
+    }
+  }
+}
+
 function stageStaticDirsForArchiveRoot(archiveRoot: string, staticDir: string, dirs: string[]) {
   for (const dir of dirs) {
     const source = join(staticDir, dir);
@@ -957,6 +972,8 @@ export function getActiveRestoreJob(): RestoreJob | undefined {
 export async function saveAsBackupRecord(archPath: string, originalName: string): Promise<BackupRecord> {
   const id = `backup_${Date.now()}_${randomBytes(4).toString('hex')}`;
   const dest = activeArchivePath(id);
+  let archiveVerified = false;
+  let recordWritten = false;
 
   try {
     try {
@@ -968,6 +985,7 @@ export async function saveAsBackupRecord(archPath: string, originalName: string)
     }
 
     const record = await inspectBackupArchive(id, dest, originalName);
+    archiveVerified = true;
     const encrypted = await encryptBackupArchiveInPlace(dest);
     const archiveSha256 = await sha256File(dest);
     record.archiveSha256 = archiveSha256;
@@ -976,10 +994,15 @@ export async function saveAsBackupRecord(archPath: string, originalName: string)
     if (record.encrypted) record.encryptionAlgorithm = BACKUP_ENCRYPTION_ALGORITHM;
     record.verifiedAt = new Date().toISOString();
     writeFileSync(activeMetaPath(id), JSON.stringify(record, null, 2));
+    recordWritten = true;
     return record;
-  } catch (err) {
-    if (existsSync(dest)) rmSync(dest, { force: true });
-    if (existsSync(activeMetaPath(id))) rmSync(activeMetaPath(id), { force: true });
+  } catch (err: unknown) {
+    if (!archiveVerified && existsSync(dest)) {
+      rmSync(dest, { force: true });
+    } else if (archiveVerified && existsSync(dest)) {
+      log.warn({ err, id, path: dest }, 'Preserved verified imported backup archive after record write failure');
+    }
+    if (!recordWritten && existsSync(activeMetaPath(id))) rmSync(activeMetaPath(id), { force: true });
     throw err;
   }
 }
@@ -1080,6 +1103,7 @@ async function runImportSave(job: ImportSaveJob, archPath: string, originalName:
       const readableArchive = await materializeReadableBackupArchive(archPath, tmpDir);
       const entries = listArchiveEntries(readableArchive);
       if (entries.length === 0) throw new Error('备份归档内容为空');
+      assertSafeArchiveEntriesForExtraction(readableArchive, entries);
       addLog(job, `归档包含 ${entries.length} 个条目`);
 
       // Stage 2: Read meta
@@ -1265,6 +1289,8 @@ async function runBackup(job: BackupJob) {
 
   const tmpDir = prepareWorkDir(job.id);
   const finalArchive = activeArchivePath(job.id);
+  let archiveVerified = false;
+  let recordWritten = false;
 
   try {
     let t: number;
@@ -1427,6 +1453,7 @@ async function runBackup(job: BackupJob) {
         syncJob(job);
       },
     });
+    archiveVerified = true;
     addLogEnd(job, t, '备份包完整性校验通过');
 
     const encrypted = await encryptBackupArchiveInPlace(finalArchive);
@@ -1473,6 +1500,7 @@ async function runBackup(job: BackupJob) {
       verifiedAt: new Date().toISOString(),
     };
     writeJsonAtomic(activeMetaPath(job.id), record);
+    recordWritten = true;
     await mirrorBackupIfEnabled(record, job);
 
     job.stage = 'done';
@@ -1508,15 +1536,24 @@ async function runBackup(job: BackupJob) {
     job.error = message;
     syncJob(job);
     if (job.source === 'scheduled') {
-      await updateBackupPolicySettings({
-        backup_last_auto_status: 'error',
-        backup_last_auto_message: message || '自动备份失败',
-        backup_last_auto_job_id: job.id,
-        backup_last_auto_at: new Date().toISOString(),
-      });
+      try {
+        await updateBackupPolicySettings({
+          backup_last_auto_status: 'error',
+          backup_last_auto_message: message || '自动备份失败',
+          backup_last_auto_job_id: job.id,
+          backup_last_auto_at: new Date().toISOString(),
+        });
+      } catch (statusErr: unknown) {
+        log.warn({ err: statusErr, jobId: job.id }, 'Failed to update scheduled backup error status');
+      }
     }
-    if (existsSync(finalArchive)) rmSync(finalArchive, { force: true });
-    if (existsSync(activeMetaPath(job.id))) rmSync(activeMetaPath(job.id), { force: true });
+    if (!archiveVerified && existsSync(finalArchive)) {
+      rmSync(finalArchive, { force: true });
+    } else if (archiveVerified && existsSync(finalArchive)) {
+      addLog(job, '备份包已通过完整性校验，失败后已保留为未登记备份，可在备份列表中校验或手动处理');
+      log.warn({ err, jobId: job.id, path: finalArchive }, 'Preserved verified backup archive after late failure');
+    }
+    if (!recordWritten && existsSync(activeMetaPath(job.id))) rmSync(activeMetaPath(job.id), { force: true });
     log.error({ err, jobId: job.id }, 'Backup failed');
   } finally {
     if (existsSync(tmpDir)) rmSync(tmpDir, { recursive: true, force: true });
@@ -1527,6 +1564,8 @@ async function runModuleBackup(job: BackupJob, scope: Exclude<BackupScope, 'full
   const tmpDir = prepareWorkDir(job.id);
   const finalArchive = activeArchivePath(job.id);
   const label = backupScopeLabel(scope);
+  let archiveVerified = false;
+  let recordWritten = false;
 
   try {
     let t: number;
@@ -1595,6 +1634,7 @@ async function runModuleBackup(job: BackupJob, scope: Exclude<BackupScope, 'full
     syncJob(job);
     t = addLogStart(job, '正在校验模块备份包...');
     await validateModuleBackupArchive(finalArchive, { expectedManifest: manifest });
+    archiveVerified = true;
     addLogEnd(job, t, '模块备份包校验通过');
 
     const encrypted = await encryptBackupArchiveInPlace(finalArchive);
@@ -1634,6 +1674,7 @@ async function runModuleBackup(job: BackupJob, scope: Exclude<BackupScope, 'full
       verifiedAt: new Date().toISOString(),
     };
     writeJsonAtomic(activeMetaPath(job.id), record);
+    recordWritten = true;
     await mirrorBackupIfEnabled(record, job);
 
     job.stage = 'done';
@@ -1652,8 +1693,16 @@ async function runModuleBackup(job: BackupJob, scope: Exclude<BackupScope, 'full
     job.stage = 'error';
     job.error = message;
     syncJob(job);
-    if (existsSync(finalArchive)) rmSync(finalArchive, { force: true });
-    if (existsSync(activeMetaPath(job.id))) rmSync(activeMetaPath(job.id), { force: true });
+    if (!archiveVerified && existsSync(finalArchive)) {
+      rmSync(finalArchive, { force: true });
+    } else if (archiveVerified && existsSync(finalArchive)) {
+      addLog(job, `${label}备份包已通过完整性校验，失败后已保留为未登记备份，可在备份列表中校验或手动处理`);
+      log.warn(
+        { err, jobId: job.id, scope, path: finalArchive },
+        'Preserved verified module backup archive after late failure',
+      );
+    }
+    if (!recordWritten && existsSync(activeMetaPath(job.id))) rmSync(activeMetaPath(job.id), { force: true });
     log.error({ err, jobId: job.id, scope }, 'Module backup failed');
   } finally {
     if (existsSync(tmpDir)) rmSync(tmpDir, { recursive: true, force: true });
@@ -1820,6 +1869,7 @@ async function createModuleBackupManifest(
   dataSha256: string,
   directoriesToCheck: readonly ArchiveDirectorySpec[],
 ): Promise<ModuleBackupManifest> {
+  for (const dir of directoriesToCheck) assertDirectoryContainsNoSymlinks(dir.source, dir.path);
   const directories: BackupManifestDirectory[] = directoriesToCheck.map((dir) => {
     const stats = countFilesAndBytesRecursive(dir.source);
     return { path: dir.path, fileCount: stats.fileCount, totalBytes: stats.totalBytes };
@@ -2627,6 +2677,7 @@ async function runRestoreFromArchive(job: RestoreJob, archPath: string, removeAr
     syncJob(job);
 
     t = addLogStart(job, '正在校验备份包完整性（条目检查 + SHA256）...');
+    assertSafeArchiveEntriesForExtraction(readableArchivePath, allEntries);
     validateArchiveEntries(allEntries, archiveManifest);
     addLogEnd(job, t, '备份包完整性校验通过');
 
@@ -3532,6 +3583,36 @@ export function isUnsafeBackupArchiveEntry(entry: string): boolean {
   return normalized.split('/').some((part) => part === '..');
 }
 
+export function isUnsafeBackupArchiveVerboseEntry(line: string): boolean {
+  const trimmed = line.trimStart();
+  if (!trimmed) return false;
+  const type = trimmed[0];
+  return type !== '-' && type !== 'd';
+}
+
+function summarizeTarVerboseLine(line: string): string {
+  return line.trim().replace(/\s+/g, ' ').slice(0, 240);
+}
+
+function assertArchiveContainsOnlyRegularFilesAndDirectories(archive: string) {
+  const raw = execFileSync('tar', ['tvzf', archive], {
+    stdio: 'pipe',
+    timeout: ARCHIVE_LIST_TIMEOUT_MS,
+  }).toString('utf-8');
+  const unsafeLine = raw.split(/\r?\n/).find(isUnsafeBackupArchiveVerboseEntry);
+  if (unsafeLine) {
+    throw new Error(`备份包包含符号链接、硬链接或特殊文件，已中止恢复: ${summarizeTarVerboseLine(unsafeLine)}`);
+  }
+}
+
+function assertSafeArchiveEntriesForExtraction(archive: string, entries: string[]) {
+  const unsafeEntry = entries.find(isUnsafeBackupArchiveEntry);
+  if (unsafeEntry) {
+    throw new Error(`备份包包含不安全路径: ${unsafeEntry}`);
+  }
+  assertArchiveContainsOnlyRegularFilesAndDirectories(archive);
+}
+
 function listArchiveEntries(archive: string): string[] {
   const raw = execFileSync('tar', ['tzf', archive], { stdio: 'pipe', timeout: ARCHIVE_LIST_TIMEOUT_MS }).toString();
   return normalizeBackupArchiveEntryList(raw);
@@ -3598,6 +3679,7 @@ async function createBackupManifest(
   databaseSqlPath: string,
   directoriesToCheck: readonly ArchiveDirectorySpec[],
 ): Promise<BackupManifest> {
+  for (const dir of directoriesToCheck) assertDirectoryContainsNoSymlinks(dir.source, dir.path);
   const directories: BackupManifestDirectory[] = directoriesToCheck.map((dir) => {
     const stats = countFilesAndBytesRecursive(dir.source);
     return { path: dir.path, fileCount: stats.fileCount, totalBytes: stats.totalBytes };
@@ -3753,6 +3835,14 @@ async function readBackupManifestForKind(archive: string): Promise<BackupManifes
   );
 }
 
+async function validateBackupArchiveByKind(archive: string): Promise<BackupManifest | ModuleBackupManifest | null> {
+  const rawManifest = await readBackupManifestForKind(archive);
+  if (isModuleBackupManifest(rawManifest)) {
+    return await validateModuleBackupArchive(archive, { expectedManifest: rawManifest });
+  }
+  return await validateBackupArchive(archive, { requireManifest: true });
+}
+
 async function validateModuleBackupArchive(
   archive: string,
   options: {
@@ -3765,8 +3855,7 @@ async function validateModuleBackupArchive(
     if (statSync(readableArchive).size <= 0) throw new Error('备份文件为空');
     const entries = await listArchiveEntriesWithProgress(readableArchive, options.onEntryProgress);
     if (entries.length === 0) throw new Error('备份归档内容为空');
-    const unsafeEntry = entries.find(isUnsafeBackupArchiveEntry);
-    if (unsafeEntry) throw new Error(`备份包包含不安全路径: ${unsafeEntry}`);
+    assertSafeArchiveEntriesForExtraction(readableArchive, entries);
 
     const archiveManifest = readArchiveManifest(readableArchive) as unknown;
     if (!isModuleBackupManifest(archiveManifest)) {
@@ -3825,10 +3914,7 @@ async function validatePlainBackupArchive(
 
   const entries = await listArchiveEntriesWithProgress(archive, options.onEntryProgress);
   if (entries.length === 0) throw new Error('备份归档内容为空');
-  const unsafeEntry = entries.find(isUnsafeBackupArchiveEntry);
-  if (unsafeEntry) {
-    throw new Error(`备份包包含不安全路径: ${unsafeEntry}`);
-  }
+  assertSafeArchiveEntriesForExtraction(archive, entries);
   if (!archiveHasEntry(entries, BACKUP_DATABASE_ENTRY) && !archiveHasEntry(entries, 'database.sql')) {
     throw new Error('备份包缺少数据库文件');
   }
@@ -3979,6 +4065,7 @@ function countFilesAndBytesRecursive(dir: string): { fileCount: number; totalByt
   let totalBytes = 0;
   for (const entry of readdirSync(dir, { withFileTypes: true })) {
     if (isIgnoredFileName(entry.name)) continue;
+    if (entry.isSymbolicLink()) continue;
     const fullPath = join(dir, entry.name);
     if (entry.isDirectory()) {
       const child = countFilesAndBytesRecursive(fullPath);
@@ -4549,7 +4636,9 @@ function copyDirectoryRecursive(source: string, destination: string) {
   for (const entry of readdirSync(source, { withFileTypes: true })) {
     const src = join(source, entry.name);
     const dest = join(destination, entry.name);
-    if (entry.isDirectory()) {
+    if (entry.isSymbolicLink()) {
+      continue;
+    } else if (entry.isDirectory()) {
       copyDirectoryRecursive(src, dest);
     } else if (entry.isFile()) {
       copyFileSync(src, dest);
@@ -4670,6 +4759,7 @@ function countFilesRecursive(dir: string, predicate?: (name: string) => boolean)
   let total = 0;
   for (const entry of readdirSync(dir, { withFileTypes: true })) {
     if (isIgnoredFileName(entry.name)) continue;
+    if (entry.isSymbolicLink()) continue;
     const fullPath = join(dir, entry.name);
     if (entry.isDirectory()) {
       total += countFilesRecursive(fullPath, predicate);
@@ -5010,22 +5100,32 @@ async function mirrorBackupIfEnabled(record: BackupRecord, job: { logs?: string[
   if (!mirrorDir) {
     const message = '镜像备份目录无效，请配置一个绝对路径，且不能指向当前备份目录';
     addLog(job, message);
-    await updateBackupPolicySettings({
-      backup_last_mirror_status: 'error',
-      backup_last_mirror_message: message,
-      backup_last_mirror_at: new Date().toISOString(),
-    });
+    try {
+      await updateBackupPolicySettings({
+        backup_last_mirror_status: 'error',
+        backup_last_mirror_message: message,
+        backup_last_mirror_at: new Date().toISOString(),
+      });
+    } catch (err: unknown) {
+      log.warn({ err }, 'Failed to update mirror backup error status');
+    }
     return;
   }
 
+  let targetArchive = '';
+  let targetMeta = '';
+  let tmpArchive = '';
+  let tmpMeta = '';
+  let targetArchiveWritten = false;
+  let targetMetaWritten = false;
   try {
     mkdirSync(mirrorDir, { recursive: true });
     const sourceArchive = activeArchivePath(record.id);
     const sourceMeta = activeMetaPath(record.id);
-    const targetArchive = join(mirrorDir, `${record.id}.tar.gz`);
-    const targetMeta = join(mirrorDir, `${record.id}.json`);
-    const tmpArchive = `${targetArchive}.tmp`;
-    const tmpMeta = `${targetMeta}.tmp`;
+    targetArchive = join(mirrorDir, `${record.id}.tar.gz`);
+    targetMeta = join(mirrorDir, `${record.id}.json`);
+    tmpArchive = `${targetArchive}.tmp`;
+    tmpMeta = `${targetMeta}.tmp`;
 
     addLog(job, `正在复制备份到外部镜像目录: ${mirrorDir}`);
     copyFileSync(sourceArchive, tmpArchive);
@@ -5035,27 +5135,45 @@ async function mirrorBackupIfEnabled(record: BackupRecord, job: { logs?: string[
         throw new Error('镜像备份 SHA256 校验失败');
       }
     }
-    await validateBackupArchive(tmpArchive, { requireManifest: true });
-    renameSync(tmpArchive, targetArchive);
-
+    await validateBackupArchiveByKind(tmpArchive);
     copyFileSync(sourceMeta, tmpMeta);
+
+    renameSync(tmpArchive, targetArchive);
+    targetArchiveWritten = true;
     renameSync(tmpMeta, targetMeta);
+    targetMetaWritten = true;
 
     const message = `镜像备份完成: ${mirrorDir}`;
     addLog(job, message);
-    await updateBackupPolicySettings({
-      backup_last_mirror_status: 'success',
-      backup_last_mirror_message: message,
-      backup_last_mirror_at: new Date().toISOString(),
-    });
+    try {
+      await updateBackupPolicySettings({
+        backup_last_mirror_status: 'success',
+        backup_last_mirror_message: message,
+        backup_last_mirror_at: new Date().toISOString(),
+      });
+    } catch (err: unknown) {
+      log.warn({ err }, 'Failed to update mirror backup success status');
+    }
   } catch (err: unknown) {
+    if (tmpArchive && existsSync(tmpArchive)) rmSync(tmpArchive, { force: true });
+    if (tmpMeta && existsSync(tmpMeta)) rmSync(tmpMeta, { force: true });
+    if (targetArchiveWritten && !targetMetaWritten && targetArchive && existsSync(targetArchive)) {
+      rmSync(targetArchive, { force: true });
+    }
+    if (!targetArchiveWritten && targetMetaWritten && targetMeta && existsSync(targetMeta)) {
+      rmSync(targetMeta, { force: true });
+    }
     const message = `镜像备份失败: ${getErrorMessage(err)}`;
     addLog(job, message);
-    await updateBackupPolicySettings({
-      backup_last_mirror_status: 'error',
-      backup_last_mirror_message: message,
-      backup_last_mirror_at: new Date().toISOString(),
-    });
+    try {
+      await updateBackupPolicySettings({
+        backup_last_mirror_status: 'error',
+        backup_last_mirror_message: message,
+        backup_last_mirror_at: new Date().toISOString(),
+      });
+    } catch (statusErr: unknown) {
+      log.warn({ err: statusErr }, 'Failed to update mirror backup error status');
+    }
   }
 }
 
