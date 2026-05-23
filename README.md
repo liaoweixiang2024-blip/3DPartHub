@@ -73,14 +73,14 @@
 
 ```bash
 # 全新部署
-curl -L https://raw.githubusercontent.com/liaoweixiang2024-blip/3DPartHub/main/deploy.sh | bash
+curl -fsSL https://raw.githubusercontent.com/liaoweixiang2024-blip/3DPartHub/main/install.sh | bash
 
 # 或者先下载再执行
-curl -L -O https://raw.githubusercontent.com/liaoweixiang2024-blip/3DPartHub/main/deploy.sh
-bash deploy.sh
+curl -fsSL -O https://raw.githubusercontent.com/liaoweixiang2024-blip/3DPartHub/main/install.sh
+bash install.sh
 ```
 
-脚本会自动完成：安装 Docker → 下载 docker-compose.yml → 生成随机密钥 → 按服务器内存自动分配资源 → 拉取最新镜像并启动。
+脚本会自动完成：修复 Docker apt 源/GPG Key → 安装 Docker → 下载 docker-compose.yml → 生成随机密钥 → 写入生产访问来源 → 按服务器内存自动分配资源 → 释放被 nginx 占用的 3780 端口 → 拉取最新镜像并启动。
 
 **带备份恢复部署：**
 
@@ -89,7 +89,7 @@ bash deploy.sh
 bash deploy.sh /path/to/backup_xxx.tar.gz
 ```
 
-脚本会自动恢复数据库和文件数据。
+脚本会把备份包复制到宿主机备份目录，部署完成后登录网页端「系统设置 → 数据备份」执行恢复。
 
 如果 GHCR 镜像包仍为私有，服务器需要先使用有 `read:packages` 权限的 GitHub Token 登录：
 
@@ -121,12 +121,13 @@ docker stats --no-stream
 
 自动分配参考：
 
-| 服务器内存 | API          | PostgreSQL   | Redis          | Web             |
-| ---------- | ------------ | ------------ | -------------- | --------------- |
-| 4G         | 2G / 1.5 CPU | 768M / 1 CPU | 256M / 0.5 CPU | 256M / 0.5 CPU  |
-| 8G         | 4G / 2 CPU   | 1G / 1 CPU   | 512M / 0.5 CPU | 512M / 0.75 CPU |
-| 16G        | 8G / 3 CPU   | 2G / 2 CPU   | 1G / 1 CPU     | 512M / 1 CPU    |
-| 32G+       | 12G / 4 CPU  | 4G / 2 CPU   | 2G / 1 CPU     | 1G / 1 CPU      |
+| 服务器内存 | API            | PostgreSQL     | Redis          | Web             |
+| ---------- | -------------- | -------------- | -------------- | --------------- |
+| 2G         | 900M / 1.2 CPU | 384M / 0.7 CPU | 128M / 0.3 CPU | 128M / 0.3 CPU  |
+| 4G         | 2G / 1.5 CPU   | 768M / 1 CPU   | 256M / 0.5 CPU | 256M / 0.5 CPU  |
+| 8G         | 4G / 2 CPU     | 1G / 1 CPU     | 512M / 0.5 CPU | 512M / 0.75 CPU |
+| 16G        | 8G / 3 CPU     | 2G / 2 CPU     | 1G / 1 CPU     | 512M / 1 CPU    |
+| 32G+       | 12G / 4 CPU    | 4G / 2 CPU     | 2G / 1 CPU     | 1G / 1 CPU      |
 
 说明：容器内存/CPU 上限会即时生效；`API_WORKERS`、`API_SHM_SIZE`、`DB_CONNECTION_LIMIT` 等启动参数会同步写入 `.env`，执行 `docker compose up -d --force-recreate api` 后完全生效。
 

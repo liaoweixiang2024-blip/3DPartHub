@@ -10,6 +10,8 @@ const required = (key: string): string => {
 };
 
 const optional = (key: string, fallback: string): string => process.env[key] || fallback;
+const optionalAllowEmpty = (key: string, fallback: string): string =>
+  Object.prototype.hasOwnProperty.call(process.env, key) ? (process.env[key] ?? '') : fallback;
 
 const isProduction = process.env.NODE_ENV === 'production';
 
@@ -108,7 +110,9 @@ export const config = {
   maxFileSize: Number(optional('MAX_FILE_SIZE', String(500 * 1024 * 1024))) || 500 * 1024 * 1024,
   redisUrl: validateRedisUrl(optional('REDIS_URL', 'redis://localhost:6379')),
   storageType: optional('STORAGE_TYPE', 'local'),
-  allowedOrigins: validateAllowedOrigins(optional('ALLOWED_ORIGINS', 'http://localhost:5173')),
+  allowedOrigins: validateAllowedOrigins(
+    optionalAllowEmpty('ALLOWED_ORIGINS', isProduction ? '' : 'http://localhost:5173'),
+  ),
   // MinIO (used when STORAGE_TYPE=minio)
   minioEndpoint: optional('MINIO_ENDPOINT', 'localhost'),
   minioPort: Number(optional('MINIO_PORT', '9000')),

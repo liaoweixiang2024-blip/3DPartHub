@@ -3,9 +3,7 @@
 # ============================================================
 #
 # 【快速开始】
-#   mkdir -p /opt/3dparthub && cd /opt/3dparthub
-#   curl -O https://raw.githubusercontent.com/liaoweixiang2024-blip/3DPartHub/main/docker-compose.yml
-#   docker compose up -d
+#   curl -fsSL https://raw.githubusercontent.com/liaoweixiang2024-blip/3DPartHub/main/install.sh | bash
 #   默认后台账号: admin （默认密码 3DPartHub@2026，首次登录后会强制修改密码）
 #
 # 【更安全的方式】

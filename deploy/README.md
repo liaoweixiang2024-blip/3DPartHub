@@ -7,12 +7,12 @@
 推荐生产部署：
 
 ```bash
-mkdir -p /opt/3dparthub && cd /opt/3dparthub
-curl -O https://raw.githubusercontent.com/liaoweixiang2024-blip/3DPartHub/main/docker-compose.yml
-docker compose up -d
+curl -fsSL https://raw.githubusercontent.com/liaoweixiang2024-blip/3DPartHub/main/install.sh | bash
 ```
 
-默认部署使用 `latest` 镜像，并只启动 `api`、`web`、`postgres`、`redis` 四个核心容器。需要立即升级时：
+脚本会自动安装 Docker、修复 Docker GPG 源、下载生产 Compose、生成 `.env`、设置访问来源、按内存写入资源上限并启动 `api`、`web`、`postgres`、`redis` 四个核心容器。
+
+需要立即升级时：
 
 ```bash
 cd /opt/3dparthub
