@@ -80,7 +80,19 @@ curl -fsSL -O https://raw.githubusercontent.com/liaoweixiang2024-blip/3DPartHub/
 bash install.sh
 ```
 
-脚本会自动完成：修复 Docker apt 源/GPG Key → 安装 Docker → 下载 docker-compose.yml → 生成随机密钥 → 写入生产访问来源 → 按服务器内存自动分配资源 → 释放被 nginx 占用的 3780 端口 → 拉取最新镜像并启动。
+脚本会自动完成：复用已有 Docker 或安装 Docker → 修复 Docker apt 源/GPG Key → 下载 docker-compose.yml → 生成随机密钥 → 写入生产访问来源 → 按服务器内存自动分配资源 → 检查 3780 端口 → 拉取最新镜像并启动。
+
+如果服务器已安装宝塔面板或已有 nginx 站点，脚本默认不会停止 nginx，也不会修改宝塔配置。`3780` 被占用时会停止部署并给出处理命令；确认要让 3DPartHub 接管端口时可显式执行：
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/liaoweixiang2024-blip/3DPartHub/main/install.sh | AUTO_STOP_NGINX=1 bash
+```
+
+保留宝塔/nginx 时也可以换端口部署：
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/liaoweixiang2024-blip/3DPartHub/main/install.sh | PORT=3781 bash
+```
 
 **带备份恢复部署：**
 

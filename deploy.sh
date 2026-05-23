@@ -37,9 +37,48 @@ REDIS_CPU_LIMIT_VALUE=""
 REDIS_MAXMEMORY_VALUE=""
 WEB_MEMORY_LIMIT_VALUE=""
 WEB_CPU_LIMIT_VALUE=""
+COMPOSE_KIND=""
 
 command_exists() {
   command -v "$1" >/dev/null 2>&1
+}
+
+detect_bt_panel() {
+  [ -d /www/server/panel ] || command_exists bt
+}
+
+compose_cmd() {
+  if [ "$COMPOSE_KIND" = "plugin" ]; then
+    docker compose "$@"
+  elif [ "$COMPOSE_KIND" = "standalone" ]; then
+    docker-compose "$@"
+  elif docker compose version >/dev/null 2>&1; then
+    docker compose "$@"
+  elif command_exists docker-compose; then
+    docker-compose "$@"
+  else
+    return 127
+  fi
+}
+
+compose_display() {
+  if [ "$COMPOSE_KIND" = "standalone" ]; then
+    echo "docker-compose"
+  else
+    echo "docker compose"
+  fi
+}
+
+detect_compose() {
+  if command_exists docker && docker compose version >/dev/null 2>&1; then
+    COMPOSE_KIND="plugin"
+    return 0
+  fi
+  if command_exists docker-compose; then
+    COMPOSE_KIND="standalone"
+    return 0
+  fi
+  return 1
 }
 
 require_root() {
@@ -127,7 +166,7 @@ ensure_env() {
   fi
 }
 
-install_docker_with_apt() {
+configure_docker_apt_repo() {
   if ! command_exists apt-get; then
     return 1
   fi
@@ -137,7 +176,7 @@ install_docker_with_apt() {
     return 1
   fi
 
-  echo -e "${YELLOW}正在安装 Docker 依赖...${NC}"
+  echo -e "${YELLOW}正在配置 Docker 官方源...${NC}"
   rm -f /etc/apt/sources.list.d/docker.list
   rm -f /etc/apt/sources.list.d/download_docker_com_linux_debian.list
   rm -f /etc/apt/sources.list.d/download_docker_com_linux_ubuntu.list
@@ -168,8 +207,20 @@ install_docker_with_apt() {
     echo -e "${YELLOW}Docker 官方源没有可安装版本，准备使用备用安装方式。${NC}"
     return 1
   fi
+}
+
+install_docker_with_apt() {
+  configure_docker_apt_repo || return 1
 
   apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+}
+
+install_compose_plugin_only() {
+  if ! command_exists apt-get; then
+    return 1
+  fi
+  configure_docker_apt_repo || return 1
+  apt-get install -y docker-compose-plugin
 }
 
 install_docker_with_official_script() {
@@ -183,14 +234,33 @@ install_docker_with_official_script() {
 }
 
 ensure_docker() {
-  if command_exists docker && docker compose version >/dev/null 2>&1; then
-    echo -e "${GREEN}  ✓ Docker 已安装${NC}"
+  if detect_bt_panel; then
+    echo -e "${YELLOW}检测到宝塔环境，脚本会复用现有 Docker，不会修改宝塔 nginx 配置。${NC}"
+  fi
+
+  if command_exists docker; then
+    if command_exists systemctl; then
+      systemctl start docker >/dev/null 2>&1 || true
+    fi
+    if detect_compose; then
+      echo -e "${GREEN}  ✓ Docker 已安装，复用当前环境${NC}"
+    else
+      require_root
+      echo -e "${YELLOW}检测到 Docker 已安装，但 Docker Compose 不可用，尝试只补装 Compose 插件...${NC}"
+      install_compose_plugin_only || true
+      if ! detect_compose; then
+        echo -e "${RED}错误: Docker 已安装，但 Docker Compose 不可用。${NC}"
+        echo "请在宝塔 Docker 管理器或系统中安装 Docker Compose v2 后重试。"
+        exit 1
+      fi
+    fi
   else
     require_root
-    echo -e "${YELLOW}检测到 Docker 不完整，开始自动安装...${NC}"
+    echo -e "${YELLOW}未检测到 Docker，开始自动安装...${NC}"
     if ! install_docker_with_apt; then
       install_docker_with_official_script
     fi
+    detect_compose || true
   fi
 
   if command_exists systemctl; then
@@ -202,13 +272,17 @@ ensure_docker() {
     echo -e "${RED}错误: Docker 安装失败，未找到 docker 命令。${NC}"
     exit 1
   fi
-  if ! docker compose version >/dev/null 2>&1; then
+  if ! detect_compose; then
     echo -e "${RED}错误: Docker Compose v2 不可用。${NC}"
     exit 1
   fi
 
   echo -e "${GREEN}  ✓ $(docker --version)${NC}"
-  echo -e "${GREEN}  ✓ $(docker compose version)${NC}"
+  if [ "$COMPOSE_KIND" = "plugin" ]; then
+    echo -e "${GREEN}  ✓ $(docker compose version)${NC}"
+  else
+    echo -e "${GREEN}  ✓ $(docker-compose version | head -n 1)${NC}"
+  fi
 }
 
 apply_resource_profile() {
@@ -312,22 +386,38 @@ release_nginx_port() {
   fi
 
   if echo "$listeners" | grep -qi 'nginx'; then
-    echo -e "${YELLOW}检测到宿主机 nginx 占用 ${port}，正在停止以便 Docker 接管端口...${NC}"
-    systemctl stop nginx >/dev/null 2>&1 || true
-    systemctl disable nginx >/dev/null 2>&1 || true
-  elif [ -n "$listeners" ] && ! echo "$listeners" | grep -qi 'docker'; then
-    echo -e "${YELLOW}⚠ 端口 ${port} 已被占用，Docker 可能无法绑定。当前占用:${NC}"
+    if [ "${AUTO_STOP_NGINX:-0}" = "1" ]; then
+      echo -e "${YELLOW}检测到宿主机 nginx 占用 ${port}，AUTO_STOP_NGINX=1，正在停止 nginx...${NC}"
+      systemctl stop nginx >/dev/null 2>&1 || true
+      systemctl disable nginx >/dev/null 2>&1 || true
+      return 0
+    fi
+    echo -e "${RED}端口 ${port} 已被 nginx 占用。为避免影响宝塔或现有网站，脚本不会自动停止 nginx。${NC}"
+    echo ""
+    echo "可选处理方式:"
+    echo "  1. 确认 nginx 不需要保留后执行: curl -fsSL https://raw.githubusercontent.com/liaoweixiang2024-blip/3DPartHub/main/install.sh | AUTO_STOP_NGINX=1 bash"
+    echo "  2. 换端口部署: curl -fsSL https://raw.githubusercontent.com/liaoweixiang2024-blip/3DPartHub/main/install.sh | PORT=3781 bash"
+    echo "  3. 保留宝塔 nginx，在宝塔里反向代理到 3DPartHub 的实际端口"
+    echo ""
+    echo "当前占用:"
     echo "$listeners"
+    return 1
+  elif [ -n "$listeners" ] && ! echo "$listeners" | grep -qi 'docker'; then
+    echo -e "${RED}端口 ${port} 已被占用，Docker 无法绑定。${NC}"
+    echo "$listeners"
+    echo "可换端口部署: PORT=3781 bash deploy.sh"
+    return 1
   fi
+  return 0
 }
 
 print_diagnostics() {
   echo ""
   echo -e "${YELLOW}容器状态:${NC}"
-  docker compose ps || true
+  compose_cmd ps || true
   echo ""
   echo -e "${YELLOW}API 最近日志:${NC}"
-  docker compose logs --tail=160 api || true
+  compose_cmd logs --tail=160 api || true
 }
 
 echo ""
@@ -375,16 +465,18 @@ if [ -z "$ALLOWED_VALUE" ] || echo "$ALLOWED_VALUE" | grep -Eq 'localhost|^\*$';
 fi
 
 apply_resource_profile
-release_nginx_port "$PORT_VALUE"
+if ! release_nginx_port "$PORT_VALUE"; then
+  exit 1
+fi
 
 echo -e "${GREEN}  ✓ .env 已准备完成${NC}"
 echo -e "${YELLOW}  初始管理员密码写在 $INSTALL_DIR/.env 的 ADMIN_PASS。首次登录后请立即修改。${NC}"
 
 echo -e "${YELLOW}[4/4] 拉取镜像并启动（首次可能需要几分钟）...${NC}"
 set +e
-docker compose pull
+compose_cmd pull
 PULL_STATUS=$?
-docker compose up -d --force-recreate
+compose_cmd up -d --force-recreate
 UP_STATUS=$?
 set -e
 
@@ -460,7 +552,7 @@ echo "    密码: $INSTALL_DIR/.env 中的 ADMIN_PASS"
 echo "    说明: 管理员只在空数据库首次启动时创建"
 echo ""
 echo "  常用命令:"
-echo "    状态:  cd $INSTALL_DIR && docker compose ps"
-echo "    日志:  cd $INSTALL_DIR && docker compose logs -f api"
-echo "    升级:  cd $INSTALL_DIR && docker compose pull && docker compose up -d --force-recreate"
+echo "    状态:  cd $INSTALL_DIR && $(compose_display) ps"
+echo "    日志:  cd $INSTALL_DIR && $(compose_display) logs -f api"
+echo "    升级:  cd $INSTALL_DIR && $(compose_display) pull && $(compose_display) up -d --force-recreate"
 echo ""

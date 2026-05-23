@@ -7,7 +7,7 @@ set -e
 
 DEPLOY_URL="${DEPLOY_URL:-https://raw.githubusercontent.com/liaoweixiang2024-blip/3DPartHub/main/deploy.sh}"
 
-if [ -f ./deploy.sh ]; then
+if [ "${USE_LOCAL_DEPLOY:-0}" = "1" ] && [ -f ./deploy.sh ]; then
   bash ./deploy.sh "$@"
   exit $?
 fi

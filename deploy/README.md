@@ -10,7 +10,13 @@
 curl -fsSL https://raw.githubusercontent.com/liaoweixiang2024-blip/3DPartHub/main/install.sh | bash
 ```
 
-脚本会自动安装 Docker、修复 Docker GPG 源、下载生产 Compose、生成 `.env`、设置访问来源、按内存写入资源上限并启动 `api`、`web`、`postgres`、`redis` 四个核心容器。
+脚本会复用已有 Docker 或自动安装 Docker，修复 Docker GPG 源，下载生产 Compose，生成 `.env`，设置访问来源，按内存写入资源上限并启动 `api`、`web`、`postgres`、`redis` 四个核心容器。
+
+检测到宝塔面板或已有 nginx 站点时，脚本默认不会停止 nginx。若 `3780` 被占用，请先确认端口归属，或显式接管：
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/liaoweixiang2024-blip/3DPartHub/main/install.sh | AUTO_STOP_NGINX=1 bash
+```
 
 需要立即升级时：
 
