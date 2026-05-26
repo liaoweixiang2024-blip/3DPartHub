@@ -27,10 +27,14 @@ function detectFormat(filename: string): CadFormat | null {
   return null;
 }
 
-type OcctInstance = any;
+type OcctInstance = {
+  ReadStepFile: (buffer: Uint8Array, params: unknown) => OcctResult;
+  ReadIgesFile: (buffer: Uint8Array, params: unknown) => OcctResult;
+};
+type OcctFactory = () => Promise<OcctInstance>;
 
 declare global {
-  var occtimportjs: any;
+  var occtimportjs: OcctFactory | OcctInstance | undefined;
   var Module: { locateFile?: (name: string) => string } | undefined;
 }
 
@@ -80,7 +84,7 @@ async function getOcct(): Promise<OcctInstance> {
     return _occtCache;
   }
 
-  if (globalThis.occtimportjs && typeof globalThis.occtimportjs === 'object' && globalThis.occtimportjs.ReadStepFile) {
+  if (globalThis.occtimportjs && typeof globalThis.occtimportjs === 'object') {
     _occtCache = globalThis.occtimportjs;
     return _occtCache;
   }

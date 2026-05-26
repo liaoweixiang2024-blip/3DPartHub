@@ -30,8 +30,6 @@ import {
   saveHomeSearchQuery,
   type HomeSearchEventDetail,
 } from '../../lib/homeSearchState';
-import { isModelDetailPath } from '../../lib/modelReturnPath';
-import { onSiteConfigChange, usePublicSettings } from '../../lib/publicSettings';
 import {
   INTERFACE_THEME_PREFERENCE_OPTIONS,
   type InterfaceThemePreferenceScope,
@@ -41,6 +39,8 @@ import {
   useResolvedAdminInterfaceTheme,
   useResolvedPublicInterfaceTheme,
 } from '../../lib/interfaceThemePreference';
+import { isModelDetailPath } from '../../lib/modelReturnPath';
+import { onSiteConfigChange, usePublicSettings } from '../../lib/publicSettings';
 import { preloadRouteForPath } from '../../lib/routeLoaders';
 import { useAuthStore } from '../../stores/useAuthStore';
 import { useThemeStore } from '../../stores/useThemeStore';
@@ -50,8 +50,8 @@ import Icon from './Icon';
 import { loadNotificationPanel, scheduleNotificationPanelPreload } from './preloadNotificationPanel';
 import { checkProtectedAccess } from './ProtectedLink';
 import SearchField from './SearchField';
-import Tooltip from './Tooltip';
 import { useToast } from './Toast';
+import Tooltip from './Tooltip';
 import { useAuthEntry } from './useAuthEntry';
 
 const preloadUploadModal = () => import('./UploadModal');

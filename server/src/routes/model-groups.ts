@@ -1,6 +1,7 @@
+import type { Prisma, PrismaClient } from '@prisma/client';
 import { Router, Response } from 'express';
-import { createLogger } from '../lib/logger.js';
 import { getErrorMessage } from '../lib/http.js';
+import { createLogger } from '../lib/logger.js';
 import { authMiddleware, type AuthRequest } from '../middleware/auth.js';
 import { requireRole } from '../middleware/rbac.js';
 import { MODEL_STATUS } from '../services/modelStatus.js';
@@ -8,7 +9,7 @@ import { clearCategoryCache } from './categories/common.js';
 
 const log = createLogger({ component: 'model-groups' });
 
-let prisma: any = null;
+let prisma: PrismaClient | null = null;
 try {
   const mod = await import('../lib/prisma.js');
   prisma = mod.prisma;
@@ -27,6 +28,16 @@ function numericQuery(value: unknown, fallback: number, min: number, max: number
   return Math.min(max, Math.max(min, Math.floor(parsed)));
 }
 
+function routeParam(value: unknown): string {
+  if (typeof value === 'string') return value;
+  if (Array.isArray(value) && typeof value[0] === 'string') return value[0];
+  return '';
+}
+
+function respondDatabaseUnavailable(res: Response) {
+  res.status(503).json({ detail: '数据库未连接' });
+}
+
 // Create group
 router.post('/api/model-groups', authMiddleware, requireRole('ADMIN'), async (req: AuthRequest, res: Response) => {
   const { name, description, modelIds } = req.body;
@@ -38,15 +49,20 @@ router.post('/api/model-groups', authMiddleware, requireRole('ADMIN'), async (re
     res.status(400).json({ detail: `单个分组最多支持 ${MAX_GROUP_MODEL_IDS} 个模型` });
     return;
   }
+  const db = prisma;
+  if (!db) {
+    respondDatabaseUnavailable(res);
+    return;
+  }
 
   try {
     // Pick the newest model as primary
-    const newest = await prisma.model.findFirst({
+    const newest = await db.model.findFirst({
       where: { id: { in: modelIds } },
       orderBy: [{ fileModifiedAt: { sort: 'desc', nulls: 'last' } }, { createdAt: 'desc' }],
       select: { id: true },
     });
-    const group = await prisma.modelGroup.create({
+    const group = await db.modelGroup.create({
       data: {
         name,
         description: description || null,
@@ -69,14 +85,15 @@ router.post('/api/model-groups', authMiddleware, requireRole('ADMIN'), async (re
 
 // List all groups
 router.get('/api/model-groups', authMiddleware, requireRole('ADMIN'), async (_req: AuthRequest, res: Response) => {
-  if (!prisma) {
+  const db = prisma;
+  if (!db) {
     res.json({ success: true, data: [] });
     return;
   }
   try {
     const { cacheGetOrSet, TTL } = await import('../lib/cache.js');
     const result = await cacheGetOrSet('cache:model-groups:list', TTL.MODELS_LIST, async () => {
-      const groups = await prisma.modelGroup.findMany({
+      const groups = await db.modelGroup.findMany({
         include: {
           primary: { select: { id: true, name: true, thumbnailUrl: true } },
           models: {
@@ -95,13 +112,13 @@ router.get('/api/model-groups', authMiddleware, requireRole('ADMIN'), async (_re
         orderBy: { createdAt: 'desc' },
         take: 100,
       });
-      return groups.map((g: any) => ({
+      return groups.map((g) => ({
         id: g.id,
         name: g.name,
         description: g.description,
         primary: g.primary,
         model_count: g.models.length,
-        models: g.models.map((m: any) => ({
+        models: g.models.map((m) => ({
           id: m.id,
           name: m.name,
           thumbnailUrl: m.thumbnailUrl,
@@ -126,7 +143,8 @@ router.get(
   authMiddleware,
   requireRole('ADMIN'),
   async (req: AuthRequest, res: Response) => {
-    if (!prisma) {
+    const db = prisma;
+    if (!db) {
       res.json({ success: true, data: { items: [], total: 0, page: 1, page_size: 20 } });
       return;
     }
@@ -136,7 +154,7 @@ router.get(
 
       const COMPLETED = MODEL_STATUS.COMPLETED;
       const offset = (page - 1) * pageSize;
-      const dupes = await prisma.$queryRaw<Array<{ name: string; cnt: number }>>`
+      const dupes = await db.$queryRaw<Array<{ name: string; cnt: number }>>`
       SELECT name, COUNT(*)::int as cnt
       FROM models
       WHERE group_id IS NULL AND status = ${COMPLETED}
@@ -146,7 +164,7 @@ router.get(
       LIMIT ${pageSize} OFFSET ${offset}
     `;
 
-      const totalResult = await prisma.$queryRaw<Array<{ total: number }>>`
+      const totalResult = await db.$queryRaw<Array<{ total: number }>>`
       SELECT COUNT(*)::int as total FROM (
         SELECT name FROM models
         WHERE group_id IS NULL AND status = ${COMPLETED}
@@ -159,9 +177,9 @@ router.get(
       const items = [];
       if (paged.length > 0) {
         // Batch query: fetch all models for paged names in one go
-        const allModels = await prisma.model.findMany({
+        const allModels = await db.model.findMany({
           where: {
-            name: { in: paged.map((d: any) => d.name) },
+            name: { in: paged.map((d) => d.name) },
             groupId: null,
             status: MODEL_STATUS.COMPLETED,
           },
@@ -196,12 +214,13 @@ router.get(
   authMiddleware,
   requireRole('ADMIN'),
   async (_req: AuthRequest, res: Response) => {
-    if (!prisma) {
+    const db = prisma;
+    if (!db) {
       res.json({ success: true, data: { total: 0 } });
       return;
     }
     try {
-      const total = await prisma.modelGroup.count();
+      const total = await db.modelGroup.count();
       res.json({ success: true, data: { total } });
     } catch (err: unknown) {
       log.error({ err }, 'Operation failed');
@@ -229,10 +248,15 @@ router.post(
       res.status(400).json({ detail: `单个分组最多支持 ${MAX_GROUP_MODEL_IDS} 个模型` });
       return;
     }
+    const db = prisma;
+    if (!db) {
+      respondDatabaseUnavailable(res);
+      return;
+    }
 
     try {
       const results: Array<{ name: string; group_id: string; model_count: number }> = [];
-      await prisma.$transaction(async (tx: any) => {
+      await db.$transaction(async (tx: Prisma.TransactionClient) => {
         for (const item of items) {
           if (!item.name || !Array.isArray(item.modelIds) || item.modelIds.length < 2) continue;
           const newest = await tx.model.findFirst({
@@ -264,12 +288,14 @@ router.post(
 
 // Get group detail
 router.get('/api/model-groups/:id', authMiddleware, requireRole('ADMIN'), async (req: AuthRequest, res: Response) => {
-  if (!prisma) {
+  const db = prisma;
+  if (!db) {
     res.status(404).json({ detail: 'Not found' });
     return;
   }
-  const group = await prisma.modelGroup.findUnique({
-    where: { id: req.params.id },
+  const groupId = routeParam(req.params.id);
+  const group = await db.modelGroup.findUnique({
+    where: { id: groupId },
     include: {
       primary: true,
       models: {
@@ -297,10 +323,22 @@ router.get('/api/model-groups/:id', authMiddleware, requireRole('ADMIN'), async 
 // Update group
 router.put('/api/model-groups/:id', authMiddleware, requireRole('ADMIN'), async (req: AuthRequest, res: Response) => {
   const { name, description, primaryId } = req.body;
+  const db = prisma;
+  if (!db) {
+    respondDatabaseUnavailable(res);
+    return;
+  }
+  const groupId = routeParam(req.params.id);
+  const nextPrimaryId =
+    primaryId === undefined || primaryId === null || typeof primaryId === 'string' ? primaryId : undefined;
+  if (primaryId !== undefined && nextPrimaryId === undefined) {
+    res.status(400).json({ detail: '主版本 ID 无效' });
+    return;
+  }
   try {
-    if (primaryId !== undefined && primaryId !== null) {
-      const member = await prisma.model.findFirst({
-        where: { id: primaryId, groupId: req.params.id },
+    if (nextPrimaryId !== undefined && nextPrimaryId !== null) {
+      const member = await db.model.findFirst({
+        where: { id: nextPrimaryId, groupId },
         select: { id: true },
       });
       if (!member) {
@@ -308,12 +346,12 @@ router.put('/api/model-groups/:id', authMiddleware, requireRole('ADMIN'), async 
         return;
       }
     }
-    const group = await prisma.modelGroup.update({
-      where: { id: req.params.id },
+    const group = await db.modelGroup.update({
+      where: { id: groupId },
       data: {
         ...(name !== undefined && { name }),
         ...(description !== undefined && { description }),
-        ...(primaryId !== undefined && { primaryId }),
+        ...(nextPrimaryId !== undefined && { primaryId: nextPrimaryId }),
       },
       include: {
         primary: { select: { id: true, name: true, thumbnailUrl: true } },
@@ -359,14 +397,20 @@ router.delete(
   authMiddleware,
   requireRole('ADMIN'),
   async (req: AuthRequest, res: Response) => {
+    const db = prisma;
+    if (!db) {
+      respondDatabaseUnavailable(res);
+      return;
+    }
+    const groupId = routeParam(req.params.id);
     try {
       // Unlink models first
-      await prisma.$transaction([
-        prisma.model.updateMany({
-          where: { groupId: req.params.id },
+      await db.$transaction([
+        db.model.updateMany({
+          where: { groupId },
           data: { groupId: null },
         }),
-        prisma.modelGroup.delete({ where: { id: req.params.id } }),
+        db.modelGroup.delete({ where: { id: groupId } }),
       ]);
       const { cacheDelByPrefix, cacheDel } = await import('../lib/cache.js');
       await cacheDelByPrefix('cache:models:');
@@ -395,15 +439,21 @@ router.post(
       res.status(400).json({ detail: `单次最多添加 ${MAX_GROUP_MODEL_IDS} 个模型` });
       return;
     }
+    const db = prisma;
+    if (!db) {
+      respondDatabaseUnavailable(res);
+      return;
+    }
+    const groupId = routeParam(req.params.id);
     try {
-      const group = await prisma.modelGroup.findUnique({ where: { id: req.params.id } });
+      const group = await db.modelGroup.findUnique({ where: { id: groupId } });
       if (!group) {
         res.status(404).json({ detail: '分组不存在' });
         return;
       }
-      await prisma.$transaction(async (tx: any) => {
-        const existingCount = await tx.model.count({ where: { groupId: req.params.id } });
-        const alreadyInGroup = await tx.model.count({ where: { id: { in: modelIds }, groupId: req.params.id } });
+      await db.$transaction(async (tx: Prisma.TransactionClient) => {
+        const existingCount = await tx.model.count({ where: { groupId } });
+        const alreadyInGroup = await tx.model.count({ where: { id: { in: modelIds }, groupId } });
         if (existingCount + modelIds.length - alreadyInGroup > MAX_GROUP_MODEL_IDS) {
           throw new Error(`EXCEEDS_LIMIT:${existingCount}`);
         }
@@ -413,9 +463,11 @@ router.post(
         });
         await tx.model.updateMany({
           where: { id: { in: modelIds } },
-          data: { groupId: req.params.id },
+          data: { groupId },
         });
-        const affectedGroupIds = [...new Set(oldGroups.map((m: any) => m.groupId).filter(Boolean))];
+        const affectedGroupIds = [
+          ...new Set(oldGroups.map((m) => m.groupId).filter((id): id is string => Boolean(id))),
+        ];
         for (const oldGroupId of affectedGroupIds) {
           const oldGroup = await tx.modelGroup.findUnique({ where: { id: oldGroupId } });
           if (oldGroup) {
@@ -457,10 +509,17 @@ router.delete(
   authMiddleware,
   requireRole('ADMIN'),
   async (req: AuthRequest, res: Response) => {
+    const db = prisma;
+    if (!db) {
+      respondDatabaseUnavailable(res);
+      return;
+    }
+    const groupId = routeParam(req.params.id);
+    const modelId = routeParam(req.params.modelId);
     try {
-      await prisma.$transaction(async (tx: any) => {
+      await db.$transaction(async (tx: Prisma.TransactionClient) => {
         const group = await tx.modelGroup.findUnique({
-          where: { id: req.params.id },
+          where: { id: groupId },
           select: {
             id: true,
             primaryId: true,
@@ -470,28 +529,28 @@ router.delete(
         if (!group) {
           throw new Error('NOT_FOUND');
         }
-        const current = group.models.some((m: any) => m.id === req.params.modelId);
+        const current = group.models.some((m) => m.id === modelId);
         if (!current) {
           throw new Error('NOT_IN_GROUP');
         }
-        const remaining = group.models.filter((m: any) => m.id !== req.params.modelId);
+        const remaining = group.models.filter((m) => m.id !== modelId);
         if (remaining.length === 0) {
-          await tx.model.update({ where: { id: req.params.modelId }, data: { groupId: null } });
-          await tx.modelGroup.delete({ where: { id: req.params.id } });
+          await tx.model.update({ where: { id: modelId }, data: { groupId: null } });
+          await tx.modelGroup.delete({ where: { id: groupId } });
         } else {
-          if (group.primaryId === req.params.modelId) {
-            remaining.sort((a: any, b: any) => {
-              const toTime = (m: any) =>
+          if (group.primaryId === modelId) {
+            remaining.sort((a, b) => {
+              const toTime = (m: (typeof remaining)[number]) =>
                 m.fileModifiedAt ? new Date(m.fileModifiedAt).getTime() : new Date(m.createdAt).getTime();
               return toTime(b) - toTime(a);
             });
             await tx.modelGroup.update({
-              where: { id: req.params.id },
+              where: { id: groupId },
               data: { primaryId: remaining[0]?.id ?? null },
             });
           }
           await tx.model.update({
-            where: { id: req.params.modelId },
+            where: { id: modelId },
             data: { groupId: null },
           });
         }

@@ -8,7 +8,7 @@ const modelDir = join(config.staticDir, 'models');
 
 function isPreviewMeta(value: unknown) {
   if (!value || typeof value !== 'object') return false;
-  const meta = value as Record<string, any>;
+  const meta = value as Record<string, unknown>;
   return meta.version === 2 && Boolean(meta.totals) && Boolean(meta.bounds);
 }
 

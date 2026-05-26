@@ -50,7 +50,7 @@ function normalizeCleanType(value: unknown): 'completed' | 'failed' {
   return String(value || '').toLowerCase() === 'failed' ? 'failed' : 'completed';
 }
 
-function isPreviewRebuildJob(job: { name?: string; data?: any }) {
+function isPreviewRebuildJob(job: { name?: string; data?: { rebuildReason?: unknown } | null }) {
   return job.name === 'convert' && Boolean(job.data?.rebuildReason);
 }
 

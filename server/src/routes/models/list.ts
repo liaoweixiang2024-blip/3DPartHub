@@ -1,3 +1,4 @@
+import type { Prisma, PrismaClient } from '@prisma/client';
 import { Router, Request, Response } from 'express';
 import { getBusinessConfig } from '../../lib/businessConfig.js';
 import { cacheGetOrSet, TTL } from '../../lib/cache.js';
@@ -16,7 +17,7 @@ import { MODEL_STATUS } from '../../services/modelStatus.js';
 import { groupedVisibleModelWhere } from '../../services/modelVisibility.js';
 
 type ModelListContext = {
-  prisma: any;
+  prisma: PrismaClient | null;
   drawingDownloadUrl: (modelId: string, drawingUrl?: string | null) => string | null;
 };
 
@@ -47,8 +48,8 @@ export function createModelListRouter({ prisma, drawingDownloadUrl }: ModelListC
     if (prisma) {
       try {
         const { value: responseData, hit } = await cacheGetOrSet(cacheKey, TTL.MODELS_LIST, async () => {
-          const where: any = { status: MODEL_STATUS.COMPLETED };
-          const andConditions: Record<string, unknown>[] = [];
+          const where: Prisma.ModelWhereInput = { status: MODEL_STATUS.COMPLETED };
+          const andConditions: Prisma.ModelWhereInput[] = [];
           const searchCond = modelTextSearchWhere(search);
           if (searchCond) andConditions.push(searchCond);
           if (format) {
@@ -63,7 +64,7 @@ export function createModelListRouter({ prisma, drawingDownloadUrl }: ModelListC
                     SELECT c.id FROM categories c JOIN cat_tree ct ON c.parent_id = ct.id
                   ) SELECT id FROM cat_tree
                 `;
-              return catIdsRaw.map((c: any) => c.id);
+              return catIdsRaw.map((c) => c.id);
             }).then((r) => r.value);
             if (catIds.length > 0) {
               where.categoryId = { in: catIds };
@@ -96,7 +97,7 @@ export function createModelListRouter({ prisma, drawingDownloadUrl }: ModelListC
 
           const total = await prisma.model.count({ where });
 
-          const orderBy: any = {};
+          const orderBy: Prisma.ModelOrderByWithRelationInput = {};
           if (sort === 'name') orderBy.name = order;
           else if (sort === 'file_size') orderBy.gltfSize = order;
           else orderBy.createdAt = order;
@@ -112,7 +113,7 @@ export function createModelListRouter({ prisma, drawingDownloadUrl }: ModelListC
             },
           });
 
-          const items = models.map((m: any) => ({
+          const items = models.map((m) => ({
             model_id: m.id,
             name: m.name || m.originalName,
             format: m.format,

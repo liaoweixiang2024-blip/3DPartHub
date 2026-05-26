@@ -291,6 +291,16 @@
   -webkit-transform-style: preserve-3d;
 }
 @media (max-width: 767px) {
+  .product-wall-card {
+    content-visibility: visible;
+    contain: layout paint;
+    contain-intrinsic-size: auto;
+  }
+  .product-wall-image-placeholder::before {
+    animation: none;
+    opacity: 0.34;
+    transform: scaleX(0.72);
+  }
   .product-wall-preview-panel {
     background: var(--color-surface-container-low);
     animation: none;

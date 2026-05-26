@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import test from 'node:test';
 
 const {
+  buildBackupPolicyReport,
   encryptBackupArchiveInPlace,
   evictCompleted,
   isEncryptedBackupArchiveFile,
@@ -139,6 +140,33 @@ test('module backups include user-facing dependent records', () => {
     'productWallImages',
     'productWallImageFavorites',
   ]);
+});
+
+test('backup policy report summarizes blockers and next actions', () => {
+  const report = buildBackupPolicyReport([
+    { key: 'local_dir', label: '本地备份目录可写', status: 'error', message: '目录不可写' },
+    { key: 'mirror', label: '外部镜像备份', status: 'warning', message: '未开启' },
+    { key: 'latest_backup', label: '最近备份可用性', status: 'ok', message: '校验通过' },
+  ]);
+
+  assert.equal(report.riskLevel, 'high');
+  assert.equal(report.blockers.length, 1);
+  assert.equal(report.warnings.length, 1);
+  assert.match(report.summary, /阻断风险/);
+  assert.equal(report.nextActions[0], '本地备份目录可写失败，请检查目录挂载和读写权限。');
+});
+
+test('backup policy report returns low risk when all checks pass', () => {
+  const report = buildBackupPolicyReport([
+    { key: 'latest_backup', label: '最近备份可用性', status: 'ok', message: '校验通过' },
+    { key: 'schedule', label: '自动备份计划', status: 'ok', message: '已开启' },
+  ]);
+
+  assert.equal(report.riskLevel, 'low');
+  assert.equal(report.blockers.length, 0);
+  assert.equal(report.warnings.length, 0);
+  assert.match(report.summary, /体检通过/);
+  assert.equal(report.nextActions.length, 1);
 });
 
 test('backup encryption stores archive bytes encrypted and materializes readable copy', async () => {

@@ -5,8 +5,10 @@
 ## Verification
 
 - [ ] `bash scripts/scan-maintenance.sh`
+- [ ] `npm run verify:deploy` when deployment, Docker, health-check, or release evidence tooling changed
 - [ ] `bash scripts/verify-local.sh`
 - [ ] `RUN_SERVER_TESTS=1 bash scripts/verify-local.sh` when backend behavior changed
+- [ ] `npm run verify:enterprise` before release or when local acceptance evidence should be archived
 
 ## Risk Checklist
 

@@ -1,5 +1,6 @@
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import type { Prisma, PrismaClient } from '@prisma/client';
 import { Router, Request } from 'express';
 import { config } from '../lib/config.js';
 import { logger } from '../lib/logger.js';
@@ -15,7 +16,7 @@ import { createModelUploadRouter } from './models/upload.js';
 import { createModelVersionsRouter } from './models/versions.js';
 
 // Try to import Prisma, fallback to null if DB is not configured
-let prisma: any = null;
+let prisma: PrismaClient | null = null;
 try {
   const mod = await import('../lib/prisma.js');
   prisma = mod.prisma;
@@ -62,7 +63,9 @@ async function getPreviewMeta(
     storedMeta: options.previewMeta,
     persist: prisma
       ? async (meta) => {
-          await prisma.model.update({ where: { id }, data: { previewMeta: meta } }).catch(() => {});
+          await prisma.model
+            .update({ where: { id }, data: { previewMeta: meta as unknown as Prisma.InputJsonValue } })
+            .catch(() => {});
         }
       : undefined,
   })) as Record<string, unknown> | null;

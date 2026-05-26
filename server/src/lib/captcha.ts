@@ -1,9 +1,6 @@
 import { randomBytes } from 'node:crypto';
-import { redis } from './cache.js';
 import svgCaptcha from 'svg-captcha';
-import { createLogger } from './logger.js';
-
-const log = createLogger({ component: 'captcha' });
+import { redis } from './cache.js';
 
 interface CaptchaResult {
   captchaId: string;

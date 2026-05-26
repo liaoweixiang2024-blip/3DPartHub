@@ -1,5 +1,6 @@
 import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import type { Prisma, PrismaClient } from '@prisma/client';
 import { Router, Response } from 'express';
 import { cacheDelByPrefix } from '../../lib/cache.js';
 import { getErrorMessage } from '../../lib/http.js';
@@ -37,7 +38,7 @@ type PreviewDiagnosticRow = {
 };
 
 type ModelsPreviewDiagnosticsContext = {
-  prisma: any;
+  prisma: PrismaClient | null;
   metadataDir: string;
   getPreviewMeta: (id: string, options?: PreviewMetaOptions) => Promise<Record<string, unknown> | null>;
 };
@@ -64,7 +65,7 @@ export function createPreviewDiagnosticsRouter({
         let rows: PreviewDiagnosticRow[] = [];
 
         if (prisma) {
-          const where: any = { status: MODEL_STATUS.COMPLETED };
+          const where: Prisma.ModelWhereInput = { status: MODEL_STATUS.COMPLETED };
           if (search) {
             where.OR = [
               { name: { contains: search, mode: 'insensitive' } },
@@ -89,7 +90,7 @@ export function createPreviewDiagnosticsRouter({
             },
           });
 
-          rows = models.map((m: any) => ({
+          rows = models.map((m) => ({
             id: m.id,
             name: m.name,
             originalName: m.originalName,
@@ -185,7 +186,7 @@ export function createPreviewDiagnosticsRouter({
       const requestedIds = stringArray(req.body?.modelIds, { limit, maxLength: 160 });
 
       try {
-        const where: any = {
+        const where: Prisma.ModelWhereInput = {
           status: MODEL_STATUS.COMPLETED,
           ...(requestedIds.length > 0 ? { id: { in: requestedIds } } : {}),
         };
@@ -209,7 +210,7 @@ export function createPreviewDiagnosticsRouter({
         });
 
         const candidateEntries = await Promise.all(
-          models.map(async (m: any) => {
+          models.map(async (m) => {
             const meta = await getPreviewMeta(m.id, {
               gltfUrl: m.gltfUrl,
               originalName: m.originalName,

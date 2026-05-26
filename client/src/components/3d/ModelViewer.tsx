@@ -1,5 +1,6 @@
 import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react';
 import * as THREE from 'three';
+import type { OrbitControls as OrbitControlsImpl } from 'three-stdlib';
 import { get3DMaterialConfig, type ViewerSettingsOverride } from '../../lib/publicSettings';
 import { THREE_THEME } from '../../themes/threeTheme';
 import type { MaterialPresetKey } from './viewerControls';
@@ -115,7 +116,7 @@ export default function ModelViewer({
   onProgress,
 }: ModelViewerProps) {
   const config = get3DMaterialConfig(viewerSettings).viewer;
-  const controlsRef = useRef<any>(null);
+  const controlsRef = useRef<OrbitControlsImpl | null>(null);
 
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const [contextLost, setContextLost] = useState(false);
@@ -138,10 +139,10 @@ export default function ModelViewer({
 
   useEffect(() => {
     const origWarn = console.warn;
-    console.warn = (...args: any[]) => {
+    console.warn = (...args: unknown[]) => {
       const msg = typeof args[0] === 'string' ? args[0] : '';
       if (suppressedWarnPatterns.some((p) => msg.includes(p))) return;
-      origWarn.apply(console, args);
+      origWarn(...args);
     };
     return () => {
       console.warn = origWarn;

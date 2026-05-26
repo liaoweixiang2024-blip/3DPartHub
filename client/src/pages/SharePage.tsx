@@ -11,7 +11,12 @@ import PageRefreshFallback from '../components/shared/PageRefreshFallback';
 import { PublicPageShell } from '../components/shared/PublicPageShell';
 import { useDocumentTitle } from '../hooks/useDocumentTitle';
 import { useMediaQuery } from '../layouts/hooks/useMediaQuery';
-import { cancelPreparedBrowserDownload, downloadBrowserFile, prepareBrowserDownload } from '../lib/browserDownload';
+import {
+  cancelPreparedBrowserDownload,
+  downloadBrowserFile,
+  openDocumentUrl,
+  prepareBrowserDownload,
+} from '../lib/browserDownload';
 import { getErrorMessage } from '../lib/errorNotifications';
 import { getDefaultPreset, getPublicSettingsSnapshot, getSiteTitle } from '../lib/publicSettings';
 
@@ -370,6 +375,10 @@ export default function SharePage() {
               href={info.drawingUrl}
               target="_blank"
               rel="noopener noreferrer"
+              onClick={(event) => {
+                event.preventDefault();
+                openDocumentUrl(info.drawingUrl!, { title: 'PDF 图纸' });
+              }}
               className="flex items-center gap-3 rounded-lg bg-surface-container-high px-4 py-3 text-sm text-on-surface hover:bg-surface-container-highest transition-colors"
             >
               <Icon name="description" size={20} className="text-on-surface-variant shrink-0" />

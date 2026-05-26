@@ -3,6 +3,7 @@ import { extname } from 'node:path';
 import archiver from 'archiver';
 import { Router, Response, urlencoded } from 'express';
 import { getBusinessConfig } from '../lib/businessConfig.js';
+import { getErrorMessage } from '../lib/http.js';
 import { logger } from '../lib/logger.js';
 import { prisma } from '../lib/prisma.js';
 import { getSetting } from '../lib/settings.js';
@@ -13,7 +14,6 @@ import { DailyDownloadLimitError, recordModelDownload } from '../services/modelD
 import { resolveDbModelDownloadTarget } from '../services/modelDownloadTarget.js';
 import { findOriginalModelPath } from '../services/modelFiles.js';
 import { MODEL_STATUS } from '../services/modelStatus.js';
-import { getErrorMessage } from '../lib/http.js';
 import { createNotification } from './notifications.js';
 
 const router = Router();
@@ -118,8 +118,8 @@ router.get('/api/favorites', authMiddleware, async (req: AuthRequest, res: Respo
     });
     res.json(
       favorites
-        .filter((f: any) => f.model)
-        .map((favorite: any) => ({
+        .filter((favorite) => favorite.model)
+        .map((favorite) => ({
           id: favorite.id,
           modelId: favorite.modelId,
           createdAt: favorite.createdAt,

@@ -25,6 +25,7 @@ import { basename, dirname, isAbsolute, join, resolve, sep } from 'path';
 import { createInterface } from 'readline';
 import { pipeline } from 'stream/promises';
 import { fileURLToPath } from 'url';
+import type { Prisma, PrismaClient } from '@prisma/client';
 import { config } from './config.js';
 import { getErrorMessage } from './http.js';
 import { syncJob, loadJob } from './jobStore.js';
@@ -32,8 +33,13 @@ import { createLogger } from './logger.js';
 
 const log = createLogger({ component: 'backup' });
 
-let _backupPrisma: any = null;
-async function getBackupPrisma() {
+type RestoreTransaction = Prisma.TransactionClient;
+type CreateManyDelegate = {
+  createMany(args: { data: Record<string, unknown>[] }): Promise<unknown>;
+};
+
+let _backupPrisma: PrismaClient | null = null;
+async function getBackupPrisma(): Promise<PrismaClient> {
   if (!_backupPrisma) {
     const { PrismaClient } = await import('@prisma/client');
     _backupPrisma = new PrismaClient();
@@ -75,6 +81,10 @@ function copyDirectoryContents(source: string, destination: string) {
       force: true,
     });
   }
+}
+
+function stripBackupArchiveExtension(name: string): string {
+  return name.replace(/\.tar\.gz$/i, '').replace(/\.tgz$/i, '');
 }
 
 function assertDirectoryContainsNoSymlinks(root: string, label = root) {
@@ -631,12 +641,27 @@ export interface BackupPolicyCheckItem {
   message: string;
 }
 
+export interface BackupPolicyReportFinding {
+  key: string;
+  label: string;
+  message: string;
+}
+
+export interface BackupPolicyReport {
+  riskLevel: 'low' | 'medium' | 'high';
+  summary: string;
+  blockers: BackupPolicyReportFinding[];
+  warnings: BackupPolicyReportFinding[];
+  nextActions: string[];
+}
+
 export interface BackupPolicyCheck {
   status: 'ok' | 'warning' | 'error';
   checkedAt: string;
   estimatedBackupSize: number;
   estimatedBackupSizeText: string;
   checks: BackupPolicyCheckItem[];
+  report: BackupPolicyReport;
 }
 
 export interface BackupStats {
@@ -690,6 +715,7 @@ export interface BackupVerificationResult {
 interface VerifyJob {
   id: string;
   backupId: string;
+  userId?: string | null;
   stage: 'queued' | 'validating_archive' | 'hashing_archive' | 'writing_record' | 'done' | 'error';
   percent: number;
   message: string;
@@ -700,6 +726,9 @@ interface VerifyJob {
 
 interface RestoreJob {
   id: string;
+  userId?: string | null;
+  source?: 'backup-record' | 'import-file';
+  backupId?: string | null;
   stage: 'extracting' | 'restoring_db' | 'restoring_files' | 'done' | 'error';
   percent: number;
   message: string;
@@ -765,8 +794,10 @@ function getActiveLockJobId(): string | undefined {
       .map((line) => line.trim())
       .find((line) => line.startsWith('jobId='))
       ?.slice('jobId='.length);
-  } catch {
-    log.warn({ err: {} }, 'Failed to read active lock job ID');
+  } catch (err: unknown) {
+    if ((err as NodeJS.ErrnoException)?.code !== 'ENOENT') {
+      log.warn({ err }, 'Failed to read active lock job ID');
+    }
     return undefined;
   }
 }
@@ -846,6 +877,31 @@ function addLogStart(job: { id?: string; logs?: string[] }, text: string): numbe
 function addLogEnd(job: { id?: string; logs?: string[] }, startTime: number, text: string) {
   const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
   addLog(job, `${text}（耗时 ${elapsed}s）`);
+}
+
+async function recordBackupAudit(input: {
+  action: string;
+  userId?: string | null;
+  resourceId?: string | null;
+  details: Record<string, unknown>;
+}) {
+  try {
+    const prismaClient = await getBackupPrisma();
+    await prismaClient.auditLog.create({
+      data: {
+        userId: input.userId || null,
+        action: input.action,
+        resource: 'backup',
+        resourceId: input.resourceId || null,
+        details: {
+          ...input.details,
+          timestamp: new Date().toISOString(),
+        },
+      },
+    });
+  } catch (err) {
+    log.warn({ err, action: input.action, resourceId: input.resourceId }, 'Failed to write backup audit log');
+  }
 }
 
 type MonitoredWorkerJob = {
@@ -2037,6 +2093,63 @@ export async function getBackupHealth(): Promise<BackupHealth> {
   };
 }
 
+function backupPolicyAction(check: BackupPolicyCheckItem): string {
+  if (check.key === 'schedule') return '开启每日自动备份，避免只依赖人工创建恢复点。';
+  if (check.key === 'retention') return '将备份保留份数调到至少 3 份，覆盖误删和延迟发现问题的场景。';
+  if (check.key === 'mirror') return '配置外部镜像目录，优先选择 NAS、独立磁盘或异地挂载目录。';
+  if (check.key === 'mirror_dir') return '修正外部镜像目录，不能为空，也不能指向当前备份目录。';
+  if (check.key === 'latest_backup') return '重新创建一次整站备份并完成校验，先建立可信恢复点。';
+  if (check.key === 'encryption') return '配置 BACKUP_ENCRYPTION_SECRET，让备份包在磁盘上保持加密。';
+  if (check.label.includes('磁盘空间')) return `${check.label}不足或无法确认，请清理空间或迁移到更大磁盘。`;
+  if (check.label.includes('可写')) return `${check.label}失败，请检查目录挂载和读写权限。`;
+  return `${check.label}：${check.message}`;
+}
+
+function toBackupPolicyFinding(check: BackupPolicyCheckItem): BackupPolicyReportFinding {
+  return {
+    key: check.key,
+    label: check.label,
+    message: check.message,
+  };
+}
+
+export function buildBackupPolicyReport(checks: BackupPolicyCheckItem[]): BackupPolicyReport {
+  const blockers = checks.filter((check) => check.status === 'error').map(toBackupPolicyFinding);
+  const warnings = checks.filter((check) => check.status === 'warning').map(toBackupPolicyFinding);
+  const nextActions = checks
+    .filter((check) => check.status !== 'ok')
+    .map(backupPolicyAction)
+    .slice(0, 5);
+
+  if (blockers.length > 0) {
+    return {
+      riskLevel: 'high',
+      summary: `发现 ${blockers.length} 个阻断风险，当前备份策略不适合作为生产恢复保障。`,
+      blockers,
+      warnings,
+      nextActions,
+    };
+  }
+
+  if (warnings.length > 0) {
+    return {
+      riskLevel: 'medium',
+      summary: `体检完成，有 ${warnings.length} 个需关注项；备份可用性需要继续完善。`,
+      blockers,
+      warnings,
+      nextActions,
+    };
+  }
+
+  return {
+    riskLevel: 'low',
+    summary: '体检通过：当前备份策略具备基础生产恢复保障。',
+    blockers,
+    warnings,
+    nextActions: ['保持定期体检，并在版本升级或大批量导入后重新创建一次整站备份。'],
+  };
+}
+
 export async function getBackupPolicyCheck(): Promise<BackupPolicyCheck> {
   const settings = await getBackupPolicySettings();
   const checks: BackupPolicyCheckItem[] = [];
@@ -2141,6 +2254,7 @@ export async function getBackupPolicyCheck(): Promise<BackupPolicyCheck> {
     estimatedBackupSize,
     estimatedBackupSizeText: formatSize(estimatedBackupSize),
     checks,
+    report: buildBackupPolicyReport(checks),
   };
 }
 
@@ -2195,12 +2309,13 @@ export async function verifyBackupArchive(id: string): Promise<BackupVerificatio
   };
 }
 
-export function startVerifyBackupJob(backupId: string): string {
+export function startVerifyBackupJob(backupId: string, userId?: string | null): string {
   if (!acquireLock()) throw new Error('有备份、恢复或校验任务正在进行中，请等待完成后再试');
   const id = `verify_${Date.now()}`;
   const job: VerifyJob = {
     id,
     backupId,
+    userId: userId || null,
     stage: 'queued',
     percent: 0,
     message: '正在准备校验备份...',
@@ -2239,6 +2354,7 @@ export async function runVerifyBackupWorker(jobId: string, backupId: string) {
   const job = loadJob<VerifyJob>(jobId) || {
     id: jobId,
     backupId,
+    userId: null,
     stage: 'queued',
     percent: 0,
     message: '正在准备校验备份...',
@@ -2346,12 +2462,38 @@ async function runVerifyBackup(job: VerifyJob, backupId: string) {
     job.message = '备份校验完成';
     addLog(job, '备份校验完成');
     syncJob(job);
+    await recordBackupAudit({
+      action: 'backup_verify',
+      userId: job.userId,
+      resourceId: backupId,
+      details: {
+        status: 'ok',
+        jobId: job.id,
+        backupId,
+        fileSizeText: job.result.fileSizeText,
+        manifestVersion: job.result.manifestVersion || '',
+        encrypted,
+        message: job.result.message,
+        checkedAt,
+      },
+    });
   } catch (err: unknown) {
     job.stage = 'error';
     job.error = getErrorMessage(err) || '备份校验失败';
     job.message = `备份校验失败: ${job.error}`;
     addLog(job, job.message);
     syncJob(job);
+    await recordBackupAudit({
+      action: 'backup_verify',
+      userId: job.userId,
+      resourceId: backupId,
+      details: {
+        status: 'error',
+        jobId: job.id,
+        backupId,
+        error: job.error,
+      },
+    });
   }
 }
 
@@ -2376,27 +2518,68 @@ export function renameBackup(id: string, newName: string): BackupRecord | null {
 
 export function deleteBackup(id: string): boolean {
   let deleted = false;
+  const fatalErrors: string[] = [];
+  const metadataWarnings: string[] = [];
   for (const dir of BACKUP_DIRS) {
     const meta = buildMetaPath(dir, id);
     const arch = buildArchivePath(dir, id);
     if (existsSync(meta)) {
-      rmSync(meta, { force: true });
       deleted = true;
     }
     if (existsSync(arch)) {
-      rmSync(arch, { force: true });
       deleted = true;
     }
+    try {
+      if (existsSync(arch)) rmSync(arch, { force: true });
+    } catch (err: unknown) {
+      fatalErrors.push(`${arch}: ${getErrorMessage(err)}`);
+      continue;
+    }
+    try {
+      if (existsSync(meta)) rmSync(meta, { force: true });
+    } catch (err: unknown) {
+      metadataWarnings.push(`${meta}: ${getErrorMessage(err)}`);
+    }
+  }
+  if (fatalErrors.length > 0) {
+    throw new Error(`删除备份文件失败，请检查备份目录权限: ${fatalErrors.join('; ')}`);
+  }
+  if (metadataWarnings.length > 0) {
+    log.warn({ id, metadataWarnings }, 'Backup archive deleted but metadata cleanup failed');
   }
   return deleted;
 }
 
 // ---- Restore ----
 
-export function startRestoreJob(backupId: string): string {
+async function recordRestoreAudit(job: RestoreJob, status: 'ok' | 'error', extra: Record<string, unknown>) {
+  await recordBackupAudit({
+    action: 'backup_restore_result',
+    userId: job.userId,
+    resourceId: job.backupId || job.id,
+    details: {
+      status,
+      jobId: job.id,
+      source: job.source || 'backup-record',
+      backupId: job.backupId || '',
+      ...extra,
+    },
+  });
+}
+
+export function startRestoreJob(backupId: string, userId?: string | null): string {
   if (!acquireLock()) throw new Error('有备份、恢复或校验任务正在进行中，请等待完成后再试');
   const jobId = `restore_${Date.now()}`;
-  const job: RestoreJob = { id: jobId, stage: 'extracting', percent: 0, message: '正在解压备份文件...', logs: [] };
+  const job: RestoreJob = {
+    id: jobId,
+    userId: userId || null,
+    source: 'backup-record',
+    backupId,
+    stage: 'extracting',
+    percent: 0,
+    message: '正在解压备份文件...',
+    logs: [],
+  };
   restoreJobs.set(jobId, job);
   syncJob(job);
 
@@ -2411,32 +2594,45 @@ export function startRestoreJob(backupId: string): string {
 }
 
 async function runRestore(job: RestoreJob, backupId: string) {
-  ensureBackupStoredInActiveDir(backupId);
-  const arch = archivePath(backupId);
-  if (!existsSync(arch)) throw new Error('备份文件不存在');
-  const meta = metaPath(backupId);
-  if (existsSync(meta)) {
-    const record = JSON.parse(readFileSync(meta, 'utf-8')) as BackupRecord;
-    if (record.archiveSha256) {
-      addLog(job, '正在校验备份文件 SHA256...');
-      const actualSha256 = await sha256File(arch);
-      if (actualSha256 !== record.archiveSha256) {
-        throw new Error('备份文件 SHA256 与记录不一致，可能已损坏或被替换，已中止恢复');
+  try {
+    ensureBackupStoredInActiveDir(backupId);
+    const arch = archivePath(backupId);
+    if (!existsSync(arch)) throw new Error('备份文件不存在');
+    const meta = metaPath(backupId);
+    if (existsSync(meta)) {
+      const record = JSON.parse(readFileSync(meta, 'utf-8')) as BackupRecord;
+      if (record.archiveSha256) {
+        addLog(job, '正在校验备份文件 SHA256...');
+        const actualSha256 = await sha256File(arch);
+        if (actualSha256 !== record.archiveSha256) {
+          throw new Error('备份文件 SHA256 与记录不一致，可能已损坏或被替换，已中止恢复');
+        }
+        assertBackupSignature(record, actualSha256);
+        addLog(job, '备份文件 SHA256 校验通过');
       }
-      assertBackupSignature(record, actualSha256);
-      addLog(job, '备份文件 SHA256 校验通过');
     }
+    await runRestoreAutoFromArchive(job, arch, false);
+  } catch (err: unknown) {
+    const message = getErrorMessage(err) || '恢复失败';
+    job.stage = 'error';
+    job.error = message;
+    job.message = `恢复失败: ${message}`;
+    addLog(job, job.message);
+    syncJob(job);
+    await recordRestoreAudit(job, 'error', { error: message });
   }
-  await runRestoreAutoFromArchive(job, arch, false);
 }
 
 // ---- Restore from uploaded file (import) ----
 
-export function startRestoreJobFromFile(archPath: string, removeAfter = true): string {
+export function startRestoreJobFromFile(archPath: string, removeAfter = true, userId?: string | null): string {
   if (!acquireLock()) throw new Error('有备份、恢复或校验任务正在进行中，请等待完成后再试');
   const jobId = `restore_${Date.now()}`;
   const job: RestoreJob = {
     id: jobId,
+    userId: userId || null,
+    source: 'import-file',
+    backupId: null,
     stage: 'extracting',
     percent: 0,
     message: '正在上传完成，开始解压...',
@@ -2456,7 +2652,17 @@ export function startRestoreJobFromFile(archPath: string, removeAfter = true): s
 }
 
 async function runRestoreFromFile(job: RestoreJob, archPath: string, removeAfter: boolean) {
-  await runRestoreAutoFromArchive(job, archPath, removeAfter);
+  try {
+    await runRestoreAutoFromArchive(job, archPath, removeAfter);
+  } catch (err: unknown) {
+    const message = getErrorMessage(err) || '恢复失败';
+    job.stage = 'error';
+    job.error = message;
+    job.message = `恢复失败: ${message}`;
+    addLog(job, job.message);
+    syncJob(job);
+    await recordRestoreAudit(job, 'error', { error: message, source: 'import-file' });
+  }
 }
 
 async function runRestoreAutoFromArchive(job: RestoreJob, archPath: string, removeAfter: boolean) {
@@ -2580,6 +2786,14 @@ async function runModuleRestoreFromArchive(
     job.result = result;
     addLog(job, `${label}恢复完成: ${result.itemCount} 条记录，${result.fileCount} 个资源文件`);
     syncJob(job);
+    await recordRestoreAudit(job, 'ok', {
+      scope: result.scope,
+      scopeLabel: result.scopeLabel,
+      itemCount: result.itemCount,
+      fileCount: result.fileCount,
+      modelCount: result.modelCount,
+      thumbnailCount: result.thumbnailCount,
+    });
 
     log.info({ jobId: job.id, scope: manifest.scope, itemCount: result.itemCount }, 'Module restore completed');
   } catch (err: unknown) {
@@ -2588,6 +2802,11 @@ async function runModuleRestoreFromArchive(
     job.error = message;
     addLog(job, `${label}恢复失败: ${message}`);
     syncJob(job);
+    await recordRestoreAudit(job, 'error', {
+      scope: expectedScope,
+      scopeLabel: label,
+      error: message,
+    });
     log.error({ err, jobId: job.id, scope: expectedScope }, 'Module restore failed');
   } finally {
     if (removeArchiveAfterExtract && existsSync(archPath)) rmSync(archPath, { force: true });
@@ -2622,6 +2841,9 @@ export async function runRestoreWorker(jobId: string, mode: 'backup' | 'file', t
   const stopLockKeepAlive = startLockKeepAlive(jobId);
   const job = loadJob<RestoreJob>(jobId) || {
     id: jobId,
+    userId: null,
+    source: mode === 'backup' ? 'backup-record' : 'import-file',
+    backupId: mode === 'backup' ? target : null,
     stage: 'extracting',
     percent: 0,
     message: mode === 'backup' ? '正在解压备份文件...' : '正在上传完成，开始解压...',
@@ -2920,6 +3142,13 @@ async function runRestoreFromArchive(job: RestoreJob, archPath: string, removeAr
     job.message = '恢复完成';
     job.result = result;
     syncJob(job);
+    await recordRestoreAudit(job, 'ok', {
+      scope: 'full',
+      scopeLabel: backupScopeLabel('full'),
+      dbRestored: result.dbRestored,
+      modelCount: result.modelCount,
+      thumbnailCount: result.thumbnailCount,
+    });
 
     log.info(
       { jobId: job.id, modelCount: result.modelCount, thumbnailCount: result.thumbnailCount },
@@ -2931,6 +3160,11 @@ async function runRestoreFromArchive(job: RestoreJob, archPath: string, removeAr
     job.error = message;
     addLog(job, `恢复失败: ${message}`);
     syncJob(job);
+    await recordRestoreAudit(job, 'error', {
+      scope: 'full',
+      scopeLabel: backupScopeLabel('full'),
+      error: message,
+    });
     log.error({ err, jobId: job.id }, 'Restore failed');
   } finally {
     if (removeArchiveAfterExtract && existsSync(archPath)) rmSync(archPath, { force: true });
@@ -3090,7 +3324,7 @@ async function inspectBackupArchive(id: string, archive: string, originalName: s
     const record: BackupRecord = {
       id,
       filename: `${id}.tar.gz`,
-      name: `导入 ${originalName.replace(/\.tar\.gz$/, '').replace(/\.tgz$/, '')}`,
+      name: `导入 ${stripBackupArchiveExtension(originalName)}`,
       createdAt: new Date().toISOString(),
       fileSize,
       fileSizeText: formatSize(fileSize),
@@ -3170,7 +3404,7 @@ async function inspectModuleBackupArchive(
     return {
       id,
       filename: `${id}.tar.gz`,
-      name: `导入${backupScopeLabel(manifest.scope)} ${originalName.replace(/\.tar\.gz$/, '').replace(/\.tgz$/, '')}`,
+      name: `导入${backupScopeLabel(manifest.scope)} ${stripBackupArchiveExtension(originalName)}`,
       scope: manifest.scope,
       scopeLabel: backupScopeLabel(manifest.scope),
       createdAt: manifest.generatedAt || new Date().toISOString(),
@@ -3234,7 +3468,7 @@ function buildModuleFilePlanFromManifest(
 async function restoreModulePayload(payload: ModuleBackupPayload, job: RestoreJob): Promise<number> {
   const prisma = await getBackupPrisma();
   return prisma.$transaction(
-    async (tx: any) => {
+    async (tx) => {
       if (payload.scope === 'models') return restoreModelsModule(tx, payload, job);
       if (payload.scope === 'selection') return restoreSelectionModule(tx, payload);
       return restoreProductWallModule(tx, payload);
@@ -3243,7 +3477,11 @@ async function restoreModulePayload(payload: ModuleBackupPayload, job: RestoreJo
   );
 }
 
-async function restoreModelsModule(tx: any, payload: ModuleBackupPayload, job: RestoreJob): Promise<number> {
+async function restoreModelsModule(
+  tx: RestoreTransaction,
+  payload: ModuleBackupPayload,
+  job: RestoreJob,
+): Promise<number> {
   await tx.$executeRawUnsafe(
     'TRUNCATE TABLE "model_versions", "favorites", "downloads", "comments", "share_links", "models", "model_groups", "categories" RESTART IDENTITY CASCADE',
   );
@@ -3382,7 +3620,7 @@ async function restoreModelsModule(tx: any, payload: ModuleBackupPayload, job: R
   );
 }
 
-async function restoreSelectionModule(tx: any, payload: ModuleBackupPayload): Promise<number> {
+async function restoreSelectionModule(tx: RestoreTransaction, payload: ModuleBackupPayload): Promise<number> {
   await tx.$executeRawUnsafe(
     'TRUNCATE TABLE "selection_shares", "selection_products", "selection_categories", "thread_size_entries" RESTART IDENTITY CASCADE',
   );
@@ -3421,7 +3659,7 @@ async function restoreSelectionModule(tx: any, payload: ModuleBackupPayload): Pr
   return categories.length + products.length + threadSizes.length + shareData.length;
 }
 
-async function restoreProductWallModule(tx: any, payload: ModuleBackupPayload): Promise<number> {
+async function restoreProductWallModule(tx: RestoreTransaction, payload: ModuleBackupPayload): Promise<number> {
   await tx.$executeRawUnsafe(
     'TRUNCATE TABLE "product_wall_image_favorites", "product_wall_images", "product_wall_categories" RESTART IDENTITY CASCADE',
   );
@@ -3458,7 +3696,7 @@ async function restoreProductWallModule(tx: any, payload: ModuleBackupPayload): 
   return categories.length + images.length + favoriteData.length;
 }
 
-async function restoreCategoryRows(tx: any, rows: Record<string, unknown>[]) {
+async function restoreCategoryRows(tx: RestoreTransaction, rows: Record<string, unknown>[]) {
   const knownIds = new Set(rows.map((row) => stringValue(row.id)).filter((id): id is string => Boolean(id)));
   const pending = rows.map((row) => reviveDateFields(row, ['createdAt', 'updatedAt']));
   const created = new Set<string>();
@@ -3476,7 +3714,7 @@ async function restoreCategoryRows(tx: any, rows: Record<string, unknown>[]) {
       const parentId = stringValue(row.parentId);
       if (parentId && knownIds.has(parentId) && !created.has(parentId)) continue;
       row.parentId = parentId && created.has(parentId) ? parentId : null;
-      await tx.category.create({ data: row });
+      await tx.category.create({ data: row as Prisma.CategoryUncheckedCreateInput });
       created.add(id);
       pending.splice(index, 1);
       progressed = true;
@@ -3486,7 +3724,7 @@ async function restoreCategoryRows(tx: any, rows: Record<string, unknown>[]) {
         const id = stringValue(row.id);
         if (!id) continue;
         row.parentId = null;
-        await tx.category.create({ data: row });
+        await tx.category.create({ data: row as Prisma.CategoryUncheckedCreateInput });
         created.add(id);
       }
       pending.length = 0;
@@ -3494,10 +3732,11 @@ async function restoreCategoryRows(tx: any, rows: Record<string, unknown>[]) {
   }
 }
 
-async function createManyInChunks(model: any, data: Record<string, unknown>[], size = 500) {
+async function createManyInChunks(model: unknown, data: Record<string, unknown>[], size = 500) {
+  const delegate = model as CreateManyDelegate;
   for (let index = 0; index < data.length; index += size) {
     const chunk = data.slice(index, index + size);
-    if (chunk.length > 0) await model.createMany({ data: chunk });
+    if (chunk.length > 0) await delegate.createMany({ data: chunk });
   }
 }
 
@@ -3512,7 +3751,7 @@ function dedupeRowsByKeys(rows: Record<string, unknown>[], keys: string[]): Reco
 }
 
 async function getRestoreUserContext(
-  tx: any,
+  tx: RestoreTransaction,
   requireFallback: boolean,
 ): Promise<{ ids: Set<string>; fallbackId: string | null }> {
   const users = (await tx.user.findMany({
@@ -4516,6 +4755,7 @@ async function commitRestoreFilePlan(plan: RestoreFilePlan, job: RestoreJob): Pr
   const replacements: DirectoryReplacement[] = [];
   let restoredSourceFiles = 0;
   let thumbnailCount = 0;
+  let cleanupReplacedBackups = false;
 
   try {
     const allItems: Array<{ archiveEntry: string; destination: string; label: string }> = [
@@ -4591,12 +4831,32 @@ async function commitRestoreFilePlan(plan: RestoreFilePlan, job: RestoreJob): Pr
     const result = { restoredSourceFiles, thumbnailCount };
     job.percent = 94;
     syncJob(job);
+    cleanupReplacedBackups = true;
     return result;
   } catch (err: unknown) {
-    rollbackDirectoryReplacements(replacements, job);
-    throw new Error(`文件目录恢复失败，已回滚已替换目录: ${getErrorMessage(err)}`);
+    const rollbackOk = rollbackDirectoryReplacements(replacements, job);
+    cleanupReplacedBackups = rollbackOk;
+    if (!rollbackOk) {
+      const preservedBackups = replacements
+        .map((replacement) => replacement.backup)
+        .filter((backup): backup is string => typeof backup === 'string' && existsSync(backup));
+      if (preservedBackups.length > 0) {
+        const sample = preservedBackups.slice(0, 5).join('；');
+        addLog(
+          job,
+          `部分目录回滚失败，已保留旧目录备份便于人工恢复: ${sample}${
+            preservedBackups.length > 5 ? ` 等 ${preservedBackups.length} 个目录` : ''
+          }`,
+        );
+      }
+    }
+    throw new Error(
+      `文件目录恢复失败，${rollbackOk ? '已回滚已替换目录' : '部分目录回滚失败，旧目录备份已保留'}: ${getErrorMessage(
+        err,
+      )}`,
+    );
   } finally {
-    cleanupDirectoryBackups(replacements);
+    if (cleanupReplacedBackups) cleanupDirectoryBackups(replacements, job);
   }
 }
 
@@ -4646,7 +4906,8 @@ function copyDirectoryRecursive(source: string, destination: string) {
   }
 }
 
-function rollbackDirectoryReplacements(replacements: DirectoryReplacement[], job: { logs?: string[] }) {
+function rollbackDirectoryReplacements(replacements: DirectoryReplacement[], job: { logs?: string[] }): boolean {
+  let ok = true;
   for (const replacement of [...replacements].reverse()) {
     try {
       rmSync(replacement.destination, { recursive: true, force: true });
@@ -4654,14 +4915,22 @@ function rollbackDirectoryReplacements(replacements: DirectoryReplacement[], job
         renameSync(replacement.backup, replacement.destination);
       }
     } catch (err: unknown) {
+      ok = false;
       addLog(job, `目录回滚失败 ${replacement.destination}: ${getErrorMessage(err)}`);
     }
   }
+  return ok;
 }
 
-function cleanupDirectoryBackups(replacements: DirectoryReplacement[]) {
+function cleanupDirectoryBackups(replacements: DirectoryReplacement[], job?: { logs?: string[] }) {
   for (const replacement of replacements) {
-    if (replacement.backup) rmSync(replacement.backup, { recursive: true, force: true });
+    if (!replacement.backup) continue;
+    try {
+      rmSync(replacement.backup, { recursive: true, force: true });
+    } catch (err: unknown) {
+      addLog(job || {}, `旧目录备份清理失败 ${replacement.backup}: ${getErrorMessage(err)}`);
+      log.warn({ err, backup: replacement.backup }, 'Failed to clean restore directory backup');
+    }
   }
 }
 

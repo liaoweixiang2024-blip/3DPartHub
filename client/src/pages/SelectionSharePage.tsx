@@ -14,6 +14,7 @@ import { PageRefreshIndicator } from '../components/shared/PageRefreshFallback';
 import { PublicPageShell } from '../components/shared/PublicPageShell';
 import SafeImage from '../components/shared/SafeImage';
 import { useDocumentTitle } from '../hooks/useDocumentTitle';
+import { openDocumentUrl } from '../lib/browserDownload';
 import { copyText } from '../lib/clipboard';
 import { downloadKitList, formatKitList, getKitListTitle } from '../lib/kitList';
 import { getSiteTitle } from '../lib/publicSettings';
@@ -229,6 +230,10 @@ function ShareResultCard({
             href={displayProduct.pdfUrl}
             target="_blank"
             rel="noopener"
+            onClick={(event) => {
+              event.preventDefault();
+              openDocumentUrl(displayProduct.pdfUrl!, { title: 'PDF 规格书' });
+            }}
             className="px-3 py-1 text-xs font-medium border border-outline-variant/30 text-on-surface-variant rounded-lg hover:bg-surface-container-high/50 transition-colors inline-flex items-center gap-1"
           >
             <Icon name="library_books" size={14} />

@@ -1,3 +1,4 @@
+import type { Prisma } from '@prisma/client';
 import { Router, Response } from 'express';
 import { getBusinessConfig } from '../../lib/businessConfig.js';
 import { revokeAllTokensBefore } from '../../lib/jwt.js';
@@ -23,7 +24,7 @@ export function createAdminUsersRouter() {
     requireRole('ADMIN'),
     async (req: AuthRequest, res: Response) => {
       try {
-        const { cacheGetOrSet, TTL } = await import('../../lib/cache.js');
+        const { cacheGetOrSet } = await import('../../lib/cache.js');
         const { value } = await cacheGetOrSet('cache:admin:users:stats', 60, async () => {
           const [total, roleGroups, active] = await Promise.all([
             prisma.user.count(),
@@ -61,7 +62,7 @@ export function createAdminUsersRouter() {
       const search = req.query.search as string | undefined;
       const role = queryRole(req.query.role);
 
-      const where: any = {};
+      const where: Prisma.UserWhereInput = {};
       if (role) where.role = role;
       if (search) {
         where.OR = [
@@ -120,7 +121,7 @@ export function createAdminUsersRouter() {
         return;
       }
       try {
-        const user = await prisma.$transaction(async (tx: any) => {
+        const user = await prisma.$transaction(async (tx) => {
           const current = await tx.user.findUnique({ where: { id: userId }, select: { role: true } });
           if (!current) throw Object.assign(new Error('NOT_FOUND'), { code: 'P2025' });
           if (current.role === 'ADMIN' && role !== 'ADMIN') {

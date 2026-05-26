@@ -8,13 +8,18 @@ export type PreviewAssetStatus = 'ok' | 'warning' | 'invalid' | 'missing';
 const PREVIEW_DIAGNOSTIC_FILTERS = new Set(['all', 'problem', 'ok', 'warning', 'invalid', 'missing']);
 const MIN_THUMBNAIL_BYTES = 1024;
 
+function objectRecord(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : null;
+}
+
 export function normalizePreviewDiagnosticFilter(value: unknown): PreviewDiagnosticFilter {
   const status = String(value || 'problem').toLowerCase();
   return PREVIEW_DIAGNOSTIC_FILTERS.has(status) ? (status as PreviewDiagnosticFilter) : 'problem';
 }
 
-function getPreviewBoundsSize(meta: Record<string, any> | null): [number, number, number] | null {
-  const size = meta?.bounds?.size;
+function getPreviewBoundsSize(meta: Record<string, unknown> | null): [number, number, number] | null {
+  const bounds = objectRecord(meta?.bounds);
+  const size = bounds?.size;
   if (Array.isArray(size) && size.length >= 3) {
     const tuple = size.slice(0, 3).map((value: unknown) => Number(value)) as [number, number, number];
     if (tuple.every((value) => Number.isFinite(value))) return tuple;
@@ -25,8 +30,10 @@ function getPreviewBoundsSize(meta: Record<string, any> | null): [number, number
   const maxs: [number, number, number] = [-Infinity, -Infinity, -Infinity];
   let valid = false;
   for (const part of parts) {
-    const min = part?.bounds?.min;
-    const max = part?.bounds?.max;
+    const partRecord = objectRecord(part);
+    const partBounds = objectRecord(partRecord?.bounds);
+    const min = partBounds?.min;
+    const max = partBounds?.max;
     if (!Array.isArray(min) || !Array.isArray(max) || min.length < 3 || max.length < 3) continue;
     for (let i = 0; i < 3; i++) {
       const lo = Number(min[i]);
@@ -41,7 +48,7 @@ function getPreviewBoundsSize(meta: Record<string, any> | null): [number, number
   return [Math.max(0, maxs[0] - mins[0]), Math.max(0, maxs[1] - mins[1]), Math.max(0, maxs[2] - mins[2])];
 }
 
-function classifyPreviewMeta(meta: Record<string, any> | null): {
+function classifyPreviewMeta(meta: Record<string, unknown> | null): {
   status: PreviewDiagnosticStatus;
   label: string;
   reason: string;
@@ -50,7 +57,9 @@ function classifyPreviewMeta(meta: Record<string, any> | null): {
     return { status: 'missing', label: '缺少诊断', reason: '没有找到可用的预览诊断或预览资产' };
   }
 
-  const totals = meta.totals || {};
+  const totals = objectRecord(meta.totals) || {};
+  const diagnostics = objectRecord(meta.diagnostics);
+  const bounds = objectRecord(meta.bounds);
   const boundsSize = getPreviewBoundsSize(meta);
   const hasGeometry = Number(totals.faceCount) > 0 && Number(totals.vertexCount) > 0;
 
@@ -58,9 +67,9 @@ function classifyPreviewMeta(meta: Record<string, any> | null): {
     return { status: 'invalid', label: '转换异常', reason: '面片、顶点或包围盒数据异常' };
   }
 
-  const warnings = Array.isArray(meta.diagnostics?.warnings) ? meta.diagnostics.warnings : [];
-  const skipped = Number(meta.diagnostics?.skippedMeshCount || 0);
-  if (!meta.diagnostics || !meta.bounds) {
+  const warnings = Array.isArray(diagnostics?.warnings) ? diagnostics.warnings : [];
+  const skipped = Number(diagnostics?.skippedMeshCount || 0);
+  if (!diagnostics || !bounds) {
     return { status: 'warning', label: '需复核', reason: '旧版诊断缺少完整转换字段' };
   }
   if (warnings.length > 0 || skipped > 0) {
@@ -164,9 +173,13 @@ export function buildPreviewDiagnosticItem(
     createdAt?: Date | string | null;
     category?: string | null;
   },
-  meta: Record<string, any> | null,
+  meta: Record<string, unknown> | null,
 ) {
   const metaHealth = classifyPreviewMeta(meta);
+  const totals = objectRecord(meta?.totals) || {};
+  const diagnostics = objectRecord(meta?.diagnostics) || {};
+  const precheck = objectRecord(diagnostics.precheck) || {};
+  const performance = objectRecord(diagnostics.performance) || {};
   const assetHealth = inspectFileUrl(m.gltfUrl, { label: '预览资产' });
   const thumbnailHealth = inspectFileUrl(m.thumbnailUrl, { label: '缩略图', minBytes: MIN_THUMBNAIL_BYTES });
   const health = mergePreviewHealth(metaHealth, assetHealth, thumbnailHealth);
@@ -189,19 +202,19 @@ export function buildPreviewDiagnosticItem(
     thumbnail_status: thumbnailHealth.status,
     thumbnail_reason: thumbnailHealth.reason,
     thumbnail_size: thumbnailHealth.size,
-    part_count: Number(meta?.totals?.partCount || 0),
-    vertex_count: Number(meta?.totals?.vertexCount || 0),
-    face_count: Number(meta?.totals?.faceCount || 0),
-    skipped_mesh_count: Number(meta?.diagnostics?.skippedMeshCount || 0),
-    warnings: Array.isArray(meta?.diagnostics?.warnings) ? meta.diagnostics.warnings : [],
-    performance_level: meta?.diagnostics?.performance?.level || meta?.diagnostics?.precheck?.sourceLevel || null,
+    part_count: Number(totals.partCount || 0),
+    vertex_count: Number(totals.vertexCount || 0),
+    face_count: Number(totals.faceCount || 0),
+    skipped_mesh_count: Number(diagnostics.skippedMeshCount || 0),
+    warnings: Array.isArray(diagnostics.warnings) ? diagnostics.warnings : [],
+    performance_level: performance.level || precheck.sourceLevel || null,
     performance_hints: [
-      ...(Array.isArray(meta?.diagnostics?.precheck?.hints) ? meta.diagnostics.precheck.hints : []),
-      ...(Array.isArray(meta?.diagnostics?.performance?.hints) ? meta.diagnostics.performance.hints : []),
+      ...(Array.isArray(precheck.hints) ? precheck.hints : []),
+      ...(Array.isArray(performance.hints) ? performance.hints : []),
     ],
-    estimated_peak_memory_mb: Number(meta?.diagnostics?.precheck?.estimatedPeakMemoryMb || 0),
+    estimated_peak_memory_mb: Number(precheck.estimatedPeakMemoryMb || 0),
     bounds_size: getPreviewBoundsSize(meta),
-    converter: meta?.diagnostics?.converter || (meta ? 'legacy-meta' : null),
-    generated_at: meta?.diagnostics?.generatedAt || null,
+    converter: diagnostics.converter || (meta ? 'legacy-meta' : null),
+    generated_at: diagnostics.generatedAt || null,
   };
 }

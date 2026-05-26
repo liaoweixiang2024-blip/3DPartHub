@@ -1,27 +1,77 @@
-import { existsSync, linkSync, lstatSync, mkdirSync, readdirSync, rmSync } from 'node:fs';
+import { existsSync, linkSync, lstatSync, mkdirSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
 import { PrismaClient } from '@prisma/client';
-import {
-  getImportSaveJob,
-  getJob,
-  getRestoreJob,
-  listBackups,
-  startBackupJob,
-  startImportSaveJob,
-  startRestoreJob,
-  verifyBackupArchive,
-} from '../src/lib/backup.js';
 
 const prisma = new PrismaClient();
 
 const STATIC_BACKUP_EXCLUDE_DIRS = new Set(['backups', '_backup_db', '_safety_snapshots']);
 const UPLOAD_BACKUP_EXCLUDE_DIRS = new Set(['backups', 'chunks', 'batch', '.download_tokens']);
+const DB_FINGERPRINT_EXCLUDE_TABLES = new Set([
+  // A restore intentionally writes a new audit entry after the database snapshot
+  // has been restored. Keep the drill focused on restorable business data.
+  'audit_logs',
+]);
 
 type DbFingerprint = Record<string, { count: number; hash: string }>;
 type DirFingerprint = Record<string, { files: number; bytes: number }>;
+type FingerprintSummary = {
+  tableCount: number;
+  totalRows: number;
+  fileGroupCount: number;
+  totalFiles: number;
+  totalBytes: number;
+};
+
+type BackupLib = typeof import('../lib/backup.js');
+type AppConfig = typeof import('../lib/config.js').config;
+
+let backupLib: BackupLib | null = null;
+let appConfig: AppConfig | null = null;
+
+async function loadRuntime() {
+  if (backupLib && appConfig) return;
+  const [backupModule, configModule] = await Promise.all([import('../lib/backup.js'), import('../lib/config.js')]);
+  backupLib = backupModule;
+  appConfig = configModule.config;
+}
+
+function backupApi(): BackupLib {
+  if (!backupLib) throw new Error('Backup runtime has not been loaded');
+  return backupLib;
+}
+
+function config(): AppConfig {
+  if (!appConfig) throw new Error('Application config has not been loaded');
+  return appConfig;
+}
+
+const staticRoot = () => join(process.cwd(), config().staticDir);
+const uploadRoot = () => join(process.cwd(), config().uploadDir);
+const backupRoot = () => join(staticRoot(), 'backups');
+
+function printHelp() {
+  const staticDir = process.env.STATIC_DIR || 'static';
+  console.log(`3DPartHub backup restore drill
+
+Usage:
+  npm run backup:e2e
+
+This command creates a full backup, imports it as a new backup record, restores it,
+compares database and business-file fingerprints, and writes:
+  ${join(staticDir, 'backups', '.restore-drills', 'latest.json')}
+
+Run it only during a maintenance window after confirming an external backup copy.`);
+}
 
 async function main() {
+  if (process.argv.includes('--help') || process.argv.includes('-h')) {
+    printHelp();
+    return;
+  }
+
+  await loadRuntime();
+
   console.log('== Backup E2E Check ==');
   console.log('1) Capturing current DB and file fingerprints...');
   const beforeDb = await fingerprintDatabase();
@@ -29,27 +79,29 @@ async function main() {
   printSummary('Before', beforeDb, beforeFiles);
 
   console.log('2) Creating a new enterprise backup...');
-  const backupId = startBackupJob();
+  const backupId = backupApi().startBackupJob();
   await waitBackup(backupId);
-  const createdRecord = listBackups().find((backup) => backup.id === backupId);
+  const createdRecord = backupApi()
+    .listBackups()
+    .find((backup) => backup.id === backupId);
   if (!createdRecord) throw new Error(`Created backup record not found: ${backupId}`);
-  await verifyBackupArchive(backupId);
+  await backupApi().verifyBackupArchive(backupId);
   console.log(`   Created and verified: ${backupId} (${createdRecord.fileSizeText})`);
 
   console.log('3) Importing the created backup as a new backup record...');
-  const sourceArchive = join(process.cwd(), 'static', 'backups', `${backupId}.tar.gz`);
+  const sourceArchive = join(backupRoot(), `${backupId}.tar.gz`);
   if (!existsSync(sourceArchive)) throw new Error(`Created archive not found: ${sourceArchive}`);
-  const importSource = join(process.cwd(), 'static', 'backups', '.work', `${backupId}.import-source.tar.gz`);
-  mkdirSync(join(process.cwd(), 'static', 'backups', '.work'), { recursive: true });
+  const importSource = join(backupRoot(), '.work', `${backupId}.import-source.tar.gz`);
+  mkdirSync(join(backupRoot(), '.work'), { recursive: true });
   rmSync(importSource, { force: true });
   linkSync(sourceArchive, importSource);
-  const importJobId = startImportSaveJob(importSource, `${backupId}.tar.gz`);
+  const importJobId = backupApi().startImportSaveJob(importSource, `${backupId}.tar.gz`);
   const importedRecord = await waitImportSave(importJobId);
-  await verifyBackupArchive(importedRecord.id);
+  await backupApi().verifyBackupArchive(importedRecord.id);
   console.log(`   Imported and verified: ${importedRecord.id} (${importedRecord.fileSizeText})`);
 
   console.log('4) Restoring from the imported backup record...');
-  const restoreJobId = startRestoreJob(importedRecord.id);
+  const restoreJobId = backupApi().startRestoreJob(importedRecord.id);
   await waitRestore(restoreJobId);
   console.log(`   Restored from: ${importedRecord.id}`);
 
@@ -59,6 +111,24 @@ async function main() {
   assertEqual('database fingerprint', beforeDb, afterDb);
   assertEqual('business file fingerprint', beforeFiles, afterFiles);
   printSummary('After', afterDb, afterFiles);
+
+  writeRestoreDrillEvidence({
+    schemaVersion: 1,
+    tool: '3DPartHub backup restore drill',
+    status: 'passed',
+    checkedAt: new Date().toISOString(),
+    createdBackupId: backupId,
+    importedBackupId: importedRecord.id,
+    restoredFromBackupId: importedRecord.id,
+    before: summarizeFingerprints(beforeDb, beforeFiles),
+    after: summarizeFingerprints(afterDb, afterFiles),
+    checks: {
+      createdBackupVerified: true,
+      importedBackupVerified: true,
+      databaseFingerprintUnchanged: true,
+      businessFilesFingerprintUnchanged: true,
+    },
+  });
 
   console.log('== Backup E2E Check Passed ==');
   console.log(
@@ -77,7 +147,7 @@ async function main() {
 async function waitBackup(jobId: string) {
   let last = '';
   while (true) {
-    const job = getJob(jobId);
+    const job = backupApi().getJob(jobId);
     if (!job) throw new Error(`Backup job not found: ${jobId}`);
     const line = `${job.stage}:${job.percent}:${job.message}`;
     if (line !== last) {
@@ -93,7 +163,7 @@ async function waitBackup(jobId: string) {
 async function waitImportSave(jobId: string) {
   let last = '';
   while (true) {
-    const job = getImportSaveJob(jobId);
+    const job = backupApi().getImportSaveJob(jobId);
     if (!job) throw new Error(`Import job not found: ${jobId}`);
     const line = `${job.stage}:${job.percent}:${job.message}`;
     if (line !== last) {
@@ -112,7 +182,7 @@ async function waitImportSave(jobId: string) {
 async function waitRestore(jobId: string) {
   let last = '';
   while (true) {
-    const job = getRestoreJob(jobId);
+    const job = backupApi().getRestoreJob(jobId);
     if (!job) throw new Error(`Restore job not found: ${jobId}`);
     const line = `${job.stage}:${job.percent}:${job.message}`;
     if (line !== last) {
@@ -136,6 +206,7 @@ async function fingerprintDatabase(): Promise<DbFingerprint> {
   `);
   const result: DbFingerprint = {};
   for (const { table_name } of tables) {
+    if (DB_FINGERPRINT_EXCLUDE_TABLES.has(table_name)) continue;
     const table = quoteIdentifier(table_name);
     const rows = await prisma.$queryRawUnsafe<Array<{ count: bigint; hash: string }>>(`
       SELECT
@@ -153,13 +224,11 @@ async function fingerprintDatabase(): Promise<DbFingerprint> {
 
 function fingerprintBusinessFiles(): DirFingerprint {
   const result: DirFingerprint = {};
-  const staticDir = join(process.cwd(), 'static');
-  for (const dir of discoverStaticBackupDirs(staticDir)) {
-    result[`static/${dir}`] = countFiles(join(staticDir, dir));
+  for (const dir of discoverStaticBackupDirs(staticRoot())) {
+    result[`${config().staticDir}/${dir}`] = countFiles(join(staticRoot(), dir));
   }
-  const uploadDir = join(process.cwd(), 'uploads');
-  for (const dir of discoverUploadBackupDirs(uploadDir)) {
-    result[`uploads/${dir}`] = countFiles(join(uploadDir, dir));
+  for (const dir of discoverUploadBackupDirs(uploadRoot())) {
+    result[`${config().uploadDir}/${dir}`] = countFiles(join(uploadRoot(), dir));
   }
   return result;
 }
@@ -221,12 +290,27 @@ function assertEqual(label: string, before: unknown, after: unknown) {
 }
 
 function printSummary(label: string, db: DbFingerprint, files: DirFingerprint) {
-  const dbRows = Object.values(db).reduce((sum, item) => sum + item.count, 0);
-  const fileRows = Object.values(files).reduce((sum, item) => sum + item.files, 0);
-  const fileBytes = Object.values(files).reduce((sum, item) => sum + item.bytes, 0);
+  const summary = summarizeFingerprints(db, files);
   console.log(
-    `   ${label}: ${Object.keys(db).length} tables / ${dbRows} rows; ${fileRows} files / ${formatBytes(fileBytes)}`,
+    `   ${label}: ${summary.tableCount} tables / ${summary.totalRows} rows; ${summary.totalFiles} files / ${formatBytes(summary.totalBytes)}`,
   );
+}
+
+function summarizeFingerprints(db: DbFingerprint, files: DirFingerprint): FingerprintSummary {
+  return {
+    tableCount: Object.keys(db).length,
+    totalRows: Object.values(db).reduce((sum, item) => sum + item.count, 0),
+    fileGroupCount: Object.keys(files).length,
+    totalFiles: Object.values(files).reduce((sum, item) => sum + item.files, 0),
+    totalBytes: Object.values(files).reduce((sum, item) => sum + item.bytes, 0),
+  };
+}
+
+function writeRestoreDrillEvidence(evidence: Record<string, unknown>) {
+  const dir = join(backupRoot(), '.restore-drills');
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(join(dir, 'latest.json'), JSON.stringify(evidence, null, 2));
+  console.log(`   Restore drill evidence written: ${join(dir, 'latest.json')}`);
 }
 
 function formatBytes(bytes: number): string {

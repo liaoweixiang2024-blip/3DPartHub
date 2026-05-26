@@ -221,6 +221,13 @@ function meshesToGltf(
   const nodes: object[] = [{ name: 'converted_model', children: [], extras: { sourceName } }];
   const parts: PreviewPartMeta[] = [];
   const warnings: string[] = [];
+  type GltfPrimitive = {
+    attributes: Record<string, number>;
+    material: number;
+    mode: number;
+    extras: { partId: string; name: string; vertexCount: number; faceCount: number };
+    indices?: number;
+  };
   const optimization = {
     indexComponentTypes: { uint16: 0, uint32: 0 },
     indexBytesSaved: 0,
@@ -406,7 +413,7 @@ function meshesToGltf(
       materialIdx = getDefaultMaterialIdx();
     }
 
-    const prim: Record<string, any> = {
+    const prim: GltfPrimitive = {
       attributes: { POSITION: posAccessorIdx },
       material: materialIdx,
       mode: 4,

@@ -1,19 +1,19 @@
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { useRef, useEffect, useState, type ReactNode } from 'react';
 
-interface VirtualProductGridProps {
-  products: any[];
+interface VirtualProductGridProps<TProduct> {
+  products: TProduct[];
   columns: number;
   rowHeight: number;
   gap?: number;
-  renderCard: (product: any, index: number) => ReactNode;
+  renderCard: (product: TProduct, index: number) => ReactNode;
   scrollRef: React.RefObject<HTMLElement | null>;
   gridClassName?: string;
 }
 
 const VIRTUALIZE_THRESHOLD = 80;
 
-export default function VirtualProductGrid({
+export default function VirtualProductGrid<TProduct>({
   products,
   columns,
   rowHeight,
@@ -21,7 +21,7 @@ export default function VirtualProductGrid({
   renderCard,
   scrollRef,
   gridClassName,
-}: VirtualProductGridProps) {
+}: VirtualProductGridProps<TProduct>) {
   const rowCount = Math.ceil(products.length / columns);
   const totalRowHeight = rowHeight + gap;
   const parentRef = useRef<HTMLDivElement>(null);

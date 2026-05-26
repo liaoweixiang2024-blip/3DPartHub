@@ -2,6 +2,7 @@ import { fork } from 'node:child_process';
 import { rmSync, existsSync, mkdirSync, copyFileSync } from 'node:fs';
 import { resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import type { Prisma, PrismaClient } from '@prisma/client';
 import type { Job } from 'bullmq';
 import { cacheDelByPrefix } from '../lib/cache.js';
 import { config } from '../lib/config.js';
@@ -76,8 +77,8 @@ function runConversionPipeline(job: Job): Promise<ConversionPipelineResult> {
       logger.error(`[conversion:${job.id}] ${String(chunk).trimEnd()}`);
     });
     child.on('message', (message: unknown) => {
-      const msg = message as Record<string, any>;
-      if (!msg || typeof msg !== 'object') return;
+      if (!message || typeof message !== 'object') return;
+      const msg = message as Record<string, unknown>;
       if (msg.type === 'log' && msg.message) {
         job.log(`[${new Date().toISOString()}] ${msg.message}`).catch(() => {});
       } else if (msg.type === 'progress') {
@@ -86,7 +87,7 @@ function runConversionPipeline(job: Job): Promise<ConversionPipelineResult> {
           job.updateProgress(Math.max(0, Math.min(100, Math.round(progress)))).catch(() => {});
         }
       } else if (msg.type === 'result') {
-        finish(null, { result: msg.result, thumb: msg.thumbnail });
+        finish(null, { result: msg.result as GltfAsset, thumb: msg.thumbnail as ConversionPipelineResult['thumb'] });
       } else if (msg.type === 'error') {
         const err = new Error(String(msg.message || '转换失败'));
         if (msg.stack) err.stack = String(msg.stack);
@@ -108,7 +109,7 @@ function runConversionPipeline(job: Job): Promise<ConversionPipelineResult> {
 }
 
 // Try to import Prisma
-let prisma: any = null;
+let prisma: PrismaClient | null = null;
 try {
   const mod = await import('../lib/prisma.js');
   prisma = mod.prisma;
@@ -233,7 +234,7 @@ export const conversionWorker = createWorker(
             status: MODEL_STATUS.COMPLETED,
             gltfUrl: result.gltfUrl,
             gltfSize: result.gltfSize,
-            previewMeta: result.previewMeta,
+            previewMeta: result.previewMeta as unknown as Prisma.InputJsonValue,
             thumbnailUrl: `${thumb.thumbnailUrl}?t=${Date.now()}`,
           },
         });

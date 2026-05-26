@@ -7,6 +7,7 @@ const DEFAULT_NOTIFICATION_PREFS: Record<string, boolean> = {
   ticket: true,
   favorite: true,
   model_conversion: true,
+  backup: true,
   download: false,
 };
 

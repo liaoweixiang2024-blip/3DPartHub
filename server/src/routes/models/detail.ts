@@ -1,5 +1,6 @@
 import { existsSync } from 'node:fs';
 import { stat as statAsync } from 'node:fs/promises';
+import type { PrismaClient } from '@prisma/client';
 import { Router, Request, Response } from 'express';
 import { cacheGet, cacheSet, TTL } from '../../lib/cache.js';
 import { requireBrowseAccess } from '../../middleware/browseAccess.js';
@@ -16,7 +17,7 @@ type PreviewMetaOptions = {
 };
 
 type ModelDetailContext = {
-  prisma: any;
+  prisma: PrismaClient | null;
   getMeta: (id: string) => Record<string, unknown> | null;
   getPreviewMeta: (id: string, options?: PreviewMetaOptions) => Promise<Record<string, unknown> | null>;
   optionalVerifiedUser: (req: Request) => Promise<{ role?: string } | null>;
@@ -97,18 +98,18 @@ export function createModelDetailRouter({
               const stepDate = parseStepFileDate(mainPath);
               if (stepDate) {
                 mainFileModifiedAt = stepDate.toISOString();
-                if (!(m as any).fileModifiedAt || (m as any).fileModifiedAt.toISOString() !== stepDate.toISOString()) {
+                if (!m.fileModifiedAt || m.fileModifiedAt.toISOString() !== stepDate.toISOString()) {
                   prisma.model.update({ where: { id: m.id }, data: { fileModifiedAt: stepDate } }).catch(() => {});
                 }
-              } else if ((m as any).fileModifiedAt) {
-                mainFileModifiedAt = (m as any).fileModifiedAt.toISOString();
+              } else if (m.fileModifiedAt) {
+                mainFileModifiedAt = m.fileModifiedAt.toISOString();
               } else {
                 const stat = await statAsync(mainPath);
                 mainFileModifiedAt = stat.mtime.toISOString();
                 prisma.model.update({ where: { id: m.id }, data: { fileModifiedAt: stat.mtime } }).catch(() => {});
               }
-            } else if ((m as any).fileModifiedAt) {
-              mainFileModifiedAt = (m as any).fileModifiedAt.toISOString();
+            } else if (m.fileModifiedAt) {
+              mainFileModifiedAt = m.fileModifiedAt.toISOString();
             } else if (dbMeta.originalModifiedAt) {
               mainFileModifiedAt = dbMeta.originalModifiedAt as string;
             }
@@ -118,7 +119,7 @@ export function createModelDetailRouter({
 
           const [variantStats, previewMeta] = await Promise.all([
             Promise.all(
-              (m.group?.models ?? []).map(async (v: any) => {
+              (m.group?.models ?? []).map(async (v) => {
                 try {
                   if (v.fileModifiedAt) return v.fileModifiedAt.toISOString();
                   const vMeta = (v.metadata as Record<string, unknown>) || {};
@@ -140,21 +141,22 @@ export function createModelDetailRouter({
               gltfUrl: m.gltfUrl,
               originalName: m.originalName,
               format: m.format,
-              previewMeta: (m as any).previewMeta,
+              previewMeta: m.previewMeta,
             }),
           ]);
 
-          const groupData = m.group
+          const group = m.group;
+          const groupData = group
             ? {
-                id: m.group.id,
-                name: m.group.name,
-                variants: m.group.models.map((v: any, i: number) => ({
+                id: group.id,
+                name: group.name,
+                variants: group.models.map((v, i) => ({
                   model_id: v.id,
                   name: v.name,
                   thumbnail_url: withAssetVersion(v.thumbnailUrl, v.updatedAt),
                   original_name: v.originalName,
                   original_size: v.originalSize,
-                  is_primary: v.id === m.group.primaryId,
+                  is_primary: v.id === group.primaryId,
                   created_at: v.createdAt,
                   file_modified_at: variantStats[i],
                 })),
@@ -172,9 +174,9 @@ export function createModelDetailRouter({
             format: m.format,
             status: m.status,
             description: m.description,
-            category: (m as any).categoryRef?.name || null,
+            category: m.categoryRef?.name || null,
             category_id: m.categoryId || null,
-            category_parent: (m as any).categoryRef?.parent || null,
+            category_parent: m.categoryRef?.parent || null,
             created_at: m.createdAt,
             file_modified_at: mainFileModifiedAt,
             drawing_url: drawingDownloadUrl(m.id, m.drawingUrl),

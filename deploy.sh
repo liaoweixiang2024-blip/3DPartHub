@@ -26,6 +26,8 @@ INSTALL_DIR="${INSTALL_DIR:-/opt/3dparthub}"
 BACKUP_DIR="$INSTALL_DIR/server/static/backups"
 BACKUP_SOURCE="${1:-}"
 COMPOSE_URL="${COMPOSE_URL:-https://raw.githubusercontent.com/liaoweixiang2024-blip/3DPartHub/main/docker-compose.yml}"
+DEPLOY_CHECK_URL="${DEPLOY_CHECK_URL:-https://raw.githubusercontent.com/liaoweixiang2024-blip/3DPartHub/main/scripts/deploy-health-check.sh}"
+DEPLOY_EVIDENCE_URL="${DEPLOY_EVIDENCE_URL:-https://raw.githubusercontent.com/liaoweixiang2024-blip/3DPartHub/main/scripts/collect-deploy-evidence.sh}"
 RESOURCE_PROFILE=""
 API_MEMORY_LIMIT_VALUE=""
 API_MEMORY_RESERVATION_VALUE=""
@@ -481,6 +483,71 @@ print_diagnostics() {
   compose_cmd logs --tail=160 api || true
 }
 
+collect_deploy_evidence_after_failure() {
+  if ! command_exists curl; then
+    return 0
+  fi
+
+  local evidence_stamp evidence_dir evidence_status
+  evidence_stamp="$(date +%Y%m%d-%H%M%S 2>/dev/null || date +%s)"
+  evidence_dir="deploy-evidence-failed-${evidence_stamp}"
+
+  echo ""
+  echo -e "${YELLOW}正在生成部署失败证据包（不包含 .env）...${NC}"
+  if ! curl -fsSL -o collect-deploy-evidence.sh "$DEPLOY_EVIDENCE_URL"; then
+    echo -e "${YELLOW}  ⚠ 无法下载证据采集脚本，请稍后手动执行 collect-deploy-evidence.sh。${NC}"
+    return 0
+  fi
+
+  set +e
+  sh collect-deploy-evidence.sh --compose-file docker-compose.yml --env-file .env --port "$PORT_VALUE" --output-dir "$evidence_dir"
+  evidence_status=$?
+  set -e
+
+  if [ -d "$evidence_dir" ]; then
+    echo -e "${YELLOW}  证据目录: $INSTALL_DIR/$evidence_dir${NC}"
+    if [ -f "${evidence_dir}.tar.gz" ]; then
+      echo -e "${YELLOW}  证据包:   $INSTALL_DIR/${evidence_dir}.tar.gz${NC}"
+      if [ -f "${evidence_dir}.tar.gz.sha256" ]; then
+        echo -e "${YELLOW}  证据摘要: $INSTALL_DIR/${evidence_dir}.tar.gz.sha256${NC}"
+      else
+        echo -e "${YELLOW}  ⚠ 未找到证据摘要: $INSTALL_DIR/${evidence_dir}.tar.gz.sha256${NC}"
+      fi
+    fi
+    echo -e "${YELLOW}  说明: 证据采集返回码 ${evidence_status} 通常表示自检仍未通过；请优先回传证据包和同名 .sha256 排查。${NC}"
+  else
+    echo -e "${YELLOW}  ⚠ 证据包生成失败，请查看上方输出并手动执行采集命令。${NC}"
+  fi
+}
+
+run_deploy_health_check() {
+  if [ "${SKIP_DEPLOY_CHECK:-0}" = "1" ]; then
+    echo -e "${YELLOW}已跳过部署自检（SKIP_DEPLOY_CHECK=1）。${NC}"
+    return 0
+  fi
+
+  if ! command_exists curl; then
+    echo -e "${YELLOW}未找到 curl，跳过部署自检脚本下载。${NC}"
+    return 0
+  fi
+
+  echo ""
+  echo -e "${YELLOW}正在运行部署自检...${NC}"
+  if curl -fsSL -o deploy-health-check.sh "$DEPLOY_CHECK_URL" && sh deploy-health-check.sh --port "$PORT_VALUE" --report deploy-health-report.txt --json deploy-health-report.json; then
+    echo -e "${GREEN}  ✓ 部署自检通过${NC}"
+    echo -e "${GREEN}  ✓ 自检报告: $INSTALL_DIR/deploy-health-report.txt${NC}"
+    echo -e "${GREEN}  ✓ JSON 报告: $INSTALL_DIR/deploy-health-report.json${NC}"
+    return 0
+  fi
+
+  echo -e "${RED}部署自检未通过。请先处理上方失败项，避免带问题上线。${NC}"
+  echo -e "${YELLOW}自检报告: $INSTALL_DIR/deploy-health-report.txt${NC}"
+  echo -e "${YELLOW}JSON 报告: $INSTALL_DIR/deploy-health-report.json${NC}"
+  echo -e "${YELLOW}复查命令: cd $INSTALL_DIR && sh deploy-health-check.sh --show-logs --report deploy-health-report.txt --json deploy-health-report.json${NC}"
+  collect_deploy_evidence_after_failure
+  return 1
+}
+
 echo ""
 echo "=============================="
 echo "  3DPartHub 一键部署"
@@ -522,6 +589,8 @@ fi
 ensure_env DB_PASSWORD "$(random_hex 24)"
 ensure_env REDIS_PASSWORD "$(random_hex 24)"
 ensure_env JWT_SECRET "$(random_hex 32)"
+ensure_env BACKUP_SIGNING_SECRET "$(random_hex 32)"
+ensure_env BACKUP_ENCRYPTION_SECRET "$(random_hex 32)"
 ensure_env ADMIN_USER "admin"
 ensure_env ADMIN_EMAIL "admin@model.com"
 ensure_env ADMIN_PASS "$(random_password)"
@@ -565,6 +634,7 @@ fi
 if [ "$UP_STATUS" -ne 0 ]; then
   echo -e "${RED}服务启动失败。${NC}"
   print_diagnostics
+  collect_deploy_evidence_after_failure
   exit 1
 fi
 
@@ -586,6 +656,12 @@ done
 
 if [ "$HEALTH_OK" != true ]; then
   echo -e "${RED}健康检查未通过。${NC}"
+  print_diagnostics
+  collect_deploy_evidence_after_failure
+  exit 1
+fi
+
+if ! run_deploy_health_check; then
   print_diagnostics
   exit 1
 fi
@@ -633,4 +709,9 @@ echo "  常用命令:"
 echo "    状态:  cd $INSTALL_DIR && $(compose_display) ps"
 echo "    日志:  cd $INSTALL_DIR && $(compose_display) logs -f api"
 echo "    升级:  cd $INSTALL_DIR && $(compose_display) pull && $(compose_display) up -d --force-recreate"
+echo "    自检:  cd $INSTALL_DIR && curl -fsSL -O https://raw.githubusercontent.com/liaoweixiang2024-blip/3DPartHub/main/scripts/deploy-health-check.sh && sh deploy-health-check.sh --report deploy-health-report.txt --json deploy-health-report.json"
+echo "    证据:  cd $INSTALL_DIR && curl -fsSL -O $DEPLOY_EVIDENCE_URL && sh collect-deploy-evidence.sh"
+echo "    回传:  deploy-evidence-*.tar.gz 和同名 deploy-evidence-*.tar.gz.sha256"
+echo "    报告:  $INSTALL_DIR/deploy-health-report.txt"
+echo "    JSON:  $INSTALL_DIR/deploy-health-report.json"
 echo ""

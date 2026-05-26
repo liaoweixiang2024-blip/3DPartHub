@@ -9,7 +9,6 @@ import {
   type ClipboardEvent,
   type FormEvent,
 } from 'react';
-import { useLocation } from 'react-router-dom';
 import useSWR from 'swr';
 import '../styles/product-wall.css';
 import {
@@ -44,6 +43,9 @@ import {
   productWallDownloadName,
   wallImageUrl,
   PRODUCT_WALL_RENDER_BATCH_SIZE,
+  PRODUCT_WALL_MOBILE_EAGER_IMAGE_COUNT,
+  PRODUCT_WALL_MOBILE_RENDER_BATCH_SIZE,
+  PRODUCT_WALL_EAGER_IMAGE_COUNT,
   PRODUCT_WALL_FAVORITES_FILTER,
   PRODUCT_WALL_CANVAS_MODE_KEY,
   PRODUCT_WALL_DEFAULT_KIND_KEY,
@@ -70,6 +72,7 @@ import SearchField from '../components/shared/SearchField';
 import { useToast } from '../components/shared/Toast';
 import { useDocumentTitle } from '../hooks/useDocumentTitle';
 import { useImeSafeSearchInput } from '../hooks/useImeSafeSearchInput';
+import { downloadBrowserFile } from '../lib/browserDownload';
 import { getBusinessConfig } from '../lib/businessConfig';
 import { copyText } from '../lib/clipboard';
 import { useAuthStore } from '../stores/useAuthStore';
@@ -95,7 +98,6 @@ function ProductWallLoadingState() {
 
 export default function ProductWallPage() {
   useDocumentTitle('产品图库');
-  const location = useLocation();
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const folderInputRef = useRef<HTMLInputElement | null>(null);
   const loadMoreRef = useRef<HTMLButtonElement | null>(null);
@@ -169,7 +171,10 @@ export default function ProductWallPage() {
   const [wallEditMode, setWallEditMode] = useState(false);
   const [selectionMode, setSelectionMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
-  const [renderCount, setRenderCount] = useState(PRODUCT_WALL_RENDER_BATCH_SIZE);
+  const [columnCount, setColumnCount] = useState(getProductWallColumnCount);
+  const initialRenderBatchSize =
+    columnCount <= 2 ? PRODUCT_WALL_MOBILE_RENDER_BATCH_SIZE : PRODUCT_WALL_RENDER_BATCH_SIZE;
+  const [renderCount, setRenderCount] = useState(initialRenderBatchSize);
   const [editingItem, setEditingItem] = useState<WallItem | null>(null);
   const [deleteCategoryTarget, setDeleteCategoryTarget] = useState<{ id: string; name: string } | null>(null);
   const [deleteDialog, setDeleteDialog] = useState<DeleteDialogState>(null);
@@ -180,7 +185,6 @@ export default function ProductWallPage() {
   const [editTags, setEditTags] = useState('');
   const [favoriteIds, setFavoriteIds] = useState<Set<string>>(() => new Set());
   const [shareState, setShareState] = useState<'idle' | 'copied'>('idle');
-  const [columnCount, setColumnCount] = useState(getProductWallColumnCount);
   const [wallReady, setWallReady] = useState(false);
   const [managementRenderCount, setManagementRenderCount] = useState(PRODUCT_WALL_RENDER_BATCH_SIZE);
   const apiError = itemsError || categoriesError;
@@ -200,6 +204,11 @@ export default function ProductWallPage() {
   const isFavoritesFilter = filter === PRODUCT_WALL_FAVORITES_FILTER;
   const uploadKind = isUtilityFilter ? resolvedDefaultUploadKind : filter;
   const uploadDisabled = uploading || !uploadKind;
+  const isCompactWallLayout = columnCount <= 2;
+  const renderBatchSize = isCompactWallLayout ? PRODUCT_WALL_MOBILE_RENDER_BATCH_SIZE : PRODUCT_WALL_RENDER_BATCH_SIZE;
+  const eagerImageCount = isCompactWallLayout ? PRODUCT_WALL_MOBILE_EAGER_IMAGE_COUNT : PRODUCT_WALL_EAGER_IMAGE_COUNT;
+  const thumbnailLazyRootMargin = isCompactWallLayout ? '180px 0px' : '300px 0px';
+  const loadMoreRootMargin = isCompactWallLayout ? '180px 0px' : '300px 0px';
   const deferredQuery = useDeferredValue(query);
   const deferredManagementQuery = useDeferredValue(managementQuery);
   const normalizedQuery = deferredQuery.trim().toLowerCase();
@@ -343,6 +352,16 @@ export default function ProductWallPage() {
       }
     }
   };
+  const downloadProductWallItem = useCallback(
+    async (item: ProductWallItem) => {
+      try {
+        await downloadBrowserFile(item.image, { fileName: productWallDownloadName(item) });
+      } catch (err) {
+        toast(errorMessage(err, '下载图片失败'), 'error');
+      }
+    },
+    [toast],
+  );
   const uploadFiles = useCallback(
     async (fileList: FileList | File[], meta?: { title?: string; description?: string }) => {
       if (!canUpload) {
@@ -438,7 +457,6 @@ export default function ProductWallPage() {
     [
       canUpload,
       isAdmin,
-      location.pathname,
       mutate,
       productWallMaxImageBytes,
       productWallUploadBatchSize,
@@ -511,6 +529,7 @@ export default function ProductWallPage() {
   }, []);
   useEffect(() => {
     if (!canUpload) return;
+    if (window.matchMedia?.('(hover: none) and (pointer: coarse)').matches) return;
     const hasFiles = (event: globalThis.DragEvent) => Array.from(event.dataTransfer?.types || []).includes('Files');
     const handleDocumentDragOver = (event: globalThis.DragEvent) => {
       if (!hasFiles(event)) return;
@@ -543,12 +562,12 @@ export default function ProductWallPage() {
     };
   }, [canUpload, handleUploadSource]);
   useEffect(() => {
-    setRenderCount(PRODUCT_WALL_RENDER_BATCH_SIZE);
+    setRenderCount(renderBatchSize);
     setWallReady(false);
     setSelectedIds(new Set());
     setWallEditMode(false);
     setSelectionMode(false);
-  }, [filter, normalizedQuery]);
+  }, [filter, normalizedQuery, renderBatchSize]);
   useEffect(() => {
     if (initialLoading) {
       setWallReady(false);
@@ -575,10 +594,10 @@ export default function ProductWallPage() {
     loadMoreFrameRef.current = window.requestAnimationFrame(() => {
       loadMoreFrameRef.current = null;
       startTransition(() => {
-        setRenderCount((count) => Math.min(count + PRODUCT_WALL_RENDER_BATCH_SIZE, visibleItemsLengthRef.current));
+        setRenderCount((count) => Math.min(count + renderBatchSize, visibleItemsLengthRef.current));
       });
     });
-  }, []);
+  }, [renderBatchSize]);
   useEffect(
     () => () => {
       if (loadMoreFrameRef.current != null) window.cancelAnimationFrame(loadMoreFrameRef.current);
@@ -593,11 +612,11 @@ export default function ProductWallPage() {
         if (!entries.some((entry) => entry.isIntersecting)) return;
         loadMoreVisibleItems();
       },
-      { rootMargin: '360px 0px' },
+      { rootMargin: loadMoreRootMargin },
     );
     observer.observe(target);
     return () => observer.disconnect();
-  }, [hasMoreVisibleItems, wallReady, loadMoreVisibleItems]);
+  }, [hasMoreVisibleItems, loadMoreRootMargin, wallReady, loadMoreVisibleItems]);
   const closeActivePreview = useCallback(() => {
     cancelAnimationFrame(0);
     previewMenuBlockUntilRef.current = performance.now() + 520;
@@ -965,7 +984,13 @@ export default function ProductWallPage() {
                               selectionMode && !selectable ? 'cursor-not-allowed opacity-55' : ''
                             }`}
                           >
-                            <ProductWallThumbnail item={item} canvasMode={canvasMode} imageIndex={imageIndex}>
+                            <ProductWallThumbnail
+                              item={item}
+                              canvasMode={canvasMode}
+                              imageIndex={imageIndex}
+                              eagerImageCount={eagerImageCount}
+                              lazyRootMargin={thumbnailLazyRootMargin}
+                            >
                               {selectionMode && selectable && (
                                 <span
                                   className={`absolute right-2 top-2 z-20 inline-flex h-8 w-8 items-center justify-center rounded-full border shadow-sm backdrop-blur ${
@@ -994,17 +1019,19 @@ export default function ProductWallPage() {
                               >
                                 <Icon name={itemFavorited ? 'favorite' : 'star'} size={14} />
                               </button>
-                              <a
-                                href={item.image}
-                                download={productWallDownloadName(item)}
-                                onClick={(event) => event.stopPropagation()}
+                              <button
+                                type="button"
+                                onClick={(event) => {
+                                  event.stopPropagation();
+                                  void downloadProductWallItem(item);
+                                }}
                                 className="product-wall-card-action"
                                 aria-label="下载图片"
                                 title="下载"
                                 data-tooltip-ignore
                               >
                                 <Icon name="download" size={14} />
-                              </a>
+                              </button>
                             </div>
                           )}
                           {wallEditMode && selectable && !selectionMode && (
@@ -1057,7 +1084,7 @@ export default function ProductWallPage() {
                     style={{ animationDelay: '0.3s' }}
                   />
                 </button>
-              ) : visibleItems.length > PRODUCT_WALL_RENDER_BATCH_SIZE ? (
+              ) : visibleItems.length > renderBatchSize ? (
                 <div className="flex h-12 w-full items-center justify-center text-xs text-on-surface-variant/40">
                   — 已经到底了 —
                 </div>
@@ -1196,6 +1223,7 @@ export default function ProductWallPage() {
           onClose={closeActivePreview}
           onToggleFavorite={() => void toggleFavorite()}
           onShare={() => void shareActiveImage()}
+          onDownload={(item) => void downloadProductWallItem(item)}
         />
       )}
       <LoginConfirmDialog open={loginDialogOpen} onClose={() => setLoginDialogOpen(false)} reason={loginDialogReason} />

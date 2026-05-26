@@ -14,7 +14,26 @@ interface ModelStats {
   status: string;
 }
 
-function extractGltfStats(gltfPath: string): { vertexCount: number; faceCount: number; dimensions: any } | null {
+type ModelDimensions = ModelStats['dimensions'];
+type GltfAccessor = { count?: number; min?: number[]; max?: number[] };
+type GltfPrimitive = { attributes?: { POSITION?: number }; indices?: number };
+type GltfMesh = { primitives?: GltfPrimitive[] };
+
+function objectRecord(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : null;
+}
+
+function recordArray<T extends Record<string, unknown>>(value: unknown): T[] {
+  return Array.isArray(value) ? (value.filter((item) => objectRecord(item)) as T[]) : [];
+}
+
+function numericArray(value: unknown): number[] | null {
+  return Array.isArray(value) ? value.map((item) => Number(item)).filter((item) => Number.isFinite(item)) : null;
+}
+
+function extractGltfStats(
+  gltfPath: string,
+): { vertexCount: number; faceCount: number; dimensions: ModelDimensions } | null {
   try {
     const { json: gltf } = readGltfAsset(gltfPath);
     let vertexCount = 0;
@@ -26,11 +45,11 @@ function extractGltfStats(gltfPath: string): { vertexCount: number; faceCount: n
       maxY = -Infinity,
       maxZ = -Infinity;
 
-    const accessors: any[] = Array.from(gltf.accessors || []);
-    const meshes: any[] = Array.from(gltf.meshes || []);
+    const accessors = recordArray<GltfAccessor>(gltf.accessors);
+    const meshes = recordArray<GltfMesh>(gltf.meshes);
 
     for (const mesh of meshes) {
-      for (const prim of mesh.primitives || []) {
+      for (const prim of Array.isArray(mesh.primitives) ? mesh.primitives : []) {
         const posIdx = prim.attributes?.POSITION;
         let primitiveVertexCount = 0;
         if (posIdx !== undefined) {
@@ -39,15 +58,17 @@ function extractGltfStats(gltfPath: string): { vertexCount: number; faceCount: n
             primitiveVertexCount = acc.count || 0;
             vertexCount += primitiveVertexCount;
             // Use min/max from accessor if available
-            if (acc.min) {
-              minX = Math.min(minX, acc.min[0]);
-              minY = Math.min(minY, acc.min[1]);
-              minZ = Math.min(minZ, acc.min[2]);
+            const min = numericArray(acc.min);
+            const max = numericArray(acc.max);
+            if (min && min.length >= 3) {
+              minX = Math.min(minX, min[0]);
+              minY = Math.min(minY, min[1]);
+              minZ = Math.min(minZ, min[2]);
             }
-            if (acc.max) {
-              maxX = Math.max(maxX, acc.max[0]);
-              maxY = Math.max(maxY, acc.max[1]);
-              maxZ = Math.max(maxZ, acc.max[2]);
+            if (max && max.length >= 3) {
+              maxX = Math.max(maxX, max[0]);
+              maxY = Math.max(maxY, max[1]);
+              maxZ = Math.max(maxZ, max[2]);
             }
           }
         }
@@ -83,8 +104,8 @@ export async function compareModels(id1: string, id2: string) {
   }
 
   // Try to extract stats from glTF files
-  let stats1: { vertexCount: number; faceCount: number; dimensions: any } | null = null;
-  let stats2: { vertexCount: number; faceCount: number; dimensions: any } | null = null;
+  let stats1: { vertexCount: number; faceCount: number; dimensions: ModelDimensions } | null = null;
+  let stats2: { vertexCount: number; faceCount: number; dimensions: ModelDimensions } | null = null;
 
   try {
     const path1 = resolveFileUrlPath(m1.gltfUrl);
@@ -136,7 +157,7 @@ export async function compareModels(id1: string, id2: string) {
   return { model1: info1, model2: info2, diff };
 }
 
-function computeVolumeDiff(d1: any, d2: any): number | null {
+function computeVolumeDiff(d1: ModelDimensions, d2: ModelDimensions): number | null {
   if (!d1 || !d2) return null;
   const v1 = (d1.maxX - d1.minX) * (d1.maxY - d1.minY) * (d1.maxZ - d1.minZ);
   const v2 = (d2.maxX - d2.minX) * (d2.maxY - d2.minY) * (d2.maxZ - d2.minZ);

@@ -25,6 +25,18 @@ const DUMMY_HASH = '$2a$12$LiVmGbGyGZkP1WQOB7SXOOJ7JqBhDmuOg2WjFwvCSCmXFGpOFHHze
 const LOGIN_FAIL_PREFIX = 'login_fail:';
 const LOGIN_MAX_FAILS = 5;
 const LOGIN_LOCK_SECONDS = 900;
+const MAX_EMAIL_LENGTH = 254;
+
+function normalizeEmailInput(value: unknown): string | null {
+  if (typeof value !== 'string') return null;
+  const email = value.trim().toLowerCase();
+  if (!email || email.length > MAX_EMAIL_LENGTH) return null;
+  return email;
+}
+
+function isValidEmail(email: string): boolean {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+}
 
 async function recordLoginFailure(email: string): Promise<number> {
   const key = `${LOGIN_FAIL_PREFIX}${email.toLowerCase()}`;
@@ -59,7 +71,15 @@ export function createAuthSessionRouter() {
   // Send email verification code
   router.post('/api/auth/email-code', async (req: Request, res: Response) => {
     const { email, captchaId, captchaText } = req.body;
-    if (!email || !captchaId || !captchaText) {
+    const normalizedEmail = normalizeEmailInput(email);
+    if (
+      !normalizedEmail ||
+      !isValidEmail(normalizedEmail) ||
+      typeof captchaId !== 'string' ||
+      typeof captchaText !== 'string' ||
+      !captchaId ||
+      !captchaText
+    ) {
       res.status(400).json({ detail: '参数不完整' });
       return;
     }
@@ -79,7 +99,7 @@ export function createAuthSessionRouter() {
       60,
       Math.floor(Number(await getSetting<number>('security_email_code_ttl_seconds')) || 600),
     );
-    const rateKey = `email_rate:${email}`;
+    const rateKey = `email_rate:${normalizedEmail}`;
     const allowed = await checkRateLimit(rateKey, cooldownSeconds);
     if (!allowed) {
       res.status(429).json({ detail: `发送太频繁，请${cooldownSeconds}秒后重试` });
@@ -88,13 +108,13 @@ export function createAuthSessionRouter() {
 
     // Generate 6-digit code
     const code = String(randomInt(100000, 1000000));
-    await storeEmailCode(email, code, emailCodeTtlSeconds);
+    await storeEmailCode(normalizedEmail, code, emailCodeTtlSeconds);
 
     try {
-      await sendVerifyCode(email, code);
+      await sendVerifyCode(normalizedEmail, code);
       res.json({ message: '验证码已发送' });
     } catch (err: unknown) {
-      await redis.del(`email_code:${email}`);
+      await redis.del(`email_code:${normalizedEmail}`);
       logger.error({ err: err }, '[auth] Email send failed');
       res.status(500).json({ detail: '邮件发送失败' });
     }
@@ -109,8 +129,16 @@ export function createAuthSessionRouter() {
     }
 
     const { username, email, password, emailCode, phone, company, address } = req.body;
+    const normalizedEmail = normalizeEmailInput(email);
 
-    if (!username || !email || !password || !emailCode) {
+    if (
+      typeof username !== 'string' ||
+      !username ||
+      !normalizedEmail ||
+      typeof password !== 'string' ||
+      typeof emailCode !== 'string' ||
+      !emailCode
+    ) {
       res.status(400).json({ detail: '所有字段不能为空' });
       return;
     }
@@ -133,7 +161,7 @@ export function createAuthSessionRouter() {
       return;
     }
 
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    if (!isValidEmail(normalizedEmail)) {
       res.status(400).json({ detail: '邮箱格式不正确' });
       return;
     }
@@ -151,7 +179,7 @@ export function createAuthSessionRouter() {
     // Check uniqueness BEFORE consuming email code
     try {
       const existing = await prisma.user.findFirst({
-        where: { OR: [{ username }, { email: email.toLowerCase() }] },
+        where: { OR: [{ username }, { email: normalizedEmail }] },
       });
       if (existing) {
         res.status(409).json({ detail: '用户名或邮箱已存在' });
@@ -162,7 +190,7 @@ export function createAuthSessionRouter() {
       return;
     }
 
-    const codeOk = await verifyEmailCode(email, emailCode);
+    const codeOk = await verifyEmailCode(normalizedEmail, emailCode);
     if (!codeOk) {
       res.status(400).json({ detail: '邮箱验证码错误或已过期' });
       return;
@@ -170,7 +198,6 @@ export function createAuthSessionRouter() {
 
     try {
       const passwordHash = await hashPassword(password);
-      const normalizedEmail = email.toLowerCase();
       const user = await prisma.user.create({
         data: {
           username,
@@ -216,23 +243,24 @@ export function createAuthSessionRouter() {
 
   router.post('/api/auth/login', async (req: Request, res: Response) => {
     const { email, password, rememberMe } = req.body;
+    const normalizedEmail = normalizeEmailInput(email);
 
-    if (!email || !password) {
+    if (!normalizedEmail || typeof password !== 'string' || !password) {
       res.status(400).json({ detail: '邮箱和密码不能为空' });
       return;
     }
 
     try {
-      const failCount = await getLoginFailureCount(email);
+      const failCount = await getLoginFailureCount(normalizedEmail);
       if (failCount >= LOGIN_MAX_FAILS) {
         res.status(429).json({ detail: `登录失败次数过多，请${Math.ceil(LOGIN_LOCK_SECONDS / 60)}分钟后重试` });
         return;
       }
 
-      const user = await prisma.user.findUnique({ where: { email: email.toLowerCase() } });
+      const user = await prisma.user.findUnique({ where: { email: normalizedEmail } });
       const valid = await verifyPassword(password, user?.passwordHash ?? DUMMY_HASH);
       if (!user || !valid) {
-        const totalFails = await recordLoginFailure(email);
+        const totalFails = await recordLoginFailure(normalizedEmail);
         if (totalFails >= LOGIN_MAX_FAILS) {
           res.status(429).json({ detail: `登录失败次数过多，请${Math.ceil(LOGIN_LOCK_SECONDS / 60)}分钟后重试` });
         } else {
@@ -241,7 +269,7 @@ export function createAuthSessionRouter() {
         return;
       }
 
-      await clearLoginFailures(email);
+      await clearLoginFailures(normalizedEmail);
 
       const payload = { userId: user.id, role: user.role };
       const accessToken = signAccessToken(payload);

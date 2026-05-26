@@ -5,6 +5,64 @@ import { findPreviewAssetPath, readGltfAsset } from './gltfAsset.js';
 type Vec3Tuple = [number, number, number];
 type Mat4 = number[];
 
+type GltfAccessor = {
+  bufferView?: number;
+  byteOffset?: number;
+  componentType?: number;
+  count?: number;
+  max?: number[];
+  min?: number[];
+  type?: string;
+};
+
+type GltfBufferView = {
+  byteOffset?: number;
+  byteStride?: number;
+};
+
+type GltfMaterial = {
+  pbrMetallicRoughness?: {
+    baseColorFactor?: number[];
+  };
+};
+
+type GltfPrimitive = {
+  attributes?: {
+    POSITION?: number;
+  };
+  indices?: number;
+  material?: number;
+};
+
+type GltfMesh = {
+  name?: string;
+  primitives?: GltfPrimitive[];
+};
+
+type GltfNode = {
+  children?: number[];
+  matrix?: number[];
+  mesh?: number;
+  name?: string;
+  rotation?: number[];
+  scale?: number[];
+  translation?: number[];
+};
+
+type GltfScene = {
+  nodes?: number[];
+};
+
+type GltfAsset = {
+  accessors?: GltfAccessor[];
+  bufferViews?: GltfBufferView[];
+  materials?: GltfMaterial[];
+  meshes?: GltfMesh[];
+  nodes?: GltfNode[];
+  scene?: number;
+  scenes?: GltfScene[];
+};
+
 interface BoundsBuilder {
   min: Vec3Tuple;
   max: Vec3Tuple;
@@ -74,7 +132,7 @@ function multiplyMat4(a: Mat4, b: Mat4): Mat4 {
   return out;
 }
 
-function composeNodeMatrix(node: any): Mat4 {
+function composeNodeMatrix(node: GltfNode): Mat4 {
   if (Array.isArray(node.matrix) && node.matrix.length === 16) {
     return node.matrix.map((value: number) => Number(value));
   }
@@ -171,12 +229,17 @@ function readScalar(view: DataView, offset: number, componentType: number): numb
   throw new Error(`Unsupported accessor component type: ${componentType}`);
 }
 
-function accessorOffset(accessor: any, bufferView: any): number {
+function accessorOffset(accessor: GltfAccessor, bufferView: GltfBufferView): number {
   return (bufferView.byteOffset || 0) + (accessor.byteOffset || 0);
 }
 
-function forEachVec3(accessor: any, bufferView: any, binData: Buffer, visit: (point: Vec3Tuple) => void) {
-  if (!accessor || !bufferView || accessor.type !== 'VEC3') return;
+function forEachVec3(
+  accessor: GltfAccessor | null | undefined,
+  bufferView: GltfBufferView | null | undefined,
+  binData: Buffer,
+  visit: (point: Vec3Tuple) => void,
+) {
+  if (!accessor || !bufferView || accessor.type !== 'VEC3' || !accessor.componentType || !accessor.count) return;
   const size = componentSize(accessor.componentType);
   const stride = bufferView.byteStride || size * 3;
   const offset = accessorOffset(accessor, bufferView);
@@ -194,7 +257,7 @@ function forEachVec3(accessor: any, bufferView: any, binData: Buffer, visit: (po
   }
 }
 
-function materialColor(material: any): string | null {
+function materialColor(material: GltfMaterial | undefined): string | null {
   const factor = material?.pbrMetallicRoughness?.baseColorFactor;
   if (!Array.isArray(factor) || factor.length < 3) return null;
   return `#${factor
@@ -207,17 +270,17 @@ function materialColor(material: any): string | null {
 }
 
 function analyzePrimitive(
-  primitive: any,
-  gltf: any,
+  primitive: GltfPrimitive,
+  gltf: GltfAsset,
   binData: Buffer,
   matrix: Mat4,
   bounds: BoundsBuilder,
 ): { vertexCount: number; faceCount: number; hasGeometry: boolean } {
-  const accessors = Array.from(gltf.accessors || []) as any[];
-  const bufferViews = Array.from(gltf.bufferViews || []) as any[];
+  const accessors = gltf.accessors ?? [];
+  const bufferViews = gltf.bufferViews ?? [];
   const posIdx = primitive.attributes?.POSITION;
   const posAcc = posIdx !== undefined ? accessors[posIdx] : null;
-  const posBv = posAcc ? bufferViews[posAcc.bufferView] : null;
+  const posBv = posAcc?.bufferView !== undefined ? bufferViews[posAcc.bufferView] : null;
   if (!posAcc) return { vertexCount: 0, faceCount: 0, hasGeometry: false };
 
   if (posBv && binData.byteLength > 0) {
@@ -244,13 +307,13 @@ function createPreviewMetaFromAsset(
   modelId: string,
   sourceName: string,
   sourceFormat: string,
-  gltf: any,
+  gltf: GltfAsset,
   binData: Buffer,
 ): PreviewMeta {
   const started = Date.now();
-  const nodes = Array.from(gltf.nodes || []) as any[];
-  const meshes = Array.from(gltf.meshes || []) as any[];
-  const materials = Array.from(gltf.materials || []) as any[];
+  const nodes = gltf.nodes ?? [];
+  const meshes = gltf.meshes ?? [];
+  const materials = gltf.materials ?? [];
   const parts: PreviewPartMeta[] = [];
   const modelBounds = makeBoundsBuilder();
   let skippedMeshCount = 0;

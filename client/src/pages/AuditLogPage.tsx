@@ -3,6 +3,7 @@ import useSWR from 'swr';
 import useSWRInfinite from 'swr/infinite';
 import client from '../api/client';
 import { unwrapResponse } from '../api/response';
+import { AdminButton, AdminIconButton } from '../components/shared/AdminControls';
 import {
   ADMIN_ROW_META_CLASS,
   ADMIN_ROW_TITLE_CLASS,
@@ -19,7 +20,6 @@ import {
   AdminLoadingState,
   AdminManagementPage,
 } from '../components/shared/AdminManagementPage';
-import { AdminButton, AdminIconButton } from '../components/shared/AdminControls';
 import { AdminPageShell } from '../components/shared/AdminPageShell';
 import AdminRefreshButton from '../components/shared/AdminRefreshButton';
 import ConfirmDialog from '../components/shared/ConfirmDialog';
@@ -39,6 +39,17 @@ type AuditDetails = {
   method?: string;
   path?: string;
   statusCode?: number;
+  status?: string;
+  riskLevel?: string;
+  summary?: string;
+  message?: string;
+  error?: string;
+  jobId?: string;
+  source?: string;
+  scopeLabel?: string;
+  modelCount?: number;
+  thumbnailCount?: number;
+  fileSizeText?: string;
   timestamp?: string;
 };
 
@@ -95,6 +106,9 @@ const ACTION_MAP: Record<string, { label: string; color: string }> = {
   ticket_reply: { label: '回复工单', color: 'text-blue-500 bg-blue-500/10' },
   ticket_status: { label: '工单状态', color: 'text-amber-500 bg-amber-500/10' },
   backup_create: { label: '创建备份', color: 'text-cyan-500 bg-cyan-500/10' },
+  backup_policy_check: { label: '备份体检', color: 'text-orange-500 bg-orange-500/10' },
+  backup_verify: { label: '备份校验', color: 'text-teal-500 bg-teal-500/10' },
+  backup_restore_result: { label: '恢复结果', color: 'text-amber-500 bg-amber-500/10' },
   backup_restore: { label: '恢复备份', color: 'text-amber-500 bg-amber-500/10' },
   backup_import_restore: { label: '导入恢复', color: 'text-amber-500 bg-amber-500/10' },
   backup_import_save: { label: '导入保存', color: 'text-cyan-500 bg-cyan-500/10' },
@@ -207,6 +221,16 @@ function getLogDetails(log: AuditEntry) {
   if (log.details?.method) detailLines.push({ label: '方法', value: log.details.method });
   if (log.details?.path) detailLines.push({ label: '路径', value: log.details.path });
   if (log.details?.statusCode) detailLines.push({ label: '状态码', value: String(log.details.statusCode) });
+  if (log.details?.status) detailLines.push({ label: '结果', value: log.details.status });
+  if (log.details?.riskLevel) detailLines.push({ label: '风险等级', value: log.details.riskLevel });
+  if (log.details?.scopeLabel) detailLines.push({ label: '范围', value: log.details.scopeLabel });
+  if (log.details?.fileSizeText) detailLines.push({ label: '文件大小', value: log.details.fileSizeText });
+  if (typeof log.details?.modelCount === 'number')
+    detailLines.push({ label: '模型数', value: String(log.details.modelCount) });
+  if (typeof log.details?.thumbnailCount === 'number') {
+    detailLines.push({ label: '预览图', value: String(log.details.thumbnailCount) });
+  }
+  if (log.details?.jobId) detailLines.push({ label: '任务ID', value: log.details.jobId });
   return detailLines;
 }
 
@@ -214,6 +238,9 @@ function getLogSummary(log: AuditEntry) {
   const body = log.details?.body;
   const primary = valueToText(body?.title || body?.name || body?.description || body?.status || body?.classification);
   if (primary) return primary;
+  if (log.details?.summary) return log.details.summary;
+  if (log.details?.message) return log.details.message;
+  if (log.details?.error) return log.details.error;
   if (log.details?.path) return log.details.path;
   if (log.resourceId) return log.resourceId;
   return '无附加详情';

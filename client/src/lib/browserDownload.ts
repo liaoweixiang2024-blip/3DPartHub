@@ -32,8 +32,41 @@ type DownloadRequestOptions = {
   preparedWindow?: PreparedDownloadWindow;
 };
 
+type BrowserDocumentOptions = {
+  title?: string;
+  fallbackUrl?: string;
+  preparedWindow?: PreparedDownloadWindow;
+};
+
+function currentBrowserPath() {
+  return `${window.location.pathname}${window.location.search}${window.location.hash}` || '/';
+}
+
+function escapeHtml(value: string) {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+function jsonForInlineScript(value: string) {
+  return JSON.stringify(value).replace(/</g, '\\u003c');
+}
+
 function buildDownloadWindowHtml(message = '正在准备下载...') {
-  return `<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${message}</title><style>body{margin:0;min-height:100vh;display:grid;place-items:center;background:#f7f8fa;color:#1d1b20;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}.box{max-width:280px;padding:20px;text-align:center}.spinner{width:28px;height:28px;margin:0 auto 14px;border:3px solid rgba(0,0,0,.12);border-top-color:#2563eb;border-radius:50%;animation:spin 1s linear infinite}@keyframes spin{to{transform:rotate(360deg)}}p{margin:0;font-size:14px;line-height:1.6;color:#555}</style></head><body><div class="box"><div class="spinner"></div><p>${message}</p></div></body></html>`;
+  const safeMessage = escapeHtml(message);
+  return `<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><title>${safeMessage}</title><style>body{margin:0;min-height:100vh;display:grid;place-items:center;background:#f7f8fa;color:#1d1b20;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}.exit{position:fixed;top:calc(env(safe-area-inset-top,0px) + 12px);left:12px;height:36px;border:0;border-radius:18px;background:#111827;color:#fff;padding:0 14px;font-size:14px;font-weight:600}.box{max-width:280px;padding:20px;text-align:center}.spinner{width:28px;height:28px;margin:0 auto 14px;border:3px solid rgba(0,0,0,.12);border-top-color:#2563eb;border-radius:50%;animation:spin 1s linear infinite}@keyframes spin{to{transform:rotate(360deg)}}p{margin:0;font-size:14px;line-height:1.6;color:#555}</style></head><body><button class="exit" onclick="window.close()">退出</button><div class="box"><div class="spinner"></div><p>${safeMessage}</p></div></body></html>`;
+}
+
+function buildDocumentViewerHtml(href: string, options: BrowserDocumentOptions = {}) {
+  const title = escapeHtml(options.title || '文件预览');
+  const safeHref = escapeHtml(href);
+  const fallbackUrl = options.fallbackUrl || '/';
+  return `<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><title>${title}</title><style>html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#111827;color:#f9fafb;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}.bar{height:calc(52px + env(safe-area-inset-top,0px));padding:env(safe-area-inset-top,0px) 12px 0;display:flex;align-items:center;gap:10px;background:#111827;border-bottom:1px solid rgba(255,255,255,.1);box-sizing:border-box}.exit,.open{height:36px;border:0;border-radius:18px;padding:0 14px;font-size:14px;font-weight:700;text-decoration:none;display:inline-flex;align-items:center;justify-content:center}.exit{background:#fff;color:#111827}.open{margin-left:auto;background:rgba(255,255,255,.12);color:#fff}.title{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:14px;font-weight:700}.viewer{display:block;width:100%;height:calc(100% - 52px - env(safe-area-inset-top,0px));border:0;background:#f3f4f6}.fallback{position:fixed;left:16px;right:16px;bottom:calc(env(safe-area-inset-bottom,0px) + 16px);padding:10px 12px;border-radius:12px;background:rgba(17,24,39,.82);backdrop-filter:blur(12px);font-size:12px;line-height:1.5;color:#d1d5db}</style></head><body><div class="bar"><button class="exit" id="exitButton" type="button">退出</button><div class="title">${title}</div><a class="open" href="${safeHref}" target="_self">打开</a></div><iframe class="viewer" src="${safeHref}" title="${title}"></iframe><div class="fallback">如果图纸没有显示，点右上角“打开”；完成后点左上角“退出”。</div><script>const fallbackUrl=${jsonForInlineScript(
+    fallbackUrl,
+  )};document.getElementById('exitButton').addEventListener('click',function(){try{window.close()}catch(e){}setTimeout(function(){if(!window.closed)location.href=fallbackUrl},80)})</script></body></html>`;
 }
 
 function updatePreparedWindow(win: PreparedDownloadWindow, message: string) {
@@ -72,6 +105,19 @@ function openPreparedDownloadWindow(): PreparedDownloadWindow {
 
 export function prepareBrowserDownload(): PreparedDownloadWindow {
   return openPreparedDownloadWindow();
+}
+
+export function prepareBrowserDocument(message = '正在打开文件...'): PreparedDownloadWindow {
+  const win = window.open('', '_blank');
+  if (win) {
+    try {
+      win.opener = null;
+    } catch {
+      // Some browsers expose opener as readonly for isolated contexts.
+    }
+    updatePreparedWindow(win, message);
+  }
+  return win;
 }
 
 export function cancelPreparedBrowserDownload(win: PreparedDownloadWindow) {
@@ -208,6 +254,47 @@ export async function downloadBrowserPostFile(
     ...options,
     method: 'POST',
     body,
+  });
+}
+
+export function openBrowserDocument(href: string, options: BrowserDocumentOptions = {}) {
+  if (!href) return;
+
+  const preparedWindow = options.preparedWindow ?? window.open('about:blank', '_blank');
+  if (preparedWindow) {
+    try {
+      preparedWindow.opener = null;
+    } catch {
+      // Some browsers expose opener as readonly for isolated contexts.
+    }
+  }
+
+  if (shouldIsolateDownloadNavigation()) {
+    if (preparedWindow && !preparedWindow.closed) {
+      try {
+        preparedWindow.document.open();
+        preparedWindow.document.write(buildDocumentViewerHtml(href, options));
+        preparedWindow.document.close();
+        return;
+      } catch {
+        // Fall through to direct navigation.
+      }
+    }
+    window.location.href = href;
+    return;
+  }
+
+  if (preparedWindow && !preparedWindow.closed) {
+    preparedWindow.location.replace(href);
+    return;
+  }
+  window.location.href = href;
+}
+
+export function openDocumentUrl(href: string, options: BrowserDocumentOptions = {}) {
+  openBrowserDocument(href, {
+    ...options,
+    fallbackUrl: options.fallbackUrl || currentBrowserPath(),
   });
 }
 

@@ -1,3 +1,4 @@
+import type { Prisma } from '@prisma/client';
 import { Router, Response } from 'express';
 import { logger } from '../../lib/logger.js';
 import { prisma } from '../../lib/prisma.js';
@@ -103,7 +104,7 @@ export function createSelectionAdminCategoriesRouter() {
         catalogShared,
         optionCatalogs,
       } = req.body;
-      const data: any = {};
+      const data: Prisma.SelectionCategoryUpdateInput = {};
       if (name !== undefined) data.name = name;
       if (slug !== undefined) data.slug = slug;
       if (description !== undefined) data.description = description;
@@ -239,7 +240,7 @@ export function createSelectionAdminCategoriesRouter() {
         }
 
         // Batch update products
-        const updated = await prisma.$transaction(async (tx: any) => {
+        const updated = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
           const products = await tx.selectionProduct.findMany({
             where: { categoryId: id },
             select: { id: true, specs: true },
@@ -248,7 +249,7 @@ export function createSelectionAdminCategoriesRouter() {
           const optImages = category.optionImages as Record<string, Record<string, string>> | null;
 
           let count = 0;
-          const updateOps = [];
+          const updateOps: Promise<unknown>[] = [];
           for (const p of products) {
             const specs = p.specs as Record<string, string>;
             if (specs[field] === oldValue) {

@@ -1,5 +1,6 @@
 import { copyFileSync, existsSync, mkdirSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
+import { Prisma, type PrismaClient } from '@prisma/client';
 import { Router, Response } from 'express';
 import { cacheDelByPrefix } from '../../lib/cache.js';
 import { config } from '../../lib/config.js';
@@ -17,7 +18,7 @@ import { generateThumbnail } from '../../services/thumbnail.js';
 import { modelUpload, validateModelUpload } from './uploadHelpers.js';
 
 type ModelConversionContext = {
-  prisma: any;
+  prisma: PrismaClient | null;
   getMeta: (id: string) => Record<string, unknown> | null;
   saveMeta: (id: string, data: Record<string, unknown>) => void;
   getPreviewMeta: (
@@ -25,6 +26,9 @@ type ModelConversionContext = {
     options?: { gltfUrl?: string | null; originalName?: string | null; format?: string | null; previewMeta?: unknown },
   ) => Promise<Record<string, unknown> | null>;
 };
+
+const toPrismaJson = (value: unknown): Prisma.InputJsonValue | typeof Prisma.JsonNull =>
+  value === null || value === undefined ? Prisma.JsonNull : (value as Prisma.InputJsonValue);
 
 export function createModelConversionRouter({ prisma, getMeta, saveMeta, getPreviewMeta }: ModelConversionContext) {
   const router = Router();
@@ -123,7 +127,7 @@ export function createModelConversionRouter({ prisma, getMeta, saveMeta, getPrev
             gltfUrl: '',
             gltfSize: 0,
             thumbnailUrl: null,
-            previewMeta: null,
+            previewMeta: Prisma.JsonNull,
             ...(originalModifiedAt && { metadata: { ...existingMeta, originalModifiedAt } }),
             ...(originalModifiedAt && { fileModifiedAt: new Date(originalModifiedAt) }),
           },
@@ -241,7 +245,7 @@ export function createModelConversionRouter({ prisma, getMeta, saveMeta, getPrev
         let gltfSize = m.gltfSize;
         let gltfUrl = m.gltfUrl;
         let previewPath = findPreviewAssetPath(modelDir, m.id, m.gltfUrl);
-        let nextPreviewMeta = (m as any).previewMeta || null;
+        let nextPreviewMeta = toPrismaJson(m.previewMeta);
 
         // Re-convert from original if available, otherwise just regenerate thumbnail from existing glTF
         if (origPath) {
@@ -249,7 +253,7 @@ export function createModelConversionRouter({ prisma, getMeta, saveMeta, getPrev
           gltfSize = result.gltfSize;
           gltfUrl = result.gltfUrl;
           previewPath = result.gltfPath;
-          nextPreviewMeta = result.previewMeta;
+          nextPreviewMeta = toPrismaJson(result.previewMeta);
         }
 
         // Regenerate thumbnail from current preview asset (GLB for new conversions, glTF for legacy assets)
@@ -383,7 +387,7 @@ export function createModelConversionRouter({ prisma, getMeta, saveMeta, getPrev
                 data: {
                   gltfUrl: result.gltfUrl,
                   gltfSize: result.gltfSize,
-                  previewMeta: result.previewMeta,
+                  previewMeta: toPrismaJson(result.previewMeta),
                   status: MODEL_STATUS.COMPLETED,
                   ...(thumbnailUrl ? { thumbnailUrl } : {}),
                 },

@@ -116,7 +116,7 @@ export function createAdminCategoriesRouter() {
       const id = req.params.id as string;
 
       try {
-        await prisma.$transaction(async (tx: any) => {
+        await prisma.$transaction(async (tx) => {
           const childCount = await tx.category.count({ where: { parentId: id } });
           if (childCount > 0) {
             throw Object.assign(new Error('HAS_CHILDREN'), { code: 'HAS_CHILDREN' });

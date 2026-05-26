@@ -19,6 +19,53 @@ interface Tri {
 type Mat4 = number[];
 type Projection = { x: number; y: number; depth: number };
 
+type GltfAccessor = {
+  bufferView?: number;
+  byteOffset?: number;
+  componentType?: number;
+  count?: number;
+  type?: string;
+};
+
+type GltfBufferView = {
+  byteOffset?: number;
+  byteStride?: number;
+};
+
+type GltfPrimitive = {
+  attributes?: {
+    NORMAL?: number;
+    POSITION?: number;
+  };
+  indices?: number;
+};
+
+type GltfMesh = {
+  primitives?: GltfPrimitive[];
+};
+
+type GltfNode = {
+  children?: number[];
+  matrix?: number[];
+  mesh?: number;
+  rotation?: number[];
+  scale?: number[];
+  translation?: number[];
+};
+
+type GltfScene = {
+  nodes?: number[];
+};
+
+type GltfAsset = {
+  accessors?: GltfAccessor[];
+  bufferViews?: GltfBufferView[];
+  meshes?: GltfMesh[];
+  nodes?: GltfNode[];
+  scene?: number;
+  scenes?: GltfScene[];
+};
+
 // Keep enough faces for complex CAD assemblies. Too aggressive sampling makes
 // thumbnails look like transparent wireframes.
 const MAX_RENDER_TRIANGLES = 2500000;
@@ -133,7 +180,7 @@ function multiplyMat4(a: Mat4, b: Mat4): Mat4 {
   return out;
 }
 
-function composeNodeMatrix(node: any): Mat4 {
+function composeNodeMatrix(node: GltfNode): Mat4 {
   if (Array.isArray(node.matrix) && node.matrix.length === 16) {
     return node.matrix.map((value: number) => Number(value));
   }
@@ -207,12 +254,16 @@ function readScalar(view: DataView, offset: number, componentType: number): numb
   throw new Error(`Unsupported accessor component type: ${componentType}`);
 }
 
-function accessorOffset(accessor: any, bufferView: any): number {
+function accessorOffset(accessor: GltfAccessor, bufferView: GltfBufferView): number {
   return (bufferView.byteOffset || 0) + (accessor.byteOffset || 0);
 }
 
-function readVec3Accessor(accessor: any, bufferView: any, binData: Buffer): Vec3[] {
-  if (!accessor || !bufferView || accessor.type !== 'VEC3') return [];
+function readVec3Accessor(
+  accessor: GltfAccessor | null | undefined,
+  bufferView: GltfBufferView | null | undefined,
+  binData: Buffer,
+): Vec3[] {
+  if (!accessor || !bufferView || accessor.type !== 'VEC3' || !accessor.componentType || !accessor.count) return [];
   const size = componentSize(accessor.componentType);
   const stride = bufferView.byteStride || size * 3;
   const offset = accessorOffset(accessor, bufferView);
@@ -232,8 +283,12 @@ function readVec3Accessor(accessor: any, bufferView: any, binData: Buffer): Vec3
   return out;
 }
 
-function readIndexAccessor(accessor: any, bufferView: any, binData: Buffer): number[] {
-  if (!accessor || !bufferView) return [];
+function readIndexAccessor(
+  accessor: GltfAccessor | null | undefined,
+  bufferView: GltfBufferView | null | undefined,
+  binData: Buffer,
+): number[] {
+  if (!accessor || !bufferView || !accessor.componentType || !accessor.count) return [];
   const size = componentSize(accessor.componentType);
   const stride = bufferView.byteStride || size;
   const offset = accessorOffset(accessor, bufferView);
@@ -484,12 +539,12 @@ export function generateThumbnail(
   }
 }
 
-function extractTriangles(gltf: any, binData: Buffer): Tri[] {
+function extractTriangles(gltf: GltfAsset, binData: Buffer): Tri[] {
   const triangles: Tri[] = [];
-  const accessors: any[] = Array.from(gltf.accessors || []);
-  const bufferViews: any[] = Array.from(gltf.bufferViews || []);
-  const meshes: any[] = Array.from(gltf.meshes || []);
-  const nodes: any[] = Array.from(gltf.nodes || []);
+  const accessors = gltf.accessors ?? [];
+  const bufferViews = gltf.bufferViews ?? [];
+  const meshes = gltf.meshes ?? [];
+  const nodes = gltf.nodes ?? [];
 
   const addMeshTriangles = (meshIndex: number, matrix: Mat4) => {
     const mesh = meshes[meshIndex];
@@ -499,7 +554,7 @@ function extractTriangles(gltf: any, binData: Buffer): Tri[] {
       if (posIdx === undefined) continue;
       const posAcc = accessors[posIdx];
       if (!posAcc) continue;
-      const posBv = bufferViews[posAcc.bufferView];
+      const posBv = posAcc.bufferView !== undefined ? bufferViews[posAcc.bufferView] : null;
 
       const positions = readVec3Accessor(posAcc, posBv, binData).map((v) => transformPoint(v, matrix));
 
@@ -509,7 +564,7 @@ function extractTriangles(gltf: any, binData: Buffer): Tri[] {
       if (normIdx !== undefined) {
         const normAcc = accessors[normIdx];
         if (normAcc) {
-          const normBv = bufferViews[normAcc.bufferView];
+          const normBv = normAcc.bufferView !== undefined ? bufferViews[normAcc.bufferView] : null;
           normals = readVec3Accessor(normAcc, normBv, binData).map((v) => transformNormal(v, matrix));
         }
       }
@@ -518,7 +573,7 @@ function extractTriangles(gltf: any, binData: Buffer): Tri[] {
       if (prim.indices !== undefined) {
         const idxAcc = accessors[prim.indices];
         if (!idxAcc) continue;
-        const idxBv = bufferViews[idxAcc.bufferView];
+        const idxBv = idxAcc.bufferView !== undefined ? bufferViews[idxAcc.bufferView] : null;
         const indices = readIndexAccessor(idxAcc, idxBv, binData);
         for (let i = 0; i + 2 < indices.length; i += 3) {
           const i0 = indices[i],
@@ -530,7 +585,7 @@ function extractTriangles(gltf: any, binData: Buffer): Tri[] {
           let nx = 0,
             ny = 0,
             nz = 0;
-          if (normals) {
+          if (normals?.[i0] && normals[i1] && normals[i2]) {
             nx = (normals[i0].x + normals[i1].x + normals[i2].x) / 3;
             ny = (normals[i0].y + normals[i1].y + normals[i2].y) / 3;
             nz = (normals[i0].z + normals[i1].z + normals[i2].z) / 3;

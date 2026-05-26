@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import type { Request, Response } from 'express';
 import { asyncHandler, badRequest, forbidden, isHttpError } from './http.js';
 
 test('HttpError helpers expose status and message', () => {
@@ -19,7 +20,7 @@ test('asyncHandler forwards rejected errors to next', async () => {
     throw error;
   });
 
-  handler({} as any, {} as any, (err?: unknown) => {
+  handler({} as Request, {} as Response, (err?: unknown) => {
     captured = err;
   });
 

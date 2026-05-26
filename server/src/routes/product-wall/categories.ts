@@ -188,7 +188,10 @@ export function createCategoryRouter() {
         res.json({ ok: true });
         void invalidateProductWallCache();
       } catch (err: unknown) {
-        const statusCode = err instanceof Error && 'statusCode' in err ? (err as any).statusCode : undefined;
+        const statusCode =
+          err instanceof Error && 'statusCode' in err && typeof err.statusCode === 'number'
+            ? err.statusCode
+            : undefined;
         if (statusCode) {
           res.status(statusCode).json({ detail: getErrorMessage(err).replace(/^Error:\s*/, '') });
           return;

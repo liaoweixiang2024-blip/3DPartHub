@@ -11,11 +11,15 @@
 #   DB_PASSWORD="$(openssl rand -hex 24)"
 #   REDIS_PASSWORD="$(openssl rand -hex 24)"
 #   JWT_SECRET="$(openssl rand -hex 32)"
+#   BACKUP_SIGNING_SECRET="$(openssl rand -hex 32)"
+#   BACKUP_ENCRYPTION_SECRET="$(openssl rand -hex 32)"
 #   ADMIN_PASS="$(openssl rand -base64 24)"
 #   cat > .env <<EOF
 #   DB_PASSWORD=${DB_PASSWORD}
 #   REDIS_PASSWORD=${REDIS_PASSWORD}
 #   JWT_SECRET=${JWT_SECRET}
+#   BACKUP_SIGNING_SECRET=${BACKUP_SIGNING_SECRET}
+#   BACKUP_ENCRYPTION_SECRET=${BACKUP_ENCRYPTION_SECRET}
 #   ADMIN_PASS=${ADMIN_PASS}
 #   EOF
 #   docker compose up -d
@@ -24,7 +28,7 @@
 # 【更新】
 #   默认使用 latest 镜像
 #   手动更新: docker compose pull && docker compose up -d --force-recreate
-#   如需锁定版本: 在 .env 中写入 IMAGE_TAG=v3.1.5
+#   如需锁定版本: 在 .env 中写入 IMAGE_TAG=v3.2.0
 #   检查日志: docker compose logs -f api
 #
 # 【数据安全】
@@ -64,7 +68,6 @@ services:
   api:
     image: ghcr.io/liaoweixiang2024-blip/3dparthub-api:${IMAGE_TAG:-latest}
     container_name: 3dparthub-api
-    init: true
     shm_size: ${API_SHM_SIZE:-1g}
     mem_limit: ${API_MEMORY_LIMIT:-2G}
     mem_reservation: ${API_MEMORY_RESERVATION:-512M}
@@ -83,6 +86,8 @@ services:
       DATABASE_URL: 'postgresql://modeluser:${DB_PASSWORD:-3dparthub-default-db-password-change-me-2026}@postgres:5432/3dparthub?connection_limit=${DB_CONNECTION_LIMIT:-5}&pool_timeout=10'
       # <<< 建议在 .env 中覆盖为随机字符串 (openssl rand -hex 32)
       JWT_SECRET: '${JWT_SECRET:-3dparthub-default-jwt-secret-change-me-2026-04-30}'
+      BACKUP_SIGNING_SECRET: '${BACKUP_SIGNING_SECRET:-}'
+      BACKUP_ENCRYPTION_SECRET: '${BACKUP_ENCRYPTION_SECRET:-}'
       JWT_EXPIRES_IN: 7d
       UPLOAD_DIR: uploads
       STATIC_DIR: static
@@ -156,7 +161,7 @@ services:
       - static-data:/app/static:ro
       - uploads-data:/app/uploads:ro
     healthcheck:
-      test: ['CMD-SHELL', 'wget -qO- http://localhost/healthz >/dev/null 2>&1 || exit 1']
+      test: ['CMD-SHELL', 'wget -qO- http://127.0.0.1/healthz >/dev/null 2>&1 || exit 1']
       interval: 30s
       timeout: 5s
       retries: 5

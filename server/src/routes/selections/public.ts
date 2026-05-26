@@ -43,7 +43,25 @@ function specValue(specs: Record<string, unknown>, field: string): string {
   return '—';
 }
 
-function selectionProductPayload(p: any, modelMap = new Map<string, { id: string; thumbnailUrl: string | null }>()) {
+type SelectionProductPayloadInput = {
+  categoryId: string;
+  categoryCatalogPdf?: string | null;
+  components?: unknown;
+  id: string;
+  image?: string | null;
+  isKit?: boolean | null;
+  modelNo?: string | null;
+  name: string;
+  pdfUrl?: string | null;
+  sortOrder?: number | null;
+  specs?: unknown;
+  unit?: string | null;
+};
+
+function selectionProductPayload(
+  p: SelectionProductPayloadInput,
+  modelMap = new Map<string, { id: string; thumbnailUrl: string | null }>(),
+) {
   const matched = p.modelNo ? modelMap.get(p.modelNo) : undefined;
   return {
     id: p.id,
@@ -57,6 +75,7 @@ function selectionProductPayload(p: any, modelMap = new Map<string, { id: string
     sortOrder: p.sortOrder,
     isKit: p.isKit,
     components: p.components,
+    categoryCatalogPdf: p.categoryCatalogPdf ?? null,
     matchedModelId: matched?.id ?? null,
     matchedModelThumbnail: matched?.thumbnailUrl ?? null,
   };
@@ -81,6 +100,10 @@ function selectionSpecsWhere(categoryId: string, specs: Record<string, string>, 
       specs: { path: [key], equals: value },
     }));
   return filters.length ? { AND: [{ categoryId }, ...filters] } : { categoryId };
+}
+
+function specsRecord(value: unknown): Record<string, unknown> {
+  return value && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : {};
 }
 
 type SelectionColumnDef = {
@@ -337,6 +360,7 @@ export function createSelectionPublicRouter() {
           }
 
           // Attach catalogPdf to items: from own category, or shared by joint type
+          const catalogByProductId = new Map<string, string | null>();
           if (items.length) {
             const category = await prisma.selectionCategory.findUnique({
               where: { slug },
@@ -360,7 +384,7 @@ export function createSelectionPublicRouter() {
                 });
                 sharedPdfMap = {};
                 for (const p of products) {
-                  const specs = p.specs as Record<string, unknown>;
+                  const specs = specsRecord(p.specs);
                   const jt = typeof specs['接头形态'] === 'string' ? specs['接头形态'] : null;
                   const pdf = catPdfById.get(p.categoryId);
                   if (jt && pdf) sharedPdfMap[jt] = pdf;
@@ -369,17 +393,20 @@ export function createSelectionPublicRouter() {
             }
 
             for (const item of items) {
-              const specs = (item as any).specs as Record<string, string>;
+              const specs = specsRecord(item.specs);
               let matchedCatalog: string | null = null;
               for (const [field, valueMap] of Object.entries(optionCatalogs)) {
-                const specVal = specs[field];
+                const specVal = typeof specs[field] === 'string' ? specs[field] : null;
                 if (specVal && valueMap[specVal]) {
                   matchedCatalog = valueMap[specVal];
                   break;
                 }
               }
-              (item as any).categoryCatalogPdf =
-                matchedCatalog || ownPdf || (sharedPdfMap && sharedPdfMap[specs['接头形态']]) || null;
+              const jointShape = typeof specs['接头形态'] === 'string' ? specs['接头形态'] : '';
+              catalogByProductId.set(
+                item.id,
+                matchedCatalog || ownPdf || (sharedPdfMap && sharedPdfMap[jointShape]) || null,
+              );
             }
           }
 
@@ -388,7 +415,9 @@ export function createSelectionPublicRouter() {
             page,
             pageSize,
             options: Array.from(counts.entries()).map(([val, count]) => ({ val, count })),
-            items: items.map((item) => selectionProductPayload(item)),
+            items: items.map((item) =>
+              selectionProductPayload({ ...item, categoryCatalogPdf: catalogByProductId.get(item.id) || null }),
+            ),
             resolvedSpecs,
             resolvedSkipped: Array.from(resolvedSkipped),
             autoAdvanced,

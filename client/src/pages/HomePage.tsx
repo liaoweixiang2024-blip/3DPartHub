@@ -485,7 +485,10 @@ export default function HomePage() {
       }
     };
     if ('requestIdleCallback' in window) {
-      (window as any).requestIdleCallback(prefetch, { timeout: 2000 });
+      const idleWindow = window as Window & {
+        requestIdleCallback?: (callback: () => void, options?: { timeout: number }) => number;
+      };
+      idleWindow.requestIdleCallback?.(prefetch, { timeout: 2000 });
     } else {
       setTimeout(prefetch, 0);
     }

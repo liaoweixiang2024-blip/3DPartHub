@@ -1,5 +1,6 @@
 import { copyFileSync, existsSync, mkdirSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
+import type { Prisma, PrismaClient } from '@prisma/client';
 import { Router, Response } from 'express';
 import { cacheDelByPrefix, cacheDel } from '../../lib/cache.js';
 import { config } from '../../lib/config.js';
@@ -15,7 +16,7 @@ import { clearCategoryCache } from '../categories/common.js';
 import { modelImageUpload } from './uploadHelpers.js';
 
 type ModelManagementContext = {
-  prisma: any;
+  prisma: PrismaClient | null;
   metadataDir: string;
   getMeta: (id: string) => Record<string, unknown> | null;
   saveMeta: (id: string, data: Record<string, unknown>) => void;
@@ -40,7 +41,8 @@ export function createModelManagementRouter({ prisma, metadataDir, getMeta, save
     groupId: true,
     group: { select: { id: true, primaryId: true } },
     versions: { select: { fileKey: true } },
-  };
+  } satisfies Prisma.ModelSelect;
+  type ModelFileCleanupRecord = Prisma.ModelGetPayload<{ select: typeof modelFileCleanupSelect }>;
 
   async function clearModelManagementCaches() {
     await cacheDelByPrefix('cache:models:');
@@ -57,7 +59,7 @@ export function createModelManagementRouter({ prisma, metadataDir, getMeta, save
     return { ...(metadata as Record<string, unknown>) };
   }
 
-  async function deleteModelRecord(tx: any, id: string, deletedById?: string | null) {
+  async function deleteModelRecord(tx: Prisma.TransactionClient, id: string, deletedById?: string | null) {
     const model = await tx.model.findUnique({
       where: { id },
       select: modelFileCleanupSelect,
@@ -88,7 +90,7 @@ export function createModelManagementRouter({ prisma, metadataDir, getMeta, save
     }
 
     // If this model is the primary of its group, transfer primary to the newest remaining variant.
-    if (model.group && model.group.primaryId === id) {
+    if (model.groupId && model.group && model.group.primaryId === id) {
       const remaining = await tx.model.findMany({
         where: { groupId: model.groupId, id: { not: id }, status: MODEL_STATUS.COMPLETED },
         orderBy: { createdAt: 'desc' },
@@ -138,7 +140,7 @@ export function createModelManagementRouter({ prisma, metadataDir, getMeta, save
 
   async function cleanupDeletedModelFiles(
     id: string,
-    dbModel: Awaited<ReturnType<typeof deleteModelRecord>> | null,
+    dbModel: ModelFileCleanupRecord | null,
     options: { clearCaches?: boolean; dbModelFound?: boolean } = {},
   ) {
     const dbModelFound = options.dbModelFound ?? Boolean(dbModel);
@@ -202,7 +204,9 @@ export function createModelManagementRouter({ prisma, metadataDir, getMeta, save
 
     if (prisma) {
       try {
-        dbModel = await prisma.$transaction((tx: any) => deleteModelRecord(tx, id, options.deletedById));
+        dbModel = await prisma.$transaction((tx: Prisma.TransactionClient) =>
+          deleteModelRecord(tx, id, options.deletedById),
+        );
       } catch (err) {
         if (err instanceof ModelDeleteBlockedError) throw err;
         logger.error({ err, modelId: id }, '[models] Failed to delete model row');
@@ -277,13 +281,15 @@ export function createModelManagementRouter({ prisma, metadataDir, getMeta, save
     const filters = rawFilters && typeof rawFilters === 'object' ? (rawFilters as Record<string, unknown>) : {};
     const search = normalizeSearchParam(filters.search);
     const categoryId = normalizeSearchParam(filters.categoryId, 80);
-    const where: any = { status: MODEL_STATUS.COMPLETED };
-    const andConditions: Record<string, unknown>[] = [];
+    const where: Prisma.ModelWhereInput = { status: MODEL_STATUS.COMPLETED };
+    const andConditions: Prisma.ModelWhereInput[] = [];
     const searchCond = modelTextSearchWhere(search);
-    if (searchCond) andConditions.push(searchCond);
+    if (searchCond) andConditions.push(searchCond as Prisma.ModelWhereInput);
 
     if (categoryId) {
-      const catIdsRaw = await prisma.$queryRaw<Array<{ id: string }>>`
+      const db = prisma;
+      if (!db) throw new Error('DATABASE_UNAVAILABLE');
+      const catIdsRaw = await db.$queryRaw<Array<{ id: string }>>`
         WITH RECURSIVE cat_tree AS (
           SELECT id FROM categories WHERE id = ${categoryId}
           UNION ALL
@@ -355,7 +361,7 @@ export function createModelManagementRouter({ prisma, metadataDir, getMeta, save
           gltf_url: updated.gltfUrl,
           gltf_size: updated.gltfSize,
           original_size: updated.originalSize,
-          category: (updated as any).categoryRef?.name || null,
+          category: updated.categoryRef?.name || null,
           category_id: updated.categoryId || null,
           download_count: updated.downloadCount || 0,
           created_at: updated.createdAt,
@@ -363,8 +369,8 @@ export function createModelManagementRouter({ prisma, metadataDir, getMeta, save
           drawing_url: updated.drawingUrl,
           drawing_name: updated.drawingName || null,
           drawing_size: updated.drawingSize || null,
-          preview_meta: (updated as any).previewMeta || null,
-          group: (updated as any).group || null,
+          preview_meta: updated.previewMeta || null,
+          group: updated.group || null,
         });
         return;
       } catch (err) {
@@ -435,7 +441,7 @@ export function createModelManagementRouter({ prisma, metadataDir, getMeta, save
         let items: Awaited<ReturnType<typeof cleanupDeletedModelFiles>>[];
         if (prisma) {
           const dbModels = await prisma.$transaction(
-            async (tx: any) => {
+            async (tx: Prisma.TransactionClient) => {
               await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext('model-batch-delete'))`;
               const deletedRows: { id: string; dbModel: Awaited<ReturnType<typeof deleteModelRecord>> | null }[] = [];
               for (const id of modelIds) {
@@ -538,7 +544,7 @@ export function createModelManagementRouter({ prisma, metadataDir, getMeta, save
         total,
         page,
         page_size: pageSize,
-        items: models.map((model: any) => {
+        items: models.map((model) => {
           const metadata = metadataObject(model.metadata);
           const updatedAt =
             model.updatedAt instanceof Date ? model.updatedAt.toISOString() : String(model.updatedAt || '');
@@ -592,7 +598,7 @@ export function createModelManagementRouter({ prisma, metadataDir, getMeta, save
           return;
         }
 
-        await prisma.$transaction(async (tx: any) => {
+        await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
           const metadata = metadataObject(model.metadata);
           const previousGroupId = typeof metadata.deletedFromGroupId === 'string' ? metadata.deletedFromGroupId : null;
           const wasPrimary = metadata.deletedWasGroupPrimary === true;
@@ -610,7 +616,7 @@ export function createModelManagementRouter({ prisma, metadataDir, getMeta, save
             data: {
               status: MODEL_STATUS.COMPLETED,
               groupId: previousGroup?.id || null,
-              metadata,
+              metadata: metadata as Prisma.InputJsonValue,
             },
           });
 

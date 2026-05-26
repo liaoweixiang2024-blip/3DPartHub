@@ -15,7 +15,7 @@ test('buildFooterCopyright falls back to 3DPartHub for empty input', () => {
   const result = buildFooterCopyright('');
   assert.ok(result.includes('3DPartHub'));
   assert.ok(buildFooterCopyright(undefined).includes('3DPartHub'));
-  assert.ok(buildFooterCopyright(null as any).includes('3DPartHub'));
+  assert.ok(buildFooterCopyright(null).includes('3DPartHub'));
 });
 
 test('buildModelDetailCopyright does not include All rights reserved', () => {

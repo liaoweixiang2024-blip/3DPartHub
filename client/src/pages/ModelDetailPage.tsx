@@ -4,7 +4,7 @@ import { useParams, useNavigate, Link, useLocation } from 'react-router-dom';
 import useSWR, { mutate as globalMutate } from 'swr';
 import { categoriesApi } from '../api/categories';
 import { downloadModelFile, isDownloadAuthRequiredError, openModelDrawing } from '../api/downloads';
-import { modelApi } from '../api/models';
+import { modelApi, type ServerModelListResponse } from '../api/models';
 import { updateSettings } from '../api/settings';
 import CadViewerPanel from '../components/3d/CadViewerPanel';
 import type { ViewMode, CameraPreset } from '../components/3d/ModelViewer';
@@ -479,7 +479,7 @@ export default function ModelDetailPage() {
       dimensions: modelData.dimensions,
     });
     toast(wasFav ? '已取消收藏' : '已收藏，可在「我的收藏」中批量下载', 'success');
-  }, [location.pathname, modelData, isFavorite, navigate, toggleFavorite, toast]);
+  }, [modelData, isFavorite, toggleFavorite, toast]);
 
   // Resolve category breadcrumb path from tree
   const categoryBreadcrumb = useMemo(() => {
@@ -995,12 +995,12 @@ export default function ModelDetailPage() {
           await modelApi.delete(modelData.id);
           globalMutate(
             (k: string) => typeof k === 'string' && k.includes('/models/infinite'),
-            (pages: any[] | undefined) => {
+            (pages: ServerModelListResponse[] | undefined) => {
               if (!pages) return pages;
-              return pages.map((p: any) => ({
+              return pages.map((p) => ({
                 ...p,
-                items: p.items?.filter((m: any) => m.id !== modelData.id),
-                total: Math.max(0, (p.total ?? 0) - (p.items?.some((m: any) => m.id === modelData.id) ? 1 : 0)),
+                items: p.items?.filter((m) => m.model_id !== modelData.id),
+                total: Math.max(0, (p.total ?? 0) - (p.items?.some((m) => m.model_id === modelData.id) ? 1 : 0)),
               }));
             },
             false,

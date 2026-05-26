@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { copyFileSync, existsSync, mkdirSync, realpathSync, rmSync } from 'node:fs';
 import { stat as statAsync } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
+import type { Prisma, PrismaClient } from '@prisma/client';
 import { Router, Response, type NextFunction } from 'express';
 import { getBusinessConfig } from '../../lib/businessConfig.js';
 import { cacheDelByPrefix } from '../../lib/cache.js';
@@ -19,9 +20,16 @@ import { scrubStepMetadata, isStepFormat } from '../../services/stepMetadataScru
 import { modelUpload, pathInside, validateModelUpload } from './uploadHelpers.js';
 
 type ModelUploadContext = {
-  prisma: any;
+  prisma: PrismaClient | null;
   saveMeta: (id: string, data: Record<string, unknown>) => void;
   deleteMeta: (id: string) => void;
+};
+
+type ModelUploadComparable = {
+  id: string;
+  groupId?: string | null;
+  fileModifiedAt?: Date | string | null;
+  createdAt: Date | string;
 };
 
 export function createModelUploadRouter({ prisma, saveMeta, deleteMeta }: ModelUploadContext) {
@@ -155,22 +163,23 @@ export function createModelUploadRouter({ prisma, saveMeta, deleteMeta }: ModelU
             select: { id: true, groupId: true, fileModifiedAt: true, createdAt: true },
           });
           if (sameNameModels.length > 0) {
-            const allModels = [{ id: modelId, fileModifiedAt: originalModifiedAt, createdAt }, ...sameNameModels];
-            const toTime = (m: any) =>
+            const allModels: ModelUploadComparable[] = [
+              { id: modelId, fileModifiedAt: originalModifiedAt, createdAt },
+              ...sameNameModels,
+            ];
+            const toTime = (m: ModelUploadComparable) =>
               m.fileModifiedAt ? new Date(m.fileModifiedAt).getTime() : new Date(m.createdAt).getTime();
-            allModels.sort((a: any, b: any) => toTime(b) - toTime(a));
+            allModels.sort((a, b) => toTime(b) - toTime(a));
             const primaryId =
-              allModels.length > 1
-                ? allModels.find((m: any) => m.id !== modelId)?.id || allModels[0].id
-                : allModels[0].id;
+              allModels.length > 1 ? allModels.find((m) => m.id !== modelId)?.id || allModels[0].id : allModels[0].id;
 
-            const existingGroup = sameNameModels.find((m: any) => m.groupId);
+            const existingGroup = sameNameModels.find((m) => m.groupId);
             if (existingGroup?.groupId) {
               await prisma.model.update({ where: { id: modelId }, data: { groupId: existingGroup.groupId } });
               await prisma.modelGroup.update({ where: { id: existingGroup.groupId }, data: { primaryId } });
             } else {
-              const allIds = [modelId, ...sameNameModels.map((m: any) => m.id)];
-              await prisma.$transaction(async (tx: any) => {
+              const allIds = [modelId, ...sameNameModels.map((m) => m.id)];
+              await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
                 const existing = await tx.modelGroup.findFirst({
                   where: { models: { some: { name: modelName } } },
                 });

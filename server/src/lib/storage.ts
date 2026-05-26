@@ -1,6 +1,8 @@
 import { createReadStream, createWriteStream, existsSync, mkdirSync, statSync, unlinkSync } from 'node:fs';
 import { dirname, resolve, sep } from 'node:path';
+import type { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
+import type { Client as MinioClient } from 'minio';
 import { logger } from '../lib/logger.js';
 import { config } from './config.js';
 
@@ -76,7 +78,7 @@ class LocalStorage implements StorageProvider {
 // --- MinIO storage ---
 
 class MinioStorage implements StorageProvider {
-  private client: any = null;
+  private client: MinioClient | null = null;
   private bucket: string;
 
   constructor() {
@@ -114,7 +116,7 @@ class MinioStorage implements StorageProvider {
     if (Buffer.isBuffer(data)) {
       await this.client.putObject(this.bucket, key, data, data.length, metadata);
     } else {
-      await this.client.putObject(this.bucket, key, data, metadata);
+      await this.client.putObject(this.bucket, key, data as unknown as Readable, undefined, metadata);
     }
     return `/storage/${this.bucket}/${key}`;
   }
@@ -130,7 +132,7 @@ class MinioStorage implements StorageProvider {
 
   async getFile(key: string): Promise<NodeJS.ReadableStream> {
     if (!this.client) throw new Error('MinIO not initialized');
-    return this.client.getObject(this.bucket, key);
+    return (await this.client.getObject(this.bucket, key)) as unknown as NodeJS.ReadableStream;
   }
 
   async deleteFile(key: string): Promise<void> {

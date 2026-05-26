@@ -225,7 +225,7 @@ export function createUserSharesRouter() {
       const selectionCategoryMap = new Map(selectionCategories.map((item) => [item.slug, item.name]));
       const selectionNameMap = await buildSelectionShareNameMap(selectionShares, selectionCategoryMap);
 
-      const modelItems: UserShareItem[] = modelShares.map((s: any) => {
+      const modelItems: UserShareItem[] = modelShares.map((s) => {
         const model = modelMap.get(s.modelId);
         return {
           id: `model:${s.id}`,

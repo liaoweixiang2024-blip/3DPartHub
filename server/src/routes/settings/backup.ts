@@ -1,5 +1,6 @@
 import { closeSync, existsSync, openSync, readSync, readdirSync, rmSync, statSync } from 'node:fs';
 import { basename, join, resolve, sep } from 'node:path';
+import type { Prisma } from '@prisma/client';
 import { Router, Response } from 'express';
 import multer from 'multer';
 import { sendAcceleratedFile } from '../../lib/acceleratedDownload.js';
@@ -32,8 +33,10 @@ import { config } from '../../lib/config.js';
 import { createProtectedResourceToken, consumeProtectedResourceToken } from '../../lib/downloadTokenStore.js';
 import { getErrorMessage } from '../../lib/http.js';
 import { createLogger } from '../../lib/logger.js';
+import { prisma } from '../../lib/prisma.js';
 import { BACKUP_DIRECT_UPLOAD_MAX_BYTES } from '../../lib/uploadLimits.js';
 import { authMiddleware, type AuthRequest } from '../../middleware/auth.js';
+import { createNotification } from '../notifications.js';
 import { adminOnly, asSingleString } from './common.js';
 
 const log = createLogger({ component: 'settings-backup' });
@@ -42,9 +45,95 @@ const managedUploadRoot = resolve(process.cwd(), config.uploadDir);
 const managedBackupRoot = resolve(process.cwd(), config.staticDir, 'backups');
 
 const SAFE_BACKUP_ID_RE = /^[a-zA-Z0-9_\-.:]+$/;
+const IMPORT_RESTORE_CONFIRM_VALUE = 'RESTORE_IMPORT';
+const BACKUP_POLICY_ALERT_COOLDOWN_MS = 6 * 60 * 60 * 1000;
+
 function validateBackupId(id: string | null | undefined): string | null {
   if (!id || !SAFE_BACKUP_ID_RE.test(id) || id.includes('..')) return null;
   return id;
+}
+
+function readDangerousConfirm(req: AuthRequest): string {
+  const body = req.body as Record<string, unknown> | undefined;
+  const fromBody = asSingleString(body?.confirm);
+  if (fromBody) return fromBody;
+  return req.get('x-danger-confirm') || '';
+}
+
+function requireDangerousConfirm(req: AuthRequest, res: Response, expected: string, label: string): boolean {
+  if (readDangerousConfirm(req) === expected) return true;
+  res.status(400).json({ detail: `${label}需要二次确认，请刷新页面后重试` });
+  return false;
+}
+
+function backupPolicyAlertRelatedId(result: Awaited<ReturnType<typeof getBackupPolicyCheck>>): string {
+  const keys = [...result.report.blockers, ...result.report.warnings]
+    .map((item) => item.key)
+    .sort()
+    .join(',');
+  return `backup-policy:${result.report.riskLevel}:${keys || 'ok'}`;
+}
+
+async function notifyAdminsAboutBackupPolicy(result: Awaited<ReturnType<typeof getBackupPolicyCheck>>) {
+  if (result.report.riskLevel === 'low') return;
+  const relatedId = backupPolicyAlertRelatedId(result);
+  const since = new Date(Date.now() - BACKUP_POLICY_ALERT_COOLDOWN_MS);
+  try {
+    const admins = await prisma.user.findMany({ where: { role: 'ADMIN' }, select: { id: true } });
+    await Promise.all(
+      admins.map(async (admin) => {
+        const exists = await prisma.notification.findFirst({
+          where: {
+            userId: admin.id,
+            type: 'backup',
+            relatedId,
+            createdAt: { gte: since },
+          },
+          select: { id: true },
+        });
+        if (exists) return null;
+        return createNotification({
+          userId: admin.id,
+          title: result.report.riskLevel === 'high' ? '备份体检发现高风险' : '备份体检需要关注',
+          message: result.report.summary,
+          type: 'backup',
+          relatedId,
+        });
+      }),
+    );
+  } catch (err) {
+    log.warn({ err }, 'Failed to create backup policy alert notifications');
+  }
+}
+
+async function recordBackupPolicyCheckAudit(
+  req: AuthRequest,
+  result: Awaited<ReturnType<typeof getBackupPolicyCheck>>,
+) {
+  try {
+    await prisma.auditLog.create({
+      data: {
+        userId: req.user?.userId || null,
+        action: 'backup_policy_check',
+        resource: 'backup',
+        resourceId: null,
+        details: {
+          method: req.method,
+          path: req.originalUrl || req.path,
+          status: result.status,
+          riskLevel: result.report.riskLevel,
+          summary: result.report.summary,
+          blockers: result.report.blockers,
+          warnings: result.report.warnings,
+          nextActions: result.report.nextActions,
+          estimatedBackupSizeText: result.estimatedBackupSizeText,
+          checkedAt: result.checkedAt,
+        } as unknown as Prisma.InputJsonObject,
+      },
+    });
+  } catch (err) {
+    log.warn({ err }, 'Failed to write backup policy check audit log');
+  }
 }
 
 function getActiveBackupOperation(): { id: string; label: string } | null {
@@ -89,6 +178,11 @@ function hasGzipMagic(path: string): boolean {
   }
 }
 
+function isBackupArchiveFilename(name: string): boolean {
+  const lower = name.toLowerCase();
+  return lower.endsWith('.tar.gz') || lower.endsWith('.tgz');
+}
+
 function validateBackupArchiveUpload(path: string, res: Response, options: { cleanup?: boolean } = {}): boolean {
   try {
     const st = statSync(path);
@@ -115,14 +209,13 @@ const backupUpload = multer({
   limits: { fileSize: BACKUP_DIRECT_UPLOAD_MAX_BYTES }, // Larger backups use the chunked restore/import flow.
   fileFilter: (_req, file, cb) => {
     if (
-      file.originalname.endsWith('.tar.gz') ||
-      file.originalname.endsWith('.tgz') ||
+      isBackupArchiveFilename(file.originalname) ||
       file.mimetype === 'application/gzip' ||
       file.mimetype === 'application/x-gzip'
     ) {
       cb(null, true);
     } else {
-      cb(new Error('只支持 .tar.gz 格式的备份文件'));
+      cb(new Error('只支持 .tar.gz / .tgz 格式的备份文件'));
     }
   },
 });
@@ -144,7 +237,7 @@ function resolveBackupPath(filePath: unknown): string | null {
   const ok = allowed.some((root) => resolved === root || resolved.startsWith(`${root}${sep}`));
   if (!ok) return null;
   if (!existsSync(resolved)) return null;
-  if (!resolved.endsWith('.tar.gz') && !resolved.endsWith('.tgz')) return null;
+  if (!isBackupArchiveFilename(resolved)) return null;
   return resolved;
 }
 
@@ -184,6 +277,8 @@ export function createSettingsBackupRouter() {
     if (!adminOnly(req, res)) return;
     try {
       const result = await getBackupPolicyCheck();
+      await recordBackupPolicyCheckAudit(req, result);
+      await notifyAdminsAboutBackupPolicy(result);
       res.json(result);
     } catch (err: unknown) {
       log.error({ err }, 'Policy check failed');
@@ -200,7 +295,7 @@ export function createSettingsBackupRouter() {
       return;
     }
     try {
-      const jobId = startVerifyBackupJob(backupId);
+      const jobId = startVerifyBackupJob(backupId, req.user!.userId);
       res.json({ jobId });
     } catch (err: unknown) {
       const msg = getErrorMessage(err);
@@ -449,12 +544,18 @@ export function createSettingsBackupRouter() {
       res.status(400).json({ detail: '备份参数无效' });
       return;
     }
-    const ok = deleteBackup(backupId);
-    if (!ok) {
-      res.status(404).json({ detail: '备份不存在' });
-      return;
+    if (!requireDangerousConfirm(req, res, backupId, '删除备份')) return;
+    try {
+      const ok = deleteBackup(backupId);
+      if (!ok) {
+        res.status(404).json({ detail: '备份不存在' });
+        return;
+      }
+      res.json({ success: true });
+    } catch (err: unknown) {
+      log.error({ err, backupId }, 'Delete backup failed');
+      res.status(500).json({ detail: getErrorMessage(err) || '删除备份失败，请检查备份目录权限' });
     }
-    res.json({ success: true });
   });
 
   // Admin: start restore job from a saved backup
@@ -466,7 +567,8 @@ export function createSettingsBackupRouter() {
         res.status(400).json({ detail: '备份参数无效' });
         return;
       }
-      const jobId = startRestoreJob(backupId);
+      if (!requireDangerousConfirm(req, res, backupId, '恢复备份')) return;
+      const jobId = startRestoreJob(backupId, req.user!.userId);
       res.json({ jobId });
     } catch (err: unknown) {
       const msg = getErrorMessage(err);
@@ -509,6 +611,7 @@ export function createSettingsBackupRouter() {
     authMiddleware,
     (req: AuthRequest, res: Response, next) => {
       if (!adminOnly(req, res)) return;
+      if (!requireDangerousConfirm(req, res, IMPORT_RESTORE_CONFIRM_VALUE, '导入并恢复备份')) return;
       next();
     },
     backupUpload.single('file'),
@@ -520,7 +623,7 @@ export function createSettingsBackupRouter() {
       }
       try {
         if (!validateBackupArchiveUpload(file.path, res, { cleanup: true })) return;
-        const jobId = startRestoreJobFromFile(file.path);
+        const jobId = startRestoreJobFromFile(file.path, true, req.user!.userId);
         res.json({ jobId });
       } catch (err: unknown) {
         cleanupTempBackupUpload(file.path);
@@ -567,9 +670,10 @@ export function createSettingsBackupRouter() {
       res.status(400).json({ detail: '文件路径无效' });
       return;
     }
+    if (!requireDangerousConfirm(req, res, IMPORT_RESTORE_CONFIRM_VALUE, '导入并恢复备份')) return;
     try {
       if (!validateBackupArchiveUpload(managedPath, res, { cleanup: true })) return;
-      const jobId = startRestoreJobFromFile(managedPath);
+      const jobId = startRestoreJobFromFile(managedPath, true, req.user!.userId);
       res.json({ jobId });
     } catch (err: unknown) {
       cleanupTempBackupUpload(managedPath);
@@ -586,12 +690,13 @@ export function createSettingsBackupRouter() {
     const filePath = req.body?.path;
     const resolved = resolveBackupPath(filePath);
     if (!resolved) {
-      res.status(400).json({ detail: '路径无效，仅支持备份目录下的 .tar.gz 文件' });
+      res.status(400).json({ detail: '路径无效，仅支持备份目录下的 .tar.gz / .tgz 文件' });
       return;
     }
+    if (!requireDangerousConfirm(req, res, IMPORT_RESTORE_CONFIRM_VALUE, '导入并恢复备份')) return;
     try {
       if (!validateBackupArchiveUpload(resolved, res)) return;
-      const jobId = startRestoreJobFromFile(resolved, false); // Don't delete server-local files
+      const jobId = startRestoreJobFromFile(resolved, false, req.user!.userId); // Don't delete server-local files
       res.json({ jobId });
     } catch (err: unknown) {
       const msg = getErrorMessage(err);
@@ -610,7 +715,7 @@ export function createSettingsBackupRouter() {
         if (!existsSync(dir)) continue;
         for (const entry of readdirSync(dir, { withFileTypes: true })) {
           if (!entry.isFile()) continue;
-          if (!entry.name.endsWith('.tar.gz') && !entry.name.endsWith('.tgz')) continue;
+          if (!isBackupArchiveFilename(entry.name)) continue;
           const fullPath = join(dir, entry.name);
           const st = statSync(fullPath);
           files.push({ name: entry.name, path: fullPath, size: st.size, modifiedAt: st.mtime.toISOString() });

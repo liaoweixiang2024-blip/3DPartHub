@@ -1,6 +1,7 @@
 import { useThree } from '@react-three/fiber';
 import { useCallback, useEffect, useRef, type MutableRefObject } from 'react';
 import * as THREE from 'three';
+import type { OrbitControls as OrbitControlsImpl } from 'three-stdlib';
 import type { CameraPreset } from './ModelViewer';
 import { FIT_MODEL_EVENT, MODEL_BOUNDS_EVENT, type ModelBoundsDetail } from './viewerEvents';
 
@@ -27,7 +28,7 @@ export default function CameraController({
 }: {
   preset: CameraPreset;
   viewportBottom?: number;
-  controlsRef?: MutableRefObject<any>;
+  controlsRef?: MutableRefObject<OrbitControlsImpl | null>;
 }) {
   const { camera, gl } = useThree();
   const modelDataRef = useRef<ModelBoundsDetail | null>(null);

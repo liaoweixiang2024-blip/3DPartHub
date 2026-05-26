@@ -1,4 +1,4 @@
-import { mutate } from 'swr';
+import useSWR, { mutate } from 'swr';
 import { getPublicSettings, type SystemSettings } from '../api/settings';
 import { applyServerThemeDefaults } from '../stores/useThemeStore';
 import { applyColorScheme } from './colorScheme';
@@ -489,8 +489,6 @@ export function getEdgeStyleConfig() {
 export function getDefaultPreset(): string {
   return (cache?.viewer_default_preset as string) || 'default';
 }
-
-import useSWR from 'swr';
 
 export function usePublicSettings() {
   const { data, isLoading } = useSWR('publicSettings', () => getCachedPublicSettings());

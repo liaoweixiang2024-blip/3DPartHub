@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { existsSync, mkdirSync, rmSync } from 'node:fs';
 import { basename, extname, join } from 'node:path';
-import { Router, Response } from 'express';
+import { NextFunction, Router, Response } from 'express';
 import multer from 'multer';
 import { sendAcceleratedFile } from '../../lib/acceleratedDownload.js';
 import { getBusinessConfig, labelFor } from '../../lib/businessConfig.js';
@@ -26,25 +26,47 @@ import {
 } from '../../middleware/security.js';
 import { createNotification } from '../notifications.js';
 
-const attachmentUpload = multer({
-  storage: multer.diskStorage({
-    destination: (_req, _file, cb) => {
-      const dir = join(process.cwd(), config.staticDir, 'ticket-attachments');
-      if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
-      cb(null, dir);
-    },
-    filename: (_req, file, cb) => {
+function createTicketAttachmentUpload(maxBytes: number) {
+  return multer({
+    storage: multer.diskStorage({
+      destination: (_req, _file, cb) => {
+        const dir = join(process.cwd(), config.staticDir, 'ticket-attachments');
+        if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
+        cb(null, dir);
+      },
+      filename: (_req, file, cb) => {
+        const ext = extname(file.originalname).toLowerCase();
+        cb(null, `${randomUUID().slice(0, 12)}${ext}`);
+      },
+    }),
+    limits: { fileSize: maxBytes },
+    fileFilter: (_req, file, cb) => {
       const ext = extname(file.originalname).toLowerCase();
-      cb(null, `${randomUUID().slice(0, 12)}${ext}`);
+      if (ext) cb(null, true);
+      else cb(new Error('文件必须包含扩展名'));
     },
-  }),
-  limits: { fileSize: 200 * 1024 * 1024 },
-  fileFilter: (_req, file, cb) => {
-    const ext = extname(file.originalname).toLowerCase();
-    if (ext) cb(null, true);
-    else cb(new Error('文件必须包含扩展名'));
-  },
-});
+  });
+}
+
+async function ticketAttachmentUpload(req: AuthRequest, res: Response, next: NextFunction) {
+  try {
+    const { uploadPolicy } = await getBusinessConfig();
+    const maxMb = ticketAttachmentMaxSizeMb(uploadPolicy);
+    createTicketAttachmentUpload(ticketAttachmentMaxBytes(uploadPolicy)).single('file')(req, res, (err) => {
+      if (!err) {
+        next();
+        return;
+      }
+      if ((err as { code?: string }).code === 'LIMIT_FILE_SIZE') {
+        res.status(413).json({ detail: `附件不能超过 ${maxMb}MB` });
+        return;
+      }
+      next(err);
+    });
+  } catch (err) {
+    next(err);
+  }
+}
 
 function param(req: { params: Record<string, string | string[]> }, key: string): string {
   const v = req.params[key];
@@ -325,7 +347,7 @@ export function createSupportTicketRouter() {
         orderBy: { createdAt: 'asc' },
       });
       res.json(
-        messages.map((message: any) => ({
+        messages.map((message) => ({
           ...message,
           attachment: createTicketAttachmentUrl(ticketId, message.attachment, req.user!),
         })),
@@ -507,7 +529,7 @@ export function createSupportTicketRouter() {
     '/api/tickets/:id/messages/upload',
     authMiddleware,
     conversationAttachmentLimiter,
-    attachmentUpload.single('file'),
+    ticketAttachmentUpload,
     async (req: AuthRequest, res: Response) => {
       const ticketId = param(req, 'id');
       try {

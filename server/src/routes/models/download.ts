@@ -1,4 +1,5 @@
 import { existsSync } from 'node:fs';
+import type { PrismaClient } from '@prisma/client';
 import { Router, Request, Response } from 'express';
 import { sendAcceleratedFile } from '../../lib/acceleratedDownload.js';
 import { consumeModelDownloadToken } from '../../lib/downloadTokenStore.js';
@@ -22,7 +23,7 @@ import {
 import { MODEL_STATUS } from '../../services/modelStatus.js';
 
 type ModelDownloadContext = {
-  prisma: any;
+  prisma: PrismaClient | null;
   getMeta: (id: string) => Record<string, unknown> | null;
 };
 

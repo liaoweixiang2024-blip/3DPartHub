@@ -14,16 +14,20 @@ export function ProductWallThumbnail({
   item,
   canvasMode,
   imageIndex,
+  eagerImageCount = PRODUCT_WALL_EAGER_IMAGE_COUNT,
+  lazyRootMargin = '420px 0px',
   children,
 }: {
   item: WallItem;
   canvasMode: ProductWallCanvasMode;
   imageIndex: number;
+  eagerImageCount?: number;
+  lazyRootMargin?: string;
   children?: ReactNode;
 }) {
   const previewSrc = productWallPreviewImage(item);
   const surfaceRef = useRef<HTMLDivElement | null>(null);
-  const eager = imageIndex < PRODUCT_WALL_EAGER_IMAGE_COUNT;
+  const eager = imageIndex < eagerImageCount;
   const [src, setSrc] = useState(previewSrc);
   const [shouldLoad, setShouldLoad] = useState(eager);
   const [loaded, setLoaded] = useState(false);
@@ -49,11 +53,11 @@ export function ProductWallThumbnail({
         setShouldLoad(true);
         observer.disconnect();
       },
-      { rootMargin: '420px 0px' },
+      { rootMargin: lazyRootMargin },
     );
     observer.observe(node);
     return () => observer.disconnect();
-  }, [item.id, shouldLoad]);
+  }, [item.id, lazyRootMargin, shouldLoad]);
 
   return (
     <div

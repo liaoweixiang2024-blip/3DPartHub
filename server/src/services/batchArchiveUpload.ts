@@ -10,6 +10,8 @@ import {
   writeFileSync,
 } from 'node:fs';
 import { join, posix, resolve, sep } from 'node:path';
+import type { Prisma } from '@prisma/client';
+import type { IZipEntry } from 'adm-zip';
 import { createExtractorFromFile } from 'node-unrar-js';
 import { getBusinessConfig } from '../lib/businessConfig.js';
 import { config } from '../lib/config.js';
@@ -52,7 +54,7 @@ export type BatchUploadResult = {
 };
 
 type ZipEntryCandidate = {
-  entry: any;
+  entry: IZipEntry;
   cleanName: string;
   ext: string;
   originalName: string;
@@ -432,7 +434,7 @@ export async function processBatchArchiveUpload({
       const cacheKey = `${structuredPath.categoryName}\0${structuredPath.subcategoryName || ''}`;
       if (archiveCategoryCache.has(cacheKey)) return archiveCategoryCache.get(cacheKey) ?? null;
 
-      const resolvedId = await prisma.$transaction(async (tx: any) => {
+      const resolvedId = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
         await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`model-category-root:${structuredPath.categoryName}`}))`;
 
         let root = await tx.category.findFirst({
@@ -704,7 +706,7 @@ export async function processBatchArchiveUpload({
           total: modelEntries.length,
         });
         processedModels += 1;
-        const declaredSize = Number((entry as any).header?.size);
+        const declaredSize = Number(entry.header.size);
         if (
           Number.isFinite(declaredSize) &&
           declaredSize > 0 &&
@@ -736,7 +738,7 @@ export async function processBatchArchiveUpload({
         const drawing = result?.model_id ? pdfByKey.get(pairKey) : null;
         if (!result?.model_id || !drawing) continue;
 
-        const drawingDeclaredSize = Number((drawing.entry as any).header?.size);
+        const drawingDeclaredSize = Number(drawing.entry.header.size);
         if (
           Number.isFinite(drawingDeclaredSize) &&
           drawingDeclaredSize > 0 &&

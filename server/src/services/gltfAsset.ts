@@ -2,7 +2,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { dirname, extname, isAbsolute, join, resolve, sep } from 'node:path';
 
 export interface GltfAssetData {
-  json: any;
+  json: Record<string, unknown>;
   binData: Buffer;
 }
 
@@ -60,7 +60,7 @@ function parseGlb(filePath: string): GltfAssetData {
   if (version !== 2) throw new Error(`Unsupported GLB version: ${version}`);
 
   let offset = 12;
-  let json: any = null;
+  let json: Record<string, unknown> | null = null;
   let binData = Buffer.alloc(0);
 
   while (offset + 8 <= data.byteLength) {
@@ -72,7 +72,11 @@ function parseGlb(filePath: string): GltfAssetData {
 
     const chunk = data.subarray(chunkStart, chunkEnd);
     if (chunkType === 0x4e4f534a) {
-      json = JSON.parse(chunk.toString('utf8').trim());
+      const parsed = JSON.parse(chunk.toString('utf8').trim()) as unknown;
+      if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+        throw new Error('GLB JSON chunk is not an object');
+      }
+      json = parsed as Record<string, unknown>;
     } else if (chunkType === 0x004e4942) {
       binData = chunk;
     }
@@ -83,8 +87,10 @@ function parseGlb(filePath: string): GltfAssetData {
   return { json, binData };
 }
 
-function readExternalBuffer(gltf: any, filePath: string): Buffer {
-  const uri = gltf.buffers?.[0]?.uri;
+function readExternalBuffer(gltf: Record<string, unknown>, filePath: string): Buffer {
+  const buffers = Array.isArray(gltf.buffers) ? gltf.buffers : [];
+  const firstBuffer = buffers[0] && typeof buffers[0] === 'object' ? (buffers[0] as Record<string, unknown>) : null;
+  const uri = firstBuffer?.uri;
   if (typeof uri === 'string' && uri.startsWith('data:')) {
     const base64 = uri.split(',')[1] || '';
     return Buffer.from(base64, 'base64');
@@ -99,6 +105,10 @@ function readExternalBuffer(gltf: any, filePath: string): Buffer {
 export function readGltfAsset(filePath: string): GltfAssetData {
   if (getPreviewAssetExtension(filePath) === 'glb') return parseGlb(filePath);
 
-  const json = JSON.parse(readFileSync(filePath, 'utf-8'));
+  const parsed = JSON.parse(readFileSync(filePath, 'utf-8')) as unknown;
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    throw new Error('GLTF JSON is not an object');
+  }
+  const json = parsed as Record<string, unknown>;
   return { json, binData: readExternalBuffer(json, filePath) };
 }

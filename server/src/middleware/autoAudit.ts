@@ -11,12 +11,11 @@ import type { AuthRequest } from './auth.js';
 const SKIP_PREFIXES = [
   '/api/health',
   '/api/tasks?', // GET task status, not mutations
+  '/api/settings/backup/check', // detailed backup drill audit is written by the route.
   '/api/settings/backup/progress', // polling
   '/api/settings/backup/restore-progress', // polling
-  '/api/settings/backup/restore-progress', // polling
   '/api/settings/backup/import-save-progress', // polling
-  '/api/settings/backup/download/', // one-time token download, logged separately
-  '/api/settings/backup/download-token/', // token generation, logged as backup_download
+  '/api/settings/backup/download/', // GET download uses a single-use token; token generation is audited.
   '/api/downloads/model-token', // short-lived browser download token generation
   '/api/settings/update/progress', // polling
   '/api/notifications', // GET polling
@@ -107,6 +106,7 @@ export function autoAudit(req: Request, _res: Response, next: NextFunction) {
         const authReq = req as AuthRequest;
         const userId = authReq.user?.userId || null;
         const params = req.params || {};
+        const body = req.body && typeof req.body === 'object' ? (req.body as Record<string, unknown>) : null;
         const resourceId =
           params.id ||
           params.modelId ||
@@ -117,7 +117,7 @@ export function autoAudit(req: Request, _res: Response, next: NextFunction) {
           params.commentId ||
           params.userId ||
           params.slug ||
-          (req.body as any)?.id ||
+          (typeof body?.id === 'string' || typeof body?.id === 'number' ? String(body.id) : null) ||
           null;
 
         const details: Record<string, Prisma.InputJsonValue> = {
@@ -127,7 +127,6 @@ export function autoAudit(req: Request, _res: Response, next: NextFunction) {
         };
 
         // Include relevant body fields (sanitized)
-        const body = req.body as Record<string, unknown>;
         if (body && typeof body === 'object') {
           const safeFields: Record<string, Prisma.InputJsonValue> = {};
           for (const key of [

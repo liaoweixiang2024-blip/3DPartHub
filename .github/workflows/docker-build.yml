@@ -6,14 +6,29 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: 'Version tag (e.g. v3.1.5)'
+        description: 'Version tag (e.g. v3.2.0)'
         required: true
 
 env:
   REGISTRY: ghcr.io
 
 jobs:
+  deploy-tools-verify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Set up Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+
+      - name: Deploy tool verification
+        run: npm run verify:deploy
+
   build-and-push:
+    needs: deploy-tools-verify
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -58,7 +73,7 @@ jobs:
             ghcr.io/${{ github.repository_owner }}/3dparthub-api:latest
           labels: |
             org.opencontainers.image.title=3DPartHub API ${{ steps.version.outputs.version }}
-            org.opencontainers.image.description=Express/Prisma API service with STEP temporary preview uploads, hardened modular backup/restore/import, protected downloads, secure Docker defaults, audit logs, rate-limited temporary files, admin settings, queues, cache/storage checks, and background jobs.
+            org.opencontainers.image.description=Express/Prisma API service with enterprise backup/restore/import validation, pure Docker deployment evidence checks, default static asset seeding, STEP temporary preview uploads, protected downloads, audit logs, queues, cache/storage checks, and background jobs.
             org.opencontainers.image.version=${{ steps.version.outputs.version }}
             org.opencontainers.image.source=https://github.com/${{ github.repository }}
             org.opencontainers.image.revision=${{ github.sha }}
@@ -78,7 +93,7 @@ jobs:
             ghcr.io/${{ github.repository_owner }}/3dparthub-web:latest
           labels: |
             org.opencontainers.image.title=3DPartHub Web ${{ steps.version.outputs.version }}
-            org.opencontainers.image.description=React/Vite frontend for 3D model libraries with temporary STEP viewer workspace, mobile/Safari download hardening, refined backup scope UI/statistics/health checks, product gallery, selection sharing, inquiry workflows, admin pages, and responsive mobile flows.
+            org.opencontainers.image.description=React/Vite frontend for 3D model libraries with refined backup scope UI, deployment health evidence visibility, temporary STEP viewer workspace, mobile/Safari hardening, product gallery, selection sharing, inquiry workflows, admin pages, and responsive mobile flows.
             org.opencontainers.image.version=${{ steps.version.outputs.version }}
             org.opencontainers.image.source=https://github.com/${{ github.repository }}
             org.opencontainers.image.revision=${{ github.sha }}
@@ -104,50 +119,5 @@ jobs:
         if: github.event_name == 'push'
         uses: softprops/action-gh-release@v3
         with:
-          name: 3DPartHub ${{ steps.version.outputs.version }} - Docker 部署兼容修复版
-          generate_release_notes: true
-          body: |
-            ## 更新标题
-
-            3DPartHub ${{ steps.version.outputs.version }} - Docker 部署兼容修复版
-
-            ## 标签描述
-
-            3DPartHub ${{ steps.version.outputs.version }} hotfix release for Docker deployment compatibility, restoring legacy one-click compose defaults while keeping production security warnings visible.
-
-            ## 更新描述
-
-            - 修复 v3.1.4 升级后旧 Docker 一键部署环境可能导致 `3dparthub-api` unhealthy 的问题。
-            - 旧版默认 DB/JWT/Redis 密钥不再直接阻止 API 启动，改为启动日志安全提醒，避免升级时站点被打挂。
-            - `docker-compose.yml` 恢复一键部署兼容默认值；新部署仍建议通过 `.env` 设置随机 `DB_PASSWORD`、`REDIS_PASSWORD`、`JWT_SECRET` 和 `ADMIN_PASS`。
-            - README 增加 API unhealthy 排查说明，提醒已有 PostgreSQL volume 不会因修改 `.env` 自动变更数据库用户密码。
-            - 临时看图、备份统计、移动端下载和批量归档上传修复继续包含在本版本镜像内。
-            - 镜像已同步更新：api/web 均发布 ${{ steps.version.outputs.version }} 与 latest 标签。
-
-            ## Docker Images
-
-            API image title: `3dparthub-api:${{ steps.version.outputs.version }}`
-
-            API image: `ghcr.io/${{ github.repository_owner }}/3dparthub-api:${{ steps.version.outputs.version }}`
-
-            API image description: Express/Prisma API service with Docker deployment compatibility hotfix, STEP temporary preview uploads, modular backup/restore/import, protected downloads, security warnings, audit logs, rate-limited temporary files, admin settings, queues, cache/storage checks, and background jobs.
-
-            Web image title: `3dparthub-web:${{ steps.version.outputs.version }}`
-
-            Web image: `ghcr.io/${{ github.repository_owner }}/3dparthub-web:${{ steps.version.outputs.version }}`
-
-            Web image description: React/Vite frontend for 3D model libraries with temporary STEP viewer workspace, mobile/Safari download hardening, refined backup scope UI/statistics/health checks, product gallery, selection sharing, inquiry workflows, admin pages, and responsive mobile flows.
-
-            ```bash
-            # Default deployment follows latest and uses Watchtower for api/web auto-updates.
-            # Run this when you want to update immediately:
-            cd /opt/3dparthub
-            curl -L -o docker-compose.yml https://raw.githubusercontent.com/${{ github.repository }}/main/docker-compose.yml
-            touch .env
-            grep -q '^IMAGE_TAG=' .env && sed -i 's/^IMAGE_TAG=.*/IMAGE_TAG=latest/' .env || echo 'IMAGE_TAG=latest' >> .env
-            docker compose pull
-            docker compose up -d --force-recreate
-
-            # Verify health
-            curl http://localhost:3780/api/health
-            ```
+          name: 3DPartHub ${{ steps.version.outputs.version }} - 企业级备份与部署验收版
+          body_path: docs/releases/${{ steps.version.outputs.version }}.md

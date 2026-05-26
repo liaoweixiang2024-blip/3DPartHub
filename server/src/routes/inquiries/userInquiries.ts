@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { existsSync, mkdirSync, rmSync } from 'node:fs';
 import { basename, extname, join } from 'node:path';
-import { Router, Response } from 'express';
+import { NextFunction, Router, Response } from 'express';
 import multer from 'multer';
 import { sendAcceleratedFile } from '../../lib/acceleratedDownload.js';
 import { getBusinessConfig } from '../../lib/businessConfig.js';
@@ -27,25 +27,47 @@ import {
 import { createNotification } from '../notifications.js';
 import { param } from './common.js';
 
-const inquiryAttachmentUpload = multer({
-  storage: multer.diskStorage({
-    destination: (_req, _file, cb) => {
-      const dir = join(process.cwd(), config.staticDir, 'inquiry-attachments');
-      if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
-      cb(null, dir);
-    },
-    filename: (_req, file, cb) => {
+function createInquiryAttachmentUpload(maxBytes: number) {
+  return multer({
+    storage: multer.diskStorage({
+      destination: (_req, _file, cb) => {
+        const dir = join(process.cwd(), config.staticDir, 'inquiry-attachments');
+        if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
+        cb(null, dir);
+      },
+      filename: (_req, file, cb) => {
+        const ext = extname(file.originalname).toLowerCase();
+        cb(null, `${randomUUID().slice(0, 12)}${ext}`);
+      },
+    }),
+    limits: { fileSize: maxBytes },
+    fileFilter: (_req, file, cb) => {
       const ext = extname(file.originalname).toLowerCase();
-      cb(null, `${randomUUID().slice(0, 12)}${ext}`);
+      if (ext) cb(null, true);
+      else cb(new Error('文件必须包含扩展名'));
     },
-  }),
-  limits: { fileSize: 200 * 1024 * 1024 },
-  fileFilter: (_req, file, cb) => {
-    const ext = extname(file.originalname).toLowerCase();
-    if (ext) cb(null, true);
-    else cb(new Error('文件必须包含扩展名'));
-  },
-});
+  });
+}
+
+async function inquiryAttachmentUpload(req: AuthRequest, res: Response, next: NextFunction) {
+  try {
+    const { uploadPolicy } = await getBusinessConfig();
+    const maxMb = ticketAttachmentMaxSizeMb(uploadPolicy);
+    createInquiryAttachmentUpload(ticketAttachmentMaxBytes(uploadPolicy)).single('file')(req, res, (err) => {
+      if (!err) {
+        next();
+        return;
+      }
+      if ((err as { code?: string }).code === 'LIMIT_FILE_SIZE') {
+        res.status(413).json({ detail: `附件不能超过 ${maxMb}MB` });
+        return;
+      }
+      next(err);
+    });
+  } catch (err) {
+    next(err);
+  }
+}
 
 type NormalizedCreateInquiryItem = {
   productId: string | null;
@@ -377,7 +399,7 @@ export function createUserInquiriesRouter() {
   router.put('/api/inquiries/:id/items', authMiddleware, async (req: AuthRequest, res: Response) => {
     try {
       const id = param(req, 'id');
-      const incoming = Array.isArray(req.body?.items) ? req.body.items : [];
+      const incoming: unknown[] = Array.isArray(req.body?.items) ? req.body.items : [];
       if (incoming.length === 0) {
         res.status(400).json({ detail: '至少需要保留一个询价产品' });
         return;
@@ -412,14 +434,15 @@ export function createUserInquiriesRouter() {
       const existingIds = new Set(inquiry.items.map((item) => item.id));
       const seenIds = new Set<string>();
       type NormalizedInquiryItemUpdate = { id: string; qty: number; remark: string };
-      const items = incoming.map((item: any): NormalizedInquiryItemUpdate | null => {
-        const itemId = typeof item?.id === 'string' ? item.id : '';
+      const items = incoming.map((item): NormalizedInquiryItemUpdate | null => {
+        const row = item && typeof item === 'object' ? (item as Record<string, unknown>) : {};
+        const itemId = typeof row.id === 'string' ? row.id : '';
         if (!itemId || !existingIds.has(itemId) || seenIds.has(itemId)) {
           return null;
         }
         seenIds.add(itemId);
-        const qty = Math.max(1, Math.min(999999, Math.floor(Number(item.qty) || 1)));
-        const remark = typeof item.remark === 'string' ? item.remark.trim().slice(0, 500) : '';
+        const qty = Math.max(1, Math.min(999999, Math.floor(Number(row.qty) || 1)));
+        const remark = typeof row.remark === 'string' ? row.remark.trim().slice(0, 500) : '';
         return { id: itemId, qty, remark };
       });
 
@@ -636,7 +659,7 @@ export function createUserInquiriesRouter() {
     '/api/inquiries/:id/messages/upload',
     authMiddleware,
     conversationAttachmentLimiter,
-    inquiryAttachmentUpload.single('file'),
+    inquiryAttachmentUpload,
     async (req: AuthRequest, res: Response) => {
       const id = param(req, 'id');
       try {

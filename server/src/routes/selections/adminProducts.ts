@@ -1,3 +1,4 @@
+import type { Prisma } from '@prisma/client';
 import { Router } from 'express';
 import { logger } from '../../lib/logger.js';
 import { prisma } from '../../lib/prisma.js';
@@ -13,6 +14,12 @@ function cleanProductName(name: string, modelNo?: string | null) {
       .replace(/^[\s\-—_]+/g, '')
       .trim() || name
   );
+}
+
+function toJsonObject(value: unknown): Record<string, Prisma.InputJsonValue> {
+  return value && typeof value === 'object' && !Array.isArray(value)
+    ? (value as Record<string, Prisma.InputJsonValue>)
+    : {};
 }
 
 export function createSelectionAdminProductsRouter() {
@@ -55,7 +62,7 @@ export function createSelectionAdminProductsRouter() {
     try {
       const id = req.params.id as string;
       const { name, modelNo, specs, image, pdfUrl, sortOrder, isKit, components } = req.body;
-      const data: any = {};
+      const data: Prisma.SelectionProductUpdateInput = {};
       if (modelNo !== undefined) data.modelNo = modelNo;
       if (name !== undefined) {
         const current =
@@ -130,7 +137,17 @@ export function createSelectionAdminProductsRouter() {
       }
 
       // Load existing products by modelNo for dedup
-      const incomingModelNos = products.map((p: any) => p.modelNo).filter(Boolean) as string[];
+      const incomingProducts = products as Array<{
+        components?: unknown;
+        image?: string | null;
+        isKit?: boolean;
+        modelNo?: string | null;
+        name?: string;
+        pdfUrl?: string | null;
+        sortOrder?: number;
+        specs?: Record<string, unknown>;
+      }>;
+      const incomingModelNos = incomingProducts.map((p) => p.modelNo).filter((item): item is string => Boolean(item));
       const existing =
         incomingModelNos.length > 0
           ? await prisma.selectionProduct.findMany({
@@ -143,23 +160,21 @@ export function createSelectionAdminProductsRouter() {
       let created = 0;
       let updated = 0;
 
-      await prisma.$transaction(async (tx: any) => {
-        for (let i = 0; i < products.length; i++) {
-          const p = products[i] as any;
+      await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
+        for (let i = 0; i < incomingProducts.length; i++) {
+          const p = incomingProducts[i];
           const modelNo = p.modelNo || null;
-          const specs = p.specs ? { ...p.specs } : {};
-          if (modelNo && specs && typeof specs === 'object' && !Array.isArray(specs)) {
-            specs['型号'] = modelNo;
-          }
-          const data = {
+          const specs = toJsonObject(p.specs);
+          if (modelNo) specs['型号'] = modelNo;
+          const data: Prisma.SelectionProductUncheckedUpdateInput = {
             name: cleanProductName(p.name || `产品 ${i + 1}`, modelNo),
             modelNo,
-            specs,
+            specs: specs as Prisma.InputJsonObject,
             image: p.image || null,
             pdfUrl: p.pdfUrl || null,
             sortOrder: p.sortOrder ?? i,
             isKit: p.isKit ?? false,
-            components: p.components ?? undefined,
+            components: p.components === undefined ? undefined : (p.components as Prisma.InputJsonValue),
           };
 
           if (modelNo && existingMap.has(modelNo)) {
@@ -170,7 +185,7 @@ export function createSelectionAdminProductsRouter() {
             updated++;
           } else {
             const createdProduct = await tx.selectionProduct.create({
-              data: { categoryId, ...data },
+              data: { categoryId, ...data } as Prisma.SelectionProductUncheckedCreateInput,
             });
             if (modelNo) existingMap.set(modelNo, createdProduct.id);
             created++;

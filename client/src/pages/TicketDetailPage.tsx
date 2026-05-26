@@ -19,6 +19,7 @@ import SafeImage from '../components/shared/SafeImage';
 import { useToast } from '../components/shared/Toast';
 import { useDocumentTitle } from '../hooks/useDocumentTitle';
 import { useMediaQuery } from '../layouts/hooks/useMediaQuery';
+import { openDocumentUrl } from '../lib/browserDownload';
 import { getBusinessConfig, statusInfo } from '../lib/businessConfig';
 import { getClipboardImageFile } from '../lib/clipboardImages';
 import { notifyGlobalError } from '../lib/errorNotifications';
@@ -163,6 +164,10 @@ function MessageBubble({ msg }: { msg: TicketMessage }) {
               href={attachmentSrc}
               target="_blank"
               rel="noopener"
+              onClick={(event) => {
+                event.preventDefault();
+                openDocumentUrl(attachmentSrc, { title: '附件预览' });
+              }}
               className="mt-2 inline-flex items-center gap-1 rounded-md border border-outline-variant/15 px-2 py-1 text-xs text-primary-container"
             >
               <Icon name="attach_file" size={12} />

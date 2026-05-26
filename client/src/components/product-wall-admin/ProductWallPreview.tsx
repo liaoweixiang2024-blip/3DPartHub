@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import type { ProductWallItem } from '../../api/productWall';
 import Icon from '../shared/Icon';
 import SafeImage from '../shared/SafeImage';
-import { productWallDownloadName, productWallPreviewImage, type ProductWallCanvasMode } from './productWallAdminUtils';
+import { productWallPreviewImage, type ProductWallCanvasMode } from './productWallAdminUtils';
 
 type WallItem = ProductWallItem;
 
@@ -15,6 +15,7 @@ export function ProductWallPreview({
   onClose,
   onToggleFavorite,
   onShare,
+  onDownload,
 }: {
   active: WallItem;
   canvasMode: ProductWallCanvasMode;
@@ -23,6 +24,7 @@ export function ProductWallPreview({
   onClose: () => void;
   onToggleFavorite: () => void;
   onShare: () => void;
+  onDownload: (item: WallItem) => void;
 }) {
   const previewCloseRef = useRef<HTMLButtonElement | null>(null);
   const previewDragRef = useRef({ active: false, moved: false, startX: 0, startY: 0, panX: 0, panY: 0 });
@@ -35,6 +37,7 @@ export function ProductWallPreview({
   const pinchJustEndedRef = useRef(false);
   const previewCanvasRef = useRef<HTMLDivElement | null>(null);
   const previewZoomRef = useRef(1);
+  const originalImageSourceRef = useRef('');
 
   const activeId = active.id;
   const activeImage = active.image || '';
@@ -97,8 +100,13 @@ export function ProductWallPreview({
 
   // Load original image
   useEffect(() => {
-    setDetailOriginalReady(false);
-    setDetailOriginalFailed(false);
+    const sourceKey = `${activeId}:${activeImage}:${activePreviewImage}`;
+    const sourceChanged = originalImageSourceRef.current !== sourceKey;
+    if (sourceChanged) {
+      originalImageSourceRef.current = sourceKey;
+      setDetailOriginalReady(false);
+      setDetailOriginalFailed(false);
+    }
     if (!activeImage || typeof window === 'undefined') return;
 
     if (activeImage === activePreviewImage) {
@@ -106,29 +114,36 @@ export function ProductWallPreview({
       return;
     }
 
+    const isCompactViewport = window.matchMedia?.('(max-width: 767px)').matches;
+    if (isCompactViewport && !previewZoomed) return;
+    if (!sourceChanged && (detailOriginalReady || detailOriginalFailed)) return;
+
     let cancelled = false;
     let image: HTMLImageElement | null = null;
-    const timer = window.setTimeout(() => {
-      if (cancelled) return;
-      image = new window.Image();
-      image.decoding = 'async';
-      image.onload = () => {
-        if (!cancelled) setDetailOriginalReady(true);
-      };
-      image.onerror = () => {
-        if (!cancelled) setDetailOriginalFailed(true);
-      };
-      image.src = activeImage;
-      const decodePromise = image.decode?.();
-      void decodePromise?.then(
-        () => {
+    const timer = window.setTimeout(
+      () => {
+        if (cancelled) return;
+        image = new window.Image();
+        image.decoding = 'async';
+        image.onload = () => {
           if (!cancelled) setDetailOriginalReady(true);
-        },
-        () => {
+        };
+        image.onerror = () => {
           if (!cancelled) setDetailOriginalFailed(true);
-        },
-      );
-    }, 120);
+        };
+        image.src = activeImage;
+        const decodePromise = image.decode?.();
+        void decodePromise?.then(
+          () => {
+            if (!cancelled) setDetailOriginalReady(true);
+          },
+          () => {
+            if (!cancelled) setDetailOriginalFailed(true);
+          },
+        );
+      },
+      previewZoomed ? 80 : isCompactViewport ? 180 : 420,
+    );
 
     return () => {
       cancelled = true;
@@ -138,7 +153,7 @@ export function ProductWallPreview({
         image.onerror = null;
       }
     };
-  }, [activeId, activeImage, activePreviewImage]);
+  }, [activeId, activeImage, activePreviewImage, detailOriginalFailed, detailOriginalReady, previewZoomed]);
 
   // Cleanup raf on unmount
   useEffect(() => {
@@ -505,15 +520,15 @@ export function ProductWallPreview({
               <Icon name={shareState === 'copied' ? 'check' : 'share'} size={16} />
               <span className="md:hidden">{shareState === 'copied' ? '已复制' : '分享'}</span>
             </button>
-            <a
-              href={active.image}
-              download={productWallDownloadName(active)}
+            <button
+              type="button"
+              onClick={() => onDownload(active)}
               className="inline-flex h-10 items-center justify-center gap-1.5 rounded-xl border border-outline-variant/16 bg-surface-container-low text-sm font-medium text-on-surface-variant transition-colors active:bg-surface-container-high md:h-9 md:w-9 md:rounded-full md:text-xs"
               aria-label="下载"
             >
               <Icon name="download" size={16} />
               <span className="md:hidden">下载</span>
-            </a>
+            </button>
           </div>
         </div>
       </div>

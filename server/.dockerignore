@@ -22,6 +22,12 @@ static/ticket-attachments/
 static/html-previews/
 static/logo/
 static/favicon/
+!static/logo/
+!static/logo/icon.svg
+!static/logo/logo.png
+!static/logo/logo.svg
+!static/favicon/
+!static/favicon/favicon.png
 static/selection-categories-ai/
 static/product-wall/
 static/js/

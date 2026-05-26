@@ -3,8 +3,8 @@ import { createRoot } from 'react-dom/client';
 import './styles/global.css';
 import App from './App';
 import { getCachedPublicSettings } from './lib/publicSettings';
-import { reportWebVitals } from './lib/webVitals';
 import { scheduleSentryInit } from './lib/sentryLazy';
+import { reportWebVitals } from './lib/webVitals';
 
 scheduleSentryInit();
 reportWebVitals();

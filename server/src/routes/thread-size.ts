@@ -1,3 +1,4 @@
+import { Prisma } from '@prisma/client';
 import { Router, Response } from 'express';
 import { getErrorMessage } from '../lib/http.js';
 import { prisma } from '../lib/prisma.js';
@@ -28,7 +29,7 @@ function adminOnly(req: AuthRequest, res: Response): boolean {
 }
 
 function entryTable() {
-  return (prisma as any).threadSizeEntry;
+  return prisma.threadSizeEntry;
 }
 
 function text(value: unknown, fallback = '') {
@@ -38,6 +39,10 @@ function text(value: unknown, fallback = '') {
 function nullableText(value: unknown) {
   const next = text(value);
   return next || null;
+}
+
+function routeParam(value: string | string[] | undefined): string {
+  return Array.isArray(value) ? value[0] || '' : value || '';
 }
 
 function sortOrder(value: unknown) {
@@ -59,13 +64,16 @@ function normalizeInput(input: EntryInput) {
     secondary: text(input.secondary),
     meta: text(input.meta),
     note: text(input.note),
-    data: input.data && typeof input.data === 'object' ? input.data : null,
+    data:
+      input.data && typeof input.data === 'object' && !Array.isArray(input.data)
+        ? (input.data as Prisma.InputJsonValue)
+        : Prisma.JsonNull,
     sortOrder: sortOrder(input.sortOrder),
     enabled: typeof input.enabled === 'boolean' ? input.enabled : true,
   };
 }
 
-function orderBy() {
+function orderBy(): Prisma.ThreadSizeEntryOrderByWithRelationInput[] {
   return [{ sortOrder: 'asc' }, { kind: 'asc' }, { family: 'asc' }, { primary: 'asc' }];
 }
 
@@ -126,7 +134,7 @@ router.put('/api/admin/thread-size/:id', authMiddleware, async (req: AuthRequest
   if (!adminOnly(req, res)) return;
   try {
     const data = normalizeInput(req.body || {});
-    const row = await entryTable().update({ where: { id: req.params.id }, data });
+    const row = await entryTable().update({ where: { id: routeParam(req.params.id) }, data });
     await invalidateThreadSizeCache();
     res.json(row);
   } catch {
@@ -136,7 +144,7 @@ router.put('/api/admin/thread-size/:id', authMiddleware, async (req: AuthRequest
 
 router.delete('/api/admin/thread-size/:id', authMiddleware, async (req: AuthRequest, res: Response) => {
   if (!adminOnly(req, res)) return;
-  await entryTable().delete({ where: { id: req.params.id } });
+  await entryTable().delete({ where: { id: routeParam(req.params.id) } });
   await invalidateThreadSizeCache();
   res.json({ ok: true });
 });
@@ -156,7 +164,7 @@ router.post('/api/admin/thread-size/import', authMiddleware, async (req: AuthReq
     const table = entryTable();
     let imported = 0;
     await prisma.$transaction(async (tx) => {
-      const txTable = (tx as any).threadSizeEntry;
+      const txTable = (tx as Prisma.TransactionClient).threadSizeEntry;
       for (const [index, raw] of rows.entries()) {
         const data = normalizeInput({ ...raw, sortOrder: raw.sortOrder ?? index });
         const id = text(raw.id);

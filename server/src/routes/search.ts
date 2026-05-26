@@ -1,3 +1,4 @@
+import type { Prisma } from '@prisma/client';
 import { Router, Response } from 'express';
 import { cacheGetOrSet, TTL } from '../lib/cache.js';
 import { prisma } from '../lib/prisma.js';
@@ -49,8 +50,8 @@ router.get('/api/search', async (req, res: Response) => {
 
   try {
     const { value: responseData, hit } = await cacheGetOrSet(cacheKey, TTL.MODELS_SEARCH, async () => {
-      const where: any = { status: MODEL_STATUS.COMPLETED };
-      const andConditions: Record<string, unknown>[] = [];
+      const where: Prisma.ModelWhereInput = { status: MODEL_STATUS.COMPLETED };
+      const andConditions: Prisma.ModelWhereInput[] = [];
 
       // Text search
       const searchCond = modelTextSearchWhere(q);
@@ -74,15 +75,17 @@ router.get('/api/search', async (req, res: Response) => {
           .filter(Boolean)
           .slice(0, 10);
         if (tagList.length > 0) {
-          const tagConditions = tagList.map((tag) => ({
-            OR: [
-              { name: { contains: tag, mode: 'insensitive' } },
-              { description: { contains: tag, mode: 'insensitive' } },
-              { partNumber: { contains: tag, mode: 'insensitive' } },
-              { category: { contains: tag, mode: 'insensitive' } },
-              { categoryRef: { is: { name: { contains: tag, mode: 'insensitive' } } } },
-            ],
-          }));
+          const tagConditions = tagList.map(
+            (tag): Prisma.ModelWhereInput => ({
+              OR: [
+                { name: { contains: tag, mode: 'insensitive' as const } },
+                { description: { contains: tag, mode: 'insensitive' as const } },
+                { partNumber: { contains: tag, mode: 'insensitive' as const } },
+                { category: { contains: tag, mode: 'insensitive' as const } },
+                { categoryRef: { is: { name: { contains: tag, mode: 'insensitive' as const } } } },
+              ],
+            }),
+          );
           andConditions.push(...tagConditions);
         }
       }
@@ -95,7 +98,7 @@ router.get('/api/search', async (req, res: Response) => {
       }
 
       // Sort
-      let orderBy: any = { createdAt: 'desc' };
+      let orderBy: Prisma.ModelOrderByWithRelationInput = { createdAt: 'desc' };
       if (sort === 'name') orderBy = { name: 'asc' };
       else if (sort === 'size') orderBy = { gltfSize: 'desc' };
       else if (sort === 'downloads') orderBy = { downloadCount: 'desc' };
@@ -114,16 +117,18 @@ router.get('/api/search', async (req, res: Response) => {
           },
         }),
       ]);
-      const userIds = Array.from(new Set(models.map((model: any) => model.createdById).filter(Boolean)));
+      const userIds = Array.from(
+        new Set(models.map((model) => model.createdById).filter((id): id is string => Boolean(id))),
+      );
       const users = userIds.length
         ? await prisma.user.findMany({
             where: { id: { in: userIds } },
             select: { id: true, username: true, avatar: true },
           })
         : [];
-      const usersById = new Map(users.map((user: any) => [user.id, user]));
+      const usersById = new Map(users.map((user) => [user.id, user]));
 
-      const items = models.map((m: any) => ({
+      const items = models.map((m) => ({
         model_id: m.id,
         name: m.name,
         original_name: m.originalName,

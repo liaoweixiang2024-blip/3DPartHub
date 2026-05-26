@@ -1,5 +1,5 @@
 import { Html } from '@react-three/drei';
-import { useFrame, useLoader, useThree } from '@react-three/fiber';
+import { useFrame, useLoader, useThree, type ThreeEvent } from '@react-three/fiber';
 import { useCallback, useMemo, useEffect, useState, useRef } from 'react';
 import * as THREE from 'three';
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
@@ -78,6 +78,11 @@ function getEnvMap(renderer: THREE.WebGLRenderer): THREE.Texture {
 
 type RenderMaterialPresetKey = Exclude<MaterialPresetKey, 'original'>;
 type MeshMaterial = THREE.Material | THREE.Material[];
+type ViewerPointerEvent = ThreeEvent<PointerEvent>;
+type PointerCaptureTarget = EventTarget & {
+  setPointerCapture?: (pointerId: number) => void;
+  releasePointerCapture?: (pointerId: number) => void;
+};
 type WireframeCapableMaterial = THREE.Material & { wireframe?: boolean };
 
 function createMaterial(
@@ -481,7 +486,10 @@ function closestPointOnSegment(point: THREE.Vector3, start: THREE.Vector3, end: 
   return start.clone().add(segment.multiplyScalar(t));
 }
 
-function measurementPointFromEvent(event: any, snapMode: MeasurementSnapMode = 'surface'): MeasurementPoint {
+function measurementPointFromEvent(
+  event: ViewerPointerEvent,
+  snapMode: MeasurementSnapMode = 'surface',
+): MeasurementPoint {
   const hitPoint = event.point as THREE.Vector3 | undefined;
   if (!hitPoint || snapMode === 'surface') return pointFromVector(hitPoint || new THREE.Vector3(), 'surface');
 
@@ -721,7 +729,7 @@ function CadModel({
   }, [boundsDetail, onProgress]);
 
   const handlePartClick = useCallback(
-    (event: any) => {
+    (event: ViewerPointerEvent) => {
       if (measurementActive && measureMode !== 'bounds' && event.point) {
         event.stopPropagation();
         onMeasurePoint?.(measurementPointFromEvent(event, measurementSnapMode));
@@ -994,7 +1002,7 @@ function GltfModel({
   }, [viewMode, boundsDetail, clonedScene, explodeAmount]);
 
   const handlePartClick = useCallback(
-    (event: any) => {
+    (event: ViewerPointerEvent) => {
       if (measurementActive && measureMode !== 'bounds' && event.point) {
         event.stopPropagation();
         onMeasurePoint?.(measurementPointFromEvent(event, measurementSnapMode));
@@ -1186,7 +1194,7 @@ function ClipPlaneOverlay({
   }, [box, direction, inverted, position]);
 
   const updatePositionFromEvent = useCallback(
-    (event: any) => {
+    (event: ViewerPointerEvent) => {
       if (!onPositionChange) return;
       const ray = event.ray || raycaster.ray;
       const nextPosition = positionOnAxisFromRay(ray, axis);
@@ -1202,19 +1210,20 @@ function ClipPlaneOverlay({
   );
 
   const handleDragStart = useCallback(
-    (event: any) => {
+    (event: ViewerPointerEvent) => {
       if (!onPositionChange) return;
       event.stopPropagation();
       draggingRef.current = true;
       setDragging(true);
-      event.target?.setPointerCapture?.(event.pointerId);
+      const target = event.target as PointerCaptureTarget;
+      target.setPointerCapture?.(event.pointerId);
       updatePositionFromEvent(event);
     },
     [onPositionChange, updatePositionFromEvent],
   );
 
   const handleDragMove = useCallback(
-    (event: any) => {
+    (event: ViewerPointerEvent) => {
       if (!draggingRef.current) return;
       event.stopPropagation();
       updatePositionFromEvent(event);
@@ -1222,12 +1231,13 @@ function ClipPlaneOverlay({
     [updatePositionFromEvent],
   );
 
-  const handleDragEnd = useCallback((event: any) => {
+  const handleDragEnd = useCallback((event: ViewerPointerEvent) => {
     if (!draggingRef.current) return;
     event.stopPropagation();
     draggingRef.current = false;
     setDragging(false);
-    event.target?.releasePointerCapture?.(event.pointerId);
+    const target = event.target as PointerCaptureTarget;
+    target.releasePointerCapture?.(event.pointerId);
   }, []);
 
   const labelValue = formatMeasureDistance(position);

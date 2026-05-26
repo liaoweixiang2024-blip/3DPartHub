@@ -6,7 +6,9 @@ export type ProductWallCanvasMode = 'white' | 'checker';
 
 export const PRODUCT_WALL_UPLOAD_BATCH_SIZE = 20;
 export const PRODUCT_WALL_RENDER_BATCH_SIZE = 24;
+export const PRODUCT_WALL_MOBILE_RENDER_BATCH_SIZE = 12;
 export const PRODUCT_WALL_EAGER_IMAGE_COUNT = 3;
+export const PRODUCT_WALL_MOBILE_EAGER_IMAGE_COUNT = 2;
 export const PRODUCT_WALL_CANVAS_MODE_KEY = 'product-wall-canvas-mode';
 export const PRODUCT_WALL_DEFAULT_KIND_KEY = 'product-wall-default-kind';
 export const PRODUCT_WALL_FAVORITES_FILTER = '我的收藏';

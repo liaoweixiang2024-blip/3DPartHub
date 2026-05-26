@@ -1,7 +1,7 @@
 {
   "name": "3dparthub-client",
   "private": true,
-  "version": "3.1.5",
+  "version": "3.2.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -9,6 +9,7 @@
     "build": "vite build",
     "typecheck": "tsc --noEmit -p tsconfig.app.json",
     "lint": "eslint .",
+    "lint:ci": "eslint . --max-warnings=0",
     "verify:themes": "node scripts/verify-theme-contract.mjs",
     "create-theme": "node scripts/create-interface-theme.mjs",
     "verify:loading": "node scripts/verify-loading-contract.mjs",

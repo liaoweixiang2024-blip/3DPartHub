@@ -1,9 +1,9 @@
 /**
  * Color scheme engine — applies CSS custom properties dynamically.
  */
+import { syncBrowserChromeColor } from './browserThemeColor';
 import { COLOR_PRESETS, COLOR_KEYS, type ColorKey } from './colorSchemes';
 import { clamp, hslToHex } from './colorUtils';
-import { syncBrowserChromeColor } from './browserThemeColor';
 
 const STYLE_ID = 'dynamic-theme';
 

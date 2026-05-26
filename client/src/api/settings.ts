@@ -4,6 +4,8 @@ import { getAccessToken } from '../stores';
 import client from './client';
 import { unwrapApiData, unwrapResponse } from './response';
 
+const IMPORT_RESTORE_CONFIRM_VALUE = 'RESTORE_IMPORT';
+
 export interface SystemSettings {
   require_login_download: boolean;
   require_login_browse: boolean;
@@ -383,12 +385,27 @@ export interface BackupPolicyCheckItem {
   message: string;
 }
 
+export interface BackupPolicyReportFinding {
+  key: string;
+  label: string;
+  message: string;
+}
+
+export interface BackupPolicyReport {
+  riskLevel: 'low' | 'medium' | 'high';
+  summary: string;
+  blockers: BackupPolicyReportFinding[];
+  warnings: BackupPolicyReportFinding[];
+  nextActions: string[];
+}
+
 export interface BackupPolicyCheck {
   status: 'ok' | 'warning' | 'error';
   checkedAt: string;
   estimatedBackupSize: number;
   estimatedBackupSizeText: string;
   checks: BackupPolicyCheckItem[];
+  report?: BackupPolicyReport;
 }
 
 export interface BackupVerificationResult {
@@ -812,11 +829,11 @@ export async function renameBackup(id: string, name: string): Promise<BackupReco
 }
 
 export async function deleteBackup(id: string): Promise<void> {
-  await client.delete(`/settings/backup/delete/${id}`);
+  await client.delete(`/settings/backup/delete/${id}`, { data: { confirm: id } });
 }
 
 export async function startRestore(id: string): Promise<string> {
-  const res = await client.post(`/settings/backup/restore/${id}`, {}, { timeout: 30000 });
+  const res = await client.post(`/settings/backup/restore/${id}`, { confirm: id }, { timeout: 30000 });
   const data = unwrapResponse<JobStartResult>(res);
   const jobId = data.jobId;
   if (!jobId) throw new Error('启动恢复失败');
@@ -1115,7 +1132,10 @@ export async function importBackup(file: File, onUploadProgress?: (percent: numb
     const { filePath } = await completeChunkedUpload(uploadId);
 
     // Step 4: Start restore from merged file
-    const { data: restoreResp } = await client.post('/settings/backup/import-chunked', { filePath });
+    const { data: restoreResp } = await client.post('/settings/backup/import-chunked', {
+      filePath,
+      confirm: IMPORT_RESTORE_CONFIRM_VALUE,
+    });
     const restoreData = unwrapApiData<JobStartResult>(restoreResp);
     const jobId = restoreData.jobId;
     if (!jobId) throw new Error('启动恢复失败');
@@ -1165,9 +1185,11 @@ function directUpload(file: File, onProgress?: (percent: number) => void): Promi
 
     const token = getAccessToken();
     if (token) xhr.setRequestHeader('Authorization', `Bearer ${token}`);
+    xhr.setRequestHeader('X-Danger-Confirm', IMPORT_RESTORE_CONFIRM_VALUE);
 
     const formData = new FormData();
     formData.append('file', file);
+    formData.append('confirm', IMPORT_RESTORE_CONFIRM_VALUE);
     xhr.timeout = 7200000;
     xhr.send(formData);
   });
@@ -1189,7 +1211,10 @@ export async function listServerBackupFiles(): Promise<ServerBackupFile[]> {
 }
 
 export async function importBackupFromPath(serverPath: string): Promise<string> {
-  const { data: resp } = await client.post('/settings/backup/import-path', { path: serverPath });
+  const { data: resp } = await client.post('/settings/backup/import-path', {
+    path: serverPath,
+    confirm: IMPORT_RESTORE_CONFIRM_VALUE,
+  });
   const inner = unwrapApiData<JobStartResult>(resp);
   const jobId = inner?.jobId;
   if (!jobId) throw new Error('启动恢复失败');

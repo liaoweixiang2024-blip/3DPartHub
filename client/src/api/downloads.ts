@@ -1,4 +1,10 @@
-import { cancelPreparedBrowserDownload, downloadBrowserFile, prepareBrowserDownload } from '../lib/browserDownload';
+import {
+  cancelPreparedBrowserDownload,
+  downloadBrowserFile,
+  openBrowserDocument,
+  prepareBrowserDocument,
+  prepareBrowserDownload,
+} from '../lib/browserDownload';
 import { getPublicSettingsSnapshot } from '../lib/publicSettings';
 import { getAccessToken, useAuthStore } from '../stores/useAuthStore';
 import { downloadBatchZip } from './batchZipDownload';
@@ -134,20 +140,19 @@ export async function createModelDrawingUrl(modelId: string): Promise<string> {
 }
 
 export async function openModelDrawing(modelId: string): Promise<void> {
-  const opened = window.open('about:blank', '_blank');
+  const opened = prepareBrowserDocument('正在打开图纸...');
   try {
     const url = await createModelDrawingUrl(modelId);
     if (!url.startsWith('/api/') && !url.startsWith(window.location.origin)) {
       throw new Error('Invalid download URL');
     }
-    if (opened) {
-      opened.opener = null;
-      opened.location.replace(url);
-    } else {
-      window.location.href = url;
-    }
+    openBrowserDocument(url, {
+      preparedWindow: opened,
+      title: 'PDF 图纸',
+      fallbackUrl: `${window.location.pathname}${window.location.search}${window.location.hash}`,
+    });
   } catch (error) {
-    opened?.close();
+    cancelPreparedBrowserDownload(opened);
     throw error;
   }
 }

@@ -37,6 +37,8 @@ interface ProductWallListResponse {
   page_size: number;
 }
 
+const PRODUCT_WALL_PAGE_PREFETCH_CONCURRENCY = 4;
+
 export interface ProductWallUpdateInput {
   title?: string;
   description?: string;
@@ -53,14 +55,20 @@ export async function listProductWallItems(): Promise<ProductWallItem[]> {
   const items = [...(data.items || [])];
   const total = Number(data.total) || items.length;
   const pageSize = Number(data.page_size) || 200;
-  let page = Number(data.page) || 1;
-  while (items.length < total) {
-    page += 1;
-    const nextRes = await client.get('/product-wall', { params: { page, page_size: pageSize } });
-    const nextData = unwrapResponse<ProductWallItem[] | ProductWallListResponse>(nextRes);
-    const nextItems = Array.isArray(nextData) ? nextData : nextData.items || [];
-    if (!nextItems.length) break;
-    items.push(...nextItems);
+  const firstPage = Number(data.page) || 1;
+  const lastPage = Math.ceil(total / pageSize);
+  const remainingPages = Array.from({ length: Math.max(0, lastPage - firstPage) }, (_, index) => firstPage + index + 1);
+  for (let index = 0; index < remainingPages.length; index += PRODUCT_WALL_PAGE_PREFETCH_CONCURRENCY) {
+    const pageBatch = remainingPages.slice(index, index + PRODUCT_WALL_PAGE_PREFETCH_CONCURRENCY);
+    const pageItems = await Promise.all(
+      pageBatch.map(async (page) => {
+        const nextRes = await client.get('/product-wall', { params: { page, page_size: pageSize } });
+        const nextData = unwrapResponse<ProductWallItem[] | ProductWallListResponse>(nextRes);
+        return Array.isArray(nextData) ? nextData : nextData.items || [];
+      }),
+    );
+    items.push(...pageItems.flat());
+    if (items.length >= total || pageItems.some((page) => page.length === 0)) break;
   }
   return items;
 }

@@ -3,7 +3,18 @@
   "private": true,
   "scripts": {
     "build": "npm --prefix client run build && npm --prefix server run build",
+    "backup:e2e": "npm --prefix server run backup:e2e:dev",
+    "deploy:check": "sh scripts/deploy-health-check.sh",
+    "deploy:evidence": "sh scripts/collect-deploy-evidence.sh",
+    "deploy:report:verify": "node scripts/verify-deploy-health-report.mjs",
+    "deploy:acceptance": "sh scripts/verify-production-deploy-evidence.sh",
+    "deploy:check:test": "sh scripts/test-deploy-health-check.sh",
+    "deploy:wiring:verify": "node scripts/verify-deploy-wiring.mjs",
     "dev:local": "bash scripts/start-local.sh",
+    "lint:ci": "npm --prefix client run lint:ci && npm --prefix server run lint:ci",
+    "verify:deploy": "sh scripts/verify-deploy-tools.sh",
+    "verify:enterprise": "node scripts/verify-enterprise-acceptance.mjs",
+    "verify:local": "bash scripts/verify-local.sh",
     "prepare": "husky"
   },
   "devDependencies": {

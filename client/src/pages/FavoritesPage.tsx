@@ -32,12 +32,12 @@ interface FavoriteModel {
   createdAt: string;
 }
 
-function mapFavorites(items: any[]): FavoriteModel[] {
+function mapFavorites(items: FavoriteItem[]): FavoriteModel[] {
   return items.map((item) => ({
-    id: item.model?.id || item.modelId,
+    id: item.model?.model_id || item.modelId,
     name: item.model?.name || '未命名模型',
     format: item.model?.format || '',
-    thumbnailUrl: item.model?.thumbnailUrl || item.model?.thumbnail_url || null,
+    thumbnailUrl: item.model?.thumbnail_url || null,
     createdAt: item.createdAt,
   }));
 }

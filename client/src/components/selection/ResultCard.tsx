@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import type { ColumnDef, SelectionProduct, SelectionComponent } from '../../api/selections';
+import { openDocumentUrl } from '../../lib/browserDownload';
 import { copyText } from '../../lib/clipboard';
 import { downloadKitList, formatKitList } from '../../lib/kitList';
 import Icon from '../shared/Icon';
@@ -222,6 +223,10 @@ export function ResultCard({
             href={product.categoryCatalogPdf}
             target="_blank"
             rel="noopener"
+            onClick={(event) => {
+              event.preventDefault();
+              openDocumentUrl(product.categoryCatalogPdf!, { title: '产品画册' });
+            }}
             className={`px-2.5 md:px-3 py-1 md:py-1.5 text-xs md:text-sm font-medium border border-outline-variant/30 text-on-surface-variant rounded-lg hover:bg-surface-container-high/50 inline-flex items-center gap-1 ${selectionPress}`}
           >
             <Icon name="menu_book" size={14} />
@@ -233,6 +238,10 @@ export function ResultCard({
             href={product.pdfUrl}
             target="_blank"
             rel="noopener"
+            onClick={(event) => {
+              event.preventDefault();
+              openDocumentUrl(product.pdfUrl!, { title: 'PDF 规格书' });
+            }}
             className={`px-2.5 md:px-3 py-1 md:py-1.5 text-xs md:text-sm font-medium border border-outline-variant/30 text-on-surface-variant rounded-lg hover:bg-surface-container-high/50 inline-flex items-center gap-1 ${selectionPress}`}
           >
             <Icon name="library_books" size={14} />

@@ -132,7 +132,7 @@ export async function ipGuard(req: Request, res: Response, next: NextFunction) {
               next();
               return;
             }
-          } catch (err) {
+          } catch (_err) {
             // Invalid referer URL — proceed with hotlink check
           }
 

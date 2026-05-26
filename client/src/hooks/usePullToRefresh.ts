@@ -120,7 +120,7 @@ export function usePullToRefresh(
       }
       pendingPullVisualRef.current = null;
     };
-  }, [commitPullVisual, finishPullGesture, isDesktop, pullMaxVisual, pullThreshold]);
+  }, [commitPullVisual, finishPullGesture, isDesktop, pullMaxVisual, pullThreshold, scrollContainerRef]);
 
   const handlePullTransitionEnd = useCallback(() => {
     if (pullStateRef.current === 'idle') {

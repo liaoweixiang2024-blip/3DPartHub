@@ -56,11 +56,11 @@ import {
 import ColorSchemeEditor from '../components/settings/ColorSchemeSettings';
 import { AdminContentPanel, AdminManagementPage } from '../components/shared/AdminManagementPage';
 import { AdminPageShell } from '../components/shared/AdminPageShell';
+import ConfirmDialog from '../components/shared/ConfirmDialog';
 import Icon from '../components/shared/Icon';
 import { PageRefreshIndicator } from '../components/shared/PageRefreshFallback';
 import ResponsiveSectionTabs from '../components/shared/ResponsiveSectionTabs';
 import SafeImage from '../components/shared/SafeImage';
-import ConfirmDialog from '../components/shared/ConfirmDialog';
 import { useToast } from '../components/shared/Toast';
 import { useDocumentTitle } from '../hooks/useDocumentTitle';
 import {
@@ -178,6 +178,20 @@ function getBackupStatusIconClass(status: BackupProtectionStatus): string {
   return 'text-on-surface-variant';
 }
 
+function getBackupRiskStatus(report?: BackupPolicyCheck['report']): BackupProtectionStatus {
+  if (report?.riskLevel === 'high') return 'error';
+  if (report?.riskLevel === 'medium') return 'warning';
+  if (report?.riskLevel === 'low') return 'ok';
+  return 'muted';
+}
+
+function getBackupRiskLabel(report?: BackupPolicyCheck['report']): string {
+  if (report?.riskLevel === 'high') return '高风险';
+  if (report?.riskLevel === 'medium') return '中风险';
+  if (report?.riskLevel === 'low') return '低风险';
+  return '待检查';
+}
+
 function findBackupPolicyCheck(policyCheck: BackupPolicyCheck | null, key: string) {
   return policyCheck?.checks.find((check) => check.key === key);
 }
@@ -288,6 +302,10 @@ function formatBackupPolicyAdvice(check: BackupPolicyCheck['checks'][number]): s
 }
 
 function buildBackupAdviceItems(health: BackupHealth, policyCheck: BackupPolicyCheck | null): string[] {
+  if (policyCheck?.report?.nextActions?.length) {
+    return policyCheck.report.nextActions.slice(0, 5);
+  }
+
   if (policyCheck) {
     const issues = policyCheck.checks.filter((check) => check.status !== 'ok');
     if (issues.length === 0) {
@@ -3675,6 +3693,36 @@ function isConnectivityResult(value: unknown): value is SettingsConnectivityResu
   );
 }
 
+type ApiErrorLike = {
+  message?: unknown;
+  jobId?: unknown;
+  response?: {
+    data?: unknown;
+  };
+};
+
+function apiErrorLike(err: unknown): ApiErrorLike {
+  return err && typeof err === 'object' ? (err as ApiErrorLike) : {};
+}
+
+function errorPayloadMessage(payload: unknown): string | null {
+  if (!payload || typeof payload !== 'object') return null;
+  const data = payload as { message?: unknown; detail?: unknown };
+  if (typeof data.message === 'string' && data.message) return data.message;
+  if (typeof data.detail === 'string' && data.detail) return data.detail;
+  return null;
+}
+
+function errorMessage(err: unknown, fallback: string): string {
+  const error = apiErrorLike(err);
+  return errorPayloadMessage(error.response?.data) || (typeof error.message === 'string' ? error.message : fallback);
+}
+
+function errorJobId(err: unknown): string | null {
+  const jobId = apiErrorLike(err).jobId;
+  return typeof jobId === 'string' && jobId ? jobId : null;
+}
+
 function connectivityTone(result: SettingsConnectivityResult | null) {
   if (!result) return 'border-outline-variant/10 bg-surface-container-high/25 text-on-surface-variant';
   if (result.status === 'success') return 'border-emerald-500/20 bg-emerald-500/8 text-emerald-600';
@@ -3899,8 +3947,8 @@ function StorageSyncPanel({ settings }: { settings: SystemSettings }) {
         if (current.length > 0) return current;
         return next.scopes.map((scope) => scope.key);
       });
-    } catch (err: any) {
-      if (!silent) toast(err.message || '同步状态加载失败', 'error');
+    } catch (err: unknown) {
+      if (!silent) toast(errorMessage(err, '同步状态加载失败'), 'error');
     } finally {
       if (!silent) setLoading(false);
     }
@@ -3969,8 +4017,8 @@ function StorageSyncPanel({ settings }: { settings: SystemSettings }) {
           : current,
       );
       toast('同步任务已开始');
-    } catch (err: any) {
-      toast(err.message || '同步任务启动失败', 'error');
+    } catch (err: unknown) {
+      toast(errorMessage(err, '同步任务启动失败'), 'error');
     } finally {
       setWorking(false);
     }
@@ -3992,8 +4040,8 @@ function StorageSyncPanel({ settings }: { settings: SystemSettings }) {
           : current,
       );
       toast('同步任务已停止');
-    } catch (err: any) {
-      toast(err.message || '停止同步失败', 'error');
+    } catch (err: unknown) {
+      toast(errorMessage(err, '停止同步失败'), 'error');
     } finally {
       setWorking(false);
     }
@@ -4014,8 +4062,8 @@ function StorageSyncPanel({ settings }: { settings: SystemSettings }) {
           : current,
       );
       toast('同步记录已删除');
-    } catch (err: any) {
-      toast(err.message || '删除同步记录失败', 'error');
+    } catch (err: unknown) {
+      toast(errorMessage(err, '删除同步记录失败'), 'error');
     } finally {
       setWorking(false);
     }
@@ -4541,6 +4589,7 @@ function Content() {
   const [checkingUpdate, setCheckingUpdate] = useState(false);
   const [restoreConfirmId, setRestoreConfirmId] = useState<string | null>(null);
   const [backupDeleteConfirm, setBackupDeleteConfirm] = useState<{ id: string; name: string } | null>(null);
+  const [deletingBackupId, setDeletingBackupId] = useState<string | null>(null);
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState('');
   const [restoring, setRestoring] = useState(false);
@@ -4551,6 +4600,7 @@ function Content() {
   const restoreActionInFlight = useRef(false);
   const importActionInFlight = useRef(false);
   const verifyActionInFlight = useRef(false);
+  const backupDeleteInFlight = useRef(false);
   const policyCheckInFlight = useRef(false);
   const jobToastKeys = useRef<Set<string>>(new Set());
 
@@ -4562,7 +4612,7 @@ function Content() {
   const [cleanupConfirmOpen, setCleanupConfirmOpen] = useState(false);
 
   // Global busy state — prevent concurrent admin operations
-  const adminBusy = exporting || importing || restoring || !!verifyingBackupId;
+  const adminBusy = exporting || importing || restoring || !!verifyingBackupId || !!deletingBackupId;
   const selectedBackupScope =
     BACKUP_SCOPE_OPTIONS.find((option) => option.value === backupScope) || BACKUP_SCOPE_OPTIONS[0];
   const hasDetailedBackupStats = Boolean(backupStats?.totalDataSizeText || backupStats?.resourceSizeText);
@@ -4617,6 +4667,7 @@ function Content() {
   const backupProtectionCards = backupHealth ? buildBackupProtectionCards(backupHealth, backupPolicyCheck) : [];
   const backupAdviceItems = backupHealth ? buildBackupAdviceItems(backupHealth, backupPolicyCheck) : [];
   const backupHealthTone = toBackupProtectionStatus(backupPolicyCheck?.status || backupHealth?.status);
+  const backupPolicyReportTone = getBackupRiskStatus(backupPolicyCheck?.report);
   const backupPolicyIssueCount = backupPolicyCheck
     ? backupPolicyCheck.checks.filter((check) => check.status !== 'ok').length
     : 0;
@@ -4753,8 +4804,8 @@ function Content() {
         loadBackupList();
         loadBackupStats();
         loadBackupHealth();
-      } catch (err: any) {
-        toast(err.message || '备份任务失败', 'error');
+      } catch (err: unknown) {
+        toast(errorMessage(err, '备份任务失败'), 'error');
       } finally {
         localStorage.removeItem('backupJobId');
         setExporting(false);
@@ -4811,8 +4862,8 @@ function Content() {
         loadBackupList();
         loadBackupStats();
         loadBackupHealth();
-      } catch (err: any) {
-        toast(err.message || '恢复失败', 'error');
+      } catch (err: unknown) {
+        toast(errorMessage(err, '恢复失败'), 'error');
       } finally {
         localStorage.removeItem('restoreJobId');
         localStorage.removeItem('restoreConfirmBackupId');
@@ -4856,8 +4907,8 @@ function Content() {
         loadBackupList();
         loadBackupStats();
         loadBackupHealth();
-      } catch (err: any) {
-        toast(err.message || '导入保存失败', 'error');
+      } catch (err: unknown) {
+        toast(errorMessage(err, '导入保存失败'), 'error');
       } finally {
         localStorage.removeItem('importSaveJobId');
         setImporting(false);
@@ -4882,8 +4933,8 @@ function Content() {
           toastVerifySuccessOnce(activeVerify.id, result.message);
           loadBackupList();
           loadBackupHealth();
-        } catch (err: any) {
-          toast(err.message || '备份校验失败', 'error');
+        } catch (err: unknown) {
+          toast(errorMessage(err, '备份校验失败'), 'error');
         } finally {
           setVerifyingBackupId(null);
           setVerifyProgress({ stage: '', percent: 0, message: '', logs: [] });
@@ -4934,8 +4985,8 @@ function Content() {
       else if (result.status === 'warning') toast('备份策略体检有警告，请查看详情', 'info');
       else toast('备份策略体检发现错误，请查看详情', 'error');
       loadBackupHealth();
-    } catch (err: any) {
-      toast(err.message || '备份策略体检失败', 'error');
+    } catch (err: unknown) {
+      toast(errorMessage(err, '备份策略体检失败'), 'error');
     } finally {
       policyCheckInFlight.current = false;
       setCheckingBackupPolicy(false);
@@ -4955,8 +5006,8 @@ function Content() {
       toastVerifySuccessOnce(jobId, result.message);
       loadBackupList();
       loadBackupHealth();
-    } catch (err: any) {
-      toast(err.response?.data?.message || err.message || '备份校验失败', 'error');
+    } catch (err: unknown) {
+      toast(errorMessage(err, '备份校验失败'), 'error');
     } finally {
       verifyActionInFlight.current = false;
       setVerifyingBackupId(null);
@@ -5050,20 +5101,20 @@ function Content() {
       }
       await sendTestEmail(testEmailTo.trim());
       toast('测试邮件已发送', 'success');
-    } catch (err: any) {
-      toast(err.response?.data?.detail || err.message || '测试邮件发送失败', 'error');
+    } catch (err: unknown) {
+      toast(errorMessage(err, '测试邮件发送失败'), 'error');
     } finally {
       setTestingEmail(false);
     }
   }
 
-  function readConnectivityError(err: any, fallback: string): SettingsConnectivityResult {
-    const payload = err?.response?.data;
+  function readConnectivityError(err: unknown, fallback: string): SettingsConnectivityResult {
+    const payload = apiErrorLike(err).response?.data;
     if (isConnectivityResult(payload)) return payload;
     return {
       ok: false,
       status: 'error',
-      message: err?.response?.data?.message || err?.response?.data?.detail || err?.message || fallback,
+      message: errorMessage(err, fallback),
       details: [],
     };
   }
@@ -5078,7 +5129,7 @@ function Content() {
       const result = await testCacheSettings();
       setCacheTestResult(result);
       toast(result.message, result.status === 'success' ? 'success' : 'info');
-    } catch (err: any) {
+    } catch (err: unknown) {
       const result = readConnectivityError(err, '缓存测试失败');
       setCacheTestResult(result);
       toast(result.message, 'error');
@@ -5097,7 +5148,7 @@ function Content() {
       const result = await testStorageSettings();
       setStorageTestResult(result);
       toast(result.message, result.status === 'success' ? 'success' : 'info');
-    } catch (err: any) {
+    } catch (err: unknown) {
       const result = readConnectivityError(err, '存储测试失败');
       setStorageTestResult(result);
       toast(result.message, 'error');
@@ -5139,26 +5190,27 @@ function Content() {
       loadBackupList();
       loadBackupStats();
       loadBackupHealth();
-    } catch (err: any) {
-      if (err.jobId) {
+    } catch (err: unknown) {
+      const existingJobId = errorJobId(err);
+      if (existingJobId) {
         toast('已有备份任务正在进行中，已恢复进度显示', 'info');
-        localStorage.setItem('backupJobId', err.jobId);
+        localStorage.setItem('backupJobId', existingJobId);
         try {
-          await pollBackupProgress(err.jobId, (stage, percent, message, logs) => {
+          await pollBackupProgress(existingJobId, (stage, percent, message, logs) => {
             setExportProgress({ stage, percent, message, logs: logs || [] });
           });
-          toastBackupCreatedOnce(err.jobId);
+          toastBackupCreatedOnce(existingJobId);
           loadBackupList();
           loadBackupStats();
           loadBackupHealth();
-        } catch (pollErr: any) {
-          toast(pollErr.message || '查询备份进度失败', 'error');
+        } catch (pollErr: unknown) {
+          toast(errorMessage(pollErr, '查询备份进度失败'), 'error');
         } finally {
           localStorage.removeItem('backupJobId');
         }
       } else {
         localStorage.removeItem('backupJobId');
-        toast(err.message || '导出失败', 'error');
+        toast(errorMessage(err, '导出失败'), 'error');
       }
     } finally {
       backupActionInFlight.current = false;
@@ -5203,7 +5255,8 @@ function Content() {
   function handleBackupFileSelect(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
-    if (!file.name.endsWith('.tar.gz') && !file.name.endsWith('.tgz')) {
+    const lowerName = file.name.toLowerCase();
+    if (!lowerName.endsWith('.tar.gz') && !lowerName.endsWith('.tgz')) {
       toast('请选择 .tar.gz 格式的备份文件', 'error');
       return;
     }
@@ -5256,8 +5309,8 @@ function Content() {
         loadBackupStats();
         loadBackupHealth();
       }
-    } catch (err: any) {
-      toast(err.message || '操作失败', 'error');
+    } catch (err: unknown) {
+      toast(errorMessage(err, '操作失败'), 'error');
     } finally {
       localStorage.removeItem('restoreJobId');
       localStorage.removeItem('importSaveJobId');
@@ -5300,8 +5353,8 @@ function Content() {
       loadBackupList();
       loadBackupStats();
       loadBackupHealth();
-    } catch (err: any) {
-      toast(err.message || '恢复失败', 'error');
+    } catch (err: unknown) {
+      toast(errorMessage(err, '恢复失败'), 'error');
     } finally {
       localStorage.removeItem('restoreJobId');
       localStorage.removeItem(RESTORE_JOB_SOURCE_KEY);
@@ -5333,15 +5386,23 @@ function Content() {
   }
 
   async function handleDelete(id: string) {
+    if (backupDeleteInFlight.current) return;
+    backupDeleteInFlight.current = true;
+    setBackupDeleteConfirm(null);
+    setDeletingBackupId(id);
     try {
       await deleteBackup(id);
-      setBackupDeleteConfirm(null);
+      setBackupList((list) => list.filter((backup) => backup.id !== id));
       loadBackupList();
       loadBackupStats();
       loadBackupHealth();
-      toast('已删除', 'success');
-    } catch {
-      toast('删除失败', 'error');
+      toast('备份已删除', 'success');
+    } catch (err: unknown) {
+      loadBackupList();
+      toast(errorMessage(err, '删除失败'), 'error');
+    } finally {
+      backupDeleteInFlight.current = false;
+      setDeletingBackupId(null);
     }
   }
 
@@ -5368,8 +5429,8 @@ function Content() {
       loadBackupList();
       loadBackupStats();
       loadBackupHealth();
-    } catch (err: any) {
-      toast(err.message || '恢复失败', 'error');
+    } catch (err: unknown) {
+      toast(errorMessage(err, '恢复失败'), 'error');
     } finally {
       localStorage.removeItem('restoreJobId');
       localStorage.removeItem('restoreConfirmBackupId');
@@ -5395,8 +5456,8 @@ function Content() {
       setCleanupSelectedKeys(new Set());
       const newScan = await scanCleanup();
       setCleanupScan(newScan);
-    } catch (err: any) {
-      toast(err.message || '清理失败', 'error');
+    } catch (err: unknown) {
+      toast(errorMessage(err, '清理失败'), 'error');
     } finally {
       setCleanupRunning(false);
     }
@@ -6369,12 +6430,36 @@ function Content() {
                                       <p className="mt-1 text-xs text-on-surface-variant">
                                         体检会实际检查本地目录权限、磁盘空间、自动策略、外部镜像、备份加密和最近备份包完整性。
                                       </p>
+                                      {backupPolicyCheck.report && (
+                                        <div
+                                          className={`mt-2 inline-flex max-w-full items-start gap-2 rounded-lg border px-2.5 py-2 text-xs ${getBackupStatusClasses(backupPolicyReportTone)}`}
+                                        >
+                                          <Icon
+                                            name={getBackupStatusIcon(backupPolicyReportTone)}
+                                            size={14}
+                                            className={`mt-0.5 shrink-0 ${getBackupStatusIconClass(backupPolicyReportTone)}`}
+                                          />
+                                          <span className="min-w-0">
+                                            <span className="font-medium">
+                                              {getBackupRiskLabel(backupPolicyCheck.report)}
+                                            </span>
+                                            <span className="mx-1 text-current/60">·</span>
+                                            <span className="break-words">{backupPolicyCheck.report.summary}</span>
+                                          </span>
+                                        </div>
+                                      )}
                                     </div>
                                     <div className="grid gap-1 text-xs text-on-surface-variant sm:text-right">
                                       <span>
                                         体检时间：{new Date(backupPolicyCheck.checkedAt).toLocaleString('zh-CN')}
                                       </span>
                                       <span>预计备份大小：{backupPolicyCheck.estimatedBackupSizeText}</span>
+                                      {backupPolicyCheck.report && (
+                                        <span>
+                                          阻断 {backupPolicyCheck.report.blockers.length} / 警告{' '}
+                                          {backupPolicyCheck.report.warnings.length}
+                                        </span>
+                                      )}
                                     </div>
                                   </div>
                                   <div className="grid gap-2 md:grid-cols-2">
@@ -6651,11 +6736,11 @@ function Content() {
                                       </button>
                                       <button
                                         onClick={() => setBackupDeleteConfirm({ id: b.id, name: b.name })}
-                                        disabled={adminBusy}
+                                        disabled={adminBusy || deletingBackupId === b.id}
                                         className="px-2.5 py-2 lg:py-1.5 text-xs font-medium bg-error-container/10 text-error rounded-md hover:bg-error-container/20 disabled:opacity-50 transition-colors flex items-center justify-center gap-1"
                                       >
                                         <Icon name="delete" size={13} />
-                                        删除
+                                        {deletingBackupId === b.id ? '删除中' : '删除'}
                                       </button>
                                     </div>
                                   </div>
@@ -6720,6 +6805,7 @@ function Content() {
                               <input
                                 ref={backupInputRef}
                                 type="file"
+                                accept=".tar.gz,.tgz,application/gzip,application/x-gzip"
                                 onChange={handleBackupFileSelect}
                                 className="hidden"
                               />
@@ -7023,8 +7109,8 @@ function Content() {
                             try {
                               const result = await scanCleanup();
                               setCleanupScan(result);
-                            } catch (err: any) {
-                              toast(err.message || '扫描失败', 'error');
+                            } catch (err: unknown) {
+                              toast(errorMessage(err, '扫描失败'), 'error');
                             } finally {
                               setCleanupScanning(false);
                             }
@@ -7152,13 +7238,17 @@ function Content() {
       </AdminManagementPage>
       <ConfirmDialog
         open={Boolean(backupDeleteConfirm)}
-        onClose={() => setBackupDeleteConfirm(null)}
+        onClose={() => {
+          if (!backupDeleteInFlight.current) setBackupDeleteConfirm(null);
+        }}
         onConfirm={() => {
-          if (backupDeleteConfirm) void handleDelete(backupDeleteConfirm.id);
+          const target = backupDeleteConfirm;
+          if (target) void handleDelete(target.id);
         }}
         title="确认删除备份"
         description={`确定要删除备份「${backupDeleteConfirm?.name || ''}」吗？`}
         confirmLabel="确认删除"
+        confirmDisabled={backupDeleteInFlight.current}
       />
       <ConfirmDialog
         open={cleanupConfirmOpen}

@@ -10,6 +10,32 @@ import { withAssetVersion } from '../../services/gltfAsset.js';
 import { resolveDbModelDownloadTarget } from '../../services/modelDownloadTarget.js';
 import { asSingleString, hasShareAccess, SHARE_ACCESS_TOKEN_TTL_MS } from './common.js';
 
+type ShareInfoCache = {
+  allowDownload: boolean;
+  allowDrawing: boolean;
+  allowPreview: boolean;
+  downloadCount: number;
+  downloadLimit: number;
+  expiresAt: Date | null;
+  id: string;
+  model: {
+    description: string | null;
+    drawingUrl: string | null;
+    format: string;
+    gltfSize: number;
+    gltfUrl: string;
+    id: string;
+    name: string;
+    originalFormat: string | null;
+    originalName: string;
+    originalSize: number;
+    thumbnailUrl: string | null;
+    updatedAt: Date;
+    uploadPath: string | null;
+  } | null;
+  modelId: string;
+};
+
 export function createPublicSharesRouter() {
   const router = Router();
 
@@ -21,43 +47,47 @@ export function createPublicSharesRouter() {
       return;
     }
 
-    const { value: shareRaw } = (await cacheGetOrSet(`cache:share:info:${token}`, TTL.MODEL_DETAIL, async () => {
-      const result = await prisma.shareLink.findUnique({
-        where: { token },
-        select: {
-          id: true,
-          modelId: true,
-          allowPreview: true,
-          allowDownload: true,
-          allowDrawing: true,
-          downloadLimit: true,
-          downloadCount: true,
-          expiresAt: true,
-        },
-      });
-      if (result) {
-        const model = await prisma.model.findUnique({
-          where: { id: result.modelId },
+    const { value: shareRaw } = await cacheGetOrSet<ShareInfoCache | null>(
+      `cache:share:info:${token}`,
+      TTL.MODEL_DETAIL,
+      async () => {
+        const result = await prisma.shareLink.findUnique({
+          where: { token },
           select: {
             id: true,
-            name: true,
-            originalName: true,
-            format: true,
-            originalSize: true,
-            gltfUrl: true,
-            gltfSize: true,
-            originalFormat: true,
-            uploadPath: true,
-            thumbnailUrl: true,
-            description: true,
-            drawingUrl: true,
-            updatedAt: true,
+            modelId: true,
+            allowPreview: true,
+            allowDownload: true,
+            allowDrawing: true,
+            downloadLimit: true,
+            downloadCount: true,
+            expiresAt: true,
           },
         });
-        return { ...result, model };
-      }
-      return result;
-    })) as any;
+        if (result) {
+          const model = await prisma.model.findUnique({
+            where: { id: result.modelId },
+            select: {
+              id: true,
+              name: true,
+              originalName: true,
+              format: true,
+              originalSize: true,
+              gltfUrl: true,
+              gltfSize: true,
+              originalFormat: true,
+              uploadPath: true,
+              thumbnailUrl: true,
+              description: true,
+              drawingUrl: true,
+              updatedAt: true,
+            },
+          });
+          return { ...result, model };
+        }
+        return result;
+      },
+    );
 
     const sharePassword: string | null = shareRaw?.id
       ? ((await prisma.shareLink.findUnique({ where: { id: shareRaw.id }, select: { password: true } }))?.password ??

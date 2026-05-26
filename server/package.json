@@ -1,6 +1,6 @@
 {
   "name": "3dparthub-server",
-  "version": "3.1.5",
+  "version": "3.2.0",
   "type": "module",
   "scripts": {
     "dev": "node --import tsx src/main.ts",
@@ -12,6 +12,7 @@
     "build": "tsc",
     "typecheck": "tsc --noEmit",
     "lint": "eslint .",
+    "lint:ci": "eslint . --max-warnings=0",
     "format": "prettier --write \"src/**/*.ts\" \"prisma/*.ts\"",
     "format:check": "prettier --check \"src/**/*.ts\" \"prisma/*.ts\"",
     "verify": "npm run typecheck && npm run lint && npm run format:check && npm run build && npm test",
@@ -22,7 +23,8 @@
     "prisma:force-reset": "bash scripts/safe-migrate.sh force-reset",
     "prisma:studio": "prisma studio",
     "preview-meta:migrate": "tsx scripts/migrate-preview-meta.ts",
-    "backup:e2e": "tsx scripts/backup-e2e-check.ts",
+    "backup:e2e": "node dist/scripts/backup-e2e-check.js",
+    "backup:e2e:dev": "tsx src/scripts/backup-e2e-check.ts",
     "seed:batch": "tsx prisma/seeds/run-batch.ts",
     "seed:all": "tsx prisma/seeds/import-selection-products.ts",
     "seed:range": "tsx prisma/seeds/run-batch.ts"

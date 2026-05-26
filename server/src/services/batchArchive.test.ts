@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { shouldAttachExternalGltfBin, shouldDownloadOriginalBatchFormat } from './batchArchive.js';
 import { normalizeBatchArchiveEntryName } from './archivePath.js';
+import { shouldAttachExternalGltfBin, shouldDownloadOriginalBatchFormat } from './batchArchive.js';
 
 test('batch favorites treats step/original/unknown formats as original downloads', () => {
   assert.equal(shouldDownloadOriginalBatchFormat(), true);

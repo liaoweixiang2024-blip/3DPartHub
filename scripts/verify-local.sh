@@ -14,13 +14,16 @@ run_step() {
 }
 
 run_step "Maintenance scans" bash "$ROOT_DIR/scripts/scan-maintenance.sh"
+run_step "Deploy tool verification" bash -c "cd \"$ROOT_DIR\" && npm run verify:deploy"
 
 run_step "Client typecheck" bash -c "cd \"$ROOT_DIR/client\" && npm run typecheck"
-run_step "Client lint" bash -c "cd \"$ROOT_DIR/client\" && npm run lint"
+run_step "Client lint baseline" bash -c "cd \"$ROOT_DIR/client\" && npm run lint:ci"
 run_step "Client build" bash -c "cd \"$ROOT_DIR/client\" && npm run build"
 
 run_step "Server typecheck" bash -c "cd \"$ROOT_DIR/server\" && npm run typecheck"
+run_step "Server lint baseline" bash -c "cd \"$ROOT_DIR/server\" && npm run lint:ci"
 run_step "Server build" bash -c "cd \"$ROOT_DIR/server\" && npm run build"
+run_step "Backup restore drill CLI smoke check" bash -c "cd \"$ROOT_DIR/server\" && npm run backup:e2e -- --help >/dev/null"
 
 if [[ "$RUN_SERVER_TESTS" == "1" ]]; then
   run_step "Server tests" bash -c "cd \"$ROOT_DIR/server\" && npm test"
@@ -40,7 +43,8 @@ if [[ "$SKIP_DOCKER" == "1" ]]; then
   echo
   echo "==> Docker compose config skipped (SKIP_DOCKER=1)"
 elif command -v docker >/dev/null 2>&1 && docker compose version >/dev/null 2>&1; then
-  run_step "Docker compose config" bash -c "cd \"$ROOT_DIR\" && docker compose -f docker-compose.local.yml config --services >/dev/null"
+  run_step "Production docker compose config" bash -c "cd \"$ROOT_DIR\" && docker compose -f docker-compose.yml config --services >/dev/null"
+  run_step "Local docker compose config" bash -c "cd \"$ROOT_DIR\" && docker compose -f docker-compose.local.yml config --services >/dev/null"
 else
   echo
   echo "==> Docker compose config skipped (docker compose not available)"

@@ -23,6 +23,7 @@ import SafeImage from '../components/shared/SafeImage';
 import { useToast } from '../components/shared/Toast';
 import { useDocumentTitle } from '../hooks/useDocumentTitle';
 import { useMediaQuery } from '../layouts/hooks/useMediaQuery';
+import { openDocumentUrl } from '../lib/browserDownload';
 import { getBusinessConfig, statusInfo, type StatusConfig } from '../lib/businessConfig';
 import { getClipboardImageFile } from '../lib/clipboardImages';
 import { getErrorMessage, notifyGlobalError } from '../lib/errorNotifications';
@@ -134,16 +135,22 @@ function escapeHtml(value: unknown) {
     .replace(/'/g, '&#39;');
 }
 
+function jsonForInlineScript(value: string) {
+  return JSON.stringify(value).replace(/</g, '\\u003c');
+}
+
 function buildQuotePrintHtml({
   inquiry,
   companyName,
   companyLogo,
   statuses,
+  fallbackUrl = '/',
 }: {
   inquiry: Inquiry;
   companyName: string;
   companyLogo?: string;
   statuses: StatusConfig[];
+  fallbackUrl?: string;
 }) {
   const info = statusInfo(statuses, inquiry.status);
   const customerCompany = inquiry.company || inquiry.user?.company || '—';
@@ -175,10 +182,17 @@ function buildQuotePrintHtml({
 <html>
 <head>
   <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
   <title>${escapeHtml(companyName)} ${escapeHtml(getInquiryCode(inquiry.id))} 报价单</title>
-  <style>${buildInquiryPrintCss()}</style>
+  <style>${buildInquiryPrintCss()}
+    .print-actions { position: fixed; top: calc(env(safe-area-inset-top, 0px) + 12px); left: 12px; right: 12px; z-index: 99; display: flex; justify-content: space-between; gap: 8px; pointer-events: none; }
+    .print-actions button { pointer-events: auto; height: 36px; border: 0; border-radius: 18px; padding: 0 14px; background: #0f172a; color: #fff; font-size: 14px; font-weight: 800; box-shadow: 0 8px 24px rgba(15, 23, 42, .18); }
+    .print-actions button:last-child { margin-left: auto; background: #2563eb; }
+    @media print { .print-actions { display: none; } }
+  </style>
 </head>
 <body>
+  <div class="print-actions"><button id="closePrintPage" type="button">退出</button><button id="printAgain" type="button">打印</button></div>
   <main class="page">
     <header>
       <div class="brand">
@@ -239,7 +253,9 @@ function buildQuotePrintHtml({
       <div class="sign"><p>客户确认：</p><div class="line">签字 / 盖章</div></div>
     </footer>
   </main>
-  <script>window.addEventListener('load', () => setTimeout(() => window.print(), 120));</script>
+  <script>const fallbackUrl=${jsonForInlineScript(
+    fallbackUrl,
+  )};document.getElementById('closePrintPage').addEventListener('click',function(){try{window.close()}catch(e){}setTimeout(function(){if(!window.closed)location.href=fallbackUrl},80)});document.getElementById('printAgain').addEventListener('click',function(){window.print()});window.addEventListener('load', () => setTimeout(() => window.print(), 120));</script>
 </body>
 </html>`;
 }
@@ -273,6 +289,10 @@ function MessageBubble({ msg, isAdminView }: { msg: InquiryMessage; isAdminView:
             href={attachment}
             target="_blank"
             rel="noopener"
+            onClick={(event) => {
+              event.preventDefault();
+              openDocumentUrl(attachment, { title: '附件预览' });
+            }}
             className={`mt-2 inline-flex items-center gap-1 rounded-md border border-outline-variant/15 px-2 py-1 text-xs ${
               isOwn ? 'text-on-primary/80' : 'text-primary-container'
             }`}
@@ -1390,6 +1410,7 @@ function DetailContent({ id }: { id: string }) {
       companyName: quotationCompanyName,
       companyLogo: quotationCompanyLogo,
       statuses,
+      fallbackUrl: `${window.location.pathname}${window.location.search}${window.location.hash}`,
     });
     const printWindow = window.open('', '_blank', 'width=960,height=900');
     if (!printWindow) {

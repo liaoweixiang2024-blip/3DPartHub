@@ -1,5 +1,6 @@
 import { existsSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
+import { Prisma, type PrismaClient } from '@prisma/client';
 import { Router, Request, Response } from 'express';
 import { cacheDelByPrefix } from '../../lib/cache.js';
 import { config } from '../../lib/config.js';
@@ -13,9 +14,17 @@ import { generateThumbnail } from '../../services/thumbnail.js';
 import { modelUpload, validateModelUpload } from './uploadHelpers.js';
 
 type ModelVersionsContext = {
-  prisma: any;
+  prisma: PrismaClient | null;
   optionalVerifiedUser: (req: Request) => Promise<{ role?: string | null } | null>;
 };
+
+function routeParam(value: string | string[] | undefined): string {
+  return Array.isArray(value) ? value[0] || '' : value || '';
+}
+
+function toPrismaJson(value: unknown): Prisma.InputJsonValue | typeof Prisma.JsonNull {
+  return value === null ? Prisma.JsonNull : (value as Prisma.InputJsonValue);
+}
 
 export function createModelVersionsRouter({ prisma, optionalVerifiedUser }: ModelVersionsContext) {
   const router = Router();
@@ -24,7 +33,7 @@ export function createModelVersionsRouter({ prisma, optionalVerifiedUser }: Mode
   router.get('/api/models/:id/versions', async (req: Request, res: Response) => {
     if (!(await requireBrowseAccess(req, res))) return;
 
-    const modelId = req.params.id;
+    const modelId = routeParam(req.params.id);
     if (!prisma) {
       res.status(503).json({ detail: '数据库未连接' });
       return;
@@ -119,7 +128,7 @@ export function createModelVersionsRouter({ prisma, optionalVerifiedUser }: Mode
             fileKey: result.gltfUrl,
             format: ext,
             fileSize: result.gltfSize,
-            previewMeta: result.previewMeta,
+            previewMeta: toPrismaJson(result.previewMeta),
             changeLog: changeLog || `版本 ${versionNumber}`,
             createdById: req.user!.userId,
           },
@@ -140,7 +149,7 @@ export function createModelVersionsRouter({ prisma, optionalVerifiedUser }: Mode
           data: {
             gltfUrl: result.gltfUrl,
             gltfSize: result.gltfSize,
-            previewMeta: result.previewMeta,
+            previewMeta: toPrismaJson(result.previewMeta),
             ...(thumbnailUrl && { thumbnailUrl }),
             status: MODEL_STATUS.COMPLETED,
           },
@@ -209,7 +218,7 @@ export function createModelVersionsRouter({ prisma, optionalVerifiedUser }: Mode
           data: {
             gltfUrl: version.fileKey,
             gltfSize: version.fileSize,
-            previewMeta: version.previewMeta,
+            previewMeta: toPrismaJson(version.previewMeta),
             ...(thumbnailUrl && { thumbnailUrl }),
             status: MODEL_STATUS.COMPLETED,
           },

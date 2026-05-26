@@ -51,6 +51,18 @@ step_import_temp/
 backups/
 stitch-assets/
 
+# Deployment health evidence and local acceptance outputs
+deploy-evidence-*/
+deploy-evidence-failed-*/
+deploy-evidence-*.sha256
+deploy-evidence-failed-*.sha256
+deploy-health-report.txt
+deploy-health-report.json
+deploy-health-acceptance.md
+deploy-health-acceptance.json
+local-enterprise-acceptance.md
+local-enterprise-acceptance.json
+
 # Private working materials
 private-docs/
 /data/

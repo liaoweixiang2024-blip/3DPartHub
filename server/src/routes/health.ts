@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { mkdir, unlink, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import express, { Router, Response } from 'express';
+import { getBackupHealth } from '../lib/backup.js';
 import { cacheIsAvailable, cachePing } from '../lib/cache.js';
 import { config } from '../lib/config.js';
 import { logger } from '../lib/logger.js';
@@ -45,6 +46,37 @@ async function checkWritableDir(name: string, dir: string) {
   await writeFile(probePath, 'ok');
   await unlink(probePath);
   return { dir };
+}
+
+async function checkBackupPolicy() {
+  const startedAt = Date.now();
+  try {
+    const health = await withTimeout(getBackupHealth(), 1500);
+    const status: HealthState = health.status === 'ok' ? 'ok' : 'degraded';
+    return {
+      name: 'backup_policy',
+      status,
+      latency_ms: Date.now() - startedAt,
+      details: {
+        status: health.status,
+        message: health.message,
+        enabled: health.enabled,
+        backup_count: health.backupCount,
+        latest_backup_at: health.latestBackup?.createdAt,
+        mirror_enabled: health.mirrorEnabled,
+        last_mirror_status: health.lastMirrorStatus,
+        encryption_enabled: health.encryption.enabled,
+      },
+    };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : '检查失败';
+    return {
+      name: 'backup_policy',
+      status: 'error' as HealthState,
+      latency_ms: Date.now() - startedAt,
+      error: message,
+    };
+  }
 }
 
 router.get('/api/health', (_req, res: Response) => {
@@ -104,11 +136,17 @@ router.get('/api/health/deep', authMiddleware, requireRole('ADMIN'), async (_req
     }),
     check('upload_dir', () => checkWritableDir('upload_dir', config.uploadDir)),
     check('static_dir', () => checkWritableDir('static_dir', config.staticDir)),
+    check('backup_dir', () => checkWritableDir('backup_dir', join(process.cwd(), config.staticDir, 'backups'))),
+    check('temp_preview_dir', () =>
+      checkWritableDir('temp_preview_dir', join(process.cwd(), config.staticDir, 'temp-previews')),
+    ),
+    checkBackupPolicy(),
   ]);
 
   const hasError = checks.some((item) => item.status === 'error');
+  const hasDegraded = checks.some((item) => item.status === 'degraded');
   res.status(hasError ? 503 : 200).json({
-    status: hasError ? 'degraded' : 'ok',
+    status: hasError || hasDegraded ? 'degraded' : 'ok',
     service: 'model-converter',
     timestamp: new Date().toISOString(),
     checks,

@@ -1,3 +1,4 @@
+import type { Prisma } from '@prisma/client';
 import { Router, Response } from 'express';
 import { getBusinessConfig } from '../lib/businessConfig.js';
 import { asyncHandler } from '../lib/http.js';
@@ -19,6 +20,9 @@ const ACTION_GROUPS: Record<string, string[]> = {
   settings: [
     'settings_update',
     'backup_create',
+    'backup_policy_check',
+    'backup_verify',
+    'backup_restore_result',
     'backup_restore',
     'backup_import_restore',
     'backup_import_save',
@@ -38,7 +42,7 @@ type AuditWhereInput = {
   to?: string;
 };
 
-async function buildAuditSearchFilter(search: string): Promise<any | null> {
+async function buildAuditSearchFilter(search: string): Promise<Prisma.AuditLogWhereInput | null> {
   if (!search) return null;
   const matchedUsers = await prisma.user.findMany({
     where: {
@@ -52,7 +56,7 @@ async function buildAuditSearchFilter(search: string): Promise<any | null> {
     take: 200,
   });
   const userIds = matchedUsers.map((user) => user.id);
-  const or: any[] = [
+  const or: Prisma.AuditLogWhereInput[] = [
     { id: { contains: search, mode: 'insensitive' } },
     { action: { contains: search, mode: 'insensitive' } },
     { resource: { contains: search, mode: 'insensitive' } },
@@ -77,8 +81,14 @@ async function buildAuditSearchFilter(search: string): Promise<any | null> {
   return { OR: or };
 }
 
-async function buildAuditWhere({ resource, search = '', userId, from, to }: AuditWhereInput) {
-  const where: any = {};
+async function buildAuditWhere({
+  resource,
+  search = '',
+  userId,
+  from,
+  to,
+}: AuditWhereInput): Promise<Prisma.AuditLogWhereInput> {
+  const where: Prisma.AuditLogWhereInput = {};
   if (resource) where.resource = resource;
   if (userId) where.userId = userId;
   if (from || to) {

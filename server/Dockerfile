@@ -59,10 +59,31 @@ COPY --from=builder --chown=node:node /app/prisma ./prisma
 COPY --from=builder --chown=node:node /app/occt-import-js.node.cjs ./occt-import-js.node.cjs
 COPY --from=builder --chown=node:node /app/occt-import-js.wasm ./occt-import-js.wasm
 COPY --from=builder --chown=node:node /app/static ./static
+COPY --from=builder --chown=node:node /app/static ./default-static
 COPY --from=builder --chown=node:node /app/VERSION ./VERSION
+COPY docker-entrypoint.sh ./docker-entrypoint.sh
 
-RUN mkdir -p uploads/.metadata uploads/chunks uploads/batch static/models static/thumbnails static/batch static/backups && \
-    chown -R node:node /app/uploads /app/static
+RUN mkdir -p \
+    uploads/.metadata \
+    uploads/chunks \
+    uploads/batch \
+    static/models \
+    static/thumbnails \
+    static/originals \
+    static/drawings \
+    static/html-previews \
+    static/temp-previews \
+    static/ticket-attachments \
+    static/inquiry-attachments \
+    static/product-wall/previews \
+    static/option-images \
+    static/selection-assets \
+    static/batch \
+    static/backups \
+    static/logo \
+    static/favicon && \
+    chmod +x /app/docker-entrypoint.sh && \
+    chown -R node:node /app/uploads /app/static /app/default-static
 
 ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium-browser
 ENV HOME=/home/node
@@ -72,4 +93,4 @@ EXPOSE 8000
 HEALTHCHECK --interval=30s --timeout=3s --start-period=10s --retries=3 \
   CMD curl -fsS http://localhost:8000/api/health/ready || exit 1
 
-CMD ["sh", "-c", "mkdir -p /app/uploads /app/static/backups/.work && chown node:node /app/static/backups /app/static/backups/.work && chmod ug+rwX /app/static/backups /app/static/backups/.work && chown -R node:node /app/static/backups/.work && exec su-exec node:node sh -c 'npx prisma migrate deploy && exec node dist/cluster.js'"]
+CMD ["sh", "/app/docker-entrypoint.sh"]

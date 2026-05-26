@@ -2,6 +2,7 @@ import cluster from 'node:cluster';
 import { randomUUID } from 'node:crypto';
 import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync } from 'node:fs';
 import { extname, join } from 'node:path';
+import type { Prisma, PrismaClient } from '@prisma/client';
 import compression from 'compression';
 import cors from 'cors';
 import express from 'express';
@@ -351,11 +352,11 @@ app.get('/api/models/count', async (req, res) => {
     const grouped = req.query.grouped !== 'false';
     const cacheKey = grouped ? 'cache:models:count:grouped' : 'cache:models:count:all';
     const { value, hit } = await cacheGetOrSet(cacheKey, TTL.MODELS_LIST, async () => {
-      const where: any = { status: MODEL_STATUS.COMPLETED };
+      const where: Prisma.ModelWhereInput = { status: MODEL_STATUS.COMPLETED };
       if (grouped) {
         const { groupedVisibleModelWhere } = await import('./services/modelVisibility.js');
         const vis = await groupedVisibleModelWhere(mod.prisma);
-        where.AND = [vis];
+        where.AND = [vis as Prisma.ModelWhereInput];
       }
       const total = await mod.prisma.model.count({ where });
       return { total };
@@ -442,7 +443,7 @@ app.listen(PORT, async () => {
     const { PrismaClient } = await import('@prisma/client');
     const seedPrisma = new PrismaClient();
     if (shouldAutoSeedCategories) {
-      const seedCategoriesMod = await trySeed<{ seedCategories: (p: any) => Promise<{ upserted: number }> }>([
+      const seedCategoriesMod = await trySeed<{ seedCategories: (p: PrismaClient) => Promise<{ upserted: number }> }>([
         './prisma/seed-categories.js',
         '../prisma/seed-categories.js',
       ]);
@@ -459,7 +460,7 @@ app.listen(PORT, async () => {
     }
 
     if (shouldAutoSeedSelectionCategories) {
-      const seedBeizeMod = await trySeed<{ seedBeizeCategories: (p: any) => Promise<{ upserted: number }> }>([
+      const seedBeizeMod = await trySeed<{ seedBeizeCategories: (p: PrismaClient) => Promise<{ upserted: number }> }>([
         './prisma/seed-beize.js',
         '../prisma/seed-beize.js',
       ]);

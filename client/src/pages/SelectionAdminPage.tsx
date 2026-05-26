@@ -68,6 +68,7 @@ import { useToast } from '../components/shared/Toast';
 import { useDocumentTitle } from '../hooks/useDocumentTitle';
 import { useImeSafeSearchInput } from '../hooks/useImeSafeSearchInput';
 import { useVisibleItems } from '../hooks/useVisibleItems';
+import { openDocumentUrl } from '../lib/browserDownload';
 import { getBusinessConfig } from '../lib/businessConfig';
 import { KIT_LIST_TITLE_OPTION_KEY } from '../lib/kitList';
 import { smartSortOptions } from '../lib/selectionSort';
@@ -592,7 +593,7 @@ function Content() {
         });
 
         const errors: string[] = [];
-        const parsed: any[] = [];
+        const parsed: NonNullable<typeof batchParsed> = [];
         const seenModelNos = new Set<string>();
 
         rows.forEach((row, i) => {
@@ -1905,6 +1906,10 @@ function Content() {
                       href={prodForm.pdfUrl}
                       target="_blank"
                       rel="noreferrer"
+                      onClick={(event) => {
+                        event.preventDefault();
+                        openDocumentUrl(prodForm.pdfUrl, { title: 'PDF 规格书' });
+                      }}
                       className="flex items-center gap-2 rounded-lg border border-outline-variant/10 bg-surface-container-lowest p-3 text-xs text-on-surface-variant hover:text-on-surface"
                     >
                       <Icon name="picture_as_pdf" size={22} className="text-error" />
@@ -2124,7 +2129,7 @@ function Content() {
               {optImgField && orderItems.length > 0 && (
                 <button
                   onClick={() => {
-                    const colDef = activeCat?.columns?.find((c: any) => c.key === optImgField);
+                    const colDef = activeCat?.columns?.find((c: ColumnDef) => c.key === optImgField);
                     setOrderItems(smartSortOptions(orderItems, colDef?.sortType));
                   }}
                   className="w-full sm:w-auto px-3 py-2 text-xs font-medium bg-surface-container-lowest text-on-surface-variant border border-outline-variant/20 rounded-md hover:bg-surface-container-high hover:text-on-surface transition-colors shrink-0"
