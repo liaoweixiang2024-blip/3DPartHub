@@ -76,6 +76,13 @@ while [ "$#" -gt 0 ]; do
 done
 
 command_exists() {
+  if [ "${DEPLOY_HEALTH_DISABLE_DOCKER:-0}" = "1" ]; then
+    case "$1" in
+      docker|docker-compose)
+        return 1
+        ;;
+    esac
+  fi
   command -v "$1" >/dev/null 2>&1
 }
 

@@ -2587,7 +2587,7 @@ run_no_docker_evidence_case() {
   evidence_archive="$evidence_dir.tar.gz"
   rm -rf "$evidence_dir" "$evidence_archive"
   set +e
-  output="$(cd "$WORK_DIR" && PATH="$NO_DOCKER_BIN:/usr/bin:/bin:/usr/sbin:/sbin" sh "$EVIDENCE_COLLECTOR" --output-dir "$evidence_dir" 2>&1)"
+  output="$(cd "$WORK_DIR" && DEPLOY_HEALTH_DISABLE_DOCKER=1 PATH="$NO_DOCKER_BIN:/usr/bin:/bin:/usr/sbin:/sbin" sh "$EVIDENCE_COLLECTOR" --output-dir "$evidence_dir" 2>&1)"
   status=$?
   set -e
   if [ "$status" -eq 0 ]; then
