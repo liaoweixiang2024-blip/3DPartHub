@@ -29,7 +29,7 @@ import { getClipboardImageFile } from '../lib/clipboardImages';
 import { getErrorMessage, notifyGlobalError } from '../lib/errorNotifications';
 import { getCustomerInquiryFlow, getCustomerInquiryStatusView } from '../lib/inquiryCustomerStatus';
 import { exportInquiryEditableXlsx } from '../lib/inquiryExport';
-import { buildInquiryPrintCss } from '../lib/printTheme';
+import { buildInquiryPrintCss, INQUIRY_PRINT_ACTION_SHADOW, INQUIRY_PRINT_COLORS } from '../lib/printTheme';
 import { usePublicSettings } from '../lib/publicSettings';
 import { useAuthStore } from '../stores/useAuthStore';
 
@@ -186,8 +186,8 @@ function buildQuotePrintHtml({
   <title>${escapeHtml(companyName)} ${escapeHtml(getInquiryCode(inquiry.id))} 报价单</title>
   <style>${buildInquiryPrintCss()}
     .print-actions { position: fixed; top: calc(env(safe-area-inset-top, 0px) + 12px); left: 12px; right: 12px; z-index: 99; display: flex; justify-content: space-between; gap: 8px; pointer-events: none; }
-    .print-actions button { pointer-events: auto; height: 36px; border: 0; border-radius: 18px; padding: 0 14px; background: #0f172a; color: #fff; font-size: 14px; font-weight: 800; box-shadow: 0 8px 24px rgba(15, 23, 42, .18); }
-    .print-actions button:last-child { margin-left: auto; background: #2563eb; }
+    .print-actions button { pointer-events: auto; height: 36px; border: 0; border-radius: 18px; padding: 0 14px; background: ${INQUIRY_PRINT_COLORS.text}; color: ${INQUIRY_PRINT_COLORS.pageBackground}; font-size: 14px; font-weight: 800; box-shadow: ${INQUIRY_PRINT_ACTION_SHADOW}; }
+    .print-actions button:last-child { margin-left: auto; background: ${INQUIRY_PRINT_COLORS.actionPrimary}; }
     @media print { .print-actions { display: none; } }
   </style>
 </head>

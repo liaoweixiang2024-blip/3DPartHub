@@ -6,9 +6,12 @@ export const INQUIRY_PRINT_COLORS = {
   border: '#cbd5e1',
   subtleBackground: '#f1f5f9',
   rowBackground: '#f8fafc',
+  actionPrimary: '#2563eb',
   noteText: '#334155',
   signatureLine: '#94a3b8',
 } as const;
+
+export const INQUIRY_PRINT_ACTION_SHADOW = '0 8px 24px rgba(15, 23, 42, .18)';
 
 export function buildInquiryPrintCss(): string {
   const c = INQUIRY_PRINT_COLORS;
