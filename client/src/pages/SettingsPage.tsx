@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
+import { useLocation } from 'react-router-dom';
 import { mutate as mutateSWR } from 'swr';
 import {
   getSettings,
@@ -384,7 +385,7 @@ const DEFAULT_SETTINGS: SystemSettings = {
   mat_default_metalness: 0.5,
   mat_default_roughness: 0.25,
   mat_default_envMapIntensity: 1.5,
-  mat_original_color: '',
+  mat_original_color: '#808080',
   mat_original_metalness: '',
   mat_original_roughness: '',
   mat_original_envMapIntensity: '',
@@ -409,13 +410,13 @@ const DEFAULT_SETTINGS: SystemSettings = {
   viewer_fill_light_intensity: 0.8,
   viewer_hemisphere_intensity: 0.5,
   viewer_bg_color: '#ffffff',
-  viewer_default_preset: 'default',
-  viewer_visible_presets: 'original,default,metal,plastic,glass',
+  viewer_default_preset: 'original',
+  viewer_visible_presets: 'original',
   viewer_edge_enabled: true,
   viewer_edge_threshold_angle: 28,
   viewer_edge_vertex_limit: 700000,
   viewer_edge_color: '#000000',
-  viewer_edge_opacity: 1.0,
+  viewer_edge_opacity: 0.25,
   viewer_edge_width: 1,
   viewer_measure_default_unit: 'auto',
   viewer_measure_record_limit: 12,
@@ -702,12 +703,6 @@ const GROUPS: SettingGroup[] = [
       { key: 'site_description', label: '网站描述', desc: '用于 SEO 和分享链接的站点描述', type: 'text' },
       { key: 'site_keywords', label: '关键词', desc: 'SEO 关键词，多个用逗号分隔', type: 'text' },
       { _section: '页脚联系信息' },
-      {
-        key: 'contact_email',
-        label: '联系邮箱',
-        desc: '显示在前台页脚的联系信息区，用户可直接点击发送邮件',
-        type: 'text',
-      },
       { key: 'contact_phone', label: '联系电话', desc: '显示在前台页脚的联系信息区', type: 'text' },
       { key: 'contact_address', label: '联系地址', desc: '显示在前台页脚底部的公司/办公地址', type: 'text' },
       { _section: '模型详情页页脚' },
@@ -1480,12 +1475,18 @@ const GROUPS: SettingGroup[] = [
       { key: 'smtp_user', label: '用户名', desc: 'SMTP 登录用户名', type: 'text' },
       { key: 'smtp_pass', label: '密码', desc: 'SMTP 登录密码或授权码', type: 'text' },
       { key: 'smtp_from', label: '发件人', desc: '发件人邮箱地址', type: 'text' },
+      {
+        key: 'contact_email',
+        label: '联系邮箱',
+        desc: '用于邮件模板底部的帮助联系邮箱；留空时使用发件人邮箱',
+        type: 'text',
+      },
       { key: 'smtp_secure', label: 'SSL/TLS', desc: '使用安全连接', type: 'switch' },
       { key: 'smtp_test', label: '测试发送', desc: '保存当前 SMTP 配置和模板后发送一封测试邮件', type: 'email-test' },
       {
         key: 'email_templates',
         label: '邮件模板',
-        desc: '编辑各业务场景的邮件标题、正文和变量占位符',
+        desc: '注册验证码、测试邮件和业务通知模板',
         type: 'textarea',
       },
     ],
@@ -1866,6 +1867,7 @@ const MAT_PRESET_FIELDS: Record<MaterialPresetKey, MatPresetField[]> = {
 // All 3D preview setting keys (used by reset-to-defaults)
 const PREVIEW_SETTING_KEYS: (keyof SystemSettings)[] = [
   'viewer_default_preset',
+  'viewer_visible_presets',
   'viewer_edge_enabled',
   'viewer_edge_threshold_angle',
   'viewer_edge_vertex_limit',
@@ -2061,7 +2063,7 @@ type PageSizePolicy = {
 
 const emailShellStart = `<div style="max-width:560px;margin:0 auto;background:#ffffff;font-family:Arial,'Microsoft YaHei',sans-serif;color:#1f2937;">
   <div style="padding:24px 28px 18px;border-bottom:1px solid #f3f4f6;">
-    <a href="{{siteUrl}}" style="display:inline-flex;align-items:center;gap:12px;text-decoration:none;color:#111827;">
+    <a href="{{actionUrl}}" style="display:inline-flex;align-items:center;gap:12px;text-decoration:none;color:#111827;">
       <img src="{{siteLogo}}" alt="{{siteTitle}}" style="height:36px;max-width:160px;object-fit:contain;border:0;vertical-align:middle;" />
       <strong style="font-size:18px;line-height:1.2;">{{siteTitle}}</strong>
     </a>
@@ -2070,13 +2072,23 @@ const emailShellStart = `<div style="max-width:560px;margin:0 auto;background:#f
 
 const emailShellEnd = `  </div>
   <div style="padding:18px 28px;border-top:1px solid #f3f4f6;color:#6b7280;font-size:12px;line-height:1.7;">
-    <div><a href="{{siteUrl}}" style="color:#f97316;text-decoration:none;">{{siteUrl}}</a></div>
+    <div style="margin:0 0 12px;"><a href="{{actionUrl}}" style="display:inline-block;padding:9px 14px;border-radius:8px;background:#f97316;color:#ffffff;text-decoration:none;font-size:13px;font-weight:600;">{{actionLabel}}</a></div>
+    <div>入口：<a href="{{actionUrl}}" style="color:#f97316;text-decoration:none;">{{actionUrl}}</a></div>
     <div>如需帮助，请联系 {{contactEmail}}</div>
     <div>&copy; {{currentYear}} {{siteTitle}}</div>
   </div>
 </div>`;
 
-const commonEmailTokens = ['siteTitle', 'siteLogo', 'siteUrl', 'contactEmail', 'currentYear', 'email'];
+const commonEmailTokens = [
+  'siteTitle',
+  'siteLogo',
+  'siteUrl',
+  'actionUrl',
+  'actionLabel',
+  'contactEmail',
+  'currentYear',
+  'email',
+];
 
 const DEFAULT_EMAIL_TEMPLATES: Record<string, EmailTemplateConfig> = {
   register_verify: {
@@ -2149,6 +2161,145 @@ ${emailShellEnd}`,
   <p style="margin:0;color:#6b7280;font-size:13px;">请登录 {{siteTitle}} 查看完整内容。</p>
 ${emailShellEnd}`,
     tokens: [...commonEmailTokens, 'ticketTitle', 'replyPreview'],
+  },
+  ticket_status_changed: {
+    label: '工单状态变更',
+    description: '工单状态更新时通知用户',
+    subject: '{{siteTitle}} 工单状态已更新',
+    html: `${emailShellStart}
+  <h2 style="margin:0 0 14px;">工单状态已更新</h2>
+  <p style="margin:0 0 10px;">工单标题：<strong>{{ticketTitle}}</strong></p>
+  <p style="margin:0 0 10px;">当前状态：<strong>{{statusLabel}}</strong></p>
+  <p style="margin:0;color:#6b7280;font-size:13px;">请登录 {{siteTitle}} 查看详情。</p>
+${emailShellEnd}`,
+    tokens: [...commonEmailTokens, 'ticketTitle', 'statusLabel'],
+  },
+  ticket_admin_new: {
+    label: '新工单提醒',
+    description: '用户创建工单时通知管理员',
+    subject: '{{siteTitle}} 有新的工单需要处理',
+    html: `${emailShellStart}
+  <h2 style="margin:0 0 14px;">有新的工单需要处理</h2>
+  <p style="margin:0 0 10px;">提交用户：<strong>{{username}}</strong></p>
+  <p style="margin:0 0 10px;">工单标题：<strong>{{ticketTitle}}</strong></p>
+  <p style="margin:0;color:#6b7280;font-size:13px;">请登录后台查看并处理。</p>
+${emailShellEnd}`,
+    tokens: [...commonEmailTokens, 'username', 'ticketTitle'],
+  },
+  ticket_admin_replied: {
+    label: '工单用户回复提醒',
+    description: '用户回复工单时通知管理员',
+    subject: '{{siteTitle}} 工单有新的用户回复',
+    html: `${emailShellStart}
+  <h2 style="margin:0 0 14px;">工单有新的用户回复</h2>
+  <p style="margin:0 0 10px;">提交用户：<strong>{{username}}</strong></p>
+  <p style="margin:0 0 10px;">工单标题：<strong>{{ticketTitle}}</strong></p>
+  <p style="margin:0 0 10px;">回复摘要：{{replyPreview}}</p>
+${emailShellEnd}`,
+    tokens: [...commonEmailTokens, 'username', 'ticketTitle', 'replyPreview'],
+  },
+  inquiry_replied: {
+    label: '询价回复通知',
+    description: '管理员回复询价时通知用户',
+    subject: '{{siteTitle}} 询价 {{inquiryNo}} 有新回复',
+    html: `${emailShellStart}
+  <h2 style="margin:0 0 14px;">询价有新回复</h2>
+  <p style="margin:0 0 10px;">询价编号：<strong>{{inquiryNo}}</strong></p>
+  <p style="margin:0 0 10px;">回复摘要：{{replyPreview}}</p>
+  <p style="margin:0;color:#6b7280;font-size:13px;">请登录 {{siteTitle}} 查看完整内容。</p>
+${emailShellEnd}`,
+    tokens: [...commonEmailTokens, 'inquiryNo', 'replyPreview'],
+  },
+  inquiry_admin_new: {
+    label: '新询价提醒',
+    description: '用户提交询价时通知管理员',
+    subject: '{{siteTitle}} 有新的询价单 {{inquiryNo}}',
+    html: `${emailShellStart}
+  <h2 style="margin:0 0 14px;">有新的询价单</h2>
+  <p style="margin:0 0 10px;">提交用户：<strong>{{username}}</strong></p>
+  <p style="margin:0 0 10px;">询价编号：<strong>{{inquiryNo}}</strong></p>
+  <p style="margin:0 0 10px;">产品数量：<strong>{{itemCount}}</strong></p>
+${emailShellEnd}`,
+    tokens: [...commonEmailTokens, 'username', 'inquiryNo', 'itemCount'],
+  },
+  inquiry_admin_replied: {
+    label: '询价用户回复提醒',
+    description: '用户回复询价时通知管理员',
+    subject: '{{siteTitle}} 询价 {{inquiryNo}} 有新的用户回复',
+    html: `${emailShellStart}
+  <h2 style="margin:0 0 14px;">询价有新的用户回复</h2>
+  <p style="margin:0 0 10px;">提交用户：<strong>{{username}}</strong></p>
+  <p style="margin:0 0 10px;">询价编号：<strong>{{inquiryNo}}</strong></p>
+  <p style="margin:0 0 10px;">回复摘要：{{replyPreview}}</p>
+${emailShellEnd}`,
+    tokens: [...commonEmailTokens, 'username', 'inquiryNo', 'replyPreview'],
+  },
+  inquiry_assigned: {
+    label: '询价转交通知',
+    description: '询价转交销售时通知用户或销售',
+    subject: '{{siteTitle}} 询价 {{inquiryNo}} 已转交处理',
+    html: `${emailShellStart}
+  <h2 style="margin:0 0 14px;">询价已转交处理</h2>
+  <p style="margin:0 0 10px;">询价编号：<strong>{{inquiryNo}}</strong></p>
+  <p style="margin:0 0 10px;">对接人：<strong>{{assigneeName}}</strong></p>
+  <p style="margin:0;color:#6b7280;font-size:13px;">请登录 {{siteTitle}} 查看详情。</p>
+${emailShellEnd}`,
+    tokens: [...commonEmailTokens, 'inquiryNo', 'assigneeName'],
+  },
+  favorite_notice: {
+    label: '模型收藏提醒',
+    description: '模型被收藏时通知上传者',
+    subject: '{{siteTitle}} 您的模型被收藏',
+    html: `${emailShellStart}
+  <h2 style="margin:0 0 14px;">您的模型被收藏</h2>
+  <p style="margin:0 0 10px;">模型名称：<strong>{{modelName}}</strong></p>
+  <p style="margin:0;color:#6b7280;font-size:13px;">您可以登录 {{siteTitle}} 查看模型详情。</p>
+${emailShellEnd}`,
+    tokens: [...commonEmailTokens, 'modelName'],
+  },
+  model_conversion_completed: {
+    label: '模型转换完成',
+    description: '模型转换成功后通知上传者',
+    subject: '{{siteTitle}} 模型转换完成',
+    html: `${emailShellStart}
+  <h2 style="margin:0 0 14px;">模型转换完成</h2>
+  <p style="margin:0 0 10px;">模型文件：<strong>{{modelName}}</strong></p>
+  <p style="margin:0;color:#6b7280;font-size:13px;">现在可以预览和下载。</p>
+${emailShellEnd}`,
+    tokens: [...commonEmailTokens, 'modelName'],
+  },
+  model_conversion_failed: {
+    label: '模型转换失败',
+    description: '模型转换失败后通知上传者',
+    subject: '{{siteTitle}} 模型转换失败',
+    html: `${emailShellStart}
+  <h2 style="margin:0 0 14px;color:#dc2626;">模型转换失败</h2>
+  <p style="margin:0 0 10px;">模型文件：<strong>{{modelName}}</strong></p>
+  <p style="margin:0 0 10px;">失败原因：{{errorMessage}}</p>
+${emailShellEnd}`,
+    tokens: [...commonEmailTokens, 'modelName', 'errorMessage'],
+  },
+  backup_policy_alert: {
+    label: '备份体检提醒',
+    description: '备份体检发现风险时通知管理员',
+    subject: '{{siteTitle}} 备份体检需要关注',
+    html: `${emailShellStart}
+  <h2 style="margin:0 0 14px;color:#f97316;">备份体检需要关注</h2>
+  <p style="margin:0 0 10px;">风险等级：<strong>{{riskLevel}}</strong></p>
+  <p style="margin:0 0 10px;">{{summary}}</p>
+${emailShellEnd}`,
+    tokens: [...commonEmailTokens, 'riskLevel', 'summary'],
+  },
+  download_notice: {
+    label: '模型下载提醒',
+    description: '模型被下载时通知上传者',
+    subject: '{{siteTitle}} 您的模型被下载',
+    html: `${emailShellStart}
+  <h2 style="margin:0 0 14px;">您的模型被下载</h2>
+  <p style="margin:0 0 10px;">模型名称：<strong>{{modelName}}</strong></p>
+  <p style="margin:0 0 10px;">下载格式：{{downloadFormat}}</p>
+${emailShellEnd}`,
+    tokens: [...commonEmailTokens, 'modelName', 'downloadFormat'],
   },
 };
 
@@ -3617,6 +3768,8 @@ function EmailTestPanel({
   changed,
   saving,
   settings,
+  templateLabel,
+  templateKey,
 }: {
   value: string;
   onChange: (value: string) => void;
@@ -3625,38 +3778,43 @@ function EmailTestPanel({
   changed: boolean;
   saving: boolean;
   settings: SystemSettings;
+  templateLabel: string;
+  templateKey: string;
 }) {
   const smtpReady = Boolean(settings.smtp_host && settings.smtp_user && settings.smtp_pass);
   const from = settings.smtp_from || settings.smtp_user || '未设置';
   return (
     <div className="w-full max-w-6xl">
-      <div className="flex flex-col xl:flex-row xl:items-center gap-3 rounded-lg border border-outline-variant/10 bg-surface-container-high/25 p-3">
-        <div className="flex items-center gap-3 min-w-0 xl:w-72 shrink-0">
+      <div className="flex flex-col xl:flex-row xl:items-center gap-2 rounded-lg border border-outline-variant/10 bg-surface-container-high/25 p-3">
+        <div className="flex flex-wrap items-center gap-2 min-w-0 xl:flex-nowrap xl:shrink-0">
           <span className={`w-2.5 h-2.5 rounded-full shrink-0 ${smtpReady ? 'bg-green-500' : 'bg-yellow-500'}`} />
-          <div className="min-w-0">
-            <p className="text-sm font-semibold text-on-surface truncate">
-              {smtpReady ? 'SMTP 配置已具备测试条件' : 'SMTP 配置还不完整'}
-            </p>
-            <p className="text-xs text-on-surface-variant truncate">发件人 {from}</p>
-          </div>
+          <span className="text-sm font-semibold text-on-surface whitespace-nowrap">
+            {smtpReady ? 'SMTP 配置已具备测试条件' : 'SMTP 配置还不完整'}
+          </span>
+          <span className="h-7 inline-flex items-center gap-1 rounded-md bg-surface-container-lowest/70 border border-outline-variant/10 px-2 text-xs min-w-0">
+            <span className="text-on-surface-variant shrink-0">发件人</span>
+            <span className="text-on-surface font-medium truncate max-w-48">{from}</span>
+          </span>
         </div>
 
         <div className="flex flex-wrap items-center gap-1.5 min-w-0 flex-1 text-xs">
-          <span className="h-10 inline-flex items-center gap-1 rounded-md bg-surface-container-lowest/70 border border-outline-variant/10 px-2.5 min-w-0 whitespace-nowrap leading-none">
+          <span className="h-7 inline-flex items-center gap-1 rounded-md bg-surface-container-lowest/70 border border-outline-variant/10 px-2 min-w-0 whitespace-nowrap leading-none">
             <span className="text-on-surface-variant shrink-0">服务器</span>
             <span className="text-on-surface font-medium truncate max-w-40">{settings.smtp_host || '未配置'}</span>
           </span>
-          <span className="h-10 inline-flex items-center gap-1 rounded-md bg-surface-container-lowest/70 border border-outline-variant/10 px-2.5 whitespace-nowrap leading-none">
+          <span className="h-7 inline-flex items-center gap-1 rounded-md bg-surface-container-lowest/70 border border-outline-variant/10 px-2 whitespace-nowrap leading-none">
             <span className="text-on-surface-variant">端口</span>
             <span className="text-on-surface font-medium">{settings.smtp_port || 465}</span>
           </span>
-          <span className="h-10 inline-flex items-center gap-1 rounded-md bg-surface-container-lowest/70 border border-outline-variant/10 px-2.5 whitespace-nowrap leading-none">
+          <span className="h-7 inline-flex items-center gap-1 rounded-md bg-surface-container-lowest/70 border border-outline-variant/10 px-2 whitespace-nowrap leading-none">
             <span className="text-on-surface-variant">连接</span>
             <span className="text-on-surface font-medium">{settings.smtp_secure ? 'SSL/TLS' : 'STARTTLS'}</span>
           </span>
-          <span className="h-10 inline-flex items-center gap-1 rounded-md bg-surface-container-lowest/70 border border-outline-variant/10 px-2.5 whitespace-nowrap leading-none">
+          <span className="h-7 inline-flex items-center gap-1 rounded-md bg-surface-container-lowest/70 border border-outline-variant/10 px-2 whitespace-nowrap leading-none">
             <span className="text-on-surface-variant">模板</span>
-            <span className="text-on-surface font-medium">smtp_test</span>
+            <span className="text-on-surface font-medium truncate max-w-36" title={templateKey}>
+              {templateLabel}
+            </span>
           </span>
         </div>
 
@@ -3937,6 +4095,7 @@ function StorageSyncPanel({ settings }: { settings: SystemSettings }) {
   const [selectedScopeKeys, setSelectedScopeKeys] = useState<string[]>([]);
   const [overwrite, setOverwrite] = useState(true);
   const [deleteExtraneous, setDeleteExtraneous] = useState(false);
+  const [deleteJobTarget, setDeleteJobTarget] = useState<StorageSyncJob | null>(null);
 
   async function refreshStatus(silent = false) {
     if (!silent) setLoading(true);
@@ -4261,7 +4420,7 @@ function StorageSyncPanel({ settings }: { settings: SystemSettings }) {
                 </div>
                 <button
                   type="button"
-                  onClick={() => handleDelete(job)}
+                  onClick={() => setDeleteJobTarget(job)}
                   disabled={working || activeJob?.id === job.id}
                   className="inline-flex h-8 items-center justify-center gap-1.5 rounded-md px-2 text-xs font-medium text-on-surface-variant transition-colors hover:bg-error-container/10 hover:text-error disabled:opacity-40"
                 >
@@ -4273,6 +4432,22 @@ function StorageSyncPanel({ settings }: { settings: SystemSettings }) {
           </div>
         </div>
       ) : null}
+      <ConfirmDialog
+        open={Boolean(deleteJobTarget)}
+        onClose={() => setDeleteJobTarget(null)}
+        onConfirm={() => {
+          const target = deleteJobTarget;
+          if (!target) return;
+          setDeleteJobTarget(null);
+          void handleDelete(target);
+        }}
+        title="确认删除同步记录"
+        description={`确定删除这条「${
+          deleteJobTarget?.direction === 'cloud_to_local' ? '云端到本地' : '本地到云端'
+        }」同步记录吗？不会删除已同步的资源文件。`}
+        confirmLabel="确认删除"
+        confirmDisabled={working}
+      />
     </div>
   );
 }
@@ -4282,6 +4457,8 @@ function renderEmailSample(source: string, settings: SystemSettings) {
     siteTitle: settings.site_title || '3DPartHub',
     siteLogo: settings.site_logo || `${window.location.origin}/favicon.svg`,
     siteUrl: window.location.origin,
+    actionUrl: `${window.location.origin}/my-inquiries/demo`,
+    actionLabel: '打开详情',
     contactEmail: settings.contact_email || settings.smtp_from || settings.smtp_user || 'support@example.com',
     currentYear: String(new Date().getFullYear()),
     email: 'test@example.com',
@@ -4290,11 +4467,28 @@ function renderEmailSample(source: string, settings: SystemSettings) {
     testTime: new Date().toLocaleString('zh-CN', { hour12: false }),
     username: '客户',
     inquiryNo: 'INQ-20260427-001',
+    itemCount: '3',
     statusLabel: '处理中',
     ticketTitle: '模型下载问题',
     replyPreview: '我们已收到您的问题，正在进一步确认。',
+    assigneeName: '销售工程师',
+    modelName: '不锈钢接头 STEP 模型',
+    errorMessage: '示例错误信息',
+    riskLevel: '中风险',
+    summary: '备份目录空间不足，请及时检查。',
+    downloadFormat: 'STEP',
   };
   return source.replace(/\{\{\s*([\w.-]+)\s*\}\}/g, (_match, key: string) => vars[key] ?? '');
+}
+
+function withEmailActionLinks(html: string): string {
+  const legacyHeader = 'href="{{siteUrl}}" style="display:inline-flex;';
+  const actionHeader = 'href="{{actionUrl}}" style="display:inline-flex;';
+  const legacyFooter = '<div><a href="{{siteUrl}}" style="color:#f97316;text-decoration:none;">{{siteUrl}}</a></div>';
+  const actionFooter =
+    '<div style="margin:0 0 12px;"><a href="{{actionUrl}}" style="display:inline-block;padding:9px 14px;border-radius:8px;background:#f97316;color:#ffffff;text-decoration:none;font-size:13px;font-weight:600;">{{actionLabel}}</a></div>\n' +
+    '    <div>入口：<a href="{{actionUrl}}" style="color:#f97316;text-decoration:none;">{{actionUrl}}</a></div>';
+  return html.split(legacyHeader).join(actionHeader).split(legacyFooter).join(actionFooter);
 }
 
 function getEmailTemplates(settings: SystemSettings) {
@@ -4309,7 +4503,7 @@ function getEmailTemplates(settings: SystemSettings) {
         {
           ...fallback,
           ...item,
-          html: legacyHtml ? fallback.html : item.html || fallback.html,
+          html: withEmailActionLinks(legacyHtml ? fallback.html : item.html || fallback.html),
           tokens: Array.from(new Set([...(fallback.tokens || []), ...((item.tokens as string[] | undefined) || [])])),
         },
       ];
@@ -4320,14 +4514,18 @@ function getEmailTemplates(settings: SystemSettings) {
 function EmailTemplatesEditor({
   settings,
   updateSetting,
+  activeKey,
+  onActiveKeyChange,
 }: {
   settings: SystemSettings;
   updateSetting: SettingUpdater;
+  activeKey: string;
+  onActiveKeyChange: (key: string) => void;
 }) {
   const templates = getEmailTemplates(settings);
   const keys = Object.keys(templates);
-  const [activeKey, setActiveKey] = useState(keys[0] || 'register_verify');
-  const active = templates[activeKey] || templates[keys[0]];
+  const resolvedActiveKey = templates[activeKey] ? activeKey : keys[0] || 'smtp_test';
+  const active = templates[resolvedActiveKey] || templates[keys[0]];
   const previewSubject = active ? renderEmailSample(active.subject, settings) : '';
   const previewHtml = active ? renderEmailSample(active.html, settings) : '';
   const update = (next: Record<string, EmailTemplateConfig>) => setJsonSetting(updateSetting, 'email_templates', next);
@@ -4337,27 +4535,23 @@ function EmailTemplatesEditor({
       [key]: { ...templates[key], ...changes },
     });
   const resetActive = () => {
-    if (!DEFAULT_EMAIL_TEMPLATES[activeKey]) return;
-    patch(activeKey, DEFAULT_EMAIL_TEMPLATES[activeKey]);
+    if (!DEFAULT_EMAIL_TEMPLATES[resolvedActiveKey]) return;
+    patch(resolvedActiveKey, DEFAULT_EMAIL_TEMPLATES[resolvedActiveKey]);
   };
 
   return (
     <div className="w-full max-w-6xl rounded-lg border border-outline-variant/10 bg-surface-container-high/20 overflow-hidden">
       <div className="grid grid-cols-1 xl:grid-cols-[260px_1fr] min-h-[620px]">
         <div className="border-b xl:border-b-0 xl:border-r border-outline-variant/10 bg-surface-container-high/35">
-          <div className="p-4 border-b border-outline-variant/10">
-            <p className="text-sm font-semibold text-on-surface">邮件模板</p>
-            <p className="text-xs text-on-surface-variant mt-1">按业务场景维护标题、正文和变量。</p>
-          </div>
           <div className="p-2 space-y-1">
             {keys.map((key) => {
               const item = templates[key];
-              const activeItem = key === activeKey;
+              const activeItem = key === resolvedActiveKey;
               return (
                 <button
                   key={key}
                   type="button"
-                  onClick={() => setActiveKey(key)}
+                  onClick={() => onActiveKeyChange(key)}
                   className={`w-full text-left rounded-md px-3 py-2.5 transition-colors ${activeItem ? 'bg-primary-container/15 text-on-surface' : 'hover:bg-surface-container-highest/50 text-on-surface-variant'}`}
                 >
                   <div className="flex items-center justify-between gap-2">
@@ -4380,7 +4574,7 @@ function EmailTemplatesEditor({
                 <div className="flex flex-wrap items-center gap-2">
                   <h4 className="text-sm font-semibold text-on-surface">{active.label}</h4>
                   <code className="text-[10px] text-on-surface-variant bg-surface-container-lowest border border-outline-variant/10 rounded px-2 py-1">
-                    {activeKey}
+                    {resolvedActiveKey}
                   </code>
                 </div>
                 <p className="text-xs text-on-surface-variant mt-1">{active.description}</p>
@@ -4401,7 +4595,7 @@ function EmailTemplatesEditor({
                   <span className="text-xs font-medium text-on-surface-variant">邮件标题</span>
                   <input
                     value={active.subject}
-                    onChange={(e) => patch(activeKey, { subject: e.target.value })}
+                    onChange={(e) => patch(resolvedActiveKey, { subject: e.target.value })}
                     className="w-full bg-surface-container-lowest text-on-surface text-sm rounded-md px-3 py-2.5 border border-outline-variant/20 outline-none focus:border-primary"
                   />
                 </label>
@@ -4427,7 +4621,7 @@ function EmailTemplatesEditor({
                   <span className="text-xs font-medium text-on-surface-variant">HTML 正文</span>
                   <textarea
                     value={active.html}
-                    onChange={(e) => patch(activeKey, { html: e.target.value })}
+                    onChange={(e) => patch(resolvedActiveKey, { html: e.target.value })}
                     rows={18}
                     spellCheck={false}
                     className="w-full bg-surface-container-lowest text-on-surface text-xs leading-5 rounded-md px-3 py-3 border border-outline-variant/20 outline-none focus:border-primary resize-y font-mono"
@@ -4465,10 +4659,14 @@ function StructuredSettingEditor({
   itemKey,
   settings,
   updateSetting,
+  emailTemplateKey,
+  onEmailTemplateKeyChange,
 }: {
   itemKey: keyof SystemSettings;
   settings: SystemSettings;
   updateSetting: SettingUpdater;
+  emailTemplateKey: string;
+  onEmailTemplateKeyChange: (key: string) => void;
 }) {
   switch (itemKey) {
     case 'footer_links':
@@ -4533,13 +4731,21 @@ function StructuredSettingEditor({
     case 'page_size_policy':
       return <PageSizePolicyEditor settings={settings} updateSetting={updateSetting} />;
     case 'email_templates':
-      return <EmailTemplatesEditor settings={settings} updateSetting={updateSetting} />;
+      return (
+        <EmailTemplatesEditor
+          settings={settings}
+          updateSetting={updateSetting}
+          activeKey={emailTemplateKey}
+          onActiveKeyChange={onEmailTemplateKeyChange}
+        />
+      );
     default:
       return null;
   }
 }
 
 function Content() {
+  const location = useLocation();
   const { toast } = useToast();
   const [settings, setSettings] = useState<SystemSettings>(DEFAULT_SETTINGS);
   const [loading, setLoading] = useState(true);
@@ -4547,6 +4753,7 @@ function Content() {
   const [changed, setChanged] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [testEmailTo, setTestEmailTo] = useState('');
+  const [testEmailTemplateKey, setTestEmailTemplateKey] = useState('smtp_test');
   const [testingEmail, setTestingEmail] = useState(false);
   const [testingCache, setTestingCache] = useState(false);
   const [testingStorage, setTestingStorage] = useState(false);
@@ -5083,7 +5290,7 @@ function Content() {
     ) as Partial<SystemSettings>;
     setSettings((prev) => ({ ...prev, ...defaults }) as SystemSettings);
     setChanged(true);
-    toast('已恢复为默认设置，点击保存生效', 'success');
+    toast('已恢复为系统预设，点击保存生效', 'success');
   }
 
   async function handleSendTestEmail() {
@@ -5099,7 +5306,9 @@ function Content() {
         setSettings(normalizeSettingsForClient({ ...normalizedSettings, ...nextSettings }));
         setChanged(false);
       }
-      await sendTestEmail(testEmailTo.trim());
+      const templates = getEmailTemplates(settings);
+      const templateKey = templates[testEmailTemplateKey] ? testEmailTemplateKey : 'smtp_test';
+      await sendTestEmail(testEmailTo.trim(), templateKey);
       toast('测试邮件已发送', 'success');
     } catch (err: unknown) {
       toast(errorMessage(err, '测试邮件发送失败'), 'error');
@@ -5463,6 +5672,19 @@ function Content() {
     }
   }
 
+  useEffect(() => {
+    if (location.hash === '#backup') {
+      setActiveTab('数据备份');
+    }
+  }, [location.hash]);
+
+  useEffect(() => {
+    if (location.hash !== '#backup' || activeTab !== '数据备份') return;
+    window.setTimeout(() => {
+      document.getElementById('backup')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }, 0);
+  }, [activeTab, location.hash]);
+
   if (loading) {
     return <SettingsLoadingState />;
   }
@@ -5513,6 +5735,7 @@ function Content() {
       setActiveTab(nextTab);
     }
   };
+
   const headerActions = (
     <div className="flex min-h-10 shrink-0 items-center justify-end gap-2">
       <span
@@ -5569,6 +5792,14 @@ function Content() {
       {secondarySettingsNavigation}
     </div>
   );
+  const emailTemplatesForTest = getEmailTemplates(settings);
+  const fallbackEmailTemplateKey = emailTemplatesForTest.smtp_test
+    ? 'smtp_test'
+    : Object.keys(emailTemplatesForTest)[0] || 'smtp_test';
+  const resolvedTestEmailTemplateKey = emailTemplatesForTest[testEmailTemplateKey]
+    ? testEmailTemplateKey
+    : fallbackEmailTemplateKey;
+  const resolvedTestEmailTemplate = emailTemplatesForTest[resolvedTestEmailTemplateKey];
 
   return (
     <>
@@ -5615,7 +5846,7 @@ function Content() {
                                 className="inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium text-on-surface-variant transition-colors hover:bg-surface-container-high hover:text-on-surface shrink-0 ml-2"
                               >
                                 <Icon name="restart_alt" size={14} />
-                                恢复默认
+                                恢复预设
                               </button>
                             </div>
 
@@ -5760,6 +5991,8 @@ function Content() {
                                           itemKey={item.key}
                                           settings={settings}
                                           updateSetting={updateSetting}
+                                          emailTemplateKey={resolvedTestEmailTemplateKey}
+                                          onEmailTemplateKeyChange={setTestEmailTemplateKey}
                                         />
                                       ) : null;
                                     const isWideControl =
@@ -6019,6 +6252,8 @@ function Content() {
                                     itemKey={item.key}
                                     settings={settings}
                                     updateSetting={updateSetting}
+                                    emailTemplateKey={resolvedTestEmailTemplateKey}
+                                    onEmailTemplateKeyChange={setTestEmailTemplateKey}
                                   />
                                 ) : null;
                               const isWideControl =
@@ -6076,6 +6311,10 @@ function Content() {
                                             changed={changed}
                                             saving={saving}
                                             settings={settings}
+                                            templateLabel={
+                                              resolvedTestEmailTemplate?.label || resolvedTestEmailTemplateKey
+                                            }
+                                            templateKey={resolvedTestEmailTemplateKey}
                                           />
                                         ) : item.type === 'cache-test' ? (
                                           <SettingsConnectivityTestPanel
@@ -6288,7 +6527,10 @@ function Content() {
                 {activeTab === '数据备份' && (
                   <>
                     {/* Data Backup Section */}
-                    <div className="bg-surface-container-low rounded-lg border border-outline-variant/10 overflow-hidden">
+                    <div
+                      id="backup"
+                      className="scroll-mt-24 bg-surface-container-low rounded-lg border border-outline-variant/10 overflow-hidden"
+                    >
                       <div className="divide-y divide-outline-variant/5">
                         {/* Backup health */}
                         {backupHealth && (

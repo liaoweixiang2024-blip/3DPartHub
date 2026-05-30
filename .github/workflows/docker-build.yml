@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: 'Version tag (e.g. v3.2.0)'
+        description: 'Version tag (e.g. v3.2.1)'
         required: true
 
 env:
@@ -73,7 +73,7 @@ jobs:
             ghcr.io/${{ github.repository_owner }}/3dparthub-api:latest
           labels: |
             org.opencontainers.image.title=3DPartHub API ${{ steps.version.outputs.version }}
-            org.opencontainers.image.description=Express/Prisma API service with enterprise backup/restore/import validation, pure Docker deployment evidence checks, default static asset seeding, STEP temporary preview uploads, protected downloads, audit logs, queues, cache/storage checks, and background jobs.
+            org.opencontainers.image.description=Express/Prisma API service with hardened backup/restore/import handling, notification action links, mail template action URLs, secure temporary STEP preview uploads, protected downloads, search/download-name fixes, audit logs, queues, cache/storage checks, and Docker deployment health tooling.
             org.opencontainers.image.version=${{ steps.version.outputs.version }}
             org.opencontainers.image.source=https://github.com/${{ github.repository }}
             org.opencontainers.image.revision=${{ github.sha }}
@@ -93,7 +93,7 @@ jobs:
             ghcr.io/${{ github.repository_owner }}/3dparthub-web:latest
           labels: |
             org.opencontainers.image.title=3DPartHub Web ${{ steps.version.outputs.version }}
-            org.opencontainers.image.description=React/Vite frontend for 3D model libraries with refined backup scope UI, deployment health evidence visibility, temporary STEP viewer workspace, mobile/Safari hardening, product gallery, selection sharing, inquiry workflows, admin pages, and responsive mobile flows.
+            org.opencontainers.image.description=React/Vite frontend for 3D model libraries with clickable precision notifications, mail template previews, refined backup UI, temporary STEP viewer workspace, mobile/Safari PWA fixes, product gallery performance, selection sharing, inquiry workflows, admin pages, and responsive mobile flows.
             org.opencontainers.image.version=${{ steps.version.outputs.version }}
             org.opencontainers.image.source=https://github.com/${{ github.repository }}
             org.opencontainers.image.revision=${{ github.sha }}
@@ -119,5 +119,5 @@ jobs:
         if: github.event_name == 'push'
         uses: softprops/action-gh-release@v3
         with:
-          name: 3DPartHub ${{ steps.version.outputs.version }} - 企业级备份与部署验收版
+          name: 3DPartHub ${{ steps.version.outputs.version }} - 通知邮件与生产体验增强版
           body_path: docs/releases/${{ steps.version.outputs.version }}.md

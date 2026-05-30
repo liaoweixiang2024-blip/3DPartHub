@@ -2,8 +2,10 @@ import { existsSync } from 'node:fs';
 import type { PrismaClient } from '@prisma/client';
 import { Router, Request, Response } from 'express';
 import { sendAcceleratedFile } from '../../lib/acceleratedDownload.js';
-import { consumeModelDownloadToken } from '../../lib/downloadTokenStore.js';
+import { consumeModelDownloadToken, verifyModelDownloadToken } from '../../lib/downloadTokenStore.js';
 import { logger } from '../../lib/logger.js';
+import { createNotification } from '../../lib/notificationDelivery.js';
+import { requestSiteUrl } from '../../lib/requestSiteUrl.js';
 import { optionalString, booleanFlag } from '../../lib/requestValidation.js';
 import { getSetting } from '../../lib/settings.js';
 import { getVerifiedRequestUser, verifyRequestToken } from '../../middleware/auth.js';
@@ -27,14 +29,50 @@ type ModelDownloadContext = {
   getMeta: (id: string) => Record<string, unknown> | null;
 };
 
+function notifyModelOwnerAboutDownload(
+  prisma: PrismaClient,
+  modelId: string,
+  downloaderId: string | null | undefined,
+  format: string,
+  siteUrl?: string,
+) {
+  void (async () => {
+    try {
+      const model = await prisma.model.findUnique({
+        where: { id: modelId },
+        select: { id: true, name: true, createdById: true },
+      });
+      if (!model || model.createdById === downloaderId) return;
+      await createNotification({
+        userId: model.createdById,
+        title: '模型被下载',
+        message: `模型「${model.name}」被下载`,
+        type: 'download',
+        audience: 'owner',
+        relatedId: model.id,
+        siteUrl,
+        emailTemplateKey: 'download_notice',
+        emailVars: { modelName: model.name, downloadFormat: format.toUpperCase() },
+      });
+    } catch (err) {
+      logger.warn({ err, modelId }, '[models] Failed to notify model owner about download');
+    }
+  })();
+}
+
 export function createModelDownloadRouter({ prisma, getMeta }: ModelDownloadContext) {
   const router = Router();
 
   // Download model file
   router.get('/api/models/:id/download', async (req: Request, res: Response) => {
     const id = req.params.id as string;
+    const isHeadRequest = req.method === 'HEAD';
     const queryDownloadToken = optionalString(req.query.download_token, { maxLength: 160 });
-    const downloadTokenPayload = queryDownloadToken ? consumeModelDownloadToken(queryDownloadToken) : null;
+    const downloadTokenPayload = queryDownloadToken
+      ? isHeadRequest
+        ? verifyModelDownloadToken(queryDownloadToken)
+        : consumeModelDownloadToken(queryDownloadToken)
+      : null;
     let requestedFormat = optionalString(req.query.format, { maxLength: 20 });
 
     if (queryDownloadToken) {
@@ -114,7 +152,7 @@ export function createModelDownloadRouter({ prisma, getMeta }: ModelDownloadCont
       return;
     }
 
-    if (prisma && target.record) {
+    if (!isHeadRequest && prisma && target.record) {
       const recordOptions = {
         userId: authUserId,
         ...target.record,
@@ -126,6 +164,13 @@ export function createModelDownloadRouter({ prisma, getMeta }: ModelDownloadCont
           // Internal/no-record downloads skip statistics without touching the hot DB path.
         } else if (shouldRecordDownloadSynchronously(recordOptions)) {
           await recordModelDownload(prisma, recordOptions);
+          notifyModelOwnerAboutDownload(
+            prisma,
+            target.record.modelId,
+            authUserId,
+            target.record.format,
+            requestSiteUrl(req),
+          );
         } else {
           const queued = await enqueueModelDownloadRecord({
             userId: authUserId,
@@ -136,6 +181,13 @@ export function createModelDownloadRouter({ prisma, getMeta }: ModelDownloadCont
           if (!queued) {
             await recordModelDownload(prisma, recordOptions);
           }
+          notifyModelOwnerAboutDownload(
+            prisma,
+            target.record.modelId,
+            authUserId,
+            target.record.format,
+            requestSiteUrl(req),
+          );
         }
       } catch (err) {
         if (err instanceof DailyDownloadLimitError) {
@@ -147,7 +199,7 @@ export function createModelDownloadRouter({ prisma, getMeta }: ModelDownloadCont
     }
 
     let releaseActiveDownload: (() => void) | null = null;
-    if (target.record?.modelId) {
+    if (!isHeadRequest && target.record?.modelId) {
       releaseActiveDownload = trackActiveModelDownload(target.record.modelId);
       const releaseOnce = () => {
         releaseActiveDownload?.();

@@ -8,6 +8,7 @@ import { getBusinessConfig, labelFor } from '../../lib/businessConfig.js';
 import { config } from '../../lib/config.js';
 import { createProtectedResourceToken, verifyProtectedResourceToken } from '../../lib/downloadTokenStore.js';
 import { prisma } from '../../lib/prisma.js';
+import { requestSiteUrl } from '../../lib/requestSiteUrl.js';
 import { optionalString } from '../../lib/requestValidation.js';
 import {
   DEMAND_DUPLICATE_WINDOW_MS,
@@ -167,7 +168,40 @@ export function createSupportTicketRouter() {
           classification: normalizedClassification,
           description: cleanDescription,
         },
+        include: { user: { select: { username: true, email: true } } },
       });
+      const ticketTitle = labelFor(ticketClassifications, ticket.classification);
+      await createNotification({
+        userId: ticket.userId,
+        title: '工单已创建',
+        message: `您的工单「${ticketTitle}」已进入处理队列`,
+        type: 'ticket',
+        audience: 'user',
+        relatedId: ticket.id,
+        siteUrl: requestSiteUrl(req),
+        emailTemplateKey: 'ticket_created',
+        emailVars: { username: ticket.user.username, ticketTitle },
+      }).catch(() => {});
+      try {
+        const admins = await prisma.user.findMany({ where: { role: 'ADMIN' }, select: { id: true } });
+        await Promise.all(
+          admins.map((admin) =>
+            createNotification({
+              userId: admin.id,
+              title: '新工单',
+              message: `${ticket.user.username} 提交了新的工单「${ticketTitle}」`,
+              type: 'ticket',
+              audience: 'admin',
+              relatedId: ticket.id,
+              siteUrl: requestSiteUrl(req),
+              emailTemplateKey: 'ticket_admin_new',
+              emailVars: { username: ticket.user.username, ticketTitle },
+            }).catch(() => {}),
+          ),
+        );
+      } catch {
+        /* best-effort admin notification */
+      }
       res.json({ id: ticket.id, status: ticket.status });
     } catch {
       res.status(500).json({ detail: '创建工单失败' });
@@ -267,7 +301,15 @@ export function createSupportTicketRouter() {
         title: '工单状态更新',
         message: `您的工单「${labelFor(ticketClassifications, ticket.classification)}」状态已更新为「${labelFor(ticketStatuses, status)}」`,
         type: 'ticket',
+        audience: 'user',
         relatedId: ticket.id,
+        siteUrl: requestSiteUrl(req),
+        emailTemplateKey: 'ticket_status_changed',
+        emailVars: {
+          username: ticket.user.username,
+          ticketTitle: labelFor(ticketClassifications, ticket.classification),
+          statusLabel: labelFor(ticketStatuses, status),
+        },
       }).catch(() => {});
       res.json(ticket);
     } catch {
@@ -487,26 +529,40 @@ export function createSupportTicketRouter() {
         });
         // Send notification to user when admin replies
         if (isAdmin) {
+          const ticketTitle = labelFor(ticketClassifications, ticket.classification);
           await createNotification({
             userId: ticket.userId,
             title: '工单回复',
-            message: `管理员回复了您的工单「${labelFor(ticketClassifications, ticket.classification)}」`,
+            message: `管理员回复了您的工单「${ticketTitle}」`,
             type: 'ticket',
+            audience: 'user',
             relatedId: ticketId,
+            siteUrl: requestSiteUrl(req),
+            emailTemplateKey: 'ticket_replied',
+            emailVars: { ticketTitle, replyPreview: cleanContent.slice(0, 120) },
           }).catch(() => {});
         }
         // Notify admins when user replies
         if (!isAdmin) {
           try {
             const admins = await prisma.user.findMany({ where: { role: 'ADMIN' }, select: { id: true } });
+            const ticketTitle = labelFor(ticketClassifications, ticket.classification);
             await Promise.all(
               admins.map((admin) =>
                 createNotification({
                   userId: admin.id,
                   title: '工单新回复',
-                  message: `用户回复了工单「${labelFor(ticketClassifications, ticket.classification)}」`,
+                  message: `用户回复了工单「${ticketTitle}」`,
                   type: 'ticket',
+                  audience: 'admin',
                   relatedId: ticketId,
+                  siteUrl: requestSiteUrl(req),
+                  emailTemplateKey: 'ticket_admin_replied',
+                  emailVars: {
+                    username: message.user.username,
+                    ticketTitle,
+                    replyPreview: cleanContent.slice(0, 120),
+                  },
                 }).catch(() => {}),
               ),
             );

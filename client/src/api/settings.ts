@@ -503,8 +503,9 @@ export async function getSettingDefaults(keys: string[]): Promise<Record<string,
   return unwrapResponse<Record<string, unknown>>(res);
 }
 
-export async function sendTestEmail(to: string): Promise<{ message: string }> {
-  const res = await client.post('/settings/email/test', { to }, { timeout: 30000 });
+export async function sendTestEmail(to: string, templateKey = 'smtp_test'): Promise<{ message: string }> {
+  const siteUrl = typeof window !== 'undefined' ? window.location.origin : undefined;
+  const res = await client.post('/settings/email/test', { to, siteUrl, templateKey }, { timeout: 30000 });
   return unwrapResponse<{ message: string }>(res);
 }
 

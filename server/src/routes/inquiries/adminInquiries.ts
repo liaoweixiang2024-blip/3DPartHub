@@ -3,12 +3,17 @@ import { Router, Response } from 'express';
 import { getBusinessConfig, labelFor } from '../../lib/businessConfig.js';
 import { logger } from '../../lib/logger.js';
 import { prisma } from '../../lib/prisma.js';
+import { requestSiteUrl } from '../../lib/requestSiteUrl.js';
 import { authMiddleware, type AuthRequest } from '../../middleware/auth.js';
 import { createNotification } from '../notifications.js';
 import { adminOnly, param } from './common.js';
 
 const SALES_ASSIGNMENT_MODES = new Set(['manual', 'default', 'auto', 'region', 'channel']);
 const SALES_CHANNELS = new Set(['online', 'offline']);
+
+function inquiryCode(id: string) {
+  return `#${id.slice(0, 8).toUpperCase()}`;
+}
 
 const salesCandidateSelect = {
   id: true,
@@ -222,9 +227,13 @@ export function createAdminInquiriesRouter() {
       await createNotification({
         userId: updated.userId,
         title: '询价单状态更新',
-        message: `您的询价单状态已更新为「${labelFor(inquiryStatuses, status)}」`,
+        message: `您的询价单 ${inquiryCode(id)} 状态已更新为「${labelFor(inquiryStatuses, status)}」`,
         type: 'inquiry',
+        audience: 'user',
         relatedId: id,
+        siteUrl: requestSiteUrl(req),
+        emailTemplateKey: 'inquiry_status_changed',
+        emailVars: { inquiryNo: inquiryCode(id), statusLabel: labelFor(inquiryStatuses, status) },
       }).catch(() => {});
 
       res.json(updated);
@@ -327,15 +336,23 @@ export function createAdminInquiriesRouter() {
         title: '询价单已转销售跟进',
         message: `${assignee.username} 将继续对接您的询价需求`,
         type: 'inquiry',
+        audience: 'user',
         relatedId: id,
+        siteUrl: requestSiteUrl(req),
+        emailTemplateKey: 'inquiry_assigned',
+        emailVars: { inquiryNo: inquiryCode(id), assigneeName: assignee.username },
       }).catch(() => {});
       if (assignee.id !== req.user!.userId) {
         await createNotification({
           userId: assignee.id,
           title: '新的询价对接任务',
-          message: `有一份询价单已转交给您跟进`,
+          message: `询价单 ${inquiryCode(id)} 已转交给您跟进`,
           type: 'inquiry',
+          audience: 'sales',
           relatedId: id,
+          siteUrl: requestSiteUrl(req),
+          emailTemplateKey: 'inquiry_assigned',
+          emailVars: { inquiryNo: inquiryCode(id), assigneeName: assignee.username },
         }).catch(() => {});
       }
 

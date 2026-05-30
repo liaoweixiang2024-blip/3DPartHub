@@ -189,7 +189,7 @@ export default function AuthModal({ initialMode = 'login', open, returnUrl, onCl
     <AnimatePresence>
       {open && (
         <motion.div
-          className="auth-modal-overlay fixed inset-0 z-[10000] flex items-center justify-center bg-black/45 px-4 py-5 backdrop-blur-sm"
+          className="auth-modal-overlay fixed inset-0 z-[10000] flex items-center justify-center bg-black/45 px-4 pb-[max(1rem,env(safe-area-inset-bottom,0px))] pt-[max(1rem,env(safe-area-inset-top,0px))] backdrop-blur-sm"
           data-interface-theme={interfaceTheme}
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
@@ -298,16 +298,16 @@ export default function AuthModal({ initialMode = 'login', open, returnUrl, onCl
                       className="min-w-0 flex-1 px-3"
                       error={Boolean(errors.captchaText)}
                       fieldSize="lg"
-                      placeholder="验证码"
-                      maxLength={4}
+                      placeholder="6位验证码"
+                      maxLength={6}
                     />
                     {captchaSvg && (
                       <button
                         type="button"
                         onClick={refreshCaptcha}
-                        className="shrink-0 cursor-pointer overflow-hidden rounded-sm border border-outline-variant/30 transition-opacity hover:opacity-80"
+                        className="shrink-0 cursor-pointer overflow-hidden rounded-sm border border-outline-variant/30 transition-opacity hover:opacity-80 [&>svg]:block [&>svg]:h-full [&>svg]:w-full"
                         dangerouslySetInnerHTML={{ __html: sanitizeHtml(captchaSvg) }}
-                        style={{ width: 100, height: 40 }}
+                        style={{ width: 150, height: 44 }}
                       />
                     )}
                   </div>

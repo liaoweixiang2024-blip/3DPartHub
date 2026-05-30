@@ -16,6 +16,7 @@ import {
 import { logger } from '../../lib/logger.js';
 import { hashPassword, verifyPassword } from '../../lib/password.js';
 import { prisma } from '../../lib/prisma.js';
+import { requestSiteUrl } from '../../lib/requestSiteUrl.js';
 import { getSetting } from '../../lib/settings.js';
 import { getRequestToken } from '../../middleware/auth.js';
 import { apiLimiter } from '../../middleware/security.js';
@@ -111,7 +112,7 @@ export function createAuthSessionRouter() {
     await storeEmailCode(normalizedEmail, code, emailCodeTtlSeconds);
 
     try {
-      await sendVerifyCode(normalizedEmail, code);
+      await sendVerifyCode(normalizedEmail, code, requestSiteUrl(req));
       res.json({ message: '验证码已发送' });
     } catch (err: unknown) {
       await redis.del(`email_code:${normalizedEmail}`);
@@ -225,7 +226,7 @@ export function createAuthSessionRouter() {
 
       const payload = { userId: user.id, role: user.role };
       const accessToken = signAccessToken(payload);
-      const refreshToken = signRefreshToken(payload);
+      const refreshToken = signRefreshToken({ ...payload, rememberMe: true });
       setAuthCookies(req, res, accessToken, refreshToken, { rememberMe: true });
 
       res.json({
@@ -273,8 +274,9 @@ export function createAuthSessionRouter() {
 
       const payload = { userId: user.id, role: user.role };
       const accessToken = signAccessToken(payload);
-      const refreshToken = signRefreshToken(payload);
-      setAuthCookies(req, res, accessToken, refreshToken, { rememberMe: Boolean(rememberMe) });
+      const shouldRemember = Boolean(rememberMe);
+      const refreshToken = signRefreshToken({ ...payload, rememberMe: shouldRemember });
+      setAuthCookies(req, res, accessToken, refreshToken, { rememberMe: shouldRemember });
 
       res.json({
         user: {
@@ -333,9 +335,15 @@ export function createAuthSessionRouter() {
       }
 
       const newFamilyId = `fam_${Date.now().toString(36)}`;
+      const shouldRemember = payload.rememberMe === true;
       const accessToken = signAccessToken({ userId: user.id, role: user.role });
-      const newRefreshToken = signRefreshToken({ userId: user.id, role: user.role, familyId: newFamilyId });
-      setAuthCookies(req, res, accessToken, newRefreshToken, { persistRefresh: true });
+      const newRefreshToken = signRefreshToken({
+        userId: user.id,
+        role: user.role,
+        familyId: newFamilyId,
+        rememberMe: shouldRemember,
+      });
+      setAuthCookies(req, res, accessToken, newRefreshToken, { rememberMe: shouldRemember });
       res.json({ accessToken });
     } catch {
       res.status(401).json({ detail: 'refresh token 无效或已过期' });

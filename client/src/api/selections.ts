@@ -213,6 +213,19 @@ export async function updateCategory(
   return unwrapResponse(res);
 }
 
+export async function updateSelectionGroup(
+  groupId: string,
+  data: Partial<{
+    groupName: string | null;
+    groupIcon: string | null;
+    groupImage: string | null;
+    groupImageFit: 'cover' | 'contain' | null;
+  }>,
+): Promise<{ updated: number }> {
+  const res = await client.put(`/admin/selections/groups/${encodeURIComponent(groupId)}`, data);
+  return unwrapResponse(res);
+}
+
 export async function deleteCategory(id: string): Promise<void> {
   await client.delete(`/admin/selections/categories/${id}`);
 }

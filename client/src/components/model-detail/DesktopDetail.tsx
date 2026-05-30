@@ -239,8 +239,9 @@ export function DesktopDetail({
                     </div>
                     <div className="min-w-0">
                       <div className="text-sm font-medium text-on-surface font-mono flex min-w-0">
-                        <span className="truncate">{modelData.name}</span>
-                        <span className="shrink-0 text-on-surface-variant">.{file.format.toLowerCase()}</span>
+                        <span className="truncate">
+                          {file.fileName || `${modelData.name}.${file.format.toLowerCase()}`}
+                        </span>
                       </div>
                       <div className="text-[11px] text-on-surface-variant mt-0.5">
                         {file.format} · {file.size}

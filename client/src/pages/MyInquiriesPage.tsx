@@ -49,7 +49,7 @@ function HistoryEmpty() {
     <AdminEmptyState
       icon="request_quote"
       title="还没有提交询价"
-      description="先在选型页把产品加入询价清单，提交后可在这里查看业务回复和处理进度。"
+      description="提交询价后，可在这里查看业务回复和处理进度。"
       action={
         <Link
           to="/selection"

@@ -32,6 +32,14 @@ function normalizeExtension(extension: string | null | undefined, fallback = 'st
     .toLowerCase();
 }
 
+const DOWNLOAD_FILE_EXTENSIONS = new Set(['step', 'stp', 'iges', 'igs', 'glb', 'gltf', 'pdf']);
+
+function stripDownloadExtension(value: string) {
+  const match = value.match(/\.([^.]+)$/);
+  if (!match) return value;
+  return DOWNLOAD_FILE_EXTENSIONS.has(match[1].toLowerCase()) ? value.slice(0, -match[0].length) : value;
+}
+
 function modelNameSeparatorIndex(baseName: string) {
   const indices = [baseName.indexOf('_'), baseName.indexOf('＿')].filter((index) => index >= 0).sort((a, b) => a - b);
 
@@ -46,7 +54,7 @@ function modelNameSeparatorIndex(baseName: string) {
 
 export function modelDownloadBaseName(sourceName: string | null | undefined, fallback = 'model') {
   const normalized = normalizeDownloadSourceName(sourceName, fallback);
-  const baseName = normalized.replace(/\.[^.]+$/, '').trim();
+  const baseName = stripDownloadExtension(normalized).trim();
   const separatorIndex = modelNameSeparatorIndex(baseName);
   const preferredName = separatorIndex >= 0 ? baseName.slice(separatorIndex + 1).trim() : baseName;
   return cleanDownloadBaseName(preferredName || baseName, fallback);
@@ -54,7 +62,7 @@ export function modelDownloadBaseName(sourceName: string | null | undefined, fal
 
 export function hasModelDownloadSuffix(sourceName: string | null | undefined) {
   const normalized = normalizeDownloadSourceName(sourceName, 'model');
-  const baseName = normalized.replace(/\.[^.]+$/, '').trim();
+  const baseName = stripDownloadExtension(normalized).trim();
   return modelNameSeparatorIndex(baseName) >= 0;
 }
 

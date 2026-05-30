@@ -1,4 +1,5 @@
 import { AnimatePresence, motion } from 'framer-motion';
+import { useState } from 'react';
 import { getPublicSettingsSnapshot } from '../../lib/publicSettings';
 import Icon from '../shared/Icon';
 import type { CameraPreset, ViewMode } from './ModelViewer';
@@ -232,6 +233,40 @@ function ExplodeControl({
   );
 }
 
+function MaterialPresetMenu({
+  presets,
+  active,
+  onSelect,
+}: {
+  presets: typeof MATERIAL_PRESETS;
+  active: MaterialPresetKey;
+  onSelect: (preset: MaterialPresetKey) => void;
+}) {
+  return (
+    <div
+      className="micro-glass flex min-w-[138px] flex-col gap-1 rounded-sm p-1.5"
+      onClick={(event) => event.stopPropagation()}
+      onPointerDown={(event) => event.stopPropagation()}
+    >
+      {presets.map((preset) => (
+        <button
+          key={preset.key}
+          type="button"
+          onClick={() => onSelect(preset.key)}
+          className={`inline-flex h-8 items-center gap-2 rounded-sm px-2 text-xs font-medium transition-colors ${
+            active === preset.key
+              ? 'bg-primary-container/20 text-primary'
+              : 'text-on-surface-variant hover:bg-surface-container-high/70 hover:text-on-surface'
+          }`}
+        >
+          <Icon name={preset.icon} size={14} />
+          <span className="truncate">{preset.label}</span>
+        </button>
+      ))}
+    </div>
+  );
+}
+
 export default function CadViewerToolbar(props: CadViewerToolbarProps) {
   const {
     variant,
@@ -267,6 +302,12 @@ export default function CadViewerToolbar(props: CadViewerToolbarProps) {
     onSetThumbnail,
     settingThumbnail,
   } = props;
+  const [materialMenuOpen, setMaterialMenuOpen] = useState(false);
+  const visiblePresets = getVisiblePresets();
+  const activeMaterialPreset =
+    visiblePresets.find((preset) => preset.key === materialPreset) ||
+    MATERIAL_PRESETS.find((preset) => preset.key === materialPreset) ||
+    MATERIAL_PRESETS[0];
 
   if (variant === 'mobile') {
     return (
@@ -377,11 +418,11 @@ export default function CadViewerToolbar(props: CadViewerToolbarProps) {
       </div>
 
       <div
-        className="absolute right-3 top-3 bottom-3 z-30 flex flex-col items-end pr-0.5"
+        className="absolute right-3 top-3 bottom-3 z-30 flex min-h-0 flex-col items-end pr-0.5"
         onClick={(event) => event.stopPropagation()}
         onPointerDown={(event) => event.stopPropagation()}
       >
-        <div className="micro-glass rounded-sm p-1 flex flex-col items-stretch gap-0.5 origin-top-right">
+        <div className="micro-glass rounded-sm p-1 flex min-h-0 max-h-full flex-col items-stretch gap-0.5 overflow-y-auto overscroll-contain scrollbar-hidden origin-top-right">
           {VIEW_MODES.map((mode) => (
             <ToolbarButton
               key={mode.key}
@@ -434,17 +475,25 @@ export default function CadViewerToolbar(props: CadViewerToolbarProps) {
             />
           )}
           <div className="w-full h-px bg-outline-variant/30 my-0.5" />
-          {getVisiblePresets().map((preset) => (
+          {visiblePresets.length <= 1 ? (
             <ToolbarButton
-              key={preset.key}
-              icon={preset.icon}
-              label={preset.label}
+              icon={activeMaterialPreset.icon}
+              label={activeMaterialPreset.label}
               size={18}
               tooltipSide="left"
-              active={materialPreset === preset.key}
-              onClick={() => onMaterialChange(preset.key)}
+              active={materialPreset === activeMaterialPreset.key}
+              onClick={() => onMaterialChange(activeMaterialPreset.key)}
             />
-          ))}
+          ) : (
+            <ToolbarButton
+              icon={activeMaterialPreset.icon}
+              label={`材质：${activeMaterialPreset.label}`}
+              size={18}
+              tooltipSide="left"
+              active={materialMenuOpen}
+              onClick={() => setMaterialMenuOpen((open) => !open)}
+            />
+          )}
           <div className="w-full h-px bg-outline-variant/30 my-0.5" />
           {onScreenshot && (
             <ToolbarButton icon="photo_camera" label="截图下载" size={18} tooltipSide="left" onClick={onScreenshot} />
@@ -461,41 +510,60 @@ export default function CadViewerToolbar(props: CadViewerToolbarProps) {
           )}
         </div>
 
-        <AnimatePresence>
-          {activeView === 'explode' && onExplodeAmountChange && (
-            <motion.div
-              initial={{ opacity: 0, scale: 0.9 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.9 }}
-              className="mt-2"
-            >
-              <ExplodeControl
-                explodeAmount={explodeAmount}
-                onExplodeAmountChange={onExplodeAmountChange}
-                onResetExplode={onResetExplode}
-              />
-            </motion.div>
-          )}
-          {clipEnabled && (
-            <motion.div
-              initial={{ opacity: 0, scale: 0.9 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.9 }}
-              className="mt-2"
-            >
-              <ClipControl
-                clipDirection={clipDirection}
-                onClipDirectionChange={onClipDirectionChange}
-                clipPosition={clipPosition}
-                onClipPositionChange={onClipPositionChange}
-                clipRange={clipRange}
-                clipInverted={clipInverted}
-                onToggleClipInverted={onToggleClipInverted}
-                onResetClip={onResetClip}
-              />
-            </motion.div>
-          )}
-        </AnimatePresence>
+        <div className="pointer-events-none absolute right-full top-0 mr-2 flex max-h-full flex-col items-end gap-2 overflow-y-auto overscroll-contain scrollbar-hidden">
+          <AnimatePresence>
+            {materialMenuOpen && visiblePresets.length > 1 && (
+              <motion.div
+                initial={{ opacity: 0, x: 8, scale: 0.96 }}
+                animate={{ opacity: 1, x: 0, scale: 1 }}
+                exit={{ opacity: 0, x: 8, scale: 0.96 }}
+                className="pointer-events-auto"
+              >
+                <MaterialPresetMenu
+                  presets={visiblePresets}
+                  active={materialPreset}
+                  onSelect={(preset) => {
+                    onMaterialChange(preset);
+                    setMaterialMenuOpen(false);
+                  }}
+                />
+              </motion.div>
+            )}
+            {activeView === 'explode' && onExplodeAmountChange && (
+              <motion.div
+                initial={{ opacity: 0, x: 8, scale: 0.96 }}
+                animate={{ opacity: 1, x: 0, scale: 1 }}
+                exit={{ opacity: 0, x: 8, scale: 0.96 }}
+                className="pointer-events-auto"
+              >
+                <ExplodeControl
+                  explodeAmount={explodeAmount}
+                  onExplodeAmountChange={onExplodeAmountChange}
+                  onResetExplode={onResetExplode}
+                />
+              </motion.div>
+            )}
+            {clipEnabled && (
+              <motion.div
+                initial={{ opacity: 0, x: 8, scale: 0.96 }}
+                animate={{ opacity: 1, x: 0, scale: 1 }}
+                exit={{ opacity: 0, x: 8, scale: 0.96 }}
+                className="pointer-events-auto"
+              >
+                <ClipControl
+                  clipDirection={clipDirection}
+                  onClipDirectionChange={onClipDirectionChange}
+                  clipPosition={clipPosition}
+                  onClipPositionChange={onClipPositionChange}
+                  clipRange={clipRange}
+                  clipInverted={clipInverted}
+                  onToggleClipInverted={onToggleClipInverted}
+                  onResetClip={onResetClip}
+                />
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </div>
       </div>
     </>
   );

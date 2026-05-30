@@ -24,6 +24,7 @@ const ROLE_LABELS: Record<string, string> = {
 const NOTIFICATION_ITEMS = [
   { key: 'ticket', label: '工单通知', desc: '工单回复、状态变更' },
   { key: 'inquiry', label: '询价通知', desc: '询价回复、处理状态变更' },
+  { key: 'backup', label: '备份通知', desc: '备份体检风险提醒' },
   { key: 'favorite', label: '收藏通知', desc: '有人收藏你的模型' },
   { key: 'model_conversion', label: '转换通知', desc: '模型转换完成或失败' },
   { key: 'download', label: '下载通知', desc: '模型被下载时通知' },
@@ -52,6 +53,8 @@ function NotificationPrefsLoadingState({ compact = false }: { compact?: boolean 
 
 function NotificationPrefs({ compact = false }: { compact?: boolean }) {
   const { toast } = useToast();
+  const user = useAuthStore((s) => s.user);
+  const showEmailPrefs = user?.role !== 'ADMIN';
   const [prefs, setPrefs] = useState<Record<string, boolean>>({});
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -108,15 +111,27 @@ function NotificationPrefs({ compact = false }: { compact?: boolean }) {
         {expanded && (
           <div className="mt-3 space-y-3">
             {NOTIFICATION_ITEMS.map((item) => (
-              <label key={item.key} className="flex items-center justify-between gap-3 rounded-md py-1">
+              <div key={item.key} className="flex items-center justify-between gap-3 rounded-md py-1">
                 <div className="min-w-0">
                   <span className="text-sm text-on-surface">{item.label}</span>
                   <p className="text-[10px] leading-snug text-on-surface-variant/60">{item.desc}</p>
                 </div>
-                <div className="shrink-0">
-                  <Toggle checked={prefs[item.key] !== false} onChange={(v) => handleChange(item.key, v)} />
+                <div className="shrink-0 flex items-center gap-3">
+                  <label className="flex items-center gap-1.5 text-[10px] text-on-surface-variant">
+                    <span>站内</span>
+                    <Toggle checked={prefs[item.key] !== false} onChange={(v) => handleChange(item.key, v)} />
+                  </label>
+                  {showEmailPrefs && (
+                    <label className="flex items-center gap-1.5 text-[10px] text-on-surface-variant">
+                      <span>邮件</span>
+                      <Toggle
+                        checked={prefs[`email_${item.key}`] !== false}
+                        onChange={(v) => handleChange(`email_${item.key}`, v)}
+                      />
+                    </label>
+                  )}
                 </div>
-              </label>
+              </div>
             ))}
             {changed && (
               <button
@@ -154,8 +169,20 @@ function NotificationPrefs({ compact = false }: { compact?: boolean }) {
                 <span className="text-sm text-on-surface">{item.label}</span>
                 <p className="text-xs text-on-surface-variant mt-0.5">{item.desc}</p>
               </div>
-              <div className="shrink-0">
-                <Toggle checked={prefs[item.key] !== false} onChange={(v) => handleChange(item.key, v)} />
+              <div className="shrink-0 flex items-center gap-4">
+                <label className="flex items-center gap-2 text-xs text-on-surface-variant">
+                  <span>站内</span>
+                  <Toggle checked={prefs[item.key] !== false} onChange={(v) => handleChange(item.key, v)} />
+                </label>
+                {showEmailPrefs && (
+                  <label className="flex items-center gap-2 text-xs text-on-surface-variant">
+                    <span>邮件</span>
+                    <Toggle
+                      checked={prefs[`email_${item.key}`] !== false}
+                      onChange={(v) => handleChange(`email_${item.key}`, v)}
+                    />
+                  </label>
+                )}
               </div>
             </div>
           ))}

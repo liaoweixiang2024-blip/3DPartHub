@@ -48,7 +48,26 @@
 }
 
 [data-interface-theme] .app-auth-dialog {
-  max-height: min(45rem, calc(100dvh - 7rem));
+  max-height: min(45rem, calc(100vh - 2rem));
+  max-height: min(
+    45rem,
+    calc(100svh - max(1rem, env(safe-area-inset-top, 0px)) - max(1rem, env(safe-area-inset-bottom, 0px)))
+  );
+  max-height: min(
+    45rem,
+    calc(100dvh - max(1rem, env(safe-area-inset-top, 0px)) - max(1rem, env(safe-area-inset-bottom, 0px)))
+  );
+}
+
+[data-interface-theme] .app-auth-header {
+  flex-shrink: 0;
+}
+
+[data-interface-theme] .app-auth-body {
+  min-height: 0;
+  flex: 1 1 auto;
+  max-height: none;
+  -webkit-overflow-scrolling: touch;
 }
 
 [data-interface-theme] .app-auth-header [data-brand-part='icon'],
@@ -131,7 +150,7 @@
 
 [data-interface-theme] .app-auth-dialog .auth-modal-legal {
   padding-right: 2rem;
-  padding-bottom: 1.75rem;
+  padding-bottom: calc(1.75rem + env(safe-area-inset-bottom, 0px));
   padding-left: 2rem;
 }
 
@@ -142,7 +161,7 @@
   }
 
   [data-interface-theme] .app-auth-dialog-register .app-auth-body {
-    max-height: calc(100dvh - 10rem);
+    max-height: none;
   }
 
   [data-interface-theme] .app-auth-dialog-register form {

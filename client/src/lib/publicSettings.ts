@@ -19,6 +19,15 @@ let pendingThemeDefaults: {
 const STORAGE_KEY = 'site_config_cache';
 const TTL = 2 * 60 * 1000; // 2 minutes — config changes propagate faster
 const DEFAULT_COPYRIGHT_PROJECT_NAME = '3DPartHub';
+const DEFAULT_3D_PREVIEW_SETTINGS: Partial<SystemSettings> = {
+  mat_original_color: '#808080',
+  mat_original_metalness: '',
+  mat_original_roughness: '',
+  mat_original_envMapIntensity: '',
+  viewer_default_preset: 'original',
+  viewer_visible_presets: 'original',
+  viewer_edge_opacity: 0.25,
+};
 
 function getCopyrightYear(): string {
   return String(new Date().getFullYear());
@@ -239,6 +248,7 @@ export function getPublicSettingsSnapshot(): Partial<SystemSettings> {
       auth_modal_enabled: true,
       login_dialog_enabled: true,
       user_interface_theme_enabled: true,
+      ...DEFAULT_3D_PREVIEW_SETTINGS,
     }
   );
 }
@@ -422,7 +432,7 @@ export type ViewerSettingsOverride = Partial<
 >;
 
 export function get3DMaterialConfig(overrides?: ViewerSettingsOverride) {
-  const s = { ...(cache || {}), ...(overrides || {}) };
+  const s = { ...DEFAULT_3D_PREVIEW_SETTINGS, ...(cache || {}), ...(overrides || {}) };
   const originalOverride: Partial<MaterialPresetConfig> | null =
     (s.mat_original_color as string) ||
     (s.mat_original_metalness as string) !== '' ||
@@ -478,16 +488,16 @@ export function get3DMaterialConfig(overrides?: ViewerSettingsOverride) {
 }
 
 export function getEdgeStyleConfig() {
-  const s = cache || {};
+  const s = { ...DEFAULT_3D_PREVIEW_SETTINGS, ...(cache || {}) };
   return {
     color: (s.viewer_edge_color as string) || '#000000',
-    opacity: (s.viewer_edge_opacity as number) ?? 1.0,
+    opacity: (s.viewer_edge_opacity as number) ?? 0.25,
     width: (s.viewer_edge_width as number) ?? 1,
   };
 }
 
 export function getDefaultPreset(): string {
-  return (cache?.viewer_default_preset as string) || 'default';
+  return (cache?.viewer_default_preset as string) || 'original';
 }
 
 export function usePublicSettings() {

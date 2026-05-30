@@ -156,6 +156,49 @@ export function createSelectionAdminCategoriesRouter() {
     }
   });
 
+  router.put('/api/admin/selections/groups/:groupId', authMiddleware, async (req: AuthRequest, res) => {
+    if (!adminOnly(req, res)) return;
+    try {
+      const groupId = asSingleString(req.params.groupId);
+      if (!groupId) {
+        res.status(400).json({ detail: '分组参数无效' });
+        return;
+      }
+
+      const { groupName, groupIcon, groupImage, groupImageFit } = req.body;
+      const data: Prisma.SelectionCategoryUpdateInput = {};
+      if (groupName !== undefined) data.groupName = groupName;
+      if (groupIcon !== undefined) data.groupIcon = groupIcon;
+      if (groupImage !== undefined) data.groupImage = groupImage || null;
+      if (groupImageFit !== undefined) {
+        if (!isValidGroupImageFit(groupImageFit)) {
+          res.status(400).json({ detail: '分组封面展示方式无效' });
+          return;
+        }
+        data.groupImageFit = groupImageFit;
+      }
+
+      if (Object.keys(data).length === 0) {
+        res.status(400).json({ detail: '缺少要更新的分组字段' });
+        return;
+      }
+
+      const result = await prisma.selectionCategory.updateMany({
+        where: { groupId },
+        data,
+      });
+      await invalidateSelectionCache();
+      res.json({ updated: result.count });
+    } catch (err: unknown) {
+      logger.error({ err }, '[Selections] Update group settings error');
+      if (err instanceof Error && 'code' in err && (err as NodeJS.ErrnoException).code === 'P2022') {
+        res.status(500).json({ detail: '数据库字段缺失，请执行迁移并重启服务后再试' });
+        return;
+      }
+      res.status(500).json({ detail: '更新分组失败' });
+    }
+  });
+
   // Delete category
   router.delete('/api/admin/selections/categories/:id', authMiddleware, async (req: AuthRequest, res) => {
     if (!adminOnly(req, res)) return;

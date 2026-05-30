@@ -1,9 +1,8 @@
 import { Router, Response } from 'express';
 import { getBusinessConfig } from '../lib/businessConfig.js';
-import { logger } from '../lib/logger.js';
+import { createNotification, getBusinessNotificationActionPath } from '../lib/notificationDelivery.js';
 import { prisma } from '../lib/prisma.js';
 import { authMiddleware, type AuthRequest } from '../middleware/auth.js';
-import { userWantsNotification } from './auth.js';
 
 const router = Router();
 
@@ -47,7 +46,20 @@ router.get('/api/notifications', authMiddleware, async (req: AuthRequest, res: R
       }),
     ]);
 
-    res.json({ data: notifications, total, page, page_size: pageSize });
+    const audience = req.user?.role === 'ADMIN' ? 'admin' : 'user';
+    res.json({
+      data: notifications.map((notification) => ({
+        ...notification,
+        actionPath: getBusinessNotificationActionPath({
+          type: notification.type,
+          relatedId: notification.relatedId,
+          audience,
+        }),
+      })),
+      total,
+      page,
+      page_size: pageSize,
+    });
   } catch {
     res.json({ data: [], total: 0 });
   }
@@ -173,34 +185,6 @@ router.delete('/api/notifications/read/clear', authMiddleware, async (req: AuthR
   }
 });
 
-// Internal helper: create notification (not exposed as API route)
-export async function createNotification(params: {
-  userId: string;
-  title: string;
-  message: string;
-  type?: string;
-  relatedId?: string;
-}) {
-  if (!prisma) return null;
-  try {
-    // Check user preference before sending
-    const notificationType = params.type || 'info';
-    const wantsIt = await userWantsNotification(params.userId, notificationType);
-    if (!wantsIt) return null;
-
-    return await prisma.notification.create({
-      data: {
-        userId: params.userId,
-        title: params.title,
-        message: params.message,
-        type: notificationType,
-        relatedId: params.relatedId || null,
-      },
-    });
-  } catch (err) {
-    logger.error({ err }, 'Failed to create notification');
-    return null;
-  }
-}
+export { createNotification };
 
 export default router;

@@ -625,14 +625,8 @@ const REQUIRED_PASS_MESSAGES = [
 ];
 
 const ALLOW_WARNINGS_REQUIRED_ALIASES = new Map([
-  [
-    'Docker 数据目录磁盘空间正常',
-    ['Docker 数据目录不存在或不可访问', 'Docker 数据目录磁盘空间无法验证'],
-  ],
-  [
-    'Docker 数据目录 inode 正常',
-    ['Docker 数据目录不存在或不可访问', 'Docker 数据目录 inode 无法验证'],
-  ],
+  ['Docker 数据目录磁盘空间正常', ['Docker 数据目录不存在或不可访问', 'Docker 数据目录磁盘空间无法验证']],
+  ['Docker 数据目录 inode 正常', ['Docker 数据目录不存在或不可访问', 'Docker 数据目录 inode 无法验证']],
   ['资源配置适配当前内存档位', ['无法读取服务器总内存', '资源配置预算检查']],
   ['API 数据卷容量正常', ['API 数据卷容量偏低', 'API 数据卷容量无法验证']],
 ]);

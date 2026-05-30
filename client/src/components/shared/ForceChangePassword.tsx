@@ -12,6 +12,8 @@ import { useToast } from './Toast';
  */
 export default function ForceChangePassword() {
   const user = useAuthStore((s) => s.user);
+  const updateUser = useAuthStore((s) => s.updateUser);
+  const setAccessToken = useAuthStore((s) => s.setAccessToken);
   const { toast } = useToast();
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -35,12 +37,14 @@ export default function ForceChangePassword() {
 
     setLoading(true);
     try {
-      await authApi.setInitialPassword(newPassword);
-      toast('密码修改成功，请重新登录', 'success');
-      setTimeout(() => {
-        useAuthStore.getState().logout();
-        window.location.replace('/login');
-      }, 800);
+      const result = await authApi.setInitialPassword(newPassword);
+      if (result.tokens?.accessToken) {
+        setAccessToken(result.tokens.accessToken, result.tokens.refreshToken ?? null);
+      }
+      updateUser({ ...(result.user || {}), mustChangePassword: false });
+      setNewPassword('');
+      setConfirmPassword('');
+      toast('密码修改成功', 'success');
     } catch (err: unknown) {
       const resp = typeof err === 'object' && err !== null ? (err as Record<string, unknown>).response : undefined;
       const data = typeof resp === 'object' && resp !== null ? (resp as Record<string, unknown>).data : undefined;

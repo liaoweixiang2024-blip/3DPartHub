@@ -1,4 +1,4 @@
-import { createReadStream } from 'node:fs';
+import { createReadStream, statSync } from 'node:fs';
 import { extname, relative, resolve, sep } from 'node:path';
 import type { Request, Response } from 'express';
 import { config } from './config.js';
@@ -55,6 +55,30 @@ function accelPathFor(filePath: string): string | null {
   return null;
 }
 
+function parseRangeHeader(rangeHeader: string | undefined, fileSize: number): { start: number; end: number } | null {
+  if (!rangeHeader) return null;
+  const match = rangeHeader.match(/^bytes=(\d*)-(\d*)$/);
+  if (!match) return null;
+
+  const [, rawStart, rawEnd] = match;
+  if (!rawStart && !rawEnd) return null;
+
+  if (!rawStart) {
+    const suffixLength = Number(rawEnd);
+    if (!Number.isSafeInteger(suffixLength) || suffixLength <= 0) return null;
+    const start = Math.max(0, fileSize - suffixLength);
+    return { start, end: fileSize - 1 };
+  }
+
+  const start = Number(rawStart);
+  const end = rawEnd ? Number(rawEnd) : fileSize - 1;
+  if (!Number.isSafeInteger(start) || !Number.isSafeInteger(end) || start < 0 || end < start || start >= fileSize) {
+    return null;
+  }
+
+  return { start, end: Math.min(end, fileSize - 1) };
+}
+
 export function sendAcceleratedFile(
   req: Request,
   res: Response,
@@ -74,17 +98,6 @@ export function sendAcceleratedFile(
     cacheControl = 'private, max-age=300',
   } = options;
 
-  res.setHeader('Content-Disposition', contentDisposition(disposition, fileName));
-  res.setHeader('Content-Type', contentType);
-  res.setHeader('Cache-Control', cacheControl);
-
-  const accelPath = req.headers['x-accel-available'] === '1' ? accelPathFor(filePath) : null;
-  if (accelPath) {
-    res.setHeader('X-Accel-Redirect', accelPath);
-    res.status(200).end();
-    return;
-  }
-
   const absolutePath = resolve(filePath);
   const allowedRoots = [resolve(process.cwd(), config.staticDir), resolve(process.cwd(), config.uploadDir)];
   const isContained = allowedRoots.some((root) => absolutePath === root || absolutePath.startsWith(`${root}${sep}`));
@@ -93,7 +106,54 @@ export function sendAcceleratedFile(
     return;
   }
 
-  const stream = createReadStream(filePath);
+  let fileSize = 0;
+  try {
+    const stat = statSync(absolutePath);
+    if (!stat.isFile()) {
+      res.status(404).json({ detail: '文件不存在' });
+      return;
+    }
+    fileSize = stat.size;
+  } catch {
+    res.status(404).json({ detail: '文件不存在' });
+    return;
+  }
+
+  res.setHeader('Content-Disposition', contentDisposition(disposition, fileName));
+  res.setHeader('Content-Type', contentType);
+  res.setHeader('Cache-Control', cacheControl);
+  res.setHeader('Accept-Ranges', 'bytes');
+  res.setHeader('Content-Length', String(fileSize));
+
+  if (req.method === 'HEAD') {
+    res.status(200).end();
+    return;
+  }
+
+  const accelPath = req.headers['x-accel-available'] === '1' ? accelPathFor(filePath) : null;
+  if (accelPath) {
+    res.setHeader('X-Accel-Redirect', accelPath);
+    res.status(200).end();
+    return;
+  }
+
+  const range = parseRangeHeader(req.headers.range, fileSize);
+  let streamOptions: { start?: number; end?: number } | undefined;
+  if (req.headers.range) {
+    if (!range) {
+      res.status(416);
+      res.setHeader('Content-Range', `bytes */${fileSize}`);
+      res.setHeader('Content-Length', '0');
+      res.end();
+      return;
+    }
+    streamOptions = { start: range.start, end: range.end };
+    res.status(206);
+    res.setHeader('Content-Range', `bytes ${range.start}-${range.end}/${fileSize}`);
+    res.setHeader('Content-Length', String(range.end - range.start + 1));
+  }
+
+  const stream = createReadStream(absolutePath, streamOptions);
   stream.on('error', () => stream.destroy());
   res.on('close', () => {
     if (!stream.destroyed) stream.destroy();

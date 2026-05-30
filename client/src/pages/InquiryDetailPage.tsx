@@ -1046,6 +1046,7 @@ function InquiryMessagesSection({
 
   return (
     <section
+      id="messages"
       className={
         flat
           ? 'overflow-hidden rounded-xl border border-outline-variant/15 bg-surface-container-low'
@@ -1179,6 +1180,14 @@ function DetailContent({ id }: { id: string }) {
   useEffect(() => {
     setMobileSections(DEFAULT_CUSTOMER_MOBILE_SECTIONS);
   }, [id]);
+
+  useEffect(() => {
+    if (location.hash !== '#messages' || !inquiry) return;
+    setMobileSections((prev) => ({ ...prev, messages: true }));
+    window.setTimeout(() => {
+      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
+    }, 0);
+  }, [inquiry, location.hash]);
 
   useEffect(() => {
     return () => {

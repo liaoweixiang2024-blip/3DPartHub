@@ -10,6 +10,7 @@ export interface TokenPayload {
   userId: string;
   role: string;
   tokenType?: 'access' | 'refresh';
+  rememberMe?: boolean;
 }
 
 export type VerifiedTokenPayload = TokenPayload & {
@@ -91,6 +92,7 @@ export function signRefreshToken(payload: TokenPayload & { familyId?: string }):
       role: payload.role,
       tokenType: 'refresh',
       familyId: payload.familyId || `fam_${Date.now().toString(36)}`,
+      rememberMe: payload.rememberMe === true,
     },
     JWT_SECRET,
     { expiresIn: REFRESH_EXPIRES },

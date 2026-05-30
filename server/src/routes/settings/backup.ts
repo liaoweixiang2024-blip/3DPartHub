@@ -34,6 +34,7 @@ import { createProtectedResourceToken, consumeProtectedResourceToken } from '../
 import { getErrorMessage } from '../../lib/http.js';
 import { createLogger } from '../../lib/logger.js';
 import { prisma } from '../../lib/prisma.js';
+import { requestSiteUrl } from '../../lib/requestSiteUrl.js';
 import { BACKUP_DIRECT_UPLOAD_MAX_BYTES } from '../../lib/uploadLimits.js';
 import { authMiddleware, type AuthRequest } from '../../middleware/auth.js';
 import { createNotification } from '../notifications.js';
@@ -74,7 +75,10 @@ function backupPolicyAlertRelatedId(result: Awaited<ReturnType<typeof getBackupP
   return `backup-policy:${result.report.riskLevel}:${keys || 'ok'}`;
 }
 
-async function notifyAdminsAboutBackupPolicy(result: Awaited<ReturnType<typeof getBackupPolicyCheck>>) {
+async function notifyAdminsAboutBackupPolicy(
+  result: Awaited<ReturnType<typeof getBackupPolicyCheck>>,
+  siteUrl?: string,
+) {
   if (result.report.riskLevel === 'low') return;
   const relatedId = backupPolicyAlertRelatedId(result);
   const since = new Date(Date.now() - BACKUP_POLICY_ALERT_COOLDOWN_MS);
@@ -97,7 +101,14 @@ async function notifyAdminsAboutBackupPolicy(result: Awaited<ReturnType<typeof g
           title: result.report.riskLevel === 'high' ? '备份体检发现高风险' : '备份体检需要关注',
           message: result.report.summary,
           type: 'backup',
+          audience: 'admin',
           relatedId,
+          siteUrl,
+          emailTemplateKey: 'backup_policy_alert',
+          emailVars: {
+            riskLevel: result.report.riskLevel === 'high' ? '高风险' : '中风险',
+            summary: result.report.summary,
+          },
         });
       }),
     );
@@ -278,7 +289,7 @@ export function createSettingsBackupRouter() {
     try {
       const result = await getBackupPolicyCheck();
       await recordBackupPolicyCheckAudit(req, result);
-      await notifyAdminsAboutBackupPolicy(result);
+      await notifyAdminsAboutBackupPolicy(result, requestSiteUrl(req));
       res.json(result);
     } catch (err: unknown) {
       log.error({ err }, 'Policy check failed');

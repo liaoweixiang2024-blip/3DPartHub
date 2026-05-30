@@ -1,5 +1,6 @@
 import { Router, Response } from 'express';
 import { sendTestEmail } from '../../lib/email.js';
+import { requestSiteUrl } from '../../lib/requestSiteUrl.js';
 import { getAllSettings, getSettingDefaults, setSettings } from '../../lib/settings.js';
 import { testCacheConnectivity, testStorageConnectivity } from '../../lib/settingsConnectivity.js';
 import { checkUpdateAvailable } from '../../lib/update.js';
@@ -62,7 +63,12 @@ export function createSettingsAdminRouter() {
       return;
     }
     try {
-      await sendTestEmail(to);
+      const siteUrl = typeof req.body?.siteUrl === 'string' ? req.body.siteUrl : requestSiteUrl(req);
+      const templateKey =
+        typeof req.body?.templateKey === 'string' && /^[\w.-]{1,80}$/.test(req.body.templateKey)
+          ? req.body.templateKey
+          : 'smtp_test';
+      await sendTestEmail(to, siteUrl, templateKey);
       res.json({ message: '测试邮件已发送' });
     } catch {
       res.status(500).json({ detail: '测试邮件发送失败' });

@@ -297,16 +297,16 @@ export default function LoginPage() {
                     className="min-w-0 flex-1 px-3"
                     error={Boolean(errors.captchaText)}
                     fieldSize="lg"
-                    placeholder="验证码"
-                    maxLength={4}
+                    placeholder="6位验证码"
+                    maxLength={6}
                   />
                   {captchaSvg && (
                     <button
                       type="button"
                       onClick={refreshCaptcha}
-                      className="shrink-0 cursor-pointer rounded-sm overflow-hidden border border-outline-variant/30 hover:opacity-80 transition-opacity"
+                      className="shrink-0 cursor-pointer rounded-sm overflow-hidden border border-outline-variant/30 hover:opacity-80 transition-opacity [&>svg]:block [&>svg]:h-full [&>svg]:w-full"
                       dangerouslySetInnerHTML={{ __html: sanitizeHtml(captchaSvg) }}
-                      style={{ width: 100, height: 40 }}
+                      style={{ width: 150, height: 44 }}
                     />
                   )}
                 </div>

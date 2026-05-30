@@ -27,12 +27,13 @@ export function setAuthCookies(
   refreshToken?: string,
   options: { rememberMe?: boolean; persistRefresh?: boolean } = {},
 ): void {
-  res.cookie(ACCESS_COOKIE, accessToken, authCookieOptions(req, ACCESS_COOKIE_MAX_AGE_MS));
+  const persistent = options.rememberMe || options.persistRefresh;
+  res.cookie(ACCESS_COOKIE, accessToken, authCookieOptions(req, persistent ? ACCESS_COOKIE_MAX_AGE_MS : undefined));
   if (refreshToken) {
     res.cookie(
       REFRESH_COOKIE,
       refreshToken,
-      authCookieOptions(req, options.rememberMe || options.persistRefresh ? REFRESH_COOKIE_MAX_AGE_MS : undefined),
+      authCookieOptions(req, persistent ? REFRESH_COOKIE_MAX_AGE_MS : undefined),
     );
   }
 }

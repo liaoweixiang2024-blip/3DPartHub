@@ -9,6 +9,7 @@ import { config } from '../../lib/config.js';
 import { createProtectedResourceToken, verifyProtectedResourceToken } from '../../lib/downloadTokenStore.js';
 import { logger } from '../../lib/logger.js';
 import { prisma } from '../../lib/prisma.js';
+import { requestSiteUrl } from '../../lib/requestSiteUrl.js';
 import { optionalString } from '../../lib/requestValidation.js';
 import {
   DEMAND_DUPLICATE_WINDOW_MS,
@@ -26,6 +27,10 @@ import {
 } from '../../middleware/security.js';
 import { createNotification } from '../notifications.js';
 import { param } from './common.js';
+
+function inquiryCode(id: string) {
+  return `#${id.slice(0, 8).toUpperCase()}`;
+}
 
 function createInquiryAttachmentUpload(maxBytes: number) {
   return multer({
@@ -320,8 +325,21 @@ export function createUserInquiriesRouter() {
             create: createItems,
           },
         },
-        include: { items: true },
+        include: { items: true, user: { select: { username: true, email: true } } },
       });
+
+      const code = inquiryCode(inquiry.id);
+      await createNotification({
+        userId: inquiry.userId,
+        title: '询价已提交',
+        message: `您的询价单 ${code} 已提交`,
+        type: 'inquiry',
+        audience: 'user',
+        relatedId: inquiry.id,
+        siteUrl: requestSiteUrl(req),
+        emailTemplateKey: 'inquiry_submitted',
+        emailVars: { username: finalContactName || inquiry.user.username, inquiryNo: code },
+      }).catch(() => {});
 
       // Notify admins
       try {
@@ -333,7 +351,15 @@ export function createUserInquiriesRouter() {
               title: '新询价单',
               message: `用户提交了一份新的询价单，包含 ${inquiry.items.length} 个产品`,
               type: 'inquiry',
+              audience: 'admin',
               relatedId: inquiry.id,
+              siteUrl: requestSiteUrl(req),
+              emailTemplateKey: 'inquiry_admin_new',
+              emailVars: {
+                username: finalContactName || inquiry.user.username,
+                inquiryNo: code,
+                itemCount: inquiry.items.length,
+              },
             }).catch(() => {}),
           ),
         );
@@ -621,22 +647,36 @@ export function createUserInquiriesRouter() {
         try {
           const targetUserId = isAdmin ? inquiry.userId : null;
           if (isAdmin) {
+            const code = inquiryCode(id);
             await createNotification({
               userId: targetUserId!,
               title: '询价单回复',
-              message: `管理员回复了您的询价单`,
+              message: `管理员回复了您的询价单 ${code}`,
               type: 'inquiry',
+              audience: 'user',
               relatedId: id,
+              siteUrl: requestSiteUrl(req),
+              emailTemplateKey: 'inquiry_replied',
+              emailVars: { inquiryNo: code, replyPreview: cleanContent.slice(0, 120) },
             });
           } else {
             const admins = await prisma.user.findMany({ where: { role: 'ADMIN' }, select: { id: true } });
+            const code = inquiryCode(id);
             for (const admin of admins) {
               await createNotification({
                 userId: admin.id,
                 title: '询价单新回复',
-                message: `用户回复了询价单`,
+                message: `用户回复了询价单 ${code}`,
                 type: 'inquiry',
+                audience: 'admin',
                 relatedId: id,
+                siteUrl: requestSiteUrl(req),
+                emailTemplateKey: 'inquiry_admin_replied',
+                emailVars: {
+                  username: message.user.username,
+                  inquiryNo: code,
+                  replyPreview: cleanContent.slice(0, 120),
+                },
               });
             }
           }

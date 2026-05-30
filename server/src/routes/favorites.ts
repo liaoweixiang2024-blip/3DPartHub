@@ -6,6 +6,7 @@ import { getBusinessConfig } from '../lib/businessConfig.js';
 import { getErrorMessage } from '../lib/http.js';
 import { logger } from '../lib/logger.js';
 import { prisma } from '../lib/prisma.js';
+import { requestSiteUrl } from '../lib/requestSiteUrl.js';
 import { getSetting } from '../lib/settings.js';
 import { authMiddleware, type AuthRequest } from '../middleware/auth.js';
 import { shouldAttachExternalGltfBin, shouldDownloadOriginalBatchFormat } from '../services/batchArchive.js';
@@ -166,7 +167,11 @@ router.post('/api/models/:id/favorite', authMiddleware, async (req: AuthRequest,
             title: '新收藏',
             message: `有用户收藏了模型「${model.name}」`,
             type: 'favorite',
+            audience: 'owner',
             relatedId: modelId,
+            siteUrl: requestSiteUrl(req),
+            emailTemplateKey: 'favorite_notice',
+            emailVars: { modelName: model.name },
           });
         }
       } catch {

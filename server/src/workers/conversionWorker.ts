@@ -255,8 +255,11 @@ export const conversionWorker = createWorker(
         userId,
         title: '模型转换完成',
         message: `${originalName} 已成功转换，可以预览和下载。`,
-        type: 'success',
+        type: 'model_conversion',
+        audience: 'user',
         relatedId: modelId,
+        emailTemplateKey: 'model_conversion_completed',
+        emailVars: { modelName: originalName },
       });
 
       await logStep(`转换任务完成: ${modelId}`);
@@ -313,8 +316,11 @@ export const conversionWorker = createWorker(
           userId,
           title: '模型转换失败',
           message: `${originalName} 转换失败: ${message}`,
-          type: 'error',
+          type: 'model_conversion',
+          audience: 'user',
           relatedId: modelId,
+          emailTemplateKey: 'model_conversion_failed',
+          emailVars: { modelName: originalName, errorMessage: message },
         });
       }
 

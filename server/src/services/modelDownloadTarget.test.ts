@@ -124,6 +124,27 @@ test('keeps underscores inside model numbers when deriving download filenames', 
   assert.equal(target?.fileName, 'SBU-3_4x1_4.step');
 });
 
+test('keeps decimal model numbers when deriving download filenames', () => {
+  const uploadPath = join(root, 'uploads', 'decimal-nozzle.step');
+  mkdirSync(join(root, 'uploads'), { recursive: true });
+  writeFileSync(uploadPath, 'step');
+
+  const target = resolveDbModelDownloadTarget(
+    {
+      id: 'decimal-nozzle',
+      name: '不锈钢高压喷嘴横扁扣_JCWHBK-3_8-1.0-50',
+      originalName: 'JCWHBK-3_8-1.0-50.STEP',
+      format: 'step',
+      originalFormat: 'step',
+      uploadPath,
+      originalSize: 123,
+    },
+    'original',
+  );
+
+  assert.equal(target?.fileName, 'JCWHBK-3_8-1.0-50.step');
+});
+
 test('uses original filename extension instead of generic binary format', () => {
   const uploadPath = join(root, 'uploads', 'multer-random-source');
   mkdirSync(join(root, 'uploads'), { recursive: true });

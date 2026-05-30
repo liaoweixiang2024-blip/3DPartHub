@@ -16,3 +16,11 @@ test('access and refresh tokens are type-bound', () => {
   assert.throws(() => verifyRefreshToken(accessToken), /Invalid refresh token/);
   assert.throws(() => verifyAccessToken(refreshToken), /Invalid access token/);
 });
+
+test('refresh tokens preserve remember-login intent', () => {
+  const rememberedToken = signRefreshToken({ userId: 'user-1', role: 'VIEWER', rememberMe: true });
+  const sessionToken = signRefreshToken({ userId: 'user-1', role: 'VIEWER', rememberMe: false });
+
+  assert.equal(verifyRefreshToken(rememberedToken).rememberMe, true);
+  assert.equal(verifyRefreshToken(sessionToken).rememberMe, false);
+});

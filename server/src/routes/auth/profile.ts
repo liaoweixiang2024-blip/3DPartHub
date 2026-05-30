@@ -1,11 +1,12 @@
 import { Router, Response } from 'express';
-import { revokeAllTokensBefore, signAccessToken, signRefreshToken } from '../../lib/jwt.js';
+import { cacheDel } from '../../lib/cache.js';
+import { revokeAllTokensBefore, signAccessToken, signRefreshToken, verifyRefreshToken } from '../../lib/jwt.js';
 import { logger } from '../../lib/logger.js';
 import { hashPassword, verifyPassword } from '../../lib/password.js';
 import { prisma } from '../../lib/prisma.js';
 import { getSetting } from '../../lib/settings.js';
 import { authMiddleware, getRequestToken, type AuthRequest } from '../../middleware/auth.js';
-import { setAuthCookies } from './cookies.js';
+import { readCookie, REFRESH_COOKIE, setAuthCookies } from './cookies.js';
 
 export function createAuthProfileRouter() {
   const router = Router();
@@ -205,9 +206,26 @@ export function createAuthProfileRouter() {
       }
 
       const hash = await hashPassword(newPassword);
-      await prisma.user.update({
+      const updatedUser = await prisma.user.update({
         where: { id: req.user!.userId },
         data: { passwordHash: hash, mustChangePassword: false },
+        select: {
+          id: true,
+          username: true,
+          email: true,
+          role: true,
+          mustChangePassword: true,
+          company: true,
+          phone: true,
+          department: true,
+          address: true,
+          bio: true,
+          avatar: true,
+          createdAt: true,
+        },
+      });
+      await cacheDel(`auth:user:${req.user!.userId}`).catch((err) => {
+        logger.warn({ err, userId: req.user!.userId }, '[password] Failed to clear auth user cache');
       });
 
       if (req.user) {
@@ -217,12 +235,21 @@ export function createAuthProfileRouter() {
           logger.error({ err }, '[profile] Failed to revoke tokens after password change');
         }
         const newPayload = { userId: req.user.userId, role: req.user.role };
+        let shouldRemember = false;
+        const refreshCookie = readCookie(req, REFRESH_COOKIE);
+        if (refreshCookie) {
+          try {
+            shouldRemember = verifyRefreshToken(refreshCookie).rememberMe === true;
+          } catch {
+            shouldRemember = false;
+          }
+        }
         const newAccess = signAccessToken(newPayload);
-        const newRefresh = signRefreshToken(newPayload);
-        setAuthCookies(req, res, newAccess, newRefresh, {});
-        res.json({ message: '密码修改成功' });
+        const newRefresh = signRefreshToken({ ...newPayload, rememberMe: shouldRemember });
+        setAuthCookies(req, res, newAccess, newRefresh, { rememberMe: shouldRemember });
+        res.json({ message: '密码修改成功', user: updatedUser, tokens: { accessToken: newAccess } });
       } else {
-        res.json({ message: '密码修改成功，请重新登录' });
+        res.json({ message: '密码修改成功，请重新登录', user: updatedUser });
       }
     } catch (err) {
       logger.error({ err }, '[password] change failed');

@@ -2,6 +2,12 @@ import type { ApiResponse, AuthTokens, LoginRequest, RegisterRequest, User } fro
 import client from './client';
 import { unwrapApiData, unwrapResponse } from './response';
 
+type PasswordChangeResult = {
+  message: string;
+  user?: User;
+  tokens?: AuthTokens;
+};
+
 export const authApi = {
   login: async (req: LoginRequest) => {
     const res = await client.post<ApiResponse<{ user: User; tokens: AuthTokens }>>('/auth/login', req);
@@ -33,13 +39,13 @@ export const authApi = {
   },
 
   changePassword: async (oldPassword: string, newPassword: string) => {
-    const res = await client.put<ApiResponse<{ message: string }>>('/auth/password', { oldPassword, newPassword });
-    return unwrapResponse<{ message: string }>(res);
+    const res = await client.put<ApiResponse<PasswordChangeResult>>('/auth/password', { oldPassword, newPassword });
+    return unwrapResponse<PasswordChangeResult>(res);
   },
 
   setInitialPassword: async (newPassword: string) => {
-    const res = await client.put<ApiResponse<{ message: string }>>('/auth/password', { newPassword });
-    return unwrapResponse<{ message: string }>(res);
+    const res = await client.put<ApiResponse<PasswordChangeResult>>('/auth/password', { newPassword });
+    return unwrapResponse<PasswordChangeResult>(res);
   },
 
   getNotificationPrefs: async (): Promise<Record<string, boolean>> => {
@@ -47,7 +53,20 @@ export const authApi = {
       const { data } = await client.get('/auth/notification-prefs');
       return unwrapApiData<Record<string, boolean>>(data);
     } catch {
-      return { ticket: true, favorite: true, model_conversion: true, download: false };
+      return {
+        ticket: true,
+        inquiry: true,
+        favorite: true,
+        model_conversion: true,
+        backup: true,
+        download: false,
+        email_ticket: true,
+        email_inquiry: true,
+        email_favorite: false,
+        email_model_conversion: true,
+        email_backup: true,
+        email_download: false,
+      };
     }
   },
 

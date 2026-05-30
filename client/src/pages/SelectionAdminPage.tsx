@@ -5,6 +5,7 @@ import {
   getSelectionCategories,
   createCategory,
   updateCategory,
+  updateSelectionGroup,
   deleteCategory,
   createProduct,
   getSelectionProducts,
@@ -123,6 +124,8 @@ function Content() {
     imageFit: 'cover' as 'cover' | 'contain',
   });
   const [groupDragIdx, setGroupDragIdx] = useState<number | null>(null);
+  const [deleteGroupId, setDeleteGroupId] = useState<string | null>(null);
+  const [removeGroupCatId, setRemoveGroupCatId] = useState<string | null>(null);
   const [manageGroupCatsId, setManageGroupCatsId] = useState<string | null>(null);
   const groupCoverInputRef = useRef<HTMLInputElement | null>(null);
 
@@ -227,27 +230,66 @@ function Content() {
 
   const { data: categories = [], mutate: mutateCats } = useSWR('selections/categories', getSelectionCategories);
 
+  const patchGroupCategoryCache = useCallback(
+    (
+      groupId: string,
+      patch: Partial<Pick<SelectionCategory, 'groupId' | 'groupName' | 'groupIcon' | 'groupImage' | 'groupImageFit'>>,
+    ) => {
+      void mutateCats(
+        (current) =>
+          (current || []).map((category) =>
+            category.groupId === groupId
+              ? {
+                  ...category,
+                  ...patch,
+                }
+              : category,
+          ),
+        { populateCache: true, revalidate: true },
+      );
+    },
+    [mutateCats],
+  );
+
+  const patchSelectionCategoryCache = useCallback(
+    (categoryId: string, patch: Partial<SelectionCategory>) => {
+      void mutateCats(
+        (current) =>
+          (current || []).map((category) =>
+            category.id === categoryId
+              ? {
+                  ...category,
+                  ...patch,
+                }
+              : category,
+          ),
+        { populateCache: true, revalidate: true },
+      );
+    },
+    [mutateCats],
+  );
+
   const saveManagedGroupCoverFile = useCallback(
     async (file: File) => {
       if (!manageGroupCatsId) return;
       const currentGroup = groupItems.find((item) => item.id === manageGroupCatsId);
+      const imageFit = currentGroup?.imageFit || 'cover';
       try {
         const { url } = await uploadOptionImage(file);
-        const catsInGroup = categories.filter((c) => c.groupId === manageGroupCatsId);
-        for (const c of catsInGroup) {
-          await updateCategory(c.id, {
-            groupImage: url || null,
-            groupImageFit: currentGroup?.imageFit || 'cover',
-          });
-        }
-        setGroupItems((items) => items.map((item) => (item.id === manageGroupCatsId ? { ...item, image: url } : item)));
-        mutateCats();
+        await updateSelectionGroup(manageGroupCatsId, {
+          groupImage: url || null,
+          groupImageFit: imageFit,
+        });
+        setGroupItems((items) =>
+          items.map((item) => (item.id === manageGroupCatsId ? { ...item, image: url, imageFit } : item)),
+        );
+        patchGroupCategoryCache(manageGroupCatsId, { groupImage: url || null, groupImageFit: imageFit });
         toast('分组封面已粘贴上传', 'success');
       } catch (err) {
         toast(getApiErrorMessage(err, '上传失败'), 'error');
       }
     },
-    [categories, groupItems, manageGroupCatsId, mutateCats, toast],
+    [groupItems, manageGroupCatsId, patchGroupCategoryCache, toast],
   );
 
   useEffect(() => {
@@ -961,6 +1003,8 @@ function Content() {
     }
     setGroupItems(Array.from(map.values()));
     setGroupForm({ name: '', icon: 'category', image: '', imageFit: 'cover' });
+    setDeleteGroupId(null);
+    setRemoveGroupCatId(null);
     setShowGroupModal(true);
   };
 
@@ -2712,6 +2756,8 @@ function Content() {
           onClick={() => {
             setShowGroupModal(false);
             setManageGroupCatsId(null);
+            setDeleteGroupId(null);
+            setRemoveGroupCatId(null);
           }}
         >
           <div
@@ -2737,16 +2783,19 @@ function Content() {
                     return;
                   }
                   try {
-                    for (const c of catsInGroup) {
-                      await updateCategory(c.id, {
-                        groupName: g.name.trim(),
-                        groupIcon: g.icon.trim() || 'category',
-                        groupImage: g.image || null,
-                        groupImageFit: g.imageFit,
-                      });
-                    }
+                    await updateSelectionGroup(manageGroupCatsId, {
+                      groupName: g.name.trim(),
+                      groupIcon: g.icon.trim() || 'category',
+                      groupImage: g.image || null,
+                      groupImageFit: g.imageFit,
+                    });
+                    patchGroupCategoryCache(manageGroupCatsId, {
+                      groupName: g.name.trim(),
+                      groupIcon: g.icon.trim() || 'category',
+                      groupImage: g.image || null,
+                      groupImageFit: g.imageFit,
+                    });
                     toast('分组设置已保存', 'success');
-                    mutateCats();
                   } catch (err) {
                     toast(getApiErrorMessage(err, '分组设置保存失败'), 'error');
                   }
@@ -2756,10 +2805,16 @@ function Content() {
                   imageFit: 'cover' | 'contain' = g?.imageFit || 'cover',
                 ) => {
                   try {
-                    for (const c of catsInGroup) {
-                      await updateCategory(c.id, { groupImage: image || null, groupImageFit: imageFit });
-                    }
-                    mutateCats();
+                    const nextImage = image || '';
+                    await updateSelectionGroup(manageGroupCatsId, {
+                      groupImage: nextImage || null,
+                      groupImageFit: imageFit,
+                    });
+                    updateManagedGroup({ image: nextImage, imageFit });
+                    patchGroupCategoryCache(manageGroupCatsId, {
+                      groupImage: nextImage || null,
+                      groupImageFit: imageFit,
+                    });
                     return true;
                   } catch (err) {
                     toast(getApiErrorMessage(err, '封面设置保存失败'), 'error');
@@ -2838,7 +2893,10 @@ function Content() {
                   <>
                     <div className="flex items-center gap-2 shrink-0">
                       <button
-                        onClick={() => setManageGroupCatsId(null)}
+                        onClick={() => {
+                          setManageGroupCatsId(null);
+                          setRemoveGroupCatId(null);
+                        }}
                         className="text-on-surface-variant hover:text-on-surface"
                       >
                         <Icon name="arrow_back" size={18} />
@@ -2980,22 +3038,56 @@ function Content() {
                         >
                           <Icon name={c.icon || 'category'} size={14} className="text-primary-container shrink-0" />
                           <span className="text-sm text-on-surface flex-1 truncate">{c.name}</span>
-                          <button
-                            onClick={async () => {
-                              await updateCategory(c.id, {
-                                groupId: null,
-                                groupName: null,
-                                groupIcon: null,
-                                groupImage: null,
-                                groupImageFit: null,
-                              });
-                              toast(`"${c.name}" 已移出分组`, 'success');
-                              mutateCats();
-                            }}
-                            className="text-error/60 hover:text-error shrink-0"
-                          >
-                            <Icon name="close" size={14} />
-                          </button>
+                          {removeGroupCatId === c.id ? (
+                            <div className="flex shrink-0 items-center gap-1">
+                              <button
+                                onClick={async () => {
+                                  await updateCategory(c.id, {
+                                    groupId: null,
+                                    groupName: null,
+                                    groupIcon: null,
+                                    groupImage: null,
+                                    groupImageFit: null,
+                                  });
+                                  patchSelectionCategoryCache(c.id, {
+                                    groupId: null,
+                                    groupName: null,
+                                    groupIcon: null,
+                                    groupImage: null,
+                                    groupImageFit: null,
+                                  });
+                                  setGroupItems((items) =>
+                                    items.map((item) =>
+                                      item.id === manageGroupCatsId
+                                        ? { ...item, catCount: Math.max(0, item.catCount - 1) }
+                                        : item,
+                                    ),
+                                  );
+                                  setRemoveGroupCatId(null);
+                                  toast(`"${c.name}" 已移出分组`, 'success');
+                                }}
+                                className="rounded bg-error/10 px-2 py-1 text-[11px] font-bold text-error"
+                              >
+                                确认
+                              </button>
+                              <button
+                                onClick={() => setRemoveGroupCatId(null)}
+                                className="rounded px-2 py-1 text-[11px] text-on-surface-variant hover:bg-surface-container-high"
+                              >
+                                取消
+                              </button>
+                            </div>
+                          ) : (
+                            <button
+                              onClick={() => setRemoveGroupCatId(c.id)}
+                              className="text-error/60 hover:text-error shrink-0"
+                              data-tooltip-ignore
+                              aria-label="移出分组"
+                              title="移出分组"
+                            >
+                              <Icon name="close" size={14} />
+                            </button>
+                          )}
                         </div>
                       ))}
 
@@ -3010,6 +3102,7 @@ function Content() {
                               <button
                                 key={c.id}
                                 onClick={async () => {
+                                  const previousGroupId = c.groupId || null;
                                   await updateCategory(c.id, {
                                     groupId: manageGroupCatsId,
                                     groupName: g?.name || '',
@@ -3017,8 +3110,24 @@ function Content() {
                                     groupImage: g?.image || null,
                                     groupImageFit: g?.imageFit || 'cover',
                                   });
+                                  patchSelectionCategoryCache(c.id, {
+                                    groupId: manageGroupCatsId,
+                                    groupName: g?.name || '',
+                                    groupIcon: g?.icon || 'category',
+                                    groupImage: g?.image || null,
+                                    groupImageFit: g?.imageFit || 'cover',
+                                  });
+                                  setGroupItems((items) =>
+                                    items.map((item) => {
+                                      if (item.id === manageGroupCatsId)
+                                        return { ...item, catCount: item.catCount + 1 };
+                                      if (previousGroupId && item.id === previousGroupId) {
+                                        return { ...item, catCount: Math.max(0, item.catCount - 1) };
+                                      }
+                                      return item;
+                                    }),
+                                  );
                                   toast(`"${c.name}" 已移入本组`, 'success');
-                                  mutateCats();
                                 }}
                                 className="flex items-center gap-2 px-3 py-2 rounded-lg border border-dashed border-outline-variant/30 bg-surface-container-lowest hover:border-primary-container/40 hover:bg-primary-container/5 w-full text-left transition-colors"
                               >
@@ -3040,7 +3149,10 @@ function Content() {
 
                     <div className="flex justify-end shrink-0 pt-2 border-t border-outline-variant/10">
                       <button
-                        onClick={() => setManageGroupCatsId(null)}
+                        onClick={() => {
+                          setManageGroupCatsId(null);
+                          setRemoveGroupCatId(null);
+                        }}
                         className="px-3 py-1.5 text-xs text-on-surface-variant hover:bg-surface-container-high/50 rounded"
                       >
                         返回
@@ -3055,7 +3167,11 @@ function Content() {
                 <div className="flex items-center justify-between shrink-0">
                   <h2 className="text-base font-bold text-on-surface">分组管理</h2>
                   <button
-                    onClick={() => setShowGroupModal(false)}
+                    onClick={() => {
+                      setShowGroupModal(false);
+                      setDeleteGroupId(null);
+                      setRemoveGroupCatId(null);
+                    }}
                     className="text-on-surface-variant hover:text-on-surface"
                   >
                     <Icon name="close" size={18} />
@@ -3154,28 +3270,52 @@ function Content() {
                       >
                         <Icon name="settings" size={13} />
                       </button>
-                      <button
-                        onClick={async () => {
-                          const catsInGroup = categories.filter((c) => c.groupId === g.id);
-                          for (const c of catsInGroup) {
-                            await updateCategory(c.id, {
-                              groupId: null,
-                              groupName: null,
-                              groupIcon: null,
-                              groupImage: null,
-                              groupImageFit: null,
-                            });
-                          }
-                          setGroupItems(groupItems.filter((gi) => gi.id !== g.id));
-                          toast('分组已删除', 'success');
-                          mutateCats();
-                        }}
-                        className={SELECTION_ICON_BUTTON_DELETE}
-                        data-tooltip-ignore
-                        aria-label="删除分组"
-                      >
-                        <Icon name="delete" size={13} />
-                      </button>
+                      {deleteGroupId === g.id ? (
+                        <div className="flex shrink-0 items-center gap-1">
+                          <button
+                            onClick={async () => {
+                              const catsInGroup = categories.filter((c) => c.groupId === g.id);
+                              for (const c of catsInGroup) {
+                                await updateCategory(c.id, {
+                                  groupId: null,
+                                  groupName: null,
+                                  groupIcon: null,
+                                  groupImage: null,
+                                  groupImageFit: null,
+                                });
+                              }
+                              patchGroupCategoryCache(g.id, {
+                                groupId: null,
+                                groupName: null,
+                                groupIcon: null,
+                                groupImage: null,
+                                groupImageFit: null,
+                              });
+                              setGroupItems(groupItems.filter((gi) => gi.id !== g.id));
+                              setDeleteGroupId(null);
+                              toast('分组已删除', 'success');
+                            }}
+                            className="rounded bg-error/10 px-2 py-1 text-[11px] font-bold text-error"
+                          >
+                            确认
+                          </button>
+                          <button
+                            onClick={() => setDeleteGroupId(null)}
+                            className="rounded px-2 py-1 text-[11px] text-on-surface-variant hover:bg-surface-container-high"
+                          >
+                            取消
+                          </button>
+                        </div>
+                      ) : (
+                        <button
+                          onClick={() => setDeleteGroupId(g.id)}
+                          className={SELECTION_ICON_BUTTON_DELETE}
+                          data-tooltip-ignore
+                          aria-label="删除分组"
+                        >
+                          <Icon name="delete" size={13} />
+                        </button>
+                      )}
                     </div>
                   ))}
                 </div>
@@ -3183,7 +3323,11 @@ function Content() {
                 {/* Save group order */}
                 <div className="flex justify-end gap-2 shrink-0 pt-2 border-t border-outline-variant/10">
                   <button
-                    onClick={() => setShowGroupModal(false)}
+                    onClick={() => {
+                      setShowGroupModal(false);
+                      setDeleteGroupId(null);
+                      setRemoveGroupCatId(null);
+                    }}
                     className="px-3 py-1.5 text-xs text-on-surface-variant hover:bg-surface-container-high/50 rounded"
                   >
                     关闭
@@ -3192,18 +3336,17 @@ function Content() {
                     onClick={async () => {
                       try {
                         for (const g of groupItems) {
-                          const catsInGroup = categories.filter((c) => c.groupId === g.id);
-                          for (const c of catsInGroup) {
-                            await updateCategory(c.id, {
-                              groupName: g.name,
-                              groupIcon: g.icon,
-                              groupImage: g.image || null,
-                              groupImageFit: g.imageFit,
-                            });
-                          }
+                          await updateSelectionGroup(g.id, {
+                            groupName: g.name,
+                            groupIcon: g.icon,
+                            groupImage: g.image || null,
+                            groupImageFit: g.imageFit,
+                          });
                         }
                         toast('分组已保存', 'success');
                         setShowGroupModal(false);
+                        setDeleteGroupId(null);
+                        setRemoveGroupCatId(null);
                         mutateCats();
                       } catch {
                         toast('保存失败', 'error');

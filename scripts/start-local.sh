@@ -63,6 +63,78 @@ wait_for_data_services() {
   exit 1
 }
 
+read_server_database_config() {
+  node -e '
+const fs = require("fs");
+const envFile = process.argv[1];
+const content = fs.readFileSync(envFile, "utf8");
+let databaseUrl = "";
+for (const line of content.split(/\r?\n/)) {
+  const match = line.match(/^\s*DATABASE_URL\s*=\s*(.*)\s*$/);
+  if (!match) continue;
+  databaseUrl = match[1].trim().replace(/^["'\'']|["'\'']$/g, "");
+}
+if (!databaseUrl) process.exit(1);
+const url = new URL(databaseUrl);
+const dbName = decodeURIComponent(url.pathname.replace(/^\/+/, ""));
+process.stdout.write([decodeURIComponent(url.username), decodeURIComponent(url.password), dbName].join("\t"));
+' "$ROOT_DIR/server/.env"
+}
+
+postgres_container_network() {
+  docker inspect 3dparthub-postgres --format '{{range $name, $_ := .NetworkSettings.Networks}}{{println $name}}{{end}}' 2>/dev/null | sed -n '1p'
+}
+
+postgres_password_reset_sql() {
+  node - "$1" "$2" <<'NODE'
+const [user, password] = process.argv.slice(2);
+const ident = (value) => `"${String(value).replace(/"/g, '""')}"`;
+const literal = (value) => `'${String(value).replace(/'/g, "''")}'`;
+process.stdout.write(`ALTER USER ${ident(user)} WITH PASSWORD ${literal(password)};`);
+NODE
+}
+
+verify_or_repair_postgres_credentials() {
+  local config db_user db_password db_name network reset_sql
+  config="$(read_server_database_config 2>/dev/null || true)"
+  if [ -z "$config" ]; then
+    echo "Skipping PostgreSQL password check: server/.env DATABASE_URL is missing or invalid."
+    return
+  fi
+
+  db_user="$(printf '%s' "$config" | awk -F '\t' '{print $1}')"
+  db_password="$(printf '%s' "$config" | awk -F '\t' '{print $2}')"
+  db_name="$(printf '%s' "$config" | awk -F '\t' '{print $3}')"
+  network="$(postgres_container_network)"
+
+  if [ -z "$db_user" ] || [ -z "$db_name" ] || [ -z "$network" ]; then
+    echo "Skipping PostgreSQL password check: local database config is incomplete."
+    return
+  fi
+
+  echo "Verifying PostgreSQL password from server/.env..."
+  if docker run --rm --network "$network" -e PGPASSWORD="$db_password" postgres:16-alpine \
+    psql -h 3dparthub-postgres -U "$db_user" -d "$db_name" -c 'select 1;' >/dev/null 2>&1; then
+    echo "PostgreSQL credentials match server/.env."
+    return
+  fi
+
+  echo "PostgreSQL password mismatch detected; repairing local dev database user..."
+  reset_sql="$(postgres_password_reset_sql "$db_user" "$db_password")"
+  if docker exec 3dparthub-postgres psql -U "$db_user" -d "$db_name" -v ON_ERROR_STOP=1 -c "$reset_sql" >/dev/null 2>&1 \
+    && docker run --rm --network "$network" -e PGPASSWORD="$db_password" postgres:16-alpine \
+      psql -h 3dparthub-postgres -U "$db_user" -d "$db_name" -c 'select 1;' >/dev/null 2>&1; then
+    echo "PostgreSQL credentials repaired."
+    return
+  fi
+
+  echo "PostgreSQL password repair failed."
+  echo "Please keep server/.env DATABASE_URL password aligned with the existing Docker volume, or recreate local data with:"
+  echo "  docker compose -f docker-compose.local.yml down -v"
+  echo "  docker compose -f docker-compose.local.yml up -d postgres redis"
+  exit 1
+}
+
 kill_port_listener() {
   port="$1"
   if ! command -v lsof >/dev/null 2>&1; then
@@ -138,4 +210,5 @@ cd "$ROOT_DIR"
 start_colima
 restart_or_create_data_services
 wait_for_data_services
+verify_or_repair_postgres_credentials
 start_dev_processes

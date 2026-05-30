@@ -279,3 +279,10 @@ export function consumeModelDownloadToken(token: string): ModelDownloadTokenPayl
     return payload;
   });
 }
+
+export function verifyModelDownloadToken(token: string): ModelDownloadTokenPayload | null {
+  return verifyTokenFile(modelTokenDir, token, readPayload, (payload) => {
+    if (!payload || payload.expiresAt <= Date.now()) return null;
+    return payload;
+  });
+}

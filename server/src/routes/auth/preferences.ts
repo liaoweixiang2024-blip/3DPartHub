@@ -1,15 +1,12 @@
 import type { Prisma } from '@prisma/client';
 import { Router, Response } from 'express';
+import {
+  DEFAULT_NOTIFICATION_PREFS,
+  notificationPrefsFromMetadata,
+  userWantsNotification,
+} from '../../lib/notificationDelivery.js';
 import { prisma } from '../../lib/prisma.js';
 import { authMiddleware, type AuthRequest } from '../../middleware/auth.js';
-
-const DEFAULT_NOTIFICATION_PREFS: Record<string, boolean> = {
-  ticket: true,
-  favorite: true,
-  model_conversion: true,
-  backup: true,
-  download: false,
-};
 
 function jsonObject(value: unknown): Prisma.JsonObject {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
@@ -23,27 +20,6 @@ function booleanRecord(value: unknown): Record<string, boolean> {
       (entry): entry is [string, boolean] => typeof entry[1] === 'boolean',
     ),
   );
-}
-
-function notificationPrefsFromMetadata(metadata: unknown): Record<string, boolean> {
-  return {
-    ...DEFAULT_NOTIFICATION_PREFS,
-    ...booleanRecord(jsonObject(metadata).notificationPrefs),
-  };
-}
-
-// Helper: check if user wants this notification type
-export async function userWantsNotification(userId: string, type: string): Promise<boolean> {
-  try {
-    const user = await prisma.user.findUnique({
-      where: { id: userId },
-      select: { metadata: true },
-    });
-    const prefs = notificationPrefsFromMetadata(user?.metadata);
-    return prefs[type] !== false;
-  } catch {
-    return true;
-  }
 }
 
 export function createAuthPreferencesRouter() {
@@ -77,7 +53,7 @@ export function createAuthPreferencesRouter() {
       meta.notificationPrefs = prefs;
       await prisma.user.update({
         where: { id: req.user!.userId },
-        data: { metadata: meta },
+        data: { metadata: meta as Prisma.InputJsonValue },
       });
       res.json(prefs);
     } catch {
@@ -87,3 +63,5 @@ export function createAuthPreferencesRouter() {
 
   return router;
 }
+
+export { userWantsNotification };

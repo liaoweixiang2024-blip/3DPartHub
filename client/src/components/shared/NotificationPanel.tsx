@@ -29,6 +29,7 @@ const TYPE_META: Record<string, { icon: string; color: string }> = {
 };
 
 const NOTIFICATION_LIST_STALE_MS = 30_000;
+const NOTIFICATION_COUNT_POLL_MS = 15_000;
 
 function getTypeMeta(type: string) {
   return TYPE_META[type] || TYPE_META.info;
@@ -36,16 +37,20 @@ function getTypeMeta(type: string) {
 
 // Resolve route from notification type + relatedId
 function getNotificationRoute(n: Notification, isAdmin: boolean): string | null {
-  if (n.type === 'backup') return isAdmin ? '/admin/settings' : null;
+  if (n.actionPath) return n.actionPath;
+  if (n.type === 'backup') return isAdmin ? '/admin/settings#backup' : null;
   if (!n.relatedId) return null;
-  if (n.type === 'ticket') return isAdmin ? `/admin/tickets/${n.relatedId}` : `/my-tickets/${n.relatedId}`;
+  if (n.type === 'ticket')
+    return isAdmin ? `/admin/tickets/${n.relatedId}#messages` : `/my-tickets/${n.relatedId}#messages`;
   if (n.type === 'comment') return `/model/${n.relatedId}`;
   if (n.type === 'favorite') return `/model/${n.relatedId}`;
   if (n.type === 'download') return `/model/${n.relatedId}`;
   if (n.type === 'success') return `/model/${n.relatedId}`;
   if (n.type === 'error') return `/model/${n.relatedId}`;
   if (n.type === 'model_conversion') return `/model/${n.relatedId}`;
-  if (n.type === 'inquiry') return isAdmin ? `/admin/inquiries/${n.relatedId}` : `/my-inquiries/${n.relatedId}`;
+  if (n.type === 'inquiry') {
+    return isAdmin ? `/admin/inquiries/${n.relatedId}#messages` : `/my-inquiries/${n.relatedId}#messages`;
+  }
   return null;
 }
 
@@ -84,9 +89,19 @@ function NotificationItem({
   return (
     <div
       onClick={handleClick}
+      onKeyDown={(event) => {
+        if (!route) return;
+        if (event.key === 'Enter' || event.key === ' ') {
+          event.preventDefault();
+          handleClick();
+        }
+      }}
+      role={route ? 'button' : undefined}
+      tabIndex={route ? 0 : undefined}
+      aria-label={route ? `${n.title}，打开详情` : n.title}
       className={`group relative flex items-start gap-3 border-b border-outline-variant/5 px-3 py-3 transition-colors sm:px-4 ${
         route
-          ? 'cursor-pointer hover:bg-surface-container-highest/50 active:bg-surface-container-highest'
+          ? 'cursor-pointer outline-none hover:bg-surface-container-highest/50 focus-visible:bg-surface-container-highest/50 focus-visible:ring-2 focus-visible:ring-primary/30 active:bg-surface-container-highest'
           : 'cursor-default'
       } ${n.read ? 'opacity-70' : ''}`}
     >
@@ -96,7 +111,15 @@ function NotificationItem({
       <div className="min-w-0 flex-1">
         <p className={`text-xs text-on-surface line-clamp-1 break-words ${!n.read ? 'font-medium' : ''}`}>{n.title}</p>
         <p className="text-[11px] text-on-surface-variant line-clamp-2 break-words mt-0.5">{n.message}</p>
-        <p className="text-[10px] text-on-surface-variant/40 mt-1">{formatTime(n.createdAt)}</p>
+        <div className="mt-1 flex min-w-0 items-center gap-2">
+          <p className="shrink-0 text-[10px] text-on-surface-variant/40">{formatTime(n.createdAt)}</p>
+          {route && (
+            <span className="inline-flex min-w-0 items-center gap-0.5 text-[10px] font-medium text-primary-container opacity-80 transition-opacity group-hover:opacity-100">
+              <span>打开详情</span>
+              <Icon name="chevron_right" size={11} />
+            </span>
+          )}
+        </div>
       </div>
       <div className="shrink-0 flex items-center gap-1.5 mt-0.5">
         {!n.read && <span className="w-2 h-2 rounded-full bg-primary-container" />}
@@ -142,32 +165,13 @@ export default function NotificationPanel({
   const iconSize = 20;
   const safeNotifications = Array.isArray(notifications) ? notifications : [];
 
-  // Poll unread count
-  useEffect(() => {
+  const refreshUnreadCount = useCallback(async () => {
     if (!isAuthenticated) return;
-    let timer: ReturnType<typeof setInterval>;
-    let stopped = false;
-
-    async function fetchCount() {
-      if (stopped) return;
-      try {
-        const count = await getUnreadCount();
-        if (!stopped) setUnreadCount(count);
-      } catch {
-        // Polling failures are ignored; the next interval retries automatically.
-      }
+    try {
+      setUnreadCount(await getUnreadCount());
+    } catch {
+      // Polling failures are ignored; the next interval retries automatically.
     }
-
-    const timeout = setTimeout(() => {
-      fetchCount();
-      timer = setInterval(fetchCount, 60000);
-    }, 2000);
-
-    return () => {
-      stopped = true;
-      clearTimeout(timeout);
-      clearInterval(timer);
-    };
   }, [isAuthenticated]);
 
   const fetchNotifications = useCallback(
@@ -213,8 +217,42 @@ export default function NotificationPanel({
   // Fetch notifications when panel opens
   useEffect(() => {
     if (!open || !isAuthenticated) return;
-    void fetchNotifications();
-  }, [fetchNotifications, isAuthenticated, open]);
+    void fetchNotifications({ force: true });
+    void refreshUnreadCount();
+  }, [fetchNotifications, isAuthenticated, open, refreshUnreadCount]);
+
+  // Poll unread count. New notifications may be created by another browser or user,
+  // so the bell must refresh independently of local actions.
+  useEffect(() => {
+    if (!isAuthenticated) return;
+    let stopped = false;
+    const tick = () => {
+      if (stopped) return;
+      void refreshUnreadCount();
+      if (open) void fetchNotifications({ force: true, preload: true });
+    };
+    tick();
+    const timer = setInterval(tick, NOTIFICATION_COUNT_POLL_MS);
+    return () => {
+      stopped = true;
+      clearInterval(timer);
+    };
+  }, [fetchNotifications, isAuthenticated, open, refreshUnreadCount]);
+
+  useEffect(() => {
+    if (!isAuthenticated) return;
+    const refreshVisible = () => {
+      if (document.visibilityState !== 'visible') return;
+      void refreshUnreadCount();
+      if (open) void fetchNotifications({ force: true });
+    };
+    document.addEventListener('visibilitychange', refreshVisible);
+    window.addEventListener('focus', refreshVisible);
+    return () => {
+      document.removeEventListener('visibilitychange', refreshVisible);
+      window.removeEventListener('focus', refreshVisible);
+    };
+  }, [fetchNotifications, isAuthenticated, open, refreshUnreadCount]);
 
   // Close on outside click (desktop only — mobile uses backdrop overlay)
   useEffect(() => {

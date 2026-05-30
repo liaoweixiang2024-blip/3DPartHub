@@ -8,6 +8,7 @@ export interface Notification {
   type: string;
   read: boolean;
   relatedId: string | null;
+  actionPath?: string | null;
   createdAt: string;
 }
 
