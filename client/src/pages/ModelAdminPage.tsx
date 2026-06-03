@@ -32,6 +32,7 @@ const MOBILE_MODEL_VISIBLE_BATCH_SIZE = 40;
 const DELETED_MODEL_PAGE_SIZE = 50;
 const MERGE_SUGGESTION_PAGE_SIZE = 40;
 const CATEGORY_FILTER_ALL = '__all__';
+const MODEL_ADMIN_COUNT_KEY = '/models/count?grouped=false';
 const MODEL_ADMIN_PANEL_CLASS =
   'rounded-lg border border-outline-variant/10 bg-surface-container-low overflow-auto min-h-[calc(100vh-220px)] max-h-[calc(100vh-220px)]';
 type ModelAdminTab = 'models' | 'suggestions' | 'groups' | 'deleted';
@@ -659,7 +660,7 @@ function DesktopContent() {
     loadMore,
     mutate,
   } = useModelAdminList(search, categoryFilter);
-  const { data: modelCountData } = useSWR('/models/count', () => modelApi.getModelCount());
+  const { data: modelCountData } = useSWR(MODEL_ADMIN_COUNT_KEY, () => modelApi.getModelCount({ grouped: false }));
   const displayModelTotal =
     categoryFilter === CATEGORY_FILTER_ALL && !search.trim() ? (modelCountData?.total ?? modelTotal) : modelTotal;
   const {
@@ -678,7 +679,7 @@ function DesktopContent() {
   // Force refresh count + list when page mounts (e.g. after deleting a model on detail page)
   useEffect(() => {
     mutate(undefined, { revalidate: true });
-    swrMutate('/models/count');
+    swrMutate(MODEL_ADMIN_COUNT_KEY);
   }, [mutate]);
   const categories = catData?.items || [];
 
@@ -813,7 +814,7 @@ function DesktopContent() {
 
   const refreshModelAdminData = () => {
     mutate();
-    swrMutate('/models/count');
+    swrMutate(MODEL_ADMIN_COUNT_KEY);
     swrMutate('/categories');
     sugMutate();
     suggestionCountMutate();
@@ -1834,7 +1835,7 @@ function MobileContent() {
     loadMore,
     mutate,
   } = useModelAdminList(search, categoryFilter);
-  const { data: modelCountDataM } = useSWR('/models/count', () => modelApi.getModelCount());
+  const { data: modelCountDataM } = useSWR(MODEL_ADMIN_COUNT_KEY, () => modelApi.getModelCount({ grouped: false }));
   const displayModelTotalM =
     categoryFilter === CATEGORY_FILTER_ALL && !search.trim() ? (modelCountDataM?.total ?? modelTotal) : modelTotal;
   const {
@@ -1854,7 +1855,7 @@ function MobileContent() {
   // Force refresh count + list when page mounts
   useEffect(() => {
     mutate(undefined, { revalidate: true });
-    swrMutate('/models/count');
+    swrMutate(MODEL_ADMIN_COUNT_KEY);
   }, [mutate]);
   const [selectedNames, setSelectedNames] = useState<Set<string>>(new Set());
   const [merging, setMerging] = useState(false);
@@ -1988,7 +1989,7 @@ function MobileContent() {
 
   const refreshModelAdminData = () => {
     mutate();
-    swrMutate('/models/count');
+    swrMutate(MODEL_ADMIN_COUNT_KEY);
     swrMutate('/categories-m');
     sugMutate();
     suggestionCountMutate();

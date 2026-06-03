@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { i18n } from '../i18n';
 import { getErrorMessage, getRateLimitRetrySeconds, notifyGlobalError } from '../lib/errorNotifications';
 import { getAccessToken, useAuthStore } from '../stores/useAuthStore';
 
@@ -19,6 +20,11 @@ const CIRCUIT_COOLDOWN_MS = 15000;
 const DEFAULT_RATE_LIMIT_COOLDOWN_SECONDS = 60;
 const rateLimitNoticeUntil = new Map<string, number>();
 
+function tToast(key: string, fallback: string) {
+  if (!i18n.isInitialized) return fallback;
+  return String(i18n.t(`toast.${key}`, { defaultValue: fallback }));
+}
+
 function isCircuitOpen(): boolean {
   if (Date.now() < circuitOpenUntil) return true;
   circuitOpenUntil = 0;
@@ -29,7 +35,9 @@ function recordServerError() {
   consecutiveServerErrors++;
   if (consecutiveServerErrors >= CIRCUIT_THRESHOLD) {
     circuitOpenUntil = Date.now() + CIRCUIT_COOLDOWN_MS;
-    notifyGlobalError('服务器暂时不可用，正在自动重试...');
+    notifyGlobalError(
+      tToast('serviceUnavailableRetrying', 'Server is temporarily unavailable. Retrying automatically...'),
+    );
   }
 }
 
@@ -41,7 +49,9 @@ function resetCircuit() {
 // Reject requests when circuit is open
 client.interceptors.request.use((config) => {
   if (isCircuitOpen()) {
-    return Promise.reject(new Error('服务暂时不可用，请稍后再试'));
+    return Promise.reject(
+      new Error(tToast('serviceUnavailable', 'Service is temporarily unavailable. Please try again later')),
+    );
   }
   return config;
 });
@@ -141,7 +151,7 @@ client.interceptors.response.use(
         // Only force logout if we're certain the session is gone (not during hydration)
         const isAuthenticated = useAuthStore.getState().isAuthenticated;
         if (isAuthenticated) {
-          notifyGlobalError('登录状态已失效，请重新登录');
+          notifyGlobalError(tToast('sessionExpired', 'Your session has expired. Please log in again'));
           useAuthStore.getState().logout();
           window.location.replace('/login');
         }
@@ -173,7 +183,7 @@ client.interceptors.response.use(
           // Refresh truly failed (auth rejection), logout
           processQueue(new Error('Session expired'), null);
           if (useAuthStore.getState().hasHydrated) {
-            notifyGlobalError('登录状态已失效，请重新登录');
+            notifyGlobalError(tToast('sessionExpired', 'Your session has expired. Please log in again'));
             useAuthStore.getState().logout();
             window.location.replace('/login');
           }
@@ -197,7 +207,7 @@ client.interceptors.response.use(
       if (!useAuthStore.getState().hasHydrated) {
         return Promise.reject(refreshError);
       }
-      notifyGlobalError('登录状态已失效，请重新登录');
+      notifyGlobalError(tToast('sessionExpired', 'Your session has expired. Please log in again'));
       useAuthStore.getState().logout();
       window.location.replace('/login');
       return Promise.reject(refreshError);

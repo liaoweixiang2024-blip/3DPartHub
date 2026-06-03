@@ -1,5 +1,6 @@
 import useSWR, { mutate } from 'swr';
 import { getPublicSettings, type SystemSettings } from '../api/settings';
+import { syncI18nSettings } from '../i18n';
 import { applyServerThemeDefaults } from '../stores/useThemeStore';
 import { applyColorScheme } from './colorScheme';
 
@@ -151,6 +152,7 @@ function fetchAndApplyPublicSettings() {
       applyMetaTags();
       applyFavicon();
       applyAppearanceSettings(cache);
+      syncI18nSettings(cache);
       notifySiteConfigChange();
       return cache;
     } catch {
@@ -206,12 +208,26 @@ export async function refreshSiteConfig(): Promise<Partial<SystemSettings>> {
     applyMetaTags();
     applyFavicon();
     applyAppearanceSettings(cache);
+    syncI18nSettings(cache);
   } catch {
     // Keep stale/default config if the public settings endpoint is unavailable.
   }
   // Notify all listeners with fresh cache populated
   notifySiteConfigChange();
   return cache || { show_watermark: false, watermark_image: '', site_title: '', site_logo: '' };
+}
+
+export function patchPublicSettings(patch: Partial<SystemSettings>): Partial<SystemSettings> {
+  const stored = loadFromStorage();
+  cache = { ...(stored?.data || cache || {}), ...patch };
+  fetchedAt = Date.now();
+  saveToStorage(cache);
+  applyMetaTags();
+  applyFavicon();
+  applyAppearanceSettings(cache);
+  syncI18nSettings(cache);
+  notifySiteConfigChange();
+  return cache;
 }
 
 export async function getCachedPublicSettings(): Promise<Partial<SystemSettings>> {
@@ -248,6 +264,9 @@ export function getPublicSettingsSnapshot(): Partial<SystemSettings> {
       auth_modal_enabled: true,
       login_dialog_enabled: true,
       user_interface_theme_enabled: true,
+      ui_default_locale: 'zh-CN',
+      ui_enabled_locales: 'zh-CN,zh-TW,en-US,ja-JP,ko-KR,de-DE',
+      ui_follow_browser_locale: false,
       ...DEFAULT_3D_PREVIEW_SETTINGS,
     }
   );

@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next';
 import { useMediaQuery } from '../../layouts/hooks/useMediaQuery';
 import {
   ModelDetailAsideFrame,
@@ -110,6 +111,7 @@ function ModelDetailDesktopSkeleton() {
 }
 
 function ModelDetailMobileSkeleton({ modelTitle, isAdmin }: { modelTitle?: string | null; isAdmin?: boolean }) {
+  const { t } = useTranslation();
   const peekVariant = getModelDetailMobilePeekVariant(modelTitle, { isAdmin });
   const mobilePeekHeight = getModelDetailMobilePeekHeight(peekVariant);
 
@@ -121,7 +123,7 @@ function ModelDetailMobileSkeleton({ modelTitle, isAdmin }: { modelTitle?: strin
         aria-busy
         aria-live="polite"
       >
-        <span className="sr-only">模型详情加载中</span>
+        <span className="sr-only">{t('modelDetail.loading')}</span>
         <section
           className="absolute inset-x-0 top-0 overflow-hidden bg-surface-container"
           style={{ bottom: mobilePeekHeight }}

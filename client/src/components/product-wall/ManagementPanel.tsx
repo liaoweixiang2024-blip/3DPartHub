@@ -5,7 +5,8 @@ import Icon from '../shared/Icon';
 import SearchField from '../shared/SearchField';
 
 type ReviewFilter = 'all' | 'approved' | 'pending' | 'rejected';
-type ManagementKindFilter = '全部' | ProductWallKind;
+type ManagementKindFilter = ProductWallKind;
+const PRODUCT_WALL_MANAGEMENT_ALL_FILTER = '__all__';
 
 interface ManagementPanelProps {
   items: ProductWallItem[];
@@ -175,22 +176,32 @@ export default memo(function ProductWallManagementPanel({
               {/* All items */}
               <button
                 type="button"
-                onClick={() => setManagementKindFilter('全部')}
+                onClick={() => setManagementKindFilter(PRODUCT_WALL_MANAGEMENT_ALL_FILTER)}
                 className={`flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm transition-colors ${
-                  managementKindFilter === '全部' ? 'bg-primary-container/8' : 'hover:bg-surface-container-high'
+                  managementKindFilter === PRODUCT_WALL_MANAGEMENT_ALL_FILTER
+                    ? 'bg-primary-container/8'
+                    : 'hover:bg-surface-container-high'
                 }`}
               >
                 <Icon
                   name="apps"
                   size={16}
-                  className={managementKindFilter === '全部' ? 'text-primary-container' : 'text-on-surface-variant'}
+                  className={
+                    managementKindFilter === PRODUCT_WALL_MANAGEMENT_ALL_FILTER
+                      ? 'text-primary-container'
+                      : 'text-on-surface-variant'
+                  }
                 />
                 <span
-                  className={managementKindFilter === '全部' ? 'font-medium text-primary-container' : 'text-on-surface'}
+                  className={
+                    managementKindFilter === PRODUCT_WALL_MANAGEMENT_ALL_FILTER
+                      ? 'font-medium text-primary-container'
+                      : 'text-on-surface'
+                  }
                 >
                   全部
                 </span>
-                {managementKindFilter === '全部' && (
+                {managementKindFilter === PRODUCT_WALL_MANAGEMENT_ALL_FILTER && (
                   <span className="ml-auto text-xs text-on-surface-variant">{items.length}</span>
                 )}
               </button>
@@ -270,7 +281,7 @@ export default memo(function ProductWallManagementPanel({
                 onChange={(e) => setManagementKindFilter(e.target.value as ManagementKindFilter)}
                 className="rounded-md border border-outline-variant/18 bg-surface px-2 py-1.5 text-xs text-on-surface md:hidden"
               >
-                <option value="全部">全部分类</option>
+                <option value={PRODUCT_WALL_MANAGEMENT_ALL_FILTER}>全部分类</option>
                 {categories.map((c) => (
                   <option key={c.id} value={c.name}>
                     {c.name}

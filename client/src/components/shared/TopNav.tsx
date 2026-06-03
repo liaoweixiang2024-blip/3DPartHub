@@ -16,9 +16,18 @@ import {
   type ReactNode,
   type Ref,
 } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { mutate } from 'swr';
 import type { SystemSettings } from '../../api/settings';
+import {
+  changeAppLanguage,
+  getEnabledLocales,
+  getLocaleLabelKey,
+  normalizeLocale,
+  type SupportedLocale,
+} from '../../i18n';
+import { localizeNavItems } from '../../i18n/nav';
 import { useMediaQuery } from '../../layouts/hooks/useMediaQuery';
 import { getBusinessConfig } from '../../lib/businessConfig';
 import {
@@ -124,6 +133,7 @@ function NotificationPanelFallback({
   onLoginClick?: () => void;
   showTooltip?: boolean;
 }) {
+  const { t } = useTranslation();
   if (!useAuthStore.getState().isAuthenticated) {
     if (compact) {
       return (
@@ -139,8 +149,8 @@ function NotificationPanelFallback({
             }
           }}
           className="p-2 rounded-lg text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high transition-colors"
-          aria-label="通知"
-          title={showTooltip ? '登录后查看通知' : undefined}
+          aria-label={t('common.notifications')}
+          title={showTooltip ? t('topNav.loginToViewNotifications') : undefined}
         >
           <Icon name="notifications" size={20} />
         </button>
@@ -156,8 +166,8 @@ function NotificationPanelFallback({
       onFocus={loadNotificationPanel}
       onClick={loadNotificationPanel}
       className="p-2 text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high rounded-lg transition-colors relative"
-      aria-label="通知"
-      data-tooltip={showTooltip ? '通知' : undefined}
+      aria-label={t('common.notifications')}
+      data-tooltip={showTooltip ? t('common.notifications') : undefined}
       data-tooltip-side={showTooltip ? 'bottom' : undefined}
     >
       <Icon name="notifications" size={20} />
@@ -195,6 +205,7 @@ function UserMenu({
   adminDefaultPath?: string;
   settings?: Partial<SystemSettings>;
 }) {
+  const { t } = useTranslation();
   const [open, setOpen] = useState(false);
   const user = useAuthStore((s) => s.user);
   const logout = useAuthStore((s) => s.logout);
@@ -226,27 +237,27 @@ function UserMenu({
 
   const menuItems = [
     {
-      label: '个人中心',
+      label: t('nav.profile'),
       icon: 'person',
       path: '/profile',
     },
     {
-      label: '临时看图',
+      label: t('nav.tempViewer'),
       icon: 'view_in_ar',
       path: '/temp-viewer',
     },
     {
-      label: '修改密码',
+      label: t('auth.changePassword'),
       icon: 'lock',
       path: '/profile?tab=security',
     },
     {
-      label: '下载历史',
+      label: t('nav.downloads'),
       icon: 'download',
       path: '/downloads',
     },
     {
-      label: '我的分享',
+      label: t('nav.myShares'),
       icon: 'share',
       path: '/my-shares',
     },
@@ -260,7 +271,9 @@ function UserMenu({
         <div className={`${avatarSize} rounded-full bg-surface-container-highest flex items-center justify-center`}>
           <Icon name="person" size={iconSize} className="text-on-surface-variant" />
         </div>
-        {!isCompact && <span className="hidden md:inline text-sm text-on-surface-variant font-light">登录</span>}
+        {!isCompact && (
+          <span className="hidden md:inline text-sm text-on-surface-variant font-light">{t('topNav.login')}</span>
+        )}
       </button>
     );
   }
@@ -272,13 +285,18 @@ function UserMenu({
       onMouseEnter={() => setOpen(true)}
       onMouseLeave={() => setOpen(false)}
     >
-      <button onClick={() => setOpen(!open)} className={userMenuButtonClass} aria-label="用户菜单" data-tooltip-ignore>
+      <button
+        onClick={() => setOpen(!open)}
+        className={userMenuButtonClass}
+        aria-label={t('topNav.userMenu')}
+        data-tooltip-ignore
+      >
         <div className={`${avatarSize} rounded-full bg-surface-container-highest flex items-center justify-center`}>
           <Icon name="person" size={iconSize} className="text-on-surface-variant" />
         </div>
         {!isCompact && (
           <span className="hidden md:inline text-sm text-on-surface-variant font-light">
-            {user?.username || '用户'}
+            {user?.username || t('common.user')}
           </span>
         )}
       </button>
@@ -294,7 +312,7 @@ function UserMenu({
           >
             <div className="bg-surface-container-high border border-outline-variant/20 rounded-sm shadow-lg py-1">
               <div className="px-4 py-2.5 border-b border-outline-variant/15">
-                <p className="text-sm font-medium text-on-surface truncate">{user?.username || '用户'}</p>
+                <p className="text-sm font-medium text-on-surface truncate">{user?.username || t('common.user')}</p>
                 <p className="text-xs text-on-surface-variant truncate mt-0.5">{user?.email || ''}</p>
               </div>
               {menuItems.map((item) => (
@@ -333,7 +351,7 @@ function UserMenu({
                   className="w-full flex items-center gap-3 px-4 py-2.5 text-sm transition-colors text-on-surface hover:bg-surface-container-highest"
                 >
                   <Icon name="admin_panel_settings" size={18} />
-                  后台管理
+                  {t('common.admin')}
                 </button>
               )}
               <button
@@ -341,7 +359,7 @@ function UserMenu({
                 className="w-full flex items-center gap-3 px-4 py-2.5 text-sm transition-colors text-error hover:bg-error-container/10"
               >
                 <Icon name="logout" size={18} />
-                退出登录
+                {t('common.logout')}
               </button>
             </div>
           </motion.div>
@@ -360,13 +378,17 @@ function InterfaceThemeSegment({
   compact?: boolean;
   scope?: InterfaceThemePreferenceScope;
 }) {
+  const { t } = useTranslation();
   const preference = useInterfaceThemePreference(scope);
 
   return (
     <div className="space-y-0.5">
       {INTERFACE_THEME_PREFERENCE_OPTIONS.map((option) => {
         const active = preference === option.value;
-        const label = option.shortLabel || option.label;
+        const label = t(option.shortLabelKey || option.labelKey, {
+          defaultValue: option.shortLabel || option.label,
+        });
+        const fullLabel = t(option.labelKey, { defaultValue: option.label });
         return (
           <button
             key={option.value}
@@ -375,7 +397,7 @@ function InterfaceThemeSegment({
             onClick={() => {
               if (active) return;
               setInterfaceThemePreference(option.value, scope);
-              onSelect?.(label);
+              onSelect?.(fullLabel);
             }}
             className={`flex h-8 w-full items-center justify-between rounded-lg px-2.5 text-xs font-medium transition-colors ${
               active
@@ -399,21 +421,78 @@ function InterfaceThemeSegment({
   );
 }
 
+function LanguageSegment({ settings, onSelect }: { settings?: Partial<SystemSettings>; onSelect?: () => void }) {
+  const { t, i18n } = useTranslation();
+  const enabledLocales = useMemo(() => getEnabledLocales(settings), [settings]);
+  const [currentLocale, setCurrentLocale] = useState<SupportedLocale>(() => normalizeLocale(i18n.language));
+
+  useEffect(() => {
+    const handleLanguageChanged = (language: string) => setCurrentLocale(normalizeLocale(language));
+    i18n.on('languageChanged', handleLanguageChanged);
+    handleLanguageChanged(i18n.language);
+    return () => i18n.off('languageChanged', handleLanguageChanged);
+  }, [i18n]);
+
+  if (enabledLocales.length <= 1) return null;
+
+  return (
+    <div className="space-y-0.5">
+      {enabledLocales.map((locale) => {
+        const active = currentLocale === locale;
+        const label = t(getLocaleLabelKey(locale));
+        return (
+          <button
+            key={locale}
+            type="button"
+            aria-pressed={active}
+            onClick={() => {
+              if (active) {
+                onSelect?.();
+                return;
+              }
+              void changeAppLanguage(locale);
+              onSelect?.();
+            }}
+            className={`flex h-8 w-full items-center justify-between rounded-lg px-2.5 text-xs font-medium transition-colors ${
+              active
+                ? 'bg-surface-container-highest/45 text-on-surface'
+                : 'text-on-surface-variant hover:bg-surface-container-highest/25 hover:text-on-surface'
+            }`}
+          >
+            <span>{label}</span>
+            <span
+              className={`flex h-4 w-4 items-center justify-center text-primary-container transition-opacity ${
+                active ? 'opacity-100' : 'opacity-0'
+              }`}
+              aria-hidden="true"
+            >
+              <Icon name="check" size={13} />
+            </span>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
 function ThemeToggle({
   showTooltip = true,
   showInterfaceThemePreference = false,
   interfaceThemeScope = 'public',
+  settings,
 }: {
   showTooltip?: boolean;
   showInterfaceThemePreference?: boolean;
   interfaceThemeScope?: InterfaceThemePreferenceScope;
+  settings?: Partial<SystemSettings>;
 }) {
+  const { t } = useTranslation();
   const [open, setOpen] = useState(false);
   const theme = useThemeStore((state) => state.theme);
   const toggleTheme = useThemeStore((state) => state.toggleTheme);
   const { toast } = useToast();
   const ref = useRef<HTMLDivElement>(null);
-  const label = '显示设置';
+  const label = t('theme.displaySettings');
 
   useEffect(() => {
     if (!open) return;
@@ -425,15 +504,20 @@ function ThemeToggle({
   }, [open]);
 
   const setDisplayMode = (mode: 'light' | 'dark') => {
-    if (theme === mode) return;
+    if (theme === mode) {
+      setOpen(false);
+      return;
+    }
     if (theme !== mode) toggleTheme();
-    toast(mode === 'dark' ? '已切换为深色模式' : '已切换为浅色模式', 'success');
+    toast(mode === 'dark' ? t('theme.switchedToDark') : t('theme.switchedToLight'), 'success');
+    setOpen(false);
   };
 
   const displayModes = [
-    { value: 'light' as const, label: '浅色', icon: 'light_mode' },
-    { value: 'dark' as const, label: '深色', icon: 'dark_mode' },
+    { value: 'light' as const, label: t('theme.light'), icon: 'light_mode' },
+    { value: 'dark' as const, label: t('theme.dark'), icon: 'dark_mode' },
   ];
+  const enabledLocales = getEnabledLocales(settings);
 
   return (
     <div ref={ref} className="relative">
@@ -472,7 +556,9 @@ function ThemeToggle({
             className="absolute right-0 top-full z-[120] pt-2"
           >
             <div className="w-52 overflow-hidden rounded-xl border border-outline-variant/12 bg-surface/95 p-1.5 shadow-dropdown backdrop-blur-xl">
-              <div className="px-2 pb-1 pt-1 text-[11px] font-medium text-on-surface-variant/55">显示</div>
+              <div className="px-2 pb-1 pt-1 text-[11px] font-medium text-on-surface-variant/55">
+                {t('theme.display')}
+              </div>
               <div className="space-y-0.5">
                 {displayModes.map((mode) => {
                   const active = theme === mode.value;
@@ -507,13 +593,25 @@ function ThemeToggle({
 
               {showInterfaceThemePreference ? (
                 <div className="mt-1.5 border-t border-outline-variant/10 pt-1.5">
-                  <div className="px-2 pb-1 text-[11px] font-medium text-on-surface-variant/55">界面</div>
+                  <div className="px-2 pb-1 text-[11px] font-medium text-on-surface-variant/55">
+                    {t('common.interface')}
+                  </div>
                   <InterfaceThemeSegment
                     scope={interfaceThemeScope}
                     onSelect={(nextLabel) => {
-                      toast(`界面风格已切换为${nextLabel}`, 'success');
+                      toast(t('theme.switchedToTheme', { label: nextLabel }), 'success');
+                      setOpen(false);
                     }}
                   />
+                </div>
+              ) : null}
+
+              {enabledLocales.length > 1 ? (
+                <div className="mt-1.5 border-t border-outline-variant/10 pt-1.5">
+                  <div className="px-2 pb-1 text-[11px] font-medium text-on-surface-variant/55">
+                    {t('common.language')}
+                  </div>
+                  <LanguageSegment settings={settings} onSelect={() => setOpen(false)} />
                 </div>
               ) : null}
             </div>
@@ -545,6 +643,7 @@ export default function TopNav({ source = 'standalone', ...props }: TopNavProps)
 }
 
 function TopNavContent({ compact = false, onMenuToggle, source = 'standalone' }: TopNavProps) {
+  const { t } = useTranslation();
   const [uploadOpen, setUploadOpen] = useState(false);
   const [desktopSearchOpen, setDesktopSearchOpen] = useState(false);
   const user = useAuthStore((state) => state.user);
@@ -571,10 +670,13 @@ function TopNavContent({ compact = false, onMenuToggle, source = 'standalone' }:
   const { userNavItems, adminNavItems } = useMemo(() => {
     const business = getBusinessConfig(settings);
     return {
-      userNavItems: business.userNav,
-      adminNavItems: business.adminNav.filter((item) => item.path.startsWith('/admin/')),
+      userNavItems: localizeNavItems(business.userNav, t),
+      adminNavItems: localizeNavItems(
+        business.adminNav.filter((item) => item.path.startsWith('/admin/')),
+        t,
+      ),
     };
-  }, [settings]);
+  }, [settings, t]);
   const topNavItems = useMemo(() => userNavItems.filter((item) => item.path !== '/'), [userNavItems]);
   const isAdminRoute = location.pathname === '/admin' || location.pathname.startsWith('/admin/');
   const ThemePackage = getInterfaceThemePackage(isAdminRoute ? resolvedAdminTheme : resolvedPublicTheme);
@@ -780,7 +882,11 @@ function TopNavContent({ compact = false, onMenuToggle, source = 'standalone' }:
     </Link>
   );
 
-  const renderSearch = (className: string, inputRef?: Ref<HTMLInputElement>, placeholder = '搜索模型、规格...') => (
+  const renderSearch = (
+    className: string,
+    inputRef?: Ref<HTMLInputElement>,
+    placeholder = t('topNav.searchModelsAndSpecs'),
+  ) => (
     <SearchField
       formProps={{ onSubmit: handleSearchSubmit }}
       inputProps={{
@@ -820,13 +926,13 @@ function TopNavContent({ compact = false, onMenuToggle, source = 'standalone' }:
             type="button"
             onClick={() => setDesktopSearchOpen((value) => !value)}
             className="p-2 text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high rounded-lg transition-colors"
-            aria-label="搜索"
+            aria-label={t('common.search')}
             aria-haspopup="dialog"
             aria-expanded={desktopSearchOpen}
           >
             <Icon name="search" size={20} />
           </button>,
-          '搜索',
+          t('common.search'),
         )}
         <AnimatePresence>
           {desktopSearchOpen && (
@@ -859,11 +965,11 @@ function TopNavContent({ compact = false, onMenuToggle, source = 'standalone' }:
             onPointerDown={preloadUploadModal}
             onFocus={preloadUploadModal}
             className="p-2 text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high rounded-lg transition-colors"
-            aria-label="上传模型"
+            aria-label={t('topNav.uploadModel')}
           >
             <Icon name="cloud_upload" size={20} />
           </button>,
-          '上传模型',
+          t('topNav.uploadModel'),
         )}
       {desktopSearchTool}
       <NotificationPanelLoader onLoginClick={() => openAuthEntry(getReturnPath())} showTooltip={showDesktopTooltips} />
@@ -871,6 +977,7 @@ function TopNavContent({ compact = false, onMenuToggle, source = 'standalone' }:
         showTooltip={showDesktopTooltips}
         showInterfaceThemePreference={isAdminRoute || isUserInterfaceThemeEnabled(settings)}
         interfaceThemeScope={isAdminRoute ? 'admin' : 'public'}
+        settings={settings}
       />
       <UserMenu
         adminDefaultPath={adminDefaultPath}
@@ -898,7 +1005,7 @@ function TopNavContent({ compact = false, onMenuToggle, source = 'standalone' }:
             <button
               onClick={() => onMenuToggle?.()}
               className="flex h-9 w-9 shrink-0 items-center justify-center rounded-sm text-primary-container transition-colors hover:bg-surface-container-high hover:text-on-surface"
-              aria-label="打开菜单"
+              aria-label={t('topNav.menu')}
               data-tooltip-ignore
             >
               <Icon name="menu" size={22} />
@@ -925,7 +1032,7 @@ function TopNavContent({ compact = false, onMenuToggle, source = 'standalone' }:
             </Link>
             <div className="ml-auto flex h-9 shrink-0 items-center gap-0.5">
               <NotificationPanelLoader compact onLoginClick={() => openAuthEntry(getReturnPath())} />
-              <ThemeToggle />
+              <ThemeToggle settings={settings} />
               <UserMenu
                 size="compact"
                 adminDefaultPath={adminDefaultPath}
@@ -956,7 +1063,7 @@ function TopNavContent({ compact = false, onMenuToggle, source = 'standalone' }:
                 }}
                 value={localQuery}
                 onClear={handleClearSearch}
-                placeholder="搜索模型..."
+                placeholder={t('topNav.searchModels')}
                 className="!h-10 !rounded-sm !px-2.5"
                 inputClassName="!text-base"
               />

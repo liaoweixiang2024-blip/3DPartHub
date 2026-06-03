@@ -1,5 +1,6 @@
 import { motion, AnimatePresence } from 'framer-motion';
 import { useState, memo } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Link, useParams, useNavigate } from 'react-router-dom';
 import useSWR from 'swr';
 import { projectApi, type Project, type ProjectModel } from '../api/projects';
@@ -43,16 +44,19 @@ const ModelRow = memo(function ModelRow({ model }: { model: ProjectModel }) {
 });
 
 function ProjectDetailLoadingState() {
+  const { t } = useTranslation();
+
   return (
     <AdminPageShell mobileContentClassName="p-4 pb-20">
       <div className="mx-auto flex min-h-[360px] w-full max-w-6xl">
-        <PageRefreshIndicator label="项目详情刷新中" />
+        <PageRefreshIndicator label={t('projects.detailLoading')} />
       </div>
     </AdminPageShell>
   );
 }
 
 function EditModal({ project, onClose, onSaved }: { project: Project; onClose: () => void; onSaved: () => void }) {
+  const { t } = useTranslation();
   const [name, setName] = useState(project.name);
   const [desc, setDesc] = useState(project.description || '');
   const [saving, setSaving] = useState(false);
@@ -63,11 +67,11 @@ function EditModal({ project, onClose, onSaved }: { project: Project; onClose: (
     setSaving(true);
     try {
       await projectApi.update(project.id, { name: name.trim(), description: desc.trim() || undefined });
-      toast('项目已更新', 'success');
+      toast(t('projects.updated'), 'success');
       onSaved();
       onClose();
     } catch {
-      toast('更新失败', 'error');
+      toast(t('projects.updateFailed'), 'error');
     } finally {
       setSaving(false);
     }
@@ -90,10 +94,10 @@ function EditModal({ project, onClose, onSaved }: { project: Project; onClose: (
         className="bg-surface-container-low rounded-t-lg sm:rounded-lg w-full max-w-md p-4 sm:p-6 shadow-2xl border border-outline-variant/20 max-h-[calc(100dvh-1.5rem)] overflow-y-auto"
         onClick={(e) => e.stopPropagation()}
       >
-        <h2 className="text-lg font-headline font-bold text-on-surface mb-4">编辑项目</h2>
+        <h2 className="text-lg font-headline font-bold text-on-surface mb-4">{t('projects.editProject')}</h2>
         <div className="space-y-4">
           <div>
-            <label className="block text-xs text-on-surface-variant mb-1">项目名称</label>
+            <label className="block text-xs text-on-surface-variant mb-1">{t('projects.name')}</label>
             <input
               value={name}
               onChange={(e) => setName(e.target.value)}
@@ -101,7 +105,7 @@ function EditModal({ project, onClose, onSaved }: { project: Project; onClose: (
             />
           </div>
           <div>
-            <label className="block text-xs text-on-surface-variant mb-1">描述</label>
+            <label className="block text-xs text-on-surface-variant mb-1">{t('projects.description')}</label>
             <textarea
               value={desc}
               onChange={(e) => setDesc(e.target.value)}
@@ -110,14 +114,14 @@ function EditModal({ project, onClose, onSaved }: { project: Project; onClose: (
           </div>
           <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-3">
             <button onClick={onClose} className="px-4 py-2 text-sm text-on-surface-variant hover:text-on-surface">
-              取消
+              {t('common.cancel')}
             </button>
             <button
               onClick={handleSave}
               disabled={saving || !name.trim()}
               className="bg-primary-container text-on-primary rounded-sm px-4 py-2 text-sm font-medium hover:opacity-90 disabled:opacity-50"
             >
-              {saving ? '保存中...' : '保存'}
+              {saving ? t('projects.saving') : t('projects.save')}
             </button>
           </div>
         </div>
@@ -127,8 +131,9 @@ function EditModal({ project, onClose, onSaved }: { project: Project; onClose: (
 }
 
 export default function ProjectDetailPage() {
+  const { t } = useTranslation();
   const { id } = useParams();
-  useDocumentTitle('项目详情');
+  useDocumentTitle(t('projects.title'));
   const navigate = useNavigate();
   const user = useAuthStore((s) => s.user);
   const [showEdit, setShowEdit] = useState(false);
@@ -143,10 +148,10 @@ export default function ProjectDetailPage() {
     if (!project) return;
     try {
       await projectApi.delete(project.id);
-      toast('项目已删除', 'success');
+      toast(t('projects.deleted'), 'success');
       navigate('/projects');
     } catch {
-      toast('删除失败', 'error');
+      toast(t('projects.deleteFailed'), 'error');
     }
   };
 
@@ -155,9 +160,9 @@ export default function ProjectDetailPage() {
     try {
       await projectApi.removeMember(id, userId);
       mutate();
-      toast('成员已移除', 'success');
+      toast(t('projects.removedMember'), 'success');
     } catch {
-      toast('移除失败', 'error');
+      toast(t('projects.removeFailed'), 'error');
     }
   };
 
@@ -165,9 +170,9 @@ export default function ProjectDetailPage() {
     return (
       <div className="flex flex-col items-center justify-center h-dvh bg-surface gap-4">
         <Icon name="search_off" size={64} className="text-on-surface-variant" />
-        <PageTitle>加载失败</PageTitle>
+        <PageTitle>{t('projects.loadFailed')}</PageTitle>
         <Link to="/projects" className="text-primary hover:underline">
-          返回项目列表
+          {t('projects.backToList')}
         </Link>
       </div>
     );
@@ -182,11 +187,11 @@ export default function ProjectDetailPage() {
       <div className="max-w-6xl mx-auto">
         <div className="flex items-center gap-2 text-sm mb-4 overflow-x-auto scrollbar-hidden">
           <Link to="/" className="text-on-surface-variant hover:text-on-surface shrink-0">
-            首页
+            {t('projects.home')}
           </Link>
           <Icon name="chevron_right" size={12} className="text-on-surface-variant/40 shrink-0" />
           <Link to="/projects" className="text-on-surface-variant hover:text-on-surface shrink-0">
-            项目
+            {t('projects.title')}
           </Link>
           <Icon name="chevron_right" size={12} className="text-on-surface-variant/40 shrink-0" />
           <span className="text-primary font-medium truncate">{project.name}</span>
@@ -198,22 +203,22 @@ export default function ProjectDetailPage() {
           </div>
           <div className="flex items-center justify-between sm:justify-end gap-3">
             <div className="text-xs text-on-surface-variant text-right">
-              <div>{project._count.models} 个模型</div>
-              <div>{project.members.length} 个成员</div>
+              <div>{t('projects.modelCount', { count: project._count.models })}</div>
+              <div>{t('projects.memberCount', { count: project.members.length })}</div>
             </div>
             {isOwner && (
               <div className="flex gap-1.5">
                 <button
                   onClick={() => setShowEdit(true)}
                   className="p-2 text-on-surface-variant hover:text-primary transition-colors rounded-sm hover:bg-surface-container-high"
-                  title="编辑项目"
+                  title={t('projects.editProject')}
                 >
                   <Icon name="edit" size={18} />
                 </button>
                 <button
                   onClick={() => setDeleteConfirm(true)}
                   className="p-2 text-on-surface-variant hover:text-error transition-colors rounded-sm hover:bg-surface-container-high"
-                  title="删除项目"
+                  title={t('projects.deleteProject')}
                 >
                   <Icon name="delete_outline" size={18} />
                 </button>
@@ -231,13 +236,13 @@ export default function ProjectDetailPage() {
               exit={{ opacity: 0, height: 0 }}
               className="mb-4 bg-error/10 border border-error/30 rounded-sm p-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between overflow-hidden"
             >
-              <p className="text-sm text-on-surface">确认删除此项目？此操作不可撤销。</p>
+              <p className="text-sm text-on-surface">{t('projects.deleteInlineConfirm')}</p>
               <div className="flex gap-2">
                 <button onClick={() => setDeleteConfirm(false)} className="px-3 py-1.5 text-xs text-on-surface-variant">
-                  取消
+                  {t('common.cancel')}
                 </button>
                 <button onClick={handleDelete} className="px-3 py-1.5 text-xs bg-error text-on-error rounded-sm">
-                  确认删除
+                  {t('projects.confirmDelete')}
                 </button>
               </div>
             </motion.div>
@@ -246,7 +251,9 @@ export default function ProjectDetailPage() {
 
         {/* Members */}
         <div className="mb-6">
-          <h2 className="text-xs uppercase tracking-widest text-on-surface-variant font-medium mb-3">成员</h2>
+          <h2 className="text-xs uppercase tracking-widest text-on-surface-variant font-medium mb-3">
+            {t('projects.members')}
+          </h2>
           <div className="flex flex-wrap gap-2">
             {project.members.map((m) => (
               <div
@@ -264,7 +271,7 @@ export default function ProjectDetailPage() {
                   <button
                     onClick={() => handleRemoveMember(m.userId)}
                     className="text-on-surface-variant/30 hover:text-error transition-colors ml-1 opacity-0 group-hover:opacity-100"
-                    title="移除成员"
+                    title={t('projects.removeMember')}
                   >
                     <Icon name="close" size={12} />
                   </button>
@@ -276,7 +283,9 @@ export default function ProjectDetailPage() {
 
         {/* Models */}
         <div>
-          <h2 className="text-xs uppercase tracking-widest text-on-surface-variant font-medium mb-3">模型列表</h2>
+          <h2 className="text-xs uppercase tracking-widest text-on-surface-variant font-medium mb-3">
+            {t('projects.modelList')}
+          </h2>
           {project.models && project.models.length > 0 ? (
             <div className="flex flex-col gap-2">
               {project.models.map((model) => (
@@ -293,7 +302,7 @@ export default function ProjectDetailPage() {
           ) : (
             <div className="flex flex-col items-center justify-center py-16 gap-3">
               <Icon name="view_in_ar" size={48} className="text-on-surface-variant/20" />
-              <p className="text-sm text-on-surface-variant">项目中还没有模型</p>
+              <p className="text-sm text-on-surface-variant">{t('projects.noModels')}</p>
             </div>
           )}
         </div>

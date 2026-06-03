@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react';
+import { useTranslation } from 'react-i18next';
 import Icon from './Icon';
 
 interface InfiniteLoadTriggerProps {
@@ -17,12 +18,16 @@ export default function InfiniteLoadTrigger({
   isLoading,
   onLoadMore,
   className = '',
-  label = '加载更多',
-  idleLabel = '继续滚动自动加载',
-  loadingLabel = '加载中...',
+  label,
+  idleLabel,
+  loadingLabel,
   buttonless = false,
 }: InfiniteLoadTriggerProps) {
+  const { t } = useTranslation();
   const ref = useRef<HTMLDivElement | null>(null);
+  const visibleLabel = label ?? t('infiniteLoad.more');
+  const visibleIdleLabel = idleLabel === undefined ? t('infiniteLoad.idle') : idleLabel;
+  const visibleLoadingLabel = loadingLabel ?? t('infiniteLoad.loading');
 
   useEffect(() => {
     if (!hasMore || isLoading) return;
@@ -42,7 +47,7 @@ export default function InfiniteLoadTrigger({
   if (!hasMore && !isLoading) return null;
 
   if (buttonless) {
-    const showIdleLabel = idleLabel !== null;
+    const showIdleLabel = visibleIdleLabel !== null;
     const showStatus = isLoading || showIdleLabel;
 
     return (
@@ -56,7 +61,7 @@ export default function InfiniteLoadTrigger({
         {showStatus ? (
           <span className="inline-flex items-center gap-2 rounded-full bg-surface-container-low px-3 py-1 text-[11px] text-on-surface-variant">
             {isLoading ? <Icon name="autorenew" size={13} className="animate-spin" /> : <Icon name="south" size={13} />}
-            {isLoading ? loadingLabel : idleLabel}
+            {isLoading ? visibleLoadingLabel : visibleIdleLabel}
           </span>
         ) : null}
       </div>
@@ -82,7 +87,7 @@ export default function InfiniteLoadTrigger({
         ) : (
           <Icon name="expand_more" size={14} />
         )}
-        {isLoading ? loadingLabel : label}
+        {isLoading ? visibleLoadingLabel : visibleLabel}
       </button>
     </div>
   );

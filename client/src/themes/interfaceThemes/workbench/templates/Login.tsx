@@ -1,8 +1,10 @@
 import { motion } from 'framer-motion';
+import { useTranslation } from 'react-i18next';
 import type { LoginThemeProps } from '../../types';
 
 export default function WorkbenchLogin({ mode, brand, form, modeSwitch, legalLinks, backLink }: LoginThemeProps) {
-  const heading = mode === 'login' ? '登录您的账户' : '注册新账户';
+  const { t } = useTranslation();
+  const heading = mode === 'login' ? t('auth.loginHeading') : t('auth.registerHeading');
 
   return (
     <div className="workbench-auth-page flex-1 overflow-hidden bg-surface">

@@ -1,4 +1,5 @@
 import { type RefObject } from 'react';
+import { useTranslation } from 'react-i18next';
 import Icon from '../shared/Icon';
 
 const btnBase =
@@ -77,6 +78,7 @@ export default function ProductWallActionMenu({
   onClearSelection,
   onOpenManagement,
 }: ActionMenuProps) {
+  const { t } = useTranslation();
   const openUpload = () => {
     setManageMenuOpen(false);
     fileInputRef.current?.click();
@@ -86,35 +88,42 @@ export default function ProductWallActionMenu({
     <>
       <MenuItem
         icon={wallEditMode ? 'close' : 'edit'}
-        label={wallEditMode ? '退出编辑' : '编辑'}
+        label={wallEditMode ? t('productWall.actions.exitEdit') : t('productWall.actions.edit')}
         disabled={!selectableVisibleItems.length}
         onClick={onToggleEditMode}
       />
       <MenuItem
         icon={selectionMode ? 'close' : 'delete'}
-        label={selectionMode ? '退出批量' : '批量删除'}
+        label={selectionMode ? t('productWall.actions.exitBatch') : t('productWall.actions.batchDelete')}
         disabled={!selectableVisibleItems.length}
         onClick={onToggleSelectionMode}
       />
       {selectionMode && (
         <>
           <MenuDivider />
-          <MenuItem icon="check" label="全选当前" disabled={!selectableVisibleItems.length} onClick={onSelectAll} />
+          <MenuItem
+            icon="check"
+            label={t('productWall.actions.selectCurrent')}
+            disabled={!selectableVisibleItems.length}
+            onClick={onSelectAll}
+          />
           <MenuItem
             icon="delete"
-            label={`删除已选${selectedCount ? ` (${selectedCount})` : ''}`}
+            label={t('productWall.actions.deleteSelected', {
+              suffix: selectedCount ? ` (${selectedCount})` : '',
+            })}
             disabled={!selectedCount}
             danger
             onClick={onDeleteSelected}
           />
-          <MenuItem icon="close" label="取消选择" onClick={onClearSelection} />
+          <MenuItem icon="close" label={t('productWall.actions.clearSelection')} onClick={onClearSelection} />
         </>
       )}
       <MenuDivider />
-      <MenuItem icon="settings" label="图片管理" onClick={onOpenManagement} />
+      <MenuItem icon="settings" label={t('productWall.actions.imageManagement')} onClick={onOpenManagement} />
       <MenuItem
         icon="folder"
-        label="上传文件夹"
+        label={t('productWall.actions.uploadFolder')}
         disabled={uploadDisabled}
         onClick={() => {
           setManageMenuOpen(false);
@@ -124,7 +133,6 @@ export default function ProductWallActionMenu({
     </>
   );
 
-  // Mobile: single more button → bottom sheet
   if (variant === 'mobile') {
     return (
       <div
@@ -138,7 +146,7 @@ export default function ProductWallActionMenu({
           className={`${btnBase} bg-primary-container/12 px-3 font-semibold text-primary-container hover:bg-primary-container/18 disabled:opacity-55`}
         >
           <Icon name={uploading ? 'sync' : 'cloud_upload'} size={16} />
-          上传
+          {t('productWall.actions.upload')}
         </button>
         {isAdmin && (
           <>
@@ -148,7 +156,7 @@ export default function ProductWallActionMenu({
               className={`${btnBase} border border-outline-variant/24 px-3 text-on-surface hover:bg-surface-container-high`}
             >
               <Icon name="settings" size={16} />
-              后台
+              {t('productWall.actions.admin')}
             </button>
             {manageMenuOpen && (
               <div className="fixed inset-x-4 bottom-[calc(5rem+env(safe-area-inset-bottom))] z-[10001] overflow-hidden rounded-xl border border-outline-variant/14 bg-surface shadow-elevated">
@@ -161,7 +169,6 @@ export default function ProductWallActionMenu({
     );
   }
 
-  // Desktop: flat toolbar with dividers
   return (
     <div className="hidden items-center justify-end gap-1 border-l border-outline-variant/16 pl-3 md:flex">
       <button
@@ -169,14 +176,13 @@ export default function ProductWallActionMenu({
         disabled={uploadDisabled}
         onClick={openUpload}
         className={`${btnBase} bg-primary-container/12 px-3 font-semibold text-primary-container hover:bg-primary-container/18 disabled:opacity-55`}
-        aria-label="上传"
+        aria-label={t('productWall.actions.upload')}
         data-tooltip-ignore
       >
         <Icon name={uploading ? 'sync' : 'cloud_upload'} size={16} />
-        上传
+        {t('productWall.actions.upload')}
       </button>
 
-      {/* 管理员操作 */}
       {isAdmin && (
         <>
           <div className={divider} />
@@ -188,7 +194,7 @@ export default function ProductWallActionMenu({
               data-tooltip-ignore
             >
               <Icon name="settings" size={16} />
-              后台
+              {t('productWall.actions.admin')}
             </button>
             {manageMenuOpen && (
               <div className="absolute right-0 top-11 z-30 w-44 overflow-hidden rounded-md border border-outline-variant/18 bg-surface shadow-dialog">

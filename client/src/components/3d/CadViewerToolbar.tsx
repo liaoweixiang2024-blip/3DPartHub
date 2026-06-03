@@ -1,5 +1,6 @@
 import { AnimatePresence, motion } from 'framer-motion';
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { getPublicSettingsSnapshot } from '../../lib/publicSettings';
 import Icon from '../shared/Icon';
 import type { CameraPreset, ViewMode } from './ModelViewer';
@@ -122,6 +123,7 @@ function ClipControl({
   | 'onToggleClipInverted'
   | 'onResetClip'
 > & { compact?: boolean }) {
+  const { t } = useTranslation();
   const range = clipRange || { min: -2, max: 2, step: 0.01 };
   const labelValue = Math.abs(range.step) >= 1 ? clipPosition.toFixed(0) : clipPosition.toFixed(2);
 
@@ -131,7 +133,11 @@ function ClipControl({
       onClick={(event) => event.stopPropagation()}
       onPointerDown={(event) => event.stopPropagation()}
     >
-      {!compact && <span className="text-[10px] text-on-surface-variant uppercase tracking-wider">剖面方向</span>}
+      {!compact && (
+        <span className="text-[10px] text-on-surface-variant uppercase tracking-wider">
+          {t('viewer.toolbar.clipDirection')}
+        </span>
+      )}
       <div className="flex gap-1">
         {(['x', 'y', 'z'] as const).map((direction) => (
           <button
@@ -149,7 +155,11 @@ function ClipControl({
         ))}
       </div>
       <div className="mt-1 flex items-center justify-between gap-2">
-        {!compact && <span className="text-[10px] text-on-surface-variant uppercase tracking-wider">剖面位置</span>}
+        {!compact && (
+          <span className="text-[10px] text-on-surface-variant uppercase tracking-wider">
+            {t('viewer.toolbar.clipPosition')}
+          </span>
+        )}
         <span className="ml-auto font-mono text-[10px] text-on-surface-variant">{labelValue}</span>
       </div>
       <input
@@ -173,7 +183,7 @@ function ClipControl({
                   : 'border-outline-variant/20 text-on-surface-variant hover:text-on-surface'
               }`}
             >
-              反向
+              {t('viewer.toolbar.invert')}
             </button>
           )}
           {onResetClip && (
@@ -182,7 +192,7 @@ function ClipControl({
               onClick={onResetClip}
               className="rounded-sm border border-outline-variant/20 px-2 py-1 text-[10px] text-on-surface-variant transition-colors hover:text-on-surface"
             >
-              归中
+              {t('viewer.toolbar.resetClip')}
             </button>
           )}
         </div>
@@ -202,6 +212,7 @@ function ExplodeControl({
   onExplodeAmountChange?: (amount: number) => void;
   onResetExplode?: () => void;
 }) {
+  const { t } = useTranslation();
   return (
     <div
       className={`micro-glass rounded-sm flex flex-col gap-1.5 ${compact ? 'p-2 min-w-[144px]' : 'p-3'}`}
@@ -209,7 +220,11 @@ function ExplodeControl({
       onPointerDown={(event) => event.stopPropagation()}
     >
       <div className="flex items-center justify-between gap-2">
-        {!compact && <span className="text-[10px] text-on-surface-variant uppercase tracking-wider">爆炸比例</span>}
+        {!compact && (
+          <span className="text-[10px] text-on-surface-variant uppercase tracking-wider">
+            {t('viewer.toolbar.explodeAmount')}
+          </span>
+        )}
         <span className="ml-auto font-mono text-[10px] text-on-surface-variant">{explodeAmount.toFixed(1)}x</span>
       </div>
       <input
@@ -220,14 +235,14 @@ function ExplodeControl({
         value={explodeAmount}
         onChange={(event) => onExplodeAmountChange?.(parseFloat(event.target.value))}
         className={`${compact ? 'w-full' : 'w-24'} accent-primary-container`}
-        aria-label="爆炸比例"
+        aria-label={t('viewer.toolbar.explodeAmount')}
       />
       <button
         type="button"
         onClick={onResetExplode}
         className="rounded-sm border border-outline-variant/20 px-2 py-1 text-[10px] text-on-surface-variant transition-colors hover:text-on-surface"
       >
-        恢复
+        {t('viewer.toolbar.resetExplode')}
       </button>
     </div>
   );
@@ -242,6 +257,7 @@ function MaterialPresetMenu({
   active: MaterialPresetKey;
   onSelect: (preset: MaterialPresetKey) => void;
 }) {
+  const { t } = useTranslation();
   return (
     <div
       className="micro-glass flex min-w-[138px] flex-col gap-1 rounded-sm p-1.5"
@@ -260,7 +276,7 @@ function MaterialPresetMenu({
           }`}
         >
           <Icon name={preset.icon} size={14} />
-          <span className="truncate">{preset.label}</span>
+          <span className="truncate">{t(`viewer.material.${preset.key}`, { defaultValue: preset.label })}</span>
         </button>
       ))}
     </div>
@@ -268,6 +284,7 @@ function MaterialPresetMenu({
 }
 
 export default function CadViewerToolbar(props: CadViewerToolbarProps) {
+  const { t } = useTranslation();
   const {
     variant,
     isAdmin,
@@ -320,7 +337,7 @@ export default function CadViewerToolbar(props: CadViewerToolbarProps) {
           <ToolbarButton
             compact
             icon="straighten"
-            label="尺寸标注"
+            label={t('viewer.toolbar.dimensions')}
             size={14}
             tooltipSide="left"
             active={showDimensions}
@@ -329,7 +346,7 @@ export default function CadViewerToolbar(props: CadViewerToolbarProps) {
           <ToolbarButton
             compact
             icon="content_cut"
-            label="剖面"
+            label={t('viewer.toolbar.clip')}
             size={14}
             tooltipSide="left"
             active={clipEnabled}
@@ -338,7 +355,7 @@ export default function CadViewerToolbar(props: CadViewerToolbarProps) {
           <ToolbarButton
             compact
             icon="restart_alt"
-            label="重置显示"
+            label={t('viewer.toolbar.resetDisplay')}
             size={14}
             tooltipSide="left"
             onClick={onResetDisplay}
@@ -346,7 +363,7 @@ export default function CadViewerToolbar(props: CadViewerToolbarProps) {
           <ToolbarButton
             compact
             icon="diamond"
-            label="实体边线"
+            label={t('viewer.toolbar.edges')}
             size={14}
             tooltipSide="left"
             active={showEdges}
@@ -355,7 +372,7 @@ export default function CadViewerToolbar(props: CadViewerToolbarProps) {
           <ToolbarButton
             compact
             icon="opacity"
-            label="透明"
+            label={t('viewer.toolbar.transparent')}
             size={14}
             tooltipSide="left"
             active={activeView === 'transparent'}
@@ -365,14 +382,21 @@ export default function CadViewerToolbar(props: CadViewerToolbarProps) {
             <ToolbarButton
               compact
               icon="photo_camera"
-              label="截图下载"
+              label={t('viewer.toolbar.screenshot')}
               size={14}
               tooltipSide="left"
               onClick={onScreenshot}
             />
           )}
           {onFullscreen && (
-            <ToolbarButton compact icon="fullscreen" label="全屏" size={14} tooltipSide="left" onClick={onFullscreen} />
+            <ToolbarButton
+              compact
+              icon="fullscreen"
+              label={t('viewer.toolbar.fullscreen')}
+              size={14}
+              tooltipSide="left"
+              onClick={onFullscreen}
+            />
           )}
         </div>
 
@@ -406,7 +430,7 @@ export default function CadViewerToolbar(props: CadViewerToolbarProps) {
           <ToolbarButton
             key={angle.key}
             icon={angle.icon}
-            label={angle.label}
+            label={t(`viewer.camera.${angle.key}`, { defaultValue: angle.label })}
             size={20}
             tooltipSide="bottom"
             active={activeCamera === angle.key}
@@ -414,7 +438,13 @@ export default function CadViewerToolbar(props: CadViewerToolbarProps) {
           />
         ))}
         <div className="h-6 w-px bg-outline-variant/30 mx-0.5" />
-        <ToolbarButton icon="locate_fixed" label="适配视图" size={20} tooltipSide="bottom" onClick={dispatchFitModel} />
+        <ToolbarButton
+          icon="locate_fixed"
+          label={t('viewer.camera.fit')}
+          size={20}
+          tooltipSide="bottom"
+          onClick={dispatchFitModel}
+        />
       </div>
 
       <div
@@ -427,7 +457,7 @@ export default function CadViewerToolbar(props: CadViewerToolbarProps) {
             <ToolbarButton
               key={mode.key}
               icon={mode.icon}
-              label={mode.label}
+              label={t(`viewer.viewMode.${mode.key}`, { defaultValue: mode.label })}
               size={18}
               tooltipSide="left"
               active={activeView === mode.key}
@@ -437,7 +467,7 @@ export default function CadViewerToolbar(props: CadViewerToolbarProps) {
           <div className="w-full h-px bg-outline-variant/30 my-0.5" />
           <ToolbarButton
             icon="straighten"
-            label="尺寸标注"
+            label={t('viewer.toolbar.dimensions')}
             size={18}
             tooltipSide="left"
             active={showDimensions}
@@ -445,7 +475,7 @@ export default function CadViewerToolbar(props: CadViewerToolbarProps) {
           />
           <ToolbarButton
             icon="diamond"
-            label="实体边线"
+            label={t('viewer.toolbar.edges')}
             size={18}
             tooltipSide="left"
             active={showEdges}
@@ -453,21 +483,33 @@ export default function CadViewerToolbar(props: CadViewerToolbarProps) {
           />
           <ToolbarButton
             icon="content_cut"
-            label="剖面查看"
+            label={t('viewer.toolbar.clipView')}
             size={18}
             tooltipSide="left"
             active={clipEnabled}
             onClick={onToggleClip}
           />
-          <ToolbarButton icon="restart_alt" label="重置显示" size={18} tooltipSide="left" onClick={onResetDisplay} />
+          <ToolbarButton
+            icon="restart_alt"
+            label={t('viewer.toolbar.resetDisplay')}
+            size={18}
+            tooltipSide="left"
+            onClick={onResetDisplay}
+          />
           {onFullscreen && (
-            <ToolbarButton icon="fullscreen" label="全屏" size={18} tooltipSide="left" onClick={onFullscreen} />
+            <ToolbarButton
+              icon="fullscreen"
+              label={t('viewer.toolbar.fullscreen')}
+              size={18}
+              tooltipSide="left"
+              onClick={onFullscreen}
+            />
           )}
           <div className="w-full h-px bg-outline-variant/30 my-0.5" />
           {onToggleMeasurement && (
             <ToolbarButton
               icon="compass"
-              label="测量工具"
+              label={t('viewer.toolbar.measurement')}
               size={18}
               tooltipSide="left"
               active={measurementOpen}
@@ -478,7 +520,7 @@ export default function CadViewerToolbar(props: CadViewerToolbarProps) {
           {visiblePresets.length <= 1 ? (
             <ToolbarButton
               icon={activeMaterialPreset.icon}
-              label={activeMaterialPreset.label}
+              label={t(`viewer.material.${activeMaterialPreset.key}`, { defaultValue: activeMaterialPreset.label })}
               size={18}
               tooltipSide="left"
               active={materialPreset === activeMaterialPreset.key}
@@ -487,7 +529,9 @@ export default function CadViewerToolbar(props: CadViewerToolbarProps) {
           ) : (
             <ToolbarButton
               icon={activeMaterialPreset.icon}
-              label={`材质：${activeMaterialPreset.label}`}
+              label={t('viewer.material.label', {
+                name: t(`viewer.material.${activeMaterialPreset.key}`, { defaultValue: activeMaterialPreset.label }),
+              })}
               size={18}
               tooltipSide="left"
               active={materialMenuOpen}
@@ -496,12 +540,18 @@ export default function CadViewerToolbar(props: CadViewerToolbarProps) {
           )}
           <div className="w-full h-px bg-outline-variant/30 my-0.5" />
           {onScreenshot && (
-            <ToolbarButton icon="photo_camera" label="截图下载" size={18} tooltipSide="left" onClick={onScreenshot} />
+            <ToolbarButton
+              icon="photo_camera"
+              label={t('viewer.toolbar.screenshot')}
+              size={18}
+              tooltipSide="left"
+              onClick={onScreenshot}
+            />
           )}
           {isAdmin && onSetThumbnail && (
             <ToolbarButton
               icon="wallpaper"
-              label="设为预览图"
+              label={t('viewer.toolbar.setThumbnail')}
               size={18}
               tooltipSide="left"
               disabled={settingThumbnail}

@@ -85,6 +85,7 @@ rgbeLoader.load('/static/js/potsdamer_platz_1k.hdr', (envMap) => {
   pmremGenerator.dispose();
 
   if (!modelUrl) {
+    window.__error = 'missing model url';
     render();
     window.__done = true;
     return;
@@ -136,13 +137,15 @@ rgbeLoader.load('/static/js/potsdamer_platz_1k.hdr', (envMap) => {
       window.__done = true;
     },
     undefined,
-    () => {
+    (error) => {
+      window.__error = error?.message || 'model load failed';
       render();
       window.__done = true;
     }
   );
 }, undefined, () => {
   if (!modelUrl) {
+    window.__error = 'missing model url';
     render();
     window.__done = true;
     return;
@@ -152,7 +155,8 @@ rgbeLoader.load('/static/js/potsdamer_platz_1k.hdr', (envMap) => {
     scene.add(gltf.scene);
     render();
     window.__done = true;
-  }, undefined, () => {
+  }, undefined, (error) => {
+    window.__error = error?.message || 'model load failed';
     render();
     window.__done = true;
   });

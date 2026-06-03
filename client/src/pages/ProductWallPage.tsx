@@ -9,6 +9,7 @@ import {
   type ClipboardEvent,
   type FormEvent,
 } from 'react';
+import { useTranslation } from 'react-i18next';
 import useSWR from 'swr';
 import '../styles/product-wall.css';
 import {
@@ -81,23 +82,29 @@ type WallItem = ProductWallItem;
 
 type WallFilter = string;
 type ReviewFilter = 'all' | ProductWallStatus;
-type ManagementKindFilter = '全部' | ProductWallKind;
+type ManagementKindFilter = ProductWallKind;
 
 type ProductWallMasonryEntry = {
   imageIndex: number;
   item: WallItem;
 };
 
+const PRODUCT_WALL_ALL_FILTER = '__all__';
+const PRODUCT_WALL_MANAGEMENT_ALL_FILTER = '__all__';
+
 function ProductWallLoadingState() {
+  const { t } = useTranslation();
+
   return (
     <section className="flex min-h-[320px] w-full">
-      <PageRefreshIndicator label="产品图库刷新中" />
+      <PageRefreshIndicator label={t('productWall.loadingLabel')} />
     </section>
   );
 }
 
 export default function ProductWallPage() {
-  useDocumentTitle('产品图库');
+  const { t } = useTranslation();
+  useDocumentTitle(t('productWall.title'));
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const folderInputRef = useRef<HTMLInputElement | null>(null);
   const loadMoreRef = useRef<HTMLButtonElement | null>(null);
@@ -135,9 +142,11 @@ export default function ProductWallPage() {
     isAdmin ? listAdminProductWallCategories : listProductWallCategories,
   );
   const [active, setActive] = useState<WallItem | null>(null);
-  const [filter, setFilter] = useState<WallFilter>('全部');
+  const [filter, setFilter] = useState<WallFilter>(PRODUCT_WALL_ALL_FILTER);
   const [reviewFilter, setReviewFilter] = useState<ReviewFilter>('approved');
-  const [managementKindFilter, setManagementKindFilter] = useState<ManagementKindFilter>('全部');
+  const [managementKindFilter, setManagementKindFilter] = useState<ManagementKindFilter>(
+    PRODUCT_WALL_MANAGEMENT_ALL_FILTER,
+  );
   const {
     value: query,
     draftValue: queryInputValue,
@@ -181,7 +190,7 @@ export default function ProductWallPage() {
   const [deleting, setDeleting] = useState(false);
   const [editTitle, setEditTitle] = useState('');
   const [editDescription, setEditDescription] = useState('');
-  const [editKind, setEditKind] = useState<ProductWallKind>('公司产品');
+  const [editKind, setEditKind] = useState<ProductWallKind>('');
   const [editTags, setEditTags] = useState('');
   const [favoriteIds, setFavoriteIds] = useState<Set<string>>(() => new Set());
   const [shareState, setShareState] = useState<'idle' | 'copied'>('idle');
@@ -194,13 +203,13 @@ export default function ProductWallPage() {
   const databaseCategoryNames = useMemo(() => categoryList.map((item) => item.name).filter(Boolean), [categoryList]);
   const categoryNames = useMemo(() => Array.from(new Set(databaseCategoryNames)), [databaseCategoryNames]);
   const filters = useMemo<WallFilter[]>(
-    () => ['全部', PRODUCT_WALL_FAVORITES_FILTER, ...categoryNames],
+    () => [PRODUCT_WALL_ALL_FILTER, PRODUCT_WALL_FAVORITES_FILTER, ...categoryNames],
     [categoryNames],
   );
   const resolvedDefaultUploadKind = categoryNames.includes(defaultUploadKind)
     ? defaultUploadKind
     : categoryNames[0] || '';
-  const isUtilityFilter = filter === '全部' || filter === PRODUCT_WALL_FAVORITES_FILTER;
+  const isUtilityFilter = filter === PRODUCT_WALL_ALL_FILTER || filter === PRODUCT_WALL_FAVORITES_FILTER;
   const isFavoritesFilter = filter === PRODUCT_WALL_FAVORITES_FILTER;
   const uploadKind = isUtilityFilter ? resolvedDefaultUploadKind : filter;
   const uploadDisabled = uploading || !uploadKind;
@@ -216,7 +225,7 @@ export default function ProductWallPage() {
   const approvedItems = useMemo(() => items.filter((item) => item.status === 'approved'), [items]);
   const visibleItems = useMemo(() => {
     const base =
-      filter === '全部'
+      filter === PRODUCT_WALL_ALL_FILTER
         ? approvedItems
         : filter === PRODUCT_WALL_FAVORITES_FILTER
           ? isLoggedIn
@@ -248,7 +257,9 @@ export default function ProductWallPage() {
   const managementItems = useMemo(() => {
     const byStatus = reviewFilter === 'all' ? items : items.filter((item) => item.status === reviewFilter);
     const byKind =
-      managementKindFilter === '全部' ? byStatus : byStatus.filter((item) => item.kind === managementKindFilter);
+      managementKindFilter === PRODUCT_WALL_MANAGEMENT_ALL_FILTER
+        ? byStatus
+        : byStatus.filter((item) => item.kind === managementKindFilter);
     if (!normalizedManagementQuery) return byKind;
     return byKind.filter((item) =>
       [item.title, item.description || '', item.kind, ...item.tags].some((value) =>
@@ -260,7 +271,7 @@ export default function ProductWallPage() {
     () =>
       filters.reduce<Record<string, number>>((acc, item) => {
         acc[item] =
-          item === '全部'
+          item === PRODUCT_WALL_ALL_FILTER
             ? approvedItems.length
             : item === PRODUCT_WALL_FAVORITES_FILTER
               ? isLoggedIn
@@ -299,7 +310,7 @@ export default function ProductWallPage() {
   const [loginDialogReason, setLoginDialogReason] = useState('');
   const toggleFavoriteItem = async (item: WallItem) => {
     if (!isLoggedIn) {
-      setLoginDialogReason('收藏图片');
+      setLoginDialogReason(t('productWall.aria.favoriteImage'));
       setLoginDialogOpen(true);
       return;
     }
@@ -310,7 +321,7 @@ export default function ProductWallPage() {
       else next.add(item.id);
       return next;
     });
-    toast(wasFavorite ? '已取消收藏' : '已收藏，可在产品图库「我的收藏」查看', 'success');
+    toast(wasFavorite ? t('productWall.toasts.favoriteRemoved') : t('productWall.toasts.favoriteAdded'), 'success');
     try {
       if (wasFavorite) await removeProductWallFavorite(item.id);
       else await addProductWallFavorite(item.id);
@@ -321,7 +332,7 @@ export default function ProductWallPage() {
         else next.delete(item.id);
         return next;
       });
-      toast('收藏操作失败', 'error');
+      toast(t('productWall.toasts.favoriteFailed'), 'error');
     }
   };
   const toggleFavorite = async () => {
@@ -357,20 +368,20 @@ export default function ProductWallPage() {
       try {
         await downloadBrowserFile(item.image, { fileName: productWallDownloadName(item) });
       } catch (err) {
-        toast(errorMessage(err, '下载图片失败'), 'error');
+        toast(errorMessage(err, t('productWall.toasts.downloadFailed')), 'error');
       }
     },
-    [toast],
+    [t, toast],
   );
   const uploadFiles = useCallback(
     async (fileList: FileList | File[], meta?: { title?: string; description?: string }) => {
       if (!canUpload) {
-        setLoginDialogReason('上传图片');
+        setLoginDialogReason(t('productWall.actions.upload'));
         setLoginDialogOpen(true);
         return;
       }
       if (!uploadKind) {
-        toast('请先创建产品图库分类后再上传', 'error');
+        toast(t('productWall.toasts.noCategoryBeforeUpload'), 'error');
         return;
       }
       const title = (meta?.title || '').trim();
@@ -395,11 +406,15 @@ export default function ProductWallPage() {
             .map((file) => `${file.name} ${formatFileSize(file.size)}`)
             .join('、');
           toast(
-            `已跳过 ${oversizedImages.length} 张超过 ${uploadPolicy.productWallImageMaxSizeMb}MB 的图片：${sample}`,
+            t('productWall.toasts.uploadSkippedDetail', {
+              count: oversizedImages.length,
+              size: uploadPolicy.productWallImageMaxSizeMb,
+              sample,
+            }),
             'error',
           );
         } else {
-          toast('请选择图片、文件夹或 zip/rar 压缩包', 'error');
+          toast(t('productWall.toasts.unsupportedUpload'), 'error');
         }
         return;
       }
@@ -419,19 +434,32 @@ export default function ProductWallPage() {
             });
             uploadedCount += result.items.length;
           } catch (error) {
-            failedMessages.push(errorMessage(error, '上传失败'));
+            failedMessages.push(errorMessage(error, t('productWall.toasts.uploadFailed')));
           }
         }
         await mutate();
         if (uploadedCount) {
-          const skippedText = oversizedImages.length ? `，已跳过 ${oversizedImages.length} 张超限图片` : '';
+          const skippedText = oversizedImages.length
+            ? t('productWall.toasts.uploadSkipped', { count: oversizedImages.length })
+            : '';
           const failText = failedMessages.length
-            ? `；部分失败：${Array.from(new Set(failedMessages)).slice(0, 2).join('；')}`
+            ? t('productWall.toasts.uploadPartialFailed', {
+                message: Array.from(new Set(failedMessages)).slice(0, 2).join('; '),
+              })
             : '';
           toast(
             isAdmin
-              ? `已上传 ${uploadedCount} 张图片到「${uploadKind}」${skippedText}${failText}`
-              : `已提交 ${uploadedCount} 张图片，审核通过后展示${skippedText}${failText}`,
+              ? t('productWall.toasts.uploadSuccess', {
+                  count: uploadedCount,
+                  kind: uploadKind,
+                  skipped: skippedText,
+                  failed: failText,
+                })
+              : t('productWall.toasts.uploadSubmitted', {
+                  count: uploadedCount,
+                  skipped: skippedText,
+                  failed: failText,
+                }),
             uploadedCount && !failedMessages.length ? 'success' : 'success',
           );
         } else if (failedMessages.length) {
@@ -442,12 +470,16 @@ export default function ProductWallPage() {
             .map((file) => `${file.name} ${formatFileSize(file.size)}`)
             .join('、');
           toast(
-            `已跳过 ${oversizedImages.length} 张超过 ${uploadPolicy.productWallImageMaxSizeMb}MB 的图片：${sample}`,
+            t('productWall.toasts.uploadSkippedDetail', {
+              count: oversizedImages.length,
+              size: uploadPolicy.productWallImageMaxSizeMb,
+              sample,
+            }),
             'error',
           );
         }
       } catch (error) {
-        toast(errorMessage(error, '上传图片失败'), 'error');
+        toast(errorMessage(error, t('productWall.toasts.uploadImageFailed')), 'error');
       } finally {
         setUploading(false);
         if (fileInputRef.current) fileInputRef.current.value = '';
@@ -460,6 +492,7 @@ export default function ProductWallPage() {
       mutate,
       productWallMaxImageBytes,
       productWallUploadBatchSize,
+      t,
       toast,
       uploadKind,
       uploadPolicy.productWallImageMaxSizeMb,
@@ -485,11 +518,11 @@ export default function ProductWallPage() {
     const title = uploadTitle.trim();
     const description = uploadDescription.trim();
     if (!title) {
-      toast('请填写图片标题', 'error');
+      toast(t('productWall.toasts.titleRequired'), 'error');
       return;
     }
     if (!description) {
-      toast('请填写图片描述', 'error');
+      toast(t('productWall.toasts.descriptionRequired'), 'error');
       return;
     }
     const files = pendingUploadFiles;
@@ -500,7 +533,7 @@ export default function ProductWallPage() {
     async (event: ClipboardEvent<HTMLDivElement>) => {
       if (!canUpload) return;
       if (!uploadKind) {
-        toast('请先创建产品图库分类后再上传', 'error');
+        toast(t('productWall.toasts.noCategoryBeforeUpload'), 'error');
         return;
       }
       const pastedImages = Array.from(event.clipboardData.files).filter((file) => file.type.startsWith('image/'));
@@ -510,7 +543,7 @@ export default function ProductWallPage() {
         return;
       }
     },
-    [canUpload, handleUploadSource, uploadKind, toast],
+    [canUpload, handleUploadSource, t, uploadKind, toast],
   );
   useEffect(() => {
     const updateColumnCount = () => setColumnCount(getProductWallColumnCount());
@@ -674,9 +707,9 @@ export default function ProductWallPage() {
       });
       syncUpdatedWallItem(updated);
       setEditingItem(null);
-      toast('图片信息已更新', 'success');
+      toast(t('productWall.toasts.imageUpdated'), 'success');
     } catch (error) {
-      toast(errorMessage(error, '更新失败'), 'error');
+      toast(errorMessage(error, t('productWall.toasts.updateFailed')), 'error');
     }
   };
   const removeItem = async (item: WallItem) => {
@@ -690,18 +723,24 @@ export default function ProductWallPage() {
         await deleteProductWallItem(deleteDialog.item.id);
         if (active?.id === deleteDialog.item.id) setActive(null);
         await mutate();
-        toast('图片已删除', 'success');
+        toast(t('productWall.toasts.imageDeleted'), 'success');
       } else {
         const result = await deleteProductWallItems(deleteDialog.ids);
         setSelectedIds(new Set());
         setSelectionMode(false);
         if (active && deleteDialog.ids.includes(active.id)) setActive(null);
         await mutate();
-        toast(`已删除 ${result.deleted} 张图片`, 'success');
+        toast(t('productWall.toasts.batchDeleted', { count: result.deleted }), 'success');
       }
       setDeleteDialog(null);
     } catch (error) {
-      toast(errorMessage(error, deleteDialog.type === 'single' ? '删除失败' : '批量删除失败'), 'error');
+      toast(
+        errorMessage(
+          error,
+          deleteDialog.type === 'single' ? t('productWall.toasts.deleteFailed') : t('productWall.batchDeleteFailed'),
+        ),
+        'error',
+      );
     } finally {
       setDeleting(false);
     }
@@ -724,9 +763,9 @@ export default function ProductWallPage() {
   };
   const openManagementPanel = () => {
     setManagementKindFilter(
-      filter !== '全部' && filter !== PRODUCT_WALL_FAVORITES_FILTER && categoryNames.includes(filter)
+      filter !== PRODUCT_WALL_ALL_FILTER && filter !== PRODUCT_WALL_FAVORITES_FILTER && categoryNames.includes(filter)
         ? (filter as ProductWallKind)
-        : '全部',
+        : PRODUCT_WALL_MANAGEMENT_ALL_FILTER,
     );
     setSelectedIds(new Set());
     setSelectionMode(false);
@@ -740,7 +779,7 @@ export default function ProductWallPage() {
   const removeSelectedItems = async () => {
     const ids = Array.from(selectedIds);
     if (!ids.length) {
-      toast('请先选择要删除的图片', 'error');
+      toast(t('productWall.toasts.noSelectionToDelete'), 'error');
       return;
     }
     setDeleteDialog({ type: 'batch', ids });
@@ -748,34 +787,38 @@ export default function ProductWallPage() {
   const reviewItem = async (item: WallItem, input: { status: 'approved' | 'rejected'; rejectReason?: string }) => {
     const rejectReason =
       input.status === 'rejected'
-        ? (input.rejectReason ?? (window.prompt('拒绝原因，可留空', item.rejectReason || '') || undefined))
+        ? (input.rejectReason ??
+          (window.prompt(t('productWall.reviewRejectPrompt'), item.rejectReason || '') || undefined))
         : undefined;
     try {
       const updated = await reviewProductWallItem(item.id, { status: input.status, rejectReason });
       syncUpdatedWallItem(updated);
-      toast(input.status === 'approved' ? '图片已通过审核' : '图片已拒绝', 'success');
+      toast(
+        input.status === 'approved' ? t('productWall.toasts.reviewApproved') : t('productWall.toasts.reviewRejected'),
+        'success',
+      );
     } catch (error) {
-      toast(errorMessage(error, '审核失败'), 'error');
+      toast(errorMessage(error, t('productWall.toasts.reviewFailed')), 'error');
     }
   };
   const createCategory = async (rawName: string) => {
     const name = rawName.trim();
     if (!name) {
-      toast('请输入分类名称', 'error');
+      toast(t('productWall.toasts.categoryNameRequired'), 'error');
       return;
     }
     try {
       await createProductWallCategory(name);
       await mutateCategories();
-      toast('分类已创建', 'success');
+      toast(t('productWall.toasts.categoryCreated'), 'success');
     } catch (error) {
-      toast(errorMessage(error, '创建分类失败'), 'error');
+      toast(errorMessage(error, t('productWall.toasts.categoryCreateFailed')), 'error');
     }
   };
   const renameCategory = async (id: string, rawName: string) => {
     const name = rawName.trim();
     if (!name) {
-      toast('分类名称不能为空', 'error');
+      toast(t('productWall.toasts.categoryEmpty'), 'error');
       return;
     }
     try {
@@ -791,21 +834,21 @@ export default function ProductWallPage() {
       void mutateCategories((current) => current?.map((item) => (item.id === id ? { ...item, name } : item)), {
         revalidate: false,
       });
-      toast('分类已更新', 'success');
+      toast(t('productWall.toasts.categoryUpdated'), 'success');
     } catch (error) {
-      toast(errorMessage(error, '更新分类失败'), 'error');
+      toast(errorMessage(error, t('productWall.toasts.categoryUpdateFailed')), 'error');
     }
   };
   const removeCategory = async (id: string, name: string) => {
     try {
       await deleteProductWallCategory(id);
       setDeleteCategoryTarget(null);
-      if (filter === name) setFilter('全部');
-      if (managementKindFilter === name) setManagementKindFilter('全部');
+      if (filter === name) setFilter(PRODUCT_WALL_ALL_FILTER);
+      if (managementKindFilter === name) setManagementKindFilter(PRODUCT_WALL_MANAGEMENT_ALL_FILTER);
       await mutateCategories();
-      toast('分类已删除', 'success');
+      toast(t('productWall.toasts.categoryDeleted'), 'success');
     } catch (error) {
-      toast(errorMessage(error, '删除分类失败'), 'error');
+      toast(errorMessage(error, t('productWall.toasts.categoryDeleteFailed')), 'error');
     }
   };
   const headerActions = canUpload ? (
@@ -916,9 +959,9 @@ export default function ProductWallPage() {
     >
       <div className="relative" onPaste={handlePaste}>
         <AdminManagementPage
-          title="产品图库"
-          meta={initialLoading ? '加载中' : undefined}
-          description="公司产品、使用现场和客户案例实拍图统一归档，按图库方式浏览。"
+          title={t('productWall.title')}
+          meta={initialLoading ? t('productWall.loading') : undefined}
+          description={t('productWall.description')}
           actions={headerActions}
           className="app-public-tool-page app-public-tool-page-product-wall"
           toolbar={
@@ -926,20 +969,30 @@ export default function ProductWallPage() {
               <ResponsiveSectionTabs
                 tabs={filters.map((item) => ({
                   value: item,
-                  label: item,
+                  label:
+                    item === PRODUCT_WALL_ALL_FILTER
+                      ? t('productWall.filters.all')
+                      : item === PRODUCT_WALL_FAVORITES_FILTER
+                        ? t('productWall.filters.favorites')
+                        : item,
                   count: filterCounts[item] || 0,
-                  icon: item === '全部' ? 'grid_view' : item === PRODUCT_WALL_FAVORITES_FILTER ? 'favorite' : 'image',
+                  icon:
+                    item === PRODUCT_WALL_ALL_FILTER
+                      ? 'grid_view'
+                      : item === PRODUCT_WALL_FAVORITES_FILTER
+                        ? 'favorite'
+                        : 'image',
                 }))}
                 value={filter}
                 onChange={setFilter}
-                mobileTitle="当前分类"
-                countUnit="张"
+                mobileTitle={t('productWall.currentCategory')}
+                countUnit={t('productWall.countUnit')}
               />
               <SearchField
                 inputProps={queryInputProps}
                 value={queryInputValue}
                 onClear={() => setQuery('')}
-                placeholder="搜索标题或标签..."
+                placeholder={t('productWall.searchPlaceholder')}
                 className="product-wall-search md:ml-auto md:w-72"
               />
             </div>
@@ -948,7 +1001,7 @@ export default function ProductWallPage() {
         >
           {dragActive && (
             <div className="mb-4 flex h-10 items-center justify-center border-y border-primary-container/35 bg-primary-container/6 text-sm font-medium text-primary-container">
-              松开上传
+              {t('productWall.dragReleaseUpload')}
             </div>
           )}
 
@@ -1013,8 +1066,14 @@ export default function ProductWallPage() {
                                   void toggleFavoriteItem(item);
                                 }}
                                 className={`product-wall-card-action ${itemFavorited ? 'is-active' : ''}`}
-                                aria-label={itemFavorited ? '取消收藏' : '收藏图片'}
-                                title={itemFavorited ? '取消收藏' : '收藏'}
+                                aria-label={
+                                  itemFavorited ? t('productWall.aria.unfavorite') : t('productWall.aria.favoriteImage')
+                                }
+                                title={
+                                  itemFavorited
+                                    ? t('productWall.preview.unfavorite')
+                                    : t('productWall.preview.favorite')
+                                }
                                 data-tooltip-ignore
                               >
                                 <Icon name={itemFavorited ? 'favorite' : 'star'} size={14} />
@@ -1026,8 +1085,8 @@ export default function ProductWallPage() {
                                   void downloadProductWallItem(item);
                                 }}
                                 className="product-wall-card-action"
-                                aria-label="下载图片"
-                                title="下载"
+                                aria-label={t('productWall.aria.downloadImage')}
+                                title={t('productWall.preview.download')}
                                 data-tooltip-ignore
                               >
                                 <Icon name="download" size={14} />
@@ -1043,8 +1102,8 @@ export default function ProductWallPage() {
                                   openEditItem(item);
                                 }}
                                 className="product-wall-card-action"
-                                aria-label="编辑图片"
-                                title="编辑"
+                                aria-label={t('productWall.aria.editImage')}
+                                title={t('productWall.actions.edit')}
                                 data-tooltip-ignore
                               >
                                 <Icon name="edit" size={14} />
@@ -1056,8 +1115,8 @@ export default function ProductWallPage() {
                                   void removeItem(item);
                                 }}
                                 className="product-wall-card-action is-danger"
-                                aria-label="删除图片"
-                                title="删除"
+                                aria-label={t('productWall.aria.deleteImage')}
+                                title={t('common.delete')}
                                 data-tooltip-ignore
                               >
                                 <Icon name="delete" size={14} />
@@ -1078,7 +1137,7 @@ export default function ProductWallPage() {
                   className="product-wall-load-more flex h-16 w-full items-center justify-center gap-2 text-xs text-on-surface-variant transition-colors hover:text-primary-container"
                 >
                   <span className="inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-on-surface-variant/50" />
-                  继续下拉加载更多
+                  {t('productWall.loadMore')}
                   <span
                     className="inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-on-surface-variant/50"
                     style={{ animationDelay: '0.3s' }}
@@ -1086,7 +1145,7 @@ export default function ProductWallPage() {
                 </button>
               ) : visibleItems.length > renderBatchSize ? (
                 <div className="flex h-12 w-full items-center justify-center text-xs text-on-surface-variant/40">
-                  — 已经到底了 —
+                  {t('productWall.reachedEnd')}
                 </div>
               ) : null}
             </>
@@ -1098,25 +1157,25 @@ export default function ProductWallPage() {
                 </div>
                 <h2 className="mt-4 text-base font-semibold text-on-surface">
                   {apiError
-                    ? '产品图库数据加载失败'
+                    ? t('productWall.empty.loadFailed')
                     : isFavoritesFilter
-                      ? '还没有收藏图片'
+                      ? t('productWall.empty.favoritesTitle')
                       : canUpload
-                        ? '这里还没有图片'
-                        : '暂无产品图库'}
+                        ? t('productWall.empty.categoryEmpty')
+                        : t('productWall.empty.noGallery')}
                 </h2>
                 <p className="mt-2 text-sm leading-6 text-on-surface-variant">
                   {apiError
-                    ? errorMessage(apiError, '请检查后端接口和数据库连接，页面不会再用演示图片替代真实数据。')
+                    ? errorMessage(apiError, t('productWall.empty.apiErrorDescription'))
                     : isFavoritesFilter
                       ? isLoggedIn
-                        ? '打开图片详情后点击收藏，喜欢的产品图片会集中显示在这里。'
-                        : '请先登录，登录后才能收藏和查看已收藏的产品图片。'
+                        ? t('productWall.empty.favoritesLoggedIn')
+                        : t('productWall.empty.favoritesLogin')
                       : canUpload
                         ? uploadKind
-                          ? `可通过标题右侧的上传入口添加图片，当前默认保存到「${uploadKind}」。`
-                          : '请先在图片管理里创建分类，然后再上传图片。'
-                        : '当前分类还没有图片，登录后可以上传产品、案例或海报图片。'}
+                          ? t('productWall.empty.uploadHint', { kind: uploadKind })
+                          : t('productWall.empty.noCategoryUpload')
+                        : t('productWall.empty.publicEmpty')}
                 </p>
               </div>
             </section>
@@ -1177,9 +1236,9 @@ export default function ProductWallPage() {
         onConfirm={() => {
           if (deleteCategoryTarget) void removeCategory(deleteCategoryTarget.id, deleteCategoryTarget.name);
         }}
-        title="确认删除分类"
-        description={`确定删除分类「${deleteCategoryTarget?.name || ''}」吗？仅空分类可以删除。`}
-        confirmLabel="确认删除"
+        title={t('productWall.categoryDeleteTitle')}
+        description={t('productWall.categoryDeleteConfirm', { name: deleteCategoryTarget?.name || '' })}
+        confirmLabel={t('common.confirm')}
       />
 
       {editingItem && (

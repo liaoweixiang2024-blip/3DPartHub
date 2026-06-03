@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Link, useLocation } from 'react-router-dom';
 import Icon from '../../../components/shared/Icon';
 import { preloadRouteForPath } from '../../../lib/routeLoaders';
@@ -97,6 +98,7 @@ export default function FloatingMenuRenderer({
   topIcon,
   topLabel,
 }: FloatingMenuRendererProps) {
+  const { t } = useTranslation();
   const location = useLocation();
   const panelRef = useRef<HTMLDivElement | null>(null);
   const [contactOpen, setContactOpen] = useState(false);
@@ -104,11 +106,15 @@ export default function FloatingMenuRenderer({
   const contactRows = useMemo(
     () =>
       [
-        contactPhone ? { icon: 'phone', label: '电话', value: contactPhone, href: `tel:${contactPhone}` } : null,
-        contactEmail ? { icon: 'mail', label: '邮箱', value: contactEmail, href: `mailto:${contactEmail}` } : null,
-        contactAddress ? { icon: 'domain', label: '地址', value: contactAddress } : null,
+        contactPhone
+          ? { icon: 'phone', label: t('floatingMenu.phone'), value: contactPhone, href: `tel:${contactPhone}` }
+          : null,
+        contactEmail
+          ? { icon: 'mail', label: t('floatingMenu.email'), value: contactEmail, href: `mailto:${contactEmail}` }
+          : null,
+        contactAddress ? { icon: 'domain', label: t('floatingMenu.address'), value: contactAddress } : null,
       ].filter(Boolean) as Array<{ icon: string; label: string; value: string; href?: string }>,
-    [contactAddress, contactEmail, contactPhone],
+    [contactAddress, contactEmail, contactPhone, t],
   );
 
   const handleBackToTop = useCallback(() => {
@@ -133,7 +139,7 @@ export default function FloatingMenuRenderer({
   }, [contactOpen]);
 
   return (
-    <aside className={appearance.rootClassName} aria-label="快捷操作" ref={panelRef}>
+    <aside className={appearance.rootClassName} aria-label={t('floatingMenu.quickActions')} ref={panelRef}>
       <button type="button" className={appearance.itemClassName} aria-label={topLabel} onClick={handleBackToTop}>
         <Icon name={topIcon} size={appearance.iconSize} />
         <span>{topLabel}</span>
@@ -165,7 +171,11 @@ export default function FloatingMenuRenderer({
         <div className={appearance.contactPanelClassName} role="dialog" aria-label={contactPanelLabel}>
           <div className={appearance.contactHeaderClassName}>
             <span>{contactPanelLabel}</span>
-            <button type="button" aria-label={`关闭${contactPanelLabel}`} onClick={() => setContactOpen(false)}>
+            <button
+              type="button"
+              aria-label={t('floatingMenu.closePanel', { title: contactPanelLabel })}
+              onClick={() => setContactOpen(false)}
+            >
               <Icon name="close" size={14} />
             </button>
           </div>
@@ -191,11 +201,11 @@ export default function FloatingMenuRenderer({
               })}
             </div>
           ) : (
-            <p className={appearance.contactEmptyClassName}>后台暂未配置联系电话、邮箱或地址。</p>
+            <p className={appearance.contactEmptyClassName}>{t('floatingMenu.contactEmpty')}</p>
           )}
           <Link to={contactActionTo} className={appearance.contactActionClassName}>
             <Icon name={contactActionIcon} size={appearance.contactRowIconSize} />
-            前往{contactActionLabel}
+            {t('floatingMenu.goToAction', { label: contactActionLabel })}
           </Link>
         </div>
       ) : null}

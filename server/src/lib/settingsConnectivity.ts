@@ -70,6 +70,19 @@ function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
+function redisTroubleshootingHints(redisUrl: string): string[] {
+  const hints: string[] = [];
+  try {
+    const parsed = new URL(redisUrl);
+    if (['localhost', '127.0.0.1', '::1'].includes(parsed.hostname)) {
+      hints.push('当前 Redis 地址指向本机；Docker 部署中应使用 redis 服务名或 REDIS_URL 环境变量中的地址。');
+    }
+  } catch {
+    hints.push('Redis 地址格式异常，请使用 redis://host:6379 或 rediss://host:6379。');
+  }
+  return hints;
+}
+
 function parseStorageEndpoint(rawEndpoint: string, useSSL: boolean): StorageEndpoint {
   const normalized = rawEndpoint.trim().replace(/\/+$/g, '');
   const endpointUrl = new URL(
@@ -113,6 +126,7 @@ export async function testCacheConnectivity(settings: Record<string, unknown>): 
   const useTls = settingBoolean(settings, 'redis_tls_enabled', false) || redisUrl.startsWith('rediss://');
   const testKey = `${keyPrefix}:settings-test:${Date.now()}`;
   const startedAt = Date.now();
+  let firstRedisError: Error | null = null;
   const redis = new Redis(redisUrl, {
     lazyConnect: true,
     password: redisPassword || undefined,
@@ -122,6 +136,9 @@ export async function testCacheConnectivity(settings: Record<string, unknown>): 
     commandTimeout: 3000,
     maxRetriesPerRequest: 0,
     retryStrategy: () => null,
+  });
+  redis.on('error', (error) => {
+    firstRedisError ||= error;
   });
 
   try {
@@ -144,12 +161,21 @@ export async function testCacheConnectivity(settings: Record<string, unknown>): 
       { provider: 'redis', latencyMs },
     );
   } catch (error) {
-    return result('error', 'Redis 测试失败', [errorMessage(error)], {
+    const message = errorMessage(firstRedisError || error);
+    return result('error', 'Redis 测试失败', [message, ...redisTroubleshootingHints(redisUrl)], {
       provider: 'redis',
       latencyMs: Date.now() - startedAt,
     });
   } finally {
-    redis.disconnect();
+    try {
+      if (redis.status === 'ready') {
+        await redis.quit();
+      } else {
+        redis.disconnect();
+      }
+    } catch {
+      redis.disconnect();
+    }
   }
 }
 

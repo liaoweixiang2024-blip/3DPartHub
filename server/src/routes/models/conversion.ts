@@ -14,7 +14,7 @@ import { findPreviewAssetPath } from '../../services/gltfAsset.js';
 import { parseStepFileDate } from '../../services/modelFileDates.js';
 import { findOriginalModelPath, isDeprecatedHtmlPreviewFormat, removeModelFiles } from '../../services/modelFiles.js';
 import { MODEL_STATUS } from '../../services/modelStatus.js';
-import { generateThumbnail } from '../../services/thumbnail.js';
+import { generateBrowserThumbnail, generateThumbnail } from '../../services/thumbnail.js';
 import { modelUpload, validateModelUpload } from './uploadHelpers.js';
 
 type ModelConversionContext = {
@@ -258,18 +258,34 @@ export function createModelConversionRouter({ prisma, getMeta, saveMeta, getPrev
 
         // Regenerate thumbnail from current preview asset (GLB for new conversions, glTF for legacy assets)
         let thumbnailUrl = m.thumbnailUrl;
+        let thumbnailWarning: string | null = null;
         if (previewPath && existsSync(previewPath)) {
           try {
-            const thumb = await generateThumbnail(previewPath, join(config.staticDir, 'thumbnails'), m.id);
+            const thumb = await generateBrowserThumbnail(previewPath, join(config.staticDir, 'thumbnails'), m.id, {
+              staticDir: config.staticDir,
+            });
             thumbnailUrl = thumb.thumbnailUrl;
-          } catch {
-            /* non-critical */
+          } catch (browserErr) {
+            logger.warn({ err: browserErr, modelId: m.id }, '[conversion] Browser thumbnail regeneration failed');
+            try {
+              const thumb = generateThumbnail(previewPath, join(config.staticDir, 'thumbnails'), m.id, 512, 512, {
+                fallbackToPlaceholder: false,
+              });
+              thumbnailUrl = thumb.thumbnailUrl;
+            } catch (fallbackErr) {
+              thumbnailWarning = '模型已重新转换，预览图生成失败，已保留原预览图';
+              logger.warn({ err: fallbackErr, modelId: m.id }, '[conversion] Thumbnail regeneration skipped');
+            }
           }
         }
 
         // Append timestamp for cache busting
         const ts = Date.now();
-        const versionedUrl = thumbnailUrl ? `${thumbnailUrl.split('?')[0]}?t=${ts}` : null;
+        const versionedUrl = thumbnailWarning
+          ? thumbnailUrl
+          : thumbnailUrl
+            ? `${thumbnailUrl.split('?')[0]}?t=${ts}`
+            : null;
 
         // Update DB with versioned URL
         await prisma.model.update({
@@ -299,6 +315,7 @@ export function createModelConversionRouter({ prisma, getMeta, saveMeta, getPrev
             gltf_url: gltfUrl,
             gltf_size: gltfSize,
             thumbnail_url: versionedUrl,
+            thumbnail_warning: thumbnailWarning,
             preview_meta: previewMeta,
           },
         });

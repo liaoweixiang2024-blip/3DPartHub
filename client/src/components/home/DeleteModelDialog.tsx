@@ -1,4 +1,5 @@
 import { motion, AnimatePresence } from 'framer-motion';
+import { useTranslation } from 'react-i18next';
 import Icon from '../shared/Icon';
 import ModelThumbnail from '../shared/ModelThumbnail';
 import type { Product } from './homeTypes';
@@ -14,6 +15,16 @@ export default function DeleteModelDialog({
   onCancel: () => void;
   onConfirm: () => void;
 }) {
+  const { t } = useTranslation();
+  const deleteItems = [
+    t('deleteModelDialog.itemOriginal'),
+    t('deleteModelDialog.itemPreview'),
+    t('deleteModelDialog.itemThumbnails'),
+    t('deleteModelDialog.itemVersions'),
+    t('deleteModelDialog.itemRelations'),
+    t('deleteModelDialog.itemDatabase'),
+  ];
+
   return (
     <AnimatePresence>
       {target && (
@@ -40,25 +51,23 @@ export default function DeleteModelDialog({
               <div className="min-w-0 flex-1">
                 <div className="mb-1 flex items-center gap-2 text-error">
                   <Icon name="warning" size={18} />
-                  <h3 className="font-headline text-base font-bold">确认删除模型</h3>
+                  <h3 className="font-headline text-base font-bold">{t('deleteModelDialog.title')}</h3>
                 </div>
                 <p className="line-clamp-2 text-sm font-medium text-on-surface">{target.name}</p>
-                <p className="mt-1 text-xs text-on-surface-variant">这个操作会立即删除模型资产与数据库关联记录。</p>
+                <p className="mt-1 text-xs text-on-surface-variant">{t('deleteModelDialog.description')}</p>
               </div>
             </div>
             <div className="space-y-4 p-5">
               <div className="rounded-md border border-error/20 bg-error-container/10 px-3 py-2.5 text-sm leading-relaxed text-on-surface">
-                删除后无法恢复，请确认当前模型不再需要展示、下载或作为变体使用。
+                {t('deleteModelDialog.warning')}
               </div>
               <div className="grid grid-cols-2 gap-2 text-xs text-on-surface-variant">
-                {['STEP/原始文件', '生成预览文件', '缩略图与图纸', '版本文件', '收藏/下载等关联', '数据库模型记录'].map(
-                  (item) => (
-                    <div key={item} className="flex items-center gap-2 rounded-md bg-surface-container-low px-2.5 py-2">
-                      <Icon name="check" size={13} className="text-error" />
-                      <span className="min-w-0 truncate">{item}</span>
-                    </div>
-                  ),
-                )}
+                {deleteItems.map((item) => (
+                  <div key={item} className="flex items-center gap-2 rounded-md bg-surface-container-low px-2.5 py-2">
+                    <Icon name="check" size={13} className="text-error" />
+                    <span className="min-w-0 truncate">{item}</span>
+                  </div>
+                ))}
               </div>
               <div className="flex justify-end gap-3 pt-1">
                 <button
@@ -66,7 +75,7 @@ export default function DeleteModelDialog({
                   disabled={deleting}
                   className="rounded-md border border-outline-variant/30 px-4 py-2 text-sm text-on-surface-variant transition-colors hover:bg-surface-container-highest disabled:opacity-50"
                 >
-                  先不删除
+                  {t('deleteModelDialog.cancel')}
                 </button>
                 <button
                   onClick={onConfirm}
@@ -74,7 +83,7 @@ export default function DeleteModelDialog({
                   className="flex items-center gap-2 rounded-md bg-error px-4 py-2 text-sm font-medium text-on-error transition-opacity hover:opacity-90 disabled:opacity-50"
                 >
                   {deleting && <Icon name="progress_activity" size={15} className="animate-spin" />}
-                  {deleting ? '正在删除...' : '确认永久删除'}
+                  {deleting ? t('deleteModelDialog.deleting') : t('deleteModelDialog.confirm')}
                 </button>
               </div>
             </div>

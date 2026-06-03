@@ -1,4 +1,5 @@
 import { useCallback } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router-dom';
 import { cacheModelDetailTitle } from '../../lib/modelDetailTitleCache';
 import { preloadModelDetailPage } from '../../lib/routeLoaders';
@@ -26,6 +27,7 @@ export function ProductCardMobile({
   imageLoading?: 'eager' | 'lazy';
   imageFetchPriority?: 'high' | 'low' | 'auto';
 }) {
+  const { t } = useTranslation();
   const detailPath = `/model/${product.id}`;
   const detailState = { from: returnPath, homeBrowseState, modelName: product.name };
   const rememberDetailTitle = useCallback(() => {
@@ -73,7 +75,7 @@ export function ProductCardMobile({
         action={
           <button onClick={() => onDownload(product.id)} className={HOME_MOBILE_ACTION_BUTTON_CLASS}>
             <Icon name="download" size={14} fill />
-            下载
+            {t('common.download')}
           </button>
         }
       />

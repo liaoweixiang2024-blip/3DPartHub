@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect, type ReactNode } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import useSWR from 'swr';
 import {
@@ -34,30 +35,14 @@ import { usePublicSettings } from '../lib/publicSettings';
 import { useAuthStore } from '../stores/useAuthStore';
 
 function CustomerStatusBadge({ status }: { status: string }) {
+  const { t } = useTranslation();
   const info = getCustomerInquiryStatusView(status);
   return (
     <span className={`inline-flex items-center gap-1 rounded-md px-2.5 py-1 text-xs font-bold ${info.badgeClassName}`}>
-      {info.label}
+      {t(`inquiryStatus.${status}.label`, { defaultValue: info.label })}
     </span>
   );
 }
-
-const INQUIRY_ADMIN_QUICK_REPLIES = [
-  '已收到询价，正在核对产品规格和数量。',
-  '请补充采购数量、期望交期或收货地区。',
-  '该型号需要确认适配参数，我们会尽快反馈。',
-  '报价和交期已更新，请查看确认。',
-  '已分配销售对接，稍后会与您联系。',
-];
-
-const INQUIRY_USER_QUICK_REPLIES = [
-  '请帮我确认报价和预计交期。',
-  '数量或规格有调整，请以最新清单为准。',
-  '收货地区和使用场景我补充如下。',
-  '可以安排销售联系我。',
-  '这个报价方案可以，麻烦推进下一步。',
-  '如果还需要补充资料，请告诉我。',
-];
 
 type InquiryItemDraft = {
   id: string;
@@ -74,15 +59,17 @@ function createItemDrafts(items: InquiryItem[]): InquiryItemDraft[] {
 }
 
 function InquiryDetailLoadingState() {
+  const { t } = useTranslation();
+
   return (
     <div className="flex h-full min-h-[320px]">
-      <PageRefreshIndicator label="询价单详情刷新中" />
+      <PageRefreshIndicator label={t('inquiryDetail.refreshing')} />
     </div>
   );
 }
 
-function formatDateTime(value: string) {
-  return new Date(value).toLocaleString('zh-CN', {
+function formatDateTime(value: string, locale = 'zh-CN') {
+  return new Date(value).toLocaleString(locale, {
     year: 'numeric',
     month: '2-digit',
     day: '2-digit',
@@ -91,8 +78,8 @@ function formatDateTime(value: string) {
   });
 }
 
-function formatShortDate(value: string) {
-  return new Date(value).toLocaleDateString('zh-CN', {
+function formatShortDate(value: string, locale = 'zh-CN') {
+  return new Date(value).toLocaleDateString(locale, {
     month: '2-digit',
     day: '2-digit',
     hour: '2-digit',
@@ -144,12 +131,18 @@ function buildQuotePrintHtml({
   companyName,
   companyLogo,
   statuses,
+  labels,
+  locale = 'zh-CN',
+  statusLabel,
   fallbackUrl = '/',
 }: {
   inquiry: Inquiry;
   companyName: string;
   companyLogo?: string;
   statuses: StatusConfig[];
+  labels: Record<string, string>;
+  locale?: string;
+  statusLabel?: string;
   fallbackUrl?: string;
 }) {
   const info = statusInfo(statuses, inquiry.status);
@@ -167,9 +160,9 @@ function buildQuotePrintHtml({
           <td>${escapeHtml(item.productName || item.modelNo || '—')}</td>
           <td>${escapeHtml(getSpecSummary(item.specs))}</td>
           <td class="right strong">${escapeHtml(item.qty)}</td>
-          <td class="center">${escapeHtml(item.unit || '个')}</td>
-          <td class="center muted">待报价</td>
-          <td class="center muted">待报价</td>
+          <td class="center">${escapeHtml(item.unit || labels.unitEach)}</td>
+          <td class="center muted">${escapeHtml(labels.pendingQuote)}</td>
+          <td class="center muted">${escapeHtml(labels.pendingQuote)}</td>
           <td>${escapeHtml(item.remark || '—')}</td>
         </tr>`,
     )
@@ -183,7 +176,7 @@ function buildQuotePrintHtml({
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
-  <title>${escapeHtml(companyName)} ${escapeHtml(getInquiryCode(inquiry.id))} 报价单</title>
+  <title>${escapeHtml(companyName)} ${escapeHtml(getInquiryCode(inquiry.id))} ${escapeHtml(labels.documentTitle)}</title>
   <style>${buildInquiryPrintCss()}
     .print-actions { position: fixed; top: calc(env(safe-area-inset-top, 0px) + 12px); left: 12px; right: 12px; z-index: 99; display: flex; justify-content: space-between; gap: 8px; pointer-events: none; }
     .print-actions button { pointer-events: auto; height: 36px; border: 0; border-radius: 18px; padding: 0 14px; background: ${INQUIRY_PRINT_COLORS.text}; color: ${INQUIRY_PRINT_COLORS.pageBackground}; font-size: 14px; font-weight: 800; box-shadow: ${INQUIRY_PRINT_ACTION_SHADOW}; }
@@ -192,65 +185,65 @@ function buildQuotePrintHtml({
   </style>
 </head>
 <body>
-  <div class="print-actions"><button id="closePrintPage" type="button">退出</button><button id="printAgain" type="button">打印</button></div>
+  <div class="print-actions"><button id="closePrintPage" type="button">${escapeHtml(labels.close)}</button><button id="printAgain" type="button">${escapeHtml(labels.print)}</button></div>
   <main class="page">
     <header>
       <div class="brand">
         ${logoHtml}
         <div>
           <div class="company">${escapeHtml(companyName)}</div>
-          <div class="en">Quotation Sheet</div>
+          <div class="en">${escapeHtml(labels.quotationSheet)}</div>
         </div>
       </div>
       <div class="title">
-        <h1>报价单</h1>
-        <p>产品询价明细</p>
+        <h1>${escapeHtml(labels.documentTitle)}</h1>
+        <p>${escapeHtml(labels.documentSubtitle)}</p>
       </div>
     </header>
     <section class="meta">
       <div class="meta-block">
-        <div class="label">客户公司</div><div class="value">${escapeHtml(customerCompany)}</div>
-        <div class="label">联系人</div><div class="value">${escapeHtml(contactName)}</div>
-        <div class="label">联系电话</div><div class="value">${escapeHtml(contactPhone)}</div>
-        <div class="label">联系地址</div><div class="value">${escapeHtml(contactAddress)}</div>
+        <div class="label">${escapeHtml(labels.customerCompany)}</div><div class="value">${escapeHtml(customerCompany)}</div>
+        <div class="label">${escapeHtml(labels.contactName)}</div><div class="value">${escapeHtml(contactName)}</div>
+        <div class="label">${escapeHtml(labels.contactPhone)}</div><div class="value">${escapeHtml(contactPhone)}</div>
+        <div class="label">${escapeHtml(labels.contactAddress)}</div><div class="value">${escapeHtml(contactAddress)}</div>
       </div>
       <div class="meta-block">
-        <div class="label">单据编号</div><div class="value">${escapeHtml(getInquiryCode(inquiry.id))}</div>
-        <div class="label">提交时间</div><div class="value">${escapeHtml(formatDateTime(inquiry.createdAt))}</div>
-        <div class="label">当前状态</div><div class="value">${escapeHtml(info.label)}</div>
-        <div class="label">产品数量</div><div class="value">${inquiry.items.length} 项 / ${totalQty}</div>
+        <div class="label">${escapeHtml(labels.documentCode)}</div><div class="value">${escapeHtml(getInquiryCode(inquiry.id))}</div>
+        <div class="label">${escapeHtml(labels.submittedAt)}</div><div class="value">${escapeHtml(formatDateTime(inquiry.createdAt, locale))}</div>
+        <div class="label">${escapeHtml(labels.currentStatus)}</div><div class="value">${escapeHtml(statusLabel || info.label)}</div>
+        <div class="label">${escapeHtml(labels.productCount)}</div><div class="value">${escapeHtml(labels.productCountValue.replace('{{items}}', String(inquiry.items.length)).replace('{{total}}', String(totalQty)))}</div>
       </div>
     </section>
     <section>
       <div class="section-head">
-        <h2>一、产品明细</h2>
-        <span>共 ${inquiry.items.length} 项 / 合计数量 ${totalQty}</span>
+        <h2>${escapeHtml(labels.productSectionTitle)}</h2>
+        <span>${escapeHtml(labels.productSectionSummary.replace('{{items}}', String(inquiry.items.length)).replace('{{total}}', String(totalQty)))}</span>
       </div>
       <table>
         <thead>
           <tr>
-            <th style="width:42px;text-align:center;">序号</th>
-            <th style="width:148px;">型号</th>
-            <th style="width:126px;">产品名称</th>
-            <th>规格摘要</th>
-            <th style="width:56px;text-align:right;">数量</th>
-            <th style="width:52px;text-align:center;">单位</th>
-            <th style="width:70px;text-align:center;">单价</th>
-            <th style="width:70px;text-align:center;">金额</th>
-            <th style="width:78px;">备注</th>
+            <th style="width:42px;text-align:center;">${escapeHtml(labels.index)}</th>
+            <th style="width:148px;">${escapeHtml(labels.modelNo)}</th>
+            <th style="width:126px;">${escapeHtml(labels.productName)}</th>
+            <th>${escapeHtml(labels.specSummary)}</th>
+            <th style="width:56px;text-align:right;">${escapeHtml(labels.qty)}</th>
+            <th style="width:52px;text-align:center;">${escapeHtml(labels.unit)}</th>
+            <th style="width:70px;text-align:center;">${escapeHtml(labels.unitPrice)}</th>
+            <th style="width:70px;text-align:center;">${escapeHtml(labels.amount)}</th>
+            <th style="width:78px;">${escapeHtml(labels.remark)}</th>
           </tr>
         </thead>
         <tbody>${rows}</tbody>
       </table>
     </section>
     <section class="note">
-      <div class="label">备注说明</div>
-      <div class="body">本单为询价明细确认版，规格、数量和备注用于业务核价；最终报价、交期与生产要求以双方确认结果为准。</div>
+      <div class="label">${escapeHtml(labels.noteTitle)}</div>
+      <div class="body">${escapeHtml(labels.noteBody)}</div>
     </section>
     <footer>
-      <div class="sign"><p>制单：</p><div class="line">系统生成</div></div>
-      <div class="sign"><p>审核：</p><div class="line">业务确认</div></div>
-      <div class="sign"><p>客户确认：</p><div class="line">签字 / 盖章</div></div>
+      <div class="sign"><p>${escapeHtml(labels.preparedBy)}</p><div class="line">${escapeHtml(labels.systemGenerated)}</div></div>
+      <div class="sign"><p>${escapeHtml(labels.reviewedBy)}</p><div class="line">${escapeHtml(labels.businessConfirm)}</div></div>
+      <div class="sign"><p>${escapeHtml(labels.customerConfirm)}</p><div class="line">${escapeHtml(labels.signature)}</div></div>
     </footer>
   </main>
   <script>const fallbackUrl=${jsonForInlineScript(
@@ -261,11 +254,13 @@ function buildQuotePrintHtml({
 }
 
 function MessageBubble({ msg, isAdminView }: { msg: InquiryMessage; isAdminView: boolean }) {
+  const { t, i18n } = useTranslation();
   const isOwn = isAdminView ? msg.isAdmin : !msg.isAdmin;
-  const sender = msg.isAdmin ? '管理员' : msg.user?.username || '用户';
+  const sender = msg.isAdmin ? t('common.admin') : msg.user?.username || t('common.user');
   const [previewImg, setPreviewImg] = useState<string | null>(null);
   const attachment = msg.attachment || '';
   const attachmentIsImage = isImageAttachment(attachment);
+  const dateLocale = i18n.resolvedLanguage || i18n.language;
   return (
     <div className={`mb-3 flex ${isOwn ? 'justify-end' : 'justify-start'}`}>
       <div
@@ -279,7 +274,7 @@ function MessageBubble({ msg, isAdminView }: { msg: InquiryMessage; isAdminView:
         {attachment && attachmentIsImage ? (
           <SafeImage
             src={attachment}
-            alt="附件"
+            alt={t('inquiryDetail.attachment')}
             className="mt-2 max-h-[240px] max-w-full cursor-pointer rounded object-contain transition-opacity hover:opacity-90"
             fallbackClassName="min-h-24"
             onClick={() => setPreviewImg(attachment)}
@@ -291,18 +286,18 @@ function MessageBubble({ msg, isAdminView }: { msg: InquiryMessage; isAdminView:
             rel="noopener"
             onClick={(event) => {
               event.preventDefault();
-              openDocumentUrl(attachment, { title: '附件预览' });
+              openDocumentUrl(attachment, { title: t('inquiryDetail.attachmentPreview') });
             }}
             className={`mt-2 inline-flex items-center gap-1 rounded-md border border-outline-variant/15 px-2 py-1 text-xs ${
               isOwn ? 'text-on-primary/80' : 'text-primary-container'
             }`}
           >
             <Icon name="attach_file" size={12} />
-            查看附件
+            {t('inquiryDetail.viewAttachment')}
           </a>
         ) : null}
         <div className={`mt-1 text-[10px] ${isOwn ? 'text-on-primary/65' : 'text-on-surface-variant'}`}>
-          {isOwn ? '我' : sender} · {formatDateTime(msg.createdAt)}
+          {isOwn ? t('inquiryDetail.me') : sender} · {formatDateTime(msg.createdAt, dateLocale)}
         </div>
       </div>
       {previewImg && (
@@ -310,7 +305,7 @@ function MessageBubble({ msg, isAdminView }: { msg: InquiryMessage; isAdminView:
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/80"
           onClick={() => setPreviewImg(null)}
         >
-          <SafeImage src={previewImg} alt="预览" className="max-h-[90vh] max-w-[90vw] object-contain" />
+          <SafeImage src={previewImg} alt={t('common.preview')} className="max-h-[90vh] max-w-[90vw] object-contain" />
         </div>
       )}
     </div>
@@ -353,6 +348,7 @@ function ItemsTable({
   onDraftChange,
   onDraftRemove,
 }: { inquiry: Inquiry; flat?: boolean } & InquiryItemsEditProps) {
+  const { t } = useTranslation();
   const draftById = new Map(drafts.map((draft) => [draft.id, draft]));
   const visibleItems = editing ? inquiry.items.filter((item) => draftById.has(item.id)) : inquiry.items;
   const totalQty = editing
@@ -371,12 +367,14 @@ function ItemsTable({
         <div className="flex flex-wrap items-center justify-between gap-2 border-b border-outline-variant/10 px-3 py-2.5">
           <div className="flex items-center gap-2">
             <Icon name="inventory_2" size={14} className="text-primary-container" />
-            <span className="text-xs font-medium text-on-surface">产品明细</span>
+            <span className="text-xs font-medium text-on-surface">{t('inquiryDetail.items.detailTitle')}</span>
             <span className="rounded-md bg-primary-container/10 px-1.5 py-0.5 text-[11px] font-semibold text-primary-container">
-              {visibleItems.length} 项
+              {t('inquiryDetail.itemCount', { count: visibleItems.length })}
             </span>
           </div>
-          <span className="text-[11px] font-medium text-on-surface-variant">合计 {totalQty}</span>
+          <span className="text-[11px] font-medium text-on-surface-variant">
+            {t('inquiryDetail.totalQtyShort', { count: totalQty })}
+          </span>
         </div>
       ) : null}
 
@@ -409,12 +407,14 @@ function ItemsTable({
                         onDraftChange?.(item.id, { qty: Math.max(1, parseInt(event.target.value) || 1) })
                       }
                       className="h-8 w-16 rounded-md border border-outline-variant/20 bg-surface-container-lowest px-2 text-center text-xs font-semibold tabular-nums text-on-surface outline-none focus:border-primary-container"
-                      aria-label={`${itemName} 数量`}
+                      aria-label={t('inquiryDetail.qtyAria', { name: itemName })}
                     />
                   ) : (
                     <p className="rounded-lg bg-surface-container px-2 py-1 text-sm font-semibold tabular-nums text-on-surface">
                       {item.qty}
-                      <span className="ml-1 text-[11px] font-medium text-on-surface-variant">{item.unit || '个'}</span>
+                      <span className="ml-1 text-[11px] font-medium text-on-surface-variant">
+                        {item.unit || t('inquiryDetail.unitEach')}
+                      </span>
                     </p>
                   )}
 
@@ -423,7 +423,7 @@ function ItemsTable({
                       type="button"
                       onClick={() => onDraftRemove?.(item.id)}
                       className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface"
-                      aria-label="移出询价清单"
+                      aria-label={t('inquiryDetail.removeItemAria')}
                     >
                       <Icon name="delete" size={15} />
                     </button>
@@ -435,7 +435,7 @@ function ItemsTable({
                 <textarea
                   value={draft.remark}
                   onChange={(event) => onDraftChange?.(item.id, { remark: event.target.value })}
-                  placeholder="备注"
+                  placeholder={t('inquiryDetail.items.remark')}
                   rows={2}
                   className="mt-2 w-full resize-none rounded-lg border border-outline-variant/20 bg-surface-container-lowest px-3 py-2 text-xs leading-5 text-on-surface outline-none focus:border-primary-container"
                 />
@@ -459,12 +459,14 @@ function ItemsTable({
             }
           >
             <tr>
-              <th className="w-12 px-3 py-2.5 text-left font-semibold">序号</th>
-              <th className="w-[220px] px-3 py-2.5 text-left font-semibold">名称</th>
-              <th className="px-3 py-2.5 text-left font-semibold">规格</th>
-              <th className="w-20 px-3 py-2.5 text-right font-semibold">数量</th>
-              <th className="w-32 px-3 py-2.5 text-left font-semibold">备注</th>
-              {editing ? <th className="w-12 px-3 py-2.5 text-right font-semibold">操作</th> : null}
+              <th className="w-12 px-3 py-2.5 text-left font-semibold">{t('inquiryDetail.items.index')}</th>
+              <th className="w-[220px] px-3 py-2.5 text-left font-semibold">{t('inquiryDetail.items.name')}</th>
+              <th className="px-3 py-2.5 text-left font-semibold">{t('inquiryDetail.items.spec')}</th>
+              <th className="w-20 px-3 py-2.5 text-right font-semibold">{t('inquiryDetail.items.qty')}</th>
+              <th className="w-32 px-3 py-2.5 text-left font-semibold">{t('inquiryDetail.items.remark')}</th>
+              {editing ? (
+                <th className="w-12 px-3 py-2.5 text-right font-semibold">{t('inquiryDetail.items.action')}</th>
+              ) : null}
             </tr>
           </thead>
           <tbody className="divide-y divide-outline-variant/10">
@@ -500,12 +502,14 @@ function ItemsTable({
                           onDraftChange?.(item.id, { qty: Math.max(1, parseInt(event.target.value) || 1) })
                         }
                         className="h-8 w-16 rounded-md border border-outline-variant/20 bg-surface-container px-2 text-center text-xs text-on-surface outline-none focus:border-primary-container"
-                        aria-label={`${getInquiryItemName(item)} 数量`}
+                        aria-label={t('inquiryDetail.qtyAria', { name: getInquiryItemName(item) })}
                       />
                     ) : (
                       <>
                         <span className="font-semibold tabular-nums text-on-surface">{item.qty}</span>
-                        <span className="ml-1 text-[11px] text-on-surface-variant">{item.unit || '个'}</span>
+                        <span className="ml-1 text-[11px] text-on-surface-variant">
+                          {item.unit || t('inquiryDetail.unitEach')}
+                        </span>
                       </>
                     )}
                   </td>
@@ -514,7 +518,7 @@ function ItemsTable({
                       <input
                         value={draft.remark}
                         onChange={(event) => onDraftChange?.(item.id, { remark: event.target.value })}
-                        placeholder="备注"
+                        placeholder={t('inquiryDetail.items.remark')}
                         className="h-8 w-full rounded-md border border-outline-variant/20 bg-surface-container px-2 text-xs text-on-surface outline-none focus:border-primary-container"
                       />
                     ) : (
@@ -527,7 +531,7 @@ function ItemsTable({
                         type="button"
                         onClick={() => onDraftRemove?.(item.id)}
                         className="inline-flex h-7 w-7 items-center justify-center rounded-md text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface"
-                        aria-label="移出询价清单"
+                        aria-label={t('inquiryDetail.removeItemAria')}
                       >
                         <Icon name="delete" size={14} />
                       </button>
@@ -563,12 +567,17 @@ function CustomerStatusPanel({
   mobileOpen = false,
   onMobileToggle,
 }: { inquiry: Inquiry; renderActions?: () => ReactNode } & MobileCollapseProps) {
+  const { t } = useTranslation();
   const assignee = inquiry.salesAssignee;
   const flow = getCustomerInquiryFlow(inquiry.status, assignee?.username);
   const totalQty = inquiry.items.reduce((sum, item) => sum + (Number(item.qty) || 0), 0);
   const messageCount = getInquiryMessages(inquiry).length;
   const currentStep = flow.steps[Math.min(flow.activeIndex, flow.steps.length - 1)] || flow.steps[0];
-  const nextText = flow.nextText.replace(/^下一步：/, '');
+  const currentStepTitle = t(`inquiryDetail.flow.steps.${currentStep.key}.title`, { defaultValue: currentStep.title });
+  const nextText = t(`inquiryDetail.flow.next.${inquiry.status}`, {
+    defaultValue: flow.nextText.replace(/^[^\uFF1A]+\uFF1A/, ''),
+    name: assignee?.username,
+  });
 
   return (
     <section className="overflow-hidden rounded-xl border border-outline-variant/15 bg-surface-container-low md:sticky md:top-0 md:z-20">
@@ -581,10 +590,16 @@ function CustomerStatusPanel({
         <span className="min-w-0">
           <span className="mb-1.5 flex items-center gap-2">
             <CustomerStatusBadge status={inquiry.status} />
-            <span className="truncate text-xs font-semibold text-on-surface">当前：{currentStep.title}</span>
+            <span className="truncate text-xs font-semibold text-on-surface">
+              {t('inquiryDetail.flow.current', { step: currentStepTitle })}
+            </span>
           </span>
           <span className="block truncate text-[11px] text-on-surface-variant">
-            {inquiry.items.length} 项产品 · 合计 {totalQty} · {messageCount} 条消息
+            {t('inquiryDetail.flow.mobileSummary', {
+              items: inquiry.items.length,
+              total: totalQty,
+              messages: messageCount,
+            })}
           </span>
         </span>
         <Icon
@@ -598,16 +613,22 @@ function CustomerStatusPanel({
           <CustomerStatusBadge status={inquiry.status} />
           <span className="shrink-0 text-[11px] font-medium text-on-surface-variant">{getInquiryCode(inquiry.id)}</span>
           <span className="h-4 w-px shrink-0 bg-outline-variant/20" aria-hidden />
-          <h2 className="truncate text-sm font-semibold text-on-surface">当前进度：{nextText}</h2>
+          <h2 className="truncate text-sm font-semibold text-on-surface">
+            {t('inquiryDetail.flow.currentProgress', { text: nextText })}
+          </h2>
           <span className="shrink-0 text-[11px] text-on-surface-variant">
-            {inquiry.items.length} 项 · 合计 {totalQty} · {messageCount} 条消息
+            {t('inquiryDetail.flow.desktopSummary', {
+              items: inquiry.items.length,
+              total: totalQty,
+              messages: messageCount,
+            })}
           </span>
         </div>
         <div className="flex shrink-0 items-center gap-3">
           {renderActions ? (
             <div className="flex flex-wrap items-center justify-end gap-1.5">{renderActions()}</div>
           ) : null}
-          <ol className="flex shrink-0 items-center gap-2" aria-label="询价进度">
+          <ol className="flex shrink-0 items-center gap-2" aria-label={t('inquiryDetail.flow.aria')}>
             {flow.steps.map((step, index) => {
               const isDone = index < flow.activeIndex;
               const isActive = index === flow.activeIndex;
@@ -621,14 +642,19 @@ function CustomerStatusPanel({
                 : isDone
                   ? 'text-on-surface-variant'
                   : 'text-on-surface-variant/60';
+              const stepTitle = t(`inquiryDetail.flow.steps.${step.key}.title`, { defaultValue: step.title });
+              const stepDescription = t(`inquiryDetail.flow.steps.${step.key}.description`, {
+                defaultValue: step.description,
+                name: assignee?.username,
+              });
               return (
                 <li key={step.key} className="flex min-w-0 items-center gap-2">
                   {index > 0 ? <span className="h-px w-7 shrink-0 bg-outline-variant/20" aria-hidden /> : null}
                   <span
                     className={`h-2 w-2 shrink-0 rounded-full ring-4 ${dotClass}`}
-                    title={`${step.title}：${step.description}`}
+                    title={t('inquiryDetail.flow.stepTitle', { title: stepTitle, description: stepDescription })}
                   />
-                  <span className={`max-w-20 truncate text-[11px] font-medium ${labelClass}`}>{step.title}</span>
+                  <span className={`max-w-20 truncate text-[11px] font-medium ${labelClass}`}>{stepTitle}</span>
                 </li>
               );
             })}
@@ -636,7 +662,7 @@ function CustomerStatusPanel({
         </div>
       </div>
       <div className={`${mobileOpen ? 'block' : 'hidden'} border-t border-outline-variant/10 px-3 py-2 md:hidden`}>
-        <ol className="relative grid grid-cols-4 gap-0" aria-label="询价进度">
+        <ol className="relative grid grid-cols-4 gap-0" aria-label={t('inquiryDetail.flow.aria')}>
           <span className="absolute left-[12.5%] right-[12.5%] top-2.5 h-px bg-outline-variant/15" aria-hidden />
           {flow.steps.map((step, index) => {
             const isDone = index < flow.activeIndex;
@@ -685,6 +711,7 @@ function CustomerDetailSummary({
   mobileOpen = false,
   onMobileToggle,
 }: { inquiry: Inquiry } & MobileCollapseProps) {
+  const { t, i18n } = useTranslation();
   const assignee = inquiry.salesAssignee;
   const contact = assignee ? [assignee.phone, assignee.email].filter(Boolean).join(' · ') : '';
   const customerCompany = inquiry.company || inquiry.user?.company;
@@ -693,6 +720,8 @@ function CustomerDetailSummary({
   const contactAddress = inquiry.contactAddress || inquiry.user?.address;
   const totalQty = inquiry.items.reduce((sum, item) => sum + (Number(item.qty) || 0), 0);
   const statusView = getCustomerInquiryStatusView(inquiry.status);
+  const statusLabel = t(`inquiryStatus.${inquiry.status}.label`, { defaultValue: statusView.label });
+  const dateLocale = i18n.resolvedLanguage || i18n.language;
 
   return (
     <aside className="overflow-hidden rounded-xl border border-outline-variant/15 bg-surface-container-low">
@@ -705,9 +734,13 @@ function CustomerDetailSummary({
         <span className="flex min-w-0 items-center gap-2">
           <Icon name="receipt_long" size={15} className="text-primary-container" />
           <span className="min-w-0">
-            <span className="block text-sm font-semibold text-on-surface">单据信息</span>
+            <span className="block text-sm font-semibold text-on-surface">{t('inquiryDetail.summary.title')}</span>
             <span className="block truncate text-[11px] text-on-surface-variant">
-              {statusView.label} · {inquiry.items.length} 项 / {totalQty}
+              {t('inquiryDetail.summary.compact', {
+                status: statusLabel,
+                items: inquiry.items.length,
+                total: totalQty,
+              })}
             </span>
           </span>
         </span>
@@ -720,7 +753,7 @@ function CustomerDetailSummary({
       <div className="hidden items-center justify-between gap-3 border-b border-outline-variant/10 px-4 py-3 md:flex">
         <div className="flex min-w-0 items-center gap-2">
           <Icon name="receipt_long" size={15} className="text-primary-container" />
-          <h3 className="text-sm font-semibold text-on-surface">单据信息</h3>
+          <h3 className="text-sm font-semibold text-on-surface">{t('inquiryDetail.summary.title')}</h3>
         </div>
         <span className="rounded-md bg-surface-container-high px-2 py-0.5 text-[11px] font-medium text-on-surface-variant">
           {getInquiryCode(inquiry.id)}
@@ -731,23 +764,44 @@ function CustomerDetailSummary({
       >
         <section className="border-b border-outline-variant/10 px-4 py-2 md:border-b-0 md:border-r md:py-3 xl:border-b xl:border-r-0">
           <dl>
-            <SummaryLine label="当前状态" value={statusView.label} />
-            <SummaryLine label="产品合计" value={`${inquiry.items.length} 项 / ${totalQty}`} />
-            <SummaryLine label="提交时间" value={formatShortDate(inquiry.createdAt)} />
-            <SummaryLine label="最近更新" value={formatShortDate(inquiry.updatedAt)} />
+            <SummaryLine label={t('inquiryDetail.summary.currentStatus')} value={statusLabel} />
+            <SummaryLine
+              label={t('inquiryDetail.summary.productTotal')}
+              value={t('inquiryDetail.summary.productTotalValue', { items: inquiry.items.length, total: totalQty })}
+            />
+            <SummaryLine
+              label={t('inquiryDetail.summary.submittedAt')}
+              value={formatShortDate(inquiry.createdAt, dateLocale)}
+            />
+            <SummaryLine
+              label={t('inquiryDetail.summary.updatedAt')}
+              value={formatShortDate(inquiry.updatedAt, dateLocale)}
+            />
           </dl>
         </section>
 
         <section className="px-4 py-2 md:py-3">
           <div className="mb-1 flex items-center gap-2 text-sm font-semibold text-on-surface">
             <Icon name="badge" size={15} className="text-primary-container" />
-            <span>联系与对接</span>
+            <span>{t('inquiryDetail.summary.contactTitle')}</span>
           </div>
           <dl>
-            <SummaryLine label="公司" value={customerCompany || '未填写'} />
-            <SummaryLine label="联系人" value={contactName || '未填写'} />
-            <SummaryLine label="电话" value={contactPhone || '未填写'} />
-            <SummaryLine label="地址" value={contactAddress || '未填写'} />
+            <SummaryLine
+              label={t('inquiryDetail.summary.company')}
+              value={customerCompany || t('inquiryDetail.notFilled')}
+            />
+            <SummaryLine
+              label={t('inquiryDetail.summary.contactName')}
+              value={contactName || t('inquiryDetail.notFilled')}
+            />
+            <SummaryLine
+              label={t('inquiryDetail.summary.phone')}
+              value={contactPhone || t('inquiryDetail.notFilled')}
+            />
+            <SummaryLine
+              label={t('inquiryDetail.summary.address')}
+              value={contactAddress || t('inquiryDetail.notFilled')}
+            />
           </dl>
 
           <div className="mt-3 rounded-lg bg-surface-container-lowest px-3 py-2.5">
@@ -755,7 +809,8 @@ function CustomerDetailSummary({
               <div className="text-sm">
                 <p className="font-semibold text-on-surface">{assignee.username}</p>
                 <p className="mt-1 text-xs leading-5 text-on-surface-variant">
-                  {[assignee.department, assignee.company].filter(Boolean).join(' / ') || '业务对接人'}
+                  {[assignee.department, assignee.company].filter(Boolean).join(' / ') ||
+                    t('inquiryDetail.summary.salesContact')}
                 </p>
                 {contact ? (
                   <p className="mt-1 break-words text-xs leading-5 text-on-surface-variant">{contact}</p>
@@ -767,9 +822,7 @@ function CustomerDetailSummary({
                 ) : null}
               </div>
             ) : (
-              <p className="text-xs leading-5 text-on-surface-variant">
-                业务确认后，如需线下推进，会在这里显示对接人信息。
-              </p>
+              <p className="text-xs leading-5 text-on-surface-variant">{t('inquiryDetail.summary.salesPending')}</p>
             )}
           </div>
         </section>
@@ -801,6 +854,7 @@ function CustomerItemsList({
   onSave: () => void;
 } & InquiryItemsEditProps &
   MobileCollapseProps) {
+  const { t } = useTranslation();
   const totalQty = editing
     ? (drafts || []).reduce((sum, item) => sum + (Number(item.qty) || 0), 0)
     : inquiry.items.reduce((sum, item) => sum + (Number(item.qty) || 0), 0);
@@ -816,9 +870,9 @@ function CustomerItemsList({
         <span className="flex min-w-0 items-center gap-2">
           <Icon name="inventory_2" size={15} className="text-primary-container" />
           <span className="min-w-0">
-            <span className="block text-sm font-semibold text-on-surface">询价产品</span>
+            <span className="block text-sm font-semibold text-on-surface">{t('inquiryDetail.items.title')}</span>
             <span className="block truncate text-[11px] text-on-surface-variant">
-              {itemCount} 项 · 合计数量 {totalQty}
+              {t('inquiryDetail.items.mobileSummary', { count: itemCount, total: totalQty })}
             </span>
           </span>
         </span>
@@ -838,7 +892,7 @@ function CustomerItemsList({
                 disabled={saving}
                 className="h-7 px-2 text-xs font-medium text-on-surface-variant hover:text-on-surface disabled:opacity-50"
               >
-                取消
+                {t('common.cancel')}
               </button>
               <button
                 type="button"
@@ -847,7 +901,7 @@ function CustomerItemsList({
                 className="inline-flex h-7 items-center gap-1 rounded-md bg-primary-container px-2 text-xs font-semibold text-on-primary hover:opacity-90 disabled:opacity-50"
               >
                 <Icon name="check" size={12} />
-                {saving ? '保存中' : '保存'}
+                {saving ? t('inquiryDetail.saving') : t('common.save')}
               </button>
             </>
           ) : (
@@ -857,7 +911,7 @@ function CustomerItemsList({
               className="inline-flex h-7 items-center gap-1 rounded-md border border-outline-variant/20 px-2 text-xs font-medium text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface"
             >
               <Icon name="edit" size={12} />
-              编辑
+              {t('common.edit')}
             </button>
           )}
         </div>
@@ -865,13 +919,15 @@ function CustomerItemsList({
       <div className="hidden flex-wrap items-center justify-between gap-2 border-b border-outline-variant/10 px-4 py-3 md:flex">
         <div className="flex min-w-0 items-center gap-2">
           <Icon name="inventory_2" size={15} className="text-primary-container" />
-          <h2 className="text-xs font-semibold text-on-surface md:text-sm">询价产品</h2>
+          <h2 className="text-xs font-semibold text-on-surface md:text-sm">{t('inquiryDetail.items.title')}</h2>
           <span className="rounded-md bg-primary-container/10 px-1.5 py-0.5 text-[11px] font-semibold text-primary-container">
-            {itemCount} 项
+            {t('inquiryDetail.itemCount', { count: itemCount })}
           </span>
         </div>
         <div className="flex shrink-0 items-center gap-1.5">
-          <span className="text-[11px] font-medium text-on-surface-variant">合计数量 {totalQty}</span>
+          <span className="text-[11px] font-medium text-on-surface-variant">
+            {t('inquiryDetail.items.totalQty', { count: totalQty })}
+          </span>
           {canEdit ? (
             editing ? (
               <>
@@ -881,7 +937,7 @@ function CustomerItemsList({
                   disabled={saving}
                   className="h-7 px-2 text-xs font-medium text-on-surface-variant hover:text-on-surface disabled:opacity-50"
                 >
-                  取消
+                  {t('common.cancel')}
                 </button>
                 <button
                   type="button"
@@ -890,7 +946,7 @@ function CustomerItemsList({
                   className="inline-flex h-7 items-center gap-1 rounded-md bg-primary-container px-2 text-xs font-semibold text-on-primary hover:opacity-90 disabled:opacity-50"
                 >
                   <Icon name="check" size={12} />
-                  {saving ? '保存中' : '保存'}
+                  {saving ? t('inquiryDetail.saving') : t('common.save')}
                 </button>
               </>
             ) : (
@@ -900,7 +956,7 @@ function CustomerItemsList({
                 className="inline-flex h-7 items-center gap-1 rounded-md border border-outline-variant/20 px-2 text-xs font-medium text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface"
               >
                 <Icon name="edit" size={12} />
-                编辑
+                {t('common.edit')}
               </button>
             )
           ) : null}
@@ -973,17 +1029,19 @@ function InquiryDetailHeader({
 }
 
 function CustomerInquiryDetailSkeleton({ inquiryId, onBack }: { inquiryId: string; onBack: () => void }) {
+  const { t } = useTranslation();
+
   return (
     <div className="flex h-full min-h-0 flex-col">
       <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-4 pt-4 scrollbar-hidden md:px-0 md:pb-0 md:pt-0">
         <main className="flex flex-col gap-3 md:gap-4">
           <AdminPageHero
-            title="我的询价详情"
+            title={t('inquiryDetail.userTitle')}
             meta={getInquiryCode(inquiryId)}
-            description="提交于 -- · -- 项产品"
+            description={t('inquiryDetail.skeletonDescription')}
             actions={
               <>
-                <InquiryDetailHeaderAction icon="arrow_back" label="返回" onClick={onBack} />
+                <InquiryDetailHeaderAction icon="arrow_back" label={t('inquiryDetail.actions.back')} onClick={onBack} />
                 <span className="hidden h-10 w-[102px] rounded-lg border border-transparent sm:block" aria-hidden />
               </>
             }
@@ -1018,7 +1076,7 @@ function CustomerInquiryDetailSkeleton({ inquiryId, onBack }: { inquiryId: strin
         <div className="mb-2 h-7 rounded-full bg-surface-container-high" />
         <div className="h-10 rounded-lg bg-surface-container-high" />
       </div>
-      <PageRefreshIndicator label="询价单详情刷新中" />
+      <PageRefreshIndicator label={t('inquiryDetail.refreshing')} />
     </div>
   );
 }
@@ -1036,13 +1094,14 @@ function InquiryMessagesSection({
   messagesEndRef: { current: HTMLDivElement | null };
   flat?: boolean;
 } & MobileCollapseProps) {
+  const { t } = useTranslation();
   const messages = getInquiryMessages(inquiry);
   const isCollapsible = Boolean(onMobileToggle);
   const isOpen = !isCollapsible || mobileOpen;
-  const titleText = '沟通记录';
+  const titleText = t('inquiryDetail.messages.title');
   const descriptionText = flat
-    ? `${messages.length} 条消息`
-    : `${messages.length} 条消息，记录这张询价单的客户和业务确认过程`;
+    ? t('inquiryDetail.messages.count', { count: messages.length })
+    : t('inquiryDetail.messages.description', { count: messages.length });
 
   return (
     <section
@@ -1107,7 +1166,7 @@ function InquiryMessagesSection({
       >
         {messages.length === 0 ? (
           <p className="flex min-h-32 items-center justify-center text-center text-sm text-on-surface-variant">
-            暂无沟通记录，业务回复后会显示在这里
+            {t('inquiryDetail.messages.empty')}
           </p>
         ) : (
           messages.map((msg) => <MessageBubble key={msg.id} msg={msg} isAdminView={isAdmin} />)
@@ -1132,6 +1191,7 @@ function NoteCard({ title, content, icon }: { title: string; content?: string | 
 }
 
 function DetailContent({ id }: { id: string }) {
+  const { t, i18n } = useTranslation();
   const navigate = useNavigate();
   const location = useLocation();
   const { toast } = useToast();
@@ -1164,6 +1224,10 @@ function DetailContent({ id }: { id: string }) {
     DEFAULT_CUSTOMER_MOBILE_SECTIONS,
   );
   const messageCount = inquiry ? getInquiryMessages(inquiry).length : undefined;
+  const dateLocale = i18n.resolvedLanguage || i18n.language;
+  const quickReplyPhrases = t(isAdmin ? 'inquiryDetail.quickReplies.admin' : 'inquiryDetail.quickReplies.user', {
+    returnObjects: true,
+  }) as string[];
 
   const prevMsgCount = useRef<number | undefined>(undefined);
   useEffect(() => {
@@ -1218,7 +1282,7 @@ function DetailContent({ id }: { id: string }) {
       setMobileSections((prev) => ({ ...prev, messages: true }));
       mutate();
     } catch (err) {
-      notifyGlobalError(err, '发送失败');
+      notifyGlobalError(err, t('inquiryDetail.sendFailed'));
     } finally {
       setSending(false);
     }
@@ -1231,12 +1295,12 @@ function DetailContent({ id }: { id: string }) {
   async function uploadComposerAttachment(file: File | null | undefined, source: 'picker' | 'paste') {
     if (!file) return;
     if (uploadingAttachment) {
-      toast('附件正在上传，请稍后再试', 'info');
+      toast(t('inquiryDetail.attachmentUploadingWait'), 'info');
       return;
     }
     if (pendingAttachment || pendingAttachmentPreviewUrl || pendingAttachmentName) {
       toast(
-        source === 'paste' ? '已有待发送附件，请先发送或移除后再粘贴截图' : '已有待发送附件，请先发送或移除后再上传',
+        source === 'paste' ? t('inquiryDetail.attachmentExistsPaste') : t('inquiryDetail.attachmentExistsPicker'),
         'info',
       );
       return;
@@ -1244,7 +1308,7 @@ function DetailContent({ id }: { id: string }) {
 
     const maxMb = Math.max(1, Number(business.uploadPolicy.ticketAttachmentMaxSizeMb) || 100);
     if (file.size > maxMb * 1024 * 1024) {
-      toast(`附件不能超过 ${maxMb}MB`, 'error');
+      toast(t('inquiryDetail.attachmentTooLarge', { max: maxMb }), 'error');
       return;
     }
 
@@ -1257,7 +1321,7 @@ function DetailContent({ id }: { id: string }) {
       const { url } = await uploadInquiryAttachment(id, file);
       setPendingAttachment(url);
     } catch (err) {
-      notifyGlobalError(err, '附件上传失败');
+      notifyGlobalError(err, t('inquiryDetail.attachmentUploadFailed'));
       if (previewUrl) URL.revokeObjectURL(previewUrl);
       setPendingAttachmentPreviewUrl(null);
       setPendingAttachmentName(null);
@@ -1301,9 +1365,9 @@ function DetailContent({ id }: { id: string }) {
       await cancelInquiry(id);
       await mutate();
       setCancelConfirmOpen(false);
-      toast('已取消', 'success');
+      toast(t('inquiryDetail.cancelled'), 'success');
     } catch (err) {
-      notifyGlobalError(err, '取消失败');
+      notifyGlobalError(err, t('inquiryDetail.cancelFailed'));
     } finally {
       setCancellingInquiry(false);
     }
@@ -1314,9 +1378,9 @@ function DetailContent({ id }: { id: string }) {
       await updateInquiryStatus(id, status);
       setItemsEditing(false);
       mutate();
-      toast(`状态已更新`, 'success');
+      toast(t('inquiryDetail.statusUpdated'), 'success');
     } catch (err) {
-      notifyGlobalError(err, '操作失败');
+      notifyGlobalError(err, t('inquiryDetail.actionFailed'));
     }
   }
 
@@ -1339,7 +1403,7 @@ function DetailContent({ id }: { id: string }) {
             className="inline-flex h-8 items-center gap-1.5 rounded-md bg-green-500/12 px-2.5 text-xs font-semibold text-green-600 transition-colors hover:bg-green-500/18"
           >
             <Icon name="badge" size={13} />
-            分配销售
+            {t('inquiryDetail.actions.assignSales')}
           </button>
         ) : null}
         {canMarkReplied ? (
@@ -1349,7 +1413,7 @@ function DetailContent({ id }: { id: string }) {
             className="inline-flex h-8 items-center gap-1.5 rounded-md bg-primary-container px-2.5 text-xs font-semibold text-on-primary transition-opacity hover:opacity-90"
           >
             <Icon name="send" size={13} />
-            标记已回复
+            {t('inquiryDetail.actions.markReplied')}
           </button>
         ) : null}
         {canCloseInquiry ? (
@@ -1359,7 +1423,7 @@ function DetailContent({ id }: { id: string }) {
             className="inline-flex h-8 items-center gap-1.5 rounded-md bg-red-500/12 px-2.5 text-xs font-semibold text-red-500 transition-colors hover:bg-red-500/18"
           >
             <Icon name="close" size={13} />
-            关闭
+            {t('common.close')}
           </button>
         ) : null}
       </>
@@ -1383,7 +1447,7 @@ function DetailContent({ id }: { id: string }) {
 
   function handleItemDraftRemove(itemId: string) {
     if (itemDrafts.length <= 1) {
-      toast('至少保留一个询价产品', 'error');
+      toast(t('inquiryDetail.items.keepOne'), 'error');
       return;
     }
     setItemDrafts((prev) => prev.filter((item) => item.id !== itemId));
@@ -1396,7 +1460,7 @@ function DetailContent({ id }: { id: string }) {
       remark: item.remark.trim(),
     }));
     if (items.length === 0) {
-      toast('至少保留一个询价产品', 'error');
+      toast(t('inquiryDetail.items.keepOne'), 'error');
       return;
     }
     setSavingItems(true);
@@ -1405,25 +1469,68 @@ function DetailContent({ id }: { id: string }) {
       mutate(updated, { revalidate: false });
       setItemsEditing(false);
       setItemDrafts([]);
-      toast('询价产品已更新', 'success');
+      toast(t('inquiryDetail.items.updated'), 'success');
     } catch (err) {
-      toast(getErrorMessage(err, '更新询价产品失败'), 'error');
+      toast(getErrorMessage(err, t('inquiryDetail.items.updateFailed')), 'error');
     } finally {
       setSavingItems(false);
     }
   }
 
   function handleExportQuote() {
+    const currentInquiry = inquiry!;
+    const quoteLabels = {
+      amount: t('inquiryDetail.quote.amount'),
+      businessConfirm: t('inquiryDetail.quote.businessConfirm'),
+      close: t('common.close'),
+      contactAddress: t('inquiryDetail.quote.contactAddress'),
+      contactName: t('inquiryDetail.quote.contactName'),
+      contactPhone: t('inquiryDetail.quote.contactPhone'),
+      currentStatus: t('inquiryDetail.quote.currentStatus'),
+      customerCompany: t('inquiryDetail.quote.customerCompany'),
+      customerConfirm: t('inquiryDetail.quote.customerConfirm'),
+      documentCode: t('inquiryDetail.quote.documentCode'),
+      documentSubtitle: t('inquiryDetail.quote.documentSubtitle'),
+      documentTitle: t('inquiryDetail.quote.documentTitle'),
+      index: t('inquiryDetail.quote.index'),
+      modelNo: t('inquiryDetail.quote.modelNo'),
+      noteBody: t('inquiryDetail.quote.noteBody'),
+      noteTitle: t('inquiryDetail.quote.noteTitle'),
+      pendingQuote: t('inquiryDetail.quote.pendingQuote'),
+      preparedBy: t('inquiryDetail.quote.preparedBy'),
+      print: t('inquiryDetail.quote.print'),
+      productCount: t('inquiryDetail.quote.productCount'),
+      productCountValue: t('inquiryDetail.quote.productCountValue'),
+      productName: t('inquiryDetail.quote.productName'),
+      productSectionSummary: t('inquiryDetail.quote.productSectionSummary'),
+      productSectionTitle: t('inquiryDetail.quote.productSectionTitle'),
+      qty: t('inquiryDetail.quote.qty'),
+      quotationSheet: t('inquiryDetail.quote.quotationSheet'),
+      remark: t('inquiryDetail.quote.remark'),
+      reviewedBy: t('inquiryDetail.quote.reviewedBy'),
+      signature: t('inquiryDetail.quote.signature'),
+      specSummary: t('inquiryDetail.quote.specSummary'),
+      submittedAt: t('inquiryDetail.quote.submittedAt'),
+      systemGenerated: t('inquiryDetail.quote.systemGenerated'),
+      unit: t('inquiryDetail.quote.unit'),
+      unitEach: t('inquiryDetail.unitEach'),
+      unitPrice: t('inquiryDetail.quote.unitPrice'),
+    };
     const html = buildQuotePrintHtml({
-      inquiry: inquiry!,
+      inquiry: currentInquiry,
       companyName: quotationCompanyName,
       companyLogo: quotationCompanyLogo,
       statuses,
+      labels: quoteLabels,
+      locale: dateLocale,
+      statusLabel: t(`inquiryStatus.${currentInquiry.status}.label`, {
+        defaultValue: statusInfo(statuses, currentInquiry.status).label,
+      }),
       fallbackUrl: `${window.location.pathname}${window.location.search}${window.location.hash}`,
     });
     const printWindow = window.open('', '_blank', 'width=960,height=900');
     if (!printWindow) {
-      toast('浏览器拦截了导出窗口，请允许弹窗后重试', 'error');
+      toast(t('inquiryDetail.export.popupBlocked'), 'error');
       return;
     }
     printWindow.document.open();
@@ -1434,9 +1541,9 @@ function DetailContent({ id }: { id: string }) {
   async function handleExportExcel() {
     try {
       await exportInquiryEditableXlsx({ inquiry: inquiry!, statuses });
-      toast('已导出询价明细表，可直接编辑报价信息', 'success');
+      toast(t('inquiryDetail.export.excelSuccess'), 'success');
     } catch (err) {
-      toast(getErrorMessage(err, '导出询价明细失败'), 'error');
+      toast(getErrorMessage(err, t('inquiryDetail.export.excelFailed')), 'error');
     }
   }
 
@@ -1446,23 +1553,30 @@ function DetailContent({ id }: { id: string }) {
         {isAdmin ? (
           <main className="flex w-full min-w-0 flex-col gap-3 md:gap-4">
             <InquiryDetailHeader
-              title="询价处理详情"
+              title={t('inquiryDetail.adminTitle')}
               inquiry={inquiry}
-              description={`提交于 ${formatDateTime(inquiry.createdAt)} · ${inquiry.items.length} 项产品 · ${
-                inquiry.company || inquiry.contactName || inquiry.user?.username || '客户'
-              }`}
+              description={t('inquiryDetail.submittedProductsWithCustomer', {
+                date: formatDateTime(inquiry.createdAt, dateLocale),
+                count: inquiry.items.length,
+                customer:
+                  inquiry.company || inquiry.contactName || inquiry.user?.username || t('inquiryDetail.customer'),
+              })}
               actions={
                 <>
-                  <InquiryDetailHeaderAction icon="arrow_back" label="返回" onClick={() => navigate(-1)} />
+                  <InquiryDetailHeaderAction
+                    icon="arrow_back"
+                    label={t('inquiryDetail.actions.back')}
+                    onClick={() => navigate(-1)}
+                  />
                   <InquiryDetailHeaderAction
                     icon="description"
-                    label="导出PDF"
+                    label={t('inquiryDetail.actions.exportPdf')}
                     shortLabel="PDF"
                     onClick={handleExportQuote}
                   />
                   <InquiryDetailHeaderAction
                     icon="spreadsheet"
-                    label="导出Excel"
+                    label={t('inquiryDetail.actions.exportExcel')}
                     shortLabel="XLS"
                     onClick={handleExportExcel}
                   />
@@ -1493,8 +1607,8 @@ function DetailContent({ id }: { id: string }) {
                 />
                 {inquiry.remark || inquiry.adminRemark ? (
                   <div className="grid gap-4 md:grid-cols-2">
-                    <NoteCard title="用户备注" content={inquiry.remark} icon="description" />
-                    <NoteCard title="跟进备注" content={inquiry.adminRemark} icon="edit" />
+                    <NoteCard title={t('inquiryDetail.notes.userRemark')} content={inquiry.remark} icon="description" />
+                    <NoteCard title={t('inquiryDetail.notes.followRemark')} content={inquiry.adminRemark} icon="edit" />
                   </div>
                 ) : null}
                 <InquiryMessagesSection
@@ -1520,16 +1634,23 @@ function DetailContent({ id }: { id: string }) {
         ) : (
           <main className="flex w-full min-w-0 flex-col gap-3 md:gap-4">
             <InquiryDetailHeader
-              title="我的询价详情"
+              title={t('inquiryDetail.userTitle')}
               inquiry={inquiry}
-              description={`提交于 ${formatDateTime(inquiry.createdAt)} · ${inquiry.items.length} 项产品`}
+              description={t('inquiryDetail.submittedProducts', {
+                date: formatDateTime(inquiry.createdAt, dateLocale),
+                count: inquiry.items.length,
+              })}
               actions={
                 <>
-                  <InquiryDetailHeaderAction icon="arrow_back" label="返回" onClick={() => navigate(-1)} />
+                  <InquiryDetailHeaderAction
+                    icon="arrow_back"
+                    label={t('inquiryDetail.actions.back')}
+                    onClick={() => navigate(-1)}
+                  />
                   {inquiry.status === 'submitted' ? (
                     <InquiryDetailHeaderAction
                       icon="close"
-                      label="取消询价"
+                      label={t('inquiryDetail.actions.cancelInquiry')}
                       onClick={requestCancelInquiry}
                       tone="danger"
                     />
@@ -1588,7 +1709,7 @@ function DetailContent({ id }: { id: string }) {
               {pendingAttachmentPreviewUrl ? (
                 <SafeImage
                   src={pendingAttachmentPreviewUrl}
-                  alt="待发送"
+                  alt={t('inquiryDetail.pendingAttachment')}
                   className="h-16 rounded border border-outline-variant/20 object-contain md:h-20"
                 />
               ) : (
@@ -1599,14 +1720,14 @@ function DetailContent({ id }: { id: string }) {
               )}
               {uploadingAttachment ? (
                 <span className="absolute bottom-1 left-1 rounded bg-black/55 px-1.5 py-0.5 text-[10px] text-white">
-                  上传中
+                  {t('inquiryDetail.uploading')}
                 </span>
               ) : null}
               <button
                 type="button"
                 onClick={clearPendingAttachment}
                 className="absolute -right-1.5 -top-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-error text-xs text-on-primary"
-                aria-label="移除附件"
+                aria-label={t('inquiryDetail.removeAttachment')}
               >
                 <Icon name="close" size={10} />
               </button>
@@ -1615,9 +1736,9 @@ function DetailContent({ id }: { id: string }) {
           <div className="flex items-end gap-1.5">
             <input ref={fileInputRef} type="file" className="hidden" onChange={handleAttachmentSelect} />
             <QuickReplyChips
-              phrases={isAdmin ? INQUIRY_ADMIN_QUICK_REPLIES : INQUIRY_USER_QUICK_REPLIES}
+              phrases={quickReplyPhrases}
               onPick={handleQuickReply}
-              title={isAdmin ? '询价处理快捷词' : '我的询价快捷词'}
+              title={isAdmin ? t('inquiryDetail.quickReplyAdminTitle') : t('inquiryDetail.quickReplyUserTitle')}
             />
             <textarea
               value={msgInput}
@@ -1630,7 +1751,7 @@ function DetailContent({ id }: { id: string }) {
                 }
               }}
               placeholder={
-                isDesktop ? '输入回复内容... (Enter 发送, Shift+Enter 换行，可粘贴截图)' : '输入回复 / 粘贴截图'
+                isDesktop ? t('inquiryDetail.replyPlaceholderDesktop') : t('inquiryDetail.replyPlaceholderMobile')
               }
               rows={1}
               className="max-h-28 min-h-9 min-w-0 flex-1 resize-none rounded-lg border border-outline-variant/20 bg-surface-container-high px-2.5 py-2 text-xs text-on-surface outline-none transition-colors placeholder:text-on-surface-variant/40 focus:border-primary-container focus:ring-1 focus:ring-primary-container/20 md:min-h-10 md:px-3 md:py-2.5 md:text-sm"
@@ -1640,7 +1761,7 @@ function DetailContent({ id }: { id: string }) {
               onClick={() => fileInputRef.current?.click()}
               disabled={uploadingAttachment}
               className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-on-surface-variant transition-colors hover:bg-surface-container-high active:bg-surface-container-highest md:h-10 md:w-10"
-              aria-label="上传图片"
+              aria-label={t('inquiryDetail.uploadImage')}
             >
               <Icon name="image" size={isDesktop ? 18 : 16} />
             </button>
@@ -1649,7 +1770,7 @@ function DetailContent({ id }: { id: string }) {
               onClick={() => fileInputRef.current?.click()}
               disabled={uploadingAttachment}
               className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-on-surface-variant transition-colors hover:bg-surface-container-high active:bg-surface-container-highest md:h-10 md:w-10"
-              aria-label="上传附件"
+              aria-label={t('inquiryDetail.uploadAttachment')}
             >
               <Icon name="attachment" size={isDesktop ? 18 : 16} />
             </button>
@@ -1657,16 +1778,17 @@ function DetailContent({ id }: { id: string }) {
               onClick={handleSendMsg}
               disabled={sending || uploadingAttachment || (!msgInput.trim() && !pendingAttachment)}
               className="inline-flex h-9 w-9 shrink-0 items-center justify-center gap-1.5 rounded-lg bg-primary-container text-sm font-medium text-on-primary transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40 md:h-10 md:w-auto md:px-4"
+              aria-label={t('inquiryDetail.send')}
             >
               <Icon name="send" size={isDesktop ? 14 : 16} />
-              <span className="hidden md:inline">发送</span>
+              <span className="hidden md:inline">{t('inquiryDetail.send')}</span>
             </button>
           </div>
         </div>
       )}
       {!canMessage && (
         <div className="shrink-0 border-t border-outline-variant/10 bg-surface-container px-4 py-3 pb-[calc(0.75rem+env(safe-area-inset-bottom,0px))] text-center text-xs text-on-surface-variant">
-          当前询价已结束，沟通记录仅供查看。
+          {t('inquiryDetail.closedReadOnly')}
         </div>
       )}
       <InquirySalesAssignmentDialog
@@ -1682,9 +1804,9 @@ function DetailContent({ id }: { id: string }) {
         }}
         onConfirm={confirmCancelInquiry}
         icon="close"
-        title="确认取消询价？"
-        description="取消后该询价单将结束处理，业务人员不会继续按这份询价单报价。沟通记录仍会保留用于查看。"
-        confirmLabel={cancellingInquiry ? '取消中...' : '确认取消'}
+        title={t('inquiryDetail.cancelDialogTitle')}
+        description={t('inquiryDetail.cancelDialogDescription')}
+        confirmLabel={cancellingInquiry ? t('inquiryDetail.cancelling') : t('inquiryDetail.confirmCancel')}
         confirmDisabled={cancellingInquiry}
       />
     </div>
@@ -1692,9 +1814,10 @@ function DetailContent({ id }: { id: string }) {
 }
 
 export default function InquiryDetailPage() {
+  const { t } = useTranslation();
   const { id } = useParams<{ id: string }>();
   const location = useLocation();
-  useDocumentTitle('询价单详情');
+  useDocumentTitle(t('inquiryDetail.documentTitle'));
 
   const content = <DetailContent id={id!} />;
   const isAdminRoute = location.pathname.startsWith('/admin/inquiries');

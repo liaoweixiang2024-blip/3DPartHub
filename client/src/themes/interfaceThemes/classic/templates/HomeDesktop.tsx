@@ -1,8 +1,10 @@
+import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router-dom';
 import { AnnouncementBanner, SkeletonCard, SkeletonListCard } from '../../../../components/home/HomeDesktopShared';
 import Icon from '../../../../components/shared/Icon';
 import InfiniteLoadTrigger from '../../../../components/shared/InfiniteLoadTrigger';
 import { PageTitle } from '../../../../components/shared/PagePrimitives';
+import Pagination from '../../../../components/shared/Pagination';
 import VirtualProductGrid, { useGridColumnCount } from '../../../../components/shared/VirtualProductGrid';
 import type { DesktopHomeThemeProps } from '../../types';
 import CategorySidebar from '../components/CategorySidebar';
@@ -17,21 +19,30 @@ export default function ClassicHomeDesktop({
   displayTotalItems,
   expandedCategories,
   hasMore,
+  homePageSizeOptions,
   isLoadingMore,
+  listLoadingMode,
+  page,
+  pageSize,
   products,
   renderProductCard,
   scrollContainerRef,
   searchQuery,
   showHomeListSkeleton,
   sortBy,
+  totalItems,
   totalModelCount,
+  totalPages,
   viewMode,
   onLoadMore,
+  onPageChange,
+  onPageSizeChange,
   onSelectCategory,
   onSortChange,
   onToggleCategory,
   onViewModeChange,
 }: DesktopHomeThemeProps) {
+  const { t } = useTranslation();
   const gridCols = useGridColumnCount();
   const isEmpty = products.length === 0 && !showHomeListSkeleton;
   const gridClasses = `home-model-grid grid gap-3 ${
@@ -63,7 +74,7 @@ export default function ClassicHomeDesktop({
                 onClick={() => onSelectCategory('all')}
                 className="text-on-surface-variant hover:text-on-surface cursor-pointer transition-colors"
               >
-                首页
+                {t('home.home')}
               </button>
               <Icon name="chevron_right" size={12} className="text-on-surface-variant/40" />
               {breadcrumb.parent && !breadcrumb.child ? (
@@ -87,9 +98,9 @@ export default function ClassicHomeDesktop({
               )}
             </div>
             <div className="home-title-mainline flex items-center gap-3">
-              <PageTitle>零件模型库</PageTitle>
+              <PageTitle>{t('home.modelLibrary')}</PageTitle>
               <span className="bg-surface-container-high px-2 py-0.5 text-xs text-on-surface-variant rounded-sm border border-outline-variant/20">
-                {displayTotalItems} 个模型
+                {t('home.modelCount', { count: displayTotalItems })}
               </span>
             </div>
           </div>
@@ -100,8 +111,8 @@ export default function ClassicHomeDesktop({
                 onChange={(event) => onSortChange(event.target.value)}
                 className="bg-surface-container-lowest text-sm text-on-surface rounded-sm pl-3 pr-8 py-1 border border-outline-variant/30 outline-none appearance-none cursor-pointer"
               >
-                <option value="created_at">最新上传</option>
-                <option value="name">名称排序</option>
+                <option value="created_at">{t('home.sortLatest')}</option>
+                <option value="name">{t('home.sortName')}</option>
               </select>
               <Icon
                 name="expand_more"
@@ -112,16 +123,16 @@ export default function ClassicHomeDesktop({
             <div className="flex rounded-sm border border-outline-variant/30 overflow-hidden">
               <button
                 onClick={() => onViewModeChange('grid')}
-                aria-label="网格视图"
-                title="网格视图"
+                aria-label={t('home.gridView')}
+                title={t('home.gridView')}
                 className={`px-2.5 py-1.5 transition-colors ${viewMode === 'grid' ? 'bg-surface-container-high text-on-surface' : 'text-on-surface-variant hover:text-on-surface'}`}
               >
                 <Icon name="grid_view" size={18} />
               </button>
               <button
                 onClick={() => onViewModeChange('list')}
-                aria-label="列表视图"
-                title="列表视图"
+                aria-label={t('home.listView')}
+                title={t('home.listView')}
                 className={`px-2.5 py-1.5 transition-colors ${viewMode === 'list' ? 'bg-surface-container-high text-on-surface' : 'text-on-surface-variant hover:text-on-surface'}`}
               >
                 <Icon name="view_list" size={18} />
@@ -158,9 +169,9 @@ export default function ClassicHomeDesktop({
               <div className="home-model-empty-state home-model-empty-state-classic flex flex-1 flex-col items-center justify-center gap-4 py-12">
                 <Icon name="search_off" size={48} className="text-on-surface-variant/30" />
                 <div className="text-center">
-                  <p className="text-on-surface-variant">没有找到匹配的模型</p>
+                  <p className="text-on-surface-variant">{t('home.emptyTitle')}</p>
                   {searchQuery.trim() && (
-                    <p className="mt-1 text-xs text-on-surface-variant/60">可以提交需求，请管理员补充或完善模型库。</p>
+                    <p className="mt-1 text-xs text-on-surface-variant/60">{t('home.emptyDescription')}</p>
                   )}
                 </div>
                 {searchQuery.trim() && (
@@ -170,18 +181,28 @@ export default function ClassicHomeDesktop({
                       source: 'model_search',
                       searchQuery: searchQuery.trim(),
                       classification: 'novel',
-                      description: `模型库未搜索到：${searchQuery.trim()}\n请协助补充或完善该模型。`,
+                      description: t('home.requestDescription', { query: searchQuery.trim() }),
                     }}
                     className="inline-flex items-center gap-2 rounded-lg bg-primary-container px-4 py-2 text-sm font-bold text-on-primary transition-opacity hover:opacity-90"
                   >
                     <Icon name="assignment_add" size={16} />
-                    申请完善模型
+                    {t('home.requestModel')}
                   </Link>
                 )}
               </div>
             )}
 
-            {products.length > 0 ? (
+            {products.length > 0 && listLoadingMode === 'pagination' ? (
+              <Pagination
+                page={page}
+                totalPages={totalPages}
+                totalItems={totalItems}
+                pageSize={pageSize}
+                pageSizeOptions={homePageSizeOptions}
+                onPageChange={onPageChange}
+                onPageSizeChange={onPageSizeChange}
+              />
+            ) : products.length > 0 ? (
               <InfiniteLoadTrigger
                 hasMore={hasMore}
                 isLoading={isLoadingMore}

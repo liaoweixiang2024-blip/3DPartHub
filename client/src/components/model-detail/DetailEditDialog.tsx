@@ -166,7 +166,7 @@ export function DetailEditDialog({
                         try {
                           const r = await modelApi.reconvert(modelId);
                           setThumbUrl(r.thumbnail_url);
-                          toast('已重新生成', 'success');
+                          toast(r.thumbnail_warning || '已重新生成', r.thumbnail_warning ? 'info' : 'success');
                           ok = true;
                         } catch {
                           toast('重新生成失败', 'error');

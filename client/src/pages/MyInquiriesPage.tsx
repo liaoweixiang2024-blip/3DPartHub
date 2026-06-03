@@ -1,4 +1,6 @@
+import type { TFunction } from 'i18next';
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Link, useNavigate } from 'react-router-dom';
 import useSWR from 'swr';
 import { getMyInquiries } from '../api/inquiries';
@@ -14,11 +16,19 @@ import { useMediaQuery } from '../layouts/hooks/useMediaQuery';
 import type { InquiryCartItem } from '../lib/inquiryCart';
 import { getCustomerInquiryStatusView } from '../lib/inquiryCustomerStatus';
 
+const INQUIRY_STATUS_KEYS = new Set(['submitted', 'quoted', 'accepted', 'rejected', 'cancelled']);
+
+function getInquiryStatusKey(status: string) {
+  return INQUIRY_STATUS_KEYS.has(status) ? status : 'default';
+}
+
 function StatusBadge({ status }: { status: string }) {
+  const { t } = useTranslation();
   const info = getCustomerInquiryStatusView(status);
+  const statusKey = getInquiryStatusKey(status);
   return (
     <span className={`inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-xs font-bold ${info.badgeClassName}`}>
-      {info.label}
+      {t(`inquiryStatus.${statusKey}.label`)}
     </span>
   );
 }
@@ -30,32 +40,36 @@ function getCartItemTitle(item: InquiryCartItem) {
   return item.modelNo || item.productName;
 }
 
-function getCustomerProgressText(status: string) {
-  return getCustomerInquiryStatusView(status).progress;
+function getCustomerProgressText(status: string, t: TFunction) {
+  return t(`inquiryStatus.${getInquiryStatusKey(status)}.progress`);
 }
 
 function HistoryDivider({ count }: { count: number }) {
+  const { t } = useTranslation();
+
   return (
     <div className="mb-2 flex items-center gap-2 text-xs font-medium text-on-surface-variant">
-      <span>已提交询价</span>
+      <span>{t('myInquiries.historyDivider')}</span>
       <span className="h-px flex-1 bg-outline-variant/10" />
-      <span>{count} 条</span>
+      <span>{t('myInquiries.historyCount', { count })}</span>
     </div>
   );
 }
 
 function HistoryEmpty() {
+  const { t } = useTranslation();
+
   return (
     <AdminEmptyState
       icon="request_quote"
-      title="还没有提交询价"
-      description="提交询价后，可在这里查看业务回复和处理进度。"
+      title={t('myInquiries.emptyTitle')}
+      description={t('myInquiries.emptyDescription')}
       action={
         <Link
           to="/selection"
           className="rounded-md bg-primary-container px-5 py-2.5 text-sm font-semibold text-on-primary transition-opacity hover:opacity-90"
         >
-          去选型
+          {t('myInquiries.emptyAction')}
         </Link>
       }
     />
@@ -63,6 +77,7 @@ function HistoryEmpty() {
 }
 
 function InquiryCartSection({ compact, onSubmitted }: { compact?: boolean; onSubmitted: () => void }) {
+  const { t } = useTranslation();
   const cart = useInquiryCart();
   const [submitOpen, setSubmitOpen] = useState(false);
 
@@ -74,9 +89,9 @@ function InquiryCartSection({ compact, onSubmitted }: { compact?: boolean; onSub
         <div className="flex flex-col gap-2 border-b border-outline-variant/10 px-3 py-2.5 md:flex-row md:items-center md:justify-between">
           <div className="flex min-w-0 items-center gap-2">
             <Icon name="request_quote" size={15} className="text-primary-container" />
-            <h2 className="text-xs font-semibold text-on-surface md:text-sm">待提交询价清单</h2>
+            <h2 className="text-xs font-semibold text-on-surface md:text-sm">{t('myInquiries.cartTitle')}</h2>
             <span className="rounded-md bg-primary-container/10 px-1.5 py-0.5 text-[11px] font-semibold text-primary-container">
-              {cart.items.length} 项
+              {t('myInquiries.countItems', { count: cart.items.length })}
             </span>
           </div>
           <div className="flex shrink-0 flex-wrap gap-1.5">
@@ -85,20 +100,20 @@ function InquiryCartSection({ compact, onSubmitted }: { compact?: boolean; onSub
               className="inline-flex h-8 items-center gap-1 rounded-md border border-outline-variant/20 px-2.5 text-xs font-medium text-on-surface-variant hover:bg-surface-container-high/50"
             >
               <Icon name="add" size={13} />
-              继续选型
+              {t('myInquiries.cartContinue')}
             </Link>
             <button
               onClick={cart.clear}
               className="h-8 px-2 text-xs font-medium text-on-surface-variant hover:text-on-surface"
             >
-              清空
+              {t('myInquiries.cartClear')}
             </button>
             <button
               onClick={() => setSubmitOpen(true)}
               className="inline-flex h-8 items-center gap-1 rounded-md bg-primary-container px-2.5 text-xs font-semibold text-on-primary hover:opacity-90"
             >
               <Icon name="send" size={13} />
-              提交
+              {t('myInquiries.cartSubmit')}
             </button>
           </div>
         </div>
@@ -116,7 +131,7 @@ function InquiryCartSection({ compact, onSubmitted }: { compact?: boolean; onSub
                     .filter(([, value]) => value && value !== '—')
                     .slice(0, 2)
                     .map(([key, value]) => `${key}:${value}`)
-                    .join(' ') || '待提交询价'}
+                    .join(' ') || t('myInquiries.pendingFallback')}
                 </p>
               </div>
               <input
@@ -125,18 +140,18 @@ function InquiryCartSection({ compact, onSubmitted }: { compact?: boolean; onSub
                 value={item.qty}
                 onChange={(event) => cart.updateItem(item.id, { qty: Math.max(1, parseInt(event.target.value) || 1) })}
                 className="h-8 rounded-md border border-outline-variant/20 bg-surface-container px-2 text-center text-xs text-on-surface outline-none focus:border-primary-container"
-                aria-label="询价数量"
+                aria-label={t('myInquiries.qtyAria')}
               />
               <input
                 value={item.remark}
                 onChange={(event) => cart.updateItem(item.id, { remark: event.target.value })}
-                placeholder="备注"
+                placeholder={t('myInquiries.remarkPlaceholder')}
                 className="h-8 min-w-0 rounded-md border border-outline-variant/20 bg-surface-container px-2 text-xs text-on-surface outline-none focus:border-primary-container"
               />
               <button
                 onClick={() => cart.removeItem(item.id)}
                 className="inline-flex h-7 w-7 items-center justify-center rounded-md text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface"
-                aria-label="移出询价清单"
+                aria-label={t('myInquiries.cartRemove')}
               >
                 <Icon name="delete" size={14} />
               </button>
@@ -159,6 +174,7 @@ function InquiryCartSection({ compact, onSubmitted }: { compact?: boolean; onSub
 }
 
 function DesktopContent() {
+  const { i18n, t } = useTranslation();
   const { data: inquiries = [], isLoading, mutate } = useSWR('my-inquiries', getMyInquiries);
   const cart = useInquiryCart();
   const hasPendingCart = cart.items.length > 0;
@@ -172,9 +188,9 @@ function DesktopContent() {
 
   return (
     <AdminManagementPage
-      title="我的询价记录"
-      meta={`${inquiries.length} 条记录`}
-      description="客户入口：查看已提交询价、业务回复和后续对接进度"
+      title={t('myInquiries.title')}
+      meta={t('myInquiries.meta', { count: inquiries.length })}
+      description={t('myInquiries.description')}
       actions={
         inquiries.length > 0 ? (
           <>
@@ -187,14 +203,14 @@ function DesktopContent() {
               className="flex items-center gap-2 rounded-lg border border-outline-variant/20 px-4 py-2.5 text-sm text-on-surface-variant transition-colors hover:text-on-surface disabled:opacity-50"
             >
               <Icon name="refresh" size={16} className={refreshing ? 'animate-spin' : ''} />
-              {refreshing ? '刷新中...' : '刷新'}
+              {refreshing ? t('myInquiries.refreshing') : t('myInquiries.refresh')}
             </button>
             <Link
               to="/selection"
               className="flex items-center gap-2 rounded-lg bg-primary-container px-5 py-2.5 text-sm font-medium text-on-primary hover:opacity-90"
             >
               <Icon name="add" size={16} />
-              发起询价
+              {t('myInquiries.actionCreate')}
             </Link>
           </>
         ) : null
@@ -206,7 +222,7 @@ function DesktopContent() {
         {isLoading ? (
           <AdminLoadingState
             variant="table"
-            label="询价记录加载中"
+            label={t('myInquiries.loading')}
             tableColumns="88px minmax(0,1fr) 220px 120px"
             tableCells={['chip', 'title', 'text', 'action']}
           />
@@ -215,10 +231,10 @@ function DesktopContent() {
         ) : inquiries.length === 0 ? null : (
           <div className="min-h-0 flex-1 overflow-auto rounded-lg border border-outline-variant/10 bg-surface-container-low">
             <div className="sticky top-0 z-10 grid grid-cols-[88px_minmax(0,1fr)_220px_120px] gap-4 border-b border-outline-variant/10 bg-surface-container-low px-6 py-3 text-xs font-bold uppercase tracking-wider text-on-surface-variant">
-              <span>状态</span>
-              <span>询价内容</span>
-              <span>当前进度</span>
-              <span>查看</span>
+              <span>{t('myInquiries.tableStatus')}</span>
+              <span>{t('myInquiries.tableContent')}</span>
+              <span>{t('myInquiries.tableProgress')}</span>
+              <span>{t('myInquiries.tableView')}</span>
             </div>
             {visibleInquiries.map((inq) => (
               <div
@@ -228,20 +244,23 @@ function DesktopContent() {
                 <StatusBadge status={inq.status} />
                 <div className="min-w-0">
                   <p className="truncate text-sm text-on-surface">
-                    {inq.items.map((it) => it.modelNo || it.productName).join('、')}
+                    {inq.items.map((it) => it.modelNo || it.productName).join(t('myInquiries.listSeparator'))}
                   </p>
                   <p className="text-xs text-on-surface-variant">
-                    {inq.items.length} 个产品 · 提交于 {new Date(inq.createdAt).toLocaleDateString('zh-CN')}
+                    {t('myInquiries.productCountWithDate', {
+                      count: inq.items.length,
+                      date: new Date(inq.createdAt).toLocaleDateString(i18n.language),
+                    })}
                   </p>
                 </div>
                 <span className="text-xs leading-relaxed text-on-surface-variant">
-                  {getCustomerProgressText(inq.status)}
+                  {getCustomerProgressText(inq.status, t)}
                 </span>
                 <button
                   onClick={() => navigate(`/my-inquiries/${inq.id}`)}
                   className="text-xs text-primary-container hover:underline"
                 >
-                  查看进度
+                  {t('myInquiries.viewProgress')}
                 </button>
               </div>
             ))}
@@ -254,6 +273,7 @@ function DesktopContent() {
 }
 
 function MobileContent() {
+  const { i18n, t } = useTranslation();
   const { data: inquiries = [], isLoading, mutate } = useSWR('my-inquiries', getMyInquiries);
   const cart = useInquiryCart();
   const hasPendingCart = cart.items.length > 0;
@@ -267,9 +287,9 @@ function MobileContent() {
 
   return (
     <AdminManagementPage
-      title="我的询价记录"
-      meta={`${inquiries.length} 条记录`}
-      description="客户入口：查看业务回复和后续对接进度"
+      title={t('myInquiries.title')}
+      meta={t('myInquiries.meta', { count: inquiries.length })}
+      description={t('myInquiries.descriptionMobile')}
       actions={
         inquiries.length > 0 ? (
           <>
@@ -288,7 +308,7 @@ function MobileContent() {
               className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-lg bg-primary-container px-3 text-xs font-medium text-on-primary"
             >
               <Icon name="add" size={14} />
-              发起
+              {t('myInquiries.actionCreateShort')}
             </Link>
           </>
         ) : null
@@ -298,7 +318,7 @@ function MobileContent() {
       <section className="flex min-h-0 flex-1 flex-col">
         {hasPendingCart && inquiries.length > 0 ? <HistoryDivider count={inquiries.length} /> : null}
         {isLoading ? (
-          <AdminLoadingState variant="list" rows={5} label="询价记录加载中" />
+          <AdminLoadingState variant="list" rows={5} label={t('myInquiries.loading')} />
         ) : inquiries.length === 0 && !hasPendingCart ? (
           <HistoryEmpty />
         ) : inquiries.length === 0 ? null : (
@@ -312,15 +332,15 @@ function MobileContent() {
                 <div className="mb-2 flex flex-wrap items-center gap-2">
                   <StatusBadge status={inq.status} />
                   <span className="text-[11px] text-on-surface-variant">
-                    {new Date(inq.createdAt).toLocaleDateString('zh-CN')}
+                    {new Date(inq.createdAt).toLocaleDateString(i18n.language)}
                   </span>
                 </div>
                 <p className="mb-1 line-clamp-2 break-words text-sm text-on-surface">
-                  {inq.items.map((it) => it.modelNo || it.productName).join('、')}
+                  {inq.items.map((it) => it.modelNo || it.productName).join(t('myInquiries.listSeparator'))}
                 </p>
                 <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-on-surface-variant">
-                  <span>{getCustomerProgressText(inq.status)}</span>
-                  <span>查看进度</span>
+                  <span>{getCustomerProgressText(inq.status, t)}</span>
+                  <span>{t('myInquiries.viewProgress')}</span>
                 </div>
               </div>
             ))}
@@ -333,7 +353,8 @@ function MobileContent() {
 }
 
 export default function MyInquiriesPage() {
-  useDocumentTitle('我的询价记录');
+  const { t } = useTranslation();
+  useDocumentTitle(t('myInquiries.title'));
   const isDesktop = useMediaQuery('(min-width: 768px)');
 
   return <AdminPageShell>{isDesktop ? <DesktopContent /> : <MobileContent />}</AdminPageShell>;

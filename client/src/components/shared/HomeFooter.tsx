@@ -1,4 +1,5 @@
 import { memo } from 'react';
+import { useTranslation } from 'react-i18next';
 import {
   getSiteTitle,
   getFooterLinks,
@@ -10,6 +11,7 @@ import {
 import Icon from './Icon';
 
 const HomeFooter = memo(function HomeFooter() {
+  const { t } = useTranslation();
   const footerLinks = getFooterLinks();
 
   return (
@@ -43,10 +45,10 @@ const HomeFooter = memo(function HomeFooter() {
             </div>
             {footerLinks.length > 0 && (
               <nav
-                aria-label="相关链接"
+                aria-label={t('home.footerLinks')}
                 className="flex max-w-md flex-wrap items-center gap-x-3 gap-y-1 md:justify-end"
               >
-                <span className="text-[10px] font-medium text-on-surface-variant/35">相关链接</span>
+                <span className="text-[10px] font-medium text-on-surface-variant/35">{t('home.footerLinks')}</span>
                 {footerLinks.map((link, i) => (
                   <a
                     key={`${link.label}-${i}`}

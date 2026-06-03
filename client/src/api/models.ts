@@ -641,14 +641,16 @@ export const modelApi = {
   ): Promise<{
     model_id: string;
     gltf_size: number;
-    thumbnail_url: string;
+    thumbnail_url: string | null;
+    thumbnail_warning?: string | null;
     preview_meta?: ModelPreviewMeta | null;
   }> => {
     const res = await client.post(`/models/${id}/reconvert`);
     return unwrapResponse<{
       model_id: string;
       gltf_size: number;
-      thumbnail_url: string;
+      thumbnail_url: string | null;
+      thumbnail_warning?: string | null;
       preview_meta?: ModelPreviewMeta | null;
     }>(res);
   },
@@ -777,8 +779,12 @@ export const modelApi = {
     return unwrapResponse<{ total: number }>(res);
   },
 
-  getModelCount: async (): Promise<{ total: number }> => {
-    const res = await client.get('/models/count');
+  getModelCount: async (params?: { grouped?: boolean }): Promise<{ total: number }> => {
+    const res = await client.get('/models/count', {
+      params: {
+        grouped: params?.grouped,
+      },
+    });
     return unwrapResponse<{ total: number }>(res);
   },
 

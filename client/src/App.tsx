@@ -7,6 +7,7 @@ import GlobalTooltip from './components/shared/GlobalTooltip';
 import { GlobalPageRefreshIndicator } from './components/shared/PageRefreshFallback';
 import RouteProgress from './components/shared/RouteProgress';
 import { ToastProvider } from './components/shared/Toast';
+import { i18n } from './i18n';
 import { isRateLimitError, notifyGlobalError } from './lib/errorNotifications';
 import { motionDuration, motionEase } from './lib/motion';
 import { getPublicSettingsSnapshot } from './lib/publicSettings';
@@ -25,7 +26,7 @@ export default function App() {
         shouldRetryOnError: (error) => !isRateLimitError(error),
         onError: (error) => {
           if (isRateLimitError(error)) return;
-          notifyGlobalError(error, '数据加载失败，请稍后重试');
+          notifyGlobalError(error, i18n.t('app.dataLoadFailed'));
         },
       }}
     >

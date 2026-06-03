@@ -78,13 +78,13 @@ export function getInquiryCartItemTitle(item: InquiryCartItem) {
   return item.modelNo || item.productName;
 }
 
-export function getInquiryCartItemSummary(item: InquiryCartItem) {
+export function getInquiryCartItemSummary(item: InquiryCartItem, remarkLabel = 'Remark') {
   const specs = Object.entries(item.specs || {})
     .filter(([, value]) => value && value !== '—')
     .slice(0, 2)
     .map(([key, value]) => `${key}:${value}`)
     .join(' ');
-  const remark = item.remark ? `备注:${item.remark}` : '';
+  const remark = item.remark ? `${remarkLabel}:${item.remark}` : '';
   return [specs, remark].filter(Boolean).join(' · ');
 }
 
@@ -92,6 +92,7 @@ export function applyManualSpecs(
   product: SelectionProduct,
   columns: ColumnDef[],
   specs: Record<string, string>,
+  options: { formatGeneratedOutletName?: (routeIndex: number) => string } = {},
 ): SelectionProduct {
   const userEntries = columns
     .filter((col) => (isManualColumn(col) || isPresetColumn(col)) && specs[col.key])
@@ -118,7 +119,7 @@ export function applyManualSpecs(
     if (!isPresetColumn(col) || !col.dependsOn || !specs[col.key]) continue;
     const routeIndex = col.dependsOn.minIndex;
     outletComponents.push({
-      name: `第${routeIndex}路出口接头`,
+      name: options.formatGeneratedOutletName?.(routeIndex) || `Route ${routeIndex} outlet connector`,
       modelNo: `PL${specs[col.key]}-02`,
       qty: 1,
     });
@@ -133,11 +134,11 @@ export function applyManualSpecs(
 }
 
 export function formatModelCount(count: number) {
-  return `${count} 个型号`;
+  return String(count);
 }
 
 export function formatOptionCount(count: number) {
-  return `${count} 个选项`;
+  return String(count);
 }
 
 export function stableJson(value: unknown): string {

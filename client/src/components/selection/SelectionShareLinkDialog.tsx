@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next';
 import Icon from '../shared/Icon';
 import type { ShareLinkDialogState } from './selectionUtils';
 
@@ -14,6 +15,7 @@ export function SelectionShareLinkDialog({
   onNativeShare: () => void;
   nativeSharePending?: boolean;
 }) {
+  const { t } = useTranslation();
   if (!state) return null;
 
   const canNativeShare = typeof navigator !== 'undefined' && typeof navigator.share === 'function';
@@ -39,7 +41,7 @@ export function SelectionShareLinkDialog({
             type="button"
             onClick={onClose}
             className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-on-surface-variant hover:bg-surface-container-highest hover:text-on-surface"
-            aria-label="关闭"
+            aria-label={t('common.close')}
             data-tooltip-ignore
           >
             <Icon name="close" size={18} />
@@ -61,7 +63,7 @@ export function SelectionShareLinkDialog({
               data-tooltip-ignore
             >
               <Icon name="share" size={16} />
-              {nativeSharePending ? '分享中...' : '系统分享'}
+              {nativeSharePending ? t('selectionPage.share.nativeSharing') : t('selectionPage.share.nativeShare')}
             </button>
           ) : null}
           <button
@@ -71,7 +73,7 @@ export function SelectionShareLinkDialog({
             data-tooltip-ignore
           >
             <Icon name="content_copy" size={16} />
-            复制链接
+            {t('selectionPage.share.copyLink')}
           </button>
         </div>
       </div>

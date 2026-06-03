@@ -1,4 +1,5 @@
 import { useLayoutEffect, useMemo, useRef, useState, type MouseEvent } from 'react';
+import { useTranslation } from 'react-i18next';
 import useSWR from 'swr';
 import { threadSizeApi } from '../api/threadSize';
 import { AdminContentPanel, AdminManagementPage } from '../components/shared/AdminManagementPage';
@@ -43,15 +44,19 @@ import { useImeSafeSearchInput } from '../hooks/useImeSafeSearchInput';
 import { useAuthStore } from '../stores/useAuthStore';
 
 function ThreadSizeLoadingState() {
+  const { t } = useTranslation();
+
   return (
     <section className="flex h-full min-h-[320px]">
-      <PageRefreshIndicator label="规格数据刷新中" />
+      <PageRefreshIndicator label={t('threadSize.loading')} />
     </section>
   );
 }
 
 export default function ThreadSizeToolPage() {
-  useDocumentTitle('规格速查');
+  const { t } = useTranslation();
+
+  useDocumentTitle(t('threadSize.documentTitle'));
   const user = useAuthStore((s) => s.user);
   const isAdmin = user?.role === 'ADMIN';
   const [activeTab, setActiveTab] = useState<ToolTab>('thread');
@@ -386,8 +391,8 @@ export default function ThreadSizeToolPage() {
       mobileContentClassName="h-full min-h-0 !pb-[4.5rem]"
     >
       <AdminManagementPage
-        title="螺纹与管路速查"
-        description="规格、俗称、测量值直接搜索"
+        title={t('threadSize.title')}
+        description={t('threadSize.description')}
         className="app-public-tool-page app-public-tool-page-thread-size"
         actions={
           isAdmin ? (
@@ -397,7 +402,7 @@ export default function ThreadSizeToolPage() {
               className="inline-flex h-9 items-center justify-center gap-1.5 rounded-lg border border-outline-variant/20 bg-surface-container-low px-3 text-xs font-bold text-on-surface-variant transition-colors hover:bg-surface-container-high hover:text-on-surface"
             >
               <Icon name="edit" size={14} />
-              管理数据
+              {t('threadSize.adminManage')}
             </button>
           ) : null
         }
@@ -415,13 +420,13 @@ export default function ThreadSizeToolPage() {
               }}
               value={queryInputValue}
               onClear={clearSearch}
-              placeholder="搜索规格、俗称、测量值..."
+              placeholder={t('threadSize.searchPlaceholder')}
             />
             <div className="min-w-0">
               <ResponsiveSectionTabs
-                tabs={[{ key: 'guide', label: '使用指南' }, ...CATEGORY_FILTERS].map((item) => ({
+                tabs={[{ key: 'guide', label: t('threadSize.categories.guide') }, ...CATEGORY_FILTERS].map((item) => ({
                   value: item.key,
-                  label: item.label,
+                  label: t(`threadSize.categories.${item.key.replace(':', '_')}`),
                   icon:
                     item.key === 'guide'
                       ? 'search'
@@ -435,7 +440,7 @@ export default function ThreadSizeToolPage() {
                 }))}
                 value={selectedCategoryKey}
                 onChange={handleCategoryClick}
-                mobileTitle="当前分类"
+                mobileTitle={t('threadSize.currentCategory')}
               />
             </div>
           </div>

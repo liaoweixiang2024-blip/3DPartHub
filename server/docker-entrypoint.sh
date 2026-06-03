@@ -35,6 +35,12 @@ seed_static_file "logo/icon.svg"
 seed_static_file "logo/logo.svg"
 seed_static_file "logo/logo.png"
 seed_static_file "favicon/favicon.png"
+seed_static_file "thumbnail-renderer.html"
+
+if [ -d /app/default-static/js ]; then
+  mkdir -p /app/static/js
+  cp -R /app/default-static/js/. /app/static/js/
+fi
 
 chown -R node:node /app/uploads /app/static
 chmod -R ug+rwX /app/uploads /app/static

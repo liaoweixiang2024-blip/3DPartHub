@@ -1,5 +1,6 @@
 import { AnimatePresence, motion } from 'framer-motion';
 import { useState, useRef, useEffect, useCallback } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Link, useNavigate } from 'react-router-dom';
 import useSWR from 'swr';
 import { authApi } from '../api/auth';
@@ -15,20 +16,48 @@ import { useDocumentTitle } from '../hooks/useDocumentTitle';
 import { useMediaQuery } from '../layouts/hooks/useMediaQuery';
 import { useAuthStore } from '../stores/useAuthStore';
 
-const ROLE_LABELS: Record<string, string> = {
-  ADMIN: '管理员',
-  EDITOR: '编辑者',
-  VIEWER: '查看者',
+const ROLE_LABEL_KEYS: Record<string, string> = {
+  ADMIN: 'profile.roles.admin',
+  EDITOR: 'profile.roles.editor',
+  VIEWER: 'profile.roles.viewer',
 };
 
-const NOTIFICATION_ITEMS = [
-  { key: 'ticket', label: '工单通知', desc: '工单回复、状态变更' },
-  { key: 'inquiry', label: '询价通知', desc: '询价回复、处理状态变更' },
-  { key: 'backup', label: '备份通知', desc: '备份体检风险提醒' },
-  { key: 'favorite', label: '收藏通知', desc: '有人收藏你的模型' },
-  { key: 'model_conversion', label: '转换通知', desc: '模型转换完成或失败' },
-  { key: 'download', label: '下载通知', desc: '模型被下载时通知' },
-];
+const NOTIFICATION_ITEMS = ['ticket', 'inquiry', 'backup', 'favorite', 'model_conversion', 'download'] as const;
+
+function normalizePhone(value: unknown): string {
+  return String(value ?? '')
+    .trim()
+    .replace(/[－—–]/g, '-')
+    .replace(/（/g, '(')
+    .replace(/）/g, ')')
+    .replace(/\s+/g, ' ');
+}
+
+function isValidPhone(value: unknown): boolean {
+  const phone = normalizePhone(value);
+  if (!phone) return true;
+  if (phone.length > 32) return false;
+  if (!/^\+?[0-9][0-9\s()-]{5,31}$/.test(phone)) return false;
+
+  const digits = phone.replace(/\D/g, '');
+  const noSpaceOrParen = phone.replace(/[()\s]/g, '');
+
+  if (/^1[3-9]\d{9}$/.test(digits)) return true;
+  if (/^(400|800)-?\d{3}-?\d{4}$/.test(noSpaceOrParen)) return true;
+  if (/^0\d{2,3}-?\d{7,8}(-?\d{1,6})?$/.test(noSpaceOrParen)) return true;
+  if (phone.startsWith('+') && digits.length >= 8 && digits.length <= 15) return true;
+
+  return false;
+}
+
+function profileErrorMessage(error: unknown, fallback: string): string {
+  const payload = (error as { response?: { data?: { detail?: unknown; message?: unknown } }; message?: unknown })
+    ?.response?.data;
+  if (typeof payload?.detail === 'string' && payload.detail) return payload.detail;
+  if (typeof payload?.message === 'string' && payload.message) return payload.message;
+  const message = (error as { message?: unknown })?.message;
+  return typeof message === 'string' && message ? message : fallback;
+}
 
 function Toggle({ checked, onChange }: { checked: boolean; onChange: (v: boolean) => void }) {
   return (
@@ -44,14 +73,17 @@ function Toggle({ checked, onChange }: { checked: boolean; onChange: (v: boolean
 }
 
 function NotificationPrefsLoadingState({ compact = false }: { compact?: boolean }) {
+  const { t } = useTranslation();
+
   return (
     <div className={`flex ${compact ? 'min-h-12' : 'min-h-24'}`}>
-      <PageRefreshIndicator label="通知设置刷新中" />
+      <PageRefreshIndicator label={t('profile.notifications.refreshing')} />
     </div>
   );
 }
 
 function NotificationPrefs({ compact = false }: { compact?: boolean }) {
+  const { t } = useTranslation();
   const { toast } = useToast();
   const user = useAuthStore((s) => s.user);
   const showEmailPrefs = user?.role !== 'ADMIN';
@@ -82,9 +114,9 @@ function NotificationPrefs({ compact = false }: { compact?: boolean }) {
       const updated = await authApi.updateNotificationPrefs(prefs);
       setPrefs(updated);
       setChanged(false);
-      toast('通知设置已保存', 'success');
+      toast(t('profile.notifications.saved'), 'success');
     } catch {
-      toast('保存失败', 'error');
+      toast(t('profile.saveFailed'), 'error');
     } finally {
       setSaving(false);
     }
@@ -100,7 +132,7 @@ function NotificationPrefs({ compact = false }: { compact?: boolean }) {
         <button onClick={() => setExpanded(!expanded)} className="w-full flex items-center justify-between">
           <div className="flex items-center gap-3">
             <Icon name="notifications" size={20} className="text-on-surface-variant" />
-            <span className="text-sm text-on-surface">通知设置</span>
+            <span className="text-sm text-on-surface">{t('profile.notifications.settings')}</span>
           </div>
           <Icon
             name="expand_more"
@@ -111,22 +143,24 @@ function NotificationPrefs({ compact = false }: { compact?: boolean }) {
         {expanded && (
           <div className="mt-3 space-y-3">
             {NOTIFICATION_ITEMS.map((item) => (
-              <div key={item.key} className="flex items-center justify-between gap-3 rounded-md py-1">
+              <div key={item} className="flex items-center justify-between gap-3 rounded-md py-1">
                 <div className="min-w-0">
-                  <span className="text-sm text-on-surface">{item.label}</span>
-                  <p className="text-[10px] leading-snug text-on-surface-variant/60">{item.desc}</p>
+                  <span className="text-sm text-on-surface">{t(`profile.notifications.items.${item}.label`)}</span>
+                  <p className="text-[10px] leading-snug text-on-surface-variant/60">
+                    {t(`profile.notifications.items.${item}.description`)}
+                  </p>
                 </div>
                 <div className="shrink-0 flex items-center gap-3">
                   <label className="flex items-center gap-1.5 text-[10px] text-on-surface-variant">
-                    <span>站内</span>
-                    <Toggle checked={prefs[item.key] !== false} onChange={(v) => handleChange(item.key, v)} />
+                    <span>{t('profile.notifications.inApp')}</span>
+                    <Toggle checked={prefs[item] !== false} onChange={(v) => handleChange(item, v)} />
                   </label>
                   {showEmailPrefs && (
                     <label className="flex items-center gap-1.5 text-[10px] text-on-surface-variant">
-                      <span>邮件</span>
+                      <span>{t('profile.notifications.email')}</span>
                       <Toggle
-                        checked={prefs[`email_${item.key}`] !== false}
-                        onChange={(v) => handleChange(`email_${item.key}`, v)}
+                        checked={prefs[`email_${item}`] !== false}
+                        onChange={(v) => handleChange(`email_${item}`, v)}
                       />
                     </label>
                   )}
@@ -139,7 +173,7 @@ function NotificationPrefs({ compact = false }: { compact?: boolean }) {
                 disabled={saving}
                 className="w-full mt-3 py-2 text-xs font-medium bg-primary-container text-on-primary rounded-lg hover:opacity-90 disabled:opacity-50 transition-opacity"
               >
-                {saving ? '保存中...' : '保存通知设置'}
+                {saving ? t('profile.saving') : t('profile.notifications.saveSettings')}
               </button>
             )}
           </div>
@@ -153,7 +187,9 @@ function NotificationPrefs({ compact = false }: { compact?: boolean }) {
       <button onClick={() => setExpanded(!expanded)} className="w-full flex items-center justify-between">
         <div className="flex items-center gap-2">
           <Icon name="notifications" size={24} className="text-on-surface-variant" />
-          <h3 className="font-headline text-sm font-semibold uppercase tracking-wide text-on-surface">通知偏好</h3>
+          <h3 className="font-headline text-sm font-semibold uppercase tracking-wide text-on-surface">
+            {t('profile.notifications.preferences')}
+          </h3>
         </div>
         <Icon
           name="expand_more"
@@ -164,22 +200,24 @@ function NotificationPrefs({ compact = false }: { compact?: boolean }) {
       {expanded && (
         <div className="mt-5 space-y-4">
           {NOTIFICATION_ITEMS.map((item) => (
-            <div key={item.key} className="flex items-center justify-between gap-4">
+            <div key={item} className="flex items-center justify-between gap-4">
               <div className="min-w-0">
-                <span className="text-sm text-on-surface">{item.label}</span>
-                <p className="text-xs text-on-surface-variant mt-0.5">{item.desc}</p>
+                <span className="text-sm text-on-surface">{t(`profile.notifications.items.${item}.label`)}</span>
+                <p className="text-xs text-on-surface-variant mt-0.5">
+                  {t(`profile.notifications.items.${item}.description`)}
+                </p>
               </div>
               <div className="shrink-0 flex items-center gap-4">
                 <label className="flex items-center gap-2 text-xs text-on-surface-variant">
-                  <span>站内</span>
-                  <Toggle checked={prefs[item.key] !== false} onChange={(v) => handleChange(item.key, v)} />
+                  <span>{t('profile.notifications.inApp')}</span>
+                  <Toggle checked={prefs[item] !== false} onChange={(v) => handleChange(item, v)} />
                 </label>
                 {showEmailPrefs && (
                   <label className="flex items-center gap-2 text-xs text-on-surface-variant">
-                    <span>邮件</span>
+                    <span>{t('profile.notifications.email')}</span>
                     <Toggle
-                      checked={prefs[`email_${item.key}`] !== false}
-                      onChange={(v) => handleChange(`email_${item.key}`, v)}
+                      checked={prefs[`email_${item}`] !== false}
+                      onChange={(v) => handleChange(`email_${item}`, v)}
                     />
                   </label>
                 )}
@@ -192,7 +230,7 @@ function NotificationPrefs({ compact = false }: { compact?: boolean }) {
               disabled={saving}
               className="px-4 py-1.5 text-xs font-medium bg-primary-container text-on-primary rounded-md hover:opacity-90 disabled:opacity-50 transition-opacity"
             >
-              {saving ? '保存中...' : '保存'}
+              {saving ? t('profile.saving') : t('common.save')}
             </button>
           )}
         </div>
@@ -202,17 +240,20 @@ function NotificationPrefs({ compact = false }: { compact?: boolean }) {
 }
 
 function ProfileDesktopLoadingState() {
+  const { t } = useTranslation();
+
   return (
     <PageBody className="mx-auto max-w-6xl pb-12" data-profile-loading>
-      <PageHeader title="个人设置" />
+      <PageHeader title={t('profile.title')} />
       <div className="flex min-h-[360px]">
-        <PageRefreshIndicator label="个人设置刷新中" />
+        <PageRefreshIndicator label={t('profile.refreshing')} />
       </div>
     </PageBody>
   );
 }
 
 function PasswordChangeDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
+  const { t } = useTranslation();
   const { toast } = useToast();
   const [form, setForm] = useState({ oldPassword: '', newPassword: '', confirmPassword: '' });
   const [loading, setLoading] = useState(false);
@@ -226,17 +267,17 @@ function PasswordChangeDialog({ open, onClose }: { open: boolean; onClose: () =>
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (form.newPassword.length < 8) {
-      setError('新密码长度至少8位');
+      setError(t('profile.password.minLength'));
       return;
     }
     if (form.newPassword !== form.confirmPassword) {
-      setError('两次输入的新密码不一致');
+      setError(t('profile.password.mismatch'));
       return;
     }
     setLoading(true);
     try {
       await authApi.changePassword(form.oldPassword, form.newPassword);
-      toast('密码修改成功，请重新登录', 'success');
+      toast(t('profile.password.changed'), 'success');
       onClose();
       setTimeout(() => {
         useAuthStore.getState().logout();
@@ -244,7 +285,7 @@ function PasswordChangeDialog({ open, onClose }: { open: boolean; onClose: () =>
       }, 1000);
     } catch (err: unknown) {
       const data = (err as { response?: { data?: { message?: string; detail?: string } } }).response?.data;
-      const msg = data?.message || data?.detail || '密码修改失败，请重试';
+      const msg = data?.message || data?.detail || t('profile.password.changeFailed');
       setError(msg);
     } finally {
       setLoading(false);
@@ -269,14 +310,16 @@ function PasswordChangeDialog({ open, onClose }: { open: boolean; onClose: () =>
             className="bg-surface-container-low rounded-t-lg sm:rounded-lg shadow-xl border border-outline-variant/20 w-full max-w-md p-4 sm:p-6 max-h-[calc(100dvh-1.5rem)] overflow-y-auto"
           >
             <div className="flex items-center justify-between mb-6">
-              <h3 className="font-headline text-lg font-semibold text-on-surface">修改密码</h3>
+              <h3 className="font-headline text-lg font-semibold text-on-surface">{t('profile.password.title')}</h3>
               <button onClick={onClose} className="p-1 text-on-surface-variant hover:text-on-surface transition-colors">
                 <Icon name="close" size={20} />
               </button>
             </div>
             <form onSubmit={handleSubmit} className="space-y-4" autoComplete="off">
               <div className="flex flex-col gap-1.5">
-                <label className="text-xs uppercase tracking-wider text-on-surface-variant">旧密码</label>
+                <label className="text-xs uppercase tracking-wider text-on-surface-variant">
+                  {t('profile.password.current')}
+                </label>
                 <input
                   name="oldPassword"
                   type="password"
@@ -288,7 +331,9 @@ function PasswordChangeDialog({ open, onClose }: { open: boolean; onClose: () =>
                 />
               </div>
               <div className="flex flex-col gap-1.5">
-                <label className="text-xs uppercase tracking-wider text-on-surface-variant">新密码</label>
+                <label className="text-xs uppercase tracking-wider text-on-surface-variant">
+                  {t('profile.password.new')}
+                </label>
                 <input
                   name="newPassword"
                   type="password"
@@ -301,7 +346,9 @@ function PasswordChangeDialog({ open, onClose }: { open: boolean; onClose: () =>
                 />
               </div>
               <div className="flex flex-col gap-1.5">
-                <label className="text-xs uppercase tracking-wider text-on-surface-variant">确认新密码</label>
+                <label className="text-xs uppercase tracking-wider text-on-surface-variant">
+                  {t('profile.password.confirm')}
+                </label>
                 <input
                   name="confirmPassword"
                   type="password"
@@ -319,14 +366,14 @@ function PasswordChangeDialog({ open, onClose }: { open: boolean; onClose: () =>
                   onClick={onClose}
                   className="px-4 py-2 text-sm text-on-surface-variant hover:text-on-surface transition-colors"
                 >
-                  取消
+                  {t('common.cancel')}
                 </button>
                 <button
                   type="submit"
                   disabled={loading}
                   className="px-6 py-2 bg-primary-container text-on-primary rounded-sm text-sm hover:bg-primary transition-colors disabled:opacity-50"
                 >
-                  {loading ? '提交中...' : '确认修改'}
+                  {loading ? t('profile.submitting') : t('profile.password.submit')}
                 </button>
               </div>
             </form>
@@ -338,6 +385,7 @@ function PasswordChangeDialog({ open, onClose }: { open: boolean; onClose: () =>
 }
 
 function MobileSharesMenu() {
+  const { t } = useTranslation();
   const { data: shares } = useSWR<ShareLink[]>('/shares/mine', listShares);
   const count = shares?.length ?? 0;
 
@@ -348,10 +396,10 @@ function MobileSharesMenu() {
     >
       <div className="flex min-w-0 items-center gap-3">
         <Icon name="share" size={20} className="text-on-surface/50" />
-        <span className="text-sm text-on-surface">我的分享</span>
+        <span className="text-sm text-on-surface">{t('profile.myShares')}</span>
       </div>
       <div className="flex shrink-0 items-center gap-2 text-on-surface-variant">
-        <span className="text-xs">{count} 条</span>
+        <span className="text-xs">{t('profile.recordCount', { count })}</span>
         <Icon name="chevron_right" size={20} className="text-on-surface/30" />
       </div>
     </Link>
@@ -359,6 +407,7 @@ function MobileSharesMenu() {
 }
 
 function DesktopContent() {
+  const { t, i18n } = useTranslation();
   const user = useAuthStore((s) => s.user);
   const updateUser = useAuthStore((s) => s.updateUser);
   const { toast } = useToast();
@@ -376,6 +425,10 @@ function DesktopContent() {
   const [saving, setSaving] = useState(false);
   const avatarInputRef = useRef<HTMLInputElement>(null);
   const { data: profile, isLoading } = useSWR(user ? '/auth/profile' : null, () => authApi.getProfile());
+  const currentProfile = profile || user;
+  const role = currentProfile?.role || '';
+  const roleLabel = ROLE_LABEL_KEYS[role] ? t(ROLE_LABEL_KEYS[role]) : role;
+  const dateLocale = i18n.resolvedLanguage || i18n.language;
 
   useEffect(() => {
     const src = profile || user;
@@ -412,15 +465,21 @@ function DesktopContent() {
   };
 
   const handleSave = async () => {
+    if (!isValidPhone(formData.phone)) {
+      toast(t('profile.phoneInvalid'), 'error');
+      return;
+    }
+    const payload = { ...formData, phone: normalizePhone(formData.phone) };
     setSaving(true);
     try {
-      const updated = await authApi.updateProfile(formData);
+      const updated = await authApi.updateProfile(payload);
+      setFormData((prev) => ({ ...prev, phone: updated.phone || payload.phone }));
       updateUser(updated);
       setSaved(true);
-      toast('设置已保存', 'success');
+      toast(t('profile.saved'), 'success');
       setTimeout(() => setSaved(false), 3000);
-    } catch {
-      toast('保存失败，请重试', 'error');
+    } catch (error) {
+      toast(profileErrorMessage(error, t('profile.saveFailed')), 'error');
     } finally {
       setSaving(false);
     }
@@ -431,7 +490,7 @@ function DesktopContent() {
       const file = e.target.files?.[0];
       if (!file) return;
       if (file.size > 2 * 1024 * 1024) {
-        toast('头像文件不能超过 2MB', 'error');
+        toast(t('profile.avatarTooLarge'), 'error');
         return;
       }
       const reader = new FileReader();
@@ -440,14 +499,14 @@ function DesktopContent() {
           const avatar = reader.result as string;
           const updated = await authApi.updateProfile({ avatar });
           updateUser(updated);
-          toast('头像已更新', 'success');
+          toast(t('profile.avatarUpdated'), 'success');
         } catch {
-          toast('头像上传失败', 'error');
+          toast(t('profile.avatarUploadFailed'), 'error');
         }
       };
       reader.readAsDataURL(file);
     },
-    [toast, updateUser],
+    [t, toast, updateUser],
   );
 
   if (isLoading) {
@@ -457,10 +516,11 @@ function DesktopContent() {
   return (
     <PageBody className="mx-auto max-w-6xl pb-12">
       <PageHeader
-        title="个人设置"
+        title={t('profile.title')}
         description={
           <>
-            用户: <span className="text-primary font-medium">{formData.username || formData.email}</span>
+            {t('profile.userPrefix')}{' '}
+            <span className="text-primary font-medium">{formData.username || formData.email}</span>
           </>
         }
         actions={
@@ -468,21 +528,21 @@ function DesktopContent() {
             {saved && (
               <span className="text-emerald-400 text-sm flex items-center gap-1">
                 <Icon name="check_circle" size={20} />
-                已保存
+                {t('profile.saved')}
               </span>
             )}
             <button
               onClick={handleDiscard}
               className="px-4 py-2 bg-transparent text-outline border border-outline/40 hover:border-outline hover:text-on-surface transition-all rounded-sm text-sm uppercase tracking-wider"
             >
-              放弃修改
+              {t('profile.discard')}
             </button>
             <button
               onClick={handleSave}
               disabled={saving}
               className="px-6 py-2 bg-primary-container text-on-primary rounded-sm text-sm uppercase tracking-wider hover:bg-primary transition-colors shadow-[0_0_15px_rgba(249,115,22,0.15)] disabled:opacity-50"
             >
-              {saving ? '保存中...' : '保存设置'}
+              {saving ? t('profile.saving') : t('profile.saveSettings')}
             </button>
           </>
         }
@@ -493,7 +553,9 @@ function DesktopContent() {
           <div className="absolute top-0 right-0 w-24 h-24 bg-gradient-to-br from-primary-container/10 to-transparent rounded-bl-full pointer-events-none" />
           <div className="flex items-center gap-2 mb-6 border-b border-outline-variant/20 pb-4">
             <Icon name="badge" size={28} className="text-primary" />
-            <h3 className="font-headline text-lg font-semibold uppercase tracking-wide text-on-surface">用户信息</h3>
+            <h3 className="font-headline text-lg font-semibold uppercase tracking-wide text-on-surface">
+              {t('profile.userInfo')}
+            </h3>
           </div>
           <div className="flex flex-col items-center mb-8">
             <input ref={avatarInputRef} type="file" className="hidden" accept="image/*" onChange={handleAvatarChange} />
@@ -517,7 +579,7 @@ function DesktopContent() {
           </div>
           <div className="space-y-5">
             <div className="flex flex-col gap-1.5">
-              <label className="text-xs uppercase tracking-wider text-on-surface-variant">姓名</label>
+              <label className="text-xs uppercase tracking-wider text-on-surface-variant">{t('profile.name')}</label>
               <input
                 name="username"
                 value={formData.username}
@@ -527,7 +589,7 @@ function DesktopContent() {
               />
             </div>
             <div className="flex flex-col gap-1.5">
-              <label className="text-xs uppercase tracking-wider text-on-surface-variant">邮箱</label>
+              <label className="text-xs uppercase tracking-wider text-on-surface-variant">{t('profile.email')}</label>
               <input
                 name="email"
                 value={formData.email}
@@ -537,7 +599,7 @@ function DesktopContent() {
               />
             </div>
             <div className="flex flex-col gap-1.5">
-              <label className="text-xs uppercase tracking-wider text-on-surface-variant">个人简介</label>
+              <label className="text-xs uppercase tracking-wider text-on-surface-variant">{t('profile.bio')}</label>
               <textarea
                 name="bio"
                 value={formData.bio}
@@ -545,7 +607,7 @@ function DesktopContent() {
                 maxLength={500}
                 rows={3}
                 className="w-full bg-surface-container-lowest text-on-surface border-none border-l-2 border-transparent focus:border-primary focus:ring-0 px-4 py-2.5 text-sm transition-colors rounded-none resize-none"
-                placeholder="简短介绍自己"
+                placeholder={t('profile.bioPlaceholder')}
               />
               <span className="text-[10px] text-on-surface-variant/50 text-right">{formData.bio.length}/500</span>
             </div>
@@ -556,51 +618,61 @@ function DesktopContent() {
           <div>
             <div className="flex items-center gap-2 mb-6 border-b border-outline-variant/20 pb-4">
               <Icon name="domain" size={28} className="text-primary" />
-              <h3 className="font-headline text-lg font-semibold uppercase tracking-wide text-on-surface">组织信息</h3>
+              <h3 className="font-headline text-lg font-semibold uppercase tracking-wide text-on-surface">
+                {t('profile.organizationInfo')}
+              </h3>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-5">
               <div className="flex flex-col gap-1.5">
-                <label className="text-xs uppercase tracking-wider text-on-surface-variant">公司名称</label>
+                <label className="text-xs uppercase tracking-wider text-on-surface-variant">
+                  {t('profile.company')}
+                </label>
                 <input
                   name="company"
                   value={formData.company}
                   onChange={handleChange}
                   className="w-full bg-surface-container-lowest text-on-surface border-none border-l-2 border-transparent focus:border-primary focus:ring-0 px-4 py-2.5 text-sm transition-colors rounded-none"
                   type="text"
-                  placeholder="填写公司名称"
+                  placeholder={t('profile.companyPlaceholder')}
                 />
               </div>
               <div className="flex flex-col gap-1.5">
-                <label className="text-xs uppercase tracking-wider text-on-surface-variant">部门/职位</label>
+                <label className="text-xs uppercase tracking-wider text-on-surface-variant">
+                  {t('profile.department')}
+                </label>
                 <input
                   name="department"
                   value={formData.department}
                   onChange={handleChange}
                   className="w-full bg-surface-container-lowest text-on-surface border-none border-l-2 border-transparent focus:border-primary focus:ring-0 px-4 py-2.5 text-sm transition-colors rounded-none"
                   type="text"
-                  placeholder="如：技术部/工程师"
+                  placeholder={t('profile.departmentPlaceholder')}
                 />
               </div>
               <div className="flex flex-col gap-1.5">
-                <label className="text-xs uppercase tracking-wider text-on-surface-variant">联系电话</label>
+                <label className="text-xs uppercase tracking-wider text-on-surface-variant">{t('profile.phone')}</label>
                 <input
                   name="phone"
                   value={formData.phone}
                   onChange={handleChange}
                   className="w-full bg-surface-container-lowest text-on-surface border-none border-l-2 border-transparent focus:border-primary focus:ring-0 px-4 py-2.5 text-sm transition-colors rounded-none"
                   type="tel"
-                  placeholder="填写联系电话"
+                  inputMode="tel"
+                  maxLength={32}
+                  placeholder={t('profile.phonePlaceholder')}
                 />
               </div>
               <div className="flex flex-col gap-1.5">
-                <label className="text-xs uppercase tracking-wider text-on-surface-variant">地址</label>
+                <label className="text-xs uppercase tracking-wider text-on-surface-variant">
+                  {t('profile.address')}
+                </label>
                 <input
                   name="address"
                   value={formData.address}
                   onChange={handleChange}
                   className="w-full bg-surface-container-lowest text-on-surface border-none border-l-2 border-transparent focus:border-primary focus:ring-0 px-4 py-2.5 text-sm transition-colors rounded-none"
                   type="text"
-                  placeholder="填写通讯地址"
+                  placeholder={t('profile.addressPlaceholder')}
                 />
               </div>
             </div>
@@ -609,15 +681,15 @@ function DesktopContent() {
             <div className="flex items-center gap-3">
               <Icon name="lock" size={20} className="text-outline-variant" />
               <div>
-                <h4 className="font-headline text-sm font-medium text-on-surface">密码安全</h4>
-                <p className="text-xs text-on-secondary-container mt-0.5">定期更新密码以保障账户安全</p>
+                <h4 className="font-headline text-sm font-medium text-on-surface">{t('profile.password.security')}</h4>
+                <p className="text-xs text-on-secondary-container mt-0.5">{t('profile.password.securityDesc')}</p>
               </div>
             </div>
             <button
               onClick={() => setPwdOpen(true)}
               className="px-4 py-1.5 bg-transparent text-secondary border border-secondary/30 hover:border-secondary transition-colors rounded-sm text-xs uppercase tracking-wider"
             >
-              修改密码
+              {t('profile.password.title')}
             </button>
           </div>
         </section>
@@ -625,20 +697,20 @@ function DesktopContent() {
         <section className="lg:col-span-12 bg-surface-container-low rounded-lg p-6">
           <div className="flex items-center gap-2 mb-4 border-b border-outline-variant/20 pb-4">
             <Icon name="shield" size={24} className="text-primary" />
-            <h3 className="font-headline text-sm font-semibold uppercase tracking-wide text-on-surface">账户信息</h3>
+            <h3 className="font-headline text-sm font-semibold uppercase tracking-wide text-on-surface">
+              {t('profile.accountInfo')}
+            </h3>
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
             <div>
-              <span className="text-xs uppercase tracking-wider text-on-surface-variant">角色</span>
-              <p className="text-sm text-on-surface mt-1">
-                {ROLE_LABELS[(profile || user)?.role || ''] || (profile || user)?.role}
-              </p>
+              <span className="text-xs uppercase tracking-wider text-on-surface-variant">{t('profile.role')}</span>
+              <p className="text-sm text-on-surface mt-1">{roleLabel || '-'}</p>
             </div>
             <div>
-              <span className="text-xs uppercase tracking-wider text-on-surface-variant">注册时间</span>
+              <span className="text-xs uppercase tracking-wider text-on-surface-variant">{t('profile.joinedAt')}</span>
               <p className="text-sm text-on-surface mt-1">
-                {(profile || user)?.createdAt
-                  ? new Date((profile || user)!.createdAt!).toLocaleDateString('zh-CN', {
+                {currentProfile?.createdAt
+                  ? new Date(currentProfile.createdAt).toLocaleDateString(dateLocale, {
                       year: 'numeric',
                       month: 'long',
                       day: 'numeric',
@@ -647,8 +719,8 @@ function DesktopContent() {
               </p>
             </div>
             <div>
-              <span className="text-xs uppercase tracking-wider text-on-surface-variant">用户ID</span>
-              <p className="text-xs text-on-surface-variant font-mono mt-1 break-all">{(profile || user)?.id}</p>
+              <span className="text-xs uppercase tracking-wider text-on-surface-variant">{t('profile.userId')}</span>
+              <p className="text-xs text-on-surface-variant font-mono mt-1 break-all">{currentProfile?.id}</p>
             </div>
           </div>
         </section>
@@ -663,6 +735,7 @@ function DesktopContent() {
 }
 
 function MobileContent() {
+  const { t, i18n } = useTranslation();
   const user = useAuthStore((s) => s.user);
   const updateUser = useAuthStore((s) => s.updateUser);
   const { toast } = useToast();
@@ -680,6 +753,9 @@ function MobileContent() {
     bio: '',
   });
   const avatarInputRef = useRef<HTMLInputElement>(null);
+  const role = user?.role || '';
+  const roleLabel = ROLE_LABEL_KEYS[role] ? t(ROLE_LABEL_KEYS[role]) : role;
+  const dateLocale = i18n.resolvedLanguage || i18n.language;
 
   useEffect(() => {
     if (user) {
@@ -700,14 +776,20 @@ function MobileContent() {
   };
 
   const handleSave = async () => {
+    if (!isValidPhone(formData.phone)) {
+      toast(t('profile.phoneInvalid'), 'error');
+      return;
+    }
+    const payload = { ...formData, phone: normalizePhone(formData.phone) };
     setSaving(true);
     try {
-      const updated = await authApi.updateProfile(formData);
+      const updated = await authApi.updateProfile(payload);
+      setFormData((prev) => ({ ...prev, phone: updated.phone || payload.phone }));
       updateUser(updated);
       setEditing(false);
-      toast('设置已保存', 'success');
-    } catch {
-      toast('保存失败，请重试', 'error');
+      toast(t('profile.saved'), 'success');
+    } catch (error) {
+      toast(profileErrorMessage(error, t('profile.saveFailed')), 'error');
     } finally {
       setSaving(false);
     }
@@ -733,7 +815,7 @@ function MobileContent() {
       const file = e.target.files?.[0];
       if (!file) return;
       if (file.size > 2 * 1024 * 1024) {
-        toast('头像文件不能超过 2MB', 'error');
+        toast(t('profile.avatarTooLarge'), 'error');
         return;
       }
       const reader = new FileReader();
@@ -742,19 +824,19 @@ function MobileContent() {
           const avatar = reader.result as string;
           const updated = await authApi.updateProfile({ avatar });
           updateUser(updated);
-          toast('头像已更新', 'success');
+          toast(t('profile.avatarUpdated'), 'success');
         } catch {
-          toast('头像上传失败', 'error');
+          toast(t('profile.avatarUploadFailed'), 'error');
         }
       };
       reader.readAsDataURL(file);
     },
-    [toast, updateUser],
+    [t, toast, updateUser],
   );
 
   return (
     <PageBody className="pb-20 space-y-4">
-      <AdminPageHero title="个人设置" description="管理你的账户信息和偏好" />
+      <AdminPageHero title={t('profile.title')} description={t('profile.description')} />
 
       {/* Avatar + basic info */}
       <div className="flex items-center gap-4 rounded-lg bg-surface-container-high p-4">
@@ -778,16 +860,21 @@ function MobileContent() {
         </div>
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
-            <h2 className="text-sm font-bold text-on-surface truncate">{user?.username || '用户'}</h2>
+            <h2 className="text-sm font-bold text-on-surface truncate">{user?.username || t('common.user')}</h2>
             <span className="shrink-0 rounded-md bg-primary-container/15 px-1.5 py-0.5 text-[10px] font-medium text-primary-container">
-              {ROLE_LABELS[user?.role || ''] || user?.role}
+              {roleLabel || '-'}
             </span>
           </div>
           <p className="text-xs text-on-surface-variant break-all line-clamp-2">{user?.email}</p>
           {user?.createdAt && (
             <p className="text-[10px] text-on-surface-variant/50 mt-0.5">
-              {new Date(user.createdAt).toLocaleDateString('zh-CN', { year: 'numeric', month: 'long', day: 'numeric' })}
-              加入
+              {t('profile.joinedDate', {
+                date: new Date(user.createdAt).toLocaleDateString(dateLocale, {
+                  year: 'numeric',
+                  month: 'long',
+                  day: 'numeric',
+                }),
+              })}
             </p>
           )}
         </div>
@@ -796,7 +883,7 @@ function MobileContent() {
             onClick={() => setEditing(true)}
             className="px-3 py-1.5 text-xs bg-primary-container text-on-primary rounded-md"
           >
-            编辑
+            {t('common.edit')}
           </button>
         )}
       </div>
@@ -805,7 +892,7 @@ function MobileContent() {
       {editing ? (
         <div className="space-y-3 rounded-lg bg-surface-container-high p-4">
           <div className="flex flex-col gap-1">
-            <label className="text-[10px] uppercase tracking-wider text-on-surface-variant">姓名</label>
+            <label className="text-[10px] uppercase tracking-wider text-on-surface-variant">{t('profile.name')}</label>
             <input
               name="username"
               value={formData.username}
@@ -815,7 +902,7 @@ function MobileContent() {
             />
           </div>
           <div className="flex flex-col gap-1">
-            <label className="text-[10px] uppercase tracking-wider text-on-surface-variant">邮箱</label>
+            <label className="text-[10px] uppercase tracking-wider text-on-surface-variant">{t('profile.email')}</label>
             <input
               name="email"
               value={formData.email}
@@ -825,51 +912,59 @@ function MobileContent() {
             />
           </div>
           <div className="flex flex-col gap-1">
-            <label className="text-[10px] uppercase tracking-wider text-on-surface-variant">公司名称</label>
+            <label className="text-[10px] uppercase tracking-wider text-on-surface-variant">
+              {t('profile.company')}
+            </label>
             <input
               name="company"
               value={formData.company}
               onChange={handleFieldChange}
               className="w-full bg-surface-container-lowest text-on-surface border border-outline-variant/30 focus:border-primary px-3 py-2 text-sm rounded-md outline-none"
               type="text"
-              placeholder="填写公司名称"
+              placeholder={t('profile.companyPlaceholder')}
             />
           </div>
           <div className="flex flex-col gap-1">
-            <label className="text-[10px] uppercase tracking-wider text-on-surface-variant">联系电话</label>
+            <label className="text-[10px] uppercase tracking-wider text-on-surface-variant">{t('profile.phone')}</label>
             <input
               name="phone"
               value={formData.phone}
               onChange={handleFieldChange}
               className="w-full bg-surface-container-lowest text-on-surface border border-outline-variant/30 focus:border-primary px-3 py-2 text-sm rounded-md outline-none"
               type="tel"
-              placeholder="填写联系电话"
+              inputMode="tel"
+              maxLength={32}
+              placeholder={t('profile.phonePlaceholder')}
             />
           </div>
           <div className="flex flex-col gap-1">
-            <label className="text-[10px] uppercase tracking-wider text-on-surface-variant">部门/职位</label>
+            <label className="text-[10px] uppercase tracking-wider text-on-surface-variant">
+              {t('profile.department')}
+            </label>
             <input
               name="department"
               value={formData.department}
               onChange={handleFieldChange}
               className="w-full bg-surface-container-lowest text-on-surface border border-outline-variant/30 focus:border-primary px-3 py-2 text-sm rounded-md outline-none"
               type="text"
-              placeholder="如：技术部/工程师"
+              placeholder={t('profile.departmentPlaceholder')}
             />
           </div>
           <div className="flex flex-col gap-1">
-            <label className="text-[10px] uppercase tracking-wider text-on-surface-variant">地址</label>
+            <label className="text-[10px] uppercase tracking-wider text-on-surface-variant">
+              {t('profile.address')}
+            </label>
             <input
               name="address"
               value={formData.address}
               onChange={handleFieldChange}
               className="w-full bg-surface-container-lowest text-on-surface border border-outline-variant/30 focus:border-primary px-3 py-2 text-sm rounded-md outline-none"
               type="text"
-              placeholder="填写通讯地址"
+              placeholder={t('profile.addressPlaceholder')}
             />
           </div>
           <div className="flex flex-col gap-1">
-            <label className="text-[10px] uppercase tracking-wider text-on-surface-variant">个人简介</label>
+            <label className="text-[10px] uppercase tracking-wider text-on-surface-variant">{t('profile.bio')}</label>
             <textarea
               name="bio"
               value={formData.bio}
@@ -877,7 +972,7 @@ function MobileContent() {
               maxLength={500}
               rows={2}
               className="w-full bg-surface-container-lowest text-on-surface border border-outline-variant/30 focus:border-primary px-3 py-2 text-sm rounded-md outline-none resize-none"
-              placeholder="简短介绍自己"
+              placeholder={t('profile.bioPlaceholder')}
             />
           </div>
           <div className="flex gap-3 pt-2">
@@ -885,14 +980,14 @@ function MobileContent() {
               onClick={handleCancel}
               className="flex-1 py-2 text-xs text-on-surface-variant border border-outline-variant/40 rounded-md"
             >
-              取消
+              {t('common.cancel')}
             </button>
             <button
               onClick={handleSave}
               disabled={saving}
               className="flex-1 py-2 text-xs bg-primary-container text-on-primary rounded-md disabled:opacity-50"
             >
-              {saving ? '保存中...' : '保存'}
+              {saving ? t('profile.saving') : t('common.save')}
             </button>
           </div>
         </div>
@@ -901,21 +996,21 @@ function MobileContent() {
           <div className="flex items-center justify-between gap-3 rounded-lg bg-surface-container-high px-4 py-3">
             <div className="flex items-center gap-3 shrink-0">
               <Icon name="domain" size={20} className="text-on-surface/50" />
-              <span className="text-sm text-on-surface">公司</span>
+              <span className="text-sm text-on-surface">{t('profile.companyShort')}</span>
             </div>
             <span className="text-sm text-on-surface-variant text-right truncate min-w-0">{user?.company || '-'}</span>
           </div>
           <div className="flex items-center justify-between gap-3 rounded-lg bg-surface-container-high px-4 py-3">
             <div className="flex items-center gap-3">
               <Icon name="phone" size={20} className="text-on-surface/50" />
-              <span className="text-sm text-on-surface">电话</span>
+              <span className="text-sm text-on-surface">{t('profile.phoneShort')}</span>
             </div>
             <span className="text-sm text-on-surface-variant text-right truncate min-w-0">{user?.phone || '-'}</span>
           </div>
           <div className="flex items-center justify-between gap-3 rounded-lg bg-surface-container-high px-4 py-3">
             <div className="flex items-center gap-3 shrink-0">
               <Icon name="badge" size={20} className="text-on-surface/50" />
-              <span className="text-sm text-on-surface">部门/职位</span>
+              <span className="text-sm text-on-surface">{t('profile.department')}</span>
             </div>
             <span className="text-sm text-on-surface-variant text-right truncate min-w-0">
               {user?.department || '-'}
@@ -924,7 +1019,7 @@ function MobileContent() {
           <div className="flex items-center justify-between gap-3 rounded-lg bg-surface-container-high px-4 py-3">
             <div className="flex items-center gap-3 shrink-0">
               <Icon name="link" size={20} className="text-on-surface/50" />
-              <span className="text-sm text-on-surface">地址</span>
+              <span className="text-sm text-on-surface">{t('profile.address')}</span>
             </div>
             <span className="text-sm text-on-surface-variant text-right truncate min-w-0">{user?.address || '-'}</span>
           </div>
@@ -932,7 +1027,7 @@ function MobileContent() {
             <div className="rounded-lg bg-surface-container-high px-4 py-3">
               <div className="flex items-center gap-3 mb-1">
                 <Icon name="description" size={20} className="text-on-surface/50" />
-                <span className="text-sm text-on-surface">个人简介</span>
+                <span className="text-sm text-on-surface">{t('profile.bio')}</span>
               </div>
               <p className="text-sm text-on-surface-variant pl-8">{user.bio}</p>
             </div>
@@ -947,7 +1042,7 @@ function MobileContent() {
       >
         <div className="flex items-center gap-3">
           <Icon name="lock" size={20} className="text-on-surface/50" />
-          <span className="text-sm text-on-surface">修改密码</span>
+          <span className="text-sm text-on-surface">{t('profile.password.title')}</span>
         </div>
         <Icon name="chevron_right" size={20} className="text-on-surface/30" />
       </button>
@@ -959,7 +1054,7 @@ function MobileContent() {
       >
         <div className="flex items-center gap-3">
           <Icon name="request_quote" size={20} className="text-on-surface/50" />
-          <span className="text-sm text-on-surface">我的询价</span>
+          <span className="text-sm text-on-surface">{t('profile.myInquiries')}</span>
         </div>
         <Icon name="chevron_right" size={20} className="text-on-surface/30" />
       </button>
@@ -978,7 +1073,9 @@ function MobileContent() {
 }
 
 export default function ProfilePage() {
-  useDocumentTitle('个人设置');
+  const { t } = useTranslation();
+
+  useDocumentTitle(t('profile.title'));
   const isDesktop = useMediaQuery('(min-width: 768px)');
 
   return <AdminPageShell>{isDesktop ? <DesktopContent /> : <MobileContent />}</AdminPageShell>;

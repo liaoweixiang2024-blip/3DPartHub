@@ -1,12 +1,12 @@
 import { useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Link, useLocation } from 'react-router-dom';
 import Icon from '../../../components/shared/Icon';
 import { useAuthEntry } from '../../../components/shared/useAuthEntry';
+import { localizeNavItems } from '../../../i18n/nav';
 import { DEFAULT_MOBILE_NAV, getBusinessConfig } from '../../../lib/businessConfig';
 import { usePublicSettings } from '../../../lib/publicSettings';
 import { preloadRouteForPath } from '../../../lib/routeLoaders';
-
-const fallbackTabs = DEFAULT_MOBILE_NAV;
 
 export interface BottomNavAppearance {
   rootClassName: string;
@@ -20,10 +20,12 @@ interface BottomNavRendererProps {
 }
 
 export default function BottomNavRenderer({ appearance }: BottomNavRendererProps) {
+  const { t } = useTranslation();
   const location = useLocation();
   const { settings } = usePublicSettings();
   const { authNodes, handleProtectedLinkClick } = useAuthEntry(settings);
-  const visibleTabs = getBusinessConfig(settings).mobileNav.slice(0, 5);
+  const visibleTabs = localizeNavItems(getBusinessConfig(settings).mobileNav.slice(0, 5), t, 'mobile');
+  const fallbackTabs = localizeNavItems(DEFAULT_MOBILE_NAV, t, 'mobile');
 
   useEffect(() => {
     const viewport = window.visualViewport;

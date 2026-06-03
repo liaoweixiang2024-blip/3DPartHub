@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react';
 import type { SystemSettings } from '../../api/settings';
+import { i18n } from '../../i18n';
 import { getPublicSettingsSnapshot } from '../../lib/publicSettings';
 import { preloadRouteForPath } from '../../lib/routeLoaders';
 import { useAuthStore } from '../../stores/useAuthStore';
@@ -16,16 +17,16 @@ const PROTECTED_PREFIXES = [
   '/projects',
 ];
 
-const PATH_LABELS: Record<string, string> = {
-  '/admin': '访问管理后台',
-  '/favorites': '查看收藏',
-  '/my-shares': '查看分享',
-  '/profile': '个人设置',
-  '/support': '技术支持',
-  '/my-tickets': '提交工单',
-  '/my-inquiries': '查看询价',
-  '/downloads': '下载历史',
-  '/projects': '查看项目',
+const PATH_LABEL_KEYS: Record<string, string> = {
+  '/admin': 'protected.reasons.admin',
+  '/favorites': 'protected.reasons.favorites',
+  '/my-shares': 'protected.reasons.myShares',
+  '/profile': 'protected.reasons.profile',
+  '/support': 'protected.reasons.support',
+  '/my-tickets': 'protected.reasons.myTickets',
+  '/my-inquiries': 'protected.reasons.myInquiries',
+  '/downloads': 'protected.reasons.downloads',
+  '/projects': 'protected.reasons.projects',
 };
 
 export function isProtectedPath(path: string): boolean {
@@ -33,10 +34,10 @@ export function isProtectedPath(path: string): boolean {
 }
 
 export function getLoginReason(path: string): string {
-  for (const [prefix, label] of Object.entries(PATH_LABELS)) {
-    if (path === prefix || path.startsWith(prefix + '/')) return label;
+  for (const [prefix, labelKey] of Object.entries(PATH_LABEL_KEYS)) {
+    if (path === prefix || path.startsWith(prefix + '/')) return i18n.t(labelKey);
   }
-  return '访问此页面';
+  return i18n.t('protected.reasons.default');
 }
 
 function readSettings(settings?: Partial<SystemSettings>) {

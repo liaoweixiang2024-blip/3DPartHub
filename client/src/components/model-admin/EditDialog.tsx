@@ -109,7 +109,7 @@ export default function EditDialog({
     try {
       const result = await modelApi.reconvert(model.model_id);
       setThumbnailUrl(result.thumbnail_url);
-      toast('预览图已重新生成', 'success');
+      toast(result.thumbnail_warning || '预览图已重新生成', result.thumbnail_warning ? 'info' : 'success');
       ok = true;
     } catch {
       toast('重新生成失败', 'error');

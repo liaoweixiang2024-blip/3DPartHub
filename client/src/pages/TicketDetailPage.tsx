@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import useSWR from 'swr';
 import client from '../api/client';
@@ -38,29 +39,12 @@ interface TicketInfo {
   user: { username: string; email: string; role?: string } | null;
 }
 
-const TICKET_ADMIN_QUICK_REPLIES = [
-  '已收到问题，我们先核对复现条件。',
-  '请补充截图、操作步骤或报错信息，方便定位。',
-  '已安排技术处理，进展会在这里同步。',
-  '问题已修复，请刷新后再确认一次。',
-  '确认无其他问题后，我们会关闭该工单。',
-];
-
-const TICKET_USER_QUICK_REPLIES = [
-  '我补充一下操作步骤和现象。',
-  '我已上传截图或附件，请查收。',
-  '这个问题仍然存在，请继续帮我确认。',
-  '请问目前处理到哪一步了？',
-  '我这边已经重新测试，问题已解决。',
-  '如果还需要补充资料，请告诉我。',
-];
-
 function isImageAttachment(url?: string | null) {
   return Boolean(url?.split(/[?#]/)[0].match(/\.(png|jpe?g|gif|webp|svg)$/i));
 }
 
-function formatDateTime(value: string) {
-  return new Date(value).toLocaleString('zh-CN', {
+function formatDateTime(value: string, locale: string) {
+  return new Date(value).toLocaleString(locale, {
     year: 'numeric',
     month: '2-digit',
     day: '2-digit',
@@ -127,21 +111,25 @@ function useVisualViewportBottomOffset(enabled: boolean) {
 
 // Chat bubble for a message
 function MessageBubble({ msg }: { msg: TicketMessage }) {
+  const { t, i18n } = useTranslation();
   const isRight = msg.isAdmin;
   const [previewImg, setPreviewImg] = useState<string | null>(null);
   const attachmentSrc = msg.attachment || '';
   const attachmentIsImage = isImageAttachment(attachmentSrc);
+  const dateLocale = i18n.resolvedLanguage || i18n.language;
   return (
     <div className={`flex ${isRight ? 'justify-end' : 'justify-start'} mb-3`}>
       <div className={`max-w-[88%] sm:max-w-[80%] min-w-0 ${isRight ? 'order-2' : 'order-1'}`}>
         <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 mb-1">
           {!isRight && (
-            <span className="text-[11px] font-medium text-on-surface-variant">{msg.user?.username || '用户'}</span>
+            <span className="text-[11px] font-medium text-on-surface-variant">
+              {msg.user?.username || t('common.user')}
+            </span>
           )}
           <span className="text-[10px] text-on-surface-variant/60">
-            {new Date(msg.createdAt).toLocaleString('zh-CN')}
+            {new Date(msg.createdAt).toLocaleString(dateLocale)}
           </span>
-          {isRight && <span className="text-[11px] font-medium text-primary">管理员</span>}
+          {isRight && <span className="text-[11px] font-medium text-primary">{t('common.admin')}</span>}
         </div>
         <div
           className={`rounded-lg px-3.5 py-2.5 text-sm leading-relaxed whitespace-pre-wrap break-words ${
@@ -154,7 +142,7 @@ function MessageBubble({ msg }: { msg: TicketMessage }) {
           {msg.attachment && attachmentIsImage ? (
             <SafeImage
               src={attachmentSrc}
-              alt="附件"
+              alt={t('ticketDetail.attachment')}
               className="mt-2 max-w-full max-h-[240px] rounded cursor-pointer hover:opacity-90 transition-opacity object-contain"
               fallbackClassName="min-h-24"
               onClick={() => setPreviewImg(attachmentSrc)}
@@ -166,12 +154,12 @@ function MessageBubble({ msg }: { msg: TicketMessage }) {
               rel="noopener"
               onClick={(event) => {
                 event.preventDefault();
-                openDocumentUrl(attachmentSrc, { title: '附件预览' });
+                openDocumentUrl(attachmentSrc, { title: t('ticketDetail.attachmentPreview') });
               }}
               className="mt-2 inline-flex items-center gap-1 rounded-md border border-outline-variant/15 px-2 py-1 text-xs text-primary-container"
             >
               <Icon name="attach_file" size={12} />
-              查看附件
+              {t('ticketDetail.viewAttachment')}
             </a>
           ) : null}
         </div>
@@ -182,7 +170,7 @@ function MessageBubble({ msg }: { msg: TicketMessage }) {
           className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center"
           onClick={() => setPreviewImg(null)}
         >
-          <SafeImage src={previewImg} alt="预览" className="max-w-[90vw] max-h-[90vh] object-contain" />
+          <SafeImage src={previewImg} alt={t('common.preview')} className="max-w-[90vw] max-h-[90vh] object-contain" />
         </div>
       )}
     </div>
@@ -191,20 +179,27 @@ function MessageBubble({ msg }: { msg: TicketMessage }) {
 
 // Original description shown as first "message"
 function OriginalMessage({ ticket }: { ticket: TicketInfo }) {
+  const { t, i18n } = useTranslation();
+  const dateLocale = i18n.resolvedLanguage || i18n.language;
+
   return (
     <div className="flex justify-start mb-3">
       <div className="max-w-[88%] sm:max-w-[80%] min-w-0">
         <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 mb-1">
-          <span className="text-[11px] font-medium text-on-surface-variant">{ticket.user?.username || '用户'}</span>
+          <span className="text-[11px] font-medium text-on-surface-variant">
+            {ticket.user?.username || t('common.user')}
+          </span>
           <span className="text-[10px] text-on-surface-variant/60">
-            {new Date(ticket.createdAt).toLocaleString('zh-CN')}
+            {new Date(ticket.createdAt).toLocaleString(dateLocale)}
           </span>
         </div>
         <div className="rounded-lg px-3.5 py-2.5 text-sm leading-relaxed whitespace-pre-wrap break-words bg-surface-container-high text-on-surface border border-outline-variant/10">
           {ticket.description}
         </div>
         {ticket.basePart && (
-          <p className="text-[11px] text-on-surface-variant mt-1 ml-1 break-words">基准零件: {ticket.basePart}</p>
+          <p className="text-[11px] text-on-surface-variant mt-1 ml-1 break-words">
+            {t('ticketDetail.basePart', { part: ticket.basePart })}
+          </p>
         )}
       </div>
     </div>
@@ -245,12 +240,14 @@ function TicketDetailHeaderAction({
 
 // Status action buttons for admin
 function StatusActions({ status, onUpdate }: { status: string; onUpdate: (s: string) => void }) {
+  const { t } = useTranslation();
+
   return (
     <div className="flex items-center gap-1.5 md:flex-wrap">
       {status === 'open' && (
         <TicketDetailHeaderAction
           icon="progress_activity"
-          label="开始处理"
+          label={t('ticketDetail.actions.startProgress')}
           tone="info"
           onClick={() => onUpdate('in_progress')}
         />
@@ -258,30 +255,41 @@ function StatusActions({ status, onUpdate }: { status: string; onUpdate: (s: str
       {status === 'in_progress' && (
         <TicketDetailHeaderAction
           icon="check_circle"
-          label="标记解决"
+          label={t('ticketDetail.actions.markResolved')}
           tone="success"
           onClick={() => onUpdate('resolved')}
         />
       )}
       {status !== 'closed' && (
-        <TicketDetailHeaderAction icon="close" label="关闭工单" onClick={() => onUpdate('closed')} />
+        <TicketDetailHeaderAction
+          icon="close"
+          label={t('ticketDetail.actions.closeTicket')}
+          onClick={() => onUpdate('closed')}
+        />
       )}
       {status === 'closed' && (
-        <TicketDetailHeaderAction icon="restore" label="重新打开" onClick={() => onUpdate('open')} />
+        <TicketDetailHeaderAction
+          icon="restore"
+          label={t('ticketDetail.actions.reopen')}
+          onClick={() => onUpdate('open')}
+        />
       )}
     </div>
   );
 }
 
 function TicketChatLoadingState() {
+  const { t } = useTranslation();
+
   return (
     <div className="flex h-full min-h-[320px]">
-      <PageRefreshIndicator label="工单详情刷新中" />
+      <PageRefreshIndicator label={t('ticketDetail.refreshing')} />
     </div>
   );
 }
 
 function ChatContent({ ticketId }: { ticketId: string }) {
+  const { t, i18n } = useTranslation();
   const navigate = useNavigate();
   const location = useLocation();
   const { toast } = useToast();
@@ -303,6 +311,10 @@ function ChatContent({ ticketId }: { ticketId: string }) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const isAdmin = currentUser?.role === 'ADMIN' && location.pathname.startsWith('/admin/tickets');
   const visualViewportBottomOffset = useVisualViewportBottomOffset(!isDesktop);
+  const dateLocale = i18n.resolvedLanguage || i18n.language;
+  const quickReplyPhrases = t(isAdmin ? 'ticketDetail.quickReplies.admin' : 'ticketDetail.quickReplies.user', {
+    returnObjects: true,
+  }) as string[];
 
   const scrollToBottom = useCallback(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -329,11 +341,11 @@ function ChatContent({ ticketId }: { ticketId: string }) {
       setPendingAttachmentName(null);
       mutateMessages();
     } catch (err) {
-      notifyGlobalError(err, '发送失败');
+      notifyGlobalError(err, t('ticketDetail.sendFailed'));
     } finally {
       setSending(false);
     }
-  }, [input, sending, uploadingAttachment, ticketId, pendingImage, mutateMessages]);
+  }, [input, sending, uploadingAttachment, ticketId, pendingImage, mutateMessages, t]);
 
   const handleQuickReply = useCallback((phrase: string) => {
     setInput((prev) => (prev.trim() ? `${prev.trimEnd()}\n${phrase}` : phrase));
@@ -343,18 +355,18 @@ function ChatContent({ ticketId }: { ticketId: string }) {
     async (file: File | null | undefined, source: 'picker' | 'paste') => {
       if (!file) return;
       if (uploadingAttachment) {
-        toast('附件正在上传，请稍后再试', 'info');
+        toast(t('ticketDetail.attachmentUploadingWait'), 'info');
         return;
       }
       if (pendingImage || pendingImageUrl || pendingAttachmentName) {
         toast(
-          source === 'paste' ? '已有待发送附件，请先发送或移除后再粘贴截图' : '已有待发送附件，请先发送或移除后再上传',
+          source === 'paste' ? t('ticketDetail.attachmentExistsPaste') : t('ticketDetail.attachmentExistsPicker'),
           'info',
         );
         return;
       }
       if (file.size > business.uploadPolicy.ticketAttachmentMaxSizeMb * 1024 * 1024) {
-        toast(`附件不能超过 ${business.uploadPolicy.ticketAttachmentMaxSizeMb}MB`, 'error');
+        toast(t('ticketDetail.attachmentTooLarge', { max: business.uploadPolicy.ticketAttachmentMaxSizeMb }), 'error');
         return;
       }
       const isImage = file.type.startsWith('image/');
@@ -366,7 +378,7 @@ function ChatContent({ ticketId }: { ticketId: string }) {
         const { url } = await uploadTicketAttachment(ticketId, file);
         setPendingImage(url);
       } catch (err) {
-        notifyGlobalError(err, '附件上传失败');
+        notifyGlobalError(err, t('ticketDetail.attachmentUploadFailed'));
         if (previewUrl) URL.revokeObjectURL(previewUrl);
         setPendingImageUrl(null);
         setPendingAttachmentName(null);
@@ -380,6 +392,7 @@ function ChatContent({ ticketId }: { ticketId: string }) {
       pendingAttachmentName,
       pendingImage,
       pendingImageUrl,
+      t,
       ticketId,
       toast,
       uploadingAttachment,
@@ -411,12 +424,12 @@ function ChatContent({ ticketId }: { ticketId: string }) {
     async (status: string) => {
       try {
         await updateTicketStatus(ticketId, status);
-        toast('状态已更新', 'success');
+        toast(t('ticketDetail.statusUpdated'), 'success');
       } catch (err) {
-        notifyGlobalError(err, '更新状态失败');
+        notifyGlobalError(err, t('ticketDetail.statusUpdateFailed'));
       }
     },
-    [ticketId, toast],
+    [t, ticketId, toast],
   );
 
   if (!ticket) {
@@ -425,9 +438,18 @@ function ChatContent({ ticketId }: { ticketId: string }) {
 
   const info = statusInfo(business.ticketStatuses, ticket.status);
   const classificationLabel = classificationMap.get(ticket.classification) || ticket.classification;
-  const ticketDescription = `${formatDateTime(ticket.createdAt)} · ${classificationLabel}${
-    isAdmin ? ` · ${ticket.user?.username || '未知用户'}` : ticket.basePart ? ` · 基准零件 ${ticket.basePart}` : ''
-  }`;
+  const metaSeparator = t('ticketDetail.metaSeparator');
+  const ticketDescription = [
+    formatDateTime(ticket.createdAt, dateLocale),
+    classificationLabel,
+    isAdmin
+      ? ticket.user?.username || t('ticketDetail.unknownUser')
+      : ticket.basePart
+        ? t('ticketDetail.basePart', { part: ticket.basePart })
+        : '',
+  ]
+    .filter(Boolean)
+    .join(metaSeparator);
   const msgList = messages || [];
   const mobileComposerSafeSpace = pendingImageUrl || pendingAttachmentName ? '8.5rem' : '4.75rem';
   const composerBottomOffset = composerFocused ? visualViewportBottomOffset : 0;
@@ -436,12 +458,16 @@ function ChatContent({ ticketId }: { ticketId: string }) {
     <div className="flex h-full min-h-0 flex-col">
       <div className="shrink-0 px-4 pt-4 md:px-0 md:pt-0">
         <AdminPageHero
-          title={isAdmin ? '工单处理详情' : '我的工单详情'}
+          title={isAdmin ? t('ticketDetail.adminTitle') : t('ticketDetail.userTitle')}
           meta={getTicketCode(ticket.id)}
-          description={`提交于 ${ticketDescription}`}
+          description={t('ticketDetail.submittedAt', { detail: ticketDescription })}
           actions={
             <>
-              <TicketDetailHeaderAction icon="arrow_back" label="返回" onClick={() => navigate(-1)} />
+              <TicketDetailHeaderAction
+                icon="arrow_back"
+                label={t('ticketDetail.actions.back')}
+                onClick={() => navigate(-1)}
+              />
               <span
                 className={`inline-flex h-9 shrink-0 items-center rounded-lg px-2.5 text-xs font-bold md:px-3 ${info.color || ''} ${info.bg || ''}`}
               >
@@ -486,7 +512,7 @@ function ChatContent({ ticketId }: { ticketId: string }) {
             {pendingImageUrl ? (
               <SafeImage
                 src={pendingImageUrl}
-                alt="待发送"
+                alt={t('ticketDetail.pendingAttachment')}
                 className={`${isDesktop ? 'h-20' : 'h-16'} rounded border border-outline-variant/20`}
               />
             ) : (
@@ -497,7 +523,7 @@ function ChatContent({ ticketId }: { ticketId: string }) {
             )}
             {uploadingAttachment ? (
               <span className="absolute bottom-1 left-1 rounded bg-black/55 px-1.5 py-0.5 text-[10px] text-white">
-                上传中
+                {t('ticketDetail.uploading')}
               </span>
             ) : null}
             <button
@@ -517,9 +543,9 @@ function ChatContent({ ticketId }: { ticketId: string }) {
         <div className="flex items-end gap-1.5">
           <input ref={fileInputRef} type="file" className="hidden" onChange={handleImageSelect} />
           <QuickReplyChips
-            phrases={isAdmin ? TICKET_ADMIN_QUICK_REPLIES : TICKET_USER_QUICK_REPLIES}
+            phrases={quickReplyPhrases}
             onPick={handleQuickReply}
-            title={isAdmin ? '工单处理快捷词' : '我的工单快捷词'}
+            title={isAdmin ? t('ticketDetail.quickReplyAdminTitle') : t('ticketDetail.quickReplyUserTitle')}
           />
           <textarea
             value={input}
@@ -534,7 +560,7 @@ function ChatContent({ ticketId }: { ticketId: string }) {
               }
             }}
             placeholder={
-              isDesktop ? '输入回复内容... (Enter 发送, Shift+Enter 换行，可粘贴截图)' : '输入回复 / 粘贴截图'
+              isDesktop ? t('ticketDetail.replyPlaceholderDesktop') : t('ticketDetail.replyPlaceholderMobile')
             }
             rows={1}
             className={`flex-1 resize-none bg-surface-container-high border border-outline-variant/20 rounded-lg text-on-surface placeholder:text-on-surface-variant/40 focus:outline-none focus:border-primary/50 focus:ring-1 focus:ring-primary/20 transition-colors max-h-28 ${isDesktop ? 'px-3 py-2.5 text-sm' : 'px-2.5 py-2 text-xs'}`}
@@ -543,6 +569,7 @@ function ChatContent({ ticketId }: { ticketId: string }) {
           <button
             onClick={() => fileInputRef.current?.click()}
             disabled={uploadingAttachment}
+            aria-label={t('ticketDetail.uploadImage')}
             className={`shrink-0 flex items-center justify-center rounded-lg text-on-surface-variant hover:bg-surface-container-high active:bg-surface-container-highest transition-colors ${isDesktop ? 'w-10 h-10' : 'w-9 h-9'}`}
           >
             <Icon name="image" size={isDesktop ? 18 : 16} />
@@ -550,6 +577,7 @@ function ChatContent({ ticketId }: { ticketId: string }) {
           <button
             onClick={() => fileInputRef.current?.click()}
             disabled={uploadingAttachment}
+            aria-label={t('ticketDetail.uploadAttachment')}
             className={`shrink-0 flex items-center justify-center rounded-lg text-on-surface-variant hover:bg-surface-container-high active:bg-surface-container-highest transition-colors ${isDesktop ? 'w-10 h-10' : 'w-9 h-9'}`}
           >
             <Icon name="attachment" size={isDesktop ? 18 : 16} />
@@ -558,9 +586,10 @@ function ChatContent({ ticketId }: { ticketId: string }) {
             onClick={handleSend}
             disabled={(!input.trim() && !pendingImage) || sending || uploadingAttachment}
             className={`shrink-0 flex items-center justify-center text-on-primary bg-primary-container rounded-lg hover:opacity-90 active:opacity-80 transition-opacity disabled:opacity-40 disabled:cursor-not-allowed ${isDesktop ? 'gap-1.5 px-4 py-2.5 text-sm font-medium' : 'w-9 h-9'}`}
+            aria-label={t('ticketDetail.send')}
           >
             <Icon name="send" size={isDesktop ? 14 : 16} />
-            {isDesktop && '发送'}
+            {isDesktop && t('ticketDetail.send')}
           </button>
         </div>
       </div>
@@ -569,9 +598,10 @@ function ChatContent({ ticketId }: { ticketId: string }) {
 }
 
 export default function TicketDetailPage() {
+  const { t } = useTranslation();
   const { id } = useParams<{ id: string }>();
   const location = useLocation();
-  useDocumentTitle('工单详情');
+  useDocumentTitle(t('ticketDetail.documentTitle'));
 
   if (!id) return null;
 

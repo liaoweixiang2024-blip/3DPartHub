@@ -1,6 +1,7 @@
 import { AnimatePresence, motion } from 'framer-motion';
 import { useState, useRef, useEffect, useMemo, useCallback, type CSSProperties } from 'react';
 import { createPortal } from 'react-dom';
+import { useTranslation } from 'react-i18next';
 import type { CategoryItem } from '../../api/categories';
 import { useImeSafeSearchInput } from '../../hooks/useImeSafeSearchInput';
 import { popoverMotion } from '../../lib/motion';
@@ -20,10 +21,11 @@ export default function CategorySelect({
   categories,
   value,
   onChange,
-  placeholder = '选择分类',
+  placeholder,
   autoFocusSearch = true,
   portalDropdown = false,
 }: CategorySelectProps) {
+  const { t } = useTranslation();
   const [open, setOpen] = useState(false);
   const [portalStyle, setPortalStyle] = useState<CSSProperties | null>(null);
   const { value: search, setValue: setSearch, inputProps: searchInputProps } = useImeSafeSearchInput();
@@ -114,6 +116,7 @@ export default function CategorySelect({
     onChange(id);
     setOpen(false);
   };
+  const visiblePlaceholder = placeholder ?? t('categorySelect.placeholder');
 
   const dropdownPanel = (
     <AnimatePresence>
@@ -138,7 +141,7 @@ export default function CategorySelect({
               inputProps={searchInputProps}
               value={search}
               onClear={() => setSearch('')}
-              placeholder="搜索分类..."
+              placeholder={t('categorySelect.searchPlaceholder')}
             />
           </div>
 
@@ -155,11 +158,13 @@ export default function CategorySelect({
               }`}
             >
               <Icon name="folder_off" size={14} className="shrink-0" />
-              未分类
+              {t('categorySelect.uncategorized')}
             </button>
 
             {filtered.length === 0 && (
-              <div className="px-3 py-4 text-sm text-on-surface-variant text-center">无匹配分类</div>
+              <div className="px-3 py-4 text-sm text-on-surface-variant text-center">
+                {t('categorySelect.noMatches')}
+              </div>
             )}
 
             {filtered.map((cat) => (
@@ -219,7 +224,7 @@ export default function CategorySelect({
         className="w-full flex items-center justify-between bg-surface-container-lowest text-on-surface border border-outline-variant/30 focus:border-primary px-3 py-2 text-sm rounded-sm outline-none cursor-pointer text-left min-w-0"
       >
         <span className={`min-w-0 truncate ${selectedName ? 'text-on-surface' : 'text-on-surface-variant/50'}`}>
-          {selectedName || placeholder}
+          {selectedName || visiblePlaceholder}
         </span>
         <Icon name={open ? 'expand_less' : 'expand_more'} size={18} className="text-on-surface-variant shrink-0" />
       </button>

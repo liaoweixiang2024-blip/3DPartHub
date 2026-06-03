@@ -1,5 +1,7 @@
 import { AnimatePresence, motion } from 'framer-motion';
+import type { TFunction } from 'i18next';
 import { useState, useCallback, useMemo } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router-dom';
 import useSWR from 'swr';
 import { downloadsApi } from '../api/downloads';
@@ -29,29 +31,31 @@ function formatFileSize(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-function formatDate(dateStr: string): string {
+function formatDate(dateStr: string, t: TFunction, locale: string): string {
   const d = new Date(dateStr);
   const now = new Date();
   const diffMs = now.getTime() - d.getTime();
   const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
-  if (diffDays === 0) return '今天';
-  if (diffDays === 1) return '昨天';
-  if (diffDays < 7) return `${diffDays}天前`;
-  return d.toLocaleDateString('zh-CN');
+  if (diffDays === 0) return t('downloads.today');
+  if (diffDays === 1) return t('downloads.yesterday');
+  if (diffDays < 7) return t('downloads.daysAgo', { count: diffDays });
+  return d.toLocaleDateString(locale);
 }
 
 function EmptyState() {
+  const { t } = useTranslation();
+
   return (
     <AdminEmptyState
       icon="download"
-      title="尚未下载任何模型"
-      description="下载过的模型会保留在这里，方便你重新下载和清理记录。"
+      title={t('downloads.emptyTitle')}
+      description={t('downloads.emptyDescription')}
       action={
         <Link
           to="/"
           className="rounded-md bg-primary-container px-5 py-2.5 text-sm font-semibold text-on-primary transition-opacity hover:opacity-90"
         >
-          浏览模型库
+          {t('downloads.browseLibrary')}
         </Link>
       }
     />
@@ -72,6 +76,8 @@ function BatchToolbar({
   onCancel: () => void;
   downloading?: boolean;
 }) {
+  const { t } = useTranslation();
+
   return (
     <motion.div
       variants={toolbarMotion}
@@ -80,7 +86,9 @@ function BatchToolbar({
       exit="exit"
       className="bg-surface-container-high border border-outline-variant/20 rounded-lg px-4 py-3 flex items-center gap-3 shadow-lg"
     >
-      <span className="text-sm text-on-surface font-medium">已选 {selectedCount} 个</span>
+      <span className="text-sm text-on-surface font-medium">
+        {t('downloads.selectedCount', { count: selectedCount })}
+      </span>
       <div className="flex-1" />
       <button
         onClick={onDownload}
@@ -92,7 +100,7 @@ function BatchToolbar({
           size={14}
           className={downloading ? 'animate-spin' : ''}
         />
-        {downloading ? '打包中...' : '打包下载'}
+        {downloading ? t('downloads.packing') : t('downloads.batchDownload')}
       </button>
       <button
         onClick={onDelete}
@@ -100,7 +108,7 @@ function BatchToolbar({
         className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-error bg-error/10 rounded-sm border border-error/20 hover:bg-error/20 disabled:cursor-not-allowed disabled:opacity-60 transition-colors"
       >
         <Icon name="delete" size={14} />
-        删除历史
+        {t('downloads.deleteHistory')}
       </button>
       <button
         onClick={onCancel}
@@ -114,6 +122,7 @@ function BatchToolbar({
 }
 
 function DesktopContent() {
+  const { i18n, t } = useTranslation();
   const { data, error, isLoading, mutate } = useSWR('/downloads', () => downloadsApi.list());
   const { toast } = useToast();
   const [selectMode, setSelectMode] = useState(false);
@@ -150,12 +159,12 @@ function DesktopContent() {
     async (modelId: string) => {
       try {
         await downloadsApi.downloadFile(modelId, 'original');
-        toast('下载已开始', 'success');
+        toast(t('downloads.downloadStarted'), 'success');
       } catch (err: unknown) {
-        toast(getErrorMessage(err, '下载失败'), 'error');
+        toast(getErrorMessage(err, t('downloads.downloadFailed')), 'error');
       }
     },
-    [toast],
+    [t, toast],
   );
 
   const handleDeleteOne = useCallback(
@@ -163,12 +172,12 @@ function DesktopContent() {
       try {
         await downloadsApi.deleteOne(id);
         mutate();
-        toast('已删除', 'success');
+        toast(t('downloads.deleted'), 'success');
       } catch {
-        toast('删除失败', 'error');
+        toast(t('downloads.deleteFailed'), 'error');
       }
     },
-    [mutate, toast],
+    [mutate, t, toast],
   );
 
   const handleBatchDelete = useCallback(() => {
@@ -183,42 +192,42 @@ function DesktopContent() {
       setSelected(new Set());
       setSelectMode(false);
       mutate();
-      toast(`已删除 ${selected.size} 条记录`, 'success');
+      toast(t('downloads.batchDeleteSuccess', { count: selected.size }), 'success');
     } catch {
-      toast('删除失败', 'error');
+      toast(t('downloads.deleteFailed'), 'error');
     }
-  }, [selected, mutate, toast]);
+  }, [selected, mutate, t, toast]);
 
   const handleBatchDownload = useCallback(async () => {
     if (selected.size === 0 || batchDownloading) return;
     const ids = Array.from(selected);
     const count = ids.length;
     setBatchDownloading(true);
-    toast(`正在打包 ${count} 条下载记录，请稍候...`, 'info');
+    toast(t('downloads.batchDownloadPreparing', { count }), 'info');
     try {
       const result = await downloadsApi.batchDownload(ids);
-      toast(`下载已提交，浏览器正在接收 ${result.fileCount} 个文件`, 'success');
+      toast(t('downloads.batchDownloadSubmitted', { count: result.fileCount }), 'success');
     } catch (err: unknown) {
-      toast(getErrorMessage(err, '打包下载失败'), 'error');
+      toast(getErrorMessage(err, t('downloads.batchDownloadFailed')), 'error');
     } finally {
       setBatchDownloading(false);
     }
-  }, [batchDownloading, selected, toast]);
+  }, [batchDownloading, selected, t, toast]);
 
   if (isLoading) {
     return (
-      <AdminManagementPage title="下载历史" description="查看和管理你下载过的模型文件">
-        <AdminLoadingState variant="list" media label="下载历史加载中" />
+      <AdminManagementPage title={t('downloads.title')} description={t('downloads.description')}>
+        <AdminLoadingState variant="list" media label={t('downloads.loading')} />
       </AdminManagementPage>
     );
   }
 
   if (error) {
     return (
-      <AdminManagementPage title="下载历史" description="查看和管理你下载过的模型文件">
+      <AdminManagementPage title={t('downloads.title')} description={t('downloads.description')}>
         <AdminErrorState
-          title="下载历史加载失败"
-          description="请稍后重试，或检查当前登录状态。"
+          title={t('downloads.loadFailed')}
+          description={t('downloads.loadFailedDescription')}
           onRetry={() => mutate()}
         />
       </AdminManagementPage>
@@ -230,7 +239,7 @@ function DesktopContent() {
       <>
         {selectMode && (
           <button onClick={toggleSelectAll} className="text-sm text-primary hover:underline">
-            {allSelected ? '取消全选' : '全选'}
+            {allSelected ? t('downloads.unselectAll') : t('downloads.selectAll')}
           </button>
         )}
         <button
@@ -245,16 +254,16 @@ function DesktopContent() {
           }`}
         >
           <Icon name={selectMode ? 'close' : 'checklist'} size={16} />
-          {selectMode ? '取消选择' : '批量操作'}
+          {selectMode ? t('downloads.cancelSelect') : t('downloads.batchOperation')}
         </button>
       </>
     ) : null;
 
   return (
     <AdminManagementPage
-      title="下载历史"
-      meta={`${downloads.length} 条记录`}
-      description="查看和管理你下载过的模型文件"
+      title={t('downloads.title')}
+      meta={t('downloads.recordsCount', { count: downloads.length })}
+      description={t('downloads.description')}
       actions={headerActions}
     >
       {/* Batch toolbar */}
@@ -282,7 +291,7 @@ function DesktopContent() {
           className="mb-4 flex items-center gap-2 px-4 py-3 bg-primary-container/10 rounded-lg border border-primary/20"
         >
           <Icon name="progress_activity" size={18} className="text-primary animate-spin" />
-          <span className="text-sm text-primary">正在打包下载，请稍候...</span>
+          <span className="text-sm text-primary">{t('downloads.batchDownloadingStatus')}</span>
         </div>
       )}
 
@@ -313,20 +322,24 @@ function DesktopContent() {
               )}
               <Link
                 to={`/model/${item.modelId}`}
-                state={{ modelName: item.model?.name || '未知模型' }}
-                onPointerDown={() => cacheModelDetailTitle(item.modelId, item.model?.name || '未知模型')}
-                onFocus={() => cacheModelDetailTitle(item.modelId, item.model?.name || '未知模型')}
+                state={{ modelName: item.model?.name || t('downloads.unknownModel') }}
+                onPointerDown={() =>
+                  cacheModelDetailTitle(item.modelId, item.model?.name || t('downloads.unknownModel'))
+                }
+                onFocus={() => cacheModelDetailTitle(item.modelId, item.model?.name || t('downloads.unknownModel'))}
                 className="min-w-0 flex-1 flex items-center gap-3 rounded-md px-3 py-2.5 transition-colors md:px-4 md:py-3 md:gap-4"
               >
                 <div className="w-14 h-14 bg-surface-container-lowest shrink-0 flex items-center justify-center p-1 rounded-md overflow-hidden">
                   <ModelThumbnail src={item.model?.thumbnail_url} alt="" className="w-full h-full object-contain" />
                 </div>
                 <div className="min-w-0 flex-1">
-                  <h3 className="text-sm font-medium text-on-surface truncate">{item.model?.name || '未知模型'}</h3>
+                  <h3 className="text-sm font-medium text-on-surface truncate">
+                    {item.model?.name || t('downloads.unknownModel')}
+                  </h3>
                   <div className="flex gap-3 text-xs text-on-surface-variant mt-1">
                     <span>{item.format?.toUpperCase() || '-'}</span>
                     <span>{formatFileSize(item.fileSize)}</span>
-                    <span>{formatDate(item.createdAt)}</span>
+                    <span>{formatDate(item.createdAt, t, i18n.language)}</span>
                   </div>
                 </div>
               </Link>
@@ -336,7 +349,7 @@ function DesktopContent() {
                   className="flex items-center gap-1 px-3 py-1.5 text-xs font-medium text-on-primary bg-primary-container rounded-sm hover:opacity-90 transition-opacity"
                 >
                   <Icon name="download" size={14} />
-                  重新下载
+                  {t('downloads.downloadAgain')}
                 </button>
                 {!selectMode && (
                   <button
@@ -356,15 +369,16 @@ function DesktopContent() {
         open={confirmOpen}
         onClose={() => setConfirmOpen(false)}
         onConfirm={confirmBatchDelete}
-        title="确认删除历史"
-        description={`确定要删除选中的 ${selected.size} 条下载历史吗？`}
-        confirmLabel="删除历史"
+        title={t('downloads.confirmDeleteTitle')}
+        description={t('downloads.confirmDeleteDescription', { count: selected.size })}
+        confirmLabel={t('downloads.deleteHistory')}
       />
     </AdminManagementPage>
   );
 }
 
 function MobileContent() {
+  const { i18n, t } = useTranslation();
   const { data, error, isLoading, mutate } = useSWR('/downloads', () => downloadsApi.list());
   const { toast } = useToast();
   const [selectMode, setSelectMode] = useState(false);
@@ -400,12 +414,12 @@ function MobileContent() {
     async (modelId: string) => {
       try {
         await downloadsApi.downloadFile(modelId, 'original');
-        toast('下载已开始', 'success');
+        toast(t('downloads.downloadStarted'), 'success');
       } catch (err: unknown) {
-        toast(getErrorMessage(err, '下载失败'), 'error');
+        toast(getErrorMessage(err, t('downloads.downloadFailed')), 'error');
       }
     },
-    [toast],
+    [t, toast],
   );
 
   const handleDelete = useCallback(
@@ -413,12 +427,12 @@ function MobileContent() {
       try {
         await downloadsApi.deleteOne(id);
         mutate();
-        toast('已删除', 'success');
+        toast(t('downloads.deleted'), 'success');
       } catch {
-        toast('删除失败', 'error');
+        toast(t('downloads.deleteFailed'), 'error');
       }
     },
-    [mutate, toast],
+    [mutate, t, toast],
   );
 
   const handleBatchDelete = useCallback(() => {
@@ -433,33 +447,33 @@ function MobileContent() {
       setSelected(new Set());
       setSelectMode(false);
       mutate();
-      toast(`已删除 ${selected.size} 条记录`, 'success');
+      toast(t('downloads.batchDeleteSuccess', { count: selected.size }), 'success');
     } catch {
-      toast('删除失败', 'error');
+      toast(t('downloads.deleteFailed'), 'error');
     }
-  }, [selected, mutate, toast]);
+  }, [selected, mutate, t, toast]);
 
   const handleBatchDownload = useCallback(async () => {
     if (selected.size === 0 || batchDownloading) return;
     const ids = Array.from(selected);
     const count = ids.length;
     setBatchDownloading(true);
-    toast(`正在打包 ${count} 条下载记录，请稍候...`, 'info');
+    toast(t('downloads.batchDownloadPreparing', { count }), 'info');
     try {
       const result = await downloadsApi.batchDownload(ids);
-      toast(`下载已提交，浏览器正在接收 ${result.fileCount} 个文件`, 'success');
+      toast(t('downloads.batchDownloadSubmitted', { count: result.fileCount }), 'success');
     } catch (err: unknown) {
-      toast(getErrorMessage(err, '打包下载失败'), 'error');
+      toast(getErrorMessage(err, t('downloads.batchDownloadFailed')), 'error');
     } finally {
       setBatchDownloading(false);
     }
-  }, [batchDownloading, selected, toast]);
+  }, [batchDownloading, selected, t, toast]);
 
   return (
     <AdminManagementPage
-      title="下载历史"
-      meta={`${downloads.length} 条记录`}
-      description="查看和管理你下载过的模型文件"
+      title={t('downloads.title')}
+      meta={t('downloads.recordsCount', { count: downloads.length })}
+      description={t('downloads.description')}
       actions={
         downloads.length > 0 ? (
           <button
@@ -471,7 +485,7 @@ function MobileContent() {
               selectMode ? 'text-primary border-primary/30' : 'text-on-surface-variant border-outline-variant/20'
             }`}
           >
-            {selectMode ? '取消' : '批量操作'}
+            {selectMode ? t('downloads.cancel') : t('downloads.batchOperation')}
           </button>
         ) : null
       }
@@ -487,24 +501,26 @@ function MobileContent() {
             className="mb-3 flex items-center gap-2 bg-surface-container-high rounded-lg px-3 py-2.5 border border-outline-variant/10"
           >
             <button onClick={toggleSelectAll} className="text-xs text-primary">
-              {allSelected ? '取消全选' : '全选'}
+              {allSelected ? t('downloads.unselectAll') : t('downloads.selectAll')}
             </button>
             <div className="flex-1" />
-            <span className="text-xs text-on-surface-variant">{selected.size} 已选</span>
+            <span className="text-xs text-on-surface-variant">
+              {t('downloads.selectedShort', { count: selected.size })}
+            </span>
             <button
               onClick={handleBatchDownload}
               disabled={selected.size === 0 || batchDownloading}
               className="flex items-center gap-1 text-xs text-on-surface-variant hover:text-on-surface disabled:cursor-not-allowed disabled:opacity-60 px-2 py-1"
             >
               {batchDownloading && <Icon name="progress_activity" size={12} className="animate-spin" />}
-              {batchDownloading ? '打包中...' : '打包下载'}
+              {batchDownloading ? t('downloads.packing') : t('downloads.batchDownload')}
             </button>
             <button
               disabled={selected.size === 0 || batchDownloading}
               onClick={handleBatchDelete}
               className="text-xs text-error disabled:cursor-not-allowed disabled:opacity-60 px-2 py-1"
             >
-              删除历史
+              {t('downloads.deleteHistory')}
             </button>
           </motion.div>
         )}
@@ -517,16 +533,16 @@ function MobileContent() {
           className="mb-3 flex items-center gap-2 px-3 py-2 bg-primary-container/10 rounded-lg border border-primary/20"
         >
           <Icon name="progress_activity" size={14} className="text-primary animate-spin" />
-          <span className="text-xs text-primary">正在打包下载，请稍候...</span>
+          <span className="text-xs text-primary">{t('downloads.batchDownloadingStatus')}</span>
         </div>
       )}
 
       {isLoading ? (
-        <AdminLoadingState variant="list" rows={5} media label="下载历史加载中" />
+        <AdminLoadingState variant="list" rows={5} media label={t('downloads.loading')} />
       ) : error ? (
         <AdminErrorState
-          title="下载历史加载失败"
-          description="请稍后重试，或检查当前登录状态。"
+          title={t('downloads.loadFailed')}
+          description={t('downloads.loadFailedDescription')}
           onRetry={() => mutate()}
         />
       ) : downloads.length === 0 ? (
@@ -554,9 +570,11 @@ function MobileContent() {
               )}
               <Link
                 to={`/model/${item.modelId}`}
-                state={{ modelName: item.model?.name || '未知模型' }}
-                onPointerDown={() => cacheModelDetailTitle(item.modelId, item.model?.name || '未知模型')}
-                onFocus={() => cacheModelDetailTitle(item.modelId, item.model?.name || '未知模型')}
+                state={{ modelName: item.model?.name || t('downloads.unknownModel') }}
+                onPointerDown={() =>
+                  cacheModelDetailTitle(item.modelId, item.model?.name || t('downloads.unknownModel'))
+                }
+                onFocus={() => cacheModelDetailTitle(item.modelId, item.model?.name || t('downloads.unknownModel'))}
                 className="flex h-20"
               >
                 <div className="w-20 h-20 bg-surface-container-lowest shrink-0 overflow-hidden">
@@ -564,11 +582,11 @@ function MobileContent() {
                 </div>
                 <div className="flex-1 min-w-0 px-3 pt-2.5 pb-2 flex flex-col justify-between">
                   <h3 className="text-sm text-on-surface leading-snug line-clamp-1">
-                    {item.model?.name || '未知模型'}
+                    {item.model?.name || t('downloads.unknownModel')}
                   </h3>
                   <div className="flex items-center justify-between">
                     <span className="text-[10px] text-on-surface-variant/50">
-                      {formatFileSize(item.fileSize)} · {formatDate(item.createdAt)}
+                      {formatFileSize(item.fileSize)} · {formatDate(item.createdAt, t, i18n.language)}
                     </span>
                     {!selectMode && (
                       <div className="flex items-center gap-1">
@@ -606,16 +624,17 @@ function MobileContent() {
         open={confirmOpen}
         onClose={() => setConfirmOpen(false)}
         onConfirm={confirmBatchDelete}
-        title="确认删除历史"
-        description={`确定要删除选中的 ${selected.size} 条下载历史吗？`}
-        confirmLabel="删除历史"
+        title={t('downloads.confirmDeleteTitle')}
+        description={t('downloads.confirmDeleteDescription', { count: selected.size })}
+        confirmLabel={t('downloads.deleteHistory')}
       />
     </AdminManagementPage>
   );
 }
 
 export default function DownloadsPage() {
-  useDocumentTitle('下载历史');
+  const { t } = useTranslation();
+  useDocumentTitle(t('downloads.title'));
   const isDesktop = useMediaQuery('(min-width: 768px)');
 
   return <AdminPageShell>{isDesktop ? <DesktopContent /> : <MobileContent />}</AdminPageShell>;

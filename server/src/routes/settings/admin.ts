@@ -1,7 +1,13 @@
 import { Router, Response } from 'express';
 import { sendTestEmail } from '../../lib/email.js';
 import { requestSiteUrl } from '../../lib/requestSiteUrl.js';
-import { getAllSettings, getSettingDefaults, setSettings } from '../../lib/settings.js';
+import {
+  CONTACT_PHONE_SETTING_MESSAGE,
+  getAllSettings,
+  getSettingDefaults,
+  isValidContactPhoneSetting,
+  setSettings,
+} from '../../lib/settings.js';
 import { testCacheConnectivity, testStorageConnectivity } from '../../lib/settingsConnectivity.js';
 import { checkUpdateAvailable } from '../../lib/update.js';
 import { authMiddleware, type AuthRequest } from '../../middleware/auth.js';
@@ -15,6 +21,14 @@ function maskSensitiveSettings(settings: Record<string, unknown>): Record<string
     if (masked[key]) masked[key] = '********';
   }
   return masked;
+}
+
+function validateSettingsPayload(payload: unknown): string | null {
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return '设置数据格式不正确';
+  if ('contact_phone' in payload && !isValidContactPhoneSetting((payload as Record<string, unknown>).contact_phone)) {
+    return CONTACT_PHONE_SETTING_MESSAGE;
+  }
+  return null;
 }
 
 export function createSettingsAdminRouter() {
@@ -46,6 +60,11 @@ export function createSettingsAdminRouter() {
   router.put('/api/settings', authMiddleware, async (req: AuthRequest, res: Response) => {
     if (!adminOnly(req, res)) return;
     try {
+      const validationMessage = validateSettingsPayload(req.body);
+      if (validationMessage) {
+        res.status(400).json({ detail: validationMessage });
+        return;
+      }
       await setSettings(req.body);
       const settings = await getAllSettings();
       res.json(maskSensitiveSettings(settings));

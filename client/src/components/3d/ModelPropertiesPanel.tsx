@@ -1,4 +1,5 @@
 import { useMemo } from 'react';
+import { useTranslation } from 'react-i18next';
 import type { ModelPreviewMeta } from '../../api/models';
 import Icon from '../shared/Icon';
 import type { ModelBoundsDetail, ModelPartItem } from './viewerEvents';
@@ -23,19 +24,23 @@ function formatCount(value?: number | null) {
   return String(value);
 }
 
-function formatNumber(value?: number | null, digits = 2) {
+function formatNumber(value?: number | null, digits = 2, locale = 'zh-CN') {
   if (typeof value !== 'number' || !Number.isFinite(value)) return '-';
-  return value.toLocaleString('zh-CN', {
+  return value.toLocaleString(locale, {
     maximumFractionDigits: digits,
     minimumFractionDigits: value === Math.round(value) ? 0 : Math.min(2, digits),
   });
 }
 
-function formatSize(size?: [number, number, number] | { x: number; y: number; z: number } | null, unit?: string) {
+function formatSize(
+  size?: [number, number, number] | { x: number; y: number; z: number } | null,
+  unit?: string,
+  locale = 'zh-CN',
+) {
   if (!size) return '-';
   const values = Array.isArray(size) ? size : [size.x, size.y, size.z];
   const suffix = unit && unit !== 'unknown' ? ` ${unit}` : '';
-  return `${formatNumber(values[0])} x ${formatNumber(values[1])} x ${formatNumber(values[2])}${suffix}`;
+  return `${formatNumber(values[0], 2, locale)} x ${formatNumber(values[1], 2, locale)} x ${formatNumber(values[2], 2, locale)}${suffix}`;
 }
 
 function PropertyRow({ label, value }: { label: string; value: string }) {
@@ -61,6 +66,7 @@ export default function ModelPropertiesPanel({
   selectedPartId,
   onClose,
 }: ModelPropertiesPanelProps) {
+  const { i18n, t } = useTranslation();
   const selectedPart = useMemo(() => parts.find((part) => part.id === selectedPartId) || null, [parts, selectedPartId]);
 
   const fallbackVertexCount = useMemo(() => parts.reduce((sum, part) => sum + part.vertexCount, 0), [parts]);
@@ -69,7 +75,7 @@ export default function ModelPropertiesPanel({
   const totals = previewMeta?.totals;
   const unit = previewMeta?.unit || '';
   const generatedAt = previewMeta?.diagnostics?.generatedAt
-    ? new Date(previewMeta.diagnostics.generatedAt).toLocaleString('zh-CN')
+    ? new Date(previewMeta.diagnostics.generatedAt).toLocaleString(i18n.language)
     : '';
 
   const panelClass =
@@ -87,18 +93,18 @@ export default function ModelPropertiesPanel({
         <div className="min-w-0">
           <div className="flex items-center gap-2">
             <Icon name="description" size={16} className="text-primary" />
-            <h3 className="text-sm font-semibold text-on-surface">模型属性</h3>
+            <h3 className="text-sm font-semibold text-on-surface">{t('viewer.properties.title')}</h3>
           </div>
           <p
             className="mt-1 truncate text-[11px] text-on-surface-variant"
             title={modelName || previewMeta?.sourceName || ''}
           >
-            {modelName || previewMeta?.sourceName || '当前模型'}
+            {modelName || previewMeta?.sourceName || t('viewer.properties.currentModel')}
           </p>
         </div>
         <button
           type="button"
-          aria-label="关闭模型属性"
+          aria-label={t('viewer.properties.close')}
           onClick={onClose}
           className="flex h-7 w-7 shrink-0 items-center justify-center rounded-sm text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface"
         >
@@ -112,17 +118,17 @@ export default function ModelPropertiesPanel({
       >
         <div className="grid grid-cols-3 gap-2">
           <div className="rounded-sm bg-surface-container-low p-2">
-            <span className="block text-[10px] text-on-surface-variant">零件</span>
+            <span className="block text-[10px] text-on-surface-variant">{t('viewer.properties.parts')}</span>
             <span className="font-mono text-sm text-on-surface">{formatCount(totals?.partCount ?? parts.length)}</span>
           </div>
           <div className="rounded-sm bg-surface-container-low p-2">
-            <span className="block text-[10px] text-on-surface-variant">顶点</span>
+            <span className="block text-[10px] text-on-surface-variant">{t('viewer.properties.vertices')}</span>
             <span className="font-mono text-sm text-on-surface">
               {formatCount(totals?.vertexCount ?? fallbackVertexCount)}
             </span>
           </div>
           <div className="rounded-sm bg-surface-container-low p-2">
-            <span className="block text-[10px] text-on-surface-variant">面</span>
+            <span className="block text-[10px] text-on-surface-variant">{t('viewer.properties.triangles')}</span>
             <span className="font-mono text-sm text-on-surface">
               {formatCount(totals?.faceCount ?? fallbackFaceCount)}
             </span>
@@ -130,25 +136,28 @@ export default function ModelPropertiesPanel({
         </div>
 
         <div className="mt-3 rounded-sm bg-surface-container-lowest px-3">
-          <PropertyRow label="名称" value={modelName || previewMeta?.sourceName || '-'} />
-          <PropertyRow label="格式" value={modelFormat || previewMeta?.sourceFormat || '-'} />
-          <PropertyRow label="文件大小" value={modelFileSize || '-'} />
-          <PropertyRow label="上传时间" value={modelCreatedAt || '-'} />
-          <PropertyRow label="包围盒" value={formatSize(previewMeta?.bounds?.size || bounds?.size, unit)} />
-          <PropertyRow label="转换器" value={previewMeta?.diagnostics?.converter || '-'} />
-          <PropertyRow label="生成时间" value={generatedAt || '-'} />
+          <PropertyRow label={t('viewer.properties.name')} value={modelName || previewMeta?.sourceName || '-'} />
+          <PropertyRow label={t('viewer.properties.format')} value={modelFormat || previewMeta?.sourceFormat || '-'} />
+          <PropertyRow label={t('viewer.properties.fileSize')} value={modelFileSize || '-'} />
+          <PropertyRow label={t('viewer.properties.uploadedAt')} value={modelCreatedAt || '-'} />
+          <PropertyRow
+            label={t('viewer.properties.bounds')}
+            value={formatSize(previewMeta?.bounds?.size || bounds?.size, unit, i18n.language)}
+          />
+          <PropertyRow label={t('viewer.properties.converter')} value={previewMeta?.diagnostics?.converter || '-'} />
+          <PropertyRow label={t('viewer.properties.generatedAt')} value={generatedAt || '-'} />
         </div>
 
         {selectedPart && (
           <div className="mt-3 rounded-sm border border-primary/20 bg-primary-container/10 px-3 py-2">
             <div className="mb-1.5 flex items-center gap-2 text-xs font-medium text-primary">
               <Icon name="locate_fixed" size={14} />
-              当前选中零件
+              {t('viewer.properties.selectedPart')}
             </div>
-            <PropertyRow label="零件名称" value={selectedPart.name} />
-            <PropertyRow label="路径" value={selectedPart.path || '-'} />
-            <PropertyRow label="顶点" value={formatCount(selectedPart.vertexCount)} />
-            <PropertyRow label="面" value={formatCount(selectedPart.triangleCount)} />
+            <PropertyRow label={t('viewer.properties.partName')} value={selectedPart.name} />
+            <PropertyRow label={t('viewer.properties.path')} value={selectedPart.path || '-'} />
+            <PropertyRow label={t('viewer.properties.vertices')} value={formatCount(selectedPart.vertexCount)} />
+            <PropertyRow label={t('viewer.properties.triangles')} value={formatCount(selectedPart.triangleCount)} />
           </div>
         )}
       </div>

@@ -11,7 +11,7 @@ export const PRODUCT_WALL_EAGER_IMAGE_COUNT = 3;
 export const PRODUCT_WALL_MOBILE_EAGER_IMAGE_COUNT = 2;
 export const PRODUCT_WALL_CANVAS_MODE_KEY = 'product-wall-canvas-mode';
 export const PRODUCT_WALL_DEFAULT_KIND_KEY = 'product-wall-default-kind';
-export const PRODUCT_WALL_FAVORITES_FILTER = '我的收藏';
+export const PRODUCT_WALL_FAVORITES_FILTER = '__favorites__';
 
 export type WebkitFileSystemEntry = {
   isFile: boolean;

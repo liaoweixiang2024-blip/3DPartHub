@@ -18,7 +18,7 @@ export const workbenchSidebarAppearance: SidebarAppearance = {
   navIntroWrapperClassName: 'flex items-center gap-3 px-3 pb-2 pt-1',
   navIntroLabelClassName: 'text-[11px] font-semibold text-on-surface-variant/55',
   navIntroLineClassName: 'flex-1 border-t border-outline-variant/12',
-  navIntroLabel: '工作区',
+  navIntroLabel: 'theme.workspace',
   topFadeWrapperClassName: fadeVisibility,
   topFadeClassName: 'h-4 bg-gradient-to-b from-surface to-transparent pointer-events-none',
   bottomFadeWrapperClassName: fadeVisibility,

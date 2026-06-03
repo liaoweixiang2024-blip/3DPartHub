@@ -1,4 +1,5 @@
 import { AnimatePresence, motion } from 'framer-motion';
+import { useTranslation } from 'react-i18next';
 import { dialogPanelMotion } from '../../lib/motion';
 import { AdminButton } from './AdminControls';
 import DialogOverlay from './DialogOverlay';
@@ -27,10 +28,13 @@ export default function ConfirmDialog({
   iconBg = 'bg-error/15',
   title,
   description,
-  confirmLabel = '确认',
+  confirmLabel,
   confirmClassName,
   confirmDisabled = false,
 }: ConfirmDialogProps) {
+  const { t } = useTranslation();
+  const visibleConfirmLabel = confirmLabel ?? t('common.confirm');
+
   return (
     <AnimatePresence>
       {open && (
@@ -52,7 +56,7 @@ export default function ConfirmDialog({
             <p className="text-sm text-on-surface-variant mb-5">{description}</p>
             <div className="flex gap-3">
               <AdminButton onClick={onClose} variant="secondary" className="flex-1">
-                取消
+                {t('common.cancel')}
               </AdminButton>
               {confirmClassName ? (
                 <button
@@ -60,11 +64,11 @@ export default function ConfirmDialog({
                   disabled={confirmDisabled}
                   className={`${confirmClassName} disabled:cursor-not-allowed disabled:opacity-50`}
                 >
-                  {confirmLabel}
+                  {visibleConfirmLabel}
                 </button>
               ) : (
                 <AdminButton onClick={onConfirm} disabled={confirmDisabled} variant="danger" className="flex-1">
-                  {confirmLabel}
+                  {visibleConfirmLabel}
                 </AdminButton>
               )}
             </div>

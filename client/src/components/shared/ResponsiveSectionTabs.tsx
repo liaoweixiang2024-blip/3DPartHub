@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import Icon from './Icon';
 
 export type ResponsiveSectionTab = {
@@ -25,13 +26,14 @@ export default function ResponsiveSectionTabs({
   tabs,
   value,
   onChange,
-  mobileTitle = '选择分类',
+  mobileTitle,
   mobileTriggerVariant = 'plain',
   desktopVariant = 'default',
   desktopAlign = 'start',
   countUnit = '',
   className = '',
 }: ResponsiveSectionTabsProps) {
+  const { t } = useTranslation();
   const [open, setOpen] = useState(false);
   const [canScrollDesktop, setCanScrollDesktop] = useState(false);
   const desktopScrollerRef = useRef<HTMLDivElement | null>(null);
@@ -75,6 +77,7 @@ export default function ResponsiveSectionTabs({
   const subtleDesktop = desktopVariant === 'subtle';
   const prominentDesktop = desktopVariant === 'prominent';
   const alignDesktopEnd = desktopAlign === 'end';
+  const visibleMobileTitle = mobileTitle ?? t('responsiveTabs.mobileTitle');
 
   const scrollDesktopTabs = (direction: -1 | 1) => {
     const scroller = desktopScrollerRef.current;
@@ -94,7 +97,7 @@ export default function ResponsiveSectionTabs({
             type="button"
             onClick={() => scrollDesktopTabs(-1)}
             className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-on-surface-variant transition-colors hover:bg-surface-container-high hover:text-on-surface"
-            aria-label="向左查看更多分类"
+            aria-label={t('responsiveTabs.scrollLeft')}
             data-tooltip-ignore
           >
             <Icon name="chevron_left" size={16} />
@@ -164,7 +167,7 @@ export default function ResponsiveSectionTabs({
                         active ? 'text-primary-container/70' : 'text-on-surface-variant/70'
                       }`}
                     >
-                      <span>共</span>
+                      <span>{t('responsiveTabs.countPrefix')}</span>
                       <span className="text-[11px] font-medium tabular-nums">{tab.count}</span>
                       {countUnit ? <span>{countUnit}</span> : null}
                     </span>
@@ -194,7 +197,7 @@ export default function ResponsiveSectionTabs({
             type="button"
             onClick={() => scrollDesktopTabs(1)}
             className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-on-surface-variant transition-colors hover:bg-surface-container-high hover:text-on-surface"
-            aria-label="向右查看更多分类"
+            aria-label={t('responsiveTabs.scrollRight')}
             data-tooltip-ignore
           >
             <Icon name="chevron_right" size={16} />
@@ -206,7 +209,7 @@ export default function ResponsiveSectionTabs({
         type="button"
         onClick={() => setOpen(true)}
         data-tooltip-ignore
-        aria-label="切换分类"
+        aria-label={t('responsiveTabs.switchCategory')}
         className={`flex w-full min-w-0 items-center justify-between gap-3 text-left transition-colors md:hidden ${
           mobileTriggerVariant === 'plain'
             ? 'h-10 rounded-md bg-transparent px-1 active:bg-surface-container-high/60'
@@ -225,14 +228,14 @@ export default function ResponsiveSectionTabs({
           </span>
           <span className="flex min-w-0 items-center gap-2">
             <span className="truncate text-sm font-semibold leading-tight text-on-surface">
-              {activeTab?.label ?? '请选择'}
+              {activeTab?.label ?? t('responsiveTabs.selectPlaceholder')}
             </span>
           </span>
         </span>
         <span className="flex shrink-0 items-center gap-2">
           {typeof activeTab?.count === 'number' ? (
             <span className="inline-flex items-baseline gap-0.5 text-xs font-medium leading-none text-on-surface-variant/75">
-              <span>共</span>
+              <span>{t('responsiveTabs.countPrefix')}</span>
               <span className="text-sm font-semibold tabular-nums text-primary-container">{activeTab.count}</span>
               {countUnit ? <span>{countUnit}</span> : null}
             </span>
@@ -251,7 +254,7 @@ export default function ResponsiveSectionTabs({
         <div className="md:hidden">
           <button
             type="button"
-            aria-label="关闭分类选择"
+            aria-label={t('responsiveTabs.closePicker')}
             data-tooltip-ignore
             className="fixed inset-0 z-[70] h-full w-full bg-transparent"
             onClick={() => setOpen(false)}
@@ -288,7 +291,7 @@ export default function ResponsiveSectionTabs({
                           active ? 'text-on-primary/70' : 'text-on-surface-variant/70'
                         }`}
                       >
-                        <span>共</span>
+                        <span>{t('responsiveTabs.countPrefix')}</span>
                         <span className="text-xs font-semibold tabular-nums">{tab.count}</span>
                         {countUnit ? <span>{countUnit}</span> : null}
                       </span>
@@ -304,7 +307,7 @@ export default function ResponsiveSectionTabs({
         <div className="fixed inset-0 z-[80] md:hidden" role="dialog" aria-modal="true">
           <button
             type="button"
-            aria-label="关闭分类选择"
+            aria-label={t('responsiveTabs.closePicker')}
             data-tooltip-ignore
             className="absolute inset-0 h-full w-full bg-black/30 backdrop-blur-[2px]"
             onClick={() => setOpen(false)}
@@ -315,14 +318,14 @@ export default function ResponsiveSectionTabs({
             </div>
             <div className="flex items-center justify-between px-4 pb-2.5 pt-3">
               <div>
-                <p className="text-base font-semibold leading-tight text-on-surface">{mobileTitle}</p>
-                <p className="mt-0.5 text-xs text-on-surface-variant">选择要编辑的设置分类</p>
+                <p className="text-base font-semibold leading-tight text-on-surface">{visibleMobileTitle}</p>
+                <p className="mt-0.5 text-xs text-on-surface-variant">{t('responsiveTabs.mobileDescription')}</p>
               </div>
               <button
                 type="button"
                 onClick={() => setOpen(false)}
                 className="flex h-9 w-9 items-center justify-center rounded-full text-on-surface-variant transition-colors hover:bg-surface-container-high hover:text-on-surface"
-                aria-label="关闭"
+                aria-label={t('common.close')}
                 data-tooltip-ignore
               >
                 <Icon name="close" size={18} />
@@ -367,7 +370,7 @@ export default function ResponsiveSectionTabs({
                           active ? 'text-on-primary/70' : 'text-on-surface-variant/70'
                         }`}
                       >
-                        <span>共</span>
+                        <span>{t('responsiveTabs.countPrefix')}</span>
                         <span className="text-xs font-semibold tabular-nums">{tab.count}</span>
                         {countUnit ? <span>{countUnit}</span> : null}
                       </span>

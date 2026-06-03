@@ -1,5 +1,6 @@
 import { motion, AnimatePresence } from 'framer-motion';
 import { useState, useEffect, useCallback, useRef, memo, type MouseEvent } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router-dom';
 import { popoverMotion } from '../../lib/motion';
 import { preloadModelDetailPage } from '../../lib/routeLoaders';
@@ -105,6 +106,7 @@ function ProductCardInner({
   const [favLoading, setFavLoading] = useState(false);
   const [favoriteBurstKey, setFavoriteBurstKey] = useState(0);
   const ignoreNextOverlayClickRef = useRef(false);
+  const { t } = useTranslation();
   const { toast } = useToast();
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
   const isFavorited = useFavoriteStore((state) => state.favoriteIds.has(product.id));
@@ -129,20 +131,20 @@ function ProductCardInner({
         await toggleFavoriteInStore({ id: product.id });
         const nextIsFavorited = useFavoriteStore.getState().favoriteIds.has(product.id);
         if (nextIsFavorited === isFavorited) {
-          toast(shouldCelebrate ? '收藏失败，请重试' : '取消收藏失败，请重试', 'error');
+          toast(shouldCelebrate ? t('productCard.favoriteFail') : t('productCard.unfavoriteFail'), 'error');
           return;
         }
         if (shouldCelebrate && nextIsFavorited) {
           setFavoriteBurstKey((key) => key + 1);
         }
-        toast(nextIsFavorited ? '已收藏，可在「我的收藏」中批量下载' : '已取消收藏', 'success');
+        toast(nextIsFavorited ? t('productCard.favoriteSuccess') : t('productCard.unfavoriteSuccess'), 'success');
       } catch {
-        toast(shouldCelebrate ? '收藏失败，请重试' : '取消收藏失败，请重试', 'error');
+        toast(shouldCelebrate ? t('productCard.favoriteFail') : t('productCard.unfavoriteFail'), 'error');
       } finally {
         setFavLoading(false);
       }
     },
-    [favLoading, isAuthenticated, isFavorited, product.id, toast, toggleFavoriteInStore],
+    [favLoading, isAuthenticated, isFavorited, product.id, t, toast, toggleFavoriteInStore],
   );
 
   const cancelRename = useCallback(() => {
@@ -226,7 +228,9 @@ function ProductCardInner({
       <div className="flex h-full flex-col p-3">
         <div className="flex min-w-0 items-start justify-between gap-2">
           <div className="min-w-0 flex-1">
-            <p className="text-[10px] font-medium uppercase tracking-[0.14em] text-primary">模型管理</p>
+            <p className="text-[10px] font-medium uppercase tracking-[0.14em] text-primary">
+              {t('productCard.adminLabel')}
+            </p>
             {renaming ? (
               <textarea
                 value={renameValue}
@@ -271,13 +275,13 @@ function ProductCardInner({
                   setRenaming(true);
                 }}
                 className="mt-1 flex w-full min-w-0 items-start gap-1.5 rounded-sm text-left text-sm font-semibold leading-tight text-on-surface transition-colors hover:text-primary"
-                title="编辑名称"
+                title={t('productCard.editName')}
               >
                 <span className="line-clamp-2 min-w-0">{product.name}</span>
               </button>
             )}
             <p className="mt-1 text-[11px] text-on-surface-variant">{product.fileSize}</p>
-            {renaming && <p className="mt-1 text-[10px] text-on-surface-variant/80">点击空白处保存，Esc 取消</p>}
+            {renaming && <p className="mt-1 text-[10px] text-on-surface-variant/80">{t('productCard.renameHint')}</p>}
           </div>
           <button
             onClick={(event) => {
@@ -287,7 +291,7 @@ function ProductCardInner({
             }}
             data-rename-control
             className="grid h-7 w-7 shrink-0 place-items-center rounded-sm text-on-surface-variant transition-colors hover:bg-surface-container-highest hover:text-on-surface"
-            title="关闭"
+            title={t('common.close')}
           >
             <Icon name="close" size={15} />
           </button>
@@ -309,7 +313,7 @@ function ProductCardInner({
                 size={13}
                 className={renameSaving ? 'animate-spin' : ''}
               />
-              <span className="truncate">打开详情</span>
+              <span className="truncate">{t('productCard.openDetail')}</span>
             </button>
             <button
               onClick={(event) => {
@@ -322,7 +326,7 @@ function ProductCardInner({
               className="flex min-w-0 items-center justify-center gap-1.5 rounded-sm border border-outline-variant/30 px-2 py-2 text-xs text-on-surface-variant transition-colors hover:bg-surface-container-highest hover:text-on-surface disabled:opacity-50"
             >
               <Icon name="share" size={13} />
-              <span className="truncate">分享链接</span>
+              <span className="truncate">{t('productCard.shareLink')}</span>
             </button>
             <button
               onClick={(event) => {
@@ -335,7 +339,7 @@ function ProductCardInner({
               className="col-span-2 flex min-w-0 items-center justify-center gap-1.5 rounded-sm border border-error/30 px-2 py-2 text-xs font-semibold text-error transition-colors hover:bg-error-container/15 disabled:opacity-50"
             >
               <Icon name="delete" size={13} />
-              <span className="truncate">删除模型</span>
+              <span className="truncate">{t('productCard.deleteModel')}</span>
             </button>
           </div>
         </div>
@@ -352,13 +356,13 @@ function ProductCardInner({
           ? 'border-primary-container/45 bg-primary-container/10 text-primary-container'
           : 'border-outline-variant/40 text-on-surface-variant hover:text-on-surface'
       } relative overflow-visible ${favLoading ? 'opacity-60' : ''}`}
-      aria-label={isFavorited ? '取消收藏' : '收藏'}
+      aria-label={isFavorited ? t('productCard.unfavorite') : t('productCard.favorite')}
       aria-pressed={isFavorited}
       data-tooltip-ignore
     >
       <FavoriteBurst burstKey={favoriteBurstKey} />
       <Icon name={isFavorited ? 'favorite' : 'star'} size={14} />
-      收藏
+      {t('productCard.favorite')}
     </button>
   ) : null;
 
@@ -393,7 +397,7 @@ function ProductCardInner({
               <span>{product.fileSize}</span>
               {showVariantMeta && product.variantCount && product.variantCount > 1 && (
                 <span className="bg-primary/20 text-primary px-1.5 py-0.5 rounded-sm text-[10px] font-medium">
-                  ×{product.variantCount} 变体
+                  {t('productCard.variantBadge', { count: product.variantCount })}
                 </span>
               )}
             </>
@@ -409,7 +413,7 @@ function ProductCardInner({
                 className={`${HOME_LIST_ACTION_BUTTON_CLASS} home-model-download-button bg-primary-container font-medium text-on-primary hover:opacity-90`}
               >
                 <Icon name="download" size={14} fill />
-                下载
+                {t('common.download')}
               </button>
               {listFavoriteAction}
               <button
@@ -421,7 +425,7 @@ function ProductCardInner({
                 className={`${HOME_LIST_ACTION_BUTTON_CLASS} home-model-preview-button border border-outline-variant/40 text-on-surface-variant hover:text-on-surface`}
               >
                 <Icon name="visibility" size={14} />
-                预览
+                {t('common.preview')}
               </button>
             </>
           }
@@ -491,7 +495,7 @@ function ProductCardInner({
                         ? 'border-primary-container/35 text-primary-container'
                         : 'text-on-surface-variant/70 hover:text-on-surface-variant'
                     } ${favLoading ? 'opacity-60' : ''}`}
-                    aria-label={isFavorited ? '取消收藏' : '收藏'}
+                    aria-label={isFavorited ? t('productCard.unfavorite') : t('productCard.favorite')}
                     aria-pressed={isFavorited}
                     data-tooltip-ignore
                   >
@@ -518,7 +522,7 @@ function ProductCardInner({
             <>
               {showCategory ? <span>{product.category}</span> : null}
               {showVariantMeta && product.variantCount && product.variantCount > 1 ? (
-                <span>{product.variantCount} 个变体</span>
+                <span>{t('productCard.variantCount', { count: product.variantCount })}</span>
               ) : null}
             </>
           ) : null
@@ -534,7 +538,7 @@ function ProductCardInner({
               className={`${HOME_GRID_ACTION_BUTTON_CLASS} home-model-download-button bg-primary-container font-medium text-on-primary hover:opacity-90`}
             >
               <Icon name="download" size={14} fill />
-              下载
+              {t('common.download')}
             </button>
             <button
               onClick={(e) => {
@@ -545,7 +549,7 @@ function ProductCardInner({
               className={`${HOME_GRID_ACTION_BUTTON_CLASS} home-model-preview-button border border-outline-variant/40 text-center text-on-surface-variant hover:text-on-surface`}
             >
               <Icon name="visibility" size={14} />
-              预览
+              {t('common.preview')}
             </button>
           </>
         }

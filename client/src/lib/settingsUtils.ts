@@ -77,6 +77,11 @@ export const DEFAULT_SETTINGS: SystemSettings = {
   interface_theme: DEFAULT_INTERFACE_THEME,
   mobile_interface_theme: DEFAULT_MOBILE_THEME,
   user_interface_theme_enabled: true,
+  home_desktop_list_loading_mode: 'pagination',
+  home_mobile_list_loading_mode: 'infinite',
+  ui_default_locale: 'zh-CN',
+  ui_enabled_locales: 'zh-CN,zh-TW,en-US,ja-JP,ko-KR,de-DE',
+  ui_follow_browser_locale: false,
   color_scheme: 'orange',
   color_custom_dark: '{}',
   color_custom_light: '{}',
@@ -406,7 +411,12 @@ export const GROUPS: SettingGroup[] = [
       { key: 'site_description', label: '网站描述', desc: '用于 SEO 和分享链接的站点描述', type: 'text' },
       { key: 'site_keywords', label: '关键词', desc: 'SEO 关键词，多个用逗号分隔', type: 'text' },
       { _section: '页脚联系信息' },
-      { key: 'contact_phone', label: '联系电话', desc: '显示在前台页脚的联系信息区', type: 'text' },
+      {
+        key: 'contact_phone',
+        label: '联系电话',
+        desc: '支持 13800138000、0755-12345678、400-123-4567、+86 13800138000',
+        type: 'text',
+      },
       { key: 'contact_address', label: '联系地址', desc: '显示在前台页脚底部的公司/办公地址', type: 'text' },
       { _section: '模型详情页页脚' },
       {
@@ -470,6 +480,53 @@ export const GROUPS: SettingGroup[] = [
         key: 'user_interface_theme_enabled',
         label: '允许用户自定义前台界面风格',
         desc: '开启后用户可在前台用户菜单里选择“跟随网站默认 / 经典主题 / 工作台主题”，仅影响公开前台桌面页面。',
+        type: 'switch',
+      },
+      {
+        key: 'home_desktop_list_loading_mode',
+        label: 'PC 首页加载方式',
+        desc: '控制 PC 端首页模型列表使用下拉自动加载还是分页；经典主题和工作台主题共用此设置。',
+        type: 'select',
+        options: [
+          { value: 'infinite', label: '下拉自动加载' },
+          { value: 'pagination', label: '分页' },
+        ],
+      },
+      {
+        key: 'home_mobile_list_loading_mode',
+        label: '移动端首页加载方式',
+        desc: '控制手机端首页模型列表使用下拉自动加载还是分页；移动端主题共用此设置。',
+        type: 'select',
+        options: [
+          { value: 'infinite', label: '下拉自动加载' },
+          { value: 'pagination', label: '分页' },
+        ],
+      },
+      { _section: '界面语言' },
+      {
+        key: 'ui_default_locale',
+        label: '默认界面语言',
+        desc: '新访客首次打开网站时使用的语言；已有用户会优先使用自己选择的语言。',
+        type: 'select',
+        options: [
+          { value: 'zh-CN', label: '简体中文' },
+          { value: 'zh-TW', label: '繁體中文' },
+          { value: 'en-US', label: 'English' },
+          { value: 'ja-JP', label: '日本語' },
+          { value: 'ko-KR', label: '한국어' },
+          { value: 'de-DE', label: 'Deutsch' },
+        ],
+      },
+      {
+        key: 'ui_enabled_locales',
+        label: '可切换语言',
+        desc: '逗号分隔，例如 zh-CN,zh-TW,en-US,ja-JP,ko-KR,de-DE。当前内置简体中文、繁体中文、英文、日语、韩语、德语。',
+        type: 'text',
+      },
+      {
+        key: 'ui_follow_browser_locale',
+        label: '首次访问跟随浏览器语言',
+        desc: '开启后，未手动选择语言的新访客会优先使用浏览器语言；不支持时回到默认语言。',
         type: 'switch',
       },
       {
@@ -2179,6 +2236,25 @@ export function normalizeStringSetting(value: unknown, fallback = '') {
   return normalized || fallback;
 }
 
+const SUPPORTED_UI_LOCALES = ['zh-CN', 'zh-TW', 'en-US', 'ja-JP', 'ko-KR', 'de-DE'] as const;
+
+export function normalizeUiDefaultLocale(value: unknown): string {
+  const locale = String(value || '').trim();
+  return SUPPORTED_UI_LOCALES.includes(locale as (typeof SUPPORTED_UI_LOCALES)[number]) ? locale : 'zh-CN';
+}
+
+export function normalizeUiEnabledLocales(value: unknown): string {
+  const locales = Array.from(
+    new Set(
+      String(value || '')
+        .split(',')
+        .map((item) => item.trim())
+        .filter((item) => SUPPORTED_UI_LOCALES.includes(item as (typeof SUPPORTED_UI_LOCALES)[number])),
+    ),
+  );
+  return locales.length ? locales.join(',') : 'zh-CN,zh-TW,en-US,ja-JP,ko-KR,de-DE';
+}
+
 export function normalizeStoragePrefix(value: unknown, fallback: string) {
   const normalized = String(value ?? fallback)
     .trim()
@@ -2200,6 +2276,8 @@ export function normalizeSettingsForSave(settings: SystemSettings): SystemSettin
     : DEFAULT_SETTINGS.storage_provider;
   return {
     ...settings,
+    ui_default_locale: normalizeUiDefaultLocale(settings.ui_default_locale),
+    ui_enabled_locales: normalizeUiEnabledLocales(settings.ui_enabled_locales),
     viewer_edge_threshold_angle: clampNumber(settings.viewer_edge_threshold_angle, 28, 1, 89),
     viewer_edge_vertex_limit: clampNumber(settings.viewer_edge_vertex_limit, 700000, 0, 5000000),
     viewer_measure_record_limit: clampNumber(settings.viewer_measure_record_limit, 12, 1, 100),

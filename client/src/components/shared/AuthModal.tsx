@@ -1,5 +1,6 @@
 import { AnimatePresence, motion } from 'framer-motion';
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { authApi } from '../../api/auth';
 import client from '../../api/client';
@@ -41,6 +42,7 @@ function getCurrentPath(location: ReturnType<typeof useLocation>) {
 }
 
 export default function AuthModal({ initialMode = 'login', open, returnUrl, onClose }: AuthModalProps) {
+  const { t } = useTranslation();
   const [mode, setMode] = useState<AuthMode>(initialMode);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -109,15 +111,15 @@ export default function AuthModal({ initialMode = 'login', open, returnUrl, onCl
 
   const validate = () => {
     const nextErrors: FormErrors = {};
-    if (!email) nextErrors.email = '请输入邮箱';
-    else if (!validateEmail(email)) nextErrors.email = '邮箱格式不正确';
-    if (!password) nextErrors.password = '请输入密码';
-    else if (password.length < 8) nextErrors.password = '密码至少8位';
+    if (!email) nextErrors.email = t('auth.errors.emailRequired');
+    else if (!validateEmail(email)) nextErrors.email = t('auth.errors.emailInvalid');
+    if (!password) nextErrors.password = t('auth.errors.passwordRequired');
+    else if (password.length < 8) nextErrors.password = t('auth.errors.passwordMin');
     if (mode === 'register') {
-      if (!username) nextErrors.username = '请输入用户名';
-      if (password !== confirmPassword) nextErrors.confirmPassword = '两次密码不一致';
-      if (!captchaText) nextErrors.captchaText = '请输入图形验证码';
-      if (!emailCode) nextErrors.emailCode = '请输入邮箱验证码';
+      if (!username) nextErrors.username = t('auth.errors.usernameRequired');
+      if (password !== confirmPassword) nextErrors.confirmPassword = t('auth.errors.confirmPasswordMismatch');
+      if (!captchaText) nextErrors.captchaText = t('auth.errors.captchaRequired');
+      if (!emailCode) nextErrors.emailCode = t('auth.errors.emailCodeRequired');
     }
     setErrors(nextErrors);
     return Object.keys(nextErrors).length === 0;
@@ -125,11 +127,11 @@ export default function AuthModal({ initialMode = 'login', open, returnUrl, onCl
 
   const handleSendEmailCode = async () => {
     if (!email || !validateEmail(email)) {
-      setErrors((prev) => ({ ...prev, email: '请输入正确的邮箱' }));
+      setErrors((prev) => ({ ...prev, email: t('auth.errors.emailInvalidInput') }));
       return;
     }
     if (!captchaText) {
-      setErrors((prev) => ({ ...prev, captchaText: '请输入图形验证码' }));
+      setErrors((prev) => ({ ...prev, captchaText: t('auth.errors.captchaRequired') }));
       return;
     }
     setSendingCode(true);
@@ -139,7 +141,7 @@ export default function AuthModal({ initialMode = 'login', open, returnUrl, onCl
       setEmailCountdown(60);
       setErrors((prev) => ({ ...prev, captchaText: undefined }));
     } catch (err: unknown) {
-      setApiError(getErrorMessage(err, '发送失败'));
+      setApiError(getErrorMessage(err, t('auth.errors.sendFailed')));
       refreshCaptcha();
     } finally {
       setSendingCode(false);
@@ -175,14 +177,16 @@ export default function AuthModal({ initialMode = 'login', open, returnUrl, onCl
         navigate(target, { replace: true });
       }
     } catch (err: unknown) {
-      setApiError(getErrorMessage(err, mode === 'login' ? '邮箱或密码错误' : '注册失败，请重试'));
+      setApiError(
+        getErrorMessage(err, mode === 'login' ? t('auth.errors.loginFailed') : t('auth.errors.registerFailed')),
+      );
       if (mode === 'register') refreshCaptcha();
     } finally {
       setLoading(false);
     }
   };
 
-  const heading = mode === 'login' ? '登录您的账户' : '注册新账户';
+  const heading = mode === 'login' ? t('auth.loginHeading') : t('auth.registerHeading');
   const AuthDialog = getInterfaceThemePackage(interfaceTheme).templates.AuthDialog;
 
   return (
@@ -205,7 +209,7 @@ export default function AuthModal({ initialMode = 'login', open, returnUrl, onCl
               </h1>
             }
             subtitle={null}
-            closeLabel="关闭登录弹窗"
+            closeLabel={t('common.close')}
             onClose={onClose}
           >
             <form onSubmit={handleSubmit} className="space-y-5 p-6 sm:p-8">
@@ -222,14 +226,14 @@ export default function AuthModal({ initialMode = 'login', open, returnUrl, onCl
 
               {mode === 'register' && (
                 <div>
-                  <AppFormLabel uppercase>联系人 / 用户名</AppFormLabel>
+                  <AppFormLabel uppercase>{t('auth.username')}</AppFormLabel>
                   <AppTextInput
                     type="text"
                     value={username}
                     onChange={(event) => setUsername(event.target.value)}
                     error={Boolean(errors.username)}
                     fieldSize="lg"
-                    placeholder="例如 张工"
+                    placeholder={t('auth.usernamePlaceholder')}
                   />
                   {errors.username && <span className={APP_FIELD_ERROR_CLASS}>{errors.username}</span>}
                 </div>
@@ -237,59 +241,59 @@ export default function AuthModal({ initialMode = 'login', open, returnUrl, onCl
 
               {mode === 'register' && (
                 <div>
-                  <AppFormLabel uppercase>手机号</AppFormLabel>
+                  <AppFormLabel uppercase>{t('auth.phone')}</AppFormLabel>
                   <AppTextInput
                     type="tel"
                     value={phone}
                     onChange={(event) => setPhone(event.target.value)}
                     fieldSize="lg"
-                    placeholder="用于询价、工单联系（选填）"
+                    placeholder={t('auth.phonePlaceholder')}
                   />
                 </div>
               )}
 
               {mode === 'register' && (
                 <div>
-                  <AppFormLabel uppercase>公司名称</AppFormLabel>
+                  <AppFormLabel uppercase>{t('auth.company')}</AppFormLabel>
                   <AppTextInput
                     type="text"
                     value={company}
                     onChange={(event) => setCompany(event.target.value)}
                     fieldSize="lg"
-                    placeholder="提交询价时自动带入（选填）"
+                    placeholder={t('auth.companyPlaceholder')}
                   />
                 </div>
               )}
 
               {mode === 'register' && (
                 <div>
-                  <AppFormLabel uppercase>联系地址</AppFormLabel>
+                  <AppFormLabel uppercase>{t('auth.address')}</AppFormLabel>
                   <AppTextInput
                     type="text"
                     value={address}
                     onChange={(event) => setAddress(event.target.value)}
                     fieldSize="lg"
-                    placeholder="用于询价对接和交付确认（选填）"
+                    placeholder={t('auth.addressPlaceholder')}
                   />
                 </div>
               )}
 
               <div>
-                <AppFormLabel uppercase>邮箱</AppFormLabel>
+                <AppFormLabel uppercase>{t('auth.email')}</AppFormLabel>
                 <AppTextInput
                   type="email"
                   value={email}
                   onChange={(event) => setEmail(event.target.value)}
                   error={Boolean(errors.email)}
                   fieldSize="lg"
-                  placeholder="例如 name@company.com"
+                  placeholder={t('auth.emailPlaceholder')}
                 />
                 {errors.email && <span className={APP_FIELD_ERROR_CLASS}>{errors.email}</span>}
               </div>
 
               {mode === 'register' && (
                 <div>
-                  <AppFormLabel uppercase>图形验证码</AppFormLabel>
+                  <AppFormLabel uppercase>{t('auth.captcha')}</AppFormLabel>
                   <div className="flex items-center gap-2">
                     <AppTextInput
                       type="text"
@@ -298,7 +302,7 @@ export default function AuthModal({ initialMode = 'login', open, returnUrl, onCl
                       className="min-w-0 flex-1 px-3"
                       error={Boolean(errors.captchaText)}
                       fieldSize="lg"
-                      placeholder="6位验证码"
+                      placeholder={t('auth.codePlaceholder')}
                       maxLength={6}
                     />
                     {captchaSvg && (
@@ -317,7 +321,7 @@ export default function AuthModal({ initialMode = 'login', open, returnUrl, onCl
 
               {mode === 'register' && (
                 <div>
-                  <AppFormLabel uppercase>邮箱验证码</AppFormLabel>
+                  <AppFormLabel uppercase>{t('auth.emailCode')}</AppFormLabel>
                   <div className="flex gap-2">
                     <AppTextInput
                       type="text"
@@ -326,7 +330,7 @@ export default function AuthModal({ initialMode = 'login', open, returnUrl, onCl
                       className="min-w-0 flex-1 px-3"
                       error={Boolean(errors.emailCode)}
                       fieldSize="lg"
-                      placeholder="6位验证码"
+                      placeholder={t('auth.codePlaceholder')}
                       maxLength={6}
                     />
                     <button
@@ -335,7 +339,7 @@ export default function AuthModal({ initialMode = 'login', open, returnUrl, onCl
                       disabled={emailCountdown > 0 || sendingCode}
                       className="shrink-0 whitespace-nowrap rounded-sm border border-primary-container/50 px-3 py-2.5 text-sm text-primary-container transition-colors hover:bg-primary-container/10 disabled:cursor-not-allowed disabled:opacity-50"
                     >
-                      {sendingCode ? '发送中...' : emailCountdown > 0 ? `${emailCountdown}s` : '发送验证码'}
+                      {sendingCode ? t('auth.sending') : emailCountdown > 0 ? `${emailCountdown}s` : t('auth.sendCode')}
                     </button>
                   </div>
                   {errors.emailCode && <span className={APP_FIELD_ERROR_CLASS}>{errors.emailCode}</span>}
@@ -343,7 +347,7 @@ export default function AuthModal({ initialMode = 'login', open, returnUrl, onCl
               )}
 
               <div>
-                <AppFormLabel uppercase>密码</AppFormLabel>
+                <AppFormLabel uppercase>{t('auth.password')}</AppFormLabel>
                 <div className="relative">
                   <AppTextInput
                     type={showPassword ? 'text' : 'password'}
@@ -352,13 +356,13 @@ export default function AuthModal({ initialMode = 'login', open, returnUrl, onCl
                     className="pr-10"
                     error={Boolean(errors.password)}
                     fieldSize="lg"
-                    placeholder="至少8位"
+                    placeholder={t('auth.passwordPlaceholder')}
                   />
                   <button
                     type="button"
                     onClick={() => setShowPassword((value) => !value)}
                     className="absolute right-3 top-1/2 -translate-y-1/2 text-on-surface-variant transition-colors hover:text-on-surface"
-                    aria-label={showPassword ? '隐藏密码' : '显示密码'}
+                    aria-label={showPassword ? t('auth.hidePassword') : t('auth.showPassword')}
                   >
                     <Icon name={showPassword ? 'visibility_off' : 'visibility'} size={18} />
                   </button>
@@ -368,7 +372,7 @@ export default function AuthModal({ initialMode = 'login', open, returnUrl, onCl
 
               {mode === 'register' && (
                 <div>
-                  <AppFormLabel uppercase>确认密码</AppFormLabel>
+                  <AppFormLabel uppercase>{t('auth.confirmPassword')}</AppFormLabel>
                   <div className="relative">
                     <AppTextInput
                       type={showPassword ? 'text' : 'password'}
@@ -377,13 +381,13 @@ export default function AuthModal({ initialMode = 'login', open, returnUrl, onCl
                       className="pr-10"
                       error={Boolean(errors.confirmPassword)}
                       fieldSize="lg"
-                      placeholder="再次输入密码"
+                      placeholder={t('auth.confirmPasswordPlaceholder')}
                     />
                     <button
                       type="button"
                       onClick={() => setShowPassword((value) => !value)}
                       className="absolute right-3 top-1/2 -translate-y-1/2 text-on-surface-variant transition-colors hover:text-on-surface"
-                      aria-label={showPassword ? '隐藏密码' : '显示密码'}
+                      aria-label={showPassword ? t('auth.hidePassword') : t('auth.showPassword')}
                     >
                       <Icon name={showPassword ? 'visibility_off' : 'visibility'} size={18} />
                     </button>
@@ -400,7 +404,7 @@ export default function AuthModal({ initialMode = 'login', open, returnUrl, onCl
                     onChange={(event) => setRememberMe(event.target.checked)}
                     className="h-4 w-4 rounded border-outline-variant/30 text-primary-container accent-primary-container"
                   />
-                  <span className="text-sm text-on-surface-variant">记住登录</span>
+                  <span className="text-sm text-on-surface-variant">{t('auth.rememberMe')}</span>
                 </label>
               )}
 
@@ -412,12 +416,12 @@ export default function AuthModal({ initialMode = 'login', open, returnUrl, onCl
                 {loading ? (
                   <span className="flex items-center justify-center gap-2">
                     <Icon name="progress_activity" size={16} className="animate-spin" />
-                    处理中...
+                    {t('auth.processing')}
                   </span>
                 ) : mode === 'login' ? (
-                  '登录'
+                  t('auth.login')
                 ) : (
-                  '注册'
+                  t('auth.register')
                 )}
               </button>
             </form>
@@ -429,7 +433,7 @@ export default function AuthModal({ initialMode = 'login', open, returnUrl, onCl
                   onClick={() => resetTransient(mode === 'login' ? 'register' : 'login')}
                   className="text-sm text-primary underline-offset-4 hover:underline"
                 >
-                  {mode === 'login' ? '没有账户？立即注册' : '已有账户？立即登录'}
+                  {mode === 'login' ? t('auth.noAccount') : t('auth.switchToLogin')}
                 </button>
               </div>
             )}
@@ -442,7 +446,7 @@ export default function AuthModal({ initialMode = 'login', open, returnUrl, onCl
                   rel="noopener noreferrer"
                   className="transition-colors hover:text-on-surface-variant"
                 >
-                  用户协议
+                  {t('auth.terms')}
                 </a>
                 <span>·</span>
                 <a
@@ -451,7 +455,7 @@ export default function AuthModal({ initialMode = 'login', open, returnUrl, onCl
                   rel="noopener noreferrer"
                   className="transition-colors hover:text-on-surface-variant"
                 >
-                  隐私声明
+                  {t('auth.privacy')}
                 </a>
               </div>
             </div>

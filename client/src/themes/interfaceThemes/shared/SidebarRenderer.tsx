@@ -1,15 +1,17 @@
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import Icon from '../../../components/shared/Icon';
 import { useAuthEntry } from '../../../components/shared/useAuthEntry';
+import { localizeNavItems } from '../../../i18n/nav';
 import { getBusinessConfig } from '../../../lib/businessConfig';
 import { usePublicSettings } from '../../../lib/publicSettings';
 import { preloadRouteForPath } from '../../../lib/routeLoaders';
 import { useAuthStore } from '../../../stores/useAuthStore';
 
 const footerNav = [
-  { label: '个人设置', icon: 'settings', path: '/profile' },
-  { label: '退出登录', icon: 'logout', path: '' },
+  { icon: 'settings', path: '/profile' },
+  { icon: 'logout', path: '' },
 ];
 
 export interface SidebarAppearance {
@@ -47,6 +49,7 @@ function isRouteActive(pathname: string, path: string) {
 }
 
 export default function SidebarRenderer({ appearance, adminRouteMode = 'all' }: SidebarRendererProps) {
+  const { t } = useTranslation();
   const location = useLocation();
   const navigate = useNavigate();
   const logout = useAuthStore((s) => s.logout);
@@ -57,12 +60,15 @@ export default function SidebarRenderer({ appearance, adminRouteMode = 'all' }: 
   const { authNodes, handleProtectedLinkClick } = useAuthEntry(settings);
   const navItems = useMemo(() => {
     const business = getBusinessConfig(settings);
-    if (!isAdmin) return business.userNav;
+    if (!isAdmin) return localizeNavItems(business.userNav, t);
     if (adminRouteMode === 'admin-only' && isAdminRoute) {
-      return business.adminNav.filter((item) => isAdminRoutePath(item.path));
+      return localizeNavItems(
+        business.adminNav.filter((item) => isAdminRoutePath(item.path)),
+        t,
+      );
     }
-    return business.adminNav;
-  }, [adminRouteMode, isAdmin, isAdminRoute, settings]);
+    return localizeNavItems(business.adminNav, t);
+  }, [adminRouteMode, isAdmin, isAdminRoute, settings, t]);
   const activeRef = useRef<HTMLAnchorElement>(null);
   const navRef = useRef<HTMLElement>(null);
   const [overflow, setOverflow] = useState({ top: false, bottom: false });
@@ -109,7 +115,9 @@ export default function SidebarRenderer({ appearance, adminRouteMode = 'all' }: 
       <nav ref={navRef} className={appearance.navClassName}>
         {showNavIntro && (
           <div className={appearance.navIntroWrapperClassName}>
-            <span className={appearance.navIntroLabelClassName}>{appearance.navIntroLabel}</span>
+            <span className={appearance.navIntroLabelClassName}>
+              {t(appearance.navIntroLabel || '', { defaultValue: appearance.navIntroLabel })}
+            </span>
             <div className={appearance.navIntroLineClassName} />
           </div>
         )}
@@ -121,7 +129,7 @@ export default function SidebarRenderer({ appearance, adminRouteMode = 'all' }: 
             <Fragment key={item.path}>
               {showDivider && (
                 <div className={appearance.sectionWrapperClassName}>
-                  <span className={appearance.sectionLabelClassName}>后台管理</span>
+                  <span className={appearance.sectionLabelClassName}>{t('common.admin')}</span>
                   <div className={appearance.sectionLineClassName} />
                 </div>
               )}
@@ -153,7 +161,7 @@ export default function SidebarRenderer({ appearance, adminRouteMode = 'all' }: 
               if (item.path === '') {
                 return (
                   <button
-                    key={item.label}
+                    key="logout"
                     onClick={() => {
                       logout();
                       navigate('/login');
@@ -161,7 +169,7 @@ export default function SidebarRenderer({ appearance, adminRouteMode = 'all' }: 
                     className={appearance.footerButtonClassName}
                   >
                     <Icon name={item.icon} size={appearance.iconSize} />
-                    <span className={appearance.itemLabelClassName}>{item.label}</span>
+                    <span className={appearance.itemLabelClassName}>{t('common.logout')}</span>
                   </button>
                 );
               }
@@ -178,7 +186,7 @@ export default function SidebarRenderer({ appearance, adminRouteMode = 'all' }: 
                   onClick={(e) => handleProtectedLinkClick(e, item.path)}
                 >
                   <Icon name={item.icon} size={appearance.iconSize} />
-                  <span className={appearance.itemLabelClassName}>{item.label}</span>
+                  <span className={appearance.itemLabelClassName}>{t('nav.profileSettings')}</span>
                 </Link>
               );
             })}

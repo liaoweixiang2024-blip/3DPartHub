@@ -635,7 +635,7 @@ case "$url" in
     if [ "${FAKE_VERSION_FAIL:-0}" = "1" ]; then
       exit 22
     fi
-    echo '{"current":"v3.2.1"}'
+    echo '{"current":"v3.2.2"}'
     ;;
   */healthz)
     echo "ok"

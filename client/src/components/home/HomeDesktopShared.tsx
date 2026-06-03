@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useTranslation } from 'react-i18next';
 import { getAnnouncement, getCachedPublicSettings } from '../../lib/publicSettings';
 import { sanitizeHtml } from '../../lib/sanitizeHtml';
 import FormatTag from '../shared/FormatTag';
@@ -155,14 +156,13 @@ export function SkeletonListCard() {
 }
 
 export function ModelEmptyState({ searchQuery }: { searchQuery: string }) {
+  const { t } = useTranslation();
   return (
     <div className="home-model-empty-state flex flex-col items-center justify-center gap-4 py-20">
       <Icon name="search_off" size={48} className="text-on-surface-variant/30" />
       <div className="text-center">
-        <p className="text-on-surface-variant">没有找到匹配的模型</p>
-        {searchQuery.trim() && (
-          <p className="mt-1 text-xs text-on-surface-variant/60">可以提交需求，请管理员补充或完善模型库。</p>
-        )}
+        <p className="text-on-surface-variant">{t('home.emptyTitle')}</p>
+        {searchQuery.trim() && <p className="mt-1 text-xs text-on-surface-variant/60">{t('home.emptyDescription')}</p>}
       </div>
       {searchQuery.trim() && (
         <a
@@ -170,7 +170,7 @@ export function ModelEmptyState({ searchQuery }: { searchQuery: string }) {
           className="inline-flex items-center gap-2 rounded-lg bg-primary-container px-4 py-2 text-sm font-bold text-on-primary transition-opacity hover:opacity-90"
         >
           <Icon name="assignment_add" size={16} />
-          申请完善模型
+          {t('home.requestModel')}
         </a>
       )}
     </div>

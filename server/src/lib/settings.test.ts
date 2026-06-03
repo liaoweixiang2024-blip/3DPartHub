@@ -1,8 +1,14 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-const { buildFooterCopyright, buildModelDetailCopyright, normalizeFooterLinksSetting, validateSettingValue } =
-  await import('./settings.js');
+const {
+  buildFooterCopyright,
+  buildModelDetailCopyright,
+  isValidContactPhoneSetting,
+  normalizeContactPhoneSetting,
+  normalizeFooterLinksSetting,
+  validateSettingValue,
+} = await import('./settings.js');
 
 test('buildFooterCopyright uses current year and provided title', () => {
   const result = buildFooterCopyright('MyApp');
@@ -89,6 +95,36 @@ test('validateSettingValue validates color_scheme', () => {
   assert.equal(validateSettingValue('color_scheme', 'blue'), 'blue');
   assert.equal(validateSettingValue('color_scheme', 'custom'), 'custom');
   assert.equal(validateSettingValue('color_scheme', 'neon'), 'orange');
+});
+
+test('validateSettingValue validates home list loading modes', () => {
+  assert.equal(validateSettingValue('home_desktop_list_loading_mode', 'pagination'), 'pagination');
+  assert.equal(validateSettingValue('home_desktop_list_loading_mode', 'infinite'), 'infinite');
+  assert.equal(validateSettingValue('home_desktop_list_loading_mode', 'bad'), 'pagination');
+  assert.equal(validateSettingValue('home_mobile_list_loading_mode', 'bad'), 'infinite');
+});
+
+test('validateSettingValue validates UI locale settings', () => {
+  assert.equal(validateSettingValue('ui_default_locale', 'zh-CN'), 'zh-CN');
+  assert.equal(validateSettingValue('ui_default_locale', 'zh-TW'), 'zh-TW');
+  assert.equal(validateSettingValue('ui_default_locale', 'en-US'), 'en-US');
+  assert.equal(validateSettingValue('ui_default_locale', 'ja-JP'), 'ja-JP');
+  assert.equal(validateSettingValue('ui_default_locale', 'ko-KR'), 'ko-KR');
+  assert.equal(validateSettingValue('ui_default_locale', 'de-DE'), 'de-DE');
+  assert.equal(validateSettingValue('ui_enabled_locales', 'en-US, bad, zh-CN, zh-TW'), 'en-US,zh-CN,zh-TW');
+  assert.equal(validateSettingValue('ui_enabled_locales', 'bad'), 'zh-CN,zh-TW,en-US,ja-JP,ko-KR,de-DE');
+});
+
+test('contact phone setting accepts standard phone formats only', () => {
+  assert.equal(normalizeContactPhoneSetting('（0755）12345678'), '(0755)12345678');
+  assert.equal(isValidContactPhoneSetting('13800138000'), true);
+  assert.equal(isValidContactPhoneSetting('0755-12345678'), true);
+  assert.equal(isValidContactPhoneSetting('400-123-4567'), true);
+  assert.equal(isValidContactPhoneSetting('+86 13800138000'), true);
+  assert.equal(isValidContactPhoneSetting('随便填电话'), false);
+  assert.equal(isValidContactPhoneSetting('12345'), false);
+  assert.equal(validateSettingValue('contact_phone', ' 0755－12345678 '), '0755-12345678');
+  assert.equal(validateSettingValue('contact_phone', 'abc123'), '');
 });
 
 test('validateSettingValue normalizes color_custom_dark JSON', () => {

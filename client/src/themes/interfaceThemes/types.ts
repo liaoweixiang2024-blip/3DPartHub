@@ -88,6 +88,7 @@ export interface DesktopHomeThemeProps {
   homePageSizeOptions: number[];
   homeSearchMaxLength: number;
   isLoadingMore: boolean;
+  listLoadingMode: HomeListLoadingMode;
   normalizeSearchQuery: (query: string) => string;
   page: number;
   pageSize: number;

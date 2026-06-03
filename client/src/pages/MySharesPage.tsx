@@ -1,5 +1,6 @@
 import { AnimatePresence, motion } from 'framer-motion';
 import { useEffect, useMemo, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router-dom';
 import useSWR from 'swr';
 import { deleteShare, listShares, type ShareLink } from '../api/shares';
@@ -33,17 +34,18 @@ function isExpired(expiresAt: string | null) {
   return Boolean(expiresAt && new Date(expiresAt) < new Date());
 }
 
-function formatDate(value: string) {
-  return new Date(value).toLocaleDateString('zh-CN');
+function formatDate(value: string, locale: string) {
+  return new Date(value).toLocaleDateString(locale);
 }
 
 function ShareTypeBadge({ type }: { type?: ShareLink['type'] }) {
+  const { t } = useTranslation();
   const isSelection = type === 'selection';
   return (
     <span
       className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium ${isSelection ? 'bg-blue-500/10 text-blue-400' : 'bg-primary-container/12 text-primary-container'}`}
     >
-      {isSelection ? '选型' : '模型'}
+      {isSelection ? t('myShares.typeSelection') : t('myShares.typeModel')}
     </span>
   );
 }
@@ -57,6 +59,8 @@ function BatchToolbar({
   onDelete: () => void;
   onCancel: () => void;
 }) {
+  const { t } = useTranslation();
+
   return (
     <motion.div
       variants={toolbarMotion}
@@ -65,14 +69,16 @@ function BatchToolbar({
       exit="exit"
       className="bg-surface-container-high border border-outline-variant/20 rounded-lg px-4 py-3 flex items-center gap-3 shadow-lg"
     >
-      <span className="text-sm text-on-surface font-medium">已选 {selectedCount} 个</span>
+      <span className="text-sm text-on-surface font-medium">
+        {t('myShares.selectedCount', { count: selectedCount })}
+      </span>
       <div className="flex-1" />
       <button
         onClick={onDelete}
         className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-error bg-error/10 rounded-sm border border-error/20 hover:bg-error/20 transition-colors"
       >
         <Icon name="delete" size={14} />
-        删除分享
+        {t('myShares.deleteShare')}
       </button>
       <button
         onClick={onCancel}
@@ -105,8 +111,9 @@ function ShareRow({
   onDeleteCancel: () => void;
   onDeleteConfirm: (id: string) => void;
 }) {
+  const { i18n, t } = useTranslation();
   const expired = isExpired(item.expiresAt);
-  const title = item.modelName || item.modelId || '未命名分享';
+  const title = item.modelName || item.modelId || t('myShares.untitled');
 
   return (
     <div
@@ -123,7 +130,7 @@ function ShareRow({
           className={`shrink-0 w-5 h-5 rounded-sm border-2 flex items-center justify-center transition-[background-color,border-color,opacity] duration-150 ease-out ${
             selected ? 'bg-primary border-primary' : 'bg-surface/80 border-outline-variant/40 hover:border-primary'
           }`}
-          aria-label={selected ? '取消选择' : '选择分享'}
+          aria-label={selected ? t('myShares.cancelSelect') : t('myShares.selectShare')}
         >
           {selected && <Icon name="check" size={14} className="text-on-primary" />}
         </button>
@@ -150,14 +157,16 @@ function ShareRow({
               {item.downloadLimit > 0 ? `/${item.downloadLimit}` : ''}
             </span>
           ) : null}
-          {item.hasPassword ? <span className="shrink-0">有密码</span> : null}
-          <span className="shrink-0">{formatDate(item.createdAt)}</span>
+          {item.hasPassword ? <span className="shrink-0">{t('myShares.hasPassword')}</span> : null}
+          <span className="shrink-0">{formatDate(item.createdAt, i18n.language)}</span>
           {expired ? (
-            <span className="shrink-0 text-error">已过期</span>
+            <span className="shrink-0 text-error">{t('myShares.expired')}</span>
           ) : item.expiresAt ? (
-            <span className="hidden shrink-0 md:inline">有效至 {formatDate(item.expiresAt)}</span>
+            <span className="hidden shrink-0 md:inline">
+              {t('myShares.validUntil', { date: formatDate(item.expiresAt, i18n.language) })}
+            </span>
           ) : (
-            <span className="hidden shrink-0 md:inline">永久有效</span>
+            <span className="hidden shrink-0 md:inline">{t('myShares.neverExpires')}</span>
           )}
         </div>
       </Link>
@@ -168,17 +177,17 @@ function ShareRow({
           className="hidden h-8 items-center gap-1.5 rounded-md px-2.5 text-xs font-medium text-on-surface-variant transition-colors hover:bg-surface-container-high hover:text-on-surface md:inline-flex"
         >
           <Icon name="open_in_new" size={15} />
-          打开
+          {t('myShares.open')}
         </Link>
         <button
           type="button"
           onClick={() => onCopy(item)}
           className="inline-flex h-8 w-8 items-center justify-center rounded-md text-primary-container transition-colors hover:bg-primary-container/10 md:w-auto md:gap-1.5 md:px-2.5 md:text-xs md:font-medium"
-          aria-label="复制链接"
+          aria-label={t('myShares.copyLink')}
           data-tooltip-ignore
         >
           <Icon name="link" size={15} />
-          <span className="hidden md:inline">复制</span>
+          <span className="hidden md:inline">{t('myShares.copy')}</span>
         </button>
         {selectMode ? null : deleting ? (
           <>
@@ -187,14 +196,14 @@ function ShareRow({
               onClick={() => onDeleteConfirm(item.id)}
               className="inline-flex h-8 items-center rounded-md bg-error px-2 text-[11px] font-medium text-on-error-container md:px-2.5 md:text-xs"
             >
-              确认
+              {t('common.confirm')}
             </button>
             <button
               type="button"
               onClick={onDeleteCancel}
               className="inline-flex h-8 items-center rounded-md px-2 text-[11px] font-medium text-on-surface-variant hover:bg-surface-container-high md:px-2.5 md:text-xs"
             >
-              取消
+              {t('common.cancel')}
             </button>
           </>
         ) : (
@@ -202,11 +211,11 @@ function ShareRow({
             type="button"
             onClick={() => onDeleteStart(item.id)}
             className="inline-flex h-8 w-8 items-center justify-center rounded-md text-error transition-colors hover:bg-error-container/10 md:w-auto md:gap-1.5 md:px-2.5 md:text-xs md:font-medium"
-            aria-label="删除"
+            aria-label={t('common.delete')}
             data-tooltip-ignore
           >
             <Icon name="delete" size={15} />
-            <span className="hidden md:inline">删除</span>
+            <span className="hidden md:inline">{t('common.delete')}</span>
           </button>
         )}
       </div>
@@ -215,7 +224,8 @@ function ShareRow({
 }
 
 export default function MySharesPage() {
-  useDocumentTitle('我的分享');
+  const { t } = useTranslation();
+  useDocumentTitle(t('myShares.title'));
   const { toast } = useToast();
   const {
     value: search,
@@ -233,13 +243,18 @@ export default function MySharesPage() {
   const filtered = useMemo(() => {
     if (!keyword) return shares;
     return shares.filter((item) =>
-      [item.modelName, item.modelId, item.token, item.type === 'selection' ? '选型' : '模型'].some((value) =>
+      [
+        item.modelName,
+        item.modelId,
+        item.token,
+        item.type === 'selection' ? t('myShares.typeSelection') : t('myShares.typeModel'),
+      ].some((value) =>
         String(value || '')
           .toLowerCase()
           .includes(keyword),
       ),
     );
-  }, [keyword, shares]);
+  }, [keyword, shares, t]);
   const selectedCount = selectedIds.size;
 
   useEffect(() => {
@@ -253,9 +268,9 @@ export default function MySharesPage() {
   async function handleCopy(item: ShareLink) {
     try {
       await copyText(getShareUrl(item));
-      toast('链接已复制', 'success');
+      toast(t('myShares.linkCopied'), 'success');
     } catch {
-      toast('复制失败，请手动复制链接', 'error');
+      toast(t('myShares.copyFailed'), 'error');
     }
   }
 
@@ -264,7 +279,7 @@ export default function MySharesPage() {
       await deleteShare(id);
       setDeleteId(null);
       mutate();
-      toast('分享已删除', 'success');
+      toast(t('myShares.deleted'), 'success');
     } catch (err: unknown) {
       const detail = typeof err === 'object' && err !== null ? (err as Record<string, unknown>).response : undefined;
       const data = typeof detail === 'object' && detail !== null ? (detail as Record<string, unknown>).data : undefined;
@@ -272,8 +287,8 @@ export default function MySharesPage() {
         typeof data === 'object' && data !== null
           ? ((data as Record<string, unknown>).message as string) ||
             ((data as Record<string, unknown>).detail as string) ||
-            '删除失败'
-          : '删除失败';
+            t('myShares.deleteFailed')
+          : t('myShares.deleteFailed');
       toast(msg, 'error');
     }
   }
@@ -311,7 +326,7 @@ export default function MySharesPage() {
       setSelectedIds(new Set());
       setSelectMode(false);
       mutate();
-      toast(`已删除 ${ids.length} 条分享`, 'success');
+      toast(t('myShares.batchDeleted', { count: ids.length }), 'success');
     } catch (err: unknown) {
       const detail = typeof err === 'object' && err !== null ? (err as Record<string, unknown>).response : undefined;
       const data = typeof detail === 'object' && detail !== null ? (detail as Record<string, unknown>).data : undefined;
@@ -319,8 +334,8 @@ export default function MySharesPage() {
         typeof data === 'object' && data !== null
           ? ((data as Record<string, unknown>).message as string) ||
             ((data as Record<string, unknown>).detail as string) ||
-            '批量删除失败'
-          : '批量删除失败';
+            t('myShares.batchDeleteFailed')
+          : t('myShares.batchDeleteFailed');
       toast(msg, 'error');
     }
   }
@@ -334,7 +349,7 @@ export default function MySharesPage() {
         <>
           {selectMode && (
             <button onClick={toggleSelectAllVisible} className="text-sm text-primary hover:underline">
-              {allVisibleSelected ? '取消全选' : '全选当前'}
+              {allVisibleSelected ? t('myShares.unselectAll') : t('myShares.selectCurrent')}
             </button>
           )}
           <button
@@ -351,7 +366,7 @@ export default function MySharesPage() {
             }`}
           >
             <Icon name={selectMode ? 'close' : 'checklist'} size={16} />
-            {selectMode ? '取消选择' : '批量操作'}
+            {selectMode ? t('myShares.cancelSelect') : t('myShares.batchOperation')}
           </button>
         </>
       ) : (
@@ -365,7 +380,7 @@ export default function MySharesPage() {
             selectMode ? 'text-primary border-primary/30' : 'text-on-surface-variant border-outline-variant/20'
           }`}
         >
-          {selectMode ? '取消' : '批量操作'}
+          {selectMode ? t('myShares.cancel') : t('myShares.batchOperation')}
         </button>
       )
     ) : null;
@@ -376,7 +391,7 @@ export default function MySharesPage() {
         inputProps={searchInputProps}
         value={searchInputValue}
         onClear={() => setSearch('')}
-        placeholder="搜索名称、链接或类型"
+        placeholder={t('myShares.searchPlaceholder')}
         className="flex-1 md:max-w-sm"
       />
     </div>
@@ -385,8 +400,8 @@ export default function MySharesPage() {
   if (isLoading) {
     return (
       <AdminPageShell>
-        <AdminManagementPage title="我的分享" description="管理自己创建的模型分享和选型分享链接">
-          <AdminLoadingState variant="list" label="分享记录加载中" />
+        <AdminManagementPage title={t('myShares.title')} description={t('myShares.description')}>
+          <AdminLoadingState variant="list" label={t('myShares.loading')} />
         </AdminManagementPage>
       </AdminPageShell>
     );
@@ -395,10 +410,10 @@ export default function MySharesPage() {
   if (error) {
     return (
       <AdminPageShell>
-        <AdminManagementPage title="我的分享" description="管理自己创建的模型分享和选型分享链接">
+        <AdminManagementPage title={t('myShares.title')} description={t('myShares.description')}>
           <AdminErrorState
-            title="分享记录加载失败"
-            description="请稍后重试，或检查当前登录状态。"
+            title={t('myShares.loadFailed')}
+            description={t('myShares.loadFailedDescription')}
             onRetry={() => mutate()}
           />
         </AdminManagementPage>
@@ -409,9 +424,9 @@ export default function MySharesPage() {
   return (
     <AdminPageShell>
       <AdminManagementPage
-        title="我的分享"
-        meta={`${shares.length} 条记录`}
-        description="管理自己创建的模型分享和选型分享链接"
+        title={t('myShares.title')}
+        meta={t('myShares.recordsCount', { count: shares.length })}
+        description={t('myShares.description')}
         actions={headerActions}
         toolbar={toolbar}
       >
@@ -438,12 +453,14 @@ export default function MySharesPage() {
               className="mb-3 flex items-center gap-2 bg-surface-container-high rounded-lg px-3 py-2.5 border border-outline-variant/10"
             >
               <button onClick={toggleSelectAllVisible} className="text-xs text-primary">
-                {allVisibleSelected ? '取消全选' : '全选'}
+                {allVisibleSelected ? t('myShares.unselectAll') : t('myShares.selectAll')}
               </button>
               <div className="flex-1" />
-              <span className="text-xs text-on-surface-variant">{selectedCount} 已选</span>
+              <span className="text-xs text-on-surface-variant">
+                {t('myShares.selectedShort', { count: selectedCount })}
+              </span>
               <button onClick={handleBatchDelete} className="text-xs text-error px-2 py-1">
-                删除分享
+                {t('myShares.deleteShare')}
               </button>
             </motion.div>
           )}
@@ -452,22 +469,22 @@ export default function MySharesPage() {
         {shares.length === 0 ? (
           <AdminEmptyState
             icon="share"
-            title="暂无分享记录"
-            description="模型详情页和选型结果页创建的分享链接会显示在这里。"
+            title={t('myShares.emptyTitle')}
+            description={t('myShares.emptyDescription')}
             action={
               <Link
                 to="/"
                 className="rounded-md bg-primary-container px-5 py-2.5 text-sm font-semibold text-on-primary transition-opacity hover:opacity-90"
               >
-                浏览模型库
+                {t('myShares.browseLibrary')}
               </Link>
             }
           />
         ) : filtered.length === 0 ? (
           <AdminEmptyState
             icon="search_off"
-            title="没有匹配的分享"
-            description="换个关键词试试。"
+            title={t('myShares.noMatchTitle')}
+            description={t('myShares.noMatchDescription')}
             className="min-h-[300px]"
           />
         ) : (
@@ -495,9 +512,9 @@ export default function MySharesPage() {
         open={confirmOpen}
         onClose={() => setConfirmOpen(false)}
         onConfirm={confirmBatchDelete}
-        title="确认删除分享"
-        description={`确定要删除选中的 ${selectedIds.size} 条分享链接吗？`}
-        confirmLabel="删除分享"
+        title={t('myShares.confirmDeleteTitle')}
+        description={t('myShares.confirmDeleteDescription', { count: selectedIds.size })}
+        confirmLabel={t('myShares.deleteShare')}
       />
     </AdminPageShell>
   );

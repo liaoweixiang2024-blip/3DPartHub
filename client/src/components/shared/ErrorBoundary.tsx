@@ -1,4 +1,5 @@
 import { Component, type ReactNode } from 'react';
+import { i18n } from '../../i18n';
 import { notifyGlobalError } from '../../lib/errorNotifications';
 import Icon from './Icon';
 
@@ -19,7 +20,7 @@ export default class ErrorBoundary extends Component<Props, State> {
   }
 
   componentDidCatch(error: Error) {
-    notifyGlobalError(error, '页面出现错误，请刷新后重试');
+    notifyGlobalError(error, i18n.t('errorBoundary.toast'));
   }
 
   render() {
@@ -27,9 +28,9 @@ export default class ErrorBoundary extends Component<Props, State> {
       return (
         <div className="flex flex-col items-center justify-center min-h-[300px] gap-4 p-8">
           <Icon name="error" size={48} className="text-error" />
-          <h2 className="font-headline text-lg font-semibold text-on-surface">页面出现错误</h2>
+          <h2 className="font-headline text-lg font-semibold text-on-surface">{i18n.t('errorBoundary.title')}</h2>
           <p className="text-on-surface-variant text-sm max-w-md text-center">
-            {this.state.error?.message || '发生了未知错误'}
+            {this.state.error?.message || i18n.t('errorBoundary.unknown')}
           </p>
           <button
             onClick={() => {
@@ -38,7 +39,7 @@ export default class ErrorBoundary extends Component<Props, State> {
             }}
             className="bg-primary-container text-on-primary px-5 py-2 rounded-sm text-sm font-medium hover:opacity-90 transition-opacity"
           >
-            重新加载
+            {i18n.t('errorBoundary.reload')}
           </button>
         </div>
       );

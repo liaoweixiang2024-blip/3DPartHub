@@ -11,8 +11,10 @@ import {
   type MouseEventHandler,
   type ReactNode,
 } from 'react';
+import { useTranslation } from 'react-i18next';
 import { modelApi, type ModelPreviewMeta } from '../../api/models';
 import { useFullscreen } from '../../hooks/useFullscreen';
+import { i18n } from '../../i18n';
 import { getCachedPublicSettings } from '../../lib/publicSettings';
 import Icon from '../shared/Icon';
 import { MODEL_DETAIL_VIEWER_CLASS } from '../shared/ModelDetailFrame';
@@ -91,15 +93,15 @@ interface CadViewerPanelProps {
 function friendlyViewerError(error: Error | null) {
   const message = error?.message || '';
   if (message.includes('401') || message.includes('Unauthorized')) {
-    return '预览文件需要访问权限，请刷新页面或重新登录后再试。';
+    return i18n.t('viewer.errors.unauthorized');
   }
   if (message.includes('404') || message.toLowerCase().includes('not found')) {
-    return '预览文件不存在，可能需要重新生成模型预览。';
+    return i18n.t('viewer.errors.notFound');
   }
   if (message.includes('Failed to fetch') || message.includes('Could not load') || message.includes('fetch for')) {
-    return '模型预览加载失败，请检查网络或稍后重试。';
+    return i18n.t('viewer.errors.network');
   }
-  return '模型预览暂时无法加载，请稍后重试。';
+  return i18n.t('viewer.errors.generic');
 }
 
 class ViewerErrorBoundary extends Component<
@@ -118,7 +120,7 @@ class ViewerErrorBoundary extends Component<
       <div className="flex h-full w-full items-center justify-center px-5">
         <div className="max-w-sm rounded-lg border border-outline-variant/15 bg-surface-container-low/95 p-5 text-center shadow-xl backdrop-blur">
           <Icon name="error" size={this.props.isMobile ? 36 : 44} className="mx-auto text-error/70" />
-          <h3 className="mt-3 text-sm font-semibold text-on-surface">模型预览加载失败</h3>
+          <h3 className="mt-3 text-sm font-semibold text-on-surface">{i18n.t('viewer.errors.title')}</h3>
           <p className="mt-2 text-xs leading-5 text-on-surface-variant">{friendlyViewerError(this.state.error)}</p>
           <button
             type="button"
@@ -129,7 +131,7 @@ class ViewerErrorBoundary extends Component<
             className="mt-4 inline-flex items-center gap-1.5 rounded-md bg-primary-container px-3 py-2 text-xs font-medium text-on-primary-container transition-opacity hover:opacity-90"
           >
             <Icon name="refresh" size={14} />
-            重新加载
+            {i18n.t('viewer.reload')}
           </button>
         </div>
       </div>
@@ -185,6 +187,7 @@ export default function CadViewerPanel({
   onBack,
   onPseudoFullscreenChange,
 }: CadViewerPanelProps) {
+  const { t } = useTranslation();
   const containerRef = useRef<HTMLDivElement>(null);
   const [, setLoaded] = useState(false);
   const [loadProgress, setLoadProgress] = useState<number | null>(null);
@@ -295,15 +298,15 @@ export default function CadViewerPanel({
       });
       const file = new File([blob], 'thumbnail.png', { type: 'image/png' });
       await modelApi.uploadThumbnail(modelId, file);
-      toast('预览图已更新', 'success');
+      toast(t('viewer.toasts.thumbnailUpdated'), 'success');
       ok = true;
     } catch {
-      toast('设置预览图失败', 'error');
+      toast(t('viewer.toasts.thumbnailFailed'), 'error');
     } finally {
       setSettingThumb(false);
     }
     if (ok) onThumbnailUpdated?.();
-  }, [modelId, onThumbnailUpdated, toast]);
+  }, [modelId, onThumbnailUpdated, t, toast]);
 
   const handleRegeneratePreview = useCallback(async () => {
     if (!modelId) return;
@@ -312,15 +315,18 @@ export default function CadViewerPanel({
     try {
       const result = await modelApi.reconvert(modelId);
       setCurrentPreviewMeta(result.preview_meta || null);
-      toast('GLB 与缩略图已重新生成', 'success');
+      toast(
+        result.thumbnail_warning || t('viewer.toasts.previewRegenerated'),
+        result.thumbnail_warning ? 'info' : 'success',
+      );
       ok = true;
     } catch {
-      toast('重新生成预览失败', 'error');
+      toast(t('viewer.toasts.previewRegenerateFailed'), 'error');
     } finally {
       setRegeneratingPreview(false);
     }
     if (ok) onThumbnailUpdated?.();
-  }, [modelId, onThumbnailUpdated, toast]);
+  }, [modelId, onThumbnailUpdated, t, toast]);
 
   const handleFullscreen = useCallback(() => {
     const el = containerRef.current;
@@ -492,7 +498,7 @@ export default function CadViewerPanel({
               ) : (
                 <div className="flex flex-col items-center gap-3">
                   <Icon name="view_in_ar" size={48} className="text-on-surface-variant/30 animate-pulse" />
-                  <span className="text-xs text-on-surface-variant">加载 3D 模型...</span>
+                  <span className="text-xs text-on-surface-variant">{t('viewer.loading.model3d')}</span>
                 </div>
               )}
             </div>
@@ -549,11 +555,11 @@ export default function CadViewerPanel({
               ? 'absolute bottom-4 left-4 z-40 inline-flex h-10 items-center gap-2 rounded-md border border-outline-variant/20 bg-surface/90 px-3 text-sm font-medium text-on-surface-variant shadow-xl backdrop-blur-xl transition-all hover:bg-surface-container-high hover:text-on-surface active:scale-[0.98]'
               : 'absolute top-2 left-2 z-40 w-8 h-8 flex items-center justify-center rounded-full micro-glass text-on-surface-variant hover:text-on-surface active:scale-90 transition-all'
           }
-          aria-label={isFullscreen ? '退出全屏' : '返回上一页'}
+          aria-label={isFullscreen ? t('viewer.exitFullscreen') : t('modelDetail.back')}
           data-tooltip-ignore
         >
           <Icon name="arrow_back" size={18} />
-          {variant === 'desktop' && <span>{isFullscreen ? '退出全屏' : '返回'}</span>}
+          {variant === 'desktop' && <span>{isFullscreen ? t('viewer.exitFullscreen') : t('modelDetail.back')}</span>}
         </button>
       )}
 

@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react';
+import { useTranslation } from 'react-i18next';
 import { PublicPageShell } from './PublicPageShell';
 
 export const MODEL_DETAIL_SHELL_CLASS = 'flex h-full min-h-0 flex-1 flex-col overflow-hidden bg-surface';
@@ -70,6 +71,7 @@ export function ModelDetailDesktopFrame({
   overlays?: ReactNode;
   busy?: boolean;
 }) {
+  const { t } = useTranslation();
   return (
     <PublicPageShell className={MODEL_DETAIL_SHELL_CLASS}>
       <main
@@ -78,7 +80,7 @@ export function ModelDetailDesktopFrame({
         aria-live={busy ? 'polite' : undefined}
         data-model-detail-layout={layout}
       >
-        {busy && <span className="sr-only">模型详情加载中</span>}
+        {busy && <span className="sr-only">{t('modelDetail.loading')}</span>}
         {children}
       </main>
       {overlays}

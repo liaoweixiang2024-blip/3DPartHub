@@ -17,7 +17,12 @@ import { logger } from '../../lib/logger.js';
 import { hashPassword, verifyPassword } from '../../lib/password.js';
 import { prisma } from '../../lib/prisma.js';
 import { requestSiteUrl } from '../../lib/requestSiteUrl.js';
-import { getSetting } from '../../lib/settings.js';
+import {
+  CONTACT_PHONE_SETTING_MESSAGE,
+  getSetting,
+  isValidContactPhoneSetting,
+  normalizeContactPhoneSetting,
+} from '../../lib/settings.js';
 import { getRequestToken } from '../../middleware/auth.js';
 import { apiLimiter } from '../../middleware/security.js';
 import { clearAuthCookies, readCookie, REFRESH_COOKIE, setAuthCookies } from './cookies.js';
@@ -131,6 +136,7 @@ export function createAuthSessionRouter() {
 
     const { username, email, password, emailCode, phone, company, address } = req.body;
     const normalizedEmail = normalizeEmailInput(email);
+    const normalizedPhone = normalizeContactPhoneSetting(phone);
 
     if (
       typeof username !== 'string' ||
@@ -177,6 +183,11 @@ export function createAuthSessionRouter() {
       return;
     }
 
+    if (phone !== undefined && !isValidContactPhoneSetting(phone)) {
+      res.status(400).json({ detail: CONTACT_PHONE_SETTING_MESSAGE });
+      return;
+    }
+
     // Check uniqueness BEFORE consuming email code
     try {
       const existing = await prisma.user.findFirst({
@@ -204,7 +215,7 @@ export function createAuthSessionRouter() {
           username,
           email: normalizedEmail,
           passwordHash,
-          phone: phone || null,
+          phone: normalizedPhone || null,
           company: company || null,
           address: address || null,
         },

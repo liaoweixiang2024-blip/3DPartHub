@@ -1,4 +1,6 @@
+import type { TFunction } from 'i18next';
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Link, useNavigate } from 'react-router-dom';
 import useSWR from 'swr';
 import client from '../api/client';
@@ -22,6 +24,17 @@ interface MyTicket {
   updatedAt: string;
 }
 
+const DEFAULT_TICKET_STATUS_KEYS = new Set(['open', 'waiting_user', 'in_progress', 'resolved', 'closed']);
+const DEFAULT_TICKET_CLASSIFICATION_KEYS = new Set(['dimension', 'material', 'novel', 'topology']);
+
+function getTicketStatusLabel(status: string, fallback: string, t: TFunction) {
+  return DEFAULT_TICKET_STATUS_KEYS.has(status) ? t(`ticketStatus.${status}`) : fallback;
+}
+
+function getTicketClassificationLabel(value: string, fallback: string, t: TFunction) {
+  return DEFAULT_TICKET_CLASSIFICATION_KEYS.has(value) ? t(`ticketClassification.${value}.label`) : fallback;
+}
+
 function useMyTickets() {
   return useSWR<MyTicket[]>('/my-tickets', () =>
     client
@@ -37,6 +50,7 @@ function useMyTickets() {
 }
 
 function Content() {
+  const { i18n, t } = useTranslation();
   const { data: tickets, isLoading, mutate } = useMyTickets();
   const { settings } = usePublicSettings();
   const business = getBusinessConfig(settings);
@@ -49,9 +63,9 @@ function Content() {
 
   return (
     <AdminManagementPage
-      title="我的工单"
-      meta={`${list.length} 条记录`}
-      description="查看你提交的技术支持工单和处理状态"
+      title={t('myTickets.title')}
+      meta={t('myTickets.meta', { count: list.length })}
+      description={t('myTickets.description')}
       actions={
         list.length > 0 ? (
           <>
@@ -64,14 +78,14 @@ function Content() {
               className="flex items-center gap-2 rounded-lg border border-outline-variant/20 px-4 py-2.5 text-sm text-on-surface-variant transition-colors hover:text-on-surface disabled:opacity-50"
             >
               <Icon name="refresh" size={16} className={refreshing ? 'animate-spin' : ''} />
-              {refreshing ? '刷新中...' : '刷新'}
+              {refreshing ? t('myTickets.refreshing') : t('myTickets.refresh')}
             </button>
             <Link
               to="/support"
               className="flex items-center gap-2 rounded-lg bg-primary-container px-5 py-2.5 text-sm font-medium text-on-primary hover:opacity-90"
             >
               <Icon name="add" size={16} />
-              新建工单
+              {t('myTickets.actionCreate')}
             </Link>
           </>
         ) : null
@@ -80,21 +94,21 @@ function Content() {
       {isLoading ? (
         <AdminLoadingState
           variant="table"
-          label="工单记录加载中"
+          label={t('myTickets.loading')}
           tableColumns="120px 120px minmax(0,1fr) 140px 160px"
           tableCells={['chip', 'chip', 'title', 'text', 'text']}
         />
       ) : list.length === 0 ? (
         <AdminEmptyState
           icon="inbox"
-          title="暂无工单记录"
-          description="提交技术支持工单后，可以在这里跟进处理状态。"
+          title={t('myTickets.emptyTitle')}
+          description={t('myTickets.emptyDescription')}
           action={
             <Link
               to="/support"
               className="rounded-md bg-primary-container px-5 py-2.5 text-sm font-semibold text-on-primary transition-opacity hover:opacity-90"
             >
-              提交工单
+              {t('myTickets.emptyAction')}
             </Link>
           }
         />
@@ -102,15 +116,21 @@ function Content() {
         <div className="bg-surface-container-low rounded-lg border border-outline-variant/10 overflow-auto">
           {/* Table header */}
           <div className="grid grid-cols-[120px_120px_1fr_140px_160px] gap-4 px-6 py-3 bg-surface-container-low text-xs uppercase tracking-wider text-on-surface-variant font-bold border-b border-outline-variant/10 sticky top-0 z-10">
-            <span>状态</span>
-            <span>分类</span>
-            <span>描述</span>
-            <span>基础零件</span>
-            <span>时间</span>
+            <span>{t('myTickets.status')}</span>
+            <span>{t('myTickets.category')}</span>
+            <span>{t('myTickets.tableDescription')}</span>
+            <span>{t('myTickets.basePart')}</span>
+            <span>{t('myTickets.time')}</span>
           </div>
           {/* Table rows */}
           {visibleTickets.map((ticket) => {
             const info = statusInfo(business.ticketStatuses, ticket.status);
+            const statusLabel = getTicketStatusLabel(ticket.status, info.label, t);
+            const classificationLabel = getTicketClassificationLabel(
+              ticket.classification,
+              classificationMap.get(ticket.classification) || ticket.classification,
+              t,
+            );
             return (
               <div
                 key={ticket.id}
@@ -132,16 +152,14 @@ function Content() {
                     }
                     size={12}
                   />
-                  {info.label}
+                  {statusLabel}
                 </span>
-                <span className="text-xs text-on-surface-variant">
-                  {classificationMap.get(ticket.classification) || ticket.classification}
-                </span>
+                <span className="text-xs text-on-surface-variant">{classificationLabel}</span>
                 <p className="text-sm text-on-surface truncate">{ticket.description}</p>
                 <span className="text-xs text-on-surface-variant truncate">{ticket.basePart || '—'}</span>
                 <span className="text-xs text-on-surface-variant flex items-center gap-1">
                   <Icon name="schedule" size={12} className="shrink-0" />
-                  {new Date(ticket.createdAt).toLocaleDateString('zh-CN')}
+                  {new Date(ticket.createdAt).toLocaleDateString(i18n.language)}
                 </span>
               </div>
             );
@@ -154,6 +172,7 @@ function Content() {
 }
 
 function MobileContent() {
+  const { i18n, t } = useTranslation();
   const { data: tickets, isLoading, mutate } = useMyTickets();
   const { settings } = usePublicSettings();
   const business = getBusinessConfig(settings);
@@ -166,9 +185,9 @@ function MobileContent() {
 
   return (
     <AdminManagementPage
-      title="我的工单"
-      meta={`${list.length} 条记录`}
-      description="查看你提交的技术支持工单和处理状态"
+      title={t('myTickets.title')}
+      meta={t('myTickets.meta', { count: list.length })}
+      description={t('myTickets.description')}
       actions={
         list.length > 0 ? (
           <>
@@ -187,25 +206,25 @@ function MobileContent() {
               className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-lg bg-primary-container px-3 text-xs font-medium text-on-primary"
             >
               <Icon name="add" size={14} />
-              新建
+              {t('myTickets.actionCreateShort')}
             </Link>
           </>
         ) : null
       }
     >
       {isLoading ? (
-        <AdminLoadingState variant="list" rows={5} label="工单记录加载中" />
+        <AdminLoadingState variant="list" rows={5} label={t('myTickets.loading')} />
       ) : list.length === 0 ? (
         <AdminEmptyState
           icon="inbox"
-          title="暂无工单记录"
-          description="提交技术支持工单后，可以在这里跟进处理状态。"
+          title={t('myTickets.emptyTitle')}
+          description={t('myTickets.emptyDescription')}
           action={
             <Link
               to="/support"
               className="rounded-md bg-primary-container px-5 py-2.5 text-sm font-semibold text-on-primary transition-opacity hover:opacity-90"
             >
-              提交工单
+              {t('myTickets.emptyAction')}
             </Link>
           }
         />
@@ -213,6 +232,12 @@ function MobileContent() {
         <div className="flex flex-col gap-2.5">
           {visibleTickets.map((ticket) => {
             const info = statusInfo(business.ticketStatuses, ticket.status);
+            const statusLabel = getTicketStatusLabel(ticket.status, info.label, t);
+            const classificationLabel = getTicketClassificationLabel(
+              ticket.classification,
+              classificationMap.get(ticket.classification) || ticket.classification,
+              t,
+            );
             return (
               <div
                 key={ticket.id}
@@ -221,20 +246,22 @@ function MobileContent() {
               >
                 <div className="flex items-center gap-2 mb-2">
                   <span className={`text-[10px] px-2 py-0.5 rounded-sm font-bold ${info.color || ''} ${info.bg || ''}`}>
-                    {info.label}
+                    {statusLabel}
                   </span>
                   <span className="text-[10px] text-on-surface-variant bg-surface-container-highest px-2 py-0.5 rounded-sm">
-                    {classificationMap.get(ticket.classification) || ticket.classification}
+                    {classificationLabel}
                   </span>
                 </div>
                 <p className="text-sm text-on-surface whitespace-pre-wrap break-words mb-2 line-clamp-3">
                   {ticket.description}
                 </p>
                 <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-on-surface-variant">
-                  {ticket.basePart && <span className="break-all">零件: {ticket.basePart}</span>}
+                  {ticket.basePart && (
+                    <span className="break-all">{t('myTickets.basePartPrefix', { part: ticket.basePart })}</span>
+                  )}
                   <span className="flex items-center gap-1 shrink-0">
                     <Icon name="schedule" size={11} />
-                    {new Date(ticket.createdAt).toLocaleDateString('zh-CN')}
+                    {new Date(ticket.createdAt).toLocaleDateString(i18n.language)}
                   </span>
                 </div>
               </div>
@@ -248,7 +275,8 @@ function MobileContent() {
 }
 
 export default function MyTicketsPage() {
-  useDocumentTitle('我的工单');
+  const { t } = useTranslation();
+  useDocumentTitle(t('myTickets.title'));
   const isDesktop = useMediaQuery('(min-width: 768px)');
 
   return <AdminPageShell>{isDesktop ? <Content /> : <MobileContent />}</AdminPageShell>;

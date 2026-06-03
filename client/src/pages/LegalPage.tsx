@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { AdminContentPanel, AdminManagementPage } from '../components/shared/AdminManagementPage';
 import { AdminPageShell } from '../components/shared/AdminPageShell';
@@ -6,7 +7,15 @@ import AuthModal from '../components/shared/AuthModal';
 import Icon from '../components/shared/Icon';
 import { isAuthModalEnabled } from '../components/shared/ProtectedLink';
 import { useDocumentTitle } from '../hooks/useDocumentTitle';
-import { DEFAULT_PRIVACY_SECTIONS, DEFAULT_TERMS_SECTIONS, parseLegalSections } from '../lib/legalContent';
+import { normalizeLocale } from '../i18n';
+import {
+  DEFAULT_PRIVACY_SECTIONS,
+  DEFAULT_LEGAL_UPDATED_AT_ZH,
+  DEFAULT_TERMS_SECTIONS,
+  getDefaultLegalSectionsForLocale,
+  isDefaultLegalSections,
+  parseLegalSections,
+} from '../lib/legalContent';
 import { refreshSiteConfig, usePublicSettings } from '../lib/publicSettings';
 import { useAuthStore } from '../stores/useAuthStore';
 
@@ -22,31 +31,38 @@ function sectionId(index: number) {
 }
 
 export default function LegalPage() {
+  const { t, i18n } = useTranslation();
   const { type } = useParams<{ type: string }>();
   const isPrivacy = type === 'privacy';
+  const locale = normalizeLocale(i18n.language);
   const { settings } = usePublicSettings();
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
   const navigate = useNavigate();
   const [authOpen, setAuthOpen] = useState(false);
   const [tocOpen, setTocOpen] = useState(false);
-  useDocumentTitle(isPrivacy ? '隐私声明' : '用户协议');
+  useDocumentTitle(isPrivacy ? t('legal.privacyTitle') : t('legal.termsTitle'));
 
-  const sections = parseLegalSections(
+  const defaultSections = isPrivacy ? DEFAULT_PRIVACY_SECTIONS : DEFAULT_TERMS_SECTIONS;
+  const configuredSections = parseLegalSections(
     isPrivacy ? settings?.legal_privacy_sections : settings?.legal_terms_sections,
-    isPrivacy ? DEFAULT_PRIVACY_SECTIONS : DEFAULT_TERMS_SECTIONS,
+    defaultSections,
   );
-  const updatedAt = String(
-    isPrivacy
-      ? settings?.legal_privacy_updated_at || '2026 年 4 月'
-      : settings?.legal_terms_updated_at || '2026 年 4 月',
-  );
-  const preface = isPrivacy
-    ? '请用户在使用本站前仔细阅读并理解本隐私声明。本声明说明本站在账号登录、模型资料管理、产品选型、规格查询、工单协作及后台管理过程中如何收集、使用、存储和保护相关信息。'
-    : '请用户在使用本站前仔细阅读并充分理解本协议。用户登录、浏览、上传、下载、分享或使用本站功能的行为，即表示用户已理解并同意遵守本协议约定。';
-  const activeTitle = isPrivacy ? '隐私声明' : '用户协议';
+  const sections =
+    locale !== 'zh-CN' && isDefaultLegalSections(configuredSections, defaultSections)
+      ? getDefaultLegalSectionsForLocale(isPrivacy, locale)
+      : configuredSections;
+  const rawUpdatedAt = String(
+    isPrivacy ? settings?.legal_privacy_updated_at || '' : settings?.legal_terms_updated_at || '',
+  ).trim();
+  const updatedAt =
+    locale !== 'zh-CN' && (!rawUpdatedAt || rawUpdatedAt === DEFAULT_LEGAL_UPDATED_AT_ZH)
+      ? t('legal.updatedFallback')
+      : rawUpdatedAt || t('legal.updatedFallback');
+  const preface = isPrivacy ? t('legal.privacyPreface') : t('legal.termsPreface');
+  const activeTitle = isPrivacy ? t('legal.privacyTitle') : t('legal.termsTitle');
   const activeIcon = isPrivacy ? 'policy' : 'description';
   const returnUrl = isPrivacy ? '/legal/privacy' : '/legal/terms';
-  const dateSummary = `更新 ${updatedAt} · 生效 ${updatedAt}`;
+  const dateSummary = t('legal.dateSummary', { date: updatedAt });
   const actionLinkClass =
     'inline-flex h-9 w-9 items-center justify-center rounded-lg text-on-surface-variant transition-colors hover:bg-surface-container hover:text-on-surface sm:h-auto sm:w-auto sm:rounded-none sm:bg-transparent sm:p-0 sm:text-sm sm:font-bold sm:hover:bg-transparent';
   const activeActionLinkClass = 'text-primary-container';
@@ -55,26 +71,26 @@ export default function LegalPage() {
     <div className="flex min-w-0 items-center justify-end gap-1 text-sm sm:gap-2.5">
       <Link
         to="/legal/privacy"
-        aria-label="隐私声明"
+        aria-label={t('legal.privacyTitle')}
         className={`${actionLinkClass} ${isPrivacy ? activeActionLinkClass : ''}`}
       >
         <Icon name="policy" size={17} className="sm:hidden" />
-        <span className="hidden sm:inline">隐私声明</span>
+        <span className="hidden sm:inline">{t('legal.privacyTitle')}</span>
       </Link>
       <span className={actionDividerClass} aria-hidden="true" />
       <Link
         to="/legal/terms"
-        aria-label="用户协议"
+        aria-label={t('legal.termsTitle')}
         className={`${actionLinkClass} ${!isPrivacy ? activeActionLinkClass : ''}`}
       >
         <Icon name="description" size={17} className="sm:hidden" />
-        <span className="hidden sm:inline">用户协议</span>
+        <span className="hidden sm:inline">{t('legal.termsTitle')}</span>
       </Link>
       <span className={actionDividerClass} aria-hidden="true" />
       {isAuthenticated ? (
-        <Link to="/profile" aria-label="个人中心" className={actionLinkClass}>
+        <Link to="/profile" aria-label={t('legal.account')} className={actionLinkClass}>
           <Icon name="person" size={16} className="sm:hidden" />
-          <span className="hidden sm:inline">个人中心</span>
+          <span className="hidden sm:inline">{t('legal.account')}</span>
         </Link>
       ) : (
         <button
@@ -92,11 +108,11 @@ export default function LegalPage() {
               navigate('/login', { state: { from: returnUrl } });
             }
           }}
-          aria-label="登录或注册"
+          aria-label={t('legal.loginRegister')}
           className={actionLinkClass}
         >
           <Icon name="person" size={16} className="sm:hidden" />
-          <span className="hidden sm:inline">登录 / 注册</span>
+          <span className="hidden sm:inline">{t('legal.loginRegister')}</span>
         </button>
       )}
     </div>
@@ -106,8 +122,8 @@ export default function LegalPage() {
     <AdminPageShell desktopContentClassName="p-6" mobileContentClassName="px-4 py-4 pb-20">
       <AdminManagementPage
         title={activeTitle}
-        description="平台服务条款与数据处理说明"
-        meta={`最后更新：${updatedAt}`}
+        description={t('legal.description')}
+        meta={t('legal.lastUpdated', { date: updatedAt })}
         actions={tabs}
         contentClassName="overflow-hidden"
       >
@@ -120,7 +136,7 @@ export default function LegalPage() {
                 </span>
                 <div className="min-w-0 flex-1">
                   <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-                    <p className="text-sm font-bold text-on-surface">阅读说明</p>
+                    <p className="text-sm font-bold text-on-surface">{t('legal.readGuide')}</p>
                     <span className="hidden h-3.5 w-px bg-outline-variant/30 sm:block" aria-hidden="true" />
                     <p className="text-xs font-medium text-on-surface-variant">{dateSummary}</p>
                   </div>
@@ -134,7 +150,7 @@ export default function LegalPage() {
             <button
               type="button"
               onClick={() => setTocOpen(true)}
-              aria-label="打开目录"
+              aria-label={t('legal.openToc')}
               className="fixed right-0 top-[42dvh] z-40 flex h-11 w-9 items-center justify-center rounded-l-lg border border-r-0 border-outline-variant/20 bg-surface-container-lowest text-primary-container shadow-float-dark lg:hidden"
             >
               <Icon name="format_list_bulleted" size={18} />
@@ -143,7 +159,7 @@ export default function LegalPage() {
               <div className="fixed inset-0 z-[320] lg:hidden">
                 <button
                   type="button"
-                  aria-label="关闭目录"
+                  aria-label={t('legal.closeToc')}
                   className="absolute inset-0 bg-surface-dim/45"
                   onClick={() => setTocOpen(false)}
                 />
@@ -151,12 +167,12 @@ export default function LegalPage() {
                   <div className="flex items-center justify-between border-b border-outline-variant/12 pb-3">
                     <div className="flex items-center gap-2">
                       <Icon name="format_list_bulleted" size={18} className="text-primary-container" />
-                      <p className="text-sm font-bold text-on-surface">阅读目录</p>
+                      <p className="text-sm font-bold text-on-surface">{t('legal.tableOfContents')}</p>
                     </div>
                     <button
                       type="button"
                       onClick={() => setTocOpen(false)}
-                      aria-label="关闭目录"
+                      aria-label={t('legal.closeToc')}
                       className="grid h-8 w-8 place-items-center rounded-full text-on-surface-variant transition-colors active:bg-surface-container"
                     >
                       <Icon name="close" size={18} />
@@ -194,7 +210,7 @@ export default function LegalPage() {
                 <nav className="flex max-h-[calc(100dvh-13rem)] flex-col overflow-hidden border-l border-outline-variant/16 pl-4 pr-1">
                   <div className="flex shrink-0 items-center gap-2 border-b border-outline-variant/10 pb-3">
                     <Icon name="format_list_bulleted" size={17} className="text-primary-container" />
-                    <p className="text-sm font-bold text-on-surface">阅读目录</p>
+                    <p className="text-sm font-bold text-on-surface">{t('legal.tableOfContents')}</p>
                   </div>
                   <ol className="mt-2 min-h-0 overflow-y-auto text-sm text-on-surface-variant scrollbar-hidden">
                     {sections.map((section, i) => (

@@ -1,5 +1,6 @@
 import { useState, useEffect, useLayoutEffect, useMemo, useCallback, useRef, type MouseEvent } from 'react';
 import { createPortal } from 'react-dom';
+import { useTranslation } from 'react-i18next';
 import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import useSWR, { mutate as globalMutate, preload } from 'swr';
 import { categoriesApi } from '../api/categories';
@@ -80,9 +81,14 @@ import {
 } from '../lib/publicSettings';
 import { useAuthStore } from '../stores';
 import { getInterfaceThemePackage } from '../themes/interfaceThemes/registry';
+import type { HomeListLoadingMode } from '../themes/interfaceThemes/types';
 import { getMobileThemePackage } from '../themes/mobileThemes/registry';
 
 const HOME_SCROLLING_IDLE_MS = 140;
+
+const normalizeHomeListLoadingMode = (value: unknown, fallback: HomeListLoadingMode): HomeListLoadingMode => {
+  return value === 'pagination' || value === 'infinite' ? value : fallback;
+};
 
 const getHomeRefreshScrollTop = (target: HomeRefreshScrollTarget, resultsAnchor: HTMLDivElement | null) => {
   if (target !== 'results' || !resultsAnchor) return 0;
@@ -96,6 +102,7 @@ export default function HomePage() {
   const navigate = useNavigate();
   const location = useLocation();
   const { toast } = useToast();
+  const { t } = useTranslation();
   const [searchParams, setSearchParams] = useSearchParams();
   const { settings: publicSettings } = usePublicSettings();
   const resolvedPublicTheme = useResolvedPublicInterfaceTheme(publicSettings);
@@ -105,8 +112,16 @@ export default function HomePage() {
   const mobileHomeTheme = MobileThemePackage.home.dataHomeTheme;
   const desktopHomeBehavior = ThemePackage.home;
   const mobileHomeBehavior = MobileThemePackage.home;
-  const usesManualHomePagination =
-    (isDesktop ? desktopHomeBehavior.listLoadingMode : mobileHomeBehavior.listLoadingMode) === 'pagination';
+  const desktopHomeListLoadingMode = normalizeHomeListLoadingMode(
+    publicSettings?.home_desktop_list_loading_mode,
+    desktopHomeBehavior.listLoadingMode,
+  );
+  const mobileHomeListLoadingMode = normalizeHomeListLoadingMode(
+    publicSettings?.home_mobile_list_loading_mode,
+    mobileHomeBehavior.listLoadingMode,
+  );
+  const activeHomeListLoadingMode = isDesktop ? desktopHomeListLoadingMode : mobileHomeListLoadingMode;
+  const usesManualHomePagination = activeHomeListLoadingMode === 'pagination';
   const showModelCardCategory = desktopHomeBehavior.showModelCardCategory;
   const showModelCardVariantMeta = desktopHomeBehavior.showModelCardVariantMeta;
   const footerLinks = getFooterLinks();
@@ -354,10 +369,10 @@ export default function HomePage() {
           setLoginPromptOpen(true);
           return;
         }
-        toast('下载失败，请稍后重试', 'error');
+        toast(t('home.downloadFailed'), 'error');
       }
     },
-    [toast],
+    [t, toast],
   );
 
   // Server-side filtering with category ID
@@ -723,7 +738,7 @@ export default function HomePage() {
         },
         { revalidate: false },
       );
-      toast('模型已删除', 'success');
+      toast(t('home.modelDeleted'), 'success');
       setDeleteTarget(null);
       setContextMenu(null);
       await Promise.all([
@@ -736,11 +751,11 @@ export default function HomePage() {
         ),
       ]);
     } catch {
-      toast('删除失败，请稍后重试', 'error');
+      toast(t('home.deleteFailed'), 'error');
     } finally {
       setDeletingModel(false);
     }
-  }, [deleteTarget, mutateCategories, mutateModels, pageSize, toast]);
+  }, [deleteTarget, mutateCategories, mutateModels, pageSize, t, toast]);
 
   const openManagedModelDetail = useCallback(
     (product: Product) => {
@@ -762,35 +777,35 @@ export default function HomePage() {
           downloadLimit: 0,
         });
         const shareUrl = `${window.location.origin}/share/${result.token}`;
-        toast('模型分享已创建', 'success');
+        toast(t('home.shareCreated'), 'success');
         try {
           await copyText(shareUrl);
-          toast('分享链接已复制到剪贴板', 'success');
+          toast(t('home.shareCopied'), 'success');
         } catch (copyError: unknown) {
           if (import.meta.env.DEV) console.warn('[Share] Copy failed:', copyError);
-          toast('模型分享已创建，请到我的分享复制链接', 'info');
+          toast(t('home.shareCreatedCopyManually'), 'info');
         }
       } catch (error: unknown) {
-        toast(getErrorMessage(error, '创建分享失败'), 'error');
+        toast(getErrorMessage(error, t('home.shareCreateFailed')), 'error');
       }
       setContextMenu(null);
     },
-    [toast],
+    [t, toast],
   );
 
   const renameManagedModel = useCallback(
     async (_product: Product, name: string) => {
       try {
         await modelApi.update(_product.id, { name });
-        toast('模型名称已更新', 'success');
+        toast(t('home.renameSuccess'), 'success');
         setContextMenu(null);
         await mutateModels();
       } catch (error: unknown) {
-        toast(getErrorMessage(error, '改名失败'), 'error');
+        toast(getErrorMessage(error, t('home.renameFailed')), 'error');
         throw error;
       }
     },
-    [mutateModels, toast],
+    [mutateModels, t, toast],
   );
 
   const requestManagedModelDelete = useCallback((product: Product) => {
@@ -966,7 +981,7 @@ export default function HomePage() {
 
   // Resolve breadcrumb
   const breadcrumb = useMemo(() => {
-    if (activeCategory === 'all') return { parent: null, child: null, label: '全部模型' };
+    if (activeCategory === 'all') return { parent: null, child: null, label: t('home.allModels') };
     const parent = categories.find((c) => c.id === activeCategory);
     if (parent) return { parent: parent.name, child: null, label: parent.name };
     for (const cat of categories) {
@@ -974,7 +989,7 @@ export default function HomePage() {
       if (child) return { parent: cat.name, child: child.name, label: `${cat.name} / ${child.name}` };
     }
     return { parent: null, child: null, label: activeCategory };
-  }, [activeCategory, categories]);
+  }, [activeCategory, categories, t]);
 
   if (browseBlocked) {
     return (
@@ -983,14 +998,14 @@ export default function HomePage() {
         data-interface-theme={ThemePackage.manifest.key}
       >
         <Icon name="lock" size={64} className="text-on-surface-variant/30" />
-        <h2 className="text-xl font-bold text-on-surface">需要登录</h2>
-        <p className="text-sm text-on-surface-variant">浏览模型库需要先登录账号</p>
+        <h2 className="text-xl font-bold text-on-surface">{t('protected.loginTitle')}</h2>
+        <p className="text-sm text-on-surface-variant">{t('home.browseLoginDescription')}</p>
         <button
           type="button"
           onClick={openLoginEntry}
           className="px-6 py-2.5 bg-primary-container text-on-primary rounded-lg text-sm font-medium hover:opacity-90"
         >
-          前往登录
+          {t('protected.goLogin')}
         </button>
         <AuthModal open={authDialogOpen} onClose={() => setAuthDialogOpen(false)} returnUrl={location.pathname} />
       </div>
@@ -1015,6 +1030,7 @@ export default function HomePage() {
           homePageSizeOptions={homePageSizeOptions}
           homeSearchMaxLength={HOME_SEARCH_MAX_LENGTH}
           isLoadingMore={isLoadingMore}
+          listLoadingMode={desktopHomeListLoadingMode}
           normalizeSearchQuery={normalizeHomeSearchQuery}
           page={page}
           pageSize={pageSize}
@@ -1048,7 +1064,7 @@ export default function HomePage() {
         <LoginConfirmDialog
           open={loginPromptOpen}
           onClose={() => setLoginPromptOpen(false)}
-          reason="下载模型"
+          reason={t('home.downloadModel')}
           returnUrl={location.pathname}
         />
         <AuthModal open={authDialogOpen} onClose={() => setAuthDialogOpen(false)} returnUrl={location.pathname} />
@@ -1098,7 +1114,13 @@ export default function HomePage() {
                 style={{ transform: pullState === 'ready' ? 'rotate(180deg)' : 'rotate(0deg)' }}
               />
             )}
-            <span>{pullState === 'refreshing' ? '正在刷新...' : pullState === 'ready' ? '松开刷新' : '下拉刷新'}</span>
+            <span>
+              {pullState === 'refreshing'
+                ? t('home.pullRefreshing')
+                : pullState === 'ready'
+                  ? t('home.pullReady')
+                  : t('home.pullIdle')}
+            </span>
           </div>
         )}
         <div className="p-3 space-y-3 pb-20 min-h-full flex flex-col">
@@ -1107,16 +1129,18 @@ export default function HomePage() {
           <div ref={titleRowRef} className="flex items-center justify-between">
             <div>
               <PageTitle className="text-base md:text-base md:normal-case">
-                {activeCategory === 'all' ? '零件目录' : breadcrumb.label}
+                {activeCategory === 'all' ? t('home.catalog') : breadcrumb.label}
               </PageTitle>
-              <span className="text-[10px] text-on-surface-variant">{displayTotalItems} 个模型</span>
+              <span className="text-[10px] text-on-surface-variant">
+                {t('home.modelCount', { count: displayTotalItems })}
+              </span>
             </div>
             <button
               onClick={() => setDrawerOpen(true)}
               className={`p-2 text-on-surface-variant hover:text-on-surface bg-surface-container-high rounded-sm flex items-center gap-1.5 transition-opacity duration-200 ${chipsStuck ? 'opacity-0 pointer-events-none' : 'opacity-100'}`}
             >
               <Icon name="tune" size={18} />
-              <span className="text-xs">筛选</span>
+              <span className="text-xs">{t('home.filter')}</span>
             </button>
           </div>
 
@@ -1132,7 +1156,7 @@ export default function HomePage() {
                       : 'bg-surface-container-high text-on-surface-variant'
                   }`}
                 >
-                  全部模型
+                  {t('home.allModels')}
                 </button>
                 {categories.map((cat) => (
                   <button
@@ -1188,9 +1212,9 @@ export default function HomePage() {
             <div className="flex flex-col items-center justify-center py-16 gap-3">
               <Icon name="search_off" size={40} className="text-on-surface-variant/30" />
               <div className="text-center">
-                <p className="text-sm text-on-surface-variant">没有找到匹配的模型</p>
+                <p className="text-sm text-on-surface-variant">{t('home.emptyTitle')}</p>
                 {searchQuery.trim() && (
-                  <p className="mt-1 text-[11px] text-on-surface-variant/60">提交需求让管理员补充模型。</p>
+                  <p className="mt-1 text-[11px] text-on-surface-variant/60">{t('home.emptyMobileDescription')}</p>
                 )}
               </div>
               {searchQuery.trim() && (
@@ -1200,12 +1224,12 @@ export default function HomePage() {
                     source: 'model_search',
                     searchQuery: searchQuery.trim(),
                     classification: 'novel',
-                    description: `模型库未搜索到：${searchQuery.trim()}\n请协助补充或完善该模型。`,
+                    description: t('home.requestDescription', { query: searchQuery.trim() }),
                   }}
                   className="inline-flex items-center gap-1.5 rounded-lg bg-primary-container px-3 py-2 text-xs font-bold text-on-primary"
                 >
                   <Icon name="assignment_add" size={14} />
-                  申请完善模型
+                  {t('home.requestModel')}
                 </Link>
               )}
             </div>
@@ -1237,10 +1261,10 @@ export default function HomePage() {
             <div className="flex flex-col items-center gap-2">
               {footerLinks.length > 0 && (
                 <nav
-                  aria-label="相关链接"
+                  aria-label={t('home.footerLinks')}
                   className="flex max-w-full flex-wrap items-center justify-center gap-x-3 gap-y-1"
                 >
-                  <span className="text-[10px] font-medium text-on-surface-variant/35">相关链接</span>
+                  <span className="text-[10px] font-medium text-on-surface-variant/35">{t('home.footerLinks')}</span>
                   {footerLinks.map((link, index) => (
                     <a
                       key={`${link.label}-${index}`}
@@ -1286,7 +1310,7 @@ export default function HomePage() {
       <LoginConfirmDialog
         open={loginPromptOpen}
         onClose={() => setLoginPromptOpen(false)}
-        reason="下载模型"
+        reason={t('home.downloadModel')}
         returnUrl={location.pathname}
       />
       <AuthModal open={authDialogOpen} onClose={() => setAuthDialogOpen(false)} returnUrl={location.pathname} />

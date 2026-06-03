@@ -1,4 +1,5 @@
 import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import * as THREE from 'three';
 import type { OrbitControls as OrbitControlsImpl } from 'three-stdlib';
 import { get3DMaterialConfig, type ViewerSettingsOverride } from '../../lib/publicSettings';
@@ -115,6 +116,7 @@ export default function ModelViewer({
   onLoaded,
   onProgress,
 }: ModelViewerProps) {
+  const { t } = useTranslation();
   const config = get3DMaterialConfig(viewerSettings).viewer;
   const controlsRef = useRef<OrbitControlsImpl | null>(null);
 
@@ -170,7 +172,7 @@ export default function ModelViewer({
         gap: 12,
       }}
     >
-      <div style={{ fontSize: 14 }}>GPU 上下文丢失，请点击刷新</div>
+      <div style={{ fontSize: 14 }}>{t('viewer.contextLost')}</div>
       <button
         onClick={() => setContextLost(false)}
         style={{
@@ -183,7 +185,7 @@ export default function ModelViewer({
           fontSize: 14,
         }}
       >
-        重新加载
+        {t('viewer.reload')}
       </button>
     </div>
   ) : (

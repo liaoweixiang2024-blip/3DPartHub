@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
+import { useTranslation } from 'react-i18next';
 import type { ProductWallItem } from '../../api/productWall';
 import Icon from '../shared/Icon';
 import SafeImage from '../shared/SafeImage';
@@ -26,6 +27,7 @@ export function ProductWallPreview({
   onShare: () => void;
   onDownload: (item: WallItem) => void;
 }) {
+  const { t } = useTranslation();
   const previewCloseRef = useRef<HTMLButtonElement | null>(null);
   const previewDragRef = useRef({ active: false, moved: false, startX: 0, startY: 0, panX: 0, panY: 0 });
   const previewPanRef = useRef({ x: 0, y: 0 });
@@ -404,7 +406,7 @@ export function ProductWallPreview({
             touchAction: 'manipulation',
           }}
           className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-black/50 text-white shadow-lg transition-colors focus:outline-none focus-visible:outline-none active:bg-black/70 md:h-9 md:w-9 md:bg-white/78 md:text-neutral-800 md:shadow-float-dark"
-          aria-label="关闭"
+          aria-label={t('productWall.preview.close')}
         >
           <svg
             width="18"
@@ -444,7 +446,7 @@ export function ProductWallPreview({
             className={`product-wall-preview-gesture-layer relative z-10 flex h-full w-full shrink-0 touch-none items-center justify-center border-none bg-transparent p-0 focus:outline-none ${
               previewZoomed ? (previewDragging ? 'cursor-grabbing' : 'cursor-grab') : 'cursor-zoom-in'
             }`}
-            aria-label={previewZoomed ? '还原图片' : '放大图片'}
+            aria-label={previewZoomed ? t('productWall.preview.restoreImage') : t('productWall.preview.zoomInImage')}
           >
             <SafeImage
               src={activeDetailImage}
@@ -489,10 +491,12 @@ export function ProductWallPreview({
                   ? 'border-primary-container/25 bg-primary-container/10 text-primary-container'
                   : 'border-outline-variant/16 bg-surface-container-low text-on-surface-variant active:bg-surface-container-high'
               }`}
-              aria-label={previewZoomed ? '还原' : '放大'}
+              aria-label={previewZoomed ? t('productWall.preview.restore') : t('productWall.preview.zoomIn')}
             >
               <Icon name={previewZoomed ? 'zoom_out' : 'zoom_in'} size={16} />
-              <span className="md:hidden">{previewZoomed ? '还原' : '放大'}</span>
+              <span className="md:hidden">
+                {previewZoomed ? t('productWall.preview.restore') : t('productWall.preview.zoomIn')}
+              </span>
             </button>
             <button
               type="button"
@@ -502,10 +506,12 @@ export function ProductWallPreview({
                   ? 'border-primary-container/25 bg-primary-container/10 text-primary-container'
                   : 'border-outline-variant/16 bg-surface-container-low text-on-surface-variant active:bg-surface-container-high'
               }`}
-              aria-label={activeFavorited ? '取消收藏' : '收藏'}
+              aria-label={activeFavorited ? t('productWall.preview.unfavorite') : t('productWall.preview.favorite')}
             >
               <Icon name={activeFavorited ? 'favorite' : 'star'} size={16} />
-              <span className="md:hidden">{activeFavorited ? '取消收藏' : '收藏'}</span>
+              <span className="md:hidden">
+                {activeFavorited ? t('productWall.preview.unfavorite') : t('productWall.preview.favorite')}
+              </span>
             </button>
             <button
               type="button"
@@ -515,19 +521,21 @@ export function ProductWallPreview({
                   ? 'border-primary-container/25 bg-primary-container/10 text-primary-container'
                   : 'border-outline-variant/16 bg-surface-container-low text-on-surface-variant active:bg-surface-container-high'
               }`}
-              aria-label={shareState === 'copied' ? '已复制' : '分享'}
+              aria-label={shareState === 'copied' ? t('productWall.preview.copied') : t('productWall.preview.share')}
             >
               <Icon name={shareState === 'copied' ? 'check' : 'share'} size={16} />
-              <span className="md:hidden">{shareState === 'copied' ? '已复制' : '分享'}</span>
+              <span className="md:hidden">
+                {shareState === 'copied' ? t('productWall.preview.copied') : t('productWall.preview.share')}
+              </span>
             </button>
             <button
               type="button"
               onClick={() => onDownload(active)}
               className="inline-flex h-10 items-center justify-center gap-1.5 rounded-xl border border-outline-variant/16 bg-surface-container-low text-sm font-medium text-on-surface-variant transition-colors active:bg-surface-container-high md:h-9 md:w-9 md:rounded-full md:text-xs"
-              aria-label="下载"
+              aria-label={t('productWall.preview.download')}
             >
               <Icon name="download" size={16} />
-              <span className="md:hidden">下载</span>
+              <span className="md:hidden">{t('productWall.preview.download')}</span>
             </button>
           </div>
         </div>

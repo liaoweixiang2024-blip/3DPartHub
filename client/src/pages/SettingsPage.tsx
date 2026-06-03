@@ -90,6 +90,7 @@ import {
   DEFAULT_FOOTER_COPYRIGHT,
   DEFAULT_MODEL_DETAIL_COPYRIGHT,
   DEFAULT_MODEL_DETAIL_DISCLAIMER,
+  patchPublicSettings,
 } from '../lib/publicSettings';
 import { BACKUP_DIRECT_UPLOAD_THRESHOLD_BYTES } from '../lib/uploadLimits';
 import {
@@ -101,6 +102,17 @@ import { DEFAULT_MOBILE_THEME, MOBILE_THEME_OPTIONS } from '../themes/mobileThem
 // Note: pollBackupProgress is used by handleExport
 
 const RESTORE_JOB_SOURCE_KEY = 'restoreJobSource';
+const PUBLIC_APPEARANCE_SETTING_KEYS = [
+  'interface_theme',
+  'mobile_interface_theme',
+  'user_interface_theme_enabled',
+  'home_desktop_list_loading_mode',
+  'home_mobile_list_loading_mode',
+  'ui_default_locale',
+  'ui_enabled_locales',
+  'ui_follow_browser_locale',
+] as const satisfies readonly (keyof SystemSettings)[];
+const CONTACT_PHONE_FORMAT_MESSAGE = '联系电话格式不正确，请填写中国手机号、带区号座机、400/800 服务电话或国际号码';
 
 const BACKUP_SCOPE_OPTIONS: Array<{ value: BackupScope; label: string; desc: string; icon: string }> = [
   { value: 'full', label: '整站备份', desc: '数据库与全部资源', icon: 'database' },
@@ -374,6 +386,11 @@ const DEFAULT_SETTINGS: SystemSettings = {
   interface_theme: DEFAULT_INTERFACE_THEME,
   mobile_interface_theme: DEFAULT_MOBILE_THEME,
   user_interface_theme_enabled: true,
+  home_desktop_list_loading_mode: 'pagination',
+  home_mobile_list_loading_mode: 'infinite',
+  ui_default_locale: 'zh-CN',
+  ui_enabled_locales: 'zh-CN,zh-TW,en-US,ja-JP,ko-KR,de-DE',
+  ui_follow_browser_locale: false,
   color_scheme: 'orange',
   color_custom_dark: '{}',
   color_custom_light: '{}',
@@ -703,7 +720,12 @@ const GROUPS: SettingGroup[] = [
       { key: 'site_description', label: '网站描述', desc: '用于 SEO 和分享链接的站点描述', type: 'text' },
       { key: 'site_keywords', label: '关键词', desc: 'SEO 关键词，多个用逗号分隔', type: 'text' },
       { _section: '页脚联系信息' },
-      { key: 'contact_phone', label: '联系电话', desc: '显示在前台页脚的联系信息区', type: 'text' },
+      {
+        key: 'contact_phone',
+        label: '联系电话',
+        desc: '支持 13800138000、0755-12345678、400-123-4567、+86 13800138000',
+        type: 'text',
+      },
       { key: 'contact_address', label: '联系地址', desc: '显示在前台页脚底部的公司/办公地址', type: 'text' },
       { _section: '模型详情页页脚' },
       {
@@ -767,6 +789,53 @@ const GROUPS: SettingGroup[] = [
         key: 'user_interface_theme_enabled',
         label: '允许用户自定义前台界面风格',
         desc: '开启后用户可在前台用户菜单里选择“跟随网站默认 / 经典主题 / 工作台主题”，仅影响公开前台桌面页面。',
+        type: 'switch',
+      },
+      {
+        key: 'home_desktop_list_loading_mode',
+        label: 'PC 首页加载方式',
+        desc: '控制 PC 端首页模型列表使用下拉自动加载还是分页；经典主题和工作台主题共用此设置。',
+        type: 'select',
+        options: [
+          { value: 'infinite', label: '下拉自动加载' },
+          { value: 'pagination', label: '分页' },
+        ],
+      },
+      {
+        key: 'home_mobile_list_loading_mode',
+        label: '移动端首页加载方式',
+        desc: '控制手机端首页模型列表使用下拉自动加载还是分页；移动端主题共用此设置。',
+        type: 'select',
+        options: [
+          { value: 'infinite', label: '下拉自动加载' },
+          { value: 'pagination', label: '分页' },
+        ],
+      },
+      { _section: '界面语言' },
+      {
+        key: 'ui_default_locale',
+        label: '默认界面语言',
+        desc: '新访客首次打开网站时使用的语言；已有用户会优先使用自己选择的语言。',
+        type: 'select',
+        options: [
+          { value: 'zh-CN', label: '简体中文' },
+          { value: 'zh-TW', label: '繁體中文' },
+          { value: 'en-US', label: 'English' },
+          { value: 'ja-JP', label: '日本語' },
+          { value: 'ko-KR', label: '한국어' },
+          { value: 'de-DE', label: 'Deutsch' },
+        ],
+      },
+      {
+        key: 'ui_enabled_locales',
+        label: '可切换语言',
+        desc: '逗号分隔，例如 zh-CN,zh-TW,en-US,ja-JP,ko-KR,de-DE。当前内置简体中文、繁体中文、英文、日语、韩语、德语。',
+        type: 'text',
+      },
+      {
+        key: 'ui_follow_browser_locale',
+        label: '首次访问跟随浏览器语言',
+        desc: '开启后，未手动选择语言的新访客会优先使用浏览器语言；不支持时回到默认语言。',
         type: 'switch',
       },
       {
@@ -2408,6 +2477,12 @@ function normalizeSettingsForClient(settings: Partial<SystemSettings>): SystemSe
   };
 }
 
+function pickPublicAppearanceSettings(settings: SystemSettings): Partial<SystemSettings> {
+  return Object.fromEntries(
+    PUBLIC_APPEARANCE_SETTING_KEYS.map((key) => [key, settings[key]]),
+  ) as Partial<SystemSettings>;
+}
+
 function setJsonSetting<T>(updateSetting: SettingUpdater, key: keyof SystemSettings, value: T) {
   updateSetting(key, JSON.stringify(value, null, 2));
 }
@@ -2625,6 +2700,55 @@ function normalizeStringSetting(value: unknown, fallback = '') {
   return normalized || fallback;
 }
 
+const SUPPORTED_UI_LOCALES = ['zh-CN', 'zh-TW', 'en-US', 'ja-JP', 'ko-KR', 'de-DE'] as const;
+
+function normalizeUiDefaultLocale(value: unknown): string {
+  const locale = String(value || '').trim();
+  return SUPPORTED_UI_LOCALES.includes(locale as (typeof SUPPORTED_UI_LOCALES)[number]) ? locale : 'zh-CN';
+}
+
+function normalizeUiEnabledLocales(value: unknown): string {
+  const locales = Array.from(
+    new Set(
+      String(value || '')
+        .split(',')
+        .map((item) => item.trim())
+        .filter((item) => SUPPORTED_UI_LOCALES.includes(item as (typeof SUPPORTED_UI_LOCALES)[number])),
+    ),
+  );
+  return locales.length ? locales.join(',') : 'zh-CN,zh-TW,en-US,ja-JP,ko-KR,de-DE';
+}
+
+function normalizeContactPhoneSetting(value: unknown): string {
+  return String(value ?? '')
+    .trim()
+    .replace(/[－—–]/g, '-')
+    .replace(/（/g, '(')
+    .replace(/）/g, ')')
+    .replace(/\s+/g, ' ');
+}
+
+function isValidContactPhoneSetting(value: unknown): boolean {
+  const phone = normalizeContactPhoneSetting(value);
+  if (!phone) return true;
+  if (phone.length > 32) return false;
+  if (!/^\+?[0-9][0-9\s()-]{5,31}$/.test(phone)) return false;
+
+  const digits = phone.replace(/\D/g, '');
+  const noSpaceOrParen = phone.replace(/[()\s]/g, '');
+
+  if (/^1[3-9]\d{9}$/.test(digits)) return true;
+  if (/^(400|800)-?\d{3}-?\d{4}$/.test(noSpaceOrParen)) return true;
+  if (/^0\d{2,3}-?\d{7,8}(-?\d{1,6})?$/.test(noSpaceOrParen)) return true;
+  if (phone.startsWith('+') && digits.length >= 8 && digits.length <= 15) return true;
+
+  return false;
+}
+
+function validateSettingsBeforeSave(settings: SystemSettings): string | null {
+  return isValidContactPhoneSetting(settings.contact_phone) ? null : CONTACT_PHONE_FORMAT_MESSAGE;
+}
+
 function normalizeStoragePrefix(value: unknown, fallback: string) {
   const normalized = String(value ?? fallback)
     .trim()
@@ -2646,6 +2770,9 @@ function normalizeSettingsForSave(settings: SystemSettings): SystemSettings {
     : DEFAULT_SETTINGS.storage_provider;
   return {
     ...settings,
+    contact_phone: normalizeContactPhoneSetting(settings.contact_phone),
+    ui_default_locale: normalizeUiDefaultLocale(settings.ui_default_locale),
+    ui_enabled_locales: normalizeUiEnabledLocales(settings.ui_enabled_locales),
     viewer_edge_threshold_angle: clampNumber(settings.viewer_edge_threshold_angle, 28, 1, 89),
     viewer_edge_vertex_limit: clampNumber(settings.viewer_edge_vertex_limit, 700000, 0, 5000000),
     viewer_measure_record_limit: clampNumber(settings.viewer_measure_record_limit, 12, 1, 100),
@@ -5225,35 +5352,46 @@ function Content() {
   async function handleSave() {
     setSaving(true);
     try {
+      const validationMessage = validateSettingsBeforeSave(settings);
+      if (validationMessage) {
+        toast(validationMessage, 'error');
+        return;
+      }
       const normalizedSettings = normalizeSettingsForSave(settings);
       if (JSON.stringify(normalizedSettings) !== JSON.stringify(settings)) {
         setSettings(normalizedSettings);
       }
       const data = await updateSettings(normalizedSettings);
-      setSettings(normalizeSettingsForClient({ ...normalizedSettings, ...data }));
+      const nextSettings = normalizeSettingsForClient({ ...normalizedSettings, ...data });
+      setSettings(nextSettings);
       setChanged(false);
       // Refresh site config: re-fetch settings, apply title/logo/favicon, notify components
       const { refreshSiteConfig } = await import('../lib/publicSettings');
       await refreshSiteConfig();
+      patchPublicSettings(pickPublicAppearanceSettings(nextSettings));
       loadBackupHealth();
       toast('设置已保存', 'success');
-    } catch {
-      toast('保存失败', 'error');
+    } catch (err: unknown) {
+      toast(errorMessage(err, '保存失败'), 'error');
     } finally {
       setSaving(false);
     }
   }
 
   async function saveCurrentSettingsSilently() {
+    const validationMessage = validateSettingsBeforeSave(settings);
+    if (validationMessage) throw new Error(validationMessage);
     const normalizedSettings = normalizeSettingsForSave(settings);
     if (JSON.stringify(normalizedSettings) !== JSON.stringify(settings)) {
       setSettings(normalizedSettings);
     }
     const data = await updateSettings(normalizedSettings);
-    setSettings(normalizeSettingsForClient({ ...normalizedSettings, ...data }));
+    const nextSettings = normalizeSettingsForClient({ ...normalizedSettings, ...data });
+    setSettings(nextSettings);
     setChanged(false);
     const { refreshSiteConfig } = await import('../lib/publicSettings');
     await refreshSiteConfig();
+    patchPublicSettings(pickPublicAppearanceSettings(nextSettings));
   }
 
   function updateSetting(key: keyof SystemSettings, value: boolean | number | string) {
@@ -5301,6 +5439,11 @@ function Content() {
     setTestingEmail(true);
     try {
       if (changed) {
+        const validationMessage = validateSettingsBeforeSave(settings);
+        if (validationMessage) {
+          toast(validationMessage, 'error');
+          return;
+        }
         const normalizedSettings = normalizeSettingsForSave(settings);
         const nextSettings = await updateSettings(normalizedSettings);
         setSettings(normalizeSettingsForClient({ ...normalizedSettings, ...nextSettings }));
@@ -6211,7 +6354,15 @@ function Content() {
                                                 </div>
                                               ) : (
                                                 <input
-                                                  type={isSensitiveTextSettingKey(item.key) ? 'password' : 'text'}
+                                                  type={
+                                                    item.key === 'contact_phone'
+                                                      ? 'tel'
+                                                      : isSensitiveTextSettingKey(item.key)
+                                                        ? 'password'
+                                                        : 'text'
+                                                  }
+                                                  inputMode={item.key === 'contact_phone' ? 'tel' : undefined}
+                                                  maxLength={item.key === 'contact_phone' ? 32 : undefined}
                                                   value={settings[item.key] as string}
                                                   onChange={(e) => updateSetting(item.key, e.target.value)}
                                                   placeholder={item.desc}
@@ -6495,7 +6646,15 @@ function Content() {
                                           </div>
                                         ) : (
                                           <input
-                                            type={isSensitiveTextSettingKey(item.key) ? 'password' : 'text'}
+                                            type={
+                                              item.key === 'contact_phone'
+                                                ? 'tel'
+                                                : isSensitiveTextSettingKey(item.key)
+                                                  ? 'password'
+                                                  : 'text'
+                                            }
+                                            inputMode={item.key === 'contact_phone' ? 'tel' : undefined}
+                                            maxLength={item.key === 'contact_phone' ? 32 : undefined}
                                             value={
                                               copyrightInputLocked
                                                 ? generatedCopyrightValue

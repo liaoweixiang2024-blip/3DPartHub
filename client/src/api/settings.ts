@@ -55,6 +55,11 @@ export interface SystemSettings {
   interface_theme: string;
   mobile_interface_theme: string;
   user_interface_theme_enabled: boolean;
+  home_desktop_list_loading_mode: string;
+  home_mobile_list_loading_mode: string;
+  ui_default_locale: string;
+  ui_enabled_locales: string;
+  ui_follow_browser_locale: boolean;
   color_scheme: string;
   color_custom_dark: string;
   color_custom_light: string;

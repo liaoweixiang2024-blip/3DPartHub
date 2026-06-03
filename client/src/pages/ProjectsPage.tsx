@@ -1,5 +1,6 @@
 import { motion, AnimatePresence } from 'framer-motion';
 import { useState, useCallback } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router-dom';
 import useSWR from 'swr';
 import { projectApi, type Project } from '../api/projects';
@@ -17,14 +18,17 @@ import { bottomSheetMotion, dialogPanelMotion, listItemMotion, overlayMotion } f
 import { useAuthStore } from '../stores';
 
 function ProjectsLoadingGrid() {
+  const { t } = useTranslation();
+
   return (
     <div className="flex min-h-[320px]">
-      <PageRefreshIndicator label="项目刷新中" />
+      <PageRefreshIndicator label={t('projects.loading')} />
     </div>
   );
 }
 
 function ProjectCard({ project, onDelete }: { project: Project; onDelete: (id: string) => void }) {
+  const { i18n, t } = useTranslation();
   const [confirming, setConfirming] = useState(false);
 
   const handleDelete = (e: React.MouseEvent) => {
@@ -47,7 +51,7 @@ function ProjectCard({ project, onDelete }: { project: Project; onDelete: (id: s
         <div className="h-32 bg-surface-container-lowest flex items-center justify-center relative">
           <Icon name="folder" size={48} className="text-on-surface-variant/20" />
           <span className="absolute top-3 right-3 text-[10px] bg-primary/20 px-2 py-0.5 rounded-sm text-primary font-medium">
-            {project._count.models} 个模型
+            {t('projects.modelCount', { count: project._count.models })}
           </span>
         </div>
         <div className="p-4">
@@ -56,10 +60,12 @@ function ProjectCard({ project, onDelete }: { project: Project; onDelete: (id: s
             <p className="text-xs text-on-surface-variant line-clamp-2 break-words">{project.description}</p>
           )}
           <div className="flex items-center gap-2 mt-3">
-            <span className="text-[10px] text-on-surface-variant">{project.members.length} 成员</span>
+            <span className="text-[10px] text-on-surface-variant">
+              {t('projects.memberCount', { count: project.members.length })}
+            </span>
             <span className="text-on-surface-variant/30">·</span>
             <span className="text-[10px] text-on-surface-variant">
-              {new Date(project.updatedAt).toLocaleDateString('zh-CN')}
+              {new Date(project.updatedAt).toLocaleDateString(i18n.language)}
             </span>
           </div>
         </div>
@@ -71,7 +77,7 @@ function ProjectCard({ project, onDelete }: { project: Project; onDelete: (id: s
             ? 'bg-error text-on-error'
             : 'bg-surface-container-high/80 text-on-surface-variant opacity-0 group-hover:opacity-100 hover:text-error'
         }`}
-        title={confirming ? '确认删除' : '删除项目'}
+        title={confirming ? t('projects.confirmDelete') : t('projects.deleteProject')}
       >
         <Icon name={confirming ? 'delete' : 'delete_outline'} size={16} />
       </button>
@@ -80,7 +86,8 @@ function ProjectCard({ project, onDelete }: { project: Project; onDelete: (id: s
 }
 
 export default function ProjectsPage() {
-  useDocumentTitle('项目');
+  const { t } = useTranslation();
+  useDocumentTitle(t('projects.title'));
   const isDesktop = useMediaQuery('(min-width: 768px)');
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
   const [showCreate, setShowCreate] = useState(false);
@@ -105,9 +112,9 @@ export default function ProjectsPage() {
       setShowCreate(false);
       setNewName('');
       setNewDesc('');
-      toast('项目已创建', 'success');
+      toast(t('projects.created'), 'success');
     } catch {
-      toast('创建失败', 'error');
+      toast(t('projects.createFailed'), 'error');
     }
   };
 
@@ -116,23 +123,27 @@ export default function ProjectsPage() {
       try {
         await projectApi.delete(id);
         mutate();
-        toast('项目已删除', 'success');
+        toast(t('projects.deleted'), 'success');
       } catch {
-        toast('删除失败', 'error');
+        toast(t('projects.deleteFailed'), 'error');
       }
     },
-    [mutate, toast],
+    [mutate, t, toast],
   );
 
   if (!isAuthenticated) {
     return (
       <div className="flex flex-col items-center justify-center h-dvh bg-surface gap-4">
         <Icon name="lock" size={64} className="text-on-surface-variant/30" />
-        <p className="text-on-surface-variant">请先登录查看项目</p>
+        <p className="text-on-surface-variant">{t('projects.loginRequired')}</p>
         <button onClick={() => setLoginDialogOpen(true)} className="text-primary hover:underline">
-          前往登录
+          {t('projects.login')}
         </button>
-        <LoginConfirmDialog open={loginDialogOpen} onClose={() => setLoginDialogOpen(false)} reason="查看项目" />
+        <LoginConfirmDialog
+          open={loginDialogOpen}
+          onClose={() => setLoginDialogOpen(false)}
+          reason={t('projects.loginReason')}
+        />
       </div>
     );
   }
@@ -144,19 +155,19 @@ export default function ProjectsPage() {
           <div className="min-w-0">
             <div className="flex items-center gap-2 text-sm mb-2 overflow-x-auto scrollbar-hidden">
               <Link to="/" className="text-on-surface-variant hover:text-on-surface">
-                首页
+                {t('projects.home')}
               </Link>
               <Icon name="chevron_right" size={12} className="text-on-surface-variant/40" />
-              <span className="text-primary font-medium">项目空间</span>
+              <span className="text-primary font-medium">{t('projects.projectSpace')}</span>
             </div>
-            <PageHeader title="项目" />
+            <PageHeader title={t('projects.title')} />
           </div>
           <button
             onClick={() => setShowCreate(true)}
             className="bg-primary-container text-on-primary rounded-sm px-4 py-2 text-sm font-medium hover:opacity-90 flex items-center gap-2"
           >
             <Icon name="add" size={20} />
-            新建项目
+            {t('projects.createProject')}
           </button>
         </div>
 
@@ -165,9 +176,9 @@ export default function ProjectsPage() {
         ) : projectList.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-20 gap-4">
             <Icon name="folder_off" size={56} className="text-on-surface-variant/30" />
-            <p className="text-on-surface-variant">还没有项目</p>
+            <p className="text-on-surface-variant">{t('projects.noProjects')}</p>
             <button onClick={() => setShowCreate(true)} className="text-primary hover:underline text-sm">
-              创建第一个项目
+              {t('projects.createFirst')}
             </button>
           </div>
         ) : (
@@ -205,24 +216,24 @@ export default function ProjectsPage() {
               className="bg-surface-container-low rounded-t-lg sm:rounded-lg w-full max-w-md p-4 sm:p-6 shadow-2xl border border-outline-variant/20 max-h-[calc(100dvh-1.5rem)] overflow-y-auto"
               onClick={(e) => e.stopPropagation()}
             >
-              <h2 className="text-lg font-headline font-bold text-on-surface mb-4">新建项目</h2>
+              <h2 className="text-lg font-headline font-bold text-on-surface mb-4">{t('projects.createProject')}</h2>
               <div className="space-y-4">
                 <div>
-                  <label className="block text-xs text-on-surface-variant mb-1">项目名称 *</label>
+                  <label className="block text-xs text-on-surface-variant mb-1">{t('projects.nameRequired')}</label>
                   <input
                     value={newName}
                     onChange={(e) => setNewName(e.target.value)}
                     className="w-full bg-surface-container-lowest text-on-surface rounded-sm px-3 py-2 border border-outline-variant/30 outline-none focus:border-primary"
-                    placeholder="输入项目名称"
+                    placeholder={t('projects.namePlaceholder')}
                   />
                 </div>
                 <div>
-                  <label className="block text-xs text-on-surface-variant mb-1">描述</label>
+                  <label className="block text-xs text-on-surface-variant mb-1">{t('projects.description')}</label>
                   <textarea
                     value={newDesc}
                     onChange={(e) => setNewDesc(e.target.value)}
                     className="w-full bg-surface-container-lowest text-on-surface rounded-sm px-3 py-2 border border-outline-variant/30 outline-none focus:border-primary resize-none h-20"
-                    placeholder="项目描述（可选）"
+                    placeholder={t('projects.projectDescriptionPlaceholder')}
                   />
                 </div>
                 <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-3">
@@ -230,14 +241,14 @@ export default function ProjectsPage() {
                     onClick={() => setShowCreate(false)}
                     className="px-4 py-2 text-sm text-on-surface-variant hover:text-on-surface"
                   >
-                    取消
+                    {t('common.cancel')}
                   </button>
                   <button
                     onClick={handleCreate}
                     disabled={!newName.trim()}
                     className="bg-primary-container text-on-primary rounded-sm px-4 py-2 text-sm font-medium hover:opacity-90 disabled:opacity-50"
                   >
-                    创建
+                    {t('projects.create')}
                   </button>
                 </div>
               </div>

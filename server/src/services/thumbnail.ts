@@ -1,6 +1,7 @@
-import { mkdirSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
-import { createCanvas } from 'canvas';
+import { createReadStream, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
+import { extname, join, relative, resolve, sep } from 'node:path';
+import { createCanvas, loadImage } from 'canvas';
 import { readGltfAsset } from './gltfAsset.js';
 
 interface Vec3 {
@@ -64,6 +65,19 @@ type GltfAsset = {
   nodes?: GltfNode[];
   scene?: number;
   scenes?: GltfScene[];
+};
+
+type ThumbnailResult = { thumbnailPath: string; thumbnailUrl: string; thumbnailSmallUrl: string };
+
+type ThumbnailGenerationOptions = {
+  fallbackToPlaceholder?: boolean;
+};
+
+type BrowserThumbnailOptions = {
+  staticDir: string;
+  width?: number;
+  height?: number;
+  timeoutMs?: number;
 };
 
 // Keep enough faces for complex CAD assemblies. Too aggressive sampling makes
@@ -310,7 +324,8 @@ export function generateThumbnail(
   modelId: string,
   width = 512,
   height = 512,
-): { thumbnailPath: string; thumbnailUrl: string; thumbnailSmallUrl: string } {
+  options: ThumbnailGenerationOptions = {},
+): ThumbnailResult {
   width = Math.min(width || 512, 1024);
   height = Math.min(height || 512, 1024);
   mkdirSync(outputDir, { recursive: true });
@@ -321,6 +336,9 @@ export function generateThumbnail(
     const allTriangles = extractTriangles(gltf, binData);
     let triangles = allTriangles;
     if (triangles.length === 0) {
+      if (options.fallbackToPlaceholder === false) {
+        throw new Error('缩略图生成失败：预览模型中没有可渲染的三角面');
+      }
       return generatePlaceholder(outputDir, modelId, width, height);
     }
 
@@ -534,8 +552,225 @@ export function generateThumbnail(
       thumbnailUrl: `/static/thumbnails/${modelId}.${thumbnail.ext}`,
       thumbnailSmallUrl: `/static/thumbnails/${modelId}_sm.${smallThumbnail.ext}`,
     };
-  } catch {
+  } catch (err) {
+    if (options.fallbackToPlaceholder === false) {
+      throw err;
+    }
     return generatePlaceholder(outputDir, modelId, width, height);
+  }
+}
+
+function browserExecutablePath() {
+  const candidates = [
+    process.env.PUPPETEER_EXECUTABLE_PATH,
+    '/usr/bin/chromium-browser',
+    '/usr/bin/chromium',
+    '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
+    '/Applications/Chromium.app/Contents/MacOS/Chromium',
+  ].filter(Boolean) as string[];
+  return candidates.find((candidate) => existsSync(candidate)) || null;
+}
+
+function rendererHtml(staticDir: string) {
+  return readFileSync(join(staticDir, 'thumbnail-renderer.html'), 'utf8');
+}
+
+function contentTypeForPath(pathname: string) {
+  const ext = extname(pathname).toLowerCase();
+  if (ext === '.html') return 'text/html; charset=utf-8';
+  if (ext === '.js' || ext === '.mjs') return 'text/javascript; charset=utf-8';
+  if (ext === '.json') return 'application/json; charset=utf-8';
+  if (ext === '.gltf') return 'model/gltf+json';
+  if (ext === '.glb') return 'model/gltf-binary';
+  if (ext === '.hdr') return 'application/octet-stream';
+  if (ext === '.wasm') return 'application/wasm';
+  if (ext === '.png') return 'image/png';
+  if (ext === '.jpg' || ext === '.jpeg') return 'image/jpeg';
+  if (ext === '.webp') return 'image/webp';
+  return 'application/octet-stream';
+}
+
+function isInsideDirectory(parent: string, child: string) {
+  const normalizedParent = resolve(parent);
+  const normalizedChild = resolve(child);
+  return normalizedChild === normalizedParent || normalizedChild.startsWith(`${normalizedParent}${sep}`);
+}
+
+function publicAssetUrl(staticDir: string, assetPath: string) {
+  const normalizedStaticDir = resolve(staticDir);
+  const normalizedAssetPath = resolve(assetPath);
+  if (!isInsideDirectory(normalizedStaticDir, normalizedAssetPath)) return '/__model';
+  return `/static/${relative(normalizedStaticDir, normalizedAssetPath).split(sep).join('/')}`;
+}
+
+function pipeFile(pathname: string, res: ServerResponse) {
+  res.writeHead(200, { 'content-type': contentTypeForPath(pathname), 'access-control-allow-origin': '*' });
+  createReadStream(pathname).pipe(res);
+}
+
+async function startThumbnailStaticServer(staticDir: string, gltfPath: string) {
+  const normalizedStaticDir = resolve(staticDir);
+  const normalizedGltfPath = resolve(gltfPath);
+  const html = rendererHtml(staticDir);
+
+  const server = createServer((req: IncomingMessage, res: ServerResponse) => {
+    try {
+      const requestUrl = new URL(req.url || '/', 'http://127.0.0.1');
+      const pathname = decodeURIComponent(requestUrl.pathname);
+
+      if (pathname === '/thumbnail-renderer.html') {
+        res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' });
+        res.end(html);
+        return;
+      }
+
+      if (pathname === '/__model') {
+        pipeFile(normalizedGltfPath, res);
+        return;
+      }
+
+      if (pathname.startsWith('/static/')) {
+        const targetPath = resolve(normalizedStaticDir, pathname.slice('/static/'.length));
+        if (!isInsideDirectory(normalizedStaticDir, targetPath) || !existsSync(targetPath)) {
+          res.writeHead(404);
+          res.end('Not found');
+          return;
+        }
+        pipeFile(targetPath, res);
+        return;
+      }
+
+      res.writeHead(404);
+      res.end('Not found');
+    } catch {
+      res.writeHead(500);
+      res.end('Internal error');
+    }
+  });
+
+  await new Promise<void>((resolveListen, rejectListen) => {
+    server.once('error', rejectListen);
+    server.listen(0, '127.0.0.1', () => {
+      server.off('error', rejectListen);
+      resolveListen();
+    });
+  });
+
+  const address = server.address();
+  if (!address || typeof address === 'string') {
+    await new Promise<void>((resolveClose) => server.close(() => resolveClose()));
+    throw new Error('缩略图生成失败：无法启动本地渲染服务');
+  }
+
+  return {
+    baseUrl: `http://127.0.0.1:${address.port}`,
+    close: () => new Promise<void>((resolveClose) => server.close(() => resolveClose())),
+  };
+}
+
+async function writeThumbnailFromImage(
+  imageBuffer: Buffer,
+  outputDir: string,
+  modelId: string,
+  width: number,
+  height: number,
+): Promise<ThumbnailResult> {
+  mkdirSync(outputDir, { recursive: true });
+
+  const image = await loadImage(imageBuffer);
+  const canvas = createCanvas(width, height);
+  const ctx = canvas.getContext('2d');
+  ctx.drawImage(image, 0, 0, image.width, image.height, 0, 0, width, height);
+
+  const thumbnail = encodeCanvas(canvas);
+  const thumbnailFilePath = thumbnailPath(outputDir, modelId, thumbnail.ext);
+  writeFileSync(thumbnailFilePath, thumbnail.buffer);
+
+  const smallCanvas = createCanvas(256, 256);
+  const smallCtx = smallCanvas.getContext('2d');
+  smallCtx.drawImage(canvas, 0, 0, width, height, 0, 0, 256, 256);
+  const smallThumbnail = encodeCanvas(smallCanvas, THUMBNAIL_SMALL_ENCODING);
+  const smallPath = thumbnailPath(outputDir, modelId, smallThumbnail.ext, true);
+  writeFileSync(smallPath, smallThumbnail.buffer);
+
+  return {
+    thumbnailPath: thumbnailFilePath,
+    thumbnailUrl: `/static/thumbnails/${modelId}.${thumbnail.ext}`,
+    thumbnailSmallUrl: `/static/thumbnails/${modelId}_sm.${smallThumbnail.ext}`,
+  };
+}
+
+export async function generateBrowserThumbnail(
+  gltfPath: string,
+  outputDir: string,
+  modelId: string,
+  options: BrowserThumbnailOptions,
+): Promise<ThumbnailResult> {
+  const executablePath = browserExecutablePath();
+  if (!executablePath) {
+    throw new Error('缩略图生成失败：未找到 Chromium/Chrome 可执行文件');
+  }
+
+  const width = Math.min(options.width || 512, 1024);
+  const height = Math.min(options.height || 512, 1024);
+  const staticServer = await startThumbnailStaticServer(options.staticDir, gltfPath);
+
+  try {
+    const modelUrl = publicAssetUrl(options.staticDir, gltfPath);
+    const rendererUrl = `${staticServer.baseUrl}/thumbnail-renderer.html?model=${encodeURIComponent(modelUrl)}`;
+    const puppeteer = await import('puppeteer-core');
+    const browser = await puppeteer.launch({
+      executablePath,
+      headless: true,
+      args: [
+        '--no-sandbox',
+        '--disable-setuid-sandbox',
+        '--disable-dev-shm-usage',
+        '--enable-webgl',
+        '--ignore-gpu-blocklist',
+        '--enable-unsafe-swiftshader',
+        '--use-angle=swiftshader',
+        '--use-gl=angle',
+      ],
+    });
+    try {
+      const page = await browser.newPage();
+      const diagnostics: string[] = [];
+      const rememberDiagnostic = (message: string) => {
+        diagnostics.push(message);
+        if (diagnostics.length > 8) diagnostics.shift();
+      };
+      page.on('console', (message) => rememberDiagnostic(`console:${message.type()}:${message.text()}`));
+      page.on('pageerror', (error: unknown) => {
+        rememberDiagnostic(`pageerror:${error instanceof Error ? error.message : String(error)}`);
+      });
+      page.on('requestfailed', (request) => {
+        rememberDiagnostic(`requestfailed:${request.url()}:${request.failure()?.errorText || 'unknown'}`);
+      });
+      page.setDefaultTimeout(options.timeoutMs || 30000);
+      await page.setViewport({ width: 1024, height: 1024, deviceScaleFactor: 1 });
+      await page.goto(rendererUrl, { waitUntil: 'load', timeout: options.timeoutMs || 30000 });
+      try {
+        await page.waitForFunction(() => (window as unknown as { __done?: boolean }).__done === true);
+      } catch (err) {
+        const detail = diagnostics.length ? `：${diagnostics.join(' | ')}` : '';
+        throw new Error(`缩略图生成失败：浏览器渲染超时${detail}`, { cause: err });
+      }
+      const renderError = await page.evaluate(() => (window as unknown as { __error?: string }).__error || null);
+      if (renderError) {
+        throw new Error(`缩略图生成失败：${renderError}`);
+      }
+      const canvas = await page.$('canvas');
+      if (!canvas) {
+        throw new Error('缩略图生成失败：浏览器渲染器未创建画布');
+      }
+      const screenshot = Buffer.from(await canvas.screenshot({ type: 'png' }));
+      return await writeThumbnailFromImage(screenshot, outputDir, modelId, width, height);
+    } finally {
+      await browser.close();
+    }
+  } finally {
+    await staticServer.close();
   }
 }
 

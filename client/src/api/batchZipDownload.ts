@@ -1,3 +1,4 @@
+import { i18n } from '../i18n';
 import {
   cancelPreparedBrowserDownload,
   downloadBrowserBlob,
@@ -26,6 +27,11 @@ type BatchZipDownloadOptions = {
 type BatchZipPreflightResponse = {
   fileCount?: number;
 };
+
+function tDownload(key: string, fallback: string) {
+  if (!i18n.isInitialized) return fallback;
+  return String(i18n.t(key, { defaultValue: fallback }));
+}
 
 function waitForBrowserPaint(): Promise<void> {
   return new Promise((resolve) => {
@@ -139,7 +145,11 @@ export async function downloadBatchZip({
       });
     }
 
-    if (!resp.ok) throw new Error(await readDownloadError(resp, '打包下载失败'));
+    if (!resp.ok) {
+      throw new Error(
+        await readDownloadError(resp, tDownload('browserDownload.batchZipFailed', 'Batch download failed')),
+      );
+    }
 
     const contentType = resp.headers.get('Content-Type') || '';
     if (!contentType.includes('application/json')) {

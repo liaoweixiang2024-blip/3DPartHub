@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useLocation } from 'react-router-dom';
 import type { MaintenanceStatus } from '../../api/settings';
 import { useAuthStore } from '../../stores/useAuthStore';
@@ -12,8 +13,8 @@ const DEFAULT_STATUS: MaintenanceStatus = {
   automatic: false,
   pending: 0,
   threshold: 50,
-  title: '系统维护中',
-  message: '系统正在进行维护、数据恢复或资源重建，部分页面可能暂时不可用。请稍后再访问。',
+  title: '',
+  message: '',
 };
 const LEGACY_MAINTENANCE_TITLE = '模型库维护中';
 const LEGACY_MAINTENANCE_MESSAGE = '模型预览资源正在重建，部分模型数量和缩略图可能暂时不完整。请稍后再访问。';
@@ -21,8 +22,8 @@ const LEGACY_MAINTENANCE_MESSAGE = '模型预览资源正在重建，部分模�
 function normalizeMaintenanceStatus(status: MaintenanceStatus): MaintenanceStatus {
   return {
     ...status,
-    title: status.title === LEGACY_MAINTENANCE_TITLE ? DEFAULT_STATUS.title : status.title,
-    message: status.message === LEGACY_MAINTENANCE_MESSAGE ? DEFAULT_STATUS.message : status.message,
+    title: status.title === LEGACY_MAINTENANCE_TITLE ? '' : status.title,
+    message: status.message === LEGACY_MAINTENANCE_MESSAGE ? '' : status.message,
   };
 }
 
@@ -39,6 +40,7 @@ function isBypassedPath(pathname: string) {
 }
 
 export default function MaintenanceGate({ children }: { children: ReactNode }) {
+  const { t } = useTranslation();
   const location = useLocation();
   const user = useAuthStore((s) => s.user);
   const [status, setStatus] = useState<MaintenanceStatus>(DEFAULT_STATUS);
@@ -79,8 +81,8 @@ export default function MaintenanceGate({ children }: { children: ReactNode }) {
         <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-primary-container/10 text-primary-container">
           <Icon name="build" size={28} />
         </div>
-        <h1 className="text-2xl font-headline font-bold text-on-surface">{status.title || DEFAULT_STATUS.title}</h1>
-        <p className="mt-3 text-sm leading-6 text-on-surface-variant">{status.message || DEFAULT_STATUS.message}</p>
+        <h1 className="text-2xl font-headline font-bold text-on-surface">{status.title || t('maintenance.title')}</h1>
+        <p className="mt-3 text-sm leading-6 text-on-surface-variant">{status.message || t('maintenance.message')}</p>
         <div className="mt-6 flex justify-center">
           <button
             type="button"
@@ -93,7 +95,7 @@ export default function MaintenanceGate({ children }: { children: ReactNode }) {
               size={16}
               className={checking ? 'animate-spin' : ''}
             />
-            {checking ? '检查中' : '重新检查'}
+            {checking ? t('maintenance.checking') : t('maintenance.recheck')}
           </button>
         </div>
       </section>

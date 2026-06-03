@@ -1,5 +1,6 @@
 import { AnimatePresence, motion } from 'framer-motion';
 import { useState, useEffect, useRef, useCallback } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import {
   getNotifications,
@@ -54,15 +55,19 @@ function getNotificationRoute(n: Notification, isAdmin: boolean): string | null 
   return null;
 }
 
-function formatTime(dateStr: string): string {
+function formatTime(
+  dateStr: string,
+  t: (key: string, options?: Record<string, unknown>) => string,
+  locale: string,
+): string {
   const d = new Date(dateStr);
   const now = new Date();
   const diff = now.getTime() - d.getTime();
-  if (diff < 60000) return '刚刚';
-  if (diff < 3600000) return `${Math.floor(diff / 60000)} 分钟前`;
-  if (diff < 86400000) return `${Math.floor(diff / 3600000)} 小时前`;
-  if (diff < 604800000) return `${Math.floor(diff / 86400000)} 天前`;
-  return d.toLocaleDateString('zh-CN', { month: '2-digit', day: '2-digit' });
+  if (diff < 60000) return t('notificationPanel.time.justNow');
+  if (diff < 3600000) return t('notificationPanel.time.minutesAgo', { count: Math.floor(diff / 60000) });
+  if (diff < 86400000) return t('notificationPanel.time.hoursAgo', { count: Math.floor(diff / 3600000) });
+  if (diff < 604800000) return t('notificationPanel.time.daysAgo', { count: Math.floor(diff / 86400000) });
+  return d.toLocaleDateString(locale, { month: '2-digit', day: '2-digit' });
 }
 
 function NotificationItem({
@@ -78,8 +83,10 @@ function NotificationItem({
   onDelete: (id: string) => void;
   onNavigate: (route: string) => void;
 }) {
+  const { t, i18n } = useTranslation();
   const meta = getTypeMeta(n.type);
   const route = getNotificationRoute(n, isAdmin);
+  const dateLocale = i18n.resolvedLanguage || i18n.language;
 
   const handleClick = () => {
     if (!n.read) onRead(n.id);
@@ -98,7 +105,7 @@ function NotificationItem({
       }}
       role={route ? 'button' : undefined}
       tabIndex={route ? 0 : undefined}
-      aria-label={route ? `${n.title}，打开详情` : n.title}
+      aria-label={route ? t('notificationPanel.openDetailAria', { title: n.title }) : n.title}
       className={`group relative flex items-start gap-3 border-b border-outline-variant/5 px-3 py-3 transition-colors sm:px-4 ${
         route
           ? 'cursor-pointer outline-none hover:bg-surface-container-highest/50 focus-visible:bg-surface-container-highest/50 focus-visible:ring-2 focus-visible:ring-primary/30 active:bg-surface-container-highest'
@@ -112,10 +119,10 @@ function NotificationItem({
         <p className={`text-xs text-on-surface line-clamp-1 break-words ${!n.read ? 'font-medium' : ''}`}>{n.title}</p>
         <p className="text-[11px] text-on-surface-variant line-clamp-2 break-words mt-0.5">{n.message}</p>
         <div className="mt-1 flex min-w-0 items-center gap-2">
-          <p className="shrink-0 text-[10px] text-on-surface-variant/40">{formatTime(n.createdAt)}</p>
+          <p className="shrink-0 text-[10px] text-on-surface-variant/40">{formatTime(n.createdAt, t, dateLocale)}</p>
           {route && (
             <span className="inline-flex min-w-0 items-center gap-0.5 text-[10px] font-medium text-primary-container opacity-80 transition-opacity group-hover:opacity-100">
-              <span>打开详情</span>
+              <span>{t('notificationPanel.openDetail')}</span>
               <Icon name="chevron_right" size={11} />
             </span>
           )}
@@ -129,8 +136,8 @@ function NotificationItem({
             onDelete(n.id);
           }}
           className="flex h-8 w-8 items-center justify-center rounded-full text-on-surface-variant/70 opacity-70 transition hover:bg-error-container/15 hover:text-error hover:opacity-100 sm:h-6 sm:w-6 sm:opacity-0 sm:group-hover:opacity-70"
-          title="删除"
-          aria-label="删除通知"
+          title={t('common.delete')}
+          aria-label={t('notificationPanel.deleteAria')}
         >
           <Icon name="close" size={12} />
         </button>
@@ -148,6 +155,7 @@ export default function NotificationPanel({
   onLoginClick?: () => void;
   showTooltip?: boolean;
 }) {
+  const { t } = useTranslation();
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
   const user = useAuthStore((s) => s.user);
   const isAdmin = user?.role === 'ADMIN';
@@ -202,12 +210,12 @@ export default function NotificationPanel({
       try {
         await listInflightRef.current;
       } catch {
-        if (!preload) setLoadError('通知加载失败，请稍后重试');
+        if (!preload) setLoadError(t('notificationPanel.loadFailed'));
       } finally {
         if (!preload) setLoading(false);
       }
     },
-    [isAuthenticated],
+    [isAuthenticated, t],
   );
 
   const handleNotificationIntent = useCallback(() => {
@@ -330,8 +338,8 @@ export default function NotificationPanel({
             }
           }}
           className="p-2 rounded-lg text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high transition-colors"
-          aria-label="通知"
-          title={showTooltip ? '登录后查看通知' : undefined}
+          aria-label={t('common.notifications')}
+          title={showTooltip ? t('topNav.loginToViewNotifications') : undefined}
         >
           <Icon name="notifications" size={20} />
         </button>
@@ -353,11 +361,13 @@ export default function NotificationPanel({
       {/* Header */}
       <div className="shrink-0 border-b border-outline-variant/15 px-4 py-3">
         <div className="flex items-start justify-between gap-3">
-          <span className="text-sm font-headline font-bold text-on-surface">{isAdmin ? '管理通知' : '通知'}</span>
+          <span className="text-sm font-headline font-bold text-on-surface">
+            {isAdmin ? t('notificationPanel.adminTitle') : t('common.notifications')}
+          </span>
           <div className="flex min-w-0 flex-wrap items-center justify-end gap-x-3 gap-y-1">
             {unreadCount > 0 && (
               <button onClick={handleMarkAllRead} className="text-[11px] text-primary-container hover:underline">
-                全部已读
+                {t('notificationPanel.markAllRead')}
               </button>
             )}
             {safeNotifications.some((n) => n.read) && (
@@ -365,14 +375,14 @@ export default function NotificationPanel({
                 onClick={handleClearRead}
                 className="text-[11px] text-on-surface-variant hover:text-on-surface transition-colors"
               >
-                清除已读
+                {t('notificationPanel.clearRead')}
               </button>
             )}
             {isMobile && (
               <button
                 onClick={() => setOpen(false)}
                 className="ml-0.5 flex h-7 w-7 items-center justify-center rounded-full text-on-surface-variant hover:bg-surface-container-highest hover:text-on-surface"
-                aria-label="关闭通知"
+                aria-label={t('notificationPanel.closeAria')}
               >
                 <Icon name="close" size={14} />
               </button>
@@ -399,7 +409,9 @@ export default function NotificationPanel({
         {!loading && safeNotifications.length === 0 && (
           <div className="flex flex-col items-center justify-center py-8 gap-2">
             <Icon name="notifications" size={32} className="text-on-surface-variant/20" />
-            <p className="text-xs text-on-surface-variant">{isAdmin ? '暂无管理通知' : '暂无通知'}</p>
+            <p className="text-xs text-on-surface-variant">
+              {isAdmin ? t('notificationPanel.emptyAdmin') : t('notificationPanel.empty')}
+            </p>
           </div>
         )}
 
@@ -429,8 +441,8 @@ export default function NotificationPanel({
             onPointerDown={handleNotificationIntent}
             onFocus={handleNotificationIntent}
             className="p-2 text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high rounded-lg transition-colors relative"
-            aria-label="通知"
-            data-tooltip={showTooltip ? '通知' : undefined}
+            aria-label={t('common.notifications')}
+            data-tooltip={showTooltip ? t('common.notifications') : undefined}
             data-tooltip-side={showTooltip ? 'bottom' : undefined}
           >
             <Icon name="notifications" size={iconSize} />
@@ -477,8 +489,8 @@ export default function NotificationPanel({
         onPointerDown={handleNotificationIntent}
         onFocus={handleNotificationIntent}
         className="p-2 text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high rounded-lg transition-colors relative"
-        aria-label="通知"
-        data-tooltip={showTooltip ? '通知' : undefined}
+        aria-label={t('common.notifications')}
+        data-tooltip={showTooltip ? t('common.notifications') : undefined}
         data-tooltip-side={showTooltip ? 'bottom' : undefined}
       >
         <Icon name="notifications" size={iconSize} />

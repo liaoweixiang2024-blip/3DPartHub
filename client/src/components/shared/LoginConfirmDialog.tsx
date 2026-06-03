@@ -1,5 +1,6 @@
 import { AnimatePresence, motion } from 'framer-motion';
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useLocation, useNavigate } from 'react-router-dom';
 import type { SystemSettings } from '../../api/settings';
 import { dialogPanelMotion } from '../../lib/motion';
@@ -18,6 +19,7 @@ interface LoginConfirmDialogProps {
 }
 
 export default function LoginConfirmDialog({ open, onClose, reason, returnUrl, onLogin }: LoginConfirmDialogProps) {
+  const { t } = useTranslation();
   const [authOpen, setAuthOpen] = useState(false);
   const [shouldShowPrompt, setShouldShowPrompt] = useState(false);
   const autoEntryHandledRef = useRef(false);
@@ -123,21 +125,23 @@ export default function LoginConfirmDialog({ open, onClose, reason, returnUrl, o
                 <div className="w-10 h-10 rounded-full bg-primary-container/20 flex items-center justify-center">
                   <Icon name="lock" size={20} className="text-primary-container" />
                 </div>
-                <h3 className="text-lg font-bold text-on-surface">需要登录</h3>
+                <h3 className="text-lg font-bold text-on-surface">{t('protected.loginTitle')}</h3>
               </div>
-              <p className="text-sm text-on-surface-variant mb-5">{reason}需要先登录账号，是否前往登录？</p>
+              <p className="text-sm text-on-surface-variant mb-5">
+                {t('protected.loginConfirmDescription', { reason })}
+              </p>
               <div className="flex gap-3">
                 <button
                   onClick={onClose}
                   className="flex-1 py-2.5 text-sm text-on-surface-variant border border-outline-variant/30 rounded-lg hover:bg-surface-container-highest transition-colors"
                 >
-                  取消
+                  {t('common.cancel')}
                 </button>
                 <button
                   onClick={() => void handleLogin()}
                   className="flex-1 py-2.5 text-sm font-medium text-on-primary bg-primary-container rounded-lg hover:opacity-90 transition-opacity"
                 >
-                  前往登录
+                  {t('protected.goLogin')}
                 </button>
               </div>
             </motion.div>

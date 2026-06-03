@@ -1,6 +1,7 @@
 import { motion, AnimatePresence } from 'framer-motion';
 import { createContext, useContext, useState, useCallback, useEffect, useRef, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
+import { i18n } from '../../i18n';
 import { notifyGlobalError, setGlobalErrorNotifier } from '../../lib/errorNotifications';
 import { toastMotion } from '../../lib/motion';
 import Icon from './Icon';
@@ -45,11 +46,11 @@ export function ToastProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     const handleError = (event: ErrorEvent) => {
-      notifyGlobalError(event.error || event.message, '页面运行出错，请刷新后重试');
+      notifyGlobalError(event.error || event.message, i18n.t('toast.runtimeError'));
     };
 
     const handleUnhandledRejection = (event: PromiseRejectionEvent) => {
-      notifyGlobalError(event.reason, '操作失败，请稍后重试');
+      notifyGlobalError(event.reason, i18n.t('toast.operationFailed'));
     };
 
     window.addEventListener('error', handleError);

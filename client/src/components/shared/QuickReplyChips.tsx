@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import Icon from './Icon';
 
 type QuickReplyChipsProps = {
@@ -8,9 +9,11 @@ type QuickReplyChipsProps = {
   title?: string;
 };
 
-export default function QuickReplyChips({ phrases, onPick, className = '', title = '快捷词' }: QuickReplyChipsProps) {
+export default function QuickReplyChips({ phrases, onPick, className = '', title }: QuickReplyChipsProps) {
+  const { t } = useTranslation();
   const [open, setOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
+  const visibleTitle = title ?? t('quickReply.title');
 
   useEffect(() => {
     if (!open) return;
@@ -40,7 +43,7 @@ export default function QuickReplyChips({ phrases, onPick, className = '', title
         className={`grid h-9 w-9 place-items-center rounded-lg border border-outline-variant/20 text-on-surface-variant transition-colors hover:border-primary-container/25 hover:bg-primary-container/8 hover:text-primary-container md:h-10 md:w-10 ${
           open ? 'border-primary-container/30 bg-primary-container/10 text-primary-container' : ''
         }`}
-        aria-label={title}
+        aria-label={visibleTitle}
         aria-expanded={open}
       >
         <Icon name="quick_reply" size={17} />
@@ -48,7 +51,7 @@ export default function QuickReplyChips({ phrases, onPick, className = '', title
       {open ? (
         <div className="absolute bottom-full left-0 z-50 mb-2 w-[min(20rem,calc(100vw-1.5rem))] overflow-hidden rounded-xl border border-outline-variant/15 bg-surface-container-lowest shadow-lg">
           <div className="border-b border-outline-variant/10 px-3 py-2 text-xs font-semibold text-on-surface">
-            {title}
+            {visibleTitle}
           </div>
           <div className="max-h-64 overflow-y-auto p-1.5 scrollbar-hidden">
             {phrases.map((phrase) => (

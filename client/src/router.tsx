@@ -1,4 +1,5 @@
 import { lazy, Suspense, useEffect, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Routes, Route, Link, useLocation, Navigate, useNavigate } from 'react-router-dom';
 import { AdminLayout, AdminPageShell, PublicLayout } from './components/shared/AdminPageShell';
 import AuthModal from './components/shared/AuthModal';
@@ -153,6 +154,7 @@ function ProtectedAccessState({
 // Protected pages — check auth BEFORE rendering
 // so redirect to login is instant (no exit animation delay)
 function ProtectedPage({ children, requiredRole }: { children: React.ReactNode; requiredRole?: string }) {
+  const { t } = useTranslation();
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
   const user = useAuthStore((s) => s.user);
   const hasHydrated = useAuthStore((s) => s.hasHydrated);
@@ -186,14 +188,14 @@ function ProtectedPage({ children, requiredRole }: { children: React.ReactNode; 
       return (
         <ProtectedAccessState
           icon="lock"
-          title="需要登录"
-          description={`${access.reason}需要先登录账号。登录后会回到当前页面继续操作。`}
+          title={t('protected.loginTitle')}
+          description={t('protected.loginDescription', { reason: access.reason })}
           secondary={
             <Link
               to="/"
               className="inline-flex h-9 items-center justify-center rounded-sm border border-outline-variant/30 px-4 text-sm font-medium text-on-surface-variant transition-colors hover:bg-surface-container-high hover:text-on-surface"
             >
-              返回模型库
+              {t('protected.backToModels')}
             </Link>
           }
           primary={
@@ -215,7 +217,7 @@ function ProtectedPage({ children, requiredRole }: { children: React.ReactNode; 
                 }}
                 className="inline-flex h-9 items-center justify-center rounded-sm bg-primary-container px-4 text-sm font-bold text-on-primary transition-opacity hover:opacity-90 active:scale-[0.98]"
               >
-                前往登录
+                {t('protected.goLogin')}
               </button>
               {authDialogOpen ? (
                 <AuthModal open={authDialogOpen} onClose={() => setAuthDialogOpen(false)} returnUrl={returnUrl} />
@@ -234,14 +236,14 @@ function ProtectedPage({ children, requiredRole }: { children: React.ReactNode; 
     return (
       <ProtectedAccessState
         icon="admin_panel_settings"
-        title="权限不足"
-        description="当前账号没有访问这个管理页面的权限。请切换管理员账号，或返回模型库继续浏览。"
+        title={t('protected.permissionTitle')}
+        description={t('protected.permissionDescription')}
         primary={
           <Link
             to="/"
             className="inline-flex h-9 items-center justify-center rounded-sm bg-primary-container px-4 text-sm font-bold text-on-primary transition-opacity hover:opacity-90 active:scale-[0.98]"
           >
-            返回模型库
+            {t('protected.backToModels')}
           </Link>
         }
       />
@@ -267,6 +269,7 @@ function ScrollPage({ children }: { children: React.ReactNode }) {
 }
 
 function NotFoundPage() {
+  const { t } = useTranslation();
   const { settings } = usePublicSettings();
   const isDesktop = useMediaQuery('(min-width: 768px)');
   const resolvedPublicTheme = useResolvedPublicInterfaceTheme(settings, isDesktop);
@@ -279,13 +282,13 @@ function NotFoundPage() {
       title={
         <>
           <Icon name="search_off" size={56} className="mx-auto text-on-surface-variant/50" />
-          <h1 className="mt-4 text-2xl font-headline font-bold text-on-surface">页面不存在</h1>
+          <h1 className="mt-4 text-2xl font-headline font-bold text-on-surface">{t('notFound.title')}</h1>
         </>
       }
-      description={<p className="text-sm text-on-surface-variant">您访问的页面可能已被移除或暂时不可用</p>}
+      description={<p className="text-sm text-on-surface-variant">{t('notFound.description')}</p>}
       homeLink={
         <Link to="/" className="text-primary-container hover:underline">
-          返回首页
+          {t('notFound.home')}
         </Link>
       }
     />

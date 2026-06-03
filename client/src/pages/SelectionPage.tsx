@@ -1,5 +1,6 @@
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
 import { startTransition, useState, useCallback, useMemo, useEffect, useLayoutEffect, useRef } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import useSWR from 'swr';
 import {
@@ -24,8 +25,6 @@ import {
   getInquiryCartItemTitle,
   getInquiryCartItemSummary,
   applyManualSpecs,
-  formatModelCount,
-  formatOptionCount,
   stableJson,
   useDebouncedValue,
   selectionMotion,
@@ -63,10 +62,11 @@ import { useAuthStore } from '../stores/useAuthStore';
 /* ══════════════ Main Page ══════════════ */
 
 export default function SelectionPage() {
+  const { t } = useTranslation();
   const { settings: settingsData } = usePublicSettings();
   const business = getBusinessConfig(settingsData);
-  const pageTitle = (settingsData?.selection_page_title as string) || '产品选型';
-  const pageDesc = (settingsData?.selection_page_desc as string) || '先选产品大类，再按参数逐步缩小范围';
+  const pageTitle = String(settingsData?.selection_page_title || '').trim() || t('selectionPage.title');
+  const pageDesc = String(settingsData?.selection_page_desc || '').trim() || t('selectionPage.description');
   useDocumentTitle(pageTitle);
   const isCategoryTablet = useMediaQuery('(min-width: 640px)');
   const isCategoryWide = useMediaQuery('(min-width: 1280px)');
@@ -384,10 +384,10 @@ export default function SelectionPage() {
   }, [columns, curField, options.length]);
   const currentStepOptionCountText =
     currentStepOptionCount === null
-      ? '手动输入'
+      ? t('selectionPage.manualInput')
       : filterBusy && !isPresetColumn(columns.find((c) => c.key === curField))
-        ? '匹配中'
-        : formatOptionCount(currentStepOptionCount);
+        ? t('selectionPage.matching')
+        : t('selectionPage.optionCount', { count: currentStepOptionCount.toLocaleString() });
 
   const visibleFiltered = filtered;
   const remainingResultCount = Math.max(filteredTotal - visibleFiltered.length, 0);
@@ -412,6 +412,13 @@ export default function SelectionPage() {
       return { ...product, matchedModelId: matched.id, matchedModelThumbnail: matched.thumbnailUrl };
     },
     [modelMatchMap],
+  );
+  const applyVisibleManualSpecs = useCallback(
+    (product: SelectionProduct) =>
+      applyManualSpecs(withVisibleMatch(product), columns, specs, {
+        formatGeneratedOutletName: (routeIndex) => t('selectionResult.generatedOutlet', { index: routeIndex }),
+      }),
+    [columns, specs, t, withVisibleMatch],
   );
   /* auto-scroll ref */
   const curStepRef = useRef<HTMLDivElement>(null);
@@ -763,12 +770,12 @@ export default function SelectionPage() {
     (product: SelectionProduct) => {
       const result = inquiryCart.toggleProduct(product);
       if (result.limitReached) {
-        toast(`单个询价单最多包含 ${inquiryCart.limit} 个产品`, 'error');
+        toast(t('selectionPage.cart.limitReached', { limit: inquiryCart.limit }), 'error');
       } else if (result.added) {
-        toast('已加入询价清单', 'success');
+        toast(t('selectionPage.cart.added'), 'success');
       }
     },
-    [inquiryCart, toast],
+    [inquiryCart, t, toast],
   );
   const toggleKit = useCallback(
     (id: string) =>
@@ -801,7 +808,7 @@ export default function SelectionPage() {
       {
         title,
         description,
-        copiedMessage = '分享链接已复制到剪贴板',
+        copiedMessage = t('selectionPage.share.copied'),
         showDialogFirst = false,
       }: {
         title: string;
@@ -812,7 +819,7 @@ export default function SelectionPage() {
     ) => {
       if (showDialogFirst) {
         setShareLinkDialog({ title, description, url });
-        toast('分享链接已创建', 'success');
+        toast(t('selectionPage.share.created'), 'success');
         return true;
       }
       try {
@@ -822,24 +829,24 @@ export default function SelectionPage() {
       } catch (error) {
         if (import.meta.env.DEV) console.warn('[Share] Copy failed:', error);
         setShareLinkDialog({ title, description, url });
-        toast('分享链接已创建，请点击复制链接', 'info');
+        toast(t('selectionPage.share.createdCopyManually'), 'info');
         return false;
       }
     },
-    [toast],
+    [t, toast],
   );
 
   const handleCopyShareDialogLink = useCallback(async () => {
     if (!shareLinkDialog) return;
     try {
       await copyText(shareLinkDialog.url);
-      toast('分享链接已复制到剪贴板', 'success');
+      toast(t('selectionPage.share.copied'), 'success');
       setShareLinkDialog(null);
     } catch (error) {
       if (import.meta.env.DEV) console.warn('[Share] Manual copy failed:', error);
-      toast('复制仍失败，请长按链接手动复制', 'error');
+      toast(t('selectionPage.share.copyFailedManual'), 'error');
     }
-  }, [shareLinkDialog, toast]);
+  }, [shareLinkDialog, t, toast]);
 
   const handleNativeShareDialogLink = useCallback(async () => {
     if (!shareLinkDialog || typeof navigator === 'undefined' || typeof navigator.share !== 'function') return;
@@ -857,18 +864,18 @@ export default function SelectionPage() {
       const errorName = (error as { name?: string })?.name;
       if (errorName === 'AbortError' || errorName === 'InvalidStateError') return;
       if (import.meta.env.DEV) console.warn('[Share] Native share failed:', error);
-      toast('系统分享未完成，请长按链接手动复制', 'error');
+      toast(t('selectionPage.share.nativeShareFailed'), 'error');
     } finally {
       nativeSharePendingRef.current = false;
       setNativeSharePending(false);
     }
-  }, [shareLinkDialog, toast]);
+  }, [shareLinkDialog, t, toast]);
 
   async function handleShare(withResults = false) {
     if (!slug) return;
     if (sharingTarget) return;
     if (!user) {
-      requireLogin('分享选型');
+      requireLogin(t('selectionPage.share.loginReason'));
       return;
     }
     setSharingTarget(withResults ? 'result' : 'category');
@@ -894,8 +901,8 @@ export default function SelectionPage() {
       const result = await createSelectionShare(payload);
       const url = `${window.location.origin}/selection/s/${result.token}`;
       await copyShareLink(url, {
-        title: withResults ? '结果分享链接已创建' : '分类分享链接已创建',
-        description: '链接已经生成，点击下面的复制链接即可复制；也可以使用系统分享。',
+        title: withResults ? t('selectionPage.share.resultTitle') : t('selectionPage.share.categoryTitle'),
+        description: t('selectionPage.share.description'),
         showDialogFirst: !isDesktop,
       });
     } catch (err: unknown) {
@@ -903,8 +910,8 @@ export default function SelectionPage() {
       const resp = typeof err === 'object' && err !== null ? (err as Record<string, unknown>).response : undefined;
       const data = typeof resp === 'object' && resp !== null ? (resp as Record<string, unknown>).data : undefined;
       const apiMsg = typeof data === 'object' && data !== null ? (data as Record<string, unknown>).message : undefined;
-      const errMsg = err instanceof Error ? err.message : '未知错误';
-      toast(`分享失败: ${apiMsg || errMsg}`, 'error');
+      const errMsg = err instanceof Error ? err.message : t('selectionPage.unknownError');
+      toast(t('selectionPage.share.failed', { message: apiMsg || errMsg }), 'error');
     } finally {
       setSharingTarget(null);
     }
@@ -969,8 +976,8 @@ export default function SelectionPage() {
   const categoryCountText = categoryStatsUnavailable ? '—' : cats.length;
   const totalProductCountText = categoryStatsUnavailable ? '—' : totalProductCount;
   const selectionStatItems = [
-    { label: '产品分类', value: categoryCountText, icon: 'account_tree' },
-    { label: '型号', value: totalProductCountText, icon: 'inventory_2' },
+    { label: t('selectionPage.stats.categories'), value: categoryCountText, icon: 'account_tree' },
+    { label: t('selectionPage.stats.models'), value: totalProductCountText, icon: 'inventory_2' },
   ];
   const topCategoryItems = useMemo(() => {
     const groupItems = groups.map((g) => {
@@ -983,7 +990,7 @@ export default function SelectionPage() {
         image: groupImage,
         icon: g.icon,
         name: g.name,
-        description: `${g.children.length} 个分类`,
+        description: t('selectionPage.categoryGroupCount', { count: g.children.length }),
         previewSeed: g.id,
         onClick: () => pickGroup(g.id),
       };
@@ -996,12 +1003,12 @@ export default function SelectionPage() {
       image: c.image,
       icon: c.icon,
       name: c.name,
-      description: formatModelCount(c.productCount ?? 0),
+      description: t('selectionPage.modelCount', { count: (c.productCount ?? 0).toLocaleString() }),
       previewSeed: c.slug,
       onClick: () => pickSub(c.slug),
     }));
     return [...groupItems, ...categoryItems].sort((a, b) => a.sortOrder - b.sortOrder);
-  }, [catBySlug, groups, pickGroup, pickSub, pressedCategoryKey, standaloneCats]);
+  }, [catBySlug, groups, pickGroup, pickSub, pressedCategoryKey, standaloneCats, t]);
   const subCategoryItems = useMemo(() => {
     if (!group) return [];
     return group.children
@@ -1015,13 +1022,15 @@ export default function SelectionPage() {
           image: childCat?.image,
           icon: childCat?.icon || ch.icon,
           name: childCat?.name || ch.name,
-          description: childCat ? formatModelCount(childCat.productCount ?? 0) : '待配置型号',
+          description: childCat
+            ? t('selectionPage.modelCount', { count: (childCat.productCount ?? 0).toLocaleString() })
+            : t('selectionPage.modelPending'),
           previewSeed: ch.slug,
           onClick: () => pickSub(ch.slug),
         };
       })
       .sort((a, b) => a.sortOrder - b.sortOrder);
-  }, [catBySlug, group, pickSub, pressedCategoryKey]);
+  }, [catBySlug, group, pickSub, pressedCategoryKey, t]);
   const categoryColumns = isDesktop ? (isCategoryUltraWide ? 4 : isCategoryWide ? 3 : isCategoryTablet ? 2 : 1) : 1;
   const categoryTitleClass = 'block truncate text-sm font-semibold leading-5 text-on-surface md:text-base';
   const categoryDescriptionClass = 'mt-0.5 block truncate text-xs leading-4 text-on-surface-variant';
@@ -1102,15 +1111,15 @@ export default function SelectionPage() {
   const categoryStatusContent =
     categoriesLoading && cats.length === 0 ? (
       <div className="flex min-h-[260px]">
-        <PageRefreshIndicator label="分类刷新中" />
+        <PageRefreshIndicator label={t('selectionPage.categories.refreshing')} />
       </div>
     ) : categoriesError && cats.length === 0 ? (
       <div className="text-center py-12">
         <Icon name="error" size={36} className="mx-auto mb-2 text-error/45" />
-        <p className="text-sm font-medium text-on-surface">分类加载失败</p>
-        <p className="mt-1 text-xs text-on-surface-variant">请稍后重试，或检查服务是否被限流</p>
+        <p className="text-sm font-medium text-on-surface">{t('selectionPage.categories.loadFailed')}</p>
+        <p className="mt-1 text-xs text-on-surface-variant">{t('selectionPage.categories.loadFailedDescription')}</p>
         <button onClick={() => void retryCategories()} className="mt-3 text-sm text-primary-container hover:underline">
-          重试
+          {t('selectionPage.retry')}
         </button>
       </div>
     ) : null;
@@ -1122,7 +1131,7 @@ export default function SelectionPage() {
       {!categoryStatusContent && groups.length === 0 && standaloneCats.length === 0 && (
         <div className="text-center py-10">
           <Icon name="inventory_2" size={40} className="mx-auto mb-3 text-on-surface-variant/20" />
-          <p className="text-sm text-on-surface-variant">暂无可选分类</p>
+          <p className="text-sm text-on-surface-variant">{t('selectionPage.categories.empty')}</p>
         </div>
       )}
     </div>
@@ -1132,19 +1141,19 @@ export default function SelectionPage() {
   async function handleShareSub(chSlug: string) {
     if (sharingTarget) return;
     if (!user) {
-      requireLogin('分享选型');
+      requireLogin(t('selectionPage.share.loginReason'));
       return;
     }
     setSharingTarget('sub');
     try {
       const url = `${window.location.origin}/selection?g=${encodeURIComponent(chSlug)}`;
       await copyShareLink(url, {
-        title: '分类链接已生成',
-        description: '链接已经生成，点击下面的复制链接即可复制；也可以使用系统分享。',
+        title: t('selectionPage.share.categoryGeneratedTitle'),
+        description: t('selectionPage.share.description'),
       });
     } catch (error) {
       if (import.meta.env.DEV) console.warn('[Share] Subcategory link failed:', error);
-      toast('生成分享链接失败', 'error');
+      toast(t('selectionPage.share.createFailed'), 'error');
     } finally {
       setSharingTarget(null);
     }
@@ -1213,7 +1222,7 @@ export default function SelectionPage() {
             </span>
             {isAutoSelected ? (
               <span className="ml-auto shrink-0 rounded-full bg-surface-container-high px-2 py-0.5 text-[10px] font-medium text-on-surface-variant/45">
-                自动
+                {t('selectionPage.autoSelected')}
               </span>
             ) : (
               <Icon name="close" size={12} className="ml-auto shrink-0 text-on-surface-variant/30" />
@@ -1236,7 +1245,7 @@ export default function SelectionPage() {
               <Icon name="remove" size={10} className="text-on-surface-variant/30" />
             </div>
             <span className="text-xs sm:text-sm text-on-surface-variant/30 line-through">{fieldLabel}</span>
-            <span className="text-[10px] text-on-surface-variant/20 ml-1">不适用</span>
+            <span className="text-[10px] text-on-surface-variant/20 ml-1">{t('selectionPage.notApplicable')}</span>
           </div>
           {hasMore && <div className="w-px h-2 bg-on-surface-variant/5 ml-5 md:ml-6" />}
         </div>
@@ -1253,7 +1262,9 @@ export default function SelectionPage() {
                   <div className="w-6 h-6 md:w-7 md:h-7 rounded-full bg-primary-container text-on-primary flex items-center justify-center text-xs font-bold shrink-0">
                     {i + 1}
                   </div>
-                  <h3 className="text-sm sm:text-base font-bold text-on-surface">选择{fieldLabel}</h3>
+                  <h3 className="text-sm sm:text-base font-bold text-on-surface">
+                    {t('selectionPage.chooseField', { field: fieldLabel })}
+                  </h3>
                 </div>
                 <span className="text-xs text-on-surface-variant bg-surface-container-high px-2.5 py-1 rounded-full shrink-0">
                   {currentStepOptionCountText}
@@ -1273,7 +1284,7 @@ export default function SelectionPage() {
                       <input
                         value={manualDrafts[field] ?? specs[field] ?? ''}
                         onChange={(e) => setManualDrafts((prev) => ({ ...prev, [field]: e.target.value }))}
-                        placeholder={colDef?.placeholder || `请填写${fieldLabel}`}
+                        placeholder={colDef?.placeholder || t('selectionPage.manualPlaceholder', { field: fieldLabel })}
                         className="w-full rounded-xl border border-outline-variant/20 bg-surface-container px-3 sm:px-4 py-2.5 pr-12 text-sm text-on-surface outline-none focus:border-primary-container transition-colors"
                       />
                       {colDef?.suffix && (
@@ -1287,12 +1298,10 @@ export default function SelectionPage() {
                       disabled={!String(manualDrafts[field] ?? specs[field] ?? '').trim()}
                       className="rounded-xl bg-primary-container px-4 py-2.5 text-sm font-bold text-on-primary disabled:opacity-40"
                     >
-                      确认
+                      {t('common.confirm')}
                     </button>
                   </div>
-                  <p className="text-xs text-on-surface-variant">
-                    定制值不参与固定库存筛选，提交询价时会写入规格并替换型号占位符。
-                  </p>
+                  <p className="text-xs text-on-surface-variant">{t('selectionPage.manualNote')}</p>
                 </form>
               ) : isPreset ? (
                 <div className="flex flex-wrap gap-2">
@@ -1317,7 +1326,7 @@ export default function SelectionPage() {
                   })}
                 </div>
               ) : shouldShowFilterLoading ? (
-                <SelectionInlineLoading label="正在匹配可选项" />
+                <SelectionInlineLoading label={t('selectionPage.loadingOptions')} />
               ) : options.length > 0 ? (
                 (() => {
                   const fieldImages = liveCat?.optionImages?.[field];
@@ -1406,19 +1415,19 @@ export default function SelectionPage() {
               ) : (
                 <div className="text-center py-6">
                   <p className="text-sm text-on-surface-variant">
-                    {colDef?.required === true ? `必填字段“${fieldLabel}”缺少可选数据` : '当前条件下没有可选项'}
+                    {colDef?.required === true
+                      ? t('selectionPage.requiredMissingOptions', { field: fieldLabel })
+                      : t('selectionPage.noOptions')}
                   </p>
                   {colDef?.required === true ? (
-                    <p className="mt-1 text-xs text-on-surface-variant/70">
-                      当前匹配型号缺少这个字段，请回退修改条件或到后台补全数据。
-                    </p>
+                    <p className="mt-1 text-xs text-on-surface-variant/70">{t('selectionPage.requiredMissingHelp')}</p>
                   ) : null}
                   {specKeys.length > 0 ? (
                     <button
                       onClick={() => dropVal(specKeys[specKeys.length - 1])}
                       className="mt-2 text-sm text-primary-container hover:underline"
                     >
-                      回退上一步
+                      {t('selectionPage.backStep')}
                     </button>
                   ) : (
                     <button
@@ -1431,7 +1440,7 @@ export default function SelectionPage() {
                       }}
                       className="mt-2 text-sm text-primary-container hover:underline"
                     >
-                      返回选择其他分类
+                      {t('selectionPage.backToCategories')}
                     </button>
                   )}
                 </div>
@@ -1482,9 +1491,11 @@ export default function SelectionPage() {
         className={`flex items-center justify-between ${isMobileResultView ? 'pt-0' : 'mt-4 border-t border-outline-variant/15 pt-3'}`}
       >
         <div>
-          <h3 className="text-base font-bold text-on-surface">选型结果</h3>
+          <h3 className="text-base font-bold text-on-surface">{t('selectionPage.result.title')}</h3>
           <p className="text-sm text-on-surface-variant mt-0.5">
-            {filteredTotal > 0 ? `共匹配 ${formatModelCount(filteredTotal)}` : '暂无匹配型号'}
+            {filteredTotal > 0
+              ? t('selectionPage.result.matchedCount', { count: filteredTotal.toLocaleString() })
+              : t('selectionPage.result.noMatches')}
           </p>
         </div>
         <div className="flex items-center gap-3">
@@ -1495,7 +1506,7 @@ export default function SelectionPage() {
               className={`text-sm text-primary-container hover:underline shrink-0 inline-flex items-center gap-1 disabled:opacity-50 ${selectionPress}`}
             >
               <Icon name="share" size={14} />
-              {isResultSharePending ? '生成中...' : '生成结果链接'}
+              {isResultSharePending ? t('selectionPage.generatingEllipsis') : t('selectionPage.result.generateLink')}
             </button>
           )}
           {specKeys.length > 0 && (
@@ -1503,7 +1514,7 @@ export default function SelectionPage() {
               onClick={restart}
               className={`text-sm text-on-surface-variant hover:text-primary-container shrink-0 ${selectionPress}`}
             >
-              重新选择
+              {t('selectionPage.result.restart')}
             </button>
           )}
         </div>
@@ -1515,40 +1526,43 @@ export default function SelectionPage() {
               shouldOverlayFilterLoading ? 'pointer-events-none select-none opacity-45' : ''
             }`}
           >
-            {visibleFiltered.map((p) => (
-              <ResultCard
-                key={p.id}
-                product={applyManualSpecs(withVisibleMatch(p), columns, specs)}
-                columns={columns}
-                kitListTitle={getKitListTitle((liveCat?.optionOrder || null) as Record<string, unknown> | null, p)}
-                selected={selectedIds.has(p.id)}
-                onToggleSelect={() => toggleInquiryProduct(applyManualSpecs(withVisibleMatch(p), columns, specs))}
-                onToggleInquiry={() => toggleInquiryProduct(applyManualSpecs(withVisibleMatch(p), columns, specs))}
-                expandedKits={expandedKits}
-                onToggleKit={toggleKit}
-                navigate={navigate}
-                isMobile={!isDesktop}
-              />
-            ))}
+            {visibleFiltered.map((p) => {
+              const visibleProduct = applyVisibleManualSpecs(p);
+              return (
+                <ResultCard
+                  key={p.id}
+                  product={visibleProduct}
+                  columns={columns}
+                  kitListTitle={getKitListTitle((liveCat?.optionOrder || null) as Record<string, unknown> | null, p)}
+                  selected={selectedIds.has(p.id)}
+                  onToggleSelect={() => toggleInquiryProduct(visibleProduct)}
+                  onToggleInquiry={() => toggleInquiryProduct(visibleProduct)}
+                  expandedKits={expandedKits}
+                  onToggleKit={toggleKit}
+                  navigate={navigate}
+                  isMobile={!isDesktop}
+                />
+              );
+            })}
             {hasMoreResults && (
               <button
                 onClick={loadMoreResults}
                 className={`w-full rounded-xl border border-outline-variant/20 bg-surface-container px-4 py-2.5 text-sm font-medium text-on-surface-variant hover:border-primary-container/40 hover:text-primary-container ${selectionPress}`}
               >
-                继续加载（还剩 {remainingResultCount} 个）
+                {t('selectionPage.result.loadMore', { count: remainingResultCount.toLocaleString() })}
               </button>
             )}
           </div>
-          {shouldOverlayFilterLoading ? <SelectionLoadingOverlay label="正在整理选型结果" /> : null}
+          {shouldOverlayFilterLoading ? <SelectionLoadingOverlay label={t('selectionPage.result.arranging')} /> : null}
         </div>
       ) : shouldShowFilterLoading ? (
-        <SelectionInlineLoading label="正在整理选型结果" />
+        <SelectionInlineLoading label={t('selectionPage.result.arranging')} />
       ) : (
         <div className="text-center py-10">
           <Icon name="search_off" size={36} className="mx-auto mb-2 text-on-surface-variant/20" />
-          <p className="text-sm text-on-surface-variant">暂无匹配型号</p>
+          <p className="text-sm text-on-surface-variant">{t('selectionPage.result.noMatches')}</p>
           <button onClick={restart} className="mt-3 text-sm text-primary-container hover:underline">
-            重新选择
+            {t('selectionPage.result.restart')}
           </button>
         </div>
       )}
@@ -1559,14 +1573,14 @@ export default function SelectionPage() {
   const wizardContent = filterError ? (
     <div className="text-center py-16 px-4">
       <Icon name="error" size={40} className="mx-auto mb-3 text-error/50" />
-      <p className="text-sm font-medium text-on-surface">选型数据加载失败</p>
-      <p className="mt-1 text-xs text-on-surface-variant">选型接口暂时不可用，请稍后重试</p>
+      <p className="text-sm font-medium text-on-surface">{t('selectionPage.state.loadFailed')}</p>
+      <p className="mt-1 text-xs text-on-surface-variant">{t('selectionPage.state.apiUnavailable')}</p>
       <div className="mt-4 flex items-center justify-center gap-3">
         <button
           onClick={() => retryFilter()}
           className="rounded-lg bg-primary-container px-4 py-2 text-sm font-bold text-on-primary hover:opacity-90"
         >
-          重试
+          {t('selectionPage.retry')}
         </button>
         <button
           onClick={() => {
@@ -1578,14 +1592,14 @@ export default function SelectionPage() {
           }}
           className="rounded-lg border border-outline-variant/30 px-4 py-2 text-sm text-on-surface-variant hover:bg-surface-container-high/50"
         >
-          返回分类列表
+          {t('selectionPage.backToCategories')}
         </button>
       </div>
     </div>
   ) : !liveCat || (!search && specKeys.length === 0 && categoryProductCount === 0) ? (
     <div className="text-center py-16">
       <Icon name="inventory_2" size={40} className="mx-auto mb-3 text-on-surface-variant/20" />
-      <p className="text-sm text-on-surface">当前分类暂无型号数据</p>
+      <p className="text-sm text-on-surface">{t('selectionPage.state.categoryEmpty')}</p>
       <button
         onClick={() => {
           setSlug(null);
@@ -1596,7 +1610,7 @@ export default function SelectionPage() {
         }}
         className="mt-3 text-sm text-primary-container hover:underline"
       >
-        选择其他分类
+        {t('selectionPage.state.chooseOtherCategory')}
       </button>
       {user?.role === 'ADMIN' && (
         <Link
@@ -1604,7 +1618,7 @@ export default function SelectionPage() {
           className="mt-3 ml-4 inline-flex items-center gap-1 text-xs text-primary-container hover:underline"
         >
           <Icon name="tune" size={14} />
-          前往管理
+          {t('selectionPage.state.goManage')}
         </Link>
       )}
     </div>
@@ -1618,38 +1632,43 @@ export default function SelectionPage() {
               shouldOverlayFilterLoading ? 'pointer-events-none select-none opacity-45' : ''
             }`}
           >
-            {visibleFiltered.map((p) => (
-              <ResultCard
-                key={p.id}
-                product={applyManualSpecs(withVisibleMatch(p), columns, specs)}
-                columns={columns}
-                kitListTitle={getKitListTitle((liveCat?.optionOrder || null) as Record<string, unknown> | null, p)}
-                selected={selectedIds.has(p.id)}
-                onToggleSelect={() => toggleInquiryProduct(applyManualSpecs(withVisibleMatch(p), columns, specs))}
-                onToggleInquiry={() => toggleInquiryProduct(applyManualSpecs(withVisibleMatch(p), columns, specs))}
-                expandedKits={expandedKits}
-                onToggleKit={toggleKit}
-                navigate={navigate}
-                isMobile={!isDesktop}
-              />
-            ))}
+            {visibleFiltered.map((p) => {
+              const visibleProduct = applyVisibleManualSpecs(p);
+              return (
+                <ResultCard
+                  key={p.id}
+                  product={visibleProduct}
+                  columns={columns}
+                  kitListTitle={getKitListTitle((liveCat?.optionOrder || null) as Record<string, unknown> | null, p)}
+                  selected={selectedIds.has(p.id)}
+                  onToggleSelect={() => toggleInquiryProduct(visibleProduct)}
+                  onToggleInquiry={() => toggleInquiryProduct(visibleProduct)}
+                  expandedKits={expandedKits}
+                  onToggleKit={toggleKit}
+                  navigate={navigate}
+                  isMobile={!isDesktop}
+                />
+              );
+            })}
             {hasMoreResults && (
               <button
                 onClick={loadMoreResults}
                 className={`w-full rounded-xl border border-outline-variant/20 bg-surface-container px-4 py-2.5 text-sm font-medium text-on-surface-variant hover:border-primary-container/40 hover:text-primary-container ${selectionPress}`}
               >
-                继续加载（还剩 {remainingResultCount} 个）
+                {t('selectionPage.result.loadMore', { count: remainingResultCount.toLocaleString() })}
               </button>
             )}
           </div>
-          {shouldOverlayFilterLoading ? <SelectionLoadingOverlay label="正在匹配搜索结果" /> : null}
+          {shouldOverlayFilterLoading ? (
+            <SelectionLoadingOverlay label={t('selectionPage.result.matchingSearch')} />
+          ) : null}
         </div>
       ) : shouldShowFilterLoading ? (
-        <SelectionInlineLoading label="正在匹配搜索结果" />
+        <SelectionInlineLoading label={t('selectionPage.result.matchingSearch')} />
       ) : (
         <div className="text-center py-12">
           <Icon name="search_off" size={36} className="mx-auto mb-2 text-on-surface-variant/20" />
-          <p className="text-sm text-on-surface-variant">没有找到匹配型号</p>
+          <p className="text-sm text-on-surface-variant">{t('selectionPage.result.noSearchMatches')}</p>
         </div>
       )}
     </div>
@@ -1692,8 +1711,10 @@ export default function SelectionPage() {
           >
             <div className="flex items-center justify-between gap-3 border-b border-outline-variant/10 px-3 py-2.5 md:py-2">
               <div className="min-w-0">
-                <p className="text-sm font-bold text-on-surface">询价清单</p>
-                <p className="text-xs text-on-surface-variant">已加入 {inquiryCart.items.length} 项</p>
+                <p className="text-sm font-bold text-on-surface">{t('selectionPage.inquiryCart.title')}</p>
+                <p className="text-xs text-on-surface-variant">
+                  {t('selectionPage.inquiryCart.addedCount', { count: inquiryCart.items.length })}
+                </p>
               </div>
               <div className="flex shrink-0 items-center gap-1.5">
                 {!isDesktop ? (
@@ -1701,20 +1722,20 @@ export default function SelectionPage() {
                     onClick={inquiryCart.clear}
                     className={`px-2 py-1.5 text-xs font-medium text-on-surface-variant hover:text-on-surface ${selectionPress}`}
                   >
-                    清空
+                    {t('selectionPage.inquiryCart.clear')}
                   </button>
                 ) : null}
                 <Link
                   to="/my-inquiries"
                   className={`shrink-0 px-2 py-1.5 text-xs font-medium text-on-surface-variant hover:text-on-surface ${selectionPress}`}
                 >
-                  {isDesktop ? '编辑清单' : '编辑'}
+                  {isDesktop ? t('selectionPage.inquiryCart.editList') : t('selectionPage.inquiryCart.edit')}
                 </Link>
               </div>
             </div>
             <div className="max-h-[calc(58dvh-56px)] divide-y divide-outline-variant/10 overflow-y-auto px-2 py-1 md:max-h-[300px]">
               {inquiryCart.items.map((item) => {
-                const summary = getInquiryCartItemSummary(item);
+                const summary = getInquiryCartItemSummary(item, t('selectionPage.inquiryCart.remarkLabel'));
                 return (
                   <div
                     key={item.id}
@@ -1723,15 +1744,17 @@ export default function SelectionPage() {
                     <div className="min-w-0 flex-1">
                       <p className="truncate text-sm font-medium text-on-surface">{getInquiryCartItemTitle(item)}</p>
                       <p className="mt-0.5 truncate text-xs text-on-surface-variant">
-                        数量 {item.qty}
-                        {item.unit || '个'}
+                        {t('selectionPage.inquiryCart.quantity', {
+                          qty: item.qty,
+                          unit: item.unit || t('selectionPage.inquiryCart.unitEach'),
+                        })}
                         {summary ? ` · ${summary}` : ''}
                       </p>
                     </div>
                     <button
                       onClick={() => inquiryCart.removeItem(item.id)}
                       className={`inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface ${selectionPress}`}
-                      aria-label="移出询价清单"
+                      aria-label={t('selectionPage.inquiryCart.removeAria')}
                     >
                       <Icon name="close" size={16} />
                     </button>
@@ -1763,9 +1786,11 @@ export default function SelectionPage() {
             >
               <Icon name="request_quote" size={16} />
             </span>
-            <span className="min-w-0 truncate leading-none">待询价</span>
+            <span className="min-w-0 truncate leading-none">{t('selectionPage.inquiryCart.pending')}</span>
             <span className="shrink-0 text-xs font-semibold leading-none text-primary-container tabular-nums">
-              {inquiryCart.items.length > 99 ? '99+' : `${inquiryCart.items.length}项`}
+              {inquiryCart.items.length > 99
+                ? '99+'
+                : t('selectionPage.inquiryCart.pendingCount', { count: inquiryCart.items.length })}
             </span>
             <Icon
               name={cartPreviewOpen ? 'chevrons_down' : 'chevrons_up'}
@@ -1775,7 +1800,9 @@ export default function SelectionPage() {
           </span>
         ) : (
           <span className="inline-flex min-w-0 items-center gap-1.5">
-            待询价 <strong className="text-on-surface">{inquiryCart.items.length}</strong> 项
+            {t('selectionPage.inquiryCart.pending')}{' '}
+            <strong className="text-on-surface">{inquiryCart.items.length}</strong>{' '}
+            {t('selectionPage.inquiryCart.itemUnit')}
           </span>
         )}
         {isDesktop ? (
@@ -1791,9 +1818,9 @@ export default function SelectionPage() {
           <button
             onClick={inquiryCart.clear}
             className={`rounded-lg px-2.5 py-1.5 text-xs text-on-surface-variant hover:bg-surface-container-high ${selectionPress}`}
-            aria-label="清空询价清单"
+            aria-label={t('selectionPage.inquiryCart.clearAria')}
           >
-            清空
+            {t('selectionPage.inquiryCart.clear')}
           </button>
         ) : null}
         <Link
@@ -1804,12 +1831,12 @@ export default function SelectionPage() {
               : `inline-flex h-9 items-center justify-center rounded-lg px-2 text-center text-sm font-medium text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface ${selectionPress}`
           }
         >
-          {isDesktop ? '我的询价' : '清单'}
+          {isDesktop ? t('selectionPage.inquiryCart.myInquiries') : t('selectionPage.inquiryCart.list')}
         </Link>
         <button
           onClick={() => {
             if (!user) {
-              requireLogin('登录后可以提交询价清单');
+              requireLogin(t('selectionPage.inquiryCart.loginReason'));
               return;
             }
             setInquiryOpen(true);
@@ -1820,7 +1847,7 @@ export default function SelectionPage() {
               : `inline-flex h-9 items-center justify-center rounded-lg bg-primary-container px-2 text-sm font-bold text-on-primary hover:opacity-90 ${selectionPress}`
           }
         >
-          {isDesktop ? '提交询价' : '提交'}
+          {isDesktop ? t('selectionPage.inquiryCart.submitInquiry') : t('selectionPage.inquiryCart.submit')}
         </button>
       </div>
     </div>
@@ -1867,7 +1894,7 @@ export default function SelectionPage() {
         <>
           {liveCat && group ? (
             <>
-              <span className="shrink-0 text-on-surface">选择</span>
+              <span className="shrink-0 text-on-surface">{t('selectionPage.select')}</span>
               <button
                 onClick={goToGroupCategories}
                 className={`max-w-[6.25rem] truncate text-on-surface-variant hover:text-primary-container ${selectionPress}`}
@@ -1923,10 +1950,10 @@ export default function SelectionPage() {
     phase === 'group'
       ? pageDesc
       : phase === 'sub'
-        ? '先选择产品分类，再按参数逐步缩小范围'
+        ? t('selectionPage.intro.sub')
         : curField
-          ? `按参数列定义顺序筛选，当前可选 ${currentStepOptionCountText}`
-          : `已完成筛选，共匹配 ${formatModelCount(filteredTotal)}`;
+          ? t('selectionPage.intro.wizard', { count: currentStepOptionCountText })
+          : t('selectionPage.intro.completed', { count: filteredTotal.toLocaleString() });
 
   const mobileSelectedSummary =
     !isDesktop && phase === 'wizard' && specKeys.length > 0 && !search ? (
@@ -1962,7 +1989,7 @@ export default function SelectionPage() {
           }}
           className="shrink-0 border-l border-outline-variant/12 px-2 text-[10px] font-medium text-on-surface-variant transition-colors hover:text-primary-container"
         >
-          清空
+          {t('selectionPage.inquiryCart.clear')}
         </button>
       </div>
     ) : null;
@@ -1974,7 +2001,7 @@ export default function SelectionPage() {
     phase === 'group' ? (
       <div className="flex min-w-0 items-center gap-4 overflow-x-auto scrollbar-none text-xs text-on-surface-variant">
         <span className="flex shrink-0 items-center gap-1.5">
-          <span className="text-sm font-semibold text-on-surface">产品大类</span>
+          <span className="text-sm font-semibold text-on-surface">{t('selectionPage.stats.productGroups')}</span>
           <span className="rounded-full bg-primary-container/8 px-2 py-0.5 text-[10px] font-medium tabular-nums text-primary-container">
             {categoryGroupCountText}
           </span>
@@ -1992,14 +2019,14 @@ export default function SelectionPage() {
     ) : phase === 'sub' && group ? (
       <div className="flex min-w-0 items-center gap-4 overflow-x-auto scrollbar-none text-xs text-on-surface-variant">
         <span className="flex shrink-0 items-center gap-1.5">
-          <span className="text-sm font-semibold text-on-surface">产品分类</span>
+          <span className="text-sm font-semibold text-on-surface">{t('selectionPage.stats.categories')}</span>
           <span className="rounded-full bg-primary-container/8 px-2 py-0.5 text-[10px] font-medium tabular-nums text-primary-container">
             {group.children.length}
           </span>
         </span>
         <span className="h-3 w-px shrink-0 bg-outline-variant/15" />
         <span className="shrink-0">
-          型号{' '}
+          {t('selectionPage.stats.models')}{' '}
           <strong className="ml-0.5 tabular-nums text-sm font-semibold text-on-surface">
             {groupProductTotal.toLocaleString()}
           </strong>
@@ -2008,7 +2035,7 @@ export default function SelectionPage() {
     ) : phase === 'wizard' ? (
       <div className="flex min-w-0 items-center gap-1.5 overflow-x-auto scrollbar-none md:gap-2">
         <span className="shrink-0 whitespace-nowrap text-xs text-on-surface-variant tabular-nums">
-          已选 {specKeys.length}/{fields.length}
+          {t('selectionPage.selectedProgress', { selected: specKeys.length, total: fields.length })}
         </span>
         {specKeys.map((k) => {
           const autoSelected = autoSelectedFields.has(k);
@@ -2040,7 +2067,7 @@ export default function SelectionPage() {
             }}
             className={`hidden h-8 shrink-0 items-center rounded-full px-2.5 text-xs font-medium text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface md:inline-flex ${selectionPress}`}
           >
-            清空
+            {t('selectionPage.inquiryCart.clear')}
           </button>
         ) : null}
       </div>
@@ -2049,7 +2076,7 @@ export default function SelectionPage() {
   const handleToolbarShare = async () => {
     if (sharingTarget) return;
     if (!user) {
-      requireLogin('分享选型');
+      requireLogin(t('selectionPage.share.loginReason'));
       return;
     }
     if (phase === 'wizard' && liveCat) {
@@ -2063,14 +2090,15 @@ export default function SelectionPage() {
     setSharingTarget('entry');
     try {
       await copyShareLink(`${window.location.origin}/selection`, {
-        title: '选型入口链接',
-        description: '链接已经生成，点击下面的复制链接即可复制；也可以使用系统分享。',
+        title: t('selectionPage.share.entryTitle'),
+        description: t('selectionPage.share.description'),
       });
     } finally {
       setSharingTarget(null);
     }
   };
-  const toolbarShareLabel = phase === 'group' ? '生成大类链接' : '生成分类链接';
+  const toolbarShareLabel =
+    phase === 'group' ? t('selectionPage.share.groupLink') : t('selectionPage.share.categoryLink');
   const isToolbarSharePending =
     phase === 'wizard' ? isCategorySharePending : phase === 'sub' ? isSubSharePending : isEntrySharePending;
 
@@ -2087,7 +2115,7 @@ export default function SelectionPage() {
             inputProps={searchDraftInputProps}
             value={searchDraftInputValue}
             onClear={() => setSearchDraft('')}
-            placeholder="输入型号或名称"
+            placeholder={t('selectionPage.searchPlaceholder')}
             className={`min-w-[9.5rem] flex-1 sm:w-64 sm:flex-none ${selectionMotion}`}
           />
         ) : null}
@@ -2097,10 +2125,12 @@ export default function SelectionPage() {
             disabled={isToolbarSharePending}
             data-tooltip-ignore
             className={`inline-flex h-9 w-[7.25rem] shrink-0 items-center justify-center gap-1.5 px-3 text-xs font-bold text-on-surface-variant hover:text-on-surface disabled:opacity-50 ${selectionPress}`}
-            aria-label={isToolbarSharePending ? '生成中' : toolbarShareLabel}
+            aria-label={isToolbarSharePending ? t('selectionPage.generating') : toolbarShareLabel}
           >
             <Icon name="share" size={14} />
-            <span className="whitespace-nowrap">{isToolbarSharePending ? '生成中' : toolbarShareLabel}</span>
+            <span className="whitespace-nowrap">
+              {isToolbarSharePending ? t('selectionPage.generating') : toolbarShareLabel}
+            </span>
           </button>
         ) : null}
         {isDesktop && phase !== 'group' ? (
@@ -2108,18 +2138,18 @@ export default function SelectionPage() {
             onClick={goHome}
             data-tooltip-ignore
             className={`inline-flex h-8 w-8 items-center justify-center rounded-lg text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface md:h-9 md:w-auto md:gap-1.5 md:px-3 ${selectionPress}`}
-            aria-label="全部分类"
+            aria-label={t('selectionPage.allCategories')}
           >
             <Icon name="inventory_2" size={14} />
-            <span className="hidden text-xs font-bold md:inline">全部分类</span>
+            <span className="hidden text-xs font-bold md:inline">{t('selectionPage.allCategories')}</span>
           </button>
         ) : null}
         {!isDesktop && phase === 'wizard' ? (
           <span
             className="inline-flex h-8 shrink-0 items-center text-[11px] font-semibold text-primary-container tabular-nums"
-            aria-label={`已选 ${specKeys.length}/${fields.length}`}
+            aria-label={t('selectionPage.selectedProgressAria', { selected: specKeys.length, total: fields.length })}
           >
-            已选 {specKeys.length}/{fields.length}
+            {t('selectionPage.selectedProgress', { selected: specKeys.length, total: fields.length })}
           </span>
         ) : null}
       </div>
@@ -2144,7 +2174,7 @@ export default function SelectionPage() {
           disabled={isCategorySharePending}
           data-tooltip-ignore
           className={`inline-flex h-8 w-8 items-center justify-center rounded-lg text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface disabled:opacity-50 ${selectionPress}`}
-          aria-label={isCategorySharePending ? '生成中' : '生成分类链接'}
+          aria-label={isCategorySharePending ? t('selectionPage.generating') : t('selectionPage.share.categoryLink')}
         >
           <Icon name="share" size={15} />
         </button>
@@ -2152,7 +2182,7 @@ export default function SelectionPage() {
           onClick={goHome}
           data-tooltip-ignore
           className={`inline-flex h-8 w-8 items-center justify-center rounded-lg text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface ${selectionPress}`}
-          aria-label="全部分类"
+          aria-label={t('selectionPage.allCategories')}
         >
           <Icon name="inventory_2" size={15} />
         </button>

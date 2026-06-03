@@ -1,4 +1,5 @@
 import { motion } from 'framer-motion';
+import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router-dom';
 import { getModelDetailCopyright, getModelDetailDisclaimer } from '../../lib/publicSettings';
 import type { ModelSpec } from '../../types';
@@ -59,6 +60,7 @@ export function DesktopDetail({
   onOpenDrawing: (id: string) => void;
   onLoginDialog: (reason: string) => void;
 }) {
+  const { i18n, t } = useTranslation();
   return (
     <ModelDetailAsideFrame
       header={
@@ -67,7 +69,7 @@ export function DesktopDetail({
             <div>
               <div className="flex items-center gap-1.5 text-[11px] tracking-[0.05em] uppercase text-on-surface-variant mb-1.5">
                 <Link to="/" className="hover:text-primary transition-colors">
-                  模型库
+                  {t('modelDetail.categoryFallback')}
                 </Link>
                 {categoryBreadcrumb.map((cat, i) => (
                   <span key={`${cat.id || cat.name || 'category'}-${i}`} className="flex items-center gap-1.5">
@@ -88,8 +90,8 @@ export function DesktopDetail({
               <button
                 onClick={onEdit}
                 className="p-2 text-on-surface-variant hover:text-primary hover:bg-surface-container-high rounded-sm transition-colors border border-outline-variant/20 shrink-0"
-                aria-label="编辑模型"
-                data-tooltip="编辑模型"
+                aria-label={t('modelDetail.editModel')}
+                data-tooltip={t('modelDetail.editModel')}
                 data-tooltip-side="bottom"
               >
                 <Icon name="settings" size={20} />
@@ -102,13 +104,13 @@ export function DesktopDetail({
               className="flex-1 bg-primary-container text-on-primary rounded-sm py-2 px-4 text-sm font-medium hover:bg-primary transition-all active:scale-95 flex items-center justify-center gap-2"
             >
               <Icon name="download" size={18} />
-              下载模型
+              {t('modelDetail.downloadModel')}
             </button>
             <motion.button
               whileTap={{ scale: 0.9 }}
               onClick={onShare}
-              aria-label="分享"
-              data-tooltip="分享"
+              aria-label={t('common.share')}
+              data-tooltip={t('common.share')}
               data-tooltip-side="bottom"
               className="bg-surface-container-high border border-outline/40 hover:border-outline text-on-surface rounded-sm p-2 transition-all flex items-center justify-center"
             >
@@ -117,8 +119,8 @@ export function DesktopDetail({
             <motion.button
               whileTap={{ scale: 0.9 }}
               onClick={onToggleFav}
-              aria-label={isFav ? '取消收藏' : '收藏'}
-              data-tooltip={isFav ? '取消收藏' : '收藏'}
+              aria-label={isFav ? t('productCard.unfavorite') : t('productCard.favorite')}
+              data-tooltip={isFav ? t('productCard.unfavorite') : t('productCard.favorite')}
               data-tooltip-side="bottom"
               className={`bg-surface-container-high border ${isFav ? 'border-primary/50' : 'border-outline/40'} hover:border-outline text-on-surface rounded-sm p-2 transition-all flex items-center justify-center`}
             >
@@ -134,7 +136,7 @@ export function DesktopDetail({
       }
       specs={
         <>
-          <h3 className={MODEL_DETAIL_SECTION_TITLE_CLASS}>技术规格</h3>
+          <h3 className={MODEL_DETAIL_SECTION_TITLE_CLASS}>{t('modelDetail.techSpecs')}</h3>
           <div className={MODEL_DETAIL_SPEC_GRID_CLASS}>
             {modelData.specs.map((spec, index) => (
               <div key={`${spec.label || 'spec'}-${index}`} className={MODEL_DETAIL_SPEC_ITEM_CLASS}>
@@ -148,7 +150,9 @@ export function DesktopDetail({
       variants={
         modelData.variants && modelData.variants.length > 1 ? (
           <div className={MODEL_DETAIL_VARIANTS_CLASS}>
-            <h3 className={MODEL_DETAIL_SECTION_TITLE_CLASS}>历史版本 ({modelData.variants.length})</h3>
+            <h3 className={MODEL_DETAIL_SECTION_TITLE_CLASS}>
+              {t('modelDetail.versions', { count: modelData.variants.length })}
+            </h3>
             <div className="flex gap-2 overflow-x-auto pb-2">
               {modelData.variants.map((v, index) => {
                 const isCurrent = v.model_id === modelData.id;
@@ -158,11 +162,11 @@ export function DesktopDetail({
                     <div className="w-20 h-20 rounded-md border-2 border-primary bg-surface-container-lowest overflow-hidden relative">
                       <ModelThumbnail src={v.thumbnail_url} alt="" className="w-full h-full object-cover" />
                       <div className="absolute bottom-0 inset-x-0 bg-primary/90 text-on-primary text-[9px] text-center py-0.5 font-medium">
-                        当前
+                        {t('modelDetail.current')}
                       </div>
                       {v.is_primary && (
                         <div className="absolute top-1 left-1 bg-primary/80 text-on-primary text-[7px] px-1 rounded-sm">
-                          主版本
+                          {t('modelDetail.primaryVersion')}
                         </div>
                       )}
                     </div>
@@ -171,7 +175,7 @@ export function DesktopDetail({
                     </p>
                     {v.file_modified_at && (
                       <p className="text-[9px] text-on-surface-variant/40 text-center">
-                        {new Date(v.file_modified_at).toLocaleDateString('zh-CN')}
+                        {new Date(v.file_modified_at).toLocaleDateString(i18n.language)}
                       </p>
                     )}
                   </div>
@@ -181,7 +185,7 @@ export function DesktopDetail({
                       <ModelThumbnail src={v.thumbnail_url} alt="" className="w-full h-full object-cover" />
                       {v.is_primary && (
                         <div className="absolute top-1 left-1 bg-primary/80 text-on-primary text-[7px] px-1 rounded-sm">
-                          主版本
+                          {t('modelDetail.primaryVersion')}
                         </div>
                       )}
                     </div>
@@ -193,7 +197,7 @@ export function DesktopDetail({
                     </p>
                     {v.file_modified_at && (
                       <p className="text-[9px] text-on-surface-variant/40 text-center">
-                        {new Date(v.file_modified_at).toLocaleDateString('zh-CN')}
+                        {new Date(v.file_modified_at).toLocaleDateString(i18n.language)}
                       </p>
                     )}
                   </Link>
@@ -205,7 +209,7 @@ export function DesktopDetail({
       }
       downloads={
         <>
-          <h3 className={MODEL_DETAIL_SECTION_TITLE_CLASS}>文件下载</h3>
+          <h3 className={MODEL_DETAIL_SECTION_TITLE_CLASS}>{t('modelDetail.fileDownloads')}</h3>
           <div className={MODEL_DETAIL_DOWNLOAD_LIST_CLASS}>
             {modelData.downloads.map((file, index) => {
               const downloadKey = `${file.downloadFormat || file.format || file.fileName || 'download'}-${index}`;
@@ -276,7 +280,7 @@ export function DesktopDetail({
               const result = checkProtectedAccess('/support');
               if (result.action === 'dialog' || result.action === 'redirect') {
                 e.preventDefault();
-                onLoginDialog(result.action === 'dialog' ? result.reason : '技术支持');
+                onLoginDialog(result.action === 'dialog' ? result.reason : t('modelDetail.supportReason'));
               }
             }}
             className="flex items-center gap-3 p-3 rounded-sm bg-surface-container-high hover:bg-surface-container-highest transition-colors group"
@@ -289,8 +293,8 @@ export function DesktopDetail({
               />
             </div>
             <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium text-on-surface">需要非标定制？</p>
-              <p className="text-xs text-on-surface-variant mt-0.5">联系工程师获取专业支持</p>
+              <p className="text-sm font-medium text-on-surface">{t('modelDetail.customSupportTitle')}</p>
+              <p className="text-xs text-on-surface-variant mt-0.5">{t('modelDetail.customSupportDescription')}</p>
             </div>
             <Icon
               name="chevron_right"

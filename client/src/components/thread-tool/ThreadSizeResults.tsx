@@ -4,6 +4,7 @@
  */
 
 import type { MouseEvent } from 'react';
+import { useTranslation } from 'react-i18next';
 import Icon from '../shared/Icon';
 import {
   CATEGORY_FILTERS,
@@ -82,6 +83,20 @@ export default function ThreadSizeResults({
   fillMainSearch,
   applyResultAsSearch,
 }: ThreadSizeResultsProps) {
+  const { t } = useTranslation();
+  const quickExamples = t('threadSize.guide.quickExamples', { returnObjects: true }) as string[];
+  const guideGroups = [
+    { key: 'thread', icon: 'hexagon' },
+    { key: 'alias', icon: 'pipeline' },
+    { key: 'measure', icon: 'straighten' },
+    { key: 'pipe', icon: 'cat_hydraulic_hose' },
+  ].map((group) => ({
+    ...group,
+    title: t(`threadSize.guide.cards.${group.key}.title`),
+    desc: t(`threadSize.guide.cards.${group.key}.desc`),
+    examples: t(`threadSize.guide.cards.${group.key}.examples`, { returnObjects: true }) as string[],
+  }));
+
   return (
     <div
       key={`${showInitialDataLoading ? 'loading' : showGuide ? 'guide' : visibleTab}:${showMeasurementResults ? 'measurement' : showDataError ? 'error' : showDatabaseEmpty ? 'database-empty' : showNoResults ? 'empty' : 'results'}`}
@@ -90,7 +105,7 @@ export default function ThreadSizeResults({
       {showInitialDataLoading && (
         <section className="flex h-full min-h-[320px]">
           <div className="flex h-full w-full items-center justify-center">
-            <span className="text-xs text-on-surface-variant/60">规格数据刷新中...</span>
+            <span className="text-xs text-on-surface-variant/60">{t('threadSize.loadingDots')}</span>
           </div>
         </section>
       )}
@@ -100,15 +115,16 @@ export default function ThreadSizeResults({
           <div className="grid min-h-full gap-2 md:h-full md:min-h-0 md:grid-rows-[auto_minmax(0,1fr)] md:gap-3">
             <div className="rounded-xl border border-outline-variant/12 bg-surface-container-low p-3 md:p-4">
               <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-primary-container/70">
-                Quick Lookup
+                {t('threadSize.guide.eyebrow')}
               </p>
-              <h2 className="mt-1.5 text-xl font-black tracking-tight text-on-surface md:text-2xl">先输入，再确认</h2>
+              <h2 className="mt-1.5 text-xl font-black tracking-tight text-on-surface md:text-2xl">
+                {t('threadSize.guide.title')}
+              </h2>
               <p className="mt-2 line-clamp-2 max-w-2xl text-xs leading-5 text-on-surface-variant md:text-sm md:leading-6">
-                规格、俗称、DN、油管
-                Dash、接头编号和实测值都可以直接搜。点击下面示例会自动填入搜索框，适合现场快速反查。
+                {t('threadSize.guide.description')}
               </p>
               <div className="mt-3 flex flex-wrap gap-1.5 md:gap-2">
-                {['G1/2', '4分', 'DN25', 'M16×1.5', '-06'].map((item) => (
+                {quickExamples.map((item) => (
                   <button
                     key={item}
                     onClick={() => fillMainSearch(item)}
@@ -121,32 +137,7 @@ export default function ThreadSizeResults({
             </div>
 
             <div className="grid min-h-0 grid-cols-1 gap-1.5 min-[390px]:grid-cols-2 md:grid-cols-4 md:grid-rows-1 md:gap-3 md:overflow-hidden">
-              {[
-                {
-                  title: '螺纹',
-                  desc: '公制、G、R/PT、NPT、JIC 规格，查看外径、牙距、牙型角。',
-                  icon: 'hexagon',
-                  examples: ['G1/4', 'G1/2', 'R1/2', 'NPT1/4', 'M16×1.5'],
-                },
-                {
-                  title: '俗称',
-                  desc: '几分、几寸、DN 快速换算，适合现场口头规格确认。',
-                  icon: 'pipeline',
-                  examples: ['2分', '4分', '6分', '1寸', 'DN25'],
-                },
-                {
-                  title: '测量',
-                  desc: '输入卡尺外径、内螺纹小径或牙距，反推最接近螺纹。',
-                  icon: 'straighten',
-                  examples: ['外径13.1', '内螺纹18.6', '牙距1.5'],
-                },
-                {
-                  title: '管路',
-                  desc: '油管、气管、Dash、JIC 和扣压接头编号快速查。',
-                  icon: 'cat_hydraulic_hose',
-                  examples: ['-06', '-08', 'JIC-06', '20411', '26711'],
-                },
-              ].map((group) => (
+              {guideGroups.map((group) => (
                 <div
                   key={group.title}
                   className="flex min-h-[148px] flex-col overflow-hidden rounded-xl border border-outline-variant/12 bg-surface-container-low p-2.5 min-[390px]:min-h-[168px] md:min-h-0 md:p-4"
@@ -186,18 +177,20 @@ export default function ThreadSizeResults({
           <div className={TABLE_CARD}>
             <div className={TABLE_HEADER}>
               <div className="min-w-0 flex-1">
-                <h2 className="text-sm font-bold text-on-surface">测量反推</h2>
-                <p className="line-clamp-1 text-[11px] text-on-surface-variant/60">按测量值匹配最接近的规格</p>
+                <h2 className="text-sm font-bold text-on-surface">{t('threadSize.measurement.title')}</h2>
+                <p className="line-clamp-1 text-[11px] text-on-surface-variant/60">
+                  {t('threadSize.measurement.description')}
+                </p>
               </div>
               <div className="flex shrink-0 flex-wrap justify-end gap-1">
                 {measurementQuery.outer && (
                   <span className="rounded bg-surface-container-low px-1.5 py-0.5 text-[10px] text-on-surface-variant">
-                    外径 {measurementQuery.outer}mm
+                    {t('threadSize.measurement.outer', { value: measurementQuery.outer })}
                   </span>
                 )}
                 {measurementQuery.inner && (
                   <span className="rounded bg-surface-container-low px-1.5 py-0.5 text-[10px] text-on-surface-variant">
-                    内径/小径 {measurementQuery.inner}mm
+                    {t('threadSize.measurement.inner', { value: measurementQuery.inner })}
                   </span>
                 )}
                 {measurementQuery.pitchMm && (
@@ -207,8 +200,11 @@ export default function ThreadSizeResults({
                 )}
                 {measurementQuery.family && measurementQuery.family !== 'all' && (
                   <span className="rounded bg-primary-container/10 px-1.5 py-0.5 text-[10px] text-primary-container">
-                    {CATEGORY_FILTERS.find((item) => item.key === `thread:${measurementQuery.family}`)?.label ||
-                      measurementQuery.family}
+                    {t(`threadSize.categories.thread_${measurementQuery.family}`, {
+                      defaultValue:
+                        CATEGORY_FILTERS.find((item) => item.key === `thread:${measurementQuery.family}`)?.label ||
+                        measurementQuery.family,
+                    })}
                   </span>
                 )}
               </div>
@@ -219,13 +215,13 @@ export default function ThreadSizeResults({
                   <table className={`${TABLE_BASE} min-w-[860px]`}>
                     <thead className={TABLE_HEAD}>
                       <tr>
-                        <th className={`${TABLE_FIRST_TH} ${TABLE_FIRST_WIDTH}`}>结果</th>
-                        <th className={`${TABLE_TH} min-w-40`}>规格</th>
-                        <th className={`${TABLE_TH} min-w-32`}>类型</th>
-                        <th className={`${TABLE_TH} min-w-28`}>外径差</th>
-                        <th className={`${TABLE_TH} min-w-28`}>内径差</th>
-                        <th className={`${TABLE_TH} min-w-28`}>牙距差</th>
-                        <th className={`${TABLE_TH} min-w-44`}>结构</th>
+                        <th className={`${TABLE_FIRST_TH} ${TABLE_FIRST_WIDTH}`}>{t('threadSize.table.result')}</th>
+                        <th className={`${TABLE_TH} min-w-40`}>{t('threadSize.table.spec')}</th>
+                        <th className={`${TABLE_TH} min-w-32`}>{t('threadSize.table.type')}</th>
+                        <th className={`${TABLE_TH} min-w-28`}>{t('threadSize.table.outerDiff')}</th>
+                        <th className={`${TABLE_TH} min-w-28`}>{t('threadSize.table.innerDiff')}</th>
+                        <th className={`${TABLE_TH} min-w-28`}>{t('threadSize.table.pitchDiff')}</th>
+                        <th className={`${TABLE_TH} min-w-44`}>{t('threadSize.table.structure')}</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-outline-variant/10">
@@ -239,7 +235,9 @@ export default function ThreadSizeResults({
                             <span
                               className={`${TABLE_FIRST_BADGE} rounded-full px-2 py-0.5 text-[11px] font-medium ${index === 0 ? 'bg-green-500/10 text-green-600' : 'bg-surface-container-high text-on-surface-variant'}`}
                             >
-                              {index === 0 ? '最接近' : `第 ${index + 1}`}
+                              {index === 0
+                                ? t('threadSize.measurement.closest')
+                                : t('threadSize.measurement.rank', { rank: index + 1 })}
                             </span>
                           </td>
                           <td className={`${TABLE_TD} font-semibold`}>{item.size}</td>
@@ -264,7 +262,7 @@ export default function ThreadSizeResults({
               </div>
             ) : (
               <div className="px-3 py-8 text-center text-xs text-on-surface-variant">
-                暂未匹配到接近规格，可补充外径、内径/小径、牙距或牙数再试。
+                {t('threadSize.measurement.noMatch')}
               </div>
             )}
           </div>
@@ -279,15 +277,15 @@ export default function ThreadSizeResults({
               <table className={`${TABLE_BASE} min-w-[1260px]`}>
                 <thead className={TABLE_HEAD}>
                   <tr>
-                    <th className={`${TABLE_FIRST_TH} ${TABLE_FIRST_WIDTH}`}>规格</th>
-                    <th className={`${TABLE_TH} min-w-32`}>类型</th>
-                    <th className={`${TABLE_TH} min-w-32`}>外径参考</th>
-                    <th className={`${TABLE_TH} min-w-40`}>底孔/小径参考</th>
-                    <th className={`${TABLE_TH} min-w-36`}>牙距 / 牙数</th>
-                    <th className={`${TABLE_TH} min-w-24`}>牙型角</th>
-                    <th className={`${TABLE_TH} min-w-40`}>锥度/结构</th>
-                    <th className={`${TABLE_TH} min-w-40`}>密封方式</th>
-                    <th className={TABLE_LONG_TH}>备注</th>
+                    <th className={`${TABLE_FIRST_TH} ${TABLE_FIRST_WIDTH}`}>{t('threadSize.table.spec')}</th>
+                    <th className={`${TABLE_TH} min-w-32`}>{t('threadSize.table.type')}</th>
+                    <th className={`${TABLE_TH} min-w-32`}>{t('threadSize.table.outerReference')}</th>
+                    <th className={`${TABLE_TH} min-w-40`}>{t('threadSize.table.innerReference')}</th>
+                    <th className={`${TABLE_TH} min-w-36`}>{t('threadSize.table.pitch')}</th>
+                    <th className={`${TABLE_TH} min-w-24`}>{t('threadSize.table.angle')}</th>
+                    <th className={`${TABLE_TH} min-w-40`}>{t('threadSize.table.taperStructure')}</th>
+                    <th className={`${TABLE_TH} min-w-40`}>{t('threadSize.table.seal')}</th>
+                    <th className={TABLE_LONG_TH}>{t('threadSize.table.note')}</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-outline-variant/10">
@@ -328,9 +326,9 @@ export default function ThreadSizeResults({
                 <thead className={TABLE_HEAD}>
                   <tr>
                     <th className={`${TABLE_FIRST_TH} ${TABLE_FIRST_WIDTH}`}>DN</th>
-                    <th className={`${TABLE_TH} min-w-28`}>英寸</th>
-                    <th className={`${TABLE_TH} min-w-36`}>外径参考</th>
-                    <th className={TABLE_LONG_TH}>常见用途</th>
+                    <th className={`${TABLE_TH} min-w-28`}>{t('threadSize.table.inch')}</th>
+                    <th className={`${TABLE_TH} min-w-36`}>{t('threadSize.table.outerReference')}</th>
+                    <th className={TABLE_LONG_TH}>{t('threadSize.table.commonUse')}</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-outline-variant/10">
@@ -365,14 +363,14 @@ export default function ThreadSizeResults({
               <table className={`${TABLE_BASE} min-w-[1180px]`}>
                 <thead className={TABLE_HEAD}>
                   <tr>
-                    <th className={`${TABLE_FIRST_TH} ${TABLE_FIRST_WIDTH}`}>规格</th>
-                    <th className={`${TABLE_TH} min-w-28`}>类型</th>
-                    <th className={`${TABLE_TH} min-w-32`}>公称/外径</th>
-                    <th className={`${TABLE_TH} min-w-28`}>内径</th>
-                    <th className={`${TABLE_TH} min-w-36`}>外径范围</th>
-                    <th className={`${TABLE_TH} min-w-36`}>常见压力</th>
-                    <th className={`${TABLE_TH} min-w-48`}>常配接头</th>
-                    <th className={TABLE_LONG_TH}>应用</th>
+                    <th className={`${TABLE_FIRST_TH} ${TABLE_FIRST_WIDTH}`}>{t('threadSize.table.spec')}</th>
+                    <th className={`${TABLE_TH} min-w-28`}>{t('threadSize.table.type')}</th>
+                    <th className={`${TABLE_TH} min-w-32`}>{t('threadSize.table.nominalOuter')}</th>
+                    <th className={`${TABLE_TH} min-w-28`}>{t('threadSize.table.inner')}</th>
+                    <th className={`${TABLE_TH} min-w-36`}>{t('threadSize.table.outerRange')}</th>
+                    <th className={`${TABLE_TH} min-w-36`}>{t('threadSize.table.pressure')}</th>
+                    <th className={`${TABLE_TH} min-w-48`}>{t('threadSize.table.commonFitting')}</th>
+                    <th className={TABLE_LONG_TH}>{t('threadSize.table.application')}</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-outline-variant/10">
@@ -390,7 +388,9 @@ export default function ThreadSizeResults({
                           {item.dash}
                         </span>
                       </td>
-                      <td className={TABLE_TD}>{item.kind || '液压油管'}</td>
+                      <td className={TABLE_TD}>
+                        {item.kind === '气管' ? t('threadSize.hose.air') : item.kind || t('threadSize.hose.hydraulic')}
+                      </td>
                       <td className={TABLE_TD}>{item.kind === '气管' ? item.nominalInch : `${item.nominalInch}"`}</td>
                       <td className={`${TABLE_TD} tabular-nums`}>{item.innerMm.toFixed(1)} mm</td>
                       <td className={TABLE_TD}>Ø {item.outerRangeMm} mm</td>
@@ -403,7 +403,7 @@ export default function ThreadSizeResults({
               </table>
             </ThreadTableScroll>
             <div className="border-t border-outline-variant/10 px-4 py-3 text-xs leading-5 text-on-surface-variant/60">
-              油管压力会随层数、结构和品牌变化；气管压力会随 PU/PA 材质、温度和厂家规格变化，最终按具体样本确认。
+              {t('threadSize.hose.note')}
             </div>
           </div>
         </section>
@@ -417,14 +417,14 @@ export default function ThreadSizeResults({
               <table className={`${TABLE_BASE} min-w-[1320px]`}>
                 <thead className={TABLE_HEAD}>
                   <tr>
-                    <th className={`${TABLE_FIRST_TH} ${TABLE_FIRST_WIDTH}`}>接头编号</th>
-                    <th className={`${TABLE_TH} min-w-44`}>分类</th>
-                    <th className={`${TABLE_TH} min-w-24`}>形态</th>
-                    <th className={`${TABLE_TH} min-w-44`}>接头类型</th>
-                    <th className={`${TABLE_TH} min-w-44`}>螺纹代码</th>
-                    <th className={`${TABLE_TH} min-w-52`}>可选插芯代码</th>
-                    <th className={`${TABLE_TH} min-w-44`}>密封结构</th>
-                    <th className={TABLE_LONG_TH}>备注</th>
+                    <th className={`${TABLE_FIRST_TH} ${TABLE_FIRST_WIDTH}`}>{t('threadSize.table.fittingCode')}</th>
+                    <th className={`${TABLE_TH} min-w-44`}>{t('threadSize.table.category')}</th>
+                    <th className={`${TABLE_TH} min-w-24`}>{t('threadSize.table.form')}</th>
+                    <th className={`${TABLE_TH} min-w-44`}>{t('threadSize.table.fittingType')}</th>
+                    <th className={`${TABLE_TH} min-w-44`}>{t('threadSize.table.threadCode')}</th>
+                    <th className={`${TABLE_TH} min-w-52`}>{t('threadSize.table.insertCode')}</th>
+                    <th className={`${TABLE_TH} min-w-44`}>{t('threadSize.table.sealStructure')}</th>
+                    <th className={TABLE_LONG_TH}>{t('threadSize.table.note')}</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-outline-variant/10">
@@ -468,12 +468,12 @@ export default function ThreadSizeResults({
               <Icon name={showDataError ? 'error' : 'database'} size={30} />
             </span>
             <h2 className="text-sm font-bold text-on-surface">
-              {showDataError ? '规格数据加载失败' : '数据库暂无规格数据'}
+              {showDataError ? t('threadSize.status.dataErrorTitle') : t('threadSize.status.dataEmptyTitle')}
             </h2>
             <p className="mt-2 text-xs leading-6 text-on-surface-variant/70">
               {showDataError
-                ? '请检查后端接口和数据库连接，页面不会再用前端内置表格替代真实数据。'
-                : '当前页面只展示数据库数据。管理员可在「管理数据」里新增或导入规格资料。'}
+                ? t('threadSize.status.dataErrorDescription')
+                : t('threadSize.status.dataEmptyDescription')}
             </p>
           </div>
         </section>
@@ -486,11 +486,11 @@ export default function ThreadSizeResults({
             <span className="mx-auto mb-4 flex h-14 w-14 items-center justify-center text-on-surface-variant/35">
               <Icon name="search_off" size={30} />
             </span>
-            <h2 className="text-sm font-bold text-on-surface">没有找到匹配结果</h2>
+            <h2 className="text-sm font-bold text-on-surface">{t('threadSize.status.noResultsTitle')}</h2>
             <p className="mt-2 text-xs leading-6 text-on-surface-variant/70">
-              换成规格、俗称、型号片段或测量值再试
+              {t('threadSize.status.noResultsDescription')}
               <br />
-              例如 G1/2、4分、DN25、-06、20.9 14牙
+              {t('threadSize.status.noResultsExamples')}
             </p>
           </div>
         </section>

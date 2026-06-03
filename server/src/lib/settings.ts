@@ -10,6 +10,7 @@ import {
   DEFAULT_UPLOAD_POLICY_FOR_SETTINGS,
 } from './businessDefaults.js';
 import { cacheDel, redis } from './cache.js';
+import { config } from './config.js';
 import { DEFAULT_EMAIL_TEMPLATES } from './emailTemplates.js';
 import { prisma } from './prisma.js';
 
@@ -25,11 +26,17 @@ const LEGACY_MAINTENANCE_MESSAGE = '模型预览资源正在重建，部分模�
 const DEFAULT_COPYRIGHT_PROJECT_NAME = '3DPartHub';
 const DEFAULT_INTERFACE_THEME_KEYS = ['workbench', 'classic'] as const;
 const DEFAULT_MOBILE_THEME_KEYS = ['classic'] as const;
+const HOME_LIST_LOADING_MODE_KEYS = ['infinite', 'pagination'] as const;
+const UI_LOCALE_KEYS = ['zh-CN', 'zh-TW', 'en-US', 'ja-JP', 'ko-KR', 'de-DE'] as const;
+const DEFAULT_UI_ENABLED_LOCALES = UI_LOCALE_KEYS.join(',');
 const COLOR_SCHEME_KEYS = ['orange', 'blue', 'green', 'purple', 'red', 'teal', 'custom'] as const;
 const CACHE_DRIVER_KEYS = ['redis', 'memory', 'off'] as const;
 const STORAGE_PROVIDER_KEYS = ['local', 'minio', 'tencent_cos', 'aliyun_oss', 'qiniu_kodo', 's3_compatible'] as const;
 const MASKED_SECRET_VALUE = '********';
+const LEGACY_LOCAL_REDIS_URLS = new Set(['redis://localhost:6379', 'redis://127.0.0.1:6379']);
 const MAX_CUSTOM_COLOR_JSON_LENGTH = 20_000;
+export const CONTACT_PHONE_SETTING_MESSAGE =
+  '联系电话格式不正确，请填写中国手机号、带区号座机、400/800 服务电话或国际号码';
 const DEFAULT_USER_NAV_FOR_SETTINGS = DEFAULT_NAV_FOR_SETTINGS.filter(
   (item) => !item.roles?.includes('ADMIN') && !item.path.startsWith('/admin/'),
 );
@@ -141,6 +148,11 @@ const SETTINGS_SCHEMA: SettingDef[] = [
   { key: 'interface_theme', defaultValue: 'workbench' },
   { key: 'mobile_interface_theme', defaultValue: 'classic' },
   { key: 'user_interface_theme_enabled', defaultValue: true },
+  { key: 'home_desktop_list_loading_mode', defaultValue: 'pagination' },
+  { key: 'home_mobile_list_loading_mode', defaultValue: 'infinite' },
+  { key: 'ui_default_locale', defaultValue: 'zh-CN' },
+  { key: 'ui_enabled_locales', defaultValue: DEFAULT_UI_ENABLED_LOCALES },
+  { key: 'ui_follow_browser_locale', defaultValue: false },
   { key: 'color_scheme', defaultValue: 'orange' },
   { key: 'color_custom_dark', defaultValue: '{}' },
   { key: 'color_custom_light', defaultValue: '{}' },
@@ -249,7 +261,7 @@ const SETTINGS_SCHEMA: SettingDef[] = [
   // Cache and object storage
   { key: 'cache_driver', defaultValue: 'redis' },
   { key: 'cache_enabled', defaultValue: true },
-  { key: 'redis_url', defaultValue: 'redis://localhost:6379' },
+  { key: 'redis_url', defaultValue: config.redisUrl },
   { key: 'redis_password', defaultValue: '' },
   { key: 'redis_db', defaultValue: 0 },
   { key: 'redis_key_prefix', defaultValue: '3dparthub' },
@@ -345,6 +357,41 @@ function normalizeLegacyMaintenanceSettings(settings: Record<string, unknown>): 
   return settings;
 }
 
+function normalizeRuntimeBackedSettings(settings: Record<string, unknown>): Record<string, unknown> {
+  normalizeLegacyMaintenanceSettings(settings);
+  const redisUrl = typeof settings.redis_url === 'string' ? settings.redis_url.trim() : '';
+  if (LEGACY_LOCAL_REDIS_URLS.has(redisUrl) && !LEGACY_LOCAL_REDIS_URLS.has(config.redisUrl)) {
+    settings.redis_url = config.redisUrl;
+  }
+  return settings;
+}
+
+export function normalizeContactPhoneSetting(value: unknown): string {
+  return String(value ?? '')
+    .trim()
+    .replace(/[－—–]/g, '-')
+    .replace(/（/g, '(')
+    .replace(/）/g, ')')
+    .replace(/\s+/g, ' ');
+}
+
+export function isValidContactPhoneSetting(value: unknown): boolean {
+  const phone = normalizeContactPhoneSetting(value);
+  if (!phone) return true;
+  if (phone.length > 32) return false;
+  if (!/^\+?[0-9][0-9\s()-]{5,31}$/.test(phone)) return false;
+
+  const digits = phone.replace(/\D/g, '');
+  const noSpaceOrParen = phone.replace(/[()\s]/g, '');
+
+  if (/^1[3-9]\d{9}$/.test(digits)) return true;
+  if (/^(400|800)-?\d{3}-?\d{4}$/.test(noSpaceOrParen)) return true;
+  if (/^0\d{2,3}-?\d{7,8}(-?\d{1,6})?$/.test(noSpaceOrParen)) return true;
+  if (phone.startsWith('+') && digits.length >= 8 && digits.length <= 15) return true;
+
+  return false;
+}
+
 // In-memory cache
 let cache: Record<string, unknown> | null = null;
 let cacheAt = 0;
@@ -372,11 +419,11 @@ export function clearSettingsCache(): void {
   cacheAt = 0;
 }
 
-export async function getAllSettings(): Promise<Record<string, unknown>> {
+export async function getAllSettings(options: { forceRefresh?: boolean } = {}): Promise<Record<string, unknown>> {
   const now = Date.now();
-  if (cache && now - cacheAt < CACHE_TTL) return cache;
+  if (!options.forceRefresh && cache && now - cacheAt < CACHE_TTL) return cache;
 
-  if (!prisma) return normalizeLegacyMaintenanceSettings({ ...DEFAULTS });
+  if (!prisma) return normalizeRuntimeBackedSettings({ ...DEFAULTS });
 
   try {
     const rows = await prisma.setting.findMany();
@@ -388,12 +435,12 @@ export async function getAllSettings(): Promise<Record<string, unknown>> {
         result[row.key] = row.value;
       }
     }
-    normalizeLegacyMaintenanceSettings(result);
+    normalizeRuntimeBackedSettings(result);
     cache = result;
     cacheAt = now;
     return result;
   } catch {
-    return normalizeLegacyMaintenanceSettings({ ...DEFAULTS });
+    return normalizeRuntimeBackedSettings({ ...DEFAULTS });
   }
 }
 
@@ -506,6 +553,7 @@ const BOOLEAN_KEYS = new Set([
   'smtp_secure',
   'auto_theme_enabled',
   'user_interface_theme_enabled',
+  'ui_follow_browser_locale',
   'viewer_edge_enabled',
   'selection_enable_match',
   'share_enabled',
@@ -600,6 +648,10 @@ export function validateSettingValue(key: string, value: unknown): unknown {
     const provider = String(value || '').trim();
     return (STORAGE_PROVIDER_KEYS as readonly string[]).includes(provider) ? provider : DEFAULTS[key];
   }
+  if (key === 'contact_phone') {
+    const phone = normalizeContactPhoneSetting(value);
+    return isValidContactPhoneSetting(phone) ? phone : DEFAULTS[key];
+  }
   if (key === 'interface_theme') {
     const theme = String(value || '').trim();
     return getSupportedInterfaceThemes().has(theme) ? theme : DEFAULTS[key];
@@ -607,6 +659,25 @@ export function validateSettingValue(key: string, value: unknown): unknown {
   if (key === 'mobile_interface_theme') {
     const theme = String(value || '').trim();
     return getSupportedMobileThemes().has(theme) ? theme : DEFAULTS[key];
+  }
+  if (key === 'home_desktop_list_loading_mode' || key === 'home_mobile_list_loading_mode') {
+    const mode = String(value || '').trim();
+    return (HOME_LIST_LOADING_MODE_KEYS as readonly string[]).includes(mode) ? mode : DEFAULTS[key];
+  }
+  if (key === 'ui_default_locale') {
+    const locale = String(value || '').trim();
+    return (UI_LOCALE_KEYS as readonly string[]).includes(locale) ? locale : DEFAULTS[key];
+  }
+  if (key === 'ui_enabled_locales') {
+    const locales = Array.from(
+      new Set(
+        String(value || '')
+          .split(',')
+          .map((item) => item.trim())
+          .filter((item) => (UI_LOCALE_KEYS as readonly string[]).includes(item)),
+      ),
+    );
+    return locales.length ? locales.join(',') : DEFAULTS[key];
   }
   if (key === 'color_scheme') {
     const scheme = String(value || '').trim();

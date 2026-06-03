@@ -1,4 +1,5 @@
 import { useMemo } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useImeSafeSearchInput } from '../../hooks/useImeSafeSearchInput';
 import Icon from '../shared/Icon';
 import SearchField from '../shared/SearchField';
@@ -35,6 +36,7 @@ export default function ModelStructurePanel({
   onShowAll,
   onClose,
 }: ModelStructurePanelProps) {
+  const { t } = useTranslation();
   const {
     value: query,
     draftValue: queryInputValue,
@@ -67,15 +69,19 @@ export default function ModelStructurePanel({
         <div className="min-w-0">
           <div className="flex items-center gap-2">
             <Icon name="view_sidebar" size={16} className="text-primary" />
-            <h3 className="text-sm font-semibold text-on-surface">模型结构</h3>
+            <h3 className="text-sm font-semibold text-on-surface">{t('viewer.structure.title')}</h3>
           </div>
           <p className="mt-1 text-[11px] text-on-surface-variant">
-            {visibleCount}/{parts.length} 可见 · {formatCount(totalTriangles)} 面
+            {t('viewer.structure.summary', {
+              visible: visibleCount,
+              total: parts.length,
+              faces: formatCount(totalTriangles),
+            })}
           </p>
         </div>
         <button
           type="button"
-          aria-label="关闭模型结构"
+          aria-label={t('viewer.structure.close')}
           onClick={onClose}
           className="flex h-7 w-7 shrink-0 items-center justify-center rounded-sm text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface"
         >
@@ -88,7 +94,7 @@ export default function ModelStructurePanel({
           inputProps={queryInputProps}
           value={queryInputValue}
           onClear={() => setQuery('')}
-          placeholder="搜索零件"
+          placeholder={t('viewer.structure.searchPlaceholder')}
         />
         <div className="grid grid-cols-2 gap-2">
           <button
@@ -97,7 +103,7 @@ export default function ModelStructurePanel({
             className="flex items-center justify-center gap-1.5 rounded-sm border border-outline-variant/20 px-2 py-1.5 text-[11px] text-on-surface-variant hover:border-primary/30 hover:text-on-surface"
           >
             <Icon name="visibility" size={13} />
-            全部显示
+            {t('viewer.structure.showAll')}
           </button>
           <button
             type="button"
@@ -105,7 +111,7 @@ export default function ModelStructurePanel({
             className="flex items-center justify-center gap-1.5 rounded-sm border border-outline-variant/20 px-2 py-1.5 text-[11px] text-on-surface-variant hover:border-primary/30 hover:text-on-surface"
           >
             <Icon name="close" size={13} />
-            取消选中
+            {t('viewer.structure.clearSelection')}
           </button>
         </div>
       </div>
@@ -117,12 +123,12 @@ export default function ModelStructurePanel({
         {parts.length === 0 ? (
           <div className="flex h-full flex-col items-center justify-center gap-2 text-center text-xs text-on-surface-variant">
             <Icon name="view_in_ar" size={30} className="opacity-40" />
-            正在读取零件结构
+            {t('viewer.structure.loading')}
           </div>
         ) : filteredParts.length === 0 ? (
           <div className="flex h-full flex-col items-center justify-center gap-2 text-center text-xs text-on-surface-variant">
             <Icon name="search_off" size={30} className="opacity-40" />
-            没有匹配的零件
+            {t('viewer.structure.empty')}
           </div>
         ) : (
           <div className="space-y-1">
@@ -151,13 +157,16 @@ export default function ModelStructurePanel({
                   <span className="min-w-0 flex-1">
                     <span className="block truncate text-xs font-medium text-on-surface">{part.name}</span>
                     <span className="mt-0.5 block truncate text-[10px] text-on-surface-variant">
-                      {formatCount(part.vertexCount)} 点 · {formatCount(part.triangleCount)} 面
+                      {t('viewer.structure.partMeta', {
+                        vertices: formatCount(part.vertexCount),
+                        faces: formatCount(part.triangleCount),
+                      })}
                     </span>
                   </span>
                   <span className="flex shrink-0 items-center gap-0.5 opacity-70 transition-opacity group-hover:opacity-100">
                     <button
                       type="button"
-                      title={hidden ? '显示零件' : '隐藏零件'}
+                      title={hidden ? t('viewer.structure.showPart') : t('viewer.structure.hidePart')}
                       onClick={(event) => {
                         event.stopPropagation();
                         onToggleHidden(part.id);
@@ -168,7 +177,7 @@ export default function ModelStructurePanel({
                     </button>
                     <button
                       type="button"
-                      title={isolated ? '取消隔离' : '隔离零件'}
+                      title={isolated ? t('viewer.structure.unisolatePart') : t('viewer.structure.isolatePart')}
                       onClick={(event) => {
                         event.stopPropagation();
                         onIsolate(isolated ? null : part.id);
@@ -187,7 +196,7 @@ export default function ModelStructurePanel({
 
       {filteredParts.length >= 400 && (
         <div className="border-t border-outline-variant/15 px-3 py-2 text-[10px] text-on-surface-variant">
-          当前仅显示前 400 个匹配零件，请用搜索缩小范围。
+          {t('viewer.structure.limitHint', { limit: 400 })}
         </div>
       )}
     </div>

@@ -1,8 +1,10 @@
 import { Fragment, useEffect, useRef, useState, type ChangeEvent, type CompositionEvent } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router-dom';
 import { AnnouncementBanner, SkeletonCard, SkeletonListCard } from '../../../../components/home/HomeDesktopShared';
 import type { Category } from '../../../../components/home/homeTypes';
 import Icon from '../../../../components/shared/Icon';
+import InfiniteLoadTrigger from '../../../../components/shared/InfiniteLoadTrigger';
 import { PageTitle } from '../../../../components/shared/PagePrimitives';
 import Pagination from '../../../../components/shared/Pagination';
 import SearchField from '../../../../components/shared/SearchField';
@@ -15,8 +17,8 @@ const LIST_CARD_HEIGHT = 80;
 const WORKBENCH_TITLE_SEARCH_DEBOUNCE_MS = 280;
 
 const WORKBENCH_SORT_OPTIONS = [
-  { value: 'created_at', label: '最新上传' },
-  { value: 'name', label: '名称排序' },
+  { value: 'created_at', labelKey: 'home.sortLatest' },
+  { value: 'name', labelKey: 'home.sortName' },
 ] as const;
 
 function clampTitleSearchInput(value: string, maxLength: number) {
@@ -34,9 +36,10 @@ function WorkbenchCategorySidebar({
   totalCount: number;
   onSelect: (id: string) => void;
 }) {
+  const { t } = useTranslation();
   const [expandedCategoryId, setExpandedCategoryId] = useState<string | null>(null);
   const allCount = totalCount || categoriesData.reduce((sum, category) => sum + category.count, 0);
-  const categorySummary = `${categoriesData.length} 类 / ${allCount} 个`;
+  const categorySummary = t('home.categorySummary', { categories: categoriesData.length, count: allCount });
 
   useEffect(() => {
     if (activeCategory === 'all') {
@@ -53,9 +56,9 @@ function WorkbenchCategorySidebar({
   }, [activeCategory, categoriesData]);
 
   return (
-    <aside className="home-workbench-category-sidebar" aria-label="分类筛选">
+    <aside className="home-workbench-category-sidebar" aria-label={t('home.categoryFilter')}>
       <div className="home-workbench-category-sidebar-header">
-        <span className="home-workbench-category-title">模型分类</span>
+        <span className="home-workbench-category-title">{t('home.categoryFilter')}</span>
         <span className="home-workbench-category-current">{categorySummary}</span>
       </div>
       <div className="home-workbench-sidebar-list scrollbar-hidden">
@@ -71,7 +74,7 @@ function WorkbenchCategorySidebar({
           }`}
         >
           <Icon name="category_all" size={16} />
-          <span>全部模型</span>
+          <span>{t('home.allModels')}</span>
           <span className="home-workbench-filter-count">{allCount}</span>
         </button>
         {categoriesData.map((category) => {
@@ -127,6 +130,7 @@ function WorkbenchCategorySidebar({
 }
 
 function WorkbenchSortControl({ value, onChange }: { value: string; onChange: (value: string) => void }) {
+  const { t } = useTranslation();
   const [open, setOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement | null>(null);
   const selectedOption = WORKBENCH_SORT_OPTIONS.find((option) => option.value === value) || WORKBENCH_SORT_OPTIONS[0];
@@ -161,11 +165,11 @@ function WorkbenchSortControl({ value, onChange }: { value: string; onChange: (v
         onClick={() => setOpen((current) => !current)}
       >
         <Icon name="filter_list" size={14} className="home-sort-icon" />
-        <span>{selectedOption.label}</span>
+        <span>{t(selectedOption.labelKey)}</span>
         <Icon name="expand_more" size={12} className="home-sort-chevron" />
       </button>
       {open && (
-        <div className="home-sort-menu" role="listbox" aria-label="排序方式">
+        <div className="home-sort-menu" role="listbox" aria-label={t('home.sortLabel')}>
           {WORKBENCH_SORT_OPTIONS.map((option) => {
             const selected = option.value === value;
             return (
@@ -180,7 +184,7 @@ function WorkbenchSortControl({ value, onChange }: { value: string; onChange: (v
                   setOpen(false);
                 }}
               >
-                <span>{option.label}</span>
+                <span>{t(option.labelKey)}</span>
                 {selected && <Icon name="check" size={14} />}
               </button>
             );
@@ -202,6 +206,7 @@ function WorkbenchTitleSearch({
   normalizeQuery: (query: string) => string;
   onSearch: (query: string) => void;
 }) {
+  const { t } = useTranslation();
   const [draft, setDraft] = useState(query);
   const debounceRef = useRef<ReturnType<typeof window.setTimeout> | null>(null);
   const composingRef = useRef(false);
@@ -275,7 +280,7 @@ function WorkbenchTitleSearch({
   return (
     <SearchField
       inputProps={{
-        'aria-label': '模型搜索',
+        'aria-label': t('home.modelSearch'),
         value: draft,
         onChange: handleChange,
         onCompositionStart: handleCompositionStart,
@@ -292,7 +297,7 @@ function WorkbenchTitleSearch({
         clearSearchDebounce();
         runSearch('');
       }}
-      placeholder="搜索型号、名称、规格..."
+      placeholder={t('home.searchPlaceholder')}
       className="home-workbench-title-search"
     />
   );
@@ -311,6 +316,7 @@ function WorkbenchHomeFooter({
   footerCopyright: string;
   footerLinks: { label: string; url: string }[];
 }) {
+  const { t } = useTranslation();
   return (
     <footer className="home-workbench-footer">
       <div className="flex min-w-0 flex-col gap-2">
@@ -342,8 +348,8 @@ function WorkbenchHomeFooter({
           </a>
         )}
         {footerLinks.length > 0 && (
-          <nav aria-label="相关链接" className="flex flex-wrap items-center gap-x-3 gap-y-1">
-            <span className="text-[10px] font-medium text-on-surface-variant/35">相关链接</span>
+          <nav aria-label={t('home.footerLinks')} className="flex flex-wrap items-center gap-x-3 gap-y-1">
+            <span className="text-[10px] font-medium text-on-surface-variant/35">{t('home.footerLinks')}</span>
             {footerLinks.map((link, index) => (
               <a
                 key={`${link.label}-${index}`}
@@ -371,8 +377,11 @@ export default function WorkbenchHomeDesktop({
   displayTotalItems,
   footerCopyright,
   footerLinks,
+  hasMore,
   homePageSizeOptions,
   homeSearchMaxLength,
+  isLoadingMore,
+  listLoadingMode,
   normalizeSearchQuery,
   page,
   pageSize,
@@ -388,12 +397,14 @@ export default function WorkbenchHomeDesktop({
   totalPages,
   viewMode,
   onHeroSearch,
+  onLoadMore,
   onPageChange,
   onPageSizeChange,
   onSelectCategory,
   onSortChange,
   onViewModeChange,
 }: DesktopHomeThemeProps) {
+  const { t } = useTranslation();
   const gridCols = useGridColumnCount();
 
   return (
@@ -412,15 +423,15 @@ export default function WorkbenchHomeDesktop({
             onSelect={onSelectCategory}
           />
 
-          <section className="home-workbench-results-panel" aria-label="模型列表">
+          <section className="home-workbench-results-panel" aria-label={t('home.modelList')}>
             <div ref={resultsAnchorRef} className="home-workbench-results-anchor" />
             <div className="home-title-toolbar flex flex-col gap-2.5 mb-6 border-b border-surface-container-low pb-3">
               <div>
                 <div className="home-title-mainbar flex items-center gap-3">
                   <div className="home-title-mainline flex items-center gap-3">
-                    <PageTitle className="home-title-heading">零件模型库</PageTitle>
+                    <PageTitle className="home-title-heading">{t('home.modelLibrary')}</PageTitle>
                     <span className="home-title-count-badge rounded-sm border border-outline-variant/20 bg-surface-container-high px-2 py-0.5 text-xs text-on-surface-variant">
-                      {displayTotalItems} 个模型
+                      {t('home.modelCount', { count: displayTotalItems })}
                     </span>
                   </div>
                   <div className="home-title-controls">
@@ -437,16 +448,16 @@ export default function WorkbenchHomeDesktop({
                       <div className="flex rounded-sm border border-outline-variant/30 overflow-hidden">
                         <button
                           onClick={() => onViewModeChange('grid')}
-                          aria-label="网格视图"
-                          title="网格视图"
+                          aria-label={t('home.gridView')}
+                          title={t('home.gridView')}
                           className={`px-2.5 py-1.5 transition-colors ${viewMode === 'grid' ? 'bg-surface-container-high text-on-surface' : 'text-on-surface-variant hover:text-on-surface'}`}
                         >
                           <Icon name="grid_view" size={18} />
                         </button>
                         <button
                           onClick={() => onViewModeChange('list')}
-                          aria-label="列表视图"
-                          title="列表视图"
+                          aria-label={t('home.listView')}
+                          title={t('home.listView')}
                           className={`px-2.5 py-1.5 transition-colors ${viewMode === 'list' ? 'bg-surface-container-high text-on-surface' : 'text-on-surface-variant hover:text-on-surface'}`}
                         >
                           <Icon name="view_list" size={18} />
@@ -489,11 +500,9 @@ export default function WorkbenchHomeDesktop({
                   <div className="home-model-empty-state flex flex-col items-center justify-center gap-4 py-20">
                     <Icon name="search_off" size={48} className="text-on-surface-variant/30" />
                     <div className="text-center">
-                      <p className="text-on-surface-variant">没有找到匹配的模型</p>
+                      <p className="text-on-surface-variant">{t('home.emptyTitle')}</p>
                       {searchQuery.trim() && (
-                        <p className="mt-1 text-xs text-on-surface-variant/60">
-                          可以提交需求，请管理员补充或完善模型库。
-                        </p>
+                        <p className="mt-1 text-xs text-on-surface-variant/60">{t('home.emptyDescription')}</p>
                       )}
                     </div>
                     {searchQuery.trim() && (
@@ -503,28 +512,38 @@ export default function WorkbenchHomeDesktop({
                           source: 'model_search',
                           searchQuery: searchQuery.trim(),
                           classification: 'novel',
-                          description: `模型库未搜索到：${searchQuery.trim()}\n请协助补充或完善该模型。`,
+                          description: t('home.requestDescription', { query: searchQuery.trim() }),
                         }}
                         className="inline-flex items-center gap-2 rounded-lg bg-primary-container px-4 py-2 text-sm font-bold text-on-primary transition-opacity hover:opacity-90"
                       >
                         <Icon name="assignment_add" size={16} />
-                        申请完善模型
+                        {t('home.requestModel')}
                       </Link>
                     )}
                   </div>
                 )}
 
                 {products.length > 0 ? <div className="home-workbench-list-spacer" aria-hidden="true" /> : null}
-                <Pagination
-                  page={page}
-                  totalPages={totalPages}
-                  totalItems={totalItems}
-                  pageSize={pageSize}
-                  pageSizeOptions={homePageSizeOptions}
-                  onPageChange={onPageChange}
-                  onPageSizeChange={onPageSizeChange}
-                  className="home-workbench-pagination"
-                />
+                {listLoadingMode === 'pagination' ? (
+                  <Pagination
+                    page={page}
+                    totalPages={totalPages}
+                    totalItems={totalItems}
+                    pageSize={pageSize}
+                    pageSizeOptions={homePageSizeOptions}
+                    onPageChange={onPageChange}
+                    onPageSizeChange={onPageSizeChange}
+                    className="home-workbench-pagination"
+                  />
+                ) : (
+                  <InfiniteLoadTrigger
+                    hasMore={hasMore}
+                    isLoading={isLoadingMore}
+                    onLoadMore={onLoadMore}
+                    buttonless
+                    idleLabel={null}
+                  />
+                )}
                 <WorkbenchHomeFooter
                   contactAddress={contactAddress}
                   contactEmail={contactEmail}

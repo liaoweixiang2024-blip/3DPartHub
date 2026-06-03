@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next';
 import Icon from './Icon';
 
 export const DEFAULT_PAGE_SIZE = 20;
@@ -36,6 +37,7 @@ export default function Pagination({
   onPageChange,
   onPageSizeChange,
 }: PaginationProps) {
+  const { t } = useTranslation();
   const showPageSize = Boolean(pageSize && onPageSizeChange);
   const minPageSize = pageSizeOptions[0] || 1;
   if (totalPages <= 1 && (!showPageSize || totalItems <= minPageSize)) return null;
@@ -50,7 +52,7 @@ export default function Pagination({
 
   const pageSizeSelect = showPageSize ? (
     <label className="relative shrink-0">
-      <span className="sr-only">每页数量</span>
+      <span className="sr-only">{t('pagination.pageSize')}</span>
       <select
         value={pageSize}
         onChange={(event) => onPageSizeChange?.(Number(event.target.value))}
@@ -58,7 +60,7 @@ export default function Pagination({
       >
         {pageSizeOptions.map((size) => (
           <option key={size} value={size}>
-            {size}/页
+            {t('pagination.sizePerPage', { size })}
           </option>
         ))}
       </select>
@@ -72,13 +74,13 @@ export default function Pagination({
 
   if (compact) {
     return (
-      <nav className={`mt-5 pb-4 ${className}`} aria-label="分页">
+      <nav className={`mt-5 pb-4 ${className}`} aria-label={t('pagination.aria')}>
         <div className="mx-auto flex w-full max-w-[320px] items-center gap-2 rounded-lg border border-outline-variant/20 bg-surface-container-low/90 p-1.5 shadow-sm">
           <button
             type="button"
             onClick={() => changePage(safePage - 1)}
             disabled={safePage <= 1}
-            aria-label="上一页"
+            aria-label={t('pagination.previous')}
             className="flex h-9 w-10 shrink-0 items-center justify-center rounded-md border border-outline-variant/20 bg-surface-container text-on-surface-variant transition-colors hover:bg-surface-container-high hover:text-on-surface disabled:cursor-not-allowed disabled:opacity-35"
           >
             <Icon name="chevron_left" size={18} />
@@ -96,7 +98,7 @@ export default function Pagination({
             type="button"
             onClick={() => changePage(safePage + 1)}
             disabled={safePage >= safeTotalPages}
-            aria-label="下一页"
+            aria-label={t('pagination.next')}
             className="flex h-9 w-10 shrink-0 items-center justify-center rounded-md border border-outline-variant/20 bg-surface-container text-on-surface-variant transition-colors hover:bg-surface-container-high hover:text-on-surface disabled:cursor-not-allowed disabled:opacity-35"
           >
             <Icon name="chevron_right" size={18} />
@@ -121,7 +123,7 @@ export default function Pagination({
   }
 
   return (
-    <nav className={`mt-7 flex flex-col items-center gap-2.5 pb-5 ${className}`} aria-label="分页">
+    <nav className={`mt-7 flex flex-col items-center gap-2.5 pb-5 ${className}`} aria-label={t('pagination.aria')}>
       <div className="inline-flex max-w-full items-center gap-1 overflow-x-auto rounded-lg border border-outline-variant/20 bg-surface-container-low/80 p-1 shadow-sm scrollbar-hidden">
         <button
           type="button"
@@ -130,7 +132,7 @@ export default function Pagination({
           className="flex h-9 shrink-0 items-center gap-1.5 rounded-md px-3 text-sm text-on-surface-variant transition-colors hover:bg-surface-container-high hover:text-on-surface disabled:cursor-not-allowed disabled:opacity-35"
         >
           <Icon name="chevron_left" size={16} />
-          <span>上一页</span>
+          <span>{t('pagination.previous')}</span>
         </button>
         <div className="mx-0.5 h-5 w-px shrink-0 bg-outline-variant/20" />
         {pages.map((p, i) =>
@@ -164,7 +166,7 @@ export default function Pagination({
           disabled={safePage >= safeTotalPages}
           className="flex h-9 shrink-0 items-center gap-1.5 rounded-md px-3 text-sm text-on-surface-variant transition-colors hover:bg-surface-container-high hover:text-on-surface disabled:cursor-not-allowed disabled:opacity-35"
         >
-          <span>下一页</span>
+          <span>{t('pagination.next')}</span>
           <Icon name="chevron_right" size={16} />
         </button>
         {pageSizeSelect && (

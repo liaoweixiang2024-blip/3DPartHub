@@ -1,5 +1,6 @@
 import { motion, AnimatePresence } from 'framer-motion';
 import { useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import { overlayMotion, sideSheetMotion } from '../../lib/motion';
 import Icon from '../shared/Icon';
 import type { Category } from './homeTypes';
@@ -23,6 +24,8 @@ export function MobileDrawer({
   onToggle: (id: string) => void;
   onSelect: (id: string) => void;
 }) {
+  const { t } = useTranslation();
+
   useEffect(() => {
     document.documentElement.classList.toggle('mobile-nav-drawer-open', open);
     return () => document.documentElement.classList.remove('mobile-nav-drawer-open');
@@ -54,7 +57,7 @@ export function MobileDrawer({
           >
             <div className="flex items-center justify-between p-4 border-b border-outline-variant/20">
               <h2 className="text-sm font-bold text-on-surface-variant tracking-wider uppercase font-headline">
-                产品目录
+                {t('home.catalog')}
               </h2>
               <button onClick={onClose} className="p-1 text-on-surface-variant">
                 <Icon name="close" size={24} />
@@ -74,7 +77,7 @@ export function MobileDrawer({
               >
                 <span className="flex items-center gap-2">
                   <Icon name="category_all" size={18} />
-                  全部模型
+                  {t('home.allModels')}
                 </span>
                 <span className="text-[10px] bg-primary/20 px-1.5 py-0.5 rounded-sm text-primary font-medium">
                   {totalCount || categoriesData.reduce((s, c) => s + c.count, 0)}

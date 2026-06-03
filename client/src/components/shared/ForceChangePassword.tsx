@@ -1,5 +1,6 @@
 import { AnimatePresence, motion } from 'framer-motion';
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { authApi } from '../../api/auth';
 import { useAuthStore } from '../../stores/useAuthStore';
 import DialogOverlay from './DialogOverlay';
@@ -11,6 +12,7 @@ import { useToast } from './Toast';
  * Shown only for admins with user.mustChangePassword === true.
  */
 export default function ForceChangePassword() {
+  const { t } = useTranslation();
   const user = useAuthStore((s) => s.user);
   const updateUser = useAuthStore((s) => s.updateUser);
   const setAccessToken = useAuthStore((s) => s.setAccessToken);
@@ -27,11 +29,11 @@ export default function ForceChangePassword() {
     setError('');
 
     if (newPassword.length < 8) {
-      setError('新密码长度至少8位');
+      setError(t('forcePassword.errors.minLength'));
       return;
     }
     if (newPassword !== confirmPassword) {
-      setError('两次输入的密码不一致');
+      setError(t('forcePassword.errors.mismatch'));
       return;
     }
 
@@ -44,7 +46,7 @@ export default function ForceChangePassword() {
       updateUser({ ...(result.user || {}), mustChangePassword: false });
       setNewPassword('');
       setConfirmPassword('');
-      toast('密码修改成功', 'success');
+      toast(t('forcePassword.toasts.success'), 'success');
     } catch (err: unknown) {
       const resp = typeof err === 'object' && err !== null ? (err as Record<string, unknown>).response : undefined;
       const data = typeof resp === 'object' && resp !== null ? (resp as Record<string, unknown>).data : undefined;
@@ -52,8 +54,8 @@ export default function ForceChangePassword() {
         typeof data === 'object' && data !== null
           ? ((data as Record<string, unknown>).message as string) ||
             ((data as Record<string, unknown>).detail as string) ||
-            '密码修改失败，请重试'
-          : '密码修改失败，请重试';
+            t('forcePassword.errors.failed')
+          : t('forcePassword.errors.failed');
       setError(msg);
     } finally {
       setLoading(false);
@@ -84,14 +86,14 @@ export default function ForceChangePassword() {
                 />
               </svg>
             </div>
-            <h2 className="text-xl font-bold text-on-surface">首次登录，请修改密码</h2>
-            <p className="text-sm text-on-surface-variant mt-2 text-center">为保障账户安全，请先设置一个新的登录密码</p>
+            <h2 className="text-xl font-bold text-on-surface">{t('forcePassword.title')}</h2>
+            <p className="text-sm text-on-surface-variant mt-2 text-center">{t('forcePassword.description')}</p>
           </div>
 
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="flex flex-col gap-1.5">
               <AppFormLabel uppercase className="mb-0">
-                新密码
+                {t('forcePassword.newPassword')}
               </AppFormLabel>
               <AppTextInput
                 type="password"
@@ -102,13 +104,13 @@ export default function ForceChangePassword() {
                 }}
                 required
                 minLength={8}
-                placeholder="至少8位"
+                placeholder={t('forcePassword.newPasswordPlaceholder')}
                 autoFocus
               />
             </div>
             <div className="flex flex-col gap-1.5">
               <AppFormLabel uppercase className="mb-0">
-                确认新密码
+                {t('forcePassword.confirmPassword')}
               </AppFormLabel>
               <AppTextInput
                 type="password"
@@ -119,7 +121,7 @@ export default function ForceChangePassword() {
                 }}
                 required
                 minLength={8}
-                placeholder="再次输入新密码"
+                placeholder={t('forcePassword.confirmPasswordPlaceholder')}
               />
             </div>
             {error && <p className="text-red-400 text-xs break-words">{error}</p>}
@@ -128,7 +130,7 @@ export default function ForceChangePassword() {
               disabled={loading}
               className="w-full py-2.5 bg-primary-container text-on-primary rounded-sm text-sm font-medium hover:bg-primary transition-colors disabled:opacity-50 mt-2"
             >
-              {loading ? '提交中...' : '确认修改'}
+              {loading ? t('forcePassword.submitting') : t('forcePassword.submit')}
             </button>
           </form>
         </motion.div>

@@ -1,4 +1,5 @@
 import { AnimatePresence, motion } from 'framer-motion';
+import { useTranslation } from 'react-i18next';
 import type { Category } from '../../../../components/home/homeTypes';
 import Icon from '../../../../components/shared/Icon';
 
@@ -17,11 +18,12 @@ export default function CategorySidebar({
   onToggle: (id: string) => void;
   onSelect: (id: string) => void;
 }) {
+  const { t } = useTranslation();
   return (
     <aside className="home-category-sidebar hidden md:flex w-56 bg-surface-container-low flex-col border-r border-primary-container/10 shrink-0 py-4 gap-2">
       <div className="home-category-header px-5 py-3 border-b border-surface">
         <h2 className="home-category-title text-sm font-bold text-on-surface tracking-wider uppercase font-headline">
-          产品目录
+          {t('home.catalog')}
         </h2>
       </div>
       <div className="flex-1 px-3 py-2 flex flex-col gap-0.5 overflow-y-auto scrollbar-hidden">
@@ -35,7 +37,7 @@ export default function CategorySidebar({
         >
           <span className="flex items-center gap-2">
             <Icon name="category_all" size={18} />
-            全部模型
+            {t('home.allModels')}
           </span>
           <span className="home-category-count text-[10px] bg-primary/20 px-1.5 py-0.5 rounded-sm text-primary font-medium">
             {totalCount || categoriesData.reduce((sum, category) => sum + category.count, 0)}

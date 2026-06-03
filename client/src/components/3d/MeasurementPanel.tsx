@@ -1,4 +1,6 @@
+import type { TFunction } from 'i18next';
 import { useMemo, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import Icon from '../shared/Icon';
 import type {
   MeasureMode,
@@ -28,17 +30,25 @@ interface MeasurementPanelProps {
 
 type MeasureUnit = 'auto' | 'mm' | 'cm' | 'm';
 
-const UNIT_OPTIONS: Array<{ key: MeasureUnit; label: string }> = [
-  { key: 'auto', label: '自动' },
+const UNIT_OPTIONS: Array<{ key: MeasureUnit; labelKey?: string; label?: string }> = [
+  { key: 'auto', labelKey: 'viewer.measurement.unitAuto' },
   { key: 'mm', label: 'mm' },
   { key: 'cm', label: 'cm' },
   { key: 'm', label: 'm' },
 ];
 
-const SNAP_OPTIONS: Array<{ key: MeasurementSnapMode; label: string; description: string }> = [
-  { key: 'surface', label: '表面', description: '稳定表面点' },
-  { key: 'edge', label: '边', description: '吸附最近边' },
-  { key: 'vertex', label: '顶点', description: '吸附最近顶点' },
+const SNAP_OPTIONS: Array<{ key: MeasurementSnapMode; labelKey: string; descriptionKey: string }> = [
+  {
+    key: 'surface',
+    labelKey: 'viewer.measurement.snapSurface',
+    descriptionKey: 'viewer.measurement.snapSurfaceDescription',
+  },
+  { key: 'edge', labelKey: 'viewer.measurement.snapEdge', descriptionKey: 'viewer.measurement.snapEdgeDescription' },
+  {
+    key: 'vertex',
+    labelKey: 'viewer.measurement.snapVertex',
+    descriptionKey: 'viewer.measurement.snapVertexDescription',
+  },
 ];
 
 function formatMeasure(value?: number, unit: MeasureUnit = 'auto') {
@@ -51,11 +61,11 @@ function formatMeasure(value?: number, unit: MeasureUnit = 'auto') {
   return `${value.toFixed(3)} mm`;
 }
 
-function snapLabel(point?: MeasurementPoint) {
+function snapLabel(point: MeasurementPoint | undefined, t: TFunction) {
   if (!point) return '-';
-  if (point.snap === 'vertex') return '顶点';
-  if (point.snap === 'edge') return '边';
-  return '表面';
+  if (point.snap === 'vertex') return t('viewer.measurement.snapVertex');
+  if (point.snap === 'edge') return t('viewer.measurement.snapEdge');
+  return t('viewer.measurement.snapSurface');
 }
 
 function distance(points: MeasurementPoint[]) {
@@ -96,31 +106,36 @@ function getMeasurementText(
   mode: MeasureMode,
   points: MeasurementPoint[],
   unit: MeasureUnit,
+  t: TFunction,
   bounds?: ModelBoundsDetail | null,
 ) {
   if (mode === 'distance') {
     const measuredDistance = distance(points);
-    return measuredDistance === null ? '' : `两点距离：${formatMeasure(measuredDistance, unit)}`;
+    return measuredDistance === null
+      ? ''
+      : t('viewer.measurement.resultDistance', { value: formatMeasure(measuredDistance, unit) });
   }
   if (mode === 'angle') {
     const measuredAngle = angle(points);
-    return measuredAngle === null ? '' : `三点角度：${measuredAngle.toFixed(2)} deg`;
+    return measuredAngle === null ? '' : t('viewer.measurement.resultAngle', { value: measuredAngle.toFixed(2) });
   }
   if (mode === 'diameter') {
     const measuredDiameter = circleDiameter(points);
-    return measuredDiameter === null ? '' : `三点直径：${formatMeasure(measuredDiameter, unit)}`;
+    return measuredDiameter === null
+      ? ''
+      : t('viewer.measurement.resultDiameter', { value: formatMeasure(measuredDiameter, unit) });
   }
   if (!bounds) return '';
   return [
-    `包围盒 X：${formatMeasure(bounds.size.x, unit)}`,
+    t('viewer.measurement.resultBoundsX', { value: formatMeasure(bounds.size.x, unit) }),
     `Y：${formatMeasure(bounds.size.y, unit)}`,
     `Z：${formatMeasure(bounds.size.z, unit)}`,
-    `最大边：${formatMeasure(bounds.maxDim, unit)}`,
+    t('viewer.measurement.resultMaxEdge', { value: formatMeasure(bounds.maxDim, unit) }),
   ].join(' / ');
 }
 
-function getRecordText(record: MeasurementRecord, unit: MeasureUnit) {
-  return getMeasurementText(record.mode, record.points, unit);
+function getRecordText(record: MeasurementRecord, unit: MeasureUnit, t: TFunction) {
+  return getMeasurementText(record.mode, record.points, unit, t);
 }
 
 export default function MeasurementPanel({
@@ -140,6 +155,7 @@ export default function MeasurementPanel({
   onRemoveRecord,
   onClose,
 }: MeasurementPanelProps) {
+  const { t } = useTranslation();
   const normalizedDefaultUnit: MeasureUnit =
     defaultUnit === 'mm' || defaultUnit === 'cm' || defaultUnit === 'm' ? defaultUnit : 'auto';
   const [unit, setUnit] = useState<MeasureUnit>(normalizedDefaultUnit);
@@ -150,22 +166,25 @@ export default function MeasurementPanel({
   const measuredAngle = angle(points);
   const measuredDiameter = circleDiameter(points);
   const requiredPoints = mode === 'angle' || mode === 'diameter' ? 3 : mode === 'distance' ? 2 : 0;
-  const snapDescription = SNAP_OPTIONS.find((option) => option.key === snapMode)?.description || '稳定表面点';
+  const snapDescription = t(
+    SNAP_OPTIONS.find((option) => option.key === snapMode)?.descriptionKey ||
+      'viewer.measurement.snapSurfaceDescription',
+  );
   const prompt =
     mode === 'bounds'
-      ? '查看当前模型包围盒尺寸'
+      ? t('viewer.measurement.promptBounds')
       : points.length === 0
-        ? `点击模型选点，当前为${snapDescription}模式`
+        ? t('viewer.measurement.promptPick', { mode: snapDescription })
         : points.length < requiredPoints
-          ? `继续选取第 ${points.length + 1} 个点`
+          ? t('viewer.measurement.promptContinue', { index: points.length + 1 })
           : mode === 'angle'
-            ? '已完成三点角度测量'
+            ? t('viewer.measurement.promptAngleDone')
             : mode === 'diameter'
-              ? '已完成三点直径测量'
-              : '已完成两点距离测量';
+              ? t('viewer.measurement.promptDiameterDone')
+              : t('viewer.measurement.promptDistanceDone');
   const resultText = useMemo(() => {
-    return getMeasurementText(mode, points, unit, bounds);
-  }, [bounds, mode, points, unit]);
+    return getMeasurementText(mode, points, unit, t, bounds);
+  }, [bounds, mode, points, t, unit]);
 
   const copyText = async (text: string, key: string) => {
     if (!text) return;
@@ -188,13 +207,13 @@ export default function MeasurementPanel({
         <div className="min-w-0">
           <div className="flex items-center gap-2">
             <Icon name="compass" size={16} className={active ? 'text-primary' : 'text-on-surface-variant'} />
-            <h3 className="text-sm font-semibold text-on-surface">测量工具</h3>
+            <h3 className="text-sm font-semibold text-on-surface">{t('viewer.measurement.title')}</h3>
           </div>
           <p className="mt-1 text-[11px] text-on-surface-variant">{prompt}</p>
         </div>
         <button
           type="button"
-          aria-label="关闭测量工具"
+          aria-label={t('viewer.measurement.close')}
           onClick={onClose}
           className="flex h-7 w-7 shrink-0 items-center justify-center rounded-sm text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface"
         >
@@ -204,7 +223,9 @@ export default function MeasurementPanel({
 
       <div className="space-y-3 overflow-y-auto p-3">
         <div className="flex items-center justify-between gap-2">
-          <span className="text-[10px] text-on-surface-variant uppercase tracking-wider">单位</span>
+          <span className="text-[10px] text-on-surface-variant uppercase tracking-wider">
+            {t('viewer.measurement.unit')}
+          </span>
           <div className="flex rounded-sm border border-outline-variant/20 bg-surface-container-low/70 p-0.5">
             {UNIT_OPTIONS.map((option) => (
               <button
@@ -217,7 +238,7 @@ export default function MeasurementPanel({
                     : 'text-on-surface-variant hover:text-on-surface'
                 }`}
               >
-                {option.label}
+                {option.labelKey ? t(option.labelKey) : option.label}
               </button>
             ))}
           </div>
@@ -225,13 +246,15 @@ export default function MeasurementPanel({
 
         {mode !== 'bounds' && (
           <div className="flex items-center justify-between gap-2">
-            <span className="text-[10px] text-on-surface-variant uppercase tracking-wider">吸附</span>
+            <span className="text-[10px] text-on-surface-variant uppercase tracking-wider">
+              {t('viewer.measurement.snap')}
+            </span>
             <div className="flex rounded-sm border border-outline-variant/20 bg-surface-container-low/70 p-0.5">
               {SNAP_OPTIONS.map((option) => (
                 <button
                   key={option.key}
                   type="button"
-                  title={option.description}
+                  title={t(option.descriptionKey)}
                   onClick={() => {
                     onSnapModeChange(option.key);
                     onClear();
@@ -242,7 +265,7 @@ export default function MeasurementPanel({
                       : 'text-on-surface-variant hover:text-on-surface'
                   }`}
                 >
-                  {option.label}
+                  {t(option.labelKey)}
                 </button>
               ))}
             </div>
@@ -252,10 +275,10 @@ export default function MeasurementPanel({
         <div className="grid grid-cols-2 gap-2">
           {(
             [
-              ['distance', '两点距离'],
-              ['angle', '三点角度'],
-              ['diameter', '三点直径'],
-              ['bounds', '包围盒'],
+              ['distance', t('viewer.measurement.modeDistance')],
+              ['angle', t('viewer.measurement.modeAngle')],
+              ['diameter', t('viewer.measurement.modeDiameter')],
+              ['bounds', t('viewer.measurement.modeBounds')],
             ] as Array<[MeasureMode, string]>
           ).map(([itemMode, label]) => (
             <button
@@ -276,7 +299,7 @@ export default function MeasurementPanel({
         {mode === 'distance' ? (
           <div className="rounded-sm border border-outline-variant/15 bg-surface-container-low/70 p-3">
             <div className="flex items-center justify-between text-xs">
-              <span className="text-on-surface-variant">距离</span>
+              <span className="text-on-surface-variant">{t('viewer.measurement.distance')}</span>
               <span className="font-mono text-on-surface">
                 {measuredDistance === null ? '-' : formatMeasure(measuredDistance, unit)}
               </span>
@@ -285,19 +308,19 @@ export default function MeasurementPanel({
               <span
                 className={`rounded-sm px-2 py-1 ${points[0] ? 'bg-cyan-400/10 text-cyan-200' : 'bg-surface-container-high/50'}`}
               >
-                起点 {snapLabel(points[0])}
+                {t('viewer.measurement.startPoint')} {snapLabel(points[0], t)}
               </span>
               <span
                 className={`rounded-sm px-2 py-1 ${points[1] ? 'bg-amber-400/10 text-amber-200' : 'bg-surface-container-high/50'}`}
               >
-                终点 {snapLabel(points[1])}
+                {t('viewer.measurement.endPoint')} {snapLabel(points[1], t)}
               </span>
             </div>
           </div>
         ) : mode === 'angle' ? (
           <div className="rounded-sm border border-outline-variant/15 bg-surface-container-low/70 p-3">
             <div className="flex items-center justify-between text-xs">
-              <span className="text-on-surface-variant">角度</span>
+              <span className="text-on-surface-variant">{t('viewer.measurement.angle')}</span>
               <span className="font-mono text-on-surface">
                 {measuredAngle === null ? '-' : `${measuredAngle.toFixed(2)} deg`}
               </span>
@@ -308,7 +331,7 @@ export default function MeasurementPanel({
                   key={index}
                   className={`rounded-sm px-2 py-1 ${points[index] ? 'bg-cyan-400/10 text-cyan-200' : 'bg-surface-container-high/50'}`}
                 >
-                  点{index + 1} {snapLabel(points[index])}
+                  {t('viewer.measurement.point', { index: index + 1 })} {snapLabel(points[index], t)}
                 </span>
               ))}
             </div>
@@ -316,7 +339,7 @@ export default function MeasurementPanel({
         ) : mode === 'diameter' ? (
           <div className="rounded-sm border border-outline-variant/15 bg-surface-container-low/70 p-3">
             <div className="flex items-center justify-between text-xs">
-              <span className="text-on-surface-variant">直径</span>
+              <span className="text-on-surface-variant">{t('viewer.measurement.diameter')}</span>
               <span className="font-mono text-on-surface">
                 {measuredDiameter === null ? '-' : formatMeasure(measuredDiameter, unit)}
               </span>
@@ -327,7 +350,7 @@ export default function MeasurementPanel({
                   key={index}
                   className={`rounded-sm px-2 py-1 ${points[index] ? 'bg-amber-400/10 text-amber-200' : 'bg-surface-container-high/50'}`}
                 >
-                  点{index + 1} {snapLabel(points[index])}
+                  {t('viewer.measurement.point', { index: index + 1 })} {snapLabel(points[index], t)}
                 </span>
               ))}
             </div>
@@ -347,7 +370,7 @@ export default function MeasurementPanel({
               <span className="font-mono text-xs text-on-surface">{formatMeasure(bounds?.size.z, unit)}</span>
             </div>
             <div className="rounded-sm border border-outline-variant/15 bg-surface-container-low/70 p-2">
-              <span className="block text-[10px] text-on-surface-variant">最大边</span>
+              <span className="block text-[10px] text-on-surface-variant">{t('viewer.measurement.maxEdge')}</span>
               <span className="font-mono text-xs text-on-surface">{formatMeasure(bounds?.maxDim, unit)}</span>
             </div>
           </div>
@@ -357,20 +380,22 @@ export default function MeasurementPanel({
           <div className="overflow-hidden rounded-sm border border-outline-variant/15 bg-surface-container-low/60">
             <div className="flex items-center justify-between gap-2 border-b border-outline-variant/10 px-2.5 py-2">
               <div className="min-w-0">
-                <div className="text-[11px] font-medium text-on-surface">测量历史</div>
-                <div className="text-[10px] text-on-surface-variant">最多保留最近 {recordLimit} 条</div>
+                <div className="text-[11px] font-medium text-on-surface">{t('viewer.measurement.history')}</div>
+                <div className="text-[10px] text-on-surface-variant">
+                  {t('viewer.measurement.historyLimit', { limit: recordLimit })}
+                </div>
               </div>
               <button
                 type="button"
                 onClick={onClearRecords}
                 className="shrink-0 rounded-sm px-2 py-1 text-[10px] text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface"
               >
-                清空
+                {t('viewer.measurement.clearHistory')}
               </button>
             </div>
             <div className="max-h-36 divide-y divide-outline-variant/10 overflow-y-auto">
               {records.map((record, index) => {
-                const recordText = getRecordText(record, unit);
+                const recordText = getRecordText(record, unit, t);
                 return (
                   <div key={record.id} className="flex items-center gap-2 px-2.5 py-2">
                     <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-sm bg-surface-container-high text-[10px] font-medium text-on-surface-variant">
@@ -383,7 +408,7 @@ export default function MeasurementPanel({
                       type="button"
                       onClick={() => copyText(recordText, record.id)}
                       disabled={!recordText}
-                      aria-label="复制测量记录"
+                      aria-label={t('viewer.measurement.copyRecord')}
                       className="flex h-7 w-7 shrink-0 items-center justify-center rounded-sm text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface disabled:opacity-40"
                     >
                       <Icon name={copiedKey === record.id ? 'check' : 'content_copy'} size={13} />
@@ -391,7 +416,7 @@ export default function MeasurementPanel({
                     <button
                       type="button"
                       onClick={() => onRemoveRecord(record.id)}
-                      aria-label="删除测量记录"
+                      aria-label={t('viewer.measurement.deleteRecord')}
                       className="flex h-7 w-7 shrink-0 items-center justify-center rounded-sm text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface"
                     >
                       <Icon name="delete" size={13} />
@@ -411,7 +436,7 @@ export default function MeasurementPanel({
             className="flex items-center justify-center gap-1.5 rounded-sm border border-outline-variant/20 px-3 py-2 text-xs text-on-surface-variant hover:border-primary/30 hover:text-on-surface disabled:opacity-40"
           >
             <Icon name={copiedKey === 'current' ? 'check' : 'content_copy'} size={14} />
-            {copiedKey === 'current' ? '已复制' : '复制结果'}
+            {copiedKey === 'current' ? t('viewer.measurement.copied') : t('viewer.measurement.copyResult')}
           </button>
           <button
             type="button"
@@ -419,7 +444,7 @@ export default function MeasurementPanel({
             className="flex items-center justify-center gap-1.5 rounded-sm border border-outline-variant/20 px-3 py-2 text-xs text-on-surface-variant hover:border-primary/30 hover:text-on-surface"
           >
             <Icon name="restart_alt" size={14} />
-            清除测量
+            {t('viewer.measurement.clear')}
           </button>
         </div>
       </div>

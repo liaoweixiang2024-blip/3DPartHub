@@ -1,5 +1,6 @@
 import { useEffect, useId, useLayoutEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { createPortal } from 'react-dom';
+import { useTranslation } from 'react-i18next';
 import Icon from './Icon';
 
 const REFRESH_ICON_CLASS = 'animate-spin text-primary-container motion-reduce:animate-none';
@@ -52,13 +53,15 @@ function getCurrentTime() {
   return typeof performance !== 'undefined' ? performance.now() : Date.now();
 }
 
-export function PageRefreshIndicator({ label = '页面刷新中' }: { label?: string }) {
+export function PageRefreshIndicator({ label }: { label?: string }) {
+  const { t } = useTranslation();
   const refreshId = useId();
+  const visibleLabel = label ?? t('pageRefresh.loading');
 
   useLayoutEffect(() => {
-    upsertRefreshEntry({ id: refreshId, label });
+    upsertRefreshEntry({ id: refreshId, label: visibleLabel });
     return () => removeRefreshEntry(refreshId);
-  }, [label, refreshId]);
+  }, [refreshId, visibleLabel]);
 
   return null;
 }
@@ -138,13 +141,10 @@ export function GlobalPageRefreshIndicator() {
   );
 }
 
-export default function PageRefreshFallback({
-  standalone = false,
-  label = '页面刷新中',
-}: {
-  standalone?: boolean;
-  label?: string;
-}) {
+export default function PageRefreshFallback({ standalone = false, label }: { standalone?: boolean; label?: string }) {
+  const { t } = useTranslation();
+  const visibleLabel = label ?? t('pageRefresh.loading');
+
   return (
     <div
       className={
@@ -152,7 +152,7 @@ export default function PageRefreshFallback({
       }
       data-page-refresh-fallback
     >
-      <PageRefreshIndicator label={label} />
+      <PageRefreshIndicator label={visibleLabel} />
     </div>
   );
 }

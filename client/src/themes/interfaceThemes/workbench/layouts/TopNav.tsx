@@ -1,6 +1,8 @@
 import { motion, useReducedMotion } from 'framer-motion';
 import { useMemo } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Link, useLocation } from 'react-router-dom';
+import { localizeNavLabel } from '../../../../i18n/nav';
 import type { NavItemConfig } from '../../../../lib/businessConfig';
 import { preloadRouteForPath } from '../../../../lib/routeLoaders';
 import type { DesktopTopNavThemeProps } from '../../types';
@@ -17,19 +19,6 @@ const WORKBENCH_NAV_PRIORITY = [
   '/my-tickets',
   '/support',
 ];
-
-const WORKBENCH_NAV_LABELS: Record<string, string> = {
-  '/': '模型',
-  '/selection': '选型',
-  '/thread-size': '规格',
-  '/product-wall': '图库',
-  '/favorites': '收藏',
-  '/downloads': '下载',
-  '/my-shares': '分享',
-  '/my-inquiries': '询价',
-  '/my-tickets': '工单',
-  '/support': '支持',
-};
 
 function getWorkbenchNavItems(items: NavItemConfig[]) {
   const byPath = new Map(items.map((item) => [item.path, item]));
@@ -56,10 +45,6 @@ const desktopTextClass = (active: boolean) =>
     active ? 'text-primary-container' : 'text-on-surface-variant hover:text-on-surface'
   }`;
 
-function getWorkbenchNavLabel(item: NavItemConfig) {
-  return WORKBENCH_NAV_LABELS[item.path] || item.label.replace(/^我的/, '').replace(/^产品/, '').replace(/历史$/, '');
-}
-
 export default function WorkbenchTopNav({
   source,
   userNavItems,
@@ -68,6 +53,7 @@ export default function WorkbenchTopNav({
   isNavActive,
   onNavClick,
 }: DesktopTopNavThemeProps) {
+  const { t } = useTranslation();
   const navItems = useMemo(() => getWorkbenchNavItems(userNavItems), [userNavItems]);
   const reduceMotion = useReducedMotion();
   const location = useLocation();
@@ -97,7 +83,10 @@ export default function WorkbenchTopNav({
         )}
 
         {!isAdminRoute ? (
-          <nav className="workbench-top-nav-menu flex min-w-0 flex-1 items-center gap-0.5" aria-label="主导航">
+          <nav
+            className="workbench-top-nav-menu flex min-w-0 flex-1 items-center gap-0.5"
+            aria-label={t('common.navigation')}
+          >
             {navItems.map((item) => {
               const active = isNavActive(item.path);
               return (
@@ -118,7 +107,7 @@ export default function WorkbenchTopNav({
                       transition={navSpring}
                     />
                   ) : null}
-                  <span className="relative z-10 whitespace-nowrap">{getWorkbenchNavLabel(item)}</span>
+                  <span className="relative z-10 whitespace-nowrap">{localizeNavLabel(item, t, 'short')}</span>
                 </Link>
               );
             })}

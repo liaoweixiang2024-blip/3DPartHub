@@ -1,4 +1,5 @@
 import type { FormHTMLAttributes, InputHTMLAttributes, ReactNode, Ref } from 'react';
+import { useTranslation } from 'react-i18next';
 import Icon from './Icon';
 
 interface SearchFieldProps {
@@ -29,10 +30,12 @@ export default function SearchField({
   placeholder,
   className = '',
   inputClassName = '',
-  clearAriaLabel = '清空搜索',
+  clearAriaLabel,
   iconSize = 16,
 }: SearchFieldProps) {
+  const { t } = useTranslation();
   const visibleValue = value ?? (typeof inputProps?.value === 'string' ? inputProps.value : '');
+  const visibleClearAriaLabel = clearAriaLabel ?? t('topNav.clearSearch');
   const { className: formClassName = '', ...restFormProps } = formProps || {};
   const content: ReactNode = (
     <>
@@ -49,7 +52,7 @@ export default function SearchField({
           type="button"
           onClick={onClear}
           className="shrink-0 p-0.5 text-on-surface-variant hover:text-on-surface"
-          aria-label={clearAriaLabel}
+          aria-label={visibleClearAriaLabel}
           data-tooltip-ignore
         >
           <Icon name="close" size={14} />

@@ -1,6 +1,7 @@
 import type { CategoryItem } from '../../api/categories';
 import type { ServerModelListItem } from '../../api/models';
 import { DEFAULT_PAGE_SIZE, normalizePageSize } from '../../components/shared/Pagination';
+import { i18n } from '../../i18n';
 import { normalizeHomeSearchQuery } from '../../lib/homeSearchState';
 import type { Category, HomeBrowseState, Product } from './homeTypes';
 
@@ -260,11 +261,11 @@ export function serverItemToProduct(item: ServerModelListItem): Product {
   const format = item.format?.toUpperCase() || 'UNKNOWN';
   return {
     id: item.model_id,
-    name: item.name || '未命名模型',
-    description: `${format} 格式 3D 模型`,
+    name: item.name || i18n.t('modelDetail.unnamed'),
+    description: i18n.t('modelDetail.formatModel', { format }),
     formats: [format],
     fileSize: formatFileSize(item.original_size || item.file_size || 0),
-    category: item.category || '其他辅料',
+    category: item.category || i18n.t('home.otherCategory'),
     thumbnailUrl: item.thumbnail_url || undefined,
     createdAt: item.created_at || undefined,
     fileSizeBytes: item.original_size || item.file_size || 0,

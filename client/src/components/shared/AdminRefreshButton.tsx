@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useMediaQuery } from '../../layouts/hooks/useMediaQuery';
 import { AdminButton, AdminIconButton } from './AdminControls';
 
@@ -13,16 +14,20 @@ interface AdminRefreshButtonProps {
 
 export default function AdminRefreshButton({
   onRefresh,
-  label = '刷新',
-  loadingLabel = '刷新中...',
-  ariaLabel = '刷新',
+  label,
+  loadingLabel,
+  ariaLabel,
   disabled = false,
   mobileIconOnly = false,
 }: AdminRefreshButtonProps) {
+  const { t } = useTranslation();
   const isDesktop = useMediaQuery('(min-width: 768px)');
   const [refreshing, setRefreshing] = useState(false);
   const busy = refreshing || disabled;
   const showText = isDesktop || !mobileIconOnly;
+  const visibleLabel = label ?? t('adminState.refresh');
+  const visibleLoadingLabel = loadingLabel ?? t('adminState.refreshing');
+  const visibleAriaLabel = ariaLabel ?? t('adminState.refresh');
 
   async function handleClick() {
     if (busy) return;
@@ -42,7 +47,7 @@ export default function AdminRefreshButton({
         iconSize={17}
         onClick={handleClick}
         disabled={busy}
-        aria-label={refreshing ? loadingLabel : ariaLabel}
+        aria-label={refreshing ? visibleLoadingLabel : visibleAriaLabel}
       />
     );
   }
@@ -54,11 +59,11 @@ export default function AdminRefreshButton({
       iconSize={isDesktop ? 16 : 14}
       onClick={handleClick}
       disabled={busy}
-      aria-label={refreshing ? loadingLabel : ariaLabel}
+      aria-label={refreshing ? visibleLoadingLabel : visibleAriaLabel}
       size={isDesktop ? 'md' : 'sm'}
       variant="secondary"
     >
-      {refreshing ? loadingLabel : label}
+      {refreshing ? visibleLoadingLabel : visibleLabel}
     </AdminButton>
   );
 }

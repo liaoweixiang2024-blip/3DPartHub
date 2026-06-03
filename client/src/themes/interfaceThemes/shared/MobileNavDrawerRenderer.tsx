@@ -1,9 +1,11 @@
 import { AnimatePresence, motion } from 'framer-motion';
 import { useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import Icon from '../../../components/shared/Icon';
 import { checkProtectedAccess } from '../../../components/shared/ProtectedLink';
 import { useAuthEntry } from '../../../components/shared/useAuthEntry';
+import { localizeNavItems } from '../../../i18n/nav';
 import { getBusinessConfig } from '../../../lib/businessConfig';
 import { overlayMotion, sideSheetMotion } from '../../../lib/motion';
 import { usePublicSettings } from '../../../lib/publicSettings';
@@ -29,6 +31,7 @@ interface MobileNavDrawerRendererProps extends MobileNavDrawerThemeProps {
 }
 
 export default function MobileNavDrawerRenderer({ open, onClose, appearance }: MobileNavDrawerRendererProps) {
+  const { t } = useTranslation();
   const location = useLocation();
   const navigate = useNavigate();
   const logout = useAuthStore((s) => s.logout);
@@ -36,7 +39,7 @@ export default function MobileNavDrawerRenderer({ open, onClose, appearance }: M
   const { settings } = usePublicSettings();
   const isAdmin = user?.role === 'ADMIN';
   const business = getBusinessConfig(settings);
-  const navItems = isAdmin ? business.adminNav : business.userNav;
+  const navItems = localizeNavItems(isAdmin ? business.adminNav : business.userNav, t, 'mobile');
   const { authNodes, handleProtectedLinkClick } = useAuthEntry(settings, { onBeforeAuth: onClose });
 
   useEffect(() => {
@@ -70,7 +73,7 @@ export default function MobileNavDrawerRenderer({ open, onClose, appearance }: M
               }}
             >
               <div className={appearance.headerClassName}>
-                <span className={appearance.titleClassName}>导航</span>
+                <span className={appearance.titleClassName}>{t('common.navigation')}</span>
                 <button onClick={onClose} className={appearance.closeButtonClassName}>
                   <Icon name="close" size={24} />
                 </button>
@@ -120,7 +123,7 @@ export default function MobileNavDrawerRenderer({ open, onClose, appearance }: M
                     className={appearance.footerLinkClassName}
                   >
                     <Icon name="settings" size={appearance.iconSize} />
-                    个人设置
+                    {t('nav.profileSettings')}
                   </Link>
                   <button
                     onClick={() => {
@@ -131,7 +134,7 @@ export default function MobileNavDrawerRenderer({ open, onClose, appearance }: M
                     className={appearance.footerLinkClassName}
                   >
                     <Icon name="logout" size={appearance.iconSize} />
-                    退出
+                    {t('common.logout')}
                   </button>
                 </div>
               )}

@@ -24,21 +24,30 @@ const LEGACY_CHANGE_EVENT = 'front-interface-theme-preference-change';
 type InterfaceThemePreferenceOption = {
   value: InterfaceThemePreference;
   label: string;
+  labelKey: string;
   shortLabel?: string;
+  shortLabelKey?: string;
   description: string;
+  descriptionKey: string;
 };
 
 export const INTERFACE_THEME_PREFERENCE_OPTIONS: InterfaceThemePreferenceOption[] = [
   {
     value: 'system',
-    label: '跟随网站默认',
-    shortLabel: '默认',
-    description: '使用管理员在后台设置的默认界面主题',
+    label: 'Site default',
+    labelKey: 'themePreference.system.label',
+    shortLabel: 'Default',
+    shortLabelKey: 'themePreference.system.shortLabel',
+    description: 'Use the default interface theme configured by the administrator',
+    descriptionKey: 'themePreference.system.description',
   },
   ...Object.values(INTERFACE_THEME_CATALOG).map((theme) => ({
     value: theme.key,
+    labelKey: `themePreference.${theme.key}.label`,
     label: theme.label,
+    shortLabelKey: `themePreference.${theme.key}.shortLabel`,
     shortLabel: theme.shortLabel,
+    descriptionKey: `themePreference.${theme.key}.description`,
     description: theme.description,
   })),
 ];

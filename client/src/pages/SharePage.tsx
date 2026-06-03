@@ -1,4 +1,5 @@
 import { useState, useEffect, lazy, Suspense, useCallback, useRef, type CSSProperties } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useParams, Link } from 'react-router-dom';
 import { getShareInfo, verifySharePassword, getShareDownloadUrl, type ShareInfo } from '../api/shares';
 import { MATERIAL_PRESETS, type MaterialPresetKey } from '../components/3d/viewerControls';
@@ -48,6 +49,7 @@ function getShareViewerPrefs() {
 }
 
 export default function SharePage() {
+  const { i18n, t } = useTranslation();
   const { token } = useParams<{ token: string }>();
   const isDesktop = useMediaQuery('(min-width: 768px)');
 
@@ -63,7 +65,7 @@ export default function SharePage() {
   const mobileDownloadBarRef = useRef<HTMLDivElement>(null);
   const [mobileDownloadBarHeight, setMobileDownloadBarHeight] = useState(0);
 
-  useDocumentTitle(info ? `${info.modelName} - 分享预览` : '分享预览');
+  useDocumentTitle(info ? `${info.modelName} - ${t('sharePage.preview')}` : t('sharePage.preview'));
 
   const loadInfo = useCallback(async () => {
     if (!token) return;
@@ -80,12 +82,12 @@ export default function SharePage() {
       if (response?.status === 410 || response?.data?.expired) {
         setExpired(true);
       } else {
-        setError(getErrorMessage(err, '获取分享信息失败'));
+        setError(getErrorMessage(err, t('sharePage.loadShareFailed')));
       }
     } finally {
       setLoading(false);
     }
-  }, [token]);
+  }, [t, token]);
 
   useEffect(() => {
     loadInfo();
@@ -135,7 +137,7 @@ export default function SharePage() {
     setPasswordError('');
     try {
       const verified = await verifySharePassword(token, password);
-      if (!verified.accessToken) throw new Error('分享访问令牌缺失');
+      if (!verified.accessToken) throw new Error(t('sharePage.accessTokenMissing'));
       setShareAccessToken(verified.accessToken);
       setPassword('');
       const data = await getShareInfo(token, verified.accessToken);
@@ -143,7 +145,7 @@ export default function SharePage() {
       setInfo(data);
       setNeedPassword(false);
     } catch (err: unknown) {
-      setPasswordError(getErrorMessage(err, '密码错误'));
+      setPasswordError(getErrorMessage(err, t('sharePage.passwordError')));
     }
   }
 
@@ -161,7 +163,7 @@ export default function SharePage() {
       });
     } catch (err) {
       cancelPreparedBrowserDownload(preparedWindow);
-      setError(getErrorMessage(err, '下载失败'));
+      setError(getErrorMessage(err, t('sharePage.downloadFailed')));
     } finally {
       setDownloading(false);
     }
@@ -181,7 +183,7 @@ export default function SharePage() {
 
   // Loading
   if (loading) {
-    return <PageRefreshFallback standalone label="分享预览刷新中" />;
+    return <PageRefreshFallback standalone label={t('sharePage.refreshLabel')} />;
   }
 
   // Expired
@@ -191,10 +193,10 @@ export default function SharePage() {
         <div className="flex flex-1 items-center justify-center bg-surface">
           <div className="text-center">
             <Icon name="link_off" size={56} className="text-on-surface-variant/40 mx-auto mb-4" />
-            <PageTitle className="mb-2">链接已失效</PageTitle>
-            <p className="text-sm text-on-surface-variant mb-4">此分享链接已过期或已被撤销</p>
+            <PageTitle className="mb-2">{t('sharePage.expiredTitle')}</PageTitle>
+            <p className="text-sm text-on-surface-variant mb-4">{t('sharePage.expiredDescription')}</p>
             <Link to="/" className="text-sm text-primary hover:underline">
-              返回首页
+              {t('sharePage.backHome')}
             </Link>
           </div>
         </div>
@@ -209,10 +211,10 @@ export default function SharePage() {
         <div className="flex flex-1 items-center justify-center bg-surface">
           <div className="text-center">
             <Icon name="error" size={56} className="text-error/50 mx-auto mb-4" />
-            <PageTitle className="mb-2">加载失败</PageTitle>
+            <PageTitle className="mb-2">{t('sharePage.loadFailed')}</PageTitle>
             <p className="text-sm text-on-surface-variant mb-4">{error}</p>
             <Link to="/" className="text-sm text-primary hover:underline">
-              返回首页
+              {t('sharePage.backHome')}
             </Link>
           </div>
         </div>
@@ -230,7 +232,7 @@ export default function SharePage() {
               <div className="px-6 py-5 border-b border-outline-variant/10 text-center">
                 <BrandMark size="compact" centered className="mx-auto mb-2 max-w-full" />
                 <h2 className="text-lg font-bold text-on-surface">{info.modelName}</h2>
-                <p className="text-xs text-on-surface-variant mt-1">此分享链接需要密码访问</p>
+                <p className="text-xs text-on-surface-variant mt-1">{t('sharePage.passwordRequired')}</p>
               </div>
               <div className="px-6 py-5 space-y-4">
                 <input
@@ -238,7 +240,7 @@ export default function SharePage() {
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   onKeyDown={(e) => e.key === 'Enter' && handleVerifyPassword()}
-                  placeholder="请输入访问密码"
+                  placeholder={t('sharePage.passwordPlaceholder')}
                   className="w-full bg-surface-container-lowest text-on-surface text-base rounded-md px-4 py-2.5 border border-outline-variant/20 outline-none focus:border-primary"
                   autoFocus
                 />
@@ -247,13 +249,13 @@ export default function SharePage() {
                   onClick={handleVerifyPassword}
                   className="w-full py-2.5 text-sm font-bold bg-primary-container text-on-primary rounded-lg hover:opacity-90 active:scale-[0.98] transition-all"
                 >
-                  验证
+                  {t('sharePage.verify')}
                 </button>
               </div>
             </div>
             <p className="text-center text-xs text-on-surface-variant mt-4">
               <Link to="/" className="hover:text-primary transition-colors">
-                ← 返回首页
+                &larr; {t('sharePage.backHome')}
               </Link>
             </p>
           </div>
@@ -266,10 +268,10 @@ export default function SharePage() {
 
   const downloadDisabled = downloading || (info.downloadLimit > 0 && info.remainingDownloads <= 0);
   const downloadLabel = downloading
-    ? '下载中...'
+    ? t('sharePage.downloading')
     : info.downloadLimit > 0
-      ? `下载（剩余 ${info.remainingDownloads} 次）`
-      : '下载模型';
+      ? t('sharePage.downloadRemaining', { count: info.remainingDownloads })
+      : t('sharePage.download');
   const renderDownloadButton = (showLimitText = true) =>
     info.allowDownload ? (
       <div className="space-y-2">
@@ -283,7 +285,7 @@ export default function SharePage() {
         </button>
         {showLimitText && info.downloadLimit > 0 && (
           <p className="text-center text-xs text-on-surface-variant">
-            下载次数：{info.downloadCount} / {info.downloadLimit}
+            {t('sharePage.downloadCount', { count: info.downloadCount, limit: info.downloadLimit })}
           </p>
         )}
       </div>
@@ -296,12 +298,12 @@ export default function SharePage() {
       {isWechat && (
         <div className="bg-primary-container/90 text-on-primary px-4 py-3 text-center text-sm font-bold relative shrink-0">
           <span>
-            请点击右上角 <Icon name="more_horiz" size={14} className="inline" /> 选择「在浏览器中打开」
+            {t('sharePage.wechatGuide')} <Icon name="more_horiz" size={14} className="inline" />
           </span>
         </div>
       )}
       <header className="min-h-12 flex items-center justify-between gap-3 px-4 py-2 bg-surface-container-low border-b border-outline-variant/10 shrink-0">
-        <span className="text-xs text-on-surface-variant/50 shrink-0">分享预览</span>
+        <span className="text-xs text-on-surface-variant/50 shrink-0">{t('sharePage.preview')}</span>
       </header>
 
       {/* Content — desktop: side-by-side, mobile: centered preview with a lightweight bottom CTA */}
@@ -341,7 +343,7 @@ export default function SharePage() {
             <div className="absolute inset-x-0 top-0 bottom-[var(--share-mobile-cta-height)] flex items-center justify-center md:bottom-0">
               <div className="text-center">
                 <Icon name="view_in_ar" size={48} className="mx-auto text-on-surface-variant/20" />
-                <p className="mt-3 text-xs text-on-surface-variant">此分享未开启模型预览</p>
+                <p className="mt-3 text-xs text-on-surface-variant">{t('sharePage.noPreview')}</p>
               </div>
             </div>
           </div>
@@ -362,7 +364,7 @@ export default function SharePage() {
               </span>
               <span className="flex items-center gap-1">
                 <Icon name="visibility" size={12} />
-                {info.downloadCount} 次下载
+                {t('sharePage.downloadTotal', { count: info.downloadCount })}
               </span>
             </div>
           </div>
@@ -377,12 +379,12 @@ export default function SharePage() {
               rel="noopener noreferrer"
               onClick={(event) => {
                 event.preventDefault();
-                openDocumentUrl(info.drawingUrl!, { title: 'PDF 图纸' });
+                openDocumentUrl(info.drawingUrl!, { title: t('sharePage.drawingTitle') });
               }}
               className="flex items-center gap-3 rounded-lg bg-surface-container-high px-4 py-3 text-sm text-on-surface hover:bg-surface-container-highest transition-colors"
             >
               <Icon name="description" size={20} className="text-on-surface-variant shrink-0" />
-              <span className="truncate">PDF 图纸</span>
+              <span className="truncate">{t('sharePage.drawingTitle')}</span>
               <Icon name="open_in_new" size={16} className="text-on-surface-variant/50 shrink-0 ml-auto" />
             </a>
           )}
@@ -392,14 +394,14 @@ export default function SharePage() {
 
           {!info.allowPreview && !info.allowDownload && (
             <div className="bg-surface-container-high/50 rounded-lg p-3 text-center">
-              <p className="text-xs text-on-surface-variant">此链接仅用于查看信息</p>
+              <p className="text-xs text-on-surface-variant">{t('sharePage.infoOnly')}</p>
             </div>
           )}
 
           {/* Expiry notice */}
           {info.expiresAt && (
             <p className="text-xs text-on-surface-variant/50 text-center">
-              链接有效期至 {new Date(info.expiresAt).toLocaleDateString('zh-CN')}
+              {t('sharePage.validUntil', { date: new Date(info.expiresAt).toLocaleDateString(i18n.language) })}
             </p>
           )}
         </div>
@@ -421,7 +423,7 @@ export default function SharePage() {
 
       {/* Footer */}
       <footer className="hidden h-10 shrink-0 items-center justify-center border-t border-outline-variant/10 md:flex">
-        <span className="text-xs text-on-surface-variant/40">由 {siteTitle} 驱动</span>
+        <span className="text-xs text-on-surface-variant/40">{t('sharePage.footerPoweredBy', { siteTitle })}</span>
       </footer>
     </PublicPageShell>
   );

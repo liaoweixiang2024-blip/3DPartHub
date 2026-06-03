@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next';
 import FloatingMenuRenderer from '../../shared/FloatingMenuRenderer';
 import type { FloatingMenuThemeProps } from '../../types';
 
@@ -17,30 +18,30 @@ const floatingMenuAppearance = {
   contactRowIconSize: 15,
 };
 
-const floatingMenuItems = [{ to: '/', icon: 'dashboard', label: '首页' }];
-
-const floatingMenuTailItems = [
-  { to: '/my-tickets', icon: 'assignment_add', label: '工单' },
-  { to: '/my-inquiries', icon: 'request_quote', label: '询价' },
-];
-
 export default function FloatingMenu({ contactAddress, contactEmail, contactPhone }: FloatingMenuThemeProps) {
+  const { t } = useTranslation();
+  const floatingMenuItems = [{ to: '/', icon: 'dashboard', label: t('nav.home') }];
+  const floatingMenuTailItems = [
+    { to: '/my-tickets', icon: 'assignment_add', label: t('nav.short.tickets') },
+    { to: '/my-inquiries', icon: 'request_quote', label: t('nav.short.inquiries') },
+  ];
+
   return (
     <FloatingMenuRenderer
       appearance={floatingMenuAppearance}
       contactAddress={contactAddress}
       contactActionTo="/support"
       contactActionIcon="support_agent"
-      contactActionLabel="技术支持"
+      contactActionLabel={t('nav.support')}
       contactEmail={contactEmail}
       contactIcon="phone"
-      contactLabel="联系"
-      contactPanelLabel="联系信息"
+      contactLabel={t('floatingMenu.contact')}
+      contactPanelLabel={t('floatingMenu.contactInfo')}
       contactPhone={contactPhone}
       homeItems={floatingMenuItems}
       tailItems={floatingMenuTailItems}
       topIcon="chevrons_up"
-      topLabel="顶部"
+      topLabel={t('floatingMenu.top')}
     />
   );
 }

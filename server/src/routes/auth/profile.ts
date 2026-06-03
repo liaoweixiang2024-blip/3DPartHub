@@ -4,7 +4,12 @@ import { revokeAllTokensBefore, signAccessToken, signRefreshToken, verifyRefresh
 import { logger } from '../../lib/logger.js';
 import { hashPassword, verifyPassword } from '../../lib/password.js';
 import { prisma } from '../../lib/prisma.js';
-import { getSetting } from '../../lib/settings.js';
+import {
+  CONTACT_PHONE_SETTING_MESSAGE,
+  getSetting,
+  isValidContactPhoneSetting,
+  normalizeContactPhoneSetting,
+} from '../../lib/settings.js';
 import { authMiddleware, getRequestToken, type AuthRequest } from '../../middleware/auth.js';
 import { readCookie, REFRESH_COOKIE, setAuthCookies } from './cookies.js';
 
@@ -42,6 +47,7 @@ export function createAuthProfileRouter() {
 
   router.put('/api/auth/profile', authMiddleware, async (req: AuthRequest, res: Response) => {
     const { username, company, phone, department, address, bio, avatar } = req.body;
+    const normalizedPhone = phone !== undefined ? normalizeContactPhoneSetting(phone) : undefined;
 
     if (username !== undefined) {
       if (typeof username !== 'string' || username.trim().length === 0) {
@@ -79,6 +85,10 @@ export function createAuthProfileRouter() {
       res.status(400).json({ detail: '个人简介不能超过500字' });
       return;
     }
+    if (phone !== undefined && !isValidContactPhoneSetting(phone)) {
+      res.status(400).json({ detail: CONTACT_PHONE_SETTING_MESSAGE });
+      return;
+    }
 
     try {
       // Check username uniqueness if changing
@@ -97,7 +107,7 @@ export function createAuthProfileRouter() {
         data: {
           ...(username !== undefined && { username }),
           ...(company !== undefined && { company }),
-          ...(phone !== undefined && { phone }),
+          ...(phone !== undefined && { phone: normalizedPhone || null }),
           ...(department !== undefined && { department }),
           ...(address !== undefined && { address }),
           ...(bio !== undefined && { bio }),

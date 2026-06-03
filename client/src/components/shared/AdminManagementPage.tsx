@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react';
+import { useTranslation } from 'react-i18next';
 import { AdminButton } from './AdminControls';
 import Icon from './Icon';
 import { APP_PAGE_DESCRIPTION_CLASS, APP_PAGE_TITLE_TRUNCATE_CLASS, mergeClassName } from './PagePrimitives';
@@ -236,23 +237,21 @@ export function AdminEmptyState({ icon, title, description, action, className }:
   );
 }
 
-export function AdminErrorState({
-  title = '数据加载失败',
-  description = '请检查网络或服务状态，稍后重试。',
-  retryLabel = '重新加载',
-  onRetry,
-  className,
-}: AdminErrorStateProps) {
+export function AdminErrorState({ title, description, retryLabel, onRetry, className }: AdminErrorStateProps) {
+  const { t } = useTranslation();
+  const visibleTitle = title ?? t('adminState.loadFailed');
+  const visibleDescription = description ?? t('adminState.loadFailedDescription');
+  const visibleRetryLabel = retryLabel ?? t('adminState.reload');
   return (
     <AdminEmptyState
       icon="error"
-      title={title}
-      description={description}
+      title={visibleTitle}
+      description={visibleDescription}
       className={className}
       action={
         onRetry ? (
           <AdminButton onClick={onRetry} icon="refresh" variant="primary">
-            {retryLabel}
+            {visibleRetryLabel}
           </AdminButton>
         ) : null
       }
@@ -260,10 +259,11 @@ export function AdminErrorState({
   );
 }
 
-export function AdminLoadingState({ className, label = '内容加载中' }: AdminLoadingStateProps) {
+export function AdminLoadingState({ className, label }: AdminLoadingStateProps) {
+  const { t } = useTranslation();
   return (
     <div className={mergeClassName('flex min-h-[320px] flex-1', className)}>
-      <PageRefreshIndicator label={label} />
+      <PageRefreshIndicator label={label ?? t('adminState.loading')} />
     </div>
   );
 }

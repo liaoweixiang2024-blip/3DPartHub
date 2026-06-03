@@ -43,7 +43,7 @@ export function createSettingsPublicRouter() {
         'cache:settings:public',
         ttlSeconds,
         async () => {
-          const all = settingsSnapshot;
+          const all = await getAllSettings({ forceRefresh: true });
           const siteTitle = all.site_title ?? '3DPartHub';
           const footerCopyrightFollowsSiteTitle = all.footer_copyright_follow_site_title !== false;
           const modelDetailCopyrightFollowsSiteTitle = all.model_detail_copyright_follow_site_title !== false;
@@ -92,6 +92,11 @@ export function createSettingsPublicRouter() {
             interface_theme: all.interface_theme ?? 'workbench',
             mobile_interface_theme: all.mobile_interface_theme ?? 'classic',
             user_interface_theme_enabled: all.user_interface_theme_enabled ?? true,
+            home_desktop_list_loading_mode: all.home_desktop_list_loading_mode ?? 'pagination',
+            home_mobile_list_loading_mode: all.home_mobile_list_loading_mode ?? 'infinite',
+            ui_default_locale: all.ui_default_locale ?? 'zh-CN',
+            ui_enabled_locales: all.ui_enabled_locales ?? 'zh-CN,zh-TW,en-US,ja-JP,ko-KR,de-DE',
+            ui_follow_browser_locale: all.ui_follow_browser_locale ?? false,
             announcement_enabled: all.announcement_enabled ?? false,
             announcement_text: all.announcement_text ?? '',
             announcement_type: all.announcement_type ?? 'info',
@@ -204,6 +209,11 @@ export function createSettingsPublicRouter() {
         auth_modal_enabled: true,
         login_dialog_enabled: true,
         user_interface_theme_enabled: true,
+        home_desktop_list_loading_mode: 'pagination',
+        home_mobile_list_loading_mode: 'infinite',
+        ui_default_locale: 'zh-CN',
+        ui_enabled_locales: 'zh-CN,zh-TW,en-US,ja-JP,ko-KR,de-DE',
+        ui_follow_browser_locale: false,
         show_watermark: false,
         watermark_image: '',
         maintenance_enabled: false,

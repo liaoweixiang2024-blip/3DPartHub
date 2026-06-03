@@ -1,3 +1,4 @@
+import { i18n } from '../i18n';
 import {
   cancelPreparedBrowserDownload,
   downloadBrowserFile,
@@ -10,6 +11,11 @@ import { getAccessToken, useAuthStore } from '../stores/useAuthStore';
 import { downloadBatchZip } from './batchZipDownload';
 import client from './client';
 import { unwrapApiData } from './response';
+
+function tDownload(key: string, fallback: string) {
+  if (!i18n.isInitialized) return fallback;
+  return String(i18n.t(key, { defaultValue: fallback }));
+}
 
 export interface DownloadHistoryItem {
   id: string;
@@ -77,7 +83,7 @@ function apiUrl(path: string): string {
 
 export class DownloadAuthRequiredError extends Error {
   constructor() {
-    super('请先登录');
+    super(tDownload('protected.loginTitle', 'Login required'));
     this.name = 'DownloadAuthRequiredError';
   }
 }
@@ -105,7 +111,7 @@ export async function createModelDownloadUrl(
 
   const { data } = await client.post('/downloads/model-token', { modelId, format });
   const created = unwrapApiData<{ token: string }>(data);
-  if (!created?.token) throw new Error('创建下载令牌失败');
+  if (!created?.token) throw new Error(tDownload('browserDownload.createTokenFailed', '创建下载令牌失败'));
 
   const params = new URLSearchParams({
     format,
@@ -135,12 +141,12 @@ export async function createModelDrawingUrl(modelId: string): Promise<string> {
 
   const { data } = await client.post('/downloads/drawing-token', { modelId });
   const created = unwrapApiData<{ url: string }>(data);
-  if (!created?.url) throw new Error('创建图纸访问令牌失败');
+  if (!created?.url) throw new Error(tDownload('browserDownload.createDrawingTokenFailed', '创建图纸访问令牌失败'));
   return created.url;
 }
 
 export async function openModelDrawing(modelId: string): Promise<void> {
-  const opened = prepareBrowserDocument('正在打开图纸...');
+  const opened = prepareBrowserDocument(tDownload('browserDownload.openingDrawing', '正在打开图纸...'));
   try {
     const url = await createModelDrawingUrl(modelId);
     if (!url.startsWith('/api/') && !url.startsWith(window.location.origin)) {
@@ -148,7 +154,7 @@ export async function openModelDrawing(modelId: string): Promise<void> {
     }
     openBrowserDocument(url, {
       preparedWindow: opened,
-      title: 'PDF 图纸',
+      title: tDownload('browserDownload.pdfDrawing', 'PDF 图纸'),
       fallbackUrl: `${window.location.pathname}${window.location.search}${window.location.hash}`,
     });
   } catch (error) {

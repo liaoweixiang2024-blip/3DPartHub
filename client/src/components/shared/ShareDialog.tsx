@@ -1,5 +1,6 @@
 import { AnimatePresence, motion } from 'framer-motion';
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { createShare, type CreateShareParams } from '../../api/shares';
 import { useMediaQuery } from '../../layouts/hooks/useMediaQuery';
 import { copyText } from '../../lib/clipboard';
@@ -19,6 +20,7 @@ interface ShareDialogProps {
 }
 
 export default function ShareDialog({ open, onClose, modelId, modelName }: ShareDialogProps) {
+  const { t } = useTranslation();
   const isMobile = useMediaQuery('(max-width: 639px)');
   const { toast } = useToast();
   const policy = getPublicSettingsSnapshot();
@@ -45,16 +47,17 @@ export default function ShareDialog({ open, onClose, modelId, modelName }: Share
 
   // Build expiry options based on policy
   const expiryOptions = (() => {
-    const opts = [{ value: 'never', label: '永久' }];
-    if (maxExpireDays === 0 || maxExpireDays >= 1) opts.push({ value: '1d', label: '1 天' });
-    if (maxExpireDays === 0 || maxExpireDays >= 7) opts.push({ value: '7d', label: '7 天' });
-    if (maxExpireDays === 0 || maxExpireDays >= 30) opts.push({ value: '30d', label: '30 天' });
+    const opts = [{ value: 'never', label: t('shareDialog.expiry.never') }];
+    if (maxExpireDays === 0 || maxExpireDays >= 1) opts.push({ value: '1d', label: t('shareDialog.expiry.oneDay') });
+    if (maxExpireDays === 0 || maxExpireDays >= 7) opts.push({ value: '7d', label: t('shareDialog.expiry.sevenDays') });
+    if (maxExpireDays === 0 || maxExpireDays >= 30)
+      opts.push({ value: '30d', label: t('shareDialog.expiry.thirtyDays') });
     return opts;
   })();
 
   async function handleCreate() {
     if (usePassword && !password.trim()) {
-      setError('请输入密码');
+      setError(t('shareDialog.errors.passwordRequired'));
       return;
     }
     setCreating(true);
@@ -72,9 +75,9 @@ export default function ShareDialog({ open, onClose, modelId, modelName }: Share
       };
       const result = await createShare(params);
       setShareUrl(`${window.location.origin}/share/${result.token}`);
-      toast('模型分享已创建', 'success');
+      toast(t('shareDialog.toasts.created'), 'success');
     } catch (err: unknown) {
-      setError(getErrorMessage(err, '创建失败'));
+      setError(getErrorMessage(err, t('shareDialog.errors.createFailed')));
     } finally {
       setCreating(false);
     }
@@ -84,10 +87,10 @@ export default function ShareDialog({ open, onClose, modelId, modelName }: Share
     try {
       await copyText(shareUrl);
       setCopied(true);
-      toast('分享链接已复制到剪贴板', 'success');
+      toast(t('shareDialog.toasts.copied'), 'success');
       setTimeout(() => setCopied(false), 2000);
     } catch (err: unknown) {
-      toast(getErrorMessage(err, '复制失败，请长按链接手动复制'), 'error');
+      toast(getErrorMessage(err, t('shareDialog.errors.copyFailed')), 'error');
     }
   }
 
@@ -134,7 +137,7 @@ export default function ShareDialog({ open, onClose, modelId, modelName }: Share
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between px-5 py-4 border-b border-outline-variant/10 shrink-0">
-              <h3 className="text-base font-bold text-on-surface">分享模型</h3>
+              <h3 className="text-base font-bold text-on-surface">{t('shareDialog.title')}</h3>
               <button onClick={onClose} className="text-on-surface-variant hover:text-on-surface transition-colors">
                 <Icon name="close" size={20} />
               </button>
@@ -143,16 +146,18 @@ export default function ShareDialog({ open, onClose, modelId, modelName }: Share
             <div className="px-5 py-4 space-y-4 overflow-y-auto scrollbar-hidden">
               {!canShare ? (
                 <div className="text-center py-6">
-                  <p className="text-sm text-on-surface-variant">分享功能已关闭，请联系管理员</p>
+                  <p className="text-sm text-on-surface-variant">{t('shareDialog.disabled')}</p>
                 </div>
               ) : (
                 <>
-                  <p className="text-sm text-on-surface-variant break-words">分享「{modelName}」给其他人查看或下载</p>
+                  <p className="text-sm text-on-surface-variant break-words">
+                    {t('shareDialog.description', { name: modelName })}
+                  </p>
 
                   {shareUrl ? (
                     <div className="space-y-3">
                       <div className="bg-primary/10 border border-primary/20 rounded-lg p-3">
-                        <p className="text-xs text-primary font-medium mb-2">分享链接已创建</p>
+                        <p className="text-xs text-primary font-medium mb-2">{t('shareDialog.linkCreated')}</p>
                         <div className="flex flex-col sm:flex-row sm:items-center gap-2">
                           <input
                             type="text"
@@ -164,7 +169,7 @@ export default function ShareDialog({ open, onClose, modelId, modelName }: Share
                             onClick={handleCopy}
                             className="shrink-0 px-3 py-2 text-xs font-medium bg-primary-container text-on-primary rounded hover:opacity-90 transition-opacity"
                           >
-                            {copied ? '已复制' : '复制'}
+                            {copied ? t('shareDialog.copied') : t('shareDialog.copy')}
                           </button>
                         </div>
                       </div>
@@ -173,13 +178,13 @@ export default function ShareDialog({ open, onClose, modelId, modelName }: Share
                           onClick={handleReset}
                           className="flex-1 px-4 py-2 text-sm font-medium border border-outline-variant/40 text-on-surface-variant rounded-lg hover:bg-surface-container-high/50 transition-colors"
                         >
-                          继续创建
+                          {t('shareDialog.createAnother')}
                         </button>
                         <button
                           onClick={onClose}
                           className="flex-1 px-4 py-2 text-sm font-medium bg-primary-container text-on-primary rounded-lg hover:opacity-90 transition-opacity"
                         >
-                          完成
+                          {t('shareDialog.done')}
                         </button>
                       </div>
                     </div>
@@ -188,8 +193,8 @@ export default function ShareDialog({ open, onClose, modelId, modelName }: Share
                       {/* Preview permission */}
                       <div className="flex items-center justify-between">
                         <div>
-                          <p className="text-sm text-on-surface">允许 3D 预览</p>
-                          <p className="text-xs text-on-surface-variant">分享页面可以查看 3D 模型</p>
+                          <p className="text-sm text-on-surface">{t('shareDialog.allowPreview')}</p>
+                          <p className="text-xs text-on-surface-variant">{t('shareDialog.allowPreviewDesc')}</p>
                         </div>
                         <button
                           onClick={() => setAllowPreview(!allowPreview)}
@@ -204,8 +209,8 @@ export default function ShareDialog({ open, onClose, modelId, modelName }: Share
                       {/* Download permission */}
                       <div className="flex items-center justify-between">
                         <div>
-                          <p className="text-sm text-on-surface">允许下载</p>
-                          <p className="text-xs text-on-surface-variant">分享页面可以下载模型文件</p>
+                          <p className="text-sm text-on-surface">{t('shareDialog.allowDownload')}</p>
+                          <p className="text-xs text-on-surface-variant">{t('shareDialog.allowDownloadDesc')}</p>
                         </div>
                         <button
                           onClick={() => setAllowDownload(!allowDownload)}
@@ -220,8 +225,8 @@ export default function ShareDialog({ open, onClose, modelId, modelName }: Share
                       {/* Drawing permission */}
                       <div className="flex items-center justify-between">
                         <div>
-                          <p className="text-sm text-on-surface">显示 PDF 图纸</p>
-                          <p className="text-xs text-on-surface-variant">分享页面可以查看和下载图纸</p>
+                          <p className="text-sm text-on-surface">{t('shareDialog.allowDrawing')}</p>
+                          <p className="text-xs text-on-surface-variant">{t('shareDialog.allowDrawingDesc')}</p>
                         </div>
                         <button
                           onClick={() => setAllowDrawing(!allowDrawing)}
@@ -236,7 +241,7 @@ export default function ShareDialog({ open, onClose, modelId, modelName }: Share
                       {/* Download limit */}
                       {allowDownload && (
                         <div>
-                          <label className="block text-sm text-on-surface mb-1">下载次数限制</label>
+                          <label className="block text-sm text-on-surface mb-1">{t('shareDialog.downloadLimit')}</label>
                           <div className="flex flex-wrap items-center gap-2">
                             <input
                               type="number"
@@ -251,7 +256,9 @@ export default function ShareDialog({ open, onClose, modelId, modelName }: Share
                               className="w-24 bg-surface-container-lowest text-on-surface text-base rounded-md px-3 py-2 border border-outline-variant/20 outline-none focus:border-primary"
                             />
                             <span className="text-xs text-on-surface-variant">
-                              0 = 不限制{maxDownloadLimit > 0 ? `，上限 ${maxDownloadLimit}` : ''}
+                              {maxDownloadLimit > 0
+                                ? t('shareDialog.downloadLimitWithMax', { max: maxDownloadLimit })
+                                : t('shareDialog.downloadLimitUnlimited')}
                             </span>
                           </div>
                         </div>
@@ -261,7 +268,7 @@ export default function ShareDialog({ open, onClose, modelId, modelName }: Share
                       {canPassword && (
                         <div>
                           <div className="flex items-center justify-between mb-1">
-                            <p className="text-sm text-on-surface">密码保护</p>
+                            <p className="text-sm text-on-surface">{t('shareDialog.passwordProtect')}</p>
                             <button
                               onClick={() => setUsePassword(!usePassword)}
                               className={`relative w-11 h-6 rounded-full transition-colors duration-200 shrink-0 ${usePassword ? 'bg-primary-container' : 'bg-outline-variant/30'}`}
@@ -276,7 +283,7 @@ export default function ShareDialog({ open, onClose, modelId, modelName }: Share
                               type="text"
                               value={password}
                               onChange={(e) => setPassword(e.target.value)}
-                              placeholder="输入访问密码"
+                              placeholder={t('shareDialog.passwordPlaceholder')}
                               className="w-full bg-surface-container-lowest text-on-surface text-base rounded-md px-3 py-2 border border-outline-variant/20 outline-none focus:border-primary"
                             />
                           )}
@@ -287,7 +294,9 @@ export default function ShareDialog({ open, onClose, modelId, modelName }: Share
                       {canCustomExpiry && (
                         <div>
                           <label className="block text-sm text-on-surface mb-1">
-                            有效期{maxExpireDays > 0 ? `（最长 ${maxExpireDays} 天）` : ''}
+                            {maxExpireDays > 0
+                              ? t('shareDialog.expiryLabelWithMax', { max: maxExpireDays })
+                              : t('shareDialog.expiryLabel')}
                           </label>
                           <div className="flex flex-wrap gap-2">
                             {expiryOptions.map((opt) => (
@@ -314,7 +323,7 @@ export default function ShareDialog({ open, onClose, modelId, modelName }: Share
                         disabled={creating}
                         className="w-full py-2.5 text-sm font-bold bg-primary-container text-on-primary rounded-lg hover:opacity-90 disabled:opacity-50 active:scale-[0.98] transition-all"
                       >
-                        {creating ? '创建中...' : '创建分享链接'}
+                        {creating ? t('shareDialog.creating') : t('shareDialog.createLink')}
                       </button>
                     </>
                   )}

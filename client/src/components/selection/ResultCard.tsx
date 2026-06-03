@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import type { ColumnDef, SelectionProduct, SelectionComponent } from '../../api/selections';
 import { openDocumentUrl } from '../../lib/browserDownload';
@@ -33,6 +34,7 @@ export function ResultCard({
   isMobile: boolean;
 }) {
   const expanded = expandedKits.has(product.id);
+  const { t } = useTranslation();
   const comps = (product.isKit && product.components ? product.components : []) as SelectionComponent[];
   const specCols = columns.filter((c) => !c.hideInResults);
   const catalogPdf = product.categoryCatalogPdf;
@@ -46,15 +48,15 @@ export function ResultCard({
     const parts = [product.modelNo || displayName].filter(Boolean) as string[];
     if (displayName && displayName !== product.modelNo) parts.push(displayName);
     await copyText(parts.join(' '));
-    toast('已复制型号和名称', 'success');
+    toast(t('selectionResult.toasts.copiedModel'), 'success');
   };
   const handleCopyKitList = async () => {
     await copyText(formatKitList(product, comps, kitListTitle));
-    toast(`已复制${kitListTitle}`, 'success');
+    toast(t('selectionResult.toasts.copiedList', { title: kitListTitle }), 'success');
   };
   const handleDownloadKitList = () => {
     downloadKitList(product, comps, kitListTitle);
-    toast(`已下载${kitListTitle}`, 'success');
+    toast(t('selectionResult.toasts.downloadedList', { title: kitListTitle }), 'success');
   };
 
   return (
@@ -81,14 +83,14 @@ export function ResultCard({
             <span className="font-mono text-sm md:text-base font-bold text-on-surface break-all">{primaryTitle}</span>
             <button
               onClick={handleCopy}
-              aria-label="复制型号和名称"
+              aria-label={t('selectionResult.copyModelAria')}
               className={`text-on-surface-variant/50 hover:text-on-surface-variant ${selectionPress}`}
             >
               <Icon name="content_copy" size={14} />
             </button>
             {product.isKit && (
               <span className="text-[10px] md:text-xs font-medium text-primary-container bg-primary-container/10 px-1.5 md:px-2 py-0.5 rounded-full">
-                套件
+                {t('selectionResult.kit')}
               </span>
             )}
           </div>
@@ -127,21 +129,21 @@ export function ResultCard({
                 className={`inline-flex items-center gap-1 rounded-md border border-outline-variant/20 px-2 py-1 hover:bg-surface-container-high/40 ${selectionPress}`}
               >
                 <Icon name={expanded ? 'visibility_off' : 'visibility'} size={14} />
-                <span>{expanded ? '收起清单' : '查看清单'}</span>
+                <span>{expanded ? t('selectionResult.collapseList') : t('selectionResult.viewList')}</span>
               </button>
               <button
                 onClick={handleCopyKitList}
                 className={`inline-flex items-center gap-1 rounded-md border border-outline-variant/20 px-2 py-1 hover:bg-surface-container-high/40 ${selectionPress}`}
               >
                 <Icon name="content_copy" size={14} />
-                <span>复制清单</span>
+                <span>{t('selectionResult.copyList')}</span>
               </button>
               <button
                 onClick={handleDownloadKitList}
                 className={`inline-flex items-center gap-1 rounded-md border border-outline-variant/20 px-2 py-1 hover:bg-surface-container-high/40 ${selectionPress}`}
               >
                 <Icon name="download" size={14} />
-                <span>下载清单</span>
+                <span>{t('selectionResult.downloadList')}</span>
               </button>
             </div>
           </div>
@@ -152,9 +154,15 @@ export function ResultCard({
                   <thead className="bg-surface-container-high text-on-surface-variant">
                     <tr>
                       <th className="px-2 py-1.5 text-left font-medium whitespace-nowrap">#</th>
-                      <th className="px-2 py-1.5 text-left font-medium whitespace-nowrap">名称</th>
-                      <th className="px-2 py-1.5 text-left font-medium whitespace-nowrap">型号</th>
-                      <th className="px-2 py-1.5 text-right font-medium whitespace-nowrap">数量</th>
+                      <th className="px-2 py-1.5 text-left font-medium whitespace-nowrap">
+                        {t('selectionResult.name')}
+                      </th>
+                      <th className="px-2 py-1.5 text-left font-medium whitespace-nowrap">
+                        {t('selectionResult.modelNo')}
+                      </th>
+                      <th className="px-2 py-1.5 text-right font-medium whitespace-nowrap">
+                        {t('selectionResult.qty')}
+                      </th>
                     </tr>
                   </thead>
                   <tbody>
@@ -182,7 +190,7 @@ export function ResultCard({
           >
             <span className="flex items-center gap-1">
               <Icon name="menu_book" size={14} />
-              画册资料
+              {t('selectionResult.catalogMaterials')}
             </span>
             <Icon name={showCatalog ? 'expand_less' : 'expand_more'} size={16} />
           </button>
@@ -191,14 +199,14 @@ export function ResultCard({
               {isCatalogImage ? (
                 <img
                   src={catalogPdf}
-                  alt="画册"
+                  alt={t('selectionResult.catalog')}
                   className="max-h-80 rounded border border-outline-variant/10 object-contain"
                 />
               ) : (
                 <iframe
                   src={catalogPdf}
                   className="w-full h-80 rounded border border-outline-variant/10"
-                  title="画册 PDF"
+                  title={t('selectionResult.catalogPdf')}
                 />
               )}
             </div>
@@ -216,7 +224,7 @@ export function ResultCard({
           } ${selectionPress}`}
         >
           <Icon name={selected ? 'check' : 'add'} size={14} />
-          <span>{selected ? '已加入询价' : '加入询价'}</span>
+          <span>{selected ? t('selectionResult.addedInquiry') : t('selectionResult.addInquiry')}</span>
         </button>
         {product.categoryCatalogPdf && (
           <a
@@ -225,12 +233,12 @@ export function ResultCard({
             rel="noopener"
             onClick={(event) => {
               event.preventDefault();
-              openDocumentUrl(product.categoryCatalogPdf!, { title: '产品画册' });
+              openDocumentUrl(product.categoryCatalogPdf!, { title: t('selectionResult.productCatalog') });
             }}
             className={`px-2.5 md:px-3 py-1 md:py-1.5 text-xs md:text-sm font-medium border border-outline-variant/30 text-on-surface-variant rounded-lg hover:bg-surface-container-high/50 inline-flex items-center gap-1 ${selectionPress}`}
           >
             <Icon name="menu_book" size={14} />
-            <span>画册</span>
+            <span>{t('selectionResult.catalog')}</span>
           </a>
         )}
         {product.pdfUrl && (
@@ -240,12 +248,12 @@ export function ResultCard({
             rel="noopener"
             onClick={(event) => {
               event.preventDefault();
-              openDocumentUrl(product.pdfUrl!, { title: 'PDF 规格书' });
+              openDocumentUrl(product.pdfUrl!, { title: t('selectionResult.pdfSpec') });
             }}
             className={`px-2.5 md:px-3 py-1 md:py-1.5 text-xs md:text-sm font-medium border border-outline-variant/30 text-on-surface-variant rounded-lg hover:bg-surface-container-high/50 inline-flex items-center gap-1 ${selectionPress}`}
           >
             <Icon name="library_books" size={14} />
-            <span>规格书</span>
+            <span>{t('selectionResult.specSheet')}</span>
           </a>
         )}
         {product.matchedModelId ? (
@@ -256,7 +264,7 @@ export function ResultCard({
             className={`px-2.5 md:px-3 py-1 md:py-1.5 text-xs md:text-sm font-medium border border-outline-variant/30 text-on-surface-variant rounded-lg hover:bg-surface-container-high/50 inline-flex items-center gap-1 ${selectionPress}`}
           >
             <Icon name="view_in_ar" size={14} />
-            <span>模型</span>
+            <span>{t('selectionResult.model')}</span>
           </a>
         ) : null}
         <button
@@ -268,7 +276,7 @@ export function ResultCard({
           className={`px-2.5 md:px-3 py-1 md:py-1.5 text-xs md:text-sm font-medium border border-outline-variant/30 text-on-surface-variant rounded-lg hover:bg-surface-container-high/50 inline-flex items-center gap-1 ${selectionPress}`}
         >
           <Icon name="support_agent" size={14} />
-          <span>技术支持</span>
+          <span>{t('selectionResult.support')}</span>
         </button>
       </div>
     </div>

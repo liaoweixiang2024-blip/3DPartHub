@@ -1,6 +1,7 @@
 import { Html } from '@react-three/drei';
 import { useFrame, useLoader, useThree, type ThreeEvent } from '@react-three/fiber';
 import { useCallback, useMemo, useEffect, useState, useRef } from 'react';
+import { useTranslation } from 'react-i18next';
 import * as THREE from 'three';
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
 import { LineMaterial } from 'three/examples/jsm/lines/LineMaterial.js';
@@ -8,6 +9,7 @@ import { LineSegments2 } from 'three/examples/jsm/lines/LineSegments2.js';
 import { LineSegmentsGeometry } from 'three/examples/jsm/lines/LineSegmentsGeometry.js';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import Icon from '../../components/shared/Icon';
+import { i18n } from '../../i18n';
 import {
   get3DMaterialConfig,
   getEdgeStyleConfig,
@@ -373,7 +375,7 @@ function meshPath(mesh: THREE.Mesh) {
 
 function cleanPartName(value: string | undefined, index: number) {
   const clean = normalizeCadLabel(value, '').replace(/[_-]+/g, ' ').replace(/\s+/g, ' ').trim();
-  return clean || `零件 ${index + 1}`;
+  return clean || i18n.t('viewer.partFallback', { index: index + 1 });
 }
 
 function partNameForMesh(mesh: THREE.Mesh, index: number) {
@@ -581,6 +583,7 @@ function CadModel({
   onLoaded,
   onProgress,
 }: MultiFormatLoaderProps) {
+  const { t } = useTranslation();
   const [cadGroup, setCadGroup] = useState<THREE.Group | null>(null);
   const [error, setError] = useState<string | null>(null);
   const gl = useThree((state) => state.gl);
@@ -615,13 +618,13 @@ function CadModel({
         }
       })
       .catch((err) => {
-        if (!cancelled) setError(err.message || '模型加载失败');
+        if (!cancelled) setError(err.message || t('viewer.errors.modelLoadFailed'));
       });
     return () => {
       cancelled = true;
       controller.abort();
     };
-  }, [onProgress, url]);
+  }, [onProgress, t, url]);
 
   // Dispose Three.js resources on unmount or URL change
   useEffect(() => {
@@ -770,7 +773,7 @@ function CadModel({
       <Html center>
         <div className="flex flex-col items-center gap-3">
           <Icon name="view_in_ar" size={48} className="text-on-surface-variant/30 animate-pulse" />
-          <span className="text-xs text-on-surface-variant">解析 CAD 模型...</span>
+          <span className="text-xs text-on-surface-variant">{t('viewer.loading.parsingCad')}</span>
         </div>
       </Html>
     );
@@ -1092,6 +1095,7 @@ function ClipPlaneOverlay({
   inverted?: boolean;
   onPositionChange?: (position: number) => void;
 }) {
+  const { t } = useTranslation();
   const noopRaycast = useCallback(() => undefined, []);
   const raycaster = useThree((state) => state.raycaster);
   const draggingRef = useRef(false);
@@ -1293,7 +1297,11 @@ function ClipPlaneOverlay({
       </mesh>
       <Html position={[labelPosition.x, labelPosition.y, labelPosition.z]} center>
         <div className="pointer-events-none select-none whitespace-nowrap rounded-sm border border-white/20 bg-black/70 px-2 py-1 text-[11px] font-mono text-white shadow-lg">
-          {direction.toUpperCase()} {labelValue} · {inverted ? '反向' : '正向'} · 可拖动
+          {t('viewer.clipDragLabel', {
+            direction: direction.toUpperCase(),
+            value: labelValue,
+            orientation: inverted ? t('viewer.clipInverted') : t('viewer.clipNormal'),
+          })}
         </div>
       </Html>
     </group>
@@ -1389,6 +1397,7 @@ function SingleMeasurementOverlay({
   muted?: boolean;
   labelPrefix?: string;
 }) {
+  const { t } = useTranslation();
   const maxPoints = mode === 'angle' || mode === 'diameter' ? 3 : 2;
   const vectors = useMemo(
     () =>
@@ -1445,15 +1454,19 @@ function SingleMeasurementOverlay({
   }, [mode, vectors]);
   const label = useMemo(() => {
     if (mode === 'angle') {
-      if (vectors.length < 3) return `角度 ${vectors.length}/3`;
-      return angle === null ? '无法计算角度' : `${labelPrefix}${angle.toFixed(2)} deg`;
+      if (vectors.length < 3) return t('viewer.measurement.progressAngle', { count: vectors.length });
+      return angle === null ? t('viewer.measurement.angleUnavailable') : `${labelPrefix}${angle.toFixed(2)} deg`;
     }
     if (mode === 'diameter') {
-      if (vectors.length < 3) return `直径 ${vectors.length}/3`;
-      return diameter === null ? '三点近似共线' : `${labelPrefix}Ø ${formatMeasureDistance(diameter)}`;
+      if (vectors.length < 3) return t('viewer.measurement.progressDiameter', { count: vectors.length });
+      return diameter === null
+        ? t('viewer.measurement.diameterCollinear')
+        : `${labelPrefix}Ø ${formatMeasureDistance(diameter)}`;
     }
-    return vectors.length >= 2 ? `${labelPrefix}${formatMeasureDistance(distance)}` : '起点';
-  }, [angle, diameter, distance, labelPrefix, mode, vectors.length]);
+    return vectors.length >= 2
+      ? `${labelPrefix}${formatMeasureDistance(distance)}`
+      : t('viewer.measurement.startPoint');
+  }, [angle, diameter, distance, labelPrefix, mode, t, vectors.length]);
 
   if (vectors.length === 0) return null;
 

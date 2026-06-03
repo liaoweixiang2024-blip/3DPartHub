@@ -1,4 +1,5 @@
 import axios, { type AxiosError } from 'axios';
+import { i18n } from '../i18n';
 
 type ErrorToastType = 'error' | 'info';
 type ErrorNotifier = (message: string, type?: ErrorToastType) => void;
@@ -74,10 +75,19 @@ function parseRetrySeconds(value: string) {
   return null;
 }
 
+function tToast(key: string, fallback: string, options?: Record<string, unknown>) {
+  if (!i18n.isInitialized) return fallback;
+  return String(i18n.t(`toast.${key}`, { defaultValue: fallback, ...options }));
+}
+
 function formatRetryWait(seconds: number) {
   const normalizedSeconds = Math.max(1, Math.ceil(seconds));
-  if (normalizedSeconds > 60) return `${Math.ceil(normalizedSeconds / 60)} 分钟`;
-  return `${normalizedSeconds} 秒`;
+  if (normalizedSeconds > 60) {
+    return tToast('retryMinutes', `${Math.ceil(normalizedSeconds / 60)} minutes`, {
+      count: Math.ceil(normalizedSeconds / 60),
+    });
+  }
+  return tToast('retrySeconds', `${normalizedSeconds} seconds`, { count: normalizedSeconds });
 }
 
 function stripRetryText(message: string) {
@@ -100,18 +110,22 @@ export function getRateLimitRetrySeconds(error: unknown) {
 }
 
 export function getRateLimitErrorMessage(error: unknown) {
-  const fallback = '请求过于频繁，请稍后再试';
+  const fallback = tToast('rateLimit', 'Too many requests. Please try again later');
   if (!isRateLimitError(error)) return fallback;
 
   const serverMessage = getResponseMessage(error.response?.data);
   const retrySeconds = getRateLimitRetrySeconds(error);
   if (!retrySeconds) return serverMessage || fallback;
 
-  const baseMessage = stripRetryText(serverMessage || '请求过于频繁') || '请求过于频繁';
-  return `${baseMessage}，请 ${formatRetryWait(retrySeconds)}后再试`;
+  const baseMessage = stripRetryText(serverMessage || tToast('rateLimitBase', 'Too many requests')) || fallback;
+  return tToast('rateLimitWithWait', `${baseMessage}. Please try again after ${formatRetryWait(retrySeconds)}`, {
+    message: baseMessage,
+    time: formatRetryWait(retrySeconds),
+  });
 }
 
-export function getErrorMessage(error: unknown, fallback = '操作失败，请稍后重试') {
+export function getErrorMessage(error: unknown, fallback?: string) {
+  const defaultFallback = fallback || tToast('operationFailed', 'Operation failed. Please try again later');
   if (axios.isAxiosError(error)) {
     const status = error.response?.status;
     const data = error.response?.data as { message?: string; detail?: string; error?: string } | string | undefined;
@@ -120,19 +134,21 @@ export function getErrorMessage(error: unknown, fallback = '操作失败，请�
 
     const responseMessage = getResponseMessage(data);
     if (responseMessage) return responseMessage;
-    if (status === 0 || error.code === 'ERR_NETWORK') return '网络连接失败，请检查服务器或网络';
-    if (status === 401) return '登录状态已失效，请重新登录';
-    if (status === 403) return '没有权限执行该操作';
-    if (status === 404) return '请求的资源不存在';
-    if (status === 413) return '上传内容过大';
-    if (status && status >= 500) return '服务器异常，请稍后重试';
+    if (status === 0 || error.code === 'ERR_NETWORK') {
+      return tToast('networkFailed', 'Network connection failed. Check the server or network');
+    }
+    if (status === 401) return tToast('sessionExpired', 'Your session has expired. Please log in again');
+    if (status === 403) return tToast('permissionDenied', 'You do not have permission to perform this action');
+    if (status === 404) return tToast('resourceNotFound', 'The requested resource does not exist');
+    if (status === 413) return tToast('uploadTooLarge', 'Uploaded content is too large');
+    if (status && status >= 500) return tToast('serverError', 'Server error. Please try again later');
     if (error.message) return error.message;
   }
 
   if (error instanceof Error && error.message) return error.message;
   if (typeof error === 'string' && error.trim()) return error;
 
-  return fallback;
+  return defaultFallback;
 }
 
 export function notifyGlobalError(error: unknown, fallback?: string, type: ErrorToastType = 'error') {

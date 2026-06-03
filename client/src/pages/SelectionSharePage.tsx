@@ -1,4 +1,6 @@
+import type { TFunction } from 'i18next';
 import { useEffect, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import useSWR from 'swr';
 import {
@@ -59,9 +61,11 @@ function replaceManualPlaceholders(
 }
 
 function SelectionShareLoadingState() {
+  const { t } = useTranslation();
+
   return (
     <div className="flex min-h-dvh">
-      <PageRefreshIndicator label="选型分享刷新中" />
+      <PageRefreshIndicator label={t('selectionShare.refreshLabel')} />
     </div>
   );
 }
@@ -70,6 +74,7 @@ function applyManualSpecs(
   product: SelectionProduct,
   columns: ColumnDef[],
   specs: Record<string, string>,
+  t: TFunction,
 ): SelectionProduct {
   const userEntries = columns
     .filter((col) => (isManualColumn(col) || isPresetColumn(col)) && specs[col.key])
@@ -96,7 +101,7 @@ function applyManualSpecs(
     if (!isPresetColumn(col) || !col.dependsOn || !specs[col.key]) continue;
     const routeIndex = col.dependsOn.minIndex;
     outletComponents.push({
-      name: `第${routeIndex}路出口接头`,
+      name: t('selectionShare.generatedOutlet', { index: routeIndex }),
       modelNo: `PL${specs[col.key]}-02`,
       qty: 1,
     });
@@ -121,7 +126,8 @@ function ShareResultCard({
   specs: Record<string, string>;
   optionOrder?: Record<string, unknown> | null;
 }) {
-  const displayProduct = applyManualSpecs(product, columns, specs);
+  const { t } = useTranslation();
+  const displayProduct = applyManualSpecs(product, columns, specs, t);
   const specCols = columns.filter((c) => !c.hideInResults);
   const comps = (
     displayProduct.isKit && displayProduct.components ? displayProduct.components : []
@@ -151,7 +157,7 @@ function ShareResultCard({
             </span>
             {displayProduct.isKit && (
               <span className="text-[10px] font-medium text-primary-container bg-primary-container/10 px-2 py-0.5 rounded-full">
-                套件
+                {t('selectionShare.kit')}
               </span>
             )}
           </div>
@@ -188,14 +194,14 @@ function ShareResultCard({
                 className="inline-flex items-center gap-1 rounded-md border border-outline-variant/20 px-2 py-1 text-xs text-on-surface-variant hover:bg-surface-container-high/40"
               >
                 <Icon name="content_copy" size={13} />
-                <span>{copiedList ? '已复制' : '复制清单'}</span>
+                <span>{copiedList ? t('selectionShare.copied') : t('selectionShare.copyList')}</span>
               </button>
               <button
                 onClick={() => downloadKitList(displayProduct, comps, kitListTitle)}
                 className="inline-flex items-center gap-1 rounded-md border border-outline-variant/20 px-2 py-1 text-xs text-on-surface-variant hover:bg-surface-container-high/40"
               >
                 <Icon name="download" size={13} />
-                <span>下载清单</span>
+                <span>{t('selectionShare.downloadList')}</span>
               </button>
             </div>
           </div>
@@ -204,9 +210,9 @@ function ShareResultCard({
               <thead className="bg-surface-container-high text-on-surface-variant">
                 <tr>
                   <th className="px-2 py-1.5 text-left font-medium whitespace-nowrap">#</th>
-                  <th className="px-2 py-1.5 text-left font-medium whitespace-nowrap">名称</th>
-                  <th className="px-2 py-1.5 text-left font-medium whitespace-nowrap">型号</th>
-                  <th className="px-2 py-1.5 text-right font-medium whitespace-nowrap">数量</th>
+                  <th className="px-2 py-1.5 text-left font-medium whitespace-nowrap">{t('selectionShare.name')}</th>
+                  <th className="px-2 py-1.5 text-left font-medium whitespace-nowrap">{t('selectionShare.modelNo')}</th>
+                  <th className="px-2 py-1.5 text-right font-medium whitespace-nowrap">{t('selectionShare.qty')}</th>
                 </tr>
               </thead>
               <tbody>
@@ -232,12 +238,12 @@ function ShareResultCard({
             rel="noopener"
             onClick={(event) => {
               event.preventDefault();
-              openDocumentUrl(displayProduct.pdfUrl!, { title: 'PDF 规格书' });
+              openDocumentUrl(displayProduct.pdfUrl!, { title: t('selectionShare.pdfTitle') });
             }}
             className="px-3 py-1 text-xs font-medium border border-outline-variant/30 text-on-surface-variant rounded-lg hover:bg-surface-container-high/50 transition-colors inline-flex items-center gap-1"
           >
             <Icon name="library_books" size={14} />
-            规格书
+            {t('selectionShare.specSheet')}
           </a>
         )}
         {displayProduct.matchedModelId && (
@@ -246,7 +252,7 @@ function ShareResultCard({
             className="px-3 py-1 text-xs font-medium border border-outline-variant/30 text-on-surface-variant rounded-lg hover:bg-surface-container-high/50 transition-colors inline-flex items-center gap-1"
           >
             <Icon name="view_in_ar" size={14} />
-            查看模型
+            {t('selectionShare.viewModel')}
           </Link>
         )}
       </div>
@@ -255,7 +261,8 @@ function ShareResultCard({
 }
 
 export default function SelectionSharePage() {
-  useDocumentTitle('选型分享');
+  const { t } = useTranslation();
+  useDocumentTitle(t('selectionShare.title'));
   const { token } = useParams<{ token: string }>();
   const navigate = useNavigate();
   const siteTitle = getSiteTitle();
@@ -289,9 +296,9 @@ export default function SelectionSharePage() {
       <PublicPageShell>
         <div className="flex flex-1 flex-col items-center justify-center bg-surface gap-4">
           <Icon name="link_off" size={48} className="text-on-surface-variant/30" />
-          <p className="text-sm text-on-surface-variant">分享链接无效或已过期</p>
+          <p className="text-sm text-on-surface-variant">{t('selectionShare.invalid')}</p>
           <Link to="/" className="text-primary-container hover:underline mt-2 text-sm">
-            返回首页
+            {t('selectionShare.backHome')}
           </Link>
         </div>
       </PublicPageShell>
@@ -323,14 +330,14 @@ export default function SelectionSharePage() {
       <div className="border-b border-outline-variant/10 bg-surface-container-low px-4 md:px-8 py-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center gap-2 min-w-0">
           <Icon name="share" size={16} className="text-primary-container" />
-          <span className="text-sm font-medium text-on-surface shrink-0">选型分享</span>
+          <span className="text-sm font-medium text-on-surface shrink-0">{t('selectionShare.title')}</span>
         </div>
         <div className="flex items-center gap-3 self-end sm:self-auto">
           <Link to="/selection" className="text-xs text-primary-container hover:underline">
-            开始新的选型
+            {t('selectionShare.startNew')}
           </Link>
           <Link to="/login" className="text-xs text-on-surface-variant hover:text-on-surface">
-            登录
+            {t('selectionShare.login')}
           </Link>
         </div>
       </div>
@@ -357,7 +364,7 @@ export default function SelectionSharePage() {
         {/* Product count */}
         <div className="flex items-center justify-between">
           <p className="text-sm text-on-surface-variant">
-            匹配到 <strong className="text-on-surface">{data.products.length}</strong> 个型号
+            {t('selectionShare.matchedCount', { count: data.products.length })}
           </p>
         </div>
 
@@ -377,16 +384,16 @@ export default function SelectionSharePage() {
         ) : (
           <div className="text-center py-10">
             <Icon name="search_off" size={36} className="mx-auto mb-2 text-on-surface-variant/20" />
-            <p className="text-sm text-on-surface-variant">产品信息已更新，暂无匹配结果</p>
+            <p className="text-sm text-on-surface-variant">{t('selectionShare.noMatch')}</p>
           </div>
         )}
 
         {/* Footer */}
         <div className="border-t border-outline-variant/10 pt-4 text-center">
           <p className="text-xs text-on-surface-variant">
-            由 {siteTitle} 选型系统生成 ·{' '}
+            {t('selectionShare.footerGenerated', { siteTitle })} ·{' '}
             <Link to="/selection" className="text-primary-container hover:underline">
-              开始新的选型
+              {t('selectionShare.startNew')}
             </Link>
           </p>
         </div>

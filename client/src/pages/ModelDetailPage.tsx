@@ -1,5 +1,6 @@
 import { motion, AnimatePresence } from 'framer-motion';
 import { useState, useRef, useCallback, useEffect, useMemo } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useParams, useNavigate, Link, useLocation } from 'react-router-dom';
 import useSWR, { mutate as globalMutate } from 'swr';
 import { categoriesApi } from '../api/categories';
@@ -53,6 +54,7 @@ export default function ModelDetailPage() {
   const { id } = useParams();
   const navigate = useNavigate();
   const location = useLocation();
+  const { i18n, t } = useTranslation();
   useDocumentTitle();
   const isDesktop = useMediaQuery('(min-width: 768px)');
   const initialViewerPrefs = useMemo(() => getViewerDisplayPrefs(), []);
@@ -93,12 +95,12 @@ export default function ModelDetailPage() {
 
   const handleShare = useCallback(() => {
     if (!useAuthStore.getState().isAuthenticated) {
-      setLoginPromptReason('分享模型');
+      setLoginPromptReason(t('modelDetail.shareModel'));
       setLoginPromptOpen(true);
       return;
     }
     setShareOpen(true);
-  }, []);
+  }, [t]);
   const detailLocationState = location.state as ModelDetailLocationState;
   const cachedModelTitle = useMemo(() => getCachedModelDetailTitle(id), [id]);
   const initialModelTitle = detailLocationState?.modelName?.trim() || cachedModelTitle;
@@ -167,14 +169,14 @@ export default function ModelDetailPage() {
         await downloadModelFile(modelId, format || 'original');
       } catch (error) {
         if (isDownloadAuthRequiredError(error)) {
-          setLoginPromptReason('下载模型');
+          setLoginPromptReason(t('modelDetail.downloadModel'));
           setLoginPromptOpen(true);
           return;
         }
-        toast('下载失败，请稍后重试', 'error');
+        toast(t('modelDetail.downloadFailed'), 'error');
       }
     },
-    [toast],
+    [t, toast],
   );
 
   const handleOpenDrawing = useCallback(
@@ -183,14 +185,14 @@ export default function ModelDetailPage() {
         await openModelDrawing(modelId);
       } catch (error) {
         if (isDownloadAuthRequiredError(error)) {
-          setLoginPromptReason('查看图纸');
+          setLoginPromptReason(t('modelDetail.viewDrawing'));
           setLoginPromptOpen(true);
           return;
         }
-        toast('打开图纸失败，请稍后重试', 'error');
+        toast(t('modelDetail.drawingOpenFailed'), 'error');
       }
     },
-    [toast],
+    [t, toast],
   );
 
   useEffect(() => {
@@ -212,13 +214,13 @@ export default function ModelDetailPage() {
       setViewerTuning(nextTuning);
       setSavedViewerTuning(nextTuning);
       await refreshSiteConfig();
-      toast('3D 预览参数已保存', 'success');
+      toast(t('modelDetail.saveViewerTuningSuccess'), 'success');
     } catch {
-      toast('保存 3D 预览参数失败', 'error');
+      toast(t('modelDetail.saveViewerTuningFailed'), 'error');
     } finally {
       setViewerTuningSaving(false);
     }
-  }, [isAdmin, toast, viewerTuning]);
+  }, [isAdmin, t, toast, viewerTuning]);
 
   const handleResetViewerTuning = useCallback(() => {
     setViewerTuning(savedViewerTuning);
@@ -260,27 +262,31 @@ export default function ModelDetailPage() {
 
   if (serverModel) {
     const format = serverModel.format?.toUpperCase() || 'UNKNOWN';
-    const name = serverModel.name || serverModel.original_name?.replace(/\.[^.]+$/, '') || '未命名模型';
+    const name = serverModel.name || serverModel.original_name?.replace(/\.[^.]+$/, '') || t('modelDetail.unnamed');
     const fileSize = formatFileSize(serverModel.original_size || 0);
-    const createdAtLabel = serverModel.created_at ? new Date(serverModel.created_at).toLocaleString('zh-CN') : 'N/A';
+    const createdAtLabel = serverModel.created_at
+      ? new Date(serverModel.created_at).toLocaleString(i18n.language)
+      : 'N/A';
     modelData = {
       id: serverModel.model_id,
       name,
-      subtitle: `${format} 格式 3D 模型`,
+      subtitle: t('modelDetail.formatModel', { format }),
       format,
       fileSize,
       createdAtLabel,
-      category: serverModel.category || '模型库',
+      category: serverModel.category || t('modelDetail.categoryFallback'),
       categoryId: serverModel.category_id || undefined,
       specs: [
-        { label: '格式', value: format },
-        { label: '文件大小', value: fileSize },
+        { label: t('modelDetail.specFormat'), value: format },
+        { label: t('modelDetail.specFileSize'), value: fileSize },
         {
-          label: '文件日期',
-          value: new Date(serverModel.file_modified_at || serverModel.created_at).toLocaleDateString('zh-CN'),
+          label: t('modelDetail.specFileDate'),
+          value: new Date(serverModel.file_modified_at || serverModel.created_at).toLocaleDateString(i18n.language),
         },
-        { label: '上传时间', value: createdAtLabel },
-        ...(serverModel.description ? [{ label: '描述', value: serverModel.description }] : []),
+        { label: t('modelDetail.specUploadedAt'), value: createdAtLabel },
+        ...(serverModel.description
+          ? [{ label: t('modelDetail.specDescription'), value: serverModel.description }]
+          : []),
       ],
       downloads: [
         {
@@ -466,7 +472,7 @@ export default function ModelDetailPage() {
     if (!modelData) return;
     const { isAuthenticated } = useAuthStore.getState();
     if (!isAuthenticated) {
-      setLoginPromptReason('收藏模型');
+      setLoginPromptReason(t('modelDetail.favoriteModel'));
       setLoginPromptOpen(true);
       return;
     }
@@ -478,8 +484,8 @@ export default function ModelDetailPage() {
       category: modelData.category,
       dimensions: modelData.dimensions,
     });
-    toast(wasFav ? '已取消收藏' : '已收藏，可在「我的收藏」中批量下载', 'success');
-  }, [modelData, isFavorite, toggleFavorite, toast]);
+    toast(wasFav ? t('productCard.unfavoriteSuccess') : t('productCard.favoriteSuccess'), 'success');
+  }, [modelData, isFavorite, toggleFavorite, t, toast]);
 
   // Resolve category breadcrumb path from tree
   const categoryBreadcrumb = useMemo(() => {
@@ -511,10 +517,10 @@ export default function ModelDetailPage() {
     return (
       <div className="flex flex-col items-center justify-center h-dvh bg-surface gap-4">
         <Icon name="error" size={64} className="text-error" />
-        <h1 className="text-2xl font-headline font-bold text-on-surface">加载失败</h1>
-        <p className="text-sm text-on-surface-variant">{error?.message || '请稍后重试'}</p>
+        <h1 className="text-2xl font-headline font-bold text-on-surface">{t('modelDetail.loadFailed')}</h1>
+        <p className="text-sm text-on-surface-variant">{error?.message || t('modelDetail.retryLater')}</p>
         <button onClick={handleBack} className="text-primary hover:underline">
-          返回上一页
+          {t('modelDetail.back')}
         </button>
       </div>
     );
@@ -528,9 +534,9 @@ export default function ModelDetailPage() {
     return (
       <div className="flex flex-col items-center justify-center h-dvh bg-surface gap-4">
         <Icon name="search_off" size={64} className="text-on-surface-variant" />
-        <h1 className="text-2xl font-headline font-bold text-on-surface">模型不存在</h1>
+        <h1 className="text-2xl font-headline font-bold text-on-surface">{t('modelDetail.notFound')}</h1>
         <button onClick={handleBack} className="text-primary hover:underline">
-          返回上一页
+          {t('modelDetail.back')}
         </button>
       </div>
     );
@@ -624,7 +630,7 @@ export default function ModelDetailPage() {
             <LoginConfirmDialog
               open={loginPromptOpen}
               onClose={() => setLoginPromptOpen(false)}
-              reason={loginPromptReason || '下载模型'}
+              reason={loginPromptReason || t('modelDetail.downloadModel')}
               returnUrl={currentPath}
             />
           </>
@@ -732,7 +738,7 @@ export default function ModelDetailPage() {
                 {isAdmin && (
                   <button
                     onClick={() => setEditOpen(true)}
-                    aria-label="编辑模型"
+                    aria-label={t('modelDetail.editModel')}
                     className="w-8 h-8 flex items-center justify-center rounded-full text-on-surface-variant hover:text-primary transition-colors"
                   >
                     <Icon name="settings" size={18} />
@@ -740,7 +746,7 @@ export default function ModelDetailPage() {
                 )}
                 <button
                   onClick={handleShare}
-                  aria-label="分享"
+                  aria-label={t('common.share')}
                   className="w-8 h-8 flex items-center justify-center rounded-full text-on-surface-variant hover:text-primary transition-colors"
                 >
                   <Icon name="share" size={18} />
@@ -748,7 +754,7 @@ export default function ModelDetailPage() {
                 <motion.button
                   whileTap={{ scale: 0.9 }}
                   onClick={handleToggleFav}
-                  aria-label={fav ? '取消收藏' : '收藏'}
+                  aria-label={fav ? t('productCard.unfavorite') : t('productCard.favorite')}
                   className="w-8 h-8 flex items-center justify-center rounded-full text-on-surface-variant transition-colors"
                 >
                   <Icon name={fav ? 'star' : 'star_border'} size={18} className={fav ? 'text-primary' : ''} />
@@ -760,7 +766,7 @@ export default function ModelDetailPage() {
               className="mt-2.5 flex h-9 w-full items-center justify-center gap-2 rounded-lg bg-primary-container text-sm font-medium text-on-primary transition-transform active:scale-[0.98]"
             >
               <Icon name="download" size={18} />
-              下载模型
+              {t('modelDetail.downloadModel')}
             </button>
           </div>
 
@@ -774,7 +780,7 @@ export default function ModelDetailPage() {
               {/* Category breadcrumb */}
               <div className="flex items-center gap-1.5 text-[11px] text-on-surface-variant overflow-x-auto scrollbar-hidden">
                 <Link to="/" className="hover:text-primary transition-colors">
-                  模型库
+                  {t('modelDetail.categoryFallback')}
                 </Link>
                 {categoryBreadcrumb.map((cat, i) => (
                   <span key={`${cat.id || cat.name || 'category'}-${i}`} className="flex items-center gap-1.5 shrink-0">
@@ -797,7 +803,7 @@ export default function ModelDetailPage() {
                   className="w-full flex items-center justify-between px-4 py-3 bg-surface-container-low"
                 >
                   <span className="text-[11px] uppercase tracking-widest text-on-surface-variant font-medium">
-                    技术参数
+                    {t('modelDetail.techSpecs')}
                   </span>
                   <motion.span animate={{ rotate: expandedSpecs ? 180 : 0 }} transition={{ duration: 0.2 }}>
                     <Icon name="expand_more" size={20} className="text-on-surface-variant" />
@@ -821,7 +827,7 @@ export default function ModelDetailPage() {
               {modelData.variants && modelData.variants.length > 1 && (
                 <div>
                   <div className="text-[11px] uppercase tracking-widest text-on-surface-variant font-medium mb-3">
-                    历史版本 ({modelData.variants.length})
+                    {t('modelDetail.versions', { count: modelData.variants.length })}
                   </div>
                   <div className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1">
                     {modelData.variants.map((v, index) => {
@@ -832,11 +838,11 @@ export default function ModelDetailPage() {
                           <div className="w-16 h-16 rounded-md border-2 border-primary bg-surface-container-lowest overflow-hidden relative">
                             <ModelThumbnail src={v.thumbnail_url} alt="" className="w-full h-full object-cover" />
                             <div className="absolute bottom-0 inset-x-0 bg-primary/90 text-on-primary text-[8px] text-center py-0.5">
-                              当前
+                              {t('modelDetail.current')}
                             </div>
                             {v.is_primary && (
                               <div className="absolute top-0.5 left-0.5 bg-primary/80 text-on-primary text-[6px] px-0.5 rounded-sm">
-                                主
+                                {t('modelDetail.primaryShort')}
                               </div>
                             )}
                           </div>
@@ -848,7 +854,7 @@ export default function ModelDetailPage() {
                           </p>
                           {v.file_modified_at && (
                             <p className="text-[8px] text-on-surface-variant/40 text-center">
-                              {new Date(v.file_modified_at).toLocaleDateString('zh-CN')}
+                              {new Date(v.file_modified_at).toLocaleDateString(i18n.language)}
                             </p>
                           )}
                         </div>
@@ -858,7 +864,7 @@ export default function ModelDetailPage() {
                             <ModelThumbnail src={v.thumbnail_url} alt="" className="w-full h-full object-cover" />
                             {v.is_primary && (
                               <div className="absolute top-0.5 left-0.5 bg-primary/80 text-on-primary text-[6px] px-0.5 rounded-sm">
-                                主
+                                {t('modelDetail.primaryShort')}
                               </div>
                             )}
                           </div>
@@ -870,7 +876,7 @@ export default function ModelDetailPage() {
                           </p>
                           {v.file_modified_at && (
                             <p className="text-[8px] text-on-surface-variant/40 text-center">
-                              {new Date(v.file_modified_at).toLocaleDateString('zh-CN')}
+                              {new Date(v.file_modified_at).toLocaleDateString(i18n.language)}
                             </p>
                           )}
                         </Link>
@@ -883,7 +889,7 @@ export default function ModelDetailPage() {
               {/* Downloads */}
               <div>
                 <div className="text-[11px] uppercase tracking-widest text-on-surface-variant font-medium mb-2">
-                  文件下载
+                  {t('modelDetail.fileDownloads')}
                 </div>
                 <div className="space-y-1.5">
                   {modelData.downloads.map((file, index) => {
@@ -954,7 +960,7 @@ export default function ModelDetailPage() {
                     const result = checkProtectedAccess('/support');
                     if (result.action === 'dialog' || result.action === 'redirect') {
                       e.preventDefault();
-                      setLoginPromptReason(result.action === 'dialog' ? result.reason : '技术支持');
+                      setLoginPromptReason(result.action === 'dialog' ? result.reason : t('modelDetail.supportReason'));
                       setLoginPromptOpen(true);
                     }
                   }}
@@ -964,8 +970,8 @@ export default function ModelDetailPage() {
                     <Icon name="support_agent" size={16} className="text-primary" />
                   </div>
                   <div className="flex-1 min-w-0">
-                    <p className="text-xs font-medium text-on-surface">需要非标定制？</p>
-                    <p className="text-[11px] text-on-surface-variant">联系工程师获取专业支持</p>
+                    <p className="text-xs font-medium text-on-surface">{t('modelDetail.customSupportTitle')}</p>
+                    <p className="text-[11px] text-on-surface-variant">{t('modelDetail.customSupportDescription')}</p>
                   </div>
                   <Icon name="chevron_right" size={16} className="text-on-surface-variant/40" />
                 </Link>
@@ -1023,7 +1029,7 @@ export default function ModelDetailPage() {
       <LoginConfirmDialog
         open={loginPromptOpen}
         onClose={() => setLoginPromptOpen(false)}
-        reason={loginPromptReason || '下载模型'}
+        reason={loginPromptReason || t('modelDetail.downloadModel')}
         returnUrl={currentPath}
       />
     </PublicPageShell>

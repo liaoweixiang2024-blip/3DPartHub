@@ -1,4 +1,5 @@
 import { useEffect, useState, type CSSProperties } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import { authApi } from '../../api/auth';
 import { createInquiry } from '../../api/inquiries';
@@ -17,6 +18,18 @@ type ContactTemplate = {
   contactName: string;
   contactPhone: string;
   contactAddress: string;
+};
+
+type ContactFieldLabels = {
+  contactName: string;
+  contactPhone: string;
+  contactAddress: string;
+};
+
+const DEFAULT_CONTACT_FIELD_LABELS: ContactFieldLabels = {
+  contactName: 'Contact',
+  contactPhone: 'Phone',
+  contactAddress: 'Address',
 };
 
 function templateStorageKey(userId?: string) {
@@ -49,12 +62,12 @@ function normalizeTemplate(template: ContactTemplate): ContactTemplate {
   };
 }
 
-function getMissingContactFields(template: ContactTemplate) {
+function getMissingContactFields(template: ContactTemplate, labels: ContactFieldLabels = DEFAULT_CONTACT_FIELD_LABELS) {
   const contact = normalizeTemplate(template);
   return [
-    !contact.contactName ? '联系人' : '',
-    !contact.contactPhone ? '联系电话' : '',
-    !contact.contactAddress ? '联系地址' : '',
+    !contact.contactName ? labels.contactName : '',
+    !contact.contactPhone ? labels.contactPhone : '',
+    !contact.contactAddress ? labels.contactAddress : '',
   ].filter(Boolean);
 }
 
@@ -122,6 +135,7 @@ export default function InquirySubmitDialog({
   items: InquiryCartItem[];
   onSubmitted?: () => void;
 }) {
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const user = useAuthStore((s) => s.user);
   const updateUser = useAuthStore((s) => s.updateUser);
@@ -172,14 +186,19 @@ export default function InquirySubmitDialog({
     setItemStates((prev) => ({ ...prev, [id]: { ...(prev[id] || { qty: 1, remark: '' }), ...patch } }));
   const contactTemplate = { company, contactName, contactPhone, contactAddress };
   const contactReady = isContactReady(contactTemplate);
-  const missingContactFields = getMissingContactFields(contactTemplate);
+  const contactFieldLabels = {
+    contactName: t('inquirySubmit.contactName'),
+    contactPhone: t('inquirySubmit.contactPhone'),
+    contactAddress: t('inquirySubmit.contactAddress'),
+  };
+  const missingContactFields = getMissingContactFields(contactTemplate, contactFieldLabels);
 
   function validateContactTemplate() {
     const template = normalizeTemplate(contactTemplate);
-    const missing = getMissingContactFields(template);
+    const missing = getMissingContactFields(template, contactFieldLabels);
     if (missing.length > 0) {
       setContactEditing(true);
-      setError(`请先完善${missing.join('、')}，便于业务人员有效联系和确认需求。`);
+      setError(t('inquirySubmit.errors.missingContact', { fields: missing.join(t('inquirySubmit.listSeparator')) }));
       return null;
     }
     return template;
@@ -211,7 +230,7 @@ export default function InquirySubmitDialog({
       setContactEditing(false);
       return template;
     } catch (err) {
-      setError(getErrorMessage(err, '保存联系信息失败'));
+      setError(getErrorMessage(err, t('inquirySubmit.errors.saveContactFailed')));
       return null;
     } finally {
       setSavingContact(false);
@@ -249,7 +268,7 @@ export default function InquirySubmitDialog({
       onSubmitted?.();
       navigate(`/my-inquiries/${inquiry.id}`);
     } catch (err) {
-      setError(getErrorMessage(err, '提交失败'));
+      setError(getErrorMessage(err, t('inquirySubmit.errors.submitFailed')));
     } finally {
       setSubmitting(false);
     }
@@ -275,14 +294,16 @@ export default function InquirySubmitDialog({
         <div className="flex shrink-0 items-center justify-between border-b border-outline-variant/10 px-4 pb-3 pt-[max(0.875rem,env(safe-area-inset-top,0px))] md:px-5 md:py-4">
           <div>
             <h3 id="inquiry-submit-dialog-title" className="text-base font-bold text-on-surface">
-              提交询价单
+              {t('inquirySubmit.title')}
             </h3>
-            <p className="mt-0.5 text-xs text-on-surface-variant">共 {items.length} 个待询价产品</p>
+            <p className="mt-0.5 text-xs text-on-surface-variant">
+              {t('inquirySubmit.itemTotal', { count: items.length })}
+            </p>
           </div>
           <button
             onClick={onClose}
             className="inline-flex h-9 w-9 items-center justify-center rounded-full text-on-surface-variant transition-colors hover:bg-surface-container-high hover:text-on-surface"
-            aria-label="关闭提交询价弹窗"
+            aria-label={t('inquirySubmit.closeAria')}
           >
             <Icon name="close" size={20} />
           </button>
@@ -293,9 +314,9 @@ export default function InquirySubmitDialog({
             <div className="flex items-center justify-between gap-3 border-b border-outline-variant/10 px-3 py-2.5">
               <div className="flex min-w-0 items-center gap-2">
                 <Icon name="inventory_2" size={14} className="text-primary-container" />
-                <p className="text-xs font-semibold text-on-surface md:text-sm">询价产品</p>
+                <p className="text-xs font-semibold text-on-surface md:text-sm">{t('inquirySubmit.products')}</p>
                 <span className="rounded-md bg-primary-container/10 px-1.5 py-0.5 text-[11px] font-semibold text-primary-container">
-                  {items.length} 项
+                  {t('inquirySubmit.itemCount', { count: items.length })}
                 </span>
               </div>
             </div>
@@ -303,9 +324,9 @@ export default function InquirySubmitDialog({
               <table className="w-full min-w-[560px] table-fixed text-xs">
                 <thead className="border-b border-outline-variant/10 text-[11px] text-on-surface-variant">
                   <tr>
-                    <th className="px-3 py-2.5 text-left font-semibold">产品</th>
-                    <th className="w-24 px-3 py-2.5 text-right font-semibold">数量</th>
-                    <th className="w-40 px-3 py-2.5 text-left font-semibold">备注</th>
+                    <th className="px-3 py-2.5 text-left font-semibold">{t('inquirySubmit.product')}</th>
+                    <th className="w-24 px-3 py-2.5 text-right font-semibold">{t('inquirySubmit.quantity')}</th>
+                    <th className="w-40 px-3 py-2.5 text-left font-semibold">{t('inquirySubmit.remark')}</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-outline-variant/10">
@@ -324,7 +345,7 @@ export default function InquirySubmitDialog({
                         </td>
                         <td className="px-3 py-2 text-right">
                           <input
-                            aria-label={`${getItemTitle(item)} 数量`}
+                            aria-label={t('inquirySubmit.itemQtyAria', { title: getItemTitle(item) })}
                             type="number"
                             min={1}
                             value={state.qty}
@@ -338,7 +359,7 @@ export default function InquirySubmitDialog({
                           <input
                             value={state.remark}
                             onChange={(event) => updateItem(item.id, { remark: event.target.value })}
-                            placeholder="备注（选填）"
+                            placeholder={t('inquirySubmit.itemRemarkPlaceholder')}
                             className="h-8 w-full rounded-md border border-outline-variant/20 bg-surface-container px-2 text-xs text-on-surface outline-none focus:border-primary-container"
                           />
                         </td>
@@ -353,9 +374,9 @@ export default function InquirySubmitDialog({
           <div className="rounded-xl border border-outline-variant/12 bg-surface-container-lowest">
             <div className="flex items-center justify-between gap-3 border-b border-outline-variant/10 px-3 py-2.5">
               <div>
-                <p className="text-sm font-bold text-on-surface">联系信息模板</p>
+                <p className="text-sm font-bold text-on-surface">{t('inquirySubmit.contactTemplate')}</p>
                 <p className="mt-0.5 text-xs text-on-surface-variant">
-                  {contactReady ? '提交时自动使用，可随时编辑。' : '请先完善后再提交询价。'}
+                  {contactReady ? t('inquirySubmit.contactReadyHint') : t('inquirySubmit.contactMissingHint')}
                 </p>
               </div>
               <button
@@ -364,51 +385,59 @@ export default function InquirySubmitDialog({
                 className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-outline-variant/20 px-2.5 py-1.5 text-xs font-medium text-on-surface-variant transition-colors hover:bg-surface-container-high hover:text-on-surface"
               >
                 <Icon name={contactEditing ? 'expand_less' : 'edit'} size={13} />
-                {contactEditing ? '收起' : '编辑'}
+                {contactEditing ? t('inquirySubmit.collapse') : t('common.edit')}
               </button>
             </div>
 
             {!contactReady && (
               <div className="mx-3 mt-3 rounded-lg border border-error/20 bg-error-container/10 px-3 py-2 text-xs leading-relaxed text-error">
-                缺少 {missingContactFields.join('、')}，完善后会保存为下次询价的默认联系信息。
+                {t('inquirySubmit.missingContactInline', {
+                  fields: missingContactFields.join(t('inquirySubmit.listSeparator')),
+                })}
               </div>
             )}
 
             {contactEditing ? (
               <div className="grid grid-cols-1 gap-3 px-3 py-3 sm:grid-cols-2">
                 <div>
-                  <label className="mb-1 block text-xs text-on-surface-variant">公司名称（选填）</label>
+                  <label className="mb-1 block text-xs text-on-surface-variant">
+                    {t('inquirySubmit.companyOptional')}
+                  </label>
                   <input
                     value={company}
                     onChange={(event) => setCompany(event.target.value)}
-                    placeholder="公司或部门名称"
+                    placeholder={t('inquirySubmit.companyPlaceholder')}
                     className="w-full rounded-lg border border-outline-variant/20 bg-surface-container px-3 py-2 text-sm text-on-surface outline-none transition-colors focus:border-primary-container"
                   />
                 </div>
                 <div>
-                  <label className="mb-1 block text-xs text-on-surface-variant">联系人</label>
+                  <label className="mb-1 block text-xs text-on-surface-variant">{t('inquirySubmit.contactName')}</label>
                   <input
                     value={contactName}
                     onChange={(event) => setContactName(event.target.value)}
-                    placeholder="例如 张工"
+                    placeholder={t('inquirySubmit.contactNamePlaceholder')}
                     className="w-full rounded-lg border border-outline-variant/20 bg-surface-container px-3 py-2 text-sm text-on-surface outline-none transition-colors focus:border-primary-container"
                   />
                 </div>
                 <div className="sm:col-span-2">
-                  <label className="mb-1 block text-xs text-on-surface-variant">联系电话</label>
+                  <label className="mb-1 block text-xs text-on-surface-variant">
+                    {t('inquirySubmit.contactPhone')}
+                  </label>
                   <input
                     value={contactPhone}
                     onChange={(event) => setContactPhone(event.target.value)}
-                    placeholder="手机号或座机"
+                    placeholder={t('inquirySubmit.contactPhonePlaceholder')}
                     className="w-full rounded-lg border border-outline-variant/20 bg-surface-container px-3 py-2 text-sm text-on-surface outline-none transition-colors focus:border-primary-container"
                   />
                 </div>
                 <div className="sm:col-span-2">
-                  <label className="mb-1 block text-xs text-on-surface-variant">联系地址</label>
+                  <label className="mb-1 block text-xs text-on-surface-variant">
+                    {t('inquirySubmit.contactAddress')}
+                  </label>
                   <input
                     value={contactAddress}
                     onChange={(event) => setContactAddress(event.target.value)}
-                    placeholder="用于业务对接和交付确认"
+                    placeholder={t('inquirySubmit.contactAddressPlaceholder')}
                     className="w-full rounded-lg border border-outline-variant/20 bg-surface-container px-3 py-2 text-sm text-on-surface outline-none transition-colors focus:border-primary-container"
                   />
                 </div>
@@ -419,7 +448,7 @@ export default function InquirySubmitDialog({
                       onClick={() => setContactEditing(false)}
                       className="rounded-lg px-3 py-2 text-xs font-medium text-on-surface-variant transition-colors hover:bg-surface-container-high"
                     >
-                      取消
+                      {t('common.cancel')}
                     </button>
                   ) : null}
                   <button
@@ -429,39 +458,47 @@ export default function InquirySubmitDialog({
                     className="inline-flex items-center gap-1.5 rounded-lg bg-primary-container px-3 py-2 text-xs font-bold text-on-primary transition-opacity hover:opacity-90 disabled:opacity-50"
                   >
                     {savingContact ? <Icon name="progress_activity" size={13} className="animate-spin" /> : null}
-                    保存为默认信息
+                    {t('inquirySubmit.saveAsDefault')}
                   </button>
                 </div>
               </div>
             ) : (
               <div className="grid gap-2 px-3 py-3 text-sm sm:grid-cols-2">
                 <div className="rounded-lg bg-surface-container px-3 py-2">
-                  <span className="block text-xs text-on-surface-variant">联系人</span>
-                  <span className="block truncate font-medium text-on-surface">{contactName || '未填写'}</span>
+                  <span className="block text-xs text-on-surface-variant">{t('inquirySubmit.contactName')}</span>
+                  <span className="block truncate font-medium text-on-surface">
+                    {contactName || t('inquirySubmit.notFilled')}
+                  </span>
                 </div>
                 <div className="rounded-lg bg-surface-container px-3 py-2">
-                  <span className="block text-xs text-on-surface-variant">联系电话</span>
-                  <span className="block truncate font-medium text-on-surface">{contactPhone || '未填写'}</span>
+                  <span className="block text-xs text-on-surface-variant">{t('inquirySubmit.contactPhone')}</span>
+                  <span className="block truncate font-medium text-on-surface">
+                    {contactPhone || t('inquirySubmit.notFilled')}
+                  </span>
                 </div>
                 <div className="rounded-lg bg-surface-container px-3 py-2">
-                  <span className="block text-xs text-on-surface-variant">公司名称</span>
-                  <span className="block truncate font-medium text-on-surface">{company || '未填写'}</span>
+                  <span className="block text-xs text-on-surface-variant">{t('inquirySubmit.company')}</span>
+                  <span className="block truncate font-medium text-on-surface">
+                    {company || t('inquirySubmit.notFilled')}
+                  </span>
                 </div>
                 <div className="rounded-lg bg-surface-container px-3 py-2">
-                  <span className="block text-xs text-on-surface-variant">联系地址</span>
-                  <span className="block truncate font-medium text-on-surface">{contactAddress || '未填写'}</span>
+                  <span className="block text-xs text-on-surface-variant">{t('inquirySubmit.contactAddress')}</span>
+                  <span className="block truncate font-medium text-on-surface">
+                    {contactAddress || t('inquirySubmit.notFilled')}
+                  </span>
                 </div>
               </div>
             )}
           </div>
 
           <div>
-            <label className="mb-1 block text-xs text-on-surface-variant">整体备注</label>
+            <label className="mb-1 block text-xs text-on-surface-variant">{t('inquirySubmit.overallRemark')}</label>
             <textarea
               value={remark}
               onChange={(event) => setRemark(event.target.value)}
               rows={2}
-              placeholder="选填：交期要求、包装要求等"
+              placeholder={t('inquirySubmit.overallRemarkPlaceholder')}
               className="w-full resize-none rounded-lg border border-outline-variant/20 bg-surface-container-lowest px-3 py-2 text-sm text-on-surface outline-none transition-colors focus:border-primary-container"
             />
           </div>
@@ -474,7 +511,7 @@ export default function InquirySubmitDialog({
             onClick={onClose}
             className="flex-1 rounded-xl border border-outline-variant/40 py-2.5 text-sm font-medium text-on-surface-variant transition-colors hover:bg-surface-container-high/50"
           >
-            取消
+            {t('common.cancel')}
           </button>
           <button
             onClick={submit}
@@ -482,12 +519,12 @@ export default function InquirySubmitDialog({
             className="flex-1 rounded-xl bg-primary-container py-2.5 text-sm font-bold text-on-primary transition-opacity hover:opacity-90 disabled:opacity-50"
           >
             {submitting
-              ? '提交中...'
+              ? t('inquirySubmit.submitting')
               : !contactReady
-                ? '先完善联系信息'
+                ? t('inquirySubmit.completeContactFirst')
                 : contactEditing
-                  ? '保存并提交询价'
-                  : '提交询价'}
+                  ? t('inquirySubmit.saveAndSubmit')
+                  : t('inquirySubmit.submit')}
           </button>
         </div>
       </div>
