@@ -174,8 +174,8 @@ for (const [label, source] of [
 ]) {
   requireIncludes(label, source, [
     'renderProductCard',
-    'aria-label="网格视图"',
-    'aria-label="列表视图"',
+    "aria-label={t('home.gridView')}",
+    "aria-label={t('home.listView')}",
     '{showHomeListSkeleton ? (',
   ]);
 }
@@ -247,7 +247,9 @@ requireIncludes('HomePage.tsx mobile pull refresh', homePullRefreshSource, [
   'name="arrow_downward"',
   'className="text-primary-container transition-transform duration-200"',
   "style={{ transform: pullState === 'ready' ? 'rotate(180deg)' : 'rotate(0deg)' }}",
-  "pullState === 'refreshing' ? '正在刷新...' : pullState === 'ready' ? '松开刷新' : '下拉刷新'",
+  "t('home.pullRefreshing')",
+  "t('home.pullReady')",
+  "t('home.pullIdle')",
   'Keep the spinner visible at least 800ms',
   'if (elapsed < 800) {',
   'setTimeout(r, 800 - elapsed)',
@@ -288,10 +290,10 @@ requireIncludes('Pagination.tsx page-size defaults', paginationSource, [
 
 requireIncludes('InfiniteLoadTrigger.tsx observability', infiniteLoadTriggerSource, [
   'idleLabel?: string | null;',
-  "idleLabel = '继续滚动自动加载',",
-  'const showIdleLabel = idleLabel !== null;',
+  "const visibleIdleLabel = idleLabel === undefined ? t('infiniteLoad.idle') : idleLabel;",
+  'const showIdleLabel = visibleIdleLabel !== null;',
   "className={`flex justify-center ${showStatus ? 'py-3' : 'h-px py-0'} ${className}`}",
-  '{isLoading ? loadingLabel : idleLabel}',
+  '{isLoading ? visibleLoadingLabel : visibleIdleLabel}',
   'data-infinite-load-trigger',
   'data-infinite-load-mode="buttonless"',
   'data-infinite-load-mode="button"',
@@ -301,27 +303,26 @@ requireIncludes('InfiniteLoadTrigger.tsx observability', infiniteLoadTriggerSour
 requireIncludes('HomePage.tsx theme-controlled list loading', homePageSource, [
   'const MobileThemePackage = getMobileThemePackage(publicSettings?.mobile_interface_theme);',
   'const mobileHomeBehavior = MobileThemePackage.home;',
-  "(isDesktop ? desktopHomeBehavior.listLoadingMode : mobileHomeBehavior.listLoadingMode) === 'pagination';",
+  'const activeHomeListLoadingMode = isDesktop ? desktopHomeListLoadingMode : mobileHomeListLoadingMode;',
+  "const usesManualHomePagination = activeHomeListLoadingMode === 'pagination';",
   'useInfiniteModels(',
   '{ manual: usesManualHomePagination }',
   'setModelPageSize(usesManualHomePagination ? 1 : page);',
 ]);
-requireIncludes('classic HomeDesktop.tsx infinite loading', classicHomeTemplateSource, [
-  '<InfiniteLoadTrigger',
-  'buttonless',
-  'idleLabel={null}',
-]);
-requireIncludes('workbench HomeDesktop.tsx pagination loading', workbenchHomeTemplateSource, [
-  '<Pagination',
-  'pageSizeOptions={homePageSizeOptions}',
-  'onPageChange=',
-  'onPageSizeChange=',
-]);
-if (classicHomeTemplateSource.includes('<Pagination')) {
-  errors.push('classic HomeDesktop.tsx must keep the legacy automatic infinite loading interaction.');
-}
-if (workbenchHomeTemplateSource.includes('<InfiniteLoadTrigger')) {
-  errors.push('workbench HomeDesktop.tsx must use pagination, not the classic infinite loading interaction.');
+for (const [label, source] of [
+  ['classic HomeDesktop.tsx configurable list loading', classicHomeTemplateSource],
+  ['workbench HomeDesktop.tsx configurable list loading', workbenchHomeTemplateSource],
+]) {
+  requireIncludes(label, source, [
+    "listLoadingMode === 'pagination'",
+    '<Pagination',
+    'pageSizeOptions={homePageSizeOptions}',
+    'onPageChange=',
+    'onPageSizeChange=',
+    '<InfiniteLoadTrigger',
+    'buttonless',
+    'idleLabel={null}',
+  ]);
 }
 
 requireIncludes('HomePage.tsx legacy page-size migration', homePageWithUtils, [

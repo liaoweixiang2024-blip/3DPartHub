@@ -78,9 +78,10 @@ const hardcodedColorAllowedPaths = [
   'pages/SettingsPage.tsx',
 ];
 const hardcodedColorPattern = /#[0-9a-fA-F]{3,8}\b|\b(?:rgb|rgba|hsl|hsla)\(/g;
-const allowedThemePackageImports = new Set(['react', 'react-router-dom', 'framer-motion']);
+const allowedThemePackageImports = new Set(['react', 'react-router-dom', 'framer-motion', 'react-i18next']);
 const allowedThemeAppImports = new Set([
   '../../components/home/homeTypes',
+  '../../../../i18n/nav',
   '../../../../components/home/HomeDesktopShared',
   '../../../../components/home/homeTypes',
   '../../../../components/shared/Icon',
