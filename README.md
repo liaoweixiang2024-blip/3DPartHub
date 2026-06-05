@@ -173,7 +173,9 @@ npm run verify:local
 
 ### 自动调整容器上限
 
-服务器或 NAS 已经部署好以后，可以单独运行资源调优脚本。它会按服务器总内存自动选择 `4G`、`8G`、`16G` 或 `32G+` 档位，先写入 `.env`，再用 `docker update` 直接调整正在运行的 `api`、`web`、`postgres`、`redis` 容器内存和 CPU 上限。
+服务器或 NAS 已经部署好以后，可以单独运行资源调优脚本。它会按服务器总内存自动选择 `2G`、`4G`、`8G`、`16G` 或 `32G+` 档位，先写入 `.env`，再用 `docker update` 直接调整正在运行的 `api`、`web`、`postgres`、`redis` 容器内存和 CPU 上限。
+
+Docker 面板里的 `已用内存 / 上限` 只表示当前用量和最大允许值，不会预占上限内存。例如 `340MB / 12GB` 表示实际只用了 340MB，12GB 只是当前自动档位给 API 容器的保护上限。Docker Compose 不能把 `mem_limit` 写成运行时动态 `auto`，因此自动调节是在部署前检测服务器内存并写入 `.env`，容器创建后 Docker 仍会显示一个具体上限。
 
 ```bash
 cd /opt/3dparthub
@@ -193,6 +195,8 @@ docker stats --no-stream
 | 32G+       | 12G / 4 CPU    | 4G / 2 CPU     | 2G / 1 CPU     | 1G / 1 CPU      |
 
 说明：容器内存/CPU 上限会即时生效；`API_WORKERS`、`API_SHM_SIZE`、`DB_CONNECTION_LIMIT` 等启动参数会同步写入 `.env`，执行 `docker compose up -d --force-recreate api` 后完全生效。部署自检会按服务器总内存复核资源配置预算，若 `API_WORKERS`、`CONVERSION_WORKER_CONCURRENCY`、`DB_CONNECTION_LIMIT`、容器内存上限或 `REDIS_MAXMEMORY` 明显超出当前档位，会要求先重新调优再上线。
+
+手动纯 Docker 部署时，推荐顺序是先执行 `sh scripts/tune-resources.sh .env --no-runtime` 生成当前服务器档位，再执行 `docker compose pull && docker compose up -d`。一键部署脚本会自动完成这一步。
 
 首次启动会自动创建管理员账号：
 
@@ -242,13 +246,13 @@ curl http://localhost:3780/api/health
 如需锁定特定版本，修改 `.env` 中的 `IMAGE_TAG`：
 
 ```bash
-sed -i 's/IMAGE_TAG=.*/IMAGE_TAG=v3.2.2/' .env
+sed -i 's/IMAGE_TAG=.*/IMAGE_TAG=v3.2.3/' .env
 docker compose pull && docker compose up -d --force-recreate
 ```
 
 升级前建议在后台 **设置 -> 数据备份** 创建并校验一次备份。
 
-要锁定到指定版本，在 `.env` 中设置 `IMAGE_TAG=v3.2.2` 等固定标签即可。
+要锁定到指定版本，在 `.env` 中设置 `IMAGE_TAG=v3.2.3` 等固定标签即可。
 
 如果从早期一键部署升级后 `api` 显示 unhealthy，先查看日志：
 

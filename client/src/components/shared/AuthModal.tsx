@@ -5,6 +5,7 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { authApi } from '../../api/auth';
 import client from '../../api/client';
 import { unwrapResponse } from '../../api/response';
+import { getUsernamePolicy, validateRegisterUsername } from '../../lib/authValidation';
 import { getErrorMessage } from '../../lib/errorNotifications';
 import { useResolvedPublicInterfaceTheme } from '../../lib/interfaceThemePreference';
 import { usePublicSettings } from '../../lib/publicSettings';
@@ -69,6 +70,7 @@ export default function AuthModal({ initialMode = 'login', open, returnUrl, onCl
   const resolvedTheme = useResolvedPublicInterfaceTheme(settings);
   const interfaceTheme = getInterfaceThemePackage(resolvedTheme).manifest.key;
   const allowRegister = settings?.allow_register ?? true;
+  const usernamePolicy = getUsernamePolicy(settings);
 
   const resetTransient = useCallback((nextMode: AuthMode) => {
     setMode(nextMode);
@@ -116,7 +118,8 @@ export default function AuthModal({ initialMode = 'login', open, returnUrl, onCl
     if (!password) nextErrors.password = t('auth.errors.passwordRequired');
     else if (password.length < 8) nextErrors.password = t('auth.errors.passwordMin');
     if (mode === 'register') {
-      if (!username) nextErrors.username = t('auth.errors.usernameRequired');
+      const usernameError = validateRegisterUsername(username, settings, t);
+      if (usernameError) nextErrors.username = usernameError;
       if (password !== confirmPassword) nextErrors.confirmPassword = t('auth.errors.confirmPasswordMismatch');
       if (!captchaText) nextErrors.captchaText = t('auth.errors.captchaRequired');
       if (!emailCode) nextErrors.emailCode = t('auth.errors.emailCodeRequired');
@@ -124,6 +127,15 @@ export default function AuthModal({ initialMode = 'login', open, returnUrl, onCl
     setErrors(nextErrors);
     return Object.keys(nextErrors).length === 0;
   };
+
+  const handleUsernameChange = useCallback(
+    (value: string) => {
+      setUsername(value);
+      const usernameError = validateRegisterUsername(value, settings, t);
+      setErrors((prev) => ({ ...prev, username: usernameError || undefined }));
+    },
+    [settings, t],
+  );
 
   const handleSendEmailCode = async () => {
     if (!email || !validateEmail(email)) {
@@ -230,9 +242,14 @@ export default function AuthModal({ initialMode = 'login', open, returnUrl, onCl
                   <AppTextInput
                     type="text"
                     value={username}
-                    onChange={(event) => setUsername(event.target.value)}
+                    onChange={(event) => handleUsernameChange(event.target.value)}
+                    onBlur={() => {
+                      const usernameError = validateRegisterUsername(username, settings, t);
+                      setErrors((prev) => ({ ...prev, username: usernameError || undefined }));
+                    }}
                     error={Boolean(errors.username)}
                     fieldSize="lg"
+                    maxLength={usernamePolicy.max}
                     placeholder={t('auth.usernamePlaceholder')}
                   />
                   {errors.username && <span className={APP_FIELD_ERROR_CLASS}>{errors.username}</span>}

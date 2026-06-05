@@ -61,7 +61,23 @@ upsert_env() {
 
 total_mb="$(detect_total_mb)"
 
-if [ "$total_mb" -lt 6144 ]; then
+if [ "$total_mb" -lt 3072 ]; then
+  profile="2G"
+  api_memory="900M"
+  api_reservation="256M"
+  api_cpu="1.2"
+  api_workers="1"
+  api_shm="256M"
+  conversion_workers="1"
+  postgres_memory="384M"
+  postgres_cpu="0.7"
+  redis_memory="128M"
+  redis_cpu="0.3"
+  redis_maxmemory="96mb"
+  web_memory="128M"
+  web_cpu="0.3"
+  db_connections="3"
+elif [ "$total_mb" -lt 6144 ]; then
   profile="4G"
   api_memory="2G"
   api_reservation="512M"

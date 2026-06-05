@@ -129,7 +129,7 @@ if [ "${1:-}" = "compose" ]; then
         fi
         if [ "${FAKE_COMPOSE_RESOURCE_LIMITS_MISSING:-0}" != "1" ]; then
           printf '%s\n' '    mem_limit: 128M'
-          printf '%s\n' '    cpus: "0.5"'
+          printf '%s\n' '    cpus: "0.3"'
         fi
         if [ "${FAKE_COMPOSE_MISSING_LOGGING:-0}" != "1" ]; then
           printf '%s\n' '    logging:'
@@ -164,7 +164,7 @@ if [ "${1:-}" = "compose" ]; then
         printf '%s\n' '  postgres:'
         printf '%s\n' '    image: postgres'
         printf '%s\n' '    mem_limit: 384M'
-        printf '%s\n' '    cpus: "1"'
+        printf '%s\n' '    cpus: "0.7"'
         if [ "${FAKE_COMPOSE_MISSING_LOGGING:-0}" != "1" ]; then
           printf '%s\n' '    logging:'
           printf '%s\n' '      driver: json-file'
@@ -184,7 +184,7 @@ if [ "${1:-}" = "compose" ]; then
         printf '%s\n' '  redis:'
         printf '%s\n' '    image: redis'
         printf '%s\n' '    mem_limit: 128M'
-        printf '%s\n' '    cpus: "0.5"'
+        printf '%s\n' '    cpus: "0.3"'
         if [ "${FAKE_COMPOSE_MISSING_LOGGING:-0}" != "1" ]; then
           printf '%s\n' '    logging:'
           printf '%s\n' '      driver: json-file'
@@ -385,13 +385,13 @@ fi
           echo "943718400|1200000000|0|0"
           ;;
         3dparthub-web)
-          echo "134217728|500000000|0|0"
+          echo "134217728|300000000|0|0"
           ;;
         3dparthub-postgres)
-          echo "402653184|1000000000|0|0"
+          echo "402653184|700000000|0|0"
           ;;
         3dparthub-redis)
-          echo "134217728|500000000|0|0"
+          echo "134217728|300000000|0|0"
           ;;
         *)
           echo "0|0|0|0"
@@ -635,7 +635,7 @@ case "$url" in
     if [ "${FAKE_VERSION_FAIL:-0}" = "1" ]; then
       exit 22
     fi
-    echo '{"current":"v3.2.2"}'
+    echo '{"current":"v3.2.3"}'
     ;;
   */healthz)
     echo "ok"
@@ -750,9 +750,12 @@ API_WORKERS=1
 API_SHM_SIZE=256M
 CONVERSION_WORKER_CONCURRENCY=1
 POSTGRES_MEMORY_LIMIT=384M
+POSTGRES_CPU_LIMIT=0.7
 REDIS_MEMORY_LIMIT=128M
+REDIS_CPU_LIMIT=0.3
 REDIS_MAXMEMORY=96mb
 WEB_MEMORY_LIMIT=128M
+WEB_CPU_LIMIT=0.3
 DB_CONNECTION_LIMIT=3
 ADMIN_PASS=test-admin-password-1234567890
 ALLOWED_ORIGINS=https://model.example.com

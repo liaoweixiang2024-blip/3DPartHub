@@ -61,32 +61,34 @@ services:
     image: ghcr.io/liaoweixiang2024-blip/3dparthub-api:${IMAGE_TAG:-latest}
     container_name: 3dparthub-api
     init: true
-    shm_size: ${API_SHM_SIZE:-1g}
-    mem_limit: ${API_MEMORY_LIMIT:-2G}
-    mem_reservation: ${API_MEMORY_RESERVATION:-512M}
-    cpus: '${API_CPU_LIMIT:-2}'
+    shm_size: ${API_SHM_SIZE:-256M}
+    mem_limit: ${API_MEMORY_LIMIT:-900M}
+    mem_reservation: ${API_MEMORY_RESERVATION:-256M}
+    cpus: '${API_CPU_LIMIT:-1.2}'
     deploy:
       resources:
         limits:
-          memory: ${API_MEMORY_LIMIT:-2G}
-          cpus: '${API_CPU_LIMIT:-2}'
+          memory: ${API_MEMORY_LIMIT:-900M}
+          cpus: '${API_CPU_LIMIT:-1.2}'
         reservations:
-          memory: ${API_MEMORY_RESERVATION:-512M}
+          memory: ${API_MEMORY_RESERVATION:-256M}
     environment:
       TZ: Asia/Shanghai
       NODE_ENV: production
       PORT: 8000
-      DATABASE_URL: 'postgresql://modeluser:${DB_PASSWORD:-3dparthub-default-db-password-change-me-2026}@postgres:5432/3dparthub?connection_limit=${DB_CONNECTION_LIMIT:-5}&pool_timeout=10'
+      DATABASE_URL: 'postgresql://modeluser:${DB_PASSWORD:-3dparthub-default-db-password-change-me-2026}@postgres:5432/3dparthub?connection_limit=${DB_CONNECTION_LIMIT:-3}&pool_timeout=10'
       # <<< 建议在 .env 中覆盖为随机字符串 (openssl rand -hex 32)
       JWT_SECRET: '${JWT_SECRET:-3dparthub-default-jwt-secret-change-me-2026-04-30}'
+      BACKUP_SIGNING_SECRET: '${BACKUP_SIGNING_SECRET:-}'
+      BACKUP_ENCRYPTION_SECRET: '${BACKUP_ENCRYPTION_SECRET:-}'
       JWT_EXPIRES_IN: 7d
       UPLOAD_DIR: uploads
       STATIC_DIR: static
-      API_WORKERS: ${API_WORKERS:-2}
+      API_WORKERS: ${API_WORKERS:-1}
       CONVERSION_WORKER_CONCURRENCY: ${CONVERSION_WORKER_CONCURRENCY:-1}
       SLOW_REQUEST_LOG_BURST: ${SLOW_REQUEST_LOG_BURST:-5}
       SLOW_REQUEST_LOG_SAMPLE_RATE: ${SLOW_REQUEST_LOG_SAMPLE_RATE:-0.01}
-      MAX_FILE_SIZE: 104857600
+      MAX_FILE_SIZE: 524288000
       REDIS_URL: redis://:${REDIS_PASSWORD:-changeme-set-in-env}@redis:6379
       ADMIN_USER: ${ADMIN_USER:-admin}
       ADMIN_EMAIL: ${ADMIN_EMAIL:-admin@model.local}
@@ -123,8 +125,8 @@ services:
     image: ghcr.io/liaoweixiang2024-blip/3dparthub-web:${IMAGE_TAG:-latest}
     container_name: 3dparthub-web
     init: true
-    mem_limit: ${WEB_MEMORY_LIMIT:-256M}
-    cpus: '${WEB_CPU_LIMIT:-0.5}'
+    mem_limit: ${WEB_MEMORY_LIMIT:-128M}
+    cpus: '${WEB_CPU_LIMIT:-0.3}'
     ports:
       - '${PORT:-3780}:80'
     ulimits:
@@ -134,8 +136,8 @@ services:
     deploy:
       resources:
         limits:
-          memory: ${WEB_MEMORY_LIMIT:-256M}
-          cpus: '${WEB_CPU_LIMIT:-0.5}'
+          memory: ${WEB_MEMORY_LIMIT:-128M}
+          cpus: '${WEB_CPU_LIMIT:-0.3}'
     depends_on:
       api:
         condition: service_healthy
@@ -156,13 +158,13 @@ services:
   postgres:
     image: postgres:16-alpine
     container_name: 3dparthub-postgres
-    mem_limit: ${POSTGRES_MEMORY_LIMIT:-512M}
-    cpus: '${POSTGRES_CPU_LIMIT:-1}'
+    mem_limit: ${POSTGRES_MEMORY_LIMIT:-384M}
+    cpus: '${POSTGRES_CPU_LIMIT:-0.7}'
     deploy:
       resources:
         limits:
-          memory: ${POSTGRES_MEMORY_LIMIT:-512M}
-          cpus: '${POSTGRES_CPU_LIMIT:-1}'
+          memory: ${POSTGRES_MEMORY_LIMIT:-384M}
+          cpus: '${POSTGRES_CPU_LIMIT:-0.7}'
     environment:
       POSTGRES_DB: 3dparthub
       POSTGRES_USER: modeluser
@@ -184,8 +186,8 @@ services:
   redis:
     image: redis:7-alpine
     container_name: 3dparthub-redis
-    mem_limit: ${REDIS_MEMORY_LIMIT:-256M}
-    cpus: '${REDIS_CPU_LIMIT:-0.5}'
+    mem_limit: ${REDIS_MEMORY_LIMIT:-128M}
+    cpus: '${REDIS_CPU_LIMIT:-0.3}'
     command:
       - redis-server
       - --requirepass
@@ -197,18 +199,18 @@ services:
       - --appendfsync
       - everysec
       - --maxmemory
-      - ${REDIS_MAXMEMORY:-192mb}
+      - ${REDIS_MAXMEMORY:-96mb}
       - --maxmemory-policy
       - noeviction
     deploy:
       resources:
         limits:
-          memory: ${REDIS_MEMORY_LIMIT:-256M}
-          cpus: '${REDIS_CPU_LIMIT:-0.5}'
+          memory: ${REDIS_MEMORY_LIMIT:-128M}
+          cpus: '${REDIS_CPU_LIMIT:-0.3}'
     volumes:
       - redis-data:/data
     healthcheck:
-      test: ['CMD', 'redis-cli', '-a', '${REDIS_PASSWORD:-changeme-set-in-env}', 'ping']
+      test: ['CMD', 'sh', '-c', 'REDISCLI_AUTH=${REDIS_PASSWORD:-changeme-set-in-env} redis-cli ping']
       interval: 10s
       timeout: 5s
       retries: 5

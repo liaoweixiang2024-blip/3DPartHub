@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: 'Version tag (e.g. v3.2.2)'
+        description: 'Version tag (e.g. v3.2.3)'
         required: true
 
 env:
@@ -119,5 +119,5 @@ jobs:
         if: github.event_name == 'push'
         uses: softprops/action-gh-release@v3
         with:
-          name: 3DPartHub ${{ steps.version.outputs.version }} - 多语言前台与移动体验增强版
+          name: 3DPartHub ${{ steps.version.outputs.version }} - 企业部署与前台体验稳定版
           body_path: docs/releases/${{ steps.version.outputs.version }}.md

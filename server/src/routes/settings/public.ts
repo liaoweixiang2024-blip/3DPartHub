@@ -49,6 +49,8 @@ export function createSettingsPublicRouter() {
           const modelDetailCopyrightFollowsSiteTitle = all.model_detail_copyright_follow_site_title !== false;
           return {
             allow_register: all.allow_register ?? true,
+            security_username_min_length: all.security_username_min_length ?? 2,
+            security_username_max_length: all.security_username_max_length ?? 32,
             require_login_download: all.require_login_download ?? false,
             require_login_browse: all.require_login_browse ?? false,
             auth_modal_enabled: all.auth_modal_enabled ?? true,
@@ -204,6 +206,8 @@ export function createSettingsPublicRouter() {
     } catch {
       res.json({
         allow_register: true,
+        security_username_min_length: 2,
+        security_username_max_length: 32,
         require_login_download: false,
         require_login_browse: false,
         auth_modal_enabled: true,

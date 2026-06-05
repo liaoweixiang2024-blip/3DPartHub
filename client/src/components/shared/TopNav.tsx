@@ -650,10 +650,14 @@ function TopNavContent({ compact = false, onMenuToggle, source = 'standalone' }:
   const isAdmin = user?.role === 'ADMIN';
   const [searchParams] = useSearchParams();
   const [localQuery, setLocalQuery] = useState(() => readHomeSearchQuery() ?? searchParams.get('q') ?? '');
+  const [desktopSearchDraft, setDesktopSearchDraft] = useState(
+    () => readHomeSearchQuery() ?? searchParams.get('q') ?? '',
+  );
   const navigate = useNavigate();
   const location = useLocation();
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const searchCompositionRef = useRef(false);
+  const desktopSearchCompositionRef = useRef(false);
   const desktopSearchRef = useRef<HTMLDivElement>(null);
   const desktopSearchInputRef = useRef<HTMLInputElement>(null);
   const isWideDesktop = useMediaQuery('(min-width: 1280px)');
@@ -696,7 +700,9 @@ function TopNavContent({ compact = false, onMenuToggle, source = 'standalone' }:
   useEffect(() => {
     if (!desktopSearchOpen) return;
     const handlePointerDown = (event: MouseEvent) => {
-      if (!desktopSearchRef.current?.contains(event.target as Node)) {
+      const target = event.target;
+      if (!(target instanceof Node)) return;
+      if (!desktopSearchRef.current?.contains(target)) {
         setDesktopSearchOpen(false);
       }
     };
@@ -706,7 +712,8 @@ function TopNavContent({ compact = false, onMenuToggle, source = 'standalone' }:
 
   useEffect(() => {
     if (!desktopSearchOpen) return;
-    requestAnimationFrame(() => desktopSearchInputRef.current?.focus());
+    const focusFrame = requestAnimationFrame(() => desktopSearchInputRef.current?.focus());
+    return () => cancelAnimationFrame(focusFrame);
   }, [desktopSearchOpen]);
 
   useEffect(() => {
@@ -715,22 +722,30 @@ function TopNavContent({ compact = false, onMenuToggle, source = 'standalone' }:
 
   useEffect(() => {
     const stored = readHomeSearchQuery();
-    setLocalQuery(stored ?? searchParams.get('q') ?? '');
-  }, [searchParams]);
+    const nextQuery = stored ?? searchParams.get('q') ?? '';
+    setLocalQuery(nextQuery);
+    if (!desktopSearchOpen) {
+      setDesktopSearchDraft(nextQuery);
+    }
+  }, [desktopSearchOpen, searchParams]);
 
   useEffect(() => {
     const handleSearchEvent = (event: Event) => {
       const detail = (event as CustomEvent<HomeSearchEventDetail>).detail;
       if (!detail || typeof detail.query !== 'string') return;
       setLocalQuery(detail.query);
+      if (!desktopSearchOpen) {
+        setDesktopSearchDraft(detail.query);
+      }
     };
     window.addEventListener(HOME_SEARCH_EVENT, handleSearchEvent);
     return () => window.removeEventListener(HOME_SEARCH_EVENT, handleSearchEvent);
-  }, []);
+  }, [desktopSearchOpen]);
 
   const doSearch = useCallback(
     (value: string) => {
       const query = normalizeHomeSearchQuery(value);
+      setLocalQuery(query);
       saveHomeSearchQuery(query);
       dispatchHomeSearchQuery(query);
       if (location.pathname === '/') {
@@ -835,9 +850,82 @@ function TopNavContent({ compact = false, onMenuToggle, source = 'standalone' }:
       if (searchCompositionRef.current || isComposingNativeEvent(e.nativeEvent)) return;
       clearSearchDebounce();
       doSearch(localQuery);
-      setDesktopSearchOpen(false);
     },
     [clearSearchDebounce, localQuery, doSearch],
+  );
+
+  const handleDesktopSearchToggle = useCallback(() => {
+    clearSearchDebounce();
+    desktopSearchCompositionRef.current = false;
+    setDesktopSearchOpen((current) => {
+      const nextOpen = !current;
+      if (nextOpen) {
+        setDesktopSearchDraft(localQuery);
+      }
+      return nextOpen;
+    });
+  }, [clearSearchDebounce, localQuery]);
+
+  const handleDesktopSearchDraftChange = useCallback((e: ChangeEvent<HTMLInputElement>) => {
+    setDesktopSearchDraft(clampSearchInput(e.currentTarget.value));
+  }, []);
+
+  const handleDesktopSearchDraftInput = useCallback((e: FormEvent<HTMLInputElement>) => {
+    setDesktopSearchDraft(clampSearchInput(e.currentTarget.value));
+  }, []);
+
+  const handleDesktopSearchCompositionStart = useCallback(() => {
+    desktopSearchCompositionRef.current = true;
+  }, []);
+
+  const handleDesktopSearchCompositionUpdate = useCallback((e: CompositionEvent<HTMLInputElement>) => {
+    setDesktopSearchDraft(clampSearchInput(e.currentTarget.value));
+  }, []);
+
+  const handleDesktopSearchCompositionEnd = useCallback((e: CompositionEvent<HTMLInputElement>) => {
+    desktopSearchCompositionRef.current = false;
+    setDesktopSearchDraft(clampSearchInput(e.currentTarget.value));
+  }, []);
+
+  const handleDesktopSearchKeyDown = useCallback(
+    (e: ReactKeyboardEvent<HTMLInputElement>) => {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        desktopSearchCompositionRef.current = false;
+        setDesktopSearchOpen(false);
+        return;
+      }
+      if (e.key !== 'Enter') return;
+      e.preventDefault();
+      if (desktopSearchCompositionRef.current || isComposingNativeEvent(e.nativeEvent)) return;
+      clearSearchDebounce();
+      const query = normalizeHomeSearchQuery(desktopSearchDraft);
+      setDesktopSearchDraft(query);
+      doSearch(query);
+      setDesktopSearchOpen(false);
+    },
+    [clearSearchDebounce, desktopSearchDraft, doSearch],
+  );
+
+  const handleDesktopSearchClear = useCallback(() => {
+    desktopSearchCompositionRef.current = false;
+    const activeQuery = normalizeHomeSearchQuery(localQuery);
+    const draftQuery = normalizeHomeSearchQuery(desktopSearchDraft);
+    setDesktopSearchDraft('');
+    if (activeQuery && activeQuery === draftQuery) doSearch('');
+  }, [desktopSearchDraft, doSearch, localQuery]);
+
+  const handleDesktopSearchSubmit = useCallback(
+    (e: FormEvent<HTMLFormElement>) => {
+      e.preventDefault();
+      if (desktopSearchCompositionRef.current || isComposingNativeEvent(e.nativeEvent)) return;
+      clearSearchDebounce();
+      const query = normalizeHomeSearchQuery(desktopSearchDraft);
+      setDesktopSearchDraft(query);
+      doSearch(query);
+      setDesktopSearchOpen(false);
+    },
+    [clearSearchDebounce, desktopSearchDraft, doSearch],
   );
 
   const handleUploaded = useCallback(() => {
@@ -924,33 +1012,71 @@ function TopNavContent({ compact = false, onMenuToggle, source = 'standalone' }:
         {renderToolbarTooltip(
           <button
             type="button"
-            onClick={() => setDesktopSearchOpen((value) => !value)}
-            className="p-2 text-on-surface-variant hover:text-on-surface hover:bg-surface-container-high rounded-lg transition-colors"
+            onClick={handleDesktopSearchToggle}
+            className={`flex h-9 w-9 items-center justify-center rounded-[0.625rem] transition-colors ${
+              desktopSearchOpen
+                ? 'bg-primary-container/12 text-primary-container'
+                : 'text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface'
+            }`}
             aria-label={t('common.search')}
-            aria-haspopup="dialog"
             aria-expanded={desktopSearchOpen}
+            data-tooltip-ignore
           >
             <Icon name="search" size={20} />
           </button>,
           t('common.search'),
         )}
         <AnimatePresence>
-          {desktopSearchOpen && (
-            <motion.div
-              initial={{ opacity: 0, y: -4, scale: 0.98 }}
+          {desktopSearchOpen ? (
+            <motion.form
+              key="top-nav-toolbar-search"
+              onSubmit={handleDesktopSearchSubmit}
+              className="top-nav-search-panel absolute right-0 top-[calc(100%+0.625rem)] z-[110] w-[min(24rem,calc(100vw-2rem))] rounded-2xl border border-outline-variant/14 bg-surface/95 p-2 text-on-surface shadow-dropdown backdrop-blur-xl"
+              role="search"
+              initial={{ opacity: 0, y: -6, scale: 0.98 }}
               animate={{ opacity: 1, y: 0, scale: 1 }}
-              exit={{ opacity: 0, y: -4, scale: 0.98 }}
-              transition={{ duration: 0.16 }}
-              className="absolute right-0 top-full z-[110] pt-2"
+              exit={{ opacity: 0, y: -6, scale: 0.98 }}
+              transition={{ duration: 0.16, ease: 'easeOut' }}
             >
-              <div className="w-[min(24rem,calc(100vw-2rem))] rounded-xl border border-outline-variant/16 bg-surface p-2 shadow-lg">
-                {renderSearch(
-                  '!h-10 !rounded-lg !border-outline-variant/25 !bg-surface-container-lowest',
-                  desktopSearchInputRef,
-                )}
+              <div className="top-nav-search-panel-field flex h-11 items-center gap-2 rounded-xl border border-outline-variant/18 bg-surface-container-lowest px-3 transition-colors focus-within:border-primary-container/60">
+                <Icon name="search" size={17} className="shrink-0 text-on-surface-variant/65" />
+                <input
+                  ref={desktopSearchInputRef}
+                  type="text"
+                  value={desktopSearchDraft}
+                  onChange={handleDesktopSearchDraftChange}
+                  onInput={handleDesktopSearchDraftInput}
+                  onCompositionStart={handleDesktopSearchCompositionStart}
+                  onCompositionUpdate={handleDesktopSearchCompositionUpdate}
+                  onCompositionEnd={handleDesktopSearchCompositionEnd}
+                  onKeyDown={handleDesktopSearchKeyDown}
+                  maxLength={HOME_SEARCH_MAX_LENGTH}
+                  enterKeyHint="search"
+                  autoComplete="off"
+                  spellCheck={false}
+                  placeholder={t('topNav.searchModelsAndSpecs')}
+                  className="h-full min-w-0 flex-1 appearance-none border-none bg-transparent p-0 text-[0.875rem] text-on-surface outline-none placeholder:text-on-surface-variant/45"
+                />
+                {desktopSearchDraft ? (
+                  <button
+                    type="button"
+                    onClick={handleDesktopSearchClear}
+                    className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-on-surface-variant transition-colors hover:bg-surface-container-high hover:text-on-surface"
+                    aria-label={t('topNav.clearSearch')}
+                  >
+                    <Icon name="close" size={14} />
+                  </button>
+                ) : null}
+                <button
+                  type="submit"
+                  className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-primary-container transition-colors hover:bg-primary-container/10"
+                  aria-label={t('common.search')}
+                >
+                  <Icon name="arrow_forward" size={15} />
+                </button>
               </div>
-            </motion.div>
-          )}
+            </motion.form>
+          ) : null}
         </AnimatePresence>
       </div>
     ) : null;

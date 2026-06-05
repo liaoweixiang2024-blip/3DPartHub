@@ -12,6 +12,7 @@ import { PageTitle } from '../components/shared/PagePrimitives';
 import { PublicPageShell } from '../components/shared/PublicPageShell';
 import { useDocumentTitle } from '../hooks/useDocumentTitle';
 import { useMediaQuery } from '../layouts/hooks/useMediaQuery';
+import { getUsernamePolicy, validateRegisterUsername } from '../lib/authValidation';
 import { getErrorMessage } from '../lib/errorNotifications';
 import { useResolvedPublicInterfaceTheme } from '../lib/interfaceThemePreference';
 import { usePublicSettings } from '../lib/publicSettings';
@@ -65,6 +66,7 @@ export default function LoginPage() {
   const resolvedPublicTheme = useResolvedPublicInterfaceTheme(publicSettings, isDesktop);
   const ThemePackage = getInterfaceThemePackage(resolvedPublicTheme);
   const LoginTemplate = ThemePackage.templates.Login;
+  const usernamePolicy = getUsernamePolicy(publicSettings);
 
   // Captcha state
   const [captchaSvg, setCaptchaSvg] = useState('');
@@ -145,7 +147,8 @@ export default function LoginPage() {
     if (!password) errs.password = t('auth.errors.passwordRequired');
     else if (password.length < 8) errs.password = t('auth.errors.passwordMin');
     if (mode === 'register') {
-      if (!username) errs.username = t('auth.errors.usernameRequired');
+      const usernameError = validateRegisterUsername(username, publicSettings, t);
+      if (usernameError) errs.username = usernameError;
       if (password !== confirmPassword) errs.confirmPassword = t('auth.errors.confirmPasswordMismatch');
       if (!captchaText) errs.captchaText = t('auth.errors.captchaRequired');
       if (!emailCode) errs.emailCode = t('auth.errors.emailCodeRequired');
@@ -153,6 +156,15 @@ export default function LoginPage() {
     setErrors(errs);
     return Object.keys(errs).length === 0;
   };
+
+  const handleUsernameChange = useCallback(
+    (value: string) => {
+      setUsername(value);
+      const usernameError = validateRegisterUsername(value, publicSettings, t);
+      setErrors((prev) => ({ ...prev, username: usernameError || undefined }));
+    },
+    [publicSettings, t],
+  );
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -229,9 +241,14 @@ export default function LoginPage() {
                 <AppTextInput
                   type="text"
                   value={username}
-                  onChange={(e) => setUsername(e.target.value)}
+                  onChange={(e) => handleUsernameChange(e.target.value)}
+                  onBlur={() => {
+                    const usernameError = validateRegisterUsername(username, publicSettings, t);
+                    setErrors((prev) => ({ ...prev, username: usernameError || undefined }));
+                  }}
                   error={Boolean(errors.username)}
                   fieldSize="lg"
+                  maxLength={usernamePolicy.max}
                   placeholder={t('auth.usernamePlaceholder')}
                 />
                 {errors.username && <span className={APP_FIELD_ERROR_CLASS}>{errors.username}</span>}

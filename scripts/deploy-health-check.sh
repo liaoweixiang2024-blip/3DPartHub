@@ -1514,14 +1514,14 @@ runtime_resource_issue() {
 check_runtime_container_resource_limits() {
   missing=""
   checked=0
-  api_memory_mb="$(parse_size_mb "$(env_or_default API_MEMORY_LIMIT 2G)" || true)"
-  web_memory_mb="$(parse_size_mb "$(env_or_default WEB_MEMORY_LIMIT 256M)" || true)"
-  postgres_memory_mb="$(parse_size_mb "$(env_or_default POSTGRES_MEMORY_LIMIT 512M)" || true)"
-  redis_memory_mb="$(parse_size_mb "$(env_or_default REDIS_MEMORY_LIMIT 256M)" || true)"
-  api_cpu_nano="$(parse_cpu_nano "$(env_or_default API_CPU_LIMIT 2)" || true)"
-  web_cpu_nano="$(parse_cpu_nano "$(env_or_default WEB_CPU_LIMIT 0.5)" || true)"
-  postgres_cpu_nano="$(parse_cpu_nano "$(env_or_default POSTGRES_CPU_LIMIT 1)" || true)"
-  redis_cpu_nano="$(parse_cpu_nano "$(env_or_default REDIS_CPU_LIMIT 0.5)" || true)"
+  api_memory_mb="$(parse_size_mb "$(env_or_default API_MEMORY_LIMIT 900M)" || true)"
+  web_memory_mb="$(parse_size_mb "$(env_or_default WEB_MEMORY_LIMIT 128M)" || true)"
+  postgres_memory_mb="$(parse_size_mb "$(env_or_default POSTGRES_MEMORY_LIMIT 384M)" || true)"
+  redis_memory_mb="$(parse_size_mb "$(env_or_default REDIS_MEMORY_LIMIT 128M)" || true)"
+  api_cpu_nano="$(parse_cpu_nano "$(env_or_default API_CPU_LIMIT 1.2)" || true)"
+  web_cpu_nano="$(parse_cpu_nano "$(env_or_default WEB_CPU_LIMIT 0.3)" || true)"
+  postgres_cpu_nano="$(parse_cpu_nano "$(env_or_default POSTGRES_CPU_LIMIT 0.7)" || true)"
+  redis_cpu_nano="$(parse_cpu_nano "$(env_or_default REDIS_CPU_LIMIT 0.3)" || true)"
 
   if [ -z "$api_memory_mb" ] || [ -z "$web_memory_mb" ] || [ -z "$postgres_memory_mb" ] || [ -z "$redis_memory_mb" ] ||
     [ -z "$api_cpu_nano" ] || [ -z "$web_cpu_nano" ] || [ -z "$postgres_cpu_nano" ] || [ -z "$redis_cpu_nano" ]; then
@@ -1909,16 +1909,16 @@ check_resource_budget() {
   web_memory_limit="$(env_value WEB_MEMORY_LIMIT)"
   api_shm_size="$(env_value API_SHM_SIZE)"
   redis_maxmemory="$(env_value REDIS_MAXMEMORY)"
-  api_workers="$(positive_int_or_default "$(env_value API_WORKERS)" 2)"
+  api_workers="$(positive_int_or_default "$(env_value API_WORKERS)" 1)"
   conversion_workers="$(positive_int_or_default "$(env_value CONVERSION_WORKER_CONCURRENCY)" 1)"
-  db_connections="$(positive_int_or_default "$(env_value DB_CONNECTION_LIMIT)" 5)"
+  db_connections="$(positive_int_or_default "$(env_value DB_CONNECTION_LIMIT)" 3)"
 
-  api_memory_mb="$(parse_size_mb "${api_memory_limit:-2G}" || true)"
-  postgres_memory_mb="$(parse_size_mb "${postgres_memory_limit:-512M}" || true)"
-  redis_memory_mb="$(parse_size_mb "${redis_memory_limit:-256M}" || true)"
-  web_memory_mb="$(parse_size_mb "${web_memory_limit:-256M}" || true)"
-  api_shm_mb="$(parse_size_mb "${api_shm_size:-1G}" || true)"
-  redis_maxmemory_mb="$(parse_size_mb "${redis_maxmemory:-192mb}" || true)"
+  api_memory_mb="$(parse_size_mb "${api_memory_limit:-900M}" || true)"
+  postgres_memory_mb="$(parse_size_mb "${postgres_memory_limit:-384M}" || true)"
+  redis_memory_mb="$(parse_size_mb "${redis_memory_limit:-128M}" || true)"
+  web_memory_mb="$(parse_size_mb "${web_memory_limit:-128M}" || true)"
+  api_shm_mb="$(parse_size_mb "${api_shm_size:-256M}" || true)"
+  redis_maxmemory_mb="$(parse_size_mb "${redis_maxmemory:-96mb}" || true)"
 
   if [ -z "$api_memory_mb" ] || [ -z "$postgres_memory_mb" ] || [ -z "$redis_memory_mb" ] || [ -z "$web_memory_mb" ] || [ -z "$api_shm_mb" ] || [ -z "$redis_maxmemory_mb" ]; then
     fail "资源配置包含无法识别的内存单位；请检查 API_MEMORY_LIMIT、POSTGRES_MEMORY_LIMIT、REDIS_MEMORY_LIMIT、WEB_MEMORY_LIMIT、API_SHM_SIZE 和 REDIS_MAXMEMORY。"
