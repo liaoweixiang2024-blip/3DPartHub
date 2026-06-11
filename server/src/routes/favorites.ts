@@ -329,8 +329,12 @@ router.post(
 
       const dailyLimit = Number(await getSetting<number>('daily_download_limit')) || 0;
 
-      for (const entry of fileEntries) {
-        if (!entry.record) continue;
+      // Pre-check: record all downloads atomically; if limit is hit, reject the whole batch
+      // without consuming any download quota.
+      const recordableEntries = fileEntries.filter(
+        (e): e is typeof e & { record: { modelId: string } } => !!e.record?.modelId,
+      );
+      for (const entry of recordableEntries) {
         try {
           await recordModelDownload(prisma, {
             userId: req.user!.userId,

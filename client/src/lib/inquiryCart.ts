@@ -88,11 +88,17 @@ export function readInquiryCartItems(): InquiryCartItem[] {
   }
 }
 
-export function writeInquiryCartItems(items: InquiryCartItem[]) {
-  if (!canUseStorage()) return;
+export function writeInquiryCartItems(items: InquiryCartItem[]): boolean {
+  if (!canUseStorage()) return false;
   const normalized = items.map(normalizeItem).filter(Boolean).slice(0, INQUIRY_CART_LIMIT) as InquiryCartItem[];
-  window.localStorage.setItem(STORAGE_KEY, JSON.stringify(normalized));
+  try {
+    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(normalized));
+  } catch {
+    // QuotaExceededError — storage full, data not written
+    return false;
+  }
   window.dispatchEvent(new CustomEvent(INQUIRY_CART_CHANGED_EVENT, { detail: normalized }));
+  return true;
 }
 
 export function productToInquiryCartItem(product: SelectionProduct): InquiryCartItem {

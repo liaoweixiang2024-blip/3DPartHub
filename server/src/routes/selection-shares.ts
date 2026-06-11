@@ -89,7 +89,9 @@ router.get('/api/selection-shares/:token', async (req: Request, res: Response) =
         where: { id: share.id },
         data: { viewCount: { increment: 1 } },
       })
-      .catch(() => {});
+      .catch((err) => {
+        log.warn({ err }, '浏览量更新失败');
+      });
 
     const [category, products] = await Promise.all([
       prisma.selectionCategory.findUnique({

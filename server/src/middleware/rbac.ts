@@ -37,7 +37,8 @@ export function requireProjectRole(...roles: Role[]) {
       return;
     }
 
-    const projectId = req.params.projectId || req.params.id || req.body.projectId;
+    const rawProjectId = req.params.projectId || req.params.id;
+    const projectId = Array.isArray(rawProjectId) ? rawProjectId[0] : rawProjectId;
     if (!projectId) {
       res.status(400).json({ detail: '缺少项目 ID' });
       return;

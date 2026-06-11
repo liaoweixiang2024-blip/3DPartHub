@@ -1,13 +1,24 @@
 import 'dotenv/config';
 
+const missingKeys: string[] = [];
 const required = (key: string): string => {
   const value = process.env[key];
   if (!value) {
-    console.error(`Missing required environment variable: ${key}`);
-    process.exit(1);
+    missingKeys.push(key);
+    return '';
   }
   return value;
 };
+
+// Collect all missing keys before exiting so the user sees them all at once
+function checkRequiredEnvVars() {
+  if (missingKeys.length > 0) {
+    console.error(
+      `\n❌ Missing required environment variable(s):\n${missingKeys.map((k) => `   - ${k}`).join('\n')}\n\nPlease set them in your .env file and restart.\n`,
+    );
+    process.exit(1);
+  }
+}
 
 const optional = (key: string, fallback: string): string => process.env[key] || fallback;
 const optionalAllowEmpty = (key: string, fallback: string): string =>
@@ -121,3 +132,5 @@ export const config = {
   minioBucket: optional('MINIO_BUCKET', 'models'),
   minioUseSSL: optional('MINIO_USE_SSL', 'false') === 'true',
 };
+
+checkRequiredEnvVars();

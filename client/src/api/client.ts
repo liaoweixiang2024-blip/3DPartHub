@@ -163,7 +163,22 @@ client.interceptors.response.use(
 
     if (refreshInProgress) {
       return new Promise((resolve, reject) => {
-        failedQueue.push({ resolve, reject });
+        // Auto-reject if refresh takes longer than 30 seconds
+        const timeout = setTimeout(() => {
+          const idx = failedQueue.findIndex((p) => p.resolve === resolve);
+          if (idx !== -1) failedQueue.splice(idx, 1);
+          reject(new Error('Token refresh timed out'));
+        }, 30_000);
+        failedQueue.push({
+          resolve: (token) => {
+            clearTimeout(timeout);
+            resolve(token);
+          },
+          reject: (err) => {
+            clearTimeout(timeout);
+            reject(err);
+          },
+        });
       }).then((token) => {
         originalRequest.headers.Authorization = `Bearer ${token}`;
         return client(originalRequest);

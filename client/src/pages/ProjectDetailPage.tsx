@@ -261,9 +261,9 @@ export default function ProjectDetailPage() {
                 className="flex items-center gap-2 bg-surface-container-high px-3 py-1.5 rounded-sm border border-outline-variant/10 group"
               >
                 <div className="w-6 h-6 rounded-full bg-primary/20 flex items-center justify-center text-[10px] text-primary font-bold">
-                  {(m.user.username || '?')[0].toUpperCase()}
+                  {(m.user?.username || '?')[0]?.toUpperCase() || '?'}
                 </div>
-                <span className="text-xs text-on-surface break-words">{m.user.username}</span>
+                <span className="text-xs text-on-surface break-words">{m.user?.username || '?'}</span>
                 <span className="text-[9px] text-on-surface-variant bg-surface-container-lowest px-1.5 py-0.5 rounded-sm">
                   {m.role}
                 </span>

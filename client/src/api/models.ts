@@ -605,7 +605,12 @@ export const modelApi = {
     });
     const { jobId } = unwrapResponse<{ jobId: string }>(res);
 
+    const pollStart = Date.now();
+    const MAX_POLL_MS = 10 * 60 * 1000; // 10 minutes max
     for (;;) {
+      if (Date.now() - pollStart > MAX_POLL_MS) {
+        throw new Error('批量上传处理超时，请稍后在模型列表中查看处理结果');
+      }
       await sleep(800);
       const progressRes = await client.get(`/batch/upload-progress/${jobId}`, { timeout: UPLOAD_REQUEST_TIMEOUT_MS });
       const progress = unwrapResponse<BatchArchiveUploadProgress>(progressRes);
@@ -796,8 +801,9 @@ export const modelApi = {
     return unwrapResponse<ModelGroupItem>(res);
   },
 
-  deleteModelGroup: async (id: string): Promise<void> => {
-    await client.delete(`/model-groups/${id}`);
+  deleteModelGroup: async (id: string): Promise<{ dissolvedModels: number }> => {
+    const res = await client.delete(`/model-groups/${id}`);
+    return unwrapResponse(res);
   },
 
   removeModelFromGroup: async (groupId: string, modelId: string): Promise<void> => {

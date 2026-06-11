@@ -26,6 +26,7 @@ import { createExtractorFromData } from 'node-unrar-js';
 import { getBusinessConfig } from '../../lib/businessConfig.js';
 import { config } from '../../lib/config.js';
 import { badRequest } from '../../lib/http.js';
+import { logger } from '../../lib/logger.js';
 import { prisma } from '../../lib/prisma.js';
 import {
   productArchiveExtractMaxFiles,
@@ -593,7 +594,8 @@ async function generatePreviewImage(
     ctx.drawImage(image, 0, 0, width, height);
     writeFileSync(previewPath, canvas.toBuffer('image/jpeg', { quality: PRODUCT_WALL_PREVIEW_JPEG_QUALITY }));
     return previewUrl;
-  } catch {
+  } catch (err) {
+    logger.warn({ err, sourcePath }, '[ProductWall] Preview generation failed');
     return null;
   }
 }

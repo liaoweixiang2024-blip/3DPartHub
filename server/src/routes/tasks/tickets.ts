@@ -7,6 +7,7 @@ import { sendAcceleratedFile } from '../../lib/acceleratedDownload.js';
 import { getBusinessConfig, labelFor } from '../../lib/businessConfig.js';
 import { config } from '../../lib/config.js';
 import { createProtectedResourceToken, verifyProtectedResourceToken } from '../../lib/downloadTokenStore.js';
+import { logger } from '../../lib/logger.js';
 import { prisma } from '../../lib/prisma.js';
 import { requestSiteUrl } from '../../lib/requestSiteUrl.js';
 import { optionalString } from '../../lib/requestValidation.js';
@@ -351,8 +352,8 @@ export function createSupportTicketRouter() {
         const filePath = join(process.cwd(), config.staticDir, 'ticket-attachments', fileName);
         try {
           rmSync(filePath, { force: true });
-        } catch {
-          /* best-effort attachment cleanup */
+        } catch (err) {
+          logger.warn({ err, filePath }, '[Tickets] Attachment cleanup failed');
         }
       }
 

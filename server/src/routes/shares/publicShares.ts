@@ -247,14 +247,23 @@ export function createPublicSharesRouter() {
     }
 
     // Atomically claim one download slot before streaming.
-    const claim = await prisma.shareLink.updateMany({
-      where: {
-        id: share.id,
-        ...(share.downloadLimit > 0 ? { downloadCount: { lt: share.downloadLimit } } : {}),
-      },
-      data: { downloadCount: { increment: 1 } },
-    });
-    if (claim.count === 0) {
+    // Use $transaction with row-level lock to prevent concurrent limit bypass.
+    let claimed = false;
+    if (share.downloadLimit > 0) {
+      await prisma.$transaction(async (tx) => {
+        const locked = await tx.$queryRaw<Array<{ download_count: number }>>`
+          SELECT download_count FROM share_links WHERE id = ${share.id} FOR UPDATE
+        `;
+        if (locked.length > 0 && locked[0].download_count < share.downloadLimit) {
+          await tx.shareLink.update({ where: { id: share.id }, data: { downloadCount: { increment: 1 } } });
+          claimed = true;
+        }
+      });
+    } else {
+      await prisma.shareLink.update({ where: { id: share.id }, data: { downloadCount: { increment: 1 } } });
+      claimed = true;
+    }
+    if (!claimed) {
       res.status(429).json({ detail: '下载次数已达上限' });
       return;
     }

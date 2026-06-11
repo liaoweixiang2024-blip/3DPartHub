@@ -123,7 +123,7 @@ model Project {
   description String?
   coverImage  String?  @map("cover_image")
   ownerId     String   @map("owner_id")
-  owner       User     @relation("ProjectOwner", fields: [ownerId], references: [id])
+  owner       User     @relation("ProjectOwner", fields: [ownerId], references: [id], onDelete: Cascade)
   createdAt   DateTime @default(now()) @map("created_at")
   updatedAt   DateTime @updatedAt @map("updated_at")
 
@@ -173,7 +173,7 @@ model Model {
   project        Project?  @relation(fields: [projectId], references: [id])
 
   createdById String @map("created_by_id")
-  createdBy   User   @relation(fields: [createdById], references: [id])
+  createdBy   User   @relation(fields: [createdById], references: [id], onDelete: Cascade)
 
   versions   ModelVersion[]
   favorites  Favorite[]
@@ -223,7 +223,7 @@ model ModelVersion {
   faceCount     Int?     @map("face_count")
   changeLog     String?  @map("change_log")
   createdById   String   @map("created_by_id")
-  createdBy     User     @relation(fields: [createdById], references: [id])
+  createdBy     User     @relation(fields: [createdById], references: [id], onDelete: Cascade)
   createdAt     DateTime @default(now()) @map("created_at")
 
   @@index([modelId])
@@ -295,7 +295,7 @@ model ShareLink {
   viewCount     Int       @default(0) @map("view_count")
   expiresAt     DateTime? @map("expires_at")
   createdById   String    @map("created_by_id")
-  createdBy     User      @relation(fields: [createdById], references: [id])
+  createdBy     User      @relation(fields: [createdById], references: [id], onDelete: Cascade)
   createdAt     DateTime  @default(now()) @map("created_at")
 
   @@index([modelId])

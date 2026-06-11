@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { once } from 'node:events';
-import { createWriteStream, existsSync, mkdirSync, rmSync, statSync } from 'node:fs';
+import { createWriteStream, existsSync, mkdirSync, readdirSync, rmSync, statSync } from 'node:fs';
 import { basename, join } from 'node:path';
 import archiver from 'archiver';
 import { Router, Response, type NextFunction } from 'express';
@@ -30,6 +30,27 @@ import { clearCategoryCache } from './categories/common.js';
 
 const router = Router();
 const log = createLogger({ component: 'batch-routes' });
+
+// Startup cleanup: remove stale batch_*.zip files left from previous crashes/restarts
+{
+  const staticDir = join(process.cwd(), config.staticDir);
+  try {
+    const entries = readdirSync(staticDir);
+    const stale = entries.filter((e) => /^batch_[0-9a-f]{8}\.zip$/i.test(e));
+    if (stale.length > 0) {
+      for (const f of stale) {
+        try {
+          rmSync(join(staticDir, f), { force: true });
+        } catch {
+          /* best-effort */
+        }
+      }
+      log.info(`Cleaned up ${stale.length} stale batch download file(s)`);
+    }
+  } catch {
+    /* static dir may not exist yet */
+  }
+}
 
 type BatchArchiveUploadJob = {
   id: string;

@@ -25,8 +25,10 @@ export function useInquiryCart() {
   const productIds = useMemo(() => new Set(items.map((item) => item.productId)), [items]);
 
   const commit = useCallback((next: InquiryCartItem[]) => {
-    writeInquiryCartItems(next);
-    setItems(readInquiryCartItems());
+    const ok = writeInquiryCartItems(next);
+    if (ok) {
+      setItems(next);
+    }
   }, []);
 
   const addProduct = useCallback(

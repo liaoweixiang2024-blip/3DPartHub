@@ -363,8 +363,8 @@ export function createUserInquiriesRouter() {
             }).catch(() => {}),
           ),
         );
-      } catch {
-        /* best-effort admin notification */
+      } catch (err) {
+        logger.warn({ err }, '[Inquiries] Admin notification failed');
       }
 
       res.status(201).json(inquiry);
@@ -680,8 +680,8 @@ export function createUserInquiriesRouter() {
               });
             }
           }
-        } catch {
-          /* best-effort inquiry notification */
+        } catch (err) {
+          logger.warn({ err }, '[Inquiries] User notification failed');
         }
 
         res.json({

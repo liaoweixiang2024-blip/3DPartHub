@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
+import { readFileSync, writeFileSync, mkdirSync, statSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { join, basename } from 'node:path';
 import { normalizeCadLabel } from '../lib/filenameEncoding.js';
@@ -568,6 +568,12 @@ export async function convertStepToGltf(
   mkdirSync(outputDir, { recursive: true });
 
   const occt = await occtimportjs();
+
+  // Guard against OOM: reject files larger than 200MB
+  const inputSize = statSync(inputPath).size;
+  if (inputSize > 200 * 1024 * 1024) {
+    throw new Error(`文件过大（${(inputSize / 1024 / 1024).toFixed(1)}MB），暂不支持超过 200MB 的文件转换`);
+  }
 
   const fileBuffer = new Uint8Array(readFileSync(inputPath));
   const nameToCheck = originalName || inputPath;

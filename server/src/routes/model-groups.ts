@@ -404,7 +404,10 @@ router.delete(
     }
     const groupId = routeParam(req.params.id);
     try {
-      // Unlink models first
+      // Count affected models before dissolving the group
+      const affectedCount = await db.model.count({ where: { groupId } });
+
+      // Unlink models first (dissolve group — all models become independent)
       await db.$transaction([
         db.model.updateMany({
           where: { groupId },
@@ -416,7 +419,7 @@ router.delete(
       await cacheDelByPrefix('cache:models:');
       await cacheDel('cache:model-groups:list');
       await clearCategoryCache();
-      res.json({ success: true });
+      res.json({ success: true, dissolvedModels: affectedCount });
     } catch (err: unknown) {
       log.error({ err }, 'Operation failed');
       res.status(500).json({ detail: '操作失败' });

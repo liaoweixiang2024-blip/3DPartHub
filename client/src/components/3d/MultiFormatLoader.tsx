@@ -78,6 +78,14 @@ function getEnvMap(renderer: THREE.WebGLRenderer): THREE.Texture {
   return _envMap;
 }
 
+/** Dispose the cached environment map texture (call on component unmount) */
+export function disposeEnvMap() {
+  if (_envMap) {
+    _envMap.dispose();
+    _envMap = null;
+  }
+}
+
 type RenderMaterialPresetKey = Exclude<MaterialPresetKey, 'original'>;
 type MeshMaterial = THREE.Material | THREE.Material[];
 type ViewerPointerEvent = ThreeEvent<PointerEvent>;

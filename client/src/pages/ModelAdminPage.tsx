@@ -1159,8 +1159,10 @@ function DesktopContent() {
     setGroupConfirm(null);
     setGroupAction(`delete:${group.id}`);
     try {
-      await modelApi.deleteModelGroup(group.id);
-      toast('分组已解散', 'success');
+      const result = await modelApi.deleteModelGroup(group.id);
+      const msg =
+        result.dissolvedModels > 1 ? `分组已解散，${result.dissolvedModels} 个模型已恢复独立显示` : '分组已解散';
+      toast(msg, 'success');
       groupMutate();
       sugMutate();
       suggestionCountMutate();
@@ -2301,8 +2303,10 @@ function MobileContent() {
     setGroupConfirm(null);
     setGroupAction(`delete:${group.id}`);
     try {
-      await modelApi.deleteModelGroup(group.id);
-      toast('分组已解散', 'success');
+      const result = await modelApi.deleteModelGroup(group.id);
+      const msg =
+        result.dissolvedModels > 1 ? `分组已解散，${result.dissolvedModels} 个模型已恢复独立显示` : '分组已解散';
+      toast(msg, 'success');
       groupMutate();
       sugMutate();
       suggestionCountMutate();

@@ -4,6 +4,7 @@ import { favoriteApi } from '../api/favorites';
 
 interface FavoriteState {
   favoriteIds: Set<string>;
+  _pendingIds: Set<string>;
   toggleFavorite: (model: { id: string; [key: string]: unknown }) => Promise<void>;
   isFavorite: (id: string) => boolean;
   hydrate: () => Promise<void>;
@@ -13,9 +14,15 @@ export const useFavoriteStore = create<FavoriteState>()(
   persist(
     (set, get) => ({
       favoriteIds: new Set<string>(),
+      _pendingIds: new Set<string>(),
       toggleFavorite: async (model) => {
+        // Prevent concurrent toggle for the same model
+        if (get()._pendingIds.has(model.id)) return;
+
         const snapshot = new Set(get().favoriteIds);
         const wasFavorite = snapshot.has(model.id);
+
+        set({ _pendingIds: new Set([...get()._pendingIds, model.id]) });
 
         const next = new Set(snapshot);
         if (wasFavorite) {
@@ -33,6 +40,10 @@ export const useFavoriteStore = create<FavoriteState>()(
           }
         } catch {
           set({ favoriteIds: snapshot });
+        } finally {
+          const pending = new Set(get()._pendingIds);
+          pending.delete(model.id);
+          set({ _pendingIds: pending });
         }
       },
       isFavorite: (id) => get().favoriteIds.has(id),

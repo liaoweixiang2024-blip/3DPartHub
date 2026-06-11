@@ -99,10 +99,10 @@ services:
       SLOW_REQUEST_LOG_BURST: ${SLOW_REQUEST_LOG_BURST:-5}
       SLOW_REQUEST_LOG_SAMPLE_RATE: ${SLOW_REQUEST_LOG_SAMPLE_RATE:-0.01}
       MAX_FILE_SIZE: 524288000
-      REDIS_URL: redis://:${REDIS_PASSWORD:-changeme-set-in-env}@redis:6379
+      REDIS_URL: redis://:${REDIS_PASSWORD:?请在 .env 中设置 REDIS_PASSWORD}@redis:6379
       ADMIN_USER: ${ADMIN_USER:-admin}
       ADMIN_EMAIL: ${ADMIN_EMAIL:-admin@model.local}
-      ADMIN_PASS: '${ADMIN_PASS:-3DPartHub@2026}'
+      ADMIN_PASS: '${ADMIN_PASS:?请在 .env 中设置 ADMIN_PASS}'
       # <<< 可选: 允许的来源域名 (多个用逗号分隔，留空则仅同源)
       ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-}
       STORAGE_TYPE: ${STORAGE_TYPE:-local}
@@ -201,8 +201,8 @@ services:
     environment:
       POSTGRES_DB: 3dparthub
       POSTGRES_USER: modeluser
-      # <<< 建议在 .env 中覆盖为强密码，与 API 的 DB_PASSWORD 一致
-      POSTGRES_PASSWORD: '${DB_PASSWORD:-3dparthub-default-db-password-change-me-2026}'
+      # <<< 必须在 .env 中设置强密码，与 API 的 DB_PASSWORD 一致
+      POSTGRES_PASSWORD: '${DB_PASSWORD:?请在 .env 中设置 DB_PASSWORD}'
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
@@ -224,7 +224,7 @@ services:
     command:
       - redis-server
       - --requirepass
-      - '${REDIS_PASSWORD:-changeme-set-in-env}'
+      - '${REDIS_PASSWORD:?请在 .env 中设置 REDIS_PASSWORD}'
       - --save
       - ''
       - --appendonly

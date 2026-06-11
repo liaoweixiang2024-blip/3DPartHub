@@ -154,6 +154,8 @@ export default function ModelViewer({
   useEffect(
     () => () => {
       cleanupContextListeners();
+      // Dispose cached WebGL env map to free GPU memory on unmount
+      import('./MultiFormatLoader').then(({ disposeEnvMap }) => disposeEnvMap()).catch(() => {});
     },
     [cleanupContextListeners],
   );

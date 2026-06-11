@@ -6,7 +6,9 @@ const ACCESS_COOKIE_MAX_AGE_MS = 8 * 24 * 60 * 60 * 1000;
 const REFRESH_COOKIE_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000;
 
 function requestIsHttps(req: Request): boolean {
-  return req.secure || req.headers['x-forwarded-proto'] === 'https' || process.env.AUTH_COOKIE_SECURE === 'true';
+  // Only trust req.secure (TLS termination at app level) or explicit env override.
+  // Do NOT trust x-forwarded-proto from the client — only trusted proxies set it.
+  return req.secure || process.env.AUTH_COOKIE_SECURE === 'true';
 }
 
 function authCookieOptions(req: Request, maxAge?: number): CookieOptions {
@@ -47,17 +49,20 @@ export function clearAuthCookies(req: Request, res: Response): void {
 export function readCookie(req: Request, name: string): string | undefined {
   const cookie = req.headers.cookie;
   if (!cookie) return undefined;
+  // Take the last occurrence if multiple cookies with the same name exist,
+  // matching browser behavior where later cookies override earlier ones.
+  let lastValue: string | undefined;
   for (const part of cookie.split(';')) {
     const [rawKey, ...rawValue] = part.trim().split('=');
     if (rawKey === name) {
       try {
-        return decodeURIComponent(rawValue.join('='));
+        lastValue = decodeURIComponent(rawValue.join('='));
       } catch {
-        return undefined;
+        // skip malformed value
       }
     }
   }
-  return undefined;
+  return lastValue;
 }
 
 export { REFRESH_COOKIE };

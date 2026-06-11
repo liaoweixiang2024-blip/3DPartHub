@@ -173,30 +173,24 @@ export function createModelUploadRouter({ prisma, saveMeta, deleteMeta }: ModelU
             const primaryId =
               allModels.length > 1 ? allModels.find((m) => m.id !== modelId)?.id || allModels[0].id : allModels[0].id;
 
-            const existingGroup = sameNameModels.find((m) => m.groupId);
-            if (existingGroup?.groupId) {
-              await prisma.model.update({ where: { id: modelId }, data: { groupId: existingGroup.groupId } });
-              await prisma.modelGroup.update({ where: { id: existingGroup.groupId }, data: { primaryId } });
-            } else {
-              const allIds = [modelId, ...sameNameModels.map((m) => m.id)];
-              await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
-                const existing = await tx.modelGroup.findFirst({
-                  where: { models: { some: { name: modelName } } },
-                });
-                if (existing) {
-                  await tx.model.update({ where: { id: modelId }, data: { groupId: existing.id } });
-                  await tx.modelGroup.update({ where: { id: existing.id }, data: { primaryId } });
-                } else {
-                  await tx.modelGroup.create({
-                    data: {
-                      name: modelName,
-                      primaryId,
-                      models: { connect: allIds.map((id) => ({ id })) },
-                    },
-                  });
-                }
+            const allIds = [modelId, ...sameNameModels.map((m) => m.id)];
+            await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
+              const existing = await tx.modelGroup.findFirst({
+                where: { models: { some: { name: modelName } } },
               });
-            }
+              if (existing) {
+                await tx.model.update({ where: { id: modelId }, data: { groupId: existing.id } });
+                await tx.modelGroup.update({ where: { id: existing.id }, data: { primaryId } });
+              } else {
+                await tx.modelGroup.create({
+                  data: {
+                    name: modelName,
+                    primaryId,
+                    models: { connect: allIds.map((id) => ({ id })) },
+                  },
+                });
+              }
+            });
           }
         } catch (mergeErr) {
           logger.error({ mergeErr }, 'Auto-merge failed (non-critical)');
@@ -214,6 +208,17 @@ export function createModelUploadRouter({ prisma, saveMeta, deleteMeta }: ModelU
       } catch (queueErr) {
         logger.error({ queueErr }, 'Queue add failed');
         await markQueueUnavailable(modelId, file.path, meta, res);
+        // Fallback: ensure DB status is not stuck at QUEUED if markQueueUnavailable also failed
+        if (prisma) {
+          try {
+            await prisma.model.updateMany({
+              where: { id: modelId, status: MODEL_STATUS.QUEUED },
+              data: { status: MODEL_STATUS.FAILED },
+            });
+          } catch {
+            /* best-effort */
+          }
+        }
         return;
       }
 
