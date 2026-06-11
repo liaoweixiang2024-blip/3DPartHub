@@ -345,10 +345,16 @@ app.use('/api/selection-shares', featureGuard('feature_selection_enabled'));
 app.use('/api/selection-shares', featureGuard('feature_shares_enabled'));
 app.use('/api/inquiries', featureGuard('feature_inquiry_enabled'));
 app.use('/api/product-wall', featureGuard('feature_product_wall_enabled'));
-app.use('/api/tasks', featureGuard('feature_tickets_enabled'));
+// Note: /api/tasks/:id and GET /api/tasks are conversion-status queries (model upload progress),
+// not tickets. Only POST /api/tasks (create ticket), /api/my-tickets, and /api/tickets/* are ticket APIs.
+app.post('/api/tasks', featureGuard('feature_tickets_enabled'));
+app.get('/api/my-tickets', featureGuard('feature_tickets_enabled'));
+app.use('/api/tickets', featureGuard('feature_tickets_enabled'));
 app.use('/api/favorites', featureGuard('feature_favorites_enabled'));
 app.use('/api/shares', featureGuard('feature_shares_enabled'));
 app.use('/api/downloads', featureGuard('feature_downloads_enabled'));
+// User-facing batch download — separate entry point that also needs the download guard.
+app.use('/api/batch-download', featureGuard('feature_downloads_enabled'));
 app.use('/api/auth/register', featureGuard('allow_register'));
 
 // Routes
