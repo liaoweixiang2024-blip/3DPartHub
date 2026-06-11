@@ -733,7 +733,12 @@ export function validateSettingValue(key: string, value: unknown): unknown {
   }
   if (BOOLEAN_KEYS.has(key)) {
     if (typeof value === 'boolean') return value;
-    if (typeof value === 'string') return value === 'true';
+    if (typeof value === 'string') {
+      // Fix: "false" should return false, but other truthy strings like "yes", "1" should return true
+      if (value.toLowerCase() === 'false') return false;
+      if (value === 'true' || value === 'yes') return true;
+      // For other strings, fall through to Boolean()
+    }
     return Boolean(value);
   }
   if (typeof value === 'string' && value.length > 1_000_000) {
