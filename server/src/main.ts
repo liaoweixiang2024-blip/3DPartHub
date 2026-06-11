@@ -338,6 +338,19 @@ app.use(responseHandler);
 // Auto audit logging for mutations
 app.use(autoAudit);
 
+// Feature toggle guards (applied before route handlers)
+const { featureGuard } = await import('./middleware/featureToggle.js');
+app.use('/api/selections', featureGuard('feature_selection_enabled'));
+app.use('/api/selection-shares', featureGuard('feature_selection_enabled'));
+app.use('/api/selection-shares', featureGuard('feature_shares_enabled'));
+app.use('/api/inquiries', featureGuard('feature_inquiry_enabled'));
+app.use('/api/product-wall', featureGuard('feature_product_wall_enabled'));
+app.use('/api/tasks', featureGuard('feature_tickets_enabled'));
+app.use('/api/favorites', featureGuard('feature_favorites_enabled'));
+app.use('/api/shares', featureGuard('feature_shares_enabled'));
+app.use('/api/downloads', featureGuard('feature_downloads_enabled'));
+app.use('/api/auth/register', featureGuard('allow_register'));
+
 // Routes
 app.use(healthRouter);
 app.use(modelCompareRouter);

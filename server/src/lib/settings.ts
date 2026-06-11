@@ -224,6 +224,14 @@ const SETTINGS_SCHEMA: SettingDef[] = [
   { key: 'share_allow_password', defaultValue: true },
   { key: 'share_allow_custom_expiry', defaultValue: true },
   { key: 'share_allow_preview', defaultValue: true },
+  // Feature toggles
+  { key: 'feature_selection_enabled', defaultValue: true },
+  { key: 'feature_inquiry_enabled', defaultValue: true },
+  { key: 'feature_product_wall_enabled', defaultValue: true },
+  { key: 'feature_tickets_enabled', defaultValue: true },
+  { key: 'feature_favorites_enabled', defaultValue: true },
+  { key: 'feature_shares_enabled', defaultValue: true },
+  { key: 'feature_downloads_enabled', defaultValue: true },
 
   // Selection wizard
   { key: 'selection_page_title', defaultValue: '产品选型' },
@@ -560,6 +568,13 @@ const BOOLEAN_KEYS = new Set([
   'share_allow_password',
   'share_allow_custom_expiry',
   'share_allow_preview',
+  'feature_selection_enabled',
+  'feature_inquiry_enabled',
+  'feature_product_wall_enabled',
+  'feature_tickets_enabled',
+  'feature_favorites_enabled',
+  'feature_shares_enabled',
+  'feature_downloads_enabled',
   'cache_enabled',
   'redis_tls_enabled',
   'storage_use_ssl',

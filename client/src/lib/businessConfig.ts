@@ -346,7 +346,31 @@ export function getBusinessConfig(settings: Partial<SystemSettings> = getPublicS
   };
 
   const allNav = migrateLegacyNav(settings) || DEFAULT_NAV;
-  const filteredNav = enabled(allNav);
+  const enabledNav = enabled(allNav);
+
+  // Feature toggle filtering — hide nav items for disabled features
+  const FEATURE_NAV_MAP: Record<string, string> = {
+    '/selection': 'feature_selection_enabled',
+    '/product-wall': 'feature_product_wall_enabled',
+    '/favorites': 'feature_favorites_enabled',
+    '/my-shares': 'feature_shares_enabled',
+    '/downloads': 'feature_downloads_enabled',
+    '/my-inquiries': 'feature_inquiry_enabled',
+    '/my-tickets': 'feature_tickets_enabled',
+    '/support': 'feature_tickets_enabled',
+  };
+  const filteredNav = enabledNav.filter((item) => {
+    const featureKey = FEATURE_NAV_MAP[item.path] as keyof SystemSettings | undefined;
+    if (!featureKey) return true;
+    return settings[featureKey] !== false;
+  });
+
+  const mobileRaw = enabled(parseSetting(settings.nav_mobile_items, DEFAULT_MOBILE_NAV));
+  const mobileFiltered = mobileRaw.filter((item) => {
+    const featureKey = FEATURE_NAV_MAP[item.path] as keyof SystemSettings | undefined;
+    if (!featureKey) return true;
+    return settings[featureKey] !== false;
+  });
 
   return {
     inquiryStatuses: normalizeInquiryStatuses(parseSetting(settings.inquiry_statuses, DEFAULT_INQUIRY_STATUSES)),
@@ -355,7 +379,7 @@ export function getBusinessConfig(settings: Partial<SystemSettings> = getPublicS
     supportProcessSteps: parseSetting(settings.support_process_steps, DEFAULT_SUPPORT_STEPS),
     userNav: filteredNav.filter((item) => !isAdminOnly(item)),
     adminNav: filteredNav,
-    mobileNav: enabled(parseSetting(settings.nav_mobile_items, DEFAULT_MOBILE_NAV)),
+    mobileNav: mobileFiltered,
     uploadPolicy: normalizeUploadPolicy({
       ...DEFAULT_UPLOAD_POLICY,
       ...parseSetting<Partial<UploadPolicy>>(settings.upload_policy, {}),

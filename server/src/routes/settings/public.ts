@@ -170,6 +170,14 @@ export function createSettingsPublicRouter() {
             share_allow_password: all.share_allow_password ?? true,
             share_allow_custom_expiry: all.share_allow_custom_expiry ?? true,
             share_allow_preview: all.share_allow_preview ?? true,
+            // Feature toggles
+            feature_selection_enabled: all.feature_selection_enabled ?? true,
+            feature_inquiry_enabled: all.feature_inquiry_enabled ?? true,
+            feature_product_wall_enabled: all.feature_product_wall_enabled ?? true,
+            feature_tickets_enabled: all.feature_tickets_enabled ?? true,
+            feature_favorites_enabled: all.feature_favorites_enabled ?? true,
+            feature_shares_enabled: all.feature_shares_enabled ?? true,
+            feature_downloads_enabled: all.feature_downloads_enabled ?? true,
             // Selection wizard
             selection_page_title: all.selection_page_title ?? '产品选型',
             selection_page_desc: all.selection_page_desc ?? '先选产品大类，再按参数逐步缩小范围',

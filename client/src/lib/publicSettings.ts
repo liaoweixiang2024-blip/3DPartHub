@@ -267,6 +267,13 @@ export function getPublicSettingsSnapshot(): Partial<SystemSettings> {
       ui_default_locale: 'zh-CN',
       ui_enabled_locales: 'zh-CN,zh-TW,en-US,ja-JP,ko-KR,de-DE',
       ui_follow_browser_locale: false,
+      feature_selection_enabled: true,
+      feature_inquiry_enabled: true,
+      feature_product_wall_enabled: true,
+      feature_tickets_enabled: true,
+      feature_favorites_enabled: true,
+      feature_shares_enabled: true,
+      feature_downloads_enabled: true,
       ...DEFAULT_3D_PREVIEW_SETTINGS,
     }
   );

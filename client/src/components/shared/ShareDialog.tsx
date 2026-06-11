@@ -25,7 +25,7 @@ export default function ShareDialog({ open, onClose, modelId, modelName }: Share
   const { toast } = useToast();
   const policy = getPublicSettingsSnapshot();
   const role = useAuthStore((s) => s.user?.role);
-  const shareEnabled = policy.share_enabled !== false;
+  const shareEnabled = policy.share_enabled !== false && policy.feature_shares_enabled !== false;
   const canShare = shareEnabled || role === 'ADMIN';
   const canPassword = policy.share_allow_password !== false;
   const canCustomExpiry = policy.share_allow_custom_expiry !== false;

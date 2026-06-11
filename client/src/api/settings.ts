@@ -128,6 +128,14 @@ export interface SystemSettings {
   share_allow_password: boolean;
   share_allow_custom_expiry: boolean;
   share_allow_preview: boolean;
+  // Feature toggles
+  feature_selection_enabled: boolean;
+  feature_inquiry_enabled: boolean;
+  feature_product_wall_enabled: boolean;
+  feature_tickets_enabled: boolean;
+  feature_favorites_enabled: boolean;
+  feature_shares_enabled: boolean;
+  feature_downloads_enabled: boolean;
   // Selection wizard
   selection_page_title: string;
   selection_page_desc: string;

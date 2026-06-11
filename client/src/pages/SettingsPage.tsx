@@ -451,6 +451,13 @@ const DEFAULT_SETTINGS: SystemSettings = {
   share_allow_password: true,
   share_allow_custom_expiry: true,
   share_allow_preview: true,
+  feature_selection_enabled: true,
+  feature_inquiry_enabled: true,
+  feature_product_wall_enabled: true,
+  feature_tickets_enabled: true,
+  feature_favorites_enabled: true,
+  feature_shares_enabled: true,
+  feature_downloads_enabled: true,
   selection_page_title: '产品选型',
   selection_page_desc: '先选产品大类，再按参数逐步缩小范围',
   selection_enable_match: true,
@@ -909,7 +916,6 @@ const GROUPS: SettingGroup[] = [
     items: [
       { key: 'require_login_browse', label: '登录浏览', desc: '用户必须登录后才能浏览模型列表', type: 'switch' },
       { key: 'require_login_download', label: '登录下载', desc: '用户必须登录后才能下载模型文件', type: 'switch' },
-      { key: 'allow_register', label: '开放注册', desc: '允许新用户自行注册账号', type: 'switch' },
       {
         key: 'auth_modal_enabled',
         label: '登录/注册表单弹窗',
@@ -931,6 +937,60 @@ const GROUPS: SettingGroup[] = [
       { key: 'login_dialog_my_tickets', label: '我的工单', desc: '访问我的工单页面时弹出登录确认', type: 'switch' },
       { key: 'login_dialog_my_inquiries', label: '我的询价', desc: '访问我的询价页面时弹出登录确认', type: 'switch' },
       { key: 'login_dialog_projects', label: '我的项目', desc: '访问我的项目页面时弹出登录确认', type: 'switch' },
+    ],
+  },
+  {
+    title: '功能开关',
+    icon: 'toggle_on',
+    items: [
+      {
+        key: 'feature_selection_enabled',
+        label: '产品选型',
+        desc: '关闭后用户无法使用选型功能，导航隐藏选型入口',
+        type: 'switch',
+      },
+      {
+        key: 'feature_inquiry_enabled',
+        label: '询价功能',
+        desc: '关闭后用户无法提交询价，导航隐藏询价入口',
+        type: 'switch',
+      },
+      {
+        key: 'feature_product_wall_enabled',
+        label: '产品图库',
+        desc: '关闭后用户无法访问产品图库，导航隐藏入口',
+        type: 'switch',
+      },
+      {
+        key: 'feature_tickets_enabled',
+        label: '工单支持',
+        desc: '关闭后用户无法提交工单和访问技术支持，导航隐藏入口',
+        type: 'switch',
+      },
+      {
+        key: 'feature_favorites_enabled',
+        label: '收藏功能',
+        desc: '关闭后用户无法收藏模型和查看收藏列表，导航隐藏入口',
+        type: 'switch',
+      },
+      {
+        key: 'feature_shares_enabled',
+        label: '分享功能',
+        desc: '关闭后用户无法创建分享链接，已有分享链接也将失效',
+        type: 'switch',
+      },
+      {
+        key: 'feature_downloads_enabled',
+        label: '下载功能',
+        desc: '关闭后用户无法下载模型文件，导航隐藏下载历史入口',
+        type: 'switch',
+      },
+      {
+        key: 'allow_register',
+        label: '用户注册',
+        desc: '关闭后新用户无法注册账号',
+        type: 'switch',
+      },
     ],
   },
   {
@@ -1677,7 +1737,7 @@ const SETTINGS_NAV_GROUPS = [
   {
     title: '访问与安全',
     icon: 'shield',
-    sections: ['访问控制', '安全防护'],
+    sections: ['访问控制', '功能开关', '安全防护'],
   },
   {
     title: '业务内容',
