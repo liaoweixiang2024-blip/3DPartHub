@@ -351,7 +351,12 @@ app.post('/api/tasks', featureGuard('feature_tickets_enabled'));
 app.get('/api/my-tickets', featureGuard('feature_tickets_enabled'));
 app.use('/api/tickets', featureGuard('feature_tickets_enabled'));
 app.use('/api/favorites', featureGuard('feature_favorites_enabled'));
+// Favorite toggle from model detail page — path lives under /api/models/:id, not /api/favorites.
+app.post('/api/models/:id/favorite', featureGuard('feature_favorites_enabled'));
+app.delete('/api/models/:id/favorite', featureGuard('feature_favorites_enabled'));
 app.use('/api/shares', featureGuard('feature_shares_enabled'));
+// Share list for a specific model — also lives under /api/models/:id.
+app.get('/api/models/:id/shares', featureGuard('feature_shares_enabled'));
 app.use('/api/downloads', featureGuard('feature_downloads_enabled'));
 // User-facing batch download — separate entry point that also needs the download guard.
 app.use('/api/batch-download', featureGuard('feature_downloads_enabled'));
