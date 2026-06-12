@@ -78,6 +78,7 @@ import {
   getContactAddress,
   getFooterCopyright,
   getFooterLinks,
+  useFeatureFlags,
 } from '../lib/publicSettings';
 import { useAuthStore } from '../stores';
 import { getInterfaceThemePackage } from '../themes/interfaceThemes/registry';
@@ -103,6 +104,7 @@ export default function HomePage() {
   const location = useLocation();
   const { toast } = useToast();
   const { t } = useTranslation();
+  const featureFlags = useFeatureFlags();
   const [searchParams, setSearchParams] = useSearchParams();
   const { settings: publicSettings } = usePublicSettings();
   const resolvedPublicTheme = useResolvedPublicInterfaceTheme(publicSettings);
@@ -840,7 +842,7 @@ export default function HomePage() {
           manageOpen={contextMenu?.product.id === product.id}
           onCloseManage={closeManagedModelOverlay}
           onOpenManageDetail={openManagedModelDetail}
-          onShareModel={shareManagedModel}
+          onShareModel={featureFlags.shares ? shareManagedModel : undefined}
           onRenameModel={renameManagedModel}
           onRequestDelete={requestManagedModelDelete}
           showCategory={showModelCardCategory}

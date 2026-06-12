@@ -2,6 +2,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useState, useEffect, useCallback, useRef, memo, type MouseEvent } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router-dom';
+import { useFeatureFlags } from '../../lib/publicSettings';
 import { popoverMotion } from '../../lib/motion';
 import { preloadModelDetailPage } from '../../lib/routeLoaders';
 import { useAuthStore, useFavoriteStore } from '../../stores';
@@ -111,6 +112,7 @@ function ProductCardInner({
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
   const isFavorited = useFavoriteStore((state) => state.favoriteIds.has(product.id));
   const toggleFavoriteInStore = useFavoriteStore((state) => state.toggleFavorite);
+  const featureFlags = useFeatureFlags();
 
   useEffect(() => {
     if (manageOpen) {
@@ -315,19 +317,21 @@ function ProductCardInner({
               />
               <span className="truncate">{t('productCard.openDetail')}</span>
             </button>
-            <button
-              onClick={(event) => {
-                event.preventDefault();
-                event.stopPropagation();
-                void finishRenameThen(() => onShareModel?.(product));
-              }}
-              data-rename-control
-              disabled={renameSaving}
-              className="flex min-w-0 items-center justify-center gap-1.5 rounded-sm border border-outline-variant/30 px-2 py-2 text-xs text-on-surface-variant transition-colors hover:bg-surface-container-highest hover:text-on-surface disabled:opacity-50"
-            >
-              <Icon name="share" size={13} />
-              <span className="truncate">{t('productCard.shareLink')}</span>
-            </button>
+            {featureFlags.shares && onShareModel && (
+              <button
+                onClick={(event) => {
+                  event.preventDefault();
+                  event.stopPropagation();
+                  void finishRenameThen(() => onShareModel?.(product));
+                }}
+                data-rename-control
+                disabled={renameSaving}
+                className="flex min-w-0 items-center justify-center gap-1.5 rounded-sm border border-outline-variant/30 px-2 py-2 text-xs text-on-surface-variant transition-colors hover:bg-surface-container-highest hover:text-on-surface disabled:opacity-50"
+              >
+                <Icon name="share" size={13} />
+                <span className="truncate">{t('productCard.shareLink')}</span>
+              </button>
+            )}
             <button
               onClick={(event) => {
                 event.preventDefault();
@@ -347,24 +351,25 @@ function ProductCardInner({
     </motion.div>
   ) : null;
 
-  const listFavoriteAction = isAuthenticated ? (
-    <button
-      onClick={toggleFavorite}
-      disabled={favLoading}
-      className={`${HOME_LIST_ACTION_BUTTON_CLASS} home-model-list-favorite-button border transition-colors ${
-        isFavorited
-          ? 'border-primary-container/45 bg-primary-container/10 text-primary-container'
-          : 'border-outline-variant/40 text-on-surface-variant hover:text-on-surface'
-      } relative overflow-visible ${favLoading ? 'opacity-60' : ''}`}
-      aria-label={isFavorited ? t('productCard.unfavorite') : t('productCard.favorite')}
-      aria-pressed={isFavorited}
-      data-tooltip-ignore
-    >
-      <FavoriteBurst burstKey={favoriteBurstKey} />
-      <Icon name={isFavorited ? 'favorite' : 'star'} size={14} />
-      {t('productCard.favorite')}
-    </button>
-  ) : null;
+  const listFavoriteAction =
+    isAuthenticated && featureFlags.favorites ? (
+      <button
+        onClick={toggleFavorite}
+        disabled={favLoading}
+        className={`${HOME_LIST_ACTION_BUTTON_CLASS} home-model-list-favorite-button border transition-colors ${
+          isFavorited
+            ? 'border-primary-container/45 bg-primary-container/10 text-primary-container'
+            : 'border-outline-variant/40 text-on-surface-variant hover:text-on-surface'
+        } relative overflow-visible ${favLoading ? 'opacity-60' : ''}`}
+        aria-label={isFavorited ? t('productCard.unfavorite') : t('productCard.favorite')}
+        aria-pressed={isFavorited}
+        data-tooltip-ignore
+      >
+        <FavoriteBurst burstKey={favoriteBurstKey} />
+        <Icon name={isFavorited ? 'favorite' : 'star'} size={14} />
+        {t('productCard.favorite')}
+      </button>
+    ) : null;
 
   if (variant === 'list') {
     const content = (
@@ -404,17 +409,19 @@ function ProductCardInner({
           }
           actions={
             <>
-              <button
-                onClick={(e) => {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  onDownload(product.id);
-                }}
-                className={`${HOME_LIST_ACTION_BUTTON_CLASS} home-model-download-button bg-primary-container font-medium text-on-primary hover:opacity-90`}
-              >
-                <Icon name="download" size={14} fill />
-                {t('common.download')}
-              </button>
+              {featureFlags.downloads && (
+                <button
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    onDownload(product.id);
+                  }}
+                  className={`${HOME_LIST_ACTION_BUTTON_CLASS} home-model-download-button bg-primary-container font-medium text-on-primary hover:opacity-90`}
+                >
+                  <Icon name="download" size={14} fill />
+                  {t('common.download')}
+                </button>
+              )}
               {listFavoriteAction}
               <button
                 onClick={(e) => {
@@ -486,7 +493,7 @@ function ProductCardInner({
             </span>
             {(isAuthenticated || (showVariantMeta && product.variantCount && product.variantCount > 1)) && (
               <div className="home-card-hover-actions absolute right-2 bottom-2 z-20 flex translate-y-1 scale-95 items-center gap-1.5 opacity-0 transition-all duration-150 ease-out group-hover:translate-y-0 group-hover:scale-100 group-hover:opacity-100">
-                {isAuthenticated && (
+                {isAuthenticated && featureFlags.favorites && (
                   <button
                     onClick={toggleFavorite}
                     disabled={favLoading}
@@ -529,17 +536,19 @@ function ProductCardInner({
         }
         actions={
           <>
-            <button
-              onClick={(e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                onDownload(product.id);
-              }}
-              className={`${HOME_GRID_ACTION_BUTTON_CLASS} home-model-download-button bg-primary-container font-medium text-on-primary hover:opacity-90`}
-            >
-              <Icon name="download" size={14} fill />
-              {t('common.download')}
-            </button>
+            {featureFlags.downloads && (
+              <button
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  onDownload(product.id);
+                }}
+                className={`${HOME_GRID_ACTION_BUTTON_CLASS} home-model-download-button bg-primary-container font-medium text-on-primary hover:opacity-90`}
+              >
+                <Icon name="download" size={14} fill />
+                {t('common.download')}
+              </button>
+            )}
             <button
               onClick={(e) => {
                 e.preventDefault();

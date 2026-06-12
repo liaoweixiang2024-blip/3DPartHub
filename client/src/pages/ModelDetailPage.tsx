@@ -47,6 +47,7 @@ import {
   getModelDetailCopyright,
   getModelDetailDisclaimer,
   refreshSiteConfig,
+  useFeatureFlags,
 } from '../lib/publicSettings';
 import { useFavoriteStore, useAuthStore } from '../stores';
 
@@ -57,6 +58,7 @@ export default function ModelDetailPage() {
   const { i18n, t } = useTranslation();
   useDocumentTitle();
   const isDesktop = useMediaQuery('(min-width: 768px)');
+  const featureFlags = useFeatureFlags();
   const initialViewerPrefs = useMemo(() => getViewerDisplayPrefs(), []);
 
   const [activeView, setActiveView] = useState<ViewMode>(initialViewerPrefs.activeView);
@@ -744,30 +746,36 @@ export default function ModelDetailPage() {
                     <Icon name="settings" size={18} />
                   </button>
                 )}
-                <button
-                  onClick={handleShare}
-                  aria-label={t('common.share')}
-                  className="w-8 h-8 flex items-center justify-center rounded-full text-on-surface-variant hover:text-primary transition-colors"
-                >
-                  <Icon name="share" size={18} />
-                </button>
-                <motion.button
-                  whileTap={{ scale: 0.9 }}
-                  onClick={handleToggleFav}
-                  aria-label={fav ? t('productCard.unfavorite') : t('productCard.favorite')}
-                  className="w-8 h-8 flex items-center justify-center rounded-full text-on-surface-variant transition-colors"
-                >
-                  <Icon name={fav ? 'star' : 'star_border'} size={18} className={fav ? 'text-primary' : ''} />
-                </motion.button>
+                {featureFlags.shares && (
+                  <button
+                    onClick={handleShare}
+                    aria-label={t('common.share')}
+                    className="w-8 h-8 flex items-center justify-center rounded-full text-on-surface-variant hover:text-primary transition-colors"
+                  >
+                    <Icon name="share" size={18} />
+                  </button>
+                )}
+                {featureFlags.favorites && (
+                  <motion.button
+                    whileTap={{ scale: 0.9 }}
+                    onClick={handleToggleFav}
+                    aria-label={fav ? t('productCard.unfavorite') : t('productCard.favorite')}
+                    className="w-8 h-8 flex items-center justify-center rounded-full text-on-surface-variant transition-colors"
+                  >
+                    <Icon name={fav ? 'star' : 'star_border'} size={18} className={fav ? 'text-primary' : ''} />
+                  </motion.button>
+                )}
               </div>
             </div>
-            <button
-              onClick={() => handleDownload(modelData.id, 'original')}
-              className="mt-2.5 flex h-9 w-full items-center justify-center gap-2 rounded-lg bg-primary-container text-sm font-medium text-on-primary transition-transform active:scale-[0.98]"
-            >
-              <Icon name="download" size={18} />
-              {t('modelDetail.downloadModel')}
-            </button>
+            {featureFlags.downloads && (
+              <button
+                onClick={() => handleDownload(modelData.id, 'original')}
+                className="mt-2.5 flex h-9 w-full items-center justify-center gap-2 rounded-lg bg-primary-container text-sm font-medium text-on-primary transition-transform active:scale-[0.98]"
+              >
+                <Icon name="download" size={18} />
+                {t('modelDetail.downloadModel')}
+              </button>
+            )}
           </div>
 
           {/* Expanded content — scrollable */}

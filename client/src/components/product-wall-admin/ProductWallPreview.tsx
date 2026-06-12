@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
 import type { ProductWallItem } from '../../api/productWall';
+import { useFeatureFlags } from '../../lib/publicSettings';
 import Icon from '../shared/Icon';
 import SafeImage from '../shared/SafeImage';
 import { productWallPreviewImage, type ProductWallCanvasMode } from './productWallAdminUtils';
@@ -28,6 +29,7 @@ export function ProductWallPreview({
   onDownload: (item: WallItem) => void;
 }) {
   const { t } = useTranslation();
+  const featureFlags = useFeatureFlags();
   const previewCloseRef = useRef<HTMLButtonElement | null>(null);
   const previewDragRef = useRef({ active: false, moved: false, startX: 0, startY: 0, panX: 0, panY: 0 });
   const previewPanRef = useRef({ x: 0, y: 0 });
@@ -498,45 +500,51 @@ export function ProductWallPreview({
                 {previewZoomed ? t('productWall.preview.restore') : t('productWall.preview.zoomIn')}
               </span>
             </button>
-            <button
-              type="button"
-              onClick={onToggleFavorite}
-              className={`inline-flex h-10 items-center justify-center gap-1.5 rounded-xl border text-sm font-medium transition-colors md:h-9 md:w-9 md:rounded-full md:text-xs ${
-                activeFavorited
-                  ? 'border-primary-container/25 bg-primary-container/10 text-primary-container'
-                  : 'border-outline-variant/16 bg-surface-container-low text-on-surface-variant active:bg-surface-container-high'
-              }`}
-              aria-label={activeFavorited ? t('productWall.preview.unfavorite') : t('productWall.preview.favorite')}
-            >
-              <Icon name={activeFavorited ? 'favorite' : 'star'} size={16} />
-              <span className="md:hidden">
-                {activeFavorited ? t('productWall.preview.unfavorite') : t('productWall.preview.favorite')}
-              </span>
-            </button>
-            <button
-              type="button"
-              onClick={onShare}
-              className={`inline-flex h-10 items-center justify-center gap-1.5 rounded-xl border text-sm font-medium transition-colors md:h-9 md:w-9 md:rounded-full md:text-xs ${
-                shareState === 'copied'
-                  ? 'border-primary-container/25 bg-primary-container/10 text-primary-container'
-                  : 'border-outline-variant/16 bg-surface-container-low text-on-surface-variant active:bg-surface-container-high'
-              }`}
-              aria-label={shareState === 'copied' ? t('productWall.preview.copied') : t('productWall.preview.share')}
-            >
-              <Icon name={shareState === 'copied' ? 'check' : 'share'} size={16} />
-              <span className="md:hidden">
-                {shareState === 'copied' ? t('productWall.preview.copied') : t('productWall.preview.share')}
-              </span>
-            </button>
-            <button
-              type="button"
-              onClick={() => onDownload(active)}
-              className="inline-flex h-10 items-center justify-center gap-1.5 rounded-xl border border-outline-variant/16 bg-surface-container-low text-sm font-medium text-on-surface-variant transition-colors active:bg-surface-container-high md:h-9 md:w-9 md:rounded-full md:text-xs"
-              aria-label={t('productWall.preview.download')}
-            >
-              <Icon name="download" size={16} />
-              <span className="md:hidden">{t('productWall.preview.download')}</span>
-            </button>
+            {featureFlags.favorites && (
+              <button
+                type="button"
+                onClick={onToggleFavorite}
+                className={`inline-flex h-10 items-center justify-center gap-1.5 rounded-xl border text-sm font-medium transition-colors md:h-9 md:w-9 md:rounded-full md:text-xs ${
+                  activeFavorited
+                    ? 'border-primary-container/25 bg-primary-container/10 text-primary-container'
+                    : 'border-outline-variant/16 bg-surface-container-low text-on-surface-variant active:bg-surface-container-high'
+                }`}
+                aria-label={activeFavorited ? t('productWall.preview.unfavorite') : t('productWall.preview.favorite')}
+              >
+                <Icon name={activeFavorited ? 'favorite' : 'star'} size={16} />
+                <span className="md:hidden">
+                  {activeFavorited ? t('productWall.preview.unfavorite') : t('productWall.preview.favorite')}
+                </span>
+              </button>
+            )}
+            {featureFlags.shares && (
+              <button
+                type="button"
+                onClick={onShare}
+                className={`inline-flex h-10 items-center justify-center gap-1.5 rounded-xl border text-sm font-medium transition-colors md:h-9 md:w-9 md:rounded-full md:text-xs ${
+                  shareState === 'copied'
+                    ? 'border-primary-container/25 bg-primary-container/10 text-primary-container'
+                    : 'border-outline-variant/16 bg-surface-container-low text-on-surface-variant active:bg-surface-container-high'
+                }`}
+                aria-label={shareState === 'copied' ? t('productWall.preview.copied') : t('productWall.preview.share')}
+              >
+                <Icon name={shareState === 'copied' ? 'check' : 'share'} size={16} />
+                <span className="md:hidden">
+                  {shareState === 'copied' ? t('productWall.preview.copied') : t('productWall.preview.share')}
+                </span>
+              </button>
+            )}
+            {featureFlags.downloads && (
+              <button
+                type="button"
+                onClick={() => onDownload(active)}
+                className="inline-flex h-10 items-center justify-center gap-1.5 rounded-xl border border-outline-variant/16 bg-surface-container-low text-sm font-medium text-on-surface-variant transition-colors active:bg-surface-container-high md:h-9 md:w-9 md:rounded-full md:text-xs"
+                aria-label={t('productWall.preview.download')}
+              >
+                <Icon name="download" size={16} />
+                <span className="md:hidden">{t('productWall.preview.download')}</span>
+              </button>
+            )}
           </div>
         </div>
       </div>

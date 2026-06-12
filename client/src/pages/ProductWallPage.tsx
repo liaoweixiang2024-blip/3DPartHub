@@ -76,6 +76,7 @@ import { useImeSafeSearchInput } from '../hooks/useImeSafeSearchInput';
 import { downloadBrowserFile } from '../lib/browserDownload';
 import { getBusinessConfig } from '../lib/businessConfig';
 import { copyText } from '../lib/clipboard';
+import { useFeatureFlags } from '../lib/publicSettings';
 import { useAuthStore } from '../stores/useAuthStore';
 
 type WallItem = ProductWallItem;
@@ -105,6 +106,7 @@ function ProductWallLoadingState() {
 export default function ProductWallPage() {
   const { t } = useTranslation();
   useDocumentTitle(t('productWall.title'));
+  const featureFlags = useFeatureFlags();
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const folderInputRef = useRef<HTMLInputElement | null>(null);
   const loadMoreRef = useRef<HTMLButtonElement | null>(null);
@@ -1059,38 +1061,44 @@ export default function ProductWallPage() {
                           </button>
                           {!wallEditMode && !selectionMode && (
                             <div className="product-wall-card-actions absolute right-2 top-2 z-20 flex items-center gap-1.5">
-                              <button
-                                type="button"
-                                onClick={(event) => {
-                                  event.stopPropagation();
-                                  void toggleFavoriteItem(item);
-                                }}
-                                className={`product-wall-card-action ${itemFavorited ? 'is-active' : ''}`}
-                                aria-label={
-                                  itemFavorited ? t('productWall.aria.unfavorite') : t('productWall.aria.favoriteImage')
-                                }
-                                title={
-                                  itemFavorited
-                                    ? t('productWall.preview.unfavorite')
-                                    : t('productWall.preview.favorite')
-                                }
-                                data-tooltip-ignore
-                              >
-                                <Icon name={itemFavorited ? 'favorite' : 'star'} size={14} />
-                              </button>
-                              <button
-                                type="button"
-                                onClick={(event) => {
-                                  event.stopPropagation();
-                                  void downloadProductWallItem(item);
-                                }}
-                                className="product-wall-card-action"
-                                aria-label={t('productWall.aria.downloadImage')}
-                                title={t('productWall.preview.download')}
-                                data-tooltip-ignore
-                              >
-                                <Icon name="download" size={14} />
-                              </button>
+                              {featureFlags.favorites && (
+                                <button
+                                  type="button"
+                                  onClick={(event) => {
+                                    event.stopPropagation();
+                                    void toggleFavoriteItem(item);
+                                  }}
+                                  className={`product-wall-card-action ${itemFavorited ? 'is-active' : ''}`}
+                                  aria-label={
+                                    itemFavorited
+                                      ? t('productWall.aria.unfavorite')
+                                      : t('productWall.aria.favoriteImage')
+                                  }
+                                  title={
+                                    itemFavorited
+                                      ? t('productWall.preview.unfavorite')
+                                      : t('productWall.preview.favorite')
+                                  }
+                                  data-tooltip-ignore
+                                >
+                                  <Icon name={itemFavorited ? 'favorite' : 'star'} size={14} />
+                                </button>
+                              )}
+                              {featureFlags.downloads && (
+                                <button
+                                  type="button"
+                                  onClick={(event) => {
+                                    event.stopPropagation();
+                                    void downloadProductWallItem(item);
+                                  }}
+                                  className="product-wall-card-action"
+                                  aria-label={t('productWall.aria.downloadImage')}
+                                  title={t('productWall.preview.download')}
+                                  data-tooltip-ignore
+                                >
+                                  <Icon name="download" size={14} />
+                                </button>
+                              )}
                             </div>
                           )}
                           {wallEditMode && selectable && !selectionMode && (

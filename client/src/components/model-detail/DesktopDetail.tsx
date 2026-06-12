@@ -1,7 +1,7 @@
 import { motion } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router-dom';
-import { getModelDetailCopyright, getModelDetailDisclaimer } from '../../lib/publicSettings';
+import { getModelDetailCopyright, getModelDetailDisclaimer, useFeatureFlags } from '../../lib/publicSettings';
 import type { ModelSpec } from '../../types';
 import Icon from '../shared/Icon';
 import {
@@ -61,6 +61,7 @@ export function DesktopDetail({
   onLoginDialog: (reason: string) => void;
 }) {
   const { i18n, t } = useTranslation();
+  const featureFlags = useFeatureFlags();
   return (
     <ModelDetailAsideFrame
       header={
@@ -99,38 +100,44 @@ export function DesktopDetail({
             )}
           </div>
           <div className={MODEL_DETAIL_ACTIONS_CLASS}>
-            <button
-              onClick={() => onDownload(modelData.id, 'original')}
-              className="flex-1 bg-primary-container text-on-primary rounded-sm py-2 px-4 text-sm font-medium hover:bg-primary transition-all active:scale-95 flex items-center justify-center gap-2"
-            >
-              <Icon name="download" size={18} />
-              {t('modelDetail.downloadModel')}
-            </button>
-            <motion.button
-              whileTap={{ scale: 0.9 }}
-              onClick={onShare}
-              aria-label={t('common.share')}
-              data-tooltip={t('common.share')}
-              data-tooltip-side="bottom"
-              className="bg-surface-container-high border border-outline/40 hover:border-outline text-on-surface rounded-sm p-2 transition-all flex items-center justify-center"
-            >
-              <Icon name="share" size={20} />
-            </motion.button>
-            <motion.button
-              whileTap={{ scale: 0.9 }}
-              onClick={onToggleFav}
-              aria-label={isFav ? t('productCard.unfavorite') : t('productCard.favorite')}
-              data-tooltip={isFav ? t('productCard.unfavorite') : t('productCard.favorite')}
-              data-tooltip-side="bottom"
-              className={`bg-surface-container-high border ${isFav ? 'border-primary/50' : 'border-outline/40'} hover:border-outline text-on-surface rounded-sm p-2 transition-all flex items-center justify-center`}
-            >
-              <Icon
-                name={isFav ? 'bookmark' : 'bookmark_border'}
-                size={20}
-                className={`${isFav ? 'text-primary' : ''}`}
-                fill={isFav}
-              />
-            </motion.button>
+            {featureFlags.downloads && (
+              <button
+                onClick={() => onDownload(modelData.id, 'original')}
+                className="flex-1 bg-primary-container text-on-primary rounded-sm py-2 px-4 text-sm font-medium hover:bg-primary transition-all active:scale-95 flex items-center justify-center gap-2"
+              >
+                <Icon name="download" size={18} />
+                {t('modelDetail.downloadModel')}
+              </button>
+            )}
+            {featureFlags.shares && (
+              <motion.button
+                whileTap={{ scale: 0.9 }}
+                onClick={onShare}
+                aria-label={t('common.share')}
+                data-tooltip={t('common.share')}
+                data-tooltip-side="bottom"
+                className="bg-surface-container-high border border-outline/40 hover:border-outline text-on-surface rounded-sm p-2 transition-all flex items-center justify-center"
+              >
+                <Icon name="share" size={20} />
+              </motion.button>
+            )}
+            {featureFlags.favorites && (
+              <motion.button
+                whileTap={{ scale: 0.9 }}
+                onClick={onToggleFav}
+                aria-label={isFav ? t('productCard.unfavorite') : t('productCard.favorite')}
+                data-tooltip={isFav ? t('productCard.unfavorite') : t('productCard.favorite')}
+                data-tooltip-side="bottom"
+                className={`bg-surface-container-high border ${isFav ? 'border-primary/50' : 'border-outline/40'} hover:border-outline text-on-surface rounded-sm p-2 transition-all flex items-center justify-center`}
+              >
+                <Icon
+                  name={isFav ? 'bookmark' : 'bookmark_border'}
+                  size={20}
+                  className={`${isFav ? 'text-primary' : ''}`}
+                  fill={isFav}
+                />
+              </motion.button>
+            )}
           </div>
         </>
       }
@@ -208,63 +215,65 @@ export function DesktopDetail({
         ) : null
       }
       downloads={
-        <>
-          <h3 className={MODEL_DETAIL_SECTION_TITLE_CLASS}>{t('modelDetail.fileDownloads')}</h3>
-          <div className={MODEL_DETAIL_DOWNLOAD_LIST_CLASS}>
-            {modelData.downloads.map((file, index) => {
-              const downloadKey = `${file.downloadFormat || file.format || file.fileName || 'download'}-${index}`;
-              return file.downloadFormat === 'drawing' ? (
-                <button
-                  key={downloadKey}
-                  type="button"
-                  onClick={() => onOpenDrawing(modelData.id)}
-                  className={`${MODEL_DETAIL_DOWNLOAD_ROW_INTERACTIVE_CLASS} cursor-pointer text-left`}
-                >
-                  <div className="flex items-center gap-3 min-w-0 flex-1">
-                    <div className="w-9 h-9 rounded-lg bg-error/10 flex items-center justify-center shrink-0">
-                      <span className="text-[10px] font-bold text-error">PDF</span>
-                    </div>
-                    <div className="min-w-0">
-                      <div className="text-sm font-medium text-on-surface truncate">{file.fileName}</div>
-                      <div className="text-[11px] text-on-surface-variant mt-0.5">
-                        {file.format} · {file.size}
-                      </div>
-                    </div>
-                  </div>
-                  <div className="text-primary hover:text-primary-container p-2">
-                    <Icon name="open_in_new" size={20} />
-                  </div>
-                </button>
-              ) : (
-                <div key={downloadKey} className={MODEL_DETAIL_DOWNLOAD_ROW_INTERACTIVE_CLASS}>
-                  <div className="flex items-center gap-3 min-w-0 flex-1">
-                    <div className="w-9 h-9 rounded-lg bg-primary-container/10 flex items-center justify-center shrink-0">
-                      <span className="text-[10px] font-bold text-primary-container">{file.format.slice(0, 4)}</span>
-                    </div>
-                    <div className="min-w-0">
-                      <div className="text-sm font-medium text-on-surface font-mono flex min-w-0">
-                        <span className="truncate">
-                          {file.fileName || `${modelData.name}.${file.format.toLowerCase()}`}
-                        </span>
-                      </div>
-                      <div className="text-[11px] text-on-surface-variant mt-0.5">
-                        {file.format} · {file.size}
-                      </div>
-                    </div>
-                  </div>
+        featureFlags.downloads ? (
+          <>
+            <h3 className={MODEL_DETAIL_SECTION_TITLE_CLASS}>{t('modelDetail.fileDownloads')}</h3>
+            <div className={MODEL_DETAIL_DOWNLOAD_LIST_CLASS}>
+              {modelData.downloads.map((file, index) => {
+                const downloadKey = `${file.downloadFormat || file.format || file.fileName || 'download'}-${index}`;
+                return file.downloadFormat === 'drawing' ? (
                   <button
-                    onClick={() =>
-                      onDownload(modelData.id, file.downloadFormat === 'original' ? 'original' : undefined)
-                    }
-                    className="text-primary hover:text-primary-container p-2"
+                    key={downloadKey}
+                    type="button"
+                    onClick={() => onOpenDrawing(modelData.id)}
+                    className={`${MODEL_DETAIL_DOWNLOAD_ROW_INTERACTIVE_CLASS} cursor-pointer text-left`}
                   >
-                    <Icon name="download" size={20} />
+                    <div className="flex items-center gap-3 min-w-0 flex-1">
+                      <div className="w-9 h-9 rounded-lg bg-error/10 flex items-center justify-center shrink-0">
+                        <span className="text-[10px] font-bold text-error">PDF</span>
+                      </div>
+                      <div className="min-w-0">
+                        <div className="text-sm font-medium text-on-surface truncate">{file.fileName}</div>
+                        <div className="text-[11px] text-on-surface-variant mt-0.5">
+                          {file.format} · {file.size}
+                        </div>
+                      </div>
+                    </div>
+                    <div className="text-primary hover:text-primary-container p-2">
+                      <Icon name="open_in_new" size={20} />
+                    </div>
                   </button>
-                </div>
-              );
-            })}
-          </div>
-        </>
+                ) : (
+                  <div key={downloadKey} className={MODEL_DETAIL_DOWNLOAD_ROW_INTERACTIVE_CLASS}>
+                    <div className="flex items-center gap-3 min-w-0 flex-1">
+                      <div className="w-9 h-9 rounded-lg bg-primary-container/10 flex items-center justify-center shrink-0">
+                        <span className="text-[10px] font-bold text-primary-container">{file.format.slice(0, 4)}</span>
+                      </div>
+                      <div className="min-w-0">
+                        <div className="text-sm font-medium text-on-surface font-mono flex min-w-0">
+                          <span className="truncate">
+                            {file.fileName || `${modelData.name}.${file.format.toLowerCase()}`}
+                          </span>
+                        </div>
+                        <div className="text-[11px] text-on-surface-variant mt-0.5">
+                          {file.format} · {file.size}
+                        </div>
+                      </div>
+                    </div>
+                    <button
+                      onClick={() =>
+                        onDownload(modelData.id, file.downloadFormat === 'original' ? 'original' : undefined)
+                      }
+                      className="text-primary hover:text-primary-container p-2"
+                    >
+                      <Icon name="download" size={20} />
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          </>
+        ) : null
       }
       support={
         <>

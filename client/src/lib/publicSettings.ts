@@ -530,3 +530,31 @@ export function usePublicSettings() {
   const { data, isLoading } = useSWR('publicSettings', () => getCachedPublicSettings());
   return { settings: data ?? undefined, isLoading };
 }
+
+// Feature flag hook for gating UI buttons. Reads from the cached public settings
+// snapshot and re-renders when settings change. Admins still see all controls —
+// server-side featureGuard lets admins bypass, so the UI should match.
+export interface FeatureFlags {
+  selection: boolean;
+  inquiry: boolean;
+  productWall: boolean;
+  tickets: boolean;
+  favorites: boolean;
+  shares: boolean;
+  downloads: boolean;
+  registration: boolean;
+}
+
+export function useFeatureFlags(): FeatureFlags {
+  const { settings } = usePublicSettings();
+  return {
+    selection: settings?.feature_selection_enabled !== false,
+    inquiry: settings?.feature_inquiry_enabled !== false,
+    productWall: settings?.feature_product_wall_enabled !== false,
+    tickets: settings?.feature_tickets_enabled !== false,
+    favorites: settings?.feature_favorites_enabled !== false,
+    shares: settings?.share_enabled !== false && settings?.feature_shares_enabled !== false,
+    downloads: settings?.feature_downloads_enabled !== false,
+    registration: settings?.allow_register !== false,
+  };
+}
