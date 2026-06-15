@@ -85,6 +85,14 @@ postgres_container_network() {
   docker inspect 3dparthub-postgres --format '{{range $name, $_ := .NetworkSettings.Networks}}{{println $name}}{{end}}' 2>/dev/null | sed -n '1p'
 }
 
+# The POSTGRES_PASSWORD the container was started with — i.e. the password the
+# volume was initialized with. Used as a fallback to repair credentials without
+# ever deleting the data volume.
+postgres_container_env_password() {
+  docker inspect 3dparthub-postgres --format '{{range .Config.Env}}{{println .}}{{end}}' 2>/dev/null \
+    | sed -n 's/^POSTGRES_PASSWORD=//p' | head -1
+}
+
 postgres_password_reset_sql() {
   node - "$1" "$2" <<'NODE'
 const [user, password] = process.argv.slice(2);
@@ -121,6 +129,10 @@ verify_or_repair_postgres_credentials() {
 
   echo "PostgreSQL password mismatch detected; repairing local dev database user..."
   reset_sql="$(postgres_password_reset_sql "$db_user" "$db_password")"
+  local init_pass
+  init_pass="$(postgres_container_env_password)"
+
+  # Repair attempt 1: local socket inside the container (often needs no password).
   if docker exec 3dparthub-postgres psql -U "$db_user" -d "$db_name" -v ON_ERROR_STOP=1 -c "$reset_sql" >/dev/null 2>&1 \
     && docker run --rm --network "$network" -e PGPASSWORD="$db_password" postgres:16-alpine \
       psql -h 3dparthub-postgres -U "$db_user" -d "$db_name" -c 'select 1;' >/dev/null 2>&1; then
@@ -128,10 +140,27 @@ verify_or_repair_postgres_credentials() {
     return
   fi
 
+  # Repair attempt 2: connect with the password the volume was initialized with.
+  # This always matches a volume created by docker-compose.local.yml and never
+  # requires deleting data.
+  if [ -n "$init_pass" ] \
+    && docker exec -e PGPASSWORD="$init_pass" 3dparthub-postgres psql -U "$db_user" -d "$db_name" -v ON_ERROR_STOP=1 -c "$reset_sql" >/dev/null 2>&1 \
+    && docker run --rm --network "$network" -e PGPASSWORD="$db_password" postgres:16-alpine \
+      psql -h 3dparthub-postgres -U "$db_user" -d "$db_name" -c 'select 1;' >/dev/null 2>&1; then
+    echo "PostgreSQL credentials repaired."
+    return
+  fi
+
   echo "PostgreSQL password repair failed."
-  echo "Please keep server/.env DATABASE_URL password aligned with the existing Docker volume, or recreate local data with:"
-  echo "  docker compose -f docker-compose.local.yml down -v"
-  echo "  docker compose -f docker-compose.local.yml up -d postgres redis"
+  echo "!!! WARNING: do NOT run 'docker compose ... down -v' — it permanently deletes"
+  echo "!!! ALL database data (models, selections, users, etc.)."
+  echo ""
+  echo "Safe recovery options that PRESERVE your data:"
+  echo "  1. Set the password in server/.env DATABASE_URL to the one the database was"
+  echo "     created with (docker-compose.local.yml default is 'modelpass'), or"
+  echo "  2. Reset the database password manually, then match it in server/.env:"
+  echo "       docker exec -it 3dparthub-postgres psql -U \"$db_user\" -d \"$db_name\""
+  echo "       # inside psql: ALTER USER \"$db_user\" WITH PASSWORD '<new-password>';"
   exit 1
 }
 
