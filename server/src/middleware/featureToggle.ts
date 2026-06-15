@@ -10,6 +10,7 @@ const FEATURE_DISABLED_MESSAGE: Record<string, string> = {
   feature_favorites_enabled: '收藏功能已关闭',
   feature_shares_enabled: '分享功能已关闭',
   feature_downloads_enabled: '下载功能已关闭',
+  feature_password_reset_enabled: '找回密码功能已关闭',
   allow_register: '注册功能已关闭',
 };
 

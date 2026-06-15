@@ -232,6 +232,7 @@ const SETTINGS_SCHEMA: SettingDef[] = [
   { key: 'feature_favorites_enabled', defaultValue: true },
   { key: 'feature_shares_enabled', defaultValue: true },
   { key: 'feature_downloads_enabled', defaultValue: true },
+  { key: 'feature_password_reset_enabled', defaultValue: true },
 
   // Selection wizard
   { key: 'selection_page_title', defaultValue: '产品选型' },
@@ -575,6 +576,7 @@ const BOOLEAN_KEYS = new Set([
   'feature_favorites_enabled',
   'feature_shares_enabled',
   'feature_downloads_enabled',
+  'feature_password_reset_enabled',
   'cache_enabled',
   'redis_tls_enabled',
   'storage_use_ssl',

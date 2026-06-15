@@ -178,6 +178,7 @@ export function createSettingsPublicRouter() {
             feature_favorites_enabled: all.feature_favorites_enabled ?? true,
             feature_shares_enabled: all.feature_shares_enabled ?? true,
             feature_downloads_enabled: all.feature_downloads_enabled ?? true,
+            feature_password_reset_enabled: all.feature_password_reset_enabled ?? true,
             // Selection wizard
             selection_page_title: all.selection_page_title ?? '产品选型',
             selection_page_desc: all.selection_page_desc ?? '先选产品大类，再按参数逐步缩小范围',

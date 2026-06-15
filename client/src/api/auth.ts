@@ -48,6 +48,20 @@ export const authApi = {
     return unwrapResponse<PasswordChangeResult>(res);
   },
 
+  requestPasswordReset: async (email: string, captchaId: string, captchaText: string) => {
+    const res = await client.post<ApiResponse<{ message: string }>>('/auth/forgot-password', {
+      email,
+      captchaId,
+      captchaText,
+    });
+    return unwrapResponse<{ message: string }>(res);
+  },
+
+  resetPassword: async (token: string, newPassword: string) => {
+    const res = await client.post<ApiResponse<{ message: string }>>('/auth/reset-password', { token, newPassword });
+    return unwrapResponse<{ message: string }>(res);
+  },
+
   getNotificationPrefs: async (): Promise<Record<string, boolean>> => {
     try {
       const { data } = await client.get('/auth/notification-prefs');

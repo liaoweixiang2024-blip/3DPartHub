@@ -69,3 +69,26 @@ export async function verifyEmailCode(email: string, code: string): Promise<bool
   );
   return result === 1;
 }
+
+/** Store a single-use password-reset token mapping token → userId (TTL in seconds). */
+export async function storePasswordResetToken(token: string, userId: string, ttlSeconds = 1800): Promise<void> {
+  const key = `pwreset:${token}`;
+  await redis.set(key, userId, 'EX', Math.max(60, ttlSeconds));
+}
+
+/**
+ * Atomically consume a password-reset token (GET + DEL), returning the userId
+ * or null if the token is missing/expired. Single-use by construction.
+ */
+export async function consumePasswordResetToken(token: string): Promise<string | null> {
+  const key = `pwreset:${token}`;
+  const result = await redis.eval(
+    `local stored = redis.call("GET", KEYS[1])
+     if not stored then return false end
+     redis.call("DEL", KEYS[1])
+     return stored`,
+    1,
+    key,
+  );
+  return result ? String(result) : null;
+}

@@ -149,6 +149,7 @@ export const DEFAULT_SETTINGS: SystemSettings = {
   feature_favorites_enabled: true,
   feature_shares_enabled: true,
   feature_downloads_enabled: true,
+  feature_password_reset_enabled: true,
   selection_page_title: '产品选型',
   selection_page_desc: '先选产品大类，再按参数逐步缩小范围',
   selection_enable_match: true,

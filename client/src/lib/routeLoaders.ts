@@ -18,6 +18,8 @@ export const loadProfilePage = () => import('../pages/ProfilePage');
 export const loadSupportPage = () => import('../pages/SupportPage');
 export const loadMyTicketsPage = () => import('../pages/MyTicketsPage');
 export const loadLoginPage = () => import('../pages/LoginPage');
+export const loadForgotPasswordPage = () => import('../pages/ForgotPasswordPage');
+export const loadResetPasswordPage = () => import('../pages/ResetPasswordPage');
 export const loadLegalPage = () => import('../pages/LegalPage');
 export const loadSharePage = () => import('../pages/SharePage');
 export const loadProjectsPage = () => import('../pages/ProjectsPage');
@@ -57,6 +59,8 @@ export function preloadModelDetailPage() {
 
 const exactRouteLoaders = new Map<string, RouteModuleLoader>([
   ['/login', loadLoginPage],
+  ['/forgot-password', loadForgotPasswordPage],
+  ['/reset-password', loadResetPasswordPage],
   ['/selection', loadSelectionPage],
   ['/temp-viewer', loadTempViewerPage],
   ['/thread-size', loadThreadSizeToolPage],

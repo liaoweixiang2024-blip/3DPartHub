@@ -161,6 +161,15 @@ export async function sendVerifyCode(toEmail: string, code: string, siteUrl?: st
   });
 }
 
+export async function sendPasswordResetEmail(toEmail: string, token: string, siteUrl?: string): Promise<void> {
+  await sendTemplateEmail('password_reset', toEmail, {
+    siteUrl,
+    actionPath: `/reset-password/${token}`,
+    actionLabel: '重置密码',
+    expireMinutes: 30,
+  });
+}
+
 export async function sendTestEmail(toEmail: string, siteUrl?: string, templateKey = 'smtp_test'): Promise<void> {
   await sendTemplateEmail(templateKey || 'smtp_test', toEmail, {
     siteUrl,

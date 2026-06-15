@@ -544,6 +544,7 @@ export interface FeatureFlags {
   shares: boolean;
   downloads: boolean;
   registration: boolean;
+  passwordReset: boolean;
 }
 
 export function useFeatureFlags(): FeatureFlags {
@@ -561,6 +562,7 @@ export function useFeatureFlags(): FeatureFlags {
       shares: true,
       downloads: true,
       registration: true,
+      passwordReset: true,
     };
   }
   return {
@@ -572,5 +574,6 @@ export function useFeatureFlags(): FeatureFlags {
     shares: settings?.share_enabled !== false && settings?.feature_shares_enabled !== false,
     downloads: settings?.feature_downloads_enabled !== false,
     registration: settings?.allow_register !== false,
+    passwordReset: settings?.feature_password_reset_enabled !== false,
   };
 }

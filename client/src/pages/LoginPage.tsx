@@ -15,7 +15,7 @@ import { useMediaQuery } from '../layouts/hooks/useMediaQuery';
 import { getUsernamePolicy, validateRegisterUsername } from '../lib/authValidation';
 import { getErrorMessage } from '../lib/errorNotifications';
 import { useResolvedPublicInterfaceTheme } from '../lib/interfaceThemePreference';
-import { usePublicSettings } from '../lib/publicSettings';
+import { useFeatureFlags, usePublicSettings } from '../lib/publicSettings';
 import { sanitizeHtml } from '../lib/sanitizeHtml';
 import { useAuthStore } from '../stores/useAuthStore';
 import { getInterfaceThemePackage } from '../themes/interfaceThemes/registry';
@@ -63,6 +63,7 @@ export default function LoginPage() {
   const [allowRegister, setAllowRegister] = useState(true);
   const isDesktop = useMediaQuery('(min-width: 768px)');
   const { settings: publicSettings } = usePublicSettings();
+  const featureFlags = useFeatureFlags();
   const resolvedPublicTheme = useResolvedPublicInterfaceTheme(publicSettings, isDesktop);
   const ThemePackage = getInterfaceThemePackage(resolvedPublicTheme);
   const LoginTemplate = ThemePackage.templates.Login;
@@ -413,15 +414,22 @@ export default function LoginPage() {
             )}
 
             {mode === 'login' && (
-              <label className="flex items-center gap-2 cursor-pointer select-none">
-                <input
-                  type="checkbox"
-                  checked={rememberMe}
-                  onChange={(e) => setRememberMe(e.target.checked)}
-                  className="w-4 h-4 rounded border-outline-variant/30 text-primary-container accent-primary-container"
-                />
-                <span className="text-sm text-on-surface-variant">{t('auth.rememberMe')}</span>
-              </label>
+              <div className="flex items-center justify-between">
+                <label className="flex items-center gap-2 cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={rememberMe}
+                    onChange={(e) => setRememberMe(e.target.checked)}
+                    className="w-4 h-4 rounded border-outline-variant/30 text-primary-container accent-primary-container"
+                  />
+                  <span className="text-sm text-on-surface-variant">{t('auth.rememberMe')}</span>
+                </label>
+                {featureFlags.passwordReset && (
+                  <Link to="/forgot-password" className="text-sm text-primary hover:underline">
+                    {t('auth.forgotPassword')}
+                  </Link>
+                )}
+              </div>
             )}
 
             <button

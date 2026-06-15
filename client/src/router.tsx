@@ -25,6 +25,8 @@ import {
   loadInquiryDetailPage,
   loadLegalPage,
   loadLoginPage,
+  loadForgotPasswordPage,
+  loadResetPasswordPage,
   loadModelAdminPage,
   loadModelDetailPage,
   loadMyInquiriesPage,
@@ -63,6 +65,8 @@ const ProfilePage = lazy(loadProfilePage);
 const SupportPage = lazy(loadSupportPage);
 const MyTicketsPage = lazy(loadMyTicketsPage);
 const LoginPage = lazy(loadLoginPage);
+const ForgotPasswordPage = lazy(loadForgotPasswordPage);
+const ResetPasswordPage = lazy(loadResetPasswordPage);
 const LegalPage = lazy(loadLegalPage);
 const SharePage = lazy(loadSharePage);
 const ProjectsPage = lazy(loadProjectsPage);
@@ -415,6 +419,22 @@ export default function Router() {
           element={
             <ScrollPage>
               <LoginPage />
+            </ScrollPage>
+          }
+        />
+        <Route
+          path="/forgot-password"
+          element={
+            <ScrollPage>
+              <ForgotPasswordPage />
+            </ScrollPage>
+          }
+        />
+        <Route
+          path="/reset-password/:token"
+          element={
+            <ScrollPage>
+              <ResetPasswordPage />
             </ScrollPage>
           }
         />

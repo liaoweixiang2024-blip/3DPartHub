@@ -459,6 +459,7 @@ const DEFAULT_SETTINGS: SystemSettings = {
   feature_favorites_enabled: true,
   feature_shares_enabled: true,
   feature_downloads_enabled: true,
+  feature_password_reset_enabled: true,
   selection_page_title: '产品选型',
   selection_page_desc: '先选产品大类，再按参数逐步缩小范围',
   selection_enable_match: true,
@@ -984,6 +985,12 @@ const GROUPS: SettingGroup[] = [
         key: 'feature_downloads_enabled',
         label: '下载功能',
         desc: '关闭后用户无法下载模型文件，导航隐藏下载历史入口',
+        type: 'switch',
+      },
+      {
+        key: 'feature_password_reset_enabled',
+        label: '找回密码',
+        desc: '关闭后用户无法通过邮箱自助重置密码，只能联系管理员',
         type: 'switch',
       },
       {

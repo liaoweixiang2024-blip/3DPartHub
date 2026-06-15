@@ -65,6 +65,20 @@ ${emailShellStart}
 ${emailShellEnd}`.trim(),
     tokens: [...commonTokens, 'code', 'expireMinutes'],
   },
+  password_reset: {
+    label: '找回密码',
+    description: '用户找回密码时发送重置链接',
+    subject: '{{siteTitle}} 密码重置',
+    html: `
+${emailShellStart}
+  <h2 style="margin:0 0 18px;color:#111827;">重置您的密码</h2>
+  <p style="margin:0 0 12px;font-size:15px;">我们收到了您重置密码的请求。点击下方按钮设置新密码：</p>
+  <p style="margin:14px 0 6px;color:#6b7280;font-size:13px;">若按钮无法点击，请复制以下链接到浏览器打开：</p>
+  <p style="margin:0 0 12px;font-size:13px;word-break:break-all;color:#f97316;">{{actionUrl}}</p>
+  <p style="margin:0;color:#6b7280;font-size:13px;">链接 {{expireMinutes}} 分钟内有效，且仅可使用一次。若非本人操作，请忽略此邮件，您的密码不会更改。</p>
+${emailShellEnd}`.trim(),
+    tokens: [...commonTokens, 'expireMinutes'],
+  },
   smtp_test: {
     label: '邮件服务测试',
     description: '管理员在系统设置中测试 SMTP 配置',
