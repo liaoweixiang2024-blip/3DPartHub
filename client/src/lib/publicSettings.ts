@@ -1,6 +1,7 @@
 import useSWR, { mutate } from 'swr';
 import { getPublicSettings, type SystemSettings } from '../api/settings';
 import { syncI18nSettings } from '../i18n';
+import { useAuthStore } from '../stores';
 import { applyServerThemeDefaults } from '../stores/useThemeStore';
 import { applyColorScheme } from './colorScheme';
 
@@ -547,6 +548,21 @@ export interface FeatureFlags {
 
 export function useFeatureFlags(): FeatureFlags {
   const { settings } = usePublicSettings();
+  // Admins bypass feature gating — the server-side featureGuard lets admins
+  // through, so the UI must match (otherwise admins can't manage a disabled area).
+  const isAdmin = useAuthStore((s) => s.user?.role === 'ADMIN');
+  if (isAdmin) {
+    return {
+      selection: true,
+      inquiry: true,
+      productWall: true,
+      tickets: true,
+      favorites: true,
+      shares: true,
+      downloads: true,
+      registration: true,
+    };
+  }
   return {
     selection: settings?.feature_selection_enabled !== false,
     inquiry: settings?.feature_inquiry_enabled !== false,

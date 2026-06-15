@@ -486,7 +486,14 @@ export default function ModelDetailPage() {
       category: modelData.category,
       dimensions: modelData.dimensions,
     });
-    toast(wasFav ? t('productCard.unfavoriteSuccess') : t('productCard.favoriteSuccess'), 'success');
+    // toggleFavorite swallows errors and rolls back internally, so check the
+    // actual post-action state to decide success vs failure messaging.
+    const nowFav = useFavoriteStore.getState().favoriteIds.has(modelData.id);
+    if (nowFav === wasFav) {
+      toast(wasFav ? t('productCard.unfavoriteFail') : t('productCard.favoriteFail'), 'error');
+      return;
+    }
+    toast(nowFav ? t('productCard.favoriteSuccess') : t('productCard.unfavoriteSuccess'), 'success');
   }, [modelData, isFavorite, toggleFavorite, t, toast]);
 
   // Resolve category breadcrumb path from tree
@@ -895,64 +902,68 @@ export default function ModelDetailPage() {
               )}
 
               {/* Downloads */}
-              <div>
-                <div className="text-[11px] uppercase tracking-widest text-on-surface-variant font-medium mb-2">
-                  {t('modelDetail.fileDownloads')}
-                </div>
-                <div className="space-y-1.5">
-                  {modelData.downloads.map((file, index) => {
-                    const downloadKey = `${file.downloadFormat || file.format || file.fileName || 'download'}-${index}`;
-                    return file.downloadFormat === 'drawing' ? (
-                      <button
-                        key={downloadKey}
-                        type="button"
-                        onClick={() => void handleOpenDrawing(modelData.id)}
-                        className="flex w-full items-center justify-between gap-2.5 rounded-sm border border-outline-variant/10 bg-surface-container-low px-3 py-2 text-left transition-colors hover:bg-surface-container"
-                      >
-                        <div className="w-7 h-7 rounded bg-error/10 flex items-center justify-center shrink-0">
-                          <span className="text-[8px] font-bold text-error">PDF</span>
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <span className="block truncate text-xs font-medium text-on-surface" title={file.fileName}>
-                            {file.fileName}
-                          </span>
-                          <span className="text-[10px] text-on-surface-variant">
-                            {file.format} · {file.size}
-                          </span>
-                        </div>
-                        <div className="ml-auto flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
-                          <Icon name="open_in_new" size={14} />
-                        </div>
-                      </button>
-                    ) : (
-                      <div
-                        key={downloadKey}
-                        className="flex items-center gap-2 px-3 py-2.5 rounded-sm bg-surface-container-low border border-outline-variant/10"
-                      >
-                        <div className="w-7 h-7 rounded bg-primary-container/15 flex items-center justify-center shrink-0">
-                          <span className="text-[8px] font-bold text-primary-container">{file.format.slice(0, 3)}</span>
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <div className="text-xs font-medium text-on-surface flex min-w-0">
-                            <span className="truncate">{file.fileName || file.format}</span>
-                          </div>
-                          <span className="text-[10px] text-on-surface-variant">
-                            {file.format} · {file.size}
-                          </span>
-                        </div>
+              {featureFlags.downloads && (
+                <div>
+                  <div className="text-[11px] uppercase tracking-widest text-on-surface-variant font-medium mb-2">
+                    {t('modelDetail.fileDownloads')}
+                  </div>
+                  <div className="space-y-1.5">
+                    {modelData.downloads.map((file, index) => {
+                      const downloadKey = `${file.downloadFormat || file.format || file.fileName || 'download'}-${index}`;
+                      return file.downloadFormat === 'drawing' ? (
                         <button
-                          onClick={() =>
-                            handleDownload(modelData.id, file.downloadFormat === 'original' ? 'original' : undefined)
-                          }
-                          className="shrink-0 w-7 h-7 flex items-center justify-center rounded-full bg-primary/10 hover:bg-primary/20 text-primary active:scale-90 transition-all"
+                          key={downloadKey}
+                          type="button"
+                          onClick={() => void handleOpenDrawing(modelData.id)}
+                          className="flex w-full items-center justify-between gap-2.5 rounded-sm border border-outline-variant/10 bg-surface-container-low px-3 py-2 text-left transition-colors hover:bg-surface-container"
                         >
-                          <Icon name="download" size={15} />
+                          <div className="w-7 h-7 rounded bg-error/10 flex items-center justify-center shrink-0">
+                            <span className="text-[8px] font-bold text-error">PDF</span>
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <span className="block truncate text-xs font-medium text-on-surface" title={file.fileName}>
+                              {file.fileName}
+                            </span>
+                            <span className="text-[10px] text-on-surface-variant">
+                              {file.format} · {file.size}
+                            </span>
+                          </div>
+                          <div className="ml-auto flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
+                            <Icon name="open_in_new" size={14} />
+                          </div>
                         </button>
-                      </div>
-                    );
-                  })}
+                      ) : (
+                        <div
+                          key={downloadKey}
+                          className="flex items-center gap-2 px-3 py-2.5 rounded-sm bg-surface-container-low border border-outline-variant/10"
+                        >
+                          <div className="w-7 h-7 rounded bg-primary-container/15 flex items-center justify-center shrink-0">
+                            <span className="text-[8px] font-bold text-primary-container">
+                              {file.format.slice(0, 3)}
+                            </span>
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <div className="text-xs font-medium text-on-surface flex min-w-0">
+                              <span className="truncate">{file.fileName || file.format}</span>
+                            </div>
+                            <span className="text-[10px] text-on-surface-variant">
+                              {file.format} · {file.size}
+                            </span>
+                          </div>
+                          <button
+                            onClick={() =>
+                              handleDownload(modelData.id, file.downloadFormat === 'original' ? 'original' : undefined)
+                            }
+                            className="shrink-0 w-7 h-7 flex items-center justify-center rounded-full bg-primary/10 hover:bg-primary/20 text-primary active:scale-90 transition-all"
+                          >
+                            <Icon name="download" size={15} />
+                          </button>
+                        </div>
+                      );
+                    })}
+                  </div>
                 </div>
-              </div>
+              )}
 
               {/* Support */}
               <div className="pt-2 border-t border-outline-variant/20">

@@ -40,28 +40,38 @@ export async function buildModelMatchMap(modelNos: string[]) {
       continue;
     }
 
-    // 2) Segment match — modelNo must appear as a complete _-delimited segment
-    //    e.g. "PC10-04" matches "白色直快插_PC10-04" (segment after _, ends at string end)
-    //    but "PC10-04" does NOT match "TKN-PC10-04" (TKN- prefix, not after _)
-    //    and "QG-L-10L" does NOT match "QG-L-10L-B11" (truncated, not full segment)
+    // 2) Containment match — model name is a complete segment of modelNo
+    //    (or vice versa), longest match wins. The shorter side must cover
+    //    at least 60 % of the longer side so that "SQG-PAU1208-6M-03" will
+    //    never match a bare "SQG" (only 3/18 = 17 %).
     let best: { id: string; thumbnailUrl: string | null } | undefined;
-    for (const nk of normKeys) {
-      // modelNo is longer/more specific → model name is a prefix segment of modelNo
-      if (nq.includes(nk)) {
-        best = normMap.get(nk);
-        break;
+    let bestLen = 0;
+    const isSep = (c: string) => c === '_' || c === '-';
+    const longerLen = (a: string, b: string) => Math.max(a.length, b.length);
+    // Check whether `needle` appears as a complete segment in `hay` at least once.
+    const segmentMatch = (hay: string, needle: string) => {
+      let from = 0;
+      let idx = hay.indexOf(needle, from);
+      while (idx !== -1) {
+        const end = idx + needle.length;
+        const precededOk = idx === 0 || isSep(hay[idx - 1]);
+        const followedOk = end === hay.length || isSep(hay[end]);
+        if (precededOk && followedOk) return true;
+        from = idx + 1;
+        idx = hay.indexOf(needle, from);
       }
-      // model name contains modelNo → must be a full _-segment
-      if (nk.includes(nq)) {
-        const idx = nk.indexOf(nq);
-        const end = idx + nq.length;
-        const precededBySep = idx > 0 && nk[idx - 1] === '_';
-        const followedByEnd = end === nk.length;
-        const followedBySep = end < nk.length && nk[end] === '_';
-        if (precededBySep && (followedByEnd || followedBySep)) {
-          best = normMap.get(nk);
-          break;
-        }
+      return false;
+    };
+    for (const nk of normKeys) {
+      // modelNo contains model name → model name must be a complete segment
+      if (nk.length > bestLen && nk.length >= longerLen(nq, nk) * 0.6 && segmentMatch(nq, nk)) {
+        best = normMap.get(nk);
+        bestLen = nk.length;
+      }
+      // model name contains modelNo → modelNo must be a complete segment
+      else if (nk.length > bestLen && nq.length >= longerLen(nq, nk) * 0.6 && segmentMatch(nk, nq)) {
+        best = normMap.get(nk);
+        bestLen = nk.length;
       }
     }
     if (best) result.set(raw, best);

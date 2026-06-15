@@ -304,29 +304,32 @@ const STEP_EXTENSIONS = new Set(['.step', '.stp', '.iges', '.igs']);
 const BACKUP_ENCRYPTION_MAGIC = '3DPHBAKENC1';
 const BACKUP_ENCRYPTION_ALGORITHM = 'aes-256-gcm';
 
-export type BackupScope = 'full' | 'models' | 'selection' | 'product_wall';
+export type BackupScope = 'full' | 'models' | 'selection' | 'product_wall' | 'config';
 
 const BACKUP_SCOPE_LABELS: Record<BackupScope, string> = {
   full: '整站备份',
   models: '模型库',
   selection: '选型',
   product_wall: '产品图库',
+  config: '系统配置',
 };
 
 const MODULE_BACKUP_STATIC_DIRS: Record<Exclude<BackupScope, 'full'>, string[]> = {
   models: ['models', 'thumbnails', 'originals', 'drawings'],
   selection: ['option-images', 'selection-assets', 'selection-categories-ai'],
   product_wall: ['product-wall'],
+  config: ['logo', 'favicon', 'watermark'],
 };
 
 export const MODULE_BACKUP_TABLE_KEYS: Record<Exclude<BackupScope, 'full'>, readonly string[]> = {
   models: ['categories', 'modelGroups', 'models', 'modelVersions', 'favorites', 'downloads', 'comments', 'shareLinks'],
   selection: ['selectionCategories', 'selectionProducts', 'threadSizeEntries', 'selectionShares'],
   product_wall: ['productWallCategories', 'productWallImages', 'productWallImageFavorites'],
+  config: ['settings', 'categories'],
 };
 
 export function normalizeBackupScope(value: unknown): BackupScope {
-  if (value === 'models' || value === 'selection' || value === 'product_wall') return value;
+  if (value === 'models' || value === 'selection' || value === 'product_wall' || value === 'config') return value;
   return 'full';
 }
 
@@ -672,6 +675,7 @@ export interface BackupStats {
   totalModelCount: number;
   modelGroupCount: number;
   categoryCount: number;
+  settingsCount: number;
   originalFileCount: number;
   drawingFileCount: number;
   modelResourceFileCount: number;
@@ -1888,6 +1892,18 @@ async function buildModuleBackupPayload(scope: Exclude<BackupScope, 'full'>): Pr
         }),
         selectionShares: await prisma.selectionShare.findMany({
           orderBy: [{ createdById: 'asc' }, { createdAt: 'asc' }],
+        }),
+      },
+    };
+  }
+
+  if (scope === 'config') {
+    return {
+      ...base,
+      tables: {
+        settings: await prisma.setting.findMany({ orderBy: [{ key: 'asc' }] }),
+        categories: await prisma.category.findMany({
+          orderBy: [{ sortOrder: 'asc' }, { createdAt: 'asc' }],
         }),
       },
     };
@@ -3216,6 +3232,7 @@ export async function getBackupStats(): Promise<BackupStats> {
   let threadSizeCount = 0;
   let productWallCategoryCount = 0;
   let productWallImageCount = 0;
+  let settingsCount = 0;
   let dbSizeBytes = 0;
   let dbSize = 'unknown';
 
@@ -3231,6 +3248,7 @@ export async function getBackupStats(): Promise<BackupStats> {
       threadSizeCount,
       productWallCategoryCount,
       productWallImageCount,
+      settingsCount,
     ] = await Promise.all([
       prisma.model.count({ where: completedStepWhere }),
       prisma.model.count(),
@@ -3241,6 +3259,7 @@ export async function getBackupStats(): Promise<BackupStats> {
       prisma.threadSizeEntry.count(),
       prisma.productWallCategory.count(),
       prisma.productWallImage.count(),
+      prisma.setting.count(),
     ]);
     const r = await prisma.$queryRaw<
       Array<{ bytes: bigint | number; pg_size_pretty: string }>
@@ -3280,6 +3299,7 @@ export async function getBackupStats(): Promise<BackupStats> {
     selectionResourceSizeText: formatSize(selectionDirStats.totalBytes),
     productWallCategoryCount,
     productWallImageCount,
+    settingsCount,
     productWallResourceFileCount: productWallDirStats.fileCount,
     productWallResourceSize: productWallDirStats.totalBytes,
     productWallResourceSizeText: formatSize(productWallDirStats.totalBytes),
@@ -3471,6 +3491,7 @@ async function restoreModulePayload(payload: ModuleBackupPayload, job: RestoreJo
     async (tx) => {
       if (payload.scope === 'models') return restoreModelsModule(tx, payload, job);
       if (payload.scope === 'selection') return restoreSelectionModule(tx, payload);
+      if (payload.scope === 'config') return restoreConfigModule(tx, payload);
       return restoreProductWallModule(tx, payload);
     },
     { maxWait: 60_000, timeout: DB_RESTORE_TIMEOUT_MS },
@@ -3694,6 +3715,64 @@ async function restoreProductWallModule(tx: RestoreTransaction, payload: ModuleB
   await createManyInChunks(tx.productWallImageFavorite, favoriteData);
 
   return categories.length + images.length + favoriteData.length;
+}
+
+/**
+ * Restore the "系统配置" module: site settings (key-value) + model categories.
+ *
+ * settings is a standalone key-value table (no inbound FKs) → safe to TRUNCATE + bulk insert.
+ *
+ * categories is referenced by models via models_category_id_fkey (ON DELETE SET NULL),
+ * so it MUST NOT be truncated — that would null out every model's category. Instead we
+ * upsert each category by id (parent-first topological order) so existing rows are updated
+ * and new ones inserted without disturbing model references.
+ */
+async function restoreConfigModule(tx: RestoreTransaction, payload: ModuleBackupPayload): Promise<number> {
+  // Settings — standalone key-value table, clean slate. Dedupe by `key` (unique
+  // constraint) defensively so a tampered/legacy backup with duplicate keys
+  // doesn't fail the whole createMany.
+  const settings = dedupeRowsByKeys(
+    tableRows(payload, 'settings').map((row) => reviveDateFields(row, ['updatedAt'])),
+    ['key'],
+  );
+  await tx.$executeRawUnsafe('TRUNCATE TABLE "settings" RESTART IDENTITY');
+  await createManyInChunks(tx.setting, settings);
+
+  // Categories — upsert by id, parents first (parentId self-FK).
+  const categories = tableRows(payload, 'categories').map((row) => reviveDateFields(row, ['createdAt', 'updatedAt']));
+  const knownIds = new Set(categories.map((row) => stringValue(row.id)).filter((id): id is string => Boolean(id)));
+  const pending = [...categories];
+  const done = new Set<string>();
+  while (pending.length > 0) {
+    let progressed = false;
+    for (let index = pending.length - 1; index >= 0; index -= 1) {
+      const row = pending[index];
+      const id = stringValue(row.id);
+      if (!id) {
+        pending.splice(index, 1);
+        progressed = true;
+        continue;
+      }
+      const parentId = stringValue(row.parentId);
+      // Parent exists in the backup but isn't upserted yet → wait for it.
+      if (parentId && knownIds.has(parentId) && !done.has(parentId)) continue;
+      // Keep the link only if the parent was actually restored; otherwise detach to avoid a dangling FK.
+      if (parentId && !(knownIds.has(parentId) && done.has(parentId))) {
+        row.parentId = null;
+      }
+      await tx.category.upsert({
+        where: { id },
+        create: row as Prisma.CategoryUncheckedCreateInput,
+        update: row as Prisma.CategoryUncheckedUpdateInput,
+      });
+      done.add(id);
+      pending.splice(index, 1);
+      progressed = true;
+    }
+    if (!progressed) break; // cycle / unresolvable parents — bail out safely
+  }
+
+  return settings.length + categories.length;
 }
 
 async function restoreCategoryRows(tx: RestoreTransaction, rows: Record<string, unknown>[]) {
@@ -4062,7 +4141,10 @@ function isModuleBackupManifest(value: unknown): value is ModuleBackupManifest {
   const manifest = value as Partial<ModuleBackupManifest> | null | undefined;
   return (
     manifest?.schemaVersion === MODULE_BACKUP_SCHEMA_VERSION &&
-    (manifest.scope === 'models' || manifest.scope === 'selection' || manifest.scope === 'product_wall') &&
+    (manifest.scope === 'models' ||
+      manifest.scope === 'selection' ||
+      manifest.scope === 'product_wall' ||
+      manifest.scope === 'config') &&
     manifest.data?.path === MODULE_BACKUP_DATA_ENTRY
   );
 }

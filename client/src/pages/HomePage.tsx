@@ -869,6 +869,7 @@ export default function HomePage() {
       showModelCardCategory,
       showModelCardVariantMeta,
       viewMode,
+      featureFlags.shares,
     ],
   );
 

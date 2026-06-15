@@ -69,7 +69,14 @@ async function main() {
       const sqlPath = path.join('/app/prisma/migrations', name, 'migration.sql');
       if (fs.existsSync(sqlPath)) {
         const sql = fs.readFileSync(sqlPath, 'utf-8');
-        try { await client.query(sql); } catch {}
+        try {
+          await client.query(sql);
+        } catch (e) {
+          // Re-run failed — do NOT mark finished, or prisma will skip a
+          // migration that was only partially applied (phantom migration).
+          console.error('[repair] Re-run FAILED for ' + name + ': ' + (e && e.message));
+          continue;
+        }
       }
       await client.query(
         'UPDATE _prisma_migrations SET finished_at = NOW(), logs = NULL, rolled_back_at = NULL WHERE migration_name = \$1 AND finished_at IS NULL',

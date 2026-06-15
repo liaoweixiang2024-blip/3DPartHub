@@ -2,7 +2,7 @@ import { existsSync } from 'node:fs';
 import bcrypt from 'bcryptjs';
 import { Router, Request, Response } from 'express';
 import { sendAcceleratedFile } from '../../lib/acceleratedDownload.js';
-import { cacheGetOrSet, TTL, redis } from '../../lib/cache.js';
+import { cacheDel, cacheGetOrSet, TTL, redis } from '../../lib/cache.js';
 import { createProtectedResourceToken } from '../../lib/downloadTokenStore.js';
 import { prisma } from '../../lib/prisma.js';
 import { getSetting } from '../../lib/settings.js';
@@ -101,7 +101,6 @@ export function createPublicSharesRouter() {
     }
 
     if (!share.model) {
-      const { cacheDel } = await import('../../lib/cache.js');
       await cacheDel(`cache:share:info:${token}`);
       res.status(404).json({ detail: '分享的模型已被删除' });
       return;
@@ -267,6 +266,9 @@ export function createPublicSharesRouter() {
       res.status(429).json({ detail: '下载次数已达上限' });
       return;
     }
+
+    // Invalidate the cached share info so the remaining-download count stays accurate.
+    await cacheDel(`cache:share:info:${token}`);
 
     sendAcceleratedFile(req, res, {
       filePath: target.filePath,

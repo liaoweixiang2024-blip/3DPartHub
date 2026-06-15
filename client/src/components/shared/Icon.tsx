@@ -143,6 +143,8 @@ import {
   ShoppingBag,
   ShoppingCart,
   Cloud,
+  Power,
+  ToggleRight,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import type { CSSProperties } from 'react';
@@ -314,6 +316,8 @@ const iconMap: Record<string, LucideIcon> = {
   compass: Compass,
   circle_dot: CircleDotIcon,
   palette: Palette,
+  power_settings_new: Power,
+  toggle_on: ToggleRight,
   tonality: CircleDotIcon,
   opacity: Droplets,
   hexagon: Hexagon,

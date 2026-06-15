@@ -2,6 +2,7 @@ import { useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router-dom';
 import { cacheModelDetailTitle } from '../../lib/modelDetailTitleCache';
+import { useFeatureFlags } from '../../lib/publicSettings';
 import { preloadModelDetailPage } from '../../lib/routeLoaders';
 import FormatTag from '../shared/FormatTag';
 import Icon from '../shared/Icon';
@@ -28,6 +29,7 @@ export function ProductCardMobile({
   imageFetchPriority?: 'high' | 'low' | 'auto';
 }) {
   const { t } = useTranslation();
+  const featureFlags = useFeatureFlags();
   const detailPath = `/model/${product.id}`;
   const detailState = { from: returnPath, homeBrowseState, modelName: product.name };
   const rememberDetailTitle = useCallback(() => {
@@ -73,10 +75,12 @@ export function ProductCardMobile({
           <h3 className="text-xs font-headline text-on-surface mb-1.5 leading-tight line-clamp-2">{product.name}</h3>
         }
         action={
-          <button onClick={() => onDownload(product.id)} className={HOME_MOBILE_ACTION_BUTTON_CLASS}>
-            <Icon name="download" size={14} fill />
-            {t('common.download')}
-          </button>
+          featureFlags.downloads ? (
+            <button onClick={() => onDownload(product.id)} className={HOME_MOBILE_ACTION_BUTTON_CLASS}>
+              <Icon name="download" size={14} fill />
+              {t('common.download')}
+            </button>
+          ) : null
         }
       />
     </div>

@@ -140,6 +140,7 @@ test('module backups include user-facing dependent records', () => {
     'productWallImages',
     'productWallImageFavorites',
   ]);
+  assert.deepEqual(MODULE_BACKUP_TABLE_KEYS.config, ['settings', 'categories']);
 });
 
 test('backup policy report summarizes blockers and next actions', () => {

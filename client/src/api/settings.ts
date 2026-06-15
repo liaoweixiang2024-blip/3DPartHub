@@ -264,6 +264,7 @@ export interface BackupStats {
   selectionResourceSizeText?: string;
   productWallCategoryCount?: number;
   productWallImageCount?: number;
+  settingsCount?: number;
   productWallResourceFileCount?: number;
   productWallResourceSize?: number;
   productWallResourceSizeText?: string;
@@ -445,7 +446,7 @@ export interface RestoreResult {
   fileCount?: number;
 }
 
-export type BackupScope = 'full' | 'models' | 'selection' | 'product_wall';
+export type BackupScope = 'full' | 'models' | 'selection' | 'product_wall' | 'config';
 
 type HttpError = Error & {
   response?: {

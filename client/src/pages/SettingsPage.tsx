@@ -119,6 +119,7 @@ const BACKUP_SCOPE_OPTIONS: Array<{ value: BackupScope; label: string; desc: str
   { value: 'models', label: '模型库', desc: '模型产品与 3D 文件', icon: 'view_in_ar' },
   { value: 'selection', label: '选型', desc: '选型分类、产品与素材', icon: 'tune' },
   { value: 'product_wall', label: '产品图库', desc: '图库分类、图片与状态', icon: 'photo_library' },
+  { value: 'config', label: '系统配置', desc: '站点设置、模型分类与品牌资产', icon: 'settings' },
 ];
 
 function getBackupScopeLabel(scope?: BackupScope, fallback?: string): string {
@@ -941,7 +942,7 @@ const GROUPS: SettingGroup[] = [
   },
   {
     title: '功能开关',
-    icon: 'toggle_on',
+    icon: 'power_settings_new',
     items: [
       {
         key: 'feature_selection_enabled',
@@ -5055,6 +5056,14 @@ function Content() {
             backupStats.productWallResourceFileCount,
           )} 个资源文件`,
           meta: `资源 ${backupStats.productWallResourceSizeText || '待刷新'}`,
+        },
+        {
+          key: 'config',
+          icon: 'settings',
+          label: '系统配置',
+          value: `${formatOptionalStatNumber(backupStats.settingsCount)} 项配置`,
+          detail: `模型分类 ${formatOptionalStatNumber(backupStats.categoryCount)} 个 / 含 logo、favicon、水印品牌资产`,
+          meta: '轻量备份',
         },
       ]
     : [];

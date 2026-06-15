@@ -14,6 +14,7 @@ import SafeImage from '../components/shared/SafeImage';
 import { useToast } from '../components/shared/Toast';
 import { useDocumentTitle } from '../hooks/useDocumentTitle';
 import { useMediaQuery } from '../layouts/hooks/useMediaQuery';
+import { useFeatureFlags } from '../lib/publicSettings';
 import { useAuthStore } from '../stores/useAuthStore';
 
 const ROLE_LABEL_KEYS: Record<string, string> = {
@@ -740,6 +741,7 @@ function MobileContent() {
   const updateUser = useAuthStore((s) => s.updateUser);
   const { toast } = useToast();
   const navigate = useNavigate();
+  const featureFlags = useFeatureFlags();
   const [pwdOpen, setPwdOpen] = useState(false);
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -1048,16 +1050,18 @@ function MobileContent() {
       </button>
 
       {/* My Inquiries */}
-      <button
-        onClick={() => navigate('/my-inquiries')}
-        className="w-full flex items-center justify-between rounded-lg bg-surface-container-high px-4 py-3 text-left"
-      >
-        <div className="flex items-center gap-3">
-          <Icon name="request_quote" size={20} className="text-on-surface/50" />
-          <span className="text-sm text-on-surface">{t('profile.myInquiries')}</span>
-        </div>
-        <Icon name="chevron_right" size={20} className="text-on-surface/30" />
-      </button>
+      {featureFlags.inquiry && (
+        <button
+          onClick={() => navigate('/my-inquiries')}
+          className="w-full flex items-center justify-between rounded-lg bg-surface-container-high px-4 py-3 text-left"
+        >
+          <div className="flex items-center gap-3">
+            <Icon name="request_quote" size={20} className="text-on-surface/50" />
+            <span className="text-sm text-on-surface">{t('profile.myInquiries')}</span>
+          </div>
+          <Icon name="chevron_right" size={20} className="text-on-surface/30" />
+        </button>
+      )}
 
       {/* Notification prefs */}
       <div className="rounded-lg bg-surface-container-high px-4 py-3">
@@ -1065,7 +1069,7 @@ function MobileContent() {
       </div>
 
       {/* My shares */}
-      <MobileSharesMenu />
+      {featureFlags.shares && <MobileSharesMenu />}
 
       <PasswordChangeDialog open={pwdOpen} onClose={() => setPwdOpen(false)} />
     </PageBody>
