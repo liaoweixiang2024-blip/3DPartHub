@@ -48,35 +48,36 @@ git push origin main
 - **CI 报红就不要继续**，先修复再重新推送
 - 检查项：TypeScript 编译、迁移文件同步、代码扫描
 
-### 4. 构建并推送 Docker 镜像
-```bash
-# 客户端（注意在 client 目录执行）
-cd client
-docker build --build-arg VITE_APP_VERSION=v<版本号> \
-  -t ghcr.io/liaoweixiang2024-blip/3dparthub-client:v<版本号> \
-  -t ghcr.io/liaoweixiang2024-blip/3dparthub-client:latest .
-docker push ghcr.io/liaoweixiang2024-blip/3dparthub-client:v<版本号>
-docker push ghcr.io/liaoweixiang2024-blip/3dparthub-client:latest
-
-# 服务端（注意在 server 目录执行）
-cd ../server
-docker build --build-arg APP_VERSION=v<版本号> \
-  -t ghcr.io/liaoweixiang2024-blip/3dparthub-server:v<版本号> \
-  -t ghcr.io/liaoweixiang2024-blip/3dparthub-server:latest .
-docker push ghcr.io/liaoweixiang2024-blip/3dparthub-server:v<版本号>
-docker push ghcr.io/liaoweixiang2024-blip/3dparthub-server:latest
-```
-
-### 5. 打标签
+### 4. 打标签（触发自动构建镜像 + Release）
+推送 `v*` 标签会自动触发 GitHub Actions（`.github/workflows/docker-build.yml`）：
+构建并推送两端镜像（带版本号 + latest）、Trivy 漏洞扫描、自动创建 GitHub Release。约 8–9 分钟，等 workflow 变绿即可。
 ```bash
 git tag -a v<版本号> -m "版本描述"
 git push origin v<版本号>
+# 在 GitHub → Actions 看 "Build & Push Docker Images" 跑完
 ```
+镜像名（ghcr.io/liaoweixiang2024-blip/）：客户端 `3dparthub-web`、服务端 `3dparthub-api`（即 docker-compose.yml 里用的名字）。
 
-### 6. 服务器更新
+> ⚠️ 仅当 CI 自动构建不可用时才手动 build/push（注意目录与镜像名）：
+> ```bash
+> # 客户端（client 目录）
+> docker build --build-arg VITE_APP_VERSION=v<版本号> \
+>   -t ghcr.io/liaoweixiang2024-blip/3dparthub-web:v<版本号> \
+>   -t ghcr.io/liaoweixiang2024-blip/3dparthub-web:latest .
+> docker push ghcr.io/liaoweixiang2024-blip/3dparthub-web:v<版本号>
+> docker push ghcr.io/liaoweixiang2024-blip/3dparthub-web:latest
+>
+> # 服务端（server 目录）
+> docker build --build-arg APP_VERSION=v<版本号> \
+>   -t ghcr.io/liaoweixiang2024-blip/3dparthub-api:v<版本号> \
+>   -t ghcr.io/liaoweixiang2024-blip/3dparthub-api:latest .
+> docker push ghcr.io/liaoweixiang2024-blip/3dparthub-api:v<版本号>
+> docker push ghcr.io/liaoweixiang2024-blip/3dparthub-api:latest
+> ```
+
+### 5. 服务器更新
 ```bash
 cd /opt/3dparthub
-docker compose down
 docker compose pull
 docker compose up -d
 # 更新后强制刷新浏览器：Cmd+Shift+R（Mac）或 Ctrl+Shift+R（Windows）
