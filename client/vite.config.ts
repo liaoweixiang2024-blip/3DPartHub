@@ -31,8 +31,13 @@ export default defineConfig({
           if (normalizedId.includes('/node_modules/')) {
             if (
               normalizedId.includes('/three/') ||
+              normalizedId.includes('/three-stdlib/') ||
               normalizedId.includes('/@react-three/') ||
-              normalizedId.includes('/@pmndrs/') ||
+              normalizedId.includes('/@pmndrs/')
+            ) {
+              return 'viewer-3d';
+            }
+            if (
               normalizedId.includes('/xlsx/') ||
               normalizedId.includes('/@sentry/') ||
               normalizedId.includes('/read-excel-file/') ||

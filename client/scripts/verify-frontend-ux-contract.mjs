@@ -58,7 +58,6 @@ const [
   infiniteLoadTriggerSource,
   clientBusinessConfigSource,
   settingsPageSource,
-  settingsUtilsSource,
   serverBusinessConfigSource,
   serverBusinessDefaultsSource,
   serverModelListSource,
@@ -101,7 +100,6 @@ const [
   readSource('components/shared/InfiniteLoadTrigger.tsx'),
   readSource('lib/businessConfig.ts'),
   readSource('pages/SettingsPage.tsx'),
-  readSource('lib/settingsUtils.ts'),
   readFile(path.join(repoRoot, 'server/src/lib/businessConfig.ts'), 'utf8'),
   readFile(path.join(repoRoot, 'server/src/lib/businessDefaults.ts'), 'utf8'),
   readFile(path.join(repoRoot, 'server/src/routes/models/list.ts'), 'utf8'),
@@ -335,7 +333,7 @@ requireIncludes('HomePage.tsx legacy page-size migration', homePageWithUtils, [
 
 for (const [label, source] of [
   ['client businessConfig.ts home page size policy', clientBusinessConfigSource],
-  ['SettingsPage.tsx / settingsUtils.ts home page size defaults', settingsPageSource + settingsUtilsSource],
+  ['SettingsPage.tsx home page size defaults', settingsPageSource],
   ['server businessConfig.ts home page size policy', serverBusinessConfigSource],
   ['server businessDefaults.ts home page size defaults', serverBusinessDefaultsSource],
 ]) {
