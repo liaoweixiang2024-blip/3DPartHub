@@ -1,6 +1,6 @@
 import { execFileSync, spawn } from 'child_process';
 import type { ChildProcess } from 'child_process';
-import { createCipheriv, createDecipheriv, createHash, createHmac, randomBytes, timingSafeEqual } from 'crypto';
+import { createHash, createHmac, randomBytes, timingSafeEqual } from 'crypto';
 import {
   existsSync,
   mkdirSync,
@@ -23,10 +23,26 @@ import {
 } from 'fs';
 import { basename, dirname, isAbsolute, join, resolve, sep } from 'path';
 import { createInterface } from 'readline';
-import { pipeline } from 'stream/promises';
 import { fileURLToPath } from 'url';
 import type { Prisma, PrismaClient } from '@prisma/client';
+import {
+  BACKUP_ENCRYPTION_ALGORITHM,
+  encryptBackupArchiveInPlace,
+  getBackupEncryptionStatus,
+  isEncryptedBackupArchiveFile,
+  materializeReadableBackupArchive,
+} from './backup/encryption.js';
+import type { BackupEncryptionStatus } from './backup/encryption.js';
 import { config } from './config.js';
+// 备份加密功能已抽到 ./backup/encryption.ts，这里再导出保持公共 API 不变（调用方零改动）
+export {
+  BACKUP_ENCRYPTION_ALGORITHM,
+  encryptBackupArchiveInPlace,
+  getBackupEncryptionStatus,
+  isEncryptedBackupArchiveFile,
+  materializeReadableBackupArchive,
+} from './backup/encryption.js';
+export type { BackupEncryptionStatus } from './backup/encryption.js';
 import { getErrorMessage } from './http.js';
 import { syncJob, loadJob } from './jobStore.js';
 import { createLogger } from './logger.js';
@@ -301,8 +317,6 @@ const BACKUP_LOCK_STALE_MS = (() => {
 const BACKUP_LOCK_KEEPALIVE_MS = Math.min(60_000, Math.max(10_000, Math.floor(BACKUP_LOCK_STALE_MS / 6)));
 const ALLOW_FOREIGN_KEY_SKIP_RESTORE = /^(1|true|yes)$/i.test(process.env.BACKUP_RESTORE_ALLOW_FK_SKIP || '');
 const STEP_EXTENSIONS = new Set(['.step', '.stp', '.iges', '.igs']);
-const BACKUP_ENCRYPTION_MAGIC = '3DPHBAKENC1';
-const BACKUP_ENCRYPTION_ALGORITHM = 'aes-256-gcm';
 
 export type BackupScope = 'full' | 'models' | 'selection' | 'product_wall' | 'config';
 
@@ -339,135 +353,6 @@ function backupScopeLabel(scope: BackupScope): string {
 
 function isModuleBackupScope(scope: BackupScope): scope is Exclude<BackupScope, 'full'> {
   return scope !== 'full';
-}
-
-type BackupEncryptionHeader = {
-  algorithm: typeof BACKUP_ENCRYPTION_ALGORITHM;
-  iv: string;
-  authTag: string;
-  createdAt: string;
-};
-
-export type BackupEncryptionStatus = {
-  enabled: boolean;
-  algorithm: typeof BACKUP_ENCRYPTION_ALGORITHM;
-  configuredBy: 'BACKUP_ENCRYPTION_SECRET' | 'BACKUP_ENCRYPTION_KEY' | null;
-  recommendedEnvName: 'BACKUP_ENCRYPTION_SECRET';
-  legacyEnvName: 'BACKUP_ENCRYPTION_KEY';
-};
-
-function backupEncryptionConfig(): { secret: string; configuredBy: BackupEncryptionStatus['configuredBy'] } {
-  const primary = process.env.BACKUP_ENCRYPTION_SECRET?.trim() || '';
-  if (primary) return { secret: primary, configuredBy: 'BACKUP_ENCRYPTION_SECRET' };
-
-  const legacy = process.env.BACKUP_ENCRYPTION_KEY?.trim() || '';
-  if (legacy) return { secret: legacy, configuredBy: 'BACKUP_ENCRYPTION_KEY' };
-
-  return { secret: '', configuredBy: null };
-}
-
-function backupEncryptionSecret(): string {
-  return backupEncryptionConfig().secret;
-}
-
-function backupEncryptionEnabled(): boolean {
-  return backupEncryptionSecret().trim().length > 0;
-}
-
-export function getBackupEncryptionStatus(): BackupEncryptionStatus {
-  const config = backupEncryptionConfig();
-  return {
-    enabled: config.secret.length > 0,
-    algorithm: BACKUP_ENCRYPTION_ALGORITHM,
-    configuredBy: config.configuredBy,
-    recommendedEnvName: 'BACKUP_ENCRYPTION_SECRET',
-    legacyEnvName: 'BACKUP_ENCRYPTION_KEY',
-  };
-}
-
-function backupEncryptionKey(): Buffer {
-  const secret = backupEncryptionSecret().trim();
-  if (!secret) throw new Error('备份文件已加密，但服务器未配置 BACKUP_ENCRYPTION_SECRET');
-  return createHash('sha256').update(secret).digest();
-}
-
-export function isEncryptedBackupArchiveFile(path: string): boolean {
-  try {
-    const fd = openSync(path, 'r');
-    try {
-      const buffer = Buffer.alloc(BACKUP_ENCRYPTION_MAGIC.length);
-      const bytesRead = readSync(fd, buffer, 0, buffer.length, 0);
-      return bytesRead === buffer.length && buffer.toString('utf-8') === BACKUP_ENCRYPTION_MAGIC;
-    } finally {
-      closeSync(fd);
-    }
-  } catch {
-    return false;
-  }
-}
-
-function readEncryptedBackupHeader(path: string): { header: BackupEncryptionHeader; payloadOffset: number } {
-  const fd = openSync(path, 'r');
-  try {
-    const buffer = Buffer.alloc(4096);
-    const bytesRead = readSync(fd, buffer, 0, buffer.length, 0);
-    const prefix = `${BACKUP_ENCRYPTION_MAGIC}\n`;
-    const text = buffer.toString('utf-8', 0, bytesRead);
-    if (!text.startsWith(prefix)) throw new Error('备份加密头无效');
-    const headerEnd = text.indexOf('\n', prefix.length);
-    if (headerEnd < 0) throw new Error('备份加密头不完整');
-    const header = JSON.parse(text.slice(prefix.length, headerEnd)) as BackupEncryptionHeader;
-    if (header.algorithm !== BACKUP_ENCRYPTION_ALGORITHM || !header.iv || !header.authTag) {
-      throw new Error('备份加密参数无效');
-    }
-    return { header, payloadOffset: Buffer.byteLength(text.slice(0, headerEnd + 1)) };
-  } finally {
-    closeSync(fd);
-  }
-}
-
-export async function encryptBackupArchiveInPlace(path: string): Promise<boolean> {
-  if (!backupEncryptionEnabled() || isEncryptedBackupArchiveFile(path)) return false;
-
-  const iv = randomBytes(12);
-  const cipher = createCipheriv(BACKUP_ENCRYPTION_ALGORITHM, backupEncryptionKey(), iv);
-  const payloadPath = `${path}.payload.${process.pid}.tmp`;
-  const encryptedPath = `${path}.encrypted.${process.pid}.tmp`;
-  try {
-    await pipeline(createReadStream(path), cipher, createWriteStream(payloadPath));
-    const header: BackupEncryptionHeader = {
-      algorithm: BACKUP_ENCRYPTION_ALGORITHM,
-      iv: iv.toString('base64'),
-      authTag: cipher.getAuthTag().toString('base64'),
-      createdAt: new Date().toISOString(),
-    };
-    writeFileSync(encryptedPath, `${BACKUP_ENCRYPTION_MAGIC}\n${JSON.stringify(header)}\n`);
-    await pipeline(createReadStream(payloadPath), createWriteStream(encryptedPath, { flags: 'a' }));
-    renameSync(encryptedPath, path);
-    return true;
-  } finally {
-    if (existsSync(payloadPath)) rmSync(payloadPath, { force: true });
-    if (existsSync(encryptedPath)) rmSync(encryptedPath, { force: true });
-  }
-}
-
-async function decryptBackupArchiveToFile(path: string, destination: string): Promise<void> {
-  const { header, payloadOffset } = readEncryptedBackupHeader(path);
-  const decipher = createDecipheriv(
-    BACKUP_ENCRYPTION_ALGORITHM,
-    backupEncryptionKey(),
-    Buffer.from(header.iv, 'base64'),
-  );
-  decipher.setAuthTag(Buffer.from(header.authTag, 'base64'));
-  await pipeline(createReadStream(path, { start: payloadOffset }), decipher, createWriteStream(destination));
-}
-
-export async function materializeReadableBackupArchive(archive: string, tmpDir: string): Promise<string> {
-  if (!isEncryptedBackupArchiveFile(archive)) return archive;
-  mkdirSync(tmpDir, { recursive: true });
-  const decryptedPath = join(tmpDir, 'decrypted-backup.tar.gz');
-  await decryptBackupArchiveToFile(archive, decryptedPath);
-  return decryptedPath;
 }
 
 async function withReadableBackupArchive<T>(archive: string, fn: (archivePath: string) => Promise<T>): Promise<T> {
