@@ -70,6 +70,7 @@ export interface StorageEndpoint {
 /** 把管理员填的 endpoint（可能带协议/端口/尾斜杠）归一为 minio 客户端所需的 host/port/useSSL。 */
 export function resolveStorageEndpoint(rawEndpoint: string, useSSL: boolean): StorageEndpoint {
   const normalized = rawEndpoint.trim().replace(/\/+$/g, '');
+  if (!normalized) return { endPoint: '', port: undefined, useSSL };
   const endpointUrl = new URL(
     /^[a-z][a-z\d+.-]*:\/\//i.test(normalized) ? normalized : `${useSSL ? 'https' : 'http'}://${normalized}`,
   );
@@ -302,9 +303,9 @@ function guessContentType(key: string): string {
 
 /** 双写：把已落地的本地文件上传到云端（provider 为 local 时 no-op）。失败只记日志。 */
 export async function persistFile(localPath: string, contentType?: string): Promise<void> {
-  const provider = await getCloudProvider();
-  if (!provider) return;
   try {
+    const provider = await getCloudProvider();
+    if (!provider) return;
     await provider.uploadFile(localPath, contentType ?? guessContentType(localPath));
   } catch (error) {
     logger.error({ err: error, file: basename(localPath) }, 'cloud persist failed (local copy intact)');
@@ -313,7 +314,13 @@ export async function persistFile(localPath: string, contentType?: string): Prom
 
 /** 批量双写。 */
 export async function persistFiles(localPaths: Array<string | null | undefined>): Promise<void> {
-  const provider = await getCloudProvider();
+  let provider;
+  try {
+    provider = await getCloudProvider();
+  } catch (error) {
+    logger.error({ err: error }, 'cloud provider unavailable, skipping persist');
+    return;
+  }
   if (!provider) return;
   for (const localPath of localPaths) {
     if (!localPath) continue;
@@ -327,9 +334,9 @@ export async function persistFiles(localPaths: Array<string | null | undefined>)
 
 /** 双删：从云端删除（provider 为 local 时 no-op）。失败只记日志。 */
 export async function deleteCloudFile(key: string): Promise<void> {
-  const provider = await getCloudProvider();
-  if (!provider) return;
   try {
+    const provider = await getCloudProvider();
+    if (!provider) return;
     await provider.deleteFile(key);
   } catch (error) {
     logger.error({ err: error, key }, 'cloud delete failed (local already removed)');
@@ -337,7 +344,13 @@ export async function deleteCloudFile(key: string): Promise<void> {
 }
 
 export async function deleteCloudFiles(keys: Array<string | null | undefined>): Promise<void> {
-  const provider = await getCloudProvider();
+  let provider;
+  try {
+    provider = await getCloudProvider();
+  } catch (error) {
+    logger.error({ err: error }, 'cloud provider unavailable, skipping delete');
+    return;
+  }
   if (!provider) return;
   for (const key of keys) {
     if (!key) continue;
