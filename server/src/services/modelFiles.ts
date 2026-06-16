@@ -1,6 +1,7 @@
 import { existsSync, rmSync, statSync } from 'node:fs';
 import { join, relative, resolve, sep } from 'node:path';
 import { config } from '../lib/config.js';
+import { deleteCloudFiles, deriveStorageKey, getCloudProvider, keyFromStaticUrl } from '../lib/storageProvider.js';
 
 export type ModelFileRef = {
   id: string;
@@ -110,4 +111,27 @@ export function removeExistingFiles(paths: Array<string | null | undefined>): Fi
 
 export function removeModelFiles(model: ModelFileRef): FileCleanupResult {
   return removeExistingFiles(modelManagedFilePaths(model));
+}
+
+/**
+ * 删除模型在云端的副本（双删）。仅删除 static/ 下的对象（models/thumbnails/originals/html-previews），
+ * uploads/ 下的原始上传文件不在云端（派生出 `..` 的 key 会被过滤）。provider 为 local 时 no-op。
+ * best-effort：失败只记日志，不影响本地删除结果。
+ */
+export async function purgeModelFromCloud(
+  model: ModelFileRef,
+  extraStaticUrls: Array<string | null | undefined> = [],
+): Promise<void> {
+  if (!(await getCloudProvider())) return;
+  const localKeys = modelManagedFilePaths(model).map(deriveStorageKey);
+  const extraKeys = extraStaticUrls
+    .map((url) => {
+      if (!url) return null;
+      const clean = String(url).split('?')[0];
+      return clean.startsWith('/static/') ? keyFromStaticUrl(clean) : null;
+    })
+    .filter((k): k is string => Boolean(k));
+  const keys = [...localKeys, ...extraKeys].filter((key) => key && !key.startsWith('..'));
+  if (keys.length === 0) return;
+  await deleteCloudFiles(keys);
 }

@@ -11,6 +11,8 @@ import { config } from './lib/config.js';
 import { logger, createLogger } from './lib/logger.js';
 import { prisma } from './lib/prisma.js';
 import { getSetting, initDefaultSettings } from './lib/settings.js';
+import { cloudFirstStatic } from './lib/staticServe.js';
+import { logStorageMode } from './lib/storageProvider.js';
 import { getVerifiedRequestUser } from './middleware/auth.js';
 import { autoAudit } from './middleware/autoAudit.js';
 import { errorHandler, notFoundHandler } from './middleware/errorHandler.js';
@@ -305,6 +307,9 @@ app.use('/static', async (req, res, next) => {
   next();
 });
 
+// 云优先服务：配了云就从云端流式代理（支持 Range），未配云端 / 云端 miss 时回退 express.static 本地。
+app.use('/static', cloudFirstStatic);
+
 app.use(
   '/static/thumbnails',
   express.static(join(process.cwd(), config.staticDir, 'thumbnails'), {
@@ -447,6 +452,9 @@ app.listen(PORT, async () => {
   }
 
   await initDefaultSettings();
+
+  // 打印对象存储模式（本地 / 云端），不阻塞启动
+  void logStorageMode();
 
   // Business categories are project-specific, so bundled demo seeds are opt-in.
   const shouldAutoSeedCategories = process.env.AUTO_SEED === '1' || process.env.AUTO_SEED_CATEGORIES === '1';

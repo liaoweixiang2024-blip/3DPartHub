@@ -10,7 +10,7 @@ import { authMiddleware, type AuthRequest } from '../../middleware/auth.js';
 import { requireRole } from '../../middleware/rbac.js';
 import { mutationLimiter } from '../../middleware/security.js';
 import { hasActiveModelDownload } from '../../services/activeModelDownloads.js';
-import { removeExistingFiles, removeModelFiles } from '../../services/modelFiles.js';
+import { purgeModelFromCloud, removeExistingFiles, removeModelFiles } from '../../services/modelFiles.js';
 import { MODEL_STATUS } from '../../services/modelStatus.js';
 import { clearCategoryCache } from '../categories/common.js';
 import { modelImageUpload } from './uploadHelpers.js';
@@ -157,21 +157,21 @@ export function createModelManagementRouter({ prisma, metadataDir, getMeta, save
       return { id, deleted: false, warnings: [] };
     }
 
-    const cleanup = removeModelFiles(
-      meta
-        ? {
-            id,
-            uploadPath: meta.upload_path as string | undefined,
-            format: meta.format as string | undefined,
-            originalFormat: dbFileInfo?.originalFormat || dbFileInfo?.format,
-          }
-        : {
-            id,
-            uploadPath: dbFileInfo?.uploadPath,
-            format: dbFileInfo?.format,
-            originalFormat: dbFileInfo?.originalFormat,
-          },
-    );
+    const modelRef = meta
+      ? {
+          id,
+          uploadPath: meta.upload_path as string | undefined,
+          format: meta.format as string | undefined,
+          originalFormat: dbFileInfo?.originalFormat || dbFileInfo?.format,
+        }
+      : {
+          id,
+          uploadPath: dbFileInfo?.uploadPath,
+          format: dbFileInfo?.format,
+          originalFormat: dbFileInfo?.originalFormat,
+        };
+
+    const cleanup = removeModelFiles(modelRef);
     const allFailed = [...cleanup.failed];
 
     const staticUrlCleanup = removeExistingFiles(
@@ -186,6 +186,9 @@ export function createModelManagementRouter({ prisma, metadataDir, getMeta, save
     const metaPath = join(metadataDir, `${id}.json`);
     const metaCleanup = removeExistingFiles([metaPath]);
     allFailed.push(...metaCleanup.failed);
+
+    // 双删：同步清理云端副本（best-effort，失败不影响本地删除结果）
+    await purgeModelFromCloud(modelRef, relatedStaticUrls);
 
     if (options.clearCaches !== false) {
       await clearModelManagementCaches();

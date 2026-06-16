@@ -7,12 +7,18 @@ import { config } from '../../lib/config.js';
 import { normalizeUploadFilename } from '../../lib/filenameEncoding.js';
 import { logger } from '../../lib/logger.js';
 import { conversionQueue } from '../../lib/queue.js';
+import { persistFile } from '../../lib/storageProvider.js';
 import { authMiddleware, type AuthRequest } from '../../middleware/auth.js';
 import { requireRole } from '../../middleware/rbac.js';
 import { convertStepToGltf } from '../../services/converter.js';
 import { findPreviewAssetPath } from '../../services/gltfAsset.js';
 import { parseStepFileDate } from '../../services/modelFileDates.js';
-import { findOriginalModelPath, isDeprecatedHtmlPreviewFormat, removeModelFiles } from '../../services/modelFiles.js';
+import {
+  findOriginalModelPath,
+  isDeprecatedHtmlPreviewFormat,
+  purgeModelFromCloud,
+  removeModelFiles,
+} from '../../services/modelFiles.js';
 import { MODEL_STATUS } from '../../services/modelStatus.js';
 import { generateBrowserThumbnail, generateThumbnail } from '../../services/thumbnail.js';
 import { modelUpload, validateModelUpload } from './uploadHelpers.js';
@@ -98,12 +104,20 @@ export function createModelConversionRouter({ prisma, getMeta, saveMeta, getPrev
         if (cleanup.failed.length > 0) {
           logger.warn({ detail: cleanup.failed }, '[models] Some old model files could not be deleted');
         }
+        // 双删：清理旧文件在云端的副本（best-effort）
+        await purgeModelFromCloud({
+          id,
+          uploadPath: m.uploadPath,
+          format: m.format,
+          originalFormat: m.originalFormat,
+        });
 
         // Save new file as original
         const originalsDir = join(config.staticDir, 'originals');
         mkdirSync(originalsDir, { recursive: true });
         const destPath = join(originalsDir, `${id}.${ext}`);
         copyFileSync(file.path, destPath);
+        await persistFile(destPath);
         rmSync(file.path, { force: true });
 
         // Update database - preserve original file modification time: STEP header > client filesystem

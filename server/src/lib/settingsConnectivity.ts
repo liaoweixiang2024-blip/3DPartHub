@@ -3,6 +3,7 @@ import { dirname, join } from 'node:path';
 import { Readable } from 'node:stream';
 import Redis from 'ioredis';
 import { config } from './config.js';
+import { createS3Client, readStorageSettings } from './storageProvider.js';
 
 export type SettingsConnectivityStatus = 'success' | 'warning' | 'error';
 
@@ -14,12 +15,6 @@ export interface SettingsConnectivityResult {
   provider?: string;
   latencyMs?: number;
 }
-
-type StorageEndpoint = {
-  endPoint: string;
-  port?: number;
-  useSSL: boolean;
-};
 
 const STORAGE_PROVIDER_LABELS: Record<string, string> = {
   local: '本地存储',
@@ -81,19 +76,6 @@ function redisTroubleshootingHints(redisUrl: string): string[] {
     hints.push('Redis 地址格式异常，请使用 redis://host:6379 或 rediss://host:6379。');
   }
   return hints;
-}
-
-function parseStorageEndpoint(rawEndpoint: string, useSSL: boolean): StorageEndpoint {
-  const normalized = rawEndpoint.trim().replace(/\/+$/g, '');
-  const endpointUrl = new URL(
-    /^[a-z][a-z\d+.-]*:\/\//i.test(normalized) ? normalized : `${useSSL ? 'https' : 'http'}://${normalized}`,
-  );
-  const port = endpointUrl.port ? Number(endpointUrl.port) : undefined;
-  return {
-    endPoint: endpointUrl.hostname,
-    port: Number.isFinite(port) ? port : undefined,
-    useSSL: endpointUrl.protocol === 'https:',
-  };
 }
 
 async function readableToString(stream: NodeJS.ReadableStream): Promise<string> {
@@ -213,64 +195,47 @@ export async function testStorageConnectivity(settings: Record<string, unknown>)
     }
   }
 
-  const endpoint = settingString(settings, 'storage_endpoint');
-  const bucket = settingString(settings, 'storage_bucket');
-  const accessKey = settingString(settings, 'storage_access_key_id');
-  const secretKey = settingString(settings, 'storage_access_key_secret');
-  const region = settingString(settings, 'storage_region');
+  const storage = readStorageSettings(settings);
   const missing = [
-    !endpoint ? 'Endpoint' : '',
-    !bucket ? 'Bucket' : '',
-    !accessKey ? 'Access Key ID' : '',
-    !secretKey ? 'Access Key Secret' : '',
+    !storage.endpoint ? 'Endpoint' : '',
+    !storage.bucket ? 'Bucket' : '',
+    !storage.accessKey ? 'Access Key ID' : '',
+    !storage.secretKey ? 'Access Key Secret' : '',
   ].filter(Boolean);
 
   if (missing.length > 0) {
     return result('error', `${providerLabel} 配置不完整`, [`缺少：${missing.join('、')}`], { provider: providerLabel });
   }
 
-  const parsedEndpoint = parseStorageEndpoint(endpoint, settingBoolean(settings, 'storage_use_ssl', true));
+  const endpointDisplay = `${storage.useSSL ? 'https' : 'http'}://${storage.endpoint}${storage.port ? `:${storage.port}` : ''}`;
   let uploaded = false;
   try {
-    const Minio = (await import('minio')).default;
-    const client = new Minio.Client({
-      endPoint: parsedEndpoint.endPoint,
-      port: parsedEndpoint.port,
-      useSSL: parsedEndpoint.useSSL,
-      accessKey,
-      secretKey,
-      region: region || undefined,
-      pathStyle: settingBoolean(settings, 'storage_force_path_style', false),
-    });
+    const client = await createS3Client(storage);
 
-    const exists = await client.bucketExists(bucket);
+    const exists = await client.bucketExists(storage.bucket);
     if (!exists) {
-      return result('error', `${providerLabel} Bucket 不存在或无权访问`, [`Bucket：${bucket}`], {
+      return result('error', `${providerLabel} Bucket 不存在或无权访问`, [`Bucket：${storage.bucket}`], {
         provider: providerLabel,
         latencyMs: Date.now() - startedAt,
       });
     }
 
-    await client.putObject(bucket, testObjectKey, Buffer.from(payload), payload.length, {
+    await client.putObject(storage.bucket, testObjectKey, Buffer.from(payload), payload.length, {
       'Content-Type': 'text/plain; charset=utf-8',
     });
     uploaded = true;
-    const objectStream = await client.getObject(bucket, testObjectKey);
+    const objectStream = await client.getObject(storage.bucket, testObjectKey);
     const saved = await readableToString(objectStream);
-    const details = [
-      `Endpoint：${parsedEndpoint.useSSL ? 'https' : 'http'}://${parsedEndpoint.endPoint}${parsedEndpoint.port ? `:${parsedEndpoint.port}` : ''}`,
-      `Bucket：${bucket}`,
-      `临时对象：${testObjectKey}`,
-    ];
+    const details = [`Endpoint：${endpointDisplay}`, `Bucket：${storage.bucket}`, `临时对象：${testObjectKey}`];
     if (settingBoolean(settings, 'storage_signed_url_enabled', false)) {
       const ttl = Math.min(
         86400,
         Math.max(60, Math.round(settingNumber(settings, 'storage_signed_url_ttl_seconds', 3600))),
       );
-      await client.presignedGetObject(bucket, testObjectKey, ttl).catch(() => undefined);
+      await client.presignedGetObject(storage.bucket, testObjectKey, ttl).catch(() => undefined);
       details.push(`签名 URL 配置已读取：${ttl} 秒`);
     }
-    await client.removeObject(bucket, testObjectKey);
+    await client.removeObject(storage.bucket, testObjectKey);
     uploaded = false;
     const latencyMs = Date.now() - startedAt;
     if (saved !== payload) {
@@ -291,17 +256,8 @@ export async function testStorageConnectivity(settings: Record<string, unknown>)
   } finally {
     if (uploaded) {
       try {
-        const Minio = (await import('minio')).default;
-        const client = new Minio.Client({
-          endPoint: parsedEndpoint.endPoint,
-          port: parsedEndpoint.port,
-          useSSL: parsedEndpoint.useSSL,
-          accessKey,
-          secretKey,
-          region: region || undefined,
-          pathStyle: settingBoolean(settings, 'storage_force_path_style', false),
-        });
-        await client.removeObject(bucket, testObjectKey);
+        const client = await createS3Client(storage);
+        await client.removeObject(storage.bucket, testObjectKey);
       } catch {
         // Best-effort cleanup only.
       }

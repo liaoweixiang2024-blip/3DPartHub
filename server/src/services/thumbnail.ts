@@ -2,6 +2,7 @@ import { createReadStream, existsSync, mkdirSync, readFileSync, writeFileSync } 
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import { extname, join, relative, resolve, sep } from 'node:path';
 import { createCanvas, loadImage } from 'canvas';
+import { persistFiles } from '../lib/storageProvider.js';
 import { readGltfAsset } from './gltfAsset.js';
 
 interface Vec3 {
@@ -546,6 +547,7 @@ export function generateThumbnail(
     const smallThumbnail = encodeCanvas(smallCanvas, THUMBNAIL_SMALL_ENCODING);
     const smallPath = thumbnailPath(outputDir, modelId, smallThumbnail.ext, true);
     writeFileSync(smallPath, smallThumbnail.buffer);
+    void persistFiles([thumbnailFilePath, smallPath]);
 
     return {
       thumbnailPath: thumbnailFilePath,
@@ -692,6 +694,7 @@ async function writeThumbnailFromImage(
   const smallThumbnail = encodeCanvas(smallCanvas, THUMBNAIL_SMALL_ENCODING);
   const smallPath = thumbnailPath(outputDir, modelId, smallThumbnail.ext, true);
   writeFileSync(smallPath, smallThumbnail.buffer);
+  await persistFiles([thumbnailFilePath, smallPath]);
 
   return {
     thumbnailPath: thumbnailFilePath,
@@ -935,6 +938,7 @@ function generatePlaceholder(
   const thumbnail = encodeCanvas(canvas);
   const thumbnailFilePath = thumbnailPath(outputDir, modelId, thumbnail.ext);
   writeFileSync(thumbnailFilePath, thumbnail.buffer);
+  void persistFiles([thumbnailFilePath, smallPath]);
   return {
     thumbnailPath: thumbnailFilePath,
     thumbnailUrl: `/static/thumbnails/${modelId}.${thumbnail.ext}`,

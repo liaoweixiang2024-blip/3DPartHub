@@ -3,6 +3,7 @@ import { readFileSync, writeFileSync, mkdirSync, statSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { join, basename } from 'node:path';
 import { normalizeCadLabel } from '../lib/filenameEncoding.js';
+import { persistFile } from '../lib/storageProvider.js';
 const require = createRequire(import.meta.url);
 const occtimportjs = require('occt-import-js');
 
@@ -617,6 +618,7 @@ export async function convertStepToGltf(
     throw new Error('模型文件中无可显示零件数据');
   }
   const gltfPath = writeGlb(json, bin, outputDir, modelId);
+  await persistFile(gltfPath);
   const originalSize = fileBuffer.length;
   const gltfSize = readFileSync(gltfPath).length;
   const cacheVersion = Date.now().toString(36);
