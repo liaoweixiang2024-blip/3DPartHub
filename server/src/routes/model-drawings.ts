@@ -12,6 +12,7 @@ import { createLogger } from '../lib/logger.js';
 import { modelDownloadFileName, modelDownloadSourceName } from '../lib/modelDownloadName.js';
 import { prisma } from '../lib/prisma.js';
 import { optionalString, requiredString } from '../lib/requestValidation.js';
+import { deleteCloudFile, keyFromStaticUrl, persistFile } from '../lib/storageProvider.js';
 import { modelDrawingMaxBytes, modelDrawingMaxSizeMb } from '../lib/uploadLimits.js';
 import { authMiddleware, verifyRequestToken, type AuthRequest } from '../middleware/auth.js';
 import { requireRole } from '../middleware/rbac.js';
@@ -112,6 +113,7 @@ router.post(
       mkdirSync(drawingDir, { recursive: true });
       const drawingPath = join(drawingDir, `${id}.pdf`);
       copyFileSync(file.path, drawingPath);
+      await persistFile(drawingPath);
       rmSync(file.path, { force: true });
 
       const drawingUrl = `/static/drawings/${id}.pdf`;
@@ -206,6 +208,11 @@ router.delete(
       await cacheDelByPrefix('cache:models:');
 
       if (drawingPath && existsSync(drawingPath)) rmSync(drawingPath, { force: true });
+      // 双删：清理云端图纸副本（best-effort）
+      const drawingUrlClean = m.drawingUrl?.split('?')[0];
+      if (drawingUrlClean?.startsWith('/static/')) {
+        await deleteCloudFile(keyFromStaticUrl(drawingUrlClean));
+      }
 
       res.json({ success: true, data: { model_id: id, drawing_url: null } });
     } catch (err: unknown) {

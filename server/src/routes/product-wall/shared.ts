@@ -28,6 +28,7 @@ import { config } from '../../lib/config.js';
 import { badRequest } from '../../lib/http.js';
 import { logger } from '../../lib/logger.js';
 import { prisma } from '../../lib/prisma.js';
+import { persistFile } from '../../lib/storageProvider.js';
 import {
   productArchiveExtractMaxFiles,
   productImageMaxSizeMb,
@@ -472,7 +473,9 @@ function scheduleProductWallPreviewBackfill() {
   previewBackfillScheduled = true;
   const timer = setTimeout(() => {
     previewBackfillScheduled = false;
-    void flushProductWallPreviewBackfillQueue();
+    void flushProductWallPreviewBackfillQueue().catch((err) =>
+      logger.warn({ err }, '[ProductWall] Preview backfill flush failed'),
+    );
   }, PRODUCT_WALL_PREVIEW_BACKFILL_DELAY_MS);
   timer.unref?.();
 }
@@ -593,6 +596,7 @@ async function generatePreviewImage(
     ctx.fillRect(0, 0, width, height);
     ctx.drawImage(image, 0, 0, width, height);
     writeFileSync(previewPath, canvas.toBuffer('image/jpeg', { quality: PRODUCT_WALL_PREVIEW_JPEG_QUALITY }));
+    await persistFile(previewPath);
     return previewUrl;
   } catch (err) {
     logger.warn({ err, sourcePath }, '[ProductWall] Preview generation failed');
@@ -725,6 +729,7 @@ export async function createItemsFromUploadedFiles(
     const targetPath = join(PRODUCT_WALL_DIR, filename);
     if (image.sourcePath) renameSync(image.sourcePath, targetPath);
     else if (image.buffer) writeFileSync(targetPath, image.buffer);
+    await persistFile(targetPath);
     const imageUrl = `/static/product-wall/${filename}`;
     const previewUrl = (await generatePreviewImage(targetPath, imageUrl)) || imageUrl;
     const title = safeTitle(req.body?.title, image.title || '产品图片');
@@ -785,6 +790,7 @@ export async function createItemFromRemoteUrl(req: AuthRequest, res: Response, s
         createMaxBytesTransform(maxBytes || FALLBACK_MAX_IMAGE_BYTES),
         createWriteStream(filePath),
       );
+      await persistFile(filePath);
       const imageUrl = `/static/product-wall/${filename}`;
       const previewUrl = (await generatePreviewImage(filePath, imageUrl)) || imageUrl;
       const title = safeTitle(req.body?.title || parsedUrl.pathname.split('/').pop(), '链接图片');

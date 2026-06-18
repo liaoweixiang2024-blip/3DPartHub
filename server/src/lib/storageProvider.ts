@@ -160,6 +160,8 @@ class S3Storage {
     const client = await this.getClient();
     const metaData: Record<string, string> = {};
     if (contentType) metaData['Content-Type'] = contentType;
+    // fPutObject 由 minio 客户端内部自动分块（默认 64MB 起步），storage_upload_multipart_mb
+    // 设置目前无法通过 fPutObject API 传入，仅作记录；如需自定义分块大小需改用底层分块上传 API。
     await client.fPutObject(this.settings.bucket, this.deriveKey(localPath), localPath, metaData);
   }
 
@@ -247,7 +249,19 @@ const staticDirAbs = () => resolve(process.cwd(), config.staticDir);
 let cached: { signature: string; provider: S3Storage } | null = null;
 
 function settingsSignature(s: StorageSettings): string {
-  return JSON.stringify([s.provider, s.endpoint, s.port, s.useSSL, s.region, s.bucket, s.accessKey, s.pathStyle]);
+  // secretKey 必须纳入签名：仅轮换 secret（access key 不变）时也要重建客户端，
+  // 否则会用旧凭证命中缓存。
+  return JSON.stringify([
+    s.provider,
+    s.endpoint,
+    s.port,
+    s.useSSL,
+    s.region,
+    s.bucket,
+    s.accessKey,
+    s.secretKey,
+    s.pathStyle,
+  ]);
 }
 
 /**
@@ -312,7 +326,7 @@ export async function persistFile(localPath: string, contentType?: string): Prom
   }
 }
 
-/** 批量双写。 */
+/** 批量双写。并发度受 storage_upload_concurrency 控制（默认 4，钳 1-16）。 */
 export async function persistFiles(localPaths: Array<string | null | undefined>): Promise<void> {
   let provider;
   try {
@@ -322,14 +336,26 @@ export async function persistFiles(localPaths: Array<string | null | undefined>)
     return;
   }
   if (!provider) return;
-  for (const localPath of localPaths) {
-    if (!localPath) continue;
-    try {
-      await provider.uploadFile(localPath, guessContentType(localPath));
-    } catch (error) {
-      logger.error({ err: error, file: basename(localPath) }, 'cloud persist failed (local copy intact)');
-    }
+  const prov = provider;
+  const paths = localPaths.filter((p): p is string => Boolean(p));
+  if (!paths.length) return;
+  const concurrency = resolveUploadConcurrency((await loadAllSettings()).storage_upload_concurrency);
+  for (let i = 0; i < paths.length; i += concurrency) {
+    await Promise.all(
+      paths.slice(i, i + concurrency).map(async (localPath) => {
+        try {
+          await prov.uploadFile(localPath, guessContentType(localPath));
+        } catch (error) {
+          logger.error({ err: error, file: basename(localPath) }, 'cloud persist failed (local copy intact)');
+        }
+      }),
+    );
   }
+}
+
+function resolveUploadConcurrency(value: unknown): number {
+  const n = Number(value);
+  return Number.isFinite(n) && n >= 1 ? Math.min(16, Math.floor(n)) : 4;
 }
 
 /** 双删：从云端删除（provider 为 local 时 no-op）。失败只记日志。 */
@@ -372,7 +398,14 @@ export async function resolveCloudObject(key: string, rangeHeader?: string): Pro
 
 /** 程序启动时打印对象存储模式（仅日志，不做网络调用；连通性由设置页测试按钮验证）。 */
 export async function logStorageMode(): Promise<void> {
-  const settings = readStorageSettings(await loadAllSettings());
+  // 启动期 prisma 可能尚未就绪 → loadAllSettings 会 reject；吞掉避免 unhandledRejection。
+  let settings;
+  try {
+    settings = readStorageSettings(await loadAllSettings());
+  } catch {
+    logger.info('  💾 对象存储：启动期设置不可用，暂按本地模式');
+    return;
+  }
   if (!isCloudStorageConfigured(settings)) {
     logger.info('  💾 对象存储：本地模式（未配置云端）');
     return;

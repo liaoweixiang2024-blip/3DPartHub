@@ -4,6 +4,7 @@ import { Router, Response } from 'express';
 import multer from 'multer';
 import { config } from '../../lib/config.js';
 import { setSetting } from '../../lib/settings.js';
+import { persistFile } from '../../lib/storageProvider.js';
 import { authMiddleware, type AuthRequest } from '../../middleware/auth.js';
 import { adminOnly } from './common.js';
 
@@ -76,6 +77,7 @@ export function createSettingsAssetsRouter() {
       const finalPath = join(targetDir, finalName);
       // Use copy+rm instead of rename to avoid EXDEV cross-device error in Docker
       copyFileSync(file.path, finalPath);
+      await persistFile(finalPath);
       rmSync(file.path, { force: true });
 
       // Build URL path: /static/<subdir>/<filename>

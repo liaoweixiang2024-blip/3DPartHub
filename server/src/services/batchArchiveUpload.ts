@@ -19,6 +19,7 @@ import { normalizeUploadFilename } from '../lib/filenameEncoding.js';
 import { createLogger } from '../lib/logger.js';
 import { modelDownloadBaseName } from '../lib/modelDownloadName.js';
 import { conversionQueue } from '../lib/queue.js';
+import { persistFile } from '../lib/storageProvider.js';
 import {
   batchArchiveMaxBytes,
   batchArchiveMaxSizeMb,
@@ -346,6 +347,7 @@ async function attachDrawingFromBuffer(
     const drawingDir = join(config.staticDir, 'drawings');
     mkdirSync(drawingDir, { recursive: true });
     writeFileSync(drawingPath, data);
+    await persistFile(drawingPath);
 
     await prismaClient.model.update({
       where: { id: modelId },
@@ -590,6 +592,7 @@ export async function processBatchArchiveUpload({
         results.push({ name: modelName || originalName, status: MODEL_STATUS.FAILED, error: '保存模型文件失败' });
         return null;
       }
+      await persistFile(originalDest);
 
       return queuePreparedModelFile(modelId, originalName, ext, originalDest, data.length, options);
     };
@@ -621,6 +624,7 @@ export async function processBatchArchiveUpload({
         results.push({ name: modelName || originalName, status: MODEL_STATUS.FAILED, error: '保存模型文件失败' });
         return null;
       }
+      await persistFile(originalDest);
 
       return queuePreparedModelFile(modelId, originalName, ext, originalDest, sourceSize, options);
     };

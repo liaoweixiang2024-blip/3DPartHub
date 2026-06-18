@@ -10,6 +10,7 @@ import multer from 'multer';
 import { DEFAULT_UPLOAD_POLICY, getBusinessConfig, type UploadPolicy } from '../../lib/businessConfig.js';
 import { config } from '../../lib/config.js';
 import { logger } from '../../lib/logger.js';
+import { persistFile } from '../../lib/storageProvider.js';
 import { authMiddleware, type AuthRequest } from '../../middleware/auth.js';
 import { adminOnly } from './common.js';
 
@@ -227,7 +228,9 @@ export function createSelectionOptionImagesRouter() {
           return;
         }
         const filename = `${randomUUID()}.${ext}`;
-        renameSync(file.path, join(optImgDir, filename));
+        const targetPath = join(optImgDir, filename);
+        renameSync(file.path, targetPath);
+        await persistFile(targetPath);
         const url = `/static/option-images/${filename}`;
         res.json({ url });
       } catch (err) {
@@ -275,7 +278,9 @@ export function createSelectionOptionImagesRouter() {
         }
 
         const filename = `${randomUUID()}.${ext}`;
-        renameSync(file.path, join(productAssetDir, filename));
+        const targetPath = join(productAssetDir, filename);
+        renameSync(file.path, targetPath);
+        await persistFile(targetPath);
         res.json({
           url: `/static/selection-assets/${filename}`,
           type: isImage ? 'image' : 'pdf',
@@ -355,6 +360,7 @@ export function createSelectionOptionImagesRouter() {
 
           if (!resp.body) throw new Error('EMPTY_REMOTE_IMAGE_BODY');
           await pipeline(resp.body, createMaxBytesTransform(maxBytes), createWriteStream(filePath));
+          await persistFile(filePath);
           saved = true;
 
           const resultUrl = `/static/option-images/${filename}`;

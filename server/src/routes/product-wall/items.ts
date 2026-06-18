@@ -1,5 +1,6 @@
 import { Router, Response } from 'express';
 import { prisma } from '../../lib/prisma.js';
+import { deleteCloudFiles, keyFromStaticUrl } from '../../lib/storageProvider.js';
 import { authMiddleware, type AuthRequest } from '../../middleware/auth.js';
 import {
   requireAdmin,
@@ -222,6 +223,12 @@ export function createItemRouter() {
         await prisma.productWallImage.delete({ where: { id } });
         removeManagedImage(target.imageUrl);
         removeManagedImage(target.previewImageUrl);
+        // 双删：清理云端主图 + 预览副本（best-effort）
+        await deleteCloudFiles(
+          [target.imageUrl, target.previewImageUrl]
+            .filter((u): u is string => u != null && u.startsWith('/static/'))
+            .map((u) => keyFromStaticUrl(u.split('?')[0])),
+        );
         res.json({ ok: true });
         void invalidateProductWallCache();
       } catch (err) {

@@ -6,6 +6,7 @@ import { cacheDelByPrefix, cacheDel } from '../../lib/cache.js';
 import { config } from '../../lib/config.js';
 import { logger } from '../../lib/logger.js';
 import { MAX_MODEL_PAGE, modelTextSearchWhere, normalizeSearchParam, numericQuery } from '../../lib/searchQuery.js';
+import { persistFile } from '../../lib/storageProvider.js';
 import { authMiddleware, type AuthRequest } from '../../middleware/auth.js';
 import { requireRole } from '../../middleware/rbac.js';
 import { mutationLimiter } from '../../middleware/security.js';
@@ -778,6 +779,7 @@ export function createModelManagementRouter({ prisma, metadataDir, getMeta, save
         const thumbPath = join(thumbDir, `${id}.${ext}`);
 
         copyFileSync(file.path, thumbPath);
+        await persistFile(thumbPath);
         rmSync(file.path, { force: true });
 
         const ts = Date.now();
