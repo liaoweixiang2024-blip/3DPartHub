@@ -468,7 +468,7 @@ function verifyDeployHealthSecurityConfigWiring() {
   );
   assertIncludes(
     'scripts/verify-deploy-health-report.mjs',
-    'API 主进程非 root 运行',
+    'API 应用进程',
     'deploy report verifier must require API main process non-root checks',
   );
   assertIncludes(
@@ -478,12 +478,12 @@ function verifyDeployHealthSecurityConfigWiring() {
   );
   assertIncludes(
     'docs/部署健康验收清单.md',
-    'API 主进程',
+    'API 应用进程',
     'deployment checklist must document API main process user checks',
   );
   assertIncludes(
     'docs/企业级改进验收状态.md',
-    'API 主进程',
+    'API 应用进程',
     'enterprise status must document API main process user checks',
   );
   assertIncludes(
