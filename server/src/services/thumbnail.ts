@@ -2,6 +2,7 @@ import { createReadStream, existsSync, mkdirSync, readFileSync, writeFileSync } 
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import { extname, join, relative, resolve, sep } from 'node:path';
 import { createCanvas, loadImage } from 'canvas';
+import { getCachedSettings } from '../lib/settings.js';
 import { persistFiles } from '../lib/storageProvider.js';
 import { readGltfAsset } from './gltfAsset.js';
 
@@ -92,24 +93,67 @@ const THUMBNAIL_FILL_LIGHT: Vec3 = { x: -0.5, y: 0.28, z: -0.25 };
 const THUMBNAIL_BASE_COLOR = { r: 174, g: 177, b: 181 };
 const THUMB_JPEG_QUALITY = 0.88;
 const THUMB_SMALL_JPEG_QUALITY = 0.82;
-const THUMBNAIL_ENCODING: Array<{ ext: 'jpg' | 'png'; mime: 'image/jpeg' | 'image/png'; quality?: number }> = [
-  { ext: 'jpg', mime: 'image/jpeg', quality: THUMB_JPEG_QUALITY },
-  { ext: 'png', mime: 'image/png' },
-];
-const THUMBNAIL_SMALL_ENCODING: Array<{ ext: 'jpg' | 'png'; mime: 'image/jpeg' | 'image/png'; quality?: number }> = [
-  { ext: 'jpg', mime: 'image/jpeg', quality: THUMB_SMALL_JPEG_QUALITY },
-  { ext: 'png', mime: 'image/png' },
-];
 
-function encodeCanvas(canvas: ReturnType<typeof createCanvas>, encodings = THUMBNAIL_ENCODING) {
-  for (const encoding of encodings) {
-    const buffer =
-      encoding.mime === 'image/jpeg'
-        ? canvas.toBuffer('image/jpeg', { quality: encoding.quality ?? THUMB_JPEG_QUALITY })
-        : canvas.toBuffer('image/png');
-    if (Buffer.isBuffer(buffer) && buffer.length > 0) return { buffer, ext: encoding.ext };
+type ThumbnailFormat = 'webp' | 'jpg' | 'png';
+type EncodingAttempt = {
+  ext: ThumbnailFormat;
+  mime: 'image/webp' | 'image/jpeg' | 'image/png';
+  quality?: number;
+};
+
+/**
+ * 读后台图片优化设置（同步快照）。image_optimize_enabled 关闭时回退到硬编码默认。
+ * - image_thumbnail_quality（0-100）→ JPEG quality（钳 0.1-0.95）
+ * - image_webp_enabled → 优先输出 webp（运行环境不支持时自动回退 jpg/png）
+ * 返回大图/小图两档质量，便于 encodeCanvas 区分。
+ */
+function readImageEncodingSettings(): { quality: number; smallQuality: number; webp: boolean } {
+  const s = getCachedSettings();
+  if (s.image_optimize_enabled === false) {
+    return { quality: THUMB_JPEG_QUALITY, smallQuality: THUMB_SMALL_JPEG_QUALITY, webp: false };
   }
-  throw new Error('缩略图编码失败：当前运行环境不支持 JPEG/PNG 输出');
+  const qRaw = Number(s.image_thumbnail_quality);
+  const quality = Number.isFinite(qRaw) ? Math.min(0.95, Math.max(0.1, qRaw / 100)) : THUMB_JPEG_QUALITY;
+  return {
+    quality,
+    smallQuality: Math.min(quality, THUMB_SMALL_JPEG_QUALITY),
+    webp: s.image_webp_enabled !== false,
+  };
+}
+
+/**
+ * 同步把 canvas 编码为 Buffer。node-canvas 的类型未把 'image/webp' 纳入 mime 联合，
+ * 这里放宽类型；运行时若未编译 webp 支持会抛错，由调用方 try/catch 回退到 jpg/png。
+ */
+function toCanvasBuffer(canvas: ReturnType<typeof createCanvas>, mime: string, quality?: number): Buffer {
+  const c = canvas as unknown as { toBuffer(m: string, opts?: { quality?: number }): Buffer };
+  return (mime === 'image/jpeg' || mime === 'image/webp') && quality !== undefined
+    ? c.toBuffer(mime, { quality })
+    : c.toBuffer(mime);
+}
+
+function encodeCanvas(canvas: ReturnType<typeof createCanvas>, small = false): { buffer: Buffer; ext: string } {
+  const { quality, smallQuality, webp } = readImageEncodingSettings();
+  const q = small ? smallQuality : quality;
+  const attempts: EncodingAttempt[] = webp
+    ? [
+        { ext: 'webp', mime: 'image/webp' },
+        { ext: 'jpg', mime: 'image/jpeg', quality: q },
+        { ext: 'png', mime: 'image/png' },
+      ]
+    : [
+        { ext: 'jpg', mime: 'image/jpeg', quality: q },
+        { ext: 'png', mime: 'image/png' },
+      ];
+  for (const attempt of attempts) {
+    try {
+      const buffer = toCanvasBuffer(canvas, attempt.mime, attempt.quality ?? q);
+      if (Buffer.isBuffer(buffer) && buffer.length > 0) return { buffer, ext: attempt.ext };
+    } catch {
+      // 当前编码不可用（如未编译 webp 支持）→ 尝试下一个
+    }
+  }
+  throw new Error('缩略图编码失败：当前运行环境不支持 JPEG/PNG/WebP 输出');
 }
 
 function thumbnailPath(outputDir: string, modelId: string, ext: string, small = false) {
@@ -327,8 +371,16 @@ export function generateThumbnail(
   height = 512,
   options: ThumbnailGenerationOptions = {},
 ): ThumbnailResult {
-  width = Math.min(width || 512, 1024);
-  height = Math.min(height || 512, 1024);
+  // image_large_max_width 作为缩略图最大宽度上限（默认 2560，钳到 [256,1024]）：
+  // 默认值不影响现状（512），管理员调小则缩略图变小。
+  const s = getCachedSettings();
+  const capRaw = Number(s.image_large_max_width);
+  const maxWidthCap =
+    Number.isFinite(capRaw) && s.image_optimize_enabled !== false
+      ? Math.min(1024, Math.max(256, Math.round(capRaw)))
+      : 1024;
+  width = Math.min(width || 512, 1024, maxWidthCap);
+  height = Math.min(height || 512, 1024, maxWidthCap);
   mkdirSync(outputDir, { recursive: true });
 
   try {
@@ -544,7 +596,7 @@ export function generateThumbnail(
     const smallCanvas = createCanvas(256, 256);
     const smallCtx = smallCanvas.getContext('2d');
     smallCtx.drawImage(canvas, 0, 0, width, height, 0, 0, 256, 256);
-    const smallThumbnail = encodeCanvas(smallCanvas, THUMBNAIL_SMALL_ENCODING);
+    const smallThumbnail = encodeCanvas(smallCanvas, true);
     const smallPath = thumbnailPath(outputDir, modelId, smallThumbnail.ext, true);
     writeFileSync(smallPath, smallThumbnail.buffer);
     void persistFiles([thumbnailFilePath, smallPath]);
@@ -691,7 +743,7 @@ async function writeThumbnailFromImage(
   const smallCanvas = createCanvas(256, 256);
   const smallCtx = smallCanvas.getContext('2d');
   smallCtx.drawImage(canvas, 0, 0, width, height, 0, 0, 256, 256);
-  const smallThumbnail = encodeCanvas(smallCanvas, THUMBNAIL_SMALL_ENCODING);
+  const smallThumbnail = encodeCanvas(smallCanvas, true);
   const smallPath = thumbnailPath(outputDir, modelId, smallThumbnail.ext, true);
   writeFileSync(smallPath, smallThumbnail.buffer);
   await persistFiles([thumbnailFilePath, smallPath]);
@@ -931,7 +983,7 @@ function generatePlaceholder(
   const smallCanvas = createCanvas(Math.round(width / 2), Math.round(height / 2));
   const smallCtx = smallCanvas.getContext('2d');
   smallCtx.drawImage(canvas, 0, 0, width, height, 0, 0, Math.round(width / 2), Math.round(height / 2));
-  const smallThumbnail = encodeCanvas(smallCanvas, THUMBNAIL_SMALL_ENCODING);
+  const smallThumbnail = encodeCanvas(smallCanvas, true);
   const smallPath = thumbnailPath(outputDir, modelId, smallThumbnail.ext, true);
   writeFileSync(smallPath, smallThumbnail.buffer);
 

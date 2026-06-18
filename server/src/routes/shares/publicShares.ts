@@ -2,10 +2,10 @@ import { existsSync } from 'node:fs';
 import bcrypt from 'bcryptjs';
 import { Router, Request, Response } from 'express';
 import { sendAcceleratedFile } from '../../lib/acceleratedDownload.js';
-import { cacheDel, cacheGetOrSet, TTL, redis } from '../../lib/cache.js';
+import { cacheDel, cacheGetOrSet, resolveCacheTtl, TTL, redis } from '../../lib/cache.js';
 import { createProtectedResourceToken } from '../../lib/downloadTokenStore.js';
 import { prisma } from '../../lib/prisma.js';
-import { getSetting } from '../../lib/settings.js';
+import { getAllSettings, getSetting } from '../../lib/settings.js';
 import { withAssetVersion } from '../../services/gltfAsset.js';
 import { resolveDbModelDownloadTarget } from '../../services/modelDownloadTarget.js';
 import { asSingleString, hasShareAccess, SHARE_ACCESS_TOKEN_TTL_MS } from './common.js';
@@ -47,9 +47,10 @@ export function createPublicSharesRouter() {
       return;
     }
 
+    const detailTtl = resolveCacheTtl((await getAllSettings()).cache_model_detail_ttl_seconds, TTL.MODEL_DETAIL);
     const { value: shareRaw } = await cacheGetOrSet<ShareInfoCache | null>(
       `cache:share:info:${token}`,
-      TTL.MODEL_DETAIL,
+      detailTtl,
       async () => {
         const result = await prisma.shareLink.findUnique({
           where: { token },
@@ -275,6 +276,8 @@ export function createPublicSharesRouter() {
       fileName: target.fileName,
       contentType: 'application/octet-stream',
       disposition: 'attachment',
+      // 计数下载（受分享下载限额约束）不缓存，确保每次下载都打点、限额准确。
+      cacheControl: 'private, no-store',
     });
   });
 

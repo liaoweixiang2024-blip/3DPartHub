@@ -1,6 +1,6 @@
 import type { Prisma } from '@prisma/client';
 import { Router, Response } from 'express';
-import { cacheGetOrSet, TTL } from '../lib/cache.js';
+import { cacheGetOrSet, resolveCacheTtl, TTL } from '../lib/cache.js';
 import { prisma } from '../lib/prisma.js';
 import {
   MAX_MODEL_PAGE,
@@ -10,6 +10,7 @@ import {
   numericQuery,
   searchCacheToken,
 } from '../lib/searchQuery.js';
+import { getAllSettings } from '../lib/settings.js';
 import { requireBrowseAccess } from '../middleware/browseAccess.js';
 import { withAssetVersion } from '../services/gltfAsset.js';
 import { MODEL_STATUS } from '../services/modelStatus.js';
@@ -49,7 +50,8 @@ router.get('/api/search', async (req, res: Response) => {
   ].join(':');
 
   try {
-    const { value: responseData, hit } = await cacheGetOrSet(cacheKey, TTL.MODELS_SEARCH, async () => {
+    const searchTtl = resolveCacheTtl((await getAllSettings()).cache_search_ttl_seconds, TTL.MODELS_SEARCH);
+    const { value: responseData, hit } = await cacheGetOrSet(cacheKey, searchTtl, async () => {
       const where: Prisma.ModelWhereInput = { status: MODEL_STATUS.COMPLETED };
       const andConditions: Prisma.ModelWhereInput[] = [];
 

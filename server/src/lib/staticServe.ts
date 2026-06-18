@@ -2,11 +2,20 @@
 // 云端 miss / 出错 / 未配云端时 next() 交给 express.static 走本地兜底。
 import type { NextFunction, Request, Response } from 'express';
 import { logger } from './logger.js';
+import { getCachedSettings } from './settings.js';
 import { resolveCloudObject } from './storageProvider.js';
 
 function cacheMaxAgeSeconds(subPath: string): number {
-  // 缩略图长期缓存；模型/原始文件缓存 1 天（与原 express.static 行为一致）。
-  return subPath.includes('/thumbnails/') ? 365 * 24 * 3600 : 24 * 3600;
+  // 读后台 max-age 天数设置（同步快照）。缩略图 → image_cache_max_age_days；
+  // 其余 /static → cache_static_asset_max_age_days。设置缺失/非法时回退原硬编码默认。
+  const s = getCachedSettings();
+  const dayToSeconds = (v: unknown, fallbackDays: number) => {
+    const n = Number(v);
+    return (Number.isFinite(n) && n >= 0 ? Math.min(n, 3650) : fallbackDays) * 24 * 3600;
+  };
+  return subPath.includes('/thumbnails/')
+    ? dayToSeconds(s.image_cache_max_age_days, 365)
+    : dayToSeconds(s.cache_static_asset_max_age_days, 1);
 }
 
 export async function cloudFirstStatic(req: Request, res: Response, next: NextFunction): Promise<void> {

@@ -1,12 +1,18 @@
 import { Router } from 'express';
 import { getBusinessConfig } from '../../lib/businessConfig.js';
-import { cacheGetOrSet, TTL } from '../../lib/cache.js';
+import { cacheGetOrSet, resolveCacheTtl, TTL } from '../../lib/cache.js';
 import { logger } from '../../lib/logger.js';
 import { buildModelMatchMap } from '../../lib/modelMatch.js';
 import { prisma } from '../../lib/prisma.js';
 import { numericValue, optionalString, stringArray } from '../../lib/requestValidation.js';
 import { normalizeSearchParam, searchCacheToken } from '../../lib/searchQuery.js';
+import { getAllSettings } from '../../lib/settings.js';
 import { requireBrowseAccess } from '../../middleware/browseAccess.js';
+
+/** 选型缓存 TTL：读后台 cache_selection_ttl_seconds（秒），非法回退 TTL.SELECTION_*。 */
+async function selectionCacheTtl(): Promise<number> {
+  return resolveCacheTtl((await getAllSettings()).cache_selection_ttl_seconds, TTL.SELECTION_PRODUCTS);
+}
 
 function cacheKeyPart(value: string): string {
   return encodeURIComponent(value);
@@ -138,7 +144,7 @@ export function createSelectionPublicRouter() {
       const { selectionEnableMatch } = await getBusinessConfig();
 
       const cacheKey = `cache:selections:search:${cacheKeyPart(search)}:${page}:${pageSize}`;
-      const { value: result } = await cacheGetOrSet(cacheKey, TTL.SELECTION_PRODUCTS, async () => {
+      const { value: result } = await cacheGetOrSet(cacheKey, await selectionCacheTtl(), async () => {
         const where = {
           OR: [
             { name: { contains: search, mode: 'insensitive' as const } },
@@ -199,7 +205,7 @@ export function createSelectionPublicRouter() {
     try {
       const { value: categories, hit } = await cacheGetOrSet(
         'cache:selections:categories',
-        TTL.SELECTION_CATEGORIES,
+        await selectionCacheTtl(),
         async () => {
           const rows = await prisma.selectionCategory.findMany({
             orderBy: { sortOrder: 'asc' },
@@ -283,7 +289,7 @@ export function createSelectionPublicRouter() {
 
       const { value: result, hit } = await cacheGetOrSet(
         cacheKey,
-        TTL.SELECTION_PRODUCTS,
+        await selectionCacheTtl(),
         async () => {
           const category = await prisma.selectionCategory.findUnique({
             where: { slug },
@@ -446,7 +452,7 @@ export function createSelectionPublicRouter() {
       const slug = req.params.slug as string;
       const { value: category, hit } = await cacheGetOrSet(
         `cache:selections:category:${cacheKeyPart(slug)}`,
-        TTL.SELECTION_CATEGORIES,
+        await selectionCacheTtl(),
         () => prisma.selectionCategory.findUnique({ where: { slug } }),
         { lockTtlMs: 10_000, waitTimeoutMs: 5_000, pollMs: 50 },
       );
@@ -504,7 +510,7 @@ export function createSelectionPublicRouter() {
 
       const { value: result, hit } = await cacheGetOrSet(
         cacheKey,
-        TTL.SELECTION_PRODUCTS,
+        await selectionCacheTtl(),
         async () => {
           const category = await prisma.selectionCategory.findUnique({ where: { slug }, select: { id: true } });
           if (!category) return null;

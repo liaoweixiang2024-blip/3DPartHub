@@ -91,8 +91,10 @@ router.get('/api/model-groups', authMiddleware, requireRole('ADMIN'), async (_re
     return;
   }
   try {
-    const { cacheGetOrSet, TTL } = await import('../lib/cache.js');
-    const result = await cacheGetOrSet('cache:model-groups:list', TTL.MODELS_LIST, async () => {
+    const { cacheGetOrSet, TTL, resolveCacheTtl } = await import('../lib/cache.js');
+    const { getAllSettings } = await import('../lib/settings.js');
+    const listTtl = resolveCacheTtl((await getAllSettings()).cache_model_list_ttl_seconds, TTL.MODELS_LIST);
+    const result = await cacheGetOrSet('cache:model-groups:list', listTtl, async () => {
       const groups = await db.modelGroup.findMany({
         include: {
           primary: { select: { id: true, name: true, thumbnailUrl: true } },

@@ -7,10 +7,11 @@ import compression from 'compression';
 import cors from 'cors';
 import express from 'express';
 import { startBackupScheduler } from './lib/backup.js';
+import { cdnUrlRewrite } from './lib/cdnRewrite.js';
 import { config } from './lib/config.js';
 import { logger, createLogger } from './lib/logger.js';
 import { prisma } from './lib/prisma.js';
-import { getSetting, initDefaultSettings } from './lib/settings.js';
+import { getAllSettings, getSetting, initDefaultSettings } from './lib/settings.js';
 import { cloudFirstStatic } from './lib/staticServe.js';
 import { logStorageMode } from './lib/storageProvider.js';
 import { getVerifiedRequestUser } from './middleware/auth.js';
@@ -337,6 +338,10 @@ app.use(
   }),
 );
 
+// CDN 响应改写：必须挂在 responseHandler 之前（成为最内层 res.json 包装），
+// 这样 responseHandler 的信封包装先执行，CDN 改写作用于最终 payload 里的 /static/ URL。
+app.use(cdnUrlRewrite);
+
 // Global response wrapper
 app.use(responseHandler);
 
@@ -377,12 +382,13 @@ app.use(batchDownloadsRouter);
 // Model count — must be registered before modelsRouter to avoid /api/models/:id catching "count"
 app.get('/api/models/count', async (req, res) => {
   try {
-    const { cacheGetOrSet, TTL } = await import('./lib/cache.js');
+    const { cacheGetOrSet, TTL, resolveCacheTtl } = await import('./lib/cache.js');
     const mod = await import('./lib/prisma.js');
     const { MODEL_STATUS } = await import('./services/modelStatus.js');
     const grouped = req.query.grouped !== 'false';
     const cacheKey = grouped ? 'cache:models:count:grouped' : 'cache:models:count:all';
-    const { value, hit } = await cacheGetOrSet(cacheKey, TTL.MODELS_LIST, async () => {
+    const listTtl = resolveCacheTtl((await getAllSettings()).cache_model_list_ttl_seconds, TTL.MODELS_LIST);
+    const { value, hit } = await cacheGetOrSet(cacheKey, listTtl, async () => {
       const where: Prisma.ModelWhereInput = { status: MODEL_STATUS.COMPLETED };
       if (grouped) {
         const { groupedVisibleModelWhere } = await import('./services/modelVisibility.js');
@@ -601,7 +607,7 @@ app.listen(PORT, async () => {
 
   // Report memory usage to primary process periodically
   if (cluster.isWorker) {
-    setInterval(() => {
+    const memReportTimer = setInterval(() => {
       try {
         const mem = process.memoryUsage();
         process.send?.({ type: 'memory', rss: mem.rss });
@@ -609,5 +615,6 @@ app.listen(PORT, async () => {
         logger.debug({ err }, 'Failed to report memory usage to primary process');
       }
     }, 60000);
+    memReportTimer.unref?.();
   }
 });

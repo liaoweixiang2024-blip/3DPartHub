@@ -428,6 +428,15 @@ export function clearSettingsCache(): void {
   cacheAt = 0;
 }
 
+/**
+ * 同步读取内存里的设置快照（供 generateThumbnail / sendAcceleratedFile / CDN 中间件等
+ * 同步消费者使用）。快照尚未加载（启动初期）或被失效时返回空对象 —— 调用方需对缺失值
+ * 自行回退到默认。设置变更通过 redis 广播在 30s 内（CACHE_TTL）刷新到所有 worker。
+ */
+export function getCachedSettings(): Record<string, unknown> {
+  return cache ?? {};
+}
+
 export async function getAllSettings(options: { forceRefresh?: boolean } = {}): Promise<Record<string, unknown>> {
   const now = Date.now();
   if (!options.forceRefresh && cache && now - cacheAt < CACHE_TTL) return cache;

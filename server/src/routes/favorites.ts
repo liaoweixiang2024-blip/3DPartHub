@@ -7,7 +7,7 @@ import { getErrorMessage } from '../lib/http.js';
 import { logger } from '../lib/logger.js';
 import { prisma } from '../lib/prisma.js';
 import { requestSiteUrl } from '../lib/requestSiteUrl.js';
-import { getSetting } from '../lib/settings.js';
+import { getAllSettings, getSetting } from '../lib/settings.js';
 import { authMiddleware, type AuthRequest } from '../middleware/auth.js';
 import { shouldAttachExternalGltfBin, shouldDownloadOriginalBatchFormat } from '../services/batchArchive.js';
 import { withAssetVersion } from '../services/gltfAsset.js';
@@ -80,8 +80,9 @@ function readBatchModelIds(body: unknown): string[] {
 router.get('/api/favorites', authMiddleware, async (req: AuthRequest, res: Response) => {
   try {
     const cacheKey = `cache:favorites:${req.user!.userId}`;
-    const { cacheGetOrSet, TTL } = await import('../lib/cache.js');
-    const { value: favorites } = await cacheGetOrSet(cacheKey, TTL.MODELS_LIST, async () => {
+    const { cacheGetOrSet, TTL, resolveCacheTtl } = await import('../lib/cache.js');
+    const listTtl = resolveCacheTtl((await getAllSettings()).cache_model_list_ttl_seconds, TTL.MODELS_LIST);
+    const { value: favorites } = await cacheGetOrSet(cacheKey, listTtl, async () => {
       const rows = await prisma.favorite.findMany({
         where: { userId: req.user!.userId, modelId: { not: '' } },
         take: 200,

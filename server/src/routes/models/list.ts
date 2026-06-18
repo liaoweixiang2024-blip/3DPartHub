@@ -1,7 +1,7 @@
 import type { Prisma, PrismaClient } from '@prisma/client';
 import { Router, Request, Response } from 'express';
 import { getBusinessConfig } from '../../lib/businessConfig.js';
-import { cacheGetOrSet, TTL } from '../../lib/cache.js';
+import { cacheGetOrSet, resolveCacheTtl, TTL } from '../../lib/cache.js';
 import { logger } from '../../lib/logger.js';
 import {
   MAX_MODEL_PAGE,
@@ -11,6 +11,7 @@ import {
   numericQuery,
   searchCacheToken,
 } from '../../lib/searchQuery.js';
+import { getAllSettings } from '../../lib/settings.js';
 import { requireBrowseAccess } from '../../middleware/browseAccess.js';
 import { withAssetVersion } from '../../services/gltfAsset.js';
 import { MODEL_STATUS } from '../../services/modelStatus.js';
@@ -47,7 +48,8 @@ export function createModelListRouter({ prisma, drawingDownloadUrl }: ModelListC
 
     if (prisma) {
       try {
-        const { value: responseData, hit } = await cacheGetOrSet(cacheKey, TTL.MODELS_LIST, async () => {
+        const listTtl = resolveCacheTtl((await getAllSettings()).cache_model_list_ttl_seconds, TTL.MODELS_LIST);
+        const { value: responseData, hit } = await cacheGetOrSet(cacheKey, listTtl, async () => {
           const where: Prisma.ModelWhereInput = { status: MODEL_STATUS.COMPLETED };
           const andConditions: Prisma.ModelWhereInput[] = [];
           const searchCond = modelTextSearchWhere(search);

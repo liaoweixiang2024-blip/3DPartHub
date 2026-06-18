@@ -2,7 +2,8 @@ import { existsSync } from 'node:fs';
 import { stat as statAsync } from 'node:fs/promises';
 import type { PrismaClient } from '@prisma/client';
 import { Router, Request, Response } from 'express';
-import { cacheGet, cacheSet, TTL } from '../../lib/cache.js';
+import { cacheGet, cacheSet, resolveCacheTtl, TTL } from '../../lib/cache.js';
+import { getAllSettings } from '../../lib/settings.js';
 import { requireBrowseAccess } from '../../middleware/browseAccess.js';
 import { withAssetVersion } from '../../services/gltfAsset.js';
 import { parseStepFileDate } from '../../services/modelFileDates.js';
@@ -41,6 +42,7 @@ export function createModelDetailRouter({
     const authPayload = await optionalVerifiedUser(req);
     const canViewUnpublished = authPayload?.role === 'ADMIN';
     const cacheKey = `cache:models:detail:${id}`;
+    const detailTtl = resolveCacheTtl((await getAllSettings()).cache_model_detail_ttl_seconds, TTL.MODEL_DETAIL);
 
     if (prisma) {
       try {
@@ -186,7 +188,7 @@ export function createModelDetailRouter({
             group: groupData,
           };
           if (m.status === MODEL_STATUS.COMPLETED) {
-            await cacheSet(cacheKey, responseData, TTL.MODEL_DETAIL);
+            await cacheSet(cacheKey, responseData, detailTtl);
           }
           res.set('X-Cache', 'MISS');
           res.json(responseData);
@@ -225,7 +227,7 @@ export function createModelDetailRouter({
       preview_meta: previewMeta,
     };
     if (m.status === MODEL_STATUS.COMPLETED) {
-      await cacheSet(cacheKey, responseData, TTL.MODEL_DETAIL);
+      await cacheSet(cacheKey, responseData, detailTtl);
     }
     res.set('X-Cache', 'MISS');
     res.json(responseData);

@@ -2,6 +2,7 @@ import { createReadStream, statSync } from 'node:fs';
 import { extname, relative, resolve, sep } from 'node:path';
 import type { Request, Response } from 'express';
 import { config } from './config.js';
+import { getCachedSettings } from './settings.js';
 
 type Disposition = 'attachment' | 'inline';
 
@@ -36,6 +37,13 @@ function contentTypeForFile(fileName: string) {
   if (ext === '.webp') return 'image/webp';
   if (ext === '.zip') return 'application/zip';
   return 'application/octet-stream';
+}
+
+/** 资源下载默认 Cache-Control：读后台 resource_cache_max_age_days（天），缺失/非法回退 300s。 */
+function defaultResourceCacheControl(): string {
+  const days = Number(getCachedSettings().resource_cache_max_age_days);
+  const seconds = Number.isFinite(days) && days >= 0 ? Math.min(days, 3650) * 24 * 3600 : 300;
+  return `private, max-age=${seconds}`;
 }
 
 function accelPathFor(filePath: string): string | null {
@@ -95,7 +103,7 @@ export function sendAcceleratedFile(
     fileName,
     contentType = contentTypeForFile(fileName),
     disposition = 'attachment',
-    cacheControl = 'private, max-age=300',
+    cacheControl = defaultResourceCacheControl(),
   } = options;
 
   const absolutePath = resolve(filePath);
@@ -130,6 +138,9 @@ export function sendAcceleratedFile(
     return;
   }
 
+  // 加速（X-Accel-Redirect）由 nginx 的 X-Accel-Available 头驱动（client/nginx.conf 显式设置）。
+  // 注意：resource_download_acceleration_enabled 设置默认 false，且 initDefaultSettings 用
+  // skipDuplicates 不可回填，若按该设置门控会关掉生产环境既有的 nginx 加速，故此处保持头驱动。
   const accelPath = req.headers['x-accel-available'] === '1' ? accelPathFor(filePath) : null;
   if (accelPath) {
     res.setHeader('X-Accel-Redirect', accelPath);

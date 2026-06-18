@@ -44,6 +44,16 @@ export const TTL = {
   SELECTION_PRODUCTS: 600, // 10 min — admin changes actively clear cache:selections:
 } as const;
 
+/**
+ * 把后台设置的 TTL 值（秒）归一为可用值：非数 → fallback；0 表示关闭缓存（cacheSet/cacheGetOrSet
+ * 见 0 即跳过）；上限 86400（1 天）。供各缓存调用点把硬编码 TTL.X 换成可配置值。
+ */
+export function resolveCacheTtl(value: unknown, fallback: number): number {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) return fallback;
+  return Math.min(86400, Math.max(0, parsed));
+}
+
 function markUnavailable() {
   available = false;
 }

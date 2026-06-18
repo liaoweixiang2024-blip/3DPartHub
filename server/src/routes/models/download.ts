@@ -215,6 +215,8 @@ export function createModelDownloadRouter({ prisma, getMeta }: ModelDownloadCont
         fileName: target.fileName,
         contentType: target.contentType,
         disposition: 'attachment',
+        // 计数下载（受每日限额约束）不缓存，确保每次下载都打点、限额准确。
+        cacheControl: 'private, no-store',
       });
     } catch (err) {
       releaseActiveDownload?.();
