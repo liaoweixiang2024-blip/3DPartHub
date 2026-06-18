@@ -876,6 +876,10 @@ export default function TempViewerPage() {
           {dragOverlay}
           {renderViewer(mobileViewerStyle, '', !mobileSheetExpanded)}
 
+          {mobileSheetExpanded ? (
+            <div className="absolute inset-0 z-20" onClick={() => setMobileSheetExpanded(false)} aria-hidden="true" />
+          ) : null}
+
           <div
             className="absolute bottom-0 left-0 right-0 z-30 flex flex-col overflow-hidden rounded-t-2xl border-t border-outline-variant/10 bg-surface-container-low shadow-bottom-panel"
             style={{
