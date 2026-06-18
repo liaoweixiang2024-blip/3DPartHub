@@ -20,9 +20,11 @@ model User {
   address            String?
   bio                String?  @db.Text
   metadata           Json?
-  mustChangePassword Boolean  @default(false) @map("must_change_password")
-  createdAt          DateTime @default(now()) @map("created_at")
-  updatedAt          DateTime @updatedAt @map("updated_at")
+  mustChangePassword Boolean   @default(false) @map("must_change_password")
+  disabled           Boolean   @default(false)
+  lastLoginAt        DateTime? @map("last_login_at")
+  createdAt          DateTime  @default(now()) @map("created_at")
+  updatedAt          DateTime  @updatedAt @map("updated_at")
 
   models                    Model[]
   modelVersions             ModelVersion[]

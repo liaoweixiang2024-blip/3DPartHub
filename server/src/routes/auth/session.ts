@@ -283,6 +283,15 @@ export function createAuthSessionRouter() {
 
       await clearLoginFailures(normalizedEmail);
 
+      // 禁用账号禁止登录（admin 在用户管理页禁用后会撤销 token，这里再兜底拦截重新登录）
+      if (user.disabled) {
+        res.status(403).json({ detail: '账号已被禁用，请联系管理员' });
+        return;
+      }
+
+      // 记录最近登录时间（best-effort，不阻塞登录）
+      prisma.user.update({ where: { id: user.id }, data: { lastLoginAt: new Date() } }).catch(() => {});
+
       const payload = { userId: user.id, role: user.role };
       const accessToken = signAccessToken(payload);
       const shouldRemember = Boolean(rememberMe);
