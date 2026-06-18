@@ -660,6 +660,15 @@ const CACHE_DRIVER_OPTIONS = [
   { value: 'off', label: '关闭缓存' },
 ];
 
+const UI_LOCALE_OPTIONS = [
+  { value: 'zh-CN', label: '简体中文' },
+  { value: 'zh-TW', label: '繁體中文' },
+  { value: 'en-US', label: 'English' },
+  { value: 'ja-JP', label: '日本語' },
+  { value: 'ko-KR', label: '한국어' },
+  { value: 'de-DE', label: 'Deutsch' },
+];
+
 const STORAGE_PROVIDER_OPTIONS = [
   { value: 'local', label: '本地存储' },
   { value: 'minio', label: 'MinIO / 私有 S3' },
@@ -826,19 +835,12 @@ const GROUPS: SettingGroup[] = [
         label: '默认界面语言',
         desc: '新访客首次打开网站时使用的语言；已有用户会优先使用自己选择的语言。',
         type: 'select',
-        options: [
-          { value: 'zh-CN', label: '简体中文' },
-          { value: 'zh-TW', label: '繁體中文' },
-          { value: 'en-US', label: 'English' },
-          { value: 'ja-JP', label: '日本語' },
-          { value: 'ko-KR', label: '한국어' },
-          { value: 'de-DE', label: 'Deutsch' },
-        ],
+        options: UI_LOCALE_OPTIONS,
       },
       {
         key: 'ui_enabled_locales',
         label: '可切换语言',
-        desc: '逗号分隔，例如 zh-CN,zh-TW,en-US,ja-JP,ko-KR,de-DE。当前内置简体中文、繁体中文、英文、日语、韩语、德语。',
+        desc: '勾选要在前台语言切换器中向用户开放的语言（默认全部开放；至少保留 1 个）。',
         type: 'text',
       },
       {
@@ -6289,6 +6291,40 @@ function Content() {
                                                   );
                                                 })}
                                               </div>
+                                            ) : item.key === 'ui_enabled_locales' ? (
+                                              <div className="flex flex-wrap gap-2">
+                                                {UI_LOCALE_OPTIONS.map((opt) => {
+                                                  const current = String(settings.ui_enabled_locales ?? '');
+                                                  const selected =
+                                                    current.trim() === ''
+                                                      ? UI_LOCALE_OPTIONS.map((o) => o.value)
+                                                      : current
+                                                          .split(',')
+                                                          .map((s) => s.trim())
+                                                          .filter(Boolean);
+                                                  const enabled = selected.includes(opt.value);
+                                                  return (
+                                                    <button
+                                                      key={opt.value}
+                                                      onClick={() => {
+                                                        if (enabled && selected.length <= 1) return;
+                                                        const next = enabled
+                                                          ? selected.filter((k) => k !== opt.value)
+                                                          : [...selected, opt.value];
+                                                        updateSetting('ui_enabled_locales', next.join(','));
+                                                      }}
+                                                      className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors border ${
+                                                        enabled
+                                                          ? 'bg-primary-container/20 text-primary-container border-primary-container/30'
+                                                          : 'bg-surface-container-highest/20 text-on-surface-variant/50 border-outline-variant/10'
+                                                      }`}
+                                                    >
+                                                      <Icon name={enabled ? 'check_circle' : 'circle'} size={14} />
+                                                      {opt.label}
+                                                    </button>
+                                                  );
+                                                })}
+                                              </div>
                                             ) : (
                                               structuredEditor ||
                                               (item.type === 'switch' ? (
@@ -6528,7 +6564,42 @@ function Content() {
                                         <p className="text-sm font-medium text-on-surface">{item.label}</p>
                                         <p className="text-xs text-on-surface-variant mt-0.5">{item.desc}</p>
                                       </div>
-                                      {structuredEditor ||
+                                      {item.key === 'ui_enabled_locales' ? (
+                                        <div className="flex flex-wrap gap-2">
+                                          {UI_LOCALE_OPTIONS.map((opt) => {
+                                            const current = String(settings.ui_enabled_locales ?? '');
+                                            const selected =
+                                              current.trim() === ''
+                                                ? UI_LOCALE_OPTIONS.map((o) => o.value)
+                                                : current
+                                                    .split(',')
+                                                    .map((s) => s.trim())
+                                                    .filter(Boolean);
+                                            const enabled = selected.includes(opt.value);
+                                            return (
+                                              <button
+                                                key={opt.value}
+                                                onClick={() => {
+                                                  if (enabled && selected.length <= 1) return;
+                                                  const next = enabled
+                                                    ? selected.filter((k) => k !== opt.value)
+                                                    : [...selected, opt.value];
+                                                  updateSetting('ui_enabled_locales', next.join(','));
+                                                }}
+                                                className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors border ${
+                                                  enabled
+                                                    ? 'bg-primary-container/20 text-primary-container border-primary-container/30'
+                                                    : 'bg-surface-container-highest/20 text-on-surface-variant/50 border-outline-variant/10'
+                                                }`}
+                                              >
+                                                <Icon name={enabled ? 'check_circle' : 'circle'} size={14} />
+                                                {opt.label}
+                                              </button>
+                                            );
+                                          })}
+                                        </div>
+                                      ) : (
+                                        structuredEditor ||
                                         (item.type === 'email-test' ? (
                                           <EmailTestPanel
                                             value={testEmailTo}
@@ -6747,7 +6818,8 @@ function Content() {
                                                 : ''
                                             }`}
                                           />
-                                        ))}
+                                        ))
+                                      )}
                                     </>
                                   )}
                                 </div>
