@@ -569,7 +569,7 @@ fi
 REPORT_FILE="$OUTPUT_DIR/deploy-health-report.txt"
 JSON_FILE="$OUTPUT_DIR/deploy-health-report.json"
 
-set -- --compose-file "$COMPOSE_FILE" --env-file "$ENV_FILE" --report "$REPORT_FILE" --json "$JSON_FILE" --show-logs
+set -- --quiet --compose-file "$COMPOSE_FILE" --env-file "$ENV_FILE" --report "$REPORT_FILE" --json "$JSON_FILE" --show-logs
 if [ -n "$PORT_OVERRIDE" ]; then
   set -- "$@" --port "$PORT_OVERRIDE"
 fi

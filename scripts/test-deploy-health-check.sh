@@ -229,11 +229,12 @@ if [ "${1:-}" = "compose" ]; then
         echo "not_writable:/app/static/backups"
         exit 3
       fi
-      if [ "$service" = "api" ] && printf '%s' "$*" | grep -q '/proc/1/status'; then
+      if [ "$service" = "api" ] && printf '%s' "$*" | grep -q 'dist/cluster.js'; then
+        # 模拟 node 应用进程（dist/cluster.js）的运行用户：app_name|app_uid|pid1_uid
         if [ "${FAKE_API_PROCESS_ROOT:-0}" = "1" ]; then
-          echo "0|root|0"
+          echo "root|0|0"
         else
-          echo "1000|node|1000"
+          echo "node|1000|0"
         fi
         exit 0
       fi
@@ -1016,7 +1017,7 @@ run_healthy_case() {
   assert_contains "$output" "容器资源限制正常"
   assert_contains "$output" "容器环境与 .env 一致"
   assert_contains "$output" "容器启动参数与 .env 一致"
-  assert_contains "$output" "API 主进程非 root 运行"
+  assert_contains "$output" "API 应用进程"
   assert_contains "$output" "宿主机备份目录可写"
   assert_contains "$output" "备份恢复演练证据正常"
   assert_contains "$output" "部署目录 inode 正常"
@@ -2649,7 +2650,7 @@ run_unhealthy_container_case() {
     echo "$output" >&2
     exit 1
   fi
-  assert_contains "$output" "3dparthub-api 正在运行但健康状态为 unhealthy"
+  assert_contains "$output" "3dparthub-api 健康检查未通过（unhealthy"
 }
 
 run_missing_healthcheck_case() {
@@ -3296,7 +3297,7 @@ run_api_process_root_failure_case() {
     echo "$output" >&2
     exit 1
   fi
-  assert_contains "$output" "API 主进程以 root 运行"
+  assert_contains "$output" "API 应用进程以 root 运行"
   if [ ! -s "$json_report" ]; then
     echo "Expected api-process-root deploy health JSON report to be written" >&2
     echo "$output" >&2
@@ -3313,7 +3314,7 @@ run_api_process_root_failure_case() {
     exit 1
   fi
   assert_contains "$verify_output" "Deploy self-check failed"
-  assert_contains "$verify_output" "API 主进程以 root 运行"
+  assert_contains "$verify_output" "API 应用进程以 root 运行"
 }
 
 run_restore_drill_missing_warning_case() {

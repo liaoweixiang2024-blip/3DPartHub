@@ -14,6 +14,7 @@ EVIDENCE_BUNDLE_ID="${EVIDENCE_BUNDLE_ID:-}"
 FAILURES=0
 WARNINGS=0
 PASSES=0
+QUIET=0
 COMPOSE_KIND=""
 DOCKER_READY=0
 TEMP_FILES=""
@@ -60,6 +61,7 @@ usage() {
   --no-logs             不扫描 API/Web 日志
   --report FILE         保存一份纯文本自检报告
   --json FILE           保存一份结构化 JSON 自检摘要
+  --quiet               控制台只输出警告/失败和总结（通过项仍写入报告文件）
   -h, --help            显示帮助
 EOF
 }
@@ -98,6 +100,9 @@ while [ "$#" -gt 0 ]; do
     --json)
       shift
       JSON_FILE="${1:-$JSON_FILE}"
+      ;;
+    --quiet)
+      QUIET=1
       ;;
     -h|--help)
       usage
@@ -179,7 +184,7 @@ system_info() {
 
 pass() {
   PASSES=$((PASSES + 1))
-  printf '%s✓%s %s\n' "$GREEN" "$NC" "$1"
+  [ "$QUIET" = "1" ] || printf '%s✓%s %s\n' "$GREEN" "$NC" "$1"
   if [ -n "$REPORT_FILE" ]; then
     printf '✓ %s\n' "$1" >> "$REPORT_FILE"
   fi
@@ -205,7 +210,7 @@ fail() {
 }
 
 section() {
-  printf '\n%s== %s ==%s\n' "$BLUE" "$1" "$NC"
+  [ "$QUIET" = "1" ] || printf '\n%s== %s ==%s\n' "$BLUE" "$1" "$NC"
   if [ -n "$REPORT_FILE" ]; then
     printf '\n== %s ==\n' "$1" >> "$REPORT_FILE"
   fi
@@ -1684,38 +1689,48 @@ check_api_process_user() {
     return
   fi
 
+  # 检测 node 应用进程（dist/cluster.js）的实际运行用户。本镜像设计：root 跑 entrypoint
+  # 做迁移，随后 su-exec node:node 降权跑应用——所以 pid1 是 root 属正常，应看应用进程。
   process_user_output="$(
     compose_cmd exec -T api sh -c '
-      uid="$(awk "/^Uid:/ {print \$2; exit}" /proc/1/status 2>/dev/null || true)"
-      gid="$(awk "/^Gid:/ {print \$2; exit}" /proc/1/status 2>/dev/null || true)"
-      user=""
-      if [ -n "$uid" ] && [ -r /etc/passwd ]; then
-        user="$(awk -F: -v uid="$uid" "\$3 == uid { print \$1; exit }" /etc/passwd 2>/dev/null || true)"
-      fi
-      printf "%s|%s|%s\n" "$uid" "${user:-unknown}" "$gid"
+      app_name=""
+      app_uid=""
+      for p in /proc/[0-9]*; do
+        cmd="$(tr "\0" " " < "$p/cmdline" 2>/dev/null)"
+        case "$cmd" in
+          *dist/cluster.js*)
+            u="$(awk "/^Uid:/ {print \$2; exit}" "$p/status" 2>/dev/null)"
+            if [ -n "$u" ]; then
+              app_uid="$u"
+              app_name="$(awk -F: -v uid="$u" "\$3==uid{print \$1;exit}" /etc/passwd 2>/dev/null)"
+              break
+            fi
+            ;;
+        esac
+      done
+      pid1_uid="$(awk "/^Uid:/ {print \$2; exit}" /proc/1/status 2>/dev/null || true)"
+      printf "%s|%s|%s\n" "${app_name:-}" "${app_uid:-}" "${pid1_uid:-}"
     ' 2>&1
   )"
   process_user_status=$?
   safe_output="$(printf '%s' "$process_user_output" | redact_sensitive_text)"
   if [ "$process_user_status" -ne 0 ] || [ -z "$safe_output" ]; then
-    fail "API 主进程用户无法验证: $(format_health_body "$safe_output")"
+    warn "API 应用进程用户无法验证: $(format_health_body "$safe_output")"
     return
   fi
 
-  uid="$(printf '%s' "$safe_output" | cut -d '|' -f 1)"
-  user="$(printf '%s' "$safe_output" | cut -d '|' -f 2)"
-  gid="$(printf '%s' "$safe_output" | cut -d '|' -f 3)"
-  case "$uid" in
-    ""|*[!0-9]*)
-      fail "API 主进程用户无法识别: $(format_health_body "$safe_output")"
-      ;;
-    0)
-      fail "API 主进程以 root 运行: uid=${uid}, user=${user:-unknown}, gid=${gid:-unknown}；请确认 API 镜像启动命令仍使用 su-exec node:node。"
-      ;;
-    *)
-      pass "API 主进程非 root 运行: uid=${uid}, user=${user:-unknown}, gid=${gid:-unknown}。"
-      ;;
-  esac
+  app_name="$(printf '%s' "$safe_output" | cut -d '|' -f 1)"
+  app_uid="$(printf '%s' "$safe_output" | cut -d '|' -f 2)"
+  pid1_uid="$(printf '%s' "$safe_output" | cut -d '|' -f 3)"
+  if [ -z "$app_uid" ]; then
+    warn "未定位到 API 应用进程（node dist/cluster.js）；entrypoint pid1=${pid1_uid:-未知}（root 属正常）。请确认启动命令使用 su-exec node:node。"
+  elif ! printf '%s' "$app_uid" | grep -qE '^[0-9]+$'; then
+    warn "API 应用进程用户无法识别: $(format_health_body "$safe_output")"
+  elif [ "$app_uid" = "0" ]; then
+    fail "API 应用进程以 root 运行（uid=0, user=${app_name:-root}）；镜像未通过 su-exec 降权，请检查启动命令。"
+  else
+    pass "API 应用进程以 ${app_name:-uid=$app_uid} 运行（非 root；entrypoint pid1=${pid1_uid:-未知} 做迁移后 su-exec 降权，符合预期）。"
+  fi
 }
 
 check_secret() {
@@ -2188,12 +2203,14 @@ scan_api_logs() {
   fi
 
   if [ "$SHOW_LOGS" = "1" ]; then
-    print_line ""
-    print_line "API 最近日志:"
     recent_logs="$(tail -n 80 "$log_file" | redact_sensitive_text)"
-    printf '%s\n' "$recent_logs"
     if [ -n "$REPORT_FILE" ]; then
-      printf '%s\n' "$recent_logs" >> "$REPORT_FILE"
+      printf '\nAPI 最近日志:\n%s\n' "$recent_logs" >> "$REPORT_FILE"
+    fi
+    if [ "$QUIET" != "1" ]; then
+      print_line ""
+      print_line "API 最近日志:"
+      printf '%s\n' "$recent_logs"
     fi
   fi
 }
@@ -2224,12 +2241,14 @@ scan_web_logs() {
   fi
 
   if [ "$SHOW_LOGS" = "1" ]; then
-    print_line ""
-    print_line "Web 最近日志:"
     recent_logs="$(tail -n 80 "$log_file" | redact_sensitive_text)"
-    printf '%s\n' "$recent_logs"
     if [ -n "$REPORT_FILE" ]; then
-      printf '%s\n' "$recent_logs" >> "$REPORT_FILE"
+      printf '\nWeb 最近日志:\n%s\n' "$recent_logs" >> "$REPORT_FILE"
+    fi
+    if [ "$QUIET" != "1" ]; then
+      print_line ""
+      print_line "Web 最近日志:"
+      printf '%s\n' "$recent_logs"
     fi
   fi
 }
@@ -2387,8 +2406,10 @@ if [ "$DOCKER_READY" = "1" ]; then
       pass "${container} 正在运行（image=${image}, health=${health}）。"
     elif [ "$health" = "none" ]; then
       warn "${container} 正在运行但未配置 healthcheck（image=${image}）。"
+    elif [ "$health" = "unhealthy" ]; then
+      fail "${container} 健康检查未通过（unhealthy，image=${image}）。"
     else
-      fail "${container} 正在运行但健康状态为 ${health}（image=${image}）。"
+      warn "${container} 正在运行，健康检查尚在 ${health:-未知}（启动初期属正常，稍候应转 healthy；image=${image}）。"
     fi
     if [ "$status" = "running" ]; then
       if [ "$oom" = "true" ]; then

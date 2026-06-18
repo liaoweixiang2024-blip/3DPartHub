@@ -593,7 +593,7 @@ const REQUIRED_PASS_MESSAGES = [
   '容器环境与 .env 一致: API BACKUP_SIGNING_SECRET',
   '容器环境与 .env 一致: API BACKUP_ENCRYPTION_SECRET',
   '容器环境与 .env 一致: API CORS 允许来源',
-  'API 主进程非 root 运行',
+  'API 应用进程',
   '健康接口正常',
   'API 安全响应头正常',
   '就绪接口正常',

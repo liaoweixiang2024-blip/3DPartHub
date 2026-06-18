@@ -533,7 +533,7 @@ run_deploy_health_check() {
 
   echo ""
   echo -e "${YELLOW}正在运行部署自检...${NC}"
-  if curl -fsSL -o deploy-health-check.sh "$DEPLOY_CHECK_URL" && sh deploy-health-check.sh --port "$PORT_VALUE" --report deploy-health-report.txt --json deploy-health-report.json; then
+  if curl -fsSL -o deploy-health-check.sh "$DEPLOY_CHECK_URL" && sh deploy-health-check.sh --quiet --port "$PORT_VALUE" --report deploy-health-report.txt --json deploy-health-report.json; then
     echo -e "${GREEN}  ✓ 部署自检通过${NC}"
     echo -e "${GREEN}  ✓ 自检报告: $INSTALL_DIR/deploy-health-report.txt${NC}"
     echo -e "${GREEN}  ✓ JSON 报告: $INSTALL_DIR/deploy-health-report.json${NC}"
