@@ -9,7 +9,7 @@
 # 【快速开始】
 #   1. 优先使用仓库根目录 docker-compose.yml
 #   2. docker compose up -d
-#   默认后台账号: admin （密码见下方 ADMIN_PASS，首次登录后会强制修改密码）
+#   登录账号: 邮箱（即 ADMIN_EMAIL）；密码见下方 ADMIN_PASS，首次登录后会强制修改密码
 #      首次登录后会强制修改密码
 #   3. 访问 http://服务器IP:3780
 #
@@ -92,7 +92,7 @@ services:
       REDIS_URL: redis://:${REDIS_PASSWORD:-changeme-set-in-env}@redis:6379
       ADMIN_USER: ${ADMIN_USER:-admin}
       ADMIN_EMAIL: ${ADMIN_EMAIL:-admin@model.local}
-      ADMIN_PASS: '${ADMIN_PASS:-3DPartHub@2026}'
+      ADMIN_PASS: '${ADMIN_PASS:?请在 .env 中设置 ADMIN_PASS（一键部署会自动随机生成）}'
       # <<< 可选: 允许的来源域名 (多个用逗号分隔)
       ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-}
       # <<< 可选: 邮件通知 (注册验证码)

@@ -4,7 +4,7 @@
 #
 # 【快速开始】
 #   curl -fsSL https://raw.githubusercontent.com/liaoweixiang2024-blip/3DPartHub/main/install.sh | bash
-#   默认后台账号: admin （默认密码 3DPartHub@2026，首次登录后会强制修改密码）
+#   登录账号: 邮箱（即 .env 的 ADMIN_EMAIL，部署脚本会打印实际值）；初始密码为部署时随机生成、写在同目录 .env 的 ADMIN_PASS，首次登录会强制修改密码
 #
 # 【更安全的方式】
 #   如需自定义密码，在同目录创建 .env：

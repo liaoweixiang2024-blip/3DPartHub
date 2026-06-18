@@ -203,7 +203,7 @@ docker stats --no-stream
 | 项目 | 默认值                                                     |
 | ---- | ---------------------------------------------------------- |
 | 邮箱 | `.env` 中的 `ADMIN_EMAIL`，默认 `admin@model.local`        |
-| 密码 | `.env` 中的 `ADMIN_PASS`，未设置时为 `3DPartHub@2026`      |
+| 密码 | `.env` 中的 `ADMIN_PASS`（一键部署会自动随机生成）         |
 | 说明 | 管理员只在空数据库首次启动时创建；首次登录后会强制修改密码 |
 
 自定义管理员账号可在 `.env` 中设置 `ADMIN_USER`、`ADMIN_EMAIL`、`ADMIN_PASS`，仅首次启动时生效。
@@ -222,7 +222,7 @@ docker stats --no-stream
 | `ALLOWED_ORIGINS`          | 否   | -                                                   | CORS 域名，多个用逗号分隔                              |
 | `ADMIN_USER`               | 否   | `admin`                                             | 初始管理员用户名，仅首次启动                           |
 | `ADMIN_EMAIL`              | 否   | `admin@model.local`                                 | 初始管理员邮箱，仅首次启动                             |
-| `ADMIN_PASS`               | 否   | `3DPartHub@2026`                                    | 初始管理员密码，仅空数据库首次启动生效                 |
+| `ADMIN_PASS`               | 是   | —（一键部署随机生成）                               | 初始管理员密码，仅空数据库首次启动生效                 |
 | `IMAGE_TAG`                | 否   | `latest`                                            | 镜像标签；默认自动跟随最新版本，写入固定标签可锁定版本 |
 | `SMTP_HOST`                | 否   | -                                                   | SMTP 服务器                                            |
 | `SMTP_USER`                | 否   | -                                                   | SMTP 用户名                                            |
