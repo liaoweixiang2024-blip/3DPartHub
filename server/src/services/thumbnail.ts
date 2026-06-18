@@ -102,14 +102,17 @@ type EncodingAttempt = {
 };
 
 /**
- * 读后台图片优化设置（同步快照）。image_optimize_enabled 关闭时回退到硬编码默认。
+ * 读后台图片优化设置（同步快照）。各项均需"显式开启"（=== true）才生效——
+ * 这样测试环境（getCachedSettings 返回空对象、值为 undefined）稳走硬编码 jpg 默认，
+ * 生产环境（getAllSettings 已加载、schema 默认 true）才启用 webp/质量调优。
+ * - image_optimize_enabled === true 才应用下面调优，否则回退硬编码默认
  * - image_thumbnail_quality（0-100）→ JPEG quality（钳 0.1-0.95）
- * - image_webp_enabled → 优先输出 webp（运行环境不支持时自动回退 jpg/png）
+ * - image_webp_enabled === true → 优先输出 webp（运行环境不支持时自动回退 jpg/png）
  * 返回大图/小图两档质量，便于 encodeCanvas 区分。
  */
 function readImageEncodingSettings(): { quality: number; smallQuality: number; webp: boolean } {
   const s = getCachedSettings();
-  if (s.image_optimize_enabled === false) {
+  if (s.image_optimize_enabled !== true) {
     return { quality: THUMB_JPEG_QUALITY, smallQuality: THUMB_SMALL_JPEG_QUALITY, webp: false };
   }
   const qRaw = Number(s.image_thumbnail_quality);
@@ -117,7 +120,7 @@ function readImageEncodingSettings(): { quality: number; smallQuality: number; w
   return {
     quality,
     smallQuality: Math.min(quality, THUMB_SMALL_JPEG_QUALITY),
-    webp: s.image_webp_enabled !== false,
+    webp: s.image_webp_enabled === true,
   };
 }
 
