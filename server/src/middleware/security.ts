@@ -3,6 +3,7 @@ import rateLimit, { ipKeyGenerator, type Options, type Store } from 'express-rat
 import helmet from 'helmet';
 import { redis } from '../lib/cache.js';
 import { logger } from '../lib/logger.js';
+import { getCachedSettings } from '../lib/settings.js';
 import { getVerifiedRequestUser, verifyRequestToken, type AuthRequest } from './auth.js';
 
 class RedisRateLimitStore implements Store {
@@ -132,11 +133,21 @@ function intEnv(name: string, fallback: number, min: number, max: number): numbe
 
 const TEMP_PREVIEW_UPLOAD_LIMIT_PER_HOUR = intEnv('TEMP_PREVIEW_UPLOAD_LIMIT_PER_HOUR', 20, 1, 200);
 
+/**
+ * 动态读取 API 限流上限：每请求读最新 `api_rate_limit` 设置（接通后台配置），
+ * 空/无效回退 5000，钳到 1–100000。之前 apiLimiter 硬编码 5000，设置被忽略。
+ */
+function resolveApiRateLimit(): number {
+  const raw = Number(getCachedSettings().api_rate_limit);
+  if (!Number.isFinite(raw) || raw <= 0) return 5000;
+  return Math.min(100000, Math.max(1, Math.floor(raw)));
+}
+
 // Rate limiting configurations
 export const apiLimiter = createLimiter('api', {
   windowMs: 15 * 60 * 1000, // 15 minutes
-  limit: 5000,
-  max: 5000,
+  limit: resolveApiRateLimit,
+  max: resolveApiRateLimit,
   skipAuthenticatedAdmin: true,
   message: { success: false, message: '请求过于频繁，请稍后再试' },
 });

@@ -340,6 +340,30 @@ export function jsonSetting<T>(value: unknown, fallback: T): T {
   }
 }
 
+/**
+ * 个体数值设置 → number（无效回退 fallback）。让 admin 可见的个体设置覆盖 upload_policy JSON。
+ * （修复死设置：product_wall_max_* / ticket_attachment_max_mb 原先被忽略，UI 显示与实际不符。）
+ */
+function numPolicyField(value: unknown, fallback: number): number {
+  const n = Number(value);
+  return Number.isFinite(n) && n > 0 ? Math.floor(n) : fallback;
+}
+
+/** 个体扩展名设置（逗号分隔）→ string[]（空/无效回退 fallback）。 */
+function parseExtsField(value: unknown, fallback: string[]): string[] {
+  if (typeof value !== 'string') return fallback;
+  const exts = Array.from(
+    new Set(
+      value
+        .split(',')
+        .map((item) => item.trim().toLowerCase())
+        .filter(Boolean)
+        .map((item) => (item.startsWith('.') ? item : `.${item}`)),
+    ),
+  );
+  return exts.length ? exts : fallback;
+}
+
 export async function getBusinessConfig() {
   const all = await getAllSettings();
   return {
@@ -357,6 +381,24 @@ export async function getBusinessConfig() {
     uploadPolicy: normalizeUploadPolicy({
       ...DEFAULT_UPLOAD_POLICY,
       ...jsonSetting<Partial<UploadPolicy>>(all.upload_policy, {}),
+      // admin 可见的个体设置为权威来源，覆盖 upload_policy JSON
+      productWallImageMaxSizeMb: numPolicyField(
+        all.product_wall_max_image_mb,
+        DEFAULT_UPLOAD_POLICY.productWallImageMaxSizeMb,
+      ),
+      productWallUploadMaxFiles: numPolicyField(
+        all.product_wall_max_batch_count,
+        DEFAULT_UPLOAD_POLICY.productWallUploadMaxFiles,
+      ),
+      productWallArchiveExtractMaxFiles: numPolicyField(
+        all.product_wall_max_zip_extract,
+        DEFAULT_UPLOAD_POLICY.productWallArchiveExtractMaxFiles,
+      ),
+      ticketAttachmentMaxSizeMb: numPolicyField(
+        all.ticket_attachment_max_mb,
+        DEFAULT_UPLOAD_POLICY.ticketAttachmentMaxSizeMb,
+      ),
+      ticketAttachmentExts: parseExtsField(all.ticket_attachment_types, DEFAULT_UPLOAD_POLICY.ticketAttachmentExts),
     }),
     selectionEnableMatch: all.selection_enable_match !== false,
     selectionThreadPriority: {
