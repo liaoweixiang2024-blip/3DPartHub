@@ -112,12 +112,14 @@ export function createUserSharesRouter() {
       // Preview policy: a disabled system setting cannot be overridden by request body.
       allowPreview = sAllowPreview ? allowPreview !== false : false;
 
-      // Expiry policy
+      // Expiry policy — default 也要钳到 max，避免 default > max 时分享有效期超过上限
+      let defaultExpireDays = sDefaultExpireDays;
+      if (sMaxExpireDays > 0 && defaultExpireDays > sMaxExpireDays) defaultExpireDays = sMaxExpireDays;
       let finalExpiresAt: Date | null = null;
       if (!sAllowCustomExpiry) {
         // User cannot customize - use default only
-        if (sDefaultExpireDays > 0) {
-          finalExpiresAt = new Date(Date.now() + sDefaultExpireDays * 86400000);
+        if (defaultExpireDays > 0) {
+          finalExpiresAt = new Date(Date.now() + defaultExpireDays * 86400000);
         }
       } else {
         if (expiresAt) {
@@ -127,14 +129,17 @@ export function createUserSharesRouter() {
             const maxDate = new Date(Date.now() + sMaxExpireDays * 86400000);
             if (finalExpiresAt > maxDate) finalExpiresAt = maxDate;
           }
-        } else if (sDefaultExpireDays > 0) {
-          finalExpiresAt = new Date(Date.now() + sDefaultExpireDays * 86400000);
+        } else if (defaultExpireDays > 0) {
+          finalExpiresAt = new Date(Date.now() + defaultExpireDays * 86400000);
         }
       }
 
-      // Download limit policy
+      // Download limit policy — 用户显式传 0 表示「无限」，不应被系统默认覆盖；
+      // 仅当请求未指定 downloadLimit 时才套用系统默认值
+      const userSpecifiedDownloadLimit =
+        'downloadLimit' in req.body && req.body.downloadLimit !== undefined && req.body.downloadLimit !== null;
       downloadLimit = Math.max(0, Math.floor(Number(downloadLimit) || 0));
-      if (downloadLimit === 0 && sDefaultDownloadLimit > 0) {
+      if (!userSpecifiedDownloadLimit && sDefaultDownloadLimit > 0) {
         downloadLimit = sDefaultDownloadLimit;
       }
       if (sMaxDownloadLimit > 0 && downloadLimit > sMaxDownloadLimit) {

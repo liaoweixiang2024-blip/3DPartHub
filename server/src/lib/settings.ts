@@ -718,6 +718,13 @@ export function validateSettingValue(key: string, value: unknown): unknown {
     return Math.min(23, Math.max(0, Math.round(n)));
   }
   if (key === 'redis_db') return clampNumericSetting(key, value, 0, 15);
+  if (key === 'backup_schedule_time') {
+    // HH:MM（00:00–23:59），与 backup 执行时的 normalizeScheduleTime 一致；非法回默认 03:00，
+    // 避免 admin 误填（如 25:99）被原样存入、执行时静默回退而难察觉
+    const raw = typeof value === 'string' ? value.trim() : '';
+    const match = raw.match(/^([01]?\d|2[0-3]):([0-5]\d)$/);
+    return match ? `${match[1].padStart(2, '0')}:${match[2]}` : DEFAULTS[key];
+  }
   if (
     key === 'cache_public_settings_ttl_seconds' ||
     key === 'cache_model_list_ttl_seconds' ||
