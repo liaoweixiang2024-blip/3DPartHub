@@ -4988,6 +4988,12 @@ function Content() {
   const [previewSubtab, setPreviewSubtab] = useState<PreviewSubtab>('general');
   const [matPresetEdit, setMatPresetEdit] = useState<MaterialPresetKey>('default');
   const imageInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
+
+  // 切换设置 tab 时把内容区滚回顶部，避免沿用上个 tab 的滚动位置
+  useEffect(() => {
+    scrollContainerRef.current?.scrollTo({ top: 0 });
+  }, [activeTab]);
 
   // Backup state
   const [backupStats, setBackupStats] = useState<BackupStats | null>(null);
@@ -6064,7 +6070,7 @@ function Content() {
           {mobileSettingsPicker}
           <div className="hidden min-w-0 md:block">{secondarySettingsNavigation}</div>
           <AdminContentPanel scroll className="h-full overflow-hidden">
-            <div className="h-full overflow-y-auto overflow-x-hidden p-4 custom-scrollbar">
+            <div ref={scrollContainerRef} className="h-full overflow-y-auto overflow-x-hidden p-4 custom-scrollbar">
               <div key={resolvedActiveTab} className="admin-tab-panel flex flex-col gap-4">
                 {activeContentGroup
                   ? [activeContentGroup].map((group) => {
