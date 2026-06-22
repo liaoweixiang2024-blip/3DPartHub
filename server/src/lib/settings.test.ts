@@ -164,7 +164,8 @@ test('validateSettingValue truncates strings over 1MB', () => {
 
 test('validateSettingValue validates backup_schedule_time as HH:MM', () => {
   assert.equal(validateSettingValue('backup_schedule_time', '03:00'), '03:00');
-  assert.equal(validateSettingValue('backup_schedule_time', '3:5'), '03:05');
+  assert.equal(validateSettingValue('backup_schedule_time', '3:05'), '03:05');
+  assert.equal(validateSettingValue('backup_schedule_time', '3:5'), '03:00');
   assert.equal(validateSettingValue('backup_schedule_time', '23:59'), '23:59');
   assert.equal(validateSettingValue('backup_schedule_time', '25:99'), '03:00');
   assert.equal(validateSettingValue('backup_schedule_time', '9am'), '03:00');
