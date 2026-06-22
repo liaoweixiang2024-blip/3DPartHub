@@ -5,6 +5,7 @@ import { authApi } from '../../api/auth';
 import { useAuthStore } from '../../stores/useAuthStore';
 import DialogOverlay from './DialogOverlay';
 import { AppFormLabel, AppTextInput } from './FormControls';
+import Icon from './Icon';
 import { useToast } from './Toast';
 
 /**
@@ -21,6 +22,8 @@ export default function ForceChangePassword() {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [showNewPassword, setShowNewPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
   if (user?.role !== 'ADMIN' || !user.mustChangePassword) return null;
 
@@ -95,34 +98,56 @@ export default function ForceChangePassword() {
               <AppFormLabel uppercase className="mb-0">
                 {t('forcePassword.newPassword')}
               </AppFormLabel>
-              <AppTextInput
-                type="password"
-                value={newPassword}
-                onChange={(e) => {
-                  setNewPassword(e.target.value);
-                  setError('');
-                }}
-                required
-                minLength={8}
-                placeholder={t('forcePassword.newPasswordPlaceholder')}
-                autoFocus
-              />
+              <div className="relative">
+                <AppTextInput
+                  type={showNewPassword ? 'text' : 'password'}
+                  value={newPassword}
+                  onChange={(e) => {
+                    setNewPassword(e.target.value);
+                    setError('');
+                  }}
+                  required
+                  minLength={8}
+                  placeholder={t('forcePassword.newPasswordPlaceholder')}
+                  autoFocus
+                  className="pr-10"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowNewPassword((v) => !v)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-on-surface-variant hover:text-on-surface transition-colors"
+                  aria-label={showNewPassword ? t('auth.hidePassword') : t('auth.showPassword')}
+                >
+                  <Icon name={showNewPassword ? 'visibility_off' : 'visibility'} size={18} />
+                </button>
+              </div>
             </div>
             <div className="flex flex-col gap-1.5">
               <AppFormLabel uppercase className="mb-0">
                 {t('forcePassword.confirmPassword')}
               </AppFormLabel>
-              <AppTextInput
-                type="password"
-                value={confirmPassword}
-                onChange={(e) => {
-                  setConfirmPassword(e.target.value);
-                  setError('');
-                }}
-                required
-                minLength={8}
-                placeholder={t('forcePassword.confirmPasswordPlaceholder')}
-              />
+              <div className="relative">
+                <AppTextInput
+                  type={showConfirmPassword ? 'text' : 'password'}
+                  value={confirmPassword}
+                  onChange={(e) => {
+                    setConfirmPassword(e.target.value);
+                    setError('');
+                  }}
+                  required
+                  minLength={8}
+                  placeholder={t('forcePassword.confirmPasswordPlaceholder')}
+                  className="pr-10"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowConfirmPassword((v) => !v)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-on-surface-variant hover:text-on-surface transition-colors"
+                  aria-label={showConfirmPassword ? t('auth.hidePassword') : t('auth.showPassword')}
+                >
+                  <Icon name={showConfirmPassword ? 'visibility_off' : 'visibility'} size={18} />
+                </button>
+              </div>
             </div>
             {error && <p className="text-red-400 text-xs break-words">{error}</p>}
             <button
