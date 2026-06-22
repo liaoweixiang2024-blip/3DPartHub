@@ -1147,12 +1147,22 @@ const GROUPS: SettingGroup[] = [
         desc: '新创建的分享链接默认是否允许 3D 预览',
         type: 'switch',
       },
-      { key: 'show_watermark', label: '下载水印', desc: '在下载的模型图片上叠加水印，保护知识产权', type: 'switch' },
-      { key: 'watermark_text', label: '水印文字', desc: '水印显示的文字内容，如公司名或品牌名', type: 'text' },
+      {
+        key: 'show_watermark',
+        label: '查看器水印',
+        desc: '在 3D 模型查看器界面叠加水印显示，仅查看页可见，不会写入下载的文件',
+        type: 'switch',
+      },
+      {
+        key: 'watermark_text',
+        label: '水印文字',
+        desc: '查看器水印显示的文字内容，如公司名或品牌名（仅查看页显示）',
+        type: 'text',
+      },
       {
         key: 'watermark_image',
         label: '水印图片',
-        desc: '上传透明背景 PNG 图片作为水印，留空则使用文字水印',
+        desc: '查看器水印图片，上传透明背景 PNG，留空则使用文字水印（仅查看页显示）',
         type: 'image',
       },
     ],
@@ -1265,47 +1275,47 @@ const GROUPS: SettingGroup[] = [
       { _section: 'Redis 与页面缓存' },
       {
         key: 'cache_enabled',
-        label: '启用缓存',
-        desc: '控制公共设置、模型列表、搜索、选型等高频数据的缓存策略',
+        label: '启用缓存（只读）',
+        desc: '⚠ 此开关不影响实际运行——缓存始终启用并由 Redis 连接状态决定，此处仅作诊断显示',
         type: 'switch',
       },
       {
         key: 'cache_driver',
-        label: '缓存驱动',
-        desc: 'Redis 适合生产环境；内存缓存适合单机测试；关闭缓存便于调试',
+        label: '缓存驱动（只读）',
+        desc: '⚠ 实际缓存始终使用 Redis，本项不影响运行，仅作诊断显示',
         type: 'select',
         options: CACHE_DRIVER_OPTIONS,
       },
       {
         key: 'redis_url',
-        label: 'Redis 地址',
-        desc: '例如 redis://127.0.0.1:6379 或 rediss://host:6379；生产环境建议使用独立 Redis',
+        label: 'Redis 地址（只读）',
+        desc: '⚠ 实际连接由环境变量 REDIS_URL 控制，此处仅显示当前值，修改不生效；如需更换请在 .env 配置',
         type: 'text',
       },
       {
         key: 'redis_password',
-        label: 'Redis 密码',
-        desc: 'Redis 认证密码；留空表示无密码，保存后会自动隐藏',
+        label: 'Redis 密码（只读）',
+        desc: '⚠ 实际密码由环境变量 REDIS_URL 内置，此处仅显示，修改不生效',
         type: 'text',
       },
       {
         key: 'redis_db',
-        label: 'Redis 数据库',
-        desc: 'Redis DB 编号，默认 0；多项目共用 Redis 时建议单独分配',
+        label: 'Redis 数据库（只读）',
+        desc: '⚠ 实际数据库编号由环境变量 REDIS_URL 内置，此处仅显示，修改不生效',
         type: 'number',
         min: 0,
         max: 15,
       },
       {
         key: 'redis_key_prefix',
-        label: '缓存键前缀',
-        desc: '用于隔离不同部署环境，如 3dparthub:prod；修改后建议清理旧缓存',
+        label: '缓存键前缀（只读）',
+        desc: '⚠ 实际键前缀由环境变量 REDIS_KEY_PREFIX 控制，此处仅显示，修改不生效',
         type: 'text',
       },
       {
         key: 'redis_tls_enabled',
-        label: 'Redis TLS',
-        desc: '云厂商 Redis 开启 TLS/SSL 时启用；也可直接使用 rediss:// 地址',
+        label: 'Redis TLS（只读）',
+        desc: '⚠ TLS 由环境变量 REDIS_URL 协议（rediss://）决定，此处仅显示，修改不生效',
         type: 'switch',
       },
       {
@@ -1493,22 +1503,22 @@ const GROUPS: SettingGroup[] = [
       },
       {
         key: 'storage_signed_url_enabled',
-        label: '私有签名访问',
-        desc: '模型文件、原始文件和附件通过临时签名 URL 访问，适合私有 Bucket',
+        label: '私有签名访问（未启用）',
+        desc: '⚠ 该功能暂未在业务流量启用——签名 URL 仅用于存储连通性诊断，资源访问不受此项影响',
         type: 'switch',
       },
       {
         key: 'storage_signed_url_ttl_seconds',
-        label: '签名链接有效期',
-        desc: '下载模型、图纸、附件时生成临时 URL 的有效时间',
+        label: '签名链接有效期（仅诊断）',
+        desc: '⚠ 仅用于存储连通性诊断的签名 URL 有效期；业务下载不生成签名 URL，修改不影响资源访问',
         type: 'number',
         min: 60,
         max: 86400,
       },
       {
         key: 'storage_upload_multipart_mb',
-        label: '分片大小',
-        desc: '大模型和压缩包上传的分片大小，云存储建议 8-64 MB',
+        label: '分片大小（只读）',
+        desc: '⚠ 由云存储客户端内部控制，当前无法通过此项配置，仅作记录，修改不生效',
         type: 'number',
         min: 5,
         max: 512,
@@ -1599,8 +1609,8 @@ const GROUPS: SettingGroup[] = [
       },
       {
         key: 'resource_download_acceleration_enabled',
-        label: '下载加速',
-        desc: '批量下载、模型下载优先使用加速域名；需要 CDN 或对象存储加速服务配合',
+        label: '下载加速（只读）',
+        desc: '⚠ 实际由 Nginx X-Accel 头驱动，此项仅显示，修改不影响下载加速行为',
         type: 'switch',
       },
     ],
@@ -2493,6 +2503,24 @@ const SENSITIVE_TEXT_SETTING_KEYS = new Set<keyof SystemSettings>([
 function isSensitiveTextSettingKey(key: SettingItem['key']): key is keyof SystemSettings {
   return isSystemSettingKey(key) && SENSITIVE_TEXT_SETTING_KEYS.has(key);
 }
+
+/**
+ * 后端不实际执行、仅由环境变量或基础设施控制的设置项。在 updateSetting 中拒绝修改，
+ * 使其在前端真正「只读」——与 label 的「（只读）」标注一致，避免 admin 误以为修改生效。
+ */
+const READONLY_SETTING_KEYS = new Set<keyof SystemSettings>([
+  'cache_enabled',
+  'cache_driver',
+  'redis_url',
+  'redis_password',
+  'redis_db',
+  'redis_key_prefix',
+  'redis_tls_enabled',
+  'storage_signed_url_enabled',
+  'storage_signed_url_ttl_seconds',
+  'storage_upload_multipart_mb',
+  'resource_download_acceleration_enabled',
+]);
 
 const inputClass =
   'w-full min-w-0 bg-surface-container-lowest text-on-surface text-xs rounded-md px-2.5 py-1.5 border border-outline-variant/20 outline-none focus:border-primary placeholder:text-on-surface-variant/30';
@@ -5473,6 +5501,7 @@ function Content() {
   }
 
   function updateSetting(key: keyof SystemSettings, value: boolean | number | string) {
+    if (READONLY_SETTING_KEYS.has(key)) return;
     setSettings((prev) => {
       let next: SystemSettings;
       if (key === 'footer_copyright_follow_site_title') {
