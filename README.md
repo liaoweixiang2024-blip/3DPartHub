@@ -230,15 +230,18 @@ docker stats --no-stream
 
 ### 更新与升级
 
+> **命令提示：** 以下用 `docker compose`（Docker Compose v2 子命令）。若提示 `'compose' is not a docker command`，说明你的系统装的是独立版 `docker-compose`（连字符），把命令里的 `docker compose` 全部换成 `docker-compose` 即可，用法完全相同。用 `docker-compose --version` 可确认版本（v2.x 即可）。
+
 ```bash
 cd /opt/3dparthub
 
-# 拉取最新镜像并强制重建容器
+# 拉取最新镜像并强制重建容器（数据卷保留，不丢数据）
 docker compose pull
 docker compose up -d --force-recreate
 
-# 验证服务正常
-curl http://localhost:3780/api/health
+# 验证版本与健康
+curl -s http://localhost:3780/api/settings/version   # 应显示最新版本，例如 v3.4.0
+curl -s http://localhost:3780/api/health
 ```
 
 > **注意：** 更新后如果页面没有变化，用 `Ctrl+Shift+R`（Mac: `Cmd+Shift+R`）强制刷新浏览器缓存。如果仍然不生效，执行 `docker compose down && docker compose pull && docker compose up -d` 彻底重建。
@@ -367,17 +370,76 @@ cp /tmp/backup_XXXX.* /opt/3dparthub/server/static/backups/
 
 ---
 
+## 运维命令速查
+
+> 以下命令在部署目录 `/opt/3dparthub` 下执行。`docker compose` 与 `docker-compose`（连字符）等价，按你的系统二选一；若提示 `'compose' is not a docker command`，改用 `docker-compose`。
+
+### 服务管理
+
+```bash
+docker compose ps                       # 查看容器状态（running / healthy）
+docker compose restart api              # 重启单个服务：api / web / postgres / redis
+docker compose logs -f --tail=200 api   # 实时跟踪日志（Ctrl+C 退出）
+docker compose stop                     # 停止服务（保留容器与数据）
+docker compose start                    # 启动已停止的服务
+docker compose down                     # 停止并删除容器（数据卷保留）
+                                        # 严禁 docker compose down -v —— 会删除全部数据！
+```
+
+### 版本与健康检查
+
+```bash
+curl -s http://localhost:3780/api/settings/version   # 当前运行版本
+curl -s http://localhost:3780/api/health             # 存活检查
+curl -s http://localhost:3780/api/health/ready       # 就绪检查（含 DB / Redis）
+```
+
+### 查看管理员账号
+
+```bash
+grep -E '^ADMIN_(EMAIL|USER)=' /opt/3dparthub/.env   # 登录邮箱与用户名
+grep '^ADMIN_PASS=' /opt/3dparthub/.env               # 初始密码（首次登录后强制改密，此后以你改后的为准）
+```
+
+> 忘记密码 / 邮箱的重置方法见下方「常见问题」。
+
+### 进入容器与数据库
+
+```bash
+docker compose exec api sh                            # 进入 api 容器 shell
+docker compose exec postgres psql -U postgres         # 进入 PostgreSQL（密码为 .env 的 DB_PASSWORD）
+docker compose exec redis redis-cli                   # 进入 Redis（设了 REDIS_PASSWORD 需加 -a <密码>）
+```
+
+### 资源与磁盘
+
+```bash
+docker stats                                          # 实时 CPU / 内存占用
+docker system df                                      # 镜像 / 容器 / 卷磁盘占用
+df -h /opt/3dparthub                                  # 部署目录所在磁盘剩余空间
+```
+
+### 更新升级
+
+```bash
+cd /opt/3dparthub
+docker compose pull && docker compose up -d --force-recreate   # 详细说明见上方「更新与升级」
+```
+
+---
+
 ## 常见问题
 
 ### 忘记管理员密码怎么办？
 
 ```bash
-docker exec -it 3dparthub-api sh
+docker compose exec api sh
 
+# 进入容器后执行（把 admin@model.local 换成你的实际管理员邮箱，可用下方命令查询）
 HASH=$(node -e "require('bcryptjs').hash('newpass123', 12).then(h => console.log(h))")
 
 npx prisma db execute --stdin << SQL
-UPDATE users SET password_hash = '$HASH', must_change_password = true WHERE email = 'admin@model.com';
+UPDATE users SET password_hash = '$HASH', must_change_password = true WHERE email = 'admin@model.local';
 SQL
 exit
 ```
@@ -387,7 +449,7 @@ exit
 ### 忘记管理员用户名或邮箱怎么办？
 
 ```bash
-docker exec -it 3dparthub-api sh -c \
+docker compose exec -T api sh -c \
   "npx prisma db execute --stdin" << SQL
 SELECT username, email, role FROM users WHERE role = 'ADMIN';
 SQL
