@@ -1,0 +1,30 @@
+#!/usr/bin/env bash
+# dcomp — 3DPartHub 部署通用的 docker-compose wrapper
+#
+# 自动检测并使用插件形式(docker compose)或独立二进制(docker-compose)，
+# 二者都不可用时报错退出。所有服务器通用，无需关心是空格还是连字符。
+#
+# 用法（在含 docker-compose.yml 的目录下，例如 /opt/3dparthub）：
+#   ./dcomp pull
+#   ./dcomp up -d --force-recreate
+#   ./dcomp ps
+#   ./dcomp logs -f --tail=200 api
+#   ./dcomp exec api sh
+#
+# 全局安装（可选；之后任意目录用 `dcomp` 而非 `./dcomp`）：
+#   cp dcomp /usr/local/bin/dcomp && chmod +x /usr/local/bin/dcomp
+#
+# 当然也可以直接用 `docker compose` 或 `docker-compose`，效果完全相同。
+set -euo pipefail
+
+if docker compose version >/dev/null 2>&1; then
+  exec docker compose "$@"
+elif command -v docker-compose >/dev/null 2>&1; then
+  exec docker-compose "$@"
+else
+  cat >&2 <<'MSG'
+ERROR: 既没有 'docker compose' 插件，也没有 'docker-compose' 独立二进制。
+请先安装 Docker 与 Docker Compose：https://docs.docker.com/compose/install/
+MSG
+  exit 127
+fi
