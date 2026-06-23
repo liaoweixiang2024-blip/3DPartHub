@@ -115,8 +115,8 @@ bash deploy.sh
 检查服务状态：
 
 ```bash
-./dcomp ps
-./dcomp logs api | tail -20
+docker compose ps
+docker compose logs api | tail -20
 curl http://localhost:3780/api/health
 ```
 
@@ -194,9 +194,9 @@ docker stats --no-stream
 | 16G        | 8G / 3 CPU     | 2G / 2 CPU     | 1G / 1 CPU     | 512M / 1 CPU    |
 | 32G+       | 12G / 4 CPU    | 4G / 2 CPU     | 2G / 1 CPU     | 1G / 1 CPU      |
 
-说明：容器内存/CPU 上限会即时生效；`API_WORKERS`、`API_SHM_SIZE`、`DB_CONNECTION_LIMIT` 等启动参数会同步写入 `.env`，执行 `./dcomp up -d --force-recreate api` 后完全生效。部署自检会按服务器总内存复核资源配置预算，若 `API_WORKERS`、`CONVERSION_WORKER_CONCURRENCY`、`DB_CONNECTION_LIMIT`、容器内存上限或 `REDIS_MAXMEMORY` 明显超出当前档位，会要求先重新调优再上线。
+说明：容器内存/CPU 上限会即时生效；`API_WORKERS`、`API_SHM_SIZE`、`DB_CONNECTION_LIMIT` 等启动参数会同步写入 `.env`，执行 `docker compose up -d --force-recreate api` 后完全生效。部署自检会按服务器总内存复核资源配置预算，若 `API_WORKERS`、`CONVERSION_WORKER_CONCURRENCY`、`DB_CONNECTION_LIMIT`、容器内存上限或 `REDIS_MAXMEMORY` 明显超出当前档位，会要求先重新调优再上线。
 
-手动纯 Docker 部署时，推荐顺序是先执行 `sh scripts/tune-resources.sh .env --no-runtime` 生成当前服务器档位，再执行 `./dcomp pull && ./dcomp up -d`。一键部署脚本会自动完成这一步。
+手动纯 Docker 部署时，推荐顺序是先执行 `sh scripts/tune-resources.sh .env --no-runtime` 生成当前服务器档位，再执行 `docker compose pull && docker compose up -d`。一键部署脚本会自动完成这一步。
 
 首次启动会自动创建管理员账号：
 
@@ -230,27 +230,27 @@ docker stats --no-stream
 
 ### 更新与升级
 
-> **命令提示：** 以下统一用 `./dcomp`（仓库根目录自带的通用 wrapper，自动适配 `docker compose` 插件或 `docker-compose` 独立二进制，**所有服务器通用，无需关心空格还是连字符**）。服务器 `git pull` 后即可用；想全局调用可执行 `cp dcomp /usr/local/bin/dcomp`（之后任意目录用 `dcomp` 而非 `./dcomp`）。若服务器不是 git 克隆，把根目录的 `dcomp` 单文件复制过去即可。当然你也可以直接用 `docker compose` 或 `docker-compose`，效果完全相同。
+> **命令提示：** 以下用 `docker compose`（Docker Compose v2 子命令）。若提示 `'compose' is not a docker command`，说明你的系统装的是独立版 `docker-compose`（连字符），把命令里的 `docker compose` 全部换成 `docker-compose` 即可，用法完全相同。用 `docker-compose --version` 可确认版本（v2.x 即可）。
 
 ```bash
 cd /opt/3dparthub
 
 # 拉取最新镜像并强制重建容器（数据卷保留，不丢数据）
-./dcomp pull
-./dcomp up -d --force-recreate
+docker compose pull
+docker compose up -d --force-recreate
 
 # 验证版本与健康
 curl -s http://localhost:3780/api/settings/version   # 应显示最新版本，例如 v3.4.0
 curl -s http://localhost:3780/api/health
 ```
 
-> **注意：** 更新后如果页面没有变化，用 `Ctrl+Shift+R`（Mac: `Cmd+Shift+R`）强制刷新浏览器缓存。如果仍然不生效，执行 `./dcomp down && ./dcomp pull && ./dcomp up -d` 彻底重建。
+> **注意：** 更新后如果页面没有变化，用 `Ctrl+Shift+R`（Mac: `Cmd+Shift+R`）强制刷新浏览器缓存。如果仍然不生效，执行 `docker compose down && docker compose pull && docker compose up -d` 彻底重建。
 
 如需锁定特定版本，修改 `.env` 中的 `IMAGE_TAG`：
 
 ```bash
 sed -i 's/IMAGE_TAG=.*/IMAGE_TAG=v3.2.3/' .env
-./dcomp pull && ./dcomp up -d --force-recreate
+docker compose pull && docker compose up -d --force-recreate
 ```
 
 升级前建议在后台 **设置 -> 数据备份** 创建并校验一次备份。
@@ -260,7 +260,7 @@ sed -i 's/IMAGE_TAG=.*/IMAGE_TAG=v3.2.3/' .env
 如果从早期一键部署升级后 `api` 显示 unhealthy，先查看日志：
 
 ```bash
-./dcomp logs --tail=200 api
+docker compose logs --tail=200 api
 ```
 
 旧版默认 DB/JWT/Redis 密钥会继续允许启动并在日志中给出安全提醒。若你已经创建过 Docker volume，后续修改 `DB_PASSWORD` 不会自动修改已有 PostgreSQL 用户密码；请保持 `.env` 中的 `DB_PASSWORD` 与旧数据库一致，或先在数据库内修改密码后再同步 `.env`。
@@ -331,7 +331,7 @@ API 容器启动时会自动修复该目录的 UID/GID 权限，避免因无法�
 
 恢复演练：
 
-- Docker 部署环境可在维护窗口执行 `./dcomp exec api npm run backup:e2e`。该命令会创建整站备份、导入为新备份记录、执行一次恢复，并对比恢复前后的数据库和业务文件指纹。
+- Docker 部署环境可在维护窗口执行 `docker compose exec api npm run backup:e2e`。该命令会创建整站备份、导入为新备份记录、执行一次恢复，并对比恢复前后的数据库和业务文件指纹。
 - 演练成功后会写入 `/app/static/backups/.restore-drills/latest.json`，宿主机对应 `server/static/backups/.restore-drills/latest.json`；后续 `collect-deploy-evidence.sh` 会把最近一次演练状态写进生产证据包。
 - 最终生产验收默认要求最近一次恢复演练有效且备份目录没有残留 `.work` 临时工作目录；缺少演练、演练时间无效、超过 30 天或存在临时工作目录时，`backupInventory.riskLevel` 会提升为中风险，`productionEvidence.finalConclusionReady` 不会为 `true`。
 - 本地源码环境可执行 `npm run backup:e2e`。该命令会真实执行恢复流程，生产环境建议先确认已有维护窗口和外部副本。
@@ -360,7 +360,7 @@ scp /opt/3dparthub/server/static/backups/backup_XXXX.* root@新服务器IP:/tmp/
 
 ```bash
 cd /opt/3dparthub
-./dcomp up -d
+docker compose up -d
 
 mkdir -p /opt/3dparthub/server/static/backups
 cp /tmp/backup_XXXX.* /opt/3dparthub/server/static/backups/
@@ -372,18 +372,18 @@ cp /tmp/backup_XXXX.* /opt/3dparthub/server/static/backups/
 
 ## 运维命令速查
 
-> 以下命令在部署目录 `/opt/3dparthub` 下执行。统一用 `./dcomp`（仓库自带 wrapper，自动适配 `docker compose` 插件或 `docker-compose` 独立二进制，所有服务器通用），等价于 `docker compose` / `docker-compose`。
+> 以下命令在部署目录 `/opt/3dparthub` 下执行。`docker compose` 与 `docker-compose`（连字符）等价，按你的系统二选一；若提示 `'compose' is not a docker command`，改用 `docker-compose`。
 
 ### 服务管理
 
 ```bash
-./dcomp ps                       # 查看容器状态（running / healthy）
-./dcomp restart api              # 重启单个服务：api / web / postgres / redis
-./dcomp logs -f --tail=200 api   # 实时跟踪日志（Ctrl+C 退出）
-./dcomp stop                     # 停止服务（保留容器与数据）
-./dcomp start                    # 启动已停止的服务
-./dcomp down                     # 停止并删除容器（数据卷保留）
-                                        # 严禁 ./dcomp down -v —— 会删除全部数据！
+docker compose ps                       # 查看容器状态（running / healthy）
+docker compose restart api              # 重启单个服务：api / web / postgres / redis
+docker compose logs -f --tail=200 api   # 实时跟踪日志（Ctrl+C 退出）
+docker compose stop                     # 停止服务（保留容器与数据）
+docker compose start                    # 启动已停止的服务
+docker compose down                     # 停止并删除容器（数据卷保留）
+                                        # 严禁 docker compose down -v —— 会删除全部数据！
 ```
 
 ### 版本与健康检查
@@ -406,9 +406,9 @@ grep '^ADMIN_PASS=' /opt/3dparthub/.env               # 初始密码（首次登
 ### 进入容器与数据库
 
 ```bash
-./dcomp exec api sh                            # 进入 api 容器 shell
-./dcomp exec postgres psql -U postgres         # 进入 PostgreSQL（密码为 .env 的 DB_PASSWORD）
-./dcomp exec redis redis-cli                   # 进入 Redis（设了 REDIS_PASSWORD 需加 -a <密码>）
+docker compose exec api sh                            # 进入 api 容器 shell
+docker compose exec postgres psql -U postgres         # 进入 PostgreSQL（密码为 .env 的 DB_PASSWORD）
+docker compose exec redis redis-cli                   # 进入 Redis（设了 REDIS_PASSWORD 需加 -a <密码>）
 ```
 
 ### 资源与磁盘
@@ -423,7 +423,7 @@ df -h /opt/3dparthub                                  # 部署目录所在磁盘
 
 ```bash
 cd /opt/3dparthub
-./dcomp pull && ./dcomp up -d --force-recreate   # 详细说明见上方「更新与升级」
+docker compose pull && docker compose up -d --force-recreate   # 详细说明见上方「更新与升级」
 ```
 
 ---
@@ -433,7 +433,7 @@ cd /opt/3dparthub
 ### 忘记管理员密码怎么办？
 
 ```bash
-./dcomp exec api sh
+docker compose exec api sh
 
 # 进入容器后执行（把 admin@model.local 换成你的实际管理员邮箱，可用下方命令查询）
 HASH=$(node -e "require('bcryptjs').hash('newpass123', 12).then(h => console.log(h))")
@@ -449,7 +449,7 @@ exit
 ### 忘记管理员用户名或邮箱怎么办？
 
 ```bash
-./dcomp exec -T api sh -c \
+docker compose exec -T api sh -c \
   "npx prisma db execute --stdin" << SQL
 SELECT username, email, role FROM users WHERE role = 'ADMIN';
 SQL
@@ -458,16 +458,16 @@ SQL
 ### 容器启动报错怎么办？
 
 ```bash
-./dcomp logs api --tail 80
-./dcomp logs postgres --tail 80
-./dcomp logs redis --tail 80
+docker compose logs api --tail 80
+docker compose logs postgres --tail 80
+docker compose logs redis --tail 80
 ```
 
 常见原因：
 
 - `P1001: Can't reach database`：PostgreSQL 尚未就绪，等待后重启 API。
 - `JWT_SECRET is required`：检查 `.env` 中的 `JWT_SECRET`。
-- `ECONNREFUSED redis`：检查 Redis 容器并执行 `./dcomp restart redis`。
+- `ECONNREFUSED redis`：检查 Redis 容器并执行 `docker compose restart redis`。
 - 数据库迁移失败：先保留卷和备份，不要删除数据卷；检查 `api` 日志里的 Prisma 错误。
 
 ---
