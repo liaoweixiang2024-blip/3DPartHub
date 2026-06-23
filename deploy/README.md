@@ -25,8 +25,8 @@ cd /opt/3dparthub
 curl -L -o docker-compose.yml https://raw.githubusercontent.com/liaoweixiang2024-blip/3DPartHub/main/docker-compose.yml
 touch .env
 grep -q '^IMAGE_TAG=' .env && sed -i 's/^IMAGE_TAG=.*/IMAGE_TAG=latest/' .env || echo 'IMAGE_TAG=latest' >> .env
-docker compose pull
-docker compose up -d --force-recreate
+docker-compose pull
+docker-compose up -d --force-recreate
 ```
 
 部署或升级后建议运行只读自检：
@@ -47,7 +47,7 @@ curl -fsSL -O https://raw.githubusercontent.com/liaoweixiang2024-blip/3DPartHub/
 sh collect-deploy-evidence.sh
 ```
 
-最终生产验收默认要求最近一次备份恢复演练纳入生产证据。维护窗口内先执行 `docker compose exec api npm run backup:e2e`，再运行 `sh collect-deploy-evidence.sh`。演练成功会写入 `server/static/backups/.restore-drills/latest.json`，证据包里的 `backup-inventory.txt` 会出现 `Restore drill evidence: status=passed`，验收摘要会显示“备份恢复演练已执行”。缺少演练、演练时间无效、超过 30 天，或备份目录残留 `.work` 临时工作目录时，`backupInventory.riskLevel` 会提升为中风险，`productionEvidence.finalConclusionReady` 不会为 `true`。该命令会真实执行恢复流程，生产环境执行前应确认已有外部副本。
+最终生产验收默认要求最近一次备份恢复演练纳入生产证据。维护窗口内先执行 `docker-compose exec api npm run backup:e2e`，再运行 `sh collect-deploy-evidence.sh`。演练成功会写入 `server/static/backups/.restore-drills/latest.json`，证据包里的 `backup-inventory.txt` 会出现 `Restore drill evidence: status=passed`，验收摘要会显示“备份恢复演练已执行”。缺少演练、演练时间无效、超过 30 天，或备份目录残留 `.work` 临时工作目录时，`backupInventory.riskLevel` 会提升为中风险，`productionEvidence.finalConclusionReady` 不会为 `true`。该命令会真实执行恢复流程，生产环境执行前应确认已有外部副本。
 
 如果指定 `--output-dir`，目录必须为空；脚本会拒绝复用已有旧证据目录，避免新旧报告混在同一个证据包里。
 

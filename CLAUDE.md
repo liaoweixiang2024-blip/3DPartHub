@@ -78,8 +78,8 @@ git push origin v<版本号>
 ### 5. 服务器更新
 ```bash
 cd /opt/3dparthub
-docker compose pull
-docker compose up -d
+docker-compose pull
+docker-compose up -d
 # 更新后强制刷新浏览器：Cmd+Shift+R（Mac）或 Ctrl+Shift+R（Windows）
 ```
 
@@ -87,7 +87,7 @@ docker compose up -d
 
 ### 推送后服务器没变化？
 1. 确认 Docker 镜像是否重新构建并推送了（不能只推代码不推镜像）
-2. 服务器执行 `docker compose pull` 确认拉到新镜像
+2. 服务器执行 `docker-compose pull` 确认拉到新镜像
 3. 用 `--force-recreate` 重建容器
 4. 浏览器强制刷新（Cmd+Shift+R）清除缓存
 

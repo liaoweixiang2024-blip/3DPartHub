@@ -1633,7 +1633,7 @@ function verifyDocs() {
   );
   assertIncludes(
     'docs/部署健康验收清单.md',
-    'docker compose exec api npm run backup:e2e',
+    'docker-compose exec api npm run backup:e2e',
     'deployment checklist must document production backup restore drill command',
   );
   assertIncludes(
@@ -1653,7 +1653,7 @@ function verifyDocs() {
   );
   assertIncludes(
     'README.md',
-    'docker compose exec api npm run backup:e2e',
+    'docker-compose exec api npm run backup:e2e',
     'README must document backup restore drill command',
   );
   assertIncludes(
