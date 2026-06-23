@@ -83,6 +83,7 @@ import {
   type TicketClassificationConfig,
   type UploadPolicy,
 } from '../lib/businessConfig';
+import { copyText } from '../lib/clipboard';
 import { DEFAULT_PRIVACY_SECTIONS, DEFAULT_TERMS_SECTIONS, type LegalSection } from '../lib/legalContent';
 import {
   buildFooterCopyright,
@@ -7281,6 +7282,26 @@ function Content() {
                                         {b.manifestVersion && <span>清单 v{b.manifestVersion}</span>}
                                         {b.verifiedAt && <span>已校验</span>}
                                       </div>
+                                      {b.filePath && (
+                                        <div className="mt-1.5 flex items-center gap-1.5 min-w-0">
+                                          <span className="shrink-0 text-xs text-on-surface-variant">路径</span>
+                                          <code className="min-w-0 truncate font-mono text-[11px] text-on-surface-variant/80 bg-surface-container-lowest/40 px-1.5 py-0.5 rounded">
+                                            {b.filePath}
+                                          </code>
+                                          <button
+                                            type="button"
+                                            onClick={() => {
+                                              copyText(b.filePath!)
+                                                .then(() => toast('已复制路径', 'success'))
+                                                .catch(() => toast('复制失败', 'error'));
+                                            }}
+                                            title="复制路径"
+                                            className="shrink-0 text-on-surface-variant/60 hover:text-on-surface-variant transition-colors"
+                                          >
+                                            <Icon name="content_copy" size={13} />
+                                          </button>
+                                        </div>
+                                      )}
                                     </div>
                                     <div className="grid grid-cols-2 gap-2 sm:grid-cols-5 lg:flex lg:flex-wrap lg:items-center lg:gap-1.5 lg:shrink-0">
                                       <button

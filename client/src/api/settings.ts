@@ -345,6 +345,7 @@ export interface StorageSyncStatusPayload {
 export interface BackupRecord {
   id: string;
   filename: string;
+  filePath?: string;
   name: string;
   scope?: BackupScope;
   scopeLabel?: string;

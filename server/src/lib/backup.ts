@@ -378,6 +378,8 @@ mkdirSync(BACKUP_WORK_DIR, { recursive: true });
 export interface BackupRecord {
   id: string;
   filename: string;
+  /** 宿主机侧归档路径（docker-compose bind mount：./server/<staticDir>/backups），仅供后台展示定位用 */
+  filePath?: string;
   name: string;
   scope?: BackupScope;
   scopeLabel?: string;
@@ -476,6 +478,13 @@ function metaPath(id: string) {
 }
 function archivePath(id: string) {
   return buildArchivePath(resolveBackupDir(id) ?? ACTIVE_BACKUP_DIR, id);
+}
+
+// 宿主机侧归档路径，镜像 docker-compose 的 bind mount（见 docker-compose.yml）：
+//   ./server/<staticDir>/backups  <->  <cwd>/<staticDir>/backups
+// 仅供后台「备份记录」展示，方便运维在宿主机上定位/复制备份文件。
+function hostBackupFilePath(filename: string): string {
+  return join('server', config.staticDir, 'backups', filename);
 }
 
 function isStepFileName(name: string): boolean {
@@ -1869,7 +1878,9 @@ export function listBackups(): BackupRecord[] {
         if (seen.has(record.id)) continue;
         const archive = buildArchivePath(dir, record.id);
         if (!existsSync(archive)) continue;
-        records.push(normalizeBackupRecord(record, archive, join(dir, file)));
+        const normalized = normalizeBackupRecord(record, archive, join(dir, file));
+        normalized.filePath = hostBackupFilePath(normalized.filename);
+        records.push(normalized);
         seen.add(record.id);
       } catch {
         log.warn({ file, dir }, 'Failed to read backup record JSON');
@@ -1885,6 +1896,7 @@ export function listBackups(): BackupRecord[] {
         records.push({
           id,
           filename: file,
+          filePath: hostBackupFilePath(file),
           name: `未登记备份 ${formatDate(stats.mtime)}`,
           createdAt: stats.mtime.toISOString(),
           fileSize: stats.size,
