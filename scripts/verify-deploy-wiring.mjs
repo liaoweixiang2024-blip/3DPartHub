@@ -1653,7 +1653,7 @@ function verifyDocs() {
   );
   assertIncludes(
     'README.md',
-    'docker compose exec api npm run backup:e2e',
+    './dcomp exec api npm run backup:e2e',
     'README must document backup restore drill command',
   );
   assertIncludes(
