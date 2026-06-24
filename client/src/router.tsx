@@ -489,6 +489,8 @@ export default function Router() {
               </PageWrap>
             }
           />
+          {/* 404 / 未匹配路由：复用公开页 chrome（PC 页头 / 移动端页头+底部菜单） */}
+          <Route path="*" element={<NotFoundPage />} />
         </Route>
 
         {/* ── Admin layout (TopNav + Sidebar) ── */}
@@ -710,8 +712,6 @@ export default function Router() {
             }
           />
         </Route>
-
-        <Route path="*" element={<NotFoundPage />} />
       </Routes>
     </MaintenanceGate>
   );
