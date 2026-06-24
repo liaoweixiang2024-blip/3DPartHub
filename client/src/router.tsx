@@ -3,7 +3,6 @@ import { useTranslation } from 'react-i18next';
 import { Routes, Route, Link, useLocation, Navigate, useNavigate } from 'react-router-dom';
 import { AdminLayout, AdminPageShell, PublicLayout } from './components/shared/AdminPageShell';
 import AuthModal from './components/shared/AuthModal';
-import BrandMark from './components/shared/BrandMark';
 import ErrorBoundary from './components/shared/ErrorBoundary';
 import Icon from './components/shared/Icon';
 import MaintenanceGate from './components/shared/MaintenanceGate';
@@ -282,7 +281,6 @@ function NotFoundPage() {
 
   return (
     <NotFound
-      brand={<BrandMark size="nav" centered />}
       title={
         <>
           <Icon name="search_off" size={56} className="mx-auto text-on-surface-variant/50" />

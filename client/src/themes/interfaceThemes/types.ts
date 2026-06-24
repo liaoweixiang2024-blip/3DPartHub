@@ -142,7 +142,7 @@ export interface AuthDialogThemeProps {
 }
 
 export interface NotFoundThemeProps {
-  brand: ReactNode;
+  brand?: ReactNode;
   title: ReactNode;
   description: ReactNode;
   homeLink: ReactNode;
