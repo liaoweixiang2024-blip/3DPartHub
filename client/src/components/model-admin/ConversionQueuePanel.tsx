@@ -20,6 +20,21 @@ import {
   previewOpsFilterRowClass,
 } from './shared';
 
+// 日志行形如「[2026-06-25T07:54:52.812Z] 消息」，时间戳是 UTC（末尾 Z）。
+// 服务端按 ISO 原样存，这里在展示前转成浏览器本地时区，避免用户看到与本地时间不符的时刻。
+function formatLogLine(line: string): string {
+  const match = /^\[(.+?)\]\s?(.*)$/.exec(line);
+  if (!match) return line;
+  const [, raw, msg] = match;
+  const d = new Date(raw);
+  if (Number.isNaN(d.getTime())) return line;
+  const pad = (n: number) => String(n).padStart(2, '0');
+  const local = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(
+    d.getMinutes(),
+  )}:${pad(d.getSeconds())}`;
+  return `[${local}] ${msg}`;
+}
+
 // ── Loading states ─────────────────────────────────────────────────────────
 
 function ConversionQueueListLoadingState({ compact }: { compact: boolean }) {
@@ -546,7 +561,7 @@ export default function ConversionQueuePanel({
                     </div>
                     {(detail.logs || []).length > 0 ? (
                       <pre className="max-h-56 overflow-auto whitespace-pre-wrap break-words rounded-sm bg-surface-container-high p-3 text-[11px] leading-relaxed text-on-surface">
-                        {(detail.logs || []).join('\n')}
+                        {(detail.logs || []).map(formatLogLine).join('\n')}
                       </pre>
                     ) : (
                       <div className="rounded-sm bg-surface-container-high px-3 py-4 text-center text-xs text-on-surface-variant">
