@@ -5,6 +5,7 @@ import { Router, Response } from 'express';
 import multer from 'multer';
 import { sendAcceleratedFile } from '../../lib/acceleratedDownload.js';
 import {
+  cancelRestoreJob,
   deleteBackup,
   getActiveImportSaveJob,
   getActiveBackupJob,
@@ -389,7 +390,30 @@ export function createSettingsBackupRouter() {
       error: job.error,
       result: job.result,
       logs: job.logs,
+      cancelled: job.cancelled,
+      destructiveStarted: job.destructiveStarted,
     });
+  });
+
+  // Admin: cancel an in-progress restore (only safe before DB schema reset)
+  router.post('/api/settings/backup/restore/cancel/:id', authMiddleware, async (req: AuthRequest, res: Response) => {
+    if (!adminOnly(req, res)) return;
+    const jobId = asSingleString(req.params.id);
+    if (!jobId) {
+      res.status(400).json({ detail: '恢复任务参数无效' });
+      return;
+    }
+    try {
+      const result = cancelRestoreJob(jobId);
+      if (!result.cancelled) {
+        res.status(409).json({ detail: result.message });
+        return;
+      }
+      res.json({ cancelled: true, message: result.message });
+    } catch (err: unknown) {
+      log.error({ err, jobId }, 'Cancel restore failed');
+      res.status(500).json({ detail: getErrorMessage(err) || '取消恢复失败' });
+    }
   });
 
   router.get('/api/settings/backup/import-save-active', authMiddleware, async (req: AuthRequest, res: Response) => {
@@ -612,6 +636,8 @@ export function createSettingsBackupRouter() {
         error: job.error,
         result: job.result,
         logs: job.logs,
+        cancelled: job.cancelled,
+        destructiveStarted: job.destructiveStarted,
       });
     },
   );

@@ -469,6 +469,10 @@ interface ProgressPayload<T = unknown> {
   error?: string;
   scope?: BackupScope;
   result?: T;
+  /** 恢复任务：用户已手动取消（与失败区分） */
+  cancelled?: boolean;
+  /** 恢复任务：已进入数据库 schema 重置，禁止取消 */
+  destructiveStarted?: boolean;
 }
 
 export interface ActiveBackupJob extends ProgressPayload {
@@ -859,7 +863,13 @@ export async function startRestore(id: string): Promise<string> {
 
 export async function pollRestoreProgress(
   jobId: string,
-  onProgress?: (stage: string, percent: number, message: string, logs?: string[]) => void,
+  onProgress?: (
+    stage: string,
+    percent: number,
+    message: string,
+    logs?: string[],
+    meta?: { cancelled?: boolean; destructiveStarted?: boolean },
+  ) => void,
   signal?: AbortSignal,
 ): Promise<RestoreResult> {
   return new Promise((resolve, reject) => {
@@ -871,6 +881,8 @@ export async function pollRestoreProgress(
     let lastStage = 'extracting';
     let lastPercent = 0;
     let lastLogs: string[] = [];
+    let lastCancelled = false;
+    let lastDestructive = false;
     const MAX_ERRORS = 240;
     const RETRYABLE_STATUSES = new Set([408, 429, 500, 502, 503, 504]);
     const poll = setInterval(async () => {
@@ -886,13 +898,18 @@ export async function pollRestoreProgress(
         lastStage = d.stage || lastStage;
         lastPercent = Number.isFinite(Number(d.percent)) ? Number(d.percent) : lastPercent;
         lastLogs = Array.isArray(d.logs) ? d.logs : lastLogs;
-        onProgress?.(d.stage || '', d.percent ?? 0, d.message || '', d.logs);
+        lastCancelled = !!d.cancelled;
+        lastDestructive = !!d.destructiveStarted;
+        onProgress?.(d.stage || '', d.percent ?? 0, d.message || '', d.logs, {
+          cancelled: lastCancelled,
+          destructiveStarted: lastDestructive,
+        });
         if (d.stage === 'done') {
           clearInterval(poll);
           resolve(d.result ?? { dbRestored: true, modelCount: 0, thumbnailCount: 0 });
         } else if (d.stage === 'error') {
           clearInterval(poll);
-          reject(new Error(d.error || '恢复失败'));
+          reject(new Error(d.cancelled ? '恢复已取消' : d.error || '恢复失败'));
         }
       } catch (err: unknown) {
         if (signal?.aborted) {
@@ -910,7 +927,10 @@ export async function pollRestoreProgress(
         }
         const retryable = !status || RETRYABLE_STATUSES.has(status);
         if (retryable) {
-          onProgress?.(lastStage, lastPercent, '后台正在恢复或服务正在重连，任务会继续等待...', lastLogs);
+          onProgress?.(lastStage, lastPercent, '后台正在恢复或服务正在重连，任务会继续等待...', lastLogs, {
+            cancelled: lastCancelled,
+            destructiveStarted: lastDestructive,
+          });
         } else {
           clearInterval(poll);
           reject(new Error(getResponseMessage(httpError.response?.data) || httpError.message || '查询恢复进度失败'));
@@ -931,6 +951,11 @@ export async function pollRestoreProgress(
       { once: true },
     );
   });
+}
+
+export async function cancelRestore(jobId: string): Promise<{ cancelled: boolean; message: string }> {
+  const res = await client.post(`/settings/backup/restore/cancel/${jobId}`, {}, { timeout: 30000 });
+  return unwrapResponse<{ cancelled: boolean; message: string }>(res);
 }
 
 export async function importBackupAsRecord(

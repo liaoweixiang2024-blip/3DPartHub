@@ -29,6 +29,7 @@ import {
   deleteBackup,
   startRestore,
   pollRestoreProgress,
+  cancelRestore,
   listBackups,
   importBackup,
   importBackupAsRecord,
@@ -5037,6 +5038,7 @@ function Content() {
   const backupScopeMenuRef = useRef<HTMLDivElement>(null);
   const backupActionInFlight = useRef(false);
   const restoreActionInFlight = useRef(false);
+  const restoreCancelRequestedRef = useRef(false);
   const importActionInFlight = useRef(false);
   const verifyActionInFlight = useRef(false);
   const backupDeleteInFlight = useRef(false);
@@ -5310,7 +5312,7 @@ function Content() {
         loadBackupStats();
         loadBackupHealth();
       } catch (err: unknown) {
-        toast(errorMessage(err, '恢复失败'), 'error');
+        handleRestoreFlowError(err, '恢复失败');
       } finally {
         localStorage.removeItem('restoreJobId');
         localStorage.removeItem('restoreConfirmBackupId');
@@ -5776,7 +5778,7 @@ function Content() {
         loadBackupHealth();
       }
     } catch (err: unknown) {
-      toast(errorMessage(err, '操作失败'), 'error');
+      handleRestoreFlowError(err, '操作失败');
     } finally {
       localStorage.removeItem('restoreJobId');
       localStorage.removeItem('importSaveJobId');
@@ -5820,7 +5822,7 @@ function Content() {
       loadBackupStats();
       loadBackupHealth();
     } catch (err: unknown) {
-      toast(errorMessage(err, '恢复失败'), 'error');
+      handleRestoreFlowError(err, '恢复失败');
     } finally {
       localStorage.removeItem('restoreJobId');
       localStorage.removeItem(RESTORE_JOB_SOURCE_KEY);
@@ -5876,6 +5878,56 @@ function Content() {
     setRestoreConfirmId(id);
   }
 
+  async function handleCancelRestore() {
+    const jobId = localStorage.getItem('restoreJobId');
+    if (!jobId) {
+      toast('未找到进行中的恢复任务', 'info');
+      return;
+    }
+    if (!window.confirm('确认停止恢复？数据库重置前的阶段可安全停止，不会修改任何数据。')) return;
+    restoreCancelRequestedRef.current = true;
+    try {
+      const r = await cancelRestore(jobId);
+      if (r.cancelled) {
+        toast(r.message || '已停止恢复', 'success');
+      } else {
+        restoreCancelRequestedRef.current = false;
+        toast(r.message || '当前阶段无法安全停止恢复', 'info');
+      }
+    } catch (err: unknown) {
+      restoreCancelRequestedRef.current = false;
+      toast(errorMessage(err, '停止恢复失败'), 'error');
+    }
+  }
+
+  function handleRestoreFlowError(err: unknown, fallback: string) {
+    if (restoreCancelRequestedRef.current) {
+      restoreCancelRequestedRef.current = false;
+      return; // 取消的提示已由 handleCancelRestore 发出，这里静默吞掉 poll 的拒绝
+    }
+    toast(errorMessage(err, fallback), 'error');
+  }
+
+  const restoreStageLocked = restoreProgress.stage === 'restoring_db' || restoreProgress.stage === 'restoring_files';
+  const cancelRestoreButton = restoreProgress.message ? (
+    <div className="mt-2 flex justify-end">
+      <button
+        type="button"
+        disabled={restoreStageLocked}
+        onClick={handleCancelRestore}
+        title={
+          restoreStageLocked
+            ? '数据库恢复中，无法安全取消（中断会留下不完整数据库）'
+            : '停止恢复（数据库重置前可安全停止，不会修改任何数据）'
+        }
+        className="px-2.5 py-1.5 text-xs font-medium bg-error-container/10 text-error rounded-md hover:bg-error-container/20 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center gap-1"
+      >
+        <Icon name="block" size={13} />
+        停止恢复
+      </button>
+    </div>
+  ) : null;
+
   async function handleRestoreConfirm() {
     if (!restoreConfirmId) return;
     if (restoreActionInFlight.current) return;
@@ -5896,7 +5948,7 @@ function Content() {
       loadBackupStats();
       loadBackupHealth();
     } catch (err: unknown) {
-      toast(errorMessage(err, '恢复失败'), 'error');
+      handleRestoreFlowError(err, '恢复失败');
     } finally {
       localStorage.removeItem('restoreJobId');
       localStorage.removeItem('restoreConfirmBackupId');
@@ -7385,7 +7437,10 @@ function Content() {
                                               </div>
                                             </>
                                           ) : (
-                                            <TaskProgressCard progress={restoreProgress} color="primary" />
+                                            <>
+                                              <TaskProgressCard progress={restoreProgress} color="primary" />
+                                              {cancelRestoreButton}
+                                            </>
                                           )}
                                         </div>
                                       </div>
@@ -7444,13 +7499,16 @@ function Content() {
                               )}
                               {/* Phase 2: Server processing */}
                               {(restoreProgress.message || uploadProgress >= 100) && (
-                                <TaskProgressCard
-                                  progress={{
-                                    message: restoreProgress.message || '上传完成，正在处理...',
-                                    percent: restoreProgress.message ? restoreProgress.percent : 100,
-                                    logs: restoreProgress.logs,
-                                  }}
-                                />
+                                <div className="space-y-2">
+                                  <TaskProgressCard
+                                    progress={{
+                                      message: restoreProgress.message || '上传完成，正在处理...',
+                                      percent: restoreProgress.message ? restoreProgress.percent : 100,
+                                      logs: restoreProgress.logs,
+                                    }}
+                                  />
+                                  {cancelRestoreButton}
+                                </div>
                               )}
                             </div>
                           )}

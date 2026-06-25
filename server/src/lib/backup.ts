@@ -633,6 +633,10 @@ interface RestoreJob {
   percent: number;
   message: string;
   error?: string;
+  /** 已进入不可安全取消的阶段（数据库 schema 重置），为 true 时禁止取消 */
+  destructiveStarted?: boolean;
+  /** 用户手动取消（与失败区分，前端展示用） */
+  cancelled?: boolean;
   result?: {
     dbRestored: boolean;
     modelCount: number;
@@ -921,6 +925,68 @@ export function getActiveRestoreJob(): RestoreJob | undefined {
     if (job && job.stage !== 'done' && job.stage !== 'error') return job;
   }
   return undefined;
+}
+
+/**
+ * 取消正在进行的恢复任务。仅在「数据库 schema 重置前」(destructiveStarted=false) 安全：
+ * 此时只有 tar / pg_dump（只读）在跑，杀掉不影响现有数据。一旦进入 schema 重置则拒绝取消，
+ * 避免留下不完整数据库。
+ */
+export function cancelRestoreJob(jobId: string): { cancelled: boolean; message: string } {
+  const job = loadJob<RestoreJob>(jobId);
+  if (!job) return { cancelled: false, message: '恢复任务不存在或已结束' };
+  if (job.stage === 'done' || job.stage === 'error') {
+    return { cancelled: false, message: job.cancelled ? '恢复任务已取消' : '恢复任务已结束，无需取消' };
+  }
+  if (job.destructiveStarted) {
+    return {
+      cancelled: false,
+      message: '数据库恢复已开始（schema 已重置），无法安全取消；请等待完成或失败后从恢复前快照回滚',
+    };
+  }
+
+  // 先 SIGKILL 整个进程组（worker 是 detached 进程组长，负 PID 连 tar/pg_dump 子进程一起立即终止），
+  // 避免 worker 在死亡前再 syncJob 覆盖取消状态。预重置阶段仅 tar / pg_dump(只读) 在跑，杀掉安全。
+  let killed = false;
+  if (getActiveLockJobId() === jobId) {
+    try {
+      const raw = readFileSync(LOCK_FILE, 'utf-8').trim();
+      const pid = Number(raw.split(/\r?\n/)[0]);
+      if (pid) {
+        try {
+          process.kill(-pid, 'SIGKILL');
+          killed = true;
+        } catch (err: unknown) {
+          const code = (err as NodeJS.ErrnoException)?.code;
+          if (code === 'ESRCH')
+            killed = true; // 进程已退出，视为已终止
+          else log.warn({ err, pid, jobId }, '取消恢复：终止进程组失败');
+        }
+      }
+    } catch {
+      // 锁文件读取失败 — 忽略，继续标记取消
+    }
+  }
+
+  // 清理该任务的临时工作目录
+  try {
+    const workDir = join(BACKUP_WORK_DIR, jobId);
+    if (existsSync(workDir)) rmSync(workDir, { recursive: true, force: true });
+  } catch (err: unknown) {
+    log.warn({ err, jobId }, '取消恢复：清理临时目录失败');
+  }
+
+  // 标记取消（stage=error 终态 + cancelled=true 供前端区分）。worker 已死不会再覆盖；
+  // monitorWorkerExit 的 markWorkerExitIfStillRunning 见 stage 已终态会跳过，不覆盖取消状态。
+  job.stage = 'error';
+  job.cancelled = true;
+  job.error = undefined;
+  job.message = killed ? '已取消恢复，未修改任何数据' : '已取消恢复';
+  addLog(job, '用户已手动取消恢复任务');
+  syncJob(job);
+  restoreJobs.set(job.id, job);
+  releaseLockForJob(jobId);
+  return { cancelled: true, message: job.message };
 }
 
 // ---- Import as backup record (save to backup list) ----
@@ -2809,7 +2875,14 @@ async function runRestoreFromArchive(
 
     // ── Phase 1: Single-pass pre-extraction (read tar ONCE) ──
     let t = addLogStart(job, '正在读取备份包文件列表...');
-    const allEntries = await listArchiveEntriesWithProgress(readableArchivePath);
+    let lastScanSync = 0;
+    const allEntries = await listArchiveEntriesWithProgress(readableArchivePath, ({ elapsedMs, entryCount }) => {
+      // 每 ~2s 更新一次进度，让前端看到扫描在动（大归档这步可能很久）
+      if (elapsedMs - lastScanSync < 2000) return;
+      lastScanSync = elapsedMs;
+      job.message = `正在扫描备份归档... 已扫描 ${entryCount} 个条目，用时 ${Math.round(elapsedMs / 1000)}s`;
+      syncJob(job);
+    });
     addLogEnd(job, t, `文件列表读取完成（${allEntries.length} 个条目）`);
 
     t = addLogStart(job, '正在读取备份清单...');
@@ -2915,6 +2988,8 @@ async function runRestoreFromArchive(
         job.percent = 45;
         job.message = '正在重置数据库...';
         syncJob(job);
+        // 即将 DROP+CREATE 数据库 schema，此后中断会留下不完整数据库，禁止取消。
+        job.destructiveStarted = true;
         t = addLogStart(job, '正在重置数据库 schema（DROP + CREATE）...');
         await resetDatabaseSchema(DB_URL_CLEAN);
         addLogEnd(job, t, '数据库 schema 已重置');
@@ -2978,6 +3053,8 @@ async function runRestoreFromArchive(
         job.percent = 45;
         job.message = '正在重置数据库结构...';
         syncJob(job);
+        // 即将重置数据库 schema，此后中断会留下不完整数据库，禁止取消。
+        job.destructiveStarted = true;
         t = addLogStart(job, '正在重置数据库 schema (增量模式)...');
         await resetDatabaseSchema(DB_URL_CLEAN);
         addLogEnd(job, t, '数据库 schema 已重置');
