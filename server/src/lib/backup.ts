@@ -307,7 +307,9 @@ const DB_DUMP_TIMEOUT_MS = 60 * 60_000;
 const DB_RESTORE_TIMEOUT_MS = 60 * 60_000;
 const ARCHIVE_LIST_TIMEOUT_MS = 30 * 60_000;
 const ARCHIVE_EXTRACT_TIMEOUT_MS = 60 * 60_000;
-const ARCHIVE_META_TIMEOUT_MS = 5 * 60_000;
+// 读清单需从归档头顺序解压到 manifest 条目（_backup_db 里 database.sql 可能很大），
+// 大库 + 慢盘/低配 CPU 下 5 分钟不够，提到 20 分钟避免误判超时。
+const ARCHIVE_META_TIMEOUT_MS = 20 * 60_000;
 const DEFAULT_BACKUP_LOCK_STALE_MINUTES = 12 * 60;
 const BACKUP_LOCK_STALE_MS = (() => {
   const raw = Number(process.env.BACKUP_LOCK_STALE_MINUTES);
