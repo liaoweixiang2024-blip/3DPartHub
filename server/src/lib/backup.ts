@@ -2581,12 +2581,17 @@ async function runRestoreFromFile(job: RestoreJob, archPath: string, removeAfter
 }
 
 async function runRestoreAutoFromArchive(job: RestoreJob, archPath: string, removeAfter: boolean) {
+  // 读清单需从归档头顺序解压到 manifest 条目，大备份可能数分钟；先给个诚实提示，
+  // 避免停留在 job 创建时的「正在解压备份文件... 0%」让用户误以为卡住。
+  job.message = '正在读取备份清单（大备份可能需要数分钟，请耐心等待）...';
+  syncJob(job);
   const rawManifest = await readBackupManifestForKind(archPath);
   if (isModuleBackupManifest(rawManifest)) {
     await runModuleRestoreFromArchive(job, archPath, removeAfter, rawManifest.scope);
     return;
   }
-  await runRestoreFromArchive(job, archPath, removeAfter);
+  // 透传已读清单，runRestoreFromArchive 不必再 tar 读第二遍。
+  await runRestoreFromArchive(job, archPath, removeAfter, rawManifest);
 }
 
 async function runModuleRestoreFromArchive(
@@ -2778,7 +2783,12 @@ export async function runRestoreWorker(jobId: string, mode: 'backup' | 'file', t
   }
 }
 
-async function runRestoreFromArchive(job: RestoreJob, archPath: string, removeArchiveAfterExtract: boolean) {
+async function runRestoreFromArchive(
+  job: RestoreJob,
+  archPath: string,
+  removeArchiveAfterExtract: boolean,
+  preReadManifest?: BackupManifest | null,
+) {
   const tmpDir = prepareWorkDir(job.id);
   const result = { dbRestored: false, modelCount: 0, thumbnailCount: 0 };
   let safetySnapshot: string | null = null;
@@ -2803,7 +2813,10 @@ async function runRestoreFromArchive(job: RestoreJob, archPath: string, removeAr
     addLogEnd(job, t, `文件列表读取完成（${allEntries.length} 个条目）`);
 
     t = addLogStart(job, '正在读取备份清单...');
-    const archiveManifest = readArchiveManifestFromEntries(readableArchivePath, allEntries);
+    const archiveManifest =
+      preReadManifest && archiveHasEntry(allEntries, BACKUP_MANIFEST_ENTRY)
+        ? preReadManifest
+        : readArchiveManifestFromEntries(readableArchivePath, allEntries);
     if (!archiveManifest) {
       throw new Error('备份包缺少清单文件，无法验证完整性');
     }
