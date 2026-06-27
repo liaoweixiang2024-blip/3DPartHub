@@ -1635,12 +1635,13 @@ run_evidence_collector_case() {
 }
 EOF
   mkdir -p "$WORK_DIR/server/static/backups/.restore-drills"
-  cat > "$WORK_DIR/server/static/backups/.restore-drills/latest.json" <<'EOF'
+  checked_at="$(date -u '+%Y-%m-%dT%H:%M:%SZ' 2>/dev/null || printf '2026-06-01T00:00:00Z')"
+  cat > "$WORK_DIR/server/static/backups/.restore-drills/latest.json" <<EOF
 {
   "schemaVersion": 1,
   "tool": "3DPartHub backup restore drill",
   "status": "passed",
-  "checkedAt": "2026-05-26T12:02:00.000Z",
+  "checkedAt": "${checked_at}",
   "createdBackupId": "backup_20260526_120000",
   "importedBackupId": "backup_20260526_120000_imported",
   "restoredFromBackupId": "backup_20260526_120000_imported"
