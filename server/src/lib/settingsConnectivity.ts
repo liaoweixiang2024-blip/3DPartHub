@@ -1,7 +1,7 @@
 import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { Readable } from 'node:stream';
-import Redis from 'ioredis';
+import { cacheDel, cacheGet, cacheIsAvailable, cachePing, cacheSet } from './cache.js';
 import { config } from './config.js';
 import { createS3Client, readStorageSettings } from './storageProvider.js';
 
@@ -86,52 +86,43 @@ async function readableToString(stream: NodeJS.ReadableStream): Promise<string> 
   return Buffer.concat(chunks).toString('utf8');
 }
 
-export async function testCacheConnectivity(settings: Record<string, unknown>): Promise<SettingsConnectivityResult> {
-  const enabled = settingBoolean(settings, 'cache_enabled', true);
-  const driver = settingString(settings, 'cache_driver', 'redis');
-  if (!enabled || driver === 'off') {
-    return result('warning', '缓存已关闭，未执行 Redis 测试', ['cache_enabled 关闭或 cache_driver 为 off。']);
-  }
-  if (driver === 'memory') {
-    return result('warning', '当前使用内存缓存，无需连接 Redis', [
-      '内存缓存只适合单机或开发环境，多进程部署建议使用 Redis。',
-    ]);
-  }
-  if (driver !== 'redis') {
-    return result('error', '未知缓存驱动，无法测试', [`cache_driver=${driver || '空'}`]);
+export async function testCacheConnectivity(_settings: Record<string, unknown>): Promise<SettingsConnectivityResult> {
+  const startedAt = Date.now();
+  const redisUrl = config.redisUrl;
+  const testKey = `settings-test:${Date.now()}`;
+
+  // Test the cache connection the application ACTUALLY uses (env REDIS_URL, via the
+  // shared cache.ts client). The app's cache layer ignores the redis_url /
+  // redis_password DB settings, so building a separate client from those settings
+  // can report WRONGPASS even while the real cache is perfectly healthy — which is
+  // exactly the false alarm this guards against. A green result here means the same
+  // connection serving /api/models, /api/categories etc. is live.
+  let ready = cacheIsAvailable();
+  if (!ready) {
+    try {
+      await cachePing();
+      ready = cacheIsAvailable();
+    } catch {
+      ready = false;
+    }
   }
 
-  const redisUrl = settingString(settings, 'redis_url', config.redisUrl);
-  const redisPassword = settingString(settings, 'redis_password');
-  const redisDb = Math.min(15, Math.max(0, Math.round(settingNumber(settings, 'redis_db', 0))));
-  const keyPrefix = normalizePrefix(settingString(settings, 'redis_key_prefix', '3dparthub'), '3dparthub');
-  const useTls = settingBoolean(settings, 'redis_tls_enabled', false) || redisUrl.startsWith('rediss://');
-  const testKey = `${keyPrefix}:settings-test:${Date.now()}`;
-  const startedAt = Date.now();
-  let firstRedisError: Error | null = null;
-  const redis = new Redis(redisUrl, {
-    lazyConnect: true,
-    password: redisPassword || undefined,
-    db: redisDb,
-    tls: useTls ? {} : undefined,
-    connectTimeout: 3000,
-    commandTimeout: 3000,
-    maxRetriesPerRequest: 0,
-    retryStrategy: () => null,
-  });
-  redis.on('error', (error) => {
-    firstRedisError ||= error;
-  });
+  if (!ready) {
+    return result(
+      'error',
+      'Redis 测试失败',
+      ['应用实际使用的缓存连接（环境变量 REDIS_URL）未就绪', ...redisTroubleshootingHints(redisUrl)],
+      { provider: 'redis', latencyMs: Date.now() - startedAt },
+    );
+  }
 
   try {
-    await redis.connect();
-    const pong = await redis.ping();
-    await redis.set(testKey, 'ok', 'EX', 30);
-    const value = await redis.get(testKey);
-    await redis.del(testKey);
+    await cacheSet(testKey, 'ok', 30);
+    const value = await cacheGet<string>(testKey);
+    await cacheDel(testKey);
     const latencyMs = Date.now() - startedAt;
-    if (pong !== 'PONG' || value !== 'ok') {
-      return result('error', 'Redis 已连接，但读写校验失败', [`PING=${pong}`, `写入后读取=${value ?? '空'}`], {
+    if (value !== 'ok') {
+      return result('error', 'Redis 已连接，但读写校验失败', [`写入后读取=${value ?? '空'}`], {
         provider: 'redis',
         latencyMs,
       });
@@ -139,25 +130,14 @@ export async function testCacheConnectivity(settings: Record<string, unknown>): 
     return result(
       'success',
       'Redis 连接和读写测试通过',
-      [`数据库 DB ${redisDb}`, `测试键 ${testKey}`, `读写延迟 ${latencyMs}ms`],
+      ['使用应用实际缓存连接（REDIS_URL 环境变量）', `测试键 ${testKey}`, `读写延迟 ${latencyMs}ms`],
       { provider: 'redis', latencyMs },
     );
   } catch (error) {
-    const message = errorMessage(firstRedisError || error);
-    return result('error', 'Redis 测试失败', [message, ...redisTroubleshootingHints(redisUrl)], {
+    return result('error', 'Redis 测试失败', [errorMessage(error), ...redisTroubleshootingHints(redisUrl)], {
       provider: 'redis',
       latencyMs: Date.now() - startedAt,
     });
-  } finally {
-    try {
-      if (redis.status === 'ready') {
-        await redis.quit();
-      } else {
-        redis.disconnect();
-      }
-    } catch {
-      redis.disconnect();
-    }
   }
 }
 

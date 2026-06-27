@@ -28,6 +28,13 @@ export default defineConfig({
             return 'mobile-nav-drawer';
           }
 
+          // 87KB of legal text — only used by LegalPage + SettingsPage. Pin to its
+          // own chunk so it never lands on the home first paint (saves ~28KB gzip
+          // off the homepage's initial download).
+          if (normalizedId.includes('/src/lib/legalContent.ts')) {
+            return 'legal-content';
+          }
+
           if (normalizedId.includes('/node_modules/')) {
             if (
               normalizedId.includes('/three/') ||
@@ -56,10 +63,7 @@ export default defineConfig({
             return 'vendor-app';
           }
 
-          if (
-            normalizedId.includes('/src/api/') ||
-            normalizedId.includes('/src/stores/')
-          ) {
+          if (normalizedId.includes('/src/api/') || normalizedId.includes('/src/stores/')) {
             return 'app-api';
           }
 
