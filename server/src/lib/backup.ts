@@ -3847,7 +3847,7 @@ function tableRows(payload: ModuleBackupPayload, key: string): Record<string, un
   return value.filter(isPlainRecord).map((row) => ({ ...row }));
 }
 
-function reviveDateFields(row: Record<string, unknown>, fields: string[]): Record<string, unknown> {
+export function reviveDateFields(row: Record<string, unknown>, fields: string[]): Record<string, unknown> {
   const next = { ...row };
   for (const field of fields) {
     if (next[field] == null) continue;

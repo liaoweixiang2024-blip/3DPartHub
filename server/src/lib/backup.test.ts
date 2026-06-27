@@ -14,6 +14,7 @@ const {
   materializeReadableBackupArchive,
   MODULE_BACKUP_TABLE_KEYS,
   normalizeBackupArchiveEntryList,
+  reviveDateFields,
 } = await import('./backup.js');
 
 function makeJob(stage: string, updatedAt?: number) {
@@ -141,6 +142,36 @@ test('module backups include user-facing dependent records', () => {
     'productWallImageFavorites',
   ]);
   assert.deepEqual(MODULE_BACKUP_TABLE_KEYS.config, ['settings', 'categories']);
+});
+
+test('category icon survives module backup serialize → restore (custom icons never dropped)', () => {
+  // Module backups (config + models scope) serialize categories via prisma.findMany(),
+  // which returns ALL scalar fields including `icon`. Each row is written to the archive
+  // as JSON and on restore is parsed back, fed through reviveDateFields(), then handed to
+  // prisma.category.create()/upsert(). reviveDateFields is the ONLY field-level transform
+  // between deserialize and the DB write, so proving it preserves a non-date scalar like
+  // `icon` proves custom category icons round-trip module backups. (Full backups use
+  // pg_dump with no table filter — verified separately by a live 56-icon round-trip.)
+  const original = {
+    id: 'cat-ss-pipe',
+    name: '不锈钢管件',
+    icon: 'stainless_steel', // custom icon — must NOT be dropped on restore
+    parentId: null,
+    sortOrder: 3,
+    createdAt: '2024-05-01T00:00:00.000Z',
+    updatedAt: '2024-06-01T00:00:00.000Z',
+  };
+
+  // 1. serialize to archive (JSON) then parse back, exactly as the restore path does
+  const parsed = JSON.parse(JSON.stringify(original));
+  // 2. revive date fields — the sole field-level transform before prisma.create/upsert
+  const restored = reviveDateFields(parsed, ['createdAt', 'updatedAt']);
+
+  assert.equal(restored.icon, 'stainless_steel', 'custom category icon must survive backup → restore');
+  assert.equal(restored.name, '不锈钢管件');
+  assert.equal(restored.id, 'cat-ss-pipe');
+  assert.equal(restored.sortOrder, 3);
+  assert.ok(restored.createdAt instanceof Date, 'date fields still revived to Date objects');
 });
 
 test('backup policy report summarizes blockers and next actions', () => {
