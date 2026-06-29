@@ -54,10 +54,6 @@ export function resolveCacheTtl(value: unknown, fallback: number): number {
   return Math.min(86400, Math.max(0, parsed));
 }
 
-function markUnavailable() {
-  available = false;
-}
-
 export async function cacheGet<T>(key: string): Promise<T | null> {
   if (!available) return null;
   try {
@@ -65,7 +61,10 @@ export async function cacheGet<T>(key: string): Promise<T | null> {
     if (!raw) return null;
     return JSON.parse(raw) as T;
   } catch {
-    markUnavailable();
+    // Transient per-command failure (timeout / OOM / parse). Don't disable the
+    // whole cache layer on one bad command — the connection is likely fine and
+    // the next call should still try. Real connection outages are handled by the
+    // ready/error/close handlers, which are the authoritative availability signal.
     return null;
   }
 }
@@ -76,7 +75,7 @@ export async function cacheSet(key: string, value: unknown, ttlSeconds: number):
   try {
     await redis.set(pk(key), JSON.stringify(value), 'EX', ttlSeconds);
   } catch {
-    markUnavailable();
+    // Transient failure — skip this write, don't kill the cache layer.
   }
 }
 
@@ -176,7 +175,7 @@ export async function cacheGetOrSet<T>(
       if (shared !== null) return { value: shared, hit: true };
     }
   } catch {
-    markUnavailable();
+    // Transient lock/set failure — fall through to serving uncached; don't kill the cache layer.
   }
 
   return { value: await loadOnce(key, load), hit: false };
@@ -187,7 +186,7 @@ export async function cacheDel(key: string): Promise<void> {
   try {
     await redis.del(pk(key));
   } catch {
-    markUnavailable();
+    // Transient failure — skip this delete, don't kill the cache layer.
   }
 }
 
@@ -208,7 +207,7 @@ export async function cacheDelByPrefix(prefix: string): Promise<void> {
       stream.on('error', reject);
     });
   } catch {
-    markUnavailable();
+    // Transient scan/delete failure — don't kill the cache layer.
   }
 }
 
