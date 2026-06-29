@@ -219,7 +219,11 @@ services:
   redis:
     image: redis:7-alpine
     container_name: 3dparthub-redis
-    mem_limit: ${REDIS_MEMORY_LIMIT:-128M}
+    # 容器内存上限必须 > REDIS_MAXMEMORY：Redis 做数据缓存 + AOF 重写/BGSAVE fork
+    # 还要额外内存（COW 瞬时可达数据量 ~2 倍）。经验值：mem_limit ≈ 2 × maxmemory。
+    # 若在 .env 里调高 REDIS_MAXMEMORY，务必同步把 REDIS_MEMORY_LIMIT 调到 ≥ 2 倍，
+    # 否则数据涨上来后容器会先于 maxmemory 触发被系统 OOM-kill。
+    mem_limit: ${REDIS_MEMORY_LIMIT:-256M}
     cpus: '${REDIS_CPU_LIMIT:-0.3}'
     command:
       - redis-server
@@ -233,12 +237,15 @@ services:
       - everysec
       - --maxmemory
       - ${REDIS_MAXMEMORY:-96mb}
+      # volatile-lru：内存吃紧时只淘汰带 TTL 的缓存 key（categories/settings/models 等），
+      # 保留 BullMQ 任务 key（多数无 TTL，绝不能被淘汰，否则队列会丢任务）。
+      # 比 noeviction 安全：noeviction 满了会直接写失败并把整个缓存层关掉。
       - --maxmemory-policy
-      - noeviction
+      - volatile-lru
     deploy:
       resources:
         limits:
-          memory: ${REDIS_MEMORY_LIMIT:-128M}
+          memory: ${REDIS_MEMORY_LIMIT:-256M}
           cpus: '${REDIS_CPU_LIMIT:-0.3}'
     volumes:
       - redis-data:/data
