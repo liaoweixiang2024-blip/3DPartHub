@@ -380,9 +380,9 @@ export default function AuthModal({ initialMode = 'login', open, returnUrl, onCl
                     type="button"
                     onClick={() => setShowPassword((value) => !value)}
                     className="absolute right-3 top-1/2 -translate-y-1/2 text-on-surface-variant transition-colors hover:text-on-surface"
-                    aria-label={showPassword ? t('auth.hidePassword') : t('auth.showPassword')}
                   >
                     <Icon name={showPassword ? 'visibility_off' : 'visibility'} size={18} />
+                    <span className="sr-only">{showPassword ? t('auth.hidePassword') : t('auth.showPassword')}</span>
                   </button>
                 </div>
                 {errors.password && <span className={APP_FIELD_ERROR_CLASS}>{errors.password}</span>}
@@ -405,9 +405,9 @@ export default function AuthModal({ initialMode = 'login', open, returnUrl, onCl
                       type="button"
                       onClick={() => setShowPassword((value) => !value)}
                       className="absolute right-3 top-1/2 -translate-y-1/2 text-on-surface-variant transition-colors hover:text-on-surface"
-                      aria-label={showPassword ? t('auth.hidePassword') : t('auth.showPassword')}
                     >
                       <Icon name={showPassword ? 'visibility_off' : 'visibility'} size={18} />
+                      <span className="sr-only">{showPassword ? t('auth.hidePassword') : t('auth.showPassword')}</span>
                     </button>
                   </div>
                   {errors.confirmPassword && <span className={APP_FIELD_ERROR_CLASS}>{errors.confirmPassword}</span>}

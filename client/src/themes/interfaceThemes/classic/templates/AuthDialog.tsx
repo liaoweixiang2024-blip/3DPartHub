@@ -27,9 +27,9 @@ export default function ClassicAuthDialog({
         type="button"
         onClick={onClose}
         className="absolute right-4 top-4 z-10 flex h-8 w-8 items-center justify-center rounded-lg text-on-surface-variant transition-colors hover:bg-surface-container-high hover:text-on-surface"
-        aria-label={closeLabel}
       >
         <Icon name="close" size={18} />
+        <span className="sr-only">{closeLabel}</span>
       </button>
 
       <div className="app-auth-header shrink-0 border-b border-outline-variant/10 px-6 pb-5 pt-6 text-center sm:px-7">
