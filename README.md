@@ -1,7 +1,7 @@
 <p align="center">
   <img src="https://img.shields.io/badge/License-MIT-blue.svg" alt="License: MIT" />
   <img src="https://img.shields.io/badge/Docker-Ready-2496ED?logo=docker&logoColor=white" alt="Docker" />
-  <img src="https://img.shields.io/badge/TypeScript-5.8-3178C6?logo=typescript&logoColor=white" alt="TypeScript" />
+  <img src="https://img.shields.io/badge/TypeScript-6.0-3178C6?logo=typescript&logoColor=white" alt="TypeScript" />
 </p>
 
 <h1 align="center">3DPartHub</h1>
@@ -25,6 +25,7 @@
 
 - **多格式支持**：STEP (`.step` / `.stp`)、IGES (`.iges` / `.igs`) 自动转换为 glTF。
 - **浏览器 CAD 预览**：基于 Three.js 的实时渲染，支持线框、实体、透明、爆炸视图、边线、裁切、测量、结构树、属性面板和缩略图。
+- **临时 STEP 预览**：未登录访客可临时上传 STEP 文件即时预览（按用户 / 全站限流），无需注册即可体验 CAD 预览能力，文件到期自动清理。
 - **批量导入**：扫描服务器目录批量导入，按文件夹结构自动归类。
 - **无限级分类**：树形分类体系，支持拖拽排序。
 - **全文搜索**：按名称、格式、分类和元数据多维检索。
@@ -59,6 +60,18 @@
 - **版本检测**：检查 GitHub Release，后台展示最新版本和更新内容。
 - **站点自定义**：站名、Logo、Favicon、配色方案、SEO、公告和邮件模板。
 - **安全与审计**：登录保护、下载策略、分享策略、IP/Host 保护、审计日志。
+
+### 云存储与 CDN（可选）
+
+- **对象存储双写**：本地存储为权威源，可选开启云端镜像——上传时同步双写到云、读取时云优先、云端异常自动回退本地兜底（best-effort，失败只记日志不影响业务）。
+- **7 种 S3 兼容服务商**：local / MinIO / AWS S3 / 阿里云 OSS / 腾讯云 COS / 七牛云 / 通用 S3，一套 minio 客户端覆盖，后台可热切换。
+- **CDN 加速**：配置 CDN 域名后，API 响应里的 `/static/` 资源（缩略图、产品图墙、模型、图纸等）URL 自动改写到 CDN 域名，图片资源与模型资源可分别开关。
+- **配置入口**：云存储与 CDN 均在后台 **设置 → 存储** 配置（`storage_provider` / `storage_cdn_base_url` 等，存于数据库 settings 表），**不是环境变量**，开箱默认本地存储、不启用 CDN。
+
+### 界面与多语言
+
+- **双界面主题**：内置「PartHub 经典版」（旧版图标导航，稳定基线）与「PartHub 工作台」（现代文字导航布局）两套界面主题，后台可切换并独立维护。
+- **中英双语**：内置简体中文（zh-CN）与英文（en-US）国际化，按浏览器语言自动识别，前端可手动切换。
 
 ---
 
@@ -212,21 +225,37 @@ docker stats --no-stream
 
 ### 环境变量
 
-| 变量                       | 必填 | 默认值                                              | 说明                                                   |
-| -------------------------- | ---- | --------------------------------------------------- | ------------------------------------------------------ |
-| `DB_PASSWORD`              | 否   | `3dparthub-default-db-password-change-me-2026`      | 数据库密码，正式环境建议在 `.env` 中覆盖               |
-| `JWT_SECRET`               | 否   | `3dparthub-default-jwt-secret-change-me-2026-04-30` | JWT 签名密钥，正式环境建议至少 32 位随机字符串         |
-| `BACKUP_SIGNING_SECRET`    | 否   | -                                                   | 备份 HMAC 签名密钥，一键部署会自动生成随机强密钥       |
-| `BACKUP_ENCRYPTION_SECRET` | 否   | -                                                   | 备份归档加密密钥，一键部署会自动生成随机强密钥         |
-| `PORT`                     | 否   | `3780`                                              | 对外访问端口                                           |
-| `ALLOWED_ORIGINS`          | 否   | -                                                   | CORS 域名，多个用逗号分隔                              |
-| `ADMIN_USER`               | 否   | `admin`                                             | 初始管理员用户名，仅首次启动                           |
-| `ADMIN_EMAIL`              | 否   | `admin@model.local`                                 | 初始管理员邮箱，仅首次启动                             |
-| `ADMIN_PASS`               | 是   | —（一键部署随机生成）                               | 初始管理员密码，仅空数据库首次启动生效                 |
-| `IMAGE_TAG`                | 否   | `latest`                                            | 镜像标签；默认自动跟随最新版本，写入固定标签可锁定版本 |
-| `SMTP_HOST`                | 否   | -                                                   | SMTP 服务器                                            |
-| `SMTP_USER`                | 否   | -                                                   | SMTP 用户名                                            |
-| `SMTP_PASS`                | 否   | -                                                   | SMTP 密码或授权码                                      |
+| 变量                                    | 必填 | 默认值                                              | 说明                                                        |
+| --------------------------------------- | ---- | --------------------------------------------------- | ----------------------------------------------------------- |
+| `DB_PASSWORD`                           | 否   | `3dparthub-default-db-password-change-me-2026`      | 数据库密码，正式环境建议在 `.env` 中覆盖                    |
+| `DATABASE_URL`                          | 否   | 自动拼接                                            | 完整数据库连接串；未设置时由 `DB_PASSWORD` 等自动生成       |
+| `JWT_SECRET`                            | 否   | `3dparthub-default-jwt-secret-change-me-2026-04-30` | JWT 签名密钥，正式环境建议至少 32 位随机字符串              |
+| `JWT_EXPIRES_IN`                        | 否   | `7d`                                                | JWT 有效期                                                  |
+| `REDIS_PASSWORD`                        | 否   | -                                                   | Redis 密码，一键部署自动生成；未设则 Redis 无密码           |
+| `REDIS_URL`                             | 否   | 自动拼接                                            | 完整 Redis 连接串；未设置时由 `REDIS_PASSWORD` 自动生成     |
+| `REDIS_MAXMEMORY`                       | 否   | `96mb`                                              | Redis 数据缓存上限（须 < `REDIS_MEMORY_LIMIT`，见资源调优） |
+| `BACKUP_SIGNING_SECRET`                 | 否   | -                                                   | 备份 HMAC 签名密钥，一键部署会自动生成随机强密钥            |
+| `BACKUP_ENCRYPTION_SECRET`              | 否   | -                                                   | 备份归档加密密钥，一键部署会自动生成随机强密钥              |
+| `MAX_FILE_SIZE`                         | 否   | `104857600`（100MB）                                | 单文件上传大小上限（字节）                                  |
+| `PORT`                                  | 否   | `3780`                                              | 对外访问端口（API 容器内部固定监听 8000）                   |
+| `ALLOWED_ORIGINS`                       | 否   | -                                                   | CORS 域名，多个用逗号分隔                                   |
+| `ADMIN_USER`                            | 否   | `admin`                                             | 初始管理员用户名，仅首次启动                                |
+| `ADMIN_EMAIL`                           | 否   | `admin@model.local`                                 | 初始管理员邮箱，仅首次启动                                  |
+| `ADMIN_PASS`                            | 是   | —（一键部署随机生成）                               | 初始管理员密码，仅空数据库首次启动生效                      |
+| `IMAGE_TAG`                             | 否   | `latest`                                            | 镜像标签；默认自动跟随最新版本，写入固定标签可锁定版本      |
+| `SMTP_HOST`                             | 否   | -                                                   | SMTP 服务器                                                 |
+| `SMTP_PORT`                             | 否   | `465`                                               | SMTP 端口                                                   |
+| `SMTP_USER`                             | 否   | -                                                   | SMTP 用户名                                                 |
+| `SMTP_PASS`                             | 否   | -                                                   | SMTP 密码或授权码                                           |
+| `TEMP_PREVIEW_UPLOAD_LIMIT_PER_HOUR`    | 否   | `20`                                                | 临时 STEP 预览：单个用户每小时上传次数上限                  |
+| `TEMP_PREVIEW_MAX_ACTIVE_PER_OWNER`     | 否   | `5`                                                 | 临时 STEP 预览：单个用户同时保留的活跃预览数                |
+| `TEMP_PREVIEW_MAX_CONCURRENT_PER_OWNER` | 否   | `1`                                                 | 临时 STEP 预览：单个用户并发转换数                          |
+| `TEMP_PREVIEW_TOTAL_ACTIVE_LIMIT`       | 否   | `500`                                               | 临时 STEP 预览：全站同时活跃预览总数                        |
+
+> **说明：**
+>
+> - **云存储与 CDN 不在此处配置**：`storage_provider` / `storage_endpoint` / `storage_bucket` / `storage_cdn_base_url` 等存于数据库 settings 表，在后台 **设置 → 存储** 配置，开箱默认本地存储、不启用 CDN。`.env.example` 里的 `STORAGE_TYPE` / `MINIO_*` 仅作迁移占位。
+> - **资源档位由脚本自动写入**：`RESOURCE_PROFILE`、`*_MEMORY_LIMIT`、`*_CPU_LIMIT`、`API_WORKERS`、`API_SHM_SIZE`、`CONVERSION_WORKER_CONCURRENCY`、`DB_CONNECTION_LIMIT` 由 `scripts/tune-resources.sh` 按服务器总内存自动写入 `.env`，见下方「自动调整容器上限」一节的档位表。
 
 ### 更新与升级
 
@@ -240,7 +269,7 @@ docker-compose pull
 docker-compose up -d --force-recreate
 
 # 验证版本与健康
-curl -s http://localhost:3780/api/settings/version   # 应显示最新版本，例如 v3.4.0
+curl -s http://localhost:3780/api/settings/version   # 应显示最新版本，例如 v3.4.6
 curl -s http://localhost:3780/api/health
 ```
 
@@ -249,13 +278,13 @@ curl -s http://localhost:3780/api/health
 如需锁定特定版本，修改 `.env` 中的 `IMAGE_TAG`：
 
 ```bash
-sed -i 's/IMAGE_TAG=.*/IMAGE_TAG=v3.2.3/' .env
+sed -i 's/IMAGE_TAG=.*/IMAGE_TAG=v3.4.5/' .env
 docker-compose pull && docker-compose up -d --force-recreate
 ```
 
 升级前建议在后台 **设置 -> 数据备份** 创建并校验一次备份。
 
-要锁定到指定版本，在 `.env` 中设置 `IMAGE_TAG=v3.2.3` 等固定标签即可。
+要锁定到指定版本，在 `.env` 中设置 `IMAGE_TAG=v3.4.5` 等固定标签即可。
 
 如果从早期一键部署升级后 `api` 显示 unhealthy，先查看日志：
 
@@ -264,6 +293,67 @@ docker-compose logs --tail=200 api
 ```
 
 旧版默认 DB/JWT/Redis 密钥会继续允许启动并在日志中给出安全提醒。若你已经创建过 Docker volume，后续修改 `DB_PASSWORD` 不会自动修改已有 PostgreSQL 用户密码；请保持 `.env` 中的 `DB_PASSWORD` 与旧数据库一致，或先在数据库内修改密码后再同步 `.env`。
+
+---
+
+## 本地开发
+
+无需 Docker 即可从源码跑起前后端。仓库提供 [docker-compose.local.yml](docker-compose.local.yml) 用于一键起本地依赖（PostgreSQL + Redis）。
+
+### 起依赖（PostgreSQL + Redis）
+
+```bash
+docker compose -f docker-compose.local.yml up -d postgres redis
+# PostgreSQL: localhost:5433   Redis: localhost:6380
+```
+
+### 后端
+
+```bash
+cd server
+# 创建 server/.env（本地 API 读 server/.env，非根目录 .env）。最小示例：
+cat > .env <<'EOF'
+DATABASE_URL=postgresql://modeluser:modelpass@localhost:5433/3dparthub
+REDIS_URL=redis://localhost:6380
+JWT_SECRET=local-dev-secret-change-me
+ADMIN_EMAIL=admin@model.local
+ADMIN_PASS=admin12345
+EOF
+npm install
+npm run prisma:deploy       # 应用迁移、初始化数据库结构（经 safe-migrate.sh，安全）
+npm run dev                 # 稳定模式，监听 :8000
+# 或 npm run dev:watch      # 仅开发代码时用热重载（备份/恢复期间不要用）
+```
+
+### 前端
+
+```bash
+cd client
+npm install
+npm run dev                 # Vite，监听 :5173，自动代理 /api → :8000
+```
+
+浏览器打开 http://localhost:5173 即可。本地默认会创建管理员账号（见 `.env` 的 `ADMIN_*`）。
+
+### 常用脚本
+
+| 命令                                    | 说明                                                        |
+| --------------------------------------- | ----------------------------------------------------------- |
+| `cd server && npm run verify`           | typecheck + lint + format + build + 单测                    |
+| `cd client && npm run verify`           | 主题/加载/UX 契约 + typecheck + lint + format + build       |
+| `npm run prisma:migrate -- --name <名>` | 生成迁移（仅创建 SQL，不应用；经 safe-migrate.sh 自动备份） |
+| `npm run prisma:deploy`                 | 应用迁移（安全）                                            |
+| `npm run prisma:backup`                 | 手动创建数据库快照                                          |
+| `npm run backup:e2e:dev`                | 本地跑备份恢复演练（**会真实恢复，确认维护窗口**）          |
+
+> ⚠️ **数据库安全**：所有 Prisma 操作走 `server/scripts/safe-migrate.sh`。**严禁** `npx prisma db push --force-reset` / `--accept-data-loss` / `migrate reset`，也**严禁** `docker compose down -v`（会清空数据卷，已多次导致本地库被清空）。
+
+### 本地完整容器测试
+
+```bash
+docker compose -f docker-compose.local.yml up -d --build   # api/web/postgres/redis 全用 Docker
+# 访问 http://localhost:3780
+```
 
 ---
 
@@ -288,6 +378,7 @@ docker-compose logs --tail=200 api
 | `pgdata`       | `/var/lib/postgresql/data` | PostgreSQL 数据库                              |
 | `uploads-data` | `/app/uploads`             | 上传附件、上传元数据                           |
 | `static-data`  | `/app/static`              | 转换模型、缩略图、原始文件、站点运行时静态资料 |
+| `redis-data`   | `/data`（redis 容器内）    | Redis 持久化数据（AOF）                        |
 
 备份包单独映射到宿主机目录 `/opt/3dparthub/server/static/backups`，容器内路径为 `/app/static/backups`。网页创建的备份和手动放入的 `.tar.gz/.tgz` 备份包都会使用这个目录。
 
@@ -515,6 +606,21 @@ docker-compose logs redis --tail 80
 ├── docker-compose.yml
 └── .github/workflows/      # CI 自动构建镜像与 Release
 ```
+
+## 更多文档
+
+| 文档                                                        | 说明                                       |
+| ----------------------------------------------------------- | ------------------------------------------ |
+| [部署健康验收清单](docs/部署健康验收清单.md)                | 生产部署自检的完整验收口径与检查项         |
+| [并发压测与部署调优](docs/并发压测与部署调优.md)            | 压测方法、资源档位与性能调优               |
+| [admin-ui-style-guide.md](docs/admin-ui-style-guide.md)     | 后台 UI 风格规范                           |
+| [theme-development-spec.md](docs/theme-development-spec.md) | 界面主题开发规范（含 classic / workbench） |
+| [代码维护规范.md](docs/代码维护规范.md)                     | 代码风格、提交与维护约定                   |
+| [运行环境规范.md](docs/运行环境规范.md)                     | 运行环境与依赖版本要求                     |
+| [full-audit-checklist.md](docs/full-audit-checklist.md)     | 全量审计清单                               |
+| [deploy/README.md](deploy/README.md)                        | 纯镜像部署（不克隆源码）说明               |
+| [PROJECT_STRUCTURE.md](PROJECT_STRUCTURE.md)                | 更细粒度的目录结构参考                     |
+| [docs/releases/](docs/releases/)                            | 各版本发布说明                             |
 
 ## 许可证
 
