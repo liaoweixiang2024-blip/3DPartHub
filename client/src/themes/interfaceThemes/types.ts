@@ -84,6 +84,9 @@ export interface DesktopHomeThemeProps {
   expandedCategories: Set<string>;
   footerCopyright: string;
   footerLinks: { label: string; url: string }[];
+  footerIcpNumber?: string;
+  footerPoliceNumber?: string;
+  footerPoliceUrl?: string;
   hasMore: boolean;
   homePageSizeOptions: number[];
   homeSearchMaxLength: number;

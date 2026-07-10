@@ -82,6 +82,8 @@ export function createSettingsPublicRouter() {
             footer_copyright: footerCopyrightFollowsSiteTitle
               ? buildFooterCopyright(siteTitle)
               : all.footer_copyright || DEFAULT_FOOTER_COPYRIGHT,
+            footer_icp_number: all.footer_icp_number ?? '',
+            footer_police_number: all.footer_police_number ?? '',
             model_detail_disclaimer: all.model_detail_disclaimer ?? DEFAULT_MODEL_DETAIL_DISCLAIMER,
             model_detail_copyright_follow_site_title: modelDetailCopyrightFollowsSiteTitle,
             model_detail_copyright: modelDetailCopyrightFollowsSiteTitle

@@ -4,6 +4,9 @@ import {
   getSiteTitle,
   getFooterLinks,
   getFooterCopyright,
+  getFooterIcpNumber,
+  getFooterPoliceNumber,
+  getFooterPoliceUrl,
   getContactEmail,
   getContactPhone,
   getContactAddress,
@@ -13,6 +16,10 @@ import Icon from './Icon';
 const HomeFooter = memo(function HomeFooter() {
   const { t } = useTranslation();
   const footerLinks = getFooterLinks();
+  const icpNumber = getFooterIcpNumber();
+  const policeNumber = getFooterPoliceNumber();
+  const policeUrl = getFooterPoliceUrl();
+  const hasFiling = Boolean(icpNumber || policeNumber);
 
   return (
     <footer className="shrink-0 border-t border-outline-variant/10 bg-surface-container-low">
@@ -21,6 +28,33 @@ const HomeFooter = memo(function HomeFooter() {
           <div className="min-w-0">
             <span className="font-headline text-sm font-semibold text-on-surface-variant/60">{getSiteTitle()}</span>
             <p className="mt-1 text-[10px] text-on-surface-variant/30">{getFooterCopyright()}</p>
+            {hasFiling && (
+              <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px] text-on-surface-variant/30">
+                {icpNumber && (
+                  <a
+                    href="https://beian.miit.gov.cn/"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="underline-offset-4 transition-colors hover:text-primary hover:underline"
+                  >
+                    {icpNumber}
+                  </a>
+                )}
+                {policeNumber &&
+                  (policeUrl ? (
+                    <a
+                      href={policeUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="underline-offset-4 transition-colors hover:text-primary hover:underline"
+                    >
+                      {policeNumber}
+                    </a>
+                  ) : (
+                    <span>{policeNumber}</span>
+                  ))}
+              </div>
+            )}
           </div>
           <div className="flex flex-col items-start gap-2 md:items-end">
             <div className="flex flex-wrap items-center gap-x-5 gap-y-1 md:justify-end">

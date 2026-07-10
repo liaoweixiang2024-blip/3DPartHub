@@ -78,6 +78,9 @@ import {
   getContactAddress,
   getFooterCopyright,
   getFooterLinks,
+  getFooterIcpNumber,
+  getFooterPoliceNumber,
+  getFooterPoliceUrl,
   useFeatureFlags,
 } from '../lib/publicSettings';
 import { useAuthStore } from '../stores';
@@ -128,6 +131,10 @@ export default function HomePage() {
   const showModelCardVariantMeta = desktopHomeBehavior.showModelCardVariantMeta;
   const footerLinks = getFooterLinks();
   const footerCopyright = getFooterCopyright();
+  const footerIcpNumber = getFooterIcpNumber();
+  const footerPoliceNumber = getFooterPoliceNumber();
+  const footerPoliceUrl = getFooterPoliceUrl();
+  const footerHasFiling = Boolean(footerIcpNumber || footerPoliceNumber);
   const contactEmail = getContactEmail();
   const contactPhone = getContactPhone();
   const contactAddress = getContactAddress();
@@ -1029,6 +1036,9 @@ export default function HomePage() {
           expandedCategories={expandedCategories}
           footerCopyright={footerCopyright}
           footerLinks={footerLinks}
+          footerIcpNumber={footerIcpNumber}
+          footerPoliceNumber={footerPoliceNumber}
+          footerPoliceUrl={footerPoliceUrl}
           hasMore={hasMore}
           homePageSizeOptions={homePageSizeOptions}
           homeSearchMaxLength={HOME_SEARCH_MAX_LENGTH}
@@ -1306,6 +1316,33 @@ export default function HomePage() {
                 </span>
               )}
               <p className="text-[10px] text-on-surface-variant/40">{getFooterCopyright()}</p>
+              {footerHasFiling && (
+                <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px] text-on-surface-variant/40">
+                  {footerIcpNumber && (
+                    <a
+                      href="https://beian.miit.gov.cn/"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="underline-offset-4 transition-colors hover:text-primary hover:underline"
+                    >
+                      {footerIcpNumber}
+                    </a>
+                  )}
+                  {footerPoliceNumber &&
+                    (footerPoliceUrl ? (
+                      <a
+                        href={footerPoliceUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="underline-offset-4 transition-colors hover:text-primary hover:underline"
+                      >
+                        {footerPoliceNumber}
+                      </a>
+                    ) : (
+                      <span>{footerPoliceNumber}</span>
+                    ))}
+                </div>
+              )}
             </div>
           </footer>
         </div>

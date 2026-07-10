@@ -309,18 +309,52 @@ function WorkbenchHomeFooter({
   contactPhone,
   footerCopyright,
   footerLinks,
+  icpNumber = '',
+  policeNumber = '',
+  policeUrl = '',
 }: {
   contactAddress: string;
   contactEmail: string;
   contactPhone: string;
   footerCopyright: string;
   footerLinks: { label: string; url: string }[];
+  icpNumber?: string;
+  policeNumber?: string;
+  policeUrl?: string;
 }) {
   const { t } = useTranslation();
+  const hasFiling = Boolean(icpNumber || policeNumber);
   return (
     <footer className="home-workbench-footer">
       <div className="flex min-w-0 flex-col gap-2">
         <p className="text-[11px] text-on-surface-variant/45">{footerCopyright}</p>
+        {hasFiling && (
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px] text-on-surface-variant/40">
+            {icpNumber && (
+              <a
+                href="https://beian.miit.gov.cn/"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="underline-offset-4 transition-colors hover:text-primary hover:underline"
+              >
+                {icpNumber}
+              </a>
+            )}
+            {policeNumber &&
+              (policeUrl ? (
+                <a
+                  href={policeUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="underline-offset-4 transition-colors hover:text-primary hover:underline"
+                >
+                  {policeNumber}
+                </a>
+              ) : (
+                <span>{policeNumber}</span>
+              ))}
+          </div>
+        )}
         {contactAddress && (
           <span className="inline-flex items-center gap-1 text-[11px] text-on-surface-variant/40">
             <Icon name="domain" size={12} />
@@ -377,6 +411,9 @@ export default function WorkbenchHomeDesktop({
   displayTotalItems,
   footerCopyright,
   footerLinks,
+  footerIcpNumber,
+  footerPoliceNumber,
+  footerPoliceUrl,
   hasMore,
   homePageSizeOptions,
   homeSearchMaxLength,
@@ -550,6 +587,9 @@ export default function WorkbenchHomeDesktop({
                   contactPhone={contactPhone}
                   footerCopyright={footerCopyright}
                   footerLinks={footerLinks}
+                  icpNumber={footerIcpNumber}
+                  policeNumber={footerPoliceNumber}
+                  policeUrl={footerPoliceUrl}
                 />
               </div>
             )}

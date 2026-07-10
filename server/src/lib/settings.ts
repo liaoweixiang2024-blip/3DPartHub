@@ -138,6 +138,10 @@ const SETTINGS_SCHEMA: SettingDef[] = [
   { key: 'footer_links', defaultValue: '' },
   { key: 'footer_copyright', defaultValue: DEFAULT_FOOTER_COPYRIGHT },
   { key: 'footer_copyright_follow_site_title', defaultValue: true },
+  // 中国大陆备案号（可选，留空则不显示）。ICP 固定指向 beian.miit.gov.cn；
+  // 公安备案号会自动从号码中提取数字生成 beian.gov.cn 标准查询链接。
+  { key: 'footer_icp_number', defaultValue: '' },
+  { key: 'footer_police_number', defaultValue: '' },
   { key: 'model_detail_disclaimer', defaultValue: DEFAULT_MODEL_DETAIL_DISCLAIMER },
   { key: 'model_detail_copyright', defaultValue: DEFAULT_MODEL_DETAIL_COPYRIGHT },
   { key: 'model_detail_copyright_follow_site_title', defaultValue: true },

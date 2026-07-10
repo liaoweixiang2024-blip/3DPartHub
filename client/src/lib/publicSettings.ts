@@ -359,6 +359,26 @@ export function getFooterCopyright(): string {
   return (cache?.footer_copyright as string)?.trim() || DEFAULT_FOOTER_COPYRIGHT;
 }
 
+// ICP filing number (中国大陆工信部备案号)，留空则不显示。固定指向工信部查询页。
+export function getFooterIcpNumber(): string {
+  return (cache?.footer_icp_number as string)?.trim() || '';
+}
+
+// 公安备案号，留空则不显示。标准查询链接由号码中的数字生成；号码不含足够
+// 数字时降级为纯文本（不可点）。
+export function getFooterPoliceNumber(): string {
+  return (cache?.footer_police_number as string)?.trim() || '';
+}
+
+// 由公安备案号推导标准查询链接；无法提取到记录号时返回空串（调用方按纯文本渲染）。
+export function getFooterPoliceUrl(): string {
+  const number = getFooterPoliceNumber();
+  const digits = number.replace(/\D/g, '');
+  // 全国互联网安全管理平台 recordcode 通常为 14 位。
+  if (digits.length < 14) return '';
+  return `https://www.beian.gov.cn/portal/registerSystemInfo?recordcode=${digits}`;
+}
+
 export function getModelDetailDisclaimer(): string {
   return (cache?.model_detail_disclaimer as string)?.trim() || DEFAULT_MODEL_DETAIL_DISCLAIMER;
 }

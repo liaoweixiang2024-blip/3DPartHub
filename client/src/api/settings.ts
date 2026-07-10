@@ -28,6 +28,8 @@ export interface SystemSettings {
   footer_links: string;
   footer_copyright: string;
   footer_copyright_follow_site_title: boolean;
+  footer_icp_number: string;
+  footer_police_number: string;
   model_detail_disclaimer: string;
   model_detail_copyright: string;
   model_detail_copyright_follow_site_title: boolean;
