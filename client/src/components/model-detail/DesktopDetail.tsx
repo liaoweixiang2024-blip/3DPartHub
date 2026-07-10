@@ -68,7 +68,7 @@ export function DesktopDetail({
         <>
           <div className={MODEL_DETAIL_HEADER_TOP_CLASS}>
             <div>
-              <div className="flex items-center gap-1.5 text-[11px] tracking-[0.05em] uppercase text-on-surface-variant mb-1.5">
+              <div className="flex items-center gap-1.5 text-[11px] tracking-[0.05em] uppercase text-on-surface-variant mb-2.5">
                 <Link to="/" className="hover:text-primary transition-colors">
                   {t('modelDetail.categoryFallback')}
                 </Link>
@@ -85,7 +85,9 @@ export function DesktopDetail({
                   </span>
                 ))}
               </div>
-              <h1 className="font-headline text-3xl font-bold text-on-surface tracking-tight mb-2">{modelData.name}</h1>
+              <h1 className="font-headline text-3xl font-bold text-on-surface tracking-tight mb-1.5">
+                {modelData.name}
+              </h1>
             </div>
             {isAdmin && onEdit && (
               <button
@@ -244,7 +246,14 @@ export function DesktopDetail({
                     </div>
                   </button>
                 ) : (
-                  <div key={downloadKey} className={MODEL_DETAIL_DOWNLOAD_ROW_INTERACTIVE_CLASS}>
+                  <button
+                    key={downloadKey}
+                    type="button"
+                    onClick={() =>
+                      onDownload(modelData.id, file.downloadFormat === 'original' ? 'original' : undefined)
+                    }
+                    className={`${MODEL_DETAIL_DOWNLOAD_ROW_INTERACTIVE_CLASS} cursor-pointer text-left`}
+                  >
                     <div className="flex items-center gap-3 min-w-0 flex-1">
                       <div className="w-9 h-9 rounded-lg bg-primary-container/10 flex items-center justify-center shrink-0">
                         <span className="text-[10px] font-bold text-primary-container">{file.format.slice(0, 4)}</span>
@@ -260,15 +269,10 @@ export function DesktopDetail({
                         </div>
                       </div>
                     </div>
-                    <button
-                      onClick={() =>
-                        onDownload(modelData.id, file.downloadFormat === 'original' ? 'original' : undefined)
-                      }
-                      className="text-primary hover:text-primary-container p-2"
-                    >
+                    <div className="text-primary group-hover:text-primary-container p-2" aria-hidden="true">
                       <Icon name="download" size={20} />
-                    </button>
-                  </div>
+                    </div>
+                  </button>
                 );
               })}
             </div>

@@ -13,22 +13,22 @@ export const MODEL_DETAIL_VIEWER_CLASS =
   'relative bg-surface-container min-w-0 flex-1 md:w-[60%] overflow-hidden border-r border-outline-variant/20 shrink-0';
 export const MODEL_DETAIL_ASIDE_CLASS =
   'model-detail-sidebar-scroll w-full md:w-[40%] md:min-w-[400px] md:max-w-[500px] bg-surface-container-low overflow-y-auto flex flex-col shrink-0 min-h-0';
-export const MODEL_DETAIL_HEADER_CLASS = 'border-b border-outline-variant/10 p-6 lg:p-8';
+export const MODEL_DETAIL_HEADER_CLASS = 'border-b border-outline-variant/10 p-6 lg:p-7';
 export const MODEL_DETAIL_HEADER_TOP_CLASS = 'mb-4 flex items-start justify-between';
-export const MODEL_DETAIL_ACTIONS_CLASS = 'mt-6 flex gap-3';
+export const MODEL_DETAIL_ACTIONS_CLASS = 'mt-4 flex gap-3';
 export const MODEL_DETAIL_SECTION_TITLE_CLASS =
-  'mb-4 border-b border-outline-variant/20 pb-2 text-[11px] uppercase tracking-[0.05em] text-on-surface-variant';
-export const MODEL_DETAIL_SPECS_CLASS = 'p-6 pb-4 lg:p-8 lg:pb-4';
-export const MODEL_DETAIL_SPEC_GRID_CLASS = 'grid grid-cols-2 gap-x-4 gap-y-2';
-export const MODEL_DETAIL_SPEC_ITEM_CLASS = 'flex flex-col border-b border-outline-variant/10 py-2';
-export const MODEL_DETAIL_VARIANTS_CLASS = 'px-8 pt-4';
-export const MODEL_DETAIL_DOWNLOADS_CLASS = 'bg-surface-container-low p-6 pt-4 lg:p-8 lg:pt-4';
-export const MODEL_DETAIL_DOWNLOAD_LIST_CLASS = 'flex flex-col gap-2';
+  'mb-2.5 border-b border-outline-variant/20 pb-1.5 text-[11px] uppercase tracking-[0.05em] text-on-surface-variant';
+export const MODEL_DETAIL_SPECS_CLASS = 'p-5 pb-3 lg:p-6 lg:pb-3';
+export const MODEL_DETAIL_SPEC_GRID_CLASS = 'grid grid-cols-2 gap-x-4 gap-y-1.5';
+export const MODEL_DETAIL_SPEC_ITEM_CLASS = 'flex flex-col border-b border-outline-variant/10 py-1.5';
+export const MODEL_DETAIL_VARIANTS_CLASS = 'px-6 pt-3';
+export const MODEL_DETAIL_DOWNLOADS_CLASS = 'bg-surface-container-low p-5 pt-3 lg:p-6 lg:pt-3';
+export const MODEL_DETAIL_DOWNLOAD_LIST_CLASS = 'flex flex-col gap-1.5';
 export const MODEL_DETAIL_DOWNLOAD_ROW_BASE_CLASS =
-  'milled-inset flex min-h-[60px] items-center justify-between rounded-sm border border-outline-variant/10 bg-surface-container-lowest p-3 transition-colors group';
+  'milled-inset flex min-h-[52px] items-center justify-between rounded-sm border border-outline-variant/10 bg-surface-container-lowest p-2.5 transition-colors group';
 export const MODEL_DETAIL_DOWNLOAD_ROW_INTERACTIVE_CLASS = `${MODEL_DETAIL_DOWNLOAD_ROW_BASE_CLASS} hover:border-primary/50`;
 export const MODEL_DETAIL_SUPPORT_CLASS =
-  'mt-auto space-y-3 border-t border-outline-variant/20 bg-surface-container p-5 lg:p-6';
+  'mt-auto space-y-2 border-t border-outline-variant/20 bg-surface-container p-4 lg:p-5';
 
 function estimateTitleUnits(title: string) {
   return Array.from(title).reduce((total, char) => {
