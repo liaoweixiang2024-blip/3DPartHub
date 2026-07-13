@@ -4,6 +4,7 @@ import { syncI18nSettings } from '../i18n';
 import { useAuthStore } from '../stores';
 import { applyServerThemeDefaults } from '../stores/useThemeStore';
 import { applyColorScheme } from './colorScheme';
+import { buildPoliceFilingUrl } from './filingNumber';
 
 let cache: Partial<SystemSettings> | null = null;
 let fetchedAt = 0;
@@ -371,12 +372,9 @@ export function getFooterPoliceNumber(): string {
 }
 
 // 由公安备案号推导标准查询链接；无法提取到记录号时返回空串（调用方按纯文本渲染）。
+// 纯逻辑见 ./filingNumber.ts（buildPoliceFilingUrl），这里只从缓存取号码再委托。
 export function getFooterPoliceUrl(): string {
-  const number = getFooterPoliceNumber();
-  const digits = number.replace(/\D/g, '');
-  // 全国互联网安全管理平台 recordcode 通常为 14 位。
-  if (digits.length < 14) return '';
-  return `https://www.beian.gov.cn/portal/registerSystemInfo?recordcode=${digits}`;
+  return buildPoliceFilingUrl(getFooterPoliceNumber());
 }
 
 export function getModelDetailDisclaimer(): string {
