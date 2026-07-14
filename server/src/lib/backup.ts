@@ -26,6 +26,14 @@ import { createInterface } from 'readline';
 import { fileURLToPath } from 'url';
 import type { Prisma, PrismaClient } from '@prisma/client';
 import {
+  isIgnoredFileName,
+  normalizeArchiveEntryLine,
+  normalizeBackupArchiveEntryList,
+  isUnsafeBackupArchiveEntry,
+  isUnsafeBackupArchiveVerboseEntry,
+  summarizeTarVerboseLine,
+} from './backup/archiveSafety.js';
+import {
   BACKUP_ENCRYPTION_ALGORITHM,
   encryptBackupArchiveInPlace,
   getBackupEncryptionStatus,
@@ -43,6 +51,11 @@ export {
   materializeReadableBackupArchive,
 } from './backup/encryption.js';
 export type { BackupEncryptionStatus } from './backup/encryption.js';
+export {
+  normalizeBackupArchiveEntryList,
+  isUnsafeBackupArchiveEntry,
+  isUnsafeBackupArchiveVerboseEntry,
+} from './backup/archiveSafety.js';
 import { getErrorMessage } from './http.js';
 import { syncJob, loadJob } from './jobStore.js';
 import { createLogger } from './logger.js';
@@ -3870,37 +3883,6 @@ function isPlainRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value && typeof value === 'object' && !Array.isArray(value));
 }
 
-export function normalizeBackupArchiveEntryList(raw: string): string[] {
-  return raw
-    .split(/\r?\n/)
-    .map(normalizeArchiveEntryLine)
-    .filter((line): line is string => Boolean(line));
-}
-
-function normalizeArchiveEntryLine(line: string): string | null {
-  const normalized = line.trim().replace(/^\.\//, '');
-  if (!normalized || isIgnoredArchiveEntry(normalized)) return null;
-  return normalized;
-}
-
-export function isUnsafeBackupArchiveEntry(entry: string): boolean {
-  const normalized = entry.trim().replace(/\\/g, '/').replace(/^\.\//, '');
-  if (!normalized || normalized.includes('\0')) return true;
-  if (normalized.startsWith('/') || /^[a-zA-Z]:\//.test(normalized) || isAbsolute(normalized)) return true;
-  return normalized.split('/').some((part) => part === '..');
-}
-
-export function isUnsafeBackupArchiveVerboseEntry(line: string): boolean {
-  const trimmed = line.trimStart();
-  if (!trimmed) return false;
-  const type = trimmed[0];
-  return type !== '-' && type !== 'd';
-}
-
-function summarizeTarVerboseLine(line: string): string {
-  return line.trim().replace(/\s+/g, ' ').slice(0, 240);
-}
-
 function assertArchiveContainsOnlyRegularFilesAndDirectories(archive: string) {
   const raw = execFileSync('tar', ['tvzf', archive], {
     stdio: 'pipe',
@@ -4401,17 +4383,6 @@ function countDirs(root: string, dirs: string[]): { fileCount: number; totalByte
     },
     { fileCount: 0, totalBytes: 0 },
   );
-}
-
-function isIgnoredArchiveEntry(entry: string): boolean {
-  return entry
-    .split('/')
-    .filter(Boolean)
-    .some((part) => isIgnoredFileName(part));
-}
-
-function isIgnoredFileName(name: string): boolean {
-  return name === '__MACOSX' || name === '.DS_Store' || name.startsWith('._');
 }
 
 function isArchiveStepEntry(entry: string): boolean {
