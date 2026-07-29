@@ -55,7 +55,7 @@ import { useMediaQuery } from '../layouts/hooks/useMediaQuery';
 import { getBusinessConfig } from '../lib/businessConfig';
 import { copyText } from '../lib/clipboard';
 import { getKitListTitle } from '../lib/kitList';
-import { usePublicSettings } from '../lib/publicSettings';
+import { useFeatureFlags, usePublicSettings } from '../lib/publicSettings';
 import { compareOptionValues } from '../lib/selectionSort';
 import { useAuthStore } from '../stores/useAuthStore';
 
@@ -85,6 +85,8 @@ export default function SelectionPage() {
   const [cartPreviewOpen, setCartPreviewOpen] = useState(false);
   const cartActionBarRef = useRef<HTMLDivElement>(null);
   const inquiryCart = useInquiryCart();
+  const featureFlags = useFeatureFlags();
+  const canInquiry = featureFlags.inquiry;
   const hideMobileBottomNav = !isDesktop && (cartPreviewOpen || inquiryOpen);
   const selectedIds = inquiryCart.productIds;
   const [expandedKits, setExpandedKits] = useState<Set<string>>(new Set());
@@ -1536,7 +1538,7 @@ export default function SelectionPage() {
                   kitListTitle={getKitListTitle((liveCat?.optionOrder || null) as Record<string, unknown> | null, p)}
                   selected={selectedIds.has(p.id)}
                   onToggleSelect={() => toggleInquiryProduct(visibleProduct)}
-                  onToggleInquiry={() => toggleInquiryProduct(visibleProduct)}
+                  onToggleInquiry={canInquiry ? () => toggleInquiryProduct(visibleProduct) : undefined}
                   expandedKits={expandedKits}
                   onToggleKit={toggleKit}
                   navigate={navigate}
@@ -1642,7 +1644,7 @@ export default function SelectionPage() {
                   kitListTitle={getKitListTitle((liveCat?.optionOrder || null) as Record<string, unknown> | null, p)}
                   selected={selectedIds.has(p.id)}
                   onToggleSelect={() => toggleInquiryProduct(visibleProduct)}
-                  onToggleInquiry={() => toggleInquiryProduct(visibleProduct)}
+                  onToggleInquiry={canInquiry ? () => toggleInquiryProduct(visibleProduct) : undefined}
                   expandedKits={expandedKits}
                   onToggleKit={toggleKit}
                   navigate={navigate}
@@ -1675,7 +1677,7 @@ export default function SelectionPage() {
   ) : null; /* wizard steps + results rendered separately via stepsJSX / resultsJSX */
 
   /* ── batch action bar ── */
-  const actionBar = inquiryCart.items.length > 0 && (
+  const actionBar = inquiryCart.items.length > 0 && canInquiry && (
     <div
       ref={cartActionBarRef}
       className={

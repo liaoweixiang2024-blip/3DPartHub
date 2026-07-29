@@ -27,7 +27,7 @@ export function ResultCard({
   kitListTitle: string;
   selected: boolean;
   onToggleSelect: () => void;
-  onToggleInquiry: () => void;
+  onToggleInquiry?: () => void;
   expandedKits: Set<string>;
   onToggleKit: (id: string) => void;
   navigate: ReturnType<typeof useNavigate>;
@@ -215,17 +215,19 @@ export function ResultCard({
       )}
 
       <div className="border-t border-outline-variant/10 px-3 md:px-4 py-2 md:py-2.5 flex items-center gap-1.5 md:gap-2 flex-wrap">
-        <button
-          onClick={onToggleInquiry}
-          className={`inline-flex items-center gap-1 px-2.5 md:px-3 py-1 md:py-1.5 text-xs md:text-sm font-bold rounded-lg transition-colors ${
-            selected
-              ? 'border border-primary-container/35 bg-primary-container/10 text-primary-container hover:bg-primary-container/15'
-              : 'bg-primary-container text-on-primary hover:opacity-90'
-          } ${selectionPress}`}
-        >
-          <Icon name={selected ? 'check' : 'add'} size={14} />
-          <span>{selected ? t('selectionResult.addedInquiry') : t('selectionResult.addInquiry')}</span>
-        </button>
+        {onToggleInquiry && (
+          <button
+            onClick={onToggleInquiry}
+            className={`inline-flex items-center gap-1 px-2.5 md:px-3 py-1 md:py-1.5 text-xs md:text-sm font-bold rounded-lg transition-colors ${
+              selected
+                ? 'border border-primary-container/35 bg-primary-container/10 text-primary-container hover:bg-primary-container/15'
+                : 'bg-primary-container text-on-primary hover:opacity-90'
+            } ${selectionPress}`}
+          >
+            <Icon name={selected ? 'check' : 'add'} size={14} />
+            <span>{selected ? t('selectionResult.addedInquiry') : t('selectionResult.addInquiry')}</span>
+          </button>
+        )}
         {product.categoryCatalogPdf && (
           <a
             href={product.categoryCatalogPdf}

@@ -13,7 +13,7 @@ import { useMediaQuery } from './layouts/hooks/useMediaQuery';
 import { useResolvedAdminInterfaceTheme, useResolvedPublicInterfaceTheme } from './lib/interfaceThemePreference';
 import { getCachedModelDetailTitle } from './lib/modelDetailTitleCache';
 import { isModelDetailPath, saveModelReturnPath } from './lib/modelReturnPath';
-import { refreshSiteConfig, usePublicSettings } from './lib/publicSettings';
+import { refreshSiteConfig, useFeatureFlags, usePublicSettings, type FeatureFlags } from './lib/publicSettings';
 import {
   loadAuditLogPage,
   loadCategoryAdminPage,
@@ -152,6 +152,44 @@ function ProtectedAccessState({
       </section>
     </AdminPageShell>
   );
+}
+
+// Feature gate — when a feature toggle is off, show a "disabled" placeholder
+// instead of letting users reach the page via direct URL. Admin bypassed via useFeatureFlags.
+function FeatureGate({ feature, children }: { feature: keyof FeatureFlags; children: React.ReactNode }) {
+  const { t } = useTranslation();
+  const flags = useFeatureFlags();
+  if (flags[feature]) return <>{children}</>;
+  return (
+    <ProtectedAccessState
+      icon="toggle_off"
+      title={t('featureGate.disabledTitle')}
+      description={t('featureGate.disabledDesc')}
+      primary={
+        <Link
+          to="/"
+          className="inline-flex items-center gap-1.5 rounded-lg bg-primary-container px-4 py-2 text-sm font-bold text-on-primary"
+        >
+          <Icon name="home" size={16} />
+          {t('featureGate.backHome')}
+        </Link>
+      }
+    />
+  );
+}
+
+// /register: when registration is disabled, redirect to login (the login page
+// already hides its signup form when allow_register is off).
+function RegistrationGate() {
+  const flags = useFeatureFlags();
+  if (flags.registration) {
+    return (
+      <ScrollPage>
+        <LoginPage />
+      </ScrollPage>
+    );
+  }
+  return <Navigate to="/login" replace />;
 }
 
 // Protected pages — check auth BEFORE rendering
@@ -412,14 +450,7 @@ export default function Router() {
             </ScrollPage>
           }
         />
-        <Route
-          path="/register"
-          element={
-            <ScrollPage>
-              <LoginPage />
-            </ScrollPage>
-          }
-        />
+        <Route path="/register" element={<RegistrationGate />} />
         <Route
           path="/forgot-password"
           element={
@@ -483,7 +514,9 @@ export default function Router() {
             path="/selection/s/:token"
             element={
               <PageWrap>
-                <SelectionSharePage />
+                <FeatureGate feature="selection">
+                  <SelectionSharePage />
+                </FeatureGate>
               </PageWrap>
             }
           />
@@ -505,7 +538,9 @@ export default function Router() {
             path="/selection"
             element={
               <PageWrap>
-                <SelectionPage />
+                <FeatureGate feature="selection">
+                  <SelectionPage />
+                </FeatureGate>
               </PageWrap>
             }
           />
@@ -521,7 +556,9 @@ export default function Router() {
             path="/product-wall"
             element={
               <PageWrap>
-                <ProductWallPage />
+                <FeatureGate feature="productWall">
+                  <ProductWallPage />
+                </FeatureGate>
               </PageWrap>
             }
           />
@@ -545,7 +582,9 @@ export default function Router() {
             path="/downloads"
             element={
               <ProtectedPage>
-                <DownloadsPage />
+                <FeatureGate feature="downloads">
+                  <DownloadsPage />
+                </FeatureGate>
               </ProtectedPage>
             }
           />
@@ -553,7 +592,9 @@ export default function Router() {
             path="/favorites"
             element={
               <ProtectedPage>
-                <FavoritesPage />
+                <FeatureGate feature="favorites">
+                  <FavoritesPage />
+                </FeatureGate>
               </ProtectedPage>
             }
           />
@@ -561,7 +602,9 @@ export default function Router() {
             path="/my-shares"
             element={
               <ProtectedPage>
-                <MySharesPage />
+                <FeatureGate feature="shares">
+                  <MySharesPage />
+                </FeatureGate>
               </ProtectedPage>
             }
           />
@@ -577,7 +620,9 @@ export default function Router() {
             path="/support"
             element={
               <ProtectedPage>
-                <SupportPage />
+                <FeatureGate feature="tickets">
+                  <SupportPage />
+                </FeatureGate>
               </ProtectedPage>
             }
           />
@@ -585,7 +630,9 @@ export default function Router() {
             path="/my-tickets"
             element={
               <ProtectedPage>
-                <MyTicketsPage />
+                <FeatureGate feature="tickets">
+                  <MyTicketsPage />
+                </FeatureGate>
               </ProtectedPage>
             }
           />
@@ -593,7 +640,9 @@ export default function Router() {
             path="/my-tickets/:id"
             element={
               <ProtectedPage>
-                <TicketDetailPage />
+                <FeatureGate feature="tickets">
+                  <TicketDetailPage />
+                </FeatureGate>
               </ProtectedPage>
             }
           />
@@ -681,7 +730,9 @@ export default function Router() {
             path="/my-inquiries"
             element={
               <ProtectedPage>
-                <MyInquiriesPage />
+                <FeatureGate feature="inquiry">
+                  <MyInquiriesPage />
+                </FeatureGate>
               </ProtectedPage>
             }
           />
@@ -689,7 +740,9 @@ export default function Router() {
             path="/my-inquiries/:id"
             element={
               <ProtectedPage>
-                <InquiryDetailPage />
+                <FeatureGate feature="inquiry">
+                  <InquiryDetailPage />
+                </FeatureGate>
               </ProtectedPage>
             }
           />

@@ -65,6 +65,11 @@ export const enUS: { translation: TranslationMap } = {
       recheck: 'Check again',
       title: 'System under maintenance',
     },
+    featureGate: {
+      backHome: 'Back to home',
+      disabledDesc: 'This feature has been disabled by the administrator. Please contact the administrator if needed.',
+      disabledTitle: 'Feature unavailable',
+    },
     forcePassword: {
       confirmPassword: 'Confirm new password',
       confirmPasswordPlaceholder: 'Enter the new password again',

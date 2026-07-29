@@ -64,6 +64,11 @@ export const zhCN: { translation: TranslationMap } = {
       recheck: '重新检查',
       title: '系统维护中',
     },
+    featureGate: {
+      backHome: '返回首页',
+      disabledDesc: '该功能当前已被管理员关闭，如有需要请与管理员联系。',
+      disabledTitle: '功能已关闭',
+    },
     forcePassword: {
       confirmPassword: '确认新密码',
       confirmPasswordPlaceholder: '再次输入新密码',
