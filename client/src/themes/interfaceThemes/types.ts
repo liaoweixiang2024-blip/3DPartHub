@@ -56,6 +56,7 @@ export interface FloatingMenuThemeProps {
   contactAddress?: string;
   contactEmail?: string;
   contactPhone?: string;
+  ticketsEnabled?: boolean;
 }
 
 export interface InterfaceThemeComponents {

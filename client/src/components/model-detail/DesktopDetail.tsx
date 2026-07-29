@@ -281,40 +281,42 @@ export function DesktopDetail({
       }
       support={
         <>
-          <Link
-            to="/support"
-            state={{
-              modelName: modelData.name,
-              modelNo: modelData.name,
-              specs: Object.fromEntries(modelData.specs.map((s) => [s.label, s.value])),
-              source: 'model',
-            }}
-            onClick={(e) => {
-              const result = checkProtectedAccess('/support');
-              if (result.action === 'dialog' || result.action === 'redirect') {
-                e.preventDefault();
-                onLoginDialog(result.action === 'dialog' ? result.reason : t('modelDetail.supportReason'));
-              }
-            }}
-            className="flex items-center gap-3 p-3 rounded-sm bg-surface-container-high hover:bg-surface-container-highest transition-colors group"
-          >
-            <div className="w-10 h-10 rounded-full bg-primary-container/15 flex items-center justify-center shrink-0">
+          {featureFlags.tickets && (
+            <Link
+              to="/support"
+              state={{
+                modelName: modelData.name,
+                modelNo: modelData.name,
+                specs: Object.fromEntries(modelData.specs.map((s) => [s.label, s.value])),
+                source: 'model',
+              }}
+              onClick={(e) => {
+                const result = checkProtectedAccess('/support');
+                if (result.action === 'dialog' || result.action === 'redirect') {
+                  e.preventDefault();
+                  onLoginDialog(result.action === 'dialog' ? result.reason : t('modelDetail.supportReason'));
+                }
+              }}
+              className="flex items-center gap-3 p-3 rounded-sm bg-surface-container-high hover:bg-surface-container-highest transition-colors group"
+            >
+              <div className="w-10 h-10 rounded-full bg-primary-container/15 flex items-center justify-center shrink-0">
+                <Icon
+                  name="support_agent"
+                  size={20}
+                  className="text-primary group-hover:text-on-primary transition-colors"
+                />
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-medium text-on-surface">{t('modelDetail.customSupportTitle')}</p>
+                <p className="text-xs text-on-surface-variant mt-0.5">{t('modelDetail.customSupportDescription')}</p>
+              </div>
               <Icon
-                name="support_agent"
+                name="chevron_right"
                 size={20}
-                className="text-primary group-hover:text-on-primary transition-colors"
+                className="text-on-surface-variant/40 group-hover:text-on-surface transition-colors"
               />
-            </div>
-            <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium text-on-surface">{t('modelDetail.customSupportTitle')}</p>
-              <p className="text-xs text-on-surface-variant mt-0.5">{t('modelDetail.customSupportDescription')}</p>
-            </div>
-            <Icon
-              name="chevron_right"
-              size={20}
-              className="text-on-surface-variant/40 group-hover:text-on-surface transition-colors"
-            />
-          </Link>
+            </Link>
+          )}
 
           <div className="pt-2 space-y-1.5">
             <p className="text-xs text-on-surface-variant/50 leading-relaxed">{getModelDetailDisclaimer()}</p>

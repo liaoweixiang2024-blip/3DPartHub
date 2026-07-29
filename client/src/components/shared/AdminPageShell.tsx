@@ -3,7 +3,7 @@ import { createContext, useContext, useLayoutEffect, useState, type ReactNode, t
 import { Outlet, useLocation } from 'react-router-dom';
 import { useMediaQuery } from '../../layouts/hooks/useMediaQuery';
 import { useResolvedAdminInterfaceTheme, useResolvedPublicInterfaceTheme } from '../../lib/interfaceThemePreference';
-import { getFooterCopyright, usePublicSettings } from '../../lib/publicSettings';
+import { getFooterCopyright, useFeatureFlags, usePublicSettings } from '../../lib/publicSettings';
 import { getInterfaceThemePackage } from '../../themes/interfaceThemes/registry';
 import type { FloatingMenuThemeProps } from '../../themes/interfaceThemes/types';
 import { getMobileThemePackage } from '../../themes/mobileThemes/registry';
@@ -42,10 +42,12 @@ function useShellThemePackages(isAdminRoute: boolean, isDesktop: boolean) {
 
 function useFloatingMenuThemeProps(): FloatingMenuThemeProps {
   const { settings } = usePublicSettings();
+  const featureFlags = useFeatureFlags();
   return {
     contactAddress: settings?.contact_address || '',
     contactEmail: settings?.contact_email || '',
     contactPhone: settings?.contact_phone || '',
+    ticketsEnabled: featureFlags.tickets,
   };
 }
 

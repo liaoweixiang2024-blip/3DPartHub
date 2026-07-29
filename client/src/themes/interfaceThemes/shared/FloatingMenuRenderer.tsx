@@ -29,9 +29,9 @@ export interface FloatingMenuAppearance {
 interface FloatingMenuRendererProps {
   appearance: FloatingMenuAppearance;
   contactAddress?: string;
-  contactActionTo: string;
-  contactActionIcon: string;
-  contactActionLabel: string;
+  contactActionTo?: string;
+  contactActionIcon?: string;
+  contactActionLabel?: string;
   contactEmail?: string;
   contactIcon: string;
   contactLabel: string;
@@ -157,12 +157,14 @@ export default function FloatingMenuRenderer({
         <Icon name={contactIcon} size={appearance.iconSize} />
         <span>{contactLabel}</span>
       </button>
-      <FloatingMenuLink
-        appearance={appearance}
-        to={contactActionTo}
-        icon={contactActionIcon}
-        label={contactActionLabel}
-      />
+      {contactActionTo && contactActionIcon && contactActionLabel && (
+        <FloatingMenuLink
+          appearance={appearance}
+          to={contactActionTo}
+          icon={contactActionIcon}
+          label={contactActionLabel}
+        />
+      )}
       {tailItems.map((item) => (
         <FloatingMenuLink key={item.to} appearance={appearance} {...item} />
       ))}
@@ -203,10 +205,12 @@ export default function FloatingMenuRenderer({
           ) : (
             <p className={appearance.contactEmptyClassName}>{t('floatingMenu.contactEmpty')}</p>
           )}
-          <Link to={contactActionTo} className={appearance.contactActionClassName}>
-            <Icon name={contactActionIcon} size={appearance.contactRowIconSize} />
-            {t('floatingMenu.goToAction', { label: contactActionLabel })}
-          </Link>
+          {contactActionTo && contactActionIcon && contactActionLabel && (
+            <Link to={contactActionTo} className={appearance.contactActionClassName}>
+              <Icon name={contactActionIcon} size={appearance.contactRowIconSize} />
+              {t('floatingMenu.goToAction', { label: contactActionLabel })}
+            </Link>
+          )}
         </div>
       ) : null}
     </aside>

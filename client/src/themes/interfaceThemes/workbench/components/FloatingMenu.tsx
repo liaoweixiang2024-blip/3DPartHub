@@ -18,11 +18,17 @@ const floatingMenuAppearance = {
   contactRowIconSize: 15,
 };
 
-export default function FloatingMenu({ contactAddress, contactEmail, contactPhone }: FloatingMenuThemeProps) {
+export default function FloatingMenu({
+  contactAddress,
+  contactEmail,
+  contactPhone,
+  ticketsEnabled,
+}: FloatingMenuThemeProps) {
   const { t } = useTranslation();
+  const showTickets = ticketsEnabled !== false;
   const floatingMenuItems = [{ to: '/', icon: 'dashboard', label: t('nav.home') }];
   const floatingMenuTailItems = [
-    { to: '/my-tickets', icon: 'assignment_add', label: t('nav.short.tickets') },
+    ...(showTickets ? [{ to: '/my-tickets', icon: 'assignment_add', label: t('nav.short.tickets') }] : []),
     { to: '/my-inquiries', icon: 'request_quote', label: t('nav.short.inquiries') },
   ];
 
@@ -30,9 +36,9 @@ export default function FloatingMenu({ contactAddress, contactEmail, contactPhon
     <FloatingMenuRenderer
       appearance={floatingMenuAppearance}
       contactAddress={contactAddress}
-      contactActionTo="/support"
-      contactActionIcon="support_agent"
-      contactActionLabel={t('nav.support')}
+      contactActionTo={showTickets ? '/support' : undefined}
+      contactActionIcon={showTickets ? 'support_agent' : undefined}
+      contactActionLabel={showTickets ? t('nav.support') : undefined}
       contactEmail={contactEmail}
       contactIcon="phone"
       contactLabel={t('floatingMenu.contact')}

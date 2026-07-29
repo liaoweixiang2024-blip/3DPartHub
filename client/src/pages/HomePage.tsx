@@ -1230,7 +1230,7 @@ export default function HomePage() {
                   <p className="mt-1 text-[11px] text-on-surface-variant/60">{t('home.emptyMobileDescription')}</p>
                 )}
               </div>
-              {searchQuery.trim() && (
+              {searchQuery.trim() && featureFlags.tickets && (
                 <Link
                   to="/support"
                   state={{

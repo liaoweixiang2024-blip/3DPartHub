@@ -967,33 +967,37 @@ export default function ModelDetailPage() {
 
               {/* Support */}
               <div className="pt-2 border-t border-outline-variant/20">
-                <Link
-                  to="/support"
-                  state={{
-                    modelName: modelData.name,
-                    modelNo: modelData.name,
-                    specs: Object.fromEntries(modelData.specs.map((s) => [s.label, s.value])),
-                    source: 'model',
-                  }}
-                  onClick={(e) => {
-                    const result = checkProtectedAccess('/support');
-                    if (result.action === 'dialog' || result.action === 'redirect') {
-                      e.preventDefault();
-                      setLoginPromptReason(result.action === 'dialog' ? result.reason : t('modelDetail.supportReason'));
-                      setLoginPromptOpen(true);
-                    }
-                  }}
-                  className="flex items-center gap-3 p-3 rounded-sm bg-surface-container-high hover:bg-surface-container-highest transition-colors group"
-                >
-                  <div className="w-8 h-8 rounded-full bg-primary-container/15 flex items-center justify-center shrink-0">
-                    <Icon name="support_agent" size={16} className="text-primary" />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-xs font-medium text-on-surface">{t('modelDetail.customSupportTitle')}</p>
-                    <p className="text-[11px] text-on-surface-variant">{t('modelDetail.customSupportDescription')}</p>
-                  </div>
-                  <Icon name="chevron_right" size={16} className="text-on-surface-variant/40" />
-                </Link>
+                {featureFlags.tickets && (
+                  <Link
+                    to="/support"
+                    state={{
+                      modelName: modelData.name,
+                      modelNo: modelData.name,
+                      specs: Object.fromEntries(modelData.specs.map((s) => [s.label, s.value])),
+                      source: 'model',
+                    }}
+                    onClick={(e) => {
+                      const result = checkProtectedAccess('/support');
+                      if (result.action === 'dialog' || result.action === 'redirect') {
+                        e.preventDefault();
+                        setLoginPromptReason(
+                          result.action === 'dialog' ? result.reason : t('modelDetail.supportReason'),
+                        );
+                        setLoginPromptOpen(true);
+                      }
+                    }}
+                    className="flex items-center gap-3 p-3 rounded-sm bg-surface-container-high hover:bg-surface-container-highest transition-colors group"
+                  >
+                    <div className="w-8 h-8 rounded-full bg-primary-container/15 flex items-center justify-center shrink-0">
+                      <Icon name="support_agent" size={16} className="text-primary" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs font-medium text-on-surface">{t('modelDetail.customSupportTitle')}</p>
+                      <p className="text-[11px] text-on-surface-variant">{t('modelDetail.customSupportDescription')}</p>
+                    </div>
+                    <Icon name="chevron_right" size={16} className="text-on-surface-variant/40" />
+                  </Link>
+                )}
                 <div className="pt-3 space-y-1">
                   <p className="text-[11px] text-on-surface-variant/50 leading-relaxed">{getModelDetailDisclaimer()}</p>
                   <p className="text-[11px] text-on-surface-variant/30">{getModelDetailCopyright()}</p>

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
-import { getAnnouncement, getCachedPublicSettings } from '../../lib/publicSettings';
+import { getAnnouncement, getCachedPublicSettings, useFeatureFlags } from '../../lib/publicSettings';
 import { sanitizeHtml } from '../../lib/sanitizeHtml';
 import FormatTag from '../shared/FormatTag';
 import Icon from '../shared/Icon';
@@ -157,6 +157,7 @@ export function SkeletonListCard() {
 
 export function ModelEmptyState({ searchQuery }: { searchQuery: string }) {
   const { t } = useTranslation();
+  const featureFlags = useFeatureFlags();
   return (
     <div className="home-model-empty-state flex flex-col items-center justify-center gap-4 py-20">
       <Icon name="search_off" size={48} className="text-on-surface-variant/30" />
@@ -164,7 +165,7 @@ export function ModelEmptyState({ searchQuery }: { searchQuery: string }) {
         <p className="text-on-surface-variant">{t('home.emptyTitle')}</p>
         {searchQuery.trim() && <p className="mt-1 text-xs text-on-surface-variant/60">{t('home.emptyDescription')}</p>}
       </div>
-      {searchQuery.trim() && (
+      {searchQuery.trim() && featureFlags.tickets && (
         <a
           href="/support"
           className="inline-flex items-center gap-2 rounded-lg bg-primary-container px-4 py-2 text-sm font-bold text-on-primary transition-opacity hover:opacity-90"
