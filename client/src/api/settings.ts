@@ -139,6 +139,7 @@ export interface SystemSettings {
   feature_shares_enabled: boolean;
   feature_downloads_enabled: boolean;
   feature_password_reset_enabled: boolean;
+  feature_temp_viewer_enabled: boolean;
   // Selection wizard
   selection_page_title: string;
   selection_page_desc: string;

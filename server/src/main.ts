@@ -373,6 +373,7 @@ app.use('/api/batch-download', featureGuard('feature_downloads_enabled'));
 app.use('/api/auth/register', featureGuard('allow_register'));
 app.use('/api/auth/forgot-password', featureGuard('feature_password_reset_enabled'));
 app.use('/api/auth/reset-password', featureGuard('feature_password_reset_enabled'));
+app.use('/api/temp-preview', featureGuard('feature_temp_viewer_enabled'));
 
 // Routes
 app.use(healthRouter);

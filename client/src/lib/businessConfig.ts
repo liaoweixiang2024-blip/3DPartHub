@@ -358,6 +358,7 @@ export function getBusinessConfig(settings: Partial<SystemSettings> = getPublicS
     '/my-inquiries': 'feature_inquiry_enabled',
     '/my-tickets': 'feature_tickets_enabled',
     '/support': 'feature_tickets_enabled',
+    '/temp-viewer': 'feature_temp_viewer_enabled',
   };
   const filteredNav = enabledNav.filter((item) => {
     const featureKey = FEATURE_NAV_MAP[item.path] as keyof SystemSettings | undefined;

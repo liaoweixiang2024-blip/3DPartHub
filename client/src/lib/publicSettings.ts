@@ -1,7 +1,6 @@
 import useSWR, { mutate } from 'swr';
 import { getPublicSettings, type SystemSettings } from '../api/settings';
 import { syncI18nSettings } from '../i18n';
-import { useAuthStore } from '../stores';
 import { applyServerThemeDefaults } from '../stores/useThemeStore';
 import { applyColorScheme } from './colorScheme';
 import { buildPoliceFilingUrl } from './filingNumber';
@@ -276,6 +275,7 @@ export function getPublicSettingsSnapshot(): Partial<SystemSettings> {
       feature_favorites_enabled: true,
       feature_shares_enabled: true,
       feature_downloads_enabled: true,
+      feature_temp_viewer_enabled: true,
       ...DEFAULT_3D_PREVIEW_SETTINGS,
     }
   );
@@ -551,8 +551,8 @@ export function usePublicSettings() {
 }
 
 // Feature flag hook for gating UI buttons. Reads from the cached public settings
-// snapshot and re-renders when settings change. Admins still see all controls —
-// server-side featureGuard lets admins bypass, so the UI should match.
+// snapshot and re-renders when settings change. Feature toggles apply to everyone,
+// including admins — a disabled feature is hidden/inaccessible site-wide.
 export interface FeatureFlags {
   selection: boolean;
   inquiry: boolean;
@@ -563,26 +563,11 @@ export interface FeatureFlags {
   downloads: boolean;
   registration: boolean;
   passwordReset: boolean;
+  tempViewer: boolean;
 }
 
 export function useFeatureFlags(): FeatureFlags {
   const { settings } = usePublicSettings();
-  // Admins bypass feature gating — the server-side featureGuard lets admins
-  // through, so the UI must match (otherwise admins can't manage a disabled area).
-  const isAdmin = useAuthStore((s) => s.user?.role === 'ADMIN');
-  if (isAdmin) {
-    return {
-      selection: true,
-      inquiry: true,
-      productWall: true,
-      tickets: true,
-      favorites: true,
-      shares: true,
-      downloads: true,
-      registration: true,
-      passwordReset: true,
-    };
-  }
   return {
     selection: settings?.feature_selection_enabled !== false,
     inquiry: settings?.feature_inquiry_enabled !== false,
@@ -593,5 +578,6 @@ export function useFeatureFlags(): FeatureFlags {
     downloads: settings?.feature_downloads_enabled !== false,
     registration: settings?.allow_register !== false,
     passwordReset: settings?.feature_password_reset_enabled !== false,
+    tempViewer: settings?.feature_temp_viewer_enabled !== false,
   };
 }

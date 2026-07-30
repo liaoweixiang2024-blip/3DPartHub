@@ -49,7 +49,7 @@ import {
   useResolvedPublicInterfaceTheme,
 } from '../../lib/interfaceThemePreference';
 import { isModelDetailPath } from '../../lib/modelReturnPath';
-import { onSiteConfigChange, usePublicSettings } from '../../lib/publicSettings';
+import { onSiteConfigChange, useFeatureFlags, usePublicSettings } from '../../lib/publicSettings';
 import { preloadRouteForPath } from '../../lib/routeLoaders';
 import { useAuthStore } from '../../stores/useAuthStore';
 import { useThemeStore } from '../../stores/useThemeStore';
@@ -235,32 +235,21 @@ function UserMenu({
     isCompact ? '' : 'ml-2'
   }`;
 
+  const featureFlags = useFeatureFlags();
   const menuItems = [
     {
       label: t('nav.profile'),
       icon: 'person',
       path: '/profile',
     },
-    {
-      label: t('nav.tempViewer'),
-      icon: 'view_in_ar',
-      path: '/temp-viewer',
-    },
+    ...(featureFlags.tempViewer ? [{ label: t('nav.tempViewer'), icon: 'view_in_ar', path: '/temp-viewer' }] : []),
     {
       label: t('auth.changePassword'),
       icon: 'lock',
       path: '/profile?tab=security',
     },
-    {
-      label: t('nav.downloads'),
-      icon: 'download',
-      path: '/downloads',
-    },
-    {
-      label: t('nav.myShares'),
-      icon: 'share',
-      path: '/my-shares',
-    },
+    ...(featureFlags.downloads ? [{ label: t('nav.downloads'), icon: 'download', path: '/downloads' }] : []),
+    ...(featureFlags.shares ? [{ label: t('nav.myShares'), icon: 'share', path: '/my-shares' }] : []),
   ];
 
   const isAdminUser = user?.role === 'ADMIN';

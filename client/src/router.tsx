@@ -490,7 +490,9 @@ export default function Router() {
             path="/temp-viewer"
             element={
               <ProtectedPage>
-                <TempViewerPage />
+                <FeatureGate feature="tempViewer">
+                  <TempViewerPage />
+                </FeatureGate>
               </ProtectedPage>
             }
           />
