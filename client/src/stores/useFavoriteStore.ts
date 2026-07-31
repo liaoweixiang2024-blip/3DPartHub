@@ -58,16 +58,23 @@ export const useFavoriteStore = create<FavoriteState>()(
     }),
     {
       name: 'favorites-storage',
+      // _pendingIds 是「进行中」的瞬态状态，绝不能持久化——
+      // JSON.stringify(Set) 会得到 "{}"，刷新加载后 _pendingIds 变成空对象，
+      // _pendingIds.has() 就会抛 "not a function"，导致收藏/取消收藏全部失败。
+      partialize: (state) => ({ favoriteIds: state.favoriteIds }),
       storage: {
         getItem: (name) => {
           const str = localStorage.getItem(name);
           if (!str) return null;
           const parsed = JSON.parse(str);
+          const savedFavoriteIds = parsed?.state?.favoriteIds;
           return {
             ...parsed,
             state: {
               ...parsed.state,
-              favoriteIds: new Set(parsed.state.favoriteIds || []),
+              favoriteIds: new Set(Array.isArray(savedFavoriteIds) ? savedFavoriteIds : []),
+              // 始终用全新 Set，丢弃旧版本可能持久化进来的脏 _pendingIds（{} 或数组）
+              _pendingIds: new Set(),
             },
           };
         },
@@ -75,8 +82,7 @@ export const useFavoriteStore = create<FavoriteState>()(
           const serialized = {
             ...value,
             state: {
-              ...value.state,
-              favoriteIds: Array.from(value.state.favoriteIds),
+              favoriteIds: Array.from(value.state.favoriteIds ?? []),
             },
           };
           localStorage.setItem(name, JSON.stringify(serialized));
