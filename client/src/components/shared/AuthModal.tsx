@@ -30,6 +30,7 @@ interface FormErrors {
   confirmPassword?: string;
   email?: string;
   emailCode?: string;
+  inviteCode?: string;
   password?: string;
   username?: string;
 }
@@ -63,6 +64,7 @@ export default function AuthModal({ initialMode = 'login', open, returnUrl, onCl
   const [phone, setPhone] = useState('');
   const [company, setCompany] = useState('');
   const [address, setAddress] = useState('');
+  const [inviteCode, setInviteCode] = useState('');
   const login = useAuthStore((state) => state.login);
   const navigate = useNavigate();
   const location = useLocation();
@@ -124,6 +126,9 @@ export default function AuthModal({ initialMode = 'login', open, returnUrl, onCl
       if (password !== confirmPassword) nextErrors.confirmPassword = t('auth.errors.confirmPasswordMismatch');
       if (!captchaText) nextErrors.captchaText = t('auth.errors.captchaRequired');
       if (!emailCode) nextErrors.emailCode = t('auth.errors.emailCodeRequired');
+      if (featureFlags.invite && !inviteCode.trim()) {
+        nextErrors.inviteCode = t('auth.errors.inviteCodeRequired');
+      }
     }
     setErrors(nextErrors);
     return Object.keys(nextErrors).length === 0;
@@ -180,6 +185,7 @@ export default function AuthModal({ initialMode = 'login', open, returnUrl, onCl
           phone: phone || undefined,
           company: company || undefined,
           address: address || undefined,
+          inviteCode: featureFlags.invite && inviteCode.trim() ? inviteCode.trim() : undefined,
         });
         login(result.user, result.tokens, true);
       }
@@ -293,6 +299,20 @@ export default function AuthModal({ initialMode = 'login', open, returnUrl, onCl
                     fieldSize="lg"
                     placeholder={t('auth.addressPlaceholder')}
                   />
+                </div>
+              )}
+
+              {mode === 'register' && featureFlags.invite && (
+                <div>
+                  <AppFormLabel uppercase>{t('auth.inviteCode')}</AppFormLabel>
+                  <AppTextInput
+                    type="text"
+                    value={inviteCode}
+                    onChange={(event) => setInviteCode(event.target.value)}
+                    fieldSize="lg"
+                    placeholder={t('auth.inviteCodePlaceholder')}
+                  />
+                  {errors.inviteCode && <span className={APP_FIELD_ERROR_CLASS}>{errors.inviteCode}</span>}
                 </div>
               )}
 
