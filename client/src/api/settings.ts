@@ -140,6 +140,7 @@ export interface SystemSettings {
   feature_downloads_enabled: boolean;
   feature_password_reset_enabled: boolean;
   feature_temp_viewer_enabled: boolean;
+  require_invite_code: boolean;
   // Selection wizard
   selection_page_title: string;
   selection_page_desc: string;

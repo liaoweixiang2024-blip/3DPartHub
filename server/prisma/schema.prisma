@@ -14,6 +14,7 @@ model User {
   passwordHash       String   @map("password_hash")
   avatar             String?
   role               Role     @default(VIEWER)
+  canInvite          Boolean  @default(false)
   company            String?
   phone              String?
   department         String?
@@ -45,6 +46,8 @@ model User {
   uploadedProductWallImages ProductWallImage[]         @relation("ProductWallUploads")
   reviewedProductWallImages ProductWallImage[]         @relation("ProductWallReviews")
   productWallFavorites      ProductWallImageFavorite[]
+  generatedInviteCodes      InviteCode[]               @relation("InviteCodeGenerator")
+  usedInviteCode            InviteCode?                @relation("InviteCodeUser")
 
   @@index([role, createdAt], map: "users_role_created_at_idx")
   @@index([createdAt], map: "users_created_at_idx")
@@ -117,6 +120,26 @@ enum Role {
   ADMIN
   EDITOR
   VIEWER
+}
+
+model InviteCode {
+  id          String    @id @default(uuid())
+  code        String    @unique
+  note        String?
+  expiresAt   DateTime? @map("expires_at")
+  status      String    @default("active")
+  createdById String    @map("created_by_id")
+  createdBy   User      @relation("InviteCodeGenerator", fields: [createdById], references: [id], onDelete: Cascade)
+  usedById    String?   @unique @map("used_by_id")
+  usedBy      User?     @relation("InviteCodeUser", fields: [usedById], references: [id], onDelete: SetNull)
+  createdAt   DateTime  @default(now()) @map("created_at")
+  usedAt      DateTime? @map("used_at")
+
+  @@index([code])
+  @@index([createdById, createdAt], map: "invite_codes_created_by_id_created_at_idx")
+  @@index([status], map: "invite_codes_status_idx")
+  @@index([expiresAt], map: "invite_codes_expires_at_idx")
+  @@map("invite_codes")
 }
 
 model Project {

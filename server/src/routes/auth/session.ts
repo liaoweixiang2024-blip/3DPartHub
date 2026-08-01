@@ -3,6 +3,7 @@ import { Router, Request, Response } from 'express';
 import { cacheGet, redis } from '../../lib/cache.js';
 import { generateCaptcha, verifyCaptcha, checkRateLimit, storeEmailCode, verifyEmailCode } from '../../lib/captcha.js';
 import { sendVerifyCode } from '../../lib/email.js';
+import { assessInviteCode, INVITE_REASON_MSG } from '../../lib/inviteCode.js';
 import {
   signAccessToken,
   signRefreshToken,
@@ -134,7 +135,7 @@ export function createAuthSessionRouter() {
       return;
     }
 
-    const { username, email, password, emailCode, phone, company, address } = req.body;
+    const { username, email, password, emailCode, phone, company, address, inviteCode } = req.body;
     const normalizedEmail = normalizeEmailInput(email);
     const normalizedPhone = normalizeContactPhoneSetting(phone);
 
@@ -202,6 +203,27 @@ export function createAuthSessionRouter() {
       return;
     }
 
+    // 邀请码校验：require_invite_code 开启时必须填有效码；一次一码，校验通过后留待创建事务中抢占标记 used
+    const requireInvite = (await getSetting<boolean>('require_invite_code')) === true;
+    const rawInviteCode = typeof inviteCode === 'string' ? inviteCode.trim() : '';
+    let pendingInviteId: string | null = null;
+    if (requireInvite) {
+      if (!rawInviteCode) {
+        res.status(400).json({ detail: '请输入邀请码' });
+        return;
+      }
+      const found = await prisma.inviteCode.findUnique({ where: { code: rawInviteCode } });
+      const assessment = assessInviteCode(
+        found ? { status: found.status, expiresAt: found.expiresAt, usedById: found.usedById } : null,
+        new Date(),
+      );
+      if (!assessment.ok) {
+        res.status(400).json({ detail: INVITE_REASON_MSG[assessment.reason] });
+        return;
+      }
+      pendingInviteId = found!.id;
+    }
+
     const codeOk = await verifyEmailCode(normalizedEmail, emailCode);
     if (!codeOk) {
       res.status(400).json({ detail: '邮箱验证码错误或已过期' });
@@ -210,29 +232,44 @@ export function createAuthSessionRouter() {
 
     try {
       const passwordHash = await hashPassword(password);
-      const user = await prisma.user.create({
-        data: {
-          username,
-          email: normalizedEmail,
-          passwordHash,
-          phone: normalizedPhone || null,
-          company: company || null,
-          address: address || null,
-        },
-        select: {
-          id: true,
-          username: true,
-          email: true,
-          role: true,
-          mustChangePassword: true,
-          company: true,
-          phone: true,
-          department: true,
-          address: true,
-          bio: true,
-          avatar: true,
-          createdAt: true,
-        },
+      const user = await prisma.$transaction(async (tx) => {
+        const created = await tx.user.create({
+          data: {
+            username,
+            email: normalizedEmail,
+            passwordHash,
+            phone: normalizedPhone || null,
+            company: company || null,
+            address: address || null,
+          },
+          select: {
+            id: true,
+            username: true,
+            email: true,
+            role: true,
+            mustChangePassword: true,
+            canInvite: true,
+            company: true,
+            phone: true,
+            department: true,
+            address: true,
+            bio: true,
+            avatar: true,
+            createdAt: true,
+          },
+        });
+        // 一次一码：条件更新抢占（仅 usedById 仍为 null 且 active 才生效）。
+        // 并发情况下第二个事务 count=0 → 抛错回滚，保证一码只被使用一次。
+        if (pendingInviteId) {
+          const claimed = await tx.inviteCode.updateMany({
+            where: { id: pendingInviteId, usedById: null, status: 'active' },
+            data: { status: 'used', usedById: created.id, usedAt: new Date() },
+          });
+          if (claimed.count === 0) {
+            throw new Error('INVITE_CODE_TAKEN');
+          }
+        }
+        return created;
       });
 
       const payload = { userId: user.id, role: user.role };
@@ -245,6 +282,10 @@ export function createAuthSessionRouter() {
         tokens: { accessToken },
       });
     } catch (err: unknown) {
+      if (err instanceof Error && err.message === 'INVITE_CODE_TAKEN') {
+        res.status(400).json({ detail: '邀请码已被使用' });
+        return;
+      }
       if (err instanceof Error && 'code' in err && (err as NodeJS.ErrnoException).code === 'P2002') {
         res.status(409).json({ detail: '用户名或邮箱已存在' });
         return;
@@ -305,6 +346,7 @@ export function createAuthSessionRouter() {
           email: user.email,
           role: user.role,
           mustChangePassword: user.mustChangePassword,
+          canInvite: user.canInvite,
           company: user.company,
           phone: user.phone,
           department: user.department,

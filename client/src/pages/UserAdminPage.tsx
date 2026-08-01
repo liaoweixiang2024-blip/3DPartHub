@@ -30,6 +30,7 @@ interface UserItem {
   bio: string | null;
   disabled: boolean;
   mustChangePassword: boolean;
+  canInvite: boolean;
   lastLoginAt: string | null;
   createdAt: string;
   _count: { downloads: number; favorites: number };

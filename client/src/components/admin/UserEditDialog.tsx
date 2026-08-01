@@ -18,6 +18,7 @@ export interface AdminUserDetail {
   bio: string | null;
   disabled: boolean;
   mustChangePassword: boolean;
+  canInvite: boolean;
   lastLoginAt: string | null;
   createdAt: string;
   _count: { downloads: number; favorites: number };
@@ -71,6 +72,7 @@ export default function UserEditDialog({
   const [bio, setBio] = useState(user.bio ?? '');
   const [mustChangePassword, setMustChangePassword] = useState(user.mustChangePassword);
   const [disabled, setDisabled] = useState(user.disabled);
+  const [canInvite, setCanInvite] = useState(user.canInvite);
   const [saving, setSaving] = useState(false);
 
   // 重置密码（临时密码）
@@ -92,6 +94,7 @@ export default function UserEditDialog({
     setBio(user.bio ?? '');
     setMustChangePassword(user.mustChangePassword);
     setDisabled(user.disabled);
+    setCanInvite(user.canInvite);
     setTempPassword('');
   }, [user.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -108,6 +111,7 @@ export default function UserEditDialog({
         bio: bio.trim() || null,
         mustChangePassword,
         disabled,
+        canInvite,
       };
       if (roleChanged) payload.role = role;
       await client.put(`/admin/users/${user.id}`, payload);
@@ -238,6 +242,15 @@ export default function UserEditDialog({
                 className="h-4 w-4"
               />
               <span className={disabled ? 'text-error' : ''}>禁用账号</span>
+            </label>
+            <label className="flex cursor-pointer items-center gap-2 text-sm text-on-surface">
+              <input
+                type="checkbox"
+                checked={canInvite}
+                onChange={(e) => setCanInvite(e.target.checked)}
+                className="h-4 w-4"
+              />
+              可生成邀请码
             </label>
           </div>
 

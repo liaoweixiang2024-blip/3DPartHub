@@ -69,6 +69,7 @@ const userListItemSelect = {
   avatar: true,
   bio: true,
   mustChangePassword: true,
+  canInvite: true,
   createdAt: true,
   _count: { select: { downloads: true, favorites: true } },
 } satisfies Prisma.UserSelect;
@@ -264,6 +265,7 @@ export function createAdminUsersRouter() {
       }
     }
     if (typeof body.mustChangePassword === 'boolean') data.mustChangePassword = body.mustChangePassword;
+    if (typeof body.canInvite === 'boolean') data.canInvite = body.canInvite;
 
     const wantRole = USER_ROLES.includes(body.role as UserRole) ? (body.role as UserRole) : undefined;
     const wantDisabled = typeof body.disabled === 'boolean' ? body.disabled : undefined;
@@ -310,6 +312,7 @@ export function createAdminUsersRouter() {
             bio: true,
             disabled: true,
             mustChangePassword: true,
+            canInvite: true,
             lastLoginAt: true,
             createdAt: true,
           },

@@ -564,6 +564,7 @@ export interface FeatureFlags {
   registration: boolean;
   passwordReset: boolean;
   tempViewer: boolean;
+  invite: boolean;
 }
 
 export function useFeatureFlags(): FeatureFlags {
@@ -579,5 +580,7 @@ export function useFeatureFlags(): FeatureFlags {
     registration: settings?.allow_register !== false,
     passwordReset: settings?.feature_password_reset_enabled !== false,
     tempViewer: settings?.feature_temp_viewer_enabled !== false,
+    // 注意：邀请码功能默认关闭，用 === true 判断（区别于其他 flag 的 !== false）
+    invite: settings?.require_invite_code === true,
   };
 }

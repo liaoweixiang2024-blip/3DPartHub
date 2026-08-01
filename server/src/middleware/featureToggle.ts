@@ -12,6 +12,7 @@ const FEATURE_DISABLED_MESSAGE: Record<string, string> = {
   feature_downloads_enabled: '下载功能已关闭',
   feature_password_reset_enabled: '找回密码功能已关闭',
   allow_register: '注册功能已关闭',
+  require_invite_code: '邀请码功能已关闭',
 };
 
 export function featureGuard(settingKey: string) {

@@ -250,6 +250,9 @@ function UserMenu({
     },
     ...(featureFlags.downloads ? [{ label: t('nav.downloads'), icon: 'download', path: '/downloads' }] : []),
     ...(featureFlags.shares ? [{ label: t('nav.myShares'), icon: 'share', path: '/my-shares' }] : []),
+    ...(featureFlags.invite && user?.canInvite
+      ? [{ label: t('nav.myInvites'), icon: 'card_giftcard', path: '/my-invites' }]
+      : []),
   ];
 
   const isAdminUser = user?.role === 'ADMIN';

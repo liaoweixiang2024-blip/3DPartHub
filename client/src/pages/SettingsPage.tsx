@@ -135,6 +135,7 @@ const DEFAULT_SETTINGS: SystemSettings = {
   require_login_download: false,
   require_login_browse: false,
   allow_register: true,
+  require_invite_code: false,
   daily_download_limit: 0,
   show_watermark: false,
   watermark_text: '3DPartHub',
@@ -405,6 +406,8 @@ interface SettingItemBase {
   step?: number;
   min?: number;
   max?: number;
+  /** 当依赖的开关为 false 时，此项禁用（灰显）。 */
+  dependsOn?: keyof SystemSettings;
 }
 
 type SystemSettingItem = SettingItemBase & {
@@ -814,6 +817,12 @@ const GROUPS: SettingGroup[] = [
         key: 'feature_temp_viewer_enabled',
         label: '临时看图',
         desc: '关闭后用户无法使用临时看图上传 STEP/STP 模型预览，导航隐藏入口',
+        type: 'switch',
+      },
+      {
+        key: 'require_invite_code',
+        label: '邀请码注册',
+        desc: '开启后被授权用户可在「我的邀请码」生成一次性邀请码 / 链接；新用户注册必须填写有效邀请码。关闭则完全开放注册',
         type: 'switch',
       },
     ],
@@ -6232,7 +6241,10 @@ function Content() {
                                                 <Switch
                                                   checked={settings[item.key] as boolean}
                                                   onChange={(v) => updateSetting(item.key, v)}
-                                                  disabled={loginDialogDisabled}
+                                                  disabled={
+                                                    loginDialogDisabled ||
+                                                    (item.dependsOn ? settings[item.dependsOn] !== true : false)
+                                                  }
                                                 />
                                               ) : item.type === 'image' ? (
                                                 <div className="flex flex-wrap items-center gap-3 min-w-0 lg:justify-self-start">

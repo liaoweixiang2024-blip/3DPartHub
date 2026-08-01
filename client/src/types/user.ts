@@ -11,6 +11,7 @@ export interface User {
   bio?: string;
   mustChangePassword?: boolean;
   createdAt?: string;
+  canInvite?: boolean;
 }
 
 export interface AuthTokens {
@@ -32,4 +33,5 @@ export interface RegisterRequest {
   phone?: string;
   company?: string;
   address?: string;
+  inviteCode?: string;
 }

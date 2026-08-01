@@ -14,6 +14,7 @@ export const loadModelDetailPage = () => import('../pages/ModelDetailPage');
 export const loadDownloadsPage = () => import('../pages/DownloadsPage');
 export const loadFavoritesPage = () => import('../pages/FavoritesPage');
 export const loadMySharesPage = () => import('../pages/MySharesPage');
+export const loadMyInvitesPage = () => import('../pages/MyInvitesPage');
 export const loadProfilePage = () => import('../pages/ProfilePage');
 export const loadSupportPage = () => import('../pages/SupportPage');
 export const loadMyTicketsPage = () => import('../pages/MyTicketsPage');
@@ -69,6 +70,7 @@ const exactRouteLoaders = new Map<string, RouteModuleLoader>([
   ['/downloads', loadDownloadsPage],
   ['/favorites', loadFavoritesPage],
   ['/my-shares', loadMySharesPage],
+  ['/my-invites', loadMyInvitesPage],
   ['/profile', loadProfilePage],
   ['/support', loadSupportPage],
   ['/my-tickets', loadMyTicketsPage],

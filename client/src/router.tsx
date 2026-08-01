@@ -29,6 +29,7 @@ import {
   loadModelAdminPage,
   loadModelDetailPage,
   loadMyInquiriesPage,
+  loadMyInvitesPage,
   loadMySharesPage,
   loadMyTicketsPage,
   loadProductWallPage,
@@ -60,6 +61,7 @@ const ModelDetailPage = lazy(loadModelDetailPage);
 const DownloadsPage = lazy(loadDownloadsPage);
 const FavoritesPage = lazy(loadFavoritesPage);
 const MySharesPage = lazy(loadMySharesPage);
+const MyInvitesPage = lazy(loadMyInvitesPage);
 const ProfilePage = lazy(loadProfilePage);
 const SupportPage = lazy(loadSupportPage);
 const MyTicketsPage = lazy(loadMyTicketsPage);
@@ -606,6 +608,16 @@ export default function Router() {
               <ProtectedPage>
                 <FeatureGate feature="shares">
                   <MySharesPage />
+                </FeatureGate>
+              </ProtectedPage>
+            }
+          />
+          <Route
+            path="/my-invites"
+            element={
+              <ProtectedPage>
+                <FeatureGate feature="invite">
+                  <MyInvitesPage />
                 </FeatureGate>
               </ProtectedPage>
             }
