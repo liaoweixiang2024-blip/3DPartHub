@@ -2,8 +2,10 @@ import { Router, Response } from 'express';
 import { generateInviteCode } from '../lib/inviteCode.js';
 import { logger } from '../lib/logger.js';
 import { prisma } from '../lib/prisma.js';
+import { getSetting } from '../lib/settings.js';
 import { authMiddleware, type AuthRequest } from '../middleware/auth.js';
 import { featureGuard } from '../middleware/featureToggle.js';
+import { requireRole } from '../middleware/rbac.js';
 
 const router = Router();
 
@@ -72,6 +74,17 @@ router.post(
       if (!(await userCanInvite(req.user!.userId))) {
         res.status(403).json({ detail: '没有生成邀请码的权限' });
         return;
+      }
+      // 待使用（active）邀请码数量上限，防止滥用；0 表示不限制
+      const maxActive = Math.max(0, Math.floor(Number(await getSetting<number>('invite_max_active_per_user')) || 10));
+      if (maxActive > 0) {
+        const activeCount = await prisma.inviteCode.count({
+          where: { createdById: req.user!.userId, status: 'active' },
+        });
+        if (activeCount >= maxActive) {
+          res.status(400).json({ detail: `待使用邀请码已达上限（${maxActive} 个），请先吊销部分再生成` });
+          return;
+        }
       }
       const body = (req.body ?? {}) as { note?: unknown; expiresAt?: unknown };
       const note = typeof body.note === 'string' ? body.note.trim().slice(0, 200) : null;
@@ -143,5 +156,19 @@ router.delete(
     }
   },
 );
+
+// 管理员：所有邀请码总览（含创建者 + 使用者，用于审计「谁邀请谁」）
+router.get('/api/admin/invites', authMiddleware, requireRole('ADMIN'), async (_req: AuthRequest, res: Response) => {
+  try {
+    const items = await prisma.inviteCode.findMany({
+      orderBy: { createdAt: 'desc' },
+      select: { ...inviteSelect, createdBy: { select: { id: true, username: true } } },
+    });
+    res.json(items);
+  } catch (err) {
+    logger.error({ err }, '[invites] admin list failed');
+    res.status(500).json({ detail: '获取邀请码列表失败' });
+  }
+});
 
 export default router;

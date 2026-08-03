@@ -22,6 +22,7 @@ import {
   loadFavoritesPage,
   loadInquiryAdminPage,
   loadInquiryDetailPage,
+  loadInviteAdminPage,
   loadLegalPage,
   loadLoginPage,
   loadForgotPasswordPage,
@@ -62,6 +63,7 @@ const DownloadsPage = lazy(loadDownloadsPage);
 const FavoritesPage = lazy(loadFavoritesPage);
 const MySharesPage = lazy(loadMySharesPage);
 const MyInvitesPage = lazy(loadMyInvitesPage);
+const InviteAdminPage = lazy(loadInviteAdminPage);
 const ProfilePage = lazy(loadProfilePage);
 const SupportPage = lazy(loadSupportPage);
 const MyTicketsPage = lazy(loadMyTicketsPage);
@@ -705,6 +707,14 @@ export default function Router() {
             element={
               <ProtectedPage requiredRole="ADMIN">
                 <UserAdminPage />
+              </ProtectedPage>
+            }
+          />
+          <Route
+            path="/admin/invites"
+            element={
+              <ProtectedPage requiredRole="ADMIN">
+                <InviteAdminPage />
               </ProtectedPage>
             }
           />

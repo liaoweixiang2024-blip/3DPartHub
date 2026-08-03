@@ -1,5 +1,5 @@
 import { AnimatePresence, motion } from 'framer-motion';
-import { useCallback, useEffect, useState, type FormEvent } from 'react';
+import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { authApi } from '../../api/auth';
@@ -15,6 +15,7 @@ import { getInterfaceThemePackage } from '../../themes/interfaceThemes/registry'
 import BrandMark from './BrandMark';
 import { APP_FIELD_ERROR_CLASS, AppFormLabel, AppTextInput } from './FormControls';
 import Icon from './Icon';
+import RegionSelect from './RegionSelect';
 
 type AuthMode = 'login' | 'register';
 
@@ -63,7 +64,8 @@ export default function AuthModal({ initialMode = 'login', open, returnUrl, onCl
   const [sendingCode, setSendingCode] = useState(false);
   const [phone, setPhone] = useState('');
   const [company, setCompany] = useState('');
-  const [address, setAddress] = useState('');
+  // address 用 ref：省市区联动选择频繁，避免每次选择触发整个弹窗表单 re-render
+  const addressRef = useRef('');
   const [inviteCode, setInviteCode] = useState('');
   const login = useAuthStore((state) => state.login);
   const navigate = useNavigate();
@@ -84,7 +86,7 @@ export default function AuthModal({ initialMode = 'login', open, returnUrl, onCl
     setEmailCountdown(0);
     setPhone('');
     setCompany('');
-    setAddress('');
+    addressRef.current = '';
   }, []);
 
   useEffect(() => {
@@ -184,7 +186,7 @@ export default function AuthModal({ initialMode = 'login', open, returnUrl, onCl
           emailCode,
           phone: phone || undefined,
           company: company || undefined,
-          address: address || undefined,
+          address: addressRef.current || undefined,
           inviteCode: featureFlags.invite && inviteCode.trim() ? inviteCode.trim() : undefined,
         });
         login(result.user, result.tokens, true);
@@ -292,12 +294,11 @@ export default function AuthModal({ initialMode = 'login', open, returnUrl, onCl
               {mode === 'register' && (
                 <div>
                   <AppFormLabel uppercase>{t('auth.address')}</AppFormLabel>
-                  <AppTextInput
-                    type="text"
-                    value={address}
-                    onChange={(event) => setAddress(event.target.value)}
+                  <RegionSelect
                     fieldSize="lg"
-                    placeholder={t('auth.addressPlaceholder')}
+                    onChange={(v) => {
+                      addressRef.current = v;
+                    }}
                   />
                 </div>
               )}

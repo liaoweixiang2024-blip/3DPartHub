@@ -183,6 +183,7 @@ export function createSettingsPublicRouter() {
             feature_password_reset_enabled: all.feature_password_reset_enabled ?? true,
             feature_temp_viewer_enabled: all.feature_temp_viewer_enabled ?? true,
             require_invite_code: all.require_invite_code ?? false,
+            invite_max_active_per_user: all.invite_max_active_per_user ?? 10,
             // Selection wizard
             selection_page_title: all.selection_page_title ?? '产品选型',
             selection_page_desc: all.selection_page_desc ?? '先选产品大类，再按参数逐步缩小范围',

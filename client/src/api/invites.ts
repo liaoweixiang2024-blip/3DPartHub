@@ -13,6 +13,10 @@ export interface InviteItem {
   usedBy: { id: string; username: string } | null;
 }
 
+export interface AdminInviteItem extends InviteItem {
+  createdBy: { id: string; username: string } | null;
+}
+
 export interface CreateInviteInput {
   note?: string;
   expiresAt?: string;
@@ -29,5 +33,9 @@ export const invitesApi = {
   },
   revoke: async (id: string): Promise<void> => {
     await client.delete(`/invites/${id}`);
+  },
+  adminList: async (): Promise<AdminInviteItem[]> => {
+    const res = await client.get<ApiResponse<AdminInviteItem[]>>('/admin/invites');
+    return unwrapResponse<AdminInviteItem[]>(res);
   },
 };

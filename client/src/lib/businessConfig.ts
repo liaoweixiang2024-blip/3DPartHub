@@ -136,6 +136,7 @@ export const DEFAULT_NAV: NavItemConfig[] = [
   { label: '分享管理', icon: 'share', path: '/admin/shares', enabled: true, roles: ['ADMIN'] },
   { label: '下载统计', icon: 'download', path: '/admin/downloads', enabled: true, roles: ['ADMIN'] },
   { label: '操作日志', icon: 'schedule', path: '/admin/audit', enabled: true, roles: ['ADMIN'] },
+  { label: '邀请管理', icon: 'card_giftcard', path: '/admin/invites', enabled: true, roles: ['ADMIN'] },
   { label: '系统设置', icon: 'settings', path: '/admin/settings', enabled: true, roles: ['ADMIN'] },
 ];
 
@@ -317,6 +318,25 @@ function migrateLegacyNav(settings: Partial<SystemSettings>): NavItemConfig[] | 
   return merged;
 }
 
+// 站点自定义导航优先，但 DEFAULT_NAV 中新增的项（custom 没有）自动追加，
+// 避免老站点早期保存过 nav_items 后，看不到后续版本新增的导航项（如「邀请码管理」）
+function mergeNewNavItems(custom: NavItemConfig[], defaults: NavItemConfig[]): NavItemConfig[] {
+  const customByPath = new Map(custom.map((i) => [i.path, i]));
+  const usedPaths = new Set<string>();
+  const result: NavItemConfig[] = [];
+  // 以 DEFAULT_NAV 顺序为骨架：custom 有则用 custom（保留用户 enabled/label），否则用 default（新增项），
+  // 保证新功能项（如「邀请管理」）出现在设计位置（系统设置上方），而非被老站点的 nav_items 挤到末尾
+  for (const d of defaults) {
+    result.push(customByPath.get(d.path) ?? d);
+    usedPaths.add(d.path);
+  }
+  // custom 中 DEFAULT_NAV 没有的项（用户自定义的额外项）追加在末尾
+  for (const c of custom) {
+    if (!usedPaths.has(c.path)) result.push(c);
+  }
+  return result;
+}
+
 export function getBusinessConfig(settings: Partial<SystemSettings> = getPublicSettingsSnapshot()) {
   const pageSizePolicy = {
     homeDefault: 20,
@@ -345,7 +365,8 @@ export function getBusinessConfig(settings: Partial<SystemSettings> = getPublicS
     ...parseSetting<Record<string, number>>(settings.page_size_policy, {}),
   };
 
-  const allNav = migrateLegacyNav(settings) || DEFAULT_NAV;
+  const customNav = migrateLegacyNav(settings);
+  const allNav = customNav ? mergeNewNavItems(customNav, DEFAULT_NAV) : DEFAULT_NAV;
   const enabledNav = enabled(allNav);
 
   // Feature toggle filtering — hide nav items for disabled features

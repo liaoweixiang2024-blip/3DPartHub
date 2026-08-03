@@ -1,5 +1,5 @@
 import { motion } from 'framer-motion';
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate, useLocation, Link } from 'react-router-dom';
 import { authApi } from '../api/auth';
@@ -10,6 +10,7 @@ import { APP_FIELD_ERROR_CLASS, AppFormLabel, AppTextInput } from '../components
 import Icon from '../components/shared/Icon';
 import { PageTitle } from '../components/shared/PagePrimitives';
 import { PublicPageShell } from '../components/shared/PublicPageShell';
+import RegionSelect from '../components/shared/RegionSelect';
 import { useDocumentTitle } from '../hooks/useDocumentTitle';
 import { useMediaQuery } from '../layouts/hooks/useMediaQuery';
 import { getUsernamePolicy, validateRegisterUsername } from '../lib/authValidation';
@@ -83,7 +84,8 @@ export default function LoginPage() {
   const [sendingCode, setSendingCode] = useState(false);
   const [phone, setPhone] = useState('');
   const [company, setCompany] = useState('');
-  const [address, setAddress] = useState('');
+  // address 用 ref 而非 state：省市区联动选择频繁，避免每次选择都触发整张注册表单 re-render（卡顿来源）
+  const addressRef = useRef('');
   const [inviteCode, setInviteCode] = useState(() => new URLSearchParams(location.search).get('invite') || '');
 
   useEffect(() => {
@@ -196,7 +198,7 @@ export default function LoginPage() {
           emailCode,
           phone: phone || undefined,
           company: company || undefined,
-          address: address || undefined,
+          address: addressRef.current || undefined,
           inviteCode: featureFlags.invite && inviteCode.trim() ? inviteCode.trim() : undefined,
         });
         login(result.user, result.tokens, true);
@@ -220,7 +222,7 @@ export default function LoginPage() {
     setCaptchaText('');
     setPhone('');
     setCompany('');
-    setAddress('');
+    addressRef.current = '';
     setInviteCode('');
   };
 
@@ -297,12 +299,11 @@ export default function LoginPage() {
             {mode === 'register' && (
               <div>
                 <AppFormLabel uppercase>{t('auth.address')}</AppFormLabel>
-                <AppTextInput
-                  type="text"
-                  value={address}
-                  onChange={(e) => setAddress(e.target.value)}
+                <RegionSelect
                   fieldSize="lg"
-                  placeholder={t('auth.addressPlaceholder')}
+                  onChange={(v) => {
+                    addressRef.current = v;
+                  }}
                 />
               </div>
             )}

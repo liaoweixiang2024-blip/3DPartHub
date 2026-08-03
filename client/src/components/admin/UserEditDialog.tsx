@@ -6,6 +6,7 @@ import { getErrorMessage } from '../../lib/errorNotifications';
 import DialogOverlay from '../shared/DialogOverlay';
 import Icon from '../shared/Icon';
 import { useToast } from '../shared/Toast';
+import { useAuthStore } from '../../stores/useAuthStore';
 
 export interface AdminUserDetail {
   id: string;
@@ -115,6 +116,12 @@ export default function UserEditDialog({
       };
       if (roleChanged) payload.role = role;
       await client.put(`/admin/users/${user.id}`, payload);
+      // 如果改的是当前登录用户，立即把 canInvite 同步到前端 store，
+      // 无需重新登录即可看到「我的邀请码」入口的显隐变化
+      const me = useAuthStore.getState().user;
+      if (me && me.id === user.id) {
+        useAuthStore.getState().updateUser({ canInvite });
+      }
       toast('已保存', 'success');
       onSaved();
       onClose();

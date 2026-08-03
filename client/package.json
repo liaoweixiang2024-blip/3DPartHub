@@ -1,7 +1,7 @@
 {
   "name": "3dparthub-client",
   "private": true,
-  "version": "3.5.1",
+  "version": "3.5.2",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -29,6 +29,7 @@
     "@react-three/postprocessing": "^3.0.4",
     "@sentry/react": "^10.51.0",
     "@tanstack/react-virtual": "^3.13.24",
+    "@vant/area-data": "^2.1.0",
     "axios": "^1.15.0",
     "framer-motion": "^12.38.0",
     "i18next": "^26.3.0",

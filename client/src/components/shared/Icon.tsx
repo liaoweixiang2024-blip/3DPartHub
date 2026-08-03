@@ -163,6 +163,7 @@ import {
   MousePointerClick,
   BadgeCheck,
   Columns,
+  Gift,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import type { CSSProperties } from 'react';
@@ -197,6 +198,7 @@ const iconMap: Record<string, LucideIcon> = {
   warning: AlertTriangle,
   check_circle: CheckCircle,
   check: Check,
+  card_giftcard: Gift,
   content_copy: Copy,
   radio_button_checked: CircleDotIcon,
   radio_button_unchecked: Circle,

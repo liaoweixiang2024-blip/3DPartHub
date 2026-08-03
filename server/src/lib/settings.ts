@@ -239,6 +239,7 @@ const SETTINGS_SCHEMA: SettingDef[] = [
   { key: 'feature_password_reset_enabled', defaultValue: true },
   { key: 'feature_temp_viewer_enabled', defaultValue: true },
   { key: 'require_invite_code', defaultValue: false },
+  { key: 'invite_max_active_per_user', defaultValue: 10 },
 
   // Selection wizard
   { key: 'selection_page_title', defaultValue: '产品选型' },

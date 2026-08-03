@@ -16,6 +16,7 @@ import { useDocumentTitle } from '../hooks/useDocumentTitle';
 import { copyText } from '../lib/clipboard';
 import { getErrorMessage } from '../lib/errorNotifications';
 import { buildInviteUrl } from '../lib/inviteUrl';
+import { usePublicSettings } from '../lib/publicSettings';
 
 const STATUS_STYLE: Record<string, string> = {
   active: 'bg-primary-container/15 text-primary',
@@ -108,6 +109,10 @@ export default function MyInvitesPage() {
 
   const origin = typeof window !== 'undefined' ? window.location.origin : '';
   const items = data ?? [];
+  const { settings } = usePublicSettings();
+  const maxActive = settings?.invite_max_active_per_user ?? 10;
+  const activeCount = items.filter((i) => i.status === 'active').length;
+  const atLimit = maxActive > 0 && activeCount >= maxActive;
 
   async function handleCreate() {
     setCreating(true);
@@ -138,7 +143,8 @@ export default function MyInvitesPage() {
   const headerActions = (
     <button
       onClick={handleCreate}
-      disabled={creating}
+      disabled={creating || atLimit}
+      title={atLimit ? t('invites.limitReached') : undefined}
       className="flex items-center gap-1.5 rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-on-primary disabled:opacity-50"
     >
       <Icon name={creating ? 'progress_activity' : 'add'} size={16} className={creating ? 'animate-spin' : ''} />
@@ -174,7 +180,11 @@ export default function MyInvitesPage() {
     <AdminPageShell>
       <AdminManagementPage
         title={t('invites.title')}
-        meta={t('invites.count', { count: items.length })}
+        meta={
+          maxActive > 0
+            ? t('invites.activeLimit', { active: activeCount, max: maxActive })
+            : t('invites.count', { count: items.length })
+        }
         description={t('invites.description')}
         actions={headerActions}
       >

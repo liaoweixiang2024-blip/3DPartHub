@@ -31,6 +31,7 @@ export const loadTicketAdminPage = () => import('../pages/TicketAdminPage');
 export const loadTicketDetailPage = () => import('../pages/TicketDetailPage');
 export const loadSettingsPage = () => import('../pages/SettingsPage');
 export const loadUserAdminPage = () => import('../pages/UserAdminPage');
+export const loadInviteAdminPage = () => import('../pages/InviteAdminPage');
 export const loadAuditLogPage = () => import('../pages/AuditLogPage');
 export const loadShareAdminPage = () => import('../pages/ShareAdminPage');
 export const loadDownloadAdminPage = () => import('../pages/DownloadAdminPage');
