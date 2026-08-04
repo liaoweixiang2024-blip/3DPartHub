@@ -22,7 +22,6 @@ import {
   type SelectionComponent,
   type ColumnDef,
 } from '../api/selections';
-import ConfirmDialog from '../components/shared/ConfirmDialog';
 import { BatchImportModal } from '../components/selection-admin/BatchImportModal';
 import { ColumnEditor } from '../components/selection-admin/ColumnEditor';
 import {
@@ -61,6 +60,7 @@ import {
 } from '../components/shared/AdminDataTable';
 import { AdminManagementPage } from '../components/shared/AdminManagementPage';
 import { AdminPageShell } from '../components/shared/AdminPageShell';
+import ConfirmDialog from '../components/shared/ConfirmDialog';
 import Icon from '../components/shared/Icon';
 import InfiniteLoadTrigger from '../components/shared/InfiniteLoadTrigger';
 import ResponsiveSectionTabs from '../components/shared/ResponsiveSectionTabs';

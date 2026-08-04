@@ -1,6 +1,6 @@
+import { lookup } from 'node:dns/promises';
 import http from 'node:http';
 import https from 'node:https';
-import { lookup } from 'node:dns/promises';
 import { isIP } from 'node:net';
 
 /**
