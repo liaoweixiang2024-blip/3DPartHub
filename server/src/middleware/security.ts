@@ -175,6 +175,15 @@ export const authLimiter = createLimiter('auth', {
   message: { success: false, message: '登录尝试过多，请稍后再试' },
 });
 
+// 邮箱验证码下发：按 IP 限流（默认 30/小时），防多邮箱 + 验证码池轰炸、消耗 SMTP 配额。
+// 与按邮箱的冷却（checkRateLimit）正交：邮箱冷却防单邮箱刷，IP 限流防跨邮箱刷。
+export const emailCodeLimiter = createLimiter('email-code', {
+  windowMs: 60 * 60 * 1000, // 1 hour
+  limit: 30,
+  max: 30,
+  message: { detail: '验证码请求过于频繁，请稍后再试' },
+});
+
 export const searchLimiter = createLimiter('search', {
   windowMs: 5 * 60 * 1000, // 5 minutes
   limit: 600,

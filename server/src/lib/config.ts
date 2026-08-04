@@ -56,8 +56,17 @@ const warnLegacySecret = (message: string) => {
 };
 
 const validateJwtSecret = (value: string): string => {
-  if (isProduction && (WEAK_JWT_SECRETS.has(value) || value.length < 32)) {
-    warnLegacySecret('JWT_SECRET is insecure for production; set a random secret of at least 32 characters.');
+  if (isProduction && WEAK_JWT_SECRETS.has(value)) {
+    // 已知公开弱密钥（仓库内兜底值 / 文档示例值）必须硬阻断：否则任何人都可用公开密钥
+    // 自签 role:ADMIN 令牌接管站点。warn 不够，必须 fail。
+    failConfig(
+      'JWT_SECRET is set to a known insecure default. Set a random secret of at least 32 characters (e.g. `openssl rand -hex 32`) in your .env file.',
+    );
+  }
+  if (isProduction && value.length < 32) {
+    warnLegacySecret(
+      'JWT_SECRET is shorter than 32 characters; set a random secret of at least 32 characters for production.',
+    );
   }
   return value;
 };

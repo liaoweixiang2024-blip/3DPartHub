@@ -41,6 +41,12 @@ export async function cloudFirstStatic(req: Request, res: Response, next: NextFu
 
   res.set('Accept-Ranges', 'bytes');
   res.set('Cache-Control', `public, max-age=${cacheMaxAgeSeconds(subPath)}`);
+  res.set('X-Content-Type-Options', 'nosniff');
+  // SVG 可内嵌 <script>，云端直链访问时若无 CSP 会在浏览器执行 → 与本地 express.static
+  // 的 setStaticSecurityHeaders 保持一致的严格 CSP，阻断脚本执行。
+  if (/\.svg$/i.test(subPath)) {
+    res.set('Content-Security-Policy', "default-src 'none'; img-src data:; style-src 'unsafe-inline'; sandbox");
+  }
   if (obj.contentType) res.set('Content-Type', obj.contentType);
   if (obj.etag) res.set('ETag', obj.etag);
   if (obj.lastModified) res.set('Last-Modified', obj.lastModified.toUTCString());

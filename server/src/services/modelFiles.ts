@@ -87,9 +87,20 @@ export function modelManagedFilePaths(model: ModelFileRef): string[] {
 export function removeExistingFiles(paths: Array<string | null | undefined>): FileCleanupResult {
   const result: FileCleanupResult = { removed: [], skipped: [], failed: [] };
   const uniquePaths = Array.from(new Set(paths.filter(Boolean) as string[]));
+  // 纵深防御：只允许删除 static/ 与 uploads/ 根下的文件，杜绝未来若有路由把用户输入写进
+  // drawingUrl/fileKey 字段后被此处 rmSync 任意删除文件的风险。
+  const allowedRoots = [resolve(process.cwd(), config.staticDir), resolve(process.cwd(), config.uploadDir)];
+  const isInsideAllowed = (candidate: string) => {
+    const abs = resolve(candidate);
+    return allowedRoots.some((root) => abs === root || abs.startsWith(`${root}${sep}`));
+  };
 
   for (const path of uniquePaths) {
     try {
+      if (!isInsideAllowed(path)) {
+        result.failed.push({ path, message: '路径不在允许的目录内，已跳过' });
+        continue;
+      }
       if (!existsSync(path)) {
         result.skipped.push(path);
         continue;

@@ -1,7 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { lookup } from 'node:dns/promises';
 import { existsSync, mkdirSync, createWriteStream, renameSync, rmSync } from 'node:fs';
-import { isIP } from 'node:net';
 import { join } from 'node:path';
 import { Transform, type TransformCallback } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
@@ -10,6 +8,7 @@ import multer from 'multer';
 import { DEFAULT_UPLOAD_POLICY, getBusinessConfig, type UploadPolicy } from '../../lib/businessConfig.js';
 import { config } from '../../lib/config.js';
 import { logger } from '../../lib/logger.js';
+import { fetchRemoteImageGuarded, isRemoteImageHostBlockedError } from '../../lib/remoteImageFetch.js';
 import { persistFile } from '../../lib/storageProvider.js';
 import { authMiddleware, type AuthRequest } from '../../middleware/auth.js';
 import { adminOnly } from './common.js';
@@ -74,56 +73,6 @@ function cleanupUploadedFile(file: Express.Multer.File | undefined) {
 function requireAdmin(req: AuthRequest, res: Response, next: NextFunction) {
   if (!adminOnly(req, res)) return;
   next();
-}
-
-function isBlockedRemoteAddress(address: string): boolean {
-  const version = isIP(address);
-  if (version === 4) {
-    const [a, b] = address.split('.').map((part) => Number(part));
-    return (
-      a === 0 ||
-      a === 10 ||
-      a === 127 ||
-      (a === 169 && b === 254) ||
-      (a === 172 && b >= 16 && b <= 31) ||
-      (a === 192 && b === 168) ||
-      (a === 100 && b >= 64 && b <= 127) ||
-      a >= 224
-    );
-  }
-
-  if (version === 6) {
-    const lower = address.toLowerCase().split('%')[0] || '';
-    if (lower.startsWith('::ffff:')) {
-      return isBlockedRemoteAddress(lower.slice('::ffff:'.length));
-    }
-    const firstHextet = Number.parseInt(lower.split(':')[0] || '0', 16);
-    return (
-      lower === '::' ||
-      lower === '::1' ||
-      (firstHextet >= 0xfc00 && firstHextet <= 0xfdff) ||
-      (firstHextet >= 0xfe80 && firstHextet <= 0xfebf) ||
-      (firstHextet >= 0xff00 && firstHextet <= 0xffff)
-    );
-  }
-
-  return false;
-}
-
-async function assertAllowedRemoteImageUrl(parsedUrl: URL) {
-  const hostname = parsedUrl.hostname.replace(/^\[|\]$/g, '').toLowerCase();
-  if (!hostname || hostname === 'localhost' || hostname.endsWith('.localhost')) {
-    throw new Error('REMOTE_IMAGE_HOST_BLOCKED');
-  }
-
-  if (isBlockedRemoteAddress(hostname)) {
-    throw new Error('REMOTE_IMAGE_HOST_BLOCKED');
-  }
-
-  const addresses = await lookup(hostname, { all: true, verbatim: false });
-  if (!addresses.length || addresses.some(({ address }) => isBlockedRemoteAddress(address))) {
-    throw new Error('REMOTE_IMAGE_HOST_BLOCKED');
-  }
 }
 
 function createMaxBytesTransform(maxBytes: number) {
@@ -319,38 +268,27 @@ export function createSelectionOptionImagesRouter() {
           return;
         }
 
-        try {
-          await assertAllowedRemoteImageUrl(parsedUrl);
-        } catch {
-          res.status(400).json({ detail: '不允许从本机、内网或保留地址下载图片' });
-          return;
-        }
-
         const { uploadPolicy } = await getBusinessConfig();
         const maxBytes = optionImageMaxBytes(uploadPolicy);
 
-        // Fetch remote image
-        const controller = new AbortController();
-        const timeout = setTimeout(() => controller.abort(), 15000);
         let filePath: string | null = null;
         let saved = false;
         try {
-          const resp = await fetch(parsedUrl, { signal: controller.signal, redirect: 'error' });
+          const resp = await fetchRemoteImageGuarded(parsedUrl, { timeoutMs: 15000 });
 
           if (!resp.ok) {
             res.status(400).json({ detail: `下载图片失败: HTTP ${resp.status}` });
             return;
           }
 
-          const contentType = normalizeMimeType(resp.headers.get('content-type') || '');
+          const contentType = normalizeMimeType(resp.contentType);
           const ext = imageExtFromMimeType(contentType);
           if (!ext || !optionImageMimeAllowed(contentType, uploadPolicy.optionImageMimePattern)) {
             res.status(400).json({ detail: '远程文件不是支持的图片格式' });
             return;
           }
 
-          const contentLength = Number(resp.headers.get('content-length') || 0);
-          if (Number.isFinite(contentLength) && contentLength > maxBytes) {
+          if (Number.isFinite(resp.contentLength) && resp.contentLength > maxBytes) {
             res.status(400).json({ detail: `图片不能超过 ${Math.round(maxBytes / 1024 / 1024)}MB` });
             return;
           }
@@ -358,15 +296,19 @@ export function createSelectionOptionImagesRouter() {
           const filename = `${randomUUID()}.${ext}`;
           filePath = join(optImgDir, filename);
 
-          if (!resp.body) throw new Error('EMPTY_REMOTE_IMAGE_BODY');
           await pipeline(resp.body, createMaxBytesTransform(maxBytes), createWriteStream(filePath));
           await persistFile(filePath);
           saved = true;
 
           const resultUrl = `/static/option-images/${filename}`;
           res.json({ url: resultUrl });
+        } catch (err) {
+          if (isRemoteImageHostBlockedError(err)) {
+            res.status(400).json({ detail: '不允许从本机、内网或保留地址下载图片' });
+            return;
+          }
+          throw err;
         } finally {
-          clearTimeout(timeout);
           if (filePath && !saved) {
             rmSync(filePath, { force: true });
           }

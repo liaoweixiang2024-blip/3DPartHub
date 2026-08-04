@@ -204,9 +204,21 @@ export function createSelectionAdminCategoriesRouter() {
     if (!adminOnly(req, res)) return;
     try {
       const id = req.params.id as string;
+      const force = req.query?.force === 'true' || req.body?.force === true;
       const category = await prisma.selectionCategory.findUnique({ where: { id } });
       if (!category) {
         res.status(404).json({ detail: '分类不存在' });
+        return;
+      }
+      // 防误删产品库：分类下有产品时，默认不立即删除（避免静默清空产品库数据）。
+      // 返回 409 + productCount 让前端二次确认；确认后带 ?force=true 再调才真正连带删除。
+      const productCount = await prisma.selectionProduct.count({ where: { categoryId: id } });
+      if (productCount > 0 && !force) {
+        res.status(409).json({
+          detail: `该分类下还有 ${productCount} 个产品，删除将连带清空这些产品（不可逆）`,
+          code: 'HAS_PRODUCTS',
+          productCount,
+        });
         return;
       }
       await prisma.selectionShare.deleteMany({ where: { categorySlug: category.slug } });

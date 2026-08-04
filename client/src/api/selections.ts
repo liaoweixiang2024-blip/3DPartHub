@@ -226,8 +226,9 @@ export async function updateSelectionGroup(
   return unwrapResponse(res);
 }
 
-export async function deleteCategory(id: string): Promise<void> {
-  await client.delete(`/admin/selections/categories/${id}`);
+export async function deleteCategory(id: string, opts?: { force?: boolean }): Promise<void> {
+  const force = opts?.force ? '?force=true' : '';
+  await client.delete(`/admin/selections/categories/${id}${force}`);
 }
 
 export async function sortCategories(items: { id: string; sortOrder: number }[]): Promise<void> {

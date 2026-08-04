@@ -28,7 +28,7 @@ import {
 } from '../../middleware/security.js';
 import { createNotification } from '../notifications.js';
 
-function createTicketAttachmentUpload(maxBytes: number) {
+function createTicketAttachmentUpload(maxBytes: number, allowedExts: string[]) {
   return multer({
     storage: multer.diskStorage({
       destination: (_req, _file, cb) => {
@@ -44,8 +44,16 @@ function createTicketAttachmentUpload(maxBytes: number) {
     limits: { fileSize: maxBytes },
     fileFilter: (_req, file, cb) => {
       const ext = extname(file.originalname).toLowerCase();
-      if (ext) cb(null, true);
-      else cb(new Error('文件必须包含扩展名'));
+      if (!ext) {
+        cb(new Error('文件必须包含扩展名'));
+        return;
+      }
+      // 强制扩展名白名单（来自后台 ticketAttachmentExts，默认仅图片），杜绝 .html/.svg 等可执行类型
+      if (!allowedExts.includes(ext)) {
+        cb(new Error(`不支持的附件类型，仅支持：${allowedExts.join('、')}`));
+        return;
+      }
+      cb(null, true);
     },
   });
 }
@@ -54,17 +62,23 @@ async function ticketAttachmentUpload(req: AuthRequest, res: Response, next: Nex
   try {
     const { uploadPolicy } = await getBusinessConfig();
     const maxMb = ticketAttachmentMaxSizeMb(uploadPolicy);
-    createTicketAttachmentUpload(ticketAttachmentMaxBytes(uploadPolicy)).single('file')(req, res, (err) => {
-      if (!err) {
-        next();
-        return;
-      }
-      if ((err as { code?: string }).code === 'LIMIT_FILE_SIZE') {
-        res.status(413).json({ detail: `附件不能超过 ${maxMb}MB` });
-        return;
-      }
-      next(err);
-    });
+    const allowedExts = ticketAttachmentExts(uploadPolicy);
+    createTicketAttachmentUpload(ticketAttachmentMaxBytes(uploadPolicy), allowedExts).single('file')(
+      req,
+      res,
+      (err) => {
+        if (!err) {
+          next();
+          return;
+        }
+        if ((err as { code?: string }).code === 'LIMIT_FILE_SIZE') {
+          res.status(413).json({ detail: `附件不能超过 ${maxMb}MB` });
+          return;
+        }
+        // fileFilter 拒绝（扩展名不在白名单）等客户端可纠正的错误，返回 400 + 友好提示
+        res.status(400).json({ detail: err instanceof Error ? err.message : '附件校验失败' });
+      },
+    );
   } catch (err) {
     next(err);
   }

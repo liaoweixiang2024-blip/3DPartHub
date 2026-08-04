@@ -550,6 +550,14 @@ export function createAdminUsersRouter() {
           if (await wouldLoseLastActiveAdmin(tx, userId, false)) throw fail('LAST_ADMIN', 'LAST_ADMIN');
           const exists = await tx.user.findUnique({ where: { id: userId }, select: { id: true } });
           if (!exists) throw fail('P2025', 'NOT_FOUND');
+          // 防级联误删：该用户名下有模型/版本时禁止直接删除——否则 user.delete 会因 schema
+          // onDelete:Cascade 连带硬删其全部模型/版本/收藏/下载/评论/分享（跨 6 表，不可逆，无回收站）。
+          // 要求先在「模型管理」转移归属或先删除这些模型。
+          const [modelCount, versionCount] = await Promise.all([
+            tx.model.count({ where: { createdById: userId } }),
+            tx.modelVersion.count({ where: { createdById: userId } }),
+          ]);
+          if (modelCount > 0 || versionCount > 0) throw fail('HAS_CONTENT', 'HAS_CONTENT');
           await tx.user.delete({ where: { id: userId } });
         });
         await revokeAllTokensBefore(userId, nowSeconds()).catch(() => {});
@@ -562,6 +570,13 @@ export function createAdminUsersRouter() {
         }
         if (code === 'P2025') {
           res.status(404).json({ detail: '用户不存在' });
+          return;
+        }
+        if (code === 'HAS_CONTENT') {
+          res.status(400).json({
+            detail:
+              '该用户名下还有模型或模型版本，直接删除会连带清空其全部模型/版本/收藏/下载/评论/分享（不可逆）。请先在「模型管理」将这些模型的归属转移给其他用户，或先删除这些模型，再删除该用户。',
+          });
           return;
         }
         res.status(500).json({ detail: '删除用户失败' });

@@ -106,6 +106,11 @@ export function sendAcceleratedFile(
     cacheControl = defaultResourceCacheControl(),
   } = options;
 
+  // 非白名单类型（contentTypeForFile 落到默认分支，含 .html/.svg/.htm 等可执行/可渲染内容）
+  // 一律强制下载，避免被浏览器以 inline 方式渲染执行（XSS）。仅图片/PDF/zip 等白名单类型允许 inline。
+  const forceDownload = contentType === 'application/octet-stream';
+  const finalDisposition: Disposition = forceDownload ? 'attachment' : disposition;
+
   const absolutePath = resolve(filePath);
   const allowedRoots = [resolve(process.cwd(), config.staticDir), resolve(process.cwd(), config.uploadDir)];
   const isContained = allowedRoots.some((root) => absolutePath === root || absolutePath.startsWith(`${root}${sep}`));
@@ -127,8 +132,9 @@ export function sendAcceleratedFile(
     return;
   }
 
-  res.setHeader('Content-Disposition', contentDisposition(disposition, fileName));
+  res.setHeader('Content-Disposition', contentDisposition(finalDisposition, fileName));
   res.setHeader('Content-Type', contentType);
+  res.setHeader('X-Content-Type-Options', 'nosniff');
   res.setHeader('Cache-Control', cacheControl);
   res.setHeader('Accept-Ranges', 'bytes');
   res.setHeader('Content-Length', String(fileSize));

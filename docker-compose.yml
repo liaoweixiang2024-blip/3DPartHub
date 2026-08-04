@@ -87,8 +87,8 @@ services:
       NODE_ENV: production
       PORT: 8000
       DATABASE_URL: 'postgresql://modeluser:${DB_PASSWORD:-3dparthub-default-db-password-change-me-2026}@postgres:5432/3dparthub?connection_limit=${DB_CONNECTION_LIMIT:-3}&pool_timeout=10'
-      # <<< 建议在 .env 中覆盖为随机字符串 (openssl rand -hex 32)
-      JWT_SECRET: '${JWT_SECRET:-3dparthub-default-jwt-secret-change-me-2026-04-30}'
+      # <<< 必须在 .env 中设置为随机字符串 (openssl rand -hex 32)，未设置则拒绝启动
+      JWT_SECRET: '${JWT_SECRET:?请在 .env 中设置 JWT_SECRET（建议 openssl rand -hex 32）}'
       BACKUP_SIGNING_SECRET: '${BACKUP_SIGNING_SECRET:-}'
       BACKUP_ENCRYPTION_SECRET: '${BACKUP_ENCRYPTION_SECRET:-}'
       JWT_EXPIRES_IN: 7d

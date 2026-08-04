@@ -22,6 +22,7 @@ import {
   type SelectionComponent,
   type ColumnDef,
 } from '../api/selections';
+import ConfirmDialog from '../components/shared/ConfirmDialog';
 import { BatchImportModal } from '../components/selection-admin/BatchImportModal';
 import { ColumnEditor } from '../components/selection-admin/ColumnEditor';
 import {
@@ -110,6 +111,9 @@ function Content() {
     catalogShared: false,
   });
   const [deleteCatId, setDeleteCatId] = useState<string | null>(null);
+  // 选型分类「强制删除」二次确认：分类下有产品时后端返回 409 HAS_PRODUCTS，
+  // 前端弹此确认框，让管理员明确「将连带删除 N 个产品」后再带 force 删除。
+  const [forceDeleteCat, setForceDeleteCat] = useState<{ id: string; name: string; count: number } | null>(null);
   const [showCatSortModal, setShowCatSortModal] = useState(false);
   const [catSortItems, setCatSortItems] = useState<{ id: string; name: string }[]>([]);
   const [catSortDragIdx, setCatSortDragIdx] = useState<number | null>(null);
@@ -413,14 +417,29 @@ function Content() {
       toast(getApiErrorMessage(err, '操作失败'), 'error');
     }
   }
-  async function handleDeleteCat(id: string) {
+  async function handleDeleteCat(id: string, force = false) {
     try {
-      await deleteCategory(id);
+      await deleteCategory(id, { force });
       toast('分类已删除', 'success');
       setDeleteCatId(null);
+      setForceDeleteCat(null);
       if (selectedCatId === id) setSelectedCatId('');
       mutateCats();
     } catch (err: unknown) {
+      const apiErr = err as {
+        response?: { status?: number; data?: { code?: string; productCount?: number } };
+      };
+      if (!force && apiErr?.response?.status === 409 && apiErr.response.data?.code === 'HAS_PRODUCTS') {
+        // 分类下有产品：后端拒绝静默删除，弹二次确认让管理员明确连带删除的代价
+        const cat = categories.find((c) => c.id === id);
+        setForceDeleteCat({
+          id,
+          name: cat?.name || '',
+          count: apiErr.response.data?.productCount ?? 0,
+        });
+        setDeleteCatId(null);
+        return;
+      }
       toast(getApiErrorMessage(err, '删除失败'), 'error');
     }
   }
@@ -2361,6 +2380,17 @@ function Content() {
           </div>
         </div>
       )}
+
+      <ConfirmDialog
+        open={Boolean(forceDeleteCat)}
+        onClose={() => setForceDeleteCat(null)}
+        onConfirm={() => {
+          if (forceDeleteCat) void handleDeleteCat(forceDeleteCat.id, true);
+        }}
+        title="强制删除分类"
+        description={`分类「${forceDeleteCat?.name || ''}」下还有 ${forceDeleteCat?.count ?? 0} 个产品，删除将连带清空这些产品，且不可恢复。确定要继续吗？`}
+        confirmLabel="确认强制删除"
+      />
 
       {/* ===== Single Option Upload Dialog ===== */}
       {editOptVal &&

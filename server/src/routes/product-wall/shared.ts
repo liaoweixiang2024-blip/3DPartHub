@@ -1,5 +1,4 @@
 import { randomUUID } from 'node:crypto';
-import { lookup } from 'node:dns/promises';
 import {
   existsSync,
   mkdirSync,
@@ -10,7 +9,6 @@ import {
   readFileSync,
   statSync,
 } from 'node:fs';
-import { isIP } from 'node:net';
 import { basename, join, resolve, sep } from 'node:path';
 import { Transform, type TransformCallback } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
@@ -28,6 +26,7 @@ import { config } from '../../lib/config.js';
 import { badRequest } from '../../lib/http.js';
 import { logger } from '../../lib/logger.js';
 import { prisma } from '../../lib/prisma.js';
+import { fetchRemoteImageGuarded, isRemoteImageHostBlockedError } from '../../lib/remoteImageFetch.js';
 import { persistFile } from '../../lib/storageProvider.js';
 import {
   productArchiveExtractMaxFiles,
@@ -325,40 +324,6 @@ function createMaxBytesTransform(maxBytes: number) {
       callback(null, chunk);
     },
   });
-}
-
-function isBlockedRemoteAddress(address: string): boolean {
-  const version = isIP(address);
-  if (version === 4) {
-    const [a, b] = address.split('.').map((part) => Number(part));
-    return (
-      a === 0 ||
-      a === 10 ||
-      a === 127 ||
-      (a === 169 && b === 254) ||
-      (a === 172 && b >= 16 && b <= 31) ||
-      (a === 192 && b === 168) ||
-      a >= 224
-    );
-  }
-  if (version === 6) {
-    const lower = address.toLowerCase().split('%')[0] || '';
-    if (lower.startsWith('::ffff:')) return isBlockedRemoteAddress(lower.slice('::ffff:'.length));
-    const firstHextet = Number.parseInt(lower.split(':')[0] || '0', 16);
-    return lower === '::' || lower === '::1' || (firstHextet >= 0xfc00 && firstHextet <= 0xffff);
-  }
-  return false;
-}
-
-async function assertAllowedRemoteImageUrl(parsedUrl: URL) {
-  const hostname = parsedUrl.hostname.replace(/^\[|\]$/g, '').toLowerCase();
-  if (!hostname || hostname === 'localhost' || hostname.endsWith('.localhost') || isBlockedRemoteAddress(hostname)) {
-    throw new Error('REMOTE_IMAGE_HOST_BLOCKED');
-  }
-  const addresses = await lookup(hostname, { all: true, verbatim: false });
-  if (!addresses.length || addresses.some(({ address }) => isBlockedRemoteAddress(address))) {
-    throw new Error('REMOTE_IMAGE_HOST_BLOCKED');
-  }
 }
 
 // ── Path helpers ────────────────────────────────────────────
@@ -768,16 +733,13 @@ export async function createItemFromRemoteUrl(req: AuthRequest, res: Response, s
       res.status(400).json({ detail: '仅支持 http/https 图片地址' });
       return;
     }
-    await assertAllowedRemoteImageUrl(parsedUrl);
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 15000);
     try {
-      const resp = await fetch(parsedUrl, { signal: controller.signal, redirect: 'error' });
-      if (!resp.ok || !resp.body) {
+      const resp = await fetchRemoteImageGuarded(parsedUrl, { timeoutMs: 15000 });
+      if (!resp.ok) {
         res.status(400).json({ detail: `下载图片失败: HTTP ${resp.status}` });
         return;
       }
-      const ext = imageExtFromMimeType(resp.headers.get('content-type') || '');
+      const ext = imageExtFromMimeType(resp.contentType);
       if (!ext) {
         res.status(400).json({ detail: '远程文件不是支持的图片格式' });
         return;
@@ -810,8 +772,12 @@ export async function createItemFromRemoteUrl(req: AuthRequest, res: Response, s
         },
       });
       res.json({ item: toProductWallItem(item) });
-    } finally {
-      clearTimeout(timeout);
+    } catch (err) {
+      if (isRemoteImageHostBlockedError(err)) {
+        res.status(400).json({ detail: '不允许从本机、内网或保留地址下载图片' });
+        return;
+      }
+      throw err;
     }
   } catch (err: unknown) {
     if (filePath) rmSync(filePath, { force: true });

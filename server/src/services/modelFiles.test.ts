@@ -78,9 +78,10 @@ test('builds managed model paths from one source of truth', () => {
 });
 
 test('removeExistingFiles reports removed, skipped, and failed paths', () => {
-  const filePath = join(root, 'cleanup', 'file.txt');
-  const missingPath = join(root, 'cleanup', 'missing.txt');
-  const directoryPath = join(root, 'cleanup', 'dir');
+  // 路径需落在 uploads/ 根下（removeExistingFiles 只允许删 static/ 与 uploads/ 内的文件）
+  const filePath = join(root, 'uploads', 'cleanup', 'file.txt');
+  const missingPath = join(root, 'uploads', 'cleanup', 'missing.txt');
+  const directoryPath = join(root, 'uploads', 'cleanup', 'dir');
   mkdirSync(directoryPath, { recursive: true });
   writeFileSync(filePath, 'delete me');
 

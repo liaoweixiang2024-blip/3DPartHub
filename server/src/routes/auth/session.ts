@@ -25,7 +25,7 @@ import {
   normalizeContactPhoneSetting,
 } from '../../lib/settings.js';
 import { getRequestToken } from '../../middleware/auth.js';
-import { apiLimiter } from '../../middleware/security.js';
+import { apiLimiter, emailCodeLimiter } from '../../middleware/security.js';
 import { clearAuthCookies, readCookie, REFRESH_COOKIE, setAuthCookies } from './cookies.js';
 
 const DUMMY_HASH = '$2a$12$LiVmGbGyGZkP1WQOB7SXOOJ7JqBhDmuOg2WjFwvCSCmXFGpOFHHze';
@@ -61,6 +61,29 @@ async function getLoginFailureCount(email: string): Promise<number> {
   return Number(val) || 0;
 }
 
+// 按邮箱的失败计数防针对单账号爆破；另加按 IP 的失败计数防跨账号撞库 + 减轻
+// 「用受害者邮箱错密码触发锁定」的定向骚扰（单 IP 骚扰会被 IP 锁拦截）。
+const LOGIN_FAIL_IP_PREFIX = 'login_fail_ip:';
+const LOGIN_IP_MAX_FAILS = 20;
+const LOGIN_IP_LOCK_SECONDS = 900;
+const LOGIN_UNKNOWN_IP = 'unknown';
+
+async function recordLoginFailureByIp(ip: string): Promise<number> {
+  const key = `${LOGIN_FAIL_IP_PREFIX}${ip}`;
+  const fails = await redis.incr(key);
+  if (fails === 1) await redis.expire(key, LOGIN_IP_LOCK_SECONDS);
+  return fails;
+}
+
+async function getLoginIpFailureCount(ip: string): Promise<number> {
+  const val = await redis.get(`${LOGIN_FAIL_IP_PREFIX}${ip}`);
+  return Number(val) || 0;
+}
+
+async function clearLoginIpFailures(ip: string): Promise<void> {
+  await redis.del(`${LOGIN_FAIL_IP_PREFIX}${ip}`);
+}
+
 export function createAuthSessionRouter() {
   const router = Router();
 
@@ -76,7 +99,7 @@ export function createAuthSessionRouter() {
   });
 
   // Send email verification code
-  router.post('/api/auth/email-code', async (req: Request, res: Response) => {
+  router.post('/api/auth/email-code', emailCodeLimiter, async (req: Request, res: Response) => {
     const { email, captchaId, captchaText } = req.body;
     const normalizedEmail = normalizeEmailInput(email);
     if (
@@ -303,19 +326,33 @@ export function createAuthSessionRouter() {
       return;
     }
 
+    const clientIp = req.ip || LOGIN_UNKNOWN_IP;
+
     try {
-      const failCount = await getLoginFailureCount(normalizedEmail);
+      const [failCount, ipFailCount] = await Promise.all([
+        getLoginFailureCount(normalizedEmail),
+        getLoginIpFailureCount(clientIp),
+      ]);
       if (failCount >= LOGIN_MAX_FAILS) {
         res.status(429).json({ detail: `登录失败次数过多，请${Math.ceil(LOGIN_LOCK_SECONDS / 60)}分钟后重试` });
+        return;
+      }
+      if (ipFailCount >= LOGIN_IP_MAX_FAILS) {
+        res.status(429).json({ detail: '该网络登录失败次数过多，请稍后再试' });
         return;
       }
 
       const user = await prisma.user.findUnique({ where: { email: normalizedEmail } });
       const valid = await verifyPassword(password, user?.passwordHash ?? DUMMY_HASH);
       if (!user || !valid) {
-        const totalFails = await recordLoginFailure(normalizedEmail);
+        const [totalFails, totalIpFails] = await Promise.all([
+          recordLoginFailure(normalizedEmail),
+          recordLoginFailureByIp(clientIp),
+        ]);
         if (totalFails >= LOGIN_MAX_FAILS) {
           res.status(429).json({ detail: `登录失败次数过多，请${Math.ceil(LOGIN_LOCK_SECONDS / 60)}分钟后重试` });
+        } else if (totalIpFails >= LOGIN_IP_MAX_FAILS) {
+          res.status(429).json({ detail: '该网络登录失败次数过多，请稍后再试' });
         } else {
           res.status(401).json({ detail: '邮箱或密码错误' });
         }
@@ -323,6 +360,7 @@ export function createAuthSessionRouter() {
       }
 
       await clearLoginFailures(normalizedEmail);
+      await clearLoginIpFailures(clientIp);
 
       // 禁用账号禁止登录（admin 在用户管理页禁用后会撤销 token，这里再兜底拦截重新登录）
       if (user.disabled) {

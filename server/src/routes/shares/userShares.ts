@@ -90,6 +90,11 @@ export function createUserSharesRouter() {
         res.status(404).json({ detail: '模型不存在' });
         return;
       }
+      // 仅允许模型所有者（或管理员）创建分享链接，避免代管他人模型、绕过站内下载配额
+      if (model.createdById !== userId && req.user!.role !== 'ADMIN') {
+        res.status(403).json({ detail: '只能分享自己上传的模型' });
+        return;
+      }
 
       // --- Apply share policy ---
       const settings = await getAllSettings();
