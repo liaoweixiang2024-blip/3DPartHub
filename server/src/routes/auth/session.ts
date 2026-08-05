@@ -359,14 +359,16 @@ export function createAuthSessionRouter() {
         return;
       }
 
-      await clearLoginFailures(normalizedEmail);
-      await clearLoginIpFailures(clientIp);
-
-      // 禁用账号禁止登录（admin 在用户管理页禁用后会撤销 token，这里再兜底拦截重新登录）
+      // 禁用账号禁止登录（admin 在用户管理页禁用后会撤销 token，这里再兜底拦截重新登录）。
+      // 必须在清失败计数之前检查——否则攻击者可用禁用账号凭据反复「对密码登录 → 清空 IP 失败计数」
+      // 来重置同 IP 的暴破窗口。
       if (user.disabled) {
         res.status(403).json({ detail: '账号已被禁用，请联系管理员' });
         return;
       }
+
+      await clearLoginFailures(normalizedEmail);
+      await clearLoginIpFailures(clientIp);
 
       // 记录最近登录时间（best-effort，不阻塞登录）
       prisma.user.update({ where: { id: user.id }, data: { lastLoginAt: new Date() } }).catch(() => {});

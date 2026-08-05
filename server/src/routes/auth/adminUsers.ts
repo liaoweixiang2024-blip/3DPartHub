@@ -2,6 +2,7 @@ import { randomBytes } from 'node:crypto';
 import type { Prisma } from '@prisma/client';
 import { Router, Response } from 'express';
 import { getBusinessConfig } from '../../lib/businessConfig.js';
+import { cacheDel } from '../../lib/cache.js';
 import { storePasswordResetToken } from '../../lib/captcha.js';
 import { sendPasswordResetEmail } from '../../lib/email.js';
 import { revokeAllTokensBefore } from '../../lib/jwt.js';
@@ -320,7 +321,10 @@ export function createAdminUsersRouter() {
       });
 
       if (roleOrDisableChanged) {
-        await revokeAllTokensBefore(userId, nowSeconds()).catch(() => {});
+        await Promise.all([
+          revokeAllTokensBefore(userId, nowSeconds()).catch(() => {}),
+          cacheDel(`auth:user:${userId}`).catch(() => {}),
+        ]);
       }
       res.json({ data: updated });
     } catch (err: unknown) {
@@ -379,7 +383,10 @@ export function createAdminUsersRouter() {
             select: { id: true, username: true, email: true, role: true },
           });
         });
-        await revokeAllTokensBefore(userId, nowSeconds());
+        await Promise.all([
+          revokeAllTokensBefore(userId, nowSeconds()).catch(() => {}),
+          cacheDel(`auth:user:${userId}`).catch(() => {}),
+        ]);
         res.json({ data: user });
       } catch (err: unknown) {
         const code = err instanceof Error && 'code' in err ? (err as NodeJS.ErrnoException).code : undefined;
@@ -418,7 +425,10 @@ export function createAdminUsersRouter() {
           where: { id: userId },
           data: { passwordHash, mustChangePassword: true },
         });
-        await revokeAllTokensBefore(userId, nowSeconds());
+        await Promise.all([
+          revokeAllTokensBefore(userId, nowSeconds()).catch(() => {}),
+          cacheDel(`auth:user:${userId}`).catch(() => {}),
+        ]);
         res.json({ ok: true });
       } catch (err: unknown) {
         if (err instanceof Error && 'code' in err && (err as NodeJS.ErrnoException).code === 'P2025') {
@@ -521,7 +531,12 @@ export function createAdminUsersRouter() {
           }
           return { updated, skipped };
         });
-        await Promise.all(result.updated.map((id) => revokeAllTokensBefore(id, now).catch(() => {})));
+        await Promise.all(
+          result.updated.flatMap((id) => [
+            revokeAllTokensBefore(id, now).catch(() => {}),
+            cacheDel(`auth:user:${id}`).catch(() => {}),
+          ]),
+        );
         res.json(result);
       } catch {
         res.status(500).json({ detail: '批量操作失败' });
@@ -558,9 +573,22 @@ export function createAdminUsersRouter() {
             tx.modelVersion.count({ where: { createdById: userId } }),
           ]);
           if (modelCount > 0 || versionCount > 0) throw fail('HAS_CONTENT', 'HAS_CONTENT');
+          // 业务记录（工单/询价/选型分享）的 user 关联为 FK Restrict，直接删会被数据库拒绝（P2003）。
+          // 这些记录属业务历史、应保留——要求改用「禁用账号」，而非随删用户消失。
+          const [ticketCount, inquiryCount, selectionShareCount] = await Promise.all([
+            tx.supportTicket.count({ where: { userId } }),
+            tx.inquiry.count({ where: { userId } }),
+            tx.selectionShare.count({ where: { createdById: userId } }),
+          ]);
+          if (ticketCount > 0 || inquiryCount > 0 || selectionShareCount > 0) {
+            throw fail('HAS_RECORDS', 'HAS_RECORDS');
+          }
           await tx.user.delete({ where: { id: userId } });
         });
-        await revokeAllTokensBefore(userId, nowSeconds()).catch(() => {});
+        await Promise.all([
+          revokeAllTokensBefore(userId, nowSeconds()).catch(() => {}),
+          cacheDel(`auth:user:${userId}`).catch(() => {}),
+        ]);
         res.json({ message: '用户已删除' });
       } catch (err: unknown) {
         const code = err instanceof Error && 'code' in err ? (err as NodeJS.ErrnoException).code : undefined;
@@ -576,6 +604,18 @@ export function createAdminUsersRouter() {
           res.status(400).json({
             detail:
               '该用户名下还有模型或模型版本，直接删除会连带清空其全部模型/版本/收藏/下载/评论/分享（不可逆）。请先在「模型管理」将这些模型的归属转移给其他用户，或先删除这些模型，再删除该用户。',
+          });
+          return;
+        }
+        if (code === 'HAS_RECORDS') {
+          res.status(400).json({
+            detail: '该用户存在工单、询价或选型分享等业务记录（需保留），无法直接删除。建议改用「禁用账号」。',
+          });
+          return;
+        }
+        if (code === 'P2003') {
+          res.status(400).json({
+            detail: '该用户存在关联业务记录，无法直接删除。建议改用「禁用账号」。',
           });
           return;
         }

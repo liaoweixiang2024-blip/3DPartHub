@@ -277,6 +277,7 @@ export function createSelectionOptionImagesRouter() {
           const resp = await fetchRemoteImageGuarded(parsedUrl, { timeoutMs: 15000 });
 
           if (!resp.ok) {
+            resp.body.resume();
             res.status(400).json({ detail: `下载图片失败: HTTP ${resp.status}` });
             return;
           }
@@ -284,11 +285,13 @@ export function createSelectionOptionImagesRouter() {
           const contentType = normalizeMimeType(resp.contentType);
           const ext = imageExtFromMimeType(contentType);
           if (!ext || !optionImageMimeAllowed(contentType, uploadPolicy.optionImageMimePattern)) {
+            resp.body.resume();
             res.status(400).json({ detail: '远程文件不是支持的图片格式' });
             return;
           }
 
           if (Number.isFinite(resp.contentLength) && resp.contentLength > maxBytes) {
+            resp.body.resume();
             res.status(400).json({ detail: `图片不能超过 ${Math.round(maxBytes / 1024 / 1024)}MB` });
             return;
           }

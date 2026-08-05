@@ -736,11 +736,13 @@ export async function createItemFromRemoteUrl(req: AuthRequest, res: Response, s
     try {
       const resp = await fetchRemoteImageGuarded(parsedUrl, { timeoutMs: 15000 });
       if (!resp.ok) {
+        resp.body.resume();
         res.status(400).json({ detail: `下载图片失败: HTTP ${resp.status}` });
         return;
       }
       const ext = imageExtFromMimeType(resp.contentType);
       if (!ext) {
+        resp.body.resume();
         res.status(400).json({ detail: '远程文件不是支持的图片格式' });
         return;
       }
