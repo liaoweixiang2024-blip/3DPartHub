@@ -211,6 +211,29 @@ export default function HomePage() {
   const titleRowRef = useRef<HTMLDivElement | null>(null);
   const resultsAnchorRef = useRef<HTMLDivElement | null>(null);
   const [chipsStuck, setChipsStuck] = useState(false);
+  // 横向分类条：选中分类变化时，把高亮的 chip 滚动到可视区（在筛选抽屉选了视区外的子分类时尤其需要）
+  const chipsScrollRef = useRef<HTMLDivElement | null>(null);
+  const chipRefs = useRef<Map<string, HTMLButtonElement>>(new Map());
+  useEffect(() => {
+    const container = chipsScrollRef.current;
+    if (!container) return;
+    const activeId =
+      activeCategory === 'all'
+        ? 'all'
+        : categories.find((c) => c.id === activeCategory || c.children?.some((ch) => ch.id === activeCategory))?.id;
+    const el = activeId ? chipRefs.current.get(activeId) : undefined;
+    if (!el) return;
+    const cRect = container.getBoundingClientRect();
+    const eRect = el.getBoundingClientRect();
+    // 右侧浮动筛选按钮 + 渐变遮罩约占 56px（chipsStuck 时显示），滚动高亮项时为其预留空间，
+    // 避免高亮 chip 滚到按钮下方被遮挡；仅 chip 在可视区外时才滚动，避免点击已可见项时的抖动
+    const rightReserve = chipsStuck ? 60 : 12;
+    if (eRect.left < cRect.left - 4) {
+      container.scrollLeft -= cRect.left - eRect.left + 8;
+    } else if (eRect.right > cRect.right - rightReserve) {
+      container.scrollLeft += eRect.right - (cRect.right - rightReserve) + 4;
+    }
+  }, [activeCategory, categories, chipsStuck]);
 
   const resetHomeListViewportForRefresh = useCallback((target: HomeRefreshScrollTarget = 'top', immediate = false) => {
     pendingHomeListRefreshTargetRef.current = target;
@@ -1157,11 +1180,15 @@ export default function HomePage() {
             </button>
           </div>
 
-          {/* Sticky category chips + filter button on right */}
+          {/* Sticky category chips + 浮动筛选按钮（App Store 风格：chips 占满整行，按钮浮在右上角带渐变遮罩） */}
           <div className="sticky top-0 z-10 -mx-3 px-3 py-2 bg-surface-dim">
-            <div className="flex items-center gap-2">
-              <div className="flex-1 flex gap-2 overflow-x-auto scrollbar-hidden">
+            <div className="relative">
+              <div ref={chipsScrollRef} className="flex gap-2 overflow-x-auto scrollbar-hidden pr-14">
                 <button
+                  ref={(el) => {
+                    if (el) chipRefs.current.set('all', el);
+                    else chipRefs.current.delete('all');
+                  }}
                   onClick={() => handleSelectCategory('all')}
                   className={`shrink-0 px-3 py-1 rounded-full text-xs font-medium transition-colors ${
                     activeCategory === 'all'
@@ -1171,23 +1198,33 @@ export default function HomePage() {
                 >
                   {t('home.allModels')}
                 </button>
-                {categories.map((cat) => (
-                  <button
-                    key={cat.id}
-                    onClick={() => handleSelectCategory(cat.id)}
-                    className={`shrink-0 px-3 py-1 rounded-full text-xs font-medium transition-colors ${
-                      activeCategory === cat.id
-                        ? 'bg-primary-container text-on-primary'
-                        : 'bg-surface-container-high text-on-surface-variant'
-                    }`}
-                  >
-                    {cat.name}
-                  </button>
-                ))}
+                {categories.map((cat) => {
+                  // 与 MobileDrawer 一致：选中子分类时，其父分类也高亮。
+                  // 横向行只展示顶级分类，否则在筛选抽屉里选了子分类后，这里会没有任何项显示选中。
+                  const isActive =
+                    activeCategory === cat.id || (cat.children?.some((c) => c.id === activeCategory) ?? false);
+                  return (
+                    <button
+                      key={cat.id}
+                      ref={(el) => {
+                        if (el) chipRefs.current.set(cat.id, el);
+                        else chipRefs.current.delete(cat.id);
+                      }}
+                      onClick={() => handleSelectCategory(cat.id)}
+                      className={`shrink-0 px-3 py-1 rounded-full text-xs font-medium transition-colors ${
+                        isActive
+                          ? 'bg-primary-container text-on-primary'
+                          : 'bg-surface-container-high text-on-surface-variant'
+                      }`}
+                    >
+                      {cat.name}
+                    </button>
+                  );
+                })}
               </div>
               <button
                 onClick={() => setDrawerOpen(true)}
-                className={`shrink-0 text-on-surface-variant hover:text-on-surface bg-surface-container-highest rounded-sm flex items-center justify-center shadow-sm transition-opacity duration-300 ${chipsStuck && products.length >= 6 ? 'opacity-100 py-1 px-2' : 'opacity-0 pointer-events-none w-0 overflow-hidden'}`}
+                className={`absolute right-0 top-1/2 -translate-y-1/2 shrink-0 text-on-surface-variant hover:text-on-surface bg-surface-container-high rounded-sm flex items-center justify-center shadow-sm transition-opacity duration-300 p-2 ${chipsStuck && products.length >= 6 ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}
               >
                 <Icon name="tune" size={16} />
               </button>
