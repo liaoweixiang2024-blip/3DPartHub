@@ -2997,6 +2997,13 @@ async function runRestoreFromArchive(
         throw new Error(`无法创建恢复前安全快照，已中止恢复以保护数据安全: ${getErrorMessage(snapErr)}`);
       }
 
+      // 进入破坏性阶段前，把安全快照持久化到 _safety_snapshots/ 并写 marker。
+      // 临时目录里的快照会在硬崩后被 cleanupStaleBackupWorkDirs 清掉，这里先复制一份保命。
+      // 持久化失败则中止恢复（与「快照创建失败即中止」一致的保守策略）。
+      if (!persistPreRestoreSnapshot(safetySnapshot, job.id)) {
+        throw new Error('无法持久化恢复前安全快照，已中止恢复以保障崩溃可恢复性');
+      }
+
       if (isFullDump) {
         job.percent = 45;
         job.message = '正在重置数据库...';
@@ -3110,6 +3117,10 @@ async function runRestoreFromArchive(
         await restoreCircularFKs(DB_URL_CLEAN);
         addLogEnd(job, t, '数据库导入完成，外键已恢复');
       }
+
+      // 数据库已成功导入（full dump 或 data-only 任一路径），现在处于已知良好状态。
+      // 清除恢复中断 marker——此后的硬崩不会留下破损数据库，无需启动时回滚。
+      clearRestoreInProgressMarker(job.id);
 
       result.dbRestored = true;
       job.percent = 70;
@@ -4541,7 +4552,10 @@ async function preflightRestoreSql(sqlPath: string) {
 
 async function resetDatabaseSchema(dbUrl: string) {
   const args = ['-v', 'ON_ERROR_STOP=1'];
-  psqlCommand(dbUrl, 'DROP SCHEMA public CASCADE', args, PSQL_COMMAND_TIMEOUT_MS);
+  // IF EXISTS: 硬中断恢复场景下 public 可能已被上一次中断的 reset/dump 删掉，
+  // 此时 `DROP SCHEMA public` 会因 "schema does not exist" + ON_ERROR_STOP=1 而失败，
+  // 导致 rollbackToSafetySnapshot 无法回滚。幂等化后无论 public 是否存在都能重置。
+  psqlCommand(dbUrl, 'DROP SCHEMA IF EXISTS public CASCADE', args, PSQL_COMMAND_TIMEOUT_MS);
   psqlCommand(dbUrl, 'CREATE SCHEMA public', args, PSQL_COMMAND_TIMEOUT_MS);
   psqlCommand(dbUrl, 'GRANT ALL ON SCHEMA public TO public', args, PSQL_COMMAND_TIMEOUT_MS);
 }
@@ -4619,6 +4633,9 @@ async function rollbackToSafetySnapshot(
         log.warn({ err: {} }, 'Failed to apply migrations after safety snapshot rollback');
       }
       addLog(job, '已成功回滚到恢复前的数据库状态');
+      // 数据库已回到恢复前的安全状态，清除「恢复进行中」marker（若存在）。
+      // 恢复端点路径下 job.id='recovery' 不匹配原 marker，由调用方按快照路径另行清理。
+      clearRestoreInProgressMarker(job.id);
       return true;
     } catch (rollbackErr: unknown) {
       const preservedPath = preserveSafetySnapshot(snapshotPath, job);
@@ -4645,6 +4662,177 @@ function preserveSafetySnapshot(snapshotPath: string | null, job: { id?: string;
   } catch (err: unknown) {
     addLog(job, `安全快照保留失败: ${getErrorMessage(err)}`);
     return null;
+  }
+}
+
+// ─── Pre-restore crash-recovery safety ───────────────────────────────────────
+// 恢复的破坏性阶段（resetDatabaseSchema = DROP+CREATE）若被 SIGKILL / OOM / 断电硬中断，
+// 数据库会留在空 schema 的破损态，而临时目录里的 safety_snapshot.sql 会被下次启动的
+// cleanupStaleBackupWorkDirs 当作 stale work dir 清掉 → 丢失回滚凭据。
+// 因此在进入破坏性阶段前，把快照复制一份到持久目录 _safety_snapshots/ 并写入 marker 文件。
+// marker 在「数据库导入成功」或「回滚成功」时清除；若服务重启时 marker 仍在，说明恢复被硬中断，
+// 启动逻辑会大声告警并指向持久快照供恢复（见 main.ts + /recover-interrupted 端点）。
+const RESTORE_IN_PROGRESS_MARKER_PREFIX = '.restore_in_progress_';
+
+interface RestoreInProgressMarker {
+  jobId: string;
+  durableSnapshot: string;
+  startedAt: string;
+}
+
+function restoreInProgressMarkerPath(jobId: string | undefined): string {
+  const safeJobId = (jobId || 'restore').replace(/[^a-zA-Z0-9_-]/g, '_');
+  return join(SAFETY_SNAPSHOT_DIR, `${RESTORE_IN_PROGRESS_MARKER_PREFIX}${safeJobId}.json`);
+}
+
+// 进入破坏性阶段前调用：把安全快照持久化一份 + 写 marker。返回持久快照路径；失败返回 null。
+function persistPreRestoreSnapshot(snapshotPath: string, jobId: string | undefined): string | null {
+  if (!snapshotPath || !existsSync(snapshotPath)) return null;
+  try {
+    mkdirSync(SAFETY_SNAPSHOT_DIR, { recursive: true });
+    const safeJobId = (jobId || 'restore').replace(/[^a-zA-Z0-9_-]/g, '_');
+    const durableSnapshot = join(SAFETY_SNAPSHOT_DIR, `${safeJobId}_${Date.now()}_pre_restore.sql`);
+    copyFileSync(snapshotPath, durableSnapshot);
+    const marker: RestoreInProgressMarker = {
+      jobId: jobId || '',
+      durableSnapshot,
+      startedAt: new Date().toISOString(),
+    };
+    writeFileSync(restoreInProgressMarkerPath(jobId), JSON.stringify(marker, null, 2));
+    log.warn({ jobId, durableSnapshot }, 'Pre-restore safety snapshot persisted (destructive phase starting)');
+    return durableSnapshot;
+  } catch (err: unknown) {
+    log.error({ err, jobId }, 'Failed to persist pre-restore safety snapshot');
+    return null;
+  }
+}
+
+// 数据库已安全（导入成功或回滚成功）后调用：清除 marker 及其引用的持久快照。
+function clearRestoreInProgressMarker(jobId: string | undefined): void {
+  try {
+    const markerPath = restoreInProgressMarkerPath(jobId);
+    if (!existsSync(markerPath)) return;
+    let durableSnapshot: string | null = null;
+    try {
+      durableSnapshot =
+        (JSON.parse(readFileSync(markerPath, 'utf-8')) as RestoreInProgressMarker).durableSnapshot || null;
+    } catch {
+      /* corrupt marker — best effort */
+    }
+    rmSync(markerPath, { force: true });
+    if (durableSnapshot && existsSync(durableSnapshot)) rmSync(durableSnapshot, { force: true });
+  } catch (err: unknown) {
+    log.warn({ err, jobId }, 'Failed to clear restore-in-progress marker');
+  }
+}
+
+export interface InterruptedRestoreInfo {
+  jobId: string;
+  durableSnapshot: string;
+  startedAt: string;
+  markerPath: string;
+}
+
+// 服务启动时调用：扫描仍存在的 marker，返回被硬中断的恢复任务（及其持久快照）。
+export function detectInterruptedRestores(): InterruptedRestoreInfo[] {
+  try {
+    if (!existsSync(SAFETY_SNAPSHOT_DIR)) return [];
+    const results: InterruptedRestoreInfo[] = [];
+    for (const entry of readdirSync(SAFETY_SNAPSHOT_DIR, { withFileTypes: true })) {
+      if (!entry.isFile()) continue;
+      if (!entry.name.startsWith(RESTORE_IN_PROGRESS_MARKER_PREFIX) || !entry.name.endsWith('.json')) continue;
+      const markerPath = join(SAFETY_SNAPSHOT_DIR, entry.name);
+      try {
+        const marker = JSON.parse(readFileSync(markerPath, 'utf-8')) as RestoreInProgressMarker;
+        if (marker.durableSnapshot && existsSync(marker.durableSnapshot)) {
+          results.push({
+            jobId: marker.jobId || entry.name,
+            durableSnapshot: marker.durableSnapshot,
+            startedAt: marker.startedAt || '',
+            markerPath,
+          });
+        }
+      } catch {
+        /* ignore corrupt marker */
+      }
+    }
+    return results;
+  } catch {
+    return [];
+  }
+}
+
+// 校验持久快照路径确实位于 _safety_snapshots/ 内（防路径遍历）。
+export function isValidDurableRestoreSnapshot(path: string): boolean {
+  try {
+    const resolved = resolve(path);
+    const root = resolve(SAFETY_SNAPSHOT_DIR) + sep;
+    return resolved.startsWith(root) && resolved.endsWith('.sql') && existsSync(resolved);
+  } catch {
+    return false;
+  }
+}
+
+// 按持久快照路径清理对应的 marker（恢复端点用：恢复任务的 jobId 未必等于调用方 id）。
+function clearRestoreInProgressMarkerBySnapshot(durableSnapshot: string): void {
+  try {
+    const resolved = resolve(durableSnapshot);
+    for (const info of detectInterruptedRestores()) {
+      if (resolve(info.durableSnapshot) === resolved) {
+        try {
+          rmSync(info.markerPath, { force: true });
+        } catch {
+          /* best effort */
+        }
+      }
+    }
+    // 快照已用于回滚，删除文件本身，避免 _safety_snapshots/ 无限堆积。
+    if (existsSync(resolved)) rmSync(resolved, { force: true });
+  } catch {
+    /* best effort */
+  }
+}
+
+// 管理员触发的恢复：用持久化的恢复前快照回滚数据库。调用方需先取得备份锁。
+export async function recoverFromInterruptedRestore(
+  durableSnapshot: string,
+  job?: { id?: string; logs?: string[] },
+): Promise<boolean> {
+  if (!isValidDurableRestoreSnapshot(durableSnapshot)) {
+    throw new Error('无效或越界的恢复快照路径');
+  }
+  const ok = await rollbackToSafetySnapshot(durableSnapshot, job || { id: 'recovery' });
+  if (ok) clearRestoreInProgressMarkerBySnapshot(durableSnapshot);
+  return ok;
+}
+
+// 路由侧恢复入口：取备份锁 → 用持久快照回滚 → 清 marker → 释放锁。
+export async function performInterruptedRestoreRecovery(
+  durableSnapshot: string,
+): Promise<{ ok: boolean; message: string }> {
+  if (!isValidDurableRestoreSnapshot(durableSnapshot)) {
+    return { ok: false, message: '无效或越界的恢复快照路径' };
+  }
+  if (!acquireLock()) {
+    return { ok: false, message: '有备份、恢复、校验或导入任务正在进行中，请等待完成后再试' };
+  }
+  const jobId = `recovery_${Date.now()}`;
+  const stopKeepAlive = startLockKeepAlive(jobId, 'manual');
+  const job = { id: jobId, logs: [] as string[] };
+  try {
+    addLog(job, '正在用恢复前安全快照回滚数据库...');
+    const ok = await rollbackToSafetySnapshot(durableSnapshot, job);
+    if (!ok) {
+      return {
+        ok: false,
+        message: '回滚失败，已尝试恢复空 schema；请检查日志，保留的快照见 _safety_snapshots/',
+      };
+    }
+    clearRestoreInProgressMarkerBySnapshot(durableSnapshot);
+    return { ok: true, message: '已成功回滚到恢复前的数据库状态' };
+  } finally {
+    stopKeepAlive();
+    releaseLockForJob(jobId);
   }
 }
 

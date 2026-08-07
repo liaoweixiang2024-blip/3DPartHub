@@ -24,6 +24,8 @@ import {
   normalizeBackupScope,
   renameBackup,
   isEncryptedBackupArchiveFile,
+  detectInterruptedRestores,
+  performInterruptedRestoreRecovery,
   startBackupJob,
   startImportSaveJob,
   startRestoreJob,
@@ -413,6 +415,39 @@ export function createSettingsBackupRouter() {
     } catch (err: unknown) {
       log.error({ err, jobId }, 'Cancel restore failed');
       res.status(500).json({ detail: getErrorMessage(err) || '取消恢复失败' });
+    }
+  });
+
+  // List restores that were hard-interrupted during the destructive phase (SIGKILL/OOM/power loss).
+  // Each entry carries a preserved pre-restore snapshot that can be rolled back to.
+  router.get('/api/settings/backup/interrupted-restores', authMiddleware, async (req: AuthRequest, res: Response) => {
+    if (!adminOnly(req, res)) return;
+    try {
+      res.json({ interrupted: detectInterruptedRestores() });
+    } catch (err: unknown) {
+      log.error({ err }, 'List interrupted restores failed');
+      res.status(500).json({ detail: getErrorMessage(err) || '查询中断恢复失败' });
+    }
+  });
+
+  // Recover from a hard-interrupted restore by rolling back to its preserved pre-restore snapshot.
+  router.post('/api/settings/backup/recover-interrupted', authMiddleware, async (req: AuthRequest, res: Response) => {
+    if (!adminOnly(req, res)) return;
+    const durableSnapshot = asSingleString((req.body as Record<string, unknown> | undefined)?.durableSnapshot);
+    if (!durableSnapshot) {
+      res.status(400).json({ detail: '缺少 durableSnapshot 参数' });
+      return;
+    }
+    try {
+      const result = await performInterruptedRestoreRecovery(durableSnapshot);
+      if (!result.ok) {
+        res.status(409).json({ detail: result.message });
+        return;
+      }
+      res.json({ ok: true, message: result.message });
+    } catch (err: unknown) {
+      log.error({ err, durableSnapshot }, 'Recover interrupted restore failed');
+      res.status(500).json({ detail: getErrorMessage(err) || '中断恢复失败' });
     }
   });
 

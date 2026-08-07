@@ -6,7 +6,7 @@ import type { Prisma, PrismaClient } from '@prisma/client';
 import compression from 'compression';
 import cors from 'cors';
 import express from 'express';
-import { startBackupScheduler } from './lib/backup.js';
+import { detectInterruptedRestores, startBackupScheduler } from './lib/backup.js';
 import { cdnUrlRewrite } from './lib/cdnRewrite.js';
 import { config } from './lib/config.js';
 import { logger, createLogger } from './lib/logger.js';
@@ -602,6 +602,29 @@ app.listen(PORT, async () => {
     }
   } catch {
     logger.debug('Startup migration safety check skipped — _prisma_migrations table may not exist yet');
+  }
+
+  // Detect a restore that was hard-interrupted during the destructive phase (SIGKILL/OOM/power loss).
+  // A persisted pre-restore snapshot means the DB may be in a reset/inconsistent state — surface it loudly.
+  // Recovery is actionable via POST /api/settings/backup/recover-interrupted.
+  try {
+    const interrupted = detectInterruptedRestores();
+    if (interrupted.length > 0) {
+      for (const info of interrupted) {
+        logger.error(
+          {
+            jobId: info.jobId,
+            durableSnapshot: info.durableSnapshot,
+            startedAt: info.startedAt,
+          },
+          'Restore was interrupted during destructive phase — DB may be inconsistent. ' +
+            'A pre-restore safety snapshot is preserved. ' +
+            'Recover via POST /api/settings/backup/recover-interrupted { durableSnapshot }, or re-run the restore.',
+        );
+      }
+    }
+  } catch (err) {
+    logger.warn({ err }, 'Failed to check for interrupted restores on startup');
   }
 
   if (process.env.CACHE_WARMUP_ENABLED !== '0') {
