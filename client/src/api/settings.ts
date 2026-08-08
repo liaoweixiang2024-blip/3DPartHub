@@ -858,8 +858,8 @@ export async function deleteBackup(id: string): Promise<void> {
   await client.delete(`/settings/backup/delete/${id}`, { data: { confirm: id } });
 }
 
-export async function startRestore(id: string): Promise<string> {
-  const res = await client.post(`/settings/backup/restore/${id}`, { confirm: id }, { timeout: 30000 });
+export async function startRestore(id: string, force = false): Promise<string> {
+  const res = await client.post(`/settings/backup/restore/${id}`, { confirm: id, force }, { timeout: 30000 });
   const data = unwrapResponse<JobStartResult>(res);
   const jobId = data.jobId;
   if (!jobId) throw new Error('启动恢复失败');

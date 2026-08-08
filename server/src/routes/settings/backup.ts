@@ -638,7 +638,8 @@ export function createSettingsBackupRouter() {
         return;
       }
       if (!requireDangerousConfirm(req, res, backupId, '恢复备份')) return;
-      const jobId = startRestoreJob(backupId, req.user!.userId);
+      const force = (req.body as Record<string, unknown> | undefined)?.force === true;
+      const jobId = startRestoreJob(backupId, req.user!.userId, force);
       res.json({ jobId });
     } catch (err: unknown) {
       const msg = getErrorMessage(err);

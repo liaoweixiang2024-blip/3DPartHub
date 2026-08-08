@@ -650,6 +650,8 @@ interface RestoreJob {
   destructiveStarted?: boolean;
   /** 用户手动取消（与失败区分，前端展示用） */
   cancelled?: boolean;
+  /** 跨服务器迁移强制恢复：跳过 HMAC 签名校验（仍校验文件完整性 SHA256） */
+  force?: boolean;
   result?: {
     dbRestored: boolean;
     modelCount: number;
@@ -2561,7 +2563,7 @@ async function recordRestoreAudit(job: RestoreJob, status: 'ok' | 'error', extra
   });
 }
 
-export function startRestoreJob(backupId: string, userId?: string | null): string {
+export function startRestoreJob(backupId: string, userId?: string | null, force = false): string {
   if (!acquireLock()) throw new Error('有备份、恢复或校验任务正在进行中，请等待完成后再试');
   const jobId = `restore_${Date.now()}`;
   const job: RestoreJob = {
@@ -2573,6 +2575,7 @@ export function startRestoreJob(backupId: string, userId?: string | null): strin
     percent: 0,
     message: '正在解压备份文件...',
     logs: [],
+    force,
   };
   restoreJobs.set(jobId, job);
   syncJob(job);
@@ -2601,7 +2604,11 @@ async function runRestore(job: RestoreJob, backupId: string) {
         if (actualSha256 !== record.archiveSha256) {
           throw new Error('备份文件 SHA256 与记录不一致，可能已损坏或被替换，已中止恢复');
         }
-        assertBackupSignature(record, actualSha256);
+        if (job.force) {
+          addLog(job, '⚠ 已跳过签名校验（跨服务器迁移强制恢复）。文件完整性 SHA256 已通过，但备份来源真实性未校验。');
+        } else {
+          assertBackupSignature(record, actualSha256);
+        }
         addLog(job, '备份文件 SHA256 校验通过');
       }
     }
@@ -4329,7 +4336,9 @@ function assertBackupSignature(record: BackupRecord, archiveSha256: string) {
   const actualBuffer = Buffer.from(record.archiveSignature, 'hex');
   const expectedBuffer = Buffer.from(expected, 'hex');
   if (actualBuffer.length !== expectedBuffer.length || !timingSafeEqual(actualBuffer, expectedBuffer)) {
-    throw new Error('备份签名校验失败，文件记录可能被篡改，已中止操作');
+    throw new Error(
+      '备份签名校验失败，已中止恢复。常见原因：① 跨服务器迁移时新服务器的 BACKUP_SIGNING_SECRET（或 JWT_SECRET）与备份时不同——请把旧服务器的 BACKUP_SIGNING_SECRET 复制到新 .env，或在恢复确认里勾选「跨服务器迁移：跳过签名校验」，或改用「导入恢复」直接上传 .tar.gz；② 备份文件或记录被篡改。（注：文件完整性 SHA256 已通过，仅来源真实性签名不匹配。）',
+    );
   }
 }
 

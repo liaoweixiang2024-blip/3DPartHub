@@ -4859,6 +4859,7 @@ function Content() {
   } | null>(null);
   const [checkingUpdate, setCheckingUpdate] = useState(false);
   const [restoreConfirmId, setRestoreConfirmId] = useState<string | null>(null);
+  const [restoreForce, setRestoreForce] = useState(false);
   const [backupDeleteConfirm, setBackupDeleteConfirm] = useState<{ id: string; name: string } | null>(null);
   const [deletingBackupId, setDeletingBackupId] = useState<string | null>(null);
   const [renamingId, setRenamingId] = useState<string | null>(null);
@@ -5706,6 +5707,7 @@ function Content() {
   }
 
   function handleRestoreRequest(id: string) {
+    setRestoreForce(false);
     setRestoreConfirmId(id);
   }
 
@@ -5766,7 +5768,7 @@ function Content() {
     setRestoring(true);
     setRestoreProgress({ stage: 'starting', percent: 0, message: '正在启动恢复...', logs: [] });
     try {
-      const jobId = await startRestore(restoreConfirmId);
+      const jobId = await startRestore(restoreConfirmId, restoreForce);
       localStorage.setItem('restoreJobId', jobId);
       localStorage.setItem('restoreConfirmBackupId', restoreConfirmId);
       localStorage.setItem(RESTORE_JOB_SOURCE_KEY, 'backup-record');
@@ -5775,6 +5777,7 @@ function Content() {
       });
       toastRestoreSuccessOnce(jobId, result);
       setRestoreConfirmId(null);
+      setRestoreForce(false);
       loadBackupList();
       loadBackupStats();
       loadBackupHealth();
@@ -7255,6 +7258,20 @@ function Content() {
                                                   ? `此操作将只覆盖当前${getBackupScopeLabel(b.scope, b.scopeLabel)}数据和资源文件，不可撤销！`
                                                   : '此操作将覆盖当前数据库和模型文件，不可撤销！'}
                                               </p>
+                                              <label className="flex items-start gap-2 mt-2 cursor-pointer select-none">
+                                                <input
+                                                  type="checkbox"
+                                                  checked={restoreForce}
+                                                  onChange={(e) => setRestoreForce(e.target.checked)}
+                                                  className="mt-0.5 accent-primary"
+                                                />
+                                                <span className="text-[11px] leading-tight text-on-surface-variant">
+                                                  跨服务器迁移：跳过签名校验
+                                                  <span className="block text-on-surface-variant/70">
+                                                    备份来自另一台服务器、签名校验失败时勾选（仍校验文件完整性）
+                                                  </span>
+                                                </span>
+                                              </label>
                                               <div className="grid grid-cols-1 gap-2 mt-2 sm:flex">
                                                 <button
                                                   onClick={handleRestoreConfirm}
