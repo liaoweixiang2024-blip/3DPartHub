@@ -4154,6 +4154,7 @@ function StorageSyncPanel({ settings }: { settings: SystemSettings }) {
   const [overwrite, setOverwrite] = useState(true);
   const [deleteExtraneous, setDeleteExtraneous] = useState(false);
   const [deleteJobTarget, setDeleteJobTarget] = useState<StorageSyncJob | null>(null);
+  const [startConfirmOpen, setStartConfirmOpen] = useState(false);
 
   async function refreshStatus(silent = false) {
     if (!silent) setLoading(true);
@@ -4334,7 +4335,7 @@ function StorageSyncPanel({ settings }: { settings: SystemSettings }) {
             ) : (
               <button
                 type="button"
-                onClick={handleStart}
+                onClick={() => setStartConfirmOpen(true)}
                 disabled={disabled || selectedScopeKeys.length === 0}
                 className="inline-flex h-10 items-center justify-center gap-1.5 rounded-md bg-primary-container px-4 text-xs font-semibold text-on-primary transition-opacity hover:opacity-90 disabled:opacity-50"
               >
@@ -4505,6 +4506,26 @@ function StorageSyncPanel({ settings }: { settings: SystemSettings }) {
         }」同步记录吗？不会删除已同步的资源文件。`}
         confirmLabel="确认删除"
         confirmDisabled={working}
+      />
+      <ConfirmDialog
+        open={startConfirmOpen}
+        onClose={() => setStartConfirmOpen(false)}
+        onConfirm={() => {
+          setStartConfirmOpen(false);
+          void handleStart();
+        }}
+        icon="cloud_sync"
+        iconColor="text-primary"
+        iconBg="bg-primary/15"
+        title="确认开始存储同步"
+        description={`将启动存储同步（方向：${
+          direction === 'cloud_to_local' ? '云端 → 本地' : '本地 → 云端'
+        }），可能持续较长时间并占用网络带宽。${
+          deleteExtraneous && canDeleteExtra
+            ? '已开启“删除多余文件”：目标端存在但源端没有的文件将被删除，此操作不可撤销，请谨慎。'
+            : ''
+        }确定开始？`}
+        confirmLabel="开始同步"
       />
     </div>
   );
@@ -4847,6 +4868,11 @@ function Content() {
   const [loadingServerFiles, setLoadingServerFiles] = useState(false);
   const [serverFileConfirm, setServerFileConfirm] = useState<ServerBackupFile | null>(null);
   const [serverFilesScanned, setServerFilesScanned] = useState(false);
+  // 二次确认弹窗开关（长耗时/重操作，防误触）
+  const [policyCheckConfirmOpen, setPolicyCheckConfirmOpen] = useState(false);
+  const [exportConfirmOpen, setExportConfirmOpen] = useState(false);
+  const [cleanupScanConfirmOpen, setCleanupScanConfirmOpen] = useState(false);
+  const [verifyConfirmId, setVerifyConfirmId] = useState<string | null>(null);
 
   // Update state
   const [currentVersion, setCurrentVersion] = useState<string>('');
@@ -5790,6 +5816,21 @@ function Content() {
       restoreActionInFlight.current = false;
       setRestoring(false);
       setRestoreProgress({ stage: '', percent: 0, message: '', logs: [] });
+    }
+  }
+
+  async function handleCleanupScan() {
+    if (cleanupScanning) return;
+    setCleanupScanning(true);
+    setCleanupScan(null);
+    setCleanupSelectedKeys(new Set());
+    try {
+      const result = await scanCleanup();
+      setCleanupScan(result);
+    } catch (err: unknown) {
+      toast(errorMessage(err, '扫描失败'), 'error');
+    } finally {
+      setCleanupScanning(false);
     }
   }
 
@@ -6811,7 +6852,7 @@ function Content() {
                                   <p className="text-xs text-on-surface-variant mt-1">{backupHealth.message}</p>
                                 </div>
                                 <button
-                                  onClick={handleBackupPolicyCheck}
+                                  onClick={() => setPolicyCheckConfirmOpen(true)}
                                   disabled={checkingBackupPolicy || adminBusy}
                                   className="w-full sm:w-auto shrink-0 px-3 py-2 text-xs font-medium bg-primary-container/15 text-primary-container rounded-md hover:bg-primary-container/25 disabled:opacity-50 transition-colors flex items-center justify-center gap-1.5"
                                 >
@@ -7091,8 +7132,8 @@ function Content() {
                                 )}
                               </div>
                               <button
-                                onClick={handleExport}
-                                disabled={adminBusy}
+                                onClick={() => setExportConfirmOpen(true)}
+                                disabled={adminBusy || exporting}
                                 className="w-full sm:w-auto px-4 py-2.5 sm:py-2 text-xs font-medium bg-primary-container/20 text-primary-container rounded-md hover:bg-primary-container/30 disabled:opacity-50 transition-colors flex items-center justify-center gap-1.5 shrink-0"
                               >
                                 <Icon name="add" size={14} />
@@ -7210,7 +7251,7 @@ function Content() {
                                         下载
                                       </button>
                                       <button
-                                        onClick={() => handleVerifyBackup(b.id)}
+                                        onClick={() => setVerifyConfirmId(b.id)}
                                         disabled={adminBusy || verifyingBackupId === b.id}
                                         className="px-2.5 py-2 lg:py-1.5 text-xs font-medium bg-surface-container-high/60 text-on-surface-variant rounded-md hover:bg-surface-container-highest/50 disabled:opacity-50 transition-colors flex items-center justify-center gap-1"
                                       >
@@ -7615,20 +7656,7 @@ function Content() {
                           </p>
                         </div>
                         <button
-                          onClick={async () => {
-                            if (cleanupScanning) return;
-                            setCleanupScanning(true);
-                            setCleanupScan(null);
-                            setCleanupSelectedKeys(new Set());
-                            try {
-                              const result = await scanCleanup();
-                              setCleanupScan(result);
-                            } catch (err: unknown) {
-                              toast(errorMessage(err, '扫描失败'), 'error');
-                            } finally {
-                              setCleanupScanning(false);
-                            }
-                          }}
+                          onClick={() => setCleanupScanConfirmOpen(true)}
                           disabled={cleanupScanning || cleanupRunning}
                           className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-primary-container px-4 text-xs font-bold text-on-primary shadow-sm transition-all hover:-translate-y-px hover:opacity-95 disabled:translate-y-0 disabled:cursor-not-allowed disabled:bg-surface-container-high disabled:text-on-surface-variant disabled:shadow-none"
                         >
@@ -7773,6 +7801,63 @@ function Content() {
         description={`将清理选中的 ${cleanupSelectedKeys.size} 个分类缓存文件，此操作不可撤销。`}
         confirmLabel={cleanupRunning ? '清理中...' : '清理选中'}
         confirmDisabled={cleanupSelectedKeys.size === 0 || cleanupRunning}
+      />
+      <ConfirmDialog
+        open={policyCheckConfirmOpen}
+        onClose={() => setPolicyCheckConfirmOpen(false)}
+        onConfirm={() => {
+          setPolicyCheckConfirmOpen(false);
+          void handleBackupPolicyCheck();
+        }}
+        icon="fact_check"
+        iconColor="text-primary"
+        iconBg="bg-primary/15"
+        title="确认开始备份策略体检"
+        description="将对备份策略进行全面体检（磁盘空间、文件权限、归档完整性等），约需 1–2 分钟，期间请勿关闭页面。确定开始？"
+        confirmLabel="开始体检"
+      />
+      <ConfirmDialog
+        open={exportConfirmOpen}
+        onClose={() => setExportConfirmOpen(false)}
+        onConfirm={() => {
+          setExportConfirmOpen(false);
+          void handleExport();
+        }}
+        icon="backup"
+        iconColor="text-primary"
+        iconBg="bg-primary/15"
+        title="确认创建备份"
+        description="将创建备份，可能需要数分钟；期间备份功能会锁定、无法同时执行其他备份操作。确定开始？"
+        confirmLabel="创建备份"
+      />
+      <ConfirmDialog
+        open={cleanupScanConfirmOpen}
+        onClose={() => setCleanupScanConfirmOpen(false)}
+        onConfirm={() => {
+          setCleanupScanConfirmOpen(false);
+          void handleCleanupScan();
+        }}
+        icon="search"
+        iconColor="text-primary"
+        iconBg="bg-primary/15"
+        title="确认开始缓存扫描"
+        description="将扫描磁盘上的孤立文件和过期临时文件，约需 30–60 秒。扫描为只读，不会删除任何文件（删除需扫描后单独确认）。确定开始？"
+        confirmLabel="开始扫描"
+      />
+      <ConfirmDialog
+        open={Boolean(verifyConfirmId)}
+        onClose={() => setVerifyConfirmId(null)}
+        onConfirm={() => {
+          const id = verifyConfirmId;
+          setVerifyConfirmId(null);
+          if (id) void handleVerifyBackup(id);
+        }}
+        icon="verified"
+        iconColor="text-primary"
+        iconBg="bg-primary/15"
+        title="确认校验备份"
+        description="将校验该备份归档的完整性（解压、逐文件比对 SHA256），约需 1–2 分钟。确定开始？"
+        confirmLabel="开始校验"
       />
     </>
   );
