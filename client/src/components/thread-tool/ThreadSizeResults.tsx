@@ -136,29 +136,29 @@ export default function ThreadSizeResults({
               </div>
             </div>
 
-            <div className="grid min-h-0 grid-cols-1 gap-1.5 min-[390px]:grid-cols-2 md:grid-cols-4 md:grid-rows-1 md:gap-3 md:overflow-hidden">
+            <div className="grid min-h-0 grid-cols-1 items-start gap-2 min-[390px]:grid-cols-2 md:grid-cols-4 md:gap-3">
               {guideGroups.map((group) => (
                 <div
                   key={group.title}
-                  className="flex min-h-[148px] flex-col overflow-hidden rounded-xl border border-outline-variant/12 bg-surface-container-low p-2.5 min-[390px]:min-h-[168px] md:min-h-0 md:p-4"
+                  className="flex flex-col overflow-hidden rounded-xl border border-outline-variant/12 bg-surface-container-low p-3 md:p-4"
                 >
-                  <div className="flex min-h-0 items-start gap-2 md:gap-3">
+                  <div className="flex items-start gap-2 md:gap-2.5">
                     <span className="grid h-7 w-7 shrink-0 place-items-center rounded-lg bg-surface text-primary-container md:h-9 md:w-9 md:rounded-xl">
                       <Icon name={group.icon} size={16} />
                     </span>
-                    <div className="min-w-0">
+                    <div className="min-w-0 flex-1">
                       <h3 className="text-[15px] font-black leading-tight text-on-surface md:text-lg">{group.title}</h3>
-                      <p className="mt-1 line-clamp-2 text-[11px] leading-4 text-on-surface-variant md:mt-1.5 md:text-sm md:leading-5">
+                      <p className="mt-1 line-clamp-2 text-[11px] leading-4 text-on-surface-variant md:mt-1.5 md:text-xs md:leading-5">
                         {group.desc}
                       </p>
                     </div>
                   </div>
-                  <div className="mt-auto grid grid-cols-2 gap-1 pt-2 md:flex md:flex-wrap md:content-end md:gap-2 md:pt-3">
+                  <div className="flex flex-wrap gap-1.5 pt-3 md:gap-2 md:pt-4">
                     {group.examples.map((item) => (
                       <button
                         key={item}
                         onClick={() => fillMainSearch(item)}
-                        className="min-w-0 truncate rounded-md bg-primary-container/8 px-1.5 py-0.5 text-[10px] font-semibold leading-4 text-primary-container transition-colors hover:bg-primary-container/14 active:scale-95 md:px-2.5 md:py-1.5 md:text-xs"
+                        className="rounded-md bg-primary-container/8 px-2 py-1 text-[11px] font-semibold leading-4 text-primary-container transition-colors hover:bg-primary-container/14 active:scale-95 md:text-xs"
                       >
                         {item}
                       </button>

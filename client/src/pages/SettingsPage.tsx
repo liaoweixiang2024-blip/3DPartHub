@@ -1107,19 +1107,6 @@ const GROUPS: SettingGroup[] = [
     items: [
       { _section: 'Redis 与页面缓存' },
       {
-        key: 'cache_enabled',
-        label: '启用缓存（只读）',
-        desc: '⚠ 此开关不影响实际运行——缓存始终启用并由 Redis 连接状态决定，此处仅作诊断显示',
-        type: 'switch',
-      },
-      {
-        key: 'cache_driver',
-        label: '缓存驱动（只读）',
-        desc: '⚠ 实际缓存始终使用 Redis，本项不影响运行，仅作诊断显示',
-        type: 'select',
-        options: CACHE_DRIVER_OPTIONS,
-      },
-      {
         key: 'redis_url',
         label: 'Redis 地址（只读）',
         desc: '⚠ 实际连接由环境变量 REDIS_URL 控制，此处仅显示当前值，修改不生效；如需更换请在 .env 配置',
@@ -1962,6 +1949,44 @@ function Switch({
   );
 }
 
+/**
+ * 只读设置项的静态展示——这些值由环境变量/基础设施决定，不可在界面修改。
+ * 用状态徽章/等宽文本呈现，而非可点的开关/下拉/输入框，避免「能点不能改」的误导。
+ */
+function ReadonlySettingValue({ item, value }: { item: SettingItem; value: unknown }) {
+  if (item.type === 'switch') {
+    const on = Boolean(value);
+    return (
+      <span
+        className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium ${
+          on ? 'bg-primary-container/15 text-primary-container' : 'bg-surface-container-high text-on-surface-variant'
+        }`}
+      >
+        <Icon name={on ? 'check_circle' : 'remove_circle'} size={13} />
+        {on ? '已启用' : '未启用'}
+      </span>
+    );
+  }
+  if (item.type === 'select') {
+    const opt = item.options?.find((o) => String(o.value) === String(value));
+    const label = opt?.label ?? (value === '' || value == null ? '—' : String(value));
+    return (
+      <span className="inline-flex items-center px-2.5 py-1 rounded-md text-xs font-medium bg-surface-container-high text-on-surface">
+        {label}
+      </span>
+    );
+  }
+  // text / number
+  const sensitive = isSensitiveTextSettingKey(item.key);
+  const empty = value === '' || value === null || value === undefined;
+  const text = empty ? '—' : sensitive ? '••••••' : String(value);
+  return (
+    <span className="inline-flex items-center min-w-0 font-mono text-xs px-2.5 py-1 rounded-md bg-surface-container-high/60 text-on-surface-variant break-all">
+      {text}
+    </span>
+  );
+}
+
 function InterfaceThemePicker({ value, onChange }: { value: string; onChange: (value: string) => void }) {
   const themes = Object.values(INTERFACE_THEME_CATALOG);
   return (
@@ -2354,6 +2379,11 @@ const READONLY_SETTING_KEYS = new Set<keyof SystemSettings>([
   'storage_upload_multipart_mb',
   'resource_download_acceleration_enabled',
 ]);
+
+/** 由环境变量/基础设施决定、不可在界面修改的设置项——渲染为静态信息，而非可点的假控件。 */
+function isReadonlySettingItem(item: SettingItem): boolean {
+  return isSystemSettingKey(item.key) && READONLY_SETTING_KEYS.has(item.key);
+}
 
 const inputClass =
   'w-full min-w-0 bg-surface-container-lowest text-on-surface text-xs rounded-md px-2.5 py-1.5 border border-outline-variant/20 outline-none focus:border-primary placeholder:text-on-surface-variant/30';
@@ -6290,7 +6320,9 @@ function Content() {
                                               </div>
                                             ) : (
                                               structuredEditor ||
-                                              (item.type === 'switch' ? (
+                                              (isReadonlySettingItem(item) ? (
+                                                <ReadonlySettingValue item={item} value={settings[item.key]} />
+                                              ) : item.type === 'switch' ? (
                                                 <Switch
                                                   checked={settings[item.key] as boolean}
                                                   onChange={(v) => updateSetting(item.key, v)}
@@ -6610,6 +6642,8 @@ function Content() {
                                           <StoragePolicyInfoPanel settings={settings} />
                                         ) : item.type === 'storage-sync' ? (
                                           <StorageSyncPanel settings={settings} />
+                                        ) : isReadonlySettingItem(item) ? (
+                                          <ReadonlySettingValue item={item} value={settings[item.key]} />
                                         ) : item.type === 'switch' ? (
                                           <Switch
                                             checked={settings[item.key] as boolean}
