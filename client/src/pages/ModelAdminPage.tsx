@@ -34,7 +34,7 @@ const MERGE_SUGGESTION_PAGE_SIZE = 40;
 const CATEGORY_FILTER_ALL = '__all__';
 const MODEL_ADMIN_COUNT_KEY = '/models/count?grouped=false';
 const MODEL_ADMIN_PANEL_CLASS =
-  'rounded-lg border border-outline-variant/10 bg-surface-container-low overflow-auto min-h-[calc(100vh-220px)] max-h-[calc(100vh-220px)]';
+  'rounded-lg border border-outline-variant/10 bg-surface-container-low overflow-auto [scrollbar-gutter:stable] min-h-[calc(100vh-220px)] max-h-[calc(100vh-220px)]';
 type ModelAdminTab = 'models' | 'suggestions' | 'groups' | 'deleted';
 type DeletedPurgeMode = 'selected' | 'all';
 type ModelGroupConfirm =
@@ -998,52 +998,60 @@ function DesktopContent() {
     startTransition(() => setActiveTab(tab));
   };
   const modelToolbarControls =
-    activeTab === 'models' && models.length > 0 ? (
+    activeTab === 'models' ? (
       <div className="flex min-w-0 shrink-0 flex-wrap items-center gap-2">
-        <span className="shrink-0 whitespace-nowrap text-xs text-on-surface-variant">
-          已加载 <strong className="text-primary">{visibleModels.length}</strong> / 共{' '}
-          <strong className="text-primary">{displayModelTotal}</strong> 个模型
-          {selectedAllMatching ? (
-            <>
-              ，已选择 <strong className="text-primary">全部匹配的 {selectedModelCount}</strong> 个
-            </>
-          ) : selectedModelCount > 0 ? (
-            <>
-              ，已选择 <strong className="text-primary">{selectedModelCount}</strong> 个
-            </>
-          ) : null}
-        </span>
+        {models.length > 0 ? (
+          <span className="shrink-0 whitespace-nowrap text-xs text-on-surface-variant">
+            已加载 <strong className="text-primary">{visibleModels.length}</strong> / 共{' '}
+            <strong className="text-primary">{displayModelTotal}</strong> 个模型
+            {selectedAllMatching ? (
+              <>
+                ，已选择 <strong className="text-primary">全部匹配的 {selectedModelCount}</strong> 个
+              </>
+            ) : selectedModelCount > 0 ? (
+              <>
+                ，已选择 <strong className="text-primary">{selectedModelCount}</strong> 个
+              </>
+            ) : null}
+          </span>
+        ) : null}
+        {/* 分类筛选属于导航控件：即使当前分类下模型为 0，也必须保留，
+            否则选中空分类后无法切回「全部分类」/其它分类（整个筛选条会随列表一起消失）。 */}
         <ModelCategoryFilter
           value={categoryFilter}
           onChange={setCategoryFilter}
           options={categoryOptions}
           allValue={CATEGORY_FILTER_ALL}
         />
-        {!selectedAllMatching && displayModelTotal > visibleModels.length ? (
-          <AdminButton
-            onClick={selectAllMatchingModels}
-            disabled={displayModelTotal === 0}
-            icon="select_all"
-            size="sm"
-            variant="tonal"
-          >
-            选择全部
-          </AdminButton>
-        ) : null}
-        {selectedModelCount > 0 ? (
+        {models.length > 0 ? (
           <>
-            <AdminButton onClick={clearSelectedModels} icon="close" size="sm" variant="secondary">
-              取消选择
-            </AdminButton>
-            <AdminButton
-              onClick={() => setBatchDeleteOpen(true)}
-              disabled={batchDeleting}
-              icon="delete"
-              size="sm"
-              variant="danger"
-            >
-              批量删除
-            </AdminButton>
+            {!selectedAllMatching && displayModelTotal > visibleModels.length ? (
+              <AdminButton
+                onClick={selectAllMatchingModels}
+                disabled={displayModelTotal === 0}
+                icon="select_all"
+                size="sm"
+                variant="tonal"
+              >
+                选择全部
+              </AdminButton>
+            ) : null}
+            {selectedModelCount > 0 ? (
+              <>
+                <AdminButton onClick={clearSelectedModels} icon="close" size="sm" variant="secondary">
+                  取消选择
+                </AdminButton>
+                <AdminButton
+                  onClick={() => setBatchDeleteOpen(true)}
+                  disabled={batchDeleting}
+                  icon="delete"
+                  size="sm"
+                  variant="danger"
+                >
+                  批量删除
+                </AdminButton>
+              </>
+            ) : null}
           </>
         ) : null}
       </div>
@@ -1555,7 +1563,9 @@ function DesktopContent() {
           ) : (
             <>
               <div className={MODEL_ADMIN_PANEL_CLASS}>
-                <table className="w-full border-separate border-spacing-0 text-sm">
+                {/* table-fixed：列宽由表头定宽决定，不再随模型名/格式/分类内容长短抖动，
+                    切换分类或翻页时各列宽度保持一致。模型列不指定宽度，吃剩余空间。 */}
+                <table className="w-full table-fixed border-separate border-spacing-0 text-sm">
                   <thead className={ADMIN_TABLE_HEAD_CLASS}>
                     <AdminTableHeadRow>
                       <AdminTableHeadCell className="w-12">
@@ -1569,11 +1579,11 @@ function DesktopContent() {
                         />
                       </AdminTableHeadCell>
                       <AdminTableHeadCell>模型</AdminTableHeadCell>
-                      <AdminTableHeadCell>分类</AdminTableHeadCell>
-                      <AdminTableHeadCell>格式</AdminTableHeadCell>
-                      <AdminTableHeadCell>大小</AdminTableHeadCell>
-                      <AdminTableHeadCell>图纸</AdminTableHeadCell>
-                      <AdminTableHeadCell className="text-right">操作</AdminTableHeadCell>
+                      <AdminTableHeadCell className="w-44">分类</AdminTableHeadCell>
+                      <AdminTableHeadCell className="w-24">格式</AdminTableHeadCell>
+                      <AdminTableHeadCell className="w-28">大小</AdminTableHeadCell>
+                      <AdminTableHeadCell className="w-20">图纸</AdminTableHeadCell>
+                      <AdminTableHeadCell className="w-64 text-right">操作</AdminTableHeadCell>
                     </AdminTableHeadRow>
                   </thead>
                   <tbody>
@@ -1601,7 +1611,7 @@ function DesktopContent() {
                               <ModelThumbnail src={m.thumbnail_url} alt="" className="w-full h-full object-cover" />
                             </div>
                             <div className="min-w-0">
-                              <span className="text-on-surface font-medium truncate max-w-[300px] block">{m.name}</span>
+                              <span className="block truncate text-on-surface font-medium">{m.name}</span>
                               {m.group && (
                                 <span className="text-[10px] text-primary font-medium">
                                   {m.group.name} {m.group.is_primary ? '· 主版本' : ''} (共{m.group.variant_count}个)
@@ -1610,7 +1620,11 @@ function DesktopContent() {
                             </div>
                           </Link>
                         </td>
-                        <td className="px-4 py-3 text-on-surface-variant">{m.category || '—'}</td>
+                        <td className="px-4 py-3 text-on-surface-variant">
+                          <span className="block truncate" title={m.category || ''}>
+                            {m.category || '—'}
+                          </span>
+                        </td>
                         <td className="px-4 py-3">
                           <span className="text-xs font-mono bg-surface-container-highest px-1.5 py-0.5 rounded-sm">
                             {m.format?.toUpperCase()}
