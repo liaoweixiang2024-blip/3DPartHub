@@ -5,6 +5,7 @@ import useSWR, { mutate as swrMutate } from 'swr';
 import useSWRInfinite from 'swr/infinite';
 import { categoriesApi, type CategoryItem } from '../api/categories';
 import { modelApi, type DeletedModelListItem, type ModelGroupItem, type ServerModelListItem } from '../api/models';
+import BatchCategoryDialog from '../components/model-admin/BatchCategoryDialog';
 import EditDialog from '../components/model-admin/EditDialog';
 import PreviewOperationsModal from '../components/model-admin/PreviewOperationsModal';
 import { formatModelDateTime, formatSize } from '../components/model-admin/shared';
@@ -647,6 +648,8 @@ function DesktopContent() {
   const [selectedAllMatching, setSelectedAllMatching] = useState(false);
   const [batchDeleteOpen, setBatchDeleteOpen] = useState(false);
   const [batchDeleting, setBatchDeleting] = useState(false);
+  const [batchCategoryOpen, setBatchCategoryOpen] = useState(false);
+  const [batchCategorySaving, setBatchCategorySaving] = useState(false);
   const [uploadOpen, setUploadOpen] = useState(false);
   const [previewOpsOpen, setPreviewOpsOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<ModelAdminTab>('models');
@@ -910,6 +913,36 @@ function DesktopContent() {
     }
   };
 
+  const handleBatchUpdateCategory = async (categoryId: string) => {
+    setBatchCategorySaving(true);
+    try {
+      const result = await modelApi.batchUpdateCategory(
+        selectedAllMatching
+          ? {
+              categoryId,
+              allMatching: true,
+              filters: {
+                search: search.trim() || undefined,
+                categoryId: categoryFilter === CATEGORY_FILTER_ALL ? undefined : categoryFilter,
+              },
+            }
+          : { categoryId, modelIds: Array.from(selectedModelIds) },
+      );
+      const skipped = result.requested - result.updated;
+      toast(
+        `已修改 ${result.updated} 个模型的分类${skipped > 0 ? `，${skipped} 个已在目标分类自动跳过` : ''}`,
+        'success',
+      );
+      clearSelectedModels();
+      setBatchCategoryOpen(false);
+      refreshModelAdminData();
+    } catch {
+      toast('批量修改分类失败', 'error');
+    } finally {
+      setBatchCategorySaving(false);
+    }
+  };
+
   const handleRestoreModel = async (model: DeletedModelListItem) => {
     setRestoringModelId(model.model_id);
     try {
@@ -1040,6 +1073,15 @@ function DesktopContent() {
               <>
                 <AdminButton onClick={clearSelectedModels} icon="close" size="sm" variant="secondary">
                   取消选择
+                </AdminButton>
+                <AdminButton
+                  onClick={() => setBatchCategoryOpen(true)}
+                  disabled={batchCategorySaving}
+                  icon="drive_file_move"
+                  size="sm"
+                  variant="tonal"
+                >
+                  批量改分类
                 </AdminButton>
                 <AdminButton
                   onClick={() => setBatchDeleteOpen(true)}
@@ -1817,6 +1859,17 @@ function DesktopContent() {
             </motion.div>
           )}
         </AnimatePresence>
+        <BatchCategoryDialog
+          open={batchCategoryOpen && selectedModelCount > 0}
+          saving={batchCategorySaving}
+          categories={catData?.items || []}
+          count={selectedModelCount}
+          allMatching={selectedAllMatching}
+          onClose={() => {
+            if (!batchCategorySaving) setBatchCategoryOpen(false);
+          }}
+          onConfirm={handleBatchUpdateCategory}
+        />
       </AdminManagementPage>
     </>
   );
@@ -1838,6 +1891,8 @@ function MobileContent() {
   const [selectedAllMatching, setSelectedAllMatching] = useState(false);
   const [batchDeleteOpen, setBatchDeleteOpen] = useState(false);
   const [batchDeleting, setBatchDeleting] = useState(false);
+  const [batchCategoryOpen, setBatchCategoryOpen] = useState(false);
+  const [batchCategorySaving, setBatchCategorySaving] = useState(false);
   const [uploadOpen, setUploadOpen] = useState(false);
   const [previewOpsOpen, setPreviewOpsOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<ModelAdminTab>('models');
@@ -2098,6 +2153,36 @@ function MobileContent() {
       toast('批量删除失败', 'error');
     } finally {
       setBatchDeleting(false);
+    }
+  };
+
+  const handleBatchUpdateCategory = async (categoryId: string) => {
+    setBatchCategorySaving(true);
+    try {
+      const result = await modelApi.batchUpdateCategory(
+        selectedAllMatching
+          ? {
+              categoryId,
+              allMatching: true,
+              filters: {
+                search: search.trim() || undefined,
+                categoryId: categoryFilter === CATEGORY_FILTER_ALL ? undefined : categoryFilter,
+              },
+            }
+          : { categoryId, modelIds: Array.from(selectedModelIds) },
+      );
+      const skipped = result.requested - result.updated;
+      toast(
+        `已修改 ${result.updated} 个模型的分类${skipped > 0 ? `，${skipped} 个已在目标分类自动跳过` : ''}`,
+        'success',
+      );
+      clearSelectedModels();
+      setBatchCategoryOpen(false);
+      refreshModelAdminData();
+    } catch {
+      toast('批量修改分类失败', 'error');
+    } finally {
+      setBatchCategorySaving(false);
     }
   };
 
@@ -2451,13 +2536,22 @@ function MobileContent() {
                 {allVisibleModelsSelected ? '取消' : '全选'}
               </button>
               {selectedModelCount > 0 && (
-                <button
-                  onClick={() => setBatchDeleteOpen(true)}
-                  disabled={batchDeleting}
-                  className="rounded-sm border border-error/20 bg-error/10 px-2.5 py-1.5 text-xs font-bold text-error disabled:opacity-40"
-                >
-                  删除
-                </button>
+                <>
+                  <button
+                    onClick={() => setBatchCategoryOpen(true)}
+                    disabled={batchCategorySaving}
+                    className="rounded-sm border border-primary/20 bg-primary/10 px-2.5 py-1.5 text-xs font-bold text-primary disabled:opacity-40"
+                  >
+                    改分类
+                  </button>
+                  <button
+                    onClick={() => setBatchDeleteOpen(true)}
+                    disabled={batchDeleting}
+                    className="rounded-sm border border-error/20 bg-error/10 px-2.5 py-1.5 text-xs font-bold text-error disabled:opacity-40"
+                  >
+                    删除
+                  </button>
+                </>
               )}
             </div>
           </div>
@@ -2927,6 +3021,17 @@ function MobileContent() {
           </motion.div>
         )}
       </AnimatePresence>
+      <BatchCategoryDialog
+        open={batchCategoryOpen && selectedModelCount > 0}
+        saving={batchCategorySaving}
+        categories={categories}
+        count={selectedModelCount}
+        allMatching={selectedAllMatching}
+        onClose={() => {
+          if (!batchCategorySaving) setBatchCategoryOpen(false);
+        }}
+        onConfirm={handleBatchUpdateCategory}
+      />
     </>
   );
 }

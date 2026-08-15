@@ -506,6 +506,86 @@ export function createModelManagementRouter({ prisma, metadataDir, getMeta, save
     },
   );
 
+  // Batch update model category (requires auth)
+  router.post(
+    '/api/models/batch-update-category',
+    mutationLimiter,
+    authMiddleware,
+    requireRole('ADMIN'),
+    async (req: AuthRequest, res: Response) => {
+      if (!prisma) {
+        res.status(503).json({ detail: '数据库未连接，无法批量修改分类' });
+        return;
+      }
+
+      const categoryId = typeof req.body?.categoryId === 'string' ? req.body.categoryId.trim() : '';
+      const allMatching = req.body?.allMatching === true;
+
+      try {
+        if (!categoryId) {
+          res.status(400).json({ detail: '请选择目标分类' });
+          return;
+        }
+        const category = await prisma.category.findUnique({ where: { id: categoryId } });
+        if (!category) {
+          res.status(400).json({ detail: '分类不存在' });
+          return;
+        }
+
+        let baseWhere: Prisma.ModelWhereInput;
+        let requested: number;
+        if (allMatching) {
+          baseWhere = await buildBatchDeleteFilterWhere(req.body?.filters);
+          requested = await prisma.model.count({ where: baseWhere });
+          if (requested > 5000) {
+            res.status(400).json({ detail: '单次按筛选条件最多修改 5000 个模型的分类，请缩小筛选范围' });
+            return;
+          }
+        } else {
+          const rawIds = req.body?.modelIds;
+          if (!Array.isArray(rawIds)) {
+            res.status(400).json({ detail: 'modelIds 必须是数组' });
+            return;
+          }
+          const modelIds = Array.from(
+            new Set(rawIds.map((id: unknown) => (typeof id === 'string' ? id.trim() : '')).filter(Boolean)),
+          );
+          if (modelIds.length === 0) {
+            res.status(400).json({ detail: '请选择要修改分类的模型' });
+            return;
+          }
+          if (modelIds.length > 500) {
+            res.status(400).json({ detail: '单次最多修改 500 个模型的分类' });
+            return;
+          }
+          baseWhere = { id: { in: modelIds } };
+          requested = modelIds.length;
+        }
+
+        // updateMany 是单条原子 UPDATE；已在目标分类的行不会命中，天然跳过。
+        // Prisma 的 not 不匹配 NULL，需单独放行未分类（categoryId 为空）的模型。
+        const updated = await prisma.model.updateMany({
+          where: {
+            AND: [baseWhere, { OR: [{ categoryId: { not: categoryId } }, { categoryId: null }] }],
+          },
+          data: { categoryId },
+        });
+
+        await cacheDelByPrefix('cache:models:');
+        await clearCategoryCache();
+
+        res.json({
+          message: '批量修改分类完成',
+          requested,
+          updated: updated.count,
+        });
+      } catch (err) {
+        logger.error({ err, categoryId }, '[models] Batch update category failed');
+        res.status(500).json({ detail: '批量修改分类失败' });
+      }
+    },
+  );
+
   // Deleted model listing and restore endpoints for recycle-bin workflows.
   router.get('/api/models/deleted', authMiddleware, requireRole('ADMIN'), async (req: AuthRequest, res: Response) => {
     res.setHeader('Cache-Control', 'no-store');

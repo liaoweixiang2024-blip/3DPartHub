@@ -226,6 +226,12 @@ export interface BatchDeleteModelsResponse {
 
 export type PurgeDeletedModelsResponse = BatchDeleteModelsResponse;
 
+export interface BatchUpdateCategoryResponse {
+  message: string;
+  requested: number;
+  updated: number;
+}
+
 export type PreviewDiagnosticStatus = 'ok' | 'warning' | 'invalid' | 'missing';
 export type PreviewDiagnosticFilter = PreviewDiagnosticStatus | 'problem' | 'all';
 
@@ -562,6 +568,16 @@ export const modelApi = {
   }): Promise<BatchDeleteModelsResponse> => {
     const res = await client.post('/models/batch-delete', data);
     return unwrapResponse<BatchDeleteModelsResponse>(res);
+  },
+
+  batchUpdateCategory: async (data: {
+    categoryId: string;
+    modelIds?: string[];
+    allMatching?: boolean;
+    filters?: { search?: string; categoryId?: string };
+  }): Promise<BatchUpdateCategoryResponse> => {
+    const res = await client.post('/models/batch-update-category', data);
+    return unwrapResponse<BatchUpdateCategoryResponse>(res);
   },
 
   update: async (
