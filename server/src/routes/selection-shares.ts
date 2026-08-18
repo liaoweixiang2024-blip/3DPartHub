@@ -4,7 +4,6 @@ import { getBusinessConfig } from '../lib/businessConfig.js';
 import { createLogger } from '../lib/logger.js';
 import { buildModelMatchMap } from '../lib/modelMatch.js';
 import { prisma } from '../lib/prisma.js';
-import { getAllSettings } from '../lib/settings.js';
 import { authMiddleware, AuthRequest } from '../middleware/auth.js';
 import { requireBrowseAccess } from '../middleware/browseAccess.js';
 
@@ -18,12 +17,7 @@ router.post('/api/selection-shares', authMiddleware, async (req: AuthRequest, re
   try {
     const userId = req.user!.userId;
 
-    const settings = await getAllSettings();
-    if (settings.share_enabled === false && req.user!.role !== 'ADMIN') {
-      res.status(403).json({ detail: '分享功能已关闭，请联系管理员' });
-      return;
-    }
-
+    // 分享总开关 feature_shares_enabled 由 main.ts 的 featureGuard 在路由入口统一拦截
     const { categorySlug, specs, productIds } = req.body;
 
     if (!categorySlug || !specs) {

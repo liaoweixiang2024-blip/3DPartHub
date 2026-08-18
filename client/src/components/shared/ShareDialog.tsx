@@ -25,7 +25,8 @@ export default function ShareDialog({ open, onClose, modelId, modelName }: Share
   const { toast } = useToast();
   const policy = getPublicSettingsSnapshot();
   const role = useAuthStore((s) => s.user?.role);
-  const shareEnabled = policy.share_enabled !== false && policy.feature_shares_enabled !== false;
+  const shareEnabled = policy.feature_shares_enabled !== false;
+  // 与后端口径一致：只看分享功能总开关（管理员可绕过，便于重新开启）
   const canShare = shareEnabled || role === 'ADMIN';
   const canPassword = policy.share_allow_password !== false;
   const canCustomExpiry = policy.share_allow_custom_expiry !== false;

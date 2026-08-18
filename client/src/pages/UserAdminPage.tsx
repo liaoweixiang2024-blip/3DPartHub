@@ -41,16 +41,23 @@ interface UserStats {
   admin: number;
   editor: number;
   viewer: number;
+  internal: number;
   active: number;
   disabled: number;
 }
 
-const ROLE_LABELS: Record<string, string> = { ADMIN: '管理员', EDITOR: '编辑者', VIEWER: '访客' };
+const ROLE_LABELS: Record<string, string> = {
+  ADMIN: '管理员',
+  EDITOR: '编辑者',
+  VIEWER: '访客',
+  INTERNAL: '内部',
+};
 
 const ROLE_COLORS: Record<string, string> = {
   ADMIN: 'bg-primary-container/15 text-primary',
   EDITOR: 'bg-blue-500/15 text-blue-400',
   VIEWER: 'bg-surface-container-highest text-on-surface-variant',
+  INTERNAL: 'bg-teal-500/15 text-teal-400',
 };
 
 const SORT_OPTIONS = [
@@ -64,6 +71,7 @@ const PERMISSION_HELP: Array<{ role: string; desc: string }> = [
   { role: '管理员', desc: '全部后台功能、用户管理、系统设置' },
   { role: '编辑者', desc: '上传/管理模型、内容审核、工单/询价处理' },
   { role: '访客', desc: '浏览、下载（受限额）、收藏、提交工单/询价' },
+  { role: '内部', desc: '权限同访客，仅用于标识内部员工，可配合「可分享模型」开关使用' },
 ];
 
 function relativeTime(value: string | null): string {
@@ -99,6 +107,7 @@ function UserRoleTabs({
         { value: 'ADMIN', label: '管理员', count: counts.ADMIN ?? 0, icon: 'shield' },
         { value: 'EDITOR', label: '编辑者', count: counts.EDITOR ?? 0, icon: 'edit' },
         { value: 'VIEWER', label: '访客', count: counts.VIEWER ?? 0, icon: 'person' },
+        { value: 'INTERNAL', label: '内部', count: counts.INTERNAL ?? 0, icon: 'badge' },
       ]}
       value={active}
       onChange={onChange}
@@ -389,6 +398,7 @@ export default function UserAdminPage() {
             <option value="ADMIN">管理员</option>
             <option value="EDITOR">编辑者</option>
             <option value="VIEWER">访客</option>
+            <option value="INTERNAL">内部</option>
           </select>
           <button
             type="button"
@@ -504,6 +514,7 @@ export default function UserAdminPage() {
                     <option value="ADMIN">管理员</option>
                     <option value="EDITOR">编辑者</option>
                     <option value="VIEWER">访客</option>
+                    <option value="INTERNAL">内部</option>
                   </select>
                   <AdminIconButton
                     icon={u.disabled ? 'lock_open' : 'block'}
@@ -576,7 +587,7 @@ export default function UserAdminPage() {
             ? `确定禁用选中的 ${selected.size} 个用户？他们将立即被登出。`
             : batchConfirm?.action === 'enable'
               ? `确定启用选中的 ${selected.size} 个用户？`
-              : `确定将选中的 ${selected.size} 个用户角色改为${batchConfirm?.role === 'ADMIN' ? '管理员' : batchConfirm?.role === 'EDITOR' ? '编辑者' : '访客'}？`
+              : `确定将选中的 ${selected.size} 个用户角色改为${ROLE_LABELS[batchConfirm?.role ?? ''] ?? batchConfirm?.role ?? ''}？`
         }
         confirmLabel="确认"
       />

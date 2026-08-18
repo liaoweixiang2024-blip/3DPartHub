@@ -1061,6 +1061,7 @@ export const zhCN: { translation: TranslationMap } = {
         admin: '管理员',
         editor: '编辑者',
         viewer: '查看者',
+        internal: '内部',
       },
     },
     threadSize: {

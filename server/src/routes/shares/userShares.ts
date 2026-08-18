@@ -90,19 +90,10 @@ export function createUserSharesRouter() {
         res.status(404).json({ detail: '模型不存在' });
         return;
       }
-      // 仅允许模型所有者（或管理员）创建分享链接，避免代管他人模型、绕过站内下载配额
-      if (model.createdById !== userId && req.user!.role !== 'ADMIN') {
-        res.status(403).json({ detail: '只能分享自己上传的模型' });
-        return;
-      }
-
       // --- Apply share policy ---
+      // 总开关 feature_shares_enabled 由 main.ts 的 featureGuard 在路由入口统一拦截；
+      // 这里不再限制「只能分享自己上传的模型」，也不再按用户区分（管理员/普通用户一视同仁）。
       const settings = await getAllSettings();
-      const sShareEnabled = settings.share_enabled !== false;
-      if (!sShareEnabled && req.user!.role !== 'ADMIN') {
-        res.status(403).json({ detail: '分享功能已关闭，请联系管理员' });
-        return;
-      }
       const sAllowPassword = settings.share_allow_password ?? true;
       const sAllowCustomExpiry = settings.share_allow_custom_expiry ?? true;
       const sDefaultExpireDays = Number(settings.share_default_expire_days) || 0;

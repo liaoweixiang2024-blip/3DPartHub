@@ -37,15 +37,22 @@ const ROLE_OPTIONS = [
   { value: 'ADMIN', label: '管理员' },
   { value: 'EDITOR', label: '编辑者' },
   { value: 'VIEWER', label: '访客' },
+  { value: 'INTERNAL', label: '内部' },
 ];
 
 const ROLE_BADGE: Record<string, string> = {
   ADMIN: 'bg-primary-container/15 text-primary',
   EDITOR: 'bg-blue-500/15 text-blue-400',
   VIEWER: 'bg-surface-container-highest text-on-surface-variant',
+  INTERNAL: 'bg-teal-500/15 text-teal-400',
 };
 
-const ROLE_LABEL: Record<string, string> = { ADMIN: '管理员', EDITOR: '编辑者', VIEWER: '访客' };
+const ROLE_LABEL: Record<string, string> = {
+  ADMIN: '管理员',
+  EDITOR: '编辑者',
+  VIEWER: '访客',
+  INTERNAL: '内部',
+};
 
 function formatDate(value: string | null): string {
   if (!value) return '—';

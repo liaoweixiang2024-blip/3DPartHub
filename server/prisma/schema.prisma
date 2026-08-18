@@ -120,6 +120,7 @@ enum Role {
   ADMIN
   EDITOR
   VIEWER
+  INTERNAL
 }
 
 model InviteCode {

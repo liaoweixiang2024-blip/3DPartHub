@@ -14,7 +14,7 @@ import { requireRole } from '../../middleware/rbac.js';
 
 const RESET_TOKEN_TTL_SECONDS = 1800;
 const PASSWORD_MIN_LENGTH = 8;
-const USER_ROLES = ['ADMIN', 'EDITOR', 'VIEWER'] as const;
+const USER_ROLES = ['ADMIN', 'EDITOR', 'VIEWER', 'INTERNAL'] as const;
 type UserRole = (typeof USER_ROLES)[number];
 const USER_SORTS = ['created_at', 'downloads', 'favorites', 'last_login'] as const;
 type UserSort = (typeof USER_SORTS)[number];
@@ -133,6 +133,7 @@ export function createAdminUsersRouter() {
           admin: roleCounts.ADMIN || 0,
           editor: roleCounts.EDITOR || 0,
           viewer: roleCounts.VIEWER || 0,
+          internal: roleCounts.INTERNAL || 0,
           active,
           disabled,
         };

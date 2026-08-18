@@ -1066,6 +1066,7 @@ export const enUS: { translation: TranslationMap } = {
         admin: 'Admin',
         editor: 'Editor',
         viewer: 'Viewer',
+        internal: 'Internal',
       },
     },
     threadSize: {

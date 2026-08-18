@@ -21,6 +21,7 @@ const ROLE_LABEL_KEYS: Record<string, string> = {
   ADMIN: 'profile.roles.admin',
   EDITOR: 'profile.roles.editor',
   VIEWER: 'profile.roles.viewer',
+  INTERNAL: 'profile.roles.internal',
 };
 
 const NOTIFICATION_ITEMS = ['ticket', 'inquiry', 'backup', 'favorite', 'model_conversion', 'download'] as const;

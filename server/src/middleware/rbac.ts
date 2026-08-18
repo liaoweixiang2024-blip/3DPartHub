@@ -26,6 +26,8 @@ export function requireRole(...roles: string[]) {
  */
 const PROJECT_ROLE_RANK: Record<Role, number> = {
   VIEWER: 1,
+  // INTERNAL 仅是全局用户标签（权限同访客），项目角色 API 白名单不含它，此处只为类型穷举补齐
+  INTERNAL: 1,
   EDITOR: 2,
   ADMIN: 3,
 };

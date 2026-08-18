@@ -575,7 +575,7 @@ export function useFeatureFlags(): FeatureFlags {
     productWall: settings?.feature_product_wall_enabled !== false,
     tickets: settings?.feature_tickets_enabled !== false,
     favorites: settings?.feature_favorites_enabled !== false,
-    shares: settings?.share_enabled !== false && settings?.feature_shares_enabled !== false,
+    shares: settings?.feature_shares_enabled !== false,
     downloads: settings?.feature_downloads_enabled !== false,
     registration: settings?.allow_register !== false,
     passwordReset: settings?.feature_password_reset_enabled !== false,
