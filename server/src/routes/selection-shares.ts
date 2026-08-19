@@ -18,7 +18,7 @@ router.post('/api/selection-shares', authMiddleware, async (req: AuthRequest, re
     const userId = req.user!.userId;
 
     // 分享总开关 feature_shares_enabled 由 main.ts 的 featureGuard 在路由入口统一拦截
-    const { categorySlug, specs, productIds } = req.body;
+    const { categorySlug, specs, productIds, autoCreated } = req.body;
 
     if (!categorySlug || !specs) {
       res.status(400).json({ detail: '缺少必要参数' });
@@ -51,6 +51,8 @@ router.post('/api/selection-shares', authMiddleware, async (req: AuthRequest, re
         specs,
         productIds: ids,
         createdById: userId,
+        // 提交工单时自动创建的快照标记为 auto，用户分享列表不展示
+        autoCreated: autoCreated === true,
       },
     });
 

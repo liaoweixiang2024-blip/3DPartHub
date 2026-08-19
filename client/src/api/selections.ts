@@ -308,6 +308,8 @@ export async function createSelectionShare(data: {
   categorySlug: string;
   specs: Record<string, string>;
   productIds: string[];
+  /** 提交工单时自动创建的快照标记，不在用户分享列表中展示 */
+  autoCreated?: boolean;
 }): Promise<SelectionShareResult> {
   const res = await client.post('/selection-shares', data);
   return unwrapResponse(res);

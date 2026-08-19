@@ -102,6 +102,8 @@ export function createAdminSharesRouter() {
         filter === 'model' || filter === 'expired' || !hasSelectionShares
           ? Promise.resolve([])
           : prisma.selectionShare.findMany({
+              // autoCreated=true 是提交工单时自动生成的选型快照，不算用户主动分享，管理列表不展示
+              where: { autoCreated: false },
               orderBy: { createdAt: 'desc' },
             }),
       ]);
@@ -209,12 +211,13 @@ export function createAdminSharesRouter() {
     try {
       const { cacheGetOrSet } = await import('../../lib/cache.js');
       const { value } = await cacheGetOrSet('cache:admin:shares:stats', 60, async () => {
+        // autoCreated 选型快照（工单来源）不计入分享统计，与列表口径一致
         const [modelTotal, selectionTotal, expired, modelAgg, selectionAgg] = await Promise.all([
           prisma.shareLink.count(),
-          prisma.selectionShare.count(),
+          prisma.selectionShare.count({ where: { autoCreated: false } }),
           prisma.shareLink.count({ where: { expiresAt: { not: null, lt: new Date() } } }),
           prisma.shareLink.aggregate({ _sum: { downloadCount: true, viewCount: true } }),
-          prisma.selectionShare.aggregate({ _sum: { viewCount: true } }),
+          prisma.selectionShare.aggregate({ where: { autoCreated: false }, _sum: { viewCount: true } }),
         ]);
         const total = modelTotal + selectionTotal;
         return {

@@ -342,6 +342,8 @@ model SelectionShare {
   createdById  String   @map("created_by_id")
   createdBy    User     @relation(fields: [createdById], references: [id])
   createdAt    DateTime @default(now()) @map("created_at")
+  /// 工单来源自动创建的快照（不显示在用户的分享列表里）
+  autoCreated  Boolean  @default(false) @map("auto_created")
 
   @@index([createdById, createdAt], map: "selection_shares_created_by_id_created_at_idx")
   @@index([categorySlug], map: "selection_shares_category_slug_idx")

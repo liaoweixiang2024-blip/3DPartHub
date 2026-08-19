@@ -200,7 +200,8 @@ export function createUserSharesRouter() {
         }),
         hasSelectionShares
           ? prisma.selectionShare.findMany({
-              where: { createdById: userId },
+              // autoCreated=true 是提交工单时自动生成的选型快照，不属于用户主动分享，列表不展示
+              where: { createdById: userId, autoCreated: false },
               orderBy: { createdAt: 'desc' },
               take: 100,
             })

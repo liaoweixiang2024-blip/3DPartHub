@@ -17,6 +17,8 @@ export function ResultCard({
   selected,
   onToggleSelect,
   onToggleInquiry,
+  onPrepareSourceUrl,
+  onBuildSourceUrl,
   expandedKits,
   onToggleKit,
   navigate,
@@ -28,6 +30,10 @@ export function ResultCard({
   selected: boolean;
   onToggleSelect: () => void;
   onToggleInquiry?: () => void;
+  /** 预创建选型分享快照（用户意图跳工单页时触发一次） */
+  onPrepareSourceUrl?: () => void;
+  /** 返回该结果所属选型状态对应的来源链接（如选型分享 /selection/s/<token>），未提供则回退模型页/选型首页 */
+  onBuildSourceUrl?: () => string | null | undefined;
   expandedKits: Set<string>;
   onToggleKit: (id: string) => void;
   navigate: ReturnType<typeof useNavigate>;
@@ -270,16 +276,18 @@ export function ResultCard({
           </a>
         ) : null}
         <button
-          onClick={() =>
+          onClick={() => {
+            onPrepareSourceUrl?.();
             navigate(`/support`, {
               state: {
                 modelNo: product.modelNo || product.name,
-                sourceUrl: product.matchedModelId ? `/model/${product.matchedModelId}` : '/selection',
+                sourceUrl:
+                  onBuildSourceUrl?.() ?? (product.matchedModelId ? `/model/${product.matchedModelId}` : '/selection'),
                 specs: product.specs,
                 source: 'selection' as const,
               },
-            })
-          }
+            });
+          }}
           className={`px-2.5 md:px-3 py-1 md:py-1.5 text-xs md:text-sm font-medium border border-outline-variant/30 text-on-surface-variant rounded-lg hover:bg-surface-container-high/50 inline-flex items-center gap-1 ${selectionPress}`}
         >
           <Icon name="support_agent" size={14} />

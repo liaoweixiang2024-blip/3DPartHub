@@ -874,11 +874,26 @@ export default function SelectionPage() {
   }, [shareLinkDialog, t, toast]);
 
   async function handleShare(withResults = false) {
-    if (!slug) return;
-    if (sharingTarget) return;
+    const path = await buildSelectionShareUrl(withResults);
+    if (!path) return;
+    await copyShareLink(`${window.location.origin}${path}`, {
+      title: withResults ? t('selectionPage.share.resultTitle') : t('selectionPage.share.categoryTitle'),
+      description: t('selectionPage.share.description'),
+      showDialogFirst: !isDesktop,
+    });
+  }
+
+  /**
+   * 创建选型分享并返回链接（复制到剪贴板由调用方处理）。
+   * 工单来源也复用这里：用户从选型结果提交工单时，来源直接指向当前选型结果快照
+   * （autoCreated=true，不在用户分享列表中展示）。
+   */
+  async function buildSelectionShareUrl(withResults: boolean, autoCreated = false): Promise<string | null> {
+    if (!slug) return null;
+    if (sharingTarget) return null;
     if (!user) {
       requireLogin(t('selectionPage.share.loginReason'));
-      return;
+      return null;
     }
     setSharingTarget(withResults ? 'result' : 'category');
     try {
@@ -899,14 +914,10 @@ export default function SelectionPage() {
         categorySlug: slug,
         specs: withResults ? specs : {},
         productIds,
+        autoCreated,
       };
       const result = await createSelectionShare(payload);
-      const url = `${window.location.origin}/selection/s/${result.token}`;
-      await copyShareLink(url, {
-        title: withResults ? t('selectionPage.share.resultTitle') : t('selectionPage.share.categoryTitle'),
-        description: t('selectionPage.share.description'),
-        showDialogFirst: !isDesktop,
-      });
+      return `/selection/s/${result.token}`;
     } catch (err: unknown) {
       if (import.meta.env.DEV) console.error('[Share] Error:', err instanceof Error ? err.message : String(err));
       const resp = typeof err === 'object' && err !== null ? (err as Record<string, unknown>).response : undefined;
@@ -914,10 +925,45 @@ export default function SelectionPage() {
       const apiMsg = typeof data === 'object' && data !== null ? (data as Record<string, unknown>).message : undefined;
       const errMsg = err instanceof Error ? err.message : t('selectionPage.unknownError');
       toast(t('selectionPage.share.failed', { message: apiMsg || errMsg }), 'error');
+      return null;
     } finally {
       setSharingTarget(null);
     }
   }
+
+  // 工单来源：预创建当前选型结果的分享快照（/selection/s/<token>），
+  // 结果卡片跳工单页时直接带上；未登录或创建失败由 ResultCard 回退（模型页/选型首页）。
+  // 筛选条件变化（specs/搜索词/分类）即作废旧快照并重建，保证来源始终对应当前结果。
+  const ticketSourceUrlRef = useRef<string | null>(null);
+  const ticketSourceBuildingRef = useRef(false);
+  const ticketSourceScopeRef = useRef<string>('');
+  const ticketSourceScope = `${slug ?? ''}|${JSON.stringify(specs)}|${search}`;
+  if (ticketSourceScopeRef.current !== ticketSourceScope) {
+    ticketSourceScopeRef.current = ticketSourceScope;
+    ticketSourceUrlRef.current = null;
+  }
+  const prepareTicketSourceUrl = useCallback(() => {
+    if (ticketSourceUrlRef.current || ticketSourceBuildingRef.current) return;
+    ticketSourceBuildingRef.current = true;
+    // autoCreated=true：工单来源快照，不进用户分享列表
+    buildSelectionShareUrl(true, true)
+      .then((path) => {
+        if (path) ticketSourceUrlRef.current = path;
+      })
+      .catch(() => {})
+      .finally(() => {
+        ticketSourceBuildingRef.current = false;
+      });
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- buildSelectionShareUrl 每次渲染重建，但内部读最新 state，预创建取调用时快照即可
+  }, []);
+  const getTicketSourceUrl = useCallback(() => ticketSourceUrlRef.current, []);
+
+  // 选型结果出现后预创建工单来源分享快照（用户未登录/分享开关关闭时静默跳过，回退逻辑兜底）
+  const hasVisibleResults = visibleFiltered.length > 0;
+  useEffect(() => {
+    if (hasVisibleResults) prepareTicketSourceUrl();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- scope 变化时快照已重置，此处触发重建
+  }, [ticketSourceScope, hasVisibleResults]);
 
   const totalProductCount = useMemo(() => cats.reduce((sum, c) => sum + (c.productCount ?? 0), 0), [cats]);
   const previewImages = [
@@ -1539,6 +1585,8 @@ export default function SelectionPage() {
                   selected={selectedIds.has(p.id)}
                   onToggleSelect={() => toggleInquiryProduct(visibleProduct)}
                   onToggleInquiry={canInquiry ? () => toggleInquiryProduct(visibleProduct) : undefined}
+                  onPrepareSourceUrl={prepareTicketSourceUrl}
+                  onBuildSourceUrl={getTicketSourceUrl}
                   expandedKits={expandedKits}
                   onToggleKit={toggleKit}
                   navigate={navigate}
@@ -1645,6 +1693,8 @@ export default function SelectionPage() {
                   selected={selectedIds.has(p.id)}
                   onToggleSelect={() => toggleInquiryProduct(visibleProduct)}
                   onToggleInquiry={canInquiry ? () => toggleInquiryProduct(visibleProduct) : undefined}
+                  onPrepareSourceUrl={prepareTicketSourceUrl}
+                  onBuildSourceUrl={getTicketSourceUrl}
                   expandedKits={expandedKits}
                   onToggleKit={toggleKit}
                   navigate={navigate}
