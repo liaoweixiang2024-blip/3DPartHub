@@ -1,9 +1,12 @@
 import { existsSync } from 'node:fs';
+import { join, resolve, sep } from 'node:path';
 import bcrypt from 'bcryptjs';
 import { Router, Request, Response } from 'express';
 import { sendAcceleratedFile } from '../../lib/acceleratedDownload.js';
 import { cacheDel, cacheGetOrSet, resolveCacheTtl, TTL, redis } from '../../lib/cache.js';
+import { config } from '../../lib/config.js';
 import { createProtectedResourceToken } from '../../lib/downloadTokenStore.js';
+import { modelDownloadFileName, modelDownloadSourceName } from '../../lib/modelDownloadName.js';
 import { prisma } from '../../lib/prisma.js';
 import { getAllSettings, getSetting } from '../../lib/settings.js';
 import { withAssetVersion } from '../../services/gltfAsset.js';
@@ -35,6 +38,20 @@ type ShareInfoCache = {
   } | null;
   modelId: string;
 };
+
+// 与 model-drawings.ts 的 resolveDrawingPath 同逻辑：把 drawingUrl 限制在 static/drawings 内。
+function resolveDrawingPath(modelId: string, drawingUrl?: string | null): string | null {
+  let candidate: string;
+  if (drawingUrl?.startsWith('/static/')) {
+    candidate = join(config.staticDir, drawingUrl.slice('/static/'.length));
+  } else {
+    candidate = join(config.staticDir, 'drawings', `${modelId}.pdf`);
+  }
+  const resolved = resolve(candidate);
+  const staticRoot = resolve(config.staticDir);
+  if (resolved !== staticRoot && !resolved.startsWith(`${staticRoot}${sep}`)) return null;
+  return resolved;
+}
 
 export function createPublicSharesRouter() {
   const router = Router();
@@ -135,7 +152,9 @@ export function createPublicSharesRouter() {
       expiresAt: share.expiresAt,
       siteTitle,
       gltfUrl: share.allowPreview && accessVerified ? withAssetVersion(model.gltfUrl, model.updatedAt) : undefined,
-      drawingUrl: share.allowDrawing && model.drawingUrl ? withAssetVersion(model.drawingUrl, model.updatedAt) : null,
+      // /static/drawings 属于 blockedStaticDirs，直接下发静态路径会 404；
+      // 改为下发受分享令牌保护的接口路径，与下载接口同一套校验。
+      drawingUrl: share.allowDrawing && model.drawingUrl ? `/api/shares/${encodeURIComponent(token)}/drawing` : null,
     });
   });
 
@@ -192,6 +211,78 @@ export function createPublicSharesRouter() {
     });
 
     res.json({ verified: true, accessToken: created.token, expiresAt: created.expiresAt });
+  });
+
+  // View PDF drawing via share link (inline)
+  router.get('/api/shares/:token/drawing', async (req: Request, res: Response) => {
+    const token = asSingleString(req.params.token);
+    if (!token) {
+      res.status(400).json({ detail: '分享参数无效' });
+      return;
+    }
+
+    const share = await prisma.shareLink.findUnique({
+      where: { token },
+      select: {
+        id: true,
+        modelId: true,
+        expiresAt: true,
+        allowDrawing: true,
+        password: true,
+      },
+    });
+
+    if (!share) {
+      res.status(404).json({ detail: '分享链接不存在' });
+      return;
+    }
+
+    if (share.expiresAt && new Date() > share.expiresAt) {
+      res.status(410).json({ detail: '分享链接已过期' });
+      return;
+    }
+
+    if (!share.allowDrawing) {
+      res.status(403).json({ detail: '此链接不允许查看图纸' });
+      return;
+    }
+
+    if (!hasShareAccess(share.id, share.password, req.query.share_access_token)) {
+      res.status(403).json({ detail: '请输入正确的分享密码' });
+      return;
+    }
+
+    const model = await prisma.model.findUnique({
+      where: { id: share.modelId },
+      select: {
+        id: true,
+        name: true,
+        originalName: true,
+        drawingName: true,
+        drawingUrl: true,
+        updatedAt: true,
+      },
+    });
+    if (!model?.drawingUrl) {
+      res.status(404).json({ detail: '图纸不存在' });
+      return;
+    }
+
+    const drawingPath = resolveDrawingPath(model.id, model.drawingUrl);
+    if (!drawingPath || !existsSync(drawingPath)) {
+      res.status(404).json({ detail: '图纸文件不存在' });
+      return;
+    }
+
+    const sourceName = modelDownloadSourceName(model.name || model.drawingName, model.originalName, model.id);
+    const fileName = modelDownloadFileName(sourceName, 'pdf', model.id);
+    sendAcceleratedFile(req, res, {
+      filePath: drawingPath,
+      fileName,
+      contentType: 'application/pdf',
+      disposition: 'inline',
+      cacheControl: 'private, no-store',
+    });
   });
 
   // Download via share link

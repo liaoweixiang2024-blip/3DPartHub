@@ -28,6 +28,9 @@ const ModelViewer = lazy(loadModelViewer);
 
 const VIEWER_PREFS_KEY = 'model_viewer_display_prefs_v1';
 
+// 无过期时间的分享，图纸链接用固定版本参数避免每次渲染生成不同 URL
+const modelVersionFallback = 1;
+
 function getShareViewerPrefs() {
   const settings = getPublicSettingsSnapshot();
   const defaultPreset = (getDefaultPreset() as MaterialPresetKey) || 'default';
@@ -267,6 +270,16 @@ export default function SharePage() {
   if (!info) return null;
 
   const downloadDisabled = downloading || (info.downloadLimit > 0 && info.remainingDownloads <= 0);
+  // 有密码的分享，图纸接口与下载接口一样需要带上 share_access_token；
+  // 无密码分享仅以模型更新时间做缓存版本号（保持与后端 withAssetVersion 一致的语义）
+  const drawingVersion = new Date(info.expiresAt ?? 0).getTime();
+  const drawingHref = info.drawingUrl
+    ? `${info.drawingUrl}${info.drawingUrl.includes('?') ? '&' : '?'}${
+        info.hasPassword && shareAccessToken
+          ? `share_access_token=${encodeURIComponent(shareAccessToken)}`
+          : `v=${encodeURIComponent(String(drawingVersion || modelVersionFallback))}`
+      }`
+    : null;
   const downloadLabel = downloading
     ? t('sharePage.downloading')
     : info.downloadLimit > 0
@@ -374,12 +387,12 @@ export default function SharePage() {
           {/* Drawing */}
           {info.drawingUrl && (
             <a
-              href={info.drawingUrl}
+              href={drawingHref ?? undefined}
               target="_blank"
               rel="noopener noreferrer"
               onClick={(event) => {
                 event.preventDefault();
-                openDocumentUrl(info.drawingUrl!, { title: t('sharePage.drawingTitle') });
+                openDocumentUrl(drawingHref ?? '', { title: t('sharePage.drawingTitle') });
               }}
               className="flex items-center gap-3 rounded-lg bg-surface-container-high px-4 py-3 text-sm text-on-surface hover:bg-surface-container-highest transition-colors"
             >
