@@ -135,6 +135,23 @@ function normalizeTicketAttachmentInput(ticketId: string, attachment: unknown): 
   return ticketAttachmentUrl(ticketId, attachment);
 }
 
+// 工单来源仅允许站内白名单路径（模型详情 / 选型 / 首页搜索），存相对路径，杜绝外链与开放重定向
+const TICKET_SOURCE_URL_PREFIXES = ['/model/', '/selection', '/?q='];
+
+function cleanTicketSourceUrl(value: unknown): string | null {
+  if (typeof value !== 'string') return null;
+  const trimmed = value.trim();
+  if (!trimmed || trimmed.length > 300) return null;
+  if (!TICKET_SOURCE_URL_PREFIXES.some((prefix) => trimmed.startsWith(prefix))) return null;
+  try {
+    const parsed = new URL(trimmed, 'http://ticket.source.local');
+    if (parsed.origin !== 'http://ticket.source.local') return null;
+    return `${parsed.pathname}${parsed.search}${parsed.hash}`;
+  } catch {
+    return null;
+  }
+}
+
 export function createSupportTicketRouter() {
   const router = Router();
 
@@ -143,6 +160,7 @@ export function createSupportTicketRouter() {
     const { basePart, classification, description } = req.body;
     const cleanDescription = cleanUserText(description);
     const cleanBasePart = cleanUserText(basePart, 120);
+    const cleanSourceUrl = cleanTicketSourceUrl(req.body.sourceUrl);
 
     if (!cleanDescription) {
       res.status(400).json({ detail: '问题描述不能为空' });
@@ -180,6 +198,7 @@ export function createSupportTicketRouter() {
         data: {
           userId: req.user!.userId,
           basePart: cleanBasePart || null,
+          sourceUrl: cleanSourceUrl,
           classification: normalizedClassification,
           description: cleanDescription,
         },

@@ -8,6 +8,7 @@ import { AdminEmptyState, AdminLoadingState, AdminManagementPage } from '../comp
 import { AdminPageShell } from '../components/shared/AdminPageShell';
 import Icon from '../components/shared/Icon';
 import InfiniteLoadTrigger from '../components/shared/InfiniteLoadTrigger';
+import TicketSourceLink from '../components/shared/TicketSourceLink';
 import { useDocumentTitle } from '../hooks/useDocumentTitle';
 import { useVisibleItems } from '../hooks/useVisibleItems';
 import { useMediaQuery } from '../layouts/hooks/useMediaQuery';
@@ -17,6 +18,7 @@ import { usePublicSettings } from '../lib/publicSettings';
 interface MyTicket {
   id: string;
   basePart: string | null;
+  sourceUrl: string | null;
   classification: string;
   description: string;
   status: string;
@@ -156,7 +158,15 @@ function Content() {
                 </span>
                 <span className="text-xs text-on-surface-variant">{classificationLabel}</span>
                 <p className="text-sm text-on-surface truncate">{ticket.description}</p>
-                <span className="text-xs text-on-surface-variant truncate">{ticket.basePart || '—'}</span>
+                {ticket.basePart || ticket.sourceUrl ? (
+                  <TicketSourceLink
+                    basePart={ticket.basePart}
+                    sourceUrl={ticket.sourceUrl}
+                    className="min-w-0 text-xs text-on-surface-variant"
+                  />
+                ) : (
+                  <span className="text-xs text-on-surface-variant">—</span>
+                )}
                 <span className="text-xs text-on-surface-variant flex items-center gap-1">
                   <Icon name="schedule" size={12} className="shrink-0" />
                   {new Date(ticket.createdAt).toLocaleDateString(i18n.language)}
@@ -256,8 +266,12 @@ function MobileContent() {
                   {ticket.description}
                 </p>
                 <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-on-surface-variant">
-                  {ticket.basePart && (
-                    <span className="break-all">{t('myTickets.basePartPrefix', { part: ticket.basePart })}</span>
+                  {(ticket.basePart || ticket.sourceUrl) && (
+                    <TicketSourceLink
+                      basePart={ticket.basePart}
+                      sourceUrl={ticket.sourceUrl}
+                      className="min-w-0 text-[11px]"
+                    />
                   )}
                   <span className="flex items-center gap-1 shrink-0">
                     <Icon name="schedule" size={11} />

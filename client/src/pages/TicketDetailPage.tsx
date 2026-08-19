@@ -17,6 +17,7 @@ import Icon from '../components/shared/Icon';
 import { PageRefreshIndicator } from '../components/shared/PageRefreshFallback';
 import QuickReplyChips from '../components/shared/QuickReplyChips';
 import SafeImage from '../components/shared/SafeImage';
+import TicketSourceLink from '../components/shared/TicketSourceLink';
 import { useToast } from '../components/shared/Toast';
 import { useDocumentTitle } from '../hooks/useDocumentTitle';
 import { useMediaQuery } from '../layouts/hooks/useMediaQuery';
@@ -31,6 +32,7 @@ interface TicketInfo {
   id: string;
   userId: string;
   basePart: string | null;
+  sourceUrl: string | null;
   classification: string;
   description: string;
   status: string;
@@ -196,9 +198,9 @@ function OriginalMessage({ ticket }: { ticket: TicketInfo }) {
         <div className="rounded-lg px-3.5 py-2.5 text-sm leading-relaxed whitespace-pre-wrap break-words bg-surface-container-high text-on-surface border border-outline-variant/10">
           {ticket.description}
         </div>
-        {ticket.basePart && (
-          <p className="text-[11px] text-on-surface-variant mt-1 ml-1 break-words">
-            {t('ticketDetail.basePart', { part: ticket.basePart })}
+        {(ticket.basePart || ticket.sourceUrl) && (
+          <p className="mt-1 ml-1 flex flex-wrap items-center gap-1 text-[11px] text-on-surface-variant">
+            <TicketSourceLink basePart={ticket.basePart} sourceUrl={ticket.sourceUrl} className="break-all" />
           </p>
         )}
       </div>

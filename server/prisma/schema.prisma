@@ -392,6 +392,7 @@ model SupportTicket {
   userId         String   @map("user_id")
   user           User     @relation(fields: [userId], references: [id])
   basePart       String?  @map("base_part")
+  sourceUrl      String?  @map("source_url")
   classification String
   description    String
   status         String   @default("open")

@@ -19,10 +19,17 @@ interface SupportContext {
   modelNo?: string;
   modelName?: string;
   searchQuery?: string;
+  sourceUrl?: string;
   classification?: string;
   description?: string;
   specs?: Record<string, string>;
   source?: 'selection' | 'model' | 'model_search';
+}
+
+// 与后端 cleanTicketSourceUrl 同口径：仅接受站内白名单相对路径
+function isSafeSourceUrl(value?: string): value is string {
+  if (!value) return false;
+  return value.startsWith('/model/') || value.startsWith('/selection') || value.startsWith('/?q=');
 }
 
 function useContextState(): { basePart: string; ctx: SupportContext | null } {
@@ -163,6 +170,7 @@ function DesktopContent() {
     try {
       await client.post('/tasks', {
         basePart: formData.basePart || undefined,
+        sourceUrl: isSafeSourceUrl(ctx?.sourceUrl) ? ctx.sourceUrl : undefined,
         classification: formData.classification,
         description: formData.description + (suffix ? `\n\n${suffix}` : ''),
       });
@@ -453,6 +461,7 @@ function MobileContent() {
     try {
       await client.post('/tasks', {
         basePart: formData.basePart || undefined,
+        sourceUrl: isSafeSourceUrl(ctx?.sourceUrl) ? ctx.sourceUrl : undefined,
         classification: formData.classification,
         description: formData.description + (suffix ? `\n\n${suffix}` : ''),
       });

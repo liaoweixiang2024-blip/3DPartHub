@@ -272,7 +272,12 @@ export function ResultCard({
         <button
           onClick={() =>
             navigate(`/support`, {
-              state: { modelNo: product.modelNo || product.name, specs: product.specs, source: 'selection' as const },
+              state: {
+                modelNo: product.modelNo || product.name,
+                sourceUrl: product.matchedModelId ? `/model/${product.matchedModelId}` : '/selection',
+                specs: product.specs,
+                source: 'selection' as const,
+              },
             })
           }
           className={`px-2.5 md:px-3 py-1 md:py-1.5 text-xs md:text-sm font-medium border border-outline-variant/30 text-on-surface-variant rounded-lg hover:bg-surface-container-high/50 inline-flex items-center gap-1 ${selectionPress}`}

@@ -10,6 +10,7 @@ import Icon from '../components/shared/Icon';
 import InfiniteLoadTrigger from '../components/shared/InfiniteLoadTrigger';
 import ResponsiveSectionTabs from '../components/shared/ResponsiveSectionTabs';
 import SearchField from '../components/shared/SearchField';
+import TicketSourceLink from '../components/shared/TicketSourceLink';
 import { useToast } from '../components/shared/Toast';
 import { useDocumentTitle } from '../hooks/useDocumentTitle';
 import { useImeSafeSearchInput } from '../hooks/useImeSafeSearchInput';
@@ -71,6 +72,7 @@ function ticketMatchesSearch(
     ticket.id,
     ticket.description,
     ticket.basePart,
+    ticket.sourceUrl,
     ticket.classification,
     classificationMap.get(ticket.classification),
     ticket.status,
@@ -342,9 +344,18 @@ function DesktopContent() {
                     </span>
                     <div className="min-w-0 flex-1">
                       <p className="text-sm text-on-surface truncate">{ticket.description}</p>
-                      <p className="text-[11px] text-on-surface-variant/70 mt-0.5">
-                        {ticket.user?.username || '未知用户'}
-                        {ticket.basePart ? ` · ${ticket.basePart}` : ''}
+                      <p className="mt-0.5 flex min-w-0 items-center gap-1 text-[11px] text-on-surface-variant/70">
+                        <span className="shrink-0">{ticket.user?.username || '未知用户'}</span>
+                        {ticket.basePart || ticket.sourceUrl ? (
+                          <>
+                            <span className="shrink-0">·</span>
+                            <TicketSourceLink
+                              basePart={ticket.basePart}
+                              sourceUrl={ticket.sourceUrl}
+                              className="min-w-0 text-[11px]"
+                            />
+                          </>
+                        ) : null}
                       </p>
                     </div>
                     <span className="shrink-0 text-xs text-on-surface-variant/50 tabular-nums">

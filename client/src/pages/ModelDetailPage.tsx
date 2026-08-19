@@ -973,6 +973,7 @@ export default function ModelDetailPage() {
                     state={{
                       modelName: modelData.name,
                       modelNo: modelData.name,
+                      sourceUrl: `/model/${modelData.id}`,
                       specs: Object.fromEntries(modelData.specs.map((s) => [s.label, s.value])),
                       source: 'model',
                     }}

@@ -5,6 +5,7 @@ export interface Ticket {
   id: string;
   userId: string;
   basePart: string | null;
+  sourceUrl: string | null;
   classification: string;
   description: string;
   status: string;

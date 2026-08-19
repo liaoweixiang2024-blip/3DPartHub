@@ -1273,6 +1273,7 @@ export default function HomePage() {
                   state={{
                     source: 'model_search',
                     searchQuery: searchQuery.trim(),
+                    sourceUrl: `/?q=${encodeURIComponent(searchQuery.trim())}`,
                     classification: 'novel',
                     description: t('home.requestDescription', { query: searchQuery.trim() }),
                   }}
