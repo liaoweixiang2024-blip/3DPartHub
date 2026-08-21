@@ -289,6 +289,9 @@ export function createSettingsPublicRouter() {
   // admin-configured favicon can't be beaten by leftover build-time declarations.
   router.get('/api/settings/head-fragment', async (_req, res: Response) => {
     res.set('Cache-Control', 'no-store, no-cache, must-revalidate');
+    // nginx SSI 子请求不会解压响应：压缩中间件若 gzip 本片段，gzip 字节会被原样
+    // 拼进 index.html，页面顶部出现乱码（框框/问号）。显式 identity 让中间件跳过压缩。
+    res.set('Content-Encoding', 'none');
     try {
       const all = await getAllSettings();
       const title = String(all.site_browser_title || all.site_title || '3DPartHub');

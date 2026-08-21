@@ -1599,7 +1599,7 @@ const SETTINGS_NAV_GROUPS = [
   {
     title: '运维维护',
     icon: 'build',
-    sections: ['系统运维', '数据备份'],
+    sections: ['系统运维', '数据备份', '关于'],
   },
 ] as const;
 
@@ -5924,6 +5924,7 @@ function Content() {
     ...cacheStorageSectionTabs,
     { title: '数据备份', icon: 'cloud_upload' },
     { title: '缓存清理', icon: 'cleaning_services' },
+    { title: '关于', icon: 'info' },
   ];
   const resolvedActiveTab = activeTab === CACHE_STORAGE_GROUP_TITLE ? CACHE_STORAGE_SECTION_TITLES[0] : activeTab;
   const activeGroup = GROUPS.find((group) => group.title === resolvedActiveTab);
@@ -7555,134 +7556,177 @@ function Content() {
                             </div>
                           )}
                         </div>
-
-                        {/* System Update — version detection only */}
-                        <div className="px-6 py-4 border-t border-outline-variant/10">
-                          <div className="flex items-center justify-between gap-4 mb-3">
-                            <div>
-                              <p className="text-sm font-medium text-on-surface">版本检测</p>
-                              <p className="text-xs text-on-surface-variant mt-0.5">
-                                当前版本:{' '}
-                                <span className="font-mono text-primary-container">
-                                  {currentVersion || updateInfo?.current || '—'}
-                                </span>
-                                {updateInfo &&
-                                  !updateInfo.updateAvailable &&
-                                  (updateInfo.current || currentVersion) !== 'unknown' && (
-                                    <span className="ml-1.5 text-emerald-400">· 已是最新</span>
-                                  )}
-                                {updateInfo?.updateAvailable && (
-                                  <>
-                                    {' '}
-                                    · 最新版本: <span className="font-mono text-emerald-400">{updateInfo.remote}</span>
-                                  </>
-                                )}
-                              </p>
-                            </div>
-                            <button
-                              onClick={handleCheckUpdate}
-                              disabled={checkingUpdate || adminBusy}
-                              className="px-4 py-2 text-xs font-medium border border-outline-variant/40 text-on-surface-variant rounded-md hover:text-on-surface hover:bg-surface-container-high/50 disabled:opacity-50 transition-colors flex items-center gap-1.5"
-                            >
-                              <Icon name="search" size={14} className={checkingUpdate ? 'animate-spin' : ''} />
-                              {checkingUpdate ? '检查中...' : '检查更新'}
-                            </button>
-                          </div>
-
-                          {updateInfo?.updateAvailable && (
-                            <div className="mt-2 rounded-md bg-primary/10 border border-primary/20 overflow-hidden">
-                              {/* Version comparison header */}
-                              <div className="px-4 py-3 bg-primary/5 border-b border-primary/10">
-                                <div className="flex items-center gap-3">
-                                  <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-surface-container-lowest text-on-surface-variant border border-outline-variant/20 font-mono">
-                                    {updateInfo.current}
-                                  </span>
-                                  <Icon name="arrow_forward" size={16} className="text-primary" />
-                                  <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 font-mono">
-                                    {updateInfo.remote}
-                                  </span>
-                                  <span className="text-xs font-medium text-primary">发现新版本</span>
-                                </div>
-                              </div>
-
-                              {/* Release notes */}
-                              {updateInfo.releaseNotes && (
-                                <div className="px-4 py-3">
-                                  <p className="text-xs font-medium text-on-surface mb-2">更新内容</p>
-                                  <div className="max-h-48 overflow-y-auto text-xs text-on-surface-variant/80 space-y-0.5 whitespace-pre-line bg-surface-container/50 rounded p-3">
-                                    {updateInfo.releaseNotes}
-                                  </div>
-                                </div>
-                              )}
-
-                              {/* Upgrade command */}
-                              <div className="px-4 py-3 border-t border-primary/10">
-                                <p className="text-xs text-on-surface-variant mb-2">
-                                  服务器默认启用自动更新；如需立即更新，执行：
-                                </p>
-                                <div className="bg-surface-container rounded p-3 font-mono text-xs text-on-surface select-all space-y-1">
-                                  <div>cd /opt/3dparthub</div>
-                                  <div>
-                                    curl -L -o docker-compose.yml
-                                    https://raw.githubusercontent.com/liaoweixiang2024-blip/3DPartHub/main/docker-compose.yml
-                                  </div>
-                                  <div>touch .env</div>
-                                  <div>
-                                    grep -q '^IMAGE_TAG=' .env && sed -i 's/^IMAGE_TAG=.*/IMAGE_TAG=latest/' .env ||
-                                    echo 'IMAGE_TAG=latest' &gt;&gt; .env
-                                  </div>
-                                  <div>docker compose pull</div>
-                                  <div>docker compose up -d --force-recreate</div>
-                                </div>
-                                <p className="text-[10px] text-on-surface-variant/50 mt-2">
-                                  不要复制 shell 提示符；升级后数据库会自动迁移，请查看日志确认: docker compose logs -f
-                                  api
-                                </p>
-                                {updateInfo.releaseUrl && (
-                                  <a
-                                    href={updateInfo.releaseUrl}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    className="inline-block mt-2 text-xs text-primary hover:underline"
-                                  >
-                                    查看 GitHub Release 详情 →
-                                  </a>
-                                )}
-                              </div>
-                            </div>
-                          )}
-
-                          {updateInfo?.releaseNotes && !updateInfo.updateAvailable && (
-                            <div className="mt-2 rounded-md bg-surface-container/60 border border-outline-variant/20 overflow-hidden">
-                              <div className="px-4 py-3 border-b border-outline-variant/10">
-                                <div className="flex items-center justify-between gap-3">
-                                  <p className="text-xs font-medium text-on-surface">最新版本更新内容</p>
-                                  <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-surface-container-lowest text-on-surface-variant border border-outline-variant/20 font-mono">
-                                    {updateInfo.remote}
-                                  </span>
-                                </div>
-                              </div>
-                              <div className="px-4 py-3">
-                                <div className="max-h-48 overflow-y-auto text-xs text-on-surface-variant/80 space-y-0.5 whitespace-pre-line bg-surface-container/50 rounded p-3">
-                                  {updateInfo.releaseNotes}
-                                </div>
-                                {updateInfo.releaseUrl && (
-                                  <a
-                                    href={updateInfo.releaseUrl}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    className="inline-block mt-2 text-xs text-primary hover:underline"
-                                  >
-                                    查看 GitHub Release 详情 →
-                                  </a>
-                                )}
-                              </div>
-                            </div>
-                          )}
-                        </div>
                       </div>
                     </div>
                   </>
+                )}
+
+                {activeTab === '关于' && (
+                  <div className="bg-surface-container-low rounded-lg border border-outline-variant/10 overflow-hidden">
+                    <div className="divide-y divide-outline-variant/5">
+                      {/* Program intro */}
+                      <div className="px-6 py-4">
+                        <p className="text-sm font-medium text-on-surface">程序介绍</p>
+                        <p className="text-xs text-on-surface-variant/80 mt-1.5 leading-relaxed">
+                          3DPartHub
+                          是一套面向制造企业的三维零件模型管理平台，覆盖模型上传与格式转换、在线预览与测量、分类检索、产品选型、工单与询价、分享协作、数据备份等完整能力。前后端一体部署，Docker
+                          一键安装，支持多级权限与功能开关。
+                        </p>
+                        <div className="mt-3 flex flex-wrap items-center gap-x-6 gap-y-1.5 text-xs text-on-surface-variant">
+                          <span>
+                            开发者：<span className="text-on-surface">廖为祥</span>（全栈开发）
+                          </span>
+                          <span>
+                            QQ：
+                            <a
+                              href="http://wpa.qq.com/msgrd?v=3&uin=255955956&site=qq&menu=yes"
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-primary hover:underline"
+                            >
+                              255955956
+                            </a>
+                          </span>
+                          <span>
+                            网址：
+                            <a
+                              href="https://liaoweixiang.com"
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-primary hover:underline"
+                            >
+                              liaoweixiang.com
+                            </a>
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* System Update — version detection only */}
+                      <div className="px-6 py-4">
+                        <div className="flex items-center justify-between gap-4 mb-3">
+                          <div>
+                            <p className="text-sm font-medium text-on-surface">版本检测</p>
+                            <p className="text-xs text-on-surface-variant mt-0.5">
+                              当前版本:{' '}
+                              <span className="font-mono text-primary-container">
+                                {currentVersion || updateInfo?.current || '—'}
+                              </span>
+                              {updateInfo &&
+                                !updateInfo.updateAvailable &&
+                                (updateInfo.current || currentVersion) !== 'unknown' && (
+                                  <span className="ml-1.5 text-emerald-400">· 已是最新</span>
+                                )}
+                              {updateInfo?.updateAvailable && (
+                                <>
+                                  {' '}
+                                  · 最新版本: <span className="font-mono text-emerald-400">{updateInfo.remote}</span>
+                                </>
+                              )}
+                            </p>
+                          </div>
+                          <button
+                            onClick={handleCheckUpdate}
+                            disabled={checkingUpdate || adminBusy}
+                            className="px-4 py-2 text-xs font-medium border border-outline-variant/40 text-on-surface-variant rounded-md hover:text-on-surface hover:bg-surface-container-high/50 disabled:opacity-50 transition-colors flex items-center gap-1.5"
+                          >
+                            <Icon name="search" size={14} className={checkingUpdate ? 'animate-spin' : ''} />
+                            {checkingUpdate ? '检查中...' : '检查更新'}
+                          </button>
+                        </div>
+
+                        {updateInfo?.updateAvailable && (
+                          <div className="mt-2 rounded-md bg-primary/10 border border-primary/20 overflow-hidden">
+                            {/* Version comparison header */}
+                            <div className="px-4 py-3 bg-primary/5 border-b border-primary/10">
+                              <div className="flex items-center gap-3">
+                                <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-surface-container-lowest text-on-surface-variant border border-outline-variant/20 font-mono">
+                                  {updateInfo.current}
+                                </span>
+                                <Icon name="arrow_forward" size={16} className="text-primary" />
+                                <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 font-mono">
+                                  {updateInfo.remote}
+                                </span>
+                                <span className="text-xs font-medium text-primary">发现新版本</span>
+                              </div>
+                            </div>
+
+                            {/* Release notes */}
+                            {updateInfo.releaseNotes && (
+                              <div className="px-4 py-3">
+                                <p className="text-xs font-medium text-on-surface mb-2">更新内容</p>
+                                <div className="max-h-48 overflow-y-auto text-xs text-on-surface-variant/80 space-y-0.5 whitespace-pre-line bg-surface-container/50 rounded p-3">
+                                  {updateInfo.releaseNotes}
+                                </div>
+                              </div>
+                            )}
+
+                            {/* Upgrade command */}
+                            <div className="px-4 py-3 border-t border-primary/10">
+                              <p className="text-xs text-on-surface-variant mb-2">
+                                服务器默认启用自动更新；如需立即更新，执行：
+                              </p>
+                              <div className="bg-surface-container rounded p-3 font-mono text-xs text-on-surface select-all space-y-1">
+                                <div>cd /opt/3dparthub</div>
+                                <div>
+                                  curl -L -o docker-compose.yml
+                                  https://raw.githubusercontent.com/liaoweixiang2024-blip/3DPartHub/main/docker-compose.yml
+                                </div>
+                                <div>touch .env</div>
+                                <div>
+                                  grep -q '^IMAGE_TAG=' .env && sed -i 's/^IMAGE_TAG=.*/IMAGE_TAG=latest/' .env || echo
+                                  'IMAGE_TAG=latest' &gt;&gt; .env
+                                </div>
+                                <div>docker compose pull</div>
+                                <div>docker compose up -d --force-recreate</div>
+                              </div>
+                              <p className="text-[10px] text-on-surface-variant/50 mt-2">
+                                不要复制 shell 提示符；升级后数据库会自动迁移，请查看日志确认: docker compose logs -f
+                                api
+                              </p>
+                              {updateInfo.releaseUrl && (
+                                <a
+                                  href={updateInfo.releaseUrl}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="inline-block mt-2 text-xs text-primary hover:underline"
+                                >
+                                  查看 GitHub Release 详情 →
+                                </a>
+                              )}
+                            </div>
+                          </div>
+                        )}
+
+                        {updateInfo?.releaseNotes && !updateInfo.updateAvailable && (
+                          <div className="mt-2 rounded-md bg-surface-container/60 border border-outline-variant/20 overflow-hidden">
+                            <div className="px-4 py-3 border-b border-outline-variant/10">
+                              <div className="flex items-center justify-between gap-3">
+                                <p className="text-xs font-medium text-on-surface">最新版本更新内容</p>
+                                <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-surface-container-lowest text-on-surface-variant border border-outline-variant/20 font-mono">
+                                  {updateInfo.remote}
+                                </span>
+                              </div>
+                            </div>
+                            <div className="px-4 py-3">
+                              <div className="max-h-48 overflow-y-auto text-xs text-on-surface-variant/80 space-y-0.5 whitespace-pre-line bg-surface-container/50 rounded p-3">
+                                {updateInfo.releaseNotes}
+                              </div>
+                              {updateInfo.releaseUrl && (
+                                <a
+                                  href={updateInfo.releaseUrl}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="inline-block mt-2 text-xs text-primary hover:underline"
+                                >
+                                  查看 GitHub Release 详情 →
+                                </a>
+                              )}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
                 )}
 
                 {activeTab === '缓存清理' && (
