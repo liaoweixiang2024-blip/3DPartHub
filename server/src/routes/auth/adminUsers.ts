@@ -21,6 +21,13 @@ type UserSort = (typeof USER_SORTS)[number];
 const USER_EDITABLE_TEXT_FIELDS = ['company', 'phone', 'department', 'bio'] as const;
 const EXPORT_LIMIT = 5000;
 const BATCH_LIMIT = 200;
+// stats 接口的 Redis 缓存键（见 GET /api/admin/users/stats）
+const USER_STATS_CACHE_KEY = 'cache:admin:users:stats';
+
+/** 角色/禁用/删除等影响统计的操作成功后调用，让 tab 计数立即生效而不是等 60s 缓存过期 */
+function invalidateUserStatsCache() {
+  return cacheDel(USER_STATS_CACHE_KEY).catch(() => {});
+}
 
 function routeParam(value: string | string[] | undefined): string | undefined {
   return Array.isArray(value) ? value[0] : value;
@@ -120,7 +127,7 @@ export function createAdminUsersRouter() {
   router.get('/api/admin/users/stats', authMiddleware, requireRole('ADMIN'), async (_req, res: Response) => {
     try {
       const { cacheGetOrSet } = await import('../../lib/cache.js');
-      const { value } = await cacheGetOrSet('cache:admin:users:stats', 60, async () => {
+      const { value } = await cacheGetOrSet(USER_STATS_CACHE_KEY, 60, async () => {
         const [total, roleGroups, active, disabled] = await Promise.all([
           prisma.user.count(),
           prisma.user.groupBy({ by: ['role'], _count: { _all: true } }),
@@ -325,6 +332,7 @@ export function createAdminUsersRouter() {
         await Promise.all([
           revokeAllTokensBefore(userId, nowSeconds()).catch(() => {}),
           cacheDel(`auth:user:${userId}`).catch(() => {}),
+          invalidateUserStatsCache(),
         ]);
       }
       res.json({ data: updated });
@@ -387,6 +395,7 @@ export function createAdminUsersRouter() {
         await Promise.all([
           revokeAllTokensBefore(userId, nowSeconds()).catch(() => {}),
           cacheDel(`auth:user:${userId}`).catch(() => {}),
+          invalidateUserStatsCache(),
         ]);
         res.json({ data: user });
       } catch (err: unknown) {
@@ -532,12 +541,13 @@ export function createAdminUsersRouter() {
           }
           return { updated, skipped };
         });
-        await Promise.all(
-          result.updated.flatMap((id) => [
+        await Promise.all([
+          ...result.updated.flatMap((id) => [
             revokeAllTokensBefore(id, now).catch(() => {}),
             cacheDel(`auth:user:${id}`).catch(() => {}),
           ]),
-        );
+          ...(result.updated.length > 0 ? [invalidateUserStatsCache()] : []),
+        ]);
         res.json(result);
       } catch {
         res.status(500).json({ detail: '批量操作失败' });
@@ -589,6 +599,7 @@ export function createAdminUsersRouter() {
         await Promise.all([
           revokeAllTokensBefore(userId, nowSeconds()).catch(() => {}),
           cacheDel(`auth:user:${userId}`).catch(() => {}),
+          invalidateUserStatsCache(),
         ]);
         res.json({ message: '用户已删除' });
       } catch (err: unknown) {

@@ -134,9 +134,13 @@ export interface UpdateHistoryEntry {
   notes: string;
 }
 
-// 版本历史缓存：GitHub API 有速率限制，且版本发布频率低，缓存 10 分钟足够
+// 版本历史缓存：列表全量拉取代价大（50 条 releases + 全部 notes），
+// 拉到后长期缓存；每次只用轻量的 /releases/latest 探测最新版本号，
+// 版本号变化（发了新版本）才重新全量拉取。探测本身再套一层短 TTL，
+// 避免频繁打开关于页时连 latest 都不打（GitHub API 有速率限制）。
 let historyCache: { at: number; entries: UpdateHistoryEntry[] } | null = null;
-const HISTORY_CACHE_TTL_MS = 10 * 60 * 1000;
+let latestProbeCache: { at: number; version: string } | null = null;
+const LATEST_PROBE_TTL_MS = 10 * 60 * 1000;
 const HISTORY_MAX_ENTRIES = 20;
 
 function parseUpdateTitleFromBody(body: string | undefined): string | undefined {
@@ -147,13 +151,28 @@ function parseUpdateTitleFromBody(body: string | undefined): string | undefined 
   return title || undefined;
 }
 
+/** 轻量探测最新发布版本号（带短 TTL，命中缓存直接返回缓存值） */
+async function probeLatestVersion(): Promise<string | null> {
+  if (latestProbeCache && Date.now() - latestProbeCache.at < LATEST_PROBE_TTL_MS) {
+    return latestProbeCache.version;
+  }
+  const release = await fetchLatestRelease('liaoweixiang2024-blip/3DPartHub');
+  if (!release?.tag_name) return null;
+  latestProbeCache = { at: Date.now(), version: release.tag_name };
+  return release.tag_name;
+}
+
 /**
  * 版本更新历史（关于页时间线数据源）：最近 N 个 GitHub Releases，
  * 按发布时间倒序。拉取失败（离线/限流）返回空数组，前端显示占位。
  */
 export async function getUpdateHistory(): Promise<UpdateHistoryEntry[]> {
-  if (historyCache && Date.now() - historyCache.at < HISTORY_CACHE_TTL_MS) {
-    return historyCache.entries;
+  // 已有缓存：只在探测到新版本发布时才全量刷新
+  if (historyCache) {
+    const latest = await probeLatestVersion();
+    const cachedTop = historyCache.entries[0]?.version;
+    if (!latest || latest === cachedTop) return historyCache.entries;
+    // latest 与缓存顶版本不一致 → 有新版本发布，落到下方全量拉取
   }
 
   const raw = await fetchJsonFromGithub('/repos/liaoweixiang2024-blip/3DPartHub/releases?per_page=50');

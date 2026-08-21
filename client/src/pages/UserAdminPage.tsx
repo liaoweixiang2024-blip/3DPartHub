@@ -68,10 +68,10 @@ const SORT_OPTIONS = [
 ];
 
 const PERMISSION_HELP: Array<{ role: string; desc: string }> = [
-  { role: '管理员', desc: '全部后台功能、用户管理、系统设置' },
-  { role: '编辑者', desc: '上传/管理模型、内容审核、工单/询价处理' },
-  { role: '访客', desc: '浏览、下载（受限额）、收藏、提交工单/询价' },
-  { role: '内部', desc: '权限同访客，仅用于标识内部员工，可配合「可分享模型」开关使用' },
+  { role: '管理员', desc: '全部后台功能：模型上传/管理、工单/询价处理、用户管理、系统设置' },
+  { role: '编辑者', desc: '权限同访客，另可被指定为询价「业务对接人」（客户询价优先分配给编辑者跟进）' },
+  { role: '访客', desc: '浏览、下载（受限额）、收藏、分享模型（受总开关控制）、提交工单/询价' },
+  { role: '内部', desc: '权限同访客，仅用于标识内部员工，便于区分内外部用户' },
 ];
 
 function relativeTime(value: string | null): string {
@@ -313,11 +313,13 @@ export default function UserAdminPage() {
         <UserRoleTabs active={roleFilter} counts={roleCounts} onChange={setRoleFilter} />
         {stats?.disabled ? <p className="mt-1 text-[11px] text-error">已禁用 {stats.disabled} 人</p> : null}
       </div>
-      <div className="flex items-center gap-2">
+      <div className="flex flex-wrap items-center gap-2">
         <select
           value={sort}
           onChange={(e) => setSort(e.target.value)}
-          className="rounded-md border border-outline-variant/20 bg-surface-container-high px-2 py-1.5 text-xs text-on-surface"
+          // iOS Safari 原生 select 不继承 font-size，需显式声明；text-sm(14px) 同时避免聚焦自动放大
+          className="shrink-0 rounded-md border border-outline-variant/20 bg-surface-container-high px-2 py-1.5 text-sm text-on-surface"
+          style={{ fontSize: '0.875rem' }}
           aria-label="排序"
         >
           {SORT_OPTIONS.map((o) => (
@@ -329,7 +331,7 @@ export default function UserAdminPage() {
         <button
           type="button"
           onClick={handleExport}
-          className="flex items-center gap-1 rounded-md border border-outline-variant/20 bg-surface-container-high px-2.5 py-1.5 text-xs text-on-surface-variant hover:text-on-surface"
+          className="flex shrink-0 items-center gap-1 whitespace-nowrap rounded-md border border-outline-variant/20 bg-surface-container-high px-2.5 py-1.5 text-sm text-on-surface-variant hover:text-on-surface"
         >
           <Icon name="download" size={14} />
           导出
@@ -339,7 +341,7 @@ export default function UserAdminPage() {
           value={searchInputValue}
           onClear={() => setSearch('')}
           placeholder="搜索用户名、邮箱、公司..."
-          className="md:w-64"
+          className="w-full md:w-64"
         />
       </div>
     </div>

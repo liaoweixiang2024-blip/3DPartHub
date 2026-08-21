@@ -55,6 +55,8 @@ import {
   type CleanupScanResult,
   type CleanupCategory,
   getUpdateHistory,
+  readCachedUpdateHistory,
+  writeCachedUpdateHistory,
   type UpdateHistoryEntry,
 } from '../api/settings';
 import ColorSchemeEditor from '../components/settings/ColorSchemeSettings';
@@ -4923,8 +4925,8 @@ function Content() {
     releaseNotes?: string;
   } | null>(null);
   const [checkingUpdate, setCheckingUpdate] = useState(false);
-  // 版本更新时间线（关于系统页）
-  const [updateHistory, setUpdateHistory] = useState<UpdateHistoryEntry[]>([]);
+  // 版本更新时间线（关于系统页）——初始值取本地缓存，进页秒开不闪加载态
+  const [updateHistory, setUpdateHistory] = useState<UpdateHistoryEntry[]>(() => readCachedUpdateHistory());
   const [updateHistoryLoading, setUpdateHistoryLoading] = useState(false);
   const [updateHistoryLoaded, setUpdateHistoryLoaded] = useState(false);
   const [expandedVersion, setExpandedVersion] = useState<string | null>(null);
@@ -5611,6 +5613,7 @@ function Content() {
       const entries = await getUpdateHistory();
       setUpdateHistory(entries);
       setUpdateHistoryLoaded(true);
+      writeCachedUpdateHistory(entries);
     } catch {
       // 拉取失败保留空列表，UI 显示重试入口
     } finally {
@@ -5927,10 +5930,16 @@ function Content() {
     }, 0);
   }, [activeTab, location.hash]);
 
-  // 进入「关于系统」页自动拉取版本更新时间线（失败可手动重试）
+  // 进入「关于系统」页自动拉取版本更新时间线（失败可手动重试）。
+  // 首次进页若已有本地缓存则直接展示并跳过请求（服务端长期缓存 + 新版本才全量刷新，
+  // 缓存内容极少变化）；手动点刷新按钮仍会强制拉取。
   useEffect(() => {
     if (activeTab === '关于系统' && !updateHistoryLoaded && !updateHistoryLoading) {
-      void loadUpdateHistory();
+      if (updateHistory.length > 0) {
+        setUpdateHistoryLoaded(true);
+      } else {
+        void loadUpdateHistory();
+      }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab]);
@@ -5993,7 +6002,8 @@ function Content() {
         className={`hidden items-center justify-center gap-1.5 whitespace-nowrap rounded-full px-2 text-xs md:inline-flex ${changed ? 'text-amber-500' : 'text-on-surface-variant'}`}
       >
         <span className={`h-1.5 w-1.5 rounded-full ${changed ? 'bg-amber-500' : 'bg-emerald-500'}`} />
-        {changed ? '有未保存修改' : '当前配置已保存'}
+        {/* 两个文案都是 7 个字（CJK 等宽），切换时宽度不变，避免页面抖动 */}
+        {changed ? '有未保存的修改' : '当前配置已保存'}
       </span>
       <button
         onClick={handleSave}

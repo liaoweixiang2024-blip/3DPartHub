@@ -16,6 +16,14 @@ function normalizeMessage(message: string) {
   return message.replace(/\s+/g, ' ').trim();
 }
 
+// iOS/WebKit 对跨域或被脱敏的错误只报 "Script error."（无任何细节）。
+// 直接把这句原文弹给用户毫无意义，换成友好文案。
+const MUTED_SCRIPT_ERROR_RE = /^script error\.?$/i;
+
+function isMutedScriptError(message: string) {
+  return MUTED_SCRIPT_ERROR_RE.test(normalizeMessage(message));
+}
+
 function shouldSkipMessage(message: string) {
   const normalized = normalizeMessage(message);
   if (!normalized) return true;
@@ -126,6 +134,10 @@ export function getRateLimitErrorMessage(error: unknown) {
 
 export function getErrorMessage(error: unknown, fallback?: string) {
   const defaultFallback = fallback || tToast('operationFailed', 'Operation failed. Please try again later');
+
+  // 被浏览器脱敏的错误（典型：iOS 点系统分享面板后 WebGL 上下文恢复时抛错）
+  // 只有 "Script error." 一句原文，换成通用兜底文案而不是弹英文术语
+  if (typeof error === 'string' && isMutedScriptError(error)) return defaultFallback;
   if (axios.isAxiosError(error)) {
     const status = error.response?.status;
     const data = error.response?.data as { message?: string; detail?: string; error?: string } | string | undefined;
@@ -145,7 +157,9 @@ export function getErrorMessage(error: unknown, fallback?: string) {
     if (error.message) return error.message;
   }
 
-  if (error instanceof Error && error.message) return error.message;
+  if (error instanceof Error && error.message) {
+    return isMutedScriptError(error.message) ? defaultFallback : error.message;
+  }
   if (typeof error === 'string' && error.trim()) return error;
 
   return defaultFallback;
@@ -154,6 +168,9 @@ export function getErrorMessage(error: unknown, fallback?: string) {
 export function notifyGlobalError(error: unknown, fallback?: string, type: ErrorToastType = 'error') {
   const message = getErrorMessage(error, fallback);
   if (shouldSkipMessage(message)) return;
+  // 脱敏错误对用户是噪音（用户无法据此做任何事），静默吞掉不上 toast。
+  // 典型场景：iOS Safari 点系统分享/添加主屏幕 → 页面挂起恢复时 WebGL 抛错。
+  if (isMutedScriptError(message)) return;
 
   if (notifier) {
     notifier(message, type);

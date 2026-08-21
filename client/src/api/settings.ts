@@ -1303,6 +1303,30 @@ export async function getUpdateHistory(): Promise<UpdateHistoryEntry[]> {
   return data?.entries ?? [];
 }
 
+// 版本历史本地缓存（localStorage）：进「关于系统」页先秒开缓存内容，
+// 服务端只在有新版本发布时才会重新拉全量（见 server/src/lib/update.ts），
+// 拿到的结果本身变化极少，本地再缓存一层避免每次进页都发请求。
+const UPDATE_HISTORY_STORAGE_KEY = 'update_history_cache';
+
+export function readCachedUpdateHistory(): UpdateHistoryEntry[] {
+  try {
+    const raw = localStorage.getItem(UPDATE_HISTORY_STORAGE_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw) as { entries?: UpdateHistoryEntry[] };
+    return Array.isArray(parsed.entries) ? parsed.entries : [];
+  } catch {
+    return [];
+  }
+}
+
+export function writeCachedUpdateHistory(entries: UpdateHistoryEntry[]): void {
+  try {
+    localStorage.setItem(UPDATE_HISTORY_STORAGE_KEY, JSON.stringify({ entries, ts: Date.now() }));
+  } catch {
+    // 存储满/隐私模式写入失败可忽略
+  }
+}
+
 // ===== Garbage Cleanup =====
 
 export interface CleanupCategory {
