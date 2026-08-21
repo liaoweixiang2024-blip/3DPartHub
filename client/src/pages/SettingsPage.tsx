@@ -54,6 +54,8 @@ import {
   executeCleanup,
   type CleanupScanResult,
   type CleanupCategory,
+  getUpdateHistory,
+  type UpdateHistoryEntry,
 } from '../api/settings';
 import ColorSchemeEditor from '../components/settings/ColorSchemeSettings';
 import { AdminContentPanel, AdminManagementPage } from '../components/shared/AdminManagementPage';
@@ -1599,7 +1601,7 @@ const SETTINGS_NAV_GROUPS = [
   {
     title: '运维维护',
     icon: 'build',
-    sections: ['系统运维', '数据备份', '关于'],
+    sections: ['系统运维', '数据备份', '关于系统'],
   },
 ] as const;
 
@@ -4921,6 +4923,11 @@ function Content() {
     releaseNotes?: string;
   } | null>(null);
   const [checkingUpdate, setCheckingUpdate] = useState(false);
+  // 版本更新时间线（关于系统页）
+  const [updateHistory, setUpdateHistory] = useState<UpdateHistoryEntry[]>([]);
+  const [updateHistoryLoading, setUpdateHistoryLoading] = useState(false);
+  const [updateHistoryLoaded, setUpdateHistoryLoaded] = useState(false);
+  const [expandedVersion, setExpandedVersion] = useState<string | null>(null);
   const [restoreConfirmId, setRestoreConfirmId] = useState<string | null>(null);
   const [restoreForce, setRestoreForce] = useState(false);
   const [backupDeleteConfirm, setBackupDeleteConfirm] = useState<{ id: string; name: string } | null>(null);
@@ -5597,6 +5604,20 @@ function Content() {
     }
   }
 
+  async function loadUpdateHistory() {
+    if (updateHistoryLoading) return;
+    setUpdateHistoryLoading(true);
+    try {
+      const entries = await getUpdateHistory();
+      setUpdateHistory(entries);
+      setUpdateHistoryLoaded(true);
+    } catch {
+      // 拉取失败保留空列表，UI 显示重试入口
+    } finally {
+      setUpdateHistoryLoading(false);
+    }
+  }
+
   async function loadBackupList() {
     try {
       const list = await listBackups();
@@ -5906,6 +5927,14 @@ function Content() {
     }, 0);
   }, [activeTab, location.hash]);
 
+  // 进入「关于系统」页自动拉取版本更新时间线（失败可手动重试）
+  useEffect(() => {
+    if (activeTab === '关于系统' && !updateHistoryLoaded && !updateHistoryLoading) {
+      void loadUpdateHistory();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab]);
+
   if (loading) {
     return <SettingsLoadingState />;
   }
@@ -5924,7 +5953,7 @@ function Content() {
     ...cacheStorageSectionTabs,
     { title: '数据备份', icon: 'cloud_upload' },
     { title: '缓存清理', icon: 'cleaning_services' },
-    { title: '关于', icon: 'info' },
+    { title: '关于系统', icon: 'info' },
   ];
   const resolvedActiveTab = activeTab === CACHE_STORAGE_GROUP_TITLE ? CACHE_STORAGE_SECTION_TITLES[0] : activeTab;
   const activeGroup = GROUPS.find((group) => group.title === resolvedActiveTab);
@@ -5961,7 +5990,7 @@ function Content() {
   const headerActions = (
     <div className="flex min-h-10 shrink-0 items-center justify-end gap-2">
       <span
-        className={`hidden w-[6.75rem] items-center justify-center gap-1.5 whitespace-nowrap rounded-full px-2 text-xs md:inline-flex ${changed ? 'text-amber-500' : 'text-on-surface-variant'}`}
+        className={`hidden items-center justify-center gap-1.5 whitespace-nowrap rounded-full px-2 text-xs md:inline-flex ${changed ? 'text-amber-500' : 'text-on-surface-variant'}`}
       >
         <span className={`h-1.5 w-1.5 rounded-full ${changed ? 'bg-amber-500' : 'bg-emerald-500'}`} />
         {changed ? '有未保存修改' : '当前配置已保存'}
@@ -7561,7 +7590,7 @@ function Content() {
                   </>
                 )}
 
-                {activeTab === '关于' && (
+                {activeTab === '关于系统' && (
                   <div className="bg-surface-container-low rounded-lg border border-outline-variant/10 overflow-hidden">
                     <div className="divide-y divide-outline-variant/5">
                       {/* Program intro */}
@@ -7721,6 +7750,116 @@ function Content() {
                                   查看 GitHub Release 详情 →
                                 </a>
                               )}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Version update timeline */}
+                      <div className="px-6 py-4">
+                        <div className="flex items-center justify-between gap-4 mb-4">
+                          <div>
+                            <p className="text-sm font-medium text-on-surface">版本更新记录</p>
+                            <p className="text-xs text-on-surface-variant mt-0.5">
+                              最近发布的版本与更新内容，从上到下按时间倒序
+                            </p>
+                          </div>
+                          <button
+                            onClick={loadUpdateHistory}
+                            disabled={updateHistoryLoading}
+                            className="px-3 py-1.5 text-xs font-medium border border-outline-variant/40 text-on-surface-variant rounded-md hover:text-on-surface hover:bg-surface-container-high/50 disabled:opacity-50 transition-colors flex items-center gap-1.5 shrink-0"
+                          >
+                            <Icon name="refresh" size={14} className={updateHistoryLoading ? 'animate-spin' : ''} />
+                            刷新
+                          </button>
+                        </div>
+
+                        {updateHistoryLoading && !updateHistoryLoaded ? (
+                          <div className="flex items-center gap-2 text-xs text-on-surface-variant">
+                            <Icon name="refresh" size={14} className="animate-spin" />
+                            正在获取版本记录...
+                          </div>
+                        ) : updateHistory.length === 0 ? (
+                          <div className="rounded-md border border-outline-variant/20 bg-surface-container/40 px-4 py-3 text-xs text-on-surface-variant">
+                            暂无版本记录{updateHistoryLoaded ? '（获取失败，可点右上角刷新重试）' : ''}
+                          </div>
+                        ) : (
+                          <div className="relative pl-5">
+                            {/* timeline vertical line */}
+                            <div className="absolute left-[5px] top-2 bottom-2 w-px bg-outline-variant/25" />
+                            <div className="space-y-4">
+                              {updateHistory.map((entry) => {
+                                const isCurrent = (currentVersion || updateInfo?.current || '') === entry.version;
+                                const expanded = expandedVersion === entry.version;
+                                const publishedText = entry.publishedAt
+                                  ? new Date(entry.publishedAt).toLocaleString('zh-CN', {
+                                      year: 'numeric',
+                                      month: '2-digit',
+                                      day: '2-digit',
+                                    })
+                                  : '';
+                                return (
+                                  <div key={entry.version} className="relative">
+                                    {/* node dot */}
+                                    <span
+                                      className={`absolute -left-5 top-1.5 h-[11px] w-[11px] rounded-full border-2 ${
+                                        isCurrent
+                                          ? 'bg-emerald-500 border-emerald-500/40'
+                                          : 'bg-primary border-primary/40'
+                                      }`}
+                                    />
+                                    <button
+                                      onClick={() => setExpandedVersion(expanded ? null : entry.version)}
+                                      className="w-full text-left"
+                                    >
+                                      <div className="flex flex-wrap items-center gap-2">
+                                        <span
+                                          className={`px-2 py-0.5 rounded text-[10px] font-bold font-mono border ${
+                                            isCurrent
+                                              ? 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30'
+                                              : 'bg-surface-container-lowest text-on-surface-variant border-outline-variant/20'
+                                          }`}
+                                        >
+                                          {entry.version}
+                                        </span>
+                                        {isCurrent && (
+                                          <span className="text-[10px] font-medium text-emerald-400">当前版本</span>
+                                        )}
+                                        {publishedText && (
+                                          <span className="text-[11px] text-on-surface-variant/70">
+                                            {publishedText}
+                                          </span>
+                                        )}
+                                        {entry.title && (
+                                          <span className="text-xs text-on-surface/90 min-w-0 truncate max-w-full">
+                                            {entry.title}
+                                          </span>
+                                        )}
+                                        <Icon
+                                          name={expanded ? 'expand_less' : 'expand_more'}
+                                          size={16}
+                                          className="text-on-surface-variant/60 shrink-0"
+                                        />
+                                      </div>
+                                    </button>
+                                    {expanded && entry.notes && (
+                                      <div className="mt-2 ml-1 rounded-md bg-surface-container/50 border border-outline-variant/15 p-3">
+                                        <div className="max-h-64 overflow-y-auto text-xs text-on-surface-variant/85 whitespace-pre-line leading-relaxed">
+                                          {entry.notes}
+                                        </div>
+                                        <a
+                                          href={entry.releaseUrl}
+                                          target="_blank"
+                                          rel="noopener noreferrer"
+                                          className="inline-block mt-2 text-xs text-primary hover:underline"
+                                        >
+                                          查看 GitHub Release 详情 →
+                                        </a>
+                                      </div>
+                                    )}
+                                  </div>
+                                );
+                              })}
                             </div>
                           </div>
                         )}

@@ -9,7 +9,7 @@ import {
   setSettings,
 } from '../../lib/settings.js';
 import { testCacheConnectivity, testStorageConnectivity } from '../../lib/settingsConnectivity.js';
-import { checkUpdateAvailable } from '../../lib/update.js';
+import { checkUpdateAvailable, getUpdateHistory } from '../../lib/update.js';
 import { authMiddleware, type AuthRequest } from '../../middleware/auth.js';
 import { adminOnly } from './common.js';
 
@@ -42,6 +42,17 @@ export function createSettingsAdminRouter() {
       res.json(result);
     } catch {
       res.json({ current: 'unknown', remote: 'unknown', updateAvailable: false });
+    }
+  });
+
+  // Admin: version update history (About-page timeline, from GitHub Releases)
+  router.get('/api/settings/update/history', authMiddleware, async (req: AuthRequest, res: Response) => {
+    if (!adminOnly(req, res)) return;
+    try {
+      const entries = await getUpdateHistory();
+      res.json({ entries });
+    } catch {
+      res.json({ entries: [] });
     }
   });
 

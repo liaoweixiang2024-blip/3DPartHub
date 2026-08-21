@@ -164,6 +164,7 @@ export default function ShareDialog({ open, onClose, modelId, modelName }: Share
                             type="text"
                             readOnly
                             value={shareUrl}
+                            onFocus={(e) => e.currentTarget.select()}
                             className="w-full sm:flex-1 bg-surface-container-lowest text-on-surface text-sm rounded px-3 py-2 border border-outline-variant/20 font-mono truncate"
                           />
                           <button

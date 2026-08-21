@@ -1289,6 +1289,20 @@ export async function checkUpdate(): Promise<UpdateCheckResult> {
   return unwrapResponse<UpdateCheckResult>(res);
 }
 
+export interface UpdateHistoryEntry {
+  version: string;
+  title?: string;
+  publishedAt?: string;
+  releaseUrl: string;
+  notes: string;
+}
+
+export async function getUpdateHistory(): Promise<UpdateHistoryEntry[]> {
+  const res = await client.get('/settings/update/history', { timeout: 30000 });
+  const data = unwrapResponse<{ entries: UpdateHistoryEntry[] }>(res);
+  return data?.entries ?? [];
+}
+
 // ===== Garbage Cleanup =====
 
 export interface CleanupCategory {
