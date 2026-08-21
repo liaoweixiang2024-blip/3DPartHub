@@ -97,9 +97,11 @@ export async function ipGuard(req: Request, res: Response, next: NextFunction) {
       const host = req.headers.host;
 
       if (!isHostAllowed(host, cachedAllowedHosts)) {
-        // Allow health check so monitoring tools don't break
-        const path = req.path;
-        if (path === '/api/health') {
+        // Allow health checks so monitoring / container healthchecks don't break.
+        // Prefix match — /api/health, /api/health/ready, /api/health/live must all
+        // pass: docker-compose probes /api/health/ready and an earlier exact-match
+        // exemption left it 403, marking the container permanently unhealthy.
+        if (req.path === '/api/health' || req.path.startsWith('/api/health/')) {
           next();
           return;
         }
