@@ -165,12 +165,22 @@ export function getErrorMessage(error: unknown, fallback?: string) {
   return defaultFallback;
 }
 
+/** 判断「原始错误」（未经 getErrorMessage 转换）是否为浏览器脱敏的 Script error */
+function isMutedScriptErrorValue(error: unknown): boolean {
+  if (typeof error === 'string') return isMutedScriptError(error);
+  if (error instanceof Error) return isMutedScriptError(error.message);
+  return false;
+}
+
 export function notifyGlobalError(error: unknown, fallback?: string, type: ErrorToastType = 'error') {
-  const message = getErrorMessage(error, fallback);
-  if (shouldSkipMessage(message)) return;
   // 脱敏错误对用户是噪音（用户无法据此做任何事），静默吞掉不上 toast。
   // 典型场景：iOS Safari 点系统分享/添加主屏幕 → 页面挂起恢复时 WebGL 抛错。
-  if (isMutedScriptError(message)) return;
+  // 注意：必须在「原始错误」上判断——getErrorMessage 会把 Script error 替换成
+  // fallback 文案（如「页面运行出错」），替换后的文案永远匹配不上脱敏判断。
+  if (isMutedScriptErrorValue(error)) return;
+
+  const message = getErrorMessage(error, fallback);
+  if (shouldSkipMessage(message)) return;
 
   if (notifier) {
     notifier(message, type);

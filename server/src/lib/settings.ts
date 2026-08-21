@@ -113,6 +113,9 @@ const SETTINGS_SCHEMA: SettingDef[] = [
   { key: 'site_app_name', defaultValue: '' },
   // PWA 安装图标（Chrome 安装 / iOS 主屏）。空串 = 用镜像内置默认图标。
   { key: 'site_app_icon', defaultValue: '' },
+  // PWA 应用描述（site.webmanifest 的 description，Chrome 安装后的应用备注）。
+  // 空串 = 跟随 site_description；都为空时用内置默认英文。
+  { key: 'site_app_desc', defaultValue: '' },
   { key: 'site_logo', defaultValue: '' },
   { key: 'site_icon', defaultValue: '' },
   { key: 'site_favicon', defaultValue: '/favicon.svg' },
@@ -680,6 +683,12 @@ export function validateSettingValue(key: string, value: unknown): unknown {
   if (key === 'site_title' || key === 'site_browser_title' || key === 'site_app_name') {
     const trimmed = String(value ?? '').trim();
     return trimmed.slice(0, 60);
+  }
+  // PWA 应用描述（manifest description）：稍宽松的限长
+  if (key === 'site_app_desc') {
+    return String(value ?? '')
+      .trim()
+      .slice(0, 200);
   }
   // 图标类 URL：只允许站内相对路径或 http(s) 绝对地址（上传接口产物 / 外链 CDN）
   if (key === 'site_favicon' || key === 'site_app_icon') {

@@ -149,6 +149,7 @@ const DEFAULT_SETTINGS: SystemSettings = {
   site_browser_title: '',
   site_app_name: '',
   site_app_icon: '',
+  site_app_desc: '',
   site_logo: '',
   site_icon: '',
   site_favicon: '/favicon.svg',
@@ -522,6 +523,12 @@ const GROUPS: SettingGroup[] = [
         label: '应用图标',
         desc: 'Chrome「安装应用」和 iPhone「添加到主屏幕」的图标，建议正方形 PNG ≥192×192；留空使用内置图标',
         type: 'image',
+      },
+      {
+        key: 'site_app_desc',
+        label: '应用描述',
+        desc: '浏览器安装应用后的应用备注（如 Chrome 应用列表描述），留空则使用站点描述',
+        type: 'text',
       },
       {
         key: 'site_logo',

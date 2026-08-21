@@ -18,6 +18,7 @@ export interface SystemSettings {
   site_browser_title: string;
   site_app_name: string;
   site_app_icon: string;
+  site_app_desc: string;
   site_logo: string;
   site_icon: string;
   site_favicon: string;

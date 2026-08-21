@@ -107,6 +107,7 @@ export function createSettingsPublicRouter() {
             site_browser_title: all.site_browser_title ?? '',
             site_app_name: all.site_app_name ?? '',
             site_app_icon: all.site_app_icon ?? '',
+            site_app_desc: all.site_app_desc ?? '',
             site_logo: all.site_logo ?? '',
             site_icon: all.site_icon ?? '',
             site_favicon: all.site_favicon ?? '/favicon.svg',
@@ -329,7 +330,10 @@ export function createSettingsPublicRouter() {
     try {
       const all = await getAllSettings();
       const appName = String(all.site_app_name || all.site_title || '3DPartHub').trim() || '3DPartHub';
-      const description = String(all.site_description || 'Enterprise 3D Part Model Management Platform');
+      // 应用描述：后台「应用描述」→ 站点描述 → 内置默认（Chrome 安装后的应用备注）
+      const description = String(
+        all.site_app_desc || all.site_description || 'Enterprise 3D Part Model Management Platform',
+      ).trim();
       // Chrome/Edge 安装图标：后台设置的应用图标（推荐 ≥192px PNG），未设置用内置默认
       const appIcon = encodeSiteHref(String(all.site_app_icon || '/android-chrome-192.png'));
       const manifest = {
