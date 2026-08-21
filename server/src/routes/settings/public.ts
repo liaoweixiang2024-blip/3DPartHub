@@ -18,6 +18,43 @@ function readTtlSeconds(value: unknown, fallback: number): number {
   return Math.min(86400, Math.max(0, parsed));
 }
 
+function escapeHtmlText(value: unknown): string {
+  return String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+/** favicon 等站点 URL 只允许站内相对路径或 http(s) 绝对地址，防注入 */
+function encodeSiteHref(value: string): string {
+  const trimmed = value.trim();
+  if (!trimmed || /[\s"'<>]/.test(trimmed)) return '/favicon.svg';
+  if (trimmed.startsWith('/')) return trimmed;
+  if (/^https?:\/\//i.test(trimmed)) return trimmed;
+  return '/favicon.svg';
+}
+
+function iconTypeFor(href: string): string {
+  if (href.endsWith('.ico')) return 'image/x-icon';
+  if (href.endsWith('.svg')) return 'image/svg+xml';
+  if (href.endsWith('.jpg') || href.endsWith('.jpeg')) return 'image/jpeg';
+  return 'image/png';
+}
+
+/** 后端不可用时的兜底 head 片段（与 client/public/head-fragment-default.html 保持一致） */
+const DEFAULT_HEAD_FRAGMENT =
+  '<title>3DPartHub</title>\n' +
+  '    <meta property="og:title" content="3DPartHub" />\n' +
+  '    <meta name="description" content="" />\n' +
+  '    <meta property="og:description" content="" />\n' +
+  '    <meta name="apple-mobile-web-app-title" content="3DPartHub" />\n' +
+  '    <link rel="icon" type="image/svg+xml" href="/favicon.svg?v=site" />\n' +
+  '    <link rel="icon" type="image/svg+xml" sizes="32x32" href="/favicon.svg?v=site" />\n' +
+  '    <link rel="icon" type="image/svg+xml" sizes="16x16" href="/favicon.svg?v=site" />\n' +
+  '    <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png?v=site" />';
+
 export function createSettingsPublicRouter() {
   const router = Router();
 
@@ -68,6 +105,8 @@ export function createSettingsPublicRouter() {
             watermark_image: all.watermark_image ?? '',
             site_title: all.site_title ?? '3DPartHub',
             site_browser_title: all.site_browser_title ?? '',
+            site_app_name: all.site_app_name ?? '',
+            site_app_icon: all.site_app_icon ?? '',
             site_logo: all.site_logo ?? '',
             site_icon: all.site_icon ?? '',
             site_favicon: all.site_favicon ?? '/favicon.svg',
@@ -239,6 +278,89 @@ export function createSettingsPublicRouter() {
         maintenance_title: '系统维护中',
         maintenance_message: '系统正在进行维护、数据恢复或资源重建，部分页面可能暂时不可用。请稍后再访问。',
       });
+    }
+  });
+
+  // Public: <head> fragment for nginx SSI injection into index.html.
+  // Returns <title> + og:title + description + favicon links so first paint (before
+  // any JS runs) shows the admin-configured brand instead of build-time defaults.
+  // NOTE: index.html deliberately has NO static icon links — this fragment is the
+  // single source of truth for them (static fallback file mirrors it), so the
+  // admin-configured favicon can't be beaten by leftover build-time declarations.
+  router.get('/api/settings/head-fragment', async (_req, res: Response) => {
+    res.set('Cache-Control', 'no-store, no-cache, must-revalidate');
+    try {
+      const all = await getAllSettings();
+      const title = String(all.site_browser_title || all.site_title || '3DPartHub');
+      const desc = String(all.site_description || '');
+      const icon = encodeSiteHref(String(all.site_favicon || '/favicon.svg'));
+      const iconType = iconTypeFor(icon);
+      // iOS 主屏图标名称：Safari 不读 webmanifest 的 name，只读这个 meta
+      const appName = String(all.site_app_name || all.site_title || '3DPartHub');
+      // iOS 主屏图标：Safari 不读 manifest icons，只读 apple-touch-icon
+      const appIcon = encodeSiteHref(String(all.site_app_icon || '/apple-touch-icon.png'));
+      const iconQuery = (href: string) => href + (href.includes('?') ? '&' : '?') + 'v=site';
+      res
+        .set('Content-Type', 'text/html; charset=utf-8')
+        .send(
+          `<title>${escapeHtmlText(title)}</title>\n` +
+            `    <meta property="og:title" content="${escapeHtmlText(title)}" />\n` +
+            `    <meta name="description" content="${escapeHtmlText(desc)}" />\n` +
+            `    <meta property="og:description" content="${escapeHtmlText(desc)}" />\n` +
+            `    <meta name="apple-mobile-web-app-title" content="${escapeHtmlText(appName)}" />\n` +
+            `    <link rel="icon" type="${iconType}" href="${iconQuery(icon)}" />\n` +
+            `    <link rel="icon" type="${iconType}" sizes="32x32" href="${iconQuery(icon)}" />\n` +
+            `    <link rel="icon" type="${iconType}" sizes="16x16" href="${iconQuery(icon)}" />\n` +
+            `    <link rel="apple-touch-icon" sizes="180x180" href="${iconQuery(appIcon)}" />`,
+        );
+    } catch {
+      res.set('Content-Type', 'text/html; charset=utf-8').send(DEFAULT_HEAD_FRAGMENT);
+    }
+  });
+
+  // Public: dynamic PWA manifest. nginx maps /site.webmanifest -> this endpoint so
+  // the "Install app" prompt uses the admin-configured app name instead of the
+  // build-time default baked into client/public/site.webmanifest.
+  router.get('/api/settings/site-manifest', async (req, res: Response) => {
+    res.set('Cache-Control', 'no-store, no-cache, must-revalidate');
+    try {
+      const all = await getAllSettings();
+      const appName = String(all.site_app_name || all.site_title || '3DPartHub').trim() || '3DPartHub';
+      const description = String(all.site_description || 'Enterprise 3D Part Model Management Platform');
+      // Chrome/Edge 安装图标：后台设置的应用图标（推荐 ≥192px PNG），未设置用内置默认
+      const appIcon = encodeSiteHref(String(all.site_app_icon || '/android-chrome-192.png'));
+      const manifest = {
+        name: appName,
+        short_name: appName.slice(0, 12),
+        description,
+        start_url: '/',
+        display: 'standalone',
+        background_color: '#faf9f7',
+        theme_color: '#faf9f7',
+        icons: [
+          { src: appIcon, sizes: '192x192', type: iconTypeFor(appIcon) },
+          ...(appIcon === '/android-chrome-192.png'
+            ? [{ src: '/favicon-512.png', sizes: '512x512', type: 'image/png' }]
+            : []),
+        ],
+      };
+      // res.json 会被全局 responseHandler 包成 {success,data} 信封，浏览器 PWA
+      // 安装需要裸 manifest JSON —— 用 res.send 序列化绕过信封包装
+      res.set('Content-Type', 'application/manifest+json; charset=utf-8').send(JSON.stringify(manifest));
+    } catch {
+      res.set('Content-Type', 'application/manifest+json; charset=utf-8').send(
+        JSON.stringify({
+          name: '3DPartHub',
+          short_name: '3DPartHub',
+          start_url: '/',
+          display: 'standalone',
+          icons: [
+            { src: '/android-chrome-192.png', sizes: '192x192', type: 'image/png' },
+            { src: '/favicon-512.png', sizes: '512x512', type: 'image/png' },
+            { src: '/favicon.svg', sizes: 'any', type: 'image/svg+xml' },
+          ],
+        }),
+      );
     }
   });
 

@@ -16,6 +16,8 @@ export interface SystemSettings {
   watermark_image: string;
   site_title: string;
   site_browser_title: string;
+  site_app_name: string;
+  site_app_icon: string;
   site_logo: string;
   site_icon: string;
   site_favicon: string;

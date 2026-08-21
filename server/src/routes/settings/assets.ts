@@ -14,6 +14,7 @@ const imageDirs: Record<string, string> = {
   site_logo: join(process.cwd(), config.staticDir, 'logo'),
   site_icon: join(process.cwd(), config.staticDir, 'logo'),
   site_favicon: join(process.cwd(), config.staticDir, 'favicon'),
+  site_app_icon: join(process.cwd(), config.staticDir, 'favicon'),
 };
 for (const dir of Object.values(imageDirs)) {
   mkdirSync(dir, { recursive: true });
@@ -25,6 +26,7 @@ const imageNames: Record<string, string> = {
   site_logo: 'logo',
   site_icon: 'icon',
   site_favicon: 'favicon',
+  site_app_icon: 'app-icon',
 };
 
 const imageUpload = multer({
@@ -87,7 +89,7 @@ export function createSettingsAssetsRouter() {
           ? 'watermark'
           : dirKey === 'site_logo' || dirKey === 'site_icon'
             ? 'logo'
-            : 'favicon';
+            : 'favicon'; // site_favicon + site_app_icon 同目录（都是小图标）
       const imageUrl = `/static/${urlSegment}/${finalName}`;
       await setSetting(key, imageUrl);
       res.json({ url: imageUrl });

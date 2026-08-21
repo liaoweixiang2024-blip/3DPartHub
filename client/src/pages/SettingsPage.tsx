@@ -143,6 +143,8 @@ const DEFAULT_SETTINGS: SystemSettings = {
   watermark_image: '',
   site_title: '3DPartHub',
   site_browser_title: '',
+  site_app_name: '',
+  site_app_icon: '',
   site_logo: '',
   site_icon: '',
   site_favicon: '/favicon.svg',
@@ -504,6 +506,18 @@ const GROUPS: SettingGroup[] = [
         label: '浏览器标题',
         desc: '浏览器标签页显示的标题，留空则使用网站名称',
         type: 'text',
+      },
+      {
+        key: 'site_app_name',
+        label: '应用名称',
+        desc: '浏览器「安装应用」和手机主屏图标显示的名称，留空则使用网站名称',
+        type: 'text',
+      },
+      {
+        key: 'site_app_icon',
+        label: '应用图标',
+        desc: 'Chrome「安装应用」和 iPhone「添加到主屏幕」的图标，建议正方形 PNG ≥192×192；留空使用内置图标',
+        type: 'image',
       },
       {
         key: 'site_logo',
@@ -6330,7 +6344,7 @@ function Content() {
                                                     <SafeImage
                                                       src={settings[item.key] as string}
                                                       alt="预览"
-                                                      className={`${item.key === 'site_icon' || item.key === 'site_favicon' ? 'h-12 w-12' : 'h-12 w-32'} object-contain bg-surface-container-lowest rounded border border-outline-variant/20`}
+                                                      className={`${['site_icon', 'site_favicon', 'site_app_icon'].includes(String(item.key)) ? 'h-12 w-12' : 'h-12 w-32'} object-contain bg-surface-container-lowest rounded border border-outline-variant/20`}
                                                       fallbackIcon="image"
                                                     />
                                                   )}
@@ -6649,7 +6663,7 @@ function Content() {
                                               <SafeImage
                                                 src={settings[item.key] as string}
                                                 alt="预览"
-                                                className={`${item.key === 'site_icon' || item.key === 'site_favicon' ? 'h-12 w-12' : 'h-12 w-32'} object-contain bg-surface-container-lowest rounded border border-outline-variant/20`}
+                                                className={`${['site_icon', 'site_favicon', 'site_app_icon'].includes(String(item.key)) ? 'h-12 w-12' : 'h-12 w-32'} object-contain bg-surface-container-lowest rounded border border-outline-variant/20`}
                                                 fallbackIcon="image"
                                               />
                                             )}

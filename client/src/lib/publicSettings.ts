@@ -414,24 +414,50 @@ function applyMetaTags() {
   if (ogDesc) ogDesc.setAttribute('content', desc);
 }
 
-// Apply dynamic favicon
+// Apply dynamic favicon + app icons.
+// The SSI head fragment already declares these links server-side; this runs when
+// settings change at runtime (e.g. admin saves a new favicon) and must update ALL
+// icon links — index.html historically declared several (any/32/16) and browsers
+// pick the best-sized match, so updating only the first link left the old PNGs
+// winning over the configured icon.
 function applyFavicon() {
   if (!cache) return;
   const favicon = getSiteFavicon();
-  if (!favicon) return;
+  const appIcon = (cache.site_app_icon as string) || '';
+  if (!favicon && !appIcon) return;
 
-  let link = document.querySelector('link[rel="icon"]') as HTMLLinkElement | null;
-  if (!link) {
-    link = document.createElement('link');
-    link.rel = 'icon';
-    document.head.appendChild(link);
+  const bust = (href: string) => href + (href.includes('?') ? '&' : '?') + '_t=' + Date.now();
+
+  if (favicon) {
+    const iconType = favicon.endsWith('.svg')
+      ? 'image/svg+xml'
+      : favicon.endsWith('.ico')
+        ? 'image/x-icon'
+        : favicon.endsWith('.jpg') || favicon.endsWith('.jpeg')
+          ? 'image/jpeg'
+          : 'image/png';
+    const iconLinks = Array.from(document.querySelectorAll<HTMLLinkElement>('link[rel="icon"]'));
+    if (iconLinks.length === 0) {
+      const link = document.createElement('link');
+      link.rel = 'icon';
+      document.head.appendChild(link);
+      iconLinks.push(link);
+    }
+    for (const link of iconLinks) {
+      link.type = iconType;
+      link.href = bust(favicon);
+    }
   }
-  // Determine type from extension
-  if (favicon.endsWith('.svg')) link.type = 'image/svg+xml';
-  else if (favicon.endsWith('.ico')) link.type = 'image/x-icon';
-  else if (favicon.endsWith('.png')) link.type = 'image/png';
-  else if (favicon.endsWith('.jpg') || favicon.endsWith('.jpeg')) link.type = 'image/jpeg';
-  link.href = favicon + (favicon.includes('?') ? '&' : '?') + '_t=' + Date.now();
+
+  if (appIcon) {
+    let touchLink = document.querySelector<HTMLLinkElement>('link[rel="apple-touch-icon"]');
+    if (!touchLink) {
+      touchLink = document.createElement('link');
+      touchLink.rel = 'apple-touch-icon';
+      document.head.appendChild(touchLink);
+    }
+    touchLink.href = bust(appIcon);
+  }
 }
 
 // Apply appearance-related settings (color scheme + theme defaults)

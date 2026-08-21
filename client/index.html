@@ -2,21 +2,16 @@
 <html class="dark" lang="zh-CN">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/favicon.svg" sizes="any" />
-    <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png" />
-    <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16.png" />
-    <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
+    <!-- 图标声明（favicon / apple-touch-icon）全部由下方 SSI 片段输出，
+         不在此静态声明——否则构建期 PNG 会压过后台设置的自定义 favicon -->
     <link rel="manifest" href="/site.webmanifest" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-    <title>3DPartHub</title>
-    <meta name="description" content="" />
+    <!--# include virtual="/api/settings/head-fragment" -->
     <meta name="theme-color" content="#faf9f7" />
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="default" />
     <link rel="preload" href="/fonts/space-grotesk-latin-400-normal.woff2" as="font" type="font/woff2" crossorigin />
     <link rel="preload" href="/fonts/space-grotesk-latin-700-normal.woff2" as="font" type="font/woff2" crossorigin />
-    <meta property="og:title" content="" />
-    <meta property="og:description" content="" />
     <meta property="og:type" content="website" />
     <script>
       // Apply site config from localStorage before React hydrates to prevent flash

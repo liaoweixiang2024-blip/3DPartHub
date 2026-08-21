@@ -109,6 +109,10 @@ const SETTINGS_SCHEMA: SettingDef[] = [
   { key: 'watermark_image', defaultValue: '' },
   { key: 'site_title', defaultValue: '3DPartHub' },
   { key: 'site_browser_title', defaultValue: '' },
+  // PWA 安装名称（site.webmanifest 的 name/short_name）。空串 = 跟随 site_title。
+  { key: 'site_app_name', defaultValue: '' },
+  // PWA 安装图标（Chrome 安装 / iOS 主屏）。空串 = 用镜像内置默认图标。
+  { key: 'site_app_icon', defaultValue: '' },
   { key: 'site_logo', defaultValue: '' },
   { key: 'site_icon', defaultValue: '' },
   { key: 'site_favicon', defaultValue: '/favicon.svg' },
@@ -672,6 +676,19 @@ function clampNumericSetting(key: string, value: unknown, min: number, max: numb
 
 export function validateSettingValue(key: string, value: unknown): unknown {
   if (key === 'footer_links') return normalizeFooterLinksSetting(value);
+  // 品牌类文本：去首尾空白 + 限长，防止把标签页标题 / PWA 安装名称撑爆
+  if (key === 'site_title' || key === 'site_browser_title' || key === 'site_app_name') {
+    const trimmed = String(value ?? '').trim();
+    return trimmed.slice(0, 60);
+  }
+  // 图标类 URL：只允许站内相对路径或 http(s) 绝对地址（上传接口产物 / 外链 CDN）
+  if (key === 'site_favicon' || key === 'site_app_icon') {
+    const normalized = normalizeTrimmedStringSetting(value, String(DEFAULTS[key] ?? ''));
+    if (!normalized) return normalized;
+    if (normalized.startsWith('/static/') || normalized.startsWith('/')) return normalized;
+    if (/^https?:\/\//i.test(normalized)) return normalized;
+    return String(DEFAULTS[key] ?? '');
+  }
   if (key === 'cache_driver') {
     const driver = String(value || '').trim();
     return (CACHE_DRIVER_KEYS as readonly string[]).includes(driver) ? driver : DEFAULTS[key];

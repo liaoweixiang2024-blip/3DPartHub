@@ -158,8 +158,16 @@ test('validateSettingValue passes through unknown keys', () => {
 
 test('validateSettingValue truncates strings over 1MB', () => {
   const long = 'x'.repeat(1_000_001);
-  const result = validateSettingValue('site_title', long) as string;
+  const result = validateSettingValue('maintenance_message', long) as string;
   assert.equal(result.length, 1_000_000);
+});
+
+test('validateSettingValue trims and caps brand title settings at 60 chars', () => {
+  assert.equal(validateSettingValue('site_title', '  My Site  '), 'My Site');
+  assert.equal(validateSettingValue('site_browser_title', '  x  '), 'x');
+  assert.equal(validateSettingValue('site_app_name', 'y'.repeat(80)).length, 60);
+  // 空值归一为空串（保持「留空则跟随网站名称」语义）
+  assert.equal(validateSettingValue('site_app_name', '   '), '');
 });
 
 test('validateSettingValue validates backup_schedule_time as HH:MM', () => {

@@ -1,11 +1,35 @@
+import { readFileSync } from 'node:fs';
+import { join, dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import tailwindcss from '@tailwindcss/vite';
 import react from '@vitejs/plugin-react';
-import { defineConfig } from 'vite';
+import { defineConfig, type Plugin } from 'vite';
 
 const devProxyTarget = process.env.VITE_DEV_PROXY_TARGET || 'http://127.0.0.1:8000';
 
+const __dirname = dirname(fileURLToPath(import.meta.url));
+
+/**
+ * Dev-only replacement for nginx SSI: index.html's <!--# include virtual="/api/settings/head-fragment" -->
+ * is replaced at serve time with the build-time default head fragment (public/head-fragment-default.html).
+ * Production serves it through nginx SSI against the live API; dev has no SSI processor.
+ */
+function devHeadFragmentPlugin(): Plugin {
+  return {
+    name: 'dev-head-fragment',
+    apply: 'serve',
+    transformIndexHtml: {
+      order: 'pre',
+      handler(html) {
+        const fragment = readFileSync(join(__dirname, 'public/head-fragment-default.html'), 'utf8');
+        return html.replace(/<!--# include virtual="\/api\/settings\/head-fragment" -->/, fragment.trim());
+      },
+    },
+  };
+}
+
 export default defineConfig({
-  plugins: [react(), tailwindcss()],
+  plugins: [react(), tailwindcss(), devHeadFragmentPlugin()],
   assetsInclude: ['**/*.wasm'],
   build: {
     sourcemap: false,
@@ -97,6 +121,12 @@ export default defineConfig({
       '/uploads': {
         target: devProxyTarget,
         changeOrigin: true,
+      },
+      // PWA manifest 由 API 按后台设置动态生成（nginx 同样把 /site.webmanifest 代理到 API）
+      '/site.webmanifest': {
+        target: devProxyTarget,
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/site\.webmanifest$/, '/api/settings/site-manifest'),
       },
     },
   },
