@@ -435,6 +435,15 @@ function broadcastSettingsInvalidate(): void {
   redis.publish(SETTINGS_INVALIDATE_CHANNEL, '1').catch(() => {});
 }
 
+/**
+ * 广播设置缓存失效（供备份恢复 worker 调用）。
+ * worker 与主进程内存隔离，直接 import 的 clearSettingsCache 只清到 worker 自己的；
+ * 走 Redis pub/sub 才能让所有主进程 worker（cluster 模式下多个）同步失效。
+ */
+export function broadcastSettingsInvalidationToAllWorkers(): void {
+  broadcastSettingsInvalidate();
+}
+
 /** Clear the in-memory settings cache (used after restore) */
 export function clearSettingsCache(): void {
   cache = null;

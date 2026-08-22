@@ -59,6 +59,7 @@ export {
 import { getErrorMessage } from './http.js';
 import { syncJob, loadJob } from './jobStore.js';
 import { createLogger } from './logger.js';
+import { createNotification } from './notificationDelivery.js';
 
 const log = createLogger({ component: 'backup' });
 
@@ -771,6 +772,34 @@ function releaseLockForJob(jobId: string): void {
 }
 
 cleanupStaleBackupWorkDirs(BACKUP_WORK_DIR);
+cleanupExpiredSafetySnapshots();
+
+/**
+ * 清理 _safety_snapshots/ 中超过 7 天的孤儿快照（与 CLAUDE.md 声明的保留策略一致）。
+ * 正常流程（恢复成功/回滚完成）会即时清掉自己的 marker+快照，这里兜的是硬中断
+ * 残留：marker 引用的快照一律保留（那是唯一回滚凭据），只删没有任何 marker
+ * 指向且超龄的文件，避免目录无限膨胀。
+ */
+function cleanupExpiredSafetySnapshots(maxAgeMs = 7 * 24 * 60 * 60 * 1000) {
+  try {
+    if (!existsSync(SAFETY_SNAPSHOT_DIR)) return;
+    const referenced = new Set(detectInterruptedRestores().map((info) => resolve(info.durableSnapshot)));
+    const now = Date.now();
+    for (const entry of readdirSync(SAFETY_SNAPSHOT_DIR, { withFileTypes: true })) {
+      if (!entry.isFile()) continue;
+      // marker 文件本身不按年龄清理——marker 是否该删由它引用的快照决定
+      if (entry.name.startsWith(RESTORE_IN_PROGRESS_MARKER_PREFIX)) continue;
+      const path = join(SAFETY_SNAPSHOT_DIR, entry.name);
+      if (referenced.has(resolve(path))) continue;
+      const { mtime } = statSync(path);
+      if (now - mtime.getTime() <= maxAgeMs) continue;
+      rmSync(path, { force: true });
+      log.warn({ path, ageDays: Math.round((now - mtime.getTime()) / 86400000) }, 'Removed expired safety snapshot');
+    }
+  } catch (err) {
+    log.warn({ err }, 'Failed to clean up expired safety snapshots');
+  }
+}
 
 function ts(): string {
   return new Date().toLocaleTimeString('zh-CN', { hour12: false });
@@ -830,6 +859,40 @@ type MonitoredWorkerJob = {
   error?: string;
   logs?: string[];
 };
+
+/**
+ * 自动备份失败/跳过时给全体管理员发站内通知（backup 类型站内默认开启）。
+ * 冷却 6 小时避免「每天定时失败」场景下重复轰炸；手动备份失败不发（用户就在界面上看得到）。
+ */
+const BACKUP_FAILURE_NOTIFY_COOLDOWN_MS = 6 * 60 * 60 * 1000;
+
+async function notifyAdminsAboutScheduledBackupFailure(jobId: string, message: string) {
+  try {
+    const prismaClient = await getBackupPrisma();
+    const relatedId = `backup-auto-failure:${localDateKey()}`;
+    const since = new Date(Date.now() - BACKUP_FAILURE_NOTIFY_COOLDOWN_MS);
+    const admins = await prismaClient.user.findMany({ where: { role: 'ADMIN' }, select: { id: true } });
+    await Promise.all(
+      admins.map(async (admin) => {
+        const exists = await prismaClient.notification.findFirst({
+          where: { userId: admin.id, type: 'backup', relatedId, createdAt: { gte: since } },
+          select: { id: true },
+        });
+        if (exists) return null;
+        return createNotification({
+          userId: admin.id,
+          title: '自动备份失败',
+          message: `计划任务备份未能完成：${message || '未知原因'}。请到后台「备份」页检查并手动执行备份。`,
+          type: 'backup',
+          audience: 'admin',
+          relatedId,
+        });
+      }),
+    );
+  } catch (err) {
+    log.warn({ err, jobId }, 'Failed to notify admins about scheduled backup failure');
+  }
+}
 
 function markWorkerExitIfStillRunning<T extends MonitoredWorkerJob>(job: T, message: string) {
   const latest = loadJob<T>(job.id) || job;
@@ -1598,6 +1661,8 @@ async function runBackup(job: BackupJob) {
       } catch (statusErr: unknown) {
         log.warn({ err: statusErr, jobId: job.id }, 'Failed to update scheduled backup error status');
       }
+      // 状态只写在后台页上，管理员不主动看就永远不知道——补一条站内通知
+      await notifyAdminsAboutScheduledBackupFailure(job.id, message);
     }
     if (!archiveVerified && existsSync(finalArchive)) {
       rmSync(finalArchive, { force: true });
@@ -1745,6 +1810,9 @@ async function runModuleBackup(job: BackupJob, scope: Exclude<BackupScope, 'full
     job.stage = 'error';
     job.error = message;
     syncJob(job);
+    if (job.source === 'scheduled') {
+      await notifyAdminsAboutScheduledBackupFailure(job.id, `${label}备份失败：${message}`);
+    }
     if (!archiveVerified && existsSync(finalArchive)) {
       rmSync(finalArchive, { force: true });
     } else if (archiveVerified && existsSync(finalArchive)) {
@@ -3226,14 +3294,21 @@ async function runRestoreFromArchive(
 async function clearCachesAfterRestore(job: { logs?: string[] }) {
   try {
     const { cacheDelByPrefix } = await import('./cache.js');
+    // 'cache:' 覆盖业务缓存；'auth:user:' 单独清——恢复覆盖库后，已不存在的用户
+    // 其 60s 认证缓存必须立即失效，否则被删用户的旧 token 仍能通过校验
     await cacheDelByPrefix('cache:');
+    await cacheDelByPrefix('auth:user:');
     addLog(job, '缓存已清理');
   } catch {
     log.warn({ err: {} }, 'Failed to clear cache after restore');
   }
   try {
-    const { clearSettingsCache } = await import('./settings.js');
+    // worker 与主进程内存隔离：除了清本进程内存，还要广播让所有主进程同步失效，
+    // 否则设置快照要等 30s TTL 才刷新，恢复后的头 30s 仍读到旧配置
+    const { clearSettingsCache, broadcastSettingsInvalidationToAllWorkers } = await import('./settings.js');
     clearSettingsCache();
+    broadcastSettingsInvalidationToAllWorkers();
+    addLog(job, '设置缓存已广播失效');
   } catch {
     log.warn({ err: {} }, 'Failed to clear settings cache after restore');
   }
@@ -5574,8 +5649,7 @@ export function startBackupScheduler() {
 async function runBackupSchedulerTick() {
   const settings = await getBackupPolicySettings();
   if (!settings.backup_auto_enabled) return;
-  if (!isScheduleDue(settings.backup_schedule_time)) return;
-  if (settings.backup_last_auto_date === localDateKey()) return;
+  if (!isScheduleDue(settings.backup_schedule_time, settings.backup_last_auto_date)) return;
 
   try {
     const jobId = startScheduledBackupJob();
@@ -5861,14 +5935,23 @@ function clampRetentionCount(value: unknown): number {
   return Math.min(60, Math.max(1, Math.floor(parsed)));
 }
 
-function isScheduleDue(scheduleTime: string): boolean {
+/**
+ * 计划时刻已过且今天还没跑过即视为到期（补跑式调度）。
+ *
+ * 原实现只在计划时刻后的 120s 窗口内触发：服务器恰好在窗口期重启（如定时备份
+ * 时刻前后部署更新）或 tick 被长任务阻塞超过 2 分钟，当天自动备份会被静默跳过，
+ * 连续多天无人察觉。backup_last_auto_date 幂等保证不会重复跑，窗口没有理由收窄。
+ */
+function isScheduleDue(scheduleTime: string, lastAutoDate: string | undefined): boolean {
   const [h, m] = scheduleTime.split(':').map(Number);
   if (!Number.isFinite(h) || !Number.isFinite(m)) return false;
   const now = new Date();
   const target = new Date(now);
   target.setHours(h, m, 0, 0);
-  const diffMs = now.getTime() - target.getTime();
-  return diffMs >= 0 && diffMs < 120_000;
+  if (now.getTime() < target.getTime()) return false;
+  // 今天已成功启动过（含失败重试中）→ 不再触发
+  if (lastAutoDate === localDateKey(now)) return false;
+  return true;
 }
 
 function localDateKey(date = new Date()): string {
