@@ -1065,8 +1065,23 @@ interface ImportSaveJob {
 
 const importSaveJobs = new Map<string, ImportSaveJob>();
 
+// spawn 子进程的参数前置校验：archPath 必须是已存在的绝对路径文件（调用方各自
+// 已做目录白名单：multer 临时文件或 resolveManagedUploadPath 校验过的受管路径），
+// originalName 必须是单行可打印文本——两者都会原样传给子进程 argv，杜绝参数注入。
+function assertImportSaveSpawnArgs(archPath: string, originalName: string): void {
+  const resolved = resolve(archPath);
+  if (!isAbsolute(resolved) || resolved.includes('\0') || !existsSync(resolved)) {
+    throw new Error('备份文件路径无效');
+  }
+  // 控制字符/换行/超长一律拒绝——originalName 会原样传给子进程 argv 与展示在 UI
+  if (/[\r\n -]/.test(originalName) || originalName.length > 255) {
+    throw new Error('备份文件名无效');
+  }
+}
+
 export function startImportSaveJob(archPath: string, originalName: string): string {
   if (!acquireLock()) throw new Error('有备份、恢复、校验或导入任务正在进行中，请等待完成后再试');
+  assertImportSaveSpawnArgs(archPath, originalName);
   const jobId = `importsave_${Date.now()}`;
   const job: ImportSaveJob = {
     id: jobId,

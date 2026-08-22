@@ -305,6 +305,7 @@ export default function UserAdminPage() {
     ADMIN: stats?.admin ?? 0,
     EDITOR: stats?.editor ?? 0,
     VIEWER: stats?.viewer ?? 0,
+    INTERNAL: stats?.internal ?? 0,
   };
 
   const toolbar = (

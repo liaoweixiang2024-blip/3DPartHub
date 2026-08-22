@@ -81,6 +81,7 @@ export async function revokeRefreshFamily(userId: string, familyId: string): Pro
 
 export function signAccessToken(payload: TokenPayload): string {
   return jwt.sign({ userId: payload.userId, role: payload.role, tokenType: 'access' }, JWT_SECRET, {
+    algorithm: 'HS256',
     expiresIn: ACCESS_EXPIRES,
   });
 }
@@ -95,12 +96,13 @@ export function signRefreshToken(payload: TokenPayload & { familyId?: string }):
       rememberMe: payload.rememberMe === true,
     },
     JWT_SECRET,
-    { expiresIn: REFRESH_EXPIRES },
+    { algorithm: 'HS256', expiresIn: REFRESH_EXPIRES },
   );
 }
 
 export function verifyToken(token: string): VerifiedTokenPayload {
-  const payload = jwt.verify(token, JWT_SECRET) as VerifiedTokenPayload;
+  // 显式固定算法：拒绝任何非 HS256 的 token（jsonwebtoken v9 已防 alg=none，这里再显式收窄）
+  const payload = jwt.verify(token, JWT_SECRET, { algorithms: ['HS256'] }) as VerifiedTokenPayload;
   if (payload.tokenType !== 'access' && payload.tokenType !== 'refresh') {
     throw new Error('Invalid token type');
   }

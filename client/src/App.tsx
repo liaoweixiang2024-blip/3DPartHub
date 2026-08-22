@@ -30,7 +30,8 @@ export default function App() {
         },
       }}
     >
-      <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+      {/* react-router v7：v7_startTransition / v7_relativeSplatPath 已是默认行为，无需 future flag */}
+      <BrowserRouter>
         <MotionConfig reducedMotion="user" transition={{ duration: motionDuration.base, ease: motionEase.standard }}>
           <ToastProvider>
             <ErrorBoundary>
