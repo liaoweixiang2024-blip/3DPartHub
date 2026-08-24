@@ -8,6 +8,7 @@ import { prisma } from '../lib/prisma.js';
 import { getSetting } from '../lib/settings.js';
 import { authMiddleware, type AuthRequest } from '../middleware/auth.js';
 import { shouldAttachExternalGltfBin, shouldDownloadOriginalBatchFormat } from '../services/batchArchive.js';
+import { getInvisibleCategoryIds } from '../services/categoryAccess.js';
 import { DailyDownloadLimitError, recordModelDownload } from '../services/modelDownloadRecorder.js';
 import { resolveDbModelDownloadTarget } from '../services/modelDownloadTarget.js';
 import { findOriginalModelPath } from '../services/modelFiles.js';
@@ -96,7 +97,11 @@ async function validateBatchSize(ids: string[], label: string): Promise<ArchiveL
   return null;
 }
 
-async function lookupHistoryArchiveEntries(ids: string[], userId: string): Promise<ArchiveLookup> {
+async function lookupHistoryArchiveEntries(
+  ids: string[],
+  userId: string,
+  invisible: Set<string>,
+): Promise<ArchiveLookup> {
   if (!prisma) return { ok: false, status: 503, detail: 'DB unavailable' };
 
   const validation = await validateBatchSize(ids, '记录');
@@ -124,6 +129,7 @@ async function lookupHistoryArchiveEntries(ids: string[], userId: string): Promi
           gltfSize: true,
           uploadPath: true,
           status: true,
+          categoryId: true,
         },
       })
     : [];
@@ -136,6 +142,8 @@ async function lookupHistoryArchiveEntries(ids: string[], userId: string): Promi
     const download = downloadById.get(id);
     const model = download ? modelById.get(download.modelId) : null;
     if (!model || model.status !== MODEL_STATUS.COMPLETED || addedModelIds.has(model.id)) continue;
+    // 分类访问控制：受限分类的模型不参与打包
+    if (model.categoryId && invisible.has(model.categoryId)) continue;
     if (!findOriginalModelPath(model)) continue;
 
     const target = resolveDbModelDownloadTarget(model, 'original');
@@ -155,6 +163,7 @@ async function lookupHistoryArchiveEntries(ids: string[], userId: string): Promi
 async function lookupFavoriteArchiveEntries(
   ids: string[],
   userId: string,
+  invisible: Set<string>,
   format = 'original',
 ): Promise<ArchiveLookup> {
   if (!prisma) return { ok: false, status: 503, detail: 'DB unavailable' };
@@ -183,11 +192,15 @@ async function lookupFavoriteArchiveEntries(
           gltfSize: true,
           uploadPath: true,
           status: true,
+          categoryId: true,
         },
       })
     : [];
   const modelById = new Map(
-    favoriteModels.filter((model) => model.status === MODEL_STATUS.COMPLETED).map((model) => [model.id, model]),
+    favoriteModels
+      .filter((model) => model.status === MODEL_STATUS.COMPLETED)
+      .filter((model) => !model.categoryId || !invisible.has(model.categoryId))
+      .map((model) => [model.id, model]),
   );
   const models: typeof favoriteModels = [];
   for (const id of ids) {
@@ -290,10 +303,12 @@ router.post('/api/batch-download', parseBatchDownloadForm, authMiddleware, async
       return;
     }
 
+    // 分类访问控制：受限分类的模型不参与任何批量打包
+    const invisible = await getInvisibleCategoryIds(req.user!.role, req.user!.userId);
     const lookup =
       source === 'downloads'
-        ? await lookupHistoryArchiveEntries(ids, req.user!.userId)
-        : await lookupFavoriteArchiveEntries(ids, req.user!.userId, format);
+        ? await lookupHistoryArchiveEntries(ids, req.user!.userId, invisible)
+        : await lookupFavoriteArchiveEntries(ids, req.user!.userId, invisible, format);
     if (!lookup.ok) {
       res.status(lookup.status).json({ detail: lookup.detail });
       return;

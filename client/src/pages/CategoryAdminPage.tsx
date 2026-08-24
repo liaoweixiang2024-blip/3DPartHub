@@ -2,6 +2,8 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import useSWR from 'swr';
 import { categoriesApi, type CategoryItem } from '../api/categories';
+import client from '../api/client';
+import { unwrapResponse } from '../api/response';
 import { AdminButton } from '../components/shared/AdminControls';
 import {
   ADMIN_GRID_ROW_CLASS,
@@ -11,6 +13,7 @@ import {
 } from '../components/shared/AdminDataTable';
 import { AdminContentPanel, AdminLoadingState, AdminManagementPage } from '../components/shared/AdminManagementPage';
 import { AdminPageShell } from '../components/shared/AdminPageShell';
+import { AppSwitch } from '../components/shared/FormControls';
 import Icon from '../components/shared/Icon';
 import SearchField from '../components/shared/SearchField';
 import { useToast } from '../components/shared/Toast';
@@ -157,6 +160,12 @@ function CategoryRow({
           <div className="min-w-0">
             <div className="flex min-w-0 items-center gap-2">
               <span className={ADMIN_ROW_TITLE_CLASS}>{cat.name}</span>
+              {cat.restricted && (
+                <span className="inline-flex items-center gap-0.5 rounded-full bg-error/15 px-2 py-1 text-[10px] font-medium text-error">
+                  <Icon name="lock" size={10} />
+                  受限
+                </span>
+              )}
               {isChild && (
                 <span className="hidden rounded-full bg-surface-container-high px-2 py-1 text-[10px] text-on-surface-variant sm:inline">
                   子分类
@@ -252,6 +261,176 @@ function CategoryRow({
   );
 }
 
+// 可授权的角色（ADMIN 始终可见，不在此列）
+const ACCESS_ROLE_OPTIONS = [
+  { value: 'EDITOR', label: '编辑者' },
+  { value: 'VIEWER', label: '访客' },
+  { value: 'INTERNAL', label: '内部' },
+];
+
+interface AccessUserOption {
+  id: string;
+  username: string;
+  email: string;
+  role: string;
+}
+
+/** 分类弹窗里的「访问限制」区块：受限开关 + 角色勾选 + 指定用户搜索多选 */
+function CategoryAccessSection({
+  restricted,
+  onRestrictedChange,
+  allowedRoles,
+  onAllowedRolesChange,
+  allowedUsers,
+  onAllowedUsersChange,
+}: {
+  restricted: boolean;
+  onRestrictedChange: (value: boolean) => void;
+  allowedRoles: string[];
+  onAllowedRolesChange: (roles: string[]) => void;
+  allowedUsers: AccessUserOption[];
+  onAllowedUsersChange: (users: AccessUserOption[]) => void;
+}) {
+  const [userSearch, setUserSearch] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
+  const [searchOpen, setSearchOpen] = useState(false);
+
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedSearch(userSearch.trim()), 300);
+    return () => clearTimeout(timer);
+  }, [userSearch]);
+
+  const { data: searchResults, isLoading: searching } = useSWR(
+    searchOpen && debouncedSearch ? `/admin/users?search=${encodeURIComponent(debouncedSearch)}` : null,
+    async (url: string) => {
+      const res = await client.get(url, { params: { page: 1, page_size: 8 } });
+      return unwrapResponse<{ items: AccessUserOption[] }>(res);
+    },
+  );
+
+  const selectedIds = new Set(allowedUsers.map((u) => u.id));
+  const options = (searchResults?.items ?? []).filter((u) => !selectedIds.has(u.id));
+
+  function toggleRole(role: string) {
+    onAllowedRolesChange(
+      allowedRoles.includes(role) ? allowedRoles.filter((r) => r !== role) : [...allowedRoles, role],
+    );
+  }
+
+  return (
+    <div className="rounded-xl border border-outline-variant/15 bg-surface-container-lowest p-3.5">
+      <div className="flex items-center justify-between gap-3">
+        <span className="flex items-center gap-2 text-sm font-medium text-on-surface">
+          <Icon name="lock" size={16} className="text-on-surface-variant" />
+          访问限制
+        </span>
+        <AppSwitch checked={restricted} onChange={onRestrictedChange} />
+      </div>
+      <p className="mt-1.5 text-[11px] text-on-surface-variant/70">
+        开启后，该分类（含子分类）下的模型仅对白名单内的角色和指定用户可见；管理员始终可见。公开分享链接不受影响。
+      </p>
+
+      {restricted && (
+        <div className="mt-3 space-y-3 border-t border-outline-variant/10 pt-3">
+          <div>
+            <div className="mb-1.5 text-xs font-medium text-on-surface-variant">允许访问的角色</div>
+            <div className="flex flex-wrap gap-2">
+              {ACCESS_ROLE_OPTIONS.map((opt) => {
+                const active = allowedRoles.includes(opt.value);
+                return (
+                  <button
+                    key={opt.value}
+                    type="button"
+                    onClick={() => toggleRole(opt.value)}
+                    className={`rounded-full px-3 py-1.5 text-xs font-medium transition-colors ${
+                      active
+                        ? 'bg-primary-container/15 text-primary-container ring-1 ring-primary-container/30'
+                        : 'bg-surface-container-high text-on-surface-variant hover:bg-surface-container-highest'
+                    }`}
+                  >
+                    {active ? '✓ ' : ''}
+                    {opt.label}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          <div className="relative">
+            <div className="mb-1.5 text-xs font-medium text-on-surface-variant">指定用户（搜索用户名 / 邮箱）</div>
+            <input
+              value={userSearch}
+              onChange={(e) => {
+                setUserSearch(e.target.value);
+                setSearchOpen(true);
+              }}
+              onFocus={() => setSearchOpen(true)}
+              placeholder="输入关键词搜索用户"
+              className="h-10 w-full rounded-lg border border-outline-variant/20 bg-surface-container-lowest px-3 text-sm text-on-surface outline-none focus:border-primary-container"
+            />
+            {allowedUsers.length > 0 && (
+              <div className="mt-2 flex flex-wrap gap-1.5">
+                {allowedUsers.map((u) => (
+                  <span
+                    key={u.id}
+                    className="inline-flex items-center gap-1 rounded-full bg-primary-container/12 px-2.5 py-1 text-xs text-primary-container"
+                  >
+                    {u.username}
+                    <button
+                      type="button"
+                      onClick={() => onAllowedUsersChange(allowedUsers.filter((x) => x.id !== u.id))}
+                      className="rounded-full p-0.5 hover:bg-primary-container/20"
+                      aria-label={`移除 ${u.username}`}
+                    >
+                      <Icon name="close" size={12} />
+                    </button>
+                  </span>
+                ))}
+              </div>
+            )}
+            {searchOpen && debouncedSearch && (
+              <div className="absolute inset-x-0 top-full z-10 mt-1 max-h-56 overflow-y-auto rounded-lg border border-outline-variant/20 bg-surface-container-low shadow-xl">
+                {searching ? (
+                  <p className="px-3 py-2.5 text-xs text-on-surface-variant">搜索中...</p>
+                ) : options.length === 0 ? (
+                  <p className="px-3 py-2.5 text-xs text-on-surface-variant">无匹配用户</p>
+                ) : (
+                  options.map((u) => (
+                    <button
+                      key={u.id}
+                      type="button"
+                      onClick={() => {
+                        onAllowedUsersChange([...allowedUsers, u]);
+                        setUserSearch('');
+                        setSearchOpen(false);
+                      }}
+                      className="flex w-full items-center justify-between gap-2 px-3 py-2 text-left hover:bg-surface-container-high"
+                    >
+                      <span className="min-w-0">
+                        <span className="block truncate text-sm text-on-surface">{u.username}</span>
+                        <span className="block truncate text-[11px] text-on-surface-variant">{u.email}</span>
+                      </span>
+                      <span className="shrink-0 rounded bg-surface-container-highest px-1.5 py-0.5 text-[10px] text-on-surface-variant">
+                        {u.role}
+                      </span>
+                    </button>
+                  ))
+                )}
+              </div>
+            )}
+          </div>
+
+          {allowedRoles.length === 0 && allowedUsers.length === 0 && (
+            <p className="rounded-lg bg-error/10 px-2.5 py-1.5 text-[11px] text-error">
+              白名单为空：除管理员外所有人都看不到该分类。请至少勾选一个角色或添加一个用户。
+            </p>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function CategoryModal({
   category,
   parentId,
@@ -265,22 +444,69 @@ function CategoryModal({
 }) {
   const [name, setName] = useState(category?.name || '');
   const [icon, setIcon] = useState(category?.icon || 'folder');
+  const [restricted, setRestricted] = useState(category?.restricted ?? false);
+  const [allowedRoles, setAllowedRoles] = useState<string[]>(category?.allowedRoles ?? []);
+  const [allowedUsers, setAllowedUsers] = useState<AccessUserOption[]>([]);
   const [saving, setSaving] = useState(false);
   const { toast } = useToast();
 
   const isEdit = !!category;
+  // 已选指定用户的 id → 展示名兜底（编辑时从接口只拿到 id，回显用首次搜索结果或 admin users 补齐）
+  const allowedUserIds = category?.allowedUserIds ?? [];
+
+  // 编辑时回显白名单用户名：拉一页用户列表按 id 匹配（低频管理操作，简单实现）
+  useEffect(() => {
+    if (!isEdit || allowedUserIds.length === 0) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const collected: AccessUserOption[] = [...allowedUsers];
+        const missing = allowedUserIds.filter((id) => !collected.some((u) => u.id === id));
+        if (missing.length === 0) return;
+        const res = await client.get('/admin/users', { params: { page: 1, page_size: 100 } });
+        const payload = unwrapResponse<{ items: AccessUserOption[] }>(res);
+        if (cancelled) return;
+        const byId = new Map(payload.items.map((u) => [u.id, u]));
+        for (const id of missing) {
+          const found = byId.get(id);
+          if (found && !collected.some((u) => u.id === found.id)) collected.push(found);
+        }
+        // 用户超过 100 个时可能没拉全，未匹配到的用 id 占位展示
+        for (const id of missing) {
+          if (!collected.some((u) => u.id === id))
+            collected.push({ id, username: id.slice(0, 8), email: '', role: '?' });
+        }
+        setAllowedUsers(collected);
+      } catch {
+        // 回显失败不阻塞编辑：保存时仍以完整 allowedUsers 为准
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isEdit, category?.id]);
 
   const handleSave = async () => {
     if (!name.trim()) {
       toast('请输入分类名称', 'error');
       return;
     }
+    if (restricted && allowedRoles.length === 0 && allowedUsers.length === 0) {
+      toast('访问限制已开启，请至少勾选一个角色或添加一个指定用户', 'error');
+      return;
+    }
     setSaving(true);
     try {
+      const accessPayload = {
+        restricted,
+        allowedRoles: restricted ? allowedRoles : [],
+        allowedUserIds: restricted ? allowedUsers.map((u) => u.id) : [],
+      };
       if (isEdit) {
-        await categoriesApi.update(category!.id, { name: name.trim(), icon });
+        await categoriesApi.update(category!.id, { name: name.trim(), icon, ...accessPayload });
       } else {
-        await categoriesApi.create({ name: name.trim(), icon, parentId: parentId || null });
+        await categoriesApi.create({ name: name.trim(), icon, parentId: parentId || null, ...accessPayload });
       }
       toast(isEdit ? '分类已更新' : '分类已创建', 'success');
       onSaved();
@@ -390,6 +616,15 @@ function CategoryModal({
               ))}
             </div>
           </div>
+
+          <CategoryAccessSection
+            restricted={restricted}
+            onRestrictedChange={setRestricted}
+            allowedRoles={allowedRoles}
+            onAllowedRolesChange={setAllowedRoles}
+            allowedUsers={allowedUsers}
+            onAllowedUsersChange={setAllowedUsers}
+          />
         </div>
 
         <div className="grid grid-cols-2 gap-2 border-t border-outline-variant/10 bg-surface-container-low px-5 py-4 sm:flex sm:justify-end">

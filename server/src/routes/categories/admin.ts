@@ -1,8 +1,65 @@
 import { Router, Response } from 'express';
+import { cacheDelByPrefix } from '../../lib/cache.js';
 import { prisma } from '../../lib/prisma.js';
 import { authMiddleware, type AuthRequest } from '../../middleware/auth.js';
 import { requireRole } from '../../middleware/rbac.js';
 import { clearCategoryCache } from './common.js';
+
+const ALLOWED_CATEGORY_ROLES = ['EDITOR', 'VIEWER', 'INTERNAL'] as const;
+const MAX_ALLOWED_USERS = 100;
+
+/** 校验并规整访问限制三字段；非法输入返回错误文案，合法返回规整后的值 */
+async function normalizeAccessFields(
+  body: Record<string, unknown>,
+): Promise<
+  | { ok: true; data: { restricted?: boolean; allowedRoles?: string[]; allowedUserIds?: string[] } }
+  | { ok: false; detail: string }
+> {
+  const result: { restricted?: boolean; allowedRoles?: string[]; allowedUserIds?: string[] } = {};
+
+  if (body.restricted !== undefined) {
+    if (typeof body.restricted !== 'boolean') return { ok: false, detail: '访问限制开关必须为布尔值' };
+    result.restricted = body.restricted;
+  }
+
+  if (body.allowedRoles !== undefined) {
+    if (!Array.isArray(body.allowedRoles)) return { ok: false, detail: '允许角色格式错误' };
+    const roles = [...new Set(body.allowedRoles.filter((r): r is string => typeof r === 'string'))];
+    if (roles.some((r) => !(ALLOWED_CATEGORY_ROLES as readonly string[]).includes(r))) {
+      return { ok: false, detail: `允许角色只能是 ${ALLOWED_CATEGORY_ROLES.join(' / ')}` };
+    }
+    result.allowedRoles = roles;
+  }
+
+  if (body.allowedUserIds !== undefined) {
+    if (!Array.isArray(body.allowedUserIds)) return { ok: false, detail: '允许用户格式错误' };
+    const ids = [
+      ...new Set(
+        body.allowedUserIds.filter((u): u is string => typeof u === 'string' && Boolean(u.trim())).map((u) => u.trim()),
+      ),
+    ];
+    if (ids.length > MAX_ALLOWED_USERS) {
+      return { ok: false, detail: `允许用户最多 ${MAX_ALLOWED_USERS} 个` };
+    }
+    if (ids.length > 0) {
+      // 校验存在性：不存在的用户直接剔除（用户被删后白名单残留无效 id 属正常情况）
+      const existing = await prisma.user.findMany({ where: { id: { in: ids } }, select: { id: true } });
+      const existingSet = new Set(existing.map((u) => u.id));
+      result.allowedUserIds = ids.filter((id) => existingSet.has(id));
+    } else {
+      result.allowedUserIds = [];
+    }
+  }
+
+  return { ok: true, data: result };
+}
+
+/** 权限字段变更后要失效模型/收藏缓存（列表内容按可见性分桶） */
+async function clearAccessCaches() {
+  await clearCategoryCache();
+  await cacheDelByPrefix('cache:models:');
+  await cacheDelByPrefix('cache:favorites:');
+}
 
 export function createAdminCategoriesRouter() {
   const router = Router();
@@ -18,6 +75,11 @@ export function createAdminCategoriesRouter() {
       res.status(400).json({ detail: '分类名称不能超过50个字符' });
       return;
     }
+    const access = await normalizeAccessFields(req.body as Record<string, unknown>);
+    if (!access.ok) {
+      res.status(400).json({ detail: access.detail });
+      return;
+    }
 
     try {
       const category = await prisma.category.create({
@@ -26,6 +88,7 @@ export function createAdminCategoriesRouter() {
           icon: icon || 'folder',
           parentId: parentId || null,
           sortOrder: sortOrder ?? 0,
+          ...access.data,
         },
       });
       await clearCategoryCache();
@@ -72,6 +135,16 @@ export function createAdminCategoriesRouter() {
     const id = req.params.id as string;
     const { name, icon, parentId, sortOrder } = req.body;
 
+    const access = await normalizeAccessFields(req.body as Record<string, unknown>);
+    if (!access.ok) {
+      res.status(400).json({ detail: access.detail });
+      return;
+    }
+    const accessChanged =
+      access.data.restricted !== undefined ||
+      access.data.allowedRoles !== undefined ||
+      access.data.allowedUserIds !== undefined;
+
     try {
       if (parentId) {
         let current: string | null = parentId;
@@ -95,9 +168,14 @@ export function createAdminCategoriesRouter() {
           ...(icon !== undefined && { icon }),
           ...(parentId !== undefined && { parentId: parentId || null }),
           ...(sortOrder !== undefined && { sortOrder }),
+          ...access.data,
         },
       });
-      await clearCategoryCache();
+      if (accessChanged) {
+        await clearAccessCaches();
+      } else {
+        await clearCategoryCache();
+      }
       res.json({ data: category });
     } catch (err: unknown) {
       if (err instanceof Error && 'code' in err && (err as NodeJS.ErrnoException).code === 'P2025') {

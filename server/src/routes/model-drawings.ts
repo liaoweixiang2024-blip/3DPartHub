@@ -16,6 +16,7 @@ import { deleteCloudFile, keyFromStaticUrl, persistFile } from '../lib/storagePr
 import { modelDrawingMaxBytes, modelDrawingMaxSizeMb } from '../lib/uploadLimits.js';
 import { authMiddleware, verifyRequestToken, type AuthRequest } from '../middleware/auth.js';
 import { requireRole } from '../middleware/rbac.js';
+import { getInvisibleCategoryIds } from '../services/categoryAccess.js';
 
 const log = createLogger({ component: 'model-drawings' });
 
@@ -160,10 +161,16 @@ router.get('/api/models/:id/drawing/download', async (req: Request, res: Respons
   try {
     const m = await prisma.model.findUnique({
       where: { id },
-      select: { id: true, name: true, originalName: true, drawingUrl: true, drawingName: true },
+      select: { id: true, name: true, originalName: true, drawingUrl: true, drawingName: true, categoryId: true },
     });
     if (!m?.drawingUrl) {
       res.status(404).json({ detail: '图纸不存在' });
+      return;
+    }
+    // 分类访问控制：受限分类的模型图纸同样拦截
+    const invisible = await getInvisibleCategoryIds(user.role ?? null, user.userId ?? null);
+    if (m.categoryId && invisible.has(m.categoryId)) {
+      res.status(403).json({ detail: '无权访问该图纸' });
       return;
     }
 

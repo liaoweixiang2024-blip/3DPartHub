@@ -9,6 +9,7 @@ import { prisma } from '../lib/prisma.js';
 import { optionalString } from '../lib/requestValidation.js';
 import { getSetting } from '../lib/settings.js';
 import { authMiddleware, optionalAuthMiddleware, type AuthRequest } from '../middleware/auth.js';
+import { getInvisibleCategoryIds } from '../services/categoryAccess.js';
 import { resolveDbModelDownloadTarget } from '../services/modelDownloadTarget.js';
 import { findOriginalModelPath } from '../services/modelFiles.js';
 import { MODEL_STATUS } from '../services/modelStatus.js';
@@ -131,7 +132,11 @@ function readBatchDownloadCheckIds(req: Request): string[] {
   return uniqueDownloadIds(query.ids ?? query['ids[]']);
 }
 
-async function lookupDownloadArchiveEntries(ids: string[], userId: string): Promise<DownloadArchiveLookup> {
+async function lookupDownloadArchiveEntries(
+  ids: string[],
+  userId: string,
+  invisible: Set<string>,
+): Promise<DownloadArchiveLookup> {
   if (!prisma) return { ok: false, status: 503, detail: 'DB unavailable' };
 
   const uniqueIds = uniqueDownloadIds(ids);
@@ -167,6 +172,7 @@ async function lookupDownloadArchiveEntries(ids: string[], userId: string): Prom
           gltfSize: true,
           uploadPath: true,
           status: true,
+          categoryId: true,
         },
       })
     : [];
@@ -179,6 +185,8 @@ async function lookupDownloadArchiveEntries(ids: string[], userId: string): Prom
     const download = downloadById.get(id);
     const model = download ? modelById.get(download.modelId) : null;
     if (!model || model.status !== MODEL_STATUS.COMPLETED || addedModelIds.has(model.id)) continue;
+    // 分类访问控制：受限分类的模型不参与打包（防绕过）
+    if (model.categoryId && invisible.has(model.categoryId)) continue;
     if (!findOriginalModelPath(model)) continue;
 
     const target = resolveDbModelDownloadTarget(model, 'original');
@@ -203,6 +211,8 @@ router.get('/api/downloads', authMiddleware, async (req: Request, res: Response)
   }
   try {
     const userId = (req as AuthRequest).user!.userId;
+    // 分类访问控制：受限分类的模型不出现在下载历史
+    const invisible = await getInvisibleCategoryIds((req as AuthRequest).user!.role, userId);
     const downloads = await prisma.download.findMany({
       where: { userId },
       select: {
@@ -226,25 +236,27 @@ router.get('/api/downloads', authMiddleware, async (req: Request, res: Response)
             format: true,
             thumbnailUrl: true,
             gltfSize: true,
+            categoryId: true,
           },
         })
       : [];
     const modelById = new Map(models.map((model) => [model.id, model]));
     const items = downloads.map((d) => {
       const model = modelById.get(d.modelId);
+      const visible = model && (!model.categoryId || !invisible.has(model.categoryId));
       return {
         id: d.id,
         modelId: d.modelId,
         format: d.format,
         fileSize: d.fileSize,
         createdAt: d.createdAt,
-        model: model
+        model: visible
           ? {
-              model_id: model.id,
-              name: model.name || model.originalName,
-              format: model.format,
-              thumbnail_url: model.thumbnailUrl,
-              gltf_size: model.gltfSize,
+              model_id: model!.id,
+              name: model!.name || model!.originalName,
+              format: model!.format,
+              thumbnail_url: model!.thumbnailUrl,
+              gltf_size: model!.gltfSize,
             }
           : null,
       };
@@ -443,6 +455,19 @@ router.post('/api/downloads/model-token', optionalAuthMiddleware, async (req: Au
       return;
     }
 
+    // 分类访问控制：受限分类的模型不发放下载令牌（/download 端点还有同款兜底拦截）
+    const invisible = await getInvisibleCategoryIds(req.user?.role ?? null, req.user?.userId ?? null);
+    if (invisible.size > 0) {
+      const model = await prisma.model.findUnique({
+        where: { id: modelId },
+        select: { categoryId: true },
+      });
+      if (model?.categoryId && invisible.has(model.categoryId)) {
+        res.status(403).json({ detail: '无权下载该模型' });
+        return;
+      }
+    }
+
     const created = await createModelDownloadToken({
       modelId,
       format,
@@ -503,7 +528,8 @@ router.all(
   authMiddleware,
   async (req: AuthRequest, res: Response) => {
     try {
-      const lookup = await lookupDownloadArchiveEntries(readBatchDownloadCheckIds(req), req.user!.userId);
+      const invisible = await getInvisibleCategoryIds(req.user!.role, req.user!.userId);
+      const lookup = await lookupDownloadArchiveEntries(readBatchDownloadCheckIds(req), req.user!.userId, invisible);
       if (!lookup.ok) {
         res.status(lookup.status).json({ detail: lookup.detail });
         return;
@@ -522,7 +548,8 @@ router.post(
   authMiddleware,
   async (req: AuthRequest, res: Response) => {
     try {
-      const lookup = await lookupDownloadArchiveEntries(readBatchDownloadIds(req.body), req.user!.userId);
+      const invisible = await getInvisibleCategoryIds(req.user!.role, req.user!.userId);
+      const lookup = await lookupDownloadArchiveEntries(readBatchDownloadIds(req.body), req.user!.userId, invisible);
       if (!lookup.ok) {
         res.status(lookup.status).json({ detail: lookup.detail });
         return;

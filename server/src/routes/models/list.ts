@@ -13,6 +13,11 @@ import {
 } from '../../lib/searchQuery.js';
 import { getAllSettings } from '../../lib/settings.js';
 import { requireBrowseAccess } from '../../middleware/browseAccess.js';
+import {
+  accessBucketKey,
+  excludedCategoriesWhere,
+  getInvisibleCategoryIdsForRequest,
+} from '../../services/categoryAccess.js';
 import { withAssetVersion } from '../../services/gltfAsset.js';
 import { MODEL_STATUS } from '../../services/modelStatus.js';
 import { groupedVisibleModelWhere } from '../../services/modelVisibility.js';
@@ -44,7 +49,12 @@ export function createModelListRouter({ prisma, drawingDownloadUrl }: ModelListC
     const maxPageSize = Math.max(1, Math.floor(Number(pageSizePolicy.homeMax) || 10000));
     const pageSize = numericQuery(req.query.page_size, defaultPageSize, 1, maxPageSize);
 
-    const cacheKey = `cache:models:${page}:${pageSize}:${searchCacheToken(search)}:${format}:${categoryId || category}:${sort}:${order}:${grouped}`;
+    // 分类访问控制：不可见分类集合 → 列表 where 排除 + 缓存分桶
+    const invisible = await getInvisibleCategoryIdsForRequest(req);
+    const bucket = accessBucketKey(invisible);
+    const accessCond = excludedCategoriesWhere(invisible);
+
+    const cacheKey = `cache:models:${page}:${pageSize}:${searchCacheToken(search)}:${format}:${categoryId || category}:${sort}:${order}:${grouped}${bucket ? `:${bucket}` : ''}`;
 
     if (prisma) {
       try {
@@ -52,6 +62,7 @@ export function createModelListRouter({ prisma, drawingDownloadUrl }: ModelListC
         const { value: responseData, hit } = await cacheGetOrSet(cacheKey, listTtl, async () => {
           const where: Prisma.ModelWhereInput = { status: MODEL_STATUS.COMPLETED };
           const andConditions: Prisma.ModelWhereInput[] = [];
+          if (accessCond) andConditions.push(accessCond);
           const searchCond = modelTextSearchWhere(search);
           if (searchCond) andConditions.push(searchCond);
           if (format) {

@@ -12,6 +12,11 @@ import {
 } from '../lib/searchQuery.js';
 import { getAllSettings } from '../lib/settings.js';
 import { requireBrowseAccess } from '../middleware/browseAccess.js';
+import {
+  accessBucketKey,
+  excludedCategoriesWhere,
+  getInvisibleCategoryIdsForRequest,
+} from '../services/categoryAccess.js';
 import { withAssetVersion } from '../services/gltfAsset.js';
 import { MODEL_STATUS } from '../services/modelStatus.js';
 import { groupedVisibleModelWhere } from '../services/modelVisibility.js';
@@ -37,6 +42,11 @@ router.get('/api/search', async (req, res: Response) => {
 
   const grouped = req.query.grouped !== 'false';
 
+  // 分类访问控制：不可见分类集合 → 搜索结果排除 + 缓存分桶
+  const invisible = await getInvisibleCategoryIdsForRequest(req);
+  const bucket = accessBucketKey(invisible);
+  const accessCond = excludedCategoriesWhere(invisible);
+
   const cacheKey = [
     'cache:models:search',
     page,
@@ -47,6 +57,7 @@ router.get('/api/search', async (req, res: Response) => {
     searchCacheToken(project),
     sort,
     grouped,
+    bucket,
   ].join(':');
 
   try {
@@ -54,6 +65,7 @@ router.get('/api/search', async (req, res: Response) => {
     const { value: responseData, hit } = await cacheGetOrSet(cacheKey, searchTtl, async () => {
       const where: Prisma.ModelWhereInput = { status: MODEL_STATUS.COMPLETED };
       const andConditions: Prisma.ModelWhereInput[] = [];
+      if (accessCond) andConditions.push(accessCond);
 
       // Text search
       const searchCond = modelTextSearchWhere(q);

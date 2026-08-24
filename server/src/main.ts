@@ -388,15 +388,24 @@ app.get('/api/models/count', async (req, res) => {
     const mod = await import('./lib/prisma.js');
     const { MODEL_STATUS } = await import('./services/modelStatus.js');
     const grouped = req.query.grouped !== 'false';
-    const cacheKey = grouped ? 'cache:models:count:grouped' : 'cache:models:count:all';
+    // 分类访问控制：不可见分类集合 → 计数排除 + 缓存分桶
+    const { getInvisibleCategoryIdsForRequest, accessBucketKey, excludedCategoriesWhere } =
+      await import('./services/categoryAccess.js');
+    const invisible = await getInvisibleCategoryIdsForRequest(req);
+    const bucket = accessBucketKey(invisible);
+    const accessCond = excludedCategoriesWhere(invisible);
+    const cacheKey = `${grouped ? 'cache:models:count:grouped' : 'cache:models:count:all'}${bucket ? `:${bucket}` : ''}`;
     const listTtl = resolveCacheTtl((await getAllSettings()).cache_model_list_ttl_seconds, TTL.MODELS_LIST);
     const { value, hit } = await cacheGetOrSet(cacheKey, listTtl, async () => {
       const where: Prisma.ModelWhereInput = { status: MODEL_STATUS.COMPLETED };
+      const andConditions: Prisma.ModelWhereInput[] = [];
       if (grouped) {
         const { groupedVisibleModelWhere } = await import('./services/modelVisibility.js');
         const vis = await groupedVisibleModelWhere(mod.prisma);
-        where.AND = [vis as Prisma.ModelWhereInput];
+        andConditions.push(vis as Prisma.ModelWhereInput);
       }
+      if (accessCond) andConditions.push(accessCond as Prisma.ModelWhereInput);
+      if (andConditions.length) where.AND = andConditions;
       const total = await mod.prisma.model.count({ where });
       return { total };
     });

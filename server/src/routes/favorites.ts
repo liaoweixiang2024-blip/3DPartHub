@@ -10,6 +10,7 @@ import { requestSiteUrl } from '../lib/requestSiteUrl.js';
 import { getAllSettings, getSetting } from '../lib/settings.js';
 import { authMiddleware, type AuthRequest } from '../middleware/auth.js';
 import { shouldAttachExternalGltfBin, shouldDownloadOriginalBatchFormat } from '../services/batchArchive.js';
+import { accessBucketKey, getInvisibleCategoryIds } from '../services/categoryAccess.js';
 import { withAssetVersion } from '../services/gltfAsset.js';
 import { DailyDownloadLimitError, recordModelDownload } from '../services/modelDownloadRecorder.js';
 import { resolveDbModelDownloadTarget } from '../services/modelDownloadTarget.js';
@@ -79,7 +80,10 @@ function readBatchModelIds(body: unknown): string[] {
 // List user's favorites
 router.get('/api/favorites', authMiddleware, async (req: AuthRequest, res: Response) => {
   try {
-    const cacheKey = `cache:favorites:${req.user!.userId}`;
+    // 分类访问控制：收藏列表不显示受限分类的模型（缓存分桶）
+    const invisible = await getInvisibleCategoryIds(req.user!.role, req.user!.userId);
+    const bucket = accessBucketKey(invisible);
+    const cacheKey = `cache:favorites:${req.user!.userId}${bucket ? `:${bucket}` : ''}`;
     const { cacheGetOrSet, TTL, resolveCacheTtl } = await import('../lib/cache.js');
     const listTtl = resolveCacheTtl((await getAllSettings()).cache_model_list_ttl_seconds, TTL.MODELS_LIST);
     const { value: favorites } = await cacheGetOrSet(cacheKey, listTtl, async () => {
@@ -107,16 +111,19 @@ router.get('/api/favorites', authMiddleware, async (req: AuthRequest, res: Respo
               gltfSize: true,
               originalSize: true,
               status: true,
+              categoryId: true,
               createdAt: true,
               updatedAt: true,
             },
           })
         : [];
+      // 受限分类的模型不出现在收藏列表（model 置 null，外层已有 null 过滤）
       const modelById = new Map(models.map((model) => [model.id, model]));
-      return rows.map((favorite) => ({
-        ...favorite,
-        model: modelById.get(favorite.modelId) || null,
-      }));
+      return rows.map((favorite) => {
+        const model = modelById.get(favorite.modelId);
+        const visible = model && (!model.categoryId || !invisible.has(model.categoryId));
+        return { ...favorite, model: visible ? model : null };
+      });
     });
     res.json(
       favorites
@@ -255,6 +262,8 @@ router.post(
     }
 
     try {
+      // 分类访问控制：受限分类的模型不参与收藏批量下载（防绕过）
+      const invisible = await getInvisibleCategoryIds(req.user!.role, req.user!.userId);
       const favorites = await prisma.favorite.findMany({
         where: { userId: req.user!.userId, modelId: { in: uniqueModelIds } },
         select: {
@@ -276,11 +285,14 @@ router.post(
               gltfSize: true,
               uploadPath: true,
               status: true,
+              categoryId: true,
             },
           })
         : [];
+      // 受限模型剔除后再进入打包流程
+      const packableModels = favoriteModels.filter((model) => !model.categoryId || !invisible.has(model.categoryId));
       const modelById = new Map(
-        favoriteModels.filter((model) => model.status === MODEL_STATUS.COMPLETED).map((model) => [model.id, model]),
+        packableModels.filter((model) => model.status === MODEL_STATUS.COMPLETED).map((model) => [model.id, model]),
       );
       const models = uniqueModelIds
         .map((id) => modelById.get(id))

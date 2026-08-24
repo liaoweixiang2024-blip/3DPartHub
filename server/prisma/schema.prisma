@@ -8,18 +8,18 @@ datasource db {
 }
 
 model User {
-  id                 String   @id @default(uuid())
-  username           String   @unique
-  email              String   @unique
-  passwordHash       String   @map("password_hash")
+  id                 String    @id @default(uuid())
+  username           String    @unique
+  email              String    @unique
+  passwordHash       String    @map("password_hash")
   avatar             String?
-  role               Role     @default(VIEWER)
-  canInvite          Boolean  @default(false)
+  role               Role      @default(VIEWER)
+  canInvite          Boolean   @default(false)
   company            String?
   phone              String?
   department         String?
   address            String?
-  bio                String?  @db.Text
+  bio                String?   @db.Text
   metadata           Json?
   mustChangePassword Boolean   @default(false) @map("must_change_password")
   disabled           Boolean   @default(false)
@@ -371,15 +371,18 @@ model AuditLog {
 }
 
 model Category {
-  id        String     @id @default(uuid())
-  name      String
-  icon      String     @default("folder")
-  parentId  String?    @map("parent_id")
-  parent    Category?  @relation("CategoryTree", fields: [parentId], references: [id], onDelete: Cascade)
-  children  Category[] @relation("CategoryTree")
-  sortOrder Int        @default(0) @map("sort_order")
-  createdAt DateTime   @default(now()) @map("created_at")
-  updatedAt DateTime   @updatedAt @map("updated_at")
+  id             String     @id @default(uuid())
+  name           String
+  icon           String     @default("folder")
+  parentId       String?    @map("parent_id")
+  parent         Category?  @relation("CategoryTree", fields: [parentId], references: [id], onDelete: Cascade)
+  children       Category[] @relation("CategoryTree")
+  sortOrder      Int        @default(0) @map("sort_order")
+  restricted     Boolean    @default(false)
+  allowedRoles   String[]   @default([]) @map("allowed_roles")
+  allowedUserIds String[]   @default([]) @map("allowed_user_ids")
+  createdAt      DateTime   @default(now()) @map("created_at")
+  updatedAt      DateTime   @updatedAt @map("updated_at")
 
   models Model[]
 

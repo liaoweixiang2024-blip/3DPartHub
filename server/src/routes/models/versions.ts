@@ -8,6 +8,7 @@ import { logger } from '../../lib/logger.js';
 import { authMiddleware, type AuthRequest } from '../../middleware/auth.js';
 import { requireBrowseAccess } from '../../middleware/browseAccess.js';
 import { requireRole } from '../../middleware/rbac.js';
+import { getInvisibleCategoryIdsForRequest } from '../../services/categoryAccess.js';
 import { convertStepToGltf } from '../../services/converter.js';
 import { MODEL_STATUS } from '../../services/modelStatus.js';
 import { generateThumbnail } from '../../services/thumbnail.js';
@@ -40,8 +41,17 @@ export function createModelVersionsRouter({ prisma, optionalVerifiedUser }: Mode
     }
     try {
       const authPayload = await optionalVerifiedUser(req);
-      const model = await prisma.model.findUnique({ where: { id: modelId }, select: { id: true, status: true } });
+      const model = await prisma.model.findUnique({
+        where: { id: modelId },
+        select: { id: true, status: true, categoryId: true },
+      });
       if (!model || (model.status !== MODEL_STATUS.COMPLETED && authPayload?.role !== 'ADMIN')) {
+        res.status(404).json({ detail: '模型不存在' });
+        return;
+      }
+      // 分类访问控制：受限分类的模型版本列表不对外暴露
+      const invisible = await getInvisibleCategoryIdsForRequest(req);
+      if (model.categoryId && invisible.has(model.categoryId)) {
         res.status(404).json({ detail: '模型不存在' });
         return;
       }

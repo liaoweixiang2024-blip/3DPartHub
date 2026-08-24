@@ -7,6 +7,9 @@ export interface CategoryItem {
   icon: string;
   parentId: string | null;
   sortOrder: number;
+  restricted?: boolean;
+  allowedRoles?: string[];
+  allowedUserIds?: string[];
   count?: number;
   totalCount?: number;
   children: CategoryItem[];
@@ -45,6 +48,9 @@ export const categoriesApi = {
     icon?: string;
     parentId?: string | null;
     sortOrder?: number;
+    restricted?: boolean;
+    allowedRoles?: string[];
+    allowedUserIds?: string[];
   }): Promise<CategoryItem> => {
     const { data: resp } = await client.post('/categories', payload);
     return unwrapApiData<CategoryItem>(resp);
@@ -52,7 +58,15 @@ export const categoriesApi = {
 
   update: async (
     id: string,
-    payload: { name?: string; icon?: string; parentId?: string | null; sortOrder?: number },
+    payload: {
+      name?: string;
+      icon?: string;
+      parentId?: string | null;
+      sortOrder?: number;
+      restricted?: boolean;
+      allowedRoles?: string[];
+      allowedUserIds?: string[];
+    },
   ): Promise<CategoryItem> => {
     const { data: resp } = await client.put(`/categories/${id}`, payload);
     return unwrapApiData<CategoryItem>(resp);

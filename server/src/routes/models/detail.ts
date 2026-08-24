@@ -5,6 +5,7 @@ import { Router, Request, Response } from 'express';
 import { cacheGet, cacheSet, resolveCacheTtl, TTL } from '../../lib/cache.js';
 import { getAllSettings } from '../../lib/settings.js';
 import { requireBrowseAccess } from '../../middleware/browseAccess.js';
+import { getInvisibleCategoryIdsForRequest } from '../../services/categoryAccess.js';
 import { withAssetVersion } from '../../services/gltfAsset.js';
 import { parseStepFileDate } from '../../services/modelFileDates.js';
 import { findOriginalModelPath, resolveStoredPath } from '../../services/modelFiles.js';
@@ -41,6 +42,8 @@ export function createModelDetailRouter({
     const id = req.params.id as string;
     const authPayload = await optionalVerifiedUser(req);
     const canViewUnpublished = authPayload?.role === 'ADMIN';
+    // 分类访问控制：受限分类下的模型，非白名单用户（含匿名）一律 403
+    const invisible = await getInvisibleCategoryIdsForRequest(req);
     const cacheKey = `cache:models:detail:${id}`;
     const detailTtl = resolveCacheTtl((await getAllSettings()).cache_model_detail_ttl_seconds, TTL.MODEL_DETAIL);
 
@@ -49,8 +52,12 @@ export function createModelDetailRouter({
         if (canViewUnpublished) {
           // Admin may view non-completed models — skip cache, always fresh
         } else {
-          const cached = await cacheGet(cacheKey);
+          const cached = await cacheGet<{ category_id?: string | null }>(cacheKey);
           if (cached) {
+            if (cached.category_id && invisible.has(cached.category_id)) {
+              res.status(403).json({ detail: '无权访问该模型' });
+              return;
+            }
             res.set('X-Cache', 'HIT');
             res.json(cached);
             return;
@@ -75,6 +82,7 @@ export function createModelDetailRouter({
                     updatedAt: true,
                     metadata: true,
                     fileModifiedAt: true,
+                    categoryId: true,
                   },
                   orderBy: { createdAt: 'asc' },
                 },
@@ -85,6 +93,10 @@ export function createModelDetailRouter({
         if (m) {
           if (m.status !== MODEL_STATUS.COMPLETED && !canViewUnpublished) {
             res.status(404).json({ detail: '模型不存在' });
+            return;
+          }
+          if (m.categoryId && invisible.has(m.categoryId)) {
+            res.status(403).json({ detail: '无权访问该模型' });
             return;
           }
           if (m.status === MODEL_STATUS.COMPLETED) {
@@ -121,23 +133,26 @@ export function createModelDetailRouter({
 
           const [variantStats, previewMeta] = await Promise.all([
             Promise.all(
-              (m.group?.models ?? []).map(async (v) => {
-                try {
-                  if (v.fileModifiedAt) return v.fileModifiedAt.toISOString();
-                  const vMeta = (v.metadata as Record<string, unknown>) || {};
-                  if (vMeta.originalModifiedAt) return vMeta.originalModifiedAt as string;
-                  if (v.uploadPath) {
-                    const p = resolveStoredPath(v.uploadPath);
-                    if (p && existsSync(p)) {
-                      const stat = await statAsync(p);
-                      return stat.mtime.toISOString();
+              // 分组兄弟里受限分类的变体一并隐藏（防从公开变体详情页看到受限模型名/缩略图）
+              (m.group?.models ?? [])
+                .filter((v) => !v.categoryId || !invisible.has(v.categoryId))
+                .map(async (v) => {
+                  try {
+                    if (v.fileModifiedAt) return v.fileModifiedAt.toISOString();
+                    const vMeta = (v.metadata as Record<string, unknown>) || {};
+                    if (vMeta.originalModifiedAt) return vMeta.originalModifiedAt as string;
+                    if (v.uploadPath) {
+                      const p = resolveStoredPath(v.uploadPath);
+                      if (p && existsSync(p)) {
+                        const stat = await statAsync(p);
+                        return stat.mtime.toISOString();
+                      }
                     }
+                  } catch {
+                    /* best-effort variant date resolution */
                   }
-                } catch {
-                  /* best-effort variant date resolution */
-                }
-                return v.createdAt ? v.createdAt.toISOString() : null;
-              }),
+                  return v.createdAt ? v.createdAt.toISOString() : null;
+                }),
             ),
             getPreviewMeta(m.id, {
               gltfUrl: m.gltfUrl,
@@ -152,16 +167,19 @@ export function createModelDetailRouter({
             ? {
                 id: group.id,
                 name: group.name,
-                variants: group.models.map((v, i) => ({
-                  model_id: v.id,
-                  name: v.name,
-                  thumbnail_url: withAssetVersion(v.thumbnailUrl, v.updatedAt),
-                  original_name: v.originalName,
-                  original_size: v.originalSize,
-                  is_primary: v.id === group.primaryId,
-                  created_at: v.createdAt,
-                  file_modified_at: variantStats[i],
-                })),
+                // index 与上面 variantStats 的过滤后数组对齐（受限变体已在统计时剔除）
+                variants: group.models
+                  .filter((v) => !v.categoryId || !invisible.has(v.categoryId))
+                  .map((v, i) => ({
+                    model_id: v.id,
+                    name: v.name,
+                    thumbnail_url: withAssetVersion(v.thumbnailUrl, v.updatedAt),
+                    original_name: v.originalName,
+                    original_size: v.originalSize,
+                    is_primary: v.id === group.primaryId,
+                    created_at: v.createdAt,
+                    file_modified_at: variantStats[i],
+                  })),
               }
             : null;
 
@@ -206,6 +224,10 @@ export function createModelDetailRouter({
     }
     if (m.status !== MODEL_STATUS.COMPLETED && !canViewUnpublished) {
       res.status(404).json({ detail: '模型不存在' });
+      return;
+    }
+    if (typeof m.category_id === 'string' && invisible.has(m.category_id)) {
+      res.status(403).json({ detail: '无权访问该模型' });
       return;
     }
     const previewMeta = await getPreviewMeta(id, {

@@ -10,6 +10,7 @@ import { optionalString, booleanFlag } from '../../lib/requestValidation.js';
 import { getSetting } from '../../lib/settings.js';
 import { getVerifiedRequestUser, verifyRequestToken } from '../../middleware/auth.js';
 import { trackActiveModelDownload } from '../../services/activeModelDownloads.js';
+import { getInvisibleCategoryIds } from '../../services/categoryAccess.js';
 import { enqueueModelDownloadRecord } from '../../services/modelDownloadQueue.js';
 import {
   DailyDownloadLimitError,
@@ -122,12 +123,22 @@ export function createModelDownloadRouter({ prisma, getMeta }: ModelDownloadCont
 
     let target: ModelDownloadTarget | null = null;
 
+    // 分类访问控制：受限分类下的模型，非白名单用户（含匿名，即使未开登录下载）一律 403
+    const invisibleCategories = await getInvisibleCategoryIds(
+      authHeaderPayload?.role ?? null,
+      authHeaderPayload?.userId ?? downloadTokenPayload?.userId ?? null,
+    );
+
     if (prisma) {
       try {
         const m = await prisma.model.findUnique({ where: { id } });
         if (m) {
           if (m.status !== MODEL_STATUS.COMPLETED && authHeaderPayload?.role !== 'ADMIN') {
             res.status(404).json({ detail: '文件不存在' });
+            return;
+          }
+          if (m.categoryId && invisibleCategories.has(m.categoryId)) {
+            res.status(403).json({ detail: '无权下载该模型' });
             return;
           }
           target = resolveDbModelDownloadTarget(m, requestedFormat);
@@ -142,6 +153,10 @@ export function createModelDownloadRouter({ prisma, getMeta }: ModelDownloadCont
       const meta = getMeta(id);
       if (!meta) {
         res.status(404).json({ detail: '模型不存在' });
+        return;
+      }
+      if (typeof meta.category_id === 'string' && invisibleCategories.has(meta.category_id)) {
+        res.status(403).json({ detail: '无权下载该模型' });
         return;
       }
       target = resolveMetadataModelDownloadTarget(id, meta, requestedFormat);

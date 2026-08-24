@@ -64,6 +64,7 @@ import ColorSchemeEditor from '../components/settings/ColorSchemeSettings';
 import { AdminContentPanel, AdminManagementPage } from '../components/shared/AdminManagementPage';
 import { AdminPageShell } from '../components/shared/AdminPageShell';
 import ConfirmDialog from '../components/shared/ConfirmDialog';
+import { AppSwitch } from '../components/shared/FormControls';
 import Icon from '../components/shared/Icon';
 import { PageRefreshIndicator } from '../components/shared/PageRefreshFallback';
 import ResponsiveSectionTabs from '../components/shared/ResponsiveSectionTabs';
@@ -1955,17 +1956,7 @@ function Switch({
   onChange: (v: boolean) => void;
   disabled?: boolean;
 }) {
-  return (
-    <button
-      onClick={disabled ? undefined : () => onChange(!checked)}
-      className={`relative w-11 h-6 rounded-full transition-colors duration-200 shrink-0 ${disabled ? 'opacity-40 cursor-not-allowed' : ''} ${checked ? 'bg-primary-container' : 'bg-outline-variant/30'}`}
-      disabled={disabled}
-    >
-      <span
-        className={`absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white shadow-sm transition-transform duration-200 ${checked ? 'translate-x-5' : 'translate-x-0'}`}
-      />
-    </button>
-  );
+  return <AppSwitch checked={checked} onChange={onChange} disabled={disabled} />;
 }
 
 /**
