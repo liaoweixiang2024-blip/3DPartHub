@@ -1,6 +1,6 @@
+import { areaList } from '@vant/area-data';
 import { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { areaList } from '@vant/area-data';
 import { AppSelect, AppTextInput, type AppFieldSize } from './FormControls';
 
 interface RegionSelectProps {

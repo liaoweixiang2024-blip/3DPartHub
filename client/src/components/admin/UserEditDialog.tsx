@@ -3,10 +3,10 @@ import useSWR from 'swr';
 import client from '../../api/client';
 import { unwrapResponse } from '../../api/response';
 import { getErrorMessage } from '../../lib/errorNotifications';
+import { useAuthStore } from '../../stores/useAuthStore';
 import DialogOverlay from '../shared/DialogOverlay';
 import Icon from '../shared/Icon';
 import { useToast } from '../shared/Toast';
-import { useAuthStore } from '../../stores/useAuthStore';
 
 export interface AdminUserDetail {
   id: string;
