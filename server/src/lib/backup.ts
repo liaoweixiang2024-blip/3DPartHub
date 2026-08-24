@@ -405,6 +405,10 @@ export interface BackupRecord {
   modelCount: number;
   thumbnailCount: number;
   dbSize: string;
+  /** 模块备份：payload 记录条数（存量记录无此字段，展示回退 modelCount） */
+  itemCount?: number;
+  /** 模块备份：资源文件总数（存量记录无此字段，展示回退 thumbnailCount） */
+  fileCount?: number;
   countMode?: 'step_models';
   archiveSha256?: string;
   archiveSignature?: string;
@@ -1290,6 +1294,9 @@ export function getImportSaveJob(id: string): ImportSaveJob | undefined {
 }
 
 export function getActiveImportSaveJob(): ImportSaveJob | undefined {
+  // 其余任务类型（backup/restore/verify）在各自 getActive 里 evict，importSave 之前
+  // 漏了——终态任务永久留在内存 map（长驻进程缓慢泄漏）
+  evictCompleted(importSaveJobs);
   for (const current of importSaveJobs.values()) {
     const job = latestPersistedJob(current);
     importSaveJobs.set(job.id, job);
@@ -1513,7 +1520,20 @@ async function runBackup(job: BackupJob) {
         '--exclude=backups',
         '--exclude=.restore_*',
       );
-      args.push(BACKUP_DB_ENTRY_DIR, ...existingBackupDirs);
+      // manifest.json 显式排在最前：tar 按参数顺序写入条目。目录递归打包时内部
+      // 顺序取决于 readdir（不稳定），database.sql 一旦排在 manifest 前，读清单
+      // 需从归档头顺序解压整个库（大库可达 20 分钟）。manifest 只有几 KB，
+      // 放头部后 `tar xOzf <archive> manifest` 秒级返回。
+      // 注意：不能对同一文件既显式传参又递归目录（会产生重复条目），所以
+      // _backup_db 下的固定文件逐个列出，动态子目录（uploads/metadata）按存在性附加。
+      args.push(
+        BACKUP_MANIFEST_ENTRY,
+        join(BACKUP_DB_ENTRY_DIR, 'database.sql'),
+        join(BACKUP_DB_ENTRY_DIR, 'meta.json'),
+      );
+      if (existsSync(stagedUploadsDir)) args.push(`${BACKUP_UPLOADS_ENTRY}`);
+      if (existsSync(join(dbMarker, 'metadata'))) args.push(BACKUP_UPLOAD_METADATA_ENTRY);
+      args.push(...existingBackupDirs);
 
       const proc = spawn('tar', args, { cwd: archiveRoot, timeout: ARCHIVE_EXTRACT_TIMEOUT_MS });
       let stderr = '';
@@ -1565,6 +1585,10 @@ async function runBackup(job: BackupJob) {
       onEntryProgress: ({ elapsedMs, entryCount }) => {
         const elapsedSec = Math.max(1, Math.round(elapsedMs / 1000));
         job.message = `正在校验备份包完整性... 已扫描 ${entryCount} 项，用时 ${elapsedSec}s`;
+        syncJob(job);
+      },
+      onStage: (message) => {
+        job.message = `正在校验备份包完整性... ${message}`;
         syncJob(job);
       },
     });
@@ -1750,7 +1774,13 @@ async function runModuleBackup(job: BackupJob, scope: Exclude<BackupScope, 'full
     job.message = '正在校验模块备份包...';
     syncJob(job);
     t = addLogStart(job, '正在校验模块备份包...');
-    await validateModuleBackupArchive(finalArchive, { expectedManifest: manifest });
+    await validateModuleBackupArchive(finalArchive, {
+      expectedManifest: manifest,
+      onStage: (message) => {
+        job.message = `正在校验模块备份包... ${message}`;
+        syncJob(job);
+      },
+    });
     archiveVerified = true;
     addLogEnd(job, t, '模块备份包校验通过');
 
@@ -1769,6 +1799,7 @@ async function runModuleBackup(job: BackupJob, scope: Exclude<BackupScope, 'full
     addLogEnd(job, t, 'SHA256 计算完成');
 
     const fileSize = statSync(finalArchive).size;
+    const fileCount = countModuleBackupFiles(scope);
     const record: BackupRecord = {
       id: job.id,
       filename: `${job.id}.tar.gz`,
@@ -1779,7 +1810,10 @@ async function runModuleBackup(job: BackupJob, scope: Exclude<BackupScope, 'full
       fileSize,
       fileSizeText: formatSize(fileSize),
       modelCount: scope === 'models' ? Number(payload.tables.models?.length || 0) : itemCount,
-      thumbnailCount: countModuleBackupFiles(scope),
+      // 旧字段保留兼容存量记录展示；新记录同时写语义化的 itemCount/fileCount
+      thumbnailCount: fileCount,
+      itemCount,
+      fileCount,
       dbSize: `${itemCount} 条记录`,
       countMode: scope === 'models' ? 'step_models' : undefined,
       archiveSha256,
@@ -1797,7 +1831,7 @@ async function runModuleBackup(job: BackupJob, scope: Exclude<BackupScope, 'full
     job.stage = 'done';
     job.percent = 100;
     job.message = `${label}备份完成`;
-    addLog(job, `${label}备份完成: ${record.dbSize}, ${record.thumbnailCount} 个资源文件`);
+    addLog(job, `${label}备份完成: ${record.dbSize}, ${fileCount} 个资源文件`);
     try {
       await applyBackupRetentionPolicy(job);
     } catch (err: unknown) {
@@ -1861,7 +1895,13 @@ async function packBackupArchive({
       '--exclude=backups',
       '--exclude=.restore_*',
     );
-    args.push(BACKUP_DB_ENTRY_DIR, ...staticDirs);
+    // 与全量打包同理：manifest 显式排最前（模块包里 module-data.json 也可能很大）
+    args.push(
+      BACKUP_MANIFEST_ENTRY,
+      join(BACKUP_DB_ENTRY_DIR, 'module-data.json'),
+      join(BACKUP_DB_ENTRY_DIR, 'meta.json'),
+    );
+    args.push(...staticDirs);
 
     const proc = spawn('tar', args, { cwd: archiveRoot, timeout: ARCHIVE_EXTRACT_TIMEOUT_MS });
     let stderr = '';
@@ -2471,6 +2511,10 @@ async function runVerifyBackup(job: VerifyJob, backupId: string) {
             job.message = `正在校验模块备份清单、数据和目录文件数... 已扫描 ${entryCount} 项，用时 ${elapsedSec}s`;
             syncJob(job);
           },
+          onStage: (message) => {
+            job.message = `正在校验模块备份... ${message}`;
+            syncJob(job);
+          },
         })
       : await validateBackupArchive(archive, {
           requireManifest: true,
@@ -2478,6 +2522,10 @@ async function runVerifyBackup(job: VerifyJob, backupId: string) {
             const elapsedSec = Math.max(1, Math.round(elapsedMs / 1000));
             job.percent = Math.min(65, 10 + Math.floor(elapsedSec / 4));
             job.message = `正在校验备份清单、数据库和目录文件数... 已扫描 ${entryCount} 项，用时 ${elapsedSec}s`;
+            syncJob(job);
+          },
+          onStage: (message) => {
+            job.message = `正在校验备份... ${message}`;
             syncJob(job);
           },
         });
@@ -3108,8 +3156,16 @@ async function runRestoreFromArchive(
         job.message = '正在恢复数据库...';
         syncJob(job);
         t = addLogStart(job, '正在导入数据库（psql restore）...');
+        // psql 导入是恢复中最长的黑盒阶段，心跳报已耗时防止界面在 55% 假死
+        const dbImportHeartbeat = (elapsedSec: number, sqlSizeText: string) => {
+          job.message = `正在导入数据库（${sqlSizeText}）... 已用时 ${elapsedSec}s`;
+          syncJob(job);
+        };
         try {
-          await restoreSqlIntoDatabase(DB_URL_CLEAN, sanitizedSqlPath, { disableTriggers: true });
+          await restoreSqlIntoDatabase(DB_URL_CLEAN, sanitizedSqlPath, {
+            disableTriggers: true,
+            onProgress: dbImportHeartbeat,
+          });
         } catch (err) {
           if (!isForeignKeyRestoreError(err)) {
             addLog(job, '数据库导入失败，尝试回滚到安全快照...');
@@ -3128,7 +3184,10 @@ async function runRestoreFromArchive(
           await sanitizeSqlDumpStreaming(sqlPath, noFkSqlPath, { skipForeignKeys: true });
           await resetDatabaseSchema(DB_URL_CLEAN);
           try {
-            await restoreSqlIntoDatabase(DB_URL_CLEAN, noFkSqlPath, { disableTriggers: true });
+            await restoreSqlIntoDatabase(DB_URL_CLEAN, noFkSqlPath, {
+              disableTriggers: true,
+              onProgress: dbImportHeartbeat,
+            });
             addLog(job, '数据库已恢复；部分历史外键约束因源数据不一致已跳过');
           } catch (fallbackErr) {
             addLog(job, '数据库兜底导入失败，尝试回滚到安全快照...');
@@ -3190,8 +3249,15 @@ async function runRestoreFromArchive(
         job.message = '正在导入数据库数据...';
         syncJob(job);
         t = addLogStart(job, '正在导入数据...');
+        // 同上：psql 黑盒导入，心跳报已耗时
         try {
-          await restoreSqlIntoDatabase(DB_URL_CLEAN, sanitizedSqlPath, { disableTriggers: true });
+          await restoreSqlIntoDatabase(DB_URL_CLEAN, sanitizedSqlPath, {
+            disableTriggers: true,
+            onProgress: (elapsedSec, sqlSizeText) => {
+              job.message = `正在导入数据（${sqlSizeText}）... 已用时 ${elapsedSec}s`;
+              syncJob(job);
+            },
+          });
         } catch (err) {
           addLog(job, '数据导入失败，尝试回滚到安全快照...');
           try {
@@ -3541,7 +3607,10 @@ async function inspectModuleBackupArchive(
       fileSize,
       fileSizeText: formatSize(fileSize),
       modelCount: manifest.scope === 'models' ? Number(payload.tables.models?.length || 0) : itemCount,
+      // 兼容旧展示字段 + 语义化新字段（同 runModuleBackup 的 record 写入）
       thumbnailCount: manifest.directories.reduce((sum, dir) => sum + dir.fileCount, 0),
+      itemCount,
+      fileCount: manifest.directories.reduce((sum, dir) => sum + dir.fileCount, 0),
       dbSize: `${itemCount} 条记录`,
       countMode: manifest.scope === 'models' ? 'step_models' : undefined,
       encrypted,
@@ -4211,6 +4280,7 @@ async function validateBackupArchive(
     expectedManifest?: BackupManifest;
     requireManifest?: boolean;
     onEntryProgress?: (info: { elapsedMs: number; entryCount: number }) => void;
+    onStage?: (message: string) => void;
   } = {},
 ): Promise<BackupManifest | null> {
   return withReadableBackupArchive(archive, (readableArchive) => validatePlainBackupArchive(readableArchive, options));
@@ -4248,6 +4318,7 @@ async function validateModuleBackupArchive(
   options: {
     expectedManifest?: ModuleBackupManifest;
     onEntryProgress?: (info: { elapsedMs: number; entryCount: number }) => void;
+    onStage?: (message: string) => void;
   } = {},
 ): Promise<ModuleBackupManifest> {
   return withReadableBackupArchive(archive, async (readableArchive) => {
@@ -4257,6 +4328,9 @@ async function validateModuleBackupArchive(
     if (entries.length === 0) throw new Error('备份归档内容为空');
     assertSafeArchiveEntriesForExtraction(readableArchive, entries);
 
+    // 以下深度校验各阶段上报阶段文案——条目扫描结束后还有多步耗时操作
+    // （读清单 / 流式哈希数据文件），不报阶段会让界面停在扫描最后一行假死。
+    options.onStage?.('正在读取模块备份清单...');
     const archiveManifest = readArchiveManifest(readableArchive) as unknown;
     if (!isModuleBackupManifest(archiveManifest)) {
       throw new Error('备份包不是有效的模块备份');
@@ -4278,6 +4352,7 @@ async function validateModuleBackupArchive(
       }
     }
 
+    options.onStage?.(`正在流式校验模块数据文件（${formatSize(manifest.data.size)}，大文件可能需要数分钟）...`);
     const dataStats = await inspectArchiveDatabase(readableArchive, manifest.data.path);
     if (dataStats.size !== manifest.data.size) {
       throw new Error(`模块数据大小不一致: manifest=${manifest.data.size}, archive=${dataStats.size}`);
@@ -4286,6 +4361,7 @@ async function validateModuleBackupArchive(
       throw new Error('模块数据 SHA256 校验失败');
     }
 
+    options.onStage?.('正在核对目录文件数...');
     for (const dir of manifest.directories) {
       if (!archiveHasEntry(entries, dir.path)) {
         throw new Error(`备份包缺少业务目录: ${dir.path}`);
@@ -4306,6 +4382,7 @@ async function validatePlainBackupArchive(
     expectedManifest?: BackupManifest;
     requireManifest?: boolean;
     onEntryProgress?: (info: { elapsedMs: number; entryCount: number }) => void;
+    onStage?: (message: string) => void;
   } = {},
 ): Promise<BackupManifest | null> {
   if (!existsSync(archive)) throw new Error('备份文件不存在');
@@ -4319,6 +4396,9 @@ async function validatePlainBackupArchive(
     throw new Error('备份包缺少数据库文件');
   }
 
+  // 以下深度校验各阶段上报阶段文案——条目扫描结束后还有多步耗时操作
+  // （读清单 / 流式哈希数据库文件），不报阶段会让界面停在扫描最后一行假死。
+  options.onStage?.('正在读取备份清单...');
   const archiveManifest = readArchiveManifest(archive);
   const manifest = options.expectedManifest || archiveManifest;
   if (!manifest) {
@@ -4346,6 +4426,7 @@ async function validatePlainBackupArchive(
     }
   }
 
+  options.onStage?.(`正在流式校验数据库文件（${formatSize(manifest.database.size)}，大库可能需要数分钟）...`);
   const archiveDbStats = await inspectArchiveDatabase(archive, manifest.database.path);
   if (archiveDbStats.size !== manifest.database.size) {
     throw new Error(`数据库备份大小不一致: manifest=${manifest.database.size}, archive=${archiveDbStats.size}`);
@@ -4354,6 +4435,7 @@ async function validatePlainBackupArchive(
     throw new Error('数据库备份 SHA256 校验失败');
   }
 
+  options.onStage?.('正在核对目录文件数...');
   for (const dir of manifest.directories) {
     if (!archiveHasEntry(entries, dir.path)) {
       throw new Error(`备份包缺少业务目录: ${dir.path}`);
@@ -4384,19 +4466,41 @@ async function inspectArchiveDatabase(
   archive: string,
   databaseEntry: string,
 ): Promise<{ size: number; sha256: string }> {
-  const tmpDir = prepareWorkDir(`verify_${Date.now()}_${Math.random().toString(36).slice(2)}`);
-  try {
-    if (!extractArchiveEntry(archive, tmpDir, databaseEntry)) {
-      throw new Error(`备份包缺少数据库文件: ${databaseEntry}`);
-    }
-    const dbPath = join(tmpDir, databaseEntry);
-    return {
-      size: statSync(dbPath).size,
-      sha256: await sha256File(dbPath),
+  // 流式校验：tar xO 直接把条目内容写到 stdout，管道进哈希——不再解压落盘。
+  // 大库（GB 级）原先要「解压到临时目录 + 读回哈希」双倍 IO，现在一遍流过。
+  return new Promise((resolve, reject) => {
+    const hash = createHash('sha256');
+    let size = 0;
+    const proc = spawn('tar', ['xOzf', archive, databaseEntry], { timeout: ARCHIVE_META_TIMEOUT_MS });
+    let stderr = '';
+    const failTimer = setTimeout(() => {
+      proc.kill('SIGKILL');
+      reject(new Error(`数据库文件校验超时（>${Math.round(ARCHIVE_META_TIMEOUT_MS / 60000)} 分钟）`));
+    }, ARCHIVE_META_TIMEOUT_MS);
+    const settled = (fn: () => void) => {
+      clearTimeout(failTimer);
+      fn();
     };
-  } finally {
-    if (existsSync(tmpDir)) rmSync(tmpDir, { recursive: true, force: true });
-  }
+    proc.stdout?.on('data', (chunk: Buffer) => {
+      size += chunk.length;
+      hash.update(chunk);
+    });
+    proc.stderr?.on('data', (chunk: Buffer) => {
+      stderr += chunk.toString('utf-8');
+    });
+    proc.on('error', (err) => settled(() => reject(new Error(`数据库文件校验失败: ${err.message}`))));
+    proc.on('close', (code) => {
+      if (code === 0) {
+        settled(() => resolve({ size, sha256: hash.digest('hex') }));
+        return;
+      }
+      if (/not found in archive|could not find/i.test(stderr)) {
+        settled(() => reject(new Error(`备份包缺少数据库文件: ${databaseEntry}`)));
+        return;
+      }
+      settled(() => reject(new Error(`数据库文件校验失败 (exit ${code}): ${stderr.trim()}`)));
+    });
+  });
 }
 
 function archiveHasEntry(entries: string[], entry: string): boolean {
@@ -4675,16 +4779,31 @@ function runPrismaDbPush(dbUrl: string) {
   });
 }
 
-async function restoreSqlIntoDatabase(dbUrl: string, sqlPath: string, options: { disableTriggers?: boolean } = {}) {
+async function restoreSqlIntoDatabase(
+  dbUrl: string,
+  sqlPath: string,
+  options: {
+    disableTriggers?: boolean;
+    /** 导入期间的进度心跳（psql 黑盒，无法取真实百分比，报已耗时防止界面假死） */
+    onProgress?: (elapsedSec: number, sqlSizeText: string) => void;
+  } = {},
+) {
   let restorePath = sqlPath;
   let guardedPath: string | null = null;
+  const sqlSizeText = formatSize(statSync(sqlPath).size);
+  const heartbeat = options.onProgress
+    ? setInterval(() => options.onProgress?.(Math.round((Date.now() - startedAt) / 1000), sqlSizeText), 5000)
+    : null;
+  const startedAt = Date.now();
   try {
     if (options.disableTriggers) {
       guardedPath = await writeTriggerGuardedSql(sqlPath);
       restorePath = guardedPath;
     }
+    options.onProgress?.(0, sqlSizeText);
     psqlFromFile(dbUrl, restorePath, ['-v', 'ON_ERROR_STOP=1'], DB_RESTORE_TIMEOUT_MS);
   } finally {
+    if (heartbeat) clearInterval(heartbeat);
     if (guardedPath) rmSync(guardedPath, { force: true });
   }
 }

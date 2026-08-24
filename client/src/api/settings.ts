@@ -361,6 +361,10 @@ export interface BackupRecord {
   fileSizeText: string;
   modelCount: number;
   thumbnailCount: number;
+  /** 模块备份：记录条数（存量记录无此字段，回退 modelCount） */
+  itemCount?: number;
+  /** 模块备份：资源文件数（存量记录无此字段，回退 thumbnailCount） */
+  fileCount?: number;
   dbSize: string;
   archiveSha256?: string;
   archiveSignature?: string;
@@ -1114,10 +1118,34 @@ async function initChunkedUpload(file: File): Promise<string> {
   return uploadId;
 }
 
-async function uploadFileInChunks(file: File, uploadId: string, onProgress?: (percent: number) => void) {
+/** 会话已上传的分片索引（会话过期/不属于当前用户返回 null） */
+async function queryUploadedChunks(
+  uploadId: string,
+): Promise<{ uploadedIndexes: number[]; totalChunks: number } | null> {
+  try {
+    const { data } = await client.get(`/upload/status`, { params: { uploadId }, timeout: 15000 });
+    const d = unwrapApiData<{ uploadedIndexes?: number[]; totalChunks?: number }>(data);
+    if (!Array.isArray(d.uploadedIndexes) || !Number.isFinite(Number(d.totalChunks))) return null;
+    return { uploadedIndexes: d.uploadedIndexes, totalChunks: Number(d.totalChunks) };
+  } catch {
+    return null;
+  }
+}
+
+async function uploadFileInChunks(
+  file: File,
+  uploadId: string,
+  onProgress?: (percent: number) => void,
+  skipIndexes?: Set<number>,
+) {
   const totalChunks = Math.ceil(file.size / BACKUP_CHUNK_SIZE_BYTES);
+  let done = skipIndexes ? countContiguousOrTotal(skipIndexes, totalChunks) : 0;
+  if (skipIndexes && skipIndexes.size > 0) {
+    onProgress?.(Math.round((done / totalChunks) * 100));
+  }
 
   for (let i = 0; i < totalChunks; i++) {
+    if (skipIndexes?.has(i)) continue;
     const start = i * BACKUP_CHUNK_SIZE_BYTES;
     const end = Math.min(start + BACKUP_CHUNK_SIZE_BYTES, file.size);
     const chunk = file.slice(start, end);
@@ -1140,8 +1168,18 @@ async function uploadFileInChunks(file: File, uploadId: string, onProgress?: (pe
       }
     }
 
-    onProgress?.(Math.round(((i + 1) / totalChunks) * 100));
+    done += 1;
+    onProgress?.(Math.round((done / totalChunks) * 100));
   }
+}
+
+function countContiguousOrTotal(uploaded: Set<number>, totalChunks: number): number {
+  let count = 0;
+  for (let i = 0; i < totalChunks; i++) {
+    if (uploaded.has(i)) count += 1;
+    else break;
+  }
+  return count;
 }
 
 async function completeChunkedUpload(uploadId: string): Promise<{ filePath: string }> {
@@ -1152,9 +1190,7 @@ async function completeChunkedUpload(uploadId: string): Promise<{ filePath: stri
 }
 
 async function chunkedSaveAsRecordJob(file: File, onProgress?: (percent: number) => void): Promise<string> {
-  const uploadId = await initChunkedUpload(file);
-  await uploadFileInChunks(file, uploadId, onProgress);
-  const { filePath } = await completeChunkedUpload(uploadId);
+  const filePath = await uploadChunkedWithResume(file, onProgress);
 
   const { data: saveResp } = await client.post('/settings/backup/import-save-chunked', {
     filePath,
@@ -1166,7 +1202,100 @@ async function chunkedSaveAsRecordJob(file: File, onProgress?: (percent: number)
   return jobId;
 }
 
-export async function importBackup(file: File, onUploadProgress?: (percent: number) => void): Promise<string> {
+/** 分块上传断点续传的本地持久化（uploadId + 文件指纹），页面刷新后可续传 */
+const CHUNKED_UPLOAD_RESUME_KEY = 'backupChunkedUploadResume';
+
+type ChunkedUploadResume = {
+  uploadId: string;
+  fileName: string;
+  fileSize: number;
+  lastModified: number;
+};
+
+function fileFingerprintMatches(saved: ChunkedUploadResume, file: File): boolean {
+  return saved.fileName === file.name && saved.fileSize === file.size && saved.lastModified === file.lastModified;
+}
+
+function readChunkedUploadResume(): ChunkedUploadResume | null {
+  try {
+    const raw = localStorage.getItem(CHUNKED_UPLOAD_RESUME_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as ChunkedUploadResume;
+    return typeof parsed.uploadId === 'string' && Number.isFinite(parsed.fileSize) ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+function writeChunkedUploadResume(file: File, uploadId: string) {
+  try {
+    localStorage.setItem(
+      CHUNKED_UPLOAD_RESUME_KEY,
+      JSON.stringify({ uploadId, fileName: file.name, fileSize: file.size, lastModified: file.lastModified }),
+    );
+  } catch {
+    /* localStorage 满了/被禁用——续传能力降级为从头传，不影响功能 */
+  }
+}
+
+function clearChunkedUploadResume() {
+  try {
+    localStorage.removeItem(CHUNKED_UPLOAD_RESUME_KEY);
+  } catch {
+    /* best-effort */
+  }
+}
+
+/** 取可续传的分块会话：指纹匹配 + 服务端会话仍存活。返回 null 则重新初始化。 */
+async function resumableChunkSession(
+  file: File,
+): Promise<{ uploadId: string; uploaded: Set<number>; resumed: boolean } | null> {
+  const saved = readChunkedUploadResume();
+  if (!saved || !fileFingerprintMatches(saved, file)) return null;
+  const status = await queryUploadedChunks(saved.uploadId);
+  if (!status || status.totalChunks !== Math.ceil(file.size / BACKUP_CHUNK_SIZE_BYTES)) return null;
+  return {
+    uploadId: saved.uploadId,
+    uploaded: new Set(status.uploadedIndexes),
+    resumed: status.uploadedIndexes.length > 0,
+  };
+}
+
+/** 纯本地指纹检查（选文件时提示用，不发请求；实际上传时再向服务端确认会话存活） */
+export function hasResumableChunkedUpload(file: File): boolean {
+  const saved = readChunkedUploadResume();
+  return Boolean(saved && fileFingerprintMatches(saved, file));
+}
+
+async function uploadChunkedWithResume(
+  file: File,
+  onProgress?: (percent: number) => void,
+  onPhaseChange?: (phase: 'uploading' | 'merging' | 'starting') => void,
+): Promise<string> {
+  const resumedSession = await resumableChunkSession(file);
+  let uploadId: string;
+  let uploaded: Set<number> | undefined;
+  if (resumedSession) {
+    uploadId = resumedSession.uploadId;
+    uploaded = resumedSession.uploaded;
+  } else {
+    uploadId = await initChunkedUpload(file);
+    writeChunkedUploadResume(file, uploadId);
+  }
+  await uploadFileInChunks(file, uploadId, onProgress, uploaded);
+  // 分块合并是服务端同步拼接整个文件，大备份可能数十秒到数分钟——
+  // 先切阶段文案，避免上传 100% 后界面假死在合并等待上
+  onPhaseChange?.('merging');
+  const { filePath } = await completeChunkedUpload(uploadId);
+  clearChunkedUploadResume();
+  return filePath;
+}
+
+export async function importBackup(
+  file: File,
+  onUploadProgress?: (percent: number) => void,
+  onPhaseChange?: (phase: 'uploading' | 'merging' | 'starting') => void,
+): Promise<string> {
   const fileSize = file.size;
 
   // Small files: direct upload. Larger backups use the chunked flow.
@@ -1176,11 +1305,10 @@ export async function importBackup(file: File, onUploadProgress?: (percent: numb
 
   // Large files: chunked upload
   try {
-    const uploadId = await initChunkedUpload(file);
-    await uploadFileInChunks(file, uploadId, onUploadProgress);
-    const { filePath } = await completeChunkedUpload(uploadId);
+    const filePath = await uploadChunkedWithResume(file, onUploadProgress, onPhaseChange);
 
-    // Step 4: Start restore from merged file
+    // Start restore from merged file
+    onPhaseChange?.('starting');
     const { data: restoreResp } = await client.post('/settings/backup/import-chunked', {
       filePath,
       confirm: IMPORT_RESTORE_CONFIRM_VALUE,

@@ -20,7 +20,10 @@ export function syncJob<T extends PersistedJobState>(job: T) {
     mkdirSync(JOB_DIR, { recursive: true });
     const target = join(JOB_DIR, `${job.id}.json`);
     const tmp = join(JOB_DIR, `${job.id}.${process.pid}.tmp`);
-    writeFileSync(tmp, JSON.stringify(job));
+    // 统一盖更新时间戳：evictCompleted 按 updatedAt 判断终态任务保留 1 小时，
+    // 此前没有任何地方写这个字段 → !job.updatedAt 恒真 → 终态任务立即被逐出内存
+    //（当前靠 loadJob 从文件读回兜底，不致 404，但语义错误且依赖 /tmp 存活）。
+    writeFileSync(tmp, JSON.stringify({ ...job, updatedAt: Date.now() }));
     renameSync(tmp, target);
   } catch {
     /* best-effort file write */

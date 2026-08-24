@@ -231,6 +231,38 @@ router.post('/api/upload/init', authMiddleware, requireRole('ADMIN'), async (req
   });
 });
 
+// Query uploaded chunk state of a session (page-refresh resume support)
+router.get('/api/upload/status', authMiddleware, requireRole('ADMIN'), async (req: AuthRequest, res: Response) => {
+  const uploadId = req.query.uploadId as string | undefined;
+  if (!uploadId) {
+    res.status(400).json({ detail: '缺少参数' });
+    return;
+  }
+  const session = loadUploadSession(uploadId);
+  if (!session) {
+    res.status(404).json({ detail: '上传会话不存在或已过期' });
+    return;
+  }
+  if (session.userId !== req.user!.userId) {
+    res.status(403).json({ detail: '无权操作' });
+    return;
+  }
+  const chunksDir = join(CHUNKS_DIR, uploadId);
+  const uploadedIndexes = existsSync(chunksDir)
+    ? readdirSync(chunksDir)
+        .map((name) => Number(name))
+        .filter((value) => Number.isInteger(value) && value >= 0 && value < session.totalChunks)
+        .sort((a, b) => a - b)
+    : [];
+  res.json({
+    fileName: session.fileName,
+    fileSize: session.fileSize,
+    totalChunks: session.totalChunks,
+    uploadedIndexes,
+    complete: uploadedIndexes.length >= session.totalChunks,
+  });
+});
+
 // Upload a chunk
 router.put('/api/upload/chunk', authMiddleware, requireRole('ADMIN'), async (req: AuthRequest, res: Response) => {
   req.setTimeout(UPLOAD_REQUEST_TIMEOUT_MS);

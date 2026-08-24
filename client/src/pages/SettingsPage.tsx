@@ -33,6 +33,7 @@ import {
   listBackups,
   importBackup,
   importBackupAsRecord,
+  hasResumableChunkedUpload,
   pollImportSaveProgress,
   listServerBackupFiles,
   importBackupFromPath,
@@ -5654,6 +5655,10 @@ function Content() {
       toast('请选择 .tar.gz 格式的备份文件', 'error');
       return;
     }
+    // 大文件分块上传支持断点续传：检测是否有同指纹的未完成会话，提示用户会自动跳过已传分块
+    if (file.size >= BACKUP_DIRECT_UPLOAD_THRESHOLD_BYTES && hasResumableChunkedUpload(file)) {
+      toast('检测到上次未完成的上传，将自动从断点续传（已上传的分块不会重传）', 'info');
+    }
     setRestoreConfirmFile(file);
   }
 
@@ -5688,12 +5693,32 @@ function Content() {
         loadBackupHealth();
       } else {
         // Direct import and restore
-        const jobId = await importBackup(restoreConfirmFile, (p) => {
-          setUploadProgress(p);
-        });
+        const jobId = await importBackup(
+          restoreConfirmFile,
+          (p) => {
+            setUploadProgress(p);
+          },
+          (phase) => {
+            if (phase === 'merging') {
+              setRestoreProgress({
+                stage: 'uploading',
+                percent: 100,
+                message: '分块已传完，服务器正在合并文件（大文件可能需要数分钟）...',
+                logs: [],
+              });
+            } else if (phase === 'starting') {
+              setRestoreProgress({
+                stage: 'uploading',
+                percent: 100,
+                message: '合并完成，正在启动恢复任务...',
+                logs: [],
+              });
+            }
+          },
+        );
         localStorage.setItem('restoreJobId', jobId);
         localStorage.setItem(RESTORE_JOB_SOURCE_KEY, 'import-file');
-        setRestoreProgress({ stage: 'uploading', percent: 100, message: '上传完成，正在恢复...', logs: [] });
+        setRestoreProgress({ stage: 'uploading', percent: 0, message: '上传完成，正在启动恢复...', logs: [] });
         const result = await pollRestoreProgress(jobId, (stage, percent, message, logs) => {
           setRestoreProgress({ stage, percent, message, logs: logs || [] });
         });
@@ -7287,8 +7312,8 @@ function Content() {
                                         <span>{b.fileSizeText}</span>
                                         {b.scope && b.scope !== 'full' ? (
                                           <>
-                                            <span>{b.modelCount ?? 0} 条记录</span>
-                                            <span>{b.thumbnailCount ?? 0} 个资源文件</span>
+                                            <span>{b.itemCount ?? b.modelCount ?? 0} 条记录</span>
+                                            <span>{b.fileCount ?? b.thumbnailCount ?? 0} 个资源文件</span>
                                           </>
                                         ) : (
                                           <>
@@ -7473,11 +7498,11 @@ function Content() {
 
                           {importing && (
                             <div className="mt-3">
-                              {/* Phase 1: Upload */}
+                              {/* Phase 1: Upload（独立进度段，切换到服务端阶段后隐藏，避免回跳） */}
                               {!restoreProgress.message && uploadProgress < 100 && (
                                 <TaskProgressCard progress={{ message: '上传中...', percent: uploadProgress }} />
                               )}
-                              {/* Phase 2: Server processing */}
+                              {/* Phase 2: Server processing（服务端任务有自己的 0-100 进度） */}
                               {(restoreProgress.message || uploadProgress >= 100) && (
                                 <div className="space-y-2">
                                   <TaskProgressCard
