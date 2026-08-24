@@ -4,7 +4,7 @@ import { cacheGetOrSet, TTL } from '../../lib/cache.js';
 import { logger } from '../../lib/logger.js';
 import { prisma } from '../../lib/prisma.js';
 import { requireBrowseAccess } from '../../middleware/browseAccess.js';
-import { accessBucketKey, getInvisibleCategoryIdsForRequest } from '../../services/categoryAccess.js';
+import { accessBucketKey, getInvisibleCategoryIdsForRequest, getViewerContext } from '../../services/categoryAccess.js';
 import { MODEL_STATUS } from '../../services/modelStatus.js';
 import { groupedVisibleModelSql } from '../../services/modelVisibility.js';
 import { CATEGORY_CACHE_PREFIX, type CategoryTreeNode } from './common.js';
@@ -27,6 +27,9 @@ export function createPublicCategoriesRouter() {
       const invisible = await getInvisibleCategoryIdsForRequest(req);
       const bucket = accessBucketKey(invisible);
       const excludedIds = [...invisible];
+      // ADMIN 全可见且缓存桶恒为空：树接口给 ADMIN 额外下发白名单（分类管理页回显用），
+      // 非 ADMIN 只拿 restricted 布尔标记，不泄露白名单内容
+      const viewerIsAdmin = getViewerContext(req).role === 'ADMIN';
       const { value: result, hit } = await cacheGetOrSet(
         `${CATEGORY_CACHE_PREFIX}tree:v4${bucket ? `:${bucket}` : ''}`,
         TTL.CATEGORIES,
@@ -74,6 +77,8 @@ export function createPublicCategoriesRouter() {
               sortOrder: cat.sortOrder,
               createdAt: cat.createdAt,
               updatedAt: cat.updatedAt,
+              restricted: cat.restricted,
+              ...(viewerIsAdmin ? { allowedRoles: cat.allowedRoles, allowedUserIds: cat.allowedUserIds } : {}),
               count,
               totalCount: count,
               children: [],

@@ -26,6 +26,7 @@ const CATEGORY_ADMIN_GRID_COLUMNS = '28px 34px 44px minmax(0,1fr) 104px 68px 152
 function CategoryRow({
   cat,
   depth = 0,
+  inheritedRestricted = false,
   dragItem,
   dragDisabled = false,
   collapsedIds,
@@ -39,6 +40,8 @@ function CategoryRow({
 }: {
   cat: CategoryItem;
   depth?: number;
+  /** 祖先有受限分类：子分类实际也被限制（自身开关可能未开），徽章加「继承」标识 */
+  inheritedRestricted?: boolean;
   dragItem: { id: string; parentId: string | null } | null;
   dragDisabled?: boolean;
   collapsedIds: Set<string>;
@@ -161,9 +164,21 @@ function CategoryRow({
             <div className="flex min-w-0 items-center gap-2">
               <span className={ADMIN_ROW_TITLE_CLASS}>{cat.name}</span>
               {cat.restricted && (
-                <span className="inline-flex items-center gap-0.5 rounded-full bg-error/15 px-2 py-1 text-[10px] font-medium text-error">
+                <span
+                  className="inline-flex items-center gap-0.5 rounded-full bg-error/15 px-2 py-1 text-[10px] font-medium text-error"
+                  title="该分类已开启访问限制"
+                >
                   <Icon name="lock" size={10} />
                   受限
+                </span>
+              )}
+              {!cat.restricted && inheritedRestricted && (
+                <span
+                  className="inline-flex items-center gap-0.5 rounded-full bg-error/10 px-2 py-1 text-[10px] text-error/80"
+                  title="父分类已开启访问限制，限制沿子树向下生效"
+                >
+                  <Icon name="lock" size={10} />
+                  受限（继承）
                 </span>
               )}
               {isChild && (
@@ -243,6 +258,7 @@ function CategoryRow({
               <CategoryRow
                 cat={child}
                 depth={depth + 1}
+                inheritedRestricted={inheritedRestricted || cat.restricted === true}
                 dragItem={dragItem}
                 dragDisabled={dragDisabled}
                 collapsedIds={collapsedIds}
@@ -267,6 +283,31 @@ const ACCESS_ROLE_OPTIONS = [
   { value: 'VIEWER', label: '访客' },
   { value: 'INTERNAL', label: '内部' },
 ];
+
+/** 沿祖先链检查是否存在受限分类：编辑已有分类时从其 parentId 向上爬；新增子分类时从 addParentId 向上爬 */
+function isAncestorRestricted(editing: CategoryItem | null, addParentId: string | null, tree: CategoryItem[]): boolean {
+  const startId = editing?.parentId ?? addParentId ?? null;
+  if (!startId) return false;
+  // 建 id → 节点（含 restricted）索引
+  const byId = new Map<string, CategoryItem>();
+  const walk = (cats: CategoryItem[]) => {
+    for (const c of cats) {
+      byId.set(c.id, c);
+      if (c.children?.length) walk(c.children);
+    }
+  };
+  walk(tree);
+  const visited = new Set<string>();
+  let currentId: string | null = startId;
+  while (currentId && !visited.has(currentId)) {
+    visited.add(currentId);
+    const node = byId.get(currentId);
+    if (!node) return false;
+    if (node.restricted) return true;
+    currentId = node.parentId;
+  }
+  return false;
+}
 
 interface AccessUserOption {
   id: string;
@@ -434,11 +475,14 @@ function CategoryAccessSection({
 function CategoryModal({
   category,
   parentId,
+  parentRestricted,
   onClose,
   onSaved,
 }: {
   category?: CategoryItem | null;
   parentId?: string | null;
+  /** 直接父分类（或其祖先）已受限：本分类实际已被限制，弹窗里提示继承关系 */
+  parentRestricted?: boolean;
   onClose: () => void;
   onSaved: () => void;
 }) {
@@ -616,6 +660,12 @@ function CategoryModal({
               ))}
             </div>
           </div>
+
+          {parentRestricted && (
+            <p className="rounded-lg bg-error/10 px-2.5 py-1.5 text-[11px] text-error">
+              上级分类已开启访问限制：无论本分类开关如何，限制都会沿子树向下生效（如需单独放开，请先关闭上级分类的限制）。
+            </p>
+          )}
 
           <CategoryAccessSection
             restricted={restricted}
@@ -873,6 +923,7 @@ function Content() {
                 <CategoryRow
                   key={cat.id}
                   cat={cat}
+                  inheritedRestricted={false}
                   dragItem={dragItem}
                   dragDisabled={dragDisabled}
                   collapsedIds={displayCollapsedIds}
@@ -920,6 +971,7 @@ function Content() {
           <CategoryModal
             category={editingCat}
             parentId={addParentId}
+            parentRestricted={isAncestorRestricted(editingCat, addParentId, tree || [])}
             onClose={() => {
               setShowModal(false);
               setEditingCat(null);
