@@ -84,6 +84,17 @@ interface ModelViewerProps {
 
 const suppressedWarnPatterns = ['THREE.Clock: This module has been deprecated', 'PCFSoftShadowMap has been deprecated'];
 
+// R3F 卸载 Canvas 时会主动 forceContextLoss 释放 GPU 上下文，three.js 随之打出
+// "WebGLRenderer: Context Lost"——这是正常清理日志而非故障。本组件卸载后监听器
+// 已随组件销毁，改用模块级时间窗静默：卸载前打点，之后 2 秒内的该日志吞掉；
+// 运行中真正的异常上下文丢失（驱动重置/显存不足）不受影响，仍会打印并弹出重载浮层。
+let lastViewerUnmountAt = 0;
+const CONTEXT_LOST_MESSAGE = 'THREE.WebGLRenderer: Context Lost.';
+
+function shouldSuppressContextLostLog(): boolean {
+  return Date.now() - lastViewerUnmountAt < 2000;
+}
+
 export default function ModelViewer({
   modelUrl,
   viewMode,
@@ -141,18 +152,26 @@ export default function ModelViewer({
 
   useEffect(() => {
     const origWarn = console.warn;
+    const origError = console.error;
     console.warn = (...args: unknown[]) => {
       const msg = typeof args[0] === 'string' ? args[0] : '';
       if (suppressedWarnPatterns.some((p) => msg.includes(p))) return;
       origWarn(...args);
     };
+    console.error = (...args: unknown[]) => {
+      const msg = typeof args[0] === 'string' ? args[0] : '';
+      if (msg.includes(CONTEXT_LOST_MESSAGE) && shouldSuppressContextLostLog()) return;
+      origError(...args);
+    };
     return () => {
       console.warn = origWarn;
+      console.error = origError;
     };
   }, []);
 
   useEffect(
     () => () => {
+      lastViewerUnmountAt = Date.now();
       cleanupContextListeners();
       // Dispose cached WebGL env map to free GPU memory on unmount
       import('./MultiFormatLoader').then(({ disposeEnvMap }) => disposeEnvMap()).catch(() => {});

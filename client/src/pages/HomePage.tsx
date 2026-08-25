@@ -1077,6 +1077,7 @@ export default function HomePage() {
           searchQuery={searchQuery}
           showHomeListSkeleton={showHomeListSkeleton}
           sortBy={sortBy}
+          supportEnabled={featureFlags.tickets}
           totalItems={totalItems}
           totalModelCount={totalModelCount}
           totalPages={totalPages}

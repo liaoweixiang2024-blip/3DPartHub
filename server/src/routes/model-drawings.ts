@@ -14,7 +14,7 @@ import { prisma } from '../lib/prisma.js';
 import { optionalString, requiredString } from '../lib/requestValidation.js';
 import { deleteCloudFile, keyFromStaticUrl, persistFile } from '../lib/storageProvider.js';
 import { modelDrawingMaxBytes, modelDrawingMaxSizeMb } from '../lib/uploadLimits.js';
-import { authMiddleware, verifyRequestToken, type AuthRequest } from '../middleware/auth.js';
+import { authMiddleware, getVerifiedRequestUser, type AuthRequest } from '../middleware/auth.js';
 import { requireRole } from '../middleware/rbac.js';
 import { getInvisibleCategoryIds } from '../services/categoryAccess.js';
 
@@ -152,8 +152,21 @@ router.get('/api/models/:id/drawing/download', async (req: Request, res: Respons
     res.status(401).json({ detail: '图纸访问令牌无效或已过期' });
     return;
   }
-  const user = tokenPayload || verifyRequestToken(req);
-  if (!user) {
+  // 分类访问控制依赖当前角色：JWT 分支必须查库解析（改角色后旧 token 里的角色已作废），
+  // 不能直接信任 token payload 里的 role 快照
+  let userId = tokenPayload?.userId ?? null;
+  let role = tokenPayload?.role ?? null;
+  if (!userId) {
+    try {
+      const verified = await getVerifiedRequestUser(req);
+      userId = verified?.payload.userId ?? null;
+      role = verified?.payload.role ?? null;
+    } catch {
+      userId = null;
+      role = null;
+    }
+  }
+  if (!userId) {
     res.status(401).json({ detail: '需要登录后才能查看图纸' });
     return;
   }
@@ -168,7 +181,7 @@ router.get('/api/models/:id/drawing/download', async (req: Request, res: Respons
       return;
     }
     // 分类访问控制：受限分类的模型图纸同样拦截
-    const invisible = await getInvisibleCategoryIds(user.role ?? null, user.userId ?? null);
+    const invisible = await getInvisibleCategoryIds(role, userId);
     if (m.categoryId && invisible.has(m.categoryId)) {
       res.status(403).json({ detail: '无权访问该图纸' });
       return;

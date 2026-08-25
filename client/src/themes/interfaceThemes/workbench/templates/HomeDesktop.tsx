@@ -429,6 +429,7 @@ export default function WorkbenchHomeDesktop({
   searchQuery,
   showHomeListSkeleton,
   sortBy,
+  supportEnabled,
   totalItems,
   totalModelCount,
   totalPages,
@@ -542,7 +543,7 @@ export default function WorkbenchHomeDesktop({
                         <p className="mt-1 text-xs text-on-surface-variant/60">{t('home.emptyDescription')}</p>
                       )}
                     </div>
-                    {searchQuery.trim() && (
+                    {searchQuery.trim() && supportEnabled && (
                       <Link
                         to="/support"
                         state={{

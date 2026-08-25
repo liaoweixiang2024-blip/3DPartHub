@@ -89,6 +89,8 @@ export interface DesktopHomeThemeProps {
   footerPoliceNumber?: string;
   footerPoliceUrl?: string;
   hasMore: boolean;
+  /** 工单功能开关（空状态「请求模型」入口的显隐，由 HomePage 经 props 注入——主题沙箱禁止直接读 publicSettings） */
+  supportEnabled: boolean;
   homePageSizeOptions: number[];
   homeSearchMaxLength: number;
   isLoadingMore: boolean;

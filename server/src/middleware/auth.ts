@@ -66,8 +66,11 @@ export async function getVerifiedRequestUser(
   if (revokeBefore && payload.iat && payload.iat < revokeBefore) return null;
 
   const cacheKey = `auth:user:${payload.userId}`;
-  const cached = await cacheGet<{ id: string; role: string; mustChangePassword: boolean }>(cacheKey);
+  const cached = await cacheGet<{ id: string; role: string; disabled?: boolean; mustChangePassword: boolean }>(
+    cacheKey,
+  );
   if (cached) {
+    if (cached.disabled) return null; // 禁用账号一律视为未认证（改角色/禁用时管理员会清此缓存，最长 60s 兜底）
     return {
       payload: {
         userId: cached.id,
@@ -80,9 +83,10 @@ export async function getVerifiedRequestUser(
 
   const user = await prisma.user.findUnique({
     where: { id: payload.userId },
-    select: { id: true, role: true, mustChangePassword: true },
+    select: { id: true, role: true, disabled: true, mustChangePassword: true },
   });
   if (!user) return null;
+  if (user.disabled) return null;
 
   await cacheSet(cacheKey, user, USER_CACHE_TTL).catch(() => {});
 

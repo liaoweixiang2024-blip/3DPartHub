@@ -498,10 +498,17 @@ router.post('/api/downloads/drawing-token', optionalAuthMiddleware, async (req: 
 
     const model = await prisma.model.findUnique({
       where: { id: modelId },
-      select: { id: true, drawingUrl: true },
+      select: { id: true, drawingUrl: true, categoryId: true },
     });
     if (!model?.drawingUrl) {
       res.status(404).json({ detail: '图纸不存在' });
+      return;
+    }
+
+    // 分类访问控制：受限分类的模型不发放图纸令牌（/drawing/download 端点还有同款兜底拦截）
+    const invisible = await getInvisibleCategoryIds(req.user?.role ?? null, req.user?.userId ?? null);
+    if (model.categoryId && invisible.has(model.categoryId)) {
+      res.status(403).json({ detail: '无权访问该图纸' });
       return;
     }
 

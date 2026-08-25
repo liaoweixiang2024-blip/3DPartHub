@@ -29,7 +29,7 @@ export function createPublicCategoriesRouter() {
       const excludedIds = [...invisible];
       // ADMIN 全可见且缓存桶恒为空：树接口给 ADMIN 额外下发白名单（分类管理页回显用），
       // 非 ADMIN 只拿 restricted 布尔标记，不泄露白名单内容
-      const viewerIsAdmin = getViewerContext(req).role === 'ADMIN';
+      const viewerIsAdmin = (await getViewerContext(req)).role === 'ADMIN';
       const { value: result, hit } = await cacheGetOrSet(
         `${CATEGORY_CACHE_PREFIX}tree:v4${bucket ? `:${bucket}` : ''}`,
         TTL.CATEGORIES,

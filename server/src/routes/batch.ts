@@ -14,7 +14,7 @@ import { syncJob, loadJob } from '../lib/jobStore.js';
 import { createLogger } from '../lib/logger.js';
 import { optionalString } from '../lib/requestValidation.js';
 import { batchArchiveMaxSizeMb, UPLOAD_REQUEST_TIMEOUT_MS } from '../lib/uploadLimits.js';
-import { authMiddleware, verifyRequestToken, type AuthRequest } from '../middleware/auth.js';
+import { authMiddleware, getVerifiedRequestUser, type AuthRequest } from '../middleware/auth.js';
 import { requireRole } from '../middleware/rbac.js';
 import {
   BatchArchiveUploadError,
@@ -264,7 +264,8 @@ router.get('/api/batch/downloads/:file', async (req, res: Response) => {
     return;
   }
 
-  const user = tokenPayload || verifyRequestToken(req);
+  // JWT 分支必须查库解析：降级/禁用后的旧 token 仍带着 ADMIN 字样，不能凭快照放行
+  const user = tokenPayload ?? (await getVerifiedRequestUser(req))?.payload ?? null;
   if (!user || user.role !== 'ADMIN') {
     res.status(401).json({ detail: '需要管理员权限' });
     return;

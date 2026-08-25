@@ -1,7 +1,7 @@
 import type { Request } from 'express';
 import rateLimit, { ipKeyGenerator, type Options, type Store } from 'express-rate-limit';
 import helmet from 'helmet';
-import { redis } from '../lib/cache.js';
+import { prefixedRedisKey, redis } from '../lib/cache.js';
 import { logger } from '../lib/logger.js';
 import { getCachedSettings } from '../lib/settings.js';
 import { getVerifiedRequestUser, verifyRequestToken, type AuthRequest } from './auth.js';
@@ -19,8 +19,9 @@ class RedisRateLimitStore implements Store {
     this.windowMs = Number(options.windowMs) || this.windowMs;
   }
 
+  // eval 直写不走 cache.ts 的自动前缀，必须手动补上（与本文件 resetAll 的扫描模式一致）
   private key(key: string) {
-    return `${this.prefix}${key}`;
+    return prefixedRedisKey(`${this.prefix}${key}`);
   }
 
   async increment(key: string) {
@@ -59,7 +60,7 @@ class RedisRateLimitStore implements Store {
   }
 
   async resetAll() {
-    const pattern = `${this.prefix}*`;
+    const pattern = prefixedRedisKey(`${this.prefix}*`);
     await redis.eval(
       `
       local cursor = '0'

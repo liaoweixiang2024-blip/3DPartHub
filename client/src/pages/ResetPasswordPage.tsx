@@ -1,7 +1,7 @@
 import { motion } from 'framer-motion';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Link, useParams } from 'react-router-dom';
+import { Link, Navigate, useParams } from 'react-router-dom';
 import { authApi } from '../api/auth';
 import BrandMark from '../components/shared/BrandMark';
 import { APP_FIELD_ERROR_CLASS, AppFormLabel, AppTextInput } from '../components/shared/FormControls';
@@ -10,6 +10,7 @@ import { PageTitle } from '../components/shared/PagePrimitives';
 import { PublicPageShell } from '../components/shared/PublicPageShell';
 import { useDocumentTitle } from '../hooks/useDocumentTitle';
 import { getErrorMessage } from '../lib/errorNotifications';
+import { useFeatureFlags } from '../lib/publicSettings';
 
 const MIN_LENGTH = 8;
 
@@ -23,6 +24,7 @@ function passwordStrength(pwd: string): { letters: boolean; numbers: boolean; sy
 export default function ResetPasswordPage() {
   const { t } = useTranslation();
   const { token } = useParams<{ token: string }>();
+  const featureFlags = useFeatureFlags();
   useDocumentTitle(t('auth.resetPasswordTitle'));
 
   const [password, setPassword] = useState('');
@@ -34,6 +36,11 @@ export default function ResetPasswordPage() {
   const [done, setDone] = useState(false);
 
   const strength = passwordStrength(password);
+
+  // 功能关闭时 URL 直达也拦（后端 reset API 有 featureGuard，这里补前端路由内拦截）
+  if (!featureFlags.passwordReset) {
+    return <Navigate to="/login" replace />;
+  }
 
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();

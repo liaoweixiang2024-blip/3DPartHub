@@ -19,7 +19,7 @@ import {
   stableStringify,
 } from '../../lib/submissionGuards.js';
 import { ticketAttachmentExts, ticketAttachmentMaxBytes, ticketAttachmentMaxSizeMb } from '../../lib/uploadLimits.js';
-import { authMiddleware, verifyRequestToken, type AuthRequest } from '../../middleware/auth.js';
+import { authMiddleware, getVerifiedRequestUser, type AuthRequest } from '../../middleware/auth.js';
 import {
   conversationAttachmentLimiter,
   conversationMessageLimiter,
@@ -565,8 +565,21 @@ export function createUserInquiriesRouter() {
       return;
     }
 
-    const user = tokenPayload || verifyRequestToken(req);
-    if (!user) {
+    // JWT 分支必须查库解析身份：不能信任 token 里的 role 快照
+    //（降级/禁用后旧 token 仍带着 ADMIN 字样会绕过下面的属主检查）
+    let userId = tokenPayload?.userId ?? null;
+    let role = tokenPayload?.role ?? null;
+    if (!userId) {
+      try {
+        const verified = await getVerifiedRequestUser(req);
+        userId = verified?.payload.userId ?? null;
+        role = verified?.payload.role ?? null;
+      } catch {
+        userId = null;
+        role = null;
+      }
+    }
+    if (!userId) {
       res.status(401).json({ detail: '需要登录后才能查看附件' });
       return;
     }
@@ -577,7 +590,7 @@ export function createUserInquiriesRouter() {
         res.status(404).json({ detail: '询价单不存在' });
         return;
       }
-      if (inquiry.userId !== user.userId && user.role !== 'ADMIN') {
+      if (inquiry.userId !== userId && role !== 'ADMIN') {
         res.status(403).json({ detail: '无权访问' });
         return;
       }

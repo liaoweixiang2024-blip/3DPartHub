@@ -15,6 +15,7 @@ import { useVisibleItems } from '../hooks/useVisibleItems';
 import { useMediaQuery } from '../layouts/hooks/useMediaQuery';
 import type { InquiryCartItem } from '../lib/inquiryCart';
 import { getCustomerInquiryStatusView } from '../lib/inquiryCustomerStatus';
+import { useFeatureFlags } from '../lib/publicSettings';
 
 const INQUIRY_STATUS_KEYS = new Set(['submitted', 'quoted', 'accepted', 'rejected', 'cancelled']);
 
@@ -58,6 +59,7 @@ function HistoryDivider({ count }: { count: number }) {
 
 function HistoryEmpty() {
   const { t } = useTranslation();
+  const featureFlags = useFeatureFlags();
 
   return (
     <AdminEmptyState
@@ -65,12 +67,15 @@ function HistoryEmpty() {
       title={t('myInquiries.emptyTitle')}
       description={t('myInquiries.emptyDescription')}
       action={
-        <Link
-          to="/selection"
-          className="rounded-md bg-primary-container px-5 py-2.5 text-sm font-semibold text-on-primary transition-opacity hover:opacity-90"
-        >
-          {t('myInquiries.emptyAction')}
-        </Link>
+        // 选型功能关闭时不引导用户去 /selection（页面本身有 FeatureGate，这里防误导性入口）
+        featureFlags.selection ? (
+          <Link
+            to="/selection"
+            className="rounded-md bg-primary-container px-5 py-2.5 text-sm font-semibold text-on-primary transition-opacity hover:opacity-90"
+          >
+            {t('myInquiries.emptyAction')}
+          </Link>
+        ) : undefined
       }
     />
   );

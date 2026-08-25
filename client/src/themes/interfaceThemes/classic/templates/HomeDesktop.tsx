@@ -30,6 +30,7 @@ export default function ClassicHomeDesktop({
   searchQuery,
   showHomeListSkeleton,
   sortBy,
+  supportEnabled,
   totalItems,
   totalModelCount,
   totalPages,
@@ -174,7 +175,7 @@ export default function ClassicHomeDesktop({
                     <p className="mt-1 text-xs text-on-surface-variant/60">{t('home.emptyDescription')}</p>
                   )}
                 </div>
-                {searchQuery.trim() && (
+                {searchQuery.trim() && supportEnabled && (
                   <Link
                     to="/support"
                     state={{

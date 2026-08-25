@@ -1,22 +1,26 @@
 // Minimal service worker for PWA installability.
 //
-// Why this exists: Chrome / Edge only surface the "Install app" affordance in
-// the address bar when the page is controlled by a service worker that registers
-// a `fetch` event handler (alongside a valid manifest, which we already have).
+// Why this exists: alongside a valid manifest (site.webmanifest) and HTTPS, a
+// registered service worker keeps the app recognized as a PWA. Chrome's old
+// requirement — a fetch handler that calls respondWith() — was retired in 2023
+// (developer.chrome.com/blog/update-install-criteria), so this worker now
+// registers NO fetch handler at all: a no-op fetch listener only added per-
+// navigation overhead, which recent Chrome versions flag in the console
+// ("Fetch event handler is recognized as no-op").
 //
-// This worker intentionally does NOT cache anything. The fetch listener below
-// never calls `respondWith()`, so the browser handles every request with its
-// default network behavior — identical to having no service worker at all for
-// request handling. Its mere presence is what satisfies the installability check.
-//
-// We avoid caching deliberately: this app is server-dependent (API, large WASM
+// This worker intentionally does NOT cache anything. Offline support is
+// deliberately out of scope: the app is server-dependent (API, large WASM
 // for CAD import, model files) and aggressive precaching would balloon storage
-// and risk serving stale bundles. Offline support is intentionally out of scope.
+// and risk serving stale bundles.
+//
+// Keeping a (handler-less) worker registered matters for users who installed
+// the app earlier, and skipWaiting/claim below push this update out to every
+// existing registration so the fetch handler disappears after one reload.
 
-const SW_VERSION = '3dparthub-sw-v1';
+const SW_VERSION = '3dparthub-sw-v2';
 
-// Activate the new worker immediately so the install icon can surface within
-// the first session rather than requiring every existing tab to close first.
+// Activate the new worker immediately so existing registrations pick up this
+// version within the first session rather than requiring every tab to close.
 self.addEventListener('install', () => {
   self.skipWaiting();
 });
@@ -33,7 +37,3 @@ self.addEventListener('activate', (event) => {
     })(),
   );
 });
-
-// The fetch handler that makes this an "installable" PWA. Empty body is
-// deliberate: no respondWith() => browser falls through to normal network.
-self.addEventListener('fetch', () => {});

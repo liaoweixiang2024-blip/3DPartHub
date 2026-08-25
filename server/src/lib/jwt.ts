@@ -1,5 +1,5 @@
 import jwt from 'jsonwebtoken';
-import { cacheGet, cacheSet, redis } from './cache.js';
+import { cacheGet, cacheSet, prefixedRedisKey, redis } from './cache.js';
 import { config } from './config.js';
 
 const JWT_SECRET = config.jwtSecret;
@@ -35,7 +35,9 @@ export async function isTokenRevoked(userId: string, iat: number): Promise<boole
 }
 
 export async function revokeAllTokensBefore(userId: string, beforeIat: number): Promise<void> {
-  const key = `token_revoke_before:${userId}`;
+  // 读方（auth.ts 的 cacheGet）带 Redis key 前缀，这里 eval 直写也必须带同一前缀，
+  // 否则键永远读不到，「改角色/禁用即顶下线」会静默失效
+  const key = prefixedRedisKey(`token_revoke_before:${userId}`);
   const ttl = 30 * 24 * 3600;
   await redis.eval(
     `local current = tonumber(redis.call("GET", KEYS[1]))
@@ -61,7 +63,8 @@ export async function isRefreshTokenRevoked(userId: string, familyId: string): P
 }
 
 export async function checkAndRevokeRefreshFamily(userId: string, familyId: string): Promise<boolean> {
-  const key = refreshTokenFamilyKey(userId, familyId);
+  // 同 revokeAllTokensBefore：eval 直写必须带 key 前缀，与读方 cacheGet 一致
+  const key = prefixedRedisKey(refreshTokenFamilyKey(userId, familyId));
   const result = await redis.eval(
     `local val = redis.call("GET", KEYS[1])
      if val == "revoked" then return 0 end

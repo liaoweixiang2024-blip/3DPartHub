@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import type { Request } from 'express';
 import { prisma } from '../lib/prisma.js';
 import type { AuthRequest } from '../middleware/auth.js';
-import { verifyRequestToken } from '../middleware/auth.js';
+import { getVerifiedRequestUser, verifyRequestToken } from '../middleware/auth.js';
 
 export type CategoryAccessContext = {
   role: string | null;
@@ -12,16 +12,25 @@ export type CategoryAccessContext = {
 /**
  * 从请求解析查看者身份（可选登录场景）：
  * 优先用中间件已挂好的 (req as AuthRequest).user（authMiddleware / requireBrowseAccess 登录态），
- * 否则尝试解析 Authorization/cookie 里的 token（require_login_browse=false 时中间件不挂 user）。
+ * 否则用 getVerifiedRequestUser 按令牌查库解析（require_login_browse=false 时中间件不挂 user）。
+ *
+ * 注意：不能直接信任 JWT payload 里的 role——那是签发时烧进去的快照（7 天有效），
+ * 管理员改角色后旧 token 仍带着旧角色，会把被降级用户当作原角色放行。
+ * getVerifiedRequestUser 会查 token 作废名单（改角色时会 revokeAllTokensBefore）并回读数据库角色。
  */
-export function getViewerContext(req: Request): CategoryAccessContext {
+export async function getViewerContext(req: Request): Promise<CategoryAccessContext> {
   const attached = (req as AuthRequest).user;
   if (attached?.role) {
     return { role: attached.role, userId: attached.userId ?? null };
   }
-  const payload = verifyRequestToken(req);
-  if (payload?.role) {
-    return { role: payload.role, userId: payload.userId ?? null };
+  if (!verifyRequestToken(req)) return { role: null, userId: null };
+  try {
+    const verified = await getVerifiedRequestUser(req);
+    if (verified?.payload.role) {
+      return { role: verified.payload.role, userId: verified.payload.userId ?? null };
+    }
+  } catch {
+    // 认证服务异常时按匿名处理（不可见集合更大，安全侧兜底）
   }
   return { role: null, userId: null };
 }
@@ -71,7 +80,7 @@ export async function getInvisibleCategoryIds(role: string | null, userId: strin
 
 /** 便捷封装：请求 → 不可见分类集合 */
 export async function getInvisibleCategoryIdsForRequest(req: Request): Promise<Set<string>> {
-  const { role, userId } = getViewerContext(req);
+  const { role, userId } = await getViewerContext(req);
   return getInvisibleCategoryIds(role, userId);
 }
 

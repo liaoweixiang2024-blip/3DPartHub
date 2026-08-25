@@ -420,10 +420,15 @@ export function createAuthSessionRouter() {
 
       const user = await prisma.user.findUnique({
         where: { id: payload.userId },
-        select: { id: true, role: true },
+        select: { id: true, role: true, disabled: true },
       });
       if (!user) {
         res.status(401).json({ detail: '用户不存在，请重新登录' });
+        return;
+      }
+      // 禁用账号不得通过旧 refresh token 续签（登录入口已拦，这里补齐 refresh 入口）
+      if (user.disabled) {
+        res.status(403).json({ detail: '账号已被禁用，请联系管理员' });
         return;
       }
 

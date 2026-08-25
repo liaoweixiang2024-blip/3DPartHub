@@ -11,6 +11,11 @@ function pk(key: string): string {
   return KEY_PREFIX + key;
 }
 
+/** 带 Redis key 前缀（cacheGet/cacheSet 均走此前缀；用 redis 原生命令如 eval 时必须复用，否则写入读不到） */
+export function prefixedRedisKey(key: string): string {
+  return pk(key);
+}
+
 export const redis = new Redis(config.redisUrl, {
   connectTimeout: 2000,
   commandTimeout: 1000,
