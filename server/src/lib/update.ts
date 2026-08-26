@@ -141,6 +141,8 @@ export interface UpdateHistoryEntry {
 let historyCache: { at: number; entries: UpdateHistoryEntry[] } | null = null;
 let latestProbeCache: { at: number; version: string } | null = null;
 const LATEST_PROBE_TTL_MS = 10 * 60 * 1000;
+// 历史缓存兜底时效：超过后即使版本号没变也重拉一次（发布说明可能被事后编辑）
+const HISTORY_TTL_MS = 60 * 60 * 1000;
 const HISTORY_MAX_ENTRIES = 20;
 
 function parseUpdateTitleFromBody(body: string | undefined): string | undefined {
@@ -167,12 +169,14 @@ async function probeLatestVersion(): Promise<string | null> {
  * 按发布时间倒序。拉取失败（离线/限流）返回空数组，前端显示占位。
  */
 export async function getUpdateHistory(): Promise<UpdateHistoryEntry[]> {
-  // 已有缓存：只在探测到新版本发布时才全量刷新
+  // 已有缓存：探测到新版本发布，或缓存超过 HISTORY_TTL_MS（发布说明事后
+  // 编辑过版本号不变，靠 TTL 兜底刷新）时才全量重拉
   if (historyCache) {
+    const expired = Date.now() - historyCache.at >= HISTORY_TTL_MS;
     const latest = await probeLatestVersion();
     const cachedTop = historyCache.entries[0]?.version;
-    if (!latest || latest === cachedTop) return historyCache.entries;
-    // latest 与缓存顶版本不一致 → 有新版本发布，落到下方全量拉取
+    if (!expired && (!latest || latest === cachedTop)) return historyCache.entries;
+    // latest 与缓存顶版本不一致（或缓存过期）→ 落到下方全量拉取
   }
 
   const raw = await fetchJsonFromGithub('/repos/liaoweixiang2024-blip/3DPartHub/releases?per_page=50');
