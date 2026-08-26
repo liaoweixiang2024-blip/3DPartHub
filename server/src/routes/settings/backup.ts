@@ -38,6 +38,7 @@ import { getErrorMessage } from '../../lib/http.js';
 import { createLogger } from '../../lib/logger.js';
 import { prisma } from '../../lib/prisma.js';
 import { requestSiteUrl } from '../../lib/requestSiteUrl.js';
+import { sendResourceError } from '../../lib/resourceErrorPage.js';
 import { BACKUP_DIRECT_UPLOAD_MAX_BYTES } from '../../lib/uploadLimits.js';
 import { authMiddleware, type AuthRequest } from '../../middleware/auth.js';
 import { createNotification } from '../notifications.js';
@@ -561,17 +562,20 @@ export function createSettingsBackupRouter() {
     const backupId = validateBackupId(asSingleString(req.params.id));
     const token = asSingleString(req.params.token);
     if (!backupId || !token) {
-      res.status(400).json({ detail: '下载令牌无效' });
+      await sendResourceError(req, res, 400, '下载令牌无效', { htmlTitle: '下载链接无效' });
       return;
     }
     const tokenPayload = consumeProtectedResourceToken(token, 'backup-download', backupId);
     if (!tokenPayload) {
-      res.status(401).json({ detail: '下载令牌已过期或无效' });
+      await sendResourceError(req, res, 401, '备份下载链接已失效，请回到系统设置重新发起下载', {
+        htmlTitle: '下载链接已失效',
+        hint: '备份下载链接为一次性链接，只能使用一次',
+      });
       return;
     }
     const filePath = getBackupArchivePath(backupId);
     if (!filePath) {
-      res.status(404).json({ detail: '备份文件不存在' });
+      await sendResourceError(req, res, 404, '备份文件不存在或已被清理', { htmlTitle: '备份不存在' });
       return;
     }
     sendAcceleratedFile(req, res, {

@@ -13,6 +13,7 @@ import { consumeProtectedResourceToken, createProtectedResourceToken } from '../
 import { syncJob, loadJob } from '../lib/jobStore.js';
 import { createLogger } from '../lib/logger.js';
 import { optionalString } from '../lib/requestValidation.js';
+import { sendResourceError } from '../lib/resourceErrorPage.js';
 import { batchArchiveMaxSizeMb, UPLOAD_REQUEST_TIMEOUT_MS } from '../lib/uploadLimits.js';
 import { authMiddleware, getVerifiedRequestUser, type AuthRequest } from '../middleware/auth.js';
 import { requireRole } from '../middleware/rbac.js';
@@ -260,20 +261,23 @@ router.get('/api/batch/downloads/:file', async (req, res: Response) => {
   const queryToken = optionalString(req.query.download_token, { maxLength: 160 });
   const tokenPayload = queryToken ? consumeProtectedResourceToken(queryToken, 'batch-download', fileName) : null;
   if (queryToken && !tokenPayload) {
-    res.status(401).json({ detail: '下载令牌无效或已过期' });
+    await sendResourceError(req, res, 401, '下载链接已失效，请回到下载历史页重新发起批量下载', {
+      htmlTitle: '下载链接已失效',
+      hint: '批量下载链接为一次性链接，只能使用一次',
+    });
     return;
   }
 
   // JWT 分支必须查库解析：降级/禁用后的旧 token 仍带着 ADMIN 字样，不能凭快照放行
   const user = tokenPayload ?? (await getVerifiedRequestUser(req))?.payload ?? null;
   if (!user || user.role !== 'ADMIN') {
-    res.status(401).json({ detail: '需要管理员权限' });
+    await sendResourceError(req, res, 401, '需要管理员权限', { htmlTitle: '无权访问' });
     return;
   }
 
   const filePath = join(process.cwd(), config.staticDir, 'batch', fileName);
   if (!existsSync(filePath)) {
-    res.status(404).json({ detail: '文件不存在' });
+    await sendResourceError(req, res, 404, '文件不存在或已被清理', { htmlTitle: '文件不存在' });
     return;
   }
 

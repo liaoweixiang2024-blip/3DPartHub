@@ -7,6 +7,7 @@ import { logger } from '../../lib/logger.js';
 import { createNotification } from '../../lib/notificationDelivery.js';
 import { requestSiteUrl } from '../../lib/requestSiteUrl.js';
 import { optionalString, booleanFlag } from '../../lib/requestValidation.js';
+import { sendResourceError } from '../../lib/resourceErrorPage.js';
 import { getSetting } from '../../lib/settings.js';
 import { getVerifiedRequestUser, verifyRequestToken } from '../../middleware/auth.js';
 import { trackActiveModelDownload } from '../../services/activeModelDownloads.js';
@@ -78,11 +79,16 @@ export function createModelDownloadRouter({ prisma, getMeta }: ModelDownloadCont
 
     if (queryDownloadToken) {
       if (!downloadTokenPayload || downloadTokenPayload.modelId !== id) {
-        res.status(401).json({ detail: '下载令牌无效或已过期' });
+        await sendResourceError(req, res, 401, '下载链接已失效，请回到模型详情页重新发起下载', {
+          htmlTitle: '下载链接已失效',
+          hint: '下载链接为一次性链接，只能使用一次且有时效',
+        });
         return;
       }
       if (requestedFormat && requestedFormat !== downloadTokenPayload.format) {
-        res.status(403).json({ detail: '下载令牌与请求格式不匹配' });
+        await sendResourceError(req, res, 403, '下载链接与请求的文件格式不匹配，请重新发起下载', {
+          htmlTitle: '下载链接无效',
+        });
         return;
       }
       requestedFormat = downloadTokenPayload.format;
@@ -115,7 +121,7 @@ export function createModelDownloadRouter({ prisma, getMeta }: ModelDownloadCont
     // Check if login is required to download
     const requireLogin = await getSetting<boolean>('require_login_download');
     if (requireLogin && !authPayload) {
-      res.status(401).json({ detail: '需要登录后才能下载' });
+      await sendResourceError(req, res, 401, '需要登录后才能下载', { htmlTitle: '请先登录' });
       return;
     }
     const dailyLimit = await getSetting<number>('daily_download_limit');
@@ -134,11 +140,11 @@ export function createModelDownloadRouter({ prisma, getMeta }: ModelDownloadCont
         const m = await prisma.model.findUnique({ where: { id } });
         if (m) {
           if (m.status !== MODEL_STATUS.COMPLETED && authHeaderPayload?.role !== 'ADMIN') {
-            res.status(404).json({ detail: '文件不存在' });
+            await sendResourceError(req, res, 404, '文件不存在或尚未完成处理', { htmlTitle: '文件不存在' });
             return;
           }
           if (m.categoryId && invisibleCategories.has(m.categoryId)) {
-            res.status(403).json({ detail: '无权下载该模型' });
+            await sendResourceError(req, res, 403, '您没有下载该模型的权限', { htmlTitle: '无权下载' });
             return;
           }
           target = resolveDbModelDownloadTarget(m, requestedFormat);
@@ -152,18 +158,18 @@ export function createModelDownloadRouter({ prisma, getMeta }: ModelDownloadCont
     if (!target) {
       const meta = getMeta(id);
       if (!meta) {
-        res.status(404).json({ detail: '模型不存在' });
+        await sendResourceError(req, res, 404, '模型不存在或已被删除', { htmlTitle: '模型不存在' });
         return;
       }
       if (typeof meta.category_id === 'string' && invisibleCategories.has(meta.category_id)) {
-        res.status(403).json({ detail: '无权下载该模型' });
+        await sendResourceError(req, res, 403, '您没有下载该模型的权限', { htmlTitle: '无权下载' });
         return;
       }
       target = resolveMetadataModelDownloadTarget(id, meta, requestedFormat);
     }
 
     if (!target || !existsSync(target.filePath)) {
-      res.status(404).json({ detail: '文件不存在' });
+      await sendResourceError(req, res, 404, '文件不存在或已被移除', { htmlTitle: '文件不存在' });
       return;
     }
 

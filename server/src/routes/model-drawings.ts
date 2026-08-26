@@ -12,6 +12,7 @@ import { createLogger } from '../lib/logger.js';
 import { modelDownloadFileName, modelDownloadSourceName } from '../lib/modelDownloadName.js';
 import { prisma } from '../lib/prisma.js';
 import { optionalString, requiredString } from '../lib/requestValidation.js';
+import { sendResourceError } from '../lib/resourceErrorPage.js';
 import { deleteCloudFile, keyFromStaticUrl, persistFile } from '../lib/storageProvider.js';
 import { modelDrawingMaxBytes, modelDrawingMaxSizeMb } from '../lib/uploadLimits.js';
 import { authMiddleware, getVerifiedRequestUser, type AuthRequest } from '../middleware/auth.js';
@@ -149,7 +150,10 @@ router.get('/api/models/:id/drawing/download', async (req: Request, res: Respons
   const queryToken = optionalString(req.query.download_token, { maxLength: 160 });
   const tokenPayload = queryToken ? verifyProtectedResourceToken(queryToken, 'model-drawing', id) : null;
   if (queryToken && !tokenPayload) {
-    res.status(401).json({ detail: '图纸访问令牌无效或已过期' });
+    await sendResourceError(req, res, 401, '图纸访问链接已失效，请回到模型详情页重新打开图纸', {
+      htmlTitle: '图纸链接已失效',
+      hint: '图纸访问链接有效期为 5 分钟，过期后需从模型详情页重新获取',
+    });
     return;
   }
   // 分类访问控制依赖当前角色：JWT 分支必须查库解析（改角色后旧 token 里的角色已作废），
@@ -167,7 +171,7 @@ router.get('/api/models/:id/drawing/download', async (req: Request, res: Respons
     }
   }
   if (!userId) {
-    res.status(401).json({ detail: '需要登录后才能查看图纸' });
+    await sendResourceError(req, res, 401, '需要登录后才能查看图纸', { htmlTitle: '请先登录' });
     return;
   }
 
@@ -183,13 +187,13 @@ router.get('/api/models/:id/drawing/download', async (req: Request, res: Respons
     // 分类访问控制：受限分类的模型图纸同样拦截
     const invisible = await getInvisibleCategoryIds(role, userId);
     if (m.categoryId && invisible.has(m.categoryId)) {
-      res.status(403).json({ detail: '无权访问该图纸' });
+      await sendResourceError(req, res, 403, '您没有查看该图纸的权限', { htmlTitle: '无权访问' });
       return;
     }
 
     const drawingPath = resolveDrawingPath(id, m.drawingUrl);
     if (!drawingPath || !existsSync(drawingPath)) {
-      res.status(404).json({ detail: '图纸文件不存在' });
+      await sendResourceError(req, res, 404, '图纸不存在或已被移除', { htmlTitle: '图纸不存在' });
       return;
     }
 

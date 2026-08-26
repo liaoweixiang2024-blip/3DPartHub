@@ -11,6 +11,7 @@ import { logger } from '../../lib/logger.js';
 import { prisma } from '../../lib/prisma.js';
 import { requestSiteUrl } from '../../lib/requestSiteUrl.js';
 import { optionalString } from '../../lib/requestValidation.js';
+import { sendResourceError } from '../../lib/resourceErrorPage.js';
 import {
   DEMAND_DUPLICATE_WINDOW_MS,
   MESSAGE_DUPLICATE_WINDOW_MS,
@@ -561,7 +562,10 @@ export function createUserInquiriesRouter() {
       ? verifyProtectedResourceToken(queryToken, 'inquiry-attachment', inquiryAttachmentResourceId(inquiryId, fileName))
       : null;
     if (queryToken && !tokenPayload) {
-      res.status(401).json({ detail: '附件访问令牌无效或已过期' });
+      await sendResourceError(req, res, 401, '附件链接已失效，请回到询价详情页重新打开附件', {
+        htmlTitle: '附件链接已失效',
+        hint: '附件链接有效期为 5 分钟，过期后需从询价详情页重新获取',
+      });
       return;
     }
 
@@ -580,24 +584,24 @@ export function createUserInquiriesRouter() {
       }
     }
     if (!userId) {
-      res.status(401).json({ detail: '需要登录后才能查看附件' });
+      await sendResourceError(req, res, 401, '需要登录后才能查看附件', { htmlTitle: '请先登录' });
       return;
     }
 
     try {
       const inquiry = await prisma.inquiry.findUnique({ where: { id: inquiryId } });
       if (!inquiry) {
-        res.status(404).json({ detail: '询价单不存在' });
+        await sendResourceError(req, res, 404, '询价单不存在', { htmlTitle: '询价单不存在' });
         return;
       }
       if (inquiry.userId !== userId && role !== 'ADMIN') {
-        res.status(403).json({ detail: '无权访问' });
+        await sendResourceError(req, res, 403, '您没有查看该附件的权限', { htmlTitle: '无权访问' });
         return;
       }
 
       const filePath = join(process.cwd(), config.staticDir, 'inquiry-attachments', fileName);
       if (!existsSync(filePath)) {
-        res.status(404).json({ detail: '附件不存在' });
+        await sendResourceError(req, res, 404, '附件不存在或已被移除', { htmlTitle: '附件不存在' });
         return;
       }
 
