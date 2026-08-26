@@ -342,19 +342,20 @@ async function attachDrawingFromBuffer(
   if (data.length > limit.maxBytes) return `PDF 图纸过大，最大支持 ${limit.maxMb}MB`;
   if (!isPdfData(data)) return 'PDF 图纸内容无效';
 
-  const drawingPath = join(config.staticDir, 'drawings', `${modelId}.pdf`);
+  const drawingId = randomUUID();
+  const drawingPath = join(config.staticDir, 'drawings', modelId, `${drawingId}.pdf`);
   try {
-    const drawingDir = join(config.staticDir, 'drawings');
-    mkdirSync(drawingDir, { recursive: true });
+    mkdirSync(join(config.staticDir, 'drawings', modelId), { recursive: true });
     writeFileSync(drawingPath, data);
     await persistFile(drawingPath);
 
-    await prismaClient.model.update({
-      where: { id: modelId },
+    await prismaClient.modelDrawing.create({
       data: {
-        drawingUrl: `/static/drawings/${modelId}.pdf`,
-        drawingName: normalizeUploadFilename(originalName, 'drawing.pdf'),
-        drawingSize: data.length,
+        id: drawingId,
+        modelId,
+        fileKey: `/static/drawings/${modelId}/${drawingId}.pdf`,
+        name: normalizeUploadFilename(originalName, 'drawing.pdf'),
+        size: data.length,
       },
     });
 
@@ -681,9 +682,12 @@ export async function processBatchArchiveUpload({
           return acc;
         }, []);
 
-      const pdfByKey = new Map<string, ZipEntryCandidate>();
+      const pdfByKey = new Map<string, ZipEntryCandidate[]>();
       for (const item of entries) {
-        if (item.ext === 'pdf' && !pdfByKey.has(item.pairKey)) pdfByKey.set(item.pairKey, item);
+        if (item.ext !== 'pdf') continue;
+        const list = pdfByKey.get(item.pairKey) || [];
+        list.push(item);
+        pdfByKey.set(item.pairKey, list);
       }
 
       const modelEntries = selectBatchModelEntries(entries, acceptedExts, results);
@@ -739,38 +743,46 @@ export async function processBatchArchiveUpload({
           modelName: item.modelNameOverride || structuredPath?.modelName,
           resolveCategoryId: structuredPath ? () => resolveArchiveCategoryId(structuredPath) : undefined,
         });
-        const drawing = result?.model_id ? pdfByKey.get(pairKey) : null;
-        if (!result?.model_id || !drawing) continue;
+        const drawings = result?.model_id ? pdfByKey.get(pairKey) || [] : [];
+        if (!result?.model_id || drawings.length === 0) continue;
 
-        const drawingDeclaredSize = Number(drawing.entry.header.size);
-        if (
-          Number.isFinite(drawingDeclaredSize) &&
-          drawingDeclaredSize > 0 &&
-          (drawingDeclaredSize > drawingLimit.maxBytes ||
-            totalExtractedBytes + drawingDeclaredSize > maxTotalExtractBytes)
-        ) {
-          result.drawing_error = `PDF 图纸过大，最大支持 ${drawingLimit.maxMb}MB`;
-          continue;
-        }
+        // 同名多 PDF：逐份绑定，全部失败才算失败（任一成功即 drawing_attached）
+        let attachedAny = false;
+        for (const drawing of drawings) {
+          const drawingDeclaredSize = Number(drawing.entry.header.size);
+          if (
+            Number.isFinite(drawingDeclaredSize) &&
+            drawingDeclaredSize > 0 &&
+            (drawingDeclaredSize > drawingLimit.maxBytes ||
+              totalExtractedBytes + drawingDeclaredSize > maxTotalExtractBytes)
+          ) {
+            if (!result.drawing_error) result.drawing_error = `PDF 图纸过大，最大支持 ${drawingLimit.maxMb}MB`;
+            continue;
+          }
 
-        const drawingData = drawing.entry.getData();
-        if (
-          drawingData.length > drawingLimit.maxBytes ||
-          totalExtractedBytes + drawingData.length > maxTotalExtractBytes
-        ) {
-          result.drawing_error = `PDF 图纸过大，最大支持 ${drawingLimit.maxMb}MB`;
-          continue;
+          const drawingData = drawing.entry.getData();
+          if (
+            drawingData.length > drawingLimit.maxBytes ||
+            totalExtractedBytes + drawingData.length > maxTotalExtractBytes
+          ) {
+            if (!result.drawing_error) result.drawing_error = `PDF 图纸过大，最大支持 ${drawingLimit.maxMb}MB`;
+            continue;
+          }
+          totalExtractedBytes += drawingData.length;
+          const drawingError = await attachDrawingFromBuffer(
+            prisma,
+            result.model_id,
+            drawing.originalName,
+            drawingData,
+            drawingLimit,
+          );
+          if (drawingError) {
+            if (!result.drawing_error) result.drawing_error = drawingError;
+          } else {
+            attachedAny = true;
+          }
         }
-        totalExtractedBytes += drawingData.length;
-        const drawingError = await attachDrawingFromBuffer(
-          prisma,
-          result.model_id,
-          drawing.originalName,
-          drawingData,
-          drawingLimit,
-        );
-        if (drawingError) result.drawing_error = drawingError;
-        else result.drawing_attached = true;
+        if (attachedAny) result.drawing_attached = true;
         await reportProgress({
           stage: 'queueing',
           percent: 22 + (processedModels / Math.max(1, modelEntries.length)) * 66,
@@ -823,9 +835,12 @@ export async function processBatchArchiveUpload({
         });
       }
 
-      const pdfByKey = new Map<string, RarEntryCandidate>();
+      const pdfByKey = new Map<string, RarEntryCandidate[]>();
       for (const item of rarEntries) {
-        if (item.ext === 'pdf' && !pdfByKey.has(item.pairKey)) pdfByKey.set(item.pairKey, item);
+        if (item.ext !== 'pdf') continue;
+        const list = pdfByKey.get(item.pairKey) || [];
+        list.push(item);
+        pdfByKey.set(item.pairKey, list);
       }
 
       const maxTotalExtractBytes = Math.max(maxModelBytes, drawingLimit.maxBytes) * MAX_BATCH_MODEL_FILES;
@@ -861,18 +876,20 @@ export async function processBatchArchiveUpload({
         selectedArchiveNames.add(item.archiveName);
         if (item.declaredSize > 0) selectedDeclaredBytes += item.declaredSize;
 
-        const drawing = pdfByKey.get(item.pairKey);
-        if (!drawing) continue;
-        if (
-          drawing.declaredSize > 0 &&
-          (drawing.declaredSize > drawingLimit.maxBytes ||
-            selectedDeclaredBytes + drawing.declaredSize > maxTotalExtractBytes)
-        ) {
-          drawingPreErrors.set(item.pairKey, `PDF 图纸过大，最大支持 ${drawingLimit.maxMb}MB`);
-          continue;
+        const drawings = pdfByKey.get(item.pairKey);
+        if (!drawings || drawings.length === 0) continue;
+        for (const drawing of drawings) {
+          if (
+            drawing.declaredSize > 0 &&
+            (drawing.declaredSize > drawingLimit.maxBytes ||
+              selectedDeclaredBytes + drawing.declaredSize > maxTotalExtractBytes)
+          ) {
+            drawingPreErrors.set(item.pairKey, `PDF 图纸过大，最大支持 ${drawingLimit.maxMb}MB`);
+            continue;
+          }
+          selectedArchiveNames.add(drawing.archiveName);
+          if (drawing.declaredSize > 0) selectedDeclaredBytes += drawing.declaredSize;
         }
-        selectedArchiveNames.add(drawing.archiveName);
-        if (drawing.declaredSize > 0) selectedDeclaredBytes += drawing.declaredSize;
       }
 
       const extractedPathByName = new Map<string, string>();
@@ -944,8 +961,8 @@ export async function processBatchArchiveUpload({
             modelName: item.modelNameOverride || item.structuredPath?.modelName,
             resolveCategoryId: item.structuredPath ? () => resolveArchiveCategoryId(item.structuredPath) : undefined,
           });
-          const drawing = result?.model_id ? pdfByKey.get(item.pairKey) : null;
-          if (!result?.model_id || !drawing) continue;
+          const drawings = result?.model_id ? pdfByKey.get(item.pairKey) || [] : [];
+          if (!result?.model_id || drawings.length === 0) continue;
 
           const drawingPreError = drawingPreErrors.get(item.pairKey);
           if (drawingPreError) {
@@ -953,31 +970,39 @@ export async function processBatchArchiveUpload({
             continue;
           }
 
-          const drawingPath = extractedPathByName.get(drawing.archiveName);
-          if (!drawingPath || !existsSync(drawingPath)) {
-            result.drawing_error = 'PDF 图纸为空或无法解压';
-            continue;
-          }
-          const drawingSize = statSync(drawingPath).size;
-          if (drawingSize <= 0) {
-            result.drawing_error = 'PDF 图纸为空或无法解压';
-            continue;
-          }
-          if (drawingSize > drawingLimit.maxBytes || rarTotalBytes + drawingSize > maxTotalExtractBytes) {
-            result.drawing_error = `PDF 图纸过大，最大支持 ${drawingLimit.maxMb}MB`;
-            continue;
-          }
+          // 同名多 PDF：逐份绑定，任一成功即 drawing_attached
+          let attachedAny = false;
+          for (const drawing of drawings) {
+            const drawingPath = extractedPathByName.get(drawing.archiveName);
+            if (!drawingPath || !existsSync(drawingPath)) {
+              if (!result.drawing_error) result.drawing_error = 'PDF 图纸为空或无法解压';
+              continue;
+            }
+            const drawingSize = statSync(drawingPath).size;
+            if (drawingSize <= 0) {
+              if (!result.drawing_error) result.drawing_error = 'PDF 图纸为空或无法解压';
+              continue;
+            }
+            if (drawingSize > drawingLimit.maxBytes || rarTotalBytes + drawingSize > maxTotalExtractBytes) {
+              if (!result.drawing_error) result.drawing_error = `PDF 图纸过大，最大支持 ${drawingLimit.maxMb}MB`;
+              continue;
+            }
 
-          rarTotalBytes += drawingSize;
-          const drawingError = await attachDrawingFromBuffer(
-            prisma,
-            result.model_id,
-            drawing.originalName,
-            readFileSync(drawingPath),
-            drawingLimit,
-          );
-          if (drawingError) result.drawing_error = drawingError;
-          else result.drawing_attached = true;
+            rarTotalBytes += drawingSize;
+            const drawingError = await attachDrawingFromBuffer(
+              prisma,
+              result.model_id,
+              drawing.originalName,
+              readFileSync(drawingPath),
+              drawingLimit,
+            );
+            if (drawingError) {
+              if (!result.drawing_error) result.drawing_error = drawingError;
+            } else {
+              attachedAny = true;
+            }
+          }
+          if (attachedAny) result.drawing_attached = true;
           await reportProgress({
             stage: 'queueing',
             percent: 38 + (processedModels / Math.max(1, selectedModelEntries.length)) * 50,

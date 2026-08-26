@@ -65,6 +65,19 @@ ${emailShellStart}
 ${emailShellEnd}`.trim(),
     tokens: [...commonTokens, 'code', 'expireMinutes'],
   },
+  change_email: {
+    label: '换绑邮箱验证码',
+    description: '用户在个人设置中更换绑定邮箱时发送验证码',
+    subject: '{{siteTitle}} 换绑邮箱验证码',
+    html: `
+${emailShellStart}
+  <h2 style="margin:0 0 18px;color:#111827;">换绑邮箱验证码</h2>
+  <p style="margin:0 0 12px;font-size:15px;">您正在更换账号绑定邮箱，验证码为：</p>
+  <div style="margin:18px 0;padding:18px;border-radius:10px;background:#fff7ed;text-align:center;font-size:32px;font-weight:700;letter-spacing:8px;color:#f97316;">{{code}}</div>
+  <p style="margin:0;color:#6b7280;font-size:13px;">验证码 {{expireMinutes}} 分钟内有效，请勿泄露给他人。若非本人操作，请立即检查账号安全。</p>
+${emailShellEnd}`.trim(),
+    tokens: [...commonTokens, 'code', 'expireMinutes'],
+  },
   password_reset: {
     label: '找回密码',
     description: '用户找回密码时发送重置链接',

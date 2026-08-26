@@ -36,7 +36,7 @@ export function createModelManagementRouter({ prisma, metadataDir, getMeta, save
     format: true,
     originalFormat: true,
     uploadPath: true,
-    drawingUrl: true,
+    drawings: { select: { fileKey: true } },
     status: true,
     metadata: true,
     groupId: true,
@@ -149,7 +149,7 @@ export function createModelManagementRouter({ prisma, metadataDir, getMeta, save
       ? { format: dbModel.format, originalFormat: dbModel.originalFormat, uploadPath: dbModel.uploadPath }
       : null;
     const relatedStaticUrls = [
-      dbModel?.drawingUrl,
+      ...(dbModel?.drawings.map((drawing: { fileKey: string }) => drawing.fileKey) || []),
       ...(dbModel?.versions.map((version: { fileKey: string | null }) => version.fileKey) || []),
     ].filter(Boolean) as string[];
 
@@ -347,6 +347,10 @@ export function createModelManagementRouter({ prisma, metadataDir, getMeta, save
           },
           include: {
             categoryRef: { select: { name: true } },
+            drawings: {
+              orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+              select: { id: true, name: true, size: true },
+            },
             group: { select: { id: true, name: true, primaryId: true, _count: { select: { models: true } } } },
           },
         });
@@ -370,9 +374,10 @@ export function createModelManagementRouter({ prisma, metadataDir, getMeta, save
           download_count: updated.downloadCount || 0,
           created_at: updated.createdAt,
           file_modified_at: updated.fileModifiedAt || null,
-          drawing_url: updated.drawingUrl,
-          drawing_name: updated.drawingName || null,
-          drawing_size: updated.drawingSize || null,
+          drawing_url: updated.drawings[0] ? `/api/models/${encodeURIComponent(id)}/drawing/download` : null,
+          drawing_name: updated.drawings[0]?.name || null,
+          drawing_size: updated.drawings[0]?.size || null,
+          drawings: updated.drawings,
           preview_meta: updated.previewMeta || null,
           group: updated.group || null,
         });

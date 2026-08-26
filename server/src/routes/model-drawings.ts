@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { copyFileSync, existsSync, mkdirSync, openSync, readSync, closeSync, rmSync, statSync } from 'node:fs';
 import { join, resolve, sep } from 'node:path';
 import { Router, Request, Response, type NextFunction } from 'express';
@@ -22,6 +23,12 @@ import { getInvisibleCategoryIds } from '../services/categoryAccess.js';
 const log = createLogger({ component: 'model-drawings' });
 
 const router = Router();
+
+export type DrawingSummary = { id: string; name: string; size: number | null };
+
+export function drawingSummaries(rows: Array<{ id: string; name: string; size: number | null }>): DrawingSummary[] {
+  return rows.map((d) => ({ id: d.id, name: d.name, size: d.size }));
+}
 
 function drawingUpload(req: Request, res: Response, next: NextFunction) {
   getBusinessConfig()
@@ -66,7 +73,15 @@ function resolveDrawingPath(modelId: string, drawingUrl?: string | null): string
   return resolved;
 }
 
-// Upload drawing (PDF) for a model.
+async function listModelDrawings(modelId: string) {
+  return prisma.modelDrawing.findMany({
+    where: { modelId },
+    orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+    select: { id: true, name: true, size: true, fileKey: true },
+  });
+}
+
+// Append drawing (PDF) for a model — each upload is a new row (multi-drawing support).
 router.post(
   '/api/models/:id/drawing',
   authMiddleware,
@@ -103,6 +118,9 @@ router.post(
       return;
     }
 
+    const drawingId = randomUUID();
+    const drawingPath = join(config.staticDir, 'drawings', id, `${drawingId}.pdf`);
+
     try {
       const m = await prisma.model.findUnique({ where: { id } });
       if (!m) {
@@ -111,21 +129,37 @@ router.post(
         return;
       }
 
-      const drawingDir = join(config.staticDir, 'drawings');
-      mkdirSync(drawingDir, { recursive: true });
-      const drawingPath = join(drawingDir, `${id}.pdf`);
+      mkdirSync(join(config.staticDir, 'drawings', id), { recursive: true });
       copyFileSync(file.path, drawingPath);
       await persistFile(drawingPath);
       rmSync(file.path, { force: true });
 
-      const drawingUrl = `/static/drawings/${id}.pdf`;
       const { size: drawingSize } = statSync(drawingPath);
       const drawingName = normalizeUploadFilename(file.originalname, 'drawing.pdf');
 
-      await prisma.model.update({ where: { id }, data: { drawingUrl, drawingName, drawingSize } });
+      await prisma.modelDrawing.create({
+        data: {
+          id: drawingId,
+          modelId: id,
+          fileKey: `/static/drawings/${id}/${drawingId}.pdf`,
+          name: drawingName,
+          size: drawingSize,
+        },
+      });
       await cacheDelByPrefix('cache:models:');
+      await cacheDelByPrefix('cache:share:info:');
 
-      res.json({ success: true, data: { model_id: id, drawing_url: drawingDownloadUrl(id, drawingUrl) } });
+      const drawings = drawingSummaries(await listModelDrawings(id));
+      res.json({
+        success: true,
+        data: {
+          model_id: id,
+          drawing_id: drawingId,
+          // 兼容旧客户端：第一份图纸的下载入口
+          drawing_url: drawingDownloadUrl(id, drawings[0] ? 'present' : null),
+          drawings,
+        },
+      });
     } catch (err: unknown) {
       try {
         rmSync(file.path, { force: true });
@@ -133,8 +167,7 @@ router.post(
         log.warn('Failed to clean up temp upload file');
       }
       try {
-        const orphanPath = join(config.staticDir, 'drawings', `${id}.pdf`);
-        if (existsSync(orphanPath)) rmSync(orphanPath, { force: true });
+        if (existsSync(drawingPath)) rmSync(drawingPath, { force: true });
       } catch {
         log.warn('Failed to clean up orphan drawing file');
       }
@@ -144,20 +177,12 @@ router.post(
   },
 );
 
-// Authenticated drawing download. Static /drawings is intentionally not public.
-router.get('/api/models/:id/drawing/download', async (req: Request, res: Response) => {
-  const id = requiredString(req.params.id, 'id');
-  const queryToken = optionalString(req.query.download_token, { maxLength: 160 });
-  const tokenPayload = queryToken ? verifyProtectedResourceToken(queryToken, 'model-drawing', id) : null;
-  if (queryToken && !tokenPayload) {
-    await sendResourceError(req, res, 401, '图纸访问链接已失效，请回到模型详情页重新打开图纸', {
-      htmlTitle: '图纸链接已失效',
-      hint: '图纸访问链接有效期为 5 分钟，过期后需从模型详情页重新获取',
-    });
-    return;
-  }
-  // 分类访问控制依赖当前角色：JWT 分支必须查库解析（改角色后旧 token 里的角色已作废），
-  // 不能直接信任 token payload 里的 role 快照
+// 解析请求身份：优先 download_token 携带的（5 分钟短令牌），否则查库校验当前登录用户。
+// 分类访问控制依赖 DB 实时角色，不能信任 token payload 里的 role 快照。
+async function resolveDrawingViewer(req: Request, queryToken: string | undefined, modelId: string) {
+  const tokenPayload = queryToken ? verifyProtectedResourceToken(queryToken, 'model-drawing', modelId) : null;
+  if (queryToken && !tokenPayload) return { expired: true as const };
+
   let userId = tokenPayload?.userId ?? null;
   let role = tokenPayload?.role ?? null;
   if (!userId) {
@@ -170,6 +195,45 @@ router.get('/api/models/:id/drawing/download', async (req: Request, res: Respons
       role = null;
     }
   }
+  return { expired: false as const, userId, role };
+}
+
+async function sendDrawingFile(
+  req: Request,
+  res: Response,
+  model: { id: string; name: string | null; originalName: string },
+  drawing: { fileKey: string; name: string },
+) {
+  const drawingPath = resolveDrawingPath(model.id, drawing.fileKey);
+  if (!drawingPath || !existsSync(drawingPath)) {
+    await sendResourceError(req, res, 404, '图纸不存在或已被移除', { htmlTitle: '图纸不存在' });
+    return;
+  }
+  const sourceName = modelDownloadSourceName(model.name || drawing.name, model.originalName, model.id);
+  const fileName = modelDownloadFileName(sourceName, 'pdf', model.id);
+  sendAcceleratedFile(req, res, {
+    filePath: drawingPath,
+    fileName,
+    contentType: 'application/pdf',
+    disposition: 'inline',
+  });
+}
+
+// Authenticated drawing download (specific drawing). Static /drawings is intentionally not public.
+router.get('/api/models/:id/drawing/:drawingId/download', async (req: Request, res: Response) => {
+  const id = requiredString(req.params.id, 'id');
+  const drawingId = requiredString(req.params.drawingId, 'drawingId');
+  const queryToken = optionalString(req.query.download_token, { maxLength: 160 });
+
+  const viewer = await resolveDrawingViewer(req, queryToken, id);
+  if (viewer.expired) {
+    await sendResourceError(req, res, 401, '图纸访问链接已失效，请回到模型详情页重新打开图纸', {
+      htmlTitle: '图纸链接已失效',
+      hint: '图纸访问链接有效期为 5 分钟，过期后需从模型详情页重新获取',
+    });
+    return;
+  }
+  const { userId, role } = viewer;
   if (!userId) {
     await sendResourceError(req, res, 401, '需要登录后才能查看图纸', { htmlTitle: '请先登录' });
     return;
@@ -178,10 +242,18 @@ router.get('/api/models/:id/drawing/download', async (req: Request, res: Respons
   try {
     const m = await prisma.model.findUnique({
       where: { id },
-      select: { id: true, name: true, originalName: true, drawingUrl: true, drawingName: true, categoryId: true },
+      select: { id: true, name: true, originalName: true, categoryId: true },
     });
-    if (!m?.drawingUrl) {
-      res.status(404).json({ detail: '图纸不存在' });
+    if (!m) {
+      res.status(404).json({ detail: '模型不存在' });
+      return;
+    }
+    const drawing = await prisma.modelDrawing.findFirst({
+      where: { id: drawingId, modelId: id },
+      select: { fileKey: true, name: true },
+    });
+    if (!drawing) {
+      await sendResourceError(req, res, 404, '图纸不存在', { htmlTitle: '图纸不存在' });
       return;
     }
     // 分类访问控制：受限分类的模型图纸同样拦截
@@ -191,27 +263,102 @@ router.get('/api/models/:id/drawing/download', async (req: Request, res: Respons
       return;
     }
 
-    const drawingPath = resolveDrawingPath(id, m.drawingUrl);
-    if (!drawingPath || !existsSync(drawingPath)) {
-      await sendResourceError(req, res, 404, '图纸不存在或已被移除', { htmlTitle: '图纸不存在' });
+    await sendDrawingFile(req, res, m, drawing);
+  } catch (err: unknown) {
+    log.error({ err, modelId: id, drawingId }, 'Download error');
+    res.status(500).json({ detail: '读取图纸失败' });
+  }
+});
+
+// Legacy authenticated drawing download — serves the first drawing (kept for in-flight 5-min tokens).
+router.get('/api/models/:id/drawing/download', async (req: Request, res: Response) => {
+  const id = requiredString(req.params.id, 'id');
+  const queryToken = optionalString(req.query.download_token, { maxLength: 160 });
+
+  const viewer = await resolveDrawingViewer(req, queryToken, id);
+  if (viewer.expired) {
+    await sendResourceError(req, res, 401, '图纸访问链接已失效，请回到模型详情页重新打开图纸', {
+      htmlTitle: '图纸链接已失效',
+      hint: '图纸访问链接有效期为 5 分钟，过期后需从模型详情页重新获取',
+    });
+    return;
+  }
+  const { userId, role } = viewer;
+  if (!userId) {
+    await sendResourceError(req, res, 401, '需要登录后才能查看图纸', { htmlTitle: '请先登录' });
+    return;
+  }
+
+  try {
+    const m = await prisma.model.findUnique({
+      where: { id },
+      select: { id: true, name: true, originalName: true, categoryId: true },
+    });
+    if (!m) {
+      res.status(404).json({ detail: '模型不存在' });
+      return;
+    }
+    const drawing = await prisma.modelDrawing.findFirst({
+      where: { modelId: id },
+      orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+      select: { fileKey: true, name: true },
+    });
+    if (!drawing) {
+      await sendResourceError(req, res, 404, '图纸不存在', { htmlTitle: '图纸不存在' });
+      return;
+    }
+    // 分类访问控制：受限分类的模型图纸同样拦截
+    const invisible = await getInvisibleCategoryIds(role, userId);
+    if (m.categoryId && invisible.has(m.categoryId)) {
+      await sendResourceError(req, res, 403, '您没有查看该图纸的权限', { htmlTitle: '无权访问' });
       return;
     }
 
-    const sourceName = modelDownloadSourceName(m.name || m.drawingName, m.originalName, id);
-    const fileName = modelDownloadFileName(sourceName, 'pdf', id);
-    sendAcceleratedFile(req, res, {
-      filePath: drawingPath,
-      fileName,
-      contentType: 'application/pdf',
-      disposition: 'inline',
-    });
+    await sendDrawingFile(req, res, m, drawing);
   } catch (err: unknown) {
     log.error({ err, modelId: id }, 'Download error');
     res.status(500).json({ detail: '读取图纸失败' });
   }
 });
 
-// Delete drawing (PDF) for a model.
+// Delete one drawing (PDF) for a model.
+router.delete(
+  '/api/models/:id/drawing/:drawingId',
+  authMiddleware,
+  requireRole('ADMIN'),
+  async (req: AuthRequest, res: Response) => {
+    const id = requiredString(req.params.id, 'id');
+    const drawingId = requiredString(req.params.drawingId, 'drawingId');
+
+    try {
+      const drawing = await prisma.modelDrawing.findFirst({ where: { id: drawingId, modelId: id } });
+      if (!drawing) {
+        res.status(404).json({ detail: '图纸不存在' });
+        return;
+      }
+
+      await prisma.modelDrawing.delete({ where: { id: drawing.id } });
+      await cacheDelByPrefix('cache:models:');
+      await cacheDelByPrefix('cache:share:info:');
+
+      const drawingPath = resolveDrawingPath(id, drawing.fileKey);
+      if (drawingPath && existsSync(drawingPath)) rmSync(drawingPath, { force: true });
+      // 双删：清理云端图纸副本（best-effort）
+      const drawingUrlClean = drawing.fileKey.split('?')[0];
+      if (drawingUrlClean.startsWith('/static/')) {
+        await deleteCloudFile(keyFromStaticUrl(drawingUrlClean));
+      }
+
+      const drawings = drawingSummaries(await listModelDrawings(id));
+      res.json({ success: true, data: { model_id: id, drawing_id: drawingId, drawings } });
+    } catch (err: unknown) {
+      log.error({ err, modelId: id, drawingId }, 'Delete error');
+      res.status(500).json({ detail: '删除图纸失败' });
+    }
+  },
+);
+
+// Delete all drawings (PDF) for a model (legacy semantics).
 router.delete(
   '/api/models/:id/drawing',
   authMiddleware,
@@ -220,25 +367,22 @@ router.delete(
     const id = requiredString(req.params.id, 'id');
 
     try {
-      const m = await prisma.model.findUnique({ where: { id } });
-      if (!m) {
-        res.status(404).json({ detail: '模型不存在' });
-        return;
-      }
+      const drawings = await prisma.modelDrawing.findMany({ where: { modelId: id } });
 
-      const drawingPath = resolveDrawingPath(id, m.drawingUrl);
-
-      await prisma.model.update({ where: { id }, data: { drawingUrl: null, drawingName: null, drawingSize: null } });
+      await prisma.modelDrawing.deleteMany({ where: { modelId: id } });
       await cacheDelByPrefix('cache:models:');
+      await cacheDelByPrefix('cache:share:info:');
 
-      if (drawingPath && existsSync(drawingPath)) rmSync(drawingPath, { force: true });
-      // 双删：清理云端图纸副本（best-effort）
-      const drawingUrlClean = m.drawingUrl?.split('?')[0];
-      if (drawingUrlClean?.startsWith('/static/')) {
-        await deleteCloudFile(keyFromStaticUrl(drawingUrlClean));
+      for (const drawing of drawings) {
+        const drawingPath = resolveDrawingPath(id, drawing.fileKey);
+        if (drawingPath && existsSync(drawingPath)) rmSync(drawingPath, { force: true });
+        const drawingUrlClean = drawing.fileKey.split('?')[0];
+        if (drawingUrlClean.startsWith('/static/')) {
+          await deleteCloudFile(keyFromStaticUrl(drawingUrlClean));
+        }
       }
 
-      res.json({ success: true, data: { model_id: id, drawing_url: null } });
+      res.json({ success: true, data: { model_id: id, drawing_url: null, drawings: [] } });
     } catch (err: unknown) {
       log.error({ err, modelId: id }, 'Delete error');
       res.status(500).json({ detail: '删除图纸失败' });

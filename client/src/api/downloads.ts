@@ -136,19 +136,19 @@ export async function downloadModelFile(
   }
 }
 
-export async function createModelDrawingUrl(modelId: string): Promise<string> {
+export async function createModelDrawingUrl(modelId: string, drawingId?: string): Promise<string> {
   await requireDownloadAuth();
 
-  const { data } = await client.post('/downloads/drawing-token', { modelId });
+  const { data } = await client.post('/downloads/drawing-token', { modelId, drawingId });
   const created = unwrapApiData<{ url: string }>(data);
   if (!created?.url) throw new Error(tDownload('browserDownload.createDrawingTokenFailed', '创建图纸访问令牌失败'));
   return created.url;
 }
 
-export async function openModelDrawing(modelId: string): Promise<void> {
+export async function openModelDrawing(modelId: string, drawingId?: string): Promise<void> {
   const opened = prepareBrowserDocument(tDownload('browserDownload.openingDrawing', '正在打开图纸...'));
   try {
-    const url = await createModelDrawingUrl(modelId);
+    const url = await createModelDrawingUrl(modelId, drawingId);
     if (!url.startsWith('/api/') && !url.startsWith(window.location.origin)) {
       throw new Error('Invalid download URL');
     }

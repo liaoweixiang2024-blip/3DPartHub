@@ -37,6 +37,7 @@ export interface ShareInfo {
   siteTitle: string;
   gltfUrl?: string;
   drawingUrl?: string | null;
+  drawings?: Array<{ id: string; name: string; size: number | null }>;
 }
 
 export interface CreateShareParams {

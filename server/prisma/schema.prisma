@@ -215,6 +215,8 @@ model Model {
   drawingName String? @map("drawing_name")
   drawingSize Int?    @map("drawing_size")
 
+  drawings ModelDrawing[]
+
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
@@ -234,6 +236,19 @@ model Model {
   @@index([name])
   @@index([name, status])
   @@map("models")
+}
+
+model ModelDrawing {
+  id        String   @id @default(uuid())
+  modelId   String   @map("model_id")
+  model     Model    @relation(fields: [modelId], references: [id], onDelete: Cascade)
+  fileKey   String   @map("file_key")
+  name      String
+  size      Int?
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([modelId])
+  @@map("model_drawings")
 }
 
 model ModelVersion {

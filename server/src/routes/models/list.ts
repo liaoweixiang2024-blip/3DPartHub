@@ -122,6 +122,11 @@ export function createModelListRouter({ prisma, drawingDownloadUrl }: ModelListC
             take: pageSize,
             include: {
               categoryRef: { select: { name: true } },
+              drawings: {
+                take: 1,
+                orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+                select: { id: true, name: true, size: true },
+              },
               group: { select: { id: true, name: true, primaryId: true, _count: { select: { models: true } } } },
             },
           });
@@ -138,9 +143,9 @@ export function createModelListRouter({ prisma, drawingDownloadUrl }: ModelListC
             category_id: m.categoryId || null,
             download_count: m.downloadCount || 0,
             created_at: m.createdAt,
-            drawing_url: drawingDownloadUrl(m.id, m.drawingUrl),
-            drawing_name: m.drawingName || null,
-            drawing_size: m.drawingSize || null,
+            drawing_url: drawingDownloadUrl(m.id, m.drawings[0] ? 'present' : null),
+            drawing_name: m.drawings[0]?.name || null,
+            drawing_size: m.drawings[0]?.size || null,
             group: m.group
               ? {
                   id: m.group.id,

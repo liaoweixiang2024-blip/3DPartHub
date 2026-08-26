@@ -471,6 +471,14 @@ app.listen(PORT, async () => {
 
   await initDefaultSettings();
 
+  // 旧单图纸列 → model_drawings 兜底回填（恢复旧备份后迁移不会重跑，靠这里补数据）
+  try {
+    const { reconcileLegacyModelDrawings } = await import('./services/modelDrawings.js');
+    await reconcileLegacyModelDrawings(prisma);
+  } catch (err) {
+    logger.debug({ err }, 'Legacy model drawings reconcile skipped');
+  }
+
   // 打印对象存储模式（本地 / 云端），不阻塞启动
   void logStorageMode();
 

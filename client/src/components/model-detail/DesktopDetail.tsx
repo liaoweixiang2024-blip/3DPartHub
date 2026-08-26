@@ -57,7 +57,7 @@ export function DesktopDetail({
   onShare: () => void;
   categoryBreadcrumb: { id: string; name: string }[];
   onDownload: (id: string, format?: string) => void;
-  onOpenDrawing: (id: string) => void;
+  onOpenDrawing: (id: string, drawingId?: string) => void;
   onLoginDialog: (reason: string) => void;
 }) {
   const { i18n, t } = useTranslation();
@@ -227,7 +227,7 @@ export function DesktopDetail({
                   <button
                     key={downloadKey}
                     type="button"
-                    onClick={() => onOpenDrawing(modelData.id)}
+                    onClick={() => onOpenDrawing(modelData.id, file.drawingId)}
                     className={`${MODEL_DETAIL_DOWNLOAD_ROW_INTERACTIVE_CLASS} cursor-pointer text-left`}
                   >
                     <div className="flex items-center gap-3 min-w-0 flex-1">

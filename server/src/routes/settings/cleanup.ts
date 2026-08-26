@@ -71,7 +71,7 @@ export function createSettingsCleanupRouter() {
             thumbnailUrl: true,
             uploadPath: true,
             gltfUrl: true,
-            drawingUrl: true,
+            drawings: { select: { fileKey: true } },
             versions: { select: { fileKey: true } },
           },
         });
@@ -80,7 +80,9 @@ export function createSettingsCleanupRouter() {
           if (m.thumbnailUrl) dbThumbnails.add(m.thumbnailUrl.split('?')[0]);
           if (m.uploadPath) dbUploadPaths.add(m.uploadPath);
           if (m.gltfUrl) dbGltfUrls.add(m.gltfUrl.split('?')[0]);
-          if (m.drawingUrl) dbDrawingUrls.add(m.drawingUrl.split('?')[0]);
+          for (const d of m.drawings) {
+            if (d.fileKey) dbDrawingUrls.add(d.fileKey.split('?')[0]);
+          }
           for (const v of m.versions) {
             if (v.fileKey) dbVersionKeys.add(v.fileKey.split('?')[0]);
           }
@@ -149,6 +151,18 @@ export function createSettingsCleanupRouter() {
       });
       addCategory('orphan_originals', '孤立原始文件 (static/originals)', orphanOriginals);
 
+      // 3.5 Orphan drawings (static/drawings — legacy flat {id}.pdf + new {modelId}/{drawingId}.pdf)
+      const drawingsDir = join(staticDir, 'drawings');
+      const allDrawings = collectFiles(drawingsDir, false);
+      const orphanDrawings = allDrawings.filter((f) => {
+        const rel = '/static/' + f.slice(staticDir.length + 1).replace(/\\/g, '/');
+        if (dbDrawingUrls.has(rel.split('?')[0])) return false;
+        const base = f.slice(drawingsDir.length + 1);
+        const modelId = base.split(/[._/]/)[0];
+        return !dbModelIds.has(modelId);
+      });
+      addCategory('orphan_drawings', '孤立图纸文件 (static/drawings)', orphanDrawings);
+
       // 4. Stale upload chunks (> 1 day old)
       const chunksDir = join(uploadDir, 'chunks');
       const allChunks = collectFiles(chunksDir, true);
@@ -203,6 +217,7 @@ export function createSettingsCleanupRouter() {
       'orphan_models',
       'orphan_thumbnails',
       'orphan_originals',
+      'orphan_drawings',
       'stale_chunks',
       'stale_batch',
       'old_snapshots',
@@ -224,6 +239,7 @@ export function createSettingsCleanupRouter() {
       const dbThumbnails = new Set<string>();
       const dbUploadPaths = new Set<string>();
       const dbGltfUrls = new Set<string>();
+      const dbDrawingUrls = new Set<string>();
       const dbVersionKeys = new Set<string>();
 
       if (prisma) {
@@ -233,6 +249,7 @@ export function createSettingsCleanupRouter() {
             thumbnailUrl: true,
             uploadPath: true,
             gltfUrl: true,
+            drawings: { select: { fileKey: true } },
             versions: { select: { fileKey: true } },
           },
         });
@@ -241,6 +258,9 @@ export function createSettingsCleanupRouter() {
           if (m.thumbnailUrl) dbThumbnails.add(m.thumbnailUrl.split('?')[0]);
           if (m.uploadPath) dbUploadPaths.add(m.uploadPath);
           if (m.gltfUrl) dbGltfUrls.add(m.gltfUrl.split('?')[0]);
+          for (const d of m.drawings) {
+            if (d.fileKey) dbDrawingUrls.add(d.fileKey.split('?')[0]);
+          }
           for (const v of m.versions) {
             if (v.fileKey) dbVersionKeys.add(v.fileKey.split('?')[0]);
           }
@@ -298,6 +318,18 @@ export function createSettingsCleanupRouter() {
           const rel = '/static/' + f.slice(staticDir.length + 1).replace(/\\/g, '/');
           if (dbUploadPaths.has(rel)) return false;
           const modelId = f.slice(originalsDir.length + 1).split(/[._]/)[0];
+          return !dbModelIds.has(modelId);
+        });
+        safeDelete(orphans);
+      }
+
+      if (targets.includes('orphan_drawings')) {
+        const drawingsDir = join(staticDir, 'drawings');
+        const all = collectFiles(drawingsDir, false);
+        const orphans = all.filter((f) => {
+          const rel = ('/static/' + f.slice(staticDir.length + 1).replace(/\\/g, '/')).split('?')[0];
+          if (dbDrawingUrls.has(rel)) return false;
+          const modelId = f.slice(drawingsDir.length + 1).split(/[._/]/)[0];
           return !dbModelIds.has(modelId);
         });
         safeDelete(orphans);

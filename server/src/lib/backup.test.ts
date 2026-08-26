@@ -124,6 +124,7 @@ test('module backups include user-facing dependent records', () => {
     'categories',
     'modelGroups',
     'models',
+    'modelDrawings',
     'modelVersions',
     'favorites',
     'downloads',

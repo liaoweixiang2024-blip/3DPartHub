@@ -491,6 +491,7 @@ router.post('/api/downloads/drawing-token', optionalAuthMiddleware, async (req: 
     }
 
     const modelId = optionalString((req.body as Record<string, unknown>)?.modelId, { maxLength: 128 });
+    const drawingId = optionalString((req.body as Record<string, unknown>)?.drawingId, { maxLength: 64 });
     if (!modelId) {
       res.status(400).json({ detail: '缺少模型 ID' });
       return;
@@ -498,9 +499,26 @@ router.post('/api/downloads/drawing-token', optionalAuthMiddleware, async (req: 
 
     const model = await prisma.model.findUnique({
       where: { id: modelId },
-      select: { id: true, drawingUrl: true, categoryId: true },
+      select: { id: true, categoryId: true },
     });
-    if (!model?.drawingUrl) {
+    if (!model) {
+      res.status(404).json({ detail: '模型不存在' });
+      return;
+    }
+
+    // 指定 drawingId 时校验归属；未指定回落第一份（兼容旧客户端）
+    const drawing = drawingId
+      ? await prisma.modelDrawing.findFirst({
+          where: { id: drawingId, modelId },
+          orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+          select: { id: true },
+        })
+      : await prisma.modelDrawing.findFirst({
+          where: { modelId },
+          orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+          select: { id: true },
+        });
+    if (!drawing) {
       res.status(404).json({ detail: '图纸不存在' });
       return;
     }
@@ -520,7 +538,7 @@ router.post('/api/downloads/drawing-token', optionalAuthMiddleware, async (req: 
       singleUse: false,
     });
 
-    const url = `/api/models/${encodeURIComponent(modelId)}/drawing/download?download_token=${encodeURIComponent(created.token)}`;
+    const url = `/api/models/${encodeURIComponent(modelId)}/drawing/${encodeURIComponent(drawing.id)}/download?download_token=${encodeURIComponent(created.token)}`;
     res.json({ ...created, url });
   } catch (err) {
     log.error({ err }, 'Failed to create drawing token');

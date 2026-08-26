@@ -33,6 +33,12 @@ export type BatchArchiveUploadProgress = {
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
+export interface DrawingRef {
+  id: string;
+  name: string;
+  size: number | null;
+}
+
 export interface ServerModelListItem {
   model_id: string;
   name: string;
@@ -48,6 +54,7 @@ export interface ServerModelListItem {
   drawing_url?: string | null;
   drawing_name?: string | null;
   drawing_size?: number | null;
+  drawings?: DrawingRef[];
   group?: {
     id: string;
     name: string;
@@ -176,6 +183,7 @@ export interface ServerModelDetail {
   drawing_url?: string | null;
   drawing_name?: string | null;
   drawing_size?: number | null;
+  drawings?: DrawingRef[];
   preview_meta?: ModelPreviewMeta | null;
   group?: {
     id: string;
@@ -704,18 +712,19 @@ export const modelApi = {
     id: string,
     file: File,
     options?: { onUploadProgress?: (progressEvent: UploadProgressEvent) => void },
-  ): Promise<{ model_id: string; drawing_url: string }> => {
+  ): Promise<{ model_id: string; drawing_id: string; drawing_url: string; drawings: DrawingRef[] }> => {
     const form = new FormData();
     form.append('file', file);
     const res = await client.post(`/models/${id}/drawing`, form, {
       headers: { 'Content-Type': 'multipart/form-data' },
       onUploadProgress: options?.onUploadProgress,
     });
-    return unwrapResponse<{ model_id: string; drawing_url: string }>(res);
+    return unwrapResponse<{ model_id: string; drawing_id: string; drawing_url: string; drawings: DrawingRef[] }>(res);
   },
 
-  deleteDrawing: async (id: string): Promise<void> => {
-    await client.delete(`/models/${id}/drawing`);
+  deleteDrawing: async (id: string, drawingId?: string): Promise<{ drawings: DrawingRef[] }> => {
+    const res = await client.delete(`/models/${id}/drawing${drawingId ? `/${encodeURIComponent(drawingId)}` : ''}`);
+    return unwrapResponse<{ drawings: DrawingRef[] }>(res);
   },
 
   getMergeSuggestions: async (params?: {

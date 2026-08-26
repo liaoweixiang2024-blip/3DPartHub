@@ -451,7 +451,14 @@ export default function UploadModal({ open, onClose, onConverted }: UploadModalP
       const archiveFiles = files.filter(isArchiveFile);
       const drawingFiles = files.filter(isDrawingFile);
       const modelKeys = new Set(modelFiles.map((file) => uploadPairKey(file.name)));
-      const drawingByKey = new Map(drawingFiles.map((file) => [uploadPairKey(file.name), file]));
+      // 同名多 PDF：一对多映射，逐份上传追加（服务端已支持多图纸）
+      const drawingByKey = new Map<string, File[]>();
+      for (const file of drawingFiles) {
+        const key = uploadPairKey(file.name);
+        const list = drawingByKey.get(key) || [];
+        list.push(file);
+        drawingByKey.set(key, list);
+      }
       drawingFail += drawingFiles.filter((file) => !modelKeys.has(uploadPairKey(file.name))).length;
       const inputTotal = Math.max(1, modelFiles.length + archiveFiles.length);
       const totalUploadBytes = Math.max(
@@ -487,20 +494,20 @@ export default function UploadModal({ open, onClose, onConverted }: UploadModalP
             try {
               const uploadResult = await uploadQueuedModelFile(f, (loaded) => reportFileUpload(f, loaded));
               completeFileUpload(f);
-              const drawing = drawingByKey.get(uploadPairKey(f.name));
-              try {
-                if (
-                  await uploadMatchedDrawing(
-                    uploadResult.model_id,
-                    drawing,
-                    (loaded) => drawing && reportFileUpload(drawing, loaded),
-                  )
-                ) {
-                  drawings += 1;
-                  completeFileUpload(drawing);
+              const matchedDrawings = drawingByKey.get(uploadPairKey(f.name)) || [];
+              for (const drawing of matchedDrawings) {
+                try {
+                  if (
+                    await uploadMatchedDrawing(uploadResult.model_id, drawing, (loaded) =>
+                      reportFileUpload(drawing, loaded),
+                    )
+                  ) {
+                    drawings += 1;
+                    completeFileUpload(drawing);
+                  }
+                } catch {
+                  drawingFail += 1;
                 }
-              } catch {
-                drawingFail += 1;
               }
               return uploadResult;
             } finally {

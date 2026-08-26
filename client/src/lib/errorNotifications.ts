@@ -99,7 +99,12 @@ function formatRetryWait(seconds: number) {
 }
 
 function stripRetryText(message: string) {
-  return message.replace(/[，,]?\s*请(?:稍后|\d+\s*秒后|\d+\s*分钟后)再试\s*$/, '').trim();
+  // 后端文案可能是「请15分钟后重试」或「请稍后再试」——都剥掉，避免与前端拼的
+  // 「请 {{time}}后再试」叠成「……请15分钟后重试，请 14 分钟后再试」
+  return message
+    .replace(/[，,]?\s*请(?:稍后|\d+\s*秒后|\d+\s*分钟后)[再重]试\s*$/, '')
+    .replace(/[，,]?\s*请(?:稍后|\d+\s*秒后|\d+\s*分钟后)[再重]试(?=[，,。])/g, '')
+    .trim();
 }
 
 export function isRateLimitError(error: unknown): error is AxiosError {

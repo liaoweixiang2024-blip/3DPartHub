@@ -44,7 +44,8 @@ export function createModelDetailRouter({
     const canViewUnpublished = authPayload?.role === 'ADMIN';
     // 分类访问控制：受限分类下的模型，非白名单用户（含匿名）一律 403
     const invisible = await getInvisibleCategoryIdsForRequest(req);
-    const cacheKey = `cache:models:detail:${id}`;
+    // v2: 响应新增 drawings 数组（旧缓存无该字段，避免 TTL 窗口内丢图纸）
+    const cacheKey = `cache:models:detail:v2:${id}`;
     const detailTtl = resolveCacheTtl((await getAllSettings()).cache_model_detail_ttl_seconds, TTL.MODEL_DETAIL);
 
     if (prisma) {
@@ -68,6 +69,10 @@ export function createModelDetailRouter({
           where: { id },
           include: {
             categoryRef: { select: { name: true, parent: { select: { id: true, name: true } } } },
+            drawings: {
+              orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+              select: { id: true, name: true, size: true },
+            },
             group: {
               include: {
                 models: {
@@ -199,9 +204,10 @@ export function createModelDetailRouter({
             category_parent: m.categoryRef?.parent || null,
             created_at: m.createdAt,
             file_modified_at: mainFileModifiedAt,
-            drawing_url: drawingDownloadUrl(m.id, m.drawingUrl),
-            drawing_name: m.drawingName || null,
-            drawing_size: m.drawingSize || null,
+            drawing_url: drawingDownloadUrl(m.id, m.drawings[0] ? 'present' : null),
+            drawing_name: m.drawings[0]?.name || null,
+            drawing_size: m.drawings[0]?.size || null,
+            drawings: m.drawings,
             preview_meta: previewMeta,
             group: groupData,
           };

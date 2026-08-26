@@ -105,7 +105,7 @@ export function modelTextSearchCondition(term: string): Record<string, unknown> 
       { dimensions: contains },
       { format: contains },
       { originalFormat: contains },
-      { drawingName: contains },
+      { drawings: { some: { name: contains } } },
       { categoryRef: { is: { name: contains } } },
       { group: { is: { name: contains } } },
     ];

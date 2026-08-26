@@ -1,9 +1,13 @@
+import { randomInt } from 'node:crypto';
 import { Router, Response } from 'express';
-import { cacheDel } from '../../lib/cache.js';
+import { cacheDel, redis } from '../../lib/cache.js';
+import { checkRateLimit, storeEmailCode, verifyEmailCode } from '../../lib/captcha.js';
+import { sendChangeEmailCode } from '../../lib/email.js';
 import { revokeAllTokensBefore, signAccessToken, signRefreshToken, verifyRefreshToken } from '../../lib/jwt.js';
 import { logger } from '../../lib/logger.js';
 import { hashPassword, verifyPassword } from '../../lib/password.js';
 import { prisma } from '../../lib/prisma.js';
+import { requestSiteUrl } from '../../lib/requestSiteUrl.js';
 import {
   CONTACT_PHONE_SETTING_MESSAGE,
   getSetting,
@@ -11,7 +15,21 @@ import {
   normalizeContactPhoneSetting,
 } from '../../lib/settings.js';
 import { authMiddleware, getRequestToken, type AuthRequest } from '../../middleware/auth.js';
+import { emailCodeLimiter } from '../../middleware/security.js';
 import { readCookie, REFRESH_COOKIE, setAuthCookies } from './cookies.js';
+
+const MAX_EMAIL_LENGTH = 254;
+
+function normalizeEmailInput(value: unknown): string | null {
+  if (typeof value !== 'string') return null;
+  const email = value.trim().toLowerCase();
+  if (!email || email.length > MAX_EMAIL_LENGTH) return null;
+  return email;
+}
+
+function isValidEmail(email: string): boolean {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+}
 
 export function createAuthProfileRouter() {
   const router = Router();
@@ -138,6 +156,124 @@ export function createAuthProfileRouter() {
         return;
       }
       res.status(500).json({ detail: '更新资料失败' });
+    }
+  });
+
+  // ===== 换绑邮箱：两步验证（旧邮箱验证码 → 新邮箱验证码）=====
+  // 邮箱是登录凭证，与普通资料不同：必须证明「能收到旧邮箱邮件」（防盗号改绑）+「新邮箱真实可用」（防占别人邮箱）
+
+  // 发送换绑验证码：target = 'old'（验证当前邮箱）| 'new'（验证新邮箱）
+  router.post(
+    '/api/auth/change-email/code',
+    authMiddleware,
+    emailCodeLimiter,
+    async (req: AuthRequest, res: Response) => {
+      const target = req.body?.target === 'new' ? 'new' : 'old';
+      const newEmail = normalizeEmailInput(req.body?.newEmail);
+
+      if (target === 'new') {
+        if (!newEmail || !isValidEmail(newEmail)) {
+          res.status(400).json({ detail: '新邮箱格式无效' });
+          return;
+        }
+        const existing = await prisma.user.findUnique({ where: { email: newEmail }, select: { id: true } });
+        if (existing) {
+          res.status(409).json({ detail: '该邮箱已被其他账号使用' });
+          return;
+        }
+      }
+
+      try {
+        const user = await prisma.user.findUnique({
+          where: { id: req.user!.userId },
+          select: { email: true },
+        });
+        if (!user?.email) {
+          res.status(400).json({ detail: '当前账号没有绑定邮箱' });
+          return;
+        }
+        const toEmail = target === 'new' ? newEmail! : user.email;
+
+        // 独立冷却（与注册验证码分开计数），key 不带前缀与 captcha.ts 现状保持一致
+        const cooldownSeconds = Math.max(
+          10,
+          Math.floor(Number(await getSetting<number>('security_email_code_cooldown_seconds')) || 60),
+        );
+        const ttlSeconds = Math.max(
+          60,
+          Math.floor(Number(await getSetting<number>('security_email_code_ttl_seconds')) || 600),
+        );
+        const allowed = await checkRateLimit(`change_email_rate:${req.user!.userId}:${target}`, cooldownSeconds);
+        if (!allowed) {
+          res.status(429).json({ detail: `发送太频繁，请${cooldownSeconds}秒后重试` });
+          return;
+        }
+
+        const code = String(randomInt(100000, 1000000));
+        await storeEmailCode(`change_email:${toEmail}`, code, ttlSeconds);
+        await sendChangeEmailCode(toEmail, code, requestSiteUrl(req));
+        res.json({ message: '验证码已发送' });
+      } catch (err) {
+        logger.error({ err }, '[auth] Change-email code send failed');
+        res.status(500).json({ detail: '邮件发送失败' });
+      }
+    },
+  );
+
+  // 执行换绑：需同时提供旧邮箱验证码 + 新邮箱验证码
+  router.post('/api/auth/change-email', authMiddleware, async (req: AuthRequest, res: Response) => {
+    const oldCode = typeof req.body?.oldCode === 'string' ? req.body.oldCode.trim() : '';
+    const newCode = typeof req.body?.newCode === 'string' ? req.body.newCode.trim() : '';
+    const newEmail = normalizeEmailInput(req.body?.newEmail);
+
+    if (!oldCode || !newCode || !newEmail || !isValidEmail(newEmail)) {
+      res.status(400).json({ detail: '参数不完整或新邮箱格式无效' });
+      return;
+    }
+
+    try {
+      const user = await prisma.user.findUnique({
+        where: { id: req.user!.userId },
+        select: { id: true, email: true },
+      });
+      if (!user?.email) {
+        res.status(400).json({ detail: '当前账号没有绑定邮箱' });
+        return;
+      }
+
+      const existing = await prisma.user.findUnique({ where: { email: newEmail }, select: { id: true } });
+      if (existing) {
+        res.status(409).json({ detail: '该邮箱已被其他账号使用' });
+        return;
+      }
+
+      // 双向验证：旧邮箱证明账号所有权，新邮箱证明新地址可达
+      const oldOk = await verifyEmailCode(`change_email:${user.email}`, oldCode);
+      if (!oldOk) {
+        res.status(400).json({ detail: '当前邮箱验证码错误或已过期' });
+        return;
+      }
+      const newOk = await verifyEmailCode(`change_email:${newEmail}`, newCode);
+      if (!newOk) {
+        res.status(400).json({ detail: '新邮箱验证码错误或已过期' });
+        return;
+      }
+
+      // 换绑成功：清理两个验证码（verifyEmailCode 已各消费一个，此处清残留冷却键非必需，仅兜底）
+      await prisma.user.update({
+        where: { id: user.id },
+        data: { email: newEmail },
+      });
+      // 邮箱是登录凭证的一部分：换绑后作废旧令牌强制重新登录，防旧会话残留
+      await revokeAllTokensBefore(user.id, Math.floor(Date.now() / 1000) + 1);
+      await cacheDel(`auth:user:${user.id}`).catch(() => {});
+      redis.del(`change_email_rate:${user.id}:old`).catch(() => {});
+      redis.del(`change_email_rate:${user.id}:new`).catch(() => {});
+
+      res.json({ message: '邮箱已更换，请重新登录' });
+    } catch (err) {
+      logger.error({ err }, '[auth] Change-email failed');
+      res.status(500).json({ detail: '更换邮箱失败' });
     }
   });
 

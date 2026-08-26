@@ -96,9 +96,12 @@ export default function SharePage() {
     loadInfo();
   }, [loadInfo]);
 
+  // 移动端底部操作条：有下载或图纸入口才出现（只读分享也可能带图纸）
+  const hasMobileActionBar = !!info && (info.allowDownload || (info.drawings?.length ?? 0) > 0 || !!info.drawingUrl);
+
   useEffect(() => {
     const bar = mobileDownloadBarRef.current;
-    if (!info?.allowDownload || !bar) {
+    if ((!info?.allowDownload && (info?.drawings?.length ?? 0) === 0 && !info?.drawingUrl) || !bar) {
       setMobileDownloadBarHeight(0);
       return;
     }
@@ -117,9 +120,19 @@ export default function SharePage() {
       observer.disconnect();
       window.removeEventListener('resize', updateHeight);
     };
-  }, [downloading, info?.allowDownload, info?.modelName, info?.remainingDownloads]);
+  }, [
+    downloading,
+    info?.allowDownload,
+    info?.drawingUrl,
+    info?.drawings?.length,
+    info?.modelName,
+    info?.remainingDownloads,
+  ]);
 
-  const mobilePreviewCtaHeight = !isDesktop && info?.allowDownload ? mobileDownloadBarHeight || 96 : 0;
+  const mobilePreviewCtaHeight =
+    !isDesktop && (info?.allowDownload || (info?.drawings?.length ?? 0) > 0 || info?.drawingUrl)
+      ? mobileDownloadBarHeight || 96
+      : 0;
 
   useEffect(() => {
     if (isDesktop || !info?.allowPreview || !info.gltfUrl || mobilePreviewCtaHeight <= 0) return;
@@ -273,13 +286,24 @@ export default function SharePage() {
   // 有密码的分享，图纸接口与下载接口一样需要带上 share_access_token；
   // 无密码分享仅以模型更新时间做缓存版本号（保持与后端 withAssetVersion 一致的语义）
   const drawingVersion = new Date(info.expiresAt ?? 0).getTime();
-  const drawingHref = info.drawingUrl
-    ? `${info.drawingUrl}${info.drawingUrl.includes('?') ? '&' : '?'}${
-        info.hasPassword && shareAccessToken
-          ? `share_access_token=${encodeURIComponent(shareAccessToken)}`
-          : `v=${encodeURIComponent(String(drawingVersion || modelVersionFallback))}`
-      }`
-    : null;
+  const drawingQuery =
+    info.hasPassword && shareAccessToken
+      ? `share_access_token=${encodeURIComponent(shareAccessToken)}`
+      : `v=${encodeURIComponent(String(drawingVersion || modelVersionFallback))}`;
+  const buildDrawingHref = (path: string) => `${path}${path.includes('?') ? '&' : '?'}${drawingQuery}`;
+  // 后端 /info 已带 drawings 数组；旧缓存窗口回落单条 drawingUrl
+  const drawingEntries: Array<{ id: string; name: string; href: string }> = (info.drawings || []).map((d) => ({
+    id: d.id,
+    name: d.name,
+    href: buildDrawingHref(`/api/shares/${encodeURIComponent(token!)}/drawing/${encodeURIComponent(d.id)}`),
+  }));
+  if (drawingEntries.length === 0 && info.drawingUrl) {
+    drawingEntries.push({
+      id: '',
+      name: t('sharePage.drawingTitle'),
+      href: buildDrawingHref(info.drawingUrl),
+    });
+  }
   const downloadLabel = downloading
     ? t('sharePage.downloading')
     : info.downloadLimit > 0
@@ -302,6 +326,30 @@ export default function SharePage() {
           </p>
         )}
       </div>
+    ) : null;
+
+  // 移动端底部操作条里的图纸入口（桌面端在信息面板里已有）
+  const renderMobileDrawingButton = () =>
+    drawingEntries.length > 0 ? (
+      <>
+        {drawingEntries.map((drawing, index) => (
+          <a
+            key={drawing.id || `drawing-${index}`}
+            href={drawing.href}
+            target="_blank"
+            rel="noopener noreferrer"
+            onClick={(event) => {
+              event.preventDefault();
+              openDocumentUrl(drawing.href, { title: drawing.name || t('sharePage.drawingTitle') });
+            }}
+            className="flex h-9 w-full items-center justify-center gap-2 rounded-lg bg-surface-container-high text-sm font-medium text-on-surface transition-colors hover:bg-surface-container-highest active:scale-[0.98]"
+          >
+            <Icon name="description" size={18} />
+            <span className="truncate">{drawing.name || t('sharePage.drawingTitle')}</span>
+            <Icon name="open_in_new" size={16} className="text-on-surface-variant/50 shrink-0" />
+          </a>
+        ))}
+      </>
     ) : null;
 
   // Main share page
@@ -384,23 +432,26 @@ export default function SharePage() {
 
           {info.description && <p className="text-sm text-on-surface-variant break-words">{info.description}</p>}
 
-          {/* Drawing */}
-          {info.drawingUrl && (
+          {/* Drawings */}
+          {drawingEntries.map((drawing, index) => (
             <a
-              href={drawingHref ?? undefined}
+              key={drawing.id || `drawing-${index}`}
+              href={drawing.href}
               target="_blank"
               rel="noopener noreferrer"
               onClick={(event) => {
                 event.preventDefault();
-                openDocumentUrl(drawingHref ?? '', { title: t('sharePage.drawingTitle') });
+                openDocumentUrl(drawing.href, { title: drawing.name || t('sharePage.drawingTitle') });
               }}
               className="flex items-center gap-3 rounded-lg bg-surface-container-high px-4 py-3 text-sm text-on-surface hover:bg-surface-container-highest transition-colors"
             >
               <Icon name="description" size={20} className="text-on-surface-variant shrink-0" />
-              <span className="truncate">{t('sharePage.drawingTitle')}</span>
+              <span className="truncate" title={drawing.name}>
+                {drawing.name || t('sharePage.drawingTitle')}
+              </span>
               <Icon name="open_in_new" size={16} className="text-on-surface-variant/50 shrink-0 ml-auto" />
             </a>
-          )}
+          ))}
 
           {/* Download button */}
           <div className="hidden md:block">{renderDownloadButton()}</div>
@@ -419,7 +470,7 @@ export default function SharePage() {
           )}
         </div>
 
-        {info.allowDownload ? (
+        {hasMobileActionBar ? (
           <div className="pointer-events-none absolute inset-x-0 bottom-0 z-30 md:hidden">
             <div
               ref={mobileDownloadBarRef}
@@ -428,7 +479,10 @@ export default function SharePage() {
               <h2 className="mb-2 line-clamp-2 break-words px-0.5 text-sm font-bold leading-[1.15rem] text-on-surface">
                 {info.modelName}
               </h2>
-              {renderDownloadButton(false)}
+              <div className="space-y-2">
+                {renderDownloadButton(false)}
+                {renderMobileDrawingButton()}
+              </div>
             </div>
           </div>
         ) : null}

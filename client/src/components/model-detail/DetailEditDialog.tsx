@@ -2,7 +2,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useState, useEffect } from 'react';
 import { type CategoryItem } from '../../api/categories';
 import { openModelDrawing } from '../../api/downloads';
-import { modelApi } from '../../api/models';
+import { modelApi, type DrawingRef } from '../../api/models';
 import { getBusinessConfig } from '../../lib/businessConfig';
 import { AdminButton, AdminIconButton } from '../shared/AdminControls';
 import CategorySelect from '../shared/CategorySelect';
@@ -17,7 +17,7 @@ export function DetailEditDialog({
   modelId,
   modelName,
   thumbnailUrl: initialThumb,
-  drawingUrl: initialDrawing,
+  drawings: initialDrawings,
   categoryId: initialCat,
   categories,
   onClose,
@@ -28,7 +28,7 @@ export function DetailEditDialog({
   modelId: string;
   modelName: string;
   thumbnailUrl: string | null;
-  drawingUrl: string | null;
+  drawings: DrawingRef[];
   categoryId?: string | null;
   categories: CategoryItem[];
   onClose: () => void;
@@ -45,7 +45,7 @@ export function DetailEditDialog({
   const [regenerating, setRegenerating] = useState(false);
   const [thumbUrl, setThumbUrl] = useState(initialThumb);
   const [drawingUploading, setDrawingUploading] = useState(false);
-  const [drawingUrl, setDrawingUrl] = useState(initialDrawing);
+  const [drawings, setDrawings] = useState<DrawingRef[]>(initialDrawings);
   const { uploadPolicy } = getBusinessConfig();
   const imageMaxBytes = Math.max(1, Number(uploadPolicy.productWallImageMaxSizeMb) || 8) * 1024 * 1024;
   const drawingMaxBytes = Math.max(1, Number(uploadPolicy.modelDrawingMaxSizeMb) || 500) * 1024 * 1024;
@@ -56,9 +56,9 @@ export function DetailEditDialog({
       setName(modelName);
       setCatId(initialCat || '');
       setThumbUrl(initialThumb);
-      setDrawingUrl(initialDrawing);
+      setDrawings(initialDrawings);
     }
-  }, [open, modelName, initialCat, initialThumb, initialDrawing]);
+  }, [open, modelName, initialCat, initialThumb, initialDrawings]);
 
   if (!open) return null;
 
@@ -201,82 +201,81 @@ export function DetailEditDialog({
                 <AppFormLabel uppercase className="mb-0">
                   产品图纸 (PDF)
                 </AppFormLabel>
-                <div className="flex items-center gap-3">
-                  {drawingUrl ? (
-                    <div className="flex items-center gap-2 flex-1">
+                <div className="flex flex-col gap-2">
+                  {drawings.map((drawing) => (
+                    <div key={drawing.id} className="flex items-center gap-2">
                       <Icon name="description" size={20} className="text-primary shrink-0" />
-                      <span className="text-sm text-on-surface truncate flex-1">已上传</span>
+                      <span className="text-sm text-on-surface truncate flex-1" title={drawing.name}>
+                        {drawing.name}
+                      </span>
                       <button
                         type="button"
-                        onClick={() => void openModelDrawing(modelId).catch(() => toast('打开图纸失败', 'error'))}
-                        className="text-xs text-primary hover:underline"
+                        onClick={() =>
+                          void openModelDrawing(modelId, drawing.id).catch(() => toast('打开图纸失败', 'error'))
+                        }
+                        className="text-xs text-primary hover:underline shrink-0"
                       >
                         查看
                       </button>
                       <button
                         onClick={async () => {
-                          let ok = false;
                           try {
-                            await modelApi.deleteDrawing(modelId);
-                            setDrawingUrl(null);
+                            const r = await modelApi.deleteDrawing(modelId, drawing.id);
+                            setDrawings(r.drawings);
                             toast('图纸已删除', 'success');
-                            ok = true;
+                            onSaved();
                           } catch {
                             toast('删除失败', 'error');
                           }
-                          if (ok) onSaved();
                         }}
-                        className="text-xs text-error hover:underline"
+                        className="text-xs text-error hover:underline shrink-0"
                       >
                         删除
                       </button>
                     </div>
-                  ) : (
-                    <>
-                      <input
-                        type="file"
-                        accept="application/pdf"
-                        className="hidden"
-                        id="detail-drawing-upload"
-                        onChange={async (e) => {
-                          const f = e.target.files?.[0];
-                          if (!f) return;
-                          if (f.type !== 'application/pdf') {
-                            toast('仅支持 PDF 格式', 'error');
-                            return;
-                          }
-                          if (f.size > drawingMaxBytes) {
-                            toast(`PDF 图纸不能超过 ${uploadPolicy.modelDrawingMaxSizeMb}MB`, 'error');
-                            return;
-                          }
-                          setDrawingUploading(true);
-                          let ok = false;
-                          try {
-                            const r = await modelApi.uploadDrawing(modelId, f);
-                            setDrawingUrl(r.drawing_url);
-                            toast('图纸上传成功', 'success');
-                            ok = true;
-                          } catch {
-                            toast('上传失败', 'error');
-                          } finally {
-                            setDrawingUploading(false);
-                          }
-                          if (ok) onSaved();
-                          e.target.value = '';
-                        }}
-                      />
-                      <AdminButton
-                        onClick={() => document.getElementById('detail-drawing-upload')?.click()}
-                        disabled={drawingUploading}
-                        icon="upload_file"
-                        size="sm"
-                        variant="secondary"
-                        className="w-full justify-center"
-                      >
-                        {drawingUploading ? '上传中...' : '上传 PDF 图纸'}
-                      </AdminButton>
-                    </>
-                  )}
+                  ))}
+                  <input
+                    type="file"
+                    accept="application/pdf"
+                    className="hidden"
+                    id="detail-drawing-upload"
+                    onChange={async (e) => {
+                      const f = e.target.files?.[0];
+                      if (!f) return;
+                      if (f.type !== 'application/pdf') {
+                        toast('仅支持 PDF 格式', 'error');
+                        e.target.value = '';
+                        return;
+                      }
+                      if (f.size > drawingMaxBytes) {
+                        toast(`PDF 图纸不能超过 ${uploadPolicy.modelDrawingMaxSizeMb}MB`, 'error');
+                        e.target.value = '';
+                        return;
+                      }
+                      setDrawingUploading(true);
+                      try {
+                        const r = await modelApi.uploadDrawing(modelId, f);
+                        setDrawings(r.drawings);
+                        toast('图纸上传成功', 'success');
+                        onSaved();
+                      } catch {
+                        toast('上传失败', 'error');
+                      } finally {
+                        setDrawingUploading(false);
+                      }
+                      e.target.value = '';
+                    }}
+                  />
+                  <AdminButton
+                    onClick={() => document.getElementById('detail-drawing-upload')?.click()}
+                    disabled={drawingUploading}
+                    icon="upload_file"
+                    size="sm"
+                    variant="secondary"
+                    className="w-full justify-center"
+                  >
+                    {drawingUploading ? '上传中...' : drawings.length > 0 ? '继续添加 PDF 图纸' : '上传 PDF 图纸'}
+                  </AdminButton>
                 </div>
               </div>
               <div className="border-t border-outline-variant/20 pt-4 mt-1">

@@ -43,6 +43,25 @@ export const authApi = {
     return unwrapResponse<PasswordChangeResult>(res);
   },
 
+  /** 换绑邮箱：发送验证码（target = 'old' 当前邮箱 | 'new' 新邮箱） */
+  sendChangeEmailCode: async (target: 'old' | 'new', newEmail?: string) => {
+    const res = await client.post<ApiResponse<{ message: string }>>('/auth/change-email/code', {
+      target,
+      newEmail,
+    });
+    return unwrapResponse<{ message: string }>(res);
+  },
+
+  /** 换绑邮箱：双验证码确认（成功后需重新登录） */
+  changeEmail: async (newEmail: string, oldCode: string, newCode: string) => {
+    const res = await client.post<ApiResponse<{ message: string }>>('/auth/change-email', {
+      newEmail,
+      oldCode,
+      newCode,
+    });
+    return unwrapResponse<{ message: string }>(res);
+  },
+
   setInitialPassword: async (newPassword: string) => {
     const res = await client.put<ApiResponse<PasswordChangeResult>>('/auth/password', { newPassword });
     return unwrapResponse<PasswordChangeResult>(res);

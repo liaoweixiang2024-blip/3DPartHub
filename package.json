@@ -35,5 +35,6 @@
     "*.{json,md,css}": [
       "prettier --write"
     ]
-  }
+  },
+  "version": "4.2.0"
 }

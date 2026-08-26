@@ -23,7 +23,7 @@ type ShareInfoCache = {
   id: string;
   model: {
     description: string | null;
-    drawingUrl: string | null;
+    drawings: Array<{ id: string; name: string; size: number | null }>;
     format: string;
     gltfSize: number;
     gltfUrl: string;
@@ -65,8 +65,9 @@ export function createPublicSharesRouter() {
     }
 
     const detailTtl = resolveCacheTtl((await getAllSettings()).cache_model_detail_ttl_seconds, TTL.MODEL_DETAIL);
+    // v2: 响应新增 drawings 数组（旧缓存无该字段，避免 TTL 窗口内丢图纸）
     const { value: shareRaw } = await cacheGetOrSet<ShareInfoCache | null>(
-      `cache:share:info:${token}`,
+      `cache:share:info:v2:${token}`,
       detailTtl,
       async () => {
         const result = await prisma.shareLink.findUnique({
@@ -97,7 +98,10 @@ export function createPublicSharesRouter() {
               uploadPath: true,
               thumbnailUrl: true,
               description: true,
-              drawingUrl: true,
+              drawings: {
+                orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+                select: { id: true, name: true, size: true },
+              },
               updatedAt: true,
             },
           });
@@ -119,7 +123,7 @@ export function createPublicSharesRouter() {
     }
 
     if (!share.model) {
-      await cacheDel(`cache:share:info:${token}`);
+      await cacheDel(`cache:share:info:v2:${token}`);
       res.status(404).json({ detail: '分享的模型已被删除' });
       return;
     }
@@ -154,7 +158,8 @@ export function createPublicSharesRouter() {
       gltfUrl: share.allowPreview && accessVerified ? withAssetVersion(model.gltfUrl, model.updatedAt) : undefined,
       // /static/drawings 属于 blockedStaticDirs，直接下发静态路径会 404；
       // 改为下发受分享令牌保护的接口路径，与下载接口同一套校验。
-      drawingUrl: share.allowDrawing && model.drawingUrl ? `/api/shares/${encodeURIComponent(token)}/drawing` : null,
+      drawingUrl: share.allowDrawing && model.drawings[0] ? `/api/shares/${encodeURIComponent(token)}/drawing` : null,
+      drawings: share.allowDrawing ? model.drawings : [],
     });
   });
 
@@ -213,14 +218,8 @@ export function createPublicSharesRouter() {
     res.json({ verified: true, accessToken: created.token, expiresAt: created.expiresAt });
   });
 
-  // View PDF drawing via share link (inline)
-  router.get('/api/shares/:token/drawing', async (req: Request, res: Response) => {
-    const token = asSingleString(req.params.token);
-    if (!token) {
-      res.status(400).json({ detail: '分享参数无效' });
-      return;
-    }
-
+  // View PDF drawing via share link (inline). Validates the share, resolves one drawing row, streams it.
+  async function sendShareDrawing(req: Request, res: Response, token: string, drawingId: string | null): Promise<void> {
     const share = await prisma.shareLink.findUnique({
       where: { token },
       select: {
@@ -238,7 +237,7 @@ export function createPublicSharesRouter() {
     }
 
     if (share.expiresAt && new Date() > share.expiresAt) {
-      res.status(410).json({ detail: '分享链接已过期' });
+      res.status(410).json({ detail: '分享链接已过期', expired: true });
       return;
     }
 
@@ -258,23 +257,31 @@ export function createPublicSharesRouter() {
         id: true,
         name: true,
         originalName: true,
-        drawingName: true,
-        drawingUrl: true,
         updatedAt: true,
       },
     });
-    if (!model?.drawingUrl) {
+    if (!model) {
+      res.status(404).json({ detail: '分享的模型已被删除' });
+      return;
+    }
+
+    const drawing = await prisma.modelDrawing.findFirst({
+      where: { modelId: model.id, ...(drawingId ? { id: drawingId } : {}) },
+      orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+      select: { fileKey: true, name: true },
+    });
+    if (!drawing) {
       res.status(404).json({ detail: '图纸不存在' });
       return;
     }
 
-    const drawingPath = resolveDrawingPath(model.id, model.drawingUrl);
+    const drawingPath = resolveDrawingPath(model.id, drawing.fileKey);
     if (!drawingPath || !existsSync(drawingPath)) {
       res.status(404).json({ detail: '图纸文件不存在' });
       return;
     }
 
-    const sourceName = modelDownloadSourceName(model.name || model.drawingName, model.originalName, model.id);
+    const sourceName = modelDownloadSourceName(model.name || drawing.name, model.originalName, model.id);
     const fileName = modelDownloadFileName(sourceName, 'pdf', model.id);
     sendAcceleratedFile(req, res, {
       filePath: drawingPath,
@@ -283,6 +290,27 @@ export function createPublicSharesRouter() {
       disposition: 'inline',
       cacheControl: 'private, no-store',
     });
+  }
+
+  // View a specific PDF drawing via share link
+  router.get('/api/shares/:token/drawing/:drawingId', async (req: Request, res: Response) => {
+    const token = asSingleString(req.params.token);
+    const drawingId = asSingleString(req.params.drawingId);
+    if (!token || !drawingId) {
+      res.status(400).json({ detail: '分享参数无效' });
+      return;
+    }
+    await sendShareDrawing(req, res, token, drawingId);
+  });
+
+  // Legacy: view the first PDF drawing via share link
+  router.get('/api/shares/:token/drawing', async (req: Request, res: Response) => {
+    const token = asSingleString(req.params.token);
+    if (!token) {
+      res.status(400).json({ detail: '分享参数无效' });
+      return;
+    }
+    await sendShareDrawing(req, res, token, null);
   });
 
   // Download via share link

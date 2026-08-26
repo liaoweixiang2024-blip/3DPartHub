@@ -352,7 +352,17 @@ const MODULE_BACKUP_STATIC_DIRS: Record<Exclude<BackupScope, 'full'>, string[]> 
 };
 
 export const MODULE_BACKUP_TABLE_KEYS: Record<Exclude<BackupScope, 'full'>, readonly string[]> = {
-  models: ['categories', 'modelGroups', 'models', 'modelVersions', 'favorites', 'downloads', 'comments', 'shareLinks'],
+  models: [
+    'categories',
+    'modelGroups',
+    'models',
+    'modelDrawings',
+    'modelVersions',
+    'favorites',
+    'downloads',
+    'comments',
+    'shareLinks',
+  ],
   selection: ['selectionCategories', 'selectionProducts', 'threadSizeEntries', 'selectionShares'],
   product_wall: ['productWallCategories', 'productWallImages', 'productWallImageFavorites'],
   config: ['settings', 'categories'],
@@ -1968,6 +1978,7 @@ async function buildModuleBackupPayload(scope: Exclude<BackupScope, 'full'>): Pr
         categories: await prisma.category.findMany({ orderBy: [{ sortOrder: 'asc' }, { createdAt: 'asc' }] }),
         modelGroups: await prisma.modelGroup.findMany({ orderBy: [{ createdAt: 'asc' }] }),
         models: await prisma.model.findMany({ orderBy: [{ createdAt: 'asc' }] }),
+        modelDrawings: await prisma.modelDrawing.findMany({ orderBy: [{ createdAt: 'asc' }] }),
         modelVersions: await prisma.modelVersion.findMany({ orderBy: [{ createdAt: 'asc' }] }),
         favorites: await prisma.favorite.findMany({ orderBy: [{ userId: 'asc' }, { createdAt: 'asc' }] }),
         downloads: await prisma.download.findMany({ orderBy: [{ userId: 'asc' }, { createdAt: 'asc' }] }),
@@ -3274,6 +3285,15 @@ async function runRestoreFromArchive(
         addLogEnd(job, t, '数据库导入完成，外键已恢复');
       }
 
+      // 旧备份的 models 行仍带单图纸列值——迁移已应用不会重跑，这里幂等回填进 model_drawings
+      try {
+        const { reconcileLegacyModelDrawings } = await import('../services/modelDrawings.js');
+        const reconciled = await reconcileLegacyModelDrawings(await getBackupPrisma());
+        if (reconciled > 0) addLog(job, `已回填 ${reconciled} 条旧图纸数据到 model_drawings`);
+      } catch (reconcileErr) {
+        log.warn({ err: reconcileErr }, 'Post-restore legacy drawing reconcile failed');
+      }
+
       // 数据库已成功导入（full dump 或 data-only 任一路径），现在处于已知良好状态。
       // 清除恢复中断 marker——此后的硬崩不会留下破损数据库，无需启动时回滚。
       clearRestoreInProgressMarker(job.id);
@@ -3683,12 +3703,13 @@ async function restoreModelsModule(
   job: RestoreJob,
 ): Promise<number> {
   await tx.$executeRawUnsafe(
-    'TRUNCATE TABLE "model_versions", "favorites", "downloads", "comments", "share_links", "models", "model_groups", "categories" RESTART IDENTITY CASCADE',
+    'TRUNCATE TABLE "model_versions", "model_drawings", "favorites", "downloads", "comments", "share_links", "models", "model_groups", "categories" RESTART IDENTITY CASCADE',
   );
 
   const categories = tableRows(payload, 'categories');
   const modelGroups = tableRows(payload, 'modelGroups');
   const models = tableRows(payload, 'models');
+  const modelDrawings = tableRows(payload, 'modelDrawings');
   const modelVersions = tableRows(payload, 'modelVersions');
   const favorites = tableRows(payload, 'favorites');
   const downloads = tableRows(payload, 'downloads');
@@ -3697,6 +3718,7 @@ async function restoreModelsModule(
   const userContext = await getRestoreUserContext(
     tx,
     models.length > 0 ||
+      modelDrawings.length > 0 ||
       modelVersions.length > 0 ||
       favorites.length > 0 ||
       downloads.length > 0 ||
@@ -3743,6 +3765,15 @@ async function restoreModelsModule(
     })
     .filter((row): row is Record<string, unknown> => Boolean(row));
   await createManyInChunks(tx.model, modelData);
+
+  const drawingData = modelDrawings
+    .map((row) => {
+      const data = reviveDateFields(row, ['createdAt']);
+      data.modelId = keepIdIfPresent(data.modelId, modelIds);
+      return data.modelId ? data : null;
+    })
+    .filter((row): row is Record<string, unknown> => Boolean(row));
+  await createManyInChunks(tx.modelDrawing, drawingData);
 
   const versionData = modelVersions
     .map((row) => {
@@ -3808,10 +3839,11 @@ async function restoreModelsModule(
 
   addLog(
     job,
-    `模型库表已重建: ${modelData.length} 个模型，${versionData.length} 个版本，${favoriteData.length} 条收藏，${downloadData.length} 条下载，${commentData.length} 条评论，${shareLinkData.length} 条分享`,
+    `模型库表已重建: ${modelData.length} 个模型，${drawingData.length} 份图纸，${versionData.length} 个版本，${favoriteData.length} 条收藏，${downloadData.length} 条下载，${commentData.length} 条评论，${shareLinkData.length} 条分享`,
   );
   return (
     modelData.length +
+    drawingData.length +
     versionData.length +
     favoriteData.length +
     downloadData.length +

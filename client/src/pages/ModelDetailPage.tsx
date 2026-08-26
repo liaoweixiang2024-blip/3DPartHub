@@ -5,7 +5,7 @@ import { useParams, useNavigate, Link, useLocation } from 'react-router-dom';
 import useSWR, { mutate as globalMutate } from 'swr';
 import { categoriesApi } from '../api/categories';
 import { downloadModelFile, isDownloadAuthRequiredError, openModelDrawing } from '../api/downloads';
-import { modelApi, type ServerModelListResponse } from '../api/models';
+import { modelApi, type DrawingRef, type ServerModelListResponse } from '../api/models';
 import { updateSettings } from '../api/settings';
 import CadViewerPanel from '../components/3d/CadViewerPanel';
 import type { ViewMode, CameraPreset } from '../components/3d/ModelViewer';
@@ -182,9 +182,9 @@ export default function ModelDetailPage() {
   );
 
   const handleOpenDrawing = useCallback(
-    async (modelId: string) => {
+    async (modelId: string, drawingId?: string) => {
       try {
-        await openModelDrawing(modelId);
+        await openModelDrawing(modelId, drawingId);
       } catch (error) {
         if (isDownloadAuthRequiredError(error)) {
           setLoginPromptReason(t('modelDetail.viewDrawing'));
@@ -260,6 +260,20 @@ export default function ModelDetailPage() {
 
   const categoryTree = catTreeData?.items;
 
+  // 编辑弹窗用的图纸列表（后端新字段；旧缓存窗口回落单条 legacy 字段）
+  const serverModelDrawings: DrawingRef[] =
+    serverModel?.drawings && serverModel.drawings.length > 0
+      ? serverModel.drawings
+      : serverModel?.drawing_url
+        ? [
+            {
+              id: '',
+              name: serverModel.drawing_name || `${serverModel.name || 'drawing'}.pdf`,
+              size: serverModel.drawing_size ?? null,
+            },
+          ]
+        : [];
+
   let modelData: ModelInfo | undefined;
 
   if (serverModel) {
@@ -297,16 +311,24 @@ export default function ModelDetailPage() {
           fileName: serverModel.original_name || `${serverModel.name}.${format.toLowerCase()}`,
           downloadFormat: 'original',
         },
-        ...(serverModel.drawing_url
-          ? [
-              {
-                format: 'PDF',
-                size: serverModel.drawing_size ? formatFileSize(serverModel.drawing_size) : 'PDF',
-                fileName: serverModel.drawing_name || `${serverModel.name}.pdf`,
-                downloadFormat: 'drawing' as const,
-              },
-            ]
-          : []),
+        ...(serverModel.drawings && serverModel.drawings.length > 0
+          ? serverModel.drawings.map((drawing) => ({
+              format: 'PDF',
+              size: drawing.size ? formatFileSize(drawing.size) : 'PDF',
+              fileName: drawing.name || `${serverModel.name}.pdf`,
+              downloadFormat: 'drawing' as const,
+              drawingId: drawing.id,
+            }))
+          : serverModel.drawing_url
+            ? [
+                {
+                  format: 'PDF',
+                  size: serverModel.drawing_size ? formatFileSize(serverModel.drawing_size) : 'PDF',
+                  fileName: serverModel.drawing_name || `${serverModel.name}.pdf`,
+                  downloadFormat: 'drawing' as const,
+                },
+              ]
+            : []),
       ],
       dimensions: '-',
       modelUrl: serverModel.gltf_url || undefined,
@@ -617,7 +639,7 @@ export default function ModelDetailPage() {
               modelId={modelData.id}
               modelName={modelData.name}
               thumbnailUrl={modelData.thumbnailUrl ?? null}
-              drawingUrl={modelData.drawingUrl ?? null}
+              drawings={serverModelDrawings}
               categoryId={modelData.categoryId}
               categories={categoryTree || []}
               onClose={() => setEditOpen(false)}
@@ -914,7 +936,7 @@ export default function ModelDetailPage() {
                         <button
                           key={downloadKey}
                           type="button"
-                          onClick={() => void handleOpenDrawing(modelData.id)}
+                          onClick={() => void handleOpenDrawing(modelData.id, file.drawingId)}
                           className="flex w-full items-center justify-between gap-2.5 rounded-sm border border-outline-variant/10 bg-surface-container-low px-3 py-2 text-left transition-colors hover:bg-surface-container"
                         >
                           <div className="w-7 h-7 rounded bg-error/10 flex items-center justify-center shrink-0">
@@ -1013,7 +1035,7 @@ export default function ModelDetailPage() {
         modelId={modelData.id}
         modelName={modelData.name}
         thumbnailUrl={modelData.thumbnailUrl ?? null}
-        drawingUrl={modelData.drawingUrl ?? null}
+        drawings={serverModelDrawings}
         categoryId={modelData.categoryId}
         categories={categoryTree || []}
         onClose={() => setEditOpen(false)}

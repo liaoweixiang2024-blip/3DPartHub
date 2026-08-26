@@ -8,6 +8,7 @@ export interface ModelDownload {
   size: string;
   fileName?: string;
   downloadFormat?: string;
+  drawingId?: string;
 }
 
 export interface ModelVersion {

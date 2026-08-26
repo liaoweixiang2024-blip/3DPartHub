@@ -161,6 +161,17 @@ export async function sendVerifyCode(toEmail: string, code: string, siteUrl?: st
   });
 }
 
+/** 换绑邮箱验证码（个人设置 → 验证旧/新邮箱各发一封） */
+export async function sendChangeEmailCode(toEmail: string, code: string, siteUrl?: string): Promise<void> {
+  await sendTemplateEmail('change_email', toEmail, {
+    siteUrl,
+    actionPath: '/profile',
+    actionLabel: '打开个人设置',
+    code,
+    expireMinutes: 10,
+  });
+}
+
 export async function sendPasswordResetEmail(toEmail: string, token: string, siteUrl?: string): Promise<void> {
   await sendTemplateEmail('password_reset', toEmail, {
     siteUrl,

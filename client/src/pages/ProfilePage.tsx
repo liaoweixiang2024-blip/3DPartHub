@@ -10,11 +10,13 @@ import { AdminPageShell } from '../components/shared/AdminPageShell';
 import Icon from '../components/shared/Icon';
 import { PageBody, PageHeader } from '../components/shared/PagePrimitives';
 import { PageRefreshIndicator } from '../components/shared/PageRefreshFallback';
+import RegionSelect from '../components/shared/RegionSelect';
 import SafeImage from '../components/shared/SafeImage';
 import { useToast } from '../components/shared/Toast';
 import { useDocumentTitle } from '../hooks/useDocumentTitle';
 import { useMediaQuery } from '../layouts/hooks/useMediaQuery';
-import { useFeatureFlags } from '../lib/publicSettings';
+import { validateRegisterUsername } from '../lib/authValidation';
+import { getPublicSettingsSnapshot, useFeatureFlags } from '../lib/publicSettings';
 import { useAuthStore } from '../stores/useAuthStore';
 
 const ROLE_LABEL_KEYS: Record<string, string> = {
@@ -386,6 +388,282 @@ function PasswordChangeDialog({ open, onClose }: { open: boolean; onClose: () =>
   );
 }
 
+/**
+ * 换绑邮箱弹窗：两步验证——① 验证当前邮箱（证明账号所有权）② 验证新邮箱（证明新地址可达）。
+ * 成功后后端会作废所有令牌，前端统一走「请重新登录」跳转。
+ */
+function EmailChangeDialog({
+  open,
+  onClose,
+  currentEmail,
+}: {
+  open: boolean;
+  onClose: () => void;
+  currentEmail: string;
+}) {
+  const { t } = useTranslation();
+  const { toast } = useToast();
+  const [step, setStep] = useState<1 | 2>(1);
+  const [newEmail, setNewEmail] = useState('');
+  const [oldCode, setOldCode] = useState('');
+  const [newCode, setNewCode] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+  const [oldSent, setOldSent] = useState(false);
+  const [newSent, setNewSent] = useState(false);
+
+  useEffect(() => {
+    if (open) {
+      setStep(1);
+      setNewEmail('');
+      setOldCode('');
+      setNewCode('');
+      setError('');
+      setOldSent(false);
+      setNewSent(false);
+    }
+  }, [open]);
+
+  const sendCode = async (target: 'old' | 'new') => {
+    setError('');
+    if (target === 'new') {
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(newEmail.trim())) {
+        setError(t('profile.emailChangeDialog.emailInvalid'));
+        return;
+      }
+    }
+    setLoading(true);
+    try {
+      await authApi.sendChangeEmailCode(target, target === 'new' ? newEmail.trim() : undefined);
+      if (target === 'old') setOldSent(true);
+      else setNewSent(true);
+      toast(t('profile.emailChangeDialog.codeSent'), 'success');
+    } catch (err: unknown) {
+      const data = (err as { response?: { data?: { message?: string; detail?: string } } }).response?.data;
+      setError(data?.message || data?.detail || t('profile.emailChangeDialog.codeSendFailed'));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSubmit = async () => {
+    setError('');
+    if (step === 1) {
+      if (!oldCode.trim()) {
+        setError(t('profile.emailChangeDialog.codeRequired'));
+        return;
+      }
+      setStep(2);
+      return;
+    }
+    if (!newEmail.trim() || !newCode.trim()) {
+      setError(t('profile.emailChangeDialog.completeRequired'));
+      return;
+    }
+    setLoading(true);
+    try {
+      await authApi.changeEmail(newEmail.trim(), oldCode.trim(), newCode.trim());
+      toast(t('profile.emailChangeDialog.success'), 'success');
+      onClose();
+      // 后端已作废所有令牌：跳登录页重新认证
+      setTimeout(() => {
+        useAuthStore.getState().logout();
+        window.location.replace('/login');
+      }, 1200);
+    } catch (err: unknown) {
+      const data = (err as { response?: { data?: { message?: string; detail?: string } } }).response?.data;
+      setError(data?.message || data?.detail || t('profile.emailChangeDialog.failed'));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const inputClass =
+    'w-full bg-surface-container-lowest text-on-surface border border-outline-variant/30 focus:border-primary px-3 py-2 text-sm rounded-sm outline-none';
+
+  return (
+    <AnimatePresence>
+      {open && (
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-surface-dim/70 backdrop-blur-sm p-3 sm:p-4"
+          onClick={onClose}
+        >
+          <motion.div
+            initial={{ scale: 0.95, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            exit={{ scale: 0.95, opacity: 0 }}
+            onClick={(e) => e.stopPropagation()}
+            className="bg-surface-container-low rounded-t-lg sm:rounded-lg shadow-xl border border-outline-variant/20 w-full max-w-md p-4 sm:p-6 max-h-[calc(100dvh-1.5rem)] overflow-y-auto"
+          >
+            <div className="flex items-center justify-between mb-2">
+              <h3 className="font-headline text-lg font-semibold text-on-surface">
+                {t('profile.emailChangeDialog.title')}
+              </h3>
+              <button onClick={onClose} className="p-1 text-on-surface-variant hover:text-on-surface transition-colors">
+                <Icon name="close" size={20} />
+              </button>
+            </div>
+            <p className="text-xs text-on-surface-variant mb-5">
+              {step === 1 ? t('profile.emailChangeDialog.step1Desc') : t('profile.emailChangeDialog.step2Desc')}
+            </p>
+
+            {/* 步骤指示 */}
+            <div className="flex items-center gap-2 mb-5">
+              {[1, 2].map((s) => (
+                <div key={s} className="flex items-center gap-2 flex-1">
+                  <div
+                    className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${
+                      step >= s
+                        ? 'bg-primary-container text-on-primary'
+                        : 'bg-surface-container-highest text-on-surface-variant'
+                    }`}
+                  >
+                    {s}
+                  </div>
+                  <span className={`text-xs ${step >= s ? 'text-on-surface' : 'text-on-surface-variant/60'}`}>
+                    {s === 1 ? t('profile.emailChangeDialog.step1') : t('profile.emailChangeDialog.step2')}
+                  </span>
+                  {s === 1 && <div className="flex-1 h-px bg-outline-variant/30" />}
+                </div>
+              ))}
+            </div>
+
+            <div className="space-y-4">
+              {step === 1 ? (
+                <>
+                  <div className="flex flex-col gap-1.5">
+                    <label className="text-xs uppercase tracking-wider text-on-surface-variant">
+                      {t('profile.emailChangeDialog.currentEmail')}
+                    </label>
+                    <input value={currentEmail} readOnly className={`${inputClass} opacity-60 cursor-default`} />
+                  </div>
+                  <div className="flex flex-col gap-1.5">
+                    <label className="text-xs uppercase tracking-wider text-on-surface-variant">
+                      {t('profile.emailChangeDialog.verificationCode')}
+                    </label>
+                    <div className="flex gap-2">
+                      <input
+                        value={oldCode}
+                        onChange={(e) => setOldCode(e.target.value)}
+                        maxLength={6}
+                        inputMode="numeric"
+                        placeholder="123456"
+                        className={inputClass}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => void sendCode('old')}
+                        disabled={loading}
+                        className="shrink-0 px-3 py-2 border border-outline-variant/40 rounded-sm text-xs font-medium text-on-surface-variant hover:text-on-surface hover:border-outline-variant/70 transition-colors disabled:opacity-50 whitespace-nowrap"
+                      >
+                        {oldSent ? t('profile.emailChangeDialog.resend') : t('profile.emailChangeDialog.sendCode')}
+                      </button>
+                    </div>
+                    {oldSent && (
+                      <span className="text-[10px] text-on-surface-variant/60">
+                        {t('profile.emailChangeDialog.checkInbox')}
+                      </span>
+                    )}
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className="flex flex-col gap-1.5">
+                    <label className="text-xs uppercase tracking-wider text-on-surface-variant">
+                      {t('profile.emailChangeDialog.newEmail')}
+                    </label>
+                    <input
+                      type="email"
+                      value={newEmail}
+                      onChange={(e) => setNewEmail(e.target.value)}
+                      placeholder={t('auth.emailPlaceholder')}
+                      className={inputClass}
+                    />
+                  </div>
+                  <div className="flex flex-col gap-1.5">
+                    <label className="text-xs uppercase tracking-wider text-on-surface-variant">
+                      {t('profile.emailChangeDialog.verificationCode')}
+                    </label>
+                    <div className="flex gap-2">
+                      <input
+                        value={newCode}
+                        onChange={(e) => setNewCode(e.target.value)}
+                        maxLength={6}
+                        inputMode="numeric"
+                        placeholder="123456"
+                        className={inputClass}
+                        disabled={!newEmail.trim()}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => void sendCode('new')}
+                        disabled={loading || !newEmail.trim()}
+                        className="shrink-0 px-3 py-2 border border-outline-variant/40 rounded-sm text-xs font-medium text-on-surface-variant hover:text-on-surface hover:border-outline-variant/70 transition-colors disabled:opacity-50 whitespace-nowrap"
+                      >
+                        {newSent ? t('profile.emailChangeDialog.resend') : t('profile.emailChangeDialog.sendCode')}
+                      </button>
+                    </div>
+                    {newSent && (
+                      <span className="text-[10px] text-on-surface-variant/60">
+                        {t('profile.emailChangeDialog.checkInboxNew')}
+                      </span>
+                    )}
+                  </div>
+                </>
+              )}
+
+              {error && (
+                <div className="bg-error-container/20 border border-error/30 rounded-sm px-3 py-2 text-xs text-error flex items-start gap-2">
+                  <Icon name="error" size={16} className="shrink-0 mt-0.5" />
+                  <span className="min-w-0 break-words">{error}</span>
+                </div>
+              )}
+
+              <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-3 pt-2">
+                {step === 2 ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setStep(1);
+                      setError('');
+                    }}
+                    className="px-4 py-2 text-sm text-on-surface-variant hover:text-on-surface transition-colors"
+                  >
+                    {t('profile.emailChangeDialog.back')}
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={onClose}
+                    className="px-4 py-2 text-sm text-on-surface-variant hover:text-on-surface transition-colors"
+                  >
+                    {t('common.cancel')}
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={() => void handleSubmit()}
+                  disabled={loading}
+                  className="px-6 py-2 bg-primary-container text-on-primary rounded-sm text-sm hover:bg-primary transition-colors disabled:opacity-50"
+                >
+                  {loading
+                    ? t('profile.submitting')
+                    : step === 1
+                      ? t('profile.emailChangeDialog.next')
+                      : t('profile.emailChangeDialog.confirm')}
+                </button>
+              </div>
+            </div>
+          </motion.div>
+        </motion.div>
+      )}
+    </AnimatePresence>
+  );
+}
+
 function MobileSharesMenu() {
   const { t } = useTranslation();
   const { data: shares } = useSWR<ShareLink[]>('/shares/mine', listShares);
@@ -414,6 +692,8 @@ function DesktopContent() {
   const updateUser = useAuthStore((s) => s.updateUser);
   const { toast } = useToast();
   const [pwdOpen, setPwdOpen] = useState(false);
+  const [emailChangeOpen, setEmailChangeOpen] = useState(false);
+  const [usernameError, setUsernameError] = useState<string | undefined>(undefined);
   const [formData, setFormData] = useState({
     username: '',
     email: '',
@@ -451,6 +731,11 @@ function DesktopContent() {
     setFormData((prev) => ({ ...prev, [e.target.name]: e.target.value }));
   };
 
+  // 用户名实时校验：与注册同规则（长度/字符集，读取后台安全设置）
+  const handleUsernameBlur = () => {
+    setUsernameError(validateRegisterUsername(formData.username, getPublicSettingsSnapshot(), t) || undefined);
+  };
+
   const handleDiscard = () => {
     const src = profile || user;
     if (src) {
@@ -471,7 +756,16 @@ function DesktopContent() {
       toast(t('profile.phoneInvalid'), 'error');
       return;
     }
-    const payload = { ...formData, phone: normalizePhone(formData.phone) };
+    const usernameInvalid = validateRegisterUsername(formData.username, getPublicSettingsSnapshot(), t);
+    if (usernameInvalid) {
+      setUsernameError(usernameInvalid);
+      toast(usernameInvalid, 'error');
+      return;
+    }
+    // 邮箱不随资料保存修改（换绑走独立的两步验证流程），payload 里剔除
+    const { email: _ignoredEmail, ...rest } = formData;
+    void _ignoredEmail;
+    const payload = { ...rest, phone: normalizePhone(formData.phone) };
     setSaving(true);
     try {
       const updated = await authApi.updateProfile(payload);
@@ -586,19 +880,33 @@ function DesktopContent() {
                 name="username"
                 value={formData.username}
                 onChange={handleChange}
+                onBlur={handleUsernameBlur}
                 className="w-full bg-surface-container-lowest text-on-surface border-none border-l-2 border-transparent focus:border-primary focus:ring-0 px-4 py-2.5 text-sm transition-colors rounded-none"
                 type="text"
               />
+              {usernameError && <span className="text-xs text-error">{usernameError}</span>}
             </div>
             <div className="flex flex-col gap-1.5">
               <label className="text-xs uppercase tracking-wider text-on-surface-variant">{t('profile.email')}</label>
-              <input
-                name="email"
-                value={formData.email}
-                onChange={handleChange}
-                className="w-full bg-surface-container-lowest text-on-surface border-none border-l-2 border-transparent focus:border-primary focus:ring-0 px-4 py-2.5 text-sm transition-colors rounded-none"
-                type="email"
-              />
+              {/* 邮箱是登录凭证，不随资料修改——换绑走「换绑邮箱」两步验证流程 */}
+              <div className="flex items-center gap-2">
+                <input
+                  name="email"
+                  value={formData.email}
+                  readOnly
+                  className="w-full bg-surface-container-lowest/60 text-on-surface-variant border-none border-l-2 border-transparent px-4 py-2.5 text-sm rounded-none cursor-default select-text"
+                  type="email"
+                />
+                <button
+                  type="button"
+                  onClick={() => setEmailChangeOpen(true)}
+                  className="shrink-0 inline-flex items-center gap-1.5 rounded-sm border border-outline-variant/30 px-3 py-2 text-xs font-medium text-on-surface-variant hover:text-on-surface hover:border-outline-variant/60 transition-colors"
+                >
+                  <Icon name="sync_alt" size={14} />
+                  {t('profile.emailChange')}
+                </button>
+              </div>
+              <span className="text-[10px] text-on-surface-variant/50">{t('profile.emailReadonlyHint')}</span>
             </div>
             <div className="flex flex-col gap-1.5">
               <label className="text-xs uppercase tracking-wider text-on-surface-variant">{t('profile.bio')}</label>
@@ -664,17 +972,14 @@ function DesktopContent() {
                   placeholder={t('profile.phonePlaceholder')}
                 />
               </div>
-              <div className="flex flex-col gap-1.5">
+              <div className="flex flex-col gap-1.5 md:col-span-2">
                 <label className="text-xs uppercase tracking-wider text-on-surface-variant">
                   {t('profile.address')}
                 </label>
-                <input
-                  name="address"
-                  value={formData.address}
-                  onChange={handleChange}
-                  className="w-full bg-surface-container-lowest text-on-surface border-none border-l-2 border-transparent focus:border-primary focus:ring-0 px-4 py-2.5 text-sm transition-colors rounded-none"
-                  type="text"
-                  placeholder={t('profile.addressPlaceholder')}
+                {/* 与注册页同款省市区三级联动；回显已有地址（老数据反查不出时保留在详细框） */}
+                <RegionSelect
+                  onChange={(value) => setFormData((prev) => ({ ...prev, address: value }))}
+                  initialAddress={profile?.address || user?.address || ''}
                 />
               </div>
             </div>
@@ -732,6 +1037,11 @@ function DesktopContent() {
         </section>
       </div>
       <PasswordChangeDialog open={pwdOpen} onClose={() => setPwdOpen(false)} />
+      <EmailChangeDialog
+        open={emailChangeOpen}
+        onClose={() => setEmailChangeOpen(false)}
+        currentEmail={currentProfile?.email || ''}
+      />
     </PageBody>
   );
 }
@@ -744,6 +1054,7 @@ function MobileContent() {
   const navigate = useNavigate();
   const featureFlags = useFeatureFlags();
   const [pwdOpen, setPwdOpen] = useState(false);
+  const [emailChangeOpen, setEmailChangeOpen] = useState(false);
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [formData, setFormData] = useState({
@@ -1073,6 +1384,11 @@ function MobileContent() {
       {featureFlags.shares && <MobileSharesMenu />}
 
       <PasswordChangeDialog open={pwdOpen} onClose={() => setPwdOpen(false)} />
+      <EmailChangeDialog
+        open={emailChangeOpen}
+        onClose={() => setEmailChangeOpen(false)}
+        currentEmail={user?.email || ''}
+      />
     </PageBody>
   );
 }
