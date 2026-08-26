@@ -7,6 +7,7 @@ import { authApi } from '../api/auth';
 import { listShares, type ShareLink } from '../api/shares';
 import { AdminPageHero } from '../components/shared/AdminManagementPage';
 import { AdminPageShell } from '../components/shared/AdminPageShell';
+import { AppSwitch } from '../components/shared/FormControls';
 import Icon from '../components/shared/Icon';
 import { PageBody, PageHeader } from '../components/shared/PagePrimitives';
 import { PageRefreshIndicator } from '../components/shared/PageRefreshFallback';
@@ -63,17 +64,9 @@ function profileErrorMessage(error: unknown, fallback: string): string {
   return typeof message === 'string' && message ? message : fallback;
 }
 
+// 视觉规格统一走 AppSwitch（与设置页开关一致）
 function Toggle({ checked, onChange }: { checked: boolean; onChange: (v: boolean) => void }) {
-  return (
-    <button
-      onClick={() => onChange(!checked)}
-      className={`relative h-5 w-9 rounded-full transition-colors ${checked ? 'bg-primary-container' : 'bg-surface-container-highest'}`}
-    >
-      <span
-        className={`absolute top-0.5 h-4 w-4 rounded-full bg-on-surface transition-transform ${checked ? 'left-[18px]' : 'left-0.5'}`}
-      />
-    </button>
-  );
+  return <AppSwitch checked={checked} onChange={onChange} />;
 }
 
 function NotificationPrefsLoadingState({ compact = false }: { compact?: boolean }) {
