@@ -605,6 +605,12 @@ export default function SharePage() {
                 <Icon name="visibility" size={12} />
                 {t('sharePage.downloadTotal', { count: info.downloadCount })}
               </span>
+              {info.expiresAt && (
+                <span className="flex items-center gap-1">
+                  <Icon name="schedule" size={12} />
+                  {new Date(info.expiresAt).toLocaleDateString(i18n.language)}
+                </span>
+              )}
             </div>
           </div>
 
@@ -617,13 +623,6 @@ export default function SharePage() {
             <div className="bg-surface-container-high/50 rounded-lg p-3 text-center">
               <p className="text-xs text-on-surface-variant">{t('sharePage.infoOnly')}</p>
             </div>
-          )}
-
-          {/* Expiry notice */}
-          {info.expiresAt && (
-            <p className="text-xs text-on-surface-variant/50 text-center">
-              {t('sharePage.validUntil', { date: new Date(info.expiresAt).toLocaleDateString(i18n.language) })}
-            </p>
           )}
         </div>
 
