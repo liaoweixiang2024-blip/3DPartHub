@@ -1348,6 +1348,7 @@ export const zhCN: { translation: TranslationMap } = {
       drawingTitle: 'PDF 图纸',
       expiredDescription: '此分享链接已过期或已被撤销',
       expiredTitle: '链接已失效',
+      fileDownloads: '文件下载',
       footerPoweredBy: '由 {{siteTitle}} 驱动',
       infoOnly: '此链接仅用于查看信息',
       loadFailed: '加载失败',

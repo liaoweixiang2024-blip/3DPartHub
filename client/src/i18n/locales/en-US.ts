@@ -1356,6 +1356,7 @@ export const enUS: { translation: TranslationMap } = {
       drawingTitle: 'PDF drawing',
       expiredDescription: 'This share link has expired or been revoked',
       expiredTitle: 'Link expired',
+      fileDownloads: 'File downloads',
       footerPoweredBy: 'Powered by {{siteTitle}}',
       infoOnly: 'This link is for viewing information only',
       loadFailed: 'Load failed',

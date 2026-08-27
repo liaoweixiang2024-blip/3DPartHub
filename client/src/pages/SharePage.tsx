@@ -2,11 +2,16 @@ import { useState, useEffect, lazy, Suspense, useCallback, useRef, type CSSPrope
 import { useTranslation } from 'react-i18next';
 import { useParams, Link } from 'react-router-dom';
 import { getShareInfo, verifySharePassword, getShareDownloadUrl, type ShareInfo } from '../api/shares';
+import type { CameraPreset, ViewMode } from '../components/3d/ModelViewer';
 import { MATERIAL_PRESETS, type MaterialPresetKey } from '../components/3d/viewerControls';
-import { dispatchFitModel } from '../components/3d/viewerEvents';
+import { DEFAULT_VIEWER_TUNING, viewerTuningFromSettings, type ViewerTuning } from '../components/3d/viewerTuning';
 import BrandMark from '../components/shared/BrandMark';
 import Icon from '../components/shared/Icon';
-import { MODEL_DETAIL_MOBILE_BOTTOM_NAV_OFFSET } from '../components/shared/ModelDetailFrame';
+import {
+  MODEL_DETAIL_DOWNLOAD_ROW_INTERACTIVE_CLASS,
+  MODEL_DETAIL_MOBILE_BOTTOM_NAV_OFFSET,
+  MODEL_DETAIL_SECTION_TITLE_CLASS,
+} from '../components/shared/ModelDetailFrame';
 import { PageTitle } from '../components/shared/PagePrimitives';
 import PageRefreshFallback from '../components/shared/PageRefreshFallback';
 import { PublicPageShell } from '../components/shared/PublicPageShell';
@@ -19,14 +24,23 @@ import {
   prepareBrowserDownload,
 } from '../lib/browserDownload';
 import { getErrorMessage } from '../lib/errorNotifications';
-import { getDefaultPreset, getPublicSettingsSnapshot, getSiteTitle } from '../lib/publicSettings';
+import {
+  getCachedPublicSettings,
+  getDefaultPreset,
+  getPublicSettingsSnapshot,
+  getSiteTitle,
+} from '../lib/publicSettings';
 
 const isWechat = /MicroMessenger/i.test(navigator.userAgent);
 
+const loadCadViewerPanel = () => import('../components/3d/CadViewerPanel');
+const CadViewerPanel = lazy(loadCadViewerPanel);
+
+// 预取基础查看器模块（CadViewerPanel 内部按需加载；提前拉起缩短首次渲染等待）
 const loadModelViewer = () => import('../components/3d/ModelViewer');
-const ModelViewer = lazy(loadModelViewer);
 
 const VIEWER_PREFS_KEY = 'model_viewer_display_prefs_v1';
+const noop = () => {};
 
 // 无过期时间的分享，图纸链接用固定版本参数避免每次渲染生成不同 URL
 const modelVersionFallback = 1;
@@ -68,12 +82,49 @@ export default function SharePage() {
   const mobileDownloadBarRef = useRef<HTMLDivElement>(null);
   const [mobileDownloadBarHeight, setMobileDownloadBarHeight] = useState(0);
 
+  // 查看器显示状态（对齐详情页/临时预览页的访客态工具集）
+  const initialPrefs = useRef(getShareViewerPrefs()).current;
+  const [activeView, setActiveView] = useState<ViewMode>('solid');
+  const [activeCamera, setActiveCamera] = useState<CameraPreset>('iso');
+  const [showDimensions, setShowDimensions] = useState(false);
+  const [materialPreset, setMaterialPreset] = useState<MaterialPresetKey>(initialPrefs.materialPreset);
+  const [showEdges, setShowEdges] = useState(initialPrefs.showEdges);
+  const [showAxis, setShowAxis] = useState(false);
+  const [clipEnabled, setClipEnabled] = useState(false);
+  const [clipPosition, setClipPosition] = useState(0);
+  const [clipDirection, setClipDirection] = useState<'x' | 'y' | 'z'>('x');
+  const [clipInverted, setClipInverted] = useState(false);
+  const [viewerFullscreen, setViewerFullscreen] = useState(false);
+  const [viewerTuning, setViewerTuning] = useState<ViewerTuning>(DEFAULT_VIEWER_TUNING);
+
+  useEffect(() => {
+    getCachedPublicSettings()
+      .then((settings) => setViewerTuning(viewerTuningFromSettings(settings as Partial<ViewerTuning>)))
+      .catch(() => {});
+  }, []);
+
+  const handleResetDisplay = useCallback(() => {
+    setActiveView('solid');
+    setActiveCamera('iso');
+    setShowDimensions(false);
+    setMaterialPreset(initialPrefs.materialPreset);
+    setShowEdges(initialPrefs.showEdges);
+    setShowAxis(false);
+    setClipEnabled(false);
+    setClipDirection('x');
+    setClipPosition(0);
+    setClipInverted(false);
+  }, [initialPrefs.materialPreset, initialPrefs.showEdges]);
+
+  const handleResetViewerTuning = useCallback(() => setViewerTuning(DEFAULT_VIEWER_TUNING), []);
+
   useDocumentTitle(info ? `${info.modelName} - ${t('sharePage.preview')}` : t('sharePage.preview'));
 
   const loadInfo = useCallback(async () => {
     if (!token) return;
     try {
       const data = await getShareInfo(token);
+      if (data.allowPreview && data.gltfUrl) void loadCadViewerPanel();
       if (data.allowPreview && data.gltfUrl) void loadModelViewer();
       setInfo(data);
       setNeedPassword(data.hasPassword);
@@ -136,16 +187,8 @@ export default function SharePage() {
 
   useEffect(() => {
     if (isDesktop || !info?.allowPreview || !info.gltfUrl || mobilePreviewCtaHeight <= 0) return;
-
-    let secondFrame = 0;
-    const firstFrame = window.requestAnimationFrame(() => {
-      secondFrame = window.requestAnimationFrame(dispatchFitModel);
-    });
-
-    return () => {
-      window.cancelAnimationFrame(firstFrame);
-      if (secondFrame) window.cancelAnimationFrame(secondFrame);
-    };
+    // 移动端操作条高度变化后让查看器重新适配模型居中（面板内部响应 resize）
+    void mobilePreviewCtaHeight;
   }, [info?.allowPreview, info?.gltfUrl, isDesktop, mobilePreviewCtaHeight]);
 
   async function handleVerifyPassword() {
@@ -157,6 +200,7 @@ export default function SharePage() {
       setShareAccessToken(verified.accessToken);
       setPassword('');
       const data = await getShareInfo(token, verified.accessToken);
+      if (data.allowPreview && data.gltfUrl) void loadCadViewerPanel();
       if (data.allowPreview && data.gltfUrl) void loadModelViewer();
       setInfo(data);
       setNeedPassword(false);
@@ -304,52 +348,95 @@ export default function SharePage() {
       href: buildDrawingHref(info.drawingUrl),
     });
   }
-  const downloadLabel = downloading
-    ? t('sharePage.downloading')
-    : info.downloadLimit > 0
-      ? t('sharePage.downloadRemaining', { count: info.remainingDownloads })
-      : t('sharePage.download');
-  const renderDownloadButton = (showLimitText = true) =>
+  // 文件下载行（对齐模型详情页的卡片样式：格式徽章 + 文件名 + 大小 + 圆形操作钮）
+  const formatLabel = (info.format || 'STEP').toUpperCase();
+  const modelFileName = info.modelName || `${t('sharePage.preview')}.${(info.format || 'step').toLowerCase()}`;
+  const fileSizeLabel = formatSize(info.fileSize);
+  const limitText =
+    info.downloadLimit > 0
+      ? t('sharePage.downloadCount', { count: info.downloadCount, limit: info.downloadLimit })
+      : '';
+
+  const renderModelDownloadRow = (compact = false) =>
     info.allowDownload ? (
-      <div className="space-y-2">
-        <button
-          onClick={handleDownload}
-          disabled={downloadDisabled}
-          className="flex h-9 w-full items-center justify-center gap-2 rounded-lg bg-primary-container text-sm font-medium text-on-primary transition-transform hover:opacity-90 disabled:opacity-50 active:scale-[0.98]"
-        >
-          <Icon name="download" size={18} />
-          {downloadLabel}
-        </button>
-        {showLimitText && info.downloadLimit > 0 && (
-          <p className="text-center text-xs text-on-surface-variant">
-            {t('sharePage.downloadCount', { count: info.downloadCount, limit: info.downloadLimit })}
-          </p>
-        )}
-      </div>
+      <button
+        type="button"
+        onClick={handleDownload}
+        disabled={downloadDisabled}
+        className={`${MODEL_DETAIL_DOWNLOAD_ROW_INTERACTIVE_CLASS} ${compact ? 'min-h-0 py-1.5' : ''} cursor-pointer text-left disabled:opacity-50`}
+        title={downloading ? t('sharePage.downloading') : modelFileName}
+      >
+        <div className="flex items-center gap-3 min-w-0 flex-1">
+          <div
+            className={`${compact ? 'h-7 w-7' : 'h-9 w-9'} rounded-lg bg-primary-container/10 flex items-center justify-center shrink-0`}
+          >
+            <span className={`${compact ? 'text-[8px]' : 'text-[10px]'} font-bold text-primary-container`}>
+              {formatLabel.slice(0, 4)}
+            </span>
+          </div>
+          <div className="min-w-0">
+            <div className={`${compact ? 'text-xs' : 'text-sm'} font-medium text-on-surface truncate`}>
+              {downloading ? t('sharePage.downloading') : modelFileName}
+            </div>
+            <div className={`${compact ? 'text-[10px]' : 'text-[11px]'} text-on-surface-variant mt-0.5`}>
+              {formatLabel} · {fileSizeLabel}
+              {info.downloadLimit > 0 && ` · ${t('sharePage.downloadRemaining', { count: info.remainingDownloads })}`}
+            </div>
+          </div>
+        </div>
+        <div className="ml-auto flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary active:scale-90 transition-all">
+          <Icon name="download" size={16} />
+        </div>
+      </button>
     ) : null;
 
-  // 移动端底部操作条里的图纸入口（桌面端在信息面板里已有）
-  const renderMobileDrawingButton = () =>
-    drawingEntries.length > 0 ? (
-      <>
-        {drawingEntries.map((drawing, index) => (
-          <a
-            key={drawing.id || `drawing-${index}`}
-            href={drawing.href}
-            target="_blank"
-            rel="noopener noreferrer"
-            onClick={(event) => {
-              event.preventDefault();
-              openDocumentUrl(drawing.href, { title: drawing.name || t('sharePage.drawingTitle') });
-            }}
-            className="flex h-9 w-full items-center justify-center gap-2 rounded-lg bg-surface-container-high text-sm font-medium text-on-surface transition-colors hover:bg-surface-container-highest active:scale-[0.98]"
+  const renderDrawingRow = (drawing: { id: string; name: string; href: string }, compact = false, keySuffix = '') => (
+    <a
+      key={drawing.id || `drawing-${keySuffix}`}
+      href={drawing.href}
+      target="_blank"
+      rel="noopener noreferrer"
+      onClick={(event) => {
+        event.preventDefault();
+        openDocumentUrl(drawing.href, { title: drawing.name || t('sharePage.drawingTitle') });
+      }}
+      className={`${MODEL_DETAIL_DOWNLOAD_ROW_INTERACTIVE_CLASS} ${compact ? 'min-h-0 py-1.5' : ''} cursor-pointer text-left`}
+    >
+      <div className="flex items-center gap-3 min-w-0 flex-1">
+        <div
+          className={`${compact ? 'h-7 w-7' : 'h-9 w-9'} rounded-lg bg-error/10 flex items-center justify-center shrink-0`}
+        >
+          <span className={`${compact ? 'text-[8px]' : 'text-[10px]'} font-bold text-error`}>PDF</span>
+        </div>
+        <div className="min-w-0">
+          <div
+            className={`${compact ? 'text-xs' : 'text-sm'} font-medium text-on-surface truncate`}
+            title={drawing.name}
           >
-            <Icon name="description" size={18} />
-            <span className="truncate">{drawing.name || t('sharePage.drawingTitle')}</span>
-            <Icon name="open_in_new" size={16} className="text-on-surface-variant/50 shrink-0" />
-          </a>
-        ))}
-      </>
+            {drawing.name || t('sharePage.drawingTitle')}
+          </div>
+          <div className={`${compact ? 'text-[10px]' : 'text-[11px]'} text-on-surface-variant mt-0.5`}>PDF</div>
+        </div>
+      </div>
+      <div className="ml-auto flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
+        <Icon name="open_in_new" size={15} />
+      </div>
+    </a>
+  );
+
+  // 文件下载区块（桌面信息面板用；行间距对齐详情页）
+  const hasDownloadSection = info.allowDownload || drawingEntries.length > 0;
+  const renderDownloadSection = (compact = false) =>
+    hasDownloadSection ? (
+      <div>
+        {!compact && <div className={MODEL_DETAIL_SECTION_TITLE_CLASS}>{t('sharePage.fileDownloads')}</div>}
+        <div className="flex flex-col gap-1.5">
+          {renderModelDownloadRow(compact)}
+          {drawingEntries.map((drawing, index) => renderDrawingRow(drawing, compact, String(index)))}
+        </div>
+        {!compact && limitText && <p className="mt-2 text-xs text-on-surface-variant">{limitText}</p>}
+        {compact && limitText && <p className="mt-1.5 px-1 text-[10px] text-on-surface-variant">{limitText}</p>}
+      </div>
     ) : null;
 
   // Main share page
@@ -383,18 +470,48 @@ export default function SharePage() {
                   </div>
                 }
               >
-                <ModelViewer
+                <CadViewerPanel
+                  variant={isDesktop ? 'desktop' : 'mobile'}
+                  isAdmin={false}
                   modelUrl={info.gltfUrl}
-                  viewMode="solid"
-                  cameraPreset="iso"
-                  showDimensions={false}
-                  showGrid={true}
-                  clipEnabled={false}
-                  clipDirection="x"
-                  clipPosition={0}
-                  materialPreset={getShareViewerPrefs().materialPreset}
-                  showEdges={getShareViewerPrefs().showEdges}
-                  showAxis={false}
+                  modelName={info.modelName}
+                  modelFormat={info.format}
+                  modelFileSize={formatSize(info.fileSize)}
+                  activeView={activeView}
+                  onViewChange={setActiveView}
+                  activeCamera={activeCamera}
+                  onCameraChange={setActiveCamera}
+                  showDimensions={showDimensions}
+                  onToggleDimensions={() => setShowDimensions(!showDimensions)}
+                  materialPreset={materialPreset}
+                  onMaterialChange={setMaterialPreset}
+                  showEdges={showEdges}
+                  onToggleEdges={() => setShowEdges(!showEdges)}
+                  clipEnabled={clipEnabled}
+                  onToggleClip={() => setClipEnabled((enabled) => !enabled)}
+                  clipPosition={clipPosition}
+                  onClipPositionChange={setClipPosition}
+                  clipDirection={clipDirection}
+                  onClipDirectionChange={setClipDirection}
+                  clipInverted={clipInverted}
+                  onToggleClipInverted={() => setClipInverted((inverted) => !inverted)}
+                  onResetClip={() => {
+                    setClipDirection('x');
+                    setClipPosition(0);
+                    setClipInverted(false);
+                  }}
+                  showAxis={showAxis}
+                  onToggleAxis={() => setShowAxis(!showAxis)}
+                  onResetDisplay={handleResetDisplay}
+                  tuningOpen={false}
+                  onToggleTuning={noop}
+                  viewerTuning={viewerTuning}
+                  onViewerTuningChange={setViewerTuning}
+                  onApplyViewerPreset={setViewerTuning}
+                  onResetViewerTuning={handleResetViewerTuning}
+                  onSaveViewerTuning={noop}
+                  viewerTuningSaving={false}
+                  onPseudoFullscreenChange={setViewerFullscreen}
                 />
               </Suspense>
             </div>
@@ -432,29 +549,8 @@ export default function SharePage() {
 
           {info.description && <p className="text-sm text-on-surface-variant break-words">{info.description}</p>}
 
-          {/* Drawings */}
-          {drawingEntries.map((drawing, index) => (
-            <a
-              key={drawing.id || `drawing-${index}`}
-              href={drawing.href}
-              target="_blank"
-              rel="noopener noreferrer"
-              onClick={(event) => {
-                event.preventDefault();
-                openDocumentUrl(drawing.href, { title: drawing.name || t('sharePage.drawingTitle') });
-              }}
-              className="flex items-center gap-3 rounded-lg bg-surface-container-high px-4 py-3 text-sm text-on-surface hover:bg-surface-container-highest transition-colors"
-            >
-              <Icon name="description" size={20} className="text-on-surface-variant shrink-0" />
-              <span className="truncate" title={drawing.name}>
-                {drawing.name || t('sharePage.drawingTitle')}
-              </span>
-              <Icon name="open_in_new" size={16} className="text-on-surface-variant/50 shrink-0 ml-auto" />
-            </a>
-          ))}
-
-          {/* Download button */}
-          <div className="hidden md:block">{renderDownloadButton()}</div>
+          {/* File downloads（卡片行样式对齐详情页） */}
+          <div className="hidden md:block">{renderDownloadSection()}</div>
 
           {!info.allowPreview && !info.allowDownload && (
             <div className="bg-surface-container-high/50 rounded-lg p-3 text-center">
@@ -470,19 +566,16 @@ export default function SharePage() {
           )}
         </div>
 
-        {hasMobileActionBar ? (
+        {hasMobileActionBar && !viewerFullscreen ? (
           <div className="pointer-events-none absolute inset-x-0 bottom-0 z-30 md:hidden">
             <div
               ref={mobileDownloadBarRef}
               className="pointer-events-auto rounded-t-xl border-t border-outline-variant/10 bg-surface-container-low/95 px-2.5 pb-2.5 pt-3 backdrop-blur-md"
             >
-              <h2 className="mb-2 line-clamp-2 break-words px-0.5 text-sm font-bold leading-[1.15rem] text-on-surface">
+              <h2 className="mb-2 line-clamp-1 break-words px-0.5 text-sm font-bold leading-tight text-on-surface">
                 {info.modelName}
               </h2>
-              <div className="space-y-2">
-                {renderDownloadButton(false)}
-                {renderMobileDrawingButton()}
-              </div>
+              {renderDownloadSection(true)}
             </div>
           </div>
         ) : null}
