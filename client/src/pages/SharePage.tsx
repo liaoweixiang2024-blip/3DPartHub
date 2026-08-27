@@ -610,15 +610,20 @@ export default function SharePage() {
         <div className="hidden w-full shrink-0 space-y-4 border-t border-outline-variant/10 bg-surface-container-low p-5 md:block md:w-80 md:border-l md:border-t-0">
           <div>
             <PageTitle className="break-words text-lg md:text-lg md:normal-case">{info.modelName}</PageTitle>
-            {/* 一行紧凑元信息：格式 · 大小 · 下载数 · 有效期 */}
-            <div className="mt-1.5 flex flex-wrap items-baseline gap-x-1.5 gap-y-1 text-xs text-on-surface-variant">
-              <span className="font-medium">{formatLabel}</span>
-              <span aria-hidden="true">·</span>
-              <span>{fileSizeLabel}</span>
-              <span aria-hidden="true">·</span>
-              <span>{t('sharePage.downloadCountShort', { count: info.downloadCount })}</span>
-              <span aria-hidden="true">·</span>
-              <span title={info.expiresAt || undefined}>{formatExpiryShort(info.expiresAt, t)}</span>
+            {/* 一行紧凑元信息：格式 · 大小 · 有效期（下载次数去掉，图标回归保持美观） */}
+            <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-on-surface-variant">
+              <span className="flex items-center gap-1">
+                <Icon name="description" size={12} />
+                {formatLabel}
+              </span>
+              <span className="flex items-center gap-1">
+                <Icon name="data_usage" size={12} />
+                {fileSizeLabel}
+              </span>
+              <span className="flex items-center gap-1" title={info.expiresAt || undefined}>
+                <Icon name="schedule" size={12} />
+                {formatExpiryShort(info.expiresAt, t)}
+              </span>
             </div>
           </div>
 
