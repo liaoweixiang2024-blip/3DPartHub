@@ -462,7 +462,8 @@ export default function SharePage() {
         {/* 3D Preview */}
         {info.allowPreview && info.gltfUrl ? (
           <div className="relative min-h-0 flex-1 bg-surface-container">
-            <div className="absolute inset-x-0 top-0 bottom-[var(--share-mobile-cta-height)] md:bottom-0">
+            {/* 移动端给底部操作条让位；桌面端面板自身是 flex 子元素需铺满父级 */}
+            <div className="absolute inset-x-0 top-0 bottom-[var(--share-mobile-cta-height)] md:static md:inset-auto md:h-full">
               <Suspense
                 fallback={
                   <div className="w-full h-full flex items-center justify-center">
