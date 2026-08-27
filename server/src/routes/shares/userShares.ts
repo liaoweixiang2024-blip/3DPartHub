@@ -146,6 +146,51 @@ export function createUserSharesRouter() {
       const hashedPassword = password ? await bcrypt.hash(password, 10) : null;
 
       const hasAllowDrawingColumn = await hasShareAllowDrawingColumn();
+      const upsertSelect = shareLinkListSelect(hasAllowDrawingColumn);
+
+      // 去重：同一用户对同一模型只保留一条自己的分享链接。
+      // 已有未过期链接 → 复用（token 不变，老链接继续可用），仅按本次提交更新设置；
+      // 已过期链接 → 走下方新建（用户重新分享拿新 token），旧行保留做记录。
+      const existing = await prisma.shareLink.findFirst({
+        where: { modelId, createdById: userId },
+        orderBy: { createdAt: 'desc' },
+        select: upsertSelect,
+      });
+      const existingAlive =
+        existing && (!existing.expiresAt || new Date(existing.expiresAt) > new Date()) ? existing : null;
+
+      if (existingAlive) {
+        const updated = await prisma.shareLink.update({
+          where: { id: existingAlive.id },
+          data: {
+            password: hashedPassword,
+            allowPreview,
+            allowDownload,
+            downloadLimit,
+            expiresAt: finalExpiresAt,
+            ...(hasAllowDrawingColumn ? { allowDrawing } : {}),
+          },
+          select: upsertSelect,
+        });
+
+        res.json({
+          id: updated.id,
+          token: updated.token,
+          allowPreview: updated.allowPreview,
+          allowDownload: updated.allowDownload,
+          allowDrawing: updated.allowDrawing ?? true,
+          downloadLimit: updated.downloadLimit,
+          downloadCount: updated.downloadCount,
+          viewCount: updated.viewCount,
+          hasPassword: !!updated.password,
+          expiresAt: updated.expiresAt,
+          createdAt: updated.createdAt,
+          url: `${req.protocol}://${req.get('host')}/share/${updated.token}`,
+          reused: true,
+        });
+        return;
+      }
+
       const createData = {
         modelId,
         token,
@@ -176,6 +221,7 @@ export function createUserSharesRouter() {
         expiresAt: share.expiresAt,
         createdAt: share.createdAt,
         url: `${req.protocol}://${req.get('host')}/share/${share.token}`,
+        reused: false,
       });
     } catch (err) {
       logger.error({ err }, '[Shares] Create error');

@@ -1,7 +1,7 @@
 import { AnimatePresence, motion } from 'framer-motion';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { createShare, type CreateShareParams } from '../../api/shares';
+import { createShare, listModelShares, type CreateShareParams } from '../../api/shares';
 import { useMediaQuery } from '../../layouts/hooks/useMediaQuery';
 import { copyText } from '../../lib/clipboard';
 import { getErrorMessage } from '../../lib/errorNotifications';
@@ -45,6 +45,33 @@ export default function ShareDialog({ open, onClose, modelId, modelName }: Share
   const [shareUrl, setShareUrl] = useState('');
   const [copied, setCopied] = useState(false);
   const [error, setError] = useState('');
+  // 已有未过期的分享链接（后端同用户+同模型只保留一条，打开时预取直接展示）
+  const [existingShare, setExistingShare] = useState<{ token: string } | null>(null);
+  // 本次提交命中后端复用（更新已有链接）时置 true，用于结果视图文案
+  const [reused, setReused] = useState(false);
+
+  useEffect(() => {
+    if (!open) return;
+    setExistingShare(null);
+    listModelShares(modelId)
+      .then((shares) => {
+        const alive = shares.find((s) => !s.expiresAt || new Date(s.expiresAt) > new Date());
+        if (alive) setExistingShare({ token: alive.token });
+      })
+      .catch(() => {
+        // 预取失败不阻塞弹窗，走正常新建/后端复用
+      });
+  }, [open, modelId]);
+
+  useEffect(() => {
+    if (existingShare && !shareUrl) {
+      setShareUrl(`${window.location.origin}/share/${existingShare.token}`);
+    }
+  }, [existingShare, shareUrl]);
+
+  useEffect(() => {
+    if (open) setReused(false);
+  }, [open]);
 
   // Build expiry options based on policy
   const expiryOptions = (() => {
@@ -76,7 +103,10 @@ export default function ShareDialog({ open, onClose, modelId, modelName }: Share
       };
       const result = await createShare(params);
       setShareUrl(`${window.location.origin}/share/${result.token}`);
-      toast(t('shareDialog.toasts.created'), 'success');
+      // 后端复用了已有链接（同用户+同模型去重）时提示「已更新」而非「已创建」
+      const wasReused = (result as { reused?: boolean }).reused === true;
+      setReused(wasReused);
+      toast(wasReused ? t('shareDialog.toasts.updated') : t('shareDialog.toasts.created'), 'success');
     } catch (err: unknown) {
       setError(getErrorMessage(err, t('shareDialog.errors.createFailed')));
     } finally {
@@ -96,8 +126,10 @@ export default function ShareDialog({ open, onClose, modelId, modelName }: Share
   }
 
   function handleReset() {
+    // 「重新配置」：回到表单（保存时后端仍会更新同一条链接，不会产生新链接）
     setShareUrl('');
     setCopied(false);
+    setReused(false);
     setAllowPreview(defaultAllowPreview);
     setAllowDownload(true);
     setAllowDrawing(true);
@@ -158,7 +190,12 @@ export default function ShareDialog({ open, onClose, modelId, modelName }: Share
                   {shareUrl ? (
                     <div className="space-y-3">
                       <div className="bg-primary/10 border border-primary/20 rounded-lg p-3">
-                        <p className="text-xs text-primary font-medium mb-2">{t('shareDialog.linkCreated')}</p>
+                        <p className="text-xs text-primary font-medium mb-2">
+                          {existingShare || reused ? t('shareDialog.linkExisting') : t('shareDialog.linkCreated')}
+                        </p>
+                        {existingShare && !reused && (
+                          <p className="text-[11px] text-on-surface-variant mb-2">{t('shareDialog.reusedNotice')}</p>
+                        )}
                         <div className="flex flex-col sm:flex-row sm:items-center gap-2">
                           <input
                             type="text"
@@ -325,7 +362,11 @@ export default function ShareDialog({ open, onClose, modelId, modelName }: Share
                         disabled={creating}
                         className="w-full py-2.5 text-sm font-bold bg-primary-container text-on-primary rounded-lg hover:opacity-90 disabled:opacity-50 active:scale-[0.98] transition-all"
                       >
-                        {creating ? t('shareDialog.creating') : t('shareDialog.createLink')}
+                        {creating
+                          ? t('shareDialog.creating')
+                          : existingShare
+                            ? t('shareDialog.updateSettings')
+                            : t('shareDialog.createLink')}
                       </button>
                     </>
                   )}

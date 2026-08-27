@@ -97,7 +97,7 @@ export const enUS: { translation: TranslationMap } = {
       allowPreviewDesc: 'The share page can view the 3D model',
       copied: 'Copied',
       copy: 'Copy',
-      createAnother: 'Create another',
+      createAnother: 'Reconfigure',
       createLink: 'Create share link',
       creating: 'Creating...',
       description: 'Share "{{name}}" for viewing or downloading',
@@ -109,6 +109,10 @@ export const enUS: { translation: TranslationMap } = {
       expiryLabel: 'Expiry',
       expiryLabelWithMax: 'Expiry (max {{max}} days)',
       linkCreated: 'Share link created',
+      linkExisting: 'Your share link',
+      reusedNotice:
+        'You have already shared this model — the existing link is reused (one link per model; settings update on save)',
+      updateSettings: 'Update share settings',
       passwordPlaceholder: 'Enter access password',
       passwordProtect: 'Password protection',
       title: 'Share Model',
@@ -126,6 +130,7 @@ export const enUS: { translation: TranslationMap } = {
       toasts: {
         copied: 'Share link copied to clipboard',
         created: 'Model share created',
+        updated: 'Share settings updated',
       },
     },
     nav: {

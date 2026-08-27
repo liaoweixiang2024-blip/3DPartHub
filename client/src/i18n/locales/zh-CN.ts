@@ -96,7 +96,7 @@ export const zhCN: { translation: TranslationMap } = {
       allowPreviewDesc: '分享页面可以查看 3D 模型',
       copied: '已复制',
       copy: '复制',
-      createAnother: '继续创建',
+      createAnother: '重新配置',
       createLink: '创建分享链接',
       creating: '创建中...',
       description: '分享「{{name}}」给其他人查看或下载',
@@ -108,6 +108,9 @@ export const zhCN: { translation: TranslationMap } = {
       expiryLabel: '有效期',
       expiryLabelWithMax: '有效期（最长 {{max}} 天）',
       linkCreated: '分享链接已创建',
+      linkExisting: '你的分享链接',
+      reusedNotice: '你之前已分享过此模型，这里直接复用现有链接（同一模型只保留一条，设置更新后生效）',
+      updateSettings: '更新分享设置',
       passwordPlaceholder: '输入访问密码',
       passwordProtect: '密码保护',
       title: '分享模型',
@@ -125,6 +128,7 @@ export const zhCN: { translation: TranslationMap } = {
       toasts: {
         copied: '分享链接已复制到剪贴板',
         created: '模型分享已创建',
+        updated: '分享设置已更新',
       },
     },
     nav: {

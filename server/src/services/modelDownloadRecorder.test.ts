@@ -18,8 +18,9 @@ function createPrismaMock(existingDownloadCount = 0) {
         calls.push('count');
         return existingDownloadCount;
       },
-      create: async () => {
-        calls.push('download.create');
+      upsert: async () => {
+        // 下载历史去重：同用户+模型+格式只留一行（mock 与生产同款调用序列）
+        calls.push('download.upsert');
       },
     },
     model: {
@@ -70,7 +71,7 @@ test('records authenticated downloads inside a transaction', async () => {
     noRecord: false,
   });
 
-  assert.deepEqual(calls, ['transaction', 'lock', 'count', 'download.create', 'tx.model.update']);
+  assert.deepEqual(calls, ['transaction', 'lock', 'count', 'download.upsert', 'tx.model.update']);
 });
 
 test('still records authenticated download when noRecord is true and daily limit is enabled', async () => {
@@ -85,7 +86,7 @@ test('still records authenticated download when noRecord is true and daily limit
     noRecord: true,
   });
 
-  assert.deepEqual(calls, ['transaction', 'lock', 'count', 'download.create', 'tx.model.update']);
+  assert.deepEqual(calls, ['transaction', 'lock', 'count', 'download.upsert', 'tx.model.update']);
 });
 
 test('skips authenticated download record when noRecord is true and no daily limit is configured', async () => {

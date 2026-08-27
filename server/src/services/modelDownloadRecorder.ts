@@ -62,13 +62,13 @@ export async function recordModelDownload(prisma: DownloadRecorderPrisma, option
     }
 
     if (!noRecord || dailyLimit > 0) {
-      await tx.download.create({
-        data: {
-          userId,
-          modelId,
-          format,
-          fileSize,
-        },
+      // 下载历史去重：同一用户+模型+格式只保留一行，重复下载仅刷新时间置顶。
+      // 注意：dailyLimit 计数依赖本表行数，去重后限额按「当天下载的不同模型数」计
+      //（同模型重复下载不消耗额度）——语义比之前宽松，属预期变化。
+      await tx.download.upsert({
+        where: { userId_modelId_format: { userId, modelId, format } },
+        create: { userId, modelId, format, fileSize },
+        update: { createdAt: new Date(), fileSize },
       });
     }
 
@@ -82,34 +82,39 @@ export async function recordModelDownload(prisma: DownloadRecorderPrisma, option
 export async function recordQueuedModelDownloads(prisma: DownloadRecorderPrisma, records: QueuedModelDownloadRecord[]) {
   if (records.length === 0) return;
 
-  const downloads = records
-    .filter((record) => record.userId)
-    .map((record) => ({
-      userId: record.userId!,
+  // 下载历史去重：批内先按 (userId, modelId, format) 合并，再逐键 upsert（同键只留一行，时间刷新）
+  const deduped = new Map<string, { userId: string; modelId: string; format: string; fileSize: number }>();
+  for (const record of records) {
+    if (!record.userId) continue;
+    const key = `${record.userId}\0${record.modelId}\0${record.format}`;
+    deduped.set(key, {
+      userId: record.userId,
       modelId: record.modelId,
       format: record.format,
       fileSize: record.fileSize,
-    }));
+    });
+  }
 
   const increments = new Map<string, number>();
   for (const record of records) {
     increments.set(record.modelId, (increments.get(record.modelId) || 0) + 1);
   }
 
-  const operations: Prisma.PrismaPromise<unknown>[] = [];
-  if (downloads.length > 0) {
-    operations.push(prisma.download.createMany({ data: downloads }));
-  }
-  for (const [modelId, count] of increments) {
-    operations.push(
-      prisma.model.update({
+  await prisma.$transaction(async (tx: DownloadRecorderTransaction) => {
+    for (const item of deduped.values()) {
+      await tx.download.upsert({
+        where: {
+          userId_modelId_format: { userId: item.userId, modelId: item.modelId, format: item.format },
+        },
+        create: { userId: item.userId, modelId: item.modelId, format: item.format, fileSize: item.fileSize },
+        update: { createdAt: new Date(), fileSize: item.fileSize },
+      });
+    }
+    for (const [modelId, count] of increments) {
+      await tx.model.update({
         where: { id: modelId },
         data: { downloadCount: { increment: count } },
-      }),
-    );
-  }
-
-  if (operations.length > 0) {
-    await prisma.$transaction(operations);
-  }
+      });
+    }
+  });
 }

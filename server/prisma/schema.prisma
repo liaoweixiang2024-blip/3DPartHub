@@ -296,6 +296,7 @@ model Download {
   fileSize  Int      @map("file_size")
   createdAt DateTime @default(now()) @map("created_at")
 
+  @@unique([userId, modelId, format], map: "downloads_user_model_format_key")
   @@index([userId])
   @@index([userId, createdAt])
   @@index([modelId])

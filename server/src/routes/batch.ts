@@ -205,18 +205,27 @@ router.post('/api/batch/download', authMiddleware, requireRole('ADMIN'), async (
     await outputClosed;
 
     // Record downloads only for models actually archived
+    // （下载历史去重：同用户+模型+格式只留一行，重复打包仅刷新时间）
     for (const model of models) {
       const archived = archivedModels.get(model.id);
       if (!archived) continue;
       try {
         await prisma.$transaction([
-          prisma.download.create({
-            data: {
+          prisma.download.upsert({
+            where: {
+              userId_modelId_format: {
+                userId: req.user!.userId,
+                modelId: model.id,
+                format: archived.format,
+              },
+            },
+            create: {
               userId: req.user!.userId,
               modelId: model.id,
               format: archived.format,
               fileSize: archived.fileSize,
             },
+            update: { createdAt: new Date(), fileSize: archived.fileSize },
           }),
           prisma.model.update({
             where: { id: model.id },
