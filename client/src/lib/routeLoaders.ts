@@ -16,6 +16,7 @@ export const loadFavoritesPage = () => import('../pages/FavoritesPage');
 export const loadMySharesPage = () => import('../pages/MySharesPage');
 export const loadMyInvitesPage = () => import('../pages/MyInvitesPage');
 export const loadProfilePage = () => import('../pages/ProfilePage');
+export const loadNotificationsPage = () => import('../pages/NotificationsPage');
 export const loadSupportPage = () => import('../pages/SupportPage');
 export const loadMyTicketsPage = () => import('../pages/MyTicketsPage');
 export const loadLoginPage = () => import('../pages/LoginPage');
@@ -73,6 +74,7 @@ const exactRouteLoaders = new Map<string, RouteModuleLoader>([
   ['/my-shares', loadMySharesPage],
   ['/my-invites', loadMyInvitesPage],
   ['/profile', loadProfilePage],
+  ['/notifications', loadNotificationsPage],
   ['/support', loadSupportPage],
   ['/my-tickets', loadMyTicketsPage],
   ['/my-inquiries', loadMyInquiriesPage],
@@ -151,6 +153,7 @@ export function warmRouteModules(role?: string) {
     loadFavoritesPage,
     loadMySharesPage,
     loadProfilePage,
+    loadNotificationsPage,
     loadSupportPage,
     loadMyTicketsPage,
     loadMyInquiriesPage,

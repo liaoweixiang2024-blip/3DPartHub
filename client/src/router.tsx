@@ -33,6 +33,7 @@ import {
   loadMyInvitesPage,
   loadMySharesPage,
   loadMyTicketsPage,
+  loadNotificationsPage,
   loadProductWallPage,
   loadProfilePage,
   loadProjectDetailPage,
@@ -65,6 +66,7 @@ const MySharesPage = lazy(loadMySharesPage);
 const MyInvitesPage = lazy(loadMyInvitesPage);
 const InviteAdminPage = lazy(loadInviteAdminPage);
 const ProfilePage = lazy(loadProfilePage);
+const NotificationsPage = lazy(loadNotificationsPage);
 const SupportPage = lazy(loadSupportPage);
 const MyTicketsPage = lazy(loadMyTicketsPage);
 const LoginPage = lazy(loadLoginPage);
@@ -629,6 +631,14 @@ export default function Router() {
             element={
               <ProtectedPage>
                 <ProfilePage />
+              </ProtectedPage>
+            }
+          />
+          <Route
+            path="/notifications"
+            element={
+              <ProtectedPage>
+                <NotificationsPage />
               </ProtectedPage>
             }
           />

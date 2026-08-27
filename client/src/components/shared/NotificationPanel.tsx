@@ -427,6 +427,17 @@ export default function NotificationPanel({
             />
           ))}
       </div>
+
+      {/* Footer — full history page entry */}
+      <div className="shrink-0 border-t border-outline-variant/15">
+        <button
+          onClick={() => handleNavigate('/notifications')}
+          className="flex w-full items-center justify-center gap-1 py-2.5 text-[11px] font-medium text-primary-container transition-colors hover:bg-surface-container-highest/50"
+        >
+          <span>{t('notificationPanel.viewAll')}</span>
+          <Icon name="chevron_right" size={12} />
+        </button>
+      </div>
     </div>
   );
 

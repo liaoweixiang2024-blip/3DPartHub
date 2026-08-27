@@ -34,7 +34,13 @@ router.get('/api/notifications', authMiddleware, async (req: AuthRequest, res: R
     const maxPageSize = Math.max(1, Math.floor(Number(pageSizePolicy.notificationMax) || 100));
     const page = Math.max(1, Number(req.query.page) || 1);
     const pageSize = Math.min(maxPageSize, Math.max(1, Number(req.query.page_size) || defaultPageSize));
-    const where = { userId: req.user!.userId };
+    // 可选筛选：read=unread|read；type=通知类型（ticket/inquiry/favorite/download/...）
+    const readFilter = req.query.read;
+    const typeFilter = typeof req.query.type === 'string' && req.query.type.trim() ? req.query.type.trim() : null;
+    const where: { userId: string; read?: boolean; type?: string } = { userId: req.user!.userId };
+    if (readFilter === 'unread') where.read = false;
+    else if (readFilter === 'read') where.read = true;
+    if (typeFilter) where.type = typeFilter;
 
     const [total, notifications] = await Promise.all([
       prisma.notification.count({ where }),

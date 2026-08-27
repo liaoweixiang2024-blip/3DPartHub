@@ -12,11 +12,25 @@ export interface Notification {
   createdAt: string;
 }
 
-export async function getNotifications(page = 1, pageSize = 20) {
-  const res = await client.get(`/notifications?page=${page}&page_size=${pageSize}`);
+export type NotificationReadFilter = 'all' | 'unread' | 'read';
+
+export async function getNotifications(
+  page = 1,
+  pageSize = 20,
+  options?: { read?: NotificationReadFilter; type?: string },
+) {
+  const params = new URLSearchParams({ page: String(page), page_size: String(pageSize) });
+  if (options?.read && options.read !== 'all') params.set('read', options.read);
+  if (options?.type) params.set('type', options.type);
+  const res = await client.get(`/notifications?${params.toString()}`);
   // ResponseHandler wraps as { success: true, data: { data: [...], total } }
   // Extract just the first data layer to preserve inner structure
-  return (res.data as { data: unknown }).data as { data: Notification[]; total: number };
+  return (res.data as { data: unknown }).data as {
+    data: Notification[];
+    total: number;
+    page: number;
+    page_size: number;
+  };
 }
 
 export async function getUnreadCount() {
