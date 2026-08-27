@@ -49,10 +49,13 @@ export default function ShareDialog({ open, onClose, modelId, modelName }: Share
   const [existingShare, setExistingShare] = useState<{ token: string } | null>(null);
   // 本次提交命中后端复用（更新已有链接）时置 true，用于结果视图文案
   const [reused, setReused] = useState(false);
+  // 「重新配置」模式：置 true 后不再自动回填已有链接，直到弹窗重开
+  const [reconfiguring, setReconfiguring] = useState(false);
 
   useEffect(() => {
     if (!open) return;
     setExistingShare(null);
+    setReconfiguring(false);
     listModelShares(modelId)
       .then((shares) => {
         const alive = shares.find((s) => !s.expiresAt || new Date(s.expiresAt) > new Date());
@@ -63,11 +66,12 @@ export default function ShareDialog({ open, onClose, modelId, modelName }: Share
       });
   }, [open, modelId]);
 
+  // 打开且未在重新配置时，有已有链接直接展示（可复制）
   useEffect(() => {
-    if (existingShare && !shareUrl) {
+    if (existingShare && !shareUrl && !reconfiguring) {
       setShareUrl(`${window.location.origin}/share/${existingShare.token}`);
     }
-  }, [existingShare, shareUrl]);
+  }, [existingShare, shareUrl, reconfiguring]);
 
   useEffect(() => {
     if (open) setReused(false);
@@ -127,6 +131,7 @@ export default function ShareDialog({ open, onClose, modelId, modelName }: Share
 
   function handleReset() {
     // 「重新配置」：回到表单（保存时后端仍会更新同一条链接，不会产生新链接）
+    setReconfiguring(true);
     setShareUrl('');
     setCopied(false);
     setReused(false);
