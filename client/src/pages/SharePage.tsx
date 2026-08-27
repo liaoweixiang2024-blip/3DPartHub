@@ -465,62 +465,118 @@ export default function SharePage() {
       >
         {/* 3D Preview */}
         {info.allowPreview && info.gltfUrl ? (
-          <div className="relative min-h-0 flex-1 bg-surface-container">
-            {/* 移动端给底部操作条让位；桌面端面板自身是 flex 子元素需铺满父级 */}
-            <div className="absolute inset-x-0 top-0 bottom-[var(--share-mobile-cta-height)] md:static md:inset-auto md:h-full">
-              <Suspense
-                fallback={
-                  <div className="w-full h-full flex items-center justify-center">
-                    <Icon name="view_in_ar" size={48} className="text-on-surface-variant/20 animate-pulse" />
-                  </div>
-                }
-              >
-                <CadViewerPanel
-                  variant={isDesktop ? 'desktop' : 'mobile'}
-                  isAdmin={false}
-                  modelUrl={info.gltfUrl}
-                  modelName={info.modelName}
-                  modelFormat={info.format}
-                  modelFileSize={formatSize(info.fileSize)}
-                  activeView={activeView}
-                  onViewChange={setActiveView}
-                  activeCamera={activeCamera}
-                  onCameraChange={setActiveCamera}
-                  showDimensions={showDimensions}
-                  onToggleDimensions={() => setShowDimensions(!showDimensions)}
-                  materialPreset={materialPreset}
-                  onMaterialChange={setMaterialPreset}
-                  showEdges={showEdges}
-                  onToggleEdges={() => setShowEdges(!showEdges)}
-                  clipEnabled={clipEnabled}
-                  onToggleClip={() => setClipEnabled((enabled) => !enabled)}
-                  clipPosition={clipPosition}
-                  onClipPositionChange={setClipPosition}
-                  clipDirection={clipDirection}
-                  onClipDirectionChange={setClipDirection}
-                  clipInverted={clipInverted}
-                  onToggleClipInverted={() => setClipInverted((inverted) => !inverted)}
-                  onResetClip={() => {
-                    setClipDirection('x');
-                    setClipPosition(0);
-                    setClipInverted(false);
-                  }}
-                  showAxis={showAxis}
-                  onToggleAxis={() => setShowAxis(!showAxis)}
-                  onResetDisplay={handleResetDisplay}
-                  tuningOpen={false}
-                  onToggleTuning={noop}
-                  viewerTuning={viewerTuning}
-                  onViewerTuningChange={setViewerTuning}
-                  onApplyViewerPreset={setViewerTuning}
-                  onResetViewerTuning={handleResetViewerTuning}
-                  onSaveViewerTuning={noop}
-                  viewerTuningSaving={false}
-                  onPseudoFullscreenChange={setViewerFullscreen}
-                />
-              </Suspense>
+          // 移动端：absolute 容器给底部操作条让位（面板 mobile 根类是 absolute inset-0 铺满容器）
+          // 桌面端：面板根类是 flex 子元素（flex-1 + stretch 拿高度），必须直接挂在 flex-row 下——
+          // 套任何 display:block 的中间层都会让 flex-1 高度塌成 0（模型渲染进 0 高区域）
+          isDesktop ? (
+            <Suspense
+              fallback={
+                <div className="flex w-full items-center justify-center">
+                  <Icon name="view_in_ar" size={48} className="text-on-surface-variant/20 animate-pulse" />
+                </div>
+              }
+            >
+              <CadViewerPanel
+                variant="desktop"
+                isAdmin={false}
+                modelUrl={info.gltfUrl}
+                modelName={info.modelName}
+                modelFormat={info.format}
+                modelFileSize={formatSize(info.fileSize)}
+                activeView={activeView}
+                onViewChange={setActiveView}
+                activeCamera={activeCamera}
+                onCameraChange={setActiveCamera}
+                showDimensions={showDimensions}
+                onToggleDimensions={() => setShowDimensions(!showDimensions)}
+                materialPreset={materialPreset}
+                onMaterialChange={setMaterialPreset}
+                showEdges={showEdges}
+                onToggleEdges={() => setShowEdges(!showEdges)}
+                clipEnabled={clipEnabled}
+                onToggleClip={() => setClipEnabled((enabled) => !enabled)}
+                clipPosition={clipPosition}
+                onClipPositionChange={setClipPosition}
+                clipDirection={clipDirection}
+                onClipDirectionChange={setClipDirection}
+                clipInverted={clipInverted}
+                onToggleClipInverted={() => setClipInverted((inverted) => !inverted)}
+                onResetClip={() => {
+                  setClipDirection('x');
+                  setClipPosition(0);
+                  setClipInverted(false);
+                }}
+                showAxis={showAxis}
+                onToggleAxis={() => setShowAxis(!showAxis)}
+                onResetDisplay={handleResetDisplay}
+                tuningOpen={false}
+                onToggleTuning={noop}
+                viewerTuning={viewerTuning}
+                onViewerTuningChange={setViewerTuning}
+                onApplyViewerPreset={setViewerTuning}
+                onResetViewerTuning={handleResetViewerTuning}
+                onSaveViewerTuning={noop}
+                viewerTuningSaving={false}
+                onPseudoFullscreenChange={setViewerFullscreen}
+              />
+            </Suspense>
+          ) : (
+            <div className="relative min-h-0 flex-1 bg-surface-container">
+              <div className="absolute inset-x-0 top-0 bottom-[var(--share-mobile-cta-height)]">
+                <Suspense
+                  fallback={
+                    <div className="w-full h-full flex items-center justify-center">
+                      <Icon name="view_in_ar" size={48} className="text-on-surface-variant/20 animate-pulse" />
+                    </div>
+                  }
+                >
+                  <CadViewerPanel
+                    variant="mobile"
+                    isAdmin={false}
+                    modelUrl={info.gltfUrl}
+                    modelName={info.modelName}
+                    modelFormat={info.format}
+                    modelFileSize={formatSize(info.fileSize)}
+                    activeView={activeView}
+                    onViewChange={setActiveView}
+                    activeCamera={activeCamera}
+                    onCameraChange={setActiveCamera}
+                    showDimensions={showDimensions}
+                    onToggleDimensions={() => setShowDimensions(!showDimensions)}
+                    materialPreset={materialPreset}
+                    onMaterialChange={setMaterialPreset}
+                    showEdges={showEdges}
+                    onToggleEdges={() => setShowEdges(!showEdges)}
+                    clipEnabled={clipEnabled}
+                    onToggleClip={() => setClipEnabled((enabled) => !enabled)}
+                    clipPosition={clipPosition}
+                    onClipPositionChange={setClipPosition}
+                    clipDirection={clipDirection}
+                    onClipDirectionChange={setClipDirection}
+                    clipInverted={clipInverted}
+                    onToggleClipInverted={() => setClipInverted((inverted) => !inverted)}
+                    onResetClip={() => {
+                      setClipDirection('x');
+                      setClipPosition(0);
+                      setClipInverted(false);
+                    }}
+                    showAxis={showAxis}
+                    onToggleAxis={() => setShowAxis(!showAxis)}
+                    onResetDisplay={handleResetDisplay}
+                    tuningOpen={false}
+                    onToggleTuning={noop}
+                    viewerTuning={viewerTuning}
+                    onViewerTuningChange={setViewerTuning}
+                    onApplyViewerPreset={setViewerTuning}
+                    onResetViewerTuning={handleResetViewerTuning}
+                    onSaveViewerTuning={noop}
+                    viewerTuningSaving={false}
+                    onPseudoFullscreenChange={setViewerFullscreen}
+                  />
+                </Suspense>
+              </div>
             </div>
-          </div>
+          )
         ) : (
           <div className="relative flex min-h-0 flex-1 items-center justify-center bg-surface-container">
             <div className="absolute inset-x-0 top-0 bottom-[var(--share-mobile-cta-height)] flex items-center justify-center md:bottom-0">
@@ -585,12 +641,8 @@ export default function SharePage() {
                 onClick={() => setDownloadDrawerOpen(true)}
                 className="flex h-10 w-full items-center justify-center gap-2 rounded-lg bg-primary-container text-sm font-medium text-on-primary transition-transform active:scale-[0.98]"
               >
-                <Icon name="download" size={18} />
+                <Icon name="folder_open" size={18} />
                 {t('sharePage.fileDownloads')}
-                <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-on-primary/15 px-1 text-[10px] font-bold">
-                  {(info.allowDownload ? 1 : 0) + drawingEntries.length}
-                </span>
-                <Icon name="expand_less" size={16} className="text-on-primary/70" />
               </button>
             </div>
           </div>
