@@ -47,6 +47,18 @@ const noop = () => {};
 // 无过期时间的分享，图纸链接用固定版本参数避免每次渲染生成不同 URL
 const modelVersionFallback = 1;
 
+// 有效期相对时间：<1h 显示分钟，<24h 显示小时，≥24h 显示天（向上取整），永久显示「永久有效」
+function formatExpiryRelative(expiresAt: string | null, t: (key: string, opts?: Record<string, unknown>) => string) {
+  if (!expiresAt) return t('sharePage.expiryNever');
+  const ms = new Date(expiresAt).getTime() - Date.now();
+  if (ms <= 0) return t('sharePage.expiryExpired');
+  const minutes = Math.ceil(ms / 60000);
+  if (minutes < 60) return t('sharePage.expiryMinutes', { count: minutes });
+  const hours = Math.ceil(ms / 3600000);
+  if (hours < 24) return t('sharePage.expiryHours', { count: hours });
+  return t('sharePage.expiryDays', { count: Math.ceil(hours / 24) });
+}
+
 function getShareViewerPrefs() {
   const settings = getPublicSettingsSnapshot();
   const defaultPreset = (getDefaultPreset() as MaterialPresetKey) || 'default';
@@ -68,7 +80,7 @@ function getShareViewerPrefs() {
 }
 
 export default function SharePage() {
-  const { i18n, t } = useTranslation();
+  const { t } = useTranslation();
   const { token } = useParams<{ token: string }>();
   const isDesktop = useMediaQuery('(min-width: 768px)');
 
@@ -605,12 +617,10 @@ export default function SharePage() {
                 <Icon name="visibility" size={12} />
                 {t('sharePage.downloadTotal', { count: info.downloadCount })}
               </span>
-              {info.expiresAt && (
-                <span className="flex items-center gap-1">
-                  <Icon name="schedule" size={12} />
-                  {new Date(info.expiresAt).toLocaleDateString(i18n.language)}
-                </span>
-              )}
+              <span className="flex items-center gap-1" title={info.expiresAt || undefined}>
+                <Icon name="schedule" size={12} />
+                {formatExpiryRelative(info.expiresAt, t)}
+              </span>
             </div>
           </div>
 
