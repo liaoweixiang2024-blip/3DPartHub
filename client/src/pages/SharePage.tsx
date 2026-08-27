@@ -1,3 +1,4 @@
+import { AnimatePresence, motion } from 'framer-motion';
 import { useState, useEffect, lazy, Suspense, useCallback, useRef, type CSSProperties } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useParams, Link } from 'react-router-dom';
@@ -24,6 +25,7 @@ import {
   prepareBrowserDownload,
 } from '../lib/browserDownload';
 import { getErrorMessage } from '../lib/errorNotifications';
+import { bottomSheetMotion, overlayMotion } from '../lib/motion';
 import {
   getCachedPublicSettings,
   getDefaultPreset,
@@ -81,6 +83,8 @@ export default function SharePage() {
   const [downloading, setDownloading] = useState(false);
   const mobileDownloadBarRef = useRef<HTMLDivElement>(null);
   const [mobileDownloadBarHeight, setMobileDownloadBarHeight] = useState(0);
+  // 移动端「文件下载」抽屉（对齐详情页底部弹层交互）
+  const [downloadDrawerOpen, setDownloadDrawerOpen] = useState(false);
 
   // 查看器显示状态（对齐详情页/临时预览页的访客态工具集）
   const initialPrefs = useRef(getShareViewerPrefs()).current;
@@ -576,11 +580,61 @@ export default function SharePage() {
               <h2 className="mb-2 line-clamp-1 break-words px-0.5 text-sm font-bold leading-tight text-on-surface">
                 {info.modelName}
               </h2>
-              {renderDownloadSection(true)}
+              <button
+                type="button"
+                onClick={() => setDownloadDrawerOpen(true)}
+                className="flex h-10 w-full items-center justify-center gap-2 rounded-lg bg-primary-container text-sm font-medium text-on-primary transition-transform active:scale-[0.98]"
+              >
+                <Icon name="download" size={18} />
+                {t('sharePage.fileDownloads')}
+                <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-on-primary/15 px-1 text-[10px] font-bold">
+                  {(info.allowDownload ? 1 : 0) + drawingEntries.length}
+                </span>
+                <Icon name="expand_less" size={16} className="text-on-primary/70" />
+              </button>
             </div>
           </div>
         ) : null}
       </div>
+
+      {/* 移动端文件下载抽屉（对齐详情页底部弹层样式） */}
+      <AnimatePresence>
+        {downloadDrawerOpen && !isDesktop && info && (
+          <>
+            <motion.div
+              key="share-download-backdrop"
+              variants={overlayMotion}
+              initial="initial"
+              animate="animate"
+              exit="exit"
+              className="fixed inset-0 z-[200] bg-black/50"
+              onClick={() => setDownloadDrawerOpen(false)}
+            />
+            <motion.div
+              key="share-download-sheet"
+              variants={bottomSheetMotion}
+              initial="initial"
+              animate="animate"
+              exit="exit"
+              className="fixed inset-x-0 bottom-0 z-[201] mx-auto max-w-lg rounded-t-2xl border-t border-outline-variant/20 bg-surface-container-low pb-[env(safe-area-inset-bottom,0px)] shadow-2xl"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="flex items-center justify-between px-4 pb-1 pt-3">
+                <h3 className="text-sm font-bold text-on-surface">{t('sharePage.fileDownloads')}</h3>
+                <button
+                  type="button"
+                  onClick={() => setDownloadDrawerOpen(false)}
+                  className="flex h-8 w-8 items-center justify-center rounded-full text-on-surface-variant hover:bg-surface-container-highest hover:text-on-surface"
+                  aria-label={t('sharePage.closeDrawer')}
+                >
+                  <Icon name="close" size={18} />
+                </button>
+              </div>
+              <div className="max-h-[60dvh] overflow-y-auto px-3 pb-4 pt-2">{renderDownloadSection(false)}</div>
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
 
       {/* Footer */}
       <footer className="hidden h-10 shrink-0 items-center justify-center border-t border-outline-variant/10 md:flex">

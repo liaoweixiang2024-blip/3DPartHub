@@ -1347,6 +1347,7 @@ export const enUS: { translation: TranslationMap } = {
     sharePage: {
       accessTokenMissing: 'Share access token is missing',
       backHome: 'Back home',
+      closeDrawer: 'Close',
       download: 'Download model',
       downloadCount: 'Downloads: {{count}} / {{limit}}',
       downloadFailed: 'Download failed',

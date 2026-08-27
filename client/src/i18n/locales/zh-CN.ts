@@ -1339,6 +1339,7 @@ export const zhCN: { translation: TranslationMap } = {
     sharePage: {
       accessTokenMissing: '分享访问令牌缺失',
       backHome: '返回首页',
+      closeDrawer: '关闭',
       download: '下载模型',
       downloadCount: '下载次数：{{count}} / {{limit}}',
       downloadFailed: '下载失败',
