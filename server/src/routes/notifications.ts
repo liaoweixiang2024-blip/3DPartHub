@@ -53,15 +53,52 @@ router.get('/api/notifications', authMiddleware, async (req: AuthRequest, res: R
     ]);
 
     const audience = req.user?.role === 'ADMIN' ? 'admin' : 'user';
+
+    // relatedId 存在性校验：关联的模型/工单/询价可能已被删除，
+    // 失效通知不再下发 actionPath（前端不显示「查看详情」，避免点进空白页）
+    const modelIds = Array.from(
+      new Set(
+        notifications
+          .filter(
+            (n) =>
+              n.relatedId &&
+              ['favorite', 'download', 'model_conversion', 'success', 'error', 'comment'].includes(n.type),
+          )
+          .map((n) => n.relatedId as string),
+      ),
+    );
+    const ticketIds = Array.from(
+      new Set(notifications.filter((n) => n.relatedId && n.type === 'ticket').map((n) => n.relatedId as string)),
+    );
+    const inquiryIds = Array.from(
+      new Set(notifications.filter((n) => n.relatedId && n.type === 'inquiry').map((n) => n.relatedId as string)),
+    );
+    const [existingModels, existingTickets, existingInquiries] = await Promise.all([
+      modelIds.length ? prisma.model.findMany({ where: { id: { in: modelIds } }, select: { id: true } }) : [],
+      ticketIds.length ? prisma.supportTicket.findMany({ where: { id: { in: ticketIds } }, select: { id: true } }) : [],
+      inquiryIds.length ? prisma.inquiry.findMany({ where: { id: { in: inquiryIds } }, select: { id: true } }) : [],
+    ]);
+    const validIds = new Set<string>([
+      ...existingModels.map((r: { id: string }) => r.id),
+      ...existingTickets.map((r: { id: string }) => r.id),
+      ...existingInquiries.map((r: { id: string }) => r.id),
+    ]);
+
     res.json({
-      data: notifications.map((notification) => ({
-        ...notification,
-        actionPath: getBusinessNotificationActionPath({
-          type: notification.type,
-          relatedId: notification.relatedId,
-          audience,
-        }),
-      })),
+      data: notifications.map((notification) => {
+        const relatedAlive =
+          !notification.relatedId || notification.type === 'backup' || validIds.has(notification.relatedId as string);
+        return {
+          ...notification,
+          actionPath: relatedAlive
+            ? getBusinessNotificationActionPath({
+                type: notification.type,
+                relatedId: notification.relatedId,
+                audience,
+              })
+            : null,
+        };
+      }),
       total,
       page,
       page_size: pageSize,
