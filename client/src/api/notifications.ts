@@ -58,6 +58,12 @@ export async function deleteNotification(id: string) {
   return unwrapResponse<{ success: boolean }>(res);
 }
 
+/** 批量删除指定通知（服务端单次上限 1000 条，返回实际删除数） */
+export async function batchDeleteNotifications(ids: string[]) {
+  const res = await client.delete('/notifications/batch', { data: { ids } });
+  return unwrapResponse<{ count: number }>(res);
+}
+
 export async function clearReadNotifications() {
   const res = await client.delete('/notifications/read/clear');
   return unwrapResponse<{ count: number }>(res);

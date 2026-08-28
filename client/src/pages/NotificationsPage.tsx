@@ -7,12 +7,14 @@ import {
   markAsRead,
   markAllAsRead,
   deleteNotification,
+  batchDeleteNotifications,
   clearReadNotifications,
   type Notification,
   type NotificationReadFilter,
 } from '../api/notifications';
 import { AdminEmptyState, AdminManagementPage } from '../components/shared/AdminManagementPage';
 import { AdminPageShell } from '../components/shared/AdminPageShell';
+import ConfirmDialog from '../components/shared/ConfirmDialog';
 import Icon from '../components/shared/Icon';
 import { PageRefreshIndicator } from '../components/shared/PageRefreshFallback';
 import { useToast } from '../components/shared/Toast';
@@ -83,12 +85,18 @@ function formatTime(dateStr: string, locale: string) {
 function NotificationRow({
   n,
   isAdmin,
+  selectMode,
+  selected,
+  onToggleSelect,
   onRead,
   onDelete,
   onNavigate,
 }: {
   n: Notification;
   isAdmin: boolean;
+  selectMode: boolean;
+  selected: boolean;
+  onToggleSelect: (id: string) => void;
   onRead: (id: string) => void;
   onDelete: (id: string) => void;
   onNavigate: (route: string) => void;
@@ -98,6 +106,10 @@ function NotificationRow({
   const route = getNotificationRoute(n, isAdmin);
 
   const handleClick = () => {
+    if (selectMode) {
+      onToggleSelect(n.id);
+      return;
+    }
     if (!n.read) onRead(n.id);
     if (route) onNavigate(route);
   };
@@ -105,21 +117,32 @@ function NotificationRow({
   return (
     <div
       onClick={handleClick}
-      role={route ? 'button' : undefined}
-      tabIndex={route ? 0 : undefined}
+      role="button"
+      tabIndex={0}
       onKeyDown={(event) => {
-        if (!route) return;
         if (event.key === 'Enter' || event.key === ' ') {
           event.preventDefault();
           handleClick();
         }
       }}
+      aria-pressed={selectMode ? selected : undefined}
       className={`group flex items-start gap-3 border-b border-outline-variant/5 px-4 py-3.5 transition-colors last:border-b-0 sm:px-5 ${
-        route
-          ? 'cursor-pointer outline-none hover:bg-surface-container-highest/50 focus-visible:bg-surface-container-highest/50 focus-visible:ring-2 focus-visible:ring-primary/30 active:bg-surface-container-highest'
-          : 'cursor-default'
-      } ${n.read ? 'opacity-70' : ''}`}
+        selectMode
+          ? `cursor-pointer outline-none hover:bg-surface-container-highest/50 ${selected ? 'bg-primary-container/10' : ''}`
+          : route
+            ? 'cursor-pointer outline-none hover:bg-surface-container-highest/50 focus-visible:bg-surface-container-highest/50 focus-visible:ring-2 focus-visible:ring-primary/30 active:bg-surface-container-highest'
+            : 'cursor-default'
+      } ${!selectMode && n.read ? 'opacity-70' : ''}`}
     >
+      {selectMode ? (
+        <span
+          className={`mt-1 flex h-5 w-5 shrink-0 items-center justify-center rounded-sm border transition-colors ${
+            selected ? 'border-primary bg-primary text-on-primary' : 'border-outline-variant/40 text-transparent'
+          }`}
+        >
+          <Icon name="check" size={14} />
+        </span>
+      ) : null}
       <span className={`mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full ${meta.color}`}>
         <Icon name={meta.icon} size={16} />
       </span>
@@ -131,7 +154,7 @@ function NotificationRow({
         <p className="mt-0.5 break-words text-xs leading-relaxed text-on-surface-variant">{n.message}</p>
         <div className="mt-1.5 flex min-w-0 items-center gap-3">
           <p className="shrink-0 text-[11px] text-on-surface-variant/50">{formatTime(n.createdAt, i18n.language)}</p>
-          {route && (
+          {!selectMode && route && (
             <span className="inline-flex min-w-0 items-center gap-0.5 text-[11px] font-medium text-primary-container opacity-80 transition-opacity group-hover:opacity-100">
               <span>{t('notificationsPage.openDetail')}</span>
               <Icon name="chevron_right" size={12} />
@@ -139,17 +162,19 @@ function NotificationRow({
           )}
         </div>
       </div>
-      <button
-        onClick={(e) => {
-          e.stopPropagation();
-          onDelete(n.id);
-        }}
-        className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-on-surface-variant/70 transition hover:bg-error-container/15 hover:text-error"
-        title={t('common.delete')}
-        aria-label={t('notificationsPage.deleteAria')}
-      >
-        <Icon name="close" size={13} />
-      </button>
+      {!selectMode && (
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            onDelete(n.id);
+          }}
+          className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-on-surface-variant/70 transition hover:bg-error-container/15 hover:text-error"
+          title={t('common.delete')}
+          aria-label={t('notificationsPage.deleteAria')}
+        >
+          <Icon name="close" size={13} />
+        </button>
+      )}
     </div>
   );
 }
@@ -163,6 +188,10 @@ export default function NotificationsPage() {
   const [readFilter, setReadFilter] = useState<NotificationReadFilter>('all');
   const [typeFilter, setTypeFilter] = useState('');
   const [page, setPage] = useState(1);
+  // 批量管理（对齐我的分享页交互）
+  const [selectMode, setSelectMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [batchConfirmOpen, setBatchConfirmOpen] = useState(false);
 
   useDocumentTitle(t('notificationsPage.title'));
 
@@ -215,6 +244,50 @@ export default function NotificationsPage() {
     }
   };
 
+  const toggleSelect = (id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const toggleSelectAllVisible = () => {
+    const visibleIds = notifications.map((n) => n.id);
+    const allSelected = visibleIds.length > 0 && visibleIds.every((id) => selectedIds.has(id));
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (allSelected) visibleIds.forEach((id) => next.delete(id));
+      else visibleIds.forEach((id) => next.add(id));
+      return next;
+    });
+  };
+
+  const exitSelectMode = () => {
+    setSelectMode(false);
+    setSelectedIds(new Set());
+  };
+
+  const handleBatchDelete = () => {
+    if (!selectedIds.size) return;
+    setBatchConfirmOpen(true);
+  };
+
+  const confirmBatchDelete = async () => {
+    setBatchConfirmOpen(false);
+    const ids = Array.from(selectedIds);
+    try {
+      const result = await batchDeleteNotifications(ids);
+      toast(t('notificationsPage.batchDeleted', { count: result?.count ?? ids.length }), 'success');
+      exitSelectMode();
+      setPage(1);
+      await mutate();
+    } catch (err) {
+      toast(getErrorMessage(err, t('notificationsPage.batchDeleteFailed')), 'error');
+    }
+  };
+
   const changeFilter = (next: { read?: NotificationReadFilter; type?: string }) => {
     if (next.read !== undefined) setReadFilter(next.read);
     if (next.type !== undefined) setTypeFilter(next.type);
@@ -252,9 +325,29 @@ export default function NotificationsPage() {
     </div>
   );
 
+  const allVisibleSelected = notifications.length > 0 && notifications.every((n) => selectedIds.has(n.id));
+
   const actions = (
     <div className="flex flex-wrap items-center gap-2">
-      {notifications.some((n) => !n.read) && (
+      {selectMode && (
+        <>
+          <button
+            onClick={toggleSelectAllVisible}
+            className="rounded-lg border border-outline-variant/20 px-3 py-2 text-xs text-on-surface-variant transition-colors hover:text-on-surface"
+          >
+            {allVisibleSelected ? t('notificationsPage.unselectAll') : t('notificationsPage.selectCurrent')}
+          </button>
+          <button
+            onClick={handleBatchDelete}
+            disabled={!selectedIds.size}
+            className="flex items-center gap-1.5 rounded-lg border border-error/30 px-3 py-2 text-xs text-error transition-colors hover:bg-error-container/10 disabled:opacity-40"
+          >
+            <Icon name="delete" size={14} />
+            {t('notificationsPage.batchDelete', { count: selectedIds.size })}
+          </button>
+        </>
+      )}
+      {!selectMode && notifications.some((n) => !n.read) && (
         <button
           onClick={handleMarkAllRead}
           className="flex items-center gap-1.5 rounded-lg border border-outline-variant/20 px-3 py-2 text-xs text-on-surface-variant transition-colors hover:text-on-surface"
@@ -263,13 +356,27 @@ export default function NotificationsPage() {
           {t('notificationsPage.markAllRead')}
         </button>
       )}
-      {hasReadItems && (
+      {!selectMode && hasReadItems && (
         <button
           onClick={handleClearRead}
           className="flex items-center gap-1.5 rounded-lg border border-outline-variant/20 px-3 py-2 text-xs text-on-surface-variant transition-colors hover:text-error"
         >
           <Icon name="clear_all" size={14} />
           {t('notificationsPage.clearRead')}
+        </button>
+      )}
+      {total > 0 && (
+        <button
+          type="button"
+          onClick={() => (selectMode ? exitSelectMode() : setSelectMode(true))}
+          className={`flex items-center gap-1.5 rounded-lg border px-3 py-2 text-xs transition-colors ${
+            selectMode
+              ? 'border-primary/30 bg-primary-container/10 text-primary'
+              : 'border-outline-variant/20 text-on-surface-variant hover:text-on-surface'
+          }`}
+        >
+          <Icon name={selectMode ? 'close' : 'checklist'} size={14} />
+          {selectMode ? t('notificationsPage.cancelSelect') : t('notificationsPage.batchOperation')}
         </button>
       )}
     </div>
@@ -301,6 +408,9 @@ export default function NotificationsPage() {
               key={n.id}
               n={n}
               isAdmin={isAdmin}
+              selectMode={selectMode}
+              selected={selectedIds.has(n.id)}
+              onToggleSelect={toggleSelect}
               onRead={handleRead}
               onDelete={handleDelete}
               onNavigate={navigate}
@@ -345,6 +455,14 @@ export default function NotificationsPage() {
       >
         {content}
       </AdminManagementPage>
+      <ConfirmDialog
+        open={batchConfirmOpen}
+        onClose={() => setBatchConfirmOpen(false)}
+        onConfirm={confirmBatchDelete}
+        title={t('notificationsPage.batchConfirmTitle', { count: selectedIds.size })}
+        description={t('notificationsPage.batchConfirmDesc')}
+        confirmLabel={t('notificationsPage.batchConfirmDelete')}
+      />
     </AdminPageShell>
   );
 }
