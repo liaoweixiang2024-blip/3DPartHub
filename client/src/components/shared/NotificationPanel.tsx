@@ -8,7 +8,6 @@ import {
   markAsRead,
   markAllAsRead,
   deleteNotification,
-  clearReadNotifications,
   type Notification,
 } from '../../api/notifications';
 import { useMediaQuery } from '../../layouts/hooks/useMediaQuery';
@@ -306,13 +305,10 @@ export default function NotificationPanel({
     [notifications],
   );
 
-  const handleClearRead = useCallback(async () => {
-    try {
-      await clearReadNotifications();
-      setNotifications((prev) => prev.filter((n) => !n.read));
-    } catch {
-      // Global error handling already reports request failures.
-    }
+  // 「清除已读」只是把已读条目收出本弹窗（本地过滤），不删数据库记录——
+  // 完整历史在「我的通知」页，那里的删除才是真删
+  const handleClearRead = useCallback(() => {
+    setNotifications((prev) => prev.filter((n) => !n.read));
   }, []);
 
   const handleNavigate = useCallback(
