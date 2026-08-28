@@ -167,7 +167,7 @@ function NotificationRow({
             e.stopPropagation();
             onDelete(n.id);
           }}
-          className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-on-surface-variant/40 opacity-0 transition-all hover:bg-error-container/10 hover:text-error focus-visible:opacity-100 group-hover:opacity-100"
+          className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-on-surface-variant/40 opacity-60 transition-all hover:bg-error-container/10 hover:text-error focus-visible:opacity-100 sm:opacity-0 sm:group-hover:opacity-100"
           title={t('common.delete')}
           aria-label={t('notificationsPage.deleteAria')}
           data-tooltip-ignore
