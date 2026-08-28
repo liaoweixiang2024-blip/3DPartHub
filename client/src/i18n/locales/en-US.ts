@@ -1359,6 +1359,7 @@ export const enUS: { translation: TranslationMap } = {
       expiredTitle: 'Link expired',
       expiryNever: 'No expiry',
       expiryExpired: 'Expired',
+      expiryFullTitle: 'Valid until {{date}}',
       expiryMinutes: 'Expires in {{count}} min',
       expiryHours: 'Expires in {{count}} h',
       expiryDays: 'Expires in {{count}} d',

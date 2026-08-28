@@ -1351,6 +1351,7 @@ export const zhCN: { translation: TranslationMap } = {
       expiredTitle: '链接已失效',
       expiryNever: '永久有效',
       expiryExpired: '已过期',
+      expiryFullTitle: '有效期至 {{date}}',
       expiryMinutes: '{{count}} 分钟后过期',
       expiryHours: '{{count}} 小时后过期',
       expiryDays: '{{count}} 天后过期',

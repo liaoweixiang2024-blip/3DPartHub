@@ -620,7 +620,22 @@ export default function SharePage() {
                 <Icon name="data_usage" size={12} />
                 {fileSizeLabel}
               </span>
-              <span className="flex items-center gap-1" title={info.expiresAt || undefined}>
+              <span
+                className="flex items-center gap-1"
+                title={
+                  info.expiresAt
+                    ? t('sharePage.expiryFullTitle', {
+                        date: new Date(info.expiresAt).toLocaleString(undefined, {
+                          year: 'numeric',
+                          month: '2-digit',
+                          day: '2-digit',
+                          hour: '2-digit',
+                          minute: '2-digit',
+                        }),
+                      })
+                    : t('sharePage.expiryNever')
+                }
+              >
                 <Icon name="schedule" size={12} />
                 {formatExpiryShort(info.expiresAt, t)}
               </span>
