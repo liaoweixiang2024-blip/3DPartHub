@@ -8,7 +8,6 @@ import {
   markAllAsRead,
   deleteNotification,
   batchDeleteNotifications,
-  clearReadNotifications,
   type Notification,
   type NotificationReadFilter,
 } from '../api/notifications';
@@ -192,8 +191,6 @@ export default function NotificationsPage() {
   const [selectMode, setSelectMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [batchConfirmOpen, setBatchConfirmOpen] = useState(false);
-  // 清除已读是永久删除，加确认防误触
-  const [clearReadConfirmOpen, setClearReadConfirmOpen] = useState(false);
 
   useDocumentTitle(t('notificationsPage.title'));
 
@@ -205,7 +202,6 @@ export default function NotificationsPage() {
   const notifications = data?.data ?? [];
   const total = data?.total ?? 0;
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
-  const hasReadItems = notifications.some((n) => n.read);
 
   const handleRead = async (id: string) => {
     try {
@@ -232,25 +228,6 @@ export default function NotificationsPage() {
       await mutate();
     } catch (err) {
       toast(getErrorMessage(err, t('notificationsPage.deleteFailed')), 'error');
-    }
-  };
-
-  // 已读条数（整库口径，非当前页）——确认弹窗提示用
-  const readCount = notifications.filter((n) => n.read).length;
-
-  const handleClearRead = () => {
-    setClearReadConfirmOpen(true);
-  };
-
-  const confirmClearRead = async () => {
-    setClearReadConfirmOpen(false);
-    try {
-      const result = await clearReadNotifications();
-      toast(t('notificationsPage.clearSuccess', { count: result?.count ?? 0 }), 'success');
-      setPage(1);
-      await mutate();
-    } catch (err) {
-      toast(getErrorMessage(err, t('notificationsPage.clearFailed')), 'error');
     }
   };
 
@@ -366,15 +343,6 @@ export default function NotificationsPage() {
           {t('notificationsPage.markAllRead')}
         </button>
       )}
-      {!selectMode && hasReadItems && (
-        <button
-          onClick={handleClearRead}
-          className="flex items-center gap-1.5 rounded-lg border border-outline-variant/20 px-3 py-2 text-xs text-on-surface-variant transition-colors hover:text-error"
-        >
-          <Icon name="clear_all" size={14} />
-          {t('notificationsPage.clearRead')}
-        </button>
-      )}
       <button
         type="button"
         onClick={() => (selectMode ? exitSelectMode() : setSelectMode(true))}
@@ -470,14 +438,6 @@ export default function NotificationsPage() {
         title={t('notificationsPage.batchConfirmTitle', { count: selectedIds.size })}
         description={t('notificationsPage.batchConfirmDesc')}
         confirmLabel={t('notificationsPage.batchConfirmDelete')}
-      />
-      <ConfirmDialog
-        open={clearReadConfirmOpen}
-        onClose={() => setClearReadConfirmOpen(false)}
-        onConfirm={confirmClearRead}
-        title={t('notificationsPage.clearReadConfirmTitle', { count: readCount })}
-        description={t('notificationsPage.clearReadConfirmDesc')}
-        confirmLabel={t('notificationsPage.clearReadConfirmDelete')}
       />
     </AdminPageShell>
   );
