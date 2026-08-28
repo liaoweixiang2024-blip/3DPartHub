@@ -9,6 +9,7 @@ const TOOLTIP_SELECTOR = [
   'button[title]',
   'a[title]',
   "[role='button'][title]",
+  '[title]',
 ].join(',');
 
 const DELAY_MS = 120;
@@ -36,11 +37,15 @@ function isModelDetailPath(pathname: string) {
   return /^\/model\/[^/]+/.test(pathname);
 }
 
+function isSharePath(pathname: string) {
+  return /^\/share\/[^/]+/.test(pathname);
+}
+
 function canShowTooltip(element: HTMLElement) {
   if (element.closest('[data-tooltip-ignore]')) return false;
   if (element.closest('[data-app-top-nav]')) return false;
   if (element.closest('header')) return true;
-  return isModelDetailPath(window.location.pathname);
+  return isModelDetailPath(window.location.pathname) || isSharePath(window.location.pathname);
 }
 
 function isPlacement(value: string | undefined): value is TooltipPlacement {
