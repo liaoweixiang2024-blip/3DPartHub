@@ -238,6 +238,10 @@ export const enUS: { translation: TranslationMap } = {
       deleteFailed: 'Delete failed',
       clearSuccess: 'Cleared {{count}} read notifications',
       clearFailed: 'Clear failed. Please try again later',
+      clearReadConfirmTitle: 'Clear {{count}} read notifications?',
+      clearReadConfirmDesc:
+        'Read notifications will be permanently deleted (not moved elsewhere). This cannot be undone.',
+      clearReadConfirmDelete: 'Clear',
       batchOperation: 'Manage',
       cancelSelect: 'Exit manage',
       selectCurrent: 'Select page',

@@ -192,6 +192,8 @@ export default function NotificationsPage() {
   const [selectMode, setSelectMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [batchConfirmOpen, setBatchConfirmOpen] = useState(false);
+  // 清除已读是永久删除，加确认防误触
+  const [clearReadConfirmOpen, setClearReadConfirmOpen] = useState(false);
 
   useDocumentTitle(t('notificationsPage.title'));
 
@@ -233,7 +235,15 @@ export default function NotificationsPage() {
     }
   };
 
-  const handleClearRead = async () => {
+  // 已读条数（整库口径，非当前页）——确认弹窗提示用
+  const readCount = notifications.filter((n) => n.read).length;
+
+  const handleClearRead = () => {
+    setClearReadConfirmOpen(true);
+  };
+
+  const confirmClearRead = async () => {
+    setClearReadConfirmOpen(false);
     try {
       const result = await clearReadNotifications();
       toast(t('notificationsPage.clearSuccess', { count: result?.count ?? 0 }), 'success');
@@ -460,6 +470,14 @@ export default function NotificationsPage() {
         title={t('notificationsPage.batchConfirmTitle', { count: selectedIds.size })}
         description={t('notificationsPage.batchConfirmDesc')}
         confirmLabel={t('notificationsPage.batchConfirmDelete')}
+      />
+      <ConfirmDialog
+        open={clearReadConfirmOpen}
+        onClose={() => setClearReadConfirmOpen(false)}
+        onConfirm={confirmClearRead}
+        title={t('notificationsPage.clearReadConfirmTitle', { count: readCount })}
+        description={t('notificationsPage.clearReadConfirmDesc')}
+        confirmLabel={t('notificationsPage.clearReadConfirmDelete')}
       />
     </AdminPageShell>
   );
