@@ -365,20 +365,18 @@ export default function NotificationsPage() {
           {t('notificationsPage.clearRead')}
         </button>
       )}
-      {total > 0 && (
-        <button
-          type="button"
-          onClick={() => (selectMode ? exitSelectMode() : setSelectMode(true))}
-          className={`flex items-center gap-1.5 rounded-lg border px-3 py-2 text-xs transition-colors ${
-            selectMode
-              ? 'border-primary/30 bg-primary-container/10 text-primary'
-              : 'border-outline-variant/20 text-on-surface-variant hover:text-on-surface'
-          }`}
-        >
-          <Icon name={selectMode ? 'close' : 'checklist'} size={14} />
-          {selectMode ? t('notificationsPage.cancelSelect') : t('notificationsPage.batchOperation')}
-        </button>
-      )}
+      <button
+        type="button"
+        onClick={() => (selectMode ? exitSelectMode() : setSelectMode(true))}
+        className={`flex items-center gap-1.5 rounded-lg border px-3 py-2 text-xs transition-colors ${
+          selectMode
+            ? 'border-primary/30 bg-primary-container/10 text-primary'
+            : 'border-outline-variant/20 text-on-surface-variant hover:text-on-surface'
+        }`}
+      >
+        <Icon name={selectMode ? 'close' : 'checklist'} size={14} />
+        {selectMode ? t('notificationsPage.cancelSelect') : t('notificationsPage.batchOperation')}
+      </button>
     </div>
   );
 
