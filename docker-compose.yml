@@ -172,6 +172,10 @@ services:
     volumes:
       - static-data:/app/static:ro
       - uploads-data:/app/uploads:ro
+      # 备份包必须与 api 共用同一 bind mount：备份下载走 nginx X-Accel-Redirect
+      # （/_protected_static/ alias /app/static/），若只挂命名卷 nginx 看不到
+      # ./server/static/backups 里的备份文件，下载会 404「未发现文件」
+      - ./server/static/backups:/app/static/backups:ro
     healthcheck:
       test: ['CMD-SHELL', 'wget -qO- http://127.0.0.1/healthz >/dev/null 2>&1 || exit 1']
       interval: 30s
