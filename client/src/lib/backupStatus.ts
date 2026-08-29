@@ -42,6 +42,8 @@ export interface BackupProtectionCard {
   value: string;
   detail: string;
   status: BackupProtectionStatus;
+  /** 未开启/有风险时提示如何操作；配置了 targetTab 则渲染成跳转按钮（设置页子区块名） */
+  action?: { text: string; targetTab?: string };
 }
 
 export function toBackupProtectionStatus(
@@ -161,39 +163,45 @@ export function buildBackupProtectionCards(
       icon: 'restore',
       label: '恢复点',
       value: health.latestBackup ? `${health.backupCount} 份` : '未创建',
-      detail: latestCheck?.message || `${latestTime} / ${health.totalSizeText}`,
+      detail: health.latestBackup
+        ? `最近一次：${latestTime}，共 ${health.totalSizeText}`
+        : '还没有任何备份，出问题时数据无法找回，建议现在创建一份',
       status: latestStatus,
+      action: health.latestBackup ? undefined : { text: '去创建备份', targetTab: '__scroll_create__' },
     },
     {
       key: 'schedule',
       icon: 'schedule',
       label: '自动化',
       value: health.enabled ? `每日 ${health.scheduleTime}` : '手动',
-      detail: scheduleCheck?.message || health.lastAutoMessage || '用于避免长期忘记创建备份',
+      detail: health.enabled
+        ? scheduleCheck?.message || health.lastAutoMessage || `每天 ${health.scheduleTime} 自动备份一次`
+        : '目前需要手动点备份。开启后系统每天定时自动备份，不怕忘记',
       status: autoStatus,
+      action: health.enabled ? undefined : { text: '去开启自动备份', targetTab: '系统运维' },
     },
     {
       key: 'mirror',
       icon: 'cloud',
       label: '异地副本',
       value: health.mirrorEnabled ? '已开启' : '未开启',
-      detail:
-        mirrorChecks.find((check) => check.status !== 'ok')?.message ||
-        health.lastMirrorMessage ||
-        health.mirrorDir ||
-        '建议镜像到 NAS 或独立磁盘',
+      detail: health.mirrorEnabled
+        ? mirrorChecks.find((check) => check.status !== 'ok')?.message ||
+          health.lastMirrorMessage ||
+          health.mirrorDir ||
+          '备份完成后自动复制一份到外部目录'
+        : '备份文件目前只存在服务器本机，服务器磁盘损坏时备份会一起丢失。开启后会自动复制一份到 NAS 或另一块磁盘',
       status: mirrorStatus,
+      action: health.mirrorEnabled ? undefined : { text: '去配置镜像目录', targetTab: '系统运维' },
     },
     {
       key: 'encryption',
       icon: 'lock',
       label: '加密',
       value: health.encryption?.enabled ? '已开启' : '未开启',
-      detail:
-        encryptionCheck?.message ||
-        (health.encryption?.enabled
-          ? `${health.encryption.algorithm}，备份包落盘前加密`
-          : `建议配置 ${health.encryption?.recommendedEnvName || 'BACKUP_ENCRYPTION_SECRET'}`),
+      detail: health.encryption?.enabled
+        ? `${health.encryption.algorithm}，备份包落盘前加密`
+        : `备份文件在磁盘上未加密，拿到文件即可读取内容。在服务器 docker-compose.yml 的 api 服务 environment 段加一条 ${health.encryption?.recommendedEnvName || 'BACKUP_ENCRYPTION_SECRET'}=<自定义密钥> 并重启容器即可开启`,
       status: encryptionStatus,
     },
   ];

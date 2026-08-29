@@ -6926,9 +6926,25 @@ function Content() {
                                       </span>
                                     </div>
                                     <p className="mt-2 truncate text-sm font-semibold text-on-surface">{card.value}</p>
-                                    <p className="mt-1 line-clamp-2 break-all text-[11px] leading-4 text-on-surface-variant">
+                                    <p className="mt-1 break-all text-[11px] leading-4 text-on-surface-variant">
                                       {card.detail}
                                     </p>
+                                    {card.action && (
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          if (card.action?.targetTab === '__scroll_create__') {
+                                            document.getElementById('backup')?.scrollIntoView({ behavior: 'smooth' });
+                                            return;
+                                          }
+                                          if (card.action?.targetTab) setActiveTab(card.action.targetTab);
+                                        }}
+                                        className="mt-2 inline-flex items-center gap-1 rounded-md border border-primary/25 bg-primary-container/10 px-2 py-1 text-[11px] font-medium text-primary-container transition-colors hover:bg-primary-container/20"
+                                      >
+                                        {card.action.text}
+                                        <Icon name="chevron_right" size={12} />
+                                      </button>
+                                    )}
                                   </div>
                                 ))}
                               </div>
