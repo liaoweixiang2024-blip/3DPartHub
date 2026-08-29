@@ -4897,7 +4897,6 @@ function Content() {
   const [verifyingBackupId, setVerifyingBackupId] = useState<string | null>(null);
   const [backupList, setBackupList] = useState<BackupRecord[]>([]);
   const [backupScope, setBackupScope] = useState<BackupScope>('full');
-  const [backupScopeMenuOpen, setBackupScopeMenuOpen] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [exportProgress, setExportProgress] = useState({ stage: '', percent: 0, message: '', logs: [] as string[] });
   const [verifyProgress, setVerifyProgress] = useState({ stage: '', percent: 0, message: '', logs: [] as string[] });
@@ -4938,7 +4937,6 @@ function Content() {
   const [restoring, setRestoring] = useState(false);
   const [restoreProgress, setRestoreProgress] = useState({ stage: '', percent: 0, message: '', logs: [] as string[] });
   const backupInputRef = useRef<HTMLInputElement>(null);
-  const backupScopeMenuRef = useRef<HTMLDivElement>(null);
   const backupActionInFlight = useRef(false);
   const restoreActionInFlight = useRef(false);
   const restoreCancelRequestedRef = useRef(false);
@@ -5059,28 +5057,6 @@ function Content() {
   const backupPolicyIssueCount = backupPolicyCheck
     ? backupPolicyCheck.checks.filter((check) => check.status !== 'ok').length
     : 0;
-
-  useEffect(() => {
-    if (!backupScopeMenuOpen) return;
-    const handlePointerDown = (event: MouseEvent) => {
-      if (!backupScopeMenuRef.current?.contains(event.target as Node)) {
-        setBackupScopeMenuOpen(false);
-      }
-    };
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') setBackupScopeMenuOpen(false);
-    };
-    document.addEventListener('mousedown', handlePointerDown);
-    document.addEventListener('keydown', handleKeyDown);
-    return () => {
-      document.removeEventListener('mousedown', handlePointerDown);
-      document.removeEventListener('keydown', handleKeyDown);
-    };
-  }, [backupScopeMenuOpen]);
-
-  useEffect(() => {
-    if (adminBusy) setBackupScopeMenuOpen(false);
-  }, [adminBusy]);
 
   function toastJobOnce(
     namespace: string,
@@ -7191,96 +7167,67 @@ function Content() {
 
                         {/* Export */}
                         <div className="px-4 py-4 sm:px-6">
-                          <div className="flex flex-col gap-3 mb-2 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
-                            <div>
-                              <p className="text-sm font-medium text-on-surface">创建备份</p>
-                              <p className="text-xs text-on-surface-variant mt-0.5">
-                                支持整站备份，也可以只备份指定模块
-                              </p>
-                            </div>
-                            <div className="grid grid-cols-1 gap-2 sm:grid-cols-[minmax(250px,300px)_auto] sm:items-center">
-                              <div ref={backupScopeMenuRef} className="relative">
-                                <button
-                                  type="button"
-                                  onClick={() => setBackupScopeMenuOpen((open) => !open)}
-                                  disabled={adminBusy}
-                                  aria-haspopup="listbox"
-                                  aria-expanded={backupScopeMenuOpen}
-                                  className="group flex h-11 w-full items-center gap-2 rounded-md border border-outline-variant/20 bg-surface-container-lowest px-3 text-left shadow-sm transition-colors hover:border-primary/35 hover:bg-surface-container-low disabled:cursor-not-allowed disabled:opacity-50"
-                                >
-                                  <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-primary-container/10 text-primary-container">
-                                    <Icon name={selectedBackupScope.icon} size={15} />
-                                  </span>
-                                  <span className="min-w-0 flex-1">
-                                    <span className="block truncate text-xs font-semibold text-on-surface">
-                                      {selectedBackupScope.label}
-                                    </span>
-                                    <span className="block truncate text-[11px] text-on-surface-variant">
-                                      {selectedBackupScope.desc}
-                                    </span>
-                                  </span>
-                                  <Icon
-                                    name={backupScopeMenuOpen ? 'expand_less' : 'expand_more'}
-                                    size={16}
-                                    className="shrink-0 text-on-surface-variant transition-colors group-hover:text-primary"
-                                  />
-                                </button>
-                                {backupScopeMenuOpen && !adminBusy && (
-                                  <div
-                                    role="listbox"
-                                    aria-label="备份范围"
-                                    className="absolute right-0 z-30 mt-2 max-h-[360px] w-full min-w-[250px] overflow-y-auto rounded-lg border border-outline-variant/20 bg-surface-container-lowest p-1 shadow-xl"
-                                  >
-                                    {BACKUP_SCOPE_OPTIONS.map((option) => {
-                                      const active = option.value === backupScope;
-                                      return (
-                                        <button
-                                          key={option.value}
-                                          type="button"
-                                          role="option"
-                                          aria-selected={active}
-                                          onClick={() => {
-                                            setBackupScope(option.value);
-                                            setBackupScopeMenuOpen(false);
-                                          }}
-                                          className={`flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-left transition-colors ${
-                                            active
-                                              ? 'bg-primary-container/15 text-primary-container'
-                                              : 'text-on-surface hover:bg-surface-container-high/60'
-                                          }`}
-                                        >
-                                          <span
-                                            className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-md ${
-                                              active
-                                                ? 'bg-primary-container/15 text-primary-container'
-                                                : 'bg-surface-container-high text-on-surface-variant'
-                                            }`}
-                                          >
-                                            <Icon name={option.icon} size={15} />
-                                          </span>
-                                          <span className="min-w-0 flex-1">
-                                            <span className="block truncate text-xs font-semibold">{option.label}</span>
-                                            <span className="block truncate text-[11px] text-on-surface-variant">
-                                              {option.desc}
-                                            </span>
-                                          </span>
-                                          {active && <Icon name="check" size={15} className="shrink-0" />}
-                                        </button>
-                                      );
-                                    })}
-                                  </div>
-                                )}
-                              </div>
-                              <button
-                                onClick={() => setExportConfirmOpen(true)}
-                                disabled={adminBusy || exporting}
-                                className="w-full sm:w-auto px-4 py-2.5 sm:py-2 text-xs font-medium bg-primary-container/20 text-primary-container rounded-md hover:bg-primary-container/30 disabled:opacity-50 transition-colors flex items-center justify-center gap-1.5 shrink-0"
-                              >
-                                <Icon name="add" size={14} />
-                                {exporting ? `${exportProgress.percent}%` : '创建备份'}
-                              </button>
-                            </div>
+                          <div className="mb-3">
+                            <p className="text-sm font-medium text-on-surface">创建备份</p>
+                            <p className="text-xs text-on-surface-variant mt-0.5">支持整站备份，也可以只备份指定模块</p>
                           </div>
+                          <div
+                            className="grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-5"
+                            role="listbox"
+                            aria-label="备份范围"
+                          >
+                            {BACKUP_SCOPE_OPTIONS.map((option) => {
+                              const active = option.value === backupScope;
+                              return (
+                                <button
+                                  key={option.value}
+                                  type="button"
+                                  role="option"
+                                  aria-selected={active}
+                                  onClick={() => setBackupScope(option.value)}
+                                  disabled={adminBusy}
+                                  className={`group flex flex-col items-start gap-1.5 rounded-lg border p-2.5 text-left transition-colors ${
+                                    active
+                                      ? 'border-primary/40 bg-primary-container/10'
+                                      : 'border-outline-variant/15 bg-surface-container-lowest hover:border-primary/25 hover:bg-surface-container-low'
+                                  } disabled:cursor-not-allowed disabled:opacity-50`}
+                                >
+                                  <span className="flex w-full items-center gap-1.5">
+                                    <span
+                                      className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-md ${
+                                        active
+                                          ? 'bg-primary-container/15 text-primary-container'
+                                          : 'bg-surface-container-high text-on-surface-variant'
+                                      }`}
+                                    >
+                                      <Icon name={option.icon} size={14} />
+                                    </span>
+                                    <span
+                                      className={`min-w-0 flex-1 truncate text-xs font-semibold ${
+                                        active ? 'text-primary-container' : 'text-on-surface'
+                                      }`}
+                                    >
+                                      {option.label}
+                                    </span>
+                                    {active && (
+                                      <Icon name="check" size={13} className="shrink-0 text-primary-container" />
+                                    )}
+                                  </span>
+                                  <span className="line-clamp-2 text-[10px] leading-snug text-on-surface-variant">
+                                    {option.desc}
+                                  </span>
+                                </button>
+                              );
+                            })}
+                          </div>
+                          <button
+                            onClick={() => setExportConfirmOpen(true)}
+                            disabled={adminBusy || exporting}
+                            className="mt-2 w-full px-4 py-2.5 text-xs font-medium bg-primary-container/20 text-primary-container rounded-md hover:bg-primary-container/30 disabled:opacity-50 transition-colors flex items-center justify-center gap-1.5 shrink-0"
+                          >
+                            <Icon name="add" size={14} />
+                            {exporting ? `${exportProgress.percent}%` : `创建${selectedBackupScope.label}备份`}
+                          </button>
                           {exporting && <TaskProgressCard progress={exportProgress} />}
                         </div>
 
