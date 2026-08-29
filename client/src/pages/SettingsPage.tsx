@@ -5014,6 +5014,42 @@ function Content() {
           detail: `模型分类 ${formatOptionalStatNumber(backupStats.categoryCount)} 个 / 含 logo、favicon、水印品牌资产`,
           meta: '轻量备份',
         },
+        {
+          key: 'users',
+          icon: 'group',
+          label: '用户',
+          value: `${formatOptionalStatNumber(backupStats.userCount)} 个账号`,
+          detail: '账号资料与权限 / 恢复时按邮箱合并，不改现有密码',
+          meta: '轻量备份',
+        },
+        {
+          key: 'tickets',
+          icon: 'support_agent',
+          label: '工单',
+          value: `${formatOptionalStatNumber(backupStats.ticketCount)} 个工单`,
+          detail: `消息 ${formatOptionalStatNumber(backupStats.ticketMessageCount)} 条 / 附件 ${formatOptionalStatNumber(
+            backupStats.ticketAttachmentFileCount,
+          )} 个`,
+          meta: '含附件',
+        },
+        {
+          key: 'inquiries',
+          icon: 'request_quote',
+          label: '询价',
+          value: `${formatOptionalStatNumber(backupStats.inquiryCount)} 个询价`,
+          detail: `明细 ${formatOptionalStatNumber(backupStats.inquiryItemCount)} 条 / 消息 ${formatOptionalStatNumber(
+            backupStats.inquiryMessageCount,
+          )} 条 / 附件 ${formatOptionalStatNumber(backupStats.inquiryAttachmentFileCount)} 个`,
+          meta: '含附件',
+        },
+        {
+          key: 'audit',
+          icon: 'receipt_long',
+          label: '审计日志',
+          value: `${formatOptionalStatNumber(backupStats.auditLogCount)} 条记录`,
+          detail: '系统操作审计 / 纯数据库记录',
+          meta: '轻量备份',
+        },
       ]
     : [];
   const backupProtectionCards = backupHealth ? buildBackupProtectionCards(backupHealth, backupPolicyCheck) : [];
@@ -7193,7 +7229,7 @@ function Content() {
                                   <div
                                     role="listbox"
                                     aria-label="备份范围"
-                                    className="absolute right-0 z-30 mt-2 w-full min-w-[250px] overflow-hidden rounded-lg border border-outline-variant/20 bg-surface-container-lowest p-1 shadow-xl"
+                                    className="absolute right-0 z-30 mt-2 max-h-[360px] w-full min-w-[250px] overflow-y-auto rounded-lg border border-outline-variant/20 bg-surface-container-lowest p-1 shadow-xl"
                                   >
                                     {BACKUP_SCOPE_OPTIONS.map((option) => {
                                       const active = option.value === backupScope;
@@ -7399,9 +7435,11 @@ function Content() {
                                             <>
                                               <p className="text-xs font-medium text-on-surface">确认恢复到此备份？</p>
                                               <p className="text-xs text-error/80 mt-1">
-                                                {b.scope && b.scope !== 'full'
-                                                  ? `此操作将只覆盖当前${getBackupScopeLabel(b.scope, b.scopeLabel)}数据和资源文件，不可撤销！`
-                                                  : '此操作将覆盖当前数据库和模型文件，不可撤销！'}
+                                                {b.scope === 'users'
+                                                  ? '此操作将按邮箱/用户名合并恢复用户：已有用户更新资料但保留现有密码，新用户将使用备份中的密码。不可撤销！'
+                                                  : b.scope && b.scope !== 'full'
+                                                    ? `此操作将只覆盖当前${getBackupScopeLabel(b.scope, b.scopeLabel)}数据和资源文件，不可撤销！`
+                                                    : '此操作将覆盖当前数据库和模型文件，不可撤销！'}
                                               </p>
                                               <label className="flex items-start gap-2 mt-2 cursor-pointer select-none">
                                                 <input
@@ -7594,7 +7632,7 @@ function Content() {
                                     >
                                       <p className="text-xs font-medium text-error">直接恢复</p>
                                       <p className="text-xs text-on-surface-variant mt-0.5">
-                                        立即覆盖当前数据库和模型文件（不可撤销）
+                                        整站备份将覆盖数据库和全部资源文件；模块备份只覆盖对应模块（不可撤销）
                                       </p>
                                     </button>
                                     <button

@@ -273,6 +273,15 @@ export interface BackupStats {
   productWallCategoryCount?: number;
   productWallImageCount?: number;
   settingsCount?: number;
+  userCount?: number;
+  ticketCount?: number;
+  ticketMessageCount?: number;
+  ticketAttachmentFileCount?: number;
+  inquiryCount?: number;
+  inquiryItemCount?: number;
+  inquiryMessageCount?: number;
+  inquiryAttachmentFileCount?: number;
+  auditLogCount?: number;
   productWallResourceFileCount?: number;
   productWallResourceSize?: number;
   productWallResourceSizeText?: string;
@@ -459,7 +468,16 @@ export interface RestoreResult {
   fileCount?: number;
 }
 
-export type BackupScope = 'full' | 'models' | 'selection' | 'product_wall' | 'config';
+export type BackupScope =
+  | 'full'
+  | 'models'
+  | 'selection'
+  | 'product_wall'
+  | 'config'
+  | 'users'
+  | 'tickets'
+  | 'inquiries'
+  | 'audit';
 
 type HttpError = Error & {
   response?: {

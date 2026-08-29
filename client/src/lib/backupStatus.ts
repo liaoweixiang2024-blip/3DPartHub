@@ -12,6 +12,10 @@ export const BACKUP_SCOPE_OPTIONS: Array<{ value: BackupScope; label: string; de
   { value: 'selection', label: '选型', desc: '选型分类、产品与素材', icon: 'tune' },
   { value: 'product_wall', label: '产品图库', desc: '图库分类、图片与状态', icon: 'photo_library' },
   { value: 'config', label: '系统配置', desc: '站点设置、模型分类与品牌资产', icon: 'settings' },
+  { value: 'users', label: '用户', desc: '账号资料与权限（合并恢复，不改现有密码）', icon: 'group' },
+  { value: 'tickets', label: '工单', desc: '工单与沟通消息', icon: 'support_agent' },
+  { value: 'inquiries', label: '询价', desc: '询价单、明细与沟通记录', icon: 'request_quote' },
+  { value: 'audit', label: '审计日志', desc: '系统操作审计记录', icon: 'receipt_long' },
 ];
 
 export function getBackupScopeLabel(scope?: BackupScope, fallback?: string): string {

@@ -334,7 +334,16 @@ const BACKUP_LOCK_KEEPALIVE_MS = Math.min(60_000, Math.max(10_000, Math.floor(BA
 const ALLOW_FOREIGN_KEY_SKIP_RESTORE = /^(1|true|yes)$/i.test(process.env.BACKUP_RESTORE_ALLOW_FK_SKIP || '');
 const STEP_EXTENSIONS = new Set(['.step', '.stp', '.iges', '.igs']);
 
-export type BackupScope = 'full' | 'models' | 'selection' | 'product_wall' | 'config';
+export type BackupScope =
+  | 'full'
+  | 'models'
+  | 'selection'
+  | 'product_wall'
+  | 'config'
+  | 'users'
+  | 'tickets'
+  | 'inquiries'
+  | 'audit';
 
 const BACKUP_SCOPE_LABELS: Record<BackupScope, string> = {
   full: '整站备份',
@@ -342,6 +351,10 @@ const BACKUP_SCOPE_LABELS: Record<BackupScope, string> = {
   selection: '选型',
   product_wall: '产品图库',
   config: '系统配置',
+  users: '用户',
+  tickets: '工单',
+  inquiries: '询价',
+  audit: '审计日志',
 };
 
 const MODULE_BACKUP_STATIC_DIRS: Record<Exclude<BackupScope, 'full'>, string[]> = {
@@ -349,6 +362,10 @@ const MODULE_BACKUP_STATIC_DIRS: Record<Exclude<BackupScope, 'full'>, string[]> 
   selection: ['option-images', 'selection-assets', 'selection-categories-ai'],
   product_wall: ['product-wall'],
   config: ['logo', 'favicon', 'watermark'],
+  users: [],
+  tickets: ['ticket-attachments'],
+  inquiries: ['inquiry-attachments'],
+  audit: [],
 };
 
 export const MODULE_BACKUP_TABLE_KEYS: Record<Exclude<BackupScope, 'full'>, readonly string[]> = {
@@ -366,10 +383,25 @@ export const MODULE_BACKUP_TABLE_KEYS: Record<Exclude<BackupScope, 'full'>, read
   selection: ['selectionCategories', 'selectionProducts', 'threadSizeEntries', 'selectionShares'],
   product_wall: ['productWallCategories', 'productWallImages', 'productWallImageFavorites'],
   config: ['settings', 'categories'],
+  users: ['users'],
+  tickets: ['supportTickets', 'ticketMessages'],
+  inquiries: ['inquiries', 'inquiryItems', 'inquiryMessages'],
+  audit: ['auditLogs'],
 };
 
 export function normalizeBackupScope(value: unknown): BackupScope {
-  if (value === 'models' || value === 'selection' || value === 'product_wall' || value === 'config') return value;
+  if (
+    value === 'models' ||
+    value === 'selection' ||
+    value === 'product_wall' ||
+    value === 'config' ||
+    value === 'users' ||
+    value === 'tickets' ||
+    value === 'inquiries' ||
+    value === 'audit'
+  ) {
+    return value;
+  }
   return 'full';
 }
 
@@ -616,6 +648,15 @@ export interface BackupStats {
   productWallResourceFileCount: number;
   productWallResourceSize: number;
   productWallResourceSizeText: string;
+  userCount: number;
+  ticketCount: number;
+  ticketMessageCount: number;
+  ticketAttachmentFileCount: number;
+  inquiryCount: number;
+  inquiryItemCount: number;
+  inquiryMessageCount: number;
+  inquiryAttachmentFileCount: number;
+  auditLogCount: number;
   uploadResourceFileCount: number;
   uploadResourceSize: number;
   uploadResourceSizeText: string;
@@ -1033,7 +1074,7 @@ export function cancelRestoreJob(jobId: string): { cancelled: boolean; message: 
   if (job.destructiveStarted) {
     return {
       cancelled: false,
-      message: '数据库恢复已开始（schema 已重置），无法安全取消；请等待完成或失败后从恢复前快照回滚',
+      message: '恢复已进入数据写入阶段（安全快照已创建），无法安全取消；请等待完成，失败后会自动回滚到恢复前快照',
     };
   }
 
@@ -1077,6 +1118,10 @@ export function cancelRestoreJob(jobId: string): { cancelled: boolean; message: 
   addLog(job, '用户已手动取消恢复任务');
   syncJob(job);
   restoreJobs.set(job.id, job);
+  // 竞态兜底：kill 若落在「快照已持久化、destructiveStarted 未落盘」的毫秒级窗口，
+  // worker 死后会残留进行中 marker → 下次启动误报「中断恢复可回滚」。取消=用户确认数据未动，
+  // 主动清掉 marker 防止管理员之后误点回滚，把取消后的业务写入一并回滚掉。
+  clearRestoreInProgressMarker(jobId);
   releaseLockForJob(jobId);
   return { cancelled: true, message: job.message };
 }
@@ -2020,6 +2065,51 @@ async function buildModuleBackupPayload(scope: Exclude<BackupScope, 'full'>): Pr
     };
   }
 
+  if (scope === 'users') {
+    return {
+      ...base,
+      tables: {
+        users: await prisma.user.findMany({ orderBy: [{ createdAt: 'asc' }] }),
+      },
+    };
+  }
+
+  if (scope === 'tickets') {
+    return {
+      ...base,
+      tables: {
+        supportTickets: await prisma.supportTicket.findMany({ orderBy: [{ createdAt: 'asc' }] }),
+        ticketMessages: await prisma.ticketMessage.findMany({
+          orderBy: [{ ticketId: 'asc' }, { createdAt: 'asc' }],
+        }),
+      },
+    };
+  }
+
+  if (scope === 'inquiries') {
+    return {
+      ...base,
+      tables: {
+        inquiries: await prisma.inquiry.findMany({ orderBy: [{ createdAt: 'asc' }] }),
+        inquiryItems: await prisma.inquiryItem.findMany({
+          orderBy: [{ inquiryId: 'asc' }],
+        }),
+        inquiryMessages: await prisma.inquiryMessage.findMany({
+          orderBy: [{ inquiryId: 'asc' }, { createdAt: 'asc' }],
+        }),
+      },
+    };
+  }
+
+  if (scope === 'audit') {
+    return {
+      ...base,
+      tables: {
+        auditLogs: await prisma.auditLog.findMany({ orderBy: [{ createdAt: 'asc' }] }),
+      },
+    };
+  }
+
   return {
     ...base,
     tables: {
@@ -2896,6 +2986,15 @@ async function runModuleRestoreFromArchive(
       const snapSize = statSync(safetySnapshot).size;
       if (snapSize === 0) throw new Error('安全快照为空');
       addLogEnd(job, t, `安全快照已创建（${formatSize(snapSize)}）`);
+      // 与整站恢复同款双保险：
+      // 1. 快照持久化到 _safety_snapshots/ + 写进行中 marker —— 硬崩（OOM/断电/SIGKILL）后
+      //    detectInterruptedRestores 能提供一键回滚入口；临时目录的快照会被清理，这份是保命副本。
+      // 2. 此后 TRUNCATE/重建数据表 + 替换资源目录都属于破坏性阶段，禁止中途取消。
+      if (!persistPreRestoreSnapshot(safetySnapshot, job.id)) {
+        throw new Error('无法持久化恢复前安全快照，已中止恢复以保障崩溃可恢复性');
+      }
+      job.destructiveStarted = true;
+      syncJob(job);
     } catch (snapErr: unknown) {
       throw new Error(`无法创建恢复前安全快照，已中止恢复以保护数据安全: ${getErrorMessage(snapErr)}`);
     }
@@ -2944,6 +3043,10 @@ async function runModuleRestoreFromArchive(
     });
 
     log.info({ jobId: job.id, scope: manifest.scope, itemCount: result.itemCount }, 'Module restore completed');
+
+    // DB 数据 + 资源目录都已落盘，处于已知良好状态；清掉硬中断救援 marker
+    //（此后进程崩溃不会留下破损数据，无需启动时提供回滚入口）。
+    clearRestoreInProgressMarker(job.id);
   } catch (err: unknown) {
     const message = getErrorMessage(err);
     job.stage = 'error';
@@ -2956,6 +3059,9 @@ async function runModuleRestoreFromArchive(
       error: message,
     });
     log.error({ err, jobId: job.id, scope: expectedScope }, 'Module restore failed');
+    // 失败路径：restoreModulePayload 的事务已回滚（DB 回到恢复前），marker 可清。
+    // 若失败发生在文件替换阶段，rollbackToSafetySnapshot 已把 DB 也拉回快照，仍一致。
+    clearRestoreInProgressMarker(job.id);
   } finally {
     if (removeArchiveAfterExtract && existsSync(archPath)) rmSync(archPath, { force: true });
     if (existsSync(tmpDir)) rmSync(tmpDir, { recursive: true, force: true });
@@ -3415,6 +3521,8 @@ export async function getBackupStats(): Promise<BackupStats> {
   const modelsDirStats = countDirs(staticDir, moduleStaticDirs('models'));
   const selectionDirStats = countDirs(staticDir, moduleStaticDirs('selection'));
   const productWallDirStats = countDirs(staticDir, moduleStaticDirs('product_wall'));
+  const ticketsDirStats = countDirs(staticDir, moduleStaticDirs('tickets'));
+  const inquiriesDirStats = countDirs(staticDir, moduleStaticDirs('inquiries'));
   const uploadDirStats = countDirs(uploadDir, discoverUploadBackupDirs(uploadDir));
   const thumbnailCount = countFilesRecursive(join(staticDir, 'thumbnails'), (name) => name.endsWith('.png'));
   const originalFileCount = countFilesRecursive(join(staticDir, 'originals'), isStepFileName);
@@ -3429,6 +3537,13 @@ export async function getBackupStats(): Promise<BackupStats> {
   let productWallCategoryCount = 0;
   let productWallImageCount = 0;
   let settingsCount = 0;
+  let userCount = 0;
+  let ticketCount = 0;
+  let ticketMessageCount = 0;
+  let inquiryCount = 0;
+  let inquiryItemCount = 0;
+  let inquiryMessageCount = 0;
+  let auditLogCount = 0;
   let dbSizeBytes = 0;
   let dbSize = 'unknown';
 
@@ -3445,6 +3560,13 @@ export async function getBackupStats(): Promise<BackupStats> {
       productWallCategoryCount,
       productWallImageCount,
       settingsCount,
+      userCount,
+      ticketCount,
+      ticketMessageCount,
+      inquiryCount,
+      inquiryItemCount,
+      inquiryMessageCount,
+      auditLogCount,
     ] = await Promise.all([
       prisma.model.count({ where: completedStepWhere }),
       prisma.model.count(),
@@ -3456,6 +3578,13 @@ export async function getBackupStats(): Promise<BackupStats> {
       prisma.productWallCategory.count(),
       prisma.productWallImage.count(),
       prisma.setting.count(),
+      prisma.user.count(),
+      prisma.supportTicket.count(),
+      prisma.ticketMessage.count(),
+      prisma.inquiry.count(),
+      prisma.inquiryItem.count(),
+      prisma.inquiryMessage.count(),
+      prisma.auditLog.count(),
     ]);
     const r = await prisma.$queryRaw<
       Array<{ bytes: bigint | number; pg_size_pretty: string }>
@@ -3496,6 +3625,15 @@ export async function getBackupStats(): Promise<BackupStats> {
     productWallCategoryCount,
     productWallImageCount,
     settingsCount,
+    userCount,
+    ticketCount,
+    ticketMessageCount,
+    ticketAttachmentFileCount: ticketsDirStats.fileCount,
+    inquiryCount,
+    inquiryItemCount,
+    inquiryMessageCount,
+    inquiryAttachmentFileCount: inquiriesDirStats.fileCount,
+    auditLogCount,
     productWallResourceFileCount: productWallDirStats.fileCount,
     productWallResourceSize: productWallDirStats.totalBytes,
     productWallResourceSizeText: formatSize(productWallDirStats.totalBytes),
@@ -3691,6 +3829,10 @@ async function restoreModulePayload(payload: ModuleBackupPayload, job: RestoreJo
       if (payload.scope === 'models') return restoreModelsModule(tx, payload, job);
       if (payload.scope === 'selection') return restoreSelectionModule(tx, payload);
       if (payload.scope === 'config') return restoreConfigModule(tx, payload);
+      if (payload.scope === 'users') return restoreUsersModule(tx, payload, job);
+      if (payload.scope === 'tickets') return restoreTicketsModule(tx, payload, job);
+      if (payload.scope === 'inquiries') return restoreInquiriesModule(tx, payload, job);
+      if (payload.scope === 'audit') return restoreAuditModule(tx, payload);
       return restoreProductWallModule(tx, payload);
     },
     { maxWait: 60_000, timeout: DB_RESTORE_TIMEOUT_MS },
@@ -3984,6 +4126,245 @@ async function restoreConfigModule(tx: RestoreTransaction, payload: ModuleBackup
   }
 
   return settings.length + categories.length;
+}
+
+// 「用户」模块合并恢复的字段集：已有用户只更新资料/权限，绝不动
+// id / passwordHash / avatar / mustChangePassword / lastLoginAt（密码、头像、登录态保持现状）。
+// email/username 为空时不下发该字段（避免 '' 兜底在多行间撞唯一键），由恢复方按需 delete。
+// 抽成纯函数便于测试合并语义（不碰 Prisma）。
+export function buildUserMergeUpdate(row: Record<string, unknown>): Record<string, unknown> {
+  const data: Record<string, unknown> = {
+    role: stringValue(row.role) ?? 'VIEWER',
+    canInvite: Boolean(row.canInvite),
+    company: stringValue(row.company),
+    phone: stringValue(row.phone),
+    department: stringValue(row.department),
+    address: stringValue(row.address),
+    bio: stringValue(row.bio),
+    metadata: isPlainRecord(row.metadata) ? JSON.parse(JSON.stringify(row.metadata)) : undefined,
+    disabled: Boolean(row.disabled),
+  };
+  const username = stringValue(row.username);
+  const email = stringValue(row.email);
+  if (username) data.username = username;
+  if (email) data.email = email;
+  return data;
+}
+
+// 新用户整行插入（含备份里的密码/头像/登录标记），保留备份 id —— 后续恢复
+// models 等模块时 keepIdIfPresent 才能把 createdById 等外键对上。
+function buildUserInsert(row: Record<string, unknown>): Prisma.UserUncheckedCreateInput {
+  const data = reviveDateFields(row, ['lastLoginAt', 'createdAt', 'updatedAt']);
+  data.canInvite = Boolean(data.canInvite);
+  data.disabled = Boolean(data.disabled);
+  data.mustChangePassword = Boolean(data.mustChangePassword);
+  return data as Prisma.UserUncheckedCreateInput;
+}
+
+/**
+ * Restore the "用户" module: merge-update by email (fallback username).
+ *
+ * users is referenced by ~15 tables — TRUNCATE would cascade-delete those users'
+ * models/favorites/comments/etc., so this module NEVER truncates. Matched users get
+ * profile/permission fields refreshed but keep their current passwordHash/avatar;
+ * unmatched users are inserted whole (backup id preserved for cross-module FKs).
+ */
+async function restoreUsersModule(
+  tx: RestoreTransaction,
+  payload: ModuleBackupPayload,
+  job: RestoreJob,
+): Promise<number> {
+  const rows = dedupeRowsByKeys(tableRows(payload, 'users'), ['email']);
+  const existing = (await tx.user.findMany({ select: { id: true, email: true, username: true } })) as Array<{
+    id: string;
+    email: string | null;
+    username: string;
+  }>;
+  const byEmail = new Map<string, string>();
+  const byUsername = new Map<string, string>();
+  const localUsernameOf = new Map<string, string>();
+  for (const user of existing) {
+    if (user.email) byEmail.set(user.email.toLowerCase(), user.id);
+    byUsername.set(user.username.toLowerCase(), user.id);
+    localUsernameOf.set(user.id, user.username.toLowerCase());
+  }
+
+  let updated = 0;
+  let inserted = 0;
+  for (const row of rows) {
+    const email = stringValue(row.email)?.toLowerCase() ?? null;
+    const username = stringValue(row.username)?.toLowerCase() ?? null;
+
+    // 匹配规则（email/username 均为唯一键，跨站合并时可能撞名）：
+    // - email 命中且命中者的 username 与备份一致（或备份无 username）→ 同一人，合并
+    // - 否则 username 命中 → 同一人（备份里换绑了邮箱），合并但邮箱保现状
+    // - 都不算命中 → 新用户插入（插入时唯一键再撞则跳过该行）
+    // 关键：email 命中但 username 对不上（本地另一个账号占了备份的邮箱）≠ 同一人，
+    // 绝不能把备份资料刷到占用者头上（否则会把别人的账号改写成备份用户）。
+    const emailMatchId = email ? byEmail.get(email) : undefined;
+    const usernameMatchId = username ? byUsername.get(username) : undefined;
+    const emailMatchIsSamePerson =
+      Boolean(emailMatchId) && (!username || localUsernameOf.get(emailMatchId!) === username);
+    let matchId: string | null = null;
+    let emailOccupiedByOther = false;
+    if (emailMatchIsSamePerson && emailMatchId) {
+      matchId = emailMatchId;
+      emailOccupiedByOther = false;
+    } else if (usernameMatchId) {
+      matchId = usernameMatchId;
+      emailOccupiedByOther = Boolean(emailMatchId && emailMatchId !== matchId);
+    }
+
+    if (matchId) {
+      const data = buildUserMergeUpdate(row);
+      // 换绑场景防御：备份里的新邮箱/新用户名已被本地其他账号占用时，改写会撞唯一键
+      // 导致整个恢复事务回滚。占用方是谁就保留谁的现状，跳过该字段改写并记日志。
+      if (emailOccupiedByOther) {
+        delete data.email;
+        addLog(job, `用户 ${row.username || matchId} 的备份邮箱已被其他账号占用，保留当前邮箱`);
+      }
+      if (username && byUsername.get(username) && byUsername.get(username) !== matchId) {
+        delete data.username;
+        addLog(job, `用户 ${row.email || matchId} 的备份用户名已被其他账号占用，保留当前用户名`);
+      }
+      if (matchId === job.userId) {
+        // 执行恢复的管理员自己：跳过 disabled/role 改写，避免备份把操作者锁死
+        delete data.disabled;
+        delete data.role;
+      }
+      await tx.user.update({ where: { id: matchId }, data });
+      updated += 1;
+    } else {
+      // 新用户插入。备份 id/邮箱/用户名理论上都可能撞本地已有账号（跨站合并、
+      // uuid 碰撞）——撞上就放弃插入该用户并记日志（本地占用者优先），绝不让
+      // 单个冲突把整个恢复事务拖回滚。
+      const data = buildUserInsert(row);
+      const newId = stringValue(data.id) || '';
+      const idTaken = newId && localUsernameOf.has(newId);
+      const emailTaken = email && byEmail.has(email);
+      const usernameTaken = username && byUsername.has(username);
+      if (idTaken || emailTaken || usernameTaken) {
+        addLog(
+          job,
+          `跳过插入用户 ${row.username || newId || '?'}：${[
+            idTaken ? 'id' : null,
+            emailTaken ? `邮箱(${row.email})` : null,
+            usernameTaken ? `用户名(${row.username})` : null,
+          ]
+            .filter(Boolean)
+            .join('/')} 已被本地账号占用`,
+        );
+        continue;
+      }
+      await tx.user.create({ data });
+      if (email && newId) byEmail.set(email, newId);
+      if (username && newId) byUsername.set(username, newId);
+      localUsernameOf.set(newId, username || '');
+      inserted += 1;
+    }
+  }
+  addLog(job, `用户合并恢复完成: 更新 ${updated} 人，新增 ${inserted} 人`);
+  return updated + inserted;
+}
+
+/**
+ * Restore the "工单" module: support_tickets + ticket_messages, clean rebuild.
+ * userId 沿用现有模块语义：目标站不存在的用户归到管理员（pickRestoreUserId）。
+ */
+async function restoreTicketsModule(
+  tx: RestoreTransaction,
+  payload: ModuleBackupPayload,
+  job: RestoreJob,
+): Promise<number> {
+  await tx.$executeRawUnsafe('TRUNCATE TABLE "ticket_messages", "support_tickets" RESTART IDENTITY CASCADE');
+
+  const tickets = tableRows(payload, 'supportTickets');
+  const messages = tableRows(payload, 'ticketMessages');
+  const userContext = await getRestoreUserContext(tx, tickets.length > 0 || messages.length > 0);
+
+  const ticketData = tickets.map((row) => {
+    const data = reviveDateFields(row, ['createdAt', 'updatedAt']);
+    data.userId = pickRestoreUserId(data.userId, userContext);
+    return data;
+  });
+  await createManyInChunks(tx.supportTicket, ticketData);
+
+  const ticketIds = new Set(ticketData.map((row) => stringValue(row.id)).filter((id): id is string => Boolean(id)));
+  const messageData = messages
+    .map((row) => {
+      const data = reviveDateFields(row, ['createdAt']);
+      data.ticketId = keepIdIfPresent(data.ticketId, ticketIds);
+      data.userId = pickRestoreUserId(data.userId, userContext);
+      return data.ticketId ? data : null;
+    })
+    .filter((row): row is Record<string, unknown> => Boolean(row));
+  await createManyInChunks(tx.ticketMessage, messageData);
+
+  addLog(job, `工单恢复完成: ${ticketData.length} 个工单，${messageData.length} 条消息`);
+  return ticketData.length + messageData.length;
+}
+
+/**
+ * Restore the "询价" module: inquiries + inquiry_items + inquiry_messages, clean rebuild.
+ * salesAssigneeId/salesAssignedById 是可空外键 → 目标站没有该用户就置 null（同 productWall 的 uploaderId）。
+ * productId 无 FK 关系（纯字符串），原样保留。
+ */
+async function restoreInquiriesModule(
+  tx: RestoreTransaction,
+  payload: ModuleBackupPayload,
+  job: RestoreJob,
+): Promise<number> {
+  await tx.$executeRawUnsafe(
+    'TRUNCATE TABLE "inquiry_messages", "inquiry_items", "inquiries" RESTART IDENTITY CASCADE',
+  );
+
+  const inquiries = tableRows(payload, 'inquiries');
+  const items = tableRows(payload, 'inquiryItems');
+  const messages = tableRows(payload, 'inquiryMessages');
+  const userContext = await getRestoreUserContext(tx, inquiries.length > 0 || messages.length > 0);
+
+  const inquiryData = inquiries.map((row) => {
+    const data = reviveDateFields(row, ['createdAt', 'updatedAt', 'salesAssignedAt']);
+    data.userId = pickRestoreUserId(data.userId, userContext);
+    data.salesAssigneeId = keepIdIfPresent(data.salesAssigneeId, userContext.ids);
+    data.salesAssignedById = keepIdIfPresent(data.salesAssignedById, userContext.ids);
+    return data;
+  });
+  await createManyInChunks(tx.inquiry, inquiryData);
+
+  const inquiryIds = new Set(inquiryData.map((row) => stringValue(row.id)).filter((id): id is string => Boolean(id)));
+  const itemData = items
+    .map((row) => {
+      const data = { ...row };
+      data.inquiryId = keepIdIfPresent(data.inquiryId, inquiryIds);
+      return data.inquiryId ? data : null;
+    })
+    .filter((row): row is Record<string, unknown> => Boolean(row));
+  await createManyInChunks(tx.inquiryItem, itemData);
+
+  const messageData = messages
+    .map((row) => {
+      const data = reviveDateFields(row, ['createdAt']);
+      data.inquiryId = keepIdIfPresent(data.inquiryId, inquiryIds);
+      data.userId = pickRestoreUserId(data.userId, userContext);
+      return data.inquiryId ? data : null;
+    })
+    .filter((row): row is Record<string, unknown> => Boolean(row));
+  await createManyInChunks(tx.inquiryMessage, messageData);
+
+  addLog(job, `询价恢复完成: ${inquiryData.length} 个询价，${itemData.length} 条明细，${messageData.length} 条消息`);
+  return inquiryData.length + itemData.length + messageData.length;
+}
+
+/**
+ * Restore the "审计日志" module: audit_logs, clean rebuild.
+ * userId 是纯字符串（schema 无关系），原样保留 —— 悬空可接受，符合审计语义。
+ */
+async function restoreAuditModule(tx: RestoreTransaction, payload: ModuleBackupPayload): Promise<number> {
+  await tx.$executeRawUnsafe('TRUNCATE TABLE "audit_logs" RESTART IDENTITY');
+  const logs = tableRows(payload, 'auditLogs').map((row) => reviveDateFields(row, ['createdAt']));
+  await createManyInChunks(tx.auditLog, logs);
+  return logs.length;
 }
 
 async function restoreCategoryRows(tx: RestoreTransaction, rows: Record<string, unknown>[]) {
@@ -4325,7 +4706,11 @@ function isModuleBackupManifest(value: unknown): value is ModuleBackupManifest {
     (manifest.scope === 'models' ||
       manifest.scope === 'selection' ||
       manifest.scope === 'product_wall' ||
-      manifest.scope === 'config') &&
+      manifest.scope === 'config' ||
+      manifest.scope === 'users' ||
+      manifest.scope === 'tickets' ||
+      manifest.scope === 'inquiries' ||
+      manifest.scope === 'audit') &&
     manifest.data?.path === MODULE_BACKUP_DATA_ENTRY
   );
 }
@@ -5821,16 +6206,33 @@ async function runBackupSchedulerTick() {
   }
 }
 
+// 保留策略核心分组逻辑（纯函数便于测试）：
+// 按「备份类型分组」各保留最近 keep 份，整站备份豁免清理 ——
+// 模块备份体积小、创建频繁，全局计数会把唯一的整站备份挤掉。
+// 输入需已按创建时间倒序（listBackups 的天然顺序）。
+export function selectRetentionPolicyRemovals<T extends { scope?: BackupScope }>(backups: T[], keep: number): T[] {
+  if (!Number.isFinite(keep) || keep <= 0) return [];
+  const counts = new Map<string, number>();
+  const out: T[] = [];
+  for (const backup of backups) {
+    const scope = backup.scope && backup.scope !== 'full' ? backup.scope : 'full';
+    const seen = (counts.get(scope) || 0) + 1;
+    counts.set(scope, seen);
+    if (scope !== 'full' && seen > keep) out.push(backup);
+  }
+  return out;
+}
+
 async function applyBackupRetentionPolicy(job: { logs?: string[] }) {
   const settings = await getBackupPolicySettings();
   const keep = settings.backup_retention_count;
   if (!Number.isFinite(keep) || keep <= 0) return;
 
-  const backups = listBackups();
-  const removable = backups.slice(keep);
+  // listBackups 已按创建时间倒序；整站备份豁免，模块备份按 scope 分组各保留 keep 份。
+  const removable = selectRetentionPolicyRemovals(listBackups(), keep);
   for (const backup of removable) {
     if (deleteBackup(backup.id)) {
-      addLog(job, `已按保留策略清理旧备份: ${backup.name || backup.id}`);
+      addLog(job, `已按保留策略清理旧${backupScopeLabel(backup.scope || 'full')}备份: ${backup.name || backup.id}`);
     }
   }
 
@@ -5966,10 +6368,16 @@ function cleanupMirrorBackups(mirrorDir: string, keep: number, job: { logs?: str
       .filter((record): record is BackupRecord => Boolean(record))
       .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
 
-    for (const record of records.slice(keep)) {
+    // 与 applyBackupRetentionPolicy 同规则：整站备份豁免，模块备份按 scope 分组各保留 keep 份
+    const counts = new Map<string, number>();
+    for (const record of records) {
+      const scope = record.scope && record.scope !== 'full' ? record.scope : 'full';
+      const seen = (counts.get(scope) || 0) + 1;
+      counts.set(scope, seen);
+      if (scope === 'full' || seen <= keep) continue;
       rmSync(join(mirrorDir, `${record.id}.json`), { force: true });
       rmSync(join(mirrorDir, `${record.id}.tar.gz`), { force: true });
-      addLog(job, `已清理外部镜像旧备份: ${record.name || record.id}`);
+      addLog(job, `已清理外部镜像旧${backupScopeLabel(record.scope || 'full')}备份: ${record.name || record.id}`);
     }
   } catch (err: unknown) {
     addLog(job, `外部镜像保留策略清理失败: ${getErrorMessage(err)}`);
