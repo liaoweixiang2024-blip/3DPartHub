@@ -73,16 +73,13 @@ import { useToast } from '../components/shared/Toast';
 import { useDocumentTitle } from '../hooks/useDocumentTitle';
 import {
   BACKUP_SCOPE_OPTIONS,
-  buildBackupAdviceItems,
   buildBackupProtectionCards,
   formatOptionalStatNumber,
   formatStatNumber,
-  getBackupRiskLabel,
   getBackupScopeLabel,
   getBackupStatusClasses,
   getBackupStatusIcon,
   getBackupStatusIconClass,
-  getBackupStatusText,
   toBackupProtectionStatus,
 } from '../lib/backupStatus';
 import {
@@ -4910,6 +4907,8 @@ function Content() {
   const [policyCheckConfirmOpen, setPolicyCheckConfirmOpen] = useState(false);
   // 体检明细默认收起——保护卡已展示各项状态，逐项检查列表仅在需要排查时展开
   const [policyDetailOpen, setPolicyDetailOpen] = useState(false);
+  // 保障胶囊点击展开的详情项（null=全部收起）
+  const [protectionDetailKey, setProtectionDetailKey] = useState<string | null>(null);
   const [exportConfirmOpen, setExportConfirmOpen] = useState(false);
   const [cleanupScanConfirmOpen, setCleanupScanConfirmOpen] = useState(false);
   const [verifyConfirmId, setVerifyConfirmId] = useState<string | null>(null);
@@ -4973,8 +4972,6 @@ function Content() {
       }
     : {};
   const backupProtectionCards = backupHealth ? buildBackupProtectionCards(backupHealth, backupPolicyCheck) : [];
-  const backupAdviceItems = backupHealth ? buildBackupAdviceItems(backupHealth, backupPolicyCheck) : [];
-  const backupHealthTone = toBackupProtectionStatus(backupPolicyCheck?.status || backupHealth?.status);
   const backupPolicyIssueCount = backupPolicyCheck
     ? backupPolicyCheck.checks.filter((check) => check.status !== 'ok').length
     : 0;
@@ -6842,230 +6839,143 @@ function Content() {
                       className="scroll-mt-24 bg-surface-container-low rounded-lg border border-outline-variant/10 overflow-hidden"
                     >
                       <div className="divide-y divide-outline-variant/5">
-                        {/* Backup health */}
-                        {backupHealth && (
-                          <div className="px-4 py-4 sm:px-6">
-                            <div
-                              className={`rounded-xl border p-4 ${
-                                backupHealthTone === 'ok'
-                                  ? 'bg-green-500/5 border-green-500/20'
-                                  : backupHealthTone === 'error'
-                                    ? 'bg-error/5 border-error/20'
-                                    : backupHealthTone === 'warning'
-                                      ? 'bg-yellow-500/5 border-yellow-500/20'
-                                      : 'bg-surface-container-high/40 border-outline-variant/10'
-                              }`}
-                            >
-                              <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-                                <div className="min-w-0">
-                                  <div className="flex flex-wrap items-center gap-2">
-                                    <span
-                                      className={`inline-flex h-8 w-8 items-center justify-center rounded-full border ${getBackupStatusClasses(backupHealthTone)}`}
-                                    >
-                                      <Icon
-                                        name={getBackupStatusIcon(backupHealthTone)}
-                                        size={18}
-                                        className={getBackupStatusIconClass(backupHealthTone)}
-                                      />
-                                    </span>
-                                    <div>
-                                      <p className="text-sm font-semibold text-on-surface">备份保障概览</p>
-                                      <p className="text-xs text-on-surface-variant mt-0.5">
-                                        判断是否具备可恢复、自动化、异地副本、加密校验四项保障
-                                      </p>
-                                    </div>
-                                    <span
-                                      className={`px-2 py-1 rounded-full border text-[11px] font-medium ${getBackupStatusClasses(backupHealthTone)}`}
-                                    >
-                                      {backupPolicyCheck
-                                        ? backupPolicyCheck.status === 'ok'
-                                          ? '体检通过'
-                                          : backupPolicyCheck.status === 'error'
-                                            ? '体检异常'
-                                            : '体检需关注'
-                                        : getBackupStatusText(backupHealthTone)}
-                                    </span>
-                                  </div>
-                                  <p className="text-xs text-on-surface-variant mt-1">{backupHealth.message}</p>
-                                </div>
+                        {/* 备份保障 + 创建备份（融合区块） */}
+                        <div className="px-4 py-4 sm:px-6">
+                          <div className="mb-3 flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
+                            <div>
+                              <p className="text-sm font-medium text-on-surface">备份与保障</p>
+                              <p className="text-xs text-on-surface-variant mt-0.5">
+                                支持整站备份，也可以只备份指定模块
+                              </p>
+                            </div>
+                            <div className="flex shrink-0 items-center gap-2">
+                              {backupStats?.totalDataSizeText && (
+                                <span className="text-xs text-on-surface-variant">
+                                  整站约 {backupStats.totalDataSizeText}
+                                </span>
+                              )}
+                              {backupHealth && (
                                 <button
                                   onClick={() => setPolicyCheckConfirmOpen(true)}
                                   disabled={checkingBackupPolicy || adminBusy}
-                                  className="w-full sm:w-auto shrink-0 px-3 py-2 text-xs font-medium bg-primary-container/15 text-primary-container rounded-md hover:bg-primary-container/25 disabled:opacity-50 transition-colors flex items-center justify-center gap-1.5"
+                                  className="px-2.5 py-1.5 text-[11px] font-medium text-primary-container hover:bg-primary-container/10 rounded-md disabled:opacity-50 transition-colors flex items-center gap-1"
                                 >
-                                  <Icon name="fact_check" size={14} />
+                                  <Icon name="fact_check" size={13} />
                                   {checkingBackupPolicy ? '体检中...' : '策略体检'}
                                 </button>
-                              </div>
+                              )}
+                            </div>
+                          </div>
 
-                              <div className="mt-4 grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
-                                {backupProtectionCards.map((card) => (
-                                  <div
-                                    key={card.key}
-                                    className="min-w-0 rounded-lg border border-outline-variant/10 bg-surface-container-lowest/70 p-3"
+                          {backupHealth && (
+                            <div className="mb-3">
+                              <div className="flex flex-wrap items-center gap-1.5">
+                                {backupProtectionCards.map((card) => {
+                                  const expanded = protectionDetailKey === card.key;
+                                  return (
+                                    <button
+                                      key={card.key}
+                                      type="button"
+                                      onClick={() => setProtectionDetailKey(expanded ? null : card.key)}
+                                      className={`flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-medium transition-colors ${getBackupStatusClasses(card.status)} ${
+                                        expanded ? 'ring-1 ring-current/30' : 'hover:brightness-95'
+                                      }`}
+                                      title={card.detail}
+                                    >
+                                      <Icon name={card.icon} size={13} />
+                                      <span>{card.label}</span>
+                                      <span className="opacity-70">{card.value}</span>
+                                      {card.status !== 'ok' && (
+                                        <Icon
+                                          name={expanded ? 'expand_less' : 'expand_more'}
+                                          size={12}
+                                          className="opacity-70"
+                                        />
+                                      )}
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                              {protectionDetailKey && (
+                                <div className="mt-2 flex flex-col gap-2 rounded-lg border border-outline-variant/10 bg-surface-container-lowest/70 px-3 py-2.5 sm:flex-row sm:items-center sm:justify-between">
+                                  {(() => {
+                                    const card = backupProtectionCards.find((c) => c.key === protectionDetailKey);
+                                    if (!card) return null;
+                                    return (
+                                      <>
+                                        <p className="min-w-0 text-xs leading-relaxed text-on-surface-variant">
+                                          <span className={`font-medium ${getBackupStatusIconClass(card.status)}`}>
+                                            {card.label} · {card.value}
+                                          </span>
+                                          <span className="mx-1.5 text-on-surface-variant/40">|</span>
+                                          {card.detail}
+                                        </p>
+                                        {card.action && (
+                                          <button
+                                            type="button"
+                                            onClick={() => {
+                                              if (card.action?.targetTab === '__scroll_create__') {
+                                                setProtectionDetailKey(null);
+                                                return;
+                                              }
+                                              if (card.action?.targetTab) setActiveTab(card.action.targetTab);
+                                            }}
+                                            className="shrink-0 rounded-md border border-primary/25 bg-primary-container/10 px-2.5 py-1 text-[11px] font-medium text-primary-container transition-colors hover:bg-primary-container/20 flex items-center gap-1"
+                                          >
+                                            {card.action.text}
+                                            <Icon name="chevron_right" size={12} />
+                                          </button>
+                                        )}
+                                      </>
+                                    );
+                                  })()}
+                                </div>
+                              )}
+                              {backupPolicyCheck && (
+                                <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-on-surface-variant">
+                                  <span
+                                    className={`rounded-full border px-2 py-0.5 font-medium ${getBackupStatusClasses(toBackupProtectionStatus(backupPolicyCheck.status))}`}
                                   >
-                                    <div className="flex items-center justify-between gap-2">
-                                      <div className="flex min-w-0 items-center gap-2">
-                                        <span
-                                          className={`inline-flex h-7 w-7 items-center justify-center rounded-full border ${getBackupStatusClasses(card.status)}`}
+                                    {backupPolicyCheck.status === 'ok'
+                                      ? '体检通过'
+                                      : backupPolicyCheck.status === 'error'
+                                        ? `${backupPolicyIssueCount} 项异常`
+                                        : `${backupPolicyIssueCount} 项需关注`}
+                                  </span>
+                                  <span>体检时间：{new Date(backupPolicyCheck.checkedAt).toLocaleString('zh-CN')}</span>
+                                  <button
+                                    type="button"
+                                    onClick={() => setPolicyDetailOpen((open) => !open)}
+                                    className="text-primary-container hover:underline flex items-center gap-0.5"
+                                  >
+                                    {policyDetailOpen ? '收起明细' : '查看明细'}
+                                    <Icon name={policyDetailOpen ? 'expand_less' : 'expand_more'} size={12} />
+                                  </button>
+                                  {policyDetailOpen && (
+                                    <div className="w-full grid gap-1.5 md:grid-cols-2">
+                                      {backupPolicyCheck.checks.map((check) => (
+                                        <div
+                                          key={check.key}
+                                          className="flex min-w-0 items-start gap-2 rounded-md border border-outline-variant/10 bg-surface-container-low/50 px-2.5 py-1.5 text-[11px]"
                                         >
                                           <Icon
-                                            name={card.icon}
-                                            size={15}
-                                            className={getBackupStatusIconClass(card.status)}
+                                            name={getBackupStatusIcon(toBackupProtectionStatus(check.status))}
+                                            size={13}
+                                            className={`mt-0.5 shrink-0 ${getBackupStatusIconClass(toBackupProtectionStatus(check.status))}`}
                                           />
-                                        </span>
-                                        <span className="truncate text-xs font-medium text-on-surface-variant">
-                                          {card.label}
-                                        </span>
-                                      </div>
-                                      <span
-                                        className={`shrink-0 rounded-full border px-1.5 py-0.5 text-[10px] font-medium ${getBackupStatusClasses(card.status)}`}
-                                      >
-                                        {getBackupStatusText(card.status)}
-                                      </span>
-                                    </div>
-                                    <p className="mt-2 truncate text-sm font-semibold text-on-surface">{card.value}</p>
-                                    <p className="mt-1 break-all text-[11px] leading-4 text-on-surface-variant">
-                                      {card.detail}
-                                    </p>
-                                    {card.action && (
-                                      <button
-                                        type="button"
-                                        onClick={() => {
-                                          if (card.action?.targetTab === '__scroll_create__') {
-                                            document.getElementById('backup')?.scrollIntoView({ behavior: 'smooth' });
-                                            return;
-                                          }
-                                          if (card.action?.targetTab) setActiveTab(card.action.targetTab);
-                                        }}
-                                        className="mt-2 inline-flex items-center gap-1 rounded-md border border-primary/25 bg-primary-container/10 px-2 py-1 text-[11px] font-medium text-primary-container transition-colors hover:bg-primary-container/20"
-                                      >
-                                        {card.action.text}
-                                        <Icon name="chevron_right" size={12} />
-                                      </button>
-                                    )}
-                                  </div>
-                                ))}
-                              </div>
-
-                              <div className="mt-3 rounded-lg border border-outline-variant/10 bg-surface-container-lowest/60 p-3">
-                                <div className="mb-2 flex items-center gap-2 text-xs font-medium text-on-surface">
-                                  <Icon name="tips_and_updates" size={15} className="text-primary-container" />
-                                  当前建议
-                                </div>
-                                <div className="space-y-1.5">
-                                  {backupAdviceItems.map((advice, index) => (
-                                    <div key={`${advice}-${index}`} className="flex items-start gap-2 text-xs">
-                                      <span className="mt-1 h-1.5 w-1.5 shrink-0 rounded-full bg-primary-container/70" />
-                                      <span className="text-on-surface-variant">{advice}</span>
-                                    </div>
-                                  ))}
-                                </div>
-                              </div>
-
-                              <div className="mt-3 grid gap-1 text-xs text-on-surface-variant sm:flex sm:flex-wrap sm:gap-x-4">
-                                {backupHealth.latestBackup && (
-                                  <span>
-                                    最近备份：{new Date(backupHealth.latestBackup.createdAt).toLocaleString('zh-CN')}
-                                  </span>
-                                )}
-                                {backupHealth.nextRunAt && (
-                                  <span>下次自动：{new Date(backupHealth.nextRunAt).toLocaleString('zh-CN')}</span>
-                                )}
-                                {backupHealth.lastAutoMessage && <span>自动任务：{backupHealth.lastAutoMessage}</span>}
-                                {backupHealth.mirrorDir && <span>镜像目录：{backupHealth.mirrorDir}</span>}
-                                {backupHealth.lastMirrorMessage && (
-                                  <span>镜像状态：{backupHealth.lastMirrorMessage}</span>
-                                )}
-                              </div>
-                              {backupPolicyCheck && (
-                                <div className="mt-3 rounded-lg bg-surface-container-lowest/70 border border-outline-variant/10 p-3">
-                                  <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                                    <div className="flex min-w-0 flex-wrap items-center gap-2">
-                                      <p className="text-xs font-semibold text-on-surface">体检结论</p>
-                                      <span
-                                        className={`rounded-full border px-2 py-0.5 text-[11px] font-medium ${getBackupStatusClasses(toBackupProtectionStatus(backupPolicyCheck.status))}`}
-                                      >
-                                        {backupPolicyCheck.status === 'ok'
-                                          ? '全部通过'
-                                          : backupPolicyCheck.status === 'error'
-                                            ? `${backupPolicyIssueCount} 项异常`
-                                            : `${backupPolicyIssueCount} 项需关注`}
-                                      </span>
-                                      {backupPolicyCheck.report && (
-                                        <span className="min-w-0 basis-full truncate text-xs text-on-surface-variant sm:basis-auto">
-                                          {getBackupRiskLabel(backupPolicyCheck.report)} ·{' '}
-                                          {backupPolicyCheck.report.summary}
-                                        </span>
-                                      )}
-                                    </div>
-                                    <button
-                                      type="button"
-                                      onClick={() => setPolicyDetailOpen((open) => !open)}
-                                      className="flex shrink-0 items-center gap-1 text-xs text-primary-container hover:underline"
-                                    >
-                                      {policyDetailOpen ? '收起明细' : '查看明细'}
-                                      <Icon name={policyDetailOpen ? 'expand_less' : 'expand_more'} size={14} />
-                                    </button>
-                                  </div>
-                                  {policyDetailOpen && (
-                                    <div className="mt-3">
-                                      <div className="grid gap-1 text-xs text-on-surface-variant sm:flex sm:flex-wrap sm:gap-x-4">
-                                        <span>
-                                          体检时间：{new Date(backupPolicyCheck.checkedAt).toLocaleString('zh-CN')}
-                                        </span>
-                                        <span>预计备份大小：{backupPolicyCheck.estimatedBackupSizeText}</span>
-                                        {backupPolicyCheck.report && (
-                                          <span>
-                                            阻断 {backupPolicyCheck.report.blockers.length} / 警告{' '}
-                                            {backupPolicyCheck.report.warnings.length}
-                                          </span>
-                                        )}
-                                      </div>
-                                      <div className="mt-2 grid gap-2 md:grid-cols-2">
-                                        {backupPolicyCheck.checks.map((check) => (
-                                          <div
-                                            key={check.key}
-                                            className="flex min-w-0 items-start gap-2 rounded-md border border-outline-variant/10 bg-surface-container-low/50 px-2.5 py-2 text-xs"
-                                          >
-                                            <Icon
-                                              name={getBackupStatusIcon(toBackupProtectionStatus(check.status))}
-                                              size={14}
-                                              className={`mt-0.5 shrink-0 ${getBackupStatusIconClass(toBackupProtectionStatus(check.status))}`}
-                                            />
-                                            <div className="min-w-0">
-                                              <p className="font-medium text-on-surface">{check.label}</p>
-                                              <p className="mt-0.5 break-all text-on-surface-variant">
-                                                {check.message}
-                                              </p>
-                                            </div>
+                                          <div className="min-w-0">
+                                            <p className="font-medium text-on-surface">{check.label}</p>
+                                            <p className="mt-0.5 break-all text-on-surface-variant">{check.message}</p>
                                           </div>
-                                        ))}
-                                      </div>
+                                        </div>
+                                      ))}
                                     </div>
                                   )}
                                 </div>
                               )}
                             </div>
-                          </div>
-                        )}
+                          )}
 
-                        {/* Export */}
-                        <div className="px-4 py-4 sm:px-6">
-                          <div className="mb-3 flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
-                            <div>
-                              <p className="text-sm font-medium text-on-surface">创建备份</p>
-                              <p className="text-xs text-on-surface-variant mt-0.5">
-                                支持整站备份，也可以只备份指定模块
-                              </p>
-                            </div>
-                            {backupStats?.totalDataSizeText && (
-                              <span className="shrink-0 text-xs text-on-surface-variant">
-                                整站数据 + 资源约 {backupStats.totalDataSizeText}
-                              </span>
-                            )}
-                          </div>
                           <div
                             className="grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-5"
                             role="listbox"
