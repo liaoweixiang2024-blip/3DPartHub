@@ -78,7 +78,6 @@ import {
   formatOptionalStatNumber,
   formatStatNumber,
   getBackupRiskLabel,
-  getBackupRiskStatus,
   getBackupScopeLabel,
   getBackupStatusClasses,
   getBackupStatusIcon,
@@ -4909,6 +4908,8 @@ function Content() {
   const [serverFilesScanned, setServerFilesScanned] = useState(false);
   // 二次确认弹窗开关（长耗时/重操作，防误触）
   const [policyCheckConfirmOpen, setPolicyCheckConfirmOpen] = useState(false);
+  // 体检明细默认收起——保护卡已展示各项状态，逐项检查列表仅在需要排查时展开
+  const [policyDetailOpen, setPolicyDetailOpen] = useState(false);
   const [exportConfirmOpen, setExportConfirmOpen] = useState(false);
   const [cleanupScanConfirmOpen, setCleanupScanConfirmOpen] = useState(false);
   const [verifyConfirmId, setVerifyConfirmId] = useState<string | null>(null);
@@ -4957,103 +4958,23 @@ function Content() {
   const adminBusy = exporting || importing || restoring || !!verifyingBackupId || !!deletingBackupId;
   const selectedBackupScope =
     BACKUP_SCOPE_OPTIONS.find((option) => option.value === backupScope) || BACKUP_SCOPE_OPTIONS[0];
-  const hasDetailedBackupStats = Boolean(backupStats?.totalDataSizeText || backupStats?.resourceSizeText);
-  const backupStatCards = backupStats
-    ? [
-        {
-          key: 'full',
-          icon: 'database',
-          label: '整站总览',
-          value: backupStats.totalDataSizeText || backupStats.dbSize,
-          detail: `数据库 ${backupStats.dbSize} / 资源 ${backupStats.resourceSizeText || '待刷新'} / 文件 ${formatOptionalStatNumber(
-            backupStats.resourceFileCount,
-          )} 个`,
-          meta: '完整备份',
-        },
-        {
-          key: 'models',
-          icon: 'view_in_ar',
-          label: '模型库',
-          value: `${formatStatNumber(backupStats.modelCount)} 个 STEP`,
-          detail: `总模型 ${formatOptionalStatNumber(backupStats.totalModelCount, formatStatNumber(backupStats.modelCount))} / 分类 ${formatOptionalStatNumber(
-            backupStats.categoryCount,
-          )} / 原始 ${formatOptionalStatNumber(
-            backupStats.originalFileCount,
-          )} / 预览 ${formatStatNumber(backupStats.thumbnailCount)} / 图纸 ${formatOptionalStatNumber(
-            backupStats.drawingFileCount,
-          )}`,
-          meta: `资源 ${backupStats.modelResourceSizeText || '待刷新'}`,
-        },
-        {
-          key: 'selection',
-          icon: 'tune',
-          label: '选型',
-          value: `${formatOptionalStatNumber(backupStats.selectionProductCount)} 个产品`,
-          detail: `${formatOptionalStatNumber(backupStats.selectionCategoryCount)} 个分类 / ${formatOptionalStatNumber(
-            backupStats.threadSizeCount,
-          )} 条螺纹数据 / ${formatOptionalStatNumber(backupStats.selectionResourceFileCount)} 个资源文件`,
-          meta: `资源 ${backupStats.selectionResourceSizeText || '待刷新'}`,
-        },
-        {
-          key: 'product_wall',
-          icon: 'photo_library',
-          label: '产品图库',
-          value: `${formatOptionalStatNumber(backupStats.productWallImageCount)} 张图片`,
-          detail: `${formatOptionalStatNumber(backupStats.productWallCategoryCount)} 个分类 / ${formatOptionalStatNumber(
-            backupStats.productWallResourceFileCount,
-          )} 个资源文件`,
-          meta: `资源 ${backupStats.productWallResourceSizeText || '待刷新'}`,
-        },
-        {
-          key: 'config',
-          icon: 'settings',
-          label: '系统配置',
-          value: `${formatOptionalStatNumber(backupStats.settingsCount)} 项配置`,
-          detail: `模型分类 ${formatOptionalStatNumber(backupStats.categoryCount)} 个 / 含 logo、favicon、水印品牌资产`,
-          meta: '轻量备份',
-        },
-        {
-          key: 'users',
-          icon: 'group',
-          label: '用户',
-          value: `${formatOptionalStatNumber(backupStats.userCount)} 个账号`,
-          detail: '账号资料与权限 / 恢复时按邮箱合并，不改现有密码',
-          meta: '轻量备份',
-        },
-        {
-          key: 'tickets',
-          icon: 'support_agent',
-          label: '工单',
-          value: `${formatOptionalStatNumber(backupStats.ticketCount)} 个工单`,
-          detail: `消息 ${formatOptionalStatNumber(backupStats.ticketMessageCount)} 条 / 附件 ${formatOptionalStatNumber(
-            backupStats.ticketAttachmentFileCount,
-          )} 个`,
-          meta: '含附件',
-        },
-        {
-          key: 'inquiries',
-          icon: 'request_quote',
-          label: '询价',
-          value: `${formatOptionalStatNumber(backupStats.inquiryCount)} 个询价`,
-          detail: `明细 ${formatOptionalStatNumber(backupStats.inquiryItemCount)} 条 / 消息 ${formatOptionalStatNumber(
-            backupStats.inquiryMessageCount,
-          )} 条 / 附件 ${formatOptionalStatNumber(backupStats.inquiryAttachmentFileCount)} 个`,
-          meta: '含附件',
-        },
-        {
-          key: 'audit',
-          icon: 'receipt_long',
-          label: '审计日志',
-          value: `${formatOptionalStatNumber(backupStats.auditLogCount)} 条记录`,
-          detail: '系统操作审计 / 纯数据库记录',
-          meta: '轻量备份',
-        },
-      ]
-    : [];
+  // 各备份范围的当前数量（合入创建备份选择卡，替代原「备份范围概览」统计卡区块）
+  const backupScopeCounts: Partial<Record<BackupScope, string>> = backupStats
+    ? {
+        full: backupStats.totalDataSizeText || backupStats.dbSize,
+        models: `${formatStatNumber(backupStats.modelCount)} 个模型`,
+        selection: `${formatOptionalStatNumber(backupStats.selectionProductCount)} 个产品`,
+        product_wall: `${formatOptionalStatNumber(backupStats.productWallImageCount)} 张图片`,
+        config: `${formatOptionalStatNumber(backupStats.settingsCount)} 项配置`,
+        users: `${formatOptionalStatNumber(backupStats.userCount)} 个账号`,
+        tickets: `${formatOptionalStatNumber(backupStats.ticketCount)} 个工单`,
+        inquiries: `${formatOptionalStatNumber(backupStats.inquiryCount)} 个询价`,
+        audit: `${formatOptionalStatNumber(backupStats.auditLogCount)} 条记录`,
+      }
+    : {};
   const backupProtectionCards = backupHealth ? buildBackupProtectionCards(backupHealth, backupPolicyCheck) : [];
   const backupAdviceItems = backupHealth ? buildBackupAdviceItems(backupHealth, backupPolicyCheck) : [];
   const backupHealthTone = toBackupProtectionStatus(backupPolicyCheck?.status || backupHealth?.status);
-  const backupPolicyReportTone = getBackupRiskStatus(backupPolicyCheck?.report);
   const backupPolicyIssueCount = backupPolicyCheck
     ? backupPolicyCheck.checks.filter((check) => check.status !== 'ok').length
     : 0;
@@ -7044,132 +6965,90 @@ function Content() {
                               </div>
                               {backupPolicyCheck && (
                                 <div className="mt-3 rounded-lg bg-surface-container-lowest/70 border border-outline-variant/10 p-3">
-                                  <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-                                    <div>
-                                      <div className="flex flex-wrap items-center gap-2">
-                                        <p className="text-xs font-semibold text-on-surface">体检结论</p>
-                                        <span
-                                          className={`rounded-full border px-2 py-0.5 text-[11px] font-medium ${getBackupStatusClasses(toBackupProtectionStatus(backupPolicyCheck.status))}`}
-                                        >
-                                          {backupPolicyCheck.status === 'ok'
-                                            ? '全部通过'
-                                            : backupPolicyCheck.status === 'error'
-                                              ? `${backupPolicyIssueCount} 项异常`
-                                              : `${backupPolicyIssueCount} 项需关注`}
-                                        </span>
-                                      </div>
-                                      <p className="mt-1 text-xs text-on-surface-variant">
-                                        体检会实际检查本地目录权限、磁盘空间、自动策略、外部镜像、备份加密和最近备份包完整性。
-                                      </p>
-                                      {backupPolicyCheck.report && (
-                                        <div
-                                          className={`mt-2 inline-flex max-w-full items-start gap-2 rounded-lg border px-2.5 py-2 text-xs ${getBackupStatusClasses(backupPolicyReportTone)}`}
-                                        >
-                                          <Icon
-                                            name={getBackupStatusIcon(backupPolicyReportTone)}
-                                            size={14}
-                                            className={`mt-0.5 shrink-0 ${getBackupStatusIconClass(backupPolicyReportTone)}`}
-                                          />
-                                          <span className="min-w-0">
-                                            <span className="font-medium">
-                                              {getBackupRiskLabel(backupPolicyCheck.report)}
-                                            </span>
-                                            <span className="mx-1 text-current/60">·</span>
-                                            <span className="break-words">{backupPolicyCheck.report.summary}</span>
-                                          </span>
-                                        </div>
-                                      )}
-                                    </div>
-                                    <div className="grid gap-1 text-xs text-on-surface-variant sm:text-right">
-                                      <span>
-                                        体检时间：{new Date(backupPolicyCheck.checkedAt).toLocaleString('zh-CN')}
-                                      </span>
-                                      <span>预计备份大小：{backupPolicyCheck.estimatedBackupSizeText}</span>
-                                      {backupPolicyCheck.report && (
-                                        <span>
-                                          阻断 {backupPolicyCheck.report.blockers.length} / 警告{' '}
-                                          {backupPolicyCheck.report.warnings.length}
-                                        </span>
-                                      )}
-                                    </div>
-                                  </div>
-                                  <div className="grid gap-2 md:grid-cols-2">
-                                    {backupPolicyCheck.checks.map((check) => (
-                                      <div
-                                        key={check.key}
-                                        className="flex min-w-0 items-start gap-2 rounded-md border border-outline-variant/10 bg-surface-container-low/50 px-2.5 py-2 text-xs"
+                                  <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                                    <div className="flex min-w-0 flex-wrap items-center gap-2">
+                                      <p className="text-xs font-semibold text-on-surface">体检结论</p>
+                                      <span
+                                        className={`rounded-full border px-2 py-0.5 text-[11px] font-medium ${getBackupStatusClasses(toBackupProtectionStatus(backupPolicyCheck.status))}`}
                                       >
-                                        <Icon
-                                          name={getBackupStatusIcon(toBackupProtectionStatus(check.status))}
-                                          size={14}
-                                          className={`mt-0.5 shrink-0 ${getBackupStatusIconClass(toBackupProtectionStatus(check.status))}`}
-                                        />
-                                        <div className="min-w-0">
-                                          <p className="font-medium text-on-surface">{check.label}</p>
-                                          <p className="mt-0.5 break-all text-on-surface-variant">{check.message}</p>
-                                        </div>
-                                      </div>
-                                    ))}
+                                        {backupPolicyCheck.status === 'ok'
+                                          ? '全部通过'
+                                          : backupPolicyCheck.status === 'error'
+                                            ? `${backupPolicyIssueCount} 项异常`
+                                            : `${backupPolicyIssueCount} 项需关注`}
+                                      </span>
+                                      {backupPolicyCheck.report && (
+                                        <span className="min-w-0 basis-full truncate text-xs text-on-surface-variant sm:basis-auto">
+                                          {getBackupRiskLabel(backupPolicyCheck.report)} ·{' '}
+                                          {backupPolicyCheck.report.summary}
+                                        </span>
+                                      )}
+                                    </div>
+                                    <button
+                                      type="button"
+                                      onClick={() => setPolicyDetailOpen((open) => !open)}
+                                      className="flex shrink-0 items-center gap-1 text-xs text-primary-container hover:underline"
+                                    >
+                                      {policyDetailOpen ? '收起明细' : '查看明细'}
+                                      <Icon name={policyDetailOpen ? 'expand_less' : 'expand_more'} size={14} />
+                                    </button>
                                   </div>
+                                  {policyDetailOpen && (
+                                    <div className="mt-3">
+                                      <div className="grid gap-1 text-xs text-on-surface-variant sm:flex sm:flex-wrap sm:gap-x-4">
+                                        <span>
+                                          体检时间：{new Date(backupPolicyCheck.checkedAt).toLocaleString('zh-CN')}
+                                        </span>
+                                        <span>预计备份大小：{backupPolicyCheck.estimatedBackupSizeText}</span>
+                                        {backupPolicyCheck.report && (
+                                          <span>
+                                            阻断 {backupPolicyCheck.report.blockers.length} / 警告{' '}
+                                            {backupPolicyCheck.report.warnings.length}
+                                          </span>
+                                        )}
+                                      </div>
+                                      <div className="mt-2 grid gap-2 md:grid-cols-2">
+                                        {backupPolicyCheck.checks.map((check) => (
+                                          <div
+                                            key={check.key}
+                                            className="flex min-w-0 items-start gap-2 rounded-md border border-outline-variant/10 bg-surface-container-low/50 px-2.5 py-2 text-xs"
+                                          >
+                                            <Icon
+                                              name={getBackupStatusIcon(toBackupProtectionStatus(check.status))}
+                                              size={14}
+                                              className={`mt-0.5 shrink-0 ${getBackupStatusIconClass(toBackupProtectionStatus(check.status))}`}
+                                            />
+                                            <div className="min-w-0">
+                                              <p className="font-medium text-on-surface">{check.label}</p>
+                                              <p className="mt-0.5 break-all text-on-surface-variant">
+                                                {check.message}
+                                              </p>
+                                            </div>
+                                          </div>
+                                        ))}
+                                      </div>
+                                    </div>
+                                  )}
                                 </div>
                               )}
                             </div>
                           </div>
                         )}
 
-                        {/* Stats */}
+                        {/* Export */}
                         <div className="px-4 py-4 sm:px-6">
                           <div className="mb-3 flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
                             <div>
-                              <p className="text-sm font-medium text-on-surface">备份范围概览</p>
+                              <p className="text-sm font-medium text-on-surface">创建备份</p>
                               <p className="text-xs text-on-surface-variant mt-0.5">
-                                整站总览包含数据库和全部业务资源，模块卡片对应可单独备份范围
+                                支持整站备份，也可以只备份指定模块
                               </p>
                             </div>
                             {backupStats?.totalDataSizeText && (
-                              <span className="text-xs text-on-surface-variant">
-                                数据 + 资源约 {backupStats.totalDataSizeText}
+                              <span className="shrink-0 text-xs text-on-surface-variant">
+                                整站数据 + 资源约 {backupStats.totalDataSizeText}
                               </span>
                             )}
-                          </div>
-                          {backupStats && !hasDetailedBackupStats && (
-                            <div className="mb-3 flex items-start gap-2 rounded-md border border-yellow-500/20 bg-yellow-500/10 px-3 py-2 text-xs text-on-surface-variant">
-                              <Icon name="warning" size={14} className="mt-0.5 shrink-0 text-yellow-500" />
-                              <span>
-                                当前接口仍是旧统计结构，只返回了
-                                STEP、预览图和数据库大小；后端重启后会显示完整模块数据。
-                              </span>
-                            </div>
-                          )}
-                          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-4">
-                            {backupStatCards.map((card) => (
-                              <div
-                                key={card.key}
-                                className="rounded-lg border border-outline-variant/10 bg-surface-container-high/35 px-3 py-3"
-                              >
-                                <div className="flex items-start justify-between gap-2">
-                                  <div className="min-w-0">
-                                    <div className="flex items-center gap-1.5 text-xs text-on-surface-variant">
-                                      <Icon name={card.icon} size={14} className="text-primary-container" />
-                                      <span>{card.label}</span>
-                                    </div>
-                                    <p className="mt-1 truncate text-sm font-semibold text-on-surface">{card.value}</p>
-                                  </div>
-                                  <span className="shrink-0 rounded-md bg-surface-container-lowest px-2 py-0.5 text-[11px] font-medium text-on-surface-variant">
-                                    {card.meta}
-                                  </span>
-                                </div>
-                                <p className="mt-2 text-[11px] leading-4 text-on-surface-variant">{card.detail}</p>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-
-                        {/* Export */}
-                        <div className="px-4 py-4 sm:px-6">
-                          <div className="mb-3">
-                            <p className="text-sm font-medium text-on-surface">创建备份</p>
-                            <p className="text-xs text-on-surface-variant mt-0.5">支持整站备份，也可以只备份指定模块</p>
                           </div>
                           <div
                             className="grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-5"
@@ -7213,7 +7092,12 @@ function Content() {
                                       <Icon name="check" size={13} className="shrink-0 text-primary-container" />
                                     )}
                                   </span>
-                                  <span className="line-clamp-2 text-[10px] leading-snug text-on-surface-variant">
+                                  <span className="line-clamp-2 min-h-[2rem] text-[10px] leading-snug text-on-surface-variant">
+                                    {backupScopeCounts[option.value] && (
+                                      <span className="mr-1 font-medium text-on-surface/70">
+                                        {backupScopeCounts[option.value]}
+                                      </span>
+                                    )}
                                     {option.desc}
                                   </span>
                                 </button>
