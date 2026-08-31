@@ -1,10 +1,12 @@
 import assert from 'node:assert/strict';
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { execFileSync as execFileSyncCb } from 'node:child_process';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
 
 const {
+  assertArchiveContainsOnlyRegularFilesAndDirectories,
   buildBackupPolicyReport,
   buildUserMergeUpdate,
   encryptBackupArchiveInPlace,
@@ -329,6 +331,33 @@ test('backup encryption stores archive bytes encrypted and materializes readable
   } finally {
     if (previousSecret === undefined) delete process.env.BACKUP_ENCRYPTION_SECRET;
     else process.env.BACKUP_ENCRYPTION_SECRET = previousSecret;
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('restore safety check survives archives whose tar listing exceeds the 1MB default buffer', () => {
+  // 生产事故回归：恢复前安全检查 execFileSync('tar tvzf') 未设 maxBuffer，
+  // Node 默认 1MB，大备份包（上万条目）列表输出超限直接抛 spawnSync ENOBUFS 中断恢复。
+  // 构造一个 tvzf 输出 > 1MB（约 15000 条目）的 tar.gz，断言检查正常通过。
+  const dir = mkdtempSync(join(tmpdir(), '3dparthub-tarbuf-'));
+  try {
+    const treeRoot = join(dir, 'tree');
+    const filesRoot = join(treeRoot, 'originals');
+    mkdirSync(filesRoot, { recursive: true });
+    const entryCount = 15000;
+    // 每行 verbose 输出约 80 字节（权限/属主/大小/日期 + 文件名），15000 条 > 1MB。
+    // 文件名控制在 255 字节内（APFS 单文件名上限）。
+    for (let i = 0; i < entryCount; i += 1) {
+      const sub = join(filesRoot, `d${i % 100}`);
+      if (i < 100) mkdirSync(sub, { recursive: true });
+      writeFileSync(join(sub, `model_${'x'.repeat(55)}_${i}.step`), 'x');
+    }
+    const archive = join(dir, 'big.tar.gz');
+    execFileSyncCb('tar', ['-czf', archive, '-C', treeRoot, 'originals'], { stdio: 'pipe' });
+
+    // 旧实现在这里抛 spawnSync tar ENOBUFS；修复后应正常通过（全普通文件/目录）
+    assert.doesNotThrow(() => assertArchiveContainsOnlyRegularFilesAndDirectories(archive));
+  } finally {
     rmSync(dir, { recursive: true, force: true });
   }
 });

@@ -261,11 +261,17 @@ function psqlFromFile(dbUrl: string, sqlPath: string, extraArgs: string[], timeo
     const containerPath = `/tmp/restore_${Date.now()}.sql`;
     const dbName = new URL(dbUrl).pathname.replace(/^\//, '');
     const user = new URL(dbUrl).username;
-    execFileSync('docker', ['cp', sqlPath, `${container}:${containerPath}`], { stdio: 'pipe', timeout: 30000 });
+    execFileSync('docker', ['cp', sqlPath, `${container}:${containerPath}`], {
+      stdio: 'pipe',
+      timeout: 30000,
+      maxBuffer: EXEC_MAX_BUFFER_BYTES,
+    });
     try {
       execFileSync('docker', ['exec', container, 'psql', '-U', user, '-d', dbName, ...extraArgs, '-f', containerPath], {
         stdio: 'pipe',
+        // psql 恢复整库 SQL 时每条语句输出一行状态（SET/INSERT 0 1...），大库轻松超默认 1MB
         timeout,
+        maxBuffer: EXEC_MAX_BUFFER_BYTES,
       });
     } finally {
       try {
@@ -292,7 +298,7 @@ function psqlFromFile(dbUrl: string, sqlPath: string, extraArgs: string[], timeo
         '-f',
         sqlPath,
       ],
-      { stdio: 'pipe', timeout, env },
+      { stdio: 'pipe', timeout, env, maxBuffer: EXEC_MAX_BUFFER_BYTES },
     );
   }
 }
@@ -306,11 +312,13 @@ function psqlCommand(dbUrl: string, sql: string, extraArgs: string[], timeout: n
     execFileSync('docker', ['exec', container, 'psql', '-U', user, '-d', dbName, ...extraArgs, '-c', sql], {
       stdio: 'pipe',
       timeout,
+      maxBuffer: EXEC_MAX_BUFFER_BYTES,
     });
   } else {
     execFileSync('psql', [dbUrl, ...extraArgs, '-c', sql], {
       stdio: 'pipe',
       timeout,
+      maxBuffer: EXEC_MAX_BUFFER_BYTES,
     });
   }
 }
@@ -324,6 +332,12 @@ const ARCHIVE_EXTRACT_TIMEOUT_MS = 60 * 60_000;
 // 读清单需从归档头顺序解压到 manifest 条目（_backup_db 里 database.sql 可能很大），
 // 大库 + 慢盘/低配 CPU 下 5 分钟不够，提到 20 分钟避免误判超时。
 const ARCHIVE_META_TIMEOUT_MS = 20 * 60_000;
+// execFileSync 默认 maxBuffer 仅 1MB：tar 列表（tvzf/tzf）与 manifest 读取（xOzf）在
+// 大备份包（上万条目）下输出轻松超过 1MB，直接抛 spawnSync ENOBUFS 中断恢复。
+// 统一放大到 512MB；tar 条目上限见 ARCHIVE_LIST_MAX_ENTRIES（超过按损坏包拒绝，不无限吃内存）。
+const EXEC_MAX_BUFFER_BYTES = 512 * 1024 * 1024;
+// tar 列表输出超过此条目数视为异常（真实备份包远低于此；防损坏包/误传大文件撑爆内存）
+const ARCHIVE_LIST_MAX_ENTRIES = 200_000;
 const DEFAULT_BACKUP_LOCK_STALE_MINUTES = 12 * 60;
 const BACKUP_LOCK_STALE_MS = (() => {
   const raw = Number(process.env.BACKUP_LOCK_STALE_MINUTES);
@@ -838,24 +852,28 @@ cleanupExpiredSafetySnapshots();
  * 指向且超龄的文件，避免目录无限膨胀。
  */
 function cleanupExpiredSafetySnapshots(maxAgeMs = 7 * 24 * 60 * 60 * 1000) {
-  try {
-    if (!existsSync(SAFETY_SNAPSHOT_DIR)) return;
-    const referenced = new Set(detectInterruptedRestores().map((info) => resolve(info.durableSnapshot)));
-    const now = Date.now();
-    for (const entry of readdirSync(SAFETY_SNAPSHOT_DIR, { withFileTypes: true })) {
-      if (!entry.isFile()) continue;
-      // marker 文件本身不按年龄清理——marker 是否该删由它引用的快照决定
-      if (entry.name.startsWith(RESTORE_IN_PROGRESS_MARKER_PREFIX)) continue;
-      const path = join(SAFETY_SNAPSHOT_DIR, entry.name);
-      if (referenced.has(resolve(path))) continue;
-      const { mtime } = statSync(path);
-      if (now - mtime.getTime() <= maxAgeMs) continue;
-      rmSync(path, { force: true });
-      log.warn({ path, ageDays: Math.round((now - mtime.getTime()) / 86400000) }, 'Removed expired safety snapshot');
+  // 延迟执行：RESTORE_IN_PROGRESS_MARKER_PREFIX / detectInterruptedRestores 声明在文件后部，
+  // 模块加载期直接调用会因 TDZ 抛 ReferenceError（过期快照从未被清过）
+  setTimeout(() => {
+    try {
+      if (!existsSync(SAFETY_SNAPSHOT_DIR)) return;
+      const referenced = new Set(detectInterruptedRestores().map((info) => resolve(info.durableSnapshot)));
+      const now = Date.now();
+      for (const entry of readdirSync(SAFETY_SNAPSHOT_DIR, { withFileTypes: true })) {
+        if (!entry.isFile()) continue;
+        // marker 文件本身不按年龄清理——marker 是否该删由它引用的快照决定
+        if (entry.name.startsWith(RESTORE_IN_PROGRESS_MARKER_PREFIX)) continue;
+        const path = join(SAFETY_SNAPSHOT_DIR, entry.name);
+        if (referenced.has(resolve(path))) continue;
+        const { mtime } = statSync(path);
+        if (now - mtime.getTime() <= maxAgeMs) continue;
+        rmSync(path, { force: true });
+        log.warn({ path, ageDays: Math.round((now - mtime.getTime()) / 86400000) }, 'Removed expired safety snapshot');
+      }
+    } catch (err) {
+      log.warn({ err }, 'Failed to clean up expired safety snapshots');
     }
-  } catch (err) {
-    log.warn({ err }, 'Failed to clean up expired safety snapshots');
-  }
+  }, 0);
 }
 
 function ts(): string {
@@ -4492,12 +4510,17 @@ function isPlainRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value && typeof value === 'object' && !Array.isArray(value));
 }
 
-function assertArchiveContainsOnlyRegularFilesAndDirectories(archive: string) {
+export function assertArchiveContainsOnlyRegularFilesAndDirectories(archive: string) {
   const raw = execFileSync('tar', ['tvzf', archive], {
     stdio: 'pipe',
     timeout: ARCHIVE_LIST_TIMEOUT_MS,
+    maxBuffer: EXEC_MAX_BUFFER_BYTES,
   }).toString('utf-8');
-  const unsafeLine = raw.split(/\r?\n/).find(isUnsafeBackupArchiveVerboseEntry);
+  const lines = raw.split(/\r?\n/);
+  if (lines.length > ARCHIVE_LIST_MAX_ENTRIES) {
+    throw new Error(`备份包条目数异常（${lines.length} 条，上限 ${ARCHIVE_LIST_MAX_ENTRIES}），已中止恢复`);
+  }
+  const unsafeLine = lines.find(isUnsafeBackupArchiveVerboseEntry);
   if (unsafeLine) {
     throw new Error(`备份包包含符号链接、硬链接或特殊文件，已中止恢复: ${summarizeTarVerboseLine(unsafeLine)}`);
   }
@@ -4512,8 +4535,16 @@ function assertSafeArchiveEntriesForExtraction(archive: string, entries: string[
 }
 
 function listArchiveEntries(archive: string): string[] {
-  const raw = execFileSync('tar', ['tzf', archive], { stdio: 'pipe', timeout: ARCHIVE_LIST_TIMEOUT_MS }).toString();
-  return normalizeBackupArchiveEntryList(raw);
+  const raw = execFileSync('tar', ['tzf', archive], {
+    stdio: 'pipe',
+    timeout: ARCHIVE_LIST_TIMEOUT_MS,
+    maxBuffer: EXEC_MAX_BUFFER_BYTES,
+  }).toString();
+  const entries = normalizeBackupArchiveEntryList(raw);
+  if (entries.length > ARCHIVE_LIST_MAX_ENTRIES) {
+    throw new Error(`备份包条目数异常（${entries.length} 条，上限 ${ARCHIVE_LIST_MAX_ENTRIES}），已中止恢复`);
+  }
+  return entries;
 }
 
 function listArchiveEntriesWithProgress(
@@ -4890,6 +4921,8 @@ function readArchiveManifest(archive: string): BackupManifest | null {
     const raw = execFileSync('tar', ['xOzf', archive, BACKUP_MANIFEST_ENTRY], {
       stdio: 'pipe',
       timeout: ARCHIVE_META_TIMEOUT_MS,
+      // manifest 含备份包全部文件清单，大备份包（上万文件）序列化后远超默认 1MB
+      maxBuffer: EXEC_MAX_BUFFER_BYTES,
     }).toString('utf-8');
     return JSON.parse(raw) as BackupManifest;
   } catch (err) {
@@ -5203,6 +5236,7 @@ function runPrismaMigrations(dbUrl: string) {
   execFileSync('npx', ['prisma', 'migrate', 'deploy'], {
     stdio: 'pipe',
     timeout: PRISMA_MIGRATE_TIMEOUT_MS,
+    maxBuffer: EXEC_MAX_BUFFER_BYTES,
     env: { ...process.env, DATABASE_URL: dbUrl },
   });
 }
@@ -5211,6 +5245,7 @@ function runPrismaDbPush(dbUrl: string) {
   execFileSync('npx', ['prisma', 'db', 'push', '--skip-generate'], {
     stdio: 'pipe',
     timeout: PRISMA_MIGRATE_TIMEOUT_MS,
+    maxBuffer: EXEC_MAX_BUFFER_BYTES,
     env: { ...process.env, DATABASE_URL: dbUrl },
   });
 }
