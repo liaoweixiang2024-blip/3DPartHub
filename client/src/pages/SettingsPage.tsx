@@ -60,6 +60,7 @@ import {
   writeCachedUpdateHistory,
   type UpdateHistoryEntry,
 } from '../api/settings';
+import BackupEncryptionNoticeDialog from '../components/settings/BackupEncryptionNoticeDialog';
 import ColorSchemeEditor from '../components/settings/ColorSchemeSettings';
 import { AdminContentPanel, AdminManagementPage } from '../components/shared/AdminManagementPage';
 import { AdminPageShell } from '../components/shared/AdminPageShell';
@@ -4910,6 +4911,8 @@ function Content() {
   // 保障胶囊点击展开的详情项（null=全部收起）
   const [protectionDetailKey, setProtectionDetailKey] = useState<string | null>(null);
   const [exportConfirmOpen, setExportConfirmOpen] = useState(false);
+  // 备份完成且归档已加密时弹一次告知（密钥保管提醒，防「密钥丢了备份打不开」）
+  const [backupEncryptedNoticeOpen, setBackupEncryptedNoticeOpen] = useState(false);
   const [cleanupScanConfirmOpen, setCleanupScanConfirmOpen] = useState(false);
   const [verifyConfirmId, setVerifyConfirmId] = useState<string | null>(null);
 
@@ -5079,10 +5082,11 @@ function Content() {
         prev.stage ? prev : { stage: 'resuming', percent: 0, message: '正在恢复备份任务...', logs: [] },
       );
       try {
-        await pollBackupProgress(backupJobId, (stage, percent, message, logs) => {
+        const { encrypted } = await pollBackupProgress(backupJobId, (stage, percent, message, logs) => {
           setExportProgress({ stage, percent, message, logs: logs || [] });
         });
         toastBackupCreatedOnce(backupJobId);
+        if (encrypted) setBackupEncryptedNoticeOpen(true);
         loadBackupList();
         loadBackupStats();
         loadBackupHealth();
@@ -5483,10 +5487,11 @@ function Content() {
     try {
       const jobId = await startBackupJob(backupScope);
       localStorage.setItem('backupJobId', jobId);
-      await pollBackupProgress(jobId, (stage, percent, message, logs) => {
+      const { encrypted } = await pollBackupProgress(jobId, (stage, percent, message, logs) => {
         setExportProgress({ stage, percent, message, logs: logs || [] });
       });
       toastBackupCreatedOnce(jobId);
+      if (encrypted) setBackupEncryptedNoticeOpen(true);
       localStorage.removeItem('backupJobId');
       loadBackupList();
       loadBackupStats();
@@ -5497,10 +5502,11 @@ function Content() {
         toast('已有备份任务正在进行中，已恢复进度显示', 'info');
         localStorage.setItem('backupJobId', existingJobId);
         try {
-          await pollBackupProgress(existingJobId, (stage, percent, message, logs) => {
+          const { encrypted } = await pollBackupProgress(existingJobId, (stage, percent, message, logs) => {
             setExportProgress({ stage, percent, message, logs: logs || [] });
           });
           toastBackupCreatedOnce(existingJobId);
+          if (encrypted) setBackupEncryptedNoticeOpen(true);
           loadBackupList();
           loadBackupStats();
           loadBackupHealth();
@@ -7108,6 +7114,12 @@ function Content() {
                                         )}
                                         {b.manifestVersion && <span>清单 v{b.manifestVersion}</span>}
                                         {b.verifiedAt && <span>已校验</span>}
+                                        {b.encrypted && (
+                                          <span className="inline-flex items-center gap-0.5 text-green-600">
+                                            <Icon name="lock" size={11} />
+                                            已加密
+                                          </span>
+                                        )}
                                       </div>
                                       {b.filePath && (
                                         <div className="mt-1.5 flex items-center gap-1.5 min-w-0">
@@ -7910,6 +7922,11 @@ function Content() {
         title="确认校验备份"
         description="将校验该备份归档的完整性（解压、逐文件比对 SHA256），约需 1–2 分钟。确定开始？"
         confirmLabel="开始校验"
+      />
+      <BackupEncryptionNoticeDialog
+        open={backupEncryptedNoticeOpen}
+        onClose={() => setBackupEncryptedNoticeOpen(false)}
+        secretEnvName={backupHealth?.encryption?.recommendedEnvName}
       />
     </>
   );

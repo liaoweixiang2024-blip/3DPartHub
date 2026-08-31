@@ -63,6 +63,8 @@ type ZipEntryCandidate = {
   structuredPath: StructuredArchivePath | null;
   modelNameOverride?: string;
   modelFolderKey?: string;
+  /** 模型文件在零件目录的子文件夹内（改版/组合变体），零件目录有直接模型文件时跳过 */
+  isNestedModelFile?: boolean;
 };
 
 type RarEntryCandidate = {
@@ -75,6 +77,8 @@ type RarEntryCandidate = {
   declaredSize: number;
   modelNameOverride?: string;
   modelFolderKey?: string;
+  /** 模型文件在零件目录的子文件夹内（改版/组合变体），零件目录有直接模型文件时跳过 */
+  isNestedModelFile?: boolean;
 };
 
 type SingleModelFolderArchive = {
@@ -248,7 +252,7 @@ function safeExtractedArchivePath(rootDir: string, fileName: string): string | n
   return candidate === root || candidate.startsWith(`${root}${sep}`) ? candidate : null;
 }
 
-function selectBatchModelEntries<
+export function selectBatchModelEntries<
   T extends {
     ext: string;
     originalName: string;
@@ -257,17 +261,24 @@ function selectBatchModelEntries<
     safeName?: string;
     modelNameOverride?: string;
     modelFolderKey?: string;
+    isNestedModelFile?: boolean;
   },
 >(entries: T[], acceptedExts: string[], results: BatchUploadResult[]): T[] {
   const selected: T[] = [];
   const structuredModelDirCounts = new Map<string, number>();
+  const directModelDirCounts = new Map<string, number>();
   const selectedStructuredModelStems = new Set<string>();
 
+  // 第一遍统计：每目录模型总数（含子文件夹变体，维持既有按 stem 去重的粒度语义）
+  // 与直接模型文件数（「零件目录优先」跳过和 modelNameOverride 触发依据）分开计数。
   for (const item of entries) {
     if (!acceptedExts.includes(item.ext)) continue;
     const key = item.structuredPath?.modelDirKey || item.modelFolderKey;
     if (!key) continue;
     structuredModelDirCounts.set(key, (structuredModelDirCounts.get(key) || 0) + 1);
+    if (!item.isNestedModelFile) {
+      directModelDirCounts.set(key, (directModelDirCounts.get(key) || 0) + 1);
+    }
   }
 
   const candidates = entries
@@ -277,8 +288,18 @@ function selectBatchModelEntries<
   for (const item of candidates) {
     const dirKey = item.structuredPath?.modelDirKey || item.modelFolderKey;
     if (dirKey) {
+      // 零件目录优先：目录本身有直接模型文件时，子文件夹里的变体（历史改版/加配件组合）跳过不传
+      if (item.isNestedModelFile && (directModelDirCounts.get(dirKey) || 0) > 0) {
+        results.push({
+          name: item.modelNameOverride || item.structuredPath?.modelName || item.originalName,
+          status: 'skipped',
+          error: '零件目录已有直接模型文件，子文件夹模型已跳过',
+        });
+        continue;
+      }
       const hasMultipleModelsInDir = (structuredModelDirCounts.get(dirKey) || 0) > 1;
-      if (hasMultipleModelsInDir && item.structuredPath && !item.modelNameOverride) {
+      // modelNameOverride（文件名覆盖目录名）只在目录有多个「直接」模型文件时触发
+      if ((directModelDirCounts.get(dirKey) || 0) > 1 && item.structuredPath && !item.modelNameOverride) {
         item.modelNameOverride = candidateModelName(item);
       }
       const modelStemKey = `${dirKey}\0${hasMultipleModelsInDir ? candidateModelStemKey(item) : dirKey}`;
@@ -673,6 +694,10 @@ export async function processBatchArchiveUpload({
             modelNameOverride:
               isSingleFolderEntry && ext && acceptedExts.includes(ext) ? singleModelFolder!.rootName : undefined,
             modelFolderKey: isSingleFolderEntry ? `single-folder:${singleModelFolder!.rootKey}` : undefined,
+            // 单零件压缩包：根目录即零件目录，文件在根目录的子文件夹里视为嵌套变体
+            isNestedModelFile: isSingleFolderEntry
+              ? archiveSegments(cleanName).length > 2
+              : structuredPath?.isBelowModelDir || false,
           };
         })
         .filter((item) => Boolean(item.ext))
@@ -832,6 +857,10 @@ export async function processBatchArchiveUpload({
           modelNameOverride:
             isSingleFolderEntry && acceptedExts.includes(ext) ? singleModelFolder!.rootName : undefined,
           modelFolderKey: isSingleFolderEntry ? `single-folder:${singleModelFolder!.rootKey}` : undefined,
+          // 单零件压缩包：根目录即零件目录，文件在根目录的子文件夹里视为嵌套变体
+          isNestedModelFile: isSingleFolderEntry
+            ? archiveSegments(safeName).length > 2
+            : structuredPath?.isBelowModelDir || false,
         });
       }
 

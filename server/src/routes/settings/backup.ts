@@ -527,6 +527,7 @@ export function createSettingsBackupRouter() {
       message: job.message,
       error: job.error,
       scope: job.scope,
+      encrypted: job.encrypted,
       logs: job.logs,
     });
   });

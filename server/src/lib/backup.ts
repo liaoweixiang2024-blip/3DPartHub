@@ -568,6 +568,8 @@ interface BackupJob {
   logs: string[];
   source?: 'manual' | 'scheduled';
   scope?: BackupScope;
+  /** 本次备份归档是否已加密落盘（done 阶段置位，进度接口透出，前端据此弹加密提示） */
+  encrypted?: boolean;
 }
 
 export interface BackupHealth {
@@ -1654,6 +1656,7 @@ async function runBackup(job: BackupJob) {
     if (encrypted) {
       addLog(job, '备份包已加密存储');
     }
+    job.encrypted = encrypted || isEncryptedBackupArchiveFile(finalArchive);
 
     job.percent = 97;
     job.message = '正在计算备份包 SHA256... 0%';
@@ -1841,6 +1844,7 @@ async function runModuleBackup(job: BackupJob, scope: Exclude<BackupScope, 'full
 
     const encrypted = await encryptBackupArchiveInPlace(finalArchive);
     if (encrypted) addLog(job, '模块备份包已加密存储');
+    job.encrypted = encrypted || isEncryptedBackupArchiveFile(finalArchive);
 
     job.percent = 97;
     job.message = '正在计算备份包 SHA256... 0%';

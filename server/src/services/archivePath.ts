@@ -5,6 +5,8 @@ export type StructuredArchivePath = {
   subcategoryName: string | null;
   modelName: string;
   modelDirKey: string;
+  /** 模型文件位于零件目录的子文件夹内（改版/加配件组合等变体），批量上传时若零件目录有直接模型文件则跳过 */
+  isBelowModelDir: boolean;
 };
 
 export type StructuredArchivePathOptions = {
@@ -39,9 +41,18 @@ function decodeArchiveNameBytes(rawName: Buffer): string {
   );
 }
 
-export function decodeZipEntryNameForUpload(entry: { entryName: string; rawEntryName?: Buffer | Uint8Array }): string {
+export function decodeZipEntryNameForUpload(entry: {
+  entryName: string;
+  rawEntryName?: Buffer | Uint8Array;
+  header?: { flags?: number } | null;
+}): string {
   const rawName = entry.rawEntryName ? Buffer.from(entry.rawEntryName) : null;
-  return rawName?.length ? decodeArchiveNameBytes(rawName) : entry.entryName;
+  if (!rawName?.length) return entry.entryName;
+  // ZIP 规范 EFS 标志位（flags bit 11 = 0x800）= 文件名是 UTF-8，直接信任——不能走启发式打分：
+  // UTF-8 中文每 3 字节会被 GBK 解成 1.5 个乱码汉字（仍在 CJK 计分区），乱码串 CJK 字符数
+  // 反而更多、得分更高，导致正确的 UTF-8 名被 GBK 乱码覆盖（Python/macOS 打的中文 ZIP 都中招）。
+  if ((entry.header?.flags ?? 0) & 0x800) return rawName.toString('utf8');
+  return decodeArchiveNameBytes(rawName);
 }
 
 export function normalizeBatchArchiveEntryName(entryName: string): string | null {
@@ -122,10 +133,14 @@ export function structuredArchivePath(
   const modelName = secondDirIsModelFolder ? secondDir : hasSubcategory && thirdDir ? thirdDir : fileStem;
   if (!categoryName || (hasSubcategory && !subcategoryName) || !modelName) return null;
   const modelKeyParts = hasSubcategory ? [categoryName, subcategoryName, modelName] : [categoryName, modelName];
+  // 嵌套判定：零件目录是第二层（无子分类，段数>3 为嵌套）或第三层（有子分类，段数>4 为嵌套）；
+  // 文件直接在分类/子分类下（无零件目录）时恒不嵌套
+  const isBelowModelDir = secondDirIsModelFolder ? parts.length > 3 : hasSubcategory ? parts.length > 4 : false;
   return {
     categoryName: categoryName.slice(0, 50),
     subcategoryName: subcategoryName ? subcategoryName.slice(0, 50) : null,
     modelName,
     modelDirKey: modelKeyParts.filter(Boolean).join('/').toLowerCase(),
+    isBelowModelDir,
   };
 }

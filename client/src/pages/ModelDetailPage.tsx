@@ -308,7 +308,11 @@ export default function ModelDetailPage() {
         {
           format,
           size: fileSize,
-          fileName: serverModel.original_name || `${serverModel.name}.${format.toLowerCase()}`,
+          // 展示名与实际下载文件名对齐：后缀统一小写（original_name 可能存 .STEP/.STP 大写原文件名）
+          fileName: (serverModel.original_name || `${serverModel.name}.${format.toLowerCase()}`).replace(
+            /\.(step|stp|iges|igs|glb|gltf)$/i,
+            (ext) => ext.toLowerCase(),
+          ),
           downloadFormat: 'original',
         },
         ...(serverModel.drawings && serverModel.drawings.length > 0

@@ -20,7 +20,15 @@ interface UploadModalProps {
 
 type UploadResult =
   | { type: 'single'; data: ConversionResponse }
-  | { type: 'batch'; ok: number; fail: number; total: number; drawings?: number; drawingFail?: number }
+  | {
+      type: 'batch';
+      ok: number;
+      fail: number;
+      total: number;
+      drawings?: number;
+      drawingFail?: number;
+      skipped?: number;
+    }
   | {
       type: 'archive';
       ok: number;
@@ -29,6 +37,7 @@ type UploadResult =
       archiveType: 'ZIP' | 'RAR';
       drawings?: number;
       drawingFail?: number;
+      skipped?: number;
     };
 
 const CONCURRENCY = 3;
@@ -447,6 +456,7 @@ export default function UploadModal({ open, onClose, onConverted }: UploadModalP
       let total = 0;
       let drawings = 0;
       let drawingFail = 0;
+      let skipped = 0;
       const modelFiles = files.filter((file) => !isArchiveFile(file) && !isDrawingFile(file));
       const archiveFiles = files.filter(isArchiveFile);
       const drawingFiles = files.filter(isDrawingFile);
@@ -548,10 +558,12 @@ export default function UploadModal({ open, onClose, onConverted }: UploadModalP
             },
           });
           const archiveOk = resp.results.filter((r) => r.status === 'queued' || r.status === 'completed').length;
+          const archiveSkipped = resp.results.filter((r) => r.status === 'skipped').length;
           drawings += resp.results.filter((r) => r.drawing_attached).length;
           drawingFail += resp.results.filter((r) => r.drawing_error).length;
           ok += archiveOk;
-          fail += resp.results.length - archiveOk;
+          skipped += archiveSkipped;
+          fail += resp.results.length - archiveOk - archiveSkipped;
           total += resp.total;
         } catch {
           fail += 1;
@@ -566,7 +578,7 @@ export default function UploadModal({ open, onClose, onConverted }: UploadModalP
       paintProgress(100, true);
       finishUploadStats();
       setPendingFiles([]);
-      setResult({ type: 'batch', ok, fail, total, drawings, drawingFail });
+      setResult({ type: 'batch', ok, fail, total, drawings, drawingFail, skipped });
       swrMutate('/models/count');
       onConverted?.();
       finishUploadRun(runId);
@@ -652,7 +664,9 @@ export default function UploadModal({ open, onClose, onConverted }: UploadModalP
         paintProgress(Math.max(processingProgress, 94), true);
         setProgressLabel('正在整理结果...');
         const ok = resp.results.filter((r) => r.status === 'queued' || r.status === 'completed').length;
-        const fail = resp.results.length - ok;
+        // 子文件夹变体（零件目录已有直接模型文件）被服务端跳过，不计入失败
+        const skipped = resp.results.filter((r) => r.status === 'skipped').length;
+        const fail = resp.results.length - ok - skipped;
         const drawings = resp.results.filter((r) => r.drawing_attached).length;
         const drawingFail = resp.results.filter((r) => r.drawing_error).length;
         if (!isCurrentUploadRun(runId)) return;
@@ -666,6 +680,7 @@ export default function UploadModal({ open, onClose, onConverted }: UploadModalP
           total: resp.total,
           drawings,
           drawingFail,
+          skipped,
         });
         swrMutate('/models/count');
         onConverted?.();
@@ -911,7 +926,9 @@ export default function UploadModal({ open, onClose, onConverted }: UploadModalP
                           {result.type === 'archive' ? `${result.archiveType} 批量上传完成` : '批量上传完成'}
                         </p>
                         <p className="text-sm text-on-surface-variant mt-1">
-                          共 {result.total} 个文件：{result.ok} 成功{result.fail > 0 ? `，${result.fail} 失败` : ''}
+                          共 {result.total} 个文件：{result.ok} 成功
+                          {result.fail > 0 ? `，${result.fail} 失败` : ''}
+                          {result.skipped ? `，${result.skipped} 跳过（零件目录已有直接模型文件）` : ''}
                         </p>
                         {(result.drawings || result.drawingFail) && (
                           <p className="text-sm text-on-surface-variant mt-1">

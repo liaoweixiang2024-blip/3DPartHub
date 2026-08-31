@@ -498,6 +498,8 @@ interface ProgressPayload<T = unknown> {
   error?: string;
   scope?: BackupScope;
   result?: T;
+  /** 备份任务：归档已加密落盘（done 阶段置位） */
+  encrypted?: boolean;
   /** 恢复任务：用户已手动取消（与失败区分） */
   cancelled?: boolean;
   /** 恢复任务：已进入数据库 schema 重置，禁止取消 */
@@ -778,7 +780,7 @@ export async function pollBackupProgress(
   jobId: string,
   onProgress?: (stage: string, percent: number, message: string, logs?: string[]) => void,
   signal?: AbortSignal,
-): Promise<string> {
+): Promise<{ jobId: string; encrypted: boolean }> {
   return new Promise((resolve, reject) => {
     if (signal?.aborted) {
       reject(new DOMException('Aborted', 'AbortError'));
@@ -806,7 +808,7 @@ export async function pollBackupProgress(
         onProgress?.(d.stage || lastStage, d.percent ?? lastPercent, d.message || '', d.logs);
         if (d.stage === 'done') {
           clearInterval(poll);
-          resolve(jobId);
+          resolve({ jobId, encrypted: Boolean(d.encrypted) });
         } else if (d.stage === 'error') {
           clearInterval(poll);
           reject(new Error(d.error || '备份失败'));

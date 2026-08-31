@@ -314,6 +314,7 @@ const iconMap: Record<string, LucideIcon> = {
   share: Share2,
   admin_panel_settings: ShieldCheck,
   policy: ShieldCheck,
+  encryption: Lock,
   zoom_in: ZoomIn,
   zoom_out: ZoomOut,
   description: FileText,
@@ -368,6 +369,7 @@ const iconMap: Record<string, LucideIcon> = {
   verified: BadgeCheck,
   view_column: Columns,
   vpn_key: KeyRound,
+  enhanced_encryption: ShieldCheck,
 
   // Category icons — parent
   category_all: Layers,
