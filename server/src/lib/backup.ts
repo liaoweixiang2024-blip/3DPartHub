@@ -336,8 +336,10 @@ const ARCHIVE_META_TIMEOUT_MS = 20 * 60_000;
 // 大备份包（上万条目）下输出轻松超过 1MB，直接抛 spawnSync ENOBUFS 中断恢复。
 // 统一放大到 512MB；tar 条目上限见 ARCHIVE_LIST_MAX_ENTRIES（超过按损坏包拒绝，不无限吃内存）。
 const EXEC_MAX_BUFFER_BYTES = 512 * 1024 * 1024;
-// tar 列表输出超过此条目数视为异常（真实备份包远低于此；防损坏包/误传大文件撑爆内存）
-const ARCHIVE_LIST_MAX_ENTRIES = 200_000;
+// tar 列表条目数上限（防损坏包/误传大文件撑爆内存）。每条列表行约 80-100 字节，
+// 100 万条 ≈ 100MB 原始输出，稳在 512MB maxBuffer 内（硬顶约 500 万条，不取满留安全边际）；
+// 真实备份包当前约 6千条（1319 模型 × ~5 文件），百万级已远超实际增长需要。
+const ARCHIVE_LIST_MAX_ENTRIES = 1_000_000;
 const DEFAULT_BACKUP_LOCK_STALE_MINUTES = 12 * 60;
 const BACKUP_LOCK_STALE_MS = (() => {
   const raw = Number(process.env.BACKUP_LOCK_STALE_MINUTES);
