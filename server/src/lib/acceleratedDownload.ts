@@ -96,6 +96,8 @@ export function sendAcceleratedFile(
     contentType?: string;
     disposition?: Disposition;
     cacheControl?: string;
+    /** 强制走 Node 流式下发，跳过 X-Accel-Redirect 加速。 */
+    forceStream?: boolean;
   },
 ) {
   const {
@@ -104,6 +106,7 @@ export function sendAcceleratedFile(
     contentType = contentTypeForFile(fileName),
     disposition = 'attachment',
     cacheControl = defaultResourceCacheControl(),
+    forceStream = false,
   } = options;
 
   // 非白名单类型（contentTypeForFile 落到默认分支，含 .html/.svg/.htm 等可执行/可渲染内容）
@@ -147,7 +150,11 @@ export function sendAcceleratedFile(
   // 加速（X-Accel-Redirect）由 nginx 的 X-Accel-Available 头驱动（client/nginx.conf 显式设置）。
   // 注意：resource_download_acceleration_enabled 设置默认 false，且 initDefaultSettings 用
   // skipDuplicates 不可回填，若按该设置门控会关掉生产环境既有的 nginx 加速，故此处保持头驱动。
-  const accelPath = req.headers['x-accel-available'] === '1' ? accelPathFor(filePath) : null;
+  // forceStream：备份目录（static/backups）是全站唯一 bind mount，api 与 web(nginx) 容器的
+  // 文件系统视图可能不一致（挂载漂移），而 API 无法探测 nginx 侧是否能看到文件——一旦漂移，
+  // X-Accel-Redirect 会让 nginx 404 且 API 毫无感知。故备份下载强制走 Node 直连流，
+  // 彻底不依赖 nginx 挂载备份目录。其他调用方的文件都在双容器共享的命名卷里，不受此影响。
+  const accelPath = !forceStream && req.headers['x-accel-available'] === '1' ? accelPathFor(filePath) : null;
   if (accelPath) {
     res.setHeader('X-Accel-Redirect', accelPath);
     res.status(200).end();

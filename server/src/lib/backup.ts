@@ -2320,6 +2320,7 @@ function backupPolicyAction(check: BackupPolicyCheckItem): string {
   if (check.key === 'mirror_dir') return '修正外部镜像目录，不能为空，也不能指向当前备份目录。';
   if (check.key === 'latest_backup') return '重新创建一次整站备份并完成校验，先建立可信恢复点。';
   if (check.key === 'encryption') return '配置 BACKUP_ENCRYPTION_SECRET，让备份包在磁盘上保持加密。';
+  if (check.key === 'download_channel') return '最近备份文件不可读，下载会失败；重新创建一次备份恢复文件后再下载验证。';
   if (check.label.includes('磁盘空间')) return `${check.label}不足或无法确认，请清理空间或迁移到更大磁盘。`;
   if (check.label.includes('可写')) return `${check.label}失败，请检查目录挂载和读写权限。`;
   return `${check.label}：${check.message}`;
@@ -2463,6 +2464,20 @@ export async function getBackupPolicyCheck(): Promise<BackupPolicyCheck> {
       });
     }
   }
+
+  // 下载通道检查：备份下载走 API 直连流（forceStream，不依赖 nginx X-Accel 挂载），
+  // 只要 API 自己能读到归档文件下载即可用。归档缺失/不可读直接暴露给管理员，而不是等点下载才失败。
+  const downloadArchive = latest ? getBackupArchivePath(latest.id) : null;
+  checks.push({
+    key: 'download_channel',
+    label: '备份下载通道',
+    status: downloadArchive ? 'ok' : 'warning',
+    message: downloadArchive
+      ? `API 直连流式下载，不依赖 nginx 静态挂载；最近备份 ${latest!.name} 文件可读`
+      : latest
+        ? `最近备份 ${latest.name} 的归档文件缺失（可能被手动移走），下载会失败，请重新创建备份`
+        : '暂无备份记录，创建备份后下载通道随之可用',
+  });
 
   return {
     status: checks.some((check) => check.status === 'error')

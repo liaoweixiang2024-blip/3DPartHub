@@ -273,11 +273,18 @@ services:
     networks:
       - internal
 
+# 数据卷显式命名（固定为生产前缀 3dparthub_）：compose 默认用「目录名_卷名」，
+# 一旦部署目录改名/换位置（如 /opt/3dparthub → 别的目录）启动，会静默连上一套
+# 全新的空卷，造成"数据全部丢失"的假象。显式命名后无论在哪个目录启动都接同一组卷。
 volumes:
   pgdata:
+    name: 3dparthub_pgdata
   uploads-data:
+    name: 3dparthub_uploads-data
   static-data:
+    name: 3dparthub_static-data
   redis-data:
+    name: 3dparthub_redis-data
 
 networks:
   internal:

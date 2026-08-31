@@ -578,12 +578,15 @@ export function createSettingsBackupRouter() {
       await sendResourceError(req, res, 404, '备份文件不存在或已被清理', { htmlTitle: '备份不存在' });
       return;
     }
+    // forceStream：备份目录是 bind mount，nginx 容器若未挂载同目录，X-Accel 会 404 且 API 无感知；
+    // 强制 Node 直连流式下发，下载链路不再依赖 nginx 能否看到备份文件（见 acceleratedDownload.ts）。
     sendAcceleratedFile(req, res, {
       filePath,
       fileName: basename(filePath),
       contentType: 'application/gzip',
       disposition: 'attachment',
       cacheControl: 'private, no-store',
+      forceStream: true,
     });
   });
 

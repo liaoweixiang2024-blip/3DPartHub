@@ -64,13 +64,19 @@ function createTestFile(content: string) {
   };
 }
 
-async function sendTestDownload(filePath: string, method = 'GET', headers: Record<string, string> = {}) {
+async function sendTestDownload(
+  filePath: string,
+  method = 'GET',
+  headers: Record<string, string> = {},
+  options: { forceStream?: boolean } = {},
+) {
   const res = new MockResponse();
   sendAcceleratedFile(createMockRequest(method, headers) as never, res as never, {
     filePath,
     fileName: 'sample.step',
     contentType: 'application/octet-stream',
     disposition: 'attachment',
+    ...(options.forceStream ? { forceStream: true } : {}),
   });
   await once(res, 'finish');
   return res;
@@ -98,6 +104,59 @@ test('download responses support byte ranges', async () => {
     assert.equal(response.statusCode, 206);
     assert.equal(response.getHeader('content-range'), 'bytes 2-5/10');
     assert.equal(response.getHeader('content-length'), '4');
+    assert.equal(response.bodyText(), '2345');
+  } finally {
+    fixture.cleanup();
+  }
+});
+
+test('accel header still drives X-Accel-Redirect by default (other callers unchanged)', async () => {
+  const fixture = createTestFile('0123456789');
+  try {
+    const response = await sendTestDownload(fixture.filePath, 'GET', { 'x-accel-available': '1' });
+
+    assert.equal(response.statusCode, 200);
+    assert.ok(response.getHeader('x-accel-redirect'));
+    assert.ok(String(response.getHeader('x-accel-redirect')).startsWith('/_protected_uploads/'));
+    // 加速路径不回正文（nginx 负责发文件）
+    assert.equal(response.bodyText(), '');
+  } finally {
+    fixture.cleanup();
+  }
+});
+
+test('forceStream ignores accel header and streams file bytes directly', async () => {
+  const fixture = createTestFile('0123456789');
+  try {
+    const response = await sendTestDownload(
+      fixture.filePath,
+      'GET',
+      { 'x-accel-available': '1' },
+      { forceStream: true },
+    );
+
+    assert.equal(response.statusCode, 200);
+    assert.equal(response.getHeader('x-accel-redirect'), undefined);
+    assert.equal(response.getHeader('content-length'), '10');
+    assert.equal(response.bodyText(), '0123456789');
+  } finally {
+    fixture.cleanup();
+  }
+});
+
+test('forceStream keeps range support on the direct stream path', async () => {
+  const fixture = createTestFile('0123456789');
+  try {
+    const response = await sendTestDownload(
+      fixture.filePath,
+      'GET',
+      { 'x-accel-available': '1', range: 'bytes=2-5' },
+      { forceStream: true },
+    );
+
+    assert.equal(response.statusCode, 206);
+    assert.equal(response.getHeader('x-accel-redirect'), undefined);
+    assert.equal(response.getHeader('content-range'), 'bytes 2-5/10');
     assert.equal(response.bodyText(), '2345');
   } finally {
     fixture.cleanup();

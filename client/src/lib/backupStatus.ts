@@ -214,6 +214,8 @@ function formatBackupPolicyAdvice(check: BackupPolicyCheck['checks'][number]): s
   if (check.key === 'mirror_dir') return '修正外部镜像目录，不能为空，也不能指向当前备份目录。';
   if (check.key === 'latest_backup') return '重新创建并校验一次备份，确认当前版本可恢复。';
   if (check.key === 'encryption') return '配置 BACKUP_ENCRYPTION_SECRET，让备份包在磁盘上保持加密。';
+  if (check.key === 'download_channel')
+    return '备份下载由 API 直连流式下发，不依赖 nginx 静态目录；若归档缺失请重新创建备份。';
   if (check.label.includes('磁盘空间')) return `${check.label}不足或不可确认，建议清理空间或换到更大磁盘。`;
   if (check.label.includes('可写')) return `${check.label}失败，请检查目录权限。`;
   return `${check.label}：${check.message}`;
