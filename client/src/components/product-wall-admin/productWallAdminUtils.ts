@@ -98,6 +98,39 @@ export async function collectFilesFromDataTransfer(dataTransfer: DataTransfer) {
   return nested.flat();
 }
 
+export type FileWithPath = { file: File; relativePath: string };
+
+async function collectFilesWithPathFromEntry(
+  entry: WebkitFileSystemEntry,
+  prefix: string,
+  maxDepth: number,
+): Promise<FileWithPath[]> {
+  if (entry.isFile) {
+    const file = await readFileEntry(entry as WebkitFileSystemFileEntry);
+    return [{ file, relativePath: prefix ? `${prefix}/${file.name}` : file.name }];
+  }
+  if (!entry.isDirectory || maxDepth <= 0) return [];
+  const children = await readDirectoryEntries(entry as WebkitFileSystemDirectoryEntry);
+  const dirPrefix = prefix ? `${prefix}/${entry.name}` : entry.name;
+  const nested = await Promise.all(
+    children.map((child) => collectFilesWithPathFromEntry(child, dirPrefix, maxDepth - 1)),
+  );
+  return nested.flat();
+}
+
+/**
+ * 展开拖入的 DataTransfer，保留每个文件相对拖入根的路径（文件夹名做模型名依赖该路径）。
+ * 必须在 drop 事件的同步阶段调用（内部立刻取 webkitGetAsEntry，items 异步会被浏览器清空），
+ * 返回的 Promise 可以往后 await。
+ */
+export function collectFilesWithPathFromDataTransfer(
+  entries: WebkitFileSystemEntry[],
+  fallbackFiles: File[],
+): Promise<FileWithPath[]> {
+  if (!entries.length) return Promise.resolve(fallbackFiles.map((file) => ({ file, relativePath: file.name })));
+  return Promise.all(entries.map((entry) => collectFilesWithPathFromEntry(entry, '', 8))).then((lists) => lists.flat());
+}
+
 export function wallImageUrl(item: WallItem) {
   if (typeof window === 'undefined') return item.image;
   return new URL(item.image, window.location.origin).toString();

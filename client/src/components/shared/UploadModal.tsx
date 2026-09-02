@@ -1,8 +1,15 @@
 import { motion, AnimatePresence } from 'framer-motion';
+import JSZip from 'jszip';
 import { useState, useCallback, useEffect, useId, useMemo, useRef } from 'react';
 import useSWR from 'swr';
 import { mutate as swrMutate } from 'swr';
 import { converterApi, modelApi, type ConversionResponse } from '../../api';
+import {
+  collectFilesWithPathFromDataTransfer,
+  type DataTransferItemWithEntry,
+  type FileWithPath,
+  type WebkitFileSystemEntry,
+} from '../product-wall-admin/productWallAdminUtils';
 import { categoriesApi } from '../../api/categories';
 import client from '../../api/client';
 import { useMediaQuery } from '../../layouts/hooks/useMediaQuery';
@@ -761,10 +768,76 @@ export default function UploadModal({ open, onClose, onConverted }: UploadModalP
     [formats],
   );
 
+  // 拖入文件夹：内存打 ZIP 走批量上传通道（服务端按路径解析文件夹名做模型标题/变体跳过/PDF 配对）。
+  // 忽略 GPUCache / 隐藏文件；只收模型格式与 PDF，其余（SLDPRT 等源文件）不上传。
+  const buildFolderUploadZip = useCallback(
+    async (collected: FileWithPath[]): Promise<File | null> => {
+      const accepted = collected.filter(({ file, relativePath }) => {
+        const ext = file.name.split('.').pop()?.toLowerCase() || '';
+        if (!formats.includes(ext) && ext !== 'pdf') return false;
+        const segments = relativePath.split('/');
+        return !segments.some((segment) => segment === 'GPUCache' || segment.startsWith('.'));
+      });
+      const hasModel = accepted.some(({ file }) => {
+        const ext = file.name.split('.').pop()?.toLowerCase() || '';
+        return formats.includes(ext);
+      });
+      if (!hasModel) return null;
+
+      const zip = new JSZip();
+      for (const { file, relativePath } of accepted) zip.file(relativePath, file);
+      const blob = await zip.generateAsync({ type: 'blob', compression: 'STORE' });
+      if (blob.size > archiveMaxBytes) {
+        setError(
+          `文件夹内容打包后 ${Math.round(blob.size / 1024 / 1024)}MB，超过 ZIP/RAR 上限 ${archiveMaxSizeMb}MB，请分批拖入`,
+        );
+        return null;
+      }
+      return new File([blob], 'folder-upload.zip', { type: 'application/zip' });
+    },
+    [archiveMaxBytes, archiveMaxSizeMb, formats],
+  );
+
   const handleDrop = useCallback(
     (e: React.DragEvent) => {
       e.preventDefault();
       setDragActive(false);
+
+      // webkitGetAsEntry 必须在事件同步阶段调用（dataTransfer.items 异步访问会被浏览器清空）
+      const items = Array.from(e.dataTransfer.items || []) as DataTransferItemWithEntry[];
+      const entries: WebkitFileSystemEntry[] = [];
+      for (const item of items) {
+        const entry = item.webkitGetAsEntry?.();
+        if (entry) entries.push(entry);
+      }
+      const hasDirectory = entries.some((entry) => entry.isDirectory);
+      if (hasDirectory) {
+        // 文件夹拖入：异步展开（entry 可异步遍历）→ 打 ZIP → 走压缩包上传流程
+        void (async () => {
+          setError(null);
+          setProgress(4);
+          setProgressLabel('正在展开文件夹...');
+          try {
+            const collected = await collectFilesWithPathFromDataTransfer(entries, []);
+            setProgressLabel(`已展开 ${collected.length} 个文件，正在打包上传...`);
+            const zipFile = await buildFolderUploadZip(collected);
+            if (!zipFile) {
+              // buildFolderUploadZip 为 null 且没设过错误（体积超限已设）时，说明没有可上传的模型文件
+              setError((prev) => prev ?? '文件夹为空或没有可上传的模型文件');
+              setProgress(0);
+              setProgressLabel('');
+              return;
+            }
+            await handleArchiveFile(zipFile);
+          } catch (err) {
+            setError(err instanceof Error ? err.message : '文件夹上传失败，请重试');
+            setProgress(0);
+            setProgressLabel('');
+          }
+        })();
+        return;
+      }
+
       if (!e.dataTransfer.files?.length) return;
       const filtered = filterFiles(e.dataTransfer.files);
       if (filtered.length === 0) {
@@ -799,10 +872,12 @@ export default function UploadModal({ open, onClose, onConverted }: UploadModalP
       }
     },
     [
+      buildFolderUploadZip,
       filterFiles,
       getArchiveSizeError,
       getDrawingMatchError,
       getFileSizeError,
+      handleArchiveFile,
       handleSingleFile,
       hasUploadableModelInput,
       isArchiveFile,
@@ -1095,7 +1170,7 @@ export default function UploadModal({ open, onClose, onConverted }: UploadModalP
                       </div>
                     ) : (
                       <>
-                        <p className="text-sm text-on-surface mb-1">拖放文件到此处，或点击选择</p>
+                        <p className="text-sm text-on-surface mb-1">拖放文件或文件夹到此处，或点击选择</p>
                         <p className="text-xs text-on-surface-variant">
                           支持 {formatLabel} 模型和同名 PDF，可多选或上传 ZIP/RAR 压缩包（上限 {archiveMaxSizeMb}MB）
                         </p>

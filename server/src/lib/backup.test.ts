@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { execFileSync as execFileSyncCb } from 'node:child_process';
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
@@ -335,7 +335,7 @@ test('backup encryption stores archive bytes encrypted and materializes readable
   }
 });
 
-test('restore safety check survives archives whose tar listing exceeds the 1MB default buffer', () => {
+test('restore safety check survives archives whose tar listing exceeds the 1MB default buffer', async () => {
   // 生产事故回归：恢复前安全检查 execFileSync('tar tvzf') 未设 maxBuffer，
   // Node 默认 1MB，大备份包（上万条目）列表输出超限直接抛 spawnSync ENOBUFS 中断恢复。
   // 构造一个 tvzf 输出 > 1MB（约 15000 条目）的 tar.gz，断言检查正常通过。
@@ -355,8 +355,27 @@ test('restore safety check survives archives whose tar listing exceeds the 1MB d
     const archive = join(dir, 'big.tar.gz');
     execFileSyncCb('tar', ['-czf', archive, '-C', treeRoot, 'originals'], { stdio: 'pipe' });
 
-    // 旧实现在这里抛 spawnSync tar ENOBUFS；修复后应正常通过（全普通文件/目录）
-    assert.doesNotThrow(() => assertArchiveContainsOnlyRegularFilesAndDirectories(archive));
+    // 旧实现在这里抛 spawnSync tar ENOBUFS；v4.3.5 用 512MB maxBuffer 兜住，
+    // 现已改为流式校验（无条目上限、内存线性）——这里验证流式版同样通过
+    await assert.doesNotReject(assertArchiveContainsOnlyRegularFilesAndDirectories(archive));
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('restore safety check rejects archives containing symlinks via streaming scan', async () => {
+  // 流式校验仍要拒绝符号链接/特殊文件（安全语义不回归）
+  const dir = mkdtempSync(join(tmpdir(), '3dparthub-tarsafe-'));
+  try {
+    const treeRoot = join(dir, 'tree');
+    const filesRoot = join(treeRoot, 'originals');
+    mkdirSync(filesRoot, { recursive: true });
+    writeFileSync(join(filesRoot, 'model.step'), 'x');
+    symlinkSync('/etc/passwd', join(filesRoot, 'evil_link'));
+    const archive = join(dir, 'linked.tar.gz');
+    execFileSyncCb('tar', ['-czf', archive, '-C', treeRoot, 'originals'], { stdio: 'pipe' });
+
+    await assert.rejects(assertArchiveContainsOnlyRegularFilesAndDirectories(archive), /符号链接|硬链接|特殊文件/);
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }

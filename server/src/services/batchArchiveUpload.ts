@@ -65,6 +65,8 @@ type ZipEntryCandidate = {
   modelFolderKey?: string;
   /** 模型文件在零件目录的子文件夹内（改版/组合变体），零件目录有直接模型文件时跳过 */
   isNestedModelFile?: boolean;
+  /** PDF 在零件目录的子文件夹内：零件目录有直接 PDF 时子夹 PDF 不挂（与模型「零件目录优先」同口径） */
+  isNestedPdf?: boolean;
 };
 
 type RarEntryCandidate = {
@@ -79,6 +81,8 @@ type RarEntryCandidate = {
   modelFolderKey?: string;
   /** 模型文件在零件目录的子文件夹内（改版/组合变体），零件目录有直接模型文件时跳过 */
   isNestedModelFile?: boolean;
+  /** PDF 在零件目录的子文件夹内：零件目录有直接 PDF 时子夹 PDF 不挂（与模型「零件目录优先」同口径） */
+  isNestedPdf?: boolean;
 };
 
 type SingleModelFolderArchive = {
@@ -204,24 +208,31 @@ function isSingleModelFolderEntry(cleanName: string, folder: SingleModelFolderAr
   return parts.length >= 2 && categoryNameKey(parts[0]) === folder.rootKey;
 }
 
-function detectSingleModelFolderArchive(
+// 单零件压缩包检测：包内所有文件共享同一根文件夹且唯一模型 stem 时，根文件夹即零件目录
+// （模型标题=文件夹名、分类用用户所选，不自动建新分类）。
+// 不依赖用户是否选分类——「文件夹/文件.STEP」的包形态本身就是零件目录信号，
+// 之前要求 selectedCategoryId 非空导致未选分类时文件夹名被 structuredArchivePath 误判为分类名。
+export function detectSingleModelFolderArchive(
   cleanNames: string[],
   acceptedExts: string[],
-  selectedCategoryId: string | null,
   knownRootCategories: Set<string>,
 ): SingleModelFolderArchive | null {
-  if (!selectedCategoryId) return null;
-
   const modelStemKeys = new Set<string>();
   let rootName = '';
   let rootKey = '';
+  let hasDirectModelFile = false;
 
   for (const cleanName of cleanNames) {
     const ext = cleanName.split('.').pop()?.toLowerCase() || '';
     if (ext !== 'pdf' && !acceptedExts.includes(ext)) continue;
 
     const parts = archiveSegments(cleanName);
-    if (parts.length < 2) return null;
+    // 根层散落的 PDF（如压缩包根的 说明.pdf）不参与包形态判定——只有模型扩展名在根层
+    // 才说明不是「文件夹包裹」形态（PDF 常被随手放包根，不该破坏单零件包识别）
+    if (parts.length < 2) {
+      if (ext === 'pdf') continue;
+      return null;
+    }
 
     const currentRootName = parts[0];
     const currentRootKey = categoryNameKey(currentRootName);
@@ -233,9 +244,16 @@ function detectSingleModelFolderArchive(
       return null;
     }
 
-    if (acceptedExts.includes(ext)) modelStemKeys.add(candidateModelStemKey({ originalName: cleanName }));
+    // 根文件夹的直接层必须有模型文件（零件目录本体所在层）——变体子夹（含喷嘴/改版）不算。
+    // 若模型只存在于更深层（分类/零件目录/文件.STEP），根文件夹是分类层，不是单零件包。
+    // 唯一 stem 也只统计直接层：变体子夹的模型会被 isNestedModelFile 跳过，不应破坏本判定。
+    if (acceptedExts.includes(ext) && parts.length === 2) {
+      hasDirectModelFile = true;
+      modelStemKeys.add(candidateModelStemKey({ originalName: cleanName }));
+    }
   }
 
+  if (!hasDirectModelFile) return null;
   return rootName && modelStemKeys.size === 1 ? { rootName, rootKey } : null;
 }
 
@@ -314,7 +332,19 @@ export function selectBatchModelEntries<
       selectedStructuredModelStems.add(modelStemKey);
     }
     selected.push(item);
-    if (selected.length >= MAX_BATCH_MODEL_FILES) break;
+    if (selected.length >= MAX_BATCH_MODEL_FILES) {
+      // 超出单包上限的候选不再静默丢弃：逐条给出 skipped 结果，
+      // 否则用户不知道包里还有模型没传，且其同名 PDF 会被误报「未找到同名模型文件」
+      for (const rest of candidates.slice(candidates.indexOf(item) + 1)) {
+        if (!acceptedExts.includes(rest.ext)) continue;
+        results.push({
+          name: rest.modelNameOverride || rest.structuredPath?.modelName || rest.originalName,
+          status: 'skipped',
+          error: `超出单包 ${MAX_BATCH_MODEL_FILES} 个模型上限，未上传，请拆分后重新上传`,
+        });
+      }
+      break;
+    }
   }
 
   return selected;
@@ -335,10 +365,44 @@ function registerUnmatchedPdfResults<T extends { ext: string; originalName: stri
     results.push({
       name: item.originalName,
       status: MODEL_STATUS.FAILED,
-      error: '未找到同名模型文件，PDF 图纸未绑定',
-      drawing_error: '未找到同名模型文件，PDF 图纸未绑定',
+      // 模型可能不存在，也可能因超出单包上限被跳过——用中性表述避免误导
+      error: '对应模型未入列（不存在或超出单包上限），PDF 图纸未绑定',
+      drawing_error: '对应模型未入列（不存在或超出单包上限），PDF 图纸未绑定',
     });
   }
+}
+
+/**
+ * PDF「零件目录优先」分组：目录有直接 PDF 时，子文件夹里的 PDF（改版/套装图纸）
+ * 不再挂到本体模型 —— 与模型条目的「零件目录优先」同口径。
+ * 无直接 PDF 的目录维持现状：子夹 PDF 照常挂（目录本体图纸在子夹里的场景）。
+ * 返回 [分组结果, 因规则被跳过的子夹 PDF 列表]（后者用于结果面板反馈，避免静默丢弃）。
+ */
+export function collectPdfEntriesForPairing<
+  T extends {
+    ext: string;
+    pairKey: string;
+    isNestedPdf?: boolean;
+  },
+>(entries: T[]): [Map<string, T[]>, T[]] {
+  const pdfByKey = new Map<string, T[]>();
+  const skippedNestedPdfs: T[] = [];
+  const hasDirectPdfByPairKey = new Set<string>();
+  for (const item of entries) {
+    if (item.ext !== 'pdf' || item.isNestedPdf) continue;
+    hasDirectPdfByPairKey.add(item.pairKey);
+  }
+  for (const item of entries) {
+    if (item.ext !== 'pdf') continue;
+    if (item.isNestedPdf && hasDirectPdfByPairKey.has(item.pairKey)) {
+      skippedNestedPdfs.push(item);
+      continue;
+    }
+    const list = pdfByKey.get(item.pairKey) || [];
+    list.push(item);
+    pdfByKey.set(item.pairKey, list);
+  }
+  return [pdfByKey, skippedNestedPdfs];
 }
 
 function isPdfData(data: Buffer | Uint8Array): boolean {
@@ -467,6 +531,13 @@ export async function processBatchArchiveUpload({
           select: { id: true },
         });
         if (!root) {
+          // 两层路径（文件夹/文件.STEP，subcategoryName 恒为 null）本该被单零件压缩包检测识别；
+          // 走到这里说明是漏网形态（如根文件夹名撞已知根分类）。此时第一层大概率是零件目录而非分类，
+          // 不自动新建根分类，落用户所选分类（未选则无分类，后续编辑页归位）。
+          // 三层及以上（subcategoryName 非空）是零件库树形态，分类名真实，维持自动创建。
+          if (!structuredPath.subcategoryName) {
+            return categoryId;
+          }
           root = await tx.category.create({
             data: { name: structuredPath.categoryName, icon: 'folder', parentId: null },
             select: { id: true },
@@ -672,7 +743,6 @@ export async function processBatchArchiveUpload({
       const singleModelFolder = detectSingleModelFolderArchive(
         zipItems.filter((item) => !item.entry.isDirectory).map((item) => item.safeName!),
         acceptedExts,
-        categoryId,
         knownRootCategories,
       );
       const entries = zipItems
@@ -698,6 +768,9 @@ export async function processBatchArchiveUpload({
             isNestedModelFile: isSingleFolderEntry
               ? archiveSegments(cleanName).length > 2
               : structuredPath?.isBelowModelDir || false,
+            isNestedPdf: isSingleFolderEntry
+              ? archiveSegments(cleanName).length > 2
+              : structuredPath?.isBelowModelDir || false,
           };
         })
         .filter((item) => Boolean(item.ext))
@@ -707,16 +780,17 @@ export async function processBatchArchiveUpload({
           return acc;
         }, []);
 
-      const pdfByKey = new Map<string, ZipEntryCandidate[]>();
-      for (const item of entries) {
-        if (item.ext !== 'pdf') continue;
-        const list = pdfByKey.get(item.pairKey) || [];
-        list.push(item);
-        pdfByKey.set(item.pairKey, list);
-      }
+      const [pdfByKey, skippedNestedPdfs] = collectPdfEntriesForPairing(entries);
 
       const modelEntries = selectBatchModelEntries(entries, acceptedExts, results);
       registerUnmatchedPdfResults(entries, modelEntries, results);
+      for (const pdf of skippedNestedPdfs) {
+        results.push({
+          name: pdf.originalName,
+          status: 'skipped',
+          error: '零件目录已有直接 PDF，子文件夹 PDF 已跳过',
+        });
+      }
       await reportProgress({
         stage: 'queueing',
         percent: 22,
@@ -829,12 +903,7 @@ export async function processBatchArchiveUpload({
         .filter((header) => !header.flags.directory)
         .map((header) => normalizeBatchArchiveEntryName(header.name))
         .filter((name): name is string => Boolean(name));
-      const singleModelFolder = detectSingleModelFolderArchive(
-        headerNames,
-        acceptedExts,
-        categoryId,
-        knownRootCategories,
-      );
+      const singleModelFolder = detectSingleModelFolderArchive(headerNames, acceptedExts, knownRootCategories);
       const rarEntries: RarEntryCandidate[] = [];
       for (const header of fileHeaders) {
         if (header.flags.directory) continue;
@@ -861,21 +930,25 @@ export async function processBatchArchiveUpload({
           isNestedModelFile: isSingleFolderEntry
             ? archiveSegments(safeName).length > 2
             : structuredPath?.isBelowModelDir || false,
+          isNestedPdf: isSingleFolderEntry
+            ? archiveSegments(safeName).length > 2
+            : structuredPath?.isBelowModelDir || false,
         });
       }
 
-      const pdfByKey = new Map<string, RarEntryCandidate[]>();
-      for (const item of rarEntries) {
-        if (item.ext !== 'pdf') continue;
-        const list = pdfByKey.get(item.pairKey) || [];
-        list.push(item);
-        pdfByKey.set(item.pairKey, list);
-      }
+      const [pdfByKey, skippedNestedPdfs] = collectPdfEntriesForPairing(rarEntries);
 
       const maxTotalExtractBytes = Math.max(maxModelBytes, drawingLimit.maxBytes) * MAX_BATCH_MODEL_FILES;
       let selectedDeclaredBytes = 0;
       const selectedModelEntries = selectBatchModelEntries(rarEntries, acceptedExts, results);
       registerUnmatchedPdfResults(rarEntries, selectedModelEntries, results);
+      for (const pdf of skippedNestedPdfs) {
+        results.push({
+          name: pdf.originalName,
+          status: 'skipped',
+          error: '零件目录已有直接 PDF，子文件夹 PDF 已跳过',
+        });
+      }
       await reportProgress({
         stage: 'extracting',
         percent: 22,
@@ -885,6 +958,9 @@ export async function processBatchArchiveUpload({
       });
       const selectedArchiveNames = new Set<string>();
       const drawingPreErrors = new Map<string, string>();
+      // 图纸字节按 archiveName 只累计一次：同一目录多模型共享 pairKey 时，
+      // 同一份 PDF 会在每个模型的 drawings 列表里重复出现，重复累加会误判「解压总量超限」
+      const countedDrawingNames = new Set<string>();
 
       for (const item of selectedModelEntries) {
         if (
@@ -917,7 +993,10 @@ export async function processBatchArchiveUpload({
             continue;
           }
           selectedArchiveNames.add(drawing.archiveName);
-          if (drawing.declaredSize > 0) selectedDeclaredBytes += drawing.declaredSize;
+          if (drawing.declaredSize > 0 && !countedDrawingNames.has(drawing.archiveName)) {
+            countedDrawingNames.add(drawing.archiveName);
+            selectedDeclaredBytes += drawing.declaredSize;
+          }
         }
       }
 

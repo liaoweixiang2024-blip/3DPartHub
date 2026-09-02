@@ -263,16 +263,18 @@ function psqlFromFile(dbUrl: string, sqlPath: string, extraArgs: string[], timeo
     const user = new URL(dbUrl).username;
     execFileSync('docker', ['cp', sqlPath, `${container}:${containerPath}`], {
       stdio: 'pipe',
-      timeout: 30000,
+      // GB 级 SQL 在慢盘/网络下 30s 拷不完，用整库恢复超时兜底
+      timeout: DB_RESTORE_TIMEOUT_MS,
       maxBuffer: EXEC_MAX_BUFFER_BYTES,
     });
     try {
-      execFileSync('docker', ['exec', container, 'psql', '-U', user, '-d', dbName, ...extraArgs, '-f', containerPath], {
-        stdio: 'pipe',
-        // psql 恢复整库 SQL 时每条语句输出一行状态（SET/INSERT 0 1...），大库轻松超默认 1MB
-        timeout,
-        maxBuffer: EXEC_MAX_BUFFER_BYTES,
-      });
+      // -q 静默 + stdout 丢弃：psql 导整库时每条语句一行状态输出（SET/INSERT 0 1...），
+      // 千万行级大库可达数百 MB，全量进内存会 ENOBUFS 中断恢复
+      execFileSync(
+        'docker',
+        ['exec', container, 'psql', '-U', user, '-d', dbName, '-q', ...extraArgs, '-f', containerPath],
+        { stdio: ['ignore', 'ignore', 'pipe'], timeout },
+      );
     } finally {
       try {
         execFileSync('docker', ['exec', container, 'rm', '-f', containerPath], { stdio: 'pipe' });
@@ -294,11 +296,12 @@ function psqlFromFile(dbUrl: string, sqlPath: string, extraArgs: string[], timeo
         url.hostname,
         '-p',
         url.port || '5432',
+        '-q',
         ...extraArgs,
         '-f',
         sqlPath,
       ],
-      { stdio: 'pipe', timeout, env, maxBuffer: EXEC_MAX_BUFFER_BYTES },
+      { stdio: ['ignore', 'ignore', 'pipe'], timeout, env },
     );
   }
 }
@@ -309,13 +312,13 @@ function psqlCommand(dbUrl: string, sql: string, extraArgs: string[], timeout: n
   if (container) {
     const dbName = new URL(dbUrl).pathname.replace(/^\//, '');
     const user = new URL(dbUrl).username;
-    execFileSync('docker', ['exec', container, 'psql', '-U', user, '-d', dbName, ...extraArgs, '-c', sql], {
+    execFileSync('docker', ['exec', container, 'psql', '-U', user, '-d', dbName, '-q', ...extraArgs, '-c', sql], {
       stdio: 'pipe',
       timeout,
       maxBuffer: EXEC_MAX_BUFFER_BYTES,
     });
   } else {
-    execFileSync('psql', [dbUrl, ...extraArgs, '-c', sql], {
+    execFileSync('psql', [dbUrl, '-q', ...extraArgs, '-c', sql], {
       stdio: 'pipe',
       timeout,
       maxBuffer: EXEC_MAX_BUFFER_BYTES,
@@ -337,8 +340,10 @@ const ARCHIVE_META_TIMEOUT_MS = 20 * 60_000;
 // 统一放大到 512MB；tar 条目上限见 ARCHIVE_LIST_MAX_ENTRIES（超过按损坏包拒绝，不无限吃内存）。
 const EXEC_MAX_BUFFER_BYTES = 512 * 1024 * 1024;
 // tar 列表条目数上限（防损坏包/误传大文件撑爆内存）。每条列表行约 80-100 字节，
-// 100 万条 ≈ 100MB 原始输出，稳在 512MB maxBuffer 内（硬顶约 500 万条，不取满留安全边际）；
-// 真实备份包当前约 6千条（1319 模型 × ~5 文件），百万级已远超实际增长需要。
+// 100 万条 ≈ 100MB 原始输出，稳在 512MB maxBuffer 内（硬顶约 500 万条，不取满留安全边际）。
+// 真实备份包当前约 6600 条（2659 模型 × ~2.5 文件），此上限只是 exec 全量缓冲路径
+// （listArchiveEntries）的保险丝；恢复主链路的流式路径（listArchiveEntriesWithProgress /
+// assertArchiveContainsOnlyRegularFilesAndDirectories）已无条目数限制。
 const ARCHIVE_LIST_MAX_ENTRIES = 1_000_000;
 const DEFAULT_BACKUP_LOCK_STALE_MINUTES = 12 * 60;
 const BACKUP_LOCK_STALE_MS = (() => {
@@ -1299,7 +1304,7 @@ async function runImportSave(job: ImportSaveJob, archPath: string, originalName:
       const readableArchive = await materializeReadableBackupArchive(archPath, tmpDir);
       const entries = listArchiveEntries(readableArchive);
       if (entries.length === 0) throw new Error('备份归档内容为空');
-      assertSafeArchiveEntriesForExtraction(readableArchive, entries);
+      await assertSafeArchiveEntriesForExtraction(readableArchive, entries);
       addLog(job, `归档包含 ${entries.length} 个条目`);
 
       // Stage 2: Read meta
@@ -3207,7 +3212,7 @@ async function runRestoreFromArchive(
     syncJob(job);
 
     t = addLogStart(job, '正在校验备份包完整性（条目检查 + SHA256）...');
-    assertSafeArchiveEntriesForExtraction(readableArchivePath, allEntries);
+    await assertSafeArchiveEntriesForExtraction(readableArchivePath, allEntries);
     validateArchiveEntries(allEntries, archiveManifest);
     addLogEnd(job, t, '备份包完整性校验通过');
 
@@ -4512,28 +4517,67 @@ function isPlainRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value && typeof value === 'object' && !Array.isArray(value));
 }
 
-export function assertArchiveContainsOnlyRegularFilesAndDirectories(archive: string) {
-  const raw = execFileSync('tar', ['tvzf', archive], {
-    stdio: 'pipe',
-    timeout: ARCHIVE_LIST_TIMEOUT_MS,
-    maxBuffer: EXEC_MAX_BUFFER_BYTES,
-  }).toString('utf-8');
-  const lines = raw.split(/\r?\n/);
-  if (lines.length > ARCHIVE_LIST_MAX_ENTRIES) {
-    throw new Error(`备份包条目数异常（${lines.length} 条，上限 ${ARCHIVE_LIST_MAX_ENTRIES}），已中止恢复`);
-  }
-  const unsafeLine = lines.find(isUnsafeBackupArchiveVerboseEntry);
-  if (unsafeLine) {
-    throw new Error(`备份包包含符号链接、硬链接或特殊文件，已中止恢复: ${summarizeTarVerboseLine(unsafeLine)}`);
-  }
+// 安全校验流式版：spawn tar tvzf 边读边查，内存只随条目数线性增长（不整包载入 stdout），
+// 因此不再需要条目数上限——损坏/异常包的极端体量表现为扫描耗时变长，而非内存爆炸。
+export function assertArchiveContainsOnlyRegularFilesAndDirectories(archive: string): Promise<void> {
+  return new Promise((resolve, reject) => {
+    let bufferedLine = '';
+    let stderr = '';
+    let settled = false;
+    const proc = spawn('tar', ['tvzf', archive], { stdio: ['ignore', 'pipe', 'pipe'] });
+    const timeout = setTimeout(() => {
+      if (settled) return;
+      proc.kill('SIGKILL');
+      reject(new Error(`备份包安全校验超时（${Math.round(ARCHIVE_LIST_TIMEOUT_MS / 1000)}s），已中止`));
+    }, ARCHIVE_LIST_TIMEOUT_MS);
+
+    const fail = (err: Error) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timeout);
+      reject(err);
+    };
+
+    proc.stdout?.on('data', (chunk: Buffer) => {
+      const parts = `${bufferedLine}${chunk.toString('utf-8')}`.split(/\r?\n/);
+      bufferedLine = parts.pop() || '';
+      for (const line of parts) {
+        if (isUnsafeBackupArchiveVerboseEntry(line)) {
+          proc.kill('SIGKILL');
+          fail(new Error(`备份包包含符号链接、硬链接或特殊文件，已中止恢复: ${summarizeTarVerboseLine(line)}`));
+          return;
+        }
+      }
+    });
+    // stderr 只用于错误信息展示，截断防无界累积
+    proc.stderr?.on('data', (chunk: Buffer) => {
+      if (stderr.length < 8192) stderr += chunk.toString('utf-8');
+    });
+    proc.on('error', (err) => fail(err instanceof Error ? err : new Error(String(err))));
+    proc.on('close', (code) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timeout);
+      if (code === 0) {
+        const remainder = bufferedLine.trim();
+        if (remainder && isUnsafeBackupArchiveVerboseEntry(remainder)) {
+          reject(new Error(`备份包包含符号链接、硬链接或特殊文件，已中止恢复: ${summarizeTarVerboseLine(remainder)}`));
+          return;
+        }
+        resolve();
+      } else {
+        reject(new Error(`备份包安全校验失败（tar 退出码 ${code ?? 'unknown'}）: ${stderr.slice(0, 2048)}`));
+      }
+    });
+  });
 }
 
-function assertSafeArchiveEntriesForExtraction(archive: string, entries: string[]) {
+async function assertSafeArchiveEntriesForExtraction(archive: string, entries: string[]) {
   const unsafeEntry = entries.find(isUnsafeBackupArchiveEntry);
   if (unsafeEntry) {
     throw new Error(`备份包包含不安全路径: ${unsafeEntry}`);
   }
-  assertArchiveContainsOnlyRegularFilesAndDirectories(archive);
+  await assertArchiveContainsOnlyRegularFilesAndDirectories(archive);
 }
 
 function listArchiveEntries(archive: string): string[] {
@@ -4578,7 +4622,8 @@ function listArchiveEntriesWithProgress(
       }
     });
     proc.stderr?.on('data', (chunk: Buffer) => {
-      stderr += chunk.toString('utf-8');
+      // stderr 只用于错误信息展示，截断防无界累积
+      if (stderr.length < 8192) stderr += chunk.toString('utf-8');
     });
     proc.on('error', (err) => {
       if (settled) return;
@@ -4795,7 +4840,7 @@ async function validateModuleBackupArchive(
     if (statSync(readableArchive).size <= 0) throw new Error('备份文件为空');
     const entries = await listArchiveEntriesWithProgress(readableArchive, options.onEntryProgress);
     if (entries.length === 0) throw new Error('备份归档内容为空');
-    assertSafeArchiveEntriesForExtraction(readableArchive, entries);
+    await assertSafeArchiveEntriesForExtraction(readableArchive, entries);
 
     // 以下深度校验各阶段上报阶段文案——条目扫描结束后还有多步耗时操作
     // （读清单 / 流式哈希数据文件），不报阶段会让界面停在扫描最后一行假死。
@@ -4860,7 +4905,7 @@ async function validatePlainBackupArchive(
 
   const entries = await listArchiveEntriesWithProgress(archive, options.onEntryProgress);
   if (entries.length === 0) throw new Error('备份归档内容为空');
-  assertSafeArchiveEntriesForExtraction(archive, entries);
+  await assertSafeArchiveEntriesForExtraction(archive, entries);
   if (!archiveHasEntry(entries, BACKUP_DATABASE_ENTRY) && !archiveHasEntry(entries, 'database.sql')) {
     throw new Error('备份包缺少数据库文件');
   }
@@ -4957,7 +5002,8 @@ async function inspectArchiveDatabase(
       hash.update(chunk);
     });
     proc.stderr?.on('data', (chunk: Buffer) => {
-      stderr += chunk.toString('utf-8');
+      // stderr 只用于错误信息展示，截断防无界累积
+      if (stderr.length < 8192) stderr += chunk.toString('utf-8');
     });
     proc.on('error', (err) => settled(() => reject(new Error(`数据库文件校验失败: ${err.message}`))));
     proc.on('close', (code) => {

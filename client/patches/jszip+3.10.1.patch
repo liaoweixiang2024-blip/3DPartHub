@@ -1,0 +1,13 @@
+diff --git a/node_modules/jszip/index.d.ts b/node_modules/jszip/index.d.ts
+index b1c9308..46cbf44 100644
+--- a/node_modules/jszip/index.d.ts
++++ b/node_modules/jszip/index.d.ts
+@@ -4,7 +4,7 @@
+ // Definitions: https://github.com/DefinitelyTyped/DefinitelyTyped
+ // TypeScript Version: 2.3
+ 
+-/// <reference types="node" />
++/// patched: node types reference removed (browser build)
+ 
+ interface JSZipSupport {
+     arraybuffer: boolean;
