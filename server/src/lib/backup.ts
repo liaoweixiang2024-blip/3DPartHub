@@ -1348,7 +1348,7 @@ async function runImportSave(job: ImportSaveJob, archPath: string, originalName:
     syncJob(job);
 
     addLog(job, `备份记录已保存: ${record.name}`);
-    addLog(job, `${record.modelCount} 个模型, ${record.thumbnailCount} 张预览图, 数据库 ${record.dbSize}`);
+    addLog(job, `${record.modelCount} 个模型, ${record.thumbnailCount} 张缩略图, 数据库 ${record.dbSize}`);
 
     job.stage = 'done';
     job.percent = 100;
@@ -1728,7 +1728,7 @@ async function runBackup(job: BackupJob) {
     job.stage = 'done';
     job.percent = 100;
     job.message = '备份完成';
-    addLog(job, `备份完成！共 ${record.modelCount} 个 STEP 模型，${record.thumbnailCount} 张预览图`);
+    addLog(job, `备份完成！共 ${record.modelCount} 个 STEP 模型，${record.thumbnailCount} 张缩略图`);
     try {
       await applyBackupRetentionPolicy(job);
     } catch (err: unknown) {
@@ -2045,114 +2045,122 @@ async function buildModuleBackupPayload(scope: Exclude<BackupScope, 'full'>): Pr
     appVersion: getAppVersion(),
   };
 
-  if (scope === 'models') {
-    return {
-      ...base,
-      tables: {
-        categories: await prisma.category.findMany({ orderBy: [{ sortOrder: 'asc' }, { createdAt: 'asc' }] }),
-        modelGroups: await prisma.modelGroup.findMany({ orderBy: [{ createdAt: 'asc' }] }),
-        models: await prisma.model.findMany({ orderBy: [{ createdAt: 'asc' }] }),
-        modelDrawings: await prisma.modelDrawing.findMany({ orderBy: [{ createdAt: 'asc' }] }),
-        modelVersions: await prisma.modelVersion.findMany({ orderBy: [{ createdAt: 'asc' }] }),
-        favorites: await prisma.favorite.findMany({ orderBy: [{ userId: 'asc' }, { createdAt: 'asc' }] }),
-        downloads: await prisma.download.findMany({ orderBy: [{ userId: 'asc' }, { createdAt: 'asc' }] }),
-        comments: await prisma.comment.findMany({ orderBy: [{ modelId: 'asc' }, { createdAt: 'asc' }] }),
-        shareLinks: await prisma.shareLink.findMany({ orderBy: [{ createdById: 'asc' }, { createdAt: 'asc' }] }),
-      },
-    };
-  }
+  // 各表读取包进同一事务：Postgres 默认 READ COMMITTED 下逐条 findMany 会看到不同时刻的数据，
+  // 备份期间的并发写入可能造成 favorite 引用尚未读到的 model 等跨表不一致（恢复时 FK 报错）。
+  // 交互式事务把读取固定在同一快照上（超时兜底，导出失败整体抛错，不产出半一致包）。
+  return prisma.$transaction(
+    async (tx): Promise<ModuleBackupPayload> => {
+      if (scope === 'models') {
+        return {
+          ...base,
+          tables: {
+            categories: await tx.category.findMany({ orderBy: [{ sortOrder: 'asc' }, { createdAt: 'asc' }] }),
+            modelGroups: await tx.modelGroup.findMany({ orderBy: [{ createdAt: 'asc' }] }),
+            models: await tx.model.findMany({ orderBy: [{ createdAt: 'asc' }] }),
+            modelDrawings: await tx.modelDrawing.findMany({ orderBy: [{ createdAt: 'asc' }] }),
+            modelVersions: await tx.modelVersion.findMany({ orderBy: [{ createdAt: 'asc' }] }),
+            favorites: await tx.favorite.findMany({ orderBy: [{ userId: 'asc' }, { createdAt: 'asc' }] }),
+            downloads: await tx.download.findMany({ orderBy: [{ userId: 'asc' }, { createdAt: 'asc' }] }),
+            comments: await tx.comment.findMany({ orderBy: [{ modelId: 'asc' }, { createdAt: 'asc' }] }),
+            shareLinks: await tx.shareLink.findMany({ orderBy: [{ createdById: 'asc' }, { createdAt: 'asc' }] }),
+          },
+        };
+      }
 
-  if (scope === 'selection') {
-    return {
-      ...base,
-      tables: {
-        selectionCategories: await prisma.selectionCategory.findMany({
-          orderBy: [{ sortOrder: 'asc' }, { createdAt: 'asc' }],
-        }),
-        selectionProducts: await prisma.selectionProduct.findMany({
-          orderBy: [{ categoryId: 'asc' }, { sortOrder: 'asc' }, { createdAt: 'asc' }],
-        }),
-        threadSizeEntries: await prisma.threadSizeEntry.findMany({
-          orderBy: [{ kind: 'asc' }, { sortOrder: 'asc' }, { createdAt: 'asc' }],
-        }),
-        selectionShares: await prisma.selectionShare.findMany({
-          orderBy: [{ createdById: 'asc' }, { createdAt: 'asc' }],
-        }),
-      },
-    };
-  }
+      if (scope === 'selection') {
+        return {
+          ...base,
+          tables: {
+            selectionCategories: await tx.selectionCategory.findMany({
+              orderBy: [{ sortOrder: 'asc' }, { createdAt: 'asc' }],
+            }),
+            selectionProducts: await tx.selectionProduct.findMany({
+              orderBy: [{ categoryId: 'asc' }, { sortOrder: 'asc' }, { createdAt: 'asc' }],
+            }),
+            threadSizeEntries: await tx.threadSizeEntry.findMany({
+              orderBy: [{ kind: 'asc' }, { sortOrder: 'asc' }, { createdAt: 'asc' }],
+            }),
+            selectionShares: await tx.selectionShare.findMany({
+              orderBy: [{ createdById: 'asc' }, { createdAt: 'asc' }],
+            }),
+          },
+        };
+      }
 
-  if (scope === 'config') {
-    return {
-      ...base,
-      tables: {
-        settings: await prisma.setting.findMany({ orderBy: [{ key: 'asc' }] }),
-        categories: await prisma.category.findMany({
-          orderBy: [{ sortOrder: 'asc' }, { createdAt: 'asc' }],
-        }),
-      },
-    };
-  }
+      if (scope === 'config') {
+        return {
+          ...base,
+          tables: {
+            settings: await tx.setting.findMany({ orderBy: [{ key: 'asc' }] }),
+            categories: await tx.category.findMany({
+              orderBy: [{ sortOrder: 'asc' }, { createdAt: 'asc' }],
+            }),
+          },
+        };
+      }
 
-  if (scope === 'users') {
-    return {
-      ...base,
-      tables: {
-        users: await prisma.user.findMany({ orderBy: [{ createdAt: 'asc' }] }),
-      },
-    };
-  }
+      if (scope === 'users') {
+        return {
+          ...base,
+          tables: {
+            users: await tx.user.findMany({ orderBy: [{ createdAt: 'asc' }] }),
+          },
+        };
+      }
 
-  if (scope === 'tickets') {
-    return {
-      ...base,
-      tables: {
-        supportTickets: await prisma.supportTicket.findMany({ orderBy: [{ createdAt: 'asc' }] }),
-        ticketMessages: await prisma.ticketMessage.findMany({
-          orderBy: [{ ticketId: 'asc' }, { createdAt: 'asc' }],
-        }),
-      },
-    };
-  }
+      if (scope === 'tickets') {
+        return {
+          ...base,
+          tables: {
+            supportTickets: await tx.supportTicket.findMany({ orderBy: [{ createdAt: 'asc' }] }),
+            ticketMessages: await tx.ticketMessage.findMany({
+              orderBy: [{ ticketId: 'asc' }, { createdAt: 'asc' }],
+            }),
+          },
+        };
+      }
 
-  if (scope === 'inquiries') {
-    return {
-      ...base,
-      tables: {
-        inquiries: await prisma.inquiry.findMany({ orderBy: [{ createdAt: 'asc' }] }),
-        inquiryItems: await prisma.inquiryItem.findMany({
-          orderBy: [{ inquiryId: 'asc' }],
-        }),
-        inquiryMessages: await prisma.inquiryMessage.findMany({
-          orderBy: [{ inquiryId: 'asc' }, { createdAt: 'asc' }],
-        }),
-      },
-    };
-  }
+      if (scope === 'inquiries') {
+        return {
+          ...base,
+          tables: {
+            inquiries: await tx.inquiry.findMany({ orderBy: [{ createdAt: 'asc' }] }),
+            inquiryItems: await tx.inquiryItem.findMany({
+              orderBy: [{ inquiryId: 'asc' }],
+            }),
+            inquiryMessages: await tx.inquiryMessage.findMany({
+              orderBy: [{ inquiryId: 'asc' }, { createdAt: 'asc' }],
+            }),
+          },
+        };
+      }
 
-  if (scope === 'audit') {
-    return {
-      ...base,
-      tables: {
-        auditLogs: await prisma.auditLog.findMany({ orderBy: [{ createdAt: 'asc' }] }),
-      },
-    };
-  }
+      if (scope === 'audit') {
+        return {
+          ...base,
+          tables: {
+            auditLogs: await tx.auditLog.findMany({ orderBy: [{ createdAt: 'asc' }] }),
+          },
+        };
+      }
 
-  return {
-    ...base,
-    tables: {
-      productWallCategories: await prisma.productWallCategory.findMany({
-        orderBy: [{ sortOrder: 'asc' }, { createdAt: 'asc' }],
-      }),
-      productWallImages: await prisma.productWallImage.findMany({
-        orderBy: [{ sortOrder: 'asc' }, { createdAt: 'asc' }],
-      }),
-      productWallImageFavorites: await prisma.productWallImageFavorite.findMany({
-        orderBy: [{ userId: 'asc' }, { createdAt: 'asc' }],
-      }),
+      return {
+        ...base,
+        tables: {
+          productWallCategories: await tx.productWallCategory.findMany({
+            orderBy: [{ sortOrder: 'asc' }, { createdAt: 'asc' }],
+          }),
+          productWallImages: await tx.productWallImage.findMany({
+            orderBy: [{ sortOrder: 'asc' }, { createdAt: 'asc' }],
+          }),
+          productWallImageFavorites: await tx.productWallImageFavorite.findMany({
+            orderBy: [{ userId: 'asc' }, { createdAt: 'asc' }],
+          }),
+        },
+      };
     },
-  };
+    { timeout: 300_000 },
+  );
 }
 
 function countModulePayloadItems(payload: ModuleBackupPayload): number {
@@ -3445,9 +3453,8 @@ async function runRestoreFromArchive(
       }
 
       // 数据库已成功导入（full dump 或 data-only 任一路径），现在处于已知良好状态。
-      // 清除恢复中断 marker——此后的硬崩不会留下破损数据库，无需启动时回滚。
-      clearRestoreInProgressMarker(job.id);
-
+      // 注意：marker 不在此处清除——后续文件目录替换阶段（commitRestoreFilePlan）被硬中断
+      // 时数据库与文件会不一致，启动检测必须仍能发现并回滚。marker 推迟到文件也提交完成后清除。
       result.dbRestored = true;
       job.percent = 70;
       syncJob(job);
@@ -3487,6 +3494,10 @@ async function runRestoreFromArchive(
     } else {
       result.modelCount = restoredSourceFiles;
     }
+
+    // 数据库与文件目录都已提交成功，恢复整体完成——现在清除中断 marker（及引用的持久快照）。
+    // （此前清得太早：文件替换阶段硬中断会让 DB 新/文件旧且无回滚入口。）
+    clearRestoreInProgressMarker(job.id);
 
     addLog(job, `恢复完成: ${result.modelCount} 个 STEP 模型, ${result.thumbnailCount} 张缩略图`);
 
@@ -3568,7 +3579,10 @@ export async function getBackupStats(): Promise<BackupStats> {
   const ticketsDirStats = countDirs(staticDir, moduleStaticDirs('tickets'));
   const inquiriesDirStats = countDirs(staticDir, moduleStaticDirs('inquiries'));
   const uploadDirStats = countDirs(uploadDir, discoverUploadBackupDirs(uploadDir));
-  const thumbnailCount = countFilesRecursive(join(staticDir, 'thumbnails'), (name) => name.endsWith('.png'));
+  const thumbnailCount = countFilesRecursive(
+    join(staticDir, 'thumbnails'),
+    (name) => name.endsWith('.png') || name.endsWith('.jpg'),
+  );
   const originalFileCount = countFilesRecursive(join(staticDir, 'originals'), isStepFileName);
   const drawingFileCount = countFilesRecursive(join(staticDir, 'drawings'));
   let modelCount = 0;
@@ -3869,7 +3883,7 @@ function buildModuleFilePlanFromManifest(
 async function restoreModulePayload(payload: ModuleBackupPayload, job: RestoreJob): Promise<number> {
   const prisma = await getBackupPrisma();
   return prisma.$transaction(
-    async (tx) => {
+    async (tx): Promise<number> => {
       if (payload.scope === 'models') return restoreModelsModule(tx, payload, job);
       if (payload.scope === 'selection') return restoreSelectionModule(tx, payload);
       if (payload.scope === 'config') return restoreConfigModule(tx, payload);
@@ -5468,12 +5482,27 @@ export interface InterruptedRestoreInfo {
   durableSnapshot: string;
   startedAt: string;
   markerPath: string;
+  /** 文件替换阶段硬中断的痕迹：静态目录下残留的 .restore_backup_* 旧目录（无 marker 也会报告） */
+  leftoverRestoreBackupDirs?: string[];
 }
 
 // 服务启动时调用：扫描仍存在的 marker，返回被硬中断的恢复任务（及其持久快照）。
 export function detectInterruptedRestores(): InterruptedRestoreInfo[] {
   try {
-    if (!existsSync(SAFETY_SNAPSHOT_DIR)) return [];
+    const leftoverDirs = listLeftoverRestoreBackupDirs();
+    if (!existsSync(SAFETY_SNAPSHOT_DIR)) {
+      return leftoverDirs.length > 0
+        ? [
+            {
+              jobId: 'file-stage-interrupted',
+              durableSnapshot: '',
+              startedAt: '',
+              markerPath: '',
+              leftoverRestoreBackupDirs: leftoverDirs,
+            },
+          ]
+        : [];
+    }
     const results: InterruptedRestoreInfo[] = [];
     for (const entry of readdirSync(SAFETY_SNAPSHOT_DIR, { withFileTypes: true })) {
       if (!entry.isFile()) continue;
@@ -5487,16 +5516,62 @@ export function detectInterruptedRestores(): InterruptedRestoreInfo[] {
             durableSnapshot: marker.durableSnapshot,
             startedAt: marker.startedAt || '',
             markerPath,
+            leftoverRestoreBackupDirs: leftoverDirs,
           });
         }
       } catch {
         /* ignore corrupt marker */
       }
     }
+    // marker 已清（DB 导入成功后旧版本会在文件阶段前清掉）但文件替换阶段硬中断：
+    // 无 marker、只有残留旧目录——也要暴露给管理员，否则静默半新半旧。
+    if (results.length === 0 && leftoverDirs.length > 0) {
+      results.push({
+        jobId: 'file-stage-interrupted',
+        durableSnapshot: '',
+        startedAt: '',
+        markerPath: '',
+        leftoverRestoreBackupDirs: leftoverDirs,
+      });
+    }
     return results;
   } catch {
     return [];
   }
+}
+
+// 静态/上传目录里残留的 .restore_backup_*（文件替换阶段被硬中断时 rename 出的旧目录备份）。
+function listLeftoverRestoreBackupDirs(): string[] {
+  const found: string[] = [];
+  try {
+    const roots = [join(process.cwd(), config.staticDir), join(process.cwd(), config.uploadDir)];
+    for (const root of roots) {
+      if (!existsSync(root)) continue;
+      for (const entry of readdirSync(root, { withFileTypes: true })) {
+        if (entry.isDirectory() && entry.name.includes('.restore_backup_')) {
+          found.push(join(root, entry.name));
+        }
+      }
+    }
+  } catch {
+    /* best effort */
+  }
+  return found;
+}
+
+// 管理员确认后清理残留旧目录（见 /api/settings/backup/clear-leftover-restore-dirs）。
+export function clearLeftoverRestoreBackupDirs(): { removed: number; errors: string[] } {
+  const errors: string[] = [];
+  let removed = 0;
+  for (const dir of listLeftoverRestoreBackupDirs()) {
+    try {
+      rmSync(dir, { recursive: true, force: true });
+      removed += 1;
+    } catch (err: unknown) {
+      errors.push(`${dir}: ${getErrorMessage(err)}`);
+    }
+  }
+  return { removed, errors };
 }
 
 // 校验持久快照路径确实位于 _safety_snapshots/ 内（防路径遍历）。

@@ -101,8 +101,12 @@ async function saveBatchBlobResponse(
 ): Promise<BatchZipDownloadResult> {
   const blob = await resp.blob();
   const disposition = resp.headers.get('Content-Disposition') || '';
-  const match = disposition.match(/filename="?([^";\n]+)"?/);
-  await downloadBrowserBlob(blob, match ? match[1] : fallbackFileName, { preparedWindow });
+  // 优先 filename*（RFC 5987，UTF-8 中文名）；老浏览器/代理剥掉该段时回退 filename=（ASCII），
+  // 都没有才用调用方兜底名
+  const starred = disposition.match(/filename\*=UTF-8''([^;\s]+)/i);
+  const plain = disposition.match(/filename="?([^";\n]+)"?/);
+  const resolvedName = starred ? decodeURIComponent(starred[1]) : plain ? plain[1] : fallbackFileName;
+  await downloadBrowserBlob(blob, resolvedName, { preparedWindow });
   return { fileCount };
 }
 

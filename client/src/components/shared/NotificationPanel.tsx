@@ -31,6 +31,32 @@ const TYPE_META: Record<string, { icon: string; color: string }> = {
 const NOTIFICATION_LIST_STALE_MS = 30_000;
 const NOTIFICATION_COUNT_POLL_MS = 15_000;
 
+// 浮窗「清除已读」= 从浮窗隐藏（不删数据库，「我的通知」页保留完整记录）。
+// 已清除的通知 id 记在本机 localStorage，刷新/重开浮窗不再显示；只记 id 不含内容。
+const PANEL_HIDDEN_KEY = 'notification.panel.hiddenIds';
+const PANEL_HIDDEN_MAX = 500;
+
+function loadPanelHiddenIds(): Set<string> {
+  try {
+    const raw = localStorage.getItem(PANEL_HIDDEN_KEY);
+    if (!raw) return new Set();
+    const ids = JSON.parse(raw);
+    return Array.isArray(ids) ? new Set(ids.filter((id) => typeof id === 'string')) : new Set();
+  } catch {
+    return new Set();
+  }
+}
+
+function savePanelHiddenIds(ids: Set<string>) {
+  try {
+    // 超上限丢最旧（Set 保持插入序，取尾部最近 N 条）
+    const arr = Array.from(ids).slice(-PANEL_HIDDEN_MAX);
+    localStorage.setItem(PANEL_HIDDEN_KEY, JSON.stringify(arr));
+  } catch {
+    /* 隐私模式/容量满：忽略，本次会话内过滤仍生效 */
+  }
+}
+
 function getTypeMeta(type: string) {
   return TYPE_META[type] || TYPE_META.info;
 }
@@ -168,6 +194,7 @@ export default function NotificationPanel({
   const ref = useRef<HTMLDivElement>(null);
   const listFetchedAtRef = useRef(0);
   const listInflightRef = useRef<Promise<void> | null>(null);
+  const [panelHiddenIds, setPanelHiddenIds] = useState<Set<string>>(() => loadPanelHiddenIds());
 
   const iconSize = 20;
   const safeNotifications = Array.isArray(notifications) ? notifications : [];
@@ -198,7 +225,9 @@ export default function NotificationPanel({
       if (!listInflightRef.current) {
         listInflightRef.current = getNotifications(1, 30)
           .then((res) => {
-            setNotifications(Array.isArray(res.data) ? res.data : []);
+            const list = Array.isArray(res.data) ? res.data : [];
+            // 本机已从浮窗清除的通知不再回到浮窗（数据库记录仍在，「我的通知」页可见）
+            setNotifications(list.filter((n) => !panelHiddenIds.has(n.id)));
             listFetchedAtRef.current = Date.now();
           })
           .finally(() => {
@@ -214,7 +243,7 @@ export default function NotificationPanel({
         if (!preload) setLoading(false);
       }
     },
-    [isAuthenticated, t],
+    [isAuthenticated, t, panelHiddenIds],
   );
 
   const handleNotificationIntent = useCallback(() => {
@@ -305,11 +334,17 @@ export default function NotificationPanel({
     [notifications],
   );
 
-  // 「清除已读」只是把已读条目收出本弹窗（本地过滤），不删数据库记录——
-  // 完整历史在「我的通知」页，那里的删除才是真删
+  // 「清除已读」= 已读条目收出本弹窗并记在本机（localStorage），刷新/重开不再显示；
+  // 不删数据库记录——完整历史在「我的通知」页，那里的删除才是真删
   const handleClearRead = useCallback(() => {
+    const next = new Set(panelHiddenIds);
+    for (const n of notifications) {
+      if (n.read) next.add(n.id);
+    }
+    setPanelHiddenIds(next);
+    savePanelHiddenIds(next);
     setNotifications((prev) => prev.filter((n) => !n.read));
-  }, []);
+  }, [notifications, panelHiddenIds]);
 
   const handleNavigate = useCallback(
     (route: string) => {

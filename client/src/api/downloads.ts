@@ -7,6 +7,7 @@ import {
   prepareBrowserDownload,
 } from '../lib/browserDownload';
 import { getPublicSettingsSnapshot } from '../lib/publicSettings';
+import { batchZipName } from '../lib/zipDownloadName';
 import { getAccessToken, useAuthStore } from '../stores/useAuthStore';
 import { downloadBatchZip } from './batchZipDownload';
 import client from './client';
@@ -187,7 +188,7 @@ export const downloadsApi = {
       legacyUrl: apiUrl('/downloads/batch-download'),
       legacyFields: { ids },
       fallbackFileCount: ids.length,
-      fallbackFileName: `downloads_${Date.now()}.zip`,
+      fallbackFileName: batchZipName('downloads', ids.length),
     });
   },
 

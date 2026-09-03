@@ -28,7 +28,7 @@ export function ResultCard({
   columns: ColumnDef[];
   kitListTitle: string;
   selected: boolean;
-  onToggleSelect: () => void;
+  onToggleSelect?: () => void;
   onToggleInquiry?: () => void;
   /** 预创建选型分享快照（用户意图跳工单页时触发一次） */
   onPrepareSourceUrl?: () => void;
@@ -80,12 +80,14 @@ export function ResultCard({
         )}
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
-            <input
-              type="checkbox"
-              checked={selected}
-              onChange={onToggleSelect}
-              className="h-4 w-4 rounded accent-primary-container shrink-0"
-            />
+            {onToggleSelect && (
+              <input
+                type="checkbox"
+                checked={selected}
+                onChange={onToggleSelect}
+                className="h-4 w-4 rounded accent-primary-container shrink-0"
+              />
+            )}
             <span className="font-mono text-sm md:text-base font-bold text-on-surface break-all">{primaryTitle}</span>
             <button
               onClick={handleCopy}

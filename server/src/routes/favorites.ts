@@ -8,6 +8,7 @@ import { logger } from '../lib/logger.js';
 import { prisma } from '../lib/prisma.js';
 import { requestSiteUrl } from '../lib/requestSiteUrl.js';
 import { getAllSettings, getSetting } from '../lib/settings.js';
+import { batchZipFileName } from '../lib/zipDownloadName.js';
 import { authMiddleware, type AuthRequest } from '../middleware/auth.js';
 import { shouldAttachExternalGltfBin, shouldDownloadOriginalBatchFormat } from '../services/batchArchive.js';
 import { accessBucketKey, getInvisibleCategoryIds } from '../services/categoryAccess.js';
@@ -365,7 +366,10 @@ router.post(
 
       // Now safe to commit headers and stream
       res.setHeader('Content-Type', 'application/zip');
-      res.setHeader('Content-Disposition', `attachment; filename="favorites_${Date.now()}.zip"`);
+      res.setHeader(
+        'Content-Disposition',
+        `attachment; filename="download.zip"; filename*=UTF-8''${encodeURIComponent(batchZipFileName('favorites', fileEntries.length))}`,
+      );
 
       const archive = archiver('zip', { zlib: { level: 5 } });
       archive.pipe(res);

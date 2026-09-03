@@ -1,4 +1,5 @@
 import type { ApiResponse } from '../types/api';
+import { batchZipName } from '../lib/zipDownloadName';
 import { downloadBatchZip, type BatchZipDownloadResult } from './batchZipDownload';
 import client from './client';
 import type { ServerModelListItem } from './models';
@@ -45,7 +46,7 @@ export const favoriteApi = {
       legacyUrl: favoriteApi.batchDownloadUrl,
       legacyFields: { modelIds, format },
       fallbackFileCount: modelIds.length,
-      fallbackFileName: `favorites_${Date.now()}.zip`,
+      fallbackFileName: batchZipName('favorites', modelIds.length),
     });
   },
 };

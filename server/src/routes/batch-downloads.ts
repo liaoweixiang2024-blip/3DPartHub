@@ -6,6 +6,7 @@ import { getBusinessConfig } from '../lib/businessConfig.js';
 import { createLogger } from '../lib/logger.js';
 import { prisma } from '../lib/prisma.js';
 import { getSetting } from '../lib/settings.js';
+import { batchZipFileName } from '../lib/zipDownloadName.js';
 import { authMiddleware, type AuthRequest } from '../middleware/auth.js';
 import { shouldAttachExternalGltfBin, shouldDownloadOriginalBatchFormat } from '../services/batchArchive.js';
 import { getInvisibleCategoryIds } from '../services/categoryAccess.js';
@@ -266,7 +267,10 @@ async function recordArchiveDownloads(req: AuthRequest, res: Response, fileEntri
 
 async function streamArchive(res: Response, fileEntries: ArchiveEntry[], zipPrefix: string): Promise<void> {
   res.setHeader('Content-Type', 'application/zip');
-  res.setHeader('Content-Disposition', `attachment; filename="${zipPrefix}_${Date.now()}.zip"`);
+  res.setHeader(
+    'Content-Disposition',
+    `attachment; filename="download.zip"; filename*=UTF-8''${encodeURIComponent(batchZipFileName(zipPrefix, fileEntries.length))}`,
+  );
 
   const archive = archiver('zip', { zlib: { level: 5 } });
   archive.on('error', (err) => {

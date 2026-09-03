@@ -5027,11 +5027,8 @@ function Content() {
       );
       return;
     }
-    toastJobOnce(
-      'backup-restore',
-      jobId,
-      `恢复成功：${result.modelCount} 个 STEP 模型，${result.thumbnailCount} 张缩略图`,
-    );
+    // 预览图数量统计已不再可靠（缩略图格式从 png 转 jpg 后统计口径失效，恒为 0），提示语只保留模型数
+    toastJobOnce('backup-restore', jobId, `恢复成功：${result.modelCount} 个 STEP 模型`);
   }
 
   function toastImportSaveSuccessOnce(jobId?: string | null) {
@@ -7108,7 +7105,6 @@ function Content() {
                                         ) : (
                                           <>
                                             <span>{b.modelCount ?? 0} 个 STEP 模型</span>
-                                            <span>{b.thumbnailCount ?? 0} 张预览图</span>
                                             <span>数据库 {b.dbSize}</span>
                                           </>
                                         )}

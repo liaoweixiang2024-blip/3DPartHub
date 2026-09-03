@@ -8,6 +8,7 @@ import { createLogger } from '../lib/logger.js';
 import { prisma } from '../lib/prisma.js';
 import { optionalString } from '../lib/requestValidation.js';
 import { getSetting } from '../lib/settings.js';
+import { batchZipFileName } from '../lib/zipDownloadName.js';
 import { authMiddleware, optionalAuthMiddleware, type AuthRequest } from '../middleware/auth.js';
 import { getInvisibleCategoryIds } from '../services/categoryAccess.js';
 import { resolveDbModelDownloadTarget } from '../services/modelDownloadTarget.js';
@@ -586,7 +587,10 @@ router.post(
       }
 
       res.setHeader('Content-Type', 'application/zip');
-      res.setHeader('Content-Disposition', `attachment; filename="downloads_${Date.now()}.zip"`);
+      res.setHeader(
+        'Content-Disposition',
+        `attachment; filename="download.zip"; filename*=UTF-8''${encodeURIComponent(batchZipFileName('downloads', lookup.fileEntries.length))}`,
+      );
 
       const archive = archiver('zip', { zlib: { level: 5 } });
       archive.on('error', (err) => {

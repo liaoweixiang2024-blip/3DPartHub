@@ -13,6 +13,7 @@ import { consumeProtectedResourceToken, createProtectedResourceToken } from '../
 import { syncJob, loadJob } from '../lib/jobStore.js';
 import { createLogger } from '../lib/logger.js';
 import { optionalString } from '../lib/requestValidation.js';
+import { formatZipStamp } from '../lib/zipDownloadName.js';
 import { sendResourceError } from '../lib/resourceErrorPage.js';
 import { batchArchiveMaxSizeMb, UPLOAD_REQUEST_TIMEOUT_MS } from '../lib/uploadLimits.js';
 import { authMiddleware, getVerifiedRequestUser, type AuthRequest } from '../middleware/auth.js';
@@ -37,7 +38,7 @@ const log = createLogger({ component: 'batch-routes' });
   const staticDir = join(process.cwd(), config.staticDir);
   try {
     const entries = readdirSync(staticDir);
-    const stale = entries.filter((e) => /^batch_[0-9a-f]{8}\.zip$/i.test(e));
+    const stale = entries.filter((e) => /^batch_.+\.zip$/i.test(e));
     if (stale.length > 0) {
       for (const f of stale) {
         try {
@@ -67,6 +68,14 @@ type BatchArchiveUploadJob = {
 };
 
 const batchArchiveUploadJobs = new Map<string, BatchArchiveUploadJob>();
+
+// 磁盘文件 batch_12files_20260903-1542_a1b2c3d4.zip → 中文展示名 批量下载_12个文件_20260903-1542.zip。
+// 解析失败（旧格式/未知格式）原样返回，下载仍可用只是名字不翻译。
+function displayZipNameFromBatchFile(fileName: string): string {
+  const match = fileName.match(/^batch_(\d+)files_(\d{8}-\d{4})_[0-9a-f]{8}\.zip$/i);
+  if (!match) return fileName;
+  return `批量下载_${match[1]}个文件_${match[2]}.zip`;
+}
 
 function updateBatchArchiveUploadJob(job: BatchArchiveUploadJob, patch: Partial<BatchArchiveUploadJob>) {
   Object.assign(job, patch, { updatedAt: new Date().toISOString() });
@@ -187,7 +196,12 @@ router.post('/api/batch/download', authMiddleware, requireRole('ADMIN'), async (
       return;
     }
 
-    const zipName = `batch_${randomUUID().slice(0, 8)}.zip`;
+    // 磁盘文件名保持纯 ASCII（batch_12files_20260903-1542_a1b2c3d4.zip）——该名会成为
+    // 下载 URL 路径段，避免中文在 URL/跨文件系统上的编码兼容问题；中文展示名
+    // （批量下载_12个文件_...）在下载响应头 Content-Disposition 里给（RFC 5987 双写法）。
+    const stamp = formatZipStamp();
+    const shortId = randomUUID().slice(0, 8);
+    const zipName = `batch_${archivedModels.size}files_${stamp}_${shortId}.zip`;
     zipPath = join(config.staticDir, 'batch', zipName);
     mkdirSync(join(config.staticDir, 'batch'), { recursive: true });
 
@@ -262,7 +276,7 @@ router.post('/api/batch/download', authMiddleware, requireRole('ADMIN'), async (
 
 router.get('/api/batch/downloads/:file', async (req, res: Response) => {
   const fileName = basename(String(req.params.file || ''));
-  if (!/^batch_[0-9a-f]{8}\.zip$/i.test(fileName)) {
+  if (!/^batch_.+[0-9a-f]{8}\.zip$/i.test(fileName) || fileName.includes('..')) {
     res.status(400).json({ detail: '文件参数无效' });
     return;
   }
@@ -292,7 +306,9 @@ router.get('/api/batch/downloads/:file', async (req, res: Response) => {
 
   sendAcceleratedFile(req, res, {
     filePath,
-    fileName,
+    // URL 里的 fileName 是 ASCII（batch_Nfiles_日期_ID.zip）；下载保存名换成中文展示名
+    // （批量下载_N个文件_日期.zip），RFC 5987 双写法保证任何浏览器不乱码
+    fileName: displayZipNameFromBatchFile(fileName),
     contentType: 'application/zip',
     disposition: 'attachment',
   });

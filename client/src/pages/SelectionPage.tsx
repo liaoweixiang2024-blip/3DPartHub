@@ -1583,7 +1583,7 @@ export default function SelectionPage() {
                   columns={columns}
                   kitListTitle={getKitListTitle((liveCat?.optionOrder || null) as Record<string, unknown> | null, p)}
                   selected={selectedIds.has(p.id)}
-                  onToggleSelect={() => toggleInquiryProduct(visibleProduct)}
+                  onToggleSelect={canInquiry ? () => toggleInquiryProduct(visibleProduct) : undefined}
                   onToggleInquiry={canInquiry ? () => toggleInquiryProduct(visibleProduct) : undefined}
                   onPrepareSourceUrl={prepareTicketSourceUrl}
                   onBuildSourceUrl={getTicketSourceUrl}
@@ -1691,7 +1691,7 @@ export default function SelectionPage() {
                   columns={columns}
                   kitListTitle={getKitListTitle((liveCat?.optionOrder || null) as Record<string, unknown> | null, p)}
                   selected={selectedIds.has(p.id)}
-                  onToggleSelect={() => toggleInquiryProduct(visibleProduct)}
+                  onToggleSelect={canInquiry ? () => toggleInquiryProduct(visibleProduct) : undefined}
                   onToggleInquiry={canInquiry ? () => toggleInquiryProduct(visibleProduct) : undefined}
                   onPrepareSourceUrl={prepareTicketSourceUrl}
                   onBuildSourceUrl={getTicketSourceUrl}

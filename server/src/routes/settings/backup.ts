@@ -6,6 +6,7 @@ import multer from 'multer';
 import { sendAcceleratedFile } from '../../lib/acceleratedDownload.js';
 import {
   cancelRestoreJob,
+  clearLeftoverRestoreBackupDirs,
   deleteBackup,
   getActiveImportSaveJob,
   getActiveBackupJob,
@@ -40,6 +41,7 @@ import { prisma } from '../../lib/prisma.js';
 import { requestSiteUrl } from '../../lib/requestSiteUrl.js';
 import { sendResourceError } from '../../lib/resourceErrorPage.js';
 import { BACKUP_DIRECT_UPLOAD_MAX_BYTES } from '../../lib/uploadLimits.js';
+import { backupDownloadFileName } from '../../lib/zipDownloadName.js';
 import { authMiddleware, type AuthRequest } from '../../middleware/auth.js';
 import { createNotification } from '../notifications.js';
 import { adminOnly, asSingleString } from './common.js';
@@ -421,6 +423,7 @@ export function createSettingsBackupRouter() {
 
   // List restores that were hard-interrupted during the destructive phase (SIGKILL/OOM/power loss).
   // Each entry carries a preserved pre-restore snapshot that can be rolled back to.
+  // file-stage-interrupted 条目没有快照（DB 已导入成功），只有残留的旧目录清单——仅提示，走清理接口。
   router.get('/api/settings/backup/interrupted-restores', authMiddleware, async (req: AuthRequest, res: Response) => {
     if (!adminOnly(req, res)) return;
     try {
@@ -430,6 +433,30 @@ export function createSettingsBackupRouter() {
       res.status(500).json({ detail: getErrorMessage(err) || '查询中断恢复失败' });
     }
   });
+
+  // 清理文件替换阶段硬中断残留的 .restore_backup_* 旧目录（确认不需要回滚时用）。
+  router.post(
+    '/api/settings/backup/clear-leftover-restore-dirs',
+    authMiddleware,
+    async (req: AuthRequest, res: Response) => {
+      if (!adminOnly(req, res)) return;
+      try {
+        const result = clearLeftoverRestoreBackupDirs();
+        if (result.errors.length > 0) {
+          res.json({ ok: false, removed: result.removed, errors: result.errors, message: '部分残留目录清理失败' });
+          return;
+        }
+        res.json({
+          ok: true,
+          removed: result.removed,
+          message: result.removed > 0 ? `已清理 ${result.removed} 个残留目录` : '无残留目录',
+        });
+      } catch (err: unknown) {
+        log.error({ err }, 'Clear leftover restore dirs failed');
+        res.status(500).json({ detail: getErrorMessage(err) || '清理残留目录失败' });
+      }
+    },
+  );
 
   // Recover from a hard-interrupted restore by rolling back to its preserved pre-restore snapshot.
   router.post('/api/settings/backup/recover-interrupted', authMiddleware, async (req: AuthRequest, res: Response) => {
@@ -581,9 +608,19 @@ export function createSettingsBackupRouter() {
     }
     // forceStream：备份目录是 bind mount，nginx 容器若未挂载同目录，X-Accel 会 404 且 API 无感知；
     // 强制 Node 直连流式下发，下载链路不再依赖 nginx 能否看到备份文件（见 acceleratedDownload.ts）。
+    // 下载文件名带 模块+数量+日期（存储文件名保持 ID 兼容旧记录，仅展示名变化）。
+    const record = listBackups().find((item) => item.id === backupId);
     sendAcceleratedFile(req, res, {
       filePath,
-      fileName: basename(filePath),
+      fileName: record
+        ? backupDownloadFileName({
+            scopeLabel: record.scopeLabel,
+            itemCount: record.itemCount,
+            modelCount: record.modelCount,
+            fileCount: record.fileCount,
+            createdAt: record.createdAt,
+          })
+        : basename(filePath),
       contentType: 'application/gzip',
       disposition: 'attachment',
       cacheControl: 'private, no-store',

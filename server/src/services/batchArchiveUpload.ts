@@ -531,6 +531,30 @@ export async function processBatchArchiveUpload({
           select: { id: true },
         });
         if (!root) {
+          // 根层名没命中根分类，但可能命中既有子分类（如整包只截取某分类的子树：
+          // 「水枪/零件/文件」里的 水枪 是 配件 的子分类）。先按名称全局找一次，
+          // 命中则整棵树挂到那个分类下，避免误建同名根分类或分类归空。
+          const named = structuredPath.subcategoryName
+            ? await tx.category.findFirst({
+                where: { name: { in: [structuredPath.categoryName, structuredPath.subcategoryName] } },
+                orderBy: [{ parentId: 'asc' }, { createdAt: 'asc' }],
+                select: { id: true, parentId: true, name: true },
+              })
+            : await tx.category.findFirst({
+                where: { name: structuredPath.categoryName },
+                orderBy: [{ parentId: 'asc' }, { createdAt: 'asc' }],
+                select: { id: true, parentId: true, name: true },
+              });
+          if (named) {
+            // subcategoryName 也命中（或两层路径直接命中分类）→ 模型直接归到命中的分类
+            if (named.name === structuredPath.subcategoryName || !named.parentId || !structuredPath.subcategoryName) {
+              return named.id;
+            }
+            // categoryName 命中且是子分类 → subcategory 作为它的子分类继续解析
+            root = { id: named.id };
+          }
+        }
+        if (!root) {
           // 两层路径（文件夹/文件.STEP，subcategoryName 恒为 null）本该被单零件压缩包检测识别；
           // 走到这里说明是漏网形态（如根文件夹名撞已知根分类）。此时第一层大概率是零件目录而非分类，
           // 不自动新建根分类，落用户所选分类（未选则无分类，后续编辑页归位）。
