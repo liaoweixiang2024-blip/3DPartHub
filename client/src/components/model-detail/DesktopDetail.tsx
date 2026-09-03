@@ -47,6 +47,7 @@ export function DesktopDetail({
   categoryBreadcrumb,
   onDownload,
   onOpenDrawing,
+  onDownloadDrawing,
   onLoginDialog,
 }: {
   modelData: ModelInfo;
@@ -58,6 +59,7 @@ export function DesktopDetail({
   categoryBreadcrumb: { id: string; name: string }[];
   onDownload: (id: string, format?: string) => void;
   onOpenDrawing: (id: string, drawingId?: string) => void;
+  onDownloadDrawing: (id: string, drawingId?: string) => void;
   onLoginDialog: (reason: string) => void;
 }) {
   const { i18n, t } = useTranslation();
@@ -224,13 +226,14 @@ export function DesktopDetail({
               {modelData.downloads.map((file, index) => {
                 const downloadKey = `${file.downloadFormat || file.format || file.fileName || 'download'}-${index}`;
                 return file.downloadFormat === 'drawing' ? (
-                  <button
-                    key={downloadKey}
-                    type="button"
-                    onClick={() => onOpenDrawing(modelData.id, file.drawingId)}
-                    className={`${MODEL_DETAIL_DOWNLOAD_ROW_INTERACTIVE_CLASS} cursor-pointer text-left`}
-                  >
-                    <div className="flex items-center gap-3 min-w-0 flex-1">
+                  <div key={downloadKey} className={MODEL_DETAIL_DOWNLOAD_ROW_INTERACTIVE_CLASS}>
+                    <button
+                      type="button"
+                      onClick={() => onDownloadDrawing(modelData.id, file.drawingId)}
+                      aria-label={t('modelDetail.downloadPdf')}
+                      data-tooltip-ignore
+                      className="flex min-w-0 flex-1 cursor-pointer items-center gap-3 text-left"
+                    >
                       <div className="w-9 h-9 rounded-lg bg-error/10 flex items-center justify-center shrink-0">
                         <span className="text-[10px] font-bold text-error">PDF</span>
                       </div>
@@ -240,11 +243,17 @@ export function DesktopDetail({
                           {file.format} · {file.size}
                         </div>
                       </div>
-                    </div>
-                    <div className="text-primary hover:text-primary-container p-2">
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => onOpenDrawing(modelData.id, file.drawingId)}
+                      aria-label={t('modelDetail.viewPdf')}
+                      data-tooltip-ignore
+                      className="text-primary hover:text-primary-container p-2 shrink-0"
+                    >
                       <Icon name="open_in_new" size={20} />
-                    </div>
-                  </button>
+                    </button>
+                  </div>
                 ) : (
                   <button
                     key={downloadKey}

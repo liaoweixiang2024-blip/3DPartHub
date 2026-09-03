@@ -10,7 +10,7 @@ import {
   type FileWithPath,
   type WebkitFileSystemEntry,
 } from '../product-wall-admin/productWallAdminUtils';
-import { categoriesApi } from '../../api/categories';
+import { categoriesApi, type CategoryItem } from '../../api/categories';
 import client from '../../api/client';
 import { useMediaQuery } from '../../layouts/hooks/useMediaQuery';
 import { getBusinessConfig } from '../../lib/businessConfig';
@@ -50,8 +50,28 @@ type UploadResult =
 const CONCURRENCY = 3;
 const UPLOAD_PROGRESS_PAINT_INTERVAL_MS = 180;
 const UPLOAD_STATS_PAINT_INTERVAL_MS = 220;
+// 上传分类记忆：只在本机记分类 id，刷新/重开弹窗沿用上次选择；分类被删后由弹窗内校验回退为空
+const LAST_CATEGORY_KEY = 'upload.category.lastId';
 let activeUploadOwner: string | null = null;
 let uploadRunCounter = 0;
+
+function loadLastCategoryId(): string {
+  try {
+    const value = localStorage.getItem(LAST_CATEGORY_KEY);
+    return value && /^[0-9a-f-]{8,80}$/i.test(value) ? value : '';
+  } catch {
+    return '';
+  }
+}
+
+function saveLastCategoryId(id: string) {
+  try {
+    if (id) localStorage.setItem(LAST_CATEGORY_KEY, id);
+    else localStorage.removeItem(LAST_CATEGORY_KEY);
+  } catch {
+    /* 隐私模式等存储不可用时静默跳过 */
+  }
+}
 
 type UploadStats = {
   loaded: number;
@@ -123,8 +143,12 @@ export default function UploadModal({ open, onClose, onConverted }: UploadModalP
   const [uploadStats, setUploadStats] = useState<UploadStats | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<UploadResult | null>(null);
-  const [categoryId, setCategoryId] = useState('');
+  const [categoryId, setCategoryId] = useState(() => loadLastCategoryId());
   const [pendingFiles, setPendingFiles] = useState<File[]>([]);
+  // 拖入的文件夹分组：每组一次拖入展开后的文件集合，上传时各自打成独立 ZIP
+  // （服务端按 ZIP 内路径解析文件夹名做标题，多组合一个包会混淆层级结构）
+  const [pendingFolderGroups, setPendingFolderGroups] = useState<FileWithPath[][]>([]);
+  const [expandingFolders, setExpandingFolders] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const ownerId = useId();
   const uploadInFlightRef = useRef(false);
@@ -234,14 +258,30 @@ export default function UploadModal({ open, onClose, onConverted }: UploadModalP
     setError(null);
     setResult(null);
     setUploading(false);
-    setCategoryId('');
     setPendingFiles([]);
+    setPendingFolderGroups([]);
   }, [ownerId]);
 
   const handleClose = useCallback(() => {
     reset();
     onClose();
   }, [reset, onClose]);
+
+  // 分类记忆：切换即保存；分类树加载后校验上次记的 id 是否还存在（分类可能已被删），不存在回退为空
+  const changeCategory = useCallback((id: string) => {
+    setCategoryId(id);
+    saveLastCategoryId(id);
+  }, []);
+
+  useEffect(() => {
+    if (!categoryId || !categoryData?.items) return;
+    const exists = (nodes: CategoryItem[]): boolean =>
+      nodes.some((node) => node.id === categoryId || (node.children?.length ? exists(node.children) : false));
+    if (!exists(categoryData.items)) {
+      setCategoryId('');
+      saveLastCategoryId('');
+    }
+  }, [categoryData, categoryId]);
 
   const beginUploadRun = useCallback(() => {
     if (uploadInFlightRef.current || (activeUploadOwner && activeUploadOwner !== ownerId)) return 0;
@@ -364,6 +404,7 @@ export default function UploadModal({ open, onClose, onConverted }: UploadModalP
         paintProgress(100, true);
         finishUploadStats();
         setPendingFiles([]);
+        setPendingFolderGroups([]);
         const uploadRes: UploadResult = { type: 'single', data: res };
         setResult(uploadRes);
         onConverted?.(res);
@@ -585,6 +626,7 @@ export default function UploadModal({ open, onClose, onConverted }: UploadModalP
       paintProgress(100, true);
       finishUploadStats();
       setPendingFiles([]);
+      setPendingFolderGroups([]);
       setResult({ type: 'batch', ok, fail, total, drawings, drawingFail, skipped });
       swrMutate('/models/count');
       onConverted?.();
@@ -608,16 +650,18 @@ export default function UploadModal({ open, onClose, onConverted }: UploadModalP
   );
 
   const handleArchiveFile = useCallback(
-    async (file: File) => {
+    async (file: File, options?: { keepQueue?: boolean; keepUploading?: boolean }) => {
       const archiveSizeError = getArchiveSizeError([file]);
       if (archiveSizeError) {
         setError(archiveSizeError);
-        return;
+        return false;
       }
 
       const runId = beginUploadRun();
-      if (!runId) return;
+      if (!runId) return false;
       setError(null);
+      // 多文件夹队列场景：清掉上一组的结果面板，切换回进度视图
+      setResult(null);
       setProgress(5);
       setProgressLabel(`正在上传 ${file.name}...`);
       beginUploadStats(file.size);
@@ -676,9 +720,14 @@ export default function UploadModal({ open, onClose, onConverted }: UploadModalP
         const fail = resp.results.length - ok - skipped;
         const drawings = resp.results.filter((r) => r.drawing_attached).length;
         const drawingFail = resp.results.filter((r) => r.drawing_error).length;
-        if (!isCurrentUploadRun(runId)) return;
+        if (!isCurrentUploadRun(runId)) return false;
         paintProgress(100, true);
-        setPendingFiles([]);
+        if (!options?.keepQueue) {
+          setPendingFiles([]);
+          setPendingFolderGroups([]);
+        }
+        // keepUploading（多文件夹队列非最后一组）：不出结果面板，直接交给下一组
+        if (options?.keepUploading) return true;
         setResult({
           type: 'archive',
           archiveType: file.name.toLowerCase().endsWith('.rar') ? 'RAR' : 'ZIP',
@@ -691,12 +740,18 @@ export default function UploadModal({ open, onClose, onConverted }: UploadModalP
         });
         swrMutate('/models/count');
         onConverted?.();
+        return true;
       } catch (err: unknown) {
         const message = err instanceof Error ? err.message : '压缩包上传失败';
         if (isCurrentUploadRun(runId)) setError(message);
+        return false;
       } finally {
         if (processingTimer) clearInterval(processingTimer);
         finishUploadRun(runId);
+        if (options?.keepUploading) {
+          // 队列还有下一组：保持上传态，进度条不闪断
+          setUploading(true);
+        }
       }
     },
     [
@@ -718,8 +773,95 @@ export default function UploadModal({ open, onClose, onConverted }: UploadModalP
     [isArchiveFile, isDrawingFile],
   );
 
+  // 拖入文件夹的入列过滤：忽略 GPUCache / 隐藏文件；只收模型格式与 PDF（SLDPRT 等源文件不上传）。
+  // 拖入瞬间只做轻量校验（有没有模型、总大小），不打 ZIP；真正打包在点「开始上传」后进行。
+  const filterFolderEntries = useCallback(
+    (collected: FileWithPath[]): FileWithPath[] =>
+      collected.filter(({ file, relativePath }) => {
+        const ext = file.name.split('.').pop()?.toLowerCase() || '';
+        if (!formats.includes(ext) && ext !== 'pdf') return false;
+        const segments = relativePath.split('/');
+        return !segments.some((segment) => segment === 'GPUCache' || segment.startsWith('.'));
+      }),
+    [formats],
+  );
+
+  // 文件夹打 ZIP：内存打包走批量上传通道（服务端按 ZIP 内路径解析文件夹名做标题/变体跳过/PDF 配对）。
+  // 纯函数：返回打包结果或拒绝原因，不直接设置错误（由调用方决定提示方式）。
+  const buildFolderUploadZip = useCallback(
+    async (collected: FileWithPath[]): Promise<{ file: File } | { error: string } | { empty: true }> => {
+      const accepted = filterFolderEntries(collected);
+      const hasModel = accepted.some(({ file }) => {
+        const ext = file.name.split('.').pop()?.toLowerCase() || '';
+        return formats.includes(ext);
+      });
+      if (!hasModel) return { empty: true };
+
+      const zip = new JSZip();
+      for (const { file, relativePath } of accepted) zip.file(relativePath, file);
+      const blob = await zip.generateAsync({ type: 'blob', compression: 'STORE' });
+      if (blob.size > archiveMaxBytes) {
+        return {
+          error: `文件夹打包后 ${Math.round(blob.size / 1024 / 1024)}MB，超过 ZIP/RAR 上限 ${archiveMaxSizeMb}MB，请分批拖入`,
+        };
+      }
+      return { file: new File([blob], 'folder-upload.zip', { type: 'application/zip' }) };
+    },
+    [archiveMaxBytes, archiveMaxSizeMb, filterFolderEntries, formats],
+  );
+
   const startUpload = useCallback(() => {
-    if (pendingFiles.length === 0) return;
+    if (pendingFiles.length === 0 && pendingFolderGroups.length === 0) return;
+    setError(null);
+
+    // 纯文件夹上传：逐组打包走压缩包通道（每组独立 ZIP，服务端按组内路径解析），
+    // 最后一组完成时统一清队列并展示结果
+    if (pendingFiles.length === 0 && pendingFolderGroups.length > 0) {
+      const groups = pendingFolderGroups;
+      void (async () => {
+        // 打包阶段先点亮进度条（不占上传运行锁，首组交给 handleArchiveFile 时由它接管）
+        setResult(null);
+        setUploading(true);
+        setProgress(3);
+        setProgressLabel('正在打包文件夹...');
+        for (let i = 0; i < groups.length; i++) {
+          const isLast = i === groups.length - 1;
+          setProgressLabel(`正在打包第 ${i + 1}/${groups.length} 个文件夹...`);
+          const result = await buildFolderUploadZip(groups[i]);
+          if ('empty' in result || 'error' in result) {
+            setError('empty' in result ? '文件夹为空或没有可上传的模型文件' : result.error);
+            setUploading(false);
+            setProgress(0);
+            setProgressLabel('');
+            return;
+          }
+          const ok = await handleArchiveFile(result.file, {
+            keepQueue: !isLast,
+            keepUploading: !isLast,
+          });
+          if (!ok) return; // handleArchiveFile 已设错误并中止，保留剩余组在队列里
+        }
+      })();
+      return;
+    }
+
+    // 文件 + 文件夹混合：文件夹组打成虚拟 ZIP 与文件一起走多文件流程（进度/结果统一）
+    if (pendingFolderGroups.length > 0) {
+      void (async () => {
+        const zipEntries: File[] = [];
+        for (let i = 0; i < pendingFolderGroups.length; i++) {
+          const result = await buildFolderUploadZip(pendingFolderGroups[i]);
+          if ('empty' in result || 'error' in result) {
+            setError('empty' in result ? '文件夹为空或没有可上传的模型文件' : result.error);
+            return;
+          }
+          zipEntries.push(result.file);
+        }
+        handleMultiFile([...pendingFiles, ...zipEntries]);
+      })();
+      return;
+    }
+
     const unmatchedPdfError = getDrawingMatchError(pendingFiles);
     if (unmatchedPdfError) {
       setError(unmatchedPdfError);
@@ -742,12 +884,14 @@ export default function UploadModal({ open, onClose, onConverted }: UploadModalP
     if (pendingFiles.length === 1 && !isArchiveFile(pendingFiles[0])) {
       handleSingleFile(pendingFiles[0]);
     } else if (pendingFiles.length === 1 && isArchiveFile(pendingFiles[0])) {
-      handleArchiveFile(pendingFiles[0]);
+      void handleArchiveFile(pendingFiles[0]);
     } else {
       handleMultiFile(pendingFiles);
     }
   }, [
     pendingFiles,
+    pendingFolderGroups,
+    buildFolderUploadZip,
     getArchiveSizeError,
     getDrawingMatchError,
     getFileSizeError,
@@ -768,36 +912,6 @@ export default function UploadModal({ open, onClose, onConverted }: UploadModalP
     [formats],
   );
 
-  // 拖入文件夹：内存打 ZIP 走批量上传通道（服务端按路径解析文件夹名做模型标题/变体跳过/PDF 配对）。
-  // 忽略 GPUCache / 隐藏文件；只收模型格式与 PDF，其余（SLDPRT 等源文件）不上传。
-  const buildFolderUploadZip = useCallback(
-    async (collected: FileWithPath[]): Promise<File | null> => {
-      const accepted = collected.filter(({ file, relativePath }) => {
-        const ext = file.name.split('.').pop()?.toLowerCase() || '';
-        if (!formats.includes(ext) && ext !== 'pdf') return false;
-        const segments = relativePath.split('/');
-        return !segments.some((segment) => segment === 'GPUCache' || segment.startsWith('.'));
-      });
-      const hasModel = accepted.some(({ file }) => {
-        const ext = file.name.split('.').pop()?.toLowerCase() || '';
-        return formats.includes(ext);
-      });
-      if (!hasModel) return null;
-
-      const zip = new JSZip();
-      for (const { file, relativePath } of accepted) zip.file(relativePath, file);
-      const blob = await zip.generateAsync({ type: 'blob', compression: 'STORE' });
-      if (blob.size > archiveMaxBytes) {
-        setError(
-          `文件夹内容打包后 ${Math.round(blob.size / 1024 / 1024)}MB，超过 ZIP/RAR 上限 ${archiveMaxSizeMb}MB，请分批拖入`,
-        );
-        return null;
-      }
-      return new File([blob], 'folder-upload.zip', { type: 'application/zip' });
-    },
-    [archiveMaxBytes, archiveMaxSizeMb, formats],
-  );
-
   const handleDrop = useCallback(
     (e: React.DragEvent) => {
       e.preventDefault();
@@ -812,27 +926,34 @@ export default function UploadModal({ open, onClose, onConverted }: UploadModalP
       }
       const hasDirectory = entries.some((entry) => entry.isDirectory);
       if (hasDirectory) {
-        // 文件夹拖入：异步展开（entry 可异步遍历）→ 打 ZIP → 走压缩包上传流程
+        // 文件夹拖入：异步展开（entry 可异步遍历）→ 轻量校验后追加进待传列表
+        // （每组一次拖入一个独立 ZIP，多次拖入互不混淆），点「开始上传」才打包走批量通道
         void (async () => {
           setError(null);
-          setProgress(4);
-          setProgressLabel('正在展开文件夹...');
+          setExpandingFolders(true);
           try {
             const collected = await collectFilesWithPathFromDataTransfer(entries, []);
-            setProgressLabel(`已展开 ${collected.length} 个文件，正在打包上传...`);
-            const zipFile = await buildFolderUploadZip(collected);
-            if (!zipFile) {
-              // buildFolderUploadZip 为 null 且没设过错误（体积超限已设）时，说明没有可上传的模型文件
-              setError((prev) => prev ?? '文件夹为空或没有可上传的模型文件');
-              setProgress(0);
-              setProgressLabel('');
+            const accepted = filterFolderEntries(collected);
+            const hasModel = accepted.some(({ file }) => {
+              const ext = file.name.split('.').pop()?.toLowerCase() || '';
+              return formats.includes(ext);
+            });
+            if (!hasModel) {
+              setError('文件夹为空或没有可上传的模型文件');
               return;
             }
-            await handleArchiveFile(zipFile);
+            const totalBytes = accepted.reduce((sum, { file }) => sum + file.size, 0);
+            if (totalBytes > archiveMaxBytes) {
+              setError(
+                `文件夹内容共 ${Math.round(totalBytes / 1024 / 1024)}MB，超过 ZIP/RAR 上限 ${archiveMaxSizeMb}MB，请分批拖入`,
+              );
+              return;
+            }
+            setPendingFolderGroups((prev) => [...prev, accepted]);
           } catch (err) {
             setError(err instanceof Error ? err.message : '文件夹上传失败，请重试');
-            setProgress(0);
-            setProgressLabel('');
+          } finally {
+            setExpandingFolders(false);
           }
         })();
         return;
@@ -865,19 +986,23 @@ export default function UploadModal({ open, onClose, onConverted }: UploadModalP
       }
       setError(null);
 
+      // 单个散文件（非压缩包非 PDF）保持原行为：直接单模型上传
       if (filtered.length === 1 && !isArchiveFile(filtered[0]) && !isDrawingFile(filtered[0])) {
         handleSingleFile(filtered[0]);
       } else {
-        setPendingFiles(filtered);
+        // 追加而非替换：可连续拖入多批文件/压缩包
+        setPendingFiles((prev) => [...prev, ...filtered]);
       }
     },
     [
-      buildFolderUploadZip,
+      archiveMaxBytes,
+      archiveMaxSizeMb,
       filterFiles,
+      filterFolderEntries,
+      formats,
       getArchiveSizeError,
       getDrawingMatchError,
       getFileSizeError,
-      handleArchiveFile,
       handleSingleFile,
       hasUploadableModelInput,
       isArchiveFile,
@@ -923,7 +1048,8 @@ export default function UploadModal({ open, onClose, onConverted }: UploadModalP
       if (filtered.length === 1 && !isArchiveFile(filtered[0]) && !isDrawingFile(filtered[0])) {
         handleSingleFile(filtered[0]);
       } else {
-        setPendingFiles(filtered);
+        // 追加而非替换：可连续选择多批文件/压缩包
+        setPendingFiles((prev) => [...prev, ...filtered]);
       }
       e.target.value = '';
     },
@@ -943,6 +1069,12 @@ export default function UploadModal({ open, onClose, onConverted }: UploadModalP
   const removePendingFile = useCallback((index: number) => {
     setError(null);
     setPendingFiles((prev) => prev.filter((_, i) => i !== index));
+  }, []);
+
+  const clearPendingQueue = useCallback(() => {
+    setError(null);
+    setPendingFiles([]);
+    setPendingFolderGroups([]);
   }, []);
 
   return (
@@ -1022,7 +1154,7 @@ export default function UploadModal({ open, onClose, onConverted }: UploadModalP
                     完成
                   </button>
                 </div>
-              ) : pendingFiles.length > 0 ? (
+              ) : pendingFiles.length > 0 || pendingFolderGroups.length > 0 || expandingFolders ? (
                 <>
                   {!uploading && categoryData?.items && categoryData.items.length > 0 && (
                     <div className="mb-4">
@@ -1032,7 +1164,7 @@ export default function UploadModal({ open, onClose, onConverted }: UploadModalP
                       <CategorySelect
                         categories={categoryData.items}
                         value={categoryId}
-                        onChange={setCategoryId}
+                        onChange={changeCategory}
                         placeholder="选择分类（可选）"
                         autoFocusSearch={false}
                         portalDropdown
@@ -1040,8 +1172,38 @@ export default function UploadModal({ open, onClose, onConverted }: UploadModalP
                     </div>
                   )}
                   <div className="border border-outline-variant/20 rounded-lg divide-y divide-outline-variant/10 max-h-60 overflow-y-auto mb-4">
+                    {expandingFolders && (
+                      <div className="flex items-center gap-2 px-3 py-2 text-sm text-on-surface-variant">
+                        <Icon name="hourglass_top" size={18} className="shrink-0 animate-spin" />
+                        <span className="flex-1">正在展开拖入的文件夹...</span>
+                      </div>
+                    )}
+                    {pendingFolderGroups.map((group, i) => {
+                      const rootNames = new Set(group.map(({ relativePath }) => relativePath.split('/')[0]));
+                      const totalMb = group.reduce((sum, { file }) => sum + file.size, 0) / 1024 / 1024;
+                      const label =
+                        rootNames.size === 1
+                          ? `${[...rootNames][0]}（${group.length} 个文件）`
+                          : `${rootNames.size} 个文件夹 / ${group.length} 个文件`;
+                      return (
+                        <div key={`folder-${i}`} className="flex items-center gap-2 px-3 py-2 text-sm">
+                          <Icon name="folder" size={18} className="text-on-surface-variant shrink-0" />
+                          <span className="truncate flex-1 text-on-surface">{label}</span>
+                          <span className="text-xs text-on-surface-variant shrink-0">{totalMb.toFixed(1)} MB</span>
+                          {!uploading && (
+                            <button
+                              type="button"
+                              onClick={() => setPendingFolderGroups((prev) => prev.filter((_, gi) => gi !== i))}
+                              className="text-on-surface-variant hover:text-error shrink-0"
+                            >
+                              <Icon name="close" size={16} />
+                            </button>
+                          )}
+                        </div>
+                      );
+                    })}
                     {pendingFiles.map((f, i) => (
-                      <div key={i} className="flex items-center gap-2 px-3 py-2 text-sm">
+                      <div key={`file-${i}`} className="flex items-center gap-2 px-3 py-2 text-sm">
                         <Icon
                           name={isArchiveFile(f) ? 'folder_zip' : 'description'}
                           size={18}
@@ -1092,7 +1254,7 @@ export default function UploadModal({ open, onClose, onConverted }: UploadModalP
                     <div className="flex gap-2">
                       <button
                         type="button"
-                        onClick={() => setPendingFiles([])}
+                        onClick={clearPendingQueue}
                         className="flex-1 border border-outline-variant/30 text-on-surface-variant rounded-sm px-4 py-2 text-sm font-medium hover:bg-surface-container-high"
                       >
                         取消
@@ -1100,9 +1262,14 @@ export default function UploadModal({ open, onClose, onConverted }: UploadModalP
                       <button
                         type="button"
                         onClick={startUpload}
-                        className="flex-1 bg-primary-container text-on-primary rounded-sm px-4 py-2 text-sm font-medium hover:opacity-90"
+                        disabled={expandingFolders || (pendingFiles.length === 0 && pendingFolderGroups.length === 0)}
+                        className="flex-1 bg-primary-container text-on-primary rounded-sm px-4 py-2 text-sm font-medium hover:opacity-90 disabled:opacity-50"
                       >
-                        开始上传 ({pendingFiles.length} 个文件)
+                        开始上传 (
+                        {pendingFolderGroups.length > 0
+                          ? `${pendingFolderGroups.length} 个文件夹`
+                          : `${pendingFiles.length} 个文件`}
+                        )
                       </button>
                     </div>
                   )}
@@ -1117,7 +1284,7 @@ export default function UploadModal({ open, onClose, onConverted }: UploadModalP
                       <CategorySelect
                         categories={categoryData.items}
                         value={categoryId}
-                        onChange={setCategoryId}
+                        onChange={changeCategory}
                         placeholder="选择分类（可选）"
                         autoFocusSearch={false}
                         portalDropdown
@@ -1175,7 +1342,7 @@ export default function UploadModal({ open, onClose, onConverted }: UploadModalP
                           支持 {formatLabel} 模型和同名 PDF，可多选或上传 ZIP/RAR 压缩包（上限 {archiveMaxSizeMb}MB）
                         </p>
                         <p className="mt-1 text-[11px] text-on-surface-variant/80">
-                          单模型文件夹可先压缩上传，文件夹名会作为产品名称
+                          可连续拖入多个文件夹/压缩包，确认列表后再点「开始上传」
                         </p>
                       </>
                     )}

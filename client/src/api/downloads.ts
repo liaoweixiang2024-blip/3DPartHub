@@ -146,6 +146,22 @@ export async function createModelDrawingUrl(modelId: string, drawingId?: string)
   return created.url;
 }
 
+/** 下载 PDF 图纸为文件（?download=1 → attachment），与查看（inline 预览）共用同一短令牌通道 */
+export async function downloadModelDrawing(modelId: string, drawingId?: string): Promise<void> {
+  const preparedWindow = prepareBrowserDownload();
+  try {
+    const url = await createModelDrawingUrl(modelId, drawingId);
+    if (!url.startsWith('/api/') && !url.startsWith(window.location.origin)) {
+      throw new Error('Invalid download URL');
+    }
+    const downloadUrl = `${url}${url.includes('?') ? '&' : '?'}download=1`;
+    await downloadBrowserFile(downloadUrl, { preparedWindow });
+  } catch (error) {
+    cancelPreparedBrowserDownload(preparedWindow);
+    throw error;
+  }
+}
+
 export async function openModelDrawing(modelId: string, drawingId?: string): Promise<void> {
   const opened = prepareBrowserDocument(tDownload('browserDownload.openingDrawing', '正在打开图纸...'));
   try {

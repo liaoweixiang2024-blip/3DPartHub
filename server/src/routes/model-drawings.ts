@@ -211,11 +211,13 @@ async function sendDrawingFile(
   }
   const sourceName = modelDownloadSourceName(model.name || drawing.name, model.originalName, model.id);
   const fileName = modelDownloadFileName(sourceName, 'pdf', model.id);
+  // ?download=1 → attachment（浏览器另存为文件）；默认 inline（浏览器内预览）
+  const disposition: 'attachment' | 'inline' = req.query.download === '1' ? 'attachment' : 'inline';
   sendAcceleratedFile(req, res, {
     filePath: drawingPath,
     fileName,
     contentType: 'application/pdf',
-    disposition: 'inline',
+    disposition,
   });
 }
 

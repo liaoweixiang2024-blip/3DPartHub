@@ -181,6 +181,8 @@ export const jaJPTranslation: TranslationMap = {
     techSpecs: '技術仕様',
     unnamed: '未命名モデル',
     viewDrawing: '図面を表示',
+    viewPdf: 'PDFをオンラインで表示',
+    downloadPdf: 'PDF図面をダウンロード',
   },
   tempViewer: {
     format: '形式',
@@ -1851,6 +1853,8 @@ export const koKRWorkflowTranslation: TranslationMap = {
     techSpecs: '기술 사양',
     unnamed: '이름 없는 모델',
     viewDrawing: '도면 보기',
+    viewPdf: 'PDF 온라인 보기',
+    downloadPdf: 'PDF 도면 다운로드',
     versions: '버전 기록({{count}})',
   },
   favorites: {

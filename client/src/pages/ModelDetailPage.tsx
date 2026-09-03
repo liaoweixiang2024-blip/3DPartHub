@@ -4,7 +4,12 @@ import { useTranslation } from 'react-i18next';
 import { useParams, useNavigate, Link, useLocation } from 'react-router-dom';
 import useSWR, { mutate as globalMutate } from 'swr';
 import { categoriesApi } from '../api/categories';
-import { downloadModelFile, isDownloadAuthRequiredError, openModelDrawing } from '../api/downloads';
+import {
+  downloadModelDrawing,
+  downloadModelFile,
+  isDownloadAuthRequiredError,
+  openModelDrawing,
+} from '../api/downloads';
 import { modelApi, type DrawingRef, type ServerModelListResponse } from '../api/models';
 import { updateSettings } from '../api/settings';
 import CadViewerPanel from '../components/3d/CadViewerPanel';
@@ -192,6 +197,22 @@ export default function ModelDetailPage() {
           return;
         }
         toast(t('modelDetail.drawingOpenFailed'), 'error');
+      }
+    },
+    [t, toast],
+  );
+
+  const handleDownloadDrawing = useCallback(
+    async (modelId: string, drawingId?: string) => {
+      try {
+        await downloadModelDrawing(modelId, drawingId);
+      } catch (error) {
+        if (isDownloadAuthRequiredError(error)) {
+          setLoginPromptReason(t('modelDetail.viewDrawing'));
+          setLoginPromptOpen(true);
+          return;
+        }
+        toast(t('modelDetail.downloadFailed'), 'error');
       }
     },
     [t, toast],
@@ -691,6 +712,7 @@ export default function ModelDetailPage() {
           categoryBreadcrumb={categoryBreadcrumb}
           onDownload={handleDownload}
           onOpenDrawing={handleOpenDrawing}
+          onDownloadDrawing={handleDownloadDrawing}
           onLoginDialog={(reason) => {
             setLoginPromptReason(reason);
             setLoginPromptOpen(true);
@@ -937,27 +959,37 @@ export default function ModelDetailPage() {
                     {modelData.downloads.map((file, index) => {
                       const downloadKey = `${file.downloadFormat || file.format || file.fileName || 'download'}-${index}`;
                       return file.downloadFormat === 'drawing' ? (
-                        <button
+                        <div
                           key={downloadKey}
-                          type="button"
-                          onClick={() => void handleOpenDrawing(modelData.id, file.drawingId)}
-                          className="flex w-full items-center justify-between gap-2.5 rounded-sm border border-outline-variant/10 bg-surface-container-low px-3 py-2 text-left transition-colors hover:bg-surface-container"
+                          className="flex w-full items-center gap-2.5 rounded-sm border border-outline-variant/10 bg-surface-container-low px-3 py-2 text-left"
                         >
                           <div className="w-7 h-7 rounded bg-error/10 flex items-center justify-center shrink-0">
                             <span className="text-[8px] font-bold text-error">PDF</span>
                           </div>
-                          <div className="flex-1 min-w-0">
+                          <button
+                            type="button"
+                            onClick={() => void handleDownloadDrawing(modelData.id, file.drawingId)}
+                            aria-label={t('modelDetail.downloadPdf')}
+                            data-tooltip-ignore
+                            className="flex-1 min-w-0 text-left"
+                          >
                             <span className="block truncate text-xs font-medium text-on-surface" title={file.fileName}>
                               {file.fileName}
                             </span>
                             <span className="text-[10px] text-on-surface-variant">
                               {file.format} · {file.size}
                             </span>
-                          </div>
-                          <div className="ml-auto flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => void handleOpenDrawing(modelData.id, file.drawingId)}
+                            aria-label={t('modelDetail.viewPdf')}
+                            data-tooltip-ignore
+                            className="ml-auto flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary/10 hover:bg-primary/20 text-primary active:scale-90 transition-all"
+                          >
                             <Icon name="open_in_new" size={14} />
-                          </div>
-                        </button>
+                          </button>
+                        </div>
                       ) : (
                         <div
                           key={downloadKey}

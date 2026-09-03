@@ -534,6 +534,7 @@ export const zhCN: { translation: TranslationMap } = {
       customSupportTitle: '需要非标定制？',
       downloadFailed: '下载失败，请稍后重试',
       downloadModel: '下载模型',
+      downloadPdf: '下载 PDF 图纸',
       drawingOpenFailed: '打开图纸失败，请稍后重试',
       editModel: '编辑模型',
       favoriteModel: '收藏模型',
@@ -557,6 +558,7 @@ export const zhCN: { translation: TranslationMap } = {
       techSpecs: '技术参数',
       unnamed: '未命名模型',
       viewDrawing: '查看图纸',
+      viewPdf: '在线查看 PDF',
       versions: '历史版本 ({{count}})',
     },
     favorites: {

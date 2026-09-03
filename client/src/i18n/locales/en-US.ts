@@ -537,6 +537,7 @@ export const enUS: { translation: TranslationMap } = {
       customSupportTitle: 'Need a custom part?',
       downloadFailed: 'Download failed. Please try again later',
       downloadModel: 'Download model',
+      downloadPdf: 'Download PDF drawing',
       drawingOpenFailed: 'Failed to open drawing. Please try again later',
       editModel: 'Edit model',
       favoriteModel: 'Favorite model',
@@ -560,6 +561,7 @@ export const enUS: { translation: TranslationMap } = {
       techSpecs: 'Technical specs',
       unnamed: 'Unnamed model',
       viewDrawing: 'View drawing',
+      viewPdf: 'View PDF online',
       versions: 'Version history ({{count}})',
     },
     favorites: {
