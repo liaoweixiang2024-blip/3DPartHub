@@ -11,7 +11,12 @@ import { authMiddleware, type AuthRequest } from '../../middleware/auth.js';
 import { requireRole } from '../../middleware/rbac.js';
 import { mutationLimiter } from '../../middleware/security.js';
 import { hasActiveModelDownload } from '../../services/activeModelDownloads.js';
-import { purgeModelFromCloud, removeExistingFiles, removeModelFiles } from '../../services/modelFiles.js';
+import {
+  findOriginalModelPath,
+  purgeModelFromCloud,
+  removeExistingFiles,
+  removeModelFiles,
+} from '../../services/modelFiles.js';
 import { MODEL_STATUS } from '../../services/modelStatus.js';
 import { clearCategoryCache } from '../categories/common.js';
 import { modelImageUpload } from './uploadHelpers.js';
@@ -647,7 +652,18 @@ export function createModelManagementRouter({ prisma, metadataDir, getMeta, save
             category: model.categoryRef?.name || null,
             deleted_at: typeof metadata.deletedAt === 'string' ? metadata.deletedAt : updatedAt,
             deleted_by_id: typeof metadata.deletedById === 'string' ? metadata.deletedById : null,
-            can_restore: model.uploadPath ? existsSync(model.uploadPath) : true,
+            // 备份恢复跨机场景：upload_path 是上传方的绝对路径，本机可能不存在，
+            // 但文件实际按约定落在 static/originals/{id}.{格式}——与下载逻辑同款回退
+            can_restore: model.uploadPath
+              ? Boolean(
+                  findOriginalModelPath({
+                    id: model.id,
+                    uploadPath: model.uploadPath,
+                    originalFormat: model.originalFormat,
+                    format: model.originalFormat,
+                  }),
+                )
+              : true,
             created_at: model.createdAt,
           };
         }),
@@ -672,7 +688,7 @@ export function createModelManagementRouter({ prisma, metadataDir, getMeta, save
       try {
         const model = await prisma.model.findUnique({
           where: { id },
-          select: { id: true, status: true, uploadPath: true, metadata: true },
+          select: { id: true, status: true, uploadPath: true, originalFormat: true, metadata: true },
         });
         if (!model) {
           res.status(404).json({ detail: '模型不存在' });
@@ -682,7 +698,15 @@ export function createModelManagementRouter({ prisma, metadataDir, getMeta, save
           res.status(400).json({ detail: '模型未处于删除状态' });
           return;
         }
-        if (model.uploadPath && !existsSync(model.uploadPath)) {
+        if (
+          model.uploadPath &&
+          !findOriginalModelPath({
+            id: model.id,
+            uploadPath: model.uploadPath,
+            originalFormat: model.originalFormat,
+            format: model.originalFormat,
+          })
+        ) {
           res.status(409).json({ detail: '原始模型文件不存在，无法恢复' });
           return;
         }
