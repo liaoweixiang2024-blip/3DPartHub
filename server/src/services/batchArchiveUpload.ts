@@ -625,6 +625,32 @@ export async function processBatchArchiveUpload({
           }
         }
 
+        // 同分类同名去重（内容指纹版）：同分类下已有同名模型、且原文件一致
+        // （原始文件名 + 大小都相同）→ 视为重复上传，跳过；
+        // 同名但文件不同（零件改版后重传，名称没变）→ 正常入库，用户后续可在
+        // 模型详情页手动清理旧条目或用版本合并。不同分类允许同名（合法的不同零件）。
+        // 分类绑定失败的条目不做该检查（resolvedCategoryId 不可信，宁可重复入库也不要错杀）。
+        if (prisma && !categoryError && modelName) {
+          const existing = await prisma.model.findFirst({
+            where: {
+              name: modelName,
+              status: { not: MODEL_STATUS.DELETED },
+              ...(resolvedCategoryId ? { categoryId: resolvedCategoryId } : { categoryId: null }),
+            },
+            select: { id: true, originalName: true, originalSize: true },
+          });
+          const isSameFile = existing?.originalName === originalName && Number(existing?.originalSize) === originalSize;
+          if (existing && isSameFile) {
+            results.push({
+              name: modelName,
+              status: 'skipped',
+              error: '该分类下已存在同名且内容相同的模型，已跳过（如需重新转换请先删除旧模型）',
+            });
+            if (originalDest && existsSync(originalDest)) rmSync(originalDest, { force: true });
+            return null;
+          }
+        }
+
         if (prisma) {
           await prisma.model.create({
             data: {

@@ -150,6 +150,7 @@ export default function UploadModal({ open, onClose, onConverted }: UploadModalP
   const [pendingFolderGroups, setPendingFolderGroups] = useState<FileWithPath[][]>([]);
   const [expandingFolders, setExpandingFolders] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
+  const addMoreInputRef = useRef<HTMLInputElement>(null);
   const ownerId = useId();
   const uploadInFlightRef = useRef(false);
   const activeRunRef = useRef(0);
@@ -650,7 +651,22 @@ export default function UploadModal({ open, onClose, onConverted }: UploadModalP
   );
 
   const handleArchiveFile = useCallback(
-    async (file: File, options?: { keepQueue?: boolean; keepUploading?: boolean }) => {
+    async (
+      file: File,
+      options?: {
+        keepQueue?: boolean;
+        keepUploading?: boolean;
+        /** 跨组累计统计（多文件夹队列）：每组完成时回调本组结果，供调用方汇总后统一展示 */
+        onAccumulate?: (stats: {
+          ok: number;
+          fail: number;
+          total: number;
+          drawings: number;
+          drawingFail: number;
+          skipped: number;
+        }) => void;
+      },
+    ) => {
       const archiveSizeError = getArchiveSizeError([file]);
       if (archiveSizeError) {
         setError(archiveSizeError);
@@ -726,6 +742,8 @@ export default function UploadModal({ open, onClose, onConverted }: UploadModalP
           setPendingFiles([]);
           setPendingFolderGroups([]);
         }
+        // 跨组累计：无论是否最后一组都先把本组统计交给调用方
+        options?.onAccumulate?.({ ok, fail, total: resp.total, drawings, drawingFail, skipped });
         // keepUploading（多文件夹队列非最后一组）：不出结果面板，直接交给下一组
         if (options?.keepUploading) return true;
         setResult({
@@ -815,7 +833,7 @@ export default function UploadModal({ open, onClose, onConverted }: UploadModalP
     setError(null);
 
     // 纯文件夹上传：逐组打包走压缩包通道（每组独立 ZIP，服务端按组内路径解析），
-    // 最后一组完成时统一清队列并展示结果
+    // 各组统计累加，最后一组完成时统一清队列并展示汇总结果
     if (pendingFiles.length === 0 && pendingFolderGroups.length > 0) {
       const groups = pendingFolderGroups;
       void (async () => {
@@ -824,6 +842,7 @@ export default function UploadModal({ open, onClose, onConverted }: UploadModalP
         setUploading(true);
         setProgress(3);
         setProgressLabel('正在打包文件夹...');
+        const acc = { ok: 0, fail: 0, total: 0, drawings: 0, drawingFail: 0, skipped: 0 };
         for (let i = 0; i < groups.length; i++) {
           const isLast = i === groups.length - 1;
           setProgressLabel(`正在打包第 ${i + 1}/${groups.length} 个文件夹...`);
@@ -838,8 +857,20 @@ export default function UploadModal({ open, onClose, onConverted }: UploadModalP
           const ok = await handleArchiveFile(result.file, {
             keepQueue: !isLast,
             keepUploading: !isLast,
+            onAccumulate: (stats) => {
+              acc.ok += stats.ok;
+              acc.fail += stats.fail;
+              acc.total += stats.total;
+              acc.drawings += stats.drawings;
+              acc.drawingFail += stats.drawingFail;
+              acc.skipped += stats.skipped;
+            },
           });
           if (!ok) return; // handleArchiveFile 已设错误并中止，保留剩余组在队列里
+          // 最后一组：以汇总统计展示结果面板（handleArchiveFile 内部那份只含末组）
+          if (isLast && groups.length > 1) {
+            setResult({ type: 'archive', archiveType: 'ZIP', ...acc });
+          }
         }
       })();
       return;
@@ -926,8 +957,9 @@ export default function UploadModal({ open, onClose, onConverted }: UploadModalP
       }
       const hasDirectory = entries.some((entry) => entry.isDirectory);
       if (hasDirectory) {
-        // 文件夹拖入：异步展开（entry 可异步遍历）→ 轻量校验后追加进待传列表
-        // （每组一次拖入一个独立 ZIP，多次拖入互不混淆），点「开始上传」才打包走批量通道
+        // 文件夹拖入：异步展开（entry 可异步遍历）→ 按根文件夹拆组 → 轻量校验后追加进待传列表。
+        // 每个根文件夹一组、上传时打独立 ZIP——服务端「单零件文件夹」识别要求包内只有一个根目录，
+        // 多文件夹合包会被当成「分类/文件」树解析，标题就退化成文件名而不是文件夹名。
         void (async () => {
           setError(null);
           setExpandingFolders(true);
@@ -942,14 +974,35 @@ export default function UploadModal({ open, onClose, onConverted }: UploadModalP
               setError('文件夹为空或没有可上传的模型文件');
               return;
             }
-            const totalBytes = accepted.reduce((sum, { file }) => sum + file.size, 0);
-            if (totalBytes > archiveMaxBytes) {
-              setError(
-                `文件夹内容共 ${Math.round(totalBytes / 1024 / 1024)}MB，超过 ZIP/RAR 上限 ${archiveMaxSizeMb}MB，请分批拖入`,
-              );
+            const byRoot = new Map<string, FileWithPath[]>();
+            for (const item of accepted) {
+              const root = item.relativePath.split('/')[0] || item.file.name;
+              const list = byRoot.get(root) || [];
+              list.push(item);
+              byRoot.set(root, list);
+            }
+            const oversizedRoot = [...byRoot.entries()].find(
+              ([, list]) => list.reduce((sum, { file }) => sum + file.size, 0) > archiveMaxBytes,
+            );
+            if (oversizedRoot) {
+              setError(`文件夹「${oversizedRoot[0]}」内容超过 ZIP/RAR 上限 ${archiveMaxSizeMb}MB，请单独压缩后上传`);
               return;
             }
-            setPendingFolderGroups((prev) => [...prev, accepted]);
+            // 每个根文件夹一组；纯散文件（无目录层级）合为一组
+            const groups: FileWithPath[][] = [];
+            let looseFiles: FileWithPath[] | null = null;
+            for (const [, list] of byRoot) {
+              const isLoose = list.every(({ relativePath }) => !relativePath.includes('/'));
+              if (isLoose && byRoot.size === 1) {
+                groups.push(list);
+              } else if (isLoose) {
+                looseFiles = looseFiles ? [...looseFiles, ...list] : list;
+              } else {
+                groups.push(list);
+              }
+            }
+            if (looseFiles) groups.push(looseFiles);
+            setPendingFolderGroups((prev) => [...prev, ...groups]);
           } catch (err) {
             setError(err instanceof Error ? err.message : '文件夹上传失败，请重试');
           } finally {
@@ -1225,6 +1278,33 @@ export default function UploadModal({ open, onClose, onConverted }: UploadModalP
                       </div>
                     ))}
                   </div>
+                  {!uploading && (
+                    <div
+                      onDragOver={(e) => {
+                        e.preventDefault();
+                        setDragActive(true);
+                      }}
+                      onDragLeave={() => setDragActive(false)}
+                      onDrop={handleDrop}
+                      onClick={() => addMoreInputRef.current?.click()}
+                      className={`mb-4 flex items-center justify-center gap-2 border-2 border-dashed rounded-lg py-3 cursor-pointer text-sm transition-colors ${
+                        dragActive
+                          ? 'border-primary bg-primary-container/5 text-primary'
+                          : 'border-outline-variant/30 text-on-surface-variant hover:border-primary/50 hover:bg-surface-container/50'
+                      }`}
+                    >
+                      <input
+                        ref={addMoreInputRef}
+                        type="file"
+                        multiple
+                        accept={acceptedFormats}
+                        onChange={handleChange}
+                        className="hidden"
+                      />
+                      <Icon name="add" size={18} />
+                      <span>继续拖入或点击添加（文件夹 / 压缩包 / 文件）</span>
+                    </div>
+                  )}
                   {error && (
                     <motion.div
                       initial={{ opacity: 0, y: -10 }}
@@ -1266,9 +1346,12 @@ export default function UploadModal({ open, onClose, onConverted }: UploadModalP
                         className="flex-1 bg-primary-container text-on-primary rounded-sm px-4 py-2 text-sm font-medium hover:opacity-90 disabled:opacity-50"
                       >
                         开始上传 (
-                        {pendingFolderGroups.length > 0
-                          ? `${pendingFolderGroups.length} 个文件夹`
-                          : `${pendingFiles.length} 个文件`}
+                        {[
+                          pendingFolderGroups.length > 0 ? `${pendingFolderGroups.length} 个文件夹` : '',
+                          pendingFiles.length > 0 ? `${pendingFiles.length} 个文件` : '',
+                        ]
+                          .filter(Boolean)
+                          .join(' + ')}
                         )
                       </button>
                     </div>
