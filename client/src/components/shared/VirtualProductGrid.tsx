@@ -32,6 +32,9 @@ export default function VirtualProductGrid<TProduct>({
     getScrollElement: () => scrollRef.current,
     estimateSize: () => totalRowHeight,
     overscan: 3,
+    // 行高按渲染后的真实卡片高度测量：网格卡片是「正方形封面 + 文本区」，
+    // 实际高度随列宽变化，固定 260px 会在列宽较大时压缩/裁切缩略图
+    measureElement: (element) => element.getBoundingClientRect().height,
   });
 
   if (products.length < VIRTUALIZE_THRESHOLD) {
@@ -46,18 +49,17 @@ export default function VirtualProductGrid<TProduct>({
         return (
           <div
             key={virtualRow.index}
+            ref={virtualizer.measureElement}
+            data-index={virtualRow.index}
             style={{
               position: 'absolute',
               top: 0,
               left: 0,
               width: '100%',
-              height: `${virtualRow.size}px`,
               transform: `translateY(${virtualRow.start}px)`,
             }}
           >
-            <div className={gridClassName} style={{ height: `${rowHeight}px` }}>
-              {rowProducts.map((product, i) => renderCard(product, startIdx + i))}
-            </div>
+            <div className={gridClassName}>{rowProducts.map((product, i) => renderCard(product, startIdx + i))}</div>
           </div>
         );
       })}

@@ -59,6 +59,7 @@ import { getBusinessConfig } from '../lib/businessConfig';
 import { copyText } from '../lib/clipboard';
 import { getErrorMessage } from '../lib/errorNotifications';
 import {
+  HOME_RESET_EVENT,
   HOME_SEARCH_EVENT,
   HOME_SEARCH_MAX_LENGTH,
   dispatchHomeSearchQuery,
@@ -508,6 +509,37 @@ export default function HomePage() {
     searchQuery,
     setModelPageSize,
     setSearchParams,
+    usesManualHomePagination,
+  ]);
+
+  // 点 logo 回首页初始状态：清搜索 + 分类回「全部」+ 第 1 页 + 默认排序 + 清 URL 参数
+  useEffect(() => {
+    const handleBrowseReset = () => {
+      const shouldRefreshList =
+        Boolean(searchQuery.trim()) || activeCategory !== 'all' || page !== 1 || sortBy !== 'created_at';
+      if (shouldRefreshList) {
+        setListRefreshPending(true);
+        resetHomeListViewportForRefresh(HOME_REFRESH_SCROLL_TARGET, usesManualHomePagination);
+      }
+      setActiveCategory('all');
+      setSearchQuery('');
+      saveHomeSearchQuery('');
+      setSortBy('created_at');
+      setPage(1);
+      void setModelPageSize(1);
+      if (searchParams.toString()) setSearchParams(new URLSearchParams(), { replace: true });
+    };
+    window.addEventListener(HOME_RESET_EVENT, handleBrowseReset);
+    return () => window.removeEventListener(HOME_RESET_EVENT, handleBrowseReset);
+  }, [
+    activeCategory,
+    page,
+    resetHomeListViewportForRefresh,
+    searchParams,
+    searchQuery,
+    setModelPageSize,
+    setSearchParams,
+    sortBy,
     usesManualHomePagination,
   ]);
 

@@ -33,6 +33,7 @@ import { getBusinessConfig } from '../../lib/businessConfig';
 import {
   HOME_SEARCH_EVENT,
   HOME_SEARCH_MAX_LENGTH,
+  dispatchHomeBrowseReset,
   dispatchHomeSearchQuery,
   normalizeHomeSearchQuery,
   readHomeSearchQuery,
@@ -945,7 +946,9 @@ function TopNavContent({ compact = false, onMenuToggle, source = 'standalone' }:
       onClick={(e) => {
         if (location.pathname === '/') {
           e.preventDefault();
+          // 已在首页：点 logo = 回到首页初始状态（清搜索 + 分类回「全部」+ 第 1 页）
           handleClearSearch();
+          dispatchHomeBrowseReset();
           requestAnimationFrame(() => {
             const scroller =
               document.querySelector<HTMLElement>('.home-scroll-container') ||
@@ -1133,7 +1136,9 @@ function TopNavContent({ compact = false, onMenuToggle, source = 'standalone' }:
               onClick={(e) => {
                 if (location.pathname === '/') {
                   e.preventDefault();
+                  // 已在首页：点 logo = 回到首页初始状态（清搜索 + 分类回「全部」+ 第 1 页）
                   handleClearSearch();
+                  dispatchHomeBrowseReset();
                   requestAnimationFrame(() => {
                     const scroller =
                       document.querySelector<HTMLElement>('.home-scroll-container') ||

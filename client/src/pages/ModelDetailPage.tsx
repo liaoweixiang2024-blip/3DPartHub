@@ -10,7 +10,7 @@ import {
   isDownloadAuthRequiredError,
   openModelDrawing,
 } from '../api/downloads';
-import { modelApi, type DrawingRef, type ServerModelListResponse } from '../api/models';
+import { modelApi, type DrawingRef, type PaginatedModelListPage } from '../api/models';
 import { updateSettings } from '../api/settings';
 import CadViewerPanel from '../components/3d/CadViewerPanel';
 import type { ViewMode, CameraPreset } from '../components/3d/ModelViewer';
@@ -1081,15 +1081,24 @@ export default function ModelDetailPage() {
         }}
         onDelete={async () => {
           await modelApi.delete(modelData.id);
+          // 缓存里存的是 mapListResponse 映射后的 camelCase 分页对象（含 totalPages），
+          // 不能按原始 snake_case 服务端响应处理——丢了 totalPages 会让 useInfiniteModels
+          // 的 getKey/hasMore 读到 undefined 抛 TypeError（曾表现为 toast 弹压缩源码）
           globalMutate(
             (k: string) => typeof k === 'string' && k.includes('/models/infinite'),
-            (pages: ServerModelListResponse[] | undefined) => {
+            (pages: PaginatedModelListPage[] | undefined) => {
               if (!pages) return pages;
-              return pages.map((p) => ({
-                ...p,
-                items: p.items?.filter((m) => m.model_id !== modelData.id),
-                total: Math.max(0, (p.total ?? 0) - (p.items?.some((m) => m.model_id === modelData.id) ? 1 : 0)),
-              }));
+              return pages.map((p) => {
+                const nextItems = p.items.filter((m) => m.model_id !== modelData.id);
+                if (nextItems.length === p.items.length) return p;
+                const nextTotal = Math.max(0, p.total - 1);
+                return {
+                  ...p,
+                  items: nextItems,
+                  total: nextTotal,
+                  totalPages: Math.max(1, Math.ceil(nextTotal / Math.max(1, p.pageSize || 20))),
+                };
+              });
             },
             false,
           );

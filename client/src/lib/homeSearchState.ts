@@ -1,5 +1,6 @@
 export const HOME_SEARCH_QUERY_KEY = 'home_model_search_query_v1';
 export const HOME_SEARCH_EVENT = 'home-model-search-change';
+export const HOME_RESET_EVENT = 'home-model-browse-reset';
 export const HOME_SEARCH_MAX_LENGTH = 200;
 
 export type HomeSearchEventDetail = {
@@ -52,4 +53,10 @@ export function dispatchHomeSearchQuery(
       },
     }),
   );
+}
+
+/** 首页「回到初始状态」：清搜索 + 分类回「全部」+ 第 1 页（点 logo 时派发） */
+export function dispatchHomeBrowseReset() {
+  if (typeof window === 'undefined') return;
+  window.dispatchEvent(new CustomEvent(HOME_RESET_EVENT));
 }

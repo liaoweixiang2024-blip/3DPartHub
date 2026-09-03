@@ -199,6 +199,9 @@ export interface ServerModelListResponse {
   page_size: number;
 }
 
+/** SWR 缓存里 `/models/infinite` 各页的实际形态：mapListResponse 映射后的 camelCase 分页对象 */
+export type PaginatedModelListPage = PaginatedResponse<ServerModelListItem>;
+
 export interface DeletedModelListItem {
   model_id: string;
   name: string;
