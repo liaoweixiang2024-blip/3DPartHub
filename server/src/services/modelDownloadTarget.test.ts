@@ -36,11 +36,11 @@ test('resolves original DB model download target', () => {
   );
 
   assert.equal(target?.filePath, uploadPath);
-  assert.equal(target?.fileName, 'Pump.step');
+  assert.equal(target?.fileName, 'pump-source.step');
   assert.deepEqual(target?.record, { modelId: 'pump', format: 'step', fileSize: 123 });
 });
 
-test('uses model number suffix after underscore for DB download filenames', () => {
+test('keeps full original name with category prefix for DB downloads', () => {
   const uploadPath = join(root, 'uploads', 'elbow.step');
   mkdirSync(join(root, 'uploads'), { recursive: true });
   writeFileSync(uploadPath, 'step');
@@ -58,10 +58,10 @@ test('uses model number suffix after underscore for DB download filenames', () =
     'original',
   );
 
-  assert.equal(target?.fileName, 'SLH-1寸x19.step');
+  assert.equal(target?.fileName, '不锈钢弯宝塔_SLH-1寸x19.step');
 });
 
-test('keeps slash fractions inside model numbers when deriving download filenames', () => {
+test('prefers original name even when it looks like a fragment', () => {
   const uploadPath = join(root, 'uploads', 'fraction.step');
   mkdirSync(join(root, 'uploads'), { recursive: true });
   writeFileSync(uploadPath, 'step');
@@ -79,7 +79,7 @@ test('keeps slash fractions inside model numbers when deriving download filename
     'original',
   );
 
-  assert.equal(target?.fileName, 'SCFM-1_2.step');
+  assert.equal(target?.fileName, '2.step');
 });
 
 test('uses model folder title while downloading actual model file name for structured archive uploads', () => {
@@ -182,7 +182,7 @@ test('resolves preview DB model download target when original is not requested',
   });
 
   assert.equal(target?.filePath, previewPath);
-  assert.equal(target?.fileName, 'Pump.glb');
+  assert.equal(target?.fileName, 'pump-source.glb');
   assert.deepEqual(target?.record, { modelId: 'pump', format: 'glb', fileSize: 456 });
 });
 
