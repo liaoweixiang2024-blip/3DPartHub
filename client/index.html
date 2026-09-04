@@ -37,7 +37,11 @@
           }
           if (cfg.site_favicon) {
             var link = document.querySelector('link[rel="icon"]');
-            if (link) link.href = cfg.site_favicon;
+            // SSI 已注入后台配置的 favicon（生产）：路径一致就不要改写 href——
+            // 加载后变更 favicon 链接会触发 Chrome「首次打开不显示、刷新才出现」
+            if (link && (link.getAttribute('href') || '').split('?')[0] !== cfg.site_favicon) {
+              link.href = cfg.site_favicon;
+            }
           }
           var themeRaw = localStorage.getItem('theme-storage');
           var themeState = themeRaw && JSON.parse(themeRaw).state;

@@ -445,7 +445,13 @@ function applyFavicon() {
     }
     for (const link of iconLinks) {
       link.type = iconType;
-      link.href = bust(favicon);
+      // href 路径未变时不动它：每次加载都加时间戳改写，会让 Chrome 认为
+      // favicon 变了又不重绘当前标签页——表现为「首次打开无图标，刷新才显示」。
+      // 只有管理员真的换了图标（路径变化）才改写并加 cache-buster。
+      const currentPath = (link.getAttribute('href') || '').split('?')[0];
+      if (currentPath !== favicon) {
+        link.href = bust(favicon);
+      }
     }
   }
 
@@ -456,7 +462,10 @@ function applyFavicon() {
       touchLink.rel = 'apple-touch-icon';
       document.head.appendChild(touchLink);
     }
-    touchLink.href = bust(appIcon);
+    const currentTouchPath = (touchLink.getAttribute('href') || '').split('?')[0];
+    if (currentTouchPath !== appIcon) {
+      touchLink.href = bust(appIcon);
+    }
   }
 }
 
