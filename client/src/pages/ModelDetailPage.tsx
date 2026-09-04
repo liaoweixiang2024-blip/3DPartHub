@@ -1081,14 +1081,14 @@ export default function ModelDetailPage() {
         }}
         onDelete={async () => {
           await modelApi.delete(modelData.id);
-          // 缓存里存的是 mapListResponse 映射后的 camelCase 分页对象（含 totalPages），
-          // 不能按原始 snake_case 服务端响应处理——丢了 totalPages 会让 useInfiniteModels
-          // 的 getKey/hasMore 读到 undefined 抛 TypeError（曾表现为 toast 弹压缩源码）
+          // SWR infinite 的每页以独立 key 缓存为「单个分页对象」（汇总数组在 $inf$ key 下，
+          // 全局 mutate 的 keyFilter 会跳过它）——所以这里 updater 收到的是单对象而非页数组，
+          // 必须兼容两种形态，且保留 totalPages（丢了会让翻页/hasMore 读到 undefined 报错）
           globalMutate(
             (k: string) => typeof k === 'string' && k.includes('/models/infinite'),
-            (pages: PaginatedModelListPage[] | undefined) => {
-              if (!pages) return pages;
-              return pages.map((p) => {
+            (page: PaginatedModelListPage | PaginatedModelListPage[] | undefined) => {
+              const updatePage = (p: PaginatedModelListPage | undefined): PaginatedModelListPage | undefined => {
+                if (!p || !Array.isArray(p.items)) return p;
                 const nextItems = p.items.filter((m) => m.model_id !== modelData.id);
                 if (nextItems.length === p.items.length) return p;
                 const nextTotal = Math.max(0, p.total - 1);
@@ -1098,7 +1098,9 @@ export default function ModelDetailPage() {
                   total: nextTotal,
                   totalPages: Math.max(1, Math.ceil(nextTotal / Math.max(1, p.pageSize || 20))),
                 };
-              });
+              };
+              if (Array.isArray(page)) return page.map(updatePage).filter(Boolean) as PaginatedModelListPage[];
+              return updatePage(page);
             },
             false,
           );

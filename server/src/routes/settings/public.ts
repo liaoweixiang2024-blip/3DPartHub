@@ -1,5 +1,8 @@
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { Router, Response } from 'express';
 import { cacheGetOrSet, TTL } from '../../lib/cache.js';
+import { config } from '../../lib/config.js';
 import { getMaintenanceStatus } from '../../lib/maintenance.js';
 import {
   buildFooterCopyright,
@@ -11,6 +14,8 @@ import {
   normalizeFooterLinksSetting,
 } from '../../lib/settings.js';
 import { getLocalVersion } from '../../lib/update.js';
+import { authMiddleware } from '../../middleware/auth.js';
+import { requireRole } from '../../middleware/rbac.js';
 
 function readTtlSeconds(value: unknown, fallback: number): number {
   const parsed = Number(value);
@@ -43,6 +48,34 @@ function iconTypeFor(href: string): string {
   return 'image/png';
 }
 
+/**
+ * 读取站内 PNG 的真实宽高（IHDR 头），用于 manifest icons 的 sizes 声明。
+ * 声明与真实尺寸不符时，Chrome 桌面安装流程可能弃用该图标（PWA 安装图标异常的
+ * 常见来源）。非站内路径 / 非 PNG / 读取失败时返回 null，调用方退回保守声明。
+ */
+function localPngSize(href: string): { width: number; height: number } | null {
+  if (!href.startsWith('/static/')) return null;
+  try {
+    const filePath = join(process.cwd(), config.staticDir, href.slice('/static/'.length));
+    const buf = readFileSync(filePath);
+    // PNG 签名 8 字节 + IHDR 长度/类型 8 字节，宽高在偏移 16/20
+    if (buf.length < 24 || !buf.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])))
+      return null;
+    const width = buf.readUInt32BE(16);
+    const height = buf.readUInt32BE(20);
+    if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) return null;
+    return { width, height };
+  } catch {
+    return null;
+  }
+}
+
+/** manifest 图标尺寸声明：PNG 读真实尺寸；其他格式退回 192x192 保守值 */
+function manifestIconSizes(href: string): string {
+  const size = href.endsWith('.png') ? localPngSize(href) : null;
+  return size ? `${size.width}x${size.height}` : '192x192';
+}
+
 /** 后端不可用时的兜底 head 片段（与 client/public/head-fragment-default.html 保持一致） */
 const DEFAULT_HEAD_FRAGMENT =
   '<title>3DPartHub</title>\n' +
@@ -65,6 +98,16 @@ export function createSettingsPublicRouter() {
       res.json({ current });
     } catch {
       res.json({ current: 'unknown' });
+    }
+  });
+
+  // 管理端用：修复引擎（gmsh）是否可用——详情页「修复预览」按钮按此提示
+  router.get('/api/settings/gmsh-available', authMiddleware, requireRole('ADMIN'), async (_req, res: Response) => {
+    try {
+      const { isGmshAvailable } = await import('../../services/gmshFallback.js');
+      res.json({ available: isGmshAvailable() });
+    } catch {
+      res.json({ available: false });
     }
   });
 
@@ -345,7 +388,9 @@ export function createSettingsPublicRouter() {
         background_color: '#faf9f7',
         theme_color: '#faf9f7',
         icons: [
-          { src: appIcon, sizes: '192x192', type: iconTypeFor(appIcon) },
+          // sizes 声明 PNG 真实尺寸：虚报 192x192 而实为 512（或更小）时，
+          // Chrome 桌面安装流程可能弃用该图标，表现即「设置了应用图标但 PC 端不生效」
+          { src: appIcon, sizes: manifestIconSizes(appIcon), type: iconTypeFor(appIcon) },
           ...(appIcon === '/android-chrome-192.png'
             ? [{ src: '/favicon-512.png', sizes: '512x512', type: 'image/png' }]
             : []),

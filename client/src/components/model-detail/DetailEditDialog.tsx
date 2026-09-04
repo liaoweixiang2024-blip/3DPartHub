@@ -43,6 +43,8 @@ export function DetailEditDialog({
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [thumbUploading, setThumbUploading] = useState(false);
   const [regenerating, setRegenerating] = useState(false);
+  const [gmshBusy, setGmshBusy] = useState(false);
+  const [gmshAvailable, setGmshAvailable] = useState<boolean | null>(null);
   const [thumbUrl, setThumbUrl] = useState(initialThumb);
   const [drawingUploading, setDrawingUploading] = useState(false);
   const [drawings, setDrawings] = useState<DrawingRef[]>(initialDrawings);
@@ -57,8 +59,12 @@ export function DetailEditDialog({
       setCatId(initialCat || '');
       setThumbUrl(initialThumb);
       setDrawings(initialDrawings);
+      // 管理员打开弹窗时探测 gmsh 是否可用（非管理员静默失败保持 null）
+      if (gmshAvailable === null) {
+        void modelApi.gmshAvailable().then(setGmshAvailable);
+      }
     }
-  }, [open, modelName, initialCat, initialThumb, initialDrawings]);
+  }, [open, modelName, initialCat, initialThumb, initialDrawings, gmshAvailable]);
 
   if (!open) return null;
 
@@ -180,9 +186,47 @@ export function DetailEditDialog({
                       size="sm"
                       variant="secondary"
                     >
-                      {regenerating ? '生成中...' : '从模型重新生成'}
+                      {regenerating ? '生成中...' : '重新生成（标准引擎）'}
                     </AdminButton>
                   </div>
+                </div>
+              </div>
+              <div className="rounded-sm border border-outline-variant/30 bg-surface-container-lowest/50 p-2.5">
+                <p className="text-[11px] text-on-surface-variant leading-relaxed">
+                  预览缺零件或有破面？标准转换引擎对个别几何会丢面——用修复引擎（gmsh）重新转换整个模型，两套引擎可分别重转互不影响。
+                </p>
+                <div className="mt-2">
+                  {gmshAvailable === false ? (
+                    <p className="text-[11px] text-error leading-relaxed">
+                      服务器未安装 gmsh，修复引擎不可用。需在服务器安装 gmsh 并挂载给 API 容器后重试。
+                    </p>
+                  ) : (
+                    <AdminButton
+                      onClick={async () => {
+                        setGmshBusy(true);
+                        let ok = false;
+                        try {
+                          const r = await modelApi.reconvertGmsh(modelId);
+                          setThumbUrl(r.thumbnail_url);
+                          toast('修复引擎转换完成，请检查预览', 'success');
+                          ok = true;
+                        } catch (err) {
+                          const message = (err as { response?: { data?: { detail?: string } } })?.response?.data
+                            ?.detail;
+                          toast(message || '修复引擎转换失败', 'error');
+                        } finally {
+                          setGmshBusy(false);
+                        }
+                        if (ok) onSaved();
+                      }}
+                      disabled={gmshBusy}
+                      icon="build"
+                      size="sm"
+                      variant="secondary"
+                    >
+                      {gmshBusy ? '修复中...' : '修复预览（gmsh 引擎）'}
+                    </AdminButton>
+                  )}
                 </div>
               </div>
               <div className="flex flex-col gap-1.5">

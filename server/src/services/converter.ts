@@ -73,7 +73,7 @@ export interface PreviewMeta {
   tree: Array<{ id: string; name: string; children: string[] }>;
   diagnostics: {
     generatedAt: string;
-    converter: 'occt-import-js';
+    converter: 'occt-import-js' | 'gmsh-fallback';
     tessellation: OcctImportParams;
     sourceMeshCount: number;
     validMeshCount: number;
@@ -557,6 +557,115 @@ function writeGlb(gltf: object, binData: Buffer, outputDir: string, modelId: str
   return glbPath;
 }
 
+/**
+ * 修复预览：用 gmsh 兜底引擎重新网格化并覆写该模型的 GLB。
+ *
+ * 适用场景：主引擎（occt-import-js / OCCT 7.6 BRepMesh）静默丢面的模型——
+ * 预览缺零件或缺面（实测案例：整个浮球丢失、斜管中段缺失）。gmsh 对这类
+ * 几何能完整网格化。管理员在模型详情/管理页点「修复预览」触发。
+ * 产物与主管线一致（同一 meshesToGltf），预览/结构树/缩略图全部兼容。
+ */
+export async function reconvertModelWithGmsh(
+  inputPath: string,
+  outputDir: string,
+  modelId: string,
+  originalName: string,
+  options: ConvertStepToGltfOptions = {},
+): Promise<GltfAsset> {
+  const startedAt = Date.now();
+  mkdirSync(outputDir, { recursive: true });
+
+  // 先用主引擎跑一遍拿包围盒（gmsh 网格密度按模型尺寸定标）；
+  // 主引擎失败/为空时用保守默认值
+  let estimatedSize = 100;
+  let dominantColor: [number, number, number] | null = null;
+  try {
+    const occt = await occtimportjs();
+    const fileBuffer = new Uint8Array(readFileSync(inputPath));
+    const nameToCheck = originalName || inputPath;
+    const ext = nameToCheck.split('.').pop()?.toLowerCase();
+    const probe: OcctResult =
+      ext === 'iges' || ext === 'igs'
+        ? (occt.ReadIgesFile(fileBuffer, null) as OcctResult)
+        : (occt.ReadStepFile(fileBuffer, null) as OcctResult);
+    let minC = [Infinity, Infinity, Infinity];
+    let maxC = [-Infinity, -Infinity, -Infinity];
+    let colorSum = [0, 0, 0];
+    let colorVerts = 0;
+    for (const m of probe?.meshes || []) {
+      const arr = m.attributes.position.array;
+      const verts = arr.length / 3;
+      // 整体色：按顶点数加权平均所有零件的 STEP 颜色——gmsh 输出单 mesh 无法
+      // 分零件着色，用加权均值让整体明暗观感与原模型（多零件多色）一致，
+      // 避免缩略图比修复前明显偏亮或偏暗
+      // 无 STEP 颜色的零件按主管线 default 材质灰计入，保证与主管线缩略图明暗一致
+      const partColor = m.color || [0.75, 0.75, 0.78];
+      colorSum[0] += partColor[0] * verts;
+      colorSum[1] += partColor[1] * verts;
+      colorSum[2] += partColor[2] * verts;
+      colorVerts += verts;
+      for (let i = 0; i < arr.length; i += 3) {
+        for (let k = 0; k < 3; k++) {
+          const v = arr[i + k];
+          if (v < minC[k]) minC[k] = v;
+          if (v > maxC[k]) maxC[k] = v;
+        }
+      }
+    }
+    if (Number.isFinite(minC[0])) {
+      estimatedSize = Math.max(maxC[0] - minC[0], maxC[1] - minC[1], maxC[2] - minC[2]);
+    }
+    if (colorVerts > 0) {
+      dominantColor = [colorSum[0] / colorVerts, colorSum[1] / colorVerts, colorSum[2] / colorVerts];
+    }
+  } catch {
+    /* probe 失败不影响兜底流程 */
+  }
+
+  const { convertStepViaGmsh, isGmshAvailable } = await import('./gmshFallback.js');
+  if (!isGmshAvailable()) {
+    throw new Error('服务器未安装 gmsh，无法使用修复引擎（请联系管理员在容器内安装 gmsh）');
+  }
+  const fallback = convertStepViaGmsh(inputPath, estimatedSize, dominantColor);
+  if (!fallback) {
+    throw new Error('修复引擎（gmsh）转换失败，请稍后重试或检查源文件');
+  }
+
+  const sourceName = originalName || basename(inputPath);
+  const mesh = fallback as unknown as OcctMesh;
+  const { json, bin, meta } = meshesToGltf([mesh], sourceName, {
+    sourceFormat: 'step+gmsh',
+    sourceMeshCount: 1,
+    skippedMeshCount: 0,
+    tessellation: { linearDeflectionType: 'bounding_box_ratio', linearDeflection: 0.001, angularDeflection: 0.15 },
+    conversionMs: Date.now() - startedAt,
+  });
+  meta.diagnostics.converter = 'gmsh-fallback';
+  if (meta.parts.length === 0) throw new Error('修复引擎未产生有效零件数据');
+
+  const gltfPath = writeGlb(json, bin, outputDir, modelId);
+  await persistFile(gltfPath);
+  const originalSize = statSync(inputPath).size;
+  const gltfSize = readFileSync(gltfPath).length;
+  const cacheVersion = Date.now().toString(36);
+  meta.diagnostics.asset = {
+    gltfSize,
+    originalSize,
+    compressionRatio: originalSize > 0 ? Number((gltfSize / originalSize).toFixed(4)) : null,
+    cacheVersion,
+  };
+
+  return {
+    modelId,
+    gltfPath,
+    gltfUrl: versionedAssetUrl(`${options.urlBase || '/static/models'}/${modelId}.glb`, cacheVersion),
+    originalName: sourceName,
+    gltfSize,
+    originalSize,
+    previewMeta: meta,
+  };
+}
+
 export async function convertStepToGltf(
   inputPath: string,
   outputDir: string,
@@ -605,6 +714,13 @@ export async function convertStepToGltf(
   if (validMeshes.length === 0) {
     throw new Error('模型文件中无有效顶点数据');
   }
+
+  // ── 兜底引擎说明（2026-09）──
+  // occt-import-js 的 WASM OCCT 7.6 BRepMesh 对特定几何会静默丢面（实测丢过整个
+  // 浮球 solid 和喷嘴管中段）。曾尝试自动检测（断口/面数比/表面积比）但误报率
+  // 不可控（CAD 零件形状太多样）。最终方案：不自动切换，提供手动「修复预览」
+  // 重转接口（POST /api/models/:id/reconvert-gmsh）走 gmsh 完整网格化，
+  // 见 gmshFallback.ts 与 models/reconvert.ts。
 
   const sourceName = originalName || basename(inputPath);
   const { json, bin, meta } = meshesToGltf(validMeshes, sourceName, {

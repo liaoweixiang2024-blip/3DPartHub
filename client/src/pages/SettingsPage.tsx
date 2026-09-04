@@ -5459,9 +5459,59 @@ function Content() {
     }
   }
 
+  /** 读取 PNG 宽高；返回 null 表示非 PNG 或读取失败（跳过校验） */
+  function readPngDimensions(file: File): Promise<{ width: number; height: number } | null> {
+    return new Promise((resolve) => {
+      const reader = new FileReader();
+      reader.onload = () => {
+        try {
+          const buf = new Uint8Array(reader.result as ArrayBuffer);
+          const sig = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a];
+          if (buf.length < 24 || sig.some((b, i) => buf[i] !== b)) return resolve(null);
+          const view = new DataView(buf.buffer, buf.byteOffset, buf.byteLength);
+          resolve({ width: view.getUint32(16), height: view.getUint32(20) });
+        } catch {
+          resolve(null);
+        }
+      };
+      reader.onerror = () => resolve(null);
+      reader.readAsArrayBuffer(file);
+    });
+  }
+
+  /**
+   * 方形图标上传前的尺寸提示。
+   * 返回：'abort'（严重不符，用户选择不上传——当前实现为过小图标直接拦）、
+   * 提示文案（警告但允许继续）、''（无需提示）。
+   */
+  async function checkSquareIconSize(file: File, key: string): Promise<'abort' | '' | string> {
+    const dims = await readPngDimensions(file);
+    if (!dims) return '';
+    const { width, height } = dims;
+    const label = key === 'site_app_icon' ? '应用图标' : key === 'site_icon' ? '站点图标' : 'Favicon 图标';
+    if (width !== height) {
+      toast(`${label}建议正方形（当前 ${width}×${height}）：非正方形图在手机主屏/PC 安装图标上会被裁切或弃用`, 'error');
+      return 'abort';
+    }
+    if (key === 'site_app_icon' && width < 192) {
+      toast(`应用图标建议 ≥192×192（当前 ${width}×${width}），过小在 PC 端安装后会模糊`, 'info');
+    }
+    return '';
+  }
+
   async function handleImageUpload(key: string, e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
+    // 方形图标类上传前先量尺寸：非正方形/过小的应用图标会导致 Chrome 桌面安装
+    // 流程弃用该图标（PWA 规范要求 ≥144 且建议正方形），提前给出提示
+    if (['site_app_icon', 'site_icon', 'site_favicon'].includes(key) && file.type === 'image/png') {
+      const sizeWarn = await checkSquareIconSize(file, key);
+      if (sizeWarn === 'abort') {
+        if (imageInputRefs.current[key]) imageInputRefs.current[key]!.value = '';
+        return;
+      }
+      if (sizeWarn) toast(sizeWarn, 'info');
+    }
     setUploading(true);
     try {
       const { url } = await uploadImage(file, key);

@@ -687,6 +687,34 @@ export const modelApi = {
     }>(res);
   },
 
+  /** 修复预览：gmsh 兜底引擎重转——主引擎静默丢面（预览缺零件/断管）时使用 */
+  reconvertGmsh: async (
+    id: string,
+  ): Promise<{
+    model_id: string;
+    gltf_size: number;
+    thumbnail_url: string | null;
+    preview_meta?: ModelPreviewMeta | null;
+  }> => {
+    const res = await client.post(`/models/${id}/reconvert-gmsh`);
+    return unwrapResponse<{
+      model_id: string;
+      gltf_size: number;
+      thumbnail_url: string | null;
+      preview_meta?: ModelPreviewMeta | null;
+    }>(res);
+  },
+
+  /** 修复引擎（gmsh）是否可用：未安装时详情页按此提示 */
+  gmshAvailable: async (): Promise<boolean> => {
+    try {
+      const res = await client.get('/settings/gmsh-available');
+      return unwrapResponse<{ available: boolean }>(res).available === true;
+    } catch {
+      return false;
+    }
+  },
+
   replaceFile: async (id: string, file: File): Promise<{ model_id: string; status: string }> => {
     const form = new FormData();
     form.append('file', file);

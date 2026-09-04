@@ -137,6 +137,9 @@ services:
       - uploads-data:/app/uploads
       - static-data:/app/static
       - ./server/static/backups:/app/static/backups
+      # 修复预览引擎（可选）：宿主机安装 gmsh 后挂载进容器
+      # （alpine 镜像无 gmsh 包；宿主执行：apt install -y gmsh 或 brew install gmsh）
+      # - /usr/bin/gmsh:/usr/local/host-bin/gmsh:ro
     healthcheck:
       test: ['CMD-SHELL', 'curl -fsS http://localhost:8000/api/health/ready >/dev/null || exit 1']
       interval: 30s

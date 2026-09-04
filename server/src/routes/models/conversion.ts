@@ -10,7 +10,7 @@ import { conversionQueue } from '../../lib/queue.js';
 import { persistFile } from '../../lib/storageProvider.js';
 import { authMiddleware, type AuthRequest } from '../../middleware/auth.js';
 import { requireRole } from '../../middleware/rbac.js';
-import { convertStepToGltf } from '../../services/converter.js';
+import { convertStepToGltf, reconvertModelWithGmsh } from '../../services/converter.js';
 import { findPreviewAssetPath } from '../../services/gltfAsset.js';
 import { parseStepFileDate } from '../../services/modelFileDates.js';
 import {
@@ -342,6 +342,115 @@ export function createModelConversionRouter({ prisma, getMeta, saveMeta, getPrev
           .catch(() => {});
         logger.error({ err }, 'Re-convert failed');
         res.status(500).json({ detail: '重新转换失败' });
+      }
+    },
+  );
+
+  // Repair a broken preview: re-mesh with the gmsh fallback engine.
+  // For models whose main conversion silently dropped faces (missing parts /
+  // holes in the preview) — the main engine (OCCT 7.6 BRepMesh) fails on some
+  // geometries that gmsh handles correctly.
+  router.post(
+    '/api/models/:id/reconvert-gmsh',
+    authMiddleware,
+    requireRole('ADMIN'),
+    async (req: AuthRequest, res: Response) => {
+      const id = req.params.id as string;
+
+      if (!prisma) {
+        res.status(503).json({ detail: '数据库未连接' });
+        return;
+      }
+
+      try {
+        const m = await prisma.model.findUnique({ where: { id } });
+        if (!m) {
+          res.status(404).json({ detail: '模型不存在' });
+          return;
+        }
+        if (m.status === MODEL_STATUS.QUEUED || m.status === MODEL_STATUS.PROCESSING) {
+          res.status(409).json({ detail: '模型正在转换中，请稍后重试' });
+          return;
+        }
+        const origPath = findOriginalModelPath(m);
+        if (!origPath || !existsSync(origPath)) {
+          res.status(400).json({ detail: '模型无原始 STEP/IGES 文件，无法用修复引擎重转' });
+          return;
+        }
+        const ext = (m.originalFormat || m.format || '').toLowerCase();
+        if (!['step', 'stp'].includes(ext)) {
+          res.status(400).json({ detail: '修复引擎目前仅支持 STEP 文件' });
+          return;
+        }
+
+        const statusUpdate = await prisma.model.updateMany({
+          where: { id, status: { notIn: [MODEL_STATUS.QUEUED, MODEL_STATUS.PROCESSING] } },
+          data: { status: MODEL_STATUS.PROCESSING },
+        });
+        if (statusUpdate.count === 0) {
+          res.status(409).json({ detail: '模型正在转换中，请稍后重试' });
+          return;
+        }
+
+        const modelDir = join(config.staticDir, 'models');
+        const result = await reconvertModelWithGmsh(origPath, modelDir, m.id, m.originalName || `${m.id}.${m.format}`);
+
+        let thumbnailUrl = m.thumbnailUrl;
+        if (existsSync(result.gltfPath)) {
+          // 与上传主管线（conversionRunner）同款软件渲染器：渐变浅灰底、统一光照。
+          // 浏览器渲染器是纯白底 + 更亮的 HDR 环境，与库里既有缩略图观感不一致。
+          try {
+            const thumb = generateThumbnail(result.gltfPath, join(config.staticDir, 'thumbnails'), m.id);
+            thumbnailUrl = thumb.thumbnailUrl;
+          } catch {
+            /* keep old thumbnail */
+          }
+        }
+
+        const ts = Date.now();
+        const versionedThumb = thumbnailUrl ? `${thumbnailUrl.split('?')[0]}?t=${ts}` : null;
+
+        await prisma.model.update({
+          where: { id },
+          data: {
+            gltfUrl: result.gltfUrl,
+            gltfSize: result.gltfSize,
+            ...(versionedThumb ? { thumbnailUrl: versionedThumb } : {}),
+            previewMeta: toPrismaJson(result.previewMeta),
+            status: MODEL_STATUS.COMPLETED,
+          },
+        });
+
+        await cacheDelByPrefix('cache:models:');
+        const previewMeta = await getPreviewMeta(m.id, {
+          gltfUrl: result.gltfUrl,
+          originalName: m.originalName,
+          format: m.format,
+          previewMeta: toPrismaJson(result.previewMeta),
+        });
+
+        res.json({
+          success: true,
+          data: {
+            model_id: m.id,
+            name: m.name,
+            gltf_url: result.gltfUrl,
+            gltf_size: result.gltfSize,
+            thumbnail_url: versionedThumb,
+            engine: 'gmsh',
+            preview_meta: previewMeta,
+          },
+        });
+      } catch (err: unknown) {
+        await prisma.model
+          .update({
+            where: { id },
+            data: { status: MODEL_STATUS.FAILED },
+          })
+          .catch(() => {});
+        logger.error({ err }, '[conversion] gmsh re-convert failed');
+        const message = err instanceof Error ? err.message : '修复引擎重转失败';
+        res.status(500).json({ detail: message });
       }
     },
   );
