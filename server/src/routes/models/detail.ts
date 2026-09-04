@@ -100,6 +100,12 @@ export function createModelDetailRouter({
             res.status(404).json({ detail: '模型不存在' });
             return;
           }
+          // 回收站中的模型对所有人（含管理员之外的访问者）视为不存在；
+          // 管理员保留可见性便于在回收站里预览确认后再恢复/彻底删除
+          if (m.status === MODEL_STATUS.DELETED && authPayload?.role !== 'ADMIN') {
+            res.status(404).json({ detail: '模型已删除' });
+            return;
+          }
           if (m.categoryId && invisible.has(m.categoryId)) {
             res.status(403).json({ detail: '无权访问该模型' });
             return;
@@ -230,6 +236,11 @@ export function createModelDetailRouter({
     }
     if (m.status !== MODEL_STATUS.COMPLETED && !canViewUnpublished) {
       res.status(404).json({ detail: '模型不存在' });
+      return;
+    }
+    // 与 DB 路径一致：回收站中的模型非管理员一律 404
+    if (m.status === MODEL_STATUS.DELETED && authPayload?.role !== 'ADMIN') {
+      res.status(404).json({ detail: '模型已删除' });
       return;
     }
     if (typeof m.category_id === 'string' && invisible.has(m.category_id)) {

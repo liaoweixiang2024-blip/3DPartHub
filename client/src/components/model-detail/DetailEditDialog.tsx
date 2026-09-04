@@ -45,6 +45,8 @@ export function DetailEditDialog({
   const [regenerating, setRegenerating] = useState(false);
   const [gmshBusy, setGmshBusy] = useState(false);
   const [gmshAvailable, setGmshAvailable] = useState<boolean | null>(null);
+  const [showGmshHelp, setShowGmshHelp] = useState(false);
+  const [gmshCmdCopied, setGmshCmdCopied] = useState<string | null>(null);
   const [thumbUrl, setThumbUrl] = useState(initialThumb);
   const [drawingUploading, setDrawingUploading] = useState(false);
   const [drawings, setDrawings] = useState<DrawingRef[]>(initialDrawings);
@@ -67,6 +69,22 @@ export function DetailEditDialog({
   }, [open, modelName, initialCat, initialThumb, initialDrawings, gmshAvailable]);
 
   if (!open) return null;
+
+  const copyGmshCmd = async (text: string, key: string) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      setGmshCmdCopied(key);
+      window.setTimeout(() => setGmshCmdCopied(null), 1500);
+    } catch {
+      setGmshCmdCopied(null);
+    }
+  };
+
+  const GMSH_INSTALL_CMD = 'apt update && apt install -y gmsh';
+  const GMSH_MOUNT_STEP = `# /opt/3dparthub/docker-compose.yml → api 服务 volumes 取消这行注释：
+- /usr/bin/gmsh:/usr/local/host-bin/gmsh:ro
+# 然后重建容器：
+docker-compose up -d --force-recreate api`;
 
   const handleSave = async () => {
     if (!name.trim()) {
@@ -188,19 +206,6 @@ export function DetailEditDialog({
                     >
                       {regenerating ? '生成中...' : '重新生成（标准引擎）'}
                     </AdminButton>
-                  </div>
-                </div>
-              </div>
-              <div className="rounded-sm border border-outline-variant/30 bg-surface-container-lowest/50 p-2.5">
-                <p className="text-[11px] text-on-surface-variant leading-relaxed">
-                  预览缺零件或有破面？标准转换引擎对个别几何会丢面——用修复引擎（gmsh）重新转换整个模型，两套引擎可分别重转互不影响。
-                </p>
-                <div className="mt-2">
-                  {gmshAvailable === false ? (
-                    <p className="text-[11px] text-error leading-relaxed">
-                      服务器未安装 gmsh，修复引擎不可用。需在服务器安装 gmsh 并挂载给 API 容器后重试。
-                    </p>
-                  ) : (
                     <AdminButton
                       onClick={async () => {
                         setGmshBusy(true);
@@ -219,15 +224,31 @@ export function DetailEditDialog({
                         }
                         if (ok) onSaved();
                       }}
-                      disabled={gmshBusy}
+                      disabled={gmshBusy || gmshAvailable === false}
                       icon="build"
                       size="sm"
                       variant="secondary"
                     >
-                      {gmshBusy ? '修复中...' : '修复预览（gmsh 引擎）'}
+                      {gmshBusy ? '修复中...' : '修复预览（gmsh）'}
                     </AdminButton>
-                  )}
+                    {gmshAvailable === false && (
+                      <button
+                        type="button"
+                        onClick={() => setShowGmshHelp(true)}
+                        aria-label="gmsh 未安装，查看安装方法"
+                        title="gmsh 未安装，点击查看安装方法"
+                        className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-error/15 text-error hover:bg-error/25 transition-colors"
+                      >
+                        <Icon name="priority_high" size={14} />
+                      </button>
+                    )}
+                  </div>
                 </div>
+              </div>
+              <div className="rounded-sm border border-outline-variant/30 bg-surface-container-lowest/50 p-2.5">
+                <p className="text-[11px] text-on-surface-variant leading-relaxed">
+                  预览缺零件或有破面？标准转换引擎对个别几何会丢面——用修复引擎（gmsh）重新转换整个模型，两套引擎可分别重转互不影响。
+                </p>
               </div>
               <div className="flex flex-col gap-1.5">
                 <AppFormLabel uppercase className="mb-0">
@@ -412,6 +433,72 @@ export function DetailEditDialog({
                   {saving ? '保存中...' : '保存'}
                 </AdminButton>
               </div>
+            </div>
+          </motion.div>
+        </DialogOverlay>
+      )}
+      {showGmshHelp && (
+        <DialogOverlay onClose={() => setShowGmshHelp(false)} zIndex={10000}>
+          <motion.div
+            initial={{ scale: 0.95, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            exit={{ scale: 0.95, opacity: 0 }}
+            onClick={(e) => e.stopPropagation()}
+            className="bg-surface-container-low rounded-t-lg sm:rounded-lg shadow-xl border border-outline-variant/20 w-full max-w-lg max-h-[calc(100dvh-1.5rem-env(safe-area-inset-bottom,0px))] sm:max-h-[85vh] flex flex-col overflow-hidden"
+          >
+            <div className="flex items-center justify-between px-4 py-4 sm:px-6 border-b border-outline-variant/10 shrink-0">
+              <div className="flex items-center gap-2">
+                <span className="flex h-6 w-6 items-center justify-center rounded-full bg-error/15 text-error">
+                  <Icon name="priority_high" size={14} />
+                </span>
+                <h3 className="font-headline text-lg font-semibold text-on-surface">修复引擎（gmsh）未安装</h3>
+              </div>
+              <AdminIconButton icon="close" onClick={() => setShowGmshHelp(false)} variant="ghost" aria-label="关闭" />
+            </div>
+            <div className="px-4 py-4 sm:px-6 space-y-4 overflow-y-auto scrollbar-hidden sm:custom-scrollbar">
+              <p className="text-xs text-on-surface-variant leading-relaxed">
+                gmsh 是独立的网格工具（API 镜像内不含），需要在服务器上安装并挂载给 API 容器。按以下两步操作：
+              </p>
+              <div>
+                <div className="flex items-center justify-between">
+                  <span className="text-[11px] font-medium text-on-surface">第 1 步 · 服务器安装 gmsh</span>
+                  <button
+                    type="button"
+                    onClick={() => void copyGmshCmd(GMSH_INSTALL_CMD, 'install')}
+                    className="flex items-center gap-1 rounded-sm px-2 py-1 text-[11px] text-primary hover:bg-primary/10"
+                  >
+                    <Icon name={gmshCmdCopied === 'install' ? 'check' : 'content_copy'} size={12} />
+                    {gmshCmdCopied === 'install' ? '已复制' : '复制'}
+                  </button>
+                </div>
+                <pre className="mt-1.5 overflow-x-auto rounded-sm bg-surface-container-highest px-3 py-2 font-mono text-xs text-on-surface">
+                  {GMSH_INSTALL_CMD}
+                </pre>
+              </div>
+              <div>
+                <div className="flex items-center justify-between">
+                  <span className="text-[11px] font-medium text-on-surface">第 2 步 · 挂载给 API 容器并重启</span>
+                  <button
+                    type="button"
+                    onClick={() => void copyGmshCmd(GMSH_MOUNT_STEP, 'mount')}
+                    className="flex items-center gap-1 rounded-sm px-2 py-1 text-[11px] text-primary hover:bg-primary/10"
+                  >
+                    <Icon name={gmshCmdCopied === 'mount' ? 'check' : 'content_copy'} size={12} />
+                    {gmshCmdCopied === 'mount' ? '已复制' : '复制'}
+                  </button>
+                </div>
+                <pre className="mt-1.5 overflow-x-auto whitespace-pre-wrap rounded-sm bg-surface-container-highest px-3 py-2 font-mono text-xs text-on-surface">
+                  {GMSH_MOUNT_STEP}
+                </pre>
+              </div>
+              <p className="text-[11px] text-on-surface-variant leading-relaxed">
+                完成后重新打开本弹窗，按钮会自动恢复可点击。注意：CentOS 系服务器把 apt 换成 yum/dnf。
+              </p>
+            </div>
+            <div className="flex justify-end gap-3 px-4 py-3 sm:px-6 border-t border-outline-variant/10 shrink-0">
+              <AdminButton onClick={() => setShowGmshHelp(false)} variant="secondary">
+                我知道了
+              </AdminButton>
             </div>
           </motion.div>
         </DialogOverlay>
