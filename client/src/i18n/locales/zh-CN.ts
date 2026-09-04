@@ -331,6 +331,7 @@ export const zhCN: { translation: TranslationMap } = {
       favoriteFail: '收藏失败，请重试',
       favoriteSuccess: '已收藏，可在「我的收藏」中批量下载',
       openDetail: '打开详情',
+      quickLabel: '快捷操作',
       renameHint: '点击空白处保存，Esc 取消',
       shareLink: '分享链接',
       unfavorite: '取消收藏',

@@ -107,9 +107,23 @@ export default function EditDialog({
     setRegenerating(true);
     let ok = false;
     try {
-      const result = await modelApi.reconvert(model.model_id);
-      setThumbnailUrl(result.thumbnail_url);
-      toast(result.thumbnail_warning || '预览图已重新生成', result.thumbnail_warning ? 'info' : 'success');
+      const { jobId } = await modelApi.reconvert(model.model_id);
+      let final: Awaited<ReturnType<typeof modelApi.reconvertProgress>> | null = null;
+      for (let i = 0; i < 900; i++) {
+        await new Promise((r) => setTimeout(r, 1000));
+        const job = await modelApi.reconvertProgress(jobId);
+        if (job.stage === 'done') {
+          final = job;
+          break;
+        }
+        if (job.stage === 'error') throw new Error(job.error || '重新生成失败');
+      }
+      if (!final) throw new Error('转换超时');
+      if (final.result?.thumbnail_url) setThumbnailUrl(final.result.thumbnail_url);
+      toast(
+        final.result?.thumbnail_warning || '预览图已重新生成',
+        final.result?.thumbnail_warning ? 'info' : 'success',
+      );
       ok = true;
     } catch {
       toast('重新生成失败', 'error');

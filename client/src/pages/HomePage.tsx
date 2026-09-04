@@ -743,15 +743,18 @@ export default function HomePage() {
     };
   }, [contextMenu, isDesktop]);
 
+  const canUseModelContextMenu = isDesktop && isAuthenticated && (isAdmin || featureFlags.shares);
   const handleModelContextMenu = useCallback(
     (event: MouseEvent, product: Product) => {
-      if (!isDesktop || !isAdmin) return;
+      // 管理员：完整管理面板（详情/分享/重命名/删除）
+      // 普通登录用户：分享面板（分享功能关闭时整体不响应右键）
+      if (!canUseModelContextMenu) return;
       event.preventDefault();
       event.stopPropagation();
       contextMenuOpenRef.current = true;
       setContextMenu({ product });
     },
-    [isAdmin, isDesktop],
+    [canUseModelContextMenu],
   );
 
   useEffect(() => {
@@ -905,8 +908,8 @@ export default function HomePage() {
           onCloseManage={closeManagedModelOverlay}
           onOpenManageDetail={openManagedModelDetail}
           onShareModel={featureFlags.shares ? shareManagedModel : undefined}
-          onRenameModel={renameManagedModel}
-          onRequestDelete={requestManagedModelDelete}
+          onRenameModel={isAdmin ? renameManagedModel : undefined}
+          onRequestDelete={isAdmin ? requestManagedModelDelete : undefined}
           showCategory={showModelCardCategory}
           showVariantMeta={showModelCardVariantMeta}
           returnPath={modelReturnPath}
@@ -923,6 +926,7 @@ export default function HomePage() {
       handleDownload,
       handleModelContextMenu,
       homeBrowseState,
+      isAdmin,
       modelReturnPath,
       openManagedModelDetail,
       renameManagedModel,

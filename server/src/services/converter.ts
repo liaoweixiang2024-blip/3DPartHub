@@ -46,6 +46,8 @@ export interface GltfAsset {
 
 export interface ConvertStepToGltfOptions {
   urlBase?: string;
+  /** 转换进度回调（0-100）：编辑弹窗重转的进度条 */
+  onProgress?: (percent: number, stage: string) => void;
 }
 
 interface PreviewPartMeta {
@@ -574,6 +576,8 @@ export async function reconvertModelWithGmsh(
 ): Promise<GltfAsset> {
   const startedAt = Date.now();
   mkdirSync(outputDir, { recursive: true });
+  const reportProgress = options.onProgress;
+  reportProgress?.(5, '正在分析几何...');
 
   // 先用主引擎跑一遍拿包围盒（gmsh 网格密度按模型尺寸定标）；
   // 主引擎失败/为空时用保守默认值
@@ -622,15 +626,18 @@ export async function reconvertModelWithGmsh(
     /* probe 失败不影响兜底流程 */
   }
 
-  const { convertStepViaGmsh, isGmshAvailable } = await import('./gmshFallback.js');
+  const { convertStepViaGmshAsync, isGmshAvailable } = await import('./gmshFallback.js');
   if (!isGmshAvailable()) {
     throw new Error('服务器未安装 gmsh，无法使用修复引擎（请联系管理员在容器内安装 gmsh）');
   }
-  const fallback = convertStepViaGmsh(inputPath, estimatedSize, dominantColor);
+  reportProgress?.(20, 'gmsh 网格化中（耗时与模型大小相关）...');
+  // 异步 spawn：不阻塞事件循环（同步版会让全站卡到转换结束）
+  const fallback = await convertStepViaGmshAsync(inputPath, estimatedSize, dominantColor);
   if (!fallback) {
     throw new Error('修复引擎（gmsh）转换失败，请稍后重试或检查源文件');
   }
 
+  reportProgress?.(70, '正在装配模型...');
   const sourceName = originalName || basename(inputPath);
   const mesh = fallback as unknown as OcctMesh;
   const { json, bin, meta } = meshesToGltf([mesh], sourceName, {
@@ -677,6 +684,9 @@ export async function convertStepToGltf(
   modelId = modelId || randomUUID().slice(0, 12);
   mkdirSync(outputDir, { recursive: true });
 
+  const reportProgress = options.onProgress;
+  reportProgress?.(8, '正在解析几何...');
+
   const occt = await occtimportjs();
 
   // Guard against OOM: reject files larger than 200MB
@@ -722,6 +732,8 @@ export async function convertStepToGltf(
   // 重转接口（POST /api/models/:id/reconvert-gmsh）走 gmsh 完整网格化，
   // 见 gmshFallback.ts 与 models/reconvert.ts。
 
+  reportProgress?.(45, '正在生成网格...');
+
   const sourceName = originalName || basename(inputPath);
   const { json, bin, meta } = meshesToGltf(validMeshes, sourceName, {
     sourceFormat: ext || 'unknown',
@@ -733,8 +745,10 @@ export async function convertStepToGltf(
   if (meta.parts.length === 0) {
     throw new Error('模型文件中无可显示零件数据');
   }
+  reportProgress?.(72, '正在装配模型...');
   const gltfPath = writeGlb(json, bin, outputDir, modelId);
   await persistFile(gltfPath);
+  reportProgress?.(88, '正在收尾...');
   const originalSize = fileBuffer.length;
   const gltfSize = readFileSync(gltfPath).length;
   const cacheVersion = Date.now().toString(36);

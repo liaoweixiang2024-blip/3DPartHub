@@ -4,17 +4,17 @@ import { useState, useCallback, useEffect, useId, useMemo, useRef } from 'react'
 import useSWR from 'swr';
 import { mutate as swrMutate } from 'swr';
 import { converterApi, modelApi, type ConversionResponse } from '../../api';
+import { categoriesApi, type CategoryItem } from '../../api/categories';
+import client from '../../api/client';
+import { useMediaQuery } from '../../layouts/hooks/useMediaQuery';
+import { getBusinessConfig } from '../../lib/businessConfig';
+import { bottomSheetMotion, dialogPanelMotion } from '../../lib/motion';
 import {
   collectFilesWithPathFromDataTransfer,
   type DataTransferItemWithEntry,
   type FileWithPath,
   type WebkitFileSystemEntry,
 } from '../product-wall-admin/productWallAdminUtils';
-import { categoriesApi, type CategoryItem } from '../../api/categories';
-import client from '../../api/client';
-import { useMediaQuery } from '../../layouts/hooks/useMediaQuery';
-import { getBusinessConfig } from '../../lib/businessConfig';
-import { bottomSheetMotion, dialogPanelMotion } from '../../lib/motion';
 import Icon from '../shared/Icon';
 import CategorySelect from './CategorySelect';
 import DialogOverlay from './DialogOverlay';

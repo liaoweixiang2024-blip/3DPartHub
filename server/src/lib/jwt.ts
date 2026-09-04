@@ -5,6 +5,10 @@ import { config } from './config.js';
 const JWT_SECRET = config.jwtSecret;
 const ACCESS_EXPIRES = config.jwtExpiresIn as jwt.SignOptions['expiresIn'];
 const REFRESH_EXPIRES = '30d';
+// 旧 refresh token 在轮换后仍可用的宽限窗口：多标签页/PWA 窗口并发加载时
+// 共享同一份 cookie，后到的请求拿旧 token 重放不是攻击。30s 覆盖页面并发
+// 加载窗口，同时仍远小于 token TTL，真复用攻击最多也只多活 30 秒。
+export const REFRESH_REUSE_GRACE_SECONDS = 30;
 
 export interface TokenPayload {
   userId: string;
@@ -62,19 +66,36 @@ export async function isRefreshTokenRevoked(userId: string, familyId: string): P
   return val === 'revoked';
 }
 
-export async function checkAndRevokeRefreshFamily(userId: string, familyId: string): Promise<boolean> {
+export interface RefreshRotationResult {
+  ok: boolean;
+  /** true = 该 family 之前已在宽限窗口内轮换过一次（并发重放，非攻击） */
+  usedBefore: boolean;
+}
+
+export async function checkAndRevokeRefreshFamily(userId: string, familyId: string): Promise<RefreshRotationResult> {
   // 同 revokeAllTokensBefore：eval 直写必须带 key 前缀，与读方 cacheGet 一致
   const key = prefixedRedisKey(refreshTokenFamilyKey(userId, familyId));
-  const result = await redis.eval(
-    `local val = redis.call("GET", KEYS[1])
-     if val == "revoked" then return 0 end
-     redis.call("SET", KEYS[1], "revoked", "EX", ARGV[1])
-     return 1`,
-    1,
-    key,
-    String(31 * 24 * 3600),
-  );
-  return result === 1;
+  try {
+    const result = await redis.eval(
+      `local val = redis.call("GET", KEYS[1])
+       if val == "revoked" then return 0 end
+       if val == "grace" then return 2 end
+       redis.call("SET", KEYS[1], "grace", "EX", ARGV[1])
+       return 1`,
+      1,
+      key,
+      String(REFRESH_REUSE_GRACE_SECONDS),
+    );
+    // Lua 返回值：0 = family 已吊销（宽限外的重放）；1 = 首次轮换；2 = 宽限窗口内并发重放
+    if (result === 0) return { ok: false, usedBefore: false };
+    if (result === 2) return { ok: true, usedBefore: true };
+    return { ok: true, usedBefore: false };
+  } catch {
+    // Redis 瞬时抖动（commandTimeout 仅 1s）不该把用户顶下线。
+    // 此处 fail-open：按首次轮换放行。写不进宽限标记意味着窗口外的
+    // 二次重放也拦不住一次，但 Redis 恢复后即恢复完整检测。
+    return { ok: true, usedBefore: false };
+  }
 }
 
 export async function revokeRefreshFamily(userId: string, familyId: string): Promise<void> {

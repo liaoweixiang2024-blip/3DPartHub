@@ -313,11 +313,23 @@ export default function CadViewerPanel({
     setRegeneratingPreview(true);
     let ok = false;
     try {
-      const result = await modelApi.reconvert(modelId);
-      setCurrentPreviewMeta(result.preview_meta || null);
+      const { jobId } = await modelApi.reconvert(modelId);
+      // 轮询到完成（工具栏入口无进度条，静默等待）
+      let final: Awaited<ReturnType<typeof modelApi.reconvertProgress>> | null = null;
+      for (let i = 0; i < 900; i++) {
+        await new Promise((r) => setTimeout(r, 1000));
+        const job = await modelApi.reconvertProgress(jobId);
+        if (job.stage === 'done') {
+          final = job;
+          break;
+        }
+        if (job.stage === 'error') throw new Error(job.error || '重新生成失败');
+      }
+      if (!final) throw new Error('转换超时');
+      setCurrentPreviewMeta((final.result as { preview_meta?: unknown } | undefined)?.preview_meta as never);
       toast(
-        result.thumbnail_warning || t('viewer.toasts.previewRegenerated'),
-        result.thumbnail_warning ? 'info' : 'success',
+        final.result?.thumbnail_warning || t('viewer.toasts.previewRegenerated'),
+        final.result?.thumbnail_warning ? 'info' : 'success',
       );
       ok = true;
     } catch {

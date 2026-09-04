@@ -1,5 +1,5 @@
-import type { ApiResponse } from '../types/api';
 import { batchZipName } from '../lib/zipDownloadName';
+import type { ApiResponse } from '../types/api';
 import { downloadBatchZip, type BatchZipDownloadResult } from './batchZipDownload';
 import client from './client';
 import type { ServerModelListItem } from './models';

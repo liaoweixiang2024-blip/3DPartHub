@@ -1,4 +1,5 @@
-import { copyFileSync, existsSync, mkdirSync, rmSync } from 'node:fs';
+import { fork } from 'node:child_process';
+import { copyFileSync, existsSync, mkdirSync, rmSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { Prisma, type PrismaClient } from '@prisma/client';
 import { Router, Response } from 'express';
@@ -10,7 +11,7 @@ import { conversionQueue } from '../../lib/queue.js';
 import { persistFile } from '../../lib/storageProvider.js';
 import { authMiddleware, type AuthRequest } from '../../middleware/auth.js';
 import { requireRole } from '../../middleware/rbac.js';
-import { convertStepToGltf, reconvertModelWithGmsh } from '../../services/converter.js';
+import { convertStepToGltf } from '../../services/converter.js';
 import { findPreviewAssetPath } from '../../services/gltfAsset.js';
 import { parseStepFileDate } from '../../services/modelFileDates.js';
 import {
@@ -20,7 +21,7 @@ import {
   removeModelFiles,
 } from '../../services/modelFiles.js';
 import { MODEL_STATUS } from '../../services/modelStatus.js';
-import { generateBrowserThumbnail, generateThumbnail } from '../../services/thumbnail.js';
+import { generateThumbnail } from '../../services/thumbnail.js';
 import { modelUpload, validateModelUpload } from './uploadHelpers.js';
 
 type ModelConversionContext = {
@@ -35,6 +36,93 @@ type ModelConversionContext = {
 
 const toPrismaJson = (value: unknown): Prisma.InputJsonValue | typeof Prisma.JsonNull =>
   value === null || value === undefined ? Prisma.JsonNull : (value as Prisma.InputJsonValue);
+
+// ── 手动重转异步任务（编辑弹窗进度条）──
+// 内存 job 表：重启即失（与批量上传同款策略）；单管理员场景足够。
+type ReconvertJob = {
+  id: string;
+  modelId: string;
+  engine: 'standard' | 'gmsh';
+  stage: 'queued' | 'processing' | 'done' | 'error';
+  percent: number;
+  message: string;
+  result?: Record<string, unknown> & { thumbnail_url?: string | null };
+  error?: string;
+  createdAt: number;
+};
+
+const reconvertJobs = new Map<string, ReconvertJob>();
+const RECONVERT_JOB_TTL_MS = 10 * 60 * 1000;
+
+// fork 隔离子进程执行重转换：occt WASM / gmsh / 软件光栅化都在子进程跑，
+// API 进程事件循环不受影响（在 API 进程内跑会同步冻结全部 HTTP 请求）。
+type RunnerOutcome = { thumbnailUrl: string | null } | { error: string };
+
+function runReconvertInChild(job: ReconvertJob, inputPath: string, modelId: string, originalName: string) {
+  const runnerPath = new URL('../../workers/reconvertRunner.js', import.meta.url);
+  return new Promise<RunnerOutcome>((resolve) => {
+    const child = fork(runnerPath, [], { stdio: ['ignore', 'pipe', 'pipe', 'ipc'] });
+    let settled = false;
+    const finish = (outcome: RunnerOutcome) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timeoutTimer);
+      child.removeAllListeners();
+      child.kill();
+      resolve(outcome);
+    };
+    const timeoutTimer = setTimeout(
+      () => {
+        logger.warn({ jobId: job.id }, '[conversion] Reconvert child timeout, killing');
+        finish({ error: '转换超时（15 分钟），已终止' });
+      },
+      15 * 60 * 1000,
+    );
+    child.stdout?.on('data', (chunk) => logger.info(`[reconvert:${job.id}] ${String(chunk).trimEnd()}`));
+    child.stderr?.on('data', (chunk) => logger.warn(`[reconvert:${job.id}] ${String(chunk).trimEnd()}`));
+    child.on(
+      'message',
+      (msg: { type: string; progress?: number; message?: string; thumbnail?: { thumbnailUrl: string } }) => {
+        if (msg.type === 'progress' && typeof msg.progress === 'number' && Number.isFinite(msg.progress)) {
+          updateReconvertJob_progress(job, msg.progress, msg.message || '转换中...');
+        } else if (msg.type === 'done') {
+          finish({ thumbnailUrl: msg.thumbnail?.thumbnailUrl ?? null });
+        } else if (msg.type === 'error') {
+          finish({ error: msg.message || '转换失败' });
+        }
+      },
+    );
+    child.on('exit', (code) => {
+      if (!settled) finish({ error: `转换子进程异常退出（code ${code}）` });
+    });
+    child.send({ type: 'run', payload: { engine: job.engine, inputPath, modelId, originalName } });
+  });
+}
+
+function updateReconvertJob_progress(job: ReconvertJob, percent: number, message: string) {
+  job.stage = 'processing';
+  job.percent = Math.max(job.percent, Math.min(99, Math.round(percent)));
+  job.message = message;
+}
+
+function createReconvertJob(modelId: string, engine: 'standard' | 'gmsh'): ReconvertJob {
+  // 清理过期任务，防内存缓慢增长
+  const now = Date.now();
+  for (const [id, job] of reconvertJobs) {
+    if (now - job.createdAt > RECONVERT_JOB_TTL_MS) reconvertJobs.delete(id);
+  }
+  const job: ReconvertJob = {
+    id: `reconvert_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+    modelId,
+    engine,
+    stage: 'queued',
+    percent: 0,
+    message: engine === 'gmsh' ? '等待修复转换...' : '等待标准转换...',
+    createdAt: now,
+  };
+  reconvertJobs.set(job.id, job);
+  return job;
+}
 
 export function createModelConversionRouter({ prisma, getMeta, saveMeta, getPreviewMeta }: ModelConversionContext) {
   const router = Router();
@@ -255,93 +343,103 @@ export function createModelConversionRouter({ prisma, getMeta, saveMeta, getPrev
           return;
         }
 
-        const modelDir = join(config.staticDir, 'models');
-        let gltfSize = m.gltfSize;
-        let gltfUrl = m.gltfUrl;
-        let previewPath = findPreviewAssetPath(modelDir, m.id, m.gltfUrl);
-        let nextPreviewMeta = toPrismaJson(m.previewMeta);
+        // 异步任务 + 进度上报：立即返回 jobId，前端轮询进度条
+        const job = createReconvertJob(id, 'standard');
+        res.json({ jobId: job.id });
 
-        // Re-convert from original if available, otherwise just regenerate thumbnail from existing glTF
-        if (origPath) {
-          const result = await convertStepToGltf(origPath, modelDir, m.id, m.originalName || `${m.id}.${m.format}`);
-          gltfSize = result.gltfSize;
-          gltfUrl = result.gltfUrl;
-          previewPath = result.gltfPath;
-          nextPreviewMeta = toPrismaJson(result.previewMeta);
-        }
-
-        // Regenerate thumbnail from current preview asset (GLB for new conversions, glTF for legacy assets)
-        let thumbnailUrl = m.thumbnailUrl;
-        let thumbnailWarning: string | null = null;
-        if (previewPath && existsSync(previewPath)) {
+        setImmediate(async () => {
           try {
-            const thumb = await generateBrowserThumbnail(previewPath, join(config.staticDir, 'thumbnails'), m.id, {
-              staticDir: config.staticDir,
-            });
-            thumbnailUrl = thumb.thumbnailUrl;
-          } catch (browserErr) {
-            logger.warn({ err: browserErr, modelId: m.id }, '[conversion] Browser thumbnail regeneration failed');
-            try {
-              const thumb = generateThumbnail(previewPath, join(config.staticDir, 'thumbnails'), m.id, 512, 512, {
-                fallbackToPlaceholder: false,
-              });
-              thumbnailUrl = thumb.thumbnailUrl;
-            } catch (fallbackErr) {
-              thumbnailWarning = '模型已重新转换，预览图生成失败，已保留原预览图';
-              logger.warn({ err: fallbackErr, modelId: m.id }, '[conversion] Thumbnail regeneration skipped');
+            // 重活全部在隔离子进程执行（occt WASM/gmsh/光栅化），API 进程事件循环
+            // 不被冻结——此前在 API 进程内同步跑，转换期间全站无响应。
+            let thumbnailUrl = m.thumbnailUrl;
+            let thumbnailWarning: string | null = null;
+            const outcome = await runReconvertInChild(job, origPath!, m.id, m.originalName || `${m.id}.${m.format}`);
+            if ('error' in outcome) {
+              throw new Error(outcome.error);
             }
+            if (outcome.thumbnailUrl) {
+              thumbnailUrl = outcome.thumbnailUrl;
+            } else {
+              thumbnailWarning = '模型已重新转换，预览图生成失败，已保留原预览图';
+            }
+            // 重读转换产物元数据（子进程已写盘）
+            let gltfSize = m.gltfSize;
+            let gltfUrl = m.gltfUrl;
+            let nextPreviewMeta = toPrismaJson(m.previewMeta);
+            try {
+              const fresh = await prisma.model.findUnique({
+                where: { id },
+                select: { gltfUrl: true, gltfSize: true, previewMeta: true },
+              });
+              if (fresh) {
+                gltfUrl = fresh.gltfUrl;
+                gltfSize = fresh.gltfSize;
+                nextPreviewMeta = toPrismaJson(fresh.previewMeta);
+              }
+            } catch {
+              /* 保留旧值 */
+            }
+
+            // Append timestamp for cache busting
+            const ts = Date.now();
+            const versionedUrl = thumbnailWarning
+              ? thumbnailUrl
+              : thumbnailUrl
+                ? `${thumbnailUrl.split('?')[0]}?t=${ts}`
+                : null;
+
+            // Update DB with versioned URL
+            await prisma.model.update({
+              where: { id },
+              data: {
+                ...(gltfUrl !== m.gltfUrl ? { gltfUrl } : {}),
+                ...(gltfSize !== m.gltfSize ? { gltfSize } : {}),
+                ...(versionedUrl !== m.thumbnailUrl ? { thumbnailUrl: versionedUrl } : {}),
+                previewMeta: nextPreviewMeta,
+                status: MODEL_STATUS.COMPLETED,
+              },
+            });
+
+            await cacheDelByPrefix('cache:models:');
+            const previewMeta = await getPreviewMeta(m.id, {
+              gltfUrl,
+              originalName: m.originalName,
+              format: m.format,
+              previewMeta: nextPreviewMeta,
+            });
+
+            Object.assign(job, {
+              stage: 'done' as const,
+              percent: 100,
+              message: '转换完成',
+              result: {
+                model_id: m.id,
+                name: m.name,
+                gltf_url: gltfUrl,
+                gltf_size: gltfSize,
+                thumbnail_url: versionedUrl,
+                thumbnail_warning: thumbnailWarning,
+                preview_meta: previewMeta,
+              },
+            });
+          } catch (err: unknown) {
+            await prisma.model
+              .update({
+                where: { id },
+                data: { status: MODEL_STATUS.FAILED },
+              })
+              .catch(() => {});
+            logger.error({ err }, 'Re-convert failed');
+            Object.assign(job, {
+              stage: 'error' as const,
+              percent: 100,
+              message: '重新转换失败',
+              error: err instanceof Error ? err.message : '重新转换失败',
+            });
           }
-        }
-
-        // Append timestamp for cache busting
-        const ts = Date.now();
-        const versionedUrl = thumbnailWarning
-          ? thumbnailUrl
-          : thumbnailUrl
-            ? `${thumbnailUrl.split('?')[0]}?t=${ts}`
-            : null;
-
-        // Update DB with versioned URL
-        await prisma.model.update({
-          where: { id },
-          data: {
-            ...(gltfUrl !== m.gltfUrl ? { gltfUrl } : {}),
-            ...(gltfSize !== m.gltfSize ? { gltfSize } : {}),
-            ...(versionedUrl !== m.thumbnailUrl ? { thumbnailUrl: versionedUrl } : {}),
-            previewMeta: nextPreviewMeta,
-            status: MODEL_STATUS.COMPLETED,
-          },
-        });
-
-        await cacheDelByPrefix('cache:models:');
-        const previewMeta = await getPreviewMeta(m.id, {
-          gltfUrl,
-          originalName: m.originalName,
-          format: m.format,
-          previewMeta: nextPreviewMeta,
-        });
-
-        res.json({
-          success: true,
-          data: {
-            model_id: m.id,
-            name: m.name,
-            gltf_url: gltfUrl,
-            gltf_size: gltfSize,
-            thumbnail_url: versionedUrl,
-            thumbnail_warning: thumbnailWarning,
-            preview_meta: previewMeta,
-          },
         });
       } catch (err: unknown) {
-        await prisma.model
-          .update({
-            where: { id },
-            data: { status: MODEL_STATUS.FAILED },
-          })
-          .catch(() => {});
-        logger.error({ err }, 'Re-convert failed');
-        res.status(500).json({ detail: '重新转换失败' });
+        res.status(500).json({ detail: '任务创建失败' });
       }
     },
   );
@@ -392,66 +490,104 @@ export function createModelConversionRouter({ prisma, getMeta, saveMeta, getPrev
           return;
         }
 
-        const modelDir = join(config.staticDir, 'models');
-        const result = await reconvertModelWithGmsh(origPath, modelDir, m.id, m.originalName || `${m.id}.${m.format}`);
+        // 异步任务 + 进度上报：立即返回 jobId，前端轮询进度条
+        const job = createReconvertJob(id, 'gmsh');
+        res.json({ jobId: job.id });
 
-        let thumbnailUrl = m.thumbnailUrl;
-        if (existsSync(result.gltfPath)) {
-          // 与上传主管线（conversionRunner）同款软件渲染器：渐变浅灰底、统一光照。
-          // 浏览器渲染器是纯白底 + 更亮的 HDR 环境，与库里既有缩略图观感不一致。
+        setImmediate(async () => {
           try {
-            const thumb = generateThumbnail(result.gltfPath, join(config.staticDir, 'thumbnails'), m.id);
-            thumbnailUrl = thumb.thumbnailUrl;
-          } catch {
-            /* keep old thumbnail */
+            // 与标准转换同构：重活（occt 探针/gmsh/光栅化）全部在隔离子进程，
+            // API 进程事件循环不被冻结
+            let thumbnailUrl = m.thumbnailUrl;
+            const outcome = await runReconvertInChild(job, origPath, m.id, m.originalName || `${m.id}.${m.format}`);
+            if ('error' in outcome) {
+              throw new Error(outcome.error);
+            }
+            if (outcome.thumbnailUrl) thumbnailUrl = outcome.thumbnailUrl;
+
+            // 子进程已写盘产物；从磁盘产物重读元数据（gmsh runner 不写 DB）
+            const modelDir = join(config.staticDir, 'models');
+            const glbPath = join(modelDir, `${m.id}.glb`);
+            const stat = existsSync(glbPath) ? statSync(glbPath) : null;
+            const ts = Date.now();
+            const versionedThumb = thumbnailUrl ? `${thumbnailUrl.split('?')[0]}?t=${ts}` : null;
+
+            await prisma.model.update({
+              where: { id },
+              data: {
+                gltfUrl: `/static/models/${m.id}.glb?v=${ts.toString(36)}`,
+                gltfSize: stat?.size ?? m.gltfSize,
+                ...(versionedThumb ? { thumbnailUrl: versionedThumb } : {}),
+                status: MODEL_STATUS.COMPLETED,
+              },
+            });
+
+            await cacheDelByPrefix('cache:models:');
+            const previewMeta = await getPreviewMeta(m.id, {
+              gltfUrl: `/static/models/${m.id}.glb?v=${ts.toString(36)}`,
+              originalName: m.originalName,
+              format: m.format,
+            });
+
+            Object.assign(job, {
+              stage: 'done' as const,
+              percent: 100,
+              message: '修复转换完成',
+              result: {
+                model_id: m.id,
+                name: m.name,
+                gltf_url: `/static/models/${m.id}.glb?v=${ts.toString(36)}`,
+                gltf_size: stat?.size ?? m.gltfSize,
+                thumbnail_url: versionedThumb,
+                engine: 'gmsh',
+                preview_meta: previewMeta,
+              },
+            });
+          } catch (err: unknown) {
+            await prisma.model
+              .update({
+                where: { id },
+                data: { status: MODEL_STATUS.FAILED },
+              })
+              .catch(() => {});
+            logger.error({ err }, '[conversion] gmsh re-convert failed');
+            const message = err instanceof Error ? err.message : '修复引擎重转失败';
+            Object.assign(job, {
+              stage: 'error' as const,
+              percent: 100,
+              message: '修复转换失败',
+              error: message,
+            });
           }
-        }
-
-        const ts = Date.now();
-        const versionedThumb = thumbnailUrl ? `${thumbnailUrl.split('?')[0]}?t=${ts}` : null;
-
-        await prisma.model.update({
-          where: { id },
-          data: {
-            gltfUrl: result.gltfUrl,
-            gltfSize: result.gltfSize,
-            ...(versionedThumb ? { thumbnailUrl: versionedThumb } : {}),
-            previewMeta: toPrismaJson(result.previewMeta),
-            status: MODEL_STATUS.COMPLETED,
-          },
-        });
-
-        await cacheDelByPrefix('cache:models:');
-        const previewMeta = await getPreviewMeta(m.id, {
-          gltfUrl: result.gltfUrl,
-          originalName: m.originalName,
-          format: m.format,
-          previewMeta: toPrismaJson(result.previewMeta),
-        });
-
-        res.json({
-          success: true,
-          data: {
-            model_id: m.id,
-            name: m.name,
-            gltf_url: result.gltfUrl,
-            gltf_size: result.gltfSize,
-            thumbnail_url: versionedThumb,
-            engine: 'gmsh',
-            preview_meta: previewMeta,
-          },
         });
       } catch (err: unknown) {
-        await prisma.model
-          .update({
-            where: { id },
-            data: { status: MODEL_STATUS.FAILED },
-          })
-          .catch(() => {});
-        logger.error({ err }, '[conversion] gmsh re-convert failed');
-        const message = err instanceof Error ? err.message : '修复引擎重转失败';
-        res.status(500).json({ detail: message });
+        res.status(500).json({ detail: '任务创建失败' });
       }
+    },
+  );
+
+  // 手动重转进度查询（编辑弹窗进度条轮询）
+  router.get(
+    '/api/models/reconvert-progress/:jobId',
+    authMiddleware,
+    requireRole('ADMIN'),
+    async (req: AuthRequest, res: Response) => {
+      const jobId = req.params.jobId as string;
+      const job = reconvertJobs.get(jobId);
+      if (!job || !jobId.startsWith('reconvert_')) {
+        res.status(404).json({ detail: '任务不存在，服务器可能已重启' });
+        return;
+      }
+      res.json({
+        job_id: job.id,
+        model_id: job.modelId,
+        engine: job.engine,
+        stage: job.stage,
+        percent: job.percent,
+        message: job.message,
+        ...(job.result ? { result: job.result } : {}),
+        ...(job.error ? { error: job.error } : {}),
+      });
     },
   );
 

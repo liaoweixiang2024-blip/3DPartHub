@@ -668,41 +668,33 @@ export const modelApi = {
     return modelApi.batchUploadFromArchive(file, options);
   },
 
-  reconvert: async (
-    id: string,
-  ): Promise<{
-    model_id: string;
-    gltf_size: number;
-    thumbnail_url: string | null;
-    thumbnail_warning?: string | null;
-    preview_meta?: ModelPreviewMeta | null;
-  }> => {
+  /** 标准转换重转（异步任务）：返回 jobId 供进度轮询 */
+  reconvert: async (id: string): Promise<{ jobId: string }> => {
     const res = await client.post(`/models/${id}/reconvert`);
-    return unwrapResponse<{
-      model_id: string;
-      gltf_size: number;
-      thumbnail_url: string | null;
-      thumbnail_warning?: string | null;
-      preview_meta?: ModelPreviewMeta | null;
-    }>(res);
+    return unwrapResponse<{ jobId: string }>(res);
   },
 
-  /** 修复预览：gmsh 兜底引擎重转——主引擎静默丢面（预览缺零件/断管）时使用 */
-  reconvertGmsh: async (
-    id: string,
+  /** 重转进度轮询 */
+  reconvertProgress: async (
+    jobId: string,
   ): Promise<{
+    job_id: string;
     model_id: string;
-    gltf_size: number;
-    thumbnail_url: string | null;
-    preview_meta?: ModelPreviewMeta | null;
+    engine: string;
+    stage: 'queued' | 'processing' | 'done' | 'error';
+    percent: number;
+    message: string;
+    result?: { model_id: string; thumbnail_url?: string | null; thumbnail_warning?: string | null };
+    error?: string;
   }> => {
+    const res = await client.get(`/models/reconvert-progress/${jobId}`);
+    return unwrapResponse(res);
+  },
+
+  /** 修复转换（gmsh 兜底引擎）：异步任务，返回 jobId 供进度轮询 */
+  reconvertGmsh: async (id: string): Promise<{ jobId: string }> => {
     const res = await client.post(`/models/${id}/reconvert-gmsh`);
-    return unwrapResponse<{
-      model_id: string;
-      gltf_size: number;
-      thumbnail_url: string | null;
-      preview_meta?: ModelPreviewMeta | null;
-    }>(res);
+    return unwrapResponse<{ jobId: string }>(res);
   },
 
   /** 修复引擎（gmsh）是否可用：未安装时详情页按此提示 */

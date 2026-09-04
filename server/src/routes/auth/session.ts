@@ -433,10 +433,20 @@ export function createAuthSessionRouter() {
       }
 
       if (payload.familyId) {
-        const notRevoked = await checkAndRevokeRefreshFamily(payload.userId, payload.familyId);
-        if (!notRevoked) {
+        const rotation = await checkAndRevokeRefreshFamily(payload.userId, payload.familyId);
+        if (!rotation.ok) {
+          // 宽限窗口（30s）外的旧 token 重放 —— 可能已泄露，按原逻辑全 family 吊销顶下线。
+          // 多标签页/PWA 窗口的并发加载都在宽限窗口内，到不了这个分支。
           await revokeAllTokensBefore(payload.userId, Math.floor(Date.now() / 1000));
           res.status(401).json({ detail: 'refresh token 已失效，请重新登录' });
+          return;
+        }
+        if (rotation.usedBefore) {
+          // 宽限窗口内的并发重放（第二个标签页/PWA 窗口慢了一步）：不再轮换
+          // refresh cookie（第一次轮换的结果仍然有效），只发新 accessToken。
+          // 两个窗口从此共享同一 family，互不吊销——这是「偶发掉登录」的主根因。
+          const accessToken = signAccessToken({ userId: user.id, role: user.role });
+          res.json({ accessToken });
           return;
         }
       }

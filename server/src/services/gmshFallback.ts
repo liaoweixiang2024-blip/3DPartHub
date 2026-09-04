@@ -1,4 +1,4 @@
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawn } from 'node:child_process';
 import { existsSync, readFileSync, rmSync, mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -195,6 +195,114 @@ function computeSmoothNormals(positions: number[], indices: number[]): number[] 
     normals[v * 3 + 2] = az / len;
   }
   return normals;
+}
+
+/** gmsh 命令参数（同步/异步版共用） */
+function gmshArgs(inputPath: string, mshPath: string, clmax: number, clmin: number) {
+  // msh2（ASCII）：节点在单元间共享，才能做角度阈值平滑法线
+  // （STL 逐三角独立顶点 + 面法线 → flat shading，圆柱/球面呈多面体棱面）
+  return [
+    inputPath,
+    '-3',
+    '-format',
+    'msh2',
+    '-o',
+    mshPath,
+    '-clmax',
+    clmax.toFixed(4),
+    '-clcurv',
+    '20',
+    '-clmin',
+    clmin.toFixed(4),
+    '-v',
+    '2',
+  ];
+}
+
+/**
+ * 异步版 gmsh 网格化：spawn 子进程不阻塞事件循环。
+ * 同步版（execFileSync）在 gmsh 运行期间冻结整个 Node 进程——大模型 40s+
+ * 期间所有 HTTP 请求无响应（API_WORKERS=1 时全站卡死）。异步版让网站正常服务。
+ */
+export async function convertStepViaGmshAsync(
+  inputPath: string,
+  estimatedModelSizeMm: number,
+  dominantColor?: [number, number, number] | null,
+): Promise<FallbackMesh | null> {
+  let tmpDir: string | null = null;
+  try {
+    tmpDir = mkdtempSync(join(tmpdir(), 'gmsh-fallback-'));
+    const mshPath = join(tmpDir, 'out.msh');
+    const baseSize = Math.max(1, estimatedModelSizeMm);
+    const attempts = [Math.min(2, baseSize / 120), Math.min(1, baseSize / 240), Math.min(0.5, baseSize / 480), 0.2];
+    const clmin = Math.max(0.05, baseSize / 1000);
+    let ok = false;
+    let lastErr: unknown = null;
+    const gmshBin = resolveGmshBin();
+    if (!gmshBin) return null;
+    for (const clmax of attempts) {
+      const err = await new Promise<string | null>((resolve) => {
+        const child = spawn(gmshBin, gmshArgs(inputPath, mshPath, clmax, clmin), {
+          stdio: ['ignore', 'ignore', 'pipe'],
+        });
+        const timer = setTimeout(() => {
+          child.kill('SIGKILL');
+          resolve('timeout');
+        }, 300_000);
+        let stderr = '';
+        child.stderr?.on('data', (d) => {
+          stderr += String(d);
+          if (stderr.length > 4096) stderr = stderr.slice(-4096);
+        });
+        child.on('error', (e) => {
+          clearTimeout(timer);
+          resolve(e.message);
+        });
+        child.on('close', (code) => {
+          clearTimeout(timer);
+          resolve(code === 0 ? null : `gmsh exited ${code}: ${stderr.slice(-300)}`);
+        });
+      });
+      if (err) {
+        lastErr = new Error(err);
+        continue;
+      }
+      if (existsSync(mshPath)) {
+        ok = true;
+        break;
+      }
+    }
+    if (!ok) {
+      if (lastErr) throw lastErr;
+      return null;
+    }
+    const mesh = parseMsh2(readFileSync(mshPath, 'utf8'));
+    if (!mesh) return null;
+    const normals = computeSmoothNormals(mesh.positions, mesh.indices);
+    return {
+      attributes: {
+        position: { array: mesh.positions },
+        normal: { array: normals },
+      },
+      index: { array: mesh.indices },
+      color: dominantColor || [1, 1, 1],
+      name: 'model_gmsh',
+    };
+  } catch (err) {
+    logger.warn(
+      { err: err instanceof Error ? err.message : String(err), inputPath },
+      '[gmshFallback] gmsh conversion failed',
+    );
+    return null;
+  } finally {
+    if (tmpDir) {
+      try {
+        rmSync(tmpDir, { recursive: true, force: true });
+      } catch {
+        /* best-effort cleanup */
+      }
+    }
+  }
 }
 
 /**

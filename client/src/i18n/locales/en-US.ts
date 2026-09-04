@@ -334,6 +334,7 @@ export const enUS: { translation: TranslationMap } = {
       favoriteFail: 'Failed to favorite. Please try again',
       favoriteSuccess: 'Added to Favorites for batch download',
       openDetail: 'Open detail',
+      quickLabel: 'Quick actions',
       renameHint: 'Click outside to save, Esc to cancel',
       shareLink: 'Share link',
       unfavorite: 'Remove favorite',

@@ -69,7 +69,7 @@ type GltfAsset = {
   scenes?: GltfScene[];
 };
 
-type ThumbnailResult = { thumbnailPath: string; thumbnailUrl: string; thumbnailSmallUrl: string };
+export type ThumbnailResult = { thumbnailPath: string; thumbnailUrl: string; thumbnailSmallUrl: string };
 
 type ThumbnailGenerationOptions = {
   fallbackToPlaceholder?: boolean;

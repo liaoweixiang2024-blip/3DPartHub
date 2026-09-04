@@ -44,6 +44,8 @@ export function DetailEditDialog({
   const [thumbUploading, setThumbUploading] = useState(false);
   const [regenerating, setRegenerating] = useState(false);
   const [gmshBusy, setGmshBusy] = useState(false);
+  const [stdProgress, setStdProgress] = useState<{ percent: number; message: string } | null>(null);
+  const [gmshProgress, setGmshProgress] = useState<{ percent: number; message: string } | null>(null);
   const [gmshAvailable, setGmshAvailable] = useState<boolean | null>(null);
   const [showGmshHelp, setShowGmshHelp] = useState(false);
   const [gmshCmdCopied, setGmshCmdCopied] = useState<string | null>(null);
@@ -70,6 +72,44 @@ export function DetailEditDialog({
 
   if (!open) return null;
 
+  // 发起重转任务并轮询进度到完成；返回 done 的 result 或抛出错误
+  const runReconvertJob = async (
+    start: () => Promise<{ jobId: string }>,
+    setProgress: (p: { percent: number; message: string } | null) => void,
+  ) => {
+    const { jobId } = await start();
+    setProgress({ percent: 1, message: '已提交...' });
+    // 服务端只在阶段边界上报（5→20→45…），长阶段（如 gmsh 网格化几十秒）数字不动。
+    // 本地每秒平滑 +1（封顶到下一阶段前的 95%），收到服务端新值时向上校准——
+    // 按钮呈现 1%→100% 连续增长，结束时由 done 精确归位。
+    let displayed = 1;
+    let serverPercent = 1;
+    let finished = false;
+    const ticker = window.setInterval(() => {
+      if (finished) return;
+      displayed = Math.min(displayed + 1, Math.max(serverPercent + 1, 95));
+      setProgress({ percent: displayed, message: '转换中...' });
+    }, 1000);
+    try {
+      for (let i = 0; i < 900; i++) {
+        await new Promise((r) => setTimeout(r, 1000));
+        const job = await modelApi.reconvertProgress(jobId);
+        if (job.stage === 'done') {
+          setProgress({ percent: 100, message: '完成' });
+          finished = true;
+          return job.result;
+        }
+        if (job.stage === 'error') throw new Error(job.error || '转换失败');
+        serverPercent = job.percent;
+        displayed = Math.max(displayed, job.percent);
+        setProgress({ percent: Math.min(displayed, 99), message: job.message });
+      }
+      throw new Error('转换超时，请稍后在模型列表确认结果');
+    } finally {
+      window.clearInterval(ticker);
+    }
+  };
+
   const copyGmshCmd = async (text: string, key: string) => {
     try {
       await navigator.clipboard.writeText(text);
@@ -80,11 +120,37 @@ export function DetailEditDialog({
     }
   };
 
-  const GMSH_INSTALL_CMD = 'apt update && apt install -y gmsh';
-  const GMSH_MOUNT_STEP = `# /opt/3dparthub/docker-compose.yml → api 服务 volumes 取消这行注释：
-- /usr/bin/gmsh:/usr/local/host-bin/gmsh:ro
-# 然后重建容器：
-docker-compose up -d --force-recreate api`;
+  // 实测验证的安装方案：发行版 gmsh（apt/yum）动态链接 glibc，Alpine 容器跑不了；
+  // 必须用 gmsh.info 官方 SDK 包 + 把依赖库一起挂载（2026-09 生产服务器验证通过）
+  const GMSH_INSTALL_CMD = `# 下载官方 SDK 版（容器内可运行）
+cd /tmp && curl -LO https://gmsh.info/bin/Linux/gmsh-4.13.1-Linux64-sdk.tgz
+tar xzf gmsh-4.13.1-Linux64-sdk.tgz
+install -m 755 gmsh-4.13.1-Linux64-sdk/bin/gmsh /usr/local/bin/gmsh.real
+mkdir -p /usr/local/lib/gmsh-sdk
+cp -a gmsh-4.13.1-Linux64-sdk/lib/. /usr/local/lib/gmsh-sdk/
+# 依赖库（Debian/Ubuntu）
+mkdir -p /usr/local/lib/gmsh-deps && cd /lib/x86_64-linux-gnu
+for lib in libGLU.so.1 libGL.so.1 libGLdispatch.so.0 libGLX.so.0 libOpenGL.so.0 \
+  libX11.so.6 libXau.so.6 libXdmcp.so.6 libXext.so.6 libXrender.so.1 libXcursor.so.1 \
+  libXfixes.so.3 libXft.so.2 libXinerama.so.1 libfontconfig.so.1 libfreetype.so.6 \
+  libexpat.so.1 libpng16.so.16 libbrotlidec.so.1 libbrotlicommon.so.1 libbsd.so.0 \
+  libmd.so.0 libstdc++.so.6 libgcc_s.so.1 libz.so.1 libdl.so.2 libpthread.so.0 librt.so.1; do
+  cp -L $lib /usr/local/lib/gmsh-deps/; done
+# wrapper 脚本
+printf '#!/bin/sh\nexport LD_LIBRARY_PATH="/usr/local/host-lib/gmsh-sdk:/usr/local/host-lib/gmsh-deps:/usr/local/host-lib:$LD_LIBRARY_PATH"\nexec /usr/local/host-bin/gmsh.real "$@"\n' > /usr/local/bin/gmsh
+chmod 755 /usr/local/bin/gmsh && /usr/local/bin/gmsh.real -version`;
+  const GMSH_MOUNT_STEP = `# /opt/3dparthub/docker-compose.yml → api 服务 volumes 下加：
+- /usr/local/bin/gmsh:/usr/local/host-bin/gmsh:ro
+- /usr/local/bin/gmsh.real:/usr/local/host-bin/gmsh.real:ro
+- /lib64/ld-linux-x86-64.so.2:/lib64/ld-linux-x86-64.so.2:ro
+- /lib/x86_64-linux-gnu/libc.so.6:/lib/x86_64-linux-gnu/libc.so.6:ro
+- /lib/x86_64-linux-gnu/libm.so.6:/lib/x86_64-linux-gnu/libm.so.6:ro
+- /lib/x86_64-linux-gnu/libgomp.so.1:/usr/local/host-lib/libgomp.so.1:ro
+- /usr/local/lib/gmsh-sdk:/usr/local/host-lib/gmsh-sdk:ro
+- /usr/local/lib/gmsh-deps:/usr/local/host-lib/gmsh-deps:ro
+# 然后重建容器并验证：
+cd /opt/3dparthub && docker-compose up -d --force-recreate api
+docker exec 3dparthub-api /usr/local/host-bin/gmsh -version  # 应输出 4.13.1`;
 
   const handleSave = async () => {
     if (!name.trim()) {
@@ -123,7 +189,8 @@ docker-compose up -d --force-recreate api`;
             animate={{ scale: 1, opacity: 1 }}
             exit={{ scale: 0.95, opacity: 0 }}
             onClick={(e) => e.stopPropagation()}
-            className="bg-surface-container-low rounded-t-lg sm:rounded-lg shadow-xl border border-outline-variant/20 w-full max-w-md max-h-[calc(100dvh-1.5rem-env(safe-area-inset-bottom,0px))] sm:max-h-[90vh] flex flex-col overflow-hidden"
+            data-tooltip-ignore
+            className="bg-surface-container-low rounded-t-lg sm:rounded-lg shadow-xl border border-outline-variant/20 w-full max-w-lg max-h-[calc(100dvh-1.5rem-env(safe-area-inset-bottom,0px))] sm:max-h-[90vh] flex flex-col overflow-hidden"
           >
             <div className="flex items-center justify-between px-4 py-4 sm:px-6 border-b border-outline-variant/10 shrink-0">
               <h3 className="font-headline text-lg font-semibold text-on-surface">编辑模型</h3>
@@ -135,10 +202,10 @@ docker-compose up -d --force-recreate api`;
                   预览图
                 </AppFormLabel>
                 <div className="flex flex-wrap items-center gap-3">
-                  <div className="w-16 h-16 rounded-sm bg-surface-container-highest shrink-0 overflow-hidden">
+                  <div className="w-24 h-24 rounded-sm bg-surface-container-highest shrink-0 overflow-hidden">
                     <ModelThumbnail src={thumbUrl} alt="" className="w-full h-full object-cover" />
                   </div>
-                  <div className="flex min-w-0 flex-col gap-1.5">
+                  <div className="flex min-w-0 flex-col gap-1.5 flex-1">
                     <input
                       type="file"
                       accept="image/png,image/jpeg,image/webp"
@@ -174,81 +241,111 @@ docker-compose up -d --force-recreate api`;
                         }
                       }}
                     />
-                    <AdminButton
-                      onClick={() => document.getElementById('detail-thumb-upload')?.click()}
-                      disabled={thumbUploading}
-                      icon="upload"
-                      size="sm"
-                      variant="secondary"
-                    >
-                      {thumbUploading ? '上传中...' : '上传图片'}
-                    </AdminButton>
-                    <AdminButton
-                      onClick={async () => {
-                        setRegenerating(true);
-                        let ok = false;
-                        try {
-                          const r = await modelApi.reconvert(modelId);
-                          setThumbUrl(r.thumbnail_url);
-                          toast(r.thumbnail_warning || '已重新生成', r.thumbnail_warning ? 'info' : 'success');
-                          ok = true;
-                        } catch {
-                          toast('重新生成失败', 'error');
-                        } finally {
-                          setRegenerating(false);
-                        }
-                        if (ok) onSaved();
-                      }}
-                      disabled={regenerating}
-                      icon="refresh"
-                      size="sm"
-                      variant="secondary"
-                    >
-                      {regenerating ? '生成中...' : '重新生成（标准引擎）'}
-                    </AdminButton>
-                    <AdminButton
-                      onClick={async () => {
-                        setGmshBusy(true);
-                        let ok = false;
-                        try {
-                          const r = await modelApi.reconvertGmsh(modelId);
-                          setThumbUrl(r.thumbnail_url);
-                          toast('修复引擎转换完成，请检查预览', 'success');
-                          ok = true;
-                        } catch (err) {
-                          const message = (err as { response?: { data?: { detail?: string } } })?.response?.data
-                            ?.detail;
-                          toast(message || '修复引擎转换失败', 'error');
-                        } finally {
-                          setGmshBusy(false);
-                        }
-                        if (ok) onSaved();
-                      }}
-                      disabled={gmshBusy || gmshAvailable === false}
-                      icon="build"
-                      size="sm"
-                      variant="secondary"
-                    >
-                      {gmshBusy ? '修复中...' : '修复预览（gmsh）'}
-                    </AdminButton>
-                    {gmshAvailable === false && (
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      <AdminButton
+                        onClick={() => document.getElementById('detail-thumb-upload')?.click()}
+                        disabled={thumbUploading}
+                        icon="upload"
+                        size="sm"
+                        variant="secondary"
+                      >
+                        {thumbUploading ? '上传中...' : '上传图片'}
+                      </AdminButton>
+                      <AdminButton
+                        onClick={async () => {
+                          setRegenerating(true);
+                          setStdProgress(null);
+                          let ok = false;
+                          try {
+                            const r = await runReconvertJob(() => modelApi.reconvert(modelId), setStdProgress);
+                            if (r?.thumbnail_url) setThumbUrl(r.thumbnail_url);
+                            toast(r?.thumbnail_warning || '标准转换完成', r?.thumbnail_warning ? 'info' : 'success');
+                            ok = true;
+                          } catch (err) {
+                            const message = (err as { response?: { data?: { detail?: string } } })?.response?.data
+                              ?.detail;
+                            toast(message || (err instanceof Error ? err.message : '标准转换失败'), 'error');
+                          } finally {
+                            setRegenerating(false);
+                          }
+                          if (ok) onSaved();
+                        }}
+                        disabled={regenerating}
+                        icon="refresh"
+                        size="sm"
+                        variant="secondary"
+                        className={regenerating ? 'relative overflow-hidden' : undefined}
+                        iconClassName={regenerating && stdProgress ? 'relative z-10' : undefined}
+                      >
+                        {regenerating && stdProgress ? (
+                          <>
+                            <span
+                              className="absolute inset-y-0 left-0 z-0 bg-primary/20"
+                              style={{ width: `${stdProgress.percent}%` }}
+                            />
+                            <span className="relative z-10 tabular-nums">转换中 {stdProgress.percent}%</span>
+                          </>
+                        ) : regenerating ? (
+                          '生成中…'
+                        ) : (
+                          '标准转换'
+                        )}
+                      </AdminButton>
+                      <AdminButton
+                        onClick={async () => {
+                          setGmshBusy(true);
+                          setGmshProgress(null);
+                          let ok = false;
+                          try {
+                            const r = await runReconvertJob(() => modelApi.reconvertGmsh(modelId), setGmshProgress);
+                            if (r?.thumbnail_url) setThumbUrl(r.thumbnail_url);
+                            toast('修复转换完成，请检查预览', 'success');
+                            ok = true;
+                          } catch (err) {
+                            const message = (err as { response?: { data?: { detail?: string } } })?.response?.data
+                              ?.detail;
+                            toast(message || (err instanceof Error ? err.message : '修复转换失败'), 'error');
+                          } finally {
+                            setGmshBusy(false);
+                          }
+                          if (ok) onSaved();
+                        }}
+                        disabled={gmshBusy || gmshAvailable === false}
+                        icon="build"
+                        size="sm"
+                        variant="secondary"
+                        className={gmshBusy ? 'relative overflow-hidden' : undefined}
+                        iconClassName={gmshBusy && gmshProgress ? 'relative z-10' : undefined}
+                      >
+                        {gmshBusy && gmshProgress ? (
+                          <>
+                            <span
+                              className="absolute inset-y-0 left-0 z-0 bg-primary/20"
+                              style={{ width: `${gmshProgress.percent}%` }}
+                            />
+                            <span className="relative z-10 tabular-nums">转换中 {gmshProgress.percent}%</span>
+                          </>
+                        ) : gmshBusy ? (
+                          '修复中…'
+                        ) : (
+                          '修复转换'
+                        )}
+                      </AdminButton>
                       <button
                         type="button"
                         onClick={() => setShowGmshHelp(true)}
-                        aria-label="gmsh 未安装，查看安装方法"
-                        title="gmsh 未安装，点击查看安装方法"
-                        className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-error/15 text-error hover:bg-error/25 transition-colors"
+                        aria-label="关于转换引擎"
+                        className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full transition-colors ${
+                          gmshAvailable === false
+                            ? 'bg-error/15 text-error hover:bg-error/25'
+                            : 'bg-primary/10 text-primary hover:bg-primary/20'
+                        }`}
                       >
-                        <Icon name="priority_high" size={14} />
+                        <Icon name={gmshAvailable === false ? 'priority_high' : 'info'} size={14} />
                       </button>
-                    )}
+                    </div>
                   </div>
                 </div>
-              </div>
-              <div className="rounded-sm border border-outline-variant/30 bg-surface-container-lowest/50 p-2.5">
-                <p className="text-[11px] text-on-surface-variant leading-relaxed">
-                  预览缺零件或有破面？标准转换引擎对个别几何会丢面——用修复引擎（gmsh）重新转换整个模型，两套引擎可分别重转互不影响。
-                </p>
               </div>
               <div className="flex flex-col gap-1.5">
                 <AppFormLabel uppercase className="mb-0">
@@ -444,56 +541,82 @@ docker-compose up -d --force-recreate api`;
             animate={{ scale: 1, opacity: 1 }}
             exit={{ scale: 0.95, opacity: 0 }}
             onClick={(e) => e.stopPropagation()}
+            data-tooltip-ignore
             className="bg-surface-container-low rounded-t-lg sm:rounded-lg shadow-xl border border-outline-variant/20 w-full max-w-lg max-h-[calc(100dvh-1.5rem-env(safe-area-inset-bottom,0px))] sm:max-h-[85vh] flex flex-col overflow-hidden"
           >
             <div className="flex items-center justify-between px-4 py-4 sm:px-6 border-b border-outline-variant/10 shrink-0">
               <div className="flex items-center gap-2">
-                <span className="flex h-6 w-6 items-center justify-center rounded-full bg-error/15 text-error">
-                  <Icon name="priority_high" size={14} />
+                <span
+                  className={`flex h-6 w-6 items-center justify-center rounded-full ${
+                    gmshAvailable === false ? 'bg-error/15 text-error' : 'bg-primary/10 text-primary'
+                  }`}
+                >
+                  <Icon name={gmshAvailable === false ? 'priority_high' : 'info'} size={14} />
                 </span>
-                <h3 className="font-headline text-lg font-semibold text-on-surface">修复引擎（gmsh）未安装</h3>
+                <h3 className="font-headline text-lg font-semibold text-on-surface">
+                  {gmshAvailable === false ? '修复转换未安装' : '关于转换引擎'}
+                </h3>
               </div>
               <AdminIconButton icon="close" onClick={() => setShowGmshHelp(false)} variant="ghost" aria-label="关闭" />
             </div>
             <div className="px-4 py-4 sm:px-6 space-y-4 overflow-y-auto scrollbar-hidden sm:custom-scrollbar">
-              <p className="text-xs text-on-surface-variant leading-relaxed">
-                gmsh 是独立的网格工具（API 镜像内不含），需要在服务器上安装并挂载给 API 容器。按以下两步操作：
-              </p>
               <div>
-                <div className="flex items-center justify-between">
-                  <span className="text-[11px] font-medium text-on-surface">第 1 步 · 服务器安装 gmsh</span>
-                  <button
-                    type="button"
-                    onClick={() => void copyGmshCmd(GMSH_INSTALL_CMD, 'install')}
-                    className="flex items-center gap-1 rounded-sm px-2 py-1 text-[11px] text-primary hover:bg-primary/10"
-                  >
-                    <Icon name={gmshCmdCopied === 'install' ? 'check' : 'content_copy'} size={12} />
-                    {gmshCmdCopied === 'install' ? '已复制' : '复制'}
-                  </button>
-                </div>
-                <pre className="mt-1.5 overflow-x-auto rounded-sm bg-surface-container-highest px-3 py-2 font-mono text-xs text-on-surface">
-                  {GMSH_INSTALL_CMD}
-                </pre>
+                <div className="text-[11px] font-medium text-on-surface">标准转换</div>
+                <p className="mt-1 text-xs text-on-surface-variant leading-relaxed">
+                  默认引擎：从 STEP
+                  源文件重新生成预览与缩略图，速度快、支持多零件分色。个别复杂几何（特定圆弧、斜柱面）可能丢面。
+                </p>
               </div>
               <div>
-                <div className="flex items-center justify-between">
-                  <span className="text-[11px] font-medium text-on-surface">第 2 步 · 挂载给 API 容器并重启</span>
-                  <button
-                    type="button"
-                    onClick={() => void copyGmshCmd(GMSH_MOUNT_STEP, 'mount')}
-                    className="flex items-center gap-1 rounded-sm px-2 py-1 text-[11px] text-primary hover:bg-primary/10"
-                  >
-                    <Icon name={gmshCmdCopied === 'mount' ? 'check' : 'content_copy'} size={12} />
-                    {gmshCmdCopied === 'mount' ? '已复制' : '复制'}
-                  </button>
-                </div>
-                <pre className="mt-1.5 overflow-x-auto whitespace-pre-wrap rounded-sm bg-surface-container-highest px-3 py-2 font-mono text-xs text-on-surface">
-                  {GMSH_MOUNT_STEP}
-                </pre>
+                <div className="text-[11px] font-medium text-on-surface">修复转换</div>
+                <p className="mt-1 text-xs text-on-surface-variant leading-relaxed">
+                  备用 gmsh
+                  引擎：对标准转换丢面的几何有兜底效果，与标准转换互相独立、可分别重转。属重量操作，大模型耗时约 1
+                  分钟。
+                </p>
               </div>
-              <p className="text-[11px] text-on-surface-variant leading-relaxed">
-                完成后重新打开本弹窗，按钮会自动恢复可点击。注意：CentOS 系服务器把 apt 换成 yum/dnf。
-              </p>
+              {gmshAvailable === false && (
+                <>
+                  <div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-[11px] font-medium text-on-surface">
+                        第 1 步 · 服务器安装 gmsh（静态版）
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => void copyGmshCmd(GMSH_INSTALL_CMD, 'install')}
+                        className="flex items-center gap-1 rounded-sm px-2 py-1 text-[11px] text-primary hover:bg-primary/10"
+                      >
+                        <Icon name={gmshCmdCopied === 'install' ? 'check' : 'content_copy'} size={12} />
+                        {gmshCmdCopied === 'install' ? '已复制' : '复制'}
+                      </button>
+                    </div>
+                    <pre className="mt-1.5 overflow-x-auto whitespace-pre-wrap rounded-sm bg-surface-container-highest px-3 py-2 font-mono text-xs text-on-surface">
+                      {GMSH_INSTALL_CMD}
+                    </pre>
+                  </div>
+                  <div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-[11px] font-medium text-on-surface">第 2 步 · 挂载依赖并重启容器</span>
+                      <button
+                        type="button"
+                        onClick={() => void copyGmshCmd(GMSH_MOUNT_STEP, 'mount')}
+                        className="flex items-center gap-1 rounded-sm px-2 py-1 text-[11px] text-primary hover:bg-primary/10"
+                      >
+                        <Icon name={gmshCmdCopied === 'mount' ? 'check' : 'content_copy'} size={12} />
+                        {gmshCmdCopied === 'mount' ? '已复制' : '复制'}
+                      </button>
+                    </div>
+                    <pre className="mt-1.5 overflow-x-auto whitespace-pre-wrap rounded-sm bg-surface-container-highest px-3 py-2 font-mono text-xs text-on-surface">
+                      {GMSH_MOUNT_STEP}
+                    </pre>
+                  </div>
+                  <p className="text-[11px] text-on-surface-variant leading-relaxed">
+                    完成后重新打开本弹窗，按钮会自动恢复可点击。注意：发行版的 apt/yum 版 gmsh
+                    与容器不兼容，必须用上面的静态版。
+                  </p>
+                </>
+              )}
             </div>
             <div className="flex justify-end gap-3 px-4 py-3 sm:px-6 border-t border-outline-variant/10 shrink-0">
               <AdminButton onClick={() => setShowGmshHelp(false)} variant="secondary">
