@@ -1,9 +1,14 @@
 import { useThree } from '@react-three/fiber';
-import { useCallback, useEffect, useRef, type MutableRefObject } from 'react';
+import { useCallback, useEffect, useRef, useState, type MutableRefObject } from 'react';
 import * as THREE from 'three';
-import type { OrbitControls as OrbitControlsImpl } from 'three-stdlib';
+import type { OrbitControls as OrbitControlsImpl, TrackballControls as TrackballControlsImpl } from 'three-stdlib';
 import type { CameraPreset } from './ModelViewer';
 import { FIT_MODEL_EVENT, MODEL_BOUNDS_EVENT, type ModelBoundsDetail } from './viewerEvents';
+import { captureViewerHandover, getViewerHandover } from './viewerHandover';
+
+// SW 模式会换装轨迹球控制器；这里只用到 target / min·maxDistance / change 事件，
+// 两种实例的联合类型即可覆盖
+type ViewerControls = OrbitControlsImpl | TrackballControlsImpl;
 
 interface CamPreset {
   position: THREE.Vector3;
@@ -28,7 +33,7 @@ export default function CameraController({
 }: {
   preset: CameraPreset;
   viewportBottom?: number;
-  controlsRef?: MutableRefObject<OrbitControlsImpl | null>;
+  controlsRef?: MutableRefObject<ViewerControls | null>;
 }) {
   const { camera, gl } = useThree();
   const modelDataRef = useRef<ModelBoundsDetail | null>(null);
@@ -66,6 +71,13 @@ export default function CameraController({
         controlsRef.current.target.copy(p.target);
         controlsRef.current.update();
       }
+      // 相机预设会把锚点拉回模型中心，同步刷新交接快照，
+      // 保证随后开启 SW 时轨迹球瞄在当前预设中心而不是旧位置
+      captureViewerHandover(
+        p.target.clone(),
+        controlsRef?.current?.minDistance ?? 0.01,
+        controlsRef?.current?.maxDistance ?? 100000,
+      );
     },
     [camera, controlsRef],
   );
@@ -133,6 +145,7 @@ export default function CameraController({
         controlsRef.current.maxDistance = Math.max(detail.maxDim * 30, distance * 12, 100);
         controlsRef.current.target.copy(center);
         controlsRef.current.update();
+        captureViewerHandover(center.clone(), controlsRef.current.minDistance, controlsRef.current.maxDistance);
       }
 
       buildPresets(center, distance);
@@ -169,6 +182,12 @@ export default function CameraController({
     if (modelDataRef.current) updateCameraClipping(modelDataRef.current);
   }, [applyPreset, preset, updateCameraClipping]);
 
+  // SW 模式开启/关闭会把 controlsRef.current 换成另一种控制器实例：
+  // 1) 感知实例更换后重新挂 change 监听（近端/远端裁剪面跟随相机距离）
+  // 2) 新实例是全新对象（默认 target/距离限制），必须把当前相机状态
+  //    （位置 + 向上轴 + 预设 + 动态距离限制）重新灌入，否则视角跳回原点
+  const controlsInstanceRef = useRef<ViewerControls | null>(null);
+  const [controlsTick, setControlsTick] = useState(0);
   useEffect(() => {
     let frameId = 0;
     let detach: (() => void) | undefined;
@@ -176,6 +195,29 @@ export default function CameraController({
       const controls = controlsRef?.current;
       if (!controls?.addEventListener) {
         frameId = window.requestAnimationFrame(attach);
+        return;
+      }
+      if (controls !== controlsInstanceRef.current) {
+        controlsInstanceRef.current = controls;
+        // 只灌「锚点语义」的量：观察中心 + 距离限制（来自单一权威快照）。
+        // 绝不在这里 applyPreset——那会把相机位置/向上轴拽回预设视角，
+        // 用户再开 SW 的瞬间视角跳变、旋转手感突变（轨迹球的旋转轴由
+        // camera.up 参与计算，倾斜的 up 会让拖拽方向和鼠标方向对不上）
+        const handover = getViewerHandover();
+        if (handover) {
+          controls.target.copy(handover.target);
+          controls.minDistance = handover.minDistance;
+          controls.maxDistance = handover.maxDistance;
+        } else if (modelDataRef.current) {
+          controls.target.set(
+            modelDataRef.current.center.x,
+            modelDataRef.current.center.y,
+            modelDataRef.current.center.z,
+          );
+          controls.minDistance = Math.max(modelDataRef.current.maxDim * 0.002, 0.01);
+          controls.maxDistance = Math.max(modelDataRef.current.maxDim * 30, 100);
+        }
+        setControlsTick((tick) => tick + 1);
         return;
       }
       const handler = () => {
@@ -190,7 +232,8 @@ export default function CameraController({
       window.cancelAnimationFrame(frameId);
       detach?.();
     };
-  }, [controlsRef, updateCameraClipping]);
+    // controlsTick 变化 = 控制器实例已更换，重挂监听
+  }, [controlsRef, updateCameraClipping, controlsTick]);
 
   return null;
 }

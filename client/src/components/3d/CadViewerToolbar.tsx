@@ -33,6 +33,8 @@ interface CadViewerToolbarProps {
   clipInverted?: boolean;
   onToggleClipInverted?: () => void;
   onResetClip?: () => void;
+  swNavMode?: boolean;
+  onToggleSwNav?: () => void;
   showAxis: boolean;
   onToggleAxis: () => void;
   measurementOpen?: boolean;
@@ -311,6 +313,8 @@ export default function CadViewerToolbar(props: CadViewerToolbarProps) {
     clipInverted,
     onToggleClipInverted,
     onResetClip,
+    swNavMode,
+    onToggleSwNav,
     measurementOpen,
     onToggleMeasurement,
     onResetDisplay,
@@ -464,6 +468,16 @@ export default function CadViewerToolbar(props: CadViewerToolbarProps) {
               onClick={() => onViewChange(mode.key)}
             />
           ))}
+          {onToggleSwNav && (
+            <ToolbarButton
+              icon="sw_mode"
+              label={t('viewer.toolbar.swMode')}
+              size={18}
+              tooltipSide="left"
+              active={swNavMode}
+              onClick={onToggleSwNav}
+            />
+          )}
           <div className="w-full h-px bg-outline-variant/30 my-0.5" />
           <ToolbarButton
             icon="straighten"

@@ -840,6 +840,7 @@ export const jaJPFrontOfficeTranslation: TranslationMap = {
       resetClip: '中央へ',
       screenshot: 'スクリーンショットをダウンロード',
       setThumbnail: 'サムネイルに設定',
+      swMode: 'SW ビューモード',
       transparent: '透明',
     },
     viewMode: {
@@ -1280,6 +1281,7 @@ export const koKRFrontOfficeTranslation: TranslationMap = {
       resetExplode: '초기화',
       screenshot: '스크린샷 다운로드',
       setThumbnail: '썸네일로 설정',
+      swMode: 'SW 보기 모드',
       transparent: '투명',
     },
     properties: {
@@ -1517,6 +1519,7 @@ export const deDEFrontOfficeTranslation: TranslationMap = {
       resetExplode: 'Zurücksetzen',
       screenshot: 'Screenshot herunterladen',
       setThumbnail: 'Als Thumbnail setzen',
+      swMode: 'SW-Ansichtsmodus',
       transparent: 'Transparent',
     },
     properties: {

@@ -330,6 +330,7 @@ const iconMap: Record<string, LucideIcon> = {
   axis_3d: Axis3D,
   box_icon: BoxIcon,
   view_icon: View,
+  sw_mode: RefreshCw,
   rotate_cw: RotateCw,
   move_3d: Move3D,
   grip_vertical: GripVertical,

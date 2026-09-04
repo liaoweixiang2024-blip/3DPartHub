@@ -409,6 +409,7 @@ export const enUS: { translation: TranslationMap } = {
         resetExplode: 'Reset',
         screenshot: 'Download screenshot',
         setThumbnail: 'Set as thumbnail',
+        swMode: 'SW view mode',
         transparent: 'Transparent',
       },
       viewMode: {

@@ -212,6 +212,7 @@ export default function CadViewerPanel({
   const [measurementPoints, setMeasurementPoints] = useState<MeasurementPoint[]>([]);
   const [measurementRecords, setMeasurementRecords] = useState<MeasurementRecord[]>([]);
   const [measurementConfig, setMeasurementConfig] = useState({ defaultUnit: 'auto', recordLimit: 12 });
+  const [swNavMode, setSwNavMode] = useState(false);
   const [watermark, setWatermark] = useState<{ show: boolean; image: string; text: string }>({
     show: false,
     image: '',
@@ -480,6 +481,7 @@ export default function CadViewerPanel({
 
   const handleResetDisplay = useCallback(() => {
     setExplodeAmount(1);
+    setSwNavMode(false);
     setMeasurementPoints([]);
     setMeasurementRecords([]);
     setSelectedPartId(null);
@@ -537,6 +539,7 @@ export default function CadViewerPanel({
               clipRange={clipRange}
               clipInverted={clipInverted}
               onClipPositionChange={onClipPositionChange}
+              swNav={swNavMode}
               materialPreset={materialPreset}
               showEdges={showEdges}
               viewerSettings={viewerTuning}
@@ -601,6 +604,8 @@ export default function CadViewerPanel({
         clipInverted={clipInverted}
         onToggleClipInverted={onToggleClipInverted}
         onResetClip={onResetClip}
+        swNavMode={swNavMode}
+        onToggleSwNav={() => setSwNavMode((v) => !v)}
         showAxis={showAxis}
         onToggleAxis={onToggleAxis}
         measurementOpen={measurementOpen}

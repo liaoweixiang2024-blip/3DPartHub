@@ -406,6 +406,7 @@ export const zhCN: { translation: TranslationMap } = {
         resetExplode: '恢复',
         screenshot: '截图下载',
         setThumbnail: '设为预览图',
+        swMode: 'SW 看图模式',
         transparent: '透明',
       },
       viewMode: {

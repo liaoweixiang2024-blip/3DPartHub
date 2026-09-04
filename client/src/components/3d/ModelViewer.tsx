@@ -1,7 +1,7 @@
 import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import * as THREE from 'three';
-import type { OrbitControls as OrbitControlsImpl } from 'three-stdlib';
+import type { OrbitControls as OrbitControlsImpl, TrackballControls as TrackballControlsImpl } from 'three-stdlib';
 import { get3DMaterialConfig, type ViewerSettingsOverride } from '../../lib/publicSettings';
 import { THREE_THEME } from '../../themes/threeTheme';
 import type { MaterialPresetKey } from './viewerControls';
@@ -19,6 +19,7 @@ const loadCameraController = () => import('./CameraController');
 const loadMultiFormatLoader = () => import('./MultiFormatLoader');
 const loadRendererExposure = () => import('./RendererExposure');
 const loadOrbitControls = () => import('@react-three/drei').then((m) => ({ default: m.OrbitControls }));
+const loadSwTrackballControls = () => import('./SwTrackballControls');
 
 const Canvas = lazy(loadCanvas);
 const Scene = lazy(loadScene);
@@ -26,6 +27,7 @@ const CameraController = lazy(loadCameraController);
 const MultiFormatLoader = lazy(loadMultiFormatLoader);
 const RendererExposure = lazy(loadRendererExposure);
 const OrbitControls = lazy(loadOrbitControls);
+const SwTrackballControls = lazy(loadSwTrackballControls);
 
 let viewerRuntimePreloaded = false;
 
@@ -62,6 +64,8 @@ interface ModelViewerProps {
   clipRange?: { min: number; max: number; step: number };
   clipInverted?: boolean;
   onClipPositionChange?: (position: number) => void;
+  /** SW 看图模式：滚轮朝鼠标位置缩放、左键平移、右键旋转 */
+  swNav?: boolean;
   materialPreset: MaterialPresetKey;
   showEdges: boolean;
   showAxis?: boolean;
@@ -108,6 +112,7 @@ export default function ModelViewer({
   clipRange,
   clipInverted,
   onClipPositionChange,
+  swNav = false,
   materialPreset,
   showEdges,
   showAxis = false,
@@ -129,7 +134,9 @@ export default function ModelViewer({
 }: ModelViewerProps) {
   const { t } = useTranslation();
   const config = get3DMaterialConfig(viewerSettings).viewer;
-  const controlsRef = useRef<OrbitControlsImpl | null>(null);
+  // SW 模式换装轨迹球：两者都有 target/min/maxDistance 与 change 事件，
+  // CameraController 只用这四个成员，联合类型即可覆盖
+  const controlsRef = useRef<OrbitControlsImpl | TrackballControlsImpl | null>(null);
 
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const [contextLost, setContextLost] = useState(false);
@@ -233,16 +240,23 @@ export default function ModelViewer({
         <RendererExposure exposure={config.exposure} />
         <Scene showGrid={showGrid} showAxis={showAxis} viewerSettings={viewerSettings} />
         <CameraController preset={cameraPreset} viewportBottom={viewportBottom} controlsRef={controlsRef} />
-        <OrbitControls
-          ref={controlsRef}
-          enableDamping
-          dampingFactor={0.15}
-          rotateSpeed={0.8}
-          zoomSpeed={1.2}
-          minDistance={0.1}
-          maxDistance={100000}
-          enablePan
-        />
+        {/* SW 模式整体换装轨迹球（无极点限制 + 缩放朝光标），OrbitControls 必须同时
+            卸载——两个实例都监听指针事件会互相打架。轨迹球旋转过的 camera.up 由
+            相机预设/贴合视图的 applyPreset 重置为标准向上轴 */}
+        {swNav ? (
+          <SwTrackballControls controlsRef={controlsRef as React.RefObject<TrackballControlsImpl | null>} />
+        ) : (
+          <OrbitControls
+            ref={controlsRef as React.Ref<OrbitControlsImpl>}
+            enableDamping
+            dampingFactor={0.15}
+            rotateSpeed={0.8}
+            zoomSpeed={1.2}
+            minDistance={0.1}
+            maxDistance={100000}
+            enablePan
+          />
+        )}
         {modelUrl && (
           <MultiFormatLoader
             url={modelUrl}
