@@ -50,6 +50,16 @@ jobs:
           echo "version=$VERSION" >> $GITHUB_OUTPUT
           echo "Building version: $VERSION"
 
+      - name: Extract release title
+        id: release_title
+        run: |
+          TITLE=$(awk '/^##[[:space:]]*更新标题/{found=1; next} found && NF {print; exit}' "docs/releases/${{ steps.version.outputs.version }}.md" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
+          if [[ -z "$TITLE" ]]; then
+            echo "docs/releases/${{ steps.version.outputs.version }}.md 缺少「## 更新标题」段，请补充后再打标签" >&2
+            exit 1
+          fi
+          echo "title=$TITLE" >> $GITHUB_OUTPUT
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v4
 
@@ -119,5 +129,5 @@ jobs:
         if: github.event_name == 'push'
         uses: softprops/action-gh-release@v3
         with:
-          name: 3DPartHub ${{ steps.version.outputs.version }} - 企业部署与前台体验稳定版
+          name: ${{ steps.release_title.outputs.title }}
           body_path: docs/releases/${{ steps.version.outputs.version }}.md
