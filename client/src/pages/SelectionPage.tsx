@@ -163,13 +163,33 @@ export default function SelectionPage() {
     shareStateRef.current = state?.shareSlug ? state : null;
   }
 
+  // ?c=<slug> 深链（选型导航页弹窗跳转）：目录加载后直达该分类向导（一次性读取）
+  const deepLinkSlugRef = useRef<string | null>(null);
+
   useEffect(() => {
     const params = new URLSearchParams(location.search);
     const g = params.get('g');
     if (g && !groupId) {
       setGroupId(g);
     }
+    const c = params.get('c');
+    if (c) deepLinkSlugRef.current = c;
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Apply ?c= deep link once categories are loaded (before share state handling)
+  useEffect(() => {
+    const c = deepLinkSlugRef.current;
+    if (!c || !cats.length || slug) return;
+    const match = cats.find((cat) => cat.slug === c);
+    if (!match) {
+      deepLinkSlugRef.current = null;
+      return;
+    }
+    setSlug(match.slug);
+    if (match.groupId) setGroupId(match.groupId);
+    deepLinkSlugRef.current = null;
+    navigate(`${location.pathname}?g=${match.groupId ?? ''}`, { replace: true });
+  }, [cats, location.pathname, navigate, slug]);
 
   // Apply share slug/specs once cats are loaded
   useEffect(() => {

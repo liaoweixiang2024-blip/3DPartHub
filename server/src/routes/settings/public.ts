@@ -11,6 +11,7 @@ import {
   DEFAULT_MODEL_DETAIL_COPYRIGHT,
   DEFAULT_MODEL_DETAIL_DISCLAIMER,
   getAllSettings,
+  normalizeCategoryNavConfigSetting,
   normalizeFooterLinksSetting,
 } from '../../lib/settings.js';
 import { getLocalVersion } from '../../lib/update.js';
@@ -264,12 +265,15 @@ export function createSettingsPublicRouter() {
             feature_downloads_enabled: all.feature_downloads_enabled ?? true,
             feature_password_reset_enabled: all.feature_password_reset_enabled ?? true,
             feature_temp_viewer_enabled: all.feature_temp_viewer_enabled ?? true,
+            feature_category_nav_enabled: all.feature_category_nav_enabled ?? true,
             require_invite_code: all.require_invite_code ?? false,
             invite_max_active_per_user: all.invite_max_active_per_user ?? 10,
             // Selection wizard
             selection_page_title: all.selection_page_title ?? '产品选型',
             selection_page_desc: all.selection_page_desc ?? '先选产品大类，再按参数逐步缩小范围',
             selection_enable_match: all.selection_enable_match ?? true,
+            // 分类选型导航页（/category-nav）流程图配置（无敏感信息，公开只读）
+            category_nav_config: normalizeCategoryNavConfigSetting(all.category_nav_config ?? ''),
             inquiry_statuses: all.inquiry_statuses ?? '',
             ticket_statuses: all.ticket_statuses ?? '',
             ticket_classifications: all.ticket_classifications ?? '',

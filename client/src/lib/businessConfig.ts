@@ -129,6 +129,7 @@ export const DEFAULT_NAV: NavItemConfig[] = [
   { label: '技术支持', icon: 'support_agent', path: '/support', enabled: true },
   { label: '模型管理', icon: 'view_in_ar', path: '/admin/models', enabled: true, roles: ['ADMIN'] },
   { label: '分类管理', icon: 'folder', path: '/admin/categories', enabled: true, roles: ['ADMIN'] },
+  { label: '导航管理', icon: 'account_tree', path: '/admin/category-nav', enabled: true, roles: ['ADMIN'] },
   { label: '选型管理', icon: 'tune', path: '/admin/selections', enabled: true, roles: ['ADMIN'] },
   { label: '询价管理', icon: 'receipt_long', path: '/admin/inquiries', enabled: true, roles: ['ADMIN'] },
   { label: '工单处理', icon: 'build', path: '/admin/tickets', enabled: true, roles: ['ADMIN'] },

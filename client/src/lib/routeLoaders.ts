@@ -27,6 +27,8 @@ export const loadSharePage = () => import('../pages/SharePage');
 export const loadProjectsPage = () => import('../pages/ProjectsPage');
 export const loadProjectDetailPage = () => import('../pages/ProjectDetailPage');
 export const loadCategoryAdminPage = () => import('../pages/CategoryAdminPage');
+export const loadCategoryNavPage = () => import('../pages/CategoryNavPage');
+export const loadCategoryNavAdminPage = () => import('../pages/CategoryNavAdminPage');
 export const loadModelAdminPage = () => import('../pages/ModelAdminPage');
 export const loadTicketAdminPage = () => import('../pages/TicketAdminPage');
 export const loadTicketDetailPage = () => import('../pages/TicketDetailPage');
@@ -65,6 +67,7 @@ const exactRouteLoaders = new Map<string, RouteModuleLoader>([
   ['/forgot-password', loadForgotPasswordPage],
   ['/reset-password', loadResetPasswordPage],
   ['/selection', loadSelectionPage],
+  ['/category-nav', loadCategoryNavPage],
   ['/temp-viewer', loadTempViewerPage],
   ['/thread-size', loadThreadSizeToolPage],
   ['/product-wall', loadProductWallPage],

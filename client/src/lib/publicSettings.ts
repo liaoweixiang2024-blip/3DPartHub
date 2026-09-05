@@ -600,6 +600,7 @@ export interface FeatureFlags {
   passwordReset: boolean;
   tempViewer: boolean;
   invite: boolean;
+  categoryNav: boolean;
 }
 
 export function useFeatureFlags(): FeatureFlags {
@@ -617,5 +618,6 @@ export function useFeatureFlags(): FeatureFlags {
     tempViewer: settings?.feature_temp_viewer_enabled !== false,
     // 注意：邀请码功能默认关闭，用 === true 判断（区别于其他 flag 的 !== false）
     invite: settings?.require_invite_code === true,
+    categoryNav: settings?.feature_category_nav_enabled !== false,
   };
 }

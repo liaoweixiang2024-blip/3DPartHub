@@ -17,6 +17,8 @@ import { refreshSiteConfig, useFeatureFlags, usePublicSettings, type FeatureFlag
 import {
   loadAuditLogPage,
   loadCategoryAdminPage,
+  loadCategoryNavPage,
+  loadCategoryNavAdminPage,
   loadDownloadAdminPage,
   loadDownloadsPage,
   loadFavoritesPage,
@@ -94,6 +96,8 @@ const MyInquiriesPage = lazy(loadMyInquiriesPage);
 const InquiryDetailPage = lazy(loadInquiryDetailPage);
 const InquiryAdminPage = lazy(loadInquiryAdminPage);
 const SelectionSharePage = lazy(loadSelectionSharePage);
+const CategoryNavPage = lazy(loadCategoryNavPage);
+const CategoryNavAdminPage = lazy(loadCategoryNavAdminPage);
 
 function RouteFallback({ standalone = false }: { standalone?: boolean }) {
   const location = useLocation();
@@ -528,6 +532,17 @@ export default function Router() {
               </PageWrap>
             }
           />
+          {/* 分类选型导航页：SMC 选型程序「按系统选择」整页复刻（静态版） */}
+          <Route
+            path="/category-nav"
+            element={
+              <PageWrap>
+                <FeatureGate feature="categoryNav">
+                  <CategoryNavPage />
+                </FeatureGate>
+              </PageWrap>
+            }
+          />
           {/* 404 / 未匹配路由：复用公开页 chrome（PC 页头 / 移动端页头+底部菜单） */}
           <Route path="*" element={<NotFoundPage />} />
         </Route>
@@ -677,6 +692,14 @@ export default function Router() {
             element={
               <ProtectedPage requiredRole="ADMIN">
                 <CategoryAdminPage />
+              </ProtectedPage>
+            }
+          />
+          <Route
+            path="/admin/category-nav"
+            element={
+              <ProtectedPage requiredRole="ADMIN">
+                <CategoryNavAdminPage />
               </ProtectedPage>
             }
           />

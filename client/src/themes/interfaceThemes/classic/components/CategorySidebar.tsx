@@ -1,5 +1,6 @@
 import { AnimatePresence, motion } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
+import { Link } from 'react-router-dom';
 import type { Category } from '../../../../components/home/homeTypes';
 import Icon from '../../../../components/shared/Icon';
 
@@ -8,6 +9,7 @@ export default function CategorySidebar({
   activeCategory,
   categories: categoriesData,
   totalCount,
+  categoryNavEnabled,
   onToggle,
   onSelect,
 }: {
@@ -15,6 +17,8 @@ export default function CategorySidebar({
   activeCategory: string;
   categories: Category[];
   totalCount: number;
+  /** 系统选型导航入口显隐（标题旁图标，跟功能开关走） */
+  categoryNavEnabled?: boolean;
   onToggle: (id: string) => void;
   onSelect: (id: string) => void;
 }) {
@@ -22,9 +26,22 @@ export default function CategorySidebar({
   return (
     <aside className="home-category-sidebar hidden md:flex w-56 bg-surface-container-low flex-col border-r border-primary-container/10 shrink-0 py-4 gap-2">
       <div className="home-category-header px-5 py-3 border-b border-surface">
-        <h2 className="home-category-title text-sm font-bold text-on-surface tracking-wider uppercase font-headline">
-          {t('home.catalog')}
-        </h2>
+        <div className="flex items-center gap-1">
+          <h2 className="home-category-title text-sm font-bold text-on-surface tracking-wider uppercase font-headline">
+            {t('home.catalog')}
+          </h2>
+          {/* 系统选型导航入口：产品目录标题旁，跟功能开关走 */}
+          {categoryNavEnabled ? (
+            <Link
+              to="/category-nav"
+              aria-label={t('nav.categoryNav')}
+              title={t('nav.categoryNav')}
+              className="grid h-5 w-5 shrink-0 place-items-center rounded-full text-on-surface-variant/70 transition-colors hover:bg-surface-container-high hover:text-primary-container"
+            >
+              <Icon name="account_tree" size={13} />
+            </Link>
+          ) : null}
+        </div>
       </div>
       <div className="flex-1 px-3 py-2 flex flex-col gap-0.5 overflow-y-auto scrollbar-hidden">
         <button

@@ -267,6 +267,13 @@ const DEFAULT_SETTINGS: SystemSettings = {
   selection_page_desc: '先选产品大类，再按参数逐步缩小范围',
   selection_enable_match: true,
   selection_thread_priority: JSON.stringify(DEFAULT_THREAD_PRIORITY, null, 2),
+  // 选型导航：开关 + JSON 配置（真实默认在服务端；此处仅兜底空结构，管理在 /admin/category-nav）
+  feature_category_nav_enabled: true,
+  category_nav_config: JSON.stringify(
+    { model: { groups: [], nodes: [] }, selection: { groups: [], nodes: [] } },
+    null,
+    2,
+  ),
   inquiry_statuses: JSON.stringify(DEFAULT_INQUIRY_STATUSES, null, 2),
   ticket_statuses: JSON.stringify(DEFAULT_TICKET_STATUSES, null, 2),
   ticket_classifications: JSON.stringify(DEFAULT_TICKET_CLASSIFICATIONS, null, 2),

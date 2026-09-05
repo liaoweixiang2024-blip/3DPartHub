@@ -76,6 +76,12 @@ const hardcodedColorAllowedPaths = [
   'styles/global.css',
   'components/settings/ColorSchemeSettings.tsx',
   'pages/SettingsPage.tsx',
+  // 选型导航页：1:1 复刻 SMC 选型程序页（stitch smc_23 / smc_tab code.html）的原版配色与插画，刻意不走主题 token
+  'pages/CategoryNavPage.tsx',
+  'components/category-nav/smcIllustrations.tsx',
+  'components/category-nav/SelectionNavContent.tsx',
+  // 选型导航管理：新建分组的预设色是存库的数据默认值（与 CategoryNavAdminPage 色板一致），非 UI 主题色
+  'pages/CategoryNavAdminPage.tsx',
 ];
 const hardcodedColorPattern = /#[0-9a-fA-F]{3,8}\b|\b(?:rgb|rgba|hsl|hsla)\(/g;
 const allowedThemePackageImports = new Set(['react', 'react-router-dom', 'framer-motion', 'react-i18next']);

@@ -38,6 +38,7 @@ server/static/logo/
 server/static/favicon/
 server/static/selection-categories-ai/
 server/static/product-wall/
+server/static/category-nav/
 server/static/js/
 client/public/static/selection-categories/
 client/public/static/selection-categories-ai/

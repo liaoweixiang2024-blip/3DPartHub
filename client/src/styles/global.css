@@ -492,3 +492,32 @@ a,
   animation: selection-tab-panel-in 0.12s ease-out;
   will-change: opacity;
 }
+
+/* 分类选型导航（/category-nav）——照搬 stitch smc_23/code.html 的悬停卡片样式 */
+.hover-card {
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.hover-card:hover {
+  transform: translateY(-2px);
+  filter: drop-shadow(0 6px 12px rgba(14, 165, 233, 0.18));
+}
+
+/* 节点分类弹窗中央大图：默认 SMC 插画（h-20/h-24）强制放大到 hero 尺寸 */
+.node-modal-hero > svg {
+  height: 13rem !important;
+  width: auto !important;
+}
+
+@media (min-width: 640px) {
+  .node-modal-hero > svg {
+    height: 18rem !important;
+  }
+}
+
+/* 选型导航页：手机端副标题放开单行截断（允许换行至 2 行），桌面保持全局单行规范 */
+.category-nav-page .app-page-description {
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  white-space: normal;
+}

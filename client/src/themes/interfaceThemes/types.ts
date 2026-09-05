@@ -91,6 +91,8 @@ export interface DesktopHomeThemeProps {
   hasMore: boolean;
   /** 工单功能开关（空状态「请求模型」入口的显隐，由 HomePage 经 props 注入——主题沙箱禁止直接读 publicSettings） */
   supportEnabled: boolean;
+  /** 系统选型导航开关（分类筛选侧栏标题旁的入口图标，同样由 HomePage 注入） */
+  categoryNavEnabled: boolean;
   homePageSizeOptions: number[];
   homeSearchMaxLength: number;
   isLoadingMore: boolean;

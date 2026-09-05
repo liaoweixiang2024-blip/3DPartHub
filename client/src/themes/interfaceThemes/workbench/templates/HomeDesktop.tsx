@@ -29,11 +29,14 @@ function WorkbenchCategorySidebar({
   activeCategory,
   categories: categoriesData,
   totalCount,
+  categoryNavEnabled,
   onSelect,
 }: {
   activeCategory: string;
   categories: Category[];
   totalCount: number;
+  /** 系统选型导航入口显隐（标题旁图标，跟功能开关走） */
+  categoryNavEnabled: boolean;
   onSelect: (id: string) => void;
 }) {
   const { t } = useTranslation();
@@ -58,7 +61,20 @@ function WorkbenchCategorySidebar({
   return (
     <aside className="home-workbench-category-sidebar" aria-label={t('home.categoryFilter')}>
       <div className="home-workbench-category-sidebar-header">
-        <span className="home-workbench-category-title">{t('home.categoryFilter')}</span>
+        <div className="flex min-w-0 items-center gap-1.5">
+          <span className="home-workbench-category-title">{t('home.categoryFilter')}</span>
+          {/* 系统选型导航入口：分类筛选标题旁，跟功能开关走 */}
+          {categoryNavEnabled ? (
+            <Link
+              to="/category-nav"
+              aria-label={t('nav.categoryNav')}
+              title={t('nav.categoryNav')}
+              className="home-workbench-category-nav-entry"
+            >
+              <Icon name="account_tree" size={14} />
+            </Link>
+          ) : null}
+        </div>
         <span className="home-workbench-category-current">{categorySummary}</span>
       </div>
       <div className="home-workbench-sidebar-list scrollbar-hidden">
@@ -430,6 +446,7 @@ export default function WorkbenchHomeDesktop({
   showHomeListSkeleton,
   sortBy,
   supportEnabled,
+  categoryNavEnabled,
   totalItems,
   totalModelCount,
   totalPages,
@@ -458,6 +475,7 @@ export default function WorkbenchHomeDesktop({
             activeCategory={activeCategory}
             categories={categories}
             totalCount={totalModelCount}
+            categoryNavEnabled={categoryNavEnabled}
             onSelect={onSelectCategory}
           />
 

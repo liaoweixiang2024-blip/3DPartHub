@@ -21,8 +21,10 @@ export function buildCategories(tree: CategoryItem[]): Category[] {
 
 export const HOME_MOBILE_CARD_CLASS =
   'home-model-card bg-surface-container-high rounded-sm overflow-hidden flex flex-col';
+// aspect 比例替代固定 h-[140px]：折叠屏等宽视口下每列变宽，固定高度 + object-cover 会把
+// 模型图裁成超宽扁条；比例高度跟随列宽等比缩放，预览图始终完整
 export const HOME_MOBILE_MEDIA_CLASS =
-  'h-[140px] bg-surface-container-lowest relative overflow-hidden flex items-center justify-center';
+  'aspect-[4/3] bg-surface-container-lowest relative overflow-hidden flex items-center justify-center';
 export const HOME_MOBILE_BODY_CLASS = 'flex flex-1 flex-col p-2.5';
 export const HOME_MOBILE_ACTION_BUTTON_CLASS =
   'mt-auto flex h-7 w-full items-center justify-center gap-1.5 rounded-sm bg-primary-container text-xs font-medium text-on-primary';

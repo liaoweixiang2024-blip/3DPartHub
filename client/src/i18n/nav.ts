@@ -20,6 +20,11 @@ const NAV_TRANSLATIONS: Record<string, NavTranslation> = {
     shortKey: 'nav.short.selection',
     knownLabels: ['产品选型', '选型', 'Product Selection', 'Selection'],
   },
+  '/category-nav': {
+    key: 'nav.categoryNav',
+    shortKey: 'nav.short.categoryNav',
+    knownLabels: ['系统选型', 'System Selector Map', '系统選定ナビ', '시스템 선택', 'System-Auswahlkarte'],
+  },
   '/product-wall': {
     key: 'nav.productWall',
     shortKey: 'nav.short.productWall',

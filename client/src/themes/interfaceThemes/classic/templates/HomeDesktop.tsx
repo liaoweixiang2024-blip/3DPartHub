@@ -31,6 +31,7 @@ export default function ClassicHomeDesktop({
   showHomeListSkeleton,
   sortBy,
   supportEnabled,
+  categoryNavEnabled,
   totalItems,
   totalModelCount,
   totalPages,
@@ -59,6 +60,7 @@ export default function ClassicHomeDesktop({
         activeCategory={activeCategory}
         categories={categories}
         totalCount={totalModelCount}
+        categoryNavEnabled={categoryNavEnabled}
         onToggle={onToggleCategory}
         onSelect={onSelectCategory}
       />

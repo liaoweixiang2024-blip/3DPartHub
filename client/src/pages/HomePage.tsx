@@ -1114,6 +1114,7 @@ export default function HomePage() {
           showHomeListSkeleton={showHomeListSkeleton}
           sortBy={sortBy}
           supportEnabled={featureFlags.tickets}
+          categoryNavEnabled={featureFlags.categoryNav}
           totalItems={totalItems}
           totalModelCount={totalModelCount}
           totalPages={totalPages}
@@ -1200,10 +1201,20 @@ export default function HomePage() {
           <AnnouncementBanner />
           {/* Header with filter button (visible when not scrolled) */}
           <div ref={titleRowRef} className="flex items-center justify-between">
-            <div>
+            <div className="flex min-w-0 items-center gap-1">
               <PageTitle className="text-base md:text-base md:normal-case">
                 {activeCategory === 'all' ? t('home.catalog') : breadcrumb.label}
               </PageTitle>
+              {/* 系统选型导航入口：产品目录标题旁（跟随功能开关，管理语境不出现） */}
+              {featureFlags.categoryNav ? (
+                <Link
+                  to="/category-nav"
+                  aria-label={t('nav.categoryNav')}
+                  className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-on-surface-variant transition-colors hover:bg-surface-container-high hover:text-primary-container active:opacity-60"
+                >
+                  <Icon name="account_tree" size={16} />
+                </Link>
+              ) : null}
               <span className="text-[10px] text-on-surface-variant">
                 {t('home.modelCount', { count: displayTotalItems })}
               </span>

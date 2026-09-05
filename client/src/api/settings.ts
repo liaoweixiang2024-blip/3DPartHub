@@ -142,6 +142,7 @@ export interface SystemSettings {
   feature_downloads_enabled: boolean;
   feature_password_reset_enabled: boolean;
   feature_temp_viewer_enabled: boolean;
+  feature_category_nav_enabled: boolean;
   require_invite_code: boolean;
   invite_max_active_per_user: number;
   // Selection wizard
@@ -158,6 +159,8 @@ export interface SystemSettings {
   nav_admin_items: string;
   nav_items: string;
   nav_mobile_items: string;
+  // 分类选型导航（/category-nav）：JSON 配置（双 section，节点 items[] 多分类）
+  category_nav_config: string;
   upload_policy: string;
   page_size_policy: string;
   // Anti-reverse-proxy & hotlink protection
@@ -621,10 +624,13 @@ export async function getMaintenanceStatus(): Promise<MaintenanceStatus> {
   return unwrapResponse<MaintenanceStatus>(res);
 }
 
-export async function uploadImage(file: File, key: string): Promise<{ url: string }> {
+export async function uploadImage(file: File, key: string, name?: string): Promise<{ url: string }> {
   const formData = new FormData();
   formData.append('file', file);
-  const res = await client.post(`/settings/upload-image?key=${encodeURIComponent(key)}`, formData, {
+  const query = name
+    ? `?key=${encodeURIComponent(key)}&name=${encodeURIComponent(name)}`
+    : `?key=${encodeURIComponent(key)}`;
+  const res = await client.post(`/settings/upload-image${query}`, formData, {
     headers: { 'Content-Type': 'multipart/form-data' },
   });
   return unwrapResponse<{ url: string }>(res);

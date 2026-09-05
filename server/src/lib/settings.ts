@@ -64,6 +64,281 @@ export const DEFAULT_MODEL_DETAIL_DISCLAIMER =
   '本平台所有 3D 模型仅供参考与模拟验证，不作为生产加工依据。产品持续迭代更新，请以实物为准。';
 export const DEFAULT_MODEL_DETAIL_COPYRIGHT = buildModelDetailCopyright(DEFAULT_COPYRIGHT_PROJECT_NAME);
 
+// ---- 分类选型导航页（/category-nav）----
+export interface CategoryNavGroup {
+  id: string;
+  name: string;
+  color: string;
+}
+/** 节点内挂的分类项：单分类节点显示大图，多分类节点每项一块小图 */
+export interface CategoryNavItem {
+  categoryId: string | null;
+  customName?: string;
+  imageUrl?: string;
+  /** 合并名：弹窗里与另一 section 同名行合并成一行（如选型「竹节管」alias=万向管 → 与模型「万向管」同一行双按钮） */
+  alias?: string;
+}
+export interface CategoryNavNode {
+  id: string;
+  groupId: string;
+  /** 兼容旧结构（单分类）：读取时迁移为 items[0]（此时 imageUrl 归入 items[0]） */
+  categoryId?: string | null;
+  customName?: string;
+  /** 节点级图标图（拓扑图卡位插画位）；优先于 SMC 默认插画 */
+  imageUrl?: string;
+  /** 节点显示名（拓扑图卡位标签）；未设置时前台回退默认文案 */
+  label?: string;
+  /** 节点可挂多个分类（1~6 项） */
+  items?: CategoryNavItem[];
+  description?: string;
+}
+export interface CategoryNavSection {
+  groups: CategoryNavGroup[];
+  nodes: CategoryNavNode[];
+}
+export interface CategoryNavConfig {
+  model: CategoryNavSection;
+  selection: CategoryNavSection;
+}
+
+/**
+ * 默认配置：三条介质线（气源处理 / 冷却水路 / 液压润滑）+ 通用件。
+ *
+ * 设计给培训用——每条线内的节点顺序 = 介质在系统里的工艺流程顺序
+ * （源头 → 处理 → 输送 → 连接 → 终端），新人沿连线走一遍即懂拓扑。
+ * 水气混装分类的处理约定：能按子分类拆开的挂子分类；跨介质关键件
+ * （阀门/仪表/宝塔等）在所属的每条线各放一个节点——同一分类被多个
+ * 节点引用是合法的，培训时每条线自成一体；非关键混装件归通用件组。
+ *
+ * model section 的 categoryId 引用种子分类 ID（中文名即 ID）；
+ * selection section 引用北泽选型目录的 slug（beize-xx-xx）。
+ * 注意「储气罐套装」的分类 ID 是 UUID（历史数据改名产生），不能按名
+ * 引用，故未纳入默认节点——需要时在后台手动添加。
+ */
+const DEFAULT_MODEL_NAV: CategoryNavSection = {
+  groups: [
+    { id: 'air', name: '气源处理', color: '#2563eb' },
+    { id: 'cooling', name: '冷却水路', color: '#16a34a' },
+    { id: 'oil', name: '液压润滑', color: '#d97706' },
+    { id: 'common', name: '通用件与资料', color: '#64748b' },
+  ],
+  nodes: [
+    // —— 气源处理：储气 → 净化 → 控压 → 阀控 → 集成 → 输送 → 连接 → 用气 ——
+    { id: 'air-01', groupId: 'air', categoryId: '储气罐', description: '气源储能' },
+    { id: 'air-02', groupId: 'air', categoryId: '气动元件', description: '阀控执行（SMC/亚德客/费斯托/金器）' },
+    { id: 'air-03', groupId: 'air', categoryId: '气控模块', description: '集成控制' },
+    { id: 'air-04', groupId: 'air', categoryId: '气控集成板', description: '集成控制' },
+    { id: 'air-05', groupId: 'air', categoryId: '气动组合', description: '集成供气单元' },
+    { id: 'air-06', groupId: 'air', categoryId: '万向管', description: '输送管路（可调位）' },
+    { id: 'air-07', groupId: 'air', categoryId: '管道', description: '输送管路' },
+    { id: 'air-08', groupId: 'air', categoryId: '气动接头', description: '输送连接' },
+    { id: 'air-09', groupId: 'air', categoryId: '铜快插', description: '输送连接' },
+    { id: 'air-10', groupId: 'air', categoryId: '铜快拧', description: '输送连接' },
+    { id: 'air-11', groupId: 'air', categoryId: '快插接头', description: '不锈钢快插' },
+    { id: 'air-12', groupId: 'air', categoryId: '快拧接头', description: '不锈钢快拧' },
+    { id: 'air-13', groupId: 'air', categoryId: '铜卡套', description: '输送连接' },
+    { id: 'air-14', groupId: 'air', categoryId: '气枪', description: '用气终端' },
+    { id: 'air-15', groupId: 'air', categoryId: '气枪套装', description: '用气终端方案' },
+    { id: 'air-16', groupId: 'air', categoryId: 'SMC气动模块', description: '整线方案' },
+    { id: 'air-17', groupId: 'air', categoryId: '费斯托气动模块', description: '整线方案' },
+    // —— 冷却水路：源头 → 分配 → 输送 → 连接 → 喷射 → 冲洗 ——
+    { id: 'water-01', groupId: 'cooling', categoryId: '中心出水', description: '冷却源头' },
+    { id: 'water-02', groupId: 'cooling', categoryId: '分流块', description: '流量分配' },
+    { id: 'water-03', groupId: 'cooling', categoryId: '万向管', description: '输送（可调位）' },
+    { id: 'water-04', groupId: 'cooling', categoryId: '304焊直通', description: '焊接输送管路' },
+    { id: 'water-05', groupId: 'cooling', categoryId: '不锈钢管件', description: '输送连接' },
+    { id: 'water-06', groupId: 'cooling', categoryId: '铁管件', description: '输送连接' },
+    { id: 'water-07', groupId: 'cooling', categoryId: '高压喷嘴', description: '终端喷射' },
+    { id: 'water-08', groupId: 'cooling', categoryId: '环喷', description: '环形喷射' },
+    { id: 'water-09', groupId: 'cooling', categoryId: '水枪', description: '手动冲洗' },
+    { id: 'water-10', groupId: 'cooling', categoryId: '水枪套装', description: '终端方案' },
+    { id: 'water-11', groupId: 'cooling', categoryId: '水路模组', description: '整线方案' },
+    // —— 液压润滑：输送 → 连接 → 转接 → 润滑 ——
+    { id: 'oil-01', groupId: 'oil', categoryId: '高压油管', description: '油路输送' },
+    { id: 'oil-02', groupId: 'oil', categoryId: '高压油管总成', description: '总成输送' },
+    { id: 'oil-03', groupId: 'oil', categoryId: '油管扣压接头', description: '扣压连接' },
+    { id: 'oil-04', groupId: 'oil', categoryId: '彩锌液压件', description: '液压连接' },
+    { id: 'oil-05', groupId: 'oil', categoryId: '白锌液压件', description: '液压连接' },
+    { id: 'oil-06', groupId: 'oil', categoryId: '碳钢接头', description: '液压连接' },
+    { id: 'oil-07', groupId: 'oil', categoryId: '宝塔', description: '软管转接（水气油通用）' },
+    { id: 'oil-08', groupId: 'oil', categoryId: '润滑配件', description: '润滑油路' },
+    { id: 'oil-09', groupId: 'oil', categoryId: '油路套装', description: '整线方案' },
+    // —— 通用件：跨介质共用 ——
+    { id: 'common-01', groupId: 'common', categoryId: '不锈钢阀门', description: '管路开关（水气通用）' },
+    { id: 'common-02', groupId: 'common', categoryId: '铜阀门', description: '管路开关（水气通用）' },
+    { id: 'common-03', groupId: 'common', categoryId: '仪表', description: '压力监测（水气油通用）' },
+    { id: 'common-04', groupId: 'common', categoryId: '铜宝塔', description: '软管转接（水气通用）' },
+    { id: 'common-05', groupId: 'common', categoryId: '钣金', description: '安装结构件' },
+    { id: 'common-06', groupId: 'common', categoryId: '其他辅料', description: '辅料' },
+  ],
+};
+
+/** 选型导航（北泽目录）：与模型导航同构的四线映射，categoryId 为选型 slug */
+const DEFAULT_SELECTION_NAV: CategoryNavSection = {
+  groups: [
+    { id: 'air', name: '气源处理', color: '#2563eb' },
+    { id: 'cooling', name: '冷却水路', color: '#16a34a' },
+    { id: 'oil', name: '液压润滑', color: '#d97706' },
+    { id: 'common', name: '通用件与资料', color: '#64748b' },
+  ],
+  nodes: [
+    // —— 气源处理 ——
+    { id: 'sel-air-01', groupId: 'air', categoryId: 'beize-03-03', description: '储气罐' },
+    { id: 'sel-air-02', groupId: 'air', categoryId: 'beize-07-07', description: '前置过滤器' },
+    { id: 'sel-air-03', groupId: 'air', categoryId: 'beize-07-05', description: 'ADTV 排水器' },
+    { id: 'sel-air-04', groupId: 'air', categoryId: 'beize-07-01', description: '压力表系列' },
+    { id: 'sel-air-05', groupId: 'air', categoryId: 'beize-07-10', description: '压力开关 / 数显传感器' },
+    { id: 'sel-air-06', groupId: 'air', categoryId: 'beize-07-04', description: 'VBA 增压器' },
+    { id: 'sel-air-07', groupId: 'air', categoryId: 'beize-02-02', description: '铜阀门（气路阀控）' },
+    { id: 'sel-air-08', groupId: 'air', categoryId: 'beize-07-03', description: '气控集成方案' },
+    { id: 'sel-air-09', groupId: 'air', categoryId: 'beize-05-01', description: '气管 / 尼龙管 / 螺旋管' },
+    { id: 'sel-air-10', groupId: 'air', categoryId: 'beize-05-02', description: '公母型快速接头' },
+    { id: 'sel-air-11', groupId: 'air', categoryId: 'beize-01-01', description: '塑料快插接头' },
+    { id: 'sel-air-12', groupId: 'air', categoryId: 'beize-01-02', description: '全铜快插接头' },
+    { id: 'sel-air-13', groupId: 'air', categoryId: 'beize-01-03', description: '全铜快拧接头' },
+    { id: 'sel-air-14', groupId: 'air', categoryId: 'beize-01-04', description: '全铜卡套接头' },
+    { id: 'sel-air-15', groupId: 'air', categoryId: 'beize-01-06', description: '不锈钢快插接头' },
+    { id: 'sel-air-16', groupId: 'air', categoryId: 'beize-01-07', description: '不锈钢快拧接头' },
+    { id: 'sel-air-17', groupId: 'air', categoryId: 'beize-03-02', description: '气枪系列' },
+    { id: 'sel-air-18', groupId: 'air', categoryId: 'beize-07-11', description: '气源模组选型' },
+    { id: 'sel-air-19', groupId: 'air', categoryId: 'beize-07-06', description: '油、气接方案' },
+    // —— 冷却水路 ——
+    { id: 'sel-water-01', groupId: 'cooling', categoryId: 'beize-03-05', description: '竹节管（可调位输送）' },
+    { id: 'sel-water-02', groupId: 'cooling', categoryId: 'beize-01-08', description: '不锈钢管件' },
+    { id: 'sel-water-03', groupId: 'cooling', categoryId: 'beize-01-09', description: '不锈钢快速接头' },
+    { id: 'sel-water-04', groupId: 'cooling', categoryId: 'beize-03-04', description: '高压喷嘴' },
+    { id: 'sel-water-05', groupId: 'cooling', categoryId: 'beize-03-01', description: '水枪系列' },
+    { id: 'sel-water-06', groupId: 'cooling', categoryId: 'beize-02-01', description: '不锈钢阀门（水路阀控）' },
+    // —— 液压润滑 ——
+    { id: 'sel-oil-01', groupId: 'oil', categoryId: 'beize-04-01', description: '高压油管总成' },
+    { id: 'sel-oil-02', groupId: 'oil', categoryId: 'beize-04-02', description: '彩锌油管接头' },
+    { id: 'sel-oil-03', groupId: 'oil', categoryId: 'beize-04-03', description: '油管 / 管卡 / 喉箍' },
+    { id: 'sel-oil-04', groupId: 'oil', categoryId: 'beize-06-01', description: '润滑配件' },
+    // —— 通用件与资料 ——
+    { id: 'sel-common-01', groupId: 'common', categoryId: 'beize-01-05', description: '精品铜接头（水气通用）' },
+    { id: 'sel-common-02', groupId: 'common', categoryId: 'beize-07-08', description: '圣戈班密封胶 / 螺纹密封' },
+    { id: 'sel-common-03', groupId: 'common', categoryId: 'beize-07-09', description: '流体兼容性对照表' },
+  ],
+};
+
+export const DEFAULT_CATEGORY_NAV_CONFIG: CategoryNavConfig = {
+  model: DEFAULT_MODEL_NAV,
+  selection: DEFAULT_SELECTION_NAV,
+};
+
+const CATEGORY_NAV_SECTION_LIMITS = { groups: 6, nodes: 100 } as const;
+/** 每个节点最多挂的分类项数（多分类小图块） */
+const CATEGORY_NAV_ITEM_LIMIT = 6;
+const CATEGORY_NAV_COLOR_RE = /^#[0-9a-fA-F]{6}$/;
+const CATEGORY_NAV_ID_RE = /^[a-zA-Z0-9_-]{1,64}$/;
+
+/** 校验并规范化单个 section；非法输入整体回退默认，不抛错（与其它 setting 校验风格一致） */
+function normalizeCategoryNavSection(value: unknown): CategoryNavSection {
+  const fallback: CategoryNavSection = { groups: [], nodes: [] };
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return fallback;
+  const raw = value as Partial<CategoryNavSection>;
+  if (!Array.isArray(raw.groups) || !Array.isArray(raw.nodes)) return fallback;
+  if (raw.groups.length > CATEGORY_NAV_SECTION_LIMITS.groups) return fallback;
+  if (raw.nodes.length > CATEGORY_NAV_SECTION_LIMITS.nodes) return fallback;
+
+  const groups: CategoryNavGroup[] = [];
+  const groupIds = new Set<string>();
+  for (const g of raw.groups) {
+    if (!g || typeof g !== 'object') return fallback;
+    const id = String((g as CategoryNavGroup).id ?? '').trim();
+    const name = String((g as CategoryNavGroup).name ?? '')
+      .trim()
+      .slice(0, 30);
+    const color = String((g as CategoryNavGroup).color ?? '').trim();
+    if (!CATEGORY_NAV_ID_RE.test(id) || !name || !CATEGORY_NAV_COLOR_RE.test(color)) return fallback;
+    if (groupIds.has(id)) return fallback;
+    groupIds.add(id);
+    groups.push({ id, name, color });
+  }
+
+  const nodes: CategoryNavNode[] = [];
+  const nodeIds = new Set<string>();
+  for (const n of raw.nodes) {
+    if (!n || typeof n !== 'object') return fallback;
+    const row = n as CategoryNavNode;
+    const id = String(row.id ?? '').trim();
+    const groupId = String(row.groupId ?? '').trim();
+    if (!CATEGORY_NAV_ID_RE.test(id) || nodeIds.has(id)) return fallback;
+    if (!groupIds.has(groupId)) return fallback;
+
+    // 旧结构（categoryId 直挂在节点上）迁移为 items[0]；新结构直接读 items。
+    // 每项：有 categoryId 或有 customName 二者其一即合法。
+    // 节点级 imageUrl 只在新结构（有 items）时保留为节点图标；旧结构归入 items[0]。
+    const isLegacy = !(Array.isArray(row.items) && row.items.length);
+    const nodeImageUrl = !isLegacy && typeof row.imageUrl === 'string' ? row.imageUrl.trim() : '';
+    const rawItems: CategoryNavItem[] = isLegacy
+      ? [
+          {
+            categoryId: row.categoryId ?? null,
+            customName: row.customName,
+            imageUrl: row.imageUrl,
+          },
+        ]
+      : row.items!.slice(0, CATEGORY_NAV_ITEM_LIMIT);
+    const items: CategoryNavItem[] = [];
+    for (const it of rawItems) {
+      if (!it || typeof it !== 'object') return fallback;
+      const categoryId = it.categoryId == null ? null : String(it.categoryId).trim().slice(0, 128);
+      const customName = it.customName == null ? undefined : String(it.customName).trim().slice(0, 50);
+      if (categoryId == null && !customName) continue; // 跳过空项（如后台删剩的占位）
+      const alias = it.alias == null ? undefined : String(it.alias).trim().slice(0, 50);
+      items.push({
+        categoryId,
+        ...(customName ? { customName } : {}),
+        ...(typeof it.imageUrl === 'string' && it.imageUrl.trim()
+          ? { imageUrl: it.imageUrl.trim().slice(0, 500) }
+          : {}),
+        ...(alias ? { alias } : {}),
+      });
+    }
+    if (items.length === 0) return fallback; // 节点至少要有一个有效项
+    nodeIds.add(id);
+    const nodeLabel = row.label == null ? undefined : String(row.label).trim().slice(0, 30);
+    nodes.push({
+      id,
+      groupId,
+      items,
+      // 节点级图标图（拓扑图卡位插画位）；未传时前台回退 SMC 默认插画
+      ...(nodeImageUrl ? { imageUrl: nodeImageUrl.slice(0, 500) } : {}),
+      ...(nodeLabel ? { label: nodeLabel } : {}),
+      ...(row.description != null && String(row.description).trim()
+        ? { description: String(row.description).trim().slice(0, 100) }
+        : {}),
+    });
+  }
+
+  return { groups, nodes };
+}
+
+/** category_nav_config 校验入口：两个 section 各自校验，整体失败回默认 */
+export function normalizeCategoryNavConfigSetting(value: unknown): string {
+  let parsed = value;
+  if (typeof value === 'string') {
+    if (!value.trim()) return JSON.stringify(DEFAULT_CATEGORY_NAV_CONFIG, null, 2);
+    try {
+      parsed = JSON.parse(value);
+    } catch {
+      return JSON.stringify(DEFAULT_CATEGORY_NAV_CONFIG, null, 2);
+    }
+  }
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    return JSON.stringify(DEFAULT_CATEGORY_NAV_CONFIG, null, 2);
+  }
+  const raw = parsed as Partial<CategoryNavConfig>;
+  const config: CategoryNavConfig = {
+    model: normalizeCategoryNavSection(raw.model),
+    selection: normalizeCategoryNavSection(raw.selection),
+  };
+  const serialized = JSON.stringify(config);
+  if (serialized.length > 200_000) return JSON.stringify(DEFAULT_CATEGORY_NAV_CONFIG, null, 2);
+  return JSON.stringify(config, null, 2);
+}
+
 type FooterLink = { label: string; url: string };
 
 export function normalizeFooterLinksSetting(value: unknown): string {
@@ -244,6 +519,7 @@ const SETTINGS_SCHEMA: SettingDef[] = [
   { key: 'feature_downloads_enabled', defaultValue: true },
   { key: 'feature_password_reset_enabled', defaultValue: true },
   { key: 'feature_temp_viewer_enabled', defaultValue: true },
+  { key: 'feature_category_nav_enabled', defaultValue: true },
   { key: 'require_invite_code', defaultValue: false },
   { key: 'invite_max_active_per_user', defaultValue: 10 },
 
@@ -255,6 +531,9 @@ const SETTINGS_SCHEMA: SettingDef[] = [
     key: 'selection_thread_priority',
     defaultValue: JSON.stringify(DEFAULT_SELECTION_THREAD_PRIORITY_FOR_SETTINGS, null, 2),
   },
+
+  // 分类选型导航页（/category-nav）：模型库/选型双 section 流程图配置
+  { key: 'category_nav_config', defaultValue: JSON.stringify(DEFAULT_CATEGORY_NAV_CONFIG, null, 2) },
 
   // Business dictionaries and policies
   { key: 'inquiry_statuses', defaultValue: JSON.stringify(DEFAULT_INQUIRY_STATUSES_FOR_SETTINGS, null, 2) },
@@ -608,6 +887,7 @@ const BOOLEAN_KEYS = new Set([
   'feature_downloads_enabled',
   'feature_password_reset_enabled',
   'feature_temp_viewer_enabled',
+  'feature_category_nav_enabled',
   'cache_enabled',
   'redis_tls_enabled',
   'storage_use_ssl',
@@ -688,6 +968,7 @@ function clampNumericSetting(key: string, value: unknown, min: number, max: numb
 
 export function validateSettingValue(key: string, value: unknown): unknown {
   if (key === 'footer_links') return normalizeFooterLinksSetting(value);
+  if (key === 'category_nav_config') return normalizeCategoryNavConfigSetting(value);
   // 品牌类文本：去首尾空白 + 限长，防止把标签页标题 / PWA 安装名称撑爆
   if (key === 'site_title' || key === 'site_browser_title' || key === 'site_app_name') {
     const trimmed = String(value ?? '').trim();

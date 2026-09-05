@@ -57,7 +57,7 @@ export function ProductCardMobile({
             <ModelThumbnail
               src={product.thumbnailUrl}
               alt={product.name}
-              className="w-full h-full object-cover"
+              className="w-full h-full object-contain p-1"
               loading={imageLoading}
               fetchPriority={imageFetchPriority}
             />

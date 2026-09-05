@@ -979,6 +979,23 @@
   letter-spacing: 0;
 }
 
+/* 系统选型导航入口：分类筛选标题旁的小图标（浅色圆底，hover 变主题色） */
+.home-page-desktop[data-home-theme='workbench'] .home-workbench-category-nav-entry {
+  display: grid;
+  place-items: center;
+  width: 1.25rem;
+  height: 1.25rem;
+  flex-shrink: 0;
+  border-radius: 999px;
+  color: color-mix(in srgb, var(--color-on-surface-variant) 75%, transparent);
+  transition: all 0.15s ease;
+}
+
+.home-page-desktop[data-home-theme='workbench'] .home-workbench-category-nav-entry:hover {
+  background: var(--color-surface-container-high);
+  color: var(--color-primary-container);
+}
+
 .home-page-desktop[data-home-theme='workbench'] .home-workbench-category-current {
   min-width: 0;
   max-width: 7.5rem;

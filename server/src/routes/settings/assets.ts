@@ -15,6 +15,8 @@ const imageDirs: Record<string, string> = {
   site_icon: join(process.cwd(), config.staticDir, 'logo'),
   site_favicon: join(process.cwd(), config.staticDir, 'favicon'),
   site_app_icon: join(process.cwd(), config.staticDir, 'favicon'),
+  // 分类选型导航页节点图（按节点逐个换图，filename 由 name 参数指定）
+  category_nav: join(process.cwd(), config.staticDir, 'category-nav'),
 };
 for (const dir of Object.values(imageDirs)) {
   mkdirSync(dir, { recursive: true });
@@ -66,8 +68,35 @@ export function createSettingsAssetsRouter() {
       }
       const key = (req.query.key as string) || (req.body.key as string);
       const targetDir = imageDirs[key];
+      if (!targetDir) {
+        rmSync(file.path, { force: true });
+        res.status(400).json({ detail: `不支持的上传类型: ${key}` });
+        return;
+      }
+      // category_nav：配置是 JSON blob，不能像其它键那样 setSetting 单 URL——
+      // 文件名由 name 参数指定（前端传 <section>-<nodeId>），返回带版本参数的
+      // URL 由调用方写进节点 imageUrl；稳定文件名覆盖 + ?v= 破浏览器缓存
+      if (key === 'category_nav') {
+        const nodeName = String(req.query.name ?? req.body.name ?? '').trim();
+        if (!/^[a-zA-Z0-9_-]{1,64}$/.test(nodeName)) {
+          rmSync(file.path, { force: true });
+          res.status(400).json({ detail: '节点图片名只允许 1-64 位字母/数字/下划线/连字符' });
+          return;
+        }
+        const navExt = (file.originalname?.split('.').pop() || '').toLowerCase();
+        const navAllowed = new Set(['png', 'jpg', 'jpeg', 'svg', 'webp', 'ico']);
+        const navFinalExt = navAllowed.has(navExt) ? navExt : 'png';
+        const navFinalName = `${nodeName}.${navFinalExt}`;
+        const navFinalPath = join(targetDir, navFinalName);
+        copyFileSync(file.path, navFinalPath);
+        await persistFile(navFinalPath);
+        rmSync(file.path, { force: true });
+        const navUrl = `/static/category-nav/${navFinalName}?v=${Date.now()}`;
+        res.json({ url: navUrl });
+        return;
+      }
       const baseName = imageNames[key];
-      if (!targetDir || !baseName) {
+      if (!baseName) {
         rmSync(file.path, { force: true });
         res.status(400).json({ detail: `不支持的上传类型: ${key}` });
         return;
