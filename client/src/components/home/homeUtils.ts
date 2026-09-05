@@ -21,8 +21,9 @@ export function buildCategories(tree: CategoryItem[]): Category[] {
 
 export const HOME_MOBILE_CARD_CLASS =
   'home-model-card bg-surface-container-high rounded-sm overflow-hidden flex flex-col';
-// aspect 比例替代固定 h-[140px]：折叠屏等宽视口下每列变宽，固定高度 + object-cover 会把
-// 模型图裁成超宽扁条；比例高度跟随列宽等比缩放，预览图始终完整
+// 比例槽（4:3）替代固定 h-[140px]：高度跟随列宽等比缩放，配合 object-cover 时裁切百分比
+// 恒为上下各 12.5%——折叠屏等宽视口下不会像固定 140px 那样把方图裁成超宽扁条；同时吃掉
+// 缩略图文件内上下的取景留白，保持历史「填满卡片」的观感。
 export const HOME_MOBILE_MEDIA_CLASS =
   'aspect-[4/3] bg-surface-container-lowest relative overflow-hidden flex items-center justify-center';
 export const HOME_MOBILE_BODY_CLASS = 'flex flex-1 flex-col p-2.5';
