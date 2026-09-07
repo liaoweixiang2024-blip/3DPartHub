@@ -9,20 +9,70 @@ const devProxyTarget = process.env.VITE_DEV_PROXY_TARGET || 'http://127.0.0.1:80
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
+const HEAD_FRAGMENT_SSI = '<!--# include virtual="/api/settings/head-fragment" -->';
+const HEAD_FRAGMENT_PLACEHOLDER = '/api/settings/head-fragment';
+
 /**
  * Dev-only replacement for nginx SSI: index.html's <!--# include virtual="/api/settings/head-fragment" -->
- * is replaced at serve time with the build-time default head fragment (public/head-fragment-default.html).
+ * is replaced at serve time with a live fragment fetched from the dev API, so the first paint
+ * (before any client JS runs) shows the admin-configured favicon — mirroring production SSI.
  * Production serves it through nginx SSI against the live API; dev has no SSI processor.
+ *
+ * Why not the static public/head-fragment-default.html: that file is the "API down" fallback with
+ * the build-time default favicon. Serving it unconditionally meant every dev reload first rendered
+ * the default icon and only swapped to the custom one once client JS fetched settings — reading as
+ * "favicon flickers between default and mine" whenever the tab was glanced at mid-swap (or the
+ * local API was slow/restarting, in which case it stayed default for the whole session).
+ *
+ * The fetched fragment is cached for DEV_HEAD_FRAGMENT_TTL_MS and refetched in the background on
+ * expiry, so per-request overhead is one memory read.
  */
+const DEV_HEAD_FRAGMENT_TTL_MS = 30_000;
+
+function fetchLiveHeadFragment(): Promise<string> {
+  return fetch(`${devProxyTarget}${HEAD_FRAGMENT_PLACEHOLDER}`).then(async (res) => {
+    if (!res.ok) throw new Error(`head-fragment ${res.status}`);
+    return res.text();
+  });
+}
+
 function devHeadFragmentPlugin(): Plugin {
+  let cachedFragment: string | null = null;
+  let cacheAt = 0;
+  let inflight: Promise<string> | null = null;
+
+  const readStaticFallback = () => readFileSync(join(__dirname, 'public/head-fragment-default.html'), 'utf8');
+
+  const getFragment = (): Promise<string> => {
+    const now = Date.now();
+    if (cachedFragment && now - cacheAt < DEV_HEAD_FRAGMENT_TTL_MS) return Promise.resolve(cachedFragment);
+    if (inflight) return inflight;
+    inflight = fetchLiveHeadFragment()
+      .then((fragment) => {
+        cachedFragment = fragment;
+        cacheAt = now;
+        return fragment;
+      })
+      .catch(() => {
+        // 本地 API 没起 / 重启中：退回静态默认片段（与线上 API 挂掉时后端的兜底一致）
+        if (!cachedFragment) cachedFragment = readStaticFallback();
+        return cachedFragment;
+      })
+      .finally(() => {
+        inflight = null;
+      });
+    return inflight;
+  };
+
   return {
     name: 'dev-head-fragment',
     apply: 'serve',
     transformIndexHtml: {
       order: 'pre',
-      handler(html) {
-        const fragment = readFileSync(join(__dirname, 'public/head-fragment-default.html'), 'utf8');
-        return html.replace(/<!--# include virtual="\/api\/settings\/head-fragment" -->/, fragment.trim());
+      async handler(html) {
+        if (!html.includes(HEAD_FRAGMENT_SSI)) return html;
+        const fragment = await getFragment();
+        return html.replace(HEAD_FRAGMENT_SSI, fragment.trim());
       },
     },
   };

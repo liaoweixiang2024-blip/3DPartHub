@@ -562,6 +562,8 @@ export const enUS: { translation: TranslationMap } = {
       specFormat: 'Format',
       specUploadedAt: 'Uploaded at',
       supportReason: 'Support',
+      titleCollapse: 'Show less',
+      titleExpand: 'Show more',
       techSpecs: 'Technical specs',
       unnamed: 'Unnamed model',
       viewDrawing: 'View drawing',

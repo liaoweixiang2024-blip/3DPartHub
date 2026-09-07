@@ -1035,7 +1035,10 @@
   gap: 0.5rem;
   border: 0;
   border-radius: 0.625rem;
-  background: transparent;
+  /* 悬浮底色从透明混入 4% 主题色：透明起点的过渡会强制文字重栅格化（macOS 子像素
+   * 抗锯齿翻转），概率性被感知为整行文字「晃一下」。改为常驻极浅底色（不透明），
+   * hover 只在两个实色间过渡，文字栅格化保持稳定。 */
+  background: color-mix(in srgb, var(--color-primary-container) 0.4%, transparent);
   color: var(--color-on-surface-variant);
   padding: 0.3125rem 0.4375rem 0.3125rem 0.5625rem;
   font-size: 0.8125rem;
@@ -1065,6 +1068,11 @@
   background: var(--color-surface-container-lowest);
   color: color-mix(in srgb, var(--color-on-surface-variant) 68%, transparent);
   padding: 0.25rem;
+  /* 图标底片 hover 变色与行背景同速过渡：无过渡时鼠标扫过会先于行背景瞬跳，
+   * 混合时序被感知为列表闪烁/抖动 */
+  transition:
+    background-color 150ms ease,
+    color 150ms ease;
 }
 
 .home-page-desktop[data-home-theme='workbench'] .home-workbench-sidebar-item > span:nth-child(2) {
@@ -1116,12 +1124,16 @@
   gap: 0.375rem;
   border: 0;
   border-radius: 0.5rem;
-  background: transparent;
+  /* 同父级项：常驻极浅底色 + 过渡，避免透明->有色切换触发文字重栅格化闪烁 */
+  background: color-mix(in srgb, var(--color-primary-container) 0.4%, transparent);
   color: color-mix(in srgb, var(--color-on-surface-variant) 72%, transparent);
   padding: 0.25rem 0.4375rem;
   font-size: 0.75rem;
   font-weight: 650;
   text-align: left;
+  transition:
+    background-color 150ms ease,
+    color 150ms ease;
 }
 
 .home-page-desktop[data-home-theme='workbench'] .home-workbench-sidebar-child > span:first-child {

@@ -1,4 +1,5 @@
 import { motion } from 'framer-motion';
+import { useLayoutEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router-dom';
 import { getModelDetailCopyright, getModelDetailDisclaimer, useFeatureFlags } from '../../lib/publicSettings';
@@ -18,6 +19,66 @@ import {
 import ModelThumbnail from '../shared/ModelThumbnail';
 import { checkProtectedAccess } from '../shared/ProtectedLink';
 import type { ModelInfo } from './modelDetailUtils';
+
+/**
+ * 按标题长度分档字号：侧栏标题区只有 ~444px 宽，30px 大标题下长型号名会折成
+ * 4-5 行把下载按钮挤出首屏。短名保持 3xl 视觉主体，中长名降一档减少折行，
+ * 超长名（≈40+ 字符）直接用正文级字号，保证头部信息密度可控。
+ */
+function titleFontSizeClass(name: string | undefined) {
+  const len = Array.from(name?.trim() || '').length;
+  if (len >= 40) return 'text-lg';
+  if (len >= 22) return 'text-2xl';
+  return 'text-3xl';
+}
+
+/**
+ * 长标题：3 行截断 + 展开/收起。展开按钮只在「clamp 真的截掉了内容」时才渲染
+ * （对比去掉 clamp 的 scrollHeight 与可视高度），避免按字数猜测导致
+ * 「点了展开却没多出任何内容」的死按钮。
+ */
+function DetailTitle({ name }: { name: string | undefined }) {
+  const { t } = useTranslation();
+  const [expanded, setExpanded] = useState(false);
+  const [clippable, setClippable] = useState(false);
+  const h1Ref = useRef<HTMLHeadingElement | null>(null);
+
+  const sizeClass = titleFontSizeClass(name);
+
+  // 标题或字号档位变化时重测是否被截断；宽度变化（窗口缩放）也重测
+  useLayoutEffect(() => {
+    const el = h1Ref.current;
+    if (!el) return;
+    const check = () => setClippable(el.scrollHeight > el.clientHeight + 1);
+    check();
+    if (typeof ResizeObserver === 'undefined') return;
+    const ro = new ResizeObserver(check);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [name, sizeClass]);
+
+  return (
+    <h1
+      ref={h1Ref}
+      className={`font-headline font-bold text-on-surface tracking-tight mb-1.5 leading-tight ${
+        expanded ? '' : 'line-clamp-3'
+      } ${sizeClass}`}
+      title={name}
+    >
+      {name}
+      {clippable ? (
+        <button
+          type="button"
+          onClick={() => setExpanded((v) => !v)}
+          className="ml-1.5 align-middle text-xs font-normal text-primary hover:text-primary-container transition-colors"
+          aria-expanded={expanded}
+        >
+          {expanded ? t('modelDetail.titleCollapse') : t('modelDetail.titleExpand')}
+        </button>
+      ) : null}
+    </h1>
+  );
+}
 
 export function SpecTable({ specs }: { specs: ModelSpec[] }) {
   return (
@@ -87,9 +148,7 @@ export function DesktopDetail({
                   </span>
                 ))}
               </div>
-              <h1 className="font-headline text-3xl font-bold text-on-surface tracking-tight mb-1.5">
-                {modelData.name}
-              </h1>
+              <DetailTitle name={modelData.name} />
             </div>
             {isAdmin && onEdit && (
               <button

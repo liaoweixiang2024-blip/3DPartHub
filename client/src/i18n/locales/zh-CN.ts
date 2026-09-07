@@ -559,6 +559,8 @@ export const zhCN: { translation: TranslationMap } = {
       specFormat: '格式',
       specUploadedAt: '上传时间',
       supportReason: '技术支持',
+      titleCollapse: '收起',
+      titleExpand: '展开',
       techSpecs: '技术参数',
       unnamed: '未命名模型',
       viewDrawing: '查看图纸',
