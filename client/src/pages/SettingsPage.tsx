@@ -7496,38 +7496,47 @@ function Content() {
                       {/* Program intro */}
                       <div className="px-6 py-4">
                         <p className="text-sm font-medium text-on-surface">程序介绍</p>
-                        <p className="text-xs text-on-surface-variant/80 mt-1.5 leading-relaxed">
+                        <p className="text-xs text-on-surface-variant mt-1.5 leading-relaxed">
                           3DPartHub
                           是一套面向制造企业的三维零件模型管理平台，覆盖模型上传与格式转换、在线预览与测量、分类检索、产品选型、工单与询价、分享协作、数据备份等完整能力。前后端一体部署，Docker
                           一键安装，支持多级权限与功能开关。
                         </p>
-                        <div className="mt-3 flex flex-wrap items-center gap-x-6 gap-y-1.5 text-xs text-on-surface-variant">
-                          <span>
-                            开发者：<span className="text-on-surface">廖为祥</span>（全栈开发）
-                          </span>
-                          <span>
-                            QQ：
-                            <a
-                              href="http://wpa.qq.com/msgrd?v=3&uin=255955956&site=qq&menu=yes"
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="text-primary hover:underline"
-                            >
-                              255955956
-                            </a>
-                          </span>
-                          <span>
-                            网址：
-                            <a
-                              href="https://liaoweixiang.com"
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="text-primary hover:underline"
-                            >
-                              liaoweixiang.com
-                            </a>
-                          </span>
-                        </div>
+                        <p className="mt-3 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-on-surface-variant/50">
+                          <span>© 2026 廖为祥</span>
+                          <a
+                            href="http://wpa.qq.com/msgrd?v=3&uin=255955956&site=qq&menu=yes"
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            title="QQ 255955956"
+                            aria-label="QQ 255955956"
+                            className="inline-flex items-center opacity-70 hover:opacity-100 transition-opacity"
+                          >
+                            <Icon name="chat" size={12} />
+                          </a>
+                          <a
+                            href="https://github.com/liaoweixiang2024-blip"
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            title="GitHub"
+                            aria-label="GitHub"
+                            className="inline-flex items-center opacity-70 hover:opacity-100 transition-opacity"
+                          >
+                            {/* lucide 已移除品牌 logo，内联 GitHub 官方 mark（24×24 viewBox） */}
+                            <svg viewBox="0 0 24 24" width="12" height="12" fill="currentColor" aria-hidden="true">
+                              <path d="M12 .297c-6.63 0-12 5.373-12 12 0 5.303 3.438 9.8 8.205 11.385.6.113.82-.258.82-.577 0-.285-.01-1.04-.015-2.04-3.338.724-4.042-1.61-4.042-1.61C4.422 18.07 3.633 17.7 3.633 17.7c-1.087-.744.084-.729.084-.729 1.205.084 1.838 1.236 1.838 1.236 1.07 1.835 2.809 1.305 3.495.998.108-.776.417-1.305.76-1.605-2.665-.3-5.466-1.332-5.466-5.93 0-1.31.465-2.38 1.235-3.22-.135-.303-.54-1.523.105-3.176 0 0 1.005-.322 3.3 1.23.96-.267 1.98-.399 3-.405 1.02.006 2.04.138 3 .405 2.28-1.552 3.285-1.23 3.285-1.23.645 1.653.24 2.873.12 3.176.765.84 1.23 1.91 1.23 3.22 0 4.61-2.805 5.625-5.475 5.92.42.36.81 1.096.81 2.22 0 1.606-.015 2.896-.015 3.286 0 .315.21.69.825.57C20.565 22.092 24 17.592 24 12.297c0-6.627-5.373-12-12-12" />
+                            </svg>
+                          </a>
+                          <a
+                            href="https://liaoweixiang.com"
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            title="liaoweixiang.com"
+                            aria-label="liaoweixiang.com"
+                            className="inline-flex items-center opacity-70 hover:opacity-100 transition-opacity"
+                          >
+                            <Icon name="link" size={12} />
+                          </a>
+                        </p>
                       </div>
 
                       {/* System Update — version detection only */}
@@ -7762,6 +7771,17 @@ function Content() {
                               })}
                             </div>
                           </div>
+                        )}
+                        {updateHistory.length > 0 && (
+                          <a
+                            href="https://github.com/liaoweixiang2024-blip/3DPartHub/releases"
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="mt-4 ml-5 inline-flex items-center gap-1 text-xs text-on-surface-variant/70 hover:text-primary transition-colors"
+                          >
+                            更多历史版本
+                            <Icon name="open_in_new" size={12} />
+                          </a>
                         )}
                       </div>
                     </div>

@@ -82,19 +82,23 @@ test('multi-use protected resource tokens remain valid until expiry', () => {
   assert.equal(verifyProtectedResourceToken(created.token, 'ticket-attachment', 'other:file.png'), null);
 });
 
-test('backup download resource tokens are single-use and resource bound', () => {
+test('backup download resource tokens are multi-use (download-tool friendly) and resource bound', () => {
+  // 备份下载走 verify（非 consume）：下载工具（迅雷/IDM）先 HEAD 探测再分段 Range
+  // 拉取，一次性令牌第一次请求就被烧掉，工具端报「无法从网站上提取文件」。
   const created = createProtectedResourceToken({
     type: 'backup-download',
     resourceId: 'backup-1',
     userId: 'admin-1',
     role: 'ADMIN',
+    ttlMs: 24 * 60 * 60 * 1000,
+    singleUse: false,
   });
 
   assert.equal(verifyProtectedResourceToken(created.token, 'backup-download', 'other-backup'), null);
-  const payload = consumeProtectedResourceToken(created.token, 'backup-download', 'backup-1');
-  assert.equal(payload?.userId, 'admin-1');
-  assert.equal(payload?.role, 'ADMIN');
-  assert.equal(consumeProtectedResourceToken(created.token, 'backup-download', 'backup-1'), null);
+  // 同一令牌可被 HEAD 探测 + 多次分段请求重复校验
+  assert.equal(verifyProtectedResourceToken(created.token, 'backup-download', 'backup-1')?.userId, 'admin-1');
+  assert.equal(verifyProtectedResourceToken(created.token, 'backup-download', 'backup-1')?.role, 'ADMIN');
+  assert.equal(verifyProtectedResourceToken(created.token, 'backup-download', 'backup-1')?.userId, 'admin-1');
 });
 
 test('share access resource tokens can be verified multiple times until expiry', () => {

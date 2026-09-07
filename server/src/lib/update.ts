@@ -143,6 +143,8 @@ let latestProbeCache: { at: number; version: string } | null = null;
 const LATEST_PROBE_TTL_MS = 10 * 60 * 1000;
 // 历史缓存兜底时效：超过后即使版本号没变也重拉一次（发布说明可能被事后编辑）
 const HISTORY_TTL_MS = 60 * 60 * 1000;
+// 仓库 release 总数远超展示量（113+），时间线只展示最近 20 个，
+// 更早的由前端「更多历史版本」链接跳 GitHub Releases 页查看
 const HISTORY_MAX_ENTRIES = 20;
 
 function parseUpdateTitleFromBody(body: string | undefined): string | undefined {
@@ -179,7 +181,11 @@ export async function getUpdateHistory(): Promise<UpdateHistoryEntry[]> {
     // latest 与缓存顶版本不一致（或缓存过期）→ 落到下方全量拉取
   }
 
-  const raw = await fetchJsonFromGithub('/repos/liaoweixiang2024-blip/3DPartHub/releases?per_page=50');
+  // 只需展示 HISTORY_MAX_ENTRIES 条，按需拉取（filter 会滤掉 draft/prerelease，
+  // 多拉一页余量保证滤后仍够数）
+  const raw = await fetchJsonFromGithub(
+    `/repos/liaoweixiang2024-blip/3DPartHub/releases?per_page=${HISTORY_MAX_ENTRIES + 10}`,
+  );
   if (!Array.isArray(raw)) return historyCache?.entries ?? [];
 
   const entries: UpdateHistoryEntry[] = raw

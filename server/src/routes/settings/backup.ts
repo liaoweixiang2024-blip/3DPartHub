@@ -34,7 +34,7 @@ import {
   startVerifyBackupJob,
 } from '../../lib/backup.js';
 import { config } from '../../lib/config.js';
-import { createProtectedResourceToken, consumeProtectedResourceToken } from '../../lib/downloadTokenStore.js';
+import { createProtectedResourceToken, verifyProtectedResourceToken } from '../../lib/downloadTokenStore.js';
 import { getErrorMessage } from '../../lib/http.js';
 import { createLogger } from '../../lib/logger.js';
 import { prisma } from '../../lib/prisma.js';
@@ -572,12 +572,18 @@ export function createSettingsBackupRouter() {
       res.status(404).json({ detail: '备份文件不存在' });
       return;
     }
+    // singleUse: false + 24 小时 TTL：下载工具（迅雷/IDM）会先 HEAD 探测再分段多线程
+    // 拉取，一次性令牌在第一次探测就被烧掉，后续请求全部 401——工具端表现为
+    // 「无法从网站上提取文件，请尝试登录相应网站」。改成与图纸/附件一致的
+    // 可复用令牌；备份文件体积大（GB 级），TTL 放宽到 24 小时避免慢速下载/断点
+    // 续传中途过期。令牌仍是 32 字节随机且绑定备份 ID，泄漏窗口可控。
     const created = createProtectedResourceToken({
       type: 'backup-download',
       resourceId: backupId,
       userId: req.user!.userId,
       role: req.user!.role,
-      singleUse: true,
+      ttlMs: 24 * 60 * 60 * 1000,
+      singleUse: false,
     });
     res.json({
       ...created,
@@ -593,11 +599,12 @@ export function createSettingsBackupRouter() {
       await sendResourceError(req, res, 400, '下载令牌无效', { htmlTitle: '下载链接无效' });
       return;
     }
-    const tokenPayload = consumeProtectedResourceToken(token, 'backup-download', backupId);
+    // verify（非 consume）：同一令牌需支持下载工具的 HEAD 探测 + 分段 Range 请求复用
+    const tokenPayload = verifyProtectedResourceToken(token, 'backup-download', backupId);
     if (!tokenPayload) {
       await sendResourceError(req, res, 401, '备份下载链接已失效，请回到系统设置重新发起下载', {
         htmlTitle: '下载链接已失效',
-        hint: '备份下载链接为一次性链接，只能使用一次',
+        hint: '备份下载链接有效期为 24 小时，过期后请重新发起下载',
       });
       return;
     }
