@@ -111,7 +111,9 @@ export function createSettingsAssetsRouter() {
       await persistFile(finalPath);
       rmSync(file.path, { force: true });
 
-      // Build URL path: /static/<subdir>/<filename>
+      // Build URL path: /static/<subdir>/<filename>?v=<ts>
+      // 文件名固定（同名覆盖换图），URL 不带版本参数时浏览器会沿用旧缓存——
+      // 包括修复前可能被缓存的 404 响应，表现为「上传成功但预览一直占位图」。
       const dirKey = Object.keys(imageDirs).find((k) => imageDirs[k] === targetDir)!;
       const urlSegment =
         dirKey === 'watermark_image'
@@ -119,7 +121,7 @@ export function createSettingsAssetsRouter() {
           : dirKey === 'site_logo' || dirKey === 'site_icon'
             ? 'logo'
             : 'favicon'; // site_favicon + site_app_icon 同目录（都是小图标）
-      const imageUrl = `/static/${urlSegment}/${finalName}`;
+      const imageUrl = `/static/${urlSegment}/${finalName}?v=${Date.now()}`;
       await setSetting(key, imageUrl);
       res.json({ url: imageUrl });
     },

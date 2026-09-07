@@ -4874,7 +4874,10 @@ function Content() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [changed, setChanged] = useState(false);
-  const [uploading, setUploading] = useState(false);
+  // 记录「正在上传哪个设置项」而非全局布尔：任一图片项上传时只让该项按钮进入
+  // 「上传中...」态。全局布尔会让两处上传控件（站点与品牌 / 界面预览）的所有按钮
+  // 同时变文案变宽，同行元素被推移——表现为「一起跳动」。
+  const [uploadingKey, setUploadingKey] = useState<string | null>(null);
   const [testEmailTo, setTestEmailTo] = useState('');
   const [testEmailTemplateKey, setTestEmailTemplateKey] = useState('smtp_test');
   const [testingEmail, setTestingEmail] = useState(false);
@@ -5519,7 +5522,7 @@ function Content() {
       }
       if (sizeWarn) toast(sizeWarn, 'info');
     }
-    setUploading(true);
+    setUploadingKey(key);
     try {
       const { url } = await uploadImage(file, key);
       setSettings((prev) => ({ ...prev, [key]: url }));
@@ -5528,7 +5531,7 @@ function Content() {
     } catch {
       toast('上传失败', 'error');
     } finally {
-      setUploading(false);
+      setUploadingKey(null);
       if (imageInputRefs.current[key]) imageInputRefs.current[key]!.value = '';
     }
   }
@@ -6413,10 +6416,10 @@ function Content() {
                                                     />
                                                     <button
                                                       onClick={() => imageInputRefs.current[item.key]?.click()}
-                                                      disabled={uploading}
+                                                      disabled={uploadingKey !== null}
                                                       className="px-3 py-1.5 text-xs font-medium bg-primary-container/20 text-primary-container rounded-md hover:bg-primary-container/30 disabled:opacity-50 transition-colors"
                                                     >
-                                                      {uploading
+                                                      {uploadingKey === item.key
                                                         ? '上传中...'
                                                         : settings[item.key]
                                                           ? '更换图片'
@@ -6732,10 +6735,14 @@ function Content() {
                                               />
                                               <button
                                                 onClick={() => imageInputRefs.current[item.key]?.click()}
-                                                disabled={uploading}
+                                                disabled={uploadingKey !== null}
                                                 className="px-3 py-1.5 text-xs font-medium bg-primary-container/20 text-primary-container rounded-md hover:bg-primary-container/30 disabled:opacity-50 transition-colors"
                                               >
-                                                {uploading ? '上传中...' : settings[item.key] ? '更换图片' : '上传图片'}
+                                                {uploadingKey === item.key
+                                                  ? '上传中...'
+                                                  : settings[item.key]
+                                                    ? '更换图片'
+                                                    : '上传图片'}
                                               </button>
                                               {settings[item.key] && (
                                                 <button
