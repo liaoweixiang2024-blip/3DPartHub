@@ -33,6 +33,17 @@ export function normalizeConversionWorkerConcurrency(value: unknown, fallback = 
   return Math.min(CONVERSION_WORKER_MAX_CONCURRENCY, Math.max(CONVERSION_WORKER_MIN_CONCURRENCY, Math.floor(parsed)));
 }
 
+/**
+ * 转换类子进程（上传转换 / 手动重转）的 V8 堆上限（MB）：跟随容器 cgroup 配额
+ * （process.constrainedMemory，Node ≥ 18），留 25% 余量给 WASM 线性内存 / Buffer /
+ * 同容器其他进程。设上限后堆爆会抛可读的 JS OOM 错误，而不是 C 层直接 SIGABRT；
+ * WASM 内存不归 V8 管，堆上限挡不住的部分由调用方的 exit(signal) 分支给提示。
+ */
+export function conversionChildHeapLimitMb(): number {
+  const totalMb = Math.floor((process.constrainedMemory?.() || 4 * 1024 * 1024 * 1024) / 1024 / 1024);
+  return Math.max(512, Math.floor((totalMb * 0.75) / 64) * 64);
+}
+
 function parseRedisUrl(url: string): { host: string; port: number; password?: string } {
   try {
     const u = new URL(url);

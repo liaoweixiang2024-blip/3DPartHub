@@ -55,10 +55,16 @@ const LAST_CATEGORY_KEY = 'upload.category.lastId';
 let activeUploadOwner: string | null = null;
 let uploadRunCounter = 0;
 
+// 分类 id 兼容两种形态：新库 uuid，也有种子/历史库直接用中文名当 id
+// （seed-categories.ts 的 id: cat.name）。校验只挡明显异常值（超长/控制字符/
+// 换行——localStorage 值可能被外部改写），不限制字符集；记的 id 不存在时
+// 弹窗内的分类树校验会兜底清空。
 function loadLastCategoryId(): string {
   try {
     const value = localStorage.getItem(LAST_CATEGORY_KEY);
-    return value && /^[0-9a-f-]{8,80}$/i.test(value) ? value : '';
+    // 值里任一字符落在控制字符区即视为无效（localStorage 值可能被外部改写）
+    if (!value || value.length > 120) return '';
+    return Array.from(value).every((ch) => ch.codePointAt(0)! >= 0x20) ? value : '';
   } catch {
     return '';
   }

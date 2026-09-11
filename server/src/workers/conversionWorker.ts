@@ -1,5 +1,5 @@
 import { fork } from 'node:child_process';
-import { rmSync, existsSync, mkdirSync, copyFileSync } from 'node:fs';
+import { rmSync, existsSync, mkdirSync, copyFileSync, statSync } from 'node:fs';
 import { resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { Prisma, PrismaClient } from '@prisma/client';
@@ -7,7 +7,12 @@ import type { Job } from 'bullmq';
 import { cacheDelByPrefix } from '../lib/cache.js';
 import { config } from '../lib/config.js';
 import { logger } from '../lib/logger.js';
-import { createWorker, conversionQueueConfig, normalizeConversionWorkerConcurrency } from '../lib/queue.js';
+import {
+  conversionChildHeapLimitMb,
+  createWorker,
+  conversionQueueConfig,
+  normalizeConversionWorkerConcurrency,
+} from '../lib/queue.js';
 import { createNotification } from '../routes/notifications.js';
 import type { GltfAsset } from '../services/converter.js';
 import { MODEL_STATUS } from '../services/modelStatus.js';
@@ -46,7 +51,7 @@ function runConversionPipeline(job: Job): Promise<ConversionPipelineResult> {
   return new Promise((resolve, reject) => {
     const child = fork(conversionRunnerPath, [], {
       stdio: ['ignore', 'pipe', 'pipe', 'ipc'],
-      execArgv: process.execArgv,
+      execArgv: [...process.execArgv, `--max-old-space-size=${conversionChildHeapLimitMb()}`],
     });
     let settled = false;
     let timeoutError: Error | null = null;
@@ -99,6 +104,28 @@ function runConversionPipeline(job: Job): Promise<ConversionPipelineResult> {
       if (settled) return;
       if (timeoutError) {
         finish(timeoutError);
+        return;
+      }
+      if (signal === 'SIGABRT' || signal === 'SIGSEGV' || signal === 'SIGKILL') {
+        // SIGABRT/SIGSEGV：occt WASM（C++ 层）内存不足或几何崩溃时直接 abort 进程，
+        // 不经过 JS 异常处理；SIGKILL 多为容器 mem_limit 触发 OOM kill。
+        // 附文件大小与容器内存配额线索，便于区分「文件太大」和「服务器内存配置不足」。
+        const inputSizeMb = (() => {
+          try {
+            return (statSync(payload.filePath).size / 1024 / 1024).toFixed(1);
+          } catch {
+            return '未知';
+          }
+        })();
+        const containerTotalMb = Math.floor((process.constrainedMemory?.() || 0) / 1024 / 1024);
+        finish(
+          new Error(
+            `转换子进程异常退出: ${signal}（源文件 ${inputSizeMb}MB，容器内存配额 ${containerTotalMb || '未知'}MB）。` +
+              (signal === 'SIGKILL'
+                ? '容器内存不足被系统终止（OOM），请调大 API_MEMORY_LIMIT 或降低转换并发后重试'
+                : '转换引擎内存不足或该文件几何过于复杂导致崩溃，请尝试调大 API_MEMORY_LIMIT 后重试；超过 200MB 的文件请拆分后上传'),
+          ),
+        );
         return;
       }
       finish(new Error(`转换子进程异常退出: ${signal || code || 'unknown'}`));

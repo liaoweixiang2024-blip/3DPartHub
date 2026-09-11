@@ -629,12 +629,14 @@ export async function processBatchArchiveUpload({
         // （原始文件名 + 大小都相同）→ 视为重复上传，跳过；
         // 同名但文件不同（零件改版后重传，名称没变）→ 正常入库，用户后续可在
         // 模型详情页手动清理旧条目或用版本合并。不同分类允许同名（合法的不同零件）。
+        // 只认 COMPLETED：上次转换失败（含 SIGABRT）的残留 FAILED 记录不算「已存在」，
+        // 否则用户删了失败的模型重传仍被跳过（FAILED 行 uploadPath 已清、文件已删）。
         // 分类绑定失败的条目不做该检查（resolvedCategoryId 不可信，宁可重复入库也不要错杀）。
         if (prisma && !categoryError && modelName) {
           const existing = await prisma.model.findFirst({
             where: {
               name: modelName,
-              status: { not: MODEL_STATUS.DELETED },
+              status: MODEL_STATUS.COMPLETED,
               ...(resolvedCategoryId ? { categoryId: resolvedCategoryId } : { categoryId: null }),
             },
             select: { id: true, originalName: true, originalSize: true },

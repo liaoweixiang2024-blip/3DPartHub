@@ -7,7 +7,7 @@ import { cacheDelByPrefix } from '../../lib/cache.js';
 import { config } from '../../lib/config.js';
 import { normalizeUploadFilename } from '../../lib/filenameEncoding.js';
 import { logger } from '../../lib/logger.js';
-import { conversionQueue } from '../../lib/queue.js';
+import { conversionChildHeapLimitMb, conversionQueue } from '../../lib/queue.js';
 import { persistFile } from '../../lib/storageProvider.js';
 import { authMiddleware, type AuthRequest } from '../../middleware/auth.js';
 import { requireRole } from '../../middleware/rbac.js';
@@ -61,7 +61,12 @@ type RunnerOutcome = { thumbnailUrl: string | null } | { error: string };
 function runReconvertInChild(job: ReconvertJob, inputPath: string, modelId: string, originalName: string) {
   const runnerPath = new URL('../../workers/reconvertRunner.js', import.meta.url);
   return new Promise<RunnerOutcome>((resolve) => {
-    const child = fork(runnerPath, [], { stdio: ['ignore', 'pipe', 'pipe', 'ipc'] });
+    // 堆上限与上传转换子进程同源（见 queue.ts conversionChildHeapLimitMb），
+    // 同一套 occt WASM 重活，同样的堆爆防护
+    const child = fork(runnerPath, [], {
+      stdio: ['ignore', 'pipe', 'pipe', 'ipc'],
+      execArgv: [...process.execArgv, `--max-old-space-size=${conversionChildHeapLimitMb()}`],
+    });
     let settled = false;
     const finish = (outcome: RunnerOutcome) => {
       if (settled) return;
@@ -92,8 +97,20 @@ function runReconvertInChild(job: ReconvertJob, inputPath: string, modelId: stri
         }
       },
     );
-    child.on('exit', (code) => {
-      if (!settled) finish({ error: `转换子进程异常退出（code ${code}）` });
+    child.on('exit', (code, signal) => {
+      if (settled) return;
+      if (signal === 'SIGABRT' || signal === 'SIGSEGV' || signal === 'SIGKILL') {
+        const containerTotalMb = Math.floor((process.constrainedMemory?.() || 0) / 1024 / 1024);
+        finish({
+          error:
+            `转换子进程异常退出: ${signal}（容器内存配额 ${containerTotalMb || '未知'}MB）。` +
+            (signal === 'SIGKILL'
+              ? '容器内存不足被系统终止（OOM），请调大 API_MEMORY_LIMIT 后重试'
+              : '转换引擎内存不足或该模型几何过于复杂导致崩溃，请尝试调大 API_MEMORY_LIMIT 后重试'),
+        });
+        return;
+      }
+      finish({ error: `转换子进程异常退出（code ${code}）` });
     });
     child.send({ type: 'run', payload: { engine: job.engine, inputPath, modelId, originalName } });
   });
