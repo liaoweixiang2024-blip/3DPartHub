@@ -102,7 +102,7 @@ export default function NodeCategoriesModal({
                   key={i}
                   type="button"
                   onClick={() => onModelCategoryClick?.(it.modelCategoryId!)}
-                  className={`hover-card flex items-center justify-center gap-3 rounded-xl bg-white/90 px-4 py-3 shadow-lg backdrop-blur-sm transition-shadow hover:shadow-xl ${
+                  className={`hover-card flex items-center justify-center gap-3 rounded-xl bg-surface-container-high/90 px-4 py-3 shadow-lg backdrop-blur-sm transition-shadow hover:shadow-xl ${
                     items.length === 1 ? 'mx-auto w-full max-w-xs flex-row' : 'flex-col pb-4 pt-3'
                   }`}
                 >
@@ -155,7 +155,7 @@ export default function NodeCategoriesModal({
               ) : (
                 <div
                   key={i}
-                  className={`flex items-center justify-center gap-3 rounded-xl bg-white/90 px-4 py-3 opacity-90 shadow-lg backdrop-blur-sm ${
+                  className={`flex items-center justify-center gap-3 rounded-xl bg-surface-container-high/90 px-4 py-3 opacity-90 shadow-lg backdrop-blur-sm ${
                     items.length === 1 ? 'mx-auto w-full max-w-xs flex-row' : 'flex-col pb-4 pt-3'
                   }`}
                 >

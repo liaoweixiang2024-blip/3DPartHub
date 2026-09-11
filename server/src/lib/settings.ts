@@ -86,6 +86,8 @@ export interface CategoryNavNode {
   customName?: string;
   /** 节点级图标图（拓扑图卡位插画位）；优先于 SMC 默认插画 */
   imageUrl?: string;
+  /** 节点默认插画 key（NAV_ICON_COMPONENTS 注册表键）：写进节点后插画跟节点走，调换顺序不丢 */
+  iconKey?: string;
   /** 节点显示名（拓扑图卡位标签）；未设置时前台回退默认文案 */
   label?: string;
   /** 节点可挂多个分类（1~6 项） */
@@ -99,6 +101,9 @@ export interface CategoryNavSection {
 export interface CategoryNavConfig {
   model: CategoryNavSection;
   selection: CategoryNavSection;
+  /** 公开页页头文案（后台可改；留空前台回退 i18n 默认文案） */
+  pageTitle?: string;
+  pageDescription?: string;
 }
 
 /**
@@ -299,12 +304,15 @@ function normalizeCategoryNavSection(value: unknown): CategoryNavSection {
     if (items.length === 0) return fallback; // 节点至少要有一个有效项
     nodeIds.add(id);
     const nodeLabel = row.label == null ? undefined : String(row.label).trim().slice(0, 30);
+    // 默认插画 key：写进节点（跟节点走，后台调换顺序插画跟着换）
+    const nodeIconKey = row.iconKey == null ? '' : String(row.iconKey).trim().slice(0, 64);
     nodes.push({
       id,
       groupId,
       items,
       // 节点级图标图（拓扑图卡位插画位）；未传时前台回退 SMC 默认插画
       ...(nodeImageUrl ? { imageUrl: nodeImageUrl.slice(0, 500) } : {}),
+      ...(CATEGORY_NAV_ID_RE.test(nodeIconKey) ? { iconKey: nodeIconKey } : {}),
       ...(nodeLabel ? { label: nodeLabel } : {}),
       ...(row.description != null && String(row.description).trim()
         ? { description: String(row.description).trim().slice(0, 100) }
@@ -330,9 +338,13 @@ export function normalizeCategoryNavConfigSetting(value: unknown): string {
     return JSON.stringify(DEFAULT_CATEGORY_NAV_CONFIG, null, 2);
   }
   const raw = parsed as Partial<CategoryNavConfig>;
+  const pageTitle = raw.pageTitle == null ? '' : String(raw.pageTitle).trim().slice(0, 50);
+  const pageDescription = raw.pageDescription == null ? '' : String(raw.pageDescription).trim().slice(0, 200);
   const config: CategoryNavConfig = {
     model: normalizeCategoryNavSection(raw.model),
     selection: normalizeCategoryNavSection(raw.selection),
+    ...(pageTitle ? { pageTitle } : {}),
+    ...(pageDescription ? { pageDescription } : {}),
   };
   const serialized = JSON.stringify(config);
   if (serialized.length > 200_000) return JSON.stringify(DEFAULT_CATEGORY_NAV_CONFIG, null, 2);

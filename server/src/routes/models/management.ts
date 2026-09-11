@@ -674,6 +674,126 @@ export function createModelManagementRouter({ prisma, metadataDir, getMeta, save
     }
   });
 
+  // 转换失败模型列表（管理页「转换失败」tab）：只读，清理走 /api/models/failed/clear
+  router.get('/api/models/failed', authMiddleware, requireRole('ADMIN'), async (req: AuthRequest, res: Response) => {
+    res.setHeader('Cache-Control', 'no-store');
+    if (!prisma) {
+      res.status(503).json({ detail: '数据库未连接，无法读取转换失败模型' });
+      return;
+    }
+
+    const page = numericQuery(req.query.page, 1, 1, MAX_MODEL_PAGE);
+    const pageSize = numericQuery(req.query.page_size, 20, 1, 100);
+    const search = normalizeSearchParam(req.query.search);
+    const where: Record<string, unknown> = { status: MODEL_STATUS.FAILED };
+    const searchCond = modelTextSearchWhere(search);
+    if (searchCond) where.AND = [searchCond];
+
+    try {
+      const [total, models] = await prisma.$transaction([
+        prisma.model.count({ where }),
+        prisma.model.findMany({
+          where,
+          orderBy: { updatedAt: 'desc' },
+          skip: (page - 1) * pageSize,
+          take: pageSize,
+          select: {
+            id: true,
+            name: true,
+            originalName: true,
+            originalFormat: true,
+            originalSize: true,
+            metadata: true,
+            updatedAt: true,
+            createdAt: true,
+            categoryRef: { select: { id: true, name: true } },
+          },
+        }),
+      ]);
+
+      res.json({
+        total,
+        page,
+        page_size: pageSize,
+        items: models.map((model) => {
+          const metadata = metadataObject(model.metadata);
+          return {
+            model_id: model.id,
+            name: model.name || model.originalName,
+            original_name: model.originalName,
+            format: model.originalFormat,
+            original_size: model.originalSize,
+            category_id: model.categoryRef?.id || null,
+            category: model.categoryRef?.name || null,
+            // 转换失败原因（conversionWorker 最终失败时写入 metadata.conversionError）
+            error: typeof metadata.conversionError === 'string' ? metadata.conversionError : null,
+            created_at: model.createdAt,
+          };
+        }),
+      });
+    } catch (err) {
+      logger.error({ err }, '[models] Failed to list conversion-failed models');
+      res.status(500).json({ detail: '读取转换失败模型失败' });
+    }
+  });
+
+  // 一键清理转换失败模型：软删（处理分组主版本转移）→ 清残留文件 → 硬删记录，
+  // 详情页随之 404。不传 ids = 清理全部 FAILED。
+  router.post(
+    '/api/models/failed/clear',
+    authMiddleware,
+    requireRole('ADMIN'),
+    async (req: AuthRequest, res: Response) => {
+      if (!prisma) {
+        res.status(503).json({ detail: '数据库未连接，无法清理转换失败模型' });
+        return;
+      }
+
+      const rawIds = Array.isArray(req.body?.ids) ? req.body.ids : [];
+      const ids = rawIds.filter((id: unknown): id is string => typeof id === 'string' && id.length > 0).slice(0, 500);
+
+      try {
+        const where: Record<string, unknown> = { status: MODEL_STATUS.FAILED };
+        if (ids.length > 0) where.id = { in: ids };
+        const targets = await prisma.model.findMany({
+          where,
+          select: { id: true, name: true },
+          orderBy: { updatedAt: 'asc' },
+          take: 500,
+        });
+
+        let cleared = 0;
+        const failed: Array<{ id: string; name: string; reason: string }> = [];
+        for (const target of targets) {
+          try {
+            await deleteModelById(target.id, { clearCaches: false });
+            const purge = await purgeDeletedModelById(target.id);
+            if (purge.deleted) {
+              cleared += 1;
+            } else {
+              const firstWarning = purge.warnings[0];
+              const reason = typeof firstWarning === 'string' ? firstWarning : firstWarning?.message || '清理失败';
+              failed.push({ id: target.id, name: target.name, reason });
+            }
+          } catch (err) {
+            failed.push({
+              id: target.id,
+              name: target.name,
+              reason: err instanceof ModelDeleteBlockedError ? err.message : '清理失败',
+            });
+          }
+        }
+
+        if (cleared > 0) await clearModelManagementCaches();
+        logger.info({ cleared, failedCount: failed.length }, '[models] Cleared conversion-failed models');
+        res.json({ cleared, failed: failed.length, details: failed.length > 0 ? failed : undefined });
+      } catch (err) {
+        logger.error({ err }, '[models] Clear conversion-failed models failed');
+        res.status(500).json({ detail: '清理转换失败模型失败' });
+      }
+    },
+  );
+
   router.post(
     '/api/models/:id/restore',
     authMiddleware,

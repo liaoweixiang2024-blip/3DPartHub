@@ -1,8 +1,10 @@
 import { fork } from 'node:child_process';
-import { copyFileSync, existsSync, mkdirSync, rmSync, statSync } from 'node:fs';
+import { randomUUID } from 'node:crypto';
+import { copyFileSync, existsSync, mkdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { Prisma, type PrismaClient } from '@prisma/client';
-import { Router, Response } from 'express';
+import multer from 'multer';
+import { Router, Response, type NextFunction } from 'express';
 import { cacheDelByPrefix } from '../../lib/cache.js';
 import { config } from '../../lib/config.js';
 import { normalizeUploadFilename } from '../../lib/filenameEncoding.js';
@@ -22,6 +24,8 @@ import {
 } from '../../services/modelFiles.js';
 import { MODEL_STATUS } from '../../services/modelStatus.js';
 import { generateThumbnail } from '../../services/thumbnail.js';
+import { UPLOAD_REQUEST_TIMEOUT_MS } from '../../lib/uploadLimits.js';
+import { createNotification } from '../notifications.js';
 import { modelUpload, validateModelUpload } from './uploadHelpers.js';
 
 type ModelConversionContext = {
@@ -605,6 +609,246 @@ export function createModelConversionRouter({ prisma, getMeta, saveMeta, getPrev
         ...(job.result ? { result: job.result } : {}),
         ...(job.error ? { error: job.error } : {}),
       });
+    },
+  );
+
+  // ── 离线转换产物导入 ──
+  // 服务器内存不足转不动的模型：本地用 convert:offline CLI 转好打包
+  // （model.glb + thumbnail.png + meta.json + original.<ext>），此处导入，
+  // 模型直接置为 COMPLETED，不再经过服务器转换队列。
+  const IMPORT_PREVIEW_MAX_BYTES = 2 * 1024 * 1024 * 1024; // 上传 zip 上限 2GB
+  const IMPORT_PREVIEW_EXTRACT_MAX_BYTES = 4 * 1024 * 1024 * 1024; // 解压总量上限（防 zip 炸弹）
+  const IMPORT_PREVIEW_ALLOWED_ORIGINAL_EXTS = new Set(['step', 'stp', 'iges', 'igs']);
+
+  router.post(
+    '/api/models/:id/import-preview',
+    authMiddleware,
+    requireRole('ADMIN'),
+    (req: AuthRequest, res: Response, next: NextFunction) => {
+      req.setTimeout(UPLOAD_REQUEST_TIMEOUT_MS);
+      res.setTimeout(UPLOAD_REQUEST_TIMEOUT_MS);
+      next();
+    },
+    multer({ dest: config.uploadDir, limits: { fileSize: IMPORT_PREVIEW_MAX_BYTES } }).single('file'),
+    async (req: AuthRequest, res: Response) => {
+      const id = req.params.id as string;
+      const file = req.file;
+      if (!file) {
+        res.status(400).json({ detail: '没有文件' });
+        return;
+      }
+      const cleanupUpload = () => rmSync(file.path, { force: true });
+
+      if (!prisma) {
+        cleanupUpload();
+        res.status(503).json({ detail: '数据库未连接' });
+        return;
+      }
+
+      const m = await prisma.model.findUnique({ where: { id } });
+      if (!m) {
+        cleanupUpload();
+        res.status(404).json({ detail: '模型不存在' });
+        return;
+      }
+      if (m.status !== MODEL_STATUS.FAILED) {
+        cleanupUpload();
+        res.status(409).json({ detail: '仅转换失败的模型支持导入转换产物' });
+        return;
+      }
+
+      const AdmZip = (await import('adm-zip')).default;
+      let zip: InstanceType<typeof AdmZip>;
+      try {
+        zip = new AdmZip(file.path);
+      } catch {
+        cleanupUpload();
+        res.status(400).json({ detail: '无法读取压缩包，请确认上传的是离线转换产出的 .offline.zip' });
+        return;
+      }
+
+      // 白名单解包：仅根层精确文件名，天然拒绝路径穿越与多余条目
+      const entries = zip.getEntries().filter((e) => !e.isDirectory);
+      if (entries.length > 10) {
+        cleanupUpload();
+        res.status(400).json({ detail: '压缩包内容异常（条目过多）' });
+        return;
+      }
+      const filesByKey = new Map<string, Buffer>();
+      let extractedBytes = 0;
+      for (const entry of entries) {
+        const name = entry.entryName.replace(/^\/+/, '');
+        if (name.includes('/')) continue; // 子目录条目一律忽略
+        const lower = name.toLowerCase();
+        const ext = lower.split('.').pop() || '';
+        const isAllowed =
+          lower === 'model.glb' || lower === 'thumbnail.png' || lower === 'meta.json'
+            ? true
+            : lower.startsWith('original.') && IMPORT_PREVIEW_ALLOWED_ORIGINAL_EXTS.has(ext);
+        if (!isAllowed) continue;
+        const data = entry.getData();
+        extractedBytes += data.length;
+        if (extractedBytes > IMPORT_PREVIEW_EXTRACT_MAX_BYTES) {
+          cleanupUpload();
+          res.status(400).json({ detail: '压缩包解压总量超限（4GB）' });
+          return;
+        }
+        filesByKey.set(lower, data);
+      }
+
+      const glbData = filesByKey.get('model.glb');
+      if (!glbData || glbData.length === 0) {
+        cleanupUpload();
+        res.status(400).json({ detail: '压缩包缺少 model.glb（请用 npm run convert:offline 生成）' });
+        return;
+      }
+      // glb magic：'glTF'（与上传分片校验同源）
+      if (glbData.length < 4 || glbData.subarray(0, 4).toString('latin1') !== 'glTF') {
+        cleanupUpload();
+        res.status(400).json({ detail: 'model.glb 内容不是有效的 glb 文件' });
+        return;
+      }
+
+      // meta.json：非法/缺失由 ensurePreviewMeta 从 glb 自动生成兜底
+      let offlineMeta: unknown;
+      const metaData = filesByKey.get('meta.json');
+      if (metaData) {
+        try {
+          offlineMeta = JSON.parse(metaData.toString('utf8'));
+        } catch {
+          offlineMeta = undefined;
+        }
+      }
+
+      // 落盘：glb → models/{id}.glb；缩略图优先 zip 自带，缺省服务端从 glb 生成
+      const modelsDir = join(config.staticDir, 'models');
+      const thumbsDir = join(config.staticDir, 'thumbnails');
+      mkdirSync(modelsDir, { recursive: true });
+      mkdirSync(thumbsDir, { recursive: true });
+      const glbPath = join(modelsDir, `${id}.glb`);
+      const workDir = join(config.uploadDir, `import-preview-${Date.now()}-${randomUUID().slice(0, 8)}`);
+      try {
+        mkdirSync(workDir, { recursive: true });
+        writeFileSync(glbPath, glbData);
+
+        let thumbnailUrl: string | null = null;
+        const thumbData = filesByKey.get('thumbnail.png');
+        if (thumbData && thumbData.length > 0 && thumbData.subarray(0, 4).toString('latin1') === '\x89PNG') {
+          const thumbPath = join(thumbsDir, `${id}.png`);
+          writeFileSync(thumbPath, thumbData);
+          await persistFile(thumbPath);
+          thumbnailUrl = `/static/thumbnails/${id}.png`;
+        } else {
+          try {
+            const thumb = await generateThumbnail(glbPath, thumbsDir, id);
+            if (existsSync(thumb.thumbnailPath)) {
+              await persistFile(thumb.thumbnailPath);
+              thumbnailUrl = thumb.thumbnailUrl;
+            }
+          } catch {
+            /* 缩略图失败不阻塞导入（详情页有占位） */
+          }
+        }
+        await persistFile(glbPath);
+
+        // 原始文件（可选）：恢复「下载原文件」与日后重转能力
+        let uploadPathUpdate: { uploadPath: string } | Record<string, never> = {};
+        let originalUpdates: { originalFormat?: string; originalSize?: number } = {};
+        const originalEntry = [...filesByKey.keys()].find((name) => name.startsWith('original.'));
+        if (originalEntry) {
+          const originalExt = originalEntry.split('.').pop()!;
+          const originalsDir = join(config.staticDir, 'originals');
+          mkdirSync(originalsDir, { recursive: true });
+          const originalPath = join(originalsDir, `${id}.${originalExt}`);
+          writeFileSync(originalPath, filesByKey.get(originalEntry)!);
+          await persistFile(originalPath);
+          uploadPathUpdate = { uploadPath: originalPath };
+          originalUpdates = {
+            originalFormat: originalExt,
+            originalSize: filesByKey.get(originalEntry)!.length,
+          };
+        }
+
+        // 失败残留元数据清除 + 转换产物入库
+        const existingMetadata =
+          m.metadata && typeof m.metadata === 'object' && !Array.isArray(m.metadata)
+            ? { ...(m.metadata as Record<string, unknown>) }
+            : {};
+        delete existingMetadata.conversionError;
+        delete existingMetadata.failedAt;
+
+        const ts = Date.now();
+        const gltfUrl = `/static/models/${id}.glb?v=${ts.toString(36)}`;
+        await prisma.model.update({
+          where: { id },
+          data: {
+            status: MODEL_STATUS.COMPLETED,
+            gltfUrl,
+            gltfSize: glbData.length,
+            ...(thumbnailUrl ? { thumbnailUrl: `${thumbnailUrl.split('?')[0]}?t=${ts}` } : {}),
+            ...(originalUpdates.originalFormat ? { format: originalUpdates.originalFormat } : {}),
+            ...originalUpdates,
+            ...uploadPathUpdate,
+            metadata: existingMetadata as unknown as Prisma.InputJsonValue,
+          },
+        });
+
+        // previewMeta：优先 zip 里的 meta.json（含本地转换诊断），非法/缺失回落从 glb 解析
+        const previewMeta = await getPreviewMeta(id, {
+          gltfUrl,
+          originalName: m.originalName,
+          format: originalUpdates.originalFormat || m.format,
+          previewMeta: offlineMeta ?? m.previewMeta,
+        });
+        if (offlineMeta && previewMeta) {
+          // 打导入标记：预览运维/详情页可区分「离线导入」与「服务器转换」
+          await prisma.model
+            .update({
+              where: { id },
+              data: {
+                previewMeta: {
+                  ...previewMeta,
+                  offlineImported: true,
+                  importedAt: new Date().toISOString(),
+                } as unknown as Prisma.InputJsonValue,
+              },
+            })
+            .catch(() => {});
+        }
+
+        await cacheDelByPrefix('cache:models:');
+        await createNotification({
+          userId: req.user!.userId,
+          title: '离线转换产物已导入',
+          message: `${m.originalName || m.name} 已导入本地转换的预览产物，模型恢复可用。`,
+          type: 'model_conversion',
+          audience: 'user',
+          relatedId: id,
+        }).catch(() => {});
+
+        logger.info(
+          { modelId: id, glbSize: glbData.length, hasOriginal: Boolean(originalEntry) },
+          '[conversion] Offline preview imported',
+        );
+        res.json({
+          success: true,
+          data: {
+            model_id: id,
+            status: MODEL_STATUS.COMPLETED,
+            gltf_url: gltfUrl,
+            gltf_size: glbData.length,
+            has_original: Boolean(originalEntry),
+            thumbnail_generated: Boolean(thumbnailUrl),
+          },
+        });
+      } catch (err) {
+        logger.error({ err, modelId: id }, '[conversion] Import offline preview failed');
+        await prisma.model.update({ where: { id }, data: { status: MODEL_STATUS.FAILED } }).catch(() => {});
+        res.status(500).json({ detail: '导入转换产物失败' });
+      } finally {
+        rmSync(workDir, { recursive: true, force: true });
+        cleanupUpload();
+      }
     },
   );
 

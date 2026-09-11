@@ -11,6 +11,7 @@ import { createModelDetailRouter } from './models/detail.js';
 import { createModelDownloadRouter } from './models/download.js';
 import { createModelListRouter } from './models/list.js';
 import { createModelManagementRouter } from './models/management.js';
+import { createModelTransferRouter } from './models/transfer.js';
 import { createPreviewDiagnosticsRouter } from './models/previewDiagnostics.js';
 import { createModelUploadRouter } from './models/upload.js';
 import { createModelVersionsRouter } from './models/versions.js';
@@ -91,6 +92,7 @@ async function optionalVerifiedUser(req: Request) {
 router.use(createPreviewDiagnosticsRouter({ prisma, metadataDir: METADATA_DIR, getPreviewMeta }));
 router.use(createModelListRouter({ prisma, drawingDownloadUrl }));
 router.use(createModelManagementRouter({ prisma, metadataDir: METADATA_DIR, getMeta, saveMeta }));
+router.use(createModelTransferRouter({ prisma }));
 router.use(createModelDetailRouter({ prisma, getMeta, getPreviewMeta, optionalVerifiedUser, drawingDownloadUrl }));
 router.use(createModelUploadRouter({ prisma, saveMeta, deleteMeta }));
 router.use(createModelDownloadRouter({ prisma, getMeta }));

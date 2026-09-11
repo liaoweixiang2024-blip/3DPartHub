@@ -178,6 +178,13 @@ export const jaJPTranslation: TranslationMap = {
   },
   modelDetail: {
     back: '戻る',
+    convertingHint: 'このモデルは変換待ちまたは変換中です。完了するとプレビューが表示されます。',
+    convertingTitle: 'モデル変換中',
+    failedDelete: '失敗記録を削除',
+    failedDeleting: '削除中...',
+    failedHint:
+      'このモデルは変換に失敗したためプレビューがありません。失敗記録を削除して再アップロードするか、「モデル管理 → 変換失敗」で一括整理できます。',
+    failedTitle: 'モデル変換に失敗しました',
     downloadModel: 'モデルをダウンロード',
     editModel: 'モデルを編集',
     shareModel: 'モデルを共有',
@@ -389,6 +396,14 @@ export const jaJPTranslation: TranslationMap = {
       saveFailed: '保存失敗',
       tooMany: '上限超過（グループ ≤ 6、ノード ≤ 100）',
       emptyNode: 'カテゴリ未設定のノードがあります',
+      itemsUnit: '項目',
+      groupFull: 'この大分類のスロットは満杯です',
+      expandAll: 'すべて展開',
+      collapseAll: 'すべて折りたたむ',
+      editGroupName: '名前を編集',
+      pageTitle: 'ページタイトル',
+      pageDescription: 'ページ説明',
+      pageCopyHint: '空欄なら既定の文案を使用。保存後フロントページのヘッダーに即時反映',
     },
   },
   settings: {
@@ -601,6 +616,14 @@ export const koKRTranslation: TranslationMap = {
       saveFailed: '저장 실패',
       tooMany: '한도 초과 (그룹 ≤ 6, 노드 ≤ 100)',
       emptyNode: '카테고리가 없는 노드가 있습니다',
+      itemsUnit: '개 항목',
+      groupFull: '이 대분류의 슬롯이 가득 찼습니다',
+      expandAll: '모두 펼치기',
+      collapseAll: '모두 접기',
+      editGroupName: '이름 편집',
+      pageTitle: '페이지 제목',
+      pageDescription: '페이지 설명',
+      pageCopyHint: '비워 두면 기본 문안 사용. 저장 후 프론트 페이지 헤더에 즉시 반영',
     },
   },
 };
@@ -811,6 +834,14 @@ export const deDETranslation: TranslationMap = {
       saveFailed: 'Speichern fehlgeschlagen',
       tooMany: 'Limit überschritten (Gruppen ≤ 6, Knoten ≤ 100)',
       emptyNode: 'Ein Knoten hat keine Kategorie',
+      itemsUnit: 'Einträge',
+      groupFull: 'Alle Slots dieser Gruppe sind belegt',
+      expandAll: 'Alle ausklappen',
+      collapseAll: 'Alle einklappen',
+      editGroupName: 'Name bearbeiten',
+      pageTitle: 'Seitentitel',
+      pageDescription: 'Seitenbeschreibung',
+      pageCopyHint: 'Leer lassen für Standardtext; der Seitenkopf wird nach dem Speichern sofort aktualisiert',
     },
   },
 };
@@ -1695,6 +1726,13 @@ export const deDEFrontOfficeTranslation: TranslationMap = {
 export const jaJPWorkflowTranslation: TranslationMap = {
   modelDetail: {
     categoryFallback: 'モデルライブラリ',
+    convertingHint: 'このモデルは変換待ちまたは変換中です。完了するとプレビューが表示されます。',
+    convertingTitle: 'モデル変換中',
+    failedDelete: '失敗記録を削除',
+    failedDeleting: '削除中...',
+    failedHint:
+      'このモデルは変換に失敗したためプレビューがありません。失敗記録を削除して再アップロードするか、「モデル管理 → 変換失敗」で一括整理できます。',
+    failedTitle: 'モデル変換に失敗しました',
     current: '現在',
     customSupportDescription: 'エンジニアに相談して専門サポートを受ける',
     customSupportTitle: 'カスタム部品が必要ですか？',
@@ -1968,6 +2006,13 @@ export const koKRWorkflowTranslation: TranslationMap = {
   modelDetail: {
     back: '뒤로',
     categoryFallback: '모델 라이브러리',
+    convertingHint: '이 모델은 대기 중이거나 변환 중입니다. 완료되면 미리보기가 표시됩니다.',
+    convertingTitle: '모델 변환 중',
+    failedDelete: '실패 기록 삭제',
+    failedDeleting: '삭제 중...',
+    failedHint:
+      '이 모델은 변환에 실패하여 미리보기가 없습니다. 실패 기록을 삭제하고 다시 업로드하거나, 모델 관리 → 변환 실패에서 일괄 정리할 수 있습니다.',
+    failedTitle: '모델 변환 실패',
     current: '현재',
     customSupportDescription: '전문 지원을 위해 엔지니어에게 문의하세요',
     customSupportTitle: '맞춤 부품이 필요하신가요?',
@@ -2359,6 +2404,14 @@ export const deDEWorkflowTranslation: TranslationMap = {
   modelDetail: {
     back: 'Zurück',
     categoryFallback: 'Modellbibliothek',
+    convertingHint:
+      'Dieses Modell befindet sich in der Warteschlange oder wird konvertiert. Die Vorschau erscheint nach Abschluss.',
+    convertingTitle: 'Modell wird konvertiert',
+    failedDelete: 'Fehlgeschlagenen Eintrag löschen',
+    failedDeleting: 'Wird gelöscht...',
+    failedHint:
+      'Die Konvertierung dieses Modells ist fehlgeschlagen, keine Vorschau verfügbar. Löschen Sie den Eintrag und laden Sie ihn erneut hoch, oder bereinigen Sie unter Modellverwaltung → Konvertierung fehlgeschlagen.',
+    failedTitle: 'Modellkonvertierung fehlgeschlagen',
     current: 'Aktuell',
     customSupportDescription: 'Kontaktieren Sie einen Ingenieur für professionelle Unterstützung',
     customSupportTitle: 'Benötigen Sie ein Sonderteil?',

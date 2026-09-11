@@ -331,6 +331,30 @@ export const conversionWorker = createWorker(
             where: { id: modelId },
             data: { status: MODEL_STATUS.FAILED, uploadPath: null },
           });
+          // 失败原因持久化到 metadata：管理页「转换失败」列表和详情页失败态展示用
+          // （合并已有 metadata，避免覆盖 originalModifiedAt 等字段）
+          try {
+            const existing = await prisma.model.findUnique({
+              where: { id: modelId },
+              select: { metadata: true },
+            });
+            const existingMeta =
+              existing?.metadata && typeof existing.metadata === 'object' && !Array.isArray(existing.metadata)
+                ? (existing.metadata as Record<string, unknown>)
+                : {};
+            await prisma.model.update({
+              where: { id: modelId },
+              data: {
+                metadata: {
+                  ...existingMeta,
+                  conversionError: message.slice(0, 500),
+                  failedAt: new Date().toISOString(),
+                },
+              },
+            });
+          } catch (metaErr) {
+            logger.warn({ metaErr, modelId }, 'Failed to persist conversion error to model metadata');
+          }
         } catch (statusErr) {
           logger.error({ statusErr, modelId }, 'Failed to mark model conversion as failed');
           await logStep(`转换失败状态写入数据库失败: ${statusErr instanceof Error ? statusErr.message : statusErr}`);

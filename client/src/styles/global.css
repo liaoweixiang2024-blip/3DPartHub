@@ -493,14 +493,14 @@ a,
   will-change: opacity;
 }
 
-/* 分类选型导航（/category-nav）——照搬 stitch smc_23/code.html 的悬停卡片样式 */
+/* 分类选型导航（/category-nav）——悬停卡片样式（smc_23 版式，投影颜色跟配色方案主色） */
 .hover-card {
   transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .hover-card:hover {
   transform: translateY(-2px);
-  filter: drop-shadow(0 6px 12px rgba(14, 165, 233, 0.18));
+  filter: drop-shadow(0 6px 12px color-mix(in srgb, var(--color-primary) 22%, transparent));
 }
 
 /* 节点分类弹窗中央大图：默认 SMC 插画（h-20/h-24）强制放大到 hero 尺寸 */
@@ -520,4 +520,24 @@ a,
   -webkit-line-clamp: 2;
   line-clamp: 2;
   white-space: normal;
+}
+
+/* 选型导航页 PC 一屏化：卡位插画高度随视口高度伸缩（min / 理想 / max），
+   大屏（2K/4K）放开上限长得更大、矮窗口自动压缩到不出纵向滚动条；管线按 DOM 实测绘制会自动跟随。
+   仅作用于桌面拓扑画布（.category-nav-desktop），手机端保持 h-24 / h-28 固定高 */
+.category-nav-desktop .slot-visual-sm {
+  height: clamp(56px, 10vh, 132px);
+}
+
+.category-nav-desktop .slot-visual-lg {
+  height: clamp(72px, 13vh, 152px);
+}
+
+/* 页头也收一档：矮窗口时 hero 更紧凑，给拓扑画布多留空间 */
+.category-nav-page .app-page-hero {
+  padding-block: 0.375rem;
+}
+
+.category-nav-page .app-page-hero-inner {
+  min-height: 44px;
 }

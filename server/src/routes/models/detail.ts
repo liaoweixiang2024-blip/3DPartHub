@@ -204,6 +204,8 @@ export function createModelDetailRouter({
             original_size: m.originalSize,
             format: m.format,
             status: m.status,
+            // 转换失败原因（conversionWorker 最终失败时写入；详情页失败态展示）
+            error: typeof dbMeta.conversionError === 'string' ? dbMeta.conversionError : null,
             description: m.description,
             category: m.categoryRef?.name || null,
             category_id: m.categoryId || null,

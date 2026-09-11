@@ -95,6 +95,7 @@ export default function ModelDetailPage() {
   const [loginPromptReason, setLoginPromptReason] = useState('');
   const [editOpen, setEditOpen] = useState(false);
   const [shareOpen, setShareOpen] = useState(false);
+  const [deletingFailedRecord, setDeletingFailedRecord] = useState(false);
   const [viewerFullscreen, setViewerFullscreen] = useState(false);
   const isAdmin = useAuthStore.getState().user?.role === 'ADMIN';
   const { toast } = useToast();
@@ -591,6 +592,57 @@ export default function ModelDetailPage() {
       <div className="flex flex-col items-center justify-center h-dvh bg-surface gap-4">
         <Icon name="search_off" size={64} className="text-on-surface-variant" />
         <h1 className="text-2xl font-headline font-bold text-on-surface">{t('modelDetail.notFound')}</h1>
+        <button onClick={handleBack} className="text-primary hover:underline">
+          {t('modelDetail.back')}
+        </button>
+      </div>
+    );
+  }
+
+  // 非 COMPLETED 模型只有管理员能走到这里（服务端对其他用户 404）。
+  // 之前直接渲染成半空的「幽灵详情页」（无预览无提示，从失败通知点进来非常困惑），
+  // 改为明确的失败/转换中状态页；失败态提供删除入口，闭环清理失败记录。
+  const modelStatus = serverModel?.status;
+  if (modelStatus === 'failed' || modelStatus === 'queued' || modelStatus === 'processing') {
+    const isFailed = modelStatus === 'failed';
+    const handleDeleteFailed = async () => {
+      if (deletingFailedRecord) return;
+      setDeletingFailedRecord(true);
+      try {
+        await modelApi.delete(modelData!.id);
+        navigate('/', { replace: true });
+      } catch {
+        toast('删除失败，请稍后重试', 'error');
+        setDeletingFailedRecord(false);
+      }
+    };
+    return (
+      <div className="flex flex-col items-center justify-center h-dvh bg-surface gap-4 px-6 text-center">
+        {isFailed ? (
+          <Icon name="error" size={64} className="text-error" />
+        ) : (
+          <Icon name="hourglass_top" size={64} className="text-primary animate-spin" />
+        )}
+        <h1 className="text-2xl font-headline font-bold text-on-surface">
+          {isFailed ? t('modelDetail.failedTitle') : t('modelDetail.convertingTitle')}
+        </h1>
+        <p className="max-w-md text-sm text-on-surface-variant">
+          {isFailed ? t('modelDetail.failedHint') : t('modelDetail.convertingHint')}
+        </p>
+        {isFailed && serverModel?.error && (
+          <p className="max-w-lg break-all rounded-sm bg-error/10 px-3 py-2 text-left text-xs text-error">
+            {serverModel.error}
+          </p>
+        )}
+        {isFailed && isAdmin && (
+          <button
+            onClick={handleDeleteFailed}
+            disabled={deletingFailedRecord}
+            className="rounded-sm border border-error/30 px-4 py-2 text-sm font-medium text-error hover:bg-error/10 disabled:opacity-50"
+          >
+            {deletingFailedRecord ? t('modelDetail.failedDeleting') : t('modelDetail.failedDelete')}
+          </button>
+        )}
         <button onClick={handleBack} className="text-primary hover:underline">
           {t('modelDetail.back')}
         </button>

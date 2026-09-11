@@ -175,6 +175,8 @@ export interface ServerModelDetail {
   original_size: number;
   format: string;
   status: string;
+  /** 转换失败原因（仅 status=failed 时有值，来自模型 metadata.conversionError） */
+  error?: string | null;
   description?: string;
   category?: string;
   category_id?: string | null;
@@ -221,6 +223,31 @@ export interface DeletedModelListResponse {
   items: DeletedModelListItem[];
   page: number;
   page_size: number;
+}
+
+export interface FailedModelListItem {
+  model_id: string;
+  name: string;
+  original_name: string;
+  format: string;
+  original_size: number;
+  category?: string | null;
+  category_id?: string | null;
+  error: string | null;
+  created_at: string;
+}
+
+export interface FailedModelListResponse {
+  total: number;
+  items: FailedModelListItem[];
+  page: number;
+  page_size: number;
+}
+
+export interface ClearFailedModelsResponse {
+  cleared: number;
+  failed: number;
+  details?: Array<{ id: string; name: string; reason: string }>;
 }
 
 export interface BatchDeleteModelsResponse {
@@ -474,6 +501,110 @@ export const modelApi = {
       pageSize: inner.page_size,
       totalPages: Math.ceil(inner.total / (inner.page_size || 20)),
     };
+  },
+
+  listFailed: async (
+    params?: PaginationParams & { search?: string },
+  ): Promise<PaginatedResponse<FailedModelListItem>> => {
+    const res = await client.get('/models/failed', {
+      params: {
+        page: params?.page || 1,
+        page_size: params?.pageSize || 20,
+        search: params?.search || undefined,
+      },
+      headers: {
+        'Cache-Control': 'no-cache',
+        Pragma: 'no-cache',
+      },
+    });
+    const inner = unwrapResponse<FailedModelListResponse>(res);
+    return {
+      items: inner.items,
+      total: inner.total,
+      page: inner.page,
+      pageSize: inner.page_size,
+      totalPages: Math.ceil(inner.total / (inner.page_size || 20)),
+    };
+  },
+
+  clearFailed: async (ids?: string[]): Promise<ClearFailedModelsResponse> => {
+    const res = await client.post('/models/failed/clear', ids && ids.length > 0 ? { ids } : {});
+    return unwrapResponse<ClearFailedModelsResponse>(res);
+  },
+
+  /** 离线转换产物导入：上传 convert:offline CLI 产出的 .offline.zip，模型直接置为已完成 */
+  importPreview: async (
+    id: string,
+    file: File,
+    options?: { onUploadProgress?: (progressEvent: UploadProgressEvent) => void },
+  ): Promise<{ model_id: string; status: string; gltf_size: number; has_original: boolean }> => {
+    const form = new FormData();
+    form.append('file', file);
+    const res = await client.post(`/models/${id}/import-preview`, form, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+      timeout: UPLOAD_REQUEST_TIMEOUT_MS,
+      onUploadProgress: options?.onUploadProgress,
+    });
+    return unwrapResponse(res);
+  },
+
+  /** 模型库搬运：导出勾选模型（流式 zip 下载，返回 Blob） */
+  exportModels: async (
+    ids: string[],
+    options?: { onDownloadProgress?: (progressEvent: UploadProgressEvent) => void },
+  ): Promise<Blob> => {
+    const res = await client.post(
+      '/models/export',
+      { ids },
+      {
+        responseType: 'blob',
+        timeout: UPLOAD_REQUEST_TIMEOUT_MS,
+        onDownloadProgress: options?.onDownloadProgress,
+      },
+    );
+    return res.data as Blob;
+  },
+
+  /** 模型库搬运：上传导出包并解析清单（第一步，返回 importId + 模型列表） */
+  importModelsAnalyze: async (
+    file: File,
+    options?: { onUploadProgress?: (progressEvent: UploadProgressEvent) => void },
+  ): Promise<{
+    import_id: string;
+    total: number;
+    dropped_no_preview: number;
+    models: Array<{
+      index: number;
+      name: string;
+      original_format: string;
+      original_size: number;
+      category_name: string | null;
+      has_original: boolean;
+      drawings: number;
+    }>;
+  }> => {
+    const form = new FormData();
+    form.append('file', file);
+    const res = await client.post('/models/import-analyze', form, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+      timeout: UPLOAD_REQUEST_TIMEOUT_MS,
+      onUploadProgress: options?.onUploadProgress,
+    });
+    return unwrapResponse(res);
+  },
+
+  /** 模型库搬运：按清单 + 分类映射入库（第二步） */
+  importModelsCommit: async (
+    importId: string,
+    items: Array<{ index: number; categoryId: string | null }>,
+  ): Promise<{
+    imported: number;
+    skipped: number;
+    failed: number;
+    details?: Array<{ name: string; reason: string }>;
+  }> => {
+    const res = await client.post('/models/import-commit', { importId, items });
+    return unwrapResponse(res);
   },
 
   previewDiagnostics: async (params?: {

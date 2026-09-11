@@ -31,6 +31,8 @@ export interface CategoryNavNode {
   customName?: string;
   /** 节点级图标图（拓扑图卡位插画位）；优先于 SMC 默认插画 */
   imageUrl?: string;
+  /** 默认插画 key（NAV_ICON_COMPONENTS 注册表键）：由后台写入配置，跟节点走（调换顺序插画跟着换） */
+  iconKey?: string;
   /** 节点显示名（拓扑图卡位标签）；未设置时前台回退默认文案 */
   label?: string;
   items?: CategoryNavItem[];
@@ -45,6 +47,9 @@ export interface CategoryNavSection {
 export interface CategoryNavConfig {
   model: CategoryNavSection;
   selection: CategoryNavSection;
+  /** 公开页页头文案（后台可改；留空前台回退 i18n 默认文案） */
+  pageTitle?: string;
+  pageDescription?: string;
 }
 
 export type CategoryNavTab = 'model' | 'selection';

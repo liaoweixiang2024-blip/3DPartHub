@@ -4,9 +4,17 @@ import { Link } from 'react-router-dom';
 import useSWR, { mutate as swrMutate } from 'swr';
 import useSWRInfinite from 'swr/infinite';
 import { categoriesApi, type CategoryItem } from '../api/categories';
-import { modelApi, type DeletedModelListItem, type ModelGroupItem, type ServerModelListItem } from '../api/models';
+import {
+  modelApi,
+  type DeletedModelListItem,
+  type FailedModelListItem,
+  type ModelGroupItem,
+  type ServerModelListItem,
+} from '../api/models';
 import BatchCategoryDialog from '../components/model-admin/BatchCategoryDialog';
 import EditDialog from '../components/model-admin/EditDialog';
+import ImportModelsDialog from '../components/model-admin/ImportModelsDialog';
+import ImportPreviewDialog from '../components/model-admin/ImportPreviewDialog';
 import PreviewOperationsModal from '../components/model-admin/PreviewOperationsModal';
 import { formatModelDateTime, formatSize } from '../components/model-admin/shared';
 import { AdminButton } from '../components/shared/AdminControls';
@@ -36,7 +44,7 @@ const CATEGORY_FILTER_ALL = '__all__';
 const MODEL_ADMIN_COUNT_KEY = '/models/count?grouped=false';
 const MODEL_ADMIN_PANEL_CLASS =
   'rounded-lg border border-outline-variant/10 bg-surface-container-low overflow-auto [scrollbar-gutter:stable] min-h-[calc(100vh-220px)] max-h-[calc(100vh-220px)]';
-type ModelAdminTab = 'models' | 'suggestions' | 'groups' | 'deleted';
+type ModelAdminTab = 'models' | 'suggestions' | 'groups' | 'failed' | 'deleted';
 type DeletedPurgeMode = 'selected' | 'all';
 type ModelGroupConfirm =
   | { type: 'remove'; group: ModelGroupItem; modelId: string }
@@ -241,6 +249,55 @@ function useDeletedModelPages(search: string, enabled: boolean, refreshVersion: 
     getKey,
     ([, query, , page]) =>
       modelApi.listDeleted({
+        search: query || undefined,
+        page,
+        pageSize: DELETED_MODEL_PAGE_SIZE,
+      }),
+    { keepPreviousData: true, revalidateFirstPage: false },
+  );
+
+  useEffect(() => {
+    if (enabled) setSize(1);
+  }, [debouncedSearch, enabled, refreshVersion, setSize]);
+
+  const pages = data || [];
+  const items = pages.flatMap((page) => page.items);
+  const firstPage = pages[0];
+  const lastPage = pages[pages.length - 1];
+  const hasMore = Boolean(lastPage && lastPage.page < lastPage.totalPages);
+  const isLoadingMore = Boolean(size > 0 && !data?.[size - 1] && !error);
+
+  const loadMore = useCallback(() => {
+    if (!hasMore || isLoadingMore) return;
+    setSize((current) => current + 1);
+  }, [hasMore, isLoadingMore, setSize]);
+
+  return {
+    items,
+    total: firstPage?.total || 0,
+    isLoading: isLoading && pages.length === 0,
+    isLoadingMore,
+    hasMore,
+    loadMore,
+    mutate,
+  };
+}
+
+function useFailedModelPages(search: string, enabled: boolean, refreshVersion: number) {
+  const debouncedSearch = useDebouncedValue(search.trim(), 300);
+  const getKey = useCallback(
+    (pageIndex: number, previousPageData: Awaited<ReturnType<typeof modelApi.listFailed>> | null) => {
+      if (!enabled) return null;
+      if (previousPageData && previousPageData.page >= previousPageData.totalPages) return null;
+      return ['/models/failed', debouncedSearch, refreshVersion, pageIndex + 1] as const;
+    },
+    [debouncedSearch, enabled, refreshVersion],
+  );
+
+  const { data, error, isLoading, mutate, setSize, size } = useSWRInfinite(
+    getKey,
+    ([, query, , page]) =>
+      modelApi.listFailed({
         search: query || undefined,
         page,
         pageSize: DELETED_MODEL_PAGE_SIZE,
@@ -565,6 +622,287 @@ function DeletedModelsPanel({
   );
 }
 
+// 转换失败模型面板：列表 + 单个/选中/全部清理（清理 = 清残留文件并删除记录，详情页随之 404）
+function FailedModelsPanel({
+  items,
+  total,
+  isLoadingMore,
+  hasMore,
+  onLoadMore,
+  onClearOne,
+  onImport,
+  onClearSelected,
+  onClearAll,
+  onToggleSelect,
+  onToggleSelectLoaded,
+  onClearSelection,
+  clearing,
+  clearingId,
+  selectedIds,
+  selectedCount,
+  allLoadedSelected,
+  compact = false,
+}: {
+  items: FailedModelListItem[];
+  total: number;
+  isLoadingMore: boolean;
+  hasMore: boolean;
+  onLoadMore: () => void;
+  onClearOne: (model: FailedModelListItem) => void;
+  onImport: (model: FailedModelListItem) => void;
+  onClearSelected: () => void;
+  onClearAll: () => void;
+  onToggleSelect: (id: string) => void;
+  onToggleSelectLoaded: () => void;
+  onClearSelection: () => void;
+  clearing: boolean;
+  clearingId: string | null;
+  selectedIds: Set<string>;
+  selectedCount: number;
+  allLoadedSelected: boolean;
+  compact?: boolean;
+}) {
+  const actionBusy = clearing;
+
+  if (compact) {
+    return (
+      <div className="admin-tab-panel flex flex-col gap-3">
+        {items.length > 0 && (
+          <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-outline-variant/10 bg-surface-container-high px-3 py-2">
+            <span className="text-xs text-on-surface-variant">
+              已加载 <span className="font-bold text-primary-container">{items.length}</span> / {total}
+              {selectedCount > 0 && <span>，已选 {selectedCount}</span>}
+            </span>
+            <div className="flex flex-wrap items-center gap-2">
+              <AdminButton onClick={onToggleSelectLoaded} disabled={actionBusy} size="sm" variant="secondary">
+                {allLoadedSelected ? '取消' : '全选'}
+              </AdminButton>
+              {selectedCount > 0 && (
+                <>
+                  <AdminButton onClick={onClearSelection} disabled={actionBusy} size="sm" variant="secondary">
+                    取消选择
+                  </AdminButton>
+                  <AdminButton onClick={onClearSelected} disabled={actionBusy} size="sm" variant="danger">
+                    清理选中
+                  </AdminButton>
+                </>
+              )}
+              <AdminButton onClick={onClearAll} disabled={actionBusy || total === 0} size="sm" variant="danger">
+                一键清理
+              </AdminButton>
+            </div>
+          </div>
+        )}
+        {items.map((model) => (
+          <div
+            key={model.model_id}
+            className="rounded-lg border border-outline-variant/10 bg-surface-container-high p-3 shadow-sm"
+          >
+            <div className="flex items-start gap-3">
+              <input
+                type="checkbox"
+                checked={selectedIds.has(model.model_id)}
+                onChange={() => onToggleSelect(model.model_id)}
+                className="mt-3 h-4 w-4 shrink-0 accent-primary-container"
+                aria-label={`选择 ${model.name}`}
+              />
+              <span className="grid h-10 w-10 shrink-0 place-items-center rounded-sm bg-error/10 text-error">
+                <Icon name="error" size={18} />
+              </span>
+              <div className="min-w-0 flex-1">
+                <p className="line-clamp-2 break-words text-sm font-semibold leading-snug text-on-surface">
+                  {model.name}
+                </p>
+                <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-[10px] text-on-surface-variant">
+                  <span>{model.category || '未分类'}</span>
+                  <span className="font-mono">{model.format?.toUpperCase()}</span>
+                  <span className="font-mono">{formatSize(model.original_size)}</span>
+                </div>
+                {model.error && (
+                  <p className="mt-1 line-clamp-2 break-all rounded-sm bg-error/10 px-1.5 py-1 text-[10px] text-error">
+                    {model.error}
+                  </p>
+                )}
+              </div>
+              <div className="flex shrink-0 flex-col gap-1.5">
+                <button
+                  onClick={() => onImport(model)}
+                  disabled={actionBusy}
+                  className="rounded-sm border border-primary/25 px-2.5 py-1.5 text-xs font-medium text-primary disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  导入产物
+                </button>
+                <button
+                  onClick={() => onClearOne(model)}
+                  disabled={actionBusy || clearingId === model.model_id}
+                  className="rounded-sm border border-error/25 px-2.5 py-1.5 text-xs font-medium text-error disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {clearingId === model.model_id ? '清理中' : '清理'}
+                </button>
+              </div>
+            </div>
+          </div>
+        ))}
+        {items.length > 0 && (
+          <InfiniteLoadTrigger hasMore={hasMore} isLoading={isLoadingMore} onLoadMore={onLoadMore} />
+        )}
+        {items.length === 0 && (
+          <div className="flex min-h-[260px] flex-col items-center justify-center text-center">
+            <Icon name="check_circle" size={38} className="mb-3 text-on-surface-variant/25" />
+            <p className="text-sm font-medium text-on-surface">没有转换失败的模型</p>
+            <p className="mt-1 text-xs text-on-surface-variant">转换失败 3 次的模型会出现在这里，可一键清理。</p>
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  return (
+    <div className={MODEL_ADMIN_PANEL_CLASS}>
+      {items.length > 0 && (
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-outline-variant/10 bg-surface-container-low px-4 py-3">
+          <div className="text-sm text-on-surface-variant">
+            已加载 <strong className="text-primary">{items.length}</strong> / 共{' '}
+            <strong className="text-primary">{total}</strong> 个转换失败模型
+            {selectedCount > 0 && (
+              <>
+                ，已选择 <strong className="text-primary">{selectedCount}</strong> 个
+              </>
+            )}
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <AdminButton
+              onClick={onToggleSelectLoaded}
+              disabled={actionBusy}
+              icon="select_all"
+              size="sm"
+              variant="secondary"
+            >
+              {allLoadedSelected ? '取消全选' : '全选已加载'}
+            </AdminButton>
+            {selectedCount > 0 && (
+              <>
+                <AdminButton
+                  onClick={onClearSelection}
+                  disabled={actionBusy}
+                  icon="close"
+                  size="sm"
+                  variant="secondary"
+                >
+                  取消选择
+                </AdminButton>
+                <AdminButton onClick={onClearSelected} disabled={actionBusy} icon="delete" size="sm" variant="danger">
+                  清理选中
+                </AdminButton>
+              </>
+            )}
+            <AdminButton
+              onClick={onClearAll}
+              disabled={actionBusy || total === 0}
+              icon="delete_sweep"
+              size="sm"
+              variant="danger"
+            >
+              一键清理全部
+            </AdminButton>
+          </div>
+        </div>
+      )}
+      <table className="w-full border-separate border-spacing-0 text-sm">
+        <thead className={ADMIN_TABLE_HEAD_CLASS}>
+          <AdminTableHeadRow>
+            <AdminTableHeadCell className="w-12">
+              <input
+                type="checkbox"
+                checked={allLoadedSelected}
+                disabled={items.length === 0 || actionBusy}
+                onChange={onToggleSelectLoaded}
+                className="h-4 w-4 accent-primary-container"
+                aria-label={allLoadedSelected ? '取消选择已显示模型' : '选择已显示模型'}
+              />
+            </AdminTableHeadCell>
+            <AdminTableHeadCell>模型</AdminTableHeadCell>
+            <AdminTableHeadCell className="min-w-[220px]">失败原因</AdminTableHeadCell>
+            <AdminTableHeadCell>分类</AdminTableHeadCell>
+            <AdminTableHeadCell>大小</AdminTableHeadCell>
+            <AdminTableHeadCell className="text-right">操作</AdminTableHeadCell>
+          </AdminTableHeadRow>
+        </thead>
+        <tbody>
+          {items.map((model) => (
+            <tr
+              key={model.model_id}
+              className="border-b border-outline-variant/10 transition-colors hover:bg-surface-container-high/50"
+            >
+              <td className="px-4 py-3 align-middle">
+                <input
+                  type="checkbox"
+                  checked={selectedIds.has(model.model_id)}
+                  onChange={() => onToggleSelect(model.model_id)}
+                  className="h-4 w-4 accent-primary-container"
+                  aria-label={`选择 ${model.name}`}
+                />
+              </td>
+              <td className="px-4 py-3">
+                <div className="flex min-w-0 items-center gap-3">
+                  <span className="grid h-10 w-10 shrink-0 place-items-center rounded-sm bg-error/10 text-error">
+                    <Icon name="error" size={18} />
+                  </span>
+                  <div className="min-w-0">
+                    <p className="block max-w-[320px] truncate font-medium text-on-surface">{model.name}</p>
+                    <p className="mt-0.5 max-w-[320px] truncate text-xs text-on-surface-variant">
+                      {formatModelDateTime(model.created_at)} 上传
+                    </p>
+                  </div>
+                </div>
+              </td>
+              <td className="max-w-[320px] px-4 py-3">
+                <p className="line-clamp-2 break-all text-xs text-error" title={model.error || undefined}>
+                  {model.error || '未记录失败原因'}
+                </p>
+              </td>
+              <td className="px-4 py-3 text-on-surface-variant">{model.category || '未分类'}</td>
+              <td className="px-4 py-3 font-mono text-on-surface-variant">{formatSize(model.original_size)}</td>
+              <td className="px-4 py-3 text-right">
+                <div className="flex flex-wrap items-center justify-end gap-1.5">
+                  <button
+                    onClick={() => onImport(model)}
+                    disabled={actionBusy}
+                    className="rounded-sm border border-primary/25 px-2.5 py-1.5 text-xs font-medium text-primary hover:bg-primary/10 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    导入产物
+                  </button>
+                  <button
+                    onClick={() => onClearOne(model)}
+                    disabled={actionBusy || clearingId === model.model_id}
+                    className="rounded-sm border border-error/25 px-2.5 py-1.5 text-xs font-medium text-error hover:bg-error/10 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    {clearingId === model.model_id ? '清理中...' : '清理'}
+                  </button>
+                </div>
+              </td>
+            </tr>
+          ))}
+          {items.length > 0 && (
+            <tr>
+              <td colSpan={6}>
+                <InfiniteLoadTrigger hasMore={hasMore} isLoading={isLoadingMore} onLoadMore={onLoadMore} />
+              </td>
+            </tr>
+          )}
+          {items.length === 0 && (
+            <tr>
+              <td colSpan={6} className="px-4 py-12 text-center text-on-surface-variant">
+                没有转换失败的模型
+              </td>
+            </tr>
+          )}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
 function ModelCategoryFilter({
   value,
   onChange,
@@ -652,6 +990,8 @@ function DesktopContent() {
   const [batchCategorySaving, setBatchCategorySaving] = useState(false);
   const [uploadOpen, setUploadOpen] = useState(false);
   const [previewOpsOpen, setPreviewOpsOpen] = useState(false);
+  const [importModelsOpen, setImportModelsOpen] = useState(false);
+  const [exportingSelection, setExportingSelection] = useState(false);
   const [activeTab, setActiveTab] = useState<ModelAdminTab>('models');
 
   const {
@@ -710,12 +1050,23 @@ function DesktopContent() {
     setValue: setDeletedSearch,
     inputProps: deletedSearchInputProps,
   } = useImeSafeSearchInput();
+  const {
+    value: failedSearch,
+    draftValue: failedSearchInputValue,
+    setValue: setFailedSearch,
+    inputProps: failedSearchInputProps,
+  } = useImeSafeSearchInput();
   const [restoringModelId, setRestoringModelId] = useState<string | null>(null);
   const [restoringDeletedBatch, setRestoringDeletedBatch] = useState(false);
   const [selectedDeletedModelIds, setSelectedDeletedModelIds] = useState<Set<string>>(new Set());
   const [purgingDeleted, setPurgingDeleted] = useState(false);
   const [purgeConfirmMode, setPurgeConfirmMode] = useState<DeletedPurgeMode | null>(null);
   const [deletedRefreshVersion, setDeletedRefreshVersion] = useState(0);
+  const [selectedFailedModelIds, setSelectedFailedModelIds] = useState<Set<string>>(new Set());
+  const [clearingFailed, setClearingFailed] = useState(false);
+  const [clearingFailedId, setClearingFailedId] = useState<string | null>(null);
+  const [importPreviewTarget, setImportPreviewTarget] = useState<FailedModelListItem | null>(null);
+  const [failedRefreshVersion, setFailedRefreshVersion] = useState(0);
   const [groupAction, setGroupAction] = useState<string | null>(null);
   const [groupConfirm, setGroupConfirm] = useState<ModelGroupConfirm | null>(null);
   const {
@@ -748,6 +1099,18 @@ function DesktopContent() {
   const { data: deletedCountData, mutate: deletedCountMutate } = useSWR('/models/deleted/count', () =>
     modelApi.listDeleted({ page: 1, pageSize: 1 }),
   );
+  const {
+    items: failedModels,
+    total: failedTotal,
+    isLoading: failedLoading,
+    isLoadingMore: failedLoadingMore,
+    hasMore: failedHasMore,
+    loadMore: loadMoreFailed,
+    mutate: failedMutate,
+  } = useFailedModelPages(failedSearch, activeTab === 'failed', failedRefreshVersion);
+  const { data: failedCountData, mutate: failedCountMutate } = useSWR('/models/failed/count', () =>
+    modelApi.listFailed({ page: 1, pageSize: 1 }),
+  );
   const deletedModelIds = deletedModels.map((model) => model.model_id);
   const selectedDeletedCount = selectedDeletedModelIds.size;
   const selectedRestorableDeletedCount = deletedModels.filter(
@@ -755,6 +1118,10 @@ function DesktopContent() {
   ).length;
   const allDeletedLoadedSelected =
     deletedModelIds.length > 0 && deletedModelIds.every((modelId) => selectedDeletedModelIds.has(modelId));
+  const failedModelIds = failedModels.map((model) => model.model_id);
+  const selectedFailedCount = selectedFailedModelIds.size;
+  const allFailedLoadedSelected =
+    failedModelIds.length > 0 && failedModelIds.every((modelId) => selectedFailedModelIds.has(modelId));
   const filteredSuggestions = suggestionSearch
     ? suggestionGroups.filter((g) => g.name.toLowerCase().includes(suggestionSearch.toLowerCase()))
     : suggestionGroups;
@@ -763,6 +1130,13 @@ function DesktopContent() {
   const allSuggestionsSelected = suggestionNames.length > 0 && selectedSuggestionCount === suggestionNames.length;
   const suggestionCount = activeTab === 'suggestions' ? activeSuggestionCount : (suggestionCountData?.total ?? 0);
   const mergedGroupCount = groupCountData?.total ?? groupData?.length;
+  const failedGlobalCount = failedCountData?.total ?? 0;
+  const failedModelCount =
+    activeTab === 'failed'
+      ? failedSearch.trim()
+        ? failedTotal
+        : Math.max(failedTotal, failedGlobalCount)
+      : failedGlobalCount;
   const deletedGlobalCount = deletedCountData?.total ?? 0;
   const deletedModelCount =
     activeTab === 'deleted'
@@ -786,6 +1160,7 @@ function DesktopContent() {
     { value: 'models', label: '全部模型', count: displayModelTotal, icon: 'inventory_2' },
     { value: 'suggestions', label: '合并建议', count: suggestionCount, icon: 'merge_type' },
     { value: 'groups', label: '已合并', count: mergedGroupCount, icon: 'category' },
+    { value: 'failed', label: '转换失败', count: failedModelCount, icon: 'error' },
     { value: 'deleted', label: '回收站', count: deletedModelCount, icon: 'delete_sweep' },
   ];
 
@@ -803,10 +1178,14 @@ function DesktopContent() {
   }, [activeTab, deletedSearch]);
 
   useEffect(() => {
-    if (activeTab !== 'deleted') return;
-    deletedMutate();
-    deletedCountMutate();
-  }, [activeTab, deletedMutate, deletedCountMutate]);
+    setSelectedFailedModelIds(new Set());
+  }, [activeTab, failedSearch]);
+
+  useEffect(() => {
+    if (activeTab !== 'failed') return;
+    failedMutate();
+    failedCountMutate();
+  }, [activeTab, failedMutate, failedCountMutate]);
 
   useEffect(() => {
     if (activeTab !== 'deleted' || deletedSearch.trim() || deletedLoading) return;
@@ -825,6 +1204,9 @@ function DesktopContent() {
     setDeletedRefreshVersion((version) => version + 1);
     deletedMutate();
     deletedCountMutate();
+    setFailedRefreshVersion((version) => version + 1);
+    failedMutate();
+    failedCountMutate();
   };
 
   const handleDelete = async () => {
@@ -1009,6 +1391,74 @@ function DesktopContent() {
     setSelectedDeletedModelIds(new Set());
   };
 
+  const toggleSelectFailedModel = (modelId: string) => {
+    setSelectedFailedModelIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(modelId)) next.delete(modelId);
+      else next.add(modelId);
+      return next;
+    });
+  };
+
+  const toggleSelectLoadedFailedModels = () => {
+    setSelectedFailedModelIds((prev) => {
+      const next = new Set(prev);
+      if (allFailedLoadedSelected) {
+        failedModelIds.forEach((modelId) => next.delete(modelId));
+      } else {
+        failedModelIds.forEach((modelId) => next.add(modelId));
+      }
+      return next;
+    });
+  };
+
+  const clearSelectedFailedModels = () => {
+    setSelectedFailedModelIds(new Set());
+  };
+
+  // 清理转换失败模型：清残留文件并删除记录（详情页随之 404）。
+  // ids 为空 = 一键清理全部；confirmText 由调用方给出（单个/选中/全部）。
+  const clearFailedModels = async (ids: string[], confirmText: string) => {
+    if (!window.confirm(confirmText)) return;
+    setClearingFailed(true);
+    try {
+      const result = await modelApi.clearFailed(ids);
+      if (result.failed > 0) {
+        toast(`已清理 ${result.cleared} 个，${result.failed} 个清理失败`, 'error');
+      } else {
+        toast(`已清理 ${result.cleared} 个转换失败模型`, 'success');
+      }
+      clearSelectedFailedModels();
+      setClearingFailedId(null);
+      refreshModelAdminData();
+    } catch {
+      toast('清理转换失败模型失败', 'error');
+    } finally {
+      setClearingFailed(false);
+    }
+  };
+
+  const handleClearFailedOne = (model: FailedModelListItem) => {
+    setClearingFailedId(model.model_id);
+    void clearFailedModels([model.model_id], `确认清理「${model.name}」？将删除该失败记录及其残留文件。`);
+  };
+
+  const handleClearFailedSelected = () => {
+    void clearFailedModels(
+      Array.from(selectedFailedModelIds),
+      `确认清理选中的 ${selectedFailedModelIds.size} 个转换失败模型？`,
+    );
+  };
+
+  const handleClearFailedAll = () => {
+    void clearFailedModels([], `确认一键清理全部 ${failedModelCount} 个转换失败模型？将删除失败记录及其残留文件。`);
+  };
+
+  // 打开离线转换产物导入弹窗（本地 convert:offline 产出的 .offline.zip）
+  const handleOpenImportPreview = (model: FailedModelListItem) => {
+    setImportPreviewTarget(model);
+  };
+
   const purgeDeletedModels = async (mode: 'selected' | 'all') => {
     const modelIds = Array.from(selectedDeletedModelIds);
     if (mode === 'selected' && modelIds.length === 0) return;
@@ -1030,6 +1480,30 @@ function DesktopContent() {
   const handleTabChange = (tab: ModelAdminTab) => {
     startTransition(() => setActiveTab(tab));
   };
+
+  // 模型库搬运：导出勾选模型为 zip 包（本地站用；服务器站导入）
+  const handleExportSelected = async () => {
+    const ids = Array.from(selectedModelIds).slice(0, 100);
+    if (ids.length === 0 || exportingSelection) return;
+    setExportingSelection(true);
+    try {
+      const blob = await modelApi.exportModels(ids);
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `模型导出-${ids.length}个-${new Date().toISOString().slice(0, 10)}.zip`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+      toast(`已导出 ${ids.length} 个模型（转换失败的模型不会包含在内）`, 'success');
+    } catch (err) {
+      toast(err instanceof Error ? err.message : '导出失败', 'error');
+    } finally {
+      setExportingSelection(false);
+    }
+  };
+
   const modelToolbarControls =
     activeTab === 'models' ? (
       <div className="flex min-w-0 shrink-0 flex-wrap items-center gap-2">
@@ -1073,6 +1547,15 @@ function DesktopContent() {
               <>
                 <AdminButton onClick={clearSelectedModels} icon="close" size="sm" variant="secondary">
                   取消选择
+                </AdminButton>
+                <AdminButton
+                  onClick={handleExportSelected}
+                  disabled={exportingSelection}
+                  icon="download"
+                  size="sm"
+                  variant="tonal"
+                >
+                  {exportingSelection ? '导出中...' : `导出选中${selectedModelCount > 100 ? '（前100）' : ''}`}
                 </AdminButton>
                 <AdminButton
                   onClick={() => setBatchCategoryOpen(true)}
@@ -1241,6 +1724,14 @@ function DesktopContent() {
               预览运维
             </AdminButton>
             <AdminButton
+              onClick={() => setImportModelsOpen(true)}
+              icon="cloud_download"
+              className="w-[122px]"
+              variant="secondary"
+            >
+              导入模型
+            </AdminButton>
+            <AdminButton
               onClick={() => setUploadOpen(true)}
               onPointerEnter={preloadUploadModal}
               onPointerDown={preloadUploadModal}
@@ -1274,7 +1765,9 @@ function DesktopContent() {
                     ? suggestionSearchInputProps
                     : activeTab === 'groups'
                       ? groupSearchInputProps
-                      : deletedSearchInputProps
+                      : activeTab === 'failed'
+                        ? failedSearchInputProps
+                        : deletedSearchInputProps
               }
               value={
                 activeTab === 'models'
@@ -1283,12 +1776,15 @@ function DesktopContent() {
                     ? suggestionSearchInputValue
                     : activeTab === 'groups'
                       ? groupSearchInputValue
-                      : deletedSearchInputValue
+                      : activeTab === 'failed'
+                        ? failedSearchInputValue
+                        : deletedSearchInputValue
               }
               onClear={() => {
                 if (activeTab === 'models') setSearch('');
                 else if (activeTab === 'suggestions') setSuggestionSearch('');
                 else if (activeTab === 'groups') setGroupSearch('');
+                else if (activeTab === 'failed') setFailedSearch('');
                 else setDeletedSearch('');
               }}
               placeholder={
@@ -1298,7 +1794,9 @@ function DesktopContent() {
                     ? '搜索建议...'
                     : activeTab === 'groups'
                       ? '搜索分组...'
-                      : '搜索已删除模型...'
+                      : activeTab === 'failed'
+                        ? '搜索转换失败模型...'
+                        : '搜索已删除模型...'
               }
             />
           </div>
@@ -1399,6 +1897,30 @@ function DesktopContent() {
                   </div>
                 )}
               </div>
+            )
+          ) : activeTab === 'failed' ? (
+            failedLoading ? (
+              <AdminLoadingState variant="table" label="转换失败模型加载中" />
+            ) : (
+              <FailedModelsPanel
+                items={failedModels}
+                total={failedTotal}
+                isLoadingMore={failedLoadingMore}
+                hasMore={failedHasMore}
+                onLoadMore={loadMoreFailed}
+                onClearOne={handleClearFailedOne}
+                onImport={handleOpenImportPreview}
+                onClearSelected={handleClearFailedSelected}
+                onClearAll={handleClearFailedAll}
+                onToggleSelect={toggleSelectFailedModel}
+                onToggleSelectLoaded={toggleSelectLoadedFailedModels}
+                onClearSelection={clearSelectedFailedModels}
+                clearing={clearingFailed}
+                clearingId={clearingFailedId}
+                selectedIds={selectedFailedModelIds}
+                selectedCount={selectedFailedCount}
+                allLoadedSelected={allFailedLoadedSelected}
+              />
             )
           ) : activeTab === 'deleted' ? (
             deletedLoading ? (
@@ -1778,6 +2300,19 @@ function DesktopContent() {
           onClose={() => setEditModel(null)}
           onSaved={() => mutate()}
         />
+        {importPreviewTarget && (
+          <ImportPreviewDialog
+            model={importPreviewTarget}
+            onClose={() => setImportPreviewTarget(null)}
+            onImported={() => {
+              setImportPreviewTarget(null);
+              refreshModelAdminData();
+            }}
+          />
+        )}
+        {importModelsOpen && (
+          <ImportModelsDialog onClose={() => setImportModelsOpen(false)} onImported={refreshModelAdminData} />
+        )}
         <AnimatePresence>
           {deleteTarget && (
             <motion.div
@@ -1895,6 +2430,7 @@ function MobileContent() {
   const [batchCategorySaving, setBatchCategorySaving] = useState(false);
   const [uploadOpen, setUploadOpen] = useState(false);
   const [previewOpsOpen, setPreviewOpsOpen] = useState(false);
+  const [importModelsOpen, setImportModelsOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<ModelAdminTab>('models');
 
   const {
@@ -1953,12 +2489,23 @@ function MobileContent() {
     setValue: setDeletedSearch,
     inputProps: deletedSearchInputProps,
   } = useImeSafeSearchInput();
+  const {
+    value: failedSearch,
+    draftValue: failedSearchInputValue,
+    setValue: setFailedSearch,
+    inputProps: failedSearchInputProps,
+  } = useImeSafeSearchInput();
   const [restoringModelId, setRestoringModelId] = useState<string | null>(null);
   const [restoringDeletedBatch, setRestoringDeletedBatch] = useState(false);
   const [selectedDeletedModelIds, setSelectedDeletedModelIds] = useState<Set<string>>(new Set());
   const [purgingDeleted, setPurgingDeleted] = useState(false);
   const [purgeConfirmMode, setPurgeConfirmMode] = useState<DeletedPurgeMode | null>(null);
   const [deletedRefreshVersion, setDeletedRefreshVersion] = useState(0);
+  const [selectedFailedModelIds, setSelectedFailedModelIds] = useState<Set<string>>(new Set());
+  const [clearingFailed, setClearingFailed] = useState(false);
+  const [clearingFailedId, setClearingFailedId] = useState<string | null>(null);
+  const [importPreviewTarget, setImportPreviewTarget] = useState<FailedModelListItem | null>(null);
+  const [failedRefreshVersion, setFailedRefreshVersion] = useState(0);
   const {
     groups: suggestionGroups,
     total: activeSuggestionCount,
@@ -1990,6 +2537,18 @@ function MobileContent() {
   const { data: deletedCountData, mutate: deletedCountMutate } = useSWR('/models/deleted/count-mobile', () =>
     modelApi.listDeleted({ page: 1, pageSize: 1 }),
   );
+  const {
+    items: failedModels,
+    total: failedTotal,
+    isLoading: failedLoading,
+    isLoadingMore: failedLoadingMore,
+    hasMore: failedHasMore,
+    loadMore: loadMoreFailed,
+    mutate: failedMutate,
+  } = useFailedModelPages(failedSearch, activeTab === 'failed', failedRefreshVersion);
+  const { data: failedCountData, mutate: failedCountMutate } = useSWR('/models/failed/count-mobile', () =>
+    modelApi.listFailed({ page: 1, pageSize: 1 }),
+  );
   const deletedModelIds = deletedModels.map((model) => model.model_id);
   const selectedDeletedCount = selectedDeletedModelIds.size;
   const selectedRestorableDeletedCount = deletedModels.filter(
@@ -1997,6 +2556,10 @@ function MobileContent() {
   ).length;
   const allDeletedLoadedSelected =
     deletedModelIds.length > 0 && deletedModelIds.every((modelId) => selectedDeletedModelIds.has(modelId));
+  const failedModelIds = failedModels.map((model) => model.model_id);
+  const selectedFailedCount = selectedFailedModelIds.size;
+  const allFailedLoadedSelected =
+    failedModelIds.length > 0 && failedModelIds.every((modelId) => selectedFailedModelIds.has(modelId));
   const groups = Array.isArray(groupData) ? groupData : [];
   const filteredGroups = groupSearch
     ? groups.filter(
@@ -2018,6 +2581,13 @@ function MobileContent() {
   const allSuggestionsSelected = suggestionNames.length > 0 && selectedSuggestionCount === suggestionNames.length;
   const suggestionCount = activeTab === 'suggestions' ? activeSuggestionCount : (suggestionCountData?.total ?? 0);
   const mergedGroupCount = groupCountData?.total ?? groupData?.length;
+  const failedGlobalCount = failedCountData?.total ?? 0;
+  const failedModelCount =
+    activeTab === 'failed'
+      ? failedSearch.trim()
+        ? failedTotal
+        : Math.max(failedTotal, failedGlobalCount)
+      : failedGlobalCount;
   const deletedGlobalCount = deletedCountData?.total ?? 0;
   const deletedModelCount =
     activeTab === 'deleted'
@@ -2029,6 +2599,7 @@ function MobileContent() {
     { value: 'models', label: '全部模型', count: displayModelTotalM, icon: 'inventory_2' },
     { value: 'suggestions', label: '合并建议', count: suggestionCount, icon: 'merge_type' },
     { value: 'groups', label: '已合并', count: mergedGroupCount, icon: 'category' },
+    { value: 'failed', label: '转换失败', count: failedModelCount, icon: 'error' },
     { value: 'deleted', label: '回收站', count: deletedModelCount, icon: 'delete_sweep' },
   ];
 
@@ -2046,10 +2617,14 @@ function MobileContent() {
   }, [activeTab, deletedSearch]);
 
   useEffect(() => {
-    if (activeTab !== 'deleted') return;
-    deletedMutate();
-    deletedCountMutate();
-  }, [activeTab, deletedMutate, deletedCountMutate]);
+    setSelectedFailedModelIds(new Set());
+  }, [activeTab, failedSearch]);
+
+  useEffect(() => {
+    if (activeTab !== 'failed') return;
+    failedMutate();
+    failedCountMutate();
+  }, [activeTab, failedMutate, failedCountMutate]);
 
   useEffect(() => {
     if (activeTab !== 'deleted' || deletedSearch.trim() || deletedLoading) return;
@@ -2068,6 +2643,9 @@ function MobileContent() {
     setDeletedRefreshVersion((version) => version + 1);
     deletedMutate();
     deletedCountMutate();
+    setFailedRefreshVersion((version) => version + 1);
+    failedMutate();
+    failedCountMutate();
   };
 
   const handleDelete = async () => {
@@ -2250,6 +2828,74 @@ function MobileContent() {
 
   const clearSelectedDeletedModels = () => {
     setSelectedDeletedModelIds(new Set());
+  };
+
+  const toggleSelectFailedModel = (modelId: string) => {
+    setSelectedFailedModelIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(modelId)) next.delete(modelId);
+      else next.add(modelId);
+      return next;
+    });
+  };
+
+  const toggleSelectLoadedFailedModels = () => {
+    setSelectedFailedModelIds((prev) => {
+      const next = new Set(prev);
+      if (allFailedLoadedSelected) {
+        failedModelIds.forEach((modelId) => next.delete(modelId));
+      } else {
+        failedModelIds.forEach((modelId) => next.add(modelId));
+      }
+      return next;
+    });
+  };
+
+  const clearSelectedFailedModels = () => {
+    setSelectedFailedModelIds(new Set());
+  };
+
+  // 清理转换失败模型：清残留文件并删除记录（详情页随之 404）。
+  // ids 为空 = 一键清理全部；confirmText 由调用方给出（单个/选中/全部）。
+  const clearFailedModels = async (ids: string[], confirmText: string) => {
+    if (!window.confirm(confirmText)) return;
+    setClearingFailed(true);
+    try {
+      const result = await modelApi.clearFailed(ids);
+      if (result.failed > 0) {
+        toast(`已清理 ${result.cleared} 个，${result.failed} 个清理失败`, 'error');
+      } else {
+        toast(`已清理 ${result.cleared} 个转换失败模型`, 'success');
+      }
+      clearSelectedFailedModels();
+      setClearingFailedId(null);
+      refreshModelAdminData();
+    } catch {
+      toast('清理转换失败模型失败', 'error');
+    } finally {
+      setClearingFailed(false);
+    }
+  };
+
+  const handleClearFailedOne = (model: FailedModelListItem) => {
+    setClearingFailedId(model.model_id);
+    void clearFailedModels([model.model_id], `确认清理「${model.name}」？将删除该失败记录及其残留文件。`);
+  };
+
+  const handleClearFailedSelected = () => {
+    void clearFailedModels(
+      Array.from(selectedFailedModelIds),
+      `确认清理选中的 ${selectedFailedModelIds.size} 个转换失败模型？`,
+    );
+  };
+
+  const handleClearFailedAll = () => {
+    void clearFailedModels([], `确认一键清理全部 ${failedModelCount} 个转换失败模型？将删除失败记录及其残留文件。`);
+  };
+
+  // 打开离线转换产物导入弹窗（本地 convert:offline 产出的 .offline.zip）
+  const handleOpenImportPreview = (model: FailedModelListItem) => {
+    setImportPreviewTarget(model);
   };
 
   const purgeDeletedModels = async (mode: 'selected' | 'all') => {
@@ -2435,6 +3081,9 @@ function MobileContent() {
             >
               运维
             </AdminButton>
+            <AdminButton onClick={() => setImportModelsOpen(true)} icon="cloud_download" size="sm" variant="secondary">
+              导入
+            </AdminButton>
             <AdminButton
               onClick={() => setUploadOpen(true)}
               onPointerEnter={preloadUploadModal}
@@ -2488,6 +3137,15 @@ function MobileContent() {
             value={suggestionSearchInputValue}
             onClear={() => setSuggestionSearch('')}
             placeholder="搜索建议..."
+            className="md:w-full"
+          />
+        )}
+        {activeTab === 'failed' && (
+          <AdminSearchField
+            inputProps={failedSearchInputProps}
+            value={failedSearchInputValue}
+            onClear={() => setFailedSearch('')}
+            placeholder="搜索转换失败模型..."
             className="md:w-full"
           />
         )}
@@ -2645,6 +3303,31 @@ function MobileContent() {
                 </p>
               )}
             </div>
+          )
+        ) : activeTab === 'failed' ? (
+          failedLoading ? (
+            <AdminLoadingState variant="list" rows={5} label="转换失败模型加载中" />
+          ) : (
+            <FailedModelsPanel
+              compact
+              items={failedModels}
+              total={failedTotal}
+              isLoadingMore={failedLoadingMore}
+              hasMore={failedHasMore}
+              onLoadMore={loadMoreFailed}
+              onClearOne={handleClearFailedOne}
+              onImport={handleOpenImportPreview}
+              onClearSelected={handleClearFailedSelected}
+              onClearAll={handleClearFailedAll}
+              onToggleSelect={toggleSelectFailedModel}
+              onToggleSelectLoaded={toggleSelectLoadedFailedModels}
+              onClearSelection={clearSelectedFailedModels}
+              clearing={clearingFailed}
+              clearingId={clearingFailedId}
+              selectedIds={selectedFailedModelIds}
+              selectedCount={selectedFailedCount}
+              allLoadedSelected={allFailedLoadedSelected}
+            />
           )
         ) : activeTab === 'deleted' ? (
           deletedLoading ? (
@@ -2929,6 +3612,19 @@ function MobileContent() {
         onClose={() => setEditModel(null)}
         onSaved={() => mutate()}
       />
+      {importPreviewTarget && (
+        <ImportPreviewDialog
+          model={importPreviewTarget}
+          onClose={() => setImportPreviewTarget(null)}
+          onImported={() => {
+            setImportPreviewTarget(null);
+            refreshModelAdminData();
+          }}
+        />
+      )}
+      {importModelsOpen && (
+        <ImportModelsDialog onClose={() => setImportModelsOpen(false)} onImported={refreshModelAdminData} />
+      )}
       <ConfirmDialog
         open={Boolean(purgeConfirmMode)}
         onClose={() => {

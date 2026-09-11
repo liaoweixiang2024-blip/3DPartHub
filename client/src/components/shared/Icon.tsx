@@ -72,6 +72,7 @@ import {
   Puzzle,
   Droplets,
   CircleDot,
+  CircleMinus,
   Fuel,
   Layers,
   Square,
@@ -164,6 +165,10 @@ import {
   BadgeCheck,
   Columns,
   Gift,
+  FolderInput,
+  DatabaseBackup,
+  CloudCog,
+  ToggleLeft,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import type { CSSProperties } from 'react';
@@ -175,6 +180,11 @@ const iconMap: Record<string, LucideIcon> = {
   download: Download,
   cloud_upload: CloudUpload,
   cloud: Cloud,
+  // 模型管理批量操作 / 设置导航 / FeatureGate 禁用态
+  drive_file_move: FolderInput,
+  backup: DatabaseBackup,
+  cloud_sync: CloudCog,
+  toggle_off: ToggleLeft,
   notifications: Bell,
   settings: Settings,
   person: User,
@@ -202,6 +212,9 @@ const iconMap: Record<string, LucideIcon> = {
   content_copy: Copy,
   radio_button_checked: CircleDotIcon,
   radio_button_unchecked: Circle,
+  // 导航管理：分类项删除 / 节点拖拽把手（此前缺映射渲染成空 span，按钮隐形不可点）
+  remove_circle_outline: CircleMinus,
+  drag_indicator: GripVertical,
 
   // Arrows & Navigation
   arrow_back: ArrowLeft,

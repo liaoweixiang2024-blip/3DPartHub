@@ -1,6 +1,6 @@
 {
   "name": "3dparthub-server",
-  "version": "4.6.2",
+  "version": "4.7.0",
   "type": "module",
   "scripts": {
     "dev": "node --import tsx src/main.ts",
@@ -27,7 +27,8 @@
     "backup:e2e:dev": "tsx src/scripts/backup-e2e-check.ts",
     "seed:batch": "tsx prisma/seeds/run-batch.ts",
     "seed:all": "tsx prisma/seeds/import-selection-products.ts",
-    "seed:range": "tsx prisma/seeds/run-batch.ts"
+    "seed:range": "tsx prisma/seeds/run-batch.ts",
+    "convert:offline": "tsx scripts/convert-offline.ts"
   },
   "dependencies": {
     "@prisma/client": "^5.22.0",
