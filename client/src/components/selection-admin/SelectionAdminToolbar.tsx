@@ -2,8 +2,8 @@ import { useState, useRef, useEffect } from 'react';
 import Icon from '../shared/Icon';
 import { SELECTION_TOOLBAR_BUTTON_BASE } from './constants';
 
-/** 「更多设置」按钮：与模型管理「预览运维/导入模型」同款（灰底 rounded-lg、无投影无上浮） */
-const MORE_BUTTON_CLASS = `${SELECTION_TOOLBAR_BUTTON_BASE} border-transparent bg-surface-container-high font-bold text-on-surface-variant hover:bg-surface-container-highest`;
+/** 「更多设置」按钮：尺寸/字重与同排工具栏按钮完全一致（共用 BASE），仅配色换成灰底实色 */
+const MORE_BUTTON_CLASS = `${SELECTION_TOOLBAR_BUTTON_BASE} border-transparent bg-surface-container-high text-on-surface-variant hover:bg-surface-container-highest`;
 
 export function SelectionToolbarButtonContent({ icon, children }: { icon: string; children: string }) {
   return (

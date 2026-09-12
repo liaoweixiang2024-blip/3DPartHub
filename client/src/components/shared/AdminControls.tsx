@@ -1,7 +1,15 @@
 import type { ButtonHTMLAttributes, ReactNode } from 'react';
 import Icon from './Icon';
 
-export type AdminButtonVariant = 'primary' | 'secondary' | 'tonal' | 'danger' | 'ghost' | 'warning' | 'success';
+export type AdminButtonVariant =
+  | 'primary'
+  | 'secondary'
+  | 'neutral'
+  | 'tonal'
+  | 'danger'
+  | 'ghost'
+  | 'warning'
+  | 'success';
 export type AdminButtonSize = 'sm' | 'md' | 'icon-sm' | 'icon-md';
 
 const baseButtonClass =
@@ -18,6 +26,9 @@ const buttonVariantClasses: Record<AdminButtonVariant, string> = {
   primary: 'border border-transparent bg-primary-container text-on-primary shadow-sm hover:opacity-90',
   secondary:
     'border border-outline-variant/20 bg-surface-container-lowest/30 text-on-surface-variant hover:border-outline-variant/35 hover:bg-surface-container-high/65 hover:text-on-surface',
+  // 灰底实色（与系统设置「保存设置」按钮已保存禁用态同款配色）：尺寸/字重与同排按钮一致，仅配色不同
+  neutral:
+    'border border-transparent bg-surface-container-high text-on-surface-variant hover:bg-surface-container-highest',
   tonal:
     'border border-primary-container/15 bg-primary-container/10 text-primary-container hover:bg-primary-container/15',
   danger: 'border border-error/20 bg-error/10 text-error hover:bg-error/15',

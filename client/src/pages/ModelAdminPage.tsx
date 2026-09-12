@@ -1732,23 +1732,23 @@ function DesktopContent() {
         description="统一维护模型文件、分类归属、预览重建和同名模型合并关系。"
         actions={
           <div className="flex items-center gap-2">
-            {/* 与系统设置页「保存设置」按钮已保存（禁用）态同款：rounded-lg 灰底、无投影无上浮 */}
-            <button
-              type="button"
+            {/* neutral 变体 = 灰底实色（保存设置按钮已保存态同款配色），尺寸与「上传模型」完全一致 */}
+            <AdminButton
               onClick={() => setPreviewOpsOpen(true)}
-              className="inline-flex h-9 w-[122px] shrink-0 items-center justify-center gap-1.5 rounded-lg bg-surface-container-high px-3.5 text-xs font-bold text-on-surface-variant transition-colors hover:bg-surface-container-highest md:h-8"
+              icon="view_in_ar"
+              className="w-[122px]"
+              variant="neutral"
             >
-              <Icon name="view_in_ar" size={14} />
               预览运维
-            </button>
-            <button
-              type="button"
+            </AdminButton>
+            <AdminButton
               onClick={() => setImportModelsOpen(true)}
-              className="inline-flex h-9 w-[122px] shrink-0 items-center justify-center gap-1.5 rounded-lg bg-surface-container-high px-3.5 text-xs font-bold text-on-surface-variant transition-colors hover:bg-surface-container-highest md:h-8"
+              icon="cloud_download"
+              className="w-[122px]"
+              variant="neutral"
             >
-              <Icon name="cloud_download" size={14} />
               导入模型
-            </button>
+            </AdminButton>
             <AdminButton
               onClick={() => setUploadOpen(true)}
               onPointerEnter={preloadUploadModal}
@@ -3121,24 +3121,19 @@ function MobileContent() {
         contentClassName="gap-3"
         actions={
           <div className="flex items-center gap-2">
-            {/* 与系统设置页「保存设置」按钮已保存（禁用）态同款：rounded-lg 灰底、无投影无上浮 */}
-            <button
-              type="button"
+            {/* neutral = 灰底实色，尺寸与「上传」（sm）完全一致，仅配色不同 */}
+            <AdminButton
               onClick={() => setPreviewOpsOpen(true)}
+              icon="view_in_ar"
+              size="sm"
+              variant="neutral"
               aria-label="打开预览运维工作台"
-              className="inline-flex h-8 shrink-0 items-center justify-center gap-1.5 rounded-lg bg-surface-container-high px-3 text-xs font-bold text-on-surface-variant transition-colors hover:bg-surface-container-highest"
             >
-              <Icon name="view_in_ar" size={14} />
               运维
-            </button>
-            <button
-              type="button"
-              onClick={() => setImportModelsOpen(true)}
-              className="inline-flex h-8 shrink-0 items-center justify-center gap-1.5 rounded-lg bg-surface-container-high px-3 text-xs font-bold text-on-surface-variant transition-colors hover:bg-surface-container-highest"
-            >
-              <Icon name="cloud_download" size={14} />
+            </AdminButton>
+            <AdminButton onClick={() => setImportModelsOpen(true)} icon="cloud_download" size="sm" variant="neutral">
               导入
-            </button>
+            </AdminButton>
             <AdminButton
               onClick={() => setUploadOpen(true)}
               onPointerEnter={preloadUploadModal}
