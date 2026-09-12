@@ -30,10 +30,15 @@ export default function CameraController({
   preset,
   viewportBottom = 0,
   controlsRef,
+  controlsEpoch,
 }: {
   preset: CameraPreset;
   viewportBottom?: number;
   controlsRef?: MutableRefObject<ViewerControls | null>;
+  /** 控制器世代标识：SW 模式开关会换装控制器实例（Orbit ↔ 轨迹球），此值随之变化，
+   *  驱动下方监听效应重跑——否则 change 监听器会留在已卸载的旧实例上，新实例不触发
+   *  近/远裁剪面跟随，SW 模式下缩小越过冻结的 far 面时模型整体被裁掉（「消失」） */
+  controlsEpoch?: string;
 }) {
   const { camera, gl } = useThree();
   const modelDataRef = useRef<ModelBoundsDetail | null>(null);
@@ -232,8 +237,10 @@ export default function CameraController({
       window.cancelAnimationFrame(frameId);
       detach?.();
     };
-    // controlsTick 变化 = 控制器实例已更换，重挂监听
-  }, [controlsRef, updateCameraClipping, controlsTick]);
+    // controlsTick 变化 = 控制器实例已更换，重挂监听；
+    // controlsEpoch 变化 = SW 开关换装控制器（Orbit ↔ 轨迹球），效应必须重跑一次
+    // 才能发现实例更换（rAF 轮询在首次挂上监听后就停了，不会自己感知换装）
+  }, [controlsRef, updateCameraClipping, controlsTick, controlsEpoch]);
 
   return null;
 }

@@ -122,6 +122,14 @@ client.interceptors.response.use(
     const originalRequest = error.config;
     const silentBackgroundRequest = isSilentBackgroundRequest(originalRequest);
 
+    // 统一改写 err.message 为简化后的友好文案（getErrorMessage 内含服务端长文规则）：
+    // 页面里大量 `err instanceof Error ? err.message` 的写法不走 getErrorMessage，
+    // 不改写的话它们弹的是 "Request failed with status code 500" 或服务端原始长文。
+    // 只动 message，response/status/code 保持原样——按状态码分支判断的页面不受影响。
+    if (error instanceof Error && !axios.isCancel(error)) {
+      error.message = getErrorMessage(error);
+    }
+
     // Don't retry login/register/refresh endpoints
     const isAuthEndpoint =
       originalRequest.url?.includes('/auth/login') ||

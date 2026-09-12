@@ -1065,6 +1065,12 @@ function DesktopContent() {
   const [selectedFailedModelIds, setSelectedFailedModelIds] = useState<Set<string>>(new Set());
   const [clearingFailed, setClearingFailed] = useState(false);
   const [clearingFailedId, setClearingFailedId] = useState<string | null>(null);
+  // 待确认的清理请求（单个/选中/全部）：走标准 ConfirmDialog，不再用原生 window.confirm
+  const [failedClearRequest, setFailedClearRequest] = useState<{
+    ids: string[];
+    title: string;
+    description: string;
+  } | null>(null);
   const [importPreviewTarget, setImportPreviewTarget] = useState<FailedModelListItem | null>(null);
   const [failedRefreshVersion, setFailedRefreshVersion] = useState(0);
   const [groupAction, setGroupAction] = useState<string | null>(null);
@@ -1259,7 +1265,8 @@ function DesktopContent() {
   const selectAllMatchingModels = () => {
     if (displayModelTotal <= 0) return;
     setSelectedAllMatching(true);
-    setSelectedModelIds(new Set());
+    // 同时把已加载的行勾上：「选择全部」要看得见勾选反馈（批量操作仍走服务端全选语义）
+    setSelectedModelIds(new Set(visibleModelIds));
   };
 
   const clearSelectedModels = () => {
@@ -1417,9 +1424,10 @@ function DesktopContent() {
   };
 
   // 清理转换失败模型：清残留文件并删除记录（详情页随之 404）。
-  // ids 为空 = 一键清理全部；confirmText 由调用方给出（单个/选中/全部）。
-  const clearFailedModels = async (ids: string[], confirmText: string) => {
-    if (!window.confirm(confirmText)) return;
+  // ids 为空 = 一键清理全部；确认弹窗由 ConfirmDialog 渲染（failedClearRequest）。
+  const clearFailedModels = async (ids: string[]) => {
+    // 单个清理时才点亮行内「清理中」状态：弹窗点取消不能把行卡在清理中
+    if (ids.length === 1) setClearingFailedId(ids[0]);
     setClearingFailed(true);
     try {
       const result = await modelApi.clearFailed(ids);
@@ -1434,24 +1442,33 @@ function DesktopContent() {
     } catch {
       toast('清理转换失败模型失败', 'error');
     } finally {
+      setFailedClearRequest(null);
       setClearingFailed(false);
     }
   };
 
   const handleClearFailedOne = (model: FailedModelListItem) => {
-    setClearingFailedId(model.model_id);
-    void clearFailedModels([model.model_id], `确认清理「${model.name}」？将删除该失败记录及其残留文件。`);
+    setFailedClearRequest({
+      ids: [model.model_id],
+      title: '确认清理失败记录',
+      description: `将删除「${model.name}」的失败记录及其残留文件。`,
+    });
   };
 
   const handleClearFailedSelected = () => {
-    void clearFailedModels(
-      Array.from(selectedFailedModelIds),
-      `确认清理选中的 ${selectedFailedModelIds.size} 个转换失败模型？`,
-    );
+    setFailedClearRequest({
+      ids: Array.from(selectedFailedModelIds),
+      title: '确认清理选中记录',
+      description: `将删除选中的 ${selectedFailedModelIds.size} 个转换失败模型及其残留文件。`,
+    });
   };
 
   const handleClearFailedAll = () => {
-    void clearFailedModels([], `确认一键清理全部 ${failedModelCount} 个转换失败模型？将删除失败记录及其残留文件。`);
+    setFailedClearRequest({
+      ids: [],
+      title: '一键清理全部失败记录',
+      description: `将删除全部 ${failedModelCount} 个转换失败模型及其残留文件。`,
+    });
   };
 
   // 打开离线转换产物导入弹窗（本地 convert:offline 产出的 .offline.zip）
@@ -1715,22 +1732,23 @@ function DesktopContent() {
         description="统一维护模型文件、分类归属、预览重建和同名模型合并关系。"
         actions={
           <div className="flex items-center gap-2">
-            <AdminButton
+            {/* 与系统设置页「保存设置」按钮已保存（禁用）态同款：rounded-lg 灰底、无投影无上浮 */}
+            <button
+              type="button"
               onClick={() => setPreviewOpsOpen(true)}
-              icon="view_in_ar"
-              className="w-[122px]"
-              variant="secondary"
+              className="inline-flex h-9 w-[122px] shrink-0 items-center justify-center gap-1.5 rounded-lg bg-surface-container-high px-3.5 text-xs font-bold text-on-surface-variant transition-colors hover:bg-surface-container-highest md:h-8"
             >
+              <Icon name="view_in_ar" size={14} />
               预览运维
-            </AdminButton>
-            <AdminButton
+            </button>
+            <button
+              type="button"
               onClick={() => setImportModelsOpen(true)}
-              icon="cloud_download"
-              className="w-[122px]"
-              variant="secondary"
+              className="inline-flex h-9 w-[122px] shrink-0 items-center justify-center gap-1.5 rounded-lg bg-surface-container-high px-3.5 text-xs font-bold text-on-surface-variant transition-colors hover:bg-surface-container-highest md:h-8"
             >
+              <Icon name="cloud_download" size={14} />
               导入模型
-            </AdminButton>
+            </button>
             <AdminButton
               onClick={() => setUploadOpen(true)}
               onPointerEnter={preloadUploadModal}
@@ -2293,6 +2311,21 @@ function DesktopContent() {
           confirmLabel={purgingDeleted ? '删除中...' : purgeConfirmMode === 'all' ? '清空回收站' : '彻底删除'}
           confirmDisabled={purgingDeleted || purgeConfirmSelectedCount <= 0}
         />
+        <ConfirmDialog
+          open={Boolean(failedClearRequest)}
+          onClose={() => {
+            if (!clearingFailed) setFailedClearRequest(null);
+          }}
+          onConfirm={() => {
+            if (!failedClearRequest) return;
+            void clearFailedModels(failedClearRequest.ids);
+          }}
+          icon="delete_sweep"
+          title={failedClearRequest?.title ?? ''}
+          description={failedClearRequest?.description ?? ''}
+          confirmLabel={clearingFailed ? '清理中...' : '确认清理'}
+          confirmDisabled={clearingFailed}
+        />
         <EditDialog
           open={!!editModel}
           model={editModel}
@@ -2504,6 +2537,12 @@ function MobileContent() {
   const [selectedFailedModelIds, setSelectedFailedModelIds] = useState<Set<string>>(new Set());
   const [clearingFailed, setClearingFailed] = useState(false);
   const [clearingFailedId, setClearingFailedId] = useState<string | null>(null);
+  // 待确认的清理请求（单个/选中/全部）：走标准 ConfirmDialog，不再用原生 window.confirm
+  const [failedClearRequest, setFailedClearRequest] = useState<{
+    ids: string[];
+    title: string;
+    description: string;
+  } | null>(null);
   const [importPreviewTarget, setImportPreviewTarget] = useState<FailedModelListItem | null>(null);
   const [failedRefreshVersion, setFailedRefreshVersion] = useState(0);
   const {
@@ -2856,9 +2895,10 @@ function MobileContent() {
   };
 
   // 清理转换失败模型：清残留文件并删除记录（详情页随之 404）。
-  // ids 为空 = 一键清理全部；confirmText 由调用方给出（单个/选中/全部）。
-  const clearFailedModels = async (ids: string[], confirmText: string) => {
-    if (!window.confirm(confirmText)) return;
+  // ids 为空 = 一键清理全部；确认弹窗由 ConfirmDialog 渲染（failedClearRequest）。
+  const clearFailedModels = async (ids: string[]) => {
+    // 单个清理时才点亮行内「清理中」状态：弹窗点取消不能把行卡在清理中
+    if (ids.length === 1) setClearingFailedId(ids[0]);
     setClearingFailed(true);
     try {
       const result = await modelApi.clearFailed(ids);
@@ -2873,24 +2913,33 @@ function MobileContent() {
     } catch {
       toast('清理转换失败模型失败', 'error');
     } finally {
+      setFailedClearRequest(null);
       setClearingFailed(false);
     }
   };
 
   const handleClearFailedOne = (model: FailedModelListItem) => {
-    setClearingFailedId(model.model_id);
-    void clearFailedModels([model.model_id], `确认清理「${model.name}」？将删除该失败记录及其残留文件。`);
+    setFailedClearRequest({
+      ids: [model.model_id],
+      title: '确认清理失败记录',
+      description: `将删除「${model.name}」的失败记录及其残留文件。`,
+    });
   };
 
   const handleClearFailedSelected = () => {
-    void clearFailedModels(
-      Array.from(selectedFailedModelIds),
-      `确认清理选中的 ${selectedFailedModelIds.size} 个转换失败模型？`,
-    );
+    setFailedClearRequest({
+      ids: Array.from(selectedFailedModelIds),
+      title: '确认清理选中记录',
+      description: `将删除选中的 ${selectedFailedModelIds.size} 个转换失败模型及其残留文件。`,
+    });
   };
 
   const handleClearFailedAll = () => {
-    void clearFailedModels([], `确认一键清理全部 ${failedModelCount} 个转换失败模型？将删除失败记录及其残留文件。`);
+    setFailedClearRequest({
+      ids: [],
+      title: '一键清理全部失败记录',
+      description: `将删除全部 ${failedModelCount} 个转换失败模型及其残留文件。`,
+    });
   };
 
   // 打开离线转换产物导入弹窗（本地 convert:offline 产出的 .offline.zip）
@@ -3072,18 +3121,24 @@ function MobileContent() {
         contentClassName="gap-3"
         actions={
           <div className="flex items-center gap-2">
-            <AdminButton
+            {/* 与系统设置页「保存设置」按钮已保存（禁用）态同款：rounded-lg 灰底、无投影无上浮 */}
+            <button
+              type="button"
               onClick={() => setPreviewOpsOpen(true)}
-              icon="view_in_ar"
-              size="sm"
-              variant="secondary"
               aria-label="打开预览运维工作台"
+              className="inline-flex h-8 shrink-0 items-center justify-center gap-1.5 rounded-lg bg-surface-container-high px-3 text-xs font-bold text-on-surface-variant transition-colors hover:bg-surface-container-highest"
             >
+              <Icon name="view_in_ar" size={14} />
               运维
-            </AdminButton>
-            <AdminButton onClick={() => setImportModelsOpen(true)} icon="cloud_download" size="sm" variant="secondary">
+            </button>
+            <button
+              type="button"
+              onClick={() => setImportModelsOpen(true)}
+              className="inline-flex h-8 shrink-0 items-center justify-center gap-1.5 rounded-lg bg-surface-container-high px-3 text-xs font-bold text-on-surface-variant transition-colors hover:bg-surface-container-highest"
+            >
+              <Icon name="cloud_download" size={14} />
               导入
-            </AdminButton>
+            </button>
             <AdminButton
               onClick={() => setUploadOpen(true)}
               onPointerEnter={preloadUploadModal}
@@ -3639,6 +3694,21 @@ function MobileContent() {
         description={purgeConfirmDescription}
         confirmLabel={purgingDeleted ? '删除中...' : purgeConfirmMode === 'all' ? '清空回收站' : '彻底删除'}
         confirmDisabled={purgingDeleted || purgeConfirmSelectedCount <= 0}
+      />
+      <ConfirmDialog
+        open={Boolean(failedClearRequest)}
+        onClose={() => {
+          if (!clearingFailed) setFailedClearRequest(null);
+        }}
+        onConfirm={() => {
+          if (!failedClearRequest) return;
+          void clearFailedModels(failedClearRequest.ids);
+        }}
+        icon="delete_sweep"
+        title={failedClearRequest?.title ?? ''}
+        description={failedClearRequest?.description ?? ''}
+        confirmLabel={clearingFailed ? '清理中...' : '确认清理'}
+        confirmDisabled={clearingFailed}
       />
       <AnimatePresence>
         {deleteTarget && (

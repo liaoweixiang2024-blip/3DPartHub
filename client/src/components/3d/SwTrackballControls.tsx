@@ -67,6 +67,39 @@ export default function SwTrackballControls({
     controls.staticMoving = false;
     controls.dynamicDampingFactor = 0.15;
     controls.cursorZoom = true;
+
+    // 修复 three-stdlib cursorZoom 的缩小「消失」bug：
+    // 库内实现 this.target.lerpVectors(worldPos, this.target, factor)——缩小（factor>1）时
+    // alpha 超过 1 属于外插，每格滚轮把观察锚点 target 往光标反侧外推 10% 并逐格复利发散，
+    // 相机盯着越漂越远的锚点，模型滑出视锥后完全消失。这里包一层 zoomCamera：
+    // 缩小时把 target 恢复为缩放前位置（等价 alpha=1，缩小不带动锚点，纯视距拉远）；
+    // 放大（factor<1）时 lerp 合法，保留「朝光标收敛」的缩放体验。
+    const patched = controls as unknown as {
+      __origZoomCamera?: () => void;
+      _zoomStart: THREE.Vector2;
+      _zoomEnd: THREE.Vector2;
+      _state: number;
+      STATE: { TOUCH_ZOOM_PAN: number };
+      _touchZoomDistanceStart: number;
+      _touchZoomDistanceEnd: number;
+      EPS: number;
+      zoomCamera: () => void;
+    };
+    const original = (patched.__origZoomCamera ??= patched.zoomCamera);
+    patched.zoomCamera = () => {
+      // 与库内两个分支同源的缩放因子：滚轮（阻尼残差）/ 触屏捏合（起止指距比）
+      const factor =
+        patched._state === patched.STATE.TOUCH_ZOOM_PAN
+          ? patched._touchZoomDistanceStart / patched._touchZoomDistanceEnd
+          : 1 + (patched._zoomEnd.y - patched._zoomStart.y) * controls.zoomSpeed;
+      const targetBefore = controls.target.clone();
+      original();
+      // 缩小（factor>1）或出现非有限值时把锚点拉回缩放前位置：
+      // lerp 的 alpha 超 1 是外插，target 会指数漂移直到模型滑出视锥「消失」
+      if (controls.cursorZoom && (!Number.isFinite(factor) || factor > 1)) {
+        controls.target.copy(targetBefore);
+      }
+    };
   }, [controls]);
 
   // 旋转灵敏度对齐默认模式（OrbitControls）：

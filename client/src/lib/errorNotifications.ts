@@ -137,6 +137,56 @@ export function getRateLimitErrorMessage(error: unknown) {
   });
 }
 
+/** 已知冗长/技术性的服务端报错 → 一句话友好提示。
+ *  命中规则的原始文案保留在 console（[server-error] 前缀），便于排查。 */
+const VERBOSE_SERVER_MESSAGE_RULES: Array<{ re: RegExp; text: string }> = [
+  {
+    // 转换子进程 OOM / 内存不足：服务端附带信号名、源文件大小、容器配额、调参建议等诊断信息
+    re: /heap out of memory|SIGABRT|SIGSEGV|SIGKILL|OOM|内存不足|内存配额|转换子进程异常退出/i,
+    text: '服务器内存不足，转换失败：大文件请拆分上传，或联系管理员调大服务器内存配置',
+  },
+  {
+    // 上传体积超限（nginx / express body 限制返回的原文）
+    re: /payload too large|entity too large|request entity|multererror/i,
+    text: '文件过大，超出服务器上传限制',
+  },
+  {
+    // Prisma 内部错误原文（Invalid `prisma.xxx()` …）对用户无意义
+    re: /Invalid `prisma\.|prismaclientvalidationerror|prisma client/i,
+    text: '数据服务异常，请稍后重试；持续出现请联系管理员',
+  },
+];
+
+/** 服务端原始报错简化：规则映射 → 剥 HTML 错误页/换行堆栈 → 超长截断到首句 */
+function simplifyServerMessage(raw: string): string {
+  const original = raw.trim();
+  if (!original) return original;
+  // 原始完整文案进 console，弹窗只给简短版
+  console.info('[server-error]', original);
+
+  // nginx / 网关错误页是整页 HTML，先剥标签
+  const stripped = /<[a-z!]/i.test(original)
+    ? original
+        .replace(/<script[\s\S]*?<\/script>/gi, ' ')
+        .replace(/<style[\s\S]*?<\/style>/gi, ' ')
+        .replace(/<[^>]+>/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim()
+    : original;
+
+  for (const rule of VERBOSE_SERVER_MESSAGE_RULES) {
+    if (rule.re.test(stripped)) return rule.text;
+  }
+
+  // 兜底：只取第一行（去掉换行携带的堆栈/元信息），超长时截到首个句读或 60 字
+  let brief = stripped.split(/\r?\n/)[0].trim();
+  if (brief.length > 80) {
+    const sentence = brief.match(/^[^。；;！!]{1,60}[。；;！!]/);
+    brief = sentence ? sentence[0] : `${brief.slice(0, 60)}…`;
+  }
+  return brief || original;
+}
+
 export function getErrorMessage(error: unknown, fallback?: string) {
   const defaultFallback = fallback || tToast('operationFailed', 'Operation failed. Please try again later');
 
@@ -150,7 +200,8 @@ export function getErrorMessage(error: unknown, fallback?: string) {
     if (status === 429) return getRateLimitErrorMessage(error);
 
     const responseMessage = getResponseMessage(data);
-    if (responseMessage) return responseMessage;
+    // 服务端文案统一走简化：已知技术性长文（内存诊断/Prisma/HTML 错误页）换成一句话
+    if (responseMessage) return simplifyServerMessage(responseMessage);
     if (status === 0 || error.code === 'ERR_NETWORK') {
       return tToast('networkFailed', 'Network connection failed. Check the server or network');
     }
@@ -163,9 +214,9 @@ export function getErrorMessage(error: unknown, fallback?: string) {
   }
 
   if (error instanceof Error && error.message) {
-    return isMutedScriptError(error.message) ? defaultFallback : error.message;
+    return isMutedScriptError(error.message) ? defaultFallback : simplifyServerMessage(error.message);
   }
-  if (typeof error === 'string' && error.trim()) return error;
+  if (typeof error === 'string' && error.trim()) return simplifyServerMessage(error);
 
   return defaultFallback;
 }

@@ -1,6 +1,9 @@
 import { useState, useRef, useEffect } from 'react';
 import Icon from '../shared/Icon';
-import { SELECTION_TOOLBAR_BUTTON_SECONDARY } from './constants';
+import { SELECTION_TOOLBAR_BUTTON_BASE } from './constants';
+
+/** 「更多设置」按钮：与模型管理「预览运维/导入模型」同款（灰底 rounded-lg、无投影无上浮） */
+const MORE_BUTTON_CLASS = `${SELECTION_TOOLBAR_BUTTON_BASE} border-transparent bg-surface-container-high font-bold text-on-surface-variant hover:bg-surface-container-highest`;
 
 export function SelectionToolbarButtonContent({ icon, children }: { icon: string; children: string }) {
   return (
@@ -32,7 +35,7 @@ export function ToolbarMoreMenu({
 
   return (
     <div className="relative" ref={ref}>
-      <button onClick={() => setOpen(!open)} className={SELECTION_TOOLBAR_BUTTON_SECONDARY}>
+      <button onClick={() => setOpen(!open)} className={MORE_BUTTON_CLASS}>
         <SelectionToolbarButtonContent icon="settings">更多设置</SelectionToolbarButtonContent>
       </button>
       {open && (

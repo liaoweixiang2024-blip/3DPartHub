@@ -239,7 +239,12 @@ export default function ModelViewer({
       <Suspense fallback={null}>
         <RendererExposure exposure={config.exposure} />
         <Scene showGrid={showGrid} showAxis={showAxis} viewerSettings={viewerSettings} />
-        <CameraController preset={cameraPreset} viewportBottom={viewportBottom} controlsRef={controlsRef} />
+        <CameraController
+          preset={cameraPreset}
+          viewportBottom={viewportBottom}
+          controlsRef={controlsRef}
+          controlsEpoch={swNav ? 'trackball' : 'orbit'}
+        />
         {/* SW 模式整体换装轨迹球（无极点限制 + 缩放朝光标），OrbitControls 必须同时
             卸载——两个实例都监听指针事件会互相打架。轨迹球旋转过的 camera.up 由
             相机预设/贴合视图的 applyPreset 重置为标准向上轴 */}

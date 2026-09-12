@@ -6,6 +6,7 @@ import { getSettings, updateSettings, uploadImage } from '../api/settings';
 import { AdminContentPanel, AdminLoadingState, AdminManagementPage } from '../components/shared/AdminManagementPage';
 import { AdminPageShell } from '../components/shared/AdminPageShell';
 import Icon from '../components/shared/Icon';
+import { useToast } from '../components/shared/Toast';
 import { useDocumentTitle } from '../hooks/useDocumentTitle';
 import {
   navNodeItems,
@@ -42,6 +43,7 @@ type DraftSection = CategoryNavSection;
 export default function CategoryNavAdminPage() {
   useDocumentTitle('导航管理');
   const { t } = useTranslation();
+  const { toast } = useToast();
 
   const {
     data: rawSettings,
@@ -255,6 +257,7 @@ export default function CategoryNavAdminPage() {
       await updateSettings({ category_nav_config: JSON.stringify(draft) });
       setSavedSnapshot(JSON.stringify(draft));
       await mutate();
+      toast('设置已保存', 'success');
       // 主动刷新本浏览器的站点配置缓存（localStorage + 模块缓存，默认 2 分钟 TTL）：
       // 让已打开的 /category-nav 等页面约 1 秒内跟随更新，不再等缓存过期
       void refreshSiteConfig();
@@ -286,7 +289,7 @@ export default function CategoryNavAdminPage() {
               type="button"
               onClick={handleSave}
               disabled={!changed || saving}
-              className="inline-flex h-9 shrink-0 items-center justify-center gap-1.5 rounded-lg bg-primary-container px-3.5 text-xs font-bold text-on-primary shadow-sm transition-all hover:-translate-y-px hover:opacity-95 disabled:translate-y-0 disabled:cursor-not-allowed disabled:bg-surface-container-high disabled:text-on-surface-variant disabled:shadow-none md:h-8"
+              className="inline-flex h-9 shrink-0 items-center justify-center gap-1.5 rounded-lg bg-primary-container px-3.5 text-xs font-bold text-on-primary shadow-sm transition-colors hover:opacity-95 disabled:cursor-not-allowed disabled:bg-surface-container-high disabled:text-on-surface-variant disabled:shadow-none md:h-8"
             >
               <Icon name={saving ? 'progress_activity' : 'save'} size={14} className={saving ? 'animate-spin' : ''} />
               {saving ? '保存中...' : '保存设置'}
@@ -305,7 +308,8 @@ export default function CategoryNavAdminPage() {
           <div className="flex flex-col gap-4 p-4">
             {/* 页面文案：留空 = 前台回退默认文案 */}
             <div className="rounded-xl border border-outline-variant/15 bg-surface-container-low p-4">
-              <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+              {/* 移动端：标签与输入框逐行堆叠（label 一行、输入框占满一行），桌面端同行排布 */}
+              <div className="flex flex-col gap-2 md:flex-row md:flex-wrap md:items-center md:gap-x-3 md:gap-y-2">
                 <span className="shrink-0 text-xs font-bold text-on-surface-variant">
                   {t('categoryNav.admin.pageTitle')}
                 </span>
@@ -313,7 +317,7 @@ export default function CategoryNavAdminPage() {
                   value={draft.pageTitle ?? ''}
                   onChange={(e) => patchConfig({ pageTitle: e.target.value })}
                   placeholder={t('categoryNav.title')}
-                  className="w-64 rounded-md border border-outline-variant/20 bg-surface-container-lowest px-2 py-1.5 text-sm font-bold text-on-surface"
+                  className="w-full rounded-md border border-outline-variant/20 bg-surface-container-lowest px-2 py-1.5 text-sm font-bold text-on-surface md:w-64"
                   maxLength={50}
                 />
                 <span className="shrink-0 text-xs font-bold text-on-surface-variant">
@@ -323,7 +327,7 @@ export default function CategoryNavAdminPage() {
                   value={draft.pageDescription ?? ''}
                   onChange={(e) => patchConfig({ pageDescription: e.target.value })}
                   placeholder={t('categoryNav.subtitle')}
-                  className="min-w-0 flex-1 rounded-md border border-outline-variant/20 bg-surface-container-lowest px-2 py-1.5 text-xs text-on-surface"
+                  className="min-w-0 w-full flex-1 rounded-md border border-outline-variant/20 bg-surface-container-lowest px-2 py-1.5 text-xs text-on-surface md:w-auto"
                   maxLength={200}
                 />
               </div>
@@ -471,7 +475,7 @@ export default function CategoryNavAdminPage() {
                                 onDrop={() => handleDropOnNode(node.id)}
                                 className="rounded-lg border border-outline-variant/15 bg-surface-container-lowest p-3"
                               >
-                                <div className="mb-2 flex items-center gap-2">
+                                <div className="mb-2 flex flex-wrap items-center gap-2">
                                   <Icon
                                     name="drag_indicator"
                                     size={16}
@@ -518,7 +522,7 @@ export default function CategoryNavAdminPage() {
                                     value={node.description ?? ''}
                                     onChange={(e) => patchNode(node.id, { description: e.target.value })}
                                     placeholder={t('categoryNav.admin.descriptionPlaceholder')}
-                                    className="min-w-0 flex-1 rounded-md border border-outline-variant/20 bg-surface-container px-2 py-1 text-xs text-on-surface"
+                                    className="w-full rounded-md border border-outline-variant/20 bg-surface-container px-2 py-1 text-xs text-on-surface md:min-w-0 md:w-auto md:flex-1"
                                     maxLength={100}
                                   />
                                   {node.imageUrl ? (
@@ -581,7 +585,7 @@ export default function CategoryNavAdminPage() {
                                               customName: e.target.value ? undefined : it.customName,
                                             })
                                           }
-                                          className="min-w-0 max-w-56 flex-1 rounded-md border border-outline-variant/20 bg-surface-container px-2 py-1 text-xs text-on-surface"
+                                          className="min-w-[140px] max-w-56 flex-1 rounded-md border border-outline-variant/20 bg-surface-container px-2 py-1 text-xs text-on-surface"
                                         >
                                           <option value="">{t('categoryNav.admin.customOption')}</option>
                                           {options.map((opt) => (

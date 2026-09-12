@@ -343,6 +343,7 @@ export function createModelTransferRouter({ prisma }: { prisma: PrismaClient | n
       }
 
       const imported: string[] = [];
+      const importedIds: string[] = [];
       const skipped: Array<{ name: string; reason: string }> = [];
       const failed: Array<{ name: string; reason: string }> = [];
       let extractedBytes = 0;
@@ -484,6 +485,7 @@ export function createModelTransferRouter({ prisma }: { prisma: PrismaClient | n
           }
 
           imported.push(name);
+          importedIds.push(modelId);
         } catch (err) {
           logger.error({ err, name, modelId }, '[transfer] Import single model failed');
           failed.push({ name, reason: '导入失败（服务器日志有详情）' });
@@ -499,6 +501,8 @@ export function createModelTransferRouter({ prisma }: { prisma: PrismaClient | n
           message: `已导入 ${imported.length} 个模型${skipped.length ? `，跳过 ${skipped.length} 个` : ''}${failed.length ? `，失败 ${failed.length} 个` : ''}。`,
           type: 'model_conversion',
           audience: 'user',
+          // 恰好导入 1 个时带上模型 id：通知「打开详情」直达模型详情页（多个时无唯一目标，不附链接）
+          ...(importedIds.length === 1 ? { relatedId: importedIds[0] } : {}),
         }).catch(() => {});
       }
       logger.info(

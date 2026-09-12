@@ -6024,7 +6024,7 @@ function Content() {
       <button
         onClick={handleSave}
         disabled={!changed || saving}
-        className="inline-flex h-9 w-[6.25rem] shrink-0 items-center justify-center gap-1.5 rounded-lg bg-primary-container px-3.5 text-xs font-bold text-on-primary shadow-sm transition-all hover:-translate-y-px hover:opacity-95 disabled:translate-y-0 disabled:cursor-not-allowed disabled:bg-surface-container-high disabled:text-on-surface-variant disabled:shadow-none md:h-8"
+        className="inline-flex h-9 w-[6.25rem] shrink-0 items-center justify-center gap-1.5 rounded-lg bg-primary-container px-3.5 text-xs font-bold text-on-primary shadow-sm transition-colors hover:opacity-95 disabled:cursor-not-allowed disabled:bg-surface-container-high disabled:text-on-surface-variant disabled:shadow-none md:h-8"
       >
         <Icon name="save" size={14} />
         {saving ? '保存中...' : '保存设置'}
@@ -7802,7 +7802,7 @@ function Content() {
                         <button
                           onClick={() => setCleanupScanConfirmOpen(true)}
                           disabled={cleanupScanning || cleanupRunning}
-                          className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-primary-container px-4 text-xs font-bold text-on-primary shadow-sm transition-all hover:-translate-y-px hover:opacity-95 disabled:translate-y-0 disabled:cursor-not-allowed disabled:bg-surface-container-high disabled:text-on-surface-variant disabled:shadow-none"
+                          className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-primary-container px-4 text-xs font-bold text-on-primary shadow-sm transition-colors hover:opacity-95 disabled:cursor-not-allowed disabled:bg-surface-container-high disabled:text-on-surface-variant disabled:shadow-none"
                         >
                           <Icon name={cleanupScanning ? 'hourglass_empty' : 'search'} size={14} />
                           {cleanupScanning ? '扫描中...' : '开始扫描'}
@@ -7904,7 +7904,7 @@ function Content() {
                                     setCleanupConfirmOpen(true);
                                   }}
                                   disabled={cleanupSelectedKeys.size === 0 || cleanupRunning}
-                                  className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-error/90 px-4 text-xs font-bold text-white shadow-sm transition-all hover:-translate-y-px hover:opacity-95 disabled:translate-y-0 disabled:cursor-not-allowed disabled:bg-surface-container-high disabled:text-on-surface-variant disabled:shadow-none"
+                                  className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-error/90 px-4 text-xs font-bold text-white shadow-sm transition-colors hover:opacity-95 disabled:cursor-not-allowed disabled:bg-surface-container-high disabled:text-on-surface-variant disabled:shadow-none"
                                 >
                                   <Icon name={cleanupRunning ? 'hourglass_empty' : 'delete'} size={14} />
                                   {cleanupRunning ? '清理中...' : `清理选中 (${cleanupSelectedKeys.size})`}
