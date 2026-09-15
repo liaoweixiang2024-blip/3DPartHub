@@ -80,7 +80,7 @@ export function AdminLayout() {
             <TopNav source="layout" />
             <div className="flex min-h-0 flex-1 overflow-hidden">
               {showDesktopSidebar ? <Sidebar /> : null}
-              <main className="flex min-h-0 flex-1 flex-col overflow-y-auto bg-surface-dim custom-scrollbar">
+              <main className="flex min-h-0 flex-1 flex-col overflow-y-auto bg-surface-dim custom-scrollbar [scrollbar-gutter:stable]">
                 <Outlet />
               </main>
               {showDesktopFloatingMenu && FloatingMenu ? <FloatingMenu {...floatingMenuProps} /> : null}

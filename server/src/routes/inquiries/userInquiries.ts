@@ -35,6 +35,7 @@ function inquiryCode(id: string) {
 
 function createInquiryAttachmentUpload(maxBytes: number, allowedExts: string[]) {
   return multer({
+    defParamCharset: 'utf-8',
     storage: multer.diskStorage({
       destination: (_req, _file, cb) => {
         const dir = join(process.cwd(), config.staticDir, 'inquiry-attachments');

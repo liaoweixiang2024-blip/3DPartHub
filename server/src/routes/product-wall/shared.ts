@@ -149,6 +149,29 @@ export function requireAdmin(req: AuthRequest, res: Response, next: NextFunction
   next();
 }
 
+function parseCsvSetting(value: string): string[] {
+  return value
+    .split(',')
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+/**
+ * 图库上传权限：ADMIN 始终放行；其他角色按「允许角色白名单 + 指定用户 ID 白名单」判定。
+ * 两份白名单存于 settings（CSV），改动后即时生效（getSetting 直读）。
+ */
+export async function canUploadProductWall(user: { userId: string; role: string }): Promise<boolean> {
+  if (user.role === 'ADMIN') return true;
+  const { getSetting } = await import('../../lib/settings.js');
+  const [rolesRaw, idsRaw] = await Promise.all([
+    getSetting<string>('product_wall_upload_roles'),
+    getSetting<string>('product_wall_upload_allowed_user_ids'),
+  ]);
+  const roles = parseCsvSetting(String(rolesRaw ?? ''));
+  const userIds = parseCsvSetting(String(idsRaw ?? ''));
+  return roles.includes(user.role) || userIds.includes(user.userId);
+}
+
 // ── Helpers: parsing ────────────────────────────────────────
 
 export function parseTags(value: unknown, fallbackTitle = ''): string[] {
@@ -361,6 +384,45 @@ export function removeManagedImage(url?: string | null) {
   rmSync(filePath, { force: true });
 }
 
+// ── 回收站过期清理 ───────────────────────────────────────────
+
+const PRODUCT_WALL_TRASH_RETENTION_MS = 30 * 24 * 60 * 60 * 1000;
+const PRODUCT_WALL_TRASH_SWEEP_INTERVAL_MS = 60 * 60 * 1000;
+let lastTrashSweepAt = 0;
+
+/**
+ * 惰性清理回收站：删除弹窗文案承诺「保留 30 天」，这里在管理员访问回收站列表时
+ * 顺带把过期记录彻底删除（文件 + 数据行，云端 best-effort）。1 小时节流避免频繁扫表。
+ */
+export async function sweepExpiredProductWallTrash(): Promise<void> {
+  const now = Date.now();
+  if (now - lastTrashSweepAt < PRODUCT_WALL_TRASH_SWEEP_INTERVAL_MS) return;
+  lastTrashSweepAt = now;
+  try {
+    const expired = await prisma.productWallImage.findMany({
+      where: { deletedAt: { not: null, lt: new Date(now - PRODUCT_WALL_TRASH_RETENTION_MS) } },
+    });
+    if (!expired.length) return;
+    await prisma.productWallImage.deleteMany({ where: { id: { in: expired.map((t) => t.id) } } });
+    for (const item of expired) {
+      removeManagedImage(item.imageUrl);
+      removeManagedImage(item.previewImageUrl);
+    }
+    const { deleteCloudFiles, keyFromStaticUrl } = await import('../../lib/storageProvider.js');
+    await deleteCloudFiles(
+      expired
+        .flatMap((item) => [item.imageUrl, item.previewImageUrl])
+        .filter((u): u is string => u != null && u.startsWith('/static/'))
+        .map((u) => keyFromStaticUrl(u.split('?')[0])),
+    );
+    logger.warn({ count: expired.length }, '[product-wall] Swept expired trash items (30d retention)');
+  } catch (err) {
+    // 清理失败不影响主流程，下次访问再试
+    lastTrashSweepAt = 0;
+    logger.warn({ err }, '[product-wall] Trash sweep failed');
+  }
+}
+
 function productWallPreviewUrlFromImageUrl(url?: string | null) {
   const relativePath = productWallRelativePathFromUrl(url);
   if (!relativePath || relativePath.startsWith('previews/')) return null;
@@ -468,6 +530,7 @@ export function queueProductWallPreviewBackfill(rows: ProductWallImageRow[]) {
 const ALLOWED_IMAGE_MIMES = new Set(['image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/svg+xml']);
 
 export const imageUpload = multer({
+  defParamCharset: 'utf-8',
   dest: PRODUCT_WALL_DIR,
   limits: { fileSize: 200 * 1024 * 1024, files: MULTER_MAX_IMAGE_FILES },
   fileFilter(_req, file, cb) {

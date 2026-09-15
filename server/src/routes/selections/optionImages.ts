@@ -99,6 +99,7 @@ function optionImageUpload(req: AuthRequest, res: Response, next: NextFunction) 
   getBusinessConfig()
     .then(({ uploadPolicy }) => {
       const upload = multer({
+        defParamCharset: 'utf-8',
         dest: optImgDir,
         limits: { fileSize: optionImageMaxBytes(uploadPolicy) },
       }).single('file');
@@ -126,6 +127,7 @@ function productAssetUpload(req: AuthRequest, res: Response, next: NextFunction)
     .then(({ uploadPolicy }) => {
       const maxBytes = Math.max(optionImageMaxBytes(uploadPolicy), PRODUCT_PDF_MAX_BYTES);
       const upload = multer({
+        defParamCharset: 'utf-8',
         dest: productAssetDir,
         limits: { fileSize: maxBytes },
       }).single('file');

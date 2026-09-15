@@ -222,7 +222,11 @@ export function createModelTransferRouter({ prisma }: { prisma: PrismaClient | n
       res.setTimeout(UPLOAD_REQUEST_TIMEOUT_MS);
       next();
     },
-    multer({ dest: importTransferDir, limits: { fileSize: TRANSFER_IMPORT_MAX_BYTES } }).single('file'),
+    multer({
+      defParamCharset: 'utf8',
+      dest: importTransferDir,
+      limits: { fileSize: TRANSFER_IMPORT_MAX_BYTES },
+    }).single('file'),
     async (req: AuthRequest, res: Response) => {
       const file = req.file;
       if (!file) {

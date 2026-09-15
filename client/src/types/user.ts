@@ -12,6 +12,8 @@ export interface User {
   mustChangePassword?: boolean;
   createdAt?: string;
   canInvite?: boolean;
+  /** 产品图库上传权限（profile 接口计算下发，设置变更后需重新拉取生效） */
+  canUploadProductWall?: boolean;
 }
 
 export interface AuthTokens {

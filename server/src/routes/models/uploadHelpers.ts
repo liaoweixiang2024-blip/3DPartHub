@@ -13,6 +13,7 @@ export const modelUpload = {
         .then(({ uploadPolicy }) => {
           const maxMb = modelMaxSizeMb(uploadPolicy);
           const upload = multer({
+            defParamCharset: 'utf-8',
             dest: config.uploadDir,
             limits: { fileSize: modelMaxBytes(uploadPolicy) },
           }).single(fieldName);
@@ -43,6 +44,7 @@ export const modelImageUpload = {
         .then(({ uploadPolicy }) => {
           const maxMb = productImageMaxSizeMb(uploadPolicy);
           const upload = multer({
+            defParamCharset: 'utf-8',
             dest: config.uploadDir,
             limits: { fileSize: productImageMaxBytes(uploadPolicy) },
           }).single(fieldName);

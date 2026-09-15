@@ -60,6 +60,10 @@
 .product-wall-thumb {
   backface-visibility: hidden;
 }
+/* 管理面板网格：固定方形格子 + 图片完整居中（contain，不裁切），留白为统一底色区块（比例由 ratioOverride 控制） */
+.product-wall-management-grid .product-wall-image-surface {
+  background-color: var(--color-surface-container);
+}
 .product-wall-card-actions {
   visibility: hidden;
   opacity: 0;

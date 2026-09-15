@@ -31,6 +31,7 @@ import { createNotification } from '../notifications.js';
 
 function createTicketAttachmentUpload(maxBytes: number, allowedExts: string[]) {
   return multer({
+    defParamCharset: 'utf-8',
     storage: multer.diskStorage({
       destination: (_req, _file, cb) => {
         const dir = join(process.cwd(), config.staticDir, 'ticket-attachments');

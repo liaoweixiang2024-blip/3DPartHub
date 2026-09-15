@@ -35,6 +35,7 @@ function drawingUpload(req: Request, res: Response, next: NextFunction) {
     .then(({ uploadPolicy }) => {
       const maxMb = modelDrawingMaxSizeMb(uploadPolicy);
       const upload = multer({
+        defParamCharset: 'utf-8',
         dest: config.uploadDir,
         limits: { fileSize: modelDrawingMaxBytes(uploadPolicy) },
       }).single('file');

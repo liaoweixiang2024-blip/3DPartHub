@@ -7,40 +7,28 @@ import {
   useRef,
   useState,
   type ClipboardEvent,
-  type FormEvent,
 } from 'react';
 import { useTranslation } from 'react-i18next';
 import useSWR from 'swr';
+import useSWRInfinite from 'swr/infinite';
 import '../styles/product-wall.css';
 import {
-  createProductWallCategory,
-  deleteProductWallCategory,
-  deleteProductWallItem,
-  deleteProductWallItems,
   listAdminProductWallCategories,
-  listAdminProductWallItems,
   listProductWallCategories,
-  listProductWallItems,
-  reviewProductWallItem,
-  updateProductWallCategory,
-  updateProductWallItem,
-  uploadProductWallImages,
+  listProductWallCounts,
+  listProductWallFavoriteItems,
+  listProductWallItemsPage,
   listProductWallFavorites,
   addProductWallFavorite,
   removeProductWallFavorite,
   type ProductWallItem,
   type ProductWallKind,
-  type ProductWallStatus,
+  type ProductWallListResponse,
 } from '../api/productWall';
-import ProductWallActionMenu from '../components/product-wall/ActionMenu';
-import ProductWallManagementPanel from '../components/product-wall/ManagementPanel';
 import {
   collectFilesFromDataTransfer,
   errorMessage,
-  formatFileSize,
   getProductWallColumnCount,
-  isSupportedUploadFile,
-  isImageFile,
   productWallDownloadName,
   wallImageUrl,
   PRODUCT_WALL_RENDER_BATCH_SIZE,
@@ -50,21 +38,14 @@ import {
   PRODUCT_WALL_FAVORITES_FILTER,
   PRODUCT_WALL_CANVAS_MODE_KEY,
   PRODUCT_WALL_DEFAULT_KIND_KEY,
-  PRODUCT_WALL_UPLOAD_BATCH_SIZE,
   productWallRatioValue,
   type ProductWallCanvasMode,
 } from '../components/product-wall-admin/productWallAdminUtils';
-import {
-  ProductWallDeleteDialog,
-  type DeleteDialogState,
-} from '../components/product-wall-admin/ProductWallDeleteDialog';
-import { ProductWallEditDialog } from '../components/product-wall-admin/ProductWallEditDialog';
 import { ProductWallPreview } from '../components/product-wall-admin/ProductWallPreview';
 import { ProductWallThumbnail } from '../components/product-wall-admin/ProductWallThumbnail';
-import { ProductWallUploadDialog } from '../components/product-wall-admin/ProductWallUploadDialog';
+import { ProductWallUploadModal } from '../components/product-wall-admin/ProductWallUploadModal';
 import { AdminManagementPage } from '../components/shared/AdminManagementPage';
 import { AdminPageShell } from '../components/shared/AdminPageShell';
-import ConfirmDialog from '../components/shared/ConfirmDialog';
 import Icon from '../components/shared/Icon';
 import LoginConfirmDialog from '../components/shared/LoginConfirmDialog';
 import { PageRefreshIndicator } from '../components/shared/PageRefreshFallback';
@@ -74,7 +55,6 @@ import { useToast } from '../components/shared/Toast';
 import { useDocumentTitle } from '../hooks/useDocumentTitle';
 import { useImeSafeSearchInput } from '../hooks/useImeSafeSearchInput';
 import { downloadBrowserFile } from '../lib/browserDownload';
-import { getBusinessConfig } from '../lib/businessConfig';
 import { copyText } from '../lib/clipboard';
 import { useFeatureFlags } from '../lib/publicSettings';
 import { useAuthStore } from '../stores/useAuthStore';
@@ -82,8 +62,6 @@ import { useAuthStore } from '../stores/useAuthStore';
 type WallItem = ProductWallItem;
 
 type WallFilter = string;
-type ReviewFilter = 'all' | ProductWallStatus;
-type ManagementKindFilter = ProductWallKind;
 
 type ProductWallMasonryEntry = {
   imageIndex: number;
@@ -91,7 +69,8 @@ type ProductWallMasonryEntry = {
 };
 
 const PRODUCT_WALL_ALL_FILTER = '__all__';
-const PRODUCT_WALL_MANAGEMENT_ALL_FILTER = '__all__';
+const PRODUCT_WALL_WALL_PAGE_SIZE = 50;
+const PRODUCT_WALL_SEARCH_DEBOUNCE_MS = 300;
 
 function ProductWallLoadingState() {
   const { t } = useTranslation();
@@ -107,8 +86,6 @@ export default function ProductWallPage() {
   const { t } = useTranslation();
   useDocumentTitle(t('productWall.title'));
   const featureFlags = useFeatureFlags();
-  const fileInputRef = useRef<HTMLInputElement | null>(null);
-  const folderInputRef = useRef<HTMLInputElement | null>(null);
   const loadMoreRef = useRef<HTMLButtonElement | null>(null);
   const previewMenuBlockUntilRef = useRef(0);
   const activePreviewRef = useRef<WallItem | null>(null);
@@ -116,28 +93,14 @@ export default function ProductWallPage() {
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
   const hasHydrated = useAuthStore((s) => s.hasHydrated);
   const { toast } = useToast();
-  const { uploadPolicy } = getBusinessConfig();
-  const productWallMaxImageBytes = Math.max(1, uploadPolicy.productWallImageMaxSizeMb) * 1024 * 1024;
-  const productWallUploadBatchSize = Math.max(
-    1,
-    Math.min(50, Number(uploadPolicy.productWallUploadMaxFiles) || PRODUCT_WALL_UPLOAD_BATCH_SIZE),
-  );
   const isLoggedIn = hasHydrated && isAuthenticated;
   const isAdmin = isLoggedIn && user?.role === 'ADMIN';
-  const canUpload = isLoggedIn;
-  const {
-    data,
-    error: itemsError,
-    mutate,
-    isLoading,
-  } = useSWR(
-    isAdmin ? 'admin-product-wall-items' : 'product-wall-items',
-    isAdmin ? listAdminProductWallItems : listProductWallItems,
-  );
+  // ADMIN 不依赖 profile 的 canUploadProductWall 字段（服务端对 ADMIN 恒放行），
+  // 避免旧登录态缺少该字段时管理员的上传/后台入口消失；非管理员以字段为准
+  const canUpload = isLoggedIn && (isAdmin || Boolean(user?.canUploadProductWall));
   const {
     data: categories,
     error: categoriesError,
-    mutate: mutateCategories,
     isLoading: categoriesLoading,
   } = useSWR(
     isAdmin ? 'admin-product-wall-categories' : 'product-wall-categories',
@@ -145,31 +108,15 @@ export default function ProductWallPage() {
   );
   const [active, setActive] = useState<WallItem | null>(null);
   const [filter, setFilter] = useState<WallFilter>(PRODUCT_WALL_ALL_FILTER);
-  const [reviewFilter, setReviewFilter] = useState<ReviewFilter>('approved');
-  const [managementKindFilter, setManagementKindFilter] = useState<ManagementKindFilter>(
-    PRODUCT_WALL_MANAGEMENT_ALL_FILTER,
-  );
   const {
     value: query,
     draftValue: queryInputValue,
     setValue: setQuery,
     inputProps: queryInputProps,
   } = useImeSafeSearchInput();
-  const [managementOpen, setManagementOpen] = useState(false);
-  const [managementQuery, setManagementQuery] = useState('');
   const [dragActive, setDragActive] = useState(false);
-  const [uploading, setUploading] = useState(false);
-  const [pendingUploadFiles, setPendingUploadFiles] = useState<File[] | null>(null);
-  const [uploadTitle, setUploadTitle] = useState('');
-  const [uploadDescription, setUploadDescription] = useState('');
-  const [manageMenuOpen, setManageMenuOpen] = useState(false);
-  const setManageMenuOpenGuarded = useCallback((value: boolean | ((prev: boolean) => boolean)) => {
-    if (performance.now() < previewMenuBlockUntilRef.current) {
-      setManageMenuOpen(false);
-      return;
-    }
-    setManageMenuOpen(value);
-  }, []);
+  const [uploadModalOpen, setUploadModalOpen] = useState(false);
+  const [uploadModalFiles, setUploadModalFiles] = useState<File[] | null>(null);
   const [canvasMode] = useState<ProductWallCanvasMode>(() => {
     if (typeof window === 'undefined') return 'white';
     const saved = window.localStorage.getItem(PRODUCT_WALL_CANVAS_MODE_KEY);
@@ -179,28 +126,13 @@ export default function ProductWallPage() {
     if (typeof window === 'undefined') return '';
     return window.localStorage.getItem(PRODUCT_WALL_DEFAULT_KIND_KEY) || '';
   });
-  const [wallEditMode, setWallEditMode] = useState(false);
-  const [selectionMode, setSelectionMode] = useState(false);
-  const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
   const [columnCount, setColumnCount] = useState(getProductWallColumnCount);
   const initialRenderBatchSize =
     columnCount <= 2 ? PRODUCT_WALL_MOBILE_RENDER_BATCH_SIZE : PRODUCT_WALL_RENDER_BATCH_SIZE;
   const [renderCount, setRenderCount] = useState(initialRenderBatchSize);
-  const [editingItem, setEditingItem] = useState<WallItem | null>(null);
-  const [deleteCategoryTarget, setDeleteCategoryTarget] = useState<{ id: string; name: string } | null>(null);
-  const [deleteDialog, setDeleteDialog] = useState<DeleteDialogState>(null);
-  const [deleting, setDeleting] = useState(false);
-  const [editTitle, setEditTitle] = useState('');
-  const [editDescription, setEditDescription] = useState('');
-  const [editKind, setEditKind] = useState<ProductWallKind>('');
-  const [editTags, setEditTags] = useState('');
   const [favoriteIds, setFavoriteIds] = useState<Set<string>>(() => new Set());
   const [shareState, setShareState] = useState<'idle' | 'copied'>('idle');
   const [wallReady, setWallReady] = useState(false);
-  const [managementRenderCount, setManagementRenderCount] = useState(PRODUCT_WALL_RENDER_BATCH_SIZE);
-  const apiError = itemsError || categoriesError;
-  const initialLoading = (isLoading && !data) || (categoriesLoading && !categories);
-  const items = useMemo(() => data ?? [], [data]);
   const categoryList = useMemo(() => categories ?? [], [categories]);
   const databaseCategoryNames = useMemo(() => categoryList.map((item) => item.name).filter(Boolean), [categoryList]);
   const categoryNames = useMemo(() => Array.from(new Set(databaseCategoryNames)), [databaseCategoryNames]);
@@ -214,35 +146,90 @@ export default function ProductWallPage() {
   const isUtilityFilter = filter === PRODUCT_WALL_ALL_FILTER || filter === PRODUCT_WALL_FAVORITES_FILTER;
   const isFavoritesFilter = filter === PRODUCT_WALL_FAVORITES_FILTER;
   const uploadKind = isUtilityFilter ? resolvedDefaultUploadKind : filter;
-  const uploadDisabled = uploading || !uploadKind;
   const isCompactWallLayout = columnCount <= 2;
   const renderBatchSize = isCompactWallLayout ? PRODUCT_WALL_MOBILE_RENDER_BATCH_SIZE : PRODUCT_WALL_RENDER_BATCH_SIZE;
   const eagerImageCount = isCompactWallLayout ? PRODUCT_WALL_MOBILE_EAGER_IMAGE_COUNT : PRODUCT_WALL_EAGER_IMAGE_COUNT;
   const thumbnailLazyRootMargin = isCompactWallLayout ? '180px 0px' : '300px 0px';
   const loadMoreRootMargin = isCompactWallLayout ? '180px 0px' : '300px 0px';
   const deferredQuery = useDeferredValue(query);
-  const deferredManagementQuery = useDeferredValue(managementQuery);
   const normalizedQuery = deferredQuery.trim().toLowerCase();
-  const normalizedManagementQuery = deferredManagementQuery.trim().toLowerCase();
-  const approvedItems = useMemo(() => items.filter((item) => item.status === 'approved'), [items]);
+
+  // ── 墙体数据：服务端分页 + 真无限滚动（分类/搜索条件上移服务端，不再一次拉全库）──
+  const wallKind = isUtilityFilter ? '' : filter;
+  const [debouncedQuery, setDebouncedQuery] = useState('');
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedQuery(query.trim()), PRODUCT_WALL_SEARCH_DEBOUNCE_MS);
+    return () => clearTimeout(timer);
+  }, [query]);
+  const wallSearchQuery = isFavoritesFilter ? '' : debouncedQuery;
+  const wallFetcher = useCallback((key: string) => {
+    const params = new URLSearchParams(key.split('?')[1] || '');
+    const page = Number(params.get('p')) || 1;
+    if (key.startsWith('product-wall-favorites')) {
+      return listProductWallFavoriteItems(page, PRODUCT_WALL_WALL_PAGE_SIZE);
+    }
+    return listProductWallItemsPage(page, PRODUCT_WALL_WALL_PAGE_SIZE, {
+      kind: params.get('k') || undefined,
+      q: params.get('q') || undefined,
+    });
+  }, []);
+  const {
+    data: wallData,
+    error: itemsError,
+    isLoading: wallIsLoading,
+    mutate: mutateWall,
+    size: wallSize,
+    setSize: setWallSize,
+  } = useSWRInfinite(
+    (pageIndex: number, previousPage: ProductWallListResponse | null) => {
+      if (isFavoritesFilter && !isLoggedIn) return null;
+      if (previousPage && previousPage.items.length < PRODUCT_WALL_WALL_PAGE_SIZE) return null;
+      if (isFavoritesFilter) return `product-wall-favorites?p=${pageIndex + 1}`;
+      return `product-wall-items?p=${pageIndex + 1}&k=${encodeURIComponent(wallKind)}&q=${encodeURIComponent(wallSearchQuery)}`;
+    },
+    wallFetcher,
+    // 翻页/窗口聚焦不重校验已加载页（变更都通过 mutateWall() 显式刷新，避免列表跳动）
+    { revalidateFirstPage: false, revalidateOnFocus: false },
+  );
+  // 切换分类/搜索条件后回到第一页（useSWRInfinite 换 key 不会自动重置 size；仅在条件真实变化时触发，避免挂载期多余重校验）
+  const lastWallQueryKeyRef = useRef(`${filter}|${wallSearchQuery}|${isLoggedIn}`);
+  useEffect(() => {
+    const nextKey = `${filter}|${wallSearchQuery}|${isLoggedIn}`;
+    if (lastWallQueryKeyRef.current === nextKey) return;
+    lastWallQueryKeyRef.current = nextKey;
+    setWallSize(1);
+  }, [filter, wallSearchQuery, isLoggedIn, setWallSize]);
+  const items = useMemo(() => wallData?.flatMap((page) => page.items) ?? [], [wallData]);
+  const wallTotal = wallData?.[0]?.total ?? 0;
+  const hasMoreWallPages = items.length < wallTotal;
+  const apiError = itemsError || categoriesError;
+  const initialLoading = (wallIsLoading && !wallData) || (categoriesLoading && !categories);
+
+  // tab 计数：公开计数接口（approved 总数 + 按分类）+ 收藏总数
+  const { data: countsData, mutate: mutateCounts } = useSWR('product-wall-counts', listProductWallCounts);
+  const { data: favoritesMeta, mutate: mutateFavoritesMeta } = useSWR(
+    isLoggedIn ? 'product-wall-favorites-meta' : null,
+    () => listProductWallFavoriteItems(1, 1),
+  );
+
   const visibleItems = useMemo(() => {
-    const base =
-      filter === PRODUCT_WALL_ALL_FILTER
-        ? approvedItems
-        : filter === PRODUCT_WALL_FAVORITES_FILTER
-          ? isLoggedIn
-            ? approvedItems.filter((item) => favoriteIds.has(item.id))
-            : []
-          : approvedItems.filter((item) => item.kind === filter);
-    if (!normalizedQuery) return base;
-    return base.filter((item) =>
+    // 收藏流不支持服务端搜索：搜索词对已加载的收藏项做客户端过滤
+    if (!isFavoritesFilter || !normalizedQuery) return items;
+    return items.filter((item) =>
       [item.title, item.description || '', item.kind, ...item.tags].some((value) =>
         value.toLowerCase().includes(normalizedQuery),
       ),
     );
-  }, [approvedItems, filter, isLoggedIn, favoriteIds, normalizedQuery]);
+  }, [items, isFavoritesFilter, normalizedQuery]);
   const renderedItems = visibleItems.slice(0, renderCount);
-  const hasMoreVisibleItems = renderedItems.length < visibleItems.length;
+  const hasMoreVisibleItems = renderedItems.length < visibleItems.length || hasMoreWallPages;
+  const filterCounts = useMemo(() => {
+    const acc: Record<string, number> = {};
+    acc[PRODUCT_WALL_ALL_FILTER] = countsData?.total ?? 0;
+    acc[PRODUCT_WALL_FAVORITES_FILTER] = isLoggedIn ? (favoritesMeta?.total ?? 0) : 0;
+    for (const name of categoryNames) acc[name] = countsData?.byKind?.[name] ?? 0;
+    return acc;
+  }, [countsData, favoritesMeta, isLoggedIn, categoryNames]);
   const masonryColumns = useMemo(() => {
     const columns = Array.from({ length: columnCount }, () => [] as ProductWallMasonryEntry[]);
     const heights = Array.from({ length: columnCount }, () => 0);
@@ -256,58 +243,24 @@ export default function ProductWallPage() {
     });
     return columns;
   }, [renderedItems, columnCount]);
-  const managementItems = useMemo(() => {
-    const byStatus = reviewFilter === 'all' ? items : items.filter((item) => item.status === reviewFilter);
-    const byKind =
-      managementKindFilter === PRODUCT_WALL_MANAGEMENT_ALL_FILTER
-        ? byStatus
-        : byStatus.filter((item) => item.kind === managementKindFilter);
-    if (!normalizedManagementQuery) return byKind;
-    return byKind.filter((item) =>
-      [item.title, item.description || '', item.kind, ...item.tags].some((value) =>
-        value.toLowerCase().includes(normalizedManagementQuery),
-      ),
-    );
-  }, [items, reviewFilter, managementKindFilter, normalizedManagementQuery]);
-  const filterCounts = useMemo(
-    () =>
-      filters.reduce<Record<string, number>>((acc, item) => {
-        acc[item] =
-          item === PRODUCT_WALL_ALL_FILTER
-            ? approvedItems.length
-            : item === PRODUCT_WALL_FAVORITES_FILTER
-              ? isLoggedIn
-                ? approvedItems.filter((image) => favoriteIds.has(image.id)).length
-                : 0
-              : approvedItems.filter((image) => image.kind === item).length;
-        return acc;
-      }, {}),
-    [filters, approvedItems, isLoggedIn, favoriteIds],
-  );
-  const canManageItem = useCallback((item?: WallItem) => Boolean(item?.id) && isAdmin, [isAdmin]);
-  const selectableVisibleItems = useMemo(() => visibleItems.filter(canManageItem), [visibleItems, canManageItem]);
   const activeFavorited = active ? favoriteIds.has(active.id) : false;
-  const selectedCount = selectedIds.size;
-  const editForm = useMemo(
-    () => ({ title: editTitle, description: editDescription, kind: editKind, tags: editTags }),
-    [editDescription, editKind, editTags, editTitle],
-  );
-  const setEditForm = useCallback(
-    (form: { title: string; description?: string; kind: ProductWallKind; tags: string }) => {
-      setEditTitle(form.title);
-      setEditDescription(form.description || '');
-      setEditKind(form.kind);
-      setEditTags(form.tags);
+
+  // 所有上传路径（按钮/拖拽/粘贴/文件夹）统一进上传弹窗确认，不再直接静默上传
+  const openUploadModal = useCallback((files?: File[] | null) => {
+    if (files && files.length) setUploadModalFiles(files);
+    setUploadModalOpen(true);
+  }, []);
+  const handleUploadSource = useCallback(
+    (fileList: FileList | File[]) => {
+      const files = Array.from(fileList);
+      if (files.length) openUploadModal(files);
     },
-    [],
+    [openUploadModal],
   );
-  const resolvedFilters = categoryNames;
-  activePreviewRef.current = active;
-  const syncUpdatedWallItem = (updated: WallItem) => {
-    setActive((current) => (current?.id === updated.id ? updated : current));
-    setEditingItem((current) => (current?.id === updated.id ? updated : current));
-    void mutate((current) => current?.map((item) => (item.id === updated.id ? updated : item)), { revalidate: false });
-  };
+  const handleUploadCompleted = useCallback(() => {
+    void mutateWall();
+    void mutateCounts();
+  }, [mutateWall, mutateCounts]);
   const [loginDialogOpen, setLoginDialogOpen] = useState(false);
   const [loginDialogReason, setLoginDialogReason] = useState('');
   const toggleFavoriteItem = async (item: WallItem) => {
@@ -327,6 +280,7 @@ export default function ProductWallPage() {
     try {
       if (wasFavorite) await removeProductWallFavorite(item.id);
       else await addProductWallFavorite(item.id);
+      void mutateFavoritesMeta();
     } catch {
       setFavoriteIds((prev) => {
         const next = new Set(prev);
@@ -375,178 +329,19 @@ export default function ProductWallPage() {
     },
     [t, toast],
   );
-  const uploadFiles = useCallback(
-    async (fileList: FileList | File[], meta?: { title?: string; description?: string }) => {
-      if (!canUpload) {
-        setLoginDialogReason(t('productWall.actions.upload'));
-        setLoginDialogOpen(true);
-        return;
-      }
-      if (!uploadKind) {
-        toast(t('productWall.toasts.noCategoryBeforeUpload'), 'error');
-        return;
-      }
-      const title = (meta?.title || '').trim();
-      const description = (meta?.description || '').trim();
-      if (!isAdmin && (!title || !description)) {
-        const files = Array.from(fileList);
-        if (!files.length) return;
-        setPendingUploadFiles(files);
-        setUploadTitle(title);
-        setUploadDescription(description);
-        return;
-      }
-      const supportedFiles = Array.from(fileList).filter(isSupportedUploadFile);
-      const oversizedImages = supportedFiles.filter(
-        (file) => isImageFile(file) && file.size > productWallMaxImageBytes,
-      );
-      const files = supportedFiles.filter((file) => !oversizedImages.includes(file));
-      if (!files.length) {
-        if (oversizedImages.length) {
-          const sample = oversizedImages
-            .slice(0, 3)
-            .map((file) => `${file.name} ${formatFileSize(file.size)}`)
-            .join('、');
-          toast(
-            t('productWall.toasts.uploadSkippedDetail', {
-              count: oversizedImages.length,
-              size: uploadPolicy.productWallImageMaxSizeMb,
-              sample,
-            }),
-            'error',
-          );
-        } else {
-          toast(t('productWall.toasts.unsupportedUpload'), 'error');
-        }
-        return;
-      }
-      setUploading(true);
-      try {
-        let uploadedCount = 0;
-        const failedMessages: string[] = [];
-        for (let index = 0; index < files.length; index += productWallUploadBatchSize) {
-          const batch = files.slice(index, index + productWallUploadBatchSize);
-          try {
-            const firstTitle = batch[0]?.name.replace(/\.[^.]+$/, '') || undefined;
-            const result = await uploadProductWallImages(batch, {
-              admin: isAdmin,
-              kind: uploadKind,
-              title: isAdmin ? (files.length === 1 ? firstTitle : undefined) : title,
-              description: isAdmin ? undefined : description,
-            });
-            uploadedCount += result.items.length;
-          } catch (error) {
-            failedMessages.push(errorMessage(error, t('productWall.toasts.uploadFailed')));
-          }
-        }
-        await mutate();
-        if (uploadedCount) {
-          const skippedText = oversizedImages.length
-            ? t('productWall.toasts.uploadSkipped', { count: oversizedImages.length })
-            : '';
-          const failText = failedMessages.length
-            ? t('productWall.toasts.uploadPartialFailed', {
-                message: Array.from(new Set(failedMessages)).slice(0, 2).join('; '),
-              })
-            : '';
-          toast(
-            isAdmin
-              ? t('productWall.toasts.uploadSuccess', {
-                  count: uploadedCount,
-                  kind: uploadKind,
-                  skipped: skippedText,
-                  failed: failText,
-                })
-              : t('productWall.toasts.uploadSubmitted', {
-                  count: uploadedCount,
-                  skipped: skippedText,
-                  failed: failText,
-                }),
-            uploadedCount && !failedMessages.length ? 'success' : 'success',
-          );
-        } else if (failedMessages.length) {
-          toast(Array.from(new Set(failedMessages)).slice(0, 2).join('；'), 'error');
-        } else if (oversizedImages.length) {
-          const sample = oversizedImages
-            .slice(0, 3)
-            .map((file) => `${file.name} ${formatFileSize(file.size)}`)
-            .join('、');
-          toast(
-            t('productWall.toasts.uploadSkippedDetail', {
-              count: oversizedImages.length,
-              size: uploadPolicy.productWallImageMaxSizeMb,
-              sample,
-            }),
-            'error',
-          );
-        }
-      } catch (error) {
-        toast(errorMessage(error, t('productWall.toasts.uploadImageFailed')), 'error');
-      } finally {
-        setUploading(false);
-        if (fileInputRef.current) fileInputRef.current.value = '';
-        if (folderInputRef.current) folderInputRef.current.value = '';
-      }
-    },
-    [
-      canUpload,
-      isAdmin,
-      mutate,
-      productWallMaxImageBytes,
-      productWallUploadBatchSize,
-      t,
-      toast,
-      uploadKind,
-      uploadPolicy.productWallImageMaxSizeMb,
-    ],
-  );
-  const handleUploadSource = useCallback(
-    (fileList: FileList | File[]) => {
-      const files = Array.from(fileList);
-      if (!files.length) return;
-      if (!isAdmin) {
-        setPendingUploadFiles(files);
-        setUploadTitle('');
-        setUploadDescription('');
-        return;
-      }
-      void uploadFiles(files);
-    },
-    [isAdmin, uploadFiles],
-  );
-  const submitPendingUpload = (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    if (!pendingUploadFiles?.length) return;
-    const title = uploadTitle.trim();
-    const description = uploadDescription.trim();
-    if (!title) {
-      toast(t('productWall.toasts.titleRequired'), 'error');
-      return;
-    }
-    if (!description) {
-      toast(t('productWall.toasts.descriptionRequired'), 'error');
-      return;
-    }
-    const files = pendingUploadFiles;
-    setPendingUploadFiles(null);
-    void uploadFiles(files, { title, description });
-  };
+
   const handlePaste = useCallback(
-    async (event: ClipboardEvent<HTMLDivElement>) => {
+    (event: ClipboardEvent<HTMLDivElement>) => {
       if (!canUpload) return;
-      if (!uploadKind) {
-        toast(t('productWall.toasts.noCategoryBeforeUpload'), 'error');
-        return;
-      }
       const pastedImages = Array.from(event.clipboardData.files).filter((file) => file.type.startsWith('image/'));
       if (pastedImages.length) {
         event.preventDefault();
-        handleUploadSource(pastedImages);
-        return;
+        openUploadModal(pastedImages);
       }
     },
-    [canUpload, handleUploadSource, t, uploadKind, toast],
+    [canUpload, openUploadModal],
   );
+
   useEffect(() => {
     const updateColumnCount = () => setColumnCount(getProductWallColumnCount());
     updateColumnCount();
@@ -554,10 +349,6 @@ export default function ProductWallPage() {
     return () => window.removeEventListener('resize', updateColumnCount);
   }, []);
   useEffect(() => {
-    if (folderInputRef.current) {
-      folderInputRef.current.setAttribute('webkitdirectory', '');
-      folderInputRef.current.setAttribute('directory', '');
-    }
     return () => {
       if (shareTimeoutRef.current) clearTimeout(shareTimeoutRef.current);
     };
@@ -599,9 +390,6 @@ export default function ProductWallPage() {
   useEffect(() => {
     setRenderCount(renderBatchSize);
     setWallReady(false);
-    setSelectedIds(new Set());
-    setWallEditMode(false);
-    setSelectionMode(false);
   }, [filter, normalizedQuery, renderBatchSize]);
   useEffect(() => {
     if (initialLoading) {
@@ -611,19 +399,24 @@ export default function ProductWallPage() {
     const frame = window.requestAnimationFrame(() => setWallReady(true));
     return () => window.cancelAnimationFrame(frame);
   }, [initialLoading, filter, normalizedQuery, columnCount]);
-  useEffect(() => {
-    setSelectedIds(new Set());
-    setManagementRenderCount(PRODUCT_WALL_RENDER_BATCH_SIZE);
-  }, [reviewFilter, managementKindFilter, normalizedManagementQuery]);
   const { data: favoriteData } = useSWR(isLoggedIn ? 'product-wall-favorites' : null, listProductWallFavorites);
   useEffect(() => {
     setFavoriteIds(new Set(favoriteData || []));
   }, [favoriteData]);
+  // 分类被重命名/删除后，墙体筛选指向失效分类时回到「全部」
+  useEffect(() => {
+    if (isUtilityFilter) return;
+    if (categoryNames.length && !categoryNames.includes(filter)) setFilter(PRODUCT_WALL_ALL_FILTER);
+  }, [categoryNames, filter, isUtilityFilter]);
   const visibleItemsLengthRef = useRef(0);
   const renderCountRef = useRef(renderCount);
   const loadMoreFrameRef = useRef<number | null>(null);
+  const hasMoreWallPagesRef = useRef(false);
+  const wallSizeRef = useRef(wallSize);
   renderCountRef.current = renderCount;
   visibleItemsLengthRef.current = visibleItems.length;
+  hasMoreWallPagesRef.current = hasMoreWallPages;
+  wallSizeRef.current = wallSize;
   const loadMoreVisibleItems = useCallback(() => {
     if (loadMoreFrameRef.current != null) return;
     loadMoreFrameRef.current = window.requestAnimationFrame(() => {
@@ -631,8 +424,12 @@ export default function ProductWallPage() {
       startTransition(() => {
         setRenderCount((count) => Math.min(count + renderBatchSize, visibleItemsLengthRef.current));
       });
+      // 已渲染条数即将覆盖已加载条数且服务端还有更多页 → 拉取下一页
+      if (renderCountRef.current + renderBatchSize >= visibleItemsLengthRef.current && hasMoreWallPagesRef.current) {
+        void setWallSize(wallSizeRef.current + 1);
+      }
     });
-  }, [renderBatchSize]);
+  }, [renderBatchSize, setWallSize]);
   useEffect(
     () => () => {
       if (loadMoreFrameRef.current != null) window.cancelAnimationFrame(loadMoreFrameRef.current);
@@ -656,7 +453,6 @@ export default function ProductWallPage() {
     cancelAnimationFrame(0);
     previewMenuBlockUntilRef.current = performance.now() + 520;
     setActive(null);
-    setManageMenuOpen(false);
   }, []);
   useEffect(() => {
     const blockPreviewClickThrough = (event: Event) => {
@@ -675,282 +471,26 @@ export default function ProductWallPage() {
     };
   }, []);
   useEffect(() => {
-    if (!manageMenuOpen) return;
-    const close = () => {
-      setManageMenuOpen(false);
-    };
-    window.addEventListener('click', close);
-    return () => window.removeEventListener('click', close);
-  }, [manageMenuOpen]);
-  useEffect(() => {
-    if (!active || editingItem || deleteDialog) return;
+    if (!active) return;
     const closePreview = (event: KeyboardEvent) => {
       if (event.key !== 'Escape') return;
       closeActivePreview();
     };
     window.addEventListener('keydown', closePreview);
     return () => window.removeEventListener('keydown', closePreview);
-  }, [active, editingItem, deleteDialog, closeActivePreview]);
-  const openEditItem = (item: WallItem) => {
-    setEditingItem(item);
-    setEditTitle(item.title);
-    setEditDescription(item.description || '');
-    setEditKind(item.kind);
-    setEditTags(item.tags.join('，'));
-  };
-  const saveEditingItem = async () => {
-    if (!editingItem) return;
-    try {
-      const updated = await updateProductWallItem(editingItem.id, {
-        title: editTitle,
-        description: editDescription,
-        tags: editTags,
-        kind: editKind,
-      });
-      syncUpdatedWallItem(updated);
-      setEditingItem(null);
-      toast(t('productWall.toasts.imageUpdated'), 'success');
-    } catch (error) {
-      toast(errorMessage(error, t('productWall.toasts.updateFailed')), 'error');
-    }
-  };
-  const removeItem = async (item: WallItem) => {
-    setDeleteDialog({ type: 'single', item });
-  };
-  const confirmDelete = async () => {
-    if (!deleteDialog) return;
-    setDeleting(true);
-    try {
-      if (deleteDialog.type === 'single') {
-        await deleteProductWallItem(deleteDialog.item.id);
-        if (active?.id === deleteDialog.item.id) setActive(null);
-        await mutate();
-        toast(t('productWall.toasts.imageDeleted'), 'success');
-      } else {
-        const result = await deleteProductWallItems(deleteDialog.ids);
-        setSelectedIds(new Set());
-        setSelectionMode(false);
-        if (active && deleteDialog.ids.includes(active.id)) setActive(null);
-        await mutate();
-        toast(t('productWall.toasts.batchDeleted', { count: result.deleted }), 'success');
-      }
-      setDeleteDialog(null);
-    } catch (error) {
-      toast(
-        errorMessage(
-          error,
-          deleteDialog.type === 'single' ? t('productWall.toasts.deleteFailed') : t('productWall.batchDeleteFailed'),
-        ),
-        'error',
-      );
-    } finally {
-      setDeleting(false);
-    }
-  };
-  const toggleSelectedItem = (item: WallItem) => {
-    setSelectedIds((prev) => {
-      const next = new Set(prev);
-      if (next.has(item.id)) next.delete(item.id);
-      else next.add(item.id);
-      return next;
-    });
-  };
-  const clearSelection = () => {
-    setSelectedIds(new Set());
-    setSelectionMode(false);
-  };
-  const selectCurrentVisibleItems = () => {
-    setSelectionMode(true);
-    setSelectedIds(new Set(selectableVisibleItems.map((item) => item.id)));
-  };
-  const openManagementPanel = () => {
-    setManagementKindFilter(
-      filter !== PRODUCT_WALL_ALL_FILTER && filter !== PRODUCT_WALL_FAVORITES_FILTER && categoryNames.includes(filter)
-        ? (filter as ProductWallKind)
-        : PRODUCT_WALL_MANAGEMENT_ALL_FILTER,
-    );
-    setSelectedIds(new Set());
-    setSelectionMode(false);
-    setManagementOpen(true);
-  };
-  const closeManagement = () => {
-    setManagementOpen(false);
-    setSelectedIds(new Set());
-    setSelectionMode(false);
-  };
-  const removeSelectedItems = async () => {
-    const ids = Array.from(selectedIds);
-    if (!ids.length) {
-      toast(t('productWall.toasts.noSelectionToDelete'), 'error');
-      return;
-    }
-    setDeleteDialog({ type: 'batch', ids });
-  };
-  const reviewItem = async (item: WallItem, input: { status: 'approved' | 'rejected'; rejectReason?: string }) => {
-    const rejectReason =
-      input.status === 'rejected'
-        ? (input.rejectReason ??
-          (window.prompt(t('productWall.reviewRejectPrompt'), item.rejectReason || '') || undefined))
-        : undefined;
-    try {
-      const updated = await reviewProductWallItem(item.id, { status: input.status, rejectReason });
-      syncUpdatedWallItem(updated);
-      toast(
-        input.status === 'approved' ? t('productWall.toasts.reviewApproved') : t('productWall.toasts.reviewRejected'),
-        'success',
-      );
-    } catch (error) {
-      toast(errorMessage(error, t('productWall.toasts.reviewFailed')), 'error');
-    }
-  };
-  const createCategory = async (rawName: string) => {
-    const name = rawName.trim();
-    if (!name) {
-      toast(t('productWall.toasts.categoryNameRequired'), 'error');
-      return;
-    }
-    try {
-      await createProductWallCategory(name);
-      await mutateCategories();
-      toast(t('productWall.toasts.categoryCreated'), 'success');
-    } catch (error) {
-      toast(errorMessage(error, t('productWall.toasts.categoryCreateFailed')), 'error');
-    }
-  };
-  const renameCategory = async (id: string, rawName: string) => {
-    const name = rawName.trim();
-    if (!name) {
-      toast(t('productWall.toasts.categoryEmpty'), 'error');
-      return;
-    }
-    try {
-      const oldName = categories?.find((item) => item.id === id)?.name;
-      await updateProductWallCategory(id, { name });
-      if (filter === oldName) setFilter(name);
-      if (managementKindFilter === oldName) setManagementKindFilter(name as ProductWallKind);
-      if (oldName && oldName !== name) {
-        void mutate((current) => current?.map((item) => (item.kind === oldName ? { ...item, kind: name } : item)), {
-          revalidate: false,
-        });
-      }
-      void mutateCategories((current) => current?.map((item) => (item.id === id ? { ...item, name } : item)), {
-        revalidate: false,
-      });
-      toast(t('productWall.toasts.categoryUpdated'), 'success');
-    } catch (error) {
-      toast(errorMessage(error, t('productWall.toasts.categoryUpdateFailed')), 'error');
-    }
-  };
-  const removeCategory = async (id: string, name: string) => {
-    try {
-      await deleteProductWallCategory(id);
-      setDeleteCategoryTarget(null);
-      if (filter === name) setFilter(PRODUCT_WALL_ALL_FILTER);
-      if (managementKindFilter === name) setManagementKindFilter(PRODUCT_WALL_MANAGEMENT_ALL_FILTER);
-      await mutateCategories();
-      toast(t('productWall.toasts.categoryDeleted'), 'success');
-    } catch (error) {
-      toast(errorMessage(error, t('productWall.toasts.categoryDeleteFailed')), 'error');
-    }
-  };
+  }, [active, closeActivePreview]);
   const headerActions = canUpload ? (
-    <div className="product-wall-action-row flex w-auto items-center justify-end gap-1.5 md:flex-wrap md:gap-2">
-      <input
-        ref={fileInputRef}
-        type="file"
-        accept="image/*,.zip,.rar,application/zip,application/vnd.rar"
-        multiple
-        className="hidden"
-        onChange={(event) => event.target.files && handleUploadSource(event.target.files)}
-      />
-      <input
-        ref={folderInputRef}
-        type="file"
-        multiple
-        className="hidden"
-        onChange={(event) => event.target.files && handleUploadSource(event.target.files)}
-      />
-      <ProductWallActionMenu
-        variant="mobile"
-        isAdmin={isAdmin}
-        uploading={uploading}
-        uploadDisabled={uploadDisabled}
-        wallEditMode={wallEditMode}
-        selectionMode={selectionMode}
-        selectedCount={selectedCount}
-        selectableVisibleItems={selectableVisibleItems}
-        manageMenuOpen={manageMenuOpen}
-        setManageMenuOpen={setManageMenuOpenGuarded}
-        fileInputRef={fileInputRef}
-        folderInputRef={folderInputRef}
-        onToggleEditMode={() => {
-          setManageMenuOpen(false);
-          setWallEditMode((v) => !v);
-          setSelectionMode(false);
-          setSelectedIds(new Set());
-        }}
-        onToggleSelectionMode={() => {
-          setManageMenuOpen(false);
-          setSelectionMode((v) => !v);
-          setWallEditMode(false);
-          if (selectionMode) setSelectedIds(new Set());
-        }}
-        onSelectAll={() => {
-          setManageMenuOpen(false);
-          selectCurrentVisibleItems();
-        }}
-        onDeleteSelected={() => {
-          setManageMenuOpen(false);
-          void removeSelectedItems();
-        }}
-        onClearSelection={() => {
-          setManageMenuOpen(false);
-          clearSelection();
-        }}
-        onOpenManagement={() => {
-          setManageMenuOpen(false);
-          openManagementPanel();
-        }}
-      />
-      <ProductWallActionMenu
-        variant="desktop"
-        isAdmin={isAdmin}
-        uploading={uploading}
-        uploadDisabled={uploadDisabled}
-        wallEditMode={wallEditMode}
-        selectionMode={selectionMode}
-        selectedCount={selectedCount}
-        selectableVisibleItems={selectableVisibleItems}
-        manageMenuOpen={manageMenuOpen}
-        setManageMenuOpen={setManageMenuOpenGuarded}
-        fileInputRef={fileInputRef}
-        folderInputRef={folderInputRef}
-        onToggleEditMode={() => {
-          setManageMenuOpen(false);
-          setWallEditMode((v) => !v);
-          setSelectionMode(false);
-          setSelectedIds(new Set());
-        }}
-        onToggleSelectionMode={() => {
-          setManageMenuOpen(false);
-          setSelectionMode((v) => !v);
-          setWallEditMode(false);
-          if (selectionMode) setSelectedIds(new Set());
-        }}
-        onSelectAll={() => {
-          setManageMenuOpen(false);
-          selectCurrentVisibleItems();
-        }}
-        onDeleteSelected={() => {
-          setManageMenuOpen(false);
-          void removeSelectedItems();
-        }}
-        onClearSelection={() => {
-          setManageMenuOpen(false);
-          clearSelection();
-        }}
-        onOpenManagement={openManagementPanel}
-      />
+    <div className="product-wall-action-row flex w-auto items-center justify-end gap-1.5 md:gap-2">
+      <button
+        type="button"
+        onClick={() => openUploadModal()}
+        className="product-wall-action inline-flex h-8 items-center justify-center gap-1.5 rounded-md bg-primary-container/12 px-3 text-sm font-semibold text-primary-container transition-colors hover:bg-primary-container/18 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-container/35"
+        aria-label={t('productWall.actions.upload')}
+        data-tooltip-ignore
+      >
+        <Icon name="cloud_upload" size={16} />
+        {t('productWall.actions.upload')}
+      </button>
     </div>
   ) : null;
 
@@ -965,7 +505,7 @@ export default function ProductWallPage() {
           meta={initialLoading ? t('productWall.loading') : undefined}
           description={t('productWall.description')}
           actions={headerActions}
-          className="app-public-tool-page app-public-tool-page-product-wall"
+          className="app-public-tool-page app-public-tool-page-product-wall !h-auto"
           toolbar={
             <div className="product-wall-toolbar grid min-h-11 items-center gap-3 md:grid-cols-[minmax(0,1fr)_18rem]">
               <ResponsiveSectionTabs
@@ -1000,6 +540,7 @@ export default function ProductWallPage() {
             </div>
           }
           contentClassName="overflow-visible"
+          toolbarSticky
         >
           {dragActive && (
             <div className="mb-4 flex h-10 items-center justify-center border-y border-primary-container/35 bg-primary-container/6 text-sm font-medium text-primary-container">
@@ -1015,29 +556,18 @@ export default function ProductWallPage() {
                 {masonryColumns.map((column, columnIndex) => (
                   <div key={columnIndex} className="product-wall-masonry-column">
                     {column.map(({ imageIndex, item }) => {
-                      const selected = selectedIds.has(item.id);
-                      const selectable = canManageItem(item);
                       const itemFavorited = favoriteIds.has(item.id);
                       return (
                         <article
                           key={item.id || `${item.title}-${imageIndex}`}
-                          className={`product-wall-card group relative break-inside-avoid overflow-hidden rounded-xl bg-transparent ${
-                            selected ? 'outline outline-2 outline-offset-2 outline-primary-container' : ''
-                          }`}
+                          className="product-wall-card group relative break-inside-avoid overflow-hidden rounded-xl bg-transparent"
                         >
                           <button
                             type="button"
                             onClick={() => {
-                              if (selectionMode) {
-                                if (selectable) toggleSelectedItem(item);
-                                return;
-                              }
                               setActive(item);
-                              setManageMenuOpen(false);
                             }}
-                            className={`block w-full overflow-hidden rounded-xl text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-container/35 ${
-                              selectionMode && !selectable ? 'cursor-not-allowed opacity-55' : ''
-                            }`}
+                            className="block w-full overflow-hidden rounded-xl text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-container/35"
                           >
                             <ProductWallThumbnail
                               item={item}
@@ -1045,21 +575,9 @@ export default function ProductWallPage() {
                               imageIndex={imageIndex}
                               eagerImageCount={eagerImageCount}
                               lazyRootMargin={thumbnailLazyRootMargin}
-                            >
-                              {selectionMode && selectable && (
-                                <span
-                                  className={`absolute right-2 top-2 z-20 inline-flex h-8 w-8 items-center justify-center rounded-full border shadow-sm backdrop-blur ${
-                                    selected
-                                      ? 'border-primary-container bg-primary-container text-on-primary-container'
-                                      : 'border-white/50 bg-black/24 text-white'
-                                  }`}
-                                >
-                                  <Icon name={selected ? 'check' : 'add'} size={16} />
-                                </span>
-                              )}
-                            </ProductWallThumbnail>
+                            />
                           </button>
-                          {!wallEditMode && !selectionMode && (
+                          {
                             <div className="product-wall-card-actions absolute right-2 top-2 z-20 flex items-center gap-1.5">
                               {featureFlags.favorites && (
                                 <button
@@ -1100,37 +618,7 @@ export default function ProductWallPage() {
                                 </button>
                               )}
                             </div>
-                          )}
-                          {wallEditMode && selectable && !selectionMode && (
-                            <div className="product-wall-card-actions product-wall-card-actions-edit absolute right-2 top-2 z-20 flex items-center gap-1.5">
-                              <button
-                                type="button"
-                                onClick={(event) => {
-                                  event.stopPropagation();
-                                  openEditItem(item);
-                                }}
-                                className="product-wall-card-action"
-                                aria-label={t('productWall.aria.editImage')}
-                                title={t('productWall.actions.edit')}
-                                data-tooltip-ignore
-                              >
-                                <Icon name="edit" size={14} />
-                              </button>
-                              <button
-                                type="button"
-                                onClick={(event) => {
-                                  event.stopPropagation();
-                                  void removeItem(item);
-                                }}
-                                className="product-wall-card-action is-danger"
-                                aria-label={t('productWall.aria.deleteImage')}
-                                title={t('common.delete')}
-                                data-tooltip-ignore
-                              >
-                                <Icon name="delete" size={14} />
-                              </button>
-                            </div>
-                          )}
+                          }
                         </article>
                       );
                     })}
@@ -1191,93 +679,18 @@ export default function ProductWallPage() {
         </AdminManagementPage>
       </div>
 
-      {managementOpen && isAdmin && (
-        <ProductWallManagementPanel
-          items={managementItems}
-          categories={categoryList}
-          reviewFilter={reviewFilter}
-          setReviewFilter={setReviewFilter}
-          managementKindFilter={managementKindFilter}
-          setManagementKindFilter={setManagementKindFilter}
-          managementQuery={managementQuery}
-          setManagementQuery={setManagementQuery}
-          managementRenderCount={managementRenderCount}
-          setManagementRenderCount={setManagementRenderCount}
-          canManageItem={canManageItem}
-          close={closeManagement}
-          onReview={(id, input) => {
-            const item = managementItems.find((candidate) => candidate.id === id);
-            if (item) void reviewItem(item, input);
+      {uploadModalOpen && canUpload && (
+        <ProductWallUploadModal
+          open={uploadModalOpen}
+          isAdmin={isAdmin}
+          categories={categoryNames}
+          defaultKind={uploadKind}
+          initialFiles={uploadModalFiles}
+          onClose={() => {
+            setUploadModalOpen(false);
+            setUploadModalFiles(null);
           }}
-          onUpdateItem={(id) => {
-            const item = managementItems.find((i) => i.id === id);
-            if (item) openEditItem(item);
-          }}
-          onDeleteItem={(id) => {
-            const item = managementItems.find((candidate) => candidate.id === id);
-            if (item) void removeItem(item);
-          }}
-          onSaveCategory={(name) => void createCategory(name)}
-          onRenameCategory={(id, name) => void renameCategory(id, name)}
-          onDeleteCategory={(id) => {
-            const category = categoryList.find((item) => item.id === id);
-            if (category) setDeleteCategoryTarget({ id, name: category.name });
-          }}
-          editingItem={editingItem}
-          setEditingItem={setEditingItem}
-          editForm={editForm}
-          setEditForm={setEditForm}
-          saveEdit={() => void saveEditingItem()}
-          resolvedFilters={resolvedFilters}
-        />
-      )}
-
-      <ProductWallDeleteDialog
-        deleteDialog={deleteDialog}
-        deleting={deleting}
-        onCancel={() => setDeleteDialog(null)}
-        onConfirm={confirmDelete}
-      />
-      <ConfirmDialog
-        open={Boolean(deleteCategoryTarget)}
-        onClose={() => setDeleteCategoryTarget(null)}
-        onConfirm={() => {
-          if (deleteCategoryTarget) void removeCategory(deleteCategoryTarget.id, deleteCategoryTarget.name);
-        }}
-        title={t('productWall.categoryDeleteTitle')}
-        description={t('productWall.categoryDeleteConfirm', { name: deleteCategoryTarget?.name || '' })}
-        confirmLabel={t('common.confirm')}
-      />
-
-      {editingItem && (
-        <ProductWallEditDialog
-          editingItem={editingItem}
-          editTitle={editTitle}
-          editDescription={editDescription}
-          editKind={editKind}
-          editTags={editTags}
-          categoryNames={categoryNames}
-          setEditTitle={setEditTitle}
-          setEditDescription={setEditDescription}
-          setEditKind={setEditKind}
-          setEditTags={setEditTags}
-          onCancel={() => setEditingItem(null)}
-          onSave={() => void saveEditingItem()}
-        />
-      )}
-
-      {pendingUploadFiles && !isAdmin && (
-        <ProductWallUploadDialog
-          pendingUploadFiles={pendingUploadFiles}
-          uploadTitle={uploadTitle}
-          uploadDescription={uploadDescription}
-          uploadKind={uploadKind}
-          fileInputRef={fileInputRef}
-          folderInputRef={folderInputRef}
-          setUploadTitle={setUploadTitle}
-          setUploadDescription={setUploadDescription}
-          onCancel={() => setPendingUploadFiles(null)}
-          onSubmit={submitPendingUpload}
+          onCompleted={handleUploadCompleted}
         />
       )}
 

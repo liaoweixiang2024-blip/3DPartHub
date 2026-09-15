@@ -52,6 +52,7 @@ import {
   loadTicketAdminPage,
   loadTicketDetailPage,
   loadUserAdminPage,
+  loadProductWallAdminPage,
   preloadRouteForPath,
   warmRouteModules,
 } from './lib/routeLoaders';
@@ -84,6 +85,7 @@ const TicketAdminPage = lazy(loadTicketAdminPage);
 const TicketDetailPage = lazy(loadTicketDetailPage);
 const SettingsPage = lazy(loadSettingsPage);
 const UserAdminPage = lazy(loadUserAdminPage);
+const ProductWallAdminPage = lazy(loadProductWallAdminPage);
 const AuditLogPage = lazy(loadAuditLogPage);
 const ShareAdminPage = lazy(loadShareAdminPage);
 const DownloadAdminPage = lazy(loadDownloadAdminPage);
@@ -732,6 +734,14 @@ export default function Router() {
             element={
               <ProtectedPage requiredRole="ADMIN">
                 <SettingsPage />
+              </ProtectedPage>
+            }
+          />
+          <Route
+            path="/admin/product-wall"
+            element={
+              <ProtectedPage requiredRole="ADMIN">
+                <ProductWallAdminPage />
               </ProtectedPage>
             }
           />

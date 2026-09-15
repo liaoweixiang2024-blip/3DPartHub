@@ -1,3 +1,4 @@
+import type { Prisma } from '@prisma/client';
 import { Router, Response } from 'express';
 import { getErrorMessage } from '../../lib/http.js';
 import { prisma } from '../../lib/prisma.js';
@@ -9,6 +10,7 @@ import {
   toProductWallItem,
   ensureProductWallData,
   queueProductWallPreviewBackfill,
+  sweepExpiredProductWallTrash,
 } from './shared.js';
 
 async function invalidateProductWallCache() {
@@ -41,16 +43,25 @@ export function createCategoryRouter() {
     }
   });
 
-  // Public: list approved items
+  // Public: list approved items (supports kind filter + title/description search)
   router.get('/api/product-wall', async (req, res, next) => {
     try {
       await ensureProductWallData();
       const page = Math.max(1, Number(req.query.page) || 1);
       const pageSize = Math.min(200, Math.max(1, Number(req.query.page_size) || 50));
-      const cacheKey = `cache:product-wall:list:${page}:${pageSize}`;
+      const kind = typeof req.query.kind === 'string' && req.query.kind.trim() ? req.query.kind.trim() : '';
+      const q = typeof req.query.q === 'string' ? req.query.q.trim().slice(0, 80) : '';
+      const cacheKey = `cache:product-wall:list:${kind || 'all'}:${encodeURIComponent(q).slice(0, 60)}:${page}:${pageSize}`;
       const { cacheGetOrSet, TTL } = await import('../../lib/cache.js');
       const { value: data } = await cacheGetOrSet(cacheKey, TTL.CATEGORIES, async () => {
-        const where = { status: 'approved' };
+        const where: Prisma.ProductWallImageWhereInput = { status: 'approved', deletedAt: null };
+        if (kind) where.kind = kind;
+        if (q) {
+          where.OR = [
+            { title: { contains: q, mode: 'insensitive' } },
+            { description: { contains: q, mode: 'insensitive' } },
+          ];
+        }
         const [rows, total] = await Promise.all([
           prisma.productWallImage.findMany({
             where,
@@ -70,15 +81,103 @@ export function createCategoryRouter() {
     }
   });
 
-  // Admin: list all items
-  router.get('/api/admin/product-wall', authMiddleware, requireAdmin, async (_req, res, next) => {
+  // Public: approved counts (total + per kind) for filter tabs
+  router.get('/api/product-wall/counts', async (_req, res, next) => {
     try {
       await ensureProductWallData();
-      const rows = await prisma.productWallImage.findMany({
-        orderBy: [{ sortOrder: 'asc' }, { createdAt: 'asc' }],
+      const { cacheGetOrSet, TTL } = await import('../../lib/cache.js');
+      const { value: data } = await cacheGetOrSet('cache:product-wall:counts', TTL.CATEGORIES, async () => {
+        const groups = await prisma.productWallImage.groupBy({
+          by: ['kind'],
+          where: { status: 'approved', deletedAt: null },
+          _count: { _all: true },
+        });
+        const byKind: Record<string, number> = {};
+        let total = 0;
+        for (const group of groups) {
+          const count = group._count._all;
+          byKind[group.kind] = count;
+          total += count;
+        }
+        return { total, byKind };
       });
-      queueProductWallPreviewBackfill(rows);
-      res.json(rows.map(toProductWallItem));
+      res.set('Cache-Control', 'public, max-age=60');
+      res.json(data);
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  // Admin: list items (paginated, filterable by status/kind/search)
+  router.get('/api/admin/product-wall', authMiddleware, requireAdmin, async (req, res, next) => {
+    try {
+      await ensureProductWallData();
+      // 访问回收站时顺带清理过期（30 天）记录，fire-and-forget 不阻塞响应
+      if (String(req.query.status || '') === 'trash') void sweepExpiredProductWallTrash();
+      const page = Math.max(1, Number(req.query.page) || 1);
+      const pageSize = Math.min(200, Math.max(1, Number(req.query.page_size) || 40));
+      const rawStatus = String(req.query.status || 'all');
+      const status =
+        rawStatus === 'pending' || rawStatus === 'approved' || rawStatus === 'rejected' || rawStatus === 'trash'
+          ? rawStatus
+          : 'all';
+      const kind = typeof req.query.kind === 'string' && req.query.kind.trim() ? req.query.kind.trim() : '';
+      const q = typeof req.query.q === 'string' ? req.query.q.trim().slice(0, 80) : '';
+      const where: Prisma.ProductWallImageWhereInput =
+        status === 'trash' ? { deletedAt: { not: null } } : { deletedAt: null };
+      if (status !== 'all' && status !== 'trash') where.status = status;
+      if (kind) where.kind = kind;
+      if (q) {
+        where.OR = [
+          { title: { contains: q, mode: 'insensitive' } },
+          { description: { contains: q, mode: 'insensitive' } },
+        ];
+      }
+      const [rows, total, statusGroups, trashCount] = await Promise.all([
+        prisma.productWallImage.findMany({
+          where,
+          orderBy: status === 'trash' ? { deletedAt: 'desc' } : [{ sortOrder: 'asc' }, { createdAt: 'asc' }],
+          skip: (page - 1) * pageSize,
+          take: pageSize,
+        }),
+        prisma.productWallImage.count({ where }),
+        prisma.productWallImage.groupBy({ by: ['status'], _count: { _all: true }, where: { deletedAt: null } }),
+        prisma.productWallImage.count({ where: { deletedAt: { not: null } } }),
+      ]);
+      const counts: Record<string, number> = { all: 0, pending: 0, approved: 0, rejected: 0, trash: trashCount };
+      for (const group of statusGroups) {
+        counts[group.status] = group._count._all;
+        counts.all += group._count._all;
+      }
+      if (status !== 'trash') queueProductWallPreviewBackfill(rows);
+      res.json({ items: rows.map(toProductWallItem), total, page, page_size: pageSize, counts });
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  // Admin: resolve upload whitelist users (display names for the settings UI)
+  router.get('/api/admin/product-wall/upload-whitelist', authMiddleware, requireAdmin, async (_req, res, next) => {
+    try {
+      const { getSetting } = await import('../../lib/settings.js');
+      const raw = String((await getSetting<string>('product_wall_upload_allowed_user_ids')) ?? '');
+      const ids = Array.from(
+        new Set(
+          raw
+            .split(',')
+            .map((item) => item.trim())
+            .filter(Boolean),
+        ),
+      );
+      if (!ids.length) {
+        res.json({ users: [] });
+        return;
+      }
+      const users = await prisma.user.findMany({
+        where: { id: { in: ids } },
+        select: { id: true, username: true, email: true, role: true, disabled: true },
+      });
+      res.json({ users });
     } catch (err) {
       next(err);
     }

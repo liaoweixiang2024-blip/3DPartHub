@@ -34,6 +34,7 @@ export const loadTicketAdminPage = () => import('../pages/TicketAdminPage');
 export const loadTicketDetailPage = () => import('../pages/TicketDetailPage');
 export const loadSettingsPage = () => import('../pages/SettingsPage');
 export const loadUserAdminPage = () => import('../pages/UserAdminPage');
+export const loadProductWallAdminPage = () => import('../pages/ProductWallAdminPage');
 export const loadInviteAdminPage = () => import('../pages/InviteAdminPage');
 export const loadAuditLogPage = () => import('../pages/AuditLogPage');
 export const loadShareAdminPage = () => import('../pages/ShareAdminPage');
@@ -86,6 +87,7 @@ const exactRouteLoaders = new Map<string, RouteModuleLoader>([
   ['/admin/tickets', loadTicketAdminPage],
   ['/admin/settings', loadSettingsPage],
   ['/admin/users', loadUserAdminPage],
+  ['/admin/product-wall', loadProductWallAdminPage],
   ['/admin/audit', loadAuditLogPage],
   ['/admin/shares', loadShareAdminPage],
   ['/admin/downloads', loadDownloadAdminPage],

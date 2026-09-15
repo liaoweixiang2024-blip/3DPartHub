@@ -571,6 +571,10 @@ const SETTINGS_SCHEMA: SettingDef[] = [
   { key: 'product_wall_max_batch_count', defaultValue: 50 },
   { key: 'product_wall_max_zip_extract', defaultValue: 100 },
 
+  // Product wall upload permission (CSV: roles / user ids)
+  { key: 'product_wall_upload_roles', defaultValue: 'ADMIN,EDITOR,VIEWER,INTERNAL' },
+  { key: 'product_wall_upload_allowed_user_ids', defaultValue: '' },
+
   // Cache and object storage
   { key: 'cache_driver', defaultValue: 'redis' },
   { key: 'cache_enabled', defaultValue: true },

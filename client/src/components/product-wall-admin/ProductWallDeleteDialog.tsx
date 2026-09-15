@@ -40,8 +40,8 @@ export function ProductWallDeleteDialog({
               <h2 className="mt-1 text-lg font-bold tracking-[-0.03em] text-on-surface">确认删除图片？</h2>
               <p className="mt-2 text-sm leading-6 text-on-surface-variant">
                 {deleteDialog.type === 'single'
-                  ? '删除后图片会从产品图库和图片管理中移除，已上传到本地的图片文件也会一并清理。'
-                  : `将删除已选的 ${deleteDialog.ids.length} 张图片，删除后无法恢复。`}
+                  ? '删除后图片会移入回收站（保留 30 天），可在图片管理的「回收站」里恢复或彻底删除。'
+                  : `将把已选的 ${deleteDialog.ids.length} 张图片移入回收站，可在「回收站」里恢复或彻底删除。`}
               </p>
             </div>
           </div>

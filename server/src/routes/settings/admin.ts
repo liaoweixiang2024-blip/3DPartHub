@@ -23,11 +23,36 @@ function maskSensitiveSettings(settings: Record<string, unknown>): Record<string
   return masked;
 }
 
+const PRODUCT_WALL_UPLOAD_ROLE_VALUES = new Set(['ADMIN', 'EDITOR', 'VIEWER', 'INTERNAL']);
+const PRODUCT_WALL_UPLOAD_IDS_MAX_LENGTH = 5000;
+
+function validateProductWallUploadSettings(payload: Record<string, unknown>): string | null {
+  if ('product_wall_upload_roles' in payload) {
+    const value = payload.product_wall_upload_roles;
+    if (typeof value !== 'string') return '图库上传角色白名单格式不正确';
+    const roles = value
+      .split(',')
+      .map((item) => item.trim())
+      .filter(Boolean);
+    if (roles.some((role) => !PRODUCT_WALL_UPLOAD_ROLE_VALUES.has(role))) {
+      return '图库上传角色只能是 ADMIN、EDITOR、VIEWER、INTERNAL';
+    }
+  }
+  if ('product_wall_upload_allowed_user_ids' in payload) {
+    const value = payload.product_wall_upload_allowed_user_ids;
+    if (typeof value !== 'string') return '图库上传用户白名单格式不正确';
+    if (value.length > PRODUCT_WALL_UPLOAD_IDS_MAX_LENGTH) return '图库上传用户白名单过长';
+  }
+  return null;
+}
+
 function validateSettingsPayload(payload: unknown): string | null {
   if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return '设置数据格式不正确';
   if ('contact_phone' in payload && !isValidContactPhoneSetting((payload as Record<string, unknown>).contact_phone)) {
     return CONTACT_PHONE_SETTING_MESSAGE;
   }
+  const productWallError = validateProductWallUploadSettings(payload as Record<string, unknown>);
+  if (productWallError) return productWallError;
   return null;
 }
 

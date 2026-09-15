@@ -14,6 +14,8 @@ export function ProductWallPreview({
   canvasMode,
   activeFavorited,
   shareState,
+  showFavorite = true,
+  showShare = true,
   onClose,
   onToggleFavorite,
   onShare,
@@ -23,6 +25,10 @@ export function ProductWallPreview({
   canvasMode: ProductWallCanvasMode;
   activeFavorited: boolean;
   shareState: 'idle' | 'copied';
+  /** 隐藏收藏按钮（如管理面板场景）。默认显示（还需 featureFlags.favorites 开启） */
+  showFavorite?: boolean;
+  /** 隐藏分享按钮。默认显示（还需 featureFlags.shares 开启） */
+  showShare?: boolean;
   onClose: () => void;
   onToggleFavorite: () => void;
   onShare: () => void;
@@ -500,7 +506,7 @@ export function ProductWallPreview({
                 {previewZoomed ? t('productWall.preview.restore') : t('productWall.preview.zoomIn')}
               </span>
             </button>
-            {featureFlags.favorites && (
+            {featureFlags.favorites && showFavorite && (
               <button
                 type="button"
                 onClick={onToggleFavorite}
@@ -517,7 +523,7 @@ export function ProductWallPreview({
                 </span>
               </button>
             )}
-            {featureFlags.shares && (
+            {featureFlags.shares && showShare && (
               <button
                 type="button"
                 onClick={onShare}

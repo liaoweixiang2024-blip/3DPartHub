@@ -222,6 +222,7 @@ function validateBackupArchiveUpload(path: string, res: Response, options: { cle
 }
 
 const backupUpload = multer({
+  defParamCharset: 'utf-8',
   dest: '/tmp',
   limits: { fileSize: BACKUP_DIRECT_UPLOAD_MAX_BYTES }, // Larger backups use the chunked restore/import flow.
   fileFilter: (_req, file, cb) => {

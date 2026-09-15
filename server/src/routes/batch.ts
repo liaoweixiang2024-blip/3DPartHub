@@ -107,6 +107,7 @@ function batchArchiveUpload(req: AuthRequest, res: Response, next: NextFunction)
     .then(({ uploadPolicy }) => {
       const maxMb = batchArchiveMaxSizeMb(uploadPolicy);
       const upload = multer({
+        defParamCharset: 'utf-8',
         dest: join(config.uploadDir, 'batch'),
         limits: { fileSize: maxMb * 1024 * 1024 },
         fileFilter(_req, file, cb) {

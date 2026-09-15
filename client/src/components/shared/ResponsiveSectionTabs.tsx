@@ -19,6 +19,8 @@ interface ResponsiveSectionTabsProps {
   desktopVariant?: 'default' | 'subtle' | 'prominent';
   desktopAlign?: 'start' | 'end';
   countUnit?: string;
+  /** 覆盖计数前缀（默认「共」）；传空字符串则只显示纯数字徽标 */
+  countPrefixText?: string;
   className?: string;
 }
 
@@ -31,6 +33,7 @@ export default function ResponsiveSectionTabs({
   desktopVariant = 'default',
   desktopAlign = 'start',
   countUnit = '',
+  countPrefixText,
   className = '',
 }: ResponsiveSectionTabsProps) {
   const { t } = useTranslation();
@@ -167,7 +170,9 @@ export default function ResponsiveSectionTabs({
                         active ? 'text-primary-container/70' : 'text-on-surface-variant/70'
                       }`}
                     >
-                      <span>{t('responsiveTabs.countPrefix')}</span>
+                      {countPrefixText === '' ? null : (
+                        <span>{countPrefixText ?? t('responsiveTabs.countPrefix')}</span>
+                      )}
                       <span className="text-[11px] font-medium tabular-nums">{tab.count}</span>
                       {countUnit ? <span>{countUnit}</span> : null}
                     </span>
@@ -235,7 +240,7 @@ export default function ResponsiveSectionTabs({
         <span className="flex shrink-0 items-center gap-2">
           {typeof activeTab?.count === 'number' ? (
             <span className="inline-flex items-baseline gap-0.5 text-xs font-medium leading-none text-on-surface-variant/75">
-              <span>{t('responsiveTabs.countPrefix')}</span>
+              {countPrefixText === '' ? null : <span>{countPrefixText ?? t('responsiveTabs.countPrefix')}</span>}
               <span className="text-sm font-semibold tabular-nums text-primary-container">{activeTab.count}</span>
               {countUnit ? <span>{countUnit}</span> : null}
             </span>
@@ -291,7 +296,9 @@ export default function ResponsiveSectionTabs({
                           active ? 'text-on-primary/70' : 'text-on-surface-variant/70'
                         }`}
                       >
-                        <span>{t('responsiveTabs.countPrefix')}</span>
+                        {countPrefixText === '' ? null : (
+                          <span>{countPrefixText ?? t('responsiveTabs.countPrefix')}</span>
+                        )}
                         <span className="text-xs font-semibold tabular-nums">{tab.count}</span>
                         {countUnit ? <span>{countUnit}</span> : null}
                       </span>
@@ -370,7 +377,9 @@ export default function ResponsiveSectionTabs({
                           active ? 'text-on-primary/70' : 'text-on-surface-variant/70'
                         }`}
                       >
-                        <span>{t('responsiveTabs.countPrefix')}</span>
+                        {countPrefixText === '' ? null : (
+                          <span>{countPrefixText ?? t('responsiveTabs.countPrefix')}</span>
+                        )}
                         <span className="text-xs font-semibold tabular-nums">{tab.count}</span>
                         {countUnit ? <span>{countUnit}</span> : null}
                       </span>

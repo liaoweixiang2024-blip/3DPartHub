@@ -245,6 +245,17 @@ export default function SharePage() {
     }
   }
 
+  // PDF 图纸下载（文件名优先取响应头 Content-Disposition）
+  async function handleDownloadDrawing(drawing: { href: string }) {
+    const preparedWindow = prepareBrowserDownload();
+    try {
+      await downloadBrowserFile(drawing.href, { preparedWindow });
+    } catch (err) {
+      cancelPreparedBrowserDownload(preparedWindow);
+      setError(getErrorMessage(err, t('sharePage.downloadFailed')));
+    }
+  }
+
   function formatSize(bytes: number) {
     if (bytes < 1024) return `${bytes}B`;
     const kb = bytes / 1024;
@@ -409,18 +420,17 @@ export default function SharePage() {
     ) : null;
 
   const renderDrawingRow = (drawing: { id: string; name: string; href: string }, compact = false, keySuffix = '') => (
-    <a
+    <div
       key={drawing.id || `drawing-${keySuffix}`}
-      href={drawing.href}
-      target="_blank"
-      rel="noopener noreferrer"
-      onClick={(event) => {
-        event.preventDefault();
-        openDocumentUrl(drawing.href, { title: drawing.name || t('sharePage.drawingTitle') });
-      }}
-      className={`${MODEL_DETAIL_DOWNLOAD_ROW_INTERACTIVE_CLASS} ${compact ? 'min-h-0 py-1.5' : ''} cursor-pointer text-left`}
+      className={`${MODEL_DETAIL_DOWNLOAD_ROW_INTERACTIVE_CLASS} ${compact ? 'min-h-0 py-1.5' : ''} text-left`}
     >
-      <div className="flex items-center gap-3 min-w-0 flex-1">
+      <button
+        type="button"
+        onClick={() => openDocumentUrl(drawing.href, { title: drawing.name || t('sharePage.drawingTitle') })}
+        aria-label={t('sharePage.viewPdf')}
+        data-tooltip-ignore
+        className="flex min-w-0 flex-1 cursor-pointer items-center gap-3 text-left"
+      >
         <div
           className={`${compact ? 'h-7 w-7' : 'h-9 w-9'} rounded-lg bg-error/10 flex items-center justify-center shrink-0`}
         >
@@ -435,11 +445,17 @@ export default function SharePage() {
           </div>
           <div className={`${compact ? 'text-[10px]' : 'text-[11px]'} text-on-surface-variant mt-0.5`}>PDF</div>
         </div>
-      </div>
-      <div className="ml-auto flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
-        <Icon name="open_in_new" size={15} />
-      </div>
-    </a>
+      </button>
+      <button
+        type="button"
+        onClick={() => void handleDownloadDrawing(drawing)}
+        aria-label={t('sharePage.downloadPdf')}
+        data-tooltip-ignore
+        className="ml-auto flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary active:scale-90 transition-all"
+      >
+        <Icon name="download" size={16} />
+      </button>
+    </div>
   );
 
   // 文件下载区块（桌面信息面板用；行间距对齐详情页）

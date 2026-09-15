@@ -32,6 +32,7 @@ const imageNames: Record<string, string> = {
 };
 
 const imageUpload = multer({
+  defParamCharset: 'utf-8',
   dest: '/tmp/settings-upload',
   limits: { fileSize: 2 * 1024 * 1024 }, // 2MB max
   fileFilter: (_req, file, cb) => {

@@ -288,8 +288,8 @@ export function DesktopDetail({
                   <div key={downloadKey} className={MODEL_DETAIL_DOWNLOAD_ROW_INTERACTIVE_CLASS}>
                     <button
                       type="button"
-                      onClick={() => onDownloadDrawing(modelData.id, file.drawingId)}
-                      aria-label={t('modelDetail.downloadPdf')}
+                      onClick={() => onOpenDrawing(modelData.id, file.drawingId)}
+                      aria-label={t('modelDetail.viewPdf')}
                       data-tooltip-ignore
                       className="flex min-w-0 flex-1 cursor-pointer items-center gap-3 text-left"
                     >
@@ -305,12 +305,12 @@ export function DesktopDetail({
                     </button>
                     <button
                       type="button"
-                      onClick={() => onOpenDrawing(modelData.id, file.drawingId)}
-                      aria-label={t('modelDetail.viewPdf')}
+                      onClick={() => onDownloadDrawing(modelData.id, file.drawingId)}
+                      aria-label={t('modelDetail.downloadPdf')}
                       data-tooltip-ignore
                       className="text-primary hover:text-primary-container p-2 shrink-0"
                     >
-                      <Icon name="open_in_new" size={20} />
+                      <Icon name="download" size={20} />
                     </button>
                   </div>
                 ) : (

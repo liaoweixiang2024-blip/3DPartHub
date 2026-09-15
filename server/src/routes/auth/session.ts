@@ -300,8 +300,9 @@ export function createAuthSessionRouter() {
       const refreshToken = signRefreshToken({ ...payload, rememberMe: true });
       setAuthCookies(req, res, accessToken, refreshToken, { rememberMe: true });
 
+      const { canUploadProductWall } = await import('../product-wall/shared.js');
       res.json({
-        user,
+        user: { ...user, canUploadProductWall: await canUploadProductWall({ userId: user.id, role: user.role }) },
         tokens: { accessToken },
       });
     } catch (err: unknown) {
@@ -379,6 +380,7 @@ export function createAuthSessionRouter() {
       const refreshToken = signRefreshToken({ ...payload, rememberMe: shouldRemember });
       setAuthCookies(req, res, accessToken, refreshToken, { rememberMe: shouldRemember });
 
+      const { canUploadProductWall } = await import('../product-wall/shared.js');
       res.json({
         user: {
           id: user.id,
@@ -394,6 +396,7 @@ export function createAuthSessionRouter() {
           bio: user.bio,
           avatar: user.avatar,
           createdAt: user.createdAt,
+          canUploadProductWall: await canUploadProductWall({ userId: user.id, role: user.role }),
         },
         tokens: { accessToken },
       });

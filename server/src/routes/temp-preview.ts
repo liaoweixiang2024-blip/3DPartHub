@@ -396,6 +396,7 @@ async function looksLikeStepFile(filePath: string) {
 
 function tempPreviewUpload(fieldName: string) {
   const upload = multer({
+    defParamCharset: 'utf-8',
     dest: config.uploadDir,
     limits: { fileSize: TEMP_PREVIEW_MAX_BYTES },
   }).single(fieldName);

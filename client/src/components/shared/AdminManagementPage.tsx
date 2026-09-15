@@ -21,6 +21,8 @@ interface AdminManagementPageProps {
   headerNavigation?: ReactNode;
   stats?: AdminStatItem[];
   toolbar?: ReactNode;
+  /** 工具栏吸顶：内容滚动时固定在顶部（如前台图库的分类筛选行） */
+  toolbarSticky?: boolean;
   children: ReactNode;
   className?: string;
   contentClassName?: string;
@@ -276,12 +278,16 @@ export function AdminManagementPage({
   headerNavigation,
   stats,
   toolbar,
+  toolbarSticky,
   children,
   className,
   contentClassName,
 }: AdminManagementPageProps) {
   return (
-    <div className={mergeClassName('app-page flex h-full min-h-0 flex-col gap-3 md:gap-4', className)}>
+    <div
+      style={toolbarSticky ? { height: 'auto', flexShrink: 0 } : undefined}
+      className={['app-page flex h-full min-h-0 flex-col gap-3 md:gap-4', className].filter(Boolean).join(' ')}
+    >
       <AdminPageHero
         title={title}
         meta={meta}
@@ -291,8 +297,16 @@ export function AdminManagementPage({
         stats={stats}
       />
       {stats?.length ? <AdminStatsGrid stats={stats} /> : null}
-      {toolbar ? <AdminToolbar>{toolbar}</AdminToolbar> : null}
-      <div className={mergeClassName('app-page-content flex min-h-0 flex-1 flex-col', contentClassName)}>
+      {toolbar ? (
+        <AdminToolbar className={toolbarSticky ? 'sticky top-0 z-20 !rounded-t-none shadow-sm' : undefined}>
+          {toolbar}
+        </AdminToolbar>
+      ) : null}
+      <div
+        className={['app-page-content flex flex-col', toolbarSticky ? null : 'min-h-0 flex-1', contentClassName]
+          .filter(Boolean)
+          .join(' ')}
+      >
         {children}
       </div>
     </div>

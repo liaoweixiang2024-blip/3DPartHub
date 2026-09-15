@@ -16,6 +16,7 @@ export function ProductWallThumbnail({
   imageIndex,
   eagerImageCount = PRODUCT_WALL_EAGER_IMAGE_COUNT,
   lazyRootMargin = '420px 0px',
+  ratioOverride,
   children,
 }: {
   item: WallItem;
@@ -23,6 +24,8 @@ export function ProductWallThumbnail({
   imageIndex: number;
   eagerImageCount?: number;
   lazyRootMargin?: string;
+  /** 固定宽高比（如管理网格传 1 统一正方形）；缺省用图片自身 ratio（瀑布流） */
+  ratioOverride?: number;
   children?: ReactNode;
 }) {
   const previewSrc = productWallPreviewImage(item);
@@ -63,7 +66,7 @@ export function ProductWallThumbnail({
     <div
       ref={surfaceRef}
       className={`product-wall-image-surface product-wall-canvas-${canvasMode} relative overflow-hidden rounded-xl`}
-      style={{ aspectRatio: productWallRatioValue(item.ratio) }}
+      style={{ aspectRatio: ratioOverride ?? productWallRatioValue(item.ratio) }}
     >
       {!loaded && !failed && <div className="product-wall-image-placeholder" aria-hidden />}
       {failed ? (

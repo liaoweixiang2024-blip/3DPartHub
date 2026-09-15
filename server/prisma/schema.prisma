@@ -74,6 +74,8 @@ model ProductWallImage {
   rejectReason String?   @map("reject_reason")
   createdAt    DateTime  @default(now()) @map("created_at")
   updatedAt    DateTime  @updatedAt @map("updated_at")
+  /// 回收站：非空表示已软删除（文件保留），可恢复或过期清理
+  deletedAt   DateTime? @map("deleted_at")
 
   favorites ProductWallImageFavorite[]
 
@@ -86,6 +88,7 @@ model ProductWallImage {
   @@index([reviewedAt], map: "product_wall_images_reviewed_at_idx")
   @@index([status, kind, sortOrder])
   @@index([status, sortOrder, createdAt], map: "product_wall_images_status_sort_order_created_at_idx")
+  @@index([deletedAt])
   @@index([kind, sortOrder], map: "product_wall_images_kind_sort_order_idx")
   @@map("product_wall_images")
 }

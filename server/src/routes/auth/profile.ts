@@ -58,7 +58,8 @@ export function createAuthProfileRouter() {
         res.status(401).json({ detail: '用户不存在，请重新登录' });
         return;
       }
-      res.json(user);
+      const { canUploadProductWall } = await import('../product-wall/shared.js');
+      res.json({ ...user, canUploadProductWall: await canUploadProductWall({ userId: user.id, role: user.role }) });
     } catch {
       res.status(500).json({ detail: '获取用户信息失败' });
     }
@@ -149,7 +150,8 @@ export function createAuthProfileRouter() {
         },
       });
 
-      res.json(user);
+      const { canUploadProductWall } = await import('../product-wall/shared.js');
+      res.json({ ...user, canUploadProductWall: await canUploadProductWall({ userId: user.id, role: user.role }) });
     } catch (err: unknown) {
       if (err instanceof Error && 'code' in err && (err as NodeJS.ErrnoException).code === 'P2002') {
         res.status(409).json({ detail: '用户名已被使用' });
@@ -396,7 +398,15 @@ export function createAuthProfileRouter() {
         const newAccess = signAccessToken(newPayload);
         const newRefresh = signRefreshToken({ ...newPayload, rememberMe: shouldRemember });
         setAuthCookies(req, res, newAccess, newRefresh, { rememberMe: shouldRemember });
-        res.json({ message: '密码修改成功', user: updatedUser, tokens: { accessToken: newAccess } });
+        const { canUploadProductWall } = await import('../product-wall/shared.js');
+        res.json({
+          message: '密码修改成功',
+          user: {
+            ...updatedUser,
+            canUploadProductWall: await canUploadProductWall({ userId: updatedUser.id, role: updatedUser.role }),
+          },
+          tokens: { accessToken: newAccess },
+        });
       } else {
         res.json({ message: '密码修改成功，请重新登录', user: updatedUser });
       }

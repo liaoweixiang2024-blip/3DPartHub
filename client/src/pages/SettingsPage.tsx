@@ -60,6 +60,10 @@ import {
   writeCachedUpdateHistory,
   type UpdateHistoryEntry,
 } from '../api/settings';
+import {
+  ProductWallUploadRolesEditor,
+  ProductWallUploadUsersEditor,
+} from '../components/product-wall-admin/ProductWallUploadPermissionFields';
 import BackupEncryptionNoticeDialog from '../components/settings/BackupEncryptionNoticeDialog';
 import ColorSchemeEditor from '../components/settings/ColorSchemeSettings';
 import { AdminContentPanel, AdminManagementPage } from '../components/shared/AdminManagementPage';
@@ -332,6 +336,8 @@ const DEFAULT_SETTINGS: SystemSettings = {
   product_wall_max_image_mb: 50,
   product_wall_max_batch_count: 50,
   product_wall_max_zip_extract: 100,
+  product_wall_upload_roles: 'ADMIN,EDITOR,VIEWER,INTERNAL',
+  product_wall_upload_allowed_user_ids: '',
   cache_driver: 'redis',
   cache_enabled: true,
   redis_url: 'redis://localhost:6379',
@@ -1102,6 +1108,18 @@ const GROUPS: SettingGroup[] = [
         type: 'number',
         min: 1,
         max: 500,
+      },
+      {
+        key: 'product_wall_upload_roles',
+        label: '图库允许上传的角色',
+        desc: '勾选的角色登录后可上传图片（进入待审核）；管理员始终允许上传',
+        type: 'text',
+      },
+      {
+        key: 'product_wall_upload_allowed_user_ids',
+        label: '图库指定可上传用户',
+        desc: '角色白名单之外，可在此添加指定用户获得上传权限（如外部摄影师）',
+        type: 'text',
       },
       {
         key: 'ticket_attachment_max_mb',
@@ -2048,6 +2066,7 @@ function InterfaceThemePicker({ value, onChange }: { value: string; onChange: (v
 }
 
 type SettingUpdater = (key: keyof SystemSettings, value: boolean | number | string) => void;
+
 type FooterLinkConfig = { label: string; url: string };
 type EmailTemplateConfig = {
   label: string;
@@ -6381,6 +6400,18 @@ function Content() {
                                                   );
                                                 })}
                                               </div>
+                                            ) : item.key === 'product_wall_upload_roles' ? (
+                                              <ProductWallUploadRolesEditor
+                                                value={String(settings.product_wall_upload_roles ?? '')}
+                                                onChange={(next) => updateSetting('product_wall_upload_roles', next)}
+                                              />
+                                            ) : item.key === 'product_wall_upload_allowed_user_ids' ? (
+                                              <ProductWallUploadUsersEditor
+                                                value={String(settings.product_wall_upload_allowed_user_ids ?? '')}
+                                                onChange={(next) =>
+                                                  updateSetting('product_wall_upload_allowed_user_ids', next)
+                                                }
+                                              />
                                             ) : (
                                               structuredEditor ||
                                               (isReadonlySettingItem(item) ? (
@@ -6659,6 +6690,18 @@ function Content() {
                                             );
                                           })}
                                         </div>
+                                      ) : item.key === 'product_wall_upload_roles' ? (
+                                        <ProductWallUploadRolesEditor
+                                          value={String(settings.product_wall_upload_roles ?? '')}
+                                          onChange={(next) => updateSetting('product_wall_upload_roles', next)}
+                                        />
+                                      ) : item.key === 'product_wall_upload_allowed_user_ids' ? (
+                                        <ProductWallUploadUsersEditor
+                                          value={String(settings.product_wall_upload_allowed_user_ids ?? '')}
+                                          onChange={(next) =>
+                                            updateSetting('product_wall_upload_allowed_user_ids', next)
+                                          }
+                                        />
                                       ) : (
                                         structuredEditor ||
                                         (item.type === 'email-test' ? (

@@ -1020,8 +1020,8 @@ export default function ModelDetailPage() {
                           </div>
                           <button
                             type="button"
-                            onClick={() => void handleDownloadDrawing(modelData.id, file.drawingId)}
-                            aria-label={t('modelDetail.downloadPdf')}
+                            onClick={() => void handleOpenDrawing(modelData.id, file.drawingId)}
+                            aria-label={t('modelDetail.viewPdf')}
                             data-tooltip-ignore
                             className="flex-1 min-w-0 text-left"
                           >
@@ -1034,12 +1034,12 @@ export default function ModelDetailPage() {
                           </button>
                           <button
                             type="button"
-                            onClick={() => void handleOpenDrawing(modelData.id, file.drawingId)}
-                            aria-label={t('modelDetail.viewPdf')}
+                            onClick={() => void handleDownloadDrawing(modelData.id, file.drawingId)}
+                            aria-label={t('modelDetail.downloadPdf')}
                             data-tooltip-ignore
                             className="ml-auto flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary/10 hover:bg-primary/20 text-primary active:scale-90 transition-all"
                           >
-                            <Icon name="open_in_new" size={14} />
+                            <Icon name="download" size={15} />
                           </button>
                         </div>
                       ) : (

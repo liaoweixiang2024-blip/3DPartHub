@@ -629,7 +629,9 @@ export function createModelConversionRouter({ prisma, getMeta, saveMeta, getPrev
       res.setTimeout(UPLOAD_REQUEST_TIMEOUT_MS);
       next();
     },
-    multer({ dest: config.uploadDir, limits: { fileSize: IMPORT_PREVIEW_MAX_BYTES } }).single('file'),
+    multer({ defParamCharset: 'utf8', dest: config.uploadDir, limits: { fileSize: IMPORT_PREVIEW_MAX_BYTES } }).single(
+      'file',
+    ),
     async (req: AuthRequest, res: Response) => {
       const id = req.params.id as string;
       const file = req.file;

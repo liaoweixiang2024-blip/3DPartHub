@@ -186,6 +186,9 @@ export interface SystemSettings {
   product_wall_max_image_mb: number;
   product_wall_max_batch_count: number;
   product_wall_max_zip_extract: number;
+  // Product wall upload permission (CSV)
+  product_wall_upload_roles: string;
+  product_wall_upload_allowed_user_ids: string;
   // Cache and object storage
   cache_driver: string;
   cache_enabled: boolean;

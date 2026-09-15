@@ -30,14 +30,31 @@ export interface ProductWallItem {
   rejectReason?: string;
 }
 
-interface ProductWallListResponse {
+export interface ProductWallListResponse {
   items: ProductWallItem[];
   total: number;
   page: number;
   page_size: number;
 }
 
-const PRODUCT_WALL_PAGE_PREFETCH_CONCURRENCY = 4;
+export interface ProductWallCountsResponse {
+  total: number;
+  byKind: Record<string, number>;
+}
+
+export type ProductWallAdminStatusFilter = 'all' | ProductWallStatus | 'trash';
+
+export interface ProductWallAdminListParams {
+  page: number;
+  pageSize: number;
+  status: ProductWallAdminStatusFilter;
+  kind?: ProductWallKind;
+  q?: string;
+}
+
+export interface ProductWallAdminListResponse extends ProductWallListResponse {
+  counts: { all: number; pending: number; approved: number; rejected: number; trash: number };
+}
 
 export interface ProductWallUpdateInput {
   title?: string;
@@ -47,35 +64,77 @@ export interface ProductWallUpdateInput {
   sortOrder?: number;
 }
 
-export async function listProductWallItems(): Promise<ProductWallItem[]> {
-  const res = await client.get('/product-wall', { params: { page: 1, page_size: 200 } });
+export async function listProductWallItemsPage(
+  page: number,
+  pageSize: number,
+  options: { kind?: ProductWallKind; q?: string } = {},
+): Promise<ProductWallListResponse> {
+  const res = await client.get('/product-wall', {
+    params: {
+      page,
+      page_size: pageSize,
+      _t: Date.now(), // 绕过浏览器 60s HTTP 缓存，保证变更后 revalidate 拿到新数据
+      ...(options.kind ? { kind: options.kind } : {}),
+      ...(options.q ? { q: options.q } : {}),
+    },
+  });
   const data = unwrapResponse<ProductWallItem[] | ProductWallListResponse>(res);
-  if (Array.isArray(data)) return data;
-
-  const items = [...(data.items || [])];
-  const total = Number(data.total) || items.length;
-  const pageSize = Number(data.page_size) || 200;
-  const firstPage = Number(data.page) || 1;
-  const lastPage = Math.ceil(total / pageSize);
-  const remainingPages = Array.from({ length: Math.max(0, lastPage - firstPage) }, (_, index) => firstPage + index + 1);
-  for (let index = 0; index < remainingPages.length; index += PRODUCT_WALL_PAGE_PREFETCH_CONCURRENCY) {
-    const pageBatch = remainingPages.slice(index, index + PRODUCT_WALL_PAGE_PREFETCH_CONCURRENCY);
-    const pageItems = await Promise.all(
-      pageBatch.map(async (page) => {
-        const nextRes = await client.get('/product-wall', { params: { page, page_size: pageSize } });
-        const nextData = unwrapResponse<ProductWallItem[] | ProductWallListResponse>(nextRes);
-        return Array.isArray(nextData) ? nextData : nextData.items || [];
-      }),
-    );
-    items.push(...pageItems.flat());
-    if (items.length >= total || pageItems.some((page) => page.length === 0)) break;
+  if (Array.isArray(data)) {
+    return { items: data, total: data.length, page, page_size: pageSize };
   }
-  return items;
+  return data;
 }
 
-export async function listAdminProductWallItems(): Promise<ProductWallItem[]> {
-  const res = await client.get('/admin/product-wall');
-  return unwrapResponse<ProductWallItem[]>(res);
+export async function listProductWallCounts(): Promise<ProductWallCountsResponse> {
+  const res = await client.get('/product-wall/counts', { params: { _t: Date.now() } });
+  return unwrapResponse<ProductWallCountsResponse>(res);
+}
+
+export async function listProductWallFavoriteItems(page: number, pageSize: number): Promise<ProductWallListResponse> {
+  const res = await client.get('/product-wall/favorites/items', {
+    params: { page, page_size: pageSize, _t: Date.now() },
+  });
+  return unwrapResponse<ProductWallListResponse>(res);
+}
+
+export async function listAdminProductWallItems(
+  params: ProductWallAdminListParams,
+): Promise<ProductWallAdminListResponse> {
+  const res = await client.get('/admin/product-wall', {
+    params: {
+      page: params.page,
+      page_size: params.pageSize,
+      status: params.status,
+      ...(params.kind ? { kind: params.kind } : {}),
+      ...(params.q ? { q: params.q } : {}),
+    },
+  });
+  return unwrapResponse<ProductWallAdminListResponse>(res);
+}
+
+export async function restoreProductWallItems(ids: string[]): Promise<{ ok: true; restored: number }> {
+  const res = await client.post('/admin/product-wall/restore', { ids });
+  return unwrapResponse<{ ok: true; restored: number }>(res);
+}
+
+export async function purgeProductWallItems(ids: string[]): Promise<{ ok: true; purged: number }> {
+  const res = await client.post('/admin/product-wall/purge', { ids });
+  return unwrapResponse<{ ok: true; purged: number }>(res);
+}
+
+export interface ProductWallUploadWhitelistUser {
+  id: string;
+  username: string;
+  email: string;
+  role: string;
+  disabled: boolean;
+}
+
+export async function listProductWallUploadWhitelist(): Promise<{
+  users: ProductWallUploadWhitelistUser[];
+}> {
+  const res = await client.get('/admin/product-wall/upload-whitelist');
+  return unwrapResponse<{ users: ProductWallUploadWhitelistUser[] }>(res);
 }
 
 export async function listProductWallCategories(): Promise<ProductWallCategory[]> {
@@ -108,7 +167,14 @@ export async function deleteProductWallCategory(id: string): Promise<{ ok: true 
 
 export async function uploadProductWallImages(
   files: File[],
-  options: { title?: string; description?: string; kind?: ProductWallKind; tags?: string; admin?: boolean } = {},
+  options: {
+    title?: string;
+    description?: string;
+    kind?: ProductWallKind;
+    tags?: string;
+    admin?: boolean;
+    onUploadProgress?: (event: { loaded: number; total?: number }) => void;
+  } = {},
 ): Promise<{ items: ProductWallItem[] }> {
   const form = new FormData();
   files.forEach((file) => form.append('files', file));
@@ -116,7 +182,9 @@ export async function uploadProductWallImages(
   if (options.description) form.append('description', options.description);
   if (options.kind) form.append('kind', options.kind);
   if (options.tags) form.append('tags', options.tags);
-  const res = await client.post(options.admin ? '/admin/product-wall/upload' : '/product-wall/upload', form);
+  const res = await client.post(options.admin ? '/admin/product-wall/upload' : '/product-wall/upload', form, {
+    onUploadProgress: options.onUploadProgress,
+  });
   return unwrapResponse<{ items: ProductWallItem[] }>(res);
 }
 
@@ -154,6 +222,14 @@ export async function deleteProductWallItem(id: string): Promise<{ ok: true }> {
 export async function deleteProductWallItems(ids: string[]): Promise<{ ok: true; deleted: number }> {
   const res = await client.post('/admin/product-wall/batch-delete', { ids });
   return unwrapResponse<{ ok: true; deleted: number }>(res);
+}
+
+export async function updateProductWallItemsKind(
+  ids: string[],
+  kind: ProductWallKind,
+): Promise<{ ok: true; updated: number; kind: ProductWallKind }> {
+  const res = await client.post('/admin/product-wall/batch-update-kind', { ids, kind });
+  return unwrapResponse<{ ok: true; updated: number; kind: ProductWallKind }>(res);
 }
 
 export async function listProductWallFavorites(): Promise<string[]> {
