@@ -132,7 +132,7 @@ export function createSelectionPublicRouter() {
 
   // Global product search across all categories
   router.get('/api/selections/search', async (req, res) => {
-    if (!(await requireBrowseAccess(req, res))) return;
+    if (!(await requireBrowseAccess(req, res, 'require_login_selection'))) return;
     try {
       const search = normalizeSearchParam(req.query.q);
       if (!search || search.length < 1) {
@@ -201,7 +201,7 @@ export function createSelectionPublicRouter() {
 
   // List all categories
   router.get('/api/selections/categories', async (req, res) => {
-    if (!(await requireBrowseAccess(req, res))) return;
+    if (!(await requireBrowseAccess(req, res, 'require_login_selection'))) return;
     try {
       const { value: categories, hit } = await cacheGetOrSet(
         'cache:selections:categories',
@@ -246,7 +246,7 @@ export function createSelectionPublicRouter() {
   });
 
   router.post('/api/selections/model-matches', async (req, res) => {
-    if (!(await requireBrowseAccess(req, res))) return;
+    if (!(await requireBrowseAccess(req, res, 'require_login_selection'))) return;
     try {
       const modelNos = stringArray(req.body?.modelNos, { limit: 500, maxLength: 200 });
       const modelMap = await buildModelMatchMap(modelNos);
@@ -258,7 +258,7 @@ export function createSelectionPublicRouter() {
   });
 
   router.post('/api/selections/categories/:slug/filter', async (req, res) => {
-    if (!(await requireBrowseAccess(req, res))) return;
+    if (!(await requireBrowseAccess(req, res, 'require_login_selection'))) return;
     try {
       const slug = req.params.slug as string;
       const specs = normalizeSpecsBody(req.body?.specs);
@@ -447,7 +447,7 @@ export function createSelectionPublicRouter() {
 
   // Get category by slug
   router.get('/api/selections/categories/:slug', async (req, res) => {
-    if (!(await requireBrowseAccess(req, res))) return;
+    if (!(await requireBrowseAccess(req, res, 'require_login_selection'))) return;
     try {
       const slug = req.params.slug as string;
       const { value: category, hit } = await cacheGetOrSet(
@@ -487,7 +487,7 @@ export function createSelectionPublicRouter() {
 
   // List products by category slug
   router.get('/api/selections/categories/:slug/products', async (req, res) => {
-    if (!(await requireBrowseAccess(req, res))) return;
+    if (!(await requireBrowseAccess(req, res, 'require_login_selection'))) return;
     try {
       const slug = req.params.slug as string;
       const page = Math.max(1, Number(req.query.page) || 1);

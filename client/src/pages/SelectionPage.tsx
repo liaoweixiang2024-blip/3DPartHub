@@ -37,6 +37,7 @@ import {
 } from '../components/selection/selectionUtils';
 import { AdminContentPanel, AdminManagementPage } from '../components/shared/AdminManagementPage';
 import { AdminPageShell } from '../components/shared/AdminPageShell';
+import BrowseLoginLock, { useBrowseGate } from '../components/shared/BrowseLoginLock';
 import Icon from '../components/shared/Icon';
 import LoginConfirmDialog from '../components/shared/LoginConfirmDialog';
 import { PageRefreshIndicator } from '../components/shared/PageRefreshFallback';
@@ -147,12 +148,15 @@ export default function SelectionPage() {
   }
 
   /* data */
+  // 浏览门槛：require_login_selection（选型独立开关）开启且未登录时不再拉取选型公开接口
+  // （发出去只会 401），显示与首页一致的模糊锁屏；门槛未判定前同样暂停请求
+  const browseGate = useBrowseGate('require_login_selection');
   const {
     data: cats = [],
     error: categoriesError,
     isLoading: categoriesLoading,
     mutate: retryCategories,
-  } = useSWR('selections/categories', getSelectionCategories);
+  } = useSWR(browseGate.dataReady ? 'selections/categories' : null, getSelectionCategories);
 
   /* pre-fill from share link state or URL params */
   const shareStateRef = useRef<{ shareSlug?: string; shareSpecs?: Record<string, string> } | null | undefined>(
@@ -2338,6 +2342,11 @@ export default function SelectionPage() {
       nativeSharePending={nativeSharePending}
     />
   );
+
+  /* 浏览门槛拦截（require_login_selection）：显示与首页一致的模糊锁屏（选型文案） */
+  if (browseGate.blocked) {
+    return <BrowseLoginLock scope="selection" />;
+  }
 
   /* ══════════ Desktop Layout ══════════ */
   if (isDesktop) {

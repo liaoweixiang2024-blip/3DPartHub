@@ -32,6 +32,7 @@ interface UserItem {
   mustChangePassword: boolean;
   canInvite: boolean;
   lastLoginAt: string | null;
+  lastActiveAt: string | null;
   createdAt: string;
   _count: { downloads: number; favorites: number };
 }
@@ -502,7 +503,7 @@ export default function UserAdminPage() {
                       {u.department ? <span>{u.department}</span> : null}
                       <span>下载 {u._count.downloads}</span>
                       <span>收藏 {u._count.favorites}</span>
-                      <span>活跃 {relativeTime(u.lastLoginAt)}</span>
+                      <span>活跃 {relativeTime(u.lastActiveAt ?? u.lastLoginAt)}</span>
                       <span>{new Date(u.createdAt).toLocaleDateString()}</span>
                     </div>
                   </div>

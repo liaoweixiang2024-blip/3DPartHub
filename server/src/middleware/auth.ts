@@ -6,6 +6,20 @@ import { prisma } from '../lib/prisma.js';
 
 const USER_CACHE_TTL = 60;
 
+// 最近活跃节流窗口：5 分钟内同一用户至多写一次 last_active_at。
+// 实现为单条带条件的 UPDATE（不匹配即空跑），对请求路径的开销可忽略。
+const LAST_ACTIVE_THROTTLE_MS = 5 * 60 * 1000;
+
+function touchUserActivity(userId: string) {
+  const threshold = new Date(Date.now() - LAST_ACTIVE_THROTTLE_MS);
+  prisma.user
+    .updateMany({
+      where: { id: userId, OR: [{ lastActiveAt: null }, { lastActiveAt: { lt: threshold } }] },
+      data: { lastActiveAt: new Date() },
+    })
+    .catch(() => {});
+}
+
 export interface AuthRequest extends Request {
   user?: TokenPayload;
 }
@@ -71,6 +85,7 @@ export async function getVerifiedRequestUser(
   );
   if (cached) {
     if (cached.disabled) return null; // 禁用账号一律视为未认证（改角色/禁用时管理员会清此缓存，最长 60s 兜底）
+    touchUserActivity(cached.id);
     return {
       payload: {
         userId: cached.id,
@@ -88,6 +103,7 @@ export async function getVerifiedRequestUser(
   if (!user) return null;
   if (user.disabled) return null;
 
+  touchUserActivity(user.id);
   await cacheSet(cacheKey, user, USER_CACHE_TTL).catch(() => {});
 
   return {

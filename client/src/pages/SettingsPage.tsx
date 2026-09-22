@@ -141,6 +141,7 @@ const CONTACT_PHONE_FORMAT_MESSAGE = '联系电话格式不正确，请填写中
 const DEFAULT_SETTINGS: SystemSettings = {
   require_login_download: false,
   require_login_browse: false,
+  require_login_selection: false,
   allow_register: true,
   require_invite_code: false,
   invite_max_active_per_user: 10,
@@ -768,6 +769,7 @@ const GROUPS: SettingGroup[] = [
     icon: 'lock',
     items: [
       { key: 'require_login_browse', label: '登录浏览', desc: '用户必须登录后才能浏览模型列表', type: 'switch' },
+      { key: 'require_login_selection', label: '登录浏览选型', desc: '用户必须登录后才能浏览选型页面', type: 'switch' },
       { key: 'require_login_download', label: '登录下载', desc: '用户必须登录后才能下载模型文件', type: 'switch' },
       {
         key: 'auth_modal_enabled',

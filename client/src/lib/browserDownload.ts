@@ -189,6 +189,24 @@ function sanitizeFileName(fileName: string) {
   return cleaned || 'download';
 }
 
+/** 跨 window 的异常对象不满足 instanceof DOMException，只能按 name 判断（分享取消等）。 */
+function isAbortErrorLike(error: unknown) {
+  return Boolean(error) && (error as { name?: string }).name === 'AbortError';
+}
+
+function formatFileSize(bytes: number) {
+  if (!Number.isFinite(bytes) || bytes <= 0) return '';
+  const units = ['B', 'KB', 'MB', 'GB'];
+  let value = bytes;
+  let unit = 0;
+  while (value >= 1024 && unit < units.length - 1) {
+    value /= 1024;
+    unit += 1;
+  }
+  const rounded = unit === 0 || value >= 10 ? Math.round(value) : Number(value.toFixed(1));
+  return `${rounded} ${units[unit]}`;
+}
+
 async function shareBlobFile(blob: Blob, fileName: string) {
   if (typeof File === 'undefined') return false;
   const file = new File([blob], sanitizeFileName(fileName), {
@@ -202,6 +220,107 @@ async function shareBlobFile(blob: Blob, fileName: string) {
   if (!canShareFiles) return false;
   await navigator.share(sharePayload);
   return true;
+}
+
+/**
+ * iOS 主屏 WebApp 内的分享面板只能在「聚焦窗口」里可靠弹出：旧实现先开浮层（浮层抢走焦点），
+ * 再从失焦的主窗口调用 navigator.share，会静默挂起（面板不弹、Promise 永不 settle），
+ * 表现为卡死在“请选择存储到文件…”提示页。此页把浮层本身渲染成保存/分享操作页，
+ * 分享调用改在该聚焦窗口内先自动尝试一次，失败/挂起时用户仍可点按钮手动触发（手势+聚焦，最可靠）。
+ */
+function buildShareTargetHtml(fileName: string, fileSize: number) {
+  const name = escapeHtml(fileName || 'download');
+  const size = escapeHtml(formatFileSize(fileSize));
+  const hint = escapeHtml(tDownload('browserDownload.chooseShareTarget', '请选择“存储到文件”或分享目标'));
+  const saveLabel = escapeHtml(tDownload('browserDownload.saveOrShare', '保存到文件 / 分享'));
+  const directLabel = escapeHtml(tDownload('browserDownload.directDownload', '直接下载'));
+  const failText = escapeHtml(tDownload('browserDownload.shareFailed', '无法打开分享面板，请点“直接下载”重试'));
+  const exitLabel = escapeHtml(tDownload('browserDownload.exit', '退出'));
+  return `<!doctype html><html lang="${currentDocumentLang()}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><title>${name}</title><style>body{margin:0;min-height:100vh;display:grid;place-items:center;background:#f7f8fa;color:#1d1b20;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}.exit{position:fixed;top:calc(env(safe-area-inset-top,0px) + 12px);left:12px;height:36px;border:0;border-radius:18px;background:#111827;color:#fff;padding:0 14px;font-size:14px;font-weight:600}.card{box-sizing:border-box;width:min(320px,calc(100vw - 48px));padding:24px 20px;text-align:center;background:#fff;border:1px solid rgba(0,0,0,.06);border-radius:20px;box-shadow:0 12px 32px rgba(17,24,39,.08)}.icon{width:56px;height:56px;margin:0 auto 12px;display:grid;place-items:center;border-radius:16px;background:#111827;color:#fff}.icon svg{width:26px;height:26px}.name{font-size:15px;font-weight:700;word-break:break-all}.size{margin-top:2px;font-size:13px;color:#6b7280}.hint{margin:14px 0 18px;font-size:13px;line-height:1.6;color:#6b7280}.btn{display:flex;width:100%;height:48px;align-items:center;justify-content:center;border:0;border-radius:14px;font-size:15px;font-weight:700}.btn.primary{background:#111827;color:#fff}.btn.ghost{margin-top:10px;background:transparent;border:1.5px solid rgba(17,24,39,.18);color:#374151}.fail{margin:12px 0 0;font-size:12px;line-height:1.5;color:#b91c1c}.fail[hidden]{display:none}</style></head><body><button class="exit" onclick="window.close()">${exitLabel}</button><div class="card"><div class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12"/><path d="m7 11 5 5 5-5"/><path d="M5 21h14"/></svg></div><div class="name">${name}</div>${size ? `<div class="size">${size}</div>` : ''}<p class="hint">${hint}</p><button class="btn primary" id="shareBtn" type="button">${saveLabel}</button><button class="btn ghost" id="directBtn" type="button">${directLabel}</button><p class="fail" id="shareFailHint" hidden>${failText}</p></div></body></html>`;
+}
+
+function presentShareTargetWindow(
+  win: NonNullable<PreparedDownloadWindow>,
+  blob: Blob,
+  blobUrl: string,
+  fileName: string,
+) {
+  try {
+    const doc = win.document;
+    doc.open();
+    doc.write(buildShareTargetHtml(fileName, blob.size));
+    doc.close();
+  } catch {
+    // Cross-context windows may not expose document writes; fall back to navigation download.
+    return false;
+  }
+
+  const shareFromWindow = async () => {
+    const realmFile = (win as unknown as { File?: typeof File }).File;
+    const file =
+      realmFile && typeof realmFile === 'function'
+        ? new realmFile([blob], fileName, { type: blob.type || 'application/octet-stream' })
+        : createShareFileFallback(blob, fileName);
+    if (!file) return false;
+    const targetNavigator = win.navigator;
+    if (!targetNavigator || typeof targetNavigator.share !== 'function') return false;
+    const sharePayload = { files: [file], title: file.name };
+    if (typeof targetNavigator.canShare === 'function' && !targetNavigator.canShare(sharePayload)) {
+      return false;
+    }
+    await targetNavigator.share(sharePayload);
+    return true;
+  };
+
+  const failHint = win.document.getElementById('shareFailHint');
+  win.document.getElementById('shareBtn')?.addEventListener('click', () => {
+    failHint?.setAttribute('hidden', '');
+    shareFromWindow()
+      .then((shared) => {
+        if (shared) {
+          closePreparedWindow(win);
+          return;
+        }
+        failHint?.removeAttribute('hidden');
+      })
+      .catch((error: unknown) => {
+        if (isAbortErrorLike(error)) return;
+        failHint?.removeAttribute('hidden');
+      });
+  });
+  win.document.getElementById('directBtn')?.addEventListener('click', () => {
+    // 优先 <a download>（Safari iOS 13+ 官方下载通道），失败再退回整窗导航到 blob:
+    let delivered = false;
+    try {
+      const anchor = win.document.createElement('a');
+      anchor.href = blobUrl;
+      anchor.download = fileName;
+      anchor.rel = 'noopener';
+      anchor.style.display = 'none';
+      win.document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+      delivered = true;
+    } catch {
+      delivered = false;
+    }
+    if (!delivered && !navigatePreparedWindowToBlob(win, blobUrl)) {
+      triggerBrowserDownload(blobUrl, fileName);
+    }
+  });
+
+  // 零点击优化：窗口聚焦时先自动拉起一次分享面板；挂起或失败也不阻塞，页面上按钮随时可点。
+  shareFromWindow()
+    .then((shared) => {
+      if (shared) closePreparedWindow(win);
+    })
+    .catch(() => {});
+  return true;
+}
+
+function createShareFileFallback(blob: Blob, fileName: string) {
+  if (typeof File === 'undefined') return null;
+  return new File([blob], fileName, { type: blob.type || 'application/octet-stream' });
 }
 
 function navigatePreparedWindowToBlob(win: PreparedDownloadWindow, blobUrl: string) {
@@ -265,24 +384,32 @@ export async function downloadBrowserBlob(
     return;
   }
 
+  const blobUrl = URL.createObjectURL(blob);
+  // iOS 主屏 WebApp：浮层已抢走焦点，分享必须改在浮层内进行，否则会静默挂起（见 buildShareTargetHtml 注释）。
+  if (
+    preparedWindow &&
+    !preparedWindow.closed &&
+    presentShareTargetWindow(preparedWindow, blob, blobUrl, safeFileName)
+  ) {
+    // 分享页自带「直接下载」兜底；blobUrl 交给用户操作，放宽回收时间。
+    window.setTimeout(() => URL.revokeObjectURL(blobUrl), 10 * 60_000);
+    return;
+  }
+
+  // 没有可用浮层（如 window.open 被拦截）：主窗口仍处于聚焦状态，直接分享后回退 <a download>。
   try {
-    updatePreparedWindow(
-      preparedWindow,
-      tDownload('browserDownload.chooseShareTarget', '请选择“存储到文件”或分享目标'),
-    );
     const shared = await shareBlobFile(blob, safeFileName);
     if (shared) {
-      closePreparedWindow(preparedWindow);
+      window.setTimeout(() => URL.revokeObjectURL(blobUrl), 60_000);
       return;
     }
   } catch (error) {
-    if (error instanceof DOMException && error.name === 'AbortError') {
-      closePreparedWindow(preparedWindow);
+    if (isAbortErrorLike(error)) {
+      window.setTimeout(() => URL.revokeObjectURL(blobUrl), 60_000);
       return;
     }
   }
 
-  const blobUrl = URL.createObjectURL(blob);
   if (!navigatePreparedWindowToBlob(preparedWindow, blobUrl)) {
     triggerBrowserDownload(blobUrl, safeFileName);
   }

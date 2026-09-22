@@ -304,8 +304,10 @@ requireIncludes('HomePage.tsx theme-controlled list loading', homePageSource, [
   'const activeHomeListLoadingMode = isDesktop ? desktopHomeListLoadingMode : mobileHomeListLoadingMode;',
   "const usesManualHomePagination = activeHomeListLoadingMode === 'pagination';",
   'useInfiniteModels(',
-  '{ manual: usesManualHomePagination }',
+  '{ manual: usesManualHomePagination, enabled: browseDataReady }',
   'setModelPageSize(usesManualHomePagination ? 1 : page);',
+  // 浏览门槛（require_login_browse）：未判定/被拦截时不发列表请求，匿名首访不闪 401 错误提示
+  'const browseDataReady = browseGateResolved && !browseBlocked;',
 ]);
 for (const [label, source] of [
   ['classic HomeDesktop.tsx configurable list loading', classicHomeTemplateSource],

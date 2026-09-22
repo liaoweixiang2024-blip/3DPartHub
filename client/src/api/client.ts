@@ -76,6 +76,22 @@ let failedQueue: Array<{
 }> = [];
 let refreshInProgress = false;
 
+// 会话失效的「提示 + 登出 + 跳登录页」全局只执行一次：
+// 并发请求同时吃 401 时（如开启浏览门槛后打开首页），不去重会叠一排「登录状态已失效」toast。
+let sessionExpiredHandled = false;
+
+function handleSessionExpiredOnce() {
+  if (sessionExpiredHandled) return;
+  sessionExpiredHandled = true;
+  notifyGlobalError(tToast('sessionExpired', 'Your session has expired. Please log in again'));
+  useAuthStore.getState().logout();
+  // 带上当前位置，登录后可回跳；已是 /login 则不再跳
+  if (!window.location.pathname.startsWith('/login')) {
+    const returnTo = encodeURIComponent(window.location.pathname + window.location.search);
+    window.location.replace(`/login?redirect=${returnTo}`);
+  }
+}
+
 function processQueue(error: unknown, token: string | null) {
   failedQueue.forEach((prom) => {
     if (error) {
@@ -121,6 +137,9 @@ client.interceptors.response.use(
   async (error) => {
     const originalRequest = error.config;
     const silentBackgroundRequest = isSilentBackgroundRequest(originalRequest);
+    // 进入处理器时的登录态：区分「会话真失效」（要提示+跳登录）与「本来就没登录」
+    // （开启浏览门槛时匿名访问公开接口吃 401，应静默、由页面级锁屏/登录引导承接）
+    const wasAuthenticated = useAuthStore.getState().isAuthenticated;
 
     // 统一改写 err.message 为简化后的友好文案（getErrorMessage 内含服务端长文规则）：
     // 页面里大量 `err instanceof Error ? err.message` 的写法不走 getErrorMessage，
@@ -157,15 +176,23 @@ client.interceptors.response.use(
           return Promise.reject(error);
         }
         // Only force logout if we're certain the session is gone (not during hydration)
-        const isAuthenticated = useAuthStore.getState().isAuthenticated;
-        if (isAuthenticated) {
-          notifyGlobalError(tToast('sessionExpired', 'Your session has expired. Please log in again'));
-          useAuthStore.getState().logout();
-          window.location.replace('/login');
+        if (wasAuthenticated) {
+          handleSessionExpiredOnce();
         }
       } else if (!isAuthEndpoint && !silentBackgroundRequest) {
         notifyGlobalError(error);
       }
+      return Promise.reject(error);
+    }
+
+    // 浏览门槛拦截（匿名访问开启了「需登录浏览」的公开接口）：无会话可刷新，
+    // 直接静默拒绝——不弹错误、不跳登录页，由页面级锁屏/登录引导（如首页 browseBlocked）承接
+    const respData = (error.response?.data ?? {}) as { code?: unknown; detail?: unknown };
+    const browseLoginRequired =
+      respData.code === 'LOGIN_REQUIRED_BROWSE' ||
+      respData.detail === '需要登录后才能浏览模型' ||
+      respData.detail === '需要登录后才能查看模型预览';
+    if (browseLoginRequired && !wasAuthenticated && useAuthStore.getState().hasHydrated) {
       return Promise.reject(error);
     }
 
@@ -205,10 +232,9 @@ client.interceptors.response.use(
         if (!newAccessToken) {
           // Refresh truly failed (auth rejection), logout
           processQueue(new Error('Session expired'), null);
-          if (useAuthStore.getState().hasHydrated) {
-            notifyGlobalError(tToast('sessionExpired', 'Your session has expired. Please log in again'));
-            useAuthStore.getState().logout();
-            window.location.replace('/login');
+          // 从未登录过的访客（如开启浏览门槛后的匿名首页访问）不弹「登录失效」、不强制跳登录页
+          if (useAuthStore.getState().hasHydrated && wasAuthenticated) {
+            handleSessionExpiredOnce();
           }
           return Promise.reject(new Error('Session expired'));
         }
@@ -230,9 +256,9 @@ client.interceptors.response.use(
       if (!useAuthStore.getState().hasHydrated) {
         return Promise.reject(refreshError);
       }
-      notifyGlobalError(tToast('sessionExpired', 'Your session has expired. Please log in again'));
-      useAuthStore.getState().logout();
-      window.location.replace('/login');
+      if (wasAuthenticated) {
+        handleSessionExpiredOnce();
+      }
       return Promise.reject(refreshError);
     } finally {
       refreshInProgress = false;

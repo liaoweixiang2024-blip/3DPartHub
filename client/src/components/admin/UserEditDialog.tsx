@@ -21,6 +21,7 @@ export interface AdminUserDetail {
   mustChangePassword: boolean;
   canInvite: boolean;
   lastLoginAt: string | null;
+  lastActiveAt?: string | null;
   createdAt: string;
   _count: { downloads: number; favorites: number };
 }
@@ -329,6 +330,7 @@ export default function UserEditDialog({
           <p className="text-[11px] text-on-surface-variant/60">
             下载 {user._count.downloads} · 收藏 {user._count.favorites} · 注册 {formatDate(user.createdAt)} · 最近登录{' '}
             {formatDate(user.lastLoginAt)}
+            {user.lastActiveAt ? ` · 最近活跃 ${formatDate(user.lastActiveAt)}` : ''}
           </p>
         </div>
 

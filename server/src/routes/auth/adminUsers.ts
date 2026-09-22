@@ -57,11 +57,13 @@ function nowSeconds(): number {
   return Math.floor(Date.now() / 1000);
 }
 
-function resolveOrderBy(sort: UserSort, order: 'asc' | 'desc'): Prisma.UserOrderByWithRelationInput {
-  if (sort === 'downloads') return { downloads: { _count: order } };
-  if (sort === 'favorites') return { favorites: { _count: order } };
-  if (sort === 'last_login') return { lastLoginAt: { sort: order, nulls: 'last' } };
-  return { createdAt: order };
+function resolveOrderBy(sort: UserSort, order: 'asc' | 'desc'): Prisma.UserOrderByWithRelationInput[] {
+  if (sort === 'downloads') return [{ downloads: { _count: order } }];
+  if (sort === 'favorites') return [{ favorites: { _count: order } }];
+  // 「最近活跃」按 lastActiveAt 优先、lastLoginAt 兜底（老用户在产生新活跃前 lastActiveAt 为 null）
+  if (sort === 'last_login')
+    return [{ lastActiveAt: { sort: order, nulls: 'last' } }, { lastLoginAt: { sort: order, nulls: 'last' } }];
+  return [{ createdAt: order }];
 }
 
 const userListItemSelect = {
@@ -74,6 +76,7 @@ const userListItemSelect = {
   department: true,
   disabled: true,
   lastLoginAt: true,
+  lastActiveAt: true,
   avatar: true,
   bio: true,
   mustChangePassword: true,
@@ -208,6 +211,7 @@ export function createAdminUsersRouter() {
           '收藏',
           '注册时间',
           '最近登录',
+          '最近活跃',
         ];
         const rows = users.map((u) => [
           u.username,
@@ -221,6 +225,7 @@ export function createAdminUsersRouter() {
           u._count.favorites,
           u.createdAt.toISOString(),
           u.lastLoginAt ? u.lastLoginAt.toISOString() : '',
+          u.lastActiveAt ? u.lastActiveAt.toISOString() : '',
         ]);
         const csv = [header, ...rows].map((r) => r.map(escapeCsvField).join(',')).join('\r\n');
         res.setHeader('Content-Type', 'text/csv; charset=utf-8');

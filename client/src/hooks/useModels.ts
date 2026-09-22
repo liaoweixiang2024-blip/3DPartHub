@@ -50,9 +50,10 @@ export function useInfiniteModels(
     sort?: string;
   },
   initialSize = 1,
-  options?: { manual?: boolean },
+  options?: { manual?: boolean; enabled?: boolean },
 ) {
   const manual = options?.manual === true;
+  const enabled = options?.enabled !== false;
   const requestedPage = params?.page || 1;
   const pageSize = params?.pageSize || 50;
   const search = params?.search || '';
@@ -62,6 +63,8 @@ export function useInfiniteModels(
   const sort = params?.sort || '';
 
   const getKey = (pageIndex: number, previousPageData: PaginatedResponse<ServerModelListItem> | null) => {
+    // enabled=false 时暂停请求（如首页浏览门槛未判定/被拦截，发出去只会吃 401）
+    if (!enabled) return null;
     if (manual && pageIndex > 0) return null;
     if (previousPageData && previousPageData.page >= previousPageData.totalPages) return null;
     const page = manual ? requestedPage : pageIndex + 1;

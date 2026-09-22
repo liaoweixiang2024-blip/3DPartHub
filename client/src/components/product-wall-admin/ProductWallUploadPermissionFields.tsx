@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import useSWR from 'swr';
 import client from '../../api/client';
-import { unwrapResponse } from '../../api/response';
 import { listProductWallUploadWhitelist, type ProductWallUploadWhitelistUser } from '../../api/productWall';
+import { unwrapResponse } from '../../api/response';
 import Icon from '../shared/Icon';
 
 const PRODUCT_WALL_UPLOAD_ROLE_OPTIONS: { value: string; label: string; hint?: string }[] = [

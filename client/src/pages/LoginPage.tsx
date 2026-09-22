@@ -62,7 +62,9 @@ export default function LoginPage() {
   const [apiError, setApiError] = useState('');
   const [rememberMe, setRememberMe] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
-  const from = (location.state as LoginLocationState | null)?.from || '/';
+  // 回跳来源优先级：路由 state.from > ?redirect= 查询参数（全局 401 拦截器跳转时携带）> 首页
+  const from =
+    (location.state as LoginLocationState | null)?.from || new URLSearchParams(location.search).get('redirect') || '/';
   const login = useAuthStore((s) => s.login);
   const [allowRegister, setAllowRegister] = useState(true);
   const isDesktop = useMediaQuery('(min-width: 768px)');

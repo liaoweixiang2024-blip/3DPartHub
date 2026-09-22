@@ -371,8 +371,10 @@ export function createAuthSessionRouter() {
       await clearLoginFailures(normalizedEmail);
       await clearLoginIpFailures(clientIp);
 
-      // 记录最近登录时间（best-effort，不阻塞登录）
-      prisma.user.update({ where: { id: user.id }, data: { lastLoginAt: new Date() } }).catch(() => {});
+      // 记录最近登录/活跃时间（best-effort，不阻塞登录）
+      prisma.user
+        .update({ where: { id: user.id }, data: { lastLoginAt: new Date(), lastActiveAt: new Date() } })
+        .catch(() => {});
 
       const payload = { userId: user.id, role: user.role };
       const accessToken = signAccessToken(payload);

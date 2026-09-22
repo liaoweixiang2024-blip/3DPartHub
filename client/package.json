@@ -1,8 +1,15 @@
 {
   "name": "3dparthub-client",
   "private": true,
-  "version": "4.8.0",
+  "version": "4.9.0",
   "type": "module",
+  "browserslist": [
+    "Edge >= 100",
+    "Chrome >= 100",
+    "Firefox >= 100",
+    "Safari >= 14",
+    "iOS >= 14"
+  ],
   "scripts": {
     "dev": "vite",
     "dev:local": "vite --host 127.0.0.1 --port 5173 --strictPort",

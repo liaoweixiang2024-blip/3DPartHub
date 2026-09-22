@@ -1,10 +1,11 @@
 import { AnimatePresence, motion } from 'framer-motion';
-import { useState, useEffect, lazy, Suspense, useCallback, useRef, type CSSProperties } from 'react';
+import { useState, useEffect, lazy, Suspense, useCallback, useRef, useMemo, type CSSProperties } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useParams, Link } from 'react-router-dom';
 import { getShareInfo, verifySharePassword, getShareDownloadUrl, type ShareInfo } from '../api/shares';
 import type { CameraPreset, ViewMode } from '../components/3d/ModelViewer';
 import { MATERIAL_PRESETS, type MaterialPresetKey } from '../components/3d/viewerControls';
+import { dispatchFitModel } from '../components/3d/viewerEvents';
 import { DEFAULT_VIEWER_TUNING, viewerTuningFromSettings, type ViewerTuning } from '../components/3d/viewerTuning';
 import BrandMark from '../components/shared/BrandMark';
 import Icon from '../components/shared/Icon';
@@ -130,9 +131,20 @@ export default function SharePage() {
     setClipDirection('x');
     setClipPosition(0);
     setClipInverted(false);
+    // 重置状态后把相机拉回模型包围盒（与详情页一致；默认相机即 'iso'，不派发事件的话 preset 不变、相机不会复位）
+    window.setTimeout(dispatchFitModel, 0);
   }, [initialPrefs.materialPreset, initialPrefs.showEdges]);
 
   const handleResetViewerTuning = useCallback(() => setViewerTuning(DEFAULT_VIEWER_TUNING), []);
+
+  // 模型预览走「凭分享令牌鉴权」的专用端点，而非 info.gltfUrl 直连 /static/models：
+  // 站点开启「需登录浏览」后静态模型对匿名请求 401，微信等未登录 webview 会加载失败；
+  // 分享页本就凭 token 授权预览，不应再叠加登录要求。密码分享把 access token 一起带上。
+  const modelPreviewUrl = useMemo(() => {
+    if (!token) return '';
+    const qs = shareAccessToken ? `?share_access_token=${encodeURIComponent(shareAccessToken)}` : '';
+    return `/api/shares/${token}/model-preview${qs}`;
+  }, [token, shareAccessToken]);
 
   useDocumentTitle(info ? `${info.modelName} - ${t('sharePage.preview')}` : t('sharePage.preview'));
 
@@ -513,7 +525,7 @@ export default function SharePage() {
               <CadViewerPanel
                 variant="desktop"
                 isAdmin={false}
-                modelUrl={info.gltfUrl}
+                modelUrl={modelPreviewUrl}
                 modelName={info.modelName}
                 modelFormat={info.format}
                 modelFileSize={formatSize(info.fileSize)}
@@ -567,7 +579,7 @@ export default function SharePage() {
                   <CadViewerPanel
                     variant="mobile"
                     isAdmin={false}
-                    modelUrl={info.gltfUrl}
+                    modelUrl={modelPreviewUrl}
                     modelName={info.modelName}
                     modelFormat={info.format}
                     modelFileSize={formatSize(info.fileSize)}

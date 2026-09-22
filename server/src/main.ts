@@ -293,7 +293,7 @@ app.use('/static', async (req, res, next) => {
     try {
       const verified = await getVerifiedRequestUser(req);
       if (!verified) {
-        res.status(401).json({ detail: '需要登录后才能查看模型预览' });
+        res.status(401).json({ detail: '需要登录后才能查看模型预览', code: 'LOGIN_REQUIRED_BROWSE' });
         return;
       }
       if (verified.mustChangePassword) {

@@ -292,6 +292,77 @@ export function createPublicSharesRouter() {
     });
   }
 
+  // 凭分享令牌流式返回 GLB 预览文件。
+  // 必要性：开启「需登录浏览」后 /static/models/* 对匿名请求 401，而查看器（three.js）裸 fetch
+  // 只能靠同源 cookie 通过——微信等第三方 webview 常无有效会话，导致分享预览报
+  // "Could not load ...: fetch for ... responded with 401"。走本端点纯凭分享令牌鉴权，
+  // 未登录环境（微信/隐私窗口）也能预览；权限位/密码/过期校验与 download/drawing 端点一致。
+  router.get('/api/shares/:token/model-preview', async (req: Request, res: Response) => {
+    const token = asSingleString(req.params.token);
+    if (!token) {
+      res.status(400).json({ detail: '分享参数无效' });
+      return;
+    }
+
+    const share = await prisma.shareLink.findUnique({
+      where: { token },
+      select: {
+        id: true,
+        modelId: true,
+        expiresAt: true,
+        allowPreview: true,
+        password: true,
+      },
+    });
+
+    if (!share) {
+      res.status(404).json({ detail: '分享链接不存在' });
+      return;
+    }
+
+    if (share.expiresAt && new Date() > share.expiresAt) {
+      res.status(410).json({ detail: '分享链接已过期', expired: true });
+      return;
+    }
+
+    if (!share.allowPreview) {
+      res.status(403).json({ detail: '此链接不允许预览' });
+      return;
+    }
+
+    if (!hasShareAccess(share.id, share.password, req.query.share_access_token)) {
+      res.status(403).json({ detail: '请输入正确的分享密码' });
+      return;
+    }
+
+    const model = await prisma.model.findUnique({
+      where: { id: share.modelId },
+      select: { id: true, gltfUrl: true },
+    });
+
+    // gltfUrl 形如 /static/models/<id>.glb（可能带 ?v= 版本参数）；限制在 static 根目录内的 .glb
+    const rawUrl = model?.gltfUrl?.split('?')[0] || '';
+    let previewPath: string | null = null;
+    if (rawUrl.startsWith('/static/') && rawUrl.endsWith('.glb')) {
+      const candidate = resolve(join(config.staticDir, rawUrl.slice('/static/'.length)));
+      const staticRoot = resolve(config.staticDir);
+      if (candidate.startsWith(`${staticRoot}${sep}`)) previewPath = candidate;
+    }
+    if (!model || !previewPath || !existsSync(previewPath)) {
+      res.status(404).json({ detail: '模型文件不存在' });
+      return;
+    }
+
+    sendAcceleratedFile(req, res, {
+      filePath: previewPath,
+      fileName: `${model.id}.glb`,
+      contentType: 'model/gltf-binary',
+      disposition: 'inline',
+      // 与 drawing 一致：预览不落浏览器缓存，密码/权限变更即时生效
+      cacheControl: 'private, no-store',
+    });
+  });
+
   // View a specific PDF drawing via share link
   router.get('/api/shares/:token/drawing/:drawingId', async (req: Request, res: Response) => {
     const token = asSingleString(req.params.token);

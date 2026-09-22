@@ -43,12 +43,12 @@ import { MobileDrawer } from '../components/home/MobileDrawer';
 import { ProductCard } from '../components/home/ProductCard';
 import { ProductCardMobile } from '../components/home/ProductCardMobile';
 import AuthModal from '../components/shared/AuthModal';
+import BrowseLoginLock from '../components/shared/BrowseLoginLock';
 import Icon from '../components/shared/Icon';
 import InfiniteLoadTrigger from '../components/shared/InfiniteLoadTrigger';
 import LoginConfirmDialog from '../components/shared/LoginConfirmDialog';
 import { PageTitle } from '../components/shared/PagePrimitives';
 import Pagination, { DEFAULT_PAGE_SIZE, normalizePageSize } from '../components/shared/Pagination';
-import { isAuthModalEnabled } from '../components/shared/ProtectedLink';
 import { PublicPageShell } from '../components/shared/PublicPageShell';
 import { useToast } from '../components/shared/Toast';
 import { useDocumentTitle } from '../hooks/useDocumentTitle';
@@ -73,7 +73,7 @@ import { cacheModelDetailTitle } from '../lib/modelDetailTitleCache';
 import {
   usePublicSettings,
   getCachedPublicSettings,
-  refreshSiteConfig,
+  getPublicSettingsSnapshot,
   getContactEmail,
   getContactPhone,
   getContactAddress,
@@ -156,7 +156,19 @@ export default function HomePage() {
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
   const user = useAuthStore((s) => s.user);
   const isAdmin = user?.role === 'ADMIN';
-  const [browseBlocked, setBrowseBlocked] = useState(false);
+  // 浏览门槛判定：有缓存的公开设置时同步初始化（避免匿名首访先发请求再吃 401）；
+  // 未判定前不发起会被拦截的列表/分类请求，杜绝闪一排「需要登录」提示
+  const initialBrowseGate = (() => {
+    const snapshot = getPublicSettingsSnapshot();
+    if (!snapshot || typeof snapshot.require_login_browse !== 'boolean') {
+      return { resolved: false, blocked: false };
+    }
+    const auth = useAuthStore.getState();
+    const blocked = snapshot.require_login_browse === true && auth.hasHydrated && !auth.isAuthenticated;
+    return { resolved: true, blocked };
+  })();
+  const [browseBlocked, setBrowseBlocked] = useState(initialBrowseGate.blocked);
+  const [browseGateResolved, setBrowseGateResolved] = useState(initialBrowseGate.resolved);
   const [restoreVisualLocked, setRestoreVisualLocked] = useState(() =>
     Boolean(initialHomeState?.restoreKey && getPendingHomeRestoreKey() === initialHomeState.restoreKey),
   );
@@ -168,17 +180,31 @@ export default function HomePage() {
   const [authDialogOpen, setAuthDialogOpen] = useState(false);
 
   useEffect(() => {
-    if (!isAuthenticated) {
-      getCachedPublicSettings()
-        .then((s) => {
-          if (s.require_login_browse) setBrowseBlocked(true);
-        })
-        .catch(() => {});
+    if (isAuthenticated) {
+      // 登录用户不受浏览门槛限制
+      setBrowseBlocked(false);
+      setBrowseGateResolved(true);
+      return;
     }
+    getCachedPublicSettings()
+      .then((s) => {
+        setBrowseBlocked(s.require_login_browse === true);
+        setBrowseGateResolved(true);
+      })
+      .catch(() => {
+        // 设置拉不到时按不限制处理，保证页面可用
+        setBrowseBlocked(false);
+        setBrowseGateResolved(true);
+      });
   }, [isAuthenticated]);
 
+  // 门槛未判定/被拦截时不发请求（发出去也只会 401）
+  const browseDataReady = browseGateResolved && !browseBlocked;
+
   // Fetch category tree (with counts from server)
-  const { data: categoryData, mutate: mutateCategories } = useSWR('/categories', () => categoriesApi.tree());
+  const { data: categoryData, mutate: mutateCategories } = useSWR(browseDataReady ? '/categories' : null, () =>
+    categoriesApi.tree(),
+  );
   const categories = useMemo(() => buildCategories(categoryData?.items || []), [categoryData]);
   const totalModelCount = useMemo(
     () => categoryData?.total ?? categories.reduce((sum, category) => sum + category.count, 0),
@@ -375,20 +401,6 @@ export default function HomePage() {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [loginPromptOpen, setLoginPromptOpen] = useState(false);
 
-  const openLoginEntry = useCallback(async () => {
-    let latestSettings = publicSettings;
-    try {
-      latestSettings = await refreshSiteConfig();
-    } catch {
-      latestSettings = publicSettings;
-    }
-    if (isAuthModalEnabled(latestSettings)) {
-      setAuthDialogOpen(true);
-      return;
-    }
-    navigate('/login', { state: { from: location.pathname } });
-  }, [location.pathname, navigate, publicSettings]);
-
   useEffect(() => {
     saveHomeSearchQuery(searchQuery);
   }, [searchQuery]);
@@ -426,7 +438,7 @@ export default function HomePage() {
       sort: sortBy,
     },
     usesManualHomePagination ? 1 : page,
-    { manual: usesManualHomePagination },
+    { manual: usesManualHomePagination, enabled: browseDataReady },
   );
 
   const handlePullRefresh = useCallback(async () => {
@@ -1061,24 +1073,8 @@ export default function HomePage() {
   }, [activeCategory, categories, t]);
 
   if (browseBlocked) {
-    return (
-      <div
-        className="flex flex-col items-center justify-center h-dvh bg-surface gap-6"
-        data-interface-theme={ThemePackage.manifest.key}
-      >
-        <Icon name="lock" size={64} className="text-on-surface-variant/30" />
-        <h2 className="text-xl font-bold text-on-surface">{t('protected.loginTitle')}</h2>
-        <p className="text-sm text-on-surface-variant">{t('home.browseLoginDescription')}</p>
-        <button
-          type="button"
-          onClick={openLoginEntry}
-          className="px-6 py-2.5 bg-primary-container text-on-primary rounded-lg text-sm font-medium hover:opacity-90"
-        >
-          {t('protected.goLogin')}
-        </button>
-        <AuthModal open={authDialogOpen} onClose={() => setAuthDialogOpen(false)} returnUrl={location.pathname} />
-      </div>
-    );
+    // 浏览门槛锁屏（模糊背景 + 与其他受保护页面一致的登录确认弹窗）
+    return <BrowseLoginLock />;
   }
 
   if (isDesktop) {

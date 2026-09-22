@@ -379,6 +379,7 @@ export function normalizeFooterLinksSetting(value: unknown): string {
 const SETTINGS_SCHEMA: SettingDef[] = [
   { key: 'require_login_download', defaultValue: false },
   { key: 'require_login_browse', defaultValue: false },
+  { key: 'require_login_selection', defaultValue: false },
   { key: 'allow_register', defaultValue: true },
   { key: 'auth_modal_enabled', defaultValue: true },
   { key: 'login_dialog_enabled', defaultValue: true },
@@ -868,6 +869,7 @@ const NUMERIC_KEYS = new Set([
 const BOOLEAN_KEYS = new Set([
   'require_login_download',
   'require_login_browse',
+  'require_login_selection',
   'allow_register',
   'auth_modal_enabled',
   'login_dialog_enabled',

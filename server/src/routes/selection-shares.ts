@@ -5,7 +5,6 @@ import { createLogger } from '../lib/logger.js';
 import { buildModelMatchMap } from '../lib/modelMatch.js';
 import { prisma } from '../lib/prisma.js';
 import { authMiddleware, AuthRequest } from '../middleware/auth.js';
-import { requireBrowseAccess } from '../middleware/browseAccess.js';
 
 const log = createLogger({ component: 'selection-shares' });
 
@@ -67,9 +66,10 @@ router.post('/api/selection-shares', authMiddleware, async (req: AuthRequest, re
 });
 
 // ========== Get selection share (public) ==========
+// 注意：分享详情不套 requireBrowseAccess——分享链接本身就凭 token 授权（与模型分享一致），
+// 叠加登录门槛会让开启「需登录浏览」的站点在微信等未登录环境里分享链接直接 401。
 
 router.get('/api/selection-shares/:token', async (req: Request, res: Response) => {
-  if (!(await requireBrowseAccess(req, res))) return;
   try {
     const shareToken = req.params.token as string;
 

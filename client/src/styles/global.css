@@ -81,6 +81,48 @@
   --color-outline: #a78b7d;
   --color-outline-variant: #584237;
 
+  /* Tailwind v4 默认调色板为 oklch()，旧版 Edge/Chrome(<111) 不支持会导致引用这些色的
+     工具类整体失效（按钮变黑等）。此处用 v3 同名 hex 覆盖项目实际用到的默认色，
+     配合 browserslist 触发的 color-mix/oklch 降级输出，保证旧浏览器颜色可用。 */
+  --color-amber-200: #fde68a;
+  --color-amber-400: #fbbf24;
+  --color-amber-500: #f59e0b;
+  --color-amber-600: #d97706;
+  --color-amber-700: #b45309;
+  --color-blue-400: #60a5fa;
+  --color-blue-500: #3b82f6;
+  --color-cyan-100: #cffafe;
+  --color-cyan-200: #a5f3fc;
+  --color-cyan-300: #67e8f9;
+  --color-cyan-400: #22d3ee;
+  --color-cyan-500: #06b6d4;
+  --color-emerald-400: #34d399;
+  --color-emerald-500: #10b981;
+  --color-emerald-600: #059669;
+  --color-green-500: #22c55e;
+  --color-green-600: #16a34a;
+  --color-indigo-500: #6366f1;
+  --color-neutral-800: #292524;
+  --color-orange-500: #f97316;
+  --color-pink-500: #ec4899;
+  --color-purple-500: #a855f7;
+  --color-purple-700: #7e22ce;
+  --color-red-400: #f87171;
+  --color-red-500: #ef4444;
+  --color-red-600: #dc2626;
+  --color-red-700: #b91c1c;
+  --color-slate-50: #f8fafc;
+  --color-slate-100: #f1f5f9;
+  --color-slate-200: #e2e8f0;
+  --color-slate-300: #cbd5e1;
+  --color-slate-500: #64748b;
+  --color-slate-600: #475569;
+  --color-slate-900: #0f172a;
+  --color-teal-400: #2dd4bf;
+  --color-teal-500: #14b8a6;
+  --color-yellow-500: #eab308;
+  --color-yellow-600: #ca8a04;
+
   --color-on-surface: #e3e2e6;
   --color-on-surface-variant: #e0c0b1;
   --color-on-background: #e3e2e6;

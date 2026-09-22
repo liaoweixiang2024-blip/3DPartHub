@@ -20,6 +20,7 @@ import {
   type ProductWallAdminListResponse,
   type ProductWallAdminStatusFilter,
 } from '../api/productWall';
+import CategoryFilterDropdown from '../components/product-wall-admin/CategoryFilterDropdown';
 import {
   errorMessage,
   productWallDownloadName,
@@ -27,7 +28,6 @@ import {
   PRODUCT_WALL_DEFAULT_KIND_KEY,
   type ProductWallCanvasMode,
 } from '../components/product-wall-admin/productWallAdminUtils';
-import CategoryFilterDropdown from '../components/product-wall-admin/CategoryFilterDropdown';
 import {
   ProductWallDeleteDialog,
   type DeleteDialogState,

@@ -9,6 +9,7 @@ const IMPORT_RESTORE_CONFIRM_VALUE = 'RESTORE_IMPORT';
 export interface SystemSettings {
   require_login_download: boolean;
   require_login_browse: boolean;
+  require_login_selection: boolean;
   allow_register: boolean;
   daily_download_limit: number;
   show_watermark: boolean;

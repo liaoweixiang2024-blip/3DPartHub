@@ -80,6 +80,53 @@ const PRODUCT_MODEL_HEADERS = ['型号编号', '型号', 'modelNo', 'modelno', '
 const PRODUCT_NAME_HEADERS = ['名称', '产品名称', 'name', 'Name'];
 const SELECTION_CATEGORY_GRID_COLUMNS = 'minmax(220px,1.4fr) minmax(120px,0.8fr) 92px 92px 80px 104px';
 
+// 解析批量导入的子零件文本：每行「零件名 型号 数量」，制表符（Excel 直接粘贴）、
+// 逗号或连续空格均可作分隔符；两列时第二列为纯数字按「型号 数量」、否则按「零件名 型号」；
+// 单列视为型号（数量 1）。返回解析结果与无法识别的行号（1 起）。
+function parseKitComponentLines(text: string): { items: SelectionComponent[]; badLines: number[] } {
+  const items: SelectionComponent[] = [];
+  const badLines: number[] = [];
+  text.split(/\r?\n/).forEach((rawLine, idx) => {
+    const line = rawLine.trim();
+    if (!line || line.startsWith('#')) return;
+    let tokens: string[];
+    if (line.includes('\t')) tokens = line.split('\t');
+    else if (line.includes(',')) tokens = line.split(',');
+    else if (/\s{2,}/.test(line)) tokens = line.split(/\s{2,}/);
+    else tokens = line.split(' ');
+    tokens = tokens.map((token) => token.trim()).filter(Boolean);
+    if (!tokens.length) return;
+
+    let name = '';
+    let modelNo = '';
+    let qty = 1;
+    if (tokens.length >= 3) {
+      const parsed = parseInt(tokens[2], 10);
+      if (!Number.isFinite(parsed) || parsed < 1) {
+        badLines.push(idx + 1);
+        return;
+      }
+      name = tokens[0];
+      modelNo = tokens[1];
+      qty = parsed;
+    } else if (tokens.length === 2) {
+      if (/^\d+$/.test(tokens[1])) {
+        modelNo = tokens[0];
+        name = tokens[0];
+        qty = parseInt(tokens[1], 10);
+      } else {
+        name = tokens[0];
+        modelNo = tokens[1];
+      }
+    } else {
+      modelNo = tokens[0];
+      name = tokens[0];
+    }
+    items.push({ name, modelNo, qty, specs: {} });
+  });
+  return { items, badLines };
+}
+
 // ========== Content ==========
 function Content() {
   const { toast } = useToast();
@@ -158,6 +205,9 @@ function Content() {
   const [productAssetUploading, setProductAssetUploading] = useState(false);
   const productAssetInputRef = useRef<HTMLInputElement | null>(null);
   const [showBatchModal, setShowBatchModal] = useState(false);
+  // 套件子零件批量导入（粘贴文本解析）
+  const [kitImportOpen, setKitImportOpen] = useState(false);
+  const [kitImportText, setKitImportText] = useState('');
   const [batchParsed, setBatchParsed] = useState<Array<{
     name: string;
     modelNo?: string;
@@ -2019,18 +2069,30 @@ function Content() {
                   <div className="mt-3 space-y-2">
                     <div className="flex items-center justify-between">
                       <span className="text-xs font-bold text-on-surface-variant">子零件清单</span>
-                      <button
-                        type="button"
-                        onClick={() =>
-                          setProdForm({
-                            ...prodForm,
-                            components: [...prodForm.components, { name: '', modelNo: '', qty: 1, specs: {} }],
-                          })
-                        }
-                        className="text-xs text-primary-container hover:underline"
-                      >
-                        + 添加子零件
-                      </button>
+                      <div className="flex items-center gap-3">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setKitImportText('');
+                            setKitImportOpen(true);
+                          }}
+                          className="text-xs text-primary-container hover:underline"
+                        >
+                          批量导入
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setProdForm({
+                              ...prodForm,
+                              components: [...prodForm.components, { name: '', modelNo: '', qty: 1, specs: {} }],
+                            })
+                          }
+                          className="text-xs text-primary-container hover:underline"
+                        >
+                          + 添加子零件
+                        </button>
+                      </div>
                     </div>
                     {prodForm.components.map((comp, i) => (
                       <div key={i} className="flex items-start gap-2 bg-surface-container-high/50 rounded-lg p-2">
@@ -2096,6 +2158,94 @@ function Content() {
                 className="px-4 py-2.5 sm:py-2 text-sm font-bold bg-primary-container text-on-primary rounded-lg sm:rounded hover:opacity-90 disabled:opacity-50"
               >
                 保存
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ===== Kit Components Batch Import Modal ===== */}
+      {kitImportOpen && (
+        <div
+          className="fixed inset-0 z-[340] bg-black/50 flex items-center justify-center p-3 sm:p-4"
+          onClick={() => setKitImportOpen(false)}
+        >
+          <div
+            className="w-full max-w-lg max-h-[86dvh] flex min-h-0 flex-col bg-surface-container-low rounded-2xl border border-outline-variant/20 p-4 sm:p-5 space-y-3 shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="shrink-0">
+              <h2 className="text-base font-bold text-on-surface">批量导入子零件</h2>
+              <p className="mt-1 text-xs text-on-surface-variant leading-relaxed">
+                每行一条，列之间用制表符（Excel 直接粘贴）、逗号或空格分隔：
+                <br />
+                「零件名 + 型号 + 数量」三列，或「型号 + 数量」两列，或仅「型号」（数量默认 1）
+              </p>
+            </div>
+            <textarea
+              value={kitImportText}
+              onChange={(e) => setKitImportText(e.target.value)}
+              rows={8}
+              spellCheck={false}
+              placeholder={'弯头接头\tPC4-M5\t2\nPC4-0.5\t4\nPC6-1'}
+              className="flex-1 min-h-32 w-full resize-none bg-surface-container-lowest text-on-surface text-sm rounded-lg px-3 py-2 border border-outline-variant/20 outline-none focus:border-primary-container font-mono"
+            />
+            {(() => {
+              const { items, badLines } = parseKitComponentLines(kitImportText);
+              return (
+                <div className="shrink-0 text-xs space-y-1">
+                  {items.length > 0 && (
+                    <p className="text-on-surface-variant">
+                      解析到 <span className="font-bold text-on-surface">{items.length}</span> 条子零件
+                      {items.length <= 5 ? (
+                        <span className="text-on-surface-variant/70">
+                          （{items.map((c) => `${c.modelNo || c.name}×${c.qty}`).join('、')}）
+                        </span>
+                      ) : null}
+                    </p>
+                  )}
+                  {badLines.length > 0 && (
+                    <p className="text-error/80">
+                      第 {badLines.join('、')} 行格式无法识别（数量需为正整数），这些行将被跳过
+                    </p>
+                  )}
+                </div>
+              );
+            })()}
+            <div className="shrink-0 flex items-center justify-end gap-2 pt-1 border-t border-outline-variant/10">
+              <button
+                type="button"
+                onClick={() => setKitImportOpen(false)}
+                className="px-4 py-2 text-sm text-on-surface-variant bg-surface-container-high/40 hover:bg-surface-container-high rounded-lg"
+              >
+                取消
+              </button>
+              {prodForm.components.length > 0 && (
+                <button
+                  type="button"
+                  disabled={parseKitComponentLines(kitImportText).items.length === 0}
+                  onClick={() => {
+                    setProdForm({ ...prodForm, components: parseKitComponentLines(kitImportText).items });
+                    setKitImportOpen(false);
+                  }}
+                  className="px-4 py-2 text-sm text-on-surface-variant bg-surface-container-high hover:bg-surface-container-high/80 rounded-lg disabled:opacity-50"
+                >
+                  替换现有清单
+                </button>
+              )}
+              <button
+                type="button"
+                disabled={parseKitComponentLines(kitImportText).items.length === 0}
+                onClick={() => {
+                  setProdForm({
+                    ...prodForm,
+                    components: [...prodForm.components, ...parseKitComponentLines(kitImportText).items],
+                  });
+                  setKitImportOpen(false);
+                }}
+                className="px-4 py-2 text-sm font-bold bg-primary-container text-on-primary rounded-lg hover:opacity-90 disabled:opacity-50"
+              >
+                追加导入
               </button>
             </div>
           </div>
