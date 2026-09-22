@@ -56,6 +56,7 @@ import { useAuthStore } from '../../stores/useAuthStore';
 import { useThemeStore } from '../../stores/useThemeStore';
 import { getInterfaceThemePackage } from '../../themes/interfaceThemes/registry';
 import BrandMark from './BrandMark';
+import { useBrowseGate } from './BrowseLoginLock';
 import Icon from './Icon';
 import { loadNotificationPanel, scheduleNotificationPanelPreload } from './preloadNotificationPanel';
 import { checkProtectedAccess } from './ProtectedLink';
@@ -1111,7 +1112,10 @@ function TopNavContent({ compact = false, onMenuToggle, source = 'standalone' }:
     </>
   );
 
-  const showMobileModelSearch = location.pathname === '/' || isModelDetailPath(location.pathname);
+  // 开启「登录浏览」且访客未登录时，首页/详情是模糊锁屏，搜索框没有可搜的内容，移动端直接隐藏
+  const browseGate = useBrowseGate('require_login_browse');
+  const showMobileModelSearch =
+    !browseGate.blocked && (location.pathname === '/' || isModelDetailPath(location.pathname));
 
   if (compact) {
     return (

@@ -439,6 +439,91 @@ router.get('/api/admin/downloads/stats', authMiddleware, async (req: AuthRequest
   }
 });
 
+// Admin download records with true pagination. The stats endpoint above only carries the latest
+// 20 rows for its summary; this endpoint lets the 下载记录 tab stream the full history page by page.
+router.get('/api/admin/downloads/records', authMiddleware, async (req: AuthRequest, res: Response) => {
+  if (!adminOnly(req, res)) return;
+  if (!prisma) {
+    res.status(503).json({ detail: 'DB unavailable' });
+    return;
+  }
+
+  try {
+    const search = String(req.query.search || '').trim();
+    const page = Math.max(1, Number.parseInt(String(req.query.page || '1'), 10) || 1);
+    const pageSize = Math.min(100, Math.max(10, Number.parseInt(String(req.query.page_size || '20'), 10) || 20));
+    const where = buildAdminDownloadSearchWhere(search);
+
+    const [total, rows] = await Promise.all([
+      prisma.download.count({ where }),
+      prisma.download.findMany({
+        where,
+        orderBy: { createdAt: 'desc' },
+        skip: (page - 1) * pageSize,
+        take: pageSize,
+        select: {
+          id: true,
+          modelId: true,
+          userId: true,
+          format: true,
+          fileSize: true,
+          createdAt: true,
+        },
+      }),
+    ]);
+
+    const userIds = Array.from(new Set(rows.map((download) => download.userId).filter(Boolean)));
+    const modelIds = Array.from(new Set(rows.map((download) => download.modelId).filter(Boolean)));
+    const [users, models] = await Promise.all([
+      userIds.length > 0
+        ? prisma.user.findMany({
+            where: { id: { in: userIds } },
+            select: { id: true, username: true, email: true },
+          })
+        : Promise.resolve([]),
+      modelIds.length > 0
+        ? prisma.model.findMany({
+            where: { id: { in: modelIds } },
+            select: {
+              id: true,
+              name: true,
+              originalName: true,
+              format: true,
+              thumbnailUrl: true,
+            },
+          })
+        : Promise.resolve([]),
+    ]);
+    const userMap = new Map(users.map((user) => [user.id, user]));
+    const modelMap = new Map(models.map((model) => [model.id, model]));
+
+    res.json({
+      items: rows.map((download) => {
+        const model = modelMap.get(download.modelId);
+        const user = userMap.get(download.userId);
+        return {
+          id: download.id,
+          model_id: download.modelId,
+          model_name: model?.name || model?.originalName || '已删除模型',
+          model_format: model?.format || download.format,
+          thumbnail_url: model?.thumbnailUrl || null,
+          user_id: download.userId,
+          username: user?.username || user?.email || '未知用户',
+          format: download.format,
+          file_size: download.fileSize,
+          created_at: download.createdAt,
+        };
+      }),
+      total,
+      page,
+      page_size: pageSize,
+    });
+  } catch (err) {
+    log.error({ err }, 'Admin download records error');
+    res.status(500).json({ detail: '获取下载记录失败' });
+  }
+});
+
 // Generate a short-lived one-time token for browser downloads.
 // This avoids placing the user's JWT in URLs, browser history, reverse-proxy logs, or Referer headers.
 router.post('/api/downloads/model-token', optionalAuthMiddleware, async (req: AuthRequest, res: Response) => {

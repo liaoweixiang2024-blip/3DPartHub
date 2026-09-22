@@ -76,6 +76,15 @@ export interface DownloadAdminStats {
 
 type DownloadHistoryResponse = DownloadHistoryItem[] | { data?: DownloadHistoryItem[] };
 
+export type DownloadAdminRecord = DownloadAdminStats['recentDownloads'][number];
+
+export interface DownloadAdminRecordsPage {
+  items: DownloadAdminRecord[];
+  total: number;
+  page: number;
+  page_size: number;
+}
+
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '/api';
 
 function apiUrl(path: string): string {
@@ -217,6 +226,13 @@ export const downloadsApi = {
       params: { search: search || undefined },
     });
     return unwrapApiData<DownloadAdminStats>(resp);
+  },
+
+  adminRecords: async (search = '', page = 1, pageSize = 20): Promise<DownloadAdminRecordsPage> => {
+    const { data: resp } = await client.get('/admin/downloads/records', {
+      params: { search: search || undefined, page, page_size: pageSize },
+    });
+    return unwrapApiData<DownloadAdminRecordsPage>(resp);
   },
 
   /** Download file via direct link (no blob in memory) */

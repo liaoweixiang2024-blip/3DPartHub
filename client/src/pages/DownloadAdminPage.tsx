@@ -1,7 +1,13 @@
-import { useState, type ReactNode } from 'react';
+import { useCallback, useState, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import useSWR from 'swr';
-import { downloadsApi, type DownloadAdminStats } from '../api/downloads';
+import useSWRInfinite, { type SWRInfiniteResponse } from 'swr/infinite';
+import {
+  downloadsApi,
+  type DownloadAdminRecord,
+  type DownloadAdminRecordsPage,
+  type DownloadAdminStats,
+} from '../api/downloads';
 import {
   AdminContentPanel,
   AdminEmptyState,
@@ -12,6 +18,7 @@ import {
 import { AdminPageShell } from '../components/shared/AdminPageShell';
 import AdminRefreshButton from '../components/shared/AdminRefreshButton';
 import Icon from '../components/shared/Icon';
+import InfiniteLoadTrigger from '../components/shared/InfiniteLoadTrigger';
 import ModelThumbnail from '../components/shared/ModelThumbnail';
 import ResponsiveSectionTabs from '../components/shared/ResponsiveSectionTabs';
 import SearchField from '../components/shared/SearchField';
@@ -24,6 +31,9 @@ type DownloadStatsTab = 'trend' | 'formats' | 'models' | 'recent';
 type SearchInputProps = ReturnType<typeof useImeSafeSearchInput>['inputProps'];
 
 const numberFormatter = new Intl.NumberFormat('zh-CN');
+
+/** 下载记录 tab 的无限滚动页大小（与服务端 /admin/downloads/records 上限一致） */
+const RECORDS_PAGE_SIZE = 20;
 
 const TAB_META: Record<DownloadStatsTab, { label: string; icon: string; title: string; description: string }> = {
   trend: {
@@ -420,60 +430,94 @@ function TopModelsPanel({ models }: { models: DownloadAdminStats['topModels'] })
   );
 }
 
-function RecentDownloadsPanel({ items }: { items: DownloadAdminStats['recentDownloads'] }) {
+function RecentDownloadRow({ item }: { item: DownloadAdminRecord }) {
   return (
-    <DownloadTabPanel tab="recent" badge={`${formatNumber(items.length)} 条记录`}>
-      {items.length === 0 ? (
-        <AdminEmptyState
-          icon="schedule"
-          title="暂无下载记录"
-          description="换个关键词试试，或等待用户下载模型。"
-          className="min-h-[280px] py-12"
-        />
-      ) : (
-        <div className="space-y-2">
-          {items.map((item) => (
-            <Link
-              key={item.id}
-              to={`/model/${item.model_id}`}
-              className="group flex items-center gap-3 rounded-xl border border-outline-variant/8 bg-surface px-3 py-3 transition-colors hover:bg-surface-container-high/55"
-            >
-              <div className="h-14 w-20 shrink-0 overflow-hidden rounded-lg bg-surface-container-high">
-                <ModelThumbnail src={item.thumbnail_url} alt="" className="h-full w-full object-cover" />
-              </div>
-              <div className="min-w-0 flex-1">
-                <p className="truncate text-sm font-semibold text-on-surface group-hover:text-primary-container">
-                  {item.model_name}
-                </p>
-                <div className="mt-1 flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 text-xs text-on-surface-variant">
-                  <span className="inline-flex min-w-0 items-center gap-1">
-                    <Icon name="person" size={12} />
-                    <span className="truncate">{item.username}</span>
-                  </span>
-                  <span className="inline-flex items-center gap-1">
-                    <Icon name="inventory_2" size={12} />
-                    {(item.format || item.model_format || 'model').toUpperCase()}
-                  </span>
-                  <span>{formatBytes(item.file_size)}</span>
-                </div>
-              </div>
-              <span className="shrink-0 text-xs tabular-nums text-on-surface-variant">
-                {formatDateTime(item.created_at)}
-              </span>
-            </Link>
-          ))}
+    <Link
+      to={`/model/${item.model_id}`}
+      className="group flex items-center gap-3 rounded-xl border border-outline-variant/8 bg-surface px-3 py-3 transition-colors hover:bg-surface-container-high/55"
+    >
+      <div className="h-14 w-20 shrink-0 overflow-hidden rounded-lg bg-surface-container-high">
+        <ModelThumbnail src={item.thumbnail_url} alt="" className="h-full w-full object-cover" />
+      </div>
+      <div className="min-w-0 flex-1">
+        <p className="truncate text-sm font-semibold text-on-surface group-hover:text-primary-container">
+          {item.model_name}
+        </p>
+        <div className="mt-1 flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 text-xs text-on-surface-variant">
+          <span className="inline-flex min-w-0 items-center gap-1">
+            <Icon name="person" size={12} />
+            <span className="truncate">{item.username}</span>
+          </span>
+          <span className="inline-flex items-center gap-1">
+            <Icon name="inventory_2" size={12} />
+            {(item.format || item.model_format || 'model').toUpperCase()}
+          </span>
+          <span>{formatBytes(item.file_size)}</span>
         </div>
-      )}
-    </DownloadTabPanel>
+      </div>
+      <span className="shrink-0 text-xs tabular-nums text-on-surface-variant">{formatDateTime(item.created_at)}</span>
+    </Link>
   );
 }
 
-function getTabCounts(data?: DownloadAdminStats): Record<DownloadStatsTab, number> {
+/**
+ * 下载记录（无限滚动）：stats 接口只带最近 20 条，这里走独立分页接口
+ * `/admin/downloads/records` 按页加载全部历史；加载触发器与分享/用户/工单管理共用
+ * InfiniteLoadTrigger（滚动到底自动加载 + 「加载更多」按钮）。
+ */
+function RecentDownloadsSection({ records }: { records: SWRInfiniteResponse<DownloadAdminRecordsPage, Error> }) {
+  const { data, error, isLoading, size, setSize } = records;
+  const pages = data ?? [];
+  const items = pages.flatMap((page) => page.items);
+  const total = pages[0]?.total ?? 0;
+  const hasMore = items.length < total;
+  const isLoadingMore = Boolean(size > 0 && !data?.[size - 1]);
+  const loadMore = useCallback(() => {
+    if (!hasMore || isLoadingMore) return;
+    setSize((current) => current + 1);
+  }, [hasMore, isLoadingMore, setSize]);
+
+  if (isLoading) {
+    return <AdminLoadingState variant="list" rows={5} label="下载记录加载中" className="min-h-[240px]" />;
+  }
+
+  if (error) {
+    return (
+      <AdminErrorState
+        title="下载记录加载失败"
+        description="请稍后重试，或使用右上角刷新按钮。"
+        onRetry={() => void records.mutate()}
+      />
+    );
+  }
+
+  if (items.length === 0) {
+    return (
+      <AdminEmptyState
+        icon="schedule"
+        title="暂无下载记录"
+        description="换个关键词试试，或等待用户下载模型。"
+        className="min-h-[280px] py-12"
+      />
+    );
+  }
+
+  return (
+    <div className="space-y-2">
+      {items.map((item) => (
+        <RecentDownloadRow key={item.id} item={item} />
+      ))}
+      {items.length > 0 && <InfiniteLoadTrigger hasMore={hasMore} isLoading={isLoadingMore} onLoadMore={loadMore} />}
+    </div>
+  );
+}
+
+function getTabCounts(data?: DownloadAdminStats, recordsTotal = 0): Record<DownloadStatsTab, number> {
   return {
     trend: data?.dailyStats.reduce((total, item) => total + item.downloads, 0) ?? 0,
     formats: data?.formatStats.length ?? 0,
     models: data?.topModels.length ?? 0,
-    recent: data?.recentDownloads.length ?? 0,
+    recent: recordsTotal || data?.summary.historyRecords || 0,
   };
 }
 
@@ -504,10 +548,21 @@ function Content() {
   } = useImeSafeSearchInput();
   const statsKey = `/admin/downloads/stats?search=${encodeURIComponent(search)}`;
   const { data, error, isLoading, mutate } = useSWR(statsKey, () => downloadsApi.adminStats(search));
+  // 下载记录走独立分页接口无限滚动加载（stats 里的 recentDownloads 只有最近 20 条）
+  const recordsQuery = useSWRInfinite<DownloadAdminRecordsPage, Error>(
+    (index, previousPageData) => {
+      if (previousPageData && previousPageData.page * previousPageData.page_size >= previousPageData.total) return null;
+      return ['admin-download-records', search, index] as const;
+    },
+    ([, searchKey, index]: readonly [string, string, number]) =>
+      downloadsApi.adminRecords(searchKey, index + 1, RECORDS_PAGE_SIZE),
+    { keepPreviousData: true },
+  );
+  const recordsTotal = recordsQuery.data?.[0]?.total ?? 0;
 
   async function handleRefresh() {
     try {
-      await mutate(undefined, { revalidate: true });
+      await Promise.all([mutate(undefined, { revalidate: true }), recordsQuery.mutate()]);
       toast('下载统计已刷新', 'success');
     } catch (err: unknown) {
       toast(getErrorMessage(err, '刷新下载统计失败'), 'error');
@@ -518,7 +573,7 @@ function Content() {
   const toolbar = (
     <DownloadAdminToolbar
       active={activeTab}
-      counts={getTabCounts(data)}
+      counts={getTabCounts(data, recordsTotal)}
       onTabChange={setActiveTab}
       searchInputProps={searchInputProps}
       searchInputValue={searchInputValue}
@@ -564,7 +619,11 @@ function Content() {
               {activeTab === 'trend' ? <TrendPanel data={data.dailyStats} /> : null}
               {activeTab === 'formats' ? <FormatPanel items={data.formatStats} /> : null}
               {activeTab === 'models' ? <TopModelsPanel models={data.topModels} /> : null}
-              {activeTab === 'recent' ? <RecentDownloadsPanel items={data.recentDownloads} /> : null}
+              {activeTab === 'recent' ? (
+                <DownloadTabPanel tab="recent" badge={`共 ${formatNumber(recordsTotal)} 条记录`}>
+                  <RecentDownloadsSection records={recordsQuery} />
+                </DownloadTabPanel>
+              ) : null}
             </div>
           </div>
         </div>

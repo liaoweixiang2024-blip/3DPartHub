@@ -1,13 +1,14 @@
 import { lazy, Suspense, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Routes, Route, Link, useLocation, Navigate, useNavigate } from 'react-router-dom';
+import { AdminPageHero } from './components/shared/AdminManagementPage';
 import { AdminLayout, AdminPageShell, PublicLayout } from './components/shared/AdminPageShell';
 import AuthModal from './components/shared/AuthModal';
 import ErrorBoundary from './components/shared/ErrorBoundary';
 import Icon from './components/shared/Icon';
 import MaintenanceGate from './components/shared/MaintenanceGate';
 import ModelDetailPageSkeleton from './components/shared/ModelDetailPageSkeleton';
-import PageRefreshFallback from './components/shared/PageRefreshFallback';
+import PageRefreshFallback, { PageRefreshIndicator } from './components/shared/PageRefreshFallback';
 import { checkProtectedAccess, isAuthModalEnabled } from './components/shared/ProtectedLink';
 import { useMediaQuery } from './layouts/hooks/useMediaQuery';
 import { useResolvedAdminInterfaceTheme, useResolvedPublicInterfaceTheme } from './lib/interfaceThemePreference';
@@ -101,7 +102,55 @@ const SelectionSharePage = lazy(loadSelectionSharePage);
 const CategoryNavPage = lazy(loadCategoryNavPage);
 const CategoryNavAdminPage = lazy(loadCategoryNavAdminPage);
 
+/**
+ * 懒加载路由首次挂起期间可稳定显示的页面标题（与各页面 hero 标题逐字一致，
+ * 避免移动端切换页面时「标题区块消失再出现」的闪变）。未收录的路径退回通用加载态。
+ */
+const ROUTE_FALLBACK_TITLE_KEYS: Record<string, string> = {
+  '/profile': 'profile.title',
+  '/favorites': 'favorites.title',
+  '/downloads': 'downloads.title',
+  '/my-shares': 'myShares.title',
+  '/support': 'support.title',
+  '/my-tickets': 'myTickets.title',
+  '/my-inquiries': 'myInquiries.title',
+  '/notifications': 'notificationsPage.title',
+  '/projects': 'projects.title',
+  '/admin/product-wall': 'productWall.management.title',
+};
+
+// 后台页面标题为页面内硬编码中文，这里保持同样文案
+const ROUTE_FALLBACK_TITLE_LITERALS: Record<string, string> = {
+  '/admin/models': '模型管理',
+  '/admin/categories': '分类管理',
+  '/admin/users': '用户管理',
+  '/admin/shares': '分享管理',
+  '/admin/downloads': '下载统计',
+  '/admin/tickets': '工单处理',
+  '/admin/inquiries': '询价处理工作台',
+  '/admin/selections': '选型管理',
+  '/admin/audit': '操作日志',
+  '/admin/settings': '系统设置',
+};
+
+function RoutePageSkeleton({ title, standalone = false }: { title: string; standalone?: boolean }) {
+  return (
+    <div
+      className={
+        standalone ? 'flex min-h-dvh flex-col bg-surface-dim' : 'flex min-h-full flex-1 flex-col bg-surface-dim'
+      }
+      data-page-refresh-fallback
+    >
+      <AdminPageHero title={title} />
+      <div className="mt-4 flex min-h-[240px] flex-1 items-start justify-center pt-16">
+        <PageRefreshIndicator />
+      </div>
+    </div>
+  );
+}
+
 function RouteFallback({ standalone = false }: { standalone?: boolean }) {
+  const { t } = useTranslation();
   const location = useLocation();
   const isAdmin = useAuthStore((state) => state.user?.role === 'ADMIN');
 
@@ -111,6 +160,11 @@ function RouteFallback({ standalone = false }: { standalone?: boolean }) {
     const modelTitle = routeState?.modelName?.trim() || getCachedModelDetailTitle(modelId);
     return <ModelDetailPageSkeleton modelTitle={modelTitle} isAdmin={isAdmin} />;
   }
+
+  const titleKey = ROUTE_FALLBACK_TITLE_KEYS[location.pathname];
+  const titleLiteral = ROUTE_FALLBACK_TITLE_LITERALS[location.pathname];
+  if (titleKey) return <RoutePageSkeleton title={t(titleKey)} standalone={standalone} />;
+  if (titleLiteral) return <RoutePageSkeleton title={titleLiteral} standalone={standalone} />;
 
   return <PageRefreshFallback standalone={standalone} />;
 }
