@@ -152,8 +152,12 @@ export default defineConfig({
       },
     },
     // The 3D viewer intentionally keeps three.js in a lazy route chunk.
-    // It is large by nature, but no longer affects the initial app bundle.
+    // It is large by nature, but no longer affects the initial bundle.
     chunkSizeWarningLimit: 1200,
+    // 全部 CSS 打进单个入口文件：分包 CSS（如 app-shared 里的标题卡样式）会在首帧
+    // 绘制之后才生效，造成移动端「标题先裸文本、后变卡片」的 FOUC 跳动。
+    // 合并后入口多 ~50KB CSS（gzip 后更小），换来首帧样式完整。
+    cssCodeSplit: false,
   },
   optimizeDeps: {
     exclude: ['occt-import-js'],
@@ -173,6 +177,28 @@ export default defineConfig({
         changeOrigin: true,
       },
       // PWA manifest 由 API 按后台设置动态生成（nginx 同样把 /site.webmanifest 代理到 API）
+      '/site.webmanifest': {
+        target: devProxyTarget,
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/site\.webmanifest$/, '/api/settings/site-manifest'),
+      },
+    },
+  },
+  // vite preview（本地预览生产构建）与 dev 同源代理，保证 /api、/static 可用
+  preview: {
+    proxy: {
+      '/api': {
+        target: devProxyTarget,
+        changeOrigin: true,
+      },
+      '/static': {
+        target: devProxyTarget,
+        changeOrigin: true,
+      },
+      '/uploads': {
+        target: devProxyTarget,
+        changeOrigin: true,
+      },
       '/site.webmanifest': {
         target: devProxyTarget,
         changeOrigin: true,

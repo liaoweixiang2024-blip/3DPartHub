@@ -153,7 +153,11 @@ function RoutePageSkeleton({
   return (
     <div
       className={
-        standalone ? 'flex min-h-dvh flex-col bg-surface-dim' : 'flex min-h-full flex-1 flex-col bg-surface-dim'
+        // app-page：主题把 hero 卡片的 CSS 变量（--app-page-hero-surface 等）定义在
+        // .app-page 祖先上，缺了它会渲染成无背景的裸文本（靠左上角）再跳成卡片。
+        standalone
+          ? 'app-page flex min-h-dvh flex-col bg-surface-dim'
+          : 'app-page flex min-h-full flex-1 flex-col bg-surface-dim'
       }
       data-page-refresh-fallback
     >

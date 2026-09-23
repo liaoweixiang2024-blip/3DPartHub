@@ -1142,7 +1142,8 @@ function MobileContent() {
   );
 
   return (
-    <>
+    /* app-page：主题把 hero 卡片的 CSS 变量定义在 .app-page 祖先上，缺了标题卡会变裸文本 */
+    <div className="app-page flex min-h-full flex-col">
       {/* hero 放在 PageBody（带进场动画）之外：标题卡与其他管理页一致保持静止，避免切入时整块上滑抖动 */}
       <AdminPageHero title={t('profile.title')} description={t('profile.description')} />
       <PageBody className="mt-4 pb-20 space-y-4">
@@ -1394,7 +1395,7 @@ function MobileContent() {
           currentEmail={user?.email || ''}
         />
       </PageBody>
-    </>
+    </div>
   );
 }
 
