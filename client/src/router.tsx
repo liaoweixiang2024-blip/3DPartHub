@@ -123,7 +123,7 @@ const ROUTE_FALLBACK_COPY: Record<string, RouteFallbackCopy> = {
   '/my-tickets': { titleKey: 'myTickets.title', descriptionKey: 'myTickets.description' },
   '/my-inquiries': { titleKey: 'myInquiries.title', descriptionKey: 'myInquiries.description' },
   '/notifications': { titleKey: 'notificationsPage.title', descriptionKey: 'notificationsPage.description' },
-  '/projects': { titleKey: 'projects.title' },
+  '/projects': { titleKey: 'projects.title', descriptionKey: 'projects.pageDescription' },
   '/admin/product-wall': {
     titleKey: 'productWall.management.title',
     descriptionKey: 'productWall.management.pageDescription',
@@ -141,31 +141,23 @@ const ROUTE_FALLBACK_COPY: Record<string, RouteFallbackCopy> = {
   '/admin/settings': { title: '系统设置', description: '配置平台的全局行为和访问策略' },
 };
 
-function RoutePageSkeleton({
-  title,
-  description,
-  standalone = false,
-}: {
-  title: string;
-  description?: string;
-  standalone?: boolean;
-}) {
+function RoutePageSkeleton({ title, description }: { title: string; description?: string }) {
   return (
-    <div
-      className={
+    // AdminPageShell：骨架与真实页面共用同一套容器 padding（Layout 内只渲染内边距层），
+    // 否则页面挂载时 hero 会被 shell 的 py-4 整体下推 ~16px，造成标题卡跳动。
+    <AdminPageShell>
+      <div
         // app-page：主题把 hero 卡片的 CSS 变量（--app-page-hero-surface 等）定义在
         // .app-page 祖先上，缺了它会渲染成无背景的裸文本（靠左上角）再跳成卡片。
-        standalone
-          ? 'app-page flex min-h-dvh flex-col bg-surface-dim'
-          : 'app-page flex min-h-full flex-1 flex-col bg-surface-dim'
-      }
-      data-page-refresh-fallback
-    >
-      <AdminPageHero title={title} description={description} />
-      <div className="mt-4 flex min-h-[240px] flex-1 items-start justify-center pt-16">
-        <PageRefreshIndicator />
+        className="app-page flex min-h-full flex-1 flex-col"
+        data-page-refresh-fallback
+      >
+        <AdminPageHero title={title} description={description} />
+        <div className="mt-4 flex min-h-[240px] flex-1 items-start justify-center pt-16">
+          <PageRefreshIndicator />
+        </div>
       </div>
-    </div>
+    </AdminPageShell>
   );
 }
 
@@ -185,7 +177,7 @@ function RouteFallback({ standalone = false }: { standalone?: boolean }) {
   if (copy) {
     const title = copy.titleKey ? t(copy.titleKey) : copy.title || '';
     const description = copy.descriptionKey ? t(copy.descriptionKey) : copy.description;
-    return <RoutePageSkeleton title={title} description={description} standalone={standalone} />;
+    return <RoutePageSkeleton title={title} description={description} />;
   }
 
   return <PageRefreshFallback standalone={standalone} />;

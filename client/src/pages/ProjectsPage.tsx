@@ -4,11 +4,11 @@ import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router-dom';
 import useSWR from 'swr';
 import { projectApi, type Project } from '../api/projects';
+import { AdminPageHero } from '../components/shared/AdminManagementPage';
 import { AdminPageShell } from '../components/shared/AdminPageShell';
 import Icon from '../components/shared/Icon';
 import InfiniteLoadTrigger from '../components/shared/InfiniteLoadTrigger';
 import LoginConfirmDialog from '../components/shared/LoginConfirmDialog';
-import { PageHeader } from '../components/shared/PagePrimitives';
 import { PageRefreshIndicator } from '../components/shared/PageRefreshFallback';
 import { useToast } from '../components/shared/Toast';
 import { useDocumentTitle } from '../hooks/useDocumentTitle';
@@ -149,113 +149,110 @@ export default function ProjectsPage() {
   }
 
   return (
-    <AdminPageShell mobileContentClassName="p-4 pb-20">
-      <div className="max-w-6xl mx-auto">
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between mb-6 border-b border-surface-container-low pb-4">
-          <div className="min-w-0">
-            <div className="flex items-center gap-2 text-sm mb-2 overflow-x-auto scrollbar-hidden">
-              <Link to="/" className="text-on-surface-variant hover:text-on-surface">
-                {t('projects.home')}
-              </Link>
-              <Icon name="chevron_right" size={12} className="text-on-surface-variant/40" />
-              <span className="text-primary font-medium">{t('projects.projectSpace')}</span>
+    <AdminPageShell>
+      <div className="app-page flex min-h-full flex-col">
+        {/* 标准标题卡（与其他管理页一致）；app-page 祖先类提供主题卡片变量 */}
+        <AdminPageHero
+          title={t('projects.title')}
+          description={t('projects.pageDescription')}
+          actions={
+            <button
+              onClick={() => setShowCreate(true)}
+              className="bg-primary-container text-on-primary rounded-sm px-4 py-2 text-sm font-medium hover:opacity-90 flex items-center gap-2"
+            >
+              <Icon name="add" size={20} />
+              {t('projects.createProject')}
+            </button>
+          }
+        />
+
+        <div className="mt-4 max-w-6xl mx-auto w-full">
+          {!projects ? (
+            <ProjectsLoadingGrid />
+          ) : projectList.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-20 gap-4">
+              <Icon name="folder_off" size={56} className="text-on-surface-variant/30" />
+              <p className="text-on-surface-variant">{t('projects.noProjects')}</p>
+              <button onClick={() => setShowCreate(true)} className="text-primary hover:underline text-sm">
+                {t('projects.createFirst')}
+              </button>
             </div>
-            <PageHeader title={t('projects.title')} />
-          </div>
-          <button
-            onClick={() => setShowCreate(true)}
-            className="bg-primary-container text-on-primary rounded-sm px-4 py-2 text-sm font-medium hover:opacity-90 flex items-center gap-2"
-          >
-            <Icon name="add" size={20} />
-            {t('projects.createProject')}
-          </button>
+          ) : (
+            <>
+              <div className={`grid gap-4 ${isDesktop ? 'grid-cols-3' : 'grid-cols-1 sm:grid-cols-2'}`}>
+                {visibleProjects.map((p) => (
+                  <motion.div key={p.id} variants={listItemMotion} initial="initial" animate="animate">
+                    <ProjectCard project={p} onDelete={handleDelete} />
+                  </motion.div>
+                ))}
+              </div>
+              <InfiniteLoadTrigger hasMore={hasMore} isLoading={false} onLoadMore={loadMore} />
+            </>
+          )}
         </div>
 
-        {!projects ? (
-          <ProjectsLoadingGrid />
-        ) : projectList.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-20 gap-4">
-            <Icon name="folder_off" size={56} className="text-on-surface-variant/30" />
-            <p className="text-on-surface-variant">{t('projects.noProjects')}</p>
-            <button onClick={() => setShowCreate(true)} className="text-primary hover:underline text-sm">
-              {t('projects.createFirst')}
-            </button>
-          </div>
-        ) : (
-          <>
-            <div className={`grid gap-4 ${isDesktop ? 'grid-cols-3' : 'grid-cols-1 sm:grid-cols-2'}`}>
-              {visibleProjects.map((p) => (
-                <motion.div key={p.id} variants={listItemMotion} initial="initial" animate="animate">
-                  <ProjectCard project={p} onDelete={handleDelete} />
-                </motion.div>
-              ))}
-            </div>
-            <InfiniteLoadTrigger hasMore={hasMore} isLoading={false} onLoadMore={loadMore} />
-          </>
-        )}
-      </div>
-
-      {/* Create project modal */}
-      <AnimatePresence>
-        {showCreate && (
-          <motion.div
-            variants={overlayMotion}
-            initial="initial"
-            animate="animate"
-            exit="exit"
-            className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/60 backdrop-blur-sm p-3 sm:p-4"
-            role="dialog"
-            aria-modal="true"
-            onClick={() => setShowCreate(false)}
-          >
+        {/* Create project modal */}
+        <AnimatePresence>
+          {showCreate && (
             <motion.div
-              variants={isDesktop ? dialogPanelMotion : bottomSheetMotion}
+              variants={overlayMotion}
               initial="initial"
               animate="animate"
               exit="exit"
-              className="bg-surface-container-low rounded-t-lg sm:rounded-lg w-full max-w-md p-4 sm:p-6 shadow-2xl border border-outline-variant/20 max-h-[calc(100dvh-1.5rem)] overflow-y-auto"
-              onClick={(e) => e.stopPropagation()}
+              className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/60 backdrop-blur-sm p-3 sm:p-4"
+              role="dialog"
+              aria-modal="true"
+              onClick={() => setShowCreate(false)}
             >
-              <h2 className="text-lg font-headline font-bold text-on-surface mb-4">{t('projects.createProject')}</h2>
-              <div className="space-y-4">
-                <div>
-                  <label className="block text-xs text-on-surface-variant mb-1">{t('projects.nameRequired')}</label>
-                  <input
-                    value={newName}
-                    onChange={(e) => setNewName(e.target.value)}
-                    className="w-full bg-surface-container-lowest text-on-surface rounded-sm px-3 py-2 border border-outline-variant/30 outline-none focus:border-primary"
-                    placeholder={t('projects.namePlaceholder')}
-                  />
+              <motion.div
+                variants={isDesktop ? dialogPanelMotion : bottomSheetMotion}
+                initial="initial"
+                animate="animate"
+                exit="exit"
+                className="bg-surface-container-low rounded-t-lg sm:rounded-lg w-full max-w-md p-4 sm:p-6 shadow-2xl border border-outline-variant/20 max-h-[calc(100dvh-1.5rem)] overflow-y-auto"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <h2 className="text-lg font-headline font-bold text-on-surface mb-4">{t('projects.createProject')}</h2>
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-xs text-on-surface-variant mb-1">{t('projects.nameRequired')}</label>
+                    <input
+                      value={newName}
+                      onChange={(e) => setNewName(e.target.value)}
+                      className="w-full bg-surface-container-lowest text-on-surface rounded-sm px-3 py-2 border border-outline-variant/30 outline-none focus:border-primary"
+                      placeholder={t('projects.namePlaceholder')}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-on-surface-variant mb-1">{t('projects.description')}</label>
+                    <textarea
+                      value={newDesc}
+                      onChange={(e) => setNewDesc(e.target.value)}
+                      className="w-full bg-surface-container-lowest text-on-surface rounded-sm px-3 py-2 border border-outline-variant/30 outline-none focus:border-primary resize-none h-20"
+                      placeholder={t('projects.projectDescriptionPlaceholder')}
+                    />
+                  </div>
+                  <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-3">
+                    <button
+                      onClick={() => setShowCreate(false)}
+                      className="px-4 py-2 text-sm text-on-surface-variant hover:text-on-surface"
+                    >
+                      {t('common.cancel')}
+                    </button>
+                    <button
+                      onClick={handleCreate}
+                      disabled={!newName.trim()}
+                      className="bg-primary-container text-on-primary rounded-sm px-4 py-2 text-sm font-medium hover:opacity-90 disabled:opacity-50"
+                    >
+                      {t('projects.create')}
+                    </button>
+                  </div>
                 </div>
-                <div>
-                  <label className="block text-xs text-on-surface-variant mb-1">{t('projects.description')}</label>
-                  <textarea
-                    value={newDesc}
-                    onChange={(e) => setNewDesc(e.target.value)}
-                    className="w-full bg-surface-container-lowest text-on-surface rounded-sm px-3 py-2 border border-outline-variant/30 outline-none focus:border-primary resize-none h-20"
-                    placeholder={t('projects.projectDescriptionPlaceholder')}
-                  />
-                </div>
-                <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-3">
-                  <button
-                    onClick={() => setShowCreate(false)}
-                    className="px-4 py-2 text-sm text-on-surface-variant hover:text-on-surface"
-                  >
-                    {t('common.cancel')}
-                  </button>
-                  <button
-                    onClick={handleCreate}
-                    disabled={!newName.trim()}
-                    className="bg-primary-container text-on-primary rounded-sm px-4 py-2 text-sm font-medium hover:opacity-90 disabled:opacity-50"
-                  >
-                    {t('projects.create')}
-                  </button>
-                </div>
-              </div>
+              </motion.div>
             </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+          )}
+        </AnimatePresence>
+      </div>
     </AdminPageShell>
   );
 }

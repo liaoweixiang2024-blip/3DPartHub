@@ -1,7 +1,7 @@
 {
   "name": "3dparthub-client",
   "private": true,
-  "version": "4.9.3",
+  "version": "4.9.4",
   "type": "module",
   "browserslist": [
     "Edge >= 100",

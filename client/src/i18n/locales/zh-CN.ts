@@ -1628,6 +1628,7 @@ export const zhCN: { translation: TranslationMap } = {
       createFailed: '创建失败',
       created: '项目已创建',
       createProject: '新建项目',
+      pageDescription: '按项目归组管理模型与图纸，便于批量维护和交付',
       deleteFailed: '删除失败',
       deleteProject: '删除项目',
       deleted: '项目已删除',

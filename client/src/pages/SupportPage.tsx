@@ -482,7 +482,9 @@ function MobileContent() {
       meta={t('support.meta')}
       description={t('support.compactDescription')}
       actions={<SupportHeaderAction compact />}
-      className="app-public-tool-page app-public-tool-page-support px-4 py-4 pb-20"
+      // 不再自叠 px-4/py-4：AdminPageShell 的内边距已提供，双重 padding 会把标题卡
+      // 压到比其他页面低 16px（切换骨架时产生跳动）
+      className="app-public-tool-page app-public-tool-page-support"
       contentClassName="space-y-5"
     >
       {ctx && <ContextCard ctx={ctx} />}
@@ -587,6 +589,7 @@ export default function SupportPage() {
   const isDesktop = useMediaQuery('(min-width: 768px)');
 
   return (
-    <AdminPageShell mobileContentClassName="p-0">{isDesktop ? <DesktopContent /> : <MobileContent />}</AdminPageShell>
+    // mobileContentClassName 不再 p-0：与移动端其他管理页共用 shell 的标准内边距
+    <AdminPageShell>{isDesktop ? <DesktopContent /> : <MobileContent />}</AdminPageShell>
   );
 }

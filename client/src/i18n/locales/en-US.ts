@@ -1639,6 +1639,7 @@ export const enUS: { translation: TranslationMap } = {
       createFailed: 'Create failed',
       created: 'Project created',
       createProject: 'New project',
+      pageDescription: 'Group models and drawings by project for batch maintenance and delivery',
       deleteFailed: 'Delete failed',
       deleteProject: 'Delete project',
       deleted: 'Project deleted',
