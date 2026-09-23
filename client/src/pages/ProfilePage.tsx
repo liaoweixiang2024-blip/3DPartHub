@@ -1142,247 +1142,259 @@ function MobileContent() {
   );
 
   return (
-    <PageBody className="pb-20 space-y-4">
+    <>
+      {/* hero 放在 PageBody（带进场动画）之外：标题卡与其他管理页一致保持静止，避免切入时整块上滑抖动 */}
       <AdminPageHero title={t('profile.title')} description={t('profile.description')} />
-
-      {/* Avatar + basic info */}
-      <div className="flex items-center gap-4 rounded-lg bg-surface-container-high p-4">
-        <input ref={avatarInputRef} type="file" className="hidden" accept="image/*" onChange={handleAvatarChange} />
-        <div onClick={() => avatarInputRef.current?.click()} className="relative group cursor-pointer shrink-0">
-          <div className="h-14 w-14 rounded-full bg-surface-container-lowest flex items-center justify-center">
-            {user?.avatar ? (
-              <SafeImage
-                src={user.avatar}
-                alt=""
-                className="w-full h-full rounded-full object-cover"
-                fallbackIcon="person"
-              />
-            ) : (
-              <Icon name="person" size={32} className="text-on-surface-variant/40" />
+      <PageBody className="mt-4 pb-20 space-y-4">
+        {/* Avatar + basic info */}
+        <div className="flex items-center gap-4 rounded-lg bg-surface-container-high p-4">
+          <input ref={avatarInputRef} type="file" className="hidden" accept="image/*" onChange={handleAvatarChange} />
+          <div onClick={() => avatarInputRef.current?.click()} className="relative group cursor-pointer shrink-0">
+            <div className="h-14 w-14 rounded-full bg-surface-container-lowest flex items-center justify-center">
+              {user?.avatar ? (
+                <SafeImage
+                  src={user.avatar}
+                  alt=""
+                  className="w-full h-full rounded-full object-cover"
+                  fallbackIcon="person"
+                />
+              ) : (
+                <Icon name="person" size={32} className="text-on-surface-variant/40" />
+              )}
+            </div>
+            <div className="absolute inset-0 rounded-full bg-surface-dim/60 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+              <Icon name="photo_camera" size={16} className="text-white" />
+            </div>
+          </div>
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-2">
+              <h2 className="text-sm font-bold text-on-surface truncate">{user?.username || t('common.user')}</h2>
+              <span className="shrink-0 rounded-md bg-primary-container/15 px-1.5 py-0.5 text-[10px] font-medium text-primary-container">
+                {roleLabel || '-'}
+              </span>
+            </div>
+            <p className="text-xs text-on-surface-variant break-all line-clamp-2">{user?.email}</p>
+            {user?.createdAt && (
+              <p className="text-[10px] text-on-surface-variant/50 mt-0.5">
+                {t('profile.joinedDate', {
+                  date: new Date(user.createdAt).toLocaleDateString(dateLocale, {
+                    year: 'numeric',
+                    month: 'long',
+                    day: 'numeric',
+                  }),
+                })}
+              </p>
             )}
           </div>
-          <div className="absolute inset-0 rounded-full bg-surface-dim/60 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-            <Icon name="photo_camera" size={16} className="text-white" />
-          </div>
-        </div>
-        <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-2">
-            <h2 className="text-sm font-bold text-on-surface truncate">{user?.username || t('common.user')}</h2>
-            <span className="shrink-0 rounded-md bg-primary-container/15 px-1.5 py-0.5 text-[10px] font-medium text-primary-container">
-              {roleLabel || '-'}
-            </span>
-          </div>
-          <p className="text-xs text-on-surface-variant break-all line-clamp-2">{user?.email}</p>
-          {user?.createdAt && (
-            <p className="text-[10px] text-on-surface-variant/50 mt-0.5">
-              {t('profile.joinedDate', {
-                date: new Date(user.createdAt).toLocaleDateString(dateLocale, {
-                  year: 'numeric',
-                  month: 'long',
-                  day: 'numeric',
-                }),
-              })}
-            </p>
+          {!editing && (
+            <button
+              onClick={() => setEditing(true)}
+              className="px-3 py-1.5 text-xs bg-primary-container text-on-primary rounded-md"
+            >
+              {t('common.edit')}
+            </button>
           )}
         </div>
-        {!editing && (
-          <button
-            onClick={() => setEditing(true)}
-            className="px-3 py-1.5 text-xs bg-primary-container text-on-primary rounded-md"
-          >
-            {t('common.edit')}
-          </button>
-        )}
-      </div>
 
-      {/* Editable fields */}
-      {editing ? (
-        <div className="space-y-3 rounded-lg bg-surface-container-high p-4">
-          <div className="flex flex-col gap-1">
-            <label className="text-[10px] uppercase tracking-wider text-on-surface-variant">{t('profile.name')}</label>
-            <input
-              name="username"
-              value={formData.username}
-              onChange={handleFieldChange}
-              className="w-full bg-surface-container-lowest text-on-surface border border-outline-variant/30 focus:border-primary px-3 py-2 text-sm rounded-md outline-none"
-              type="text"
-            />
-          </div>
-          <div className="flex flex-col gap-1">
-            <label className="text-[10px] uppercase tracking-wider text-on-surface-variant">{t('profile.email')}</label>
-            <input
-              name="email"
-              value={formData.email}
-              onChange={handleFieldChange}
-              className="w-full bg-surface-container-lowest text-on-surface border border-outline-variant/30 focus:border-primary px-3 py-2 text-sm rounded-md outline-none"
-              type="email"
-            />
-          </div>
-          <div className="flex flex-col gap-1">
-            <label className="text-[10px] uppercase tracking-wider text-on-surface-variant">
-              {t('profile.company')}
-            </label>
-            <input
-              name="company"
-              value={formData.company}
-              onChange={handleFieldChange}
-              className="w-full bg-surface-container-lowest text-on-surface border border-outline-variant/30 focus:border-primary px-3 py-2 text-sm rounded-md outline-none"
-              type="text"
-              placeholder={t('profile.companyPlaceholder')}
-            />
-          </div>
-          <div className="flex flex-col gap-1">
-            <label className="text-[10px] uppercase tracking-wider text-on-surface-variant">{t('profile.phone')}</label>
-            <input
-              name="phone"
-              value={formData.phone}
-              onChange={handleFieldChange}
-              className="w-full bg-surface-container-lowest text-on-surface border border-outline-variant/30 focus:border-primary px-3 py-2 text-sm rounded-md outline-none"
-              type="tel"
-              inputMode="tel"
-              maxLength={32}
-              placeholder={t('profile.phonePlaceholder')}
-            />
-          </div>
-          <div className="flex flex-col gap-1">
-            <label className="text-[10px] uppercase tracking-wider text-on-surface-variant">
-              {t('profile.department')}
-            </label>
-            <input
-              name="department"
-              value={formData.department}
-              onChange={handleFieldChange}
-              className="w-full bg-surface-container-lowest text-on-surface border border-outline-variant/30 focus:border-primary px-3 py-2 text-sm rounded-md outline-none"
-              type="text"
-              placeholder={t('profile.departmentPlaceholder')}
-            />
-          </div>
-          <div className="flex flex-col gap-1">
-            <label className="text-[10px] uppercase tracking-wider text-on-surface-variant">
-              {t('profile.address')}
-            </label>
-            <input
-              name="address"
-              value={formData.address}
-              onChange={handleFieldChange}
-              className="w-full bg-surface-container-lowest text-on-surface border border-outline-variant/30 focus:border-primary px-3 py-2 text-sm rounded-md outline-none"
-              type="text"
-              placeholder={t('profile.addressPlaceholder')}
-            />
-          </div>
-          <div className="flex flex-col gap-1">
-            <label className="text-[10px] uppercase tracking-wider text-on-surface-variant">{t('profile.bio')}</label>
-            <textarea
-              name="bio"
-              value={formData.bio}
-              onChange={(e) => setFormData((prev) => ({ ...prev, bio: e.target.value }))}
-              maxLength={500}
-              rows={2}
-              className="w-full bg-surface-container-lowest text-on-surface border border-outline-variant/30 focus:border-primary px-3 py-2 text-sm rounded-md outline-none resize-none"
-              placeholder={t('profile.bioPlaceholder')}
-            />
-          </div>
-          <div className="flex gap-3 pt-2">
-            <button
-              onClick={handleCancel}
-              className="flex-1 py-2 text-xs text-on-surface-variant border border-outline-variant/40 rounded-md"
-            >
-              {t('common.cancel')}
-            </button>
-            <button
-              onClick={handleSave}
-              disabled={saving}
-              className="flex-1 py-2 text-xs bg-primary-container text-on-primary rounded-md disabled:opacity-50"
-            >
-              {saving ? t('profile.saving') : t('common.save')}
-            </button>
-          </div>
-        </div>
-      ) : (
-        <div className="space-y-2">
-          <div className="flex items-center justify-between gap-3 rounded-lg bg-surface-container-high px-4 py-3">
-            <div className="flex items-center gap-3 shrink-0">
-              <Icon name="domain" size={20} className="text-on-surface/50" />
-              <span className="text-sm text-on-surface">{t('profile.companyShort')}</span>
+        {/* Editable fields */}
+        {editing ? (
+          <div className="space-y-3 rounded-lg bg-surface-container-high p-4">
+            <div className="flex flex-col gap-1">
+              <label className="text-[10px] uppercase tracking-wider text-on-surface-variant">
+                {t('profile.name')}
+              </label>
+              <input
+                name="username"
+                value={formData.username}
+                onChange={handleFieldChange}
+                className="w-full bg-surface-container-lowest text-on-surface border border-outline-variant/30 focus:border-primary px-3 py-2 text-sm rounded-md outline-none"
+                type="text"
+              />
             </div>
-            <span className="text-sm text-on-surface-variant text-right truncate min-w-0">{user?.company || '-'}</span>
-          </div>
-          <div className="flex items-center justify-between gap-3 rounded-lg bg-surface-container-high px-4 py-3">
-            <div className="flex items-center gap-3">
-              <Icon name="phone" size={20} className="text-on-surface/50" />
-              <span className="text-sm text-on-surface">{t('profile.phoneShort')}</span>
+            <div className="flex flex-col gap-1">
+              <label className="text-[10px] uppercase tracking-wider text-on-surface-variant">
+                {t('profile.email')}
+              </label>
+              <input
+                name="email"
+                value={formData.email}
+                onChange={handleFieldChange}
+                className="w-full bg-surface-container-lowest text-on-surface border border-outline-variant/30 focus:border-primary px-3 py-2 text-sm rounded-md outline-none"
+                type="email"
+              />
             </div>
-            <span className="text-sm text-on-surface-variant text-right truncate min-w-0">{user?.phone || '-'}</span>
-          </div>
-          <div className="flex items-center justify-between gap-3 rounded-lg bg-surface-container-high px-4 py-3">
-            <div className="flex items-center gap-3 shrink-0">
-              <Icon name="badge" size={20} className="text-on-surface/50" />
-              <span className="text-sm text-on-surface">{t('profile.department')}</span>
+            <div className="flex flex-col gap-1">
+              <label className="text-[10px] uppercase tracking-wider text-on-surface-variant">
+                {t('profile.company')}
+              </label>
+              <input
+                name="company"
+                value={formData.company}
+                onChange={handleFieldChange}
+                className="w-full bg-surface-container-lowest text-on-surface border border-outline-variant/30 focus:border-primary px-3 py-2 text-sm rounded-md outline-none"
+                type="text"
+                placeholder={t('profile.companyPlaceholder')}
+              />
             </div>
-            <span className="text-sm text-on-surface-variant text-right truncate min-w-0">
-              {user?.department || '-'}
-            </span>
-          </div>
-          <div className="flex items-center justify-between gap-3 rounded-lg bg-surface-container-high px-4 py-3">
-            <div className="flex items-center gap-3 shrink-0">
-              <Icon name="link" size={20} className="text-on-surface/50" />
-              <span className="text-sm text-on-surface">{t('profile.address')}</span>
+            <div className="flex flex-col gap-1">
+              <label className="text-[10px] uppercase tracking-wider text-on-surface-variant">
+                {t('profile.phone')}
+              </label>
+              <input
+                name="phone"
+                value={formData.phone}
+                onChange={handleFieldChange}
+                className="w-full bg-surface-container-lowest text-on-surface border border-outline-variant/30 focus:border-primary px-3 py-2 text-sm rounded-md outline-none"
+                type="tel"
+                inputMode="tel"
+                maxLength={32}
+                placeholder={t('profile.phonePlaceholder')}
+              />
             </div>
-            <span className="text-sm text-on-surface-variant text-right truncate min-w-0">{user?.address || '-'}</span>
+            <div className="flex flex-col gap-1">
+              <label className="text-[10px] uppercase tracking-wider text-on-surface-variant">
+                {t('profile.department')}
+              </label>
+              <input
+                name="department"
+                value={formData.department}
+                onChange={handleFieldChange}
+                className="w-full bg-surface-container-lowest text-on-surface border border-outline-variant/30 focus:border-primary px-3 py-2 text-sm rounded-md outline-none"
+                type="text"
+                placeholder={t('profile.departmentPlaceholder')}
+              />
+            </div>
+            <div className="flex flex-col gap-1">
+              <label className="text-[10px] uppercase tracking-wider text-on-surface-variant">
+                {t('profile.address')}
+              </label>
+              <input
+                name="address"
+                value={formData.address}
+                onChange={handleFieldChange}
+                className="w-full bg-surface-container-lowest text-on-surface border border-outline-variant/30 focus:border-primary px-3 py-2 text-sm rounded-md outline-none"
+                type="text"
+                placeholder={t('profile.addressPlaceholder')}
+              />
+            </div>
+            <div className="flex flex-col gap-1">
+              <label className="text-[10px] uppercase tracking-wider text-on-surface-variant">{t('profile.bio')}</label>
+              <textarea
+                name="bio"
+                value={formData.bio}
+                onChange={(e) => setFormData((prev) => ({ ...prev, bio: e.target.value }))}
+                maxLength={500}
+                rows={2}
+                className="w-full bg-surface-container-lowest text-on-surface border border-outline-variant/30 focus:border-primary px-3 py-2 text-sm rounded-md outline-none resize-none"
+                placeholder={t('profile.bioPlaceholder')}
+              />
+            </div>
+            <div className="flex gap-3 pt-2">
+              <button
+                onClick={handleCancel}
+                className="flex-1 py-2 text-xs text-on-surface-variant border border-outline-variant/40 rounded-md"
+              >
+                {t('common.cancel')}
+              </button>
+              <button
+                onClick={handleSave}
+                disabled={saving}
+                className="flex-1 py-2 text-xs bg-primary-container text-on-primary rounded-md disabled:opacity-50"
+              >
+                {saving ? t('profile.saving') : t('common.save')}
+              </button>
+            </div>
           </div>
-          {user?.bio && (
-            <div className="rounded-lg bg-surface-container-high px-4 py-3">
-              <div className="flex items-center gap-3 mb-1">
-                <Icon name="description" size={20} className="text-on-surface/50" />
-                <span className="text-sm text-on-surface">{t('profile.bio')}</span>
+        ) : (
+          <div className="space-y-2">
+            <div className="flex items-center justify-between gap-3 rounded-lg bg-surface-container-high px-4 py-3">
+              <div className="flex items-center gap-3 shrink-0">
+                <Icon name="domain" size={20} className="text-on-surface/50" />
+                <span className="text-sm text-on-surface">{t('profile.companyShort')}</span>
               </div>
-              <p className="text-sm text-on-surface-variant pl-8">{user.bio}</p>
+              <span className="text-sm text-on-surface-variant text-right truncate min-w-0">
+                {user?.company || '-'}
+              </span>
             </div>
-          )}
-        </div>
-      )}
+            <div className="flex items-center justify-between gap-3 rounded-lg bg-surface-container-high px-4 py-3">
+              <div className="flex items-center gap-3">
+                <Icon name="phone" size={20} className="text-on-surface/50" />
+                <span className="text-sm text-on-surface">{t('profile.phoneShort')}</span>
+              </div>
+              <span className="text-sm text-on-surface-variant text-right truncate min-w-0">{user?.phone || '-'}</span>
+            </div>
+            <div className="flex items-center justify-between gap-3 rounded-lg bg-surface-container-high px-4 py-3">
+              <div className="flex items-center gap-3 shrink-0">
+                <Icon name="badge" size={20} className="text-on-surface/50" />
+                <span className="text-sm text-on-surface">{t('profile.department')}</span>
+              </div>
+              <span className="text-sm text-on-surface-variant text-right truncate min-w-0">
+                {user?.department || '-'}
+              </span>
+            </div>
+            <div className="flex items-center justify-between gap-3 rounded-lg bg-surface-container-high px-4 py-3">
+              <div className="flex items-center gap-3 shrink-0">
+                <Icon name="link" size={20} className="text-on-surface/50" />
+                <span className="text-sm text-on-surface">{t('profile.address')}</span>
+              </div>
+              <span className="text-sm text-on-surface-variant text-right truncate min-w-0">
+                {user?.address || '-'}
+              </span>
+            </div>
+            {user?.bio && (
+              <div className="rounded-lg bg-surface-container-high px-4 py-3">
+                <div className="flex items-center gap-3 mb-1">
+                  <Icon name="description" size={20} className="text-on-surface/50" />
+                  <span className="text-sm text-on-surface">{t('profile.bio')}</span>
+                </div>
+                <p className="text-sm text-on-surface-variant pl-8">{user.bio}</p>
+              </div>
+            )}
+          </div>
+        )}
 
-      {/* Password */}
-      <button
-        onClick={() => setPwdOpen(true)}
-        className="w-full flex items-center justify-between rounded-lg bg-surface-container-high px-4 py-3 text-left"
-      >
-        <div className="flex items-center gap-3">
-          <Icon name="lock" size={20} className="text-on-surface/50" />
-          <span className="text-sm text-on-surface">{t('profile.password.title')}</span>
-        </div>
-        <Icon name="chevron_right" size={20} className="text-on-surface/30" />
-      </button>
-
-      {/* My Inquiries */}
-      {featureFlags.inquiry && (
+        {/* Password */}
         <button
-          onClick={() => navigate('/my-inquiries')}
+          onClick={() => setPwdOpen(true)}
           className="w-full flex items-center justify-between rounded-lg bg-surface-container-high px-4 py-3 text-left"
         >
           <div className="flex items-center gap-3">
-            <Icon name="request_quote" size={20} className="text-on-surface/50" />
-            <span className="text-sm text-on-surface">{t('profile.myInquiries')}</span>
+            <Icon name="lock" size={20} className="text-on-surface/50" />
+            <span className="text-sm text-on-surface">{t('profile.password.title')}</span>
           </div>
           <Icon name="chevron_right" size={20} className="text-on-surface/30" />
         </button>
-      )}
 
-      {/* Notification prefs */}
-      <div className="rounded-lg bg-surface-container-high px-4 py-3">
-        <NotificationPrefs compact />
-      </div>
+        {/* My Inquiries */}
+        {featureFlags.inquiry && (
+          <button
+            onClick={() => navigate('/my-inquiries')}
+            className="w-full flex items-center justify-between rounded-lg bg-surface-container-high px-4 py-3 text-left"
+          >
+            <div className="flex items-center gap-3">
+              <Icon name="request_quote" size={20} className="text-on-surface/50" />
+              <span className="text-sm text-on-surface">{t('profile.myInquiries')}</span>
+            </div>
+            <Icon name="chevron_right" size={20} className="text-on-surface/30" />
+          </button>
+        )}
 
-      {/* My shares */}
-      {featureFlags.shares && <MobileSharesMenu />}
+        {/* Notification prefs */}
+        <div className="rounded-lg bg-surface-container-high px-4 py-3">
+          <NotificationPrefs compact />
+        </div>
 
-      <PasswordChangeDialog open={pwdOpen} onClose={() => setPwdOpen(false)} />
-      <EmailChangeDialog
-        open={emailChangeOpen}
-        onClose={() => setEmailChangeOpen(false)}
-        currentEmail={user?.email || ''}
-      />
-    </PageBody>
+        {/* My shares */}
+        {featureFlags.shares && <MobileSharesMenu />}
+
+        <PasswordChangeDialog open={pwdOpen} onClose={() => setPwdOpen(false)} />
+        <EmailChangeDialog
+          open={emailChangeOpen}
+          onClose={() => setEmailChangeOpen(false)}
+          currentEmail={user?.email || ''}
+        />
+      </PageBody>
+    </>
   );
 }
 

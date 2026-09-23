@@ -103,37 +103,53 @@ const CategoryNavPage = lazy(loadCategoryNavPage);
 const CategoryNavAdminPage = lazy(loadCategoryNavAdminPage);
 
 /**
- * 懒加载路由首次挂起期间可稳定显示的页面标题（与各页面 hero 标题逐字一致，
- * 避免移动端切换页面时「标题区块消失再出现」的闪变）。未收录的路径退回通用加载态。
+ * 懒加载路由首次挂起期间可稳定显示的页面标题卡文案（与各页面 hero 逐字一致，
+ * 避免移动端切换页面时「标题区块消失再出现」「先出标题再补描述」的闪变）。
+ * 未收录的路径退回通用加载态。
  */
-const ROUTE_FALLBACK_TITLE_KEYS: Record<string, string> = {
-  '/profile': 'profile.title',
-  '/favorites': 'favorites.title',
-  '/downloads': 'downloads.title',
-  '/my-shares': 'myShares.title',
-  '/support': 'support.title',
-  '/my-tickets': 'myTickets.title',
-  '/my-inquiries': 'myInquiries.title',
-  '/notifications': 'notificationsPage.title',
-  '/projects': 'projects.title',
-  '/admin/product-wall': 'productWall.management.title',
+type RouteFallbackCopy = {
+  titleKey?: string;
+  descriptionKey?: string;
+  title?: string;
+  description?: string;
 };
 
-// 后台页面标题为页面内硬编码中文，这里保持同样文案
-const ROUTE_FALLBACK_TITLE_LITERALS: Record<string, string> = {
-  '/admin/models': '模型管理',
-  '/admin/categories': '分类管理',
-  '/admin/users': '用户管理',
-  '/admin/shares': '分享管理',
-  '/admin/downloads': '下载统计',
-  '/admin/tickets': '工单处理',
-  '/admin/inquiries': '询价处理工作台',
-  '/admin/selections': '选型管理',
-  '/admin/audit': '操作日志',
-  '/admin/settings': '系统设置',
+const ROUTE_FALLBACK_COPY: Record<string, RouteFallbackCopy> = {
+  '/profile': { titleKey: 'profile.title', descriptionKey: 'profile.description' },
+  '/favorites': { titleKey: 'favorites.title', descriptionKey: 'favorites.pageDescription' },
+  '/downloads': { titleKey: 'downloads.title', descriptionKey: 'downloads.description' },
+  '/my-shares': { titleKey: 'myShares.title', descriptionKey: 'myShares.description' },
+  '/support': { titleKey: 'support.title', descriptionKey: 'support.description' },
+  '/my-tickets': { titleKey: 'myTickets.title', descriptionKey: 'myTickets.description' },
+  '/my-inquiries': { titleKey: 'myInquiries.title', descriptionKey: 'myInquiries.description' },
+  '/notifications': { titleKey: 'notificationsPage.title', descriptionKey: 'notificationsPage.description' },
+  '/projects': { titleKey: 'projects.title' },
+  '/admin/product-wall': {
+    titleKey: 'productWall.management.title',
+    descriptionKey: 'productWall.management.pageDescription',
+  },
+  // 后台页面标题/描述为页面内硬编码中文，这里保持同样文案
+  '/admin/models': { title: '模型管理', description: '统一维护模型文件、分类归属、预览重建和同名模型合并关系。' },
+  '/admin/categories': { title: '分类管理', description: '维护模型库分类、子分类和图标展示' },
+  '/admin/users': { title: '用户管理', description: '管理用户角色、账号状态和使用数据' },
+  '/admin/shares': { title: '分享管理', description: '管理模型分享链接、访问权限和下载记录' },
+  '/admin/downloads': { title: '下载统计', description: '统计模型下载量、用户下载历史、热门模型和格式分布' },
+  '/admin/tickets': { title: '工单处理', description: '管理用户提交的模型需求工单' },
+  '/admin/inquiries': { title: '询价处理工作台', description: '管理员入口：处理客户询价、分配销售、导出业务明细' },
+  '/admin/selections': { title: '选型管理', description: '管理选型分类、产品、参数列定义和批量导入数据' },
+  '/admin/audit': { title: '操作日志', description: '查看后台操作、登录、下载和数据变更记录' },
+  '/admin/settings': { title: '系统设置', description: '配置平台的全局行为和访问策略' },
 };
 
-function RoutePageSkeleton({ title, standalone = false }: { title: string; standalone?: boolean }) {
+function RoutePageSkeleton({
+  title,
+  description,
+  standalone = false,
+}: {
+  title: string;
+  description?: string;
+  standalone?: boolean;
+}) {
   return (
     <div
       className={
@@ -141,7 +157,7 @@ function RoutePageSkeleton({ title, standalone = false }: { title: string; stand
       }
       data-page-refresh-fallback
     >
-      <AdminPageHero title={title} />
+      <AdminPageHero title={title} description={description} />
       <div className="mt-4 flex min-h-[240px] flex-1 items-start justify-center pt-16">
         <PageRefreshIndicator />
       </div>
@@ -161,10 +177,12 @@ function RouteFallback({ standalone = false }: { standalone?: boolean }) {
     return <ModelDetailPageSkeleton modelTitle={modelTitle} isAdmin={isAdmin} />;
   }
 
-  const titleKey = ROUTE_FALLBACK_TITLE_KEYS[location.pathname];
-  const titleLiteral = ROUTE_FALLBACK_TITLE_LITERALS[location.pathname];
-  if (titleKey) return <RoutePageSkeleton title={t(titleKey)} standalone={standalone} />;
-  if (titleLiteral) return <RoutePageSkeleton title={titleLiteral} standalone={standalone} />;
+  const copy = ROUTE_FALLBACK_COPY[location.pathname];
+  if (copy) {
+    const title = copy.titleKey ? t(copy.titleKey) : copy.title || '';
+    const description = copy.descriptionKey ? t(copy.descriptionKey) : copy.description;
+    return <RoutePageSkeleton title={title} description={description} standalone={standalone} />;
+  }
 
   return <PageRefreshFallback standalone={standalone} />;
 }
